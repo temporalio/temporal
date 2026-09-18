@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
@@ -110,4 +111,33 @@ func TestExecutable_UngovernedCauseDropsTheKey(t *testing.T) {
 	)
 	_, known = e.ThrottleKey()
 	require.False(t, known, "a system scoped limit is not this namespace's budget")
+}
+
+// A task classified while the controller was off is exactly the cohort the off-to-on path
+// exists to serve, and it was the one completion reporting skipped: the latch that says "this
+// task was throttled at some point" was only ever set on the enabled branch.
+func TestExecutable_CompletionIsReportedForWorkClassifiedWhileOff(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	capture := metricstest.NewCaptureHandler()
+	o := defaultThrottleOverrides()
+	o.enabled = false
+	state, _ := newTestThrottleState(o)
+
+	e := newThrottleTestExecutable(ctrl, state)
+	e.chasmMetricsHandler = capture
+	e.reportThrottle(
+		enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
+		enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+	)
+
+	// The operator turns the controller on; the task then completes.
+	enabledState, _ := newTestThrottleState(defaultThrottleOverrides())
+	e.throttleState = enabledState
+
+	snapshot := capture.StartCapture()
+	e.reportCompletion()
+	capture.StopCapture(snapshot)
+
+	require.NotEmpty(t, snapshot.Snapshot()[metrics.TaskThrottleCompletions.Name()],
+		"a task throttled before the flag was turned on still completes under the controller")
 }

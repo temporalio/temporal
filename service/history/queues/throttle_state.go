@@ -200,7 +200,10 @@ func (s *ThrottleState) Finish(permit *throttleEntry, submitted bool) {
 }
 
 func (s *ThrottleState) ReportThrottled(key ThrottleKey, permit *throttleEntry) {
-	if !s.Enabled() {
+	// A metered rejection is the other half of a release already committed, so it is recorded
+	// even if the controller was turned off in between. Dropping it would leave that window
+	// reading clean and raise the rate of a class whose releases were all failing.
+	if !s.Enabled() && permit == nil {
 		return
 	}
 	// The release was issued by the permit's class, so that is the class whose rate the
@@ -240,6 +243,21 @@ func minDecisionReleases(lossThreshold float64) int64 {
 		return 1
 	}
 	return int64(math.Ceil(1 / lossThreshold))
+}
+
+// WithdrawRelease takes a release back out of the window's sample. The dispatch happened, but
+// its outcome says nothing about the budget, so leaving it in would read as a success and help
+// raise the rate on evidence the class never produced.
+func (s *ThrottleState) WithdrawRelease(permit *throttleEntry) {
+	if permit == nil {
+		return
+	}
+	permit.Lock()
+	defer permit.Unlock()
+
+	if permit.releases > 0 {
+		permit.releases--
+	}
 }
 
 // advanceWindowLocked closes an elapsed window and applies at most one rate change for it.
@@ -370,7 +388,7 @@ func (s *ThrottleState) controlLaw() (beta, increaseRatio, lossThreshold float64
 
 	lossThreshold = defaultThrottleLossThreshold
 	if s.options.LossThreshold != nil {
-		if configured := s.options.LossThreshold(); configured >= 0 && configured < 1 {
+		if configured := s.options.LossThreshold(); configured > 0 && configured < 1 {
 			lossThreshold = configured
 		}
 	}

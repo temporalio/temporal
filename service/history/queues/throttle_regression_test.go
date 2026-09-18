@@ -8,6 +8,9 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	ctasks "go.temporal.io/server/common/tasks"
 )
 
@@ -516,4 +519,199 @@ func TestThrottleState_AbsurdIncreaseRatioFallsBackToTheDefault(t *testing.T) {
 	closeWindow(state, timeSource, key)
 
 	require.InEpsilon(t, o.initialRate*(1+defaultThrottleIncreaseRatio), throttleRate(state, key), 1e-9)
+}
+
+// The load-bearing invariant of the design: loss on traffic the gate never sent must not move
+// the rate. Without it a busy namespace's parked tasks are driven to the floor by rejections
+// belonging to the traffic actually consuming the budget. The rejections here outnumber the
+// releases five to one, so counting them at all is unmissable.
+func TestThrottleState_UnadmittedRejectionsCannotDriveADecision(t *testing.T) {
+	o := defaultThrottleOverrides()
+	state, timeSource := newTestThrottleState(o)
+	key := testKey()
+
+	_, _, lossThreshold := state.controlLaw()
+	samples := minDecisionReleases(lossThreshold)
+	for i := int64(0); i < samples; i++ {
+		require.True(t, admitOK(state, key))
+	}
+	for i := int64(0); i < samples*5; i++ {
+		state.ReportThrottled(key, nil)
+	}
+	closeWindow(state, timeSource, key)
+
+	require.InEpsilon(t, o.initialRate, throttleRate(state, key), 1e-9,
+		"rejections the gate did not issue are not evidence about its own releases")
+}
+
+// A release committed while the controller was on has to be matched even if the flag goes off
+// before its rejection arrives. Otherwise the window it belongs to reads clean, and a class
+// whose releases were all failing raises its rate while an operator is mid-toggle.
+func TestThrottleState_RejectionSurvivesTheFlagGoingOff(t *testing.T) {
+	enabled := true
+	timeSource := clock.NewEventTimeSource()
+	timeSource.Update(time.Unix(0, 0))
+	state := NewThrottleState(
+		ThrottleStateOptions{
+			Enabled:       func() bool { return enabled },
+			Beta:          dynamicconfig.GetFloatPropertyFn(0.85),
+			IncreaseRatio: dynamicconfig.GetFloatPropertyFn(0.10),
+			LossThreshold: dynamicconfig.GetFloatPropertyFn(0.05),
+			Window:        dynamicconfig.GetDurationPropertyFn(testThrottleWindow),
+			MaxKeys:       dynamicconfig.GetIntPropertyFn(1024),
+		},
+		timeSource,
+		log.NewTestLogger(),
+		metrics.NoopMetricsHandler,
+	)
+	state.minRate, state.maxRate, state.initialRate = 1, 10000, 100
+	state.keyTTL = 5 * time.Minute
+	key := testKey()
+
+	_, _, lossThreshold := state.controlLaw()
+	permits := make([]*throttleEntry, 0, 32)
+	for i := int64(0); i < minDecisionReleases(lossThreshold); i++ {
+		allowed, permit, _ := state.Admit(key)
+		require.True(t, allowed)
+		state.Finish(permit, true)
+		permits = append(permits, permit)
+	}
+
+	enabled = false
+	for _, permit := range permits {
+		state.ReportThrottled(key, permit)
+	}
+	enabled = true
+	closeWindow(state, timeSource, key)
+
+	require.InEpsilon(t, 85.0, throttleRate(state, key), 1e-9,
+		"every release failed, so the window must not read clean")
+}
+
+// A dispatch refused for a reason pacing cannot fix is not evidence in either direction. Left
+// in the sample it reads as a success, so a class failing entirely on lock contention would
+// climb - and the burst it climbs to is the wave this design exists to remove.
+func TestThrottleState_WithdrawnReleaseDoesNotRaiseTheRate(t *testing.T) {
+	o := defaultThrottleOverrides()
+	state, timeSource := newTestThrottleState(o)
+	key := testKey()
+
+	for i := 0; i < 400; i++ {
+		allowed, permit, _ := state.Admit(key)
+		if !allowed {
+			closeWindow(state, timeSource, key)
+			continue
+		}
+		state.Finish(permit, true)
+		state.WithdrawRelease(permit)
+	}
+	closeWindow(state, timeSource, key)
+
+	require.LessOrEqual(t, throttleRate(state, key), o.initialRate,
+		"a class whose every dispatch failed must not have climbed")
+}
+
+// A threshold of zero makes any single rejection a decrease and demands a perfectly clean
+// window for an increase. That is the rule the design argues against, reached from below;
+// commit 073471ef1 closed the same hole at the top of the range.
+func TestThrottleState_LossThresholdOfZeroFallsBackToTheDefault(t *testing.T) {
+	o := defaultThrottleOverrides()
+	o.lossThresh = 0
+	state, timeSource := newTestThrottleState(o)
+	key := testKey()
+
+	require.True(t, admitOK(state, key))
+	state.ReportThrottled(key, state.peek(key))
+	closeWindow(state, timeSource, key)
+
+	require.InEpsilon(t, o.initialRate, throttleRate(state, key), 1e-9,
+		"one rejection out of one release must not decide anything at the default threshold")
+}
+
+// Loss exactly at the threshold is tolerated, not punished: the threshold is the amount of
+// loss the class is allowed to run at, so meeting it is not grounds for backing off.
+func TestThrottleState_LossExactlyAtTheThresholdDoesNotDecrease(t *testing.T) {
+	o := defaultThrottleOverrides()
+	state, timeSource := newTestThrottleState(o)
+	key := testKey()
+
+	// 1 rejection in 20 releases is exactly the 5% threshold.
+	_, _, lossThreshold := state.controlLaw()
+	samples := minDecisionReleases(lossThreshold)
+	for i := int64(0); i < samples; i++ {
+		require.True(t, admitOK(state, key))
+	}
+	state.ReportThrottled(key, state.peek(key))
+	closeWindow(state, timeSource, key)
+
+	require.GreaterOrEqual(t, throttleRate(state, key), o.initialRate,
+		"loss at the threshold is the budget the class is allowed, not a reason to back off")
+}
+
+// The burst floor is the difference between a slow class and a wedged one: below one token a
+// window the bucket can never reach the whole token an admit needs, and the class stops
+// releasing entirely however long it waits.
+func TestThrottleEntry_BurstNeverFallsBelowOneToken(t *testing.T) {
+	o := defaultThrottleOverrides()
+	o.minRate = 0.01
+	o.initialRate = 0.01
+	state, timeSource := newTestThrottleState(o)
+	key := testKey()
+
+	require.True(t, admitOK(state, key), "a class below one release a window still releases")
+	require.False(t, admitOK(state, key), "and then has to earn the next token")
+
+	// The floor caps the burst, not the refill: at 0.01/s a whole token takes 100 windows.
+	timeSource.Update(timeSource.Now().Add(100 * testThrottleWindow))
+	require.True(t, admitOK(state, key), "which it can still reach, because a burst is never under one")
+}
+
+// Loss is 1 - budget/(other + rate), so once competing traffic alone exceeds
+// budget/(1 - threshold) the loss is above the threshold at every rate the class can reach,
+// including the floor. It decreases every decision and pins there, reacting to a signal it
+// cannot influence. Whether backing off or holding a share is the right answer when a
+// namespace is genuinely over budget is a design question, but the boundary is arithmetic and
+// must not move by accident.
+func TestThrottleState_CompetingTrafficAboveTheBudgetPinsTheClassAtTheFloor(t *testing.T) {
+	const budget = 200.0
+
+	settle := func(other float64) float64 {
+		o := defaultThrottleOverrides()
+		o.initialRate = budget
+		state, timeSource := newTestThrottleState(o)
+		key := testKey()
+
+		for w := 0; w < 400; w++ {
+			permits := make([]*throttleEntry, 0, 512)
+			for {
+				allowed, permit, _ := state.Admit(key)
+				if !allowed {
+					break
+				}
+				state.Finish(permit, true)
+				permits = append(permits, permit)
+			}
+			if total := other + float64(len(permits)); total > budget && len(permits) > 0 {
+				rejected := int((total - budget) * float64(len(permits)) / total)
+				for i := 0; i < rejected && i < len(permits); i++ {
+					state.ReportThrottled(key, permits[i])
+				}
+			}
+			timeSource.Update(timeSource.Now().Add(testThrottleWindow))
+		}
+		return throttleRate(state, key)
+	}
+
+	o := defaultThrottleOverrides()
+	boundary := budget / (1 - o.lossThresh)
+
+	below := settle(boundary * 0.75)
+	require.Greater(t, below, budget*0.1,
+		"below the boundary the class still claims the share left to it")
+
+	above := settle(boundary * 2)
+	require.Less(t, above, o.minRate*4,
+		"above it the class sits at the floor, whatever rate it started from")
+	require.Less(t, above, below/10,
+		"the two regimes are not close; the boundary is a cliff, not a slope")
 }
