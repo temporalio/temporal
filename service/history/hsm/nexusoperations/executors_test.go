@@ -664,7 +664,6 @@ func TestProcessInvocationTask(t *testing.T) {
 					MinRequestTimeout:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 					PayloadSizeLimit:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
 					CallbackURLTemplate:     dynamicconfig.GetStringPropertyFn("http://localhost/callback"),
-					UseSystemCallbackURL:    dynamicconfig.GetBoolPropertyFn(true),
 					UseNewFailureWireFormat: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
@@ -1943,7 +1942,6 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 					PayloadSizeLimit:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
 					MaxOperationTokenLength: dynamicconfig.GetIntPropertyFnFilteredByNamespace(1000),
 					CallbackURLTemplate:     dynamicconfig.GetStringPropertyFn("http://localhost/callback"),
-					UseSystemCallbackURL:    dynamicconfig.GetBoolPropertyFn(true),
 					UseNewFailureWireFormat: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 					NumHistoryShards:        4,
 					RetryPolicy: func() backoff.RetryPolicy {

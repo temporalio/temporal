@@ -29,6 +29,12 @@ var (
 		true,
 		`AdminEnableListHistoryTasks is the key for enabling listing history tasks`,
 	)
+	AdminEnableDescribeMutableStateRateLimit = NewGlobalBoolSetting(
+		"admin.enableDescribeMutableStateRateLimit",
+		false,
+		`AdminEnableDescribeMutableStateRateLimit gates whether AdminService.DescribeMutableState is subject to
+pod-level rate limiting. Read once at process startup: changing this value requires a restart to take effect.`,
+	)
 	AdminMatchingNamespaceToPartitionDispatchRate = NewNamespaceFloatSetting(
 		"admin.matchingNamespaceToPartitionDispatchRate",
 		10000,
@@ -95,7 +101,7 @@ values in system search attributes.`,
 	)
 	VisibilityEnableUnifiedQueryConverter = NewGlobalBoolSetting(
 		"system.visibilityEnableUnifiedQueryConverter",
-		false,
+		true,
 		`VisibilityEnableUnifiedQueryConverter enables the unified query converter for parsing the
 query.`,
 	)
@@ -901,11 +907,6 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		"frontend.historyHostErrorPercentage",
 		0.5,
 		`HistoryHostErrorPercentage is the proportion of hosts that are unhealthy through observation external to the host and internal host health checks`,
-	)
-	HistoryHostSelfErrorProportion = NewGlobalFloatSetting(
-		"frontend.historyHostSelfErrorProportion",
-		0.05,
-		`HistoryHostStartingProportion is the proportion of hosts that have marked themselves as not ready -- this could due to waiting to acquire all shards on startup, or an internal health check failure`,
 	)
 	SendRawWorkflowHistory = NewNamespaceBoolSetting(
 		"frontend.sendRawWorkflowHistory",
@@ -1757,6 +1758,12 @@ execution.`,
 		`EnablePaginationTokenBranchValidationShadowMode logs and emits metrics for a page token whose
 branch token is not the execution's current one, but still serves the read.`,
 	)
+	EnablePaginationTokenBranchReplacement = NewGlobalBoolSetting(
+		"history.enablePaginationTokenBranchReplacement",
+		true,
+		`EnablePaginationTokenBranchReplacement, when pagination-token branch validation is enforced,
+replaces a page token's branch token when it identifies the current branch but has different metadata.`,
+	)
 
 	EnableReplicationStream = NewGlobalBoolSetting(
 		"history.enableReplicationStream",
@@ -2525,6 +2532,12 @@ visibility if they were removed from the mutable state`,
 		100,
 		`ArchivalTaskBatchSize is batch size for archivalQueueProcessor`,
 	)
+	EnableVisibilityArchivalRecordDeduplication = NewNamespaceBoolSetting(
+		"history.enableVisibilityArchivalRecordDeduplication",
+		false,
+		`EnableVisibilityArchivalRecordDeduplication enables best-effort content-aware visibility archival deduplication for S3 and GCS.
+When enabled, the archival store must allow reading object metadata in addition to writing objects.`,
+	)
 	ArchivalProcessorMaxPollRPS = NewGlobalIntSetting(
 		"history.archivalProcessorMaxPollRPS",
 		20,
@@ -2708,8 +2721,9 @@ the oldest task of each immediate queue category that has a backlog`,
 	DefaultActivityRetryPolicy = NewNamespaceTypedSetting(
 		"history.defaultActivityRetryPolicy",
 		retrypolicy.DefaultDefaultRetrySettings,
-		`DefaultActivityRetryPolicy represents the out-of-box retry policy for activities where
-the user has not specified an explicit RetryPolicy`,
+		`DefaultActivityRetryPolicy represents the out-of-box retry policy for activities. It
+applies both when the user has not specified any RetryPolicy and, field by field, to fill
+in fields that are unset (or set to their zero value) in an explicit RetryPolicy`,
 	)
 	DefaultWorkflowRetryPolicy = NewNamespaceTypedSetting(
 		"history.defaultWorkflowRetryPolicy",
@@ -3045,6 +3059,11 @@ to persistence. The buffer holds slim queue rows (task metadata, not event paylo
 		100,
 		`Maximum number of low priority replication tasks that can be sent per second per shard`,
 	)
+	EnableReplicationGradualConnect = NewGlobalBoolSetting(
+		"history.enableReplicationGradualConnect",
+		false,
+		`Controls whether replication stream senders honor gradual-connect ramps.`,
+	)
 	ReplicationStreamEventLoopRetryMaxAttempts = NewGlobalIntSetting(
 		"history.ReplicationStreamEventLoopRetryMaxAttempts",
 		100, // 0 means retry forever
@@ -3196,6 +3215,13 @@ time (mirrors gRPC MaxConnectionAge's +/-10% jitter). Values outside [0, 1] are 
 		false,
 		`If true, validate the start time of the old workflow is older than WorkflowIdReuseMinimalInterval when reusing workflow ID.`,
 	)
+	EnableSignalWithStartRequestIDDeduplication = NewNamespaceBoolSetting(
+		"history.enableSignalWithStartRequestIdDeduplication",
+		true,
+		`If true, a SignalWithStartWorkflowExecution retry whose request ID was already handled by the
+current run returns that run instead of starting a second one, and reports Started=true when that
+request ID created the run (matching StartWorkflowExecution).`,
+	)
 	BusinessIDReuseRate = NewNamespaceIntSetting(
 		"history.businessIDReuseRate",
 		0,
@@ -3271,6 +3297,15 @@ Requires service restart to take effect.`,
 		`EnableCHASMSkipPersistence controls whether CHASM CloseTransaction omits nodes whose serialized data is unchanged.
 This optimization should only be enabled after every cluster that may receive CHASM replication supports invalidating
 hydrated ancestor components when applying child-node mutations.`,
+	)
+
+	ChasmDLQScheduledPureTaskOnValidation = NewNamespaceBoolSetting(
+		"history.chasmDLQScheduledPureTaskOnValidation",
+		false,
+		`ChasmDLQScheduledPureTaskOnValidation controls whether scheduled CHASM pure tasks that remain valid
+after successful execution are sent to DLQ instead of retried indefinitely. A pure task that is still
+valid after execution would otherwise loop forever; enabling this flag detects that condition and
+terminates the task via DLQ. Immediate pure tasks are never affected by this setting.`,
 	)
 
 	ChasmMaxInMemoryPureTasks = NewGlobalIntSetting(

@@ -189,8 +189,8 @@ func propagateTimeSkippingToOtherExecution(
 // =============================================================================
 // wrapTimeSourceWithTimeSkipping wraps ms.timeSource (and the hBuilder's copy) with a time-skipping
 // wrapper. The closure captures ms so the offset tracks ms.executionInfo.TimeSkippingInfo as it
-// evolves — no need to re-wrap when TimeSkippingInfo is created or replaced. Called once per MS
-// lifetime from the constructors; the type-assertion guard makes any repeat call a no-op.
+// evolves — no need to re-wrap when TimeSkippingInfo is replaced. The type-assertion guard makes
+// repeat calls from initialization, DB loading, or replication a no-op.
 func (ms *MutableStateImpl) wrapTimeSourceWithTimeSkipping() {
 	if _, ok := ms.timeSource.(*clock.TimeSkippingTimeSourceWrapper); ok {
 		return

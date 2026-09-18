@@ -17,7 +17,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/chasm/lib/callback"
-	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/metrics"
@@ -326,24 +325,14 @@ func (a *Activity) addCompletionCallbacks(
 	registrationTime := timestamppb.New(ctx.Now(a))
 
 	for idx, cb := range completionCallbacks {
-		chasmCB := &callbackspb.Callback{
-			Links: cb.GetLinks(),
-		}
-		switch variant := cb.Variant.(type) {
-		case *commonpb.Callback_Nexus_:
-			chasmCB.Variant = &callbackspb.Callback_Nexus_{
-				Nexus: &callbackspb.Callback_Nexus{
-					Url:    variant.Nexus.GetUrl(),
-					Header: variant.Nexus.GetHeader(),
-				},
-			}
-		default:
-			return serviceerror.NewInvalidArgumentf("unsupported callback variant: %T", variant)
+		chasmCB, err := callback.FromAPICallback(cb)
+		if err != nil {
+			return err
 		}
 
-		// requestID (unique per API call) + idx (position within the request) ensures unique,idempotent callback IDs.
+		// requestID (unique per API call) + idx (position within the request) ensures unique, idempotent callback IDs.
 		id := fmt.Sprintf("%s-%d", requestID, idx)
-		callbackObj := callback.NewCallback(requestID, registrationTime, &callbackspb.CallbackState{}, chasmCB)
+		callbackObj := callback.NewCallback(requestID, registrationTime, chasmCB)
 		a.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
 	}
 	return nil

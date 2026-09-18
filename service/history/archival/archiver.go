@@ -15,12 +15,14 @@ import (
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/history/configs"
 	"go.uber.org/multierr"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -71,12 +73,13 @@ type (
 	}
 
 	archiver struct {
-		archiverProvider        provider.ArchiverProvider
-		metricsHandler          metrics.Handler
-		logger                  log.Logger
-		rateLimiter             quotas.RateLimiter
-		searchAttributeProvider searchattribute.Provider
-		visibilityManager       manager.VisibilityManager
+		archiverProvider                            provider.ArchiverProvider
+		metricsHandler                              metrics.Handler
+		logger                                      log.Logger
+		rateLimiter                                 quotas.RateLimiter
+		searchAttributeProvider                     searchattribute.Provider
+		visibilityManager                           manager.VisibilityManager
+		enableVisibilityArchivalRecordDeduplication dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -93,6 +96,7 @@ func NewArchiver(
 	rateLimiter quotas.RateLimiter,
 	searchAttributeProvider searchattribute.Provider,
 	visibilityManger manager.VisibilityManager,
+	config *configs.Config,
 ) Archiver {
 	return &archiver{
 		archiverProvider:        archiverProvider,
@@ -101,6 +105,7 @@ func NewArchiver(
 		rateLimiter:             rateLimiter,
 		searchAttributeProvider: searchAttributeProvider,
 		visibilityManager:       visibilityManger,
+		enableVisibilityArchivalRecordDeduplication: config.EnableVisibilityArchivalRecordDeduplication,
 	}
 }
 
@@ -228,6 +233,11 @@ func (a *archiver) archiveVisibility(ctx context.Context, request *Request, logg
 		historyArchivalUri = request.HistoryURI.String()
 	}
 
+	archiveOptions := make([]carchiver.ArchiveOption, 0, 1)
+	if a.enableVisibilityArchivalRecordDeduplication(request.Namespace) {
+		archiveOptions = append(archiveOptions, carchiver.GetVisibilityArchivalRecordDeduplicationOption())
+	}
+
 	return visibilityArchiver.Archive(ctx, request.VisibilityURI, &archiverspb.VisibilityRecord{
 		NamespaceId:        request.NamespaceID,
 		Namespace:          request.Namespace,
@@ -243,7 +253,7 @@ func (a *archiver) archiveVisibility(ctx context.Context, request *Request, logg
 		Memo:               request.Memo,
 		SearchAttributes:   searchAttributes,
 		HistoryArchivalUri: historyArchivalUri,
-	})
+	}, archiveOptions...)
 }
 
 // recordArchiveTargetResult takes an error pointer as an argument so that it isn't passed-by-value when used in a defer

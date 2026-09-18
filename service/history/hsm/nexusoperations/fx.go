@@ -18,5 +18,3 @@ var Module = fx.Module(
 		return ClientProvider(cp)
 	}),
 )
-
-const NexusCallbackSourceHeader = "Nexus-Callback-Source"

@@ -7,6 +7,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/metrics"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -53,7 +54,7 @@ func (*noopChasmTree) IsDirty() bool {
 	return false
 }
 
-func (*noopChasmTree) Terminate(chasm.TerminateComponentRequest) error {
+func (*noopChasmTree) Terminate(chasm.TerminateComponentRequest, metrics.ReasonString) error {
 	return nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math"
 	"math/rand"
+	"strconv"
 	"testing"
 	"time"
 
@@ -17,12 +18,14 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
@@ -35,6 +38,7 @@ import (
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -54,6 +58,7 @@ type (
 
 		streamSender         *StreamSenderImpl
 		senderFlowController *MockSenderFlowController
+		timeSource           *clock.EventTimeSource
 		config               *configs.Config
 	}
 )
@@ -79,12 +84,14 @@ func (s *streamSenderSuite) SetupTest() {
 	s.historyEngine = historyi.NewMockEngine(s.controller)
 	s.taskConverter = NewMockSourceTaskConverter(s.controller)
 	s.config = tests.NewDynamicConfig()
+	s.timeSource = clock.NewEventTimeSource()
 	s.clientShardKey = NewClusterShardKey(rand.Int31(), 1)
 	s.serverShardKey = NewClusterShardKey(rand.Int31(), 1)
 	s.shardContext.EXPECT().GetEngine(gomock.Any()).Return(s.historyEngine, nil).AnyTimes()
 	s.shardContext.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
 	s.shardContext.EXPECT().GetLogger().Return(log.NewNoopLogger()).AnyTimes()
 	s.shardContext.EXPECT().GetThrottledLogger().Return(log.NewNoopLogger()).AnyTimes()
+	s.shardContext.EXPECT().GetTimeSource().Return(s.timeSource).AnyTimes()
 
 	s.streamSender = NewStreamSender(
 		s.server,
@@ -754,6 +761,253 @@ func (s *streamSenderSuite) TestSendLive() {
 	)
 	s.NoError(err)
 	s.False(s.streamSender.IsValid())
+}
+
+func (s *streamSenderSuite) gradualConnectNamespace(
+	namespaceID string,
+	ramp *persistencespb.NamespaceReplicationRamp,
+) *namespace.Namespace {
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: "source_cluster",
+		Clusters:          []string{"source_cluster", "target_cluster"},
+	}
+	if ramp != nil {
+		replicationConfig.ClusterReplicationRamps = map[string]*persistencespb.NamespaceReplicationRamp{
+			"target_cluster": ramp,
+		}
+	}
+	return namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: namespaceID, Name: "test-namespace"},
+		nil,
+		replicationConfig,
+		100,
+	)
+}
+
+func (s *streamSenderSuite) TestShouldProcessTask_GradualConnect() {
+	const namespaceID = "namespace-id"
+	s.config.EnableReplicationGradualConnect = dynamicconfig.GetBoolPropertyFn(true)
+	startTime := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+	s.timeSource.Update(startTime)
+	s.streamSender.clientClusterShardCount = 1
+	registry := namespace.NewMockRegistry(s.controller)
+	registry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(
+		s.gradualConnectNamespace(namespaceID, &persistencespb.NamespaceReplicationRamp{
+			StartTime: timestamppb.New(startTime),
+			Duration:  durationpb.New(time.Hour),
+		}),
+		nil,
+	).AnyTimes()
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(registry).AnyTimes()
+	metricHandler := metricstest.NewCaptureHandler()
+	capture := metricHandler.StartCapture()
+	defer metricHandler.StopCapture(capture)
+	s.streamSender.metrics = metricHandler
+	task := &tasks.HistoryReplicationTask{WorkflowKey: definition.WorkflowKey{
+		NamespaceID: namespaceID,
+		WorkflowID:  "workflow-id",
+	}}
+
+	s.False(s.streamSender.shouldProcessTask(task))
+	s.timeSource.Update(startTime.Add(time.Hour))
+	s.True(s.streamSender.shouldProcessTask(task))
+	recordings := capture.Snapshot()
+	s.Require().Len(recordings[metrics.ReplicationTasksShedByGradualConnect.Name()], 1)
+	s.Contains(recordings[metrics.ReplicationTasksShedByGradualConnect.Name()][0].Tags, metrics.OperationTagName)
+	s.Require().Len(recordings[metrics.ReplicationGradualConnectPercent.Name()], 1)
+	s.NotContains(recordings[metrics.ReplicationGradualConnectPercent.Name()][0].Tags, metrics.OperationTagName)
+}
+
+func (s *streamSenderSuite) TestShouldProcessTask_GradualConnectDisabled() {
+	const namespaceID = "namespace-id"
+	startTime := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+	s.timeSource.Update(startTime)
+	s.streamSender.clientClusterShardCount = 1
+	registry := namespace.NewMockRegistry(s.controller)
+	registry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(
+		s.gradualConnectNamespace(namespaceID, &persistencespb.NamespaceReplicationRamp{
+			StartTime: timestamppb.New(startTime),
+			Duration:  durationpb.New(time.Hour),
+		}),
+		nil,
+	)
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(registry)
+	task := &tasks.HistoryReplicationTask{WorkflowKey: definition.WorkflowKey{
+		NamespaceID: namespaceID,
+		WorkflowID:  "workflow-id",
+	}}
+
+	s.True(s.streamSender.shouldProcessTask(task))
+}
+
+func (s *streamSenderSuite) TestShouldProcessTask_DeleteBypassesGradualConnect() {
+	const namespaceID = "namespace-id"
+	s.config.EnableReplicationGradualConnect = dynamicconfig.GetBoolPropertyFn(true)
+	startTime := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+	s.timeSource.Update(startTime)
+	s.streamSender.clientClusterShardCount = 1
+	registry := namespace.NewMockRegistry(s.controller)
+	registry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(
+		s.gradualConnectNamespace(namespaceID, &persistencespb.NamespaceReplicationRamp{
+			StartTime: timestamppb.New(startTime),
+			Duration:  durationpb.New(time.Hour),
+		}),
+		nil,
+	)
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(registry)
+	task := &tasks.DeleteExecutionReplicationTask{WorkflowKey: definition.WorkflowKey{
+		NamespaceID: namespaceID,
+		WorkflowID:  "workflow-id",
+	}}
+
+	s.True(s.streamSender.shouldProcessTask(task))
+}
+
+func (s *streamSenderSuite) TestShouldProcessTask_ForceReplicationRequiresClearedRamp() {
+	const namespaceID = "namespace-id"
+	s.config.EnableReplicationGradualConnect = dynamicconfig.GetBoolPropertyFn(true)
+	startTime := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+	s.timeSource.Update(startTime)
+	s.streamSender.clientClusterShardCount = 1
+	registry := namespace.NewMockRegistry(s.controller)
+	registry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(
+		s.gradualConnectNamespace(namespaceID, &persistencespb.NamespaceReplicationRamp{
+			StartTime: timestamppb.New(startTime),
+			Duration:  durationpb.New(time.Hour),
+		}),
+		nil,
+	)
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(registry)
+	task := &tasks.SyncWorkflowStateTask{
+		WorkflowKey: definition.WorkflowKey{
+			NamespaceID: namespaceID,
+			WorkflowID:  "workflow-id",
+		},
+		Priority:           enumsspb.TASK_PRIORITY_LOW,
+		IsForceReplication: true,
+	}
+
+	s.False(s.streamSender.shouldProcessTask(task))
+}
+
+func (s *streamSenderSuite) TestShouldProcessTask_ClockRegressionCanReduceAdmission() {
+	const namespaceID = "namespace-id"
+	s.config.EnableReplicationGradualConnect = dynamicconfig.GetBoolPropertyFn(true)
+	startTime := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+	var workflowID string
+	for i := 0; ; i++ {
+		candidate := strconv.Itoa(i)
+		if dynamicconfig.RolloutAccepts([]byte(candidate), 50) &&
+			!dynamicconfig.RolloutAccepts([]byte(candidate), 10) {
+			workflowID = candidate
+			break
+		}
+	}
+	s.streamSender.clientClusterShardCount = 1
+	registry := namespace.NewMockRegistry(s.controller)
+	registry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(
+		s.gradualConnectNamespace(namespaceID, &persistencespb.NamespaceReplicationRamp{
+			StartTime: timestamppb.New(startTime),
+			Duration:  durationpb.New(10 * time.Minute),
+		}),
+		nil,
+	).AnyTimes()
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(registry).AnyTimes()
+	task := &tasks.HistoryReplicationTask{WorkflowKey: definition.WorkflowKey{
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+	}}
+
+	s.timeSource.Update(startTime.Add(5 * time.Minute))
+	s.True(s.streamSender.shouldProcessTask(task))
+	s.timeSource.Update(startTime.Add(time.Minute))
+	s.False(s.streamSender.shouldProcessTask(task))
+}
+
+func (s *streamSenderSuite) TestSendTasks_GradualConnectSkipsConversionAndAdvancesWatermark() {
+	const namespaceID = "namespace-id"
+	s.config.EnableReplicationGradualConnect = dynamicconfig.GetBoolPropertyFn(true)
+	startTime := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+	s.timeSource.Update(startTime)
+	s.streamSender.clientClusterShardCount = 1
+	beginInclusiveWatermark := rand.Int63()
+	endExclusiveWatermark := beginInclusiveWatermark + 1
+	item := &tasks.HistoryReplicationTask{
+		WorkflowKey: definition.WorkflowKey{
+			NamespaceID: namespaceID,
+			WorkflowID:  "workflow-id",
+		},
+		TaskID:              beginInclusiveWatermark,
+		VisibilityTimestamp: startTime,
+	}
+	iter := collection.NewPagingIterator[tasks.Task](
+		func([]byte) ([]tasks.Task, []byte, error) {
+			return []tasks.Task{item}, nil, nil
+		},
+	)
+	registry := namespace.NewMockRegistry(s.controller)
+	registry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(
+		s.gradualConnectNamespace(namespaceID, &persistencespb.NamespaceReplicationRamp{
+			StartTime: timestamppb.New(startTime),
+			Duration:  durationpb.New(time.Hour),
+		}),
+		nil,
+	)
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(registry)
+	s.historyEngine.EXPECT().GetReplicationTasksIter(
+		gomock.Any(),
+		string(s.clientShardKey.ClusterID),
+		beginInclusiveWatermark,
+		endExclusiveWatermark,
+	).Return(iter, nil)
+	s.taskConverter.EXPECT().Convert(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(
+		func(response *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			s.Empty(response.GetMessages().GetReplicationTasks())
+			s.Equal(endExclusiveWatermark, response.GetMessages().GetExclusiveHighWatermark())
+			return nil
+		},
+	)
+
+	s.Require().NoError(s.streamSender.sendTasks(
+		enumsspb.TASK_PRIORITY_UNSPECIFIED,
+		beginInclusiveWatermark,
+		endExclusiveWatermark,
+	))
+}
+
+func TestGradualConnectPercent(t *testing.T) {
+	t.Parallel()
+	startTime := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+	validRamp := func(duration time.Duration) *persistencespb.NamespaceReplicationRamp {
+		return &persistencespb.NamespaceReplicationRamp{
+			StartTime: timestamppb.New(startTime),
+			Duration:  durationpb.New(duration),
+		}
+	}
+	testCases := []struct {
+		name string
+		ramp *persistencespb.NamespaceReplicationRamp
+		now  time.Time
+		want int
+	}{
+		{name: "missing ramp", now: startTime, want: 100},
+		{name: "missing start time", ramp: &persistencespb.NamespaceReplicationRamp{Duration: durationpb.New(time.Hour)}, now: startTime, want: 100},
+		{name: "invalid start time", ramp: &persistencespb.NamespaceReplicationRamp{StartTime: &timestamppb.Timestamp{Seconds: 253402300800}, Duration: durationpb.New(time.Hour)}, now: startTime, want: 100},
+		{name: "zero duration", ramp: validRamp(0), now: startTime, want: 100},
+		{name: "negative duration", ramp: validRamp(-time.Hour), now: startTime, want: 100},
+		{name: "before start", ramp: validRamp(time.Hour), now: startTime.Add(-time.Minute), want: 0},
+		{name: "at start", ramp: validRamp(time.Hour), now: startTime, want: 0},
+		{name: "partial", ramp: validRamp(time.Hour), now: startTime.Add(15 * time.Minute), want: 25},
+		{name: "complete", ramp: validRamp(time.Hour), now: startTime.Add(time.Hour), want: 100},
+		{name: "past complete", ramp: validRamp(time.Hour), now: startTime.Add(24 * time.Hour), want: 100},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, testCase.want, gradualConnectPercent(testCase.ramp, testCase.now))
+		})
+	}
 }
 
 func (s *streamSenderSuite) TestSendTasks_Noop() {
