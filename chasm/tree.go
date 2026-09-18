@@ -1471,6 +1471,16 @@ func (n *Node) structuredRef(
 
 }
 
+// componentPath returns the path of the given component relative to the root of the tree, or nil if
+// the component is not (yet) registered as a node.
+func (n *Node) componentPath(component Component) []string {
+	refNode, ok := n.valueToNode[component]
+	if !ok || !refNode.isComponent() {
+		return nil
+	}
+	return refNode.path()
+}
+
 // componentLinks returns the union of links across all requests stored on the
 // given component's metadata. Pending writes staged in the current transaction
 // replace persisted entries for the same request ID (matching the read
@@ -3120,30 +3130,25 @@ func (n *Node) ArchetypeID() ArchetypeID {
 	return n.root().serializedNode.Metadata.GetComponentAttributes().GetTypeId()
 }
 
-// Execution returns the identity of the execution this node belongs to.
+// executionType returns the execution type registered for the root component's archetype.
 //
 // The execution type comes from the *root* component of the tree, not from the current node, so
 // every node of an execution reports the same value. May be [enumspb.EXECUTION_TYPE_UNSPECIFIED]
 // if the root component was registered without a WithExecutionType option.
-func (n *Node) Execution() *commonpb.Execution {
-	workflowKey := n.backend.GetWorkflowKey()
-	return &commonpb.Execution{
-		Type:       n.executionType(),
-		BusinessId: workflowKey.WorkflowID,
-		RunId:      workflowKey.RunID,
-	}
-}
-
-// executionType returns the execution type registered for the root component's archetype.
 func (n *Node) executionType() enumspb.ExecutionType {
 	// ArchetypeID() resolves the root of the tree, regardless of which node it is called on.
 	archetypeID := n.ArchetypeID()
+	if archetypeID == UnspecifiedArchetypeID {
+		// The root component is not set yet, so the execution has no external representation.
+		return enumspb.EXECUTION_TYPE_UNSPECIFIED
+	}
+
 	rc, ok := n.registry.ComponentByID(archetypeID)
 	if !ok {
 		softassert.Fail(n.logger, "unknown archetype id", tag.ArchetypeID(archetypeID))
 		return enumspb.EXECUTION_TYPE_UNSPECIFIED
 	}
-	return rc.ExecutionType()
+	return rc.executionType
 }
 
 // Archetype returns the root component's fully qualified name.

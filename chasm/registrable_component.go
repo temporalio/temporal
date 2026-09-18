@@ -90,12 +90,6 @@ func WithExecutionType(
 	}
 }
 
-// ExecutionType returns the execution type registered for this component via WithExecutionType,
-// or [enumspb.EXECUTION_TYPE_UNSPECIFIED] if none was registered.
-func (rc *RegistrableComponent) ExecutionType() enumspb.ExecutionType {
-	return rc.executionType
-}
-
 // WithBusinessIDAlias allows specifying the business ID alias of the component.
 // This option must be specified if the archetype uses the Visibility component.
 func WithBusinessIDAlias(

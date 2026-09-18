@@ -112,19 +112,6 @@ func (p ParentPtr[T]) parentNode() (*Node, bool) {
 	return parent, true
 }
 
-// Path returns the path of the parent component relative to the root component of the execution.
-// e.g. ["Updates", updateID] for a Workflow Update. Returns nil if the ParentPtr is not initialized.
-//
-// Each segment is the name of the field (or, for a component inside a CHASM map, the map key) that
-// holds the component, so a path is only as stable as the field names it traverses.
-func (p ParentPtr[T]) Path() []string {
-	parent, ok := p.parentNode()
-	if !ok {
-		return nil
-	}
-	return parent.path()
-}
-
 // Fqn returns the fully qualified name that the parent component is registered under, e.g.
 // "workflow.workflow". Returns "" if the ParentPtr is not initialized or the parent's type is not registered.
 func (p ParentPtr[T]) Fqn() string {

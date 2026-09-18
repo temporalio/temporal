@@ -673,22 +673,46 @@ func (s *nodeSuite) assertParentPointer(testComponentNode *Node) {
 
 	_, found := testComponent.ParentPtr.TryGet(chasmContext)
 	s.False(found)
-	s.Nil(testComponent.ParentPtr.Path(), "an uninitialized ParentPtr has no path")
 
 	subComponent1 := testComponent.SubComponent1.Get(chasmContext)
 	testComponentFromPtr := subComponent1.ParentPtr.Get(chasmContext)
 	// Asserting they actually point to the same testComponent object.
 	s.Same(testComponent, testComponentFromPtr)
-	s.Equal([]string{}, subComponent1.ParentPtr.Path(), "the root component's path is empty")
 
 	subComponent11 := subComponent1.SubComponent11.Get(chasmContext)
 	testSubComponent1FromPtr := subComponent11.ParentPtr.Get(chasmContext)
 	// Asserting they actually point to the same testSubComponent1 object.
 	s.Same(subComponent1, testSubComponent1FromPtr)
-	s.Equal([]string{"SubComponent1"}, subComponent11.ParentPtr.Path())
 }
 
-func (s *nodeSuite) TestExecution() {
+func (s *nodeSuite) TestComponentPath() {
+	node := s.testComponentTree()
+
+	mutableContext := NewMutableContext(context.Background(), node)
+	component, err := node.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+
+	mapSubComponent1 := &TestSubComponent1{}
+	testComponent.SubComponents = Map[string, *TestSubComponent1]{
+		"mapSubComponent1": NewComponentField(mutableContext, mapSubComponent1),
+	}
+	s.Nil(mutableContext.Path(mapSubComponent1), "a component not yet synced into the tree has no path")
+	s.NoError(node.syncSubComponents())
+
+	subComponent1 := testComponent.SubComponent1.Get(mutableContext)
+	subComponent11 := subComponent1.SubComponent11.Get(mutableContext)
+
+	s.Equal([]string{}, mutableContext.Path(testComponent), "the root component's path is empty")
+	s.Equal([]string{"SubComponent1"}, mutableContext.Path(subComponent1))
+	s.Equal([]string{"SubComponent1", "SubComponent11"}, mutableContext.Path(subComponent11))
+	// A component inside a CHASM map is addressed by its key in that map.
+	s.Equal([]string{"SubComponents", "mapSubComponent1"}, mutableContext.Path(mapSubComponent1))
+
+	s.Nil(mutableContext.Path(&TestComponent{}), "a component that is not in the tree has no path")
+}
+
+func (s *nodeSuite) TestExecutionType() {
 	testCases := map[string]struct {
 		rootArchetypeID uint32
 		expectedType    enumspb.ExecutionType
@@ -707,27 +731,15 @@ func (s *nodeSuite) TestExecution() {
 
 	for name, tc := range testCases {
 		s.Run(name, func() {
-			workflowKey := definition.NewWorkflowKey("namespace-id", "business-id", "run-id")
-			s.nodeBackend = &MockNodeBackend{
-				HandleGetWorkflowKey: func() definition.WorkflowKey {
-					return workflowKey
-				},
-			}
-
 			serializedNodes := testComponentSerializedNodes()
 			serializedNodes[""].Metadata.GetComponentAttributes().TypeId = tc.rootArchetypeID
 			root, err := s.newTestTree(serializedNodes)
 			s.NoError(err)
 
-			expected := &commonpb.Execution{
-				Type:       tc.expectedType,
-				BusinessId: "business-id",
-				RunId:      "run-id",
-			}
-			s.ProtoEqual(expected, root.Execution())
-			// Every node reports the execution it belongs to, not one per component.
-			s.ProtoEqual(expected, root.children["SubComponent1"].Execution())
-			s.ProtoEqual(expected, NewContext(context.Background(), root).Execution())
+			s.Equal(tc.expectedType, root.executionType())
+			// Every node reports the type of the execution it belongs to, not one per component.
+			s.Equal(tc.expectedType, root.children["SubComponent1"].executionType())
+			s.Equal(tc.expectedType, NewContext(context.Background(), root).ExecutionInfo().ExecutionType)
 		})
 	}
 }

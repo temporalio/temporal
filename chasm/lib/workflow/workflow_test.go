@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
@@ -14,13 +13,13 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-// TestExecution verifies that a workflow and the components nested inside it all report the same
-// execution identity, and that a nested component is located by its path within that execution.
-func TestExecution(t *testing.T) {
+// TestExecutionTypeAndPath verifies that a workflow and the components nested inside it all report
+// the same execution identity, and that a nested component is located by its path within that
+// execution.
+func TestExecutionTypeAndPath(t *testing.T) {
 	logger := log.NewTestLogger()
 	registry := chasm.NewRegistry(logger)
 	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
@@ -54,13 +53,13 @@ func TestExecution(t *testing.T) {
 	workflowCallback := newTestCallback("workflow-request-id")
 	updateCallback := newTestCallback("update-request-id")
 
-	// A ParentPtr is only initialized once its component is synced into the tree below.
-	require.Nil(t, workflowCallback.CompletionSource.Path())
+	// A component has no path until it is synced into the tree below.
+	require.Nil(t, mutableCtx.Path(workflowCallback))
 	update := NewWorkflowUpdate(mutableCtx, "update-id", chasm.NewMSPointer(nodeBackend))
 	update.Callbacks = chasm.Map[string, *callback.Callback]{
 		updateCallback.RequestId: chasm.NewComponentField(mutableCtx, updateCallback),
 	}
-	require.NoError(t, root.SetRootComponent(&Workflow{
+	wf := &Workflow{
 		MSPointer: chasm.NewMSPointer(nodeBackend),
 		Callbacks: chasm.Map[string, *callback.Callback]{
 			workflowCallback.RequestId: chasm.NewComponentField(mutableCtx, workflowCallback),
@@ -68,18 +67,27 @@ func TestExecution(t *testing.T) {
 		Updates: chasm.Map[string, *WorkflowUpdate]{
 			update.UpdateId: chasm.NewComponentField(mutableCtx, update),
 		},
-	}))
+	}
+	require.NoError(t, root.SetRootComponent(wf))
 
 	// The workflow archetype is registered with EXECUTION_TYPE_WORKFLOW, so every component of the
 	// tree reports the workflow as the execution it belongs to.
-	protorequire.ProtoEqual(t, &commonpb.Execution{
-		Type:       enumspb.EXECUTION_TYPE_WORKFLOW,
-		BusinessId: "workflow-id",
-		RunId:      "run-id",
-	}, chasm.NewContext(context.Background(), root).Execution())
+	ctx := chasm.NewContext(context.Background(), root)
+	require.Equal(t, enumspb.EXECUTION_TYPE_WORKFLOW, ctx.ExecutionInfo().ExecutionType)
+	require.Equal(t, chasm.ExecutionKey{
+		NamespaceID: "namespace-id",
+		BusinessID:  "workflow-id",
+		RunID:       "run-id",
+	}, ctx.ExecutionKey())
 
 	// The workflow is the root of the execution, so its path within the execution is empty.
-	require.Equal(t, []string{}, workflowCallback.CompletionSource.Path())
-	// An update is addressed by its key in the workflow's Updates map.
-	require.Equal(t, []string{"Updates", update.UpdateId}, updateCallback.CompletionSource.Path())
+	require.Equal(t, []string{}, ctx.Path(wf))
+	require.Equal(t, []string{"Callbacks", workflowCallback.RequestId}, ctx.Path(workflowCallback))
+	require.Equal(t, []string{"Updates", update.UpdateId}, ctx.Path(update))
+
+	// The callback on the Workflow Update exposes the full path.
+	require.Equal(t,
+		[]string{"Updates", update.UpdateId, "Callbacks", updateCallback.RequestId},
+		ctx.Path(updateCallback),
+	)
 }

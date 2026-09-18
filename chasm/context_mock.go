@@ -23,7 +23,6 @@ var _ MutableContext = (*MockMutableContext)(nil)
 
 // MockContext is a mock implementation of [Context].
 type MockContext struct {
-	HandleExecution            func() *commonpb.Execution
 	HandleExecutionKey         func() ExecutionKey
 	HandleNow                  func(component Component) time.Time
 	HandleRef                  func(component Component) ([]byte, error)
@@ -37,6 +36,7 @@ type MockContext struct {
 	HandleLinks                func(component Component) []*commonpb.Link
 	HandleRequestLinks         func(component Component, requestID string) ([]*commonpb.Link, error)
 	HandleUserMetadata         func(component Component) *sdkpb.UserMetadata
+	HandlePath                 func(component Component) []string
 
 	// GoCtx is the underlying context.Context used for context value lookups.
 	// Any values set on it will be available via the CHASM mock context's Value method,
@@ -101,13 +101,6 @@ func (c *MockContext) structuredRef(cmp Component) (ComponentRef, error) {
 	return ComponentRef{}, nil
 }
 
-func (c *MockContext) Execution() *commonpb.Execution {
-	if c.HandleExecution != nil {
-		return c.HandleExecution()
-	}
-	return nil
-}
-
 func (c *MockContext) ExecutionKey() ExecutionKey {
 	if c.HandleExecutionKey != nil {
 		return c.HandleExecutionKey()
@@ -170,9 +163,15 @@ func (c *MockContext) UserMetadata(component Component) *sdkpb.UserMetadata {
 	return nil
 }
 
+func (c *MockContext) Path(component Component) []string {
+	if c.HandlePath != nil {
+		return c.HandlePath(component)
+	}
+	return nil
+}
+
 func (c *MockContext) withValue(key any, value any) Context {
 	return &MockContext{
-		HandleExecution:      c.HandleExecution,
 		HandleExecutionKey:   c.HandleExecutionKey,
 		HandleNow:            c.HandleNow,
 		HandleRef:            c.HandleRef,
@@ -184,6 +183,7 @@ func (c *MockContext) withValue(key any, value any) Context {
 		HandleLinks:          c.HandleLinks,
 		HandleRequestLinks:   c.HandleRequestLinks,
 		HandleUserMetadata:   c.HandleUserMetadata,
+		HandlePath:           c.HandlePath,
 	}
 }
 

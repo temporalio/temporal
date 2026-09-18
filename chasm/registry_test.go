@@ -84,33 +84,6 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_Success() {
 	require.Nil(s.T(), rc3)
 }
 
-func (s *RegistryTestSuite) TestRegistry_RegisterComponents_WithExecutionType() {
-	r := chasm.NewRegistry(s.logger)
-	ctrl := gomock.NewController(s.T())
-	lib := chasm.NewMockLibrary(ctrl)
-	lib.EXPECT().Name().Return("TestLibrary").AnyTimes()
-	lib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*chasm.MockComponent](
-			"ActivityComponent",
-			chasm.WithExecutionType(enumspb.EXECUTION_TYPE_ACTIVITY),
-		),
-	})
-	lib.EXPECT().Tasks().Return(nil)
-	lib.EXPECT().NexusServices().Return(nil)
-	lib.EXPECT().NexusServiceProcessors().Return(nil)
-
-	err := r.Register(lib)
-	s.Require().NoError(err)
-
-	activityRC, ok := r.Component("TestLibrary.ActivityComponent")
-	s.Require().True(ok)
-	s.Require().Equal(enumspb.EXECUTION_TYPE_ACTIVITY, activityRC.ExecutionType())
-
-	// The option is optional: a component without it has no external execution representation.
-	normalRC := chasm.NewRegistrableComponent[*chasm.MockComponent]("NormalComponent")
-	s.Require().Equal(enumspb.EXECUTION_TYPE_UNSPECIFIED, normalRC.ExecutionType())
-}
-
 func (s *RegistryTestSuite) TestRegistry_RegisterComponents_WithDetached() {
 	r := chasm.NewRegistry(s.logger)
 	ctrl := gomock.NewController(s.T())
