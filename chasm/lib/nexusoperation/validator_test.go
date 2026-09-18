@@ -23,17 +23,18 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	test "go.temporal.io/server/common/testing"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func newTestValidator(config *Config) *validator {
+func newTestValidator(t *testing.T, config *Config) *validator {
 	return newValidator(
 		config,
 		log.NewNoopLogger(),
 		nil,
 		nil,
-		mustNewCallbackValidator(),
+		test.NewCallbacksValidator(t, test.NewCallbacksValidatorConfig()),
 		newTestLinkValidator(10, 10),
 	)
 }
@@ -93,6 +94,7 @@ func newNexusHandlerCallback() *commonpb.Callback {
 }
 
 func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
+	cbValidator := test.NewCallbacksValidator(t, test.NewCallbacksValidatorConfig())
 	ctrl := gomock.NewController(t)
 	mockVisibilityManager := manager.NewMockVisibilityManager(ctrl)
 	mockVisibilityManager.EXPECT().GetIndexName().Return("index-name").AnyTimes()
@@ -558,7 +560,6 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 				tc.mutateConfig(&caseConfig)
 			}
 
-			cbValidator := mustNewCallbackValidator()
 			logger := log.NewNoopLogger()
 			v := newValidator(&caseConfig, logger, nil, saValidator, cbValidator, newTestLinkValidator(10, 10))
 
@@ -658,7 +659,7 @@ func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizeDescribeRequest(validReq, "test-namespace-id")
+			err := newTestValidator(t, config).validateAndNormalizeDescribeRequest(validReq, "test-namespace-id")
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -745,7 +746,7 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizeCancelRequest(validReq)
+			err := newTestValidator(t, config).validateAndNormalizeCancelRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -809,7 +810,7 @@ func TestValidateDeleteNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizeDeleteRequest(validReq)
+			err := newTestValidator(t, config).validateAndNormalizeDeleteRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -896,7 +897,7 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizeTerminateRequest(validReq)
+			err := newTestValidator(t, config).validateAndNormalizeTerminateRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -989,7 +990,7 @@ func TestValidatePollNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizePollRequest(validReq)
+			err := newTestValidator(t, config).validateAndNormalizePollRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -1008,7 +1009,7 @@ func TestValidateOnConflictOptions(t *testing.T) {
 	t.Parallel()
 
 	// on_conflict_options validation is config-independent.
-	v := newTestValidator(&Config{})
+	v := newTestValidator(t, &Config{})
 	cb := newNexusCallback()
 
 	t.Run("Unset", func(t *testing.T) {
