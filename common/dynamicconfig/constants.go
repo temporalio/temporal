@@ -29,6 +29,12 @@ var (
 		true,
 		`AdminEnableListHistoryTasks is the key for enabling listing history tasks`,
 	)
+	AdminEnableDescribeMutableStateRateLimit = NewGlobalBoolSetting(
+		"admin.enableDescribeMutableStateRateLimit",
+		false,
+		`AdminEnableDescribeMutableStateRateLimit gates whether AdminService.DescribeMutableState is subject to
+pod-level rate limiting. Read once at process startup: changing this value requires a restart to take effect.`,
+	)
 	AdminMatchingNamespaceToPartitionDispatchRate = NewNamespaceFloatSetting(
 		"admin.matchingNamespaceToPartitionDispatchRate",
 		10000,
@@ -2526,6 +2532,12 @@ visibility if they were removed from the mutable state`,
 		100,
 		`ArchivalTaskBatchSize is batch size for archivalQueueProcessor`,
 	)
+	EnableVisibilityArchivalRecordDeduplication = NewNamespaceBoolSetting(
+		"history.enableVisibilityArchivalRecordDeduplication",
+		false,
+		`EnableVisibilityArchivalRecordDeduplication enables best-effort content-aware visibility archival deduplication for S3 and GCS.
+When enabled, the archival store must allow reading object metadata in addition to writing objects.`,
+	)
 	ArchivalProcessorMaxPollRPS = NewGlobalIntSetting(
 		"history.archivalProcessorMaxPollRPS",
 		20,
@@ -2709,8 +2721,9 @@ the oldest task of each immediate queue category that has a backlog`,
 	DefaultActivityRetryPolicy = NewNamespaceTypedSetting(
 		"history.defaultActivityRetryPolicy",
 		retrypolicy.DefaultDefaultRetrySettings,
-		`DefaultActivityRetryPolicy represents the out-of-box retry policy for activities where
-the user has not specified an explicit RetryPolicy`,
+		`DefaultActivityRetryPolicy represents the out-of-box retry policy for activities. It
+applies both when the user has not specified any RetryPolicy and, field by field, to fill
+in fields that are unset (or set to their zero value) in an explicit RetryPolicy`,
 	)
 	DefaultWorkflowRetryPolicy = NewNamespaceTypedSetting(
 		"history.defaultWorkflowRetryPolicy",

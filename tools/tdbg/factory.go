@@ -1,6 +1,7 @@
 package tdbg
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
@@ -17,6 +18,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/auth"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.uber.org/multierr"
@@ -110,6 +112,7 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, 
 
 	dialOpts := []grpc.DialOption{
 		grpcSecurityOptions,
+		grpc.WithChainUnaryInterceptor(callerInfoInterceptor),
 	}
 
 	connection, err := grpc.NewClient(frontendAddress, dialOpts...)
@@ -118,6 +121,28 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, 
 		return nil, err
 	}
 	return connection, nil
+}
+
+// callerInfoInterceptor tags every outgoing tdbg call as CallerTypeOperator. tdbg is exclusively
+// a human-operator CLI, so without this, its calls would compete at the same priority as bulk
+// automated traffic against APIs that are throttled by CallerType (e.g. AdminService.DescribeMutableState).
+//
+// tdbg originates requests rather than relaying an inherited caller context, so unlike
+// common/rpc's headersInterceptor (which only calls headers.Propagate because there's already
+// caller info on the incoming context to relay), this must both set the caller info and
+// propagate it to the outgoing context itself: headers.SetCallerInfo only ever writes to the
+// incoming side of ctx, which grpc does not put on the wire.
+func callerInfoInterceptor(
+	ctx context.Context,
+	method string,
+	req, reply any,
+	cc *grpc.ClientConn,
+	invoker grpc.UnaryInvoker,
+	opts ...grpc.CallOption,
+) error {
+	ctx = headers.SetCallerInfo(ctx, headers.NewCallerInfo("tdbg", headers.CallerTypeOperator, ""))
+	ctx = headers.Propagate(ctx)
+	return invoker(ctx, method, req, reply, cc, opts...)
 }
 
 func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
