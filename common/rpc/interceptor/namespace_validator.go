@@ -68,9 +68,7 @@ var (
 		api.WorkflowServicePrefix + "GetSystemInfo":       {},
 		api.WorkflowServicePrefix + "GetSearchAttributes": {},
 		api.AdminServicePrefix + "GetSearchAttributes":    {},
-		// Search attribute schema, not workflow data — the same information
-		// GetSearchAttributes returns. DeleteNamespace stays out: it starts a workflow that
-		// deletes the namespace's executions.
+		// Search attributes
 		api.OperatorServicePrefix + "ListSearchAttributes":   {},
 		api.OperatorServicePrefix + "AddSearchAttributes":    {},
 		api.OperatorServicePrefix + "RemoveSearchAttributes": {},
