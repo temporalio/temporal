@@ -1271,13 +1271,10 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 		)
 		return &matchingservice.CancelOutstandingWorkerPollsResponse{}, nil
 	}
-	cfg := rootPM.GetConfig()
-	// Use the real read partition count from ephemeral data (dynamic partitioning),
-	// falling back to dynamic config if not set (e.g. dynamic partitioning not active).
-	scaleInfo := rootPM.GetUserDataManager().PartitionScale()
-	numPartitions := int(scaleInfo.GetRead())
+	// Ephemeral data carries the real read partition count once dynamic partitioning is active.
+	numPartitions := int(rootPM.GetUserDataManager().PartitionScale().GetRead())
 	if numPartitions <= 0 {
-		numPartitions = cfg.NumReadPartitions()
+		numPartitions = rootPM.GetConfig().NumReadPartitions()
 	}
 
 	e.logger.Debug("Initiating fan-out for worker poll cancellation",
