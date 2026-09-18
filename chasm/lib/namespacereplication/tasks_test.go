@@ -90,6 +90,12 @@ func TestIsPeerDestinationDown(t *testing.T) {
 	}
 }
 
+func TestPeerOutcomeFromResultRejectsZeroValue(t *testing.T) {
+	outcome, err := peerOutcomeFromResult(PeerApplyResultUnspecified)
+	require.Error(t, err)
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_UNSPECIFIED, outcome)
+}
+
 // -----------------------------------------------------------------------------
 // Validate gating (pure — Validate ignores the chasm.Context).
 // -----------------------------------------------------------------------------
@@ -227,8 +233,8 @@ func (env *nsreplTestEnv) start(mutation *namespacereplicationpb.NamespaceMutati
 	_, err := chasm.StartExecution(
 		env.engineCtx,
 		key,
-		func(_ chasm.MutableContext, m *namespacereplicationpb.NamespaceMutation) (*NamespaceMutationComponent, error) {
-			c := NewNamespaceMutationComponent(m)
+		func(mctx chasm.MutableContext, m *namespacereplicationpb.NamespaceMutation) (*NamespaceMutationComponent, error) {
+			c := NewNamespaceMutationComponent(mctx, m)
 			if mutate != nil {
 				mutate(c)
 			}
@@ -528,7 +534,7 @@ func TestApplyLocalTask_Execute_UpdateRetryRequiresExpectedNotificationVersion(t
 		nil,
 	)
 	env.metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(
-		&persistence.GetMetadataResponse{NotificationVersion: 8},
+		&persistence.GetMetadataResponse{NotificationVersion: mutation.GetExpectedVersion() + 1},
 		nil,
 	)
 

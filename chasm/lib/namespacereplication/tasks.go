@@ -76,7 +76,9 @@ func (h *applyLocalTaskHandler) Validate(
 
 // Execute writes authoritative mutations to the local metadata store with
 // strict version-CAS. Shadow and replicate-only mutations skip the local write;
-// only shadow also suppresses destination writes.
+// only shadow also suppresses destination writes. Authoritative ambiguous
+// results are reconciled so a retry cannot turn a committed source mutation
+// into a terminal failure.
 func (h *applyLocalTaskHandler) Execute(
 	ctx context.Context,
 	ref chasm.ComponentRef,
@@ -141,7 +143,12 @@ func (h *applyLocalTaskHandler) Execute(
 			NotificationVersion: loaded.ExpectedVer,
 		})
 	default:
-		return h.recordLocalFailure(ctx, ref, fmt.Errorf("unsupported namespace operation: %v", loaded.Operation))
+		return h.recordLocalFailure(
+			ctx,
+			ref,
+			loaded.Detail.GetInfo().GetId(),
+			fmt.Errorf("unsupported namespace operation: %v", loaded.Operation),
+		)
 	}
 	if applyErr != nil {
 		if shouldReconcileLocalApply(loaded.Operation, applyErr) {
@@ -153,15 +160,15 @@ func (h *applyLocalTaskHandler) Execute(
 				loaded.IsGlobal,
 			)
 			if reconcileErr != nil {
-				// Keep the component pending. Returning an error leaves the durable
-				// side-effect task eligible for retry, which closes the crash window
-				// without guessing whether the metadata write committed.
+				// Keep the component pending until the durable task can determine
+				// whether the metadata write committed.
 				return fmt.Errorf("reconcile local namespace mutation after %v: %w", applyErr, reconcileErr)
 			}
 			if alreadyApplied {
 				h.logger.Info(
 					"namespacereplication recovered committed local apply",
 					tag.WorkflowNamespaceID(loaded.Detail.GetInfo().GetId()),
+					tag.NewStringTag("business_id", ref.BusinessID),
 				)
 				return h.commitLocal(ctx, ref)
 			}
@@ -176,16 +183,13 @@ func (h *applyLocalTaskHandler) Execute(
 				return fmt.Errorf("resolve local namespace mutation after %v: %w", applyErr, resolutionErr)
 			}
 			if !definitelyNotApplied {
-				// A read performed immediately after a timed-out write may still see the
-				// old value even though that write later commits. Keep the durable task
-				// pending and retry instead of turning one stale read into a terminal
-				// failure and permanently suppressing peer fan-out.
+				// A read immediately after a timed-out write can still see the old
+				// value even when that write later commits.
 				return fmt.Errorf("local namespace mutation outcome remains unresolved: %w", applyErr)
 			}
 		}
-		return h.recordLocalFailure(ctx, ref, applyErr)
+		return h.recordLocalFailure(ctx, ref, loaded.Detail.GetInfo().GetId(), applyErr)
 	}
-
 	// Commit transition: record success and schedule peer fan-out. When there are
 	// no peers (single-cluster global namespace) allPeersTerminal() is already true,
 	// so complete the component in the same update. This is a separate transition
@@ -202,8 +206,8 @@ func (h *applyLocalTaskHandler) localMutationDefinitelyNotApplied(
 	expectedVersion int64,
 	applyErr error,
 ) (bool, error) {
-	var alreadyExists *serviceerror.NamespaceAlreadyExists
-	if operation == namespacereplicationpb.NAMESPACE_OPERATION_CREATE && errors.As(applyErr, &alreadyExists) {
+	if _, ok := errors.AsType[*serviceerror.NamespaceAlreadyExists](applyErr); ok &&
+		operation == namespacereplicationpb.NAMESPACE_OPERATION_CREATE {
 		// The exact-state check already ruled out a retry of our own successful
 		// create, so the existing row belongs to a conflicting create.
 		return true, nil
@@ -264,12 +268,10 @@ func (h *applyLocalTaskHandler) localMutationAlreadyApplied(
 	}
 
 	response, err := h.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{ID: namespaceID})
-	var notFound *serviceerror.NamespaceNotFound
-	switch {
-	case err == nil:
-	case errors.As(err, &notFound):
-		return false, nil
-	default:
+	if err != nil {
+		if _, ok := errors.AsType[*serviceerror.NamespaceNotFound](err); ok {
+			return false, nil
+		}
 		return false, err
 	}
 
@@ -309,11 +311,13 @@ func (h *applyLocalTaskHandler) commitLocal(
 func (h *applyLocalTaskHandler) recordLocalFailure(
 	ctx context.Context,
 	ref chasm.ComponentRef,
+	namespaceID string,
 	applyErr error,
 ) error {
 	errType := classifyLocalErr(applyErr)
 	h.logger.Warn("namespacereplication local apply failed",
-		tag.NewStringTag("namespace_id", ref.BusinessID),
+		tag.WorkflowNamespaceID(namespaceID),
+		tag.NewStringTag("business_id", ref.BusinessID),
 		tag.NewStringTag("error_type", errType),
 		tag.Error(applyErr),
 	)
@@ -361,36 +365,32 @@ const (
 // CreateNamespace collision is AlreadyExists (terminal, matching legacy
 // RegisterNamespace), and anything else is a degenerate Internal failure.
 // Symmetric with classifyPeerErr on the peer path.
-//
-// Uses errors.As rather than a bare type switch so the classification survives
-// error wrapping and a wrapped *serviceerror.Unavailable is still recognized as
-// retriable rather than falling through to Internal.
 func classifyLocalErr(err error) string {
-	var (
-		unavailable       *serviceerror.Unavailable
-		resourceExhausted *serviceerror.ResourceExhausted
-		deadlineExceeded  *serviceerror.DeadlineExceeded
-		invalidArgument   *serviceerror.InvalidArgument
-		alreadyExists     *serviceerror.NamespaceAlreadyExists
-		conditionFailed   *persistence.ConditionFailedError
-		timeout           *persistence.TimeoutError
-	)
-	switch {
-	case errors.As(err, &unavailable),
-		errors.As(err, &resourceExhausted),
-		errors.As(err, &deadlineExceeded),
-		errors.As(err, &conditionFailed),
-		errors.As(err, &timeout),
-		errors.Is(err, context.Canceled),
-		errors.Is(err, context.DeadlineExceeded):
+	if _, ok := errors.AsType[*serviceerror.Unavailable](err); ok {
 		return localFailureUnavailable
-	case errors.As(err, &invalidArgument):
-		return localFailureInvalidArgument
-	case errors.As(err, &alreadyExists):
-		return localFailureAlreadyExists
-	default:
-		return localFailureInternal
 	}
+	if _, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
+		return localFailureUnavailable
+	}
+	if _, ok := errors.AsType[*serviceerror.DeadlineExceeded](err); ok {
+		return localFailureUnavailable
+	}
+	if _, ok := errors.AsType[*persistence.ConditionFailedError](err); ok {
+		return localFailureUnavailable
+	}
+	if _, ok := errors.AsType[*persistence.TimeoutError](err); ok {
+		return localFailureUnavailable
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return localFailureUnavailable
+	}
+	if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
+		return localFailureInvalidArgument
+	}
+	if _, ok := errors.AsType[*serviceerror.NamespaceAlreadyExists](err); ok {
+		return localFailureAlreadyExists
+	}
+	return localFailureInternal
 }
 
 // -----------------------------------------------------------------------------
@@ -501,7 +501,14 @@ func (h *applyPeerTaskHandler) Execute(
 	// which transport the deployment injected.
 	result, applyErr := h.peerApplier.Apply(ctx, task.GetTargetCell(), loaded.Operation, loaded.Detail, loaded.Shadow)
 	if applyErr != nil {
-		saveErr := h.recordPeerOutcome(ctx, ref, task, classifyPeerErr(applyErr), applyErr)
+		saveErr := h.recordPeerOutcome(
+			ctx,
+			ref,
+			loaded.Detail.GetInfo().GetId(),
+			task,
+			classifyPeerErr(applyErr),
+			applyErr,
+		)
 		if isPeerDestinationDown(applyErr) {
 			return queueserrors.NewDestinationDownError(applyErr.Error(), saveErr)
 		}
@@ -510,9 +517,16 @@ func (h *applyPeerTaskHandler) Execute(
 
 	outcome, resultErr := peerOutcomeFromResult(result)
 	if resultErr != nil {
-		return h.recordPeerOutcome(ctx, ref, task, classifyPeerErr(resultErr), resultErr)
+		return h.recordPeerOutcome(
+			ctx,
+			ref,
+			loaded.Detail.GetInfo().GetId(),
+			task,
+			classifyPeerErr(resultErr),
+			resultErr,
+		)
 	}
-	return h.recordPeerOutcome(ctx, ref, task, outcome, nil)
+	return h.recordPeerOutcome(ctx, ref, loaded.Detail.GetInfo().GetId(), task, outcome, nil)
 }
 
 // peerOutcomeFromResult maps a transport-neutral PeerApplyResult onto the
@@ -538,13 +552,15 @@ func peerOutcomeFromResult(result PeerApplyResult) (namespacereplicationpb.PeerA
 func (h *applyPeerTaskHandler) recordPeerOutcome(
 	ctx context.Context,
 	ref chasm.ComponentRef,
+	namespaceID string,
 	task *namespacereplicationpb.ApplyPeerTask,
 	outcome namespacereplicationpb.PeerApplyOutcome,
 	execErr error,
 ) error {
 	if execErr != nil {
 		h.logger.Warn("namespacereplication peer apply failed",
-			tag.NewStringTag("namespace_id", ref.BusinessID),
+			tag.WorkflowNamespaceID(namespaceID),
+			tag.NewStringTag("business_id", ref.BusinessID),
 			tag.NewStringTag("target_cell", task.GetTargetCell()),
 			tag.NewInt32("attempt", task.GetAttempt()),
 			tag.Error(execErr),
@@ -613,43 +629,41 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 // help. Unknown errors default to retriable (safer: apply-if-higher makes
 // duplicate writes no-ops).
 func classifyPeerErr(err error) namespacereplicationpb.PeerApplyOutcome {
-	var (
-		unavailable       *serviceerror.Unavailable
-		resourceExhausted *serviceerror.ResourceExhausted
-		deadlineExceeded  *serviceerror.DeadlineExceeded
-		invalidArgument   *serviceerror.InvalidArgument
-		notFound          *serviceerror.NotFound
-		unimplemented     *serviceerror.Unimplemented
-	)
-	switch {
-	case errors.As(err, &unavailable),
-		errors.As(err, &resourceExhausted),
-		errors.As(err, &deadlineExceeded):
-		return namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE
-	case errors.As(err, &invalidArgument),
-		errors.As(err, &notFound),
-		errors.As(err, &unimplemented):
-		return namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL
-	default:
+	if _, ok := errors.AsType[*serviceerror.Unavailable](err); ok {
 		return namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE
 	}
+	if _, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
+		return namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE
+	}
+	if _, ok := errors.AsType[*serviceerror.DeadlineExceeded](err); ok {
+		return namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE
+	}
+	if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
+		return namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL
+	}
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
+		return namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL
+	}
+	if _, ok := errors.AsType[*serviceerror.Unimplemented](err); ok {
+		return namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL
+	}
+	return namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE
 }
 
 func isPeerDestinationDown(err error) bool {
-	var (
-		unavailable       *serviceerror.Unavailable
-		deadlineExceeded  *serviceerror.DeadlineExceeded
-		resourceExhausted *serviceerror.ResourceExhausted
-		serviceErr        serviceerror.ServiceError
-	)
-	switch {
-	case errors.As(err, &unavailable), errors.As(err, &deadlineExceeded):
-		return true
-	case errors.As(err, &resourceExhausted), errors.As(err, &serviceErr):
-		return false
-	default:
+	if _, ok := errors.AsType[*serviceerror.Unavailable](err); ok {
 		return true
 	}
+	if _, ok := errors.AsType[*serviceerror.DeadlineExceeded](err); ok {
+		return true
+	}
+	if _, ok := errors.AsType[*serviceerror.ResourceExhausted](err); ok {
+		return false
+	}
+	if _, ok := errors.AsType[serviceerror.ServiceError](err); ok {
+		return false
+	}
+	return true
 }
 
 // -----------------------------------------------------------------------------

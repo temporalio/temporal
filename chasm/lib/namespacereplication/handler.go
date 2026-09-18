@@ -52,8 +52,7 @@ func (h *handler) TriggerNamespaceMutation(
 		ctx,
 		key,
 		func(mctx chasm.MutableContext, mutation *namespacereplicationpb.NamespaceMutation) (*NamespaceMutationComponent, error) {
-			component := NewNamespaceMutationComponent(mutation)
-			component.Visibility = chasm.NewComponentField(mctx, chasm.NewVisibility(mctx))
+			component := NewNamespaceMutationComponent(mctx, mutation)
 			if err := TransitionScheduleLocal.Apply(component, mctx, EventScheduleLocal{}); err != nil {
 				return nil, err
 			}
