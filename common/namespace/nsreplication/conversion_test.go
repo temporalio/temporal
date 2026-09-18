@@ -223,3 +223,33 @@ func TestNamespaceDetailToTaskAttributes_NonNormalStateDropped(t *testing.T) {
 	got := NamespaceDetailToTaskAttributes(enumsspb.NAMESPACE_OPERATION_UPDATE, detail)
 	require.Equal(t, enumspb.REPLICATION_STATE_UNSPECIFIED, got.GetReplicationConfig().GetState())
 }
+
+func TestNamespaceDetailFromTransmissionTask(t *testing.T) {
+	info := &persistencespb.NamespaceInfo{Id: "ns-id"}
+	config := &persistencespb.NamespaceConfig{}
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: "active",
+		State:             enumspb.REPLICATION_STATE_HANDOVER,
+		Clusters:          []string{"active", "standby"},
+		FailoverHistory:   []*persistencespb.FailoverStatus{{FailoverVersion: 1}},
+	}
+	failoverHistory := []*persistencespb.FailoverStatus{{FailoverVersion: 2}}
+
+	detail := NamespaceDetailFromTransmissionTask(
+		info,
+		config,
+		replicationConfig,
+		3,
+		4,
+		failoverHistory,
+	)
+
+	require.Same(t, info, detail.GetInfo())
+	require.Same(t, config, detail.GetConfig())
+	require.Equal(t, "active", detail.GetReplicationConfig().GetActiveClusterName())
+	require.Equal(t, enumspb.REPLICATION_STATE_HANDOVER, detail.GetReplicationConfig().GetState())
+	require.Equal(t, []string{"active", "standby"}, detail.GetReplicationConfig().GetClusters())
+	require.Equal(t, failoverHistory, detail.GetReplicationConfig().GetFailoverHistory())
+	require.Equal(t, int64(3), detail.GetConfigVersion())
+	require.Equal(t, int64(4), detail.GetFailoverVersion())
+}
