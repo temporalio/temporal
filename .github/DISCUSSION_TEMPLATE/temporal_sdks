@@ -1,0 +1,29 @@
+title: "Feature Request"
+body:
+  - type: markdown
+    attributes:
+      value: "Fill out this form to add a feature request! If you have a bug, want support, or need to troubleshoot, please do NOT post in this space - it will be deleted. This is for feature requests only."
+  
+  - type: textarea
+    id: problem
+    attributes:
+      label: "Is your feature request related to a problem? Please describe"
+      description: "Please give a clear and concise description of what the problem is."
+    validations:
+      required: true
+  
+  - type: textarea
+    id: solution
+    attributes:
+      label: "Describe the solution you'd like"
+      description: "A clear and concise description of what you want to happen. Screenshots or code samples are very helpful!"
+    validations:
+      required: true
+  
+  - type: textarea
+    id: context
+    attributes:
+      label: "Additional context"
+      description: "Add any other context or screenshots about the feature request here."
+    validations:
+      required: false
