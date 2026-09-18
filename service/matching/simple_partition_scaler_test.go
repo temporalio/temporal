@@ -240,9 +240,9 @@ func TestBoundsFromOldCount(t *testing.T) {
 		oldCount: 2, // 0.2 would round to 0
 		maxTgt:   1,
 	}, {
-		name:     "zero old count disables derivation",
-		cfg:      dynamicconfig.SimplePartitionScalerSettings{Min: 2, MaxAsMultipleOfOldCount: 1},
-		oldCount: 0,
+		name:      "zero old count disables derivation",
+		cfg:       dynamicconfig.SimplePartitionScalerSettings{Min: 2, MaxAsMultipleOfOldCount: 1},
+		oldCount:  0,
 		minTarget: 2,
 	}} {
 		t.Run(tc.name, func(t *testing.T) {

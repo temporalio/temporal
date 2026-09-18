@@ -74,9 +74,20 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 		return PartitionScalerDecision{NewTarget: 0}
 	}
 
-	fixed, minTarget, maxTarget := s.bounds(cfg)
+	var oldCount int // read at most once per call
+	multiplied := func(setting float32) int {
+		if setting <= 0 || s.oldCount == nil {
+			return 0
+		}
+		if oldCount == 0 {
+			oldCount = max(1, s.oldCount())
+		}
+		return max(1, int(setting*float32(oldCount)+0.5))
+	}
 
-	if fixed > 0 {
+	if cfg.Fixed > 0 {
+		return PartitionScalerDecision{NewTarget: int(cfg.Fixed), BacklogCap: int(cfg.BacklogCap)}
+	} else if fixed := multiplied(cfg.FixedAsMultipleOfOldCount); fixed > 0 {
 		return PartitionScalerDecision{NewTarget: fixed, BacklogCap: int(cfg.BacklogCap)}
 	}
 
@@ -111,13 +122,20 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 	// update backlog target based on counts
 	backlogTarget := updateBacklogTarget(cfg, in.BacklogCounts, (*bitSet)(&state.BacklogTarget))
 
-	// add them and clamp
+	// add them and clamp. note all mins are applied before all maxes, so a max wins if the
+	// two are in conflict.
 	totalTarget := addTarget + backlogTarget
-	if minTarget > 0 {
-		totalTarget = max(totalTarget, minTarget)
+	if cfg.Min > 0 {
+		totalTarget = max(totalTarget, int(cfg.Min))
 	}
-	if maxTarget > 0 {
-		totalTarget = min(totalTarget, maxTarget)
+	if multipliedMin := multiplied(cfg.MinAsMultipleOfOldCount); multipliedMin > 0 {
+		totalTarget = max(totalTarget, multipliedMin)
+	}
+	if cfg.Max > 0 {
+		totalTarget = min(totalTarget, int(cfg.Max))
+	}
+	if multipliedMax := multiplied(cfg.MaxAsMultipleOfOldCount); multipliedMax > 0 {
+		totalTarget = min(totalTarget, multipliedMax)
 	}
 
 	privateState, _ := anypb.New(&state) // ignore error, just use nil
@@ -129,52 +147,6 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 }
 
 func (*simplePartitionScaler) Stop() {
-}
-
-// bounds resolves the effective Fixed, Min, and Max values, combining the explicit settings
-// with the ones derived from the old static partition count. Zero means "not set" for all
-// three, as in the settings themselves.
-func (s *simplePartitionScaler) bounds(cfg dynamicconfig.SimplePartitionScalerSettings) (fixed, minTarget, maxTarget int) {
-	fixed, minTarget, maxTarget = int(cfg.Fixed), int(cfg.Min), int(cfg.Max)
-
-	if cfg.FixedAsMultipleOfOldCount <= 0 && cfg.MinAsMultipleOfOldCount <= 0 && cfg.MaxAsMultipleOfOldCount <= 0 {
-		return fixed, minTarget, maxTarget
-	}
-	oldCount := 0
-	if s.oldCount != nil {
-		oldCount = s.oldCount()
-	}
-	if oldCount <= 0 {
-		return fixed, minTarget, maxTarget
-	}
-
-	// An explicit Fixed wins over the derived one.
-	if fixed == 0 {
-		fixed = multipleOfOldCount(cfg.FixedAsMultipleOfOldCount, oldCount)
-	}
-	// For Min and Max, a derived bound applies in addition to an explicit one, i.e. we use
-	// whichever is more restrictive.
-	if derived := multipleOfOldCount(cfg.MinAsMultipleOfOldCount, oldCount); derived > 0 {
-		minTarget = max(minTarget, derived)
-	}
-	if derived := multipleOfOldCount(cfg.MaxAsMultipleOfOldCount, oldCount); derived > 0 {
-		if maxTarget > 0 {
-			maxTarget = min(maxTarget, derived)
-		} else {
-			maxTarget = derived
-		}
-	}
-
-	return fixed, minTarget, maxTarget
-}
-
-// multipleOfOldCount returns multiple * oldCount rounded to the nearest integer, but at least
-// one if multiple is non-zero. Returns 0 if multiple is not set.
-func multipleOfOldCount(multiple float32, oldCount int) int {
-	if multiple <= 0 {
-		return 0
-	}
-	return max(1, int(multiple*float32(oldCount)+0.5))
 }
 
 func (s *simplePartitionScaler) updateAddTarget(
