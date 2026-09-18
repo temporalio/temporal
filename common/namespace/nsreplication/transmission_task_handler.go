@@ -2,8 +2,6 @@ package nsreplication
 
 import (
 	"context"
-	"crypto/sha256"
-	"slices"
 
 	otellog "go.opentelemetry.io/otel/log"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -16,7 +14,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/wideevents"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -133,8 +130,9 @@ func (r *replicator) HandleTransmissionTask(
 	return nil
 }
 
-// NamespaceDetailFromTransmissionTask assembles the detail used by the legacy
-// queue builder so shadow mode can compare it with the independently built CHASM detail.
+// NamespaceDetailFromTransmissionTask assembles the detail consumed by the
+// legacy queue's shared detail-to-wire converter. Failover history is explicit
+// because HandleTransmissionTask receives it separately from replicationConfig.
 func NamespaceDetailFromTransmissionTask(
 	info *persistencespb.NamespaceInfo,
 	config *persistencespb.NamespaceConfig,
@@ -147,9 +145,9 @@ func NamespaceDetailFromTransmissionTask(
 		Info:   info,
 		Config: config,
 		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: replicationConfig.GetActiveClusterName(),
-			State:             replicationConfig.GetState(),
-			Clusters:          replicationConfig.GetClusters(),
+			ActiveClusterName: replicationConfig.ActiveClusterName,
+			State:             replicationConfig.State,
+			Clusters:          replicationConfig.Clusters,
 			FailoverHistory:   failoverHistory,
 		},
 		ConfigVersion:   configVersion,
@@ -248,51 +246,6 @@ func NamespaceDetailToTaskAttributes(
 		attributes.ReplicationConfig.State = replicationConfig.State
 	}
 	return attributes
-}
-
-// NamespaceTaskFingerprint returns a stable fingerprint of the receiver wire payload.
-func NamespaceTaskFingerprint(task *replicationspb.NamespaceTaskAttributes) ([]byte, error) {
-	payload, err := proto.MarshalOptions{Deterministic: true}.Marshal(task)
-	if err != nil {
-		return nil, err
-	}
-	fingerprint := sha256.Sum256(payload)
-	return fingerprint[:], nil
-}
-
-// DifferingNamespaceTaskFields reports the top-level wire fields that differ.
-func DifferingNamespaceTaskFields(
-	a *replicationspb.NamespaceTaskAttributes,
-	b *replicationspb.NamespaceTaskAttributes,
-) []string {
-	var fields []string
-	if a.GetNamespaceOperation() != b.GetNamespaceOperation() {
-		fields = append(fields, "namespace_operation")
-	}
-	if a.GetId() != b.GetId() {
-		fields = append(fields, "id")
-	}
-	if !proto.Equal(a.GetInfo(), b.GetInfo()) {
-		fields = append(fields, "info")
-	}
-	if !proto.Equal(a.GetConfig(), b.GetConfig()) {
-		fields = append(fields, "config")
-	}
-	if !proto.Equal(a.GetReplicationConfig(), b.GetReplicationConfig()) {
-		fields = append(fields, "replication_config")
-	}
-	if a.GetConfigVersion() != b.GetConfigVersion() {
-		fields = append(fields, "config_version")
-	}
-	if a.GetFailoverVersion() != b.GetFailoverVersion() {
-		fields = append(fields, "failover_version")
-	}
-	if !slices.EqualFunc(a.GetFailoverHistory(), b.GetFailoverHistory(), func(a, b *replicationpb.FailoverStatus) bool {
-		return proto.Equal(a, b)
-	}) {
-		fields = append(fields, "failover_history")
-	}
-	return fields
 }
 
 func convertClusterReplicationConfigToProto(

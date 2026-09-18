@@ -13,7 +13,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/testing/protorequire"
-	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -224,31 +223,33 @@ func TestNamespaceDetailToTaskAttributes_NonNormalStateDropped(t *testing.T) {
 	got := NamespaceDetailToTaskAttributes(enumsspb.NAMESPACE_OPERATION_UPDATE, detail)
 	require.Equal(t, enumspb.REPLICATION_STATE_UNSPECIFIED, got.GetReplicationConfig().GetState())
 }
-func TestNamespaceTaskFingerprint_Deterministic(t *testing.T) {
-	first := NamespaceDetailToTaskAttributes(enumsspb.NAMESPACE_OPERATION_UPDATE, &persistencespb.NamespaceDetail{
-		Info:              &persistencespb.NamespaceInfo{Id: "ns-id", Data: map[string]string{"a": "1", "b": "2"}},
-		Config:            &persistencespb.NamespaceConfig{},
-		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
-	})
-	second := proto.Clone(first).(*replicationspb.NamespaceTaskAttributes)
-	second.Info.Data = map[string]string{"b": "2", "a": "1"}
 
-	firstFingerprint, err := NamespaceTaskFingerprint(first)
-	require.NoError(t, err)
-	secondFingerprint, err := NamespaceTaskFingerprint(second)
-	require.NoError(t, err)
-	require.Equal(t, firstFingerprint, secondFingerprint)
-}
-
-func TestDifferingNamespaceTaskFields(t *testing.T) {
-	first := &replicationspb.NamespaceTaskAttributes{
-		Id:            "ns-id",
-		Info:          &namespacepb.NamespaceInfo{Name: "before"},
-		ConfigVersion: 1,
+func TestNamespaceDetailFromTransmissionTask(t *testing.T) {
+	info := &persistencespb.NamespaceInfo{Id: "ns-id"}
+	config := &persistencespb.NamespaceConfig{}
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: "active",
+		State:             enumspb.REPLICATION_STATE_HANDOVER,
+		Clusters:          []string{"active", "standby"},
+		FailoverHistory:   []*persistencespb.FailoverStatus{{FailoverVersion: 1}},
 	}
-	second := proto.Clone(first).(*replicationspb.NamespaceTaskAttributes)
-	second.Info.Name = "after"
-	second.ConfigVersion = 2
+	failoverHistory := []*persistencespb.FailoverStatus{{FailoverVersion: 2}}
 
-	require.Equal(t, []string{"info", "config_version"}, DifferingNamespaceTaskFields(first, second))
+	detail := NamespaceDetailFromTransmissionTask(
+		info,
+		config,
+		replicationConfig,
+		3,
+		4,
+		failoverHistory,
+	)
+
+	require.Same(t, info, detail.GetInfo())
+	require.Same(t, config, detail.GetConfig())
+	require.Equal(t, "active", detail.GetReplicationConfig().GetActiveClusterName())
+	require.Equal(t, enumspb.REPLICATION_STATE_HANDOVER, detail.GetReplicationConfig().GetState())
+	require.Equal(t, []string{"active", "standby"}, detail.GetReplicationConfig().GetClusters())
+	require.Equal(t, failoverHistory, detail.GetReplicationConfig().GetFailoverHistory())
+	require.Equal(t, int64(3), detail.GetConfigVersion())
+	require.Equal(t, int64(4), detail.GetFailoverVersion())
 }
