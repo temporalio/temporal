@@ -2086,6 +2086,26 @@ The actual count is calculated as base * (multiplier ^ level)`,
 The actual count is calculated as base * (multiplier ^ level)`,
 	)
 
+	BenchmarkAPSLimiterEnabled = NewGlobalBoolSetting(
+		"history.benchmarkAPSLimiterEnabled",
+		false,
+		`BENCHMARK SCAFFOLDING, not a production feature. Refuses history task dispatches with a
+namespace scoped APS resource exhausted error once a namespace exceeds the configured rate, so
+a live cluster can be driven into throttling on demand.`,
+	)
+	BenchmarkAPSLimiterRPS = NewGlobalIntSetting(
+		"history.benchmarkAPSLimiterRPS",
+		25,
+		`Per host, per namespace rate the benchmark APS limiter admits. The bucket is local to
+each history process, so the aggregate ceiling is this times the number of history pods.`,
+	)
+	BenchmarkAPSLimiterActivityTasksOnly = NewGlobalBoolSetting(
+		"history.benchmarkAPSLimiterActivityTasksOnly",
+		true,
+		`Meter only activity transfer tasks. A throttled workflow task regenerates indefinitely,
+which ties the size of the backlog to how long the run takes; metering activity dispatches
+alone makes the backlog a real instantaneous queue depth.`,
+	)
 	TaskThrottleControllerEnabled = NewGlobalBoolSetting(
 		"history.taskThrottleControllerEnabled",
 		false,

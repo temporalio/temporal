@@ -130,6 +130,10 @@ type Config struct {
 	TaskDLQInternalErrors          dynamicconfig.BoolPropertyFn
 	TaskDLQErrorPattern            dynamicconfig.StringPropertyFn
 
+	BenchmarkAPSLimiterEnabled           dynamicconfig.BoolPropertyFn
+	BenchmarkAPSLimiterRPS               dynamicconfig.IntPropertyFn
+	BenchmarkAPSLimiterActivityTasksOnly dynamicconfig.BoolPropertyFn
+
 	TaskThrottleControllerEnabled       dynamicconfig.BoolPropertyFn
 	TaskThrottleControllerMinRate       dynamicconfig.FloatPropertyFn
 	TaskThrottleControllerInitialRate   dynamicconfig.FloatPropertyFn
@@ -586,6 +590,9 @@ func NewConfig(
 		TaskDLQInternalErrors:          dynamicconfig.HistoryTaskDLQInternalErrors.Get(dc),
 		TaskDLQErrorPattern:            dynamicconfig.HistoryTaskDLQErrorPattern.Get(dc),
 
+		BenchmarkAPSLimiterEnabled:                           dynamicconfig.BenchmarkAPSLimiterEnabled.Get(dc),
+		BenchmarkAPSLimiterRPS:                               dynamicconfig.BenchmarkAPSLimiterRPS.Get(dc),
+		BenchmarkAPSLimiterActivityTasksOnly:                 dynamicconfig.BenchmarkAPSLimiterActivityTasksOnly.Get(dc),
 		TaskThrottleControllerEnabled:                        dynamicconfig.TaskThrottleControllerEnabled.Get(dc),
 		TaskThrottleControllerMinRate:                        dynamicconfig.TaskThrottleControllerMinRate.Get(dc),
 		TaskThrottleControllerInitialRate:                    dynamicconfig.TaskThrottleControllerInitialRate.Get(dc),

@@ -102,8 +102,19 @@ var QueueModule = fx.Options(
 		},
 		getOptionalQueueFactories,
 	),
+	fx.Provide(APSExecutorWrapperProvider),
 	fx.Invoke(QueueFactoryLifetimeHooks),
 )
+
+// APSExecutorWrapperProvider is benchmark scaffolding. It is always provided and is a
+// passthrough until history.benchmarkAPSLimiterEnabled is turned on.
+func APSExecutorWrapperProvider(config *configs.Config) queues.ExecutorWrapper {
+	return queues.NewAPSExecutorWrapper(queues.APSLimiterOptions{
+		Enabled:           config.BenchmarkAPSLimiterEnabled,
+		RPS:               config.BenchmarkAPSLimiterRPS,
+		ActivityTasksOnly: config.BenchmarkAPSLimiterActivityTasksOnly,
+	})
+}
 
 func ThrottleStateProvider(
 	config *configs.Config,
