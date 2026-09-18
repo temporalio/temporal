@@ -110,7 +110,8 @@ func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *s
 			BaseLogger:     logger,
 		}),
 		scheduler.NewSchedulerCallbacksTaskHandler(scheduler.SchedulerCallbacksTaskHandlerOptions{
-			Config: config,
+			Config:         config,
+			MetricsHandler: metrics.NoopMetricsHandler,
 		}),
 		scheduler.NewGeneratorTaskHandler(scheduler.GeneratorTaskHandlerOptions{
 			Config:         config,

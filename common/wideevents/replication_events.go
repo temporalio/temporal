@@ -111,6 +111,7 @@ const (
 
 	ParentChildPhaseVerifyChildCompletion = "verify_child_completion"
 	ParentChildPhaseParentResend          = "parent_resend"
+	ParentChildPhaseChildResend           = "child_resend"
 
 	ParentChildOutcomeNotFound          = "not_found"
 	ParentChildOutcomeCompletionMissing = "completion_missing"

@@ -43,10 +43,12 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/grpcfaultstest"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
@@ -70,6 +72,14 @@ type (
 	// NamespaceRateLimiters holds the three per-category namespace rate limiters that
 	// NamespaceRateLimitInterceptorProvider combines into a single routing rate limiter.
 	NamespaceRateLimiters struct {
+		Execution                    quotas.RequestRateLimiter
+		Visibility                   quotas.RequestRateLimiter
+		NamespaceReplicationInducing quotas.RequestRateLimiter
+	}
+
+	// RateLimiters holds the three per-category pod-level rate limiters that
+	// RateLimitInterceptorProvider combines into a single routing rate limiter.
+	RateLimiters struct {
 		Execution                    quotas.RequestRateLimiter
 		Visibility                   quotas.RequestRateLimiter
 		NamespaceReplicationInducing quotas.RequestRateLimiter
@@ -99,6 +109,7 @@ var Module = fx.Options(
 	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
+	fx.Provide(RateLimitersProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(interceptor.NewHealthInterceptor),
 	fx.Provide(NamespaceCountLimitInterceptorProvider),
@@ -259,6 +270,7 @@ func GrpcServerOptionsProvider(
 	customInterceptors []grpc.UnaryServerInterceptor,
 	customStreamInterceptors []grpc.StreamServerInterceptor,
 	metricsHandler metrics.Handler,
+	testHooks testhooks.TestHooks,
 ) GrpcServerOptions {
 	kep := keepalive.EnforcementPolicy{
 		MinTime:             serviceConfig.KeepAliveMinTime(),
@@ -318,6 +330,10 @@ func GrpcServerOptionsProvider(
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
 		unaryInterceptors = append(unaryInterceptors, customInterceptors...)
 	}
+	faultGenerator := grpcfaultstest.NewGenerator(testHooks)
+	if faultInterceptor := grpcfaults.UnaryServerInterceptor(faultGenerator); faultInterceptor != nil {
+		unaryInterceptors = append(unaryInterceptors, faultInterceptor)
+	}
 	// retry interceptor should be the most inner interceptor
 	unaryInterceptors = append(unaryInterceptors, retryableInterceptor.Intercept)
 
@@ -362,9 +378,13 @@ func ConfigProvider(
 
 func ServiceErrorInterceptorProvider(
 	dc *dynamicconfig.Collection,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
 ) *interceptor.ServiceErrorInterceptor {
 	return interceptor.NewServiceErrorInterceptor(
 		dynamicconfig.MaxServiceErrorMessageLength.Get(dc),
+		metricsHandler,
+		logger,
 	)
 }
 
@@ -482,12 +502,12 @@ func getRateFnWithMetrics(rateFn quotas.RateFn, handler metrics.Handler) quotas.
 	}
 }
 
-func RateLimitInterceptorProvider(
+func RateLimitersProvider(
 	serviceConfig *Config,
 	frontendServiceResolver membership.ServiceResolver,
 	handler metrics.Handler,
 	logger log.SnTaggedLogger,
-) *interceptor.RateLimitInterceptor {
+) RateLimiters {
 	rateFn := calculator.NewLoggedCalculator(
 		calculator.ClusterAwareQuotaCalculator{
 			MemberCounter:    frontendServiceResolver,
@@ -502,13 +522,44 @@ func RateLimitInterceptorProvider(
 		return float64(serviceConfig.NamespaceReplicationInducingAPIsRPS())
 	}
 
+	return RateLimiters{
+		Execution: configs.NewExecutionPriorityRateLimiter(
+			quotas.NewDefaultIncomingRateBurst(rateFnWithMetrics), serviceConfig.OperatorRPSRatio),
+		Visibility: configs.NewVisibilityPriorityRateLimiter(
+			quotas.NewDefaultIncomingRateBurst(rateFn), serviceConfig.OperatorRPSRatio),
+		NamespaceReplicationInducing: configs.NewNamespaceReplicationInducingAPIPriorityRateLimiter(
+			quotas.NewDefaultIncomingRateBurst(namespaceReplicationInducingRateFn), serviceConfig.OperatorRPSRatio),
+	}
+}
+
+func RateLimitInterceptorProvider(
+	serviceConfig *Config,
+	rateLimiters RateLimiters,
+) *interceptor.RateLimitInterceptor {
+	mapping := make(map[string]quotas.RequestRateLimiter)
+	for api := range configs.APIToPriority {
+		mapping[api] = rateLimiters.Execution
+	}
+	for api := range configs.VisibilityAPIToPriority {
+		mapping[api] = rateLimiters.Visibility
+	}
+	for api := range configs.NamespaceReplicationInducingAPIToPriority {
+		mapping[api] = rateLimiters.NamespaceReplicationInducing
+	}
+	for api := range configs.PodOnlyAPIToPriority { // do not mirror this loop in NamespaceRateLimitInterceptorProvider
+		mapping[api] = rateLimiters.Execution
+	}
+	// EnableDescribeMutableStateRateLimit is read once, here, at fx-graph construction time — toggling
+	// it in production requires bouncing frontend pods to pick up the new value. Once DescribeMutableState's
+	// rollout is complete, move its entry into PodOnlyAPIToPriority above and delete this branch.
+	if serviceConfig.EnableDescribeMutableStateRateLimit() {
+		for api := range configs.DescribeMutableStateAPIToPriority { // do not mirror this loop in NamespaceRateLimitInterceptorProvider
+			mapping[api] = rateLimiters.Execution
+		}
+	}
+
 	return interceptor.NewRateLimitInterceptor(
-		configs.NewRequestToRateLimiter(
-			quotas.NewDefaultIncomingRateBurst(rateFnWithMetrics),
-			quotas.NewDefaultIncomingRateBurst(rateFn),
-			quotas.NewDefaultIncomingRateBurst(namespaceReplicationInducingRateFn),
-			serviceConfig.OperatorRPSRatio,
-		),
+		quotas.NewRoutingRateLimiter(mapping),
 		map[string]int{
 			healthpb.Health_Check_FullMethodName:                     0, // exclude health check requests from rate limiting.
 			adminservice.AdminService_DeepHealthCheck_FullMethodName: 0, // exclude deep health check requests from rate limiting.
@@ -905,12 +956,17 @@ func OperatorHandlerProvider(
 // callbackValidatorProvider creates a callback Validator using the production dynamic config keys
 // so that existing operator configurations (callback.allowedAddresses) are honored.
 func callbackValidatorProvider(dc *dynamicconfig.Collection) (callbacks.Validator, error) {
-	return callbacks.NewValidator(callbacks.ValidatorConfig{
-		MaxCallbacksPerExecution: chasmcallback.MaxPerExecution.Get(dc),
-		URLMaxLength:             dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
-		HeaderMaxSize:            dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
-		EndpointRules:            chasmcallback.AllowedAddresses.Get(dc),
-	})
+	cfg := callbacks.ValidatorConfig{
+		MaxCallbacksPerExecution:         chasmcallback.MaxPerExecution.Get(dc),
+		MaxIDLengthLimit:                 dynamicconfig.MaxIDLengthLimit.Get(dc),
+		URLMaxLength:                     dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
+		HeaderMaxSize:                    dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
+		EndpointRules:                    chasmcallback.AllowedAddresses.Get(dc),
+		MaxServiceNameLength:             chasmnexus.MaxServiceNameLength.Get(dc),
+		MaxOperationNameLength:           chasmnexus.MaxOperationNameLength.Get(dc),
+		NexusHandlerSourceContextMaxSize: chasmcallback.NexusHandlerSourceContextMaxSize.Get(dc),
+	}
+	return callbacks.NewValidator(cfg)
 }
 
 func HandlerProvider(

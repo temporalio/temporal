@@ -14,6 +14,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -57,6 +59,7 @@ import (
 	"go.temporal.io/server/common/stream_batcher"
 	"go.temporal.io/server/common/taskqueue"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
@@ -622,6 +625,17 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		Priority:         addRequest.Priority,
 	}
 
+	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		// Later poll and response spans derive the same ID from the task token,
+		// allowing them to be correlated with this span.
+		workerTaskID := tasktoken.WorkflowWorkerTaskID(
+			taskInfo.GetNamespaceId(),
+			taskInfo.GetRunId(),
+			taskInfo.GetScheduledEventId(),
+		)
+		span.SetAttributes(attribute.String(telemetry.WorkerTaskIDKey, workerTaskID))
+	}
+
 	return pm.AddTask(ctx, addTaskParams{
 		taskInfo:    taskInfo,
 		forwardInfo: addRequest.ForwardInfo,
@@ -660,6 +674,17 @@ func (e *matchingEngineImpl) AddActivityTask(
 		Stamp:            addRequest.Stamp,
 		Priority:         addRequest.Priority,
 		ComponentRef:     addRequest.ComponentRef,
+	}
+
+	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		// Later poll and response spans derive the same ID from the task token,
+		// allowing them to be correlated with this span.
+		workerTaskID := tasktoken.ActivityWorkerTaskID(
+			taskInfo.GetNamespaceId(),
+			taskInfo.GetRunId(),
+			taskInfo.GetScheduledEventId(),
+		)
+		span.SetAttributes(attribute.String(telemetry.WorkerTaskIDKey, workerTaskID))
 	}
 
 	return pm.AddTask(ctx, addTaskParams{
@@ -1146,6 +1171,12 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	if resp != nil || err != nil {
 		return resp, err
 	}
+	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		// Later poll and response spans derive the same ID from the task token,
+		// allowing them to be correlated with this span.
+		workerTaskID := tasktoken.QueryWorkerTaskID(queryRequest.GetNamespaceId(), taskID)
+		span.SetAttributes(attribute.String(telemetry.WorkerTaskIDKey, workerTaskID))
+	}
 
 	// if we get here it means that dispatch of query task has occurred locally
 	// must wait on result channel to get query result
@@ -1241,6 +1272,7 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 	}
 	// TODO: Delete this code path after EnableMatchingFanOutForPollCancellation is rolled out.
 	if request.WorkerInstanceKey != "" {
+		// Keep Put before CancelAll; poll registration uses the inverse order to avoid missed polls.
 		e.shutdownWorkers.Put(request.WorkerInstanceKey, struct{}{})
 	}
 	cancelledCount := e.workerInstancePollers.CancelAll(request.WorkerInstanceKey)
@@ -1387,6 +1419,7 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPollsPartition(
 	var cancelledCount int32
 	for _, worker := range request.GetWorkers() {
 		if worker.GetWorkerInstanceKey() != "" {
+			// Keep Put before CancelAll; poll registration uses the inverse order to avoid missed polls.
 			e.shutdownWorkers.Put(worker.GetWorkerInstanceKey(), struct{}{})
 		}
 		cancelledCount += e.workerInstancePollers.CancelAll(worker.GetWorkerInstanceKey())
@@ -2457,13 +2490,33 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 		mergedData := MergeVersioningData(currentVersioningData, newVersioningData)
 
 		// take last writer for V2 rules and V3 data
-		if req.GetUserData().GetClock() == nil || current.GetClock() != nil && hlc.Greater(current.GetClock(), req.GetUserData().GetClock()) {
+		currentClock := current.GetClock()
+		incomingClock := req.GetUserData().GetClock()
+		// Replication can persist user data without its clock, since we are wrongly setting the clock to nil while merging (to be fixed).
+		// Let incoming data win while the current data is clockless so it is not discarded during another replication. Future merge logic will resolve
+		// conflicts between all combinations of incoming and current data instead of relying on this compatibility fallback.
+		if currentClock != nil && (incomingClock == nil || hlc.Greater(currentClock, incomingClock)) {
 			if mergedData != nil {
 				// v2 rules
 				mergedData.AssignmentRules = currentVersioningData.GetAssignmentRules()
 				mergedData.RedirectRules = currentVersioningData.GetRedirectRules()
 			}
 			mergedUserData.PerType = current.GetPerType()
+
+			// We have wrongly discarded incoming per-type data and should investigate what information was lost.
+			// This is harmful since we might have lost information pertaining to worker-versioning, task queue config
+			// and fairness state.
+			if len(req.GetUserData().GetPerType()) > 0 {
+				metrics.TaskQueueUserDataReplicationIncomingPerTypeDataDropped.With(e.metricsHandler).Record(1,
+					metrics.NamespaceTag(ns.Name().String()),
+				)
+				e.logger.Warn("task queue user data replication discarded non-empty per-type data",
+					tag.WorkflowNamespace(ns.Name().String()),
+					tag.WorkflowNamespaceID(req.GetNamespaceId()),
+					tag.WorkflowTaskQueueName(req.GetTaskQueue()),
+					tag.NewAnyTag("current-clock", currentClock),
+				)
+			}
 		} else {
 			if mergedData != nil {
 				// v2 rules
@@ -2661,7 +2714,6 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 	if err != nil {
 		return nil, err
 	}
-
 	// Buffer the deadline so we can still respond with timeout if we hit the deadline while dispatching
 	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, matching.DefaultTimeout, e.config.MinDispatchTaskTimeout(ns.Name().String()))
 	defer cancel()
@@ -2688,6 +2740,12 @@ func (e *matchingEngineImpl) DispatchNexusTask(ctx context.Context, request *mat
 	// host's result can be returned directly.
 	if resp != nil {
 		return resp, nil
+	}
+	if span := trace.SpanFromContext(ctx); span.IsRecording() {
+		// Later poll and response spans derive the same ID from the task token,
+		// allowing them to be correlated with this span.
+		workerTaskID := tasktoken.NexusWorkerTaskID(request.GetNamespaceId(), taskID)
+		span.SetAttributes(attribute.String(telemetry.WorkerTaskIDKey, workerTaskID))
 	}
 
 	// If we get here it means that task dispatch has occurred locally.
@@ -2802,7 +2860,7 @@ pollLoop:
 	}
 }
 
-func (e *matchingEngineImpl) RespondNexusTaskCompleted(ctx context.Context, request *matchingservice.RespondNexusTaskCompletedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskCompletedResponse, error) {
+func (e *matchingEngineImpl) RespondNexusTaskCompleted(_ context.Context, request *matchingservice.RespondNexusTaskCompletedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskCompletedResponse, error) {
 	resultCh, ok := e.nexusResults.Pop(request.GetTaskId())
 	if !ok {
 		opMetrics.Counter(metrics.RespondNexusTaskFailedPerTaskQueueCounter.Name()).Record(1)
@@ -2815,7 +2873,7 @@ func (e *matchingEngineImpl) RespondNexusTaskCompleted(ctx context.Context, requ
 	return &matchingservice.RespondNexusTaskCompletedResponse{}, nil
 }
 
-func (e *matchingEngineImpl) RespondNexusTaskFailed(ctx context.Context, request *matchingservice.RespondNexusTaskFailedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskFailedResponse, error) {
+func (e *matchingEngineImpl) RespondNexusTaskFailed(_ context.Context, request *matchingservice.RespondNexusTaskFailedRequest, opMetrics metrics.Handler) (*matchingservice.RespondNexusTaskFailedResponse, error) {
 	resultCh, ok := e.nexusResults.Pop(request.GetTaskId())
 	if !ok {
 		opMetrics.Counter(metrics.RespondNexusTaskFailedPerTaskQueueCounter.Name()).Record(1)
@@ -3024,17 +3082,6 @@ func (e *matchingEngineImpl) pollTask(
 	// reached, instead of emptyTask, context timeout error is returned to the frontend by the rpc stack,
 	// which counts against our SLO. By shortening the timeout by a very small amount, the emptyTask can be
 	// returned to the handler before a context timeout error is generated.
-	workerInstanceKey := pollMetadata.workerInstanceKey
-	if workerInstanceKey != "" && e.shutdownWorkers.Get(workerInstanceKey) != nil {
-		e.logger.Info("Rejecting poll from recently-shutdown worker",
-			tag.WorkflowNamespaceID(partition.NamespaceId()),
-			tag.WorkflowTaskQueueName(partition.TaskQueue().Name()),
-			tag.WorkflowTaskQueueType(partition.TaskType()),
-			tag.NewStringTag("worker-instance-key", workerInstanceKey),
-		)
-		return nil, false, errNoTasks
-	}
-
 	// For non-forwarded polls, subtract a proportional random jitter to spread expiration
 	// times across pollers and prevent thundering herd reconnects. Jitter is capped so the
 	// interval never falls below forwardedPollMinInterval.
@@ -3051,22 +3098,28 @@ func (e *matchingEngineImpl) pollTask(
 	ctx, cancel := contextutil.WithDeadlineBuffer(ctx, longPollInterval, returnEmptyTaskTimeBudget)
 	defer cancel()
 
+	if workerInstanceKey := pollMetadata.workerInstanceKey; workerInstanceKey != "" {
+		// Register before checking shutdownWorkers. The shutdown path does the reverse:
+		// it populates shutdownWorkers before calling CancelAll. So either the check
+		// sees the shutdown, or CancelAll sees the registration.
+		pollerTrackerKey := uuid.NewString()
+		e.workerInstancePollers.Add(workerInstanceKey, pollerTrackerKey, cancel)
+		defer e.workerInstancePollers.Remove(workerInstanceKey, pollerTrackerKey)
+
+		if e.shutdownWorkers.Get(workerInstanceKey) != nil {
+			e.logger.Debug("Rejecting poll from recently-shutdown worker",
+				tag.WorkflowNamespaceID(partition.NamespaceId()),
+				tag.WorkflowTaskQueueName(partition.TaskQueue().Name()),
+				tag.WorkflowTaskQueueType(partition.TaskType()),
+				tag.NewStringTag("worker-instance-key", workerInstanceKey),
+			)
+			return nil, false, errNoTasks
+		}
+	}
+
 	if pollerID, ok := ctx.Value(pollerIDKey).(string); ok && pollerID != "" {
 		e.outstandingPollers.Set(pollerID, cancel)
-
-		// Also track by worker instance key for bulk cancellation during shutdown.
-		// Use UUID (not pollerID) because pollerID is reused when forwarded.
-		pollerTrackerKey := uuid.NewString()
-		if workerInstanceKey != "" {
-			e.workerInstancePollers.Add(workerInstanceKey, pollerTrackerKey, cancel)
-		}
-
-		defer func() {
-			e.outstandingPollers.Delete(pollerID)
-			if workerInstanceKey != "" {
-				e.workerInstancePollers.Remove(workerInstanceKey, pollerTrackerKey)
-			}
-		}()
+		defer e.outstandingPollers.Delete(pollerID)
 	}
 	return pm.PollTask(ctx, pollMetadata)
 }

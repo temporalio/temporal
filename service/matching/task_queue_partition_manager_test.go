@@ -676,6 +676,20 @@ func latestLogicalBacklogCount(snap map[string][]*metricstest.CapturedRecording,
 	return latest, found
 }
 
+// latestLogicalBacklogAge returns the most recent approximate_backlog_age_seconds
+// recording for the given worker_version and task_priority tag values.
+func latestLogicalBacklogAge(snap map[string][]*metricstest.CapturedRecording, workerVersion, priorityTag string) (float64, bool) {
+	var latest float64
+	found := false
+	for _, rec := range snap[metrics.ApproximateBacklogAgeSeconds.Name()] {
+		if rec.Tags["worker_version"] == workerVersion && rec.Tags[metrics.TaskPriorityTagName] == priorityTag {
+			latest = rec.Value.(float64)
+			found = true
+		}
+	}
+	return latest, found
+}
+
 // addRoutingConfigUserData sets up deployment user data with a current version and an optional
 // ramping version. Pass "" for rampingBuildID to omit ramping. Note, this only adds the routing config
 // for the Workflow Task Queue Type.
@@ -739,7 +753,8 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_NoVersioning() {
 
 	s.spoolDefaultTasks(pm, 5)
 
-	// Wait for backlog stats to stabilize, then emit logical metrics.
+	// Wait for backlog stats to stabilize, then emit logical metrics. Both the count and
+	// the age gauge are emitted per priority under the default task_priority tag.
 	s.Require().Eventually(func() bool {
 		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 		defer cancel()
@@ -747,7 +762,11 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_NoVersioning() {
 
 		snap := capture.Snapshot()
 		count, ok := latestLogicalBacklogCount(snap, "__unversioned__", defaultPriorityTag)
-		return ok && count == float64(5)
+		if !ok || count != float64(5) {
+			return false
+		}
+		_, ageOk := latestLogicalBacklogAge(snap, "__unversioned__", defaultPriorityTag)
+		return ageOk
 	}, 2*time.Second, 50*time.Millisecond)
 }
 
@@ -857,9 +876,13 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_CurrentAndRamping(
 		unvCount, unvOk := latestLogicalBacklogCount(snap, "__unversioned__", defaultPriorityTag)
 		curCount, curOk := latestLogicalBacklogCount(snap, currentVersionTag, defaultPriorityTag)
 		rmpCount, rmpOk := latestLogicalBacklogCount(snap, rampingVersionTag, defaultPriorityTag)
+		// Age is emitted per version under the same task_priority tag as the count.
+		_, curAgeOk := latestLogicalBacklogAge(snap, currentVersionTag, defaultPriorityTag)
+		_, rmpAgeOk := latestLogicalBacklogAge(snap, rampingVersionTag, defaultPriorityTag)
 		return unvOk && unvCount == float64(0) &&
 			curOk && curCount == float64(7) &&
-			rmpOk && rmpCount == float64(3)
+			rmpOk && rmpCount == float64(3) &&
+			curAgeOk && rmpAgeOk
 	}, 2*time.Second, 50*time.Millisecond)
 }
 

@@ -13,7 +13,7 @@ import (
 )
 
 func TestQueryConverter_GetDatetimeFormat(t *testing.T) {
-	qc := &queryConverter{}
+	qc := &esQueryConverter{}
 	require.Equal(t, time.RFC3339Nano, qc.GetDatetimeFormat())
 }
 
@@ -43,7 +43,7 @@ func TestQueryConverter_BuildParenExpr(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			qc := &queryConverter{}
+			qc := &esQueryConverter{}
 			out, err := qc.BuildParenExpr(tc.in)
 			r.NoError(err)
 			r.Equal(tc.out, out)
@@ -88,7 +88,7 @@ func TestQueryConverter_BuildNotExpr(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			qc := &queryConverter{}
+			qc := &esQueryConverter{}
 			out, err := qc.BuildNotExpr(tc.in)
 			r.NoError(err)
 			r.Equal(tc.out, out)
@@ -169,7 +169,7 @@ func TestQueryConverter_BuildAndExpr(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			qc := &queryConverter{}
+			qc := &esQueryConverter{}
 			out, err := qc.BuildAndExpr(tc.in...)
 			r.NoError(err)
 			r.Equal(tc.out, out)
@@ -250,7 +250,7 @@ func TestQueryConverter_BuildOrExpr(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			qc := &queryConverter{}
+			qc := &esQueryConverter{}
 			out, err := qc.BuildOrExpr(tc.in...)
 			r.NoError(err)
 			r.Equal(tc.out, out)
@@ -346,7 +346,7 @@ func TestQueryConverter_ConvertComparisonExpr(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			qc := &queryConverter{}
+			qc := &esQueryConverter{}
 			out, err := qc.ConvertComparisonExpr(tc.operator, tc.col, tc.value)
 			if tc.err != "" {
 				r.Error(err)
@@ -483,7 +483,7 @@ func TestQueryConverter_ConvertKeywordComparisonExpr(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			qc := &queryConverter{}
+			qc := &esQueryConverter{}
 			out, err := qc.ConvertKeywordComparisonExpr(tc.operator, tc.col, tc.value)
 			if tc.err != "" {
 				r.Error(err)
@@ -558,7 +558,7 @@ func TestQueryConverter_ConvertKeywordListComparisonExpr(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			qc := &queryConverter{}
+			qc := &esQueryConverter{}
 			out, err := qc.ConvertKeywordListComparisonExpr(tc.operator, tc.col, tc.value)
 			if tc.err != "" {
 				r.Error(err)
@@ -617,7 +617,7 @@ func TestQueryConverter_ConvertTextComparisonExpr(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			qc := &queryConverter{}
+			qc := &esQueryConverter{}
 			out, err := qc.ConvertTextComparisonExpr(tc.operator, tc.col, tc.value)
 			if tc.err != "" {
 				r.Error(err)
@@ -681,7 +681,7 @@ func TestQueryConverter_ConvertRangeExpr(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			qc := &queryConverter{}
+			qc := &esQueryConverter{}
 			out, err := qc.ConvertRangeExpr(tc.operator, tc.col, tc.from, tc.to)
 			if tc.err != "" {
 				r.Error(err)
@@ -736,7 +736,7 @@ func TestQueryConverter_ConvertIsExpr(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			qc := &queryConverter{}
+			qc := &esQueryConverter{}
 			out, err := qc.ConvertIsExpr(tc.operator, tc.col)
 			if tc.err != "" {
 				r.Error(err)
