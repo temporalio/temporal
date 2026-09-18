@@ -780,7 +780,7 @@ func (s *namespaceReplicationCHASMTestSuite) requireSuccessfulShadowApply(
 		namespaceName,
 		operation,
 		true,
-		adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED,
+		adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH,
 	)
 }
 

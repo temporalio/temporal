@@ -260,7 +260,18 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowCompareOnly() {
 		Fingerprint:   fingerprint,
 	})
 	s.Require().NoError(err)
-	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED, response.GetOutcome())
+	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, response.GetOutcome())
+	s.Nil(s.namespaceMutationExecutor.task)
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowMismatch() {
+	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+		NamespaceTask: &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"},
+		Shadow:        true,
+		Fingerprint:   []byte("incorrect-fingerprint"),
+	})
+	s.Require().NoError(err)
+	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH, response.GetOutcome())
 	s.Nil(s.namespaceMutationExecutor.task)
 }
 

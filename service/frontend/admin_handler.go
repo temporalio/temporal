@@ -1055,14 +1055,17 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			tag.NewStringTag("expected_fingerprint", hex.EncodeToString(request.GetFingerprint())),
 			tag.NewStringTag("actual_fingerprint", hex.EncodeToString(actualFingerprint)),
 		)
-		if !request.GetShadow() {
-			return nil, serviceerror.NewInvalidArgument("namespace mutation fingerprint mismatch")
+		if request.GetShadow() {
+			return &adminservice.ApplyNamespaceMutationResponse{
+				Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH,
+			}, nil
 		}
+		return nil, serviceerror.NewInvalidArgument("namespace mutation fingerprint mismatch")
 	}
 
 	if request.GetShadow() {
 		return &adminservice.ApplyNamespaceMutationResponse{
-			Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED,
+			Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH,
 		}, nil
 	}
 

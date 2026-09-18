@@ -71,19 +71,21 @@ enum ComponentStatus {
   COMPONENT_STATUS_FAILED = 3;
 }
 
-// LocalApplyOutcome reports the result of the local CAS write. Binary outcome:
-// pending until the write resolves, then committed or failed.
+// LocalApplyOutcome reports the result of the local phase: pending until an
+// authoritative write resolves or shadow mode deliberately skips that write.
 enum LocalApplyOutcome {
   LOCAL_APPLY_OUTCOME_UNSPECIFIED = 0;
   LOCAL_APPLY_OUTCOME_PENDING = 1;
   LOCAL_APPLY_OUTCOME_COMMITTED = 2;
   LOCAL_APPLY_OUTCOME_FAILED = 3;
+  // Shadow mode deliberately skipped the source metadata-store write.
+  LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW = 4;
 }
 
-// PeerApplyOutcome reports the result of a peer apply via the
-// ApplyNamespaceMutation admin RPC. Richer than the local outcome because the
-// receiver's apply-if-higher logic can no-op stale incoming mutations, and the
-// RPC can fail in retriable or terminal ways.
+// PeerApplyOutcome reports the result of processing a mutation at a peer via
+// the ApplyNamespaceMutation admin RPC. Richer than the local outcome because
+// the receiver can shadow-validate without writing or no-op a stale mutation,
+// and the RPC can fail in retriable or terminal ways.
 enum PeerApplyOutcome {
   PEER_APPLY_OUTCOME_UNSPECIFIED = 0;
   PEER_APPLY_OUTCOME_PENDING = 1;
@@ -97,19 +99,25 @@ enum PeerApplyOutcome {
   // distinct from APPLIED so the sender never records a phantom write, and from
   // FAILED_* so it doesn't read as an error.
   PEER_APPLY_OUTCOME_NOT_ADMITTED = 6;
+  // The peer processed a shadow request without writing receiver state and the
+  // received payload matched the sender's fingerprint.
+  PEER_APPLY_OUTCOME_SHADOW_MATCH = 7;
+  // The peer processed a shadow request without writing receiver state and the
+  // received payload did not match the sender's fingerprint.
+  PEER_APPLY_OUTCOME_SHADOW_MISMATCH = 8;
 }
 
 message LocalApplyStatus {
-  // Current outcome of the local metadata-store apply.
+  // Current outcome of the local phase.
   LocalApplyOutcome outcome = 1;
-  // Time the local apply reached COMMITTED or FAILED. Unset while pending.
+  // Time the local apply reached a terminal outcome. Unset while pending.
   google.protobuf.Timestamp resolved_at = 2;
   // Failure detail when outcome is FAILED (e.g. CAS conflict, store unavailable).
   temporal.api.failure.v1.Failure failure = 3;
 }
 
 message PeerApplyStatus {
-  // Current outcome of applying the mutation to this peer.
+  // Current outcome of processing the mutation at this peer.
   PeerApplyOutcome outcome = 1;
   // Number of completed apply attempts.
   int32 attempt_count = 2;

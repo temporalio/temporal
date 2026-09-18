@@ -76,8 +76,8 @@ func TestTerminateAfterLocalCommitPreservesCommitOutcome(t *testing.T) {
 }
 
 // TestAllPeersTerminal verifies the completion predicate: true only when every
-// peer reached a terminal outcome (Applied / NoOpStale / FailedTerminal), false
-// while any peer is still Pending or FailedRetriable.
+// peer reached a terminal outcome, false while any peer is still Pending or
+// FailedRetriable.
 func TestAllPeersTerminal(t *testing.T) {
 	testCases := []struct {
 		name  string
@@ -97,6 +97,8 @@ func TestAllPeersTerminal(t *testing.T) {
 				"b": namespacereplicationpb.PEER_APPLY_OUTCOME_NO_OP_STALE,
 				"c": namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL,
 				"d": namespacereplicationpb.PEER_APPLY_OUTCOME_NOT_ADMITTED,
+				"e": namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MATCH,
+				"f": namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MISMATCH,
 			},
 			want: true,
 		},
