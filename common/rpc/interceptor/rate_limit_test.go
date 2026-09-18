@@ -3,10 +3,13 @@ package interceptor
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/quotas"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
@@ -24,6 +27,42 @@ type (
 
 func TestRateLimitInterceptorSuite(t *testing.T) {
 	suite.Run(t, &rateLimitInterceptorSuite{})
+}
+
+func (s *rateLimitInterceptorSuite) TestInterceptNexus() {
+	for _, tc := range []struct {
+		name            string
+		input           interceptornexus.InterceptorInput
+		allow           bool
+		nextCalled      bool
+		expectedOutcome string
+	}{
+		{name: "allowed", input: interceptornexus.NewStartOpInput("service", "operation", testNamespace, time.Now(), nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{APIName: "NexusOperation"}), allow: true, nextCalled: true},
+		{name: "rate limited", input: interceptornexus.NewStartOpInput("service", "operation", testNamespace, time.Now(), nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{APIName: "NexusOperation"}), expectedOutcome: "global_rate_limited"},
+	} {
+		s.Run(tc.name, func() {
+			ctx := context.Background()
+			interceptor := NewRateLimitInterceptor(s.mockRateLimiter, nil)
+			s.mockRateLimiter.EXPECT().Allow(gomock.Any(), gomock.Any()).Return(tc.allow)
+			nextCalled := false
+			_, err := interceptor.InterceptNexus(
+				ctx,
+				tc.input,
+				func(context.Context, interceptornexus.InterceptorInput) (any, error) {
+					nextCalled = true
+					return nil, nil
+				},
+			)
+			if tc.expectedOutcome != "" {
+				var interceptorErr *interceptornexus.InterceptorError
+				s.ErrorAs(err, &interceptorErr)
+				s.Equal(tc.expectedOutcome, interceptorErr.Outcome)
+			} else {
+				s.NoError(err)
+			}
+			s.Equal(tc.nextCalled, nextCalled)
+		})
+	}
 }
 
 func (s *rateLimitInterceptorSuite) SetupTest() {

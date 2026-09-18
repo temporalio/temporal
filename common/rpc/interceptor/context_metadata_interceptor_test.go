@@ -197,7 +197,7 @@ func TestContextMetadataInterceptor_appendContextMetadataToTrailer(t *testing.T)
 			info := &grpc.UnaryServerInfo{
 				FullMethod: "/test.Service/TestMethod",
 			}
-			interceptor.appendContextMetadataToTrailer(ctx, info)
+			interceptor.appendContextMetadataToTrailer(ctx, info.FullMethod)
 		})
 	}
 }
