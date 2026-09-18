@@ -95,18 +95,14 @@ func (r *replicator) HandleTransmissionTask(
 	// two transports. Today only this legacy queue path calls it. FailoverHistory
 	// is threaded in explicitly because callers pass it separately from
 	// replicationConfig.
-	detail := &persistencespb.NamespaceDetail{
-		Info:   info,
-		Config: config,
-		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: replicationConfig.ActiveClusterName,
-			State:             replicationConfig.State,
-			Clusters:          replicationConfig.Clusters,
-			FailoverHistory:   failoverHistoy,
-		},
-		ConfigVersion:   configVersion,
-		FailoverVersion: failoverVersion,
-	}
+	detail := NamespaceDetailFromTransmissionTask(
+		info,
+		config,
+		replicationConfig,
+		configVersion,
+		failoverVersion,
+		failoverHistoy,
+	)
 
 	replicationTask := &replicationspb.ReplicationTask{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK,
@@ -132,6 +128,31 @@ func (r *replicator) HandleTransmissionTask(
 		})
 	}
 	return nil
+}
+
+// NamespaceDetailFromTransmissionTask assembles the detail consumed by the
+// legacy queue's shared detail-to-wire converter. Failover history is explicit
+// because HandleTransmissionTask receives it separately from replicationConfig.
+func NamespaceDetailFromTransmissionTask(
+	info *persistencespb.NamespaceInfo,
+	config *persistencespb.NamespaceConfig,
+	replicationConfig *persistencespb.NamespaceReplicationConfig,
+	configVersion int64,
+	failoverVersion int64,
+	failoverHistory []*persistencespb.FailoverStatus,
+) *persistencespb.NamespaceDetail {
+	return &persistencespb.NamespaceDetail{
+		Info:   info,
+		Config: config,
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: replicationConfig.ActiveClusterName,
+			State:             replicationConfig.State,
+			Clusters:          replicationConfig.Clusters,
+			FailoverHistory:   failoverHistory,
+		},
+		ConfigVersion:   configVersion,
+		FailoverVersion: failoverVersion,
+	}
 }
 
 // ShouldReplicateNamespace reports whether a namespace mutation must be
