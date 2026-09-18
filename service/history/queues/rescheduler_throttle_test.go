@@ -18,10 +18,10 @@ import (
 type (
 	throttledExecutable struct {
 		*MockExecutable
-		key      ThrottleKey
-		known    bool
-		admitted bool
-		permit   *throttleEntry
+		key         ThrottleKey
+		known       bool
+		admitted    bool
+		admittedKey ThrottleKey
 	}
 
 	recordingGate struct {
@@ -30,13 +30,16 @@ type (
 	}
 )
 
-func (e *throttledExecutable) ThrottleKey() (ThrottleKey, bool) {
-	return e.key, e.known
+func (e *throttledExecutable) ThrottleKey() ThrottleKey {
+	if !e.known {
+		return ThrottleKey{}
+	}
+	return e.key
 }
 
-func (e *throttledExecutable) SetThrottlePermit(permit *throttleEntry) {
-	e.permit = permit
-	e.admitted = permit != nil
+func (e *throttledExecutable) SetThrottleAdmitted(key ThrottleKey) {
+	e.admittedKey = key
+	e.admitted = key != ThrottleKey{}
 }
 
 func (g *recordingGate) FireCh() <-chan struct{}    { return g.fireCh }
@@ -293,7 +296,7 @@ func TestReschedule_PermitIsVisibleBeforeSubmit(t *testing.T) {
 	r.Add(e, now)
 
 	scheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(Executable) bool {
-		require.NotNil(t, e.permit)
+		require.NotEqual(t, ThrottleKey{}, e.admittedKey)
 		return true
 	})
 	r.reschedule()
@@ -393,13 +396,15 @@ func TestReschedule_EnablingTheControllerPacesWorkAlreadyParked(t *testing.T) {
 			LossThreshold: dynamicconfig.GetFloatPropertyFn(0.05),
 			Window:        dynamicconfig.GetDurationPropertyFn(testThrottleWindow),
 			MaxKeys:       dynamicconfig.GetIntPropertyFn(1024),
+			MinRate:       dynamicconfig.GetFloatPropertyFn(1),
+			MaxRate:       dynamicconfig.GetFloatPropertyFn(10000),
+			InitialRate:   dynamicconfig.GetFloatPropertyFn(1),
+			KeyTTL:        dynamicconfig.GetDurationPropertyFn(5 * time.Minute),
 		},
 		timeSource,
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
 	)
-	state.minRate, state.maxRate = 1, 10000
-	state.initialRate, state.keyTTL = 1, 5*time.Minute
 
 	r, scheduler, _ := newTestRescheduler(t, ctrl, timeSource, state)
 	key := apsKey("ns-1")
@@ -433,19 +438,20 @@ func TestThrottleState_RaisingTheFloorLiftsAClassAlreadyAtIt(t *testing.T) {
 	state := NewThrottleState(
 		ThrottleStateOptions{
 			Enabled:       dynamicconfig.GetBoolPropertyFn(true),
-			MinRate:       func() float64 { return floor },
 			Beta:          dynamicconfig.GetFloatPropertyFn(0.85),
 			IncreaseRatio: dynamicconfig.GetFloatPropertyFn(0.10),
 			LossThreshold: dynamicconfig.GetFloatPropertyFn(0.05),
 			Window:        dynamicconfig.GetDurationPropertyFn(testThrottleWindow),
 			MaxKeys:       dynamicconfig.GetIntPropertyFn(1024),
+			MinRate:       func() float64 { return floor },
+			MaxRate:       dynamicconfig.GetFloatPropertyFn(10000),
+			InitialRate:   dynamicconfig.GetFloatPropertyFn(100),
+			KeyTTL:        dynamicconfig.GetDurationPropertyFn(5 * time.Minute),
 		},
 		timeSource,
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
 	)
-	state.minRate, state.maxRate, state.initialRate = 1, 10000, 100
-	state.keyTTL = 5 * time.Minute
 	key := testKey()
 
 	for i := 0; i < 60; i++ {
@@ -510,13 +516,15 @@ func TestReschedule_UngovernedTasksDoNotWaitOnAnotherClassBudget(t *testing.T) {
 			LossThreshold: dynamicconfig.GetFloatPropertyFn(0.05),
 			Window:        dynamicconfig.GetDurationPropertyFn(testThrottleWindow),
 			MaxKeys:       dynamicconfig.GetIntPropertyFn(1024),
+			MinRate:       dynamicconfig.GetFloatPropertyFn(1),
+			MaxRate:       dynamicconfig.GetFloatPropertyFn(10000),
+			InitialRate:   dynamicconfig.GetFloatPropertyFn(100),
+			KeyTTL:        dynamicconfig.GetDurationPropertyFn(5 * time.Minute),
 		},
 		timeSource,
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
 	)
-	state.minRate, state.maxRate, state.initialRate = 1, 10000, 1
-	state.keyTTL = 5 * time.Minute
 
 	r, scheduler, _ := newTestRescheduler(t, ctrl, timeSource, state)
 	now := timeSource.Now()

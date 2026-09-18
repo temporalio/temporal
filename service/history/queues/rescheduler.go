@@ -144,7 +144,7 @@ func (r *reschedulerImpl) Add(
 	rescheduleTime time.Time,
 ) {
 	key := reschedulerKey{TaskChannelKey: r.taskChannelKeyFn(executable)}
-	key.Throttle, _ = executableThrottleKey(executable)
+	key.Throttle = executableThrottleKey(executable)
 
 	r.Lock()
 	pq := r.getOrCreateClassLocked(key)
@@ -161,17 +161,17 @@ func (r *reschedulerImpl) Add(
 	}
 }
 
-func executableThrottleKey(executable Executable) (ThrottleKey, bool) {
+func executableThrottleKey(executable Executable) ThrottleKey {
 	reporter, ok := executable.(ThrottleKeyProvider)
 	if !ok {
-		return ThrottleKey{}, false
+		return ThrottleKey{}
 	}
 	return reporter.ThrottleKey()
 }
 
-func setThrottlePermit(executable Executable, permit *throttleEntry) {
-	if receiver, ok := executable.(throttlePermitReceiver); ok {
-		receiver.SetThrottlePermit(permit)
+func setThrottleAdmitted(executable Executable, key ThrottleKey) {
+	if reporter, ok := executable.(ThrottleKeyProvider); ok {
+		reporter.SetThrottleAdmitted(key)
 	}
 }
 
@@ -309,12 +309,6 @@ func (r *reschedulerImpl) classWeight(key reschedulerKey) int {
 	return r.channelWeightFn(key.TaskChannelKey)
 }
 
-func (r *reschedulerImpl) refreshClassWeightsLocked() {
-	for i := range r.keyOrder {
-		r.keyOrder[i].weight = r.classWeight(r.keyOrder[i].key)
-	}
-}
-
 func (r *reschedulerImpl) drainClassLocked(
 	key reschedulerKey,
 	pq collection.Queue[rescheduledExecuable],
@@ -337,11 +331,11 @@ func (r *reschedulerImpl) drainClassLocked(
 			continue
 		}
 
-		var permit *throttleEntry
+		metered := false
 		if classThrottle != (ThrottleKey{}) {
 			var allowed bool
 			var retryAfter time.Duration
-			allowed, permit, retryAfter = r.throttleState.Admit(classThrottle)
+			allowed, metered, retryAfter = r.throttleState.Admit(classThrottle)
 			if !allowed {
 				pass.wakeAt(pass.now.Add(r.budgetRetryInterval(retryAfter)))
 				return
@@ -349,20 +343,19 @@ func (r *reschedulerImpl) drainClassLocked(
 		}
 
 		executable.SetScheduledTime(pass.now)
-		if permit != nil {
-			// A worker can report a rejection before TrySubmit returns.
-			setThrottlePermit(executable, permit)
+		if metered {
+			// Mark before submitting: a worker can reach HandleErr before TrySubmit returns.
+			setThrottleAdmitted(executable, classThrottle)
 		}
 		if !r.scheduler.TrySubmit(executable) {
-			if permit != nil {
-				setThrottlePermit(executable, nil)
+			if metered {
+				setThrottleAdmitted(executable, ThrottleKey{})
+				r.throttleState.Return(classThrottle)
 			}
-			r.throttleState.Finish(permit, false)
 			pass.wakeAt(pass.now.Add(
 				backoff.Jitter(taskChanFullBackoff, taskChanFullBackoffJitterCoefficient)))
 			return
 		}
-		r.throttleState.Finish(permit, true)
 
 		pq.Remove()
 		r.numExecutables--
@@ -429,7 +422,6 @@ func (r *reschedulerImpl) cleanupPQ() {
 		}
 	}
 	r.rebuildKeyOrderLocked()
-	r.refreshClassWeightsLocked()
 }
 
 func (r *reschedulerImpl) drain() {

@@ -33,10 +33,9 @@ func TestExecutable_RejectionUnderAnotherBudgetChargesTheIssuingClass(t *testing
 	e := newThrottleTestExecutable(ctrl, state)
 
 	issuing := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
-	allowed, permit, _ := state.Admit(issuing)
+	allowed, _, _ := state.Admit(issuing)
 	require.True(t, allowed)
-	state.Finish(permit, true)
-	e.SetThrottlePermit(permit)
+	e.SetThrottleAdmitted(issuing)
 
 	e.reportThrottle(
 		enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT,
@@ -56,10 +55,9 @@ func TestExecutable_BusyWorkflowDoesNotChargeTheIssuingClass(t *testing.T) {
 	e := newThrottleTestExecutable(ctrl, state)
 
 	issuing := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
-	allowed, permit, _ := state.Admit(issuing)
+	allowed, _, _ := state.Admit(issuing)
 	require.True(t, allowed)
-	state.Finish(permit, true)
-	e.SetThrottlePermit(permit)
+	e.SetThrottleAdmitted(issuing)
 
 	e.reportThrottle(
 		enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
@@ -85,8 +83,8 @@ func TestExecutable_ClassifiesWhileTheControllerIsOff(t *testing.T) {
 		enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 	)
 
-	key, known := e.ThrottleKey()
-	require.True(t, known, "the task must know its class before the flag is turned on")
+	key := e.ThrottleKey()
+	require.NotEqual(t, ThrottleKey{}, key, "the task must know its class before the flag is on")
 	require.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, key.Cause)
 	require.Zero(t, throttleLen(state), "a disabled controller must track nothing")
 }
@@ -102,15 +100,14 @@ func TestExecutable_UngovernedCauseDropsTheKey(t *testing.T) {
 		enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
 		enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 	)
-	_, known := e.ThrottleKey()
-	require.True(t, known)
+	require.NotEqual(t, ThrottleKey{}, e.ThrottleKey())
 
 	e.reportThrottle(
 		enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
 		enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
 	)
-	_, known = e.ThrottleKey()
-	require.False(t, known, "a system scoped limit is not this namespace's budget")
+	require.Equal(t, ThrottleKey{}, e.ThrottleKey(),
+		"a system scoped limit is not this namespace's budget")
 }
 
 // A task classified while the controller was off is exactly the cohort the off-to-on path
@@ -152,10 +149,9 @@ func TestExecutable_BusyWorkflowIsNeverChargedWhateverTheFlagSays(t *testing.T) 
 		e := newThrottleTestExecutable(ctrl, state)
 
 		issuing := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
-		allowed, permit, _ := state.Admit(issuing)
+		allowed, _, _ := state.Admit(issuing)
 		require.True(t, allowed)
-		state.Finish(permit, true)
-		e.SetThrottlePermit(permit)
+		e.SetThrottleAdmitted(issuing)
 
 		// The flag moves after the release was committed, which is what an operator toggling
 		// it mid-incident does.

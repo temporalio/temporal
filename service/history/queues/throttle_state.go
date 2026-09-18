@@ -9,7 +9,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -55,15 +54,9 @@ type (
 		logger         log.Logger
 		metricsHandler metrics.Handler
 
-		minRate     float64
-		maxRate     float64
-		initialRate float64
-		keyTTL      time.Duration
-
-		mu         sync.RWMutex
-		entries    map[ThrottleKey]*throttleEntry
-		lastSweep  time.Time
-		lastCapLog time.Time
+		mu        sync.RWMutex
+		entries   map[ThrottleKey]*throttleEntry
+		lastSweep time.Time
 	}
 
 	throttleEntry struct {
@@ -92,10 +85,6 @@ func NewThrottleState(
 		timeSource:     timeSource,
 		logger:         logger,
 		metricsHandler: metricsHandler,
-		minRate:        defaultThrottleMinRate,
-		maxRate:        defaultThrottleMaxRate,
-		initialRate:    defaultThrottleInitialRate,
-		keyTTL:         defaultThrottleKeyTTL,
 		lastSweep:      timeSource.Now(),
 		entries:        make(map[ThrottleKey]*throttleEntry),
 	}
@@ -134,22 +123,17 @@ func (s *ThrottleState) Enabled() bool {
 }
 
 func (s *ThrottleState) Window() time.Duration {
-	if s.options.Window != nil {
-		if window := s.options.Window(); window > 0 {
-			return window
-		}
-	}
-	return defaultThrottleWindow
+	return configured(s.options.Window, defaultThrottleWindow)
 }
 
-func (s *ThrottleState) Admit(key ThrottleKey) (allowed bool, permit *throttleEntry, retryAfter time.Duration) {
+func (s *ThrottleState) Admit(key ThrottleKey) (allowed, metered bool, retryAfter time.Duration) {
 	if !s.Enabled() {
-		return true, nil, 0
+		return true, false, 0
 	}
 	entry := s.getOrCreate(key)
 	if entry == nil {
 		metrics.TaskThrottleGateAdmitted.With(s.metricsHandler).Record(1, key.cappedTags()...)
-		return true, nil, 0
+		return true, false, 0
 	}
 
 	now := s.timeSource.Now()
@@ -163,48 +147,45 @@ func (s *ThrottleState) Admit(key ThrottleKey) (allowed bool, permit *throttleEn
 	if entry.tokens < 1 {
 		entry.suppressions++
 		metrics.TaskThrottleGateSuppressed.With(s.metricsHandler).Record(1, key.metricsTags()...)
-		return false, nil, entry.tokenETALocked()
+		return false, false, entry.tokenETALocked()
 	}
 
 	entry.tokens--
+	entry.releases++
 	metrics.TaskThrottleGateAdmitted.With(s.metricsHandler).Record(1, key.metricsTags()...)
-	return true, entry, 0
+	return true, true, 0
 }
 
-func (s *ThrottleState) Finish(permit *throttleEntry, submitted bool) {
-	if permit == nil {
+// Return gives back a release the scheduler refused. It never reached the enforcer, so it is
+// not a rejection, and leaving it counted would read as a clean release and raise the rate.
+func (s *ThrottleState) Return(key ThrottleKey) {
+	entry := s.peek(key)
+	if entry == nil {
 		return
 	}
 
-	now := s.timeSource.Now()
-	window := s.Window()
-	permit.Lock()
-	if submitted {
-		permit.releases++
-	} else {
-		permit.tokens = min(permit.tokens+1, permit.burstLocked(window))
+	entry.Lock()
+	defer entry.Unlock()
+
+	entry.tokens = min(entry.tokens+1, entry.burstLocked(s.Window()))
+	if entry.releases > 0 {
+		entry.releases--
 	}
-	s.advanceWindowLocked(permit, now, window)
-	permit.Unlock()
 }
 
-func (s *ThrottleState) ReportThrottled(key ThrottleKey, permit *throttleEntry) {
-	// A metered rejection is the other half of a release already committed, so it is recorded
-	// even if the controller was turned off in between. Dropping it would leave that window
-	// reading clean and raise the rate of a class whose releases were all failing.
-	if !s.Enabled() && permit == nil {
+// ReportThrottled feeds one rejection in. metered says the gate issued the release it refused,
+// which is what makes it evidence: loss on traffic the controller never sent would drive a
+// class to the floor while the traffic actually consuming the budget flowed past.
+//
+// A metered rejection is recorded even when the controller has since been turned off, because
+// the release it answers was already counted and the window would otherwise read clean.
+func (s *ThrottleState) ReportThrottled(key ThrottleKey, metered bool) {
+	if !s.Enabled() && !metered {
 		return
 	}
-	// The release was issued by the permit's class, so that is the class whose rate the
-	// rejection is evidence about, even when a different budget is the one that refused it.
-	// Charging the reported cause instead would leave the issuing class reading clean.
-	charged := key
-	if permit != nil {
-		charged = permit.key
-	}
-	entry := s.peek(charged)
-	if permit != nil && entry == nil {
-		entry = s.getOrCreate(charged)
+	entry := s.peek(key)
+	if metered && entry == nil {
+		entry = s.getOrCreate(key)
 	}
 	if entry == nil {
 		metrics.TaskThrottleRejections.With(s.metricsHandler).Record(1, key.cappedTags()...)
@@ -218,7 +199,7 @@ func (s *ThrottleState) ReportThrottled(key ThrottleKey, permit *throttleEntry) 
 	defer entry.Unlock()
 
 	s.touchLocked(entry, now, window)
-	if permit != nil {
+	if metered {
 		entry.rejections++
 		s.advanceWindowLocked(entry, now, window)
 	}
@@ -326,79 +307,53 @@ func (s *ThrottleState) clamp(rate float64) float64 {
 	return min(max(rate, s.floor()), s.ceiling())
 }
 
-func (s *ThrottleState) controlLaw() (beta, increaseRatio, lossThreshold float64) {
-	beta = defaultThrottleBeta
-	if s.options.Beta != nil {
-		if configured := s.options.Beta(); configured > 0 && configured < 1 {
-			beta = configured
+// Every knob is live dynamic config, and every one falls back to its documented default when
+// it is unset or set to something the control law cannot use. These are the two shapes that
+// takes: a positive value, or a fraction strictly between zero and one.
+func configured[T ~float64 | ~int64 | ~int](fn func() T, fallback T) T {
+	if fn != nil {
+		if value := fn(); value > 0 {
+			return value
 		}
 	}
-
-	increaseRatio = defaultThrottleIncreaseRatio
-	if s.options.IncreaseRatio != nil {
-		// Bounded above as well: doubling on every clean window is a config mistake, and
-		// an infinite ratio would take the rate to the ceiling in one step.
-		if configured := s.options.IncreaseRatio(); configured > 0 && configured <= 1 {
-			increaseRatio = configured
-		}
-	}
-
-	lossThreshold = defaultThrottleLossThreshold
-	if s.options.LossThreshold != nil {
-		if configured := s.options.LossThreshold(); configured > 0 && configured < 1 {
-			lossThreshold = configured
-		}
-	}
-	return beta, increaseRatio, lossThreshold
+	return fallback
 }
 
-func (s *ThrottleState) maxKeys() int {
-	if s.options.MaxKeys != nil {
-		if configured := s.options.MaxKeys(); configured > 0 {
-			return configured
+// A gain outside (0, 1) inverts the control law rather than tuning it: a decrease factor of 1
+// or more raises the rate on loss, and a zero increase never lifts it again.
+func configuredFraction(fn dynamicconfig.FloatPropertyFn, fallback float64) float64 {
+	if fn != nil {
+		if value := fn(); value > 0 && value < 1 {
+			return value
 		}
 	}
-	return defaultThrottleMaxKeys
+	return fallback
 }
 
-// floor and startRate are live, unlike the ceiling and the TTL: a class driven to the floor
-// by a long incident climbs back multiplicatively and the idle reset cannot rescue it, so
-// these are the two an operator reaches for while one is still running. Both are read only
-// when a rate is clamped or a class is created or reset, never per admit.
 func (s *ThrottleState) floor() float64 {
-	if s.options.MinRate != nil {
-		if configured := s.options.MinRate(); configured > 0 {
-			return configured
-		}
-	}
-	return s.minRate
+	return configured(s.options.MinRate, defaultThrottleMinRate)
 }
 
 func (s *ThrottleState) ceiling() float64 {
-	if s.options.MaxRate != nil {
-		if configured := s.options.MaxRate(); configured > 0 {
-			return configured
-		}
-	}
-	return s.maxRate
-}
-
-func (s *ThrottleState) ttl() time.Duration {
-	if s.options.KeyTTL != nil {
-		if configured := s.options.KeyTTL(); configured > 0 {
-			return configured
-		}
-	}
-	return s.keyTTL
+	return configured(s.options.MaxRate, defaultThrottleMaxRate)
 }
 
 func (s *ThrottleState) startRate() float64 {
-	if s.options.InitialRate != nil {
-		if configured := s.options.InitialRate(); configured > 0 {
-			return configured
-		}
-	}
-	return s.initialRate
+	return configured(s.options.InitialRate, defaultThrottleInitialRate)
+}
+
+func (s *ThrottleState) ttl() time.Duration {
+	return configured(s.options.KeyTTL, defaultThrottleKeyTTL)
+}
+
+func (s *ThrottleState) maxKeys() int {
+	return configured(s.options.MaxKeys, defaultThrottleMaxKeys)
+}
+
+func (s *ThrottleState) controlLaw() (beta, increaseRatio, lossThreshold float64) {
+	return configuredFraction(s.options.Beta, defaultThrottleBeta),
+		configuredFraction(s.options.IncreaseRatio, defaultThrottleIncreaseRatio),
+		configuredFraction(s.options.LossThreshold, defaultThrottleLossThreshold)
 }
 
 func (s *ThrottleState) peek(key ThrottleKey) *throttleEntry {
@@ -421,13 +376,9 @@ func (s *ThrottleState) getOrCreate(key ThrottleKey) *throttleEntry {
 	now := s.timeSource.Now()
 	s.maybeSweepLocked(now)
 	if len(s.entries) >= s.maxKeys() {
+		// Fail open past the cap. TaskThrottleKeysDropped is the signal; a log line per
+		// dropped key would fire hardest exactly when the host is already struggling.
 		metrics.TaskThrottleKeysDropped.With(s.metricsHandler).Record(1, key.cappedTags()...)
-		if now.Sub(s.lastCapLog) >= s.ttl() {
-			s.lastCapLog = now
-			s.logger.Warn("Throttle controller key cap reached, failing open.",
-				tag.NewStringTag("throttle-cause", key.Cause.String()),
-			)
-		}
 		return nil
 	}
 

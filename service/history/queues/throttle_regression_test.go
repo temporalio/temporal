@@ -19,10 +19,10 @@ func TestThrottleState_FailedSubmitAfterWindowDoesNotIncreaseRate(t *testing.T) 
 	state, timeSource := newTestThrottleState(o)
 	key := testKey()
 
-	allowed, permit, _ := state.Admit(key)
+	allowed, _, _ := state.Admit(key)
 	require.True(t, allowed)
 	timeSource.Update(timeSource.Now().Add(testThrottleWindow))
-	state.Finish(permit, false)
+	state.Return(key)
 
 	require.InEpsilon(t, 1.0, throttleRate(state, key), 1e-9)
 	require.True(t, admitOK(state, key), "the unused token must be returned")
@@ -31,13 +31,12 @@ func TestThrottleState_FailedSubmitAfterWindowDoesNotIncreaseRate(t *testing.T) 
 func TestThrottleState_SuccessfulSubmitCommitsRelease(t *testing.T) {
 	state, _ := newTestThrottleState(defaultThrottleOverrides())
 	key := testKey()
-	allowed, permit, _ := state.Admit(key)
+	allowed, metered, _ := state.Admit(key)
 	require.True(t, allowed)
+	require.True(t, metered, "the gate tracked this release")
 
-	state.Finish(permit, true)
-	permit.Lock()
-	defer permit.Unlock()
-	require.Equal(t, int64(1), permit.releases)
+	releases, _ := throttleCounters(state, key)
+	require.Equal(t, int64(1), releases)
 }
 
 func TestThrottleState_FailedSubmitRefundsWithoutRelease(t *testing.T) {
@@ -45,33 +44,31 @@ func TestThrottleState_FailedSubmitRefundsWithoutRelease(t *testing.T) {
 	o.initialRate = 1
 	state, _ := newTestThrottleState(o)
 	key := testKey()
-	allowed, permit, _ := state.Admit(key)
+	allowed, _, _ := state.Admit(key)
 	require.True(t, allowed)
 
-	state.Finish(permit, false)
-	permit.Lock()
-	defer permit.Unlock()
-	require.InEpsilon(t, 1.0, permit.tokens, 1e-9)
-	require.Zero(t, permit.releases)
+	state.Return(key)
+
+	releases, _ := throttleCounters(state, key)
+	require.Zero(t, releases, "a submit that never happened is not a release")
+	require.True(t, admitOK(state, key), "and its token is back")
 }
 
-func TestThrottleState_StalePermitChargesCurrentEntry(t *testing.T) {
+func TestThrottleState_RejectionAfterEvictionChargesTheCurrentEntry(t *testing.T) {
 	o := defaultThrottleOverrides()
 	o.keyTTL = time.Second
 	state, timeSource := newTestThrottleState(o)
 	key := testKey()
-	allowed, permit, _ := state.Admit(key)
+	allowed, metered, _ := state.Admit(key)
 	require.True(t, allowed)
-	state.Finish(permit, true)
 
 	timeSource.Update(timeSource.Now().Add(2 * o.keyTTL))
 	state.getOrCreate(apsKey("other"))
 	require.Nil(t, state.peek(key))
 
-	state.ReportThrottled(key, permit)
+	state.ReportThrottled(key, metered)
 	current := state.peek(key)
 	require.NotNil(t, current)
-	require.NotSame(t, permit, current)
 	current.Lock()
 	defer current.Unlock()
 	require.Equal(t, int64(1), current.rejections)
@@ -84,15 +81,14 @@ func TestThrottleState_DeniedAdmitReportsTokenETA(t *testing.T) {
 	key := testKey()
 
 	for range 4 {
-		allowed, permit, retryAfter := state.Admit(key)
+		allowed, _, retryAfter := state.Admit(key)
 		require.True(t, allowed)
 		require.Zero(t, retryAfter)
-		state.Finish(permit, true)
 	}
 
-	allowed, permit, retryAfter := state.Admit(key)
+	allowed, metered, retryAfter := state.Admit(key)
 	require.False(t, allowed)
-	require.Nil(t, permit)
+	require.False(t, metered)
 	require.Equal(t, 250*time.Millisecond, retryAfter)
 }
 
@@ -102,9 +98,9 @@ func TestThrottleState_FailOpenAdmitHasNoPermit(t *testing.T) {
 	state, _ := newTestThrottleState(o)
 
 	require.True(t, admitOK(state, apsKey("tracked")))
-	allowed, permit, _ := state.Admit(apsKey("overflow"))
-	require.True(t, allowed)
-	require.Nil(t, permit)
+	allowed, metered, _ := state.Admit(apsKey("overflow"))
+	require.True(t, allowed, "past the cap the gate fails open")
+	require.False(t, metered, "but it tracked nothing, so a rejection is not evidence")
 }
 
 func TestThrottleState_RefillUsesRateFromElapsedWindow(t *testing.T) {
@@ -161,16 +157,15 @@ func TestThrottleState_IndependentInstancesConvergeOnSharedBudget(t *testing.T) 
 			timeSource.Update(now)
 		}
 
-		permits := make([][]*throttleEntry, hostCount)
+		admitted := make([]int, hostCount)
 		total := 0
 		for i, state := range states {
 			for range offered[i] {
-				allowed, permit, _ := state.Admit(key)
+				allowed, _, _ := state.Admit(key)
 				if !allowed {
 					continue
 				}
-				state.Finish(permit, true)
-				permits[i] = append(permits[i], permit)
+				admitted[i]++
 				total++
 			}
 		}
@@ -178,9 +173,9 @@ func TestThrottleState_IndependentInstancesConvergeOnSharedBudget(t *testing.T) 
 		if total > sharedBudget {
 			overflow := total - sharedBudget
 			for i, state := range states {
-				rejected := int(math.Round(float64(overflow*len(permits[i])) / float64(total)))
-				for _, permit := range permits[i][:rejected] {
-					state.ReportThrottled(key, permit)
+				rejected := int(math.Round(float64(overflow*admitted[i]) / float64(total)))
+				for range rejected {
+					state.ReportThrottled(key, true)
 				}
 			}
 		}
@@ -288,10 +283,9 @@ func TestThrottleState_ThrottledWindowDoesNotIncrease(t *testing.T) {
 	key := testKey()
 	_, _, lossThreshold := state.controlLaw()
 	for i := int64(0); i < minDecisionReleases(lossThreshold); i++ {
-		allowed, permit, _ := state.Admit(key)
+		allowed, metered, _ := state.Admit(key)
 		require.True(t, allowed)
-		state.Finish(permit, true)
-		state.ReportThrottled(key, permit)
+		state.ReportThrottled(key, metered)
 	}
 	closeWindow(state, timeSource, key)
 
@@ -364,10 +358,11 @@ func TestThrottleState_RejectionUnderAnotherCauseChargesTheIssuingClass(t *testi
 	issuing := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
 	other := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, "ns-1")
 
-	allowed, permit, _ := state.Admit(issuing)
+	allowed, metered, _ := state.Admit(issuing)
 	require.True(t, allowed)
-	state.Finish(permit, true)
-	state.ReportThrottled(other, permit)
+	// The executable charges the class that issued the release, not the cause reported.
+	require.True(t, metered)
+	state.ReportThrottled(issuing, true)
 
 	releases, rejections := throttleCounters(state, issuing)
 	require.Equal(t, int64(1), releases)
@@ -391,20 +386,19 @@ func TestThrottleState_ConvergesOnTheShareLeftByOtherTraffic(t *testing.T) {
 		key := testKey()
 
 		for w := 0; w < 400; w++ {
-			permits := make([]*throttleEntry, 0, 512)
+			admitted := 0
 			for {
-				allowed, permit, _ := state.Admit(key)
+				allowed, _, _ := state.Admit(key)
 				if !allowed {
 					break
 				}
-				state.Finish(permit, true)
-				permits = append(permits, permit)
+				admitted++
 			}
-			if aggregate := other + float64(len(permits)); aggregate > budget && len(permits) > 0 {
+			if aggregate := other + float64(admitted); aggregate > budget && admitted > 0 {
 				// The enforcer refuses the overflow; this class owns its share of it.
-				rejected := int((aggregate - budget) * float64(len(permits)) / aggregate)
-				for i := 0; i < rejected && i < len(permits); i++ {
-					state.ReportThrottled(key, permits[i])
+				rejected := int((aggregate - budget) * float64(admitted) / aggregate)
+				for range rejected {
+					state.ReportThrottled(key, true)
 				}
 			}
 			timeSource.Update(timeSource.Now().Add(testThrottleWindow))
@@ -492,7 +486,7 @@ func TestThrottleState_UnadmittedRejectionsCannotDriveADecision(t *testing.T) {
 		require.True(t, admitOK(state, key))
 	}
 	for i := int64(0); i < samples*5; i++ {
-		state.ReportThrottled(key, nil)
+		state.ReportThrottled(key, false)
 	}
 	closeWindow(state, timeSource, key)
 
@@ -515,27 +509,27 @@ func TestThrottleState_RejectionSurvivesTheFlagGoingOff(t *testing.T) {
 			LossThreshold: dynamicconfig.GetFloatPropertyFn(0.05),
 			Window:        dynamicconfig.GetDurationPropertyFn(testThrottleWindow),
 			MaxKeys:       dynamicconfig.GetIntPropertyFn(1024),
+			MinRate:       dynamicconfig.GetFloatPropertyFn(1),
+			MaxRate:       dynamicconfig.GetFloatPropertyFn(10000),
+			InitialRate:   dynamicconfig.GetFloatPropertyFn(100),
+			KeyTTL:        dynamicconfig.GetDurationPropertyFn(5 * time.Minute),
 		},
 		timeSource,
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
 	)
-	state.minRate, state.maxRate, state.initialRate = 1, 10000, 100
-	state.keyTTL = 5 * time.Minute
 	key := testKey()
 
 	_, _, lossThreshold := state.controlLaw()
-	permits := make([]*throttleEntry, 0, 32)
-	for i := int64(0); i < minDecisionReleases(lossThreshold); i++ {
-		allowed, permit, _ := state.Admit(key)
+	samples := minDecisionReleases(lossThreshold)
+	for i := int64(0); i < samples; i++ {
+		allowed, _, _ := state.Admit(key)
 		require.True(t, allowed)
-		state.Finish(permit, true)
-		permits = append(permits, permit)
 	}
 
 	enabled = false
-	for _, permit := range permits {
-		state.ReportThrottled(key, permit)
+	for i := int64(0); i < samples; i++ {
+		state.ReportThrottled(key, true)
 	}
 	enabled = true
 	closeWindow(state, timeSource, key)
@@ -554,7 +548,7 @@ func TestThrottleState_LossThresholdOfZeroFallsBackToTheDefault(t *testing.T) {
 	key := testKey()
 
 	require.True(t, admitOK(state, key))
-	state.ReportThrottled(key, state.peek(key))
+	state.ReportThrottled(key, true)
 	closeWindow(state, timeSource, key)
 
 	require.InEpsilon(t, o.initialRate, throttleRate(state, key), 1e-9,
@@ -574,7 +568,7 @@ func TestThrottleState_LossExactlyAtTheThresholdDoesNotDecrease(t *testing.T) {
 	for i := int64(0); i < samples; i++ {
 		require.True(t, admitOK(state, key))
 	}
-	state.ReportThrottled(key, state.peek(key))
+	state.ReportThrottled(key, true)
 	closeWindow(state, timeSource, key)
 
 	require.GreaterOrEqual(t, throttleRate(state, key), o.initialRate,
@@ -615,19 +609,18 @@ func TestThrottleState_CompetingTrafficAboveTheBudgetPinsTheClassAtTheFloor(t *t
 		key := testKey()
 
 		for w := 0; w < 400; w++ {
-			permits := make([]*throttleEntry, 0, 512)
+			admitted := 0
 			for {
-				allowed, permit, _ := state.Admit(key)
+				allowed, _, _ := state.Admit(key)
 				if !allowed {
 					break
 				}
-				state.Finish(permit, true)
-				permits = append(permits, permit)
+				admitted++
 			}
-			if total := other + float64(len(permits)); total > budget && len(permits) > 0 {
-				rejected := int((total - budget) * float64(len(permits)) / total)
-				for i := 0; i < rejected && i < len(permits); i++ {
-					state.ReportThrottled(key, permits[i])
+			if total := other + float64(admitted); total > budget && admitted > 0 {
+				rejected := int((total - budget) * float64(admitted) / total)
+				for range rejected {
+					state.ReportThrottled(key, true)
 				}
 			}
 			timeSource.Update(timeSource.Now().Add(testThrottleWindow))
@@ -679,19 +672,20 @@ func TestThrottleState_CeilingIsLive(t *testing.T) {
 	state := NewThrottleState(
 		ThrottleStateOptions{
 			Enabled:       dynamicconfig.GetBoolPropertyFn(true),
-			MaxRate:       func() float64 { return ceiling },
 			Beta:          dynamicconfig.GetFloatPropertyFn(0.85),
 			IncreaseRatio: dynamicconfig.GetFloatPropertyFn(0.10),
 			LossThreshold: dynamicconfig.GetFloatPropertyFn(0.05),
 			Window:        dynamicconfig.GetDurationPropertyFn(testThrottleWindow),
 			MaxKeys:       dynamicconfig.GetIntPropertyFn(1024),
+			MinRate:       dynamicconfig.GetFloatPropertyFn(1),
+			MaxRate:       func() float64 { return ceiling },
+			InitialRate:   dynamicconfig.GetFloatPropertyFn(100),
+			KeyTTL:        dynamicconfig.GetDurationPropertyFn(5 * time.Minute),
 		},
 		timeSource,
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
 	)
-	state.minRate, state.maxRate, state.initialRate = 1, 10000, 100
-	state.keyTTL = 5 * time.Minute
 	key := testKey()
 
 	for i := 0; i < 60; i++ {
@@ -721,14 +715,13 @@ func TestThrottleState_FailuresOutsideTheBudgetDoNotSlowTheClass(t *testing.T) {
 		issued := 0
 		for w := 0; w < 120; w++ {
 			for {
-				allowed, permit, _ := state.Admit(key)
+				allowed, metered, _ := state.Admit(key)
 				if !allowed {
 					break
 				}
-				state.Finish(permit, true)
 				issued++
 				if issued%50 == 0 {
-					state.ReportThrottled(key, permit) // 2% budget loss, under the threshold
+					state.ReportThrottled(key, metered) // 2% budget loss, under the threshold
 				}
 				// The other issued%100 < contention dispatches fail on a workflow lock. The
 				// controller is told nothing about them, which is the whole point.

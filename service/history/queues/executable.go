@@ -76,12 +76,12 @@ type (
 		IsTerminalTaskError() bool
 	}
 
+	// ThrottleKeyProvider is implemented by executables the controller can pace: they report
+	// which class their last failure belongs to, and they can be told that the gate issued a
+	// dispatch, under which class. The zero key means neither.
 	ThrottleKeyProvider interface {
-		ThrottleKey() (ThrottleKey, bool)
-	}
-
-	throttlePermitReceiver interface {
-		SetThrottlePermit(permit *throttleEntry)
+		ThrottleKey() ThrottleKey
+		SetThrottleAdmitted(key ThrottleKey)
 	}
 )
 
@@ -148,8 +148,7 @@ type (
 		throttleState              *ThrottleState
 		throttleMu                 sync.Mutex
 		throttleKey                ThrottleKey
-		hasThrottleKey             bool
-		throttlePermit             *throttleEntry
+		throttleAdmittedKey        ThrottleKey
 		wasThrottled               bool
 		dlqEnabled                 dynamicconfig.BoolPropertyFn
 		terminalFailureCause       error
@@ -822,7 +821,7 @@ func (e *executableImpl) shouldResubmitOnNack(err error) bool {
 	if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) && common.IsResourceExhausted(err) {
 		// Resubmitting synchronously bypasses the rescheduler, and with it the gate, so every
 		// parked task would keep rediscovering the same constraint at full dispatch cost.
-		if e.throttleState != nil && e.throttleState.Enabled() && e.isGovernedByController() {
+		if e.throttleState != nil && e.throttleState.Enabled() && e.ThrottleKey() != (ThrottleKey{}) {
 			return false
 		}
 		if e.resourceExhaustedCount > resourceExhaustedResubmitMaxAttempts {
@@ -843,113 +842,54 @@ func (e *executableImpl) shouldResubmitOnNack(err error) bool {
 		err != consts.ErrNamespaceHandover
 }
 
+// reportThrottle records which class this failure belongs to and, when the gate issued the
+// dispatch, feeds the rejection back to the class that issued it.
+//
+// Classification happens whether or not the controller is running. The key is inert while it
+// is off, since every reader checks the flag first, but it means a task parked before the flag
+// is turned on already knows which budget refused it, instead of the first pass afterwards
+// releasing the whole backlog ungated.
+//
+// Only the governed budgets are evidence. A release refused by anything else - a contended
+// workflow lock, a limit enforced at another scope - says nothing about this namespace's APS
+// or persistence budget, so it stays counted as the clean release it was.
 func (e *executableImpl) reportThrottle(
 	cause enumspb.ResourceExhaustedCause,
 	scope enumspb.ResourceExhaustedScope,
 ) {
-	if e.throttleState == nil || !e.throttleState.Enabled() {
-		// A release committed before the flag was turned off still has to be matched, or the
-		// window it belongs to reads clean. The key itself is inert while the controller is
-		// off, since every reader checks Enabled first, but recording it is what lets a task
-		// parked before the flag was turned on be paced instead of draining in one wave.
-		e.reportGovernedRejection(cause, scope)
-		e.classifyThrottle(cause, scope)
-		return
-	}
-
-	metrics.TaskThrottleWastedAttempts.With(e.chasmMetricsHandler).Record(
-		1,
-		metrics.ResourceExhaustedCauseTag(cause),
-		metrics.ResourceExhaustedScopeTag(scope),
-	)
-
-	if !IsControllerInput(cause, scope) {
-		// The cause is not one the controller governs, but a release it issued still failed,
-		// so the class that issued it has to see the loss before the key is dropped. Workflow
-		// lock contention is the exception: it is not a shared budget, so releasing slower
-		// does not clear it and there is no feedback to lift the rate again.
-		e.clearThrottle()
-		return
-	}
-
-	key := NewThrottleKey(cause, e.GetNamespaceID())
+	governed := IsControllerInput(cause, scope)
 
 	e.throttleMu.Lock()
-	e.throttleKey = key
-	e.hasThrottleKey = true
-	e.wasThrottled = true
-	permit := e.throttlePermit
-	e.throttlePermit = nil
+	admitted := e.throttleAdmittedKey
+	e.throttleAdmittedKey = ThrottleKey{}
+	e.throttleKey = ThrottleKey{}
+	if governed {
+		e.throttleKey = NewThrottleKey(cause, e.GetNamespaceID())
+		e.wasThrottled = true
+	}
+	key := e.throttleKey
 	e.throttleMu.Unlock()
 
-	e.throttleState.ReportThrottled(key, permit)
-}
-
-// classifyThrottle records which class this failure belongs to without reporting it.
-func (e *executableImpl) classifyThrottle(
-	cause enumspb.ResourceExhaustedCause,
-	scope enumspb.ResourceExhaustedScope,
-) {
-	if !IsControllerInput(cause, scope) {
-		e.clearThrottle()
+	if e.throttleState == nil {
 		return
 	}
-	key := NewThrottleKey(cause, e.GetNamespaceID())
-
-	e.throttleMu.Lock()
-	defer e.throttleMu.Unlock()
-
-	e.throttleKey = key
-	e.hasThrottleKey = true
-	e.wasThrottled = true
-	e.throttlePermit = nil
-}
-
-// reportGovernedRejection charges a rejection to the class that issued the release, but only
-// for the budgets this controller paces. A release refused by anything else - a workflow lock,
-// a limit enforced at a different scope - says nothing about this namespace's APS or
-// persistence budget, so it is dropped rather than counted in either direction.
-func (e *executableImpl) reportGovernedRejection(
-	cause enumspb.ResourceExhaustedCause,
-	scope enumspb.ResourceExhaustedScope,
-) {
-	permit := e.takeThrottlePermit()
-	if permit == nil || !IsControllerInput(cause, scope) {
+	if e.throttleState.Enabled() {
+		metrics.TaskThrottleWastedAttempts.With(e.chasmMetricsHandler).Record(
+			1,
+			metrics.ResourceExhaustedCauseTag(cause),
+			metrics.ResourceExhaustedScopeTag(scope),
+		)
+	}
+	if !governed {
 		return
 	}
-	e.throttleState.ReportThrottled(permit.key, permit)
-}
-
-func (e *executableImpl) takeThrottlePermit() *throttleEntry {
-	e.throttleMu.Lock()
-	defer e.throttleMu.Unlock()
-
-	permit := e.throttlePermit
-	e.throttlePermit = nil
-	return permit
-}
-
-func (e *executableImpl) clearThrottle() {
-	e.throttleMu.Lock()
-	defer e.throttleMu.Unlock()
-
-	e.hasThrottleKey = false
-	e.throttleKey = ThrottleKey{}
-	e.throttlePermit = nil
-}
-
-func (e *executableImpl) SetThrottlePermit(permit *throttleEntry) {
-	e.throttleMu.Lock()
-	defer e.throttleMu.Unlock()
-
-	e.throttlePermit = permit
-}
-
-func (e *executableImpl) ThrottleKey() (ThrottleKey, bool) {
-	e.throttleMu.Lock()
-	defer e.throttleMu.Unlock()
-
-	return e.throttleKey, e.hasThrottleKey
+	if admitted != (ThrottleKey{}) {
+		// The class that issued the release is the one this is evidence about, whichever
+		// budget refused it.
+		e.throttleState.ReportThrottled(admitted, true)
+		return
+	}
+	e.throttleState.ReportThrottled(key, false)
 }
 
 func (e *executableImpl) reportCompletion() {
@@ -967,11 +907,26 @@ func (e *executableImpl) reportCompletion() {
 	metrics.TaskThrottleCompletions.With(e.chasmMetricsHandler).Record(1)
 }
 
-func (e *executableImpl) isGovernedByController() bool {
+func (e *executableImpl) clearThrottle() {
 	e.throttleMu.Lock()
 	defer e.throttleMu.Unlock()
 
-	return e.hasThrottleKey
+	e.throttleKey = ThrottleKey{}
+	e.throttleAdmittedKey = ThrottleKey{}
+}
+
+func (e *executableImpl) SetThrottleAdmitted(key ThrottleKey) {
+	e.throttleMu.Lock()
+	defer e.throttleMu.Unlock()
+
+	e.throttleAdmittedKey = key
+}
+
+func (e *executableImpl) ThrottleKey() ThrottleKey {
+	e.throttleMu.Lock()
+	defer e.throttleMu.Unlock()
+
+	return e.throttleKey
 }
 
 func (e *executableImpl) backoffDuration(

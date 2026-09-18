@@ -1488,8 +1488,7 @@ func (s *executableSuite) TestHandleErr_NonThrottleErrorsAreNotControllerInputs(
 
 			_ = executable.HandleErr(tc.taskErr)
 			provider := executable.(queues.ThrottleKeyProvider)
-			_, known := provider.ThrottleKey()
-			s.False(known)
+			s.Equal(queues.ThrottleKey{}, provider.ThrottleKey())
 		})
 	}
 }
@@ -1529,12 +1528,12 @@ func (s *executableSuite) TestHandleErr_DLQPatternClearsAStaleThrottleKey() {
 
 	provider, ok := executable.(queues.ThrottleKeyProvider)
 	s.Require().True(ok)
-	_, held := provider.ThrottleKey()
+	held := provider.ThrottleKey() != queues.ThrottleKey{}
 	s.True(held, "the throttled attempt should have attached a key")
 
 	s.Error(executable.HandleErr(serviceerror.NewUnavailable("does-not-matter")))
 
-	_, held = provider.ThrottleKey()
+	held = provider.ThrottleKey() != queues.ThrottleKey{}
 	s.False(held, "a task headed for the DLQ must not still be parked on a budget")
 }
 
@@ -1570,13 +1569,12 @@ func (s *executableSuite) TestHandleErr_ThrottleErrorsDriveController() {
 	s.True(ok)
 
 	s.Error(executable.HandleErr(throttleErr))
-	key, known := provider.ThrottleKey()
-	s.True(known)
+	key := provider.ThrottleKey()
+	s.NotEqual(queues.ThrottleKey{}, key)
 	s.Equal(queues.NewThrottleKey(throttleErr.Cause, tests.NamespaceID.String()), key)
 
 	s.Error(executable.HandleErr(serviceerror.NewUnavailable("unrelated")))
-	_, known = provider.ThrottleKey()
-	s.False(known)
+	s.Equal(queues.ThrottleKey{}, provider.ThrottleKey())
 }
 
 func (s *executableSuite) TestHandleErr_BusyWorkflowClearsThrottleClass() {
@@ -1592,12 +1590,10 @@ func (s *executableSuite) TestHandleErr_BusyWorkflowClearsThrottleClass() {
 	}))
 	provider, ok := executable.(queues.ThrottleKeyProvider)
 	s.True(ok)
-	_, known := provider.ThrottleKey()
-	s.True(known)
+	s.NotEqual(queues.ThrottleKey{}, provider.ThrottleKey())
 
 	s.Error(executable.HandleErr(consts.ErrResourceExhaustedBusyWorkflow))
-	_, known = provider.ThrottleKey()
-	s.False(known)
+	s.Equal(queues.ThrottleKey{}, provider.ThrottleKey())
 
 	s.mockScheduler.EXPECT().TrySubmit(executable).Return(true)
 	executable.Nack(consts.ErrResourceExhaustedBusyWorkflow)

@@ -59,16 +59,16 @@ func newTestThrottleStateWithWindow(
 			IncreaseRatio: dynamicconfig.GetFloatPropertyFn(o.increase),
 			LossThreshold: dynamicconfig.GetFloatPropertyFn(o.lossThresh),
 			Window:        dynamicconfig.GetDurationPropertyFn(window),
+			MinRate:       dynamicconfig.GetFloatPropertyFn(o.minRate),
+			MaxRate:       dynamicconfig.GetFloatPropertyFn(o.maxRate),
+			InitialRate:   dynamicconfig.GetFloatPropertyFn(o.initialRate),
 			MaxKeys:       dynamicconfig.GetIntPropertyFn(o.maxKeys),
+			KeyTTL:        dynamicconfig.GetDurationPropertyFn(o.keyTTL),
 		},
 		timeSource,
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
 	)
-	state.minRate = o.minRate
-	state.maxRate = o.maxRate
-	state.initialRate = o.initialRate
-	state.keyTTL = o.keyTTL
 	return state, timeSource
 }
 
@@ -132,22 +132,28 @@ func testKey() ThrottleKey {
 }
 
 func admitOK(c *ThrottleState, key ThrottleKey) bool {
-	allowed, permit, _ := c.Admit(key)
-	c.Finish(permit, true)
+	allowed, _, _ := c.Admit(key)
 	return allowed
 }
 
 // reportThrottle feeds rejections in for one control decision. A decision needs a sample the
 // loss ratio can resolve, so the admitted form supplies the releases the rejections are
 // measured against: one call is one window of total loss.
+// reportThrottle drives one decision's worth of total loss through the real admission path:
+// enough metered releases for the ratio to resolve the threshold, every one of them refused.
+// The unadmitted form reports a rejection the gate never issued, which must stay inert.
+// reportThrottle drives one control decision's worth of total loss. It plants the sample
+// rather than admitting through the gate, because the tests built on it are about the decision
+// and must not have their bucket drained underneath them; the admission path is covered by
+// admitOK, admitAndReject and the convergence tests.
 func reportThrottle(c *ThrottleState, key ThrottleKey, admitted bool) {
 	if !c.Enabled() || !admitted {
-		c.ReportThrottled(key, nil)
+		c.ReportThrottled(key, false)
 		return
 	}
 	entry := c.getOrCreate(key)
 	if entry == nil {
-		c.ReportThrottled(key, nil)
+		c.ReportThrottled(key, false)
 		return
 	}
 	_, _, lossThreshold := c.controlLaw()
@@ -156,18 +162,17 @@ func reportThrottle(c *ThrottleState, key ThrottleKey, admitted bool) {
 	entry.releases += samples
 	entry.rejections += samples - 1
 	entry.Unlock()
-	c.ReportThrottled(key, entry)
+	c.ReportThrottled(key, true)
 }
 
 // admitAndReject issues one release and reports it rejected, which is the metered pair the
 // control law measures. It reports false when the gate refused the release.
 func admitAndReject(c *ThrottleState, key ThrottleKey) bool {
-	allowed, permit, _ := c.Admit(key)
+	allowed, metered, _ := c.Admit(key)
 	if !allowed {
 		return false
 	}
-	c.Finish(permit, true)
-	c.ReportThrottled(key, permit)
+	c.ReportThrottled(key, metered)
 	return true
 }
 
