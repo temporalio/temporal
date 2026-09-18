@@ -20,41 +20,41 @@ type scalerCfg = dynamicconfig.TypedPropertyFn[dynamicconfig.SimplePartitionScal
 
 // simplePartitionScalerFactory creates simplePartitionScalers.
 type simplePartitionScalerFactory struct {
-	cfg      scalerFactoryCfg
-	oldCount dynamicconfig.IntPropertyFnWithTaskQueueFilter
+	cfg         scalerFactoryCfg
+	legacyCount dynamicconfig.IntPropertyFnWithTaskQueueFilter
 }
 
 func newSimplePartitionScalerFactory(
 	cfg scalerFactoryCfg,
-	oldCount dynamicconfig.IntPropertyFnWithTaskQueueFilter,
+	legacyCount dynamicconfig.IntPropertyFnWithTaskQueueFilter,
 ) *simplePartitionScalerFactory {
-	return &simplePartitionScalerFactory{cfg: cfg, oldCount: oldCount}
+	return &simplePartitionScalerFactory{cfg: cfg, legacyCount: legacyCount}
 }
 
 func (s *simplePartitionScalerFactory) New(
 	nsName namespace.Name, tqName string, tqType enumspb.TaskQueueType,
 ) PartitionScaler {
 	cfg := func() dynamicconfig.SimplePartitionScalerSettings { return s.cfg(nsName.String(), tqName, tqType) }
-	oldCount := func() int { return s.oldCount(nsName.String(), tqName, tqType) }
-	return newSimplePartitionScaler(cfg, oldCount, clock.NewRealTimeSource())
+	legacyCount := func() int { return s.legacyCount(nsName.String(), tqName, tqType) }
+	return newSimplePartitionScaler(cfg, legacyCount, clock.NewRealTimeSource())
 }
 
 // simplePartitionScaler uses task add rates to scale partitions.
 type simplePartitionScaler struct {
 	cfg scalerCfg
-	// oldCount returns the "old" static partition count that the *AsMultipleOfOldCount
+	// legacyCount returns the "legacy" static partition count that the *AsMultipleOfLegacy
 	// settings are relative to. May be nil, which disables those settings.
-	oldCount dynamicconfig.IntPropertyFn
-	ts       clock.TimeSource
-	trackers map[time.Duration]*taskTracker
+	legacyCount dynamicconfig.IntPropertyFn
+	ts          clock.TimeSource
+	trackers    map[time.Duration]*taskTracker
 }
 
-func newSimplePartitionScaler(cfg scalerCfg, oldCount dynamicconfig.IntPropertyFn, ts clock.TimeSource) *simplePartitionScaler {
+func newSimplePartitionScaler(cfg scalerCfg, legacyCount dynamicconfig.IntPropertyFn, ts clock.TimeSource) *simplePartitionScaler {
 	return &simplePartitionScaler{
-		cfg:      cfg,
-		oldCount: oldCount,
-		ts:       ts,
-		trackers: make(map[time.Duration]*taskTracker),
+		cfg:         cfg,
+		legacyCount: legacyCount,
+		ts:          ts,
+		trackers:    make(map[time.Duration]*taskTracker),
 	}
 }
 
@@ -74,20 +74,20 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 		return PartitionScalerDecision{NewTarget: 0}
 	}
 
-	var oldCount int // read at most once per call
+	var legacyCount int // read at most once per call
 	multiplied := func(setting float32) int {
-		if setting <= 0 || s.oldCount == nil {
+		if setting <= 0 || s.legacyCount == nil {
 			return 0
 		}
-		if oldCount == 0 {
-			oldCount = max(1, s.oldCount())
+		if legacyCount == 0 {
+			legacyCount = max(1, s.legacyCount())
 		}
-		return max(1, int(setting*float32(oldCount)+0.5))
+		return max(1, int(setting*float32(legacyCount)+0.5))
 	}
 
 	if cfg.Fixed > 0 {
 		return PartitionScalerDecision{NewTarget: int(cfg.Fixed), BacklogCap: int(cfg.BacklogCap)}
-	} else if fixed := multiplied(cfg.FixedAsMultipleOfOldCount); fixed > 0 {
+	} else if fixed := multiplied(cfg.FixedAsMultipleOfLegacy); fixed > 0 {
 		return PartitionScalerDecision{NewTarget: fixed, BacklogCap: int(cfg.BacklogCap)}
 	}
 
@@ -128,13 +128,13 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 	if cfg.Min > 0 {
 		totalTarget = max(totalTarget, int(cfg.Min))
 	}
-	if multipliedMin := multiplied(cfg.MinAsMultipleOfOldCount); multipliedMin > 0 {
+	if multipliedMin := multiplied(cfg.MinAsMultipleOfLegacy); multipliedMin > 0 {
 		totalTarget = max(totalTarget, multipliedMin)
 	}
 	if cfg.Max > 0 {
 		totalTarget = min(totalTarget, int(cfg.Max))
 	}
-	if multipliedMax := multiplied(cfg.MaxAsMultipleOfOldCount); multipliedMax > 0 {
+	if multipliedMax := multiplied(cfg.MaxAsMultipleOfLegacy); multipliedMax > 0 {
 		totalTarget = min(totalTarget, multipliedMax)
 	}
 

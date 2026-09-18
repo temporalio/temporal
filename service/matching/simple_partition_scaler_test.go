@@ -116,7 +116,7 @@ func TestOnTasksFixedIncludesBacklogCap(t *testing.T) {
 	}
 	scaler := newSimplePartitionScaler(
 		dynamicconfig.GetTypedPropertyFn(cfg),
-		nil, // no old count
+		nil, // no legacy count
 		nil, // time source unused on the fixed path
 	)
 	decision := scaler.OnTasks(PartitionScalerInput{CurrentTarget: 1})
@@ -180,13 +180,13 @@ func TestOnTasksBacklogScalesUpAndDown(t *testing.T) {
 	require.Equal(t, 1, d.NewTarget)
 }
 
-// TestOnTasksOldCountMultiples covers the *AsMultipleOfOldCount settings and how they combine
+// TestOnTasksLegacyMultiples covers the *AsMultipleOfLegacy settings and how they combine
 // with the explicit Fixed/Min/Max: an explicit Fixed wins over the derived one, while derived
 // Min/Max apply in addition to explicit ones, so the more restrictive of the pair wins.
 //
 // Each case uses no Ups/Downs and CurrentTarget 1, so the pre-clamp target is
 // 1 (add baseline) + the number of occupied partitions.
-func TestOnTasksOldCountMultiples(t *testing.T) {
+func TestOnTasksLegacyMultiples(t *testing.T) {
 	t.Parallel()
 
 	// backlog knobs shared by the non-fixed cases, so backlog counts above 300 occupy a
@@ -194,117 +194,117 @@ func TestOnTasksOldCountMultiples(t *testing.T) {
 	const backlogReset, backlogBase = 100, 300
 
 	for _, tc := range []struct {
-		name     string
-		cfg      dynamicconfig.SimplePartitionScalerSettings
-		oldCount func() int
-		counts   []int64
-		expected int
+		name        string
+		cfg         dynamicconfig.SimplePartitionScalerSettings
+		legacyCount func() int
+		counts      []int64
+		expected    int
 	}{{
 		name: "derived max clamps",
 		cfg: dynamicconfig.SimplePartitionScalerSettings{
 			Enabled: true, BacklogReset: backlogReset, BacklogBase: backlogBase,
-			MaxAsMultipleOfOldCount: 1,
+			MaxAsMultipleOfLegacy: 1,
 		},
-		oldCount: func() int { return 2 },
-		counts:   []int64{500, 500, 500}, // pre-clamp 1+3 = 4
-		expected: 2,                      // capped at the old count: the rollback-safety case
+		legacyCount: func() int { return 2 },
+		counts:      []int64{500, 500, 500}, // pre-clamp 1+3 = 4
+		expected:    2,                      // capped at the legacy count: the rollback-safety case
 	}, {
 		name: "derived min raises",
 		cfg: dynamicconfig.SimplePartitionScalerSettings{
 			Enabled: true, BacklogReset: backlogReset, BacklogBase: backlogBase,
-			MinAsMultipleOfOldCount: 2,
+			MinAsMultipleOfLegacy: 2,
 		},
-		oldCount: func() int { return 2 },
-		counts:   nil, // pre-clamp 1
-		expected: 4,
+		legacyCount: func() int { return 2 },
+		counts:      nil, // pre-clamp 1
+		expected:    4,
 	}, {
 		name: "derived min more restrictive than explicit",
 		cfg: dynamicconfig.SimplePartitionScalerSettings{
 			Enabled: true, BacklogReset: backlogReset, BacklogBase: backlogBase,
-			Min: 2, MinAsMultipleOfOldCount: 1,
+			Min: 2, MinAsMultipleOfLegacy: 1,
 		},
-		oldCount: func() int { return 4 },
-		counts:   nil, // pre-clamp 1
-		expected: 4,   // derived min 4 beats explicit min 2
+		legacyCount: func() int { return 4 },
+		counts:      nil, // pre-clamp 1
+		expected:    4,   // derived min 4 beats explicit min 2
 	}, {
 		name: "explicit min more restrictive than derived",
 		cfg: dynamicconfig.SimplePartitionScalerSettings{
 			Enabled: true, BacklogReset: backlogReset, BacklogBase: backlogBase,
-			Min: 6, MinAsMultipleOfOldCount: 1,
+			Min: 6, MinAsMultipleOfLegacy: 1,
 		},
-		oldCount: func() int { return 4 },
-		counts:   nil, // pre-clamp 1
-		expected: 6,   // explicit min 6 beats derived min 4
+		legacyCount: func() int { return 4 },
+		counts:      nil, // pre-clamp 1
+		expected:    6,   // explicit min 6 beats derived min 4
 	}, {
 		name: "derived max more restrictive than explicit",
 		cfg: dynamicconfig.SimplePartitionScalerSettings{
 			Enabled: true, BacklogReset: backlogReset, BacklogBase: backlogBase,
-			Max: 100, MaxAsMultipleOfOldCount: 1,
+			Max: 100, MaxAsMultipleOfLegacy: 1,
 		},
-		oldCount: func() int { return 2 },
-		counts:   []int64{500, 500, 500}, // pre-clamp 1+3 = 4
-		expected: 2,                      // derived max 2 beats explicit max 100
+		legacyCount: func() int { return 2 },
+		counts:      []int64{500, 500, 500}, // pre-clamp 1+3 = 4
+		expected:    2,                      // derived max 2 beats explicit max 100
 	}, {
 		name: "explicit max more restrictive than derived",
 		cfg: dynamicconfig.SimplePartitionScalerSettings{
 			Enabled: true, BacklogReset: backlogReset, BacklogBase: backlogBase,
-			Max: 2, MaxAsMultipleOfOldCount: 4,
+			Max: 2, MaxAsMultipleOfLegacy: 4,
 		},
-		oldCount: func() int { return 2 },
-		counts:   []int64{500, 500, 500}, // pre-clamp 1+3 = 4
-		expected: 2,                      // explicit max 2 beats derived max 8
+		legacyCount: func() int { return 2 },
+		counts:      []int64{500, 500, 500}, // pre-clamp 1+3 = 4
+		expected:    2,                      // explicit max 2 beats derived max 8
 	}, {
 		name: "multiple rounds to nearest",
 		cfg: dynamicconfig.SimplePartitionScalerSettings{
 			Enabled: true, BacklogReset: backlogReset, BacklogBase: backlogBase,
-			MaxAsMultipleOfOldCount: 1.5,
+			MaxAsMultipleOfLegacy: 1.5,
 		},
-		oldCount: func() int { return 3 },
-		counts:   []int64{500, 500, 500, 500, 500, 500}, // pre-clamp 1+6 = 7
-		expected: 5,                                     // 1.5*3 = 4.5 rounds to 5
+		legacyCount: func() int { return 3 },
+		counts:      []int64{500, 500, 500, 500, 500, 500}, // pre-clamp 1+6 = 7
+		expected:    5,                                     // 1.5*3 = 4.5 rounds to 5
 	}, {
 		name: "small multiple still yields at least one",
 		cfg: dynamicconfig.SimplePartitionScalerSettings{
 			Enabled: true, BacklogReset: backlogReset, BacklogBase: backlogBase,
-			MaxAsMultipleOfOldCount: 0.1,
+			MaxAsMultipleOfLegacy: 0.1,
 		},
-		oldCount: func() int { return 2 },
-		counts:   []int64{500}, // pre-clamp 1+1 = 2
-		expected: 1,            // 0.1*2 = 0.2 would round down to 0
+		legacyCount: func() int { return 2 },
+		counts:      []int64{500}, // pre-clamp 1+1 = 2
+		expected:    1,            // 0.1*2 = 0.2 would round down to 0
 	}, {
-		name: "nil old count disables derivation",
+		name: "nil legacy count disables derivation",
 		cfg: dynamicconfig.SimplePartitionScalerSettings{
 			Enabled: true, BacklogReset: backlogReset, BacklogBase: backlogBase,
-			MaxAsMultipleOfOldCount: 1,
+			MaxAsMultipleOfLegacy: 1,
 		},
-		oldCount: nil,
-		counts:   []int64{500, 500, 500}, // pre-clamp 1+3 = 4
-		expected: 4,                      // unclamped
+		legacyCount: nil,
+		counts:      []int64{500, 500, 500}, // pre-clamp 1+3 = 4
+		expected:    4,                      // unclamped
 	}, {
 		name: "max wins over a conflicting min",
 		cfg: dynamicconfig.SimplePartitionScalerSettings{
 			Enabled: true, BacklogReset: backlogReset, BacklogBase: backlogBase,
-			Max: 4, MinAsMultipleOfOldCount: 2,
+			Max: 4, MinAsMultipleOfLegacy: 2,
 		},
-		oldCount: func() int { return 4 },
-		counts:   nil, // pre-clamp 1
-		expected: 4,   // derived min 8 raises it, then explicit max 4 pulls it back down
+		legacyCount: func() int { return 4 },
+		counts:      nil, // pre-clamp 1
+		expected:    4,   // derived min 8 raises it, then explicit max 4 pulls it back down
 	}, {
-		name:     "derived fixed",
-		cfg:      dynamicconfig.SimplePartitionScalerSettings{Enabled: true, FixedAsMultipleOfOldCount: 2},
-		oldCount: func() int { return 4 },
-		expected: 8,
+		name:        "derived fixed",
+		cfg:         dynamicconfig.SimplePartitionScalerSettings{Enabled: true, FixedAsMultipleOfLegacy: 2},
+		legacyCount: func() int { return 4 },
+		expected:    8,
 	}, {
-		name:     "explicit fixed wins over derived",
-		cfg:      dynamicconfig.SimplePartitionScalerSettings{Enabled: true, Fixed: 3, FixedAsMultipleOfOldCount: 2},
-		oldCount: func() int { return 8 },
-		expected: 3,
+		name:        "explicit fixed wins over derived",
+		cfg:         dynamicconfig.SimplePartitionScalerSettings{Enabled: true, Fixed: 3, FixedAsMultipleOfLegacy: 2},
+		legacyCount: func() int { return 8 },
+		expected:    3,
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			scaler := newSimplePartitionScaler(
 				dynamicconfig.GetTypedPropertyFn(tc.cfg),
-				tc.oldCount,
+				tc.legacyCount,
 				nil, // time source unused with no Ups/Downs
 			)
 			d := scaler.OnTasks(PartitionScalerInput{
@@ -316,14 +316,14 @@ func TestOnTasksOldCountMultiples(t *testing.T) {
 	}
 }
 
-// TestOnTasksFixedFromOldCountIncludesBacklogCap verifies the derived-Fixed fast path
+// TestOnTasksFixedFromLegacyIncludesBacklogCap verifies the derived-Fixed fast path
 // propagates BacklogCap, like the explicit-Fixed path does.
-func TestOnTasksFixedFromOldCountIncludesBacklogCap(t *testing.T) {
+func TestOnTasksFixedFromLegacyIncludesBacklogCap(t *testing.T) {
 	t.Parallel()
 	cfg := dynamicconfig.SimplePartitionScalerSettings{
-		Enabled:                   true,
-		FixedAsMultipleOfOldCount: 2,
-		BacklogCap:                1000,
+		Enabled:                 true,
+		FixedAsMultipleOfLegacy: 2,
+		BacklogCap:              1000,
 	}
 	scaler := newSimplePartitionScaler(
 		dynamicconfig.GetTypedPropertyFn(cfg),
