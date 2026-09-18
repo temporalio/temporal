@@ -79,7 +79,6 @@ type (
 		windowStart  time.Time
 		lastAccess   time.Time
 		releases     int64
-		withdrawn    int64 // releases whose outcome says nothing about the budget
 		rejections   int64
 		suppressions int64
 		// Spans Admit to Finish only, which is the reservation, not the task's execution.
@@ -248,19 +247,6 @@ func minDecisionReleases(lossThreshold float64) int64 {
 	return int64(math.Ceil(1 / lossThreshold))
 }
 
-// WithdrawRelease marks a release as saying nothing about the budget. It still counts toward
-// the evidence a decision needs, because the class did release it; it is only taken out of the
-// ratio, so it neither reads as a success nor as loss.
-func (s *ThrottleState) WithdrawRelease(permit *throttleEntry) {
-	if permit == nil {
-		return
-	}
-	permit.Lock()
-	defer permit.Unlock()
-
-	permit.withdrawn++
-}
-
 // advanceWindowLocked closes an elapsed window and applies at most one rate change for it.
 //
 // A window that carries too little evidence to resolve the threshold is closed without a
@@ -280,21 +266,12 @@ func (s *ThrottleState) advanceWindowLocked(entry *throttleEntry, now time.Time,
 		return
 	}
 	defer func() {
-		entry.releases, entry.withdrawn = 0, 0
-		entry.rejections, entry.suppressions = 0, 0
+		entry.releases, entry.rejections, entry.suppressions = 0, 0, 0
 	}()
-
-	// Withdrawn releases leave the ratio, so a window can carry evidence and still say nothing
-	// about the budget. A withdrawal reported after the window that released it can also push
-	// this negative, which reads the same way.
-	budgetReleases := entry.releases - entry.withdrawn
-	if budgetReleases <= 0 {
-		return
-	}
 
 	// A rejection can land in the window after the one that released it, so this can exceed
 	// 1. It is only ever compared to the threshold, which it is above either way.
-	loss := float64(entry.rejections) / float64(budgetReleases)
+	loss := float64(entry.rejections) / float64(entry.releases)
 	switch {
 	case loss > lossThreshold:
 		entry.rate = s.clamp(entry.rate * beta)
@@ -333,8 +310,7 @@ func (e *throttleEntry) resetLocked(rate float64, now time.Time, window time.Dur
 	e.rate = rate
 	e.lastRefill = now
 	e.windowStart = now
-	e.releases, e.withdrawn = 0, 0
-	e.rejections, e.suppressions = 0, 0
+	e.releases, e.rejections, e.suppressions = 0, 0, 0
 	e.tokens = e.burstLocked(window)
 }
 

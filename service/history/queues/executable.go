@@ -852,7 +852,7 @@ func (e *executableImpl) reportThrottle(
 		// window it belongs to reads clean. The key itself is inert while the controller is
 		// off, since every reader checks Enabled first, but recording it is what lets a task
 		// parked before the flag was turned on be paced instead of draining in one wave.
-		e.closeOutPermit(cause)
+		e.reportGovernedRejection(cause, scope)
 		e.classifyThrottle(cause, scope)
 		return
 	}
@@ -868,7 +868,6 @@ func (e *executableImpl) reportThrottle(
 		// so the class that issued it has to see the loss before the key is dropped. Workflow
 		// lock contention is the exception: it is not a shared budget, so releasing slower
 		// does not clear it and there is no feedback to lift the rate again.
-		e.closeOutPermit(cause)
 		e.clearThrottle()
 		return
 	}
@@ -906,17 +905,16 @@ func (e *executableImpl) classifyThrottle(
 	e.throttlePermit = nil
 }
 
-// closeOutPermit settles the reservation this dispatch was issued under, for the paths that
-// drop the class rather than report against it. A workflow lock is not a shared budget, so a
-// release refused by one is withdrawn from the sample instead of charged: releasing more
-// slowly cannot clear a lock, and leaving it counted would read as the budget being free.
-func (e *executableImpl) closeOutPermit(cause enumspb.ResourceExhaustedCause) {
+// reportGovernedRejection charges a rejection to the class that issued the release, but only
+// for the budgets this controller paces. A release refused by anything else - a workflow lock,
+// a limit enforced at a different scope - says nothing about this namespace's APS or
+// persistence budget, so it is dropped rather than counted in either direction.
+func (e *executableImpl) reportGovernedRejection(
+	cause enumspb.ResourceExhaustedCause,
+	scope enumspb.ResourceExhaustedScope,
+) {
 	permit := e.takeThrottlePermit()
-	if permit == nil {
-		return
-	}
-	if cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW {
-		e.throttleState.WithdrawRelease(permit)
+	if permit == nil || !IsControllerInput(cause, scope) {
 		return
 	}
 	e.throttleState.ReportThrottled(permit.key, permit)

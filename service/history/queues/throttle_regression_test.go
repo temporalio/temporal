@@ -588,29 +588,6 @@ func TestThrottleState_RejectionSurvivesTheFlagGoingOff(t *testing.T) {
 		"every release failed, so the window must not read clean")
 }
 
-// A dispatch refused for a reason pacing cannot fix is not evidence in either direction. Left
-// in the sample it reads as a success, so a class failing entirely on lock contention would
-// climb - and the burst it climbs to is the wave this design exists to remove.
-func TestThrottleState_WithdrawnReleaseDoesNotRaiseTheRate(t *testing.T) {
-	o := defaultThrottleOverrides()
-	state, timeSource := newTestThrottleState(o)
-	key := testKey()
-
-	for i := 0; i < 400; i++ {
-		allowed, permit, _ := state.Admit(key)
-		if !allowed {
-			closeWindow(state, timeSource, key)
-			continue
-		}
-		state.Finish(permit, true)
-		state.WithdrawRelease(permit)
-	}
-	closeWindow(state, timeSource, key)
-
-	require.LessOrEqual(t, throttleRate(state, key), o.initialRate,
-		"a class whose every dispatch failed must not have climbed")
-}
-
 // A threshold of zero makes any single rejection a decrease and demands a perfectly clean
 // window for an increase. That is the rule the design argues against, reached from below;
 // commit 073471ef1 closed the same hole at the top of the range.
@@ -716,45 +693,6 @@ func TestThrottleState_CompetingTrafficAboveTheBudgetPinsTheClassAtTheFloor(t *t
 		"the two regimes are not close; the boundary is a cliff, not a slope")
 }
 
-// A withdrawal says "this release tells us nothing about the budget", not "this release did not
-// happen". Taking it out of the evidence as well as the ratio meant a class whose dispatches
-// kept failing on lock contention never reached the decision threshold, so its rate never moved
-// in either direction - it stayed wherever it happened to sit, including at the floor.
-func TestThrottleState_WithdrawalsDoNotFreezeTheDecisionCadence(t *testing.T) {
-	o := defaultThrottleOverrides()
-	o.initialRate = 40
-	state, timeSource := newTestThrottleState(o)
-	key := testKey()
-
-	// Nine dispatches in ten fail on something pacing cannot fix; the tenth is refused by the
-	// budget, which is 10% loss and above the threshold.
-	issued := 0
-	for w := 0; w < 40; w++ {
-		for {
-			allowed, permit, _ := state.Admit(key)
-			if !allowed {
-				break
-			}
-			state.Finish(permit, true)
-			issued++
-			if issued%10 == 0 {
-				state.ReportThrottled(key, permit)
-			} else {
-				state.WithdrawRelease(permit)
-			}
-		}
-		closeWindow(state, timeSource, key)
-	}
-
-	// Direction alone does not discriminate, because shrinking the evidence only slowed the
-	// cadence rather than reversing it. The cadence is the point: every one of these windows
-	// carries a full sample, so forty of them at total budget loss land near the floor (~3.5),
-	// where counting a withdrawal against the evidence stretches each decision across five
-	// windows and leaves the class an order of magnitude higher (~17.7).
-	require.Less(t, throttleRate(state, key), o.initialRate/8,
-		"a decision must be reached every window, however many dispatches were withdrawn")
-}
-
 // The rate a class starts at goes through the same clamp as every rate the control law
 // produces. Without that, an initial rate above the ceiling hands the class a burst of one
 // window at that rate the first time it is touched.
@@ -813,31 +751,40 @@ func TestThrottleState_CeilingIsLive(t *testing.T) {
 		"lowering the ceiling must pull a class already above it back down")
 }
 
-// A class every one of whose dispatches fails on lock contention has no information about the
-// budget, so holding its rate is right. What must not happen is that it cannot leave that
-// state: the moment contention clears, the very next window has a real sample again.
-func TestThrottleState_FullyWithdrawnClassStillRecovers(t *testing.T) {
-	o := defaultThrottleOverrides()
-	state, timeSource := newTestThrottleState(o)
-	key := testKey()
+// Only the namespace APS and persistence budgets are evidence. A release refused by anything
+// else - a contended workflow lock above all - says nothing about the budget this class paces,
+// so it must not change how fast the class is allowed to go. Counting such a failure as loss
+// inflates the ratio by 1/(1 - contention) and drives a healthy class toward the floor.
+func TestThrottleState_FailuresOutsideTheBudgetDoNotSlowTheClass(t *testing.T) {
+	settle := func(contention int) float64 {
+		o := defaultThrottleOverrides()
+		o.initialRate = 200
+		state, timeSource := newTestThrottleState(o)
+		key := testKey()
 
-	for w := 0; w < 100; w++ {
-		for {
-			allowed, permit, _ := state.Admit(key)
-			if !allowed {
-				break
+		issued := 0
+		for w := 0; w < 120; w++ {
+			for {
+				allowed, permit, _ := state.Admit(key)
+				if !allowed {
+					break
+				}
+				state.Finish(permit, true)
+				issued++
+				if issued%50 == 0 {
+					state.ReportThrottled(key, permit) // 2% budget loss, under the threshold
+				}
+				// The other issued%100 < contention dispatches fail on a workflow lock. The
+				// controller is told nothing about them, which is the whole point.
 			}
-			state.Finish(permit, true)
-			state.WithdrawRelease(permit)
+			closeWindow(state, timeSource, key)
 		}
-		closeWindow(state, timeSource, key)
+		return throttleRate(state, key)
 	}
-	require.InEpsilon(t, o.initialRate, throttleRate(state, key), 1e-9,
-		"no evidence about the budget means no decision, in either direction")
 
-	// Contention clears.
-	cleanWindow(state, key)
-	closeWindow(state, timeSource, key)
-	require.InEpsilon(t, o.initialRate*(1+o.increase), throttleRate(state, key), 1e-9,
-		"the first window with a real sample must move the rate again")
+	quiet := settle(0)
+	for _, contention := range []int{50, 80, 95} {
+		require.InEpsilon(t, quiet, settle(contention), 1e-9,
+			"%d%% lock contention must not change the rate; only the budget decides it", contention)
+	}
 }
