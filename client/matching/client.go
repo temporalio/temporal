@@ -174,12 +174,14 @@ func (c *clientImpl) pickClientForWrite(
 	p tqid.Partition,
 	loadBalance bool,
 	pc PartitionCounts,
-) (matchingservice.MatchingServiceClient, error) {
+) (matchingservice.MatchingServiceClient, int, error) {
+	estimatedTasksAllPartitions := 0
 	if loadBalance {
-		p = c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
+		p, estimatedTasksAllPartitions = c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
 	}
 	proto.Name = p.RpcName()
-	return c.getClientForTaskQueuePartition(p)
+	client, err := c.getClientForTaskQueuePartition(p)
+	return client, estimatedTasksAllPartitions, err
 }
 
 // pickClientForRead mutates the given proto. Callers should copy the proto before if necessary.

@@ -56,10 +56,11 @@ func (c *clientImpl) doAddActivityTask(
 		Priority:               request.Priority,
 		ComponentRef:           request.ComponentRef,
 	}
-	client, err := c.pickClientForWrite(request.GetTaskQueue(), p, loadBalance, pc)
+	client, estimatedTasksAllPartitions, err := c.pickClientForWrite(request.GetTaskQueue(), p, loadBalance, pc)
 	if err != nil {
 		return nil, err
 	}
+	ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions)
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.AddActivityTask(ctx, request, opts...)
@@ -105,10 +106,11 @@ func (c *clientImpl) doAddWorkflowTask(
 		Priority:               request.Priority,
 		Stamp:                  request.Stamp,
 	}
-	client, err := c.pickClientForWrite(request.GetTaskQueue(), p, loadBalance, pc)
+	client, estimatedTasksAllPartitions, err := c.pickClientForWrite(request.GetTaskQueue(), p, loadBalance, pc)
 	if err != nil {
 		return nil, err
 	}
+	ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions)
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.AddWorkflowTask(ctx, request, opts...)
@@ -402,10 +404,11 @@ func (c *clientImpl) doDispatchNexusTask(
 		Request:     request.Request,
 		ForwardInfo: request.ForwardInfo,
 	}
-	client, err := c.pickClientForWrite(request.GetTaskQueue(), p, loadBalance, pc)
+	client, estimatedTasksAllPartitions, err := c.pickClientForWrite(request.GetTaskQueue(), p, loadBalance, pc)
 	if err != nil {
 		return nil, err
 	}
+	ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions)
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.DispatchNexusTask(ctx, request, opts...)
@@ -811,10 +814,11 @@ func (c *clientImpl) doQueryWorkflow(
 		ForwardInfo:      request.ForwardInfo,
 		Priority:         request.Priority,
 	}
-	client, err := c.pickClientForWrite(request.GetTaskQueue(), p, loadBalance, pc)
+	client, estimatedTasksAllPartitions, err := c.pickClientForWrite(request.GetTaskQueue(), p, loadBalance, pc)
 	if err != nil {
 		return nil, err
 	}
+	ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions)
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.QueryWorkflow(ctx, request, opts...)

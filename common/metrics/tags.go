@@ -26,6 +26,7 @@ const (
 	namespaceState          = "namespace_state"
 	sourceCluster           = "source_cluster"
 	targetCluster           = "target_cluster"
+	transport               = "transport"
 	taskSourceTag           = "source"
 	forwardedTag            = "forwarded"
 	pollResultTagName       = "poll_result"
@@ -155,6 +156,14 @@ func TargetClusterTag(value string) Tag {
 		value = unknownValue
 	}
 	return Tag{Key: targetCluster, Value: value}
+}
+
+// TransportTag returns a new transport tag.
+func TransportTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: transport, Value: value}
 }
 
 // FromClusterIDTag returns a new from cluster tag.
@@ -336,8 +345,8 @@ const (
 
 const (
 	PollerScaleReasonIdle                 ReasonString = "idle"
-	PollerScaleReasonBacklog              ReasonString = "backlog"
-	PollerScaleReasonTaskRate             ReasonString = "task_rate"
+	PollerScaleReasonDelay                ReasonString = "delay"
+	PollerScaleReasonRatio                ReasonString = "ratio"
 	PollerScaleReasonRateLimited          ReasonString = "rate_limited"
 	PollerScaleReasonTaskQueueRateLimited ReasonString = "task_queue_rate_limited"
 )
@@ -441,6 +450,22 @@ func ResourceExhaustedScopeTag(scope enumspb.ResourceExhaustedScope) Tag {
 	return Tag{Key: resourceExhaustedScopeTag, Value: scope.String()}
 }
 
+func LastAttemptCauseTag(value string) Tag {
+	return Tag{Key: LastAttemptCauseTagName, Value: value}
+}
+
+// Values for AttemptStageTagName, identifying whether TaskAlertableAttempt was recorded
+// mid-retry or at the attempt's final resolution.
+const (
+	AttemptStageInFlight = "in_flight"
+	AttemptStageTerminal = "terminal"
+)
+
+var (
+	AttemptStageInFlightTag = Tag{Key: AttemptStageTagName, Value: AttemptStageInFlight}
+	AttemptStageTerminalTag = Tag{Key: AttemptStageTagName, Value: AttemptStageTerminal}
+)
+
 func ServiceNameTag(value primitives.ServiceName) Tag {
 	return Tag{Key: serviceName, Value: string(value)}
 }
@@ -472,6 +497,9 @@ type ReasonString string
 // ReasonTag is a generic tag can be used anywhere a reason is needed.
 // Make sure that the value is of limited cardinality.
 func ReasonTag(value ReasonString) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
 	return Tag{Key: reason, Value: string(value)}
 }
 
@@ -488,6 +516,16 @@ func ReplicationTaskPriorityTag(value enumsspb.TaskPriority) Tag {
 // DestinationTag is a tag for metrics emitted by outbound task executors for the task's destination.
 func DestinationTag(value string) Tag {
 	return Tag{Key: destination, Value: value}
+}
+
+// NexusCompletionSourceTag identifies the CHASM component that delivered a completion callback, by
+// its fully qualified name, e.g. "workflow.workflow". An empty value means the framework could not
+// resolve the callback's parent.
+func NexusCompletionSourceTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: nexusCompletionSourceTagName, Value: value}
 }
 
 func VersioningBehaviorTag(behavior enumspb.VersioningBehavior) Tag {

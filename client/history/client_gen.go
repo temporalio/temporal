@@ -524,7 +524,21 @@ func (c *clientImpl) IsActivityTaskValid(
 	request *historyservice.IsActivityTaskValidRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.IsActivityTaskValidResponse, error) {
-	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetExecution().GetWorkflowId())
+	var shardID int32
+	if len(request.GetComponentRef()) == 0 {
+		shardID = c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetExecution().GetWorkflowId())
+	} else {
+		componentRef, err := c.tokenSerializer.DeserializeChasmComponentRef(request.GetComponentRef())
+		if err != nil {
+			return nil, serviceerror.NewInvalidArgument("error deserializing component ref")
+		}
+		if componentRef.GetNamespaceId() == "" || componentRef.GetBusinessId() == "" {
+			return nil, serviceerror.NewInvalidArgument("component ref missing namespace ID or business ID")
+		}
+
+		shardID = c.shardIDFromWorkflowID(componentRef.GetNamespaceId(), componentRef.GetBusinessId())
+	}
+
 	var response *historyservice.IsActivityTaskValidResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error

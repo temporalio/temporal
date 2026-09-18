@@ -5,7 +5,7 @@ import (
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence/visibility"
-	"go.temporal.io/server/components/nexusoperations"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 )
 
 var (
@@ -79,7 +79,6 @@ var (
 		dynamicconfig.ForceNexusEndpointRefreshOnRead.Key():                 true,
 		dynamicconfig.RefreshNexusEndpointsMinWait.Key():                    1 * time.Millisecond,
 		nexusoperations.RecordCancelRequestCompletionEvents.Key():           true,
-		nexusoperations.UseSystemCallbackURL.Key():                          true,
 
 		// CHASM scheduler rollout percents default to 0 in production; in tests we
 		// dial them to 100 so existing tests that only flip the binary enable flag

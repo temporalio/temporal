@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -743,8 +744,6 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	// TODO@time-skipping: if time skipping happened, the virtual time is
-	// propagated to the new mutable state, need to check the fast-forward works correctly in the retry.
 	newMutableState, err := workflow.NewMutableStateInChain(
 		t.shardContext,
 		t.shardContext.GetEventsCache(),
@@ -801,6 +800,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 			t.shardContext.GetThrottledLogger(),
 			t.shardContext.GetMetricsHandler(),
 			nil, // no pagination buffer limiter as it is a transient context
+			testhooks.TestHooks{},
 		),
 		newMutableState,
 	)

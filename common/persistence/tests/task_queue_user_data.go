@@ -2,6 +2,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -180,6 +181,34 @@ func (s *TaskQueueUserDataSuite) TestUpdateConflict() {
 		s.Equal(int64(3), res.UserData.Version)
 		s.True(hlc.Equal(data.Data.Clock, res.UserData.Data.Clock))
 	}
+}
+
+func (s *TaskQueueUserDataSuite) TestGetTaskQueuesByBuildIDPages() {
+	buildID := "build-id"
+	const taskQueueCount = 101
+	expectedTaskQueues := make([]string, 0, taskQueueCount)
+
+	for i := range taskQueueCount {
+		taskQueue := fmt.Sprintf("task-queue-%03d", i)
+		expectedTaskQueues = append(expectedTaskQueues, taskQueue)
+		err := s.taskManager.UpdateTaskQueueUserData(s.ctx, &p.UpdateTaskQueueUserDataRequest{
+			NamespaceID: s.namespaceID,
+			Updates: map[string]*p.SingleTaskQueueUserDataUpdate{
+				taskQueue: {
+					UserData:      s.makeData(hlc.Zero(12345), 0),
+					BuildIdsAdded: []string{buildID},
+				},
+			},
+		})
+		s.NoError(err)
+	}
+
+	taskQueues, err := s.taskManager.GetTaskQueuesByBuildId(s.ctx, &p.GetTaskQueuesByBuildIdRequest{
+		NamespaceID: s.namespaceID,
+		BuildID:     buildID,
+	})
+	s.NoError(err)
+	s.ElementsMatch(expectedTaskQueues, taskQueues)
 }
 
 func (s *TaskQueueUserDataSuite) makeData(prev *hlc.Clock, ver int64) *persistencespb.VersionedTaskQueueUserData {
