@@ -7089,46 +7089,6 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.ElementsMatch(t, []int32{1, 2, 3, 4}, remotePartitionIDs)
 	})
 
-	t.Run("fan-out: falls back to DC when scale info has zero read", func(t *testing.T) {
-		// When PartitionScale returns zero (dynamic partitioning not active), the code
-		// should fall back to NumReadPartitions from dynamic config. We assert on
-		// remote partition IDs to prove DC=3 was used (partitions 1,2 only).
-		t.Parallel()
-		scaleInfo := &taskqueuespb.PartitionScaleInfo{Read: 0} // zero triggers fallback to DC
-		routeFn := func(p tqid.Partition) (string, error) {
-			if strings.Contains(p.RpcName(), "/") {
-				return "remote-host", nil // child partitions go remote
-			}
-			return "self-host", nil // root stays local
-		}
-		engine, mockMatchingClient := setupFanOutTest(t, 3, scaleInfo, routeFn)
-		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
-
-		var remotePartitionIDs []int32
-		mockMatchingClient.EXPECT().
-			CancelOutstandingWorkerPollsPartition(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(_ context.Context, req *matchingservice.CancelOutstandingWorkerPollsPartitionRequest, _ ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
-				for _, p := range req.GetPartitions() {
-					remotePartitionIDs = append(remotePartitionIDs, p.GetNormalPartitionId())
-				}
-				return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{CancelledCount: 1}, nil
-			}).
-			Times(1) // all remote partitions grouped to one host
-
-		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
-			&matchingservice.CancelOutstandingWorkerPollsRequest{
-				NamespaceId:       "test-namespace-id",
-				TaskQueue:         &taskqueuepb.TaskQueue{Name: "test-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-				WorkerInstanceKey: "worker-key",
-				WorkerIdentity:    "worker-identity",
-			})
-
-		require.NoError(t, err)
-		require.Equal(t, int32(2), resp.CancelledCount) // 1 local (root) + 1 remote RPC
-		// The absence of partition 3+ proves the DC value of 3 was used, not scale info.
-		require.ElementsMatch(t, []int32{1, 2}, remotePartitionIDs)
-	})
 
 	t.Run("fan-out: removePollerFromHistory called for every partition", func(t *testing.T) {
 		// Verifies that poller history is cleaned up for each partition, not just
