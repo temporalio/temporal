@@ -1769,7 +1769,8 @@ func (x *ApplyNamespaceMutationRequest) GetNamespaceTask() *v15.NamespaceTaskAtt
 }
 
 type ApplyNamespaceMutationResponse struct {
-	state         protoimpl.MessageState                 `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Result of applying the mutation on the receiving cluster.
 	Outcome       ApplyNamespaceMutationResponse_Outcome `protobuf:"varint,1,opt,name=outcome,proto3,enum=temporal.server.api.adminservice.v1.ApplyNamespaceMutationResponse_Outcome" json:"outcome,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

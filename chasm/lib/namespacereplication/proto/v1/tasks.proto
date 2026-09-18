@@ -21,6 +21,8 @@ message ApplyPeerTask {
 // ApplyPeerBackoffTask fires after a retriable peer apply failure. It is a pure
 // timer task that re-enqueues ApplyPeerTask as an immediate outbound task.
 message ApplyPeerBackoffTask {
+  // Peer cell whose retry is released when this timer fires.
   string target_cell = 1;
+  // Attempt number used to reject stale or duplicate retry timers.
   int32 attempt = 2;
 }

@@ -306,20 +306,22 @@ func (PeerApplyOutcome) EnumDescriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDescGZIP(), []int{3}
 }
 
-// NamespaceMutation is the input to a NamespaceMutationComponent — the full target
-// state of the namespace plus the CAS guard and an optional correlation ID.
+// NamespaceMutation is the input to a NamespaceMutationComponent. It contains
+// the full target state of the namespace and the local CAS guard.
 type NamespaceMutation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// CREATE or UPDATE. Mirrors transmission_task_handler's NamespaceOperation.
 	Operation NamespaceOperation `protobuf:"varint,1,opt,name=operation,proto3,enum=temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceOperation" json:"operation,omitempty"`
-	// Full target NamespaceDetail. Self-contained — apply tasks read this directly
-	// and write it as-is to the metadata store / peer cells.
+	// Full target NamespaceDetail. The local apply writes this detail to the
+	// metadata store. Peer applies convert it to NamespaceTaskAttributes before
+	// invoking ApplyNamespaceMutation.
 	NamespaceDetail *v1.NamespaceDetail `protobuf:"bytes,2,opt,name=namespace_detail,json=namespaceDetail,proto3" json:"namespace_detail,omitempty"`
 	// CAS guard for the local apply. Must match the metadata store's current
 	// notification_version (today: cell-global counter; future: per-namespace).
 	ExpectedVersion int64 `protobuf:"varint,3,opt,name=expected_version,json=expectedVersion,proto3" json:"expected_version,omitempty"`
-	// List of peer cells to fan out to after the local apply succeeds.
-	// Drawn from NamespaceDetail.replication_config.clusters minus the local cell.
+	// List of peer cells to fan out to after the local apply succeeds. For an
+	// update, this is the union of the previous and target cluster lists, minus
+	// the local cell, so a removed peer receives the final configuration.
 	PeerCells     []string `protobuf:"bytes,4,rep,name=peer_cells,json=peerCells,proto3" json:"peer_cells,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -457,9 +459,11 @@ func (x *NamespaceMutationState) GetPeerApply() map[string]*PeerApplyStatus {
 }
 
 type LocalApplyStatus struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	Outcome   LocalApplyOutcome      `protobuf:"varint,1,opt,name=outcome,proto3,enum=temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyOutcome" json:"outcome,omitempty"`
-	AppliedAt *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=applied_at,json=appliedAt,proto3" json:"applied_at,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Current outcome of the local metadata-store apply.
+	Outcome LocalApplyOutcome `protobuf:"varint,1,opt,name=outcome,proto3,enum=temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyOutcome" json:"outcome,omitempty"`
+	// Time the local apply reached COMMITTED or FAILED. Unset while pending.
+	ResolvedAt *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=resolved_at,json=resolvedAt,proto3" json:"resolved_at,omitempty"`
 	// Failure detail when outcome is FAILED (e.g. CAS conflict, store unavailable).
 	Failure       *v11.Failure `protobuf:"bytes,3,opt,name=failure,proto3" json:"failure,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -503,9 +507,9 @@ func (x *LocalApplyStatus) GetOutcome() LocalApplyOutcome {
 	return LOCAL_APPLY_OUTCOME_UNSPECIFIED
 }
 
-func (x *LocalApplyStatus) GetAppliedAt() *timestamppb.Timestamp {
+func (x *LocalApplyStatus) GetResolvedAt() *timestamppb.Timestamp {
 	if x != nil {
-		return x.AppliedAt
+		return x.ResolvedAt
 	}
 	return nil
 }
@@ -518,12 +522,16 @@ func (x *LocalApplyStatus) GetFailure() *v11.Failure {
 }
 
 type PeerApplyStatus struct {
-	state          protoimpl.MessageState `protogen:"open.v1"`
-	Outcome        PeerApplyOutcome       `protobuf:"varint,1,opt,name=outcome,proto3,enum=temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyOutcome" json:"outcome,omitempty"`
-	AttemptCount   int32                  `protobuf:"varint,2,opt,name=attempt_count,json=attemptCount,proto3" json:"attempt_count,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Current outcome of applying the mutation to this peer.
+	Outcome PeerApplyOutcome `protobuf:"varint,1,opt,name=outcome,proto3,enum=temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyOutcome" json:"outcome,omitempty"`
+	// Number of completed apply attempts.
+	AttemptCount int32 `protobuf:"varint,2,opt,name=attempt_count,json=attemptCount,proto3" json:"attempt_count,omitempty"`
+	// Time the first apply attempt result was recorded. Unset before the first attempt.
 	FirstAttemptAt *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=first_attempt_at,json=firstAttemptAt,proto3" json:"first_attempt_at,omitempty"`
-	LastAttemptAt  *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_attempt_at,json=lastAttemptAt,proto3" json:"last_attempt_at,omitempty"`
-	// Failure detail when outcome is FAILED_*.
+	// Time the most recent apply attempt result was recorded.
+	LastAttemptAt *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_attempt_at,json=lastAttemptAt,proto3" json:"last_attempt_at,omitempty"`
+	// Most recent failure. Retained after a later successful attempt for diagnostics.
 	LastFailure   *v11.Failure `protobuf:"bytes,5,opt,name=last_failure,json=lastFailure,proto3" json:"last_failure,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -614,11 +622,11 @@ const file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto
 	"peer_apply\x18\x04 \x03(\v2^.temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.PeerApplyEntryR\tpeerApply\x1a\x86\x01\n" +
 	"\x0ePeerApplyEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12^\n" +
-	"\x05value\x18\x02 \x01(\v2H.temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatusR\x05value:\x028\x01\"\xef\x01\n" +
+	"\x05value\x18\x02 \x01(\v2H.temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatusR\x05value:\x028\x01\"\xf1\x01\n" +
 	"\x10LocalApplyStatus\x12d\n" +
-	"\aoutcome\x18\x01 \x01(\x0e2J.temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyOutcomeR\aoutcome\x129\n" +
-	"\n" +
-	"applied_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\tappliedAt\x12:\n" +
+	"\aoutcome\x18\x01 \x01(\x0e2J.temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyOutcomeR\aoutcome\x12;\n" +
+	"\vresolved_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"resolvedAt\x12:\n" +
 	"\afailure\x18\x03 \x01(\v2 .temporal.api.failure.v1.FailureR\afailure\"\xea\x02\n" +
 	"\x0fPeerApplyStatus\x12c\n" +
 	"\aoutcome\x18\x01 \x01(\x0e2I.temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyOutcomeR\aoutcome\x12#\n" +
@@ -685,7 +693,7 @@ var file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_d
 	6,  // 4: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.local_apply:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus
 	8,  // 5: temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.peer_apply:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationState.PeerApplyEntry
 	2,  // 6: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus.outcome:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyOutcome
-	10, // 7: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus.applied_at:type_name -> google.protobuf.Timestamp
+	10, // 7: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus.resolved_at:type_name -> google.protobuf.Timestamp
 	11, // 8: temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyStatus.failure:type_name -> temporal.api.failure.v1.Failure
 	3,  // 9: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus.outcome:type_name -> temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyOutcome
 	10, // 10: temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyStatus.first_attempt_at:type_name -> google.protobuf.Timestamp
