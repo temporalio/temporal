@@ -1845,7 +1845,9 @@ type ReplicationTaskInfo struct {
 	TargetClusters         []string                `protobuf:"bytes,23,rep,name=target_clusters,json=targetClusters,proto3" json:"target_clusters,omitempty"`
 	IsForceReplication     bool                    `protobuf:"varint,24,opt,name=is_force_replication,json=isForceReplication,proto3" json:"is_force_replication,omitempty"`
 	// (-- api-linter: core::0141::forbidden-types=disabled --)
-	ArchetypeId           uint32              `protobuf:"varint,25,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
+	ArchetypeId uint32 `protobuf:"varint,25,opt,name=archetype_id,json=archetypeId,proto3" json:"archetype_id,omitempty"`
+	// Contains the current version-history items captured when this replication task was created.
+	// The branch token is omitted; presence distinguishes captured tasks from legacy tasks.
 	CurrentVersionHistory *v14.VersionHistory `protobuf:"bytes,26,opt,name=current_version_history,json=currentVersionHistory,proto3" json:"current_version_history,omitempty"`
 	unknownFields         protoimpl.UnknownFields
 	sizeCache             protoimpl.SizeCache
