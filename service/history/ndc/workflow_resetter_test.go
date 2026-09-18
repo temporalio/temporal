@@ -902,6 +902,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 
 	resetContext := historyi.NewMockWorkflowContext(s.controller)
 	resetContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
+	resetContext.EXPECT().RefreshCacheSize()
 	resetContext.EXPECT().Unlock()
 	resetContext.EXPECT().IsDirty().Return(false).AnyTimes()
 	resetMutableState := historyi.NewMockMutableState(s.controller)
@@ -996,6 +997,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_MissingCu
 	// runB survives and loads.
 	runBContext := historyi.NewMockWorkflowContext(s.controller)
 	runBContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
+	runBContext.EXPECT().RefreshCacheSize()
 	runBContext.EXPECT().Unlock()
 	runBContext.EXPECT().IsDirty().Return(false).AnyTimes()
 	runBMutableState := historyi.NewMockMutableState(s.controller)
@@ -1007,6 +1009,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_MissingCu
 	// runC was deleted; loading it truncates the chain.
 	runCContext := historyi.NewMockWorkflowContext(s.controller)
 	runCContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
+	runCContext.EXPECT().RefreshCacheSize()
 	runCContext.EXPECT().Unlock()
 	runCContext.EXPECT().IsDirty().Return(false).AnyTimes()
 	runCContext.EXPECT().Clear().AnyTimes()
@@ -1061,6 +1064,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_MissingCu
 
 	runBContext := historyi.NewMockWorkflowContext(s.controller)
 	runBContext.EXPECT().Lock(gomock.Any(), locks.PriorityHigh).Return(nil)
+	runBContext.EXPECT().RefreshCacheSize()
 	runBContext.EXPECT().Unlock()
 	runBContext.EXPECT().IsDirty().Return(false).AnyTimes()
 	runBContext.EXPECT().Clear().AnyTimes()
