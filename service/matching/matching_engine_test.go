@@ -3004,6 +3004,154 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_NoData() {
 	s.Nil(res.UserData.GetData())
 }
 
+func (s *matchingEngineSuite) applyTaskQueueUserDataReplicationEvent(
+	taskQueue string,
+	data *persistencespb.TaskQueueUserData,
+) *persistencespb.TaskQueueUserData {
+	taskQueueFamily, err := tqid.NewTaskQueueFamily(s.ns.ID().String(), taskQueue)
+	s.Require().NoError(err)
+	pm, _, err := s.matchingEngine.getTaskQueuePartitionManager(
+		context.Background(),
+		taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(),
+		true,
+		loadCauseUserData,
+	)
+	s.Require().NoError(err)
+
+	_, err = s.matchingEngine.ApplyTaskQueueUserDataReplicationEvent(context.Background(), &matchingservice.ApplyTaskQueueUserDataReplicationEventRequest{
+		NamespaceId: s.ns.ID().String(),
+		TaskQueue:   taskQueue,
+		UserData:    data,
+	})
+	s.Require().NoError(err)
+
+	userData, _, err := pm.GetUserDataManager().GetUserData()
+	s.Require().NoError(err)
+	s.Require().NotNil(userData.GetData())
+	return userData.GetData()
+}
+
+func (s *matchingEngineSuite) seedTaskQueueUserData(taskQueue string, data *persistencespb.TaskQueueUserData) {
+	s.Require().NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(), &persistence.UpdateTaskQueueUserDataRequest{
+		NamespaceID: s.ns.ID().String(),
+		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
+			taskQueue: {UserData: &persistencespb.VersionedTaskQueueUserData{Data: data}},
+		},
+	}))
+}
+
+func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventAcceptsClocklessData() {
+	deploymentData := &persistencespb.TaskQueueUserData{
+		PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+			int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+				DeploymentData: &persistencespb.DeploymentData{
+					DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+						"deployment": {
+							RoutingConfig: &deploymentpb.RoutingConfig{RevisionNumber: 1},
+						},
+					},
+				},
+			},
+		},
+	}
+	fairnessData := &persistencespb.TaskQueueUserData{
+		PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+			int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY): {FairnessState: enumsspb.FAIRNESS_STATE_V2},
+		},
+	}
+	tests := []struct {
+		name     string
+		current  *persistencespb.TaskQueueUserData
+		incoming *persistencespb.TaskQueueUserData
+	}{
+		{
+			name:     "deployment data replaces persisted empty payload",
+			current:  &persistencespb.TaskQueueUserData{},
+			incoming: deploymentData,
+		},
+		{
+			name:     "fairness data replaces absent payload",
+			incoming: fairnessData,
+		},
+		{
+			name: "incoming data replaces different clockless payload",
+			current: &persistencespb.TaskQueueUserData{
+				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+					int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY): {FairnessState: enumsspb.FAIRNESS_STATE_V1},
+				},
+			},
+			incoming: fairnessData,
+		},
+	}
+
+	for _, test := range tests {
+		s.Run(test.name, func() {
+			taskQueue := uuid.NewString()
+			if test.current != nil {
+				s.seedTaskQueueUserData(taskQueue, test.current)
+			}
+
+			got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, test.incoming)
+
+			protorequire.ProtoEqual(s.T(), test.incoming, got)
+		})
+	}
+}
+
+func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventKeepsClockedCurrent() {
+	captureHandler := s.captureDroppedOnEngine()
+	clockedCurrent := &persistencespb.TaskQueueUserData{
+		Clock: &clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1},
+		PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+			int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V1},
+		},
+	}
+	tests := []struct {
+		name        string
+		incoming    *persistencespb.TaskQueueUserData
+		wantDropped bool
+	}{
+		{
+			name:        "clockless incoming",
+			wantDropped: true,
+			incoming: &persistencespb.TaskQueueUserData{
+				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V2},
+				},
+			},
+		},
+		{
+			name:        "older clocked incoming",
+			wantDropped: true,
+			incoming: &persistencespb.TaskQueueUserData{
+				Clock: &clockspb.HybridLogicalClock{WallClock: 5, ClusterId: 1},
+				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V2},
+				},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		s.Run(test.name, func() {
+			taskQueue := uuid.NewString()
+			s.seedTaskQueueUserData(taskQueue, clockedCurrent)
+			capture := captureHandler.StartCapture()
+			defer captureHandler.StopCapture(capture)
+
+			got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, test.incoming)
+
+			protorequire.ProtoEqual(s.T(), clockedCurrent, got)
+			recordings := capture.Snapshot()[metrics.TaskQueueUserDataReplicationIncomingPerTypeDataDropped.Name()]
+			if test.wantDropped {
+				s.Len(recordings, 1)
+			} else {
+				s.Empty(recordings)
+			}
+		})
+	}
+}
+
 func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {
 	namespaceID := namespace.ID(uuid.NewString())
 	tq := "tupac"
