@@ -6894,11 +6894,12 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 	})
 
 	t.Run("fan-out: uses dynamic partition count from scale info", func(t *testing.T) {
-		// When PartitionScale returns a non-zero Read count, the fan-out should use that
-		// instead of the dynamic config value. DC says 3, but scale info says 5 — so we
-		// expect RPCs for partitions 1-4, not just 1-2.
+		// Simulate dynamic partitioning by setting scaleInfo.Read=5 while DC=3.
+		// If the code correctly reads from PartitionScale(), it fans out to partitions
+		// 0-4 (5 total). If it incorrectly uses DC, it would only fan out to 0-2 (3 total).
+		// We assert on the actual partition IDs in the remote RPC to distinguish the two.
 		t.Parallel()
-		scaleInfo := &taskqueuespb.PartitionScaleInfo{Read: 5, Write: 3}
+		scaleInfo := &taskqueuespb.PartitionScaleInfo{Read: 5, Write: 3} // Read=5 differs from DC=3
 		routeFn := func(p tqid.Partition) (string, error) {
 			rpcName := p.RpcName()
 			if strings.Contains(rpcName, "/") {
@@ -6906,7 +6907,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			}
 			return "self-host", nil // root stays local
 		}
-		engine, mockMatchingClient := setupFanOutTest(t, 3, scaleInfo, routeFn)
+		engine, mockMatchingClient := setupFanOutTest(t, 3 /* DC */, scaleInfo, routeFn)
 		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
 
 		var remotePartitionIDs []int32
@@ -6933,16 +6934,17 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			})
 
 		require.NoError(t, err)
-		// 1 local (root) + 1 remote RPC = 2 total
-		require.Equal(t, int32(2), resp.CancelledCount)
-		// Remote RPC should include partitions 1,2,3,4 (not just 1,2 from DC=3)
+		require.Equal(t, int32(2), resp.CancelledCount) // 1 local (root) + 1 remote RPC
+		// Key assertion: partitions 3,4 prove scale info (Read=5) was used, not DC (3).
+		// With DC=3 this would be [1,2] only.
 		require.ElementsMatch(t, []int32{1, 2, 3, 4}, remotePartitionIDs)
 	})
 
 	t.Run("fan-out: falls back to DC when scale info has zero read", func(t *testing.T) {
-		// When PartitionScale returns zero Read, fall back to NumReadPartitions from DC.
+		// When PartitionScale returns zero (dynamic partitioning not active), the code
+		// should fall back to NumReadPartitions from dynamic config.
 		t.Parallel()
-		scaleInfo := &taskqueuespb.PartitionScaleInfo{Read: 0, Write: 0}
+		scaleInfo := &taskqueuespb.PartitionScaleInfo{Read: 0, Write: 0} // zero triggers fallback to DC
 		routeFn := func(p tqid.Partition) (string, error) {
 			return "self-host", nil
 		}
