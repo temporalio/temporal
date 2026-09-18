@@ -292,11 +292,10 @@ func (s *FunctionalClustersTestSuite) TestNaturallyBufferedChildWorkflowOutcomes
 		}
 		commands = append(commands, startChildWorkflowCommand(childIDs[outcome], childQueues[outcome], runTimeout))
 	}
-	s.completeWorkflowTaskAndScheduleNext(ctx, workflowTaskCompletion{
+	heldWorkflowTask := s.completeWorkflowTaskAndReturnNext(ctx, workflowTaskCompletion{
 		Task:     firstTask,
 		Commands: commands,
 	})
-	heldWorkflowTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, parentQueue)
 	s.Require().NotEmpty(heldWorkflowTask.TaskToken)
 
 	completedTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, childQueues["completed"])

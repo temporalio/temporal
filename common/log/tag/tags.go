@@ -66,6 +66,16 @@ func RequestID(requestID string) ZapTag {
 	return NewStringTag("request-id", requestID)
 }
 
+// NextPageToken returns tag for NextPageToken
+func NextPageToken(nextPageToken []byte) ZapTag {
+	return NewBinaryTag("next-page-token", nextPageToken)
+}
+
+// PageSize returns tag for PageSize
+func PageSize(pageSize int) ZapTag {
+	return NewInt("page-size", pageSize)
+}
+
 // ==========  Workflow tags defined here: ( wf is short for workflow) ==========
 
 // WorkflowAction returns tag for WorkflowAction
@@ -382,6 +392,10 @@ func ScheduleID(scheduleID string) ZapTag {
 // Component returns tag for Component
 func component(component string) ZapTag {
 	return NewStringTag("component", component)
+}
+
+func nexusStage(stage string) ZapTag {
+	return NewStringTag("nexus-stage", stage)
 }
 
 // Lifecycle returns tag for Lifecycle
@@ -1021,6 +1035,11 @@ func Cause(cause string) ZapTag {
 
 func NexusOperation(operation string) ZapTag {
 	return NewStringTag("nexus-operation", operation)
+}
+
+// NexusCompletionSource retuns a tag for the source of the Nexus completion callback.
+func NexusCompletionSource(source string) ZapTag {
+	return NewStringTag("nexus-completion-source", source)
 }
 
 func NexusService(service string) ZapTag {

@@ -92,7 +92,9 @@ func (s *xdcBaseSuite) setupSuite(opts ...testcore.TestClusterOption) {
 	if s.dynamicConfigOverrides == nil {
 		s.dynamicConfigOverrides = make(map[dynamicconfig.Key]any)
 	}
-	s.dynamicConfigOverrides[dynamicconfig.ClusterMetadataRefreshInterval.Key()] = time.Second * 5
+	if _, ok := s.dynamicConfigOverrides[dynamicconfig.ClusterMetadataRefreshInterval.Key()]; !ok {
+		s.dynamicConfigOverrides[dynamicconfig.ClusterMetadataRefreshInterval.Key()] = time.Second * 5
+	}
 	s.dynamicConfigOverrides[dynamicconfig.NamespaceCacheRefreshInterval.Key()] = testcore.NamespaceCacheRefreshInterval
 	s.dynamicConfigOverrides[dynamicconfig.EnableTransitionHistory.Key()] = s.enableTransitionHistory
 	// TODO (prathyush): remove this after setting it to true by default.
@@ -338,10 +340,21 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 	clusters []*testcore.TestCluster,
 ) {
 	replicationConfigs := make([]*replicationpb.ClusterReplicationConfig, len(clusters))
-	clusterNames := make([]string, len(clusters))
 	for ci, c := range clusters {
 		replicationConfigs[ci] = &replicationpb.ClusterReplicationConfig{ClusterName: c.ClusterName()}
-		clusterNames[ci] = c.ClusterName()
+	}
+	s.updateNamespaceClustersWithReplicationConfigs(ns, inClusterIndex, clusters, replicationConfigs)
+}
+
+func (s *xdcBaseSuite) updateNamespaceClustersWithReplicationConfigs(
+	ns string,
+	inClusterIndex int,
+	clusters []*testcore.TestCluster,
+	replicationConfigs []*replicationpb.ClusterReplicationConfig,
+) {
+	clusterNames := make([]string, len(replicationConfigs))
+	for ci, replicationConfig := range replicationConfigs {
+		clusterNames[ci] = replicationConfig.GetClusterName()
 	}
 
 	_, err := clusters[inClusterIndex].FrontendClient().UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{

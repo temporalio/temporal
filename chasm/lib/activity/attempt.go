@@ -293,15 +293,16 @@ func (a *Activity) firstDispatchTime() time.Time {
 }
 
 func (a *Activity) newActivityDispatchTask(ctx chasm.Context) *activitypb.ActivityDispatchTask {
+	attempt := a.LastAttempt.Get(ctx)
 	dispatchReason := activitypb.DISPATCH_REASON_IMMEDIATE
-	if a.GetFirstAttemptStartedTime() != nil {
+	if attempt.GetCount() > 1 {
 		dispatchReason = activitypb.DISPATCH_REASON_RETRY
-	} else if a.GetStartDelay().AsDuration() > 0 {
+	} else if a.GetFirstAttemptStartedTime() == nil && a.GetStartDelay().AsDuration() > 0 {
 		dispatchReason = activitypb.DISPATCH_REASON_START_DELAY
 	}
 
 	return &activitypb.ActivityDispatchTask{
-		Stamp:            a.LastAttempt.Get(ctx).GetStamp(),
+		Stamp:            attempt.GetStamp(),
 		DispatchReason:   dispatchReason,
 		StartDelayBucket: startDelayBucket(a.GetStartDelay().AsDuration()),
 	}

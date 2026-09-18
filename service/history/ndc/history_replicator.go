@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
@@ -600,6 +601,7 @@ func (r *HistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 			r.shardContext.GetThrottledLogger(),
 			r.shardContext.GetMetricsHandler(),
 			nil, // no pagination buffer limiter as it is a transient context
+			testhooks.TestHooks{},
 		)
 
 		newWorkflow = NewWorkflow(
