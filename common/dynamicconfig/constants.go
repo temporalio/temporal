@@ -67,8 +67,9 @@ var (
 		false,
 		`VisibilityEnableShadowReadMode is the config to enable shadow read from secondary visibility`,
 	)
-	SecondaryVisibilityWritingMode = NewGlobalStringSetting(
+	SecondaryVisibilityWritingMode = NewGlobalTypedSettingWithConverter(
 		"system.secondaryVisibilityWritingMode",
+		convertSecondaryVisibilityWritingMode,
 		"off",
 		`SecondaryVisibilityWritingMode is key for how to write to secondary visibility`,
 	)
