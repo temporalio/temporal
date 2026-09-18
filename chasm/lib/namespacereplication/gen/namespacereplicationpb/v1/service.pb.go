@@ -28,8 +28,9 @@ type TriggerNamespaceMutationRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The target namespace being mutated. Informational: the authoritative copy is
 	// in mutation.namespace_detail.info.id; kept here for validation and logging.
-	NamespaceId string             `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Mutation    *NamespaceMutation `protobuf:"bytes,2,opt,name=mutation,proto3" json:"mutation,omitempty"`
+	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	// Mutation used to create and run the per-mutation component.
+	Mutation *NamespaceMutation `protobuf:"bytes,2,opt,name=mutation,proto3" json:"mutation,omitempty"`
 	// Shard-routing key. Set by the frontend (invokeCHASMNamespaceMutation) so the
 	// layered client routes the RPC to the exact shard the component will live on.
 	// The handler builds ExecutionKey{NamespaceID: system_namespace_id,

@@ -10,10 +10,10 @@ option go_package = "go.temporal.io/server/chasm/lib/namespacereplication/gen/na
 
 // NamespaceReplicationService is the internal (frontend → history) RPC that
 // frontend uses to trigger namespace mutations through the CHASM-based
-// replication transport. The history-side handler starts the per-namespace
-// NamespaceMutationComponent and waits for the local apply (ApplyLocalTask) to
-// complete. Peer fan-out (ApplyPeerTask) continues asynchronously after the
-// RPC returns.
+// replication transport. The history-side handler starts one
+// NamespaceMutationComponent for each mutation and waits for the local apply
+// (ApplyLocalTask) to complete. Peer fan-out (ApplyPeerTask) continues
+// asynchronously after the RPC returns.
 service NamespaceReplicationService {
   rpc TriggerNamespaceMutation(TriggerNamespaceMutationRequest) returns (TriggerNamespaceMutationResponse) {
     // Route by the SAME (namespace, business_id) pair the handler uses to build
@@ -35,6 +35,7 @@ message TriggerNamespaceMutationRequest {
   // in mutation.namespace_detail.info.id; kept here for validation and logging.
   string namespace_id = 1;
 
+  // Mutation used to create and run the per-mutation component.
   NamespaceMutation mutation = 2;
 
   // Shard-routing key. Set by the frontend (invokeCHASMNamespaceMutation) so the
