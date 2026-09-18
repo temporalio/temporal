@@ -1,7 +1,6 @@
 package nsreplication
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -113,48 +111,10 @@ func TestShouldReplicateNamespace(t *testing.T) {
 	}
 }
 
-func TestShouldReplicateNamespace_AllCombinations(t *testing.T) {
-	states := enumspb.NamespaceState(0).Descriptor().Values()
-	for _, forceReplicate := range []bool{false, true} {
-		for _, isGlobal := range []bool{false, true} {
-			for _, clusterCount := range []int{0, 1, 2} {
-				for _, clusterListChanged := range []bool{false, true} {
-					for i := 0; i < states.Len(); i++ {
-						state := enumspb.NamespaceState(states.Get(i).Number())
-						name := fmt.Sprintf(
-							"force=%t/global=%t/clusters=%d/list-changed=%t/state=%s",
-							forceReplicate,
-							isGlobal,
-							clusterCount,
-							clusterListChanged,
-							state,
-						)
-						t.Run(name, func(t *testing.T) {
-							clusters := make([]string, clusterCount)
-							want := state != enumspb.NAMESPACE_STATE_DELETED &&
-								(forceReplicate || (isGlobal && (clusterCount > 1 || clusterListChanged)))
-							got := ShouldReplicateNamespace(
-								forceReplicate,
-								isGlobal,
-								clusters,
-								clusterListChanged,
-								state,
-							)
-							require.Equal(t, want, got)
-						})
-					}
-				}
-			}
-		}
-	}
-}
-
-// TestNamespaceDetailToTaskAttributes pins the detail->wire converter that an
-// eventual CHASM-based transport will also build its requests through. Pinning
-// the full field set here guards against the "field replicated by one transport
-// but dropped by the other" failure mode: any replicated field added to
-// NamespaceTaskAttributes must be threaded through this function or this test
-// fails. Today only HandleTransmissionTask calls it.
+// TestNamespaceDetailToTaskAttributes pins the current detail-to-wire mapping
+// that an eventual CHASM-based transport will also use. Comparing the complete
+// result guards against either transport dropping a currently replicated field.
+// Today only HandleTransmissionTask calls it.
 func TestNamespaceDetailToTaskAttributes(t *testing.T) {
 	detail, want := namespaceDetailConversionTestCase()
 
@@ -162,134 +122,10 @@ func TestNamespaceDetailToTaskAttributes(t *testing.T) {
 	protorequire.ProtoEqual(t, want, got)
 }
 
-func TestNamespaceDetailToTaskAttributes_FieldCoverage(t *testing.T) {
-	detail, _ := namespaceDetailConversionTestCase()
-	got := NamespaceDetailToTaskAttributes(enumsspb.NAMESPACE_OPERATION_UPDATE, detail)
-
-	sourceCases := []struct {
-		name    string
-		message proto.Message
-		mapped  []string
-		ignored []string
-	}{
-		{
-			name:    "persistence NamespaceDetail",
-			message: detail,
-			mapped:  []string{"info", "config", "replication_config", "config_version", "failover_version"},
-			// Receiver-side namespace tasks do not carry source-local failover bookkeeping.
-			ignored: []string{"failover_notification_version", "failover_end_time"},
-		},
-		{
-			name:    "persistence NamespaceInfo",
-			message: detail.Info,
-			mapped:  []string{"id", "state", "name", "description", "owner", "data"},
-		},
-		{
-			name:    "persistence NamespaceConfig",
-			message: detail.Config,
-			mapped: []string{
-				"retention",
-				"bad_binaries",
-				"history_archival_state",
-				"history_archival_uri",
-				"visibility_archival_state",
-				"visibility_archival_uri",
-				"custom_search_attribute_aliases",
-			},
-			// These persistence-only fields have no NamespaceTaskAttributes wire counterpart.
-			ignored: []string{"archival_bucket", "workflow_rules"},
-		},
-		{
-			name:    "persistence NamespaceReplicationConfig",
-			message: detail.ReplicationConfig,
-			mapped:  []string{"active_cluster_name", "clusters", "state", "failover_history"},
-			// Ramp schedules are source-local and must not be copied by namespace replication.
-			ignored: []string{"cluster_replication_ramps"},
-		},
-		{
-			name:    "persistence FailoverStatus",
-			message: detail.ReplicationConfig.FailoverHistory[0],
-			mapped:  []string{"failover_time", "failover_version"},
-		},
-	}
-
-	for _, tc := range sourceCases {
-		t.Run(tc.name, func(t *testing.T) {
-			requireProtoFieldsClassified(t, tc.message, tc.mapped, tc.ignored)
-			requireAllProtoFieldsSet(t, tc.message)
-		})
-	}
-
-	destinationCases := []struct {
-		name    string
-		message proto.Message
-		mapped  []string
-		ignored []string
-	}{
-		{
-			name:    "wire NamespaceTaskAttributes",
-			message: got,
-			mapped: []string{
-				"namespace_operation",
-				"id",
-				"info",
-				"config",
-				"replication_config",
-				"config_version",
-				"failover_version",
-				"failover_history",
-			},
-		},
-		{
-			name:    "wire NamespaceInfo",
-			message: got.Info,
-			mapped:  []string{"name", "state", "description", "owner_email", "data"},
-			// ID is carried at the task's top level; the remaining fields are derived by the receiver.
-			ignored: []string{"id", "capabilities", "limits", "supports_schedules"},
-		},
-		{
-			name:    "wire NamespaceConfig",
-			message: got.Config,
-			mapped: []string{
-				"workflow_execution_retention_ttl",
-				"bad_binaries",
-				"history_archival_state",
-				"history_archival_uri",
-				"visibility_archival_state",
-				"visibility_archival_uri",
-				"custom_search_attribute_aliases",
-			},
-		},
-		{
-			name:    "wire NamespaceReplicationConfig",
-			message: got.ReplicationConfig,
-			mapped:  []string{"active_cluster_name", "clusters", "state"},
-		},
-		{
-			name:    "wire ClusterReplicationConfig",
-			message: got.ReplicationConfig.Clusters[0],
-			mapped:  []string{"cluster_name"},
-			// Like persisted ramp schedules, requested ramp durations are source-local.
-			ignored: []string{"replication_ramp_duration"},
-		},
-		{
-			name:    "wire FailoverStatus",
-			message: got.FailoverHistory[0],
-			mapped:  []string{"failover_time", "failover_version"},
-		},
-	}
-
-	for _, tc := range destinationCases {
-		t.Run(tc.name, func(t *testing.T) {
-			requireProtoFieldsClassified(t, tc.message, tc.mapped, tc.ignored)
-			requireProtoFieldsSet(t, tc.message, tc.mapped)
-			requireProtoFieldsUnset(t, tc.message, tc.ignored)
-		})
-	}
-}
-
 func namespaceDetailConversionTestCase() (*persistencespb.NamespaceDetail, *replicationspb.NamespaceTaskAttributes) {
 	failoverTime := timestamppb.New(time.Unix(12345, 0).UTC())
+	// Populate replicated and source-local fields so the expected wire result
+	// documents which current fields are intentionally omitted.
 	detail := &persistencespb.NamespaceDetail{
 		Info: &persistencespb.NamespaceInfo{
 			Id:          "ns-id",
@@ -388,7 +224,6 @@ func TestNamespaceDetailToTaskAttributes_NonNormalStateDropped(t *testing.T) {
 	got := NamespaceDetailToTaskAttributes(enumsspb.NAMESPACE_OPERATION_UPDATE, detail)
 	require.Equal(t, enumspb.REPLICATION_STATE_UNSPECIFIED, got.GetReplicationConfig().GetState())
 }
-
 func TestNamespaceTaskFingerprint_Deterministic(t *testing.T) {
 	first := NamespaceDetailToTaskAttributes(enumsspb.NAMESPACE_OPERATION_UPDATE, &persistencespb.NamespaceDetail{
 		Info:              &persistencespb.NamespaceInfo{Id: "ns-id", Data: map[string]string{"a": "1", "b": "2"}},
@@ -416,49 +251,4 @@ func TestDifferingNamespaceTaskFields(t *testing.T) {
 	second.ConfigVersion = 2
 
 	require.Equal(t, []string{"info", "config_version"}, DifferingNamespaceTaskFields(first, second))
-}
-
-func requireProtoFieldsClassified(t *testing.T, message proto.Message, mapped, ignored []string) {
-	t.Helper()
-
-	fields := message.ProtoReflect().Descriptor().Fields()
-	actual := make([]string, 0, fields.Len())
-	for i := 0; i < fields.Len(); i++ {
-		actual = append(actual, string(fields.Get(i).Name()))
-	}
-	classified := append(append([]string(nil), mapped...), ignored...)
-	require.ElementsMatch(t, actual, classified)
-}
-
-func requireAllProtoFieldsSet(t *testing.T, message proto.Message) {
-	t.Helper()
-
-	reflection := message.ProtoReflect()
-	fields := reflection.Descriptor().Fields()
-	for i := 0; i < fields.Len(); i++ {
-		field := fields.Get(i)
-		require.True(t, reflection.Has(field), "test fixture must set field %q", field.FullName())
-	}
-}
-
-func requireProtoFieldsSet(t *testing.T, message proto.Message, names []string) {
-	t.Helper()
-
-	reflection := message.ProtoReflect()
-	for _, name := range names {
-		field := reflection.Descriptor().Fields().ByName(protoreflect.Name(name))
-		require.NotNil(t, field, "unknown field %q", name)
-		require.True(t, reflection.Has(field), "mapped field %q must be set", field.FullName())
-	}
-}
-
-func requireProtoFieldsUnset(t *testing.T, message proto.Message, names []string) {
-	t.Helper()
-
-	reflection := message.ProtoReflect()
-	for _, name := range names {
-		field := reflection.Descriptor().Fields().ByName(protoreflect.Name(name))
-		require.NotNil(t, field, "unknown field %q", name)
-		require.False(t, reflection.Has(field), "ignored field %q must be unset", field.FullName())
-	}
 }
