@@ -11,7 +11,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	ctasks "go.temporal.io/server/common/tasks"
 )
 
 func TestThrottleState_FailedSubmitAfterWindowDoesNotIncreaseRate(t *testing.T) {
@@ -39,7 +38,6 @@ func TestThrottleState_SuccessfulSubmitCommitsRelease(t *testing.T) {
 	permit.Lock()
 	defer permit.Unlock()
 	require.Equal(t, int64(1), permit.releases)
-	require.Zero(t, permit.pending)
 }
 
 func TestThrottleState_FailedSubmitRefundsWithoutRelease(t *testing.T) {
@@ -55,7 +53,6 @@ func TestThrottleState_FailedSubmitRefundsWithoutRelease(t *testing.T) {
 	defer permit.Unlock()
 	require.InEpsilon(t, 1.0, permit.tokens, 1e-9)
 	require.Zero(t, permit.releases)
-	require.Zero(t, permit.pending)
 }
 
 func TestThrottleState_StalePermitChargesCurrentEntry(t *testing.T) {
@@ -308,16 +305,6 @@ func TestThrottleEntry_NonPositiveRateHasNoTokenETA(t *testing.T) {
 	}
 }
 
-func TestThrottleState_ReportSuccessClosesCleanWindow(t *testing.T) {
-	state, timeSource := newTestThrottleState(defaultThrottleOverrides())
-	key := testKey()
-	cleanWindow(state, key)
-	timeSource.Update(timeSource.Now().Add(testThrottleWindow))
-
-	state.ReportSuccess(key)
-	require.InEpsilon(t, 110.0, throttleRate(state, key), 1e-9)
-}
-
 // A class is only asking for a higher rate when the gate refuses it. Raising the rate of a
 // class that never ran out of tokens would climb to the ceiling on clean windows alone, and the
 // burst that buys is what the class dumps the moment its demand returns.
@@ -374,8 +361,8 @@ func TestThrottleState_LowRateClassIsNotCutByAnUnresolvableRatio(t *testing.T) {
 // clean while every one of its releases was refused.
 func TestThrottleState_RejectionUnderAnotherCauseChargesTheIssuingClass(t *testing.T) {
 	state, _ := newTestThrottleState(defaultThrottleOverrides())
-	issuing := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1", ctasks.PriorityHigh)
-	other := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, "ns-1", ctasks.PriorityHigh)
+	issuing := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
+	other := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, "ns-1")
 
 	allowed, permit, _ := state.Admit(issuing)
 	require.True(t, allowed)
@@ -388,19 +375,6 @@ func TestThrottleState_RejectionUnderAnotherCauseChargesTheIssuingClass(t *testi
 
 	_, otherRejections := throttleCounters(state, other)
 	require.Zero(t, otherRejections, "the reported cause issued nothing, so it learns nothing")
-}
-
-// Priority is part of the key so that each priority paces itself. Sharing one bucket across
-// priorities let a high priority backlog hold every token while the rescheduler, which offers
-// the budget in strict priority order, never reached the lower priority class at all.
-func TestThrottleKey_PriorityIsItsOwnClass(t *testing.T) {
-	state, _ := newTestThrottleState(defaultThrottleOverrides())
-	high := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1", ctasks.PriorityHigh)
-	preemptable := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1", ctasks.PriorityPreemptable)
-
-	cleanWindow(state, high)
-	require.False(t, admitOK(state, high), "high priority has spent its whole bucket")
-	require.True(t, admitOK(state, preemptable), "a lower priority class holds its own tokens")
 }
 
 // A namespace token bucket refuses what exceeds the budget, so the loss this class sees rises
@@ -487,24 +461,6 @@ func TestThrottleState_IdleResetClearsTheDemandSignal(t *testing.T) {
 	suppressions := entry.suppressions
 	entry.Unlock()
 	require.Zero(t, suppressions, "demand from before the reset must not survive it")
-}
-
-// A reserved token has to survive until its Finish, or the refund lands on an entry nothing
-// else can see. The window is short, but the sweep runs off an unrelated caller's insert.
-func TestThrottleState_SweepKeepsAClassWithAnOutstandingReservation(t *testing.T) {
-	o := defaultThrottleOverrides()
-	o.keyTTL = time.Second
-	state, timeSource := newTestThrottleState(o)
-	key := testKey()
-
-	allowed, permit, _ := state.Admit(key)
-	require.True(t, allowed)
-
-	timeSource.Update(timeSource.Now().Add(2 * o.keyTTL))
-	state.getOrCreate(apsKey("unrelated")) // drives the sweep
-
-	require.NotNil(t, state.peek(key), "a class holding a reservation must not be swept")
-	state.Finish(permit, true)
 }
 
 // The increase ratio is a fraction of the current rate. An unbounded one would reach the

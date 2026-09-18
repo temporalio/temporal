@@ -872,7 +872,7 @@ func (e *executableImpl) reportThrottle(
 		return
 	}
 
-	key := NewThrottleKey(cause, e.GetNamespaceID(), e.GetPriority())
+	key := NewThrottleKey(cause, e.GetNamespaceID())
 
 	e.throttleMu.Lock()
 	e.throttleKey = key
@@ -894,7 +894,7 @@ func (e *executableImpl) classifyThrottle(
 		e.clearThrottle()
 		return
 	}
-	key := NewThrottleKey(cause, e.GetNamespaceID(), e.GetPriority())
+	key := NewThrottleKey(cause, e.GetNamespaceID())
 
 	e.throttleMu.Lock()
 	defer e.throttleMu.Unlock()
@@ -958,7 +958,6 @@ func (e *executableImpl) reportCompletion() {
 	}
 	e.throttleMu.Lock()
 	wasThrottled := e.wasThrottled
-	key, hasKey := e.throttleKey, e.hasThrottleKey
 	e.throttleMu.Unlock()
 
 	if !wasThrottled {
@@ -966,9 +965,6 @@ func (e *executableImpl) reportCompletion() {
 	}
 	metrics.TaskThrottleAttemptsPerCompletion.With(e.chasmMetricsHandler).Record(e.attempt.Load())
 	metrics.TaskThrottleCompletions.With(e.chasmMetricsHandler).Record(1)
-	if hasKey {
-		e.throttleState.ReportSuccess(key)
-	}
 }
 
 func (e *executableImpl) isGovernedByController() bool {

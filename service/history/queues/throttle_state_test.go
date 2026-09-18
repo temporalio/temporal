@@ -12,7 +12,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	ctasks "go.temporal.io/server/common/tasks"
 )
 
 const testThrottleWindow = time.Second
@@ -105,15 +104,15 @@ func TestIsControllerInput(t *testing.T) {
 }
 
 func TestNewThrottleKey_OneClassPerNamespaceAndCause(t *testing.T) {
-	aps := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1", ctasks.PriorityHigh)
+	aps := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
 
 	require.Equal(t, "ns-1", aps.NamespaceID)
 	require.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, aps.Cause)
 
-	require.Equal(t, aps, NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1", ctasks.PriorityHigh))
-	require.NotEqual(t, aps, NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-2", ctasks.PriorityHigh),
+	require.Equal(t, aps, NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1"))
+	require.NotEqual(t, aps, NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-2"),
 		"one namespace's budget must not gate another's")
-	require.NotEqual(t, aps, NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, "ns-1", ctasks.PriorityHigh),
+	require.NotEqual(t, aps, NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, "ns-1"),
 		"two budgets a namespace holds independently must not share a class")
 }
 
@@ -129,7 +128,7 @@ func newTestThrottleStateWithEntries(
 }
 
 func testKey() ThrottleKey {
-	return NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1", ctasks.PriorityHigh)
+	return NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
 }
 
 func admitOK(c *ThrottleState, key ThrottleKey) bool {
@@ -400,7 +399,7 @@ func TestThrottleState_ClassesAreIndependent(t *testing.T) {
 	state, timeSource := newTestThrottleState(defaultThrottleOverrides())
 
 	namespaceKey := testKey()
-	otherCause := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, "ns-1", ctasks.PriorityHigh)
+	otherCause := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT, "ns-1")
 
 	reportThrottle(state, namespaceKey, true)
 	closeWindow(state, timeSource, namespaceKey)

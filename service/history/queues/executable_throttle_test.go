@@ -32,7 +32,7 @@ func TestExecutable_RejectionUnderAnotherBudgetChargesTheIssuingClass(t *testing
 	state, _ := newTestThrottleState(defaultThrottleOverrides())
 	e := newThrottleTestExecutable(ctrl, state)
 
-	issuing := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1", ctasks.PriorityHigh)
+	issuing := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
 	allowed, permit, _ := state.Admit(issuing)
 	require.True(t, allowed)
 	state.Finish(permit, true)
@@ -55,7 +55,7 @@ func TestExecutable_BusyWorkflowDoesNotChargeTheIssuingClass(t *testing.T) {
 	state, _ := newTestThrottleState(defaultThrottleOverrides())
 	e := newThrottleTestExecutable(ctrl, state)
 
-	issuing := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1", ctasks.PriorityHigh)
+	issuing := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
 	allowed, permit, _ := state.Admit(issuing)
 	require.True(t, allowed)
 	state.Finish(permit, true)
@@ -151,7 +151,7 @@ func TestExecutable_BusyWorkflowIsNeverChargedWhateverTheFlagSays(t *testing.T) 
 		state, _ := newTestThrottleState(defaultThrottleOverrides())
 		e := newThrottleTestExecutable(ctrl, state)
 
-		issuing := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1", ctasks.PriorityHigh)
+		issuing := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
 		allowed, permit, _ := state.Admit(issuing)
 		require.True(t, allowed)
 		state.Finish(permit, true)

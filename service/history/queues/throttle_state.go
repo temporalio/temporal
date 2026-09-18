@@ -11,7 +11,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	ctasks "go.temporal.io/server/common/tasks"
 )
 
 const (
@@ -29,14 +28,12 @@ const (
 )
 
 type (
-	// ThrottleKey identifies one controlled class. Priority is part of it because the
-	// rescheduler offers the budget to classes in strict priority order: sharing one bucket
-	// across priorities would let a high priority backlog spend every token indefinitely,
-	// and would charge a preemptable rejection to the class high priority work draws on.
+	// ThrottleKey identifies one controlled class: one bucket per budget. Priority is not part
+	// of it. The rescheduler offers that one bucket to classes in priority order, which only
+	// means something while they are drawing on the same budget.
 	ThrottleKey struct {
 		Cause       enumspb.ResourceExhaustedCause
 		NamespaceID string
-		Priority    ctasks.Priority
 	}
 
 	ThrottleStateOptions struct {
@@ -81,9 +78,6 @@ type (
 		releases     int64
 		rejections   int64
 		suppressions int64
-		// Spans Admit to Finish only, which is the reservation, not the task's execution.
-		// It keeps a reserved entry from being swept out from under its own refund.
-		pending int64
 	}
 )
 
@@ -119,19 +113,14 @@ func IsControllerInput(
 		cause == enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT
 }
 
-func NewThrottleKey(
-	cause enumspb.ResourceExhaustedCause,
-	namespaceID string,
-	priority ctasks.Priority,
-) ThrottleKey {
-	return ThrottleKey{Cause: cause, NamespaceID: namespaceID, Priority: priority}
+func NewThrottleKey(cause enumspb.ResourceExhaustedCause, namespaceID string) ThrottleKey {
+	return ThrottleKey{Cause: cause, NamespaceID: namespaceID}
 }
 
 func (k ThrottleKey) metricsTags() []metrics.Tag {
 	return []metrics.Tag{
 		metrics.ResourceExhaustedCauseTag(k.Cause),
 		metrics.NamespaceIDTag(k.NamespaceID),
-		metrics.TaskPriorityTag(k.Priority.String()),
 	}
 }
 
@@ -178,7 +167,6 @@ func (s *ThrottleState) Admit(key ThrottleKey) (allowed bool, permit *throttleEn
 	}
 
 	entry.tokens--
-	entry.pending++
 	metrics.TaskThrottleGateAdmitted.With(s.metricsHandler).Record(1, key.metricsTags()...)
 	return true, entry, 0
 }
@@ -196,7 +184,6 @@ func (s *ThrottleState) Finish(permit *throttleEntry, submitted bool) {
 	} else {
 		permit.tokens = min(permit.tokens+1, permit.burstLocked(window))
 	}
-	permit.pending--
 	s.advanceWindowLocked(permit, now, window)
 	permit.Unlock()
 }
@@ -287,23 +274,6 @@ func (s *ThrottleState) advanceWindowLocked(entry *throttleEntry, now time.Time,
 		return
 	}
 	metrics.TaskThrottleAdmittedRate.With(s.metricsHandler).Record(entry.rate, entry.key.metricsTags()...)
-}
-
-func (s *ThrottleState) ReportSuccess(key ThrottleKey) {
-	if !s.Enabled() {
-		return
-	}
-	entry := s.peek(key)
-	if entry == nil {
-		return
-	}
-
-	now := s.timeSource.Now()
-	window := s.Window()
-	entry.Lock()
-	defer entry.Unlock()
-	s.touchLocked(entry, now, window)
-	s.advanceWindowLocked(entry, now, window)
 }
 
 func (e *throttleEntry) resetLocked(rate float64, now time.Time, window time.Duration) {
@@ -482,7 +452,7 @@ func (s *ThrottleState) maybeSweepLocked(now time.Time) {
 	evicted := false
 	for key, entry := range s.entries {
 		entry.Lock()
-		idle := entry.pending == 0 && now.Sub(entry.lastAccess) > s.ttl()
+		idle := now.Sub(entry.lastAccess) > s.ttl()
 		entry.Unlock()
 		if idle {
 			delete(s.entries, key)

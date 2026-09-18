@@ -81,7 +81,7 @@ func newTestRescheduler(
 }
 
 func apsKey(namespaceID string) ThrottleKey {
-	return NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, namespaceID, ctasks.PriorityHigh)
+	return NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, namespaceID)
 }
 
 func TestReschedule_ThrottledClassDoesNotBlockHealthyClass(t *testing.T) {
