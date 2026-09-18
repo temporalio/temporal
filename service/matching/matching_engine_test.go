@@ -3100,6 +3100,7 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventAcceptsC
 }
 
 func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventKeepsClockedCurrent() {
+	captureHandler := s.captureDroppedOnEngine()
 	clockedCurrent := &persistencespb.TaskQueueUserData{
 		Clock: &clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1},
 		PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
@@ -3107,11 +3108,13 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventKeepsClo
 		},
 	}
 	tests := []struct {
-		name     string
-		incoming *persistencespb.TaskQueueUserData
+		name        string
+		incoming    *persistencespb.TaskQueueUserData
+		wantDropped bool
 	}{
 		{
-			name: "clockless incoming",
+			name:        "clockless incoming",
+			wantDropped: true,
 			incoming: &persistencespb.TaskQueueUserData{
 				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
 					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V2},
@@ -3119,7 +3122,8 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventKeepsClo
 			},
 		},
 		{
-			name: "older clocked incoming",
+			name:        "older clocked incoming",
+			wantDropped: true,
 			incoming: &persistencespb.TaskQueueUserData{
 				Clock: &clockspb.HybridLogicalClock{WallClock: 5, ClusterId: 1},
 				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
@@ -3133,10 +3137,18 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventKeepsClo
 		s.Run(test.name, func() {
 			taskQueue := uuid.NewString()
 			s.seedTaskQueueUserData(taskQueue, clockedCurrent)
+			capture := captureHandler.StartCapture()
+			defer captureHandler.StopCapture(capture)
 
 			got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, test.incoming)
 
 			protorequire.ProtoEqual(s.T(), clockedCurrent, got)
+			recordings := capture.Snapshot()[metrics.TaskQueueUserDataReplicationIncomingPerTypeDataDropped.Name()]
+			if test.wantDropped {
+				s.Len(recordings, 1)
+			} else {
+				s.Empty(recordings)
+			}
 		})
 	}
 }
