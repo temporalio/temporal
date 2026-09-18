@@ -20,7 +20,7 @@ const (
 	// DCRedirectionPolicyNoop means no redirection
 	DCRedirectionPolicyNoop = "noop"
 	// DCRedirectionPolicySelectedAPIsForwarding means forwarding state-effecting APIs based on namespace
-	// See selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs for the list of APIs
+	// See selectedAPIsForwardingRedirectionPolicyAllowedAPIs for the list of APIs
 	DCRedirectionPolicySelectedAPIsForwarding = "selected-apis-forwarding"
 
 	// DCRedirectionPolicyAllAPIsForwarding means forwarding all APIs based on namespace active cluster
@@ -48,24 +48,24 @@ type (
 		selectedAPIsOnlyForNS dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		namespaceRegistry     namespace.Registry
 		selectedAPIsOnly      bool
-		// additionalWhitelisted are embedder methods that forward under the
+		// allowlistAdditions are embedder methods that forward under the
 		// selected-APIs policy, keyed by full gRPC method. Nil by default. Without this
 		// an embedder could register a response constructor on the Redirection
-		// interceptor and still never forward, because the whitelist in
-		// selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs is private
+		// interceptor and still never forward, because the allow-list in
+		// selectedAPIsForwardingRedirectionPolicyAllowedAPIs is private
 		// and holds only this server's own methods.
-		additionalWhitelisted map[string]struct{}
+		allowlistAdditions map[string]struct{}
 	}
 )
 
-// selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs are the APIs the
+// selectedAPIsForwardingRedirectionPolicyAllowedAPIs are the APIs the
 // selected-apis-forwarding policy forwards to the active cluster, keyed by full gRPC
 // method.
 //
 // Full methods rather than bare names because an embedder registers its own services on
 // this server: a bare "DescribeTaskQueue" cannot tell WorkflowService's from another
 // service's, and an entry meant for one would silently apply to the other.
-var selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs = map[string]struct{}{
+var selectedAPIsForwardingRedirectionPolicyAllowedAPIs = map[string]struct{}{
 	// Workflow APIs
 	wfMethod("StartWorkflowExecution"):           {},
 	wfMethod("SignalWithStartWorkflowExecution"): {},
@@ -79,6 +79,11 @@ var selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs = map[string]struct{}
 	wfMethod("DeleteWorkflowExecution"):          {},
 	wfMethod("QueryWorkflow"):                    {},
 	wfMethod("ExecuteMultiOperation"):            {},
+	// AdminService carries a DeleteWorkflowExecution too, and the bare key this list used
+	// to have covered both. Redirection returns early for anything outside WorkflowService,
+	// so nothing consults this list for it — the entry is here to keep the set the bare key
+	// described, not because a request reaches it.
+	api.AdminServicePrefix + "DeleteWorkflowExecution": {},
 
 	// Standalone Activity APIs
 	wfMethod("StartActivityExecution"):         {},
@@ -173,18 +178,18 @@ func NewAllAPIsForwardingPolicy(
 	}
 }
 
-// WithAdditionalWhitelistedMethods returns a copy of the policy that also forwards the
+// WithAdditionalAllowedMethods returns a copy of the policy that also forwards the
 // given full gRPC methods under the selected-APIs policy.
 //
 // Embedders use it to opt their own methods into forwarding.
-func (policy *SelectedAPIsForwardingRedirectionPolicy) WithAdditionalWhitelistedMethods(fullMethods ...string) *SelectedAPIsForwardingRedirectionPolicy {
+func (policy *SelectedAPIsForwardingRedirectionPolicy) WithAdditionalAllowedMethods(fullMethods ...string) *SelectedAPIsForwardingRedirectionPolicy {
 	clone := *policy
-	clone.additionalWhitelisted = make(map[string]struct{}, len(policy.additionalWhitelisted)+len(fullMethods))
-	for method := range policy.additionalWhitelisted {
-		clone.additionalWhitelisted[method] = struct{}{}
+	clone.allowlistAdditions = make(map[string]struct{}, len(policy.allowlistAdditions)+len(fullMethods))
+	for method := range policy.allowlistAdditions {
+		clone.allowlistAdditions[method] = struct{}{}
 	}
 	for _, method := range fullMethods {
-		clone.additionalWhitelisted[method] = struct{}{}
+		clone.allowlistAdditions[method] = struct{}{}
 	}
 	return &clone
 }
@@ -219,12 +224,12 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) withRedirect(ctx context.
 	return call(targetDC)
 }
 
-// whitelisted reports whether fullMethod forwards under the selected-APIs policy.
-func (policy *SelectedAPIsForwardingRedirectionPolicy) whitelisted(fullMethod string) bool {
-	if _, ok := selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs[fullMethod]; ok {
+// allowed reports whether fullMethod forwards under the selected-APIs policy.
+func (policy *SelectedAPIsForwardingRedirectionPolicy) allowed(fullMethod string) bool {
+	if _, ok := selectedAPIsForwardingRedirectionPolicyAllowedAPIs[fullMethod]; ok {
 		return true
 	}
-	_, ok := policy.additionalWhitelisted[fullMethod]
+	_, ok := policy.allowlistAdditions[fullMethod]
 	return ok
 }
 
@@ -249,8 +254,8 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 	// Get routingKey from context (set by RoutingKeyInterceptor)
 	routingKey := GetRoutingKeyFromContext(ctx)
 
-	if policy.whitelisted(fullMethod) {
-		// redirect if API is whitelisted
+	if policy.allowed(fullMethod) {
+		// redirect if API is allow-listed
 		return namespaceEntry.ActiveClusterName(routingKey), true
 	}
 

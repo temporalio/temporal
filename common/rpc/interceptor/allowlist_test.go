@@ -54,28 +54,28 @@ func TestHandoverAllowed_EmbedderEntriesAreFullMethodScoped(t *testing.T) {
 	require.False(t, handoverAllowed(api.MatchingServicePrefix+"ListWorkers", additional))
 }
 
-func TestSelectedAPIsForwarding_WhitelistIsFullMethodScoped(t *testing.T) {
-	require.Contains(t, selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs,
+func TestSelectedAPIsForwarding_AllowlistIsFullMethodScoped(t *testing.T) {
+	require.Contains(t, selectedAPIsForwardingRedirectionPolicyAllowedAPIs,
 		api.WorkflowServicePrefix+"SignalWorkflowExecution")
 
 	policy := &SelectedAPIsForwardingRedirectionPolicy{}
-	require.True(t, policy.whitelisted(api.WorkflowServicePrefix+"SignalWorkflowExecution"))
-	require.False(t, policy.whitelisted(api.HistoryServicePrefix+"SignalWorkflowExecution"),
+	require.True(t, policy.allowed(api.WorkflowServicePrefix+"SignalWorkflowExecution"))
+	require.False(t, policy.allowed(api.HistoryServicePrefix+"SignalWorkflowExecution"),
 		"HistoryService has the same method name and must not inherit the entry")
 
 	// ScheduleWorkflowTask exists on HistoryService and is deliberately absent from the
-	// server's whitelist: no client calls it. An embedder that needs it forwarded between
+	// server's allow-list: no client calls it. An embedder that needs it forwarded between
 	// clusters uses the extension point.
-	require.NotContains(t, selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs,
+	require.NotContains(t, selectedAPIsForwardingRedirectionPolicyAllowedAPIs,
 		api.HistoryServicePrefix+"ScheduleWorkflowTask")
-	require.False(t, policy.whitelisted(api.HistoryServicePrefix+"ScheduleWorkflowTask"))
+	require.False(t, policy.allowed(api.HistoryServicePrefix+"ScheduleWorkflowTask"))
 
-	extended := policy.WithAdditionalWhitelistedMethods(api.HistoryServicePrefix + "ScheduleWorkflowTask")
-	require.True(t, extended.whitelisted(api.HistoryServicePrefix+"ScheduleWorkflowTask"))
-	require.False(t, extended.whitelisted(api.WorkflowServicePrefix+"ScheduleWorkflowTask"),
+	extended := policy.WithAdditionalAllowedMethods(api.HistoryServicePrefix + "ScheduleWorkflowTask")
+	require.True(t, extended.allowed(api.HistoryServicePrefix+"ScheduleWorkflowTask"))
+	require.False(t, extended.allowed(api.WorkflowServicePrefix+"ScheduleWorkflowTask"),
 		"the addition must not widen the server's own surface")
-	require.False(t, policy.whitelisted(api.HistoryServicePrefix+"ScheduleWorkflowTask"),
-		"WithAdditionalWhitelistedMethods must not mutate the receiver")
+	require.False(t, policy.allowed(api.HistoryServicePrefix+"ScheduleWorkflowTask"),
+		"WithAdditionalAllowedMethods must not mutate the receiver")
 }
 
 // This server's own two lists, asserted the way an embedder should assert theirs: nothing
@@ -89,7 +89,7 @@ func TestServerListsAreValidFullMethods(t *testing.T) {
 		list map[string]struct{}
 	}{
 		{"allowedMethodsDuringHandover", allowedMethodsDuringHandover},
-		{"selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs", selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs},
+		{"selectedAPIsForwardingRedirectionPolicyAllowedAPIs", selectedAPIsForwardingRedirectionPolicyAllowedAPIs},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			entries := make([]string, 0, len(tc.list))
@@ -176,7 +176,7 @@ func TestNewNamespaceHandoverInterceptor_LogsInvalidEntriesAndKeepsGoing(t *test
 // The extension has to reach the policy NewRedirection builds for itself, not just a
 // policy a caller happens to hold: the field is private and there is no other way in, so
 // without this an embedder could register a redirect response and still never forward.
-func TestRedirection_WithAdditionalWhitelistedMethods(t *testing.T) {
+func TestRedirection_WithAdditionalAllowedMethods(t *testing.T) {
 	controller := gomock.NewController(t)
 	clusterMetadata := cluster.NewMockMetadata(controller)
 	clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -196,13 +196,13 @@ func TestRedirection_WithAdditionalWhitelistedMethods(t *testing.T) {
 	const embedderMethod = "/embedder.api.v1.Service/ScheduleWorkflowTask"
 
 	base := newRedirection()
-	require.False(t, base.redirectionPolicy.(*SelectedAPIsForwardingRedirectionPolicy).whitelisted(embedderMethod))
+	require.False(t, base.redirectionPolicy.(*SelectedAPIsForwardingRedirectionPolicy).allowed(embedderMethod))
 
-	extended := newRedirection().WithAdditionalWhitelistedMethods(embedderMethod)
-	require.True(t, extended.redirectionPolicy.(*SelectedAPIsForwardingRedirectionPolicy).whitelisted(embedderMethod))
+	extended := newRedirection().WithAdditionalAllowedMethods(embedderMethod)
+	require.True(t, extended.redirectionPolicy.(*SelectedAPIsForwardingRedirectionPolicy).allowed(embedderMethod))
 
 	// The server's own surface is untouched, and the receiver is not mutated.
 	require.False(t, extended.redirectionPolicy.(*SelectedAPIsForwardingRedirectionPolicy).
-		whitelisted(api.WorkflowServicePrefix+"ScheduleWorkflowTask"))
-	require.False(t, base.redirectionPolicy.(*SelectedAPIsForwardingRedirectionPolicy).whitelisted(embedderMethod))
+		allowed(api.WorkflowServicePrefix+"ScheduleWorkflowTask"))
+	require.False(t, base.redirectionPolicy.(*SelectedAPIsForwardingRedirectionPolicy).allowed(embedderMethod))
 }

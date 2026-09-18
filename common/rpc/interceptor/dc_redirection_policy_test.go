@@ -139,6 +139,9 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestSelectedAPIs() {
 		wfMethod("DeleteWorkflowExecution"):          {},
 		wfMethod("QueryWorkflow"):                    {},
 		wfMethod("ExecuteMultiOperation"):            {},
+		// Kept because the bare key this list used to have covered AdminService's
+		// same-named method too, not because a request reaches it.
+		api.AdminServicePrefix + "DeleteWorkflowExecution": {},
 
 		// Standalone Activity APIs
 		wfMethod("StartActivityExecution"):         {},
@@ -155,7 +158,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestSelectedAPIs() {
 		wfMethod("RequestCancelNexusOperationExecution"): {},
 		wfMethod("TerminateNexusOperationExecution"):     {},
 		wfMethod("DeleteNexusOperationExecution"):        {},
-	}, selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs)
+	}, selectedAPIsForwardingRedirectionPolicyAllowedAPIs)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect_LocalNamespace() {
@@ -218,8 +221,8 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 	s.Equal(2, callCount)
 }
 
-func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect_GlobalNamespace_NoForwarding_APINotWhitelisted() {
-	// Active cluster is alternative, but non-whitelisted APIs must stay local.
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect_GlobalNamespace_NoForwarding_APINotAllowed() {
+	// Active cluster is alternative, but not allow-listed APIs must stay local.
 	s.setupGlobalNamespaceWithTwoReplicationCluster(true, false)
 
 	callCount := 0
@@ -229,8 +232,8 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 		return nil
 	}
 
-	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
-		apiName += "_notwhitelisted"
+	for apiName := range selectedAPIsForwardingRedirectionPolicyAllowedAPIs {
+		apiName += "_notallowed"
 		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
 		s.NoError(err)
 
@@ -238,7 +241,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestWithNamespaceRedirect
 		s.NoError(err)
 	}
 
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
+	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyAllowedAPIs), callCount)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_Forwarding_CurrentCluster() {
@@ -251,7 +254,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 		return nil
 	}
 
-	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
+	for apiName := range selectedAPIsForwardingRedirectionPolicyAllowedAPIs {
 		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
 		s.NoError(err)
 
@@ -259,7 +262,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 		s.NoError(err)
 	}
 
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
+	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyAllowedAPIs), callCount)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_Forwarding_AlternativeCluster() {
@@ -272,7 +275,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 		return nil
 	}
 
-	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
+	for apiName := range selectedAPIsForwardingRedirectionPolicyAllowedAPIs {
 		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
 		s.NoError(err)
 
@@ -280,18 +283,18 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 		s.NoError(err)
 	}
 
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), callCount)
+	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyAllowedAPIs), callCount)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_OneCluster() {
 	s.setupGlobalNamespaceWithOneCluster(false)
-	callCount := len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs) * 2
+	callCount := len(selectedAPIsForwardingRedirectionPolicyAllowedAPIs) * 2
 
 	testcases := []struct {
 		name              string
 		forwardingEnabled bool
 		selectedAPIsOnly  bool
-		apiWhitelisted    bool
+		apiAllowed        bool
 		expectedCallCount map[string]int
 	}{
 		{
@@ -305,16 +308,16 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 			expectedCallCount: map[string]int{s.alternativeClusterName: callCount},
 		},
 		{
-			name:              "Forwarding enabled, all APIs disabled, API not whitelisted",
+			name:              "Forwarding enabled, all APIs disabled, API not allow-listed",
 			forwardingEnabled: true,
 			selectedAPIsOnly:  true,
 			expectedCallCount: map[string]int{s.currentClusterName: callCount},
 		},
 		{
-			name:              "Forwarding enabled, all APIs disabled, API whitelisted",
+			name:              "Forwarding enabled, all APIs disabled, API allow-listed",
 			forwardingEnabled: true,
 			selectedAPIsOnly:  true,
-			apiWhitelisted:    true,
+			apiAllowed:        true,
 			expectedCallCount: map[string]int{s.alternativeClusterName: callCount},
 		},
 	}
@@ -330,9 +333,9 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 				return nil
 			}
 
-			for fullMethod := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
-				if !tc.apiWhitelisted {
-					fullMethod += "_notwhitelisted"
+			for fullMethod := range selectedAPIsForwardingRedirectionPolicyAllowedAPIs {
+				if !tc.apiAllowed {
+					fullMethod += "_notallowed"
 				}
 				err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, fullMethod, nil, callFn)
 				s.NoError(err)
@@ -364,7 +367,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 		}
 	}
 
-	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
+	for apiName := range selectedAPIsForwardingRedirectionPolicyAllowedAPIs {
 		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
 		s.NoError(err)
 
@@ -372,8 +375,8 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 		s.NoError(err)
 	}
 
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), currentClustercallCount)
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), alternativeClustercallCount)
+	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyAllowedAPIs), currentClustercallCount)
+	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyAllowedAPIs), alternativeClustercallCount)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_Forwarding_AlternativeClusterToCurrentCluster() {
@@ -394,7 +397,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 		}
 	}
 
-	for apiName := range selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs {
+	for apiName := range selectedAPIsForwardingRedirectionPolicyAllowedAPIs {
 		err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
 		s.NoError(err)
 
@@ -402,8 +405,8 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 		s.NoError(err)
 	}
 
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), currentClustercallCount)
-	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), alternativeClustercallCount)
+	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyAllowedAPIs), currentClustercallCount)
+	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyAllowedAPIs), alternativeClustercallCount)
 }
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_Forwarding_AlternativeClusterToCurrentCluster_AllAPIs() {
@@ -452,7 +455,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 		return nil
 	}
 
-	apiName := "NonWhitelistedAPI"
+	apiName := "NotAllowedAPI"
 	err := policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, nil, callFn)
 	s.NoError(err)
 	err = policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, nil, callFn)
