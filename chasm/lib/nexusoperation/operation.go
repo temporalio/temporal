@@ -19,8 +19,10 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
+	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -118,7 +120,7 @@ func NewOperation(state *nexusoperationpb.OperationState) *Operation {
 func newStandaloneOperation(
 	ctx chasm.MutableContext,
 	req *nexusoperationpb.StartNexusOperationRequest,
-	maxCallbacks int,
+	callbackValidator callbacks.Validator,
 	linkValidator *linkValidator,
 ) (*Operation, error) {
 	frontendReq := req.GetFrontendRequest()
@@ -148,7 +150,8 @@ func newStandaloneOperation(
 		ctx,
 		frontendReq.GetRequestId(),
 		frontendReq.GetCompletionCallbacks(),
-		maxCallbacks,
+		frontendReq.GetNamespace(),
+		callbackValidator,
 	); err != nil {
 		return nil, err
 	}
@@ -456,22 +459,23 @@ func (o *Operation) getOrCreateOutcome(ctx chasm.MutableContext) *nexusoperation
 // request is a no-op rather than a duplicate. The idempotency probe runs before the closed check, so a
 // retry still succeeds if the operation closed after the first attach.
 //
-// maxCallbacks is re-checked here because callback.Validator only bounds the callbacks on the start
-// request; callbacks added later via on_conflict_options bypass it.
+// The cumulative callback limits are checked here, because the frontend is only aware of the callbacks
+// on the request, and not the current state.
 func (o *Operation) addCompletionCallbacks(
 	ctx chasm.MutableContext,
 	requestID string,
-	completionCallbacks []*commonpb.Callback,
-	maxCallbacks int,
+	newCallbacks []*commonpb.Callback,
+	namespaceName string,
+	validator callbacks.Validator,
 ) error {
-	if len(completionCallbacks) == 0 {
+	if len(newCallbacks) == 0 {
 		return nil
 	}
 	if requestID == "" {
 		return serviceerror.NewInvalidArgument("cannot attach completion callbacks without a request ID")
 	}
-	// Attaching is atomic, so the presence of the first key means this request already attached all of
-	// its callbacks. See the note above on why this precedes the closed check.
+	// Idempotency check. Attaching is atomic, so if we see that the first callback has been attached we
+	// know they all are present.
 	if _, ok := o.Callbacks[completionCallbackID(requestID, 0)]; ok {
 		return nil
 	}
@@ -479,21 +483,26 @@ func (o *Operation) addCompletionCallbacks(
 		return serviceerror.NewFailedPrecondition("cannot attach callbacks to a closed nexus operation")
 	}
 
-	currentCount := len(o.Callbacks)
-	if len(completionCallbacks)+currentCount > maxCallbacks {
-		return serviceerror.NewFailedPreconditionf(
-			"cannot attach more than %d callbacks to a nexus operation (%d callbacks already attached)",
-			maxCallbacks,
-			currentCount,
-		)
+	// Validate
+	err := validator.ValidateAdditions(namespaceName, newCallbacks, callbacks.CurrentCallbacksInfo{
+		Count:     len(o.Callbacks),
+		TotalSize: int(o.GetCallbackMetadata().GetTotalCallbacksSize()),
+	})
+	if err != nil {
+		return err
 	}
 
+	// Attach
 	if o.Callbacks == nil {
-		o.Callbacks = make(chasm.Map[string, *callback.Callback], len(completionCallbacks))
+		o.Callbacks = make(chasm.Map[string, *callback.Callback], len(newCallbacks))
+	}
+
+	if o.CallbackMetadata == nil {
+		o.CallbackMetadata = &callbackspb.CallbackMetadata{}
 	}
 
 	registrationTime := timestamppb.New(ctx.Now(o))
-	for idx, cb := range completionCallbacks {
+	for idx, cb := range newCallbacks {
 		chasmCB, err := callback.FromAPICallback(cb)
 		if err != nil {
 			return err
@@ -504,6 +513,8 @@ func (o *Operation) addCompletionCallbacks(
 		cbRequestID := uuid.NewString()
 		callbackObj := callback.NewCallback(cbRequestID, registrationTime, chasmCB)
 		o.Callbacks[completionCallbackID(requestID, idx)] = chasm.NewComponentField(ctx, callbackObj)
+		o.CallbackMetadata.TotalCallbacksCount++
+		o.CallbackMetadata.TotalCallbacksSize += int64(cb.Size())
 	}
 	return nil
 }
