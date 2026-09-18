@@ -8,6 +8,8 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -128,6 +130,29 @@ func TestCallbackTotals(t *testing.T) {
 			ctx, timestamppb.Now(), "u1", "req-1", cbs))
 		require.Len(t, wf.Updates["u1"].Get(ctx).Callbacks, 2)
 		require.Equal(t, int32(2), wf.GetTotalCallbacksCount())
+	})
+
+	// The metric exists so the fleet-wide distribution can be read before the size limit is
+	// given a non-zero default, so it must report the execution's running total, not the
+	// increment from a single attach.
+	t.Run("RecordsTheCumulativeTotalAsAMetric", func(t *testing.T) {
+		captureHandler := metricstest.NewCaptureHandler()
+		capture := captureHandler.StartCapture()
+		ctx := &chasm.MockMutableContext{
+			MockContext: chasm.MockContext{
+				HandleMetricsHandler: func() metrics.Handler { return captureHandler },
+			},
+		}
+		wf := newTotalsTestWorkflow()
+
+		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", []*commonpb.Callback{cb1}))
+		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-2", []*commonpb.Callback{cb2}))
+
+		recorded := capture.Snapshot()[callback.TotalSizePerExecution.Name()]
+		require.Len(t, recorded, 2)
+		require.Equal(t, wantSize(t, cb1), recorded[0].Value)
+		require.Equal(t, wantSize(t, cb1, cb2), recorded[1].Value,
+			"the second sample must be the running total, not just the second callback")
 	})
 
 	t.Run("EmptyWorkflowReportsZeroWithoutRecomputing", func(t *testing.T) {

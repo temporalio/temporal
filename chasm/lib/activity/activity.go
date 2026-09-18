@@ -371,6 +371,7 @@ func (a *Activity) addCompletionCallbacks(
 		a.Callbacks[p.id] = chasm.NewComponentField(ctx, callbackObj)
 		a.TotalCallbacksSize += int64(p.chasmCB.Size())
 	}
+	callback.RecordTotalSizePerExecution(ctx, a.TotalCallbacksSize)
 	return nil
 }
 
