@@ -5,7 +5,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	fcpb "go.temporal.io/server/chasm/lib/flowcontrol/gen/flowcontrolpb/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -13,7 +12,7 @@ import (
 func newTestComponent(limit int32) *Component {
 	return &Component{
 		ConcurrencyState: &fcpb.ConcurrencyState{
-			Config: &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: limit},
+			Config: &fcpb.ConcurrencyLimit{ConcurrentTasks: limit},
 		},
 	}
 }
@@ -67,7 +66,7 @@ func TestPoll(t *testing.T) {
 		{
 			name: "old generation retries with current generation",
 			component: &Component{ConcurrencyState: &fcpb.ConcurrencyState{
-				Config:     &taskqueuepb.ConcurrencyLimit{},
+				Config:     &fcpb.ConcurrencyLimit{},
 				Generation: 2,
 			}},
 			requestGeneration: 1,
@@ -78,7 +77,7 @@ func TestPoll(t *testing.T) {
 		{
 			name: "future generation waits",
 			component: &Component{ConcurrencyState: &fcpb.ConcurrencyState{
-				Config:     &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: 1},
+				Config:     &fcpb.ConcurrencyLimit{ConcurrentTasks: 1},
 				Generation: 2,
 			}},
 			requestGeneration: 3,
@@ -87,7 +86,7 @@ func TestPoll(t *testing.T) {
 		{
 			name: "selected waiter receives available tokens",
 			component: &Component{ConcurrencyState: &fcpb.ConcurrencyState{
-				Config:     &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: 3},
+				Config:     &fcpb.ConcurrencyLimit{ConcurrentTasks: 3},
 				Generation: 2,
 				WakeUpTo:   100,
 				Slots: []*fcpb.ConcurrencyState_Slot{
@@ -104,7 +103,7 @@ func TestPoll(t *testing.T) {
 		{
 			name: "wake all selects later waiter",
 			component: &Component{ConcurrencyState: &fcpb.ConcurrencyState{
-				Config:     &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: 2},
+				Config:     &fcpb.ConcurrencyLimit{ConcurrentTasks: 2},
 				Generation: 2,
 				WakeAll:    true,
 			}},
@@ -118,7 +117,7 @@ func TestPoll(t *testing.T) {
 		{
 			name: "unselected waiter stays blocked with stored capacity",
 			component: &Component{ConcurrencyState: &fcpb.ConcurrencyState{
-				Config:     &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: 1},
+				Config:     &fcpb.ConcurrencyLimit{ConcurrentTasks: 1},
 				Generation: 2,
 				WakeUpTo:   100,
 			}},
@@ -129,7 +128,7 @@ func TestPoll(t *testing.T) {
 		{
 			name: "expired reservation wakes waiter without transition",
 			component: &Component{ConcurrencyState: &fcpb.ConcurrencyState{
-				Config:     &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: 1},
+				Config:     &fcpb.ConcurrencyLimit{ConcurrentTasks: 1},
 				Generation: 2,
 				Slots: []*fcpb.ConcurrencyState_Slot{
 					{SlotId: "expired", Expires: timestamppb.New(now.Add(-time.Second))},
@@ -145,7 +144,7 @@ func TestPoll(t *testing.T) {
 		{
 			name: "unexpired reservation keeps waiter blocked",
 			component: &Component{ConcurrencyState: &fcpb.ConcurrencyState{
-				Config:     &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: 1},
+				Config:     &fcpb.ConcurrencyLimit{ConcurrentTasks: 1},
 				Generation: 2,
 				Slots: []*fcpb.ConcurrencyState_Slot{
 					{SlotId: "active", Expires: timestamppb.New(now.Add(time.Minute))},
@@ -158,7 +157,7 @@ func TestPoll(t *testing.T) {
 		{
 			name: "expiration does not bypass staging when stored capacity exists",
 			component: &Component{ConcurrencyState: &fcpb.ConcurrencyState{
-				Config:     &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: 2},
+				Config:     &fcpb.ConcurrencyLimit{ConcurrentTasks: 2},
 				Generation: 2,
 				Slots: []*fcpb.ConcurrencyState_Slot{
 					{SlotId: "expired", Expires: timestamppb.New(now.Add(-time.Second))},
@@ -171,7 +170,7 @@ func TestPoll(t *testing.T) {
 		{
 			name: "selected waiter may receive no tokens",
 			component: &Component{ConcurrencyState: &fcpb.ConcurrencyState{
-				Config:     &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: 1},
+				Config:     &fcpb.ConcurrencyLimit{ConcurrentTasks: 1},
 				Generation: 2,
 				WakeAll:    true,
 				Slots: []*fcpb.ConcurrencyState_Slot{
@@ -220,10 +219,10 @@ func TestUpdateConfigRequiresNewerVersion(t *testing.T) {
 	c := newTestComponent(1)
 	c.ConfigVersion = 2
 
-	c.updateConfig(&taskqueuepb.ConcurrencyLimit{ConcurrentTasks: 2}, 2)
+	c.updateConfig(&fcpb.ConcurrencyLimit{ConcurrentTasks: 2}, 2)
 	require.Equal(t, int32(1), c.Config.ConcurrentTasks)
 
-	c.updateConfig(&taskqueuepb.ConcurrencyLimit{ConcurrentTasks: 3}, 3)
+	c.updateConfig(&fcpb.ConcurrencyLimit{ConcurrentTasks: 3}, 3)
 	require.Equal(t, int32(3), c.Config.ConcurrentTasks)
 	require.Equal(t, int64(3), c.ConfigVersion)
 }

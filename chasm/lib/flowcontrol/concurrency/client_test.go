@@ -9,7 +9,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	fcpb "go.temporal.io/server/chasm/lib/flowcontrol/gen/flowcontrolpb/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/stream_batcher"
@@ -68,7 +67,7 @@ func TestBatchingClient(t *testing.T) {
 			Key:                    "limiter-key",
 			ReserveSlots:           []string{"reserve-1"},
 			CancelReservationSlots: []string{"cancel-1"},
-			ConfigUpdate:           &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: 10},
+			ConfigUpdate:           &fcpb.ConcurrencyLimit{ConcurrentTasks: 10},
 			ConfigUpdateVersion:    1,
 		},
 		{
@@ -77,7 +76,7 @@ func TestBatchingClient(t *testing.T) {
 			ReserveSlots:        []string{"reserve-2"},
 			CommitSlots:         []string{"commit-1"},
 			ReleaseSlots:        []string{"release-1"},
-			ConfigUpdate:        &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: 20},
+			ConfigUpdate:        &fcpb.ConcurrencyLimit{ConcurrentTasks: 20},
 			ConfigUpdateVersion: 2,
 		},
 	}

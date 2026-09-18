@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/chasmtest"
 	fcpb "go.temporal.io/server/chasm/lib/flowcontrol/gen/flowcontrolpb/v1"
@@ -68,7 +67,7 @@ func (tc *testHandlerContext) start(t *testing.T, limit int32) {
 	req := &fcpb.ConcurrencyBatchRequest{
 		NamespaceId:         tc.key.namespaceID,
 		Key:                 tc.key.key,
-		ConfigUpdate:        &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: limit},
+		ConfigUpdate:        &fcpb.ConcurrencyLimit{ConcurrentTasks: limit},
 		ConfigUpdateVersion: 1,
 	}
 	_, err := chasm.StartExecution(
@@ -220,7 +219,7 @@ func TestHandlerApplyBatchSlotLifecycle(t *testing.T) {
 
 	ress := tc.apply(&fcpb.ConcurrencyBatchRequest{
 		ReserveSlots:        []string{"first"},
-		ConfigUpdate:        &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: 1},
+		ConfigUpdate:        &fcpb.ConcurrencyLimit{ConcurrentTasks: 1},
 		ConfigUpdateVersion: 1,
 	})
 	require.NoError(t, ress[0].err)
@@ -257,7 +256,7 @@ func TestHandlerApplyBatchCommitAfterReservationExpiry(t *testing.T) {
 
 	ress := tc.apply(&fcpb.ConcurrencyBatchRequest{
 		ReserveSlots:        []string{"expired"},
-		ConfigUpdate:        &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: 1},
+		ConfigUpdate:        &fcpb.ConcurrencyLimit{ConcurrentTasks: 1},
 		ConfigUpdateVersion: 1,
 	})
 	require.NoError(t, ress[0].err)
@@ -301,7 +300,7 @@ func TestInitFn(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c, err := initFn(nil, chasmReq{items: []batchReq{{
 				req: &fcpb.ConcurrencyBatchRequest{
-					ConfigUpdate:        &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: tt.limit},
+					ConfigUpdate:        &fcpb.ConcurrencyLimit{ConcurrentTasks: tt.limit},
 					ConfigUpdateVersion: 4,
 				},
 			}}})
@@ -316,11 +315,11 @@ func TestInitFn(t *testing.T) {
 func TestInitFnUsesNewestConfigInBatch(t *testing.T) {
 	c, err := initFn(nil, chasmReq{items: []batchReq{
 		{req: &fcpb.ConcurrencyBatchRequest{
-			ConfigUpdate:        &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: 3},
+			ConfigUpdate:        &fcpb.ConcurrencyLimit{ConcurrentTasks: 3},
 			ConfigUpdateVersion: 3,
 		}},
 		{req: &fcpb.ConcurrencyBatchRequest{
-			ConfigUpdate:        &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: 1},
+			ConfigUpdate:        &fcpb.ConcurrencyLimit{ConcurrentTasks: 1},
 			ConfigUpdateVersion: 2,
 		}},
 	}})
@@ -373,7 +372,7 @@ func TestUpdateFnIgnoresStaleConfig(t *testing.T) {
 
 	ress, err := updateFn(c, newTestMutableContext(now), chasmReq{items: []batchReq{{
 		req: &fcpb.ConcurrencyBatchRequest{
-			ConfigUpdate:        &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: 0},
+			ConfigUpdate:        &fcpb.ConcurrencyLimit{ConcurrentTasks: 0},
 			ConfigUpdateVersion: 1,
 			ReserveSlots:        []string{"first", "second"},
 		},
@@ -487,7 +486,7 @@ func TestUpdateFnConfigDecreaseIncrementsGeneration(t *testing.T) {
 
 	ress, err := updateFn(c, newTestMutableContext(now), chasmReq{items: []batchReq{{
 		req: &fcpb.ConcurrencyBatchRequest{
-			ConfigUpdate:        &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: 1},
+			ConfigUpdate:        &fcpb.ConcurrencyLimit{ConcurrentTasks: 1},
 			ConfigUpdateVersion: 2,
 		},
 	}}})
@@ -511,7 +510,7 @@ func TestUpdateFnConfigDecreaseDoesNotEvictSlots(t *testing.T) {
 
 	ress, err := updateFn(c, newTestMutableContext(now), chasmReq{
 		items: []batchReq{{req: &fcpb.ConcurrencyBatchRequest{
-			ConfigUpdate:        &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: 1},
+			ConfigUpdate:        &fcpb.ConcurrencyLimit{ConcurrentTasks: 1},
 			ConfigUpdateVersion: 2,
 		}}},
 		getWakeLevel: getWakeLevel,
@@ -550,7 +549,7 @@ func TestUpdateFnConfigIncreaseWakesWaiters(t *testing.T) {
 
 	ress, err := updateFn(c, newTestMutableContext(now), chasmReq{
 		items: []batchReq{{req: &fcpb.ConcurrencyBatchRequest{
-			ConfigUpdate:        &taskqueuepb.ConcurrencyLimit{ConcurrentTasks: 3},
+			ConfigUpdate:        &fcpb.ConcurrencyLimit{ConcurrentTasks: 3},
 			ConfigUpdateVersion: 2,
 		}}},
 		getWakeLevel: func(tokens int32) (int64, bool) {

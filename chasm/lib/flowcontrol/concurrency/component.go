@@ -4,7 +4,6 @@ import (
 	"slices"
 	"time"
 
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	fcpb "go.temporal.io/server/chasm/lib/flowcontrol/gen/flowcontrolpb/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -78,7 +77,7 @@ func (c *Component) incrementGeneration() {
 	c.WakeStage = 0
 }
 
-func (c *Component) updateConfig(config *taskqueuepb.ConcurrencyLimit, version int64) {
+func (c *Component) updateConfig(config *fcpb.ConcurrencyLimit, version int64) {
 	if config != nil && version > c.ConfigVersion {
 		c.Config = config
 		c.ConfigVersion = version

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/tidwall/btree"
-	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	fcpb "go.temporal.io/server/chasm/lib/flowcontrol/gen/flowcontrolpb/v1"
 	"go.temporal.io/server/common"
@@ -94,7 +93,7 @@ func initFn(_ chasm.MutableContext, creq chasmReq) (*Component, error) {
 	// For per-task limits, this may be missing and set via api later.
 	c := &Component{
 		ConcurrencyState: &fcpb.ConcurrencyState{
-			Config: &taskqueuepb.ConcurrencyLimit{
+			Config: &fcpb.ConcurrencyLimit{
 				ConcurrentTasks: initialLimit,
 			},
 		},
