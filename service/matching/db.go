@@ -877,11 +877,12 @@ func (db *taskQueueDB) emitPhysicalBacklogGaugesLocked() {
 	}
 
 	var totalLag int64
-	var oldestTime time.Time
 	counts := make(map[int32]int64)
+	oldestByPriority := make(map[int32]time.Time)
 	for _, s := range db.subqueues {
-		counts[s.Key.Priority] += s.ApproximateBacklogCount
-		oldestTime = minNonZeroTime(oldestTime, s.oldestTime)
+		pri := s.Key.Priority
+		counts[pri] += s.ApproximateBacklogCount
+		oldestByPriority[pri] = minNonZeroTime(oldestByPriority[pri], s.oldestTime)
 		// note: this metric is only an estimation for the lag.
 		// taskID in DB may not be continuous, especially when task list ownership changes.
 		if s.FairMaxReadLevel != nil && s.FairAckLevel != nil {
@@ -900,13 +901,16 @@ func (db *taskQueueDB) emitPhysicalBacklogGaugesLocked() {
 		backlogAgeGauge = metrics.PhysicalApproximateBacklogAgeSeconds
 	}
 
+	// Emit count and age per priority so the two gauges share the same task_priority tag set.
 	for priority, count := range counts {
-		backlogCountGauge.With(db.metricsHandler).Record(float64(count), metrics.MatchingTaskPriorityTag(priority))
-	}
-	if oldestTime.IsZero() {
-		backlogAgeGauge.With(db.metricsHandler).Record(0)
-	} else {
-		backlogAgeGauge.With(db.metricsHandler).Record(time.Since(oldestTime).Seconds())
+		priorityTag := metrics.MatchingTaskPriorityTag(priority)
+		backlogCountGauge.With(db.metricsHandler).Record(float64(count), priorityTag)
+
+		var ageSeconds float64
+		if oldest := oldestByPriority[priority]; !oldest.IsZero() {
+			ageSeconds = time.Since(oldest).Seconds()
+		}
+		backlogAgeGauge.With(db.metricsHandler).Record(ageSeconds, priorityTag)
 	}
 	metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler).Record(float64(totalLag))
 }
@@ -995,8 +999,9 @@ func (db *taskQueueDB) emitZeroPhysicalBacklogGauges() {
 	}
 
 	for k := range priorities {
-		backlogCountGauge.With(db.metricsHandler).Record(0, metrics.MatchingTaskPriorityTag(k))
+		priorityTag := metrics.MatchingTaskPriorityTag(k)
+		backlogCountGauge.With(db.metricsHandler).Record(0, priorityTag)
+		backlogAgeGauge.With(db.metricsHandler).Record(0, priorityTag)
 	}
-	backlogAgeGauge.With(db.metricsHandler).Record(0)
 	metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler).Record(0)
 }

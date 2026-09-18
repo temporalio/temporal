@@ -1037,6 +1037,11 @@ func NexusOperation(operation string) ZapTag {
 	return NewStringTag("nexus-operation", operation)
 }
 
+// NexusCompletionSource retuns a tag for the source of the Nexus completion callback.
+func NexusCompletionSource(source string) ZapTag {
+	return NewStringTag("nexus-completion-source", source)
+}
+
 func NexusService(service string) ZapTag {
 	return NewStringTag("nexus-service", service)
 }

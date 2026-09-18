@@ -155,6 +155,30 @@ func (s *rawTaskConverterSuite) TearDownTest() {
 	s.shardContext.StopForTest()
 }
 
+func (s *rawTaskConverterSuite) TestSourceTaskConverterSetsWorkflowLockPriority() {
+	task := &tasks.SyncActivityTask{
+		WorkflowKey: definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.runID),
+	}
+	targetClusterID := int32(3)
+	s.mockEngine.EXPECT().ConvertReplicationTask(gomock.Any(), task, targetClusterID).DoAndReturn(
+		func(ctx context.Context, _ tasks.Task, _ int32) (*replicationspb.ReplicationTask, error) {
+			s.Equal(locks.PriorityHigh, workflowLockPriorityFromContext(ctx))
+			return nil, nil
+		},
+	)
+	converter := NewSourceTaskConverter(
+		s.mockEngine,
+		s.shardContext.Resource.NamespaceCache,
+		nil,
+		nil,
+		s.shardContext.GetConfig(),
+	)
+
+	result, err := converter.Convert(task, targetClusterID, enumsspb.TASK_PRIORITY_LOW, locks.PriorityHigh)
+	s.NoError(err)
+	s.Nil(result)
+}
+
 func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_WorkflowMissing() {
 	ctx := context.Background()
 	scheduledEventID := int64(144)
@@ -181,6 +205,27 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Workflow
 		},
 		chasm.WorkflowArchetypeID,
 		locks.PriorityLow,
+	).Return(s.workflowContext, s.releaseFn, nil)
+	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(nil, serviceerror.NewNotFound(""))
+
+	result, err := convertActivityStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
+	s.NoError(err)
+	s.Nil(result)
+	s.True(s.lockReleased)
+}
+
+func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_HighPriorityLock() {
+	ctx := withWorkflowLockPriority(context.Background(), locks.PriorityHigh)
+	task := &tasks.SyncActivityTask{
+		WorkflowKey: definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.runID),
+	}
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
+		gomock.Any(),
+		s.shardContext,
+		namespace.ID(s.namespaceID),
+		&commonpb.WorkflowExecution{WorkflowId: s.workflowID, RunId: s.runID},
+		chasm.WorkflowArchetypeID,
+		locks.PriorityHigh,
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(nil, serviceerror.NewNotFound(""))
 

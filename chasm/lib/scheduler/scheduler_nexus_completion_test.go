@@ -10,6 +10,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
@@ -26,7 +27,7 @@ import (
 type nexusCompletionTestCase struct {
 	name              string
 	setupInvoker      func(*scheduler.Invoker)
-	setupScheduler    func(*scheduler.Scheduler)
+	setupScheduler    func(*scheduler.Scheduler, chasm.MutableContext)
 	completion        *persistencespb.ChasmNexusCompletion
 	expectPaused      bool
 	expectStatus      enumspb.WorkflowExecutionStatus
@@ -44,7 +45,7 @@ func executeNexusCompletion(t *testing.T, tc nexusCompletionTestCase) {
 		tc.setupInvoker(invoker)
 	}
 	if tc.setupScheduler != nil {
-		tc.setupScheduler(sched)
+		tc.setupScheduler(sched, ctx)
 	}
 
 	initialLastCompletion := sched.LastCompletionResult.Get(ctx)
@@ -119,6 +120,11 @@ func TestHandleNexusCompletion_Success(t *testing.T) {
 				},
 			}
 		},
+		setupScheduler: func(sched *scheduler.Scheduler, ctx chasm.MutableContext) {
+			sched.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{
+				Failure: &failurepb.Failure{Message: "previous failure"},
+			})
+		},
 		completion: &persistencespb.ChasmNexusCompletion{
 			RequestId: "req-1",
 			Outcome: &persistencespb.ChasmNexusCompletion_Success{
@@ -128,9 +134,30 @@ func TestHandleNexusCompletion_Success(t *testing.T) {
 		},
 		expectPaused: false,
 		expectStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		validateScheduler: func(t *testing.T, sched *scheduler.Scheduler, ctx chasm.Context) {
+			require.Nil(t, sched.LastCompletionResult.Get(ctx).Failure)
+		},
 	}
 
 	executeNexusCompletion(t, tc)
+}
+
+func TestHandleNexusCompletion_InvalidOutcome(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+	start := &schedulespb.BufferedStart{
+		RequestId:  "req-1",
+		WorkflowId: "wf-1",
+		RunId:      "run-1",
+		Attempt:    1,
+		ActualTime: timestamppb.New(time.Now().Add(-time.Minute)),
+		StartTime:  timestamppb.New(time.Now().Add(-30 * time.Second)),
+	}
+	sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{start}
+
+	err := sched.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{RequestId: "req-1"})
+	var invalidArgument *serviceerror.InvalidArgument
+	require.ErrorAs(t, err, &invalidArgument)
+	require.Nil(t, start.GetCompleted())
 }
 
 func TestHandleNexusCompletion_ExistingAllowAllDoesNotUpdateCompletionState(t *testing.T) {
@@ -344,7 +371,7 @@ func TestHandleNexusCompletion_PauseOnFailure(t *testing.T) {
 				},
 			}
 		},
-		setupScheduler: func(sched *scheduler.Scheduler) {
+		setupScheduler: func(sched *scheduler.Scheduler, _ chasm.MutableContext) {
 			sched.Schedule.Policies.PauseOnFailure = true
 		},
 		completion: &persistencespb.ChasmNexusCompletion{

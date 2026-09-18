@@ -29,6 +29,12 @@ var (
 		true,
 		`AdminEnableListHistoryTasks is the key for enabling listing history tasks`,
 	)
+	AdminEnableDescribeMutableStateRateLimit = NewGlobalBoolSetting(
+		"admin.enableDescribeMutableStateRateLimit",
+		false,
+		`AdminEnableDescribeMutableStateRateLimit gates whether AdminService.DescribeMutableState is subject to
+pod-level rate limiting. Read once at process startup: changing this value requires a restart to take effect.`,
+	)
 	AdminMatchingNamespaceToPartitionDispatchRate = NewNamespaceFloatSetting(
 		"admin.matchingNamespaceToPartitionDispatchRate",
 		10000,
@@ -95,7 +101,7 @@ values in system search attributes.`,
 	)
 	VisibilityEnableUnifiedQueryConverter = NewGlobalBoolSetting(
 		"system.visibilityEnableUnifiedQueryConverter",
-		false,
+		true,
 		`VisibilityEnableUnifiedQueryConverter enables the unified query converter for parsing the
 query.`,
 	)
@@ -212,13 +218,19 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 	)
 	WorkerCommandsDispatchTimeout = NewGlobalDurationSetting(
 		"system.workerCommandsDispatchTimeout",
-		10*time.Second*debug.TimeoutMultiplier,
-		`WorkerCommandsDispatchTimeout is the timeout for dispatching worker commands to a worker via Nexus.`,
+		5*time.Second*debug.TimeoutMultiplier,
+		`WorkerCommandsDispatchTimeout is the timeout for dispatching worker commands to a worker via Nexus.`+
+			` A small value is used to detect missing workers sooner — otherwise the outbound executor`+
+			` thread is held waiting for a poller that will never arrive.`,
 	)
 	WorkerCommandsMaxAttempts = NewGlobalIntSetting(
 		"system.workerCommandsMaxAttempts",
-		3,
-		`WorkerCommandsMaxAttempts is the maximum number of dispatch attempts for a worker commands task before dropping it.`,
+		30,
+		`WorkerCommandsMaxAttempts is the maximum number of dispatch attempts for a worker commands task before dropping it.`+
+			` This only applies to transport errors (e.g. matching server unavailable) — missing poller`+
+			` timeouts are not retried. Set high enough to ride out matching server rolling restarts —`+
+			` with the default backoff (initial=1s, coefficient=1.1), 30 attempts spreads retries over`+
+			` ~2 minutes. Transport errors fail fast, so more attempts are cheap.`,
 	)
 	NamespaceMinRetentionGlobal = NewGlobalDurationSetting(
 		"system.namespaceMinRetentionGlobal",
@@ -896,11 +908,6 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		0.5,
 		`HistoryHostErrorPercentage is the proportion of hosts that are unhealthy through observation external to the host and internal host health checks`,
 	)
-	HistoryHostSelfErrorProportion = NewGlobalFloatSetting(
-		"frontend.historyHostSelfErrorProportion",
-		0.05,
-		`HistoryHostStartingProportion is the proportion of hosts that have marked themselves as not ready -- this could due to waiting to acquire all shards on startup, or an internal health check failure`,
-	)
 	SendRawWorkflowHistory = NewNamespaceBoolSetting(
 		"frontend.sendRawWorkflowHistory",
 		false,
@@ -1554,7 +1561,9 @@ these log lines can be noisy, we want to be able to turn on and sample selective
 		"matching.pollerScalingMinimumBacklog",
 		200*time.Millisecond,
 		`MatchingPollerScalingBacklogAgeScaleUp is the minimum backlog age that must be accumulated before
-a decision to scale up the number of pollers will be issued`,
+a decision to scale up the number of pollers will be issued. If MatchingUseSignalsV2ForPollerScaling is true,
+this is instead the maximum age of a dispatched task (measured from its create time) above which a scale-up
+will be issued.`,
 	)
 	MatchingPollerScalingWaitTime = NewTaskQueueDurationSetting(
 		"matching.pollerScalingWaitTime",
@@ -1572,7 +1581,8 @@ second per poller by one physical queue manager`,
 		"matching.pollerScalingTaskAddToDispatchRatio",
 		1.2,
 		`MatchingPollerScalingTaskAddToDispatchRatio is the ratio of task add rate to task
-dispatch rate above which a decision to scale up the number of pollers will be issued`,
+dispatch rate above which a decision to scale up the number of pollers will be issued. If MatchingUseSignalsV2ForPollerScaling
+is true, this is instead the ratio of task add rate to task sync match rate.`,
 	)
 	MatchingEnablePollerScalingDecisionMetrics = NewTaskQueueBoolSetting(
 		"matching.enablePollerScalingDecisionMetrics",
@@ -1580,6 +1590,13 @@ dispatch rate above which a decision to scale up the number of pollers will be i
 		`MatchingEnablePollerScalingDecisionMetrics, when enabled, causes matching to emit the poller_scale_decision
 metric describing why pollers are scaled up, down, or held for a physical task queue. This is opt-in and can be
 scoped by namespace and/or task queue.`,
+	)
+	MatchingUseSignalsV2ForPollerScaling = NewTaskQueueBoolSetting(
+		"matching.useSignalsV2ForPollerScaling",
+		false,
+		`MatchingUseSignalsV2ForPollerScaling, when enabled, uses v2 scaling signals for poller autoscaling:
+(1) sync match rate instead of total dispatch rate for the add-to-dispatch ratio check, and
+(2) task dispatch latency instead of backlog age stats for the backlog scale-up check.`,
 	)
 	MatchingUseNewMatcher = NewTaskQueueTypedSettingWithConverter(
 		"matching.useNewMatcher",
@@ -1740,6 +1757,12 @@ execution.`,
 		false,
 		`EnablePaginationTokenBranchValidationShadowMode logs and emits metrics for a page token whose
 branch token is not the execution's current one, but still serves the read.`,
+	)
+	EnablePaginationTokenBranchReplacement = NewGlobalBoolSetting(
+		"history.enablePaginationTokenBranchReplacement",
+		true,
+		`EnablePaginationTokenBranchReplacement, when pagination-token branch validation is enforced,
+replaces a page token's branch token when it identifies the current branch but has different metadata.`,
 	)
 
 	EnableReplicationStream = NewGlobalBoolSetting(
@@ -2509,6 +2532,12 @@ visibility if they were removed from the mutable state`,
 		100,
 		`ArchivalTaskBatchSize is batch size for archivalQueueProcessor`,
 	)
+	EnableVisibilityArchivalRecordDeduplication = NewNamespaceBoolSetting(
+		"history.enableVisibilityArchivalRecordDeduplication",
+		false,
+		`EnableVisibilityArchivalRecordDeduplication enables best-effort content-aware visibility archival deduplication for S3 and GCS.
+When enabled, the archival store must allow reading object metadata in addition to writing objects.`,
+	)
 	ArchivalProcessorMaxPollRPS = NewGlobalIntSetting(
 		"history.archivalProcessorMaxPollRPS",
 		20,
@@ -2692,8 +2721,9 @@ the oldest task of each immediate queue category that has a backlog`,
 	DefaultActivityRetryPolicy = NewNamespaceTypedSetting(
 		"history.defaultActivityRetryPolicy",
 		retrypolicy.DefaultDefaultRetrySettings,
-		`DefaultActivityRetryPolicy represents the out-of-box retry policy for activities where
-the user has not specified an explicit RetryPolicy`,
+		`DefaultActivityRetryPolicy represents the out-of-box retry policy for activities. It
+applies both when the user has not specified any RetryPolicy and, field by field, to fill
+in fields that are unset (or set to their zero value) in an explicit RetryPolicy`,
 	)
 	DefaultWorkflowRetryPolicy = NewNamespaceTypedSetting(
 		"history.defaultWorkflowRetryPolicy",
@@ -2930,6 +2960,12 @@ should be enabled for non continuedAsNew workflow UpdateWithNew case.`,
 		false,
 		`ReplicationMultipleBatches is the flag to enable replication of multiple history event batches`,
 	)
+	ReplicationTaskConverterLowPriorityLockMaxAttempts = NewGlobalIntSetting(
+		"history.ReplicationTaskConverterLowPriorityLockMaxAttempts",
+		3,
+		`ReplicationTaskConverterLowPriorityLockMaxAttempts is the number of busy-workflow conversion failures using
+a low priority workflow lock before subsequent stream sender conversion attempts use a high priority lock.`,
+	)
 	HistoryTaskDLQEnabled = NewGlobalBoolSetting(
 		"history.TaskDLQEnabled",
 		true,
@@ -3023,6 +3059,11 @@ to persistence. The buffer holds slim queue rows (task metadata, not event paylo
 		"history.ReplicationStreamSenderLowPriorityQPS",
 		100,
 		`Maximum number of low priority replication tasks that can be sent per second per shard`,
+	)
+	EnableReplicationGradualConnect = NewGlobalBoolSetting(
+		"history.enableReplicationGradualConnect",
+		false,
+		`Controls whether replication stream senders honor gradual-connect ramps.`,
 	)
 	ReplicationStreamEventLoopRetryMaxAttempts = NewGlobalIntSetting(
 		"history.ReplicationStreamEventLoopRetryMaxAttempts",
@@ -3175,6 +3216,13 @@ time (mirrors gRPC MaxConnectionAge's +/-10% jitter). Values outside [0, 1] are 
 		false,
 		`If true, validate the start time of the old workflow is older than WorkflowIdReuseMinimalInterval when reusing workflow ID.`,
 	)
+	EnableSignalWithStartRequestIDDeduplication = NewNamespaceBoolSetting(
+		"history.enableSignalWithStartRequestIdDeduplication",
+		true,
+		`If true, a SignalWithStartWorkflowExecution retry whose request ID was already handled by the
+current run returns that run instead of starting a second one, and reports Started=true when that
+request ID created the run (matching StartWorkflowExecution).`,
+	)
 	BusinessIDReuseRate = NewNamespaceIntSetting(
 		"history.businessIDReuseRate",
 		0,
@@ -3250,6 +3298,15 @@ Requires service restart to take effect.`,
 		`EnableCHASMSkipPersistence controls whether CHASM CloseTransaction omits nodes whose serialized data is unchanged.
 This optimization should only be enabled after every cluster that may receive CHASM replication supports invalidating
 hydrated ancestor components when applying child-node mutations.`,
+	)
+
+	ChasmDLQScheduledPureTaskOnValidation = NewNamespaceBoolSetting(
+		"history.chasmDLQScheduledPureTaskOnValidation",
+		false,
+		`ChasmDLQScheduledPureTaskOnValidation controls whether scheduled CHASM pure tasks that remain valid
+after successful execution are sent to DLQ instead of retried indefinitely. A pure task that is still
+valid after execution would otherwise loop forever; enabling this flag detects that condition and
+terminates the task via DLQ. Immediate pure tasks are never affected by this setting.`,
 	)
 
 	ChasmMaxInMemoryPureTasks = NewGlobalIntSetting(
