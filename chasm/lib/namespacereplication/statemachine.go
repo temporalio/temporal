@@ -55,10 +55,10 @@ var TransitionLocalCommitted = chasm.NewTransition(
 	},
 )
 
-// EventLocalFailed is emitted by ApplyLocalTask on terminal failure (CAS conflict,
-// validation error, store unavailable past retry budget). Transitions to FAILED;
-// peers are never contacted. This is the "no divergence on caller-visible failure"
-// guarantee.
+// EventLocalFailed is emitted by ApplyLocalTask on a terminal failure (validation
+// error, or a CAS/write error whose readback proves this mutation did not commit).
+// Transitions to FAILED; peers are never contacted. This is the "no divergence
+// on caller-visible failure" guarantee.
 type EventLocalFailed struct {
 	Time    time.Time
 	Err     error

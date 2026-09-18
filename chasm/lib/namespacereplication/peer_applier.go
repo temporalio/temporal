@@ -18,9 +18,12 @@ import (
 type PeerApplyResult int
 
 const (
+	// PeerApplyResultUnspecified is invalid and must never be treated as a
+	// successful peer apply.
+	PeerApplyResultUnspecified PeerApplyResult = iota
 	// PeerApplyResultApplied means the peer accepted the mutation as new state
 	// (created or updated). Collapses the admin RPC's Applied / Created / Duplicate.
-	PeerApplyResultApplied PeerApplyResult = iota
+	PeerApplyResultApplied
 	// PeerApplyResultNoOpStale means the peer already held equal-or-newer state
 	// (apply-if-higher no-op). A success, not a failure.
 	PeerApplyResultNoOpStale
@@ -70,13 +73,13 @@ func (a *adminClientPeerApplier) Apply(
 ) (PeerApplyResult, error) {
 	adminClient, err := a.clientBean.GetRemoteAdminClient(targetCell)
 	if err != nil {
-		return 0, err
+		return PeerApplyResultUnspecified, err
 	}
 	resp, err := adminClient.ApplyNamespaceMutation(ctx, &adminservice.ApplyNamespaceMutationRequest{
 		NamespaceTask: nsreplication.NamespaceDetailToTaskAttributes(operation, detail),
 	})
 	if err != nil {
-		return 0, err
+		return PeerApplyResultUnspecified, err
 	}
 	// Map the receiver's wire outcome to a transport-neutral result. Exhaustive on
 	// purpose: adding a wire outcome must force a decision here rather than being
@@ -94,7 +97,7 @@ func (a *adminClientPeerApplier) Apply(
 	case adminservice.ApplyNamespaceMutationResponse_OUTCOME_NOT_ADMITTED:
 		return PeerApplyResultNotAdmitted, nil
 	default:
-		return 0, serviceerror.NewInternal(
+		return PeerApplyResultUnspecified, serviceerror.NewInternal(
 			fmt.Sprintf("peer %s returned unexpected apply outcome %v", targetCell, resp.GetOutcome()))
 	}
 }

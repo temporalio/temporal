@@ -35,7 +35,10 @@ var _ chasm.StateMachine[namespacereplicationpb.ComponentStatus] = (*NamespaceMu
 
 // NewNamespaceMutationComponent constructs a fresh component with the mutation set
 // and per-peer status entries initialized to PENDING.
-func NewNamespaceMutationComponent(mutation *namespacereplicationpb.NamespaceMutation) *NamespaceMutationComponent {
+func NewNamespaceMutationComponent(
+	ctx chasm.MutableContext,
+	mutation *namespacereplicationpb.NamespaceMutation,
+) *NamespaceMutationComponent {
 	peerApply := make(map[string]*namespacereplicationpb.PeerApplyStatus, len(mutation.GetPeerCells()))
 	for _, cell := range mutation.GetPeerCells() {
 		peerApply[cell] = &namespacereplicationpb.PeerApplyStatus{
@@ -51,6 +54,7 @@ func NewNamespaceMutationComponent(mutation *namespacereplicationpb.NamespaceMut
 			},
 			PeerApply: peerApply,
 		},
+		Visibility: chasm.NewComponentField(ctx, chasm.NewVisibility(ctx)),
 	}
 }
 
