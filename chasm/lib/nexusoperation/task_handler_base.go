@@ -83,23 +83,7 @@ func (b *nexusTaskHandlerBase) buildCallbackURL(
 	ns *namespace.Namespace,
 	endpoint *persistencespb.NexusEndpointEntry,
 ) (string, error) {
-	// endpoint is nil for system-internal operations where endpoint lookup is skipped.
-	// These always use the system callback URL since the callback is handled internally.
-	if endpoint == nil {
-		return commonnexus.SystemCallbackURL, nil
-	}
-	target := endpoint.GetEndpoint().GetSpec().GetTarget().GetVariant()
-	if !b.config.UseSystemCallbackURL() {
-		return buildCallbackFromTemplate(b.config.CallbackURLTemplate(), ns)
-	}
-	switch target.(type) {
-	case *persistencespb.NexusEndpointTarget_Worker_:
-		return commonnexus.SystemCallbackURL, nil
-	case *persistencespb.NexusEndpointTarget_External_:
-		return buildCallbackFromTemplate(b.config.CallbackURLTemplate(), ns)
-	default:
-		return "", fmt.Errorf("unknown endpoint target type: %T", target)
-	}
+	return buildCallbackURL(b.config.CallbackURLTemplate(), ns, endpoint)
 }
 
 func buildCallbackFromTemplate(callbackTemplate *template.Template, ns *namespace.Namespace) (string, error) {

@@ -15,8 +15,9 @@ type (
 	// ArchiveFeatureCatalog is a collection features for the Archive method of
 	// History/Visibility Archiver
 	ArchiveFeatureCatalog struct {
-		ProgressManager   ProgressManager
-		NonRetryableError NonRetryableError
+		ProgressManager                       ProgressManager
+		NonRetryableError                     NonRetryableError
+		VisibilityArchivalRecordDeduplication bool
 	}
 
 	// NonRetryableError returns an error indicating archiver has encountered an non-retryable error
@@ -73,5 +74,13 @@ func GetNonRetryableErrorOption(nonRetryableErr error) ArchiveOption {
 		catalog.NonRetryableError = func() error {
 			return nonRetryableErr
 		}
+	}
+}
+
+// GetVisibilityArchivalRecordDeduplicationOption returns an ArchiveOption for enabling
+// content-aware visibility archival deduplication.
+func GetVisibilityArchivalRecordDeduplicationOption() ArchiveOption {
+	return func(catalog *ArchiveFeatureCatalog) {
+		catalog.VisibilityArchivalRecordDeduplication = true
 	}
 }

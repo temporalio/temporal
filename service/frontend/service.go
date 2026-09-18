@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity"
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -65,6 +66,7 @@ type Config struct {
 	GlobalRPS          dynamicconfig.IntPropertyFn
 	OperatorRPSRatio   dynamicconfig.FloatPropertyFn
 
+	EnableDescribeMutableStateRateLimit                               dynamicconfig.BoolPropertyFn
 	NamespaceReplicationInducingAPIsRPS                               dynamicconfig.IntPropertyFn
 	MaxNamespaceRPSPerInstance                                        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceBurstRatioPerInstance                                 dynamicconfig.FloatPropertyFnWithNamespaceFilter
@@ -224,6 +226,9 @@ type Config struct {
 	MaxCallbacksPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackEndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[callbacks.AddressMatchRules]
 
+	// The callback kinds a client may attach to a workflow execution.
+	WorkflowEnabledCallbackKinds dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.Kind]
+
 	MaxNexusOperationTokenLength   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NexusRequestHeadersBlacklist   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	NexusForwardRequestUseEndpoint dynamicconfig.BoolPropertyFn
@@ -237,8 +242,7 @@ type Config struct {
 	MaskInternalErrorDetails dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// Health check
-	HistoryHostErrorPercentage     dynamicconfig.FloatPropertyFn
-	HistoryHostSelfErrorProportion dynamicconfig.FloatPropertyFn
+	HistoryHostErrorPercentage dynamicconfig.FloatPropertyFn
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -321,6 +325,7 @@ func NewConfig(
 		RPS:                                 dynamicconfig.FrontendRPS.Get(dc),
 		GlobalRPS:                           dynamicconfig.FrontendGlobalRPS.Get(dc),
 		OperatorRPSRatio:                    dynamicconfig.OperatorRPSRatio.Get(dc),
+		EnableDescribeMutableStateRateLimit: dynamicconfig.AdminEnableDescribeMutableStateRateLimit.Get(dc),
 		NamespaceReplicationInducingAPIsRPS: dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Get(dc),
 
 		MaxNamespaceRPSPerInstance:                                        dynamicconfig.FrontendMaxNamespaceRPSPerInstance.Get(dc),
@@ -428,13 +433,14 @@ func NewConfig(
 		LinkMaxSize:        dynamicconfig.FrontendLinkMaxSize.Get(dc),
 		MaxLinksPerRequest: dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
 
-		CallbackEndpointConfigs:     chasmcallback.AllowedAddresses.Get(dc),
+		CallbackEndpointConfigs:      chasmcallback.AllowedAddresses.Get(dc),
+		WorkflowEnabledCallbackKinds: chasmworkflow.EnabledCallbackKinds.Get(dc),
+
 		AdminEnableListHistoryTasks: dynamicconfig.AdminEnableListHistoryTasks.Get(dc),
 
 		MaskInternalErrorDetails: dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc),
 
 		HistoryHostErrorPercentage:              dynamicconfig.HistoryHostErrorPercentage.Get(dc),
-		HistoryHostSelfErrorProportion:          dynamicconfig.HistoryHostSelfErrorProportion.Get(dc),
 		LogAllReqErrors:                         dynamicconfig.LogAllReqErrors.Get(dc),
 		EnableEagerWorkflowStart:                dynamicconfig.EnableEagerWorkflowStart.Get(dc),
 		WorkflowRulesAPIsEnabled:                dynamicconfig.WorkflowRulesAPIsEnabled.Get(dc),

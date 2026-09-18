@@ -492,7 +492,14 @@ func (c *QueryConverter[ExprT]) convertColName(in sqlparser.Expr) (*SAColumn, er
 		)
 	}
 	saAlias := strings.ReplaceAll(sqlparser.String(expr), "`", "")
-	saFieldName, saType, err := c.resolveSearchAttributeAlias(saAlias)
+	saFieldName, saType, err := ResolveSearchAttributeAlias(
+		saAlias,
+		c.namespaceName,
+		c.saMapper,
+		c.saTypeMap,
+		c.chasmMapper,
+		c.archetypeID,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -506,79 +513,6 @@ func (c *QueryConverter[ExprT]) convertColName(in sqlparser.Expr) (*SAColumn, er
 		return nil, err
 	}
 	return colName, nil
-}
-
-func (c *QueryConverter[ExprT]) resolveSearchAttributeAlias(
-	alias string,
-) (fieldName string, fieldType enumspb.IndexedValueType, retErr error) {
-	// resolveCSA only returns true if `alias` is a custom search attribute.
-	resolveCSA := func(alias string) bool {
-		fn, err := c.saMapper.GetFieldName(alias, c.namespaceName.String())
-		if err != nil {
-			return false
-		}
-		ft, err := c.saTypeMap.GetType(fn)
-		if err != nil {
-			return false
-		}
-		fieldName, fieldType = fn, ft
-		return true
-	}
-	// resolveChasmSA only returns true if `alias` is a CHASM search attribute.
-	resolveChasmSA := func(alias string) bool {
-		if c.chasmMapper == nil {
-			return false
-		}
-		fn, err := c.chasmMapper.Field(alias)
-		if err != nil {
-			return false
-		}
-		ft, err := c.chasmMapper.ValueType(fn)
-		if err != nil {
-			return false
-		}
-		fieldName, fieldType = fn, ft
-		return true
-	}
-
-	var err error
-	fieldName = alias
-	// First, check if it's a custom search attribute.
-	if sadefs.IsMappable(alias) && resolveCSA(alias) {
-		return
-	}
-	// Second, check if it's a CHASM search attribute.
-	if resolveChasmSA(alias) {
-		return
-	}
-	// Third, check if it's a system/reserved search attribute.
-	fieldType, err = c.saTypeMap.GetType(fieldName)
-	if err == nil {
-		return
-	}
-	// Fourth, check for special aliases or adding/removing the `Temporal` prefix.
-	if strings.TrimPrefix(alias, sadefs.ReservedPrefix) == sadefs.ScheduleID {
-		fieldName = sadefs.WorkflowID
-	} else if c.archetypeID == chasm.SchedulerArchetypeID && alias == "TemporalSystemExecutionStatus" {
-		// To support querying Workflow based schedulers and CHASM based schedulers, we need to translate
-		// TemporalSystemExecutionStatus as an alias to the system search attribute ExecutionStatus.
-		fieldName = "ExecutionStatus"
-	} else if strings.HasPrefix(fieldName, sadefs.ReservedPrefix) {
-		fieldName = fieldName[len(sadefs.ReservedPrefix):]
-	} else {
-		fieldName = sadefs.ReservedPrefix + fieldName
-	}
-	fieldType, err = c.saTypeMap.GetType(fieldName)
-	if err == nil {
-		return
-	}
-
-	retErr = NewConverterError(
-		"%s: column name '%s' is not a valid search attribute",
-		InvalidExpressionErrMessage,
-		alias,
-	)
-	return
 }
 
 func (c *QueryConverter[ExprT]) parseValueExpr(

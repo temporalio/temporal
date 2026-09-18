@@ -79,8 +79,7 @@ func SyncWorkflowStateFromSource(
 		if common.IsNotFoundError(err) {
 			return SyncWorkflowStateResultSourceNotFound, nil
 		}
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		if errors.As(err, &failedPreconditionErr) {
+		if _, ok := errors.AsType[*serviceerror.FailedPrecondition](err); ok {
 			return SyncWorkflowStateResultSkipped, nil
 		}
 		return SyncWorkflowStateResultSkipped, err
@@ -91,8 +90,7 @@ func SyncWorkflowStateFromSource(
 
 	namespaceEntry, err = namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
-		var namespaceNotFoundErr *serviceerror.NamespaceNotFound
-		if errors.As(err, &namespaceNotFoundErr) {
+		if _, ok := errors.AsType[*serviceerror.NamespaceNotFound](err); ok {
 			return SyncWorkflowStateResultSkipped, nil
 		}
 		return SyncWorkflowStateResultSkipped, err

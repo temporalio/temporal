@@ -94,13 +94,11 @@ type BuildId struct {
 	State BuildId_State          `protobuf:"varint,2,opt,name=state,proto3,enum=temporal.server.api.persistence.v1.BuildId_State" json:"state,omitempty"`
 	// HLC timestamp representing when the state was updated or the when build ID was originally inserted.
 	// (-- api-linter: core::0142::time-field-type=disabled
-	//
-	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
+	//     aip.dev/not-precedent: Using HLC instead of wall clock. --)
 	StateUpdateTimestamp *v1.HybridLogicalClock `protobuf:"bytes,3,opt,name=state_update_timestamp,json=stateUpdateTimestamp,proto3" json:"state_update_timestamp,omitempty"`
 	// HLC timestamp representing when this build ID was last made default in its version set.
 	// (-- api-linter: core::0142::time-field-type=disabled
-	//
-	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
+	//     aip.dev/not-precedent: Using HLC instead of wall clock. --)
 	BecameDefaultTimestamp *v1.HybridLogicalClock `protobuf:"bytes,4,opt,name=became_default_timestamp,json=becameDefaultTimestamp,proto3" json:"became_default_timestamp,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
@@ -170,12 +168,11 @@ type CompatibleVersionSet struct {
 	// Set IDs are used internally by matching.
 	// A set typically has one set ID and extra care is taken to enforce this.
 	// In some situations, including:
-	//   - Replication race between task queue user data and history events
-	//   - Replication split-brain + later merge
-	//   - Delayed user data propagation between partitions
-	//   - Cross-task-queue activities/child workflows/CAN where the user has not set up parallel
-	//     versioning data
-	//
+	// - Replication race between task queue user data and history events
+	// - Replication split-brain + later merge
+	// - Delayed user data propagation between partitions
+	// - Cross-task-queue activities/child workflows/CAN where the user has not set up parallel
+	//   versioning data
 	// we have to guess the set id for a build ID. If that happens, and then the build ID is
 	// discovered to be in a different set, then the sets will be merged and both (or more)
 	// build ids will be preserved, so that we don't lose tasks.
@@ -186,8 +183,7 @@ type CompatibleVersionSet struct {
 	BuildIds []*BuildId `protobuf:"bytes,2,rep,name=build_ids,json=buildIds,proto3" json:"build_ids,omitempty"`
 	// HLC timestamp representing when this set was last made the default for the queue.
 	// (-- api-linter: core::0142::time-field-type=disabled
-	//
-	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
+	//     aip.dev/not-precedent: Using HLC instead of wall clock. --)
 	BecameDefaultTimestamp *v1.HybridLogicalClock `protobuf:"bytes,4,opt,name=became_default_timestamp,json=becameDefaultTimestamp,proto3" json:"became_default_timestamp,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
@@ -248,14 +244,11 @@ type AssignmentRule struct {
 	state protoimpl.MessageState     `protogen:"open.v1"`
 	Rule  *v11.BuildIdAssignmentRule `protobuf:"bytes,1,opt,name=rule,proto3" json:"rule,omitempty"`
 	// (-- api-linter: core::0142::time-field-type=disabled
-	//
-	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
+	//     aip.dev/not-precedent: Using HLC instead of wall clock. --)
 	CreateTimestamp *v1.HybridLogicalClock `protobuf:"bytes,2,opt,name=create_timestamp,json=createTimestamp,proto3" json:"create_timestamp,omitempty"`
-	//	when delete_timestamp is present the rule should be treated as deleted
-	//
+	//  when delete_timestamp is present the rule should be treated as deleted
 	// (-- api-linter: core::0142::time-field-type=disabled
-	//
-	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
+	//     aip.dev/not-precedent: Using HLC instead of wall clock. --)
 	DeleteTimestamp *v1.HybridLogicalClock `protobuf:"bytes,3,opt,name=delete_timestamp,json=deleteTimestamp,proto3" json:"delete_timestamp,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
@@ -316,14 +309,11 @@ type RedirectRule struct {
 	state protoimpl.MessageState             `protogen:"open.v1"`
 	Rule  *v11.CompatibleBuildIdRedirectRule `protobuf:"bytes,1,opt,name=rule,proto3" json:"rule,omitempty"`
 	// (-- api-linter: core::0142::time-field-type=disabled
-	//
-	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
+	//     aip.dev/not-precedent: Using HLC instead of wall clock. --)
 	CreateTimestamp *v1.HybridLogicalClock `protobuf:"bytes,2,opt,name=create_timestamp,json=createTimestamp,proto3" json:"create_timestamp,omitempty"`
-	//	when delete_timestamp is present the rule should be treated as deleted
-	//
+	//  when delete_timestamp is present the rule should be treated as deleted
 	// (-- api-linter: core::0142::time-field-type=disabled
-	//
-	//	aip.dev/not-precedent: Using HLC instead of wall clock. --)
+	//     aip.dev/not-precedent: Using HLC instead of wall clock. --)
 	DeleteTimestamp *v1.HybridLogicalClock `protobuf:"bytes,3,opt,name=delete_timestamp,json=deleteTimestamp,proto3" json:"delete_timestamp,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
@@ -838,22 +828,22 @@ func file_temporal_server_api_persistence_v1_task_queues_proto_rawDescGZIP() []b
 var file_temporal_server_api_persistence_v1_task_queues_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
 var file_temporal_server_api_persistence_v1_task_queues_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_temporal_server_api_persistence_v1_task_queues_proto_goTypes = []any{
-	(BuildId_State)(0),                        // 0: temporal.server.api.persistence.v1.BuildId.State
-	(*BuildId)(nil),                           // 1: temporal.server.api.persistence.v1.BuildId
-	(*CompatibleVersionSet)(nil),              // 2: temporal.server.api.persistence.v1.CompatibleVersionSet
-	(*AssignmentRule)(nil),                    // 3: temporal.server.api.persistence.v1.AssignmentRule
-	(*RedirectRule)(nil),                      // 4: temporal.server.api.persistence.v1.RedirectRule
-	(*VersioningData)(nil),                    // 5: temporal.server.api.persistence.v1.VersioningData
-	(*DeploymentData)(nil),                    // 6: temporal.server.api.persistence.v1.DeploymentData
-	(*WorkerDeploymentData)(nil),              // 7: temporal.server.api.persistence.v1.WorkerDeploymentData
-	(*TaskQueueTypeUserData)(nil),             // 8: temporal.server.api.persistence.v1.TaskQueueTypeUserData
-	(*TaskQueueUserData)(nil),                 // 9: temporal.server.api.persistence.v1.TaskQueueUserData
-	(*VersionedTaskQueueUserData)(nil),        // 10: temporal.server.api.persistence.v1.VersionedTaskQueueUserData
-	nil,                                       // 11: temporal.server.api.persistence.v1.DeploymentData.DeploymentsDataEntry
-	nil,                                       // 12: temporal.server.api.persistence.v1.WorkerDeploymentData.VersionsEntry
-	nil,                                       // 13: temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry
-	(*v1.HybridLogicalClock)(nil),             // 14: temporal.server.api.clock.v1.HybridLogicalClock
-	(*v11.BuildIdAssignmentRule)(nil),         // 15: temporal.api.taskqueue.v1.BuildIdAssignmentRule
+	(BuildId_State)(0),                 // 0: temporal.server.api.persistence.v1.BuildId.State
+	(*BuildId)(nil),                    // 1: temporal.server.api.persistence.v1.BuildId
+	(*CompatibleVersionSet)(nil),       // 2: temporal.server.api.persistence.v1.CompatibleVersionSet
+	(*AssignmentRule)(nil),             // 3: temporal.server.api.persistence.v1.AssignmentRule
+	(*RedirectRule)(nil),               // 4: temporal.server.api.persistence.v1.RedirectRule
+	(*VersioningData)(nil),             // 5: temporal.server.api.persistence.v1.VersioningData
+	(*DeploymentData)(nil),             // 6: temporal.server.api.persistence.v1.DeploymentData
+	(*WorkerDeploymentData)(nil),       // 7: temporal.server.api.persistence.v1.WorkerDeploymentData
+	(*TaskQueueTypeUserData)(nil),      // 8: temporal.server.api.persistence.v1.TaskQueueTypeUserData
+	(*TaskQueueUserData)(nil),          // 9: temporal.server.api.persistence.v1.TaskQueueUserData
+	(*VersionedTaskQueueUserData)(nil), // 10: temporal.server.api.persistence.v1.VersionedTaskQueueUserData
+	nil,                                // 11: temporal.server.api.persistence.v1.DeploymentData.DeploymentsDataEntry
+	nil,                                // 12: temporal.server.api.persistence.v1.WorkerDeploymentData.VersionsEntry
+	nil,                                // 13: temporal.server.api.persistence.v1.TaskQueueUserData.PerTypeEntry
+	(*v1.HybridLogicalClock)(nil),      // 14: temporal.server.api.clock.v1.HybridLogicalClock
+	(*v11.BuildIdAssignmentRule)(nil),  // 15: temporal.api.taskqueue.v1.BuildIdAssignmentRule
 	(*v11.CompatibleBuildIdRedirectRule)(nil), // 16: temporal.api.taskqueue.v1.CompatibleBuildIdRedirectRule
 	(*v12.DeploymentVersionData)(nil),         // 17: temporal.server.api.deployment.v1.DeploymentVersionData
 	(*v13.RoutingConfig)(nil),                 // 18: temporal.api.deployment.v1.RoutingConfig

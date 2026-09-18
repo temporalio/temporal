@@ -41,6 +41,8 @@ type MockNodeBackend struct {
 	HandleGetNamespaceEntry           func() *namespace.Namespace
 	HandleEndpointRegistry            func() EndpointRegistry
 
+	HandleChasmDLQScheduledPureTaskOnValidationEnabled func() bool
+
 	// Recorded calls (protected by mu).
 	mu                  sync.Mutex
 	TasksByCategory     map[tasks.Category][]tasks.Task
@@ -75,6 +77,13 @@ func (m *MockNodeBackend) GetApproximatePersistedSize() int {
 func (m *MockNodeBackend) ChasmSkipPersistenceEnabled() bool {
 	if m.HandleChasmSkipPersistenceEnabled != nil {
 		return m.HandleChasmSkipPersistenceEnabled()
+	}
+	return false
+}
+
+func (m *MockNodeBackend) ChasmDLQScheduledPureTaskOnValidationEnabled() bool {
+	if m.HandleChasmDLQScheduledPureTaskOnValidationEnabled != nil {
+		return m.HandleChasmDLQScheduledPureTaskOnValidationEnabled()
 	}
 	return false
 }

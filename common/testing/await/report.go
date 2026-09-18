@@ -42,10 +42,12 @@ func (r *timeoutReport) recordAttemptTimeout() {
 }
 
 func (r timeoutReport) reportAttemptErrors(tb testing.TB) {
+	tb.Helper()
 	reportAttemptErrors(tb, r.failures)
 }
 
 func (r timeoutReport) reportTimeout(tb testing.TB, funcName, timeoutMsg string) {
+	tb.Helper()
 	r.reportAttemptErrors(tb)
 	message := fmt.Sprintf("condition not satisfied after %v", r.effectiveTimeout)
 	if timeoutMsg != "" {
@@ -56,6 +58,7 @@ func (r timeoutReport) reportTimeout(tb testing.TB, funcName, timeoutMsg string)
 }
 
 func reportAttemptErrors(tb testing.TB, failures []attemptFailure) {
+	tb.Helper()
 	if len(failures) == 0 {
 		return
 	}
