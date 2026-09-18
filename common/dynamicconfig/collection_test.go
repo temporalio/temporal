@@ -422,8 +422,20 @@ func (s *collectionSuite) TestGetTypedProtoEnum() {
 		s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, get())
 	})
 
+	s.Run("Shorthand", func() {
+		s.client.SetValue(testGetTypedPropertyKey, "Disabled")
+		s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, get())
+		s.client.SetValue(testGetTypedPropertyKey, "disabled")
+		s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, get())
+		s.client.SetValue(testGetTypedPropertyKey, "state_disabled")
+		s.Equal(enumspb.ARCHIVAL_STATE_DISABLED, get())
+	})
+
 	s.Run("NotFound", func() {
 		s.client.SetValue(testGetTypedPropertyKey, "some_other_string")
+		s.Equal(def, get())
+		// a shorthand has to land on an underscore boundary
+		s.client.SetValue(testGetTypedPropertyKey, "abled")
 		s.Equal(def, get())
 	})
 

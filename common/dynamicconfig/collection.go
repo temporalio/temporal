@@ -737,18 +737,28 @@ func mapstructureHookTimestamp(f, t reflect.Type, data any) (any, error) {
 	return time.Time{}, errors.New("value not convertible to Time")
 }
 
-// Parses proto enum values from strings.
+// Parses proto enum values from strings, case-insensitively. Accepts either the full value
+// name or any trailing part of it on an underscore boundary, so the enum name prefix can be
+// left off.
 func mapstructureHookProtoEnum(f, t reflect.Type, data any) (any, error) {
 	if f != stringType || !t.Implements(protoEnumType) {
 		return data, nil
 	}
 	vals := reflect.New(t).Interface().(protoreflect.Enum).Descriptor().Values()
 	str := strings.ToLower(data.(string)) // we checked f above so this can't fail
+	var suffixMatch protoreflect.EnumValueDescriptor
 	for i := 0; i < vals.Len(); i++ {
 		val := vals.Get(i)
-		if str == strings.ToLower(string(val.Name())) {
+		name := strings.ToLower(string(val.Name()))
+		if name == str {
+			// full name always wins so a shorthand can't shadow a full name
 			return val.Number(), nil
+		} else if suffixMatch == nil && strings.HasSuffix(name, "_"+str) {
+			suffixMatch = val
 		}
+	}
+	if suffixMatch != nil {
+		return suffixMatch.Number(), nil
 	}
 	return nil, fmt.Errorf("name %q not found in enum %s", data, t.Name())
 }

@@ -1,0 +1,21 @@
+syntax = "proto3";
+
+package temporal.server.api.enums.v1;
+
+option go_package = "go.temporal.io/server/api/enums/v1;enums";
+
+// PartitionScaleMode controls what the partition scale manager does with the pluggable
+// partition scaler. Note that the scaler has its own enabled setting and must also be enabled
+// for any action to be taken.
+enum PartitionScaleMode {
+  // Treated the same as PARTITION_SCALE_MODE_DISABLED.
+  PARTITION_SCALE_MODE_UNSPECIFIED = 0;
+  // Don't call the scaler, and act as if it had returned a disabled decision: fall back to
+  // dynamic config. Note that as with a disabled scaler, this could leave tasks stranded if
+  // the scaler had scaled above the dynamic config setting.
+  PARTITION_SCALE_MODE_DISABLED = 1;
+  // Call the scaler and log/emit metrics for its decisions, but don't apply them.
+  PARTITION_SCALE_MODE_SHADOW = 2;
+  // Call the scaler and apply its decisions.
+  PARTITION_SCALE_MODE_ENABLED = 3;
+}

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	sdkworker "go.temporal.io/sdk/worker"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/primitives"
@@ -1678,13 +1679,14 @@ default as namespace cardinality can be high and this requires a metrics collect
 	MatchingPartitionScaleManager = NewTaskQueueTypedSetting(
 		"matching.partitionScaleManager",
 		PartitionScaleManagerSettings{
+			Mode:                  enumsspb.PARTITION_SCALE_MODE_SHADOW,
 			MaxRate:               0.33,
 			ShrinkRatio:           0.1,
 			ShrinkDelta:           8,
 			BatchSize:             100,
 			BackgroundInterval:    23 * time.Second,
 			DrainBufferTime:       15 * time.Second,
-			ShadowModeLogInterval: 0,
+			ShadowModeLogInterval: 30 * time.Second,
 		},
 		`Settings for partition scale manager.`,
 	)
