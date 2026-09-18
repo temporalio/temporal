@@ -288,6 +288,7 @@ func reset(_ Config, s AbstractState, e Event) Outcome {
 func updateOptions(_ Config, s AbstractState, _ Event) Outcome {
 	switch s.Status {
 	case Scheduled, Paused, Started, PauseRequested:
+		// TODO(dan) the model cannot express update-options
 		return noop(s)
 	case CancelRequested, ResetRequested:
 		return reject(s, FailedPrecondition)
