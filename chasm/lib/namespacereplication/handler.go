@@ -25,24 +25,12 @@ func (h *handler) TriggerNamespaceMutation(
 ) (response *namespacereplicationpb.TriggerNamespaceMutationResponse, retErr error) {
 	defer log.CapturePanic(h.logger, &retErr)
 
-	if req == nil || req.GetMutation() == nil {
-		return nil, serviceerror.NewInvalidArgument("mutation is required")
-	}
-	if req.GetNamespaceId() == "" {
-		return nil, serviceerror.NewInvalidArgument("namespace_id is required")
-	}
-	if req.GetSystemNamespaceId() == "" {
-		return nil, serviceerror.NewInvalidArgument("system_namespace_id is required")
-	}
-	if req.GetBusinessId() == "" {
-		return nil, serviceerror.NewInvalidArgument("business_id is required")
-	}
-	if req.GetMutation().GetNamespaceDetail() == nil {
-		return nil, serviceerror.NewInvalidArgument("mutation.namespace_detail is required")
+	if err := validateTriggerNamespaceMutationRequest(req); err != nil {
+		return nil, err
 	}
 
 	key := executionKey(req)
-	if _, err := chasm.StartExecution[*NamespaceMutationComponent, *namespacereplicationpb.NamespaceMutation](
+	startResult, err := chasm.StartExecution[*NamespaceMutationComponent, *namespacereplicationpb.NamespaceMutation](
 		ctx,
 		key,
 		func(mctx chasm.MutableContext, mutation *namespacereplicationpb.NamespaceMutation) (*NamespaceMutationComponent, error) {
@@ -53,18 +41,21 @@ func (h *handler) TriggerNamespaceMutation(
 			return component, nil
 		},
 		req.GetMutation(),
-	); err != nil {
+		chasm.WithRequestID(req.GetBusinessId()),
+	)
+	if err != nil {
 		return nil, err
 	}
 
-	ref := chasm.NewComponentRef[*NamespaceMutationComponent](key)
+	ref := chasm.NewComponentRef[*NamespaceMutationComponent](startResult.ExecutionKey)
 	result, _, err := chasm.PollComponent(
 		ctx,
 		ref,
 		func(component *NamespaceMutationComponent, _ chasm.Context, _ chasm.NoValue) (*namespacereplicationpb.TriggerNamespaceMutationResponse, bool, error) {
 			local := component.GetLocalApply()
 			switch local.GetOutcome() {
-			case namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED:
+			case namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED,
+				namespacereplicationpb.LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW:
 				return &namespacereplicationpb.TriggerNamespaceMutationResponse{}, true, nil
 			case namespacereplicationpb.LOCAL_APPLY_OUTCOME_FAILED:
 				failure := local.GetFailure()
@@ -79,6 +70,50 @@ func (h *handler) TriggerNamespaceMutation(
 		return nil, err
 	}
 	return result, nil
+}
+
+func validateTriggerNamespaceMutationRequest(req *namespacereplicationpb.TriggerNamespaceMutationRequest) error {
+	if req == nil || req.GetMutation() == nil {
+		return serviceerror.NewInvalidArgument("mutation is required")
+	}
+	if !req.GetMutation().GetShadow() {
+		return serviceerror.NewFailedPrecondition("authoritative CHASM namespace replication is not enabled")
+	}
+	if req.GetNamespaceId() == "" {
+		return serviceerror.NewInvalidArgument("namespace_id is required")
+	}
+	if req.GetSystemNamespaceId() == "" {
+		return serviceerror.NewInvalidArgument("system_namespace_id is required")
+	}
+	if req.GetBusinessId() == "" {
+		return serviceerror.NewInvalidArgument("business_id is required")
+	}
+	detail := req.GetMutation().GetNamespaceDetail()
+	if detail == nil {
+		return serviceerror.NewInvalidArgument("mutation.namespace_detail is required")
+	}
+	if detail.GetInfo() == nil {
+		return serviceerror.NewInvalidArgument("mutation.namespace_detail.info is required")
+	}
+	if detail.GetConfig() == nil {
+		return serviceerror.NewInvalidArgument("mutation.namespace_detail.config is required")
+	}
+	if detail.GetReplicationConfig() == nil {
+		return serviceerror.NewInvalidArgument("mutation.namespace_detail.replication_config is required")
+	}
+	if detail.GetInfo().GetId() == "" {
+		return serviceerror.NewInvalidArgument("mutation.namespace_detail.info.id is required")
+	}
+	if req.GetNamespaceId() != detail.GetInfo().GetId() {
+		return serviceerror.NewInvalidArgument("namespace_id must match mutation.namespace_detail.info.id")
+	}
+	switch req.GetMutation().GetOperation() {
+	case namespacereplicationpb.NAMESPACE_OPERATION_CREATE,
+		namespacereplicationpb.NAMESPACE_OPERATION_UPDATE:
+		return nil
+	default:
+		return serviceerror.NewInvalidArgument("mutation.operation must be create or update")
+	}
 }
 
 func executionKey(req *namespacereplicationpb.TriggerNamespaceMutationRequest) chasm.ExecutionKey {

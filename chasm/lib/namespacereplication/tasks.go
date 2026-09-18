@@ -53,7 +53,7 @@ func newApplyLocalTaskHandler(opts applyLocalTaskHandlerOptions) *applyLocalTask
 }
 
 // Validate gates execution: only run if the component is still RUNNING and the
-// local apply hasn't already been recorded as committed.
+// local phase hasn't already resolved.
 func (h *applyLocalTaskHandler) Validate(
 	_ chasm.Context,
 	c *NamespaceMutationComponent,
@@ -98,7 +98,7 @@ func (h *applyLocalTaskHandler) Execute(
 				ExpectedVer: m.GetExpectedVersion(),
 				Shadow:      m.GetShadow(),
 				// Anything that reaches the CHASM transport is a global namespace —
-				// the frontend's shouldUseCHASMReplication gate ensures local-only
+				// the frontend's replication gate ensures local-only
 				// namespaces never get here. Hardcoded rather than read from the
 				// mutation to avoid drift.
 				IsGlobal: true,
@@ -110,7 +110,7 @@ func (h *applyLocalTaskHandler) Execute(
 		return fmt.Errorf("failed to read chasm component details: %w", err)
 	}
 	if loaded.Shadow {
-		return h.commitLocal(ctx, ref)
+		return h.resolveLocal(ctx, ref, true)
 	}
 
 	// The metadata write and component transition cannot share a transaction, so
@@ -157,7 +157,7 @@ func (h *applyLocalTaskHandler) Execute(
 					tag.WorkflowNamespaceID(loaded.Detail.GetInfo().GetId()),
 					tag.NewStringTag("business_id", ref.BusinessID),
 				)
-				return h.commitLocal(ctx, ref)
+				return h.resolveLocal(ctx, ref, false)
 			}
 
 			definitelyNotApplied, resolutionErr := h.localMutationDefinitelyNotApplied(
@@ -185,7 +185,7 @@ func (h *applyLocalTaskHandler) Execute(
 	// destination after Apply returns (TransitionLocalCommitted's is RUNNING), so a
 	// COMPLETED set inside it would be clobbered — the same reason peer completion
 	// needs its own transition.
-	return h.commitLocal(ctx, ref)
+	return h.resolveLocal(ctx, ref, false)
 }
 
 func (h *applyLocalTaskHandler) localMutationDefinitelyNotApplied(
@@ -254,17 +254,22 @@ func (h *applyLocalTaskHandler) localMutationAlreadyApplied(
 	return true, nil
 }
 
-func (h *applyLocalTaskHandler) commitLocal(
+func (h *applyLocalTaskHandler) resolveLocal(
 	ctx context.Context,
 	ref chasm.ComponentRef,
+	shadow bool,
 ) error {
 	_, _, err := chasm.UpdateComponent(
 		ctx,
 		ref,
 		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (chasm.NoValue, error) {
-			if err := TransitionLocalCommitted.Apply(c, mctx, EventLocalCommitted{
-				Time: mctx.Now(c),
-			}); err != nil {
+			var err error
+			if shadow {
+				err = TransitionLocalShadowSkipped.Apply(c, mctx, EventLocalShadowSkipped{Time: mctx.Now(c)})
+			} else {
+				err = TransitionLocalCommitted.Apply(c, mctx, EventLocalCommitted{Time: mctx.Now(c)})
+			}
+			if err != nil {
 				return nil, err
 			}
 			if c.allPeersTerminal() {
@@ -405,7 +410,7 @@ func newApplyPeerTaskHandler(opts applyPeerTaskHandlerOptions) *applyPeerTaskHan
 	}
 }
 
-// Validate gates execution: the local apply must have committed, this peer's
+// Validate gates execution: the local phase must permit fan-out, this peer's
 // status must still be PENDING, and the attempt number must match. The attempt
 // gating prevents stale retries (callback library uses the same pattern).
 func (h *applyPeerTaskHandler) Validate(
@@ -417,7 +422,7 @@ func (h *applyPeerTaskHandler) Validate(
 	if c.GetStatus() != namespacereplicationpb.COMPONENT_STATUS_RUNNING {
 		return false, nil
 	}
-	if c.GetLocalApply().GetOutcome() != namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED {
+	if !localApplyAllowsPeerFanout(c.GetLocalApply().GetOutcome()) {
 		return false, nil
 	}
 	peer := c.GetPeerApply()[task.GetTargetCell()]
@@ -499,13 +504,18 @@ func (h *applyPeerTaskHandler) Execute(
 }
 
 // peerOutcomeFromResult maps a transport-neutral PeerApplyResult onto the
-// persisted per-peer outcome. All three are terminal (see allPeersTerminal):
+// persisted per-peer outcome. All outcomes mapped here are terminal (see
+// allPeersTerminal):
 // NotAdmitted is a terminal non-failure, kept distinct from Applied so the
 // component never records a peer write that didn't happen.
 func peerOutcomeFromResult(result PeerApplyResult) (namespacereplicationpb.PeerApplyOutcome, error) {
 	switch result {
 	case PeerApplyResultApplied:
 		return namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED, nil
+	case PeerApplyResultShadowMatch:
+		return namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MATCH, nil
+	case PeerApplyResultShadowMismatch:
+		return namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MISMATCH, nil
 	case PeerApplyResultNoOpStale:
 		return namespacereplicationpb.PEER_APPLY_OUTCOME_NO_OP_STALE, nil
 	case PeerApplyResultNotAdmitted:
@@ -657,7 +667,7 @@ func (h *applyPeerBackoffTaskHandler) Validate(
 	if c.GetStatus() != namespacereplicationpb.COMPONENT_STATUS_RUNNING {
 		return false, nil
 	}
-	if c.GetLocalApply().GetOutcome() != namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED {
+	if !localApplyAllowsPeerFanout(c.GetLocalApply().GetOutcome()) {
 		return false, nil
 	}
 	peer := c.GetPeerApply()[task.GetTargetCell()]
@@ -665,6 +675,11 @@ func (h *applyPeerBackoffTaskHandler) Validate(
 		return false, nil
 	}
 	return peer.GetAttemptCount() == task.GetAttempt(), nil
+}
+
+func localApplyAllowsPeerFanout(outcome namespacereplicationpb.LocalApplyOutcome) bool {
+	return outcome == namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED ||
+		outcome == namespacereplicationpb.LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW
 }
 
 func (h *applyPeerBackoffTaskHandler) Execute(

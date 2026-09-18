@@ -196,10 +196,11 @@ func ComponentStatusFromString(s string) (ComponentStatus, error) {
 
 var (
 	LocalApplyOutcome_shorthandValue = map[string]int32{
-		"Unspecified": 0,
-		"Pending":     1,
-		"Committed":   2,
-		"Failed":      3,
+		"Unspecified":   0,
+		"Pending":       1,
+		"Committed":     2,
+		"Failed":        3,
+		"SkippedShadow": 4,
 	}
 )
 
@@ -223,6 +224,8 @@ var (
 		"FailedRetriable": 4,
 		"FailedTerminal":  5,
 		"NotAdmitted":     6,
+		"ShadowMatch":     7,
+		"ShadowMismatch":  8,
 	}
 )
 

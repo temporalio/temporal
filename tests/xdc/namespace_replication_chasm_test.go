@@ -284,7 +284,7 @@ func (s *namespaceReplicationCHASMTestSuite) requireSuccessfulShadowApply(
 ) {
 	s.Require().NoError(observed.err)
 	s.Require().NotNil(observed.response)
-	s.Require().Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED, observed.response.GetOutcome())
+	s.Require().Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, observed.response.GetOutcome())
 	s.requireShadowApplyRequest(observed, namespaceName, operation)
 }
 
