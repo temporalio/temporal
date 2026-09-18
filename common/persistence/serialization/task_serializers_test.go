@@ -406,44 +406,71 @@ func (s *taskSerializerSuite) TestSyncHSMTask() {
 }
 
 func (s *taskSerializerSuite) TestSyncVersionedTransitionTask() {
-	syncVersionedTransitionTask := &tasks.SyncVersionedTransitionTask{
-		WorkflowKey:         s.workflowKey,
-		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
-		TaskID:              rand.Int63(),
-		ArchetypeID:         rand.Uint32(),
-		FirstEventID:        rand.Int63(),
-		NextEventID:         rand.Int63(),
-		NewRunID:            uuid.New().String(),
-		Priority:            enumsspb.TASK_PRIORITY_LOW,
-		VersionedTransition: &persistencespb.VersionedTransition{
-			NamespaceFailoverVersion: rand.Int63(),
-			TransitionCount:          rand.Int63(),
+	testCases := []struct {
+		name                  string
+		currentVersionHistory *historyspb.VersionHistory
+	}{
+		{
+			name: "Nil",
 		},
-		CurrentVersionHistory: &historyspb.VersionHistory{
-			Items: []*historyspb.VersionHistoryItem{
-				{EventId: 123, Version: 456},
-			},
+		{
+			name:                  "Empty",
+			currentVersionHistory: &historyspb.VersionHistory{},
 		},
-		TaskEquivalents: []tasks.Task{
-			&tasks.HistoryReplicationTask{
-				WorkflowKey:         s.workflowKey,
-				VisibilityTimestamp: time.Unix(0, 0).UTC(),
-				FirstEventID:        rand.Int63(),
-				NextEventID:         rand.Int63(),
-				Version:             rand.Int63(),
-				NewRunID:            uuid.New().String(),
-				Priority:            enumsspb.TASK_PRIORITY_LOW,
+		{
+			name: "Populated",
+			currentVersionHistory: &historyspb.VersionHistory{
+				Items: []*historyspb.VersionHistoryItem{
+					{EventId: 123, Version: 456},
+				},
 			},
 		},
 	}
 
-	s.assertEqualTasksWithOpts(syncVersionedTransitionTask,
-		func(task, deserializedTask tasks.Task) {
-			s.True(proto.Equal(task.(*tasks.SyncVersionedTransitionTask).VersionedTransition, deserializedTask.(*tasks.SyncVersionedTransitionTask).VersionedTransition))
-			s.True(proto.Equal(task.(*tasks.SyncVersionedTransitionTask).CurrentVersionHistory, deserializedTask.(*tasks.SyncVersionedTransitionTask).CurrentVersionHistory))
-		},
-		cmpopts.IgnoreFields(tasks.SyncVersionedTransitionTask{}, "VersionedTransition", "CurrentVersionHistory"),
-	)
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			syncVersionedTransitionTask := &tasks.SyncVersionedTransitionTask{
+				WorkflowKey:         s.workflowKey,
+				VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
+				TaskID:              rand.Int63(),
+				ArchetypeID:         rand.Uint32(),
+				FirstEventID:        rand.Int63(),
+				NextEventID:         rand.Int63(),
+				NewRunID:            uuid.New().String(),
+				Priority:            enumsspb.TASK_PRIORITY_LOW,
+				VersionedTransition: &persistencespb.VersionedTransition{
+					NamespaceFailoverVersion: rand.Int63(),
+					TransitionCount:          rand.Int63(),
+				},
+				CurrentVersionHistory: tc.currentVersionHistory,
+				TaskEquivalents: []tasks.Task{
+					&tasks.HistoryReplicationTask{
+						WorkflowKey:         s.workflowKey,
+						VisibilityTimestamp: time.Unix(0, 0).UTC(),
+						FirstEventID:        rand.Int63(),
+						NextEventID:         rand.Int63(),
+						Version:             rand.Int63(),
+						NewRunID:            uuid.New().String(),
+						Priority:            enumsspb.TASK_PRIORITY_LOW,
+					},
+				},
+			}
+
+			s.assertEqualTasksWithOpts(syncVersionedTransitionTask,
+				func(task, deserializedTask tasks.Task) {
+					deserializedSyncTask := deserializedTask.(*tasks.SyncVersionedTransitionTask)
+					s.True(proto.Equal(task.(*tasks.SyncVersionedTransitionTask).VersionedTransition, deserializedSyncTask.VersionedTransition))
+					s.True(proto.Equal(tc.currentVersionHistory, deserializedSyncTask.CurrentVersionHistory))
+					if tc.currentVersionHistory == nil {
+						s.Nil(deserializedSyncTask.CurrentVersionHistory)
+					} else {
+						s.NotNil(deserializedSyncTask.CurrentVersionHistory)
+					}
+				},
+				cmpopts.IgnoreFields(tasks.SyncVersionedTransitionTask{}, "VersionedTransition", "CurrentVersionHistory"),
+			)
+		})
+	}
 }
 
 func (s *taskSerializerSuite) TestSyncWorkflowStateTask() {
