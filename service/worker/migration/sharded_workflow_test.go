@@ -320,6 +320,33 @@ func TestSharded_InvalidInput(t *testing.T) {
 	}
 }
 
+func TestValidateShardedForceReplicationParams_MaxExecsPerShard(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		maxExecsPerShard int
+		wantErr          bool
+	}{
+		{name: "unset uses default", maxExecsPerShard: 0},
+		{name: "minimum accepted", maxExecsPerShard: 5},
+		{name: "below minimum rejected", maxExecsPerShard: 4, wantErr: true},
+		{name: "negative rejected", maxExecsPerShard: -1, wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateShardedForceReplicationParams(&ShardedForceReplicationParams{
+				Namespace:         "test-ns",
+				TargetClusterName: "remote_cluster",
+				MaxExecsPerShard:  tc.maxExecsPerShard,
+			})
+			if tc.wantErr {
+				require.Error(t, err)
+				require.True(t, hasAppErrType(err, "InvalidConfiguration"))
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
 // TestSharded_ListWorkflowsError: a hard failure from ListWorkflows
 // propagates out as the workflow error. Mirrors the existing
 // force-replication TestListWorkflowsError.

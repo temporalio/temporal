@@ -148,6 +148,11 @@ func validateShardedForceReplicationParams(params *ShardedForceReplicationParams
 	if len(params.TargetClusterName) == 0 {
 		return temporal.NewNonRetryableApplicationError("InvalidArgument: TargetClusterName is required", "InvalidArgument", nil)
 	}
+	if params.MaxExecsPerShard != 0 && params.MaxExecsPerShard < minimumMaxExecsPerShard {
+		return temporal.NewNonRetryableApplicationError(
+			fmt.Sprintf("MaxExecsPerShard (%d) must be at least %d", params.MaxExecsPerShard, minimumMaxExecsPerShard),
+			"InvalidConfiguration", nil)
+	}
 	return nil
 }
 

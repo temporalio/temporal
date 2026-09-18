@@ -522,6 +522,68 @@ func checkpointProbe(ctx workflow.Context) error {
 	return s.lastErr
 }
 
+func checkpointDrainProbe(ctx workflow.Context, failBatch bool) (time.Duration, error) {
+	start := workflow.Now(ctx)
+	s := &shardedWorkflowState{}
+	batchID := s.batches.claim(BatchPayload{
+		0: {"workflow-id": {{RunID: "run-id"}}},
+	})
+	workflow.Go(ctx, func(gCtx workflow.Context) {
+		if err := workflow.NewTimer(gCtx, time.Minute).Get(gCtx, nil); err != nil {
+			s.setLastErr(err)
+			return
+		}
+		if failBatch {
+			s.setLastErr(errors.New("synthetic batch failure"))
+			return
+		}
+		s.batches.releaseAll(batchID)
+	})
+	s.checkpointAtBoundary(ctx, &workflow.Execution{ID: "parent-id", RunID: "parent-run"}, []byte("next-page"))
+	return workflow.Now(ctx).Sub(start), s.lastErr
+}
+
+func TestCheckpointAtBoundary_WaitsForInFlightBatches(t *testing.T) {
+	t.Run("signals after batches drain", func(t *testing.T) {
+		suite := &testsuite.WorkflowTestSuite{}
+		env := suite.NewTestWorkflowEnvironment()
+		env.RegisterWorkflow(checkpointDrainProbe)
+		env.OnSignalExternalWorkflow(
+			mock.Anything, mock.Anything, mock.Anything,
+			shardedCheckpointSignalName, mock.Anything,
+		).Return(nil)
+
+		env.ExecuteWorkflow(checkpointDrainProbe, false)
+
+		require.True(t, env.IsWorkflowCompleted())
+		require.NoError(t, env.GetWorkflowError())
+		var elapsed time.Duration
+		require.NoError(t, env.GetWorkflowResult(&elapsed))
+		require.Equal(t, time.Minute, elapsed)
+	})
+
+	t.Run("batch failure wakes wait without signaling", func(t *testing.T) {
+		suite := &testsuite.WorkflowTestSuite{}
+		env := suite.NewTestWorkflowEnvironment()
+		env.RegisterWorkflow(checkpointDrainProbe)
+		var checkpointSignaled atomic.Bool
+		env.OnSignalExternalWorkflow(
+			mock.Anything, mock.Anything, mock.Anything,
+			shardedCheckpointSignalName, mock.Anything,
+		).Run(func(mock.Arguments) {
+			checkpointSignaled.Store(true)
+		}).Return(nil).Maybe()
+
+		env.ExecuteWorkflow(checkpointDrainProbe, true)
+
+		require.True(t, env.IsWorkflowCompleted())
+		err := env.GetWorkflowError()
+		require.Error(t, err)
+		require.Contains(t, err.Error(), "synthetic batch failure")
+		require.False(t, checkpointSignaled.Load())
+	})
+}
+
 // TestCheckpointAtBoundary_SignalFailureFailsChild verifies that checkpointAtBoundary
 // latches lastErr when the checkpoint signal to the parent fails. A dropped
 // checkpoint means the parent never starts a successor, so every execution past

@@ -65,6 +65,7 @@ const (
 	// 50 keeps a hot shard's contribution under half a default-sized
 	// batch (BatchSize=100), so a batch still spans ≥2 shards.
 	defaultMaxExecsPerShard = 50
+	minimumMaxExecsPerShard = 5
 
 	// defaultShardNoProgress is the per-shard cumulative no-progress
 	// backstop. While a shard's pending exec count is non-zero and
