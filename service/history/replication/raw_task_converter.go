@@ -42,7 +42,12 @@ type (
 		config                    *configs.Config
 	}
 	SourceTaskConverter interface {
-		Convert(task tasks.Task, targetClusterID int32, priority enumsspb.TaskPriority) (*replicationspb.ReplicationTask, error)
+		Convert(
+			task tasks.Task,
+			targetClusterID int32,
+			priority enumsspb.TaskPriority,
+			workflowLockPriority locks.Priority,
+		) (*replicationspb.ReplicationTask, error)
 	}
 	SourceTaskConverterProvider func(
 		historyEngine historyi.Engine,
@@ -61,6 +66,7 @@ type (
 		syncStateRetriever SyncStateRetriever
 		logger             log.Logger
 	}
+	workflowLockPriorityContextKey struct{}
 )
 
 func NewSourceTaskConverter(
@@ -83,6 +89,7 @@ func (c *SourceTaskConverterImpl) Convert(
 	task tasks.Task,
 	targetClusterID int32,
 	priority enumsspb.TaskPriority,
+	workflowLockPriority locks.Priority,
 ) (*replicationspb.ReplicationTask, error) {
 
 	var ctx context.Context
@@ -101,6 +108,7 @@ func (c *SourceTaskConverterImpl) Convert(
 	callerInfo := getReplicaitonCallerInfo(priority)
 	ctx, cancel = newTaskContext(nsName, c.config.ReplicationTaskApplyTimeout(), callerInfo)
 	defer cancel()
+	ctx = withWorkflowLockPriority(ctx, workflowLockPriority)
 	replicationTask, err := c.historyEngine.ConvertReplicationTask(ctx, task, targetClusterID)
 	if err != nil {
 		return nil, err
@@ -411,7 +419,7 @@ func generateStateReplicationTask(
 			RunId:      workflowKey.RunID,
 		},
 		archetypeID,
-		locks.PriorityLow,
+		workflowLockPriorityFromContext(ctx),
 	)
 	if err != nil {
 		return nil, err
@@ -427,6 +435,18 @@ func generateStateReplicationTask(
 	default:
 		return nil, err
 	}
+}
+
+func workflowLockPriorityFromContext(ctx context.Context) locks.Priority {
+	priority, ok := ctx.Value(workflowLockPriorityContextKey{}).(locks.Priority)
+	if !ok {
+		return locks.PriorityLow
+	}
+	return priority
+}
+
+func withWorkflowLockPriority(ctx context.Context, priority locks.Priority) context.Context {
+	return context.WithValue(ctx, workflowLockPriorityContextKey{}, priority)
 }
 
 func getVersionHistoryAndEvents(

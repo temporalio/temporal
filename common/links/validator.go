@@ -58,9 +58,40 @@ func validateFields(l *commonpb.Link) error {
 		if t.WorkflowEvent.GetEventRef().GetEventType() == enumspb.EVENT_TYPE_UNSPECIFIED && t.WorkflowEvent.GetEventRef().GetEventId() != 0 {
 			return serviceerror.NewInvalidArgument("workflow event link ref cannot have an unspecified event type and a non-zero event ID")
 		}
+		if requestIDRef := t.WorkflowEvent.GetRequestIdRef(); requestIDRef != nil {
+			if requestIDRef.GetRequestId() == "" {
+				return serviceerror.NewInvalidArgument("workflow event request ID ref must not have an empty request ID")
+			}
+			if requestIDRef.GetEventType() == enumspb.EVENT_TYPE_UNSPECIFIED {
+				return serviceerror.NewInvalidArgument("workflow event request ID ref must not have an unspecified event type")
+			}
+		}
 	case *commonpb.Link_BatchJob_:
 		if t.BatchJob.GetJobId() == "" {
 			return serviceerror.NewInvalidArgument("batch job link must not have an empty job ID")
+		}
+	case *commonpb.Link_Callback_:
+		if t.Callback.GetNamespace() == "" {
+			return serviceerror.NewInvalidArgument("callback link must have a namespace")
+		}
+		if t.Callback.GetExecution() == nil {
+			return serviceerror.NewInvalidArgument("callback link must have an execution")
+		}
+		exType := t.Callback.GetExecution().GetType()
+		if exType == enumspb.EXECUTION_TYPE_UNSPECIFIED {
+			return serviceerror.NewInvalidArgument("callback link execution must have a type")
+		}
+		if _, ok := enumspb.ExecutionType_name[int32(exType)]; !ok {
+			return serviceerror.NewInvalidArgument("callback link execution type is unknown")
+		}
+		if t.Callback.GetExecution().GetBusinessId() == "" {
+			return serviceerror.NewInvalidArgument("callback link execution must have a business ID")
+		}
+		if t.Callback.GetExecution().GetRunId() == "" {
+			return serviceerror.NewInvalidArgument("callback link execution must have a run ID")
+		}
+		if t.Callback.GetRequestId() == "" {
+			return serviceerror.NewInvalidArgument("callback link must have a request ID")
 		}
 	case *commonpb.Link_NexusOperation_:
 		if t.NexusOperation.GetNamespace() == "" {

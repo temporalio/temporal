@@ -258,6 +258,30 @@ func TestConvertLinkWorkflowEventToNexusLink(t *testing.T) {
 			outputURL: "temporal:///namespaces/ns/workflows/wf-id/run-id/history?eventType=WorkflowExecutionOptionsUpdated&referenceType=RequestIdReference&requestID=request-id",
 		},
 		{
+			name: "valid signal request id ref",
+			input: &commonpb.Link_WorkflowEvent{
+				Namespace:  "ns",
+				WorkflowId: "wf-id",
+				RunId:      "run-id",
+				Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+						RequestId: "signal-request-id",
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+					},
+				},
+			},
+			output: nexus.Link{
+				URL: &url.URL{
+					Scheme:   "temporal",
+					Path:     "/namespaces/ns/workflows/wf-id/run-id/history",
+					RawPath:  "/namespaces/ns/workflows/wf-id/run-id/history",
+					RawQuery: "eventType=WorkflowExecutionSignaled&referenceType=RequestIdReference&requestID=signal-request-id",
+				},
+				Type: "temporal.api.common.v1.Link.WorkflowEvent",
+			},
+			outputURL: "temporal:///namespaces/ns/workflows/wf-id/run-id/history?eventType=WorkflowExecutionSignaled&referenceType=RequestIdReference&requestID=signal-request-id",
+		},
+		{
 			name: "valid request id empty",
 			input: &commonpb.Link_WorkflowEvent{
 				Namespace:  "ns",
@@ -506,6 +530,29 @@ func TestConvertNexusLinkToLinkWorkflowEvent(t *testing.T) {
 					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
 						RequestId: "request-id",
 						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED,
+					},
+				},
+			},
+		},
+		{
+			name: "valid signal request id ref",
+			input: nexus.Link{
+				URL: &url.URL{
+					Scheme:   "temporal",
+					Path:     "/namespaces/ns/workflows/wf-id/run-id/history",
+					RawPath:  "/namespaces/ns/workflows/wf-id/run-id/history",
+					RawQuery: "referenceType=RequestIdReference&requestID=signal-request-id&eventType=WorkflowExecutionSignaled",
+				},
+				Type: "temporal.api.common.v1.Link.WorkflowEvent",
+			},
+			output: &commonpb.Link_WorkflowEvent{
+				Namespace:  "ns",
+				WorkflowId: "wf-id",
+				RunId:      "run-id",
+				Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+						RequestId: "signal-request-id",
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 					},
 				},
 			},
