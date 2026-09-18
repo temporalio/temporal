@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
@@ -375,6 +376,54 @@ func (r *rateLimitManager) consumeTokens(now int64, task *internalTask, tokens i
 		}
 		r.perKeyReady.Put(key, sl.consume(p, now, tokens))
 	}
+}
+
+func (r *rateLimitManager) grantTokens(priority *commonpb.Priority, requested int32) int32 {
+	now := r.timeSource.Now()
+	if !r.config.NewMatcher {
+		available := r.dynamicRateLimiter.TokensAt(now)
+		granted := min(requested, int32(max(available, 0)))
+		if granted > 0 && r.dynamicRateLimiter.AllowN(now, int(granted)) {
+			return granted
+		}
+		return 0
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	nowNanos := now.UnixNano()
+	granted := min(requested, availableSimpleLimiterTokens(r.wholeQueueReady, r.wholeQueueLimit, nowNanos))
+	if r.perKeyLimit.limited() {
+		key := priority.GetFairnessKey()
+		var ready simpleLimiter
+		if value := r.perKeyReady.Get(key); value != nil {
+			ready = value.(simpleLimiter) // nolint:revive
+		}
+		params := r.perKeyLimit
+		params.interval = time.Duration(float32(params.interval) / getEffectiveWeight(r.perKeyOverrides, priority))
+		granted = min(granted, availableSimpleLimiterTokens(ready, params, nowNanos))
+		if granted == 0 {
+			return 0
+		}
+		r.perKeyReady.Put(key, ready.consume(params, nowNanos, int64(granted)))
+	}
+
+	if granted > 0 {
+		r.wholeQueueReady = r.wholeQueueReady.consume(r.wholeQueueLimit, nowNanos, int64(granted))
+	}
+	return granted
+}
+
+func availableSimpleLimiterTokens(ready simpleLimiter, params simpleLimiterParams, now int64) int32 {
+	if params.never() || ready.delay(now) > 0 {
+		return 0
+	}
+	if !params.limited() {
+		return math.MaxInt32
+	}
+	clippedReady := max(now, int64(ready)+params.burst.Nanoseconds()) - params.burst.Nanoseconds()
+	return int32(min((now-clippedReady)/params.interval.Nanoseconds()+1, math.MaxInt32))
 }
 
 // GetFairnessWeightOverrides returns the current fairness weight overrides.

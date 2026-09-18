@@ -1,14 +1,18 @@
 package matching
 
 import (
+	"math"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
@@ -57,6 +61,34 @@ func (s *RateLimitManagerSuite) TestUpdatePerKeySimpleRateLimitLocked_WhenFairne
 	s.Equal(0, rateLimitManager.perKeyReady.Size(), "All per-key ready entries should be cleared")
 	s.False(rateLimitManager.perKeyLimit.limited(), "Per-key limit should be cleared")
 	rateLimitManager.mu.Unlock()
+}
+
+func TestRateLimitManagerGrantTokens(t *testing.T) {
+	timeSource := clock.NewEventTimeSource().Update(time.Now())
+	manager := &rateLimitManager{
+		config:          &taskQueueConfig{NewMatcher: true},
+		timeSource:      timeSource,
+		perKeyReady:     cache.New(10, nil),
+		wholeQueueLimit: makeSimpleLimiterParams(10, time.Second),
+		perKeyLimit:     makeSimpleLimiterParams(1, 0),
+	}
+
+	keyOne := &commonpb.Priority{FairnessKey: "one"}
+	keyTwo := &commonpb.Priority{FairnessKey: "two"}
+	require.Equal(t, int32(1), manager.grantTokens(keyOne, 20))
+	require.Equal(t, int32(0), manager.grantTokens(keyOne, 1))
+	require.Equal(t, int32(1), manager.grantTokens(keyTwo, 1))
+
+	timeSource.Advance(time.Second)
+	require.Equal(t, int32(1), manager.grantTokens(keyOne, 2))
+}
+
+func TestAvailableSimpleLimiterTokens(t *testing.T) {
+	nowNs := time.Now().UnixNano()
+	require.Equal(t, int32(11), availableSimpleLimiterTokens(0, makeSimpleLimiterParams(10, time.Second), nowNs))
+	require.Equal(t, int32(0), availableSimpleLimiterTokens(simpleLimiter(nowNs+1), makeSimpleLimiterParams(10, time.Second), nowNs))
+	require.Equal(t, int32(0), availableSimpleLimiterTokens(0, makeSimpleLimiterParams(0, time.Second), nowNs))
+	require.Equal(t, int32(math.MaxInt32), availableSimpleLimiterTokens(0, makeSimpleLimiterParams(1e12, 0), nowNs))
 }
 
 // Additions to rateLimitManager for use by other unit tests:

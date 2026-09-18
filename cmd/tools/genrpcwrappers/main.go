@@ -107,6 +107,7 @@ var (
 		// these need to pick a partition. too complicated.
 		"client.matching.AddActivityTask":       true,
 		"client.matching.AddWorkflowTask":       true,
+		"client.matching.GrantEagerDispatch":    true,
 		"client.matching.PollActivityTaskQueue": true,
 		"client.matching.PollWorkflowTaskQueue": true,
 		"client.matching.QueryWorkflow":         true,

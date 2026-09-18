@@ -308,6 +308,25 @@ func (c *priBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb.
 	return result
 }
 
+func (c *priBacklogManagerImpl) NonNegligibleBacklogPriority() priorityKey {
+	c.subqueueLock.Lock()
+	defer c.subqueueLock.Unlock()
+
+	var highest priorityKey
+	for subqueue, priority := range c.priorityBySubqueue {
+		oldestBacklogTime := c.subqueues[subqueue].getOldestBacklogTime()
+		backlogAge := time.Duration(0)
+		if !oldestBacklogTime.IsZero() {
+			backlogAge = time.Since(oldestBacklogTime)
+		}
+		if backlogAge >= c.config.BacklogNegligibleAge() &&
+			(highest == 0 || priority < highest) {
+			highest = priority
+		}
+	}
+	return highest
+}
+
 func (c *priBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	c.subqueueLock.Lock()
 	defer c.subqueueLock.Unlock()

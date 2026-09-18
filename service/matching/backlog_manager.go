@@ -46,6 +46,7 @@ type (
 		BacklogCountHint() int64
 		BacklogStatus() *taskqueuepb.TaskQueueStatus
 		BacklogStatsByPriority() map[int32]*taskqueuepb.TaskQueueStats
+		NonNegligibleBacklogPriority() priorityKey
 		InternalStatus() []*taskqueuespb.InternalTaskQueueStatus
 		// FinalGC does a final gc pass before unloading.
 		// Used when unloading a draining queue that won't be reloaded.
@@ -204,6 +205,13 @@ func (c *backlogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb.Tas
 			ApproximateBacklogAge:   durationpb.New(c.taskReader.getBacklogHeadAge()),
 		},
 	}
+}
+
+func (c *backlogManagerImpl) NonNegligibleBacklogPriority() priorityKey {
+	if c.taskReader.getBacklogHeadAge() < c.config.BacklogNegligibleAge() {
+		return 0
+	}
+	return c.config.DefaultPriorityKey
 }
 
 func (c *backlogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueStatus {

@@ -289,6 +289,20 @@ func (c *metricClient) GetWorkerVersioningRules(
 	return c.client.GetWorkerVersioningRules(ctx, request, opts...)
 }
 
+func (c *metricClient) GrantEagerDispatch(
+	ctx context.Context,
+	request *matchingservice.GrantEagerDispatchRequest,
+	opts ...grpc.CallOption,
+) (_ *matchingservice.GrantEagerDispatchResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "MatchingClientGrantEagerDispatch")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.GrantEagerDispatch(ctx, request, opts...)
+}
+
 func (c *metricClient) ListNexusEndpoints(
 	ctx context.Context,
 	request *matchingservice.ListNexusEndpointsRequest,

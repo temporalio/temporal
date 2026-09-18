@@ -75,10 +75,10 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) AddSpooledTaskToMatcher(task
 }
 
 // DispatchNexusTask mocks base method.
-func (m *MockphysicalTaskQueueManager) DispatchNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error) {
+func (m *MockphysicalTaskQueueManager) DispatchNexusTask(ctx context.Context, task *internalTask) (*v12.DispatchNexusTaskResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DispatchNexusTask", ctx, task)
-	ret0, _ := ret[0].(*matchingservice.DispatchNexusTaskResponse)
+	ret0, _ := ret[0].(*v12.DispatchNexusTaskResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -90,10 +90,10 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) DispatchNexusTask(ctx, task 
 }
 
 // DispatchQueryTask mocks base method.
-func (m *MockphysicalTaskQueueManager) DispatchQueryTask(ctx context.Context, task *internalTask) (*matchingservice.QueryWorkflowResponse, error) {
+func (m *MockphysicalTaskQueueManager) DispatchQueryTask(ctx context.Context, task *internalTask) (*v12.QueryWorkflowResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DispatchQueryTask", ctx, task)
-	ret0, _ := ret[0].(*matchingservice.QueryWorkflowResponse)
+	ret0, _ := ret[0].(*v12.QueryWorkflowResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -131,10 +131,10 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) FinishedDraining() *gomock.C
 }
 
 // GetAllPollerInfo mocks base method.
-func (m *MockphysicalTaskQueueManager) GetAllPollerInfo() []*taskqueue.PollerInfo {
+func (m *MockphysicalTaskQueueManager) GetAllPollerInfo() []*v10.PollerInfo {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetAllPollerInfo")
-	ret0, _ := ret[0].([]*taskqueue.PollerInfo)
+	ret0, _ := ret[0].([]*v10.PollerInfo)
 	return ret0
 }
 
@@ -159,10 +159,10 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) GetFairnessWeightOverrides()
 }
 
 // GetInternalTaskQueueStatus mocks base method.
-func (m *MockphysicalTaskQueueManager) GetInternalTaskQueueStatus() []*taskqueue0.InternalTaskQueueStatus {
+func (m *MockphysicalTaskQueueManager) GetInternalTaskQueueStatus() []*v14.InternalTaskQueueStatus {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetInternalTaskQueueStatus")
-	ret0, _ := ret[0].([]*taskqueue0.InternalTaskQueueStatus)
+	ret0, _ := ret[0].([]*v14.InternalTaskQueueStatus)
 	return ret0
 }
 
@@ -173,10 +173,10 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) GetInternalTaskQueueStatus()
 }
 
 // GetStatsByPriority mocks base method.
-func (m *MockphysicalTaskQueueManager) GetStatsByPriority(includeRates bool) map[int32]*taskqueue.TaskQueueStats {
+func (m *MockphysicalTaskQueueManager) GetStatsByPriority(includeRates bool) map[int32]*v10.TaskQueueStats {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetStatsByPriority", includeRates)
-	ret0, _ := ret[0].(map[int32]*taskqueue.TaskQueueStats)
+	ret0, _ := ret[0].(map[int32]*v10.TaskQueueStats)
 	return ret0
 }
 
@@ -201,10 +201,10 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) HasPollerAfter(accessTime an
 }
 
 // LegacyDescribeTaskQueue mocks base method.
-func (m *MockphysicalTaskQueueManager) LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse {
+func (m *MockphysicalTaskQueueManager) LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *v12.DescribeTaskQueueResponse {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LegacyDescribeTaskQueue", includeTaskQueueStatus)
-	ret0, _ := ret[0].(*matchingservice.DescribeTaskQueueResponse)
+	ret0, _ := ret[0].(*v12.DescribeTaskQueueResponse)
 	return ret0
 }
 
@@ -284,7 +284,7 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) QueueKey() *gomock.Call {
 }
 
 // RecordTaskAdd mocks base method.
-func (m *MockphysicalTaskQueueManager) RecordTaskAdd(result string, forwarded bool, behavior enums.VersioningBehavior) {
+func (m *MockphysicalTaskQueueManager) RecordTaskAdd(result string, forwarded bool, behavior v1.VersioningBehavior) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "RecordTaskAdd", result, forwarded, behavior)
 }
@@ -332,7 +332,7 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) SetupDraining() *gomock.Call
 }
 
 // SpoolTask mocks base method.
-func (m *MockphysicalTaskQueueManager) SpoolTask(taskInfo *persistence.TaskInfo) error {
+func (m *MockphysicalTaskQueueManager) SpoolTask(taskInfo *v13.TaskInfo) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SpoolTask", taskInfo)
 	ret0, _ := ret[0].(error)
@@ -358,7 +358,7 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) Start() *gomock.Call {
 }
 
 // StartScaleManager mocks base method.
-func (m *MockphysicalTaskQueueManager) StartScaleManager(arg0 *persistence.PartitionScaleState) {
+func (m *MockphysicalTaskQueueManager) StartScaleManager(arg0 *v13.PartitionScaleState) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "StartScaleManager", arg0)
 }
@@ -433,7 +433,7 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) UpdateRemotePriorityBacklogs
 }
 
 // UpdateScaleState mocks base method.
-func (m *MockphysicalTaskQueueManager) UpdateScaleState(arg0 *persistence.PartitionScaleState, arg1 bool) error {
+func (m *MockphysicalTaskQueueManager) UpdateScaleState(arg0 *v13.PartitionScaleState, arg1 bool) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "UpdateScaleState", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -470,4 +470,18 @@ func (m *MockphysicalTaskQueueManager) WaitUntilInitialized(arg0 context.Context
 func (mr *MockphysicalTaskQueueManagerMockRecorder) WaitUntilInitialized(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitUntilInitialized", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).WaitUntilInitialized), arg0)
+}
+
+// NonNegligibleBacklogPriority mocks base method.
+func (m *MockphysicalTaskQueueManager) NonNegligibleBacklogPriority() priorityKey {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NonNegligibleBacklogPriority")
+	ret0, _ := ret[0].(priorityKey)
+	return ret0
+}
+
+// NonNegligibleBacklogPriority indicates an expected call of NonNegligibleBacklogPriority.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) NonNegligibleBacklogPriority() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NonNegligibleBacklogPriority", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).NonNegligibleBacklogPriority))
 }
