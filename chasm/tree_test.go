@@ -673,16 +673,51 @@ func (s *nodeSuite) assertParentPointer(testComponentNode *Node) {
 
 	_, found := testComponent.ParentPtr.TryGet(chasmContext)
 	s.False(found)
+	s.Nil(testComponent.ParentPtr.Path(), "an uninitialized ParentPtr has no path")
 
 	subComponent1 := testComponent.SubComponent1.Get(chasmContext)
 	testComponentFromPtr := subComponent1.ParentPtr.Get(chasmContext)
 	// Asserting they actually point to the same testComponent object.
 	s.Same(testComponent, testComponentFromPtr)
+	s.Equal([]string{}, subComponent1.ParentPtr.Path(), "the root component's path is empty")
 
 	subComponent11 := subComponent1.SubComponent11.Get(chasmContext)
 	testSubComponent1FromPtr := subComponent11.ParentPtr.Get(chasmContext)
 	// Asserting they actually point to the same testSubComponent1 object.
 	s.Same(subComponent1, testSubComponent1FromPtr)
+	s.Equal([]string{"SubComponent1"}, subComponent11.ParentPtr.Path())
+}
+
+func (s *nodeSuite) TestExecution() {
+	workflowKey := definition.NewWorkflowKey("namespace-id", "business-id", "run-id")
+	s.nodeBackend = &MockNodeBackend{
+		HandleGetWorkflowKey: func() definition.WorkflowKey {
+			return workflowKey
+		},
+	}
+
+	root, err := s.newTestTree(testComponentSerializedNodes())
+	s.NoError(err)
+
+	// TestComponent, the root component, is registered with EXECUTION_TYPE_WORKFLOW.
+	expected := &commonpb.Execution{
+		Type:       enumspb.EXECUTION_TYPE_WORKFLOW,
+		BusinessId: "business-id",
+		RunId:      "run-id",
+	}
+	s.ProtoEqual(expected, root.Execution())
+
+	// Every node reports the execution it belongs to, not one per component.
+	s.ProtoEqual(expected, root.children["SubComponent1"].Execution())
+
+	chasmContext := NewContext(context.Background(), root)
+	component, err := root.Component(chasmContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+
+	subComponent1 := testComponent.SubComponent1.Get(chasmContext)
+	s.ProtoEqual(expected, subComponent1.ParentPtr.Execution())
+	s.Nil(testComponent.ParentPtr.Execution(), "an uninitialized ParentPtr has no execution")
 }
 
 func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {

@@ -5,20 +5,29 @@ import (
 	"maps"
 	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	callbackpb "go.temporal.io/api/callback/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/log/tag"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/softassert"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// CompletionSource is the interface different kinds of executions implement so that their result can be
+// delivered to waiting callback handlers.
 type CompletionSource interface {
+	// GetNexusCompletion returns the execution's result. Links on the returned CompleteOperationOptions
+	// are the "backlinks", so a Nexus handler receiving the completion can link to its source.
 	GetNexusCompletion(ctx chasm.Context, requestID string) (nexusrpc.CompleteOperationOptions, error)
 }
 
@@ -99,9 +108,30 @@ func (c *Callback) loadInvocationArgs(
 
 	// NexusHandler callbacks, deliver the result by invoking a Nexus handler.
 	if nexusHandler := c.GetCallback().GetNexusHandler(); nexusHandler != nil {
+		// Create a link pointing to *this* CHASM Callback. NexusHandler-variant callbacks do not invoke the
+		// targeted Nexus handler using the links carried on the CompletionSource, because that would point to the
+		// source execution. Instead, we use the Callback-variant link to identify a particular completion callback
+		// _attached to_ the source execution.
+		//
+		// Links are supplementary, so a source reporting an execution type with no link representation still has
+		// its completion delivered.
+		var selfLinks []*nexuspb.Link
+		selfLink, err := c.buildSelfLink(ctx, c.CompletionSource)
+		if err != nil {
+			softassert.Fail(
+				ctx.Logger(),
+				"failed to build the callback self link",
+				tag.Error(err),
+				tag.NexusCompletionSource(c.CompletionSource.Fqn()),
+			)
+		} else {
+			selfLinks = commonnexus.ConvertLinksToProto([]nexus.Link{selfLink})
+		}
+
 		return invocableNexusHandler{
 			callback:            nexusHandler,
 			completion:          completion,
+			sourceLinks:         selfLinks,
 			completionSourceTag: c.CompletionSource.Fqn(),
 			businessID:          ctx.ExecutionKey().BusinessID,
 			runID:               ctx.ExecutionKey().RunID,
@@ -130,6 +160,27 @@ func (c *Callback) loadInvocationArgs(
 	}, nil
 }
 
+// recordHandlerLinks stores the links the callback's target returned when it accepted the delivery.
+// For a NexusHandler callback these are the handler links the worker attached to its StartOperation
+// response, e.g. a workflow_event link to the workflow it started to process the completion.
+func (c *Callback) recordHandlerLinks(ctx chasm.MutableContext, links []nexus.Link) error {
+	if len(links) == 0 {
+		return nil
+	}
+	// Unconvertible links are dropped with a warning rather than failing the callback. The callback
+	// has already been delivered at this point, so returning an error would fail the transition and
+	// leave the delivered callback retrying forever.
+	protoLinks := commonnexus.ConvertNexusLinksToProtoLinks(links, ctx.Logger())
+	if len(protoLinks) == 0 {
+		return nil
+	}
+	// Swallow any errors here for the same reason as above.
+	if err := ctx.SetRequestLinks(c, c.RequestId, protoLinks); err != nil {
+		softassert.Fail(ctx.Logger(), "failed to record NexusHandler callback links", tag.Error(err))
+	}
+	return nil
+}
+
 type saveResultInput struct {
 	result      invocationResult
 	retryPolicy backoff.RetryPolicy
@@ -141,6 +192,11 @@ func (c *Callback) saveResult(
 ) (chasm.NoValue, error) {
 	switch r := input.result.(type) {
 	case invocationResultOK:
+		// Persist any links returned from the callback's invocation.
+		// This is only applicable to the NexusHandler-callback case.
+		if err := c.recordHandlerLinks(ctx, r.links); err != nil {
+			return nil, err
+		}
 		err := TransitionSucceeded.Apply(c, ctx, EventSucceeded{Time: ctx.Now(c)})
 		return nil, err
 	case invocationResultRetry:
@@ -244,6 +300,10 @@ func (c *Callback) ToAPICallbackInfo(ctx chasm.Context) (*callbackpb.CallbackInf
 	if err != nil {
 		return nil, err
 	}
+	// Merge the static links that were part of the callback's creation (apiCb.Links) with
+	// any new links picked up as part of the callback's execution.
+	existingLinks := ctx.Links(c)
+	apiCb.Links = append(apiCb.Links, common.CloneProtoSlice(existingLinks)...)
 	apiState, blockedReason, err := c.APIState(ctx)
 	if err != nil {
 		return nil, err
@@ -307,4 +367,20 @@ func ScheduleStandbyCallbacks(ctx chasm.MutableContext, callbacks chasm.Map[stri
 		}
 	}
 	return nil
+}
+
+// buildSelfLink returns a commonpb.Link_Callback encoded as a nexus.Link, addressing this
+// callback within the execution of its completion source.
+func (c *Callback) buildSelfLink(ctx chasm.Context, compSrc chasm.ParentPtr[CompletionSource]) (nexus.Link, error) {
+	link, err := commonnexus.ConvertLinkCallbackToNexusLink(&commonpb.Link_Callback{
+		Namespace: ctx.NamespaceEntry().Name().String(),
+		Execution: compSrc.Execution(),
+		// A source that is the root component of its execution has an empty path.
+		ComponentPath: compSrc.Path(),
+		RequestId:     c.GetRequestId(),
+	})
+	if err != nil {
+		return nexus.Link{}, fmt.Errorf("converting to nexus.Link: %w", err)
+	}
+	return link, nil
 }

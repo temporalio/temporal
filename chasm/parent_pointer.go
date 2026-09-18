@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/softassert"
 )
@@ -110,6 +111,31 @@ func (p ParentPtr[T]) parentNode() (*Node, bool) {
 	}
 
 	return parent, true
+}
+
+// Execution returns the identity of the execution the parent component belongs to, which is also
+// the execution the component holding this ParentPtr belongs to. See [Node.Execution]. Returns nil
+// if the ParentPtr is not initialized.
+func (p ParentPtr[T]) Execution() *commonpb.Execution {
+	parent, ok := p.parentNode()
+	if !ok {
+		return nil
+	}
+	return parent.Execution()
+}
+
+// Path returns the path of the parent component, relative to the root component of the execution,
+// e.g. ["Updates", updateID] for a Workflow Update. The root component's path is empty. Returns nil
+// if the ParentPtr is not initialized.
+//
+// Each segment is the name of the field (or, for a component inside a CHASM map, the map key) that
+// holds the component, so a path is only as stable as the field names it traverses.
+func (p ParentPtr[T]) Path() []string {
+	parent, ok := p.parentNode()
+	if !ok {
+		return nil
+	}
+	return parent.path()
 }
 
 // Fqn returns the fully qualified name that the parent component is registered under, e.g.

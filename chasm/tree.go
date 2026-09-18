@@ -3120,6 +3120,31 @@ func (n *Node) ArchetypeID() ArchetypeID {
 	return n.root().serializedNode.Metadata.GetComponentAttributes().GetTypeId()
 }
 
+// Execution returns the identity of the execution this node belongs to: the business ID and run ID
+// of the execution, along with the execution type registered for the execution's archetype.
+//
+// The type comes from the root component of the tree, not from the component at this node, so every
+// node of an execution reports the same value. It is [enumspb.EXECUTION_TYPE_UNSPECIFIED] if the
+// root component was registered without a WithExecutionType option.
+func (n *Node) Execution() *commonpb.Execution {
+	workflowKey := n.backend.GetWorkflowKey()
+	return &commonpb.Execution{
+		Type:       n.executionType(),
+		BusinessId: workflowKey.WorkflowID,
+		RunId:      workflowKey.RunID,
+	}
+}
+
+// executionType returns the execution type registered for the root component's archetype. Note that
+// ArchetypeID() resolves the root of the tree, regardless of which node it is called on.
+func (n *Node) executionType() enumspb.ExecutionType {
+	rc, ok := n.registry.ComponentByID(n.ArchetypeID())
+	if !ok {
+		return enumspb.EXECUTION_TYPE_UNSPECIFIED
+	}
+	return rc.ExecutionType()
+}
+
 // Archetype returns the root component's fully qualified name.
 // Deprecated: use ArchetypeID() instead, this method will be removed.
 func (n *Node) Archetype() (Archetype, error) {

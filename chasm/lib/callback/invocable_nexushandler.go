@@ -36,6 +36,11 @@ type invocableNexusHandler struct {
 	callback   *callbackspb.Callback_NexusHandler
 	completion nexusrpc.CompleteOperationOptions
 
+	// sourceLinks identifies the source callback to the Nexus handler, so the handler can link whatever
+	// resources it spawns to the source callback. (Rather than the source execution which had the NexusHandler-
+	// callback attached to it.)
+	sourceLinks []*nexuspb.Link
+
 	// completionSourceTag is the fully qualified name of the CHASM component that produced this
 	// completion, e.g. "workflow.workflow" or "activity.activity".
 	completionSourceTag string
@@ -132,10 +137,9 @@ func (n invocableNexusHandler) buildDispatchRequest(
 					Operation: n.callback.GetOperation(),
 					RequestId: n.requestID,
 					Payload:   input,
-					// TODO(temporal/issues/11889): These links will be wrong. Backlinks to the source of the Nexus completion
-					// should be to the *callback attached* to the completion's source. Not the completion directly.
-					// e.g. a Link_Callback to "SANO xxx callback yyy", and not "SANO xxx".
-					Links: commonnexus.ConvertLinksToProto(n.completion.Links),
+					// The handler gets a link to this callback, not the source-execution link the
+					// completion carries, so whatever it spawns points back at this specific callback.
+					Links: n.sourceLinks,
 				},
 			},
 			Capabilities: &nexuspb.Request_Capabilities{
@@ -242,7 +246,10 @@ func (n invocableNexusHandler) classifyDispatchResult(
 		// Both flavors of success count as delivered. An async start means the worker accepted the
 		// completion and started an operation to process it; either way the callback is done, it does
 		// not wait for that operation to finish.
-		return invocationResultOK{}
+		//
+		// Either flavor can carry handler links back, e.g. a link to the workflow the handler
+		// started to process the completion. They will be recorded on the CHASM Callback.
+		return invocationResultOK{links: commonnexus.ConvertLinksFromProto(result.Links)}
 	}
 
 	// Every remaining outcome carries an error: what the worker reported, or one that
