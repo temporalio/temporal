@@ -2823,9 +2823,7 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ClosedWorkflow_Sharded(
 // duplicate of TestForceMigration_ResetWorkflow. Same intent as the
 // legacy version: replicate a (reset → completed) workflow pair across
 // clusters and confirm both runs are visible on the target. Asserts
-// the activity-level verification count by walking the workflow's
-// history for "ReplicateBatch" activity completions (the sharded
-// activity name, replacing legacy "VerifyReplicationTasks").
+// the verification count reported by the sharded child workflow.
 func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow_Sharded() {
 	testCtx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -2898,40 +2896,26 @@ func (s *FunctionalClustersTestSuite) TestForceMigration_ResetWorkflow_Sharded()
 	err = sysWfRun.Get(testCtx, nil)
 	s.NoError(err)
 
-	// Verify the force-replication workflow actually ran ReplicateBatch
-	// activities (the sharded activity name; legacy is
-	// VerifyReplicationTasks) and that VerifiedCount sums to the
-	// expected number of workflow runs.
+	// ReplicateBatch activities run in child workflows, so verify the count
+	// returned by each completed sharded worker child.
 	var totalVerifiedCount int64
-	scheduledActivityTypes := make(map[int64]string) // scheduledEventId -> activity type name
 	histIter := sysClient.GetWorkflowHistory(testCtx, forceReplicationWorkflowID, sysWfRun.GetRunID(),
 		false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT)
 	for histIter.HasNext() {
 		event, err := histIter.Next()
 		s.NoError(err)
-		switch event.GetEventType() {
-		case enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
-			attrs := event.GetActivityTaskScheduledEventAttributes()
-			scheduledActivityTypes[event.GetEventId()] = attrs.GetActivityType().GetName()
-		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
-			attrs := event.GetActivityTaskCompletedEventAttributes()
-			activityType := scheduledActivityTypes[attrs.GetScheduledEventId()]
-			if activityType != "ReplicateBatch" {
-				continue
-			}
-			result := attrs.GetResult()
-			if result != nil && len(result.GetPayloads()) > 0 {
-				// Mirrors replicateBatchResult.VerifiedCount on the
-				// activity-side struct. Anonymous shape avoids
-				// importing the activity package's internal type.
-				var resp struct {
-					VerifiedCount int64
-				}
-				s.NoError(payloads.Decode(result, &resp))
-				totalVerifiedCount += resp.VerifiedCount
-			}
-		default:
+		if event.GetEventType() != enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED {
+			continue
 		}
+		attrs := event.GetChildWorkflowExecutionCompletedEventAttributes()
+		if attrs.GetWorkflowType().GetName() != "force-replication-sharded-worker" {
+			continue
+		}
+		var result struct {
+			VerifiedCount int64
+		}
+		s.NoError(payloads.Decode(attrs.GetResult(), &result))
+		totalVerifiedCount += result.VerifiedCount
 	}
 	// Expect exactly 2 verified workflow runs: original run + reset run
 	s.Equal(int64(2), totalVerifiedCount,
