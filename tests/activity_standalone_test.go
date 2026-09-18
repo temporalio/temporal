@@ -2909,7 +2909,7 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 		require.NoError(t, err)
 	})
 
-	t.Run("DifferentRequestIDFails", func(t *testing.T) {
+	t.Run("DifferentRequestIDIsNotFound", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
@@ -2936,8 +2936,8 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 			Reason:     "Test Termination",
 			Identity:   "terminator",
 		})
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
 	})
 
 	t.Run("NonExistent", func(t *testing.T) {
