@@ -44,8 +44,33 @@ func (q *boolQuery) MinimumNumberShouldMatch(minimumNumberShouldMatch int) *bool
 func (q *boolQuery) Source() (any, error) {
 	return elastic.NewBoolQuery().
 		MustNot(q.mustNotClauses...).
-		Filter(q.filterClauses...).
+		Filter(q.mergeFilterClauses()...).
 		Should(q.shouldClauses...).
 		MinimumShouldMatch(q.minimumShouldMatch).
 		Source()
+}
+
+func (q *boolQuery) mergeFilterClauses() []elastic.Query {
+	queries := make([]elastic.Query, 0, len(q.filterClauses))
+	rangeQueriesIndices := make(map[string]int)
+	for _, query := range q.filterClauses {
+		if rq, ok := query.(*rangeQuery); !ok {
+			// Non-range queries are left as it is.
+			queries = append(queries, query)
+		} else if index, ok := rangeQueriesIndices[rq.field]; !ok {
+			rangeQueriesIndices[rq.field] = len(queries)
+			queries = append(queries, rq)
+		} else {
+			otherRQ := queries[index].(*rangeQuery) //nolint:revive // panic is not possible
+			newRQ, ok := mergeRangeQueries(otherRQ, rq)
+			if !ok {
+				// Merge returns an error if trying to compare values with different types.
+				// Thus, error should not be possible since validation already happened.
+				// If something unexpected happens, ignore it and abort merging.
+				return q.filterClauses
+			}
+			queries[index] = newRQ
+		}
+	}
+	return queries
 }
