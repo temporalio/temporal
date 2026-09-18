@@ -414,7 +414,9 @@ func (m *StreamReceiverMonitorImpl) fillStatusMap(statusMap map[ClusterShardKeyP
 			}
 			continue
 		}
-		if len(readerState.Scopes) == 3 {
+		// Scopes 3+ are per-namespace isolation lanes (see isolation_manager.go);
+		// scopes 0-2 keep their meaning, so tolerate the extra scopes.
+		if len(readerState.Scopes) >= 3 {
 			statusMap[ClusterShardKeyPair{Client: clientKey, Server: serverKey}] = &streamStatus{
 				defaultAckLevel:      readerState.Scopes[0].Range.InclusiveMin.TaskId,
 				highPriorityAckLevel: readerState.Scopes[1].Range.InclusiveMin.TaskId,
