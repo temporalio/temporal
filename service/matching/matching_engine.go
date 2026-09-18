@@ -2455,13 +2455,33 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 		mergedData := MergeVersioningData(currentVersioningData, newVersioningData)
 
 		// take last writer for V2 rules and V3 data
-		if req.GetUserData().GetClock() == nil || current.GetClock() != nil && hlc.Greater(current.GetClock(), req.GetUserData().GetClock()) {
+		currentClock := current.GetClock()
+		incomingClock := req.GetUserData().GetClock()
+		// Replication can persist user data without its clock, since we are wrongly setting the clock to nil while merging (to be fixed).
+		// Let incoming data win while the current data is clockless so it is not discarded during another replication. Future merge logic will resolve
+		// conflicts between all combinations of incoming and current data instead of relying on this compatibility fallback.
+		if currentClock != nil && (incomingClock == nil || hlc.Greater(currentClock, incomingClock)) {
 			if mergedData != nil {
 				// v2 rules
 				mergedData.AssignmentRules = currentVersioningData.GetAssignmentRules()
 				mergedData.RedirectRules = currentVersioningData.GetRedirectRules()
 			}
 			mergedUserData.PerType = current.GetPerType()
+
+			// We have wrongly discarded incoming per-type data and should investigate what information was lost.
+			// This is harmful since we might have lost information pertaining to worker-versioning, task queue config
+			// and fairness state.
+			if len(req.GetUserData().GetPerType()) > 0 {
+				metrics.TaskQueueUserDataReplicationIncomingPerTypeDataDropped.With(e.metricsHandler).Record(1,
+					metrics.NamespaceTag(ns.Name().String()),
+				)
+				e.logger.Warn("task queue user data replication discarded non-empty per-type data",
+					tag.WorkflowNamespace(ns.Name().String()),
+					tag.WorkflowNamespaceID(req.GetNamespaceId()),
+					tag.WorkflowTaskQueueName(req.GetTaskQueue()),
+					tag.NewAnyTag("current-clock", currentClock),
+				)
+			}
 		} else {
 			if mergedData != nil {
 				// v2 rules
