@@ -25,3 +25,28 @@ message NexusCancellationParentData {
 message IncomingSignalData {
   int64 event_id = 1;
 }
+
+// WorkflowState is the persisted state of the CHASM workflow root component.
+//
+// Workflow execution state itself still lives in mutable state; this message exists to carry
+// aggregate accounting that cannot be derived cheaply from the CHASM tree. Counting callbacks
+// by walking the tree means deserializing every WorkflowUpdate node, and summing their sizes
+// is not possible at all mid-transaction, because child blobs are only serialized when the
+// transaction closes.
+//
+// The component previously used google.protobuf.Empty. Both encode to zero bytes when unset,
+// and node identity comes from the registered component type ID rather than the proto type, so
+// workflows persisted before this message existed load as an all-zero WorkflowState.
+message WorkflowState {
+  // Total completion callbacks across the workflow-level map and every update's map.
+  int32 total_callbacks_count = 1;
+
+  // Sum of the serialized size of those callbacks. Counts only the callback specification,
+  // never the delivery bookkeeping (attempt, failures, timestamps), which mutates after attach
+  // and would otherwise let a workflow drift over its budget on its own.
+  //
+  // Zero alongside a non-empty callback set means the workflow was persisted before this field
+  // existed; the total is recomputed from the tree on the next attach. That is unambiguous
+  // because a validated callback always serializes to more than zero bytes.
+  int64 total_callbacks_size = 2;
+}

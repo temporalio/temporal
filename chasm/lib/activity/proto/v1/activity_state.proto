@@ -161,6 +161,16 @@ message ActivityState {
 
   // Used to de-dupe update requests.
   string last_update_options_request_id = 23;
+
+  // Sum of the serialized size of every completion callback attached to this activity.
+  // Counts only the callback specification, never the delivery bookkeeping (attempt,
+  // failures, timestamps), which mutates after attach and would otherwise let an activity
+  // drift over its budget on its own.
+  //
+  // Zero alongside a non-empty callback set means the activity was persisted before this
+  // field existed; the total is recomputed from the tree on the next attach. That is
+  // unambiguous because a validated callback always serializes to more than zero bytes.
+  int64 total_callbacks_size = 24;
 }
 
 message ActivityCancelState {

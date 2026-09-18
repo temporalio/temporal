@@ -39,9 +39,14 @@ func newTestValidator(t *testing.T, config *Config) *validator {
 }
 
 func newTestCallbackValidator(t *testing.T, maxCallbacks int) callbacks.Validator {
+	return newTestCallbackValidatorWithSizeLimit(t, maxCallbacks, 0 /* unlimited */)
+}
+
+func newTestCallbackValidatorWithSizeLimit(t *testing.T, maxCallbacks, maxTotalSize int) callbacks.Validator {
 	t.Helper()
 	cfg := test.NewCallbacksValidatorConfig()
 	cfg.MaxCallbacksPerExecution = func(string) int { return maxCallbacks }
+	cfg.TotalCallbacksMaxSize = func(string) int { return maxTotalSize }
 	validator, err := callbacks.NewValidator(cfg)
 	require.NoError(t, err)
 	return validator

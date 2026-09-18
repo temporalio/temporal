@@ -18,6 +18,8 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/chasm/lib/callback"
+	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
@@ -1185,6 +1187,80 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		require.Len(t, activity.Callbacks, 1)
 	})
 
+	t.Run("ARetryThatInsertsNothingIsAcceptedAtTheCap", func(t *testing.T) {
+		// The cumulative limits must be charged against what the call actually persists. A
+		// retry re-derives keys that are already present, so it inserts nothing and must not be
+		// rejected for a cap it does not move.
+		ctx, activity := newCtx(), newActivity()
+		validator := newValidator(t, 2)
+		cbs := []*commonpb.Callback{
+			nexusCallback("http://localhost/callback-0"),
+			nexusCallback("http://localhost/callback-1"),
+		}
+
+		require.NoError(t, activity.addCompletionCallbacks(ctx, "req-1", cbs, validator, "ns"))
+		require.Len(t, activity.Callbacks, 2)
+		sizeAtCap := activity.GetTotalCallbacksSize()
+
+		require.NoError(t, activity.addCompletionCallbacks(ctx, "req-1", cbs, validator, "ns"))
+		require.Len(t, activity.Callbacks, 2)
+		require.Equal(t, sizeAtCap, activity.GetTotalCallbacksSize())
+	})
+
+	t.Run("TracksTheTotalSizeOfTheAttachedCallbacks", func(t *testing.T) {
+		ctx, activity := newCtx(), newActivity()
+		cbs := []*commonpb.Callback{
+			nexusCallback("http://localhost/callback-0"),
+			nexusCallback("http://localhost/callback-1"),
+		}
+
+		require.NoError(t, activity.addCompletionCallbacks(ctx, "req-1", cbs, newValidator(t, 10), "ns"))
+		require.Equal(t, sumCallbackSizes(ctx, activity), activity.GetTotalCallbacksSize())
+		require.NotZero(t, activity.GetTotalCallbacksSize())
+	})
+
+	t.Run("ReAttachingTheSameRequestIDLeavesTheTotalSizeUnchanged", func(t *testing.T) {
+		ctx, activity := newCtx(), newActivity()
+		validator := newValidator(t, 10)
+		cbs := []*commonpb.Callback{nexusCallback("http://localhost/callback-0")}
+
+		require.NoError(t, activity.addCompletionCallbacks(ctx, "req-1", cbs, validator, "ns"))
+		afterFirstAttach := activity.GetTotalCallbacksSize()
+		require.NotZero(t, afterFirstAttach)
+
+		require.NoError(t, activity.addCompletionCallbacks(ctx, "req-1", cbs, validator, "ns"))
+		require.Equal(t, afterFirstAttach, activity.GetTotalCallbacksSize())
+	})
+
+	t.Run("BackfillsTheTotalSizeForActivitiesPersistedBeforeTheField", func(t *testing.T) {
+		// An activity written before total_callbacks_size existed carries callbacks with a zero
+		// total; the next attach recomputes it from the tree.
+		ctx, activity := newCtx(), newActivity()
+		preExisting := callback.NewCallback("req-0", timestamppb.New(testTime), &callbackspb.Callback{
+			Variant: &callbackspb.Callback_Nexus_{
+				Nexus: &callbackspb.Callback_Nexus{Url: "http://localhost/pre-existing"},
+			},
+		})
+		// Delivery bookkeeping accrues after attach and must stay out of the recomputed total.
+		preExisting.Attempt = 3
+		preExisting.LastAttemptCompleteTime = timestamppb.New(testTime)
+		activity.Callbacks = chasm.Map[string, *callback.Callback]{
+			"req-0-0": chasm.NewComponentField(ctx, preExisting),
+		}
+		require.Zero(t, activity.GetTotalCallbacksSize())
+
+		require.NoError(t, activity.addCompletionCallbacks(ctx, "req-1", []*commonpb.Callback{
+			nexusCallback("http://localhost/callback-0"),
+		}, newValidator(t, 10), "ns"))
+
+		require.Len(t, activity.Callbacks, 2)
+		require.Equal(t, sumCallbackSizes(ctx, activity), activity.GetTotalCallbacksSize())
+		// The pre-existing callback's spec is included, but not its bookkeeping.
+		require.Greater(t, activity.GetTotalCallbacksSize(), int64(preExisting.GetCallback().Size()))
+		require.Less(t, activity.GetTotalCallbacksSize(), int64(preExisting.CallbackState.Size()+
+			activity.Callbacks["req-1-0"].Get(ctx).CallbackState.Size()))
+	})
+
 	t.Run("EmptyListIsNoOp", func(t *testing.T) {
 		ctx, activity := newCtx(), newActivity()
 		require.NoError(t, activity.addCompletionCallbacks(ctx, "req-1", nil, newValidator(t, 10), "ns"))
@@ -1204,6 +1280,16 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		require.ErrorContains(t, err, "cannot attach callbacks to a closed activity")
 		require.Empty(t, activity.Callbacks)
 	})
+}
+
+// sumCallbackSizes returns the summed serialized size of the callback specs attached to the
+// activity, which is what ActivityState.total_callbacks_size denormalizes.
+func sumCallbackSizes(ctx chasm.Context, a *Activity) int64 {
+	var total int64
+	for _, field := range a.Callbacks {
+		total += int64(field.Get(ctx).GetCallback().Size())
+	}
+	return total
 }
 
 // TestEffectiveUserMetadata_FallsBackToLegacy ensures that activities persisted

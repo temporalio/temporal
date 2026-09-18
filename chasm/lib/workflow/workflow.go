@@ -13,16 +13,18 @@ import (
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	"go.temporal.io/server/service/history/historybuilder"
-	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type Workflow struct {
 	chasm.UnimplementedComponent
 
-	// For now, workflow state is managed by mutable_state_impl, not CHASM engine, leaving it empty as CHASM expects a
-	// state object.
-	*emptypb.Empty
+	// Workflow execution state itself is still managed by mutable_state_impl, not the CHASM
+	// engine. This carries only the aggregate callback accounting, which cannot be derived
+	// cheaply from the tree. It is left nil until something needs it, so a workflow with no
+	// callbacks still persists a zero-byte blob exactly as it did when this was an
+	// emptypb.Empty. Use state() to write; the generated getters are nil-safe for reads.
+	*chasmworkflowpb.WorkflowState
 
 	// MSPointer is a special in-memory field for accessing the underlying mutable state.
 	chasm.MSPointer
@@ -48,6 +50,15 @@ func NewWorkflow(
 	return &Workflow{
 		MSPointer: msPointer,
 	}
+}
+
+// state returns the workflow's persisted state, allocating it on first write. Reads should use
+// the generated getters, which tolerate a nil receiver.
+func (w *Workflow) state() *chasmworkflowpb.WorkflowState {
+	if w.WorkflowState == nil {
+		w.WorkflowState = &chasmworkflowpb.WorkflowState{}
+	}
+	return w.WorkflowState
 }
 
 func (w *Workflow) LifecycleState(
@@ -119,52 +130,78 @@ func (w *Workflow) RejectUpdate(ctx chasm.MutableContext, updateID string, rejec
 	return callback.ScheduleStandbyCallbacks(ctx, upd.Callbacks)
 }
 
-// totalCallbackCount returns the total number of callbacks across workflow-level
-// and all update-level callback maps.
-func (w *Workflow) totalCallbackCount(ctx chasm.Context) int {
-	count := len(w.Callbacks)
-	for _, updateField := range w.Updates {
-		count += len(updateField.Get(ctx).Callbacks)
+// callbackTotals returns the count and summed size of every callback on the workflow, across
+// both the workflow-level map and all update-level maps.
+//
+// The totals are denormalized onto WorkflowState because deriving them walks and deserializes
+// every WorkflowUpdate node, and under a MutableContext that also marks each one dirty. Sizes
+// could not be derived at all mid-transaction, since child blobs are only serialized when the
+// transaction closes.
+func (w *Workflow) callbackTotals(ctx chasm.Context) (count int, size int64) {
+	if w.GetTotalCallbacksSize() != 0 || (len(w.Callbacks) == 0 && len(w.Updates) == 0) {
+		return int(w.GetTotalCallbacksCount()), w.GetTotalCallbacksSize()
 	}
-	return count
+	// A stored size of zero alongside a non-empty callback set can only mean the workflow was
+	// persisted before WorkflowState existed, because a validated callback always serializes to
+	// more than zero bytes. Recompute once; the caller writes the result back.
+	return w.recomputeCallbackTotals(ctx)
+}
+
+// recomputeCallbackTotals walks the tree to rebuild the aggregate accounting. Only the callback
+// specification is measured, never the surrounding CallbackState, whose delivery bookkeeping
+// mutates after attach and would make the total drift on its own.
+func (w *Workflow) recomputeCallbackTotals(ctx chasm.Context) (count int, size int64) {
+	sum := func(callbacks chasm.Map[string, *callback.Callback]) {
+		for _, field := range callbacks {
+			count++
+			size += int64(field.Get(ctx).GetCallback().Size())
+		}
+	}
+	sum(w.Callbacks)
+	for _, updateField := range w.Updates {
+		sum(updateField.Get(ctx).Callbacks)
+	}
+	return count, size
 }
 
 // checkWorkflowCallbackLimit returns an error if adding newCount callbacks would
 // exceed the per-workflow maximum.
-func (w *Workflow) checkWorkflowCallbackLimit(ctx chasm.Context, newCount, maxCallbacksPerWorkflow int) error {
-	current := w.totalCallbackCount(ctx)
-	if newCount+current > maxCallbacksPerWorkflow {
+func (w *Workflow) checkWorkflowCallbackLimit(currentCount, newCount, maxCallbacksPerWorkflow int) error {
+	if newCount+currentCount > maxCallbacksPerWorkflow {
 		return serviceerror.NewFailedPreconditionf(
 			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
 			maxCallbacksPerWorkflow,
-			current,
+			currentCount,
 		)
 	}
 	return nil
 }
 
-// addCallbacksToMap converts common callbacks to CHASM callback components and
-// inserts them into the target map, keyed by "<requestID>-<index>".
+// pendingCallback is a converted callback together with the key it will occupy.
+type pendingCallback struct {
+	id      string
+	chasmCB *callbackspb.Callback
+}
+
+// planCallbackInsertions converts the request's callbacks and drops any whose key is already
+// present in target.
 //
-// All callbacks are validated up front, so target is not mutated unless every
-// callback can be converted successfully (atomic from the caller's POV).
-func addCallbacksToMap(
-	ctx chasm.MutableContext,
+// Planning before validating means the limits are charged against what the call would actually
+// persist rather than against the request as sent: a retry re-derives keys it has already
+// written, and rejecting it for exceeding a cap it does not move would be wrong. Conversion
+// happens before the skip so a malformed callback is still rejected on a retry, and all
+// conversion happens up front so target is never partially mutated.
+func planCallbackInsertions(
 	target chasm.Map[string, *callback.Callback],
 	requestID string,
-	eventTime *timestamppb.Timestamp,
 	completionCallbacks []*commonpb.Callback,
-) error {
-	chasmCBs := make([]*callbackspb.Callback, len(completionCallbacks))
-	for i, cb := range completionCallbacks {
+) ([]pendingCallback, error) {
+	var pending []pendingCallback
+	for idx, cb := range completionCallbacks {
 		chasmCB, err := callback.FromAPICallback(cb)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		chasmCBs[i] = chasmCB
-	}
-
-	for idx, chasmCB := range chasmCBs {
 		// requestID (unique per API call) + idx (position within the request) ensures unique, idempotent callback IDs.
 		// Unlike HSM callbacks, CHASM replicates entire trees rather than replaying events, so deterministic
 		// cross-cluster IDs based on event version are not needed.
@@ -173,10 +210,25 @@ func addCallbacksToMap(
 			// Already registered, skip to avoid overwriting.
 			continue
 		}
-		callbackObj := callback.NewCallback(requestID, eventTime, chasmCB)
-		target[id] = chasm.NewComponentField(ctx, callbackObj)
+		pending = append(pending, pendingCallback{id: id, chasmCB: chasmCB})
 	}
-	return nil
+	return pending, nil
+}
+
+// applyCallbackInsertions writes the planned callbacks into target and reports their summed
+// size, which the caller folds into the workflow's aggregate accounting.
+func applyCallbackInsertions(
+	ctx chasm.MutableContext,
+	target chasm.Map[string, *callback.Callback],
+	requestID string,
+	eventTime *timestamppb.Timestamp,
+	pending []pendingCallback,
+) (insertedSize int64) {
+	for _, p := range pending {
+		target[p.id] = chasm.NewComponentField(ctx, callback.NewCallback(requestID, eventTime, p.chasmCB))
+		insertedSize += int64(p.chasmCB.Size())
+	}
+	return insertedSize
 }
 
 // AddCompletionCallbacks creates completion callbacks using the CHASM implementation.
@@ -188,15 +240,30 @@ func (w *Workflow) AddCompletionCallbacks(
 	completionCallbacks []*commonpb.Callback,
 	maxCallbacksPerWorkflow int,
 ) error {
-	if err := w.checkWorkflowCallbackLimit(ctx, len(completionCallbacks), maxCallbacksPerWorkflow); err != nil {
+	pending, err := planCallbackInsertions(w.Callbacks, requestID, completionCallbacks)
+	if err != nil {
+		return err
+	}
+	currentCount, currentSize := w.callbackTotals(ctx)
+	if err := w.checkWorkflowCallbackLimit(currentCount, len(pending), maxCallbacksPerWorkflow); err != nil {
 		return err
 	}
 
 	if w.Callbacks == nil {
-		w.Callbacks = make(chasm.Map[string, *callback.Callback], len(completionCallbacks))
+		w.Callbacks = make(chasm.Map[string, *callback.Callback], len(pending))
 	}
 
-	return addCallbacksToMap(ctx, w.Callbacks, requestID, eventTime, completionCallbacks)
+	insertedSize := applyCallbackInsertions(ctx, w.Callbacks, requestID, eventTime, pending)
+	w.recordCallbackTotals(currentCount+len(pending), currentSize+insertedSize)
+	return nil
+}
+
+// recordCallbackTotals persists the workflow's aggregate callback accounting. It is written
+// even when nothing was inserted, so that a total recomputed for a workflow that predates the
+// counters is not recomputed again on the next attach.
+func (w *Workflow) recordCallbackTotals(count int, size int64) {
+	w.state().TotalCallbacksCount = int32(count)
+	w.state().TotalCallbacksSize = size
 }
 
 // AddUpdateCompletionCallbacks creates completion callbacks using the CHASM implementation.
@@ -211,8 +278,28 @@ func (w *Workflow) AddUpdateCompletionCallbacks(
 	maxCallbacksPerWorkflow int,
 	maxCallbacksPerUpdateID int,
 ) error {
-	if err := w.checkWorkflowCallbackLimit(ctx, len(completionCallbacks), maxCallbacksPerWorkflow); err != nil {
+	// Plan against the update's existing callbacks, which also means an update component is not
+	// created for a request that is about to be rejected.
+	var existing chasm.Map[string, *callback.Callback]
+	if updateField, ok := w.Updates[updateID]; ok {
+		existing = updateField.Get(ctx).Callbacks
+	}
+	pending, err := planCallbackInsertions(existing, requestID, completionCallbacks)
+	if err != nil {
 		return err
+	}
+
+	currentCount, currentSize := w.callbackTotals(ctx)
+	if err := w.checkWorkflowCallbackLimit(currentCount, len(pending), maxCallbacksPerWorkflow); err != nil {
+		return err
+	}
+	if len(pending)+len(existing) > maxCallbacksPerUpdateID {
+		return serviceerror.NewFailedPreconditionf(
+			"cannot attach more than %d callbacks to update %q (%d callbacks already attached)",
+			maxCallbacksPerUpdateID,
+			updateID,
+			len(existing),
+		)
 	}
 
 	if w.Updates == nil {
@@ -220,23 +307,14 @@ func (w *Workflow) AddUpdateCompletionCallbacks(
 	}
 	if _, ok := w.Updates[updateID]; !ok {
 		workflowUpdateObj := NewWorkflowUpdate(ctx, updateID, w.MSPointer)
-		workflowUpdateObj.Callbacks = make(chasm.Map[string, *callback.Callback], len(completionCallbacks))
+		workflowUpdateObj.Callbacks = make(chasm.Map[string, *callback.Callback], len(pending))
 		w.Updates[updateID] = chasm.NewComponentField(ctx, workflowUpdateObj)
 	}
-
 	update := w.Updates[updateID].Get(ctx)
 
-	currentCallbackCount := len(update.Callbacks)
-	if len(completionCallbacks)+currentCallbackCount > maxCallbacksPerUpdateID {
-		return serviceerror.NewFailedPreconditionf(
-			"cannot attach more than %d callbacks to update %q (%d callbacks already attached)",
-			maxCallbacksPerUpdateID,
-			updateID,
-			currentCallbackCount,
-		)
-	}
-
-	return addCallbacksToMap(ctx, update.Callbacks, requestID, eventTime, completionCallbacks)
+	insertedSize := applyCallbackInsertions(ctx, update.Callbacks, requestID, eventTime, pending)
+	w.recordCallbackTotals(currentCount+len(pending), currentSize+insertedSize)
+	return nil
 }
 
 // addAndApplyHistoryEvent adds a history event to the workflow and applies the corresponding event definition,

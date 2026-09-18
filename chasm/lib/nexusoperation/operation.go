@@ -473,10 +473,10 @@ func (o *Operation) addCompletionCallbacks(
 		return serviceerror.NewFailedPrecondition("cannot attach callbacks to a closed nexus operation")
 	}
 
-	// TODO: Populate CurrentCallbacksSize once OperationState.total_callbacks_size denormalizes it.
-	// Until then only the count is bounded; the size limit is disabled by default.
+	o.backfillTotalCallbacksSize(ctx)
 	if err := validator.ValidateAdditions(namespaceName, completionCallbacks, callbacks.ValidateAdditionsOptions{
-		CurrentCount: len(o.Callbacks),
+		CurrentCount:         len(o.Callbacks),
+		CurrentCallbacksSize: int(o.TotalCallbacksSize),
 	}); err != nil {
 		return err
 	}
@@ -497,8 +497,28 @@ func (o *Operation) addCompletionCallbacks(
 		cbRequestID := uuid.NewString()
 		callbackObj := callback.NewCallback(cbRequestID, registrationTime, chasmCB)
 		o.Callbacks[completionCallbackID(requestID, idx)] = chasm.NewComponentField(ctx, callbackObj)
+		// Accounted per insertion, so the total still matches the tree if a later callback in this
+		// batch fails to convert. Only the callback spec counts, never the delivery bookkeeping
+		// wrapped around it, which mutates after attach.
+		o.TotalCallbacksSize += int64(chasmCB.Size())
 	}
 	return nil
+}
+
+// backfillTotalCallbacksSize recomputes the denormalized total for operations persisted before the
+// field existed. A zero total alongside a non-empty callback map is an unambiguous marker of that
+// case: a validated callback always serializes to more than zero bytes, so a maintained total over a
+// non-empty set is never zero. Runs at most once per operation, since every later attach keeps the
+// recomputed total up to date.
+func (o *Operation) backfillTotalCallbacksSize(ctx chasm.Context) {
+	if o.TotalCallbacksSize != 0 || len(o.Callbacks) == 0 {
+		return
+	}
+	var total int64
+	for _, field := range o.Callbacks {
+		total += int64(field.Get(ctx).GetCallback().Size())
+	}
+	o.TotalCallbacksSize = total
 }
 
 // attachLinks records the given links on the operation keyed by requestID. Duplicates within the same

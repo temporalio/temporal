@@ -171,6 +171,77 @@ func (x *IncomingSignalData) GetEventId() int64 {
 	return 0
 }
 
+// WorkflowState is the persisted state of the CHASM workflow root component.
+//
+// Workflow execution state itself still lives in mutable state; this message exists to carry
+// aggregate accounting that cannot be derived cheaply from the CHASM tree. Counting callbacks
+// by walking the tree means deserializing every WorkflowUpdate node, and summing their sizes
+// is not possible at all mid-transaction, because child blobs are only serialized when the
+// transaction closes.
+//
+// The component previously used google.protobuf.Empty. Both encode to zero bytes when unset,
+// and node identity comes from the registered component type ID rather than the proto type, so
+// workflows persisted before this message existed load as an all-zero WorkflowState.
+type WorkflowState struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Total completion callbacks across the workflow-level map and every update's map.
+	TotalCallbacksCount int32 `protobuf:"varint,1,opt,name=total_callbacks_count,json=totalCallbacksCount,proto3" json:"total_callbacks_count,omitempty"`
+	// Sum of the serialized size of those callbacks. Counts only the callback specification,
+	// never the delivery bookkeeping (attempt, failures, timestamps), which mutates after attach
+	// and would otherwise let a workflow drift over its budget on its own.
+	//
+	// Zero alongside a non-empty callback set means the workflow was persisted before this field
+	// existed; the total is recomputed from the tree on the next attach. That is unambiguous
+	// because a validated callback always serializes to more than zero bytes.
+	TotalCallbacksSize int64 `protobuf:"varint,2,opt,name=total_callbacks_size,json=totalCallbacksSize,proto3" json:"total_callbacks_size,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
+}
+
+func (x *WorkflowState) Reset() {
+	*x = WorkflowState{}
+	mi := &file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WorkflowState) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WorkflowState) ProtoMessage() {}
+
+func (x *WorkflowState) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WorkflowState.ProtoReflect.Descriptor instead.
+func (*WorkflowState) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *WorkflowState) GetTotalCallbacksCount() int32 {
+	if x != nil {
+		return x.TotalCallbacksCount
+	}
+	return 0
+}
+
+func (x *WorkflowState) GetTotalCallbacksSize() int64 {
+	if x != nil {
+		return x.TotalCallbacksSize
+	}
+	return 0
+}
+
 var File_temporal_server_chasm_lib_workflow_proto_v1_state_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDesc = "" +
@@ -182,7 +253,10 @@ const file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDesc = "" 
 	"\x1bNexusCancellationParentData\x12,\n" +
 	"\x12requested_event_id\x18\x01 \x01(\x03R\x10requestedEventId\"/\n" +
 	"\x12IncomingSignalData\x12\x19\n" +
-	"\bevent_id\x18\x01 \x01(\x03R\aeventIdBDZBgo.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpbb\x06proto3"
+	"\bevent_id\x18\x01 \x01(\x03R\aeventId\"u\n" +
+	"\rWorkflowState\x122\n" +
+	"\x15total_callbacks_count\x18\x01 \x01(\x05R\x13totalCallbacksCount\x120\n" +
+	"\x14total_callbacks_size\x18\x02 \x01(\x03R\x12totalCallbacksSizeBDZBgo.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDescOnce sync.Once
@@ -196,11 +270,12 @@ func file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDescGZIP() 
 	return file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
+var file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_goTypes = []any{
 	(*NexusOperationParentData)(nil),    // 0: temporal.server.chasm.lib.workflow.proto.v1.NexusOperationParentData
 	(*NexusCancellationParentData)(nil), // 1: temporal.server.chasm.lib.workflow.proto.v1.NexusCancellationParentData
 	(*IncomingSignalData)(nil),          // 2: temporal.server.chasm.lib.workflow.proto.v1.IncomingSignalData
+	(*WorkflowState)(nil),               // 3: temporal.server.chasm.lib.workflow.proto.v1.WorkflowState
 }
 var file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type
@@ -221,7 +296,7 @@ func file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDesc), len(file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   3,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
