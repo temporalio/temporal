@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -296,11 +297,18 @@ func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx ch
 	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
 }
 
+// addCompletionCallbacks attaches completion callbacks to the activity, keyed by request ID plus
+// the callback's position within the request, so a retried request re-derives the same keys and is
+// a no-op rather than a duplicate.
+//
+// The cumulative limits are re-checked here because the frontend validator only bounds the
+// callbacks on a single request; callbacks added later via on_conflict_options bypass it.
 func (a *Activity) addCompletionCallbacks(
 	ctx chasm.MutableContext,
 	requestID string,
 	completionCallbacks []*commonpb.Callback,
-	maxCallbacks int,
+	validator callbacks.Validator,
+	namespaceName string,
 ) error {
 	if len(completionCallbacks) == 0 {
 		return nil
@@ -309,13 +317,12 @@ func (a *Activity) addCompletionCallbacks(
 		return serviceerror.NewFailedPrecondition("cannot attach callbacks to a closed activity")
 	}
 
-	currentCount := len(a.Callbacks)
-	if len(completionCallbacks)+currentCount > maxCallbacks {
-		return serviceerror.NewFailedPreconditionf(
-			"cannot attach more than %d callbacks to an activity (%d callbacks already attached)",
-			maxCallbacks,
-			currentCount,
-		)
+	// TODO: Populate CurrentCallbacksSize once ActivityState.total_callbacks_size exists. Until
+	// then only the count limit is meaningful here (the size limit is disabled by default).
+	if err := validator.ValidateAdditions(namespaceName, completionCallbacks, callbacks.ValidateAdditionsOptions{
+		CurrentCount: len(a.Callbacks),
+	}); err != nil {
+		return err
 	}
 
 	if a.Callbacks == nil {
@@ -332,6 +339,12 @@ func (a *Activity) addCompletionCallbacks(
 
 		// requestID (unique per API call) + idx (position within the request) ensures unique, idempotent callback IDs.
 		id := fmt.Sprintf("%s-%d", requestID, idx)
+		if _, exists := a.Callbacks[id]; exists {
+			// Skip rather than overwrite: a retry would otherwise reset an already-persisted
+			// callback's state, and the denormalized size counter is derived from the insertions
+			// made here, so re-inserting would double-count it.
+			continue
+		}
 		callbackObj := callback.NewCallback(requestID, registrationTime, chasmCB)
 		a.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
 	}

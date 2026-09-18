@@ -3,7 +3,6 @@ package nexusoperation
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -23,44 +22,29 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	test "go.temporal.io/server/common/testing"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func newTestValidator(config *Config) *validator {
+func newTestValidator(t *testing.T, config *Config) *validator {
 	return newValidator(
 		config,
 		log.NewNoopLogger(),
 		nil,
 		nil,
-		mustNewCallbackValidator(),
+		newTestCallbackValidator(t, 10),
 		newTestLinkValidator(10, 10),
 	)
 }
 
-func mustNewCallbackValidator() callbacks.Validator {
-	allowAllAddresses := callbacks.AddressMatchRules{
-		Rules: []callbacks.AddressMatchRule{
-			{Regexp: regexp.MustCompile(`.*`), AllowInsecure: true},
-		},
-	}
-	cfg := callbacks.ValidatorConfig{
-		MaxCallbacksPerExecution:         func(string) int { return 10 },
-		TotalCallbacksMaxSize:            func(string) int { return 0 }, // Unlimited.
-		MaxIDLengthLimit:                 func() int { return 10 },
-		URLMaxLength:                     func(string) int { return 1000 },
-		HeaderMaxSize:                    func(string) int { return 4096 },
-		EndpointRules:                    func(string) callbacks.AddressMatchRules { return allowAllAddresses },
-		MaxServiceNameLength:             func(string) int { return 10 },
-		MaxOperationNameLength:           func(string) int { return 10 },
-		NexusHandlerSourceContextMaxSize: func(string) int { return 1000 },
-	}
-
-	v, err := callbacks.NewValidator(cfg)
-	if err != nil {
-		panic("creating callback validator: " + err.Error())
-	}
-	return v
+func newTestCallbackValidator(t *testing.T, maxCallbacks int) callbacks.Validator {
+	t.Helper()
+	cfg := test.NewCallbacksValidatorConfig()
+	cfg.MaxCallbacksPerExecution = func(string) int { return maxCallbacks }
+	validator, err := callbacks.NewValidator(cfg)
+	require.NoError(t, err)
+	return validator
 }
 
 func newNexusCallback() *commonpb.Callback {
@@ -558,7 +542,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 				tc.mutateConfig(&caseConfig)
 			}
 
-			cbValidator := mustNewCallbackValidator()
+			cbValidator := newTestCallbackValidator(t, 10)
 			logger := log.NewNoopLogger()
 			v := newValidator(&caseConfig, logger, nil, saValidator, cbValidator, newTestLinkValidator(10, 10))
 
@@ -658,7 +642,7 @@ func TestValidateDescribeNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizeDescribeRequest(validReq, "test-namespace-id")
+			err := newTestValidator(t, config).validateAndNormalizeDescribeRequest(validReq, "test-namespace-id")
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -745,7 +729,7 @@ func TestValidateRequestCancelNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizeCancelRequest(validReq)
+			err := newTestValidator(t, config).validateAndNormalizeCancelRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -809,7 +793,7 @@ func TestValidateDeleteNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizeDeleteRequest(validReq)
+			err := newTestValidator(t, config).validateAndNormalizeDeleteRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -896,7 +880,7 @@ func TestValidateTerminateNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizeTerminateRequest(validReq)
+			err := newTestValidator(t, config).validateAndNormalizeTerminateRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -989,7 +973,7 @@ func TestValidatePollNexusOperationExecutionRequest(t *testing.T) {
 			if tc.mutate != nil {
 				tc.mutate(validReq)
 			}
-			err := newTestValidator(config).validateAndNormalizePollRequest(validReq)
+			err := newTestValidator(t, config).validateAndNormalizePollRequest(validReq)
 			if tc.errMsg != "" {
 				var invalidArgErr *serviceerror.InvalidArgument
 				require.ErrorAs(t, err, &invalidArgErr)
@@ -1008,7 +992,7 @@ func TestValidateOnConflictOptions(t *testing.T) {
 	t.Parallel()
 
 	// on_conflict_options validation is config-independent.
-	v := newTestValidator(&Config{})
+	v := newTestValidator(t, &Config{})
 	cb := newNexusCallback()
 
 	t.Run("Unset", func(t *testing.T) {

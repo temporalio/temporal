@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -118,7 +119,7 @@ func NewOperation(state *nexusoperationpb.OperationState) *Operation {
 func newStandaloneOperation(
 	ctx chasm.MutableContext,
 	req *nexusoperationpb.StartNexusOperationRequest,
-	maxCallbacks int,
+	callbackValidator callbacks.Validator,
 	linkValidator *linkValidator,
 ) (*Operation, error) {
 	frontendReq := req.GetFrontendRequest()
@@ -148,7 +149,8 @@ func newStandaloneOperation(
 		ctx,
 		frontendReq.GetRequestId(),
 		frontendReq.GetCompletionCallbacks(),
-		maxCallbacks,
+		callbackValidator,
+		frontendReq.GetNamespace(),
 	); err != nil {
 		return nil, err
 	}
@@ -446,13 +448,15 @@ func (o *Operation) getOrCreateOutcome(ctx chasm.MutableContext) *nexusoperation
 // request is a no-op rather than a duplicate. The idempotency probe runs before the closed check, so a
 // retry still succeeds if the operation closed after the first attach.
 //
-// maxCallbacks is re-checked here because callback.Validator only bounds the callbacks on the start
-// request; callbacks added later via on_conflict_options bypass it.
+// The cumulative limits are re-checked here, via ValidateAdditions, because the frontend's
+// callbacks.Validator only bounds the callbacks on a single start request; callbacks added later via
+// on_conflict_options bypass it.
 func (o *Operation) addCompletionCallbacks(
 	ctx chasm.MutableContext,
 	requestID string,
 	completionCallbacks []*commonpb.Callback,
-	maxCallbacks int,
+	validator callbacks.Validator,
+	namespaceName string,
 ) error {
 	if len(completionCallbacks) == 0 {
 		return nil
@@ -469,13 +473,12 @@ func (o *Operation) addCompletionCallbacks(
 		return serviceerror.NewFailedPrecondition("cannot attach callbacks to a closed nexus operation")
 	}
 
-	currentCount := len(o.Callbacks)
-	if len(completionCallbacks)+currentCount > maxCallbacks {
-		return serviceerror.NewFailedPreconditionf(
-			"cannot attach more than %d callbacks to a nexus operation (%d callbacks already attached)",
-			maxCallbacks,
-			currentCount,
-		)
+	// TODO: Populate CurrentCallbacksSize once OperationState.total_callbacks_size denormalizes it.
+	// Until then only the count is bounded; the size limit is disabled by default.
+	if err := validator.ValidateAdditions(namespaceName, completionCallbacks, callbacks.ValidateAdditionsOptions{
+		CurrentCount: len(o.Callbacks),
+	}); err != nil {
+		return err
 	}
 
 	if o.Callbacks == nil {

@@ -18,12 +18,14 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	test "go.temporal.io/server/common/testing"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -1093,6 +1095,115 @@ func TestAttachLinks_RejectsWhenComponentCapExceeded(t *testing.T) {
 
 	err := activity.attachLinks(ctx, []*commonpb.Link{newLink}, "req-new", validator, "ns")
 	require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+}
+
+func TestAddCompletionCallbacks(t *testing.T) {
+	testTime := time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	newCtx := func() *chasm.MockMutableContext {
+		return &chasm.MockMutableContext{
+			MockContext: chasm.MockContext{
+				HandleNow: func(chasm.Component) time.Time { return testTime },
+			},
+		}
+	}
+	newActivity := func() *Activity {
+		return &Activity{
+			ActivityState: &activitypb.ActivityState{Status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED},
+		}
+	}
+	newValidator := func(t *testing.T, maxPerExecution int) callbacks.Validator {
+		t.Helper()
+		cfg := test.NewCallbacksValidatorConfig()
+		cfg.MaxCallbacksPerExecution = func(string) int { return maxPerExecution }
+		validator, err := callbacks.NewValidator(cfg)
+		require.NoError(t, err)
+		return validator
+	}
+	nexusCallback := func(url string) *commonpb.Callback {
+		return &commonpb.Callback{
+			Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: url}},
+		}
+	}
+
+	t.Run("AttachesCallbacksKeyedByRequestIDAndPosition", func(t *testing.T) {
+		ctx, activity := newCtx(), newActivity()
+		cbs := []*commonpb.Callback{
+			nexusCallback("http://localhost/callback-0"),
+			nexusCallback("http://localhost/callback-1"),
+		}
+
+		require.NoError(t, activity.addCompletionCallbacks(ctx, "req-1", cbs, newValidator(t, 10), "ns"))
+		require.Len(t, activity.Callbacks, 2)
+		require.Equal(t, "http://localhost/callback-0", activity.Callbacks["req-1-0"].Get(ctx).GetCallback().GetNexus().GetUrl())
+		require.Equal(t, "http://localhost/callback-1", activity.Callbacks["req-1-1"].Get(ctx).GetCallback().GetNexus().GetUrl())
+	})
+
+	t.Run("ReAttachingTheSameRequestIDDoesNotDuplicateOrOverwrite", func(t *testing.T) {
+		// A retried start (or a retried on_conflict_options attach) re-derives the same callback
+		// keys. The existing entries must be left alone: overwriting would reset state the first
+		// attach already persisted, and the per-execution size counter is derived from the
+		// insertions made here, so a re-insert would double-count.
+		ctx, activity := newCtx(), newActivity()
+		validator := newValidator(t, 10)
+		cbs := []*commonpb.Callback{nexusCallback("http://localhost/callback-0")}
+
+		require.NoError(t, activity.addCompletionCallbacks(ctx, "req-1", cbs, validator, "ns"))
+		require.Len(t, activity.Callbacks, 1)
+
+		// Retry carrying a different payload under the same request ID: the stored callback must
+		// still be the one persisted by the first call.
+		retried := []*commonpb.Callback{nexusCallback("http://localhost/other")}
+		require.NoError(t, activity.addCompletionCallbacks(ctx, "req-1", retried, validator, "ns"))
+		require.Len(t, activity.Callbacks, 1)
+		require.Equal(t, "http://localhost/callback-0", activity.Callbacks["req-1-0"].Get(ctx).GetCallback().GetNexus().GetUrl())
+	})
+
+	t.Run("DistinctRequestIDsAccumulate", func(t *testing.T) {
+		ctx, activity := newCtx(), newActivity()
+		validator := newValidator(t, 10)
+		cbs := []*commonpb.Callback{nexusCallback("http://localhost/callback-0")}
+
+		require.NoError(t, activity.addCompletionCallbacks(ctx, "req-1", cbs, validator, "ns"))
+		require.NoError(t, activity.addCompletionCallbacks(ctx, "req-2", cbs, validator, "ns"))
+		require.Len(t, activity.Callbacks, 2)
+	})
+
+	t.Run("RejectsWhenTheExecutionCapWouldBeExceeded", func(t *testing.T) {
+		ctx, activity := newCtx(), newActivity()
+		validator := newValidator(t, 2)
+		require.NoError(t, activity.addCompletionCallbacks(ctx, "req-1", []*commonpb.Callback{
+			nexusCallback("http://localhost/callback-0"),
+		}, validator, "ns"))
+
+		err := activity.addCompletionCallbacks(ctx, "req-2", []*commonpb.Callback{
+			nexusCallback("http://localhost/callback-1"),
+			nexusCallback("http://localhost/callback-2"),
+		}, validator, "ns")
+		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+		require.ErrorContains(t, err, "cannot attach more than 2 callbacks to an execution (1 callbacks already attached)")
+		require.Len(t, activity.Callbacks, 1)
+	})
+
+	t.Run("EmptyListIsNoOp", func(t *testing.T) {
+		ctx, activity := newCtx(), newActivity()
+		require.NoError(t, activity.addCompletionCallbacks(ctx, "req-1", nil, newValidator(t, 10), "ns"))
+		require.Nil(t, activity.Callbacks)
+	})
+
+	t.Run("RejectsAClosedActivity", func(t *testing.T) {
+		ctx := newCtx()
+		activity := &Activity{
+			ActivityState: &activitypb.ActivityState{Status: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED},
+		}
+
+		err := activity.addCompletionCallbacks(ctx, "req-1", []*commonpb.Callback{
+			nexusCallback("http://localhost/callback-0"),
+		}, newValidator(t, 10), "ns")
+		require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+		require.ErrorContains(t, err, "cannot attach callbacks to a closed activity")
+		require.Empty(t, activity.Callbacks)
+	})
 }
 
 // TestEffectiveUserMetadata_FallsBackToLegacy ensures that activities persisted

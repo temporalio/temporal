@@ -953,10 +953,16 @@ func OperatorHandlerProvider(
 	return NewOperatorHandlerImpl(args)
 }
 
-// callbackValidatorProvider creates a callback Validator using the production dynamic config keys
-// so that existing operator configurations (callback.allowedAddresses) are honored.
+// callbackValidatorProvider creates a callback Validator using the production dynamic config
+// keys, so that existing operator configuration (callback.allowedAddresses and friends) is
+// honored.
+//
+// The history service deliberately duplicates this function. The two must stay in agreement:
+// the frontend bounds a single request and history bounds the execution's cumulative totals,
+// so configuring them differently would let a request be accepted at one and rejected at the
+// other.
 func callbackValidatorProvider(dc *dynamicconfig.Collection) (callbacks.Validator, error) {
-	cfg := callbacks.ValidatorConfig{
+	return callbacks.NewValidator(callbacks.ValidatorConfig{
 		MaxCallbacksPerExecution:         chasmcallback.MaxPerExecution.Get(dc),
 		TotalCallbacksMaxSize:            chasmcallback.TotalMaxSizePerExecution.Get(dc),
 		MaxIDLengthLimit:                 dynamicconfig.MaxIDLengthLimit.Get(dc),
@@ -966,8 +972,7 @@ func callbackValidatorProvider(dc *dynamicconfig.Collection) (callbacks.Validato
 		MaxServiceNameLength:             chasmnexus.MaxServiceNameLength.Get(dc),
 		MaxOperationNameLength:           chasmnexus.MaxOperationNameLength.Get(dc),
 		NexusHandlerSourceContextMaxSize: chasmcallback.NexusHandlerSourceContextMaxSize.Get(dc),
-	}
-	return callbacks.NewValidator(cfg)
+	})
 }
 
 func HandlerProvider(
