@@ -20,6 +20,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
+
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -74,11 +80,6 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
-	"go.uber.org/mock/gomock"
-	"google.golang.org/grpc"
-	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/timestamppb"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 // static error used in tests
@@ -7088,7 +7089,6 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		// With DC=3 this would be [1,2] only.
 		require.ElementsMatch(t, []int32{1, 2, 3, 4}, remotePartitionIDs)
 	})
-
 
 	t.Run("fan-out: removePollerFromHistory called for every partition", func(t *testing.T) {
 		// Verifies that poller history is cleaned up for each partition, not just
