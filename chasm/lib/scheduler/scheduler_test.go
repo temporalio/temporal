@@ -113,6 +113,12 @@ func TestCreateScheduler_InitialPauseState(t *testing.T) {
 	}
 }
 
+func TestCreateScheduler_NoMigrationEvent(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+
+	require.Empty(t, sched.EventLog.Get(ctx).Events)
+}
+
 // TestListInfo_RecentActionsCapped verifies that the ScheduleListInfo memo
 // hard-caps RecentActions. recentActions() includes running starts, which
 // aren't bounded by completed-action retention, so without the cap the
@@ -309,6 +315,11 @@ func TestCreateSchedulerFromMigration(t *testing.T) {
 	// Last completion result
 	lastResult := sched.LastCompletionResult.Get(ctx)
 	require.Equal(t, []byte("result-data"), lastResult.Success.Data)
+
+	events := sched.EventLog.Get(ctx).Events
+	require.Len(t, events, 1)
+	require.Equal(t, "created via migration from V1", events[0].Message)
+	require.NotNil(t, events[0].Time)
 
 	require.NoError(t, node.SetRootComponent(sched))
 	_, err = node.CloseTransaction()
