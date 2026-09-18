@@ -3142,7 +3142,7 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventKeepsClo
 			got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, test.incoming)
 
 			protorequire.ProtoEqual(s.T(), clockedCurrent, got)
-			recordings := capture.SnapshotMetric(metrics.TaskQueueUserDataReplicationIncomingPerTypeDataDropped.Name())
+			recordings := capture.Snapshot()[metrics.TaskQueueUserDataReplicationIncomingPerTypeDataDropped.Name()]
 			if test.wantDropped {
 				s.Len(recordings, 1)
 			} else {
