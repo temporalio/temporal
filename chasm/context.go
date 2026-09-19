@@ -98,6 +98,7 @@ type EndpointRegistry interface {
 
 type MutableContext interface {
 	Context
+	TimeSkippingConfigurator
 
 	// AddTask adds a task to be emitted as part of the current transaction.
 	// The task is associated with the given component and will be invoked via the registered handler for the given task
@@ -299,6 +300,10 @@ func (c *mutableCtx) withValue(key any, value any) Context {
 	return &mutableCtx{
 		immutableCtx: ContextWithValue(c.immutableCtx, key, value),
 	}
+}
+
+func (c *mutableCtx) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
+	c.root.backend.SetTimeSkippingConfig(config)
 }
 
 // ContextWithValue returns a new Context with the given key-value pair added.
