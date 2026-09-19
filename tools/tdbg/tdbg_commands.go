@@ -23,6 +23,11 @@ func getCommands(
 ) []*cli.Command {
 	return []*cli.Command{
 		{
+			Name:        "vts",
+			Usage:       "Inspect and administer virtual time skipping",
+			Subcommands: newVTSCommands(clientFactory, prompterFactory),
+		},
+		{
 			Name:        "execution",
 			Aliases:     []string{"e", "w", "workflow"},
 			Usage:       "Run admin operation on an execution (workflow)",
@@ -74,6 +79,49 @@ func getCommands(
 			Name:        "decode",
 			Usage:       "Decode payload",
 			Subcommands: newDecodeCommands(taskBlobEncoder),
+		},
+	}
+}
+
+func newVTSCommands(clientFactory ClientFactory, prompterFactory PrompterFactory) []*cli.Command {
+	return []*cli.Command{
+		{
+			Name:   "get",
+			Usage:  "Show virtual time-skipping information for an execution",
+			Flags:  executionDescribeFlags(),
+			Action: func(c *cli.Context) error { return AdminGetTimeSkipping(c, clientFactory) },
+		},
+		{
+			Name:  "disable",
+			Usage: "Forcefully disable virtual time skipping for an execution (requires two confirmations unless --yes is set)",
+			Flags: executionDescribeFlags(),
+			Action: func(c *cli.Context) error {
+				return AdminDisableTimeSkipping(c, clientFactory, prompterFactory(c))
+			},
+		},
+	}
+}
+
+func executionDescribeFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name:    FlagBusinessID,
+			Aliases: FlagBusinessIDAlias,
+			Usage:   "Business ID (Workflow ID)",
+		},
+		&cli.StringFlag{
+			Name:    FlagRunID,
+			Aliases: FlagRunIDAlias,
+			Usage:   "Run ID (optional, uses latest if not specified)",
+		},
+		&cli.StringFlag{
+			Name:        FlagArchetype,
+			Usage:       "Fully qualified archetype name of the execution",
+			DefaultText: chasm.WorkflowArchetype,
+		},
+		&cli.UintFlag{
+			Name:  FlagArchetypeID,
+			Usage: "Archetype ID (optional, overrides --archetype if specified)",
 		},
 	}
 }
@@ -150,27 +198,7 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 			Name:    "describe",
 			Aliases: []string{"d"},
 			Usage:   "Describe internal information of Temporal execution",
-			Flags: []cli.Flag{
-				&cli.StringFlag{
-					Name:    FlagBusinessID,
-					Aliases: FlagBusinessIDAlias,
-					Usage:   "Business ID (Workflow ID)",
-				},
-				&cli.StringFlag{
-					Name:    FlagRunID,
-					Aliases: FlagRunIDAlias,
-					Usage:   "Run ID (optional, uses latest if not specified)",
-				},
-				&cli.StringFlag{
-					Name:        FlagArchetype,
-					Usage:       "Fully qualified archetype name of the execution",
-					DefaultText: chasm.WorkflowArchetype,
-				},
-				&cli.UintFlag{
-					Name:  FlagArchetypeID,
-					Usage: "Archetype ID (optional, overrides --archetype if specified)",
-				},
-			},
+			Flags:   executionDescribeFlags(),
 			Action: func(c *cli.Context) error {
 				return AdminDescribeExecution(c, clientFactory)
 			},

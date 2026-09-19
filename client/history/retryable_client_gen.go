@@ -206,6 +206,21 @@ func (c *retryableClient) DescribeWorkflowExecution(
 	return resp, err
 }
 
+func (c *retryableClient) DisableTimeSkipping(
+	ctx context.Context,
+	request *historyservice.DisableTimeSkippingRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.DisableTimeSkippingResponse, error) {
+	var resp *historyservice.DisableTimeSkippingResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DisableTimeSkipping(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ExecuteMultiOperation(
 	ctx context.Context,
 	request *historyservice.ExecuteMultiOperationRequest,

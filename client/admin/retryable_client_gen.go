@@ -191,6 +191,21 @@ func (c *retryableClient) DescribeTaskQueuePartition(
 	return resp, err
 }
 
+func (c *retryableClient) DisableTimeSkipping(
+	ctx context.Context,
+	request *adminservice.DisableTimeSkippingRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.DisableTimeSkippingResponse, error) {
+	var resp *adminservice.DisableTimeSkippingResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.DisableTimeSkipping(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ForceUnloadTaskQueuePartition(
 	ctx context.Context,
 	request *adminservice.ForceUnloadTaskQueuePartitionRequest,

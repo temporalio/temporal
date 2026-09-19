@@ -130,6 +130,21 @@ func (mr *MockEngineMockRecorder) DescribeMutableState(ctx, request any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeMutableState", reflect.TypeOf((*MockEngine)(nil).DescribeMutableState), ctx, request)
 }
 
+// DisableTimeSkipping mocks base method.
+func (m *MockEngine) DisableTimeSkipping(ctx context.Context, request *historyservice.DisableTimeSkippingRequest) (*historyservice.DisableTimeSkippingResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DisableTimeSkipping", ctx, request)
+	ret0, _ := ret[0].(*historyservice.DisableTimeSkippingResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DisableTimeSkipping indicates an expected call of DisableTimeSkipping.
+func (mr *MockEngineMockRecorder) DisableTimeSkipping(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DisableTimeSkipping", reflect.TypeOf((*MockEngine)(nil).DisableTimeSkipping), ctx, request)
+}
+
 // DescribeWorkflowExecution mocks base method.
 func (m *MockEngine) DescribeWorkflowExecution(ctx context.Context, request *historyservice.DescribeWorkflowExecutionRequest) (*historyservice.DescribeWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()

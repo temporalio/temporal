@@ -867,6 +867,31 @@ func (h *Handler) DescribeMutableState(ctx context.Context, request *historyserv
 	return resp, nil
 }
 
+func (h *Handler) DisableTimeSkipping(
+	ctx context.Context,
+	request *historyservice.DisableTimeSkippingRequest,
+) (*historyservice.DisableTimeSkippingResponse, error) {
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, request.GetExecution().GetWorkflowId())
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngine(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	response, err := engine.DisableTimeSkipping(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	return response, nil
+}
+
 // GetMutableState - returns the id of the next event in the execution's history
 func (h *Handler) GetMutableState(ctx context.Context, request *historyservice.GetMutableStateRequest) (*historyservice.GetMutableStateResponse, error) {
 	namespaceID := namespace.ID(request.GetNamespaceId())

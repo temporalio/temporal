@@ -66,6 +66,7 @@ const (
 	AdminService_ForceUnloadTaskQueuePartition_FullMethodName       = "/temporal.server.api.adminservice.v1.AdminService/ForceUnloadTaskQueuePartition"
 	AdminService_GetTaskQueueUserData_FullMethodName                = "/temporal.server.api.adminservice.v1.AdminService/GetTaskQueueUserData"
 	AdminService_MigrateSchedule_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/MigrateSchedule"
+	AdminService_DisableTimeSkipping_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/DisableTimeSkipping"
 )
 
 // AdminServiceClient is the client API for AdminService service.
@@ -124,7 +125,9 @@ type AdminServiceClient interface {
 	// GetDLQMessages returns messages from DLQ.
 	GetDLQMessages(ctx context.Context, in *GetDLQMessagesRequest, opts ...grpc.CallOption) (*GetDLQMessagesResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
-	//     aip.dev/not-precedent:  --)
+	//
+	//	aip.dev/not-precedent:  --)
+	//
 	// PurgeDLQMessages purges messages from DLQ.
 	PurgeDLQMessages(ctx context.Context, in *PurgeDLQMessagesRequest, opts ...grpc.CallOption) (*PurgeDLQMessagesResponse, error)
 	// MergeDLQMessages merges messages from DLQ.
@@ -143,7 +146,8 @@ type AdminServiceClient interface {
 	GetNamespace(ctx context.Context, in *GetNamespaceRequest, opts ...grpc.CallOption) (*GetNamespaceResponse, error)
 	GetDLQTasks(ctx context.Context, in *GetDLQTasksRequest, opts ...grpc.CallOption) (*GetDLQTasksResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
-	//     aip.dev/not-precedent:  --)
+	//
+	//	aip.dev/not-precedent:  --)
 	PurgeDLQTasks(ctx context.Context, in *PurgeDLQTasksRequest, opts ...grpc.CallOption) (*PurgeDLQTasksResponse, error)
 	MergeDLQTasks(ctx context.Context, in *MergeDLQTasksRequest, opts ...grpc.CallOption) (*MergeDLQTasksResponse, error)
 	DescribeDLQJob(ctx context.Context, in *DescribeDLQJobRequest, opts ...grpc.CallOption) (*DescribeDLQJobResponse, error)
@@ -158,6 +162,8 @@ type AdminServiceClient interface {
 	GetTaskQueueUserData(ctx context.Context, in *GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*GetTaskQueueUserDataResponse, error)
 	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
 	MigrateSchedule(ctx context.Context, in *MigrateScheduleRequest, opts ...grpc.CallOption) (*MigrateScheduleResponse, error)
+	// DisableTimeSkipping forcefully disables virtual time skipping for an execution.
+	DisableTimeSkipping(ctx context.Context, in *DisableTimeSkippingRequest, opts ...grpc.CallOption) (*DisableTimeSkippingResponse, error)
 }
 
 type adminServiceClient struct {
@@ -604,6 +610,15 @@ func (c *adminServiceClient) MigrateSchedule(ctx context.Context, in *MigrateSch
 	return out, nil
 }
 
+func (c *adminServiceClient) DisableTimeSkipping(ctx context.Context, in *DisableTimeSkippingRequest, opts ...grpc.CallOption) (*DisableTimeSkippingResponse, error) {
+	out := new(DisableTimeSkippingResponse)
+	err := c.cc.Invoke(ctx, AdminService_DisableTimeSkipping_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AdminServiceServer is the server API for AdminService service.
 // All implementations must embed UnimplementedAdminServiceServer
 // for forward compatibility
@@ -660,7 +675,9 @@ type AdminServiceServer interface {
 	// GetDLQMessages returns messages from DLQ.
 	GetDLQMessages(context.Context, *GetDLQMessagesRequest) (*GetDLQMessagesResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
-	//     aip.dev/not-precedent:  --)
+	//
+	//	aip.dev/not-precedent:  --)
+	//
 	// PurgeDLQMessages purges messages from DLQ.
 	PurgeDLQMessages(context.Context, *PurgeDLQMessagesRequest) (*PurgeDLQMessagesResponse, error)
 	// MergeDLQMessages merges messages from DLQ.
@@ -679,7 +696,8 @@ type AdminServiceServer interface {
 	GetNamespace(context.Context, *GetNamespaceRequest) (*GetNamespaceResponse, error)
 	GetDLQTasks(context.Context, *GetDLQTasksRequest) (*GetDLQTasksResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
-	//     aip.dev/not-precedent:  --)
+	//
+	//	aip.dev/not-precedent:  --)
 	PurgeDLQTasks(context.Context, *PurgeDLQTasksRequest) (*PurgeDLQTasksResponse, error)
 	MergeDLQTasks(context.Context, *MergeDLQTasksRequest) (*MergeDLQTasksResponse, error)
 	DescribeDLQJob(context.Context, *DescribeDLQJobRequest) (*DescribeDLQJobResponse, error)
@@ -694,6 +712,8 @@ type AdminServiceServer interface {
 	GetTaskQueueUserData(context.Context, *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error)
 	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
 	MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error)
+	// DisableTimeSkipping forcefully disables virtual time skipping for an execution.
+	DisableTimeSkipping(context.Context, *DisableTimeSkippingRequest) (*DisableTimeSkippingResponse, error)
 	mustEmbedUnimplementedAdminServiceServer()
 }
 
@@ -838,6 +858,9 @@ func (UnimplementedAdminServiceServer) GetTaskQueueUserData(context.Context, *Ge
 }
 func (UnimplementedAdminServiceServer) MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MigrateSchedule not implemented")
+}
+func (UnimplementedAdminServiceServer) DisableTimeSkipping(context.Context, *DisableTimeSkippingRequest) (*DisableTimeSkippingResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DisableTimeSkipping not implemented")
 }
 func (UnimplementedAdminServiceServer) mustEmbedUnimplementedAdminServiceServer() {}
 
@@ -1688,6 +1711,24 @@ func _AdminService_MigrateSchedule_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_DisableTimeSkipping_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DisableTimeSkippingRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).DisableTimeSkipping(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_DisableTimeSkipping_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).DisableTimeSkipping(ctx, req.(*DisableTimeSkippingRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AdminService_ServiceDesc is the grpc.ServiceDesc for AdminService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1874,6 +1915,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MigrateSchedule",
 			Handler:    _AdminService_MigrateSchedule_Handler,
+		},
+		{
+			MethodName: "DisableTimeSkipping",
+			Handler:    _AdminService_DisableTimeSkipping_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

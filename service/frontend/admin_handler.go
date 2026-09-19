@@ -483,6 +483,39 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 	}, nil
 }
 
+func (adh *AdminHandler) DisableTimeSkipping(
+	ctx context.Context,
+	request *adminservice.DisableTimeSkippingRequest,
+) (_ *adminservice.DisableTimeSkippingResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if err := validateExecution(request.GetExecution()); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	archetypeID, err := adh.validateAndResolveArchetypeID(request.GetArchetype(), request.GetArchetypeId())
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := adh.historyClient.DisableTimeSkipping(ctx, &historyservice.DisableTimeSkippingRequest{
+		NamespaceId: namespaceID.String(),
+		Execution:   request.GetExecution(),
+		ArchetypeId: archetypeID,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &adminservice.DisableTimeSkippingResponse{Disabled: response.GetDisabled()}, nil
+}
+
 // RemoveTask returns information about the internal states of a history host
 func (adh *AdminHandler) RemoveTask(ctx context.Context, request *adminservice.RemoveTaskRequest) (_ *adminservice.RemoveTaskResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)

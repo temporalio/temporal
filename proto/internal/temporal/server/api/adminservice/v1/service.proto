@@ -231,4 +231,9 @@ service AdminService {
   rpc MigrateSchedule(MigrateScheduleRequest) returns (MigrateScheduleResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }
+
+  // DisableTimeSkipping forcefully disables virtual time skipping for an execution.
+  rpc DisableTimeSkipping(DisableTimeSkippingRequest) returns (DisableTimeSkippingResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 }

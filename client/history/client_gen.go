@@ -235,6 +235,26 @@ func (c *clientImpl) DescribeWorkflowExecution(
 	return response, nil
 }
 
+func (c *clientImpl) DisableTimeSkipping(
+	ctx context.Context,
+	request *historyservice.DisableTimeSkippingRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.DisableTimeSkippingResponse, error) {
+	shardID := c.shardIDFromWorkflowID(request.GetNamespaceId(), request.GetExecution().GetWorkflowId())
+	var response *historyservice.DisableTimeSkippingResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.DisableTimeSkipping(ctx, request, opts...)
+		return err
+	}
+	if err := c.executeWithRedirect(ctx, shardID, op); err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) ExecuteMultiOperation(
 	ctx context.Context,
 	request *historyservice.ExecuteMultiOperationRequest,

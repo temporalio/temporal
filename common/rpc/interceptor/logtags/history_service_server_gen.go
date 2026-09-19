@@ -87,6 +87,13 @@ func (wt *WorkflowTags) extractFromHistoryServiceServerMessage(message any) []ta
 		}
 	case *historyservice.DescribeWorkflowExecutionResponse:
 		return nil
+	case *historyservice.DisableTimeSkippingRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetExecution().GetRunId()),
+		}
+	case *historyservice.DisableTimeSkippingResponse:
+		return nil
 	case *historyservice.ExecuteMultiOperationRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetWorkflowId()),

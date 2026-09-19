@@ -303,6 +303,26 @@ func (mr *MockHistoryServiceClientMockRecorder) DescribeWorkflowExecution(ctx, i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).DescribeWorkflowExecution), varargs...)
 }
 
+// DisableTimeSkipping mocks base method.
+func (m *MockHistoryServiceClient) DisableTimeSkipping(ctx context.Context, in *historyservice.DisableTimeSkippingRequest, opts ...grpc.CallOption) (*historyservice.DisableTimeSkippingResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DisableTimeSkipping", varargs...)
+	ret0, _ := ret[0].(*historyservice.DisableTimeSkippingResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DisableTimeSkipping indicates an expected call of DisableTimeSkipping.
+func (mr *MockHistoryServiceClientMockRecorder) DisableTimeSkipping(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DisableTimeSkipping", reflect.TypeOf((*MockHistoryServiceClient)(nil).DisableTimeSkipping), varargs...)
+}
+
 // ExecuteMultiOperation mocks base method.
 func (m *MockHistoryServiceClient) ExecuteMultiOperation(ctx context.Context, in *historyservice.ExecuteMultiOperationRequest, opts ...grpc.CallOption) (*historyservice.ExecuteMultiOperationResponse, error) {
 	m.ctrl.T.Helper()
@@ -1958,6 +1978,21 @@ func (m *MockHistoryServiceServer) DescribeWorkflowExecution(arg0 context.Contex
 func (mr *MockHistoryServiceServerMockRecorder) DescribeWorkflowExecution(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).DescribeWorkflowExecution), arg0, arg1)
+}
+
+// DisableTimeSkipping mocks base method.
+func (m *MockHistoryServiceServer) DisableTimeSkipping(arg0 context.Context, arg1 *historyservice.DisableTimeSkippingRequest) (*historyservice.DisableTimeSkippingResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DisableTimeSkipping", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.DisableTimeSkippingResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DisableTimeSkipping indicates an expected call of DisableTimeSkipping.
+func (mr *MockHistoryServiceServerMockRecorder) DisableTimeSkipping(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DisableTimeSkipping", reflect.TypeOf((*MockHistoryServiceServer)(nil).DisableTimeSkipping), arg0, arg1)
 }
 
 // ExecuteMultiOperation mocks base method.

@@ -375,6 +375,74 @@ func describeMutableState(c *cli.Context, clientFactory ClientFactory) (*adminse
 	return resp, nil
 }
 
+// AdminGetTimeSkipping prints the persisted virtual time-skipping information for an execution.
+func AdminGetTimeSkipping(c *cli.Context, clientFactory ClientFactory) error {
+	response, err := describeMutableState(c, clientFactory)
+	if err != nil {
+		return err
+	}
+	if response.GetDatabaseMutableState() == nil {
+		return errors.New("no mutable state returned")
+	}
+
+	timeSkippingInfo := response.GetDatabaseMutableState().GetExecutionInfo().GetTimeSkippingInfo()
+	if timeSkippingInfo == nil {
+		_, _ = fmt.Fprintln(c.App.Writer, "time skipping not enabled")
+		return nil
+	}
+	prettyPrintJSONObject(c, timeSkippingInfo)
+	return nil
+}
+
+// AdminDisableTimeSkipping forcefully disables virtual time skipping for an execution.
+func AdminDisableTimeSkipping(c *cli.Context, clientFactory ClientFactory, prompter *Prompter) error {
+	namespaceName, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+	businessID, err := getRequiredOption(c, FlagBusinessID)
+	if err != nil {
+		return err
+	}
+	runID := c.String(FlagRunID)
+	archetype := getArchetype(c)
+	archetypeID := chasm.ArchetypeID(c.Uint(FlagArchetypeID))
+	archetypeSelector := fmt.Sprintf("Archetype: %s", archetype)
+	if c.IsSet(FlagArchetypeID) {
+		archetypeSelector = fmt.Sprintf("ArchetypeID: %d", archetypeID)
+	}
+
+	prompter.Prompt(fmt.Sprintf(
+		"Namespace: %s BusinessID: %s RunID: %s %s\nDisable virtual time skipping for this execution?",
+		namespaceName,
+		businessID,
+		runID,
+		archetypeSelector,
+	))
+	prompter.Prompt("This directly modifies mutable state without recording a history event. Confirm again?")
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+	response, err := clientFactory.AdminClient(c).DisableTimeSkipping(ctx, &adminservice.DisableTimeSkippingRequest{
+		Namespace: namespaceName,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: businessID,
+			RunId:      runID,
+		},
+		Archetype:   archetype,
+		ArchetypeId: archetypeID,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to disable time skipping: %w", err)
+	}
+	if !response.GetDisabled() {
+		_, _ = fmt.Fprintln(c.App.Writer, "time skipping not enabled")
+		return nil
+	}
+	_, _ = fmt.Fprintln(c.App.Writer, "time skipping disabled")
+	return nil
+}
+
 // AdminDeleteWorkflow force deletes a workflow's mutable state (both concrete and current), history, and visibility
 // records as long as it's possible.
 // It should only be used as a troubleshooting tool since no additional check will be done before the deletion.

@@ -475,13 +475,13 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
 					},
 				}
 				return versionHistories, []*persistencespb.VersionedTransition{
-					{NamespaceFailoverVersion: 1, TransitionCount: 12},
-					{NamespaceFailoverVersion: 2, TransitionCount: 15},
-				}, []*persistencespb.StateMachineTombstoneBatch{
-					{
-						VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12},
-					},
-				}, nil
+						{NamespaceFailoverVersion: 1, TransitionCount: 12},
+						{NamespaceFailoverVersion: 2, TransitionCount: 15},
+					}, []*persistencespb.StateMachineTombstoneBatch{
+						{
+							VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12},
+						},
+					}, nil
 			},
 		},
 		{
@@ -500,13 +500,13 @@ func (s *syncWorkflowStateSuite) TestSyncWorkflowState_ReturnSnapshot() {
 					},
 				}
 				return versionHistories, []*persistencespb.VersionedTransition{
-					{NamespaceFailoverVersion: 1, TransitionCount: 13},
-					{NamespaceFailoverVersion: 2, TransitionCount: 15},
-				}, []*persistencespb.StateMachineTombstoneBatch{
-					{
-						VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12},
-					},
-				}, &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 13}
+						{NamespaceFailoverVersion: 1, TransitionCount: 13},
+						{NamespaceFailoverVersion: 2, TransitionCount: 15},
+					}, []*persistencespb.StateMachineTombstoneBatch{
+						{
+							VersionedTransition: &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 12},
+						},
+					}, &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 13}
 			},
 		},
 	}

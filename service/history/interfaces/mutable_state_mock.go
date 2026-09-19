@@ -1974,6 +1974,20 @@ func (mr *MockMutableStateMockRecorder) DeleteSubStateMachine(path any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSubStateMachine", reflect.TypeOf((*MockMutableState)(nil).DeleteSubStateMachine), path)
 }
 
+// DisableTimeSkipping mocks base method.
+func (m *MockMutableState) DisableTimeSkipping() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DisableTimeSkipping")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// DisableTimeSkipping indicates an expected call of DisableTimeSkipping.
+func (mr *MockMutableStateMockRecorder) DisableTimeSkipping() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DisableTimeSkipping", reflect.TypeOf((*MockMutableState)(nil).DisableTimeSkipping))
+}
+
 // EnsureChasmWorkflowComponent mocks base method.
 func (m *MockMutableState) EnsureChasmWorkflowComponent(ctx context.Context) {
 	m.ctrl.T.Helper()

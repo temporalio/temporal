@@ -23,6 +23,43 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+func (s *mutableStateSuite) TestDisableTimeSkipping() {
+	s.Run("NotConfigured", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+		s.False(s.mutableState.DisableTimeSkipping())
+		s.False(s.mutableState.timeSkippingInfoUpdated)
+	})
+
+	s.Run("AlreadyDisabled", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: false},
+		}
+		s.False(s.mutableState.DisableTimeSkipping())
+		s.False(s.mutableState.timeSkippingInfoUpdated)
+	})
+
+	s.Run("Enabled", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
+		s.True(s.mutableState.DisableTimeSkipping())
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.False(tsi.GetConfig().GetEnabled())
+		s.True(s.mutableState.timeSkippingInfoUpdated)
+	})
+
+	s.Run("PendingFastForwardIsStamped", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+			FastForwardInfo: &persistencespb.FastForwardInfo{
+				TargetTime: timestamppb.New(time.Now().Add(time.Hour)),
+			},
+		}
+		s.True(s.mutableState.DisableTimeSkipping())
+		s.NotNil(s.mutableState.executionInfo.TimeSkippingInfo.GetFastForwardInfoLastUpdateVersionedTransition())
+	})
+}
+
 func (s *mutableStateSuite) TestPropagateTimeSkippingToNextRun() {
 	fixed := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
 	fixedTS := timestamppb.New(fixed)

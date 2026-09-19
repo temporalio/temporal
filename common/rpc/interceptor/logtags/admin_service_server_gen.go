@@ -66,6 +66,13 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 		return nil
 	case *adminservice.DescribeTaskQueuePartitionResponse:
 		return nil
+	case *adminservice.DisableTimeSkippingRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetExecution().GetRunId()),
+		}
+	case *adminservice.DisableTimeSkippingResponse:
+		return nil
 	case *adminservice.ForceUnloadTaskQueuePartitionRequest:
 		return nil
 	case *adminservice.ForceUnloadTaskQueuePartitionResponse:
