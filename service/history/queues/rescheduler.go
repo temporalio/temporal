@@ -33,8 +33,9 @@ type (
 	// Rescheduler buffers task executables that are failed to process and
 	// resubmit them to the task scheduler when the Reschedule method is called.
 	Rescheduler interface {
-		// Add task executable to the rescheduler.
-		Add(task Executable, rescheduleTime time.Time)
+		// Add task executable to the rescheduler. throttle is the budget it is waiting on, or
+		// the zero key when the controller does not pace it.
+		Add(task Executable, rescheduleTime time.Time, throttle ThrottleKey)
 
 		// Reschedule triggers an immediate reschedule for provided namespace
 		// ignoring executable's reschedule time.
@@ -142,9 +143,9 @@ func (r *reschedulerImpl) Stop() {
 func (r *reschedulerImpl) Add(
 	executable Executable,
 	rescheduleTime time.Time,
+	throttle ThrottleKey,
 ) {
-	key := reschedulerKey{TaskChannelKey: r.taskChannelKeyFn(executable)}
-	key.Throttle = executableThrottleKey(executable)
+	key := reschedulerKey{TaskChannelKey: r.taskChannelKeyFn(executable), Throttle: throttle}
 
 	r.Lock()
 	pq := r.getOrCreateClassLocked(key)
@@ -158,20 +159,6 @@ func (r *reschedulerImpl) Add(
 
 	if r.isStopped() {
 		r.drain()
-	}
-}
-
-func executableThrottleKey(executable Executable) ThrottleKey {
-	reporter, ok := executable.(ThrottleKeyProvider)
-	if !ok {
-		return ThrottleKey{}
-	}
-	return reporter.ThrottleKey()
-}
-
-func setThrottleAdmitted(executable Executable, admitted bool) {
-	if reporter, ok := executable.(ThrottleKeyProvider); ok {
-		reporter.SetThrottleAdmitted(admitted)
 	}
 }
 
@@ -337,11 +324,11 @@ func (r *reschedulerImpl) drainClassLocked(
 		executable.SetScheduledTime(pass.now)
 		if metered {
 			// Mark before submitting: a worker can reach HandleErr before TrySubmit returns.
-			setThrottleAdmitted(executable, true)
+			executable.SetThrottleAdmitted(true)
 		}
 		if !r.scheduler.TrySubmit(executable) {
 			if metered {
-				setThrottleAdmitted(executable, false)
+				executable.SetThrottleAdmitted(false)
 				r.throttleState.Return(key.Throttle)
 			}
 			pass.wakeAt(pass.now.Add(

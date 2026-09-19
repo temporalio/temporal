@@ -353,6 +353,18 @@ func (mr *MockExecutableMockRecorder) SetTaskID(id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetTaskID", reflect.TypeOf((*MockExecutable)(nil).SetTaskID), id)
 }
 
+// SetThrottleAdmitted mocks base method.
+func (m *MockExecutable) SetThrottleAdmitted(admitted bool) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetThrottleAdmitted", admitted)
+}
+
+// SetThrottleAdmitted indicates an expected call of SetThrottleAdmitted.
+func (mr *MockExecutableMockRecorder) SetThrottleAdmitted(admitted any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetThrottleAdmitted", reflect.TypeOf((*MockExecutable)(nil).SetThrottleAdmitted), admitted)
+}
+
 // SetVisibilityTime mocks base method.
 func (m *MockExecutable) SetVisibilityTime(timestamp time.Time) {
 	m.ctrl.T.Helper()
@@ -377,6 +389,20 @@ func (m *MockExecutable) State() tasks.State {
 func (mr *MockExecutableMockRecorder) State() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "State", reflect.TypeOf((*MockExecutable)(nil).State))
+}
+
+// ThrottleKey mocks base method.
+func (m *MockExecutable) ThrottleKey() ThrottleKey {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ThrottleKey")
+	ret0, _ := ret[0].(ThrottleKey)
+	return ret0
+}
+
+// ThrottleKey indicates an expected call of ThrottleKey.
+func (mr *MockExecutableMockRecorder) ThrottleKey() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ThrottleKey", reflect.TypeOf((*MockExecutable)(nil).ThrottleKey))
 }
 
 // MockExecutor is a mock of Executor interface.

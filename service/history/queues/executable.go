@@ -50,6 +50,13 @@ type (
 		GetPriority() ctasks.Priority
 		GetScheduledTime() time.Time
 		SetScheduledTime(time.Time)
+
+		// ThrottleKey is the budget this task last failed against, or the zero key.
+		ThrottleKey() ThrottleKey
+
+		// SetThrottleAdmitted records that the gate issued this dispatch. It is set before the
+		// scheduler handoff, which is what carries it to the worker that reads it.
+		SetThrottleAdmitted(admitted bool)
 	}
 
 	Executor interface {
@@ -74,13 +81,6 @@ type (
 	// not be rescheduled. Tasks should be enqueued to the DLQ immediately if an error is marked as terminal.
 	MaybeTerminalTaskError interface {
 		IsTerminalTaskError() bool
-	}
-
-	// ThrottleKeyProvider is implemented by executables the controller can pace. The zero key
-	// means unclassified.
-	ThrottleKeyProvider interface {
-		ThrottleKey() ThrottleKey
-		SetThrottleAdmitted(admitted bool)
 	}
 )
 
@@ -750,7 +750,7 @@ func (e *executableImpl) Nack(err error) {
 			e.inMemoryNoUserLatency += backoffDuration
 		}
 
-		e.rescheduler.Add(e, e.timeSource.Now().Add(backoffDuration))
+		e.rescheduler.Add(e, e.timeSource.Now().Add(backoffDuration), e.throttleKey)
 	}
 }
 
@@ -760,7 +760,7 @@ func (e *executableImpl) Reschedule() {
 		return
 	}
 
-	e.rescheduler.Add(e, e.timeSource.Now().Add(e.backoffDuration(nil)))
+	e.rescheduler.Add(e, e.timeSource.Now().Add(e.backoffDuration(nil)), e.throttleKey)
 }
 
 func (e *executableImpl) State() ctasks.State {
@@ -817,7 +817,7 @@ func (e *executableImpl) shouldResubmitOnNack(err error) bool {
 	if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) && common.IsResourceExhausted(err) {
 		// Resubmitting synchronously bypasses the rescheduler, and with it the gate, so every
 		// parked task would keep rediscovering the same constraint at full dispatch cost.
-		if e.throttleState != nil && e.throttleState.Enabled() && e.ThrottleKey() != (ThrottleKey{}) {
+		if e.throttleState != nil && e.throttleState.Enabled() && e.throttleKey != (ThrottleKey{}) {
 			return false
 		}
 		if e.resourceExhaustedCount > resourceExhaustedResubmitMaxAttempts {
@@ -874,13 +874,12 @@ func (e *executableImpl) clearThrottle() {
 	e.throttleAdmitted = false
 }
 
-// Called before the scheduler handoff, which is what carries it to the reading worker.
-func (e *executableImpl) SetThrottleAdmitted(admitted bool) {
-	e.throttleAdmitted = admitted
-}
-
 func (e *executableImpl) ThrottleKey() ThrottleKey {
 	return e.throttleKey
+}
+
+func (e *executableImpl) SetThrottleAdmitted(admitted bool) {
+	e.throttleAdmitted = admitted
 }
 
 func (e *executableImpl) backoffDuration(

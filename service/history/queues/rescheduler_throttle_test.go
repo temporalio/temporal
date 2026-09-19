@@ -81,6 +81,15 @@ func newTestRescheduler(
 	return r, scheduler, gate
 }
 
+// addThrottled parks a task the way the executable does: with the class it last failed under.
+func addThrottled(r *reschedulerImpl, e *throttledExecutable, at time.Time) {
+	key := ThrottleKey{}
+	if e.known {
+		key = e.key
+	}
+	r.Add(e, at, key)
+}
+
 func apsKey(namespaceID string) ThrottleKey {
 	return NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, namespaceID)
 }
@@ -105,8 +114,8 @@ func TestReschedule_ThrottledClassDoesNotBlockHealthyClass(t *testing.T) {
 	healthy := newThrottledExecutable(ctrl, ThrottleKey{}, false)
 	healthy.EXPECT().GetNamespaceID().Return("ns-healthy").AnyTimes()
 
-	r.Add(throttled, now)
-	r.Add(healthy, now)
+	addThrottled(r, throttled, now)
+	addThrottled(r, healthy, now)
 
 	submitted := make([]Executable, 0, 2)
 	scheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(e Executable) bool {
@@ -136,7 +145,7 @@ func TestReschedule_BudgetIsCeilingNotQuota(t *testing.T) {
 	key := apsKey("ns-1")
 	notDue := newThrottledExecutable(ctrl, key, true)
 	notDue.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()
-	r.Add(notDue, now.Add(time.Minute))
+	addThrottled(r, notDue, now.Add(time.Minute))
 
 	scheduler.EXPECT().TrySubmit(gomock.Any()).Times(0)
 
@@ -166,7 +175,7 @@ func TestReschedule_SingleTimerGateUpdatePerPass(t *testing.T) {
 		e := newThrottledExecutable(ctrl, ThrottleKey{}, false)
 		namespaceID := string(rune('a' + i))
 		e.EXPECT().GetNamespaceID().Return(namespaceID).AnyTimes()
-		r.Add(e, now.Add(delay))
+		addThrottled(r, e, now.Add(delay))
 	}
 
 	gate.updates = nil
@@ -194,7 +203,7 @@ func TestReschedule_BudgetDeniedWakesInsideControlWindow(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		e := newThrottledExecutable(ctrl, key, true)
 		e.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()
-		r.Add(e, now)
+		addThrottled(r, e, now)
 	}
 
 	scheduler.EXPECT().TrySubmit(gomock.Any()).Times(0)
@@ -243,7 +252,7 @@ func TestReschedule_DisabledControllerReleasesEverythingDue(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		e := newThrottledExecutable(ctrl, apsKey("ns-1"), true)
 		e.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()
-		r.Add(e, now)
+		addThrottled(r, e, now)
 	}
 
 	scheduler.EXPECT().TrySubmit(gomock.Any()).Return(true).Times(10)
@@ -271,7 +280,7 @@ func TestReschedule_DisablingControllerDrainsExistingGatedQueues(t *testing.T) {
 	for range 3 {
 		e := newThrottledExecutable(ctrl, key, true)
 		e.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()
-		r.Add(e, now)
+		addThrottled(r, e, now)
 	}
 
 	enabled = false
@@ -291,7 +300,7 @@ func TestReschedule_PermitIsVisibleBeforeSubmit(t *testing.T) {
 	key := apsKey("ns-1")
 	e := newThrottledExecutable(ctrl, key, true)
 	e.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()
-	r.Add(e, now)
+	addThrottled(r, e, now)
 
 	scheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(Executable) bool {
 		require.True(t, e.admitted)
@@ -330,8 +339,8 @@ func TestReschedule_HighPriorityGetsBudgetFirst(t *testing.T) {
 	high := newThrottledExecutable(ctrl, key, true)
 	high.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()
 	high.EXPECT().GetPriority().Return(ctasks.PriorityHigh).AnyTimes()
-	r.Add(preemptable, now)
-	r.Add(high, now)
+	addThrottled(r, preemptable, now)
+	addThrottled(r, high, now)
 
 	var submitted []Executable
 	scheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(e Executable) bool {
@@ -359,7 +368,7 @@ func TestReschedule_FailedSubmitRefundsTheToken(t *testing.T) {
 	key := apsKey("ns-1")
 	e := newThrottledExecutable(ctrl, key, true)
 	e.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()
-	r.Add(e, now)
+	addThrottled(r, e, now)
 
 	scheduler.EXPECT().TrySubmit(gomock.Any()).Return(false).Times(1)
 	r.reschedule()
@@ -412,7 +421,7 @@ func TestReschedule_EnablingTheControllerPacesWorkAlreadyParked(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		e := newThrottledExecutable(ctrl, key, true)
 		e.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()
-		r.Add(e, now)
+		addThrottled(r, e, now)
 	}
 	require.Equal(t, 50, r.Len())
 
@@ -480,7 +489,7 @@ func TestReschedule_CursorRotatesBetweenEqualClasses(t *testing.T) {
 	for _, ns := range []string{"ns-1", "ns-2", "ns-3"} {
 		e := newThrottledExecutable(ctrl, apsKey(ns), true)
 		e.EXPECT().GetNamespaceID().Return(ns).AnyTimes()
-		r.Add(e, now)
+		addThrottled(r, e, now)
 	}
 	require.Len(t, r.keyOrder, 3)
 
@@ -526,11 +535,11 @@ func TestReschedule_UngovernedTasksDoNotWaitOnAnotherClassBudget(t *testing.T) {
 	key := apsKey("ns-1")
 	governed := newThrottledExecutable(ctrl, key, true)
 	governed.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()
-	r.Add(governed, now)
+	addThrottled(r, governed, now)
 
 	ungoverned := newThrottledExecutable(ctrl, ThrottleKey{}, false)
 	ungoverned.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()
-	r.Add(ungoverned, now)
+	addThrottled(r, ungoverned, now)
 
 	// Both were parked before the controller was gating, which is when the classes are formed.
 	enabled.Store(true)

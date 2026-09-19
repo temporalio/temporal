@@ -34,7 +34,7 @@ func TestExecutable_RejectionUnderAnotherBudgetChargesTheIssuingClass(t *testing
 		enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 	)
 	issuing := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
-	require.Equal(t, issuing, e.ThrottleKey())
+	require.Equal(t, issuing, e.throttleKey)
 
 	// ...and the rescheduler then releases it from that class.
 	allowed, _, _ := state.Admit(issuing)
@@ -62,7 +62,7 @@ func TestExecutable_BusyWorkflowDoesNotChargeTheIssuingClass(t *testing.T) {
 		enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 	)
 	issuing := NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
-	require.Equal(t, issuing, e.ThrottleKey())
+	require.Equal(t, issuing, e.throttleKey)
 
 	// ...and the rescheduler then releases it from that class.
 	allowed, _, _ := state.Admit(issuing)
@@ -91,7 +91,7 @@ func TestExecutable_ClassifiesWhileTheControllerIsOff(t *testing.T) {
 		enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 	)
 
-	key := e.ThrottleKey()
+	key := e.throttleKey
 	require.NotEqual(t, ThrottleKey{}, key, "the task must know its class before the flag is on")
 	require.Equal(t, enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, key.Cause)
 	require.Zero(t, throttleLen(state), "a disabled controller must track nothing")
@@ -107,13 +107,13 @@ func TestExecutable_UngovernedCauseDropsTheKey(t *testing.T) {
 		enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
 		enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 	)
-	require.NotEqual(t, ThrottleKey{}, e.ThrottleKey())
+	require.NotEqual(t, ThrottleKey{}, e.throttleKey)
 
 	e.reportThrottle(
 		enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
 		enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
 	)
-	require.Equal(t, ThrottleKey{}, e.ThrottleKey(),
+	require.Equal(t, ThrottleKey{}, e.throttleKey,
 		"a system scoped limit is not this namespace's budget")
 }
 
