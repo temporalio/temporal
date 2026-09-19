@@ -3952,8 +3952,6 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 		return nil
 	}
 
-	// todo@feiyang: how to check that the current cluster is active cluster
-	// and this closeTransaction state change logic should only happen in active cluster
 	rootComponent, err := n.Component(immutableContext, ComponentRef{})
 	if err != nil {
 		return err
