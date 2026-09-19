@@ -14,13 +14,13 @@ import (
 func TestPropagateTimeSkippingToOtherExecution(t *testing.T) {
 	t.Parallel()
 
-	t.Run("nil", func(t *testing.T) {
+	t.Run("when time-skipping info is nil, nothing is propagated", func(t *testing.T) {
 		config, state := PropagateTimeSkippingToOtherExecution(nil)
 		require.Nil(t, config)
 		require.Nil(t, state)
 	})
 
-	t.Run("config and virtual time", func(t *testing.T) {
+	t.Run("by default, state and config are propagated to other executions without fast-forward", func(t *testing.T) {
 		sourceConfig := &commonpb.TimeSkippingConfig{
 			Enabled:             true,
 			MaxSessionSkipCount: 7,
@@ -44,7 +44,7 @@ func TestPropagateTimeSkippingToOtherExecution(t *testing.T) {
 		require.True(t, sourceConfig.GetEnabled(), "propagated config must be cloned")
 	})
 
-	t.Run("disable propagation only suppresses config", func(t *testing.T) {
+	t.Run("when propagation is disabled, only virtual time is propagated", func(t *testing.T) {
 		config, state := PropagateTimeSkippingToOtherExecution(&persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{
 				Enabled:            true,
@@ -65,7 +65,7 @@ func TestTimeSkippingTransition(t *testing.T) {
 	t.Parallel()
 	base := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
 
-	t.Run("New sets only the current time", func(t *testing.T) {
+	t.Run("new transition sets only the current time", func(t *testing.T) {
 		tr := NewTimeSkippingTransition(base)
 		require.Equal(t, base, tr.CurrentTime)
 		require.True(t, tr.GetTargetTime().IsZero())
@@ -74,7 +74,7 @@ func TestTimeSkippingTransition(t *testing.T) {
 	})
 	// Invariant 1: every method is nil-safe — on a nil receiver, and (for GateByFastForward)
 	// on a nil/absent fast-forward argument.
-	t.Run("nil safe", func(t *testing.T) {
+	t.Run("nil inputs are safe", func(t *testing.T) {
 		var nilTr *TimeSkippingTransition
 		require.False(t, nilTr.IsValid(), "nil transition is never valid")
 		require.NotPanics(t, func() { nilTr.TrackEarliestFutureTime(base.Add(time.Hour)) })
@@ -99,7 +99,7 @@ func TestTimeSkippingTransition(t *testing.T) {
 
 	// Invariant 2: TrackEarliestFutureTime keeps the earliest strictly-trackable future time
 	// and ignores anything that is not a usable future skip target.
-	t.Run("earliest future time", func(t *testing.T) {
+	t.Run("track earliest future time", func(t *testing.T) {
 		t.Run("ignores zero and past candidates", func(t *testing.T) {
 			tr := NewTimeSkippingTransition(base)
 			tr.TrackEarliestFutureTime(time.Time{})          // zero candidate
@@ -107,7 +107,7 @@ func TestTimeSkippingTransition(t *testing.T) {
 			require.True(t, tr.GetTargetTime().IsZero())
 		})
 
-		t.Run("keeps the earliest of several future candidates", func(t *testing.T) {
+		t.Run("keeps the earliest future candidate", func(t *testing.T) {
 			tr := NewTimeSkippingTransition(base)
 			tr.TrackEarliestFutureTime(base.Add(3 * time.Hour))
 			require.Equal(t, base.Add(3*time.Hour), tr.GetTargetTime())
@@ -130,8 +130,8 @@ func TestTimeSkippingTransition(t *testing.T) {
 	// it is the earliest target (nothing earlier tracked). When a real candidate is earlier the
 	// fast-forward is not reached and skipping stays enabled. An absent/reached/zero fast-forward
 	// is a no-op.
-	t.Run("fast-forward fallback and gating", func(t *testing.T) {
-		t.Run("taken as the target and disables when nothing earlier exists", func(t *testing.T) {
+	t.Run("gate by fast-forward", func(t *testing.T) {
+		t.Run("uses fast-forward when no earlier target exists", func(t *testing.T) {
 			tr := NewTimeSkippingTransition(base)
 			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(time.Hour))})
 			require.True(t, base.Add(time.Hour).Equal(tr.GetTargetTime()))
@@ -139,7 +139,7 @@ func TestTimeSkippingTransition(t *testing.T) {
 			require.True(t, tr.IsValid())
 		})
 
-		t.Run("an earlier tracked target wins over a later fast-forward", func(t *testing.T) {
+		t.Run("earlier tracked target wins over fast-forward", func(t *testing.T) {
 			tr := NewTimeSkippingTransition(base)
 			tr.TrackEarliestFutureTime(base.Add(time.Hour))
 			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(3 * time.Hour))})
@@ -147,7 +147,7 @@ func TestTimeSkippingTransition(t *testing.T) {
 			require.False(t, tr.DisabledAfterFastForward)
 		})
 
-		t.Run("an earlier fast-forward wins over a later tracked target and disables", func(t *testing.T) {
+		t.Run("earlier fast-forward wins and disables time skipping", func(t *testing.T) {
 			tr := NewTimeSkippingTransition(base)
 			tr.TrackEarliestFutureTime(base.Add(3 * time.Hour))
 			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(time.Hour))})
@@ -155,7 +155,7 @@ func TestTimeSkippingTransition(t *testing.T) {
 			require.True(t, tr.DisabledAfterFastForward)
 		})
 
-		t.Run("ignores an already-reached fast-forward", func(t *testing.T) {
+		t.Run("ignores an already reached fast-forward", func(t *testing.T) {
 			tr := NewTimeSkippingTransition(base)
 			tr.GateByFastForward(&persistencespb.FastForwardInfo{
 				HasReached: true,
@@ -165,44 +165,53 @@ func TestTimeSkippingTransition(t *testing.T) {
 			require.False(t, tr.DisabledAfterFastForward)
 		})
 
-		t.Run("ignores a zero-valued target time", func(t *testing.T) {
+		t.Run("ignores a zero fast-forward target", func(t *testing.T) {
 			tr := NewTimeSkippingTransition(base)
 			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(time.Time{})})
 			require.True(t, tr.GetTargetTime().IsZero())
 			require.False(t, tr.DisabledAfterFastForward)
 		})
 
-		t.Run("target equal to current disables as a bare signal", func(t *testing.T) {
+		t.Run("fast-forward at current time disables without a target", func(t *testing.T) {
 			tr := NewTimeSkippingTransition(base)
 			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base)})
-			require.True(t, tr.GetTargetTime().IsZero())
+			require.True(t, tr.GetTargetTime().IsZero(), "a target at now is already due, not a future skip target")
 			require.True(t, tr.DisabledAfterFastForward)
 			require.True(t, tr.IsValid())
 		})
 
-		t.Run("past target disables as a bare signal", func(t *testing.T) {
+		t.Run("past fast-forward disables without a target", func(t *testing.T) {
 			tr := NewTimeSkippingTransition(base)
 			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(-time.Hour))})
 			require.True(t, tr.GetTargetTime().IsZero(), "a past target is not a future skip target")
 			require.True(t, tr.DisabledAfterFastForward)
 			require.True(t, tr.IsValid())
 		})
+
+		t.Run("stale fast-forward clears the tracked target and disables time skipping", func(t *testing.T) {
+			tr := NewTimeSkippingTransition(base)
+			tr.TrackEarliestFutureTime(base.Add(time.Hour))
+			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(-time.Hour))})
+			require.True(t, tr.GetTargetTime().IsZero(), "a stale fast-forward clears the tracked target")
+			require.True(t, tr.DisabledAfterFastForward)
+			require.True(t, tr.IsValid(), "a bare disable signal is still a valid transition")
+		})
 	})
 
 	// Invariant 4: without a current time the transition is always invalid and no setter can
 	// make it valid — every field is relative to the current time.
-	t.Run("no current time always invalid", func(t *testing.T) {
-		t.Run("a directly-set target is still invalid", func(t *testing.T) {
+	t.Run("missing current time", func(t *testing.T) {
+		t.Run("a directly set target remains invalid", func(t *testing.T) {
 			tr := &TimeSkippingTransition{targetTime: base.Add(time.Hour)}
 			require.False(t, tr.IsValid())
 		})
 
-		t.Run("a directly-set disable signal is still invalid", func(t *testing.T) {
+		t.Run("a directly set disable signal remains invalid", func(t *testing.T) {
 			tr := &TimeSkippingTransition{DisabledAfterFastForward: true}
 			require.False(t, tr.IsValid())
 		})
 
-		t.Run("setters are no-ops without a current time", func(t *testing.T) {
+		t.Run("setters are no-ops", func(t *testing.T) {
 			tr := &TimeSkippingTransition{}
 			tr.TrackEarliestFutureTime(base)
 			tr.GateByFastForward(&persistencespb.FastForwardInfo{TargetTime: timestamppb.New(base.Add(time.Hour))})

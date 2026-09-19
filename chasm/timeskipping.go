@@ -89,7 +89,11 @@ func NewTimeSkippingTransition(currentTime time.Time) *TimeSkippingTransition {
 // signal. Nil-safe. A transition without a current time is never valid — every meaningful field is
 // derived relative to the current time, so without it there is nothing to apply.
 func (t *TimeSkippingTransition) IsValid() bool {
-	return t != nil && !t.CurrentTime.IsZero() && (!t.targetTime.IsZero() || t.DisabledAfterFastForward)
+	return t.isInitialized() && (!t.targetTime.IsZero() || t.DisabledAfterFastForward)
+}
+
+func (t *TimeSkippingTransition) isInitialized() bool {
+	return t != nil && !t.CurrentTime.IsZero()
 }
 
 // GetTargetTime returns the earliest tracked skip target, or the zero time when none has been set.
@@ -103,7 +107,7 @@ func (t *TimeSkippingTransition) GetTargetTime() time.Time {
 }
 
 func (t *TimeSkippingTransition) TrackEarliestFutureTime(candidate time.Time) {
-	if t == nil || t.CurrentTime.IsZero() || candidate.IsZero() || candidate.Before(t.CurrentTime) {
+	if !t.isInitialized() || candidate.IsZero() || candidate.Before(t.CurrentTime) {
 		return
 	}
 	if t.targetTime.IsZero() || candidate.Before(t.targetTime) {
@@ -112,7 +116,7 @@ func (t *TimeSkippingTransition) TrackEarliestFutureTime(candidate time.Time) {
 }
 
 func (t *TimeSkippingTransition) GateByFastForward(ff *persistencespb.FastForwardInfo) {
-	if t == nil || t.CurrentTime.IsZero() {
+	if !t.isInitialized() {
 		return
 	}
 	if ff == nil || ff.GetHasReached() || ff.GetTargetTime() == nil ||

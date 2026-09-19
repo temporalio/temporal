@@ -3952,8 +3952,6 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 		return nil
 	}
 
-	// CONSIDER(time-skipping): Pass the transaction policy into CHASM so time skipping is
-	// explicitly restricted to active-cluster transactions.
 	rootComponent, err := n.Component(immutableContext, ComponentRef{})
 	if err != nil {
 		return err
