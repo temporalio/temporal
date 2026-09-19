@@ -24,7 +24,6 @@ func (s *nodeSuite) newSkipPersistenceTestTree(
 	if len(serializedNodes) == 0 {
 		return NewEmptyTree(
 			s.registry,
-			s.timeSource,
 			s.nodeBackend,
 			s.nodePathEncoder,
 			s.logger,
@@ -35,7 +34,6 @@ func (s *nodeSuite) newSkipPersistenceTestTree(
 	root, err := NewTreeFromDB(
 		serializedNodes,
 		s.registry,
-		s.timeSource,
 		s.nodeBackend,
 		s.nodePathEncoder,
 		s.logger,
