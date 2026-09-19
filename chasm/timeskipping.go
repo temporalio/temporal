@@ -5,6 +5,8 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // =============================================================================
@@ -38,6 +40,32 @@ type TimeSkippingRuntimeGate interface {
 	IsExecutionSkippable(ctx Context) bool
 }
 
+// PropagateTimeSkippingToOtherExecution snapshots time-skipping state for a new, independent
+// execution that shares the source execution's virtual clock, such as a child workflow or a
+// workflow started by a schedule.
+func PropagateTimeSkippingToOtherExecution(
+	tsi *persistencespb.TimeSkippingInfo,
+) (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation) {
+	if tsi == nil {
+		return nil, nil
+	}
+
+	var statePropagation *commonpb.TimeSkippingStatePropagation
+	if accumulated := tsi.GetAccumulatedSkippedDuration().AsDuration(); accumulated > 0 {
+		statePropagation = &commonpb.TimeSkippingStatePropagation{
+			InitialSkippedDuration: durationpb.New(accumulated),
+		}
+	}
+
+	config := tsi.GetConfig()
+	if config == nil || config.GetDisablePropagation() {
+		return nil, statePropagation
+	}
+	propagatedConfig := common.CloneProto(config)
+	propagatedConfig.FastForwardConfig = nil
+	return propagatedConfig, statePropagation
+}
+
 // =============================================================================
 // Time Skipping Data Structure
 // =============================================================================
@@ -53,8 +81,6 @@ type TimeSkippingTransition struct {
 
 // NewTimeSkippingTransition creates a new time-skipping transition with the current time.
 // Methods provided by this data structure cannot be used without a current time.
-//
-// todo@time-skipping: the methods will be used by CHASM so keep as public.
 func NewTimeSkippingTransition(currentTime time.Time) *TimeSkippingTransition {
 	return &TimeSkippingTransition{CurrentTime: currentTime}
 }

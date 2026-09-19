@@ -428,7 +428,6 @@ func NewMutableState(
 
 	s.mustInitHSM()
 
-	// TODO@time-skipping: support time skipping for chasm
 	if s.config.EnableChasm(namespaceName) {
 		s.chasmTree = chasm.NewEmptyTree(
 			shard.ChasmRegistry(),
@@ -581,7 +580,6 @@ func NewMutableStateFromDB(
 		mutableState.chasmNodeSizes[key] = nodeSize
 	}
 
-	// TODO@time-skipping: support time skipping for chasm
 	if shard.GetConfig().EnableChasm(namespaceEntry.Name().String()) {
 		var err error
 		mutableState.chasmTree, err = chasm.NewTreeFromDB(
@@ -6472,7 +6470,7 @@ func (ms *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	childTSC, childTSStateProp := propagateTimeSkippingToOtherExecution(ms.GetExecutionInfo().GetTimeSkippingInfo())
+	childTSC, childTSStateProp := chasm.PropagateTimeSkippingToOtherExecution(ms.GetExecutionInfo().GetTimeSkippingInfo())
 	event, batchID := ms.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
 		command,
@@ -7791,9 +7789,8 @@ func (ms *MutableStateImpl) closeTransaction(
 	// Run time-skipping after closeTransactionHandleWorkflowTask so a just-scheduled
 	// workflow task is visible to (and suppresses) the idle check, and before isStateDirty
 	// so the transition event we emit here participates in the dirty-state computation.
-	// todo@time-skipping: but chasm close transaction logic is after isStateDirty,
-	// and need to reconsider the sequence of time skipping close trx handling in this function
-	// when supporting chasm.
+	// CONSIDER(time-skipping): Move CHASM time-skipping handling before isStateDirty so a
+	// time-skipping-only CHASM mutation participates in transition history.
 	regenTimerTasksForWorkflowTimeSkipping := ms.closeTransactionHandleWorkflowTimeSkipping(ctx, transactionPolicy)
 
 	// Save if the state is dirty before closeTransactionPrepareEvents since it flushes the buffer
