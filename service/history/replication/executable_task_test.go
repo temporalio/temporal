@@ -1086,25 +1086,101 @@ func (s *executableTaskSuite) TestMarkPoisonPill() {
 	s.NoError(err)
 }
 
-func (s *executableTaskSuite) TestMarkPoisonPill_MaxAttemptsReached() {
-	s.task.markPoisonPillAttempts = MarkPoisonPillMaxAttempts - 1
-	shardID := rand.Int31()
-	shardContext := historyi.NewMockShardContext(s.controller)
-	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
-		namespace.ID(s.namespaceId),
-		s.workflowId,
-	).Return(shardContext, nil).AnyTimes()
-	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
-	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
-		ShardID:           shardID,
-		SourceClusterName: s.task.sourceClusterName,
-		TaskInfo:          s.task.replicationTask.RawTaskInfo,
-	}).Return(serviceerror.NewInternal("failed"))
+func TestExecutableTaskTrackerHandlesRepeatedDLQFailures(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		failShardLookup bool
+		dropAfterFive   bool
+	}{
+		{name: "DLQ write failure"},
+		{name: "shard lookup failure", failShardLookup: true},
+		{name: "DLQ write failure with breakglass", dropAfterFive: true},
+		{name: "shard lookup failure with breakglass", failShardLookup: true, dropAfterFive: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			controller := gomock.NewController(t)
+			shardController := shard.NewMockController(controller)
+			executionManager := persistence.NewMockExecutionManager(controller)
+			shardContext := historyi.NewMockShardContext(controller)
+			shardContext.EXPECT().GetShardID().Return(int32(2)).AnyTimes()
+			config := tests.NewDynamicConfig()
+			if tc.dropAfterFive {
+				config.ReplicationDropTaskAfterDLQFailure = func() bool { return true }
+			}
+			toolBox := ProcessToolBox{
+				Config:          config,
+				ShardController: shardController,
+				DLQWriter:       NewExecutionManagerDLQWriter(executionManager),
+				MetricsHandler:  metrics.NoopMetricsHandler,
+				Logger:          log.NewNoopLogger(),
+			}
+			taskInfo := &persistencespb.ReplicationTaskInfo{
+				NamespaceId: "namespace-id",
+				WorkflowId:  "workflow-id",
+				RunId:       "run-id",
+				TaskId:      100,
+			}
+			creationTime := time.Unix(100, 0)
+			task := &ExecutableWorkflowStateTask{
+				ExecutableTask: NewExecutableTask(
+					toolBox, taskInfo.TaskId, metrics.SyncWorkflowStateTaskScope,
+					creationTime, creationTime, "source-cluster", ClusterShardKey{ShardID: 1},
+					&replicationspb.ReplicationTask{RawTaskInfo: taskInfo},
+				),
+			}
+			task.Nack(errors.New("replication failed"))
+			tracker := NewExecutableTaskTracker(toolBox.Logger, toolBox.MetricsHandler)
+			highWatermark := WatermarkInfo{Watermark: taskInfo.TaskId + 1, Timestamp: creationTime.Add(time.Second)}
+			tracker.TrackTasks(highWatermark, task)
 
-	err := s.task.MarkPoisonPill()
-	s.Error(err)
-	err = s.task.MarkPoisonPill()
-	s.NoError(err)
+			failedAttempts := markPoisonPillBreakglassAttempts + 1
+			if tc.dropAfterFive {
+				failedAttempts = markPoisonPillBreakglassAttempts
+			}
+			failure := serviceerror.NewUnavailable("temporarily unavailable")
+			request := &persistence.PutReplicationTaskToDLQRequest{
+				ShardID:           2,
+				SourceClusterName: "source-cluster",
+				TaskInfo:          taskInfo,
+			}
+			if tc.failShardLookup {
+				shardLookupFailures := shardController.EXPECT().GetShardByNamespaceWorkflow(namespace.ID(taskInfo.NamespaceId), taskInfo.WorkflowId).
+					Return(nil, failure).Times(failedAttempts)
+				if !tc.dropAfterFive {
+					gomock.InOrder(
+						shardLookupFailures,
+						shardController.EXPECT().GetShardByNamespaceWorkflow(namespace.ID(taskInfo.NamespaceId), taskInfo.WorkflowId).
+							Return(shardContext, nil),
+					)
+					executionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), request).Return(nil)
+				}
+			} else {
+				totalAttempts := failedAttempts
+				if !tc.dropAfterFive {
+					totalAttempts++
+				}
+				shardController.EXPECT().GetShardByNamespaceWorkflow(namespace.ID(taskInfo.NamespaceId), taskInfo.WorkflowId).
+					Return(shardContext, nil).Times(totalAttempts)
+				dlqWriteFailures := executionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), request).
+					Return(failure).Times(failedAttempts)
+				if !tc.dropAfterFive {
+					gomock.InOrder(
+						dlqWriteFailures,
+						executionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), request).Return(nil),
+					)
+				}
+			}
+
+			for attempt := range failedAttempts {
+				require.Equal(t, &WatermarkInfo{Watermark: taskInfo.TaskId, Timestamp: creationTime}, tracker.LowWatermark(),
+					"failed attempt %d must not acknowledge the task", attempt+1)
+				require.Equal(t, 1, tracker.Size())
+			}
+			require.Equal(t, &highWatermark, tracker.LowWatermark())
+			require.Zero(t, tracker.Size())
+			require.Equal(t, &highWatermark, tracker.LowWatermark())
+		})
+	}
 }
 
 func (s *executableTaskSuite) TestSyncState() {

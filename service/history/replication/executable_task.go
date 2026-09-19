@@ -45,7 +45,8 @@ const (
 )
 
 const (
-	ResendAttempt = 2
+	ResendAttempt                    = 2
+	markPoisonPillBreakglassAttempts = 5
 )
 
 var (
@@ -916,12 +917,12 @@ FilterLoop:
 func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 	taskInfo := e.ReplicationTask().GetRawTaskInfo()
 
-	if e.markPoisonPillAttempts >= MarkPoisonPillMaxAttempts {
-		e.Logger.Error("MarkPoisonPill reached max attempts",
+	if e.Config.ReplicationDropTaskAfterDLQFailure() && e.markPoisonPillAttempts >= markPoisonPillBreakglassAttempts {
+		e.Logger.Error("MarkPoisonPill reached breakglass max attempts",
 			tag.SourceCluster(e.SourceClusterName()),
 			tag.ReplicationTask(taskInfo),
 		)
-		e.emitReplicationTaskError(wideevents.ReplOperationDLQWrite, "Writing replication task to DLQ reached maximum attempts", nil, map[string]any{
+		e.emitReplicationTaskError(wideevents.ReplOperationDLQWrite, "Writing replication task to DLQ reached breakglass maximum attempts", nil, map[string]any{
 			"dlq_attempt": e.markPoisonPillAttempts,
 			"disposition": wideevents.ReplDispositionDiscarded,
 			"terminal":    true,
