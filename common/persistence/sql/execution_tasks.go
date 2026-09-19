@@ -67,14 +67,22 @@ func (m *sqlExecutionStore) RangeCompleteHistoryTasks(
 	ctx context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	switch request.TaskCategory.Type() {
-	case tasks.CategoryTypeImmediate:
-		return m.rangeCompleteHistoryImmediateTasks(ctx, request)
-	case tasks.CategoryTypeScheduled:
-		return m.rangeCompleteHistoryScheduledTasks(ctx, request)
-	default:
-		return serviceerror.NewInternalf("Unknown task category type: %v", request.TaskCategory)
-	}
+	return m.txExecuteShardLocked(
+		ctx,
+		"RangeCompleteHistoryTasks",
+		request.ShardID,
+		request.RangeID,
+		func(tx sqlplugin.Tx) error {
+			switch request.TaskCategory.Type() {
+			case tasks.CategoryTypeImmediate:
+				return m.rangeCompleteHistoryImmediateTasks(ctx, tx, request)
+			case tasks.CategoryTypeScheduled:
+				return m.rangeCompleteHistoryScheduledTasks(ctx, tx, request)
+			default:
+				return serviceerror.NewInternalf("Unknown task category type: %v", request.TaskCategory)
+			}
+		},
+	)
 }
 
 func (m *sqlExecutionStore) getHistoryImmediateTasks(
@@ -167,6 +175,7 @@ func (m *sqlExecutionStore) completeHistoryImmediateTask(
 
 func (m *sqlExecutionStore) rangeCompleteHistoryImmediateTasks(
 	ctx context.Context,
+	tx sqlplugin.Tx,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
 	// This is for backward compatiblity.
@@ -175,14 +184,14 @@ func (m *sqlExecutionStore) rangeCompleteHistoryImmediateTasks(
 	categoryID := request.TaskCategory.ID()
 	switch categoryID {
 	case tasks.CategoryIDTransfer:
-		return m.rangeCompleteTransferTasks(ctx, request)
+		return m.rangeCompleteTransferTasks(ctx, tx, request)
 	case tasks.CategoryIDVisibility:
-		return m.rangeCompleteVisibilityTasks(ctx, request)
+		return m.rangeCompleteVisibilityTasks(ctx, tx, request)
 	case tasks.CategoryIDReplication:
-		return m.rangeCompleteReplicationTasks(ctx, request)
+		return m.rangeCompleteReplicationTasks(ctx, tx, request)
 	}
 
-	if _, err := m.DB.RangeDeleteFromHistoryImmediateTasks(ctx, sqlplugin.HistoryImmediateTasksRangeFilter{
+	if _, err := tx.RangeDeleteFromHistoryImmediateTasks(ctx, sqlplugin.HistoryImmediateTasksRangeFilter{
 		ShardID:            request.ShardID,
 		CategoryID:         int32(categoryID),
 		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
@@ -279,6 +288,7 @@ func (m *sqlExecutionStore) completeHistoryScheduledTask(
 
 func (m *sqlExecutionStore) rangeCompleteHistoryScheduledTasks(
 	ctx context.Context,
+	tx sqlplugin.Tx,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
 	// This is for backward compatiblity.
@@ -286,12 +296,12 @@ func (m *sqlExecutionStore) rangeCompleteHistoryScheduledTasks(
 	// so they have their own tables.
 	categoryID := request.TaskCategory.ID()
 	if categoryID == tasks.CategoryIDTimer {
-		return m.rangeCompleteTimerTasks(ctx, request)
+		return m.rangeCompleteTimerTasks(ctx, tx, request)
 	}
 
 	start := request.InclusiveMinTaskKey.FireTime
 	end := request.ExclusiveMaxTaskKey.FireTime
-	if _, err := m.DB.RangeDeleteFromHistoryScheduledTasks(ctx, sqlplugin.HistoryScheduledTasksRangeFilter{
+	if _, err := tx.RangeDeleteFromHistoryScheduledTasks(ctx, sqlplugin.HistoryScheduledTasksRangeFilter{
 		ShardID:                         request.ShardID,
 		CategoryID:                      int32(categoryID),
 		InclusiveMinVisibilityTimestamp: start,
@@ -360,9 +370,10 @@ func (m *sqlExecutionStore) completeTransferTask(
 
 func (m *sqlExecutionStore) rangeCompleteTransferTasks(
 	ctx context.Context,
+	tx sqlplugin.Tx,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	if _, err := m.DB.RangeDeleteFromTransferTasks(ctx, sqlplugin.TransferTasksRangeFilter{
+	if _, err := tx.RangeDeleteFromTransferTasks(ctx, sqlplugin.TransferTasksRangeFilter{
 		ShardID:            request.ShardID,
 		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
 		ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
@@ -434,11 +445,12 @@ func (m *sqlExecutionStore) completeTimerTask(
 
 func (m *sqlExecutionStore) rangeCompleteTimerTasks(
 	ctx context.Context,
+	tx sqlplugin.Tx,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
 	start := request.InclusiveMinTaskKey.FireTime
 	end := request.ExclusiveMaxTaskKey.FireTime
-	if _, err := m.DB.RangeDeleteFromTimerTasks(ctx, sqlplugin.TimerTasksRangeFilter{
+	if _, err := tx.RangeDeleteFromTimerTasks(ctx, sqlplugin.TimerTasksRangeFilter{
 		ShardID:                         request.ShardID,
 		InclusiveMinVisibilityTimestamp: start,
 		ExclusiveMaxVisibilityTimestamp: end,
@@ -572,9 +584,10 @@ func (m *sqlExecutionStore) completeReplicationTask(
 
 func (m *sqlExecutionStore) rangeCompleteReplicationTasks(
 	ctx context.Context,
+	tx sqlplugin.Tx,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	if _, err := m.DB.RangeDeleteFromReplicationTasks(ctx, sqlplugin.ReplicationTasksRangeFilter{
+	if _, err := tx.RangeDeleteFromReplicationTasks(ctx, sqlplugin.ReplicationTasksRangeFilter{
 		ShardID:            request.ShardID,
 		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
 		ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
@@ -747,9 +760,10 @@ func (m *sqlExecutionStore) completeVisibilityTask(
 
 func (m *sqlExecutionStore) rangeCompleteVisibilityTasks(
 	ctx context.Context,
+	tx sqlplugin.Tx,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	if _, err := m.DB.RangeDeleteFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksRangeFilter{
+	if _, err := tx.RangeDeleteFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksRangeFilter{
 		ShardID:            request.ShardID,
 		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
 		ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
