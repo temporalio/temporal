@@ -2146,28 +2146,15 @@ func (s *workflowResetterSuite) TestCherryPickChasmEvent() {
 			wantOutcome: cherryPickSkipped,
 		},
 		{
-			// A workflow with no CHASM state at all cannot own the operation. Erroring here would abort the whole
-			// reapply batch over an event that simply belongs to a tree this workflow doesn't have.
-			name:     "chasm disabled with no chasm nodes is skipped, not an error",
-			registry: s.newChasmRegistryWithEvent(eventType, nil),
-			setupMock: func(ms *historyi.MockMutableState) {
-				ms.EXPECT().ChasmEnabled().Return(false)
-				ms.EXPECT().HasChasmNodes().Return(false)
-			},
-			wantOutcome: cherryPickSkipped,
-			wantSkipLog: &debugLevel,
-		},
-		{
-			// The tree was not hydrated but the workflow does carry CHASM nodes, so the operation may exist and
+			// The tree was not hydrated, so the operation this event addresses may exist in persistence and
 			// simply be unreachable. Skipping would drop the event silently, so this must fail instead.
-			name:     "chasm disabled with chasm nodes is an error, not a silent skip",
+			name:     "chasm disabled is an error, not a silent skip",
 			registry: s.newChasmRegistryWithEvent(eventType, nil),
 			setupMock: func(ms *historyi.MockMutableState) {
 				ms.EXPECT().ChasmEnabled().Return(false)
-				ms.EXPECT().HasChasmNodes().Return(true)
 			},
 			wantOutcome: cherryPickSkipped,
-			wantErr:     errChasmDisabledWithNodes,
+			wantErr:     errChasmDisabled,
 		},
 		{
 			name:     "component lookup error is skipped",
@@ -2390,10 +2377,9 @@ func (s *workflowResetterSuite) TestReapplyEventsOrphanedOperationDoesNotDiscard
 	s.Equal(ownedEventID, applied[0].GetEventId())
 }
 
-// TestReapplyEventsFailsWhenChasmDisabledWithNodes: when the CHASM tree was not hydrated but the workflow holds
-// CHASM nodes, the addressed operation may exist and simply be unreachable, so reapply must fail rather than drop
-// the event.
-func (s *workflowResetterSuite) TestReapplyEventsFailsWhenChasmDisabledWithNodes() {
+// TestReapplyEventsFailsWhenChasmDisabled: when the CHASM tree was not hydrated the addressed operation may
+// exist in persistence and simply be unreachable, so reapply must fail rather than drop the event.
+func (s *workflowResetterSuite) TestReapplyEventsFailsWhenChasmDisabled() {
 	const hsmOwnedType = enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED
 	const unreachableType = enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED
 
@@ -2410,7 +2396,6 @@ func (s *workflowResetterSuite) TestReapplyEventsFailsWhenChasmDisabledWithNodes
 	ms.EXPECT().HSM().Return(nil).Times(2)
 	ms.EXPECT().AddHistoryEvent(hsmOwnedType, gomock.Any()).Return(&historypb.HistoryEvent{}).Times(1)
 	ms.EXPECT().ChasmEnabled().Return(false).Times(1)
-	ms.EXPECT().HasChasmNodes().Return(true).Times(1)
 
 	applied, err := reapplyEvents(
 		context.Background(), ms, nil, hsmRegistry,
@@ -2418,7 +2403,7 @@ func (s *workflowResetterSuite) TestReapplyEventsFailsWhenChasmDisabledWithNodes
 		[]*historypb.HistoryEvent{hsmOwned, unreachable, afterAbort}, nil, "", false, s.logger,
 	)
 
-	s.ErrorIs(err, errChasmDisabledWithNodes, "an unreachable operation must fail reapplyEvents, not be skipped")
+	s.ErrorIs(err, errChasmDisabled, "an unreachable operation must fail reapplyEvents, not be skipped")
 	s.Len(applied, 1, "reapply is fail-fast and stops at the unreachable event")
 	s.Equal(hsmOwned.GetEventId(), applied[0].GetEventId())
 }
