@@ -146,7 +146,6 @@ type (
 		invalidTask                bool
 		resourceExhaustedCount     int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
 		throttleState              *ThrottleState
-		throttleMu                 sync.Mutex
 		throttleKey                ThrottleKey
 		throttleAdmitted           bool
 		wasThrottled               bool
@@ -859,7 +858,6 @@ func (e *executableImpl) reportThrottle(
 ) {
 	governed := IsControllerInput(cause, scope)
 
-	e.throttleMu.Lock()
 	// The class that issued this dispatch is the one the task was parked under, which is the
 	// key it still holds until the line below replaces it.
 	issuer, metered := e.throttleKey, e.throttleAdmitted
@@ -870,7 +868,6 @@ func (e *executableImpl) reportThrottle(
 		e.wasThrottled = true
 	}
 	key := e.throttleKey
-	e.throttleMu.Unlock()
 
 	if e.throttleState == nil {
 		return
@@ -898,11 +895,7 @@ func (e *executableImpl) reportCompletion() {
 	if e.throttleState == nil || !e.throttleState.Enabled() {
 		return
 	}
-	e.throttleMu.Lock()
-	wasThrottled := e.wasThrottled
-	e.throttleMu.Unlock()
-
-	if !wasThrottled {
+	if !e.wasThrottled {
 		return
 	}
 	metrics.TaskThrottleAttemptsPerCompletion.With(e.chasmMetricsHandler).Record(e.attempt.Load())
@@ -910,24 +903,17 @@ func (e *executableImpl) reportCompletion() {
 }
 
 func (e *executableImpl) clearThrottle() {
-	e.throttleMu.Lock()
-	defer e.throttleMu.Unlock()
-
 	e.throttleKey = ThrottleKey{}
 	e.throttleAdmitted = false
 }
 
+// SetThrottleAdmitted is called before the dispatch is handed to the scheduler, so the
+// scheduler's own handoff is what carries it to the worker that reads it.
 func (e *executableImpl) SetThrottleAdmitted(admitted bool) {
-	e.throttleMu.Lock()
-	defer e.throttleMu.Unlock()
-
 	e.throttleAdmitted = admitted
 }
 
 func (e *executableImpl) ThrottleKey() ThrottleKey {
-	e.throttleMu.Lock()
-	defer e.throttleMu.Unlock()
-
 	return e.throttleKey
 }
 
