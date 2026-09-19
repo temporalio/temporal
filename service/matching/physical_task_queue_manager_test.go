@@ -192,6 +192,35 @@ func (s *PhysicalTaskQueueManagerTestSuite) getTaskManager() *testTaskManager {
 	return s.tqMgr.partitionMgr.engine.taskManager.(*testTaskManager)
 }
 
+// TestRecordTaskAdd_FairnessKeyTag verifies the inflow counter tasks_added carries the
+// task's fairness key, gated by breakdownByFairnessKey (mirroring the dispatch metrics).
+func (s *PhysicalTaskQueueManagerTestSuite) TestRecordTaskAdd_FairnessKeyTag() {
+	cases := []struct {
+		name      string
+		breakdown bool
+		wantKey   string
+	}{
+		{"breakdown enabled tags the real key", true, "orders"},
+		{"breakdown disabled omits the key", false, "__omitted__"},
+	}
+	for _, tc := range cases {
+		s.Run(tc.name, func() {
+			handler := metricstest.NewCaptureHandler()
+			s.tqMgr.metricsHandler = handler
+			s.tqMgr.partitionMgr.config.BreakdownMetricsByFairnessKey = func() bool { return tc.breakdown }
+
+			capture := handler.StartCapture()
+			defer handler.StopCapture(capture)
+
+			s.tqMgr.RecordTaskAdd(metrics.TaskAddResultBacklog, false, enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED, "orders")
+
+			recs := capture.Snapshot()[metrics.TasksAddedCounter.Name()]
+			s.Require().Len(recs, 1)
+			s.Equal(tc.wantKey, recs[0].Tags[metrics.FairnessKeyTagName])
+		})
+	}
+}
+
 // TODO(pri): old matcher cleanup
 func (s *PhysicalTaskQueueManagerTestSuite) TestReaderBacklogAge() {
 	if s.newMatcher {
