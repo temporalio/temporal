@@ -1,0 +1,10 @@
+ALTER TABLE executions ALTER COLUMN workflow_id TYPE VARCHAR(1000);
+ALTER TABLE current_executions ALTER COLUMN workflow_id TYPE VARCHAR(1000);
+ALTER TABLE buffered_events ALTER COLUMN workflow_id TYPE VARCHAR(1000);
+ALTER TABLE activity_info_maps ALTER COLUMN workflow_id TYPE VARCHAR(1000);
+ALTER TABLE timer_info_maps ALTER COLUMN workflow_id TYPE VARCHAR(1000);
+ALTER TABLE child_execution_info_maps ALTER COLUMN workflow_id TYPE VARCHAR(1000);
+ALTER TABLE request_cancel_info_maps ALTER COLUMN workflow_id TYPE VARCHAR(1000);
+ALTER TABLE signal_info_maps ALTER COLUMN workflow_id TYPE VARCHAR(1000);
+ALTER TABLE signals_requested_sets ALTER COLUMN workflow_id TYPE VARCHAR(1000);
+ALTER TABLE chasm_node_maps ALTER COLUMN workflow_id TYPE VARCHAR(1000);
