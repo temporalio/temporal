@@ -286,16 +286,10 @@ func (r *reschedulerImpl) reschedule() {
 func (r *reschedulerImpl) visitOrderLocked() []weightedClass {
 	n := len(r.keyOrder)
 	r.visitOrder = r.visitOrder[:0]
-	uniform := true
 	for i := 0; i < n; i++ {
 		r.visitOrder = append(r.visitOrder, r.keyOrder[(r.rrCursor+i)%n])
-		if r.visitOrder[i].weight != r.visitOrder[0].weight {
-			uniform = false
-		}
 	}
-	if uniform {
-		return r.visitOrder
-	}
+	// Stable, so the rotation above still decides the order within one priority.
 	slices.SortStableFunc(r.visitOrder, func(a, b weightedClass) int {
 		return cmp.Compare(b.weight, a.weight)
 	})
@@ -314,7 +308,6 @@ func (r *reschedulerImpl) drainClassLocked(
 	pq collection.Queue[rescheduledExecuable],
 	pass *reschedulePass,
 ) {
-	classThrottle := key.Throttle
 	metrics.TaskReschedulerClassQueueDepth.With(r.metricsHandler).Record(int64(pq.Len()), r.classTags(key)...)
 
 	for !pq.IsEmpty() {
@@ -332,14 +325,13 @@ func (r *reschedulerImpl) drainClassLocked(
 		}
 
 		metered := false
-		if classThrottle != (ThrottleKey{}) {
-			var allowed bool
-			var retryAfter time.Duration
-			allowed, metered, retryAfter = r.throttleState.Admit(classThrottle)
+		if key.Throttle != (ThrottleKey{}) {
+			allowed, admitted, retryAfter := r.throttleState.Admit(key.Throttle)
 			if !allowed {
 				pass.wakeAt(pass.now.Add(r.budgetRetryInterval(retryAfter)))
 				return
 			}
+			metered = admitted
 		}
 
 		executable.SetScheduledTime(pass.now)
@@ -350,7 +342,7 @@ func (r *reschedulerImpl) drainClassLocked(
 		if !r.scheduler.TrySubmit(executable) {
 			if metered {
 				setThrottleAdmitted(executable, false)
-				r.throttleState.Return(classThrottle)
+				r.throttleState.Return(key.Throttle)
 			}
 			pass.wakeAt(pass.now.Add(
 				backoff.Jitter(taskChanFullBackoff, taskChanFullBackoffJitterCoefficient)))
