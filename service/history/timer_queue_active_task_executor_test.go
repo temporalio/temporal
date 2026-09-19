@@ -2049,7 +2049,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execut
 		WorkflowId: tests.WorkflowKey.WorkflowID,
 		RunId:      tests.WorkflowKey.RunID,
 	}
-	virtualNow := s.now.Add(time.Hour)
+	virtualNow := s.now.Add(5 * time.Hour)
 
 	// Mock the CHASM tree and execute interface.
 	mockEach := &chasm.MockNodePureTask{
