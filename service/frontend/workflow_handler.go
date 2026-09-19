@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
@@ -113,6 +114,7 @@ const (
 	maxReasonLength              = 1000 // Maximum length for the reason field in RateLimitUpdate configurations.
 	defaultUserTerminateReason   = "terminated by user via frontend"
 	defaultUserTerminateIdentity = "frontend-service"
+	maxScheduleFastForward       = 365 * 24 * time.Hour
 )
 
 type (
@@ -709,10 +711,30 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
+	if err := validateTimeSkippingStatePropagation(ctx, request.GetTimeSkippingStatePropagation()); err != nil {
+		return nil, err
+	}
 	if err := wh.validateAndPopulateTimeSkippingConfig(request.GetTimeSkippingConfig(), namespaceName); err != nil {
 		return nil, err
 	}
 	return request, nil
+}
+
+func validateTimeSkippingStatePropagation(
+	ctx context.Context,
+	state *commonpb.TimeSkippingStatePropagation,
+) error {
+	if state == nil {
+		return nil
+	}
+	// TODO(time-skipping): Confirm that an authenticated internal principal is
+	// the right long-term authorization boundary for server-originated state.
+	principal := headers.GetPrincipal(ctx)
+	if principal.GetType() != authorization.InternalPrincipalType ||
+		principal.GetName() != authorization.InternalPrincipalName {
+		return errTimeSkippingStatePropagationNotInternal
+	}
+	return nil
 }
 
 func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
@@ -745,6 +767,42 @@ func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 			return serviceerror.NewInvalidArgument("time_skipping_config: cannot set fast_forward when enabled is false")
 		}
 		return nil
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) validateAndPopulateScheduleTimeSkippingConfig(
+	schedule *schedulepb.Schedule,
+	ns namespace.Name,
+) error {
+	config := schedule.GetTimeSkippingConfig()
+	if config == nil {
+		return nil
+	}
+	if !wh.config.ScheduleV2TimeSkippingEnabled(ns.String()) {
+		return errScheduleTimeSkippingNotEnabled
+	}
+	if err := wh.validateAndPopulateTimeSkippingConfig(config, ns); err != nil {
+		return err
+	}
+	if !config.GetEnabled() {
+		return nil
+	}
+	fastForward := config.GetFastForwardConfig()
+	if fastForward == nil {
+		return serviceerror.NewInvalidArgument(
+			"schedule time_skipping_config: fast_forward_config is required when enabled")
+	}
+	if fastForward.GetDuration().AsDuration() > maxScheduleFastForward {
+		return serviceerror.NewInvalidArgument(
+			"schedule time_skipping_config: fast_forward duration cannot exceed 365 days")
+	}
+	return nil
+}
+
+func validateScheduleTimeSkippingBackend(schedule *schedulepb.Schedule, useV2 bool) error {
+	if schedule.GetTimeSkippingConfig() != nil && !useV2 {
+		return errScheduleTimeSkippingNotEnabled
 	}
 	return nil
 }
@@ -3917,6 +3975,14 @@ func (wh *WorkflowHandler) CreateSchedule(
 	if err != nil {
 		return nil, err
 	}
+	if request.Schedule.GetTimeSkippingConfig() != nil {
+		if err = validateScheduleTimeSkippingBackend(request.Schedule, useChasmScheduler); err != nil {
+			return nil, err
+		}
+		if err = wh.validateAndPopulateScheduleTimeSkippingConfig(request.Schedule, namespaceName); err != nil {
+			return nil, err
+		}
+	}
 
 	if err = wh.validateStartWorkflowArgsForSchedule(namespaceName, request.GetSchedule().GetAction().GetStartWorkflow()); err != nil {
 		return nil, err
@@ -4756,6 +4822,9 @@ func (wh *WorkflowHandler) UpdateSchedule(
 	}
 
 	if wh.chasmSchedulerEnabled(ctx, request.Namespace) {
+		if err = wh.validateAndPopulateScheduleTimeSkippingConfig(request.Schedule, namespaceName); err != nil {
+			return nil, err
+		}
 		res, err := wh.updateScheduleCHASM(ctx, request)
 		if err == nil {
 			return res, nil
@@ -4763,6 +4832,9 @@ func (wh *WorkflowHandler) UpdateSchedule(
 		if !isSchedulerErrorLegacyRoutable(err) {
 			return nil, err
 		}
+	}
+	if err = validateScheduleTimeSkippingBackend(request.Schedule, false); err != nil {
+		return nil, err
 	}
 
 	// Reject memo updates for V1 schedules.
