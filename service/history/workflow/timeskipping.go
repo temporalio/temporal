@@ -463,7 +463,6 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippingTransitionedEvent(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error {
-	// todo: merge with chasm time skipping
 	attr := event.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
 	tsi := ms.executionInfo.GetTimeSkippingInfo()
 
@@ -478,25 +477,16 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 		return invalidTransitionError
 	}
 
-	// update time
-	if !timeNotSet(attr.TargetTime) {
-		asd := ms.accumulatedSkippedDuration() + attr.TargetTime.AsTime().Sub(event.GetEventTime().AsTime())
-		tsi.AccumulatedSkippedDuration = durationpb.New(asd)
+	hasSkipTarget := !timeNotSet(attr.TargetTime)
+	var skippedDuration time.Duration
+	if hasSkipTarget {
+		skippedDuration = attr.TargetTime.AsTime().Sub(event.GetEventTime().AsTime())
 	}
-	// update enabled state
-	if attr.GetDisabledAfterFastForward() && tsi.GetFastForwardInfo() != nil {
-		reachedFFInfo := tsi.GetFastForwardInfo()
-		reachedFFInfo.HasReached = true
-		ms.setAndStampFastForwardInfo(reachedFFInfo)
-		tsi.Config.Enabled = false
-	}
-	// update skip
-	tsi.SessionSkipCount += 1
-	if tsi.SessionSkipCount >= tsi.Config.GetMaxSessionSkipCount() && tsi.Config.Enabled {
-		tsi.Config.Enabled = false
-	}
-
-	ms.timeSkippingInfoUpdated = true
+	ms.executeTimeSkippingTransition(
+		skippedDuration,
+		hasSkipTarget,
+		attr.GetDisabledAfterFastForward(),
+	)
 	return nil
 }
 
@@ -523,11 +513,24 @@ func (ms *MutableStateImpl) RecordTimeSkippingTransition(transition *chasm.TimeS
 		return
 	}
 
-	if !transition.GetTargetTime().IsZero() {
+	ms.executeTimeSkippingTransition(
+		transition.GetSkippedDuration(),
+		!transition.GetTargetTime().IsZero(),
+		transition.DisabledAfterFastForward,
+	)
+}
+
+func (ms *MutableStateImpl) executeTimeSkippingTransition(
+	skippedDuration time.Duration,
+	hasSkipTarget bool,
+	disabledAfterFastForward bool,
+) {
+	tsi := ms.executionInfo.GetTimeSkippingInfo()
+	if hasSkipTarget {
 		tsi.AccumulatedSkippedDuration = durationpb.New(
-			ms.accumulatedSkippedDuration() + transition.GetSkippedDuration())
+			ms.accumulatedSkippedDuration() + skippedDuration)
 	}
-	if transition.DisabledAfterFastForward && tsi.GetFastForwardInfo() != nil {
+	if disabledAfterFastForward && tsi.GetFastForwardInfo() != nil {
 		reachedFFInfo := tsi.GetFastForwardInfo()
 		reachedFFInfo.HasReached = true
 		ms.setAndStampFastForwardInfo(reachedFFInfo)
