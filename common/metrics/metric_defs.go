@@ -952,18 +952,6 @@ var (
 		"task_rescheduler_class_queue_depth",
 		WithDescription("The number of task executables parked in one rescheduler class queue."),
 	)
-	TaskThrottleAttemptsPerCompletion = NewDimensionlessHistogramDef(
-		"task_throttle_attempts_per_completion",
-		WithDescription("The number of attempts needed by a task that was throttled before completing."),
-	)
-	TaskThrottleWastedAttempts = NewCounterDef(
-		"task_throttle_wasted_attempts",
-		WithDescription("The number of history task attempts that reached the enforcement point only to be rejected by a throttle."),
-	)
-	TaskThrottleCompletions = NewCounterDef(
-		"task_throttle_completions",
-		WithDescription("The number of tasks that completed after being throttled."),
-	)
 	TaskThrottleGateAdmitted = NewCounterDef(
 		"task_throttle_gate_admitted",
 		WithDescription("The number of task releases admitted by the throttle controller gate."),

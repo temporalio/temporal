@@ -148,7 +148,6 @@ type (
 		throttleState              *ThrottleState
 		throttleKey                ThrottleKey
 		throttleAdmitted           bool
-		wasThrottled               bool
 		dlqEnabled                 dynamicconfig.BoolPropertyFn
 		terminalFailureCause       error
 		unexpectedErrorAttempts    int
@@ -713,7 +712,6 @@ func (e *executableImpl) Ack() {
 	}
 
 	metrics.TaskAttempt.With(e.chasmMetricsHandler).Record(e.attempt.Load())
-	e.reportCompletion()
 	priorityTaggedProvider := e.chasmMetricsHandler.WithTags(metrics.TaskPriorityTag(e.priority.String()))
 	metrics.TaskLatency.With(priorityTaggedProvider).Record(e.inMemoryNoUserLatency)
 	metrics.TaskQueueLatency.With(priorityTaggedProvider.WithTags(metrics.QueueReaderIDTag(e.readerID))).
@@ -865,21 +863,8 @@ func (e *executableImpl) reportThrottle(
 	e.throttleKey = ThrottleKey{}
 	if governed {
 		e.throttleKey = NewThrottleKey(cause, e.GetNamespaceID())
-		e.wasThrottled = true
 	}
-	key := e.throttleKey
-
-	if e.throttleState == nil {
-		return
-	}
-	if e.throttleState.Enabled() {
-		metrics.TaskThrottleWastedAttempts.With(e.chasmMetricsHandler).Record(
-			1,
-			metrics.ResourceExhaustedCauseTag(cause),
-			metrics.ResourceExhaustedScopeTag(scope),
-		)
-	}
-	if !governed {
+	if e.throttleState == nil || !governed {
 		return
 	}
 	if metered {
@@ -888,18 +873,7 @@ func (e *executableImpl) reportThrottle(
 		e.throttleState.ReportThrottled(issuer, true)
 		return
 	}
-	e.throttleState.ReportThrottled(key, false)
-}
-
-func (e *executableImpl) reportCompletion() {
-	if e.throttleState == nil || !e.throttleState.Enabled() {
-		return
-	}
-	if !e.wasThrottled {
-		return
-	}
-	metrics.TaskThrottleAttemptsPerCompletion.With(e.chasmMetricsHandler).Record(e.attempt.Load())
-	metrics.TaskThrottleCompletions.With(e.chasmMetricsHandler).Record(1)
+	e.throttleState.ReportThrottled(e.throttleKey, false)
 }
 
 func (e *executableImpl) clearThrottle() {
