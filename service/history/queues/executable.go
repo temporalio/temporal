@@ -854,26 +854,30 @@ func (e *executableImpl) reportThrottle(
 	cause enumspb.ResourceExhaustedCause,
 	scope enumspb.ResourceExhaustedScope,
 ) {
-	governed := IsControllerInput(cause, scope)
-
 	// The class that issued this dispatch is the one the task was parked under, which is the
-	// key it still holds until the line below replaces it.
+	// key it still holds until it is reclassified below.
 	issuer, metered := e.throttleKey, e.throttleAdmitted
 	e.throttleAdmitted = false
 	e.throttleKey = ThrottleKey{}
-	if governed {
-		e.throttleKey = NewThrottleKey(cause, e.GetNamespaceID())
-	}
-	if e.throttleState == nil || !governed {
+
+	if !IsControllerInput(cause, scope) {
+		// Not a budget this controller paces. The task leaves the gated class, and the release
+		// that failed stays counted as the clean one it was as far as the budget goes.
 		return
 	}
+	e.throttleKey = NewThrottleKey(cause, e.GetNamespaceID())
+	if e.throttleState == nil {
+		return
+	}
+
+	// A metered rejection is evidence about the class that issued the release, whichever
+	// budget refused it. An unmetered one belongs to the class the task now waits on, where it
+	// is recorded for visibility but must not move the rate.
+	key := e.throttleKey
 	if metered {
-		// The class that issued the release is the one this is evidence about, whichever
-		// budget refused it.
-		e.throttleState.ReportThrottled(issuer, true)
-		return
+		key = issuer
 	}
-	e.throttleState.ReportThrottled(e.throttleKey, false)
+	e.throttleState.ReportThrottled(key, metered)
 }
 
 func (e *executableImpl) clearThrottle() {
