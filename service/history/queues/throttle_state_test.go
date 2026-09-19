@@ -116,8 +116,7 @@ func TestNewThrottleKey_OneClassPerNamespaceAndCause(t *testing.T) {
 		"two budgets a namespace holds independently must not share a class")
 }
 
-// newTestThrottleStateWithEntries builds a controller that shares another one's class map, so
-// a test can change the enabled flag without losing the classes already established.
+// Shares another controller's class map, so the enabled flag can change without losing it.
 func newTestThrottleStateWithEntries(
 	o throttleTestOverrides,
 	from *ThrottleState,
@@ -142,10 +141,8 @@ func admitOK(c *ThrottleState, key ThrottleKey) bool {
 // reportThrottle drives one decision's worth of total loss through the real admission path:
 // enough metered releases for the ratio to resolve the threshold, every one of them refused.
 // The unadmitted form reports a rejection the gate never issued, which must stay inert.
-// reportThrottle drives one control decision's worth of total loss. It plants the sample
-// rather than admitting through the gate, because the tests built on it are about the decision
-// and must not have their bucket drained underneath them; the admission path is covered by
-// admitOK, admitAndReject and the convergence tests.
+// One decision's worth of total loss. Plants the sample rather than admitting, so tests about
+// the decision keep their bucket; the admission path is covered by admitOK and admitAndReject.
 func reportThrottle(c *ThrottleState, key ThrottleKey, admitted bool) {
 	if !c.Enabled() || !admitted {
 		c.ReportThrottled(key, false)
@@ -165,8 +162,7 @@ func reportThrottle(c *ThrottleState, key ThrottleKey, admitted bool) {
 	c.ReportThrottled(key, true)
 }
 
-// admitAndReject issues one release and reports it rejected, which is the metered pair the
-// control law measures. It reports false when the gate refused the release.
+// One metered release and its rejection: the pair the control law measures.
 func admitAndReject(c *ThrottleState, key ThrottleKey) bool {
 	allowed, metered, _ := c.Admit(key)
 	if !allowed {
@@ -176,7 +172,7 @@ func admitAndReject(c *ThrottleState, key ThrottleKey) bool {
 	return true
 }
 
-// throttleCounters reports the open window's release and rejection counts.
+// The open window's release and rejection counts.
 func throttleCounters(state *ThrottleState, key ThrottleKey) (releases, rejections int64) {
 	entry := state.peek(key)
 	if entry == nil {
@@ -187,8 +183,7 @@ func throttleCounters(state *ThrottleState, key ThrottleKey) (releases, rejectio
 	return entry.releases, entry.rejections
 }
 
-// cleanWindow gives the class a window it wants a higher rate in: the bucket is drained until
-// the gate refuses, which is the demand signal, and nothing is reported rejected.
+// Drains the bucket so the gate refuses, which is the demand signal, with no rejections.
 func cleanWindow(c *ThrottleState, key ThrottleKey) {
 	for admitOK(c, key) { //nolint:revive // draining, body intentionally empty
 	}

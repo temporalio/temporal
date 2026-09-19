@@ -282,7 +282,7 @@ func (r *reschedulerImpl) reschedule() {
 	}
 }
 
-// Priority ordering is a best-effort preference within this shard; the bucket is host-wide.
+// Best-effort within this shard; the bucket is host-wide.
 func (r *reschedulerImpl) visitOrderLocked() []weightedClass {
 	n := len(r.keyOrder)
 	r.visitOrder = r.visitOrder[:0]
@@ -387,7 +387,7 @@ func (r *reschedulerImpl) rescheduleUngatedLocked(now time.Time) {
 	}
 }
 
-// A floor avoids every shard polling at the host-wide bucket's refill rate.
+// The floor stops every shard polling at the bucket's refill rate.
 func (r *reschedulerImpl) budgetRetryInterval(eta time.Duration) time.Duration {
 	const budgetRetryDivisor = 10
 

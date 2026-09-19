@@ -27,9 +27,8 @@ const (
 )
 
 type (
-	// ThrottleKey identifies one controlled class: one bucket per budget. Priority is not part
-	// of it. The rescheduler offers that one bucket to classes in priority order, which only
-	// means something while they are drawing on the same budget.
+	// ThrottleKey is one bucket per budget. Priority is deliberately not part of it: the
+	// rescheduler offers the one bucket to classes in priority order, which needs it shared.
 	ThrottleKey struct {
 		Cause       enumspb.ResourceExhaustedCause
 		NamespaceID string
@@ -156,8 +155,8 @@ func (s *ThrottleState) Admit(key ThrottleKey) (allowed, metered bool, retryAfte
 	return true, true, 0
 }
 
-// Return gives back a release the scheduler refused. It never reached the enforcer, so it is
-// not a rejection, and leaving it counted would read as a clean release and raise the rate.
+// Return takes back a release the scheduler refused. It never reached the enforcer, so
+// leaving it counted would read as a clean one.
 func (s *ThrottleState) Return(key ThrottleKey) {
 	entry := s.peek(key)
 	if entry == nil {
@@ -173,12 +172,9 @@ func (s *ThrottleState) Return(key ThrottleKey) {
 	}
 }
 
-// ReportThrottled feeds one rejection in. metered says the gate issued the release it refused,
-// which is what makes it evidence: loss on traffic the controller never sent would drive a
-// class to the floor while the traffic actually consuming the budget flowed past.
-//
-// A metered rejection is recorded even when the controller has since been turned off, because
-// the release it answers was already counted and the window would otherwise read clean.
+// ReportThrottled feeds one rejection in. metered says the gate issued the release that was
+// refused, which is what makes it evidence. Such a rejection is recorded even once the
+// controller is off, since the release it answers was already counted.
 func (s *ThrottleState) ReportThrottled(key ThrottleKey, metered bool) {
 	if !s.Enabled() && !metered {
 		return
@@ -205,9 +201,8 @@ func (s *ThrottleState) ReportThrottled(key ThrottleKey, metered bool) {
 	}
 }
 
-// minDecisionReleases is how many releases a loss ratio needs before it can resolve the
-// threshold. Below 1/threshold the smallest non-zero ratio is already above it, so a single
-// rejection would decide "total loss" for a class that is merely slow.
+// Below 1/threshold releases the smallest non-zero ratio already exceeds the threshold, so one
+// rejection would read as total loss.
 func minDecisionReleases(lossThreshold float64) int64 {
 	if !(lossThreshold > 0) {
 		return 1
@@ -215,16 +210,13 @@ func minDecisionReleases(lossThreshold float64) int64 {
 	return int64(math.Ceil(1 / lossThreshold))
 }
 
-// advanceWindowLocked closes an elapsed window and applies at most one rate change for it.
-//
-// A window that carries too little evidence to resolve the threshold is closed without a
-// decision and its counters are carried forward, so a low rate class accumulates a measurable
-// sample instead of reacting to the first rejection it sees.
+// Closes an elapsed window and applies at most one rate change. A window with too little
+// evidence is closed without deciding and its counters carry forward.
 func (s *ThrottleState) advanceWindowLocked(entry *throttleEntry, now time.Time, window time.Duration) {
 	if now.Sub(entry.windowStart) < window {
 		return
 	}
-	// Credit the elapsed window at the rate that governed it, before a decision changes it.
+	// Credit the window at the rate that governed it, before the decision changes it.
 	entry.refillLocked(now, window)
 	entry.windowStart = now
 
@@ -237,8 +229,7 @@ func (s *ThrottleState) advanceWindowLocked(entry *throttleEntry, now time.Time,
 		entry.releases, entry.rejections, entry.suppressions = 0, 0, 0
 	}()
 
-	// A rejection can land in the window after the one that released it, so this can exceed
-	// 1. It is only ever compared to the threshold, which it is above either way.
+	// Can exceed 1 when a rejection lands a window late; it is only compared to the threshold.
 	loss := float64(entry.rejections) / float64(entry.releases)
 	switch {
 	case loss > lossThreshold:
@@ -250,8 +241,7 @@ func (s *ThrottleState) advanceWindowLocked(entry *throttleEntry, now time.Time,
 		entry.rate = s.clamp(entry.rate * (1 + increaseRatio))
 		metrics.TaskThrottleRateIncreases.With(s.metricsHandler).Record(1, entry.key.metricsTags()...)
 	default:
-		// The gate never refused this class, so it has not asked for a higher rate. Raising it
-		// anyway would grow the burst it can spend the moment demand returns.
+		// Never refused, so it has not asked for more. Raising it would grow the burst.
 		return
 	}
 	metrics.TaskThrottleAdmittedRate.With(s.metricsHandler).Record(entry.rate, entry.key.metricsTags()...)
@@ -307,9 +297,7 @@ func (s *ThrottleState) clamp(rate float64) float64 {
 	return min(max(rate, s.floor()), s.ceiling())
 }
 
-// Every knob is live dynamic config, and every one falls back to its documented default when
-// it is unset or set to something the control law cannot use. These are the two shapes that
-// takes: a positive value, or a fraction strictly between zero and one.
+// Every knob is live, falling back to its default when unset or unusable.
 func configured[T ~float64 | ~int64 | ~int](fn func() T, fallback T) T {
 	if fn != nil {
 		if value := fn(); value > 0 {
@@ -319,8 +307,7 @@ func configured[T ~float64 | ~int64 | ~int](fn func() T, fallback T) T {
 	return fallback
 }
 
-// A gain outside (0, 1) inverts the control law rather than tuning it: a decrease factor of 1
-// or more raises the rate on loss, and a zero increase never lifts it again.
+// A gain outside (0, 1) inverts the law: beta >= 1 raises the rate on loss.
 func configuredFraction(fn dynamicconfig.FloatPropertyFn, fallback float64) float64 {
 	if fn != nil {
 		if value := fn(); value > 0 && value < 1 {
@@ -376,8 +363,7 @@ func (s *ThrottleState) getOrCreate(key ThrottleKey) *throttleEntry {
 	now := s.timeSource.Now()
 	s.maybeSweepLocked(now)
 	if len(s.entries) >= s.maxKeys() {
-		// Fail open past the cap. TaskThrottleKeysDropped is the signal; a log line per
-		// dropped key would fire hardest exactly when the host is already struggling.
+		// Fail open past the cap; the metric is the signal, a log here would storm.
 		metrics.TaskThrottleKeysDropped.With(s.metricsHandler).Record(1, key.cappedTags()...)
 		return nil
 	}

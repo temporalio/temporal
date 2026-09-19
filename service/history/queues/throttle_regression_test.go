@@ -372,9 +372,8 @@ func TestThrottleState_RejectionUnderAnotherCauseChargesTheIssuingClass(t *testi
 	require.Zero(t, otherRejections, "the reported cause issued nothing, so it learns nothing")
 }
 
-// A namespace token bucket refuses what exceeds the budget, so the loss this class sees rises
-// with its own rate. That feedback is what the control law needs: it settles just above the
-// share other traffic leaves it, rather than at the floor or the ceiling.
+// Loss rises with the class's own rate, which is the feedback the law needs: it settles just
+// above the share other traffic leaves it.
 func TestThrottleState_ConvergesOnTheShareLeftByOtherTraffic(t *testing.T) {
 	const budget = 200.0
 
@@ -414,9 +413,8 @@ func TestThrottleState_ConvergesOnTheShareLeftByOtherTraffic(t *testing.T) {
 	}
 }
 
-// A rejection that arrives after its class was swept lands on a recreated entry that has
-// issued nothing. With no releases to measure them against there is no ratio, so any number
-// of them must leave the rate alone rather than score as total loss.
+// Rejections landing on a recreated entry have no releases to measure against, so any number
+// of them must leave the rate alone.
 func TestThrottleState_UnmatchedRejectionsDoNotCutAClassThatIssuedNothing(t *testing.T) {
 	o := defaultThrottleOverrides()
 	state, timeSource := newTestThrottleState(o)
@@ -434,8 +432,7 @@ func TestThrottleState_UnmatchedRejectionsDoNotCutAClassThatIssuedNothing(t *tes
 		"rejections with no releases behind them are not evidence of loss")
 }
 
-// The demand signal is per decision, like the counters beside it. Carrying it through an idle
-// reset buys the revived class an increase on demand it showed before it went quiet.
+// Carrying the demand signal through an idle reset buys an increase on demand already spent.
 func TestThrottleState_IdleResetClearsTheDemandSignal(t *testing.T) {
 	o := defaultThrottleOverrides()
 	o.keyTTL = time.Minute
@@ -457,8 +454,7 @@ func TestThrottleState_IdleResetClearsTheDemandSignal(t *testing.T) {
 	require.Zero(t, suppressions, "demand from before the reset must not survive it")
 }
 
-// The increase ratio is a fraction of the current rate. An unbounded one would reach the
-// ceiling in a single window, which is a config mistake rather than an instruction.
+// An unbounded increase ratio reaches the ceiling in one window.
 func TestThrottleState_AbsurdIncreaseRatioFallsBackToTheDefault(t *testing.T) {
 	o := defaultThrottleOverrides()
 	o.increase = 1e6
@@ -471,10 +467,8 @@ func TestThrottleState_AbsurdIncreaseRatioFallsBackToTheDefault(t *testing.T) {
 	require.InEpsilon(t, o.initialRate*(1+defaultThrottleIncreaseRatio), throttleRate(state, key), 1e-9)
 }
 
-// The load-bearing invariant of the design: loss on traffic the gate never sent must not move
-// the rate. Without it a busy namespace's parked tasks are driven to the floor by rejections
-// belonging to the traffic actually consuming the budget. The rejections here outnumber the
-// releases five to one, so counting them at all is unmissable.
+// Loss on traffic the gate never sent must not move the rate. Five rejections per release, so
+// counting any of them is unmissable.
 func TestThrottleState_UnadmittedRejectionsCannotDriveADecision(t *testing.T) {
 	o := defaultThrottleOverrides()
 	state, timeSource := newTestThrottleState(o)
@@ -494,9 +488,8 @@ func TestThrottleState_UnadmittedRejectionsCannotDriveADecision(t *testing.T) {
 		"rejections the gate did not issue are not evidence about its own releases")
 }
 
-// A release committed while the controller was on has to be matched even if the flag goes off
-// before its rejection arrives. Otherwise the window it belongs to reads clean, and a class
-// whose releases were all failing raises its rate while an operator is mid-toggle.
+// A release committed while on keeps its rejection after the flag goes off, or the window
+// reads clean while every release was failing.
 func TestThrottleState_RejectionSurvivesTheFlagGoingOff(t *testing.T) {
 	enabled := true
 	timeSource := clock.NewEventTimeSource()
@@ -538,9 +531,7 @@ func TestThrottleState_RejectionSurvivesTheFlagGoingOff(t *testing.T) {
 		"every release failed, so the window must not read clean")
 }
 
-// A threshold of zero makes any single rejection a decrease and demands a perfectly clean
-// window for an increase. That is the rule the design argues against, reached from below;
-// commit 073471ef1 closed the same hole at the top of the range.
+// A threshold of zero is the degenerate rule reached from below: any rejection decreases.
 func TestThrottleState_LossThresholdOfZeroFallsBackToTheDefault(t *testing.T) {
 	o := defaultThrottleOverrides()
 	o.lossThresh = 0
@@ -555,8 +546,7 @@ func TestThrottleState_LossThresholdOfZeroFallsBackToTheDefault(t *testing.T) {
 		"one rejection out of one release must not decide anything at the default threshold")
 }
 
-// Loss exactly at the threshold is tolerated, not punished: the threshold is the amount of
-// loss the class is allowed to run at, so meeting it is not grounds for backing off.
+// The threshold is the loss the class may run at, so meeting it is not grounds to back off.
 func TestThrottleState_LossExactlyAtTheThresholdDoesNotDecrease(t *testing.T) {
 	o := defaultThrottleOverrides()
 	state, timeSource := newTestThrottleState(o)
@@ -575,9 +565,8 @@ func TestThrottleState_LossExactlyAtTheThresholdDoesNotDecrease(t *testing.T) {
 		"loss at the threshold is the budget the class is allowed, not a reason to back off")
 }
 
-// The burst floor is the difference between a slow class and a wedged one: below one token a
-// window the bucket can never reach the whole token an admit needs, and the class stops
-// releasing entirely however long it waits.
+// Below one token a window the bucket never reaches the whole token an admit needs, and the
+// class wedges.
 func TestThrottleEntry_BurstNeverFallsBelowOneToken(t *testing.T) {
 	o := defaultThrottleOverrides()
 	o.minRate = 0.01
@@ -594,11 +583,8 @@ func TestThrottleEntry_BurstNeverFallsBelowOneToken(t *testing.T) {
 }
 
 // Loss is 1 - budget/(other + rate), so once competing traffic alone exceeds
-// budget/(1 - threshold) the loss is above the threshold at every rate the class can reach,
-// including the floor. It decreases every decision and pins there, reacting to a signal it
-// cannot influence. Whether backing off or holding a share is the right answer when a
-// namespace is genuinely over budget is a design question, but the boundary is arithmetic and
-// must not move by accident.
+// budget/(1 - threshold) it stays above the threshold at every rate, including the floor.
+// Whether pinning there is the right answer is a design question; the boundary is arithmetic.
 func TestThrottleState_CompetingTrafficAboveTheBudgetPinsTheClassAtTheFloor(t *testing.T) {
 	const budget = 200.0
 
@@ -642,9 +628,8 @@ func TestThrottleState_CompetingTrafficAboveTheBudgetPinsTheClassAtTheFloor(t *t
 		"the two regimes are not close; the boundary is a cliff, not a slope")
 }
 
-// The rate a class starts at goes through the same clamp as every rate the control law
-// produces. Without that, an initial rate above the ceiling hands the class a burst of one
-// window at that rate the first time it is touched.
+// The starting rate goes through the same clamp, or an initial rate above the ceiling hands
+// the class a full window's burst at it.
 func TestThrottleState_InitialRateIsClamped(t *testing.T) {
 	o := defaultThrottleOverrides()
 	o.maxRate = 100
@@ -663,8 +648,7 @@ func TestThrottleState_InitialRateIsClamped(t *testing.T) {
 		"nor hold a burst larger than the ceiling allows")
 }
 
-// The ceiling and the idle TTL are live, like the floor and the initial rate. Two rounds of
-// review pointed at these knobs as the ones an operator reaches for mid-incident.
+// The ceiling is live, like the floor and the initial rate.
 func TestThrottleState_CeilingIsLive(t *testing.T) {
 	ceiling := 10000.0
 	timeSource := clock.NewEventTimeSource()
@@ -701,10 +685,8 @@ func TestThrottleState_CeilingIsLive(t *testing.T) {
 		"lowering the ceiling must pull a class already above it back down")
 }
 
-// Only the namespace APS and persistence budgets are evidence. A release refused by anything
-// else - a contended workflow lock above all - says nothing about the budget this class paces,
-// so it must not change how fast the class is allowed to go. Counting such a failure as loss
-// inflates the ratio by 1/(1 - contention) and drives a healthy class toward the floor.
+// A release refused by anything but the governed budgets must not change the rate. Counting
+// it inflates the ratio by 1/(1 - contention) and drives a healthy class to the floor.
 func TestThrottleState_FailuresOutsideTheBudgetDoNotSlowTheClass(t *testing.T) {
 	settle := func(contention int) float64 {
 		o := defaultThrottleOverrides()

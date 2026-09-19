@@ -76,9 +76,8 @@ type (
 		IsTerminalTaskError() bool
 	}
 
-	// ThrottleKeyProvider is implemented by executables the controller can pace: they report
-	// which class their last failure belongs to, and they can be told that the gate issued a
-	// dispatch, under which class. The zero key means neither.
+	// ThrottleKeyProvider is implemented by executables the controller can pace. The zero key
+	// means unclassified.
 	ThrottleKeyProvider interface {
 		ThrottleKey() ThrottleKey
 		SetThrottleAdmitted(admitted bool)
@@ -839,30 +838,21 @@ func (e *executableImpl) shouldResubmitOnNack(err error) bool {
 		err != consts.ErrNamespaceHandover
 }
 
-// reportThrottle records which class this failure belongs to and, when the gate issued the
-// dispatch, feeds the rejection back to the class that issued it.
+// Classifies the failure, and reports it when the gate issued the dispatch.
 //
-// Classification happens whether or not the controller is running. The key is inert while it
-// is off, since every reader checks the flag first, but it means a task parked before the flag
-// is turned on already knows which budget refused it, instead of the first pass afterwards
-// releasing the whole backlog ungated.
-//
-// Only the governed budgets are evidence. A release refused by anything else - a contended
-// workflow lock, a limit enforced at another scope - says nothing about this namespace's APS
-// or persistence budget, so it stays counted as the clean release it was.
+// Classification runs even while the controller is off, so work parked before the flag is
+// turned on is paced rather than released in one ungated wave.
 func (e *executableImpl) reportThrottle(
 	cause enumspb.ResourceExhaustedCause,
 	scope enumspb.ResourceExhaustedScope,
 ) {
-	// The class that issued this dispatch is the one the task was parked under, which is the
-	// key it still holds until it is reclassified below.
+	// The issuing class is the one the task was parked under, until reclassified below.
 	issuer, metered := e.throttleKey, e.throttleAdmitted
 	e.throttleAdmitted = false
 	e.throttleKey = ThrottleKey{}
 
 	if !IsControllerInput(cause, scope) {
-		// Not a budget this controller paces. The task leaves the gated class, and the release
-		// that failed stays counted as the clean one it was as far as the budget goes.
+		// Not a budget this controller paces, so the release stays counted as clean.
 		return
 	}
 	e.throttleKey = NewThrottleKey(cause, e.GetNamespaceID())
@@ -870,9 +860,8 @@ func (e *executableImpl) reportThrottle(
 		return
 	}
 
-	// A metered rejection is evidence about the class that issued the release, whichever
-	// budget refused it. An unmetered one belongs to the class the task now waits on, where it
-	// is recorded for visibility but must not move the rate.
+	// A metered rejection belongs to the class that issued the release, whichever budget
+	// refused it; an unmetered one is recorded against the new class but must not move it.
 	key := e.throttleKey
 	if metered {
 		key = issuer
@@ -885,8 +874,7 @@ func (e *executableImpl) clearThrottle() {
 	e.throttleAdmitted = false
 }
 
-// SetThrottleAdmitted is called before the dispatch is handed to the scheduler, so the
-// scheduler's own handoff is what carries it to the worker that reads it.
+// Called before the scheduler handoff, which is what carries it to the reading worker.
 func (e *executableImpl) SetThrottleAdmitted(admitted bool) {
 	e.throttleAdmitted = admitted
 }

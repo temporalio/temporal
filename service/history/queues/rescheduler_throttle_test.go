@@ -466,9 +466,7 @@ func TestThrottleState_RaisingTheFloorLiftsAClassAlreadyAtIt(t *testing.T) {
 		"raising the floor must lift a class already pinned to it")
 }
 
-// The cursor rotates so that classes of equal priority take turns leading the pass. Without
-// it whichever class the sort left first would be offered the scheduler's capacity every
-// time, and a class behind it would only ever get what the first one did not take.
+// Equal-priority classes take turns leading the pass.
 func TestReschedule_CursorRotatesBetweenEqualClasses(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	overrides := defaultThrottleOverrides()
@@ -497,9 +495,7 @@ func TestReschedule_CursorRotatesBetweenEqualClasses(t *testing.T) {
 	require.Len(t, leaders, 3, "every class must get a turn at the head of the pass")
 }
 
-// A task the controller does not govern must not wait on another task's budget. Deciding
-// gating per task inside one shared queue meant a governed task at the head, denied by its
-// bucket, stopped the pass and stranded every ungoverned task behind it.
+// An ungoverned task must not wait on another class's budget.
 func TestReschedule_UngovernedTasksDoNotWaitOnAnotherClassBudget(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	var enabled atomic.Bool

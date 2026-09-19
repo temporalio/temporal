@@ -22,10 +22,7 @@ func newThrottleTestExecutable(ctrl *gomock.Controller, state *ThrottleState) *e
 	}
 }
 
-// The control loop asks whether the releases this class issued are getting through, so a
-// release refused by a second budget belongs to the class that issued it. This is the path
-// the rescheduler actually drives: a permit set on the executable, then a rejection reported
-// under a cause the permit was not issued for.
+// A release refused by a second budget belongs to the class that issued it.
 func TestExecutable_RejectionUnderAnotherBudgetChargesTheIssuingClass(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	state, _ := newTestThrottleState(defaultThrottleOverrides())
@@ -53,8 +50,7 @@ func TestExecutable_RejectionUnderAnotherBudgetChargesTheIssuingClass(t *testing
 	require.Equal(t, int64(1), rejections, "the class that issued the release must see the loss")
 }
 
-// A contended workflow lock is not a shared budget. Releasing slower cannot clear it, so
-// charging it drives the class toward the floor with no feedback that lifts it again.
+// A lock is not a budget: releasing slower cannot clear it, so charging it never lifts.
 func TestExecutable_BusyWorkflowDoesNotChargeTheIssuingClass(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	state, _ := newTestThrottleState(defaultThrottleOverrides())
@@ -82,9 +78,7 @@ func TestExecutable_BusyWorkflowDoesNotChargeTheIssuingClass(t *testing.T) {
 	require.Zero(t, rejections, "lock contention is not evidence about a shared budget")
 }
 
-// Classification runs even while the controller is off, so a task parked before the flag was
-// turned on already knows which budget refused it and can be paced rather than released in
-// one wave. Nothing may be reported to the controller from that path.
+// Classification runs while off, so parked work is already classified when the flag flips.
 func TestExecutable_ClassifiesWhileTheControllerIsOff(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	o := defaultThrottleOverrides()
@@ -103,8 +97,7 @@ func TestExecutable_ClassifiesWhileTheControllerIsOff(t *testing.T) {
 	require.Zero(t, throttleLen(state), "a disabled controller must track nothing")
 }
 
-// An ungoverned cause means this task is no longer waiting on a budget the controller paces,
-// so it must leave the gated class rather than sit behind a rate it is not blocked on.
+// An ungoverned cause means the task leaves the gated class.
 func TestExecutable_UngovernedCauseDropsTheKey(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	state, _ := newTestThrottleState(defaultThrottleOverrides())
@@ -124,9 +117,7 @@ func TestExecutable_UngovernedCauseDropsTheKey(t *testing.T) {
 		"a system scoped limit is not this namespace's budget")
 }
 
-// Two branches of reportThrottle were settling the reservation independently and had already
-// diverged: with the controller off, a lock-contended release was charged as budget loss,
-// which is the one cause the design says must never be charged.
+// Lock contention must never be charged, whichever side of the flag it lands on.
 func TestExecutable_BusyWorkflowIsNeverChargedWhateverTheFlagSays(t *testing.T) {
 	for _, enabled := range []bool{true, false} {
 		ctrl := gomock.NewController(t)
