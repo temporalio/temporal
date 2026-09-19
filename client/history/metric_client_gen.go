@@ -177,6 +177,20 @@ func (c *metricClient) DescribeWorkflowExecution(
 	return c.client.DescribeWorkflowExecution(ctx, request, opts...)
 }
 
+func (c *metricClient) DisableTimeSkipping(
+	ctx context.Context,
+	request *historyservice.DisableTimeSkippingRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.DisableTimeSkippingResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "HistoryClientDisableTimeSkipping")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DisableTimeSkipping(ctx, request, opts...)
+}
+
 func (c *metricClient) ExecuteMultiOperation(
 	ctx context.Context,
 	request *historyservice.ExecuteMultiOperationRequest,

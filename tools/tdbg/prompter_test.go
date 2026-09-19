@@ -115,6 +115,19 @@ func TestPrompter(t *testing.T) {
 	}
 }
 
+func TestPrompterSupportsConsecutivePrompts(t *testing.T) {
+	var output bytes.Buffer
+	prompter := tdbg.NewPrompter(testFlagLookup{t: t}, func(params *tdbg.PrompterParams) {
+		params.Reader = bytes.NewBufferString("yes\ny\n")
+		params.Writer = &output
+		params.Exiter = func(int) { t.Fatal("unexpected exit") }
+	})
+
+	prompter.Prompt("first")
+	prompter.Prompt("second")
+	require.Equal(t, "first [y/N]: second [y/N]: ", output.String())
+}
+
 // Write is the implementation of the io.Writer interface for testWriter.
 // It writes bytes to the buffer or returns an error if configured to do so.
 func (t *testWriter) Write(p []byte) (n int, err error) {

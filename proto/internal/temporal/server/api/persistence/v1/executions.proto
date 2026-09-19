@@ -326,8 +326,8 @@ message WorkflowExecutionInfo {
 }
 
 message TimeSkippingInfo {
-  reserved 3;
-  reserved "current_elapsed_duration_bound";
+  reserved 3, 8;
+  reserved "current_elapsed_duration_bound", "disabled_reason";
 
   // Current time-skipping configuration applied to the execution.
   temporal.api.common.v1.TimeSkippingConfig config = 1;

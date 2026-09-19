@@ -681,3 +681,15 @@ message MigrateScheduleRequest {
 }
 
 message MigrateScheduleResponse {}
+
+message DisableTimeSkippingRequest {
+  string namespace = 1;
+  temporal.api.common.v1.WorkflowExecution execution = 2;
+  string archetype = 3;
+  // (-- api-linter: core::0141::forbidden-types=disabled --)
+  uint32 archetype_id = 4;
+}
+
+message DisableTimeSkippingResponse {
+  bool disabled = 1;
+}

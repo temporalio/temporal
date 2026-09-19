@@ -57,6 +57,21 @@ func (ms *MutableStateImpl) updateTimeSkippingInfo(
 	ms.timeSkippingInfoUpdated = true
 }
 
+// DisableTimeSkipping forcefully disables time skipping without recording a history event.
+func (ms *MutableStateImpl) DisableTimeSkipping() bool {
+	tsi := ms.executionInfo.GetTimeSkippingInfo()
+	if tsi == nil || !tsi.GetConfig().GetEnabled() {
+		return false
+	}
+
+	tsi.Config.Enabled = false
+	if tsi.FastForwardInfo != nil {
+		ms.setAndStampFastForwardInfo(common.CloneProto(tsi.FastForwardInfo))
+	}
+	ms.timeSkippingInfoUpdated = true
+	return true
+}
+
 // applyFastForward (re)computes the FastForwardInfo using the new TimeSkippingConfig (TSC) and propagated time-skippingstates.
 // This method should be called whenever the TimeSkippingConfig is initialized or updated.
 //

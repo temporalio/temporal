@@ -426,6 +426,8 @@ type (
 		// ToRealTime converts a virtual timestamp from mutable state to wall-clock time,
 		// adjusting for accumulated skipped duration which may have happened.
 		ToRealTime(virtualTime time.Time) time.Time
+		// DisableTimeSkipping forcefully disables time skipping without recording a history event.
+		DisableTimeSkipping() bool
 		AddWorkflowExecutionTimeSkippingTransitionedEvent(
 			ctx context.Context, targetTime time.Time, disabledAfterFastForward bool) (*historypb.HistoryEvent, error)
 		ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error

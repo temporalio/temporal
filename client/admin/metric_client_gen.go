@@ -177,6 +177,20 @@ func (c *metricClient) DescribeTaskQueuePartition(
 	return c.client.DescribeTaskQueuePartition(ctx, request, opts...)
 }
 
+func (c *metricClient) DisableTimeSkipping(
+	ctx context.Context,
+	request *adminservice.DisableTimeSkippingRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.DisableTimeSkippingResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientDisableTimeSkipping")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.DisableTimeSkipping(ctx, request, opts...)
+}
+
 func (c *metricClient) ForceUnloadTaskQueuePartition(
 	ctx context.Context,
 	request *adminservice.ForceUnloadTaskQueuePartitionRequest,

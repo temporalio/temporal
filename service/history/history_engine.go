@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/service/history/api/deleteworkflow"
 	"go.temporal.io/server/service/history/api/describemutablestate"
 	"go.temporal.io/server/service/history/api/describeworkflow"
+	"go.temporal.io/server/service/history/api/disabletimeskipping"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionhistory"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionhistoryreverse"
 	"go.temporal.io/server/service/history/api/getworkflowexecutionrawhistory"
@@ -540,6 +541,13 @@ func (e *historyEngineImpl) DescribeMutableState(
 	request *historyservice.DescribeMutableStateRequest,
 ) (response *historyservice.DescribeMutableStateResponse, retError error) {
 	return describemutablestate.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker)
+}
+
+func (e *historyEngineImpl) DisableTimeSkipping(
+	ctx context.Context,
+	request *historyservice.DisableTimeSkippingRequest,
+) (*historyservice.DisableTimeSkippingResponse, error) {
+	return disabletimeskipping.Invoke(ctx, request, e.shardContext, e.workflowConsistencyChecker)
 }
 
 // ResetStickyTaskQueue reset the volatile information in mutable state of a given workflow.

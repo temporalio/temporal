@@ -12,7 +12,7 @@ type (
 	// Prompter is a helper for prompting the user for confirmation.
 	Prompter struct {
 		writer     io.Writer
-		reader     io.Reader
+		reader     *bufio.Reader
 		exiter     func(code int)
 		flagLookup BoolFlagLookup
 	}
@@ -52,7 +52,7 @@ func NewPrompter(c BoolFlagLookup, opts ...PrompterOption) *Prompter {
 	}
 	return &Prompter{
 		writer:     params.Writer,
-		reader:     params.Reader,
+		reader:     bufio.NewReader(params.Reader),
 		exiter:     params.Exiter,
 		flagLookup: c,
 	}
@@ -68,8 +68,7 @@ func (p *Prompter) Prompt(msg string) {
 	if err != nil {
 		panic(fmt.Errorf("failed to write prompt: %w", err))
 	}
-	reader := bufio.NewReader(p.reader)
-	text, err := reader.ReadString('\n')
+	text, err := p.reader.ReadString('\n')
 	if err != nil {
 		panic(fmt.Errorf("failed to read prompt: %w", err))
 	}

@@ -129,6 +129,16 @@ func (c *clientImpl) DescribeTaskQueuePartition(
 	return c.client.DescribeTaskQueuePartition(ctx, request, opts...)
 }
 
+func (c *clientImpl) DisableTimeSkipping(
+	ctx context.Context,
+	request *adminservice.DisableTimeSkippingRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.DisableTimeSkippingResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.DisableTimeSkipping(ctx, request, opts...)
+}
+
 func (c *clientImpl) ForceUnloadTaskQueuePartition(
 	ctx context.Context,
 	request *adminservice.ForceUnloadTaskQueuePartitionRequest,
