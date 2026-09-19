@@ -27,10 +27,13 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/payload"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/nexusworkflowref"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 )
 
 func TestDescribeHistoryHost(t *testing.T) {
@@ -291,6 +294,71 @@ func TestCompleteNexusOperationChasm_RunFallback(t *testing.T) {
 				require.NoError(t, err)
 			} else {
 				require.ErrorContains(t, err, tc.wantErrContains)
+			}
+		})
+	}
+}
+
+func TestCompleteNexusOperation_ValidatesCHASMRefMatchesHSMRef(t *testing.T) {
+	t.Parallel()
+
+	hsmCompletion := &tokenspb.NexusOperationCompletion{
+		NamespaceId: "test-namespace-id",
+		WorkflowId:  "test-workflow-id",
+		RunId:       "test-run-id",
+		Ref: &persistencespb.StateMachineRef{
+			Path: []*persistencespb.StateMachineKey{{
+				Type: nexusoperations.OperationMachineType,
+				Id:   "42",
+			}},
+		},
+		RequestId: "test-request-id",
+	}
+	chasmCompletion, err := nexusworkflowref.HSMRefToCHASMRef(hsmCompletion)
+	require.NoError(t, err)
+	dualRefCompletion, err := nexusworkflowref.CHASMRefToHSMRef(chasmCompletion)
+	require.NoError(t, err)
+	dualRefCompletion.ComponentRef = chasmCompletion.GetComponentRef()
+
+	testCases := []struct {
+		name    string
+		mutate  func(*tokenspb.NexusOperationCompletion)
+		wantErr bool
+	}{
+		{name: "matching refs"},
+		{name: "missing request ID", mutate: func(c *tokenspb.NexusOperationCompletion) { c.RequestId = "" }, wantErr: true},
+		{name: "namespace mismatch", mutate: func(c *tokenspb.NexusOperationCompletion) { c.NamespaceId = "other-namespace" }, wantErr: true},
+		{name: "workflow mismatch", mutate: func(c *tokenspb.NexusOperationCompletion) { c.WorkflowId = "other-workflow" }, wantErr: true},
+		{name: "run mismatch", mutate: func(c *tokenspb.NexusOperationCompletion) { c.RunId = "other-run" }, wantErr: true},
+		{name: "path mismatch", mutate: func(c *tokenspb.NexusOperationCompletion) { c.Ref.Path[0].Id = "43" }, wantErr: true},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			completion := proto.Clone(dualRefCompletion).(*tokenspb.NexusOperationCompletion)
+			if tc.mutate != nil {
+				tc.mutate(completion)
+			}
+
+			ctrl := gomock.NewController(t)
+			controller := shard.NewMockController(ctrl)
+			shardLookupErr := errors.New("shard lookup failed")
+			if !tc.wantErr {
+				controller.EXPECT().
+					GetShardByNamespaceWorkflow(namespace.ID(hsmCompletion.GetNamespaceId()), hsmCompletion.GetWorkflowId()).
+					Return(nil, shardLookupErr)
+			}
+
+			h := &Handler{controller: controller}
+			_, err := h.CompleteNexusOperation(context.Background(), &historyservice.CompleteNexusOperationRequest{
+				Completion: completion,
+			})
+			if tc.wantErr {
+				var invalidArgument *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgument)
+			} else {
+				require.ErrorIs(t, err, shardLookupErr)
 			}
 		})
 	}

@@ -53,6 +53,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/nexusworkflowref"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/deletedlqtasks"
 	"go.temporal.io/server/service/history/api/deleteexecution"
@@ -69,6 +70,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/fx"
 	"google.golang.org/grpc/health"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -2147,6 +2149,13 @@ func (h *Handler) ListTasks(
 }
 
 func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyservice.CompleteNexusOperationRequest) (*historyservice.CompleteNexusOperationResponse, error) {
+	convertedFromCHASM := len(request.GetCompletion().GetComponentRef()) > 0
+	if convertedFromCHASM {
+		if err := validateCHASMRefMatchesHSMRef(request.GetCompletion()); err != nil {
+			return nil, serviceerror.NewInvalidArgumentf("invalid CHASM to HSM completion fallback: %v", err)
+		}
+	}
+
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespace.ID(request.Completion.NamespaceId), request.Completion.WorkflowId)
 	if err != nil {
 		return nil, h.convertError(err)
@@ -2161,6 +2170,7 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 		WorkflowKey:     definition.NewWorkflowKey(request.Completion.NamespaceId, request.Completion.WorkflowId, request.Completion.RunId),
 		StateMachineRef: request.Completion.Ref,
 	}
+	env := engine.StateMachineEnvironment(metrics.OperationTag(metrics.HistoryCompleteNexusOperationScope))
 	var opErr *nexus.OperationError
 	if request.State != string(nexus.OperationStateSucceeded) {
 		failure := commonnexus.ProtoFailureToNexusFailure(request.GetFailure())
@@ -2181,9 +2191,19 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 			}
 		}
 	}
+	var currentRunAccess func(ctx context.Context, ref hsm.Ref, requestID string, accessor func(*hsm.Node) error) error
+	if convertedFromCHASM {
+		currentRunAccess = func(ctx context.Context, ref hsm.Ref, requestID string, accessor func(*hsm.Node) error) error {
+			currentRunEnv, ok := env.(currentRunNexusOperationAccessor)
+			if !ok {
+				return serviceerror.NewInternal("current-run Nexus operation lookup unavailable")
+			}
+			return currentRunEnv.accessCurrentNexusOperation(ctx, ref, requestID, accessor)
+		}
+	}
 	err = h.nexusCompletionHandler.Handle(
 		ctx,
-		engine.StateMachineEnvironment(metrics.OperationTag(metrics.HistoryCompleteNexusOperationScope)),
+		env,
 		ref,
 		request.Completion.RequestId,
 		request.OperationToken,
@@ -2191,11 +2211,29 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 		request.Links,
 		request.GetSuccess(),
 		opErr,
+		currentRunAccess,
 	)
 	if err != nil {
 		return nil, h.convertError(err)
 	}
 	return &historyservice.CompleteNexusOperationResponse{}, nil
+}
+
+func validateCHASMRefMatchesHSMRef(completion *tokenspb.NexusOperationCompletion) error {
+	if completion.GetRequestId() == "" {
+		return errors.New("completion has no request ID")
+	}
+	expected, err := nexusworkflowref.CHASMRefToHSMRef(completion)
+	if err != nil {
+		return err
+	}
+	if completion.GetNamespaceId() != expected.GetNamespaceId() ||
+		completion.GetWorkflowId() != expected.GetWorkflowId() ||
+		completion.GetRunId() != expected.GetRunId() ||
+		!proto.Equal(completion.GetRef(), expected.GetRef()) {
+		return errors.New("CHASM and HSM completion references do not identify the same operation")
+	}
+	return nil
 }
 
 func (h *Handler) CompleteNexusOperationChasm(

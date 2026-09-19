@@ -162,6 +162,16 @@ type CompletionHandler struct {
 	config         *Config
 }
 
+// CurrentRunNexusOperationAccess applies a completion to the equivalent Nexus operation on the current
+// workflow run. CompletionHandler invokes it only after ordinary HSM reference resolution returns
+// an eligible NotFound. Implementations must resolve and mutate the operation atomically.
+type CurrentRunNexusOperationAccess func(
+	context.Context,
+	hsm.Ref,
+	string,
+	func(*hsm.Node) error,
+) error
+
 // NewCompletionHandler returns a CompletionHandler. Wired via fx; see Module.
 func NewCompletionHandler(metricsHandler metrics.Handler, config *Config) *CompletionHandler {
 	return &CompletionHandler{metricsHandler: metricsHandler, config: config}
@@ -169,6 +179,24 @@ func NewCompletionHandler(metricsHandler metrics.Handler, config *Config) *Compl
 
 // Handle resolves an async Nexus operation completion.
 func (h *CompletionHandler) Handle(
+	ctx context.Context,
+	env hsm.Environment,
+	ref hsm.Ref,
+	requestID string,
+	operationToken string,
+	startTime *timestamppb.Timestamp,
+	links []*commonpb.Link,
+	result *commonpb.Payload,
+	opFailedError *nexus.OperationError,
+	currentRunAccess CurrentRunNexusOperationAccess,
+) error {
+	if currentRunAccess != nil {
+		return h.handleConvertedFromCHASM(ctx, env, ref, requestID, operationToken, startTime, links, result, opFailedError, currentRunAccess)
+	}
+	return h.handle(ctx, env, ref, requestID, operationToken, startTime, links, result, opFailedError)
+}
+
+func (h *CompletionHandler) handle(
 	ctx context.Context,
 	env hsm.Environment,
 	ref hsm.Ref,
@@ -206,24 +234,14 @@ func (h *CompletionHandler) Handle(
 			return serviceerror.NewNotFound("operation not found")
 		}
 
-		if opFailedError != nil {
-			err = handleOperationError(node, operation, opFailedError)
-		} else {
-			err = handleSuccessfulOperationResult(node, operation, result, nil)
-		}
+		emitMetrics, err = h.applyCompletionAndBuildMetrics(node, operation, result, opFailedError, fabricatedStart, env.Now)
 		// TODO(bergundy): Remove this once the operation auto-deletes itself from the tree on completion with state
 		// based replication.
 		if errors.Is(err, hsm.ErrInvalidTransition) {
 			isRetryableNotFoundErr = false
 			return serviceerror.NewNotFound("operation not found")
 		}
-		if err != nil {
-			return err
-		}
-		// fabricatedStart means the executor never emitted schedule-to-start, so we emit it here.
-		emitScheduleToStart := fabricatedStart && operation.StartedTime != nil
-		emitMetrics = h.deferredCompletionMetric(operation, node.NamespaceName(), node.WorkflowTypeName(), opFailedError, emitScheduleToStart, env.Now())
-		return nil
+		return err
 	})
 	if errors.As(err, new(*serviceerror.NotFound)) && isRetryableNotFoundErr && ref.WorkflowKey.RunID != "" {
 		// Try again without a run ID in case the original run was reset.
@@ -234,7 +252,7 @@ func (h *CompletionHandler) Handle(
 		ref.StateMachineRef.MutableStateVersionedTransition = nil
 		ref.StateMachineRef.MachineInitialVersionedTransition.TransitionCount = 0
 		ref.StateMachineRef.MachineLastUpdateVersionedTransition.TransitionCount = 0
-		return h.Handle(ctx, env, ref, requestID, operationToken, startTime, links, result, opFailedError)
+		return h.handle(ctx, env, ref, requestID, operationToken, startTime, links, result, opFailedError)
 	}
 	if err != nil {
 		return err
@@ -243,6 +261,91 @@ func (h *CompletionHandler) Handle(
 		emitMetrics()
 	}
 	return nil
+}
+
+// handleConvertedFromCHASM resolves a completion whose CHASM reference was converted to HSM.
+func (h *CompletionHandler) handleConvertedFromCHASM(
+	ctx context.Context,
+	env hsm.Environment,
+	ref hsm.Ref,
+	requestID string,
+	operationToken string,
+	startTime *timestamppb.Timestamp,
+	links []*commonpb.Link,
+	result *commonpb.Payload,
+	opFailedError *nexus.OperationError,
+	currentRunAccess CurrentRunNexusOperationAccess,
+) error {
+	isRetryableNotFoundErr := requestID != ""
+	var emitMetrics func()
+	accessor := func(node *hsm.Node) error {
+		if err := node.CheckRunning(); err != nil {
+			return err
+		}
+		operation, err := hsm.MachineData[Operation](node)
+		if err != nil {
+			return err
+		}
+		if requestID != "" && operation.RequestId != requestID {
+			isRetryableNotFoundErr = false
+			return serviceerror.NewNotFound("operation not found")
+		}
+		isRetryableNotFoundErr = false
+		fabricatedStart := TransitionStarted.Possible(operation)
+		if err := fabricateStartedEventIfMissing(node, requestID, operationToken, startTime, links); err != nil {
+			return err
+		}
+
+		emitMetrics, err = h.applyCompletionAndBuildMetrics(node, operation, result, opFailedError, fabricatedStart, env.Now)
+		// TODO(bergundy): Remove this once the operation auto-deletes itself from the tree on completion with state
+		// based replication.
+		if errors.Is(err, hsm.ErrInvalidTransition) {
+			return serviceerror.NewNotFound("operation not found")
+		}
+		return err
+	}
+
+	err := env.Access(ctx, ref, hsm.AccessWrite, accessor)
+	if err == nil {
+		if emitMetrics != nil {
+			emitMetrics()
+		}
+		return nil
+	}
+	if !errors.As(err, new(*serviceerror.NotFound)) || !isRetryableNotFoundErr || ref.WorkflowKey.RunID == "" {
+		return err
+	}
+
+	ref.WorkflowKey.RunID = ""
+	err = currentRunAccess(ctx, ref, requestID, accessor)
+	if err != nil {
+		return err
+	}
+	if emitMetrics != nil {
+		emitMetrics()
+	}
+	return nil
+}
+
+func (h *CompletionHandler) applyCompletionAndBuildMetrics(
+	node *hsm.Node,
+	operation Operation,
+	result *commonpb.Payload,
+	opFailedError *nexus.OperationError,
+	fabricatedStart bool,
+	now func() time.Time,
+) (func(), error) {
+	var err error
+	if opFailedError != nil {
+		err = handleOperationError(node, operation, opFailedError)
+	} else {
+		err = handleSuccessfulOperationResult(node, operation, result, nil)
+	}
+	if err != nil {
+		return nil, err
+	}
+	emitScheduleToStart := fabricatedStart && operation.StartedTime != nil
+	return h.deferredCompletionMetric(operation, node.NamespaceName(), node.WorkflowTypeName(), opFailedError, emitScheduleToStart, now()), nil
 }
 
 // deferredCompletionMetric builds the post-commit caller-side emit for a resolved async completion:

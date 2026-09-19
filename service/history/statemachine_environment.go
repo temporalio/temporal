@@ -361,8 +361,11 @@ func (e *stateMachineEnvironment) validateNotZombieWorkflow(
 }
 
 func (e *stateMachineEnvironment) Access(ctx context.Context, ref hsm.Ref, accessType hsm.AccessType, accessor func(*hsm.Node) error) (retErr error) {
-	wfCtx, release, ms, err := e.getValidatedMutableState(
-		ctx, ref.WorkflowKey, func(workflowContext historyi.WorkflowContext, ms historyi.MutableState, potentialStaleState bool) error {
+	return e.access(
+		ctx,
+		ref,
+		accessType,
+		func(workflowContext historyi.WorkflowContext, ms historyi.MutableState, potentialStaleState bool) error {
 			accessTypeForZombieValidation := accessType
 			if ref.TaskID != 0 {
 				// For task references we never want to access a zombie workflow, even if the machine is accessed for read.
@@ -373,6 +376,23 @@ func (e *stateMachineEnvironment) Access(ctx context.Context, ref hsm.Ref, acces
 			}
 			return e.validateStateMachineRef(ctx, workflowContext, ms, ref, potentialStaleState)
 		},
+		accessor,
+	)
+}
+
+// access contains the workflow locking, state-machine lookup, and persistence shared by normal HSM
+// access and narrowly scoped alternate reference-validation paths.
+func (e *stateMachineEnvironment) access(
+	ctx context.Context,
+	ref hsm.Ref,
+	accessType hsm.AccessType,
+	validate func(historyi.WorkflowContext, historyi.MutableState, bool) error,
+	accessor func(*hsm.Node) error,
+) (retErr error) {
+	wfCtx, release, ms, err := e.getValidatedMutableState(
+		ctx,
+		ref.WorkflowKey,
+		validate,
 	)
 	if err != nil {
 		return err

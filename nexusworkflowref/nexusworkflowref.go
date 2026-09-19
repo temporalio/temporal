@@ -112,8 +112,8 @@ func chasmCompletion(id operationIdentity) (*tokenspb.NexusOperationCompletion, 
 }
 
 // hsmCompletion builds an HSM-format completion token. The versioned-transition fields are non-nil
-// zero values: the completion handler's reset fallback zeroes their transition counts and would
-// nil-panic if they were unset. Identity is re-established by request ID.
+// zero values because normal HSM validation dereferences them on the stronger, original-run attempt.
+// Identity is re-established by request ID.
 func hsmCompletion(id operationIdentity) *tokenspb.NexusOperationCompletion {
 	return &tokenspb.NexusOperationCompletion{
 		NamespaceId: id.namespaceID,

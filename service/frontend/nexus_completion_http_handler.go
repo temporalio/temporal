@@ -283,6 +283,9 @@ func (h *nexusCompletionHandler) completeOperation(
 	}
 	var fallbackErr error
 	if isChasm {
+		// Preserve the original CHASM ref alongside the converted HSM ref only in this
+		// frontend to history call. Normal callback-token paths never mint this combined form.
+		converted.ComponentRef = completion.GetComponentRef()
 		fallbackErr = h.completeHSMOperation(ctx, converted, successPayload, req, links)
 	} else {
 		fallbackErr = h.completeChasmOperation(ctx, logger, converted, successPayload, req, links)

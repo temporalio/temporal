@@ -114,6 +114,8 @@ func TestCompleteOperation_FrameworkFallback(t *testing.T) {
 					client.EXPECT().CompleteNexusOperation(gomock.Any(), gomock.Any()).
 						DoAndReturn(func(_ context.Context, req *historyservice.CompleteNexusOperationRequest, _ ...grpc.CallOption) (*historyservice.CompleteNexusOperationResponse, error) {
 							require.NotNil(t, req.GetCompletion().GetRef())
+							require.Equal(t, chasmCompletionToken(t).GetComponentRef(), req.GetCompletion().GetComponentRef())
+							require.Equal(t, convTestRequestID, req.GetCompletion().GetRequestId())
 							return &historyservice.CompleteNexusOperationResponse{}, nil
 						}),
 				)
