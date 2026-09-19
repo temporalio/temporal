@@ -64,7 +64,6 @@ func newTestRescheduler(
 	t.Helper()
 
 	scheduler := NewMockScheduler(ctrl)
-	scheduler.EXPECT().ChannelWeightFn().Return(nil).AnyTimes()
 	scheduler.EXPECT().TaskChannelKeyFn().Return(
 		func(e Executable) TaskChannelKey { return TaskChannelKey{NamespaceID: e.GetNamespaceID()} },
 	).AnyTimes()
@@ -323,12 +322,6 @@ func TestReschedule_HighPriorityGetsBudgetFirst(t *testing.T) {
 	scheduler.EXPECT().TaskChannelKeyFn().Return(func(e Executable) TaskChannelKey {
 		return TaskChannelKey{NamespaceID: e.GetNamespaceID(), Priority: e.GetPriority()}
 	}).AnyTimes()
-	scheduler.EXPECT().ChannelWeightFn().Return(func(key TaskChannelKey) int {
-		if key.Priority == ctasks.PriorityHigh {
-			return 10
-		}
-		return 1
-	})
 	r := NewRescheduler(scheduler, timeSource, log.NewTestLogger(), metrics.NoopMetricsHandler, state)
 	r.timerGate = &recordingGate{fireCh: make(chan struct{}, 1)}
 
@@ -497,7 +490,7 @@ func TestReschedule_CursorRotatesBetweenEqualClasses(t *testing.T) {
 	leaders := make(map[reschedulerKey]bool)
 	for i := 0; i < 3; i++ {
 		r.Lock()
-		leaders[r.visitOrderLocked()[0].key] = true
+		leaders[r.visitOrderLocked()[0]] = true
 		r.Unlock()
 		r.reschedule()
 	}
@@ -559,4 +552,72 @@ func TestReschedule_UngovernedTasksDoNotWaitOnAnotherClassBudget(t *testing.T) {
 		"an ungoverned task is not blocked by a budget it is not waiting on")
 	require.NotContains(t, submitted, Executable(governed),
 		"and the governed one is still held by its own budget")
+}
+
+// Priority order is a property of the rescheduler, not of the throttle flag.
+func TestReschedule_PriorityOrderHoldsWithTheControllerOff(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	o := defaultThrottleOverrides()
+	o.enabled = false
+	state, stateClock := newTestThrottleState(o)
+	now := stateClock.Now()
+	timeSource := clock.NewEventTimeSource()
+	timeSource.Update(now)
+
+	scheduler := NewMockScheduler(ctrl)
+	scheduler.EXPECT().TaskChannelKeyFn().Return(func(e Executable) TaskChannelKey {
+		return TaskChannelKey{NamespaceID: e.GetNamespaceID(), Priority: e.GetPriority()}
+	}).AnyTimes()
+	r := NewRescheduler(scheduler, timeSource, log.NewTestLogger(), metrics.NoopMetricsHandler, state)
+	r.timerGate = &recordingGate{fireCh: make(chan struct{}, 1)}
+
+	// Parked under a budget, but the controller is off, so nothing is gated.
+	key := apsKey("ns-1")
+	for _, p := range []ctasks.Priority{
+		ctasks.PriorityPreemptable, ctasks.PriorityLow, ctasks.PriorityHigh,
+	} {
+		e := newThrottledExecutable(ctrl, key, true)
+		e.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()
+		e.EXPECT().GetPriority().Return(p).AnyTimes()
+		addThrottled(r, e, now)
+	}
+
+	var submitted []ctasks.Priority
+	scheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(e Executable) bool {
+		submitted = append(submitted, e.GetPriority())
+		return true
+	}).AnyTimes()
+	r.reschedule()
+
+	require.Equal(t,
+		[]ctasks.Priority{ctasks.PriorityHigh, ctasks.PriorityLow, ctasks.PriorityPreemptable},
+		submitted,
+		"a disabled controller must not cost the rescheduler its priority order")
+	require.Zero(t, throttleLen(state), "a disabled controller must track nothing")
+}
+
+// A queue wired without a controller still parks tasks under a class key, so the gate must
+// tolerate a nil state rather than dereference it.
+func TestReschedule_NilControllerStillDispatchesClassedWork(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	timeSource := clock.NewEventTimeSource()
+	now := time.Unix(0, 0)
+	timeSource.Update(now)
+
+	scheduler := NewMockScheduler(ctrl)
+	scheduler.EXPECT().TaskChannelKeyFn().Return(
+		func(e Executable) TaskChannelKey { return TaskChannelKey{NamespaceID: e.GetNamespaceID()} },
+	).AnyTimes()
+	r := NewRescheduler(scheduler, timeSource, log.NewTestLogger(), metrics.NoopMetricsHandler, nil)
+	r.timerGate = &recordingGate{fireCh: make(chan struct{}, 1)}
+
+	e := newThrottledExecutable(ctrl, apsKey("ns-1"), true)
+	e.EXPECT().GetNamespaceID().Return("ns-1").AnyTimes()
+	addThrottled(r, e, now)
+	require.NotEqual(t, ThrottleKey{}, r.keyOrder[0].Throttle, "the class key must carry the cause")
+
+	scheduler.EXPECT().TrySubmit(gomock.Any()).Return(true).Times(1)
+	require.NotPanics(t, r.reschedule)
+	require.Zero(t, r.Len())
+	require.False(t, e.admitted, "a task the controller never metered must not be marked")
 }

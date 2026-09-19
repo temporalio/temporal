@@ -46,7 +46,6 @@ type (
 		TrySubmit(Executable) bool
 
 		TaskChannelKeyFn() TaskChannelKeyFn
-		ChannelWeightFn() ChannelWeightFn
 	}
 
 	TaskChannelKey struct {
@@ -212,10 +211,6 @@ func (s *schedulerImpl) Stop() {
 	s.Scheduler.Stop()
 }
 
-func (s *schedulerImpl) ChannelWeightFn() ChannelWeightFn {
-	return s.channelWeightFn
-}
-
 func (s *schedulerImpl) TaskChannelKeyFn() TaskChannelKeyFn {
 	return s.taskChannelKeyFn
 }
@@ -232,15 +227,10 @@ func (s *schedulerImpl) HandleBusyWorkflow(executable Executable) bool {
 type CommonSchedulerWrapper struct {
 	tasks.Scheduler[Executable]
 	TaskKeyFn func(e Executable) TaskChannelKey
-	WeightFn  ChannelWeightFn
 }
 
 func (s *CommonSchedulerWrapper) TaskChannelKeyFn() TaskChannelKeyFn {
 	return s.TaskKeyFn
-}
-
-func (s *CommonSchedulerWrapper) ChannelWeightFn() ChannelWeightFn {
-	return s.WeightFn
 }
 
 func NewRateLimitedScheduler(
@@ -308,10 +298,6 @@ func (s *rateLimitedSchedulerImpl) Start() {
 
 func (s *rateLimitedSchedulerImpl) Stop() {
 	s.baseScheduler.Stop()
-}
-
-func (s *rateLimitedSchedulerImpl) ChannelWeightFn() ChannelWeightFn {
-	return s.baseScheduler.ChannelWeightFn()
 }
 
 func (s *rateLimitedSchedulerImpl) TaskChannelKeyFn() TaskChannelKeyFn {

@@ -59,11 +59,6 @@ type (
 		Throttle ThrottleKey
 	}
 
-	weightedClass struct {
-		key    reschedulerKey
-		weight int
-	}
-
 	reschedulerImpl struct {
 		scheduler      Scheduler
 		timeSource     clock.TimeSource
@@ -77,12 +72,11 @@ type (
 
 		timerGate        timer.Gate
 		taskChannelKeyFn TaskChannelKeyFn
-		channelWeightFn  ChannelWeightFn
 
 		sync.Mutex
 		pqMap          map[reschedulerKey]collection.Queue[rescheduledExecuable]
-		keyOrder       []weightedClass
-		visitOrder     []weightedClass
+		keyOrder       []reschedulerKey
+		visitOrder     []reschedulerKey
 		rrCursor       int
 		numExecutables int
 	}
@@ -110,7 +104,6 @@ func NewRescheduler(
 
 		pqMap: make(map[reschedulerKey]collection.Queue[rescheduledExecuable]),
 	}
-	r.channelWeightFn = scheduler.ChannelWeightFn()
 	return r
 }
 
@@ -247,17 +240,12 @@ func (r *reschedulerImpl) reschedule() {
 	defer r.Unlock()
 
 	metrics.TaskReschedulerPendingTasks.With(r.metricsHandler).Record(int64(r.numExecutables))
-	now := r.timeSource.Now()
-	if !r.gating() {
-		r.rescheduleUngatedLocked(now)
-		return
-	}
-	pass := reschedulePass{now: now}
+	pass := reschedulePass{now: r.timeSource.Now()}
 
 	n := len(r.keyOrder)
-	for _, class := range r.visitOrderLocked() {
-		if pq, ok := r.pqMap[class.key]; ok && !pq.IsEmpty() {
-			r.drainClassLocked(class.key, pq, &pass)
+	for _, key := range r.visitOrderLocked() {
+		if pq, ok := r.pqMap[key]; ok && !pq.IsEmpty() {
+			r.drainClassLocked(key, pq, &pass)
 		}
 	}
 	if n > 0 {
@@ -269,25 +257,17 @@ func (r *reschedulerImpl) reschedule() {
 	}
 }
 
-// Best-effort within this shard; the bucket is host-wide.
-func (r *reschedulerImpl) visitOrderLocked() []weightedClass {
+func (r *reschedulerImpl) visitOrderLocked() []reschedulerKey {
 	n := len(r.keyOrder)
 	r.visitOrder = r.visitOrder[:0]
 	for i := 0; i < n; i++ {
 		r.visitOrder = append(r.visitOrder, r.keyOrder[(r.rrCursor+i)%n])
 	}
-	// Stable, so the rotation above still decides the order within one priority.
-	slices.SortStableFunc(r.visitOrder, func(a, b weightedClass) int {
-		return cmp.Compare(b.weight, a.weight)
+	// Lower Priority sorts first. Stable, so the rotation still breaks ties within one priority.
+	slices.SortStableFunc(r.visitOrder, func(a, b reschedulerKey) int {
+		return cmp.Compare(a.Priority, b.Priority)
 	})
 	return r.visitOrder
-}
-
-func (r *reschedulerImpl) classWeight(key reschedulerKey) int {
-	if r.channelWeightFn == nil {
-		return 0
-	}
-	return r.channelWeightFn(key.TaskChannelKey)
 }
 
 func (r *reschedulerImpl) drainClassLocked(
@@ -341,39 +321,6 @@ func (r *reschedulerImpl) drainClassLocked(
 	}
 }
 
-func (r *reschedulerImpl) gating() bool {
-	return r.throttleState != nil && r.throttleState.Enabled()
-}
-
-func (r *reschedulerImpl) rescheduleUngatedLocked(now time.Time) {
-	for _, pq := range r.pqMap {
-		for !pq.IsEmpty() {
-			rescheduled := pq.Peek()
-			if now.Before(rescheduled.rescheduleTime) {
-				r.timerGate.Update(rescheduled.rescheduleTime)
-				break
-			}
-
-			executable := rescheduled.executable
-			if executable.State() == ctasks.TaskStateCancelled {
-				pq.Remove()
-				r.numExecutables--
-				continue
-			}
-
-			executable.SetScheduledTime(now)
-			if !r.scheduler.TrySubmit(executable) {
-				r.timerGate.Update(now.Add(
-					backoff.Jitter(taskChanFullBackoff, taskChanFullBackoffJitterCoefficient)))
-				break
-			}
-
-			pq.Remove()
-			r.numExecutables--
-		}
-	}
-}
-
 // The floor stops every shard polling at the bucket's refill rate.
 func (r *reschedulerImpl) budgetRetryInterval(eta time.Duration) time.Duration {
 	const budgetRetryDivisor = 10
@@ -424,9 +371,9 @@ func (r *reschedulerImpl) rebuildKeyOrderLocked() {
 		return
 	}
 	order := r.keyOrder[:0]
-	for _, class := range r.keyOrder {
-		if _, ok := r.pqMap[class.key]; ok {
-			order = append(order, class)
+	for _, key := range r.keyOrder {
+		if _, ok := r.pqMap[key]; ok {
+			order = append(order, key)
 		}
 	}
 	r.keyOrder = order
@@ -448,7 +395,7 @@ func (r *reschedulerImpl) getOrCreateClassLocked(
 
 	pq := r.newPriorityQueue(nil)
 	r.pqMap[key] = pq
-	r.keyOrder = append(r.keyOrder, weightedClass{key: key, weight: r.classWeight(key)})
+	r.keyOrder = append(r.keyOrder, key)
 	return pq
 }
 
