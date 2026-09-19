@@ -687,6 +687,65 @@ func (s *nodeSuite) assertParentPointer(testComponentNode *Node) {
 	s.Same(subComponent1, testSubComponent1FromPtr)
 }
 
+func (s *nodeSuite) TestComponentPath() {
+	node := s.testComponentTree()
+
+	mutableContext := NewMutableContext(context.Background(), node)
+	component, err := node.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := component.(*TestComponent)
+
+	mapSubComponent1 := &TestSubComponent1{}
+	testComponent.SubComponents = Map[string, *TestSubComponent1]{
+		"mapSubComponent1": NewComponentField(mutableContext, mapSubComponent1),
+	}
+	s.Nil(mutableContext.Path(mapSubComponent1), "a component not yet synced into the tree has no path")
+	s.NoError(node.syncSubComponents())
+
+	subComponent1 := testComponent.SubComponent1.Get(mutableContext)
+	subComponent11 := subComponent1.SubComponent11.Get(mutableContext)
+
+	s.Equal([]string{}, mutableContext.Path(testComponent), "the root component's path is empty")
+	s.Equal([]string{"SubComponent1"}, mutableContext.Path(subComponent1))
+	s.Equal([]string{"SubComponent1", "SubComponent11"}, mutableContext.Path(subComponent11))
+	// A component inside a CHASM map is addressed by its key in that map.
+	s.Equal([]string{"SubComponents", "mapSubComponent1"}, mutableContext.Path(mapSubComponent1))
+
+	s.Nil(mutableContext.Path(&TestComponent{}), "a component that is not in the tree has no path")
+}
+
+func (s *nodeSuite) TestExecutionType() {
+	testCases := map[string]struct {
+		rootArchetypeID uint32
+		expectedType    enumspb.ExecutionType
+	}{
+		// TestComponent is registered with EXECUTION_TYPE_WORKFLOW.
+		"registered execution type": {
+			rootArchetypeID: testComponentTypeID,
+			expectedType:    enumspb.EXECUTION_TYPE_WORKFLOW,
+		},
+		// TestSubComponent1 is registered without a WithExecutionType option.
+		"no registered execution type": {
+			rootArchetypeID: testSubComponent1TypeID,
+			expectedType:    enumspb.EXECUTION_TYPE_UNSPECIFIED,
+		},
+	}
+
+	for name, tc := range testCases {
+		s.Run(name, func() {
+			serializedNodes := testComponentSerializedNodes()
+			serializedNodes[""].Metadata.GetComponentAttributes().TypeId = tc.rootArchetypeID
+			root, err := s.newTestTree(serializedNodes)
+			s.NoError(err)
+
+			s.Equal(tc.expectedType, root.executionType())
+			// Every node reports the type of the execution it belongs to, not one per component.
+			s.Equal(tc.expectedType, root.children["SubComponent1"].executionType())
+			s.Equal(tc.expectedType, NewContext(context.Background(), root).ExecutionInfo().ExecutionType)
+		})
+	}
+}
+
 func (s *nodeSuite) TestSyncSubComponents_DeleteLeafNode() {
 	node := s.testComponentTree()
 
