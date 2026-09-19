@@ -257,6 +257,24 @@ func registerGatedWorkflow(env *testcore.TestEnv, wt string, runs *atomic.Int32)
 	}, workflow.RegisterOptions{Name: wt})
 }
 
+// registerTimerWorkflow registers a workflow with exactly one user timer.
+func registerTimerWorkflow(
+	env *testcore.TestEnv,
+	wt string,
+	timerDuration time.Duration,
+	started *atomic.Int32,
+	completed *atomic.Int32,
+) {
+	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		_ = workflow.SideEffect(ctx, func(workflow.Context) any { started.Add(1); return 0 })
+		if err := workflow.NewTimer(ctx, timerDuration).Get(ctx, nil); err != nil {
+			return err
+		}
+		_ = workflow.SideEffect(ctx, func(workflow.Context) any { completed.Add(1); return 0 })
+		return nil
+	}, workflow.RegisterOptions{Name: wt})
+}
+
 // countMetric returns how many captured samples of metricName carry every tag in want.
 func countMetric(capture *testcore.NamespaceMetricCapture, metricName string, want map[string]string) int {
 	return len(capture.CollectMetric(metricName, func(rec *metricstest.CapturedRecording) bool {
@@ -436,6 +454,15 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestUpdateScheduleMemo", func(t *testing.T) { t.Parallel(); testUpdateScheduleMemo(t, newContext) })
 	t.Run("TestStateSizeBytesReported", func(t *testing.T) { t.Parallel(); testStateSizeBytesReported(t, newContext) })
 	t.Run("TestBufferOverrunDropsActions", func(t *testing.T) { t.Parallel(); testBufferOverrunDropsActions(t, newContext) })
+	t.Run("TestTimeSkippingFastForward", func(t *testing.T) { t.Parallel(); testScheduleTimeSkippingFastForward(t) })
+	t.Run("TestTimeSkippingDefaultPolicyWithUserTimer", func(t *testing.T) {
+		t.Parallel()
+		testScheduleTimeSkippingDefaultPolicyWithUserTimer(t)
+	})
+	t.Run("TestTimeSkippingBufferAllBackfillWithUserTimer", func(t *testing.T) {
+		t.Parallel()
+		testScheduleTimeSkippingBufferAllBackfillWithUserTimer(t)
+	})
 	t.Run("TestDescribeCatchupWindowAfterCreateAndUpdate", func(t *testing.T) {
 		t.Parallel()
 		testDescribeCatchupWindowAfterCreateAndUpdate(t)
@@ -463,6 +490,241 @@ func TestScheduleCHASM(t *testing.T) {
 		t.Parallel()
 		testPauseOnFailureIgnoresCancelTerminate(t, newContext, stopByTerminate)
 	})
+}
+
+func testScheduleTimeSkippingFastForward(t *testing.T) {
+	opts := append(
+		scheduleCommonOpts(t),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true),
+		testcore.WithDynamicConfig(dynamicconfig.ScheduleV2TimeSkippingEnabled, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnablePrincipalPropagation, true),
+		testcore.WithInternalPrincipalAuth(),
+	)
+	s := newScheduleEnv(t, opts...)
+	ctx := chasmContextFactory(testcontext.For(t))
+
+	sid := testcore.RandomizeStr("sched-time-skipping")
+	wid := testcore.RandomizeStr("sched-time-skipping-wf")
+	wt := testcore.RandomizeStr("sched-time-skipping-wt")
+	var runs atomic.Int32
+	registerCountingWorkflow(s, wt, &runs)
+
+	now := time.Now().UTC()
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{{
+				Interval: durationpb.New(time.Hour),
+				Phase:    durationpb.New(now.Sub(now.Truncate(time.Hour))),
+			}},
+		},
+		Action: startWorkflowAction(s, wid, wt),
+		Policies: &schedulepb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		},
+		State: &schedulepb.ScheduleState{Paused: true},
+	}
+	createSchedule(ctx, t, s, sid, schedule)
+
+	schedule.State.Paused = false
+	schedule.TimeSkippingConfig = &commonpb.TimeSkippingConfig{
+		Enabled: true,
+		FastForwardConfig: &commonpb.FastForwardConfig{
+			Id:       uuid.NewString(),
+			Duration: durationpb.New(5*time.Hour + 30*time.Minute),
+		},
+	}
+	_, err := s.FrontendClient().UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		return runs.Load() >= 5
+	}, time.Minute, pollInterval)
+	require.Equal(t, int32(5), runs.Load())
+
+	var describe *workflowservice.DescribeScheduleResponse
+	require.Eventually(t, func() bool {
+		var err error
+		describe, err = s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		return err == nil && len(describe.GetInfo().GetRecentActions()) >= 2
+	}, time.Minute, pollInterval)
+
+	seenRunIDs := make(map[string]struct{}, 2)
+	for _, action := range describe.GetInfo().GetRecentActions()[:2] {
+		execution := action.GetStartWorkflowResult()
+		require.NotEmpty(t, execution.GetWorkflowId())
+		require.NotEmpty(t, execution.GetRunId())
+		require.NotContains(t, seenRunIDs, execution.GetRunId())
+		seenRunIDs[execution.GetRunId()] = struct{}{}
+
+		wallTime := time.Now()
+		workflowDescription, err := s.FrontendClient().DescribeWorkflowExecution(
+			ctx,
+			&workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: s.Namespace().String(),
+				Execution: execution,
+			},
+		)
+		require.NoError(t, err)
+		timeSkippingInfo := workflowDescription.GetWorkflowExtendedInfo().GetTimeSkippingInfo()
+		require.NotNil(t, timeSkippingInfo)
+		require.NotNil(t, timeSkippingInfo.GetEffectiveConfig())
+		require.Nil(t, timeSkippingInfo.GetEffectiveConfig().GetFastForwardConfig())
+		require.Greater(t, timeSkippingInfo.GetCurrentTime().AsTime().Sub(wallTime), 30*time.Minute)
+	}
+}
+
+func testScheduleTimeSkippingDefaultPolicyWithUserTimer(t *testing.T) {
+	opts := append(
+		scheduleCommonOpts(t),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true),
+		testcore.WithDynamicConfig(dynamicconfig.ScheduleV2TimeSkippingEnabled, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnablePrincipalPropagation, true),
+		testcore.WithInternalPrincipalAuth(),
+	)
+	s := newScheduleEnv(t, opts...)
+	ctx := chasmContextFactory(testcontext.For(t))
+
+	sid := testcore.RandomizeStr("sched-time-skipping-default")
+	wid := testcore.RandomizeStr("sched-time-skipping-default-wf")
+	wt := testcore.RandomizeStr("sched-time-skipping-default-wt")
+	var started, completed atomic.Int32
+	registerTimerWorkflow(s, wt, 30*time.Minute, &started, &completed)
+
+	now := time.Now().UTC()
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{{
+				Interval: durationpb.New(time.Hour),
+				Phase:    durationpb.New(now.Sub(now.Truncate(time.Hour))),
+			}},
+		},
+		Action:   startWorkflowAction(s, wid, wt),
+		Policies: &schedulepb.SchedulePolicies{},
+		State:    &schedulepb.ScheduleState{Paused: true},
+	}
+	timeSkippingConfig := &commonpb.TimeSkippingConfig{
+		Enabled: true,
+		FastForwardConfig: &commonpb.FastForwardConfig{
+			Id:       uuid.NewString(),
+			Duration: durationpb.New(3*time.Hour + 30*time.Minute),
+		},
+	}
+
+	// Schedule time skipping remains a V2-only feature even when its dynamic
+	// config is enabled for the namespace.
+	v1Schedule := proto.Clone(schedule).(*schedulepb.Schedule)
+	v1Schedule.TimeSkippingConfig = proto.Clone(timeSkippingConfig).(*commonpb.TimeSkippingConfig)
+	_, err := s.FrontendClient().CreateSchedule(v1ContextFactory(testcontext.For(t)), &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: testcore.RandomizeStr("sched-time-skipping-v1"),
+		Schedule:   v1Schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	var unimplemented *serviceerror.Unimplemented
+	require.ErrorAs(t, err, &unimplemented)
+	require.ErrorContains(t, err, "Schedule time skipping is not enabled for namespace")
+
+	createSchedule(ctx, t, s, sid, schedule)
+
+	schedule.State.Paused = false
+	schedule.TimeSkippingConfig = timeSkippingConfig
+	_, err = s.FrontendClient().UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule:   schedule,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	require.Eventually(t, func() bool {
+		return completed.Load() >= 3
+	}, time.Minute, pollInterval, "three scheduled workflows should complete their user timers")
+	require.Equal(t, int32(3), started.Load())
+	require.Equal(t, int32(3), completed.Load())
+
+	describe, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(3), describe.GetInfo().GetActionCount())
+	require.Empty(t, describe.GetInfo().GetRunningWorkflows())
+}
+
+func testScheduleTimeSkippingBufferAllBackfillWithUserTimer(t *testing.T) {
+	opts := append(
+		scheduleCommonOpts(t),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true),
+		testcore.WithDynamicConfig(dynamicconfig.ScheduleV2TimeSkippingEnabled, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnablePrincipalPropagation, true),
+		testcore.WithInternalPrincipalAuth(),
+	)
+	s := newScheduleEnv(t, opts...)
+	ctx := chasmContextFactory(testcontext.For(t))
+
+	sid := testcore.RandomizeStr("sched-time-skipping-backfill")
+	wid := testcore.RandomizeStr("sched-time-skipping-backfill-wf")
+	wt := testcore.RandomizeStr("sched-time-skipping-backfill-wt")
+	var started, completed atomic.Int32
+	registerTimerWorkflow(s, wt, time.Hour, &started, &completed)
+
+	now := time.Now().UTC().Truncate(time.Second)
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{{
+				Interval: durationpb.New(24 * time.Hour),
+				Phase:    durationpb.New(now.Sub(now.Truncate(24 * time.Hour))),
+			}},
+		},
+		Action: startWorkflowAction(s, wid, wt),
+		Policies: &schedulepb.SchedulePolicies{
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+		},
+		State: &schedulepb.ScheduleState{Paused: true},
+		TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+			Enabled: true,
+			FastForwardConfig: &commonpb.FastForwardConfig{
+				Id:       uuid.NewString(),
+				Duration: durationpb.New(6 * time.Hour),
+			},
+		},
+	}
+	createSchedule(ctx, t, s, sid, schedule)
+
+	patchSchedule(ctx, t, s, sid, &schedulepb.SchedulePatch{
+		Unpause: "run backfill",
+		BackfillRequest: []*schedulepb.BackfillRequest{{
+			StartTime:     timestamppb.New(now.Add(-72 * time.Hour)),
+			EndTime:       timestamppb.New(now.Add(-24 * time.Hour)),
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+		}},
+	})
+
+	require.Eventually(t, func() bool {
+		return completed.Load() >= 3
+	}, time.Minute, pollInterval, "all buffered backfill workflows should complete their user timers")
+	require.Equal(t, int32(3), started.Load())
+	require.Equal(t, int32(3), completed.Load())
+
+	describe, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(3), describe.GetInfo().GetActionCount())
+	require.Empty(t, describe.GetInfo().GetRunningWorkflows())
+	require.Zero(t, describe.GetInfo().GetBufferSize())
 }
 
 func testDescribeCatchupWindowAfterCreateAndUpdate(t *testing.T) {

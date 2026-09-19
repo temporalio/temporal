@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -3938,6 +3939,81 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	tsc = &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 999}
 	s.Require().NoError(maxSkipWH.validateAndPopulateTimeSkippingConfig(tsc, s.testNamespace))
 	s.Require().Equal(int32(999), tsc.GetMaxSessionSkipCount())
+}
+
+func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
+	config := s.newConfig()
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.ScheduleV2TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	wh := s.getWorkflowHandler(config)
+	s.Require().ErrorIs(
+		wh.validateAndPopulateScheduleTimeSkippingConfig(
+			&schedulepb.Schedule{TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true}},
+			s.testNamespace,
+		),
+		errScheduleTimeSkippingNotEnabled,
+	)
+
+	config.ScheduleV2TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh = s.getWorkflowHandler(config)
+
+	testCases := []struct {
+		name    string
+		config  *commonpb.TimeSkippingConfig
+		wantErr bool
+	}{
+		{name: "unset"},
+		{name: "disabled", config: &commonpb.TimeSkippingConfig{Enabled: false}},
+		{name: "enabled without fast forward", config: &commonpb.TimeSkippingConfig{Enabled: true}, wantErr: true},
+		{name: "one year", config: &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{
+			Id: "one-year", Duration: durationpb.New(365 * 24 * time.Hour),
+		}}},
+		{name: "over one year", config: &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{
+			Id: "over-one-year", Duration: durationpb.New(365*24*time.Hour + time.Second),
+		}}, wantErr: true},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			err := wh.validateAndPopulateScheduleTimeSkippingConfig(
+				&schedulepb.Schedule{TimeSkippingConfig: tc.config}, s.testNamespace)
+			if tc.wantErr {
+				s.Require().Error(err)
+			} else {
+				s.Require().NoError(err)
+			}
+		})
+	}
+}
+
+func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingBackend() {
+	scheduleWithConfig := &schedulepb.Schedule{TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true}}
+
+	s.Require().NoError(validateScheduleTimeSkippingBackend(nil, false))
+	s.Require().NoError(validateScheduleTimeSkippingBackend(scheduleWithConfig, true))
+	s.Require().ErrorIs(
+		validateScheduleTimeSkippingBackend(scheduleWithConfig, false),
+		errScheduleTimeSkippingNotEnabled,
+	)
+}
+
+func (s *WorkflowHandlerSuite) TestValidateTimeSkippingStatePropagation() {
+	state := &commonpb.TimeSkippingStatePropagation{InitialSkipCount: 1}
+
+	s.Require().NoError(validateTimeSkippingStatePropagation(context.Background(), nil))
+	s.Require().ErrorIs(
+		validateTimeSkippingStatePropagation(context.Background(), state),
+		errTimeSkippingStatePropagationNotInternal,
+	)
+	userCtx := headers.SetPrincipal(context.Background(), &commonpb.Principal{Type: "user", Name: "alice"})
+	s.Require().ErrorIs(
+		validateTimeSkippingStatePropagation(userCtx, state),
+		errTimeSkippingStatePropagationNotInternal,
+	)
+	internalCtx := headers.SetPrincipal(context.Background(), &commonpb.Principal{
+		Type: authorization.InternalPrincipalType,
+		Name: authorization.InternalPrincipalName,
+	})
+	s.Require().NoError(validateTimeSkippingStatePropagation(internalCtx, state))
 }
 
 func (s *WorkflowHandlerSuite) TestPollWorkflowExecutionTimeSkipping() {

@@ -483,6 +483,8 @@ go.temporal.io/api v1.63.6-0.20260909222256-20151aa90480 h1:1w2xEZFpL7R9NagEQeWT
 go.temporal.io/api v1.63.6-0.20260909222256-20151aa90480/go.mod h1:acM0I9WPuYg8W3Pd9jOZvEgi7mRUttUQ4+e7fowKVnM=
 go.temporal.io/auto-scaled-workers v0.0.0-20260928183627-719679297cbe h1:BlshPqVI1uh/AsdfGPPjfKc37HEZdGfcmvx+uW+rbe8=
 go.temporal.io/auto-scaled-workers v0.0.0-20260928183627-719679297cbe/go.mod h1:6Q4guHwlbJldBOZwvc201E0+Jz9Tly1L1Db6C7RJuLw=
+go.temporal.io/api v1.63.6-0.20260919001421-0303ad186683 h1:uf7Ntqke4qRJzfaihbKRVZ/AkUAz6ZkF5PBPbxI2XIg=
+go.temporal.io/api v1.63.6-0.20260919001421-0303ad186683/go.mod h1:SrlW2JMwVlDP4nRWSNznUFqnSHd+YeMDS1BkYo63HCQ=
 go.temporal.io/sdk v1.48.0 h1:WDctKDVuh0Z8Nf7euAyqs/EwcPg1JTIIq1Fut8Tq118=
 go.temporal.io/sdk v1.48.0/go.mod h1:SHv3+fLzD0GGZAwf0xNSvu8UmO1nFgG9WBSYoowApIk=
 go.uber.org/atomic v1.5.0/go.mod h1:sABNBOSYdrvTF6hTgEIbc7YasKWGhgEQZyfxyTvoXHQ=
