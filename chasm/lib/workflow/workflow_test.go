@@ -27,14 +27,15 @@ func TestExecutionTypeAndPath(t *testing.T) {
 	require.NoError(t, registry.Register(&callback.Library{}))
 
 	workflowKey := definition.NewWorkflowKey("namespace-id", "workflow-id", "run-id")
+	timeSource := clock.NewEventTimeSource()
 	nodeBackend := &chasm.MockNodeBackend{
 		HandleNextTransitionCount: func() int64 { return 2 },
 		HandleGetCurrentVersion:   func() int64 { return 1 },
 		HandleGetWorkflowKey:      func() definition.WorkflowKey { return workflowKey },
+		HandleNow:                 timeSource.Now,
 	}
 	root := chasm.NewEmptyTree(
 		registry,
-		clock.NewEventTimeSource(),
 		nodeBackend,
 		chasm.DefaultPathEncoder,
 		logger,
