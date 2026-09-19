@@ -114,6 +114,7 @@ func NewManager(
 			secondaryVisibilityManager,
 			enableReadFromSecondaryVisibility,
 			secondaryVisibilityWritingMode,
+			logger,
 		)
 		return NewVisibilityManagerDual(
 			visibilityManager,

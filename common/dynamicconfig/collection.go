@@ -643,6 +643,19 @@ func convertString(val any) (string, error) {
 	return "", errors.New("value type is not string")
 }
 
+func convertSecondaryVisibilityWritingMode(val any) (string, error) {
+	s, err := convertString(val)
+	if err != nil {
+		return "", err
+	}
+	switch s {
+	case "off", "on", "dual":
+		return s, nil
+	default:
+		return "", fmt.Errorf("unknown secondary visibility writing mode %q, must be one of: off, on, dual", s)
+	}
+}
+
 func convertBool(val any) (bool, error) {
 	switch v := val.(type) {
 	case bool:
