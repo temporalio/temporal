@@ -378,6 +378,8 @@ func (s *ContextImpl) SetQueueState(
 	tasksCompleted int,
 	state *persistencespb.QueueState,
 ) error {
+	// A nil result can mean the update was batched in memory. It does not by
+	// itself make a scheduled cleanup boundary available to the next owner.
 	return s.updateShardInfo(tasksCompleted,
 		func() {
 			categoryID := category.ID()

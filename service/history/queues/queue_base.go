@@ -375,6 +375,9 @@ func (p *queueBase) rangeCompleteTasks(
 	newExclusiveDeletionHighWatermark tasks.Key,
 ) error {
 	if p.category.Type() == tasks.CategoryTypeScheduled {
+		// Time-only cleanup is not fenced by shard ownership. A delayed request can
+		// cover a successor's tasks if its scheduling floor does not include this
+		// owner's unpersisted reader progress.
 		oldExclusiveDeletionHighWatermark.TaskID = 0
 		newExclusiveDeletionHighWatermark.TaskID = 0
 	}
