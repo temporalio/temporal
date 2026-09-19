@@ -1235,6 +1235,8 @@ func (s *registryWatchSuite) TestWatchNamespaceDeletedDuringRefresh() {
 
 	ns2ID := namespace.NewID()
 	ns2Record := s.newNamespaceResponse(ns2ID, "namespace-2", cluster.TestCurrentClusterName, 2)
+	s.regPersistence.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: ns2ID.String()}).
+		Return(nil, serviceerror.NewNamespaceNotFound(ns2ID.String()))
 
 	watchCh1 := make(chan *persistence.NamespaceWatchEvent, 1)
 	watchCh2 := make(chan *persistence.NamespaceWatchEvent, 1)
