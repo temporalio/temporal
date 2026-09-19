@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/testing/await"
 )
 
 func TestGradualChangeValue_BeforeAfter(t *testing.T) {
@@ -104,7 +105,7 @@ func TestGradualChangeValue_NewAtWhenTime(t *testing.T) {
 	for i := range 100 {
 		key := fmt.Appendf(nil, "key%d", i)
 		at := gc.When(key)
-		assert.Equal(t, "new", gc.Value(key, at),
+		require.Equal(t, "new", gc.Value(key, at),
 			"Value at the transition time returned by When must already be the new value, "+
 				"otherwise a subscriber whose timer fires exactly at When misses the transition")
 	}
@@ -131,15 +132,15 @@ func TestSubscribeGradualChange_TimerFiresExactlyAtTransitionTime(t *testing.T) 
 	}, ts)
 	defer cancel()
 
-	assert.False(t, initial)
+	require.False(t, initial)
 
 	// Fire the rescheduled timer exactly at the key's transition time. In production this
 	// happens whenever the runtime timer fires within (End-Start)/2^32 of its deadline
 	// (~200us for this 10-day window). The subscriber must still observe the new value;
 	// otherwise it is stuck on the old value with no timer left to reevaluate.
 	ts.Update(gc.When(key))
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, []bool{true}, callbackVals.get())
+	await.Require(t.Context(), t, func(t *await.T) {
+		require.Equal(t, []bool{true}, callbackVals.get())
 	}, time.Second, time.Millisecond)
 }
 
