@@ -103,8 +103,8 @@ func mutateFieldForCoverage(t *testing.T, field reflect.Value) {
 		}
 		mutated := append(append([]byte(nil), field.Bytes()...), 0xFF)
 		field.Set(reflect.ValueOf(mutated).Convert(field.Type()))
-	case reflect.Ptr:
-		if field.Type().Elem() != reflect.TypeOf(time.Time{}) {
+	case reflect.Pointer:
+		if field.Type().Elem() != reflect.TypeFor[time.Time]() {
 			t.Fatalf("mutateFieldForCoverage: add support for pointer element type %s", field.Type().Elem())
 		}
 		next := time.Now()
