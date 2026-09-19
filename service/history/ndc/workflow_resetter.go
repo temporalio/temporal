@@ -45,10 +45,7 @@ const (
 
 var (
 	errWorkflowResetterMaxChildren = serviceerror.NewInvalidArgumentf("WorkflowResetter encountered max allowed children [%d] while resetting.", maxChildrenInResetMutableState)
-	// errChasmDisabledWithNodes is returned when reapply cannot reach a CHASM operation because the tree was not
-	// hydrated even though the workflow holds CHASM nodes.
-	errChasmDisabledWithNodes = serviceerror.NewInternal(
-		"cannot reapply CHASM event: CHASM is disabled for this workflow but it has CHASM nodes")
+	errChasmDisabled               = serviceerror.NewInternal("cannot reapply event: CHASM is disabled for this workflow.")
 )
 
 type (
@@ -1230,19 +1227,10 @@ func cherryPickChasmEvent(
 		return cherryPickSkipped, nil
 	}
 	if !mutableState.ChasmEnabled() {
-		// There is no hydrated tree to apply the event to. Workflow may still hold CHASM nodes that were never hydrated.
-		if mutableState.HasChasmNodes() {
-			// The operation this event addresses may be among those nodes, so skipping would drop the event
-			// while its operation still exists. Fail here instead and let callers (like replication) retry and
-			// potentially recover once EnableChasm is on again for the namespace.
-			return cherryPickSkipped, fmt.Errorf("%w: event type %v",
-				errChasmDisabledWithNodes, event.GetEventType())
-		}
-		// No CHASM nodes at all, so no CHASM component can own the event and skipping loses nothing.
-		// With CHASM disabled, reset always takes this path rather than the error above, because its mutable
-		// state is rebuilt fresh and so tracks no persisted nodes.
-		logSkippedOperation(mutableState, event, isReset, logger)
-		return cherryPickSkipped, nil
+		// There is no hydrated tree to apply the event to. The operation this event addresses may be among those nodes,
+		// so skipping would drop the event while its operation still exists. Fail here instead and let callers
+		// retry and potentially recover once EnableChasm is on again for the namespace.
+		return cherryPickSkipped, fmt.Errorf("%w: event type %v", errChasmDisabled, event.GetEventType())
 	}
 	wf, chasmCtx, err := mutableState.ChasmWorkflowComponent(ctx)
 	if err != nil {

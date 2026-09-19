@@ -1330,8 +1330,11 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 
 	// Reset once more, this time to an event before the operation was scheduled. NexusOperationScheduled is a command
 	// event and is never cherry-picked, so the rebuilt tree has no such operation, while the reapply batch still
-	// carries the operation's Started and Completed events. Those belong to an operation in neither tree: they must be
-	// skipped and the reset must still succeed.
+	// carries the operation's Started and Completed events. Those belong to an operation in neither tree.
+	//
+	// With CHASM enabled they are skipped and the reset still succeeds. Without it there is no hydrated tree
+	// so reapply cannot rule out that the operation is merely unreachable and fails rather than dropping
+	// the events.
 	//
 	// Stop the worker first. Unlike the two resets above, this reset point precedes the
 	// ScheduleNexusOperation command, so a running worker would replay callerWF on the reset run and schedule the
@@ -1351,6 +1354,11 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 		RequestId:                 uuid.NewString(),
 		WorkflowTaskFinishEventId: hist[preScheduleIdx].EventId,
 	})
+	if !chasmEnabled {
+		s.ErrorContains(err, "CHASM is disabled for this workflow",
+			"without a hydrated tree the orphaned Nexus events cannot be ruled out, so the reset must fail")
+		return
+	}
 	s.NoError(err,
 		"resetting to before the operation was scheduled must skip the orphaned Nexus events, not fail on them")
 
