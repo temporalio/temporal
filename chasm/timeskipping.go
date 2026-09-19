@@ -81,8 +81,6 @@ type TimeSkippingTransition struct {
 
 // NewTimeSkippingTransition creates a new time-skipping transition with the current time.
 // Methods provided by this data structure cannot be used without a current time.
-//
-// todo@time-skipping: the methods will be used by CHASM so keep as public.
 func NewTimeSkippingTransition(currentTime time.Time) *TimeSkippingTransition {
 	return &TimeSkippingTransition{CurrentTime: currentTime}
 }
