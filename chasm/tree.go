@@ -3952,8 +3952,8 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 		return nil
 	}
 
-	// todo@feiyang: how to check that the current cluster is active cluster
-	// and this closeTransaction state change logic should only happen in active cluster
+	// CONSIDER(time-skipping): Pass the transaction policy into CHASM so time skipping is
+	// explicitly restricted to active-cluster transactions.
 	rootComponent, err := n.Component(immutableContext, ComponentRef{})
 	if err != nil {
 		return err

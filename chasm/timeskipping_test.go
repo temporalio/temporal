@@ -5,9 +5,58 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func TestPropagateTimeSkippingToOtherExecution(t *testing.T) {
+	t.Parallel()
+
+	t.Run("nil", func(t *testing.T) {
+		config, state := PropagateTimeSkippingToOtherExecution(nil)
+		require.Nil(t, config)
+		require.Nil(t, state)
+	})
+
+	t.Run("config and virtual time", func(t *testing.T) {
+		sourceConfig := &commonpb.TimeSkippingConfig{
+			Enabled:             true,
+			MaxSessionSkipCount: 7,
+			FastForwardConfig: &commonpb.FastForwardConfig{
+				Id:       "source-fast-forward",
+				Duration: durationpb.New(5 * time.Hour),
+			},
+		}
+		config, state := PropagateTimeSkippingToOtherExecution(&persistencespb.TimeSkippingInfo{
+			Config:                     sourceConfig,
+			AccumulatedSkippedDuration: durationpb.New(2 * time.Hour),
+		})
+
+		require.True(t, config.GetEnabled())
+		require.Equal(t, int32(7), config.GetMaxSessionSkipCount())
+		require.Nil(t, config.GetFastForwardConfig())
+		require.Equal(t, 2*time.Hour, state.GetInitialSkippedDuration().AsDuration())
+		require.Zero(t, state.GetInitialSkipCount())
+
+		config.Enabled = false
+		require.True(t, sourceConfig.GetEnabled(), "propagated config must be cloned")
+	})
+
+	t.Run("disable propagation only suppresses config", func(t *testing.T) {
+		config, state := PropagateTimeSkippingToOtherExecution(&persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{
+				Enabled:            true,
+				DisablePropagation: true,
+			},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		})
+
+		require.Nil(t, config)
+		require.Equal(t, time.Hour, state.GetInitialSkippedDuration().AsDuration())
+	})
+}
 
 // TestTimeSkippingTransition covers the pure timeSkippingTransition data structure:
 // its constructor, validity check, earliest-future-time tracking, and fast-forward
