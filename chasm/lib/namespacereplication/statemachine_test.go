@@ -41,7 +41,7 @@ func TestPeerRetryBackoff(t *testing.T) {
 }
 
 func TestTransitionLocalCommittedSchedulesOutboundTasks(t *testing.T) {
-	c := NewNamespaceMutationComponent(&chasm.MockMutableContext{}, &namespacereplicationpb.NamespaceMutation{PeerCells: []string{"cellB", "cellC"}})
+	c := NewNamespaceMutationComponent(&namespacereplicationpb.NamespaceMutation{PeerCells: []string{"cellB", "cellC"}})
 	ctx := &chasm.MockMutableContext{}
 
 	now := time.Date(2026, 8, 22, 0, 0, 0, 0, time.UTC)
@@ -57,7 +57,7 @@ func TestTransitionLocalCommittedSchedulesOutboundTasks(t *testing.T) {
 }
 
 func TestTransitionLocalShadowSkippedSchedulesOutboundTasks(t *testing.T) {
-	c := NewNamespaceMutationComponent(&chasm.MockMutableContext{}, &namespacereplicationpb.NamespaceMutation{PeerCells: []string{"cellB"}})
+	c := NewNamespaceMutationComponent(&namespacereplicationpb.NamespaceMutation{PeerCells: []string{"cellB"}})
 	ctx := &chasm.MockMutableContext{}
 
 	now := time.Date(2026, 8, 22, 0, 0, 0, 0, time.UTC)
@@ -67,7 +67,7 @@ func TestTransitionLocalShadowSkippedSchedulesOutboundTasks(t *testing.T) {
 }
 
 func TestTransitionPeerRetryUsesPureTimerTask(t *testing.T) {
-	c := NewNamespaceMutationComponent(&chasm.MockMutableContext{}, &namespacereplicationpb.NamespaceMutation{PeerCells: []string{"cellB"}})
+	c := NewNamespaceMutationComponent(&namespacereplicationpb.NamespaceMutation{PeerCells: []string{"cellB"}})
 	c.LocalApply.Outcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED
 	ctx := &chasm.MockMutableContext{}
 	now := time.Date(2026, 8, 22, 0, 0, 0, 0, time.UTC)
@@ -88,7 +88,7 @@ func TestTransitionPeerRetryUsesPureTimerTask(t *testing.T) {
 }
 
 func TestApplyPeerBackoffTaskReenqueuesOutboundTask(t *testing.T) {
-	c := NewNamespaceMutationComponent(&chasm.MockMutableContext{}, &namespacereplicationpb.NamespaceMutation{PeerCells: []string{"cellB"}})
+	c := NewNamespaceMutationComponent(&namespacereplicationpb.NamespaceMutation{PeerCells: []string{"cellB"}})
 	c.LocalApply.Outcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED
 	c.PeerApply["cellB"].AttemptCount = 2
 	h := newApplyPeerBackoffTaskHandler()

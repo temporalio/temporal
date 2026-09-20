@@ -211,7 +211,7 @@ func TestTriggerNamespaceMutationRetryUsesExistingExecution(t *testing.T) {
 				ctx,
 				executionKey(req),
 				func(mctx chasm.MutableContext, mutation *namespacereplicationpb.NamespaceMutation) (*NamespaceMutationComponent, error) {
-					component := NewNamespaceMutationComponent(mctx, mutation)
+					component := NewNamespaceMutationComponent(mutation)
 					component.LocalApply.Outcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW
 					if completed {
 						component.Status = namespacereplicationpb.COMPONENT_STATUS_COMPLETED

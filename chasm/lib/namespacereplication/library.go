@@ -49,11 +49,6 @@ func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*NamespaceMutationComponent](
 			chasm.NamespaceReplicationComponentName,
-			// Surface the BusinessID (= namespace_id:mutation_uuid) as a visibility
-			// search-attribute alias so components show up in `temporal workflow
-			// list`. Required because the component has a Field[*Visibility] (the
-			// registry rejects a visibility component that has no businessID alias).
-			chasm.WithBusinessIDAlias("NamespaceMutationId"),
 		),
 	}
 }

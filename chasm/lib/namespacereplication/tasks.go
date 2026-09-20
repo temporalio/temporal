@@ -11,6 +11,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -106,7 +107,7 @@ func (h *applyLocalTaskHandler) Execute(
 			m := c.GetMutation()
 			return loadResult{
 				Operation:     m.GetOperation(),
-				Detail:        m.GetNamespaceDetail(),
+				Detail:        common.CloneProto(m.GetNamespaceDetail()),
 				ExpectedVer:   m.GetExpectedVersion(),
 				Shadow:        m.GetShadow(),
 				ReplicateOnly: m.GetReplicateOnly(),
@@ -554,7 +555,7 @@ func (h *applyPeerTaskHandler) Execute(
 			m := c.GetMutation()
 			return loadResult{
 				Operation: convertOperation(m.GetOperation()),
-				Detail:    m.GetNamespaceDetail(),
+				Detail:    common.CloneProto(m.GetNamespaceDetail()),
 				Shadow:    m.GetShadow(),
 			}, nil
 		},
