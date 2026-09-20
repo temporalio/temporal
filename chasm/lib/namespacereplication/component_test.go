@@ -12,8 +12,7 @@ import (
 // TestNewNamespaceMutationComponent verifies the component starts RUNNING with a
 // PENDING local apply and a PENDING per-peer entry for every peer cell.
 func TestNewNamespaceMutationComponent(t *testing.T) {
-	ctx := &chasm.MockMutableContext{}
-	c := NewNamespaceMutationComponent(ctx, &namespacereplicationpb.NamespaceMutation{
+	c := NewNamespaceMutationComponent(&namespacereplicationpb.NamespaceMutation{
 		Operation: namespacereplicationpb.NAMESPACE_OPERATION_UPDATE,
 		PeerCells: []string{"cellB", "cellC"},
 	})
@@ -24,7 +23,6 @@ func TestNewNamespaceMutationComponent(t *testing.T) {
 	for _, cell := range []string{"cellB", "cellC"} {
 		require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, c.GetPeerApply()[cell].GetOutcome(), cell)
 	}
-	require.NotNil(t, c.Visibility.Get(ctx))
 }
 
 // TestLifecycleState maps each component status onto the CHASM lifecycle state
@@ -46,7 +44,7 @@ func TestLifecycleState(t *testing.T) {
 }
 
 func TestTerminateBeforeLocalCommitRecordsFailure(t *testing.T) {
-	c := NewNamespaceMutationComponent(&chasm.MockMutableContext{}, &namespacereplicationpb.NamespaceMutation{})
+	c := NewNamespaceMutationComponent(&namespacereplicationpb.NamespaceMutation{})
 	now := time.Date(2026, 9, 16, 12, 0, 0, 0, time.UTC)
 	ctx := &chasm.MockMutableContext{
 		MockContext: chasm.MockContext{
@@ -66,7 +64,7 @@ func TestTerminateBeforeLocalCommitRecordsFailure(t *testing.T) {
 }
 
 func TestTerminateAfterLocalCommitPreservesCommitOutcome(t *testing.T) {
-	c := NewNamespaceMutationComponent(&chasm.MockMutableContext{}, &namespacereplicationpb.NamespaceMutation{})
+	c := NewNamespaceMutationComponent(&namespacereplicationpb.NamespaceMutation{})
 	c.LocalApply.Outcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED
 
 	_, err := c.Terminate(&chasm.MockMutableContext{}, chasm.TerminateComponentRequest{})

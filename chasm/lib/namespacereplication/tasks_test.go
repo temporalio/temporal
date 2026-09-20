@@ -245,7 +245,7 @@ func (env *nsreplTestEnv) start(mutation *namespacereplicationpb.NamespaceMutati
 		env.engineCtx,
 		key,
 		func(mctx chasm.MutableContext, m *namespacereplicationpb.NamespaceMutation) (*NamespaceMutationComponent, error) {
-			c := NewNamespaceMutationComponent(mctx, m)
+			c := NewNamespaceMutationComponent(m)
 			if mutate != nil {
 				mutate(c)
 			}
@@ -354,6 +354,29 @@ func TestApplyLocalTask_Execute_ShadowSkipsMetadataWrite(t *testing.T) {
 	component := env.read(ref)
 	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW, component.GetLocalApply().GetOutcome())
 	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, component.GetPeerApply()["cellB"].GetOutcome())
+}
+
+func TestApplyLocalTask_Execute_ClonesDetailForMetadataManager(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	mutation := env.mutationUpdate()
+	mutation.NamespaceDetail.Info.Description = "component-owned"
+	ref := env.start(mutation, nil)
+
+	env.metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *persistence.UpdateNamespaceRequest) error {
+			req.Namespace.Info.Description = "mutated by metadata manager"
+			return nil
+		})
+
+	require.NoError(t, env.localHandler.Execute(
+		env.engineCtx,
+		ref,
+		chasm.TaskAttributes{},
+		&namespacereplicationpb.ApplyLocalTask{},
+	))
+
+	component := env.read(ref)
+	require.Equal(t, "component-owned", component.GetMutation().GetNamespaceDetail().GetInfo().GetDescription())
 }
 
 // A local commit with no peers (single-cluster global namespace) has nothing to
@@ -951,13 +974,17 @@ func TestAdminClientPeerApplier_Apply(t *testing.T) {
 // mockPeerApplier is a stand-in transport used to prove the handler delegates the
 // peer write to the injected PeerApplier — the seam a deployment overrides.
 type mockPeerApplier struct {
-	result PeerApplyResult
-	err    error
-	cells  []string
+	result       PeerApplyResult
+	err          error
+	cells        []string
+	mutateDetail func(*persistencespb.NamespaceDetail)
 }
 
-func (m *mockPeerApplier) Apply(_ context.Context, targetCell string, _ enumsspb.NamespaceOperation, _ *persistencespb.NamespaceDetail, _ bool) (PeerApplyResult, error) {
+func (m *mockPeerApplier) Apply(_ context.Context, targetCell string, _ enumsspb.NamespaceOperation, detail *persistencespb.NamespaceDetail, _ bool) (PeerApplyResult, error) {
 	m.cells = append(m.cells, targetCell)
+	if m.mutateDetail != nil {
+		m.mutateDetail(detail)
+	}
 	return m.result, m.err
 }
 
@@ -981,6 +1008,37 @@ func TestApplyPeerTask_Execute_UsesInjectedApplier(t *testing.T) {
 	c := env.read(ref)
 	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_NO_OP_STALE, c.GetPeerApply()["cellB"].GetOutcome())
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_COMPLETED, c.GetStatus())
+}
+
+func TestApplyPeerTask_Execute_ClonesDetailForInjectedApplier(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	mutation := env.mutationUpdate("cellB")
+	mutation.NamespaceDetail.Info.Description = "component-owned"
+	ref := env.start(mutation, func(c *NamespaceMutationComponent) {
+		c.LocalApply.Outcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED
+	})
+
+	applier := &mockPeerApplier{
+		result: PeerApplyResultApplied,
+		mutateDetail: func(detail *persistencespb.NamespaceDetail) {
+			detail.Info.Description = "mutated by peer applier"
+		},
+	}
+	handler := &applyPeerTaskHandler{
+		peerApplier:    applier,
+		metricsHandler: metrics.NoopMetricsHandler,
+		logger:         log.NewTestLogger(),
+	}
+
+	require.NoError(t, handler.Execute(
+		env.engineCtx,
+		ref,
+		chasm.TaskAttributes{},
+		&namespacereplicationpb.ApplyPeerTask{TargetCell: "cellB", Attempt: 0},
+	))
+
+	component := env.read(ref)
+	require.Equal(t, "component-owned", component.GetMutation().GetNamespaceDetail().GetInfo().GetDescription())
 }
 
 func TestApplyPeerTask_Execute_UnknownInjectedResultRetries(t *testing.T) {

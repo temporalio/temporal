@@ -21,13 +21,6 @@ type NamespaceMutationComponent struct {
 	chasm.UnimplementedComponent
 
 	*namespacereplicationpb.NamespaceMutationState
-
-	// Visibility child component. Makes the parent component listable via
-	// `temporal workflow list` (with the BusinessID alias registered in
-	// library.go surfaced as the NamespaceMutationId search attribute). Without
-	// this field, no visibility record is written and the component is
-	// only discoverable via tdbg.
-	Visibility chasm.Field[*chasm.Visibility]
 }
 
 var _ chasm.RootComponent = (*NamespaceMutationComponent)(nil)
@@ -36,7 +29,6 @@ var _ chasm.StateMachine[namespacereplicationpb.ComponentStatus] = (*NamespaceMu
 // NewNamespaceMutationComponent constructs a fresh component with the mutation set
 // and per-peer status entries initialized to PENDING.
 func NewNamespaceMutationComponent(
-	ctx chasm.MutableContext,
 	mutation *namespacereplicationpb.NamespaceMutation,
 ) *NamespaceMutationComponent {
 	peerApply := make(map[string]*namespacereplicationpb.PeerApplyStatus, len(mutation.GetPeerCells()))
@@ -54,7 +46,6 @@ func NewNamespaceMutationComponent(
 			},
 			PeerApply: peerApply,
 		},
-		Visibility: chasm.NewComponentField(ctx, chasm.NewVisibility(ctx)),
 	}
 }
 
