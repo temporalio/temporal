@@ -5,11 +5,13 @@ import (
 	"errors"
 	"fmt"
 
+	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -27,6 +29,7 @@ type applyLocalTaskHandlerOptions struct {
 	fx.In
 
 	MetadataManager persistence.MetadataManager
+	ClusterMetadata cluster.Metadata
 	MetricsHandler  metrics.Handler
 	Logger          log.Logger
 }
@@ -35,6 +38,7 @@ type applyLocalTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*namespacereplicationpb.ApplyLocalTask]
 
 	metadataManager persistence.MetadataManager
+	currentCluster  string
 	// TODO(namespacereplication): emit metrics for the local apply path. Suggested shape:
 	//   - nsrepl_apply_attempts_total{outcome="local"}     counter
 	//   - nsrepl_apply_failures_total{outcome="local"}     counter
@@ -47,6 +51,7 @@ type applyLocalTaskHandler struct {
 func newApplyLocalTaskHandler(opts applyLocalTaskHandlerOptions) *applyLocalTaskHandler {
 	return &applyLocalTaskHandler{
 		metadataManager: opts.MetadataManager,
+		currentCluster:  opts.ClusterMetadata.GetCurrentClusterName(),
 		metricsHandler:  opts.MetricsHandler,
 		logger:          opts.Logger,
 	}
@@ -155,7 +160,7 @@ func (h *applyLocalTaskHandler) Execute(
 				return h.commitLocal(ctx, ref)
 			}
 
-			definitelyNotApplied, resolutionErr := h.localMutationDefinitelyNotApplied(
+			resolvedAsFailure, resolutionErr := h.localMutationResolvedAsFailure(
 				ctx,
 				loaded.Operation,
 				loaded.ExpectedVer,
@@ -164,7 +169,7 @@ func (h *applyLocalTaskHandler) Execute(
 			if resolutionErr != nil {
 				return fmt.Errorf("resolve local namespace mutation after %v: %w", applyErr, resolutionErr)
 			}
-			if !definitelyNotApplied {
+			if !resolvedAsFailure {
 				// A read immediately after a timed-out write can still see the old
 				// value even when that write later commits.
 				return fmt.Errorf("local namespace mutation outcome remains unresolved: %w", applyErr)
@@ -183,7 +188,12 @@ func (h *applyLocalTaskHandler) Execute(
 	return h.commitLocal(ctx, ref)
 }
 
-func (h *applyLocalTaskHandler) localMutationDefinitelyNotApplied(
+// localMutationResolvedAsFailure reports whether an ambiguous local write can
+// now safely be resolved as a caller-visible failure. A true result means either
+// this attempt definitely did not commit, or an UPDATE's CAS slot is gone. The
+// latter may mean an earlier attempt committed and was subsequently superseded;
+// in that case the newer full namespace snapshot owns peer fan-out.
+func (h *applyLocalTaskHandler) localMutationResolvedAsFailure(
 	ctx context.Context,
 	operation namespacereplicationpb.NamespaceOperation,
 	expectedVersion int64,
@@ -239,7 +249,8 @@ func (h *applyLocalTaskHandler) localMutationAlreadyApplied(
 		return false, err
 	}
 
-	if response.IsGlobalNamespace != isGlobal || !proto.Equal(response.Namespace, detail) {
+	if response.IsGlobalNamespace != isGlobal ||
+		!namespaceDetailsEqualAfterPersistenceRead(detail, response.Namespace, h.currentCluster) {
 		return false, nil
 	}
 	if operation == namespacereplicationpb.NAMESPACE_OPERATION_UPDATE &&
@@ -247,6 +258,56 @@ func (h *applyLocalTaskHandler) localMutationAlreadyApplied(
 		return false, nil
 	}
 	return true, nil
+}
+
+// namespaceDetailsEqualAfterPersistenceRead compares a mutation payload with a
+// MetadataManager read. MetadataManager materializes persistence defaults that
+// may have been absent from the payload written by an earlier attempt; those
+// represent the same namespace state and must not turn an ambiguous success into
+// a terminal failure during reconciliation.
+func namespaceDetailsEqualAfterPersistenceRead(
+	expected *persistencespb.NamespaceDetail,
+	actual *persistencespb.NamespaceDetail,
+	currentCluster string,
+) bool {
+	if expected == nil || actual == nil {
+		return expected == actual
+	}
+
+	expectedCopy := &persistencespb.NamespaceDetail{}
+	proto.Merge(expectedCopy, expected)
+	expected = expectedCopy
+	actualCopy := &persistencespb.NamespaceDetail{}
+	proto.Merge(actualCopy, actual)
+	actual = actualCopy
+	normalizeNamespaceDetailAfterPersistenceRead(expected, currentCluster)
+	normalizeNamespaceDetailAfterPersistenceRead(actual, currentCluster)
+	return proto.Equal(expected, actual)
+}
+
+func normalizeNamespaceDetailAfterPersistenceRead(
+	detail *persistencespb.NamespaceDetail,
+	currentCluster string,
+) {
+	if detail.Info != nil && detail.Info.Data == nil {
+		detail.Info.Data = map[string]string{}
+	}
+	if detail.Config != nil &&
+		(detail.Config.BadBinaries == nil || detail.Config.BadBinaries.Binaries == nil) {
+		detail.Config.BadBinaries = &namespacepb.BadBinaries{
+			Binaries: map[string]*namespacepb.BadBinaryInfo{},
+		}
+	}
+	if detail.ReplicationConfig != nil {
+		detail.ReplicationConfig.ActiveClusterName = persistence.GetOrUseDefaultActiveCluster(
+			currentCluster,
+			detail.ReplicationConfig.ActiveClusterName,
+		)
+		detail.ReplicationConfig.Clusters = persistence.GetOrUseDefaultClusters(
+			currentCluster,
+			detail.ReplicationConfig.Clusters,
+		)
+	}
 }
 
 func (h *applyLocalTaskHandler) commitLocal(
