@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
@@ -743,6 +744,40 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
 		s.Require().NotNil(tsi)
 		s.Equal(int32(0), tsi.GetSessionSkipCount())
+		s.True(s.mutableState.timeSkippingInfoUpdated)
+	})
+}
+
+func (s *mutableStateSuite) TestSetTimeSkippingConfig() {
+	s.Run("InitsWhenTimeSkippingInfoNil", func() {
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		s.mutableState.executionInfo.TimeSkippingInfo = nil
+		s.mutableState.timeSkippingInfoUpdated = false
+
+		config := &commonpb.TimeSkippingConfig{Enabled: true}
+		s.mutableState.SetTimeSkippingConfig(config)
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Require().NotNil(tsi)
+		s.True(proto.Equal(config, tsi.GetConfig()))
+		s.True(s.mutableState.timeSkippingInfoUpdated)
+	})
+
+	s.Run("UpdatesWhenTimeSkippingInfoExists", func() {
+		s.mutableState.timeSource = clock.NewEventTimeSource()
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: false},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		}
+		s.mutableState.timeSkippingInfoUpdated = false
+
+		config := &commonpb.TimeSkippingConfig{Enabled: true}
+		s.mutableState.SetTimeSkippingConfig(config)
+
+		tsi := s.mutableState.executionInfo.GetTimeSkippingInfo()
+		s.Require().NotNil(tsi)
+		s.True(proto.Equal(config, tsi.GetConfig()))
+		s.Equal(time.Hour, tsi.GetAccumulatedSkippedDuration().AsDuration())
 		s.True(s.mutableState.timeSkippingInfoUpdated)
 	})
 }
@@ -1736,6 +1771,33 @@ func (s *mutableStateSuite) TestWrapTimeSourceWithTimeSkipping() {
 		)
 		s.Equal(fixedBase.Add(skipped), event.GetEventTime().AsTime())
 	})
+}
+
+func (s *mutableStateSuite) TestChasmContextNowReflectsAccumulatedSkippedDuration() {
+	const accumulatedSkip = 3 * time.Hour
+	baseTime := time.Date(2026, 1, 1, 1, 0, 0, 0, time.UTC)
+
+	timeSource := clock.NewEventTimeSource()
+	timeSource.Update(baseTime)
+	s.mutableState.timeSource = timeSource
+	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
+		AccumulatedSkippedDuration: durationpb.New(accumulatedSkip),
+	}
+	s.mutableState.wrapTimeSourceWithTimeSkipping()
+
+	s.Equal(baseTime.Add(accumulatedSkip), s.mutableState.Now())
+
+	node := chasm.NewEmptyTree(
+		chasm.NewRegistry(s.logger),
+		s.mutableState,
+		chasm.DefaultPathEncoder,
+		s.logger,
+		metrics.NoopMetricsHandler,
+	)
+	ctx := chasm.NewMutableContext(context.Background(), node)
+
+	s.Equal(baseTime.Add(accumulatedSkip), ctx.Now(nil))
 }
 
 func (s *mutableStateSuite) TestTimeSkippingInfoUtil() {

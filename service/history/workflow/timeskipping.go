@@ -23,9 +23,9 @@ import (
 // =============================================================================
 // Time Skipping Configuration Management
 // =============================================================================
-// initTimeSkippingInfo can be called either when (1) a user starts an execution or
-// (2) another run is started with in the same execution (the workflow chain-of-runs model)
-// `propagatedState` is only set in the latter case.
+// initTimeSkippingInfo creates TimeSkippingInfo when an execution first receives a time-skipping
+// config or propagated virtual-time state. This can happen at execution start, through an options
+// update on an existing execution, or when a CHASM component first sets its config.
 func (ms *MutableStateImpl) initTimeSkippingInfo(
 	config *commonpb.TimeSkippingConfig,
 	propagatedState *commonpb.TimeSkippingStatePropagation,
