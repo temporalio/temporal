@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
@@ -16,13 +18,16 @@ import (
 	"go.temporal.io/server/chasm/chasmtest"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	serverclient "go.temporal.io/server/client"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
+	historytasks "go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // -----------------------------------------------------------------------------
@@ -183,6 +188,10 @@ type nsreplTestEnv struct {
 }
 
 func newNsreplTestEnv(t *testing.T) *nsreplTestEnv {
+	return newNsreplTestEnvWithOptions(t)
+}
+
+func newNsreplTestEnvWithOptions(t *testing.T, opts ...chasmtest.EngineOption) *nsreplTestEnv {
 	t.Helper()
 	logger := log.NewTestLogger()
 	ctrl := gomock.NewController(t)
@@ -192,6 +201,7 @@ func newNsreplTestEnv(t *testing.T) *nsreplTestEnv {
 
 	localHandler := &applyLocalTaskHandler{
 		metadataManager: metadataMgr,
+		currentCluster:  "cellA",
 		metricsHandler:  metrics.NoopMetricsHandler,
 		logger:          logger,
 	}
@@ -212,7 +222,7 @@ func newNsreplTestEnv(t *testing.T) *nsreplTestEnv {
 		PeerBackoffTaskHandler: backoffHandler,
 	}))
 
-	engine := chasmtest.NewEngine(t, registry)
+	engine := chasmtest.NewEngine(t, registry, opts...)
 	return &nsreplTestEnv{
 		t:              t,
 		metadataMgr:    metadataMgr,
@@ -269,6 +279,36 @@ func testDetail() *persistencespb.NamespaceDetail {
 		ConfigVersion:     5,
 		FailoverVersion:   3,
 	}
+}
+
+func persistenceNormalizedDetail(detail *persistencespb.NamespaceDetail) *persistencespb.NamespaceDetail {
+	detail = proto.Clone(detail).(*persistencespb.NamespaceDetail)
+	detail.Info.Data = map[string]string{}
+	detail.Config.BadBinaries = &namespacepb.BadBinaries{
+		Binaries: map[string]*namespacepb.BadBinaryInfo{},
+	}
+	return detail
+}
+
+func TestNamespaceDetailsEqualAfterPersistenceRead(t *testing.T) {
+	expected := testDetail()
+	expected.ReplicationConfig.ActiveClusterName = ""
+	expected.ReplicationConfig.Clusters = nil
+
+	actual := persistenceNormalizedDetail(expected)
+	actual.ReplicationConfig.ActiveClusterName = "cellA"
+	actual.ReplicationConfig.Clusters = []string{"cellA"}
+
+	require.False(t, proto.Equal(expected, actual), "test must exercise persistence-materialized fields")
+	require.True(t, namespaceDetailsEqualAfterPersistenceRead(expected, actual, "cellA"))
+
+	wrongDefault := persistenceNormalizedDetail(expected)
+	wrongDefault.ReplicationConfig.ActiveClusterName = "cellB"
+	wrongDefault.ReplicationConfig.Clusters = []string{"cellB"}
+	require.False(t, namespaceDetailsEqualAfterPersistenceRead(expected, wrongDefault, "cellA"))
+
+	actual.Info.Description = "different persisted state"
+	require.False(t, namespaceDetailsEqualAfterPersistenceRead(expected, actual, "cellA"))
 }
 
 // A successful local UPDATE commits and schedules one peer task per peer cell.
@@ -357,7 +397,7 @@ func TestApplyLocalTask_Execute_UpdateRetryRecoversCommittedWrite(t *testing.T) 
 		&persistence.TimeoutError{Msg: "write result unknown"})
 	env.metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: "ns-id"}).Return(
 		&persistence.GetNamespaceResponse{
-			Namespace:           proto.Clone(mutation.GetNamespaceDetail()).(*persistencespb.NamespaceDetail),
+			Namespace:           persistenceNormalizedDetail(mutation.GetNamespaceDetail()),
 			IsGlobalNamespace:   true,
 			NotificationVersion: mutation.GetExpectedVersion(),
 		},
@@ -427,7 +467,7 @@ func TestApplyLocalTask_Execute_CreateRetryRecoversCommittedWrite(t *testing.T) 
 	)
 	env.metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: "ns-id"}).Return(
 		&persistence.GetNamespaceResponse{
-			Namespace:         proto.Clone(mutation.GetNamespaceDetail()).(*persistencespb.NamespaceDetail),
+			Namespace:         persistenceNormalizedDetail(mutation.GetNamespaceDetail()),
 			IsGlobalNamespace: true,
 		},
 		nil,
@@ -549,10 +589,11 @@ func TestApplyLocalTask_Execute_ReconcileReadFailureKeepsPending(t *testing.T) {
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, component.GetStatus())
 }
 
-// A CAS conflict from the store surfaces as a terminal local failure carrying the
-// Unavailable (retriable) error class, and NO peer task is scheduled — the "no
-// divergence on caller-visible failure" gating invariant.
-func TestApplyLocalTask_Execute_CASConflictFailsUnavailable(t *testing.T) {
+// A later metadata version means this UPDATE's CAS slot is gone. That can also
+// happen when an earlier attempt committed and a newer same-namespace mutation
+// subsequently superseded it. Resolve this component as a retryable failure and
+// leave its peers pending; the newer full namespace snapshot owns peer fan-out.
+func TestApplyLocalTask_Execute_SupersededUpdateFailsUnavailable(t *testing.T) {
 	env := newNsreplTestEnv(t)
 	ref := env.start(env.mutationUpdate("cellB", "cellC"), nil)
 
@@ -698,6 +739,77 @@ func TestApplyPeerTask_Execute_RetriableReschedules(t *testing.T) {
 	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, peer.GetOutcome(), "retriable failure keeps peer pending")
 	require.Equal(t, int32(1), peer.GetAttemptCount())
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, c.GetStatus(), "component not complete while a peer is still retrying")
+}
+
+func TestApplyPeerTask_Execute_RetryBudgetBoundary(t *testing.T) {
+	now := time.Date(2026, 9, 19, 12, 0, 0, 0, time.UTC)
+	testCases := []struct {
+		name             string
+		elapsed          time.Duration
+		wantOutcome      namespacereplicationpb.PeerApplyOutcome
+		wantStatus       namespacereplicationpb.ComponentStatus
+		wantNewTimerTask int
+	}{
+		{
+			name:             "below budget retries",
+			elapsed:          peerRetryBudget - time.Nanosecond,
+			wantOutcome:      namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING,
+			wantStatus:       namespacereplicationpb.COMPONENT_STATUS_RUNNING,
+			wantNewTimerTask: 1,
+		},
+		{
+			name:        "at budget is terminal",
+			elapsed:     peerRetryBudget,
+			wantOutcome: namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL,
+			wantStatus:  namespacereplicationpb.COMPONENT_STATUS_COMPLETED,
+		},
+		{
+			name:        "above budget is terminal",
+			elapsed:     peerRetryBudget + time.Nanosecond,
+			wantOutcome: namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL,
+			wantStatus:  namespacereplicationpb.COMPONENT_STATUS_COMPLETED,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			timeSource := clock.NewEventTimeSource().Update(now)
+			env := newNsreplTestEnvWithOptions(t, chasmtest.WithTimeSource(timeSource))
+			ref := env.start(env.mutationUpdate("cellB"), func(c *NamespaceMutationComponent) {
+				c.LocalApply.Outcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED
+				peer := c.PeerApply["cellB"]
+				peer.AttemptCount = 2
+				peer.FirstAttemptAt = timestamppb.New(now.Add(-tc.elapsed))
+			})
+
+			beforeTasks, err := env.engine.Tasks(ref)
+			require.NoError(t, err)
+			beforeTimers := len(beforeTasks[historytasks.CategoryTimer])
+
+			env.clientBean.EXPECT().GetRemoteAdminClient("cellB").Return(env.adminClient, nil)
+			env.adminClient.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).Return(
+				nil, serviceerror.NewUnavailable("peer down"))
+
+			err = env.peerHandler.Execute(
+				env.engineCtx,
+				ref,
+				chasm.TaskAttributes{Destination: "cellB"},
+				&namespacereplicationpb.ApplyPeerTask{TargetCell: "cellB", Attempt: 2},
+			)
+			var destinationDownErr *queueserrors.DestinationDownError
+			require.ErrorAs(t, err, &destinationDownErr)
+
+			component := env.read(ref)
+			peer := component.GetPeerApply()["cellB"]
+			require.Equal(t, tc.wantOutcome, peer.GetOutcome())
+			require.Equal(t, int32(3), peer.GetAttemptCount())
+			require.Equal(t, tc.wantStatus, component.GetStatus())
+
+			afterTasks, err := env.engine.Tasks(ref)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantNewTimerTask, len(afterTasks[historytasks.CategoryTimer])-beforeTimers)
+		})
+	}
 }
 
 // -----------------------------------------------------------------------------
