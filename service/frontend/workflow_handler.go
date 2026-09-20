@@ -739,14 +739,7 @@ func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 			return errTimeSkippingFastForwardIDNotSet
 		}
 	}
-
-	if !tsc.GetEnabled() {
-		if tsc.GetFastForwardConfig() != nil {
-			return serviceerror.NewInvalidArgument("time_skipping_config: cannot set fast_forward when enabled is false")
-		}
-		return nil
-	}
-	return nil
+	return chasm.ValidateTimeSkippingConfig(tsc)
 }
 
 func (wh *WorkflowHandler) unaliasedSearchAttributesFrom(
