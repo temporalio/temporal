@@ -104,6 +104,7 @@ type Event struct {
 	ResetHeartbeat      bool     // Reset: discard the persisted heartbeat checkpoint instead of carrying it into the new attempt.
 	HasHeartbeatDetails bool     // Failure response: attach last_heartbeat_details, to be stored as the activity's heartbeat progress.
 	Failure             *Failure // RespondFailed: the failure to send, or nil to respond with no failure at all (as a worker may). A nil failure is retryable.
+	SameRequestID       bool     // Pause: repeat of the request id of the previous command of this type.
 }
 
 // Failure specifies the failure a RespondFailed event sends.
@@ -291,6 +292,8 @@ func (e Event) String() string {
 		return fmt.Sprintf("%s[heartbeatDetails=%v,failureType=%d]", e.Type.String(), e.HasHeartbeatDetails, e.Failure.Type)
 	case ResetType:
 		return fmt.Sprintf("%s[keepPaused=%v,resetHeartbeat=%v]", e.Type.String(), e.KeepPaused, e.ResetHeartbeat)
+	case PauseType:
+		return fmt.Sprintf("%s[sameRequestID=%v]", e.Type.String(), e.SameRequestID)
 	default:
 		return e.Type.String()
 	}

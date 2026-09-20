@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -342,6 +343,25 @@ type activityDriverState struct {
 	cfg            activityConfig
 	token          []byte
 	startedAttempt int32 // attempt number returned by the last successful Poll
+
+	// establishedReqID[eventType] is the request id of the operator command of that type that the
+	// activity last accepted; a SameRequestID event replays it. lastReqID is the id the most recent
+	// operator RPC carried, which establishRequestID promotes.
+	establishedReqID map[model.EventType]string
+	lastReqID        string
+}
+
+// reqID is the request id for an operator command: the id the activity last accepted for that
+// command type if the event is a replay, else a fresh one.
+func (a *activityDriverState) reqID(e model.Event) string {
+	id := uuid.NewString()
+	if e.SameRequestID {
+		if established, ok := a.establishedReqID[e.Type]; ok {
+			id = established
+		}
+	}
+	a.lastReqID = id
+	return id
 }
 
 // driverState lets an embedded activityDriverState supply its state to drivenActivity.

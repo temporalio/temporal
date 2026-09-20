@@ -218,7 +218,12 @@ func terminate(_ Config, s AbstractState, _ Event) Outcome {
 }
 
 // PauseActivityExecution
-func pause(_ Config, s AbstractState, _ Event) Outcome {
+func pause(_ Config, s AbstractState, e Event) Outcome {
+	// A pause carrying the request id of the pause that was already applied is that call being
+	// retried, so it is a no-op whatever the activity has done since, including being unpaused.
+	if e.SameRequestID {
+		return noop(s)
+	}
 	switch s.Status {
 	case Scheduled:
 		n := s

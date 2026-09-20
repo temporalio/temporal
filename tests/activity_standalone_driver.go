@@ -119,7 +119,7 @@ func (d *saaDriver) start(t require.TestingT, cfg activityConfig) *saaHandle {
 	resp, err := d.env.FrontendClient().StartActivityExecution(d.testContext(), d.startRequest(cfg, id, id))
 	require.NoError(t, err)
 	return &saaHandle{
-		activityDriverState: activityDriverState{cfg: cfg},
+		activityDriverState: activityDriverState{cfg: cfg, establishedReqID: map[model.EventType]string{}},
 		model:               newActivityModel(cfg),
 		d:                   d,
 		activityID:          id,
@@ -311,7 +311,7 @@ func (a *saaHandle) rpc(_ testing.TB, e model.Event) error {
 		return err
 	case model.PauseType:
 		_, err := fc.PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
-			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(), Reason: "drive", RequestId: uuid.NewString(),
+			Namespace: ns, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(), Reason: "drive", RequestId: a.reqID(e),
 		})
 		return err
 	case model.UnpauseType:

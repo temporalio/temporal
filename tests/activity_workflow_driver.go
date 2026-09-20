@@ -13,7 +13,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	activitypb "go.temporal.io/api/activity/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -141,7 +140,7 @@ func (d *wfaDriver) start(t *testing.T, cfg activityConfig) *wfaHandle {
 		wfaActivityParams{Cfg: cfg, ActivityTQ: actTQ, ActivityID: actID, HoldOpen: d.holdOpen})
 	require.NoError(t, err)
 	a := &wfaHandle{
-		activityDriverState: activityDriverState{cfg: cfg},
+		activityDriverState: activityDriverState{cfg: cfg, establishedReqID: map[model.EventType]string{}},
 		model:               newActivityModel(cfg),
 		d:                   d,
 		run:                 run,
@@ -366,7 +365,7 @@ func (a *wfaHandle) rpc(t testing.TB, e model.Event) error {
 		return nil
 	case model.PauseType:
 		_, err := fc.PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
-			Namespace: ns, WorkflowId: a.workflowID, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(), Reason: "drive", RequestId: uuid.NewString(),
+			Namespace: ns, WorkflowId: a.workflowID, ActivityId: a.activityID, RunId: a.runID, Identity: a.d.env.Tv().ClientIdentity(), Reason: "drive", RequestId: a.reqID(e),
 		})
 		return err
 	case model.UnpauseType:

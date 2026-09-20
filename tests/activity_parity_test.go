@@ -8,10 +8,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/activity/model"
@@ -563,11 +565,19 @@ func (s *activityParityTestSuite) TestActivityCore() {
 // activityHandle is what a parity test reads from an activity, satisfied by both wfaHandle and
 // saaHandle, so that a test states its claim once instead of once per implementation.
 type activityHandle interface {
+	driverState() *activityDriverState
 	driveEvent(testing.TB, model.Event)
 	rpc(testing.TB, model.Event) error
 	respondCanceledByID() error
 	activityInfo(require.TestingT) activityInfo
 	terminalOutcome(require.TestingT) activityTerminalOutcome
+}
+
+// establishRequestID records the last operator RPC of this type as the one the activity accepted, so
+// that a following SameRequestID event replays its request id.
+func establishRequestID(a activityHandle, eventType model.EventType) {
+	state := a.driverState()
+	state.establishedReqID[eventType] = state.lastReqID
 }
 
 // driveTraceWFAAndSAA drives trace as a workflow activity and as a standalone activity, running
@@ -590,6 +600,82 @@ func driveTraceWFAAndSAA(
 	t.Run("StandaloneActivity", func(t *testing.T) {
 		check(t, newSAADriver(t, env, cfg).driveTrace(t, trace))
 	})
+}
+
+// TestPauseUnpause covers the pause/unpause (P) entries of the WFA/SAA parity survey.
+func (s *activityParityTestSuite) TestPauseUnpause() {
+	t := s.T()
+	env := newActivityParityEnv(t)
+
+	// P04: a pause is identified by its request id, so a redelivery of one the user has since
+	// unpaused must be recognised as already applied. Re-pausing would silently undo the unpause.
+	t.Run("PauseReplayAfterUnpause", func(t *testing.T) {
+		driveTraceWFAAndSAA(t, env, activityConfig{MaxAttempts: 1, RetryInterval: activityLongDuration},
+			[]model.Event{model.Pause},
+			func(t *testing.T, a activityHandle) {
+				establishRequestID(a, model.PauseType)
+				a.driveEvent(t, model.Unpause)
+				a.driveEvent(t, model.Event{Type: model.PauseType, SameRequestID: true})
+				require.Equal(t, activityInfo{RunState: enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, Attempt: 1},
+					a.activityInfo(t),
+					"a replayed pause whose request id was already consumed must not re-pause the activity")
+				// The dispatch the unpause released must still reach a poller, which the run state alone
+				// does not establish.
+				a.driveEvent(t, model.Poll)
+			})
+	})
+
+	// P12: an unpause is identified by its request id, as a pause is (P04), so a redelivery of one the
+	// user has since re-paused past must be recognised as already applied: the later pause stands. Both
+	// pauses and the replay are sent as raw RPCs, because the trace vocabulary sends no request id on
+	// unpause, and driving them raw leaves the model cursor behind — nothing may be driven afterwards.
+	t.Run("UnpauseReplayAfterPause", func(t *testing.T) {
+		assertReplayIgnored := func(t *testing.T, a activityHandle, unpause pauseParityUnpause) {
+			spent := uuid.NewString()
+			require.NoError(t, a.rpc(t, model.Pause))
+			require.NoError(t, unpause(spent))
+			require.NoError(t, a.rpc(t, model.Pause))
+			// Whether a recognised replay is reported as success or refused is not this claim; what the
+			// activity is left in is.
+			_ = unpause(spent)
+			require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, a.activityInfo(t).RunState,
+				"a replayed unpause whose request id was already consumed must not undo the later pause")
+		}
+		cfg := activityConfig{MaxAttempts: 1, RetryInterval: activityLongDuration}
+
+		t.Run("WorkflowActivity", func(t *testing.T) {
+			a := newWFADriver(t, env, cfg).driveTrace(t, nil)
+			assertReplayIgnored(t, a, pauseParityUnpauseWFA(a))
+		})
+		t.Run("StandaloneActivity", func(t *testing.T) {
+			a := newSAADriver(t, env, cfg).driveTrace(t, nil)
+			assertReplayIgnored(t, a, pauseParityUnpauseSAA(a))
+		})
+	})
+}
+
+// pauseParityUnpause is an UnpauseActivityExecution carrying a request id, which the trace vocabulary
+// cannot send. It bypasses the driver's model check, so nothing may be driven on the handle after it.
+type pauseParityUnpause func(requestID string) error
+
+func pauseParityUnpauseWFA(a *wfaHandle) pauseParityUnpause {
+	return func(requestID string) error {
+		_, err := a.d.env.FrontendClient().UnpauseActivityExecution(a.testContext(), &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace: a.d.env.Namespace().String(), WorkflowId: a.workflowID, ActivityId: a.activityID, RunId: a.runID,
+			Identity: a.d.env.Tv().ClientIdentity(), RequestId: requestID,
+		})
+		return err
+	}
+}
+
+func pauseParityUnpauseSAA(a *saaHandle) pauseParityUnpause {
+	return func(requestID string) error {
+		_, err := a.d.env.FrontendClient().UnpauseActivityExecution(a.testContext(), &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace: a.d.env.Namespace().String(), ActivityId: a.activityID, RunId: a.runID,
+			Identity: a.d.env.Tv().ClientIdentity(), RequestId: requestID,
+		})
+		return err
+	}
 }
 
 // Force-completing an activity by ID must work whenever no attempt is in progress: while Scheduled
