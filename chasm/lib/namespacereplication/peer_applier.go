@@ -42,8 +42,8 @@ const (
 // The default OSS implementation (adminClientPeerApplier) uses the cross-cluster
 // ApplyNamespaceMutation admin RPC. A deployment that needs a different peer
 // transport (e.g. calling UpdateNamespace directly on the peer host) can provide
-// an alternative PeerApplier via fx — e.g. fx.Decorate/fx.Provide in the history
-// service options — without touching any policy in this package.
+// an alternative PeerApplier via fx.Decorate in the history service options —
+// without touching any policy in this package.
 type PeerApplier interface {
 	Apply(
 		ctx context.Context,

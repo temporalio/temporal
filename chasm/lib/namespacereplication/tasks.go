@@ -11,6 +11,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -98,7 +99,7 @@ func (h *applyLocalTaskHandler) Execute(
 			m := c.GetMutation()
 			return loadResult{
 				Operation:   m.GetOperation(),
-				Detail:      m.GetNamespaceDetail(),
+				Detail:      common.CloneProto(m.GetNamespaceDetail()),
 				ExpectedVer: m.GetExpectedVersion(),
 				// Anything that reaches the CHASM transport is a global namespace —
 				// the frontend's shouldUseCHASMReplication gate ensures local-only
@@ -509,7 +510,7 @@ func (h *applyPeerTaskHandler) Execute(
 			m := c.GetMutation()
 			return loadResult{
 				Operation: convertOperation(m.GetOperation()),
-				Detail:    m.GetNamespaceDetail(),
+				Detail:    common.CloneProto(m.GetNamespaceDetail()),
 			}, nil
 		},
 		nil,
