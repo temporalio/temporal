@@ -176,6 +176,8 @@ type (
 		currentMemo proto.Message
 
 		needsPointerResolution bool
+
+		totalTimeSkippedUpdatedInPassive bool
 	}
 
 	taskWithAttributes struct {
@@ -2509,6 +2511,7 @@ func (n *Node) cleanupTransaction() {
 	}
 
 	n.needsPointerResolution = false
+	n.totalTimeSkippedUpdatedInPassive = false
 
 	// Reset per-node subtreeIsDirty on all nodes in the tree.
 	for _, node := range n.andAllChildren() {
@@ -2893,6 +2896,12 @@ func (n *Node) applyUpdates(
 }
 
 func (n *Node) RefreshTasks() error {
+	// A full refresh regenerates every physical task, including skip-adjusted timers (fire
+	// times are converted against the current accumulated skip in backend.AddTasks). It
+	// therefore subsumes any pending replication-driven time-skipping re-stamp, so clear the
+	// flag to avoid generating those timer tasks twice in the same CloseTransaction.
+	n.totalTimeSkippedUpdatedInPassive = false
+
 	for _, node := range n.andAllChildren() {
 		// Only reset task status here, the actual task generation will be done when
 		// CloseTransaction() is called to persist the changes.
@@ -2914,6 +2923,10 @@ func (n *Node) RefreshTasks() error {
 	}
 
 	return nil
+}
+
+func (n *Node) MarkTotalTimeSkippedUpdatedInPassive() {
+	n.totalTimeSkippedUpdatedInPassive = true
 }
 
 func (n *Node) resetTaskStatus() bool {
@@ -3938,6 +3951,17 @@ func encodeChasmBlob(m proto.Message) (*commonpb.DataBlob, error) {
 }
 
 func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) error {
+	// Replication does not mark the subtree dirty. Re-stamp timers only when the
+	// replicated accumulated skip changed.
+	if !n.subtreeIsDirty {
+		if n.totalTimeSkippedUpdatedInPassive {
+			if err := n.regenerateTimerTasksForTimeSkipping(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
 	if n.parent != nil {
 		n.logger.Warn("time skipping handler called on non-root component is no-op")
 		return nil
