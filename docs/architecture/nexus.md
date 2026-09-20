@@ -65,13 +65,8 @@ To enable Nexus in your deployment:
 
 2. Configure Nexus settings in the [dynamic config](https://docs.temporal.io/references/dynamic-configuration)
 
-- 2a. Since version 1.30.0, only turn on using the system callback URL (`temporal://system`), this flag will go away in
-the 1.31.0 release and will be made the default.
-
-    ```yaml
-   component.nexusoperations.useSystemCallbackURL:
-    - value: true
-   ```
+- 2a. Starting with version 1.31.0, callbacks for worker targets always use the system callback URL
+  (`temporal://system`). No callback URL configuration is required.
 
 - 2b. Prior to version 1.30.0, you must set a public callback URL, and allowed callback addresses. These configurations
   are also required for calling **experimental** external endpoint targets.
