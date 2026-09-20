@@ -4,7 +4,10 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 // =============================================================================
@@ -22,8 +25,9 @@ import (
 
 type TimeSkippingConfigurator interface {
 	// SetTimeSkippingConfig sets the execution's time-skipping config: the first call establishes it,
-	// later calls update it in place (preserving the accumulated skipped duration).
-	SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
+	// later calls update it in place (preserving the accumulated skipped duration). This method also
+	// validates the config and returns an invalid argument error when needed.
+	SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) error
 }
 
 type TimeSkippingRuntimeGate interface {
@@ -38,8 +42,34 @@ type TimeSkippingRuntimeGate interface {
 	IsExecutionSkippable(ctx Context) bool
 }
 
+// PropagateTimeSkippingToOtherExecution snapshots time-skipping state for a new, independent
+// execution that shares the source execution's virtual clock, such as a child workflow or a
+// workflow started by a schedule.
+func PropagateTimeSkippingToOtherExecution(
+	tsi *persistencespb.TimeSkippingInfo,
+) (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation) {
+	if tsi == nil {
+		return nil, nil
+	}
+
+	var statePropagation *commonpb.TimeSkippingStatePropagation
+	if accumulated := tsi.GetAccumulatedSkippedDuration().AsDuration(); accumulated > 0 {
+		statePropagation = &commonpb.TimeSkippingStatePropagation{
+			InitialSkippedDuration: durationpb.New(accumulated),
+		}
+	}
+
+	config := tsi.GetConfig()
+	if config == nil || config.GetDisablePropagation() {
+		return nil, statePropagation
+	}
+	propagatedConfig := common.CloneProto(config)
+	propagatedConfig.FastForwardConfig = nil
+	return propagatedConfig, statePropagation
+}
+
 // =============================================================================
-// Time Skipping Data Structure
+// Time Skipping Data Structure and Utils
 // =============================================================================
 
 type TimeSkippingTransition struct {
@@ -53,17 +83,18 @@ type TimeSkippingTransition struct {
 
 // NewTimeSkippingTransition creates a new time-skipping transition with the current time.
 // Methods provided by this data structure cannot be used without a current time.
-//
-// todo@time-skipping: the methods will be used by CHASM so keep as public.
 func NewTimeSkippingTransition(currentTime time.Time) *TimeSkippingTransition {
 	return &TimeSkippingTransition{CurrentTime: currentTime}
 }
 
 // IsValid reports whether the transition is worth applying: a real skip target, or a bare disable
-// signal. Nil-safe. A transition without a current time is never valid — every meaningful field is
-// derived relative to the current time, so without it there is nothing to apply.
+// signal. Nil-safe. A new transition without any field is not a valid one.
 func (t *TimeSkippingTransition) IsValid() bool {
-	return t != nil && !t.CurrentTime.IsZero() && (!t.targetTime.IsZero() || t.DisabledAfterFastForward)
+	return t.isInitialized() && (!t.targetTime.IsZero() || t.DisabledAfterFastForward)
+}
+
+func (t *TimeSkippingTransition) isInitialized() bool {
+	return t != nil && !t.CurrentTime.IsZero()
 }
 
 // GetTargetTime returns the earliest tracked skip target, or the zero time when none has been set.
@@ -77,7 +108,7 @@ func (t *TimeSkippingTransition) GetTargetTime() time.Time {
 }
 
 func (t *TimeSkippingTransition) TrackEarliestFutureTime(candidate time.Time) {
-	if t == nil || t.CurrentTime.IsZero() || candidate.IsZero() || candidate.Before(t.CurrentTime) {
+	if !t.isInitialized() || candidate.IsZero() || candidate.Before(t.CurrentTime) {
 		return
 	}
 	if t.targetTime.IsZero() || candidate.Before(t.targetTime) {
@@ -86,7 +117,7 @@ func (t *TimeSkippingTransition) TrackEarliestFutureTime(candidate time.Time) {
 }
 
 func (t *TimeSkippingTransition) GateByFastForward(ff *persistencespb.FastForwardInfo) {
-	if t == nil || t.CurrentTime.IsZero() {
+	if !t.isInitialized() {
 		return
 	}
 	if ff == nil || ff.GetHasReached() || ff.GetTargetTime() == nil ||
@@ -118,4 +149,18 @@ func (t *TimeSkippingTransition) GetSkippedDuration() time.Duration {
 		return 0
 	}
 	return t.targetTime.Sub(t.CurrentTime)
+}
+
+// ValidateTimeSkippingConfig validates configuration shared by all execution archetypes.
+func ValidateTimeSkippingConfig(tsc *commonpb.TimeSkippingConfig) error {
+	if !tsc.GetEnabled() {
+		if tsc.GetFastForwardConfig() != nil {
+			return serviceerror.NewInvalidArgument("time_skipping_config: cannot set fast_forward when enabled is false")
+		}
+		return nil
+	}
+	if ff := tsc.GetFastForwardConfig(); ff != nil && ff.GetDuration().AsDuration() <= 0 {
+		return serviceerror.NewInvalidArgument("time_skipping_config: fast_forward duration must be positive")
+	}
+	return nil
 }

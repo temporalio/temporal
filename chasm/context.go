@@ -29,6 +29,9 @@ type Context interface {
 	ExecutionKey() ExecutionKey
 	// ExecutionInfo returns metadata information about the execution.
 	ExecutionInfo() ExecutionInfo
+	// GetTimeSkippingPropagateState returns the time-skipping configuration and state to propagate.
+	// It should be called when an execution with time skipping starts another execution.
+	GetTimeSkippingPropagateState() (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation)
 	// Logger returns a logger tagged with execution key and other chasm framework internal information.
 	Logger() log.Logger
 	// NamespaceEntry returns the namespace entry for the execution.
@@ -215,6 +218,13 @@ func (c *immutableCtx) ExecutionInfo() ExecutionInfo {
 	}
 }
 
+func (c *immutableCtx) GetTimeSkippingPropagateState() (
+	*commonpb.TimeSkippingConfig,
+	*commonpb.TimeSkippingStatePropagation,
+) {
+	return PropagateTimeSkippingToOtherExecution(c.root.backend.GetExecutionInfo().GetTimeSkippingInfo())
+}
+
 func (c *immutableCtx) Logger() log.Logger {
 	return c.root.logger
 }
@@ -302,8 +312,15 @@ func (c *mutableCtx) withValue(key any, value any) Context {
 	}
 }
 
-func (c *mutableCtx) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
+func (c *mutableCtx) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) error {
+	if config == nil {
+		return nil
+	}
+	if err := ValidateTimeSkippingConfig(config); err != nil {
+		return err
+	}
 	c.root.backend.SetTimeSkippingConfig(config)
+	return nil
 }
 
 // ContextWithValue returns a new Context with the given key-value pair added.

@@ -429,5 +429,6 @@ type (
 		AddWorkflowExecutionTimeSkippingTransitionedEvent(
 			ctx context.Context, targetTime time.Time, disabledAfterFastForward bool) (*historypb.HistoryEvent, error)
 		ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error
+		RecordTimeSkippingTransition(transition *chasm.TimeSkippingTransition)
 	}
 )
