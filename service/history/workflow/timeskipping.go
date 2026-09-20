@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
@@ -59,6 +60,7 @@ func (ms *MutableStateImpl) updateTimeSkippingInfo(
 }
 
 func (ms *MutableStateImpl) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
+	// todo: migrate workflow init and update to this unified method
 	if ms.executionInfo.GetTimeSkippingInfo() == nil {
 		ms.initTimeSkippingInfo(config, nil)
 	} else {
@@ -101,7 +103,7 @@ func (ms *MutableStateImpl) applyFastForward(propagatedTargetTime *timestamppb.T
 		targetTime = ms.Now().Add(ffConfig.GetDuration().AsDuration())
 	}
 
-	ffVersionedTransition := ms.setAndStampFastForwardInfo(&persistencespb.FastForwardInfo{
+	ms.setAndStampFastForwardInfo(&persistencespb.FastForwardInfo{
 		TargetTime: timestamppb.New(targetTime),
 		HasReached: hasReached,
 	})
@@ -114,12 +116,7 @@ func (ms *MutableStateImpl) applyFastForward(propagatedTargetTime *timestamppb.T
 
 	// schedule the wake-up timer only while skipping is still enabled
 	if tsc.GetEnabled() {
-		ms.AddTasks(&tasks.TimeSkippingTimerTask{
-			WorkflowKey:         ms.GetWorkflowKey(),
-			VisibilityTimestamp: targetTime,
-			VersionedTransition: ffVersionedTransition,
-			ArchetypeID:         ms.ChasmTree().ArchetypeID(),
-		})
+		ms.addTimeSkippingFastForwardTask()
 	}
 }
 
@@ -490,9 +487,12 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 	return nil
 }
 
-func (ms *MutableStateImpl) closeTransactionRegenTimerTasksForWorkflowTimeSkipping(
+func (ms *MutableStateImpl) regenerateTimerTasksForWorkflowTimeSkipping(
 	transactionPolicy historyi.TransactionPolicy,
 ) error {
+	if !ms.IsWorkflow() {
+		return nil
+	}
 	switch transactionPolicy {
 	case historyi.TransactionPolicyActive:
 		return ms.taskGenerator.RegenerateTimerTasksForTimeSkipping()
@@ -502,6 +502,10 @@ func (ms *MutableStateImpl) closeTransactionRegenTimerTasksForWorkflowTimeSkippi
 		return serviceerror.NewInternalf("unknown transaction policy: %v", transactionPolicy)
 	}
 }
+
+// =============================================================================
+// Time Skipping Runtime Methods for Chasm-based Executions
+// =============================================================================
 
 func (ms *MutableStateImpl) RecordTimeSkippingTransition(transition *chasm.TimeSkippingTransition) {
 	if ms.IsWorkflow() || !transition.IsValid() {
@@ -513,11 +517,15 @@ func (ms *MutableStateImpl) RecordTimeSkippingTransition(transition *chasm.TimeS
 		return
 	}
 
+	skippedDuration := transition.GetSkippedDuration()
 	ms.executeTimeSkippingTransition(
-		transition.GetSkippedDuration(),
+		skippedDuration,
 		!transition.GetTargetTime().IsZero(),
 		transition.DisabledAfterFastForward,
 	)
+	if skippedDuration > 0 {
+		ms.addTimeSkippingFastForwardTask()
+	}
 }
 
 func (ms *MutableStateImpl) executeTimeSkippingTransition(
@@ -542,4 +550,46 @@ func (ms *MutableStateImpl) executeTimeSkippingTransition(
 		tsi.Config.Enabled = false
 	}
 	ms.timeSkippingInfoUpdated = true
+}
+
+// flagSkipDurationUpdateInPassive marks the chasm tree to re-stamp timer tasks against the
+// replicated accumulated skip, detected via changes to TimeSkippingInfo. On the active cluster,
+// tasks are regenerated as time is skipped; on a passive cluster those time changes instead arrive
+// via replication from the active cluster, so this flag is how the passive side triggers the
+// equivalent task regeneration. It is called from the replication paths in ApplyMutation and
+// ApplySnapshot.
+func (ms *MutableStateImpl) flagSkipDurationUpdateInPassive(
+	prevTimeSkippingVT *persistencespb.VersionedTransition,
+	preAccumulatedSkipDuration time.Duration,
+) {
+	if ms.IsWorkflow() {
+		// Workflow executions now re-stamp time-skipping timers via TaskRefresher.refreshTasksForTimeSkipping.
+		return
+	}
+	currTimeSkippingVT := ms.executionInfo.GetTimeSkippingInfo().GetLastUpdateVersionedTransition()
+	if transitionhistory.Compare(currTimeSkippingVT, prevTimeSkippingVT) <= 0 {
+		return
+	}
+	if ms.accumulatedSkippedDuration() == preAccumulatedSkipDuration {
+		return
+	}
+	ms.chasmTree.MarkTotalTimeSkippedUpdatedInPassive()
+	ms.addTimeSkippingFastForwardTask()
+}
+
+// =============================================================================
+// Time Skipping Utility Methods
+// =============================================================================
+
+func (ms *MutableStateImpl) addTimeSkippingFastForwardTask() {
+	tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
+	if !NewTimeSkippingInfoUtil(tsi).HasPendingFastForward() {
+		return
+	}
+	ms.AddTasks(&tasks.TimeSkippingFastForwardTimerTask{
+		WorkflowKey:         ms.GetWorkflowKey(),
+		VisibilityTimestamp: tsi.GetFastForwardInfo().GetTargetTime().AsTime(),
+		VersionedTransition: tsi.GetFastForwardInfoLastUpdateVersionedTransition(),
+		ArchetypeID:         ms.ChasmTree().ArchetypeID(),
+	})
 }

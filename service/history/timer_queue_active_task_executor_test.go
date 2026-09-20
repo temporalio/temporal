@@ -2512,7 +2512,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() {
 			}
 			pms.ExecutionInfo.TimeSkippingInfo = tc.tsi
 
-			timerTask := &tasks.TimeSkippingTimerTask{
+			timerTask := &tasks.TimeSkippingFastForwardTimerTask{
 				WorkflowKey:         workflowKey,
 				TaskID:              s.mustGenerateTaskID(),
 				VisibilityTimestamp: s.now.Add(time.Hour),
@@ -2608,7 +2608,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_Cha
 		s.mockChasmEngine,
 	).(*timerQueueActiveTaskExecutor)
 
-	timerTask := &tasks.TimeSkippingTimerTask{
+	timerTask := &tasks.TimeSkippingFastForwardTimerTask{
 		WorkflowKey:         workflowKey,
 		TaskID:              s.mustGenerateTaskID(),
 		VisibilityTimestamp: s.now.Add(time.Hour),

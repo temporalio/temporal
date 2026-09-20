@@ -2514,7 +2514,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() 
 	s.Run("Wait", func() {
 		pms, workflowKey := makeTimeSkippingPendingMS()
 
-		timerTask := &tasks.TimeSkippingTimerTask{
+		timerTask := &tasks.TimeSkippingFastForwardTimerTask{
 			WorkflowKey:         workflowKey,
 			TaskID:              s.mustGenerateTaskID(),
 			VisibilityTimestamp: s.now,
@@ -2534,7 +2534,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() 
 		pms, workflowKey := makeTimeSkippingPendingMS()
 		pms.ExecutionInfo.TimeSkippingInfo.FastForwardInfo.HasReached = true
 
-		timerTask := &tasks.TimeSkippingTimerTask{
+		timerTask := &tasks.TimeSkippingFastForwardTimerTask{
 			WorkflowKey:         workflowKey,
 			TaskID:              s.mustGenerateTaskID(),
 			VisibilityTimestamp: s.now.Add(time.Hour),
@@ -2551,7 +2551,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() 
 	s.Run("Discard", func() {
 		pms, workflowKey := makeTimeSkippingPendingMS()
 
-		timerTask := &tasks.TimeSkippingTimerTask{
+		timerTask := &tasks.TimeSkippingFastForwardTimerTask{
 			WorkflowKey:         workflowKey,
 			TaskID:              s.mustGenerateTaskID(),
 			VisibilityTimestamp: s.now,
