@@ -370,8 +370,9 @@ func (s *namespaceReplicationCHASMTestSuite) TestAuthoritativeTransportConcurren
 	s.Require().Nil(failedApply.response)
 	s.Require().ErrorAs(failedApply.err, new(*serviceerror.Unavailable))
 	s.failApplyRequests.Store(false)
+	terminalVersions := make(map[int64]struct{}, mutationCount)
 	recovered := false
-	for !recovered {
+	for len(terminalVersions) < mutationCount {
 		observed := s.receiveObservedApply(ctx)
 		if observed.err != nil {
 			s.Require().ErrorAs(observed.err, new(*serviceerror.Unavailable))
@@ -386,7 +387,12 @@ func (s *namespaceReplicationCHASMTestSuite) TestAuthoritativeTransportConcurren
 		default:
 			s.FailNow("unexpected recovered apply outcome", observed.response.GetOutcome())
 		}
+		configVersion := observed.request.GetNamespaceTask().GetConfigVersion()
+		s.Require().GreaterOrEqual(configVersion, int64(1))
+		s.Require().LessOrEqual(configVersion, int64(mutationCount))
+		terminalVersions[configVersion] = struct{}{}
 	}
+	s.Require().True(recovered, "no peer apply advanced the standby namespace")
 
 	sourceFingerprint, err := nsreplication.NamespaceTaskFingerprint(
 		nsreplication.NamespaceDetailToTaskAttributes(enumsspb.NAMESPACE_OPERATION_UPDATE, sourceNamespace.Namespace),
