@@ -152,7 +152,6 @@ func TestEffectiveNamespaceReplicationTransportMode(t *testing.T) {
 	}{
 		{name: "legacy", configured: dynamicconfig.NamespaceReplicationTransportModeLegacy, want: namespaceReplicationTransportLegacy},
 		{name: "shadow", configured: dynamicconfig.NamespaceReplicationTransportModeShadow, want: namespaceReplicationTransportShadow},
-		{name: "chasm falls back to legacy", configured: dynamicconfig.NamespaceReplicationTransportModeCHASM, want: namespaceReplicationTransportLegacy},
 		{name: "unknown falls back to legacy", configured: "unknown", want: namespaceReplicationTransportLegacy},
 	}
 

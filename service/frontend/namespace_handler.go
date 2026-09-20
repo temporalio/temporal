@@ -1527,12 +1527,6 @@ func (d *namespaceHandler) effectiveNamespaceReplicationTransportMode() namespac
 		return namespaceReplicationTransportLegacy
 	case dynamicconfig.NamespaceReplicationTransportModeShadow:
 		return namespaceReplicationTransportShadow
-	case dynamicconfig.NamespaceReplicationTransportModeCHASM:
-		d.logger.Warn(
-			"CHASM namespace replication transport is not available; using legacy transport",
-			tag.NewStringTag("mode", configuredMode),
-		)
-		return namespaceReplicationTransportLegacy
 	default:
 		d.logger.Warn(
 			"unknown namespace replication transport mode; using legacy transport",
