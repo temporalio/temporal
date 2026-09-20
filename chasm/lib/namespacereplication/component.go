@@ -7,16 +7,16 @@ import (
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 )
 
-// NamespaceMutationComponent is a CHASM component that applies a single
-// namespace mutation: local CAS commit on the host cell, then parallel apply-if-higher
-// fan-out to peer cells via the cross-cluster admin RPC.
+// NamespaceMutationComponent is a CHASM component that processes a single
+// namespace mutation: an authoritative local CAS commit or a shadow-mode skip,
+// then parallel peer fan-out via the cross-cluster admin RPC.
 //
 // One component per mutation invocation. BusinessID = namespace_id:mutation_uuid
 // (unique per invocation), so concurrent mutations on the same namespace each get
 // their own component rather than blocking one another; the component is started
-// with chasm.StartExecution and awaited with chasm.PollComponent. Serialization of
-// concurrent same-namespace mutations happens at the metadata store's version-CAS
-// in ApplyLocalTask (matching legacy UpdateNamespace), not in the CHASM engine.
+// with chasm.StartExecution and awaited with chasm.PollComponent. Authoritative
+// same-namespace mutations are serialized by the metadata store's version-CAS in
+// ApplyLocalTask (matching legacy UpdateNamespace), not in the CHASM engine.
 type NamespaceMutationComponent struct {
 	chasm.UnimplementedComponent
 
@@ -108,12 +108,14 @@ func (c *NamespaceMutationComponent) Terminate(
 }
 
 // allPeersTerminal reports whether every peer has reached a terminal outcome
-// (Applied, NoOpStale, NotAdmitted, or FailedTerminal). Used to decide when to
-// move the component to COMPLETED.
+// (Applied, ShadowMatch, ShadowMismatch, NoOpStale, NotAdmitted, or
+// FailedTerminal). Used to decide when to move the component to COMPLETED.
 func (c *NamespaceMutationComponent) allPeersTerminal() bool {
 	for _, status := range c.GetPeerApply() {
 		switch status.GetOutcome() {
 		case namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED,
+			namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MATCH,
+			namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MISMATCH,
 			namespacereplicationpb.PEER_APPLY_OUTCOME_NO_OP_STALE,
 			namespacereplicationpb.PEER_APPLY_OUTCOME_NOT_ADMITTED,
 			namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL:

@@ -73,8 +73,9 @@ service AdminService {
 
   // ApplyNamespaceMutation is the receiver-side entry point for the CHASM-based
   // namespace replication transport. The originating cell's NamespaceMutationComponent
-  // calls this RPC against each peer cell after its local apply commits.
-  // Apply semantics are apply-if-higher (config_version / failover_version).
+  // calls this RPC against each peer cell after its local phase resolves.
+  // This implementation currently accepts only shadow requests, validates the
+  // transported payload, and never writes receiver namespace state.
   rpc ApplyNamespaceMutation(ApplyNamespaceMutationRequest) returns (ApplyNamespaceMutationResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }
