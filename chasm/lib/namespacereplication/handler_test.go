@@ -47,11 +47,10 @@ func TestExecutionKeyUsesRoutingFields(t *testing.T) {
 
 func TestValidateTriggerNamespaceMutationRequest(t *testing.T) {
 	testCases := []struct {
-		name       string
-		request    func() *namespacereplicationpb.TriggerNamespaceMutationRequest
-		mutate     func(*namespacereplicationpb.TriggerNamespaceMutationRequest)
-		wantFailed bool
-		wantValid  bool
+		name      string
+		request   func() *namespacereplicationpb.TriggerNamespaceMutationRequest
+		mutate    func(*namespacereplicationpb.TriggerNamespaceMutationRequest)
+		wantValid bool
 	}{
 		{
 			name:    "nil request",
@@ -62,13 +61,6 @@ func TestValidateTriggerNamespaceMutationRequest(t *testing.T) {
 			mutate: func(req *namespacereplicationpb.TriggerNamespaceMutationRequest) {
 				req.Mutation = nil
 			},
-		},
-		{
-			name: "authoritative mutation rejected",
-			mutate: func(req *namespacereplicationpb.TriggerNamespaceMutationRequest) {
-				req.Mutation.Shadow = false
-			},
-			wantFailed: true,
 		},
 		{
 			name: "missing namespace id",
@@ -137,13 +129,29 @@ func TestValidateTriggerNamespaceMutationRequest(t *testing.T) {
 			},
 		},
 		{
-			name: "valid create",
+			name: "valid authoritative create",
 			mutate: func(req *namespacereplicationpb.TriggerNamespaceMutationRequest) {
 				req.Mutation.Operation = namespacereplicationpb.NAMESPACE_OPERATION_CREATE
+				req.Mutation.Shadow = false
 			},
 			wantValid: true,
 		},
-		{name: "valid update", wantValid: true},
+		{
+			name: "valid authoritative update",
+			mutate: func(req *namespacereplicationpb.TriggerNamespaceMutationRequest) {
+				req.Mutation.Shadow = false
+			},
+			wantValid: true,
+		},
+		{name: "valid shadow update", wantValid: true},
+		{
+			name: "valid replicate-only update",
+			mutate: func(req *namespacereplicationpb.TriggerNamespaceMutationRequest) {
+				req.Mutation.Shadow = false
+				req.Mutation.ReplicateOnly = true
+			},
+			wantValid: true,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -161,13 +169,30 @@ func TestValidateTriggerNamespaceMutationRequest(t *testing.T) {
 				return
 			}
 			require.Error(t, err)
-			if tc.wantFailed {
-				var failedPrecondition *serviceerror.FailedPrecondition
-				require.ErrorAs(t, err, &failedPrecondition)
-			} else {
-				var invalidArgument *serviceerror.InvalidArgument
-				require.ErrorAs(t, err, &invalidArgument)
-			}
+			var invalidArgument *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgument)
+		})
+	}
+}
+
+func TestTriggerNamespaceMutationRejectsInvalidReplicateOnlyModes(t *testing.T) {
+	for _, testCase := range []struct {
+		name      string
+		operation namespacereplicationpb.NamespaceOperation
+		shadow    bool
+	}{
+		{name: "create", operation: namespacereplicationpb.NAMESPACE_OPERATION_CREATE},
+		{name: "shadow", operation: namespacereplicationpb.NAMESPACE_OPERATION_UPDATE, shadow: true},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			req := validTriggerNamespaceMutationRequest()
+			req.Mutation.Operation = testCase.operation
+			req.Mutation.Shadow = testCase.shadow
+			req.Mutation.ReplicateOnly = true
+
+			_, err := newHandler(log.NewNoopLogger()).TriggerNamespaceMutation(context.Background(), req)
+			var invalidArgument *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgument)
 		})
 	}
 }

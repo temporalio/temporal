@@ -17,6 +17,7 @@ import (
 const (
 	NamespaceReplicationTransportModeLegacy = "legacy"
 	NamespaceReplicationTransportModeShadow = "shadow"
+	NamespaceReplicationTransportModeCHASM  = "chasm"
 )
 
 var (
@@ -80,7 +81,7 @@ var (
 	NamespaceReplicationTransportMode = NewGlobalStringSetting(
 		"system.namespaceReplicationTransportMode",
 		NamespaceReplicationTransportModeLegacy,
-		`NamespaceReplicationTransportMode selects the namespace replication transport: legacy or shadow.`,
+		`NamespaceReplicationTransportMode selects the namespace replication transport: legacy, shadow, or chasm.`,
 	)
 	VisibilityDisableOrderByClause = NewNamespaceBoolSetting(
 		"system.visibilityDisableOrderByClause",

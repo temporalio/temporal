@@ -29,6 +29,12 @@ func (h *handler) TriggerNamespaceMutation(
 	if err := validateTriggerNamespaceMutationRequest(req); err != nil {
 		return nil, err
 	}
+	if req.GetMutation().GetReplicateOnly() && req.GetMutation().GetShadow() {
+		return nil, serviceerror.NewInvalidArgument("mutation.replicate_only and mutation.shadow are mutually exclusive")
+	}
+	if req.GetMutation().GetReplicateOnly() && req.GetMutation().GetOperation() != namespacereplicationpb.NAMESPACE_OPERATION_UPDATE {
+		return nil, serviceerror.NewInvalidArgument("mutation.replicate_only requires an update operation")
+	}
 
 	key := executionKey(req)
 	startResult, err := chasm.StartExecution[*NamespaceMutationComponent, *namespacereplicationpb.NamespaceMutation](
@@ -76,9 +82,6 @@ func (h *handler) TriggerNamespaceMutation(
 func validateTriggerNamespaceMutationRequest(req *namespacereplicationpb.TriggerNamespaceMutationRequest) error {
 	if req == nil || req.GetMutation() == nil {
 		return serviceerror.NewInvalidArgument("mutation is required")
-	}
-	if !req.GetMutation().GetShadow() {
-		return serviceerror.NewFailedPrecondition("authoritative CHASM namespace replication is not enabled")
 	}
 	if req.GetNamespaceId() == "" {
 		return serviceerror.NewInvalidArgument("namespace_id is required")
