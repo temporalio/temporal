@@ -213,6 +213,14 @@ message ApplyNamespaceMutationRequest {
   // SHA-256 of the deterministic namespace_task protobuf encoding computed by
   // the sender. The receiver recomputes it to detect transport drift.
   bytes fingerprint = 3;
+
+  // Observability metadata for correlating a receiver attempt with its source
+  // CHASM component. These fields do not affect apply semantics.
+  string source_cluster = 4;
+  string component_business_id = 5;
+  string component_run_id = 6;
+  // One-based delivery attempt count.
+  int32 attempt_count = 7;
 }
 
 message ApplyNamespaceMutationResponse {

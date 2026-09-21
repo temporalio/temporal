@@ -1746,7 +1746,14 @@ type ApplyNamespaceMutationRequest struct {
 	Shadow bool `protobuf:"varint,2,opt,name=shadow,proto3" json:"shadow,omitempty"`
 	// SHA-256 of the deterministic namespace_task protobuf encoding computed by
 	// the sender. The receiver recomputes it to detect transport drift.
-	Fingerprint   []byte `protobuf:"bytes,3,opt,name=fingerprint,proto3" json:"fingerprint,omitempty"`
+	Fingerprint []byte `protobuf:"bytes,3,opt,name=fingerprint,proto3" json:"fingerprint,omitempty"`
+	// Observability metadata for correlating a receiver attempt with its source
+	// CHASM component. These fields do not affect apply semantics.
+	SourceCluster       string `protobuf:"bytes,4,opt,name=source_cluster,json=sourceCluster,proto3" json:"source_cluster,omitempty"`
+	ComponentBusinessId string `protobuf:"bytes,5,opt,name=component_business_id,json=componentBusinessId,proto3" json:"component_business_id,omitempty"`
+	ComponentRunId      string `protobuf:"bytes,6,opt,name=component_run_id,json=componentRunId,proto3" json:"component_run_id,omitempty"`
+	// One-based delivery attempt count.
+	AttemptCount  int32 `protobuf:"varint,7,opt,name=attempt_count,json=attemptCount,proto3" json:"attempt_count,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1800,6 +1807,34 @@ func (x *ApplyNamespaceMutationRequest) GetFingerprint() []byte {
 		return x.Fingerprint
 	}
 	return nil
+}
+
+func (x *ApplyNamespaceMutationRequest) GetSourceCluster() string {
+	if x != nil {
+		return x.SourceCluster
+	}
+	return ""
+}
+
+func (x *ApplyNamespaceMutationRequest) GetComponentBusinessId() string {
+	if x != nil {
+		return x.ComponentBusinessId
+	}
+	return ""
+}
+
+func (x *ApplyNamespaceMutationRequest) GetComponentRunId() string {
+	if x != nil {
+		return x.ComponentRunId
+	}
+	return ""
+}
+
+func (x *ApplyNamespaceMutationRequest) GetAttemptCount() int32 {
+	if x != nil {
+		return x.AttemptCount
+	}
+	return 0
 }
 
 type ApplyNamespaceMutationResponse struct {
@@ -6249,11 +6284,15 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x19last_processed_message_id\x18\x02 \x01(\x03R\x16lastProcessedMessageId\x12!\n" +
 	"\fcluster_name\x18\x03 \x01(\tR\vclusterName\"~\n" +
 	"'GetNamespaceReplicationMessagesResponse\x12S\n" +
-	"\bmessages\x18\x01 \x01(\v27.temporal.server.api.replication.v1.ReplicationMessagesR\bmessages\"\xbd\x01\n" +
+	"\bmessages\x18\x01 \x01(\v27.temporal.server.api.replication.v1.ReplicationMessagesR\bmessages\"\xe7\x02\n" +
 	"\x1dApplyNamespaceMutationRequest\x12b\n" +
 	"\x0enamespace_task\x18\x01 \x01(\v2;.temporal.server.api.replication.v1.NamespaceTaskAttributesR\rnamespaceTask\x12\x16\n" +
 	"\x06shadow\x18\x02 \x01(\bR\x06shadow\x12 \n" +
-	"\vfingerprint\x18\x03 \x01(\fR\vfingerprint\"\xd7\x02\n" +
+	"\vfingerprint\x18\x03 \x01(\fR\vfingerprint\x12%\n" +
+	"\x0esource_cluster\x18\x04 \x01(\tR\rsourceCluster\x122\n" +
+	"\x15component_business_id\x18\x05 \x01(\tR\x13componentBusinessId\x12(\n" +
+	"\x10component_run_id\x18\x06 \x01(\tR\x0ecomponentRunId\x12#\n" +
+	"\rattempt_count\x18\a \x01(\x05R\fattemptCount\"\xd7\x02\n" +
 	"\x1eApplyNamespaceMutationResponse\x12e\n" +
 	"\aoutcome\x18\x01 \x01(\x0e2K.temporal.server.api.adminservice.v1.ApplyNamespaceMutationResponse.OutcomeR\aoutcome\"\xcd\x01\n" +
 	"\aOutcome\x12\x17\n" +

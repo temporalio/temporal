@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/payload"
@@ -114,6 +115,7 @@ type (
 		historyHealthChecker       HealthChecker
 		chasmRegistry              *chasm.Registry
 		schedulerClient            schedulerpb.SchedulerServiceClient
+		metricsHandler             metrics.Handler
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -149,6 +151,7 @@ type (
 		ChasmRegistry                       *chasm.Registry
 		NamespaceDataMerger                 nsreplication.NamespaceDataMerger
 		SchedulerClient                     schedulerpb.SchedulerServiceClient
+		MetricsHandler                      metrics.Handler
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -206,6 +209,7 @@ func NewAdminHandler(
 		matchingClient:             args.matchingClient,
 		chasmRegistry:              args.ChasmRegistry,
 		schedulerClient:            args.SchedulerClient,
+		metricsHandler:             args.MetricsHandler,
 	}
 }
 
@@ -1046,6 +1050,14 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 	}
 	actualFingerprint, err := nsreplication.NamespaceTaskFingerprint(request.GetNamespaceTask())
 	if err != nil {
+		if request.GetShadow() {
+			adh.recordShadowReceiveComparison(
+				request.GetNamespaceTask().GetNamespaceOperation(),
+				request.GetSourceCluster(),
+				namespaceReplicationShadowOutcomeError,
+			)
+			adh.emitShadowReceiveComparison(request, request.GetFingerprint(), nil, namespaceReplicationShadowOutcomeError, err)
+		}
 		return nil, serviceerror.NewInternalf("fingerprint namespace mutation: %v", err)
 	}
 	if !bytes.Equal(request.GetFingerprint(), actualFingerprint) {
@@ -1056,6 +1068,18 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			tag.NewStringTag("actual_fingerprint", hex.EncodeToString(actualFingerprint)),
 		)
 		if request.GetShadow() {
+			adh.recordShadowReceiveComparison(
+				request.GetNamespaceTask().GetNamespaceOperation(),
+				request.GetSourceCluster(),
+				namespaceReplicationShadowOutcomeMismatch,
+			)
+			adh.emitShadowReceiveComparison(
+				request,
+				request.GetFingerprint(),
+				actualFingerprint,
+				namespaceReplicationShadowOutcomeMismatch,
+				nil,
+			)
 			return &adminservice.ApplyNamespaceMutationResponse{
 				Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH,
 			}, nil
@@ -1064,6 +1088,18 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 	}
 
 	if request.GetShadow() {
+		adh.recordShadowReceiveComparison(
+			request.GetNamespaceTask().GetNamespaceOperation(),
+			request.GetSourceCluster(),
+			namespaceReplicationShadowOutcomeMatch,
+		)
+		adh.emitShadowReceiveComparison(
+			request,
+			request.GetFingerprint(),
+			actualFingerprint,
+			namespaceReplicationShadowOutcomeMatch,
+			nil,
+		)
 		return &adminservice.ApplyNamespaceMutationResponse{
 			Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH,
 		}, nil
@@ -1098,6 +1134,23 @@ func namespaceMutationResponseOutcome(
 		return adminservice.ApplyNamespaceMutationResponse_OUTCOME_UNSPECIFIED,
 			serviceerror.NewInternalf("unknown namespace mutation outcome: %v", outcome)
 	}
+}
+
+func (adh *AdminHandler) recordShadowReceiveComparison(
+	operation enumsspb.NamespaceOperation,
+	sourceCluster string,
+	outcome string,
+) {
+	if adh.metricsHandler == nil {
+		return
+	}
+	metrics.NamespaceReplicationShadowReceiveComparisonOutcomes.With(adh.metricsHandler).Record(
+		1,
+		metrics.SourceClusterTag(sourceCluster),
+		metrics.TargetClusterTag(adh.clusterMetadata.GetCurrentClusterName()),
+		metrics.OperationTag(namespaceReplicationOperationMetricValue(operation)),
+		metrics.OutcomeTag(outcome),
+	)
 }
 
 // GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task ID.
