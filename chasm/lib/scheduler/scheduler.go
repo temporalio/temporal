@@ -732,6 +732,7 @@ func (s *Scheduler) Describe(
 	info.FutureActionTimes = futureActionTimes
 	// Only starts that have not reached StartWorkflowExecution count as buffered.
 	info.BufferSize = int64(invoker.bufferedStartsCount())
+	info.TimeSkippingInfo = ctx.GetTimeSkippingInfo()
 
 	executionInfo := ctx.ExecutionInfo()
 	info.StateSizeBytes = int64(executionInfo.ApproximateStateSize)
