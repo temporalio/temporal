@@ -6,40 +6,36 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/tqid"
 )
 
-func TestGrantEagerDispatchRequestForPartition(t *testing.T) {
+func TestSetTaskQueuePartition(t *testing.T) {
 	family, err := tqid.NewTaskQueueFamily("namespace-id", "task-queue")
 	require.NoError(t, err)
 	taskQueue := family.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-	request := &matchingservice.GrantEagerDispatchRequest{
-		NamespaceId: "namespace-id",
-		Items:       []*matchingservice.GrantEagerDispatchRequest_Item{{Count: 1}},
-	}
+	partitionProto := &taskqueuespb.TaskQueuePartition{}
 
-	rootRequest, err := grantEagerDispatchRequestForPartition(request, taskQueue.RootPartition())
+	err = setTaskQueuePartition(partitionProto, taskQueue.RootPartition())
 	require.NoError(t, err)
-	require.Equal(t, int32(0), rootRequest.GetTaskQueuePartition().GetNormalPartitionId())
-	require.NotNil(t, rootRequest.GetTaskQueuePartition().GetPartitionId())
-	require.Equal(t, "task-queue", rootRequest.GetTaskQueuePartition().GetTaskQueue())
-	require.Equal(t, enumspb.TASK_QUEUE_TYPE_ACTIVITY, rootRequest.GetTaskQueuePartition().GetTaskQueueType())
+	require.Equal(t, int32(0), partitionProto.GetNormalPartitionId())
+	require.NotNil(t, partitionProto.GetPartitionId())
+	require.Equal(t, "task-queue", partitionProto.GetTaskQueue())
+	require.Equal(t, enumspb.TASK_QUEUE_TYPE_ACTIVITY, partitionProto.GetTaskQueueType())
 
-	childRequest, err := grantEagerDispatchRequestForPartition(request, taskQueue.NormalPartition(3))
+	err = setTaskQueuePartition(partitionProto, taskQueue.NormalPartition(3))
 	require.NoError(t, err)
-	require.Equal(t, int32(3), childRequest.GetTaskQueuePartition().GetNormalPartitionId())
-	require.Nil(t, request.GetTaskQueuePartition())
+	require.Equal(t, int32(3), partitionProto.GetNormalPartitionId())
 
-	_, err = grantEagerDispatchRequestForPartition(
-		request,
+	err = setTaskQueuePartition(
+		partitionProto,
 		family.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition("sticky"),
 	)
 	var invalidArgument *serviceerror.InvalidArgument
 	require.ErrorAs(t, err, &invalidArgument)
 
-	_, err = grantEagerDispatchRequestForPartition(
-		request,
+	err = setTaskQueuePartition(
+		partitionProto,
 		family.TaskQueue(enumspb.TASK_QUEUE_TYPE_NEXUS).WorkerCommandsPartition(),
 	)
 	require.ErrorAs(t, err, &invalidArgument)

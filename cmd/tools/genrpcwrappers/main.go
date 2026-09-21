@@ -42,8 +42,8 @@ type (
 	// the load balancer (when the request is for a non-forwarded root partition) in
 	// addition to routing it to the owning host.
 	loadBalancedMethod struct {
-		// taskQueueType is the task queue type of the partition to route to. It can't be
-		// inferred from the request since these requests don't carry a task queue type.
+		// taskQueueType is the task queue type of the partition to route to. If empty,
+		// the request carries the type in a TaskQueuePartition proto.
 		taskQueueType string
 		// read picks the read partition, which may hold a lease that has to be released
 		// after the call, instead of the write partition.
@@ -132,7 +132,7 @@ var (
 		"matching.PollActivityTaskQueue": {taskQueueType: "ACTIVITY", read: true, longPoll: true},
 		"matching.PollWorkflowTaskQueue": {taskQueueType: "WORKFLOW", read: true, longPoll: true},
 		"matching.PollNexusTaskQueue":    {taskQueueType: "NEXUS", read: true, longPoll: true},
-		"client.matching.GrantEagerDispatch": {},
+		"matching.GrantEagerDispatch":    {},
 	}
 	// Fields to ignore when looking for the routing fields in a request object.
 	ignoreField = map[string]bool{
@@ -477,27 +477,78 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 }
 
 // makeLoadBalancedFields computes the template fields for a matching method that load
-// balances across the partitions of a task queue. Everything but the task queue type is
-// derived from the request type.
+// balances across the partitions of a task queue. A configured task queue type is used
+// with public TaskQueue protos; otherwise the request's internal TaskQueuePartition proto
+// supplies the queue, type, and initial partition.
 func makeLoadBalancedFields(reqType reflect.Type, lb loadBalancedMethod, fields map[string]string) {
 	t := reqType.Elem() // we know it's a pointer
 
-	tq := findOneNestedField(t, "TaskQueue", "request", 2)
 	nsID := findOneNestedField(t, "NamespaceId", "request", 1)
 
 	// The source partition of a forwarded request lives either in a plain field on the
-	// request or inside its forward info.
+	// request or inside its forward info. Some load-balanced requests have neither.
 	forwardedSource := tryFindOneNestedField(t, "ForwardedSource", "request", 1)
 	if !forwardedSource.found() {
-		fi := findOneNestedField(t, "ForwardInfo", "request", 1)
-		forwardedSource = fieldWithPath{path: fi.path + ".GetSourcePartition()"}
+		if fi := tryFindOneNestedField(t, "ForwardInfo", "request", 1); fi.found() {
+			forwardedSource = fieldWithPath{path: fi.path + ".GetSourcePartition()"}
+		}
 	}
+	hasForwardedSource := forwardedSource.found()
+	if !hasForwardedSource {
+		forwardedSource = fieldWithPath{path: `""`}
+	}
+
+	if lb.taskQueueType == "" {
+		// Some internal requests carry the complete partition representation. In that
+		// case the task queue type and the initial partition both come from the proto.
+		tqp := findOneNestedField(t, "TaskQueuePartition", "request", 1)
+		notForwardedCondition := ""
+		if hasForwardedSource {
+			notForwardedCondition = " && " + forwardedSource.path + ` == ""`
+		}
+		fields["ResolvePartition"] = fmt.Sprintf(`p := tqid.PartitionFromPartitionProto(%s, %s)
+	if _, ok := p.(*tqid.NormalPartition); !ok {
+		return nil, serviceerror.NewInvalidArgument("load balanced requests only support normal task queue partitions")
+	}
+	loadBalance := p.SupportsPartitions() && p.IsRoot()%s`, tqp.path, nsID.path, notForwardedCondition)
+		fields["ForwardedSource"] = forwardedSource.path
+		if hasForwardedSource {
+			fields["ForwardingStats"] = fmt.Sprintf(
+				"c.emitForwardedSourceStatsForTaskQueueName(metricsHandler, %s, %s.GetTaskQueue())",
+				forwardedSource.path,
+				tqp.path,
+			)
+		} else {
+			fields["ForwardingStats"] = ""
+		}
+		fields["CopyRequest"] = makeCopyRequest(reqType, tqp.path)
+		fields["PickClient"] = fmt.Sprintf(`if loadBalance {
+		p, _ = c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
+	}
+	if err := setTaskQueuePartition(%s, p); err != nil {
+		return nil, err
+	}
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}`, tqp.path)
+		return
+	}
+
+	tq := findOneNestedField(t, "TaskQueue", "request", 2)
 
 	fields["TaskQueue"] = tq.path
 	fields["NamespaceId"] = nsID.path
 	fields["TaskQueueType"] = "enumspb.TASK_QUEUE_TYPE_" + lb.taskQueueType
 	fields["ForwardedSource"] = forwardedSource.path
+	fields["ForwardingStats"] = fmt.Sprintf("c.emitForwardedSourceStats(metricsHandler, %s, %s)", forwardedSource.path, tq.path)
 	fields["CopyRequest"] = makeCopyRequest(reqType, tq.path)
+	fields["ResolvePartition"] = fmt.Sprintf(`p, loadBalance := c.resolvePartition(
+		%s,
+		%s,
+		%s,
+		%s,
+	)`, tq.path, nsID.path, fields["TaskQueueType"], forwardedSource.path)
 
 	if lb.longPoll {
 		fields["LongPoll"] = "LongPoll"
@@ -738,12 +789,7 @@ func (c *clientImpl) {{.Method}}(
 	request {{.RequestType}},
 	opts ...grpc.CallOption,
 ) ({{.ResponseType}}, error) {
-	p, loadBalance := c.resolvePartition(
-		{{.TaskQueue}},
-		{{.NamespaceId}},
-		{{.TaskQueueType}},
-		{{.ForwardedSource}},
-	)
+	{{.ResolvePartition}}
 	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, p, loadBalance, request, opts, c.do{{.Method}})
 }
 
@@ -777,7 +823,7 @@ func (c *metricClient) {{.Method}}(
 		c.finishMetricsRecording(metricsHandler, startTime, retError)
 	}()
 
-	c.emitForwardedSourceStats(metricsHandler, {{.ForwardedSource}}, {{.TaskQueue}})
+	{{.ForwardingStats}}
 
 	return c.client.{{.Method}}(ctx, request, opts...)
 }
@@ -794,9 +840,11 @@ import (
 	"math/rand"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"{{.ServicePackagePath}}"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/grpc"
 )

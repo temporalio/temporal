@@ -23,7 +23,6 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/tqid"
-	"google.golang.org/grpc"
 )
 
 var _ matchingservice.MatchingServiceClient = (*clientImpl)(nil)
@@ -154,62 +153,21 @@ func reapEvictableClients(
 	}
 }
 
-func (c *clientImpl) GrantEagerDispatch(
-	ctx context.Context,
-	request *matchingservice.GrantEagerDispatchRequest,
-	opts ...grpc.CallOption,
-) (*matchingservice.GrantEagerDispatchResponse, error) {
-	p := tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId())
-	if _, ok := p.(*tqid.NormalPartition); !ok {
-		return nil, serviceerror.NewInvalidArgument("eager dispatch grants only support normal task queue partitions")
-	}
-	loadBalance := p.SupportsPartitions() && p.IsRoot()
-	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, p, loadBalance, request, opts, c.grantEagerDispatch)
-}
-
-func (c *clientImpl) grantEagerDispatch(
-	ctx context.Context,
-	p tqid.Partition,
-	loadBalance bool,
-	pc PartitionCounts,
-	request *matchingservice.GrantEagerDispatchRequest,
-	opts []grpc.CallOption,
-) (*matchingservice.GrantEagerDispatchResponse, error) {
-	if loadBalance {
-		p, _ = c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
-	}
-	request, err := grantEagerDispatchRequestForPartition(request, p)
-	if err != nil {
-		return nil, err
-	}
-
-	client, err := c.getClientForTaskQueuePartition(p)
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.GrantEagerDispatch(ctx, request, opts...)
-}
-
-func grantEagerDispatchRequestForPartition(
-	request *matchingservice.GrantEagerDispatchRequest,
+func setTaskQueuePartition(
+	proto *taskqueuespb.TaskQueuePartition,
 	partition tqid.Partition,
-) (*matchingservice.GrantEagerDispatchRequest, error) {
-	request = common.CloneProto(request)
-	request.TaskQueuePartition = &taskqueuespb.TaskQueuePartition{
-		TaskQueue:     partition.TaskQueue().Name(),
-		TaskQueueType: partition.TaskType(),
-	}
+) error {
 	switch partition := partition.(type) {
 	case *tqid.NormalPartition:
-		request.TaskQueuePartition.PartitionId = &taskqueuespb.TaskQueuePartition_NormalPartitionId{
+		proto.TaskQueue = partition.TaskQueue().Name()
+		proto.TaskQueueType = partition.TaskType()
+		proto.PartitionId = &taskqueuespb.TaskQueuePartition_NormalPartitionId{
 			NormalPartitionId: int32(partition.PartitionId()),
 		}
 	default:
-		return nil, serviceerror.NewInvalidArgument("eager dispatch grants only support normal task queue partitions")
+		return serviceerror.NewInvalidArgument("load balanced requests only support normal task queue partitions")
 	}
-	return request, nil
+	return nil
 }
 
 // resolvePartition parses the input task queue partition and decides how it should be routed.

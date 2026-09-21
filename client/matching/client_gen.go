@@ -8,9 +8,11 @@ import (
 	"math/rand"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/grpc"
 )
@@ -546,6 +548,53 @@ func (c *clientImpl) GetWorkerVersioningRules(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.GetWorkerVersioningRules(ctx, request, opts...)
+}
+
+func (c *clientImpl) GrantEagerDispatch(
+	ctx context.Context,
+	request *matchingservice.GrantEagerDispatchRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.GrantEagerDispatchResponse, error) {
+	p := tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId())
+	if _, ok := p.(*tqid.NormalPartition); !ok {
+		return nil, serviceerror.NewInvalidArgument("load balanced requests only support normal task queue partitions")
+	}
+	loadBalance := p.SupportsPartitions() && p.IsRoot()
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, p, loadBalance, request, opts, c.doGrantEagerDispatch)
+}
+
+func (c *clientImpl) doGrantEagerDispatch(
+	ctx context.Context,
+	p tqid.Partition,
+	loadBalance bool,
+	pc PartitionCounts,
+	request *matchingservice.GrantEagerDispatchRequest,
+	opts []grpc.CallOption,
+) (*matchingservice.GrantEagerDispatchResponse, error) {
+	// Copy the messages on the path to the task queue, since picking a partition
+	// rewrites its name. The rest is shared with the original request.
+	request = &matchingservice.GrantEagerDispatchRequest{
+		NamespaceId: request.NamespaceId,
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     request.TaskQueuePartition.TaskQueue,
+			TaskQueueType: request.TaskQueuePartition.TaskQueueType,
+			PartitionId:   request.TaskQueuePartition.PartitionId,
+		},
+		Items: request.Items,
+	}
+	if loadBalance {
+		p, _ = c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
+	}
+	if err := setTaskQueuePartition(request.GetTaskQueuePartition(), p); err != nil {
+		return nil, err
+	}
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GrantEagerDispatch(ctx, request, opts...)
 }
 
 func (c *clientImpl) ListNexusEndpoints(
