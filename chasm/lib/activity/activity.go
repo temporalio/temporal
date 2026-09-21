@@ -17,7 +17,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/chasm/lib/callback"
-	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/metrics"
@@ -99,6 +98,11 @@ type RespondFailedEvent struct {
 type RespondCancelledEvent struct {
 	Request *historyservice.RespondActivityTaskCanceledRequest
 	Token   *tokenspb.Task
+}
+
+// errClosed is the error returned by an operator command on a closed activity.
+func (a *Activity) errClosed() error {
+	return serviceerror.NewNotFoundf("no running activity execution: it closed with status %v", a.GetStatus())
 }
 
 func (a *Activity) isTerminal() bool {
@@ -326,24 +330,14 @@ func (a *Activity) addCompletionCallbacks(
 	registrationTime := timestamppb.New(ctx.Now(a))
 
 	for idx, cb := range completionCallbacks {
-		chasmCB := &callbackspb.Callback{
-			Links: cb.GetLinks(),
-		}
-		switch variant := cb.Variant.(type) {
-		case *commonpb.Callback_Nexus_:
-			chasmCB.Variant = &callbackspb.Callback_Nexus_{
-				Nexus: &callbackspb.Callback_Nexus{
-					Url:    variant.Nexus.GetUrl(),
-					Header: variant.Nexus.GetHeader(),
-				},
-			}
-		default:
-			return serviceerror.NewInvalidArgumentf("unsupported callback variant: %T", variant)
+		chasmCB, err := callback.FromAPICallback(cb)
+		if err != nil {
+			return err
 		}
 
-		// requestID (unique per API call) + idx (position within the request) ensures unique,idempotent callback IDs.
+		// requestID (unique per API call) + idx (position within the request) ensures unique, idempotent callback IDs.
 		id := fmt.Sprintf("%s-%d", requestID, idx)
-		callbackObj := callback.NewCallback(requestID, registrationTime, &callbackspb.CallbackState{}, chasmCB)
+		callbackObj := callback.NewCallback(requestID, registrationTime, chasmCB)
 		a.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
 	}
 	return nil
@@ -557,17 +551,12 @@ func (a *Activity) Terminate(
 	ctx chasm.MutableContext,
 	req chasm.TerminateComponentRequest,
 ) (chasm.TerminateComponentResponse, error) {
-	// If already in terminated state, fail if request ID is different, else no-op
-	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED {
-		newReqID := req.RequestID
-		existingReqID := a.GetTerminateState().GetRequestId()
-
-		if existingReqID != newReqID {
-			return chasm.TerminateComponentResponse{}, serviceerror.NewFailedPreconditionf(
-				"already terminated with request ID %s", existingReqID)
-		}
-
+	if req.RequestID != "" && a.GetTerminateState().GetRequestId() == req.RequestID {
 		return chasm.TerminateComponentResponse{}, nil
+	}
+
+	if a.isTerminal() {
+		return chasm.TerminateComponentResponse{}, a.errClosed()
 	}
 
 	metricsHandler := a.enrichedMetricsHandler(ctx, metrics.ActivityTerminatedScope)

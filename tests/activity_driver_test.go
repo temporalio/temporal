@@ -4,6 +4,7 @@ package tests
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -52,6 +53,68 @@ func (s *activityParityTestSuite) TestDriversRecognizeTimeoutObservedBeforeWait(
 		a.awaitTimeout(t, model.StartToCloseElapses, time.Now().Add(waitForDriver))
 	})
 }
+
+// The model refuses two sorts of trace event: one whose clock is not running, and a Poll that
+// finds no task. Driving either waits for something that never happens.
+func TestModelRefusesUnrealizableEvents(t *testing.T) {
+	t.Parallel()
+
+	cfg := activityConfig{MaxAttempts: 3, RetryInterval: activityLongDuration}
+	for name, tc := range map[string]struct {
+		accepted []model.Event
+		refused  model.Event
+		failure  string
+	}{
+		"PollDuringRetryBackoff": {
+			accepted: []model.Event{model.Poll, model.FailRetryably},
+			refused:  model.Poll,
+			failure:  "Poll that finds no task",
+		},
+		"PollWhilePaused": {
+			accepted: []model.Event{model.Pause},
+			refused:  model.Poll,
+			failure:  "Poll that finds no task",
+		},
+		"PollAfterClose": {
+			accepted: []model.Event{model.Terminate},
+			refused:  model.Poll,
+			failure:  "Poll that finds no task",
+		},
+		"HeartbeatTimeoutThatIsNotConfigured": {
+			accepted: []model.Event{model.Poll},
+			refused:  model.HeartbeatElapses,
+			failure:  "event that cannot occur",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			m := newActivityModel(cfg)
+			for _, e := range tc.accepted {
+				require.Emptyf(t, tryAdvance(m, e), "the model must accept %s", e)
+			}
+			require.Contains(t, tryAdvance(m, tc.refused), tc.failure)
+		})
+	}
+}
+
+// tryAdvance advances m past e, returning the refusal the model reported, or empty if it accepted e
+// and advanced.
+func tryAdvance(m *activityModel, e model.Event) string {
+	recorder := &failureRecorder{}
+	m.advance(recorder, e)
+	return recorder.failure
+}
+
+// failureRecorder is a require.TestingT that records a refusal rather than failing the test, so that
+// a test can assert the model refuses an event. FailNow does nothing, which is safe because
+// activityModel.advance returns as soon as it has reported a refusal.
+type failureRecorder struct{ failure string }
+
+func (r *failureRecorder) Errorf(format string, args ...any) {
+	r.failure = fmt.Sprintf(format, args...)
+}
+func (r *failureRecorder) FailNow() {}
 
 // contextualDriver is the slice of a driver's API this test exercises.
 type contextualDriver interface{ testContext() context.Context }

@@ -32,6 +32,13 @@ import (
 )
 
 type (
+	namespaceDataMergerFunc func(
+		currentData map[string]string,
+		taskData map[string]string,
+		currentConfigVersion int64,
+		taskConfigVersion int64,
+	) (map[string]string, bool)
+
 	replicationEventCaptureLogger struct {
 		embedded.Logger
 		records []otellog.Record
@@ -47,6 +54,15 @@ type (
 		metricsCapture      *metricstest.Capture
 	}
 )
+
+func (f namespaceDataMergerFunc) MergeData(
+	currentData map[string]string,
+	taskData map[string]string,
+	currentConfigVersion int64,
+	taskConfigVersion int64,
+) (map[string]string, bool) {
+	return f(currentData, taskData, currentConfigVersion, taskConfigVersion)
+}
 
 func namespaceUpdateRequestMatcher(expected *persistence.UpdateNamespaceRequest) gomock.Matcher {
 	return gomock.Cond(func(actual *persistence.UpdateNamespaceRequest) bool {
@@ -887,6 +903,16 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	updateClusterStandby := "other random standby cluster name"
 	updateConfigVersion := int64(1)
 	updateFailoverVersion := int64(59)
+	s.namespaceReplicator.dataMerger = namespaceDataMergerFunc(func(
+		currentData map[string]string,
+		taskData map[string]string,
+		currentVersion int64,
+		taskVersion int64,
+	) (map[string]string, bool) {
+		s.Equal(updateConfigVersion+1, currentVersion)
+		s.Equal(updateConfigVersion, taskVersion)
+		return currentData, false
+	})
 	updateClusters := []*replicationpb.ClusterReplicationConfig{
 		{
 			ClusterName: updateClusterActive,

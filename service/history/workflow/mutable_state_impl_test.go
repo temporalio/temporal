@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -2917,6 +2918,72 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	s.IsType((*serviceerror.NotFound)(nil), err)
 }
 
+// TestGetNexusUpdateCompletion_TransientReadErrorPropagated verifies that we correctly propagate
+// an update completion event read error if the event was actually recorded in-memory.
+func (s *mutableStateSuite) TestGetNexusUpdateCompletion_TransientReadErrorPropagated() {
+	ctx := context.Background()
+
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	_, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{StartRequest: &workflowservice.StartWorkflowExecutionRequest{}},
+	)
+	s.NoError(err)
+	_, err = s.mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+
+	updateID := s.T().Name() + "-update-id"
+	acptEvent, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
+		updateID, s.T().Name()+"-msg-id", 1,
+		&updatepb.Request{Meta: &updatepb.Meta{UpdateId: updateID}},
+	)
+	s.NoError(err)
+
+	completedEvent, err := s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(
+		acptEvent.EventId,
+		&updatepb.Response{
+			Meta:    &updatepb.Meta{UpdateId: updateID},
+			Outcome: &updatepb.Outcome{Value: &updatepb.Outcome_Success{Success: testPayloads}},
+		},
+	)
+	s.NoError(err)
+
+	_, err = s.mutableState.AddCompletedWorkflowEvent(
+		completedEvent.GetEventId(),
+		&commandpb.CompleteWorkflowExecutionCommandAttributes{},
+		"",
+	)
+	s.NoError(err)
+
+	// Close the transaction to create the event version history used by the read.
+	_, _, err = s.mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+	s.NoError(err)
+
+	transientErr := serviceerror.NewUnavailablef("simulated transient read failure")
+	s.mockEventsCache.EXPECT().GetEvent(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Cond(func(key events.EventKey) bool { return key.EventID == completedEvent.GetEventId() }),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(nil, transientErr)
+	s.mockEventsCache.EXPECT().GetEvent(
+		gomock.Any(),
+		gomock.Any(),
+		gomock.Cond(func(key events.EventKey) bool { return key.EventID != completedEvent.GetEventId() }),
+		gomock.Any(),
+		gomock.Any(),
+	).Return(&historypb.HistoryEvent{}, nil).AnyTimes()
+
+	// If the cache + persistence read returns a transient error but the completion is recorded, it must
+	// not be misclassified as another error.
+	opts, err := s.mutableState.GetNexusUpdateCompletion(ctx, updateID, "some-request-id")
+	var unavailableErr *serviceerror.Unavailable
+	s.Equal(nexusrpc.CompleteOperationOptions{}, opts)
+	s.ErrorAs(err, &unavailableErr, "expect transientErr to be propagated back to caller")
+}
+
 func (s *mutableStateSuite) TestApplyActivityTaskStartedEvent() {
 	state := s.buildWorkflowMutableState()
 
@@ -4806,6 +4873,10 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncVers
 	s.Equal(expectedTask.WorkflowKey, actualTask.WorkflowKey)
 	s.Equal(expectedTask.VersionedTransition, actualTask.VersionedTransition)
 	s.Equal(expectedTask.ArchetypeID, actualTask.ArchetypeID)
+	s.True(proto.Equal(&historyspb.VersionHistory{
+		Items: versionhistory.CopyVersionHistoryItems(ms.executionInfo.VersionHistories.Histories[0].Items),
+	}, actualTask.CurrentVersionHistory))
+	s.Empty(actualTask.CurrentVersionHistory.BranchToken)
 	s.Equal(3, len(actualTask.TaskEquivalents))
 	s.Equal(historyTasks[0], actualTask.TaskEquivalents[0])
 	s.Equal(historyTasks[1], actualTask.TaskEquivalents[1])
@@ -5836,8 +5907,9 @@ func (s *mutableStateSuite) buildSnapshot(state *MutableStateImpl) *persistences
 			},
 			SignalRequestIdsLastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
 			WorkflowTaskLastUpdateVersionedTransition:     state.executionInfo.WorkflowTaskLastUpdateVersionedTransition,
-			UpdateInfos: state.executionInfo.UpdateInfos,
-			UpdateCount: state.executionInfo.UpdateCount,
+			TimeSkippingInfo: state.executionInfo.TimeSkippingInfo,
+			UpdateInfos:      state.executionInfo.UpdateInfos,
+			UpdateCount:      state.executionInfo.UpdateCount,
 		},
 		ExecutionState: &persistencespb.WorkflowExecutionState{
 			RunId:               state.executionState.RunId,
@@ -5902,6 +5974,9 @@ func (s *mutableStateSuite) TestApplySnapshot() {
 			currentMS.chasmTree = currentMockChasmTree
 
 			state = s.buildWorkflowMutableState()
+			state.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+				AccumulatedSkippedDuration: durationpb.New(2 * time.Hour),
+			}
 			state.ExecutionInfo.UpdateCount = 1
 			state.ExecutionInfo.UpdateInfos = map[string]*persistencespb.UpdateInfo{
 				"replicated-update": {
@@ -5972,6 +6047,8 @@ func (s *mutableStateSuite) TestApplySnapshot() {
 			err = currentMS.ApplySnapshot(snapshot)
 			s.NoError(err)
 			s.NotNil(currentMS.GetExecutionInfo().SubStateMachinesByType)
+			_, isTimeSkippingTimeSource := currentMS.timeSource.(*clock.TimeSkippingTimeSourceWrapper)
+			s.True(isTimeSkippingTimeSource)
 
 			s.verifyMutableState(currentMS, targetMS, originMS)
 			s.Equal(tc.expectedWorkflowTaskUpdated, currentMS.workflowTaskUpdated)
@@ -6063,6 +6140,9 @@ func (s *mutableStateSuite) TestApplyMutation() {
 			currentMS.GetExecutionInfo().SubStateMachineTombstoneBatches = tombstones
 
 			state = s.buildWorkflowMutableState()
+			state.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+				AccumulatedSkippedDuration: durationpb.New(2 * time.Hour),
+			}
 			state.ExecutionInfo.UpdateCount = 1
 			state.ExecutionInfo.UpdateInfos = map[string]*persistencespb.UpdateInfo{
 				"replicated-update": {
@@ -6210,6 +6290,8 @@ func (s *mutableStateSuite) TestApplyMutation() {
 
 			err = currentMS.ApplyMutation(mutation)
 			s.NoError(err)
+			_, isTimeSkippingTimeSource := currentMS.timeSource.(*clock.TimeSkippingTimeSourceWrapper)
+			s.True(isTimeSkippingTimeSource)
 			s.verifyMutableState(currentMS, targetMS, originMS)
 			s.Equal(tc.expectedWorkflowTaskUpdated, currentMS.workflowTaskUpdated)
 		})
@@ -8000,6 +8082,11 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
 		accumulated := ms.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
 		s.Require().NotNil(accumulated)
 		s.Greater(accumulated.AsDuration(), time.Duration(0))
+		protorequire.ProtoEqual(
+			s.T(),
+			ms.CurrentVersionedTransition(),
+			ms.GetExecutionInfo().TimeSkippingInfo.GetLastUpdateVersionedTransition(),
+		)
 
 		// A WorkflowExecutionTimeSkippingTransitioned event must appear in the written batches.
 		var tsEvent *historypb.HistoryEvent

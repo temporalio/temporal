@@ -8,6 +8,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -25,7 +26,7 @@ type ChasmTree interface {
 	RefreshTasks() error
 	IsStateDirty() bool
 	IsDirty() bool
-	Terminate(chasm.TerminateComponentRequest) error
+	Terminate(chasm.TerminateComponentRequest, metrics.ReasonString) error
 	Archetype() (chasm.Archetype, error)
 	ArchetypeID() chasm.ArchetypeID
 	EachPureTask(
