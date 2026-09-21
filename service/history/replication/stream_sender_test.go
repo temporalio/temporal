@@ -71,17 +71,16 @@ func TestStreamSenderSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func TestStreamSenderLaneCapability(t *testing.T) {
-	sender := &StreamSenderImpl{laneCapabilityReady: make(chan struct{})}
+func (s *streamSenderSuite) TestLaneCapability() {
+	s.streamSender.laneCapabilityKnown = make(chan struct{})
 	supported := &replicationspb.SyncReplicationState{
 		SupportsReplicationLanes:       true,
 		ReplicationLaneProtocolVersion: 1,
 	}
-	require.NoError(t, sender.observeLaneCapability(supported))
-	require.NoError(t, sender.waitForLaneCapability())
-	require.True(t, sender.laneCapabilityKnown.Load())
-	require.True(t, sender.lanesConfirmed.Load())
-	require.Error(t, sender.observeLaneCapability(&replicationspb.SyncReplicationState{}))
+	s.NoError(s.streamSender.observeLaneCapability(supported))
+	s.NoError(s.streamSender.waitForLaneCapability())
+	s.True(s.streamSender.lanesConfirmed.Load())
+	s.Error(s.streamSender.observeLaneCapability(&replicationspb.SyncReplicationState{}))
 }
 
 func (s *streamSenderSuite) SetupSuite() {
@@ -179,7 +178,7 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_CreatesGenericLane() {
 		100,
 		log.NewNoopLogger(),
 	)
-	s.streamSender.laneCapabilityReady = make(chan struct{})
+	s.streamSender.laneCapabilityKnown = make(chan struct{})
 	readerID := shard.ReplicationReaderIDFromClusterShardID(
 		int64(s.clientShardKey.ClusterID),
 		s.clientShardKey.ShardID,
@@ -259,7 +258,7 @@ func (s *streamSenderSuite) TestSendCatchUp_LanesPrimesHighTrackerBeforeCapabili
 		100,
 		log.NewNoopLogger(),
 	)
-	s.streamSender.laneCapabilityReady = make(chan struct{})
+	s.streamSender.laneCapabilityKnown = make(chan struct{})
 
 	scope := func(taskID int64) *persistencespb.QueueSliceScope {
 		return &persistencespb.QueueSliceScope{
@@ -336,6 +335,136 @@ func (s *streamSenderSuite) TestSendCatchUp_LanesPrimesHighTrackerBeforeCapabili
 	result := await.Rcv(s.T(), catchupDone)
 	s.NoError(result.err)
 	s.Equal(endExclusiveWatermark, result.taskID)
+}
+
+// A receiver that does not understand lanes must have the lane ranges re-covered by
+// the default lane from their resume floor.
+func (s *streamSenderSuite) TestSendCatchUp_LaneUnsupportedReCoversFromLaneFloor() {
+	s.streamSender.isTieredStackEnabled = true
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	laneFloor := int64(50)
+	beginInclusiveWatermark := int64(100)
+	endExclusiveWatermark := int64(200)
+
+	registry, err := newSenderLaneRegistry(beginInclusiveWatermark, nil)
+	s.NoError(err)
+	_, _, err = registry.Create("namespace:namespace-a", namespaceLaneScope("namespace-a", laneFloor), 1)
+	s.NoError(err)
+	s.streamSender.laneRegistry = registry
+	s.streamSender.laneController = newSenderLaneController(
+		registry,
+		newNamespaceIsolationPolicy(4, 3, 3),
+		100,
+		log.NewNoopLogger(),
+	)
+	s.streamSender.laneCapabilityKnown = make(chan struct{})
+
+	scope := func(taskID int64) *persistencespb.QueueSliceScope {
+		return &persistencespb.QueueSliceScope{
+			Range: &persistencespb.QueueSliceRange{
+				InclusiveMin: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(taskID)),
+				ExclusiveMax: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(math.MaxInt64)),
+			},
+			Predicate: &persistencespb.Predicate{
+				PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+				Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+			},
+		}
+	}
+	s.shardContext.EXPECT().GetQueueState(tasks.CategoryReplication).Return(&persistencespb.QueueState{
+		ReaderStates: map[int64]*persistencespb.QueueReaderState{
+			readerID: {
+				Scopes: []*persistencespb.QueueSliceScope{
+					scope(beginInclusiveWatermark),
+					scope(beginInclusiveWatermark),
+					scope(beginInclusiveWatermark),
+				},
+			},
+		},
+	}, true)
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
+		tasks.NewImmediateKey(endExclusiveWatermark),
+	)
+
+	sent := make(chan *replicationspb.WorkflowReplicationMessages, 2)
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(
+		func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			sent <- resp.GetMessages()
+			return nil
+		},
+	).Times(2)
+	s.historyEngine.EXPECT().GetReplicationTasksIter(
+		gomock.Any(),
+		string(s.clientShardKey.ClusterID),
+		laneFloor,
+		endExclusiveWatermark,
+	).Return(collection.NewPagingIterator[tasks.Task](
+		func(paginationToken []byte) ([]tasks.Task, []byte, error) {
+			return []tasks.Task{}, nil, nil
+		},
+	), nil)
+
+	type catchupResult struct {
+		taskID int64
+		err    error
+	}
+	catchupDone := make(chan catchupResult, 1)
+	go func() {
+		taskID, err := s.streamSender.sendCatchUp(enumsspb.TASK_PRIORITY_HIGH)
+		catchupDone <- catchupResult{taskID, err}
+	}()
+
+	primed := await.Rcv(s.T(), sent)
+	s.Equal(laneFloor, primed.GetExclusiveHighWatermark())
+
+	s.NoError(s.streamSender.observeLaneCapability(&replicationspb.SyncReplicationState{}))
+
+	trailing := await.Rcv(s.T(), sent)
+	s.Equal(endExclusiveWatermark, trailing.GetExclusiveHighWatermark())
+	result := await.Rcv(s.T(), catchupDone)
+	s.NoError(result.err)
+	s.Equal(endExclusiveWatermark, result.taskID)
+}
+
+// Once the receiver proves it does not understand lanes, lane state is dropped:
+// the default lane re-covers the lane ranges, so persisted reader state no longer
+// carries them.
+func (s *streamSenderSuite) TestRecvSyncReplicationState_LaneUnsupportedDropsLanes() {
+	registry, err := newSenderLaneRegistry(100, nil)
+	s.NoError(err)
+	_, _, err = registry.Create("namespace:namespace-a", namespaceLaneScope("namespace-a", 100), 1)
+	s.NoError(err)
+	s.streamSender.laneRegistry = registry
+	s.streamSender.laneController = newSenderLaneController(
+		registry,
+		newNamespaceIsolationPolicy(4, 3, 3),
+		100,
+		log.NewNoopLogger(),
+	)
+	s.streamSender.laneCapabilityKnown = make(chan struct{})
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	state := syncReplicationState(100, 100, 200)
+	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(state)
+
+	var persisted *persistencespb.QueueReaderState
+	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(readerID, gomock.Any()).DoAndReturn(
+		func(_ int64, readerState *persistencespb.QueueReaderState) error {
+			persisted = readerState
+			return nil
+		},
+	)
+	s.shardContext.EXPECT().UpdateRemoteReaderInfo(readerID, int64(99), gomock.Any()).Return(nil)
+
+	s.NoError(s.streamSender.recvSyncReplicationState(state))
+	s.False(s.streamSender.lanesConfirmed.Load())
+	s.Empty(registry.Snapshots())
+	s.Empty(persisted.Lanes)
 }
 
 // TestRecvSyncReplicationState_ReaderGroupEquivalence pins the PR's core claim: for

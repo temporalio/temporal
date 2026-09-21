@@ -69,14 +69,15 @@ type (
 		laneController          *senderLaneController
 		laneRegistry            *senderLaneRegistry
 		laneInitializationError error
-		laneCapabilityReady     chan struct{}
-		laneCapabilityOnce      sync.Once
-		laneCapabilityKnown     atomic.Bool
-		lanesConfirmed          atomic.Bool
-		laneRateLimiters        []quotas.RateLimiter
-		flowController          SenderFlowController
-		sendLock                sync.Mutex
-		ssRateLimiter           ServerSchedulerRateLimiter
+		// laneCapabilityKnown is closed once the receiver's lane capability is
+		// decided by the first sync state; lanesConfirmed is valid only after that.
+		laneCapabilityKnown chan struct{}
+		laneCapabilityOnce  sync.Once
+		lanesConfirmed      atomic.Bool
+		laneRateLimiters    []quotas.RateLimiter
+		flowController      SenderFlowController
+		sendLock            sync.Mutex
+		ssRateLimiter       ServerSchedulerRateLimiter
 	}
 )
 
@@ -106,10 +107,10 @@ func NewStreamSender(
 	readerGroup := newReaderGroupIfEnabled(config.EnableReplicationReaderGroup, shardContext, clientShardKey, tieredStackEnabled, logger)
 	lanesEnabled := tieredStackEnabled && readerGroup != nil && config.EnableReplicationStreamLanes()
 	var laneClassCount int
-	var laneCapabilityReady chan struct{}
+	var laneCapabilityKnown chan struct{}
 	if lanesEnabled {
 		laneClassCount = normalizedLaneClassCount(config.ReplicationStreamSenderLaneClassCount())
-		laneCapabilityReady = make(chan struct{})
+		laneCapabilityKnown = make(chan struct{})
 	}
 	laneRegistry, laneController, laneInitializationError := newSenderLaneComponentsIfEnabled(
 		config,
@@ -139,7 +140,7 @@ func NewStreamSender(
 		laneController:          laneController,
 		laneRegistry:            laneRegistry,
 		laneInitializationError: laneInitializationError,
-		laneCapabilityReady:     laneCapabilityReady,
+		laneCapabilityKnown:     laneCapabilityKnown,
 		laneRateLimiters:        newLaneRateLimiters(config, lanesEnabled, laneClassCount),
 		flowController:          NewSenderFlowController(config, logger),
 		ssRateLimiter:           ssRateLimiter,
@@ -332,7 +333,7 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 				return err
 			}
 		} else {
-			s.laneRegistry.CollapseToDefault(highAcked)
+			s.laneRegistry.ClearLanes()
 		}
 		s.emitLaneMetrics()
 		if err := s.shardContext.UpdateReplicationQueueReaderState(readerID, s.laneRegistry.BuildReaderState(attr)); err != nil {
@@ -474,8 +475,10 @@ func (s *StreamSenderImpl) sendCatchUp(priority enumsspb.TaskPriority) (int64, e
 	catchupEndExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 
 	catchupBeginInclusiveWatermark := s.catchupBeginWatermark(priority, catchupEndExclusiveWatermark)
-	recordDefaultCoverage := false
 	if s.laneRegistry != nil && priority == enumsspb.TASK_PRIORITY_HIGH {
+		// Snapshot the lane resume floor before the capability wait: the recv loop
+		// drops lane state once the receiver proves it does not understand lanes.
+		resumeFloor, hasLanes := s.laneRegistry.ResumeFloor()
 		// The receiver emits no sync state until both its priority trackers have
 		// observed a batch, and the lane capability handshake rides on the first
 		// sync state. Prime the receiver's HIGH tracker with an empty batch, or
@@ -483,7 +486,7 @@ func (s *StreamSenderImpl) sendCatchUp(priority enumsspb.TaskPriority) (int64, e
 		// must not exceed the catch-up begin: the receiver drops batches whose
 		// watermark does not advance.
 		primeWatermark := catchupBeginInclusiveWatermark
-		if resumeFloor, ok := s.laneRegistry.ResumeFloor(); ok {
+		if hasLanes {
 			primeWatermark = min(primeWatermark, resumeFloor)
 		}
 		if err := s.sendTasks(priority, primeWatermark, primeWatermark); err != nil {
@@ -492,11 +495,10 @@ func (s *StreamSenderImpl) sendCatchUp(priority enumsspb.TaskPriority) (int64, e
 		if err := s.waitForLaneCapability(); err != nil {
 			return 0, err
 		}
-		if !s.lanesConfirmed.Load() {
-			if resumeFloor, ok := s.laneRegistry.ResumeFloor(); ok {
-				catchupBeginInclusiveWatermark = min(catchupBeginInclusiveWatermark, resumeFloor)
-				recordDefaultCoverage = true
-			}
+		if !s.lanesConfirmed.Load() && hasLanes {
+			// The receiver does not understand lanes: re-cover their ranges on the
+			// default lane from the resume floor.
+			catchupBeginInclusiveWatermark = min(catchupBeginInclusiveWatermark, resumeFloor)
 		}
 	}
 	sent, err := s.sendDefaultTasks(
@@ -510,9 +512,6 @@ func (s *StreamSenderImpl) sendCatchUp(priority enumsspb.TaskPriority) (int64, e
 	if !sent {
 		return 0, serviceerror.NewInternal("replication default lane blocked during catch-up")
 	}
-	if recordDefaultCoverage {
-		s.laneRegistry.RecordDefaultCoverage(catchupBeginInclusiveWatermark, catchupEndExclusiveWatermark)
-	}
 	return catchupEndExclusiveWatermark, nil
 }
 
@@ -520,8 +519,7 @@ func (s *StreamSenderImpl) observeLaneCapability(attr *replicationspb.SyncReplic
 	supported := attr.GetSupportsReplicationLanes() && attr.GetReplicationLaneProtocolVersion() >= 1
 	s.laneCapabilityOnce.Do(func() {
 		s.lanesConfirmed.Store(supported)
-		s.laneCapabilityKnown.Store(true)
-		close(s.laneCapabilityReady)
+		close(s.laneCapabilityKnown)
 	})
 	if s.lanesConfirmed.Load() != supported {
 		return NewStreamError("StreamSender detected replication lane capability change", nil)
@@ -530,11 +528,8 @@ func (s *StreamSenderImpl) observeLaneCapability(attr *replicationspb.SyncReplic
 }
 
 func (s *StreamSenderImpl) waitForLaneCapability() error {
-	if s.laneCapabilityKnown.Load() {
-		return nil
-	}
 	select {
-	case <-s.laneCapabilityReady:
+	case <-s.laneCapabilityKnown:
 		return nil
 	case <-s.shutdownChan.Channel():
 		return context.Canceled

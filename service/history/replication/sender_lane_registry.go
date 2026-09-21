@@ -32,13 +32,11 @@ type senderLane struct {
 }
 
 type senderLaneRegistry struct {
-	mu                     sync.Mutex
-	defaultCursor          int64
-	defaultCoverageTarget  int64
-	defaultCoveragePending bool
-	defaultLeases          int
-	byKey                  map[string]*senderLane
-	byID                   map[string]*senderLane
+	mu            sync.Mutex
+	defaultCursor int64
+	defaultLeases int
+	byKey         map[string]*senderLane
+	byID          map[string]*senderLane
 }
 
 // The registry owns the durable logical-key/scope association and the ephemeral
@@ -285,34 +283,15 @@ func (r *senderLaneRegistry) ResumeFloor() (int64, bool) {
 	return floor, true
 }
 
-func (r *senderLaneRegistry) RecordDefaultCoverage(beginInclusive, endExclusive int64) bool {
+// ClearLanes drops all lane state. The sender calls it once the receiver proves it
+// does not understand lanes: the default lane re-covers the lane ranges from their
+// resume floor, and the receiver's acks are truthful resume points, so the lanes
+// are redundant from that point on.
+func (r *senderLaneRegistry) ClearLanes() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if len(r.byKey) == 0 {
-		return false
-	}
-	floor := int64(math.MaxInt64)
-	for _, lane := range r.byKey {
-		floor = min(floor, max(lane.scope.Range.InclusiveMin.TaskID, lane.acked))
-	}
-	if beginInclusive > floor || endExclusive < floor {
-		return false
-	}
-	r.defaultCoverageTarget = endExclusive
-	r.defaultCoveragePending = true
-	return true
-}
-
-func (r *senderLaneRegistry) CollapseToDefault(defaultAcked int64) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if len(r.byKey) == 0 || !r.defaultCoveragePending || defaultAcked < r.defaultCoverageTarget {
-		return false
-	}
 	clear(r.byKey)
 	clear(r.byID)
-	r.defaultCoveragePending = false
-	return true
 }
 
 func (r *senderLaneRegistry) BuildReaderState(attr *replicationspb.SyncReplicationState) *persistencespb.QueueReaderState {

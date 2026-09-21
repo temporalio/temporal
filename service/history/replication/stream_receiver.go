@@ -295,7 +295,7 @@ func (r *StreamReceiverImpl) ackMessage(
 			inclusiveLowWaterMark = lowPriorityWaterMarkInfo.Watermark
 			inclusiveLowWaterMarkTime = lowPriorityWaterMarkInfo.Timestamp
 		}
-		laneWatermarks := r.laneRegistry.Watermarks()
+		laneWatermarks := r.laneWatermarks()
 		if len(laneWatermarks) > 0 {
 			laneStates = make(map[string]*replicationspb.ReplicationState, len(laneWatermarks))
 		}
@@ -406,12 +406,7 @@ func (r *StreamReceiverImpl) processMessages(
 		exclusiveHighWatermark := messages.ExclusiveHighWatermark
 		exclusiveHighWatermarkTime := timestamp.TimeValue(messages.ExclusiveHighWatermarkTime)
 		laneID := messages.GetLaneId()
-		var taskTracker ExecutableTaskTracker
-		if laneID == "" {
-			taskTracker, err = r.getTaskTracker(priority)
-		} else {
-			taskTracker, err = r.laneRegistry.Resolve(laneID, priority, messages.GetRetireLane())
-		}
+		taskTracker, err := r.getTaskTrackerForLane(priority, laneID, messages.GetRetireLane())
 		if err != nil {
 			return NewStreamError("ReplicationTask invalid lane", err)
 		}
