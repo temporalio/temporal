@@ -478,7 +478,7 @@ func (s *StreamSenderImpl) sendCatchUp(priority enumsspb.TaskPriority) (int64, e
 	if s.laneRegistry != nil && priority == enumsspb.TASK_PRIORITY_HIGH {
 		// Snapshot the lane resume floor before the capability wait: the recv loop
 		// drops lane state once the receiver proves it does not understand lanes.
-		resumeFloor, hasLanes := s.laneRegistry.ResumeFloor()
+		resumeFloor, _, hasLanes := s.laneRegistry.ResumeFloor()
 		// The receiver emits no sync state until both its priority trackers have
 		// observed a batch, and the lane capability handshake rides on the first
 		// sync state. Prime the receiver's HIGH tracker with an empty batch, or
@@ -604,10 +604,10 @@ func newSenderLaneComponentsIfEnabled(
 		return nil, nil, nil
 	}
 	defaultCursor, persisted := persistedReplicationLanes(shardContext, clientShardKey)
-	registry, err := newSenderLaneRegistry(defaultCursor, persisted)
+	registry, err := newSenderLaneRegistry(defaultCursor, persisted, classCount)
 	if err != nil {
 		logger.DPanic("Failed to restore replication lanes", tag.Error(err))
-		registry, _ = newSenderLaneRegistry(defaultCursor, nil)
+		registry, _ = newSenderLaneRegistry(defaultCursor, nil, classCount)
 	}
 	policy := newNamespaceIsolationPolicy(
 		classCount,
@@ -650,8 +650,11 @@ func newLaneRateLimiters(config *configs.Config, enabled bool, classCount int) [
 		depth := i + 1
 		limiters[i] = quotas.NewDynamicRateLimiter(
 			quotas.NewRateBurst(func() float64 {
+				// Clamp the ratio to (0, 1]: larger values would invert the class
+				// ordering, and non-positive values would freeze lanes.
+				ratio := min(1, max(0.01, config.ReplicationStreamSenderLaneQPSRatio()))
 				return float64(config.ReplicationStreamSenderLowPriorityQPS()) *
-					math.Pow(config.ReplicationStreamSenderLaneQPSRatio(), float64(depth))
+					math.Pow(ratio, float64(depth))
 			}, func() int { return 1 }),
 			time.Minute,
 		)
@@ -805,8 +808,8 @@ func (s *StreamSenderImpl) laneFailoverWatermark(attr *replicationspb.SyncReplic
 		}
 	}
 	if s.lanesConfirmed.Load() {
-		if floor, ok := s.laneRegistry.ResumeFloor(); ok && floor < watermark {
-			return floor - 1, time.Time{}
+		if floor, floorTime, ok := s.laneRegistry.ResumeFloor(); ok && floor < watermark {
+			return floor - 1, floorTime
 		}
 	}
 	return watermark - 1, watermarkTime

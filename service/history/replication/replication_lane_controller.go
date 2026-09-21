@@ -157,7 +157,12 @@ func newSenderLaneController(
 		registry: registry,
 		policy:   policy,
 		maxLanes: maxLanes,
-		observer: &replicationLaneTransitionObserver{logger: logger},
+		observer: &replicationLaneTransitionObserver{
+			logger: logger,
+			// Denials fire once per throttled namespace per reconcile cycle, so they
+			// are throttled separately from the rare transition logs.
+			throttledLogger: log.NewThrottledLogger(logger, func() float64 { return 1 }),
+		},
 	}
 }
 
@@ -172,6 +177,7 @@ func (c *senderLaneController) Reconcile(
 		switch directive.kind {
 		case replicationLaneCreate:
 			if c.maxLanes > 0 && laneCount >= c.maxLanes {
+				c.observer.CreationDenied(directive.logicalKey, laneCount, c.maxLanes)
 				continue
 			}
 			lane, created, err := c.registry.Create(
@@ -216,7 +222,16 @@ func (c *senderLaneController) CompleteRetirement(laneID string) bool {
 }
 
 type replicationLaneTransitionObserver struct {
-	logger log.Logger
+	logger          log.Logger
+	throttledLogger log.Logger
+}
+
+func (o *replicationLaneTransitionObserver) CreationDenied(logicalKey string, laneCount, maxLanes int) {
+	o.throttledLogger.Warn("Replication lane creation denied: lane limit reached",
+		tag.NewStringTag("replication-lane-logical-key", logicalKey),
+		tag.NewInt("replication-lane-count", laneCount),
+		tag.NewInt("replication-lane-max", maxLanes),
+	)
 }
 
 func (o *replicationLaneTransitionObserver) Created(lane senderLaneSnapshot) {

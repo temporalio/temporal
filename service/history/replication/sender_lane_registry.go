@@ -6,6 +6,7 @@ import (
 	"math"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/google/uuid"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -23,6 +24,7 @@ type senderLaneSnapshot struct {
 	scope      queues.Scope
 	cursor     int64
 	acked      int64
+	ackedTime  time.Time
 	retiring   bool
 }
 
@@ -42,7 +44,7 @@ type senderLaneRegistry struct {
 // The registry owns the durable logical-key/scope association and the ephemeral
 // wire ID. Restoring a durable lane always creates a new stream-local ID.
 
-func newSenderLaneRegistry(defaultCursor int64, persisted []*persistencespb.QueueReaderLane) (*senderLaneRegistry, error) {
+func newSenderLaneRegistry(defaultCursor int64, persisted []*persistencespb.QueueReaderLane, classCount int) (*senderLaneRegistry, error) {
 	r := &senderLaneRegistry{
 		defaultCursor: defaultCursor,
 		byKey:         make(map[string]*senderLane, len(persisted)),
@@ -56,11 +58,18 @@ func newSenderLaneRegistry(defaultCursor int64, persisted []*persistencespb.Queu
 			return nil, fmt.Errorf("duplicate persisted replication lane logical key %q", persistedLane.GetLogicalKey())
 		}
 		scope := queues.FromPersistenceScope(persistedLane.GetScope())
-		lane := r.newLane(persistedLane.GetLogicalKey(), scope, 1)
+		lane := r.newLane(persistedLane.GetLogicalKey(), scope, restoreLaneClass(persistedLane.GetServiceClass(), classCount))
 		r.byKey[lane.logicalKey] = lane
 		r.byID[lane.id] = lane
 	}
 	return r, nil
+}
+
+// restoreLaneClass clamps a persisted service class into [1, classCount]: zero
+// predates the field, and a class above the current count would never be served
+// by a class event loop.
+func restoreLaneClass(persisted int32, classCount int) replicationLaneClass {
+	return replicationLaneClass(min(max(int(persisted), 1), max(1, classCount)))
 }
 
 func (r *senderLaneRegistry) newLane(logicalKey string, scope queues.Scope, class replicationLaneClass) *senderLane {
@@ -138,6 +147,7 @@ func (r *senderLaneRegistry) ObserveAcks(states map[string]*replicationspb.Repli
 	for laneID, state := range states {
 		if lane, ok := r.byID[laneID]; ok && state.GetInclusiveLowWatermark() > lane.acked {
 			lane.acked = state.GetInclusiveLowWatermark()
+			lane.ackedTime = state.GetInclusiveLowWatermarkTime().AsTime()
 		}
 	}
 }
@@ -270,17 +280,24 @@ func (r *senderLaneRegistry) DefaultCursor() int64 {
 	return r.defaultCursor
 }
 
-func (r *senderLaneRegistry) ResumeFloor() (int64, bool) {
+// ResumeFloor returns the lowest resume point across lanes, with the ack time of
+// the binding lane. The time is zero when the binding lane has never been acked:
+// its resume point is its scope floor, which has no associated ack.
+func (r *senderLaneRegistry) ResumeFloor() (int64, time.Time, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if len(r.byKey) == 0 {
-		return 0, false
+		return 0, time.Time{}, false
 	}
 	floor := int64(math.MaxInt64)
+	var floorTime time.Time
 	for _, lane := range r.byKey {
-		floor = min(floor, max(lane.scope.Range.InclusiveMin.TaskID, lane.acked))
+		if resume := max(lane.scope.Range.InclusiveMin.TaskID, lane.acked); resume < floor {
+			floor = resume
+			floorTime = lane.ackedTime
+		}
 	}
-	return floor, true
+	return floor, floorTime, true
 }
 
 // ClearLanes drops all lane state. The sender calls it once the receiver proves it
@@ -310,8 +327,9 @@ func (r *senderLaneRegistry) BuildReaderState(attr *replicationspb.SyncReplicati
 		scope := lane.scope
 		scope.Range.InclusiveMin = tasks.NewImmediateKey(resume)
 		state.Lanes = append(state.Lanes, &persistencespb.QueueReaderLane{
-			LogicalKey: logicalKey,
-			Scope:      queues.ToPersistenceScope(scope),
+			LogicalKey:   logicalKey,
+			Scope:        queues.ToPersistenceScope(scope),
+			ServiceClass: int32(lane.class),
 		})
 		state.Scopes[0].Range.InclusiveMin.TaskId = min(state.Scopes[0].Range.InclusiveMin.TaskId, resume)
 	}

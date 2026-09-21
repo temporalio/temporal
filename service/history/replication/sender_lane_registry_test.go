@@ -2,20 +2,22 @@ package replication
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/service/history/queues"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestSenderLaneRegistryPersistsLogicalKeyWithScope(t *testing.T) {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, 4)
 	require.NoError(t, err)
 	laneB, created, err := registry.Create("namespace:b", namespaceLaneScope("b", 20), 1)
 	require.NoError(t, err)
 	require.True(t, created)
-	laneA, created, err := registry.Create("namespace:a", namespaceLaneScope("a", 10), 1)
+	laneA, created, err := registry.Create("namespace:a", namespaceLaneScope("a", 10), 2)
 	require.NoError(t, err)
 	require.True(t, created)
 	registry.ObserveAcks(map[string]*replicationspb.ReplicationState{
@@ -28,24 +30,64 @@ func TestSenderLaneRegistryPersistsLogicalKeyWithScope(t *testing.T) {
 	require.Len(t, state.Lanes, 2)
 	require.Equal(t, "namespace:a", state.Lanes[0].LogicalKey)
 	require.Equal(t, int64(15), state.Lanes[0].Scope.Range.InclusiveMin.TaskId)
+	require.Equal(t, int32(2), state.Lanes[0].ServiceClass)
 	require.Equal(t, "namespace:b", state.Lanes[1].LogicalKey)
 	require.Equal(t, int64(25), state.Lanes[1].Scope.Range.InclusiveMin.TaskId)
+	require.Equal(t, int32(1), state.Lanes[1].ServiceClass)
 
-	restored, err := newSenderLaneRegistry(120, state.Lanes)
+	restored, err := newSenderLaneRegistry(120, state.Lanes, 4)
 	require.NoError(t, err)
 	restoredA, ok := restored.SnapshotByKey("namespace:a")
 	require.True(t, ok)
 	require.Equal(t, int64(15), restoredA.cursor)
+	require.Equal(t, replicationLaneClass(2), restoredA.class)
 	require.NotEqual(t, laneA.id, restoredA.id)
 }
 
+func TestSenderLaneRegistryRestoresClampedServiceClass(t *testing.T) {
+	scope := queues.ToPersistenceScope(namespaceLaneScope("a", 10))
+	restored, err := newSenderLaneRegistry(100, []*persistencespb.QueueReaderLane{
+		{LogicalKey: "namespace:demoted", Scope: scope, ServiceClass: 9},
+		{LogicalKey: "namespace:legacy", Scope: scope, ServiceClass: 0},
+	}, 4)
+	require.NoError(t, err)
+	demoted, ok := restored.SnapshotByKey("namespace:demoted")
+	require.True(t, ok)
+	require.Equal(t, replicationLaneClass(4), demoted.class)
+	legacy, ok := restored.SnapshotByKey("namespace:legacy")
+	require.True(t, ok)
+	require.Equal(t, replicationLaneClass(1), legacy.class)
+}
+
+func TestSenderLaneRegistryResumeFloorCarriesAckTime(t *testing.T) {
+	registry, err := newSenderLaneRegistry(100, nil, 4)
+	require.NoError(t, err)
+	lane, _, err := registry.Create("namespace:a", namespaceLaneScope("a", 10), 1)
+	require.NoError(t, err)
+
+	// The scope floor binds before any ack: no ack time exists yet.
+	floor, floorTime, ok := registry.ResumeFloor()
+	require.True(t, ok)
+	require.Equal(t, int64(10), floor)
+	require.Zero(t, floorTime)
+
+	ackTime := time.Date(2026, 9, 21, 12, 0, 0, 0, time.UTC)
+	registry.ObserveAcks(map[string]*replicationspb.ReplicationState{
+		lane.id: {InclusiveLowWatermark: 50, InclusiveLowWatermarkTime: timestamppb.New(ackTime)},
+	})
+	floor, floorTime, ok = registry.ResumeFloor()
+	require.True(t, ok)
+	require.Equal(t, int64(50), floor)
+	require.Equal(t, ackTime, floorTime)
+}
+
 func TestSenderLaneRegistryRejectsInvalidPersistence(t *testing.T) {
-	_, err := newSenderLaneRegistry(0, []*persistencespb.QueueReaderLane{{LogicalKey: "namespace:a"}})
+	_, err := newSenderLaneRegistry(0, []*persistencespb.QueueReaderLane{{LogicalKey: "namespace:a"}}, 4)
 	require.Error(t, err)
 }
 
 func TestSenderLaneRegistryRetirementWaitsForAckAndLease(t *testing.T) {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, 4)
 	require.NoError(t, err)
 	lane, _, err := registry.Create("namespace:a", namespaceLaneScope("a", 10), 1)
 	require.NoError(t, err)
@@ -80,7 +122,7 @@ func TestSenderLaneRegistryRetirementWaitsForAckAndLease(t *testing.T) {
 }
 
 func TestSenderLaneRegistryAckNeverRewinds(t *testing.T) {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, 4)
 	require.NoError(t, err)
 	lane, _, err := registry.Create("namespace:a", namespaceLaneScope("a", 10), 1)
 	require.NoError(t, err)

@@ -29,6 +29,10 @@ message QueueReaderState {
 message QueueReaderLane {
   string logical_key = 1;
   QueueSliceScope scope = 2;
+  // The lane's service class at persist time, so a restored lane keeps its
+  // demotion instead of restarting at the fastest class. Zero predates this
+  // field and restores as class 1.
+  int32 service_class = 3;
 }
 
 message QueueSliceScope {

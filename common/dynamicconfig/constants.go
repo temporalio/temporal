@@ -3061,7 +3061,7 @@ processing and the reader group. Changing it restarts replication streams.`,
 		"history.ReplicationStreamSenderLaneQPSRatio",
 		0.1,
 		`ReplicationStreamSenderLaneQPSRatio is the multiplier applied per lane service class to
-ReplicationStreamSenderLowPriorityQPS.`,
+ReplicationStreamSenderLowPriorityQPS. The sender clamps it to (0, 1].`,
 	)
 	ReplicationStreamSenderLaneClassCount = NewGlobalIntSetting(
 		"history.ReplicationStreamSenderLaneClassCount",

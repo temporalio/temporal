@@ -184,9 +184,13 @@ func (x *QueueReaderState) GetLanes() []*QueueReaderLane {
 }
 
 type QueueReaderLane struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	LogicalKey    string                 `protobuf:"bytes,1,opt,name=logical_key,json=logicalKey,proto3" json:"logical_key,omitempty"`
-	Scope         *QueueSliceScope       `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	LogicalKey string                 `protobuf:"bytes,1,opt,name=logical_key,json=logicalKey,proto3" json:"logical_key,omitempty"`
+	Scope      *QueueSliceScope       `protobuf:"bytes,2,opt,name=scope,proto3" json:"scope,omitempty"`
+	// The lane's service class at persist time, so a restored lane keeps its
+	// demotion instead of restarting at the fastest class. Zero predates this
+	// field and restores as class 1.
+	ServiceClass  int32 `protobuf:"varint,3,opt,name=service_class,json=serviceClass,proto3" json:"service_class,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -233,6 +237,13 @@ func (x *QueueReaderLane) GetScope() *QueueSliceScope {
 		return x.Scope
 	}
 	return nil
+}
+
+func (x *QueueReaderLane) GetServiceClass() int32 {
+	if x != nil {
+		return x.ServiceClass
+	}
+	return 0
 }
 
 type QueueSliceScope struct {
@@ -603,11 +614,12 @@ const file_temporal_server_api_persistence_v1_queues_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v24.temporal.server.api.persistence.v1.QueueReaderStateR\x05value:\x028\x01\"\xaa\x01\n" +
 	"\x10QueueReaderState\x12K\n" +
 	"\x06scopes\x18\x01 \x03(\v23.temporal.server.api.persistence.v1.QueueSliceScopeR\x06scopes\x12I\n" +
-	"\x05lanes\x18\x02 \x03(\v23.temporal.server.api.persistence.v1.QueueReaderLaneR\x05lanes\"}\n" +
+	"\x05lanes\x18\x02 \x03(\v23.temporal.server.api.persistence.v1.QueueReaderLaneR\x05lanes\"\xa2\x01\n" +
 	"\x0fQueueReaderLane\x12\x1f\n" +
 	"\vlogical_key\x18\x01 \x01(\tR\n" +
 	"logicalKey\x12I\n" +
-	"\x05scope\x18\x02 \x01(\v23.temporal.server.api.persistence.v1.QueueSliceScopeR\x05scope\"\xa9\x01\n" +
+	"\x05scope\x18\x02 \x01(\v23.temporal.server.api.persistence.v1.QueueSliceScopeR\x05scope\x12#\n" +
+	"\rservice_class\x18\x03 \x01(\x05R\fserviceClass\"\xa9\x01\n" +
 	"\x0fQueueSliceScope\x12I\n" +
 	"\x05range\x18\x01 \x01(\v23.temporal.server.api.persistence.v1.QueueSliceRangeR\x05range\x12K\n" +
 	"\tpredicate\x18\x02 \x01(\v2-.temporal.server.api.persistence.v1.PredicateR\tpredicate\"\xb5\x01\n" +

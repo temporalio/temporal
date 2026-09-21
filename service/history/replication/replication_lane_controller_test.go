@@ -10,7 +10,7 @@ import (
 )
 
 func TestNamespaceIsolationPolicyReclassifiesAndRetiresThroughRegistry(t *testing.T) {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, 4)
 	require.NoError(t, err)
 	controller := newSenderLaneController(
 		registry,
@@ -47,7 +47,7 @@ func TestNamespaceIsolationPolicyReclassifiesAndRetiresThroughRegistry(t *testin
 }
 
 func TestSenderLaneControllerBoundsTenfoldSignalGrowth(t *testing.T) {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, 4)
 	require.NoError(t, err)
 	controller := newSenderLaneController(
 		registry,

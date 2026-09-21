@@ -169,7 +169,7 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_SingleStack_Success() {
 }
 
 func (s *streamSenderSuite) TestRecvSyncReplicationState_CreatesGenericLane() {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, 4)
 	s.NoError(err)
 	s.streamSender.laneRegistry = registry
 	s.streamSender.laneController = newSenderLaneController(
@@ -213,7 +213,7 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_CreatesGenericLane() {
 }
 
 func (s *streamSenderSuite) TestSendLaneUsesOpaqueLaneID() {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, 4)
 	s.NoError(err)
 	lane, _, err := registry.Create("namespace:namespace-a", namespaceLaneScope("namespace-a", 100), 1)
 	s.NoError(err)
@@ -247,7 +247,7 @@ func (s *streamSenderSuite) TestSendCatchUp_LanesPrimesHighTrackerBeforeCapabili
 	beginInclusiveWatermark := int64(100)
 	endExclusiveWatermark := int64(200)
 
-	registry, err := newSenderLaneRegistry(beginInclusiveWatermark, nil)
+	registry, err := newSenderLaneRegistry(beginInclusiveWatermark, nil, 4)
 	s.NoError(err)
 	_, _, err = registry.Create("namespace:namespace-a", namespaceLaneScope("namespace-a", laneFloor), 1)
 	s.NoError(err)
@@ -349,7 +349,7 @@ func (s *streamSenderSuite) TestSendCatchUp_LaneUnsupportedReCoversFromLaneFloor
 	beginInclusiveWatermark := int64(100)
 	endExclusiveWatermark := int64(200)
 
-	registry, err := newSenderLaneRegistry(beginInclusiveWatermark, nil)
+	registry, err := newSenderLaneRegistry(beginInclusiveWatermark, nil, 4)
 	s.NoError(err)
 	_, _, err = registry.Create("namespace:namespace-a", namespaceLaneScope("namespace-a", laneFloor), 1)
 	s.NoError(err)
@@ -433,7 +433,7 @@ func (s *streamSenderSuite) TestSendCatchUp_LaneUnsupportedReCoversFromLaneFloor
 // the default lane re-covers the lane ranges, so persisted reader state no longer
 // carries them.
 func (s *streamSenderSuite) TestRecvSyncReplicationState_LaneUnsupportedDropsLanes() {
-	registry, err := newSenderLaneRegistry(100, nil)
+	registry, err := newSenderLaneRegistry(100, nil, 4)
 	s.NoError(err)
 	_, _, err = registry.Create("namespace:namespace-a", namespaceLaneScope("namespace-a", 100), 1)
 	s.NoError(err)
