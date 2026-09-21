@@ -6170,7 +6170,7 @@ func (wh *WorkflowHandler) StopBatchOperation(
 	}
 
 	// Check that the target job ID is a batcher workflow.
-	execution, err := wh.getBatchJobExecution(ctx, request.GetNamespace(), request.GetJobId())
+	jobResp, err := wh.describeBatchJob(ctx, request.GetNamespace(), request.GetJobId())
 	if err != nil {
 		return nil, err
 	}
@@ -6179,7 +6179,7 @@ func (wh *WorkflowHandler) StopBatchOperation(
 		Namespace: request.GetNamespace(),
 		// Use the validated execution from above, so that a run of the same workflow ID
 		// started in between is not terminated in its place.
-		WorkflowExecution: execution,
+		WorkflowExecution: jobResp.GetWorkflowExecutionInfo().GetExecution(),
 		Reason:            request.GetReason(),
 		Identity:          request.GetIdentity(),
 	}
@@ -6190,15 +6190,15 @@ func (wh *WorkflowHandler) StopBatchOperation(
 	return &workflowservice.StopBatchOperationResponse{}, nil
 }
 
-// getBatchJobExecution verifies that a batch job ID is in fact a batcher workflow
-// started by StartBatchOperation or StartAdminBatchOperation, that use a known
-// workflow type, and hide behind a batcher namespace division. This is used to
-// prevent batch APIs on non-batch workflows/jobs.
-func (wh *WorkflowHandler) getBatchJobExecution(
+// describeBatchJob describes a batch job by ID, verifies that the ID is in fact
+// a batcher workflow started by StartBatchOperation or StartAdminBatchOperation,
+// that use a known workflow type, and hide behind a batcher namespace division.
+// This is used to prevent batch APIs on non-batch workflows/jobs.
+func (wh *WorkflowHandler) describeBatchJob(
 	ctx context.Context,
 	nsName string,
 	jobID string,
-) (*commonpb.WorkflowExecution, error) {
+) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
 	resp, err := wh.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 		Namespace: nsName,
 		Execution: &commonpb.WorkflowExecution{WorkflowId: jobID},
@@ -6224,7 +6224,7 @@ func (wh *WorkflowHandler) getBatchJobExecution(
 		return nil, errBatchJobIDNotValid
 	}
 
-	return executionInfo.GetExecution(), nil
+	return resp, nil
 }
 
 func (wh *WorkflowHandler) DescribeBatchOperation(
@@ -6252,14 +6252,7 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		return nil, errBatchAPINotAllowed
 	}
 
-	execution := &commonpb.WorkflowExecution{
-		WorkflowId: request.GetJobId(),
-		RunId:      "",
-	}
-	resp, err := wh.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: request.GetNamespace(),
-		Execution: execution,
-	})
+	resp, err := wh.describeBatchJob(ctx, request.GetNamespace(), request.GetJobId())
 	if err != nil {
 		return nil, err
 	}
