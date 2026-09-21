@@ -1871,11 +1871,13 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_HeartbeatsWi
 }
 
 // TestProcessSingleTask_NilUpdateMask verifies that an options-update batch whose
-// request carries no UpdateMask is forwarded rather than dereferenced. The task
-// runs on a bare goroutine started by processWorkflowsWithProactiveFetching, so a
-// nil dereference here takes down the worker process rather than failing the
-// batch -- and ValidateBatchOperation only requires an UpdateMask for the
-// workflow-options operation, not the activity-options one.
+// request carries no UpdateMask is forwarded as nil, rather than dereferenced or
+// rebuilt into an empty mask. The task runs on a bare goroutine started by
+// processWorkflowsWithProactiveFetching, so a nil dereference here takes down the
+// worker process rather than failing the batch -- and ValidateBatchOperation only
+// requires an UpdateMask for the workflow-options operation, not the
+// activity-options one. An empty mask is worse than no mask: the server accepts
+// it and applies it as a no-op success.
 func (s *activitiesSuite) TestProcessSingleTask_NilUpdateMask() {
 	execution := &commonpb.WorkflowExecution{WorkflowId: "wf-1", RunId: "run-1"}
 	testPage := &page{
@@ -1913,8 +1915,7 @@ func (s *activitiesSuite) TestProcessSingleTask_NilUpdateMask() {
 		s.Require().NotNil(captured)
 		s.Equal("batch-updater", captured.GetIdentity())
 		s.True(captured.GetRestoreOriginal())
-		s.Require().NotNil(captured.GetUpdateMask())
-		s.Empty(captured.GetUpdateMask().GetPaths())
+		s.Nil(captured.GetUpdateMask())
 	})
 
 	s.Run("update workflow options", func() {
@@ -1944,8 +1945,7 @@ func (s *activitiesSuite) TestProcessSingleTask_NilUpdateMask() {
 		s.Require().NoError(s.processSingleTaskForTest(batchOperation, testTask))
 		s.Require().NotNil(captured)
 		s.Equal("batch-updater", captured.GetIdentity())
-		s.Require().NotNil(captured.GetUpdateMask())
-		s.Empty(captured.GetUpdateMask().GetPaths())
+		s.Nil(captured.GetUpdateMask())
 	})
 }
 

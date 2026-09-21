@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/worker_versioning"
 	workercommon "go.temporal.io/server/service/worker/common"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 const (
@@ -807,7 +806,7 @@ func (a *activities) processSingleTask(
 					Namespace:                namespace,
 					WorkflowExecution:        executionInfo.Execution,
 					WorkflowExecutionOptions: operation.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions(),
-					UpdateMask:               &fieldmaskpb.FieldMask{Paths: operation.UpdateWorkflowOptionsOperation.GetUpdateMask().GetPaths()},
+					UpdateMask:               operation.UpdateWorkflowOptionsOperation.GetUpdateMask(),
 					Identity:                 operation.UpdateWorkflowOptionsOperation.GetIdentity(),
 				})
 				return err
@@ -844,7 +843,7 @@ func (a *activities) processSingleTask(
 				updateRequest := &workflowservice.UpdateActivityOptionsRequest{
 					Namespace:       namespace,
 					Execution:       executionInfo.Execution,
-					UpdateMask:      &fieldmaskpb.FieldMask{Paths: operation.UpdateActivityOptionsOperation.GetUpdateMask().GetPaths()},
+					UpdateMask:      operation.UpdateActivityOptionsOperation.GetUpdateMask(),
 					RestoreOriginal: operation.UpdateActivityOptionsOperation.GetRestoreOriginal(),
 					Identity:        operation.UpdateActivityOptionsOperation.GetIdentity(),
 				}
