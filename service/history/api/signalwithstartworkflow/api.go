@@ -87,8 +87,8 @@ func Invoke(
 		return nil, err
 	}
 
-	// Notify version workflow if we're starting a new workflow pinned to a potentially drained version
-	if outcome.started {
+	// Use createdRun because Started can remain true on later calls, while reactivation runs once per run.
+	if outcome.createdRun {
 		api.ReactivateVersionWorkflowIfPinned(ctx, namespaceEntry, request.GetVersioningOverride(), reactivationSignaler, shard.GetConfig().EnableVersionReactivationSignals(), shouldSkipReactivation, revisionNumber)
 	}
 
