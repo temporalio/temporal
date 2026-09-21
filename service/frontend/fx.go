@@ -821,6 +821,7 @@ func AdminHandlerProvider(
 	chasmRegistry *chasm.Registry,
 	namespaceDataMerger nsreplication.NamespaceDataMerger,
 	schedulerClient schedulerpb.SchedulerServiceClient,
+	metricsHandler metrics.Handler,
 	namespaceDLQHandler nsreplication.DLQMessageHandler,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
@@ -851,6 +852,7 @@ func AdminHandlerProvider(
 		chasmRegistry,
 		namespaceDataMerger,
 		schedulerClient,
+		metricsHandler,
 		taskCategoryRegistry,
 		matchingClient,
 	}
@@ -1021,6 +1023,7 @@ func HandlerProvider(
 			saValidator,
 		),
 		chasmNsReplClient,
+		metricsHandler,
 	)
 	return wfHandler
 }

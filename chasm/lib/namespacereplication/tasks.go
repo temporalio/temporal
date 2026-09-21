@@ -438,9 +438,10 @@ func classifyLocalErr(err error) string {
 type applyPeerTaskHandlerOptions struct {
 	fx.In
 
-	PeerApplier    PeerApplier
-	MetricsHandler metrics.Handler
-	Logger         log.Logger
+	PeerApplier     PeerApplier
+	ClusterMetadata cluster.Metadata
+	MetricsHandler  metrics.Handler
+	Logger          log.Logger
 }
 
 type applyPeerTaskHandler struct {
@@ -450,7 +451,8 @@ type applyPeerTaskHandler struct {
 	// cell. The default OSS impl uses the ApplyNamespaceMutation admin RPC; this
 	// handler owns the surrounding policy (retry, error classification, per-peer
 	// state, completion) independent of which transport is injected.
-	peerApplier PeerApplier
+	peerApplier    PeerApplier
+	currentCluster string
 	// TODO(namespacereplication): emit metrics for the peer apply path. Suggested shape:
 	//   - nsrepl_apply_attempts_total{target_cell, source_cell, outcome}    counter
 	//   - nsrepl_apply_failures_total{target_cell, source_cell}             counter
@@ -467,6 +469,7 @@ type applyPeerTaskHandler struct {
 func newApplyPeerTaskHandler(opts applyPeerTaskHandlerOptions) *applyPeerTaskHandler {
 	return &applyPeerTaskHandler{
 		peerApplier:    opts.PeerApplier,
+		currentCluster: opts.ClusterMetadata.GetCurrentClusterName(),
 		metricsHandler: opts.MetricsHandler,
 		logger:         opts.Logger,
 	}
@@ -535,7 +538,16 @@ func (h *applyPeerTaskHandler) Execute(
 	// (dial failure or apply failure) is classified here into retriable vs
 	// terminal, so the retry/gating policy stays in this package regardless of
 	// which transport the deployment injected.
-	result, applyErr := h.peerApplier.Apply(ctx, task.GetTargetCell(), loaded.Operation, loaded.Detail, loaded.Shadow)
+	result, applyErr := h.peerApplier.Apply(ctx, PeerApplyRequest{
+		SourceCluster:       h.currentCluster,
+		TargetCluster:       task.GetTargetCell(),
+		ComponentBusinessID: ref.BusinessID,
+		ComponentRunID:      ref.RunID,
+		AttemptCount:        task.GetAttempt() + 1,
+		Operation:           loaded.Operation,
+		Detail:              loaded.Detail,
+		Shadow:              loaded.Shadow,
+	})
 	if applyErr != nil {
 		saveErr := h.recordPeerOutcome(
 			ctx,
