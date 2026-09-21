@@ -28,6 +28,15 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+type contextWithTimeSkippingInfo struct {
+	chasm.Context
+	info *commonpb.TimeSkippingInfo
+}
+
+func (c contextWithTimeSkippingInfo) GetTimeSkippingInfo() *commonpb.TimeSkippingInfo {
+	return c.info
+}
+
 func TestListInfo(t *testing.T) {
 	scheduler, ctx, _ := setupSchedulerForTest(t)
 
@@ -1015,6 +1024,23 @@ func TestScheduler_Describe_ReturnsIsolatedVisibilityMaps(t *testing.T) {
 		"DescribeSchedule response Memo must be a copy, not the live Visibility map")
 	require.NotContains(t, vis.CustomSearchAttributes(ctx), "injectedSA",
 		"DescribeSchedule response SearchAttributes must be a copy, not the live Visibility map")
+}
+
+func TestScheduler_Describe_ReturnsTimeSkippingInfo(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+	want := &commonpb.TimeSkippingInfo{
+		CurrentTime:             timestamppb.New(time.Now().UTC()),
+		EffectiveConfig:         &commonpb.TimeSkippingConfig{Enabled: true},
+		CurrentSessionSkipCount: 3,
+	}
+
+	resp, err := sched.Describe(
+		contextWithTimeSkippingInfo{Context: ctx, info: want},
+		&schedulerpb.DescribeScheduleRequest{},
+		newLegacySpecBuilder(0, 0),
+	)
+	require.NoError(t, err)
+	require.Same(t, want, resp.GetFrontendResponse().GetInfo().GetTimeSkippingInfo())
 }
 
 // TestScheduler_Describe_DoesNotMutateCachedComponent proves Describe defaults and
