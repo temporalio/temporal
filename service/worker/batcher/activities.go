@@ -58,7 +58,7 @@ type batchProcessorConfig struct {
 	adjustedQuery string
 	batchType     enumspb.BatchOperationType
 	concurrency   int
-	// heartbeatTimeout (or default 0) of the activity.
+	// heartbeatTimeout is the activity's heartbeat timeout. Zero means unset.
 	heartbeatTimeout  time.Duration
 	initialPageToken  []byte
 	initialExecutions []*commonpb.WorkflowExecution
