@@ -13,8 +13,11 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/proto"
 )
 
 type captureNamespaceReplicationClient struct {
@@ -50,12 +53,16 @@ func (c *blockingNamespaceReplicationClient) TriggerNamespaceMutation(
 func TestInvokeShadowNamespaceMutation(t *testing.T) {
 	controller := gomock.NewController(t)
 	clusterMetadata := cluster.NewMockMetadata(controller)
-	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a")
+	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a").Times(2)
 	client := &captureNamespaceReplicationClient{requests: make(chan *namespacereplicationpb.TriggerNamespaceMutationRequest, 1)}
+	metricsHandler := metricstest.NewCaptureHandler()
+	metricsCapture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(metricsCapture)
 	handler := &namespaceHandler{
 		logger:            log.NewNoopLogger(),
 		clusterMetadata:   clusterMetadata,
 		chasmNsReplClient: client,
+		metricsHandler:    metricsHandler,
 		config: &Config{
 			NamespaceReplicationTransportMode: dynamicconfig.GetStringPropertyFn(dynamicconfig.NamespaceReplicationTransportModeShadow),
 		},
@@ -78,6 +85,15 @@ func TestInvokeShadowNamespaceMutation(t *testing.T) {
 		true,
 		true,
 	)
+	requireShadowComparisonMetric(
+		t,
+		metricsCapture,
+		metrics.NamespaceReplicationShadowBuildComparisonOutcomes.Name(),
+		metrics.SourceClusterTag("").Key,
+		"cell-a",
+		"update",
+		namespaceReplicationShadowOutcomeMatch,
+	)
 	select {
 	case request := <-client.requests:
 		require.True(t, request.GetMutation().GetShadow())
@@ -86,6 +102,113 @@ func TestInvokeShadowNamespaceMutation(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for shadow namespace mutation")
 	}
+}
+
+func TestInvokeShadowNamespaceMutationRecordsBuildMismatch(t *testing.T) {
+	controller := gomock.NewController(t)
+	clusterMetadata := cluster.NewMockMetadata(controller)
+	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a").Times(2)
+	client := &captureNamespaceReplicationClient{requests: make(chan *namespacereplicationpb.TriggerNamespaceMutationRequest, 1)}
+	metricsHandler := metricstest.NewCaptureHandler()
+	metricsCapture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(metricsCapture)
+	handler := &namespaceHandler{
+		logger:            log.NewNoopLogger(),
+		clusterMetadata:   clusterMetadata,
+		chasmNsReplClient: client,
+		metricsHandler:    metricsHandler,
+	}
+	chasmDetail := &persistencespb.NamespaceDetail{
+		Info:              &persistencespb.NamespaceInfo{Id: "namespace-id", State: enumspb.NAMESPACE_STATE_REGISTERED},
+		Config:            &persistencespb.NamespaceConfig{},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{Clusters: []string{"cell-a", "cell-b"}},
+		ConfigVersion:     3,
+	}
+	legacyDetail := proto.Clone(chasmDetail).(*persistencespb.NamespaceDetail)
+	legacyDetail.ConfigVersion = 2
+
+	handler.invokeShadowNamespaceMutation(
+		namespaceReplicationTransportShadow,
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		chasmDetail,
+		legacyDetail,
+		7,
+		nil,
+		true,
+		true,
+	)
+	requireShadowComparisonMetric(
+		t,
+		metricsCapture,
+		metrics.NamespaceReplicationShadowBuildComparisonOutcomes.Name(),
+		metrics.SourceClusterTag("").Key,
+		"cell-a",
+		"update",
+		namespaceReplicationShadowOutcomeMismatch,
+	)
+	select {
+	case <-client.requests:
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for shadow namespace mutation")
+	}
+}
+
+func TestInvokeShadowNamespaceMutationRecordsBuildError(t *testing.T) {
+	controller := gomock.NewController(t)
+	clusterMetadata := cluster.NewMockMetadata(controller)
+	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a")
+	metricsHandler := metricstest.NewCaptureHandler()
+	metricsCapture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(metricsCapture)
+	handler := &namespaceHandler{
+		logger:          log.NewNoopLogger(),
+		clusterMetadata: clusterMetadata,
+		metricsHandler:  metricsHandler,
+	}
+	chasmDetail := &persistencespb.NamespaceDetail{
+		Info:              &persistencespb.NamespaceInfo{Id: "namespace-id", State: enumspb.NAMESPACE_STATE_REGISTERED},
+		Config:            &persistencespb.NamespaceConfig{},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{Clusters: []string{"cell-a", "cell-b"}},
+	}
+	legacyDetail := proto.Clone(chasmDetail).(*persistencespb.NamespaceDetail)
+	legacyDetail.Info.Name = string([]byte{0xff})
+
+	handler.invokeShadowNamespaceMutation(
+		namespaceReplicationTransportShadow,
+		enumsspb.NAMESPACE_OPERATION_CREATE,
+		chasmDetail,
+		legacyDetail,
+		0,
+		nil,
+		true,
+		false,
+	)
+	requireShadowComparisonMetric(
+		t,
+		metricsCapture,
+		metrics.NamespaceReplicationShadowBuildComparisonOutcomes.Name(),
+		metrics.SourceClusterTag("").Key,
+		"cell-a",
+		"create",
+		namespaceReplicationShadowOutcomeError,
+	)
+}
+
+func requireShadowComparisonMetric(
+	t *testing.T,
+	capture *metricstest.Capture,
+	metricName string,
+	clusterTagKey string,
+	clusterName string,
+	operation string,
+	outcome string,
+) {
+	t.Helper()
+	recordings := capture.SnapshotMetric(metricName)
+	require.Len(t, recordings, 1)
+	require.Equal(t, clusterName, recordings[0].Tags[clusterTagKey])
+	require.Equal(t, operation, recordings[0].Tags[metrics.OperationTag("").Key])
+	require.Equal(t, outcome, recordings[0].Tags[metrics.OutcomeTag("").Key])
 }
 
 func TestInvokeShadowNamespaceMutationDoesNotBlockCaller(t *testing.T) {

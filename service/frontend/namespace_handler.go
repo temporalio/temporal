@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsmanager"
 	"go.temporal.io/server/common/namespace/nsreplication"
@@ -59,6 +60,7 @@ type (
 		timeSource             clock.TimeSource
 		config                 *Config
 		chasmNsReplClient      namespacereplicationpb.NamespaceReplicationServiceClient
+		metricsHandler         metrics.Handler
 	}
 
 	namespaceReplicationTransportMode int
@@ -80,6 +82,12 @@ const (
 	namespaceMutationModeAuthoritative namespaceMutationMode = iota
 	// Shadow mutations compare at peers but never write namespace state.
 	namespaceMutationModeShadow
+)
+
+const (
+	namespaceReplicationShadowOutcomeMatch    = "match"
+	namespaceReplicationShadowOutcomeMismatch = "mismatch"
+	namespaceReplicationShadowOutcomeError    = "error"
 )
 
 var (
@@ -105,6 +113,7 @@ func newNamespaceHandler(
 	timeSource clock.TimeSource,
 	config *Config,
 	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
+	metricsHandler metrics.Handler,
 ) *namespaceHandler {
 	return &namespaceHandler{
 		logger:                 logger,
@@ -119,6 +128,7 @@ func newNamespaceHandler(
 		timeSource:             timeSource,
 		config:                 config,
 		chasmNsReplClient:      chasmNsReplClient,
+		metricsHandler:         metricsHandler,
 	}
 }
 
@@ -1476,15 +1486,19 @@ func (d *namespaceHandler) invokeShadowNamespaceMutation(
 	chasmTask := nsreplication.NamespaceDetailToTaskAttributes(operation, chasmDetail)
 	legacyFingerprint, err := nsreplication.NamespaceTaskFingerprint(legacyTask)
 	if err != nil {
+		d.recordShadowBuildComparison(operation, namespaceReplicationShadowOutcomeError)
 		d.logger.Error("namespace replication shadow legacy fingerprint failed", tag.Error(err))
 		return
 	}
 	chasmFingerprint, err := nsreplication.NamespaceTaskFingerprint(chasmTask)
 	if err != nil {
+		d.recordShadowBuildComparison(operation, namespaceReplicationShadowOutcomeError)
 		d.logger.Error("namespace replication shadow CHASM fingerprint failed", tag.Error(err))
 		return
 	}
+	outcome := namespaceReplicationShadowOutcomeMatch
 	if !bytes.Equal(legacyFingerprint, chasmFingerprint) {
+		outcome = namespaceReplicationShadowOutcomeMismatch
 		d.logger.Warn(
 			"namespace replication shadow build mismatch",
 			tag.WorkflowNamespaceID(chasmDetail.GetInfo().GetId()),
@@ -1493,6 +1507,7 @@ func (d *namespaceHandler) invokeShadowNamespaceMutation(
 			tag.NewStringTag("chasm_fingerprint", hex.EncodeToString(chasmFingerprint)),
 		)
 	}
+	d.recordShadowBuildComparison(operation, outcome)
 
 	namespaceID := chasmDetail.GetInfo().GetId()
 	// Shadow validation must not add latency or failure coupling to the
@@ -1518,6 +1533,32 @@ func (d *namespaceHandler) invokeShadowNamespaceMutation(
 			)
 		}
 	}()
+}
+
+func (d *namespaceHandler) recordShadowBuildComparison(
+	operation enumsspb.NamespaceOperation,
+	outcome string,
+) {
+	if d.metricsHandler == nil {
+		return
+	}
+	metrics.NamespaceReplicationShadowBuildComparisonOutcomes.With(d.metricsHandler).Record(
+		1,
+		metrics.SourceClusterTag(d.clusterMetadata.GetCurrentClusterName()),
+		metrics.OperationTag(namespaceReplicationOperationMetricValue(operation)),
+		metrics.OutcomeTag(outcome),
+	)
+}
+
+func namespaceReplicationOperationMetricValue(operation enumsspb.NamespaceOperation) string {
+	switch operation {
+	case enumsspb.NAMESPACE_OPERATION_CREATE:
+		return "create"
+	case enumsspb.NAMESPACE_OPERATION_UPDATE:
+		return "update"
+	default:
+		return "unknown"
+	}
 }
 
 func (d *namespaceHandler) effectiveNamespaceReplicationTransportMode() namespaceReplicationTransportMode {

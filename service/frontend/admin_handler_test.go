@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
@@ -208,6 +209,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		chasmRegistry,
 		nsreplication.NewNoopDataMerger(),
 		nil, // schedulerClient - not needed for most admin handler tests
+		metrics.NoopMetricsHandler,
 		tasks.NewDefaultTaskCategoryRegistry(),
 		s.mockResource.GetMatchingClient(),
 	}
@@ -234,7 +236,14 @@ func (s *adminHandlerSuite) TearDownTest() {
 }
 
 func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowCompareOnly() {
-	namespaceTask := &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"}
+	metricsHandler := metricstest.NewCaptureHandler()
+	metricsCapture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(metricsCapture)
+	s.handler.metricsHandler = metricsHandler
+	namespaceTask := &replicationspb.NamespaceTaskAttributes{
+		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_CREATE,
+		Id:                 "namespace-id",
+	}
 	fingerprint, err := nsreplication.NamespaceTaskFingerprint(namespaceTask)
 	s.Require().NoError(err)
 
@@ -245,16 +254,67 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowCompareOnly() {
 	})
 	s.Require().NoError(err)
 	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, response.GetOutcome())
+	requireShadowComparisonMetric(
+		s.T(),
+		metricsCapture,
+		metrics.NamespaceReplicationShadowReceiveComparisonOutcomes.Name(),
+		metrics.TargetClusterTag("").Key,
+		s.currentClusterName,
+		"create",
+		namespaceReplicationShadowOutcomeMatch,
+	)
 }
 
 func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowMismatch() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	metricsCapture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(metricsCapture)
+	s.handler.metricsHandler = metricsHandler
 	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
-		NamespaceTask: &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"},
-		Shadow:        true,
-		Fingerprint:   []byte("incorrect-fingerprint"),
+		NamespaceTask: &replicationspb.NamespaceTaskAttributes{
+			NamespaceOperation: enumsspb.NAMESPACE_OPERATION_UPDATE,
+			Id:                 "namespace-id",
+		},
+		Shadow:      true,
+		Fingerprint: []byte("incorrect-fingerprint"),
 	})
 	s.Require().NoError(err)
 	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH, response.GetOutcome())
+	requireShadowComparisonMetric(
+		s.T(),
+		metricsCapture,
+		metrics.NamespaceReplicationShadowReceiveComparisonOutcomes.Name(),
+		metrics.TargetClusterTag("").Key,
+		s.currentClusterName,
+		"update",
+		namespaceReplicationShadowOutcomeMismatch,
+	)
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowFingerprintError() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	metricsCapture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(metricsCapture)
+	s.handler.metricsHandler = metricsHandler
+
+	_, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+		NamespaceTask: &replicationspb.NamespaceTaskAttributes{
+			NamespaceOperation: enumsspb.NAMESPACE_OPERATION_UPDATE,
+			Info:               &namespacepb.NamespaceInfo{Name: string([]byte{0xff})},
+		},
+		Shadow: true,
+	})
+	var internal *serviceerror.Internal
+	s.ErrorAs(err, &internal)
+	requireShadowComparisonMetric(
+		s.T(),
+		metricsCapture,
+		metrics.NamespaceReplicationShadowReceiveComparisonOutcomes.Name(),
+		metrics.TargetClusterTag("").Key,
+		s.currentClusterName,
+		"update",
+		namespaceReplicationShadowOutcomeError,
+	)
 }
 
 func (s *adminHandlerSuite) TestApplyNamespaceMutation_RejectsAuthoritativeRequest() {
