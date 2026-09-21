@@ -18,6 +18,18 @@ import (
 // here.
 type PeerApplyResult int
 
+// PeerApplyRequest carries one transport attempt and its correlation metadata.
+type PeerApplyRequest struct {
+	SourceCluster       string
+	TargetCluster       string
+	ComponentBusinessID string
+	ComponentRunID      string
+	AttemptCount        int32
+	Operation           enumsspb.NamespaceOperation
+	Detail              *persistencespb.NamespaceDetail
+	Shadow              bool
+}
+
 const (
 	// PeerApplyResultUnspecified is invalid and must never be treated as a
 	// successful peer apply.
@@ -55,10 +67,7 @@ const (
 type PeerApplier interface {
 	Apply(
 		ctx context.Context,
-		targetCell string,
-		operation enumsspb.NamespaceOperation,
-		detail *persistencespb.NamespaceDetail,
-		shadow bool,
+		request PeerApplyRequest,
 	) (PeerApplyResult, error)
 }
 
@@ -76,24 +85,25 @@ func newAdminClientPeerApplier(clientBean serverclient.Bean) PeerApplier {
 
 func (a *adminClientPeerApplier) Apply(
 	ctx context.Context,
-	targetCell string,
-	operation enumsspb.NamespaceOperation,
-	detail *persistencespb.NamespaceDetail,
-	shadow bool,
+	request PeerApplyRequest,
 ) (PeerApplyResult, error) {
-	adminClient, err := a.clientBean.GetRemoteAdminClient(targetCell)
+	adminClient, err := a.clientBean.GetRemoteAdminClient(request.TargetCluster)
 	if err != nil {
 		return PeerApplyResultUnspecified, err
 	}
-	namespaceTask := nsreplication.NamespaceDetailToTaskAttributes(operation, detail)
+	namespaceTask := nsreplication.NamespaceDetailToTaskAttributes(request.Operation, request.Detail)
 	fingerprint, err := nsreplication.NamespaceTaskFingerprint(namespaceTask)
 	if err != nil {
 		return 0, fmt.Errorf("fingerprint namespace mutation: %w", err)
 	}
 	resp, err := adminClient.ApplyNamespaceMutation(ctx, &adminservice.ApplyNamespaceMutationRequest{
-		NamespaceTask: namespaceTask,
-		Shadow:        shadow,
-		Fingerprint:   fingerprint,
+		NamespaceTask:       namespaceTask,
+		Shadow:              request.Shadow,
+		Fingerprint:         fingerprint,
+		SourceCluster:       request.SourceCluster,
+		ComponentBusinessId: request.ComponentBusinessID,
+		ComponentRunId:      request.ComponentRunID,
+		AttemptCount:        request.AttemptCount,
 	})
 	if err != nil {
 		return PeerApplyResultUnspecified, err
@@ -108,32 +118,32 @@ func (a *adminClientPeerApplier) Apply(
 	case adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED,
 		adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED,
 		adminservice.ApplyNamespaceMutationResponse_OUTCOME_DUPLICATE:
-		if shadow {
-			return PeerApplyResultUnspecified, unexpectedPeerOutcome(targetCell, shadow, resp.GetOutcome())
+		if request.Shadow {
+			return PeerApplyResultUnspecified, unexpectedPeerOutcome(request.TargetCluster, request.Shadow, resp.GetOutcome())
 		}
 		return PeerApplyResultApplied, nil
 	case adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH:
-		if !shadow {
-			return PeerApplyResultUnspecified, unexpectedPeerOutcome(targetCell, shadow, resp.GetOutcome())
+		if !request.Shadow {
+			return PeerApplyResultUnspecified, unexpectedPeerOutcome(request.TargetCluster, request.Shadow, resp.GetOutcome())
 		}
 		return PeerApplyResultShadowMatch, nil
 	case adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH:
-		if !shadow {
-			return PeerApplyResultUnspecified, unexpectedPeerOutcome(targetCell, shadow, resp.GetOutcome())
+		if !request.Shadow {
+			return PeerApplyResultUnspecified, unexpectedPeerOutcome(request.TargetCluster, request.Shadow, resp.GetOutcome())
 		}
 		return PeerApplyResultShadowMismatch, nil
 	case adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE:
-		if shadow {
-			return PeerApplyResultUnspecified, unexpectedPeerOutcome(targetCell, shadow, resp.GetOutcome())
+		if request.Shadow {
+			return PeerApplyResultUnspecified, unexpectedPeerOutcome(request.TargetCluster, request.Shadow, resp.GetOutcome())
 		}
 		return PeerApplyResultNoOpStale, nil
 	case adminservice.ApplyNamespaceMutationResponse_OUTCOME_NOT_ADMITTED:
-		if shadow {
-			return PeerApplyResultUnspecified, unexpectedPeerOutcome(targetCell, shadow, resp.GetOutcome())
+		if request.Shadow {
+			return PeerApplyResultUnspecified, unexpectedPeerOutcome(request.TargetCluster, request.Shadow, resp.GetOutcome())
 		}
 		return PeerApplyResultNotAdmitted, nil
 	default:
-		return PeerApplyResultUnspecified, unexpectedPeerOutcome(targetCell, shadow, resp.GetOutcome())
+		return PeerApplyResultUnspecified, unexpectedPeerOutcome(request.TargetCluster, request.Shadow, resp.GetOutcome())
 	}
 }
 

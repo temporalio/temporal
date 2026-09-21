@@ -1051,8 +1051,12 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 
 	actualFingerprint, err := nsreplication.NamespaceTaskFingerprint(request.GetNamespaceTask())
 	if err != nil {
-		adh.recordShadowReceiveComparison(request.GetNamespaceTask().GetNamespaceOperation(), namespaceReplicationShadowOutcomeError)
-		adh.emitShadowReceiveComparison(request.GetNamespaceTask(), request.GetFingerprint(), nil, namespaceReplicationShadowOutcomeError, err)
+		adh.recordShadowReceiveComparison(
+			request.GetNamespaceTask().GetNamespaceOperation(),
+			request.GetSourceCluster(),
+			namespaceReplicationShadowOutcomeError,
+		)
+		adh.emitShadowReceiveComparison(request, request.GetFingerprint(), nil, namespaceReplicationShadowOutcomeError, err)
 		return nil, serviceerror.NewInternalf("fingerprint namespace mutation: %v", err)
 	}
 	outcome := adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH
@@ -1067,8 +1071,12 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 		outcome = adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH
 		metricsOutcome = namespaceReplicationShadowOutcomeMismatch
 	}
-	adh.recordShadowReceiveComparison(request.GetNamespaceTask().GetNamespaceOperation(), metricsOutcome)
-	adh.emitShadowReceiveComparison(request.GetNamespaceTask(), request.GetFingerprint(), actualFingerprint, metricsOutcome, nil)
+	adh.recordShadowReceiveComparison(
+		request.GetNamespaceTask().GetNamespaceOperation(),
+		request.GetSourceCluster(),
+		metricsOutcome,
+	)
+	adh.emitShadowReceiveComparison(request, request.GetFingerprint(), actualFingerprint, metricsOutcome, nil)
 
 	return &adminservice.ApplyNamespaceMutationResponse{
 		Outcome: outcome,
@@ -1077,6 +1085,7 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 
 func (adh *AdminHandler) recordShadowReceiveComparison(
 	operation enumsspb.NamespaceOperation,
+	sourceCluster string,
 	outcome string,
 ) {
 	if adh.metricsHandler == nil {
@@ -1084,6 +1093,7 @@ func (adh *AdminHandler) recordShadowReceiveComparison(
 	}
 	metrics.NamespaceReplicationShadowReceiveComparisonOutcomes.With(adh.metricsHandler).Record(
 		1,
+		metrics.SourceClusterTag(sourceCluster),
 		metrics.TargetClusterTag(adh.clusterMetadata.GetCurrentClusterName()),
 		metrics.OperationTag(namespaceReplicationOperationMetricValue(operation)),
 		metrics.OutcomeTag(outcome),

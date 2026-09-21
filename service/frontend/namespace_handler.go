@@ -1484,20 +1484,50 @@ func (d *namespaceHandler) invokeShadowNamespaceMutation(
 
 	legacyTask := nsreplication.NamespaceDetailToTaskAttributes(operation, legacyDetail)
 	chasmTask := nsreplication.NamespaceDetailToTaskAttributes(operation, chasmDetail)
+	namespaceID := chasmDetail.GetInfo().GetId()
+	currentCluster := d.clusterMetadata.GetCurrentClusterName()
+	peerCells := peerCellsFromClusters(
+		currentCluster,
+		chasmDetail.GetReplicationConfig().GetClusters(),
+		previousClusters,
+	)
 	legacyFingerprint, err := nsreplication.NamespaceTaskFingerprint(legacyTask)
 	if err != nil {
 		d.recordShadowBuildComparison(operation, namespaceReplicationShadowOutcomeError)
-		d.emitShadowBuildComparison(chasmTask, nil, nil, nil, namespaceReplicationShadowOutcomeError, err)
+		d.emitShadowBuildComparison(
+			legacyTask,
+			chasmTask,
+			nil,
+			nil,
+			nil,
+			"",
+			currentCluster,
+			peerCells,
+			namespaceReplicationShadowOutcomeError,
+			err,
+		)
 		d.logger.Error("namespace replication shadow legacy fingerprint failed", tag.Error(err))
 		return
 	}
 	chasmFingerprint, err := nsreplication.NamespaceTaskFingerprint(chasmTask)
 	if err != nil {
 		d.recordShadowBuildComparison(operation, namespaceReplicationShadowOutcomeError)
-		d.emitShadowBuildComparison(chasmTask, legacyFingerprint, nil, nil, namespaceReplicationShadowOutcomeError, err)
+		d.emitShadowBuildComparison(
+			legacyTask,
+			chasmTask,
+			legacyFingerprint,
+			nil,
+			nil,
+			"",
+			currentCluster,
+			peerCells,
+			namespaceReplicationShadowOutcomeError,
+			err,
+		)
 		d.logger.Error("namespace replication shadow CHASM fingerprint failed", tag.Error(err))
 		return
 	}
+	businessID := namespaceID + ":" + uuid.NewString()
 	outcome := namespaceReplicationShadowOutcomeMatch
 	var differingFields []string
 	if !bytes.Equal(legacyFingerprint, chasmFingerprint) {
@@ -1512,9 +1542,19 @@ func (d *namespaceHandler) invokeShadowNamespaceMutation(
 		)
 	}
 	d.recordShadowBuildComparison(operation, outcome)
-	d.emitShadowBuildComparison(chasmTask, legacyFingerprint, chasmFingerprint, differingFields, outcome, nil)
+	d.emitShadowBuildComparison(
+		legacyTask,
+		chasmTask,
+		legacyFingerprint,
+		chasmFingerprint,
+		differingFields,
+		businessID,
+		currentCluster,
+		peerCells,
+		outcome,
+		nil,
+	)
 
-	namespaceID := chasmDetail.GetInfo().GetId()
 	// Shadow validation must not add latency or failure coupling to the
 	// authoritative legacy request. This timeout bounds only the detached
 	// TriggerNamespaceMutation start/poll RPC; if StartExecution already persisted
@@ -1528,7 +1568,8 @@ func (d *namespaceHandler) invokeShadowNamespaceMutation(
 			operation,
 			chasmDetail,
 			expectedVersion,
-			previousClusters,
+			peerCells,
+			businessID,
 			namespaceMutationModeShadow,
 		); err != nil {
 			d.logger.Warn(
@@ -1587,24 +1628,21 @@ func (d *namespaceHandler) triggerNamespaceMutation(
 	operation enumsspb.NamespaceOperation,
 	detail *persistencespb.NamespaceDetail,
 	expectedVersion int64,
-	previousClusters []string,
+	peerCells []string,
+	businessID string,
 	mode namespaceMutationMode,
 ) (*namespacereplicationpb.TriggerNamespaceMutationResponse, error) {
 	namespaceID := detail.GetInfo().GetId()
 	return d.chasmNsReplClient.TriggerNamespaceMutation(ctx, &namespacereplicationpb.TriggerNamespaceMutationRequest{
 		NamespaceId:       namespaceID,
 		SystemNamespaceId: primitives.SystemNamespaceID,
-		BusinessId:        namespaceID + ":" + uuid.NewString(),
+		BusinessId:        businessID,
 		Mutation: &namespacereplicationpb.NamespaceMutation{
 			Operation:       toCHASMNamespaceOperation(operation),
 			NamespaceDetail: detail,
 			ExpectedVersion: expectedVersion,
-			PeerCells: peerCellsFromClusters(
-				d.clusterMetadata.GetCurrentClusterName(),
-				detail.GetReplicationConfig().GetClusters(),
-				previousClusters,
-			),
-			Shadow: mode == namespaceMutationModeShadow,
+			PeerCells:       peerCells,
+			Shadow:          mode == namespaceMutationModeShadow,
 		},
 	})
 }

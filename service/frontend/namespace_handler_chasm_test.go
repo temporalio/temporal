@@ -56,7 +56,7 @@ func (c *blockingNamespaceReplicationClient) TriggerNamespaceMutation(
 func TestInvokeShadowNamespaceMutation(t *testing.T) {
 	controller := gomock.NewController(t)
 	clusterMetadata := cluster.NewMockMetadata(controller)
-	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a").Times(3)
+	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a").Times(2)
 	client := &captureNamespaceReplicationClient{requests: make(chan *namespacereplicationpb.TriggerNamespaceMutationRequest, 1)}
 	metricsHandler := metricstest.NewCaptureHandler()
 	metricsCapture := metricsHandler.StartCapture()
@@ -110,11 +110,15 @@ func TestInvokeShadowNamespaceMutation(t *testing.T) {
 	)
 	require.Equal(t, details["legacy_task_fingerprint"], details["chasm_task_fingerprint"])
 	require.Equal(t, details["task_fingerprint"], details["chasm_task_fingerprint"])
+	require.NotEmpty(t, details["component_business_id"])
+	require.Equal(t, []any{"cell-b", "cell-c"}, details["target_clusters"])
+	require.NotContains(t, details, "legacy_task")
 	select {
 	case request := <-client.requests:
 		require.True(t, request.GetMutation().GetShadow())
 		require.Equal(t, int64(7), request.GetMutation().GetExpectedVersion())
 		require.Equal(t, []string{"cell-b", "cell-c"}, request.GetMutation().GetPeerCells())
+		require.Equal(t, details["component_business_id"], request.GetBusinessId())
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for shadow namespace mutation")
 	}
@@ -123,7 +127,7 @@ func TestInvokeShadowNamespaceMutation(t *testing.T) {
 func TestInvokeShadowNamespaceMutationRecordsBuildMismatch(t *testing.T) {
 	controller := gomock.NewController(t)
 	clusterMetadata := cluster.NewMockMetadata(controller)
-	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a").Times(3)
+	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a").Times(2)
 	client := &captureNamespaceReplicationClient{requests: make(chan *namespacereplicationpb.TriggerNamespaceMutationRequest, 1)}
 	metricsHandler := metricstest.NewCaptureHandler()
 	metricsCapture := metricsHandler.StartCapture()
@@ -177,6 +181,7 @@ func TestInvokeShadowNamespaceMutationRecordsBuildMismatch(t *testing.T) {
 	)
 	require.NotEqual(t, details["legacy_task_fingerprint"], details["chasm_task_fingerprint"])
 	require.Equal(t, []any{"config_version"}, details["differing_fields"])
+	require.Equal(t, "2", details["legacy_task"].(map[string]any)["config_version"])
 	select {
 	case <-client.requests:
 	case <-time.After(time.Second):
@@ -237,6 +242,8 @@ func TestInvokeShadowNamespaceMutationRecordsBuildError(t *testing.T) {
 		"",
 	)
 	require.NotEmpty(t, details["error"])
+	require.Equal(t, "incomplete", details["legacy_task_payload_status"])
+	require.NotEmpty(t, details["legacy_task_json_error"])
 }
 
 func requireShadowComparisonMetric(
@@ -247,6 +254,7 @@ func requireShadowComparisonMetric(
 	clusterName string,
 	operation string,
 	outcome string,
+	sourceCluster ...string,
 ) {
 	t.Helper()
 	recordings := capture.SnapshotMetric(metricName)
@@ -254,6 +262,9 @@ func requireShadowComparisonMetric(
 	require.Equal(t, clusterName, recordings[0].Tags[clusterTagKey])
 	require.Equal(t, operation, recordings[0].Tags[metrics.OperationTag("").Key])
 	require.Equal(t, outcome, recordings[0].Tags[metrics.OutcomeTag("").Key])
+	if len(sourceCluster) > 0 {
+		require.Equal(t, sourceCluster[0], recordings[0].Tags[metrics.SourceClusterTag("").Key])
+	}
 }
 
 func requireShadowComparisonEvent(
@@ -375,12 +386,8 @@ func TestEffectiveNamespaceReplicationTransportMode(t *testing.T) {
 }
 
 func TestTriggerNamespaceMutationModes(t *testing.T) {
-	controller := gomock.NewController(t)
-	clusterMetadata := cluster.NewMockMetadata(controller)
-	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a").Times(2)
 	client := &captureNamespaceReplicationClient{requests: make(chan *namespacereplicationpb.TriggerNamespaceMutationRequest, 2)}
 	handler := &namespaceHandler{
-		clusterMetadata:   clusterMetadata,
 		chasmNsReplClient: client,
 	}
 	detail := &persistencespb.NamespaceDetail{
@@ -403,11 +410,14 @@ func TestTriggerNamespaceMutationModes(t *testing.T) {
 				enumsspb.NAMESPACE_OPERATION_UPDATE,
 				detail,
 				7,
-				nil,
+				[]string{"cell-b"},
+				"namespace-id:mutation-id",
 				tc.mode,
 			)
 			require.NoError(t, err)
 			request := <-client.requests
+			require.Equal(t, "namespace-id:mutation-id", request.GetBusinessId())
+			require.Equal(t, []string{"cell-b"}, request.GetMutation().GetPeerCells())
 			require.Equal(t, tc.wantShadow, request.GetMutation().GetShadow())
 		})
 	}
