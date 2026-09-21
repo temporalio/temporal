@@ -313,6 +313,7 @@ func (c *fairBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb
 	return result
 }
 
+// NonNegligibleBacklogPriority returns 0 when no priority has a non-negligible backlog.
 func (c *fairBacklogManagerImpl) NonNegligibleBacklogPriority() priorityKey {
 	c.subqueueLock.Lock()
 	defer c.subqueueLock.Unlock()

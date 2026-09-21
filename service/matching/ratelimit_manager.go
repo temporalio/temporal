@@ -369,7 +369,7 @@ func (r *rateLimitManager) consumeTokens(now int64, task *internalTask, tokens i
 		key := pri.GetFairnessKey()
 		weight := getEffectiveWeight(r.perKeyOverrides, pri)
 		p := r.perKeyLimit
-		p.interval = time.Duration(float32(p.interval) / weight) // scale by weight
+		p.divideInterval(weight) // scale by weight
 		var sl simpleLimiter
 		if v := r.perKeyReady.Get(key); v != nil {
 			sl = v.(simpleLimiter) // nolint:revive
@@ -393,7 +393,7 @@ func (r *rateLimitManager) grantTokens(priority *commonpb.Priority, requested in
 	defer r.mu.Unlock()
 
 	nowNanos := now.UnixNano()
-	granted := min(requested, availableSimpleLimiterTokens(r.wholeQueueReady, r.wholeQueueLimit, nowNanos))
+	granted := min(requested, r.wholeQueueReady.availableSimpleLimiterTokens(r.wholeQueueLimit, nowNanos))
 	if r.perKeyLimit.limited() {
 		key := priority.GetFairnessKey()
 		var ready simpleLimiter
@@ -401,8 +401,8 @@ func (r *rateLimitManager) grantTokens(priority *commonpb.Priority, requested in
 			ready = value.(simpleLimiter) // nolint:revive
 		}
 		params := r.perKeyLimit
-		params.interval = time.Duration(float32(params.interval) / getEffectiveWeight(r.perKeyOverrides, priority))
-		granted = min(granted, availableSimpleLimiterTokens(ready, params, nowNanos))
+		params.divideInterval(getEffectiveWeight(r.perKeyOverrides, priority))
+		granted = min(granted, ready.availableSimpleLimiterTokens(params, nowNanos))
 		if granted == 0 {
 			return 0
 		}
@@ -413,17 +413,6 @@ func (r *rateLimitManager) grantTokens(priority *commonpb.Priority, requested in
 		r.wholeQueueReady = r.wholeQueueReady.consume(r.wholeQueueLimit, nowNanos, int64(granted))
 	}
 	return granted
-}
-
-func availableSimpleLimiterTokens(ready simpleLimiter, params simpleLimiterParams, now int64) int32 {
-	if params.never() || ready.delay(now) > 0 {
-		return 0
-	}
-	if !params.limited() {
-		return math.MaxInt32
-	}
-	clippedReady := max(now, int64(ready)+params.burst.Nanoseconds()) - params.burst.Nanoseconds()
-	return int32(min((now-clippedReady)/params.interval.Nanoseconds()+1, math.MaxInt32))
 }
 
 // GetFairnessWeightOverrides returns the current fairness weight overrides.

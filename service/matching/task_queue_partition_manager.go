@@ -685,21 +685,29 @@ func (pm *taskQueuePartitionManagerImpl) GrantEagerDispatch(
 		return nil, err
 	}
 
-	var currentVersion, rampingVersion *deploymentspb.WorkerDeploymentVersion
-	var isRamping bool
-	var rampingPercentage float32
-	for _, item := range items {
-		if item.GetVersion() != nil {
-			perTypeUserData, _, err := pm.getPerTypeUserData()
-			if err != nil {
-				return nil, err
-			}
-			currentVersion, _, _, rampingVersion, isRamping, rampingPercentage, _, _ =
-				worker_versioning.CalculateTaskQueueVersioningInfo(perTypeUserData.GetDeploymentData())
-			break
-		}
+	type versioningInfo struct {
+		currentVersion    *deploymentspb.WorkerDeploymentVersion
+		rampingVersion    *deploymentspb.WorkerDeploymentVersion
+		isRamping         bool
+		rampingPercentage float32
 	}
+	getVersioningInfo := sync.OnceValues(func() (versioningInfo, error) {
+		perTypeUserData, _, err := pm.getPerTypeUserData()
+		if err != nil {
+			return versioningInfo{}, err
+		}
+		currentVersion, _, _, rampingVersion, isRamping, rampingPercentage, _, _ :=
+			worker_versioning.CalculateTaskQueueVersioningInfo(perTypeUserData.GetDeploymentData())
+		return versioningInfo{
+			currentVersion:    currentVersion,
+			rampingVersion:    rampingVersion,
+			isRamping:         isRamping,
+			rampingPercentage: rampingPercentage,
+		}, nil
+	})
 
+	// Resolve every physical queue before consuming rate-limit tokens. If any item is
+	// invalid or cannot be resolved, no grants from earlier items should be consumed.
 	physicalQueues := make([]physicalTaskQueueManager, len(items))
 	checkDefaultBacklog := make([]bool, len(items))
 	for index, item := range items {
@@ -712,6 +720,14 @@ func (pm *taskQueuePartitionManagerImpl) GrantEagerDispatch(
 			if err := worker_versioning.ValidateDeploymentVersion(version, pm.engine.config.MaxIDLengthLimit()); err != nil {
 				return nil, err
 			}
+			info, err := getVersioningInfo()
+			if err != nil {
+				return nil, err
+			}
+			// The default queue holds unpinned tasks that may be dispatched to the
+			// current or actively ramping version, so its backlog must also be checked.
+			checkDefaultBacklog[index] = version.Equal(info.currentVersion) ||
+				(info.isRamping && info.rampingPercentage > 0 && version.Equal(info.rampingVersion))
 		}
 		physicalQueue, err := pm.getPhysicalQueue(
 			ctx,
@@ -722,32 +738,29 @@ func (pm *taskQueuePartitionManagerImpl) GrantEagerDispatch(
 			return nil, err
 		}
 		physicalQueues[index] = physicalQueue
-		checkDefaultBacklog[index] = version.Equal(currentVersion) ||
-			(isRamping && rampingPercentage > 0 && version.Equal(rampingVersion))
 	}
 
 	responseItems := make([]*matchingservice.GrantEagerDispatchResponse_Item, len(items))
 	backlogPriorities := make(map[physicalTaskQueueManager]priorityKey)
+	getBacklogPriority := func(physicalQueue physicalTaskQueueManager) priorityKey {
+		if backlogPriority, ok := backlogPriorities[physicalQueue]; ok {
+			return backlogPriority
+		}
+		physicalQueue.MarkAlive()
+		backlogPriority := physicalQueue.NonNegligibleBacklogPriority()
+		backlogPriorities[physicalQueue] = backlogPriority
+		return backlogPriority
+	}
 	for index, item := range items {
 		physicalQueue := physicalQueues[index]
-		backlogPriority, seen := backlogPriorities[physicalQueue]
-		if !seen {
-			physicalQueue.MarkAlive()
-			backlogPriority = physicalQueue.NonNegligibleBacklogPriority()
-			backlogPriorities[physicalQueue] = backlogPriority
-		}
+		backlogPriority := getBacklogPriority(physicalQueue)
 
 		if checkDefaultBacklog[index] {
 			defaultQueue := pm.defaultQueue()
 			if defaultQueue == nil {
 				return nil, errDefaultQueueNotInit
 			}
-			defaultBacklogPriority, seen := backlogPriorities[defaultQueue]
-			if !seen {
-				defaultQueue.MarkAlive()
-				defaultBacklogPriority = defaultQueue.NonNegligibleBacklogPriority()
-				backlogPriorities[defaultQueue] = defaultBacklogPriority
-			}
+			defaultBacklogPriority := getBacklogPriority(defaultQueue)
 			if defaultBacklogPriority != 0 &&
 				(backlogPriority == 0 || defaultBacklogPriority < backlogPriority) {
 				backlogPriority = defaultBacklogPriority
@@ -755,13 +768,14 @@ func (pm *taskQueuePartitionManagerImpl) GrantEagerDispatch(
 		}
 
 		priority := pm.config.clipPriority(priorityKey(item.GetPriority().GetPriorityKey()))
-		// Same or higher priority backlog (<= priority value) prevents Eager.
-		if backlogPriority != 0 && backlogPriority <= priority {
-			responseItems[index] = &matchingservice.GrantEagerDispatchResponse_Item{}
-			continue
+		// Zero means there is no non-negligible backlog. Otherwise, a numerically smaller
+		// backlog priority is higher and prevents eager dispatch when it is <= priority.
+		granted := int32(0)
+		if backlogPriority == 0 || backlogPriority > priority {
+			granted = pm.rateLimitManager.grantTokens(item.GetPriority(), item.GetCount())
 		}
 		responseItems[index] = &matchingservice.GrantEagerDispatchResponse_Item{
-			GrantedCount: pm.rateLimitManager.grantTokens(item.GetPriority(), item.GetCount()),
+			GrantedCount: granted,
 		}
 	}
 	return responseItems, nil

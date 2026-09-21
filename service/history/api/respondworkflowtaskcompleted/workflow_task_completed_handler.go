@@ -551,8 +551,10 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	if handler.mutableState.GetExecutionState().Status == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		bypassActivityTaskGeneration = true
 		eagerStartActivity = false
-	} else if eagerStartActivity && !handler.eagerActivityDispatchAllowed(ctx, namespace, attr) {
+	} else if eagerStartActivity &&
+		// This line makes an RPC call to matching
 		// TODO: batch possibly multiple activities in a single RPC call
+		!handler.eagerActivityDispatchAllowed(ctx, namespace, attr) {
 		// Matching grants are best-effort. On a denial or any matching failure, generate the
 		// activity task normally instead of failing workflow task completion.
 		bypassActivityTaskGeneration = false
