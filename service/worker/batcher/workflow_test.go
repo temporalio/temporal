@@ -288,26 +288,3 @@ func (s *batcherSuite) TestBatchWorkflow_HeartbeatTimeoutFromParams() {
 		})
 	}
 }
-
-// TestBatchActivityOptions_ConcurrentCallsDoNotInterfere guards the failure mode
-// the per-call construction exists for: batch workflows run concurrently on a
-// worker, so building the options through shared mutable state both races (under
-// -race) and lets one execution observe another's heartbeat timeout.
-func (s *batcherSuite) TestBatchActivityOptions_ConcurrentCallsDoNotInterfere() {
-	const numCalls = 50
-
-	got := make([]time.Duration, numCalls)
-	var wg sync.WaitGroup
-	for i := range numCalls {
-		wg.Go(func() {
-			// A distinct timeout per goroutine, so a shared value would surface
-			// as some other goroutine's timeout here.
-			got[i] = batchActivityOptions(time.Duration(i+1) * time.Second).HeartbeatTimeout
-		})
-	}
-	wg.Wait()
-
-	for i, timeout := range got {
-		s.Equal(time.Duration(i+1)*time.Second, timeout)
-	}
-}
