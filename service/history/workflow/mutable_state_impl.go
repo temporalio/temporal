@@ -4332,6 +4332,10 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(
 	return event, ai, err
 }
 
+func (ms *MutableStateImpl) GenerateActivityTask(scheduledEventID int64) error {
+	return ms.taskGenerator.GenerateActivityTasks(scheduledEventID)
+}
+
 func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 	batchID int64,
 	event *historypb.HistoryEvent,

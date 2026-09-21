@@ -6,6 +6,7 @@ import (
 	"maps"
 	"math"
 	"math/bits"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -766,7 +767,20 @@ func (pm *taskQueuePartitionManagerImpl) grantEagerDispatch(
 ) ([]*matchingservice.GrantEagerDispatchResponse_Item, error) {
 	responseItems := make([]*matchingservice.GrantEagerDispatchResponse_Item, len(items))
 	backlogPriorities := make(map[physicalTaskQueueManager]priorityKey)
-	for index, item := range items {
+	grantOrder := make([]int, len(items))
+	for index := range items {
+		grantOrder[index] = index
+	}
+	// Allocate shared rate-limit capacity to higher-priority items first. Keep responseItems
+	// indexed by the original request order, as required by the RPC contract.
+	sort.SliceStable(grantOrder, func(left, right int) bool {
+		leftPriority := pm.config.clipPriority(priorityKey(items[grantOrder[left]].GetPriority().GetPriorityKey()))
+		rightPriority := pm.config.clipPriority(priorityKey(items[grantOrder[right]].GetPriority().GetPriorityKey()))
+		return leftPriority < rightPriority
+	})
+
+	for _, index := range grantOrder {
+		item := items[index]
 		backlogPriority, err := pm.eagerDispatchBacklogPriority(targets[index], backlogPriorities)
 		if err != nil {
 			return nil, err

@@ -344,6 +344,29 @@ func (s *PartitionManagerTestSuite) TestGrantEagerDispatchReturnsPartialRateLimi
 	}, items)
 }
 
+func (s *PartitionManagerTestSuite) TestGrantEagerDispatchGrantsHigherPriorityFirst() {
+	if !s.newMatcher {
+		s.T().Skip("simple limiter is only used by the new matcher")
+	}
+
+	partitionMgr := s.newEagerDispatchPartitionManager(0, nil)
+	partitionMgr.rateLimitManager = &rateLimitManager{
+		config:          partitionMgr.config,
+		timeSource:      clock.NewEventTimeSource().Update(time.Now()),
+		wholeQueueLimit: makeSimpleLimiterParams(1, 0),
+	}
+
+	items, err := partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
+		{Count: 1, Priority: &commonpb.Priority{PriorityKey: 4}},
+		{Count: 1, Priority: &commonpb.Priority{PriorityKey: 2}},
+	})
+	s.Require().NoError(err)
+	s.Require().Equal([]*matchingservice.GrantEagerDispatchResponse_Item{
+		{},
+		{GrantedCount: 1},
+	}, items)
+}
+
 func (s *PartitionManagerTestSuite) TestGrantEagerDispatchValidationDoesNotConsumeTokens() {
 	if !s.newMatcher {
 		s.T().Skip("simple limiter is only used by the new matcher")
