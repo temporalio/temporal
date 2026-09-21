@@ -110,12 +110,8 @@ func (r *replicationReaderGroup) FailoverWatermark(
 // Falls back to index 0 (the overall watermark) when the state was written by an
 // older single-stack version that only has one scope.
 //
-// allowExtraScopes controls the >3-scope case: with the reader group disabled it is
-// false and any scope count other than exactly 3 falls back to index 0 — the
-// pre-reader-group behavior, byte for byte. With the reader group enabled it is true
-// and scopes 3+ are tolerated: they are reserved for the per-lane cursors of
-// replication namespace isolation, introduced by a follow-up PR (which updates this
-// comment to point at the component that owns them).
+// allowExtraScopes retains compatibility with the experimental extended-scope
+// encoding. Generic replication lanes are stored separately in QueueReaderState.Lanes.
 func priorityScopeIndex(priority enumsspb.TaskPriority, scopeCount int, allowExtraScopes bool) int {
 	if scopeCount == 3 || (allowExtraScopes && scopeCount > 3) {
 		switch priority {

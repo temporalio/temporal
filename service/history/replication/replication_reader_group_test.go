@@ -223,9 +223,8 @@ func (s *replicationReaderGroupSuite) TestPriorityScopeIndex() {
 		s.Equal(0, priorityScopeIndex(enumsspb.TASK_PRIORITY_UNSPECIFIED, 3, allowExtraScopes))
 		s.Equal(0, priorityScopeIndex(enumsspb.TASK_PRIORITY_UNSPECIFIED, 1, allowExtraScopes))
 	}
-	// The 4+ scope boundary: only the reader group (allowExtraScopes) reads priority
-	// scopes out of an extended state; the legacy path keeps the pre-refactor
-	// exactly-3 semantics and falls back to the overall watermark.
+	// Keep reading the experimental extended-scope encoding during upgrades even
+	// though generic lanes now persist separately from the three priority scopes.
 	s.Equal(1, priorityScopeIndex(enumsspb.TASK_PRIORITY_HIGH, 4, true))
 	s.Equal(2, priorityScopeIndex(enumsspb.TASK_PRIORITY_LOW, 4, true))
 	s.Equal(0, priorityScopeIndex(enumsspb.TASK_PRIORITY_HIGH, 4, false))

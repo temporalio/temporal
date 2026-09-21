@@ -70,6 +70,19 @@ func TestStreamSenderSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestStreamSenderLaneCapability(t *testing.T) {
+	sender := &StreamSenderImpl{laneCapabilityReady: make(chan struct{})}
+	supported := &replicationspb.SyncReplicationState{
+		SupportsReplicationLanes:       true,
+		ReplicationLaneProtocolVersion: 1,
+	}
+	require.NoError(t, sender.observeLaneCapability(supported))
+	require.NoError(t, sender.waitForLaneCapability())
+	require.True(t, sender.laneCapabilityKnown.Load())
+	require.True(t, sender.lanesConfirmed.Load())
+	require.Error(t, sender.observeLaneCapability(&replicationspb.SyncReplicationState{}))
+}
+
 func (s *streamSenderSuite) SetupSuite() {
 }
 
@@ -153,6 +166,70 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_SingleStack_Success() {
 
 	err := s.streamSender.recvSyncReplicationState(replicationState)
 	s.NoError(err)
+}
+
+func (s *streamSenderSuite) TestRecvSyncReplicationState_CreatesGenericLane() {
+	registry, err := newSenderLaneRegistry(100, nil)
+	s.NoError(err)
+	s.streamSender.laneRegistry = registry
+	s.streamSender.laneController = newSenderLaneController(
+		registry,
+		newNamespaceIsolationPolicy(4, 3, 3),
+		100,
+		log.NewNoopLogger(),
+	)
+	s.streamSender.laneCapabilityReady = make(chan struct{})
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	state := syncReplicationState(100, 100, 200)
+	state.SupportsReplicationLanes = true
+	state.ReplicationLaneProtocolVersion = 1
+	state.ThrottleHighNamespaceIds = []string{"namespace-a"}
+	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(state)
+
+	var persisted *persistencespb.QueueReaderState
+	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(readerID, gomock.Any()).DoAndReturn(
+		func(_ int64, readerState *persistencespb.QueueReaderState) error {
+			persisted = readerState
+			return nil
+		},
+	)
+	s.shardContext.EXPECT().UpdateRemoteReaderInfo(readerID, int64(99), gomock.Any()).Return(nil)
+
+	s.NoError(s.streamSender.recvSyncReplicationState(state))
+	s.True(s.streamSender.lanesConfirmed.Load())
+	s.Len(persisted.Lanes, 1)
+	s.Equal("namespace:namespace-a", persisted.Lanes[0].LogicalKey)
+	s.Equal(int64(100), persisted.Lanes[0].Scope.Range.InclusiveMin.TaskId)
+	s.Equal(
+		[]string{"namespace-a"},
+		persisted.Lanes[0].Scope.Predicate.GetNamespaceIdPredicateAttributes().GetNamespaceIds(),
+	)
+	lane, ok := registry.SnapshotByKey("namespace:namespace-a")
+	s.True(ok)
+	s.NotEmpty(lane.id)
+}
+
+func (s *streamSenderSuite) TestSendLaneUsesOpaqueLaneID() {
+	registry, err := newSenderLaneRegistry(100, nil)
+	s.NoError(err)
+	lane, _, err := registry.Create("namespace:namespace-a", namespaceLaneScope("namespace-a", 100), 1)
+	s.NoError(err)
+	s.streamSender.laneRegistry = registry
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(
+		func(response *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			messages := response.GetMessages()
+			s.Equal(lane.id, messages.GetLaneId())
+			s.Equal(enumsspb.TASK_PRIORITY_HIGH, messages.GetPriority())
+			s.False(messages.GetRetireLane())
+			s.Empty(messages.GetReplicationTasks())
+			return nil
+		},
+	)
+
+	s.NoError(s.streamSender.sendLane(lane, lane.cursor))
 }
 
 // TestRecvSyncReplicationState_ReaderGroupEquivalence pins the PR's core claim: for

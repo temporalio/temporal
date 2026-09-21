@@ -20,6 +20,15 @@ message QueueState {
 
 message QueueReaderState {
   repeated QueueSliceScope scopes = 1;
+  // Named substreams owned by this reader. The key is meaningful only to the
+  // component that created the lane; persistence keeps it structurally paired
+  // with the scope needed to resume that lane.
+  repeated QueueReaderLane lanes = 2;
+}
+
+message QueueReaderLane {
+  string logical_key = 1;
+  QueueSliceScope scope = 2;
 }
 
 message QueueSliceScope {
