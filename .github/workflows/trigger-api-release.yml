@@ -75,6 +75,7 @@ jobs:
             api
 
       - name: Dispatch api-go release
+        id: dispatch
         if: steps.plan.outputs.action == 'release'
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
@@ -98,6 +99,7 @@ jobs:
       # pinning the same commit do not alert each other. The release chain has
       # taken up to 46 minutes.
       - name: Wait for the api-go tag
+        id: wait
         if: steps.plan.outputs.action == 'release'
         env:
           TAG: ${{ steps.plan.outputs.tag }}
@@ -116,6 +118,33 @@ jobs:
           echo "::error::Tag $TAG did not appear in api-go within $TIMEOUT_SECONDS seconds"
           exit 1
 
+      # Say what actually broke. The plan step's reason describes what this run
+      # set out to do, so on a dispatch or wait failure it reads like success
+      # ("releasing it as vX.Y.Z") and buries the real cause in the run log.
+      - name: Describe the failure
+        id: failure
+        if: failure()
+        env:
+          PLAN_OUTCOME: ${{ steps.plan.outcome }}
+          TOKEN_OUTCOME: ${{ steps.token.outcome }}
+          DISPATCH_OUTCOME: ${{ steps.dispatch.outcome }}
+          WAIT_OUTCOME: ${{ steps.wait.outcome }}
+          REASON: ${{ steps.plan.outputs.reason }}
+          TAG: ${{ steps.plan.outputs.tag }}
+        run: |
+          if [[ "$PLAN_OUTCOME" == failure ]]; then
+            summary="could not decide what to release: $REASON"
+          elif [[ "$TOKEN_OUTCOME" == failure ]]; then
+            summary="could not mint a token to dispatch the $TAG release"
+          elif [[ "$DISPATCH_OUTCOME" == failure ]]; then
+            summary="could not dispatch the $TAG release to temporalio/api"
+          elif [[ "$WAIT_OUTCOME" == failure ]]; then
+            summary="dispatched $TAG but the tag never appeared in api-go"
+          else
+            summary="failed; see the run log"
+          fi
+          echo "summary=$summary" >> "$GITHUB_OUTPUT"
+
       - name: Notify Slack
         if: failure()
         uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v4.0.0
@@ -125,4 +154,4 @@ jobs:
           # The action returns success on a Slack-side error unless asked not to.
           errors: true
           payload: |
-            {"text": ${{ toJSON(format('api-go release automation failed on `{0}` — go.temporal.io/api {1} — {2} — {3}/{4}/actions/runs/{5}', github.ref_name, steps.plan.outputs.version, steps.plan.outputs.reason, github.server_url, github.repository, github.run_id)) }}}
+            {"text": ${{ toJSON(format('api-go release automation failed on `{0}` (go.temporal.io/api {1}) — {2} — {3}/{4}/actions/runs/{5}', github.ref_name, steps.plan.outputs.version, steps.failure.outputs.summary, github.server_url, github.repository, github.run_id)) }}}

@@ -51,6 +51,17 @@ func TestDerivePseudoRelease(t *testing.T) {
 			version:     "v1.63.5",
 			errContains: "cannot read revision",
 		},
+		{
+			// +incompatible sorts after the prerelease, so trimming the
+			// prerelease off the version leaves it unchanged and the "tag"
+			// would be the whole pseudo-version. temporalio/api only checks
+			// that a tag starts with "v" and is unused, so without the final
+			// guard it would create a tag by that name. Not reachable for
+			// go.temporal.io/api, which is v1, but the guard is why.
+			name:        "+incompatible cannot yield a release tag",
+			version:     "v2.0.1-0.20240101000000-abcdef012345+incompatible",
+			errContains: "cannot derive a release tag",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
