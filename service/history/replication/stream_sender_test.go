@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -230,6 +231,111 @@ func (s *streamSenderSuite) TestSendLaneUsesOpaqueLaneID() {
 	)
 
 	s.NoError(s.streamSender.sendLane(lane, lane.cursor))
+}
+
+// The receiver emits no sync state until both its priority trackers have observed a
+// batch, and the lane capability handshake rides on the first sync state. Catch-up
+// must therefore prime the receiver's HIGH tracker with an empty batch before
+// waiting on the handshake; without priming no HIGH traffic ever flows and the
+// handshake never completes.
+func (s *streamSenderSuite) TestSendCatchUp_LanesPrimesHighTrackerBeforeCapabilityHandshake() {
+	s.streamSender.isTieredStackEnabled = true
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	laneFloor := int64(50)
+	beginInclusiveWatermark := int64(100)
+	endExclusiveWatermark := int64(200)
+
+	registry, err := newSenderLaneRegistry(beginInclusiveWatermark, nil)
+	s.NoError(err)
+	_, _, err = registry.Create("namespace:namespace-a", namespaceLaneScope("namespace-a", laneFloor), 1)
+	s.NoError(err)
+	s.streamSender.laneRegistry = registry
+	s.streamSender.laneController = newSenderLaneController(
+		registry,
+		newNamespaceIsolationPolicy(4, 3, 3),
+		100,
+		log.NewNoopLogger(),
+	)
+	s.streamSender.laneCapabilityReady = make(chan struct{})
+
+	scope := func(taskID int64) *persistencespb.QueueSliceScope {
+		return &persistencespb.QueueSliceScope{
+			Range: &persistencespb.QueueSliceRange{
+				InclusiveMin: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(taskID)),
+				ExclusiveMax: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(math.MaxInt64)),
+			},
+			Predicate: &persistencespb.Predicate{
+				PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+				Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+			},
+		}
+	}
+	s.shardContext.EXPECT().GetQueueState(tasks.CategoryReplication).Return(&persistencespb.QueueState{
+		ReaderStates: map[int64]*persistencespb.QueueReaderState{
+			readerID: {
+				Scopes: []*persistencespb.QueueSliceScope{
+					scope(beginInclusiveWatermark),
+					scope(beginInclusiveWatermark),
+					scope(beginInclusiveWatermark),
+				},
+			},
+		},
+	}, true)
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
+		tasks.NewImmediateKey(endExclusiveWatermark),
+	)
+
+	sent := make(chan *replicationspb.WorkflowReplicationMessages, 2)
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(
+		func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			sent <- resp.GetMessages()
+			return nil
+		},
+	).Times(2)
+	s.historyEngine.EXPECT().GetReplicationTasksIter(
+		gomock.Any(),
+		string(s.clientShardKey.ClusterID),
+		beginInclusiveWatermark,
+		endExclusiveWatermark,
+	).Return(collection.NewPagingIterator[tasks.Task](
+		func(paginationToken []byte) ([]tasks.Task, []byte, error) {
+			return []tasks.Task{}, nil, nil
+		},
+	), nil)
+
+	type catchupResult struct {
+		taskID int64
+		err    error
+	}
+	catchupDone := make(chan catchupResult, 1)
+	go func() {
+		taskID, err := s.streamSender.sendCatchUp(enumsspb.TASK_PRIORITY_HIGH)
+		catchupDone <- catchupResult{taskID, err}
+	}()
+
+	// The priming batch must go out while the receiver's lane capability is still
+	// unknown; without it this receive times out because the handshake below can
+	// never complete. Its watermark is the lowest point this catch-up may send
+	// from, so no later batch is dropped as non-advancing.
+	primed := await.Rcv(s.T(), sent)
+	s.Equal(enumsspb.TASK_PRIORITY_HIGH, primed.GetPriority())
+	s.Empty(primed.GetLaneId())
+	s.Empty(primed.GetReplicationTasks())
+	s.Equal(laneFloor, primed.GetExclusiveHighWatermark())
+
+	s.NoError(s.streamSender.observeLaneCapability(&replicationspb.SyncReplicationState{
+		SupportsReplicationLanes:       true,
+		ReplicationLaneProtocolVersion: 1,
+	}))
+
+	trailing := await.Rcv(s.T(), sent)
+	s.Equal(endExclusiveWatermark, trailing.GetExclusiveHighWatermark())
+	result := await.Rcv(s.T(), catchupDone)
+	s.NoError(result.err)
+	s.Equal(endExclusiveWatermark, result.taskID)
 }
 
 // TestRecvSyncReplicationState_ReaderGroupEquivalence pins the PR's core claim: for

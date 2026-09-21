@@ -471,16 +471,27 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 }
 
 func (s *StreamSenderImpl) sendCatchUp(priority enumsspb.TaskPriority) (int64, error) {
-	if s.laneRegistry != nil && priority == enumsspb.TASK_PRIORITY_HIGH {
-		if err := s.waitForLaneCapability(); err != nil {
-			return 0, err
-		}
-	}
 	catchupEndExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 
 	catchupBeginInclusiveWatermark := s.catchupBeginWatermark(priority, catchupEndExclusiveWatermark)
 	recordDefaultCoverage := false
 	if s.laneRegistry != nil && priority == enumsspb.TASK_PRIORITY_HIGH {
+		// The receiver emits no sync state until both its priority trackers have
+		// observed a batch, and the lane capability handshake rides on the first
+		// sync state. Prime the receiver's HIGH tracker with an empty batch, or
+		// the handshake and this loop wait on each other forever. The watermark
+		// must not exceed the catch-up begin: the receiver drops batches whose
+		// watermark does not advance.
+		primeWatermark := catchupBeginInclusiveWatermark
+		if resumeFloor, ok := s.laneRegistry.ResumeFloor(); ok {
+			primeWatermark = min(primeWatermark, resumeFloor)
+		}
+		if err := s.sendTasks(priority, primeWatermark, primeWatermark); err != nil {
+			return 0, err
+		}
+		if err := s.waitForLaneCapability(); err != nil {
+			return 0, err
+		}
 		if !s.lanesConfirmed.Load() {
 			if resumeFloor, ok := s.laneRegistry.ResumeFloor(); ok {
 				catchupBeginInclusiveWatermark = min(catchupBeginInclusiveWatermark, resumeFloor)
