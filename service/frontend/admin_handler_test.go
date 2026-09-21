@@ -240,6 +240,9 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowCompareOnly() {
 	metricsCapture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(metricsCapture)
 	s.handler.metricsHandler = metricsHandler
+	eventLogger := &captureNamespaceEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 	namespaceTask := &replicationspb.NamespaceTaskAttributes{
 		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_CREATE,
 		Id:                 "namespace-id",
@@ -263,6 +266,16 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowCompareOnly() {
 		"create",
 		namespaceReplicationShadowOutcomeMatch,
 	)
+	details := requireShadowComparisonEvent(
+		s.T(),
+		eventLogger.records,
+		namespaceReplicationComparisonBoundaryReceive,
+		namespaceReplicationShadowOutcomeMatch,
+		"",
+		s.currentClusterName,
+	)
+	s.Equal(details["expected_task_fingerprint"], details["actual_task_fingerprint"])
+	s.Equal(details["task_fingerprint"], details["actual_task_fingerprint"])
 }
 
 func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowMismatch() {
@@ -270,6 +283,9 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowMismatch() {
 	metricsCapture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(metricsCapture)
 	s.handler.metricsHandler = metricsHandler
+	eventLogger := &captureNamespaceEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
 		NamespaceTask: &replicationspb.NamespaceTaskAttributes{
 			NamespaceOperation: enumsspb.NAMESPACE_OPERATION_UPDATE,
@@ -289,6 +305,16 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowMismatch() {
 		"update",
 		namespaceReplicationShadowOutcomeMismatch,
 	)
+	details := requireShadowComparisonEvent(
+		s.T(),
+		eventLogger.records,
+		namespaceReplicationComparisonBoundaryReceive,
+		namespaceReplicationShadowOutcomeMismatch,
+		"",
+		s.currentClusterName,
+	)
+	s.NotEqual(details["expected_task_fingerprint"], details["actual_task_fingerprint"])
+	s.Equal(details["task_fingerprint"], details["actual_task_fingerprint"])
 }
 
 func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowFingerprintError() {

@@ -28,12 +28,16 @@ const (
 	NamespaceReplicationReceived  NamespaceReplicationPhase = "received"
 	NamespaceReplicationProcessed NamespaceReplicationPhase = "processed"
 	NamespaceReplicationDLQed     NamespaceReplicationPhase = "dlqed"
+	NamespaceReplicationCompared  NamespaceReplicationPhase = "compared"
 
 	NamespaceReplicationOutcomeCreated     NamespaceReplicationOutcome = "created"
 	NamespaceReplicationOutcomeUpdated     NamespaceReplicationOutcome = "updated"
 	NamespaceReplicationOutcomeNotAdmitted NamespaceReplicationOutcome = "not_admitted"
 	NamespaceReplicationOutcomeDuplicate   NamespaceReplicationOutcome = "duplicate"
 	NamespaceReplicationOutcomeNoChange    NamespaceReplicationOutcome = "no_change"
+	NamespaceReplicationOutcomeMatch       NamespaceReplicationOutcome = "match"
+	NamespaceReplicationOutcomeMismatch    NamespaceReplicationOutcome = "mismatch"
+	NamespaceReplicationOutcomeError       NamespaceReplicationOutcome = "error"
 )
 
 // NamespaceReplicationTaskEventData contains the task-specific fields shared by every lifecycle phase.

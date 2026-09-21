@@ -1052,6 +1052,7 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 	actualFingerprint, err := nsreplication.NamespaceTaskFingerprint(request.GetNamespaceTask())
 	if err != nil {
 		adh.recordShadowReceiveComparison(request.GetNamespaceTask().GetNamespaceOperation(), namespaceReplicationShadowOutcomeError)
+		adh.emitShadowReceiveComparison(request.GetNamespaceTask(), request.GetFingerprint(), nil, namespaceReplicationShadowOutcomeError, err)
 		return nil, serviceerror.NewInternalf("fingerprint namespace mutation: %v", err)
 	}
 	outcome := adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH
@@ -1067,6 +1068,7 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 		metricsOutcome = namespaceReplicationShadowOutcomeMismatch
 	}
 	adh.recordShadowReceiveComparison(request.GetNamespaceTask().GetNamespaceOperation(), metricsOutcome)
+	adh.emitShadowReceiveComparison(request.GetNamespaceTask(), request.GetFingerprint(), actualFingerprint, metricsOutcome, nil)
 
 	return &adminservice.ApplyNamespaceMutationResponse{
 		Outcome: outcome,

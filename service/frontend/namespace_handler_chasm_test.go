@@ -2,10 +2,12 @@ package frontend
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	otellog "go.opentelemetry.io/otel/log"
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -15,6 +17,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/wideevents"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
@@ -53,18 +56,21 @@ func (c *blockingNamespaceReplicationClient) TriggerNamespaceMutation(
 func TestInvokeShadowNamespaceMutation(t *testing.T) {
 	controller := gomock.NewController(t)
 	clusterMetadata := cluster.NewMockMetadata(controller)
-	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a").Times(2)
+	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a").Times(3)
 	client := &captureNamespaceReplicationClient{requests: make(chan *namespacereplicationpb.TriggerNamespaceMutationRequest, 1)}
 	metricsHandler := metricstest.NewCaptureHandler()
 	metricsCapture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(metricsCapture)
+	eventLogger := &captureNamespaceEventLogger{}
 	handler := &namespaceHandler{
 		logger:            log.NewNoopLogger(),
+		eventLogger:       eventLogger,
 		clusterMetadata:   clusterMetadata,
 		chasmNsReplClient: client,
 		metricsHandler:    metricsHandler,
 		config: &Config{
 			NamespaceReplicationTransportMode: dynamicconfig.GetStringPropertyFn(dynamicconfig.NamespaceReplicationTransportModeShadow),
+			EmitNamespaceLifecycleEvents:      dynamicconfig.GetBoolPropertyFn(true),
 		},
 	}
 	detail := &persistencespb.NamespaceDetail{
@@ -94,6 +100,16 @@ func TestInvokeShadowNamespaceMutation(t *testing.T) {
 		"update",
 		namespaceReplicationShadowOutcomeMatch,
 	)
+	details := requireShadowComparisonEvent(
+		t,
+		eventLogger.records,
+		namespaceReplicationComparisonBoundaryBuild,
+		namespaceReplicationShadowOutcomeMatch,
+		"cell-a",
+		"",
+	)
+	require.Equal(t, details["legacy_task_fingerprint"], details["chasm_task_fingerprint"])
+	require.Equal(t, details["task_fingerprint"], details["chasm_task_fingerprint"])
 	select {
 	case request := <-client.requests:
 		require.True(t, request.GetMutation().GetShadow())
@@ -107,16 +123,21 @@ func TestInvokeShadowNamespaceMutation(t *testing.T) {
 func TestInvokeShadowNamespaceMutationRecordsBuildMismatch(t *testing.T) {
 	controller := gomock.NewController(t)
 	clusterMetadata := cluster.NewMockMetadata(controller)
-	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a").Times(2)
+	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a").Times(3)
 	client := &captureNamespaceReplicationClient{requests: make(chan *namespacereplicationpb.TriggerNamespaceMutationRequest, 1)}
 	metricsHandler := metricstest.NewCaptureHandler()
 	metricsCapture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(metricsCapture)
+	eventLogger := &captureNamespaceEventLogger{}
 	handler := &namespaceHandler{
 		logger:            log.NewNoopLogger(),
+		eventLogger:       eventLogger,
 		clusterMetadata:   clusterMetadata,
 		chasmNsReplClient: client,
 		metricsHandler:    metricsHandler,
+		config: &Config{
+			EmitNamespaceLifecycleEvents: dynamicconfig.GetBoolPropertyFn(true),
+		},
 	}
 	chasmDetail := &persistencespb.NamespaceDetail{
 		Info:              &persistencespb.NamespaceInfo{Id: "namespace-id", State: enumspb.NAMESPACE_STATE_REGISTERED},
@@ -146,6 +167,16 @@ func TestInvokeShadowNamespaceMutationRecordsBuildMismatch(t *testing.T) {
 		"update",
 		namespaceReplicationShadowOutcomeMismatch,
 	)
+	details := requireShadowComparisonEvent(
+		t,
+		eventLogger.records,
+		namespaceReplicationComparisonBoundaryBuild,
+		namespaceReplicationShadowOutcomeMismatch,
+		"cell-a",
+		"",
+	)
+	require.NotEqual(t, details["legacy_task_fingerprint"], details["chasm_task_fingerprint"])
+	require.Equal(t, []any{"config_version"}, details["differing_fields"])
 	select {
 	case <-client.requests:
 	case <-time.After(time.Second):
@@ -156,14 +187,19 @@ func TestInvokeShadowNamespaceMutationRecordsBuildMismatch(t *testing.T) {
 func TestInvokeShadowNamespaceMutationRecordsBuildError(t *testing.T) {
 	controller := gomock.NewController(t)
 	clusterMetadata := cluster.NewMockMetadata(controller)
-	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a")
+	clusterMetadata.EXPECT().GetCurrentClusterName().Return("cell-a").Times(2)
 	metricsHandler := metricstest.NewCaptureHandler()
 	metricsCapture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(metricsCapture)
+	eventLogger := &captureNamespaceEventLogger{}
 	handler := &namespaceHandler{
 		logger:          log.NewNoopLogger(),
+		eventLogger:     eventLogger,
 		clusterMetadata: clusterMetadata,
 		metricsHandler:  metricsHandler,
+		config: &Config{
+			EmitNamespaceLifecycleEvents: dynamicconfig.GetBoolPropertyFn(true),
+		},
 	}
 	chasmDetail := &persistencespb.NamespaceDetail{
 		Info:              &persistencespb.NamespaceInfo{Id: "namespace-id", State: enumspb.NAMESPACE_STATE_REGISTERED},
@@ -192,6 +228,15 @@ func TestInvokeShadowNamespaceMutationRecordsBuildError(t *testing.T) {
 		"create",
 		namespaceReplicationShadowOutcomeError,
 	)
+	details := requireShadowComparisonEvent(
+		t,
+		eventLogger.records,
+		namespaceReplicationComparisonBoundaryBuild,
+		namespaceReplicationShadowOutcomeError,
+		"cell-a",
+		"",
+	)
+	require.NotEmpty(t, details["error"])
 }
 
 func requireShadowComparisonMetric(
@@ -209,6 +254,44 @@ func requireShadowComparisonMetric(
 	require.Equal(t, clusterName, recordings[0].Tags[clusterTagKey])
 	require.Equal(t, operation, recordings[0].Tags[metrics.OperationTag("").Key])
 	require.Equal(t, outcome, recordings[0].Tags[metrics.OutcomeTag("").Key])
+}
+
+func requireShadowComparisonEvent(
+	t *testing.T,
+	records []otellog.Record,
+	boundary string,
+	outcome string,
+	sourceCluster string,
+	targetCluster string,
+) map[string]any {
+	t.Helper()
+	require.Len(t, records, 1)
+	require.Equal(t, wideevents.NamespaceLifecycleEventName, records[0].EventName())
+	attributes := make(map[string]string)
+	records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		if kv.Value.Kind() == otellog.KindString {
+			attributes[kv.Key] = kv.Value.AsString()
+		}
+		return true
+	})
+	require.Equal(t, string(wideevents.NamespaceReplicationCompared), attributes["phase"])
+	var details map[string]any
+	require.NoError(t, json.Unmarshal([]byte(attributes["details"]), &details))
+	require.Equal(t, namespaceReplicationShadowTransport, details["transport"])
+	require.Equal(t, namespaceReplicationShadowMode, details["mode"])
+	require.Equal(t, boundary, details["comparison_boundary"])
+	require.Equal(t, outcome, details["outcome"])
+	if sourceCluster == "" {
+		require.NotContains(t, details, "source_cluster")
+	} else {
+		require.Equal(t, sourceCluster, details["source_cluster"])
+	}
+	if targetCluster == "" {
+		require.NotContains(t, details, "target_cluster")
+	} else {
+		require.Equal(t, targetCluster, details["target_cluster"])
+	}
+	return details
 }
 
 func TestInvokeShadowNamespaceMutationDoesNotBlockCaller(t *testing.T) {

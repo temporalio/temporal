@@ -1487,27 +1487,32 @@ func (d *namespaceHandler) invokeShadowNamespaceMutation(
 	legacyFingerprint, err := nsreplication.NamespaceTaskFingerprint(legacyTask)
 	if err != nil {
 		d.recordShadowBuildComparison(operation, namespaceReplicationShadowOutcomeError)
+		d.emitShadowBuildComparison(chasmTask, nil, nil, nil, namespaceReplicationShadowOutcomeError, err)
 		d.logger.Error("namespace replication shadow legacy fingerprint failed", tag.Error(err))
 		return
 	}
 	chasmFingerprint, err := nsreplication.NamespaceTaskFingerprint(chasmTask)
 	if err != nil {
 		d.recordShadowBuildComparison(operation, namespaceReplicationShadowOutcomeError)
+		d.emitShadowBuildComparison(chasmTask, legacyFingerprint, nil, nil, namespaceReplicationShadowOutcomeError, err)
 		d.logger.Error("namespace replication shadow CHASM fingerprint failed", tag.Error(err))
 		return
 	}
 	outcome := namespaceReplicationShadowOutcomeMatch
+	var differingFields []string
 	if !bytes.Equal(legacyFingerprint, chasmFingerprint) {
 		outcome = namespaceReplicationShadowOutcomeMismatch
+		differingFields = nsreplication.DifferingNamespaceTaskFields(legacyTask, chasmTask)
 		d.logger.Warn(
 			"namespace replication shadow build mismatch",
 			tag.WorkflowNamespaceID(chasmDetail.GetInfo().GetId()),
-			tag.NewStringTag("differing_fields", strings.Join(nsreplication.DifferingNamespaceTaskFields(legacyTask, chasmTask), ",")),
+			tag.NewStringTag("differing_fields", strings.Join(differingFields, ",")),
 			tag.NewStringTag("legacy_fingerprint", hex.EncodeToString(legacyFingerprint)),
 			tag.NewStringTag("chasm_fingerprint", hex.EncodeToString(chasmFingerprint)),
 		)
 	}
 	d.recordShadowBuildComparison(operation, outcome)
+	d.emitShadowBuildComparison(chasmTask, legacyFingerprint, chasmFingerprint, differingFields, outcome, nil)
 
 	namespaceID := chasmDetail.GetInfo().GetId()
 	// Shadow validation must not add latency or failure coupling to the
