@@ -29,11 +29,9 @@ type HealthCheck struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Machine-readable check type identifier for programmatic matching.
 	// Known values defined as Go constants in api/health/v1/types.go:
-	//
-	//	"grpc_health", "rpc_latency", "rpc_error_ratio",
-	//	"persistence_latency", "persistence_error_ratio",
-	//	"host_availability", "task_queue_backlog"
-	//
+	//   "grpc_health", "rpc_latency", "rpc_error_ratio",
+	//   "persistence_latency", "persistence_error_ratio",
+	//   "host_availability", "task_queue_backlog"
 	// We use strings instead of an enum for flexibility: new check types can be
 	// added without proto changes. See HealthCheck.message for human-readable details.
 	CheckType string         `protobuf:"bytes,1,opt,name=check_type,json=checkType,proto3" json:"check_type,omitempty"`

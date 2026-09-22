@@ -862,6 +862,20 @@ func (s *Scheduler) MigrateToWorkflow(
 		return &schedulerpb.MigrateToWorkflowResponse{}, nil
 	}
 
+	if config := ctx.GetTimeSkippingInfo().GetEffectiveConfig(); config.GetEnabled() {
+		config.Enabled = false
+		config.FastForwardConfig = nil
+		if err := ctx.SetTimeSkippingConfig(config); err != nil {
+			return nil, err
+		}
+		s.Schedule.TimeSkippingConfig = common.CloneProto(config)
+		ctx.Logger().Warn(
+			"time skipping disabled during schedule migration from V2 to V1",
+			tag.WorkflowNamespace(s.GetNamespace()),
+			tag.ScheduleID(s.GetScheduleId()),
+		)
+	}
+
 	// Save pre-migration paused state, mark migration as pending, then pause.
 	s.WorkflowMigration = &schedulerpb.WorkflowMigrationState{
 		PreMigrationPaused: s.Schedule.State.Paused,
