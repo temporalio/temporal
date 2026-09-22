@@ -553,8 +553,8 @@ func (s *StreamSenderImpl) catchupBeginWatermark(priority enumsspb.TaskPriority,
 		watermark := s.readerGroup.CatchupBeginWatermark(end, priority)
 		if s.laneRegistry == nil && priority == enumsspb.TASK_PRIORITY_HIGH {
 			if queueState, ok := s.shardContext.GetQueueState(tasks.CategoryReplication); ok {
-				if readerState, ok := queueState.ReaderStates[s.readerGroup.ReaderID()]; ok && len(readerState.GetLanes()) > 0 {
-					return readerState.Scopes[0].Range.InclusiveMin.TaskId
+				if recoveryWatermark, ok := persistedLaneRecoveryWatermark(queueState.ReaderStates[s.readerGroup.ReaderID()]); ok {
+					return recoveryWatermark
 				}
 			}
 		}
@@ -574,7 +574,19 @@ func (s *StreamSenderImpl) catchupBeginWatermark(priority enumsspb.TaskPriority,
 		s.logger.Debug(fmt.Sprintf("StreamSender readerState not found, readerID %v", readerID))
 		return end
 	}
+	if s.laneRegistry == nil && priority == enumsspb.TASK_PRIORITY_HIGH {
+		if watermark, ok := persistedLaneRecoveryWatermark(readerState); ok {
+			return watermark
+		}
+	}
 	return s.getSendCatchupBeginInclusiveWatermark(readerState, priority)
+}
+
+func persistedLaneRecoveryWatermark(readerState *persistencespb.QueueReaderState) (int64, bool) {
+	if len(readerState.GetLanes()) == 0 || len(readerState.GetScopes()) == 0 {
+		return 0, false
+	}
+	return readerState.Scopes[0].Range.InclusiveMin.TaskId, true
 }
 
 func (s *StreamSenderImpl) getSendCatchupBeginInclusiveWatermark(readerState *persistencespb.QueueReaderState, priority enumsspb.TaskPriority) int64 {
@@ -694,6 +706,9 @@ func (s *StreamSenderImpl) sendLaneEventLoop(class replicationLaneClass) (retErr
 
 	newTaskNotificationChan, subscriberID := s.historyEngine.SubscribeReplicationNotification(s.clientClusterName)
 	defer s.historyEngine.UnsubscribeReplicationNotification(subscriberID)
+	if err := s.waitForLaneCapability(); err != nil {
+		return err
+	}
 	timer := time.NewTimer(s.config.ReplicationStreamSendEmptyTaskDuration())
 	defer timer.Stop()
 
@@ -728,6 +743,7 @@ func (s *StreamSenderImpl) sendDefaultTasks(
 	endExclusiveWatermark int64,
 ) (bool, error) {
 	var filter func(tasks.Task) bool
+	defaultLeaseCompleted := false
 	if s.laneRegistry != nil && priority == enumsspb.TASK_PRIORITY_HIGH {
 		if s.lanesConfirmed.Load() {
 			var acquired bool
@@ -735,12 +751,14 @@ func (s *StreamSenderImpl) sendDefaultTasks(
 			if !acquired {
 				return false, nil
 			}
-			defer s.laneRegistry.ReleaseDefault()
+			defer func() {
+				s.laneRegistry.ReleaseDefault(endExclusiveWatermark, defaultLeaseCompleted)
+			}()
 		} else {
 			s.laneRegistry.AdvanceDefaultCursor(endExclusiveWatermark)
 		}
 	}
-	return true, s.sendTasksOnLane(
+	err := s.sendTasksOnLane(
 		priority,
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
@@ -749,6 +767,8 @@ func (s *StreamSenderImpl) sendDefaultTasks(
 		sharedLaneTag,
 		nil,
 	)
+	defaultLeaseCompleted = err == nil && !s.shutdownChan.IsShutdown()
+	return true, err
 }
 
 func (s *StreamSenderImpl) sendLane(snapshot senderLaneSnapshot, end int64) error {

@@ -31,14 +31,18 @@ type senderLaneSnapshot struct {
 type senderLane struct {
 	senderLaneSnapshot
 	leases int
+	// A pending lane is durable but cannot send until the shared-lane handoff completes.
+	pending bool
 }
 
 type senderLaneRegistry struct {
-	mu            sync.Mutex
-	defaultCursor int64
-	defaultLeases int
-	byKey         map[string]*senderLane
-	byID          map[string]*senderLane
+	mu                sync.Mutex
+	defaultCursor     int64 // furthest shared range reserved by a sender
+	defaultSentCursor int64 // furthest shared range sent successfully
+	defaultLeases     int
+	defaultSendFailed bool
+	byKey             map[string]*senderLane
+	byID              map[string]*senderLane
 }
 
 // The registry owns the durable logical-key/scope association and the ephemeral
@@ -46,9 +50,10 @@ type senderLaneRegistry struct {
 
 func newSenderLaneRegistry(defaultCursor int64, persisted []*persistencespb.QueueReaderLane, classCount int) (*senderLaneRegistry, error) {
 	r := &senderLaneRegistry{
-		defaultCursor: defaultCursor,
-		byKey:         make(map[string]*senderLane, len(persisted)),
-		byID:          make(map[string]*senderLane, len(persisted)),
+		defaultCursor:     defaultCursor,
+		defaultSentCursor: defaultCursor,
+		byKey:             make(map[string]*senderLane, len(persisted)),
+		byID:              make(map[string]*senderLane, len(persisted)),
 	}
 	for i, persistedLane := range persisted {
 		if persistedLane.GetLogicalKey() == "" || persistedLane.GetScope() == nil {
@@ -93,6 +98,11 @@ func (r *senderLaneRegistry) Create(logicalKey string, scope queues.Scope, class
 		return lane.senderLaneSnapshot, false, nil
 	}
 	lane := r.newLane(logicalKey, scope, class)
+	if r.defaultLeases == 0 && !r.defaultSendFailed {
+		lane.cursor = max(lane.cursor, r.defaultSentCursor)
+	} else {
+		lane.pending = true
+	}
 	r.byKey[logicalKey] = lane
 	r.byID[lane.id] = lane
 	return lane.senderLaneSnapshot, true, nil
@@ -123,7 +133,7 @@ func (r *senderLaneRegistry) ClassSnapshots(class replicationLaneClass) []sender
 	defer r.mu.Unlock()
 	var out []senderLaneSnapshot
 	for _, lane := range r.byKey {
-		if lane.class == class && !lane.retiring {
+		if lane.class == class && !lane.pending && !lane.retiring {
 			out = append(out, lane.senderLaneSnapshot)
 		}
 	}
@@ -156,7 +166,7 @@ func (r *senderLaneRegistry) RequestRetirement(logicalKey string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	lane, ok := r.byKey[logicalKey]
-	if !ok || lane.retiring || r.defaultCursor == 0 || lane.acked < r.defaultCursor {
+	if !ok || lane.pending || lane.retiring || r.defaultCursor == 0 || lane.acked < r.defaultCursor {
 		return false
 	}
 	lane.retiring = true
@@ -202,7 +212,7 @@ func (r *senderLaneRegistry) Acquire(laneID string) (senderLaneSnapshot, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	lane, ok := r.byID[laneID]
-	if !ok || lane.retiring || lane.leases != 0 {
+	if !ok || lane.pending || lane.retiring || lane.leases != 0 {
 		return senderLaneSnapshot{}, false
 	}
 	lane.leases++
@@ -239,9 +249,8 @@ func (r *senderLaneRegistry) AcquireDefault(to int64) (func(tasks.Task) bool, bo
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for _, lane := range r.byKey {
-		if lane.retiring {
-			// Do not let the shared cursor cross a scope that is between its last
-			// dedicated send and the final retirement marker.
+		if lane.pending || lane.retiring {
+			// Do not let the shared cursor cross a lane handoff in either direction.
 			return nil, false
 		}
 	}
@@ -266,11 +275,25 @@ func (r *senderLaneRegistry) AcquireDefault(to int64) (func(tasks.Task) bool, bo
 	}, true
 }
 
-func (r *senderLaneRegistry) ReleaseDefault() {
+func (r *senderLaneRegistry) ReleaseDefault(to int64, completed bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if completed {
+		r.defaultSentCursor = max(r.defaultSentCursor, to)
+	} else {
+		r.defaultSendFailed = true
+	}
 	if r.defaultLeases > 0 {
 		r.defaultLeases--
+	}
+	if r.defaultLeases != 0 || r.defaultSendFailed {
+		return
+	}
+	for _, lane := range r.byKey {
+		if lane.pending {
+			lane.cursor = max(lane.cursor, r.defaultSentCursor)
+			lane.pending = false
+		}
 	}
 }
 

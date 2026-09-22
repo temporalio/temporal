@@ -112,13 +112,52 @@ func TestSenderLaneRegistryRetirementWaitsForAckAndLease(t *testing.T) {
 
 	registry.Release(lane.id)
 	require.Empty(t, registry.ReadyRetirements())
-	registry.ReleaseDefault()
+	registry.ReleaseDefault(100, true)
 	require.Equal(t, lane.id, registry.ReadyRetirements()[0].id)
 	retired, ok := registry.CompleteRetirement(lane.id)
 	require.True(t, ok)
 	require.Equal(t, lane.logicalKey, retired.logicalKey)
 	_, ok = registry.SnapshotByKey(lane.logicalKey)
 	require.False(t, ok)
+}
+
+func TestSenderLaneRegistryCreationWaitsForDefaultLease(t *testing.T) {
+	registry, err := newSenderLaneRegistry(100, nil, 4)
+	require.NoError(t, err)
+
+	_, acquired := registry.AcquireDefault(200)
+	require.True(t, acquired)
+	lane, created, err := registry.Create("namespace:a", namespaceLaneScope("a", 100), 1)
+	require.NoError(t, err)
+	require.True(t, created)
+	require.Empty(t, registry.ClassSnapshots(1))
+	_, acquired = registry.Acquire(lane.id)
+	require.False(t, acquired)
+
+	_, acquired = registry.AcquireDefault(300)
+	require.False(t, acquired)
+	registry.ReleaseDefault(200, true)
+
+	lanes := registry.ClassSnapshots(1)
+	require.Len(t, lanes, 1)
+	require.Equal(t, lane.id, lanes[0].id)
+	require.Equal(t, int64(200), lanes[0].cursor)
+}
+
+func TestSenderLaneRegistryCreationDoesNotCrossFailedDefaultLease(t *testing.T) {
+	registry, err := newSenderLaneRegistry(100, nil, 4)
+	require.NoError(t, err)
+
+	_, acquired := registry.AcquireDefault(200)
+	require.True(t, acquired)
+	_, created, err := registry.Create("namespace:a", namespaceLaneScope("a", 100), 1)
+	require.NoError(t, err)
+	require.True(t, created)
+	registry.ReleaseDefault(200, false)
+
+	require.Empty(t, registry.ClassSnapshots(1))
+	_, acquired = registry.AcquireDefault(300)
+	require.False(t, acquired)
 }
 
 func TestSenderLaneRegistryAckNeverRewinds(t *testing.T) {

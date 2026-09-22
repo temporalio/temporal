@@ -233,6 +233,49 @@ func (s *streamSenderSuite) TestSendLaneUsesOpaqueLaneID() {
 	s.NoError(s.streamSender.sendLane(lane, lane.cursor))
 }
 
+func (s *streamSenderSuite) TestSendLaneEventLoopWaitsForCapabilityPublication() {
+	registry, err := newSenderLaneRegistry(100, nil, 4)
+	s.Require().NoError(err)
+	lane, _, err := registry.Create("namespace:namespace-a", namespaceLaneScope("namespace-a", 100), 1)
+	s.Require().NoError(err)
+	s.streamSender.laneRegistry = registry
+	s.streamSender.laneCapabilityKnown = make(chan struct{})
+	s.streamSender.lanesConfirmed.Store(true)
+
+	notifications := make(chan struct{})
+	subscribed := make(chan struct{})
+	s.historyEngine.EXPECT().SubscribeReplicationNotification("target_cluster").DoAndReturn(
+		func(string) (<-chan struct{}, string) {
+			close(subscribed)
+			return notifications, "lane-subscriber"
+		},
+	)
+	s.historyEngine.EXPECT().UnsubscribeReplicationNotification("lane-subscriber")
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
+		tasks.NewImmediateKey(lane.cursor),
+	)
+	sent := make(chan *replicationspb.WorkflowReplicationMessages, 1)
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(
+		func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			sent <- resp.GetMessages()
+			return nil
+		},
+	)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- s.streamSender.sendLaneEventLoop(1)
+	}()
+	await.Rcv(s.T(), subscribed)
+	s.Require().Never(func() bool { return len(sent) > 0 }, 100*time.Millisecond, 5*time.Millisecond)
+
+	s.streamSender.publishLaneCapability()
+	messages := await.Rcv(s.T(), sent)
+	s.Equal(lane.id, messages.GetLaneId())
+	s.streamSender.shutdownChan.Shutdown()
+	s.NoError(await.Rcv(s.T(), done))
+}
+
 // The receiver emits no sync state until both its priority trackers have observed a
 // batch, and the lane capability handshake rides on the first sync state. Catch-up
 // must therefore prime the receiver's HIGH tracker with an empty batch before
@@ -1109,6 +1152,53 @@ func (s *streamSenderSuite) TestSendCatchUp_TieredStack_TieredReaderScope() {
 	s.Equal(endExclusiveWatermark, highPriorityCatchupTaskID)
 	s.NoError(lowPriorityCatchupErr)
 	s.Equal(endExclusiveWatermark, lowPriorityCatchupTaskID)
+}
+
+func (s *streamSenderSuite) TestCatchupBeginWatermark_RecoversPersistedLanesWithoutReaderGroup() {
+	s.streamSender.isTieredStackEnabled = true
+	s.streamSender.readerGroup = nil
+	s.streamSender.laneRegistry = nil
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	makeScope := func(taskID int64) *persistencespb.QueueSliceScope {
+		return &persistencespb.QueueSliceScope{
+			Range: &persistencespb.QueueSliceRange{
+				InclusiveMin: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(taskID)),
+				ExclusiveMax: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(math.MaxInt64)),
+			},
+			Predicate: &persistencespb.Predicate{
+				PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+				Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+			},
+		}
+	}
+	const (
+		overallWatermark = int64(50)
+		highWatermark    = int64(100)
+		lowWatermark     = int64(80)
+	)
+	s.shardContext.EXPECT().GetQueueState(tasks.CategoryReplication).Return(&persistencespb.QueueState{
+		ReaderStates: map[int64]*persistencespb.QueueReaderState{
+			readerID: {
+				Scopes: []*persistencespb.QueueSliceScope{
+					makeScope(overallWatermark),
+					makeScope(highWatermark),
+					makeScope(lowWatermark),
+				},
+				Lanes: []*persistencespb.QueueReaderLane{{
+					LogicalKey: "namespace:a",
+					Scope:      makeScope(overallWatermark),
+				}},
+			},
+		},
+	}, true)
+
+	s.Equal(
+		overallWatermark,
+		s.streamSender.catchupBeginWatermark(enumsspb.TASK_PRIORITY_HIGH, 200),
+	)
 }
 
 func (s *streamSenderSuite) TestSendCatchUp_SingleStack_NoReaderState() {
