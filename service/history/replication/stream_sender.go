@@ -69,15 +69,16 @@ type (
 		laneController          *senderLaneController
 		laneRegistry            *senderLaneRegistry
 		laneInitializationError error
-		// laneCapabilityKnown is closed once the receiver's lane capability is
-		// decided by the first sync state; lanesConfirmed is valid only after that.
-		laneCapabilityKnown chan struct{}
-		laneCapabilityOnce  sync.Once
-		lanesConfirmed      atomic.Bool
-		laneRateLimiters    []quotas.RateLimiter
-		flowController      SenderFlowController
-		sendLock            sync.Mutex
-		ssRateLimiter       ServerSchedulerRateLimiter
+		// laneCapabilityKnown is closed after the first sync state has been
+		// applied to the registry; lanesConfirmed is valid only after that.
+		laneCapabilityKnown       chan struct{}
+		laneCapabilityOnce        sync.Once
+		laneCapabilityPublishOnce sync.Once
+		lanesConfirmed            atomic.Bool
+		laneRateLimiters          []quotas.RateLimiter
+		flowController            SenderFlowController
+		sendLock                  sync.Mutex
+		ssRateLimiter             ServerSchedulerRateLimiter
 	}
 )
 
@@ -311,11 +312,11 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 		s.clientShardKey.ShardID,
 	)
 	if s.laneController != nil {
-		if err := s.observeLaneCapability(attr); err != nil {
-			return err
-		}
 		if attr.HighPriorityState == nil || attr.LowPriorityState == nil {
 			return NewStreamError("streamSender: missing priority state with replication lanes", nil)
+		}
+		if err := s.observeLaneCapability(attr); err != nil {
+			return err
 		}
 		s.flowController.RefreshReceiverFlowControlInfo(attr)
 		highAcked := attr.GetHighPriorityState().GetInclusiveLowWatermark()
@@ -335,6 +336,7 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 		} else {
 			s.laneRegistry.ClearLanes()
 		}
+		s.publishLaneCapability()
 		s.emitLaneMetrics()
 		if err := s.shardContext.UpdateReplicationQueueReaderState(readerID, s.laneRegistry.BuildReaderState(attr)); err != nil {
 			return err
@@ -519,12 +521,17 @@ func (s *StreamSenderImpl) observeLaneCapability(attr *replicationspb.SyncReplic
 	supported := attr.GetSupportsReplicationLanes() && attr.GetReplicationLaneProtocolVersion() >= 1
 	s.laneCapabilityOnce.Do(func() {
 		s.lanesConfirmed.Store(supported)
-		close(s.laneCapabilityKnown)
 	})
 	if s.lanesConfirmed.Load() != supported {
 		return NewStreamError("StreamSender detected replication lane capability change", nil)
 	}
 	return nil
+}
+
+func (s *StreamSenderImpl) publishLaneCapability() {
+	s.laneCapabilityPublishOnce.Do(func() {
+		close(s.laneCapabilityKnown)
+	})
 }
 
 func (s *StreamSenderImpl) waitForLaneCapability() error {
