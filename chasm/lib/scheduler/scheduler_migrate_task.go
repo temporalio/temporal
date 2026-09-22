@@ -105,13 +105,15 @@ func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 	// Read state and convert to V1 args inside the ReadComponent callback,
 	// where we have access to the CHASM context for consistent time.
 	type readResult struct {
-		args             *schedulespb.StartScheduleArgs
-		namespace        string
-		namespaceID      string
-		scheduleID       string
-		searchAttributes map[string]*commonpb.Payload
-		memo             map[string]*commonpb.Payload
-		now              time.Time
+		args                         *schedulespb.StartScheduleArgs
+		namespace                    string
+		namespaceID                  string
+		scheduleID                   string
+		searchAttributes             map[string]*commonpb.Payload
+		memo                         map[string]*commonpb.Payload
+		timeSkippingConfig           *commonpb.TimeSkippingConfig
+		timeSkippingStatePropagation *commonpb.TimeSkippingStatePropagation
+		now                          time.Time
 	}
 	var result readResult
 
@@ -120,6 +122,7 @@ func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 		schedulerRef,
 		func(s *Scheduler, ctx chasm.Context, _ any) (struct{}, error) {
 			now := ctx.Now(s)
+			timeSkippingConfig, timeSkippingStatePropagation := ctx.GetTimeSkippingPropagateState()
 			schedulerState := common.CloneProto(s.SchedulerState)
 			generatorState := common.CloneProto(s.Generator.Get(ctx).GeneratorState)
 			invokerState := common.CloneProto(s.Invoker.Get(ctx).InvokerState)
@@ -153,12 +156,14 @@ func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 					memo,
 					now,
 				),
-				namespace:        schedulerState.GetNamespace(),
-				namespaceID:      schedulerState.GetNamespaceId(),
-				scheduleID:       schedulerState.GetScheduleId(),
-				searchAttributes: searchAttributes,
-				memo:             memo,
-				now:              now,
+				namespace:                    schedulerState.GetNamespace(),
+				namespaceID:                  schedulerState.GetNamespaceId(),
+				scheduleID:                   schedulerState.GetScheduleId(),
+				searchAttributes:             searchAttributes,
+				memo:                         memo,
+				timeSkippingConfig:           timeSkippingConfig,
+				timeSkippingStatePropagation: timeSkippingStatePropagation,
+				now:                          now,
 			}
 			return struct{}{}, nil
 		},
@@ -205,18 +210,20 @@ func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 	}
 	workflowID := legacyscheduler.WorkflowIDPrefix + result.scheduleID
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:                uuid.NewString(),
-		Namespace:                result.namespace,
-		WorkflowId:               workflowID,
-		WorkflowType:             &commonpb.WorkflowType{Name: legacyscheduler.WorkflowType},
-		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-		Input:                    inputPayloads,
-		Identity:                 fmt.Sprintf("temporal-scheduler-migration-%s-%s", result.namespace, result.scheduleID),
-		WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
-		Memo:                     &commonpb.Memo{Fields: result.memo},
-		SearchAttributes:         sa,
-		Priority:                 &commonpb.Priority{},
+		RequestId:                    uuid.NewString(),
+		Namespace:                    result.namespace,
+		WorkflowId:                   workflowID,
+		WorkflowType:                 &commonpb.WorkflowType{Name: legacyscheduler.WorkflowType},
+		TaskQueue:                    &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
+		Input:                        inputPayloads,
+		Identity:                     fmt.Sprintf("temporal-scheduler-migration-%s-%s", result.namespace, result.scheduleID),
+		WorkflowIdReusePolicy:        enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowIdConflictPolicy:     enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
+		Memo:                         &commonpb.Memo{Fields: result.memo},
+		SearchAttributes:             sa,
+		Priority:                     &commonpb.Priority{},
+		TimeSkippingConfig:           result.timeSkippingConfig,
+		TimeSkippingStatePropagation: result.timeSkippingStatePropagation,
 	}
 
 	_, err = h.historyClient.StartWorkflowExecution(

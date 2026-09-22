@@ -126,9 +126,7 @@ type AdminServiceClient interface {
 	// GetDLQMessages returns messages from DLQ.
 	GetDLQMessages(ctx context.Context, in *GetDLQMessagesRequest, opts ...grpc.CallOption) (*GetDLQMessagesResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent:  --)
-	//
+	//     aip.dev/not-precedent:  --)
 	// PurgeDLQMessages purges messages from DLQ.
 	PurgeDLQMessages(ctx context.Context, in *PurgeDLQMessagesRequest, opts ...grpc.CallOption) (*PurgeDLQMessagesResponse, error)
 	// MergeDLQMessages merges messages from DLQ.
@@ -147,8 +145,7 @@ type AdminServiceClient interface {
 	GetNamespace(ctx context.Context, in *GetNamespaceRequest, opts ...grpc.CallOption) (*GetNamespaceResponse, error)
 	GetDLQTasks(ctx context.Context, in *GetDLQTasksRequest, opts ...grpc.CallOption) (*GetDLQTasksResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent:  --)
+	//     aip.dev/not-precedent:  --)
 	PurgeDLQTasks(ctx context.Context, in *PurgeDLQTasksRequest, opts ...grpc.CallOption) (*PurgeDLQTasksResponse, error)
 	MergeDLQTasks(ctx context.Context, in *MergeDLQTasksRequest, opts ...grpc.CallOption) (*MergeDLQTasksResponse, error)
 	DescribeDLQJob(ctx context.Context, in *DescribeDLQJobRequest, opts ...grpc.CallOption) (*DescribeDLQJobResponse, error)
@@ -685,9 +682,7 @@ type AdminServiceServer interface {
 	// GetDLQMessages returns messages from DLQ.
 	GetDLQMessages(context.Context, *GetDLQMessagesRequest) (*GetDLQMessagesResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent:  --)
-	//
+	//     aip.dev/not-precedent:  --)
 	// PurgeDLQMessages purges messages from DLQ.
 	PurgeDLQMessages(context.Context, *PurgeDLQMessagesRequest) (*PurgeDLQMessagesResponse, error)
 	// MergeDLQMessages merges messages from DLQ.
@@ -706,8 +701,7 @@ type AdminServiceServer interface {
 	GetNamespace(context.Context, *GetNamespaceRequest) (*GetNamespaceResponse, error)
 	GetDLQTasks(context.Context, *GetDLQTasksRequest) (*GetDLQTasksResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
-	//
-	//	aip.dev/not-precedent:  --)
+	//     aip.dev/not-precedent:  --)
 	PurgeDLQTasks(context.Context, *PurgeDLQTasksRequest) (*PurgeDLQTasksResponse, error)
 	MergeDLQTasks(context.Context, *MergeDLQTasksRequest) (*MergeDLQTasksResponse, error)
 	DescribeDLQJob(context.Context, *DescribeDLQJobRequest) (*DescribeDLQJobResponse, error)

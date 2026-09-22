@@ -1,15 +1,43 @@
 package scheduler_test
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/historyservicemock/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/searchattribute"
+	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
+
+type migrationTimeSkippingContext struct {
+	chasm.MutableContext
+	info      *commonpb.TimeSkippingInfo
+	setConfig *commonpb.TimeSkippingConfig
+}
+
+func (c *migrationTimeSkippingContext) GetTimeSkippingInfo() *commonpb.TimeSkippingInfo {
+	return common.CloneProto(c.info)
+}
+
+func (c *migrationTimeSkippingContext) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) error {
+	c.setConfig = common.CloneProto(config)
+	return nil
+}
 
 func TestMigrateToWorkflow_PausesSchedule(t *testing.T) {
 	sched, ctx, _ := setupSchedulerForTest(t)
@@ -25,6 +53,77 @@ func TestMigrateToWorkflow_PausesSchedule(t *testing.T) {
 	require.True(t, sched.Schedule.State.Paused)
 	require.Equal(t, "paused for migration to workflow-backed scheduler", sched.Schedule.State.Notes)
 	require.NotNil(t, sched.WorkflowMigration)
+}
+
+func TestMigrateToWorkflow_DisablesTimeSkipping(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+	config := &commonpb.TimeSkippingConfig{
+		Enabled: true,
+		FastForwardConfig: &commonpb.FastForwardConfig{
+			Id:       "fast-forward",
+			Duration: durationpb.New(time.Hour),
+		},
+	}
+	sched.Schedule.TimeSkippingConfig = common.CloneProto(config)
+	migrationCtx := &migrationTimeSkippingContext{
+		MutableContext: ctx,
+		info: &commonpb.TimeSkippingInfo{
+			EffectiveConfig: config,
+		},
+	}
+
+	_, err := sched.MigrateToWorkflow(migrationCtx, &schedulerpb.MigrateToWorkflowRequest{
+		NamespaceId: namespaceID,
+		ScheduleId:  scheduleID,
+	})
+	require.NoError(t, err)
+
+	require.NotNil(t, migrationCtx.setConfig)
+	require.False(t, migrationCtx.setConfig.GetEnabled())
+	require.Nil(t, migrationCtx.setConfig.GetFastForwardConfig())
+	require.False(t, sched.Schedule.GetTimeSkippingConfig().GetEnabled())
+	require.Nil(t, sched.Schedule.GetTimeSkippingConfig().GetFastForwardConfig())
+}
+
+func TestMigrateToWorkflowTask_PropagatesDisabledTimeSkipping(t *testing.T) {
+	env := newTestEnv(t, withMockEngine())
+	config := &commonpb.TimeSkippingConfig{Enabled: false}
+	env.NodeBackend.HandleGetExecutionInfo = func() *persistencespb.WorkflowExecutionInfo {
+		return &persistencespb.WorkflowExecutionInfo{
+			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+				Config:                     config,
+				AccumulatedSkippedDuration: durationpb.New(2 * time.Hour),
+			},
+		}
+	}
+	env.Scheduler.WorkflowMigration = &schedulerpb.WorkflowMigrationState{}
+
+	readCtx := env.ReadContext()
+	env.ExpectReadComponent(readCtx, env.Scheduler)
+	env.ExpectUpdateComponent(env.MutableContext(), env.Scheduler)
+
+	historyClient := historyservicemock.NewMockHistoryServiceClient(env.Ctrl)
+	historyClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, request *historyservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*historyservice.StartWorkflowExecutionResponse, error) {
+			require.False(t, request.GetStartRequest().GetTimeSkippingConfig().GetEnabled())
+			require.Equal(t, 2*time.Hour, request.GetTimeSkippingStatePropagation().GetInitialSkippedDuration().AsDuration())
+			return &historyservice.StartWorkflowExecutionResponse{}, nil
+		})
+
+	handler := scheduler.NewSchedulerMigrateToWorkflowTaskHandler(scheduler.SchedulerMigrateToWorkflowTaskHandlerOptions{
+		Config:           defaultConfig(),
+		MetricsHandler:   metrics.NoopMetricsHandler,
+		BaseLogger:       env.Logger,
+		HistoryClient:    historyClient,
+		SaMapperProvider: searchattribute.NewTestMapperProvider(nil),
+	})
+	require.NoError(t, handler.Execute(
+		env.EngineContext(),
+		chasm.ComponentRef{},
+		chasm.TaskAttributes{},
+		&schedulerpb.SchedulerMigrateToWorkflowTask{},
+	))
+	require.True(t, env.Scheduler.Closed)
 }
 
 func TestMigrateToWorkflow_SavesPreMigrationState(t *testing.T) {
