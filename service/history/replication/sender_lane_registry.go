@@ -166,7 +166,7 @@ func (r *senderLaneRegistry) RequestRetirement(logicalKey string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	lane, ok := r.byKey[logicalKey]
-	if !ok || lane.pending || lane.retiring || r.defaultCursor == 0 || lane.acked < r.defaultCursor {
+	if !ok || lane.pending || lane.retiring || lane.leases != 0 || r.defaultCursor == 0 || lane.acked < max(r.defaultCursor, lane.cursor) {
 		return false
 	}
 	lane.retiring = true

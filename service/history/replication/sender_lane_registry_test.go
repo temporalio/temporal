@@ -103,6 +103,8 @@ func TestSenderLaneRegistryRetirementWaitsForAckAndLease(t *testing.T) {
 	registry.ObserveAcks(map[string]*replicationspb.ReplicationState{
 		lane.id: {InclusiveLowWatermark: 100},
 	})
+	require.False(t, registry.RequestRetirement(lane.logicalKey))
+	registry.Release(lane.id)
 	require.True(t, registry.RequestRetirement(lane.logicalKey))
 	require.Empty(t, registry.ReadyRetirements())
 	_, ok = registry.Acquire(lane.id)
@@ -110,8 +112,6 @@ func TestSenderLaneRegistryRetirementWaitsForAckAndLease(t *testing.T) {
 	_, defaultAcquired = registry.AcquireDefault(110)
 	require.False(t, defaultAcquired)
 
-	registry.Release(lane.id)
-	require.Empty(t, registry.ReadyRetirements())
 	registry.ReleaseDefault(100, true)
 	require.Equal(t, lane.id, registry.ReadyRetirements()[0].id)
 	retired, ok := registry.CompleteRetirement(lane.id)
@@ -119,6 +119,29 @@ func TestSenderLaneRegistryRetirementWaitsForAckAndLease(t *testing.T) {
 	require.Equal(t, lane.logicalKey, retired.logicalKey)
 	_, ok = registry.SnapshotByKey(lane.logicalKey)
 	require.False(t, ok)
+}
+
+func TestSenderLaneRegistryRetirementWaitsForInFlightLaneAck(t *testing.T) {
+	registry, err := newSenderLaneRegistry(100, nil, 4)
+	require.NoError(t, err)
+	lane, _, err := registry.Create("namespace:a", namespaceLaneScope("a", 10), 1)
+	require.NoError(t, err)
+
+	_, acquired := registry.Acquire(lane.id)
+	require.True(t, acquired)
+	registry.ObserveAcks(map[string]*replicationspb.ReplicationState{
+		lane.id: {InclusiveLowWatermark: 100},
+	})
+	require.False(t, registry.RequestRetirement(lane.logicalKey))
+
+	registry.AdvanceLaneCursor(lane.id, 200)
+	registry.Release(lane.id)
+	require.False(t, registry.RequestRetirement(lane.logicalKey))
+
+	registry.ObserveAcks(map[string]*replicationspb.ReplicationState{
+		lane.id: {InclusiveLowWatermark: 200},
+	})
+	require.True(t, registry.RequestRetirement(lane.logicalKey))
 }
 
 func TestSenderLaneRegistryCreationWaitsForDefaultLease(t *testing.T) {
