@@ -1063,12 +1063,17 @@ var (
 	CompleteWorkflowTaskWithStickyDisabledCounter = NewCounterDef("complete_workflow_task_sticky_disabled_count")
 	WorkflowTaskHeartbeatTimeoutCounter           = NewCounterDef("workflow_task_heartbeat_timeout_count")
 	SignalWithStartSkipDelayCounter               = NewCounterDef("signal_with_start_skip_delay_count")
+	SignalWithStartWorkflowStartDeduped           = NewCounterDef("signal_with_start_workflow_start_deduped")
 	DuplicateReplicationEventsCounter             = NewCounterDef("duplicate_replication_events")
 	AcquireLockFailedCounter                      = NewCounterDef("acquire_lock_failed")
 	WorkflowContextCleared                        = NewCounterDef("workflow_context_cleared")
 	HistoryPassiveReplicationTestHookCounter      = NewCounterDef(
 		"history_passive_replication_test_hook",
 		WithDescription("Number of times the test-only passive replication hook executes. This must be zero in production."),
+	)
+	ExecutionForceTerminations = NewCounterDef(
+		"execution_force_terminations",
+		WithDescription("The number of workflow or CHASM executions force terminated due to system conditions (not application specific reasons). Tagged by namespace, archetype, and reason."),
 	)
 	MutableStateSize = NewBytesHistogramDef(
 		"mutable_state_size",
@@ -1150,6 +1155,9 @@ var (
 	ReplicationTasksFailed             = NewCounterDef("replication_tasks_failed")
 	ReplicationTasksBackFill           = NewCounterDef("replication_tasks_back_fill")
 	ReplicationTasksBackFillLatency    = NewTimerDef("replication_tasks_back_fill_latency")
+
+	ReplicationTasksShedByGradualConnect = NewCounterDef("replication_tasks_shed_by_gradual_connect")
+	ReplicationGradualConnectPercent     = NewGaugeDef("replication_gradual_connect_percent")
 	// ParentWorkflowResendAttempts counts parent resends started by standby completion verification.
 	ParentWorkflowResendAttempts = NewCounterDef("parent_workflow_resend_attempts")
 	// ParentWorkflowResendSkipped counts attempts that found a resend for the same parent in flight.
@@ -1474,6 +1482,7 @@ var (
 	VisibilityArchiverArchiveNonRetryableErrorCount                   = NewCounterDef("visibility_archiver_archive_non_retryable_error")
 	VisibilityArchiverArchiveTransientErrorCount                      = NewCounterDef("visibility_archiver_archive_transient_error")
 	VisibilityArchiveSuccessCount                                     = NewCounterDef("visibility_archiver_archive_success")
+	VisibilityArchiverBlobExistsCount                                 = NewCounterDef("visibility_archiver_blob_exists")
 	HistoryScavengerSuccessCount                                      = NewCounterDef("scavenger_success")
 	HistoryScavengerErrorCount                                        = NewCounterDef("scavenger_errors")
 	HistoryScavengerSkipCount                                         = NewCounterDef("scavenger_skips")
@@ -1549,9 +1558,29 @@ var (
 	ReplicatorLatency                                 = NewTimerDef("replicator_latency")
 	ReplicatorDLQFailures                             = NewCounterDef("replicator_dlq_enqueue_fails")
 	NamespaceReplicationEnqueueDLQCount               = NewCounterDef("namespace_replication_dlq_enqueue_requests")
-	ParentClosePolicyProcessorSuccess                 = NewCounterDef("parent_close_policy_processor_requests")
-	ParentClosePolicyProcessorFailures                = NewCounterDef("parent_close_policy_processor_errors")
-	SignalExternalWorkflowExecutionFailures           = NewCounterDef(
+	NamespaceReplicationApplyOutcomes                 = NewCounterDef(
+		"namespace_replication_apply_outcomes",
+		WithDescription("The number of terminal namespace metadata replication apply outcomes per target cluster."),
+	)
+	NamespaceReplicationApplyEndToEndLatency = NewTimerDef(
+		"namespace_replication_apply_end_to_end_latency",
+		WithDescription("Latency from source publication to a terminal namespace metadata replication apply outcome."),
+	)
+	TaskQueueUserDataReplicationApplyOutcomes = NewCounterDef(
+		"task_queue_user_data_replication_apply_outcomes",
+		WithDescription("The number of terminal task queue user data replication apply outcomes per target cluster."),
+	)
+	TaskQueueUserDataReplicationApplyEndToEndLatency = NewTimerDef(
+		"task_queue_user_data_replication_apply_end_to_end_latency",
+		WithDescription("Latency from source publication to a terminal task queue user data replication apply outcome."),
+	)
+	TaskQueueUserDataReplicationIncomingPerTypeDataDropped = NewCounterDef(
+		"task_queue_user_data_replication_incoming_per_type_data_dropped",
+		WithDescription("The number of task queue user data replication merges that discarded incoming, non-empty per-type data."),
+	)
+	ParentClosePolicyProcessorSuccess       = NewCounterDef("parent_close_policy_processor_requests")
+	ParentClosePolicyProcessorFailures      = NewCounterDef("parent_close_policy_processor_errors")
+	SignalExternalWorkflowExecutionFailures = NewCounterDef(
 		"signal_external_workflow_execution_failures",
 		WithDescription("The number of signal external workflow execution failures by cause."),
 	)
@@ -1669,7 +1698,7 @@ var (
 	)
 	ScheduleCallbackReattach = NewCounterDef(
 		"schedule_callback_reattach",
-		WithDescription("Outcomes of re-attaching a completion callback to an already-running action, used for migration and anti-entropy. The reason tag distinguishes a genuine attach from the paths that synthesize an action result: not_found (target gone, recorded TERMINATED) and attach_race (target closed mid-attach, recorded COMPLETED)."),
+		WithDescription("Outcomes of re-attaching a completion callback to an already-running action, used for migration and anti-entropy. The reason tag distinguishes a genuine attach from recorded outcomes: not_found (target gone, recorded TERMINATED) and already_closed (target closed, recorded terminal status)."),
 	)
 
 	// Worker Versioning

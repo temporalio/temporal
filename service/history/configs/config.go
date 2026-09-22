@@ -311,12 +311,14 @@ type Config struct {
 	ReplicationEnableDLQMetrics                          dynamicconfig.BoolPropertyFn
 	ReplicationEnableUpdateWithNewTaskMerge              dynamicconfig.BoolPropertyFn
 	ReplicationMultipleBatches                           dynamicconfig.BoolPropertyFn
+	ReplicationTaskConverterLowPriorityLockMaxAttempts   dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderErrorRetryWait                dynamicconfig.DurationPropertyFn
 	ReplicationStreamSenderErrorRetryBackoffCoefficient  dynamicconfig.FloatPropertyFn
 	ReplicationStreamSenderErrorRetryMaxInterval         dynamicconfig.DurationPropertyFn
 	ReplicationStreamSenderErrorRetryMaxAttempts         dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderErrorRetryExpiration          dynamicconfig.DurationPropertyFn
 	ReplicationStreamSenderSkipStuckTask                 dynamicconfig.BoolPropertyFn
+	EnableReplicationGradualConnect                      dynamicconfig.BoolPropertyFn
 
 	ReplicationExecutableTaskErrorRetryWait               dynamicconfig.DurationPropertyFn
 	ReplicationExecutableTaskErrorRetryBackoffCoefficient dynamicconfig.FloatPropertyFn
@@ -419,6 +421,7 @@ type Config struct {
 	ArchivalProcessorArchiveDelay                       dynamicconfig.DurationPropertyFn
 	ArchivalBackendMaxRPS                               dynamicconfig.FloatPropertyFn
 	ArchivalQueueMaxReaderCount                         dynamicconfig.IntPropertyFn
+	EnableVisibilityArchivalRecordDeduplication         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	WorkflowExecutionMaxInFlightUpdates                           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	WorkflowExecutionMaxInFlightUpdatePayloads                    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -433,6 +436,7 @@ type Config struct {
 
 	EnablePaginationTokenBranchValidation           dynamicconfig.BoolPropertyFn
 	EnablePaginationTokenBranchValidationShadowMode dynamicconfig.BoolPropertyFn
+	EnablePaginationTokenBranchReplacement          dynamicconfig.BoolPropertyFn
 
 	WorkflowIdReuseMinimalInterval           dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	EnableWorkflowIdReuseStartTimeValidation dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -440,6 +444,8 @@ type Config struct {
 	BusinessIDReuseBurstRatio                dynamicconfig.FloatPropertyFnWithNamespaceFilter
 	BusinessIDReuseLimiterCacheSize          dynamicconfig.IntPropertyFn
 	BusinessIDReuseLimiterCacheTTL           dynamicconfig.DurationPropertyFn
+
+	EnableSignalWithStartRequestIDDeduplication dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	HealthCheckHistoryGRPCSettings      dynamicconfig.TypedPropertyFn[health.Settings]
 	HealthPersistenceLatencyFailure     dynamicconfig.FloatPropertyFn
@@ -667,6 +673,7 @@ func NewConfig(
 		ReplicationStreamReadBufferSize:                     dynamicconfig.ReplicationStreamReadBufferSize.Get(dc),
 		ReplicationStreamSenderHighPriorityQPS:              dynamicconfig.ReplicationStreamSenderHighPriorityQPS.Get(dc),
 		ReplicationStreamSenderLowPriorityQPS:               dynamicconfig.ReplicationStreamSenderLowPriorityQPS.Get(dc),
+		EnableReplicationGradualConnect:                     dynamicconfig.EnableReplicationGradualConnect.Get(dc),
 		ReplicationStreamEventLoopRetryMaxAttempts:          dynamicconfig.ReplicationStreamEventLoopRetryMaxAttempts.Get(dc),
 		ReplicationReceiverMaxOutstandingTaskCount:          dynamicconfig.ReplicationReceiverMaxOutstandingTaskCount.Get(dc),
 		ReplicationReceiverSlowSubmissionLatencyThreshold:   dynamicconfig.ReplicationReceiverSlowSubmissionLatencyThreshold.Get(dc),
@@ -757,6 +764,7 @@ func NewConfig(
 		ReplicationTaskProcessorCleanupInterval:              dynamicconfig.ReplicationTaskProcessorCleanupInterval.Get(dc),
 		ReplicationTaskProcessorCleanupJitterCoefficient:     dynamicconfig.ReplicationTaskProcessorCleanupJitterCoefficient.Get(dc),
 		ReplicationMultipleBatches:                           dynamicconfig.ReplicationMultipleBatches.Get(dc),
+		ReplicationTaskConverterLowPriorityLockMaxAttempts:   dynamicconfig.ReplicationTaskConverterLowPriorityLockMaxAttempts.Get(dc),
 
 		ReplicationStreamSenderErrorRetryWait:               dynamicconfig.ReplicationStreamSenderErrorRetryWait.Get(dc),
 		ReplicationStreamSenderErrorRetryBackoffCoefficient: dynamicconfig.ReplicationStreamSenderErrorRetryBackoffCoefficient.Get(dc),
@@ -835,6 +843,7 @@ func NewConfig(
 		ArchivalProcessorArchiveDelay:                       dynamicconfig.ArchivalProcessorArchiveDelay.Get(dc),
 		ArchivalBackendMaxRPS:                               dynamicconfig.ArchivalBackendMaxRPS.Get(dc),
 		ArchivalQueueMaxReaderCount:                         dynamicconfig.ArchivalQueueMaxReaderCount.Get(dc),
+		EnableVisibilityArchivalRecordDeduplication:         dynamicconfig.EnableVisibilityArchivalRecordDeduplication.Get(dc),
 
 		// workflow update related
 		WorkflowExecutionMaxInFlightUpdates:                           dynamicconfig.WorkflowExecutionMaxInFlightUpdates.Get(dc),
@@ -850,6 +859,7 @@ func NewConfig(
 
 		EnablePaginationTokenBranchValidation:           dynamicconfig.EnablePaginationTokenBranchValidation.Get(dc),
 		EnablePaginationTokenBranchValidationShadowMode: dynamicconfig.EnablePaginationTokenBranchValidationShadowMode.Get(dc),
+		EnablePaginationTokenBranchReplacement:          dynamicconfig.EnablePaginationTokenBranchReplacement.Get(dc),
 
 		WorkflowIdReuseMinimalInterval:           dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
 		EnableWorkflowIdReuseStartTimeValidation: dynamicconfig.EnableWorkflowIdReuseStartTimeValidation.Get(dc),
@@ -857,6 +867,8 @@ func NewConfig(
 		BusinessIDReuseBurstRatio:                dynamicconfig.BusinessIDReuseBurstRatio.Get(dc),
 		BusinessIDReuseLimiterCacheSize:          dynamicconfig.BusinessIDReuseLimiterCacheSize.Get(dc),
 		BusinessIDReuseLimiterCacheTTL:           dynamicconfig.BusinessIDReuseLimiterCacheTTL.Get(dc),
+
+		EnableSignalWithStartRequestIDDeduplication: dynamicconfig.EnableSignalWithStartRequestIDDeduplication.Get(dc),
 
 		HealthCheckHistoryGRPCSettings:      dynamicconfig.HealthCheckHistoryGRPCSettings.Get(dc),
 		HealthPersistenceLatencyFailure:     dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
