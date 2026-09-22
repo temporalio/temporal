@@ -328,7 +328,7 @@ func (s *streamReceiverSuite) TestMemberLane_CreatedAfterStopIsCancelled() {
 	tracker.TrackTasks(WatermarkInfo{Watermark: 2, Timestamp: time.Now()}, task)
 }
 
-func (s *streamReceiverSuite) TestMemberLane_RetiredLaneDroppedOnceDrained() {
+func (s *streamReceiverSuite) TestMemberLane_RetiredLaneForgottenOnceDrained() {
 	tracker, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "ns-a", false)
 	s.NoError(err)
 	tracker.TrackTasks(WatermarkInfo{Watermark: 100, Timestamp: time.Now()})
@@ -349,9 +349,11 @@ func (s *streamReceiverSuite) TestMemberLane_RetiredLaneDroppedOnceDrained() {
 	wms = s.streamReceiver.laneWatermarks()
 	s.NotContains(wms, "ns-a")
 
-	// Lane IDs are stream-local incarnations and cannot be reused after retirement.
-	_, err = s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "ns-a", false)
-	s.Error(err)
+	// The sender uses UUIDs and rejects collisions with active lanes. Once drained,
+	// the receiver can forget this ID instead of retaining lifetime tombstones.
+	replacementTracker, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "ns-a", false)
+	s.NoError(err)
+	s.NotSame(tracker, replacementTracker)
 }
 
 func (s *streamReceiverSuite) TestMemberLane_WatermarkDoesNotHoldLaneLock() {

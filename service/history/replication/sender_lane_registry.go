@@ -43,6 +43,7 @@ type senderLaneRegistry struct {
 	defaultSendFailed bool
 	byKey             map[string]*senderLane
 	byID              map[string]*senderLane
+	generateLaneID    func() string
 }
 
 // The registry owns the durable logical-key/scope association and the ephemeral
@@ -54,6 +55,7 @@ func newSenderLaneRegistry(defaultCursor int64, persisted []*persistencespb.Queu
 		defaultSentCursor: defaultCursor,
 		byKey:             make(map[string]*senderLane, len(persisted)),
 		byID:              make(map[string]*senderLane, len(persisted)),
+		generateLaneID:    uuid.NewString,
 	}
 	for i, persistedLane := range persisted {
 		if persistedLane.GetLogicalKey() == "" || persistedLane.GetScope() == nil {
@@ -79,8 +81,15 @@ func restoreLaneClass(persisted int32, classCount int) replicationLaneClass {
 
 func (r *senderLaneRegistry) newLane(logicalKey string, scope queues.Scope, class replicationLaneClass) *senderLane {
 	cursor := scope.Range.InclusiveMin.TaskID
+	laneID := r.generateLaneID()
+	for {
+		if _, exists := r.byID[laneID]; !exists {
+			break
+		}
+		laneID = r.generateLaneID()
+	}
 	return &senderLane{senderLaneSnapshot: senderLaneSnapshot{
-		id:         uuid.NewString(),
+		id:         laneID,
 		logicalKey: logicalKey,
 		class:      class,
 		scope:      scope,

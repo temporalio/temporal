@@ -13,7 +13,6 @@ import (
 type receiverLaneRegistry struct {
 	mu             sync.Mutex
 	lanes          map[string]*receiverLane
-	retired        map[string]struct{}
 	closed         bool
 	logger         log.Logger
 	metricsHandler metrics.Handler
@@ -32,7 +31,6 @@ type receiverLane struct {
 func newReceiverLaneRegistry(logger log.Logger, metricsHandler metrics.Handler) *receiverLaneRegistry {
 	return &receiverLaneRegistry{
 		lanes:          make(map[string]*receiverLane),
-		retired:        make(map[string]struct{}),
 		logger:         logger,
 		metricsHandler: metricsHandler,
 	}
@@ -52,9 +50,6 @@ func (r *receiverLaneRegistry) Resolve(
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, retired := r.retired[laneID]; retired {
-		return nil, serviceerror.NewInternalf("replication lane %q was reused after retirement", laneID)
-	}
 	lane, ok := r.lanes[laneID]
 	if !ok {
 		lane = &receiverLane{
@@ -128,7 +123,6 @@ func (r *receiverLaneRegistry) Watermarks() map[string]WatermarkInfo {
 		}
 		if lane.retiring && lane.tracking == 0 && lane.tracker.Size() == 0 && watermark != nil {
 			delete(r.lanes, laneID)
-			r.retired[laneID] = struct{}{}
 			r.mu.Unlock()
 			continue
 		}

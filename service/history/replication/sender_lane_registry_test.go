@@ -86,6 +86,24 @@ func TestSenderLaneRegistryRejectsInvalidPersistence(t *testing.T) {
 	require.Error(t, err)
 }
 
+func TestSenderLaneRegistryAvoidsActiveLaneIDCollision(t *testing.T) {
+	registry, err := newSenderLaneRegistry(100, nil, 4)
+	require.NoError(t, err)
+	generated := []string{"duplicate", "duplicate", "unique"}
+	registry.generateLaneID = func() string {
+		id := generated[0]
+		generated = generated[1:]
+		return id
+	}
+
+	laneA, _, err := registry.Create("namespace:a", namespaceLaneScope("a", 10), 1)
+	require.NoError(t, err)
+	laneB, _, err := registry.Create("namespace:b", namespaceLaneScope("b", 10), 1)
+	require.NoError(t, err)
+	require.Equal(t, "duplicate", laneA.id)
+	require.Equal(t, "unique", laneB.id)
+}
+
 func TestSenderLaneRegistryRetirementWaitsForAckAndLease(t *testing.T) {
 	registry, err := newSenderLaneRegistry(100, nil, 4)
 	require.NoError(t, err)
