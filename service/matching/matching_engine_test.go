@@ -6667,6 +6667,9 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
 		mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(rootPartition.TaskQueue(), config, nsName))
 		mockPM.EXPECT().RemovePoller(gomock.Any()).AnyTimes()
+		mockUDM := NewMockuserDataManager(ctrl)
+		mockUDM.EXPECT().PartitionScale().Return(nil)
+		mockPM.EXPECT().GetUserDataManager().Return(mockUDM)
 
 		mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
 		rawClient := &routingMatchingClient{
@@ -6796,7 +6799,9 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 	})
 
 	// Flat fan-out test helper: creates an engine with a mock root PM and routing client.
-	setupFanOutTest := func(t *testing.T, numPartitions int, routeFn func(p tqid.Partition) (string, error)) (
+	// scaleInfo is returned by the mock PartitionScale(). Pass nil to simulate dynamic
+	// partitioning not being active (falls back to dcPartitions).
+	setupFanOutTest := func(t *testing.T, dcPartitions int, scaleInfo *taskqueuespb.PartitionScaleInfo, routeFn func(p tqid.Partition) (string, error)) (
 		*matchingEngineImpl,
 		*matchingservicemock.MockMatchingServiceClient,
 	) {
@@ -6815,13 +6820,16 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 
 		config := defaultTestConfig()
 		config.EnableMatchingFanOutForPollCancellation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
-		config.NumTaskqueueReadPartitions = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(numPartitions)
+		config.NumTaskqueueReadPartitions = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(dcPartitions)
 
 		rootPartition := tqid.UnsafeTaskQueueFamily(namespaceID, "test-queue").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
 		mockPM := NewMocktaskQueuePartitionManager(ctrl)
 		mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
-		mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(rootPartition.TaskQueue(), config, nsName))
+		mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(rootPartition.TaskQueue(), config, nsName)).AnyTimes()
 		mockPM.EXPECT().RemovePoller(gomock.Any()).AnyTimes()
+		mockUDM := NewMockuserDataManager(ctrl)
+		mockUDM.EXPECT().PartitionScale().Return(scaleInfo)
+		mockPM.EXPECT().GetUserDataManager().Return(mockUDM)
 
 		var rawClient matchingservice.MatchingServiceClient
 		if routeFn != nil {
@@ -6850,7 +6858,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 	t.Run("fan-out: single partition handled locally", func(t *testing.T) {
 		t.Parallel()
 		// All partitions route to self — no RPCs expected.
-		engine, _ := setupFanOutTest(t, 1, func(p tqid.Partition) (string, error) {
+		engine, _ := setupFanOutTest(t, 1, nil /* no dynamic partitioning */, func(p tqid.Partition) (string, error) {
 			return "self-host", nil
 		})
 		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
@@ -6882,7 +6890,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			}
 			return "self-host", nil // root partition
 		}
-		engine, mockMatchingClient := setupFanOutTest(t, 5, routeFn)
+		engine, mockMatchingClient := setupFanOutTest(t, 5, nil /* no dynamic partitioning */, routeFn)
 		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
 
 		rpcsByHost := map[string][]int32{}
@@ -6932,7 +6940,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			}
 			return "self-host", nil
 		}
-		engine, mockMatchingClient := setupFanOutTest(t, 3, routeFn)
+		engine, mockMatchingClient := setupFanOutTest(t, 3, nil /* no dynamic partitioning */, routeFn)
 		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
 
 		mockMatchingClient.EXPECT().
@@ -6976,7 +6984,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			}
 			return "self-host", nil
 		}
-		engine, mockMatchingClient := setupFanOutTest(t, 3, routeFn)
+		engine, mockMatchingClient := setupFanOutTest(t, 3, nil /* no dynamic partitioning */, routeFn)
 		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
 
 		mockMatchingClient.EXPECT().
@@ -7007,7 +7015,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 	t.Run("fan-out: no routing client falls back to individual RPCs", func(t *testing.T) {
 		// 3 partitions, no routing client. Each remote partition gets its own RPC.
 		t.Parallel()
-		engine, mockMatchingClient := setupFanOutTest(t, 3, nil /* no routing */)
+		engine, mockMatchingClient := setupFanOutTest(t, 3, nil /* no dynamic partitioning */, nil /* no routing */)
 		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
 
 		// Without routing, all partitions are "ungrouped" — each gets its own RPC.
@@ -7032,6 +7040,53 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.NoError(t, err)
 		// 3 RPCs return 1 each = 3 total (no local handling without routing)
 		require.Equal(t, int32(3), resp.CancelledCount)
+	})
+
+	t.Run("fan-out: uses dynamic partition count from scale info", func(t *testing.T) {
+		// Simulate dynamic partitioning by setting scaleInfo.Read=5 while DC=3.
+		// If the code correctly reads from PartitionScale(), it fans out to partitions
+		// 0-4 (5 total). If it incorrectly uses DC, it would only fan out to 0-2 (3 total).
+		// We assert on the actual partition IDs in the remote RPC to distinguish the two.
+		t.Parallel()
+		scaleInfo := &taskqueuespb.PartitionScaleInfo{Read: 5} // Read=5 differs from DC=3
+		routeFn := func(p tqid.Partition) (string, error) {
+			rpcName := p.RpcName()
+			if strings.Contains(rpcName, "/") {
+				return "remote-host", nil // child partitions go remote
+			}
+			return "self-host", nil // root stays local
+		}
+		engine, mockMatchingClient := setupFanOutTest(t, 3 /* DC */, scaleInfo, routeFn)
+		engine.workerInstancePollers.Add("worker-key", "poller-0", func() {})
+
+		var remotePartitionIDs []int32
+		var mu sync.Mutex
+		mockMatchingClient.EXPECT().
+			CancelOutstandingWorkerPollsPartition(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, req *matchingservice.CancelOutstandingWorkerPollsPartitionRequest, _ ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
+				mu.Lock()
+				for _, p := range req.GetPartitions() {
+					remotePartitionIDs = append(remotePartitionIDs, p.GetNormalPartitionId())
+				}
+				mu.Unlock()
+				return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{CancelledCount: 1}, nil
+			}).
+			Times(1) // all remote partitions grouped to one host
+
+		resp, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       "test-namespace-id",
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "test-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				WorkerInstanceKey: "worker-key",
+				WorkerIdentity:    "worker-identity",
+			})
+
+		require.NoError(t, err)
+		require.Equal(t, int32(2), resp.CancelledCount) // 1 local (root) + 1 remote RPC
+		// Key assertion: partitions 3,4 prove scale info (Read=5) was used, not DC (3).
+		// With DC=3 this would be [1,2] only.
+		require.ElementsMatch(t, []int32{1, 2, 3, 4}, remotePartitionIDs)
 	})
 
 	t.Run("fan-out: removePollerFromHistory called for every partition", func(t *testing.T) {
@@ -7065,6 +7120,9 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
 			if i == 0 {
 				mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(partition.TaskQueue(), config, nsName))
+				mockUDM := NewMockuserDataManager(ctrl)
+				mockUDM.EXPECT().PartitionScale().Return(nil)
+				mockPM.EXPECT().GetUserDataManager().Return(mockUDM)
 			}
 			// Each partition must get RemovePoller called exactly once with the worker identity.
 			mockPM.EXPECT().RemovePoller(pollerIdentity("worker-identity")).Times(1)

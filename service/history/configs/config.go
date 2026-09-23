@@ -311,6 +311,7 @@ type Config struct {
 	ReplicationEnableDLQMetrics                          dynamicconfig.BoolPropertyFn
 	ReplicationEnableUpdateWithNewTaskMerge              dynamicconfig.BoolPropertyFn
 	ReplicationMultipleBatches                           dynamicconfig.BoolPropertyFn
+	ReplicationTaskConverterLowPriorityLockMaxAttempts   dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderErrorRetryWait                dynamicconfig.DurationPropertyFn
 	ReplicationStreamSenderErrorRetryBackoffCoefficient  dynamicconfig.FloatPropertyFn
 	ReplicationStreamSenderErrorRetryMaxInterval         dynamicconfig.DurationPropertyFn
@@ -443,6 +444,8 @@ type Config struct {
 	BusinessIDReuseBurstRatio                dynamicconfig.FloatPropertyFnWithNamespaceFilter
 	BusinessIDReuseLimiterCacheSize          dynamicconfig.IntPropertyFn
 	BusinessIDReuseLimiterCacheTTL           dynamicconfig.DurationPropertyFn
+
+	EnableSignalWithStartRequestIDDeduplication dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	HealthCheckHistoryGRPCSettings      dynamicconfig.TypedPropertyFn[health.Settings]
 	HealthPersistenceLatencyFailure     dynamicconfig.FloatPropertyFn
@@ -761,6 +764,7 @@ func NewConfig(
 		ReplicationTaskProcessorCleanupInterval:              dynamicconfig.ReplicationTaskProcessorCleanupInterval.Get(dc),
 		ReplicationTaskProcessorCleanupJitterCoefficient:     dynamicconfig.ReplicationTaskProcessorCleanupJitterCoefficient.Get(dc),
 		ReplicationMultipleBatches:                           dynamicconfig.ReplicationMultipleBatches.Get(dc),
+		ReplicationTaskConverterLowPriorityLockMaxAttempts:   dynamicconfig.ReplicationTaskConverterLowPriorityLockMaxAttempts.Get(dc),
 
 		ReplicationStreamSenderErrorRetryWait:               dynamicconfig.ReplicationStreamSenderErrorRetryWait.Get(dc),
 		ReplicationStreamSenderErrorRetryBackoffCoefficient: dynamicconfig.ReplicationStreamSenderErrorRetryBackoffCoefficient.Get(dc),
@@ -863,6 +867,8 @@ func NewConfig(
 		BusinessIDReuseBurstRatio:                dynamicconfig.BusinessIDReuseBurstRatio.Get(dc),
 		BusinessIDReuseLimiterCacheSize:          dynamicconfig.BusinessIDReuseLimiterCacheSize.Get(dc),
 		BusinessIDReuseLimiterCacheTTL:           dynamicconfig.BusinessIDReuseLimiterCacheTTL.Get(dc),
+
+		EnableSignalWithStartRequestIDDeduplication: dynamicconfig.EnableSignalWithStartRequestIDDeduplication.Get(dc),
 
 		HealthCheckHistoryGRPCSettings:      dynamicconfig.HealthCheckHistoryGRPCSettings.Get(dc),
 		HealthPersistenceLatencyFailure:     dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
