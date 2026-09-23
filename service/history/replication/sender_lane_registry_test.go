@@ -7,7 +7,9 @@ import (
 	"github.com/stretchr/testify/require"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -185,20 +187,42 @@ func TestSenderLaneRegistryCreationWaitsForDefaultLease(t *testing.T) {
 	require.Equal(t, int64(200), lanes[0].cursor)
 }
 
-func TestSenderLaneRegistryCreationDoesNotCrossFailedDefaultLease(t *testing.T) {
+func TestSenderLaneRegistryRecoversFailedDefaultLeaseBeforeHandoff(t *testing.T) {
 	registry, err := newSenderLaneRegistry(100, nil, 4)
+	require.NoError(t, err)
+	_, _, err = registry.Create("namespace:a", namespaceLaneScope("a", 100), 1)
 	require.NoError(t, err)
 
 	_, acquired := registry.AcquireDefault(200)
 	require.True(t, acquired)
-	_, created, err := registry.Create("namespace:a", namespaceLaneScope("a", 100), 1)
+	lane, created, err := registry.Create("namespace:b", namespaceLaneScope("b", 100), 1)
 	require.NoError(t, err)
 	require.True(t, created)
 	require.Empty(t, registry.ReleaseDefault(200, false))
 
-	require.Empty(t, registry.ClassSnapshots(1))
-	_, acquired = registry.AcquireDefault(300)
+	_, acquired = registry.Acquire(lane.id)
 	require.False(t, acquired)
+	filter, acquired := registry.AcquireDefault(300)
+	require.True(t, acquired)
+	require.NotNil(t, filter)
+	require.False(t, filter(&tasks.HistoryReplicationTask{
+		WorkflowKey: definition.NewWorkflowKey("a", "workflow-a", "run-a"),
+		TaskID:      100,
+	}))
+	require.True(t, filter(&tasks.HistoryReplicationTask{
+		WorkflowKey: definition.NewWorkflowKey("b", "workflow-b", "run-b"),
+		TaskID:      100,
+	}))
+	require.Empty(t, registry.ReleaseDefault(300, false))
+
+	filter, acquired = registry.AcquireDefault(400)
+	require.True(t, acquired)
+	require.NotNil(t, filter)
+	require.Equal(t, []replicationLaneClass{1}, registry.ReleaseDefault(400, true))
+	recovered, ok := registry.SnapshotByKey("namespace:b")
+	require.True(t, ok)
+	require.Equal(t, lane.id, recovered.id)
+	require.Equal(t, int64(400), recovered.cursor)
 }
 
 func TestSenderLaneRegistryAckNeverRewinds(t *testing.T) {

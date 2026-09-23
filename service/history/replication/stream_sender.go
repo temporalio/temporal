@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"math"
 	"slices"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -55,11 +54,6 @@ type (
 		maxTasks        int
 		maxScannedTasks int
 		onRetry         func()
-	}
-	laneSendResult struct {
-		laneID string
-		more   bool
-		err    error
 	}
 	StreamSenderImpl struct {
 		server                  historyservice.HistoryService_StreamWorkflowReplicationMessagesServer
@@ -697,202 +691,8 @@ func newLaneRateLimiters(config *configs.Config, enabled bool, classCount int) [
 	return limiters
 }
 
-func newLaneClassWakeChannels(classCount int) []chan struct{} {
-	channels := make([]chan struct{}, classCount)
-	for i := range channels {
-		channels[i] = make(chan struct{}, 1)
-	}
-	return channels
-}
-
 func normalizedLaneClassCount(configured int) int {
 	return max(1, configured)
-}
-
-const sharedLaneTag = "default"
-
-func laneClassTag(class replicationLaneClass) string {
-	return "class-" + strconv.Itoa(int(class))
-}
-
-func (s *StreamSenderImpl) sendLaneEventLoop(class replicationLaneClass) (retErr error) {
-	var panicErr error
-	defer func() {
-		if panicErr != nil {
-			retErr = panicErr
-			metrics.ReplicationStreamPanic.With(s.metrics).Record(1)
-		}
-	}()
-	defer log.CapturePanic(s.logger, &panicErr)
-	if s.laneInitializationError != nil {
-		return NewStreamError("StreamSender failed to restore replication lanes", s.laneInitializationError)
-	}
-
-	newTaskNotificationChan, subscriberID := s.historyEngine.SubscribeReplicationNotification(s.clientClusterName)
-	defer s.historyEngine.UnsubscribeReplicationNotification(subscriberID)
-	if err := s.waitForLaneCapability(); err != nil {
-		return err
-	}
-	timer := time.NewTimer(s.config.ReplicationStreamSendEmptyTaskDuration())
-	defer timer.Stop()
-	results := make(chan laneSendResult)
-	laneClassWakeChannel := s.laneClassWakeChannel(class)
-
-	continuousRound := false
-	for {
-		drainLaneClassWake(laneClassWakeChannel)
-		more, stopped, err := s.sendLaneRound(class, continuousRound, results)
-		if err != nil {
-			return err
-		}
-		if stopped {
-			return nil
-		}
-		if more {
-			continuousRound = true
-			select {
-			case <-s.shutdownChan.Channel():
-				return nil
-			default:
-				continue
-			}
-		}
-		continuousRound, stopped, err = s.waitForLaneWork(timer, newTaskNotificationChan, laneClassWakeChannel, results)
-		if err != nil {
-			return err
-		}
-		if stopped {
-			return nil
-		}
-	}
-}
-
-func (s *StreamSenderImpl) sendLaneRound(
-	class replicationLaneClass,
-	continuous bool,
-	results chan laneSendResult,
-) (more bool, stopped bool, err error) {
-	if s.lanesConfirmed.Load() {
-		end := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
-		for _, lane := range s.laneRegistry.ClassSnapshots(class) {
-			if continuous && lane.cursor >= end {
-				continue
-			}
-			retrying, started := s.startLaneTurn(lane, end, results)
-			if !started {
-				continue
-			}
-			turnMore, stopped, err := s.waitForLaneTurn(lane.id, retrying, results)
-			if err != nil || stopped {
-				return false, stopped, err
-			}
-			more = more || turnMore
-		}
-	}
-	drainedMore, err := drainLaneResults(results)
-	return more || drainedMore, false, err
-}
-
-func (s *StreamSenderImpl) waitForLaneTurn(
-	laneID string,
-	retrying <-chan struct{},
-	results <-chan laneSendResult,
-) (more bool, stopped bool, err error) {
-	for {
-		select {
-		case result := <-results:
-			if result.err != nil {
-				return false, false, result.err
-			}
-			more = more || result.more
-			if result.laneID == laneID {
-				return more, false, nil
-			}
-		case <-retrying:
-			// The lane keeps its lease while retrying, so peers can run
-			// without allowing a second turn to overtake this task.
-			return more, false, nil
-		case <-s.shutdownChan.Channel():
-			return false, true, nil
-		}
-	}
-}
-
-func drainLaneResults(results <-chan laneSendResult) (bool, error) {
-	more := false
-	for {
-		select {
-		case result := <-results:
-			if result.err != nil {
-				return false, result.err
-			}
-			more = more || result.more
-		default:
-			return more, nil
-		}
-	}
-}
-
-func (s *StreamSenderImpl) waitForLaneWork(
-	timer *time.Timer,
-	newTaskNotificationChan <-chan struct{},
-	laneClassWakeChannel <-chan struct{},
-	results <-chan laneSendResult,
-) (more bool, stopped bool, err error) {
-	if !timer.Stop() {
-		select {
-		case <-timer.C:
-		default:
-		}
-	}
-	timer.Reset(s.config.ReplicationStreamSendEmptyTaskDuration())
-	for {
-		select {
-		case <-s.shutdownChan.Channel():
-			return false, true, nil
-		case <-newTaskNotificationChan:
-			return false, false, nil
-		case <-laneClassWakeChannel:
-			return false, false, nil
-		case <-timer.C:
-			return false, false, nil
-		case result := <-results:
-			if result.err != nil {
-				return false, false, result.err
-			}
-			if result.more {
-				return true, false, nil
-			}
-		}
-	}
-}
-
-func drainLaneClassWake(wakeChannel <-chan struct{}) {
-	select {
-	case <-wakeChannel:
-	default:
-	}
-}
-
-func (s *StreamSenderImpl) laneClassWakeChannel(class replicationLaneClass) <-chan struct{} {
-	index := int(class) - 1
-	if index < 0 || index >= len(s.laneClassWakeChannels) {
-		return nil
-	}
-	return s.laneClassWakeChannels[index]
-}
-
-func (s *StreamSenderImpl) wakeLaneClasses(classes ...replicationLaneClass) {
-	for _, class := range classes {
-		index := int(class) - 1
-		if index < 0 || index >= len(s.laneClassWakeChannels) {
-			continue
-		}
-		select {
-		case s.laneClassWakeChannels[index] <- struct{}{}:
-		default:
-		}
-	}
 }
 
 func (s *StreamSenderImpl) sendDefaultTasks(
@@ -936,54 +736,6 @@ func (s *StreamSenderImpl) sendLane(snapshot senderLaneSnapshot, end int64) (boo
 	}
 	defer s.laneRegistry.Release(lane.id)
 	return s.sendAcquiredLane(lane, end, nil)
-}
-
-func (s *StreamSenderImpl) startLaneTurn(
-	snapshot senderLaneSnapshot,
-	end int64,
-	results chan<- laneSendResult,
-) (<-chan struct{}, bool) {
-	lane, ok := s.laneRegistry.Acquire(snapshot.id)
-	if !ok {
-		return nil, false
-	}
-	retrying := make(chan struct{})
-	var retryOnce sync.Once
-	go func() {
-		result := s.runLaneTurn(lane, end, func() {
-			retryOnce.Do(func() {
-				close(retrying)
-			})
-		})
-		s.laneRegistry.Release(lane.id)
-		if current, ok := s.laneRegistry.SnapshotByKey(lane.logicalKey); ok && current.class != lane.class {
-			s.wakeLaneClasses(current.class)
-		}
-		select {
-		case results <- result:
-		case <-s.shutdownChan.Channel():
-		case <-s.server.Context().Done():
-		}
-	}()
-	return retrying, true
-}
-
-func (s *StreamSenderImpl) runLaneTurn(
-	lane senderLaneSnapshot,
-	end int64,
-	onRetry func(),
-) (result laneSendResult) {
-	result.laneID = lane.id
-	var panicErr error
-	defer func() {
-		if panicErr != nil {
-			result.err = panicErr
-			metrics.ReplicationStreamPanic.With(s.metrics).Record(1)
-		}
-	}()
-	defer log.CapturePanic(s.logger, &panicErr)
-	result.more, result.err = s.sendAcquiredLane(lane, end, onRetry)
-	return result
 }
 
 func (s *StreamSenderImpl) sendAcquiredLane(

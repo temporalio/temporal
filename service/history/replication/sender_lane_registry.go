@@ -40,10 +40,11 @@ type senderLaneRegistry struct {
 	defaultCursor     int64 // furthest shared range reserved by a sender
 	defaultSentCursor int64 // furthest shared range sent successfully
 	defaultLeases     int
-	defaultSendFailed bool
-	byKey             map[string]*senderLane
-	byID              map[string]*senderLane
-	generateLaneID    func() string
+	// A failed shared pass must re-cover pending lane scopes before handoff.
+	defaultRecoveryPending bool
+	byKey                  map[string]*senderLane
+	byID                   map[string]*senderLane
+	generateLaneID         func() string
 }
 
 // The registry owns the durable logical-key/scope association and the ephemeral
@@ -107,7 +108,7 @@ func (r *senderLaneRegistry) Create(logicalKey string, scope queues.Scope, class
 		return lane.senderLaneSnapshot, false, nil
 	}
 	lane := r.newLane(logicalKey, scope, class)
-	if r.defaultLeases == 0 && !r.defaultSendFailed {
+	if r.defaultLeases == 0 && !r.defaultRecoveryPending {
 		lane.cursor = max(lane.cursor, r.defaultSentCursor)
 	} else {
 		lane.pending = true
@@ -257,11 +258,15 @@ func (r *senderLaneRegistry) AdvanceDefaultCursor(to int64) {
 func (r *senderLaneRegistry) AcquireDefault(to int64) (func(tasks.Task) bool, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	recovering := r.defaultLeases == 0 && r.defaultRecoveryPending
 	for _, lane := range r.byKey {
-		if lane.pending || lane.retiring {
+		if lane.retiring || (lane.pending && !recovering) {
 			// Do not let the shared cursor cross a lane handoff in either direction.
 			return nil, false
 		}
+	}
+	if recovering {
+		r.defaultRecoveryPending = false
 	}
 	r.defaultLeases++
 	if to > r.defaultCursor {
@@ -269,6 +274,10 @@ func (r *senderLaneRegistry) AcquireDefault(to int64) (func(tasks.Task) bool, bo
 	}
 	scopes := make([]queues.Scope, 0, len(r.byKey))
 	for _, lane := range r.byKey {
+		if lane.pending {
+			// Recovery must re-cover pending scopes on the shared lane before handoff.
+			continue
+		}
 		scopes = append(scopes, lane.scope)
 	}
 	if len(scopes) == 0 {
@@ -290,12 +299,12 @@ func (r *senderLaneRegistry) ReleaseDefault(to int64, completed bool) []replicat
 	if completed {
 		r.defaultSentCursor = max(r.defaultSentCursor, to)
 	} else {
-		r.defaultSendFailed = true
+		r.defaultRecoveryPending = true
 	}
 	if r.defaultLeases > 0 {
 		r.defaultLeases--
 	}
-	if r.defaultLeases != 0 || r.defaultSendFailed {
+	if r.defaultLeases != 0 || r.defaultRecoveryPending {
 		return nil
 	}
 	var runnableClasses []replicationLaneClass

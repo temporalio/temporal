@@ -386,6 +386,119 @@ func (s *streamSenderSuite) TestSendLaneEventLoopsWakeOnCreationAndReclassificat
 	s.NoError(await.Rcv(s.T(), done))
 }
 
+func (s *streamSenderSuite) TestSendLaneEventLoopPreservesWakeDuringContinuousRound() {
+	const (
+		begin = int64(100)
+		end   = int64(102)
+	)
+	s.config.ReplicationStreamSendEmptyTaskDuration = func() time.Duration { return time.Hour }
+	registry, err := newSenderLaneRegistry(begin, nil, 1)
+	s.Require().NoError(err)
+	laneA, _, err := registry.Create("namespace:namespace-a", namespaceLaneScope("namespace-a", begin), 1)
+	s.Require().NoError(err)
+	s.streamSender.laneRegistry = registry
+	s.streamSender.laneRateLimiters = []quotas.RateLimiter{nil}
+	s.streamSender.laneClassWakeChannels = newLaneClassWakeChannels(1)
+	s.streamSender.clientClusterShardCount = 1
+	s.streamSender.laneCapabilityKnown = make(chan struct{})
+	s.streamSender.lanesConfirmed.Store(true)
+	s.streamSender.publishLaneCapability()
+
+	visibilityTime := time.Now().UTC()
+	allTasks := []tasks.Task{
+		&tasks.HistoryReplicationTask{
+			WorkflowKey:         definition.NewWorkflowKey("namespace-a", "workflow-a-1", "run-a-1"),
+			TaskID:              begin,
+			VisibilityTimestamp: visibilityTime,
+		},
+		&tasks.HistoryReplicationTask{
+			WorkflowKey:         definition.NewWorkflowKey("namespace-a", "workflow-a-2", "run-a-2"),
+			TaskID:              begin + 1,
+			VisibilityTimestamp: visibilityTime,
+		},
+	}
+	namespaceRegistry := namespace.NewMockRegistry(s.controller)
+	namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("namespace-a")).Return(namespace.NewGlobalNamespaceForTest(
+		nil,
+		nil,
+		&persistencespb.NamespaceReplicationConfig{Clusters: []string{"source_cluster", "target_cluster"}},
+		100,
+	), nil).AnyTimes()
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(namespaceRegistry).AnyTimes()
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
+		tasks.NewImmediateKey(end),
+	).AnyTimes()
+	s.historyEngine.EXPECT().GetReplicationTasksIter(
+		gomock.Any(),
+		string(s.clientShardKey.ClusterID),
+		gomock.Any(),
+		end,
+	).DoAndReturn(func(_ context.Context, _ string, scanBegin, _ int64) (collection.Iterator[tasks.Task], error) {
+		var scanTasks []tasks.Task
+		for _, task := range allTasks {
+			if task.GetTaskID() >= scanBegin {
+				scanTasks = append(scanTasks, task)
+			}
+		}
+		return collection.NewPagingIterator[tasks.Task](
+			func([]byte) ([]tasks.Task, []byte, error) {
+				return scanTasks, nil, nil
+			},
+		), nil
+	}).AnyTimes()
+	s.taskConverter.EXPECT().Convert(
+		gomock.Any(),
+		s.clientShardKey.ClusterID,
+		enumsspb.TASK_PRIORITY_HIGH,
+		locks.PriorityLow,
+	).DoAndReturn(func(task tasks.Task, _ int32, _ enumsspb.TaskPriority, _ locks.Priority) (*replicationspb.ReplicationTask, error) {
+		return &replicationspb.ReplicationTask{
+			SourceTaskId:   task.GetTaskID(),
+			VisibilityTime: timestamppb.New(task.GetVisibilityTime()),
+		}, nil
+	}).AnyTimes()
+
+	notifications := make(chan struct{})
+	s.historyEngine.EXPECT().SubscribeReplicationNotification("target_cluster").Return(notifications, "lane-subscriber")
+	s.historyEngine.EXPECT().UnsubscribeReplicationNotification("lane-subscriber")
+	laneBSent := make(chan struct{})
+	laneBID := ""
+	laneBObserved := false
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(
+		func(response *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			messages := response.GetMessages()
+			if laneBID == "" && messages.GetLaneId() == laneA.id && len(messages.GetReplicationTasks()) != 0 {
+				laneB, created, err := registry.Create(
+					"namespace:namespace-b",
+					namespaceLaneScope("namespace-b", end),
+					1,
+				)
+				if err != nil {
+					return err
+				}
+				if !created {
+					return errors.New("namespace-b lane already exists")
+				}
+				laneBID = laneB.id
+				s.streamSender.wakeLaneClasses(1)
+			}
+			if !laneBObserved && messages.GetLaneId() == laneBID {
+				laneBObserved = true
+				close(laneBSent)
+				s.streamSender.shutdownChan.Shutdown()
+			}
+			return nil
+		},
+	).AnyTimes()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- s.streamSender.sendLaneEventLoop(1)
+	}()
+	await.Rcv(s.T(), laneBSent)
+	s.NoError(await.Rcv(s.T(), done))
+}
+
 func (s *streamSenderSuite) TestSendLaneEventLoopRoundRobinsLanesInClass() {
 	const (
 		begin = int64(100)
