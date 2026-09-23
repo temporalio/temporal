@@ -7,6 +7,7 @@ import (
 	"math"
 	"reflect"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -649,12 +650,10 @@ func convertStringEnum(vals []string) func(any) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		for _, v := range vals {
-			if s == v {
-				return s, nil
-			}
+		if !slices.Contains(vals, s) {
+			return "", fmt.Errorf("invalid value %q, must be one of: %v", s, vals)
 		}
-		return "", fmt.Errorf("invalid value %q, must be one of: %v", s, vals)
+		return s, nil
 	}
 }
 
