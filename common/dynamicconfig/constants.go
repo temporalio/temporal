@@ -3053,8 +3053,7 @@ to persistence. The buffer holds slim queue rows (task metadata, not event paylo
 	EnableReplicationStreamLanes = NewGlobalBoolSetting(
 		"history.EnableReplicationStreamLanes",
 		false,
-		`EnableReplicationStreamLanes enables sender-defined replication lanes. The first policy
-isolates namespaces reported by the receiver as overwhelming the HIGH lane. Requires tiered
+		`EnableReplicationStreamLanes enables sender-defined replication lanes. Requires tiered
 processing and the reader group. Changing it restarts replication streams.`,
 	)
 	ReplicationStreamSenderLaneQPSRatio = NewGlobalFloatSetting(
