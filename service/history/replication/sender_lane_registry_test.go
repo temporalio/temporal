@@ -228,6 +228,103 @@ func TestSenderLaneRegistryRecoversFailedDefaultLeaseBeforeHandoff(t *testing.T)
 	require.Equal(t, int64(400), recovered.cursor)
 }
 
+func TestSenderLaneRegistryHandoffSurvivesCrashBeforeRetirementPersistence(t *testing.T) {
+	const (
+		initialCursor = int64(100)
+		handoffCursor = int64(200)
+		retireCursor  = int64(300)
+	)
+	namespaceATask := &tasks.HistoryReplicationTask{
+		WorkflowKey: definition.NewWorkflowKey("a", "workflow-a", "run-a"),
+		TaskID:      handoffCursor,
+	}
+	namespaceBTask := &tasks.HistoryReplicationTask{
+		WorkflowKey: definition.NewWorkflowKey("b", "workflow-b", "run-b"),
+		TaskID:      handoffCursor,
+	}
+
+	registry, err := newSenderLaneRegistry(initialCursor, nil, 4)
+	require.NoError(t, err)
+	sharedFilter, acquired := registry.AcquireDefault(handoffCursor)
+	require.True(t, acquired)
+	require.Nil(t, sharedFilter)
+
+	lane, created, err := registry.Create("namespace:a", namespaceLaneScope("a", initialCursor), 1)
+	require.NoError(t, err)
+	require.True(t, created)
+	require.Empty(t, registry.ClassSnapshots(1))
+	_, _, acquired = registry.Acquire(lane)
+	require.False(t, acquired)
+	require.Equal(t, []replicationLaneClass{1}, registry.ReleaseDefault(handoffCursor, true))
+
+	lane, ok := registry.SnapshotByKey(lane.logicalKey)
+	require.True(t, ok)
+	require.Equal(t, handoffCursor, lane.cursor)
+	leasedLane, _, acquired := registry.Acquire(lane)
+	require.True(t, acquired)
+	require.True(t, leasedLane.scope.Contains(namespaceATask))
+	require.False(t, leasedLane.scope.Contains(namespaceBTask))
+	registry.AdvanceLaneCursor(lane.id, retireCursor)
+	registry.Release(lane.id)
+	registry.ObserveAcks(map[string]*replicationspb.ReplicationState{
+		lane.id: {InclusiveLowWatermark: handoffCursor},
+	})
+	durableState := registry.BuildReaderState(syncReplicationState(handoffCursor, handoffCursor, handoffCursor))
+	require.Equal(t, handoffCursor, replicationLaneDefaultCursor(durableState))
+	require.Len(t, durableState.Lanes, 1)
+	require.Equal(t, handoffCursor, durableState.Lanes[0].GetScope().GetRange().GetInclusiveMin().GetTaskId())
+
+	sharedFilter, acquired = registry.AcquireDefault(retireCursor)
+	require.True(t, acquired)
+	require.NotNil(t, sharedFilter)
+	require.False(t, sharedFilter(namespaceATask))
+	require.True(t, sharedFilter(namespaceBTask))
+	require.Empty(t, registry.ReleaseDefault(retireCursor, true))
+	registry.ObserveAcks(map[string]*replicationspb.ReplicationState{
+		lane.id: {InclusiveLowWatermark: retireCursor},
+	})
+	require.True(t, registry.RequestRetirement(lane.logicalKey))
+	require.Equal(t, lane.id, registry.ReadyRetirements()[0].id)
+	_, completed := registry.CompleteRetirement(lane.id)
+	require.True(t, completed)
+	sharedFilter, acquired = registry.AcquireDefault(retireCursor + 1)
+	require.True(t, acquired)
+	require.Nil(t, sharedFilter)
+	registry.ReleaseDefault(retireCursor+1, true)
+
+	// The retirement marker is sent before the lane-free reader state is durable.
+	// Restarting from the previous state must restore the lane and safely resend its range.
+	restored, err := newSenderLaneRegistry(replicationLaneDefaultCursor(durableState), durableState.Lanes, 4)
+	require.NoError(t, err)
+	restoredLane, ok := restored.SnapshotByKey(lane.logicalKey)
+	require.True(t, ok)
+	require.NotEqual(t, lane.id, restoredLane.id)
+	require.Equal(t, handoffCursor, restoredLane.cursor)
+
+	sharedFilter, acquired = restored.AcquireDefault(retireCursor)
+	require.True(t, acquired)
+	require.NotNil(t, sharedFilter)
+	require.False(t, sharedFilter(namespaceATask))
+	require.True(t, sharedFilter(namespaceBTask))
+	leasedLane, _, acquired = restored.Acquire(restoredLane)
+	require.True(t, acquired)
+	require.Equal(t, handoffCursor, leasedLane.cursor)
+	restored.AdvanceLaneCursor(restoredLane.id, retireCursor)
+	restored.Release(restoredLane.id)
+	require.Empty(t, restored.ReleaseDefault(retireCursor, true))
+	restored.ObserveAcks(map[string]*replicationspb.ReplicationState{
+		restoredLane.id: {InclusiveLowWatermark: retireCursor},
+	})
+	require.True(t, restored.RequestRetirement(restoredLane.logicalKey))
+	require.Equal(t, restoredLane.id, restored.ReadyRetirements()[0].id)
+	_, completed = restored.CompleteRetirement(restoredLane.id)
+	require.True(t, completed)
+	sharedFilter, acquired = restored.AcquireDefault(retireCursor + 1)
+	require.True(t, acquired)
+	require.Nil(t, sharedFilter)
+	restored.ReleaseDefault(retireCursor+1, true)
+}
+
 func TestSenderLaneRegistryAckNeverRewinds(t *testing.T) {
 	registry, err := newSenderLaneRegistry(100, nil, 4)
 	require.NoError(t, err)
