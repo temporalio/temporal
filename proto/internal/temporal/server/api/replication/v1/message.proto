@@ -72,17 +72,13 @@ message SyncReplicationState {
   // lanes. The priority lives in the field name: a future LOW-lane extension adds
   // its own throttle_low_namespace_ids rather than widening this one.
   repeated string throttle_high_namespace_ids = 5;
-  // Deprecated compatibility fields for the original namespace-specific lane
-  // prototype. New senders and receivers use the generic fields below.
-  map<string, ReplicationState> isolated_lane_states = 6 [deprecated = true];
-  bool supports_namespace_isolation = 7 [deprecated = true];
   // Low watermarks of sender-defined lanes, keyed by opaque lane ID. Policy
   // signals such as throttle_high_namespace_ids remain independent of lane IDs.
-  map<string, ReplicationState> lane_states = 8;
+  map<string, ReplicationState> lane_states = 6;
   // True when the receiver understands lane_id-tagged messages.
-  bool supports_replication_lanes = 9;
+  bool supports_replication_lanes = 7;
   // Highest version of the generic lane protocol supported by the receiver.
-  int32 replication_lane_protocol_version = 10;
+  int32 replication_lane_protocol_version = 8;
 }
 message ReplicationState {
   int64 inclusive_low_watermark = 1;
@@ -105,16 +101,12 @@ message WorkflowReplicationMessages {
   int64 exclusive_high_watermark = 2;
   google.protobuf.Timestamp exclusive_high_watermark_time = 3;
   temporal.server.api.enums.v1.TaskPriority priority = 4;
-  // Deprecated compatibility fields for the original namespace-specific lane
-  // prototype. New senders use the generic fields below.
-  string isolated_namespace_id = 5 [deprecated = true];
-  bool retire_isolated_lane = 6 [deprecated = true];
   // Opaque, stream-local ID for an independently ordered lane. The receiver uses
   // it only for tracker routing; scheduler priority still comes from `priority`.
-  string lane_id = 7;
+  string lane_id = 5;
   // True on the final message for a lane. No later message on this stream may use
   // the same lane ID.
-  bool retire_lane = 8;
+  bool retire_lane = 6;
 }
 
 // TODO: Deprecate this definition, it only used by the deprecated replication DLQ v1 logic
