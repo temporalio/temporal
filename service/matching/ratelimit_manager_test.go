@@ -85,10 +85,10 @@ func TestRateLimitManagerGrantTokens(t *testing.T) {
 
 func TestAvailableSimpleLimiterTokens(t *testing.T) {
 	nowNs := time.Now().UnixNano()
-	require.Equal(t, int32(11), availableSimpleLimiterTokens(0, makeSimpleLimiterParams(10, time.Second), nowNs))
-	require.Equal(t, int32(0), availableSimpleLimiterTokens(simpleLimiter(nowNs+1), makeSimpleLimiterParams(10, time.Second), nowNs))
-	require.Equal(t, int32(0), availableSimpleLimiterTokens(0, makeSimpleLimiterParams(0, time.Second), nowNs))
-	require.Equal(t, int32(math.MaxInt32), availableSimpleLimiterTokens(0, makeSimpleLimiterParams(1e12, 0), nowNs))
+	require.Equal(t, int32(11), simpleLimiter(0).availableSimpleLimiterTokens(makeSimpleLimiterParams(10, time.Second), nowNs))
+	require.Equal(t, int32(0), simpleLimiter(nowNs+1).availableSimpleLimiterTokens(makeSimpleLimiterParams(10, time.Second), nowNs))
+	require.Equal(t, int32(0), simpleLimiter(0).availableSimpleLimiterTokens(makeSimpleLimiterParams(0, time.Second), nowNs))
+	require.Equal(t, int32(math.MaxInt32), simpleLimiter(0).availableSimpleLimiterTokens(makeSimpleLimiterParams(1e12, 0), nowNs))
 }
 
 // Additions to rateLimitManager for use by other unit tests:
