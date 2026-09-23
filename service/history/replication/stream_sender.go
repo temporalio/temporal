@@ -88,6 +88,7 @@ type (
 		laneCapabilityPublishOnce sync.Once
 		lanesConfirmed            atomic.Bool
 		laneRateLimiters          []quotas.RateLimiter
+		laneClassWakeChannels     []chan struct{}
 		flowController            SenderFlowController
 		sendLock                  sync.Mutex
 		ssRateLimiter             ServerSchedulerRateLimiter
@@ -155,6 +156,7 @@ func NewStreamSender(
 		laneInitializationError: laneInitializationError,
 		laneCapabilityKnown:     laneCapabilityKnown,
 		laneRateLimiters:        newLaneRateLimiters(config, lanesEnabled, laneClassCount),
+		laneClassWakeChannels:   newLaneClassWakeChannels(laneClassCount),
 		flowController:          NewSenderFlowController(config, logger),
 		ssRateLimiter:           ssRateLimiter,
 	}
@@ -333,15 +335,17 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 		s.flowController.RefreshReceiverFlowControlInfo(attr)
 		highAcked := attr.GetHighPriorityState().GetInclusiveLowWatermark()
 		if s.lanesConfirmed.Load() {
-			if err := s.laneController.Reconcile(
+			runnableClasses, err := s.laneController.Reconcile(
 				replicationLanePolicySignals{
 					throttleHighNamespaceIDs: attr.GetThrottleHighNamespaceIds(),
 					sharedHighWatermark:      highAcked,
 				},
 				attr.GetLaneStates(),
-			); err != nil {
+			)
+			if err != nil {
 				return err
 			}
+			s.wakeLaneClasses(runnableClasses...)
 			if err := s.sendReadyLaneRetirements(); err != nil {
 				return err
 			}
@@ -693,6 +697,14 @@ func newLaneRateLimiters(config *configs.Config, enabled bool, classCount int) [
 	return limiters
 }
 
+func newLaneClassWakeChannels(classCount int) []chan struct{} {
+	channels := make([]chan struct{}, classCount)
+	for i := range channels {
+		channels[i] = make(chan struct{}, 1)
+	}
+	return channels
+}
+
 func normalizedLaneClassCount(configured int) int {
 	return max(1, configured)
 }
@@ -724,9 +736,11 @@ func (s *StreamSenderImpl) sendLaneEventLoop(class replicationLaneClass) (retErr
 	timer := time.NewTimer(s.config.ReplicationStreamSendEmptyTaskDuration())
 	defer timer.Stop()
 	results := make(chan laneSendResult)
+	laneClassWakeChannel := s.laneClassWakeChannel(class)
 
 	continuousRound := false
 	for {
+		drainLaneClassWake(laneClassWakeChannel)
 		more, stopped, err := s.sendLaneRound(class, continuousRound, results)
 		if err != nil {
 			return err
@@ -743,7 +757,7 @@ func (s *StreamSenderImpl) sendLaneEventLoop(class replicationLaneClass) (retErr
 				continue
 			}
 		}
-		continuousRound, stopped, err = s.waitForLaneWork(timer, newTaskNotificationChan, results)
+		continuousRound, stopped, err = s.waitForLaneWork(timer, newTaskNotificationChan, laneClassWakeChannel, results)
 		if err != nil {
 			return err
 		}
@@ -822,6 +836,7 @@ func drainLaneResults(results <-chan laneSendResult) (bool, error) {
 func (s *StreamSenderImpl) waitForLaneWork(
 	timer *time.Timer,
 	newTaskNotificationChan <-chan struct{},
+	laneClassWakeChannel <-chan struct{},
 	results <-chan laneSendResult,
 ) (more bool, stopped bool, err error) {
 	if !timer.Stop() {
@@ -837,6 +852,8 @@ func (s *StreamSenderImpl) waitForLaneWork(
 			return false, true, nil
 		case <-newTaskNotificationChan:
 			return false, false, nil
+		case <-laneClassWakeChannel:
+			return false, false, nil
 		case <-timer.C:
 			return false, false, nil
 		case result := <-results:
@@ -846,6 +863,34 @@ func (s *StreamSenderImpl) waitForLaneWork(
 			if result.more {
 				return true, false, nil
 			}
+		}
+	}
+}
+
+func drainLaneClassWake(wakeChannel <-chan struct{}) {
+	select {
+	case <-wakeChannel:
+	default:
+	}
+}
+
+func (s *StreamSenderImpl) laneClassWakeChannel(class replicationLaneClass) <-chan struct{} {
+	index := int(class) - 1
+	if index < 0 || index >= len(s.laneClassWakeChannels) {
+		return nil
+	}
+	return s.laneClassWakeChannels[index]
+}
+
+func (s *StreamSenderImpl) wakeLaneClasses(classes ...replicationLaneClass) {
+	for _, class := range classes {
+		index := int(class) - 1
+		if index < 0 || index >= len(s.laneClassWakeChannels) {
+			continue
+		}
+		select {
+		case s.laneClassWakeChannels[index] <- struct{}{}:
+		default:
 		}
 	}
 }
@@ -865,7 +910,7 @@ func (s *StreamSenderImpl) sendDefaultTasks(
 				return false, nil
 			}
 			defer func() {
-				s.laneRegistry.ReleaseDefault(endExclusiveWatermark, defaultLeaseCompleted)
+				s.wakeLaneClasses(s.laneRegistry.ReleaseDefault(endExclusiveWatermark, defaultLeaseCompleted)...)
 			}()
 		} else {
 			s.laneRegistry.AdvanceDefaultCursor(endExclusiveWatermark)
@@ -911,6 +956,9 @@ func (s *StreamSenderImpl) startLaneTurn(
 			})
 		})
 		s.laneRegistry.Release(lane.id)
+		if current, ok := s.laneRegistry.SnapshotByKey(lane.logicalKey); ok && current.class != lane.class {
+			s.wakeLaneClasses(current.class)
+		}
 		select {
 		case results <- result:
 		case <-s.shutdownChan.Channel():

@@ -169,7 +169,7 @@ func newSenderLaneController(
 func (c *senderLaneController) Reconcile(
 	signals replicationLanePolicySignals,
 	laneStates map[string]*replicationspb.ReplicationState,
-) error {
+) ([]replicationLaneClass, error) {
 	c.registry.ObserveAcks(laneStates)
 	lanes := c.registry.Snapshots()
 	laneCount := len(lanes)
@@ -186,7 +186,7 @@ func (c *senderLaneController) Reconcile(
 				directive.class,
 			)
 			if err != nil {
-				return err
+				return nil, err
 			}
 			if created {
 				laneCount++
@@ -206,10 +206,25 @@ func (c *senderLaneController) Reconcile(
 		case replicationLaneKeep:
 			c.registry.CancelRetirement(directive.logicalKey)
 		default:
-			return fmt.Errorf("unknown replication lane directive kind: %d", directive.kind)
+			return nil, fmt.Errorf("unknown replication lane directive kind: %d", directive.kind)
 		}
 	}
-	return nil
+	return runnableLaneClasses(lanes, c.registry.Snapshots()), nil
+}
+
+func runnableLaneClasses(before, after []senderLaneSnapshot) []replicationLaneClass {
+	previous := make(map[string]senderLaneSnapshot, len(before))
+	for _, lane := range before {
+		previous[lane.logicalKey] = lane
+	}
+	var classes []replicationLaneClass
+	for _, lane := range after {
+		prior, existed := previous[lane.logicalKey]
+		if !existed || prior.class != lane.class || (prior.retiring && !lane.retiring) {
+			classes = append(classes, lane.class)
+		}
+	}
+	return classes
 }
 
 func (c *senderLaneController) CompleteRetirement(laneID string) bool {

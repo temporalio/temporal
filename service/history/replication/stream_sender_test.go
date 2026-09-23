@@ -278,6 +278,114 @@ func (s *streamSenderSuite) TestSendLaneEventLoopWaitsForCapabilityPublication()
 	s.NoError(await.Rcv(s.T(), done))
 }
 
+func (s *streamSenderSuite) TestSendLaneEventLoopsWakeOnCreationAndReclassification() {
+	const watermark = int64(100)
+
+	s.config.ReplicationStreamSendEmptyTaskDuration = func() time.Duration { return time.Hour }
+	registry, err := newSenderLaneRegistry(watermark, nil, 2)
+	s.Require().NoError(err)
+	s.streamSender.laneRegistry = registry
+	s.streamSender.laneController = newSenderLaneController(
+		registry,
+		newNamespaceIsolationPolicy(2, 2, 100),
+		100,
+		log.NewNoopLogger(),
+	)
+	s.streamSender.laneRateLimiters = []quotas.RateLimiter{nil, nil}
+	s.streamSender.laneClassWakeChannels = newLaneClassWakeChannels(2)
+	s.streamSender.laneCapabilityKnown = make(chan struct{})
+	s.streamSender.lanesConfirmed.Store(true)
+	s.streamSender.publishLaneCapability()
+
+	notifications := make(chan struct{})
+	subscribed := make(chan struct{}, 2)
+	s.historyEngine.EXPECT().SubscribeReplicationNotification("target_cluster").DoAndReturn(
+		func(string) (<-chan struct{}, string) {
+			subscribed <- struct{}{}
+			return notifications, "lane-subscriber"
+		},
+	).Times(2)
+	s.historyEngine.EXPECT().UnsubscribeReplicationNotification("lane-subscriber").Times(2)
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
+		tasks.NewImmediateKey(watermark),
+	).AnyTimes()
+
+	firstSendStarted := make(chan struct{})
+	releaseFirstSend := make(chan struct{})
+	firstSendReleased := false
+	defer func() {
+		if !firstSendReleased {
+			close(releaseFirstSend)
+		}
+		s.streamSender.shutdownChan.Shutdown()
+	}()
+	sent := make(chan *replicationspb.WorkflowReplicationMessages, 2)
+	sendCount := 0
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(
+		func(response *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			sendCount++
+			sent <- response.GetMessages()
+			if sendCount == 1 {
+				close(firstSendStarted)
+				<-releaseFirstSend
+			} else {
+				s.streamSender.shutdownChan.Shutdown()
+			}
+			return nil
+		},
+	).Times(2)
+
+	done := make(chan error, 2)
+	for class := replicationLaneClass(1); class <= 2; class++ {
+		go func() {
+			done <- s.streamSender.sendLaneEventLoop(class)
+		}()
+	}
+	await.Rcv(s.T(), subscribed)
+	await.Rcv(s.T(), subscribed)
+	s.Require().Never(func() bool { return len(sent) != 0 }, 100*time.Millisecond, time.Millisecond)
+
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	state := syncReplicationState(watermark, watermark, watermark)
+	state.SupportsReplicationLanes = true
+	state.ReplicationLaneProtocolVersion = 1
+	state.ThrottleHighNamespaceIds = []string{"namespace-a"}
+	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(state).Times(2)
+	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(readerID, gomock.Any()).Return(nil).Times(2)
+	s.shardContext.EXPECT().UpdateRemoteReaderInfo(readerID, watermark-1, gomock.Any()).Return(nil).Times(2)
+
+	s.NoError(s.streamSender.recvSyncReplicationState(state))
+	await.Rcv(s.T(), firstSendStarted)
+	lane, ok := registry.SnapshotByKey("namespace:namespace-a")
+	s.True(ok)
+	s.Equal(replicationLaneClass(1), lane.class)
+
+	s.NoError(s.streamSender.recvSyncReplicationState(state))
+	lane, ok = registry.SnapshotByKey("namespace:namespace-a")
+	s.True(ok)
+	s.Equal(replicationLaneClass(2), lane.class)
+	await.RequireTruef(
+		s.T(),
+		func() bool { return len(s.streamSender.laneClassWakeChannels[1]) == 0 },
+		time.Second,
+		time.Millisecond,
+		"the class-2 worker did not consume its reclassification wake-up",
+	)
+
+	close(releaseFirstSend)
+	firstSendReleased = true
+	first := await.Rcv(s.T(), sent)
+	second := await.Rcv(s.T(), sent)
+	s.Equal(lane.id, first.GetLaneId())
+	s.Equal(lane.id, second.GetLaneId())
+
+	s.NoError(await.Rcv(s.T(), done))
+	s.NoError(await.Rcv(s.T(), done))
+}
+
 func (s *streamSenderSuite) TestSendLaneEventLoopRoundRobinsLanesInClass() {
 	const (
 		begin = int64(100)

@@ -177,7 +177,7 @@ func TestSenderLaneRegistryCreationWaitsForDefaultLease(t *testing.T) {
 
 	_, acquired = registry.AcquireDefault(300)
 	require.False(t, acquired)
-	registry.ReleaseDefault(200, true)
+	require.Equal(t, []replicationLaneClass{1}, registry.ReleaseDefault(200, true))
 
 	lanes := registry.ClassSnapshots(1)
 	require.Len(t, lanes, 1)
@@ -194,7 +194,7 @@ func TestSenderLaneRegistryCreationDoesNotCrossFailedDefaultLease(t *testing.T) 
 	_, created, err := registry.Create("namespace:a", namespaceLaneScope("a", 100), 1)
 	require.NoError(t, err)
 	require.True(t, created)
-	registry.ReleaseDefault(200, false)
+	require.Empty(t, registry.ReleaseDefault(200, false))
 
 	require.Empty(t, registry.ClassSnapshots(1))
 	_, acquired = registry.AcquireDefault(300)

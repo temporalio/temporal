@@ -284,7 +284,7 @@ func (r *senderLaneRegistry) AcquireDefault(to int64) (func(tasks.Task) bool, bo
 	}, true
 }
 
-func (r *senderLaneRegistry) ReleaseDefault(to int64, completed bool) {
+func (r *senderLaneRegistry) ReleaseDefault(to int64, completed bool) []replicationLaneClass {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if completed {
@@ -296,14 +296,17 @@ func (r *senderLaneRegistry) ReleaseDefault(to int64, completed bool) {
 		r.defaultLeases--
 	}
 	if r.defaultLeases != 0 || r.defaultSendFailed {
-		return
+		return nil
 	}
+	var runnableClasses []replicationLaneClass
 	for _, lane := range r.byKey {
 		if lane.pending {
 			lane.cursor = max(lane.cursor, r.defaultSentCursor)
 			lane.pending = false
+			runnableClasses = append(runnableClasses, lane.class)
 		}
 	}
+	return runnableClasses
 }
 
 func (r *senderLaneRegistry) DefaultCursor() int64 {
