@@ -1662,11 +1662,6 @@ an optional feature and also requires a metrics collection system that can handl
 The metric has dimensions: namespace, taskqueue, and task_type (Workflow, Activity, Nexus). Disabled by
 default as namespace cardinality can be high and this requires a metrics collection system that can handle it.`,
 	)
-	MatchingAutoEnableV2 = NewTaskQueueBoolSetting(
-		"matching.autoEnableV2",
-		false,
-		`MatchingAutoEnableV2 automatically enables fairness when a fairness or priority key is seen`,
-	)
 	MatchingPartitionScaleAllowedDrift = NewTaskQueueTypedSetting(
 		"matching.partitionScaleAllowedDrift",
 		PartitionScaleAllowedDrift{

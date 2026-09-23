@@ -44,7 +44,6 @@ type (
 		RangeSize                                int64
 		NewMatcherSub                            dynamicconfig.TypedSubscribableWithTaskQueueFilter[dynamicconfig.GradualChange[bool]]
 		EnableFairnessSub                        dynamicconfig.TypedSubscribableWithTaskQueueFilter[dynamicconfig.GradualChange[bool]]
-		AutoEnableV2Sub                          dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
 		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		GetTasksReloadAt                         dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		UpdateAckInterval                        dynamicconfig.DurationPropertyFnWithTaskQueueFilter
@@ -175,8 +174,6 @@ type (
 		NewMatcherSub                  func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
 		EnableFairness                 bool
 		EnableFairnessSub              func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
-		AutoEnableV2                   func() bool
-		AutoEnableV2Sub                func(func(bool)) (bool, func())
 		GetTasksBatchSize              func() int
 		GetTasksReloadAt               func() int
 		UpdateAckInterval              func() time.Duration
@@ -298,7 +295,6 @@ func NewConfig(
 		RangeSize:                                100000,
 		NewMatcherSub:                            dynamicconfig.MatchingUseNewMatcher.Subscribe(dc),
 		EnableFairnessSub:                        dynamicconfig.MatchingEnableFairness.Subscribe(dc),
-		AutoEnableV2Sub:                          dynamicconfig.MatchingAutoEnableV2.Subscribe(dc),
 		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
 		GetTasksReloadAt:                         dynamicconfig.MatchingGetTasksReloadAt.Get(dc),
 		UpdateAckInterval:                        dynamicconfig.MatchingUpdateAckInterval.Get(dc),
@@ -414,13 +410,6 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		EnableFairnessSub: func(cb func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
 			return config.EnableFairnessSub(ns.String(), taskQueueName, taskType, cb)
-		},
-		AutoEnableV2: func() bool {
-			v, _ := config.AutoEnableV2Sub(ns.String(), taskQueueName, taskType, nil)
-			return v
-		},
-		AutoEnableV2Sub: func(cb func(bool)) (bool, func()) {
-			return config.AutoEnableV2Sub(ns.String(), taskQueueName, taskType, cb)
 		},
 		GetTasksBatchSize: func() int {
 			return config.GetTasksBatchSize(ns.String(), taskQueueName, taskType)

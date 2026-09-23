@@ -676,13 +676,6 @@ func (h *Handler) CountWorkers(
 	}, nil
 }
 
-func (h *Handler) UpdateFairnessState(
-	ctx context.Context, request *matchingservice.UpdateFairnessStateRequest,
-) (_ *matchingservice.UpdateFairnessStateResponse, retError error) {
-	defer log.CapturePanic(h.logger, &retError)
-	return h.engine.UpdateFairnessState(ctx, request)
-}
-
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
 	entry, err := h.namespaceRegistry.GetNamespaceByID(id)
 	if err != nil {

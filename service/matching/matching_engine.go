@@ -3836,46 +3836,6 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(
 	}, nil
 }
 
-func (e *matchingEngineImpl) UpdateFairnessState(
-	ctx context.Context,
-	req *matchingservice.UpdateFairnessStateRequest,
-) (*matchingservice.UpdateFairnessStateResponse, error) {
-	partition, err := tqid.NormalPartitionFromRpcName(req.GetTaskQueue(), req.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	if err != nil {
-		return nil, err
-	}
-
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseOtherWrite)
-	if err != nil {
-		return nil, err
-	}
-
-	updateFn := func(old *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
-		data := old
-		if data != nil {
-			data = common.CloneProto(old)
-		} else {
-			data = &persistencespb.TaskQueueUserData{}
-		}
-		if data.PerType == nil {
-			data.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
-		}
-		typ := int32(req.GetTaskQueueType())
-		perType := data.PerType[typ]
-		if perType == nil {
-			data.PerType[typ] = &persistencespb.TaskQueueTypeUserData{}
-			perType = data.PerType[typ]
-		}
-		perType.FairnessState = req.FairnessState
-		return data, true, nil
-	}
-	_, err = pm.GetUserDataManager().UpdateUserData(ctx, UserDataUpdateOptions{Source: "Matching auto enable"}, updateFn)
-	if err != nil {
-		return nil, err
-	}
-	return &matchingservice.UpdateFairnessStateResponse{}, nil
-}
-
 func (e *matchingEngineImpl) newTaskTracker() *taskTracker {
 	return newTaskTracker(e.timeSource, 5*time.Second, 30*time.Second)
 }

@@ -1211,88 +1211,6 @@ func (s *matchingEngineSuite) TestAddWorkflowTasksForwarded() {
 	s.AddTasksTest(enumspb.TASK_QUEUE_TYPE_WORKFLOW, true)
 }
 
-func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
-	tv := testvars.New(s.T()).WithNamespaceID(s.ns.ID())
-	req := &matchingservice.UpdateFairnessStateRequest{
-		NamespaceId:   tv.NamespaceID().String(),
-		TaskQueue:     tv.TaskQueue().Name,
-		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		FairnessState: enumsspb.FAIRNESS_STATE_V2,
-	}
-	var didUpdate atomic.Bool
-	s.mockMatchingClient.EXPECT().UpdateFairnessState(context.Background(), req).DoAndReturn(
-		func(ctx context.Context, req *matchingservice.UpdateFairnessStateRequest, opts ...grpc.CallOption) (*matchingservice.UpdateFairnessStateResponse, error) {
-			didUpdate.Store(true)
-			return s.matchingEngine.UpdateFairnessState(ctx, req)
-		},
-	)
-	dbq := newUnversionedRootQueueKey(tv.NamespaceID().String(), tv.TaskQueue().Name, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	mgr := s.newPartitionManager(dbq.partition, s.matchingEngine.config)
-	cMgr := mgr.(*taskQueuePartitionManagerImpl)
-	mgr.GetUserDataManager().(*mockUserDataManager).onChange = cMgr.userDataChanged
-	s.matchingEngine.updateTaskQueue(dbq.partition, mgr)
-	mgr.Start()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	err := mgr.WaitUntilInitialized(ctx)
-	s.Require().NoError(err)
-	cancel()
-
-	_, _, err = s.matchingEngine.AddWorkflowTask(
-		context.Background(),
-		&matchingservice.AddWorkflowTaskRequest{
-			NamespaceId: tv.NamespaceID().String(),
-			Execution:   tv.WorkflowExecution(),
-			TaskQueue:   tv.TaskQueue(),
-			Priority: &commonpb.Priority{
-				PriorityKey: 3,
-				FairnessKey: "myFairnessKey",
-			},
-		},
-	)
-	// The task may or may not be enqueued before a shutdown, so ignore that error
-	if err != errShutdown {
-		s.Require().NoError(err)
-	}
-	s.Eventually(didUpdate.Load, time.Second, time.Millisecond)
-
-	// We check the old partition manager for the change because a new partition created will not reference the same mockUserDataManager.
-	data, _, _ := mgr.GetUserDataManager().GetUserData()
-	s.Require().Equal(enumsspb.FAIRNESS_STATE_V2, data.GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].FairnessState)
-	// At this point the partition manager should be unloaded
-	select {
-	case <-cMgr.initCtx.Done():
-	case <-time.After(time.Second):
-		s.Require().Fail("our partition manager was not unloaded")
-	}
-}
-
-func (s *matchingEngineSuite) TestSkipAutoEnable() {
-	if !s.newMatcher && !s.fairness {
-		s.T().Skip("We only skip auto enable if new matcher is explicitly enabled already")
-	}
-
-	// Explicitly set to zero times in the event this call is added as expected during setup in the future
-	s.mockMatchingClient.EXPECT().UpdateFairnessState(context.Background(), nil).DoAndReturn(
-		func(ctx context.Context, req *matchingservice.UpdateFairnessStateRequest, opts ...grpc.CallOption) (*matchingservice.UpdateFairnessStateResponse, error) {
-			return s.matchingEngine.UpdateFairnessState(ctx, req)
-		},
-	).Times(0)
-
-	tv := testvars.New(s.T())
-	_, _, err := s.matchingEngine.AddWorkflowTask(
-		context.Background(),
-		&matchingservice.AddWorkflowTaskRequest{
-			NamespaceId: tv.NamespaceID().String(),
-			Execution:   tv.WorkflowExecution(),
-			TaskQueue:   tv.TaskQueue(),
-			Priority: &commonpb.Priority{
-				PriorityKey: 3,
-			},
-		},
-	)
-	s.Require().NoError(err)
-}
-
 func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isForwarded bool) {
 	s.matchingEngine.config.RangeSize = 300 // override to low number for the test
 
@@ -6461,7 +6379,6 @@ func defaultTestConfig() *Config {
 	config := NewConfig(dynamicconfig.NewNoopCollection())
 	config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
 	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(1)
-	config.AutoEnableV2Sub = trueTaskQueueSub
 	// Always update metadata on append in tests so backlog count assertions are exact.
 	config.MetadataUpdateOnAppendInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(0)
 	return config
@@ -6503,10 +6420,6 @@ func useFairness(config *Config) {
 
 func staticTrueChange(_, _ string, _ enumspb.TaskQueueType, _ func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
 	return dynamicconfig.StaticGradualChange(true), func() {}
-}
-
-func trueTaskQueueSub(_, _ string, _ enumspb.TaskQueueType, _ func(bool)) (bool, func()) {
-	return true, func() {}
 }
 
 func staticFalseChange(_, _ string, _ enumspb.TaskQueueType, _ func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
@@ -7292,8 +7205,7 @@ func (r *routingMatchingClient) Route(p tqid.Partition) (string, error) {
 	return r.routeFn(p)
 }
 
-// TestAutoEnableV2ConfigChange tests that switching autoEnable triggers unload when effective config changes
-func TestAutoEnableV2ConfigChange(t *testing.T) {
+func TestMatchingConfigIgnoresPersistedFairnessState(t *testing.T) {
 	controller := gomock.NewController(t)
 
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
@@ -7317,11 +7229,8 @@ func TestAutoEnableV2ConfigChange(t *testing.T) {
 	engine.Start()
 	defer engine.Stop()
 
-	// autoEnable ON, base configs OFF -> with V2 fairnessState, effective config is NewMatcher=true, EnableFairness=true
-	cleanupAutoEnable := dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, true)
 	cleanupFairness := dcClient.OverrideSetting(dynamicconfig.MatchingEnableFairness, false)
 	cleanupNewMatcher := dcClient.OverrideSetting(dynamicconfig.MatchingUseNewMatcher, false)
-	defer cleanupAutoEnable()
 	defer cleanupFairness()
 	defer cleanupNewMatcher()
 
@@ -7373,24 +7282,20 @@ func TestAutoEnableV2ConfigChange(t *testing.T) {
 	defer cancel()
 	err = pm.WaitUntilInitialized(ctx)
 	require.NoError(t, err)
+	require.False(t, pm.config.NewMatcher)
+	require.False(t, pm.config.EnableFairness)
 
 	pq, err := pm.defaultQueueFuture.Get(ctx)
 	require.NoError(t, err)
 
-	// Turn autoEnable OFF -> effective config changes to NewMatcher=false, EnableFairness=false
-	cleanupAutoEnable()
-	_ = dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, false)
-
-	require.Eventually(t, func() bool {
-		return !pm.config.AutoEnableV2()
-	}, 2*time.Second, 10*time.Millisecond, "autoEnable should be updated")
+	_ = dcClient.OverrideSetting(dynamicconfig.MatchingEnableFairness, true)
 
 	require.Eventually(t, func() bool {
 		return pq.(*physicalTaskQueueManagerImpl).tqCtx.Err() != nil
 	}, 2*time.Second, 10*time.Millisecond, "physical queue should be stopped when effective config changes")
 }
 
-func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testing.T) {
+func TestFairnessConfigOverridesPersistedV0(t *testing.T) {
 	controller := gomock.NewController(t)
 
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
@@ -7414,11 +7319,8 @@ func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testin
 	engine.Start()
 	defer engine.Stop()
 
-	// autoEnable OFF, base configs ON -> with V2 fairnessState, effective config is NewMatcher=true, EnableFairness=true
-	cleanupAutoEnable := dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, false)
 	cleanupFairness := dcClient.OverrideSetting(dynamicconfig.MatchingEnableFairness, true)
-	cleanupNewMatcher := dcClient.OverrideSetting(dynamicconfig.MatchingUseNewMatcher, true)
-	defer cleanupAutoEnable()
+	cleanupNewMatcher := dcClient.OverrideSetting(dynamicconfig.MatchingUseNewMatcher, false)
 	defer cleanupFairness()
 	defer cleanupNewMatcher()
 
@@ -7442,7 +7344,7 @@ func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testin
 			Data: &persistencespb.TaskQueueUserData{
 				PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
 					int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
-						FairnessState: enumsspb.FAIRNESS_STATE_V2,
+						FairnessState: enumsspb.FAIRNESS_STATE_V0,
 					},
 				},
 			},
@@ -7471,27 +7373,6 @@ func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testin
 	err = pm.WaitUntilInitialized(ctx)
 	require.NoError(t, err)
 
-	require.Eventually(t, func() bool {
-		return !pm.config.AutoEnableV2() && pm.config.NewMatcher && pm.config.EnableFairness
-	}, 2*time.Second, 10*time.Millisecond, "config should be initialized")
-
-	pq, err := pm.defaultQueueFuture.Get(ctx)
-	require.NoError(t, err)
-
-	// Turn autoEnable ON -> effective config stays NewMatcher=true, EnableFairness=true (same as before)
-	cleanupAutoEnable()
-	_ = dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, true)
-
-	require.Eventually(t, func() bool {
-		return pm.config.AutoEnableV2()
-	}, 2*time.Second, 10*time.Millisecond, "autoEnable should be updated")
-
-	require.Never(t, func() bool {
-		select {
-		case <-pq.(*physicalTaskQueueManagerImpl).tqCtx.Done():
-			return true
-		default:
-			return false
-		}
-	}, 100*time.Millisecond, 10*time.Millisecond, "physical queue should NOT be stopped when effective config does not change")
+	require.True(t, pm.config.NewMatcher)
+	require.True(t, pm.config.EnableFairness)
 }

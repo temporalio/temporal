@@ -60,7 +60,6 @@ const (
 	MatchingService_CountWorkers_FullMethodName                           = "/temporal.server.api.matchingservice.v1.MatchingService/CountWorkers"
 	MatchingService_UpdateTaskQueueConfig_FullMethodName                  = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateTaskQueueConfig"
 	MatchingService_DescribeWorker_FullMethodName                         = "/temporal.server.api.matchingservice.v1.MatchingService/DescribeWorker"
-	MatchingService_UpdateFairnessState_FullMethodName                    = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateFairnessState"
 	MatchingService_CheckTaskQueueVersionMembership_FullMethodName        = "/temporal.server.api.matchingservice.v1.MatchingService/CheckTaskQueueVersionMembership"
 )
 
@@ -119,24 +118,33 @@ type MatchingServiceClient interface {
 	// ListTaskQueuePartitions returns a map of partitionKey and hostAddress for a task queue.
 	ListTaskQueuePartitions(ctx context.Context, in *ListTaskQueuePartitionsRequest, opts ...grpc.CallOption) (*ListTaskQueuePartitionsResponse, error)
 	// (-- api-linter: core::0134::response-message-name=disabled
-	//     aip.dev/not-precedent: UpdateWorkerBuildIdCompatibility RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateWorkerBuildIdCompatibility RPC doesn't follow Google API format. --)
+	//
 	// (-- api-linter: core::0134::method-signature=disabled
-	//     aip.dev/not-precedent: UpdateWorkerBuildIdCompatibility RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateWorkerBuildIdCompatibility RPC doesn't follow Google API format. --)
 	UpdateWorkerBuildIdCompatibility(ctx context.Context, in *UpdateWorkerBuildIdCompatibilityRequest, opts ...grpc.CallOption) (*UpdateWorkerBuildIdCompatibilityResponse, error)
 	GetWorkerBuildIdCompatibility(ctx context.Context, in *GetWorkerBuildIdCompatibilityRequest, opts ...grpc.CallOption) (*GetWorkerBuildIdCompatibilityResponse, error)
 	// Fetch user data for a task queue, this request should always be routed to the node holding the root partition of the workflow task queue.
 	GetTaskQueueUserData(ctx context.Context, in *GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*GetTaskQueueUserDataResponse, error)
 	// Allows updating the Build ID assignment and redirect rules for a given Task Queue.
 	// (-- api-linter: core::0134::method-signature=disabled
-	//     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	//
 	// (-- api-linter: core::0134::response-message-name=disabled
-	//     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
 	UpdateWorkerVersioningRules(ctx context.Context, in *UpdateWorkerVersioningRulesRequest, opts ...grpc.CallOption) (*UpdateWorkerVersioningRulesResponse, error)
 	// Fetches the Build ID assignment and redirect rules for a Task Queue
 	// (-- api-linter: core::0127::resource-name-extraction=disabled
-	//     aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	//
 	// (-- api-linter: core::0131::http-uri-name=disabled
-	//     aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
 	GetWorkerVersioningRules(ctx context.Context, in *GetWorkerVersioningRulesRequest, opts ...grpc.CallOption) (*GetWorkerVersioningRulesResponse, error)
 	// This request should always be routed to the node holding the root partition of the workflow task queue.
 	SyncDeploymentUserData(ctx context.Context, in *SyncDeploymentUserDataRequest, opts ...grpc.CallOption) (*SyncDeploymentUserDataResponse, error)
@@ -158,9 +166,12 @@ type MatchingServiceClient interface {
 	// All user data updates must first go through the task queue owner using the `UpdateWorkerBuildIdCompatibility`
 	// API.
 	// (-- api-linter: core::0134::response-message-name=disabled
-	//     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
+	//
 	// (-- api-linter: core::0134::method-signature=disabled
-	//     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
 	UpdateTaskQueueUserData(ctx context.Context, in *UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*UpdateTaskQueueUserDataResponse, error)
 	// Replicate task queue user data across clusters, must be done via the owning node for updates in namespace.
 	ReplicateTaskQueueUserData(ctx context.Context, in *ReplicateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*ReplicateTaskQueueUserDataResponse, error)
@@ -170,21 +181,31 @@ type MatchingServiceClient interface {
 	CheckTaskQueueUserDataPropagation(ctx context.Context, in *CheckTaskQueueUserDataPropagationRequest, opts ...grpc.CallOption) (*CheckTaskQueueUserDataPropagationResponse, error)
 	// Create a Nexus endpoint.
 	// (-- api-linter: core::0133::method-signature=disabled
-	//     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+	//
 	// (-- api-linter: core::0133::response-message-name=disabled
-	//     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+	//
 	// (-- api-linter: core::0133::http-uri-parent=disabled
-	//     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
 	CreateNexusEndpoint(ctx context.Context, in *CreateNexusEndpointRequest, opts ...grpc.CallOption) (*CreateNexusEndpointResponse, error)
 	// Optimistically update a Nexus endpoint based on provided version.
 	// If this request is accepted, the input is considered the "current" state of this service at the time it was
 	// persisted and the updated version is returned.
 	// (-- api-linter: core::0134::method-signature=disabled
-	//     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+	//
 	// (-- api-linter: core::0134::response-message-name=disabled
-	//     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+	//
 	// (-- api-linter: core::0134::request-resource-required=disabled
-	//     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
 	UpdateNexusEndpoint(ctx context.Context, in *UpdateNexusEndpointRequest, opts ...grpc.CallOption) (*UpdateNexusEndpointResponse, error)
 	// Delete a service by its name.
 	DeleteNexusEndpoint(ctx context.Context, in *DeleteNexusEndpointRequest, opts ...grpc.CallOption) (*DeleteNexusEndpointResponse, error)
@@ -200,24 +221,20 @@ type MatchingServiceClient interface {
 	CountWorkers(ctx context.Context, in *CountWorkersRequest, opts ...grpc.CallOption) (*CountWorkersResponse, error)
 	// Set the persisted task queue configuration.
 	// (-- api-linter: core::0134::method-signature=disabled
-	//     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
+	//
 	// (-- api-linter: core::0134::response-message-name=disabled
-	//     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
+	//
 	// (-- api-linter: core::0134::request-resource-required=disabled
-	//     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
 	UpdateTaskQueueConfig(ctx context.Context, in *UpdateTaskQueueConfigRequest, opts ...grpc.CallOption) (*UpdateTaskQueueConfigResponse, error)
 	// DescribeWorker retrieves a worker information in the specified namespace that match the provided instance key.
 	// Returns an error if the namespace or worker doesn't exist.
 	DescribeWorker(ctx context.Context, in *DescribeWorkerRequest, opts ...grpc.CallOption) (*DescribeWorkerResponse, error)
-	// UpdateFairnessState changes the fairness_state stored in UserData for automatically enabling
-	// priority and fairness.
-	// (-- api-linter: core::0134::method-signature=disabled
-	//     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
-	// (-- api-linter: core::0134::response-message-name=disabled
-	//     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
-	// (-- api-linter: core::0134::request-resource-required=disabled
-	//     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
-	UpdateFairnessState(ctx context.Context, in *UpdateFairnessStateRequest, opts ...grpc.CallOption) (*UpdateFairnessStateResponse, error)
 	// CheckTaskQueueVersionMembership checks if a task queue is part of a specific deployment version.
 	CheckTaskQueueVersionMembership(ctx context.Context, in *CheckTaskQueueVersionMembershipRequest, opts ...grpc.CallOption) (*CheckTaskQueueVersionMembershipResponse, error)
 }
@@ -590,15 +607,6 @@ func (c *matchingServiceClient) DescribeWorker(ctx context.Context, in *Describe
 	return out, nil
 }
 
-func (c *matchingServiceClient) UpdateFairnessState(ctx context.Context, in *UpdateFairnessStateRequest, opts ...grpc.CallOption) (*UpdateFairnessStateResponse, error) {
-	out := new(UpdateFairnessStateResponse)
-	err := c.cc.Invoke(ctx, MatchingService_UpdateFairnessState_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func (c *matchingServiceClient) CheckTaskQueueVersionMembership(ctx context.Context, in *CheckTaskQueueVersionMembershipRequest, opts ...grpc.CallOption) (*CheckTaskQueueVersionMembershipResponse, error) {
 	out := new(CheckTaskQueueVersionMembershipResponse)
 	err := c.cc.Invoke(ctx, MatchingService_CheckTaskQueueVersionMembership_FullMethodName, in, out, opts...)
@@ -663,24 +671,33 @@ type MatchingServiceServer interface {
 	// ListTaskQueuePartitions returns a map of partitionKey and hostAddress for a task queue.
 	ListTaskQueuePartitions(context.Context, *ListTaskQueuePartitionsRequest) (*ListTaskQueuePartitionsResponse, error)
 	// (-- api-linter: core::0134::response-message-name=disabled
-	//     aip.dev/not-precedent: UpdateWorkerBuildIdCompatibility RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateWorkerBuildIdCompatibility RPC doesn't follow Google API format. --)
+	//
 	// (-- api-linter: core::0134::method-signature=disabled
-	//     aip.dev/not-precedent: UpdateWorkerBuildIdCompatibility RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateWorkerBuildIdCompatibility RPC doesn't follow Google API format. --)
 	UpdateWorkerBuildIdCompatibility(context.Context, *UpdateWorkerBuildIdCompatibilityRequest) (*UpdateWorkerBuildIdCompatibilityResponse, error)
 	GetWorkerBuildIdCompatibility(context.Context, *GetWorkerBuildIdCompatibilityRequest) (*GetWorkerBuildIdCompatibilityResponse, error)
 	// Fetch user data for a task queue, this request should always be routed to the node holding the root partition of the workflow task queue.
 	GetTaskQueueUserData(context.Context, *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error)
 	// Allows updating the Build ID assignment and redirect rules for a given Task Queue.
 	// (-- api-linter: core::0134::method-signature=disabled
-	//     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	//
 	// (-- api-linter: core::0134::response-message-name=disabled
-	//     aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
 	UpdateWorkerVersioningRules(context.Context, *UpdateWorkerVersioningRulesRequest) (*UpdateWorkerVersioningRulesResponse, error)
 	// Fetches the Build ID assignment and redirect rules for a Task Queue
 	// (-- api-linter: core::0127::resource-name-extraction=disabled
-	//     aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	//
 	// (-- api-linter: core::0131::http-uri-name=disabled
-	//     aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: GetWorkerVersioningRulesRequest RPC doesn't follow Google API format. --)
 	GetWorkerVersioningRules(context.Context, *GetWorkerVersioningRulesRequest) (*GetWorkerVersioningRulesResponse, error)
 	// This request should always be routed to the node holding the root partition of the workflow task queue.
 	SyncDeploymentUserData(context.Context, *SyncDeploymentUserDataRequest) (*SyncDeploymentUserDataResponse, error)
@@ -702,9 +719,12 @@ type MatchingServiceServer interface {
 	// All user data updates must first go through the task queue owner using the `UpdateWorkerBuildIdCompatibility`
 	// API.
 	// (-- api-linter: core::0134::response-message-name=disabled
-	//     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
+	//
 	// (-- api-linter: core::0134::method-signature=disabled
-	//     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
 	UpdateTaskQueueUserData(context.Context, *UpdateTaskQueueUserDataRequest) (*UpdateTaskQueueUserDataResponse, error)
 	// Replicate task queue user data across clusters, must be done via the owning node for updates in namespace.
 	ReplicateTaskQueueUserData(context.Context, *ReplicateTaskQueueUserDataRequest) (*ReplicateTaskQueueUserDataResponse, error)
@@ -714,21 +734,31 @@ type MatchingServiceServer interface {
 	CheckTaskQueueUserDataPropagation(context.Context, *CheckTaskQueueUserDataPropagationRequest) (*CheckTaskQueueUserDataPropagationResponse, error)
 	// Create a Nexus endpoint.
 	// (-- api-linter: core::0133::method-signature=disabled
-	//     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+	//
 	// (-- api-linter: core::0133::response-message-name=disabled
-	//     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+	//
 	// (-- api-linter: core::0133::http-uri-parent=disabled
-	//     aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: CreateNexusEndpoint RPC doesn't follow Google API format. --)
 	CreateNexusEndpoint(context.Context, *CreateNexusEndpointRequest) (*CreateNexusEndpointResponse, error)
 	// Optimistically update a Nexus endpoint based on provided version.
 	// If this request is accepted, the input is considered the "current" state of this service at the time it was
 	// persisted and the updated version is returned.
 	// (-- api-linter: core::0134::method-signature=disabled
-	//     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+	//
 	// (-- api-linter: core::0134::response-message-name=disabled
-	//     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+	//
 	// (-- api-linter: core::0134::request-resource-required=disabled
-	//     aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateNexusEndpoint RPC doesn't follow Google API format. --)
 	UpdateNexusEndpoint(context.Context, *UpdateNexusEndpointRequest) (*UpdateNexusEndpointResponse, error)
 	// Delete a service by its name.
 	DeleteNexusEndpoint(context.Context, *DeleteNexusEndpointRequest) (*DeleteNexusEndpointResponse, error)
@@ -744,24 +774,20 @@ type MatchingServiceServer interface {
 	CountWorkers(context.Context, *CountWorkersRequest) (*CountWorkersResponse, error)
 	// Set the persisted task queue configuration.
 	// (-- api-linter: core::0134::method-signature=disabled
-	//     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
+	//
 	// (-- api-linter: core::0134::response-message-name=disabled
-	//     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
+	//
 	// (-- api-linter: core::0134::request-resource-required=disabled
-	//     aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
+	//
+	//	aip.dev/not-precedent: UpdateTaskQueueConfig RPC doesn't follow Google API format. --)
 	UpdateTaskQueueConfig(context.Context, *UpdateTaskQueueConfigRequest) (*UpdateTaskQueueConfigResponse, error)
 	// DescribeWorker retrieves a worker information in the specified namespace that match the provided instance key.
 	// Returns an error if the namespace or worker doesn't exist.
 	DescribeWorker(context.Context, *DescribeWorkerRequest) (*DescribeWorkerResponse, error)
-	// UpdateFairnessState changes the fairness_state stored in UserData for automatically enabling
-	// priority and fairness.
-	// (-- api-linter: core::0134::method-signature=disabled
-	//     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
-	// (-- api-linter: core::0134::response-message-name=disabled
-	//     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
-	// (-- api-linter: core::0134::request-resource-required=disabled
-	//     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
-	UpdateFairnessState(context.Context, *UpdateFairnessStateRequest) (*UpdateFairnessStateResponse, error)
 	// CheckTaskQueueVersionMembership checks if a task queue is part of a specific deployment version.
 	CheckTaskQueueVersionMembership(context.Context, *CheckTaskQueueVersionMembershipRequest) (*CheckTaskQueueVersionMembershipResponse, error)
 	mustEmbedUnimplementedMatchingServiceServer()
@@ -890,9 +916,6 @@ func (UnimplementedMatchingServiceServer) UpdateTaskQueueConfig(context.Context,
 }
 func (UnimplementedMatchingServiceServer) DescribeWorker(context.Context, *DescribeWorkerRequest) (*DescribeWorkerResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DescribeWorker not implemented")
-}
-func (UnimplementedMatchingServiceServer) UpdateFairnessState(context.Context, *UpdateFairnessStateRequest) (*UpdateFairnessStateResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method UpdateFairnessState not implemented")
 }
 func (UnimplementedMatchingServiceServer) CheckTaskQueueVersionMembership(context.Context, *CheckTaskQueueVersionMembershipRequest) (*CheckTaskQueueVersionMembershipResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CheckTaskQueueVersionMembership not implemented")
@@ -1630,24 +1653,6 @@ func _MatchingService_DescribeWorker_Handler(srv interface{}, ctx context.Contex
 	return interceptor(ctx, in, info, handler)
 }
 
-func _MatchingService_UpdateFairnessState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateFairnessStateRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(MatchingServiceServer).UpdateFairnessState(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: MatchingService_UpdateFairnessState_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(MatchingServiceServer).UpdateFairnessState(ctx, req.(*UpdateFairnessStateRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _MatchingService_CheckTaskQueueVersionMembership_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(CheckTaskQueueVersionMembershipRequest)
 	if err := dec(in); err != nil {
@@ -1832,10 +1837,6 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DescribeWorker",
 			Handler:    _MatchingService_DescribeWorker_Handler,
-		},
-		{
-			MethodName: "UpdateFairnessState",
-			Handler:    _MatchingService_UpdateFairnessState_Handler,
 		},
 		{
 			MethodName: "CheckTaskQueueVersionMembership",
