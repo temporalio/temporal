@@ -54,6 +54,12 @@ type (
 	sendTasksBudget struct {
 		maxTasks        int
 		maxScannedTasks int
+		onRetry         func()
+	}
+	laneSendResult struct {
+		laneID string
+		more   bool
+		err    error
 	}
 	StreamSenderImpl struct {
 		server                  historyservice.HistoryService_StreamWorkflowReplicationMessagesServer
@@ -717,22 +723,16 @@ func (s *StreamSenderImpl) sendLaneEventLoop(class replicationLaneClass) (retErr
 	}
 	timer := time.NewTimer(s.config.ReplicationStreamSendEmptyTaskDuration())
 	defer timer.Stop()
+	results := make(chan laneSendResult)
 
 	continuousRound := false
 	for {
-		more := false
-		if s.lanesConfirmed.Load() {
-			end := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
-			for _, lane := range s.laneRegistry.ClassSnapshots(class) {
-				if continuousRound && lane.cursor >= end {
-					continue
-				}
-				laneHasMore, err := s.sendLane(lane, end)
-				if err != nil {
-					return err
-				}
-				more = more || laneHasMore
-			}
+		more, stopped, err := s.sendLaneRound(class, continuousRound, results)
+		if err != nil {
+			return err
+		}
+		if stopped {
+			return nil
 		}
 		if more {
 			continuousRound = true
@@ -743,19 +743,109 @@ func (s *StreamSenderImpl) sendLaneEventLoop(class replicationLaneClass) (retErr
 				continue
 			}
 		}
-		continuousRound = false
-		if !timer.Stop() {
-			select {
-			case <-timer.C:
-			default:
-			}
+		continuousRound, stopped, err = s.waitForLaneWork(timer, newTaskNotificationChan, results)
+		if err != nil {
+			return err
 		}
-		timer.Reset(s.config.ReplicationStreamSendEmptyTaskDuration())
+		if stopped {
+			return nil
+		}
+	}
+}
+
+func (s *StreamSenderImpl) sendLaneRound(
+	class replicationLaneClass,
+	continuous bool,
+	results chan laneSendResult,
+) (more bool, stopped bool, err error) {
+	if s.lanesConfirmed.Load() {
+		end := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
+		for _, lane := range s.laneRegistry.ClassSnapshots(class) {
+			if continuous && lane.cursor >= end {
+				continue
+			}
+			retrying, started := s.startLaneTurn(lane, end, results)
+			if !started {
+				continue
+			}
+			turnMore, stopped, err := s.waitForLaneTurn(lane.id, retrying, results)
+			if err != nil || stopped {
+				return false, stopped, err
+			}
+			more = more || turnMore
+		}
+	}
+	drainedMore, err := drainLaneResults(results)
+	return more || drainedMore, false, err
+}
+
+func (s *StreamSenderImpl) waitForLaneTurn(
+	laneID string,
+	retrying <-chan struct{},
+	results <-chan laneSendResult,
+) (more bool, stopped bool, err error) {
+	for {
+		select {
+		case result := <-results:
+			if result.err != nil {
+				return false, false, result.err
+			}
+			more = more || result.more
+			if result.laneID == laneID {
+				return more, false, nil
+			}
+		case <-retrying:
+			// The lane keeps its lease while retrying, so peers can run
+			// without allowing a second turn to overtake this task.
+			return more, false, nil
+		case <-s.shutdownChan.Channel():
+			return false, true, nil
+		}
+	}
+}
+
+func drainLaneResults(results <-chan laneSendResult) (bool, error) {
+	more := false
+	for {
+		select {
+		case result := <-results:
+			if result.err != nil {
+				return false, result.err
+			}
+			more = more || result.more
+		default:
+			return more, nil
+		}
+	}
+}
+
+func (s *StreamSenderImpl) waitForLaneWork(
+	timer *time.Timer,
+	newTaskNotificationChan <-chan struct{},
+	results <-chan laneSendResult,
+) (more bool, stopped bool, err error) {
+	if !timer.Stop() {
+		select {
+		case <-timer.C:
+		default:
+		}
+	}
+	timer.Reset(s.config.ReplicationStreamSendEmptyTaskDuration())
+	for {
 		select {
 		case <-s.shutdownChan.Channel():
-			return nil
+			return false, true, nil
 		case <-newTaskNotificationChan:
+			return false, false, nil
 		case <-timer.C:
+			return false, false, nil
+		case result := <-results:
+			if result.err != nil {
+				return false, false, result.err
+			}
+			if result.more {
+				return true, false, nil
+			}
 		}
 	}
 }
@@ -800,6 +890,59 @@ func (s *StreamSenderImpl) sendLane(snapshot senderLaneSnapshot, end int64) (boo
 		return false, nil
 	}
 	defer s.laneRegistry.Release(lane.id)
+	return s.sendAcquiredLane(lane, end, nil)
+}
+
+func (s *StreamSenderImpl) startLaneTurn(
+	snapshot senderLaneSnapshot,
+	end int64,
+	results chan<- laneSendResult,
+) (<-chan struct{}, bool) {
+	lane, ok := s.laneRegistry.Acquire(snapshot.id)
+	if !ok {
+		return nil, false
+	}
+	retrying := make(chan struct{})
+	var retryOnce sync.Once
+	go func() {
+		result := s.runLaneTurn(lane, end, func() {
+			retryOnce.Do(func() {
+				close(retrying)
+			})
+		})
+		s.laneRegistry.Release(lane.id)
+		select {
+		case results <- result:
+		case <-s.shutdownChan.Channel():
+		case <-s.server.Context().Done():
+		}
+	}()
+	return retrying, true
+}
+
+func (s *StreamSenderImpl) runLaneTurn(
+	lane senderLaneSnapshot,
+	end int64,
+	onRetry func(),
+) (result laneSendResult) {
+	result.laneID = lane.id
+	var panicErr error
+	defer func() {
+		if panicErr != nil {
+			result.err = panicErr
+			metrics.ReplicationStreamPanic.With(s.metrics).Record(1)
+		}
+	}()
+	defer log.CapturePanic(s.logger, &panicErr)
+	result.more, result.err = s.sendAcquiredLane(lane, end, onRetry)
+	return result
+}
+
+func (s *StreamSenderImpl) sendAcquiredLane(
+	lane senderLaneSnapshot,
+	end int64,
+	onRetry func(),
+) (bool, error) {
 	if lane.cursor >= end {
 		return false, s.sendTasksOnLane(
 			enumsspb.TASK_PRIORITY_HIGH,
@@ -822,6 +965,7 @@ func (s *StreamSenderImpl) sendLane(snapshot senderLaneSnapshot, end int64) (boo
 		sendTasksBudget{
 			maxTasks:        laneTasksPerTurn,
 			maxScannedTasks: laneTaskScansPerTurn,
+			onRetry:         onRetry,
 		},
 	)
 	if err != nil {
@@ -1037,7 +1181,7 @@ func (s *StreamSenderImpl) sendTasksOnLaneWithBudget(
 		if err := s.sendLaneProgressIfNeeded(item, priority, laneID, &skipCount); err != nil {
 			return beginInclusiveWatermark, err
 		}
-		sent, err := s.sendTaskOnLaneIfEligible(item, priority, filter, laneID, laneTag, laneRateLimiter)
+		sent, err := s.sendTaskOnLaneIfEligible(item, priority, filter, laneID, laneTag, laneRateLimiter, budget.onRetry)
 		if err != nil {
 			return beginInclusiveWatermark, err
 		}
@@ -1092,6 +1236,7 @@ func (s *StreamSenderImpl) sendTaskOnLaneIfEligible(
 	laneID string,
 	laneTag string,
 	laneRateLimiter quotas.RateLimiter,
+	onRetry func(),
 ) (bool, error) {
 	if !s.shouldSendTaskOnLane(item, priority, filter) {
 		return false, nil
@@ -1104,7 +1249,7 @@ func (s *StreamSenderImpl) sendTaskOnLaneIfEligible(
 		metrics.ReplicationTaskPriorityTag(priority),
 	)
 
-	attempt, sent, err := s.sendTaskOnLane(item, priority, laneID, laneTag, laneRateLimiter)
+	attempt, sent, err := s.sendTaskOnLane(item, priority, laneID, laneTag, laneRateLimiter, onRetry)
 	if err != nil {
 		return sent, s.handleTaskSendError(item, attempt, priority, err)
 	}
@@ -1187,6 +1332,7 @@ func (s *StreamSenderImpl) sendTaskOnLane(
 	laneID string,
 	laneTag string,
 	laneRateLimiter quotas.RateLimiter,
+	onRetry func(),
 ) (int64, bool, error) {
 	var attempt int64
 	sent := false
@@ -1238,7 +1384,22 @@ func (s *StreamSenderImpl) sendTaskOnLane(
 		WithMaximumAttempts(s.config.ReplicationStreamSenderErrorRetryMaxAttempts()).
 		WithExpirationInterval(s.config.ReplicationStreamSenderErrorRetryExpiration())
 
-	err := backoff.ThrottleRetry(operation, retryPolicy, isRetryableError)
+	retryable := isRetryableError
+	if onRetry != nil {
+		retryable = func(err error) bool {
+			if !isRetryableError(err) {
+				return false
+			}
+			onRetry()
+			return true
+		}
+	}
+	err := backoff.ThrottleRetryContext(
+		s.server.Context(),
+		func(context.Context) error { return operation() },
+		retryPolicy,
+		retryable,
+	)
 	metrics.ReplicationTaskSendAttempt.With(s.metrics).Record(
 		attempt,
 		metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
