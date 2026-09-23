@@ -151,7 +151,7 @@ func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, num
 	}
 
 	nextInterval := float64(p.initialInterval) * math.Pow(p.backoffCoefficient, float64(numAttempts-1))
-	// Disallow retries if initialInterval is negative or nextInterval overflows
+	// Disallow retries if initialInterval is negative
 	if nextInterval <= 0 {
 		return done
 	}
@@ -162,6 +162,14 @@ func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, num
 	if p.expirationInterval != NoInterval {
 		remainingTime := float64(math.Max(0, float64(p.expirationInterval-elapsedTime)))
 		nextInterval = math.Min(remainingTime, nextInterval)
+	}
+
+	// Disallow retries if nextInterval still overflows time.Duration after capping. The
+	// conversion of an out-of-range float64 to int64 is platform-dependent: it wraps to a
+	// negative value on amd64 (caught by the check below) but saturates to MaxInt64 on
+	// arm64, which would produce a ~292-year backoff instead of stopping.
+	if nextInterval >= float64(math.MaxInt64) {
+		return done
 	}
 
 	// Bail out if the next interval is smaller than initial retry interval

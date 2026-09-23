@@ -301,6 +301,7 @@ func (s *StreamSenderImpl) emitReplicationSent(
 		SourceShard:   s.serverShardKey.ShardID,
 		SourceTaskID:  item.GetTaskID(),
 		TargetCluster: s.clientClusterName,
+		TargetShard:   s.clientShardKey.ShardID,
 		Priority:      task.GetPriority().String(),
 	}
 	if vt := task.GetVersionedTransition(); vt != nil {
@@ -369,6 +370,7 @@ func (s *StreamSenderImpl) emitReplicationSkipped(
 		SourceShard:   s.serverShardKey.ShardID,
 		SourceTaskID:  item.GetTaskID(),
 		TargetCluster: s.clientClusterName,
+		TargetShard:   s.clientShardKey.ShardID,
 		Priority:      priority.String(),
 		Namespace:     nsName.String(),
 		NamespaceID:   nsID,
