@@ -10,10 +10,8 @@ import (
 
 	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -153,23 +151,6 @@ func reapEvictableClients(
 	}
 }
 
-func setTaskQueuePartition(
-	proto *taskqueuespb.TaskQueuePartition,
-	partition tqid.Partition,
-) error {
-	switch partition := partition.(type) {
-	case *tqid.NormalPartition:
-		proto.TaskQueue = partition.TaskQueue().Name()
-		proto.TaskQueueType = partition.TaskType()
-		proto.PartitionId = &taskqueuespb.TaskQueuePartition_NormalPartitionId{
-			NormalPartitionId: int32(partition.PartitionId()),
-		}
-	default:
-		return serviceerror.NewInvalidArgument("load balanced requests only support normal task queue partitions")
-	}
-	return nil
-}
-
 // resolvePartition parses the input task queue partition and decides how it should be routed.
 // It returns the parsed partition and whether the load balancer should choose the final
 // partition among the task queue's partitions (true only for a non-forwarded root partition
@@ -185,40 +166,6 @@ func (c *clientImpl) resolvePartition(proto *taskqueuepb.TaskQueue, nsid string,
 	}
 	loadBalance := p.SupportsPartitions() && p.IsRoot() && forwardedFrom == ""
 	return p, loadBalance
-}
-
-// pickClientForWrite mutates the given proto. Callers should copy the proto before if necessary.
-func (c *clientImpl) pickClientForWrite(
-	proto *taskqueuepb.TaskQueue,
-	p tqid.Partition,
-	loadBalance bool,
-	pc PartitionCounts,
-) (matchingservice.MatchingServiceClient, int, error) {
-	estimatedTasksAllPartitions := 0
-	if loadBalance {
-		p, estimatedTasksAllPartitions = c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
-	}
-	proto.Name = p.RpcName()
-	client, err := c.getClientForTaskQueuePartition(p)
-	return client, estimatedTasksAllPartitions, err
-}
-
-// pickClientForRead mutates the given proto. Callers should copy the proto before if necessary.
-func (c *clientImpl) pickClientForRead(
-	proto *taskqueuepb.TaskQueue,
-	p tqid.Partition,
-	loadBalance bool,
-	pc PartitionCounts,
-) (client matchingservice.MatchingServiceClient, release func(), err error) {
-	if loadBalance {
-		token := c.loadBalancer.PickReadPartition(p.TaskQueue(), pc)
-		p = token.TQPartition
-		release = token.Release
-	}
-
-	proto.Name = p.RpcName()
-	client, err = c.getClientForTaskQueuePartition(p)
-	return client, release, err
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {

@@ -477,14 +477,16 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 }
 
 // makeLoadBalancedFields computes the template fields for a matching method that load
-// balances across the partitions of a task queue. A configured task queue type is used
-// with public TaskQueue protos; otherwise the request's internal TaskQueuePartition proto
-// supplies the queue, type, and initial partition.
+// balances across the partitions of a task queue.
 func makeLoadBalancedFields(reqType reflect.Type, lb loadBalancedMethod, fields map[string]string) {
-	t := reqType.Elem() // we know it's a pointer
+	if lb.taskQueueType == "" {
+		makeTaskQueuePartitionLoadBalancedFields(reqType, fields)
+		return
+	}
+	makeTaskQueueLoadBalancedFields(reqType, lb, fields)
+}
 
-	nsID := findOneNestedField(t, "NamespaceId", "request", 1)
-
+func findForwardedSource(t reflect.Type) fieldWithPath {
 	// The source partition of a forwarded request lives either in a plain field on the
 	// request or inside its forward info. Some load-balanced requests have neither.
 	forwardedSource := tryFindOneNestedField(t, "ForwardedSource", "request", 1)
@@ -493,54 +495,45 @@ func makeLoadBalancedFields(reqType reflect.Type, lb loadBalancedMethod, fields 
 			forwardedSource = fieldWithPath{path: fi.path + ".GetSourcePartition()"}
 		}
 	}
-	hasForwardedSource := forwardedSource.found()
-	if !hasForwardedSource {
-		forwardedSource = fieldWithPath{path: `""`}
-	}
+	return forwardedSource
+}
 
-	if lb.taskQueueType == "" {
-		// Some internal requests carry the complete partition representation. In that
-		// case the task queue type and the initial partition both come from the proto.
-		tqp := findOneNestedField(t, "TaskQueuePartition", "request", 1)
-		notForwardedCondition := ""
-		if hasForwardedSource {
-			notForwardedCondition = " && " + forwardedSource.path + ` == ""`
-		}
-		fields["ResolvePartition"] = fmt.Sprintf(`p := tqid.PartitionFromPartitionProto(%s, %s)
+func makeTaskQueuePartitionLoadBalancedFields(reqType reflect.Type, fields map[string]string) {
+	t := reqType.Elem() // we know it's a pointer
+	nsID := findOneNestedField(t, "NamespaceId", "request", 1)
+	forwardedSource := findForwardedSource(t)
+	tqp := findOneNestedField(t, "TaskQueuePartition", "request", 1)
+
+	notForwardedCondition := ""
+	if forwardedSource.found() {
+		notForwardedCondition = " && " + forwardedSource.path + ` == ""`
+		fields["ForwardingStats"] = fmt.Sprintf(
+			"c.emitForwardedSourceStatsForTaskQueueName(metricsHandler, %s, %s.GetTaskQueue())",
+			forwardedSource.path,
+			tqp.path,
+		)
+	} else {
+		fields["ForwardingStats"] = ""
+	}
+	fields["ResolvePartition"] = fmt.Sprintf(`p := tqid.PartitionFromPartitionProto(%s, %s)
 	if _, ok := p.(*tqid.NormalPartition); !ok {
 		return nil, serviceerror.NewInvalidArgument("load balanced requests only support normal task queue partitions")
 	}
 	loadBalance := p.SupportsPartitions() && p.IsRoot()%s`, tqp.path, nsID.path, notForwardedCondition)
-		fields["ForwardedSource"] = forwardedSource.path
-		if hasForwardedSource {
-			fields["ForwardingStats"] = fmt.Sprintf(
-				"c.emitForwardedSourceStatsForTaskQueueName(metricsHandler, %s, %s.GetTaskQueue())",
-				forwardedSource.path,
-				tqp.path,
-			)
-		} else {
-			fields["ForwardingStats"] = ""
-		}
-		fields["CopyRequest"] = makeCopyRequest(reqType, tqp.path)
-		fields["PickClient"] = fmt.Sprintf(`if loadBalance {
-		p, _ = c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
-	}
-	if err := setTaskQueuePartition(%s, p); err != nil {
-		return nil, err
-	}
-	client, err := c.getClientForTaskQueuePartition(p)
-	if err != nil {
-		return nil, err
-	}`, tqp.path)
-		return
-	}
+	fields["CopyRequest"] = makeCopyRequest(reqType, tqp.path)
+	fields["PickPartition"] = fmt.Sprintf(`targetPartition, _ := c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
+		%s.PartitionId = &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(targetPartition.PartitionId())}`, tqp.path)
+}
 
+func makeTaskQueueLoadBalancedFields(reqType reflect.Type, lb loadBalancedMethod, fields map[string]string) {
+	t := reqType.Elem() // we know it's a pointer
+	nsID := findOneNestedField(t, "NamespaceId", "request", 1)
+	forwardedSource := findForwardedSource(t)
 	tq := findOneNestedField(t, "TaskQueue", "request", 2)
 
 	fields["TaskQueue"] = tq.path
 	fields["NamespaceId"] = nsID.path
 	fields["TaskQueueType"] = "enumspb.TASK_QUEUE_TYPE_" + lb.taskQueueType
-	fields["ForwardedSource"] = forwardedSource.path
 	fields["ForwardingStats"] = fmt.Sprintf("c.emitForwardedSourceStats(metricsHandler, %s, %s)", forwardedSource.path, tq.path)
 	fields["CopyRequest"] = makeCopyRequest(reqType, tq.path)
 	fields["ResolvePartition"] = fmt.Sprintf(`p, loadBalance := c.resolvePartition(
@@ -554,18 +547,17 @@ func makeLoadBalancedFields(reqType reflect.Type, lb loadBalancedMethod, fields 
 		fields["LongPoll"] = "LongPoll"
 	}
 	if lb.read {
-		fields["PickClient"] = fmt.Sprintf(`client, release, err := c.pickClientForRead(%s, p, loadBalance, pc)
-	if err != nil {
-		return nil, err
-	}
-	if release != nil {
-		defer release()
-	}`, tq.path)
+		fields["PickPartition"] = fmt.Sprintf(`
+		token := c.loadBalancer.PickReadPartition(p.TaskQueue(), pc)
+		p = token.TQPartition
+		%s.Name = p.RpcName()
+		if release := token.Release; release != nil {
+		 defer release()
+		}`, tq.path)
 	} else {
-		fields["PickClient"] = fmt.Sprintf(`client, estimatedTasksAllPartitions, err := c.pickClientForWrite(%s, p, loadBalance, pc)
-	if err != nil {
-		return nil, err
-	}
+		fields["PickPartition"] = fmt.Sprintf(`
+		targetPartition, estimatedTasksAllPartitions := c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
+		%s.Name = targetPartition.RpcName()
 	ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions)`, tq.path)
 	}
 }
@@ -801,8 +793,14 @@ func (c *clientImpl) do{{.Method}}(
 	request {{.RequestType}},
 	opts []grpc.CallOption,
 ) ({{.ResponseType}}, error) {
-	{{.CopyRequest}}
-	{{.PickClient}}
+	if loadBalance {
+		{{.CopyRequest}}
+		{{.PickPartition}}
+	}
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
 	ctx, cancel := c.create{{or .LongPoll ""}}Context(ctx)
 	defer cancel()
 	return client.{{.Method}}(ctx, request, opts...)

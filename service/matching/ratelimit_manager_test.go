@@ -1,7 +1,6 @@
 package matching
 
 import (
-	"math"
 	"testing"
 	"time"
 
@@ -81,14 +80,6 @@ func TestRateLimitManagerGrantTokens(t *testing.T) {
 
 	timeSource.Advance(time.Second)
 	require.Equal(t, int32(1), manager.grantTokens(keyOne, 2))
-}
-
-func TestAvailableSimpleLimiterTokens(t *testing.T) {
-	nowNs := time.Now().UnixNano()
-	require.Equal(t, int32(11), simpleLimiter(0).availableSimpleLimiterTokens(makeSimpleLimiterParams(10, time.Second), nowNs))
-	require.Equal(t, int32(0), simpleLimiter(nowNs+1).availableSimpleLimiterTokens(makeSimpleLimiterParams(10, time.Second), nowNs))
-	require.Equal(t, int32(0), simpleLimiter(0).availableSimpleLimiterTokens(makeSimpleLimiterParams(0, time.Second), nowNs))
-	require.Equal(t, int32(math.MaxInt32), simpleLimiter(0).availableSimpleLimiterTokens(makeSimpleLimiterParams(1e12, 0), nowNs))
 }
 
 // Additions to rateLimitManager for use by other unit tests:

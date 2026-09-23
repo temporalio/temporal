@@ -706,8 +706,11 @@ func makeSimpleLimiterParams(rate float64, burstDuration time.Duration) simpleLi
 
 func (p simpleLimiterParams) never() bool   { return p.interval < 0 }
 func (p simpleLimiterParams) limited() bool { return p.interval > 0 }
-func (p simpleLimiterParams) divideInterval(by float32) {
-	p.interval = time.Duration(float32(p.interval) / by)
+func (p simpleLimiterParams) divideInterval(by float32) simpleLimiterParams {
+	return simpleLimiterParams{
+		interval: time.Duration(float32(p.interval) / by),
+		burst:    p.burst,
+	}
 }
 
 // delay returns the time until the limiter is ready.
