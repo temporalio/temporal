@@ -643,16 +643,18 @@ func convertString(val any) (string, error) {
 	return "", errors.New("value type is not string")
 }
 
-func convertSecondaryVisibilityWritingMode(val any) (string, error) {
-	s, err := convertString(val)
-	if err != nil {
-		return "", err
-	}
-	switch s {
-	case "off", "on", "dual":
-		return s, nil
-	default:
-		return "", fmt.Errorf("unknown secondary visibility writing mode %q, must be one of: off, on, dual", s)
+func convertStringEnum(vals []string) func(any) (string, error) {
+	return func(val any) (string, error) {
+		s, err := convertString(val)
+		if err != nil {
+			return "", err
+		}
+		for _, v := range vals {
+			if s == v {
+				return s, nil
+			}
+		}
+		return "", fmt.Errorf("invalid value %q, must be one of: %v", s, vals)
 	}
 }
 

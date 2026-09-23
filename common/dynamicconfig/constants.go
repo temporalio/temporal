@@ -75,7 +75,7 @@ pod-level rate limiting. Read once at process startup: changing this value requi
 	)
 	SecondaryVisibilityWritingMode = NewGlobalTypedSettingWithConverter(
 		"system.secondaryVisibilityWritingMode",
-		convertSecondaryVisibilityWritingMode,
+		convertStringEnum([]string{"off", "on", "dual"}),
 		"off",
 		`SecondaryVisibilityWritingMode is key for how to write to secondary visibility`,
 	)
