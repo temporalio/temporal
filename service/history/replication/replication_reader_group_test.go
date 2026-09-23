@@ -98,6 +98,17 @@ func (s *replicationReaderGroupSuite) TestCatchupBeginWatermark_ThreeScopes_Uses
 	s.Equal(int64(100), g.CatchupBeginWatermark(999, enumsspb.TASK_PRIORITY_UNSPECIFIED))
 }
 
+func (s *replicationReaderGroupSuite) TestCatchupBeginWatermark_LanesUseDefaultCursor() {
+	g := s.newGroup(true)
+	state := s.makeQueueState(50, 50, 300)
+	state.ReaderStates[s.readerID].ReplicationLaneDefaultCursor =
+		shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(200))
+	s.shardContext.EXPECT().GetQueueState(tasks.CategoryReplication).Return(state, true).Times(2)
+
+	s.Equal(int64(200), g.CatchupBeginWatermark(999, enumsspb.TASK_PRIORITY_HIGH))
+	s.Equal(int64(300), g.CatchupBeginWatermark(999, enumsspb.TASK_PRIORITY_LOW))
+}
+
 // BuildReaderState — tiered mode
 
 func (s *replicationReaderGroupSuite) TestBuildReaderState_Tiered_Success() {

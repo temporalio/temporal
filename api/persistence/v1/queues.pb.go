@@ -134,9 +134,12 @@ type QueueReaderState struct {
 	// Named substreams owned by this reader. The key is meaningful only to the
 	// component that created the lane; persistence keeps it structurally paired
 	// with the scope needed to resume that lane.
-	Lanes         []*QueueReaderLane `protobuf:"bytes,2,rep,name=lanes,proto3" json:"lanes,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Lanes []*QueueReaderLane `protobuf:"bytes,2,rep,name=lanes,proto3" json:"lanes,omitempty"`
+	// The default lane's actual cursor while scopes[1] is clamped to the oldest
+	// lane cursor so servers that predate lanes can recover all HIGH traffic.
+	ReplicationLaneDefaultCursor *TaskKey `protobuf:"bytes,3,opt,name=replication_lane_default_cursor,json=replicationLaneDefaultCursor,proto3" json:"replication_lane_default_cursor,omitempty"`
+	unknownFields                protoimpl.UnknownFields
+	sizeCache                    protoimpl.SizeCache
 }
 
 func (x *QueueReaderState) Reset() {
@@ -179,6 +182,13 @@ func (x *QueueReaderState) GetScopes() []*QueueSliceScope {
 func (x *QueueReaderState) GetLanes() []*QueueReaderLane {
 	if x != nil {
 		return x.Lanes
+	}
+	return nil
+}
+
+func (x *QueueReaderState) GetReplicationLaneDefaultCursor() *TaskKey {
+	if x != nil {
+		return x.ReplicationLaneDefaultCursor
 	}
 	return nil
 }
@@ -611,10 +621,11 @@ const file_temporal_server_api_persistence_v1_queues_proto_rawDesc = "" +
 	"\x1fexclusive_reader_high_watermark\x18\x02 \x01(\v2+.temporal.server.api.persistence.v1.TaskKeyR\x1cexclusiveReaderHighWatermark\x1au\n" +
 	"\x11ReaderStatesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\x03R\x03key\x12J\n" +
-	"\x05value\x18\x02 \x01(\v24.temporal.server.api.persistence.v1.QueueReaderStateR\x05value:\x028\x01\"\xaa\x01\n" +
+	"\x05value\x18\x02 \x01(\v24.temporal.server.api.persistence.v1.QueueReaderStateR\x05value:\x028\x01\"\x9e\x02\n" +
 	"\x10QueueReaderState\x12K\n" +
 	"\x06scopes\x18\x01 \x03(\v23.temporal.server.api.persistence.v1.QueueSliceScopeR\x06scopes\x12I\n" +
-	"\x05lanes\x18\x02 \x03(\v23.temporal.server.api.persistence.v1.QueueReaderLaneR\x05lanes\"\xa2\x01\n" +
+	"\x05lanes\x18\x02 \x03(\v23.temporal.server.api.persistence.v1.QueueReaderLaneR\x05lanes\x12r\n" +
+	"\x1freplication_lane_default_cursor\x18\x03 \x01(\v2+.temporal.server.api.persistence.v1.TaskKeyR\x1creplicationLaneDefaultCursor\"\xa2\x01\n" +
 	"\x0fQueueReaderLane\x12\x1f\n" +
 	"\vlogical_key\x18\x01 \x01(\tR\n" +
 	"logicalKey\x12I\n" +
@@ -680,20 +691,21 @@ var file_temporal_server_api_persistence_v1_queues_proto_depIdxs = []int32{
 	0,  // 2: temporal.server.api.persistence.v1.QueueState.exclusive_reader_high_watermark:type_name -> temporal.server.api.persistence.v1.TaskKey
 	4,  // 3: temporal.server.api.persistence.v1.QueueReaderState.scopes:type_name -> temporal.server.api.persistence.v1.QueueSliceScope
 	3,  // 4: temporal.server.api.persistence.v1.QueueReaderState.lanes:type_name -> temporal.server.api.persistence.v1.QueueReaderLane
-	4,  // 5: temporal.server.api.persistence.v1.QueueReaderLane.scope:type_name -> temporal.server.api.persistence.v1.QueueSliceScope
-	5,  // 6: temporal.server.api.persistence.v1.QueueSliceScope.range:type_name -> temporal.server.api.persistence.v1.QueueSliceRange
-	14, // 7: temporal.server.api.persistence.v1.QueueSliceScope.predicate:type_name -> temporal.server.api.persistence.v1.Predicate
-	0,  // 8: temporal.server.api.persistence.v1.QueueSliceRange.inclusive_min:type_name -> temporal.server.api.persistence.v1.TaskKey
-	0,  // 9: temporal.server.api.persistence.v1.QueueSliceRange.exclusive_max:type_name -> temporal.server.api.persistence.v1.TaskKey
-	15, // 10: temporal.server.api.persistence.v1.HistoryTask.blob:type_name -> temporal.api.common.v1.DataBlob
-	12, // 11: temporal.server.api.persistence.v1.Queue.partitions:type_name -> temporal.server.api.persistence.v1.Queue.PartitionsEntry
-	2,  // 12: temporal.server.api.persistence.v1.QueueState.ReaderStatesEntry.value:type_name -> temporal.server.api.persistence.v1.QueueReaderState
-	9,  // 13: temporal.server.api.persistence.v1.Queue.PartitionsEntry.value:type_name -> temporal.server.api.persistence.v1.QueuePartition
-	14, // [14:14] is the sub-list for method output_type
-	14, // [14:14] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	0,  // 5: temporal.server.api.persistence.v1.QueueReaderState.replication_lane_default_cursor:type_name -> temporal.server.api.persistence.v1.TaskKey
+	4,  // 6: temporal.server.api.persistence.v1.QueueReaderLane.scope:type_name -> temporal.server.api.persistence.v1.QueueSliceScope
+	5,  // 7: temporal.server.api.persistence.v1.QueueSliceScope.range:type_name -> temporal.server.api.persistence.v1.QueueSliceRange
+	14, // 8: temporal.server.api.persistence.v1.QueueSliceScope.predicate:type_name -> temporal.server.api.persistence.v1.Predicate
+	0,  // 9: temporal.server.api.persistence.v1.QueueSliceRange.inclusive_min:type_name -> temporal.server.api.persistence.v1.TaskKey
+	0,  // 10: temporal.server.api.persistence.v1.QueueSliceRange.exclusive_max:type_name -> temporal.server.api.persistence.v1.TaskKey
+	15, // 11: temporal.server.api.persistence.v1.HistoryTask.blob:type_name -> temporal.api.common.v1.DataBlob
+	12, // 12: temporal.server.api.persistence.v1.Queue.partitions:type_name -> temporal.server.api.persistence.v1.Queue.PartitionsEntry
+	2,  // 13: temporal.server.api.persistence.v1.QueueState.ReaderStatesEntry.value:type_name -> temporal.server.api.persistence.v1.QueueReaderState
+	9,  // 14: temporal.server.api.persistence.v1.Queue.PartitionsEntry.value:type_name -> temporal.server.api.persistence.v1.QueuePartition
+	15, // [15:15] is the sub-list for method output_type
+	15, // [15:15] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_persistence_v1_queues_proto_init() }

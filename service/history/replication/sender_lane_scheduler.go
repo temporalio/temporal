@@ -63,8 +63,11 @@ func (c *senderLaneTurnCoordinator) Start(
 	snapshot senderLaneSnapshot,
 	end int64,
 ) (<-chan struct{}, bool) {
-	lane, ok := c.registry.Acquire(snapshot.id)
+	lane, ownerClass, ok := c.registry.Acquire(snapshot)
 	if !ok {
+		if ownerClass != 0 {
+			c.wake(ownerClass)
+		}
 		return nil, false
 	}
 	retrying := make(chan struct{})

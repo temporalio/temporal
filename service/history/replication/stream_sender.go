@@ -667,7 +667,7 @@ func persistedReplicationLanes(
 	if !ok || len(readerState.Scopes) < 2 {
 		return 0, nil
 	}
-	return readerState.Scopes[1].GetRange().GetInclusiveMin().GetTaskId(), readerState.GetLanes()
+	return replicationLaneDefaultCursor(readerState), readerState.GetLanes()
 }
 
 func newLaneRateLimiters(config *configs.Config, enabled bool, classCount int) []quotas.RateLimiter {
@@ -730,8 +730,9 @@ func (s *StreamSenderImpl) sendDefaultTasks(
 }
 
 func (s *StreamSenderImpl) sendLane(snapshot senderLaneSnapshot, end int64) (bool, error) {
-	lane, ok := s.laneRegistry.Acquire(snapshot.id)
+	lane, ownerClass, ok := s.laneRegistry.Acquire(snapshot)
 	if !ok {
+		s.wakeLaneClasses(ownerClass)
 		return false, nil
 	}
 	defer s.laneRegistry.Release(lane.id)

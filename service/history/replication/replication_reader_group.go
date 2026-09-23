@@ -19,8 +19,8 @@ import (
 // previously spread across recvSyncReplicationState and
 // getSendCatchupBeginInclusiveWatermark.
 //
-// HIGH/LOW priority lane isolation using the existing 3-scope QueueReaderState
-// encoding. No wire-protocol or persistence-format changes.
+// HIGH/LOW priority lane isolation uses the 3-scope QueueReaderState encoding;
+// generic lane state is persisted alongside those scopes.
 type replicationReaderGroup struct {
 	shardContext   historyi.ShardContext
 	clientShardKey ClusterShardKey
@@ -66,7 +66,17 @@ func (r *replicationReaderGroup) CatchupBeginWatermark(
 		r.logger.Debug(fmt.Sprintf("StreamSender readerState not found, readerID %v", r.ReaderID()))
 		return catchupEnd
 	}
+	if priority == enumsspb.TASK_PRIORITY_HIGH && readerState.GetReplicationLaneDefaultCursor() != nil {
+		return replicationLaneDefaultCursor(readerState)
+	}
 	return readerState.Scopes[priorityScopeIndex(priority, len(readerState.Scopes), true)].Range.InclusiveMin.TaskId
+}
+
+func replicationLaneDefaultCursor(readerState *persistencespb.QueueReaderState) int64 {
+	if cursor := readerState.GetReplicationLaneDefaultCursor(); cursor != nil {
+		return cursor.GetTaskId()
+	}
+	return readerState.Scopes[1].GetRange().GetInclusiveMin().GetTaskId()
 }
 
 // BuildReaderState constructs the QueueReaderState to persist from a received
@@ -106,7 +116,9 @@ func (r *replicationReaderGroup) FailoverWatermark(
 }
 
 // priorityScopeIndex maps a priority to its index within QueueReaderState.Scopes.
-// Scope 0 is the overall watermark, scope 1 HIGH, scope 2 default-LOW.
+// Scope 0 is the overall watermark, scope 1 is the legacy-safe HIGH watermark,
+// and scope 2 is default-LOW. When lanes exist, new senders read the actual
+// default-HIGH cursor from QueueReaderState.ReplicationLaneDefaultCursor.
 // Falls back to index 0 (the overall watermark) when the state was written by an
 // older single-stack version that only has one scope.
 //

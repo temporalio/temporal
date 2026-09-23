@@ -29,6 +29,8 @@ func TestSenderLaneRegistryPersistsLogicalKeyWithScope(t *testing.T) {
 
 	state := registry.BuildReaderState(syncReplicationState(100, 120, 200))
 	require.Equal(t, int64(15), state.Scopes[0].Range.InclusiveMin.TaskId)
+	require.Equal(t, int64(15), state.Scopes[1].Range.InclusiveMin.TaskId)
+	require.Equal(t, int64(120), state.GetReplicationLaneDefaultCursor().GetTaskId())
 	require.Len(t, state.Lanes, 2)
 	require.Equal(t, "namespace:a", state.Lanes[0].LogicalKey)
 	require.Equal(t, int64(15), state.Lanes[0].Scope.Range.InclusiveMin.TaskId)
@@ -37,8 +39,9 @@ func TestSenderLaneRegistryPersistsLogicalKeyWithScope(t *testing.T) {
 	require.Equal(t, int64(25), state.Lanes[1].Scope.Range.InclusiveMin.TaskId)
 	require.Equal(t, int32(1), state.Lanes[1].ServiceClass)
 
-	restored, err := newSenderLaneRegistry(120, state.Lanes, 4)
+	restored, err := newSenderLaneRegistry(replicationLaneDefaultCursor(state), state.Lanes, 4)
 	require.NoError(t, err)
+	require.Equal(t, int64(120), restored.DefaultCursor())
 	restoredA, ok := restored.SnapshotByKey("namespace:a")
 	require.True(t, ok)
 	require.Equal(t, int64(15), restoredA.cursor)
@@ -112,10 +115,10 @@ func TestSenderLaneRegistryRetirementWaitsForAckAndLease(t *testing.T) {
 	lane, _, err := registry.Create("namespace:a", namespaceLaneScope("a", 10), 1)
 	require.NoError(t, err)
 
-	leased, ok := registry.Acquire(lane.id)
+	leased, _, ok := registry.Acquire(lane)
 	require.True(t, ok)
 	require.Equal(t, lane.id, leased.id)
-	_, ok = registry.Acquire(lane.id)
+	_, _, ok = registry.Acquire(lane)
 	require.False(t, ok)
 	_, defaultAcquired := registry.AcquireDefault(100)
 	require.True(t, defaultAcquired)
@@ -127,7 +130,7 @@ func TestSenderLaneRegistryRetirementWaitsForAckAndLease(t *testing.T) {
 	registry.Release(lane.id)
 	require.True(t, registry.RequestRetirement(lane.logicalKey))
 	require.Empty(t, registry.ReadyRetirements())
-	_, ok = registry.Acquire(lane.id)
+	_, _, ok = registry.Acquire(lane)
 	require.False(t, ok)
 	_, defaultAcquired = registry.AcquireDefault(110)
 	require.False(t, defaultAcquired)
@@ -147,7 +150,7 @@ func TestSenderLaneRegistryRetirementWaitsForInFlightLaneAck(t *testing.T) {
 	lane, _, err := registry.Create("namespace:a", namespaceLaneScope("a", 10), 1)
 	require.NoError(t, err)
 
-	_, acquired := registry.Acquire(lane.id)
+	_, _, acquired := registry.Acquire(lane)
 	require.True(t, acquired)
 	registry.ObserveAcks(map[string]*replicationspb.ReplicationState{
 		lane.id: {InclusiveLowWatermark: 100},
@@ -174,7 +177,7 @@ func TestSenderLaneRegistryCreationWaitsForDefaultLease(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, created)
 	require.Empty(t, registry.ClassSnapshots(1))
-	_, acquired = registry.Acquire(lane.id)
+	_, _, acquired = registry.Acquire(lane)
 	require.False(t, acquired)
 
 	_, acquired = registry.AcquireDefault(300)
@@ -200,7 +203,7 @@ func TestSenderLaneRegistryRecoversFailedDefaultLeaseBeforeHandoff(t *testing.T)
 	require.True(t, created)
 	require.Empty(t, registry.ReleaseDefault(200, false))
 
-	_, acquired = registry.Acquire(lane.id)
+	_, _, acquired = registry.Acquire(lane)
 	require.False(t, acquired)
 	filter, acquired := registry.AcquireDefault(300)
 	require.True(t, acquired)

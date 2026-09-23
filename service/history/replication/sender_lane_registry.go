@@ -12,6 +12,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -218,15 +219,18 @@ func (r *senderLaneRegistry) CompleteRetirement(laneID string) (senderLaneSnapsh
 	return lane.senderLaneSnapshot, true
 }
 
-func (r *senderLaneRegistry) Acquire(laneID string) (senderLaneSnapshot, bool) {
+func (r *senderLaneRegistry) Acquire(snapshot senderLaneSnapshot) (senderLaneSnapshot, replicationLaneClass, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	lane, ok := r.byID[laneID]
+	lane, ok := r.byID[snapshot.id]
 	if !ok || lane.pending || lane.retiring || lane.leases != 0 {
-		return senderLaneSnapshot{}, false
+		return senderLaneSnapshot{}, 0, false
+	}
+	if lane.class != snapshot.class {
+		return senderLaneSnapshot{}, lane.class, false
 	}
 	lane.leases++
-	return lane.senderLaneSnapshot, true
+	return lane.senderLaneSnapshot, lane.class, true
 }
 
 func (r *senderLaneRegistry) Release(laneID string) {
@@ -360,6 +364,11 @@ func (r *senderLaneRegistry) BuildReaderState(attr *replicationspb.SyncReplicati
 	defer r.mu.Unlock()
 
 	state := buildTieredReaderState(attr)
+	if len(r.byKey) != 0 {
+		state.ReplicationLaneDefaultCursor = shard.ConvertToPersistenceTaskKey(
+			tasks.NewImmediateKey(attr.GetHighPriorityState().GetInclusiveLowWatermark()),
+		)
+	}
 	keys := make([]string, 0, len(r.byKey))
 	for logicalKey := range r.byKey {
 		keys = append(keys, logicalKey)
@@ -376,6 +385,9 @@ func (r *senderLaneRegistry) BuildReaderState(attr *replicationspb.SyncReplicati
 			ServiceClass: int32(lane.class),
 		})
 		state.Scopes[0].Range.InclusiveMin.TaskId = min(state.Scopes[0].Range.InclusiveMin.TaskId, resume)
+		// Older servers cannot read Lanes, so their HIGH scan must re-cover every
+		// outstanding lane range after a rollback.
+		state.Scopes[1].Range.InclusiveMin.TaskId = min(state.Scopes[1].Range.InclusiveMin.TaskId, resume)
 	}
 	return state
 }
