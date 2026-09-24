@@ -3,9 +3,8 @@ package visibility
 //go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination manager_selector_mock.go
 
 import (
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
@@ -22,7 +21,6 @@ type (
 		secondaryVisibilityManager        manager.VisibilityManager
 		enableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		secondaryVisibilityWritingMode    dynamicconfig.StringPropertyFn
-		logger                            log.Logger
 	}
 )
 
@@ -33,14 +31,12 @@ func newDefaultManagerSelector(
 	secondaryVisibilityManager manager.VisibilityManager,
 	enableSecondaryVisibilityRead dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	secondaryVisibilityWritingMode dynamicconfig.StringPropertyFn,
-	logger log.Logger,
 ) *defaultManagerSelector {
 	return &defaultManagerSelector{
 		visibilityManager:                 visibilityManager,
 		secondaryVisibilityManager:        secondaryVisibilityManager,
 		enableReadFromSecondaryVisibility: enableSecondaryVisibilityRead,
 		secondaryVisibilityWritingMode:    secondaryVisibilityWritingMode,
-		logger:                            logger,
 	}
 }
 
@@ -54,11 +50,10 @@ func (v *defaultManagerSelector) writeManagers() ([]manager.VisibilityManager, e
 	case SecondaryVisibilityWritingModeDual:
 		return []manager.VisibilityManager{v.visibilityManager, v.secondaryVisibilityManager}, nil
 	default:
-		v.logger.Warn(
-			"Unknown secondary visibility writing mode, treating as off",
-			tag.Value(mode),
+		return nil, serviceerror.NewInternalf(
+			"unknown secondary visibility writing mode: %s",
+			mode,
 		)
-		return []manager.VisibilityManager{v.visibilityManager}, nil
 	}
 }
 
