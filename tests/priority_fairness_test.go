@@ -330,7 +330,7 @@ type FairnessSuite struct {
 }
 
 func TestFairnessSuite(t *testing.T) {
-	parallelsuite.Run(t, &FairnessSuite{}, false)
+	parallelsuite.Run(t, &FairnessSuite{})
 }
 
 // fairnessPartitions is the number of read/write partitions used by FairnessSuite.
@@ -346,8 +346,8 @@ func (s *FairnessSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEn
 		// TODO: disable this and use default later?
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, s.fairnessPartitions()),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, s.fairnessPartitions()),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingEnableFairness, true),
 	}
-	baseOpts = append(baseOpts, testcore.WithDynamicConfig(dynamicconfig.MatchingEnableFairness, true))
 	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
 }
 
