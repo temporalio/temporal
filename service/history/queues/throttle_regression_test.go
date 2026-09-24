@@ -207,7 +207,7 @@ func TestThrottleState_IndependentInstancesConvergeOnSharedBudget(t *testing.T) 
 	for i, state := range states {
 		require.True(t, sawIncrease[i], "host %d never increased", i)
 		require.True(t, sawDecrease[i], "host %d never decreased", i)
-		require.Greater(t, throttleRate(state, key), defaultThrottleMinRate,
+		require.Greater(t, throttleRate(state, key), state.options.MinRate(),
 			"host %d collapsed to the minimum rate", i)
 	}
 }
@@ -252,36 +252,10 @@ func TestThrottleState_BackwardClockDoesNotResetActiveKey(t *testing.T) {
 	require.Less(t, throttleRate(state, key), o.initialRate)
 }
 
-func TestThrottleState_InvalidLiveConfigUsesDefaults(t *testing.T) {
-	state, timeSource := newTestThrottleState(defaultThrottleOverrides())
-	state.options.Beta = func() float64 { return math.NaN() }
-	state.options.IncreaseRatio = func() float64 { return -1 }
-	state.options.LossThreshold = func() float64 { return 2 }
-	state.options.Window = func() time.Duration { return 0 }
-	state.options.MaxKeys = func() int { return 0 }
-	key := testKey()
-
-	reportThrottle(state, key, true)
-	closeWindow(state, timeSource, key)
-	require.InEpsilon(t, 85.0, throttleRate(state, key), 1e-9)
-	require.Equal(t, defaultThrottleWindow, state.Window())
-	require.Equal(t, defaultThrottleMaxKeys, state.maxKeys())
-}
-
-func TestThrottleState_LossThresholdOfOneStillDecreases(t *testing.T) {
-	state, timeSource := newTestThrottleState(defaultThrottleOverrides())
-	state.options.LossThreshold = func() float64 { return 1 }
-	key := testKey()
-
-	reportThrottle(state, key, true)
-	closeWindow(state, timeSource, key)
-	require.InEpsilon(t, 85.0, throttleRate(state, key), 1e-9)
-}
-
 func TestThrottleState_ThrottledWindowDoesNotIncrease(t *testing.T) {
 	state, timeSource := newTestThrottleState(defaultThrottleOverrides())
 	key := testKey()
-	_, _, lossThreshold := state.controlLaw()
+	lossThreshold := state.options.LossThreshold()
 	for i := int64(0); i < minDecisionReleases(lossThreshold); i++ {
 		allowed, metered, _ := state.Admit(key)
 		require.True(t, allowed)
@@ -421,7 +395,7 @@ func TestThrottleState_UnmatchedRejectionsDoNotCutAClassThatIssuedNothing(t *tes
 	key := testKey()
 
 	entry := state.getOrCreate(key)
-	_, _, lossThreshold := state.controlLaw()
+	lossThreshold := state.options.LossThreshold()
 	entry.Lock()
 	entry.rejections = minDecisionReleases(lossThreshold) * 5
 	entry.Unlock()
@@ -455,7 +429,7 @@ func TestThrottleState_IdleResetClearsTheDemandSignal(t *testing.T) {
 }
 
 // An unbounded increase ratio reaches the ceiling in one window.
-func TestThrottleState_AbsurdIncreaseRatioFallsBackToTheDefault(t *testing.T) {
+func TestThrottleState_IncreaseCannotExceedTheCeiling(t *testing.T) {
 	o := defaultThrottleOverrides()
 	o.increase = 1e6
 	state, timeSource := newTestThrottleState(o)
@@ -464,7 +438,8 @@ func TestThrottleState_AbsurdIncreaseRatioFallsBackToTheDefault(t *testing.T) {
 	cleanWindow(state, key)
 	closeWindow(state, timeSource, key)
 
-	require.InEpsilon(t, o.initialRate*(1+defaultThrottleIncreaseRatio), throttleRate(state, key), 1e-9)
+	require.InEpsilon(t, o.maxRate, throttleRate(state, key), 1e-9,
+		"the ceiling is what bounds a misconfigured increase ratio")
 }
 
 // Loss on traffic the gate never sent must not move the rate. Five rejections per release, so
@@ -474,7 +449,7 @@ func TestThrottleState_UnadmittedRejectionsCannotDriveADecision(t *testing.T) {
 	state, timeSource := newTestThrottleState(o)
 	key := testKey()
 
-	_, _, lossThreshold := state.controlLaw()
+	lossThreshold := state.options.LossThreshold()
 	samples := minDecisionReleases(lossThreshold)
 	for i := int64(0); i < samples; i++ {
 		require.True(t, admitOK(state, key))
@@ -513,7 +488,7 @@ func TestThrottleState_RejectionSurvivesTheFlagGoingOff(t *testing.T) {
 	)
 	key := testKey()
 
-	_, _, lossThreshold := state.controlLaw()
+	lossThreshold := state.options.LossThreshold()
 	samples := minDecisionReleases(lossThreshold)
 	for i := int64(0); i < samples; i++ {
 		allowed, _, _ := state.Admit(key)
@@ -532,7 +507,9 @@ func TestThrottleState_RejectionSurvivesTheFlagGoingOff(t *testing.T) {
 }
 
 // A threshold of zero is the degenerate rule reached from below: any rejection decreases.
-func TestThrottleState_LossThresholdOfZeroFallsBackToTheDefault(t *testing.T) {
+func TestThrottleState_ZeroLossThresholdDecidesOnOneRelease(t *testing.T) {
+	require.Equal(t, int64(1), minDecisionReleases(0), "1/0 must not reach the division")
+
 	o := defaultThrottleOverrides()
 	o.lossThresh = 0
 	state, timeSource := newTestThrottleState(o)
@@ -542,8 +519,8 @@ func TestThrottleState_LossThresholdOfZeroFallsBackToTheDefault(t *testing.T) {
 	state.ReportThrottled(key, true)
 	closeWindow(state, timeSource, key)
 
-	require.InEpsilon(t, o.initialRate, throttleRate(state, key), 1e-9,
-		"one rejection out of one release must not decide anything at the default threshold")
+	require.InEpsilon(t, o.initialRate*o.beta, throttleRate(state, key), 1e-9,
+		"any loss exceeds a zero threshold")
 }
 
 // The threshold is the loss the class may run at, so meeting it is not grounds to back off.
@@ -553,7 +530,7 @@ func TestThrottleState_LossExactlyAtTheThresholdDoesNotDecrease(t *testing.T) {
 	key := testKey()
 
 	// 1 rejection in 20 releases is exactly the 5% threshold.
-	_, _, lossThreshold := state.controlLaw()
+	lossThreshold := state.options.LossThreshold()
 	samples := minDecisionReleases(lossThreshold)
 	for i := int64(0); i < samples; i++ {
 		require.True(t, admitOK(state, key))
@@ -718,4 +695,20 @@ func TestThrottleState_FailuresOutsideTheBudgetDoNotSlowTheClass(t *testing.T) {
 		require.InEpsilon(t, quiet, settle(contention), 1e-9,
 			"%d%% lock contention must not change the rate; only the budget decides it", contention)
 	}
+}
+
+// Live config values are no longer sanitised on the way in, so clamp is the only thing
+// standing between a NaN gain and a NaN rate.
+func TestThrottleState_NaNGainCannotPoisonTheRate(t *testing.T) {
+	o := defaultThrottleOverrides()
+	state, timeSource := newTestThrottleState(o)
+	state.options.IncreaseRatio = func() float64 { return math.NaN() }
+	key := testKey()
+
+	cleanWindow(state, key)
+	closeWindow(state, timeSource, key)
+
+	rate := throttleRate(state, key)
+	require.False(t, math.IsNaN(rate), "a NaN gain must not reach the rate")
+	require.InEpsilon(t, o.minRate, rate, 1e-9, "clamp sends a NaN rate to the floor")
 }

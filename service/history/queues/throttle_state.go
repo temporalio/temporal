@@ -12,19 +12,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 )
 
-const (
-	throttleSweepDivisor = 4
-
-	defaultThrottleBeta          = 0.85
-	defaultThrottleIncreaseRatio = 0.10
-	defaultThrottleLossThreshold = 0.05
-	defaultThrottleWindow        = time.Second
-	defaultThrottleMaxKeys       = 1024
-	defaultThrottleMinRate       = 1.0
-	defaultThrottleMaxRate       = 10000.0
-	defaultThrottleInitialRate   = 1000.0
-	defaultThrottleKeyTTL        = 5 * time.Minute
-)
+const throttleSweepDivisor = 4
 
 type (
 	// ThrottleKey is one bucket per budget. Priority is deliberately not part of it: the
@@ -118,11 +106,11 @@ func (k ThrottleKey) cappedTags() []metrics.Tag {
 }
 
 func (s *ThrottleState) Enabled() bool {
-	return s != nil && s.options.Enabled != nil && s.options.Enabled()
+	return s != nil && s.options.Enabled()
 }
 
 func (s *ThrottleState) Window() time.Duration {
-	return configured(s.options.Window, defaultThrottleWindow)
+	return s.options.Window()
 }
 
 func (s *ThrottleState) Admit(key ThrottleKey) (allowed, metered bool, retryAfter time.Duration) {
@@ -220,9 +208,9 @@ func (s *ThrottleState) advanceWindowLocked(entry *throttleEntry, now time.Time,
 	entry.refillLocked(now, window)
 	entry.windowStart = now
 
-	beta, increaseRatio, lossThreshold := s.controlLaw()
-	minSamples := minDecisionReleases(lossThreshold)
-	if entry.releases < minSamples {
+	// Read once: the evidence gate and the comparison below must use the same threshold.
+	lossThreshold := s.options.LossThreshold()
+	if entry.releases < minDecisionReleases(lossThreshold) {
 		return
 	}
 	defer func() {
@@ -233,12 +221,12 @@ func (s *ThrottleState) advanceWindowLocked(entry *throttleEntry, now time.Time,
 	loss := float64(entry.rejections) / float64(entry.releases)
 	switch {
 	case loss > lossThreshold:
-		entry.rate = s.clamp(entry.rate * beta)
+		entry.rate = s.clamp(entry.rate * s.options.Beta())
 		// Tokens banked at the old rate would let the class overshoot the new one.
 		entry.tokens = min(entry.tokens, entry.burstLocked(window))
 		metrics.TaskThrottleRateDecreases.With(s.metricsHandler).Record(1, entry.key.metricsTags()...)
 	case entry.suppressions > 0:
-		entry.rate = s.clamp(entry.rate * (1 + increaseRatio))
+		entry.rate = s.clamp(entry.rate * (1 + s.options.IncreaseRatio()))
 		metrics.TaskThrottleRateIncreases.With(s.metricsHandler).Record(1, entry.key.metricsTags()...)
 	default:
 		// Never refused, so it has not asked for more. Raising it would grow the burst.
@@ -256,8 +244,8 @@ func (e *throttleEntry) resetLocked(rate float64, now time.Time, window time.Dur
 }
 
 func (s *ThrottleState) touchLocked(entry *throttleEntry, now time.Time, window time.Duration) {
-	if !entry.lastAccess.IsZero() && now.Sub(entry.lastAccess) > s.ttl() {
-		entry.resetLocked(s.clamp(s.startRate()), now, window)
+	if !entry.lastAccess.IsZero() && now.Sub(entry.lastAccess) > s.options.KeyTTL() {
+		entry.resetLocked(s.clamp(s.options.InitialRate()), now, window)
 	}
 	// A backwards clock step must not make an active entry look idle.
 	if now.After(entry.lastAccess) {
@@ -292,55 +280,9 @@ func (e *throttleEntry) tokenETALocked() time.Duration {
 
 func (s *ThrottleState) clamp(rate float64) float64 {
 	if math.IsNaN(rate) {
-		return s.floor()
+		return s.options.MinRate()
 	}
-	return min(max(rate, s.floor()), s.ceiling())
-}
-
-// Every knob is live, falling back to its default when unset or unusable.
-func configured[T ~float64 | ~int64 | ~int](fn func() T, fallback T) T {
-	if fn != nil {
-		if value := fn(); value > 0 {
-			return value
-		}
-	}
-	return fallback
-}
-
-// A gain outside (0, 1) inverts the law: beta >= 1 raises the rate on loss.
-func configuredFraction(fn dynamicconfig.FloatPropertyFn, fallback float64) float64 {
-	if fn != nil {
-		if value := fn(); value > 0 && value < 1 {
-			return value
-		}
-	}
-	return fallback
-}
-
-func (s *ThrottleState) floor() float64 {
-	return configured(s.options.MinRate, defaultThrottleMinRate)
-}
-
-func (s *ThrottleState) ceiling() float64 {
-	return configured(s.options.MaxRate, defaultThrottleMaxRate)
-}
-
-func (s *ThrottleState) startRate() float64 {
-	return configured(s.options.InitialRate, defaultThrottleInitialRate)
-}
-
-func (s *ThrottleState) ttl() time.Duration {
-	return configured(s.options.KeyTTL, defaultThrottleKeyTTL)
-}
-
-func (s *ThrottleState) maxKeys() int {
-	return configured(s.options.MaxKeys, defaultThrottleMaxKeys)
-}
-
-func (s *ThrottleState) controlLaw() (beta, increaseRatio, lossThreshold float64) {
-	return configuredFraction(s.options.Beta, defaultThrottleBeta),
-		configuredFraction(s.options.IncreaseRatio, defaultThrottleIncreaseRatio),
-		configuredFraction(s.options.LossThreshold, defaultThrottleLossThreshold)
+	return min(max(rate, s.options.MinRate()), s.options.MaxRate())
 }
 
 func (s *ThrottleState) peek(key ThrottleKey) *throttleEntry {
@@ -362,7 +304,7 @@ func (s *ThrottleState) getOrCreate(key ThrottleKey) *throttleEntry {
 
 	now := s.timeSource.Now()
 	s.maybeSweepLocked(now)
-	if len(s.entries) >= s.maxKeys() {
+	if len(s.entries) >= s.options.MaxKeys() {
 		// Fail open past the cap; the metric is the signal, a log here would storm.
 		metrics.TaskThrottleKeysDropped.With(s.metricsHandler).Record(1, key.cappedTags()...)
 		return nil
@@ -370,7 +312,7 @@ func (s *ThrottleState) getOrCreate(key ThrottleKey) *throttleEntry {
 
 	entry := &throttleEntry{
 		key:         key,
-		rate:        s.clamp(s.startRate()),
+		rate:        s.clamp(s.options.InitialRate()),
 		lastRefill:  now,
 		windowStart: now,
 		lastAccess:  now,
@@ -382,14 +324,14 @@ func (s *ThrottleState) getOrCreate(key ThrottleKey) *throttleEntry {
 }
 
 func (s *ThrottleState) maybeSweepLocked(now time.Time) {
-	if now.Sub(s.lastSweep) < s.ttl()/throttleSweepDivisor {
+	if now.Sub(s.lastSweep) < s.options.KeyTTL()/throttleSweepDivisor {
 		return
 	}
 	s.lastSweep = now
 	evicted := false
 	for key, entry := range s.entries {
 		entry.Lock()
-		idle := now.Sub(entry.lastAccess) > s.ttl()
+		idle := now.Sub(entry.lastAccess) > s.options.KeyTTL()
 		entry.Unlock()
 		if idle {
 			delete(s.entries, key)

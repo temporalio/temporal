@@ -1448,9 +1448,19 @@ func (s *executableSuite) accessInternalState(executable queues.Executable) {
 }
 
 func (s *executableSuite) newTestThrottleState() *queues.ThrottleState {
+	dc := dynamicconfig.NewNoopCollection()
 	return queues.NewThrottleState(
 		queues.ThrottleStateOptions{
-			Enabled: dynamicconfig.GetBoolPropertyFn(true),
+			Enabled:       dynamicconfig.GetBoolPropertyFn(true),
+			MinRate:       dynamicconfig.TaskThrottleControllerMinRate.Get(dc),
+			MaxRate:       dynamicconfig.TaskThrottleControllerMaxRate.Get(dc),
+			InitialRate:   dynamicconfig.TaskThrottleControllerInitialRate.Get(dc),
+			KeyTTL:        dynamicconfig.TaskThrottleControllerKeyTTL.Get(dc),
+			Beta:          dynamicconfig.TaskThrottleControllerBeta.Get(dc),
+			IncreaseRatio: dynamicconfig.TaskThrottleControllerIncreaseRatio.Get(dc),
+			LossThreshold: dynamicconfig.TaskThrottleControllerLossThreshold.Get(dc),
+			Window:        dynamicconfig.TaskThrottleControllerWindow.Get(dc),
+			MaxKeys:       dynamicconfig.TaskThrottleControllerMaxKeys.Get(dc),
 		},
 		s.timeSource,
 		log.NewTestLogger(),

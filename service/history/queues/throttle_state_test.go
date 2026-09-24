@@ -153,7 +153,7 @@ func reportThrottle(c *ThrottleState, key ThrottleKey, admitted bool) {
 		c.ReportThrottled(key, false)
 		return
 	}
-	_, _, lossThreshold := c.controlLaw()
+	lossThreshold := c.options.LossThreshold()
 	samples := minDecisionReleases(lossThreshold)
 	entry.Lock()
 	entry.releases += samples
