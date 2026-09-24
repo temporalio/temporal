@@ -58,6 +58,40 @@ func TestPropagateTimeSkippingToOtherExecution(t *testing.T) {
 	})
 }
 
+func TestTimeSkippingInfoForDescribe(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
+	require.Nil(t, timeSkippingInfoForDescribe(nil, now))
+
+	config := &commonpb.TimeSkippingConfig{
+		Enabled: true,
+		FastForwardConfig: &commonpb.FastForwardConfig{
+			Id:       "fast-forward",
+			Duration: durationpb.New(3 * time.Hour),
+		},
+	}
+	targetTime := now.Add(2 * time.Hour)
+	info := timeSkippingInfoForDescribe(&persistencespb.TimeSkippingInfo{
+		Config:           config,
+		SessionSkipCount: 4,
+		FastForwardInfo: &persistencespb.FastForwardInfo{
+			TargetTime: timestamppb.New(targetTime),
+			HasReached: true,
+		},
+	}, now)
+
+	require.Equal(t, now, info.GetCurrentTime().AsTime())
+	require.Equal(t, int32(4), info.GetCurrentSessionSkipCount())
+	require.Equal(t, "fast-forward", info.GetFastForwardInfo().GetFastForwardId())
+	require.Equal(t, 3*time.Hour, info.GetFastForwardInfo().GetFastForwardDuration().AsDuration())
+	require.Equal(t, targetTime, info.GetFastForwardInfo().GetTargetTime().AsTime())
+	require.True(t, info.GetFastForwardInfo().GetHasCompleted())
+
+	info.EffectiveConfig.Enabled = false
+	require.True(t, config.GetEnabled(), "describe info must not alias persisted configuration")
+}
+
 // TestTimeSkippingTransition covers the pure timeSkippingTransition data structure:
 // its constructor, validity check, earliest-future-time tracking, and fast-forward
 // gating. It needs no mutable state, so it is a plain test rather than a suite method.
