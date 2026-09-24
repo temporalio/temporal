@@ -1,10 +1,14 @@
 package tasks
 
 import (
+	"context"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/testing/await"
 	"go.uber.org/mock/gomock"
 )
 
@@ -36,6 +40,32 @@ func (s *bufferingNoopScheduler) WaitShutdown() {
 }
 
 var _ RunnableScheduler = &bufferingNoopScheduler{}
+
+type immediateNoopScheduler struct {
+	stopped atomic.Bool
+	waited  atomic.Bool
+}
+
+func (s *immediateNoopScheduler) TrySubmit(r Runnable) bool {
+	r.Run(context.Background())
+	return true
+}
+
+func (s *immediateNoopScheduler) InitiateShutdown() {
+	s.stopped.Store(true)
+}
+
+func (s *immediateNoopScheduler) WaitShutdown() {
+	s.waited.Store(true)
+}
+
+var _ RunnableScheduler = &immediateNoopScheduler{}
+
+type noopRunnable struct{}
+
+func (noopRunnable) Run(context.Context) {}
+
+func (noopRunnable) Abort() {}
 
 func TestSchedulerLogic(t *testing.T) {
 	ctrl := gomock.NewController(t)
@@ -73,10 +103,76 @@ func TestSchedulerLogic(t *testing.T) {
 
 	require.Len(t, scheds, 2)
 	require.Len(t, scheds["a"].buffer, 1)
-	require.Equal(t, "a", scheds["a"].buffer[0].(RunnableTask).Task.(taskWithID).ID)
+	require.Equal(t, "a", scheds["a"].buffer[0].(*trackedRunnable).runnable.(RunnableTask).Task.(taskWithID).ID)
 	require.Len(t, scheds["b"].buffer, 1)
-	require.Equal(t, "b", scheds["b"].buffer[0].(RunnableTask).Task.(taskWithID).ID)
+	require.Equal(t, "b", scheds["b"].buffer[0].(*trackedRunnable).runnable.(RunnableTask).Task.(taskWithID).ID)
 	// Stop shuts down all groups.
 	require.True(t, scheds["a"].stopped && scheds["b"].stopped)
 	require.True(t, scheds["a"].waited && scheds["b"].waited)
+}
+
+func TestGroupBySchedulerEvictsIdleGroups(t *testing.T) {
+	schedulers := make(map[string]*immediateNoopScheduler)
+	sched := NewGroupByScheduler[string, taskWithID](GroupBySchedulerOptions[string, taskWithID]{
+		Logger:      log.NewNoopLogger(),
+		IdleTimeout: time.Millisecond,
+		KeyFn:       func(t taskWithID) string { return t.ID },
+		RunnableFactory: func(taskWithID) Runnable {
+			return noopRunnable{}
+		},
+		SchedulerFactory: func(key string) RunnableScheduler {
+			group := &immediateNoopScheduler{}
+			schedulers[key] = group
+			return group
+		},
+	})
+
+	require.True(t, sched.TrySubmit(taskWithID{ID: "a"}))
+	group := schedulers["a"]
+	await.RequireTrue(t, func() bool {
+		sched.mu.RLock()
+		_, exists := sched.schedulers["a"]
+		sched.mu.RUnlock()
+		return !exists && group.stopped.Load() && group.waited.Load()
+	}, time.Second, time.Millisecond)
+
+	sched.Stop()
+}
+
+func TestGroupBySchedulerIgnoresStaleIdleCallbacks(t *testing.T) {
+	schedulers := make(map[string]*immediateNoopScheduler)
+	sched := NewGroupByScheduler[string, taskWithID](GroupBySchedulerOptions[string, taskWithID]{
+		Logger:      log.NewNoopLogger(),
+		IdleTimeout: time.Hour,
+		KeyFn:       func(t taskWithID) string { return t.ID },
+		RunnableFactory: func(taskWithID) Runnable {
+			return noopRunnable{}
+		},
+		SchedulerFactory: func(key string) RunnableScheduler {
+			group := &immediateNoopScheduler{}
+			schedulers[key] = group
+			return group
+		},
+	})
+	defer sched.Stop()
+
+	require.True(t, sched.TrySubmit(taskWithID{ID: "a"}))
+	sched.mu.RLock()
+	group := sched.schedulers["a"]
+	sched.mu.RUnlock()
+	require.NotNil(t, group)
+	group.mu.Lock()
+	staleTimerID := group.idleTimerID
+	group.mu.Unlock()
+	staleCallback := group.onIdle
+
+	// Reuse the group before the old callback runs. This models a callback that
+	// was already queued when the idle timer was stopped.
+	require.True(t, sched.TrySubmit(taskWithID{ID: "a"}))
+	staleCallback(staleTimerID)
+
+	sched.mu.RLock()
+	_, exists := sched.schedulers["a"]
+	sched.mu.RUnlock()
+	require.True(t, exists)
 }
