@@ -270,6 +270,18 @@ service MatchingService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
 
+  // Deprecated. Fairness selection is controlled by dynamic configuration.
+  // (-- api-linter: core::0134::method-signature=disabled
+  //     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+  // (-- api-linter: core::0134::response-message-name=disabled
+  //     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+  // (-- api-linter: core::0134::request-resource-required=disabled
+  //     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
+  rpc UpdateFairnessState(UpdateFairnessStateRequest) returns (UpdateFairnessStateResponse) {
+    option deprecated = true;
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
   // CheckTaskQueueVersionMembership checks if a task queue is part of a specific deployment version.
   rpc CheckTaskQueueVersionMembership(CheckTaskQueueVersionMembershipRequest) returns (CheckTaskQueueVersionMembershipResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
