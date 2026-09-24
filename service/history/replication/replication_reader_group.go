@@ -14,13 +14,20 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+const (
+	readerOverallScopeIndex = iota
+	readerHighPriorityScopeIndex
+	readerLowPriorityScopeIndex
+	tieredReaderScopeCount
+)
+
 // replicationReaderGroup manages per-priority cursor state for a replication stream
 // sender. It encapsulates the QueueReaderState scope-index arithmetic that was
 // previously spread across recvSyncReplicationState and
 // getSendCatchupBeginInclusiveWatermark.
 //
-// HIGH/LOW priority lane isolation using the existing 3-scope QueueReaderState
-// encoding. No wire-protocol or persistence-format changes.
+// HIGH/LOW priority lane isolation uses the 3-scope QueueReaderState encoding;
+// generic lane state is persisted alongside those scopes.
 type replicationReaderGroup struct {
 	shardContext   historyi.ShardContext
 	clientShardKey ClusterShardKey
@@ -66,7 +73,17 @@ func (r *replicationReaderGroup) CatchupBeginWatermark(
 		r.logger.Debug(fmt.Sprintf("StreamSender readerState not found, readerID %v", r.ReaderID()))
 		return catchupEnd
 	}
+	if priority == enumsspb.TASK_PRIORITY_HIGH && readerState.GetReplicationLaneDefaultCursor() != nil {
+		return replicationLaneDefaultCursor(readerState)
+	}
 	return readerState.Scopes[priorityScopeIndex(priority, len(readerState.Scopes), true)].Range.InclusiveMin.TaskId
+}
+
+func replicationLaneDefaultCursor(readerState *persistencespb.QueueReaderState) int64 {
+	if cursor := readerState.GetReplicationLaneDefaultCursor(); cursor != nil {
+		return cursor.GetTaskId()
+	}
+	return readerState.Scopes[readerHighPriorityScopeIndex].GetRange().GetInclusiveMin().GetTaskId()
 }
 
 // BuildReaderState constructs the QueueReaderState to persist from a received
@@ -106,28 +123,26 @@ func (r *replicationReaderGroup) FailoverWatermark(
 }
 
 // priorityScopeIndex maps a priority to its index within QueueReaderState.Scopes.
-// Scope 0 is the overall watermark, scope 1 HIGH, scope 2 default-LOW.
+// Scope 0 is the overall watermark, scope 1 is the legacy-safe HIGH watermark,
+// and scope 2 is default-LOW. When lanes exist, new senders read the actual
+// default-HIGH cursor from QueueReaderState.ReplicationLaneDefaultCursor.
 // Falls back to index 0 (the overall watermark) when the state was written by an
 // older single-stack version that only has one scope.
 //
-// allowExtraScopes controls the >3-scope case: with the reader group disabled it is
-// false and any scope count other than exactly 3 falls back to index 0 — the
-// pre-reader-group behavior, byte for byte. With the reader group enabled it is true
-// and scopes 3+ are tolerated: they are reserved for the per-lane cursors of
-// replication namespace isolation, introduced by a follow-up PR (which updates this
-// comment to point at the component that owns them).
+// allowExtraScopes retains compatibility with the experimental extended-scope
+// encoding. Generic replication lanes are stored separately in QueueReaderState.Lanes.
 func priorityScopeIndex(priority enumsspb.TaskPriority, scopeCount int, allowExtraScopes bool) int {
-	if scopeCount == 3 || (allowExtraScopes && scopeCount > 3) {
+	if scopeCount == tieredReaderScopeCount || (allowExtraScopes && scopeCount > tieredReaderScopeCount) {
 		switch priority {
 		case enumsspb.TASK_PRIORITY_HIGH:
-			return 1
+			return readerHighPriorityScopeIndex
 		case enumsspb.TASK_PRIORITY_LOW:
-			return 2
+			return readerLowPriorityScopeIndex
 		case enumsspb.TASK_PRIORITY_UNSPECIFIED:
-			return 0
+			return readerOverallScopeIndex
 		}
 	}
-	return 0
+	return readerOverallScopeIndex
 }
 
 func buildTieredReaderState(attr *replicationspb.SyncReplicationState) *persistencespb.QueueReaderState {

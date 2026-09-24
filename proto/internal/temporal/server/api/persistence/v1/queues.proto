@@ -20,6 +20,22 @@ message QueueState {
 
 message QueueReaderState {
   repeated QueueSliceScope scopes = 1;
+  // Named substreams owned by this reader. The key is meaningful only to the
+  // component that created the lane; persistence keeps it structurally paired
+  // with the scope needed to resume that lane.
+  repeated QueueReaderLane lanes = 2;
+  // The default lane's actual cursor while scopes[1] is clamped to the oldest
+  // lane cursor so servers that predate lanes can recover all HIGH traffic.
+  TaskKey replication_lane_default_cursor = 3;
+}
+
+message QueueReaderLane {
+  string logical_key = 1;
+  QueueSliceScope scope = 2;
+  // The lane's service class at persist time, so a restored lane keeps its
+  // demotion instead of restarting at the fastest class. Zero predates this
+  // field and restores as class 1.
+  int32 service_class = 3;
 }
 
 message QueueSliceScope {
