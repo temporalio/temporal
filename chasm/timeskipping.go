@@ -8,6 +8,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // =============================================================================
@@ -66,6 +67,31 @@ func PropagateTimeSkippingToOtherExecution(
 	propagatedConfig := common.CloneProto(config)
 	propagatedConfig.FastForwardConfig = nil
 	return propagatedConfig, statePropagation
+}
+
+func timeSkippingInfoForDescribe(
+	tsi *persistencespb.TimeSkippingInfo,
+	currentTime time.Time,
+) *commonpb.TimeSkippingInfo {
+	if tsi == nil {
+		return nil
+	}
+
+	info := &commonpb.TimeSkippingInfo{
+		CurrentTime:             timestamppb.New(currentTime),
+		EffectiveConfig:         common.CloneProto(tsi.GetConfig()),
+		CurrentSessionSkipCount: tsi.GetSessionSkipCount(),
+	}
+	if ff := tsi.GetFastForwardInfo(); ff != nil {
+		config := tsi.GetConfig().GetFastForwardConfig()
+		info.FastForwardInfo = &commonpb.TimeSkippingFastForwardInfo{
+			TargetTime:          common.CloneProto(ff.GetTargetTime()),
+			HasCompleted:        ff.GetHasReached(),
+			FastForwardId:       config.GetId(),
+			FastForwardDuration: common.CloneProto(config.GetDuration()),
+		}
+	}
+	return info
 }
 
 // =============================================================================

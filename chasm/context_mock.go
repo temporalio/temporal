@@ -38,6 +38,7 @@ type MockContext struct {
 	HandleUserMetadata                  func(component Component) *sdkpb.UserMetadata
 	HandlePath                          func(component Component) []string
 	HandleGetTimeSkippingPropagateState func() (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation)
+	HandleGetTimeSkippingInfo           func() *commonpb.TimeSkippingInfo
 
 	// GoCtx is the underlying context.Context used for context value lookups.
 	// Any values set on it will be available via the CHASM mock context's Value method,
@@ -78,6 +79,13 @@ func (c *MockContext) GetTimeSkippingPropagateState() (
 		return nil, nil
 	}
 	return c.HandleGetTimeSkippingPropagateState()
+}
+
+func (c *MockContext) GetTimeSkippingInfo() *commonpb.TimeSkippingInfo {
+	if c.HandleGetTimeSkippingInfo == nil {
+		return nil
+	}
+	return c.HandleGetTimeSkippingInfo()
 }
 
 func (c *MockContext) RequestHeader(key string) string {
@@ -196,6 +204,7 @@ func (c *MockContext) withValue(key any, value any) Context {
 		HandleUserMetadata:                  c.HandleUserMetadata,
 		HandlePath:                          c.HandlePath,
 		HandleGetTimeSkippingPropagateState: c.HandleGetTimeSkippingPropagateState,
+		HandleGetTimeSkippingInfo:           c.HandleGetTimeSkippingInfo,
 	}
 }
 
