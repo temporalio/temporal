@@ -134,6 +134,7 @@ func TestLegacyToCreateFromMigrationStateRequest(t *testing.T) {
 		require.Equal(t, id, backfiller.BackfillId)
 		require.NotNil(t, backfiller.GetBackfillRequest())
 		require.Equal(t, now.Add(-time.Hour), backfiller.GetBackfillRequest().StartTime.AsTime())
+		require.Equal(t, now.Add(-time.Hour), backfiller.GetLastProcessedTime().AsTime())
 	}
 
 	// Last completion result
@@ -325,6 +326,82 @@ func TestCHASMToLegacyStartScheduleArgs(t *testing.T) {
 		}
 	}
 	require.True(t, triggerFound)
+}
+
+func TestConvertBackfillersCHASMToLegacy_BackfillCursor(t *testing.T) {
+	startTime := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	progressTime := startTime.Add(2 * time.Hour)
+	tests := []struct {
+		name          string
+		attempt       int64
+		lastProcessed *timestamppb.Timestamp
+		wantStartTime time.Time
+	}{
+		{
+			name:          "fresh",
+			wantStartTime: startTime.Add(-time.Millisecond),
+		},
+		{
+			name:          "stalled before progress",
+			attempt:       1,
+			wantStartTime: startTime.Add(-time.Millisecond),
+		},
+		{
+			name:          "zero watermark",
+			attempt:       1,
+			lastProcessed: timestamppb.New(time.Unix(0, 0)),
+			wantStartTime: time.Unix(0, 0).UTC(),
+		},
+		{
+			name:          "progressed",
+			attempt:       2,
+			lastProcessed: timestamppb.New(progressTime),
+			wantStartTime: progressTime,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			backfillers := map[string]*schedulerpb.BackfillerState{
+				"backfill": {
+					BackfillId:        "backfill",
+					Attempt:           tc.attempt,
+					LastProcessedTime: tc.lastProcessed,
+					Request: &schedulerpb.BackfillerState_BackfillRequest{
+						BackfillRequest: &schedulepb.BackfillRequest{
+							StartTime: timestamppb.New(startTime),
+							EndTime:   timestamppb.New(startTime.Add(4 * time.Hour)),
+						},
+					},
+				},
+			}
+
+			ongoing, triggers := convertBackfillersCHASMToLegacy(backfillers, startTime)
+
+			require.Len(t, ongoing, 1)
+			require.Empty(t, triggers)
+			require.Equal(t, tc.wantStartTime, ongoing[0].GetStartTime().AsTime())
+		})
+	}
+}
+
+func TestBackfillCursorRoundTripPreservesLegacyProgress(t *testing.T) {
+	cursor := time.Date(2024, 6, 1, 12, 0, 0, 0, time.UTC)
+	request := &schedulepb.BackfillRequest{
+		StartTime: timestamppb.New(cursor),
+		EndTime:   timestamppb.New(cursor.Add(time.Hour)),
+	}
+
+	backfillers := convertBackfillsLegacyToCHASM([]*schedulepb.BackfillRequest{request})
+	require.Len(t, backfillers, 1)
+	for _, backfiller := range backfillers {
+		require.Equal(t, cursor, backfiller.GetLastProcessedTime().AsTime())
+	}
+
+	ongoing, triggers := convertBackfillersCHASMToLegacy(backfillers, cursor.Add(time.Hour))
+	require.Len(t, ongoing, 1)
+	require.Empty(t, triggers)
+	require.Equal(t, cursor, ongoing[0].GetStartTime().AsTime())
 }
 
 // TestCHASMToLegacyStartScheduleArgs_PendingTriggerAppendsAfterExistingQueue verifies that a

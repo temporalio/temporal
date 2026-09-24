@@ -346,3 +346,31 @@ func TestBackfillCapacityStallDoesNotSkipRange(t *testing.T) {
 	require.Len(t, retryResult.BufferedStarts, want,
 		"a capacity-only retry must process the same complete range as an unstalled first attempt")
 }
+
+func TestBackfillTask_EpochWatermarkIsProgress(t *testing.T) {
+	env := newTestEnv(t)
+	cursor := time.Unix(0, 0).UTC()
+	request := &schedulepb.BackfillRequest{
+		StartTime: timestamppb.New(cursor.Add(-5 * defaultInterval)),
+		EndTime:   timestamppb.New(cursor.Add(defaultInterval)),
+	}
+	backfiller := &scheduler.Backfiller{BackfillerState: &schedulerpb.BackfillerState{
+		BackfillId:        "epoch-watermark",
+		LastProcessedTime: timestamppb.New(cursor),
+		Request: &schedulerpb.BackfillerState_BackfillRequest{
+			BackfillRequest: request,
+		},
+	}}
+	handler := scheduler.NewBackfillerTaskHandler(scheduler.BackfillerTaskHandlerOptions{
+		Config:         defaultConfig(),
+		MetricsHandler: metrics.NoopMetricsHandler,
+		BaseLogger:     env.Logger,
+		SpecProcessor:  env.SpecProcessor,
+	})
+
+	result, err := handler.ProcessBackfill(env.Scheduler, backfiller, scheduler.DefaultTweakables.MaxBufferSize)
+	require.NoError(t, err)
+	require.True(t, result.Complete)
+	require.Len(t, result.BufferedStarts, 1)
+	require.Equal(t, cursor.Add(defaultInterval), result.BufferedStarts[0].GetActualTime().AsTime())
+}
