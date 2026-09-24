@@ -676,11 +676,12 @@ func (h *Handler) CountWorkers(
 	}, nil
 }
 
+// UpdateFairnessState is retained as a no-op for compatibility with older servers and clients.
 func (h *Handler) UpdateFairnessState(
-	ctx context.Context, request *matchingservice.UpdateFairnessStateRequest,
+	_ context.Context, _ *matchingservice.UpdateFairnessStateRequest,
 ) (_ *matchingservice.UpdateFairnessStateResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	return h.engine.UpdateFairnessState(ctx, request)
+	return &matchingservice.UpdateFairnessStateResponse{}, nil
 }
 
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {

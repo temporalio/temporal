@@ -100,6 +100,15 @@ func findMetricWithTag(snap metricstest.CaptureSnapshot, metricName, tagKey, tag
 
 const nexusTaskRequestsMetric = "nexus_task_requests"
 
+func TestUpdateFairnessStateIsCompatibilityNoOp(t *testing.T) {
+	h := &Handler{logger: log.NewNoopLogger()}
+
+	response, err := h.UpdateFairnessState(context.Background(), &matchingservice.UpdateFairnessStateRequest{})
+
+	require.NoError(t, err)
+	require.NotNil(t, response)
+}
+
 func TestNexusHandlersEmitClientNameMetric(t *testing.T) {
 	const expectedClientName = "temporal-go"
 	taskQueue := &taskqueuepb.TaskQueue{Name: "test-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
