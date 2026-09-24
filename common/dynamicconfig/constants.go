@@ -29,6 +29,12 @@ var (
 		true,
 		`AdminEnableListHistoryTasks is the key for enabling listing history tasks`,
 	)
+	AdminEnableDescribeMutableStateRateLimit = NewGlobalBoolSetting(
+		"admin.enableDescribeMutableStateRateLimit",
+		false,
+		`AdminEnableDescribeMutableStateRateLimit gates whether AdminService.DescribeMutableState is subject to
+pod-level rate limiting. Read once at process startup: changing this value requires a restart to take effect.`,
+	)
 	AdminMatchingNamespaceToPartitionDispatchRate = NewNamespaceFloatSetting(
 		"admin.matchingNamespaceToPartitionDispatchRate",
 		10000,
@@ -2526,6 +2532,12 @@ visibility if they were removed from the mutable state`,
 		100,
 		`ArchivalTaskBatchSize is batch size for archivalQueueProcessor`,
 	)
+	EnableVisibilityArchivalRecordDeduplication = NewNamespaceBoolSetting(
+		"history.enableVisibilityArchivalRecordDeduplication",
+		false,
+		`EnableVisibilityArchivalRecordDeduplication enables best-effort content-aware visibility archival deduplication for S3 and GCS.
+When enabled, the archival store must allow reading object metadata in addition to writing objects.`,
+	)
 	ArchivalProcessorMaxPollRPS = NewGlobalIntSetting(
 		"history.archivalProcessorMaxPollRPS",
 		20,
@@ -2709,8 +2721,9 @@ the oldest task of each immediate queue category that has a backlog`,
 	DefaultActivityRetryPolicy = NewNamespaceTypedSetting(
 		"history.defaultActivityRetryPolicy",
 		retrypolicy.DefaultDefaultRetrySettings,
-		`DefaultActivityRetryPolicy represents the out-of-box retry policy for activities where
-the user has not specified an explicit RetryPolicy`,
+		`DefaultActivityRetryPolicy represents the out-of-box retry policy for activities. It
+applies both when the user has not specified any RetryPolicy and, field by field, to fill
+in fields that are unset (or set to their zero value) in an explicit RetryPolicy`,
 	)
 	DefaultWorkflowRetryPolicy = NewNamespaceTypedSetting(
 		"history.defaultWorkflowRetryPolicy",
@@ -2946,6 +2959,12 @@ should be enabled for non continuedAsNew workflow UpdateWithNew case.`,
 		"history.ReplicationMultipleBatches",
 		false,
 		`ReplicationMultipleBatches is the flag to enable replication of multiple history event batches`,
+	)
+	ReplicationTaskConverterLowPriorityLockMaxAttempts = NewGlobalIntSetting(
+		"history.ReplicationTaskConverterLowPriorityLockMaxAttempts",
+		3,
+		`ReplicationTaskConverterLowPriorityLockMaxAttempts is the number of busy-workflow conversion failures using
+a low priority workflow lock before subsequent stream sender conversion attempts use a high priority lock.`,
 	)
 	HistoryTaskDLQEnabled = NewGlobalBoolSetting(
 		"history.TaskDLQEnabled",
@@ -3196,6 +3215,13 @@ time (mirrors gRPC MaxConnectionAge's +/-10% jitter). Values outside [0, 1] are 
 		"history.enableWorkflowIdReuseStartTimeValidation",
 		false,
 		`If true, validate the start time of the old workflow is older than WorkflowIdReuseMinimalInterval when reusing workflow ID.`,
+	)
+	EnableSignalWithStartRequestIDDeduplication = NewNamespaceBoolSetting(
+		"history.enableSignalWithStartRequestIdDeduplication",
+		true,
+		`If true, a SignalWithStartWorkflowExecution retry whose request ID was already handled by the
+current run returns that run instead of starting a second one, and reports Started=true when that
+request ID created the run (matching StartWorkflowExecution).`,
 	)
 	BusinessIDReuseRate = NewNamespaceIntSetting(
 		"history.businessIDReuseRate",

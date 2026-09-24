@@ -13,6 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	metrics "go.temporal.io/server/common/metrics"
 	interfaces "go.temporal.io/server/service/history/interfaces"
 	workflow "go.temporal.io/server/service/history/workflow"
 	gomock "go.uber.org/mock/gomock"
@@ -144,16 +145,16 @@ func (mr *MockWorkflowMockRecorder) Revive(ctx, taskRefresher any) *gomock.Call 
 }
 
 // SuppressBy mocks base method.
-func (m *MockWorkflow) SuppressBy(incomingWorkflow Workflow) (interfaces.TransactionPolicy, error) {
+func (m *MockWorkflow) SuppressBy(incomingWorkflow Workflow, metricsHandler metrics.Handler) (interfaces.TransactionPolicy, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SuppressBy", incomingWorkflow)
+	ret := m.ctrl.Call(m, "SuppressBy", incomingWorkflow, metricsHandler)
 	ret0, _ := ret[0].(interfaces.TransactionPolicy)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // SuppressBy indicates an expected call of SuppressBy.
-func (mr *MockWorkflowMockRecorder) SuppressBy(incomingWorkflow any) *gomock.Call {
+func (mr *MockWorkflowMockRecorder) SuppressBy(incomingWorkflow, metricsHandler any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SuppressBy", reflect.TypeOf((*MockWorkflow)(nil).SuppressBy), incomingWorkflow)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SuppressBy", reflect.TypeOf((*MockWorkflow)(nil).SuppressBy), incomingWorkflow, metricsHandler)
 }
