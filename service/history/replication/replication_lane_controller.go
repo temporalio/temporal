@@ -17,7 +17,7 @@ type replicationLaneDirectiveKind int
 const (
 	replicationLaneCreate replicationLaneDirectiveKind = iota + 1
 	replicationLaneReclassify
-	replicationLaneRelease
+	replicationLaneRetire
 	replicationLaneKeep
 )
 
@@ -118,7 +118,7 @@ func (p *namespaceIsolationPolicy) Evaluate(
 		streak.throttled = 0
 		streak.calm++
 		if streak.calm >= p.cooldownCycles {
-			directives = append(directives, replicationLaneDirective{kind: replicationLaneRelease, logicalKey: lane.logicalKey})
+			directives = append(directives, replicationLaneDirective{kind: replicationLaneRetire, logicalKey: lane.logicalKey})
 		}
 	}
 
@@ -197,7 +197,7 @@ func (c *senderLaneController) Reconcile(
 			if lane, changed := c.registry.SetClass(directive.logicalKey, directive.class); changed {
 				c.observer.Reclassified(lane)
 			}
-		case replicationLaneRelease:
+		case replicationLaneRetire:
 			if c.registry.RequestRetirement(directive.logicalKey) {
 				if lane, ok := c.registry.SnapshotByKey(directive.logicalKey); ok {
 					c.observer.RetirementRequested(lane)

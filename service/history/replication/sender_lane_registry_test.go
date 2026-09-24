@@ -28,8 +28,8 @@ func TestSenderLaneRegistryPersistsLogicalKeyWithScope(t *testing.T) {
 	})
 
 	state := registry.BuildReaderState(syncReplicationState(100, 120, 200))
-	require.Equal(t, int64(15), state.Scopes[0].Range.InclusiveMin.TaskId)
-	require.Equal(t, int64(15), state.Scopes[1].Range.InclusiveMin.TaskId)
+	require.Equal(t, int64(15), state.Scopes[readerOverallScopeIndex].Range.InclusiveMin.TaskId)
+	require.Equal(t, int64(15), state.Scopes[readerHighPriorityScopeIndex].Range.InclusiveMin.TaskId)
 	require.Equal(t, int64(120), state.GetReplicationLaneDefaultCursor().GetTaskId())
 	require.Len(t, state.Lanes, 2)
 	require.Equal(t, "namespace:a", state.Lanes[0].LogicalKey)
@@ -41,7 +41,7 @@ func TestSenderLaneRegistryPersistsLogicalKeyWithScope(t *testing.T) {
 
 	restored, err := newSenderLaneRegistry(replicationLaneDefaultCursor(state), state.Lanes, 4)
 	require.NoError(t, err)
-	require.Equal(t, int64(120), restored.DefaultCursor())
+	require.Equal(t, int64(120), restored.DefaultReservedCursor())
 	restoredA, ok := restored.SnapshotByKey("namespace:a")
 	require.True(t, ok)
 	require.Equal(t, int64(15), restoredA.cursor)
@@ -205,22 +205,22 @@ func TestSenderLaneRegistryRecoversFailedDefaultLeaseBeforeHandoff(t *testing.T)
 
 	_, _, acquired = registry.Acquire(lane)
 	require.False(t, acquired)
-	filter, acquired := registry.AcquireDefault(300)
+	belongsToDefaultLane, acquired := registry.AcquireDefault(300)
 	require.True(t, acquired)
-	require.NotNil(t, filter)
-	require.False(t, filter(&tasks.HistoryReplicationTask{
+	require.NotNil(t, belongsToDefaultLane)
+	require.False(t, belongsToDefaultLane(&tasks.HistoryReplicationTask{
 		WorkflowKey: definition.NewWorkflowKey("a", "workflow-a", "run-a"),
 		TaskID:      100,
 	}))
-	require.True(t, filter(&tasks.HistoryReplicationTask{
+	require.True(t, belongsToDefaultLane(&tasks.HistoryReplicationTask{
 		WorkflowKey: definition.NewWorkflowKey("b", "workflow-b", "run-b"),
 		TaskID:      100,
 	}))
 	require.Empty(t, registry.ReleaseDefault(300, false))
 
-	filter, acquired = registry.AcquireDefault(400)
+	belongsToDefaultLane, acquired = registry.AcquireDefault(400)
 	require.True(t, acquired)
-	require.NotNil(t, filter)
+	require.NotNil(t, belongsToDefaultLane)
 	require.Equal(t, []replicationLaneClass{1}, registry.ReleaseDefault(400, true))
 	recovered, ok := registry.SnapshotByKey("namespace:b")
 	require.True(t, ok)

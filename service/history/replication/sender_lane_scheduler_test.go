@@ -34,7 +34,7 @@ func TestSenderLaneTurnCoordinatorReleasesAfterResultDelivery(t *testing.T) {
 	require.False(t, acquired)
 
 	result := await.Rcv(t, turns.Results())
-	await.Rcv(t, result.released)
+	await.Rcv(t, result.leaseReleased)
 	acquiredLane, _, acquired := registry.Acquire(lane)
 	require.True(t, acquired)
 	registry.Release(acquiredLane.id)

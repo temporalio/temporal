@@ -13,10 +13,10 @@ import (
 const sharedLaneTag = "default"
 
 type laneSendResult struct {
-	laneID   string
-	more     bool
-	err      error
-	released <-chan struct{} // closed after the registry lease is released
+	laneID        string
+	more          bool
+	err           error
+	leaseReleased <-chan struct{} // closed after the registry lease is released
 }
 
 // senderLaneTurnCoordinator binds asynchronous turns to one class-loop invocation.
@@ -70,16 +70,16 @@ func (c *senderLaneTurnCoordinator) Start(
 		}
 		return nil, false
 	}
-	retrying := make(chan struct{})
-	var retryOnce sync.Once
+	retryStarted := make(chan struct{})
+	var retryStartedOnce sync.Once
 	go func() {
 		result := c.run(lane, end, func() {
-			retryOnce.Do(func() {
-				close(retrying)
+			retryStartedOnce.Do(func() {
+				close(retryStarted)
 			})
 		})
-		released := make(chan struct{})
-		result.released = released
+		leaseReleased := make(chan struct{})
+		result.leaseReleased = leaseReleased
 		delivered := false
 		// Keep the lease until the receiving loop observes this completion. If the
 		// loop has exited, abandon the result so the goroutine and lease cannot leak.
@@ -91,13 +91,13 @@ func (c *senderLaneTurnCoordinator) Start(
 		case <-c.streamDone:
 		}
 		c.registry.Release(lane.id)
-		close(released)
+		close(leaseReleased)
 		current, ok := c.registry.SnapshotByKey(lane.logicalKey)
 		if ok && (!delivered || current.class != lane.class) {
 			c.wake(current.class)
 		}
 	}()
-	return retrying, true
+	return retryStarted, true
 }
 
 func newLaneClassWakeChannels(classCount int) []chan struct{} {
@@ -127,7 +127,7 @@ func (s *StreamSenderImpl) sendLaneEventLoop(class replicationLaneClass) (retErr
 
 	newTaskNotificationChan, subscriberID := s.historyEngine.SubscribeReplicationNotification(s.clientClusterName)
 	defer s.historyEngine.UnsubscribeReplicationNotification(subscriberID)
-	if err := s.waitForLaneCapability(); err != nil {
+	if err := s.waitForInitialLaneState(); err != nil {
 		return err
 	}
 	timer := time.NewTimer(s.config.ReplicationStreamSendEmptyTaskDuration())
@@ -189,11 +189,11 @@ func (s *StreamSenderImpl) sendLaneRound(
 			if continuous && lane.cursor >= end {
 				continue
 			}
-			retrying, started := turns.Start(lane, end)
+			retryStarted, started := turns.Start(lane, end)
 			if !started {
 				continue
 			}
-			turnMore, stopped, err := s.waitForLaneTurn(lane.id, retrying, turns.Results())
+			turnMore, stopped, err := s.waitForLaneTurn(lane.id, retryStarted, turns.Results())
 			if err != nil || stopped {
 				return false, stopped, err
 			}
@@ -206,13 +206,13 @@ func (s *StreamSenderImpl) sendLaneRound(
 
 func (s *StreamSenderImpl) waitForLaneTurn(
 	laneID string,
-	retrying <-chan struct{},
+	retryStarted <-chan struct{},
 	results <-chan laneSendResult,
 ) (more bool, stopped bool, err error) {
 	for {
 		select {
 		case result := <-results:
-			waitForLaneRelease(result)
+			waitForLeaseRelease(result)
 			if result.err != nil {
 				return false, false, result.err
 			}
@@ -220,7 +220,7 @@ func (s *StreamSenderImpl) waitForLaneTurn(
 			if result.laneID == laneID {
 				return more, false, nil
 			}
-		case <-retrying:
+		case <-retryStarted:
 			return more, false, nil
 		case <-s.shutdownChan.Channel():
 			return false, true, nil
@@ -233,7 +233,7 @@ func drainLaneResults(results <-chan laneSendResult) (bool, error) {
 	for {
 		select {
 		case result := <-results:
-			waitForLaneRelease(result)
+			waitForLeaseRelease(result)
 			if result.err != nil {
 				return false, result.err
 			}
@@ -268,7 +268,7 @@ func (s *StreamSenderImpl) waitForLaneWork(
 		case <-timer.C:
 			return false, false, nil
 		case result := <-results:
-			waitForLaneRelease(result)
+			waitForLeaseRelease(result)
 			if result.err != nil {
 				return false, false, result.err
 			}
@@ -279,9 +279,9 @@ func (s *StreamSenderImpl) waitForLaneWork(
 	}
 }
 
-func waitForLaneRelease(result laneSendResult) {
-	if result.released != nil {
-		<-result.released
+func waitForLeaseRelease(result laneSendResult) {
+	if result.leaseReleased != nil {
+		<-result.leaseReleased
 	}
 }
 
@@ -318,7 +318,7 @@ func (s *StreamSenderImpl) wakeLaneClasses(classes ...replicationLaneClass) {
 func (s *StreamSenderImpl) runLaneTurn(
 	lane senderLaneSnapshot,
 	end int64,
-	onRetry func(),
+	onRetryStarted func(),
 ) (result laneSendResult) {
 	result.laneID = lane.id
 	var panicErr error
@@ -329,6 +329,6 @@ func (s *StreamSenderImpl) runLaneTurn(
 		}
 	}()
 	defer log.CapturePanic(s.logger, &panicErr)
-	result.more, result.err = s.sendAcquiredLane(lane, end, onRetry)
+	result.more, result.err = s.sendAcquiredLane(lane, end, onRetryStarted)
 	return result
 }

@@ -22,10 +22,10 @@ type receiverLaneRegistry struct {
 // only preserves ordering and progress for the sender's stream-local lane ID.
 
 type receiverLane struct {
-	tracker  ExecutableTaskTracker
-	priority enumsspb.TaskPriority
-	retiring bool
-	tracking int
+	tracker                    ExecutableTaskTracker
+	priority                   enumsspb.TaskPriority
+	retiring                   bool
+	batchRegistrationsInFlight int
 }
 
 func newReceiverLaneRegistry(logger log.Logger, metricsHandler metrics.Handler) *receiverLaneRegistry {
@@ -70,19 +70,19 @@ func (r *receiverLaneRegistry) Resolve(
 	} else if lane.retiring && !retire {
 		return nil, serviceerror.NewInternalf("replication lane %q received traffic after retirement", laneID)
 	}
-	lane.tracking++
+	lane.batchRegistrationsInFlight++
 	return lane.tracker, nil
 }
 
-func (r *receiverLaneRegistry) FinishBatch(laneID string, retire bool) {
+func (r *receiverLaneRegistry) FinishBatchRegistration(laneID string, retire bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	lane, ok := r.lanes[laneID]
-	if !ok || lane.tracking == 0 {
+	if !ok || lane.batchRegistrationsInFlight == 0 {
 		r.logger.DPanic("Replication lane batch finished without a matching resolution")
 		return
 	}
-	lane.tracking--
+	lane.batchRegistrationsInFlight--
 	if retire {
 		lane.retiring = true
 	}
@@ -121,7 +121,7 @@ func (r *receiverLaneRegistry) Watermarks() map[string]WatermarkInfo {
 			r.mu.Unlock()
 			continue
 		}
-		if lane.retiring && lane.tracking == 0 && lane.tracker.Size() == 0 && watermark != nil {
+		if lane.retiring && lane.batchRegistrationsInFlight == 0 && lane.tracker.Size() == 0 && watermark != nil {
 			delete(r.lanes, laneID)
 			r.mu.Unlock()
 			continue

@@ -37,10 +37,10 @@ type senderLane struct {
 }
 
 type senderLaneRegistry struct {
-	mu                sync.Mutex
-	defaultCursor     int64 // furthest shared range reserved by a sender
-	defaultSentCursor int64 // furthest shared range sent successfully
-	defaultLeases     int
+	mu                     sync.Mutex
+	defaultReservedCursor  int64 // furthest shared range reserved by a sender
+	defaultCompletedCursor int64 // furthest shared range sent successfully
+	defaultLeases          int
 	// A failed shared pass must re-cover pending lane scopes before handoff.
 	defaultRecoveryPending bool
 	byKey                  map[string]*senderLane
@@ -51,13 +51,13 @@ type senderLaneRegistry struct {
 // The registry owns the durable logical-key/scope association and the ephemeral
 // wire ID. Restoring a durable lane always creates a new stream-local ID.
 
-func newSenderLaneRegistry(defaultCursor int64, persisted []*persistencespb.QueueReaderLane, classCount int) (*senderLaneRegistry, error) {
+func newSenderLaneRegistry(persistedDefaultCursor int64, persisted []*persistencespb.QueueReaderLane, classCount int) (*senderLaneRegistry, error) {
 	r := &senderLaneRegistry{
-		defaultCursor:     defaultCursor,
-		defaultSentCursor: defaultCursor,
-		byKey:             make(map[string]*senderLane, len(persisted)),
-		byID:              make(map[string]*senderLane, len(persisted)),
-		generateLaneID:    uuid.NewString,
+		defaultReservedCursor:  persistedDefaultCursor,
+		defaultCompletedCursor: persistedDefaultCursor,
+		byKey:                  make(map[string]*senderLane, len(persisted)),
+		byID:                   make(map[string]*senderLane, len(persisted)),
+		generateLaneID:         uuid.NewString,
 	}
 	for i, persistedLane := range persisted {
 		if persistedLane.GetLogicalKey() == "" || persistedLane.GetScope() == nil {
@@ -110,7 +110,7 @@ func (r *senderLaneRegistry) Create(logicalKey string, scope queues.Scope, class
 	}
 	lane := r.newLane(logicalKey, scope, class)
 	if r.defaultLeases == 0 && !r.defaultRecoveryPending {
-		lane.cursor = max(lane.cursor, r.defaultSentCursor)
+		lane.cursor = max(lane.cursor, r.defaultCompletedCursor)
 	} else {
 		lane.pending = true
 	}
@@ -177,7 +177,14 @@ func (r *senderLaneRegistry) RequestRetirement(logicalKey string) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	lane, ok := r.byKey[logicalKey]
-	if !ok || lane.pending || lane.retiring || lane.leases != 0 || r.defaultCursor == 0 || lane.acked < max(r.defaultCursor, lane.cursor) {
+	if !ok || lane.pending || lane.retiring || lane.leases != 0 {
+		return false
+	}
+	if r.defaultReservedCursor == 0 {
+		return false
+	}
+	retirementCursor := max(r.defaultReservedCursor, lane.cursor)
+	if lane.acked < retirementCursor {
 		return false
 	}
 	lane.retiring = true
@@ -251,15 +258,15 @@ func (r *senderLaneRegistry) AdvanceLaneCursor(laneID string, to int64) {
 	}
 }
 
-func (r *senderLaneRegistry) AdvanceDefaultCursor(to int64) {
+func (r *senderLaneRegistry) AdvanceDefaultReservation(endExclusive int64) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if to > r.defaultCursor {
-		r.defaultCursor = to
+	if endExclusive > r.defaultReservedCursor {
+		r.defaultReservedCursor = endExclusive
 	}
 }
 
-func (r *senderLaneRegistry) AcquireDefault(to int64) (func(tasks.Task) bool, bool) {
+func (r *senderLaneRegistry) AcquireDefault(endExclusive int64) (func(tasks.Task) bool, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	recovering := r.defaultLeases == 0 && r.defaultRecoveryPending
@@ -273,8 +280,8 @@ func (r *senderLaneRegistry) AcquireDefault(to int64) (func(tasks.Task) bool, bo
 		r.defaultRecoveryPending = false
 	}
 	r.defaultLeases++
-	if to > r.defaultCursor {
-		r.defaultCursor = to
+	if endExclusive > r.defaultReservedCursor {
+		r.defaultReservedCursor = endExclusive
 	}
 	scopes := make([]queues.Scope, 0, len(r.byKey))
 	for _, lane := range r.byKey {
@@ -297,11 +304,11 @@ func (r *senderLaneRegistry) AcquireDefault(to int64) (func(tasks.Task) bool, bo
 	}, true
 }
 
-func (r *senderLaneRegistry) ReleaseDefault(to int64, completed bool) []replicationLaneClass {
+func (r *senderLaneRegistry) ReleaseDefault(endExclusive int64, completed bool) []replicationLaneClass {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if completed {
-		r.defaultSentCursor = max(r.defaultSentCursor, to)
+		r.defaultCompletedCursor = max(r.defaultCompletedCursor, endExclusive)
 	} else {
 		r.defaultRecoveryPending = true
 	}
@@ -314,7 +321,7 @@ func (r *senderLaneRegistry) ReleaseDefault(to int64, completed bool) []replicat
 	var runnableClasses []replicationLaneClass
 	for _, lane := range r.byKey {
 		if lane.pending {
-			lane.cursor = max(lane.cursor, r.defaultSentCursor)
+			lane.cursor = max(lane.cursor, r.defaultCompletedCursor)
 			lane.pending = false
 			runnableClasses = append(runnableClasses, lane.class)
 		}
@@ -322,10 +329,10 @@ func (r *senderLaneRegistry) ReleaseDefault(to int64, completed bool) []replicat
 	return runnableClasses
 }
 
-func (r *senderLaneRegistry) DefaultCursor() int64 {
+func (r *senderLaneRegistry) DefaultReservedCursor() int64 {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.defaultCursor
+	return r.defaultReservedCursor
 }
 
 // ResumeFloor returns the lowest resume point across lanes, with the ack time of
@@ -384,10 +391,16 @@ func (r *senderLaneRegistry) BuildReaderState(attr *replicationspb.SyncReplicati
 			Scope:        queues.ToPersistenceScope(scope),
 			ServiceClass: int32(lane.class),
 		})
-		state.Scopes[0].Range.InclusiveMin.TaskId = min(state.Scopes[0].Range.InclusiveMin.TaskId, resume)
+		state.Scopes[readerOverallScopeIndex].Range.InclusiveMin.TaskId = min(
+			state.Scopes[readerOverallScopeIndex].Range.InclusiveMin.TaskId,
+			resume,
+		)
 		// Older servers cannot read Lanes, so their HIGH scan must re-cover every
 		// outstanding lane range after a rollback.
-		state.Scopes[1].Range.InclusiveMin.TaskId = min(state.Scopes[1].Range.InclusiveMin.TaskId, resume)
+		state.Scopes[readerHighPriorityScopeIndex].Range.InclusiveMin.TaskId = min(
+			state.Scopes[readerHighPriorityScopeIndex].Range.InclusiveMin.TaskId,
+			resume,
+		)
 	}
 	return state
 }

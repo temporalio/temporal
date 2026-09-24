@@ -14,6 +14,13 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+const (
+	readerOverallScopeIndex = iota
+	readerHighPriorityScopeIndex
+	readerLowPriorityScopeIndex
+	tieredReaderScopeCount
+)
+
 // replicationReaderGroup manages per-priority cursor state for a replication stream
 // sender. It encapsulates the QueueReaderState scope-index arithmetic that was
 // previously spread across recvSyncReplicationState and
@@ -76,7 +83,7 @@ func replicationLaneDefaultCursor(readerState *persistencespb.QueueReaderState) 
 	if cursor := readerState.GetReplicationLaneDefaultCursor(); cursor != nil {
 		return cursor.GetTaskId()
 	}
-	return readerState.Scopes[1].GetRange().GetInclusiveMin().GetTaskId()
+	return readerState.Scopes[readerHighPriorityScopeIndex].GetRange().GetInclusiveMin().GetTaskId()
 }
 
 // BuildReaderState constructs the QueueReaderState to persist from a received
@@ -125,17 +132,17 @@ func (r *replicationReaderGroup) FailoverWatermark(
 // allowExtraScopes retains compatibility with the experimental extended-scope
 // encoding. Generic replication lanes are stored separately in QueueReaderState.Lanes.
 func priorityScopeIndex(priority enumsspb.TaskPriority, scopeCount int, allowExtraScopes bool) int {
-	if scopeCount == 3 || (allowExtraScopes && scopeCount > 3) {
+	if scopeCount == tieredReaderScopeCount || (allowExtraScopes && scopeCount > tieredReaderScopeCount) {
 		switch priority {
 		case enumsspb.TASK_PRIORITY_HIGH:
-			return 1
+			return readerHighPriorityScopeIndex
 		case enumsspb.TASK_PRIORITY_LOW:
-			return 2
+			return readerLowPriorityScopeIndex
 		case enumsspb.TASK_PRIORITY_UNSPECIFIED:
-			return 0
+			return readerOverallScopeIndex
 		}
 	}
-	return 0
+	return readerOverallScopeIndex
 }
 
 func buildTieredReaderState(attr *replicationspb.SyncReplicationState) *persistencespb.QueueReaderState {

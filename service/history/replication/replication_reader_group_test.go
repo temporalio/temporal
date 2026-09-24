@@ -121,9 +121,9 @@ func (s *replicationReaderGroupSuite) TestBuildReaderState_Tiered_Success() {
 	got, err := g.BuildReaderState(attr)
 	s.NoError(err)
 	s.Len(got.Scopes, 3)
-	s.Equal(int64(50), got.Scopes[0].Range.InclusiveMin.TaskId)
-	s.Equal(int64(100), got.Scopes[1].Range.InclusiveMin.TaskId)
-	s.Equal(int64(200), got.Scopes[2].Range.InclusiveMin.TaskId)
+	s.Equal(int64(50), got.Scopes[readerOverallScopeIndex].Range.InclusiveMin.TaskId)
+	s.Equal(int64(100), got.Scopes[readerHighPriorityScopeIndex].Range.InclusiveMin.TaskId)
+	s.Equal(int64(200), got.Scopes[readerLowPriorityScopeIndex].Range.InclusiveMin.TaskId)
 	for _, sc := range got.Scopes {
 		s.Equal(int64(math.MaxInt64), sc.Range.ExclusiveMax.TaskId)
 		s.Equal(enumsspb.PREDICATE_TYPE_UNIVERSAL, sc.Predicate.PredicateType)
@@ -159,9 +159,9 @@ func (s *replicationReaderGroupSuite) TestBuildReaderState_SingleStack_Success()
 	got, err := g.BuildReaderState(attr)
 	s.NoError(err)
 	s.Len(got.Scopes, 1)
-	s.Equal(int64(77), got.Scopes[0].Range.InclusiveMin.TaskId)
-	s.Equal(int64(math.MaxInt64), got.Scopes[0].Range.ExclusiveMax.TaskId)
-	s.Equal(enumsspb.PREDICATE_TYPE_UNIVERSAL, got.Scopes[0].Predicate.PredicateType)
+	s.Equal(int64(77), got.Scopes[readerOverallScopeIndex].Range.InclusiveMin.TaskId)
+	s.Equal(int64(math.MaxInt64), got.Scopes[readerOverallScopeIndex].Range.ExclusiveMax.TaskId)
+	s.Equal(enumsspb.PREDICATE_TYPE_UNIVERSAL, got.Scopes[readerOverallScopeIndex].Predicate.PredicateType)
 }
 
 func (s *replicationReaderGroupSuite) TestBuildReaderState_SingleStack_UnexpectedHighPriority_Error() {

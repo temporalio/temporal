@@ -429,7 +429,7 @@ func (r *StreamReceiverImpl) processMessages(
 			Timestamp: exclusiveHighWatermarkTime,
 		}, convertedTasks...)
 		if laneID != "" {
-			r.laneRegistry.FinishBatch(laneID, messages.GetRetireLane())
+			r.laneRegistry.FinishBatchRegistration(laneID, messages.GetRetireLane())
 		}
 		for _, task := range trackedTasks {
 			schedulerPriority, err := r.getTaskSchedulerPriority(priority, task)
@@ -500,8 +500,8 @@ func (r *StreamReceiverImpl) getTaskTrackerForLane(
 	return r.laneRegistry.Resolve(laneID, priority, retire)
 }
 
-func (r *StreamReceiverImpl) finishLaneBatch(laneID string, retire bool) {
-	r.laneRegistry.FinishBatch(laneID, retire)
+func (r *StreamReceiverImpl) finishLaneBatchRegistration(laneID string, retire bool) {
+	r.laneRegistry.FinishBatchRegistration(laneID, retire)
 }
 
 func (r *StreamReceiverImpl) laneWatermarks() map[string]WatermarkInfo {

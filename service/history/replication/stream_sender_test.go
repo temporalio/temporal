@@ -72,14 +72,14 @@ func TestStreamSenderSuite(t *testing.T) {
 }
 
 func (s *streamSenderSuite) TestLaneCapability() {
-	s.streamSender.laneCapabilityKnown = make(chan struct{})
+	s.streamSender.initialLaneStateApplied = make(chan struct{})
 	supported := &replicationspb.SyncReplicationState{
 		SupportsReplicationLanes:       true,
 		ReplicationLaneProtocolVersion: 1,
 	}
 	s.NoError(s.streamSender.observeLaneCapability(supported))
-	s.streamSender.publishLaneCapability()
-	s.NoError(s.streamSender.waitForLaneCapability())
+	s.streamSender.markInitialLaneStateApplied()
+	s.NoError(s.streamSender.waitForInitialLaneState())
 	s.True(s.streamSender.lanesConfirmed.Load())
 	s.Error(s.streamSender.observeLaneCapability(&replicationspb.SyncReplicationState{}))
 }
@@ -179,7 +179,7 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_CreatesGenericLane() {
 		100,
 		log.NewNoopLogger(),
 	)
-	s.streamSender.laneCapabilityKnown = make(chan struct{})
+	s.streamSender.initialLaneStateApplied = make(chan struct{})
 	readerID := shard.ReplicationReaderIDFromClusterShardID(
 		int64(s.clientShardKey.ClusterID),
 		s.clientShardKey.ShardID,
@@ -235,13 +235,13 @@ func (s *streamSenderSuite) TestSendLaneUsesOpaqueLaneID() {
 	s.False(more)
 }
 
-func (s *streamSenderSuite) TestSendLaneEventLoopWaitsForCapabilityPublication() {
+func (s *streamSenderSuite) TestSendLaneEventLoopWaitsForInitialLaneState() {
 	registry, err := newSenderLaneRegistry(100, nil, 4)
 	s.Require().NoError(err)
 	lane, _, err := registry.Create("namespace:namespace-a", namespaceLaneScope("namespace-a", 100), 1)
 	s.Require().NoError(err)
 	s.streamSender.laneRegistry = registry
-	s.streamSender.laneCapabilityKnown = make(chan struct{})
+	s.streamSender.initialLaneStateApplied = make(chan struct{})
 	s.streamSender.lanesConfirmed.Store(true)
 
 	notifications := make(chan struct{})
@@ -271,7 +271,7 @@ func (s *streamSenderSuite) TestSendLaneEventLoopWaitsForCapabilityPublication()
 	await.Rcv(s.T(), subscribed)
 	s.Require().Never(func() bool { return len(sent) > 0 }, 100*time.Millisecond, 5*time.Millisecond)
 
-	s.streamSender.publishLaneCapability()
+	s.streamSender.markInitialLaneStateApplied()
 	messages := await.Rcv(s.T(), sent)
 	s.Equal(lane.id, messages.GetLaneId())
 	s.streamSender.shutdownChan.Shutdown()
@@ -293,9 +293,9 @@ func (s *streamSenderSuite) TestSendLaneEventLoopsWakeOnCreationAndReclassificat
 	)
 	s.streamSender.laneRateLimiters = []quotas.RateLimiter{nil, nil}
 	s.streamSender.laneClassWakeChannels = newLaneClassWakeChannels(2)
-	s.streamSender.laneCapabilityKnown = make(chan struct{})
+	s.streamSender.initialLaneStateApplied = make(chan struct{})
 	s.streamSender.lanesConfirmed.Store(true)
-	s.streamSender.publishLaneCapability()
+	s.streamSender.markInitialLaneStateApplied()
 
 	notifications := make(chan struct{})
 	subscribed := make(chan struct{}, 2)
@@ -400,9 +400,9 @@ func (s *streamSenderSuite) TestSendLaneEventLoopPreservesWakeDuringContinuousRo
 	s.streamSender.laneRateLimiters = []quotas.RateLimiter{nil}
 	s.streamSender.laneClassWakeChannels = newLaneClassWakeChannels(1)
 	s.streamSender.clientClusterShardCount = 1
-	s.streamSender.laneCapabilityKnown = make(chan struct{})
+	s.streamSender.initialLaneStateApplied = make(chan struct{})
 	s.streamSender.lanesConfirmed.Store(true)
-	s.streamSender.publishLaneCapability()
+	s.streamSender.markInitialLaneStateApplied()
 
 	visibilityTime := time.Now().UTC()
 	allTasks := []tasks.Task{
@@ -513,9 +513,9 @@ func (s *streamSenderSuite) TestSendLaneEventLoopRoundRobinsLanesInClass() {
 	s.streamSender.laneRegistry = registry
 	s.streamSender.laneRateLimiters = []quotas.RateLimiter{nil}
 	s.streamSender.clientClusterShardCount = 1
-	s.streamSender.laneCapabilityKnown = make(chan struct{})
+	s.streamSender.initialLaneStateApplied = make(chan struct{})
 	s.streamSender.lanesConfirmed.Store(true)
-	s.streamSender.publishLaneCapability()
+	s.streamSender.markInitialLaneStateApplied()
 
 	visibilityTime := time.Now().UTC()
 	allTasks := []tasks.Task{
@@ -625,9 +625,9 @@ func (s *streamSenderSuite) TestSendLaneEventLoopRetryDoesNotBlockPeerLane() {
 	s.streamSender.laneRegistry = registry
 	s.streamSender.laneRateLimiters = []quotas.RateLimiter{nil}
 	s.streamSender.clientClusterShardCount = 1
-	s.streamSender.laneCapabilityKnown = make(chan struct{})
+	s.streamSender.initialLaneStateApplied = make(chan struct{})
 	s.streamSender.lanesConfirmed.Store(true)
-	s.streamSender.publishLaneCapability()
+	s.streamSender.markInitialLaneStateApplied()
 
 	visibilityTime := time.Now().UTC()
 	allTasks := []tasks.Task{
@@ -858,7 +858,7 @@ func (s *streamSenderSuite) TestSendCatchUp_LanesPrimesHighTrackerBeforeCapabili
 		100,
 		log.NewNoopLogger(),
 	)
-	s.streamSender.laneCapabilityKnown = make(chan struct{})
+	s.streamSender.initialLaneStateApplied = make(chan struct{})
 
 	scope := func(taskID int64) *persistencespb.QueueSliceScope {
 		return &persistencespb.QueueSliceScope{
@@ -929,7 +929,7 @@ func (s *streamSenderSuite) TestSendCatchUp_LanesPrimesHighTrackerBeforeCapabili
 		SupportsReplicationLanes:       true,
 		ReplicationLaneProtocolVersion: 1,
 	}))
-	s.streamSender.publishLaneCapability()
+	s.streamSender.markInitialLaneStateApplied()
 
 	trailing := await.Rcv(s.T(), sent)
 	s.Equal(endExclusiveWatermark, trailing.GetExclusiveHighWatermark())
@@ -960,7 +960,7 @@ func (s *streamSenderSuite) TestSendCatchUp_FirstCapabilityReconcilePrecedesDefa
 		100,
 		log.NewNoopLogger(),
 	)
-	s.streamSender.laneCapabilityKnown = make(chan struct{})
+	s.streamSender.initialLaneStateApplied = make(chan struct{})
 
 	state := syncReplicationState(beginInclusiveWatermark, beginInclusiveWatermark, beginInclusiveWatermark)
 	state.SupportsReplicationLanes = true
@@ -1071,8 +1071,8 @@ func (s *streamSenderSuite) TestSendCatchUp_FirstCapabilityReconcilePrecedesDefa
 
 	var catchup catchupResult
 	select {
-	case <-s.streamSender.laneCapabilityKnown:
-		// If capability is published before reconciliation, let catch-up finish
+	case <-s.streamSender.initialLaneStateApplied:
+		// If the initial lane state is marked applied before reconciliation, let catch-up finish
 		// while reconciliation remains blocked so the leaked task is deterministic.
 		catchup = await.Rcv(s.T(), catchupDone)
 		close(releaseRefresh)
@@ -1121,7 +1121,7 @@ func (s *streamSenderSuite) TestSendCatchUp_LaneUnsupportedReCoversFromLaneFloor
 		100,
 		log.NewNoopLogger(),
 	)
-	s.streamSender.laneCapabilityKnown = make(chan struct{})
+	s.streamSender.initialLaneStateApplied = make(chan struct{})
 
 	scope := func(taskID int64) *persistencespb.QueueSliceScope {
 		return &persistencespb.QueueSliceScope{
@@ -1182,7 +1182,7 @@ func (s *streamSenderSuite) TestSendCatchUp_LaneUnsupportedReCoversFromLaneFloor
 	s.Equal(laneFloor, primed.GetExclusiveHighWatermark())
 
 	s.NoError(s.streamSender.observeLaneCapability(&replicationspb.SyncReplicationState{}))
-	s.streamSender.publishLaneCapability()
+	s.streamSender.markInitialLaneStateApplied()
 
 	trailing := await.Rcv(s.T(), sent)
 	s.Equal(endExclusiveWatermark, trailing.GetExclusiveHighWatermark())
@@ -1206,7 +1206,7 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_LaneUnsupportedDropsLan
 		100,
 		log.NewNoopLogger(),
 	)
-	s.streamSender.laneCapabilityKnown = make(chan struct{})
+	s.streamSender.initialLaneStateApplied = make(chan struct{})
 	readerID := shard.ReplicationReaderIDFromClusterShardID(
 		int64(s.clientShardKey.ClusterID),
 		s.clientShardKey.ShardID,

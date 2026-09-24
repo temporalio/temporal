@@ -247,7 +247,7 @@ func (s *streamReceiverSuite) TestGetTaskTrackerForLane_AcceptsPrioritizedLanes(
 func (s *streamReceiverSuite) TestGetTaskTrackerForLane_RejectsPriorityChange() {
 	_, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "lane-a", false)
 	s.NoError(err)
-	s.streamReceiver.finishLaneBatch("lane-a", false)
+	s.streamReceiver.finishLaneBatchRegistration("lane-a", false)
 
 	_, err = s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_LOW, "lane-a", false)
 	s.Error(err)
@@ -257,13 +257,13 @@ func (s *streamReceiverSuite) TestReplicationLane_RejectsTrafficAfterRetirement(
 	tracker, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "lane-a", false)
 	s.NoError(err)
 	tracker.TrackTasks(WatermarkInfo{Watermark: 100, Timestamp: time.Now()})
-	s.streamReceiver.finishLaneBatch("lane-a", false)
+	s.streamReceiver.finishLaneBatchRegistration("lane-a", false)
 
 	markerTracker, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "lane-a", true)
 	s.NoError(err)
 	s.Same(tracker, markerTracker)
 	markerTracker.TrackTasks(WatermarkInfo{Watermark: 200, Timestamp: time.Now()})
-	s.streamReceiver.finishLaneBatch("lane-a", true)
+	s.streamReceiver.finishLaneBatchRegistration("lane-a", true)
 
 	_, err = s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "lane-a", false)
 	s.Error(err)
@@ -280,7 +280,7 @@ func (s *streamReceiverSuite) TestMemberLane_RetireBatchMidTrackSurvivesAckSnaps
 	s.Contains(s.streamReceiver.laneRegistry.lanes, "ns-a")
 
 	tracker.TrackTasks(WatermarkInfo{Watermark: 50, Timestamp: time.Now()})
-	s.streamReceiver.finishLaneBatch("ns-a", true)
+	s.streamReceiver.finishLaneBatchRegistration("ns-a", true)
 	s.streamReceiver.laneWatermarks()
 	s.NotContains(s.streamReceiver.laneRegistry.lanes, "ns-a")
 }
@@ -294,7 +294,7 @@ func (s *streamReceiverSuite) TestMemberLane_RetireBatchOnRetiringLaneNotOrphane
 	tracker, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "ns-a", true)
 	s.NoError(err)
 	tracker.TrackTasks(WatermarkInfo{Watermark: 100, Timestamp: time.Now()})
-	s.streamReceiver.finishLaneBatch("ns-a", true)
+	s.streamReceiver.finishLaneBatchRegistration("ns-a", true)
 
 	// The lane is now retiring and drained. A second retire batch resolves to it...
 	trackerAgain, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "ns-a", true)
@@ -308,7 +308,7 @@ func (s *streamReceiverSuite) TestMemberLane_RetireBatchOnRetiringLaneNotOrphane
 
 	// Once the batch is tracked and finished, the drained lane is dropped as before.
 	trackerAgain.TrackTasks(WatermarkInfo{Watermark: 200, Timestamp: time.Now()})
-	s.streamReceiver.finishLaneBatch("ns-a", true)
+	s.streamReceiver.finishLaneBatchRegistration("ns-a", true)
 	s.streamReceiver.laneWatermarks()
 	s.NotContains(s.streamReceiver.laneRegistry.lanes, "ns-a")
 }
@@ -332,7 +332,7 @@ func (s *streamReceiverSuite) TestMemberLane_RetiredLaneForgottenOnceDrained() {
 	tracker, err := s.streamReceiver.getTaskTrackerForLane(enumsspb.TASK_PRIORITY_HIGH, "ns-a", false)
 	s.NoError(err)
 	tracker.TrackTasks(WatermarkInfo{Watermark: 100, Timestamp: time.Now()})
-	s.streamReceiver.finishLaneBatch("ns-a", false)
+	s.streamReceiver.finishLaneBatchRegistration("ns-a", false)
 
 	// Active lane reports its watermark.
 	wms := s.streamReceiver.laneWatermarks()
@@ -345,7 +345,7 @@ func (s *streamReceiverSuite) TestMemberLane_RetiredLaneForgottenOnceDrained() {
 	s.NoError(err)
 	s.Same(tracker, markerTracker)
 	markerTracker.TrackTasks(WatermarkInfo{Watermark: 200, Timestamp: time.Now()})
-	s.streamReceiver.finishLaneBatch("ns-a", true)
+	s.streamReceiver.finishLaneBatchRegistration("ns-a", true)
 	wms = s.streamReceiver.laneWatermarks()
 	s.NotContains(wms, "ns-a")
 
