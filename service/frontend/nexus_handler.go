@@ -141,6 +141,14 @@ func (c *operationContext) matchingRequest(req *nexuspb.Request) *matchingservic
 	}
 }
 
+func convertNexusClaimMapperError(err error) error {
+	var permissionDeniedError *serviceerror.PermissionDenied
+	if errors.As(err, &permissionDeniedError) {
+		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthenticated, "unauthorized")
+	}
+	return commonnexus.ConvertGRPCError(err, false)
+}
+
 func (c *operationContext) augmentContext(ctx context.Context, header nexus.Header) context.Context {
 	ctx = metrics.AddMetricsContext(ctx)
 	ctx = interceptor.AddTelemetryContext(ctx, c.metricsHandlerForInterceptors)
