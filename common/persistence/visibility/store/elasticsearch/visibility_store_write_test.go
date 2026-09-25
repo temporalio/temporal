@@ -18,6 +18,37 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+func (s *ESVisibilitySuite) TestAddSearchAttributes() {
+	request := &manager.AddSearchAttributesRequest{
+		SearchAttributes: map[string]enumspb.IndexedValueType{
+			"CustomKeywordField": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+	}
+	s.mockESClient.EXPECT().PutMapping(gomock.Any(), testIndex, request.SearchAttributes).Return(true, nil)
+	s.mockESClient.EXPECT().WaitForYellowStatus(gomock.Any(), testIndex).Return("yellow", nil)
+
+	err := s.visibilityStore.AddSearchAttributes(context.Background(), request)
+	s.NoError(err)
+}
+
+func (s *ESVisibilitySuite) TestAddSearchAttributes_Serverless() {
+	serverlessStore := *s.visibilityStore
+	serverlessStore.serverless = true
+
+	request := &manager.AddSearchAttributesRequest{
+		SearchAttributes: map[string]enumspb.IndexedValueType{
+			"CustomKeywordField": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+	}
+	s.mockESClient.EXPECT().PutMapping(gomock.Any(), testIndex, request.SearchAttributes).Return(true, nil)
+	// No WaitForYellowStatus on serverless: readiness is confirmed by reading the mapping back.
+	s.mockESClient.EXPECT().GetMapping(gomock.Any(), testIndex).
+		Return(map[string]string{"CustomKeywordField": "keyword"}, nil)
+
+	err := serverlessStore.AddSearchAttributes(context.Background(), request)
+	s.NoError(err)
+}
+
 func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 	// test non-empty request fields match
 	request := &store.InternalRecordWorkflowExecutionStartedRequest{
