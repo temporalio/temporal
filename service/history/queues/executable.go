@@ -956,7 +956,7 @@ func (e *CircuitBreakerExecutable) Execute() error {
 			"%w: %w",
 			&serviceerror.ResourceExhausted{
 				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN,
-				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
 				Message: "circuit breaker rejection",
 			},
 			err,
