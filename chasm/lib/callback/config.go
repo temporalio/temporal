@@ -14,16 +14,23 @@ var MaxPerExecution = dynamicconfig.NewNamespaceIntSetting(
 	`MaxPerExecution is the maximum number of callbacks that can be attached to an execution (workflow or standalone activity).`,
 )
 
-// TODO(chrsmith): This just caps the size of an individual source context payload.
-// We also need to wire through an aggregate max size, for all callbacks in an execution.
-// (We expect that users will want fewer NexusHandler callbacks with larger payloads than the
-// full 2k execution callbacks, with a much smaller per-callback payload size.)
-
+// NexusHandlerSourceContextMaxSize caps a single source context payload. The aggregate budget
+// across every callback on an execution is TotalMaxSizePerExecution.
 var NexusHandlerSourceContextMaxSize = dynamicconfig.NewNamespaceIntSetting(
 	"callback.nexusHandler.sourceContext.maxSize",
 	1024*1024,
 	`The maximum allowed size, in bytes, of the opaque source context attached to a single NexusHandler
 completion callback. The server carries this payload to the callback's handler untouched.`,
+)
+
+var TotalMaxSizePerExecution = dynamicconfig.NewNamespaceIntSetting(
+	"callback.totalMaxSizePerExecution",
+	0, // Set to X MiB after we've confirmed enforcing a limit won't impact customers.
+	`The maximum allowed total size, in bytes, of all [commonpb.Callback]s attached to a single
+execution. This includes things like links, URLs, headers, etc. But does not cover the server's
+bookkeeping.
+
+A value of 0 means no limit is enforced.`,
 )
 
 var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(

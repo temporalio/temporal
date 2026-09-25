@@ -958,6 +958,7 @@ func OperatorHandlerProvider(
 func callbackValidatorProvider(dc *dynamicconfig.Collection) (callbacks.Validator, error) {
 	cfg := callbacks.ValidatorConfig{
 		MaxCallbacksPerExecution:         chasmcallback.MaxPerExecution.Get(dc),
+		TotalCallbacksMaxSize:            chasmcallback.TotalMaxSizePerExecution.Get(dc),
 		MaxIDLengthLimit:                 dynamicconfig.MaxIDLengthLimit.Get(dc),
 		URLMaxLength:                     dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
 		HeaderMaxSize:                    dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
