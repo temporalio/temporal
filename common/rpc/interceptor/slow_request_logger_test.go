@@ -10,6 +10,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -23,8 +25,9 @@ type slowRequestLoggerSuite struct {
 	suite.Suite
 	controller *gomock.Controller
 
-	logger      *log.MockLogger
-	interceptor *interceptor.SlowRequestLoggerInterceptor
+	logger       *log.MockLogger
+	mockRegistry *namespace.MockRegistry
+	interceptor  *interceptor.SlowRequestLoggerInterceptor
 }
 
 func TestSlowRequestLoggerInterceptor(t *testing.T) {
@@ -34,8 +37,11 @@ func TestSlowRequestLoggerInterceptor(t *testing.T) {
 func (s *slowRequestLoggerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.logger = log.NewMockLogger(s.controller)
+	s.mockRegistry = namespace.NewMockRegistry(s.controller)
+	s.mockRegistry.EXPECT().GetNamespace(gomock.Any()).Return(nil, nil).AnyTimes()
 	s.interceptor = interceptor.NewSlowRequestLoggerInterceptor(
 		s.logger,
+		s.mockRegistry,
 		dynamicconfig.GetDurationPropertyFn(testThreshold),
 	)
 }
@@ -70,9 +76,21 @@ func (s *slowRequestLoggerSuite) TestIntercept() {
 	_, err := s.interceptor.Intercept(ctx, request, info, fastHandler)
 	s.NoError(err)
 
-	// Ensure slow requests are logged.
+	// Ensure slow requests are logged, and that the namespace tag is included so the log
+	// line can be filtered/queried by namespace.
 	expectedMsg := "Slow gRPC call"
-	s.logger.EXPECT().Warn(gomock.Eq(expectedMsg), gomock.Any()).Times(1)
+	s.logger.EXPECT().Warn(gomock.Eq(expectedMsg), gomock.Any()).Times(1).Do(
+		func(_ string, tags ...tag.Tag) {
+			var foundNamespace bool
+			for _, t := range tags {
+				if t.Key() == "wf-namespace" {
+					foundNamespace = true
+					s.Equal("namespace-name", t.Value())
+				}
+			}
+			s.True(foundNamespace, "expected slow request log to include the namespace tag")
+		},
+	)
 	_, err = s.interceptor.Intercept(ctx, request, info, slowHandler)
 	s.NoError(err)
 
