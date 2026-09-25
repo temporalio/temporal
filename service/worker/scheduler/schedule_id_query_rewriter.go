@@ -146,7 +146,8 @@ func rewriteIsExpr(expr *sqlparser.IsExpr, saMapper searchattribute.Mapper, saNa
 func IsNegativeScheduleIDOperator(operator string) bool {
 	return operator == sqlparser.NotEqualStr ||
 		operator == sqlparser.NotInStr ||
-		operator == sqlparser.NotStartsWithStr
+		operator == sqlparser.NotStartsWithStr ||
+		operator == sqlparser.NotLikeStr
 }
 
 // isScheduleIDToWorkflowIDColumn returns true if col refers to the ScheduleId search attribute

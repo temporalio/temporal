@@ -24,8 +24,7 @@ var errorCases = map[string]string{
 	"select * from a where zz(k=2)":          query.NotSupportedErrMessage,
 	"select * from a group by k, m":          query.NotSupportedErrMessage,
 	"select * from a group by k order by id": query.NotSupportedErrMessage,
-	"select * from a where a like '%a%'":     "operator 'like' not allowed in comparison expression",
-	"select * from a where a not like '%a%'": "operator 'not like' not allowed in comparison expression",
+	"select * from a where value like '%a%'": "operator 'like' not supported for search attribute",
 	"invalid query":                          query.MalformedSqlQueryErrMessage,
 	"select * from a where  a= 1 and multi_match(zz=1, query='this is a test', fields=(title,title.origin), type=phrase)": query.NotSupportedErrMessage,
 }
@@ -70,6 +69,9 @@ var supportedWhereCases = map[string]string{
 	"create_time between '2015-01-01T00:00:00+0800' and '2017-01-01T00:00:00+0800' and process_id = 0 and status >= 1 and content = '三个男人' and phone = '15810324322'": `{"bool":{"filter":[{"range":{"create_time":{"from":"2015-01-01T00:00:00+0800","include_lower":true,"include_upper":true,"to":"2017-01-01T00:00:00+0800"}}},{"term":{"process_id":0}},{"range":{"status":{"from":1,"include_lower":true,"include_upper":true,"to":null}}},{"match":{"content":{"query":"三个男人"}}},{"match":{"phone":{"query":"15810324322"}}}]}}`,
 	"value starts_with 'prefix'":     `{"bool":{"filter":{"prefix":{"value":"prefix"}}}}`,
 	"value not starts_with 'prefix'": `{"bool":{"must_not":{"prefix":{"value":"prefix"}}}}`,
+	"a like '%sub%'":                 `{"bool":{"filter":{"wildcard":{"a":{"value":"*sub*"}}}}}`,
+	"a not like '%sub%'":             `{"bool":{"must_not":{"wildcard":{"a":{"value":"*sub*"}}}}}`,
+	"a like 'foo_bar*'":              `{"bool":{"filter":{"wildcard":{"a":{"value":"foo?bar\\*"}}}}}`,
 }
 
 var supportedWhereOrderCases = map[string]struct {
