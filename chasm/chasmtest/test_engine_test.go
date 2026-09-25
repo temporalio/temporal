@@ -190,6 +190,21 @@ func TestStartExecutionDeduplicatesUpdateRequestID(t *testing.T) {
 	require.Equal(t, 0, startCount)
 }
 
+func TestNextTaskTime(t *testing.T) {
+	const ttl = time.Hour
+	e, ref := startStore(t, ttl)
+	start := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	next, ok, err := e.NextTaskTime(ref, start)
+	require.NoError(t, err)
+	require.True(t, ok)
+	require.Equal(t, start.Add(ttl), next)
+
+	_, ok, err = e.NextTaskTime(ref, next)
+	require.NoError(t, err)
+	require.False(t, ok)
+}
+
 func startStore(
 	t *testing.T,
 	ttl time.Duration,
