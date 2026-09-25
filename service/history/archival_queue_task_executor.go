@@ -7,11 +7,13 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/archival"
@@ -99,6 +101,27 @@ func (e *archivalQueueTaskExecutor) processArchiveExecutionTask(ctx context.Cont
 	if err != nil {
 		return err
 	}
+	// Archival tasks are local (not replicated), so a standby cluster must retry
+	// the task rather than drop it — otherwise the archive is permanently lost.
+	// NamespaceNotActive is treated as retryable by the queue
+	// (see queues.executable isExpectedRetryableError), so returning it here
+	// re-queues the task until this cluster becomes active.
+	currentClusterName := e.shardContext.GetClusterMetadata().GetCurrentClusterName()
+	nsEntry, nsErr := e.shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.NamespaceID))
+	if nsErr == nil {
+		activeClusterName := nsEntry.ActiveClusterName(namespace.RoutingKey{ID: task.WorkflowID})
+		if activeClusterName != currentClusterName {
+			logger.Debug("Skipping archival on standby cluster; task will retry until active.",
+				tag.WorkflowNamespaceID(task.NamespaceID),
+				tag.WorkflowID(task.WorkflowID),
+				tag.ClusterName(currentClusterName),
+				tag.TargetCluster(activeClusterName),
+			)
+			return serviceerror.NewNamespaceNotActive(task.NamespaceID, currentClusterName, activeClusterName)
+		}
+	}
+	// If the namespace lookup failed, fall through and process as active so a
+	// registry hiccup never drops archival work.
 	if len(request.Targets) > 0 {
 		_, err = e.archiver.Archive(ctx, request)
 		if err != nil {
