@@ -185,6 +185,12 @@ var queryConverterTestCases = []queryConverterTestCase{
 		es:   `{"bool":{"filter":{"term":{"Keyword01":"foo's bar"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
+		name: "Keyword value with leading and trailing quotes",
+		in:   "AliasForKeyword01 = '''foo'''",
+		sql:  "TemporalNamespaceDivision is null and Keyword01 = '''foo'''",
+		es:   `{"bool":{"filter":{"term":{"Keyword01":"'foo'"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
 		name: "Keyword value with backslash",
 		in:   "AliasForKeyword01 = 'foo\\\\bar'",
 		sql:  "TemporalNamespaceDivision is null and Keyword01 = 'foo\\\\bar'",
