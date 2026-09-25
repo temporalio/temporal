@@ -58,6 +58,20 @@ message SchedulerState {
   // fall back to the recomputed value, which is what makes the rollout a no-op
   // until the first Generator tick advances it.
   google.protobuf.Timestamp last_event_time = 13;
+
+  VisibilityPublication visibility_publication = 14;
+}
+
+message VisibilityPublication {
+  temporal.api.schedule.v1.ScheduleListInfo list_info = 1;
+  google.protobuf.Timestamp next_action_time = 2;
+  google.protobuf.Timestamp idle_close_time = 3;
+  int64 running_workflow_count = 4;
+  int64 buffered_starts_count = 5;
+  bool paused = 6;
+  string execution_status = 7;
+  google.protobuf.Timestamp refresh_deadline = 8;
+  int64 refresh_generation = 9;
 }
 
 // WorkflowMigrationState tracks the state of an in-progress V2-to-V1 migration.

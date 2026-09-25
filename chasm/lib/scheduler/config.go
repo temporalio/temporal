@@ -21,6 +21,7 @@ type (
 		IdleTime                          time.Duration // How long to keep schedules after they're done
 		EventLogMaxEntries                int           // Maximum EventLog entries retained per component; the earliest entries are dropped beyond this.
 		EventLogMaxMessageLen             int           // Maximum byte length of an EventLog message; longer messages are truncated at a UTF-8 boundary.
+		VisibilityCoalesceInterval        time.Duration // Maximum time routine schedule changes wait before visibility publication.
 	}
 
 	// Config is the CHASM Scheduler dynamic config, shared among all sub-components.
