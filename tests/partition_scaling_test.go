@@ -13,6 +13,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
@@ -35,6 +36,7 @@ const (
 
 func scalerEnvOptions(dcPartitions int, shrink scalerShrink) []testcore.TestOption {
 	settings := dynamicconfig.PartitionScaleManagerSettings{
+		Mode:               enumsspb.PARTITION_SCALE_MODE_ENABLED,
 		MaxRate:            100,         // don't limit speed of changes
 		BatchSize:          1,           // always go directly to scaler
 		BackgroundInterval: time.Second, // ping scaler often and drain faster
