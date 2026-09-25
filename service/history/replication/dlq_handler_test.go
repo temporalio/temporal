@@ -194,13 +194,11 @@ func (s *dlqHandlerSuite) TestPurgeMessages() {
 	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(
 		gomock.Any(),
 		&persistence.RangeDeleteReplicationTaskFromDLQRequest{
-			RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
-				ShardID:             s.mockShard.GetShardID(),
-				TaskCategory:        tasks.CategoryReplication,
-				InclusiveMinTaskKey: tasks.NewImmediateKey(persistence.EmptyQueueMessageID + 1),
-				ExclusiveMaxTaskKey: tasks.NewImmediateKey(lastMessageID + 1),
-			},
-			SourceClusterName: s.sourceCluster,
+			ShardID:             s.mockShard.GetShardID(),
+			TaskCategory:        tasks.CategoryReplication,
+			InclusiveMinTaskKey: tasks.NewImmediateKey(persistence.EmptyQueueMessageID + 1),
+			ExclusiveMaxTaskKey: tasks.NewImmediateKey(lastMessageID + 1),
+			SourceClusterName:   s.sourceCluster,
 		}).Return(nil)
 
 	s.shardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
@@ -273,13 +271,11 @@ func (s *dlqHandlerSuite) TestMergeMessages() {
 		}, nil)
 	s.taskExecutor.EXPECT().Execute(gomock.Any(), remoteTask, true).Return(nil)
 	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(gomock.Any(), &persistence.RangeDeleteReplicationTaskFromDLQRequest{
-		RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
-			ShardID:             s.mockShard.GetShardID(),
-			TaskCategory:        tasks.CategoryReplication,
-			InclusiveMinTaskKey: tasks.NewImmediateKey(persistence.EmptyQueueMessageID + 1),
-			ExclusiveMaxTaskKey: tasks.NewImmediateKey(lastMessageID + 1),
-		},
-		SourceClusterName: s.sourceCluster,
+		ShardID:             s.mockShard.GetShardID(),
+		TaskCategory:        tasks.CategoryReplication,
+		InclusiveMinTaskKey: tasks.NewImmediateKey(persistence.EmptyQueueMessageID + 1),
+		ExclusiveMaxTaskKey: tasks.NewImmediateKey(lastMessageID + 1),
+		SourceClusterName:   s.sourceCluster,
 	}).Return(nil)
 
 	s.shardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
