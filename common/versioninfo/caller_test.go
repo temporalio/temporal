@@ -1,6 +1,7 @@
 package versioninfo_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -81,5 +82,67 @@ func TestPostInfo(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("Request failed: %s", err)
+	}
+}
+
+func TestCaller_Timeout(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+	}))
+	defer ts.Close()
+
+	u, err := url.Parse(ts.URL)
+	if err != nil {
+		t.Fatalf("Parse URL failed: %s", err)
+	}
+	caller := &versioninfo.Caller{
+		Scheme:  u.Scheme,
+		Host:    u.Host,
+		Timeout: 50 * time.Millisecond,
+	}
+	_, err = caller.Call(&versioninfo.VersionCheckRequest{
+		Product:   "server",
+		Version:   "0.1",
+		ClusterID: "foo",
+		DB:        "cassandra",
+		OS:        "linux",
+		Arch:      "arm64",
+		Timestamp: time.Now().UnixNano(),
+	})
+	if err == nil {
+		t.Fatal("expected caller to time out, got nil error")
+	}
+}
+
+func TestCaller_ContextCancellation(t *testing.T) {
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(200 * time.Millisecond)
+	}))
+	defer ts.Close()
+
+	u, err := url.Parse(ts.URL)
+	if err != nil {
+		t.Fatalf("Parse URL failed: %s", err)
+	}
+	caller := &versioninfo.Caller{
+		Scheme:  u.Scheme,
+		Host:    u.Host,
+		Timeout: 1 * time.Second,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel() // Cancel immediately
+
+	_, err = caller.CallWithContext(ctx, &versioninfo.VersionCheckRequest{
+		Product:   "server",
+		Version:   "0.1",
+		ClusterID: "foo",
+		DB:        "cassandra",
+		OS:        "linux",
+		Arch:      "arm64",
+		Timestamp: time.Now().UnixNano(),
+	})
+	if err == nil {
+		t.Fatal("expected caller to return error on cancelled context, got nil")
 	}
 }
