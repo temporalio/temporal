@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"math"
 	"math/rand"
 	"runtime"
 	"sync/atomic"
@@ -1127,6 +1128,14 @@ func TestSimpleLimiterLowToHigh(t *testing.T) {
 func TestCheckConstants(t *testing.T) {
 	// 1000 to leave room for further adjustments
 	assert.Greater(t, pollForwarderPriority, 1000*maxPriorityLevels)
+}
+
+func TestAvailableSimpleLimiterTokens(t *testing.T) {
+	nowNs := time.Now().UnixNano()
+	require.Equal(t, int32(11), simpleLimiter(0).availableSimpleLimiterTokens(makeSimpleLimiterParams(10, time.Second), nowNs))
+	require.Equal(t, int32(0), simpleLimiter(nowNs+1).availableSimpleLimiterTokens(makeSimpleLimiterParams(10, time.Second), nowNs))
+	require.Equal(t, int32(0), simpleLimiter(0).availableSimpleLimiterTokens(makeSimpleLimiterParams(0, time.Second), nowNs))
+	require.Equal(t, int32(math.MaxInt32), simpleLimiter(0).availableSimpleLimiterTokens(makeSimpleLimiterParams(1e12, 0), nowNs))
 }
 
 func FuzzMatcherData(f *testing.F) {

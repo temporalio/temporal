@@ -2,6 +2,7 @@ package matching
 
 import (
 	"context"
+	"math"
 	"sync"
 	"time"
 	"unsafe"
@@ -705,6 +706,12 @@ func makeSimpleLimiterParams(rate float64, burstDuration time.Duration) simpleLi
 
 func (p simpleLimiterParams) never() bool   { return p.interval < 0 }
 func (p simpleLimiterParams) limited() bool { return p.interval > 0 }
+func (p simpleLimiterParams) divideInterval(by float32) simpleLimiterParams {
+	return simpleLimiterParams{
+		interval: time.Duration(float32(p.interval) / by),
+		burst:    p.burst,
+	}
+}
 
 // delay returns the time until the limiter is ready.
 // If the return value is <= 0 then the limiter can go now.
@@ -745,4 +752,15 @@ func (ready simpleLimiter) clip(p simpleLimiterParams, now int64, maxTokens int6
 	// clip it back to now + maxTokens*interval + burst.
 	maxDelay := maxTokens*p.interval.Nanoseconds() + p.burst.Nanoseconds()
 	return min(ready, simpleLimiter(now+maxDelay))
+}
+
+func (ready simpleLimiter) availableSimpleLimiterTokens(params simpleLimiterParams, now int64) int32 {
+	if params.never() || ready.delay(now) > 0 {
+		return 0
+	}
+	if !params.limited() {
+		return math.MaxInt32
+	}
+	clippedReady := max(now, int64(ready)+params.burst.Nanoseconds()) - params.burst.Nanoseconds()
+	return int32(min((now-clippedReady)/params.interval.Nanoseconds()+1, math.MaxInt32))
 }

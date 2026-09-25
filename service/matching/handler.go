@@ -197,6 +197,14 @@ func (h *Handler) AddActivityTask(
 	return &matchingservice.AddActivityTaskResponse{AssignedBuildId: assignedBuildId}, err
 }
 
+func (h *Handler) GrantEagerDispatch(
+	ctx context.Context,
+	request *matchingservice.GrantEagerDispatchRequest,
+) (_ *matchingservice.GrantEagerDispatchResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.GrantEagerDispatch(ctx, request)
+}
+
 // AddWorkflowTask - adds a workflow task.
 func (h *Handler) AddWorkflowTask(
 	ctx context.Context,

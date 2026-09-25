@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
@@ -367,14 +368,49 @@ func (r *rateLimitManager) consumeTokens(now int64, task *internalTask, tokens i
 		pri := task.getPriority()
 		key := pri.GetFairnessKey()
 		weight := getEffectiveWeight(r.perKeyOverrides, pri)
-		p := r.perKeyLimit
-		p.interval = time.Duration(float32(p.interval) / weight) // scale by weight
+		p := r.perKeyLimit.divideInterval(weight) // scale by weight
 		var sl simpleLimiter
 		if v := r.perKeyReady.Get(key); v != nil {
 			sl = v.(simpleLimiter) // nolint:revive
 		}
 		r.perKeyReady.Put(key, sl.consume(p, now, tokens))
 	}
+}
+
+func (r *rateLimitManager) grantTokens(priority *commonpb.Priority, requested int32) int32 {
+	now := r.timeSource.Now()
+	if !r.config.NewMatcher {
+		available := r.dynamicRateLimiter.TokensAt(now)
+		granted := min(requested, int32(max(available, 0)))
+		if granted > 0 && r.dynamicRateLimiter.AllowN(now, int(granted)) {
+			return granted
+		}
+		return 0
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	nowNanos := now.UnixNano()
+	granted := min(requested, r.wholeQueueReady.availableSimpleLimiterTokens(r.wholeQueueLimit, nowNanos))
+	if r.perKeyLimit.limited() {
+		key := priority.GetFairnessKey()
+		var ready simpleLimiter
+		if value := r.perKeyReady.Get(key); value != nil {
+			ready = value.(simpleLimiter) // nolint:revive
+		}
+		params := r.perKeyLimit.divideInterval(getEffectiveWeight(r.perKeyOverrides, priority))
+		granted = min(granted, ready.availableSimpleLimiterTokens(params, nowNanos))
+		if granted == 0 {
+			return 0
+		}
+		r.perKeyReady.Put(key, ready.consume(params, nowNanos, int64(granted)))
+	}
+
+	if granted > 0 {
+		r.wholeQueueReady = r.wholeQueueReady.consume(r.wholeQueueLimit, nowNanos, int64(granted))
+	}
+	return granted
 }
 
 // GetFairnessWeightOverrides returns the current fairness weight overrides.

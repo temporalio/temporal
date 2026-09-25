@@ -715,6 +715,19 @@ func (c *physicalTaskQueueManagerImpl) GetStatsByPriority(includeRates bool) map
 	return stats
 }
 
+// NonNegligibleBacklogPriority returns 0 when neither active nor draining queues have a
+// non-negligible backlog.
+func (c *physicalTaskQueueManagerImpl) NonNegligibleBacklogPriority() priorityKey {
+	highest := c.backlogMgr.NonNegligibleBacklogPriority()
+	if draining := c.getDrainBacklogMgr(); draining != nil {
+		drainingHighest := draining.NonNegligibleBacklogPriority()
+		if drainingHighest != 0 && (highest == 0 || drainingHighest < highest) {
+			highest = drainingHighest
+		}
+	}
+	return highest
+}
+
 func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() []*taskqueuespb.InternalTaskQueueStatus {
 	status := c.backlogMgr.InternalStatus()
 	if m := c.getDrainBacklogMgr(); m != nil {

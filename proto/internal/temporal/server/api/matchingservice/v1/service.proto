@@ -37,6 +37,25 @@ service MatchingService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
 
+  // GrantEagerDispatch is called by the history service to ask a task queue partition whether tasks may be
+  // dispatched eagerly, meaning returned inline to the worker that is already making a call, instead of going
+  // through Add{Workflow,Activity}Task and matching's dispatch path. It covers activity tasks dispatched in a
+  // RespondWorkflowTaskCompleted response and the first workflow task dispatched in a StartWorkflowExecution
+  // response; task_queue_partition.task_queue_type distinguishes them.
+  //
+  // This RPC persists nothing and enqueues nothing: it reads the partition's state and answers per item. For each
+  // item it grants, the partition debits its whole-queue and per-fairness-key rate limiters, since the eagerly
+  // dispatched task will never reach matching again. Items it does not grant are not charged; history sends those
+  // through Add{Workflow,Activity}Task as usual, and they are limited normally at dispatch time.
+  //
+  // A grant is permission to dispatch, not a reservation that can be returned: capacity debited for a grant that
+  // history ends up not using is not refunded.
+  //
+  // History treats any failure, including Unimplemented from an older matching host, as "do not dispatch eagerly".
+  rpc GrantEagerDispatch(GrantEagerDispatchRequest) returns (GrantEagerDispatchResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
   // QueryWorkflow is called by frontend to query a workflow.
   rpc QueryWorkflow(QueryWorkflowRequest) returns (QueryWorkflowResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;

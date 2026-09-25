@@ -471,3 +471,17 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) WaitUntilInitialized(arg0 an
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WaitUntilInitialized", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).WaitUntilInitialized), arg0)
 }
+
+// NonNegligibleBacklogPriority mocks base method.
+func (m *MockphysicalTaskQueueManager) NonNegligibleBacklogPriority() priorityKey {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NonNegligibleBacklogPriority")
+	ret0, _ := ret[0].(priorityKey)
+	return ret0
+}
+
+// NonNegligibleBacklogPriority indicates an expected call of NonNegligibleBacklogPriority.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) NonNegligibleBacklogPriority() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NonNegligibleBacklogPriority", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).NonNegligibleBacklogPriority))
+}

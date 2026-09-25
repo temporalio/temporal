@@ -401,6 +401,7 @@ type Config struct {
 
 	EnableCrossNamespaceCommands      dynamicconfig.BoolPropertyFn
 	EnableActivityEagerExecution      dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableEagerActivityDispatchCheck  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableActivityRetryStampIncrement dynamicconfig.BoolPropertyFn
 	EnableCancelActivityWorkerCommand dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkerCommandsDispatchTimeout     dynamicconfig.DurationPropertyFn
@@ -823,6 +824,7 @@ func NewConfig(
 
 		EnableCrossNamespaceCommands:      dynamicconfig.EnableCrossNamespaceCommands.Get(dc),
 		EnableActivityEagerExecution:      dynamicconfig.EnableActivityEagerExecution.Get(dc),
+		EnableEagerActivityDispatchCheck:  dynamicconfig.EnableEagerActivityDispatchCheck.Get(dc),
 		EnableActivityRetryStampIncrement: dynamicconfig.EnableActivityRetryStampIncrement.Get(dc),
 		EnableCancelActivityWorkerCommand: dynamicconfig.EnableCancelActivityWorkerCommand.Get(dc),
 		WorkerCommandsDispatchTimeout:     dynamicconfig.WorkerCommandsDispatchTimeout.Get(dc),
