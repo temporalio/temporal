@@ -4,6 +4,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 )
 
 // gRPC method request must implement either NamespaceNameGetter or NamespaceIDGetter
@@ -56,6 +57,13 @@ func GetNamespaceName(
 			return namespace.EmptyName, err
 		}
 		return namespaceName, nil
+
+	case nexus.InterceptorInput:
+		ns, err := request.NamespaceEntry()
+		if err != nil {
+			return namespace.EmptyName, err
+		}
+		return ns.Name(), nil
 
 	default:
 		return namespace.EmptyName, serviceerror.NewInternalf("unable to extract namespace info from request of type %T", req)
