@@ -98,7 +98,7 @@ func NewFactory(
 		namespaceRateLimiter:  namespaceRateLimiter,
 		shardRateLimiter:      shardRateLimiter,
 		healthSignals:         healthSignals,
-		enableDataLossMetrics: dynamicconfig.BoolPropertyFn(enableDataLossMetrics),
+		enableDataLossMetrics:                       dynamicconfig.BoolPropertyFn(enableDataLossMetrics),
 		enableBestEffortDeleteTasksOnWorkflowUpdate: dynamicconfig.BoolPropertyFn(enableBestEffortDeleteTasksOnWorkflowUpdate),
 	}
 	factory.initDependencies()
