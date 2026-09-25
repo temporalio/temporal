@@ -472,12 +472,13 @@ func (c *physicalTaskQueueManagerImpl) SpoolTask(taskInfo *persistencespb.TaskIn
 	return c.backlogMgr.SpoolTask(taskInfo)
 }
 
-func (c *physicalTaskQueueManagerImpl) RecordTaskAdd(result string, forwarded bool, behavior enumspb.VersioningBehavior) {
+func (c *physicalTaskQueueManagerImpl) RecordTaskAdd(result string, forwarded bool, behavior enumspb.VersioningBehavior, fairnessKey string) {
 	c.metricsHandler.Counter(metrics.TasksAddedCounter.Name()).Record(
 		1,
 		metrics.TaskAddResultTag(result),
 		metrics.ForwardedTag(forwarded),
 		metrics.VersioningBehaviorTag(behavior),
+		metrics.FairnessKeyTag(fairnessKey, c.config.BreakdownMetricsByFairnessKey()),
 	)
 }
 

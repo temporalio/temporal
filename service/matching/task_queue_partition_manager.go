@@ -611,6 +611,7 @@ reredirectTask:
 
 	behavior := directive.GetBehavior()
 	forwarded := params.forwardInfo != nil
+	fairnessKey := params.taskInfo.GetPriority().GetFairnessKey()
 
 	var outcome syncMatchOutcome
 	if isActive {
@@ -629,7 +630,7 @@ reredirectTask:
 			if err != nil {
 				syncMatchResult = taskAddErrResult(err)
 			}
-			syncMatchQueue.RecordTaskAdd(syncMatchResult, forwarded, behavior)
+			syncMatchQueue.RecordTaskAdd(syncMatchResult, forwarded, behavior, fairnessKey)
 
 			// Build ID is not returned for sync match. The returned build ID is used by History to update
 			// mutable state (and visibility) when the first workflow task is spooled.
@@ -646,7 +647,7 @@ reredirectTask:
 
 	if spoolQueue == nil {
 		// This means the task is being forwarded. Child partition will persist the task when sync match fails.
-		syncMatchQueue.RecordTaskAdd(metrics.TaskAddResultSyncMatchUnavail, forwarded, behavior)
+		syncMatchQueue.RecordTaskAdd(metrics.TaskAddResultSyncMatchUnavail, forwarded, behavior, fairnessKey)
 		return "", false, errRemoteSyncMatchFailed
 	}
 
@@ -658,7 +659,7 @@ reredirectTask:
 
 	err = spoolQueue.SpoolTask(params.taskInfo)
 	if err == nil {
-		spoolQueue.RecordTaskAdd(metrics.TaskAddResultBacklog, forwarded, behavior)
+		spoolQueue.RecordTaskAdd(metrics.TaskAddResultBacklog, forwarded, behavior, fairnessKey)
 		// We should not use targetVersion because targetVersion is always routing-config-deriven.
 		// For pinned workflows, targetVersion is not necessarily the same as the pinned version.
 		// Also, note that we use syncMatchQueue's version, and not spoolQueue's version. This is
@@ -667,7 +668,7 @@ reredirectTask:
 		// changes by the time they can be dispatched.
 		pm.processTaskAddHooks(ctx, syncMatchQueue.QueueKey().Version().WorkerDeploymentVersionS(), outcome)
 	} else {
-		spoolQueue.RecordTaskAdd(taskAddErrResult(err), forwarded, behavior)
+		spoolQueue.RecordTaskAdd(taskAddErrResult(err), forwarded, behavior, fairnessKey)
 	}
 
 	return assignedBuildId, false, err

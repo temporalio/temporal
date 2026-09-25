@@ -365,6 +365,18 @@ func MatchingTaskPriorityTag(value int32) Tag {
 	return Tag{Key: TaskPriorityTagName, Value: priStr}
 }
 
+func FairnessKeyTag(value string, breakdown bool) Tag {
+	// An absent key maps to "__none__" regardless of the breakdown setting, so a task with no
+	// fairness key stays distinguishable from one whose real key is hidden ("__omitted__")
+	// without enabling the high-cardinality breakdown.
+	if value == "" {
+		value = none
+	} else if !breakdown {
+		value = omitted
+	}
+	return Tag{Key: FairnessKeyTagName, Value: value}
+}
+
 func QueueReaderIDTag(readerID int64) Tag {
 	return Tag{Key: QueueReaderIDTagName, Value: strconv.Itoa(int(readerID))}
 }
