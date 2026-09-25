@@ -490,7 +490,7 @@ func (rt *roundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to extract port from frontend member: %w", err)
 	}
-	address := fmt.Sprintf("%s:%d", host, rt.httpPort)
+	address := net.JoinHostPort(host, convert.IntToString(rt.httpPort))
 
 	// Replace request's host.
 	req.URL.Host = address
