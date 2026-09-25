@@ -43,6 +43,12 @@ func NewLibrary(registry *Registry) chasm.Library {
 	return &library{registry: registry}
 }
 
+// NewNilLibrary returns a Library with nil handlers, for decoding contexts such as tdbg where
+// no task execution happens.
+func NewNilLibrary() chasm.Library {
+	return &library{registry: NewRegistry()}
+}
+
 func (l *library) Name() string {
 	return chasm.WorkflowLibraryName
 }
