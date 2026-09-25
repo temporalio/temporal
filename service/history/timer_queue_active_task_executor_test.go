@@ -2049,6 +2049,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execut
 		WorkflowId: tests.WorkflowKey.WorkflowID,
 		RunId:      tests.WorkflowKey.RunID,
 	}
+	virtualNow := s.now.Add(time.Hour)
 
 	// Mock the CHASM tree and execute interface.
 	mockEach := &chasm.MockNodePureTask{
@@ -2057,7 +2058,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execut
 		},
 	}
 	chasmTree := historyi.NewMockChasmTree(s.controller)
-	chasmTree.EXPECT().EachPureTask(gomock.Any(), gomock.Any()).
+	chasmTree.EXPECT().EachPureTask(virtualNow, gomock.Any()).
 		Times(1).Do(
 		func(_ time.Time, callback func(executor chasm.NodePureTask, taskAttributes chasm.TaskAttributes, task any) (bool, error)) error {
 			_, err := callback(mockEach, chasm.TaskAttributes{}, nil)
@@ -2076,7 +2077,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteChasmPureTimerTask_Execut
 		&persistencespb.WorkflowExecutionState{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
 	).AnyTimes()
 	ms.EXPECT().ChasmTree().Return(chasmTree).AnyTimes()
-	ms.EXPECT().Now().Return(s.now).AnyTimes()
+	ms.EXPECT().Now().Return(virtualNow).AnyTimes()
 
 	// Add a valid timer task.
 	timerTask := &tasks.ChasmTaskPure{
@@ -2511,7 +2512,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() {
 			}
 			pms.ExecutionInfo.TimeSkippingInfo = tc.tsi
 
-			timerTask := &tasks.TimeSkippingTimerTask{
+			timerTask := &tasks.TimeSkippingFastForwardTimerTask{
 				WorkflowKey:         workflowKey,
 				TaskID:              s.mustGenerateTaskID(),
 				VisibilityTimestamp: s.now.Add(time.Hour),
@@ -2544,6 +2545,78 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() {
 			s.True(tsi.GetFastForwardInfo().GetHasReached(), "happy path must set HasReached=true")
 		})
 	}
+}
+
+func (s *timerQueueActiveTaskExecutorSuite) TestExecuteTimeSkippingTimerTask_ChasmExecution() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowKey.WorkflowID,
+		RunId:      tests.WorkflowKey.RunID,
+	}
+	workflowKey := definition.NewWorkflowKey(
+		s.namespaceID.String(),
+		execution.GetWorkflowId(),
+		execution.GetRunId(),
+	)
+	versionedTransition := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: s.version,
+		TransitionCount:          1,
+	}
+	info := &persistencespb.WorkflowExecutionInfo{
+		TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+			FastForwardInfo: &persistencespb.FastForwardInfo{
+				TargetTime: timestamppb.New(s.now.Add(time.Hour)),
+			},
+			FastForwardInfoLastUpdateVersionedTransition: versionedTransition,
+		},
+	}
+
+	chasmTree := historyi.NewMockChasmTree(s.controller)
+	chasmTree.EXPECT().ArchetypeID().Return(tests.ArchetypeID).AnyTimes()
+
+	ms := historyi.NewMockMutableState(s.controller)
+	ms.EXPECT().GetWorkflowKey().Return(workflowKey).AnyTimes()
+	ms.EXPECT().GetCurrentVersion().Return(s.version).AnyTimes()
+	ms.EXPECT().GetExecutionInfo().Return(info).AnyTimes()
+	ms.EXPECT().GetNamespaceEntry().Return(s.namespaceEntry).AnyTimes()
+	ms.EXPECT().ChasmTree().Return(chasmTree).AnyTimes()
+	ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	ms.EXPECT().Now().Return(s.now.Add(time.Hour))
+	ms.EXPECT().RecordTimeSkippingTransition(gomock.Any()).Do(func(transition *chasm.TimeSkippingTransition) {
+		s.True(transition.DisabledAfterFastForward)
+		s.True(transition.GetTargetTime().IsZero())
+	})
+
+	wfCtx := historyi.NewMockWorkflowContext(s.controller)
+	wfCtx.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(ms, nil)
+	wfCtx.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), s.mockShard).Return(nil)
+
+	mockCache := wcache.NewMockCache(s.controller)
+	mockCache.EXPECT().GetOrCreateChasmExecution(
+		gomock.Any(), s.mockShard, gomock.Any(), execution, tests.ArchetypeID, locks.PriorityLow,
+	).Return(wfCtx, wcache.NoopReleaseFn, nil)
+
+	//nolint:revive // unchecked-type-assertion
+	executor := newTimerQueueActiveTaskExecutor(
+		s.mockShard,
+		mockCache,
+		s.mockDeleteManager,
+		s.mockShard.GetLogger(),
+		metrics.NoopMetricsHandler,
+		s.config,
+		s.mockShard.Resource.GetMatchingClient(),
+		s.mockChasmEngine,
+	).(*timerQueueActiveTaskExecutor)
+
+	timerTask := &tasks.TimeSkippingFastForwardTimerTask{
+		WorkflowKey:         workflowKey,
+		TaskID:              s.mustGenerateTaskID(),
+		VisibilityTimestamp: s.now.Add(time.Hour),
+		VersionedTransition: versionedTransition,
+		ArchetypeID:         tests.ArchetypeID,
+	}
+	resp := executor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.NoError(resp.ExecutionErr)
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) TestProcessSingleActivityTimeoutTask() {

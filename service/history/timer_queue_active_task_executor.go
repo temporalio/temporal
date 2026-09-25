@@ -128,7 +128,7 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 	case *tasks.ChasmTask:
 		task.Attempt = executable.Attempt()
 		err = t.executeChasmSideEffectTimerTask(ctx, task)
-	case *tasks.TimeSkippingTimerTask:
+	case *tasks.TimeSkippingFastForwardTimerTask:
 		err = t.executeTimeSkippingTimerTask(ctx, task)
 	default:
 		err = queueserrors.NewUnprocessableTaskError("unknown task type")
@@ -922,7 +922,7 @@ func (t *timerQueueActiveTaskExecutor) getTimerSequence(
 // so by the time we get here the user-visible elapsed budget is genuinely exhausted.
 func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 	ctx context.Context,
-	task *tasks.TimeSkippingTimerTask,
+	task *tasks.TimeSkippingFastForwardTimerTask,
 ) (retError error) {
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
@@ -942,16 +942,11 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 		return consts.ErrWorkflowExecutionNotFound
 	}
 
-	// Route by execution archetype. Treat an unspecified archetype — a record persisted before
-	// archetype IDs existed, or a not-yet-initialized chasm tree — as the built-in workflow archetype.
+	// Treat an unspecified archetype — a record persisted before archetype IDs existed, or a
+	// not-yet-initialized chasm tree — as the built-in workflow archetype.
 	archetypeID := mutableState.ChasmTree().ArchetypeID()
 	if archetypeID == chasm.UnspecifiedArchetypeID {
 		archetypeID = chasm.WorkflowArchetypeID
-	}
-	if archetypeID != chasm.WorkflowArchetypeID {
-		// TODO@time-skipping: chasm execution path is not implemented yet.
-		release(nil)
-		return nil
 	}
 
 	if !mutableState.IsWorkflowExecutionRunning() {
@@ -1001,7 +996,13 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 	}
 
 	// 3) firing fast-forward timer (only turns off time skipping, and no task regeneration)
-	// TODO@time-skipping: chasm execution path is not implemented yet.
+	if archetypeID != chasm.WorkflowArchetypeID {
+		transition := chasm.NewTimeSkippingTransition(mutableState.Now())
+		transition.DisabledAfterFastForward = true
+		mutableState.RecordTimeSkippingTransition(transition)
+		return t.updateWorkflowExecution(ctx, weContext, mutableState, false)
+	}
+
 	_, err = mutableState.AddWorkflowExecutionTimeSkippingTransitionedEvent(
 		ctx, time.Time{}, true)
 	if err != nil {
@@ -1135,7 +1136,6 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 	ctx context.Context,
 	task *tasks.ChasmTaskPure,
 ) error {
-	// TODO@time-skipping: if time skipping happened, check if virtual time is needed here.
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
