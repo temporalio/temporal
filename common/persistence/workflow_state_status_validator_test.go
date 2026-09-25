@@ -118,11 +118,13 @@ func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateCr
 		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW,
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
-		enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED,
 	}
 
-	// Updating workflow to State: CREATED and status: RUNNING is allowed
+	// Updating workflow to State: CREATED and status: {RUNNING, PAUSED} is
+	// allowed: a workflow can be paused before its first workflow task has ever
+	// run (e.g. while waiting out start_delay/cron/retry backoff).
 	s.NoError(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	s.NoError(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED))
 
 	for _, status := range disallowedStatuses {
 		s.Error(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, status))

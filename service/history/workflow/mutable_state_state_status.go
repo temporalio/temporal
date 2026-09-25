@@ -23,12 +23,11 @@ func setStateStatus(
 		// no validation
 	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
 		switch state {
-		case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:
-			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-				return invalidStateTransitionErr(e.GetState(), state, status)
-			}
-
-		case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
+		case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
+			// PAUSED is allowed while staying CREATED: a workflow may be paused
+			// before its first workflow task has ever run (e.g. while waiting
+			// out start_delay, cron, or retry backoff), in which case the
+			// run-state stays CREATED rather than advancing to RUNNING.
 			if status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING && status != enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
