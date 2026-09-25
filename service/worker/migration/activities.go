@@ -143,6 +143,12 @@ type (
 		isReady      bool
 	}
 
+	replicationCheckpoint struct {
+		now          func() time.Time
+		requestStart time.Time
+		maxTaskIDs   map[int32]int64
+	}
+
 	WorkflowVerifier func(
 		ctx context.Context,
 		request *verifyReplicationTasksRequest,
@@ -202,9 +208,10 @@ func (a *activities) GetMaxReplicationTaskIDs(ctx context.Context) (*Replication
 
 func (a *activities) WaitReplication(ctx context.Context, waitRequest WaitReplicationRequest) error {
 	ctx = headers.SetCallerInfo(ctx, headers.SystemPreemptableCallerInfo)
+	checkpoint := replicationCheckpoint{now: time.Now}
 
 	for {
-		done, err := a.checkReplicationOnce(ctx, waitRequest)
+		done, err := a.checkReplicationOnce(ctx, waitRequest, &checkpoint)
 		if err != nil {
 			return err
 		}
@@ -225,6 +232,7 @@ func classifyShardReplicationStatus(
 	requiredMinTaskID int64,
 	allowedLaggingTasks int64,
 	allowedLagging time.Duration,
+	caughtUpToCheckpoint bool,
 ) shardStatus {
 	// AsTime is nil-safe: a nil timestamp reports as epoch.
 	ackVisUnset := remoteProgress.AckedTaskVisibilityTime.AsTime().Equal(time.Unix(0, 0))
@@ -242,7 +250,7 @@ func classifyShardReplicationStatus(
 
 	fullyCaughtUp := localShard.MaxReplicationTaskId == remoteProgress.AckedTaskId
 	passedRequiredMinimum := remoteProgress.AckedTaskId >= requiredMinTaskID
-	withinLagTolerance := laggingTasks <= allowedLaggingTasks || timeLag <= allowedLagging
+	withinLagTolerance := laggingTasks <= allowedLaggingTasks || timeLag <= allowedLagging || caughtUpToCheckpoint
 
 	return shardStatus{
 		shardID:      localShard.GetShardId(),
@@ -252,8 +260,18 @@ func classifyShardReplicationStatus(
 	}
 }
 
+func (c *replicationCheckpoint) isFresh(now time.Time, allowedLagging time.Duration) bool {
+	age := now.Sub(c.requestStart)
+	return c.maxTaskIDs != nil && allowedLagging > 0 && age >= 0 && age <= allowedLagging
+}
+
 // checkReplicationOnce checks whether the remote cluster has caught up on all shards.
-func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitReplicationRequest) (bool, error) {
+func (a *activities) checkReplicationOnce(
+	ctx context.Context,
+	waitRequest WaitReplicationRequest,
+	checkpoint *replicationCheckpoint,
+) (bool, error) {
+	requestStart := checkpoint.now()
 	resp, err := a.HistoryClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
 		RemoteClusters: []string{waitRequest.RemoteCluster}, // only the specified remote cluster
 	})
@@ -266,6 +284,7 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 	if int(waitRequest.ShardCount) != len(localShards) {
 		return false, fmt.Errorf("GetReplicationStatus returns %d shards, expecting %d", len(resp.Shards), waitRequest.ShardCount)
 	}
+	checkpointFresh := checkpoint.isFresh(checkpoint.now(), waitRequest.AllowedLagging)
 
 	sort.SliceStable(localShards, func(i, j int) bool {
 		return localShards[i].ShardId < localShards[j].ShardId
@@ -289,13 +308,26 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest WaitR
 			return false, fmt.Errorf("GetReplicationStatus response for shard %d does not contains remote cluster %s", localShard.ShardId, waitRequest.RemoteCluster)
 		}
 
+		checkpointTaskID, hasCheckpoint := checkpoint.maxTaskIDs[localShard.ShardId]
 		shardStatuses = append(shardStatuses, classifyShardReplicationStatus(
 			localShard,
 			remoteShardProgress,
 			requiredMinTaskIDPerShard[localShard.ShardId],
 			waitRequest.AllowedLaggingTasks,
 			waitRequest.AllowedLagging,
+			checkpointFresh && hasCheckpoint && remoteShardProgress.AckedTaskId >= checkpointTaskID,
 		))
+	}
+
+	// A quiet shard's previous task timestamp can be old even when new work replicates promptly.
+	// Covering a recent source checkpoint bounds lag without counting that idle time. Retain
+	// the checkpoint for the allowed interval so each poll does not move the target forward.
+	if !checkpointFresh && waitRequest.AllowedLagging > 0 {
+		checkpoint.requestStart = requestStart
+		checkpoint.maxTaskIDs = make(map[int32]int64, len(localShards))
+		for _, localShard := range localShards {
+			checkpoint.maxTaskIDs[localShard.ShardId] = localShard.MaxReplicationTaskId
+		}
 	}
 
 	var (
