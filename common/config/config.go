@@ -268,6 +268,8 @@ type (
 		DataStores map[string]DataStore `yaml:"datastores"`
 		// TransactionSizeLimit is the largest allowed transaction size
 		TransactionSizeLimit dynamicconfig.IntPropertyFn `yaml:"-" json:"-"`
+		// HistoryNodeBlobCompressionThreshold is the minimum blob size to compress (0 = disabled)
+		HistoryNodeBlobCompressionThreshold dynamicconfig.IntPropertyFn `yaml:"-" json:"-"`
 	}
 
 	// DataStore is the configuration for a single datastore
