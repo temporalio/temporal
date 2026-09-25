@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
@@ -921,6 +922,96 @@ func (s *activitiesSuite) TestStartTaskProcessor_RetryableErrorsDoNotDeadlock() 
 		case <-time.After(10 * time.Second):
 			s.FailNow("timed out waiting for task response: worker is deadlocked")
 		}
+	}
+}
+
+func (s *activitiesSuite) TestProcessTaskWithRetriesRecordsMetrics() {
+	tests := []struct {
+		name               string
+		err                error
+		batchType          enumspb.BatchOperationType
+		wantSuccessRecords int
+		wantFailureRecords int
+	}{
+		{
+			name:      "expected cancel precondition does not record processor error",
+			err:       serviceerror.NewFailedPrecondition("activity is already terminal"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY,
+		},
+		{
+			name:      "expected terminate precondition does not record processor error",
+			err:       serviceerror.NewFailedPrecondition("activity is already terminal"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+		},
+		{
+			name:               "success records processor request",
+			batchType:          enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY,
+			wantSuccessRecords: 1,
+		},
+		{
+			name:               "transient cancel failure records processor error",
+			err:                serviceerror.NewUnavailable("history service is unavailable"),
+			batchType:          enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY,
+			wantFailureRecords: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+
+			batchOperation := &batchspb.BatchOperationInput{
+				BatchType: tt.batchType,
+				Request:   &workflowservice.StartBatchOperationRequest{},
+			}
+			switch tt.batchType {
+			case enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY:
+				batchOperation.Request.Operation = &workflowservice.StartBatchOperationRequest_CancelActivitiesOperation{
+					CancelActivitiesOperation: &batchpb.BatchOperationCancelActivities{},
+				}
+				s.mockFrontendClient.EXPECT().
+					RequestCancelActivityExecution(gomock.Any(), gomock.Any()).
+					Return(nil, tt.err)
+			case enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY:
+				batchOperation.Request.Operation = &workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation{
+					TerminateActivitiesOperation: &batchpb.BatchOperationTerminateActivities{},
+				}
+				s.mockFrontendClient.EXPECT().
+					TerminateActivityExecution(gomock.Any(), gomock.Any()).
+					Return(nil, tt.err)
+			default:
+				s.FailNow("unsupported batch type", "batch type: %v", tt.batchType)
+			}
+
+			respCh := make(chan taskResponse, 1)
+			limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 1000 }))
+			a := &activities{}
+			a.processTaskWithRetries(
+				context.Background(),
+				batchOperation,
+				"ns",
+				task{targetExecution: &commonpb.Execution{BusinessId: "activity-id", RunId: "run-id"}, attempts: 1},
+				respCh,
+				limiter,
+				nil,
+				s.mockFrontendClient,
+				metricsHandler,
+				log.NewTestLogger(),
+			)
+
+			resp := <-respCh
+			if tt.err == nil {
+				s.Require().NoError(resp.err)
+			} else {
+				s.Require().Error(resp.err)
+			}
+
+			snapshot := capture.Snapshot()
+			s.Require().Len(snapshot[metrics.BatcherProcessorSuccess.Name()], tt.wantSuccessRecords)
+			s.Require().Len(snapshot[metrics.BatcherProcessorFailures.Name()], tt.wantFailureRecords)
+		})
 	}
 }
 
