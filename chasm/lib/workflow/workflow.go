@@ -57,13 +57,9 @@ func NewWorkflow(
 }
 
 func (w *Workflow) LifecycleState(
-	_ chasm.Context,
+	ctx chasm.Context,
 ) chasm.LifecycleState {
-	// NOTE: closeTransactionHandleRootLifecycleChange() is bypassed in tree.go
-	//
-	// NOTE: detached mode is not implemented yet, so always return Running here.
-	// Otherwise, tasks for callback component can't be executed after workflow is closed.
-	return chasm.LifecycleStateRunning
+	return w.MSPointer.LifecycleState()
 }
 
 func (w *Workflow) ContextMetadata(_ chasm.Context) map[string]string {
