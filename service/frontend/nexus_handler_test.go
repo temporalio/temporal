@@ -2,16 +2,27 @@ package frontend
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"maps"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/temporalnexus"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/authorization"
@@ -323,6 +334,128 @@ func TestNexusInterceptRequest_ForwardingEnabled_ResultsInNotActiveError(t *test
 	snap := capture.Snapshot()
 	require.Len(t, snap["test"], 1)
 	require.Equal(t, map[string]string{"outcome": "request_forwarded"}, snap["test"][0].Tags)
+}
+
+func TestForwardStartOperation_PreservesResponseLinks(t *testing.T) {
+	handlerLink := temporalnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+		Namespace:  "handler-namespace",
+		WorkflowId: "handler-workflow-id",
+		RunId:      "handler-run-id",
+		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			},
+		},
+	})
+	responseBody, err := json.Marshal(nexus.OperationInfo{
+		Token: "operation-token",
+		State: nexus.OperationStateRunning,
+	})
+	require.NoError(t, err)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Add("Nexus-Link", fmt.Sprintf("<%s>; type=%q", handlerLink.URL.String(), handlerLink.Type))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write(responseBody)
+	}))
+	t.Cleanup(server.Close)
+
+	clusterConfig := cluster.NewTestClusterMetadataConfig(true, true)
+	clusterConfig.ClusterInformation = maps.Clone(clusterConfig.ClusterInformation)
+	activeCluster := clusterConfig.ClusterInformation[cluster.TestAlternativeClusterName]
+	activeCluster.HTTPAddress = strings.TrimPrefix(server.URL, "http://")
+	clusterConfig.ClusterInformation[cluster.TestAlternativeClusterName] = activeCluster
+	clusterMetadata := clustertest.NewMetadataForTest(clusterConfig)
+	h := &nexusHandler{
+		clusterMetadata:      clusterMetadata,
+		forwardingClients:    cluster.NewFrontendHTTPClientCache(clusterMetadata, nil),
+		useForwardByEndpoint: dynamicconfig.GetBoolPropertyFn(false),
+	}
+	oc := newOperationContext(contextOptions{
+		namespaceState:          enumspb.NAMESPACE_STATE_REGISTERED,
+		namespacePassive:        true,
+		quota:                   1,
+		namespaceRateLimitAllow: true,
+		rateLimitAllow:          true,
+		redirectAllow:           true,
+	})
+	oc.clusterMetadata = clusterMetadata
+
+	content, err := nexus.DefaultSerializer().Serialize("input")
+	require.NoError(t, err)
+	input := nexus.NewLazyValue(nexus.DefaultSerializer(), &nexus.Reader{
+		ReadCloser: io.NopCloser(strings.NewReader(string(content.Data))),
+		Header:     content.Header,
+	})
+	recorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	ctx, span := tracerProvider.Tracer("test").Start(t.Context(), "test")
+	ctx = nexus.WithHandlerContext(ctx, nexus.HandlerInfo{})
+	result, err := h.forwardStartOperation(ctx, "service", "operation", input, nexus.StartOperationOptions{
+		Header:    nexus.Header{},
+		RequestID: "request-id",
+	}, oc)
+	span.End()
+
+	require.NoError(t, err)
+	asyncResult, ok := result.(*nexus.HandlerStartOperationResultAsync)
+	require.True(t, ok)
+	require.Equal(t, "operation-token", asyncResult.OperationToken)
+	forwardedLinks := nexus.HandlerLinks(ctx)
+	require.Len(t, forwardedLinks, 1)
+	require.Equal(t, handlerLink.URL.String(), forwardedLinks[0].URL.String())
+	require.Equal(t, handlerLink.Type, forwardedLinks[0].Type)
+	spans := recorder.Ended()
+	require.Len(t, spans, 1)
+	require.Len(t, spans[0].Links(), 1)
+}
+
+func TestAnnotateServerSpanLinks_IgnoresUnrelatedWorkflowEvent(t *testing.T) {
+	recorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	ctx, span := tracerProvider.Tracer("test").Start(t.Context(), "test")
+
+	link := temporalnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+		Namespace:  "namespace",
+		WorkflowId: "workflow-id",
+		RunId:      "run-id",
+		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+			},
+		},
+	})
+	(&operationContext{}).annotateServerSpanLinks(ctx, "request-id", []nexus.Link{link})
+	span.End()
+
+	spans := recorder.Ended()
+	require.Len(t, spans, 1)
+	require.Empty(t, spans[0].Links())
+	require.Empty(t, spans[0].Attributes())
+}
+
+func TestAnnotateServerSpanLinks_IgnoresUnrelatedRequestIDReference(t *testing.T) {
+	recorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	ctx, span := tracerProvider.Tracer("test").Start(t.Context(), "test")
+
+	link := temporalnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+		Namespace:  "namespace",
+		WorkflowId: "workflow-id",
+		RunId:      "run-id",
+		Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+			RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+				RequestId: "other-request-id",
+			},
+		},
+	})
+	(&operationContext{}).annotateServerSpanLinks(ctx, "request-id", []nexus.Link{link})
+	span.End()
+
+	spans := recorder.Ended()
+	require.Len(t, spans, 1)
+	require.Empty(t, spans[0].Links())
+	require.Empty(t, spans[0].Attributes())
 }
 
 func TestNexusInterceptRequest_InvalidSDKVersion_ResultsInBadRequest(t *testing.T) {
