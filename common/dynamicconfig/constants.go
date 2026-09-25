@@ -2949,6 +2949,11 @@ workflow resends.`,
 		true,
 		`ReplicationEnableDLQMetrics is the flag to emit DLQ metrics`,
 	)
+	ReplicationDropTaskAfterDLQFailure = NewGlobalBoolSetting(
+		"history.ReplicationDropTaskAfterDLQFailure",
+		false,
+		`ReplicationDropTaskAfterDLQFailure is a breakglass flag that discards a replication task after attempts to enqueue it to the DLQ. Enabling this may cause replication data loss.`,
+	)
 	ReplicationEnableUpdateWithNewTaskMerge = NewGlobalBoolSetting(
 		"history.ReplicationEnableUpdateWithNewTaskMerge",
 		false,
