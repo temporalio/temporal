@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 	"github.com/temporalio/sqlparser"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 )
 
@@ -22,6 +23,33 @@ func TestMySQLQueryConverterSuite(t *testing.T) {
 		},
 	}
 	suite.Run(t, s)
+}
+
+func (s *mysqlQueryConverterSuite) TestBuildCountStmtSkipsJoinsWithoutCustomSearchAttribute() {
+	// GROUP BY ExecutionStatus with no filter only references a column on
+	// executions_visibility itself, so the count query shouldn't join against
+	// custom_search_attributes/chasm_search_attributes at all.
+	sqlStr, _ := s.queryConverter.buildCountStmt(
+		namespace.ID("test-namespace-id"),
+		"",
+		[]string{"status"},
+		false,
+	)
+	s.NotContains(sqlStr, "custom_search_attributes")
+	s.NotContains(sqlStr, "chasm_search_attributes")
+}
+
+func (s *mysqlQueryConverterSuite) TestBuildCountStmtJoinsWithCustomSearchAttribute() {
+	// A query filtering on a custom search attribute column still needs both joins
+	// to resolve it, so correctness must be preserved when usesCustomSearchAttribute is true.
+	sqlStr, _ := s.queryConverter.buildCountStmt(
+		namespace.ID("test-namespace-id"),
+		"(Int01 = 1)",
+		nil,
+		true,
+	)
+	s.Contains(sqlStr, "LEFT JOIN custom_search_attributes")
+	s.Contains(sqlStr, "LEFT JOIN chasm_search_attributes")
 }
 
 func (s *mysqlQueryConverterSuite) TestGetCoalesceCloseTimeExpr() {
