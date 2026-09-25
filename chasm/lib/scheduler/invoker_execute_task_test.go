@@ -64,6 +64,32 @@ func newInvokerExecuteTestEnv(t *testing.T, configure ...func(*scheduler.Config)
 	}
 }
 
+// runProcessBufferTask runs a ProcessBuffer pure task against the environment's
+// live Invoker, leaving the existing buffer in place. Used by multi-phase tests
+// that drive ProcessBuffer and Execute in the order production emits them.
+func (e *invokerExecuteTestEnv) runProcessBufferTask(t *testing.T) {
+	t.Helper()
+	ctx := e.MutableContext()
+	invoker := e.Scheduler.Invoker.Get(ctx)
+	require.NoError(t, newProcessBufferHandler(e.testEnv).Execute(
+		ctx, invoker, chasm.TaskAttributes{}, &schedulerpb.InvokerProcessBufferTask{}))
+	require.NoError(t, e.CloseTransaction())
+}
+
+// runExecuteTask runs an Execute side-effect task against the environment's live
+// Invoker, leaving the existing buffer in place (unlike runExecuteTestCase,
+// which installs a fresh one).
+func (e *invokerExecuteTestEnv) runExecuteTask(t *testing.T) {
+	t.Helper()
+	ctx := e.MutableContext()
+	invoker := e.Scheduler.Invoker.Get(ctx)
+	e.ExpectReadComponent(ctx, invoker)
+	e.ExpectUpdateComponent(ctx, invoker)
+	require.NoError(t, e.handler.Execute(
+		e.EngineContext(), chasm.ComponentRef{}, chasm.TaskAttributes{}, &schedulerpb.InvokerExecuteTask{}))
+	require.NoError(t, e.CloseTransaction())
+}
+
 type executeTestCase struct {
 	InitialBufferedStarts     []*schedulespb.BufferedStart
 	InitialCancelWorkflows    []*commonpb.WorkflowExecution
@@ -1250,6 +1276,175 @@ func TestExecuteTask_BackoffUsesFrameworkClock(t *testing.T) {
 				"BackoffTime %v looks derived from wall clock, not framework clock", backoff)
 		},
 	})
+}
+
+// startRetryAfterFirstFailure drives the setup shared by the catch-up deadline
+// retry tests: a single Attempt == 0 start whose ActualTime sits just inside the
+// schedule's catch-up window, promoted to Attempt 1 by ProcessBuffer, whose
+// first StartWorkflowExecution then fails retryably and lands in backoff.
+//
+// It returns the live Invoker and an accessor for the request IDs the frontend
+// mock has seen (the first call fails retryably, every later call succeeds), so
+// callers can assert on whether a second RPC was issued at all.
+func startRetryAfterFirstFailure(
+	t *testing.T,
+	env *invokerExecuteTestEnv,
+	manual bool,
+) (invoker *scheduler.Invoker, requestIDs func() []string) {
+	t.Helper()
+
+	now := env.TimeSource.Now()
+	// One minute in the past: comfortably inside the 5m default catch-up window,
+	// so the deadline (ActualTime + 5m) is still four minutes out.
+	actualTime := timestamppb.New(now.Add(-time.Minute))
+
+	var seen []string
+	env.mockFrontendClient.EXPECT().
+		StartWorkflowExecution(gomock.Any(), gomock.Any()).
+		AnyTimes().
+		DoAndReturn(func(
+			_ context.Context,
+			req *workflowservice.StartWorkflowExecutionRequest,
+			_ ...grpc.CallOption,
+		) (*workflowservice.StartWorkflowExecutionResponse, error) {
+			seen = append(seen, req.GetRequestId())
+			if len(seen) == 1 {
+				return nil, serviceerror.NewDeadlineExceeded("transient")
+			}
+			return &workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil
+		})
+
+	ctx := env.MutableContext()
+	invoker = env.Scheduler.Invoker.Get(ctx)
+	invoker.LastProcessedTime = timestamppb.New(now)
+	invoker.BufferedStarts = []*schedulespb.BufferedStart{{
+		NominalTime:   actualTime,
+		ActualTime:    actualTime,
+		DesiredTime:   actualTime,
+		Manual:        manual,
+		RequestId:     "req",
+		WorkflowId:    "wf",
+		OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+	}}
+
+	// Phase 1: ProcessBuffer checks the deadline, consumes any limited-action
+	// slot, and promotes the start to its first attempt.
+	env.runProcessBufferTask(t)
+	require.Equal(t, int64(1), invoker.BufferedStarts[0].GetAttempt(),
+		"setup invariant: the start must pass its initial catch-up check and be promoted")
+
+	// Phase 2: the first StartWorkflowExecution fails retryably, persisting an
+	// incremented attempt and a framework-clock backoff.
+	env.runExecuteTask(t)
+	require.Len(t, seen, 1, "setup invariant: exactly one start RPC so far")
+	require.Equal(t, int64(2), invoker.BufferedStarts[0].GetAttempt())
+	require.True(t, invoker.BufferedStarts[0].GetBackoffTime().AsTime().After(now),
+		"setup invariant: BackoffTime must derive from the framework clock")
+
+	return invoker, func() []string { return seen }
+}
+
+// A start that passed its catch-up deadline check on Attempt 0 and then failed
+// its first StartWorkflowExecution retryably must not be retried once that
+// deadline has passed: it is dropped and counted as missed, exactly as an
+// initially-expired Attempt 0 start is.
+//
+// Regression for SCH-055: processBuffer filters the pending set to Attempt == 0
+// before checking startWorkflowDeadline, and getEligibleBufferedStarts (the only
+// gate on the retry path) checks attempt/run/backoff but never the deadline, so
+// an expired automated start was still retried and never counted as missed.
+func TestExecuteTask_RetryPastCatchupDeadline(t *testing.T) {
+	cases := []struct {
+		name string
+		// Manual starts are exempt: startWorkflowDeadline gives them a moving
+		// one-hour-future deadline because catch-up doesn't apply to them.
+		manual bool
+		// Framework clock advance applied after the failed first attempt, relative
+		// to the start of the test. The catch-up deadline lands at +4m.
+		advance                     time.Duration
+		expectedStartCalls          int
+		expectedMissedCatchupWindow int64
+		expectedBufferedStarts      int
+	}{
+		{
+			name:                        "automated retry past the catch-up deadline is dropped and counted as missed",
+			advance:                     10 * time.Minute,
+			expectedStartCalls:          1,
+			expectedMissedCatchupWindow: 1,
+			expectedBufferedStarts:      0,
+		},
+		{
+			// Control: the deadline must only stop retries that are actually late.
+			name:                   "automated retry inside the catch-up deadline still runs",
+			advance:                2 * time.Second,
+			expectedStartCalls:     2,
+			expectedBufferedStarts: 1,
+		},
+		{
+			// Control: manual trigger/backfill starts must not start expiring.
+			name:                   "manual start is exempt from the catch-up deadline",
+			manual:                 true,
+			advance:                10 * time.Minute,
+			expectedStartCalls:     2,
+			expectedBufferedStarts: 1,
+		},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			env := newInvokerExecuteTestEnv(t)
+			now := env.TimeSource.Now()
+			invoker, requestIDs := startRetryAfterFirstFailure(t, env, c.manual)
+			backoffTime := invoker.BufferedStarts[0].GetBackoffTime().AsTime()
+
+			// Phase 3: advance the framework clock through the backoff (and, for the
+			// expiry case, past the catch-up deadline), then run the tasks addTasks
+			// generated, in the order production runs them: the backoff-timer
+			// ProcessBuffer first (it advances LastProcessedTime), then Execute.
+			env.TimeSource.Update(now.Add(c.advance))
+			require.False(t, backoffTime.After(env.TimeSource.Now()),
+				"setup invariant: the retry backoff must have elapsed")
+			env.runProcessBufferTask(t)
+			env.runExecuteTask(t)
+
+			require.Len(t, requestIDs(), c.expectedStartCalls,
+				"unexpected number of StartWorkflowExecution calls")
+			if len(requestIDs()) > 1 {
+				require.Equal(t, requestIDs()[0], requestIDs()[1],
+					"a retry must reuse the first attempt's request ID")
+			}
+			require.Equal(t, c.expectedMissedCatchupWindow, env.Scheduler.Info.MissedCatchupWindow)
+			require.Len(t, invoker.GetBufferedStarts(), c.expectedBufferedStarts)
+		})
+	}
+}
+
+// A retry dropped for missing its catch-up deadline does NOT refund the
+// LimitedActions slot that the Attempt == 0 ProcessBuffer pass already consumed.
+// The first StartWorkflowExecution's outcome is uncertain (the workflow may in
+// fact be running), and every other post-promotion drop path - non-retryable
+// failure, max-attempt exhaustion - leaves the slot spent too. Contrast with
+// TestProcessBufferTask_MissedCatchupPreservesRemainingActions, where the start
+// expired before any slot was taken.
+func TestExecuteTask_RetryPastCatchupDeadlineDoesNotRefundRemainingActions(t *testing.T) {
+	env := newInvokerExecuteTestEnv(t)
+	env.Scheduler.Schedule.State.LimitedActions = true
+	env.Scheduler.Schedule.State.RemainingActions = 3
+
+	now := env.TimeSource.Now()
+	invoker, requestIDs := startRetryAfterFirstFailure(t, env, false)
+	require.Equal(t, int64(2), env.Scheduler.Schedule.State.RemainingActions,
+		"setup invariant: promotion to Attempt 1 consumes a limited-action slot")
+
+	env.TimeSource.Update(now.Add(10 * time.Minute))
+	env.runProcessBufferTask(t)
+	env.runExecuteTask(t)
+
+	require.Len(t, requestIDs(), 1, "the expired retry must not issue another start RPC")
+	require.Empty(t, invoker.GetBufferedStarts())
+	require.Equal(t, int64(1), env.Scheduler.Info.MissedCatchupWindow)
+	require.Equal(t, int64(2), env.Scheduler.Schedule.State.RemainingActions,
+		"expiring a retry must not refund the already-consumed limited-action slot")
 }
 
 type startWorkflowExecutionRequestIDMatcher struct {
