@@ -531,7 +531,14 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 			1, metrics.ResourceExhaustedCauseTag(resourceExhaustedErr.Cause))
 		return true, err
 	}
-	e.resourceExhaustedCount = 0
+	// Only reset the accumulated resource exhausted count for errors that don't indicate
+	// congestion. A brief window of Unavailable/DeadlineExceeded errors (e.g. during a
+	// database failover) must not discard the accumulated long backoff state, otherwise
+	// tasks across all shards fall back to the fast retry path at once and re-fire in a
+	// synchronized burst once persistence recovers, exceeding the persistence rate limit.
+	if !common.IsCongestionError(err) {
+		e.resourceExhaustedCount = 0
+	}
 
 	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
 		// error is expected when there's namespace failover,
@@ -866,7 +873,7 @@ func (e *executableImpl) shouldResubmitOnNack(err error) bool {
 	}
 
 	if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) &&
-		common.IsResourceExhausted(err) &&
+		common.IsCongestionError(err) &&
 		e.resourceExhaustedCount > resourceExhaustedResubmitMaxAttempts {
 		return false
 	}
@@ -903,9 +910,14 @@ func (e *executableImpl) backoffDuration(
 	}
 
 	backoffDuration := reschedulePolicy.ComputeNextDelay(0, int(e.attempt.Load()), err)
-	if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) && common.IsResourceExhausted(err) {
+	if !errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) && common.IsCongestionError(err) {
 		// try a different reschedule policy to slow down retry
-		// upon system resource exhausted error and pick the longer backoff duration
+		// upon system resource exhausted error and pick the longer backoff duration.
+		// Other congestion errors (Unavailable/DeadlineExceeded) also take this path so
+		// that a brief persistence outage doesn't drop tasks with accumulated congestion
+		// backoff state (resourceExhaustedCount) back onto the fast default curve.
+		// When resourceExhaustedCount is 0, ComputeNextDelay returns backoff.done (-1)
+		// and the default reschedule policy still applies.
 		backoffDuration = max(
 			backoffDuration,
 			taskResourceExhuastedReschedulePolicy.ComputeNextDelay(0, e.resourceExhaustedCount, err),
