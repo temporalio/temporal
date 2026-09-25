@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/server/common/config"
@@ -173,5 +175,36 @@ func (pdb *db) QueryContext(ctx context.Context, query string, args ...any) (*sq
 }
 
 func (pdb *db) Rebind(query string) string {
-	return pdb.conn().Rebind(query)
+	return rebind(query)
+}
+
+// rebind replaces the `?` bind variable placeholders of a query with the
+// positional `$N` placeholders that PostgreSQL expects.
+//
+// It exists instead of sqlx.Rebind because sqlx rewrites every question mark it
+// finds, including those inside string literals. Visibility filters embed
+// user-supplied values directly in the query text, so a value such as
+// 'foo?-value' would have its question mark turned into a placeholder, leaving a
+// positional parameter that is never bound.
+func rebind(query string) string {
+	var sb strings.Builder
+	sb.Grow(len(query))
+	inLiteral := false
+	argNum := 0
+	for i := 0; i < len(query); i++ {
+		switch c := query[i]; {
+		case c == '\'':
+			// A doubled quote, the escape for a quote inside a literal, leaves
+			// and immediately re-enters the literal, which is equivalent.
+			inLiteral = !inLiteral
+			sb.WriteByte(c)
+		case c == '?' && !inLiteral:
+			argNum++
+			sb.WriteByte('$')
+			sb.WriteString(strconv.Itoa(argNum))
+		default:
+			sb.WriteByte(c)
+		}
+	}
+	return sb.String()
 }
