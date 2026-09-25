@@ -52,7 +52,7 @@ func (f *faultTracker) attach(unregister func()) func() {
 		f.loggingEnabled = false
 		f.mu.Unlock()
 		unregister()
-		if !f.fired.Load() {
+		if !f.t.Skipped() && !f.fired.Load() {
 			f.t.Error("fault injection was registered but never fired - the fault was never injected")
 		}
 	})

@@ -163,3 +163,52 @@ func TestFaultInjection_StoreNotConfigured(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, resp2)
 }
+
+func TestStoreFaultInjector_RuntimeFaultTakesPriority(t *testing.T) {
+	t.Parallel()
+
+	runtimeErr := errors.New("runtime")
+	request := &struct{}{}
+	var target config.FaultInjectionTarget
+	cfg := &config.FaultInjectionDataStoreConfig{
+		Methods: map[string]config.FaultInjectionMethodConfig{
+			"Method": {Errors: map[string]float64{"Timeout": 1}},
+		},
+	}
+	generator, ok := newStoreFaultInjector(config.ExecutionStoreName, cfg, func(got config.FaultInjectionTarget) error {
+		target = got
+		return runtimeErr
+	})
+	require.True(t, ok)
+
+	f := generator.generate("Method", request)
+	require.NotNil(t, f)
+	require.ErrorIs(t, f.err, runtimeErr)
+	require.Equal(t, config.ExecutionStoreName, target.Store)
+	require.Equal(t, "Method", target.Method)
+	require.Same(t, request, target.Request)
+}
+
+func TestStoreFaultInjector_ConfigCanRunOperationBeforeError(t *testing.T) {
+	t.Parallel()
+
+	cfg := &config.FaultInjectionDataStoreConfig{
+		Methods: map[string]config.FaultInjectionMethodConfig{
+			"Method": {Errors: map[string]float64{"ExecuteAndTimeout": 1}},
+		},
+	}
+	generator, ok := newStoreFaultInjector(config.ExecutionStoreName, cfg, nil)
+	require.True(t, ok)
+
+	f := generator.generate("Method")
+	require.NotNil(t, f)
+	executed := false
+	err := f.inject(func() error {
+		executed = true
+		return nil
+	})
+
+	require.True(t, executed)
+	var timeoutErr *persistence.TimeoutError
+	require.ErrorAs(t, err, &timeoutErr)
+}
