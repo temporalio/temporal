@@ -5,16 +5,12 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/resolver"
 )
 
-// This pool properly enabled the support for SQLite in the temporal server.
-// Internal Temporal services are highly isolated, each will create at least a single connection to the database violating
-// the SQLite concept of safety only within a single thread.
+// connPool shares one *sqlx.DB for each DSN.
 type connPool struct {
 	mu   sync.Mutex
-	pool map[string]entry
+	pool map[string]*entry
 }
 
 type entry struct {
@@ -24,63 +20,49 @@ type entry struct {
 
 func newConnPool() *connPool {
 	return &connPool{
-		pool: make(map[string]entry),
+		pool: make(map[string]*entry),
 	}
 }
 
-// Allocate allocates the shared database in the pool or returns already exists instance with the same DSN. If instance
-// for such DSN already exists, it will be returned instead. Each request counts as reference until Close.
-func (cp *connPool) Allocate(
+// acquire returns the shared connection pool for cfg and an idempotent release function.
+func (cp *connPool) acquire(
 	cfg *config.SQL,
-	resolver resolver.ServiceResolver,
-	logger log.Logger,
-	create func(*config.SQL, resolver.ServiceResolver, log.Logger) (*sqlx.DB, error),
-) (db *sqlx.DB, err error) {
-	cp.mu.Lock()
-	defer cp.mu.Unlock()
-
+	create func(string) (*sqlx.DB, error),
+) (*sqlx.DB, func() error, error) {
 	dsn, err := buildDSN(cfg)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	if entry, ok := cp.pool[dsn]; ok {
-		entry.refCount++
-		return entry.db, nil
-	}
-
-	db, err = create(cfg, resolver, logger)
-	if err != nil {
-		return nil, err
-	}
-
-	cp.pool[dsn] = entry{db: db, refCount: 1}
-
-	return db, nil
-}
-
-// Close virtual connection to database. Only closes for real once no references left.
-func (cp *connPool) Close(cfg *config.SQL) {
 	cp.mu.Lock()
 	defer cp.mu.Unlock()
-
-	dsn, err := buildDSN(cfg)
-	if err != nil {
-		return
-	}
 
 	e, ok := cp.pool[dsn]
 	if !ok {
-		// no such database
-		return
+		db, err := create(dsn)
+		if err != nil {
+			return nil, nil, err
+		}
+		e = &entry{db: db}
+		cp.pool[dsn] = e
+	}
+	e.refCount++
+	release := sync.OnceValue(func() error {
+		return cp.release(dsn)
+	})
+	return e.db, release, nil
+}
+
+func (cp *connPool) release(dsn string) error {
+	cp.mu.Lock()
+	defer cp.mu.Unlock()
+
+	e := cp.pool[dsn]
+	e.refCount--
+	if e.refCount != 0 {
+		return nil
 	}
 
-	e.refCount--
-	// todo: at the moment pool will persist a single connection to the DB for the whole duration of application
-	// temporal will start and stop DB connections multiple times, which will cause the loss of the cache
-	// and "db is closed" error
-	// if e.refCount == 0 {
-	// 	e.db.Close()
-	// 	delete(cp.pool, dsn)
-	// }
+	delete(cp.pool, dsn)
+	return e.db.Close()
 }
