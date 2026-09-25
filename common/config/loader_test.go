@@ -108,6 +108,19 @@ services:
 			errorContains: "yaml",
 		},
 		{
+			// Regression test: the error must identify which config file failed to
+			// parse, since the underlying yaml error (e.g. "did not find expected key")
+			// has no file context of its own and is otherwise impossible to act on
+			// when multiple config files are loaded (base.yaml, env.yaml, env_zone.yaml).
+			name:          "invalid yaml error identifies the offending file",
+			configContent: invalidYaml,
+			loadOptions: func(configPath string) []loadOption {
+				return []loadOption{WithConfigDir(filepath.Dir(configPath))}
+			},
+			expectError:   true,
+			errorContains: "base.yaml",
+		},
+		{
 			name:          "non-existent directory returns error",
 			configContent: "",
 			loadOptions: func(configPath string) []loadOption {
