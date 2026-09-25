@@ -216,10 +216,7 @@ func (a *VersionActivities) UpdateWorkerControllerInstance(ctx context.Context, 
 	upserts := scalingGroupUpdatesToWCI(input.GetUpsertScalingGroups())
 	resp, err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), upserts, input.GetRemoveScalingGroups())
 	if err != nil {
-		if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
-			return nil, temporal.NewNonRetryableApplicationError(err.Error(), errInvalidComputeConfig, nil)
-		}
-		return nil, err
+		return nil, wciClientErrorToActivityError(err)
 	}
 	return wciSpecToComputeConfigSummary(resp.Spec), nil
 }

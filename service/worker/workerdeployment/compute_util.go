@@ -1,9 +1,13 @@
 package workerdeployment
 
 import (
+	"errors"
+
 	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
+	"go.temporal.io/api/serviceerror"
 	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -120,4 +124,14 @@ func wciValidationStatusToComputeStatus(vs *wciiface.ValidationStatus) *deployme
 		pv.ErrorMessage = vs.ErrMessage
 	}
 	return &deploymentpb.ComputeStatus{ProviderValidation: pv}
+}
+
+func wciClientErrorToActivityError(err error) error {
+	if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
+		return temporal.NewNonRetryableApplicationError(err.Error(), errInvalidComputeConfig, nil)
+	}
+	if _, ok := errors.AsType[*serviceerror.FailedPrecondition](err); ok {
+		return temporal.NewNonRetryableApplicationError(err.Error(), errFailedPrecondition, nil)
+	}
+	return err
 }
