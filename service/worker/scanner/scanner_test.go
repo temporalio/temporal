@@ -6,6 +6,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -188,6 +191,7 @@ func (s *scannerTestSuite) TestScannerEnabled() {
 					MaxConcurrentActivityTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
 					MaxConcurrentWorkflowTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
 					HistoryScannerEnabled:                  dynamicconfig.GetBoolPropertyFn(c.HistoryScannerEnabled),
+					HistoryScannerCronSchedule:             dynamicconfig.GetStringPropertyFn(historyScannerWFStartOptions.CronSchedule),
 					BuildIdScavengerEnabled:                dynamicconfig.GetBoolPropertyFn(c.BuildIdScavengerEnabled),
 					ExecutionsScannerEnabled:               dynamicconfig.GetBoolPropertyFn(c.ExecutionsScannerEnabled),
 					TaskQueueScannerEnabled:                dynamicconfig.GetBoolPropertyFn(c.TaskQueueScannerEnabled),
@@ -270,6 +274,7 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 			MaxConcurrentActivityTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
 			MaxConcurrentWorkflowTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
 			HistoryScannerEnabled:                  dynamicconfig.GetBoolPropertyFn(true),
+			HistoryScannerCronSchedule:             dynamicconfig.GetStringPropertyFn(historyScannerWFStartOptions.CronSchedule),
 			ExecutionsScannerEnabled:               dynamicconfig.GetBoolPropertyFn(false),
 			TaskQueueScannerEnabled:                dynamicconfig.GetBoolPropertyFn(false),
 			BuildIdScavengerEnabled:                dynamicconfig.GetBoolPropertyFn(false),
@@ -314,6 +319,207 @@ func (s *scannerTestSuite) TestScannerShutdown() {
 		<-ctx.Done()
 		return nil, ctx.Err()
 	})
+	err := scanner.Start()
+	s.NoError(err)
+	wg.Wait()
+	scanner.Stop()
+}
+
+func (s *scannerTestSuite) TestHistoryScannerWFStartOptionsCronSchedule() {
+	for _, c := range []struct {
+		Name           string
+		ConfiguredCron string
+		ExpectedCron   string
+	}{
+		{
+			Name:           "Default",
+			ConfiguredCron: "0 */12 * * *",
+			ExpectedCron:   "0 */12 * * *",
+		},
+		{
+			Name:           "Custom",
+			ConfiguredCron: "0 * * * *",
+			ExpectedCron:   "0 * * * *",
+		},
+		{
+			Name:           "EmptyFallsBackToDefault",
+			ConfiguredCron: "",
+			ExpectedCron:   "0 */12 * * *",
+		},
+		{
+			Name:           "InvalidFallsBackToDefault",
+			ConfiguredCron: "not-a-cron-spec",
+			ExpectedCron:   "0 */12 * * *",
+		},
+	} {
+		s.Run(c.Name, func() {
+			scanner := &Scanner{
+				context: scannerContext{
+					cfg: &Config{
+						HistoryScannerCronSchedule: dynamicconfig.GetStringPropertyFn(c.ConfiguredCron),
+					},
+					logger: log.NewNoopLogger(),
+				},
+			}
+			options := scanner.historyScannerWFStartOptions()
+			s.Equal(c.ExpectedCron, options.CronSchedule)
+			s.Equal(historyScannerWFID, options.ID)
+			s.Equal(historyScannerTaskQueueName, options.TaskQueue)
+		})
+	}
+}
+
+type fakeHistoryEventIterator struct {
+	events []*historypb.HistoryEvent
+}
+
+func (f *fakeHistoryEventIterator) HasNext() bool {
+	return len(f.events) > 0
+}
+
+func (f *fakeHistoryEventIterator) Next() (*historypb.HistoryEvent, error) {
+	event := f.events[0]
+	f.events = f.events[1:]
+	return event, nil
+}
+
+func startedEventWithCronSchedule(cronSchedule string) *historypb.HistoryEvent {
+	return &historypb.HistoryEvent{
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+			WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+				CronSchedule: cronSchedule,
+			},
+		},
+	}
+}
+
+func (s *scannerTestSuite) newHistoryScannerForCronTest(ctrl *gomock.Controller, cronSchedule string, mockSdkClientFactory *sdk.MockClientFactory) *Scanner {
+	return New(
+		log.NewNoopLogger(),
+		&Config{
+			MaxConcurrentActivityExecutionSize:     dynamicconfig.GetIntPropertyFn(1),
+			MaxConcurrentWorkflowTaskExecutionSize: dynamicconfig.GetIntPropertyFn(1),
+			MaxConcurrentActivityTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
+			MaxConcurrentWorkflowTaskPollers:       dynamicconfig.GetIntPropertyFn(1),
+			HistoryScannerEnabled:                  dynamicconfig.GetBoolPropertyFn(true),
+			HistoryScannerCronSchedule:             dynamicconfig.GetStringPropertyFn(cronSchedule),
+			BuildIdScavengerEnabled:                dynamicconfig.GetBoolPropertyFn(false),
+			ExecutionsScannerEnabled:               dynamicconfig.GetBoolPropertyFn(false),
+			TaskQueueScannerEnabled:                dynamicconfig.GetBoolPropertyFn(false),
+			ScheduleInvariantsScannerOptions:       dynamicconfig.GetTypedPropertyFn(dynamicconfig.DefaultScheduleInvariantsScannerParams),
+			Persistence: &config.Persistence{
+				DefaultStore: config.StoreTypeNoSQL,
+				DataStores: map[string]config.DataStore{
+					config.StoreTypeNoSQL: {},
+				},
+			},
+		},
+		mockSdkClientFactory,
+		metrics.NoopMetricsHandler,
+		p.NewMockExecutionManager(ctrl),
+		nil,
+		nil,
+		p.NewMockTaskManager(ctrl),
+		historyservicemock.NewMockHistoryServiceClient(ctrl),
+		adminservicemock.NewMockAdminServiceClient(ctrl),
+		nil,
+		namespace.NewMockRegistry(ctrl),
+		"active-cluster",
+		membership.NewHostInfoFromAddress("localhost"),
+		serialization.NewSerializer(),
+	)
+}
+
+// TestHistoryScannerRestartedOnCronScheduleChange tests that a running history scanner
+// workflow is terminated and restarted when the configured cron schedule differs from
+// the schedule the running workflow was started with.
+func (s *scannerTestSuite) TestHistoryScannerRestartedOnCronScheduleChange() {
+	ctrl := gomock.NewController(s.T())
+	mockSdkClientFactory := sdk.NewMockClientFactory(ctrl)
+	mockSdkClient := mocksdk.NewMockClient(ctrl)
+	worker := mocksdk.NewMockWorker(ctrl)
+
+	newCronSchedule := "0 * * * *"
+	scanner := s.newHistoryScannerForCronTest(ctrl, newCronSchedule, mockSdkClientFactory)
+
+	mockSdkClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
+	worker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
+	worker.EXPECT().RegisterWorkflowWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
+	worker.EXPECT().Start()
+	worker.EXPECT().Stop()
+	mockSdkClientFactory.EXPECT().NewWorker(gomock.Any(), historyScannerTaskQueueName, gomock.Any()).Return(worker)
+
+	// The first start attempt hits an already running workflow started on the old schedule.
+	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), historyScannerWFTypeName).DoAndReturn(func(
+		_ context.Context,
+		options client.StartWorkflowOptions,
+		_ string,
+		_ ...any,
+	) (client.WorkflowRun, error) {
+		s.Equal(newCronSchedule, options.CronSchedule)
+		return nil, serviceerror.NewWorkflowExecutionAlreadyStarted("already started", "", "")
+	})
+	mockSdkClient.EXPECT().GetWorkflowHistory(gomock.Any(), historyScannerWFID, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT).Return(
+		&fakeHistoryEventIterator{events: []*historypb.HistoryEvent{startedEventWithCronSchedule("0 */12 * * *")}},
+	)
+	mockSdkClient.EXPECT().TerminateWorkflow(gomock.Any(), historyScannerWFID, "", cronScheduleChangedTerminationReason).Return(nil)
+
+	// The retry then starts the workflow on the new schedule.
+	var wg sync.WaitGroup
+	wg.Add(1)
+	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), historyScannerWFTypeName).DoAndReturn(func(
+		_ context.Context,
+		options client.StartWorkflowOptions,
+		_ string,
+		_ ...any,
+	) (client.WorkflowRun, error) {
+		s.Equal(newCronSchedule, options.CronSchedule)
+		wg.Done()
+		return nil, nil
+	})
+
+	err := scanner.Start()
+	s.NoError(err)
+	wg.Wait()
+	scanner.Stop()
+}
+
+// TestHistoryScannerNotRestartedWhenCronScheduleUnchanged tests that a running history
+// scanner workflow is left alone when it already runs on the configured cron schedule.
+func (s *scannerTestSuite) TestHistoryScannerNotRestartedWhenCronScheduleUnchanged() {
+	ctrl := gomock.NewController(s.T())
+	mockSdkClientFactory := sdk.NewMockClientFactory(ctrl)
+	mockSdkClient := mocksdk.NewMockClient(ctrl)
+	worker := mocksdk.NewMockWorker(ctrl)
+
+	cronSchedule := "0 * * * *"
+	scanner := s.newHistoryScannerForCronTest(ctrl, cronSchedule, mockSdkClientFactory)
+
+	mockSdkClientFactory.EXPECT().GetSystemClient().Return(mockSdkClient).AnyTimes()
+	worker.EXPECT().RegisterActivityWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
+	worker.EXPECT().RegisterWorkflowWithOptions(gomock.Any(), gomock.Any()).AnyTimes()
+	worker.EXPECT().Start()
+	worker.EXPECT().Stop()
+	mockSdkClientFactory.EXPECT().NewWorker(gomock.Any(), historyScannerTaskQueueName, gomock.Any()).Return(worker)
+
+	mockSdkClient.EXPECT().ExecuteWorkflow(gomock.Any(), gomock.Any(), historyScannerWFTypeName).Return(
+		nil, serviceerror.NewWorkflowExecutionAlreadyStarted("already started", "", ""),
+	)
+	var wg sync.WaitGroup
+	wg.Add(1)
+	mockSdkClient.EXPECT().GetWorkflowHistory(gomock.Any(), historyScannerWFID, "", false, enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT).DoAndReturn(func(
+		_ context.Context,
+		_ string,
+		_ string,
+		_ bool,
+		_ enumspb.HistoryEventFilterType,
+	) client.HistoryEventIterator {
+		wg.Done()
+		return &fakeHistoryEventIterator{events: []*historypb.HistoryEvent{startedEventWithCronSchedule(cronSchedule)}}
+	})
+	// No TerminateWorkflow and no second ExecuteWorkflow expected.
+
 	err := scanner.Start()
 	s.NoError(err)
 	wg.Wait()
