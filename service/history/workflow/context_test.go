@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/testhooks"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -82,6 +83,7 @@ func (s *contextSuite) SetupTest() {
 		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,
 		limiter.NewKeyedBytesLimiter(),
+		testhooks.TestHooks{},
 	)
 }
 

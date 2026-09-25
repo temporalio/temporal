@@ -319,6 +319,10 @@ message WorkflowExecutionInfo {
 
   // Time skipping info that contains the config and runtime history of the time skipping for the workflow.
   TimeSkippingInfo time_skipping_info = 115;
+
+  // Time of the most recent AdminRebuildMutableState call for this run, unset if the run
+  // was never rebuilt.
+  google.protobuf.Timestamp mutable_state_rebuild_time = 116;
 }
 
 message TimeSkippingInfo {
@@ -475,6 +479,9 @@ message ReplicationTaskInfo {
   bool is_force_replication = 24;
   // (-- api-linter: core::0141::forbidden-types=disabled --)
   uint32 archetype_id = 25;
+  // Contains the current version-history items captured when this replication task was created.
+  // The branch token is omitted; presence distinguishes captured tasks from legacy tasks.
+  history.v1.VersionHistory current_version_history = 26;
 }
 
 // visibility_task_data column

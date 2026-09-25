@@ -198,7 +198,7 @@ func (s *scopeSuite) TestCanMergeByRange() {
 		predicate,
 		tasks.NewNamespacePredicate(namespaceIDs),
 		tasks.NewNamespacePredicate([]string{uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()}),
-		tasks.NewTypePredicate([]enumsspb.TaskType{enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER}),
+		tasks.NewOutboundTaskPredicate([]tasks.TaskGroupNamespaceIDAndDestination{{TaskGroup: "g1", NamespaceID: "n1", Destination: "d1"}}),
 	}
 	s.True(predicate.Equals(testPredicates[0]))
 	s.True(predicate.Equals(testPredicates[1]))
@@ -284,7 +284,7 @@ func (s *scopeSuite) TestCanMergeByPredicate() {
 
 	s.True(scope.CanMergeByPredicate(scope))
 	s.True(scope.CanMergeByPredicate(NewScope(r, predicate)))
-	s.True(scope.CanMergeByPredicate(NewScope(r, tasks.NewTypePredicate([]enumsspb.TaskType{}))))
+	s.True(scope.CanMergeByPredicate(NewScope(r, tasks.NewOutboundTaskPredicate(nil))))
 
 	s.False(scope.CanMergeByPredicate(NewScope(NewRandomRange(), predicate)))
 	s.False(scope.CanMergeByPredicate(NewScope(NewRandomRange(), predicates.Universal[tasks.Task]())))

@@ -523,11 +523,7 @@ func (s *queryConverterSuite) TestConvertColName() {
 			input:    "InvalidName",
 			output:   "",
 			retValue: nil,
-			err: query.NewConverterError(
-				"%s: column name '%s' is not a valid search attribute",
-				query.InvalidExpressionErrMessage,
-				"InvalidName",
-			),
+			err:      query.NewConverterError("%s: %s", query.InvalidSearchAttribute, "InvalidName"),
 		},
 		{
 			name:   "valid system search attribute: ExecutionStatus",
@@ -784,6 +780,206 @@ func (s *queryConverterSuite) TestConvertValueExpr() {
 			},
 			output: "('foo', 'bar')",
 			err:    nil,
+		},
+		// The SQL parser folds the sign into integer values, but represents signed floats
+		// as an unary expression.
+		{
+			name:  "valid negative integer",
+			input: "-123",
+			args: map[string]any{
+				"saName":      "AliasForInt01",
+				"saFieldName": "Int01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_INT,
+			},
+			output: "-123",
+			err:    nil,
+		},
+		{
+			// The parser folds both signs into the value, so this is not an unary expression.
+			name:  "valid double negative integer",
+			input: "- -123",
+			args: map[string]any{
+				"saName":      "AliasForInt01",
+				"saFieldName": "Int01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_INT,
+			},
+			output: "123",
+			err:    nil,
+		},
+		{
+			name:  "valid positive negative integer",
+			input: "+ -123",
+			args: map[string]any{
+				"saName":      "AliasForInt01",
+				"saFieldName": "Int01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_INT,
+			},
+			output: "-123",
+			err:    nil,
+		},
+		{
+			name:  "valid negative positive integer",
+			input: "- +123",
+			args: map[string]any{
+				"saName":      "AliasForInt01",
+				"saFieldName": "Int01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_INT,
+			},
+			output: "-123",
+			err:    nil,
+		},
+		{
+			name:  "valid negative float",
+			input: "-1.5",
+			args: map[string]any{
+				"saName":      "AliasForDouble01",
+				"saFieldName": "Double01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+			},
+			output: "-1.5",
+			err:    nil,
+		},
+		{
+			name:  "valid positive sign float",
+			input: "+1.5",
+			args: map[string]any{
+				"saName":      "AliasForDouble01",
+				"saFieldName": "Double01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+			},
+			output: "1.5",
+			err:    nil,
+		},
+		{
+			name:  "valid negative float with trailing zeros",
+			input: "-1.500",
+			args: map[string]any{
+				"saName":      "AliasForDouble01",
+				"saFieldName": "Double01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+			},
+			output: "-1.5",
+			err:    nil,
+		},
+		{
+			name:  "valid negative float in tuple",
+			input: "(-1.5, 2.5)",
+			args: map[string]any{
+				"saName":      "AliasForDouble01",
+				"saFieldName": "Double01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+			},
+			output: "(-1.5, 2.5)",
+			err:    nil,
+		},
+		{
+			// Only a literal value can be signed, not another unary expression.
+			name:  "nested unary expression",
+			input: "- -1.5",
+			args: map[string]any{
+				"saName":      "AliasForDouble01",
+				"saFieldName": "Double01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_DOUBLE,
+			},
+			output: "",
+			err: query.NewConverterError(
+				"%s: unary operator not supported in %q",
+				query.InvalidExpressionErrMessage,
+				"- -1.5",
+			),
+		},
+		{
+			name:  "unary expression with string value",
+			input: "-'foo'",
+			args: map[string]any{
+				"saName":      "AliasForKeyword01",
+				"saFieldName": "Keyword01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			},
+			output: "",
+			err: query.NewConverterError(
+				"%s: unary operator not supported in %q",
+				query.InvalidExpressionErrMessage,
+				"-'foo'",
+			),
+		},
+		{
+			name:  "unary expression with bool value",
+			input: "-true",
+			args: map[string]any{
+				"saName":      "AliasForBool01",
+				"saFieldName": "Bool01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_BOOL,
+			},
+			output: "",
+			err: query.NewConverterError(
+				"%s: unary operator not supported in %q",
+				query.InvalidExpressionErrMessage,
+				"-true",
+			),
+		},
+		{
+			name:  "unary expression with parenthesized value",
+			input: "-(10)",
+			args: map[string]any{
+				"saName":      "AliasForInt01",
+				"saFieldName": "Int01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_INT,
+			},
+			output: "",
+			err: query.NewConverterError(
+				"%s: unary operator not supported in %q",
+				query.InvalidExpressionErrMessage,
+				"-(10)",
+			),
+		},
+		{
+			name:  "unsupported unary operator: bitwise not",
+			input: "~1",
+			args: map[string]any{
+				"saName":      "AliasForInt01",
+				"saFieldName": "Int01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_INT,
+			},
+			output: "",
+			err: query.NewConverterError(
+				"%s: unary operator %q",
+				query.NotSupportedErrMessage,
+				sqlparser.TildaStr,
+			),
+		},
+		{
+			name:  "unsupported unary operator: logical not",
+			input: "!1",
+			args: map[string]any{
+				"saName":      "AliasForInt01",
+				"saFieldName": "Int01",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_INT,
+			},
+			output: "",
+			err: query.NewConverterError(
+				"%s: unary operator %q",
+				query.NotSupportedErrMessage,
+				sqlparser.BangStr,
+			),
+		},
+		{
+			// The value is converted before the sign is applied, so the errors of the
+			// underlying value are returned as is.
+			name:  "unary expression with invalid value type",
+			input: "-1.5",
+			args: map[string]any{
+				"saName":      "StartTime",
+				"saFieldName": "StartTime",
+				"saType":      enumspb.INDEXED_VALUE_TYPE_DATETIME,
+			},
+			output: "",
+			err: query.NewConverterError(
+				"%s: unexpected value type %T for search attribute %s",
+				query.InvalidExpressionErrMessage,
+				float64(1.5),
+				"StartTime",
+			),
 		},
 	}
 

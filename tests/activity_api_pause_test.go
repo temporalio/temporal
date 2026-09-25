@@ -111,6 +111,25 @@ func TestActivityApiPauseClientTestSuite(t *testing.T) {
 		t.Run(api.name, func(t *testing.T) {
 			t.Parallel()
 
+			t.Run("TestActivityPauseApi_AfterWorkflowCompleted", func(t *testing.T) {
+				s := testcore.NewEnv(t)
+				ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+				defer cancel()
+
+				workflowFn := func(workflow.Context) error { return nil }
+				s.SdkWorker().RegisterWorkflow(workflowFn)
+
+				workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+					ID:        testcore.RandomizeStr("wf_id-" + t.Name()),
+					TaskQueue: s.WorkerTaskQueue(),
+				}, workflowFn)
+				require.NoError(t, err)
+				require.NoError(t, workflowRun.Get(ctx, nil))
+
+				err = api.pause(ctx, s, workflowRun.GetID(), "activity-id", "test-identity", "test-reason", "test-request-id")
+				require.ErrorContains(t, err, "workflow execution already completed")
+			})
+
 			t.Run("TestActivityPauseApi_WhileRunning", func(t *testing.T) {
 				s := testcore.NewEnv(t)
 

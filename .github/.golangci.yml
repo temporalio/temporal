@@ -198,6 +198,10 @@ linters:
         text: "panic"
         linters:
           - forbidigo
+      - path: chasm/lib/activity/model/.*\.go$ # the activity model transition function deliberately panics if it can't accept an event
+        text: "panic"
+        linters:
+          - forbidigo
       - path: tests/testcore/.*\.go$ # still needed in tests/testcore/ until we remove testify suites entirely
         text: "FunctionalTestBase"
         linters:
@@ -234,6 +238,10 @@ linters:
       - path: ^tools\/.+\.go
         linters:
           - revive
+      # These packages remain imported to read and maintain persisted HSM state.
+      - text: "SA1019: go.temporal.io/server/service/history/hsm/(callbacks|nexusoperations) is deprecated"
+        linters:
+          - staticcheck
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0

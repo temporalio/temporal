@@ -28,16 +28,17 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
-	"go.temporal.io/server/components/callbacks"
-	"go.temporal.io/server/components/nexusoperations"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/callbacks"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -837,6 +838,10 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 				require.True(t, ok)
 				require.Equal(t, chasm.WorkflowArchetypeID, syncVersionTask.GetArchetypeID())
 				require.Equal(t, enumsspb.TASK_PRIORITY_LOW, syncVersionTask.Priority)
+				require.True(t, proto.Equal(&historyspb.VersionHistory{
+					Items: executionInfo.VersionHistories.Histories[0].Items,
+				}, syncVersionTask.CurrentVersionHistory))
+				require.Empty(t, syncVersionTask.CurrentVersionHistory.BranchToken)
 				taskEquivalent := syncVersionTask.TaskEquivalents
 				require.Len(t, taskEquivalent, len(tc.expectedTaskEquivalentTypes))
 				for i, equivalent := range taskEquivalent {

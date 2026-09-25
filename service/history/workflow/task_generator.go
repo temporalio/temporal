@@ -827,9 +827,12 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 				FirstEventID:        executionInfo.LastFirstEventId,
 				FirstEventVersion:   lastItem.Version,
 				NextEventID:         nextEventID,
-				TaskEquivalents:     taskEquivalents,
-				TargetClusters:      targetClusters,
-				IsForceReplication:  true,
+				CurrentVersionHistory: &historyspb.VersionHistory{
+					Items: versionhistory.CopyVersionHistoryItems(versionHistory.Items),
+				},
+				TaskEquivalents:    taskEquivalents,
+				TargetClusters:     targetClusters,
+				IsForceReplication: true,
 			}}, 1, nil
 		}
 		if !isWorkflow {
@@ -889,9 +892,12 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(targetClusters []string) ([]t
 			FirstEventID:        executionInfo.LastFirstEventId,
 			FirstEventVersion:   lastItem.GetVersion(),
 			NextEventID:         nextEventID,
-			TaskEquivalents:     taskEquivalents,
-			TargetClusters:      targetClusters,
-			IsForceReplication:  true,
+			CurrentVersionHistory: &historyspb.VersionHistory{
+				Items: versionhistory.CopyVersionHistoryItems(versionHistory.Items),
+			},
+			TaskEquivalents:    taskEquivalents,
+			TargetClusters:     targetClusters,
+			IsForceReplication: true,
 		}}, 1, nil
 	}
 	if !isWorkflow {

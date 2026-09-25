@@ -104,6 +104,24 @@ func (s *ActivityApiResetClientTestSuite) makeWorkflowFunc(activityFunction Acti
 	}
 }
 
+func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterWorkflowCompleted() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	workflowFn := func(workflow.Context) error { return nil }
+	s.SdkWorker().RegisterWorkflow(workflowFn)
+
+	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
+		TaskQueue: s.TaskQueue(),
+	}, workflowFn)
+	s.Require().NoError(err)
+	s.Require().NoError(workflowRun.Get(ctx, nil))
+
+	err = s.resetFn(ctx, workflowRun.GetID(), "activity-id", false, false)
+	s.Require().ErrorContains(err, "workflow execution already completed")
+}
+
 func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry() {
 	// activity reset is called after multiple attempts,
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
