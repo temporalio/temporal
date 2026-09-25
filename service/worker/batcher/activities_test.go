@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -20,7 +21,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/mocks"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
@@ -30,9 +32,12 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.uber.org/mock/gomock"
 )
 
@@ -781,6 +786,49 @@ func (s *activitiesSuite) TestIsNonRetryableError() {
 			batchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
 			want:      false,
 		},
+		{
+			// An InvalidArgument is permanent whatever the batch type: the same
+			// arguments fail the same way on every attempt.
+			name:      "InvalidArgument for RESET_WORKFLOW returns true",
+			err:       serviceerror.NewInvalidArgument("Workflow task finish ID must be > 1 && <= workflow last event ID."),
+			batchType: enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW,
+			want:      true,
+		},
+		{
+			name:      "InvalidArgument for SIGNAL_WORKFLOW returns true",
+			err:       serviceerror.NewInvalidArgument("signal name is not set"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
+			want:      true,
+		},
+		{
+			name:      "InvalidArgument for UNPAUSE_ACTIVITY returns true",
+			err:       serviceerror.NewInvalidArgument("activity type is not set"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY,
+			want:      true,
+		},
+		{
+			// The batch type carries no operation-specific rule at all, so this
+			// covers the path that used to fall through to "retryable".
+			name:      "InvalidArgument for DELETE_ACTIVITY returns true",
+			err:       serviceerror.NewInvalidArgument("run id is not valid"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY,
+			want:      true,
+		},
+		{
+			// The task layer may annotate before processTaskWithRetries sees it.
+			name:      "wrapped InvalidArgument returns true",
+			err:       fmt.Errorf("reset workflow: %w", serviceerror.NewInvalidArgument("invalid reset point")),
+			batchType: enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW,
+			want:      true,
+		},
+		{
+			// Only the typed error is permanent; the same wording from an
+			// untyped error carries no such guarantee.
+			name:      "untyped error mentioning invalid argument returns false",
+			err:       errors.New("invalid argument"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_RESET_WORKFLOW,
+			want:      false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -853,10 +901,87 @@ func (s *activitiesSuite) TestStartTaskProcessor_SignalUsesWorkerNamespace() {
 
 	taskCh <- testTask
 
-	go a.startTaskProcessor(ctx, batchOperation, workerNamespace, taskCh, respCh, limiter, nil, s.mockFrontendClient, metrics.NoopMetricsHandler, log.NewTestLogger())
+	go a.startTaskProcessor(ctx, batchOperation, workerNamespace, taskCh, respCh, limiter, s.mockFrontendClient, metrics.NoopMetricsHandler, log.NewTestLogger())
 
 	resp := <-respCh
 	s.NoError(resp.err)
+}
+
+// TestStartTaskProcessor_SignalForwardsRequestFields verifies the signal path
+// forwards every field the requester supplied, including the header that carries
+// tracing and auth tokens through to the receiving workflow.
+func (s *activitiesSuite) TestStartTaskProcessor_SignalForwardsRequestFields() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	a := &activities{
+		activityDeps: activityDeps{
+			FrontendClient: s.mockFrontendClient,
+			Logger:         log.NewTestLogger(),
+			MetricsHandler: metrics.NoopMetricsHandler,
+		},
+	}
+
+	input := payloads.EncodeString("signal-input")
+	header := &commonpb.Header{
+		Fields: map[string]*commonpb.Payload{
+			"tracing-token": payload.EncodeString("trace-me"),
+		},
+	}
+	batchOperation := &batchspb.BatchOperationInput{
+		NamespaceId: "some-namespace-id",
+		BatchType:   enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
+		Request: &workflowservice.StartBatchOperationRequest{
+			Namespace: "untrusted-namespace",
+			JobId:     "job-id",
+			Reason:    "batch reason",
+			Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
+				SignalOperation: &batchpb.BatchOperationSignal{
+					Signal:   "test-signal",
+					Input:    input,
+					Header:   header,
+					Identity: "batch-signaler",
+				},
+			},
+		},
+	}
+
+	testPage := &page{
+		executionInfos: []*workflowpb.WorkflowExecutionInfo{
+			{Execution: &commonpb.WorkflowExecution{WorkflowId: "test-workflow-id", RunId: "test-run-id"}},
+		},
+	}
+
+	var captured *workflowservice.SignalWorkflowExecutionRequest
+	s.mockFrontendClient.EXPECT().
+		SignalWorkflowExecution(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *workflowservice.SignalWorkflowExecutionRequest, _ ...any) (*workflowservice.SignalWorkflowExecutionResponse, error) {
+			captured = req
+			return &workflowservice.SignalWorkflowExecutionResponse{}, nil
+		})
+
+	taskCh := make(chan task, 1)
+	respCh := make(chan taskResponse, 1)
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 1000 }))
+
+	go a.startTaskProcessor(ctx, batchOperation, "trusted-namespace", taskCh, respCh, limiter, s.mockFrontendClient, metrics.NoopMetricsHandler, log.NewTestLogger())
+
+	taskCh <- task{executionInfo: testPage.executionInfos[0], attempts: 1, page: testPage}
+
+	resp := <-respCh
+	s.Require().NoError(resp.err)
+
+	s.Require().NotNil(captured)
+	s.Equal("trusted-namespace", captured.Namespace, "must use worker namespace, not request namespace")
+	protorequire.ProtoEqual(s.T(), testPage.executionInfos[0].Execution, captured.WorkflowExecution)
+	s.Equal("test-signal", captured.SignalName)
+	protorequire.ProtoEqual(s.T(), input, captured.Input)
+	protorequire.ProtoEqual(s.T(), header, captured.Header)
+	s.Equal("batch-signaler", captured.Identity)
+	s.Equal(
+		deterministicRequestID("job-id", "signal", "test-workflow-id", "test-run-id", "test-signal"),
+		captured.RequestId,
+	)
 }
 
 // TestStartTaskProcessor_RetryableErrorsDoNotDeadlock verifies that repeated retryable
@@ -899,7 +1024,7 @@ func (s *activitiesSuite) TestStartTaskProcessor_RetryableErrorsDoNotDeadlock() 
 	respCh := make(chan taskResponse, 1)
 	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 1000 }))
 
-	go a.startTaskProcessor(ctx, batchOperation, "ns", taskCh, respCh, limiter, nil, s.mockFrontendClient, metrics.NoopMetricsHandler, log.NewTestLogger())
+	go a.startTaskProcessor(ctx, batchOperation, "ns", taskCh, respCh, limiter, s.mockFrontendClient, metrics.NoopMetricsHandler, log.NewTestLogger())
 
 	// Feed tasks from a separate goroutine so the test can drain responses concurrently.
 	go func() {
@@ -979,7 +1104,7 @@ func (s *activitiesSuite) TestStartTaskProcessor_ActivityTerminalStateIsNotRetri
 	respCh := make(chan taskResponse, 1)
 	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 1000 }))
 
-	go a.startTaskProcessor(ctx, batchOperation, "ns", taskCh, respCh, limiter, nil, s.mockFrontendClient, metrics.NoopMetricsHandler, log.NewTestLogger())
+	go a.startTaskProcessor(ctx, batchOperation, "ns", taskCh, respCh, limiter, s.mockFrontendClient, metrics.NoopMetricsHandler, log.NewTestLogger())
 
 	taskCh <- task{targetExecution: testPage.targetExecutionInfo[0], attempts: 1, page: testPage}
 
@@ -991,6 +1116,229 @@ func (s *activitiesSuite) TestStartTaskProcessor_ActivityTerminalStateIsNotRetri
 	}
 
 	s.Equal(int32(1), calls.Load(), "terminal-state failure must not be retried")
+}
+
+// TestStartTaskProcessor_InvalidArgumentIsNotRetried verifies that an
+// InvalidArgument from a target's own operation is attempted exactly once. The
+// same arguments fail the same way every time, and processTaskWithRetries retries
+// in place paced only by the batch's rate limiter, so retrying spends the whole
+// AttemptsOnRetryableError budget -- and the batch's request budget -- to arrive
+// at the same failure. Unlike the activity FailedPrecondition case, this holds
+// for every batch type.
+func (s *activitiesSuite) TestStartTaskProcessor_InvalidArgumentIsNotRetried() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	a := &activities{
+		activityDeps: activityDeps{
+			FrontendClient: s.mockFrontendClient,
+			Logger:         log.NewTestLogger(),
+			MetricsHandler: metrics.NoopMetricsHandler,
+		},
+	}
+
+	batchOperation := &batchspb.BatchOperationInput{
+		NamespaceId: "some-namespace-id",
+		BatchType:   enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
+		// Generous retry budget: the point is that none of it gets used.
+		AttemptsOnRetryableError: 50,
+		Request: &workflowservice.StartBatchOperationRequest{
+			Namespace: "ns",
+			JobId:     "job-id",
+			Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
+				SignalOperation: &batchpb.BatchOperationSignal{Signal: "test-signal"},
+			},
+		},
+	}
+
+	var calls atomic.Int32
+	s.mockFrontendClient.EXPECT().
+		SignalWorkflowExecution(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(context.Context, *workflowservice.SignalWorkflowExecutionRequest, ...any) (*workflowservice.SignalWorkflowExecutionResponse, error) {
+			calls.Add(1)
+			return nil, serviceerror.NewInvalidArgument("signal name is not set")
+		}).
+		AnyTimes()
+
+	testPage := &page{
+		executionInfos: []*workflowpb.WorkflowExecutionInfo{
+			{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-1", RunId: "run-1"}},
+		},
+	}
+
+	taskCh := make(chan task, 1)
+	respCh := make(chan taskResponse, 1)
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 1000 }))
+
+	go a.startTaskProcessor(ctx, batchOperation, "ns", taskCh, respCh, limiter, s.mockFrontendClient, metrics.NoopMetricsHandler, log.NewTestLogger())
+
+	taskCh <- task{executionInfo: testPage.executionInfos[0], attempts: 1, page: testPage}
+
+	select {
+	case resp := <-respCh:
+		s.Require().Error(resp.err)
+	case <-time.After(10 * time.Second):
+		s.FailNow("timed out waiting for task response")
+	}
+
+	s.Equal(int32(1), calls.Load(), "an InvalidArgument must not be retried")
+}
+
+// TestStartTaskProcessor_TerminationForwardsRequestFields verifies the terminate
+// path calls the frontend with the batch job's reason plus the requester's
+// identity and details, all against the worker's bound namespace. The SDK client
+// this path used to go through substituted its own identity (pid@host) and had
+// no way to send details at all.
+func (s *activitiesSuite) TestStartTaskProcessor_TerminationForwardsRequestFields() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	a := &activities{
+		activityDeps: activityDeps{
+			FrontendClient: s.mockFrontendClient,
+			Logger:         log.NewTestLogger(),
+			MetricsHandler: metrics.NoopMetricsHandler,
+		},
+	}
+
+	details := payloads.EncodeString("why-it-was-terminated")
+	batchOperation := &batchspb.BatchOperationInput{
+		NamespaceId: "some-namespace-id",
+		BatchType:   enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+		Request: &workflowservice.StartBatchOperationRequest{
+			// Intentionally different from the worker's bound namespace below.
+			Namespace: "untrusted-namespace",
+			JobId:     "job-id",
+			Reason:    "batch reason",
+			Operation: &workflowservice.StartBatchOperationRequest_TerminationOperation{
+				TerminationOperation: &batchpb.BatchOperationTermination{
+					Identity: "batch-terminator",
+					Details:  details,
+				},
+			},
+		},
+	}
+
+	testPage := &page{
+		executionInfos: []*workflowpb.WorkflowExecutionInfo{
+			{Execution: &commonpb.WorkflowExecution{WorkflowId: "test-workflow-id", RunId: "test-run-id"}},
+		},
+	}
+
+	var captured *workflowservice.TerminateWorkflowExecutionRequest
+	s.mockFrontendClient.EXPECT().
+		TerminateWorkflowExecution(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *workflowservice.TerminateWorkflowExecutionRequest, _ ...any) (*workflowservice.TerminateWorkflowExecutionResponse, error) {
+			captured = req
+			return &workflowservice.TerminateWorkflowExecutionResponse{}, nil
+		})
+
+	taskCh := make(chan task, 1)
+	respCh := make(chan taskResponse, 1)
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 1000 }))
+
+	go a.startTaskProcessor(ctx, batchOperation, "trusted-namespace", taskCh, respCh, limiter, s.mockFrontendClient, metrics.NoopMetricsHandler, log.NewTestLogger())
+
+	taskCh <- task{executionInfo: testPage.executionInfos[0], attempts: 1, page: testPage}
+
+	resp := <-respCh
+	s.Require().NoError(resp.err)
+
+	s.Require().NotNil(captured)
+	s.Equal("trusted-namespace", captured.Namespace, "must use worker namespace, not request namespace")
+	protorequire.ProtoEqual(s.T(), testPage.executionInfos[0].Execution, captured.WorkflowExecution)
+	s.Equal("batch reason", captured.Reason)
+	s.Equal("batch-terminator", captured.Identity)
+	protorequire.ProtoEqual(s.T(), details, captured.Details)
+}
+
+// TestStartTaskProcessor_CancellationForwardsRequestFields verifies the cancel
+// path forwards the requester's identity, the batch's reason, and a request ID
+// derived from the job and target, so the server can de-dupe retries of the same
+// cancel instead of recording a second cancel-requested event. The SDK client
+// this path used to go through dropped identity and reason, and generated a
+// fresh UUID on every call.
+func (s *activitiesSuite) TestStartTaskProcessor_CancellationForwardsRequestFields() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	a := &activities{
+		activityDeps: activityDeps{
+			FrontendClient: s.mockFrontendClient,
+			Logger:         log.NewTestLogger(),
+			MetricsHandler: metrics.NoopMetricsHandler,
+		},
+	}
+
+	batchOperation := &batchspb.BatchOperationInput{
+		NamespaceId:              "some-namespace-id",
+		BatchType:                enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW,
+		AttemptsOnRetryableError: 2,
+		Request: &workflowservice.StartBatchOperationRequest{
+			// Intentionally different from the worker's bound namespace below.
+			Namespace: "untrusted-namespace",
+			JobId:     "job-id",
+			Reason:    "batch reason",
+			Operation: &workflowservice.StartBatchOperationRequest_CancellationOperation{
+				CancellationOperation: &batchpb.BatchOperationCancellation{
+					Identity: "batch-canceler",
+				},
+			},
+		},
+	}
+
+	// The first attempt fails transiently, so the task is retried in place: both
+	// attempts must carry the same request ID.
+	var mu sync.Mutex
+	var requests []*workflowservice.RequestCancelWorkflowExecutionRequest
+	s.mockFrontendClient.EXPECT().
+		RequestCancelWorkflowExecution(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *workflowservice.RequestCancelWorkflowExecutionRequest, _ ...any) (*workflowservice.RequestCancelWorkflowExecutionResponse, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			requests = append(requests, req)
+			if len(requests) == 1 {
+				return nil, errors.New("transient error")
+			}
+			return &workflowservice.RequestCancelWorkflowExecutionResponse{}, nil
+		}).
+		Times(3)
+
+	taskCh := make(chan task, 1)
+	respCh := make(chan taskResponse, 1)
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 1000 }))
+
+	go a.startTaskProcessor(ctx, batchOperation, "trusted-namespace", taskCh, respCh, limiter, s.mockFrontendClient, metrics.NoopMetricsHandler, log.NewTestLogger())
+
+	firstPage := &page{
+		executionInfos: []*workflowpb.WorkflowExecutionInfo{
+			{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-1", RunId: "run-1"}},
+		},
+	}
+	taskCh <- task{executionInfo: firstPage.executionInfos[0], attempts: 1, page: firstPage}
+	s.NoError((<-respCh).err)
+
+	// A different target in the same job must get its own request ID.
+	secondPage := &page{
+		executionInfos: []*workflowpb.WorkflowExecutionInfo{
+			{Execution: &commonpb.WorkflowExecution{WorkflowId: "wf-2", RunId: "run-2"}},
+		},
+	}
+	taskCh <- task{executionInfo: secondPage.executionInfos[0], attempts: 1, page: secondPage}
+	s.NoError((<-respCh).err)
+
+	mu.Lock()
+	defer mu.Unlock()
+	s.Require().Len(requests, 3)
+	for _, req := range requests {
+		s.Equal("trusted-namespace", req.Namespace, "must use worker namespace, not request namespace")
+		s.Equal("batch-canceler", req.Identity)
+		s.Equal("batch reason", req.Reason)
+		s.NotEmpty(req.RequestId)
+	}
+	protorequire.ProtoEqual(s.T(), firstPage.executionInfos[0].Execution, requests[0].WorkflowExecution)
+	s.Equal(requests[0].RequestId, requests[1].RequestId, "a retry of the same cancel must reuse its request ID")
+	s.NotEqual(requests[0].RequestId, requests[2].RequestId, "a different target must get a different request ID")
 }
 
 // TestRecordCompletedPages_ResumeTracksOldestIncompletePage verifies the resume point only
@@ -1077,7 +1425,6 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAll
 		taskCh chan task,
 		respCh chan taskResponse,
 		_ quotas.RequestRateLimiter,
-		_ sdkclient.Client,
 		_ workflowservice.WorkflowServiceClient,
 		_ metrics.Handler,
 		_ log.Logger,
@@ -1169,7 +1516,6 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAll
 		taskCh chan task,
 		respCh chan taskResponse,
 		_ quotas.RequestRateLimiter,
-		_ sdkclient.Client,
 		_ workflowservice.WorkflowServiceClient,
 		_ metrics.Handler,
 		_ log.Logger,
@@ -1259,7 +1605,6 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_InitialTarge
 				taskCh chan task,
 				respCh chan taskResponse,
 				_ quotas.RequestRateLimiter,
-				_ sdkclient.Client,
 				_ workflowservice.WorkflowServiceClient,
 				_ metrics.Handler,
 				_ log.Logger,
@@ -1323,7 +1668,6 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_LegacyActivi
 		taskCh chan task,
 		respCh chan taskResponse,
 		_ quotas.RequestRateLimiter,
-		_ sdkclient.Client,
 		_ workflowservice.WorkflowServiceClient,
 		_ metrics.Handler,
 		_ log.Logger,
@@ -1416,4 +1760,205 @@ func (s *activitiesSuite) TestDeterministicRequestID_ScopedToJob() {
 
 	s.NotEqual(deterministicRequestID(jobA, parts...), deterministicRequestID(jobB, parts...))
 	s.NotEqual(deterministicRequestID(jobA, "signal", "workflow-id", "run-id", "other-signal"), deterministicRequestID(jobA, parts...))
+}
+
+func (s *activitiesSuite) TestHeartbeatInterval() {
+	for _, tc := range []struct {
+		name             string
+		heartbeatTimeout time.Duration
+		expected         time.Duration
+	}{
+		{
+			name:             "unset assumes the default timeout",
+			heartbeatTimeout: 0,
+			expected:         defaultActivityHeartBeatTimeout / 4,
+		},
+		{
+			name:             "negative assumes the default timeout",
+			heartbeatTimeout: -time.Second,
+			expected:         defaultActivityHeartBeatTimeout / 4,
+		},
+		{
+			name:             "a shorter timeout heartbeats more often",
+			heartbeatTimeout: time.Second,
+			expected:         250 * time.Millisecond,
+		},
+		{
+			name:             "a longer timeout heartbeats less often",
+			heartbeatTimeout: 2 * time.Minute,
+			expected:         30 * time.Second,
+		},
+	} {
+		s.Run(tc.name, func() {
+			interval := heartbeatInterval(tc.heartbeatTimeout)
+			s.Equal(tc.expected, interval)
+			if tc.heartbeatTimeout > 0 {
+				s.Less(interval, tc.heartbeatTimeout,
+					"the interval must stay under the timeout it was derived from")
+			}
+		})
+	}
+}
+
+// TestProcessWorkflowsWithProactiveFetching_HeartbeatsWithinShortTimeout verifies
+// the activity heartbeats on a cadence derived from the heartbeat timeout it was
+// scheduled with. A cadence fixed to the default outlives a shorter timeout, so
+// the activity would time out mid-batch while making progress.
+func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_HeartbeatsWithinShortTimeout() {
+	const heartbeatTimeout = 40 * time.Millisecond
+
+	// The task takes many heartbeat intervals to process, so a correct cadence
+	// heartbeats during it while the default cadence (2.5s) would not.
+	fakeWorker := func(
+		ctx context.Context,
+		taskCh chan task,
+		respCh chan taskResponse,
+		_ quotas.RequestRateLimiter,
+		_ workflowservice.WorkflowServiceClient,
+		_ metrics.Handler,
+		_ log.Logger,
+	) {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case t := <-taskCh:
+				select {
+				case <-time.After(20 * heartbeatTimeout):
+				case <-ctx.Done():
+					return
+				}
+				select {
+				case respCh <- taskResponse{page: t.page}:
+				case <-ctx.Done():
+					return
+				}
+			}
+		}
+	}
+
+	a := &activities{}
+	config := batchProcessorConfig{
+		batchType:        enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+		concurrency:      1,
+		heartbeatTimeout: heartbeatTimeout,
+		initialExecutions: []*commonpb.WorkflowExecution{
+			{WorkflowId: "wf-1", RunId: "run-1"},
+		},
+	}
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 10000 }))
+
+	var heartbeats atomic.Int32
+	env := s.NewTestActivityEnvironment()
+	env.SetOnActivityHeartbeatListener(func(_ *activity.Info, _ converter.EncodedValues) {
+		heartbeats.Add(1)
+	})
+	runner := func(ctx context.Context) (HeartBeatDetails, error) {
+		return a.processWorkflowsWithProactiveFetching(
+			ctx, config, fakeWorker, limiter, nil, metrics.NoopMetricsHandler, log.NewTestLogger(), HeartBeatDetails{},
+		)
+	}
+	env.RegisterActivity(runner)
+
+	encoded, err := env.ExecuteActivity(runner)
+	s.Require().NoError(err)
+	var hbd HeartBeatDetails
+	s.Require().NoError(encoded.Get(&hbd))
+	s.Equal(1, hbd.SuccessCount)
+
+	s.Positive(heartbeats.Load(),
+		"the activity must heartbeat while processing a task that outlasts its heartbeat timeout")
+}
+
+// TestProcessSingleTask_NilUpdateMask verifies that an options-update batch whose
+// request carries no UpdateMask is forwarded as nil, rather than dereferenced or
+// rebuilt into an empty mask. The task runs on a bare goroutine started by
+// processWorkflowsWithProactiveFetching, so a nil dereference here takes down the
+// worker process rather than failing the batch -- and ValidateBatchOperation only
+// requires an UpdateMask for the workflow-options operation, not the
+// activity-options one. An empty mask is worse than no mask: the server accepts
+// it and applies it as a no-op success.
+func (s *activitiesSuite) TestProcessSingleTask_NilUpdateMask() {
+	execution := &commonpb.WorkflowExecution{WorkflowId: "wf-1", RunId: "run-1"}
+	testPage := &page{
+		executionInfos: []*workflowpb.WorkflowExecutionInfo{{Execution: execution}},
+	}
+	testTask := task{executionInfo: testPage.executionInfos[0], attempts: 1, page: testPage}
+
+	s.Run("update activity options", func() {
+		var captured *workflowservice.UpdateActivityOptionsRequest
+		s.mockFrontendClient.EXPECT().
+			UpdateActivityOptions(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, req *workflowservice.UpdateActivityOptionsRequest, _ ...any) (*workflowservice.UpdateActivityOptionsResponse, error) {
+				captured = req
+				return &workflowservice.UpdateActivityOptionsResponse{}, nil
+			})
+
+		batchOperation := &batchspb.BatchOperationInput{
+			NamespaceId: "some-namespace-id",
+			BatchType:   enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS,
+			Request: &workflowservice.StartBatchOperationRequest{
+				Namespace: "ns",
+				JobId:     "job-id",
+				Operation: &workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation{
+					UpdateActivityOptionsOperation: &batchpb.BatchOperationUpdateActivityOptions{
+						Identity:        "batch-updater",
+						RestoreOriginal: true,
+						// UpdateMask deliberately unset.
+						Activity: &batchpb.BatchOperationUpdateActivityOptions_MatchAll{MatchAll: true},
+					},
+				},
+			},
+		}
+
+		s.Require().NoError(s.processSingleTaskForTest(batchOperation, testTask))
+		s.Require().NotNil(captured)
+		s.Equal("batch-updater", captured.GetIdentity())
+		s.True(captured.GetRestoreOriginal())
+		s.Nil(captured.GetUpdateMask())
+	})
+
+	s.Run("update workflow options", func() {
+		var captured *workflowservice.UpdateWorkflowExecutionOptionsRequest
+		s.mockFrontendClient.EXPECT().
+			UpdateWorkflowExecutionOptions(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, req *workflowservice.UpdateWorkflowExecutionOptionsRequest, _ ...any) (*workflowservice.UpdateWorkflowExecutionOptionsResponse, error) {
+				captured = req
+				return &workflowservice.UpdateWorkflowExecutionOptionsResponse{}, nil
+			})
+
+		batchOperation := &batchspb.BatchOperationInput{
+			NamespaceId: "some-namespace-id",
+			BatchType:   enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS,
+			Request: &workflowservice.StartBatchOperationRequest{
+				Namespace: "ns",
+				JobId:     "job-id",
+				Operation: &workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation{
+					UpdateWorkflowOptionsOperation: &batchpb.BatchOperationUpdateWorkflowExecutionOptions{
+						Identity: "batch-updater",
+						// UpdateMask deliberately unset.
+					},
+				},
+			},
+		}
+
+		s.Require().NoError(s.processSingleTaskForTest(batchOperation, testTask))
+		s.Require().NotNil(captured)
+		s.Equal("batch-updater", captured.GetIdentity())
+		s.Nil(captured.GetUpdateMask())
+	})
+}
+
+// processSingleTaskForTest runs one task through processSingleTask against the
+// suite's mock frontend client.
+func (s *activitiesSuite) processSingleTaskForTest(batchOperation *batchspb.BatchOperationInput, t task) error {
+	a := &activities{
+		activityDeps: activityDeps{
+			FrontendClient: s.mockFrontendClient,
+			Logger:         log.NewTestLogger(),
+			MetricsHandler: metrics.NoopMetricsHandler,
+		},
+	}
+	limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 1000 }))
+	return a.processSingleTask(context.Background(), batchOperation, "ns", t, limiter, s.mockFrontendClient, log.NewTestLogger())
 }

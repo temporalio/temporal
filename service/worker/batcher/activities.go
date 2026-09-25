@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/worker_versioning"
 	workercommon "go.temporal.io/server/service/worker/common"
-	"google.golang.org/protobuf/types/known/fieldmaskpb"
 )
 
 const (
@@ -55,10 +54,12 @@ var (
 
 // batchProcessorConfig holds the configuration for batch processing
 type batchProcessorConfig struct {
-	namespace         string
-	adjustedQuery     string
-	batchType         enumspb.BatchOperationType
-	concurrency       int
+	namespace     string
+	adjustedQuery string
+	batchType     enumspb.BatchOperationType
+	concurrency   int
+	// heartbeatTimeout is the activity's heartbeat timeout. Zero means unset.
+	heartbeatTimeout  time.Duration
 	initialPageToken  []byte
 	initialExecutions []*commonpb.WorkflowExecution
 	// initialTargetExecutions holds an explicit list of activity target
@@ -73,7 +74,6 @@ type batchWorkerProcessor func(
 	taskCh chan task,
 	respCh chan taskResponse,
 	rateLimiter quotas.RequestRateLimiter,
-	sdkClient sdkclient.Client,
 	frontendClient workflowservice.WorkflowServiceClient,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -225,6 +225,15 @@ func fetchPage(
 	}, nil
 }
 
+// heartbeatInterval returns 1/4th fraction of the activity's heartbeat timeout.
+// By default, returns 10s/4 = 2.5s.
+func heartbeatInterval(heartbeatTimeout time.Duration) time.Duration {
+	if heartbeatTimeout <= 0 {
+		heartbeatTimeout = defaultActivityHeartBeatTimeout
+	}
+	return heartbeatTimeout / 4
+}
+
 // processWorkflowsWithProactiveFetching handles the core logic for both batch activity functions
 // nolint:revive,cognitive-complexity
 func (a *activities) processWorkflowsWithProactiveFetching(
@@ -243,12 +252,12 @@ func (a *activities) processWorkflowsWithProactiveFetching(
 	taskCh := make(chan task, concurrency)
 	respCh := make(chan taskResponse, concurrency)
 
-	// Ticker for frequent heartbeats to avoid timeout during slow processing, 1/4 of the default heartbeat timeout (10s)
-	heartbeatTicker := time.NewTicker(defaultActivityHeartBeatTimeout / 4)
+	// Ticker for frequent heartbeats to avoid timeout during slow processing.
+	heartbeatTicker := time.NewTicker(heartbeatInterval(config.heartbeatTimeout))
 	defer heartbeatTicker.Stop()
 
 	for range concurrency {
-		go startWorkerProcessor(ctx, taskCh, respCh, rateLimiter, sdkClient, a.FrontendClient, metricsHandler, logger)
+		go startWorkerProcessor(ctx, taskCh, respCh, rateLimiter, a.FrontendClient, metricsHandler, logger)
 	}
 
 	// Initialize the first p from initial executions or fetch from query
@@ -493,6 +502,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		adjustedQuery:           visibilityQuery,
 		batchType:               batchParams.BatchType,
 		concurrency:             a.getOperationConcurrency(int(batchParams.Concurrency)),
+		heartbeatTimeout:        batchParams.GetActivityHeartbeatTimeout().AsDuration(),
 		initialPageToken:        hbd.PageToken,
 		initialExecutions:       executions,
 		initialTargetExecutions: targetExecutions,
@@ -504,12 +514,11 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		taskCh chan task,
 		respCh chan taskResponse,
 		rateLimiter quotas.RequestRateLimiter,
-		sdkClient sdkclient.Client,
 		frontendClient workflowservice.WorkflowServiceClient,
 		metricsHandler metrics.Handler,
 		logger log.Logger,
 	) {
-		a.startTaskProcessor(ctx, batchParams, ns, taskCh, respCh, rateLimiter, sdkClient, frontendClient, metricsHandler, logger)
+		a.startTaskProcessor(ctx, batchParams, ns, taskCh, respCh, rateLimiter, frontendClient, metricsHandler, logger)
 	}
 
 	return a.processWorkflowsWithProactiveFetching(ctx, config, workerProcessor, rateLimiter, sdkClient, metricsHandler, logger, hbd)
@@ -577,7 +586,6 @@ func (a *activities) startTaskProcessor(
 	taskCh chan task,
 	respCh chan taskResponse,
 	limiter quotas.RequestRateLimiter,
-	sdkClient sdkclient.Client,
 	frontendClient workflowservice.WorkflowServiceClient,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -595,7 +603,7 @@ func (a *activities) startTaskProcessor(
 				continue
 			}
 
-			a.processTaskWithRetries(ctx, batchOperation, namespace, task, respCh, limiter, sdkClient, frontendClient, metricsHandler, logger)
+			a.processTaskWithRetries(ctx, batchOperation, namespace, task, respCh, limiter, frontendClient, metricsHandler, logger)
 		}
 	}
 }
@@ -621,7 +629,6 @@ func (a *activities) processSingleTask(
 	namespace string,
 	task task,
 	limiter quotas.RequestRateLimiter,
-	sdkClient sdkclient.Client,
 	frontendClient workflowservice.WorkflowServiceClient,
 	logger log.Logger,
 ) error {
@@ -677,12 +684,28 @@ func (a *activities) processSingleTask(
 	case *workflowservice.StartBatchOperationRequest_TerminationOperation:
 		err = processTask(ctx, limiter, task,
 			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
-				return sdkClient.TerminateWorkflow(ctx, executionInfo.Execution.WorkflowId, executionInfo.Execution.RunId, batchOperation.Request.Reason)
+				_, err := frontendClient.TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
+					Namespace:         namespace,
+					WorkflowExecution: executionInfo.Execution,
+					Reason:            batchOperation.Request.GetReason(),
+					Details:           operation.TerminationOperation.GetDetails(),
+					Identity:          operation.TerminationOperation.GetIdentity(),
+				})
+				return err
 			})
 	case *workflowservice.StartBatchOperationRequest_CancellationOperation:
 		err = processTask(ctx, limiter, task,
 			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
-				return sdkClient.CancelWorkflow(ctx, executionInfo.Execution.WorkflowId, executionInfo.Execution.RunId)
+				_, err := frontendClient.RequestCancelWorkflowExecution(ctx, &workflowservice.RequestCancelWorkflowExecutionRequest{
+					Namespace:         namespace,
+					WorkflowExecution: executionInfo.Execution,
+					Identity:          operation.CancellationOperation.GetIdentity(),
+					// Surfaced as the cause of the cancel-requested event.
+					Reason: batchOperation.Request.GetReason(),
+					RequestId: deterministicRequestID(batchOperation.Request.GetJobId(), "cancel",
+						executionInfo.Execution.GetWorkflowId(), executionInfo.Execution.GetRunId()),
+				})
+				return err
 			})
 	case *workflowservice.StartBatchOperationRequest_SignalOperation:
 		err = processTask(ctx, limiter, task,
@@ -692,6 +715,7 @@ func (a *activities) processSingleTask(
 					WorkflowExecution: executionInfo.Execution,
 					SignalName:        operation.SignalOperation.GetSignal(),
 					Input:             operation.SignalOperation.GetInput(),
+					Header:            operation.SignalOperation.GetHeader(),
 					Identity:          operation.SignalOperation.GetIdentity(),
 					RequestId: deterministicRequestID(batchOperation.Request.GetJobId(), "signal",
 						executionInfo.Execution.GetWorkflowId(), executionInfo.Execution.GetRunId(), operation.SignalOperation.GetSignal()),
@@ -781,15 +805,16 @@ func (a *activities) processSingleTask(
 				_, err := frontendClient.UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
 					Namespace:                namespace,
 					WorkflowExecution:        executionInfo.Execution,
-					WorkflowExecutionOptions: operation.UpdateWorkflowOptionsOperation.WorkflowExecutionOptions,
-					UpdateMask:               &fieldmaskpb.FieldMask{Paths: operation.UpdateWorkflowOptionsOperation.UpdateMask.Paths},
-					Identity:                 operation.UpdateWorkflowOptionsOperation.Identity,
+					WorkflowExecutionOptions: operation.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions(),
+					UpdateMask:               operation.UpdateWorkflowOptionsOperation.GetUpdateMask(),
+					Identity:                 operation.UpdateWorkflowOptionsOperation.GetIdentity(),
 				})
 				return err
 			})
 	case *workflowservice.StartBatchOperationRequest_ResetActivitiesOperation:
 		err = processTask(ctx, limiter, task,
 			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
+				// Note that ResetAttempts is ignored, and always resets attempt to 1.
 				resetRequest := &workflowservice.ResetActivityRequest{
 					Namespace:              namespace,
 					Execution:              executionInfo.Execution,
@@ -818,9 +843,9 @@ func (a *activities) processSingleTask(
 				updateRequest := &workflowservice.UpdateActivityOptionsRequest{
 					Namespace:       namespace,
 					Execution:       executionInfo.Execution,
-					UpdateMask:      &fieldmaskpb.FieldMask{Paths: operation.UpdateActivityOptionsOperation.UpdateMask.Paths},
-					RestoreOriginal: operation.UpdateActivityOptionsOperation.RestoreOriginal,
-					Identity:        operation.UpdateActivityOptionsOperation.Identity,
+					UpdateMask:      operation.UpdateActivityOptionsOperation.GetUpdateMask(),
+					RestoreOriginal: operation.UpdateActivityOptionsOperation.GetRestoreOriginal(),
+					Identity:        operation.UpdateActivityOptionsOperation.GetIdentity(),
 				}
 
 				switch ao := operation.UpdateActivityOptionsOperation.GetActivity().(type) {
@@ -846,6 +871,12 @@ func (a *activities) processSingleTask(
 func isNonRetryableError(err error, batchType enumspb.BatchOperationType) bool {
 	if err == nil {
 		return false
+	}
+
+	// Avoid retry of InvalidArgument because it can burn batch rate limit, and
+	// log the same per-target failure multiple times.
+	if _, isInvalidArgument := errors.AsType[*serviceerror.InvalidArgument](err); isInvalidArgument {
+		return true
 	}
 
 	errMsg := err.Error()
@@ -888,14 +919,13 @@ func (a *activities) processTaskWithRetries(
 	task task,
 	respCh chan taskResponse,
 	limiter quotas.RequestRateLimiter,
-	sdkClient sdkclient.Client,
 	frontendClient workflowservice.WorkflowServiceClient,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) {
 	var err error
 	for {
-		err = a.processSingleTask(ctx, batchOperation, ns, task, limiter, sdkClient, frontendClient, logger)
+		err = a.processSingleTask(ctx, batchOperation, ns, task, limiter, frontendClient, logger)
 		if err == nil {
 			metrics.BatcherProcessorSuccess.With(metricsHandler).Record(1)
 			break
