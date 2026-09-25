@@ -215,6 +215,7 @@ func NewConfig(
 			ExecutionsScannerEnabled:                dynamicconfig.ExecutionsScannerEnabled.Get(dc),
 			HistoryScannerDataMinAge:                dynamicconfig.HistoryScannerDataMinAge.Get(dc),
 			HistoryScannerVerifyRetention:           dynamicconfig.HistoryScannerVerifyRetention.Get(dc),
+			HistoryScannerRPS:                       dynamicconfig.HistoryScannerRPS.Get(dc),
 			ExecutionScannerPerHostQPS:              dynamicconfig.ExecutionScannerPerHostQPS.Get(dc),
 			ExecutionScannerPerShardQPS:             dynamicconfig.ExecutionScannerPerShardQPS.Get(dc),
 			ExecutionDataDurationBuffer:             dynamicconfig.ExecutionDataDurationBuffer.Get(dc),
