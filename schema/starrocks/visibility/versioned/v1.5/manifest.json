@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.5",
+  "MinCompatibleVersion": "0.1",
+  "Description": "add root workflow info columns and indices",
+  "SchemaUpdateCqlFiles": [
+    "add_root_workflow_info.sql"
+  ]
+}
