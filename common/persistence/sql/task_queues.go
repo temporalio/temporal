@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 
@@ -77,9 +78,15 @@ func (m *taskQueueStore) GetTaskQueue(
 			"GetTaskQueue operation failed. TaskQueue: %v, TaskQueueType: %v, Error: %v",
 			request.TaskQueue, request.TaskType, err)
 	default:
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
+		}
 		return nil, serviceerror.NewUnavailablef(
 			"GetTaskQueue operation failed. Failed to check if task queue %v of type %v existed. Error: %v",
-			request.TaskQueue, request.TaskType, err)
+			request.TaskQueue,
+			request.TaskType,
+			err,
+		)
 	}
 }
 
