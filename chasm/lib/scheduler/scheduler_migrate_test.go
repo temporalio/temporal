@@ -26,12 +26,20 @@ import (
 
 type migrationTimeSkippingContext struct {
 	chasm.MutableContext
-	info      *commonpb.TimeSkippingInfo
-	setConfig *commonpb.TimeSkippingConfig
+	info             *commonpb.TimeSkippingInfo
+	statePropagation *commonpb.TimeSkippingStatePropagation
+	setConfig        *commonpb.TimeSkippingConfig
 }
 
 func (c *migrationTimeSkippingContext) GetTimeSkippingInfo() *commonpb.TimeSkippingInfo {
 	return common.CloneProto(c.info)
+}
+
+func (c *migrationTimeSkippingContext) GetTimeSkippingPropagateState() (
+	*commonpb.TimeSkippingConfig,
+	*commonpb.TimeSkippingStatePropagation,
+) {
+	return common.CloneProto(c.info.GetEffectiveConfig()), common.CloneProto(c.statePropagation)
 }
 
 func (c *migrationTimeSkippingContext) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) error {
@@ -55,34 +63,57 @@ func TestMigrateToWorkflow_PausesSchedule(t *testing.T) {
 	require.NotNil(t, sched.WorkflowMigration)
 }
 
-func TestMigrateToWorkflow_DisablesTimeSkipping(t *testing.T) {
-	sched, ctx, _ := setupSchedulerForTest(t)
-	config := &commonpb.TimeSkippingConfig{
-		Enabled: true,
-		FastForwardConfig: &commonpb.FastForwardConfig{
-			Id:       "fast-forward",
-			Duration: durationpb.New(time.Hour),
+func TestMigrateToWorkflow_BlockedByTimeSkipping(t *testing.T) {
+	tests := []struct {
+		name            string
+		config          *commonpb.TimeSkippingConfig
+		skippedDuration time.Duration
+	}{
+		{
+			name: "time skipping enabled",
+			config: &commonpb.TimeSkippingConfig{
+				Enabled: true,
+				FastForwardConfig: &commonpb.FastForwardConfig{
+					Id:       "fast-forward",
+					Duration: durationpb.New(time.Hour),
+				},
+			},
 		},
-	}
-	sched.Schedule.TimeSkippingConfig = common.CloneProto(config)
-	migrationCtx := &migrationTimeSkippingContext{
-		MutableContext: ctx,
-		info: &commonpb.TimeSkippingInfo{
-			EffectiveConfig: config,
+		{
+			name:            "accumulated skipped duration",
+			config:          &commonpb.TimeSkippingConfig{Enabled: false},
+			skippedDuration: 2 * time.Hour,
 		},
 	}
 
-	_, err := sched.MigrateToWorkflow(migrationCtx, &schedulerpb.MigrateToWorkflowRequest{
-		NamespaceId: namespaceID,
-		ScheduleId:  scheduleID,
-	})
-	require.NoError(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			sched, ctx, _ := setupSchedulerForTest(t)
+			sched.Schedule.TimeSkippingConfig = common.CloneProto(tt.config)
+			migrationCtx := &migrationTimeSkippingContext{
+				MutableContext: ctx,
+				info: &commonpb.TimeSkippingInfo{
+					EffectiveConfig: common.CloneProto(tt.config),
+				},
+			}
+			if tt.skippedDuration > 0 {
+				migrationCtx.statePropagation = &commonpb.TimeSkippingStatePropagation{
+					InitialSkippedDuration: durationpb.New(tt.skippedDuration),
+				}
+			}
 
-	require.NotNil(t, migrationCtx.setConfig)
-	require.False(t, migrationCtx.setConfig.GetEnabled())
-	require.Nil(t, migrationCtx.setConfig.GetFastForwardConfig())
-	require.False(t, sched.Schedule.GetTimeSkippingConfig().GetEnabled())
-	require.Nil(t, sched.Schedule.GetTimeSkippingConfig().GetFastForwardConfig())
+			_, err := sched.MigrateToWorkflow(migrationCtx, &schedulerpb.MigrateToWorkflowRequest{
+				NamespaceId: namespaceID,
+				ScheduleId:  scheduleID,
+			})
+
+			require.ErrorIs(t, err, scheduler.ErrTimeSkippingMigration)
+			require.False(t, sched.Schedule.State.Paused)
+			require.Nil(t, sched.WorkflowMigration)
+			require.Nil(t, migrationCtx.setConfig)
+			require.Equal(t, tt.config, sched.Schedule.GetTimeSkippingConfig())
+		})
+	}
 }
 
 func TestMigrateToWorkflowTask_PropagatesDisabledTimeSkipping(t *testing.T) {

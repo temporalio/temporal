@@ -116,6 +116,7 @@ var (
 	ErrSentinel              = serviceerror.NewNotFound("schedule is a sentinel")
 	ErrSentinelBlocked       = serviceerror.NewUnavailable("schedule is a sentinel; please retry after sentinel expires")
 	ErrMigrationPending      = serviceerror.NewUnavailable("schedule has a pending migration to workflow; please retry later")
+	ErrTimeSkippingMigration = serviceerror.NewFailedPrecondition("schedule with enabled time skipping or accumulated skipped duration cannot migrate to workflow-backed scheduler")
 )
 
 // NewScheduler returns an initialized CHASM scheduler root component.
@@ -315,9 +316,6 @@ func CreateSchedulerFromMigration(
 		EventLog:             chasm.NewComponentField(ctx, NewEventLog(ctx)),
 	}
 	sched.setNullableFields()
-	if err := ctx.SetTimeSkippingConfig(sched.Schedule.GetTimeSkippingConfig()); err != nil {
-		return nil, err
-	}
 
 	// These components won't start with any tasks, as stale running workflow entries
 	// can cause immediate computation after migration to drop actions due to overlap
@@ -862,18 +860,10 @@ func (s *Scheduler) MigrateToWorkflow(
 		return &schedulerpb.MigrateToWorkflowResponse{}, nil
 	}
 
-	if config := ctx.GetTimeSkippingInfo().GetEffectiveConfig(); config.GetEnabled() {
-		config.Enabled = false
-		config.FastForwardConfig = nil
-		if err := ctx.SetTimeSkippingConfig(config); err != nil {
-			return nil, err
-		}
-		s.Schedule.TimeSkippingConfig = common.CloneProto(config)
-		ctx.Logger().Warn(
-			"time skipping disabled during schedule migration from V2 to V1",
-			tag.WorkflowNamespace(s.GetNamespace()),
-			tag.ScheduleID(s.GetScheduleId()),
-		)
+	_, timeSkippingState := ctx.GetTimeSkippingPropagateState()
+	if ctx.GetTimeSkippingInfo().GetEffectiveConfig().GetEnabled() ||
+		timeSkippingState.GetInitialSkippedDuration().AsDuration() > 0 {
+		return nil, ErrTimeSkippingMigration
 	}
 
 	// Save pre-migration paused state, mark migration as pending, then pause.
