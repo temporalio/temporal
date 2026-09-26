@@ -632,7 +632,7 @@ func testScheduleTimeSkippingDefaultPolicyWithUserTimer(t *testing.T) {
 	})
 	var unimplemented *serviceerror.Unimplemented
 	require.ErrorAs(t, err, &unimplemented)
-	require.ErrorContains(t, err, "Schedule time skipping is not enabled for namespace")
+	require.ErrorContains(t, err, "Schedule time skipping is not enabled for the namespace")
 
 	createSchedule(ctx, t, s, sid, schedule)
 
