@@ -71,6 +71,38 @@ func TestVisibilityPublicationAcrossTransactions(t *testing.T) {
 	}))
 }
 
+func TestVisibilityPublicationFlagDisableAcrossTransactions(t *testing.T) {
+	enabled := true
+	engine := newSchedulerTestEngine(t, defaultSchedule(),
+		withEngineVisibilityCoalescingEnabledFn(func() bool { return enabled }))
+	initialTasks, err := engine.engine.Tasks(engine.rootRef)
+	require.NoError(t, err)
+	initialCount := len(initialTasks[tasks.CategoryVisibility])
+	require.NoError(t, engine.updateScheduler(func(s *scheduler.Scheduler, ctx chasm.MutableContext) error {
+		s.Invoker.Get(ctx).BufferedStarts = append(s.Invoker.Get(ctx).BufferedStarts,
+			&schedulespb.BufferedStart{RequestId: "pending"})
+		return nil
+	}))
+	deferredTasks, err := engine.engine.Tasks(engine.rootRef)
+	require.NoError(t, err)
+	require.Len(t, deferredTasks[tasks.CategoryVisibility], initialCount)
+
+	enabled = false
+	require.NoError(t, engine.updateScheduler(func(s *scheduler.Scheduler, ctx chasm.MutableContext) error {
+		s.Invoker.Get(ctx).BufferedStarts = append(s.Invoker.Get(ctx).BufferedStarts,
+			&schedulespb.BufferedStart{RequestId: "after-disable"})
+		return nil
+	}))
+	publishedTasks, err := engine.engine.Tasks(engine.rootRef)
+	require.NoError(t, err)
+	require.Len(t, publishedTasks[tasks.CategoryVisibility], initialCount+1)
+	require.NoError(t, engine.readScheduler(func(s *scheduler.Scheduler, ctx chasm.Context) error {
+		require.Nil(t, s.VisibilityPublication)
+		require.Equal(t, s.ListInfo(ctx), s.Memo(ctx))
+		return nil
+	}))
+}
+
 func TestVisibilityPublicationCoalescesRoutineChanges(t *testing.T) {
 	env := newTestEnv(t, withVisibilityCoalesceInterval(30*time.Second))
 	ctx := env.MutableContext()
@@ -169,8 +201,8 @@ func TestVisibilityPublicationFlushesPatch(t *testing.T) {
 }
 
 func TestVisibilityPublicationFlushesWhenDisabled(t *testing.T) {
-	interval := 30 * time.Second
-	env := newTestEnv(t, withVisibilityCoalesceIntervalFn(func() time.Duration { return interval }))
+	enabled := true
+	env := newTestEnv(t, withVisibilityCoalescingEnabledFn(func() bool { return enabled }))
 	ctx := env.MutableContext()
 	s := env.Scheduler
 	s.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{{RequestId: "first"}}
@@ -178,18 +210,48 @@ func TestVisibilityPublicationFlushesWhenDisabled(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, changed)
 	require.NotNil(t, s.VisibilityPublication.RefreshDeadline)
+	deadline := s.VisibilityPublication.RefreshDeadline.AsTime()
+	generation := s.VisibilityPublication.RefreshGeneration
 
-	interval = 0
+	enabled = false
 	changed, err = s.PrepareVisibility(ctx)
 	require.NoError(t, err)
 	require.True(t, changed)
-	require.Equal(t, int64(1), s.VisibilityPublication.BufferedStartsCount)
-	require.Nil(t, s.VisibilityPublication.RefreshDeadline)
+	require.Nil(t, s.VisibilityPublication)
+	require.Equal(t, s.ListInfo(ctx), s.Memo(ctx))
+	valid, err := (&scheduler.SchedulerVisibilityRefreshTaskHandler{}).Validate(ctx, s, chasm.TaskInvocation{
+		TaskAttributes: chasm.TaskAttributes{ScheduledTime: deadline},
+	}, &schedulerpb.SchedulerVisibilityRefreshTask{Generation: generation})
+	require.NoError(t, err)
+	require.False(t, valid)
 
 	s.Invoker.Get(ctx).BufferedStarts = append(s.Invoker.Get(ctx).BufferedStarts,
 		&schedulespb.BufferedStart{RequestId: "second"})
 	changed, err = s.PrepareVisibility(ctx)
 	require.NoError(t, err)
-	require.True(t, changed)
-	require.Equal(t, int64(2), s.VisibilityPublication.BufferedStartsCount)
+	require.False(t, changed)
+	require.Nil(t, s.VisibilityPublication)
+}
+
+func TestVisibilityPublicationDefaultDisabled(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := env.MutableContext()
+	s := env.Scheduler
+	require.Positive(t, scheduler.DefaultTweakables.VisibilityCoalesceInterval)
+	s.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{{RequestId: "pending"}}
+	changed, err := s.PrepareVisibility(ctx)
+	require.NoError(t, err)
+	require.False(t, changed)
+	require.Nil(t, s.VisibilityPublication)
+}
+
+func TestVisibilityPublicationZeroIntervalDisabled(t *testing.T) {
+	env := newTestEnv(t, withVisibilityCoalesceIntervalFn(func() time.Duration { return 0 }))
+	ctx := env.MutableContext()
+	s := env.Scheduler
+	s.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{{RequestId: "pending"}}
+	changed, err := s.PrepareVisibility(ctx)
+	require.NoError(t, err)
+	require.False(t, changed)
+	require.Nil(t, s.VisibilityPublication)
 }

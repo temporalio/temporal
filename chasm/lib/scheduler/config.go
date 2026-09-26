@@ -21,6 +21,7 @@ type (
 		IdleTime                          time.Duration // How long to keep schedules after they're done
 		EventLogMaxEntries                int           // Maximum EventLog entries retained per component; the earliest entries are dropped beyond this.
 		EventLogMaxMessageLen             int           // Maximum byte length of an EventLog message; longer messages are truncated at a UTF-8 boundary.
+		EnableVisibilityCoalescing        bool          // Defers routine visibility publication until the coalescing interval elapses.
 		VisibilityCoalesceInterval        time.Duration // Maximum time routine schedule changes wait before visibility publication.
 	}
 
@@ -97,6 +98,7 @@ var (
 		IdleTime:                          7 * 24 * time.Hour,
 		EventLogMaxEntries:                30,
 		EventLogMaxMessageLen:             1000,
+		VisibilityCoalesceInterval:        30 * time.Second,
 	}
 )
 

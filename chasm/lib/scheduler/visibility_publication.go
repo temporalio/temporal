@@ -14,19 +14,14 @@ func (s *Scheduler) PrepareVisibility(ctx chasm.MutableContext) (bool, error) {
 		return false, nil
 	}
 
-	interval := tweakablesFromContext(ctx).VisibilityCoalesceInterval
-	if interval <= 0 {
+	tweakables := tweakablesFromContext(ctx)
+	interval := tweakables.VisibilityCoalesceInterval
+	if !tweakables.EnableVisibilityCoalescing || interval <= 0 {
 		s.visibilityForcePublish = false
 		if s.VisibilityPublication == nil {
 			return false, nil
 		}
-		live := s.currentVisibilityPublication(ctx)
-		previous := s.VisibilityPublication
-		if previous.GetRefreshDeadline() == nil && sameVisibilityPublication(previous, live) {
-			return false, nil
-		}
-		live.RefreshGeneration = previous.GetRefreshGeneration() + 1
-		s.VisibilityPublication = live
+		s.VisibilityPublication = nil
 		metrics.ScheduleVisibilityPublicationImmediateCount.With(ctx.MetricsHandler()).Record(1)
 		return true, nil
 	}

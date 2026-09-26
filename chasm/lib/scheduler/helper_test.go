@@ -159,11 +159,12 @@ type testEnv struct {
 
 // testEnvConfig holds configuration options for testEnv.
 type testEnvConfig struct {
-	specProcessor                scheduler.SpecProcessor
-	withMockEngine               bool
-	schedule                     *schedulepb.Schedule
-	visibilityCoalesceInterval   time.Duration
-	visibilityCoalesceIntervalFn func() time.Duration
+	specProcessor                 scheduler.SpecProcessor
+	withMockEngine                bool
+	schedule                      *schedulepb.Schedule
+	visibilityCoalesceInterval    time.Duration
+	visibilityCoalesceIntervalFn  func() time.Duration
+	visibilityCoalescingEnabledFn func() bool
 }
 
 // testEnvOption is a functional option for configuring testEnv.
@@ -206,6 +207,12 @@ func withVisibilityCoalesceIntervalFn(interval func() time.Duration) testEnvOpti
 	}
 }
 
+func withVisibilityCoalescingEnabledFn(enabled func() bool) testEnvOption {
+	return func(c *testEnvConfig) {
+		c.visibilityCoalescingEnabledFn = enabled
+	}
+}
+
 // expiredSchedule returns a schedule whose spec has already ended, so the
 // Generator finds no next wakeup and takes its idle branch. This is the shape
 // of a real schedule that has run to the end of its subscription window.
@@ -233,11 +240,12 @@ func newRealSpecProcessor(ctrl *gomock.Controller, logger log.Logger) scheduler.
 
 // engineTestConfig holds configuration options for newTestEngineContext.
 type engineTestConfig struct {
-	specProcessor                scheduler.SpecProcessor
-	timeSource                   *clock.EventTimeSource
-	engineOpts                   []chasmtest.EngineOption
-	visibilityCoalesceInterval   time.Duration
-	visibilityCoalesceIntervalFn func() time.Duration
+	specProcessor                 scheduler.SpecProcessor
+	timeSource                    *clock.EventTimeSource
+	engineOpts                    []chasmtest.EngineOption
+	visibilityCoalesceInterval    time.Duration
+	visibilityCoalesceIntervalFn  func() time.Duration
+	visibilityCoalescingEnabledFn func() bool
 }
 
 // engineTestOption is a functional option for configuring newTestEngineContext.
@@ -263,6 +271,12 @@ func withEngineTimeSource(ts *clock.EventTimeSource) engineTestOption {
 func withEngineVisibilityCoalesceInterval(interval time.Duration) engineTestOption {
 	return func(c *engineTestConfig) {
 		c.visibilityCoalesceInterval = interval
+	}
+}
+
+func withEngineVisibilityCoalescingEnabledFn(enabled func() bool) engineTestOption {
+	return func(c *engineTestConfig) {
+		c.visibilityCoalescingEnabledFn = enabled
 	}
 }
 
@@ -301,12 +315,16 @@ func newTestEngineContextFromConfig(
 	registry := chasm.NewRegistry(logger)
 	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
 	libraryConfig := defaultConfig()
-	if config.visibilityCoalesceIntervalFn != nil || config.visibilityCoalesceInterval > 0 {
+	if config.visibilityCoalesceIntervalFn != nil || config.visibilityCoalesceInterval > 0 || config.visibilityCoalescingEnabledFn != nil {
 		libraryConfig.Tweakables = func(string) scheduler.Tweakables {
 			tweakables := scheduler.DefaultTweakables
+			tweakables.EnableVisibilityCoalescing = true
+			if config.visibilityCoalescingEnabledFn != nil {
+				tweakables.EnableVisibilityCoalescing = config.visibilityCoalescingEnabledFn()
+			}
 			if config.visibilityCoalesceIntervalFn != nil {
 				tweakables.VisibilityCoalesceInterval = config.visibilityCoalesceIntervalFn()
-			} else {
+			} else if config.visibilityCoalesceInterval > 0 {
 				tweakables.VisibilityCoalesceInterval = config.visibilityCoalesceInterval
 			}
 			return tweakables
@@ -432,12 +450,16 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 		t.Fatalf("failed to register core library: %v", err)
 	}
 	libraryConfig := defaultConfig()
-	if config.visibilityCoalesceIntervalFn != nil || config.visibilityCoalesceInterval > 0 {
+	if config.visibilityCoalesceIntervalFn != nil || config.visibilityCoalesceInterval > 0 || config.visibilityCoalescingEnabledFn != nil {
 		libraryConfig.Tweakables = func(string) scheduler.Tweakables {
 			tweakables := scheduler.DefaultTweakables
+			tweakables.EnableVisibilityCoalescing = true
+			if config.visibilityCoalescingEnabledFn != nil {
+				tweakables.EnableVisibilityCoalescing = config.visibilityCoalescingEnabledFn()
+			}
 			if config.visibilityCoalesceIntervalFn != nil {
 				tweakables.VisibilityCoalesceInterval = config.visibilityCoalesceIntervalFn()
-			} else {
+			} else if config.visibilityCoalesceInterval > 0 {
 				tweakables.VisibilityCoalesceInterval = config.visibilityCoalesceInterval
 			}
 			return tweakables
