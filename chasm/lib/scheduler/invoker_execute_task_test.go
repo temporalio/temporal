@@ -546,6 +546,14 @@ func TestExecuteTask_TimeSkippingStartTimeUsesFrameworkClock(t *testing.T) {
 	frameworkNow := env.TimeSource.Now().Add(24 * time.Hour)
 	env.TimeSource.Update(frameworkNow)
 	env.Scheduler.Schedule.State.Paused = true
+	env.NodeBackend.HandleGetExecutionInfo = func() *persistencespb.WorkflowExecutionInfo {
+		return &persistencespb.WorkflowExecutionInfo{
+			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+				Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
+				AccumulatedSkippedDuration: durationpb.New(24 * time.Hour),
+			},
+		}
+	}
 
 	startTime := timestamppb.New(frameworkNow)
 	env.mockFrontendClient.EXPECT().
@@ -568,6 +576,57 @@ func TestExecuteTask_TimeSkippingStartTimeUsesFrameworkClock(t *testing.T) {
 			require.True(t, frameworkNow.Equal(invoker.GetBufferedStarts()[0].GetStartTime().AsTime()))
 		},
 	})
+}
+
+func TestExecuteTask_WithoutSkippedDurationStartTimeUsesWallClock(t *testing.T) {
+	tests := []struct {
+		name   string
+		config *commonpb.TimeSkippingConfig
+	}{
+		{name: "time skipping unset"},
+		{name: "time skipping disabled", config: &commonpb.TimeSkippingConfig{Enabled: false}},
+		{name: "time skipping enabled before first skip", config: &commonpb.TimeSkippingConfig{Enabled: true}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newInvokerExecuteTestEnv(t)
+			frameworkNow := env.TimeSource.Now().Add(24 * time.Hour)
+			env.TimeSource.Update(frameworkNow)
+			env.Scheduler.Schedule.State.Paused = true
+			if tc.config != nil {
+				env.NodeBackend.HandleGetExecutionInfo = func() *persistencespb.WorkflowExecutionInfo {
+					return &persistencespb.WorkflowExecutionInfo{
+						TimeSkippingInfo: &persistencespb.TimeSkippingInfo{Config: tc.config},
+					}
+				}
+			}
+
+			startTime := timestamppb.New(frameworkNow)
+			env.mockFrontendClient.EXPECT().
+				StartWorkflowExecution(gomock.Any(), gomock.Any()).
+				Return(&workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil)
+
+			beforeStart := time.Now()
+			runExecuteTestCase(t, env, &executeTestCase{
+				InitialBufferedStarts: []*schedulespb.BufferedStart{{
+					NominalTime:   startTime,
+					ActualTime:    startTime,
+					DesiredTime:   startTime,
+					RequestId:     "req1",
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+					Attempt:       1,
+				}},
+				ExpectedBufferedStarts:   1,
+				ExpectedRunningWorkflows: 1,
+				ExpectedActionCount:      1,
+				ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker, _ *invokerExecuteTestEnv) {
+					actualStartTime := invoker.GetBufferedStarts()[0].GetStartTime().AsTime()
+					require.False(t, actualStartTime.Before(beforeStart))
+					require.False(t, actualStartTime.After(time.Now()))
+				},
+			})
+		})
+	}
 }
 
 // Execute is scheduled with an empty buffer.

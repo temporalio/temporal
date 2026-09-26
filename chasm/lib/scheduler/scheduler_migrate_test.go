@@ -42,9 +42,8 @@ func (c *migrationTimeSkippingContext) GetTimeSkippingPropagateState() (
 	return common.CloneProto(c.info.GetEffectiveConfig()), common.CloneProto(c.statePropagation)
 }
 
-func (c *migrationTimeSkippingContext) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) error {
+func (c *migrationTimeSkippingContext) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
 	c.setConfig = common.CloneProto(config)
-	return nil
 }
 
 func TestMigrateToWorkflow_PausesSchedule(t *testing.T) {
@@ -116,14 +115,12 @@ func TestMigrateToWorkflow_BlockedByTimeSkipping(t *testing.T) {
 	}
 }
 
-func TestMigrateToWorkflowTask_PropagatesDisabledTimeSkipping(t *testing.T) {
+func TestMigrateToWorkflowTask_DoesNotPropagateDisabledTimeSkipping(t *testing.T) {
 	env := newTestEnv(t, withMockEngine())
-	config := &commonpb.TimeSkippingConfig{Enabled: false}
 	env.NodeBackend.HandleGetExecutionInfo = func() *persistencespb.WorkflowExecutionInfo {
 		return &persistencespb.WorkflowExecutionInfo{
 			TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
-				Config:                     config,
-				AccumulatedSkippedDuration: durationpb.New(2 * time.Hour),
+				Config: &commonpb.TimeSkippingConfig{Enabled: false},
 			},
 		}
 	}
@@ -136,8 +133,8 @@ func TestMigrateToWorkflowTask_PropagatesDisabledTimeSkipping(t *testing.T) {
 	historyClient := historyservicemock.NewMockHistoryServiceClient(env.Ctrl)
 	historyClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).
 		DoAndReturn(func(_ context.Context, request *historyservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*historyservice.StartWorkflowExecutionResponse, error) {
-			require.False(t, request.GetStartRequest().GetTimeSkippingConfig().GetEnabled())
-			require.Equal(t, 2*time.Hour, request.GetTimeSkippingStatePropagation().GetInitialSkippedDuration().AsDuration())
+			require.Nil(t, request.GetStartRequest().GetTimeSkippingConfig())
+			require.Nil(t, request.GetStartRequest().GetTimeSkippingStatePropagation())
 			return &historyservice.StartWorkflowExecutionResponse{}, nil
 		})
 

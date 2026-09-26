@@ -144,6 +144,7 @@ func NewScheduler(
 		EventLog:             chasm.NewComponentField(ctx, NewEventLog(ctx)),
 	}
 	sched.setNullableFields()
+	ctx.SetTimeSkippingConfig(input.GetTimeSkippingConfig())
 	sched.Info.CreateTime = timestamppb.New(ctx.Now(sched))
 	sched.applyPausePatch(ctx, patch)
 
@@ -348,6 +349,34 @@ func (s *Scheduler) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 	}
 
 	return chasm.LifecycleStateRunning
+}
+
+// IsExecutionSkippable reports whether the scheduler has no internal work that
+// must complete before its virtual clock advances to the next timer.
+func (s *Scheduler) IsExecutionSkippable(ctx chasm.Context) bool {
+	// Schedule status.
+	if s.Sentinel || s.Closed || s.WorkflowMigration != nil || s.Schedule.GetState().GetPaused() {
+		return false
+	}
+	// Active Backfillers.
+	if s.hasMoreBackfills() {
+		return false
+	}
+
+	// Pending Invoker work.
+	invoker := s.Invoker.Get(ctx)
+	if len(invoker.GetCancelWorkflows()) > 0 || len(invoker.GetTerminateWorkflows()) > 0 {
+		return false
+	}
+	for _, start := range invoker.GetBufferedStarts() {
+		if start.GetCompleted() == nil {
+			return false
+		}
+	}
+
+	// Generator readiness.
+	lastProcessedTime := s.Generator.Get(ctx).GetLastProcessedTime()
+	return lastProcessedTime != nil && !lastProcessedTime.AsTime().Before(s.Info.GetUpdateTime().AsTime())
 }
 
 func (s *Scheduler) ContextMetadata(_ chasm.Context) map[string]string {
@@ -897,6 +926,7 @@ func (s *Scheduler) Update(
 
 	s.Schedule = req.FrontendRequest.Schedule
 	s.setNullableFields()
+	ctx.SetTimeSkippingConfig(s.Schedule.GetTimeSkippingConfig())
 
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
 	s.updateConflictToken()

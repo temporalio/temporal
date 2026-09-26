@@ -665,7 +665,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	start *schedulespb.BufferedStart,
 	lastCompletionState *schedulerpb.LastCompletionResult,
 	schedulerRef []byte,
-	actualStartTime time.Time,
+	virtualStartTime time.Time,
 	timeSkippingConfig *commonpb.TimeSkippingConfig,
 	timeSkippingStatePropagation *commonpb.TimeSkippingStatePropagation,
 ) error {
@@ -742,6 +742,11 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	result, err := h.frontendClient.StartWorkflowExecution(ctx, request)
 	if err != nil {
 		return err
+	}
+	actualStartTime := time.Now()
+	// Preserve existing wall-clock behavior unless the started workflow inherits skipped time.
+	if timeSkippingStatePropagation.GetInitialSkippedDuration().AsDuration() > 0 {
+		actualStartTime = virtualStartTime
 	}
 
 	// Set metadata on the cloned start. The clone was created in startWorkflows
