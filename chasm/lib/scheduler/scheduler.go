@@ -63,7 +63,6 @@ type Scheduler struct {
 var (
 	_ (chasm.VisibilitySearchAttributesProvider) = (*Scheduler)(nil)
 	_ (chasm.VisibilityMemoProvider)             = (*Scheduler)(nil)
-	_ (chasm.VisibilityTransactionPreparer)      = (*Scheduler)(nil)
 )
 
 var (
@@ -366,7 +365,7 @@ func (s *Scheduler) ContextMetadata(_ chasm.Context) map[string]string {
 
 // Terminate implements the chasm.RootComponent interface.
 func (s *Scheduler) Terminate(
-	_ chasm.MutableContext,
+	ctx chasm.MutableContext,
 	_ chasm.TerminateComponentRequest,
 ) (chasm.TerminateComponentResponse, error) {
 	if s.Closed {
@@ -376,6 +375,7 @@ func (s *Scheduler) Terminate(
 	// Needed so that the CHASM-level search attribute reads closed as well as the
 	// MS-level/legacy ExecutionStatus.
 	s.Closed = true
+	s.PrepareVisibility(ctx)
 	return chasm.TerminateComponentResponse{}, nil
 }
 
@@ -807,6 +807,7 @@ func (s *Scheduler) Delete(
 		return nil, ErrMigrationPending
 	}
 	s.Closed = true
+	s.PrepareVisibility(ctx)
 	return &schedulerpb.DeleteScheduleResponse{
 		FrontendResponse: &workflowservice.DeleteScheduleResponse{},
 	}, nil
@@ -842,6 +843,7 @@ func (s *Scheduler) MigrateToWorkflow(
 
 	// Schedule a side-effect task to export state and start the V1 workflow.
 	ctx.AddTask(s, chasm.TaskAttributes{}, &schedulerpb.SchedulerMigrateToWorkflowTask{})
+	s.PrepareVisibility(ctx)
 
 	return &schedulerpb.MigrateToWorkflowResponse{}, nil
 }

@@ -44,12 +44,6 @@ type VisibilityMemoProvider interface {
 	Memo(Context) proto.Message
 }
 
-// VisibilityTransactionPreparer lets a root coalesce visibility changes before
-// the framework decides whether to enqueue an update task.
-type VisibilityTransactionPreparer interface {
-	PrepareVisibility(MutableContext) (bool, error)
-}
-
 // VisibilitySearchAttributesMapper is a mapper for CHASM search attributes.
 type VisibilitySearchAttributesMapper struct {
 	// map from CHASM and predefined search attribute aliases to field names.

@@ -113,8 +113,7 @@ func TestVisibilityPublicationCoalescesRoutineChanges(t *testing.T) {
 	initial := s.VisibilityPublication
 	invoker := s.Invoker.Get(ctx)
 	invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{RequestId: "first"})
-	changed, err := s.PrepareVisibility(ctx)
-	require.NoError(t, err)
+	changed := s.PrepareVisibility(ctx)
 	require.True(t, changed)
 	deadline := s.VisibilityPublication.RefreshDeadline.AsTime()
 	require.True(t, env.TimeSource.Now().Add(30*time.Second).Equal(deadline))
@@ -122,8 +121,7 @@ func TestVisibilityPublicationCoalescesRoutineChanges(t *testing.T) {
 	require.Same(t, initial, s.VisibilityPublication)
 
 	invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{RequestId: "second"})
-	changed, err = s.PrepareVisibility(ctx)
-	require.NoError(t, err)
+	changed = s.PrepareVisibility(ctx)
 	require.False(t, changed)
 	require.Equal(t, deadline, s.VisibilityPublication.RefreshDeadline.AsTime())
 
@@ -139,9 +137,8 @@ func TestVisibilityPublicationCoalescesRoutineChanges(t *testing.T) {
 	}, task)
 	require.NoError(t, err)
 	require.False(t, valid)
-	changed, err = s.PrepareVisibility(ctx)
-	require.NoError(t, err)
-	require.True(t, changed)
+	changed = s.PrepareVisibility(ctx)
+	require.False(t, changed)
 	require.Equal(t, int64(2), s.VisibilityPublication.BufferedStartsCount)
 	require.Nil(t, s.VisibilityPublication.RefreshDeadline)
 	valid, err = handler.Validate(ctx, s, chasm.TaskInvocation{
@@ -157,22 +154,19 @@ func TestVisibilityPublicationFlushesPauseAndClose(t *testing.T) {
 	s := env.Scheduler
 
 	s.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{{RequestId: "pending"}}
-	changed, err := s.PrepareVisibility(ctx)
-	require.NoError(t, err)
+	changed := s.PrepareVisibility(ctx)
 	require.True(t, changed)
 	require.NotNil(t, s.VisibilityPublication.RefreshDeadline)
 
 	s.Schedule.State.Paused = true
-	changed, err = s.PrepareVisibility(ctx)
-	require.NoError(t, err)
+	changed = s.PrepareVisibility(ctx)
 	require.True(t, changed)
 	require.True(t, s.VisibilityPublication.Paused)
 	require.Equal(t, int64(1), s.VisibilityPublication.BufferedStartsCount)
 	require.Nil(t, s.VisibilityPublication.RefreshDeadline)
 
 	s.Closed = true
-	changed, err = s.PrepareVisibility(ctx)
-	require.NoError(t, err)
+	changed = s.PrepareVisibility(ctx)
 	require.True(t, changed)
 	require.Equal(t, "Completed", s.VisibilityPublication.ExecutionStatus)
 }
@@ -182,19 +176,17 @@ func TestVisibilityPublicationFlushesPatch(t *testing.T) {
 	ctx := env.MutableContext()
 	s := env.Scheduler
 	s.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{{RequestId: "pending"}}
-	changed, err := s.PrepareVisibility(ctx)
-	require.NoError(t, err)
+	changed := s.PrepareVisibility(ctx)
 	require.True(t, changed)
 	require.NotNil(t, s.VisibilityPublication.RefreshDeadline)
 
-	_, err = s.Patch(ctx, &schedulerpb.PatchScheduleRequest{
+	_, err := s.Patch(ctx, &schedulerpb.PatchScheduleRequest{
 		FrontendRequest: &workflowservice.PatchScheduleRequest{
 			Patch: &schedulepb.SchedulePatch{},
 		},
 	})
 	require.NoError(t, err)
-	changed, err = s.PrepareVisibility(ctx)
-	require.NoError(t, err)
+	changed = s.PrepareVisibility(ctx)
 	require.True(t, changed)
 	require.Equal(t, int64(1), s.VisibilityPublication.BufferedStartsCount)
 	require.Nil(t, s.VisibilityPublication.RefreshDeadline)
@@ -206,16 +198,14 @@ func TestVisibilityPublicationFlushesWhenDisabled(t *testing.T) {
 	ctx := env.MutableContext()
 	s := env.Scheduler
 	s.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{{RequestId: "first"}}
-	changed, err := s.PrepareVisibility(ctx)
-	require.NoError(t, err)
+	changed := s.PrepareVisibility(ctx)
 	require.True(t, changed)
 	require.NotNil(t, s.VisibilityPublication.RefreshDeadline)
 	deadline := s.VisibilityPublication.RefreshDeadline.AsTime()
 	generation := s.VisibilityPublication.RefreshGeneration
 
 	enabled = false
-	changed, err = s.PrepareVisibility(ctx)
-	require.NoError(t, err)
+	changed = s.PrepareVisibility(ctx)
 	require.True(t, changed)
 	require.Nil(t, s.VisibilityPublication)
 	require.Equal(t, s.ListInfo(ctx), s.Memo(ctx))
@@ -227,8 +217,7 @@ func TestVisibilityPublicationFlushesWhenDisabled(t *testing.T) {
 
 	s.Invoker.Get(ctx).BufferedStarts = append(s.Invoker.Get(ctx).BufferedStarts,
 		&schedulespb.BufferedStart{RequestId: "second"})
-	changed, err = s.PrepareVisibility(ctx)
-	require.NoError(t, err)
+	changed = s.PrepareVisibility(ctx)
 	require.False(t, changed)
 	require.Nil(t, s.VisibilityPublication)
 }
@@ -239,8 +228,7 @@ func TestVisibilityPublicationDefaultDisabled(t *testing.T) {
 	s := env.Scheduler
 	require.Positive(t, scheduler.DefaultTweakables.VisibilityCoalesceInterval)
 	s.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{{RequestId: "pending"}}
-	changed, err := s.PrepareVisibility(ctx)
-	require.NoError(t, err)
+	changed := s.PrepareVisibility(ctx)
 	require.False(t, changed)
 	require.Nil(t, s.VisibilityPublication)
 }
@@ -250,8 +238,7 @@ func TestVisibilityPublicationZeroIntervalDisabled(t *testing.T) {
 	ctx := env.MutableContext()
 	s := env.Scheduler
 	s.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{{RequestId: "pending"}}
-	changed, err := s.PrepareVisibility(ctx)
-	require.NoError(t, err)
+	changed := s.PrepareVisibility(ctx)
 	require.False(t, changed)
 	require.Nil(t, s.VisibilityPublication)
 }

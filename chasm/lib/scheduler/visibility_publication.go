@@ -9,9 +9,10 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func (s *Scheduler) PrepareVisibility(ctx chasm.MutableContext) (bool, error) {
+// PrepareVisibility reconciles the published view after a scheduler mutation.
+func (s *Scheduler) PrepareVisibility(ctx chasm.MutableContext) bool {
 	if s.Sentinel {
-		return false, nil
+		return false
 	}
 
 	tweakables := tweakablesFromContext(ctx)
@@ -19,11 +20,11 @@ func (s *Scheduler) PrepareVisibility(ctx chasm.MutableContext) (bool, error) {
 	if !tweakables.EnableVisibilityCoalescing || interval <= 0 {
 		s.visibilityForcePublish = false
 		if s.VisibilityPublication == nil {
-			return false, nil
+			return false
 		}
 		s.VisibilityPublication = nil
 		metrics.ScheduleVisibilityPublicationImmediateCount.With(ctx.MetricsHandler()).Record(1)
-		return true, nil
+		return true
 	}
 
 	live := s.currentVisibilityPublication(ctx)
@@ -32,11 +33,11 @@ func (s *Scheduler) PrepareVisibility(ctx chasm.MutableContext) (bool, error) {
 		s.VisibilityPublication = live
 		s.visibilityForcePublish = false
 		metrics.ScheduleVisibilityPublicationImmediateCount.With(ctx.MetricsHandler()).Record(1)
-		return true, nil
+		return true
 	}
 
 	if sameVisibilityPublication(previous, live) && !s.visibilityForcePublish {
-		return false, nil
+		return false
 	}
 
 	immediate := s.visibilityForcePublish || s.Closed ||
@@ -51,12 +52,12 @@ func (s *Scheduler) PrepareVisibility(ctx chasm.MutableContext) (bool, error) {
 		s.VisibilityPublication = live
 		s.visibilityForcePublish = false
 		metrics.ScheduleVisibilityPublicationImmediateCount.With(ctx.MetricsHandler()).Record(1)
-		return true, nil
+		return true
 	}
 
 	if previous.GetRefreshDeadline() != nil {
 		metrics.ScheduleVisibilityPublicationDeferredCount.With(ctx.MetricsHandler()).Record(1)
-		return false, nil
+		return false
 	}
 
 	deadline := ctx.Now(s).Add(interval)
@@ -65,7 +66,7 @@ func (s *Scheduler) PrepareVisibility(ctx chasm.MutableContext) (bool, error) {
 	ctx.AddTask(s, chasm.TaskAttributes{ScheduledTime: deadline},
 		&schedulerpb.SchedulerVisibilityRefreshTask{Generation: previous.RefreshGeneration})
 	metrics.ScheduleVisibilityPublicationDeferredCount.With(ctx.MetricsHandler()).Record(1)
-	return true, nil
+	return true
 }
 
 func sameVisibilityPublication(a, b *schedulerpb.VisibilityPublication) bool {
@@ -147,5 +148,6 @@ func (h *SchedulerVisibilityRefreshTaskHandler) Execute(
 	s.VisibilityPublication.RefreshGeneration++
 	s.visibilityForcePublish = true
 	metrics.ScheduleVisibilityPublicationRefreshCount.With(ctx.MetricsHandler()).Record(1)
+	s.PrepareVisibility(ctx)
 	return nil
 }

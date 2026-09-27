@@ -56,6 +56,7 @@ func (r *SchedulerIdleTaskHandler) Execute(
 ) error {
 	scheduler.getOrCreateEventLog(ctx).LogEvent(ctx, "schedule closed from idle timer")
 	scheduler.Closed = true
+	scheduler.PrepareVisibility(ctx)
 	newTaggedMetricsHandler(r.metricsHandler, scheduler).
 		Counter(metrics.ScheduleIdleTask.Name()).
 		Record(1, metrics.OutcomeTag(outcomeFired), metrics.ReasonTag(reasonNone))

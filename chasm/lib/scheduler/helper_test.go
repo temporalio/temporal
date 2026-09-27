@@ -403,7 +403,11 @@ func (e *schedulerTestEngine) updateScheduler(
 		e.engineCtx,
 		e.rootRef,
 		func(s *scheduler.Scheduler, ctx chasm.MutableContext, _ struct{}) (struct{}, error) {
-			return struct{}{}, update(s, ctx)
+			if err := update(s, ctx); err != nil {
+				return struct{}{}, err
+			}
+			s.PrepareVisibility(ctx)
+			return struct{}{}, nil
 		},
 		struct{}{},
 	)
