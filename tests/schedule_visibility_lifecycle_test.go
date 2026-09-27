@@ -281,15 +281,20 @@ func testScheduleVisibilityBuffer(t *testing.T, tweakables chasmscheduler.Tweaka
 }
 
 func testScheduleVisibilityIdleClose(t *testing.T, tweakables chasmscheduler.Tweakables) {
-	tweakables.IdleTime = shortIdleTime
+	tweakables.IdleTime = 6 * time.Second
 	env := scheduleVisibilityEnv(t, tweakables)
 	ctx := chasmContextFactory(testcontext.For(t))
 	scheduleID := testcore.RandomizeStr("visibility-idle")
+	createdAt := time.Now().UTC()
 	createSchedule(ctx, t, env, scheduleID, &schedulepb.Schedule{
 		Spec:   &schedulepb.ScheduleSpec{},
 		Action: startWorkflowAction(env, testcore.RandomizeStr("visibility-idle-action"), "visibility-idle-workflow"),
 	})
 	getScheduleEntryFromVisibility(env, scheduleID, chasmContextFactory, nil)
+	await.RequireTruef(t, func() bool {
+		return scheduleVisibleWithQuery(env, scheduleID,
+			fmt.Sprintf(`%s > "%s"`, chasmscheduler.ScheduleIdleCloseTimeName, createdAt.Format(time.RFC3339Nano)))
+	}, awaitTimeout, pollInterval, "idle close deadline should be queryable")
 	await.RequireTruef(t, func() bool { return scheduleClosed(ctx, env, scheduleID) }, awaitTimeout, pollInterval,
 		"idle schedule should close")
 	await.RequireTruef(t, func() bool {
