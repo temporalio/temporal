@@ -4,7 +4,6 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -26,9 +25,8 @@ import (
 
 type TimeSkippingConfigurator interface {
 	// SetTimeSkippingConfig sets the execution's time-skipping config: the first call establishes it,
-	// later calls update it in place (preserving the accumulated skipped duration). This method also
-	// validates the config and returns an invalid argument error when needed.
-	SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) error
+	// later calls update it in place, preserving the accumulated skipped duration.
+	SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
 }
 
 type TimeSkippingRuntimeGate interface {
@@ -175,18 +173,4 @@ func (t *TimeSkippingTransition) GetSkippedDuration() time.Duration {
 		return 0
 	}
 	return t.targetTime.Sub(t.CurrentTime)
-}
-
-// ValidateTimeSkippingConfig validates configuration shared by all execution archetypes.
-func ValidateTimeSkippingConfig(tsc *commonpb.TimeSkippingConfig) error {
-	if !tsc.GetEnabled() {
-		if tsc.GetFastForwardConfig() != nil {
-			return serviceerror.NewInvalidArgument("time_skipping_config: cannot set fast_forward when enabled is false")
-		}
-		return nil
-	}
-	if ff := tsc.GetFastForwardConfig(); ff != nil && ff.GetDuration().AsDuration() <= 0 {
-		return serviceerror.NewInvalidArgument("time_skipping_config: fast_forward duration must be positive")
-	}
-	return nil
 }
