@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/temporalio/temporal/tools/testing/freeport"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/authorization"
@@ -24,7 +25,6 @@ import (
 	sqliteplugin "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/schema/sqlite"
 	"go.temporal.io/server/temporal"
-	"go.temporal.io/server/tools/testing/freeport"
 	expmaps "golang.org/x/exp/maps"
 )
 
