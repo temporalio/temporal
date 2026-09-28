@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -32,6 +33,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
@@ -2442,34 +2444,130 @@ func TestNamespaceFailoverReloadsPartitionWithNewStateTag(t *testing.T) {
 	e.metricsHandler = captureHandler
 	capture := captureHandler.StartCapture()
 	defer captureHandler.StopCapture(capture)
+	lastBacklog := func(metricName string) (float64, string, bool) {
+		recordings := capture.SnapshotMetric(metricName)
+		if len(recordings) == 0 {
+			return 0, "", false
+		}
+		last := recordings[len(recordings)-1]
+		//revive:disable-next-line:unchecked-type-assertion
+		return last.Value.(float64), last.Tags["namespace_state"], true
+	}
 
 	partition := newRootPartition(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	pm, _, err := e.getTaskQueuePartitionManager(context.Background(), partition, true, loadCausePoll)
 	require.NoError(t, err)
+	//revive:disable-next-line:unchecked-type-assertion
+	dQueue := pm.(*taskQueuePartitionManagerImpl).defaultQueue()
+	for i := range 3 {
+		require.NoError(t, dQueue.SpoolTask(&persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  fmt.Sprintf("wf-%d", i),
+		}))
+	}
+	await.RequireTrue(t, func() bool {
+		value, state, ok := lastBacklog(metrics.ApproximateBacklogCount.Name())
+		return ok && value > 0 && state == metrics.PassiveNamespaceStateTagValue
+	}, 5*time.Second, 10*time.Millisecond)
 
 	newNS := failoverTestNamespace(cluster.TestCurrentClusterName)
 	current.Store(newNS)
 	await.RequireTrue(t, func() bool {
-		stopped := capture.SnapshotMetric(metrics.TaskQueueStoppedCounter.Name())
-		return len(stopped) > 0 && stopped[len(stopped)-1].Tags["namespace_state"] == metrics.PassiveNamespaceStateTagValue
+		count, countState, countOK := lastBacklog(metrics.ApproximateBacklogCount.Name())
+		age, ageState, ageOK := lastBacklog(metrics.ApproximateBacklogAgeSeconds.Name())
+		return countOK && ageOK && count == 0 && age == 0 &&
+			countState == metrics.PassiveNamespaceStateTagValue && ageState == metrics.PassiveNamespaceStateTagValue
 	}, 5*time.Second, 10*time.Millisecond)
 	require.Empty(t, e.getTaskQueuePartitions(10))
-	for _, metricName := range []string{metrics.ApproximateBacklogCount.Name(), metrics.ApproximateBacklogAgeSeconds.Name()} {
-		recordings := capture.SnapshotMetric(metricName)
-		require.NotEmpty(t, recordings)
-		last := recordings[len(recordings)-1]
-		require.Equal(t, metrics.PassiveNamespaceStateTagValue, last.Tags["namespace_state"])
-		require.InDelta(t, 0, last.Value, 0.001)
-	}
 
 	reloaded, created, err := e.getTaskQueuePartitionManager(context.Background(), partition, true, loadCausePoll)
 	require.NoError(t, err)
 	require.True(t, created)
 	require.NotSame(t, pm, reloaded)
 	require.Same(t, newNS, reloaded.Namespace())
-	e.unloadTaskQueuePartition(reloaded, unloadCauseForce)
-	stopped := capture.SnapshotMetric(metrics.TaskQueueStoppedCounter.Name())
-	require.Equal(t, metrics.ActiveNamespaceStateTagValue, stopped[len(stopped)-1].Tags["namespace_state"])
+	await.RequireTrue(t, func() bool {
+		value, state, ok := lastBacklog(metrics.ApproximateBacklogCount.Name())
+		return ok && value > 0 && state == metrics.ActiveNamespaceStateTagValue
+	}, 5*time.Second, 10*time.Millisecond)
+}
+
+func TestNamespaceFailoverUnloadsWithBacklogMetricsDisabled(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		config := defaultTestConfig()
+		config.BacklogMetricsEmitInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(0)
+		e, current, _ := newFailoverTestEngine(t, config, cluster.TestCurrentClusterName)
+
+		partition := newRootPartition(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+		_, _, err := e.getTaskQueuePartitionManager(context.Background(), partition, true, loadCausePoll)
+		require.NoError(t, err)
+
+		//nolint:forbidigo // synctest advances the fake clock
+		time.Sleep(2 * time.Minute)
+		synctest.Wait()
+		require.Len(t, e.getTaskQueuePartitions(10), 1)
+
+		current.Store(failoverTestNamespace(cluster.TestAlternativeClusterName))
+		//nolint:forbidigo // synctest advances the fake clock
+		time.Sleep(2 * time.Minute)
+		synctest.Wait()
+		require.Empty(t, e.getTaskQueuePartitions(10))
+	})
+}
+
+func TestNamespaceFailoverUnloadDuringInitialization(t *testing.T) {
+	e, current, _ := newFailoverTestEngine(t, defaultTestConfig(), cluster.TestCurrentClusterName)
+	blocking := &blockingGetTaskQueueManager{TaskManager: e.taskManager, entered: make(chan struct{}), release: make(chan struct{})}
+	e.taskManager = blocking
+	partition := newRootPartition(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+
+	loadErr := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCausePoll)
+		loadErr <- err
+	}()
+	<-blocking.entered
+	pms := e.getTaskQueuePartitions(10)
+	require.Len(t, pms, 1)
+
+	current.Store(failoverTestNamespace(cluster.TestAlternativeClusterName))
+	unloaded := make(chan bool, 1)
+	go func() {
+		//revive:disable-next-line:unchecked-type-assertion
+		unloaded <- pms[0].(*taskQueuePartitionManagerImpl).unloadIfNamespaceStateChanged()
+	}()
+	close(blocking.release)
+	require.True(t, <-unloaded)
+	require.Error(t, <-loadErr)
+	require.Empty(t, e.getTaskQueuePartitions(10))
+
+	reloaded, created, err := e.getTaskQueuePartitionManager(context.Background(), partition, true, loadCausePoll)
+	require.NoError(t, err)
+	require.True(t, created)
+	require.NotSame(t, pms[0], reloaded)
+}
+
+// blockingGetTaskQueueManager blocks the first GetTaskQueue call until release is closed.
+type blockingGetTaskQueueManager struct {
+	persistence.TaskManager
+	once    sync.Once
+	entered chan struct{}
+	release chan struct{}
+}
+
+func (m *blockingGetTaskQueueManager) GetTaskQueue(
+	ctx context.Context,
+	request *persistence.GetTaskQueueRequest,
+) (*persistence.GetTaskQueueResponse, error) {
+	first := false
+	m.once.Do(func() { first = true })
+	if first {
+		close(m.entered)
+		<-m.release
+	}
+	return m.TaskManager.GetTaskQueue(ctx, request)
 }
 
 func failoverTestNamespace(activeCluster string) *namespace.Namespace {
