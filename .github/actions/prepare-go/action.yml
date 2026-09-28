@@ -1,0 +1,104 @@
+name: Prepare Go
+description: Set up Go, restore caches, and download modules with retry.
+
+outputs:
+  build_cache_hit:
+    description: Whether the Go build cache was restored from an exact match.
+    value: ${{ steps.restore-build.outputs.cache-hit }}
+  build_cache_path:
+    description: Go build cache path.
+    value: ${{ steps.go-env.outputs.gocache }}
+  build_cache_primary_key:
+    description: Primary key used for the Go build cache restore.
+    value: ${{ steps.restore-build.outputs.cache-primary-key }}
+  dependency_cache_hit:
+    description: Whether the Go module cache was restored from an exact match.
+    value: ${{ steps.restore-deps.outputs.cache-hit }}
+  dependency_cache_path:
+    description: Go module cache path.
+    value: ${{ steps.go-env.outputs.gomodcache }}
+  dependency_cache_primary_key:
+    description: Primary key used for the Go module cache restore.
+    value: ${{ steps.restore-deps.outputs.cache-primary-key }}
+  tools_cache_hit:
+    description: Whether the Go tools cache was restored from an exact match.
+    value: ${{ steps.restore-tools.outputs.cache-hit }}
+  tools_cache_path:
+    description: Go tools cache path.
+    value: .bin
+  tools_cache_primary_key:
+    description: Primary key used for the Go tools cache restore.
+    value: ${{ steps.restore-tools.outputs.cache-primary-key }}
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve Go version
+      id: go-version
+      shell: bash
+      run: |
+        version="$(
+          awk '
+            $1 == "go" { go_version = $2 }
+            $1 == "toolchain" && $2 != "default" {
+              toolchain_version = $2
+              sub(/^go/, "", toolchain_version)
+            }
+            END {
+              if (toolchain_version != "") print toolchain_version
+              else print go_version
+            }
+          ' go.mod
+        )"
+        if [[ -z "$version" ]]; then
+          echo "Unable to resolve the Go version from go.mod" >&2
+          exit 1
+        fi
+        echo "version=$version" >> "$GITHUB_OUTPUT"
+
+    - uses: cloudx-io/setup-go@8b45cf394acf101459db0d47aa9735a4fe5eea63 # v1.0.0
+      with:
+        go-version: ${{ steps.go-version.outputs.version }}
+        cache-key-prefix: ${{ github.job }}-${{ strategy.job-index }}
+        cache-dependency-path: go.sum
+
+    - name: Resolve Go cache paths
+      id: go-env
+      shell: bash
+      run: |
+        echo "gocache=$(go env GOCACHE)" >> "$GITHUB_OUTPUT"
+        echo "gomodcache=$(go env GOMODCACHE)" >> "$GITHUB_OUTPUT"
+
+    - name: Restore dependencies
+      id: restore-deps
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: ${{ steps.go-env.outputs.gomodcache }}
+        key: go-${{ runner.os }}${{ runner.arch }}-${{ steps.go-version.outputs.version }}-${{ hashFiles('go.mod') }}-deps-${{ hashFiles('go.sum') }}
+
+    - name: Restore Go tools
+      id: restore-tools
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: .bin
+        key: go-${{ runner.os }}${{ runner.arch }}-${{ steps.go-version.outputs.version }}-tools-${{ hashFiles('Makefile') }}
+
+    # Cache restore can miss modules after go.sum changes or partial cache saves.
+    # Retrying download here isolates transient Go proxy failures from the Go command.
+    - name: Download Go modules
+      uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+      with:
+        max_attempts: 3
+        retry_wait_seconds: 10
+        timeout_minutes: 5
+        shell: bash
+        command: go mod download
+
+    - name: Restore build outputs
+      id: restore-build
+      uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: ${{ steps.go-env.outputs.gocache }}
+        key: go-${{ runner.os }}${{ runner.arch }}-${{ steps.go-version.outputs.version }}-build-${{ env.COMMIT }}
+        restore-keys: |
+          go-${{ runner.os }}${{ runner.arch }}-${{ steps.go-version.outputs.version }}-build-
