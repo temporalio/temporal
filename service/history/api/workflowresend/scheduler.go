@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -13,7 +14,14 @@ import (
 	ctasks "go.temporal.io/server/common/tasks"
 )
 
-const OperationName = "WorkflowResend"
+const (
+	OperationName = "WorkflowResend"
+
+	sourceNotFoundCacheSize = 4096
+	// An entry only needs to outlive one standby task retry, whose backoff is capped at three
+	// minutes. An evicted entry falls back to the standby task's discard-time source check.
+	sourceNotFoundCacheTTL = 10 * time.Minute
+)
 
 // SubmitResult describes the outcome of scheduler admission.
 type SubmitResult int
@@ -37,6 +45,11 @@ type Scheduler interface {
 	) SubmitResult
 }
 
+type SourceNotFoundCache interface {
+	MarkSourceNotFound(key definition.WorkflowKey, sourceCluster string)
+	SourceNotFound(key definition.WorkflowKey) (sourceCluster string, ok bool)
+}
+
 // BoundedWorkflowScheduler deduplicates workflow resends and bounds their concurrency.
 type BoundedWorkflowScheduler struct {
 	pool *ctasks.DynamicWorkerPoolScheduler
@@ -46,9 +59,14 @@ type BoundedWorkflowScheduler struct {
 
 	mu       sync.Mutex
 	inFlight map[definition.WorkflowKey]struct{}
+
+	sourceNotFound cache.Cache
 }
 
-var _ Scheduler = (*BoundedWorkflowScheduler)(nil)
+var (
+	_ Scheduler           = (*BoundedWorkflowScheduler)(nil)
+	_ SourceNotFoundCache = (*BoundedWorkflowScheduler)(nil)
+)
 
 // NewBoundedWorkflowScheduler creates a bounded workflow scheduler with no task buffer.
 func NewBoundedWorkflowScheduler(
@@ -68,7 +86,17 @@ func NewBoundedWorkflowScheduler(
 		logger:         logger,
 		metricsHandler: metricsHandler,
 		inFlight:       make(map[definition.WorkflowKey]struct{}),
+		sourceNotFound: cache.New(sourceNotFoundCacheSize, &cache.Options{TTL: sourceNotFoundCacheTTL}),
 	}
+}
+
+func (s *BoundedWorkflowScheduler) MarkSourceNotFound(key definition.WorkflowKey, sourceCluster string) {
+	s.sourceNotFound.Put(key, sourceCluster)
+}
+
+func (s *BoundedWorkflowScheduler) SourceNotFound(key definition.WorkflowKey) (string, bool) {
+	sourceCluster, ok := s.sourceNotFound.Get(key).(string)
+	return sourceCluster, ok
 }
 
 func (s *BoundedWorkflowScheduler) TrySubmit(

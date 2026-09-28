@@ -33,6 +33,31 @@ func TestSubmitResultZeroValueFailsSafe(t *testing.T) {
 	require.Equal(t, SubmitResultFailed, result)
 }
 
+func TestBoundedWorkflowSchedulerSourceNotFound(t *testing.T) {
+	scheduler := NewBoundedWorkflowScheduler(func() int { return 1 }, log.NewNoopLogger(), metrics.NoopMetricsHandler)
+	t.Cleanup(func() {
+		scheduler.InitiateShutdown()
+		scheduler.WaitShutdown()
+	})
+
+	key := testWorkflowKey("a")
+	_, ok := scheduler.SourceNotFound(key)
+	require.False(t, ok)
+
+	scheduler.MarkSourceNotFound(key, "source")
+	sourceCluster, ok := scheduler.SourceNotFound(key)
+	require.True(t, ok)
+	require.Equal(t, "source", sourceCluster)
+
+	scheduler.MarkSourceNotFound(key, "new source")
+	sourceCluster, ok = scheduler.SourceNotFound(key)
+	require.True(t, ok)
+	require.Equal(t, "new source", sourceCluster)
+
+	_, ok = scheduler.SourceNotFound(definition.NewWorkflowKey(key.NamespaceID, key.WorkflowID, "other run"))
+	require.False(t, ok)
+}
+
 func TestBoundedWorkflowSchedulerDeduplicatesAndReleasesWorkflow(t *testing.T) {
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
