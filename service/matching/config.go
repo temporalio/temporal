@@ -82,6 +82,7 @@ type (
 		TaskQueueLimitPerBuildId                 dynamicconfig.IntPropertyFnWithNamespaceFilter
 		GetUserDataLongPollTimeout               dynamicconfig.DurationPropertyFn
 		GetUserDataRefresh                       dynamicconfig.DurationPropertyFn
+		WriteUserDataToChasm                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		EphemeralDataUpdateInterval              dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		BacklogMetricsEmitInterval               dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		PriorityBacklogForwarding                dynamicconfig.BoolPropertyFnWithTaskQueueFilter
@@ -193,6 +194,7 @@ type (
 		GetUserDataReturnBudget    time.Duration
 		GetUserDataInitialRefresh  time.Duration
 		GetUserDataRefresh         dynamicconfig.DurationPropertyFn
+		WriteUserDataToChasm       func() bool
 
 		// taskWriter configuration
 		OutstandingTaskAppendsThreshold func() int
@@ -347,6 +349,7 @@ func NewConfig(
 		TaskQueueLimitPerBuildId:                 dynamicconfig.TaskQueuesPerBuildIdLimit.Get(dc),
 		GetUserDataLongPollTimeout:               dynamicconfig.MatchingGetUserDataLongPollTimeout.Get(dc), // Use -10 seconds so that we send back empty response instead of timeout
 		GetUserDataRefresh:                       dynamicconfig.MatchingGetUserDataRefresh.Get(dc),
+		WriteUserDataToChasm:                     dynamicconfig.MatchingTaskQueueUserDataWriteToChasm.Get(dc),
 		EphemeralDataUpdateInterval:              dynamicconfig.MatchingEphemeralDataUpdateInterval.Get(dc),
 		BacklogMetricsEmitInterval:               dynamicconfig.MatchingBacklogMetricsEmitInterval.Get(dc),
 		PriorityBacklogForwarding:                dynamicconfig.MatchingPriorityBacklogForwarding.Get(dc),
@@ -485,6 +488,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		GetUserDataReturnBudget:    returnEmptyTaskTimeBudget,
 		GetUserDataInitialRefresh:  ioTimeout,
 		GetUserDataRefresh:         config.GetUserDataRefresh,
+		WriteUserDataToChasm: func() bool {
+			return config.WriteUserDataToChasm(ns.String())
+		},
 		OutstandingTaskAppendsThreshold: func() int {
 			return config.OutstandingTaskAppendsThreshold(ns.String(), taskQueueName, taskType)
 		},

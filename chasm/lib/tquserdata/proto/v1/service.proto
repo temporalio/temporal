@@ -1,0 +1,16 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.tquserdata.proto.v1;
+
+import "chasm/lib/tquserdata/proto/v1/request_response.proto";
+import "temporal/server/api/common/v1/api_category.proto";
+import "temporal/server/api/routing/v1/extension.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapb";
+
+service TaskQueueUserDataService {
+  rpc UpsertTaskQueueUserData(UpsertTaskQueueUserDataRequest) returns (UpsertTaskQueueUserDataResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "business_id";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+}

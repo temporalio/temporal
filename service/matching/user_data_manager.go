@@ -18,6 +18,8 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/chasm/lib/tquserdata"
+	"go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock/hybrid_logical_clock"
@@ -31,6 +33,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -111,6 +114,7 @@ type (
 		namespaceRegistry namespace.Registry
 		logger            log.Logger
 		matchingClient    matchingservice.MatchingServiceClient
+		chasmClient       tquserdatapb.TaskQueueUserDataServiceClient
 		goroGroup         goro.Group
 		// userDataReady is fulfilled once versioning data is fetched from the root partition. If this TQ is
 		// the root partition, it is fulfilled as soon as it is fetched from db.
@@ -146,6 +150,7 @@ func newUserDataManager(
 	config *taskQueueConfig,
 	logger log.Logger,
 	registry namespace.Registry,
+	chasmClient tquserdatapb.TaskQueueUserDataServiceClient,
 ) *userDataManagerImpl {
 	m := &userDataManagerImpl{
 		onFatalErr:             onFatalErr,
@@ -157,6 +162,7 @@ func newUserDataManager(
 		namespaceRegistry:      registry,
 		logger:                 logger,
 		matchingClient:         matchingClient,
+		chasmClient:            chasmClient,
 		userDataReady:          future.NewFuture[struct{}](),
 		ephemeralDataChanged:   make(chan struct{}),
 	}
@@ -411,6 +417,7 @@ func (m *userDataManagerImpl) loadUserDataFromDB(ctx context.Context) error {
 	defer m.lock.Unlock()
 	m.setUserDataLocked(response.UserData)
 	m.logNewUserData("loaded user data from db", response.UserData)
+	m.upsertUserDataToChasmLocked(ctx, response.UserData)
 
 	return nil
 }
@@ -454,6 +461,7 @@ func (m *userDataManagerImpl) refreshUserDataFromDB(ctx context.Context) error {
 	// The db has newer data. We can just update to it.
 	m.setUserDataLocked(response.UserData)
 	m.logger.Warn("user data version mismatch: db had newer data; reloading", tags...)
+	m.upsertUserDataToChasmLocked(ctx, response.UserData)
 
 	return nil
 }
@@ -571,8 +579,30 @@ func (m *userDataManagerImpl) updateUserData(
 	updatedVersionedData := &persistencespb.VersionedTaskQueueUserData{Version: preUpdateVersion + 1, Data: updatedUserData}
 	m.logNewUserData("modified user data", updatedVersionedData, tag.String("user-data-update-source", options.Source))
 	m.setUserDataLocked(updatedVersionedData)
+	m.upsertUserDataToChasmLocked(ctx, updatedVersionedData)
 
 	return updatedVersionedData, shouldReplicate, err
+}
+
+func (m *userDataManagerImpl) upsertUserDataToChasmLocked(
+	ctx context.Context,
+	userData *persistencespb.VersionedTaskQueueUserData,
+) {
+	if m.chasmClient == nil || m.config.WriteUserDataToChasm == nil || !m.config.WriteUserDataToChasm() ||
+		userData.GetData() == nil {
+		return
+	}
+	_, err := m.chasmClient.UpsertTaskQueueUserData(ctx, &tquserdatapb.UpsertTaskQueueUserDataRequest{
+		NamespaceId:   m.partition.NamespaceId(),
+		TaskQueue:     m.partition.TaskQueue().Name(),
+		BusinessId:    tquserdata.BusinessID(m.partition.TaskQueue().Name()),
+		UserData:      proto.Clone(userData.GetData()).(*persistencespb.TaskQueueUserData),
+		LegacyVersion: userData.GetVersion(),
+	})
+	if err != nil {
+		m.logger.Error("failed to mirror task queue user data to CHASM", tag.Error(err), tag.UserDataVersion(userData.GetVersion()))
+		return
+	}
 }
 
 func (m *userDataManagerImpl) HandleGetUserDataRequest(

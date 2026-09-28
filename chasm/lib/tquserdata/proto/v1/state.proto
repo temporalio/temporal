@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.tquserdata.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapb";
+
+message UserDataState {
+  // Orders snapshots mirrored from the legacy task_queue_user_data table.
+  int64 legacy_version = 1;
+  bool closed = 2;
+}

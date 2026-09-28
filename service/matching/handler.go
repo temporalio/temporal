@@ -10,6 +10,7 @@ import (
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/headers"
@@ -58,6 +59,7 @@ type (
 		FairTaskManager               persistence.FairTaskManager
 		HistoryClient                 resource.HistoryClient
 		MatchingRawClient             resource.MatchingRawClient
+		TaskQueueUserDataChasmClient  tquserdatapb.TaskQueueUserDataServiceClient
 		WorkerDeploymentClient        workerdeployment.Client
 		HostInfoProvider              membership.HostInfoProvider
 		MatchingServiceResolver       membership.ServiceResolver
@@ -119,6 +121,7 @@ func NewHandler(
 			params.Serializer,
 			params.TaskHookFactories,
 			params.PartitionScalerFactory,
+			params.TaskQueueUserDataChasmClient,
 		),
 		namespaceRegistry: params.NamespaceRegistry,
 		workersRegistry:   params.WorkersRegistry,

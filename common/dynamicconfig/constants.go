@@ -1444,6 +1444,11 @@ This can help reduce effects of task queue movement.`,
 		5*time.Minute,
 		`MatchingGetUserDataRefresh is how often the user data owner refreshes data from persistence.`,
 	)
+	MatchingTaskQueueUserDataWriteToChasm = NewNamespaceBoolSetting(
+		"matching.taskQueueUserData.writeToChasm",
+		false,
+		`Mirror root task queue user data from the legacy table to CHASM.`,
+	)
 	MatchingEphemeralDataUpdateInterval = NewTaskQueueDurationSetting(
 		"matching.ephemeralDataUpdateInterval",
 		5*time.Second,

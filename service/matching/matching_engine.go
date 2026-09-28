@@ -31,6 +31,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb/v1"
 	"go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -149,6 +150,7 @@ type (
 		fairTaskManager               persistence.FairTaskManager
 		historyClient                 resource.HistoryClient
 		matchingRawClient             resource.MatchingRawClient
+		taskQueueUserDataChasmClient  tquserdatapb.TaskQueueUserDataServiceClient
 		workerDeploymentClient        workerdeployment.Client
 		tokenSerializer               *tasktoken.Serializer
 		historySerializer             serialization.Serializer
@@ -287,27 +289,29 @@ func NewEngine(
 	historySerializer serialization.Serializer,
 	taskHookFactories []hooks.TaskHookFactory,
 	partitionScalerFactory PartitionScalerFactory,
+	taskQueueUserDataChasmClient tquserdatapb.TaskQueueUserDataServiceClient,
 ) Engine {
 	scopedMetricsHandler := metricsHandler.WithTags(metrics.OperationTag(metrics.MatchingEngineScope))
 	e := &matchingEngineImpl{
-		status:                 common.DaemonStatusInitialized,
-		taskManager:            taskManager,
-		fairTaskManager:        fairTaskManager,
-		historyClient:          historyClient,
-		matchingRawClient:      matchingRawClient,
-		tokenSerializer:        tasktoken.NewSerializer(),
-		workerDeploymentClient: workerDeploymentClient,
-		historySerializer:      historySerializer,
-		logger:                 log.With(logger, tag.ComponentMatchingEngine),
-		throttledLogger:        log.With(throttledLogger, tag.ComponentMatchingEngine),
-		namespaceRegistry:      namespaceRegistry,
-		hostInfoProvider:       hostInfoProvider,
-		serviceResolver:        resolver,
-		membershipChangedCh:    make(chan *membership.ChangedEvent, 1), // allow one signal to be buffered while we're working
-		clusterMeta:            clusterMeta,
-		timeSource:             clock.NewRealTimeSource(), // No need to mock this at the moment
-		visibilityManager:      visibilityManager,
-		nexusEndpointClient:    newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager),
+		status:                       common.DaemonStatusInitialized,
+		taskManager:                  taskManager,
+		fairTaskManager:              fairTaskManager,
+		historyClient:                historyClient,
+		matchingRawClient:            matchingRawClient,
+		taskQueueUserDataChasmClient: taskQueueUserDataChasmClient,
+		tokenSerializer:              tasktoken.NewSerializer(),
+		workerDeploymentClient:       workerDeploymentClient,
+		historySerializer:            historySerializer,
+		logger:                       log.With(logger, tag.ComponentMatchingEngine),
+		throttledLogger:              log.With(throttledLogger, tag.ComponentMatchingEngine),
+		namespaceRegistry:            namespaceRegistry,
+		hostInfoProvider:             hostInfoProvider,
+		serviceResolver:              resolver,
+		membershipChangedCh:          make(chan *membership.ChangedEvent, 1), // allow one signal to be buffered while we're working
+		clusterMeta:                  clusterMeta,
+		timeSource:                   clock.NewRealTimeSource(), // No need to mock this at the moment
+		visibilityManager:            visibilityManager,
+		nexusEndpointClient:          newEndpointClient(config.NexusEndpointsRefreshInterval, nexusEndpointManager),
 		// nexusEndpointsOwnershipLostCh initialized below
 		saProvider:       saProvider,
 		saMapperProvider: saMapperProvider,
@@ -511,6 +515,7 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		tqConfig,
 		logger,
 		e.namespaceRegistry,
+		e.taskQueueUserDataChasmClient,
 	)
 	newPM, err = newTaskQueuePartitionManager(
 		e,
