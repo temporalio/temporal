@@ -262,15 +262,15 @@ func loadRunData(dir string) (map[string]float64, error) {
 			}
 			artifactDir := strings.SplitN(relative, string(filepath.Separator), 2)[0]
 			artifact, recognized := github.ParseArtifactName(artifactDir)
-			recognized = recognized && artifact.Prefix == "junit-xml"
+			recognized = recognized && artifact.Type == "junit-xml"
 			found = append(found, junitFile{
 				path:       path,
-				artifact:   artifact.Suffix,
+				artifact:   artifact.NameSuffix,
 				attempt:    artifact.RunAttempt,
 				recognized: recognized,
 			})
 			if recognized {
-				latestAttempts[artifact.Suffix] = max(latestAttempts[artifact.Suffix], artifact.RunAttempt)
+				latestAttempts[artifact.NameSuffix] = max(latestAttempts[artifact.NameSuffix], artifact.RunAttempt)
 			}
 		}
 		return nil
