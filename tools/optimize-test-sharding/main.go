@@ -179,7 +179,9 @@ func downloadJUnitArtifact(ctx context.Context, artifact github.Artifact, runDir
 	if err != nil {
 		return err
 	}
-	if _, err := junit.ExtractReportsFromZip(zipPath, artifactDir); err != nil {
+	if _, err := github.ExtractArtifactFiles(zipPath, artifactDir, func(name string) bool {
+		return strings.EqualFold(filepath.Ext(name), ".xml")
+	}); err != nil {
 		return fmt.Errorf("extracting artifact %q: %w", artifact.Name, err)
 	}
 	return nil
