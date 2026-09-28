@@ -138,7 +138,7 @@ func (s *batchCommandTestSuite) TestAdminBatchStart() {
 		s.Equal("target-ns", request.GetNamespace())
 		s.Equal("WorkflowType='MyWorkflow'", request.GetVisibilityQuery())
 		s.Equal("cleanup", request.GetReason())
-		s.Equal("my-job:target-ns", request.GetJobId())
+		s.Equal("target-ns:my-job", request.GetJobId())
 		s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, request.GetDelegationOperation().GetBatchType())
 		s.Contains(s.output.String(), "DANGER: destructive delegated batch operation")
 		s.Contains(s.output.String(), "User namespace: \"target-ns\"")
