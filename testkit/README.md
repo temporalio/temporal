@@ -1,10 +1,10 @@
-# github.com/temporalio/temporal/tools/testing
+# github.com/temporalio/temporal/testkit
 
 Test utilities that don't depend on the Temporal server, published as a separate Go module so that
 other repositories can use them without depending on `go.temporal.io/server`.
 
 ```sh
-go get github.com/temporalio/temporal/tools/testing@<sha>
+go get github.com/temporalio/temporal/testkit@<sha>
 ```
 
 ## Rules
@@ -23,6 +23,6 @@ The server's `go.mod` requires a published version of this module. That version 
 consumers of the server resolve, so after changing the API here:
 
 1. Merge the change to this module.
-2. Bump the `github.com/temporalio/temporal/tools/testing` requirement in the root `go.mod` to the new
+2. Bump the `github.com/temporalio/temporal/testkit` requirement in the root `go.mod` to the new
    pseudo-version.
 3. Only then use the new API from server code.

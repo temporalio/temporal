@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/temporalio/temporal/tools/testing/freeport"
+	"github.com/temporalio/temporal/testkit/freeport"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/authorization"

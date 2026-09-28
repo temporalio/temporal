@@ -1,4 +1,4 @@
-module github.com/temporalio/temporal/tools/testing
+module github.com/temporalio/temporal/testkit
 
 go 1.27.0
 
