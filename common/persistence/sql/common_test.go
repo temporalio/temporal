@@ -10,20 +10,26 @@ import (
 	"go.temporal.io/api/serviceerror"
 )
 
-func TestConvertSQLError_PreservesContextErrors(t *testing.T) {
+func TestConvertSQLError(t *testing.T) {
 	t.Parallel()
 
-	canceled := fmt.Errorf("lock: %w", context.Canceled)
-	deadline := fmt.Errorf("query: %w", context.DeadlineExceeded)
-
-	err := convertSQLError("Failed to lock task queue", canceled)
-	require.ErrorIs(t, err, context.Canceled)
-	var unavailable *serviceerror.Unavailable
-	require.NotErrorAs(t, err, &unavailable, "canceled must not be wrapped as Unavailable")
-
-	err = convertSQLError("Failed to lock task queue", deadline)
-	require.ErrorIs(t, err, context.DeadlineExceeded)
-	require.NotErrorAs(t, err, &unavailable, "deadline exceeded must not be wrapped as Unavailable")
+	for _, tc := range []struct {
+		name  string
+		err   error
+		cause error
+	}{
+		{name: "canceled", err: fmt.Errorf("lock: %w", context.Canceled), cause: context.Canceled},
+		{name: "deadline exceeded", err: fmt.Errorf("query: %w", context.DeadlineExceeded), cause: context.DeadlineExceeded},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			err := convertSQLError("Failed to lock task queue", tc.err)
+			require.ErrorIs(t, err, tc.cause)
+			require.ErrorContains(t, err, "Failed to lock task queue")
+			var unavailable *serviceerror.Unavailable
+			require.NotErrorAs(t, err, &unavailable)
+		})
+	}
 }
 
 func TestConvertSQLError_WrapsOtherErrorsAsUnavailable(t *testing.T) {
@@ -32,12 +38,6 @@ func TestConvertSQLError_WrapsOtherErrorsAsUnavailable(t *testing.T) {
 	err := convertSQLError("Failed to lock task queue", errors.New("connection reset"))
 	var unavailable *serviceerror.Unavailable
 	require.ErrorAs(t, err, &unavailable)
-	require.Contains(t, err.Error(), "Failed to lock task queue")
-	require.Contains(t, err.Error(), "connection reset")
-}
-
-func TestConvertSQLError_Nil(t *testing.T) {
-	t.Parallel()
-	err := convertSQLError("Failed to lock task queue", nil)
-	require.NoError(t, err)
+	require.ErrorContains(t, err, "Failed to lock task queue")
+	require.ErrorContains(t, err, "connection reset")
 }

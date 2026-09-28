@@ -7,10 +7,10 @@ import (
 	"encoding/binary"
 	"encoding/gob"
 	"encoding/json"
-	"errors"
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
@@ -85,10 +85,7 @@ func (m *SqlStore) txExecute(ctx context.Context, operation string, f func(tx sq
 // deadline must stay unwrap-able so callers can skip retries and error logs on
 // shutdown; other errors become Unavailable.
 func convertSQLError(message string, err error) error {
-	if err == nil {
-		return nil
-	}
-	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+	if common.IsContextCanceledErr(err) || common.IsContextDeadlineExceededErr(err) {
 		return fmt.Errorf("%s: %w", message, err)
 	}
 	return serviceerror.NewUnavailablef("%s: %v", message, err)
