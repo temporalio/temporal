@@ -694,7 +694,7 @@ func TestGrantEagerActivityDispatch(t *testing.T) {
 		Priority:  priority,
 	}
 
-	tests := []struct {
+	testCases := []struct {
 		name     string
 		response *matchingservice.GrantEagerDispatchResponse
 		err      error
@@ -724,7 +724,7 @@ func TestGrantEagerActivityDispatch(t *testing.T) {
 		},
 	}
 
-	for _, test := range tests {
+	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 

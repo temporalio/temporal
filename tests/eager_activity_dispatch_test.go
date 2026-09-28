@@ -7,8 +7,9 @@ import (
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	workflowservice "go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
@@ -71,8 +72,8 @@ func TestEagerActivityFallsBackWhenBacklogExists(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, response.GetActivityTasks())
 
-	require.Eventually(t, func() bool {
-		response, err := env.FrontendClient().DescribeTaskQueue(env.Context(), &workflowservice.DescribeTaskQueueRequest{
+	await.RequireTruef(t, func() bool {
+		response, err := env.FrontendClient().DescribeTaskQueue(t.Context(), &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     env.Namespace().String(),
 			TaskQueue:     tvBacklogged.TaskQueue(),
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
@@ -105,7 +106,7 @@ func TestEagerActivityFallsBackWhenBacklogExists(t *testing.T) {
 
 func startEagerActivityTestWorkflow(t *testing.T, env *testcore.TestEnv, tv *testvars.TestVars) {
 	t.Helper()
-	_, err := env.FrontendClient().StartWorkflowExecution(env.Context(), &workflowservice.StartWorkflowExecutionRequest{
+	_, err := env.FrontendClient().StartWorkflowExecution(t.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                tv.RequestID(),
 		Namespace:                env.Namespace().String(),
 		WorkflowId:               tv.WorkflowID(),

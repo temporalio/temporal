@@ -585,10 +585,10 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 
 func (handler *workflowTaskCompletedHandler) eagerActivityDispatchAllowed(
 	ctx context.Context,
-	namespace string,
+	namespaceName string,
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
 ) bool {
-	return !handler.config.EnableEagerActivityDispatchCheck(namespace) ||
+	return !handler.config.EnableEagerActivityDispatchCheck(namespaceName) ||
 		handler.grantEagerActivityDispatch(ctx, attr)
 }
 

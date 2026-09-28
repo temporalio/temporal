@@ -9,8 +9,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	workflowservicepb "go.temporal.io/api/workflowservice/v1"
-	matchingservicespb "go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -27,7 +27,7 @@ const (
 )
 
 type testClientCache struct {
-	client      matchingservicespb.MatchingServiceClient
+	client      matchingservice.MatchingServiceClient
 	lookupKey   string
 	lookupIndex int
 	lookupCalls int
@@ -111,18 +111,18 @@ func TestDoGrantEagerDispatch_LoadBalancedRoot(t *testing.T) {
 	cache := &testClientCache{client: serviceClient}
 	loadBalancer := &testLoadBalancer{writePartition: selectedPartition}
 	client := newTestClient(cache, loadBalancer)
-	request := &matchingservicespb.GrantEagerDispatchRequest{
+	request := &matchingservice.GrantEagerDispatchRequest{
 		NamespaceId: testNamespaceID,
 		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 			TaskQueue:     testTaskQueueName,
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 		},
-		Items: []*matchingservicespb.GrantEagerDispatchRequest_Item{{Count: 1}},
+		Items: []*matchingservice.GrantEagerDispatchRequest_Item{{Count: 1}},
 	}
-	response := &matchingservicespb.GrantEagerDispatchResponse{}
+	response := &matchingservice.GrantEagerDispatchResponse{}
 
 	serviceClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, outgoing *matchingservicespb.GrantEagerDispatchRequest, _ ...grpc.CallOption) (*matchingservicespb.GrantEagerDispatchResponse, error) {
+		func(_ context.Context, outgoing *matchingservice.GrantEagerDispatchRequest, _ ...grpc.CallOption) (*matchingservice.GrantEagerDispatchResponse, error) {
 			require.Equal(t, int32(3), outgoing.GetTaskQueuePartition().GetNormalPartitionId())
 			require.Same(t, request.GetItems()[0], outgoing.GetItems()[0])
 			return response, nil
@@ -152,7 +152,7 @@ func TestDoGrantEagerDispatch_DirectPartition(t *testing.T) {
 	cache := &testClientCache{client: serviceClient}
 	loadBalancer := &testLoadBalancer{}
 	client := newTestClient(cache, loadBalancer)
-	request := &matchingservicespb.GrantEagerDispatchRequest{
+	request := &matchingservice.GrantEagerDispatchRequest{
 		NamespaceId: testNamespaceID,
 		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
 			TaskQueue:     testTaskQueueName,
@@ -162,7 +162,7 @@ func TestDoGrantEagerDispatch_DirectPartition(t *testing.T) {
 			},
 		},
 	}
-	response := &matchingservicespb.GrantEagerDispatchResponse{}
+	response := &matchingservice.GrantEagerDispatchResponse{}
 
 	serviceClient.EXPECT().GrantEagerDispatch(gomock.Any(), request).Return(response, nil)
 
@@ -188,14 +188,14 @@ func TestDoAddWorkflowTask_LoadBalancedRoot(t *testing.T) {
 	cache := &testClientCache{client: serviceClient}
 	loadBalancer := &testLoadBalancer{writePartition: selectedPartition, writeEstimate: 17}
 	client := newTestClient(cache, loadBalancer)
-	request := &matchingservicespb.AddWorkflowTaskRequest{
+	request := &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: testNamespaceID,
 		TaskQueue:   &taskqueuepb.TaskQueue{Name: testTaskQueueName},
 	}
-	response := &matchingservicespb.AddWorkflowTaskResponse{}
+	response := &matchingservice.AddWorkflowTaskResponse{}
 
 	serviceClient.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, outgoing *matchingservicespb.AddWorkflowTaskRequest, _ ...grpc.CallOption) (*matchingservicespb.AddWorkflowTaskResponse, error) {
+		func(ctx context.Context, outgoing *matchingservice.AddWorkflowTaskRequest, _ ...grpc.CallOption) (*matchingservice.AddWorkflowTaskResponse, error) {
 			require.Equal(t, selectedPartition.RpcName(), outgoing.GetTaskQueue().GetName())
 			outgoingMetadata, ok := metadata.FromOutgoingContext(ctx)
 			require.True(t, ok)
@@ -234,17 +234,17 @@ func TestDoPollWorkflowTaskQueue_LoadBalancedRoot(t *testing.T) {
 		balancer:    partitionBalancer,
 	}}
 	client := newTestClient(cache, loadBalancer)
-	request := &matchingservicespb.PollWorkflowTaskQueueRequest{
+	request := &matchingservice.PollWorkflowTaskQueueRequest{
 		NamespaceId: testNamespaceID,
-		PollRequest: &workflowservicepb.PollWorkflowTaskQueueRequest{
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: &taskqueuepb.TaskQueue{Name: testTaskQueueName},
 			Identity:  "worker",
 		},
 	}
-	response := &matchingservicespb.PollWorkflowTaskQueueResponse{}
+	response := &matchingservice.PollWorkflowTaskQueueResponse{}
 
 	serviceClient.EXPECT().PollWorkflowTaskQueue(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ context.Context, outgoing *matchingservicespb.PollWorkflowTaskQueueRequest, _ ...grpc.CallOption) (*matchingservicespb.PollWorkflowTaskQueueResponse, error) {
+		func(_ context.Context, outgoing *matchingservice.PollWorkflowTaskQueueRequest, _ ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
 			require.Equal(t, selectedPartition.RpcName(), outgoing.GetPollRequest().GetTaskQueue().GetName())
 			require.Equal(t, "worker", outgoing.GetPollRequest().GetIdentity())
 			return response, nil
@@ -299,7 +299,7 @@ func TestGrantEagerDispatch_RejectsUnsupportedPartition(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			client := &clientImpl{}
-			_, err := client.GrantEagerDispatch(context.Background(), &matchingservicespb.GrantEagerDispatchRequest{
+			_, err := client.GrantEagerDispatch(context.Background(), &matchingservice.GrantEagerDispatchRequest{
 				NamespaceId:        testNamespaceID,
 				TaskQueuePartition: test.partition(),
 			})
