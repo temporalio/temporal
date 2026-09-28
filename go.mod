@@ -52,6 +52,7 @@ require (
 	github.com/temporalio/ringpop-go v0.1.0
 	github.com/temporalio/sqlparser v0.1.0
 	github.com/temporalio/tchannel-go v1.22.1
+	github.com/temporalio/temporal/tools/testing v0.0.0-20260928223736-b9fc09cb4c3a
 	github.com/tidwall/btree v1.8.1
 	github.com/uber-go/tally/v4 v4.1.17
 	github.com/urfave/cli v1.22.17
