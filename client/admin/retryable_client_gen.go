@@ -56,6 +56,21 @@ func (c *retryableClient) AddTasks(
 	return resp, err
 }
 
+func (c *retryableClient) ApplyNamespaceMutation(
+	ctx context.Context,
+	request *adminservice.ApplyNamespaceMutationRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ApplyNamespaceMutationResponse, error) {
+	var resp *adminservice.ApplyNamespaceMutationResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ApplyNamespaceMutation(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CancelDLQJob(
 	ctx context.Context,
 	request *adminservice.CancelDLQJobRequest,
