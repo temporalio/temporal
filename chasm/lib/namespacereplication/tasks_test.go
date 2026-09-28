@@ -20,7 +20,6 @@ import (
 	serverclient "go.temporal.io/server/client"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	historytasks "go.temporal.io/server/service/history/tasks"
@@ -200,15 +199,13 @@ func newNsreplTestEnvWithOptions(t *testing.T, opts ...chasmtest.EngineOption) *
 	localHandler := &applyLocalTaskHandler{
 		metadataManager: metadataMgr,
 		currentCluster:  "cellA",
-		metricsHandler:  metrics.NoopMetricsHandler,
 		logger:          logger,
 	}
 	peerHandler := &applyPeerTaskHandler{
 		// Exercise the real default transport (admin RPC) over the mocked client
 		// bean, so the handler + default applier are covered together.
-		peerApplier:    newAdminClientPeerApplier(clientBean),
-		metricsHandler: metrics.NoopMetricsHandler,
-		logger:         logger,
+		peerApplier: newAdminClientPeerApplier(clientBean),
+		logger:      logger,
 	}
 	backoffHandler := newApplyPeerBackoffTaskHandler()
 
@@ -578,6 +575,28 @@ func TestApplyLocalTask_Execute_UpdateRetryRequiresExpectedNotificationVersion(t
 	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_FAILED, component.GetLocalApply().GetOutcome())
 }
 
+func TestLocalMutationIsCurrentPersistedStateRequiresGlobalNamespace(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	mutation := env.mutationUpdate("cellB")
+
+	env.metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+		ID: mutation.GetNamespaceDetail().GetInfo().GetId(),
+	}).Return(&persistence.GetNamespaceResponse{
+		Namespace:           persistenceNormalizedDetail(mutation.GetNamespaceDetail()),
+		IsGlobalNamespace:   false,
+		NotificationVersion: mutation.GetExpectedVersion(),
+	}, nil)
+
+	isCurrentPersistedState, err := env.localHandler.localMutationIsCurrentPersistedState(
+		env.engineCtx,
+		mutation.GetOperation(),
+		mutation.GetNamespaceDetail(),
+		mutation.GetExpectedVersion(),
+	)
+	require.NoError(t, err)
+	require.False(t, isCurrentPersistedState)
+}
+
 func TestApplyLocalTask_Execute_ReconcileReadFailureKeepsPending(t *testing.T) {
 	env := newNsreplTestEnv(t)
 	ref := env.start(env.mutationUpdate("cellB"), nil)
@@ -891,9 +910,8 @@ func TestApplyPeerTask_Execute_UsesInjectedApplier(t *testing.T) {
 
 	applier := &mockPeerApplier{result: PeerApplyResultNoOpStale}
 	handler := &applyPeerTaskHandler{
-		peerApplier:    applier,
-		metricsHandler: metrics.NoopMetricsHandler,
-		logger:         log.NewTestLogger(),
+		peerApplier: applier,
+		logger:      log.NewTestLogger(),
 	}
 
 	require.NoError(t, handler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyPeerTask{TargetCell: "cellB", Attempt: 0}))
@@ -919,9 +937,8 @@ func TestApplyPeerTask_Execute_ClonesDetailForInjectedApplier(t *testing.T) {
 		},
 	}
 	handler := &applyPeerTaskHandler{
-		peerApplier:    applier,
-		metricsHandler: metrics.NoopMetricsHandler,
-		logger:         log.NewTestLogger(),
+		peerApplier: applier,
+		logger:      log.NewTestLogger(),
 	}
 
 	require.NoError(t, handler.Execute(
@@ -941,9 +958,8 @@ func TestApplyPeerTask_Execute_UnknownInjectedResultRetries(t *testing.T) {
 
 	applier := &mockPeerApplier{result: PeerApplyResult(999)}
 	handler := &applyPeerTaskHandler{
-		peerApplier:    applier,
-		metricsHandler: metrics.NoopMetricsHandler,
-		logger:         log.NewTestLogger(),
+		peerApplier: applier,
+		logger:      log.NewTestLogger(),
 	}
 
 	require.NoError(t, handler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyPeerTask{TargetCell: "cellB", Attempt: 0}))

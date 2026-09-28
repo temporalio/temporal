@@ -65,7 +65,7 @@ func TestTransitionPeerRetryUsesPureTimerTask(t *testing.T) {
 	require.NoError(t, TransitionPeerRetry.Apply(c, ctx, EventPeerRetry{
 		Time:       now,
 		TargetCell: "cellB",
-		Attempt:    1,
+		Attempts:   1,
 		Err:        errors.New("down"),
 	}))
 	require.Len(t, ctx.Tasks, 1)
