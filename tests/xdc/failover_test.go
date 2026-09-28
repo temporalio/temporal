@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -27,11 +28,16 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/await"
@@ -141,6 +147,80 @@ func (s *FunctionalClustersTestSuite) TestNamespaceFailover_ReplicationStateIsNo
 			)
 		}
 	}, replicationWaitTime, replicationCheckInterval)
+}
+
+// TestNamespaceFailover_BacklogMetricsFollowNamespaceState guards against loaded task queue partitions
+// continuing to report backlog under the namespace_state tag they were loaded with after a failover.
+func (s *FunctionalClustersTestSuite) TestNamespaceFailover_BacklogMetricsFollowNamespaceState() {
+	for _, c := range s.clusters {
+		c.OverrideDynamicConfig(s.T(), dynamicconfig.MatchingBacklogMetricsEmitInterval, 500*time.Millisecond)
+		// A single partition keeps the reload below deterministic: with child partitions, a child can still
+		// be loaded when the root force-loads it and only unload afterwards, leaving nothing to reload it.
+		c.OverrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueReadPartitions, 1)
+		c.OverrideDynamicConfig(s.T(), dynamicconfig.MatchingNumTaskqueueWritePartitions, 1)
+	}
+	namespace := s.createGlobalNamespace()
+	tq := testcore.RandomizeStr("backlog-metrics-failover-tq")
+	captureHandler, ok := s.clusters[0].Host().GetMetricsHandler().(*metricstest.CaptureHandler)
+	s.True(ok, "cluster metrics handler does not support capture")
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	const numWorkflows = 5
+	for i := range numWorkflows {
+		_, err := s.clusters[0].FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:    uuid.NewString(),
+			Namespace:    namespace,
+			WorkflowId:   fmt.Sprintf("backlog-metrics-failover-%d", i),
+			WorkflowType: &commonpb.WorkflowType{Name: "backlog-metrics-failover-type"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		s.NoError(err)
+	}
+
+	// Sums the latest backlog gauge value of each partition, per namespace_state tag.
+	backlogByState := func() map[string]float64 {
+		latest := make(map[[2]string]float64)
+		for _, r := range capture.SnapshotMetric(metrics.ApproximateBacklogCount.Name()) {
+			if r.Tags["namespace"] != namespace || r.Tags["taskqueue"] != tq || r.Tags["task_type"] != "Workflow" {
+				continue
+			}
+			//revive:disable-next-line:unchecked-type-assertion
+			latest[[2]string{r.Tags["namespace_state"], r.Tags["partition"]}] = r.Value.(float64)
+		}
+		totals := make(map[string]float64)
+		for key, value := range latest {
+			totals[key[0]] += value
+		}
+		return totals
+	}
+
+	await.Require(testcore.NewContext(), s.T(), func(t *await.T) {
+		require.InDelta(t, numWorkflows, backlogByState()[metrics.ActiveNamespaceStateTagValue], 0.1)
+	}, 30*time.Second, 500*time.Millisecond)
+
+	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
+
+	nsResp, err := s.clusters[0].FrontendClient().DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: namespace,
+	})
+	s.NoError(err)
+	await.Require(testcore.NewContext(), s.T(), func(t *await.T) {
+		// Unloaded partitions only reload on their next access. Load it directly, since the frontend
+		// forwards requests for a passive namespace to the active cluster.
+		_, err := s.clusters[0].MatchingClient().ForceLoadTaskQueuePartition(t.Context(), &matchingservice.ForceLoadTaskQueuePartitionRequest{
+			NamespaceId: nsResp.GetNamespaceInfo().GetId(),
+			TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+				TaskQueue:     tq,
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
+			},
+		})
+		require.NoError(t, err)
+		totals := backlogByState()
+		require.InDelta(t, 0, totals[metrics.ActiveNamespaceStateTagValue], 0.1)
+		require.InDelta(t, numWorkflows, totals[metrics.PassiveNamespaceStateTagValue], 0.1)
+	}, 30*time.Second, 500*time.Millisecond)
 }
 
 func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
