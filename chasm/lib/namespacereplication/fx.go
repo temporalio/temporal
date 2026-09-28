@@ -21,6 +21,7 @@ var Module = fx.Module(
 	fx.Provide(newAdminClientPeerApplier),
 	fx.Provide(newApplyPeerTaskHandler),
 	fx.Provide(newApplyPeerBackoffTaskHandler),
+	fx.Provide(newHandler),
 	fx.Provide(newLibrary),
 	fx.Invoke(register),
 )

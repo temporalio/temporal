@@ -24,6 +24,7 @@ import (
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	historytasks "go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -153,6 +154,7 @@ func TestApplyPeerTaskHandler_Validate(t *testing.T) {
 		want    bool
 	}{
 		{"committed + pending + matching attempt -> run", newComp(namespacereplicationpb.COMPONENT_STATUS_RUNNING, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, pending), 0, true},
+		{"shadow-skipped + pending + matching attempt -> run", newComp(namespacereplicationpb.COMPONENT_STATUS_RUNNING, namespacereplicationpb.LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW, pending), 0, true},
 		{"local not committed -> drop", newComp(namespacereplicationpb.COMPONENT_STATUS_RUNNING, namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING, pending), 0, false},
 		{"component not running -> drop", newComp(namespacereplicationpb.COMPONENT_STATUS_FAILED, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, pending), 0, false},
 		{"peer missing -> drop", newComp(namespacereplicationpb.COMPONENT_STATUS_RUNNING, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, nil), 0, false},
@@ -336,6 +338,19 @@ func TestApplyLocalTask_Execute_UpdateCommitSchedulesPeers(t *testing.T) {
 	for _, cell := range []string{"cellB", "cellC"} {
 		require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, c.GetPeerApply()[cell].GetOutcome(), cell)
 	}
+}
+
+func TestApplyLocalTask_Execute_ShadowSkipsMetadataWrite(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	mutation := env.mutationUpdate("cellB")
+	mutation.Shadow = true
+	ref := env.start(mutation, nil)
+
+	require.NoError(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{}))
+
+	component := env.read(ref)
+	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW, component.GetLocalApply().GetOutcome())
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, component.GetPeerApply()["cellB"].GetOutcome())
 }
 
 func TestApplyLocalTask_Execute_ClonesDetailForMetadataManager(t *testing.T) {
@@ -677,6 +692,44 @@ func TestApplyPeerTask_Execute_Applied(t *testing.T) {
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_COMPLETED, c.GetStatus())
 }
 
+func TestApplyPeerTask_Execute_ShadowOutcome(t *testing.T) {
+	for _, tc := range []struct {
+		name        string
+		wireOutcome adminservice.ApplyNamespaceMutationResponse_Outcome
+		wantOutcome namespacereplicationpb.PeerApplyOutcome
+	}{
+		{
+			name:        "match",
+			wireOutcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH,
+			wantOutcome: namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MATCH,
+		},
+		{
+			name:        "mismatch",
+			wireOutcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH,
+			wantOutcome: namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MISMATCH,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newNsreplTestEnv(t)
+			mutation := env.mutationUpdate("cellB")
+			mutation.Shadow = true
+			ref := env.start(mutation, func(c *NamespaceMutationComponent) {
+				c.LocalApply = &namespacereplicationpb.LocalApplyStatus{Outcome: namespacereplicationpb.LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW}
+			})
+
+			env.clientBean.EXPECT().GetRemoteAdminClient("cellB").Return(env.adminClient, nil)
+			env.adminClient.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).Return(
+				&adminservice.ApplyNamespaceMutationResponse{Outcome: tc.wireOutcome}, nil)
+
+			require.NoError(t, env.peerHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{Destination: "cellB"}, &namespacereplicationpb.ApplyPeerTask{TargetCell: "cellB", Attempt: 0}))
+
+			c := env.read(ref)
+			require.Equal(t, tc.wantOutcome, c.GetPeerApply()["cellB"].GetOutcome())
+			require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_COMPLETED, c.GetStatus())
+		})
+	}
+}
+
 func TestApplyPeerTask_Execute_NoOpStale(t *testing.T) {
 	env := newNsreplTestEnv(t)
 	ref := env.startCommitted("cellB")
@@ -805,8 +858,121 @@ func TestApplyPeerTask_Execute_RetryBudgetBoundary(t *testing.T) {
 // PeerApplier transport seam.
 // -----------------------------------------------------------------------------
 
-// TestAdminClientPeerApplier_Apply covers the default (admin RPC) transport in
-// isolation: outcome mapping and error propagation for the handler to classify.
+func TestPeerApplyResultFromOutcome(t *testing.T) {
+	tests := []struct {
+		name    string
+		shadow  bool
+		outcome adminservice.ApplyNamespaceMutationResponse_Outcome
+		want    PeerApplyResult
+		wantErr bool
+	}{
+		{
+			name:    "shadow match",
+			shadow:  true,
+			outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH,
+			want:    PeerApplyResultShadowMatch,
+		},
+		{
+			name:    "shadow mismatch",
+			shadow:  true,
+			outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH,
+			want:    PeerApplyResultShadowMismatch,
+		},
+		{
+			name:    "shadow rejects applied",
+			shadow:  true,
+			outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED,
+			wantErr: true,
+		},
+		{
+			name:    "shadow rejects created",
+			shadow:  true,
+			outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED,
+			wantErr: true,
+		},
+		{
+			name:    "shadow rejects duplicate",
+			shadow:  true,
+			outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_DUPLICATE,
+			wantErr: true,
+		},
+		{
+			name:    "shadow rejects no-op stale",
+			shadow:  true,
+			outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE,
+			wantErr: true,
+		},
+		{
+			name:    "shadow rejects not admitted",
+			shadow:  true,
+			outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_NOT_ADMITTED,
+			wantErr: true,
+		},
+		{
+			name:    "shadow rejects unspecified",
+			shadow:  true,
+			outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_UNSPECIFIED,
+			wantErr: true,
+		},
+		{
+			name:    "authoritative applied",
+			outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED,
+			want:    PeerApplyResultApplied,
+		},
+		{
+			name:    "authoritative created",
+			outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED,
+			want:    PeerApplyResultApplied,
+		},
+		{
+			name:    "authoritative duplicate",
+			outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_DUPLICATE,
+			want:    PeerApplyResultApplied,
+		},
+		{
+			name:    "authoritative no-op stale",
+			outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE,
+			want:    PeerApplyResultNoOpStale,
+		},
+		{
+			name:    "authoritative not admitted",
+			outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_NOT_ADMITTED,
+			want:    PeerApplyResultNotAdmitted,
+		},
+		{
+			name:    "authoritative rejects shadow match",
+			outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH,
+			wantErr: true,
+		},
+		{
+			name:    "authoritative rejects shadow mismatch",
+			outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH,
+			wantErr: true,
+		},
+		{
+			name:    "authoritative rejects unspecified",
+			outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_UNSPECIFIED,
+			wantErr: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			result, err := peerApplyResultFromOutcome("cellB", test.shadow, test.outcome)
+			if test.wantErr {
+				require.Error(t, err)
+				require.Equal(t, PeerApplyResultUnspecified, result)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, test.want, result)
+		})
+	}
+}
+
+// TestAdminClientPeerApplier_Apply covers request construction, local
+// preprocessing, and transport error propagation. Outcome mapping is tested
+// exhaustively by TestPeerApplyResultFromOutcome.
 func TestAdminClientPeerApplier_Apply(t *testing.T) {
 	detail := testDetail()
 	newApplier := func(t *testing.T) (*serverclient.MockBean, *adminservicemock.MockAdminServiceClient, PeerApplier) {
@@ -816,70 +982,51 @@ func TestAdminClientPeerApplier_Apply(t *testing.T) {
 		return bean, admin, newAdminClientPeerApplier(bean)
 	}
 
-	t.Run("applied outcome", func(t *testing.T) {
+	t.Run("sends shadow request with fingerprint", func(t *testing.T) {
 		bean, admin, applier := newApplier(t)
 		bean.EXPECT().GetRemoteAdminClient("cellB").Return(admin, nil)
-		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).Return(
-			&adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED}, nil)
-		res, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail)
+		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(_ context.Context, request *adminservice.ApplyNamespaceMutationRequest, _ ...grpc.CallOption) (*adminservice.ApplyNamespaceMutationResponse, error) {
+				require.True(t, request.GetShadow())
+				require.NotEmpty(t, request.GetFingerprint())
+				return &adminservice.ApplyNamespaceMutationResponse{
+					Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH,
+				}, nil
+			})
+
+		result, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail, true)
 		require.NoError(t, err)
-		require.Equal(t, PeerApplyResultApplied, res)
+		require.Equal(t, PeerApplyResultShadowMatch, result)
 	})
-	t.Run("created maps to applied", func(t *testing.T) {
-		bean, admin, applier := newApplier(t)
-		bean.EXPECT().GetRemoteAdminClient("cellB").Return(admin, nil)
-		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).Return(
-			&adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED}, nil)
-		res, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_CREATE, detail)
-		require.NoError(t, err)
-		require.Equal(t, PeerApplyResultApplied, res)
-	})
-	t.Run("no-op-stale outcome", func(t *testing.T) {
-		bean, admin, applier := newApplier(t)
-		bean.EXPECT().GetRemoteAdminClient("cellB").Return(admin, nil)
-		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).Return(
-			&adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE}, nil)
-		res, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail)
-		require.NoError(t, err)
-		require.Equal(t, PeerApplyResultNoOpStale, res)
-	})
-	t.Run("duplicate maps to applied", func(t *testing.T) {
-		bean, admin, applier := newApplier(t)
-		bean.EXPECT().GetRemoteAdminClient("cellB").Return(admin, nil)
-		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).Return(
-			&adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_DUPLICATE}, nil)
-		res, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_CREATE, detail)
-		require.NoError(t, err)
-		require.Equal(t, PeerApplyResultApplied, res)
-	})
-	t.Run("not-admitted is its own terminal result, not applied", func(t *testing.T) {
-		bean, admin, applier := newApplier(t)
-		bean.EXPECT().GetRemoteAdminClient("cellB").Return(admin, nil)
-		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).Return(
-			&adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_NOT_ADMITTED}, nil)
-		res, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail)
-		require.NoError(t, err)
-		require.Equal(t, PeerApplyResultNotAdmitted, res)
-	})
-	t.Run("unspecified/unknown outcome surfaced as error, not phantom applied", func(t *testing.T) {
-		bean, admin, applier := newApplier(t)
-		bean.EXPECT().GetRemoteAdminClient("cellB").Return(admin, nil)
-		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).Return(
-			&adminservice.ApplyNamespaceMutationResponse{Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_UNSPECIFIED}, nil)
-		_, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail)
-		require.Error(t, err)
+	t.Run("fingerprint error is terminal and does not resolve remote client", func(t *testing.T) {
+		_, _, applier := newApplier(t)
+		invalidDetail := proto.Clone(detail).(*persistencespb.NamespaceDetail)
+		invalidDetail.Info.Name = string([]byte{0xff})
+
+		result, err := applier.Apply(
+			context.Background(),
+			"cellB",
+			enumsspb.NAMESPACE_OPERATION_UPDATE,
+			invalidDetail,
+			true,
+		)
+		var invalidArgument *serviceerror.InvalidArgument
+		require.ErrorAs(t, err, &invalidArgument)
+		require.Equal(t, PeerApplyResultUnspecified, result)
+		require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL, classifyPeerErr(err))
+		require.False(t, isPeerDestinationDown(err))
 	})
 	t.Run("rpc error propagates", func(t *testing.T) {
 		bean, admin, applier := newApplier(t)
 		bean.EXPECT().GetRemoteAdminClient("cellB").Return(admin, nil)
 		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewUnavailable("down"))
-		_, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail)
+		_, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail, true)
 		require.Error(t, err)
 	})
 	t.Run("dial error propagates", func(t *testing.T) {
 		bean, _, applier := newApplier(t)
 		bean.EXPECT().GetRemoteAdminClient("cellB").Return(nil, serviceerror.NewUnavailable("no route"))
-		_, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail)
+		_, err := applier.Apply(context.Background(), "cellB", enumsspb.NAMESPACE_OPERATION_UPDATE, detail, true)
 		require.Error(t, err)
 	})
 }
@@ -893,7 +1040,7 @@ type mockPeerApplier struct {
 	mutateDetail func(*persistencespb.NamespaceDetail)
 }
 
-func (m *mockPeerApplier) Apply(_ context.Context, targetCell string, _ enumsspb.NamespaceOperation, detail *persistencespb.NamespaceDetail) (PeerApplyResult, error) {
+func (m *mockPeerApplier) Apply(_ context.Context, targetCell string, _ enumsspb.NamespaceOperation, detail *persistencespb.NamespaceDetail, _ bool) (PeerApplyResult, error) {
 	m.cells = append(m.cells, targetCell)
 	if m.mutateDetail != nil {
 		m.mutateDetail(detail)
