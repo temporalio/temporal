@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
@@ -31,7 +30,6 @@ type applyLocalTaskHandlerOptions struct {
 
 	MetadataManager persistence.MetadataManager
 	ClusterMetadata cluster.Metadata
-	MetricsHandler  metrics.Handler
 	Logger          log.Logger
 }
 
@@ -40,20 +38,13 @@ type applyLocalTaskHandler struct {
 
 	metadataManager persistence.MetadataManager
 	currentCluster  string
-	// TODO(namespacereplication): emit metrics for the local apply path. Suggested shape:
-	//   - nsrepl_apply_attempts_total{outcome="local"}     counter
-	//   - nsrepl_apply_failures_total{outcome="local"}     counter
-	//   - nsrepl_apply_duration_seconds{outcome="local"}   histogram
-	// metricsHandler is wired through fx but not yet used.
-	metricsHandler metrics.Handler
-	logger         log.Logger
+	logger          log.Logger
 }
 
 func newApplyLocalTaskHandler(opts applyLocalTaskHandlerOptions) *applyLocalTaskHandler {
 	return &applyLocalTaskHandler{
 		metadataManager: opts.MetadataManager,
 		currentCluster:  opts.ClusterMetadata.GetCurrentClusterName(),
-		metricsHandler:  opts.MetricsHandler,
 		logger:          opts.Logger,
 	}
 }
@@ -90,7 +81,6 @@ func (h *applyLocalTaskHandler) Execute(
 		Operation   namespacereplicationpb.NamespaceOperation
 		Detail      *persistencespb.NamespaceDetail
 		ExpectedVer int64
-		IsGlobal    bool
 		Shadow      bool
 	}
 	loaded, err := chasm.ReadComponent(
@@ -103,11 +93,6 @@ func (h *applyLocalTaskHandler) Execute(
 				Detail:      common.CloneProto(m.GetNamespaceDetail()),
 				ExpectedVer: m.GetExpectedVersion(),
 				Shadow:      m.GetShadow(),
-				// Anything that reaches the CHASM transport is a global namespace —
-				// the frontend's replication gate ensures local-only
-				// namespaces never get here. Hardcoded rather than read from the
-				// mutation to avoid drift.
-				IsGlobal: true,
 			}, nil
 		},
 		nil,
@@ -127,12 +112,12 @@ func (h *applyLocalTaskHandler) Execute(
 	case namespacereplicationpb.NAMESPACE_OPERATION_CREATE:
 		_, applyErr = h.metadataManager.CreateNamespace(ctx, &persistence.CreateNamespaceRequest{
 			Namespace:         loaded.Detail,
-			IsGlobalNamespace: loaded.IsGlobal,
+			IsGlobalNamespace: true,
 		})
 	case namespacereplicationpb.NAMESPACE_OPERATION_UPDATE:
 		applyErr = h.metadataManager.UpdateNamespace(ctx, &persistence.UpdateNamespaceRequest{
 			Namespace:           loaded.Detail,
-			IsGlobalNamespace:   loaded.IsGlobal,
+			IsGlobalNamespace:   true,
 			NotificationVersion: loaded.ExpectedVer,
 		})
 	default:
@@ -145,19 +130,18 @@ func (h *applyLocalTaskHandler) Execute(
 	}
 	if applyErr != nil {
 		if shouldReconcileLocalApply(loaded.Operation, applyErr) {
-			alreadyApplied, reconcileErr := h.localMutationAlreadyApplied(
+			isCurrentPersistedState, reconcileErr := h.localMutationIsCurrentPersistedState(
 				ctx,
 				loaded.Operation,
 				loaded.Detail,
 				loaded.ExpectedVer,
-				loaded.IsGlobal,
 			)
 			if reconcileErr != nil {
 				// Keep the component pending until the durable task can determine
 				// whether the metadata write committed.
 				return fmt.Errorf("reconcile local namespace mutation after %v: %w", applyErr, reconcileErr)
 			}
-			if alreadyApplied {
+			if isCurrentPersistedState {
 				h.logger.Info(
 					"namespacereplication recovered committed local apply",
 					tag.WorkflowNamespaceID(loaded.Detail.GetInfo().GetId()),
@@ -235,12 +219,15 @@ func shouldReconcileLocalApply(
 		(operation == namespacereplicationpb.NAMESPACE_OPERATION_CREATE && errType == localFailureAlreadyExists)
 }
 
-func (h *applyLocalTaskHandler) localMutationAlreadyApplied(
+// localMutationIsCurrentPersistedState reports whether the current namespace
+// row can be attributed to this mutation. It deliberately returns false when a
+// later same-namespace update has superseded this mutation, even if the complete
+// namespace snapshots happen to match.
+func (h *applyLocalTaskHandler) localMutationIsCurrentPersistedState(
 	ctx context.Context,
 	operation namespacereplicationpb.NamespaceOperation,
 	detail *persistencespb.NamespaceDetail,
 	expectedVersion int64,
-	isGlobal bool,
 ) (bool, error) {
 	namespaceID := detail.GetInfo().GetId()
 	if namespaceID == "" {
@@ -255,10 +242,16 @@ func (h *applyLocalTaskHandler) localMutationAlreadyApplied(
 		return false, err
 	}
 
-	if response.IsGlobalNamespace != isGlobal ||
+	// The CHASM transport is global-only. IsGlobalNamespace is persisted outside
+	// NamespaceDetail, so it must be checked separately from the proto comparison.
+	if !response.IsGlobalNamespace ||
 		!namespaceDetailsEqualAfterPersistenceRead(detail, response.Namespace, h.currentCluster) {
 		return false, nil
 	}
+	// An UPDATE stores the CAS version it consumed on the namespace row before
+	// advancing the cell-global metadata version. Exact equality therefore ties
+	// the observed row to this mutation. A larger row version means a later
+	// same-namespace mutation has superseded it, even if the snapshots match.
 	if operation == namespacereplicationpb.NAMESPACE_OPERATION_UPDATE &&
 		response.NotificationVersion != expectedVersion {
 		return false, nil
@@ -280,17 +273,15 @@ func namespaceDetailsEqualAfterPersistenceRead(
 		return expected == actual
 	}
 
-	expectedCopy := &persistencespb.NamespaceDetail{}
-	proto.Merge(expectedCopy, expected)
-	expected = expectedCopy
-	actualCopy := &persistencespb.NamespaceDetail{}
-	proto.Merge(actualCopy, actual)
-	actual = actualCopy
+	expected = common.CloneProto(expected)
+	actual = common.CloneProto(actual)
 	normalizeNamespaceDetailAfterPersistenceRead(expected, currentCluster)
 	normalizeNamespaceDetailAfterPersistenceRead(actual, currentCluster)
 	return proto.Equal(expected, actual)
 }
 
+// Keep this in sync with the defaults materialized by
+// persistence.ConvertInternalGetNamespaceResponse.
 func normalizeNamespaceDetailAfterPersistenceRead(
 	detail *persistencespb.NamespaceDetail,
 	currentCluster string,
@@ -438,9 +429,8 @@ func classifyLocalErr(err error) string {
 type applyPeerTaskHandlerOptions struct {
 	fx.In
 
-	PeerApplier    PeerApplier
-	MetricsHandler metrics.Handler
-	Logger         log.Logger
+	PeerApplier PeerApplier
+	Logger      log.Logger
 }
 
 type applyPeerTaskHandler struct {
@@ -451,24 +441,16 @@ type applyPeerTaskHandler struct {
 	// handler owns the surrounding policy (retry, error classification, per-peer
 	// state, completion) independent of which transport is injected.
 	peerApplier PeerApplier
-	// TODO(namespacereplication): emit metrics for the peer apply path. Suggested shape:
-	//   - nsrepl_apply_attempts_total{target_cell, source_cell, outcome}    counter
-	//   - nsrepl_apply_failures_total{target_cell, source_cell}             counter
-	//   - nsrepl_apply_duration_seconds{target_cell, source_cell}           histogram
-	// metricsHandler is wired through fx but not yet used.
-	//
 	// Retriable peer failures are retried with capped exponential backoff over a
 	// 7-day budget by recordPeerOutcome + TransitionPeerRetry (see statemachine.go),
 	// not by CHASM's default task retry.
-	metricsHandler metrics.Handler
-	logger         log.Logger
+	logger log.Logger
 }
 
 func newApplyPeerTaskHandler(opts applyPeerTaskHandlerOptions) *applyPeerTaskHandler {
 	return &applyPeerTaskHandler{
-		peerApplier:    opts.PeerApplier,
-		metricsHandler: opts.MetricsHandler,
-		logger:         opts.Logger,
+		peerApplier: opts.PeerApplier,
+		logger:      opts.Logger,
 	}
 }
 
@@ -546,6 +528,10 @@ func (h *applyPeerTaskHandler) Execute(
 			applyErr,
 		)
 		if isPeerDestinationDown(applyErr) {
+			// Signal the outbound queue's per-destination circuit breaker without
+			// introducing a second retry path. The queue unwraps this and returns
+			// saveErr: nil acknowledges this task after the CHASM backoff was saved;
+			// a non-nil saveErr retries the task because its state was not saved.
 			return queueserrors.NewDestinationDownError(applyErr.Error(), saveErr)
 		}
 		return saveErr
@@ -612,7 +598,7 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 		ref,
 		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (chasm.NoValue, error) {
 			now := mctx.Now(c)
-			nextAttempt := task.GetAttempt() + 1
+			completedAttempts := task.GetAttempt() + 1
 
 			// Retriable failure: keep the peer PENDING and reschedule with capped
 			// exponential backoff until the total retry budget (measured from the
@@ -630,7 +616,7 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 					return nil, TransitionPeerRetry.Apply(c, mctx, EventPeerRetry{
 						Time:       now,
 						TargetCell: task.GetTargetCell(),
-						Attempt:    nextAttempt,
+						Attempts:   completedAttempts,
 						Err:        execErr,
 					})
 				}
@@ -642,7 +628,7 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 				Time:       now,
 				TargetCell: task.GetTargetCell(),
 				Outcome:    outcome,
-				Attempts:   nextAttempt,
+				Attempts:   completedAttempts,
 				Err:        execErr,
 			}); err != nil {
 				return nil, err
