@@ -911,9 +911,8 @@ func (a *activities) processTaskWithRetries(
 
 		if !isExpectedActivityBatchTaskFailure(err, batchOperation.BatchType) {
 			metrics.BatcherProcessorFailures.With(metricsHandler).Record(1)
+			logger.Error("Failed to process batch operation task", tag.Error(err))
 		}
-
-		logger.Error("Failed to process batch operation task", tag.Error(err))
 
 		if isRetryableTaskError(err, batchOperation) && task.attempts <= int(batchOperation.AttemptsOnRetryableError) && !isDone(ctx) {
 			task.attempts++
