@@ -122,7 +122,7 @@ func processArtifactJob(ctx context.Context, job ArtifactJob, totalArtifacts int
 	}
 
 	// Extract XML files
-	xmlFiles, err := extractArtifactZip(zipPath, job.TempDir)
+	xmlFiles, err := junit.ExtractZip(zipPath, job.TempDir)
 	if err != nil {
 		result.Error = fmt.Errorf("failed to extract artifact %d: %w", job.Artifact.ID, err)
 		fmt.Printf("  Warning: %v\n", result.Error)
