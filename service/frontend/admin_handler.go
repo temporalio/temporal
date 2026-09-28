@@ -1489,8 +1489,8 @@ func createDelegatedBatchRequest(
 		JobId:           adminRequest.GetJobId(),
 		Reason:          adminRequest.GetReason(),
 		VisibilityQuery: adminRequest.GetVisibilityQuery(),
-		Executions:      adminRequest.GetExecutions(),
 	}
+	targetExecutionType := enumspb.EXECUTION_TYPE_WORKFLOW
 	// Only delegate destructive operations whose fields can be derived from the admin envelope.
 	switch batchType {
 	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW:
@@ -1504,6 +1504,7 @@ func createDelegatedBatchRequest(
 				Reason:   adminRequest.GetReason(),
 			},
 		}
+		targetExecutionType = enumspb.EXECUTION_TYPE_ACTIVITY
 	case enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW:
 		delegatedBatchRequest.Operation = &workflowservice.StartBatchOperationRequest_DeletionOperation{
 			DeletionOperation: &batchpb.BatchOperationDeletion{Identity: adminRequest.GetIdentity()},
@@ -1512,9 +1513,17 @@ func createDelegatedBatchRequest(
 		delegatedBatchRequest.Operation = &workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation{
 			DeleteActivitiesOperation: &batchpb.BatchOperationDeleteActivities{},
 		}
+		targetExecutionType = enumspb.EXECUTION_TYPE_ACTIVITY
 	default:
 		return nil, serviceerror.NewInvalidArgumentf(
 			"batch operation type %v cannot be delegated to the admin API", batchType)
+	}
+	for _, execution := range adminRequest.GetExecutions() {
+		delegatedBatchRequest.TargetExecutions = append(delegatedBatchRequest.TargetExecutions, &commonpb.Execution{
+			Type:       targetExecutionType,
+			BusinessId: execution.GetWorkflowId(),
+			RunId:      execution.GetRunId(),
+		})
 	}
 	return delegatedBatchRequest, nil
 }
