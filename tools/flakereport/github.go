@@ -58,20 +58,20 @@ func fetchRunArtifacts(ctx context.Context, repo string, runID int64) ([]github.
 // Functional tests: junit-xml--{run_id}--{job_id}--{run_attempt}--{matrix_name}--{display_name}--functional-test
 // Unit/integration:  junit-xml--{run_id}--{job_id}--{run_attempt}--unit-test
 // Returns: runID, jobID, matrixName ("unknown" for fields that are absent or unparseable)
-func parseArtifactName(artifactName string) (string, string, string) {
+func parseArtifactName(artifactName string) (runID, jobID, matrixName string) {
 	parsed, _ := github.ParseArtifactName(artifactName)
 	if parsed.Type == "" {
 		return "unknown", "unknown", "unknown"
 	}
 
-	jobID := parsed.JobID
+	jobID = parsed.JobID
 	if jobID == "" {
 		jobID = "unknown"
 	}
 
 	// Functional test artifacts carry a matrix name (DB config) at the start of the suffix.
 	// Unit/integration artifacts have only the test type (e.g. "unit-test") in the suffix.
-	matrixName := "unknown"
+	matrixName = "unknown"
 	suffix := strings.Split(parsed.NameSuffix, "--")
 	if len(suffix) >= 2 {
 		matrixName = suffix[0]
