@@ -3,7 +3,6 @@ package github
 import (
 	"archive/zip"
 	"context"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -106,45 +105,4 @@ func TestDownloadArtifactRetriesIncompleteResponses(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, entries, 1)
 	require.Equal(t, filepath.Base(zipPath), entries[0].Name())
-}
-
-func TestDownloadRunArtifactsFiltersByPattern(t *testing.T) {
-	var downloaded []string
-	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
-		switch request.URL.Path {
-		case "/repos/temporalio/temporal/actions/runs/123/artifacts":
-			_, _ = writer.Write([]byte(`{"artifacts":[
-				{"id":1,"name":"junit-xml--one"},
-				{"id":2,"name":"junit-xml--expired","expired":true},
-				{"id":3,"name":"debug-logs--one"}
-			]}`))
-		case "/repos/temporalio/temporal/actions/artifacts/1/zip":
-			downloaded = append(downloaded, request.URL.Path)
-			_, _ = writer.Write([]byte("artifact"))
-		default:
-			http.Error(writer, fmt.Sprintf("unexpected request %s", request.URL.Path), http.StatusNotFound)
-		}
-	}))
-	defer server.Close()
-
-	restoreAPIClient(t, server.URL, server.Client())
-	t.Setenv("GH_TOKEN", "test-token")
-	outputDir := t.TempDir()
-
-	downloads, err := DownloadRunArtifacts(
-		context.Background(),
-		"temporalio/temporal",
-		123,
-		"junit-*",
-		outputDir,
-	)
-	require.NoError(t, err)
-	require.Equal(t, []string{"/repos/temporalio/temporal/actions/artifacts/1/zip"}, downloaded)
-	require.Equal(t, []DownloadedArtifact{{
-		Artifact: Artifact{ID: 1, Name: "junit-xml--one"},
-		ZipPath:  filepath.Join(outputDir, "artifact-1.zip"),
-	}}, downloads)
-	content, err := os.ReadFile(downloads[0].ZipPath)
-	require.NoError(t, err)
-	require.Equal(t, "artifact", string(content))
 }

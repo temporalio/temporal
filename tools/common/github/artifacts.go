@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -27,12 +26,6 @@ type Artifact struct {
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"created_at"`
 	Expired   bool      `json:"expired"`
-}
-
-// DownloadedArtifact is an artifact and the local path to its downloaded zip file.
-type DownloadedArtifact struct {
-	Artifact Artifact
-	ZipPath  string
 }
 
 // ArtifactName is an artifact name using the repository's
@@ -96,43 +89,6 @@ func ListRunArtifacts(ctx context.Context, repo string, githubActionsRunID int64
 	}
 
 	return artifacts, nil
-}
-
-// DownloadRunArtifacts downloads the non-expired artifacts in a workflow run whose names match pattern.
-func DownloadRunArtifacts(
-	ctx context.Context,
-	repo string,
-	githubActionsRunID int64,
-	pattern string,
-	outputDir string,
-) ([]DownloadedArtifact, error) {
-	if _, err := path.Match(pattern, ""); err != nil {
-		return nil, fmt.Errorf("invalid artifact name pattern %q: %w", pattern, err)
-	}
-	artifacts, err := ListRunArtifacts(ctx, repo, githubActionsRunID)
-	if err != nil {
-		return nil, err
-	}
-	if err := os.MkdirAll(outputDir, 0o755); err != nil {
-		return nil, fmt.Errorf("failed to create artifact download directory: %w", err)
-	}
-
-	var downloads []DownloadedArtifact
-	for _, artifact := range artifacts {
-		matched, err := path.Match(pattern, artifact.Name)
-		if err != nil {
-			return nil, fmt.Errorf("matching artifact name %q: %w", artifact.Name, err)
-		}
-		if artifact.Expired || !matched {
-			continue
-		}
-		zipPath, err := DownloadArtifact(ctx, repo, artifact.ID, outputDir)
-		if err != nil {
-			return nil, err
-		}
-		downloads = append(downloads, DownloadedArtifact{Artifact: artifact, ZipPath: zipPath})
-	}
-	return downloads, nil
 }
 
 // DownloadArtifact downloads a single GitHub Actions artifact zip file.
