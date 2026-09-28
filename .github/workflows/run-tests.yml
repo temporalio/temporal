@@ -17,6 +17,8 @@ concurrency: # Auto-cancel existing runs in the PR when a new commit is pushed
   cancel-in-progress: true
 
 env:
+  # cloudx-io/setup-go does not support go-version-file; keep this in sync with go.mod.
+  GO_VERSION: "1.27.0"
   # For pull_request: use the head of the PR branch (not the merge branch which is the default!)
   # For push: use the pushed commit.
   COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
@@ -200,45 +202,8 @@ jobs:
           echo "job_matrix=$MATRIX" >> "$GITHUB_OUTPUT"
           echo "Generated $(jq length <<< "$MATRIX") jobs"
 
-  pre-build:
-    name: Pre-build for cache
-    runs-on: ubuntu-24.04-arm # NOTE: avoid using larger runners as they have high provisioning time (up to several minutes)
-    steps:
-      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          ref: ${{ env.COMMIT }}
-
-      - name: Prepare Go
-        id: prepare-go
-        uses: ./.github/actions/prepare-go
-
-      - run: make pre-build-functional-test-coverage
-
-      - name: Save Go dependencies
-        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        if: ${{ steps.prepare-go.outputs.dependency_cache_hit != 'true' }}
-        with:
-          path: ${{ steps.prepare-go.outputs.dependency_cache_path }}
-          key: ${{ steps.prepare-go.outputs.dependency_cache_primary_key }}
-
-      - name: Save Go tools
-        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        if: ${{ steps.prepare-go.outputs.tools_cache_hit != 'true' }}
-        with:
-          path: ${{ steps.prepare-go.outputs.tools_cache_path }}
-          key: ${{ steps.prepare-go.outputs.tools_cache_primary_key }}
-
-      - name: Save Go build outputs
-        uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
-        if: ${{ steps.prepare-go.outputs.build_cache_hit != 'true' }}
-        with:
-          path: ${{ steps.prepare-go.outputs.build_cache_path }}
-          key: ${{ steps.prepare-go.outputs.build_cache_primary_key }}
-
   misc-checks:
     name: Misc checks
-    needs: [pre-build]
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -248,8 +213,20 @@ jobs:
           # buf-breaking tries to compare HEAD against merge base so we need to be able to find it
           fetch-depth: 100
 
-      - name: Prepare Go
-        uses: ./.github/actions/prepare-go
+      - name: Set up Go
+        uses: cloudx-io/setup-go@8b45cf394acf101459db0d47aa9735a4fe5eea63 # v1.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-key-prefix: misc-checks
+
+      - name: Download Go modules
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+        with:
+          max_attempts: 3
+          retry_wait_seconds: 10
+          timeout_minutes: 5
+          shell: bash
+          command: go mod download
 
       - uses: jdx/mise-action@dba19683ed58901619b14f395a24841710cb4925 # v4.1.0
         with:
@@ -264,7 +241,6 @@ jobs:
 
   unit-test:
     name: Unit test
-    needs: [pre-build]
     runs-on: ubuntu-24.04-arm
     env:
       TEST_TIMEOUT: 15m
@@ -275,8 +251,20 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - name: Prepare Go
-        uses: ./.github/actions/prepare-go
+      - name: Set up Go
+        uses: cloudx-io/setup-go@8b45cf394acf101459db0d47aa9735a4fe5eea63 # v1.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-key-prefix: unit-test
+
+      - name: Download Go modules
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+        with:
+          max_attempts: 3
+          retry_wait_seconds: 10
+          timeout_minutes: 5
+          shell: bash
+          command: go mod download
 
       - name: Run unit tests
         timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
@@ -295,7 +283,6 @@ jobs:
 
   leak-test:
     name: Resource leak test
-    needs: [pre-build]
     runs-on: ubuntu-24.04-arm
     env:
       GITHUB_TIMEOUT: 10
@@ -307,8 +294,20 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           ref: ${{ env.COMMIT }}
 
-      - name: Prepare Go
-        uses: ./.github/actions/prepare-go
+      - name: Set up Go
+        uses: cloudx-io/setup-go@8b45cf394acf101459db0d47aa9735a4fe5eea63 # v1.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-key-prefix: leak-test
+
+      - name: Download Go modules
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+        with:
+          max_attempts: 3
+          retry_wait_seconds: 10
+          timeout_minutes: 5
+          shell: bash
+          command: go mod download
 
       - name: Run resource leak test
         timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
@@ -324,7 +323,6 @@ jobs:
 
   integration-test:
     name: Integration test
-    needs: [pre-build]
     runs-on: ubuntu-24.04-arm
     env:
       CONTAINERS: cassandra mysql postgresql elasticsearch
@@ -342,8 +340,20 @@ jobs:
           compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: ${{ env.CONTAINERS }}
 
-      - name: Prepare Go
-        uses: ./.github/actions/prepare-go
+      - name: Set up Go
+        uses: cloudx-io/setup-go@8b45cf394acf101459db0d47aa9735a4fe5eea63 # v1.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-key-prefix: integration-test
+
+      - name: Download Go modules
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+        with:
+          max_attempts: 3
+          retry_wait_seconds: 10
+          timeout_minutes: 5
+          shell: bash
+          command: go mod download
 
       - name: Wait for containerized dependencies to be healthy
         uses: ./.github/actions/docker-compose-healthy
@@ -378,7 +388,7 @@ jobs:
   functional-test:
     # Display name shown in the UI. The job-id lookup uses this exact value.
     name: Functional test (${{ matrix.name }}, ${{ matrix.display_name }})
-    needs: [pre-build, test-setup]
+    needs: [test-setup]
     strategy:
       fail-fast: false
       matrix:
@@ -403,8 +413,20 @@ jobs:
           services: ${{ env.CONTAINERS }}
           cache: true
 
-      - name: Prepare Go
-        uses: ./.github/actions/prepare-go
+      - name: Set up Go
+        uses: cloudx-io/setup-go@8b45cf394acf101459db0d47aa9735a4fe5eea63 # v1.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-key-prefix: functional-test-${{ matrix.name }}-${{ matrix.display_name }}
+
+      - name: Download Go modules
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+        with:
+          max_attempts: 3
+          retry_wait_seconds: 10
+          timeout_minutes: 5
+          shell: bash
+          command: go mod download
 
       - name: ${{ matrix.display_name == 'smoke' && 'ℹ️ Smoke test' || 'ℹ️ Full test' }}
         run: echo "::notice::${{ matrix.display_name == 'smoke' && 'This is a smoke test. Add the test-all-dbs label to run all tests on all DBs.' || needs.test-setup.outputs.full_test_reason }}"
@@ -452,7 +474,6 @@ jobs:
 
   mixed-brain-test:
     name: Mixed brain test
-    needs: [pre-build]
     runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
@@ -466,8 +487,20 @@ jobs:
           compose_file: ${{ env.DOCKER_COMPOSE_FILE }}
           services: postgresql
 
-      - name: Prepare Go
-        uses: ./.github/actions/prepare-go
+      - name: Set up Go
+        uses: cloudx-io/setup-go@8b45cf394acf101459db0d47aa9735a4fe5eea63 # v1.0.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache-key-prefix: mixed-brain-test
+
+      - name: Download Go modules
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
+        with:
+          max_attempts: 3
+          retry_wait_seconds: 10
+          timeout_minutes: 5
+          shell: bash
+          command: go mod download
 
       - name: Install PostgreSQL schema
         run: make install-schema-postgresql12
