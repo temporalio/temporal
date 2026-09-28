@@ -30,9 +30,8 @@ builds:
     env:
       - CGO_ENABLED=0
     tags:
-      # Removes unused GCS gRPC modules, cutting about 11 MiB from Linux release binaries.
       # The server uses storage.NewClient (REST), not storage.NewGRPCClient.
-      # Related issue: https://github.com/googleapis/google-cloud-go/issues/12343
+      # This build tag removes the unused GCS gRPC modules, reducing the size of release binary.
       - disable_grpc_modules
     goos:
       - linux
