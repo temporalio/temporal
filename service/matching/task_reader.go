@@ -184,9 +184,7 @@ Loop:
 		case <-updateAckTimer.C:
 			err := tr.persistAckBacklogCountLevel(ctx)
 			isConditionFailed := tr.backlogMgr.signalIfFatal(err)
-			// SQL wraps context cancel as Unavailable ("Failed to lock task queue"), so
-			// check ctx.Err() instead of errors.Is(err, context.Canceled).
-			if err != nil && !isConditionFailed && ctx.Err() == nil {
+			if err != nil && !isConditionFailed && !common.IsContextCanceledErr(err) {
 				tr.logger().Error("Persistent store operation failure",
 					tag.StoreOperationUpdateTaskQueue,
 					tag.Error(err))
