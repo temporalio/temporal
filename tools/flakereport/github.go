@@ -125,7 +125,7 @@ func extractArtifactZip(zipPath, outputDir string) ([]string, error) {
 // Returns: runID, jobID, matrixName ("unknown" for fields that are absent or unparseable)
 func parseArtifactName(artifactName string) (runID string, jobID string, matrixName string) {
 	parsed, _ := github.ParseArtifactName(artifactName)
-	if parsed.Prefix == "" {
+	if parsed.Type == "" {
 		return "unknown", "unknown", "unknown"
 	}
 
@@ -138,7 +138,7 @@ func parseArtifactName(artifactName string) (runID string, jobID string, matrixN
 
 	// Functional test artifacts carry a matrix name (DB config) at the start of the suffix.
 	// Unit/integration artifacts have only the test type (e.g. "unit-test") in the suffix.
-	suffix := strings.Split(parsed.Suffix, "--")
+	suffix := strings.Split(parsed.NameSuffix, "--")
 	if len(suffix) >= 2 {
 		matrixName = suffix[0]
 	} else {

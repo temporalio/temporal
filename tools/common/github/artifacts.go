@@ -22,13 +22,13 @@ type Artifact struct {
 }
 
 // ArtifactName is an artifact name using the repository's
-// prefix--run ID--job ID--run attempt--suffix convention.
+// type--run ID--job ID--run attempt--name suffix convention.
 type ArtifactName struct {
-	Prefix     string
+	Type       string
 	RunID      string
 	JobID      string
 	RunAttempt int
-	Suffix     string
+	NameSuffix string
 }
 
 // ParseArtifactName parses the repository's workflow artifact naming convention. When the name
@@ -39,14 +39,14 @@ func ParseArtifactName(name string) (ArtifactName, bool) {
 		return ArtifactName{}, false
 	}
 	parsed := ArtifactName{
-		Prefix: parts[0],
-		RunID:  parts[1],
-		JobID:  parts[2],
+		Type:  parts[0],
+		RunID: parts[1],
+		JobID: parts[2],
 	}
 	if len(parts) < 5 {
 		return parsed, false
 	}
-	parsed.Suffix = strings.Join(parts[4:], "--")
+	parsed.NameSuffix = strings.Join(parts[4:], "--")
 	runAttempt, err := strconv.Atoi(parts[3])
 	if err != nil || runAttempt < 1 {
 		return parsed, false
