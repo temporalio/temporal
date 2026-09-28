@@ -173,7 +173,7 @@ $(LOCALBIN):
 	@mkdir -p $(LOCALBIN)
 
 .PHONY: golangci-lint
-LINT_CODE_TARGETS ?= ./...
+LINT_CODE_TARGETS ?= ./... ./tools/testing/...
 GOLANGCI_LINT_BASE_REV ?= $(MAIN_BRANCH)
 GOLANGCI_LINT_FIX ?= true
 GOLANGCI_LINT_VERSION := v2.13.0
@@ -788,6 +788,7 @@ update-dashboards:
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
 	@go mod tidy
+	@cd tools/testing && go mod tidy
 
 update-dependencies:
 	@printf $(COLOR) "Update dependencies (minor versions only) ..."

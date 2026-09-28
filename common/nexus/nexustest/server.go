@@ -11,7 +11,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/common/testing/freeport"
+	"go.temporal.io/server/tools/testing/freeport"
 )
 
 func AllocListenAddress() string {

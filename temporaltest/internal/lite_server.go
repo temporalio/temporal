@@ -22,9 +22,9 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	sqliteplugin "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	"go.temporal.io/server/common/testing/freeport"
 	"go.temporal.io/server/schema/sqlite"
 	"go.temporal.io/server/temporal"
+	"go.temporal.io/server/tools/testing/freeport"
 	expmaps "golang.org/x/exp/maps"
 )
 

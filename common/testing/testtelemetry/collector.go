@@ -9,7 +9,7 @@ import (
 
 	ctrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	trace "go.opentelemetry.io/proto/otlp/trace/v1"
-	"go.temporal.io/server/common/testing/freeport"
+	"go.temporal.io/server/tools/testing/freeport"
 	"google.golang.org/grpc"
 )
 
