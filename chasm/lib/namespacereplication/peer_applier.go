@@ -81,14 +81,16 @@ func (a *adminClientPeerApplier) Apply(
 	detail *persistencespb.NamespaceDetail,
 	shadow bool,
 ) (PeerApplyResult, error) {
-	adminClient, err := a.clientBean.GetRemoteAdminClient(targetCell)
-	if err != nil {
-		return PeerApplyResultUnspecified, err
-	}
 	namespaceTask := nsreplication.NamespaceDetailToTaskAttributes(operation, detail)
 	fingerprint, err := nsreplication.NamespaceTaskFingerprint(namespaceTask)
 	if err != nil {
-		return 0, fmt.Errorf("fingerprint namespace mutation: %w", err)
+		return PeerApplyResultUnspecified, serviceerror.NewInvalidArgument(
+			fmt.Sprintf("fingerprint namespace mutation: %v", err),
+		)
+	}
+	adminClient, err := a.clientBean.GetRemoteAdminClient(targetCell)
+	if err != nil {
+		return PeerApplyResultUnspecified, err
 	}
 	resp, err := adminClient.ApplyNamespaceMutation(ctx, &adminservice.ApplyNamespaceMutationRequest{
 		NamespaceTask: namespaceTask,
@@ -98,42 +100,43 @@ func (a *adminClientPeerApplier) Apply(
 	if err != nil {
 		return PeerApplyResultUnspecified, err
 	}
+	return peerApplyResultFromOutcome(targetCell, shadow, resp.GetOutcome())
+}
+
+func peerApplyResultFromOutcome(
+	targetCell string,
+	shadow bool,
+	outcome adminservice.ApplyNamespaceMutationResponse_Outcome,
+) (PeerApplyResult, error) {
 	// Map the receiver's wire outcome to a transport-neutral result. Exhaustive on
 	// purpose: adding a wire outcome must force a decision here rather than being
-	// silently absorbed into Applied. Applied / Created / Duplicate all mean "the
-	// peer now holds our state"; a success response we can't classify is a protocol
-	// violation and is surfaced as an error (so the handler retries/logs it) rather
-	// than recorded as a phantom write.
-	switch resp.GetOutcome() {
+	// silently absorbed into Applied. Shadow requests accept only validation
+	// outcomes because they must not write receiver state.
+	if shadow {
+		switch outcome {
+		case adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH:
+			return PeerApplyResultShadowMatch, nil
+		case adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH:
+			return PeerApplyResultShadowMismatch, nil
+		default:
+			return PeerApplyResultUnspecified, unexpectedPeerOutcome(targetCell, shadow, outcome)
+		}
+	}
+
+	// Applied / Created / Duplicate all mean the peer now holds our state. A
+	// success response we can't classify is a protocol violation and is surfaced
+	// as an error rather than recorded as a phantom write.
+	switch outcome {
 	case adminservice.ApplyNamespaceMutationResponse_OUTCOME_APPLIED,
 		adminservice.ApplyNamespaceMutationResponse_OUTCOME_CREATED,
 		adminservice.ApplyNamespaceMutationResponse_OUTCOME_DUPLICATE:
-		if shadow {
-			return PeerApplyResultUnspecified, unexpectedPeerOutcome(targetCell, shadow, resp.GetOutcome())
-		}
 		return PeerApplyResultApplied, nil
-	case adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH:
-		if !shadow {
-			return PeerApplyResultUnspecified, unexpectedPeerOutcome(targetCell, shadow, resp.GetOutcome())
-		}
-		return PeerApplyResultShadowMatch, nil
-	case adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH:
-		if !shadow {
-			return PeerApplyResultUnspecified, unexpectedPeerOutcome(targetCell, shadow, resp.GetOutcome())
-		}
-		return PeerApplyResultShadowMismatch, nil
 	case adminservice.ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE:
-		if shadow {
-			return PeerApplyResultUnspecified, unexpectedPeerOutcome(targetCell, shadow, resp.GetOutcome())
-		}
 		return PeerApplyResultNoOpStale, nil
 	case adminservice.ApplyNamespaceMutationResponse_OUTCOME_NOT_ADMITTED:
-		if shadow {
-			return PeerApplyResultUnspecified, unexpectedPeerOutcome(targetCell, shadow, resp.GetOutcome())
-		}
 		return PeerApplyResultNotAdmitted, nil
 	default:
-		return PeerApplyResultUnspecified, unexpectedPeerOutcome(targetCell, shadow, resp.GetOutcome())
+		return PeerApplyResultUnspecified, unexpectedPeerOutcome(targetCell, shadow, outcome)
 	}
 }
 
