@@ -29,6 +29,8 @@ builds:
     binary: temporal-server
     env:
       - CGO_ENABLED=0
+    tags:
+      - disable_grpc_modules
     goos:
       - linux
       - darwin
