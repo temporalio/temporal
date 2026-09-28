@@ -69,18 +69,11 @@ func (s *activityParityTestSuite) TestNonRetryableErrorTypes() {
 			NonRetryableErrorTypes: []string{retrypolicy.TimeoutFailureTypePrefix + timeoutType(timeout).String()},
 		}
 
-		t.Run("WorkflowActivity", func(t *testing.T) {
+		driveTraceWFAAndSAA(t, env, cfg, trace, func(t *testing.T, a activityHandle) {
 			require.Equalf(t, activityTerminalOutcome{
 				status:     enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
 				retryState: enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
-			}, newWFADriver(t, env, cfg).driveTrace(t, trace).terminalOutcome(t),
-				"a %s timeout marked non-retryable must fail the activity terminally, not retry it", timeoutType(timeout))
-		})
-		t.Run("StandaloneActivity", func(t *testing.T) {
-			require.Equalf(t, activityTerminalOutcome{
-				status:     enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
-				retryState: enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
-			}, newSAADriver(t, env, cfg).driveTrace(t, trace).terminalOutcome(t),
+			}, a.terminalOutcome(t),
 				"a %s timeout marked non-retryable must fail the activity terminally, not retry it", timeoutType(timeout))
 		})
 	}
@@ -142,22 +135,14 @@ func (s *activityParityTestSuite) TestRetryableServerFailureIsRetried() {
 		model.Poll,
 		{Type: model.RespondFailedByIDType, Failure: &model.Failure{Type: model.ServerFailureType}},
 	}
-	// A second attempt is scheduled and backing off, rather than the activity going terminal.
-	expected := activityInfo{
-		RunState:                   enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
-		Attempt:                    2,
-		CurrentRetryInterval:       activityLongDuration,
-		NextAttemptScheduleTimeSet: true,
-	}
-
-	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-		t := s.T()
-		require.Equal(t, expected, newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t),
-			"a retryable ServerFailure must schedule another attempt, not fail terminally")
-	})
-	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
-		t := s.T()
-		require.Equal(t, expected, newSAADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t),
+	driveTraceWFAAndSAA(s.T(), env, cfg, trace, func(t *testing.T, a activityHandle) {
+		// A second attempt is scheduled and backing off, rather than the activity going terminal.
+		require.Equal(t, activityInfo{
+			RunState:                   enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
+			Attempt:                    2,
+			CurrentRetryInterval:       activityLongDuration,
+			NextAttemptScheduleTimeSet: true,
+		}, a.activityInfo(t),
 			"a retryable ServerFailure must schedule another attempt, not fail terminally")
 	})
 }
@@ -188,13 +173,8 @@ func (s *activityParityTestSuite) TestSyntheticFailuresHaveRetryParity() {
 				model.Poll,
 				{Type: model.RespondFailedByIDType, Failure: &model.Failure{Type: tc.failureType}},
 			}
-			s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-				t := s.T()
-				require.Equal(t, wantRetry, newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t))
-			})
-			s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
-				t := s.T()
-				require.Equal(t, wantRetry, newSAADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t))
+			driveTraceWFAAndSAA(s.T(), env, cfg, trace, func(t *testing.T, a activityHandle) {
+				require.Equal(t, wantRetry, a.activityInfo(t))
 			})
 		})
 	}
@@ -334,20 +314,13 @@ func (s *activityParityTestSuite) TestNilFailureIsRetryable() {
 	env := newActivityParityEnv(s.T())
 	cfg := activityConfig{MaxAttempts: 3, RetryInterval: activityLongDuration}
 	trace := []model.Event{model.Poll, {Type: model.RespondFailedType}}
-	want := activityInfo{
-		RunState:                   enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
-		Attempt:                    2,
-		CurrentRetryInterval:       activityLongDuration,
-		NextAttemptScheduleTimeSet: true,
-	}
-
-	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-		t := s.T()
-		require.Equal(t, want, newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t))
-	})
-	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
-		t := s.T()
-		require.Equal(t, want, newSAADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t))
+	driveTraceWFAAndSAA(s.T(), env, cfg, trace, func(t *testing.T, a activityHandle) {
+		require.Equal(t, activityInfo{
+			RunState:                   enumspb.PENDING_ACTIVITY_STATE_SCHEDULED,
+			Attempt:                    2,
+			CurrentRetryInterval:       activityLongDuration,
+			NextAttemptScheduleTimeSet: true,
+		}, a.activityInfo(t))
 	})
 }
 
@@ -376,11 +349,8 @@ func (s *activityParityTestSuite) TestCurrentRetryIntervalAndNextAttemptSchedule
 
 	// both drives a trace through both implementations, asserting each reports expected.
 	both := func(t *testing.T, cfg activityConfig, trace []model.Event, expected activityInfo) {
-		t.Run("WorkflowActivity", func(t *testing.T) {
-			require.Equal(t, expected, newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t))
-		})
-		t.Run("StandaloneActivity", func(t *testing.T) {
-			require.Equal(t, expected, newSAADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t))
+		driveTraceWFAAndSAA(t, env, cfg, trace, func(t *testing.T, a activityHandle) {
+			require.Equal(t, expected, a.activityInfo(t))
 		})
 	}
 
@@ -497,15 +467,9 @@ func (s *activityParityTestSuite) TestPauseRequestedAfterResetKeepPaused() {
 	trace := []model.Event{model.Poll, model.Pause, model.ResetKeepPaused}
 	cfg := activityConfig{MaxAttempts: 3, RetryInterval: activityLongDuration}
 
-	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-		t := s.T()
+	driveTraceWFAAndSAA(s.T(), env, cfg, trace, func(t *testing.T, a activityHandle) {
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED,
-			newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t).RunState)
-	})
-	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
-		t := s.T()
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED,
-			newSAADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t).RunState)
+			a.activityInfo(t).RunState)
 	})
 }
 
@@ -516,15 +480,10 @@ func (s *activityParityTestSuite) TestCancel() {
 	env := newActivityParityEnv(s.T())
 	trace := []model.Event{model.Poll, model.RequestCancel, model.RespondCanceled}
 	cfg := activityConfig{MaxAttempts: 1}
-	expected := activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED}
 
-	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-		t := s.T()
-		require.Equal(t, expected, newWFADriver(t, env, cfg).driveTrace(t, trace).terminalOutcome(t))
-	})
-	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
-		t := s.T()
-		require.Equal(t, expected, newSAADriver(t, env, cfg).driveTrace(t, trace).terminalOutcome(t))
+	driveTraceWFAAndSAA(s.T(), env, cfg, trace, func(t *testing.T, a activityHandle) {
+		require.Equal(t, activityTerminalOutcome{status: enumspb.ACTIVITY_EXECUTION_STATUS_CANCELED},
+			a.terminalOutcome(t))
 	})
 }
 
@@ -532,15 +491,8 @@ func (s *activityParityTestSuite) TestRespondCanceledWithoutRequest() {
 	env := newActivityParityEnv(s.T())
 	cfg := activityConfig{MaxAttempts: 1}
 
-	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-		t := s.T()
-		handle := newWFADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll})
-		assertActivityTaskNotCancelRequested(t, handle.rpc(t, model.RespondCanceled))
-	})
-	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
-		t := s.T()
-		handle := newSAADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll})
-		assertActivityTaskNotCancelRequested(t, handle.rpc(t, model.RespondCanceled))
+	driveTraceWFAAndSAA(s.T(), env, cfg, []model.Event{model.Poll}, func(t *testing.T, a activityHandle) {
+		assertActivityTaskNotCancelRequested(t, a.rpc(t, model.RespondCanceled))
 	})
 }
 
@@ -548,15 +500,8 @@ func (s *activityParityTestSuite) TestRespondCanceledByIDWithoutRequest() {
 	env := newActivityParityEnv(s.T())
 	cfg := activityConfig{MaxAttempts: 1}
 
-	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-		t := s.T()
-		handle := newWFADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll})
-		assertActivityTaskNotCancelRequested(t, handle.respondCanceledByID())
-	})
-	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
-		t := s.T()
-		handle := newSAADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll})
-		assertActivityTaskNotCancelRequested(t, handle.respondCanceledByID())
+	driveTraceWFAAndSAA(s.T(), env, cfg, []model.Event{model.Poll}, func(t *testing.T, a activityHandle) {
+		assertActivityTaskNotCancelRequested(t, a.respondCanceledByID())
 	})
 }
 
@@ -594,13 +539,13 @@ func (s *activityParityTestSuite) TestActivityCore() {
 	// answers that uniformly across Signal, Update, UpdateOptions, Terminate, Pause and Unpause, and
 	// consistency across execution types is what settles it.
 	t.Run("OperatorCommandAfterClose", func(t *testing.T) {
-		parityDriveOutlivingActivity(t, env, activityConfig{MaxAttempts: 1},
+		driveTraceWFAAndSAA(t, env, activityConfig{MaxAttempts: 1},
 			[]model.Event{model.Poll, model.Complete},
-			func(t *testing.T, a parityActivity) {
+			func(t *testing.T, a activityHandle) {
 				for _, e := range []model.Event{model.Pause, model.Unpause, model.Reset, model.UpdateOptions} {
 					a.driveEvent(t, e)
 				}
-			})
+			}, func(d *wfaDriver) { d.holdOpen = true })
 
 		// Terminate and RequestCancel are standalone-activity commands: a workflow activity has no
 		// terminate at all, and its cancellation is a workflow command rather than a call an operator
@@ -615,29 +560,36 @@ func (s *activityParityTestSuite) TestActivityCore() {
 	})
 }
 
-// parityActivity is what a parity test reads from a driven activity. Both drivers' handles satisfy
-// it, so a test states its claim once instead of once per implementation.
-type parityActivity interface {
+// activityHandle is what a parity test reads from an activity, satisfied by both wfaHandle and
+// saaHandle, so that a test states its claim once instead of once per implementation.
+type activityHandle interface {
 	driveEvent(testing.TB, model.Event)
+	rpc(testing.TB, model.Event) error
+	respondCanceledByID() error
+	activityInfo(require.TestingT) activityInfo
+	terminalOutcome(require.TestingT) activityTerminalOutcome
 }
 
-// parityDriveOutlivingActivity drives trace through both implementations and hands each resulting
-// activity to check. It is for a test that acts on the activity after it has closed: the WFA wrapper
-// workflow must outlive its activity, or the RPC under test is answered about a workflow that no
-// longer exists, which says nothing about how a closed activity behaves.
-func parityDriveOutlivingActivity(
+// driveTraceWFAAndSAA drives trace as a workflow activity and as a standalone activity, running
+// check against each.
+func driveTraceWFAAndSAA(
 	t *testing.T,
 	env *testcore.TestEnv,
 	cfg activityConfig,
 	trace []model.Event,
-	check func(*testing.T, parityActivity),
+	check func(*testing.T, activityHandle),
+	opts ...func(*wfaDriver),
 ) {
 	t.Run("WorkflowActivity", func(t *testing.T) {
+		t.Parallel()
 		d := newWFADriver(t, env, cfg)
-		d.holdOpen = true
+		for _, opt := range opts {
+			opt(d)
+		}
 		check(t, d.driveTrace(t, trace))
 	})
 	t.Run("StandaloneActivity", func(t *testing.T) {
+		t.Parallel()
 		check(t, newSAADriver(t, env, cfg).driveTrace(t, trace))
 	})
 }
@@ -684,19 +636,12 @@ func (s *activityParityTestSuite) TestLastHeartbeatDetailsPersistedOnAttemptFail
 	env := newActivityParityEnv(s.T())
 	cfg := activityConfig{MaxAttempts: 2}
 
-	expected := activityMarshalPayloads(activityHeartbeatDetails)
 	for _, eventType := range []model.EventType{model.RespondFailedType, model.RespondFailedByIDType} {
 		s.Run(eventType.String(), func(s *activityParityTestSuite) {
 			trace := []model.Event{model.Poll, {Type: eventType, Failure: &model.Failure{}, HasHeartbeatDetails: true}}
-			s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-				t := s.T()
-				require.Equal(t, expected,
-					newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t).LastHeartbeatDetails)
-			})
-			s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
-				t := s.T()
-				require.Equal(t, expected,
-					newSAADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t).LastHeartbeatDetails)
+			driveTraceWFAAndSAA(s.T(), env, cfg, trace, func(t *testing.T, a activityHandle) {
+				require.Equal(t, activityMarshalPayloads(activityHeartbeatDetails),
+					a.activityInfo(t).LastHeartbeatDetails)
 			})
 		})
 	}
@@ -724,15 +669,9 @@ func (s *activityParityTestSuite) TestResetHeartbeatDetails() {
 			// Reset with no attempt in progress: takes effect at once.
 			s.Run("WhileScheduled", func(s *activityParityTestSuite) {
 				trace := []model.Event{model.Poll, model.Heartbeat, model.FailRetryably, tc.resetEvent}
-				s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
-					t := s.T()
+				driveTraceWFAAndSAA(s.T(), env, cfg, trace, func(t *testing.T, a activityHandle) {
 					require.Equal(t, tc.expectedHeartbeatDetails,
-						newWFADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t).LastHeartbeatDetails)
-				})
-				s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
-					t := s.T()
-					require.Equal(t, tc.expectedHeartbeatDetails,
-						newSAADriver(t, env, cfg).driveTrace(t, trace).activityInfo(t).LastHeartbeatDetails)
+						a.activityInfo(t).LastHeartbeatDetails)
 				})
 			})
 			// Reset while a worker owns the attempt: deferred until that worker yields
@@ -991,11 +930,8 @@ func (s *activityParityTestSuite) TestTerminalRetryState() {
 	for _, tc := range testCases {
 		s.Run(tc.name, func(s *activityParityTestSuite) {
 			t := s.T()
-			t.Run("WorkflowActivity", func(t *testing.T) {
-				require.Equal(t, tc.expected, newWFADriver(t, env, tc.cfg).driveTrace(t, tc.trace).terminalOutcome(t))
-			})
-			t.Run("StandaloneActivity", func(t *testing.T) {
-				require.Equal(t, tc.expected, newSAADriver(t, env, tc.cfg).driveTrace(t, tc.trace).terminalOutcome(t))
+			driveTraceWFAAndSAA(t, env, tc.cfg, tc.trace, func(t *testing.T, a activityHandle) {
+				require.Equal(t, tc.expected, a.terminalOutcome(t))
 			})
 		})
 	}
