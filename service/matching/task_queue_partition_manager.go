@@ -1611,7 +1611,29 @@ func (pm *taskQueuePartitionManagerImpl) unloadIfNamespaceStateChanged() bool {
 		return false
 	}
 	pm.unloadFromEngine(unloadCauseNamespaceStateChange)
+	pm.reloadAfterNamespaceStateChange()
 	return true
+}
+
+// reloadAfterNamespaceStateChange loads the partition again right away instead of on its next poll or add,
+// so a backlog with no traffic (e.g. no workers yet on the newly active cluster) is still reported.
+func (pm *taskQueuePartitionManagerImpl) reloadAfterNamespaceStateChange() {
+	partition, ok := pm.partition.(*tqid.NormalPartition)
+	if !ok {
+		return
+	}
+	ctx := pm.callerInfoContext(context.Background())
+	_, err := pm.matchingClient.ForceLoadTaskQueuePartition(ctx, &matchingservice.ForceLoadTaskQueuePartitionRequest{
+		NamespaceId: partition.NamespaceId(),
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     partition.TaskQueue().Name(),
+			TaskQueueType: partition.TaskType(),
+			PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(partition.PartitionId())},
+		},
+	})
+	if err != nil {
+		pm.logger.Warn("failed to reload partition after namespace state change", tag.Error(err))
+	}
 }
 
 // fetchAndEmitLogicalBacklogMetrics calls Describe to get attributed backlog stats and emits

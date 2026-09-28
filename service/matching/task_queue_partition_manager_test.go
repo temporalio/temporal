@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/matching/hooks"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -2418,18 +2419,24 @@ func TestUnloadIfNamespaceStateChanged(t *testing.T) {
 		{name: "lookup error", from: cluster.TestCurrentClusterName, to: cluster.TestAlternativeClusterName, lookupErr: errors.New("lookup failed")},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			e, current, lookupErr := newFailoverTestEngine(t, defaultTestConfig(), tc.from)
+			env := newFailoverTestEnv(t, defaultTestConfig(), tc.from)
+			e := env.engine
 			partition := newRootPartition(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 			pm, _, err := e.getTaskQueuePartitionManager(context.Background(), partition, true, loadCausePoll)
 			require.NoError(t, err)
 
-			current.Store(failoverTestNamespace(tc.to))
+			env.current.Store(failoverTestNamespace(tc.to))
 			if tc.lookupErr != nil {
-				lookupErr.Store(&tc.lookupErr)
+				env.lookupErr.Store(&tc.lookupErr)
 			}
 			//revive:disable-next-line:unchecked-type-assertion
 			require.Equal(t, tc.unload, pm.(*taskQueuePartitionManagerImpl).unloadIfNamespaceStateChanged())
 			require.Equal(t, tc.unload, len(e.getTaskQueuePartitions(10)) == 0)
+			wantReloads := 0
+			if tc.unload {
+				wantReloads = 1
+			}
+			require.Equal(t, wantReloads, env.rootReloads())
 		})
 	}
 }
@@ -2439,7 +2446,8 @@ func TestNamespaceFailoverReloadsPartitionWithNewStateTag(t *testing.T) {
 	config.BacklogMetricsEmitInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
 	config.BreakdownMetricsByTaskQueue = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true)
 	config.BreakdownMetricsByPartition = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true)
-	e, current, _ := newFailoverTestEngine(t, config, cluster.TestAlternativeClusterName)
+	env := newFailoverTestEnv(t, config, cluster.TestAlternativeClusterName)
+	e, current := env.engine, &env.current
 	captureHandler := metricstest.NewCaptureHandler()
 	e.metricsHandler = captureHandler
 	capture := captureHandler.StartCapture()
@@ -2496,7 +2504,8 @@ func TestNamespaceFailoverUnloadsWithBacklogMetricsDisabled(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		config := defaultTestConfig()
 		config.BacklogMetricsEmitInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(0)
-		e, current, _ := newFailoverTestEngine(t, config, cluster.TestCurrentClusterName)
+		env := newFailoverTestEnv(t, config, cluster.TestCurrentClusterName)
+		e, current := env.engine, &env.current
 
 		partition := newRootPartition(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 		_, _, err := e.getTaskQueuePartitionManager(context.Background(), partition, true, loadCausePoll)
@@ -2516,9 +2525,11 @@ func TestNamespaceFailoverUnloadsWithBacklogMetricsDisabled(t *testing.T) {
 }
 
 func TestNamespaceFailoverUnloadDuringInitialization(t *testing.T) {
-	e, current, _ := newFailoverTestEngine(t, defaultTestConfig(), cluster.TestCurrentClusterName)
+	env := newFailoverTestEnv(t, defaultTestConfig(), cluster.TestCurrentClusterName)
+	e := env.engine
 	blocking := &blockingGetTaskQueueManager{TaskManager: e.taskManager, entered: make(chan struct{}), release: make(chan struct{})}
 	e.taskManager = blocking
+	defer close(blocking.release)
 	partition := newRootPartition(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 
 	loadErr := make(chan error, 1)
@@ -2532,14 +2543,19 @@ func TestNamespaceFailoverUnloadDuringInitialization(t *testing.T) {
 	pms := e.getTaskQueuePartitions(10)
 	require.Len(t, pms, 1)
 
-	current.Store(failoverTestNamespace(cluster.TestAlternativeClusterName))
+	// Persistence stays blocked until the unload has finished, so initialization cannot complete first.
+	env.current.Store(failoverTestNamespace(cluster.TestAlternativeClusterName))
 	unloaded := make(chan bool, 1)
 	go func() {
 		//revive:disable-next-line:unchecked-type-assertion
 		unloaded <- pms[0].(*taskQueuePartitionManagerImpl).unloadIfNamespaceStateChanged()
 	}()
-	close(blocking.release)
-	require.True(t, <-unloaded)
+	select {
+	case ok := <-unloaded:
+		require.True(t, ok)
+	case <-time.After(5 * time.Second):
+		require.FailNow(t, "unload blocked on partition initialization")
+	}
 	require.Error(t, <-loadErr)
 	require.Empty(t, e.getTaskQueuePartitions(10))
 
@@ -2549,7 +2565,8 @@ func TestNamespaceFailoverUnloadDuringInitialization(t *testing.T) {
 	require.NotSame(t, pms[0], reloaded)
 }
 
-// blockingGetTaskQueueManager blocks the first GetTaskQueue call until release is closed.
+// blockingGetTaskQueueManager blocks the first GetTaskQueue call until release is closed or its
+// context is canceled.
 type blockingGetTaskQueueManager struct {
 	persistence.TaskManager
 	once    sync.Once
@@ -2565,7 +2582,11 @@ func (m *blockingGetTaskQueueManager) GetTaskQueue(
 	m.once.Do(func() { first = true })
 	if first {
 		close(m.entered)
-		<-m.release
+		select {
+		case <-m.release:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
 	return m.TaskManager.GetTaskQueue(ctx, request)
 }
@@ -2579,32 +2600,56 @@ func failoverTestNamespace(activeCluster string) *namespace.Namespace {
 	)
 }
 
-// newFailoverTestEngine returns an engine whose namespace registry serves the namespace stored in
-// the returned pointer, or the stored error if one is set.
-func newFailoverTestEngine(
-	t *testing.T,
-	config *Config,
-	activeCluster string,
-) (*matchingEngineImpl, *atomic.Pointer[namespace.Namespace], *atomic.Pointer[error]) {
+type failoverTestEnv struct {
+	engine    *matchingEngineImpl
+	current   atomic.Pointer[namespace.Namespace]
+	lookupErr atomic.Pointer[error]
+
+	forceLoadsLock sync.Mutex
+	forceLoads     []*taskqueuespb.TaskQueuePartition
+}
+
+// newFailoverTestEnv returns an engine whose namespace registry serves the namespace stored in
+// env.current, or env.lookupErr if one is set. Force-load requests are recorded, not executed.
+func newFailoverTestEnv(t *testing.T, config *Config, activeCluster string) *failoverTestEnv {
 	ctrl := gomock.NewController(t)
-	var current atomic.Pointer[namespace.Namespace]
-	var lookupErr atomic.Pointer[error]
-	current.Store(failoverTestNamespace(activeCluster))
+	env := &failoverTestEnv{}
+	env.current.Store(failoverTestNamespace(activeCluster))
 	registry := namespace.NewMockRegistry(ctrl)
 	registry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).DoAndReturn(func(namespace.ID) (*namespace.Namespace, error) {
-		if err := lookupErr.Load(); err != nil {
+		if err := env.lookupErr.Load(); err != nil {
 			return nil, *err
 		}
-		return current.Load(), nil
+		return env.current.Load(), nil
 	}).AnyTimes()
 	registry.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(namespace.Name(namespaceName), nil).AnyTimes()
 	client := matchingservicemock.NewMockMatchingServiceClient(ctrl)
-	client.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{}, nil).AnyTimes()
-	e := createTestMatchingEngine(log.NewTestLogger(), ctrl, config, client, registry)
+	client.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *matchingservice.ForceLoadTaskQueuePartitionRequest, _ ...grpc.CallOption) (*matchingservice.ForceLoadTaskQueuePartitionResponse, error) {
+			env.forceLoadsLock.Lock()
+			defer env.forceLoadsLock.Unlock()
+			env.forceLoads = append(env.forceLoads, req.GetTaskQueuePartition())
+			return &matchingservice.ForceLoadTaskQueuePartitionResponse{}, nil
+		}).AnyTimes()
+	env.engine = createTestMatchingEngine(log.NewTestLogger(), ctrl, config, client, registry)
 	t.Cleanup(func() {
-		for _, pm := range e.getTaskQueuePartitions(10) {
-			e.unloadTaskQueuePartition(pm, unloadCauseShuttingDown)
+		for _, pm := range env.engine.getTaskQueuePartitions(10) {
+			env.engine.unloadTaskQueuePartition(pm, unloadCauseShuttingDown)
 		}
 	})
-	return e, &current, &lookupErr
+	return env
+}
+
+// rootReloads counts force-load requests for the root partition. Child partitions are also force-loaded
+// whenever the root loads, so only root requests come from reloadAfterNamespaceStateChange.
+func (env *failoverTestEnv) rootReloads() int {
+	env.forceLoadsLock.Lock()
+	defer env.forceLoadsLock.Unlock()
+	count := 0
+	for _, p := range env.forceLoads {
+		if p.GetNormalPartitionId() == 0 {
+			count++
+		}
+	}
+	return count
 }
