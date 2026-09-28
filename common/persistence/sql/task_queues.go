@@ -87,6 +87,9 @@ func (m *taskQueueStore) GetTaskQueue(
 			request.TaskType,
 			err,
 		)
+		return nil, convertSQLError("GetTaskQueue", fmt.Sprintf(
+			"failed to check if task queue %v of type %v existed",
+			request.TaskQueue, request.TaskType), err)
 	}
 }
 
