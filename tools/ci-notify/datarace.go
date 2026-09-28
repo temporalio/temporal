@@ -201,11 +201,8 @@ func trimRepoPath(path string) string {
 // the form "test-summary-json--<run_id>--<job_id>--<run_attempt>--<suffix>".
 // Returns "" when the name doesn't carry a job ID.
 func jobIDFromArtifactName(name string) string {
-	parts := strings.Split(name, "--")
-	if len(parts) < 3 {
-		return ""
-	}
-	return parts[2]
+	parsed, _ := github.ParseArtifactName(name)
+	return parsed.JobID
 }
 
 // uniqueDataRaces removes duplicate races (the same race is reported by every
