@@ -2741,3 +2741,41 @@ func TestCreateDelegatedBatchRequest(t *testing.T) {
 		})
 	}
 }
+
+func TestCreateDelegatedBatchRequestConvertsExecutions(t *testing.T) {
+	adminRequest := &adminservice.StartAdminBatchOperationRequest{
+		Namespace: "target-namespace",
+		JobId:     "job-id",
+		Reason:    "test reason",
+		Executions: []*commonpb.WorkflowExecution{
+			{WorkflowId: "business-id", RunId: "run-id"},
+		},
+	}
+
+	tests := []struct {
+		name          string
+		batchType     enumspb.BatchOperationType
+		executionType enumspb.ExecutionType
+	}{
+		{
+			name:          "workflow operation",
+			batchType:     enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+			executionType: enumspb.EXECUTION_TYPE_WORKFLOW,
+		},
+		{
+			name:          "activity operation",
+			batchType:     enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+			executionType: enumspb.EXECUTION_TYPE_ACTIVITY,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			request, err := createDelegatedBatchRequest(adminRequest, tc.batchType)
+			require.NoError(t, err)
+			require.Equal(t, []*commonpb.Execution{
+				{Type: tc.executionType, BusinessId: "business-id", RunId: "run-id"},
+			}, request.GetTargetExecutions())
+		})
+	}
+}
