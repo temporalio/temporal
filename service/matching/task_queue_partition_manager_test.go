@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -25,7 +26,9 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -2396,4 +2399,114 @@ func TestStickyQueueAdjustedStats_VersioningAttributionSkipped(t *testing.T) {
 	require.NotNil(t, adjustedStats)
 	require.InDelta(t, rawStats[3].TasksAddRate, adjustedStats.TasksAddRate, 0)
 	require.InDelta(t, rawStats[3].TasksDispatchRate, adjustedStats.TasksDispatchRate, 0)
+}
+
+func TestUnloadIfNamespaceStateChanged(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		from      string
+		to        string
+		lookupErr error
+		unload    bool
+	}{
+		{name: "active to passive", from: cluster.TestCurrentClusterName, to: cluster.TestAlternativeClusterName, unload: true},
+		{name: "passive to active", from: cluster.TestAlternativeClusterName, to: cluster.TestCurrentClusterName, unload: true},
+		{name: "unchanged active", from: cluster.TestCurrentClusterName, to: cluster.TestCurrentClusterName},
+		{name: "passive to other passive", from: cluster.TestAlternativeClusterName, to: "third-cluster"},
+		{name: "lookup error", from: cluster.TestCurrentClusterName, to: cluster.TestAlternativeClusterName, lookupErr: errors.New("lookup failed")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e, current, lookupErr := newFailoverTestEngine(t, defaultTestConfig(), tc.from)
+			partition := newRootPartition(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+			pm, _, err := e.getTaskQueuePartitionManager(context.Background(), partition, true, loadCausePoll)
+			require.NoError(t, err)
+
+			current.Store(failoverTestNamespace(tc.to))
+			if tc.lookupErr != nil {
+				lookupErr.Store(&tc.lookupErr)
+			}
+			//revive:disable-next-line:unchecked-type-assertion
+			require.Equal(t, tc.unload, pm.(*taskQueuePartitionManagerImpl).unloadIfNamespaceStateChanged())
+			require.Equal(t, tc.unload, len(e.getTaskQueuePartitions(10)) == 0)
+		})
+	}
+}
+
+func TestNamespaceFailoverReloadsPartitionWithNewStateTag(t *testing.T) {
+	config := defaultTestConfig()
+	config.BacklogMetricsEmitInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
+	config.BreakdownMetricsByTaskQueue = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true)
+	config.BreakdownMetricsByPartition = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true)
+	e, current, _ := newFailoverTestEngine(t, config, cluster.TestAlternativeClusterName)
+	captureHandler := metricstest.NewCaptureHandler()
+	e.metricsHandler = captureHandler
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	partition := newRootPartition(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	pm, _, err := e.getTaskQueuePartitionManager(context.Background(), partition, true, loadCausePoll)
+	require.NoError(t, err)
+
+	newNS := failoverTestNamespace(cluster.TestCurrentClusterName)
+	current.Store(newNS)
+	await.RequireTrue(t, func() bool {
+		stopped := capture.SnapshotMetric(metrics.TaskQueueStoppedCounter.Name())
+		return len(stopped) > 0 && stopped[len(stopped)-1].Tags["namespace_state"] == metrics.PassiveNamespaceStateTagValue
+	}, 5*time.Second, 10*time.Millisecond)
+	require.Empty(t, e.getTaskQueuePartitions(10))
+	for _, metricName := range []string{metrics.ApproximateBacklogCount.Name(), metrics.ApproximateBacklogAgeSeconds.Name()} {
+		recordings := capture.SnapshotMetric(metricName)
+		require.NotEmpty(t, recordings)
+		last := recordings[len(recordings)-1]
+		require.Equal(t, metrics.PassiveNamespaceStateTagValue, last.Tags["namespace_state"])
+		require.InDelta(t, 0, last.Value, 0.001)
+	}
+
+	reloaded, created, err := e.getTaskQueuePartitionManager(context.Background(), partition, true, loadCausePoll)
+	require.NoError(t, err)
+	require.True(t, created)
+	require.NotSame(t, pm, reloaded)
+	require.Same(t, newNS, reloaded.Namespace())
+	e.unloadTaskQueuePartition(reloaded, unloadCauseForce)
+	stopped := capture.SnapshotMetric(metrics.TaskQueueStoppedCounter.Name())
+	require.Equal(t, metrics.ActiveNamespaceStateTagValue, stopped[len(stopped)-1].Tags["namespace_state"])
+}
+
+func failoverTestNamespace(activeCluster string) *namespace.Namespace {
+	return namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespaceName},
+		nil,
+		&persistencespb.NamespaceReplicationConfig{ActiveClusterName: activeCluster},
+		1,
+	)
+}
+
+// newFailoverTestEngine returns an engine whose namespace registry serves the namespace stored in
+// the returned pointer, or the stored error if one is set.
+func newFailoverTestEngine(
+	t *testing.T,
+	config *Config,
+	activeCluster string,
+) (*matchingEngineImpl, *atomic.Pointer[namespace.Namespace], *atomic.Pointer[error]) {
+	ctrl := gomock.NewController(t)
+	var current atomic.Pointer[namespace.Namespace]
+	var lookupErr atomic.Pointer[error]
+	current.Store(failoverTestNamespace(activeCluster))
+	registry := namespace.NewMockRegistry(ctrl)
+	registry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).DoAndReturn(func(namespace.ID) (*namespace.Namespace, error) {
+		if err := lookupErr.Load(); err != nil {
+			return nil, *err
+		}
+		return current.Load(), nil
+	}).AnyTimes()
+	registry.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(namespace.Name(namespaceName), nil).AnyTimes()
+	client := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+	client.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{}, nil).AnyTimes()
+	e := createTestMatchingEngine(log.NewTestLogger(), ctrl, config, client, registry)
+	t.Cleanup(func() {
+		for _, pm := range e.getTaskQueuePartitions(10) {
+			e.unloadTaskQueuePartition(pm, unloadCauseShuttingDown)
+		}
+	})
+	return e, &current, &lookupErr
 }

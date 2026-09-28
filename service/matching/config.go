@@ -270,6 +270,7 @@ const (
 	unloadCauseForce
 	unloadCauseConfigChange
 	unloadCauseOtherError
+	unloadCauseNamespaceStateChange
 )
 
 // NewConfig returns new service config with default values

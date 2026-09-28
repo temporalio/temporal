@@ -1579,21 +1579,39 @@ func (pm *taskQueuePartitionManagerImpl) updateEphemeralDataIteration(prevBacklo
 func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.Context) error {
 	for {
 		interval := pm.config.BacklogMetricsEmitInterval()
-		if interval == 0 { // disabled
-			_ = util.InterruptibleSleep(ctx, time.Minute)
-			if ctx.Err() != nil {
-				return ctx.Err()
-			}
-			continue
+		emit := interval > 0
+		if !emit {
+			interval = time.Minute
 		}
 
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(backoff.Jitter(interval, 0.05)):
+		}
+
+		if pm.unloadIfNamespaceStateChanged() {
+			return nil
+		}
+		if emit {
 			pm.fetchAndEmitLogicalBacklogMetrics(ctx)
 		}
 	}
+}
+
+// unloadIfNamespaceStateChanged unloads the partition if the namespace failed over to or away from
+// this cluster since load, since the metrics handler's namespace_state tag is fixed at load time.
+func (pm *taskQueuePartitionManagerImpl) unloadIfNamespaceStateChanged() bool {
+	isActive, err := pm.isActiveInCluster()
+	if err != nil {
+		return false
+	}
+	//nolint:forbidigo // partition manager is namespace-scoped
+	if isActive == pm.ns.ActiveInCluster(pm.engine.clusterMeta.GetCurrentClusterName()) {
+		return false
+	}
+	pm.unloadFromEngine(unloadCauseNamespaceStateChange)
+	return true
 }
 
 // fetchAndEmitLogicalBacklogMetrics calls Describe to get attributed backlog stats and emits
