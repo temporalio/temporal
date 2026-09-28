@@ -20,7 +20,8 @@ import (
 )
 
 const (
-	defaultLevel = 2 // 1 means shard by suite, 2 means shard by test
+	defaultLevel       = 2 // 1 means shard by suite, 2 means shard by test
+	temporalRepository = "temporalio/temporal"
 )
 
 var testNameRe = regexp.MustCompile(`^(.*?)\s*\(.*\)$`)
@@ -29,7 +30,7 @@ func Main() error {
 	shards := flag.Int("shards", 0, "Number of shards (required)")
 	tries := flag.Int("tries", 10000, "Number of tries")
 	workflow := flag.String("workflow", "", "GitHub Actions workflow name to fetch artifacts from (uses gh CLI)")
-	artifactPattern := flag.String("artifact-pattern", "", "Artifact name pattern for gh run download")
+	artifactPattern := flag.String("artifact-pattern", "", "Artifact name pattern to download")
 	runs := flag.Int("runs", 5, "Number of recent successful runs to download")
 	branch := flag.String("branch", "main", "Branch to find successful runs on")
 	event := flag.String("event", "push", "Event type to filter runs by")
@@ -39,7 +40,7 @@ func Main() error {
 		log.Printf("Usage: %s [options]", os.Args[0])
 		log.Print("Optimizes the salt selection for test sharding.")
 		log.Print("Uses -workflow and -artifact-pattern to download JUnit XML files")
-		log.Print("from recent successful GitHub Actions runs via gh CLI.")
+		log.Print("from recent successful GitHub Actions runs.")
 		flag.PrintDefaults()
 	}
 	flag.Parse()
@@ -109,8 +110,8 @@ func Main() error {
 	return nil
 }
 
-// downloadArtifacts uses gh CLI to find the latest successful runs and download
-// matching artifacts. Returns the path to a temp directory containing the files.
+// downloadArtifacts finds the latest successful runs and downloads matching artifacts.
+// Returns the path to a temp directory containing the files.
 func downloadArtifacts(workflow, artifactPattern, branch, event string, limit int) (string, error) {
 	runIDs, err := findLatestRuns(workflow, branch, event, limit)
 	if err != nil {
@@ -122,27 +123,42 @@ func downloadArtifacts(workflow, artifactPattern, branch, event string, limit in
 		return "", err
 	}
 
-	var downloaded int
 	for _, runID := range runIDs {
-		log.Printf("Downloading artifacts from run %s", runID)
-		if err := github.RunDownload(context.Background(), runID, github.RunDownloadOptions{
-			Pattern: artifactPattern,
-			Dir:     filepath.Join(dir, runID),
-		}); err != nil {
-			log.Printf("Skipping run %s: %v", runID, err)
-			continue
+		runIDString := strconv.FormatInt(runID, 10)
+		log.Printf("Downloading artifacts from run %s", runIDString)
+		runDir := filepath.Join(dir, runIDString)
+		downloads, err := github.DownloadRunArtifacts(
+			context.Background(),
+			temporalRepository,
+			runID,
+			artifactPattern,
+			runDir,
+		)
+		if err != nil {
+			_ = os.RemoveAll(dir)
+			return "", err
 		}
-		downloaded++
-	}
-	if downloaded == 0 {
-		_ = os.RemoveAll(dir)
-		return "", fmt.Errorf("no runs had artifacts matching %q", artifactPattern)
+		if len(downloads) == 0 {
+			_ = os.RemoveAll(dir)
+			return "", fmt.Errorf("run %s had no artifacts matching %q", runIDString, artifactPattern)
+		}
+		for _, download := range downloads {
+			artifactDir := filepath.Join(runDir, download.Artifact.Name)
+			if err := os.MkdirAll(artifactDir, 0o755); err != nil {
+				_ = os.RemoveAll(dir)
+				return "", fmt.Errorf("creating directory for artifact %q: %w", download.Artifact.Name, err)
+			}
+			if _, err := junit.ExtractZip(download.ZipPath, artifactDir); err != nil {
+				_ = os.RemoveAll(dir)
+				return "", fmt.Errorf("extracting artifact %q: %w", download.Artifact.Name, err)
+			}
+		}
 	}
 
 	return dir, nil
 }
 
-func findLatestRuns(workflow, branch, event string, limit int) ([]string, error) {
+func findLatestRuns(workflow, branch, event string, limit int) ([]int64, error) {
 	runs, err := github.ListRuns(context.Background(), github.RunListOptions{
 		Workflow: workflow,
 		Event:    event,
@@ -157,9 +173,9 @@ func findLatestRuns(workflow, branch, event string, limit int) ([]string, error)
 		return nil, fmt.Errorf("no successful runs found for workflow %s on %s/%s", workflow, branch, event)
 	}
 
-	ids := make([]string, len(runs))
+	ids := make([]int64, len(runs))
 	for i, r := range runs {
-		ids[i] = strconv.FormatInt(r.DatabaseID, 10)
+		ids[i] = r.DatabaseID
 	}
 	return ids, nil
 }

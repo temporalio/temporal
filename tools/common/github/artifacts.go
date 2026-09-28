@@ -6,13 +6,20 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
+
+	"go.temporal.io/server/common/backoff"
 )
 
-const artifactDownloadTimeout = 60 * time.Second
+const (
+	artifactDownloadAttempts             = 3
+	artifactDownloadRetryInitialInterval = 5 * time.Second
+	artifactDownloadTimeout              = 60 * time.Second
+)
 
 // Artifact represents a downloadable GitHub Actions artifact.
 type Artifact struct {
@@ -20,6 +27,12 @@ type Artifact struct {
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"created_at"`
 	Expired   bool      `json:"expired"`
+}
+
+// DownloadedArtifact is an artifact and the local path to its downloaded zip file.
+type DownloadedArtifact struct {
+	Artifact Artifact
+	ZipPath  string
 }
 
 // ArtifactName is an artifact name using the repository's
@@ -85,12 +98,73 @@ func ListRunArtifacts(ctx context.Context, repo string, githubActionsRunID int64
 	return artifacts, nil
 }
 
+// DownloadRunArtifacts downloads the non-expired artifacts in a workflow run whose names match pattern.
+func DownloadRunArtifacts(
+	ctx context.Context,
+	repo string,
+	githubActionsRunID int64,
+	pattern string,
+	outputDir string,
+) ([]DownloadedArtifact, error) {
+	if _, err := path.Match(pattern, ""); err != nil {
+		return nil, fmt.Errorf("invalid artifact name pattern %q: %w", pattern, err)
+	}
+	artifacts, err := ListRunArtifacts(ctx, repo, githubActionsRunID)
+	if err != nil {
+		return nil, err
+	}
+	if err := os.MkdirAll(outputDir, 0o755); err != nil {
+		return nil, fmt.Errorf("failed to create artifact download directory: %w", err)
+	}
+
+	var downloads []DownloadedArtifact
+	for _, artifact := range artifacts {
+		matched, err := path.Match(pattern, artifact.Name)
+		if err != nil {
+			return nil, fmt.Errorf("matching artifact name %q: %w", artifact.Name, err)
+		}
+		if artifact.Expired || !matched {
+			continue
+		}
+		zipPath, err := DownloadArtifact(ctx, repo, artifact.ID, outputDir)
+		if err != nil {
+			return nil, err
+		}
+		downloads = append(downloads, DownloadedArtifact{Artifact: artifact, ZipPath: zipPath})
+	}
+	return downloads, nil
+}
+
 // DownloadArtifact downloads a single GitHub Actions artifact zip file.
 func DownloadArtifact(ctx context.Context, repo string, artifactID int64, outputDir string) (string, error) {
-	path := fmt.Sprintf("/repos/%s/actions/artifacts/%d/zip", repo, artifactID)
+	return downloadArtifactWithRetry(ctx, repo, artifactID, outputDir, artifactDownloadRetryInitialInterval)
+}
+
+func downloadArtifactWithRetry(
+	ctx context.Context,
+	repo string,
+	artifactID int64,
+	outputDir string,
+	retryInterval time.Duration,
+) (string, error) {
+	var zipPath string
+	policy := backoff.NewExponentialRetryPolicy(retryInterval).WithMaximumAttempts(artifactDownloadAttempts)
+	err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
+		var err error
+		zipPath, err = downloadArtifactOnce(ctx, repo, artifactID, outputDir)
+		return err
+	}, policy, nil)
+	if err != nil {
+		return "", fmt.Errorf("failed to download artifact %d after %d attempts: %w", artifactID, artifactDownloadAttempts, err)
+	}
+	return zipPath, nil
+}
+
+func downloadArtifactOnce(ctx context.Context, repo string, artifactID int64, outputDir string) (string, error) {
+	apiPath := fmt.Sprintf("/repos/%s/actions/artifacts/%d/zip", repo, artifactID)
 	downloadCtx, cancel := context.WithTimeout(ctx, artifactDownloadTimeout)
 	defer cancel()
-	response, err := get(downloadCtx, path)
+	response, err := get(downloadCtx, apiPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to download artifact %d: %w", artifactID, err)
 	}
