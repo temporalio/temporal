@@ -84,6 +84,7 @@ var (
 	FlagExecute                    = "execute"
 	FlagWorkers                    = "workers"
 	FlagOutputLog                  = "output-log"
+	FlagBatchType                  = "batch-type"
 	FlagFile                       = "file"
 	FlagStart                      = "lookback-start"
 	FlagStartTime                  = "start-time"

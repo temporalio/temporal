@@ -71,6 +71,11 @@ func getCommands(
 			Subcommands: newAdminScheduleCommands(clientFactory),
 		},
 		{
+			Name:        "delegated-batch",
+			Usage:       "Delegate workflow or activity termination from a user namespace to temporal-system",
+			Subcommands: newAdminBatchCommands(clientFactory, prompterFactory),
+		},
+		{
 			Name:        "decode",
 			Usage:       "Decode payload",
 			Subcommands: newDecodeCommands(taskBlobEncoder),
