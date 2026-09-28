@@ -44,16 +44,12 @@ type (
 	// ClientCacheEntryProvider creates a client cache entry.
 	ClientCacheEntryProvider func(clientKey string) (ClientCacheEntry, error)
 
-	cachedEntry struct {
-		ClientCacheEntry
-	}
-
 	clientCacheImpl struct {
 		keyResolver    keyResolver
 		clientProvider ClientCacheEntryProvider
 
 		cacheLock sync.RWMutex
-		clients   map[string]cachedEntry
+		clients   map[string]ClientCacheEntry
 
 		logger log.Logger
 	}
@@ -86,7 +82,7 @@ func NewClientCacheWithEntryProvider(
 		keyResolver:    keyResolver,
 		clientProvider: clientProvider,
 
-		clients: make(map[string]cachedEntry),
+		clients: make(map[string]ClientCacheEntry),
 		logger:  logger,
 	}
 }
@@ -124,7 +120,7 @@ func (c *clientCacheImpl) GetClientForClientKey(clientKey string) (any, error) {
 		c.cacheLock.Unlock()
 		return nil, err
 	}
-	c.clients[clientKey] = cachedEntry{ClientCacheEntry: newEntry}
+	c.clients[clientKey] = newEntry
 	c.cacheLock.Unlock()
 
 	if ok {
@@ -166,7 +162,7 @@ func (c *clientCacheImpl) Evict(clientKey string) {
 func (c *clientCacheImpl) EvictAll() {
 	c.cacheLock.Lock()
 	entries := c.clients
-	c.clients = make(map[string]cachedEntry)
+	c.clients = make(map[string]ClientCacheEntry)
 	c.cacheLock.Unlock()
 
 	for _, entry := range entries {
@@ -174,11 +170,11 @@ func (c *clientCacheImpl) EvictAll() {
 	}
 }
 
-func (e cachedEntry) isValid() bool {
+func (e ClientCacheEntry) isValid() bool {
 	return e.IsValid == nil || e.IsValid()
 }
 
-func (c *clientCacheImpl) release(entry cachedEntry) {
+func (c *clientCacheImpl) release(entry ClientCacheEntry) {
 	if entry.Release == nil {
 		return
 	}
