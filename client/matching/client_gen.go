@@ -61,6 +61,7 @@ func (c *clientImpl) doAddActivityTask(
 		}
 
 		targetPartition, estimatedTasksAllPartitions := c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
+		p = targetPartition
 		request.GetTaskQueue().Name = targetPartition.RpcName()
 		ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions)
 	}
@@ -116,6 +117,7 @@ func (c *clientImpl) doAddWorkflowTask(
 		}
 
 		targetPartition, estimatedTasksAllPartitions := c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
+		p = targetPartition
 		request.GetTaskQueue().Name = targetPartition.RpcName()
 		ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions)
 	}
@@ -419,6 +421,7 @@ func (c *clientImpl) doDispatchNexusTask(
 		}
 
 		targetPartition, estimatedTasksAllPartitions := c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
+		p = targetPartition
 		request.GetTaskQueue().Name = targetPartition.RpcName()
 		ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions)
 	}
@@ -599,6 +602,7 @@ func (c *clientImpl) doGrantEagerDispatch(
 			Items: request.Items,
 		}
 		targetPartition, _ := c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
+		p = targetPartition
 		request.GetTaskQueuePartition().PartitionId = &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(targetPartition.PartitionId())}
 	}
 	client, err := c.getClientForTaskQueuePartition(p)
@@ -897,6 +901,7 @@ func (c *clientImpl) doQueryWorkflow(
 		}
 
 		targetPartition, estimatedTasksAllPartitions := c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
+		p = targetPartition
 		request.GetTaskQueue().Name = targetPartition.RpcName()
 		ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions)
 	}

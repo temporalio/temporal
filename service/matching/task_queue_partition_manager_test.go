@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -60,28 +61,45 @@ type PartitionManagerTestSuite struct {
 	ns             *namespace.Namespace
 }
 
-type backlogManagerWithNonNegligibleBacklog struct {
-	backlogManager
-	priority priorityKey
+type eagerDispatchPhysicalQueue struct {
+	physicalTaskQueueManager
+	backlogPriority priorityKey
 }
 
-func (m *backlogManagerWithNonNegligibleBacklog) NonNegligibleBacklogPriority() priorityKey {
-	return m.priority
+func (*eagerDispatchPhysicalQueue) WaitUntilInitialized(context.Context) error {
+	return nil
 }
 
-func (s *PartitionManagerTestSuite) setNonNegligibleBacklogPriority(
-	queue physicalTaskQueueManager,
-	priority priorityKey,
-) {
-	physicalQueue, ok := queue.(*physicalTaskQueueManagerImpl)
-	s.Require().True(ok)
-	if backlogManager, ok := physicalQueue.backlogMgr.(*backlogManagerWithNonNegligibleBacklog); ok {
-		backlogManager.priority = priority
-		return
+func (*eagerDispatchPhysicalQueue) MarkAlive() {
+}
+
+func (q *eagerDispatchPhysicalQueue) NonNegligibleBacklogPriority() priorityKey {
+	return q.backlogPriority
+}
+
+func (s *PartitionManagerTestSuite) newEagerDispatchPartitionManager(
+	defaultBacklogPriority priorityKey,
+	versionBacklogPriorities map[PhysicalTaskQueueVersion]priorityKey,
+) *taskQueuePartitionManagerImpl {
+	defaultQueueFuture := future.NewFuture[physicalTaskQueueManager]()
+	defaultQueueFuture.Set(&eagerDispatchPhysicalQueue{backlogPriority: defaultBacklogPriority}, nil)
+
+	versionedQueues := make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager, len(versionBacklogPriorities))
+	for version, backlogPriority := range versionBacklogPriorities {
+		versionedQueues[version] = &eagerDispatchPhysicalQueue{backlogPriority: backlogPriority}
 	}
-	physicalQueue.backlogMgr = &backlogManagerWithNonNegligibleBacklog{
-		backlogManager: physicalQueue.backlogMgr,
-		priority:       priority,
+
+	return &taskQueuePartitionManagerImpl{
+		engine:             s.partitionMgr.engine,
+		partition:          s.partitionMgr.partition,
+		ns:                 s.partitionMgr.ns,
+		config:             s.partitionMgr.config,
+		versionedQueues:    versionedQueues,
+		userDataManager:    s.partitionMgr.userDataManager,
+		logger:             s.partitionMgr.logger,
+		throttledLogger:    s.partitionMgr.throttledLogger,
+		rateLimitManager:   s.partitionMgr.rateLimitManager,
+		defaultQueueFuture: defaultQueueFuture,
 	}
 }
 
@@ -203,10 +221,9 @@ func (s *PartitionManagerTestSuite) TestGrantEagerDispatchValidation() {
 }
 
 func (s *PartitionManagerTestSuite) TestGrantEagerDispatchChecksPhysicalQueueBacklogPriority() {
-	defaultQueue := s.partitionMgr.defaultQueue()
-	s.setNonNegligibleBacklogPriority(defaultQueue, s.partitionMgr.config.DefaultPriorityKey)
+	partitionMgr := s.newEagerDispatchPartitionManager(s.partitionMgr.config.DefaultPriorityKey, nil)
 
-	items, err := s.partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
+	items, err := partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
 		{Count: 1, Priority: &commonpb.Priority{PriorityKey: 2}},
 		{Count: 1, Priority: &commonpb.Priority{PriorityKey: 3}},
 		{Count: 1, Priority: &commonpb.Priority{PriorityKey: 4}},
@@ -222,14 +239,20 @@ func (s *PartitionManagerTestSuite) TestGrantEagerDispatchChecksPhysicalQueueBac
 }
 
 func (s *PartitionManagerTestSuite) TestGrantEagerDispatchChecksDefaultBacklogByVersion() {
-	defaultQueue := s.partitionMgr.defaultQueue()
-	s.setNonNegligibleBacklogPriority(defaultQueue, s.partitionMgr.config.DefaultPriorityKey)
+	partitionMgr := s.newEagerDispatchPartitionManager(
+		s.partitionMgr.config.DefaultPriorityKey,
+		map[PhysicalTaskQueueVersion]priorityKey{
+			{deploymentSeriesName: "deployment", buildId: "current"}: 0,
+			{deploymentSeriesName: "deployment", buildId: "ramping"}: 0,
+			{deploymentSeriesName: "deployment", buildId: "old"}:     0,
+		},
+	)
 	s.addRoutingConfigUserData("deployment", "current", "ramping", 0)
 
-	items, err := s.partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
+	items, err := partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
 		{
 			Count:    1,
-			Priority: &commonpb.Priority{PriorityKey: int32(s.partitionMgr.config.DefaultPriorityKey)},
+			Priority: &commonpb.Priority{PriorityKey: int32(partitionMgr.config.DefaultPriorityKey)},
 			Version:  workerDeploymentVersion("ramping"),
 		},
 	})
@@ -238,7 +261,7 @@ func (s *PartitionManagerTestSuite) TestGrantEagerDispatchChecksDefaultBacklogBy
 
 	s.addRoutingConfigUserData("deployment", "current", "ramping", 50)
 
-	items, err = s.partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
+	items, err = partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
 		{
 			Count:    1,
 			Priority: &commonpb.Priority{PriorityKey: 2},
@@ -277,15 +300,14 @@ func (s *PartitionManagerTestSuite) TestGrantEagerDispatchChecksDefaultBacklogBy
 
 func (s *PartitionManagerTestSuite) TestGrantEagerDispatchChecksVersionBacklog() {
 	version := workerDeploymentVersion("old")
-	queue, err := s.partitionMgr.getPhysicalQueue(
-		context.Background(),
-		"",
-		worker_versioning.DeploymentFromDeploymentVersion(version),
+	partitionMgr := s.newEagerDispatchPartitionManager(
+		0,
+		map[PhysicalTaskQueueVersion]priorityKey{
+			{deploymentSeriesName: "deployment", buildId: "old"}: s.partitionMgr.config.DefaultPriorityKey,
+		},
 	)
-	s.Require().NoError(err)
-	s.setNonNegligibleBacklogPriority(queue, s.partitionMgr.config.DefaultPriorityKey)
 
-	items, err := s.partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
+	items, err := partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
 		{Count: 1, Priority: &commonpb.Priority{PriorityKey: 2}, Version: version},
 		{Count: 1, Priority: &commonpb.Priority{PriorityKey: 3}, Version: version},
 		{Count: 1, Priority: &commonpb.Priority{PriorityKey: 4}, Version: version},
@@ -320,6 +342,34 @@ func (s *PartitionManagerTestSuite) TestGrantEagerDispatchReturnsPartialRateLimi
 		{GrantedCount: 1},
 		{},
 	}, items)
+}
+
+func (s *PartitionManagerTestSuite) TestGrantEagerDispatchValidationDoesNotConsumeTokens() {
+	if !s.newMatcher {
+		s.T().Skip("simple limiter is only used by the new matcher")
+	}
+
+	rateLimitManager := s.partitionMgr.rateLimitManager
+	rateLimitManager.mu.Lock()
+	rateLimitManager.timeSource = clock.NewEventTimeSource().Update(time.Now())
+	rateLimitManager.wholeQueueReady = 0
+	rateLimitManager.wholeQueueLimit = makeSimpleLimiterParams(1, 0)
+	rateLimitManager.perKeyLimit = simpleLimiterParams{}
+	rateLimitManager.mu.Unlock()
+
+	_, err := s.partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
+		{Count: 1},
+		{Count: 0},
+	})
+	s.Require().Error(err)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArgument)
+
+	items, err := s.partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
+		{Count: 1},
+	})
+	s.Require().NoError(err)
+	s.Require().Equal([]*matchingservice.GrantEagerDispatchResponse_Item{{GrantedCount: 1}}, items)
 }
 
 func (s *PartitionManagerTestSuite) TestAddTaskNoRules_NoVersionDirective() {

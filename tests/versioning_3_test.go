@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/taskpoller"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/common/worker_versioning"
@@ -1244,6 +1245,46 @@ func (s *Versioning3Suite) TestEagerActivity() {
 			return env.respondCompleteWorkflow(tv, vbUnpinned), nil
 		})
 	env.verifyWorkflowVersioning(s, tv, vbUnpinned, tv.Deployment(), nil, nil)
+}
+
+func (s *Versioning3Suite) TestEagerActivityWithMatchingGrant() {
+	env := s.setupEnv(
+		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerExecution, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableEagerActivityDispatchCheck, true),
+	)
+	env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, 1))
+	env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 1))
+
+	tv := env.Tv()
+	env.updateTaskQueueDeploymentDataWithRoutingConfig(s, tv, &deploymentpb.RoutingConfig{
+		CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromStringV31(tv.DeploymentVersionString()),
+		CurrentVersionChangedTime: timestamp.TimePtr(time.Now()),
+		RevisionNumber:            1,
+	}, map[string]*deploymentspb.WorkerDeploymentVersionData{tv.DeploymentVersion().GetBuildId(): {
+		Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+	}}, []string{}, tqTypeWf, tqTypeAct)
+	env.startWorkflow(s, tv, nil)
+
+	poller, response := env.pollWftAndHandle(s, tv, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.Require().NotNil(task)
+			completion := env.respondWftWithActivities(tv, tv, true, vbUnpinned, "eager")
+			completion.Commands[0].GetScheduleActivityTaskCommandAttributes().RequestEagerExecution = true
+			return completion, nil
+		})
+
+	s.Require().Len(response.GetActivityTasks(), 1)
+	eagerActivity := response.GetActivityTasks()[0]
+	s.Equal("eager", eagerActivity.GetActivityId())
+
+	_, err := poller.HandleActivityTask(tv, eagerActivity, taskpoller.CompleteActivityTask(tv))
+	s.Require().NoError(err)
+
+	env.pollWftAndHandle(s, tv, false, nil,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			s.Require().NotNil(task)
+			return env.respondCompleteWorkflow(tv, vbUnpinned), nil
+		})
 }
 
 func (s *Versioning3Suite) TestEagerActivityTimeoutMetricTags() {

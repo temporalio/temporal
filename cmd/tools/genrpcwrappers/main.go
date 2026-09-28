@@ -522,6 +522,7 @@ func makeTaskQueuePartitionLoadBalancedFields(reqType reflect.Type, fields map[s
 	loadBalance := p.SupportsPartitions() && p.IsRoot()%s`, tqp.path, nsID.path, notForwardedCondition)
 	fields["CopyRequest"] = makeCopyRequest(reqType, tqp.path)
 	fields["PickPartition"] = fmt.Sprintf(`targetPartition, _ := c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
+		p = targetPartition
 		%s.PartitionId = &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(targetPartition.PartitionId())}`, tqp.path)
 }
 
@@ -557,8 +558,9 @@ func makeTaskQueueLoadBalancedFields(reqType reflect.Type, lb loadBalancedMethod
 	} else {
 		fields["PickPartition"] = fmt.Sprintf(`
 		targetPartition, estimatedTasksAllPartitions := c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
+		p = targetPartition
 		%s.Name = targetPartition.RpcName()
-	ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions)`, tq.path)
+		ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions)`, tq.path)
 	}
 }
 

@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsregistry"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
@@ -46,6 +47,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func TestCommandProtocolMessage(t *testing.T) {
@@ -784,6 +786,111 @@ func TestEagerActivityDispatchCheckDynamicConfig(t *testing.T) {
 				},
 			}
 			require.True(t, handler.eagerActivityDispatchAllowed(context.Background(), "namespace", attr))
+		})
+	}
+}
+
+func TestHandleCommandScheduleActivity_EagerDispatchGrant(t *testing.T) {
+	testCases := []struct {
+		name           string
+		response       *matchingservice.GrantEagerDispatchResponse
+		matchingErr    error
+		wantBypass     bool
+		wantPostAction bool
+	}{
+		{
+			name: "grant keeps eager dispatch",
+			response: &matchingservice.GrantEagerDispatchResponse{Items: []*matchingservice.GrantEagerDispatchResponse_Item{
+				{GrantedCount: 1},
+			}},
+			wantBypass:     true,
+			wantPostAction: true,
+		},
+		{
+			name: "denial falls back to normal dispatch",
+			response: &matchingservice.GrantEagerDispatchResponse{Items: []*matchingservice.GrantEagerDispatchResponse_Item{
+				{},
+			}},
+		},
+		{
+			name:        "matching error falls back to normal dispatch",
+			matchingErr: errors.New("matching unavailable"),
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			ms := historyi.NewMockMutableState(ctrl)
+			matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+			namespaceRegistry := namespace.NewMockRegistry(ctrl)
+			logger := log.NewNoopLogger()
+			config := &configs.Config{
+				MaxIDLengthLimit: dynamicconfig.GetIntPropertyFn(1000),
+				DefaultActivityRetryPolicy: func(string) retrypolicy.DefaultRetrySettings {
+					return retrypolicy.DefaultDefaultRetrySettings
+				},
+				DefaultWorkflowRetryPolicy: func(string) retrypolicy.DefaultRetrySettings {
+					return retrypolicy.DefaultDefaultRetrySettings
+				},
+				EnableCrossNamespaceCommands:     dynamicconfig.GetBoolPropertyFn(true),
+				EnableActivityEagerExecution:     dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+				EnableEagerActivityDispatchCheck: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+			}
+			executionInfo := &persistencespb.WorkflowExecutionInfo{
+				NamespaceId: tests.NamespaceID.String(),
+				WorkflowId:  tests.WorkflowID,
+				TaskQueue:   "workflow-task-queue",
+			}
+			executionState := &persistencespb.WorkflowExecutionState{
+				RunId:  tests.RunID,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			}
+			attr := &commandpb.ScheduleActivityTaskCommandAttributes{
+				ActivityId:            "activity-id",
+				ActivityType:          &commonpb.ActivityType{Name: "activity-type"},
+				TaskQueue:             &taskqueuepb.TaskQueue{Name: "activity-task-queue"},
+				StartToCloseTimeout:   durationpb.New(10 * time.Second),
+				RequestEagerExecution: true,
+			}
+			event := &historypb.HistoryEvent{EventId: 42}
+
+			ms.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
+			ms.EXPECT().GetExecutionState().Return(executionState).AnyTimes()
+			ms.EXPECT().GetAssignedBuildId().Return("").AnyTimes()
+			ms.EXPECT().GetPendingActivityInfos().Return(nil).AnyTimes()
+			ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+			ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
+			ms.EXPECT().GetMostRecentWorkerVersionStamp().Return(nil).AnyTimes()
+			ms.EXPECT().AddActivityTaskScheduledEvent(int64(123), attr, test.wantBypass).Return(event, nil, nil)
+			namespaceRegistry.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.LocalNamespaceEntry, nil)
+			matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).Return(test.response, test.matchingErr)
+
+			handler := &workflowTaskCompletedHandler{
+				workflowTaskCompletedID: 123,
+				mutableState:            ms,
+				attrValidator: api.NewCommandAttrValidator(
+					namespaceRegistry,
+					config,
+					nil,
+				),
+				sizeLimitChecker: newWorkflowSizeChecker(
+					workflowSizeLimits{},
+					ms,
+					nil,
+					metrics.NoopMetricsHandler,
+					logger,
+				),
+				metricsHandler: metrics.NoopMetricsHandler,
+				config:         config,
+				matchingClient: matchingClient,
+			}
+
+			actualEvent, response, err := handler.handleCommandScheduleActivity(context.Background(), attr)
+			require.NoError(t, err)
+			require.Same(t, event, actualEvent)
+			require.NotNil(t, response)
+			require.Equal(t, test.wantPostAction, response.commandPostAction != nil)
 		})
 	}
 }
