@@ -30,8 +30,9 @@ builds:
     env:
       - CGO_ENABLED=0
     tags:
-      # The server uses storage.NewClient (REST), not storage.NewGRPCClient.
-      # This build tag removes the unused GCS gRPC modules, reducing the size of release binary.
+      # The `disable_grpc_modules` build tag excludes gRPC dependencies from cloud.google.com/go/storage,
+      # reducing binary size since we only use the REST client (storage.NewClient), not the
+      # gRPC client (storage.NewGRPCClient). Related issue: https://github.com/googleapis/google-cloud-go/issues/12343
       - disable_grpc_modules
     goos:
       - linux
