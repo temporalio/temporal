@@ -130,45 +130,59 @@ func downloadArtifacts(workflow, artifactPattern, branch, event string, limit in
 	for _, runID := range runIDs {
 		runIDString := strconv.FormatInt(runID, 10)
 		log.Printf("Downloading artifacts from run %s", runIDString)
-		runDir := filepath.Join(dir, runIDString)
-		artifacts, err := github.ListRunArtifacts(context.Background(), temporalRepository, runID)
-		if err != nil {
+		if err := downloadRunReports(
+			context.Background(),
+			runID,
+			artifactPattern,
+			filepath.Join(dir, runIDString),
+		); err != nil {
 			_ = os.RemoveAll(dir)
-			return "", err
-		}
-		matched := 0
-		for _, artifact := range artifacts {
-			matches, err := path.Match(artifactPattern, artifact.Name)
-			if err != nil {
-				_ = os.RemoveAll(dir)
-				return "", fmt.Errorf("matching artifact name %q: %w", artifact.Name, err)
-			}
-			if artifact.Expired || !matches {
-				continue
-			}
-			matched++
-			artifactDir := filepath.Join(runDir, artifact.Name)
-			if err := os.MkdirAll(artifactDir, 0o755); err != nil {
-				_ = os.RemoveAll(dir)
-				return "", fmt.Errorf("creating directory for artifact %q: %w", artifact.Name, err)
-			}
-			zipPath, err := github.DownloadArtifact(context.Background(), temporalRepository, artifact.ID, artifactDir)
-			if err != nil {
-				_ = os.RemoveAll(dir)
-				return "", err
-			}
-			if _, err := junit.ExtractReportsFromZip(zipPath, artifactDir); err != nil {
-				_ = os.RemoveAll(dir)
-				return "", fmt.Errorf("extracting artifact %q: %w", artifact.Name, err)
-			}
-		}
-		if matched == 0 {
-			_ = os.RemoveAll(dir)
-			return "", fmt.Errorf("run %s had no artifacts matching %q", runIDString, artifactPattern)
+			return "", fmt.Errorf("downloading artifacts from run %s: %w", runIDString, err)
 		}
 	}
 
 	return dir, nil
+}
+
+func downloadRunReports(ctx context.Context, runID int64, artifactPattern, runDir string) error {
+	artifacts, err := github.ListRunArtifacts(ctx, temporalRepository, runID)
+	if err != nil {
+		return err
+	}
+
+	matched := false
+	for _, artifact := range artifacts {
+		matches, err := path.Match(artifactPattern, artifact.Name)
+		if err != nil {
+			return fmt.Errorf("matching artifact name %q: %w", artifact.Name, err)
+		}
+		if artifact.Expired || !matches {
+			continue
+		}
+		matched = true
+		if err := downloadJUnitArtifact(ctx, artifact, runDir); err != nil {
+			return err
+		}
+	}
+	if !matched {
+		return fmt.Errorf("no artifacts matched %q", artifactPattern)
+	}
+	return nil
+}
+
+func downloadJUnitArtifact(ctx context.Context, artifact github.Artifact, runDir string) error {
+	artifactDir := filepath.Join(runDir, artifact.Name)
+	if err := os.MkdirAll(artifactDir, 0o755); err != nil {
+		return fmt.Errorf("creating directory for artifact %q: %w", artifact.Name, err)
+	}
+	zipPath, err := github.DownloadArtifact(ctx, temporalRepository, artifact.ID, artifactDir)
+	if err != nil {
+		return err
+	}
+	if _, err := junit.ExtractReportsFromZip(zipPath, artifactDir); err != nil {
+		return fmt.Errorf("extracting artifact %q: %w", artifact.Name, err)
+	}
+	return nil
 }
 
 func findLatestRuns(workflow, branch, event string, limit int) ([]int64, error) {
