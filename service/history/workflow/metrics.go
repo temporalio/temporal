@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -11,7 +12,9 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -110,6 +113,7 @@ func emitWorkflowCompletionStats(
 	namespace namespace.Name,
 	completion completionMetric,
 	config *configs.Config,
+	mapperProvider searchattribute.MapperProvider,
 ) {
 	// Only emit metrics for Workflows, not other Chasm archetypes
 	if !completion.isWorkflow {
@@ -121,6 +125,9 @@ func emitWorkflowCompletionStats(
 		metrics.NamespaceStateTag(completion.namespaceState),
 		metrics.WorkflowTypeTag(completion.workflowTypeName),
 	)
+	if saTags := searchAttributeMetricTags(config, mapperProvider, namespace, completion.searchAttributes); len(saTags) > 0 {
+		handler = handler.WithTags(saTags...)
+	}
 
 	closed := true
 	switch completion.status {
@@ -161,6 +168,89 @@ func GetPerTaskQueueFamilyScope(
 		config.BreakdownMetricsByTaskQueue(namespaceName.String(), taskQueueFamily, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 		tags...,
 	)
+}
+
+// Caps each SA-derived label value; every distinct value becomes a new metric series.
+const maxSearchAttributeMetricTagLength = 256
+
+func searchAttributeMetricTags(
+	config *configs.Config,
+	mapperProvider searchattribute.MapperProvider,
+	namespaceName namespace.Name,
+	searchAttributes map[string]*commonpb.Payload,
+) []metrics.Tag {
+	// Nil-safe: tests and non-standard constructors may build partial Configs.
+	if config.SearchAttributeLabels == nil {
+		return nil
+	}
+	keys := config.SearchAttributeLabels(namespaceName.String())
+	if len(keys) == 0 || len(searchAttributes) == 0 {
+		return nil
+	}
+
+	fields := aliasSearchAttributeFields(mapperProvider, namespaceName, searchAttributes)
+	tags := make([]metrics.Tag, 0, len(keys))
+	for _, key := range keys {
+		p, ok := fields[key]
+		if !ok {
+			continue
+		}
+		value, ok := searchAttributeScalarValue(p)
+		if !ok {
+			continue
+		}
+		if len(value) > maxSearchAttributeMetricTagLength {
+			value = string([]rune(value)[:maxSearchAttributeMetricTagLength])
+		}
+		tags = append(tags, metrics.StringTag(key, value))
+	}
+	return tags
+}
+
+// Maps storage field names (Keyword08) to user names for allowlist matching; raw names on failure.
+func aliasSearchAttributeFields(
+	mapperProvider searchattribute.MapperProvider,
+	namespaceName namespace.Name,
+	fields map[string]*commonpb.Payload,
+) map[string]*commonpb.Payload {
+	if mapperProvider == nil {
+		return fields
+	}
+	aliased, err := searchattribute.AliasFields(
+		mapperProvider,
+		&commonpb.SearchAttributes{IndexedFields: fields},
+		namespaceName.String(),
+	)
+	// Never let a mapping failure break the close path.
+	if err != nil || aliased == nil {
+		return fields
+	}
+	return aliased.GetIndexedFields()
+}
+
+// Decodes a JSON scalar from a mutable-state payload (which carries no type metadata).
+func searchAttributeScalarValue(p *commonpb.Payload) (string, bool) {
+	var value any
+	if err := payload.Decode(p, &value); err != nil {
+		return "", false
+	}
+	// Legacy SDK keyword encoding sends scalars as one-element lists.
+	if list, ok := value.([]any); ok {
+		if len(list) != 1 {
+			return "", false
+		}
+		value = list[0]
+	}
+	switch value := value.(type) {
+	case string:
+		return value, value != ""
+	case bool:
+		return strconv.FormatBool(value), true
+	case float64:
+		return strconv.FormatFloat(value, 'g', -1, 64), true
+	default: // lists, maps and other non-scalars are not useful labels
+		return "", false
+	}
 }
 
 type VersioningMetricContext struct {
