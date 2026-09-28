@@ -3446,6 +3446,43 @@ func (this *BatchOperationRefreshTasks) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type BatchOperationDelegation to the protobuf v3 wire format
+func (val *BatchOperationDelegation) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type BatchOperationDelegation from the protobuf v3 wire format
+func (val *BatchOperationDelegation) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *BatchOperationDelegation) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two BatchOperationDelegation values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *BatchOperationDelegation) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *BatchOperationDelegation
+	switch t := that.(type) {
+	case *BatchOperationDelegation:
+		that1 = t
+	case BatchOperationDelegation:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type MigrateScheduleRequest to the protobuf v3 wire format
 func (val *MigrateScheduleRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

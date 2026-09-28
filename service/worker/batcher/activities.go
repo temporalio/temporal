@@ -57,7 +57,7 @@ var (
 
 // batchProcessorConfig holds the configuration for batch processing
 type batchProcessorConfig struct {
-	namespace         string
+	targetNamespace   string
 	adjustedQuery     string
 	batchType         enumspb.BatchOperationType
 	concurrency       int
@@ -180,7 +180,7 @@ func fetchPage(
 	if isActivityBatchType(config.batchType) {
 		resp, err := sdkClient.WorkflowService().ListActivityExecutions(ctx,
 			&workflowservice.ListActivityExecutionsRequest{
-				Namespace:     config.namespace,
+				Namespace:     config.targetNamespace,
 				PageSize:      int32(pageSize),
 				NextPageToken: pageToken,
 				Query:         config.adjustedQuery,
@@ -403,9 +403,13 @@ func (a *activities) checkAndGetTargetNamespace(batchParams *batchspb.BatchOpera
 	return a.namespace.String(), nil
 }
 
-// todo: check if this a solid and safe way
 func isAdminRequest(batchParams *batchspb.BatchOperationInput) bool {
 	return batchParams.AdminRequest != nil
+}
+
+func isAdminDelegatedRequest(batchParams *batchspb.BatchOperationInput) bool {
+	_, ok := batchParams.GetAdminRequest().GetOperation().(*adminservice.StartAdminBatchOperationRequest_DelegationOperation)
+	return ok
 }
 
 // BatchActivityWithProtobuf is an activity for processing batch operations using protobuf as the input type.
@@ -421,12 +425,12 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		logger.Error("Failed to run batch operation due to namespace mismatch", tag.Error(err))
 		return hbd, err
 	}
-
 	sdkClientForTargetNS := a.ClientFactory.NewClient(sdkclient.Options{
 		Namespace:     targetNS,
 		DataConverter: sdk.PreferProtoDataConverter,
 	})
 	defer sdkClientForTargetNS.Close()
+
 	startOver := true
 	if activity.HasHeartbeatDetails(ctx) {
 		if err := activity.GetHeartbeatDetails(ctx, &hbd); err == nil {
@@ -444,11 +448,10 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	// Admin batch uses the host level rate limiter which applies across all namespaces and all admin batch workflows.
 	rateLimiter := quotas.RequestRateLimiter(a.AdminBatcherRateLimiter)
 
-	if batchParams.AdminRequest != nil {
+	if isAdminRequest(batchParams) {
 		ctx = headers.SetCallerType(ctx, headers.CallerTypePreemptable)
-		adminReq := batchParams.AdminRequest
-		visibilityQuery = adminReq.GetVisibilityQuery()
-		executions = adminReq.GetExecutions()
+		visibilityQuery = a.adjustQueryAdminBatchType(batchParams)
+		executions = batchParams.GetAdminRequest().GetExecutions()
 	} else {
 		visibilityQuery = a.adjustQueryBatchTypeEnum(batchParams.Request.VisibilityQuery, batchParams.BatchType)
 		//nolint:staticcheck // SA1019: Executions is deprecated but still needed for backward compatibility
@@ -499,7 +502,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 
 	// Prepare configuration for shared processing function
 	config := batchProcessorConfig{
-		namespace:               targetNS,
+		targetNamespace:         targetNS,
 		adjustedQuery:           visibilityQuery,
 		batchType:               batchParams.BatchType,
 		concurrency:             a.getOperationConcurrency(int(batchParams.Concurrency)),
@@ -556,7 +559,16 @@ func (a *activities) adjustQueryBatchTypeEnum(query string, batchType enumspb.Ba
 	}
 }
 
-func (a *activities) adjustQueryAdminBatchType(adminReq *adminservice.StartAdminBatchOperationRequest) string {
+func (a *activities) adjustQueryAdminBatchType(
+	batchParams *batchspb.BatchOperationInput,
+) string {
+	adminReq := batchParams.GetAdminRequest()
+	// if a user batch is delegated as an admin batch
+	if isAdminDelegatedRequest(batchParams) {
+		batchType := batchParams.BatchType
+		return a.adjustQueryBatchTypeEnum(adminReq.GetVisibilityQuery(), batchType)
+	}
+	// other admin batch:
 	// RefreshWorkflowTasks applies to both open and closed workflows,
 	// so no additional filter is needed - return query as-is.
 	return adminReq.GetVisibilityQuery()
@@ -583,7 +595,7 @@ func taskTimeoutContext(ctx context.Context) (context.Context, context.CancelFun
 func (a *activities) startTaskProcessor(
 	ctx context.Context,
 	batchOperation *batchspb.BatchOperationInput,
-	namespace string,
+	targetNamespace string,
 	taskCh chan task,
 	respCh chan taskResponse,
 	limiter quotas.RequestRateLimiter,
@@ -605,7 +617,7 @@ func (a *activities) startTaskProcessor(
 				continue
 			}
 
-			a.processTaskWithRetries(ctx, batchOperation, namespace, task, respCh, limiter, sdkClient, frontendClient, metricsHandler, logger)
+			a.processTaskWithRetries(ctx, batchOperation, targetNamespace, task, respCh, limiter, sdkClient, frontendClient, metricsHandler, logger)
 		}
 	}
 }
@@ -628,7 +640,7 @@ func deterministicRequestID(jobID string, parts ...string) string {
 func (a *activities) processSingleTask(
 	ctx context.Context,
 	batchOperation *batchspb.BatchOperationInput,
-	namespace string,
+	targetNamespace string,
 	task task,
 	limiter quotas.RequestRateLimiter,
 	sdkClient sdkclient.Client,
@@ -642,8 +654,7 @@ func (a *activities) processSingleTask(
 	ctx, cancel := taskTimeoutContext(ctx)
 	defer cancel()
 
-	// Handle admin batch operations
-	if batchOperation.AdminRequest != nil {
+	if isAdminRequest(batchOperation) && !isAdminDelegatedRequest(batchOperation) {
 		return a.processAdminTask(ctx, batchOperation, task, limiter)
 	}
 
@@ -652,7 +663,7 @@ func (a *activities) processSingleTask(
 		err = processTargetTask(ctx, limiter, task,
 			func(execution *commonpb.Execution) error {
 				_, err := frontendClient.TerminateActivityExecution(ctx, &workflowservice.TerminateActivityExecutionRequest{
-					Namespace:  namespace,
+					Namespace:  targetNamespace,
 					ActivityId: execution.GetBusinessId(),
 					RunId:      execution.GetRunId(),
 					Identity:   operation.TerminateActivitiesOperation.GetIdentity(),
@@ -665,7 +676,7 @@ func (a *activities) processSingleTask(
 		err = processTargetTask(ctx, limiter, task,
 			func(execution *commonpb.Execution) error {
 				_, err := frontendClient.DeleteActivityExecution(ctx, &workflowservice.DeleteActivityExecutionRequest{
-					Namespace:  namespace,
+					Namespace:  targetNamespace,
 					ActivityId: execution.GetBusinessId(),
 					RunId:      execution.GetRunId(),
 				})
@@ -675,7 +686,7 @@ func (a *activities) processSingleTask(
 		err = processTargetTask(ctx, limiter, task,
 			func(execution *commonpb.Execution) error {
 				_, err := frontendClient.RequestCancelActivityExecution(ctx, &workflowservice.RequestCancelActivityExecutionRequest{
-					Namespace:  namespace,
+					Namespace:  targetNamespace,
 					ActivityId: execution.GetBusinessId(),
 					RunId:      execution.GetRunId(),
 					Identity:   operation.CancelActivitiesOperation.GetIdentity(),
@@ -698,7 +709,7 @@ func (a *activities) processSingleTask(
 		err = processTask(ctx, limiter, task,
 			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
 				_, err := frontendClient.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
-					Namespace:         namespace,
+					Namespace:         targetNamespace,
 					WorkflowExecution: executionInfo.Execution,
 					SignalName:        operation.SignalOperation.GetSignal(),
 					Input:             operation.SignalOperation.GetInput(),
@@ -712,7 +723,7 @@ func (a *activities) processSingleTask(
 		err = processTask(ctx, limiter, task,
 			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
 				_, err := frontendClient.DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
-					Namespace:         namespace,
+					Namespace:         targetNamespace,
 					WorkflowExecution: executionInfo.Execution,
 				})
 				return err
@@ -729,7 +740,7 @@ func (a *activities) processSingleTask(
 					// Using ResetOptions
 					// Note: getResetEventIDByOptions may modify workflowExecution.RunId, if reset should be to a prior run
 					//nolint:staticcheck // SA1019: worker versioning v0.31
-					eventID, err = getResetEventIDByOptions(ctx, operation.ResetOperation.Options, namespace, executionInfo.Execution, frontendClient, logger)
+					eventID, err = getResetEventIDByOptions(ctx, operation.ResetOperation.Options, targetNamespace, executionInfo.Execution, frontendClient, logger)
 					//nolint:staticcheck // SA1019: worker versioning v0.31
 					resetReapplyType = operation.ResetOperation.Options.ResetReapplyType
 					//nolint:staticcheck // SA1019: worker versioning v0.31
@@ -737,7 +748,7 @@ func (a *activities) processSingleTask(
 				} else {
 					// Old fields
 					//nolint:staticcheck // SA1019: worker versioning v0.31
-					eventID, err = getResetEventIDByType(ctx, operation.ResetOperation.ResetType, namespace, executionInfo.Execution, frontendClient, logger)
+					eventID, err = getResetEventIDByType(ctx, operation.ResetOperation.ResetType, targetNamespace, executionInfo.Execution, frontendClient, logger)
 					//nolint:staticcheck // SA1019: worker versioning v0.31
 					resetReapplyType = operation.ResetOperation.ResetReapplyType
 				}
@@ -745,7 +756,7 @@ func (a *activities) processSingleTask(
 					return err
 				}
 				_, err = frontendClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
-					Namespace:         namespace,
+					Namespace:         targetNamespace,
 					WorkflowExecution: executionInfo.Execution,
 					Reason:            batchOperation.Request.Reason,
 					RequestId: deterministicRequestID(batchOperation.Request.GetJobId(), "reset",
@@ -762,7 +773,7 @@ func (a *activities) processSingleTask(
 		err = processTask(ctx, limiter, task,
 			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
 				unpauseRequest := &workflowservice.UnpauseActivityRequest{
-					Namespace:      namespace,
+					Namespace:      targetNamespace,
 					Execution:      executionInfo.Execution,
 					Identity:       operation.UnpauseActivitiesOperation.Identity,
 					ResetAttempts:  operation.UnpauseActivitiesOperation.ResetAttempts,
@@ -789,7 +800,7 @@ func (a *activities) processSingleTask(
 		err = processTask(ctx, limiter, task,
 			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
 				_, err := frontendClient.UpdateWorkflowExecutionOptions(ctx, &workflowservice.UpdateWorkflowExecutionOptionsRequest{
-					Namespace:                namespace,
+					Namespace:                targetNamespace,
 					WorkflowExecution:        executionInfo.Execution,
 					WorkflowExecutionOptions: operation.UpdateWorkflowOptionsOperation.WorkflowExecutionOptions,
 					UpdateMask:               &fieldmaskpb.FieldMask{Paths: operation.UpdateWorkflowOptionsOperation.UpdateMask.Paths},
@@ -801,7 +812,7 @@ func (a *activities) processSingleTask(
 		err = processTask(ctx, limiter, task,
 			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
 				resetRequest := &workflowservice.ResetActivityRequest{
-					Namespace:              namespace,
+					Namespace:              targetNamespace,
 					Execution:              executionInfo.Execution,
 					Identity:               operation.ResetActivitiesOperation.Identity,
 					ResetHeartbeat:         operation.ResetActivitiesOperation.ResetHeartbeat,
@@ -826,7 +837,7 @@ func (a *activities) processSingleTask(
 		err = processTask(ctx, limiter, task,
 			func(executionInfo *workflowpb.WorkflowExecutionInfo) error {
 				updateRequest := &workflowservice.UpdateActivityOptionsRequest{
-					Namespace:       namespace,
+					Namespace:       targetNamespace,
 					Execution:       executionInfo.Execution,
 					UpdateMask:      &fieldmaskpb.FieldMask{Paths: operation.UpdateActivityOptionsOperation.UpdateMask.Paths},
 					RestoreOriginal: operation.UpdateActivityOptionsOperation.RestoreOriginal,
