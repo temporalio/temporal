@@ -432,7 +432,6 @@ func NewMutableState(
 	if s.config.EnableChasm(namespaceName) {
 		s.chasmTree = chasm.NewEmptyTree(
 			shard.ChasmRegistry(),
-			shard.GetTimeSource(),
 			s,
 			chasm.DefaultPathEncoder,
 			logger,
@@ -588,7 +587,6 @@ func NewMutableStateFromDB(
 		mutableState.chasmTree, err = chasm.NewTreeFromDB(
 			dbRecord.ChasmNodes,
 			shard.ChasmRegistry(),
-			shard.GetTimeSource(),
 			mutableState,
 			chasm.DefaultPathEncoder,
 			mutableState.logger, // this logger is tagged with execution key.
@@ -8423,18 +8421,18 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 				firstEventVersion := common.EmptyVersion
 				nextEventID := common.EmptyEventID
 				var lastVersionHistoryItem *historyspb.VersionHistoryItem
+				currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.executionInfo.VersionHistories)
+				if err != nil {
+					return err
+				}
 				if len(eventBatches) > 0 {
 					firstEventID = eventBatches[0][0].EventId
 					firstEventVersion = eventBatches[0][0].Version
 					lastBatch := eventBatches[len(eventBatches)-1]
 					nextEventID = lastBatch[len(lastBatch)-1].EventId + 1
 				} else {
-					currentHistory, err := versionhistory.GetCurrentVersionHistory(ms.executionInfo.VersionHistories)
-					if err != nil {
-						return err
-					}
-					if !versionhistory.IsEmptyVersionHistory(currentHistory) {
-						item, err := versionhistory.GetLastVersionHistoryItem(currentHistory)
+					if !versionhistory.IsEmptyVersionHistory(currentVersionHistory) {
+						item, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
 						//nolint:revive // max-control-nesting: control flow nesting exceeds 5
 						if err != nil {
 							return err
@@ -8459,6 +8457,9 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 						NextEventID:            nextEventID,
 						TaskEquivalents:        replicationTasks,
 						LastVersionHistoryItem: lastVersionHistoryItem,
+						CurrentVersionHistory: &historyspb.VersionHistory{
+							Items: versionhistory.CopyVersionHistoryItems(currentVersionHistory.Items),
+						},
 					}
 
 					if ms.dbRecordVersion == 1 {

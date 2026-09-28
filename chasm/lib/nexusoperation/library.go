@@ -1,6 +1,7 @@
 package nexusoperation
 
 import (
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -49,6 +50,7 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*Operation](
 			componentName,
+			chasm.WithExecutionType(enumspb.EXECUTION_TYPE_NEXUS_OPERATION),
 			chasm.WithSearchAttributes(
 				EndpointSearchAttribute,
 				ServiceSearchAttribute,
