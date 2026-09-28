@@ -89,7 +89,6 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		newMatcher               bool
 		fairness                 bool
 		controller               *gomock.Controller
 		mockHistoryClient        *historyservicemock.MockHistoryServiceClient
@@ -102,11 +101,11 @@ type (
 		hostInfoForResolver      membership.HostInfo
 		mockNexusEndpointManager *persistence.MockNexusEndpointManager
 
-		matchingEngine     *matchingEngineImpl
-		taskManager        *testTaskManager // points to classicTaskManager or fairTaskManager
-		classicTaskManager *testTaskManager
-		fairTaskManager    *testTaskManager
-		logger             *testlogger.TestLogger
+		matchingEngine  *matchingEngineImpl
+		taskManager     *testTaskManager // equal to either v1TaskManager or fairTaskManager
+		v1TaskManager   *testTaskManager
+		fairTaskManager *testTaskManager
+		logger          *testlogger.TestLogger
 	}
 )
 
@@ -148,17 +147,12 @@ func createMockNamespaceCache(controller *gomock.Controller, nsName namespace.Na
 	return ns, mockNamespaceCache
 }
 
-// TODO(pri): cleanup; delete this
-func TestMatchingEngine_Classic_Suite(t *testing.T) {
-	suite.Run(t, &matchingEngineSuite{newMatcher: false})
-}
-
 func TestMatchingEngine_Pri_Suite(t *testing.T) {
-	suite.Run(t, &matchingEngineSuite{newMatcher: true})
+	suite.Run(t, &matchingEngineSuite{})
 }
 
 func TestMatchingEngine_Fair_Suite(t *testing.T) {
-	suite.Run(t, &matchingEngineSuite{newMatcher: true, fairness: true})
+	suite.Run(t, &matchingEngineSuite{fairness: true})
 }
 
 func (s *matchingEngineSuite) SetupSuite() {
@@ -184,12 +178,12 @@ func (s *matchingEngineSuite) SetupTest() {
 
 	// create and supply two task managers, but only one is expected to be used at a time since
 	// we run tests with fairness enabled in separate suite.
-	s.classicTaskManager = newTestTaskManager(s.logger)
+	s.v1TaskManager = newTestTaskManager(s.logger)
 	s.fairTaskManager = newTestFairTaskManager(s.logger)
 	if s.fairness {
 		s.taskManager = s.fairTaskManager
 	} else {
-		s.taskManager = s.classicTaskManager
+		s.taskManager = s.v1TaskManager
 	}
 
 	s.ns, s.mockNamespaceCache = createMockNamespaceCache(s.controller, matchingTestNamespace)
@@ -208,7 +202,7 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.mockNexusEndpointManager = persistence.NewMockNexusEndpointManager(s.controller)
 	s.mockNexusEndpointManager.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&persistence.ListNexusEndpointsResponse{}, nil).AnyTimes()
 
-	s.matchingEngine = s.newMatchingEngine(s.newConfig(), s.classicTaskManager, s.fairTaskManager)
+	s.matchingEngine = s.newMatchingEngine(s.newConfig(), s.v1TaskManager, s.fairTaskManager)
 	s.matchingEngine.Start()
 }
 
@@ -216,8 +210,6 @@ func (s *matchingEngineSuite) newConfig() *Config {
 	res := defaultTestConfig()
 	if s.fairness {
 		useFairness(res)
-	} else if !s.newMatcher {
-		useClassicMatcher(res)
 	}
 	return res
 }
@@ -1266,33 +1258,6 @@ func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 	}
 }
 
-func (s *matchingEngineSuite) TestSkipAutoEnable() {
-	if !s.newMatcher && !s.fairness {
-		s.T().Skip("We only skip auto enable if new matcher is explicitly enabled already")
-	}
-
-	// Explicitly set to zero times in the event this call is added as expected during setup in the future
-	s.mockMatchingClient.EXPECT().UpdateFairnessState(context.Background(), nil).DoAndReturn(
-		func(ctx context.Context, req *matchingservice.UpdateFairnessStateRequest, opts ...grpc.CallOption) (*matchingservice.UpdateFairnessStateResponse, error) {
-			return s.matchingEngine.UpdateFairnessState(ctx, req)
-		},
-	).Times(0)
-
-	tv := testvars.New(s.T())
-	_, _, err := s.matchingEngine.AddWorkflowTask(
-		context.Background(),
-		&matchingservice.AddWorkflowTaskRequest{
-			NamespaceId: tv.NamespaceID().String(),
-			Execution:   tv.WorkflowExecution(),
-			TaskQueue:   tv.TaskQueue(),
-			Priority: &commonpb.Priority{
-				PriorityKey: 3,
-			},
-		},
-	)
-	s.Require().NoError(err)
-}
-
 func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isForwarded bool) {
 	s.matchingEngine.config.RangeSize = 300 // override to low number for the test
 
@@ -1391,9 +1356,7 @@ func (s *matchingEngineSuite) TestQueryWorkflowDoesNotLoadSticky() {
 }
 
 func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher; flaky")
-	}
+	s.T().Skip("not supported by new matcher; flaky")
 
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
 
@@ -1510,9 +1473,8 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 
 // TODO: this unit test does not seem to belong to matchingEngine, move it to the right place
 func (s *matchingEngineSuite) TestSyncMatchActivities() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher")
-	}
+	s.T().Skip("not supported by new matcher")
+
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
 
 	scope := tally.NewTestScope("test", nil)
@@ -1692,9 +1654,7 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 		5. Verify that both the pollers have received tasks.
 	*/
 
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher")
-	}
+	s.T().Skip("not supported by new matcher")
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
 
 	scope := tally.NewTestScope("test", nil)
@@ -1872,9 +1832,7 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
-	if s.newMatcher {
-		s.T().Skip("test is flaky with new matcher")
-	}
+	s.T().Skip("test is flaky with new matcher")
 	dispatchLimitFn := func(int, int64) float64 {
 		return defaultTaskDispatchRPS
 	}
@@ -2051,9 +2009,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher; flaky")
-	}
+	s.T().Skip("not supported by new matcher; flaky")
 
 	runID := uuid.NewString()
 	workflowID := "workflow1"
@@ -2318,9 +2274,7 @@ func (s *matchingEngineSuite) TestForceUnloadTaskQueue() {
 }
 
 func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
-	if s.newMatcher {
-		s.T().Skip("test is flaky with new matcher")
-	}
+	s.T().Skip("test is flaky with new matcher")
 	runID := uuid.NewString()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -2343,7 +2297,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 
 	engines := make([]*matchingEngineImpl, engineCount)
 	for p := range engineCount {
-		e := s.newMatchingEngine(s.newConfig(), s.classicTaskManager, s.fairTaskManager)
+		e := s.newMatchingEngine(s.newConfig(), s.v1TaskManager, s.fairTaskManager)
 		e.config.RangeSize = rangeSize
 		engines[p] = e
 		e.Start()
@@ -2474,9 +2428,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 }
 
 func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
-	if s.newMatcher {
-		s.T().Skip("test is flaky with new matcher")
-	}
+	s.T().Skip("test is flaky with new matcher")
 	runID := uuid.NewString()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -2499,7 +2451,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 
 	engines := make([]*matchingEngineImpl, engineCount)
 	for p := range engineCount {
-		e := s.newMatchingEngine(s.newConfig(), s.classicTaskManager, s.fairTaskManager)
+		e := s.newMatchingEngine(s.newConfig(), s.v1TaskManager, s.fairTaskManager)
 		e.config.RangeSize = rangeSize
 		engines[p] = e
 		e.Start()
@@ -2617,10 +2569,9 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 	s.LessOrEqual(expectedRange, s.taskManager.getQueueDataByKey(tlID).rangeID)
 }
 
+/*
 func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher")
-	}
+	s.T().Skip("not supported by new matcher")
 
 	// test default is 100ms, but make it longer for this test so it's not flaky
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Second)
@@ -2657,12 +2608,12 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	task2.finish(taskFinishResult{consumedToken: true})
 	s.EqualValues(0, s.taskManager.getTaskCount(dbq))
 }
+*/
 
+/*
 // TODO: should be moved to backlog_manager_test
 func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher")
-	}
+	s.T().Skip("not supported by new matcher")
 
 	runID := uuid.NewString()
 	workflowID := "workflow1"
@@ -2758,6 +2709,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	s.True(0 < len(batch.tasks) && len(batch.tasks) <= rangeSize)
 	s.True(batch.isReadBatchDone)
 }
+*/
 
 func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
 	config := s.newConfig()
@@ -2777,11 +2729,10 @@ func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
 	}
 }
 
+/*
 // TODO: should be moved to backlog_manager_test
 func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher")
-	}
+	s.T().Skip("not supported by new matcher")
 
 	runID := uuid.NewString()
 	workflowID := uuid.NewString()
@@ -2875,6 +2826,7 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 		blm.taskGC.RunNow(blm.taskAckManager.getAckLevel())
 	}
 }
+*/
 
 func (s *matchingEngineSuite) TestGetVersioningData() {
 	namespaceID := namespace.ID(uuid.NewString())
@@ -3033,7 +2985,7 @@ func (s *matchingEngineSuite) applyTaskQueueUserDataReplicationEvent(
 }
 
 func (s *matchingEngineSuite) seedTaskQueueUserData(taskQueue string, data *persistencespb.TaskQueueUserData) {
-	s.Require().NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(), &persistence.UpdateTaskQueueUserDataRequest{
+	s.Require().NoError(s.v1TaskManager.UpdateTaskQueueUserData(context.Background(), &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: s.ns.ID().String(),
 		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
 			taskQueue: {UserData: &persistencespb.VersionedTaskQueueUserData{Data: data}},
@@ -3161,7 +3113,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {
 		Version: 1,
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
+	s.NoError(s.v1TaskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
 			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
@@ -3190,7 +3142,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsEmpty() {
 		Version: 1,
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
+	s.NoError(s.v1TaskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
 			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
@@ -3219,7 +3171,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Expires() {
 		Version: 1,
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
+	s.NoError(s.v1TaskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
 			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
@@ -3301,7 +3253,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 		Version: 1,
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
+	s.NoError(s.v1TaskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
 			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
@@ -3391,7 +3343,7 @@ func (s *matchingEngineSuite) TestUpdateUserData_FailsOnKnownVersionMismatch() {
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
 
-	err := s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
+	err := s.v1TaskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
 			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
@@ -3491,7 +3443,7 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 		},
 	}
 
-	err := s.classicTaskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
+	err := s.v1TaskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceID,
 		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
 			tq: &persistence.SingleTaskQueueUserDataUpdate{
@@ -3544,7 +3496,7 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 		},
 	}
 
-	err = s.classicTaskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
+	err = s.v1TaskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceID,
 		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
 			tq: &persistence.SingleTaskQueueUserDataUpdate{
@@ -3602,7 +3554,7 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	config := s.newConfig()
 	config.MembershipUnloadDelay = dynamicconfig.GetDurationPropertyFn(10 * time.Millisecond)
 
-	e := newMatchingEngine(config, s.classicTaskManager, s.fairTaskManager, s.mockHistoryClient,
+	e := newMatchingEngine(config, s.v1TaskManager, s.fairTaskManager, s.mockHistoryClient,
 		s.logger, s.mockNamespaceCache, routingClient, s.mockVisibilityManager,
 		s.mockHostInfoProvider, s.mockServiceResolver, s.mockNexusEndpointManager)
 	e.Start()
@@ -4097,17 +4049,13 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 
 // TestResettingBacklogCounter tests the scenario where approximateBacklogCounter over-counts and resets it accordingly
 func (s *matchingEngineSuite) TestResetBacklogCounterNoDBErrors() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher; flaky")
-	}
+	s.T().Skip("not supported by new matcher; flaky")
 
 	s.resetBacklogCounter(2, 2, 2)
 }
 
 func (s *matchingEngineSuite) TestResetBacklogCounterDBErrors() {
-	if s.newMatcher {
-		s.T().Skip("test is flaky with new matcher")
-	}
+	s.T().Skip("test is flaky with new matcher")
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
 	s.taskManager.addFault("CreateTasks", "ConditionFailed", 0.1)
@@ -4117,16 +4065,12 @@ func (s *matchingEngineSuite) TestResetBacklogCounterDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterNoDBErrors() {
-	if s.newMatcher {
-		s.T().Skip("test is flaky with new matcher")
-	}
+	s.T().Skip("test is flaky with new matcher")
 	s.resetBacklogCounter(10, 20, 2)
 }
 
 func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterDBErrors() {
-	if s.newMatcher {
-		s.T().Skip("test is flaky with new matcher")
-	}
+	s.T().Skip("test is flaky with new matcher")
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
 	s.taskManager.addFault("CreateTasks", "ConditionFailed", 0.1)
@@ -4176,9 +4120,7 @@ func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksNoDBErrors() {
-	if s.newMatcher {
-		s.T().Skip("test is flaky with new matcher")
-	}
+	s.T().Skip("test is flaky with new matcher")
 	s.concurrentPublishAndConsumeValidateBacklogCounter(20, 100, 100)
 }
 
@@ -4521,7 +4463,7 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_NewDeploymentDataRemove
 	}
 
 	// Using the lower level UpdateTaskQueueUserData to set the user data for multiple versions at once.
-	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(), &persistence.UpdateTaskQueueUserDataRequest{
+	s.NoError(s.v1TaskManager.UpdateTaskQueueUserData(context.Background(), &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceID,
 		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
 			tq: {UserData: userData},
@@ -5263,7 +5205,7 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_DeletedVersionRemovesOl
 		},
 	}
 
-	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(), &persistence.UpdateTaskQueueUserDataRequest{
+	s.NoError(s.v1TaskManager.UpdateTaskQueueUserData(context.Background(), &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceID,
 		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
 			tq: {UserData: userData},
@@ -6492,11 +6434,6 @@ func (d *dynamicRateBurstWrapper) Burst() int {
 	return d.RateLimiterImpl.Burst()
 }
 
-// TODO(pri): cleanup; delete this
-func useClassicMatcher(config *Config) {
-	config.NewMatcherSub = staticFalseChange
-}
-
 func useFairness(config *Config) {
 	config.EnableFairnessSub = staticTrueChange
 }
@@ -7317,13 +7254,11 @@ func TestAutoEnableV2ConfigChange(t *testing.T) {
 	engine.Start()
 	defer engine.Stop()
 
-	// autoEnable ON, base configs OFF -> with V2 fairnessState, effective config is NewMatcher=true, EnableFairness=true
+	// autoEnable ON, base configs OFF -> with V2 fairnessState, effective config is EnableFairness=true
 	cleanupAutoEnable := dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, true)
 	cleanupFairness := dcClient.OverrideSetting(dynamicconfig.MatchingEnableFairness, false)
-	cleanupNewMatcher := dcClient.OverrideSetting(dynamicconfig.MatchingUseNewMatcher, false)
 	defer cleanupAutoEnable()
 	defer cleanupFairness()
-	defer cleanupNewMatcher()
 
 	testNamespaceID := uuid.NewString()
 	testTaskQueueName := "test-tq-" + uuid.NewString()
@@ -7377,7 +7312,7 @@ func TestAutoEnableV2ConfigChange(t *testing.T) {
 	pq, err := pm.defaultQueueFuture.Get(ctx)
 	require.NoError(t, err)
 
-	// Turn autoEnable OFF -> effective config changes to NewMatcher=false, EnableFairness=false
+	// Turn autoEnable OFF -> effective config changes to EnableFairness=false
 	cleanupAutoEnable()
 	_ = dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, false)
 
@@ -7414,13 +7349,11 @@ func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testin
 	engine.Start()
 	defer engine.Stop()
 
-	// autoEnable OFF, base configs ON -> with V2 fairnessState, effective config is NewMatcher=true, EnableFairness=true
+	// autoEnable OFF, base configs ON -> with V2 fairnessState, effective config is EnableFairness=true
 	cleanupAutoEnable := dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, false)
 	cleanupFairness := dcClient.OverrideSetting(dynamicconfig.MatchingEnableFairness, true)
-	cleanupNewMatcher := dcClient.OverrideSetting(dynamicconfig.MatchingUseNewMatcher, true)
 	defer cleanupAutoEnable()
 	defer cleanupFairness()
-	defer cleanupNewMatcher()
 
 	testNamespaceID := uuid.NewString()
 	testTaskQueueName := "test-tq-" + uuid.NewString()
@@ -7472,13 +7405,13 @@ func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testin
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		return !pm.config.AutoEnableV2() && pm.config.NewMatcher && pm.config.EnableFairness
+		return !pm.config.AutoEnableV2() && pm.config.EnableFairness
 	}, 2*time.Second, 10*time.Millisecond, "config should be initialized")
 
 	pq, err := pm.defaultQueueFuture.Get(ctx)
 	require.NoError(t, err)
 
-	// Turn autoEnable ON -> effective config stays NewMatcher=true, EnableFairness=true (same as before)
+	// Turn autoEnable ON -> effective config stays EnableFairness=true (same as before)
 	cleanupAutoEnable()
 	_ = dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, true)
 

@@ -42,7 +42,6 @@ type (
 		// task queue configuration
 
 		RangeSize                                int64
-		NewMatcherSub                            dynamicconfig.TypedSubscribableWithTaskQueueFilter[dynamicconfig.GradualChange[bool]]
 		EnableFairnessSub                        dynamicconfig.TypedSubscribableWithTaskQueueFilter[dynamicconfig.GradualChange[bool]]
 		AutoEnableV2Sub                          dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
 		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
@@ -171,8 +170,6 @@ type (
 		BacklogTaskForwardTimeout      func() time.Duration
 		ForwardPollRetryMaxInterval    func() time.Duration
 		RangeSize                      int64
-		NewMatcher                     bool
-		NewMatcherSub                  func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
 		EnableFairness                 bool
 		EnableFairnessSub              func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
 		AutoEnableV2                   func() bool
@@ -296,7 +293,6 @@ func NewConfig(
 		OperatorRPSRatio:                         dynamicconfig.OperatorRPSRatio.Get(dc),
 		PollWaitForNamespaceRateLimitToken:       dynamicconfig.PollWaitForNamespaceRateLimitToken.Get(dc),
 		RangeSize:                                100000,
-		NewMatcherSub:                            dynamicconfig.MatchingUseNewMatcher.Subscribe(dc),
 		EnableFairnessSub:                        dynamicconfig.MatchingEnableFairness.Subscribe(dc),
 		AutoEnableV2Sub:                          dynamicconfig.MatchingAutoEnableV2.Subscribe(dc),
 		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
@@ -409,9 +405,6 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 
 	return &taskQueueConfig{
 		RangeSize: config.RangeSize,
-		NewMatcherSub: func(cb func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
-			return config.NewMatcherSub(ns.String(), taskQueueName, taskType, cb)
-		},
 		EnableFairnessSub: func(cb func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
 			return config.EnableFairnessSub(ns.String(), taskQueueName, taskType, cb)
 		},

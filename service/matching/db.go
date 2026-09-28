@@ -62,7 +62,6 @@ type (
 
 	taskQueueState struct {
 		rangeID       int64
-		ackLevel      int64 // TODO(pri): old matcher cleanup, delete later
 		subqueues     []persistencespb.SubqueueInfo
 		otherHasTasks bool
 		scaleState    *persistencespb.PartitionScaleState
@@ -166,7 +165,6 @@ func (db *taskQueueDB) RenewLease(
 	}
 	return taskQueueState{
 		rangeID:       db.rangeID,
-		ackLevel:      db.subqueues[subqueueZero].AckLevel, // TODO(pri): cleanup, only used by old backlog manager
 		subqueues:     db.cloneSubqueues(),
 		otherHasTasks: !db.isDraining && db.otherHasTasks,
 		scaleState:    db.scaleState,
@@ -214,7 +212,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 		// If we are the draining one, then assume the other has tasks, so we can migrate
 		// backwards safely. Also assume other has tasks if the config allows for migration
 		// (and the partition supports fairness) since we may have just turned on fairness and need to migrate.
-		canMigrate := (db.config.NewMatcher || db.config.EnableFairness) && db.queue.Partition().SupportsFairness()
+		canMigrate := db.queue.Partition().SupportsFairness()
 		db.otherHasTasks = canMigrate || db.isDraining
 
 		if _, err := db.store.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
@@ -253,36 +251,6 @@ func (db *taskQueueDB) updateTaskQueueLocked(ctx context.Context, incrementRange
 	db.lastWrite = time.Now()
 	db.rangeID = newRangeID
 	return nil
-}
-
-// OldUpdateState updates the queue state with the given value. This is used by old backlog
-// manager (not subqueue-enabled).
-// TODO(pri): old matcher cleanup
-func (db *taskQueueDB) OldUpdateState(
-	ctx context.Context,
-	ackLevel int64,
-) error {
-	db.Lock()
-	defer db.Unlock()
-	// We don't need to update lastWrite/lastChange in here since this function is only used by
-	// the old backlog manager and those fields are only used by the new backlog manager.
-
-	// Reset approximateBacklogCount to fix the count divergence issue
-	maxReadLevel := db.getMaxReadLevelLocked(subqueueZero)
-	if ackLevel == maxReadLevel {
-		db.subqueues[subqueueZero].ApproximateBacklogCount = 0
-		db.subqueues[subqueueZero].oldestTime = time.Time{} // zero time means no backlog
-	}
-
-	prevAckLevel := db.subqueues[subqueueZero].AckLevel
-	db.subqueues[subqueueZero].AckLevel = ackLevel
-
-	err := db.updateTaskQueueLocked(ctx, false)
-	if err != nil {
-		db.subqueues[subqueueZero].AckLevel = prevAckLevel
-	}
-	db.emitPhysicalBacklogGaugesLocked()
-	return err
 }
 
 // shouldUpdateMetadataOnAppendLocked returns whether a task append should also write the

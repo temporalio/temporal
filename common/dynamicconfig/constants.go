@@ -1598,12 +1598,6 @@ scoped by namespace and/or task queue.`,
 (1) sync match rate instead of total dispatch rate for the add-to-dispatch ratio check, and
 (2) task dispatch latency instead of backlog age stats for the backlog scale-up check.`,
 	)
-	MatchingUseNewMatcher = NewTaskQueueTypedSettingWithConverter(
-		"matching.useNewMatcher",
-		ConvertGradualChange(true),
-		StaticGradualChange(true),
-		`Use priority-enabled TaskMatcher`,
-	)
 	MatchingEnableFairness = NewTaskQueueTypedSettingWithConverter(
 		"matching.enableFairness",
 		ConvertGradualChange(false),

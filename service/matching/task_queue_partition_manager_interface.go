@@ -29,14 +29,6 @@ type (
 		// maxDispatchPerSecond is the max rate at which tasks are allowed to be dispatched
 		// from this task queue to pollers
 		PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, bool, error)
-		// ProcessSpooledTask dispatches a task to a poller. When there are no pollers to pick
-		// up the task, this method will return error. Task will not be persisted to db
-		// TODO(pri): old matcher cleanup
-		ProcessSpooledTask(
-			ctx context.Context,
-			task *internalTask,
-			backlogQueue *PhysicalTaskQueueKey,
-		) error
 		// AddSpooledTask passes a task to the matcher to make it eligible for matching and
 		// returns immediately. (New matcher only)
 		AddSpooledTask(ctx context.Context, task *internalTask, backlogQueue *PhysicalTaskQueueKey) error

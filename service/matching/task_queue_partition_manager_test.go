@@ -51,7 +51,6 @@ type PartitionManagerTestSuite struct {
 	suite.Suite
 	protorequire.ProtoAssertions
 
-	newMatcher     bool
 	fairness       bool
 	controller     *gomock.Controller
 	userDataMgr    *mockUserDataManager
@@ -60,20 +59,14 @@ type PartitionManagerTestSuite struct {
 	ns             *namespace.Namespace
 }
 
-// TODO(pri): cleanup; delete this
-func TestTaskQueuePartitionManager_Classic_Suite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, &PartitionManagerTestSuite{newMatcher: false})
-}
-
 func TestTaskQueuePartitionManager_Pri_Suite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, &PartitionManagerTestSuite{newMatcher: true})
+	suite.Run(t, &PartitionManagerTestSuite{})
 }
 
 func TestTaskQueuePartitionManager_Fair_Suite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, &PartitionManagerTestSuite{newMatcher: true, fairness: true})
+	suite.Run(t, &PartitionManagerTestSuite{fairness: true})
 }
 
 func (s *PartitionManagerTestSuite) SetupTest() {
@@ -86,8 +79,6 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	config := defaultTestConfig()
 	if s.fairness {
 		useFairness(config)
-	} else if !s.newMatcher {
-		useClassicMatcher(config)
 	}
 
 	s.matchingClient = matchingservicemock.NewMockMatchingServiceClient(s.controller)
@@ -1732,9 +1723,6 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_AddHookNoSyncMatch() {
 }
 
 func (s *PartitionManagerTestSuite) TestTaskAddHooks_RateLimited() {
-	if !s.newMatcher {
-		s.T().Skip("rate limiting signal from matcher is only available in new matcher")
-	}
 	hook := &capturingTaskMatchHook{}
 	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
 	defer cleanup()

@@ -2,8 +2,8 @@ package matching
 
 import (
 	"context"
-	"sync"
-	"sync/atomic"
+	"errors"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -15,39 +15,28 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+var errForwarderSlowDown = errors.New("limit exceeded")
 
 type ForwarderTestSuite struct {
 	suite.Suite
 
-	newFwdr    bool
 	controller *gomock.Controller
 	client     *matchingservicemock.MockMatchingServiceClient
-	fwdr       forwarder
+	fwdr       *priForwarder
 	cfg        *forwarderConfig
 	partition  *tqid.NormalPartition
 }
 
-type forwarder interface {
-	ForwardTask(background context.Context, task *internalTask) error
-	ForwardQueryTask(background context.Context, task *internalTask) (*matchingservice.QueryWorkflowResponse, error)
-	ForwardPoll(ctx context.Context, p *pollMetadata) (*internalTask, error)
-}
-
-// TODO(pri): cleanup; delete this
-func TestForwarderSuite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, &ForwarderTestSuite{newFwdr: false})
-}
-
 func TestPriorityForwarderSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, &ForwarderTestSuite{newFwdr: true})
+	suite.Run(t, &ForwarderTestSuite{})
 }
 
 func (t *ForwarderTestSuite) SetupTest() {
@@ -64,13 +53,8 @@ func (t *ForwarderTestSuite) SetupTest() {
 	t.NoError(err)
 	t.partition = tqFam.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
 
-	if t.newFwdr {
-		t.fwdr, err = newPriForwarder(t.cfg, UnversionedQueueKey(t.partition), t.client, testhooks.TestHooks{})
-		t.NoError(err)
-	} else {
-		t.fwdr, err = newForwarder(t.cfg, UnversionedQueueKey(t.partition), t.client)
-		t.NoError(err)
-	}
+	t.fwdr, err = newPriForwarder(t.cfg, UnversionedQueueKey(t.partition), t.client, testhooks.TestHooks{})
+	t.NoError(err)
 }
 
 func (t *ForwarderTestSuite) TearDownTest() {
@@ -400,101 +384,11 @@ func (t *ForwarderTestSuite) TestForwardPollForNexusPreservesWorkerInstanceKey()
 		"WorkerInstanceKey should be preserved when forwarding Nexus poll")
 }
 
-// TODO(pri): old matcher cleanup
-func (t *ForwarderTestSuite) TestMaxOutstandingConcurrency() {
-	if t.newFwdr {
-		t.T().Skip("priority forwarder is not compatible with this test")
-	}
-	fwdr := t.fwdr.(*Forwarder)
-
-	concurrency := 50
-	testCases := []struct {
-		name          string
-		mustLeakToken bool
-		output        int32
-	}{
-		{"contention", false, int32(concurrency)},
-		{"token_leak", true, 1},
-	}
-
-	var adds int32
-	var polls int32
-	var wg sync.WaitGroup
-
-	for _, tc := range testCases {
-		adds = 0
-		polls = 0
-		t.Run(tc.name, func() {
-			for range concurrency {
-				wg.Go(func() {
-					timer := time.NewTimer(time.Millisecond * 200)
-					select {
-					case token := <-fwdr.AddReqTokenC():
-						timer.Stop()
-						if !tc.mustLeakToken {
-							token.release()
-						}
-						atomic.AddInt32(&adds, 1)
-					case <-timer.C:
-					}
-
-					timer = time.NewTimer(time.Millisecond * 200)
-					select {
-					case token := <-fwdr.PollReqTokenC():
-						timer.Stop()
-						if !tc.mustLeakToken {
-							token.release()
-						}
-						atomic.AddInt32(&polls, 1)
-					case <-timer.C:
-					}
-				})
-			}
-			t.True(common.AwaitWaitGroup(&wg, time.Second))
-			t.Equal(tc.output, adds)
-			t.Equal(tc.output, polls)
-		})
-	}
-}
-
-// TODO(pri): old matcher cleanup
-func (t *ForwarderTestSuite) TestMaxOutstandingConfigUpdate() {
-	if t.newFwdr {
-		t.T().Skip("priority forwarder is not compatible with this test")
-	}
-	fwdr := t.fwdr.(*Forwarder)
-
-	maxOutstandingTasks := int32(1)
-	maxOutstandingPolls := int32(1)
-	t.cfg.ForwarderMaxOutstandingTasks = func() int { return int(atomic.LoadInt32(&maxOutstandingTasks)) }
-	t.cfg.ForwarderMaxOutstandingPolls = func() int { return int(atomic.LoadInt32(&maxOutstandingPolls)) }
-
-	startC := make(chan struct{})
-	doneWG := sync.WaitGroup{}
-	for range 10 {
-		doneWG.Go(func() {
-			<-startC
-			token1 := <-fwdr.AddReqTokenC()
-			token1.release()
-			token2 := <-fwdr.PollReqTokenC()
-			token2.release()
-		})
-	}
-
-	maxOutstandingTasks = 10
-	maxOutstandingPolls = 10
-	close(startC)
-	t.True(common.AwaitWaitGroup(&doneWG, time.Second))
-
-	t.Equal(10, cap(fwdr.addReqToken.Load().(*ForwarderReqToken).ch))
-	t.Equal(10, cap(fwdr.pollReqToken.Load().(*ForwarderReqToken).ch))
-}
-
 func (t *ForwarderTestSuite) usingTaskqueuePartition(taskType enumspb.TaskQueueType) {
 	f, err := tqid.NewTaskQueueFamily("fwdr", "tl0")
 	t.NoError(err)
 	t.partition = f.TaskQueue(taskType).NormalPartition(1)
-	t.fwdr, err = newForwarder(t.cfg, UnversionedQueueKey(t.partition), t.client)
+	t.fwdr, err = newPriForwarder(t.cfg, UnversionedQueueKey(t.partition), t.client, testhooks.TestHooks{})
 	t.NoError(err)
 }
 
@@ -502,7 +396,7 @@ func (t *ForwarderTestSuite) usingBuildIdQueue(taskType enumspb.TaskQueueType, b
 	f, err := tqid.NewTaskQueueFamily("fwdr", "tl0")
 	t.NoError(err)
 	t.partition = f.TaskQueue(taskType).NormalPartition(1)
-	t.fwdr, err = newForwarder(t.cfg, BuildIdQueueKey(t.partition, buildId), t.client)
+	t.fwdr, err = newPriForwarder(t.cfg, BuildIdQueueKey(t.partition, buildId), t.client, testhooks.TestHooks{})
 	t.NoError(err)
 }
 
@@ -512,4 +406,21 @@ func mustParent(tn *tqid.NormalPartition, n int) *tqid.NormalPartition {
 		panic(err)
 	}
 	return parent
+}
+
+func randomTaskInfo() *persistencespb.AllocatedTaskInfo {
+	rt1 := time.Date(rand.Intn(9999), time.Month(rand.Intn(12)+1), rand.Intn(28)+1, rand.Intn(24)+1, rand.Intn(60), rand.Intn(60), rand.Intn(1e9), time.UTC)
+	rt2 := time.Date(rand.Intn(5000)+3000, time.Month(rand.Intn(12)+1), rand.Intn(28)+1, rand.Intn(24)+1, rand.Intn(60), rand.Intn(60), rand.Intn(1e9), time.UTC)
+
+	return &persistencespb.AllocatedTaskInfo{
+		Data: &persistencespb.TaskInfo{
+			NamespaceId:      uuid.NewString(),
+			WorkflowId:       uuid.NewString(),
+			RunId:            uuid.NewString(),
+			ScheduledEventId: rand.Int63(),
+			CreateTime:       timestamppb.New(rt1),
+			ExpiryTime:       timestamppb.New(rt2),
+		},
+		TaskId: rand.Int63(),
+	}
 }

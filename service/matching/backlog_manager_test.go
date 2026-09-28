@@ -51,11 +51,6 @@ type BacklogManagerTestSuite struct {
 	capturedTasksSlice []*internalTask
 }
 
-func TestBacklogManager_Classic_Suite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, &BacklogManagerTestSuite{newMatcher: false})
-}
-
 func TestBacklogManager_Pri_Suite(t *testing.T) {
 	t.Parallel()
 	suite.Run(t, &BacklogManagerTestSuite{newMatcher: true})
@@ -115,7 +110,7 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 			func() counter.Counter { return counter.NewMapCounter(1000) },
 			false,
 		)
-	} else if s.newMatcher {
+	} else {
 		s.blm = newPriBacklogManager(
 			ctx,
 			s.ptqMgr,
@@ -126,17 +121,6 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 			nil,
 			s.metricsCap,
 			false,
-		)
-	} else {
-		s.blm = newBacklogManager(
-			ctx,
-			s.ptqMgr,
-			tlCfg,
-			s.taskMgr,
-			s.logger,
-			s.logger,
-			nil,
-			s.metricsCap,
 		)
 	}
 }
@@ -162,6 +146,7 @@ func (s *BacklogManagerTestSuite) capturedTasks() []*internalTask {
 	return slices.Clone(s.capturedTasksSlice)
 }
 
+/*
 func (s *BacklogManagerTestSuite) TestReadLevelForAllExpiredTasksInBatch() {
 	if s.newMatcher {
 		s.T().Skip("not compatible with new backlog manager")
@@ -215,6 +200,7 @@ func (s *BacklogManagerTestSuite) TestReadLevelForAllExpiredTasksInBatch() {
 	s.Equal(int64(0), blm.taskAckManager.getAckLevel())
 	s.Equal(int64(14), blm.taskAckManager.getReadLevel())
 }
+*/
 
 func (s *BacklogManagerTestSuite) TestTaskWriterShutdown() {
 	s.blm.Start()
@@ -232,6 +218,7 @@ func (s *BacklogManagerTestSuite) TestTaskWriterShutdown() {
 	s.Error(err)
 }
 
+/*
 func (s *BacklogManagerTestSuite) TestReadBatchDone() {
 	if s.newMatcher {
 		s.T().Skip("not compatible with new backlog manager")
@@ -263,7 +250,9 @@ func (s *BacklogManagerTestSuite) TestReadBatchDone() {
 	s.True(batch.isReadBatchDone)
 	s.NoError(err)
 }
+*/
 
+/*
 func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedByAppendTask() {
 	if s.newMatcher {
 		s.T().Skip("not compatible with new backlog manager")
@@ -288,7 +277,9 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedByAppen
 		return totalApproximateBacklogCount(blm) == int64(1)
 	}, time.Second*30, time.Millisecond)
 }
+*/
 
+/*
 func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_DecrementedByCompleteTask() {
 	if s.newMatcher {
 		s.T().Skip("not compatible with new backlog manager")
@@ -322,6 +313,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_DecrementedByCompl
 	s.Equal(int64(3), ackLevel, "should move the ack level")
 	s.Equal(int64(3), numAcked, "should decrease the backlog counter to 0 as no more tasks in the backlog")
 }
+*/
 
 func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpoolTask() {
 	s.blm.Start()
@@ -768,10 +760,6 @@ func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_AllExpired() {
 // testSkipExpiredTasks verifies that the task reader correctly skips over expired tasks
 // in the DB and advances the ack level past them.
 func (s *BacklogManagerTestSuite) testSkipExpiredTasks(batchSize int, blocks ...taskBlock) {
-	if !s.newMatcher {
-		s.T().Skip("not compatible with classic backlog manager")
-	}
-
 	s.cfgcli.OverrideValue(dynamicconfig.MatchingGetTasksBatchSize.Key(), batchSize)
 
 	// Pre-populate the DB with tasks before starting the backlog manager.
@@ -864,32 +852,6 @@ func (s *BacklogManagerTestSuite) TestExpiredTasksOnRead_EmitTasksDropped() {
 			reasons = append(reasons, r.Tags["reason"])
 		}
 		return reasons
-	}
-
-	if !s.newMatcher {
-		// Classic reader: drive addTasksToBuffer directly, mirroring
-		// TestReadLevelForAllExpiredTasksInBatch. The emission is synchronous.
-		blm := s.blm.(*backlogManagerImpl)
-		s.Require().NoError(blm.taskWriter.initReadWriteState())
-
-		expired := make([]*persistencespb.AllocatedTaskInfo, numExpired)
-		for i := range expired {
-			expired[i] = &persistencespb.AllocatedTaskInfo{
-				TaskId: int64(i + 1),
-				Data: &persistencespb.TaskInfo{
-					CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-3600),
-					ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
-				},
-			}
-		}
-		s.Require().NoError(blm.taskReader.addTasksToBuffer(context.TODO(), expired))
-
-		reasons := droppedReasons()
-		s.Require().Len(reasons, numExpired)
-		for _, reason := range reasons {
-			s.Equal(dropReasonExpiredRead.tag().Value, reason)
-		}
-		return
 	}
 
 	// Pri/fair readers read the backlog from the DB asynchronously after Start.

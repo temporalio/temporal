@@ -1,5 +1,6 @@
 package matching
 
+/*
 import (
 	"context"
 	"math/rand"
@@ -832,23 +833,6 @@ func (t *MatcherTestSuite) TestRemotePollForQuery() {
 	t.True(task.isStarted())
 }
 
-func randomTaskInfo() *persistencespb.AllocatedTaskInfo {
-	rt1 := time.Date(rand.Intn(9999), time.Month(rand.Intn(12)+1), rand.Intn(28)+1, rand.Intn(24)+1, rand.Intn(60), rand.Intn(60), rand.Intn(1e9), time.UTC)
-	rt2 := time.Date(rand.Intn(5000)+3000, time.Month(rand.Intn(12)+1), rand.Intn(28)+1, rand.Intn(24)+1, rand.Intn(60), rand.Intn(60), rand.Intn(1e9), time.UTC)
-
-	return &persistencespb.AllocatedTaskInfo{
-		Data: &persistencespb.TaskInfo{
-			NamespaceId:      uuid.NewString(),
-			WorkflowId:       uuid.NewString(),
-			RunId:            uuid.NewString(),
-			ScheduledEventId: rand.Int63(),
-			CreateTime:       timestamppb.New(rt1),
-			ExpiryTime:       timestamppb.New(rt2),
-		},
-		TaskId: rand.Int63(),
-	}
-}
-
 func randomTaskInfoWithAge(age time.Duration) *persistencespb.AllocatedTaskInfo {
 	rt1 := time.Now().Add(-age)
 	rt2 := rt1.Add(time.Hour)
@@ -865,3 +849,4 @@ func randomTaskInfoWithAge(age time.Duration) *persistencespb.AllocatedTaskInfo 
 		TaskId: rand.Int63(),
 	}
 }
+*/

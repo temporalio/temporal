@@ -2,6 +2,7 @@ package matching
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -29,8 +30,7 @@ type (
 	}
 )
 
-// TODO(pri): old matcher cleanup, move to here
-// var errInvalidTaskQueueType = errors.New("unrecognized task queue type")
+var errInvalidTaskQueueType = errors.New("unrecognized task queue type")
 
 // newPriForwarder returns an instance of priForwarder object which
 // can be used to forward api request calls from a task queue
