@@ -1,14 +1,10 @@
 package junit
 
 import (
-	"archive/zip"
 	"encoding/xml"
 	"errors"
 	"fmt"
-	"io"
 	"os"
-	"path/filepath"
-	"strings"
 
 	junitxml "github.com/jstemmer/go-junit-report/v2/junit"
 )
@@ -79,67 +75,6 @@ func ReadTestcases(path string) ([]Testcase, error) {
 		cases = append(cases, suite.Testcases...)
 	}
 	return cases, nil
-}
-
-// ExtractReportsFromZip extracts zip file and returns paths to JUnit XML files
-func ExtractReportsFromZip(zipPath, outputDir string) ([]string, error) {
-	r, err := zip.OpenReader(zipPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open zip file %s: %w", zipPath, err)
-	}
-	defer func() {
-		if err := r.Close(); err != nil {
-			fmt.Printf("Warning: Failed to close zip reader: %v\n", err)
-		}
-	}()
-
-	var xmlFiles []string
-
-	for _, f := range r.File {
-		// Skip directories
-		if f.FileInfo().IsDir() {
-			continue
-		}
-
-		// Only extract XML files
-		if !strings.HasSuffix(strings.ToLower(f.Name), ".xml") {
-			continue
-		}
-
-		// Create extraction path
-		extractPath := filepath.Join(outputDir, filepath.Base(f.Name))
-
-		// Open file from zip
-		rc, err := f.Open()
-		if err != nil {
-			return nil, fmt.Errorf("failed to open file %s in zip: %w", f.Name, err)
-		}
-
-		// Create output file
-		outFile, err := os.Create(extractPath)
-		if err != nil {
-			_ = rc.Close()
-			return nil, fmt.Errorf("failed to create output file %s: %w", extractPath, err)
-		}
-
-		// Copy content
-		_, err = io.Copy(outFile, rc)
-		if closeErr := rc.Close(); closeErr != nil {
-			_ = outFile.Close()
-			return nil, fmt.Errorf("failed to close zip file reader: %w", closeErr)
-		}
-		if closeErr := outFile.Close(); closeErr != nil {
-			return nil, fmt.Errorf("failed to close output file: %w", closeErr)
-		}
-
-		if err != nil {
-			return nil, fmt.Errorf("failed to extract file %s: %w", f.Name, err)
-		}
-
-		xmlFiles = append(xmlFiles, extractPath)
-	}
-
-	return xmlFiles, nil
 }
 
 // Write writes a JUnit XML file.
