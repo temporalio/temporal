@@ -81,8 +81,8 @@ func ReadTestcases(path string) ([]Testcase, error) {
 	return cases, nil
 }
 
-// ExtractZip extracts zip file and returns paths to JUnit XML files
-func ExtractZip(zipPath, outputDir string) ([]string, error) {
+// ExtractReportsFromZip extracts zip file and returns paths to JUnit XML files
+func ExtractReportsFromZip(zipPath, outputDir string) ([]string, error) {
 	r, err := zip.OpenReader(zipPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open zip file %s: %w", zipPath, err)

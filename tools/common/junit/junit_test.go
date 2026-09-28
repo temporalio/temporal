@@ -156,7 +156,7 @@ func TestReadTestcases(t *testing.T) {
 	require.Equal(t, []Testcase{{Name: "TestOne"}, {Name: "TestTwo"}}, cases)
 }
 
-func TestExtractZip(t *testing.T) {
+func TestExtractReportsFromZip(t *testing.T) {
 	zipPath := filepath.Join(t.TempDir(), "artifact.zip")
 	zipFile, err := os.Create(zipPath)
 	require.NoError(t, err)
@@ -175,7 +175,7 @@ func TestExtractZip(t *testing.T) {
 	require.NoError(t, zipFile.Close())
 
 	outputDir := t.TempDir()
-	paths, err := ExtractZip(zipPath, outputDir)
+	paths, err := ExtractReportsFromZip(zipPath, outputDir)
 	require.NoError(t, err)
 	require.ElementsMatch(t, []string{
 		filepath.Join(outputDir, "one.xml"),
