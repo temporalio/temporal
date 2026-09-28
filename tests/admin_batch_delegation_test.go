@@ -140,7 +140,7 @@ func (s *AdminBatchDelegationTestSuite) TestTdbgBatchTerminate_RunsInSystemNames
 
 	// tdbg qualifies the job ID with the namespace: the batch workflow runs in the system namespace,
 	// where job IDs from every namespace share one workflow ID space.
-	batchWorkflowID := jobID + ":" + ns
+	batchWorkflowID := ns + ":" + jobID
 
 	s.Await(func(s *AdminBatchDelegationTestSuite) {
 		resp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
@@ -223,7 +223,7 @@ func (s *AdminBatchDelegationTestSuite) TestTdbgBatchDelete_RunsInSystemNamespac
 		"--"+tdbg.FlagJobID, jobID,
 	))
 
-	batchWorkflowID := jobID + ":" + ns
+	batchWorkflowID := ns + ":" + jobID
 	s.Await(func(s *AdminBatchDelegationTestSuite) {
 		resp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: primitives.SystemLocalNamespace,
@@ -310,7 +310,7 @@ func (s *AdminBatchDelegationTestSuite) TestTdbgBatchDeleteActivities_RunsInSyst
 		"--"+tdbg.FlagJobID, jobID,
 	))
 
-	batchWorkflowID := jobID + ":" + ns
+	batchWorkflowID := ns + ":" + jobID
 	s.Await(func(s *AdminBatchDelegationTestSuite) {
 		resp, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: primitives.SystemLocalNamespace,

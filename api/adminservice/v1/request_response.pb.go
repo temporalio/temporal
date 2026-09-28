@@ -2626,15 +2626,13 @@ func (*RemoveRemoteClusterResponse) Descriptor() ([]byte, []int) {
 type ListClusterMembersRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "within" is used to indicate a time range. --)
+	//     aip.dev/not-precedent: "within" is used to indicate a time range. --)
 	LastHeartbeatWithin *durationpb.Duration  `protobuf:"bytes,1,opt,name=last_heartbeat_within,json=lastHeartbeatWithin,proto3" json:"last_heartbeat_within,omitempty"`
 	RpcAddress          string                `protobuf:"bytes,2,opt,name=rpc_address,json=rpcAddress,proto3" json:"rpc_address,omitempty"`
 	HostId              string                `protobuf:"bytes,3,opt,name=host_id,json=hostId,proto3" json:"host_id,omitempty"`
 	Role                v14.ClusterMemberRole `protobuf:"varint,4,opt,name=role,proto3,enum=temporal.server.api.enums.v1.ClusterMemberRole" json:"role,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "after" is used to indicate a time range. --)
+	//     aip.dev/not-precedent: "after" is used to indicate a time range. --)
 	SessionStartedAfterTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=session_started_after_time,json=sessionStartedAfterTime,proto3" json:"session_started_after_time,omitempty"`
 	PageSize                int32                  `protobuf:"varint,6,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	NextPageToken           []byte                 `protobuf:"bytes,7,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
