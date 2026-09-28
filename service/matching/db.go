@@ -406,6 +406,25 @@ func (db *taskQueueDB) setKnownFairBacklogCount(subqueue subqueueIndex, count in
 	}
 }
 
+// setKnownBacklogCount sets ApproximateBacklogCount to a count the priority task reader knows
+// exactly because it has read to readLevel, the end of the backlog. It is skipped if a task was
+// written since then: the write has already counted itself here but may not be in the reader's
+// count yet.
+func (db *taskQueueDB) setKnownBacklogCount(subqueue subqueueIndex, count int64, readLevel int64, oldestTime time.Time) {
+	db.Lock()
+	defer db.Unlock()
+
+	if db.getMaxReadLevelLocked(subqueue) != readLevel {
+		return
+	}
+	dbQueue := db.subqueues[subqueue]
+	if dbQueue.ApproximateBacklogCount != count || !dbQueue.oldestTime.Equal(oldestTime) {
+		db.lastChange = time.Now()
+		dbQueue.ApproximateBacklogCount = count
+		dbQueue.oldestTime = oldestTime
+	}
+}
+
 // updateApproximateBacklogCount updates the in-memory DB state with the given delta value
 // TODO(pri): old matcher cleanup
 func (db *taskQueueDB) updateBacklogStats(countDelta int64, oldestTime time.Time) {
