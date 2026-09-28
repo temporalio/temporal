@@ -124,23 +124,23 @@ func extractArtifactZip(zipPath, outputDir string) ([]string, error) {
 // Unit/integration:  junit-xml--{run_id}--{job_id}--{run_attempt}--unit-test
 // Returns: runID, jobID, matrixName ("unknown" for fields that are absent or unparseable)
 func parseArtifactName(artifactName string) (runID string, jobID string, matrixName string) {
-	parts := strings.Split(artifactName, "--")
-	if len(parts) < 3 {
+	parsed, _ := github.ParseArtifactName(artifactName)
+	if parsed.Prefix == "" {
 		return "unknown", "unknown", "unknown"
 	}
 
-	runID = parts[1]
+	runID = parsed.RunID
 
-	jobID = parts[2]
+	jobID = parsed.JobID
 	if jobID == "" {
 		jobID = "unknown"
 	}
 
-	// Functional test artifacts carry a matrix name (DB config) at parts[4].
-	// Unit/integration artifacts have only 5 parts where parts[4] is the test type
-	// (e.g. "unit-test"), not a matrix name. Functional artifacts have >=7 parts.
-	if len(parts) >= 6 {
-		matrixName = parts[4]
+	// Functional test artifacts carry a matrix name (DB config) at the start of the suffix.
+	// Unit/integration artifacts have only the test type (e.g. "unit-test") in the suffix.
+	suffix := strings.Split(parsed.Suffix, "--")
+	if len(suffix) >= 2 {
+		matrixName = suffix[0]
 	} else {
 		matrixName = "unknown"
 	}

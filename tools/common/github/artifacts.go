@@ -6,6 +6,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -17,6 +19,40 @@ type Artifact struct {
 	Name      string    `json:"name"`
 	CreatedAt time.Time `json:"created_at"`
 	Expired   bool      `json:"expired"`
+}
+
+// ArtifactName is an artifact name using the repository's
+// prefix--run ID--job ID--run attempt--suffix convention.
+type ArtifactName struct {
+	Prefix     string
+	RunID      string
+	JobID      string
+	RunAttempt int
+	Suffix     string
+}
+
+// ParseArtifactName parses the repository's workflow artifact naming convention. When the name
+// is incomplete, it returns false while preserving any fields that could be parsed.
+func ParseArtifactName(name string) (ArtifactName, bool) {
+	parts := strings.Split(name, "--")
+	if len(parts) < 3 {
+		return ArtifactName{}, false
+	}
+	parsed := ArtifactName{
+		Prefix: parts[0],
+		RunID:  parts[1],
+		JobID:  parts[2],
+	}
+	if len(parts) < 5 {
+		return parsed, false
+	}
+	parsed.Suffix = strings.Join(parts[4:], "--")
+	runAttempt, err := strconv.Atoi(parts[3])
+	if err != nil || runAttempt < 1 {
+		return parsed, false
+	}
+	parsed.RunAttempt = runAttempt
+	return parsed, true
 }
 
 // ListRunArtifacts retrieves artifacts for a GitHub Actions workflow run.
