@@ -10,7 +10,6 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -24,8 +23,6 @@ const (
 	defaultLevel       = 2 // 1 means shard by suite, 2 means shard by test
 	temporalRepository = "temporalio/temporal"
 )
-
-var testNameRe = regexp.MustCompile(`^(.*?)\s*\(.*\)$`)
 
 func Main() error {
 	shards := flag.Int("shards", 0, "Number of shards (required)")
@@ -76,7 +73,7 @@ func Main() error {
 
 	log.Printf("Loaded %d unique test names", len(tmap))
 
-	smap := aggregateByLevel(tmap)
+	smap := aggregateRuns(tmap)
 	log.Printf("Aggregated to %d entries for sharding", len(smap))
 
 	var totalTime float64
@@ -209,68 +206,120 @@ func findLatestRuns(workflow, branch, event string, limit int) ([]int64, error) 
 	return ids, nil
 }
 
-// loadTestData returns a map of test names to durations in seconds.
+// loadTestData returns a map of test names to per-run durations in seconds.
 func loadTestData(dir string) (map[string][]float64, error) {
-	var files []string
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+
+	tmap := make(map[string][]float64)
+	var runs int
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		runDir := filepath.Join(dir, entry.Name())
+		units, err := loadRunData(runDir)
+		if err != nil {
+			return nil, fmt.Errorf("loading run %s: %w", entry.Name(), err)
+		}
+		if len(units) == 0 {
+			return nil, fmt.Errorf("run %s produced no test sharding units", entry.Name())
+		}
+		for name, seconds := range units {
+			tmap[name] = append(tmap[name], seconds)
+		}
+		runs++
+	}
+	if runs == 0 {
+		return nil, errors.New("no test run directories found")
+	}
+	log.Printf("Loaded test data from %d run(s)", runs)
+	return tmap, nil
+}
+
+// loadRunData combines the separately uploaded shard and database artifacts into one run. Their
+// durations are additive; only retry attempts within an individual artifact collapse to a max.
+func loadRunData(dir string) (map[string]float64, error) {
+	type junitFile struct {
+		path       string
+		artifact   string
+		attempt    int
+		recognized bool
+	}
+
+	var found []junitFile
+	latestAttempts := make(map[string]int)
 	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if !d.IsDir() && strings.HasSuffix(path, ".xml") {
-			files = append(files, path)
+			relative, err := filepath.Rel(dir, path)
+			if err != nil {
+				return err
+			}
+			artifactDir := strings.SplitN(relative, string(filepath.Separator), 2)[0]
+			artifact, recognized := github.ParseArtifactName(artifactDir)
+			recognized = recognized && artifact.Prefix == "junit-xml"
+			found = append(found, junitFile{
+				path:       path,
+				artifact:   artifact.Suffix,
+				attempt:    artifact.RunAttempt,
+				recognized: recognized,
+			})
+			if recognized {
+				latestAttempts[artifact.Suffix] = max(latestAttempts[artifact.Suffix], artifact.RunAttempt)
+			}
 		}
 		return nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	if len(files) == 0 {
+	if len(found) == 0 {
 		return nil, errors.New("no XML files found")
 	}
-	log.Printf("Found %d XML file(s)", len(files))
 
-	tmap := make(map[string][]float64)
+	files := make([]string, 0, len(found))
+	for _, file := range found {
+		if !file.recognized || file.attempt == latestAttempts[file.artifact] {
+			files = append(files, file.path)
+		}
+	}
+	log.Printf("Found %d XML file(s) in %s", len(files), filepath.Base(dir))
+
+	units := make(map[string]float64)
 	for _, filename := range files {
-		if err := processJUnitReport(filename, tmap); err != nil {
+		cases, err := junit.ReadTestcases(filename)
+		if err != nil {
 			return nil, fmt.Errorf("processing %s: %w", filename, err)
 		}
-	}
-	return tmap, nil
-}
-
-func processJUnitReport(filename string, tmap map[string][]float64) error {
-	testsuites, err := junit.Read(filename)
-	if err != nil {
-		return err
-	}
-
-	for _, suite := range testsuites.Suites {
-		for _, tc := range suite.Testcases {
-			duration, err := strconv.ParseFloat(tc.Time, 64)
-			if err != nil {
-				continue
-			}
-			name := tc.Name
-			if m := testNameRe.FindStringSubmatch(name); m != nil {
-				name = m[1]
-			}
-			tmap[name] = append(tmap[name], duration)
+		for name, seconds := range shardingUnits(cases) {
+			units[name] += seconds
 		}
 	}
-
-	return nil
+	return units, nil
 }
 
-func aggregateByLevel(tmap map[string][]float64) map[string]float64 {
+// shardingUnits reduces one artifact to the depth-2 names hashed by the functional test runtime.
+// Skipped cases did not consume time on this shard, retry attempts represent one test run, and
+// parent entries report the sum of their subtests, so retaining any of them would double-count.
+func shardingUnits(cases []junit.Testcase) map[string]float64 {
+	units := make(map[string]float64, len(cases))
+	for name, seconds := range junit.LeafTestDurations(cases) {
+		parts := strings.Split(name, "/")
+		unit := strings.Join(parts[:min(len(parts), defaultLevel)], "/")
+		units[unit] += seconds
+	}
+	return units
+}
+
+func aggregateRuns(tmap map[string][]float64) map[string]float64 {
 	smap := make(map[string]float64)
 
 	for name, times := range tmap {
-		// Only include entries at the target depth (e.g. "Suite/Test" at level 2).
-		if strings.Count(name, "/")+1 != defaultLevel {
-			continue
-		}
-
-		// Sum all observed durations across runs.
 		var total float64
 		for _, t := range times {
 			total += t
