@@ -122,16 +122,21 @@ func downloadArtifacts(workflow, artifactPattern, branch, event string, limit in
 		return "", err
 	}
 
+	var downloaded int
 	for _, runID := range runIDs {
 		log.Printf("Downloading artifacts from run %s", runID)
-		runDir := filepath.Join(dir, runID)
 		if err := github.RunDownload(context.Background(), runID, github.RunDownloadOptions{
 			Pattern: artifactPattern,
-			Dir:     runDir,
+			Dir:     filepath.Join(dir, runID),
 		}); err != nil {
-			_ = os.RemoveAll(dir)
-			return "", err
+			log.Printf("Skipping run %s: %v", runID, err)
+			continue
 		}
+		downloaded++
+	}
+	if downloaded == 0 {
+		_ = os.RemoveAll(dir)
+		return "", fmt.Errorf("no runs had artifacts matching %q", artifactPattern)
 	}
 
 	return dir, nil

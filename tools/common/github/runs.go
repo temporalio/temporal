@@ -3,20 +3,10 @@ package github
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
-
-	"go.temporal.io/server/common/backoff"
-)
-
-const (
-	runDownloadAttempts             = 3
-	runDownloadRetryInitialInterval = 5 * time.Second
 )
 
 // Conclusion represents the conclusion status of a workflow run or job.
@@ -262,148 +252,8 @@ type RunDownloadOptions struct {
 	Dir     string
 }
 
-// RunDownload executes `gh run download`. When Dir is set, downloads are staged outside the
-// destination and transient failures are retried before a successful result replaces it.
+// RunDownload executes `gh run download`.
 func RunDownload(ctx context.Context, runID string, opts RunDownloadOptions) error {
-	if opts.Dir == "" {
-		return runDownloadOnce(ctx, runID, opts)
-	}
-	return runDownloadWithRetry(ctx, runID, opts, runDownloadRetryInitialInterval, runDownloadOnce)
-}
-
-type runDownloader func(context.Context, string, RunDownloadOptions) error
-
-func runDownloadWithRetry(
-	ctx context.Context,
-	runID string,
-	opts RunDownloadOptions,
-	retryInterval time.Duration,
-	download runDownloader,
-) (retErr error) {
-	attempt := 0
-	var completedDir string
-	var stagingDirs []string
-	defer func() {
-		for _, stagingDir := range stagingDirs {
-			if err := os.RemoveAll(stagingDir); err != nil {
-				retErr = errors.Join(retErr, fmt.Errorf("cleaning artifact download staging directory: %w", err))
-			}
-		}
-	}()
-	destination, err := canonicalPath(opts.Dir)
-	if err != nil {
-		return fmt.Errorf("resolving artifact download directory: %w", err)
-	}
-	workingDir, err := os.Getwd()
-	if err != nil {
-		return fmt.Errorf("resolving working directory: %w", err)
-	}
-	workingDir, err = canonicalPath(workingDir)
-	if err != nil {
-		return fmt.Errorf("resolving working directory: %w", err)
-	}
-	relativeWorkingDir, err := filepath.Rel(destination, workingDir)
-	if err != nil {
-		return fmt.Errorf("comparing artifact download directory with working directory: %w", err)
-	}
-	if relativeWorkingDir == "." || relativeWorkingDir != ".." && !strings.HasPrefix(relativeWorkingDir, ".."+string(filepath.Separator)) {
-		return fmt.Errorf("artifact download directory %q contains the working directory", opts.Dir)
-	}
-	parentDir := filepath.Dir(destination)
-	if err := os.MkdirAll(parentDir, 0o755); err != nil {
-		return fmt.Errorf("creating artifact download parent directory: %w", err)
-	}
-
-	policy := backoff.NewExponentialRetryPolicy(retryInterval).WithMaximumAttempts(runDownloadAttempts)
-	err = backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
-		attempt++
-		stagingDir, err := os.MkdirTemp(parentDir, ".run-download-*")
-		if err != nil {
-			return err
-		}
-		stagingDirs = append(stagingDirs, stagingDir)
-		attemptOpts := opts
-		attemptOpts.Dir = stagingDir
-		if err := download(ctx, runID, attemptOpts); err != nil {
-			if cleanupErr := os.RemoveAll(stagingDir); cleanupErr != nil {
-				return errors.Join(err, fmt.Errorf("cleaning artifact download staging directory: %w", cleanupErr))
-			}
-			return err
-		}
-		completedDir = stagingDir
-		return nil
-	}, policy, nil)
-	if err != nil {
-		return fmt.Errorf("downloading artifacts from run %s failed after %d attempts: %w", runID, attempt, err)
-	}
-	return replaceDownloadDirectory(completedDir, destination)
-}
-
-func canonicalPath(path string) (string, error) {
-	absolute, err := filepath.Abs(path)
-	if err != nil {
-		return "", err
-	}
-
-	candidate := absolute
-	var missing []string
-	for {
-		resolved, err := filepath.EvalSymlinks(candidate)
-		if err == nil {
-			for i := len(missing) - 1; i >= 0; i-- {
-				resolved = filepath.Join(resolved, missing[i])
-			}
-			return resolved, nil
-		}
-		if !errors.Is(err, os.ErrNotExist) {
-			return "", err
-		}
-		parent := filepath.Dir(candidate)
-		if parent == candidate {
-			return absolute, nil
-		}
-		missing = append(missing, filepath.Base(candidate))
-		candidate = parent
-	}
-}
-
-func replaceDownloadDirectory(source, destination string) error {
-	var backup string
-	if _, err := os.Lstat(destination); err == nil {
-		reservedBackup, err := os.MkdirTemp(filepath.Dir(destination), ".run-download-backup-*")
-		if err != nil {
-			return fmt.Errorf("reserving artifact download backup: %w", err)
-		}
-		if err := os.Remove(reservedBackup); err != nil {
-			return fmt.Errorf("reserving artifact download backup: %w", err)
-		}
-		if err := os.Rename(destination, reservedBackup); err != nil {
-			return fmt.Errorf("backing up artifact download directory: %w", err)
-		}
-		backup = reservedBackup
-	} else if !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("checking artifact download directory: %w", err)
-	}
-
-	if err := os.Rename(source, destination); err != nil {
-		installErr := fmt.Errorf("finalizing artifact download directory: %w", err)
-		if backup == "" {
-			return installErr
-		}
-		if restoreErr := os.Rename(backup, destination); restoreErr != nil {
-			return errors.Join(installErr, fmt.Errorf("restoring previous artifact download directory: %w", restoreErr))
-		}
-		return installErr
-	}
-	if backup != "" {
-		if err := os.RemoveAll(backup); err != nil {
-			return fmt.Errorf("removing previous artifact download directory: %w", err)
-		}
-	}
-	return nil
-}
-
-func runDownloadOnce(ctx context.Context, runID string, opts RunDownloadOptions) error {
 	args := []string{"run", "download", runID}
 	if opts.Repo != "" {
 		args = append(args, "--repo", opts.Repo)
