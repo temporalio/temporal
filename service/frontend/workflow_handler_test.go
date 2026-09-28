@@ -507,6 +507,23 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_StartRequestNot
 	s.Equal(errRequestNotSet, err)
 }
 
+func (s *WorkflowHandlerSuite) TestValidateStartWorkflowArgsForSchedule_EmptyWorkflowIdGeneratesUUID() {
+	wh := s.getWorkflowHandler(s.newConfig())
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil).AnyTimes()
+	info := &workflowpb.NewWorkflowExecutionInfo{
+		WorkflowType:             &commonpb.WorkflowType{Name: "workflow-type"},
+		TaskQueue:                &taskqueuepb.TaskQueue{Name: "task-queue"},
+		WorkflowExecutionTimeout: durationpb.New(time.Second),
+		WorkflowRunTimeout:       durationpb.New(time.Second),
+		WorkflowTaskTimeout:      durationpb.New(time.Second),
+	}
+	err := wh.validateStartWorkflowArgsForSchedule(s.testNamespace, info)
+	s.Require().NoError(err)
+	s.Require().NotEmpty(info.WorkflowId)
+	_, err = uuid.Parse(info.WorkflowId)
+	s.Require().NoError(err)
+}
+
 func (s *WorkflowHandlerSuite) TestValidateStartWorkflowArgsForSchedule_Failed_InvalidVersioningOverride() {
 	wh := s.getWorkflowHandler(s.newConfig())
 	err := wh.validateStartWorkflowArgsForSchedule(s.testNamespace, &workflowpb.NewWorkflowExecutionInfo{
@@ -6087,6 +6104,19 @@ func (s *WorkflowHandlerSuite) TestScheduleValidation() {
 			name:      "CreateSchedule initial patch timestamp",
 			errString: "backfill request 0 start time is not a valid timestamp",
 			invoke:    func() error { return create(&schedulepb.Schedule{}, invalidBackfillTimestamp()) },
+		},
+		{
+			name:      "CreateSchedule empty workflow id",
+			errString: "WorkflowType is not set",
+			invoke: func() error {
+				return create(&schedulepb.Schedule{
+					Action: &schedulepb.ScheduleAction{
+						Action: &schedulepb.ScheduleAction_StartWorkflow{
+							StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{},
+						},
+					},
+				}, nil)
+			},
 		},
 		{
 			name:      "UpdateSchedule policy",
