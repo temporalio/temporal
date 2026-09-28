@@ -110,7 +110,10 @@ func (u *Updater) ApplyRequest(
 	defer func() {
 		if err == nil {
 			// Capture the link for response as long as there isn't an error on apply.
-			u.responseLink = u.captureResponseLink(ms)
+			u.responseLink, err = u.captureResponseLink(ctx, ms)
+			if err != nil {
+				action = nil
+			}
 		}
 	}()
 
@@ -236,9 +239,9 @@ func (u *Updater) ApplyRequest(
 //	requestID has an event recorded on it?
 //	  - Yes: use that event for a requestIdRef link.
 //	  - No: is the update accepted/completed?
-//	        - Yes: use the update accepted/completed event for an eventRef link.
+//	        - Yes: use the update accepted event for an eventRef link.
 //	        - No: use the projected event for a requestIDRef as the update is still in-flight.
-func (u *Updater) captureResponseLink(ms historyi.MutableState) *commonpb.Link {
+func (u *Updater) captureResponseLink(ctx context.Context, ms historyi.MutableState) (*commonpb.Link, error) {
 
 	request := u.req.GetRequest().GetRequest()
 	requestID := request.GetRequestId()
@@ -266,16 +269,20 @@ func (u *Updater) captureResponseLink(ms historyi.MutableState) *commonpb.Link {
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
 			},
 		}
-	} else if completion := ms.GetExecutionInfo().GetUpdateInfos()[updateID].GetCompletion(); completion != nil {
-		// If requestID doesn't have a history event but is completed already, link to the completed event.
+	} else if ms.GetExecutionInfo().GetUpdateInfos()[updateID].GetCompletion() != nil {
+		// If requestID doesn't have a history event but is completed already, link to the accepted event.
+		acceptedEventID, err := ms.GetUpdateAcceptedEventID(ctx, updateID)
+		if err != nil {
+			return nil, err
+		}
 		linkWfEvent.Reference = &commonpb.Link_WorkflowEvent_EventRef{
 			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-				EventId:   completion.EventId,
-				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED,
+				EventId:   acceptedEventID,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
 			},
 		}
 	} else {
-		// If neither of the above, the update is in flight - use the requestIDRef for projected event.
+		// If none of the above, the update is in flight - use the requestIDRef for projected event.
 		linkWfEvent.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
 			RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
 				RequestId: requestID,
@@ -286,7 +293,7 @@ func (u *Updater) captureResponseLink(ms historyi.MutableState) *commonpb.Link {
 
 	return &commonpb.Link{
 		Variant: &commonpb.Link_WorkflowEvent_{WorkflowEvent: linkWfEvent},
-	}
+	}, nil
 }
 
 func (u *Updater) OnSuccess(

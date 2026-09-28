@@ -140,6 +140,7 @@ type (
 		ApplyWorkflowExecutionUpdateAdmittedEvent(event *historypb.HistoryEvent, batchId int64) error
 		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
+		GetUpdateAcceptedEventID(ctx context.Context, updateID string) (int64, error)
 		CheckResettable() error
 		// UpdateResetRunID saves the runID that resulted when this execution was reset.
 		UpdateResetRunID(runID string)

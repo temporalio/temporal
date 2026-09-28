@@ -134,8 +134,8 @@ func makeUpdateWithCallbackHandler(
 					// Accepted update: link points to either the accepted event or the options updated event.
 					require.Equal(t, cfg.nextExpectedEventType(), workflowEvent.GetRequestIdRef().GetEventType())
 				} else {
-					// Completed update: link points to the completed event.
-					require.Equal(t, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED, workflowEvent.GetEventRef().GetEventType())
+					// Completed update: link points to the accepted event.
+					require.Equal(t, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, workflowEvent.GetEventRef().GetEventType())
 				}
 			} else if wfLink := link.GetWorkflow(); wfLink != nil {
 				// Rejected update: link points to the workflow with a reason.
@@ -1965,7 +1965,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestLinksOnRepeatedUpdates() {
 	requireRequestIDLink(firstResp, firstRequestID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
 	requireRequestIDLink(secondResp, secondRequestID, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED)
 
-	// Complete the update before sending another update to verify completed updates getting Completed links.
+	// Complete the update before sending another update to verify completed updates linking to their original Accepted event.
 	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "complete-update", nil))
 	_, err = env.FrontendClient().PollWorkflowExecutionUpdate(ctx, &workflowservice.PollWorkflowExecutionUpdateRequest{
 		Namespace: env.Namespace().String(),
@@ -1993,9 +1993,9 @@ func (s *NexusWorkflowUpdateTestSuite) TestLinksOnRepeatedUpdates() {
 	eventRef := thirdResp.GetLink().GetWorkflowEvent().GetEventRef()
 	s.Require().NotNil(eventRef, "link should be an EventReference")
 
-	updateCompletedEvent := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED)
-	s.Require().Equal(updateCompletedEvent.EventId, eventRef.EventId, "eventID should match the Completed eventID of the original request")
-	s.Require().Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_COMPLETED, eventRef.EventType)
+	updateAcceptedEvent := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED)
+	s.Require().Equal(updateAcceptedEvent.EventId, eventRef.EventId, "eventID should match the Accepted eventID of the original request")
+	s.Require().Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, eventRef.EventType)
 
 	// Clean up.
 	s.NoError(env.SdkClient().SignalWorkflow(ctx, run.GetID(), run.GetRunID(), "stop", nil))
