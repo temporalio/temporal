@@ -82,7 +82,8 @@ func getDataRaces(ctx context.Context, runID int64) ([]DataRace, error) {
 		if err != nil {
 			return
 		}
-		races = append(races, dataRacesFromRows(rows, jobIDFromArtifactName(artifactName))...)
+		artifact, _ := github.ParseArtifactName(artifactName)
+		races = append(races, dataRacesFromRows(rows, artifact.JobID)...)
 	})
 	if err != nil {
 		return nil, err
@@ -195,14 +196,6 @@ func firstGoFrame(lines []string) string {
 // trimRepoPath strips the CI checkout prefix from an absolute source path.
 func trimRepoPath(path string) string {
 	return repoPathPrefixRegex.ReplaceAllString(path, "")
-}
-
-// jobIDFromArtifactName extracts the job ID from a test-summary artifact name of
-// the form "test-summary-json--<run_id>--<job_id>--<run_attempt>--<suffix>".
-// Returns "" when the name doesn't carry a job ID.
-func jobIDFromArtifactName(name string) string {
-	parsed, _ := github.ParseArtifactName(name)
-	return parsed.JobID
 }
 
 // uniqueDataRaces removes duplicate races (the same race is reported by every
