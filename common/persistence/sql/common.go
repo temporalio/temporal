@@ -53,7 +53,7 @@ func (m *SqlStore) Close() {
 func (m *SqlStore) txExecute(ctx context.Context, operation string, f func(tx sqlplugin.Tx) error) error {
 	tx, err := m.DB.BeginTx(ctx)
 	if err != nil {
-		return convertSQLError(operation+" failed. Failed to start transaction", err)
+		return convertSQLError(operation, "failed to start transaction", err)
 	}
 	err = f(tx)
 	if err != nil {
@@ -72,11 +72,11 @@ func (m *SqlStore) txExecute(ctx context.Context, operation string, f func(tx sq
 			*serviceerror.NotFound:
 			return err
 		default:
-			return convertSQLError(operation, err)
+			return convertSQLError(operation, "", err)
 		}
 	}
 	if err := tx.Commit(); err != nil {
-		return convertSQLError(operation+" operation failed. Failed to commit transaction", err)
+		return convertSQLError(operation, "failed to commit transaction", err)
 	}
 	return nil
 }
@@ -84,11 +84,15 @@ func (m *SqlStore) txExecute(ctx context.Context, operation string, f func(tx sq
 // convertSQLError maps driver errors to persistence errors. Context cancel and
 // deadline must stay unwrap-able so callers can skip retries and error logs on
 // shutdown; other errors become Unavailable.
-func convertSQLError(message string, err error) error {
-	if common.IsContextCanceledErr(err) || common.IsContextDeadlineExceededErr(err) {
-		return fmt.Errorf("%s: %w", message, err)
+func convertSQLError(operation string, message string, err error) error {
+	prefix := operation
+	if message != "" {
+		prefix = operation + ": " + message
 	}
-	return serviceerror.NewUnavailablef("%s: %v", message, err)
+	if common.IsContextCanceledErr(err) || common.IsContextDeadlineExceededErr(err) {
+		return fmt.Errorf("%s: %w", prefix, err)
+	}
+	return serviceerror.NewUnavailablef("%s: %v", prefix, err)
 }
 
 func gobSerialize(x any) ([]byte, error) {

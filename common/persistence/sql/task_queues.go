@@ -77,8 +77,8 @@ func (m *taskQueueStore) GetTaskQueue(
 			"GetTaskQueue operation failed. TaskQueue: %v, TaskQueueType: %v, Error: %v",
 			request.TaskQueue, request.TaskType, err)
 	default:
-		return nil, convertSQLError(fmt.Sprintf(
-			"GetTaskQueue operation failed. Failed to check if task queue %v of type %v existed",
+		return nil, convertSQLError("GetTaskQueue", fmt.Sprintf(
+			"failed to check if task queue %v of type %v existed",
 			request.TaskQueue, request.TaskType), err)
 	}
 }

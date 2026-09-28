@@ -23,9 +23,9 @@ func TestConvertSQLError(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			err := convertSQLError("Failed to lock task queue", tc.err)
+			err := convertSQLError("lockTaskQueue", "", tc.err)
 			require.ErrorIs(t, err, tc.cause)
-			require.ErrorContains(t, err, "Failed to lock task queue")
+			require.ErrorContains(t, err, "lockTaskQueue")
 			var unavailable *serviceerror.Unavailable
 			require.NotErrorAs(t, err, &unavailable)
 		})
@@ -35,9 +35,10 @@ func TestConvertSQLError(t *testing.T) {
 func TestConvertSQLError_WrapsOtherErrorsAsUnavailable(t *testing.T) {
 	t.Parallel()
 
-	err := convertSQLError("Failed to lock task queue", errors.New("connection reset"))
+	err := convertSQLError("lockTaskQueue", "failed to lock row", errors.New("connection reset"))
 	var unavailable *serviceerror.Unavailable
 	require.ErrorAs(t, err, &unavailable)
-	require.ErrorContains(t, err, "Failed to lock task queue")
+	require.ErrorContains(t, err, "lockTaskQueue")
+	require.ErrorContains(t, err, "failed to lock row")
 	require.ErrorContains(t, err, "connection reset")
 }
