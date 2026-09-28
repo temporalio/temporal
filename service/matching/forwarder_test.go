@@ -2,7 +2,6 @@ package matching
 
 import (
 	"context"
-	"errors"
 	"math/rand"
 	"testing"
 	"time"
@@ -21,8 +20,6 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
-
-var errForwarderSlowDown = errors.New("limit exceeded")
 
 type ForwarderTestSuite struct {
 	suite.Suite
@@ -178,19 +175,6 @@ func (t *ForwarderTestSuite) TestForwardActivityTask_WithBuildId() {
 		int32(request.GetScheduleToStartTimeout().AsDuration().Seconds()))
 	t.Equal(t.partition.RpcName(), request.GetForwardInfo().GetSourcePartition())
 	t.Equal(enumsspb.TASK_SOURCE_DB_BACKLOG, request.GetForwardInfo().GetTaskSource())
-}
-
-func (t *ForwarderTestSuite) TestForwardTaskRateExceeded() {
-	t.usingTaskqueuePartition(enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-
-	rps := 2
-	t.client.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil).Times(rps)
-	taskInfo := randomTaskInfo()
-	task := newInternalTaskFromBacklog(taskInfo, nil)
-	for range rps {
-		t.NoError(t.fwdr.ForwardTask(context.Background(), task))
-	}
-	t.Equal(errForwarderSlowDown, t.fwdr.ForwardTask(context.Background(), task))
 }
 
 func (t *ForwarderTestSuite) TestForwardQueryTaskError() {

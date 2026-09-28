@@ -246,11 +246,17 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload()
 	s.config.MaxTaskQueueIdleTime = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Second)
 	s.tqMgr.Start()
 	defer s.tqMgr.Stop(unloadCauseShuttingDown)
+	s.Require().NoError(s.tqMgr.WaitUntilInitialized(context.Background()))
 
 	tm := s.getTaskManager()
+	baseline := tm.getUpdateCount(s.physicalTaskQueueKey)
+
+	// The final update is skipped if nothing changed, so change something.
+	s.tqMgr.backlogMgr.getDB().updateBacklogStats(1, time.Time{})
+
 	s.EventuallyWithT(func(collect *assert.CollectT) {
 		// will unload due to idleness
-		require.Equal(collect, 1, tm.getUpdateCount(s.physicalTaskQueueKey))
+		require.Equal(collect, baseline+1, tm.getUpdateCount(s.physicalTaskQueueKey))
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
