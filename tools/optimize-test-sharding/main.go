@@ -148,7 +148,7 @@ func downloadArtifacts(workflow, artifactPattern, branch, event string, limit in
 				_ = os.RemoveAll(dir)
 				return "", fmt.Errorf("creating directory for artifact %q: %w", download.Artifact.Name, err)
 			}
-			if _, err := junit.ExtractZip(download.ZipPath, artifactDir); err != nil {
+			if _, err := junit.ExtractReportsFromZip(download.ZipPath, artifactDir); err != nil {
 				_ = os.RemoveAll(dir)
 				return "", fmt.Errorf("extracting artifact %q: %w", download.Artifact.Name, err)
 			}
