@@ -159,6 +159,10 @@ func TestMixedBrain(t *testing.T) {
 			ClusterEndpoint: devserver.ClusterEndpoint{
 				RPCAddress: currentSrv.FrontendHostPort(),
 			},
+			// TODO: remove this once the release server defaults to standalone activities on. Currently the downgrade version of 1.31 has SAA defaulted to off.
+			DynamicConfigValues: map[string]any{
+				"activity.enableStandalone": true,
+			},
 		})
 	})
 	if t.Failed() {
