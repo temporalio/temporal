@@ -60,6 +60,7 @@ type (
 		dlqInternalErrors          dynamicconfig.BoolPropertyFn
 		dlqErrorPattern            dynamicconfig.StringPropertyFn
 		logger                     log.Logger
+		throttleState              *queues.ThrottleState
 	}
 	option func(*params)
 )
@@ -127,6 +128,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 		expectError                  bool
 		expectedAttemptNoUserLatency time.Duration
 		expectBackoff                bool
+		expectResubmit               bool
 	}{
 		{
 			name:                         "NoError",
@@ -141,6 +143,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 			expectError:                  true,
 			expectedAttemptNoUserLatency: attemptNoUserLatency,
 			expectBackoff:                true,
+			expectResubmit:               true,
 		},
 		{
 			name:                         "NotFoundError",
@@ -162,6 +165,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 			expectError:                  true,
 			expectedAttemptNoUserLatency: 0,
 			expectBackoff:                false,
+			expectResubmit:               true,
 		},
 		{
 			name:                         "APSLimitError",
@@ -169,6 +173,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 			expectError:                  true,
 			expectedAttemptNoUserLatency: 0,
 			expectBackoff:                false,
+			expectResubmit:               true,
 		},
 		{
 			name: "OPSLimitError",
@@ -180,6 +185,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 			expectError:                  true,
 			expectedAttemptNoUserLatency: 0,
 			expectBackoff:                false,
+			expectResubmit:               true,
 		},
 		{
 			name:                         "PersistenceNamespaceLimitExceeded",
@@ -187,6 +193,7 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 			expectError:                  true,
 			expectedAttemptNoUserLatency: 0,
 			expectBackoff:                false,
+			expectResubmit:               true,
 		},
 	}
 
@@ -224,8 +231,10 @@ func (s *executableSuite) TestExecute_InMemoryNoUserLatency_SingleAttempt() {
 
 			if tc.expectError {
 				s.Error(err)
-				s.mockScheduler.EXPECT().TrySubmit(executable).Return(false)
-				s.mockRescheduler.EXPECT().Add(executable, gomock.Any())
+				if tc.expectResubmit {
+					s.mockScheduler.EXPECT().TrySubmit(executable).Return(false)
+				}
+				s.mockRescheduler.EXPECT().Add(executable, gomock.Any(), gomock.Any())
 				executable.Nack(err)
 				return
 			}
@@ -1238,7 +1247,7 @@ func (s *executableSuite) TestTaskNack_Resubmit_Fail() {
 	executable := s.newTestExecutable()
 
 	s.mockScheduler.EXPECT().TrySubmit(executable).Return(false)
-	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now())).Do(func(_ queues.Executable, _ time.Time) {
+	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now()), gomock.Any()).Do(func(_ queues.Executable, _ time.Time, _ queues.ThrottleKey) {
 		s.Equal(ctasks.TaskStatePending, executable.State())
 
 		go func() {
@@ -1275,7 +1284,7 @@ func (s *executableSuite) TestTaskNack_Reschedule() {
 		s.Run(tc.name, func() {
 			executable := s.newTestExecutable()
 
-			s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now())).Do(func(_ queues.Executable, _ time.Time) {
+			s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now()), gomock.Any()).Do(func(_ queues.Executable, _ time.Time, _ queues.ThrottleKey) {
 				s.Equal(ctasks.TaskStatePending, executable.State())
 
 				go func() {
@@ -1559,6 +1568,7 @@ func (s *executableSuite) newTestExecutable(opts ...option) queues.Executable {
 			params.MaxUnexpectedErrorAttempts = p.maxUnexpectedErrorAttempts
 			params.DLQInternalErrors = p.dlqInternalErrors
 			params.DLQErrorPattern = p.dlqErrorPattern
+			params.ThrottleState = p.throttleState
 		},
 	)
 }
@@ -1656,7 +1666,7 @@ func (s *executableSuite) TestTaskNack_BusyWorkflow_FallbackToReschedule() {
 	// For busy workflow errors, shouldResubmitOnNack returns true, so TrySubmit is called first.
 	// If TrySubmit fails (returns false), then rescheduler.Add is called.
 	mockScheduler.EXPECT().TrySubmit(executable).Return(false).Times(1)
-	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now())).Times(1)
+	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now()), gomock.Any()).Times(1)
 
 	executable.Nack(consts.ErrResourceExhaustedBusyWorkflow)
 
@@ -1673,11 +1683,182 @@ func (s *executableSuite) TestTaskNack_BusyWorkflow_NoHandlerFallsBackToReschedu
 	// For busy workflow errors, shouldResubmitOnNack returns true, so TrySubmit is called first.
 	// If TrySubmit fails (returns false), then rescheduler.Add is called.
 	s.mockScheduler.EXPECT().TrySubmit(executable).Return(false).Times(1)
-	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now())).Times(1)
+	s.mockRescheduler.EXPECT().Add(executable, gomock.AssignableToTypeOf(time.Now()), gomock.Any()).Times(1)
 
 	executable.Nack(consts.ErrResourceExhaustedBusyWorkflow)
 }
 
 func (s *executableSuite) accessInternalState(executable queues.Executable) {
 	_ = fmt.Sprintf("%v", executable)
+}
+
+func (s *executableSuite) newTestThrottleState() *queues.ThrottleState {
+	settings := dynamicconfig.DefaultTaskThrottleControllerSettings
+	settings.Enabled = true
+	return queues.NewThrottleState(
+		func() dynamicconfig.TaskThrottleControllerSettings { return settings },
+		s.timeSource,
+		metrics.NoopMetricsHandler,
+	)
+}
+
+func (s *executableSuite) TestHandleErr_NonThrottleErrorsAreNotControllerInputs() {
+	testCases := []struct {
+		name    string
+		taskErr error
+	}{
+		{name: "StandbyTaskRetry", taskErr: consts.ErrTaskRetry},
+		{name: "DependencyTaskNotCompleted", taskErr: consts.ErrDependencyTaskNotCompleted},
+		{name: "NamespaceHandover", taskErr: consts.ErrNamespaceHandover},
+		{name: "NamespaceNotActive", taskErr: serviceerror.NewNamespaceNotActive("ns", "active", "standby")},
+		{name: "BusyWorkflow", taskErr: consts.ErrResourceExhaustedBusyWorkflow},
+		{
+			name: "CircuitBreakerOpen",
+			taskErr: &serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN,
+				Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+				Message: "circuit breaker open",
+			},
+		},
+		{name: "Unavailable", taskErr: serviceerror.NewUnavailable("unavailable")},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			throttleState := s.newTestThrottleState()
+			executable := s.newTestExecutable(func(p *params) {
+				p.throttleState = throttleState
+			})
+
+			_ = executable.HandleErr(tc.taskErr)
+			s.Equal(queues.ThrottleKey{}, queues.ThrottleKeyOf(executable))
+		})
+	}
+}
+
+func (s *executableSuite) TestNack_ThrottleScopedGoesToTheRescheduler() {
+	throttleState := s.newTestThrottleState()
+	executable := s.newTestExecutable(func(p *params) {
+		p.throttleState = throttleState
+	})
+
+	throttleErr := &serviceerror.ResourceExhausted{
+		Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
+		Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+	}
+	s.Error(executable.HandleErr(throttleErr))
+
+	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).Times(0)
+	s.mockRescheduler.EXPECT().Add(executable, gomock.Any(), gomock.Any()).Times(1)
+
+	executable.Nack(throttleErr)
+}
+
+func (s *executableSuite) TestHandleErr_DLQPatternClearsAStaleThrottleKey() {
+	throttleState := s.newTestThrottleState()
+	executable := s.newTestExecutable(func(p *params) {
+		p.throttleState = throttleState
+		p.dlqErrorPattern = func() string {
+			return "does-not-matter"
+		}
+	})
+
+	throttleErr := &serviceerror.ResourceExhausted{
+		Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
+		Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+	}
+	s.Error(executable.HandleErr(throttleErr))
+
+	held := queues.ThrottleKeyOf(executable) != queues.ThrottleKey{}
+	s.True(held, "the throttled attempt should have attached a key")
+
+	s.Error(executable.HandleErr(serviceerror.NewUnavailable("does-not-matter")))
+
+	held = queues.ThrottleKeyOf(executable) != queues.ThrottleKey{}
+	s.False(held, "a task headed for the DLQ must not still be parked on a budget")
+}
+
+func (s *executableSuite) TestNack_BusyWorkflowKeepsTheFastPath() {
+	throttleState := s.newTestThrottleState()
+	executable := s.newTestExecutable(func(p *params) {
+		p.throttleState = throttleState
+	})
+
+	busyErr := &serviceerror.ResourceExhausted{
+		Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
+		Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+	}
+	s.Error(executable.HandleErr(busyErr))
+
+	s.mockScheduler.EXPECT().TrySubmit(executable).Return(true).Times(1)
+
+	executable.Nack(busyErr)
+}
+
+func (s *executableSuite) TestHandleErr_ThrottleErrorsDriveController() {
+	throttleState := s.newTestThrottleState()
+	executable := s.newTestExecutable(func(p *params) {
+		p.throttleState = throttleState
+	})
+
+	throttleErr := &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Message: "namespace APS limit reached",
+	}
+
+	s.Error(executable.HandleErr(throttleErr))
+	key := queues.ThrottleKeyOf(executable)
+	s.NotEqual(queues.ThrottleKey{}, key)
+	s.Equal(queues.NewThrottleKey(throttleErr.Cause, tests.NamespaceID.String()), key)
+
+	s.Error(executable.HandleErr(serviceerror.NewUnavailable("unrelated")))
+	s.Equal(queues.ThrottleKey{}, queues.ThrottleKeyOf(executable))
+}
+
+func (s *executableSuite) TestHandleErr_BusyWorkflowClearsThrottleClass() {
+	throttleState := s.newTestThrottleState()
+	executable := s.newTestExecutable(func(p *params) {
+		p.throttleState = throttleState
+	})
+
+	s.Error(executable.HandleErr(&serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Message: "namespace APS limit reached",
+	}))
+	s.NotEqual(queues.ThrottleKey{}, queues.ThrottleKeyOf(executable))
+
+	s.Error(executable.HandleErr(consts.ErrResourceExhaustedBusyWorkflow))
+	s.Equal(queues.ThrottleKey{}, queues.ThrottleKeyOf(executable))
+
+	s.mockScheduler.EXPECT().TrySubmit(executable).Return(true)
+	executable.Nack(consts.ErrResourceExhaustedBusyWorkflow)
+}
+
+func (s *executableSuite) TestNack_ParksInTheClassItFailedUnder() {
+	throttleState := s.newTestThrottleState()
+	executable := s.newTestExecutable(func(p *params) {
+		p.throttleState = throttleState
+	})
+
+	throttleErr := &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Message: "namespace APS limit reached",
+	}
+	s.Error(executable.HandleErr(throttleErr))
+
+	var parked queues.ThrottleKey
+	s.mockRescheduler.EXPECT().Add(executable, gomock.Any(), gomock.Any()).
+		Do(func(_ queues.Executable, _ time.Time, key queues.ThrottleKey) {
+			parked = key
+		}).Times(1)
+	executable.Nack(throttleErr)
+
+	s.Equal(
+		queues.NewThrottleKey(throttleErr.Cause, tests.NamespaceID.String()),
+		parked,
+		"the task must be parked on the budget that refused it, not ungoverned",
+	)
 }

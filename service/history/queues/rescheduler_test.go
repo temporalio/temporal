@@ -51,6 +51,7 @@ func (s *rescheudulerSuite) SetupTest() {
 		s.timeSource,
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
+		nil,
 	)
 }
 
@@ -65,6 +66,7 @@ func (s *rescheudulerSuite) TestStartStop() {
 		timeSource,
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
+		nil,
 	)
 
 	rescheduler.Start()
@@ -83,6 +85,7 @@ func (s *rescheudulerSuite) TestStartStop() {
 		rescheduler.Add(
 			mockExecutable,
 			timeSource.Now().Add(time.Duration(rand.Int63n(300))*time.Millisecond),
+			ThrottleKey{},
 		)
 	}
 
@@ -101,6 +104,7 @@ func (s *rescheudulerSuite) TestDrain() {
 		timeSource,
 		log.NewTestLogger(),
 		metrics.NoopMetricsHandler,
+		nil,
 	)
 
 	rescheduler.Start()
@@ -110,6 +114,7 @@ func (s *rescheudulerSuite) TestDrain() {
 		rescheduler.Add(
 			NewMockExecutable(s.controller),
 			timeSource.Now().Add(time.Duration(rand.Int63n(300))*time.Second),
+			ThrottleKey{},
 		)
 	}
 
@@ -129,11 +134,13 @@ func (s *rescheudulerSuite) TestReschedule_NoRescheduleLimit() {
 		s.rescheduler.Add(
 			mockTask,
 			now.Add(time.Duration(rand.Int63n(rescheduleInterval.Nanoseconds()))),
+			ThrottleKey{},
 		)
 
 		s.rescheduler.Add(
 			NewMockExecutable(s.controller),
 			now.Add(rescheduleInterval+time.Duration(rand.Int63n(time.Minute.Nanoseconds()))),
+			ThrottleKey{},
 		)
 	}
 	s.Equal(numExecutable, s.rescheduler.Len())
@@ -158,6 +165,7 @@ func (s *rescheudulerSuite) TestReschedule_TaskChanFull() {
 		s.rescheduler.Add(
 			mockTask,
 			now.Add(time.Duration(rand.Int63n(rescheduleInterval.Nanoseconds()))),
+			ThrottleKey{},
 		)
 	}
 	s.Equal(numExecutable, s.rescheduler.Len())
@@ -189,6 +197,7 @@ func (s *rescheudulerSuite) TestReschedule_DropCancelled() {
 		s.rescheduler.Add(
 			mockTask,
 			now.Add(time.Duration(rand.Int63n(rescheduleInterval.Nanoseconds()))),
+			ThrottleKey{},
 		)
 	}
 
@@ -216,6 +225,7 @@ func (s *rescheudulerSuite) TestForceReschedule_ImmediateTask() {
 		s.rescheduler.Add(
 			mockTask,
 			now.Add(time.Minute+time.Duration(rand.Int63n(time.Minute.Nanoseconds()))),
+			ThrottleKey{},
 		)
 	}
 
@@ -247,6 +257,7 @@ func (s *rescheudulerSuite) TestForceReschedule_ScheduledTask() {
 	s.rescheduler.Add(
 		retryingTask,
 		now.Add(time.Minute),
+		ThrottleKey{},
 	)
 
 	// schedule queue pre-fetches tasks
@@ -258,6 +269,7 @@ func (s *rescheudulerSuite) TestForceReschedule_ScheduledTask() {
 	s.rescheduler.Add(
 		futureTask,
 		futureTaskTimestamp,
+		ThrottleKey{},
 	)
 
 	s.mockScheduler.EXPECT().TrySubmit(gomock.Any()).DoAndReturn(func(_ Executable) bool {

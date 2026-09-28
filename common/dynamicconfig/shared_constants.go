@@ -90,6 +90,58 @@ var DefaultDynamicRateLimitingParams = DynamicRateLimitingParams{
 	RateMultiMax:         1.0,
 }
 
+// TaskThrottleControllerSettings tunes the host level pacing of history task retries that
+// were refused by a namespace APS or persistence rate limiter. One budget is kept per
+// (cause, namespace); its admitted rate moves multiplicatively, down by Beta when a control
+// window loses more than LossThreshold and up by IncreaseRatio when it does not.
+type TaskThrottleControllerSettings struct {
+	// Enabled toggles the controller. While off, tasks are still classified so parked work
+	// already knows its budget when it is switched on.
+	Enabled bool
+	// MinRate is the floor on a budget's admitted rate, in releases per second. Raising it
+	// is the lever for shortening recovery after a long incident. Values below one release
+	// per second are not honoured, because a budget that low can never earn the releases a
+	// decision needs.
+	MinRate float64
+	// MaxRate is the ceiling on a budget's admitted rate, in releases per second. It also
+	// bounds the burst, which is one window's worth of credit.
+	MaxRate float64
+	// InitialRate is the rate a budget starts at, and returns to when it is reset after
+	// going idle.
+	InitialRate float64
+	// KeyTTL is how long a budget survives untouched before it is evicted, or reset to
+	// InitialRate if it is touched again first, so a rate learned during an incident does
+	// not outlive it.
+	KeyTTL time.Duration
+	// Beta is the multiplicative decrease applied after a lossy window. Should be in (0, 1).
+	Beta float64
+	// IncreaseRatio is the fraction by which the rate grows after a clean window.
+	IncreaseRatio float64
+	// LossThreshold is the fraction of admitted releases that may be throttled before the
+	// rate decreases. It also sizes the evidence gate: a window decides nothing until it has
+	// seen 1/LossThreshold releases.
+	LossThreshold float64
+	// Window is the control window over which loss is evaluated. Keep it at a second or more:
+	// a blocked budget looks again every tenth of a window, so a shorter one polls harder, and
+	// at zero it polls without pausing at all.
+	Window time.Duration
+	// MaxKeys caps the budgets tracked by a host. Past the cap the controller fails open.
+	MaxKeys int
+}
+
+var DefaultTaskThrottleControllerSettings = TaskThrottleControllerSettings{
+	Enabled:       false,
+	MinRate:       1.0,
+	MaxRate:       10000.0,
+	InitialRate:   1000.0,
+	KeyTTL:        5 * time.Minute,
+	Beta:          0.85,
+	IncreaseRatio: 0.10,
+	LossThreshold: 0.05,
+	Window:        time.Second,
+	MaxKeys:       1024,
+}
+
 // ScheduleInvariantsScannerParams configures the schedule-invariants scanners. The three
 // invariant checks are independently toggleable but otherwise share their timing and
 // rate-limiting knobs, so they're grouped into a single struct-valued dynamic config.
