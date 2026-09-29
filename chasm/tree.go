@@ -1453,6 +1453,7 @@ func (n *Node) structuredRef(
 		return ComponentRef{}, errComponentNotFound
 	}
 
+	componentPath := refNode.path()
 	workflowKey := refNode.backend.GetWorkflowKey()
 	return ComponentRef{
 		ExecutionKey: ExecutionKey{
@@ -1464,10 +1465,28 @@ func (n *Node) structuredRef(
 		// TODO: Consider using node's LastUpdateVersionedTransition for checking staleness here.
 		// Using VersionedTransition of the entire tree might be too strict.
 		executionLastUpdateVT: transitionhistory.CopyVersionedTransition(refNode.backend.CurrentVersionedTransition()),
-		componentPath:         refNode.path(),
-		componentInitialVT:    refNode.serializedNode.GetMetadata().GetInitialVersionedTransition(),
+		componentPath:         componentPath,
+		componentInitialVT: refComponentInitialVT(
+			componentPath,
+			refNode.serializedNode.GetMetadata().GetInitialVersionedTransition(),
+		),
 	}, nil
 
+}
+
+// refComponentInitialVT returns the InitialVersionedTransition to embed in a ref for the component at
+// the given path. It is omitted for the root component: the root can't be deleted and recreated within
+// a run, so the execution key and archetype already identify it. The persisted value is also not
+// trustworthy for a Workflow root synthesized while loading an execution with no CHASM nodes, since
+// the root is created before the mutable state's current version is known.
+func refComponentInitialVT(
+	componentPath []string,
+	initialVT *persistencespb.VersionedTransition,
+) *persistencespb.VersionedTransition {
+	if len(componentPath) == 0 {
+		return nil
+	}
+	return initialVT
 }
 
 // componentPath returns the path of the given component relative to the root of the tree, or nil if
@@ -3868,7 +3887,7 @@ func (n *Node) invokeSideEffectTaskFn(
 		archetypeID:           ArchetypeID(taskInfo.GetArchetypeId()),
 		executionLastUpdateVT: taskInfo.ComponentLastUpdateVersionedTransition,
 		componentPath:         taskInfo.Path,
-		componentInitialVT:    taskInfo.ComponentInitialVersionedTransition,
+		componentInitialVT:    refComponentInitialVT(taskInfo.Path, taskInfo.ComponentInitialVersionedTransition),
 
 		// Validate the Ref only once it is accessed by the task's handler.
 		validationFn: makeValidationFn(registrableTask, validate, chasmTask.Attempt, taskAttributes, taskValue),

@@ -2462,12 +2462,12 @@ func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresExecutionTransition
 	// Deliberately corrupt the execution transition in the callback token. Completion should still
 	// succeed: it resolves at RefConsistencyLevelComponentCreation, which ignores the execution
 	// transition (staleness is checked against the component's creation transition instead) and
-	// re-establishes identity by request ID. The creation transition is left valid, as the framework
-	// legitimately relies on it to guarantee the loaded state knows about the operation.
+	// re-establishes identity by request ID. The operation is the root component, so the ref carries
+	// no creation transition: the root is already identified by its execution key and archetype.
 	ref := &persistencespb.ChasmComponentRef{}
 	s.NoError(ref.Unmarshal(completionToken.GetComponentRef()))
 	s.NotNil(ref.ExecutionVersionedTransition)
-	s.NotNil(ref.ComponentInitialVersionedTransition)
+	s.Nil(ref.ComponentInitialVersionedTransition)
 	ref.ExecutionVersionedTransition = &persistencespb.VersionedTransition{
 		NamespaceFailoverVersion: ref.ExecutionVersionedTransition.NamespaceFailoverVersion + 1000,
 		TransitionCount:          ref.ExecutionVersionedTransition.TransitionCount + 1000,
