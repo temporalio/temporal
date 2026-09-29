@@ -640,6 +640,10 @@ message TaskQueueFamilySummary {
   repeated int64 bloom_filter_words = 4;
 }
 
+// MaxTaskQueuesInVersionFailureDetails is the details of the failure when the maximum number
+// of task queues in a version is exceeded. By storing the task queue family summary, the deployment workflow
+// uses a bloom filter, during subsequent registrations, to determine if a task queue family may exist in the version
+// at the time of registration of a new task queue.
 message MaxTaskQueuesInVersionFailureDetails {
   TaskQueueFamilySummary task_queue_family_summary = 1;
 }
