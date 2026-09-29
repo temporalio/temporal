@@ -1293,7 +1293,7 @@ See DynamicRateLimitingParams comments for more details.`,
 	MatchingGetTasksReloadAt = NewTaskQueueIntSetting(
 		"matching.getTasksReloadAt",
 		100,
-		`Reload a batch of tasks when there are this many remaining. Must be less than MatchingGetTasksBatchSize. (Requires new matcher.)`,
+		`Reload a batch of tasks when there are this many remaining. Must be less than MatchingGetTasksBatchSize.`,
 	)
 	MatchingLongPollExpirationInterval = NewTaskQueueDurationSetting(
 		"matching.longPollExpirationInterval",
@@ -1602,7 +1602,7 @@ scoped by namespace and/or task queue.`,
 		"matching.enableFairness",
 		ConvertGradualChange(false),
 		StaticGradualChange(false),
-		`Enable fairness for task dispatching. Implies matching.useNewMatcher.`,
+		`Enable fairness for task dispatching.`,
 	)
 	MatchingPriorityLevels = NewTaskQueueIntSetting(
 		"matching.priorityLevels",
@@ -1659,7 +1659,7 @@ default as namespace cardinality can be high and this requires a metrics collect
 	MatchingAutoEnableV2 = NewTaskQueueBoolSetting(
 		"matching.autoEnableV2",
 		false,
-		`MatchingAutoEnableV2 automatically enables fairness when a fairness or priority key is seen`,
+		`MatchingAutoEnableV2 automatically enables fairness when a fairness key is seen`,
 	)
 	MatchingPartitionScaleAllowedDrift = NewTaskQueueTypedSetting(
 		"matching.partitionScaleAllowedDrift",

@@ -354,7 +354,6 @@ func (s *FairnessSuite) newTestEnv(doAutoEnable bool, opts ...testcore.TestOptio
 	if doAutoEnable {
 		baseOpts = append(baseOpts,
 			testcore.WithDynamicConfig(dynamicconfig.MatchingAutoEnableV2, true),
-			testcore.WithDynamicConfig(dynamicconfig.MatchingEnableFairness, false),
 		)
 	} else {
 		baseOpts = append(baseOpts,
@@ -371,7 +370,7 @@ func (s *FairnessSuite) triggerAutoEnable(env *testcore.TestEnv) {
 		WorkflowType: env.Tv().WorkflowType(),
 		TaskQueue:    env.Tv().TaskQueue(),
 		Priority: &commonpb.Priority{
-			PriorityKey: 3,
+			FairnessKey: "trigger",
 		},
 	})
 	s.NoError(err)
