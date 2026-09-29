@@ -37,21 +37,21 @@ runs:
       id: go-version
       shell: bash
       run: |
-        version="$(
-          awk -v gotoolchain="${GOTOOLCHAIN:-}" '
-            gotoolchain != "local" && match($0, /^toolchain go1\.[0-9]+(\.[0-9]+|rc[0-9]+)?/) {
-              print substr($0, 13, RLENGTH - 12)
-              found = 1
-              exit
-            }
-            go_version == "" && match($0, /^go [0-9]+(\.[0-9]+)*/) {
-              go_version = substr($0, 4, RLENGTH - 3)
-            }
-            END {
-              if (!found) print go_version
-            }
-          ' go.mod
-        )"
+        go_version=""
+        toolchain_version=""
+        while read -r directive value _; do
+          case "$directive" in
+            go)
+              go_version="$value"
+              ;;
+            toolchain)
+              if [[ "${GOTOOLCHAIN:-}" != "local" && "$value" == go* ]]; then
+                toolchain_version="${value#go}"
+              fi
+              ;;
+          esac
+        done < go.mod
+        version="${toolchain_version:-$go_version}"
         if [[ -z "$version" ]]; then
           echo "Unable to resolve the Go version from go.mod" >&2
           exit 1
