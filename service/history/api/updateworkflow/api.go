@@ -54,7 +54,10 @@ type Updater struct {
 	scheduledEventID       int64
 	scheduleToStartTimeout time.Duration
 	workflowTaskStamp      int32
-	responseLink           *commonpb.Link
+	// responseLink is the link attached to the response. It is set in ApplyRequest
+	// and read in OnSuccess - which runs after workflow lock is released and so doesn't
+	// have access to MutableState to derive it.
+	responseLink *commonpb.Link
 }
 
 func NewUpdater(
@@ -106,17 +109,24 @@ func (u *Updater) ApplyRequest(
 	ctx context.Context,
 	updateReg update.Registry,
 	ms historyi.MutableState,
-) (action *api.UpdateWorkflowAction, err error) {
-	defer func() {
-		if err == nil {
-			// Capture the link for response as long as there isn't an error on apply.
-			u.responseLink, err = u.captureResponseLink(ctx, ms)
-			if err != nil {
-				action = nil
-			}
-		}
-	}()
+) (*api.UpdateWorkflowAction, error) {
+	action, err := u.applyRequest(ctx, updateReg, ms)
+	if err != nil {
+		return nil, err
+	}
+	// Capture the anticipated link for the response after the request has been applied.
+	// If the request itself fails/is rejected, OnSuccess will link to the workflow itself instead.
+	if u.responseLink, err = u.captureResponseLink(ctx, ms); err != nil {
+		return nil, err
+	}
+	return action, nil
+}
 
+func (u *Updater) applyRequest(
+	ctx context.Context,
+	updateReg update.Registry,
+	ms historyi.MutableState,
+) (*api.UpdateWorkflowAction, error) {
 	if u.req.GetRequest().GetFirstExecutionRunId() != "" &&
 		ms.GetExecutionInfo().GetFirstExecutionRunId() != u.req.GetRequest().GetFirstExecutionRunId() {
 		return nil, consts.ErrWorkflowExecutionNotFound
@@ -165,7 +175,10 @@ func (u *Updater) ApplyRequest(
 		return nil, consts.ErrWorkflowClosing
 	}
 
-	var alreadyExisted bool
+	var (
+		alreadyExisted bool
+		err            error
+	)
 	if u.upd, alreadyExisted, err = updateReg.FindOrCreate(ctx, updateID); err != nil {
 		return nil, err
 	}

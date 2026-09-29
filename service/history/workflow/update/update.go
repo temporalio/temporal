@@ -498,12 +498,10 @@ func (u *Update) persistCallback(
 	if requestID != "" && eventStore.HasRequestID(requestID) {
 		return true, nil
 	}
-	// Copy Nexus links to the event so that backlinks are preserved in history.
+	// Copy callback links to the event so that backlinks are preserved in history.
 	var callbackLinks []*commonpb.Link
 	for _, callback := range completionCallbacks {
-		if callback.GetNexus() != nil {
-			callbackLinks = append(callbackLinks, callback.GetLinks()...)
-		}
+		callbackLinks = append(callbackLinks, callback.GetLinks()...)
 	}
 	_, err = eventStore.AddWorkflowExecutionOptionsUpdatedEvent(
 		nil, false, "", nil, callbackLinks, "", nil, nil, false,
