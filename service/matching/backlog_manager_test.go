@@ -88,7 +88,6 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 
 	s.ptqMgr = NewMockphysicalTaskQueueManager(s.controller)
 	s.ptqMgr.EXPECT().QueueKey().Return(queue).AnyTimes()
-	s.ptqMgr.EXPECT().ProcessSpooledTask(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	s.ptqMgr.EXPECT().GetFairnessWeightOverrides().AnyTimes().Return(fairnessWeightOverrides{ /* To avoid deadlock with gomock method */ })
 	s.ptqMgr.EXPECT().StartScaleManager(gomock.Any()).AnyTimes()
 	// New task queues assume the other table may have tasks (to allow migration), so draining gets set up.
