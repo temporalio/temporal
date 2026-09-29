@@ -14,8 +14,49 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/tasks"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+// Validate that ProcessBufferTask is invalidated by a later high water mark.
+func TestProcessBufferTask_Validate(t *testing.T) {
+	env := newTestEnv(t)
+	now := env.TimeSource.Now()
+	handler := newProcessBufferHandler(env)
+	invoker := env.Scheduler.Invoker.Get(env.MutableContext())
+
+	cases := []struct {
+		name              string
+		lastProcessedTime *timestamppb.Timestamp
+		scheduledTime     time.Time
+		expectedValid     bool
+	}{
+		{name: "immediate always valid", lastProcessedTime: timestamppb.New(now), scheduledTime: time.Time{}, expectedValid: true},
+		{name: "nil LPT always valid", lastProcessedTime: nil, scheduledTime: now, expectedValid: true},
+		{name: "scheduled after LPT is valid", lastProcessedTime: timestamppb.New(now), scheduledTime: now.Add(time.Second), expectedValid: true},
+		{name: "scheduled equal to LPT is stale", lastProcessedTime: timestamppb.New(now), scheduledTime: now, expectedValid: false},
+		{name: "scheduled before LPT is stale", lastProcessedTime: timestamppb.New(now.Add(time.Second)), scheduledTime: now, expectedValid: false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			invoker.LastProcessedTime = c.lastProcessedTime
+			valid, err := handler.Validate(env.MutableContext(), invoker, chasm.TaskInvocation{TaskAttributes: chasm.TaskAttributes{ScheduledTime: c.scheduledTime}}, &schedulerpb.InvokerProcessBufferTask{})
+			require.NoError(t, err)
+			require.Equal(t, c.expectedValid, valid)
+		})
+	}
+}
+
+func TestProcessBufferTask_Validate_MigrationPending(t *testing.T) {
+	env := newTestEnv(t)
+	ctx := env.MutableContext()
+	invoker := env.Scheduler.Invoker.Get(ctx)
+	env.Scheduler.WorkflowMigration = &schedulerpb.WorkflowMigrationState{}
+
+	valid, err := newProcessBufferHandler(env).Validate(ctx, invoker, chasm.TaskInvocation{}, &schedulerpb.InvokerProcessBufferTask{})
+	require.NoError(t, err)
+	require.False(t, valid)
+}
 
 // A buffer of only deferred starts (Attempt=-1) must NOT start a workflow or
 // emit a ProcessBufferTask. Deferred starts wait on completion events, not on a
@@ -277,6 +318,58 @@ func TestProcessBufferTask_BufferOne(t *testing.T) {
 	})
 }
 
+func TestProcessBufferTask_BufferOneKeepsExistingDeferredStart(t *testing.T) {
+	env := newTestEnv(t)
+	startTime := timestamppb.New(env.TimeSource.Now())
+	runProcessBufferTestCase(t, env, &processBufferTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{
+			{
+				NominalTime:   startTime,
+				ActualTime:    startTime,
+				DesiredTime:   startTime,
+				RequestId:     "deferred-first",
+				WorkflowId:    "deferred-first",
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+				Attempt:       -1,
+			},
+			{
+				NominalTime:   startTime,
+				ActualTime:    startTime,
+				DesiredTime:   startTime,
+				RequestId:     "new-later",
+				WorkflowId:    "new-later",
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+			},
+		},
+		InitialRunningWorkflows:  []*commonpb.WorkflowExecution{{WorkflowId: "running", RunId: "running-run"}},
+		ExpectedBufferedStarts:   1,
+		ExpectedRunningWorkflows: 1,
+		ExpectedOverlapSkipped:   1,
+		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker) {
+			require.Equal(t, "deferred-first", invoker.GetBufferedStarts()[0].GetRequestId())
+			require.Equal(t, int64(-1), invoker.GetBufferedStarts()[0].GetAttempt())
+		},
+	})
+}
+
+func TestProcessBufferTask_BufferOneDropsDeferredStartPastCatchupWindow(t *testing.T) {
+	env := newTestEnv(t)
+	env.Scheduler.Schedule.Policies.CatchupWindow = durationpb.New(10 * time.Minute)
+	startTime := timestamppb.New(env.TimeSource.Now().Add(-15 * time.Minute))
+	runProcessBufferTestCase(t, env, &processBufferTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{{
+			NominalTime:   startTime,
+			ActualTime:    startTime,
+			DesiredTime:   startTime,
+			RequestId:     "deferred-expired",
+			WorkflowId:    "deferred-expired",
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+			Attempt:       -1,
+		}},
+		ExpectedMissedCatchupWindow: 1,
+	})
+}
+
 // ProcessBuffer is scheduled with an empty buffer.
 func TestProcessBufferTask_Empty(t *testing.T) {
 	env := newTestEnv(t)
@@ -414,6 +507,43 @@ func TestProcessBufferTask_MissedCatchupPreservesRemainingActions(t *testing.T) 
 	})
 	require.Equal(t, int64(3), env.Scheduler.Schedule.State.RemainingActions,
 		"RemainingActions must not be consumed by a start that was dropped for missing the catchup window")
+}
+
+// Paused schedules drop automated buffered starts during processBuffer (but
+// must keep manual ones). Guards against accidental promotion of automated
+// starts while paused.
+func TestProcessBufferTask_PausedDropsAutomatedKeepsManual(t *testing.T) {
+	env := newTestEnv(t)
+	env.Scheduler.Schedule.State.Paused = true
+
+	startTime := timestamppb.New(env.TimeSource.Now())
+	runProcessBufferTestCase(t, env, &processBufferTestCase{
+		InitialBufferedStarts: []*schedulespb.BufferedStart{
+			{
+				NominalTime:   startTime,
+				ActualTime:    startTime,
+				DesiredTime:   startTime,
+				Manual:        false,
+				RequestId:     "auto",
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			},
+			{
+				NominalTime:   startTime,
+				ActualTime:    startTime,
+				DesiredTime:   startTime,
+				Manual:        true,
+				RequestId:     "manual",
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			},
+		},
+		ExpectedBufferedStarts: 1,
+		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker) {
+			kept := invoker.GetBufferedStarts()[0]
+			require.Equal(t, "manual", kept.RequestId)
+			require.Equal(t, int64(1), kept.Attempt,
+				"manual start must be promoted to Attempt=1 even when schedule is paused")
+		},
+	})
 }
 
 // A buffered start with an overlap policy to cancel other workflows is processed.

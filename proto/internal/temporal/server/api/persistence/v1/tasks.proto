@@ -124,6 +124,16 @@ message PartitionScaleState {
   //     aip.dev/not-precedent: This is a bit field --)
   repeated uint64 backlog_state = 4;
 
+  // Summary of backlog counts, 8 bits per partition (see common/number/compact8.go).
+  // This is different from backlog_state: a partition will have a 1 bit in backlog_state
+  // unless it is draining and we know for sure that it's fully drained. It may have zero
+  // actual backlog most of that time, so it would have a zero here. Also, we commit changes to
+  // backlog_state to persistence before changing counts, but we don't have to keep
+  // backlog_counts as consistent.
+  bytes backlog_counts = 5;
+  // Backlog load balancing config from scaler, in compact8 format.
+  int32 backlog_cap = 6;
+
   // Arbitrary state kept by the scaler implementation.
   // (-- api-linter: core::0146::any=disabled
   //     aip.dev/not-precedent: This is not public. --)
@@ -133,4 +143,9 @@ message PartitionScaleState {
 message SimplePartitionScalerState {
   // How many partitions to target based on add rate alone.
   int32 add_target = 1;
+  // Partitions to reserve based on backlog count. This is a bitfield where a 1 means "this has
+  // gone above BacklogBase and not gone below BacklogReset".
+  // (-- api-linter: core::0141::forbidden-types=disabled
+  //     aip.dev/not-precedent: This is a bit field --)
+  repeated uint64 backlog_target = 2;
 }

@@ -12,6 +12,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -20,6 +21,7 @@ import (
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
@@ -173,6 +175,27 @@ func (s *WorkflowResetSuite) TestRepeatedResets() {
 	newRunID2 := s.performReset(env, workflowID, baseRunID)
 	s.assertResetWorkflowLink(env, workflowID, baseRunID, newRunID2)                                     // base -> newRunID2
 	s.assertMutableStateStatus(env, workflowID, newRunID1, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED) // newRunID1 was the current run.
+}
+
+// Resetting a failed workflow must not re-emit workflow_failed: the counter stays at 1 regardless of the number of resets.
+func (s *WorkflowResetSuite) TestRepeatedResets_FailedWorkflowDoesNotDoubleCountFailedMetric() {
+	env := testcore.NewEnv(s.T())
+	workflowID := env.Tv().WorkflowID()
+
+	capture := env.StartNamespaceMetricCapture()
+
+	failedRunID := s.prepareSingleFailedRun(env, workflowID)
+	s.assertMutableStateStatus(env, workflowID, failedRunID, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED)
+
+	// The reset runs are never driven to fail, so any workflow_failed beyond the first is the bug.
+	const resetCount = 5
+	for range resetCount {
+		s.performReset(env, workflowID, failedRunID)
+	}
+
+	failedRecordings := capture.Metric(metrics.WorkflowFailedCount.Name())
+	s.Len(failedRecordings, 1,
+		"workflow_failed must be recorded once (the genuine failure), not once per reset")
 }
 
 // Explicit base run is provided. There are more closed runs between base and the current run. Asserts that no other runs apart from base & current are mutated.
@@ -540,6 +563,39 @@ func (s *WorkflowResetSuite) prepareSingleRun(env *testcore.TestEnv, workflowID 
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
 			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
 				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
+			},
+		}},
+	})
+	s.NoError(err)
+	return run.GetRunID()
+}
+
+// prepareSingleFailedRun starts a workflow and fails it on the first workflow task, leaving a single FAILED run.
+func (s *WorkflowResetSuite) prepareSingleFailedRun(env *testcore.TestEnv, workflowID string) string {
+	tv := env.Tv()
+	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), client.StartWorkflowOptions{
+		TaskQueue: tv.TaskQueue().Name,
+		ID:        workflowID,
+	}, "test-workflow-arg")
+	s.NoError(err)
+
+	pollWTResp, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace: env.Namespace().String(),
+		TaskQueue: tv.TaskQueue(),
+		Identity:  tv.WorkerIdentity(),
+	})
+	s.NoError(err)
+
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		TaskToken: pollWTResp.TaskToken,
+		Commands: []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_FailWorkflowExecutionCommandAttributes{
+				FailWorkflowExecutionCommandAttributes: &commandpb.FailWorkflowExecutionCommandAttributes{
+					Failure: &failurepb.Failure{
+						Message: "deterministic failure for reset metric repro",
+					},
+				},
 			},
 		}},
 	})

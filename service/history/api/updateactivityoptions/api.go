@@ -15,10 +15,12 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/activityoptions"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -49,6 +51,7 @@ func Invoke(
 	)
 
 	var response *historyservice.UpdateActivityOptionsResponse
+	var activityMetrics []workflow.ActivityMetricsInfo
 
 	err := api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -60,15 +63,24 @@ func Invoke(
 		),
 		func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 			mutableState := workflowLease.GetMutableState()
+			var updatedActivities []*persistencespb.ActivityInfo
 			var err error
 			if updateRequest.RestoreOriginal {
-				response, err = restoreOriginalOptions(ctx, mutableState, updateRequest)
+				response, updatedActivities, err = restoreOriginalOptions(ctx, mutableState, updateRequest)
 			} else {
-				response, err = processActivityOptionsRequest(validator, mutableState, updateRequest, request.GetNamespaceId())
+				response, updatedActivities, err = processActivityOptionsRequest(
+					validator,
+					mutableState,
+					updateRequest,
+					request.GetNamespaceId(),
+				)
 			}
 
 			if err != nil {
 				return nil, err
+			}
+			for _, activityInfo := range updatedActivities {
+				activityMetrics = append(activityMetrics, workflow.NewActivityMetricsInfo(mutableState, activityInfo))
 			}
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
@@ -84,15 +96,8 @@ func Invoke(
 		return nil, err
 	}
 
-	targetingMethod := "type"
-	if _, ok := updateRequest.GetActivity().(*workflowservice.UpdateActivityOptionsRequest_Id); ok {
-		targetingMethod = "id"
-	}
-	if ns, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.NamespaceId)); err == nil {
-		metrics.ActivityUpdateOptionsRequests.With(shardContext.GetMetricsHandler().WithTags(
-			metrics.NamespaceTag(ns.Name().String()),
-			metrics.ActivityTargetingMethodTag(targetingMethod),
-		)).Record(1)
+	for _, info := range activityMetrics {
+		metrics.ActivityUpdateOptions.With(info.MetricsHandler(shardContext, metrics.ActivityUpdateOptionsScope)).Record(1)
 	}
 
 	logger := shardContext.GetLogger()
@@ -124,47 +129,49 @@ func processActivityOptionsRequest(
 	mutableState historyi.MutableState,
 	updateRequest *workflowservice.UpdateActivityOptionsRequest,
 	namespaceID string,
-) (*historyservice.UpdateActivityOptionsResponse, error) {
+) (*historyservice.UpdateActivityOptionsResponse, []*persistencespb.ActivityInfo, error) {
 	if !mutableState.IsWorkflowExecutionRunning() {
-		return nil, consts.ErrWorkflowCompleted
+		return nil, nil, consts.ErrWorkflowCompleted
 	}
 	mergeFrom := updateRequest.GetActivityOptions()
 	if mergeFrom == nil {
-		return nil, serviceerror.NewInvalidArgument("ActivityOptions are not provided")
+		return nil, nil, serviceerror.NewInvalidArgument("ActivityOptions are not provided")
 	}
 
 	activityIDs := getActivityIDs(updateRequest, mutableState)
 
 	if len(activityIDs) == 0 {
-		return nil, consts.ErrActivityNotFound
+		return nil, nil, consts.ErrActivityNotFound
 	}
 
 	mask := updateRequest.GetUpdateMask()
 	if mask == nil {
-		return nil, serviceerror.NewInvalidArgument("UpdateMask is not provided")
+		return nil, nil, serviceerror.NewInvalidArgument("UpdateMask is not provided")
 	}
 
 	updateFields := util.ParseFieldMask(mask)
 
 	var adjustedOptions *activitypb.ActivityOptions
+	updatedActivities := make([]*persistencespb.ActivityInfo, 0, len(activityIDs))
 	var err error
 	for _, activityId := range activityIDs {
 		ai, activityFound := mutableState.GetActivityByActivityID(activityId)
 
 		if !activityFound {
-			return nil, consts.ErrActivityNotFound
+			return nil, nil, consts.ErrActivityNotFound
 		}
 
 		if adjustedOptions, err = processActivityOptionsUpdate(validator, mutableState, namespaceID, ai, mergeFrom, updateFields); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
+		updatedActivities = append(updatedActivities, ai)
 	}
 
 	// fill the response
 	response := &historyservice.UpdateActivityOptionsResponse{
 		ActivityOptions: adjustedOptions,
 	}
-	return response, nil
+	return response, updatedActivities, nil
 }
 
 func processActivityOptionsUpdate(
@@ -194,8 +201,14 @@ func processActivityOptionsUpdate(
 	}
 
 	// update activity options
-	if err := mergeActivityOptions(mergeInto, mergeFrom, updateFields); err != nil {
+	if err := activityoptions.MergeActivityOptions(mergeInto, mergeFrom, updateFields); err != nil {
 		return nil, err
+	}
+
+	if util.FieldMaskHasSubPath(updateFields, "retryPolicy") {
+		if err := retrypolicy.Validate(mergeInto.GetRetryPolicy()); err != nil {
+			return nil, err
+		}
 	}
 
 	// validate the updated options
@@ -205,110 +218,6 @@ func processActivityOptionsUpdate(
 	}
 
 	return updateActivityOptions(mutableState, ai, adjustedOptions)
-}
-
-func mergeActivityOptions(
-	mergeInto *activitypb.ActivityOptions,
-	mergeFrom *activitypb.ActivityOptions,
-	updateFields map[string]struct{},
-) error {
-
-	if _, ok := updateFields["taskQueue.name"]; ok {
-		if mergeFrom.TaskQueue == nil {
-			return serviceerror.NewInvalidArgument("TaskQueue is not provided")
-		}
-		if mergeInto.TaskQueue == nil {
-			mergeInto.TaskQueue = mergeFrom.TaskQueue
-		}
-		mergeInto.TaskQueue.Name = mergeFrom.TaskQueue.Name
-	}
-
-	if _, ok := updateFields["scheduleToCloseTimeout"]; ok {
-		mergeInto.ScheduleToCloseTimeout = mergeFrom.ScheduleToCloseTimeout
-	}
-
-	if _, ok := updateFields["scheduleToStartTimeout"]; ok {
-		mergeInto.ScheduleToStartTimeout = mergeFrom.ScheduleToStartTimeout
-	}
-
-	if _, ok := updateFields["startToCloseTimeout"]; ok {
-		mergeInto.StartToCloseTimeout = mergeFrom.StartToCloseTimeout
-	}
-
-	if _, ok := updateFields["heartbeatTimeout"]; ok {
-		mergeInto.HeartbeatTimeout = mergeFrom.HeartbeatTimeout
-	}
-
-	if _, ok := updateFields["priority"]; ok {
-		mergeInto.Priority = mergeFrom.Priority
-	}
-
-	if _, ok := updateFields["priority.priorityKey"]; ok {
-		if mergeFrom.Priority == nil {
-			return serviceerror.NewInvalidArgument("Priority is not provided")
-		}
-		if mergeInto.Priority == nil {
-			mergeInto.Priority = &commonpb.Priority{}
-		}
-		mergeInto.Priority.PriorityKey = mergeFrom.Priority.PriorityKey
-	}
-
-	if _, ok := updateFields["priority.fairnessKey"]; ok {
-		if mergeFrom.Priority == nil {
-			return serviceerror.NewInvalidArgument("Priority is not provided")
-		}
-		if mergeInto.Priority == nil {
-			mergeInto.Priority = &commonpb.Priority{}
-		}
-		mergeInto.Priority.FairnessKey = mergeFrom.Priority.FairnessKey
-	}
-
-	if _, ok := updateFields["priority.fairnessWeight"]; ok {
-		if mergeFrom.Priority == nil {
-			return serviceerror.NewInvalidArgument("Priority is not provided")
-		}
-		if mergeInto.Priority == nil {
-			mergeInto.Priority = &commonpb.Priority{}
-		}
-		mergeInto.Priority.FairnessWeight = mergeFrom.Priority.FairnessWeight
-	}
-
-	if mergeInto.RetryPolicy == nil {
-		mergeInto.RetryPolicy = &commonpb.RetryPolicy{}
-	}
-
-	if _, ok := updateFields["retryPolicy"]; ok {
-		mergeInto.RetryPolicy = mergeFrom.RetryPolicy
-	}
-
-	if _, ok := updateFields["retryPolicy.initialInterval"]; ok {
-		if mergeFrom.RetryPolicy == nil {
-			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
-		}
-		mergeInto.RetryPolicy.InitialInterval = mergeFrom.RetryPolicy.InitialInterval
-	}
-
-	if _, ok := updateFields["retryPolicy.backoffCoefficient"]; ok {
-		if mergeFrom.RetryPolicy == nil {
-			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
-		}
-		mergeInto.RetryPolicy.BackoffCoefficient = mergeFrom.RetryPolicy.BackoffCoefficient
-	}
-
-	if _, ok := updateFields["retryPolicy.maximumInterval"]; ok {
-		if mergeFrom.RetryPolicy == nil {
-			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
-		}
-		mergeInto.RetryPolicy.MaximumInterval = mergeFrom.RetryPolicy.MaximumInterval
-	}
-	if _, ok := updateFields["retryPolicy.maximumAttempts"]; ok {
-		if mergeFrom.RetryPolicy == nil {
-			return serviceerror.NewInvalidArgument("RetryPolicy is not provided")
-		}
-		mergeInto.RetryPolicy.MaximumAttempts = mergeFrom.RetryPolicy.MaximumAttempts
-	}
-
-	return nil
 }
 
 func adjustActivityOptions(
@@ -353,6 +262,10 @@ func getActivityIDs(updateRequest *workflowservice.UpdateActivityOptionsRequest,
 			if ai.ActivityType.Name == activityType {
 				activityIDs = append(activityIDs, ai.ActivityId)
 			}
+		}
+	case *workflowservice.UpdateActivityOptionsRequest_MatchAll:
+		for _, ai := range ms.GetPendingActivityInfos() {
+			activityIDs = append(activityIDs, ai.ActivityId)
 		}
 	}
 	return activityIDs
@@ -413,33 +326,34 @@ func restoreOriginalOptions(
 	ctx context.Context,
 	ms historyi.MutableState,
 	updateRequest *workflowservice.UpdateActivityOptionsRequest,
-) (*historyservice.UpdateActivityOptionsResponse, error) {
+) (*historyservice.UpdateActivityOptionsResponse, []*persistencespb.ActivityInfo, error) {
 
 	activityIDs := getActivityIDs(updateRequest, ms)
 
 	if len(activityIDs) == 0 {
-		return nil, consts.ErrActivityNotFound
+		return nil, nil, consts.ErrActivityNotFound
 	}
 
 	var updatedOptions *activitypb.ActivityOptions
+	updatedActivities := make([]*persistencespb.ActivityInfo, 0, len(activityIDs))
 
 	for _, activityId := range activityIDs {
 		ai, activityFound := ms.GetActivityByActivityID(activityId)
 
 		if !activityFound {
-			return nil, consts.ErrActivityNotFound
+			return nil, nil, consts.ErrActivityNotFound
 		}
 
 		event, err := ms.GetActivityScheduledEvent(ctx, ai.ScheduledEventId)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		attrs, ok := event.Attributes.(*historypb.HistoryEvent_ActivityTaskScheduledEventAttributes)
 		if !ok {
-			return nil, serviceerror.NewInvalidArgument("ActivityTaskScheduledEvent is invalid")
+			return nil, nil, serviceerror.NewInvalidArgument("ActivityTaskScheduledEvent is invalid")
 		}
 		if attrs == nil || attrs.ActivityTaskScheduledEventAttributes == nil {
-			return nil, serviceerror.NewInvalidArgument("ActivityTaskScheduledEvent is incomplete")
+			return nil, nil, serviceerror.NewInvalidArgument("ActivityTaskScheduledEvent is incomplete")
 		}
 
 		originalOptions := attrs.ActivityTaskScheduledEventAttributes
@@ -457,12 +371,13 @@ func restoreOriginalOptions(
 		}
 
 		if updatedOptions, err = updateActivityOptions(ms, ai, activityOptions); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
+		updatedActivities = append(updatedActivities, ai)
 
 	}
 
 	return &historyservice.UpdateActivityOptionsResponse{
 		ActivityOptions: updatedOptions,
-	}, nil
+	}, updatedActivities, nil
 }

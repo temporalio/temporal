@@ -5,9 +5,13 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	enumspb "go.temporal.io/api/enums/v1"
+	schedulepb "go.temporal.io/api/schedule/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -51,7 +55,7 @@ func runIdleValidateTestCase(t *testing.T, env *testEnv, c *idleValidateTestCase
 	task := &schedulerpb.SchedulerIdleTask{IdleTimeTotal: durationpb.New(c.taskIdleTimeTotal)}
 	taskAttrs := chasm.TaskAttributes{ScheduledTime: c.scheduledTime}
 
-	isValid, err := handler.Validate(ctx, sched, taskAttrs, task)
+	isValid, err := handler.Validate(ctx, sched, chasm.TaskInvocation{TaskAttributes: taskAttrs}, task)
 	require.NoError(t, err)
 	require.Equal(t, c.expectedValid, isValid)
 }
@@ -62,6 +66,7 @@ func runIdleValidateTestCase(t *testing.T, env *testEnv, c *idleValidateTestCase
 func anchorLastEventTo(sched *scheduler.Scheduler, anchor time.Time) {
 	sched.Info.UpdateTime = timestamppb.New(anchor)
 	sched.Info.CreateTime = timestamppb.New(anchor)
+	sched.LastEventTime = timestamppb.New(anchor)
 }
 
 func TestIdleTask_Execute(t *testing.T) {
@@ -96,6 +101,59 @@ func TestIdleTask_ExecuteInitializesEventLogMissingFromOlderTree(t *testing.T) {
 	eventLog := sched.EventLog.Get(ctx)
 	require.Len(t, eventLog.Events, 1)
 	require.Equal(t, "schedule closed from idle timer", eventLog.Events[0].Message)
+}
+
+func TestIdleTask_AllowAllStartRearmsIdleTimer(t *testing.T) {
+	base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+	timeSource := clock.NewEventTimeSource()
+	timeSource.Update(base)
+
+	schedule := defaultSchedule()
+	schedule.Spec = &schedulepb.ScheduleSpec{}
+	testEngine := newSchedulerTestEngine(t, schedule, withEngineTimeSource(timeSource))
+
+	_, err := testEngine.engine.FirePureTasks(testEngine.rootRef, base)
+	require.NoError(t, err)
+	oldIdleDeadline := base.Add(scheduler.DefaultTweakables.IdleTime)
+	require.NoError(t, testEngine.readScheduler(func(s *scheduler.Scheduler, _ chasm.Context) error {
+		require.Equal(t, oldIdleDeadline, s.IdleCloseTime.AsTime())
+		return nil
+	}))
+
+	startTime := base.Add(time.Minute)
+	timeSource.Update(startTime)
+	require.NoError(t, testEngine.updateScheduler(func(s *scheduler.Scheduler, ctx chasm.MutableContext) error {
+		invoker := s.Invoker.Get(ctx)
+		invoker.BufferedStarts = append(invoker.BufferedStarts, &schedulespb.BufferedStart{
+			RequestId:     "allow-all-request",
+			WorkflowId:    "allow-all-workflow",
+			NominalTime:   timestamppb.New(startTime),
+			ActualTime:    timestamppb.New(startTime),
+			DesiredTime:   timestamppb.New(startTime),
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+			Attempt:       1,
+		})
+		_, _, startOnlyActions := invoker.RecordExecuteResult(ctx, []*schedulespb.BufferedStart{{
+			RequestId:     "allow-all-request",
+			RunId:         "allow-all-run",
+			StartTime:     timestamppb.New(startTime),
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		}}, nil)
+		s.RecordStartOnlyActions(ctx, startOnlyActions)
+		return nil
+	}))
+
+	_, err = testEngine.engine.FirePureTasks(testEngine.rootRef, oldIdleDeadline)
+	require.NoError(t, err)
+
+	newIdleDeadline := startTime.Add(scheduler.DefaultTweakables.IdleTime)
+	timeSource.Update(newIdleDeadline)
+	_, err = testEngine.engine.FirePureTasks(testEngine.rootRef, newIdleDeadline)
+	require.NoError(t, err)
+	require.NoError(t, testEngine.readScheduler(func(s *scheduler.Scheduler, _ chasm.Context) error {
+		require.True(t, s.Closed)
+		return nil
+	}))
 }
 
 func TestIdleTask_Validate_SchedulerNotIdle(t *testing.T) {
@@ -192,7 +250,7 @@ func TestIdleTask_Validate_MetricReasons(t *testing.T) {
 			taskAttrs := chasm.TaskAttributes{ScheduledTime: now}
 			c.setup(env.Scheduler, now, &taskAttrs)
 
-			isValid, err := handler.Validate(env.MutableContext(), env.Scheduler, taskAttrs,
+			isValid, err := handler.Validate(env.MutableContext(), env.Scheduler, chasm.TaskInvocation{TaskAttributes: taskAttrs},
 				&schedulerpb.SchedulerIdleTask{IdleTimeTotal: durationpb.New(10 * time.Minute)})
 			require.NoError(t, err)
 			require.False(t, isValid)
@@ -203,4 +261,100 @@ func TestIdleTask_Validate_MetricReasons(t *testing.T) {
 			require.Equal(t, c.expectedReason, recorded[0].Tags["reason"])
 		})
 	}
+}
+
+// Manual-only schedules (empty spec) close from idle like any other: V1
+// applies RetentionTime to them, and lastEventTime is advanced by manual
+// triggers via recentActions, so the idle timer cannot silently kill a
+// schedule that customers are actively using.
+func TestIdleTask_Validate_ManualOnlyClosesFromIdle(t *testing.T) {
+	env := newTestEnv(t)
+	now := env.TimeSource.Now()
+	runIdleValidateTestCase(t, env, &idleValidateTestCase{
+		configIdleTime:    10 * time.Minute,
+		taskIdleTimeTotal: 10 * time.Minute,
+		scheduledTime:     now,
+		setupScheduler: func(sched *scheduler.Scheduler, _ chasm.Context) {
+			anchorLastEventTo(sched, now.Add(-10*time.Minute))
+			sched.Schedule.Spec = &schedulepb.ScheduleSpec{}
+		},
+		expectedValid: true,
+	})
+}
+
+// A pending backfill (separate task-driven component) must drain before close.
+func TestIdleTask_Validate_HasBackfillHeldOpen(t *testing.T) {
+	env := newTestEnv(t)
+	now := env.TimeSource.Now()
+	runIdleValidateTestCase(t, env, &idleValidateTestCase{
+		configIdleTime:    10 * time.Minute,
+		taskIdleTimeTotal: 10 * time.Minute,
+		scheduledTime:     now,
+		setupScheduler: func(sched *scheduler.Scheduler, _ chasm.Context) {
+			anchorLastEventTo(sched, now.Add(-10*time.Minute))
+			// hasMoreBackfills only checks length, so a zero-value Field stub
+			// suffices. If that ever changes, this stub will need real state.
+			sched.Backfillers = chasm.Map[string, *scheduler.Backfiller]{
+				"bf-stub": chasm.Field[*scheduler.Backfiller]{},
+			}
+		},
+		expectedValid: false,
+	})
+}
+
+// If lastEventTime advanced since arm (e.g., a workflow start appended to
+// recentActions), the recomputed deadline is later than ScheduledTime - the
+// old task is premature, the Generator will arm a fresh task at the new time.
+func TestIdleTask_Validate_ExpirationShiftedLater(t *testing.T) {
+	env := newTestEnv(t)
+	now := env.TimeSource.Now()
+	runIdleValidateTestCase(t, env, &idleValidateTestCase{
+		configIdleTime:    10 * time.Minute,
+		taskIdleTimeTotal: 10 * time.Minute,
+		scheduledTime:     now,
+		setupScheduler: func(sched *scheduler.Scheduler, _ chasm.Context) {
+			sched.Info.UpdateTime = timestamppb.New(now)
+		},
+		expectedValid: false,
+	})
+}
+
+// Exact-equality between recomputed deadline and ScheduledTime must fire.
+func TestIdleTask_Validate_ExpirationStableFires(t *testing.T) {
+	env := newTestEnv(t)
+	now := env.TimeSource.Now()
+	runIdleValidateTestCase(t, env, &idleValidateTestCase{
+		configIdleTime:    10 * time.Minute,
+		taskIdleTimeTotal: 10 * time.Minute,
+		scheduledTime:     now,
+		setupScheduler: func(sched *scheduler.Scheduler, _ chasm.Context) {
+			anchorLastEventTo(sched, now.Add(-10*time.Minute))
+		},
+		expectedValid: true,
+	})
+}
+
+// Sentinels are exempt from held-open semantics, even when their state would
+// otherwise hold a real scheduler open. They exist only to reserve a schedule
+// ID and must auto-close after SentinelIdleTime.
+func TestIdleTask_Validate_SentinelNotHeldOpen(t *testing.T) {
+	sentinel, ctx, _ := setupSentinelForTest(t)
+	// Force every state that would normally hold a non-sentinel open.
+	sentinel.Schedule = &schedulepb.Schedule{
+		Spec:  &schedulepb.ScheduleSpec{},
+		State: &schedulepb.ScheduleState{Paused: true},
+	}
+	sentinel.Backfillers = chasm.Map[string, *scheduler.Backfiller]{
+		"bf-stub": chasm.Field[*scheduler.Backfiller]{},
+	}
+
+	handler := newIdleHandler(scheduler.SentinelIdleTime)
+	task := &schedulerpb.SchedulerIdleTask{IdleTimeTotal: durationpb.New(scheduler.SentinelIdleTime)}
+	taskAttrs := chasm.TaskAttributes{
+		ScheduledTime: sentinel.Info.CreateTime.AsTime().Add(scheduler.SentinelIdleTime),
+	}
+
+	isValid, err := handler.Validate(ctx, sentinel, chasm.TaskInvocation{TaskAttributes: taskAttrs}, task)
+	require.NoError(t, err)
+	require.True(t, isValid, "sentinel must remain eligible to close regardless of paused/backfill/empty-spec state")
 }

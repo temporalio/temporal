@@ -6,6 +6,7 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -181,6 +182,13 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	}
 
 	executionInfo := ms.GetExecutionInfo()
+	lastWriteVersion := common.EmptyVersion
+	if !retentionDelete {
+		lastWriteVersion, err = ms.GetLastWriteVersion()
+		if err != nil {
+			return err
+		}
+	}
 	if err := m.shardContext.DeleteWorkflowExecution(
 		ctx,
 		definition.WorkflowKey{
@@ -189,6 +197,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 			RunID:       we.GetRunId(),
 		},
 		ms.ChasmTree().ArchetypeID(),
+		lastWriteVersion,
 		currentBranchToken,
 		executionInfo.GetCloseVisibilityTaskId(),
 		closeTime,

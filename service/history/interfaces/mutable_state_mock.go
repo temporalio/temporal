@@ -1696,6 +1696,18 @@ func (mr *MockMutableStateMockRecorder) ApplyWorkflowTaskTimedOutEvent(arg0 any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyWorkflowTaskTimedOutEvent", reflect.TypeOf((*MockMutableState)(nil).ApplyWorkflowTaskTimedOutEvent), arg0)
 }
 
+// AttachChasmRequestID mocks base method.
+func (m *MockMutableState) AttachChasmRequestID(requestID string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "AttachChasmRequestID", requestID)
+}
+
+// AttachChasmRequestID indicates an expected call of AttachChasmRequestID.
+func (mr *MockMutableStateMockRecorder) AttachChasmRequestID(requestID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AttachChasmRequestID", reflect.TypeOf((*MockMutableState)(nil).AttachChasmRequestID), requestID)
+}
+
 // AttachRequestID mocks base method.
 func (m *MockMutableState) AttachRequestID(requestID string, eventType enums.EventType, eventID int64) {
 	m.ctrl.T.Helper()
@@ -3823,6 +3835,22 @@ func (m *MockMutableState) UpdateDuplicatedResource(resourceDedupKey definition.
 func (mr *MockMutableStateMockRecorder) UpdateDuplicatedResource(resourceDedupKey any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDuplicatedResource", reflect.TypeOf((*MockMutableState)(nil).UpdateDuplicatedResource), resourceDedupKey)
+}
+
+// UpdateLastRunningClock mocks base method.
+func (m *MockMutableState) UpdateLastRunningClock(arg0 []*persistence0.WorkflowEvents) (*persistence.WorkflowExecutionInfo, []*persistence0.WorkflowEvents, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateLastRunningClock", arg0)
+	ret0, _ := ret[0].(*persistence.WorkflowExecutionInfo)
+	ret1, _ := ret[1].([]*persistence0.WorkflowEvents)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// UpdateLastRunningClock indicates an expected call of UpdateLastRunningClock.
+func (mr *MockMutableStateMockRecorder) UpdateLastRunningClock(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLastRunningClock", reflect.TypeOf((*MockMutableState)(nil).UpdateLastRunningClock), arg0)
 }
 
 // UpdateResetRunID mocks base method.

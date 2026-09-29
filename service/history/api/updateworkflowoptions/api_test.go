@@ -254,8 +254,8 @@ func TestMergeOptions_TimeSkippingConfig(t *testing.T) {
 	tscMask := &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}}
 	cfgA := &commonpb.TimeSkippingConfig{Enabled: true}
 	cfgB := &commonpb.TimeSkippingConfig{
-		Enabled:     true,
-		FastForward: durationpb.New(time.Hour),
+		Enabled:           true,
+		FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Hour)},
 	}
 	cfgC := &commonpb.TimeSkippingConfig{Enabled: false}
 
@@ -505,46 +505,46 @@ func TestMergeAndApply(t *testing.T) {
 			name:          "basic: fast-forward from nil",
 			initialConfig: nil,
 			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
+				TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: oneHour}},
 			},
 			updateMask:               tscMask,
 			expectChanges:            true,
 			expectVersioningOverride: nil,
 			unsetVersion:             true,
-			expectTSCInEvent:         &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
+			expectTSCInEvent:         &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: oneHour}},
 			expectTSCUpdated:         true,
-			resultTSC:                &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
+			resultTSC:                &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: oneHour}},
 			needCheckResultTSC:       true,
 		},
 		{
 			name:          "reapply: TSC updated with same fast-forward",
-			initialConfig: &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
+			initialConfig: &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: oneHour}},
 			updateOptions: &workflowpb.WorkflowExecutionOptions{
-				TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
+				TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: oneHour}},
 			},
 			updateMask:               tscMask,
 			expectVersioningOverride: nil,
 			unsetVersion:             true,
 
 			expectChanges:      true,
-			expectTSCInEvent:   &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
+			expectTSCInEvent:   &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: oneHour}},
 			expectTSCUpdated:   true,
-			resultTSC:          &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
+			resultTSC:          &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: oneHour}},
 			needCheckResultTSC: true,
 		},
 		{
 			name:                     "TSC no change: version update with fast-forward untouched",
-			initialConfig:            &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
+			initialConfig:            &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: oneHour}},
 			updateOptions:            &workflowpb.WorkflowExecutionOptions{VersioningOverride: newOverride},
 			updateMask:               versioningMask,
 			expectVersioningOverride: newOverride,
 			unsetVersion:             false,
 			// as we always put the merged TSC into the event, even if it is the same as the initial config
 			expectChanges:      true,
-			expectTSCInEvent:   &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
+			expectTSCInEvent:   &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: oneHour}},
 			expectTSCUpdated:   false,
 			needCheckResultTSC: true,
-			resultTSC:          &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
+			resultTSC:          &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: oneHour}},
 		},
 		{
 			name:                     "TSC no change: TSC without fast-forward are updated with same value",
@@ -557,7 +557,7 @@ func TestMergeAndApply(t *testing.T) {
 		},
 		{
 			name:                     "nil allowed: nil with mask clears the TSC",
-			initialConfig:            &commonpb.TimeSkippingConfig{Enabled: true, FastForward: oneHour},
+			initialConfig:            &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: oneHour}},
 			updateOptions:            &workflowpb.WorkflowExecutionOptions{VersioningOverride: newOverride},
 			updateMask:               &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config", "versioning_override"}},
 			expectChanges:            true,

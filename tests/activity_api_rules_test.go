@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
@@ -42,17 +43,17 @@ type internalRulesTestWorkflow struct {
 	activityCompleteCn   chan struct{}
 	activityFailedCn     chan struct{}
 
-	env *testcore.TestEnv
+	tb testing.TB
 }
 
-func newInternalRulesTestWorkflow(env *testcore.TestEnv) *internalRulesTestWorkflow {
+func newInternalRulesTestWorkflow(tb testing.TB) *internalRulesTestWorkflow {
 	wf := &internalRulesTestWorkflow{
 		initialRetryInterval:   1 * time.Second,
 		scheduleToCloseTimeout: 30 * time.Minute,
 		startToCloseTimeout:    15 * time.Minute,
 		activityCompleteCn:     make(chan struct{}),
 		activityFailedCn:       make(chan struct{}),
-		env:                    env,
+		tb:                     tb,
 	}
 	wf.activityRetryPolicy = &temporal.RetryPolicy{
 		InitialInterval:    wf.initialRetryInterval,
@@ -89,11 +90,11 @@ func (w *internalRulesTestWorkflow) ActivityFuncForRetryActivity() (string, erro
 	w.startedActivityCount.Add(1)
 
 	if !w.letActivitySucceed.Load() {
-		w.env.WaitForChannel(w.activityFailedCn)
+		await.Rcv(w.tb, w.activityFailedCn)
 		activityErr := errors.New("bad-luck-please-retry")
 		return "", activityErr
 	}
-	w.env.WaitForChannel(w.activityCompleteCn)
+	await.Rcv(w.tb, w.activityCompleteCn)
 	return "done!", nil
 }
 
@@ -104,13 +105,13 @@ func (w *internalRulesTestWorkflow) ActivityFuncForRetryTask() (string, error) {
 		activityErr := errors.New("bad-luck-please-retry")
 		return "", activityErr
 	}
-	w.env.WaitForChannel(w.activityCompleteCn)
+	await.Rcv(w.tb, w.activityCompleteCn)
 	return "done!", nil
 }
 
 func (w *internalRulesTestWorkflow) ActivityFuncForPrePause() (string, error) {
 	w.startedActivityCount.Add(1)
-	w.env.WaitForChannel(w.activityCompleteCn)
+	await.Rcv(w.tb, w.activityCompleteCn)
 	return "done!", nil
 }
 
@@ -252,7 +253,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_CRUD() {
 func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryActivity() {
 	env := s.newTestEnv()
 
-	testWorkflow := newInternalRulesTestWorkflow(env)
+	testWorkflow := newInternalRulesTestWorkflow(s.T())
 	env.SdkWorker().RegisterWorkflow(testWorkflow.WorkflowFuncForRetryActivity)
 	env.SdkWorker().RegisterActivity(testWorkflow.ActivityFuncForRetryActivity)
 
@@ -380,7 +381,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_RetryTask() {
 	// 8. Let activity complete
 	// 9. Wait for workflow to finish
 
-	testRetryTaskWorkflow := newInternalRulesTestWorkflow(env)
+	testRetryTaskWorkflow := newInternalRulesTestWorkflow(s.T())
 
 	// set much longer retry interval to make sure that activity is retried at least once
 	testRetryTaskWorkflow.activityRetryPolicy.InitialInterval = 4 * time.Second
@@ -514,7 +515,7 @@ func (s *ActivityApiRulesClientTestSuite) TestActivityRulesApi_PrePause() {
 	// 11. Let activity complete
 	// 12. Wait for workflow to finish
 
-	testRetryTaskWorkflow := newInternalRulesTestWorkflow(env)
+	testRetryTaskWorkflow := newInternalRulesTestWorkflow(s.T())
 
 	env.SdkWorker().RegisterWorkflow(testRetryTaskWorkflow.WorkflowFuncForPrePause)
 	env.SdkWorker().RegisterActivity(testRetryTaskWorkflow.ActivityFuncForPrePause)

@@ -13,7 +13,8 @@ import (
 var ErrTaskDiscarded = errors.New("standby task pending for too long")
 
 type (
-	// TaskAttributes specifies scheduling metadata for a task.
+	// TaskAttributes specifies scheduling metadata for a task, supplied by the component author when
+	// the task is added via [MutableContext.AddTask].
 	TaskAttributes struct {
 		// ScheduledTime is when the task should fire. Use [TaskScheduledTimeImmediate] (zero value)
 		// for tasks that should execute as soon as possible.
@@ -22,6 +23,18 @@ type (
 		// callbacks). When non-empty, the task is categorized as outbound; when empty, it is
 		// categorized as a transfer task. Destination must only be set on immediate tasks.
 		Destination string
+	}
+
+	// TaskInvocation is passed to a task's Validate callback. It carries the task's [TaskAttributes]
+	// together with framework-supplied state for the current processing attempt.
+	TaskInvocation struct {
+		TaskAttributes
+		// Attempt is the current processing attempt for this task, starting at 1. It comes from the
+		// task executable and is not persisted; it resets to 1 on shard reload and on active or
+		// standby failover. It is 0 when the task is validated outside of task processing, such as
+		// during transaction close. A best effort validator may compare it against a threshold and
+		// return false to give up on a task that would otherwise never become invalid on its own.
+		Attempt int
 	}
 
 	// SideEffectTaskHandler handles side effect tasks that run outside of the state lock and have access to a Go
@@ -69,7 +82,7 @@ type (
 		// - (true, nil) if the task is valid and should be executed
 		// - (false, nil) if the task should be silently dropped (it's no longer relevant)
 		// - (anything, error) if validation fails with an error
-		Validate(Context, C, TaskAttributes, T) (bool, error)
+		Validate(Context, C, TaskInvocation, T) (bool, error)
 	}
 )
 

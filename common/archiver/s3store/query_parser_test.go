@@ -41,11 +41,26 @@ func (s *queryParserSuite) TestParseWorkflowIDAndWorkflowTypeName() {
 			query:     "WorkflowTypeName = \"random workflowTypeName\"",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				workflowTypeName: new("random workflowTypeName"),
+				workflowType: new("random workflowTypeName"),
+			},
+		},
+		{
+			query:     "WorkflowType = \"random workflowType\"",
+			expectErr: false,
+			parsedQuery: &parsedQuery{
+				workflowType: new("random workflowType"),
 			},
 		},
 		{
 			query:     "WorkflowId = \"random workflowID\" and WorkflowTypeName = \"random workflowTypeName\"",
+			expectErr: true,
+		},
+		{
+			query:     "WorkflowId = \"random workflowID\" and WorkflowType = \"random workflowTypeName\"",
+			expectErr: true,
+		},
+		{
+			query:     "WorkflowTypeName = \"random workflowTypeName\" and WorkflowType = \"random workflowTypeName\"",
 			expectErr: true,
 		},
 		{
@@ -100,7 +115,7 @@ func (s *queryParserSuite) TestParseWorkflowIDAndWorkflowTypeName() {
 		}
 		s.NoError(err)
 		s.Equal(tc.parsedQuery.workflowID, parsedQuery.workflowID)
-		s.Equal(tc.parsedQuery.workflowTypeName, parsedQuery.workflowTypeName)
+		s.Equal(tc.parsedQuery.workflowType, parsedQuery.workflowType)
 
 	}
 }
@@ -217,7 +232,7 @@ func (s *queryParserSuite) TestParseStartTime() {
 			query:     commonQueryPart + "StartTime = 1000",
 			expectErr: false,
 			parsedQuery: &parsedQuery{
-				startTime: new(time.Unix(0, 1000)),
+				startTime: new(time.Unix(0, 1000).UTC()),
 			},
 		},
 		{
@@ -244,6 +259,6 @@ func (s *queryParserSuite) TestParseStartTime() {
 			continue
 		}
 		s.NoError(err)
-		s.Equal(tc.parsedQuery.closeTime, parsedQuery.closeTime)
+		s.Equal(tc.parsedQuery.startTime, parsedQuery.startTime)
 	}
 }

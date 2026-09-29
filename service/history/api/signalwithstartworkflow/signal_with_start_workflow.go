@@ -19,6 +19,20 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 )
 
+// startOutcome describes the run that received the signal (or was started).
+type startOutcome struct {
+	// runID is the run that received the signal or was started.
+	runID string
+	// firstExecutionRunID is the head-of-chain run id. May be empty when reading from a pre-existing
+	// record whose ExecutionState has not been backfilled yet.
+	firstExecutionRunID string
+	// The started response is true when this call creates a run. With deduplication enabled, it also
+	// remains true when the request ID created the returned run.
+	started bool
+	// createdRun reports whether this call created the run and gates once-per-run side effects.
+	createdRun bool
+}
+
 func SignalWithStartWorkflow(
 	ctx context.Context,
 	shard historyi.ShardContext,
@@ -26,7 +40,7 @@ func SignalWithStartWorkflow(
 	currentWorkflowLease api.WorkflowLease,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
-) (string, bool, error) {
+) (startOutcome, error) {
 	// workflow is running and restart was not requested, and conflict policy is to use existing
 	if currentWorkflowLease != nil &&
 		currentWorkflowLease.GetMutableState().IsWorkflowExecutionRunning() &&
@@ -40,9 +54,18 @@ func SignalWithStartWorkflow(
 			currentWorkflowLease,
 			signalWithStartRequest,
 		); err != nil {
-			return "", false, err
+			return startOutcome{}, err
 		}
-		return currentWorkflowLease.GetContext().GetWorkflowKey().RunID, false, nil
+
+		firstExecutionRunID, err := currentWorkflowLease.GetMutableState().GetFirstRunID(ctx)
+		if err != nil {
+			return startOutcome{}, err
+		}
+		return startOutcome{
+			runID:               currentWorkflowLease.GetContext().GetWorkflowKey().RunID,
+			firstExecutionRunID: firstExecutionRunID,
+			started:             signalWithStartCreatedRun(shard, namespaceEntry, currentWorkflowLease.GetMutableState(), signalWithStartRequest.GetRequestId()),
+		}, nil
 	}
 	// else, either workflow is not running or restart requested
 	return startAndSignalWorkflow(
@@ -62,7 +85,19 @@ func startAndSignalWorkflow(
 	currentWorkflowLease api.WorkflowLease,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
-) (string, bool, error) {
+) (startOutcome, error) {
+	if outcome, err := dedupSignalWithStartRequest(
+		ctx,
+		shard,
+		namespaceEntry,
+		currentWorkflowLease,
+		signalWithStartRequest.GetRequestId(),
+	); err != nil {
+		return startOutcome{}, err
+	} else if outcome != nil {
+		return *outcome, nil
+	}
+
 	workflowID := signalWithStartRequest.GetWorkflowId()
 	runID := uuid.New().String()
 	// TODO(bergundy): Support eager workflow task
@@ -75,12 +110,12 @@ func startAndSignalWorkflow(
 		signalWithStartRequest,
 	)
 	if err != nil {
-		return "", false, err
+		return startOutcome{}, err
 	}
 
 	newWorkflowLease, err := api.NewWorkflowLeaseAndContext(nil, shard, newMutableState)
 	if err != nil {
-		return "", false, err
+		return startOutcome{}, err
 	}
 
 	if err = api.ValidateSignal(
@@ -91,7 +126,7 @@ func startAndSignalWorkflow(
 		signalWithStartRequest.GetHeader().Size(),
 		"SignalWithStartWorkflowExecution",
 	); err != nil {
-		return "", false, err
+		return startOutcome{}, err
 	}
 
 	workflowMutationFn, err := createWorkflowMutationFunction(
@@ -103,7 +138,7 @@ func startAndSignalWorkflow(
 		signalWithStartRequest.GetWorkflowIdConflictPolicy(),
 	)
 	if err != nil {
-		return "", false, err
+		return startOutcome{}, err
 	}
 	if workflowMutationFn != nil {
 		if err = startAndSignalWithCurrentWorkflow(
@@ -113,21 +148,74 @@ func startAndSignalWorkflow(
 			workflowMutationFn,
 			newWorkflowLease,
 		); err != nil {
-			return "", false, err
+			return startOutcome{}, err
 		}
-		return runID, true, nil
+		// Started a fresh run after terminating the existing one: this run is the head of the chain.
+		return startOutcome{runID: runID, firstExecutionRunID: runID, started: true, createdRun: true}, nil
 	}
 	vrid, err := createVersionedRunID(currentWorkflowLease)
 	if err != nil {
-		return "", false, err
+		return startOutcome{}, err
 	}
 	return startAndSignalWithoutCurrentWorkflow(
 		ctx,
 		shard,
 		vrid,
 		newWorkflowLease,
-		signalWithStartRequest.RequestId,
 	)
+}
+
+func signalWithStartCreatedRun(
+	shard historyi.ShardContext,
+	namespaceEntry *namespace.Namespace,
+	mutableState historyi.MutableState,
+	requestID string,
+) bool {
+	if !shard.GetConfig().EnableSignalWithStartRequestIDDeduplication(namespaceEntry.Name().String()) {
+		return false
+	}
+	return mutableState.GetExecutionState().GetCreateRequestId() == requestID
+}
+
+// dedupSignalWithStartRequest returns the result for a request already handled by the current run,
+// or nil. Call it before workflow ID reuse and conflict policies so a retry returns that result
+// instead of rejecting or replacing the execution.
+//
+// IsSignalRequested is authoritative. ExecutionState.RequestIds omits SIGNALED events and may
+// contain another API's request ID. Deduplication applies only to the current run because signal
+// request IDs do not survive continue-as-new.
+func dedupSignalWithStartRequest(
+	ctx context.Context,
+	shard historyi.ShardContext,
+	namespaceEntry *namespace.Namespace,
+	currentWorkflowLease api.WorkflowLease,
+	requestID string,
+) (*startOutcome, error) {
+	if currentWorkflowLease == nil || requestID == "" {
+		return nil, nil
+	}
+	if !shard.GetConfig().EnableSignalWithStartRequestIDDeduplication(namespaceEntry.Name().String()) {
+		return nil, nil
+	}
+
+	mutableState := currentWorkflowLease.GetMutableState()
+	if !mutableState.IsSignalRequested(requestID) {
+		return nil, nil
+	}
+
+	firstExecutionRunID, err := mutableState.GetFirstRunID(ctx)
+	if err != nil {
+		return nil, err
+	}
+	metrics.SignalWithStartWorkflowStartDeduped.With(shard.GetMetricsHandler()).Record(
+		1,
+		metrics.NamespaceTag(namespaceEntry.Name().String()),
+	)
+	return &startOutcome{
+		runID:               currentWorkflowLease.GetContext().GetWorkflowKey().RunID,
+		firstExecutionRunID: firstExecutionRunID,
+		started:             signalWithStartCreatedRun(shard, namespaceEntry, mutableState, requestID),
+	}, nil
 }
 
 func createWorkflowMutationFunction(
@@ -164,6 +252,7 @@ func createWorkflowMutationFunction(
 		currentExecutionState.State,
 		currentExecutionState.Status,
 		currentExecutionState.RequestIds,
+		currentExecutionState.FirstExecutionRunId,
 		workflowIDReusePolicy,
 		workflowIDConflictPolicy,
 		currentWorkflowStartTime,
@@ -219,17 +308,16 @@ func startAndSignalWithoutCurrentWorkflow(
 	shardContext historyi.ShardContext,
 	vrid *api.VersionedRunID,
 	newWorkflowLease api.WorkflowLease,
-	requestID string,
-) (string, bool, error) {
+) (startOutcome, error) {
 	newWorkflow, newWorkflowEventsSeq, err := newWorkflowLease.GetMutableState().CloseTransactionAsSnapshot(
 		ctx,
 		historyi.TransactionPolicyActive,
 	)
 	if err != nil {
-		return "", false, err
+		return startOutcome{}, err
 	}
 	if len(newWorkflowEventsSeq) != 1 {
-		return "", false, serviceerror.NewInternal("unable to create 1st event batch")
+		return startOutcome{}, serviceerror.NewInternal("unable to create 1st event batch")
 	}
 
 	createMode := persistence.CreateWorkflowModeBrandNew
@@ -245,7 +333,7 @@ func startAndSignalWithoutCurrentWorkflow(
 			newWorkflowLease.GetMutableState(),
 		)
 		if err != nil {
-			return "", false, err
+			return startOutcome{}, err
 		}
 	}
 	err = newWorkflowLease.GetContext().CreateWorkflowExecution(
@@ -259,19 +347,17 @@ func startAndSignalWithoutCurrentWorkflow(
 		newWorkflowEventsSeq,
 		historyi.TransactionPolicyActive,
 	)
-	switch failedErr := err.(type) {
-	case nil:
-		return newWorkflowLease.GetContext().GetWorkflowKey().RunID, true, nil
-	case *persistence.CurrentWorkflowConditionFailedError:
-		if _, ok := failedErr.RequestIDs[requestID]; ok {
-			return failedErr.RunID, false, nil
-		}
-		return "", false, err
-	default:
-		return "", false, err
+	// CurrentWorkflowConditionFailedError.RequestIDs does not record signal delivery.
+	// Return the error so a retry can check IsSignalRequested.
+	if err != nil {
+		return startOutcome{}, err
 	}
+	// Brand-new run: head of the chain == this run id.
+	runID := newWorkflowLease.GetContext().GetWorkflowKey().RunID
+	return startOutcome{runID: runID, firstExecutionRunID: runID, started: true, createdRun: true}, nil
 }
 
+// Successful calls leave the lease held for outcome reads. Invoke releases it.
 func signalWorkflow(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
@@ -287,17 +373,12 @@ func signalWorkflow(
 		request.GetHeader().Size(),
 		"SignalWithStartWorkflowExecution",
 	); err != nil {
-		// in-memory mutable state is still clean, release the lock with nil error to prevent
-		// clearing and reloading mutable state
+		// Release clean state with nil so Invoke's deferred release does not clear and reload it.
 		workflowLease.GetReleaseFn()(nil)
 		return err
 	}
 
 	if request.GetRequestId() != "" && mutableState.IsSignalRequested(request.GetRequestId()) {
-		// duplicate signal
-		// in-memory mutable state is still clean, release the lock with nil error to prevent
-		// clearing and reloading mutable state
-		workflowLease.GetReleaseFn()(nil)
 		return nil
 	}
 	if request.GetRequestId() != "" {

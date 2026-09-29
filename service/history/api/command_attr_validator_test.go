@@ -740,7 +740,7 @@ func (s *commandAttrValidatorSuite) TestValidateActivityRetryPolicy() {
 				RetryPolicy: tt.input,
 			}
 
-			err := s.validator.validateActivityRetryPolicy(s.testNamespaceID, attr.GetRetryPolicy())
+			err := s.validator.validateActivityRetryPolicy(namespace.Name(s.testNamespaceID.String()), attr.GetRetryPolicy())
 			assert.Nil(s.T(), err, "expected no error")
 			assert.Equal(s.T(), tt.want, attr.RetryPolicy, "unexpected retry policy")
 		})
@@ -875,6 +875,13 @@ func (s *commandAttrValidatorSuite) TestValidateActivityScheduleAttributes_Workf
 
 	for _, tt := range testCases {
 		s.Run(tt.name, func() {
+			namespaceEntry := namespace.NewLocalNamespaceForTest(
+				&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
+				nil,
+				cluster.TestCurrentClusterName,
+			)
+			s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.testNamespaceID).Return(namespaceEntry, nil)
+
 			attributes := &commandpb.ScheduleActivityTaskCommandAttributes{
 				ActivityId:          "test-activity-id",
 				ActivityType:        &commonpb.ActivityType{Name: "test-activity-type"},

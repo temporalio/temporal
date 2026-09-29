@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"google.golang.org/grpc"
@@ -26,14 +27,19 @@ var _ grpc.UnaryServerInterceptor = (*NamespaceHandoverInterceptor)(nil).Interce
 type (
 	// NamespaceHandoverInterceptor handles the namespace in handover replication state
 	NamespaceHandoverInterceptor struct {
-		namespaceRegistry                      namespace.Registry
-		timeSource                             clock.TimeSource
-		enabledForNS                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		nsCacheRefreshInterval                 dynamicconfig.DurationPropertyFn
-		metricsHandler                         metrics.Handler
-		logger                                 log.Logger
-		requestErrorHandler                    ErrorHandler
+		namespaceRegistry      namespace.Registry
+		timeSource             clock.TimeSource
+		nsCacheRefreshInterval dynamicconfig.DurationPropertyFn
+		metricsHandler         metrics.Handler
+		logger                 log.Logger
+		requestErrorHandler    ErrorHandler
+		// Keyed by full gRPC method.
 		additionalAllowedMethodsDuringHandover map[string]struct{}
+		// additionalServicePrefixes are gRPC service prefixes (besides WorkflowService)
+		// whose methods the handover gate also applies to. Empty by default; embedders set
+		// these via WithAdditionalServicePrefixes, for their own services whose requests
+		// expose a namespace, without this package knowing about them.
+		additionalServicePrefixes []string
 	}
 )
 
@@ -47,13 +53,19 @@ func NewNamespaceHandoverInterceptor(
 	additionalAllowedMethodsDuringHandover []string,
 ) *NamespaceHandoverInterceptor {
 
-	additional := make(map[string]struct{}, len(additionalAllowedMethodsDuringHandover))
-	for _, m := range additionalAllowedMethodsDuringHandover {
-		additional[m] = struct{}{}
+	additional := newAdditionalAllowedMethods(additionalAllowedMethodsDuringHandover)
+	// Inert entries fail open here — a method meant to be let through a handover is not —
+	// so say so rather than start silently wrong. Both interceptors get this list from the
+	// same source, so checking it once covers both.
+	//
+	// TODO: fail startup instead of logging, once callers verify their entries before
+	// deploying. A list assembled at runtime makes a bad entry fail on an arbitrary
+	// restart rather than at deploy time, which is the wrong moment to refuse to start.
+	if err := validateFullMethods(additionalAllowedMethodsDuringHandover...); err != nil {
+		logger.Warn("handover allow-list entries will never match", tag.Error(err))
 	}
 
 	return &NamespaceHandoverInterceptor{
-		enabledForNS:                           dynamicconfig.EnableNamespaceHandoverWait.Get(dc),
 		nsCacheRefreshInterval:                 dynamicconfig.NamespaceCacheRefreshInterval.Get(dc),
 		namespaceRegistry:                      namespaceRegistry,
 		metricsHandler:                         metricsHandler,
@@ -64,6 +76,29 @@ func NewNamespaceHandoverInterceptor(
 	}
 }
 
+// WithAdditionalServicePrefixes returns a copy of the interceptor whose handover gate also applies
+// to methods under the given gRPC service prefixes (besides WorkflowService). Embedders use this to
+// extend the gate to other transports without this package referencing them.
+func (i *NamespaceHandoverInterceptor) WithAdditionalServicePrefixes(prefixes ...string) *NamespaceHandoverInterceptor {
+	clone := *i
+	clone.additionalServicePrefixes = append(append([]string{}, i.additionalServicePrefixes...), prefixes...)
+	return &clone
+}
+
+// handlesMethod reports whether the handover gate applies to fullMethod: always for WorkflowService,
+// plus any embedder-configured service prefixes.
+func (i *NamespaceHandoverInterceptor) handlesMethod(fullMethod string) bool {
+	if strings.HasPrefix(fullMethod, api.WorkflowServicePrefix) {
+		return true
+	}
+	for _, prefix := range i.additionalServicePrefixes {
+		if strings.HasPrefix(fullMethod, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 func (i *NamespaceHandoverInterceptor) Intercept(
 	ctx context.Context,
 	req any,
@@ -72,7 +107,7 @@ func (i *NamespaceHandoverInterceptor) Intercept(
 ) (_ any, retError error) {
 	defer log.CapturePanic(i.logger, &retError)
 
-	if !strings.HasPrefix(info.FullMethod, api.WorkflowServicePrefix) {
+	if !i.handlesMethod(info.FullMethod) {
 		return handler(ctx, req)
 	}
 
@@ -80,14 +115,14 @@ func (i *NamespaceHandoverInterceptor) Intercept(
 	methodName := api.MethodName(info.FullMethod)
 	namespaceName := MustGetNamespaceName(i.namespaceRegistry, req)
 
-	if namespaceName != namespace.EmptyName && i.enabledForNS(namespaceName.String()) {
+	if namespaceName != namespace.EmptyName {
 		var waitTime *time.Duration
 		defer func() {
 			if waitTime != nil {
 				metrics.HandoverWaitLatency.With(i.metricsHandler).Record(*waitTime)
 			}
 		}()
-		waitTime, err := i.waitNamespaceHandoverUpdate(ctx, namespaceName, methodName)
+		waitTime, err := i.waitNamespaceHandoverUpdate(ctx, namespaceName, info.FullMethod)
 		if err != nil {
 			metricsHandler, logTags := CreateUnaryMetricsHandlerLogTags(
 				i.metricsHandler,
@@ -117,12 +152,9 @@ func (i *NamespaceHandoverInterceptor) Intercept(
 func (i *NamespaceHandoverInterceptor) waitNamespaceHandoverUpdate(
 	ctx context.Context,
 	namespaceName namespace.Name,
-	methodName string,
+	fullMethod string,
 ) (waitTime *time.Duration, retErr error) {
-	if _, ok := allowedMethodsDuringHandover[methodName]; ok {
-		return nil, nil
-	}
-	if _, ok := i.additionalAllowedMethodsDuringHandover[methodName]; ok {
+	if handoverAllowed(fullMethod, i.additionalAllowedMethodsDuringHandover) {
 		return nil, nil
 	}
 

@@ -75,7 +75,7 @@ func Invoke(
 		return nil, err
 	}
 
-	runID, started, err := SignalWithStartWorkflow(
+	outcome, err := SignalWithStartWorkflow(
 		ctx,
 		shard,
 		namespaceEntry,
@@ -87,19 +87,20 @@ func Invoke(
 		return nil, err
 	}
 
-	// Notify version workflow if we're starting a new workflow pinned to a potentially drained version
-	if started {
+	// Use createdRun because Started can remain true on later calls, while reactivation runs once per run.
+	if outcome.createdRun {
 		api.ReactivateVersionWorkflowIfPinned(ctx, namespaceEntry, request.GetVersioningOverride(), reactivationSignaler, shard.GetConfig().EnableVersionReactivationSignals(), shouldSkipReactivation, revisionNumber)
 	}
 
 	swr := signalWithStartRequest.SignalWithStartRequest
 	return &historyservice.SignalWithStartWorkflowExecutionResponse{
-		RunId:   runID,
-		Started: started,
+		RunId:               outcome.runID,
+		FirstExecutionRunId: outcome.firstExecutionRunID,
+		Started:             outcome.started,
 		SignalLink: api.GenerateRequestIDRefLink(
 			swr.GetNamespace(),
 			swr.GetWorkflowId(),
-			runID,
+			outcome.runID,
 			swr.GetRequestId(),
 			enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 		),

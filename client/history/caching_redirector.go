@@ -74,6 +74,11 @@ func (r *CachingRedirector[C]) stop() {
 	r.goros.Wait()
 }
 
+func (r *CachingRedirector[C]) Close() {
+	r.stop()
+	r.connections.Close()
+}
+
 func (r *CachingRedirector[C]) clientForShardID(shardID int32) (C, error) {
 	var zero C
 	if err := checkShardID(shardID); err != nil {
@@ -220,8 +225,7 @@ func (r *CachingRedirector[C]) handleSolError(opEntry cacheEntry[C], solErr *ser
 }
 
 func maybeHostDownError(opErr error) bool {
-	var unavail *serviceerror.Unavailable
-	if errors.As(opErr, &unavail) {
+	if _, ok := errors.AsType[*serviceerror.Unavailable](opErr); ok {
 		return true
 	}
 	return common.IsContextDeadlineExceededErr(opErr)

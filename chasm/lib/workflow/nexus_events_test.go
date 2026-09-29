@@ -375,10 +375,11 @@ func TestCancelRequestedEventDefinitionApply(t *testing.T) {
 	t.Run("creates cancellation child", func(t *testing.T) {
 		tcx := newTestContext(t, defaultConfig)
 		event, key := scheduleOperation(t, tcx)
+		requestedTime := time.Now().UTC()
 
 		applyEventDefinition[CancelRequestedEventDefinition](t, tcx, &historypb.HistoryEvent{
 			EventId:   int64(20),
-			EventTime: timestamppb.Now(),
+			EventTime: timestamppb.New(requestedTime),
 			Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
 				NexusOperationCancelRequestedEventAttributes: &historypb.NexusOperationCancelRequestedEventAttributes{
 					ScheduledEventId: event.EventId,
@@ -389,8 +390,9 @@ func TestCancelRequestedEventDefinitionApply(t *testing.T) {
 		field, ok := tcx.wf.Operations[key]
 		require.True(t, ok)
 		op := field.Get(tcx.chasmCtx)
-		_, hasCancellation := op.Cancellation.TryGet(tcx.chasmCtx)
+		cancellation, hasCancellation := op.Cancellation.TryGet(tcx.chasmCtx)
 		require.True(t, hasCancellation)
+		require.Equal(t, requestedTime, cancellation.GetRequestedTime().AsTime())
 	})
 
 	t.Run("tolerates missing operation", func(t *testing.T) {

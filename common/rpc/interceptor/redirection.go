@@ -83,6 +83,7 @@ var (
 		"ExecuteMultiOperation":              func() any { return &workflowservice.ExecuteMultiOperationResponse{} },
 		"UpdateWorkflowExecution":            func() any { return &workflowservice.UpdateWorkflowExecutionResponse{} },
 		"PollWorkflowExecutionUpdate":        func() any { return &workflowservice.PollWorkflowExecutionUpdateResponse{} },
+		"PollWorkflowExecutionTimeSkipping":  func() any { return &workflowservice.PollWorkflowExecutionTimeSkippingResponse{} },
 		"TerminateWorkflowExecution":         func() any { return &workflowservice.TerminateWorkflowExecutionResponse{} },
 		"DeleteWorkflowExecution":            func() any { return &workflowservice.DeleteWorkflowExecutionResponse{} },
 		"ListTaskQueuePartitions":            func() any { return &workflowservice.ListTaskQueuePartitionsResponse{} },
@@ -181,6 +182,10 @@ type (
 		clientBean         client.Bean
 		metricsHandler     metrics.Handler
 		timeSource         clock.TimeSource
+		// redirectResponsesByFullMethod registers embedder methods (keyed by full gRPC method, so
+		// they don't collide with the bareredirectResponsesByFullMethod-name maps) as globally-redirectable, each mapped to its
+		// response constructor. Nil by default, preserving the WorkflowService-only behavior.
+		redirectResponsesByFullMethod map[string]responseConstructorFn
 	}
 )
 
@@ -215,6 +220,29 @@ func NewRedirection(
 	}
 }
 
+// WithRedirectResponses returns a copy of the interceptor that treats the given fullMethod ->
+// response-constructor entries as globally-redirectable APIs, keyed by full gRPC method so they
+// don't collide with the bare-method-name maps. The registered requests must expose their
+// namespace (via NamespaceNameGetter/NamespaceIDGetter) so it can be resolved for redirection.
+func (i *Redirection) WithRedirectResponses(responses map[string]func() any) *Redirection {
+	clone := *i
+	clone.redirectResponsesByFullMethod = make(map[string]responseConstructorFn, len(responses))
+	for fullMethod, ctor := range responses {
+		clone.redirectResponsesByFullMethod[fullMethod] = ctor
+	}
+	return &clone
+}
+
+// WithAdditionalAllowedMethods returns a copy of the interceptor whose policy also
+// forwards the given full gRPC methods. Embedder uses this to extend its own methods.
+func (i *Redirection) WithAdditionalAllowedMethods(fullMethods ...string) *Redirection {
+	clone := *i
+	if policy, ok := i.redirectionPolicy.(*SelectedAPIsForwardingRedirectionPolicy); ok {
+		clone.redirectionPolicy = policy.WithAdditionalAllowedMethods(fullMethods...)
+	}
+	return &clone
+}
+
 var _ grpc.UnaryServerInterceptor = (*Redirection)(nil).Intercept
 
 func (i *Redirection) Intercept(
@@ -224,6 +252,19 @@ func (i *Redirection) Intercept(
 	handler grpc.UnaryHandler,
 ) (_ any, retError error) {
 	defer log.CapturePanic(i.logger, &retError)
+	if raFn, ok := i.redirectResponsesByFullMethod[info.FullMethod]; ok {
+		if !i.RedirectionAllowed(ctx) {
+			return handler(ctx, req)
+		}
+		// Resolve the namespace exactly like the WorkflowService global path below; the registered
+		// request must expose it via NamespaceNameGetter/NamespaceIDGetter. Fails closed (returns
+		// the error) rather than running a global-namespace request on a possibly non-owning cell.
+		namespaceName, err := GetNamespaceName(i.namespaceCache, req)
+		if err != nil {
+			return nil, err
+		}
+		return i.handleRedirectAPIInvocation(ctx, req, info, handler, api.MethodName(info.FullMethod), raFn, namespaceName)
+	}
 
 	if !strings.HasPrefix(info.FullMethod, api.WorkflowServicePrefix) {
 		return handler(ctx, req)
@@ -281,7 +322,9 @@ func (i *Redirection) handleRedirectAPIInvocation(
 		i.AfterCall(scope, startTime, targetClusterName, namespaceName.String(), retError)
 	}()
 
-	err = i.redirectionPolicy.WithNamespaceRedirect(ctx, namespaceName, methodName, req, func(targetDC string) error {
+	// The policy matches on the full method; methodName stays bare for metrics, whose
+	// operation names are keyed that way.
+	err = i.redirectionPolicy.WithNamespaceRedirect(ctx, namespaceName, info.FullMethod, req, func(targetDC string) error {
 		targetClusterName = targetDC
 		if targetClusterName == i.currentClusterName {
 			resp, err = handler(ctx, req)

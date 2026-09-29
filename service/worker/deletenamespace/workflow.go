@@ -165,7 +165,7 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	}
 
 	ctx31 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	err = workflow.ExecuteLocalActivity(ctx31, la.RenameNamespaceActivity, params.Namespace, result.DeletedNamespace).Get(ctx, nil)
+	err = workflow.ExecuteLocalActivity(ctx31, la.RenameNamespaceActivity, params.NamespaceID, params.Namespace, result.DeletedNamespace).Get(ctx, nil)
 	if err != nil {
 		return result, err
 	}

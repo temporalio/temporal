@@ -5,6 +5,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
@@ -64,7 +65,7 @@ func Invoke(
 				func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 					mutableState := workflowLease.GetMutableState()
 
-					return api.UpdateWorkflowTerminate, workflow.TerminateWorkflow(
+					return api.UpdateWorkflowTerminate, workflow.ForceTerminateWorkflow(
 						mutableState,
 						"Delete workflow execution",
 						nil,
@@ -72,6 +73,8 @@ func Invoke(
 						true,
 						// TODO(bergundy): No links will be attached here for now, we may want to add support for this later though.
 						nil,
+						shardContext.GetMetricsHandler(),
+						chasm.ExecutionForceTerminationReasonDeleteExecution,
 					)
 				},
 				nil,

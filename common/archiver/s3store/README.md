@@ -37,12 +37,13 @@ The syntax for the query is based on SQL
 
 Supported column names are
 - WorkflowId *String*
-- WorkflowTypeName *String*
+- WorkflowType *String*
+- WorkflowTypeName *String (legacy alias)*
 - StartTime *Date*
 - CloseTime *Date*
 - SearchPrecision *String - Day, Hour, Minute, Second*
 
-WorkflowId or WorkflowTypeName is required. If filtering on date use StartTime or CloseTime in combination with SearchPrecision.
+WorkflowId or WorkflowType is required. WorkflowTypeName is still accepted as a legacy alias. If filtering on date use StartTime or CloseTime in combination with SearchPrecision.
 
 Searching for a record will be done in times in the UTC timezone
 

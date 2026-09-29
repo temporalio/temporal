@@ -195,9 +195,9 @@ func (c *NexusEndpointClient) List(
 		return c.listAndFilterByName(ctx, request)
 	}
 
-	pageSize := request.GetPageSize()
+	pageSize := int(request.GetPageSize())
 	if pageSize == 0 {
-		pageSize = int32(c.config.listDefaultPageSize())
+		pageSize = c.config.listDefaultPageSize()
 	} else if err := c.validatePageSize(pageSize); err != nil {
 		return nil, err
 	}
@@ -205,10 +205,15 @@ func (c *NexusEndpointClient) List(
 	resp, err := c.persistence.ListNexusEndpoints(ctx, &p.ListNexusEndpointsRequest{
 		LastKnownTableVersion: 0,
 		NextPageToken:         request.NextPageToken,
-		PageSize:              int(pageSize),
+		PageSize:              pageSize,
 	})
 	if err != nil {
-		c.logger.Error(fmt.Sprintf("error listing Nexus endpoints from persistence. NextPageToken: %v PageSize: %d", request.NextPageToken, pageSize), tag.Error(err))
+		c.logger.Error(
+			"error listing Nexus endpoints from persistence",
+			tag.Error(err),
+			tag.NextPageToken(request.NextPageToken),
+			tag.PageSize(pageSize),
+		)
 		return nil, serviceerror.NewInternal("error listing Nexus endpoints")
 	}
 
@@ -285,7 +290,13 @@ func (c *NexusEndpointClient) listAndFilterByName(
 			PageSize:              pageSize,
 		})
 		if err != nil {
-			c.logger.Error(fmt.Sprintf("error listing Nexus endpoints from persistence with Name filter. CurrentPageToken: %v PageSize: %d Name: %v", currentPageToken, pageSize, request.Name), tag.Error(err))
+			c.logger.Error(
+				"error listing Nexus endpoints from persistence with Name filter",
+				tag.Error(err),
+				tag.NextPageToken(currentPageToken),
+				tag.PageSize(pageSize),
+				tag.Endpoint(request.Name),
+			)
 			return nil, serviceerror.NewInternal("error listing Nexus endpoints")
 		}
 
@@ -398,14 +409,14 @@ func validateGetRequest(request *operatorservice.GetNexusEndpointRequest) error 
 	return issues.GetError()
 }
 
-func (c *NexusEndpointClient) validatePageSize(pageSize int32) error {
+func (c *NexusEndpointClient) validatePageSize(pageSize int) error {
 	// pageSize == 0 is treated as unset and will be changed to the default and does not go through this validation
 	if pageSize < 0 {
 		return serviceerror.NewInvalidArgument("page_size is negative")
 	}
 
 	maxPageSize := c.config.listMaxPageSize()
-	if pageSize > int32(maxPageSize) {
+	if pageSize > maxPageSize {
 		return serviceerror.NewInvalidArgumentf("page_size exceeds limit of %d", maxPageSize)
 	}
 
@@ -416,8 +427,7 @@ func (c *NexusEndpointClient) transformServiceError(err error, message string) e
 	if err == nil {
 		return nil
 	}
-	var notFound *serviceerror.NotFound
-	if errors.As(err, &notFound) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 		return err
 	}
 	c.logger.Error(message, tag.Error(err))

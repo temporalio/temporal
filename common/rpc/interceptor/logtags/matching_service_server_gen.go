@@ -35,6 +35,10 @@ func (wt *WorkflowTags) extractFromMatchingServiceServerMessage(message any) []t
 		return nil
 	case *matchingservice.CancelOutstandingWorkerPollsResponse:
 		return nil
+	case *matchingservice.CancelOutstandingWorkerPollsPartitionRequest:
+		return nil
+	case *matchingservice.CancelOutstandingWorkerPollsPartitionResponse:
+		return nil
 	case *matchingservice.CheckTaskQueueUserDataPropagationRequest:
 		return nil
 	case *matchingservice.CheckTaskQueueUserDataPropagationResponse:

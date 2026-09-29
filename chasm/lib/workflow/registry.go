@@ -100,6 +100,11 @@ func eventDefinitionByGoType[D EventDefinition](r *Registry) (D, bool) {
 // for example, because of a disabled feature flag.
 var ErrCommandNotSupported = errors.New("command not supported")
 
+// ErrCommandTargetNotFound is returned by a [CommandHandler] when the command type is supported but the entity it
+// targets is not owned by the CHASM tree (for example, a Nexus operation that lives in the HSM tree or no longer
+// exists). The dispatcher falls back to the HSM command handler so the command follows the tree that owns the entity.
+var ErrCommandTargetNotFound = errors.New("command target not found in chasm tree")
+
 type CommandHandlerOptions struct {
 	WorkflowTaskCompletedEventID int64
 }

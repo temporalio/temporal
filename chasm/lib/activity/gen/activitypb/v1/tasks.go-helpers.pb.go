@@ -2,6 +2,8 @@
 package activitypb
 
 import (
+	"fmt"
+
 	"google.golang.org/protobuf/proto"
 )
 
@@ -188,4 +190,50 @@ func (this *HeartbeatTimeoutTask) Equal(that interface{}) bool {
 	}
 
 	return proto.Equal(this, that1)
+}
+
+var (
+	DispatchReason_shorthandValue = map[string]int32{
+		"Unspecified": 0,
+		"Immediate":   1,
+		"StartDelay":  2,
+		"Retry":       3,
+	}
+)
+
+// DispatchReasonFromString parses a DispatchReason value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to DispatchReason
+func DispatchReasonFromString(s string) (DispatchReason, error) {
+	if v, ok := DispatchReason_value[s]; ok {
+		return DispatchReason(v), nil
+	} else if v, ok := DispatchReason_shorthandValue[s]; ok {
+		return DispatchReason(v), nil
+	}
+	return DispatchReason(0), fmt.Errorf("%s is not a valid DispatchReason", s)
+}
+
+var (
+	StartDelayBucket_shorthandValue = map[string]int32{
+		"Unspecified": 0,
+		"None":        1,
+		"Lt1M":        2,
+		"1M10M":       3,
+		"10M1H":       4,
+		"1H6H":        5,
+		"6H1D":        6,
+		"1D7D":        7,
+		"7D30D":       8,
+		"Gt30D":       9,
+	}
+)
+
+// StartDelayBucketFromString parses a StartDelayBucket value from  either the protojson
+// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to StartDelayBucket
+func StartDelayBucketFromString(s string) (StartDelayBucket, error) {
+	if v, ok := StartDelayBucket_value[s]; ok {
+		return StartDelayBucket(v), nil
+	} else if v, ok := StartDelayBucket_shorthandValue[s]; ok {
+		return StartDelayBucket(v), nil
+	}
+	return StartDelayBucket(0), fmt.Errorf("%s is not a valid StartDelayBucket", s)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
@@ -47,12 +48,13 @@ func TestExecute_FeatureFlagOff_DropsTask(t *testing.T) {
 	d := &Dispatcher{
 		config: &configs.Config{
 			EnableCancelActivityWorkerCommand: func(string) bool { return false },
+			WorkerCommandsDispatchTimeout:     func() time.Duration { return 10 * time.Second },
 		},
 		logger: log.NewNoopLogger(),
 	}
 
 	task := testWorkerCommandsTask()
-	err := d.Execute(context.Background(), task, 1 /* attempt */, "test-namespace")
+	err := d.Execute(context.Background(), task, "test-namespace")
 	require.NoError(t, err, "task should be silently dropped when feature flag is off")
 }
 
@@ -60,72 +62,15 @@ func TestExecute_EmptyCommands_DropsTask(t *testing.T) {
 	d := &Dispatcher{
 		config: &configs.Config{
 			EnableCancelActivityWorkerCommand: func(string) bool { return true },
+			WorkerCommandsDispatchTimeout:     func() time.Duration { return 10 * time.Second },
 		},
 		logger: log.NewNoopLogger(),
 	}
 
 	task := testWorkerCommandsTask()
 	task.Commands = nil
-	err := d.Execute(context.Background(), task, 1 /* attempt */, "test-namespace")
+	err := d.Execute(context.Background(), task, "test-namespace")
 	require.NoError(t, err, "task with no commands should be dropped")
-}
-
-func TestExecute_ExceedsMaxAttempts_DropsTask(t *testing.T) {
-	metricsHandler := metricstest.NewCaptureHandler()
-	capture := metricsHandler.StartCapture()
-	defer metricsHandler.StopCapture(capture)
-
-	d := &Dispatcher{
-		config: &configs.Config{
-			EnableCancelActivityWorkerCommand: func(string) bool { return true },
-		},
-		metricsHandler: metricsHandler,
-		logger:         log.NewNoopLogger(),
-	}
-
-	task := testWorkerCommandsTask()
-	err := d.Execute(context.Background(), task, MaxTaskAttempts+1, "test-namespace")
-	require.NoError(t, err, "task should be dropped when max attempts exceeded")
-
-	requireMetricValue(t, capture.Snapshot(), "max_attempts_exceeded")
-}
-
-func TestExecute_AtMaxAttempt_StillExecutes(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	mockClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
-	metricsHandler := metricstest.NewCaptureHandler()
-	capture := metricsHandler.StartCapture()
-	defer metricsHandler.StopCapture(capture)
-
-	d := &Dispatcher{
-		matchingClient: mockClient,
-		config: &configs.Config{
-			EnableCancelActivityWorkerCommand: func(string) bool { return true },
-		},
-		metricsHandler: metricsHandler,
-		logger:         log.NewNoopLogger(),
-	}
-
-	mockClient.EXPECT().DispatchNexusTask(gomock.Any(), gomock.Any()).Return(
-		&matchingservice.DispatchNexusTaskResponse{
-			Outcome: &matchingservice.DispatchNexusTaskResponse_Response{
-				Response: &nexuspb.Response{
-					Variant: &nexuspb.Response_StartOperation{
-						StartOperation: &nexuspb.StartOperationResponse{
-							Variant: &nexuspb.StartOperationResponse_SyncSuccess{
-								SyncSuccess: &nexuspb.StartOperationResponse_Sync{},
-							},
-						},
-					},
-				},
-			},
-		}, nil)
-
-	task := testWorkerCommandsTask()
-	err := d.Execute(context.Background(), task, MaxTaskAttempts, "test-namespace")
-	require.NoError(t, err, "task at exactly max attempt should still execute")
-
-	requireMetricValue(t, capture.Snapshot(), "success")
 }
 
 func TestExecute_DispatchSuccess(t *testing.T) {
@@ -139,6 +84,7 @@ func TestExecute_DispatchSuccess(t *testing.T) {
 		matchingClient: mockClient,
 		config: &configs.Config{
 			EnableCancelActivityWorkerCommand: func(string) bool { return true },
+			WorkerCommandsDispatchTimeout:     func() time.Duration { return 10 * time.Second },
 		},
 		metricsHandler: metricsHandler,
 		logger:         log.NewNoopLogger(),
@@ -164,7 +110,7 @@ func TestExecute_DispatchSuccess(t *testing.T) {
 		})
 
 	task := testWorkerCommandsTask()
-	err := d.Execute(context.Background(), task, 1 /* attempt */, "test-namespace")
+	err := d.Execute(context.Background(), task, "test-namespace")
 	require.NoError(t, err)
 
 	require.NotNil(t, capturedReq)
@@ -186,6 +132,7 @@ func TestExecute_DispatchRPCError(t *testing.T) {
 		matchingClient: mockClient,
 		config: &configs.Config{
 			EnableCancelActivityWorkerCommand: func(string) bool { return true },
+			WorkerCommandsDispatchTimeout:     func() time.Duration { return 10 * time.Second },
 		},
 		metricsHandler: metricsHandler,
 		logger:         log.NewNoopLogger(),
@@ -195,7 +142,7 @@ func TestExecute_DispatchRPCError(t *testing.T) {
 		nil, errors.New("connection refused"))
 
 	task := testWorkerCommandsTask()
-	err := d.Execute(context.Background(), task, 1 /* attempt */, "test-namespace")
+	err := d.Execute(context.Background(), task, "test-namespace")
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "connection refused")
 
@@ -213,6 +160,7 @@ func TestExecute_UpstreamTimeout(t *testing.T) {
 		matchingClient: mockClient,
 		config: &configs.Config{
 			EnableCancelActivityWorkerCommand: func(string) bool { return true },
+			WorkerCommandsDispatchTimeout:     func() time.Duration { return 10 * time.Second },
 		},
 		metricsHandler: metricsHandler,
 		logger:         log.NewNoopLogger(),
@@ -226,12 +174,8 @@ func TestExecute_UpstreamTimeout(t *testing.T) {
 		}, nil)
 
 	task := testWorkerCommandsTask()
-	err := d.Execute(context.Background(), task, 1 /* attempt */, "test-namespace")
-	require.Error(t, err)
-
-	var he *nexus.HandlerError
-	require.ErrorAs(t, err, &he)
-	require.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, he.Type)
+	err := d.Execute(context.Background(), task, "test-namespace")
+	require.NoError(t, err, "upstream timeout should not be retried — worker is likely gone")
 
 	requireMetricValue(t, capture.Snapshot(), "no_poller")
 }
@@ -255,7 +199,7 @@ func TestHandleError_WorkerError_ReturnNil(t *testing.T) {
 	requireMetricValue(t, capture.Snapshot(), "worker_error")
 }
 
-func TestHandleError_UpstreamTimeout_ReturnRetryable(t *testing.T) {
+func TestHandleError_UpstreamTimeout_ReturnNil(t *testing.T) {
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)
@@ -268,11 +212,7 @@ func TestHandleError_UpstreamTimeout_ReturnRetryable(t *testing.T) {
 	handlerErr := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUpstreamTimeout, "upstream timeout")
 	task := testWorkerCommandsTask()
 	err := d.handleError(handlerErr, task, "test-namespace")
-	require.Error(t, err, "upstream timeout should be retried")
-
-	var he *nexus.HandlerError
-	require.ErrorAs(t, err, &he)
-	require.Equal(t, nexus.HandlerErrorTypeUpstreamTimeout, he.Type)
+	require.NoError(t, err, "upstream timeout should not be retried — worker is likely gone")
 
 	requireMetricValue(t, capture.Snapshot(), "no_poller")
 }

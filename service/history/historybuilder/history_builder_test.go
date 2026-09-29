@@ -1344,6 +1344,9 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 	parentClosePolicy := enumspb.ParentClosePolicy(rand.Int31n(int32(len(enumspb.ParentClosePolicy_name))))
 	workflowIdReusePolicy := enumspb.WorkflowIdReusePolicy(rand.Int31n(int32(len(enumspb.WorkflowIdReusePolicy_name))))
 	control := "random control"
+	versioningOverride := &workflowpb.VersioningOverride{
+		Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+	}
 
 	attributes := &commandpb.StartChildWorkflowExecutionCommandAttributes{
 		Namespace:                testNamespaceName.String(),
@@ -1362,6 +1365,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 		Memo:                     testMemo,
 		SearchAttributes:         testSearchAttributes,
 		Header:                   testHeader,
+		VersioningOverride:       versioningOverride,
 	}
 	event, _ := s.historyBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletionEventID,
@@ -1397,6 +1401,9 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 				Memo:                         testMemo,
 				SearchAttributes:             testSearchAttributes,
 				Header:                       testHeader,
+				VersioningOverride: &workflowpb.VersioningOverride{
+					Override: &workflowpb.VersioningOverride_AutoUpgrade{AutoUpgrade: true},
+				},
 			},
 		},
 	}, event)
@@ -2229,14 +2236,13 @@ func (s *historyBuilderSuite) TestHasBufferEvent() {
 func (s *historyBuilderSuite) TestBufferEvent() {
 	// workflow status events will be assign event ID immediately
 	workflowEvents := map[enumspb.EventType]bool{
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:                    true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:                  true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:                     true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:                  true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:                 true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW:           true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:                   true,
-		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED: true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:          true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:        true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:           true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:        true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:       true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW: true,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:         true,
 	}
 
 	// workflow task events will be assign event ID immediately
