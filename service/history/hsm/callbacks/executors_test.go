@@ -143,6 +143,8 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+			capture := logger.StartCapture()
 			ctrl := gomock.NewController(t)
 			namespaceRegistryMock := namespace.NewMockRegistry(ctrl)
 			factory := namespace.NewDefaultReplicationResolverFactory()
@@ -182,7 +184,8 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 							},
 						},
 					},
-					State: enumsspb.CALLBACK_STATE_SCHEDULED,
+					State:     enumsspb.CALLBACK_STATE_SCHEDULED,
+					RequestId: "request-id",
 				},
 			}
 			coll := callbacks.MachineCollection(root)
@@ -200,7 +203,7 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 					HTTPCallerProvider: func(nid queuescommon.NamespaceIDAndDestination) callbacks.HTTPCaller {
 						return tc.caller
 					},
-					Logger: log.NewNoopLogger(),
+					Logger: logger,
 					Config: &callbacks.Config{
 						RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 						RetryPolicy: func() backoff.RetryPolicy {
@@ -237,6 +240,21 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			cb, err = coll.Data("ID")
 			require.NoError(t, err)
 			tc.assertOutcome(t, cb)
+
+			if tc.expectedMetricOutcome != "success" {
+				// A callback that will be retried is logged as a warning; only a dropped one is an error.
+				level := testlogger.Error
+				if tc.retryable {
+					level = testlogger.Warn
+				}
+				capture.RequireContains(t, testlogger.CapturedLogPattern{
+					Level:   level,
+					Message: "Callback request failed",
+					Tags: map[string]any{
+						"request-id": "request-id",
+					},
+				})
+			}
 		})
 	}
 }
