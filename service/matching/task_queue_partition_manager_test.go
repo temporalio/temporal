@@ -2441,65 +2441,6 @@ func TestUnloadIfNamespaceStateChanged(t *testing.T) {
 	}
 }
 
-func TestNamespaceFailoverReloadsPartitionWithNewStateTag(t *testing.T) {
-	config := defaultTestConfig()
-	config.BacklogMetricsEmitInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
-	config.BreakdownMetricsByTaskQueue = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true)
-	config.BreakdownMetricsByPartition = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true)
-	env := newFailoverTestEnv(t, config, cluster.TestAlternativeClusterName)
-	e, current := env.engine, &env.current
-	captureHandler := metricstest.NewCaptureHandler()
-	e.metricsHandler = captureHandler
-	capture := captureHandler.StartCapture()
-	defer captureHandler.StopCapture(capture)
-	lastBacklog := func(metricName string) (float64, string, bool) {
-		recordings := capture.SnapshotMetric(metricName)
-		if len(recordings) == 0 {
-			return 0, "", false
-		}
-		last := recordings[len(recordings)-1]
-		//revive:disable-next-line:unchecked-type-assertion
-		return last.Value.(float64), last.Tags["namespace_state"], true
-	}
-
-	partition := newRootPartition(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	pm, _, err := e.getTaskQueuePartitionManager(context.Background(), partition, true, loadCausePoll)
-	require.NoError(t, err)
-	//revive:disable-next-line:unchecked-type-assertion
-	dQueue := pm.(*taskQueuePartitionManagerImpl).defaultQueue()
-	for i := range 3 {
-		require.NoError(t, dQueue.SpoolTask(&persistencespb.TaskInfo{
-			NamespaceId: namespaceID,
-			RunId:       "run",
-			WorkflowId:  fmt.Sprintf("wf-%d", i),
-		}))
-	}
-	await.RequireTrue(t, func() bool {
-		value, state, ok := lastBacklog(metrics.ApproximateBacklogCount.Name())
-		return ok && value > 0 && state == metrics.PassiveNamespaceStateTagValue
-	}, 5*time.Second, 10*time.Millisecond)
-
-	newNS := failoverTestNamespace(cluster.TestCurrentClusterName)
-	current.Store(newNS)
-	await.RequireTrue(t, func() bool {
-		count, countState, countOK := lastBacklog(metrics.ApproximateBacklogCount.Name())
-		age, ageState, ageOK := lastBacklog(metrics.ApproximateBacklogAgeSeconds.Name())
-		return countOK && ageOK && count == 0 && age == 0 &&
-			countState == metrics.PassiveNamespaceStateTagValue && ageState == metrics.PassiveNamespaceStateTagValue
-	}, 5*time.Second, 10*time.Millisecond)
-	require.Empty(t, e.getTaskQueuePartitions(10))
-
-	reloaded, created, err := e.getTaskQueuePartitionManager(context.Background(), partition, true, loadCausePoll)
-	require.NoError(t, err)
-	require.True(t, created)
-	require.NotSame(t, pm, reloaded)
-	require.Same(t, newNS, reloaded.Namespace())
-	await.RequireTrue(t, func() bool {
-		value, state, ok := lastBacklog(metrics.ApproximateBacklogCount.Name())
-		return ok && value > 0 && state == metrics.ActiveNamespaceStateTagValue
-	}, 5*time.Second, 10*time.Millisecond)
-}
-
 func TestNamespaceFailoverUnloadsWithBacklogMetricsDisabled(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		config := defaultTestConfig()

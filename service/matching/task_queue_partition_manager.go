@@ -1600,7 +1600,8 @@ func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.C
 }
 
 // unloadIfNamespaceStateChanged unloads the partition if the namespace failed over to or away from
-// this cluster since load, since the metrics handler's namespace_state tag is fixed at load time.
+// this cluster after the partition loaded, because the metrics handler's namespace_state tag is fixed
+// at load time.
 func (pm *taskQueuePartitionManagerImpl) unloadIfNamespaceStateChanged() bool {
 	isActive, err := pm.isActiveInCluster()
 	if err != nil {
