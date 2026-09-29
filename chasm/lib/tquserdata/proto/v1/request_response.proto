@@ -3,6 +3,7 @@ syntax = "proto3";
 package temporal.server.chasm.lib.tquserdata.proto.v1;
 
 import "temporal/server/api/persistence/v1/task_queues.proto";
+import "temporal/server/api/clock/v1/message.proto";
 
 option go_package = "go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapb";
 
@@ -12,6 +13,25 @@ message UpsertTaskQueueUserDataRequest {
   temporal.server.api.persistence.v1.TaskQueueUserData user_data = 3;
   int64 legacy_version = 4;
   string business_id = 5;
+  oneof precondition {
+    bool expect_missing = 6;
+    TaskQueueUserDataClockCondition expected_clock = 7;
+  }
 }
 
 message UpsertTaskQueueUserDataResponse {}
+
+// The wrapper distinguishes an expected nil clock from an unconditional write.
+message TaskQueueUserDataClockCondition {
+  temporal.server.api.clock.v1.HybridLogicalClock clock = 1;
+}
+
+message GetTaskQueueUserDataRequest {
+  string namespace_id = 1;
+  string task_queue = 2;
+  string business_id = 3;
+}
+
+message GetTaskQueueUserDataResponse {
+  temporal.server.api.persistence.v1.TaskQueueUserData user_data = 1;
+}

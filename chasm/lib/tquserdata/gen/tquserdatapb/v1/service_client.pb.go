@@ -65,6 +65,49 @@ func NewTaskQueueUserDataServiceLayeredClient(
 func (c *TaskQueueUserDataServiceLayeredClient) Stop() {
 	c.redirector.Close()
 }
+func (c *TaskQueueUserDataServiceLayeredClient) callGetTaskQueueUserDataNoRetry(
+	ctx context.Context,
+	request *GetTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (*GetTaskQueueUserDataResponse, error) {
+	var response *GetTaskQueueUserDataResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("TaskQueueUserDataService.GetTaskQueueUserData"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetBusinessId(), c.numShards)
+	op := func(ctx context.Context, client TaskQueueUserDataServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.GetTaskQueueUserData(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *TaskQueueUserDataServiceLayeredClient) GetTaskQueueUserData(
+	ctx context.Context,
+	request *GetTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (*GetTaskQueueUserDataResponse, error) {
+	call := func(ctx context.Context) (*GetTaskQueueUserDataResponse, error) {
+		return c.callGetTaskQueueUserDataNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}
 func (c *TaskQueueUserDataServiceLayeredClient) callUpsertTaskQueueUserDataNoRetry(
 	ctx context.Context,
 	request *UpsertTaskQueueUserDataRequest,

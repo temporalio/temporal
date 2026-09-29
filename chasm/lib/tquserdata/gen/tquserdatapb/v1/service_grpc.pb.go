@@ -20,6 +20,7 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
+	TaskQueueUserDataService_GetTaskQueueUserData_FullMethodName    = "/temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService/GetTaskQueueUserData"
 	TaskQueueUserDataService_UpsertTaskQueueUserData_FullMethodName = "/temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService/UpsertTaskQueueUserData"
 )
 
@@ -27,6 +28,7 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type TaskQueueUserDataServiceClient interface {
+	GetTaskQueueUserData(ctx context.Context, in *GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*GetTaskQueueUserDataResponse, error)
 	UpsertTaskQueueUserData(ctx context.Context, in *UpsertTaskQueueUserDataRequest, opts ...grpc.CallOption) (*UpsertTaskQueueUserDataResponse, error)
 }
 
@@ -36,6 +38,15 @@ type taskQueueUserDataServiceClient struct {
 
 func NewTaskQueueUserDataServiceClient(cc grpc.ClientConnInterface) TaskQueueUserDataServiceClient {
 	return &taskQueueUserDataServiceClient{cc}
+}
+
+func (c *taskQueueUserDataServiceClient) GetTaskQueueUserData(ctx context.Context, in *GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*GetTaskQueueUserDataResponse, error) {
+	out := new(GetTaskQueueUserDataResponse)
+	err := c.cc.Invoke(ctx, TaskQueueUserDataService_GetTaskQueueUserData_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *taskQueueUserDataServiceClient) UpsertTaskQueueUserData(ctx context.Context, in *UpsertTaskQueueUserDataRequest, opts ...grpc.CallOption) (*UpsertTaskQueueUserDataResponse, error) {
@@ -51,6 +62,7 @@ func (c *taskQueueUserDataServiceClient) UpsertTaskQueueUserData(ctx context.Con
 // All implementations must embed UnimplementedTaskQueueUserDataServiceServer
 // for forward compatibility
 type TaskQueueUserDataServiceServer interface {
+	GetTaskQueueUserData(context.Context, *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error)
 	UpsertTaskQueueUserData(context.Context, *UpsertTaskQueueUserDataRequest) (*UpsertTaskQueueUserDataResponse, error)
 	mustEmbedUnimplementedTaskQueueUserDataServiceServer()
 }
@@ -59,6 +71,9 @@ type TaskQueueUserDataServiceServer interface {
 type UnimplementedTaskQueueUserDataServiceServer struct {
 }
 
+func (UnimplementedTaskQueueUserDataServiceServer) GetTaskQueueUserData(context.Context, *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetTaskQueueUserData not implemented")
+}
 func (UnimplementedTaskQueueUserDataServiceServer) UpsertTaskQueueUserData(context.Context, *UpsertTaskQueueUserDataRequest) (*UpsertTaskQueueUserDataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpsertTaskQueueUserData not implemented")
 }
@@ -74,6 +89,24 @@ type UnsafeTaskQueueUserDataServiceServer interface {
 
 func RegisterTaskQueueUserDataServiceServer(s grpc.ServiceRegistrar, srv TaskQueueUserDataServiceServer) {
 	s.RegisterService(&TaskQueueUserDataService_ServiceDesc, srv)
+}
+
+func _TaskQueueUserDataService_GetTaskQueueUserData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTaskQueueUserDataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TaskQueueUserDataServiceServer).GetTaskQueueUserData(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TaskQueueUserDataService_GetTaskQueueUserData_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TaskQueueUserDataServiceServer).GetTaskQueueUserData(ctx, req.(*GetTaskQueueUserDataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _TaskQueueUserDataService_UpsertTaskQueueUserData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -101,6 +134,10 @@ var TaskQueueUserDataService_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService",
 	HandlerType: (*TaskQueueUserDataServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "GetTaskQueueUserData",
+			Handler:    _TaskQueueUserDataService_GetTaskQueueUserData_Handler,
+		},
 		{
 			MethodName: "UpsertTaskQueueUserData",
 			Handler:    _TaskQueueUserDataService_UpsertTaskQueueUserData_Handler,

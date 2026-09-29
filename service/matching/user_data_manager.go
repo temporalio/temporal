@@ -417,7 +417,7 @@ func (m *userDataManagerImpl) loadUserDataFromDB(ctx context.Context) error {
 	defer m.lock.Unlock()
 	m.setUserDataLocked(response.UserData)
 	m.logNewUserData("loaded user data from db", response.UserData)
-	m.upsertUserDataToChasmLocked(ctx, response.UserData)
+	m.seedUserDataToChasmLocked(ctx, response.UserData)
 
 	return nil
 }
@@ -461,7 +461,6 @@ func (m *userDataManagerImpl) refreshUserDataFromDB(ctx context.Context) error {
 	// The db has newer data. We can just update to it.
 	m.setUserDataLocked(response.UserData)
 	m.logger.Warn("user data version mismatch: db had newer data; reloading", tags...)
-	m.upsertUserDataToChasmLocked(ctx, response.UserData)
 
 	return nil
 }
@@ -582,6 +581,60 @@ func (m *userDataManagerImpl) updateUserData(
 	m.upsertUserDataToChasmLocked(ctx, updatedVersionedData)
 
 	return updatedVersionedData, shouldReplicate, err
+}
+
+func (m *userDataManagerImpl) seedUserDataToChasmLocked(
+	ctx context.Context,
+	userData *persistencespb.VersionedTaskQueueUserData,
+) {
+	if m.chasmClient == nil || m.config.WriteUserDataToChasm == nil || !m.config.WriteUserDataToChasm() {
+		return
+	}
+	response, err := m.chasmClient.GetTaskQueueUserData(ctx, &tquserdatapb.GetTaskQueueUserDataRequest{
+		NamespaceId: m.partition.NamespaceId(),
+		TaskQueue:   m.partition.TaskQueue().Name(),
+		BusinessId:  tquserdata.BusinessID(m.partition.TaskQueue().Name()),
+	})
+	if err != nil && !common.IsNotFoundError(err) {
+		m.logger.Error("failed to read task queue user data from CHASM", tag.Error(err))
+		return
+	}
+	chasmData := response.GetUserData()
+	if userData.GetData() == nil {
+		if chasmData != nil {
+			m.logger.Warn("task queue user data exists in CHASM but is missing from db")
+		}
+		return
+	}
+	request := &tquserdatapb.UpsertTaskQueueUserDataRequest{
+		NamespaceId:   m.partition.NamespaceId(),
+		TaskQueue:     m.partition.TaskQueue().Name(),
+		BusinessId:    tquserdata.BusinessID(m.partition.TaskQueue().Name()),
+		UserData:      proto.Clone(userData.GetData()).(*persistencespb.TaskQueueUserData),
+		LegacyVersion: userData.GetVersion(),
+	}
+	if chasmData == nil {
+		request.Precondition = &tquserdatapb.UpsertTaskQueueUserDataRequest_ExpectMissing{ExpectMissing: true}
+	} else {
+		dbClock, chasmClock := userData.GetData().GetClock(), chasmData.GetClock()
+		if proto.Equal(dbClock, chasmClock) {
+			return
+		}
+		if dbClock == nil || (chasmClock != nil && hybrid_logical_clock.Less(dbClock, chasmClock)) {
+			m.logger.Warn("task queue user data clock in db is older than CHASM",
+				tag.UserDataVersion(userData.GetVersion()),
+				tag.Time("db-user-data-timestamp", hybrid_logical_clock.UTC(dbClock)),
+				tag.Time("chasm-user-data-timestamp", hybrid_logical_clock.UTC(chasmClock)),
+			)
+			return
+		}
+		request.Precondition = &tquserdatapb.UpsertTaskQueueUserDataRequest_ExpectedClock{
+			ExpectedClock: &tquserdatapb.TaskQueueUserDataClockCondition{Clock: chasmClock},
+		}
+	}
+	if _, err := m.chasmClient.UpsertTaskQueueUserData(ctx, request); err != nil {
+		m.logger.Error("failed to seed task queue user data in CHASM", tag.Error(err), tag.UserDataVersion(userData.GetVersion()))
+	}
 }
 
 func (m *userDataManagerImpl) upsertUserDataToChasmLocked(
