@@ -1356,8 +1356,6 @@ func (s *matchingEngineSuite) TestQueryWorkflowDoesNotLoadSticky() {
 }
 
 func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
-	s.T().Skip("not supported by new matcher; flaky")
-
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
 
 	runID := uuid.NewString()
@@ -1465,7 +1463,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		s.Equal(serializedToken, result.TaskToken)
 		i++
 	}
-	s.Equal(0, s.taskManager.getTaskCount(tlID))
+	s.expectEmptyBacklog(tlID)
 	expectedRange := int64((taskCount + 1) / rangeSize)
 	// Due to conflicts some ids are skipped and more real ranges are used.
 	s.LessOrEqual(expectedRange, s.taskManager.getQueueDataByKey(tlID).rangeID)
@@ -1473,12 +1471,7 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 
 // TODO: this unit test does not seem to belong to matchingEngine, move it to the right place
 func (s *matchingEngineSuite) TestSyncMatchActivities() {
-	s.T().Skip("not supported by new matcher")
-
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
-
-	scope := tally.NewTestScope("test", nil)
-	s.matchingEngine.metricsHandler = metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(metrics.ServiceNameTag(primitives.MatchingService))
 
 	// Set a short long poll expiration so that we don't have to wait too long for 0 throttling cases
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(2 * time.Second)
@@ -1614,8 +1607,6 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 		assert.EqualValues(collect, 0, s.taskManager.getTaskCount(dbq))
 	}, 2*time.Second, 100*time.Millisecond)
 
-	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count+namespace="+matchingTestNamespace+",namespace_state=active,operation=TaskQueueMgr,partition=0,service_name=matching,task_type=Activity,taskqueue=makeToast,worker_build_id=,worker_deployment_name=,worker_version=__unversioned__"]
-	s.Equal(1, int(syncCtr.Value())) // Check times zero rps is set = throttle counter
 	expectedRange := int64((taskCount + 1) / 30)
 	// Due to conflicts some ids are skipped and more real ranges are used.
 	s.LessOrEqual(expectedRange, s.taskManager.getQueueDataByKey(dbq).rangeID)
@@ -1651,7 +1642,6 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 		5. Verify that both the pollers have received tasks.
 	*/
 
-	s.T().Skip("not supported by new matcher")
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
 
 	scope := tally.NewTestScope("test", nil)
@@ -1825,42 +1815,8 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
-	s.T().Skip("test is flaky with new matcher")
-	dispatchLimitFn := func(int, int64) float64 {
-		return defaultTaskDispatchRPS
-	}
 	const workerCount = 20
 	const taskCount = 100
-	throttleCt := s.concurrentPublishConsumeActivities(workerCount, taskCount, dispatchLimitFn)
-	s.Zero(throttleCt)
-}
-
-func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivitiesWithZeroDispatch() {
-	s.T().Skip("Racy - times out ~50% of the time running locally with --race")
-	// Set a short long poll expiration so that we don't have to wait too long for 0 throttling cases
-	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(20 * time.Millisecond)
-	dispatchLimitFn := func(wc int, tc int64) float64 {
-		if tc%50 == 0 && wc%5 == 0 { // Gets triggered atleast 20 times
-			return 0
-		}
-		return defaultTaskDispatchRPS
-	}
-	const workerCount = 20
-	const taskCount = 100
-	throttleCt := s.concurrentPublishConsumeActivities(workerCount, taskCount, dispatchLimitFn)
-	s.logger.Info("Number of tasks throttled", tag.Number(throttleCt))
-	// atleast once from 0 dispatch poll, and until TTL is hit at which time throttle limit is reset
-	// hard to predict exactly how many times, since the atomic.Value load might not have updated.
-	s.GreaterOrEqual(throttleCt, 1)
-}
-
-func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
-	workerCount int,
-	taskCount int64,
-	dispatchLimitFn func(int, int64) float64,
-) int64 {
-	scope := tally.NewTestScope("test", nil)
-	s.matchingEngine.metricsHandler = metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(metrics.ServiceNameTag(primitives.MatchingService))
 
 	runID := uuid.NewString()
 	workflowID := "workflow1"
@@ -1939,17 +1895,16 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 			}, nil
 		}).AnyTimes()
 
-	for p := range workerCount {
-		go func(wNum int) {
+	for range workerCount {
+		go func() {
 			defer wg.Done()
 			for i := int64(0); i < taskCount; {
-				maxDispatch := dispatchLimitFn(wNum, i)
 				result, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
 					NamespaceId: namespaceID,
 					PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 						TaskQueue:         taskQueue,
 						Identity:          identity,
-						TaskQueueMetadata: &taskqueuepb.TaskQueueMetadata{MaxTasksPerSecond: &wrapperspb.DoubleValue{Value: maxDispatch}},
+						TaskQueueMetadata: &taskqueuepb.TaskQueueMetadata{MaxTasksPerSecond: &wrapperspb.DoubleValue{Value: defaultTaskDispatchRPS}},
 					},
 				}, metrics.NoopMetricsHandler)
 				s.NoError(err)
@@ -1977,7 +1932,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 				protoassert.ProtoEqual(s.T(), taskToken, resultToken)
 				i++
 			}
-		}(p)
+		}()
 	}
 	wg.Wait()
 	totalTasks := int(taskCount) * workerCount
@@ -1986,23 +1941,10 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	expectedRange := int64((persisted + 1) / rangeSize)
 	// Due to conflicts some ids are skipped and more real ranges are used.
 	s.LessOrEqual(expectedRange, s.taskManager.getQueueDataByKey(dbq).rangeID)
-	s.Equal(0, s.taskManager.getTaskCount(dbq))
-
-	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,taskqueue=makeToast"]
-	bufCtr := scope.Snapshot().Counters()["test.buffer_throttle_count+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,taskqueue=makeToast"]
-	total := int64(0)
-	if syncCtr != nil {
-		total += syncCtr.Value()
-	}
-	if bufCtr != nil {
-		total += bufCtr.Value()
-	}
-	return total
+	s.expectEmptyBacklog(dbq)
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
-	s.T().Skip("not supported by new matcher; flaky")
-
 	runID := uuid.NewString()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -2105,7 +2047,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 		}()
 	}
 	wg.Wait()
-	s.Equal(0, s.taskManager.getTaskCount(tlID))
+	s.expectEmptyBacklog(tlID)
 	totalTasks := taskCount * workerCount
 	persisted := s.taskManager.getCreateTaskCount(tlID)
 	s.Less(persisted, totalTasks)
@@ -3766,6 +3708,15 @@ func (s *matchingEngineSuite) getPhysicalTaskQueueManagerImplFromKey(ptq *Physic
 	return s.getPhysicalTaskQueueManagerImpl(s.getTaskQueuePartitionManagerImpl(ptq))
 }
 
+// expectEmptyBacklog waits for the backlog of ptq to be fully acked. Note that we can't expect
+// the task manager to be empty, since task gc is best-effort.
+func (s *matchingEngineSuite) expectEmptyBacklog(ptq *PhysicalTaskQueueKey) {
+	pqMgr := s.getPhysicalTaskQueueManagerImplFromKey(ptq)
+	s.EventuallyWithT(func(collect *assert.CollectT) {
+		require.Zero(collect, totalApproximateBacklogCount(pqMgr.backlogMgr))
+	}, 5*time.Second, 10*time.Millisecond)
+}
+
 func (s *matchingEngineSuite) addConsumeAllWorkflowTasksNonConcurrently(taskCount int) {
 	workflowType, workflowExecution := s.generateWorkflowExecution()
 	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
@@ -3848,8 +3799,11 @@ func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksNoDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksDBErrors() {
-	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
-		"UpdateState an atomic operation.")
+	if s.fairness {
+		s.T().Skip("TODO: fair backlog count sometimes under-counts by about one write batch here")
+	}
+	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
+	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
 	s.taskManager.addFault("CreateTasks", "ConditionFailed", 0.1)
 	s.taskManager.addFault("GetTasks", "Unavailable", 0.1)
 
@@ -3857,13 +3811,12 @@ func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksNoDBErrors() {
-	s.T().Skip("test is flaky with new matcher")
 	s.concurrentPublishAndConsumeValidateBacklogCounter(20, 100, 100)
 }
 
 func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksDBErrors() {
-	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
-		"UpdateState an atomic operation.")
+	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
+	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
 	s.taskManager.addFault("CreateTasks", "ConditionFailed", 0.1)
 	s.taskManager.addFault("GetTasks", "Unavailable", 0.1)
 
@@ -3888,8 +3841,8 @@ func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksN
 }
 
 func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksDBErrors() {
-	s.T().Skip("Skipping this as the backlog counter could under-count. Fix requires making " +
-		"UpdateState an atomic operation.")
+	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
+	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
 	s.taskManager.addFault("CreateTasks", "ConditionFailed", 0.1)
 	s.taskManager.addFault("GetTasks", "Unavailable", 0.1)
 
