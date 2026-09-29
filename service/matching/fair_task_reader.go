@@ -151,7 +151,7 @@ func (tr *fairTaskReader) getOldestBacklogTime() time.Time {
 }
 
 func (tr *fairTaskReader) completeTask(task *internalTask, res taskResponse) {
-	recordDroppedTask(tr.backlogMgr.metricsHandler, res.dropReason)
+	recordDroppedTask(tr.backlogMgr.metricsHandler, tr.backlogMgr.config, res.dropReason, task.getPriority())
 
 	tr.lock.Lock()
 
@@ -473,7 +473,7 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 		} else if IsTaskExpired(t) {
 			// Expired tasks are inserted pre-acked so they advance ackLevel and get GC'd.
 			merged.SetHint(outstandingTask{level: level}, &hint)
-			recordDroppedTask(tr.backlogMgr.metricsHandler, dropReasonExpiredRead)
+			recordDroppedTask(tr.backlogMgr.metricsHandler, tr.backlogMgr.config, dropReasonExpiredRead, t.GetData().GetPriority())
 		} else {
 			task := newInternalTaskFromBacklog(t, tr.completeTask)
 			tr.backlogMgr.setPriority(task)

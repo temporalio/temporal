@@ -56,6 +56,7 @@ type (
 		BreakdownMetricsByTaskQueue              dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		BreakdownMetricsByPartition              dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		BreakdownMetricsByBuildID                dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+		BreakdownMetricsByFairnessKey            dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		EnableWorkerPluginMetrics                dynamicconfig.BoolPropertyFn
 		EnablePollerAutoscalingMetrics           dynamicconfig.BoolPropertyFn
 		ExternalPayloadsEnabled                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -221,9 +222,10 @@ type (
 		FairnessKeyRateLimitCacheSize func() int
 		MaxFairnessKeyWeightOverrides func() int
 
-		BreakdownMetricsByTaskQueue func() bool
-		BreakdownMetricsByPartition func() bool
-		BreakdownMetricsByBuildID   func() bool
+		BreakdownMetricsByTaskQueue   func() bool
+		BreakdownMetricsByPartition   func() bool
+		BreakdownMetricsByBuildID     func() bool
+		BreakdownMetricsByFairnessKey func() bool
 
 		PollerHistoryTTL func() time.Duration
 
@@ -319,6 +321,7 @@ func NewConfig(
 		BreakdownMetricsByTaskQueue:              dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 		BreakdownMetricsByPartition:              dynamicconfig.MetricsBreakdownByPartition.Get(dc),
 		BreakdownMetricsByBuildID:                dynamicconfig.MetricsBreakdownByBuildID.Get(dc),
+		BreakdownMetricsByFairnessKey:            dynamicconfig.MetricsBreakdownByFairnessKey.Get(dc),
 		EnableWorkerPluginMetrics:                dynamicconfig.MatchingEnableWorkerPluginMetrics.Get(dc),
 		EnablePollerAutoscalingMetrics:           dynamicconfig.MatchingEnablePollerAutoscalingMetrics.Get(dc),
 		ExternalPayloadsEnabled:                  dynamicconfig.ExternalPayloadsEnabled.Get(dc),
@@ -508,6 +511,9 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		BreakdownMetricsByBuildID: func() bool {
 			return config.BreakdownMetricsByBuildID(ns.String(), taskQueueName, taskType)
+		},
+		BreakdownMetricsByFairnessKey: func() bool {
+			return config.BreakdownMetricsByFairnessKey(ns.String(), taskQueueName, taskType)
 		},
 		AdminNamespaceToPartitionDispatchRate: func() float64 {
 			return config.AdminNamespaceToPartitionDispatchRate(ns.String())
