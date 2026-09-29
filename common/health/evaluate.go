@@ -32,7 +32,6 @@ func Evaluate(reader SignalReader, settings Settings, label string) ([]*healthsp
 			CheckTypeRPCLatencyOverall+fmt.Sprintf("_P%0.2f", 100.0*qt.Quantile),
 			latency,
 			float64(qt.Threshold.Milliseconds()),
-			fmt.Sprintf("history service overall percentile latency (P%0.2f < %dms, enforced: %t)", 100.0*qt.Quantile, qt.Threshold.Milliseconds(), settings.Overall.Enforced),
 			settings.Overall.Enforced,
 		))
 	}
@@ -48,7 +47,6 @@ func Evaluate(reader SignalReader, settings Settings, label string) ([]*healthsp
 				CheckTypeRPCErrorRatioOverall,
 				errorRatio,
 				settings.Overall.ErrorRatioThreshold.Threshold,
-				fmt.Sprintf("history service overall error ratio (< %0.2f, enforced: %t)", settings.Overall.ErrorRatioThreshold.Threshold, settings.Overall.Enforced),
 				settings.Overall.Enforced,
 			))
 		}
@@ -69,7 +67,6 @@ func Evaluate(reader SignalReader, settings Settings, label string) ([]*healthsp
 				fmt.Sprintf("%s_%s_P%0.2f", CheckTypeRPCLatencyGroup, group.Name, 100.0*qt.Quantile),
 				latency,
 				float64(qt.Threshold.Milliseconds()),
-				fmt.Sprintf("history service %s group percentile latency (P%0.2f < %dms, enforced: %t)", group.Name, 100.0*qt.Quantile, qt.Threshold.Milliseconds(), group.Thresholds.Enforced),
 				group.Thresholds.Enforced,
 			))
 		}
@@ -81,7 +78,6 @@ func Evaluate(reader SignalReader, settings Settings, label string) ([]*healthsp
 					fmt.Sprintf("%s_%s", CheckTypeRPCErrorRatioGroup, group.Name),
 					errorRatio,
 					group.Thresholds.ErrorRatioThreshold.Threshold,
-					fmt.Sprintf("history service %s group error ratio (< %0.2f, enforced: %t)", group.Name, group.Thresholds.ErrorRatioThreshold.Threshold, group.Thresholds.Enforced),
 					group.Thresholds.Enforced,
 				))
 			}
@@ -111,7 +107,7 @@ func Evaluate(reader SignalReader, settings Settings, label string) ([]*healthsp
 	return checks, state, unenforcedState
 }
 
-func errorIfOverThreshold(checkType string, value float64, threshold float64, message string, enforced bool) *healthspb.HealthCheck {
+func errorIfOverThreshold(checkType string, value float64, threshold float64, enforced bool) *healthspb.HealthCheck {
 	state := enumspb.HEALTH_STATE_SERVING
 	if value > threshold {
 		state = enumspb.HEALTH_STATE_NOT_SERVING
@@ -122,7 +118,6 @@ func errorIfOverThreshold(checkType string, value float64, threshold float64, me
 		State:     state,
 		Value:     value,
 		Threshold: threshold,
-		Message:   message,
 		Enforced:  enforced,
 	}
 }
