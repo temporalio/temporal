@@ -2,7 +2,6 @@ package callback
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -10,6 +9,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -92,12 +93,11 @@ func (c invocableInternal) Invoke(
 		requestID = c.requestID
 	}
 
-	if err := ValidateInternalCallbackRef(decodedRef, ns.ID(), h.config.InternalCallbackCrossNamespaceArchetypes()); err != nil {
+	// Validate that the bytes are a valid ChasmComponentRef
+	ref := &persistencespb.ChasmComponentRef{}
+	if err := proto.Unmarshal(decodedRef, ref); err != nil {
 		outcome = outcomeInvalidRef
-		if errors.Is(err, ErrInternalCallbackNamespaceMismatch) {
-			outcome = outcomeNamespaceMismatch
-		}
-		return invocationResultFail{logInternalError(h.logger, "invalid internal callback", err)}
+		return invocationResultFail{logInternalError(h.logger, "failed to unmarshal CHASM ComponentRef", err)}
 	}
 
 	request, err := c.getHistoryRequest(decodedRef, requestID)

@@ -1,16 +1,11 @@
 package callback
 
 import (
-	"errors"
-	"fmt"
 	"time"
 
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/backoff"
 	commoncallbacks "go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/namespace"
 )
 
 var MaxPerExecution = dynamicconfig.NewNamespaceIntSetting(
@@ -59,16 +54,14 @@ internally.`,
 )
 
 type Config struct {
-	RequestTimeout                           dynamicconfig.DurationPropertyFnWithDestinationFilter
-	RetryPolicy                              dynamicconfig.TypedPropertyFn[backoff.RetryPolicy]
-	InspectSourceHeader                      dynamicconfig.BoolPropertyFn
-	InternalCallbackCrossNamespaceArchetypes dynamicconfig.TypedPropertyFn[[]string]
+	RequestTimeout      dynamicconfig.DurationPropertyFnWithDestinationFilter
+	RetryPolicy         dynamicconfig.TypedPropertyFn[backoff.RetryPolicy]
+	InspectSourceHeader dynamicconfig.BoolPropertyFn
 }
 
 func configProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		RequestTimeout:                           RequestTimeout.Get(dc),
-		InternalCallbackCrossNamespaceArchetypes: InternalCallbackCrossNamespaceArchetypes.Get(dc),
+		RequestTimeout: RequestTimeout.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
 				RetryPolicyInitialInterval.Get(dc)(),
@@ -80,45 +73,6 @@ func configProvider(dc *dynamicconfig.Collection) *Config {
 		},
 		InspectSourceHeader: InspectSourceHeader.Get(dc),
 	}
-}
-
-var InternalCallbackCrossNamespaceArchetypes = dynamicconfig.NewGlobalTypedSetting(
-	"callback.internal.crossNamespaceArchetypes",
-	[]string(nil),
-	`The list of fully-qualified CHASM archetype names whose internal callbacks may target a namespace other than the
-callback source namespace. Internal callbacks for all other archetypes must target the source namespace. Only add an
-archetype here as an escape hatch; cross-namespace internal callbacks are not expected.`,
-)
-
-var (
-	ErrInvalidInternalCallbackRef        = errors.New("invalid CHASM ComponentRef")
-	ErrInternalCallbackNamespaceMismatch = errors.New("internal callback namespace mismatch")
-)
-
-// ValidateInternalCallbackRef checks that a temporal://internal callback's component ref is well formed and targets
-// the callback's source namespace, unless its archetype is in crossNamespaceArchetypes. The token is caller supplied,
-// so this must run on every internal delivery path (CHASM and HSM callbacks) before calling History.
-func ValidateInternalCallbackRef(
-	serializedRef []byte,
-	sourceNamespaceID namespace.ID,
-	crossNamespaceArchetypes []string,
-) error {
-	ref := &persistencespb.ChasmComponentRef{}
-	if err := ref.Unmarshal(serializedRef); err != nil {
-		return fmt.Errorf("%w: %w", ErrInvalidInternalCallbackRef, err)
-	}
-	if ref.GetNamespaceId() == "" || ref.GetBusinessId() == "" {
-		return ErrInvalidInternalCallbackRef
-	}
-	if ref.GetNamespaceId() == sourceNamespaceID.String() {
-		return nil
-	}
-	for _, archetype := range crossNamespaceArchetypes {
-		if chasm.GenerateTypeID(archetype) == ref.GetArchetypeId() {
-			return nil
-		}
-	}
-	return ErrInternalCallbackNamespaceMismatch
 }
 
 var EncodeInternalTokenWithEnvelope = dynamicconfig.NewNamespaceBoolSetting(

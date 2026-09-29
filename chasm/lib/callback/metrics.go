@@ -81,7 +81,6 @@ const (
 	outcomeLegacyFailure     outcomeTag = "operation_error" // Emitted for clients sending older, deprecated error formats.
 	outcomeInvalidRef        outcomeTag = "invalid-ref"
 	outcomeMissingToken      outcomeTag = "missing-token"
-	outcomeNamespaceMismatch outcomeTag = "namespace-mismatch"
 	outcomeRequestBuildError outcomeTag = "request-build-error"
 	outcomeRequestTimeout    outcomeTag = "request-timeout"
 	outcomeSuccess           outcomeTag = "success"
