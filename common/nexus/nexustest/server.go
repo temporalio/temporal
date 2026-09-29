@@ -10,7 +10,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
-	"github.com/temporalio/temporal/testkit/freeport"
+	"github.com/temporalio/temporal/testx/freeport"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 )
 

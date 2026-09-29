@@ -1,7 +1,7 @@
 package main
 
 import (
-	"go.temporal.io/server/tools/testrunner"
+	"github.com/temporalio/temporal/testx/testrunner"
 )
 
 func main() {

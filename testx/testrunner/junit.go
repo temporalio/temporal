@@ -7,7 +7,7 @@ import (
 	"slices"
 	"strings"
 
-	"go.temporal.io/server/tools/common/junit"
+	"github.com/temporalio/temporal/testx/junit"
 )
 
 // alertsSuiteName is the JUnit suite name used for structural alerts (data

@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/tools/common/junit"
+	"github.com/temporalio/temporal/testx/junit"
 )
 
 func TestRunnerSanitizeAndParseArgs(t *testing.T) {

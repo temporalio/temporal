@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/temporalio/temporal/testx/junit"
 	"go.temporal.io/server/tools/common/github"
-	"go.temporal.io/server/tools/common/junit"
 )
 
 // ArtifactJob represents a job to download and process an artifact

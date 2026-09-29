@@ -1,28 +1,33 @@
-# github.com/temporalio/temporal/testkit
+# github.com/temporalio/temporal/testx
 
-Test utilities that don't depend on the Temporal server, published as a separate Go module so that
-other repositories can use them without depending on `go.temporal.io/server`.
+Test utilities and CI tools that don't depend on the Temporal server, published as a separate Go
+module so that other repositories can use them without depending on `go.temporal.io/server`.
 
 ```sh
-go get github.com/temporalio/temporal/testkit@<sha>
+go get github.com/temporalio/temporal/testx@<version>
+go run github.com/temporalio/temporal/testx/cmd/test-runner@<version>
 ```
 
 ## Rules
 
-- This module must not import `go.temporal.io/server`. Its separate `go.mod` enforces that.
+- This module must not depend on `go.temporal.io/server`. CI enforces this.
 - Keep dependencies minimal. Every dependency here becomes a dependency of every consumer.
-- Don't require newer dependency versions than the server's `go.mod`. With `go.work`, the higher
-  version would silently apply to local server builds, but not to downstream consumers.
 
 ## Development
 
-The repository root has a `go.work` file that includes this module. Changes here are picked up by the
-server immediately, so a single PR can change both.
+The server's `go.mod` requires this module and replaces it with the local `./testx` directory, so
+server code always builds against the testx code in the same commit. A single PR can change testx
+and use the change in the server.
 
-The server's `go.mod` requires a published version of this module. That version is what downstream
-consumers of the server resolve, so after changing the API here:
+Downstream consumers of the server ignore the `replace` and resolve the required version instead.
+So every PR that changes `testx/` must also bump the version in the root `go.mod`:
 
-1. Merge the change to this module.
-2. Bump the `github.com/temporalio/temporal/testkit` requirement in the root `go.mod` to the new
-   pseudo-version.
-3. Only then use the new API from server code.
+```sh
+go mod edit -require=github.com/temporalio/temporal/testx@v0.2.0
+```
+
+CI rejects testx changes if that version is already tagged. After merging, the `testx-tag` workflow
+tags the merge commit as `testx/<version>`, which makes the version resolvable.
+
+Run tests and lint with `make testx-test` and `make lint-testx`; `./...` from the repo root doesn't
+include this module.

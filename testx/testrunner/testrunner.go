@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"go.temporal.io/server/tools/common/junit"
+	"github.com/temporalio/temporal/testx/junit"
 )
 
 const (

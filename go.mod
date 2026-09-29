@@ -35,9 +35,7 @@ require (
 	github.com/iancoleman/strcase v0.3.0
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/jmoiron/sqlx v1.4.0
-	github.com/jstemmer/go-junit-report/v2 v2.1.0
 	github.com/lib/pq v1.12.3
-	github.com/maruel/panicparse/v2 v2.5.0
 	github.com/mitchellh/mapstructure v1.5.0
 	github.com/nexus-rpc/nexus-proto-annotations v0.1.0
 	github.com/nexus-rpc/sdk-go v0.7.0
@@ -52,7 +50,7 @@ require (
 	github.com/temporalio/ringpop-go v0.1.0
 	github.com/temporalio/sqlparser v0.1.0
 	github.com/temporalio/tchannel-go v1.22.1
-	github.com/temporalio/temporal/testkit v0.0.0-20260928224608-dddad422595d
+	github.com/temporalio/temporal/testx v0.1.0
 	github.com/tidwall/btree v1.8.1
 	github.com/uber-go/tally/v4 v4.1.17
 	github.com/urfave/cli v1.22.17
@@ -174,8 +172,10 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
+	github.com/jstemmer/go-junit-report/v2 v2.1.0 // indirect
 	github.com/klauspost/compress v1.18.5 // indirect
 	github.com/mailru/easyjson v0.9.2 // indirect
+	github.com/maruel/panicparse/v2 v2.5.0 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.21 // indirect
 	github.com/mattn/go-runewidth v0.0.23 // indirect
@@ -236,4 +236,11 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-tool golang.org/x/perf/cmd/benchstat
+tool (
+	github.com/temporalio/temporal/testx/cmd/test-runner
+	golang.org/x/perf/cmd/benchstat
+)
+
+// Server code always builds against testx from the same commit. Downstream consumers ignore this
+// replace and resolve the required testx version, which .github/workflows/testx-tag.yml tags on merge.
+replace github.com/temporalio/temporal/testx => ./testx

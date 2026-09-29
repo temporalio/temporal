@@ -15,8 +15,8 @@ import (
 	"strings"
 
 	"github.com/dgryski/go-farm"
+	"github.com/temporalio/temporal/testx/junit"
 	"go.temporal.io/server/tools/common/github"
-	"go.temporal.io/server/tools/common/junit"
 )
 
 const (

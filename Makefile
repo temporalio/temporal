@@ -118,7 +118,7 @@ ALL_SCRIPTS     := $(shell find . -name "*.sh")
 MAIN_BRANCH    := main
 
 # If you update these dirs, please also update in CategoryDirs find_altered_tests.go
-TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
+TEST_DIRS       := $(filter-out ./testx/%,$(sort $(dir $(filter %_test.go,$(ALL_SRC)))))
 FUNCTIONAL_TEST_ROOT          := ./tests
 FUNCTIONAL_TEST_XDC_ROOT      := ./tests/xdc
 FUNCTIONAL_TEST_NDC_ROOT      := ./tests/ndc
@@ -173,7 +173,7 @@ $(LOCALBIN):
 	@mkdir -p $(LOCALBIN)
 
 .PHONY: golangci-lint
-LINT_CODE_TARGETS ?= ./... ./testkit/...
+LINT_CODE_TARGETS ?= ./...
 GOLANGCI_LINT_BASE_REV ?= $(MAIN_BRANCH)
 GOLANGCI_LINT_FIX ?= true
 GOLANGCI_LINT_VERSION := v2.13.0
@@ -416,6 +416,7 @@ lint-code-fast:
 		git diff --no-renames --name-only "$$base" -- '*.go'; \
 		git ls-files --others --exclude-standard -- '*.go'; \
 	} | sed 's|^|./|; s|/[^/]*$$||' | sort -u \
+	  | grep -v "^\./testx/" \
 	  | while read -r dir; do [ -d "$$dir" ] && printf '%s ' "$$dir"; done); \
 	if [ -z "$$targets" ]; then \
 		printf $(COLOR) "No changed Go packages to lint."; \
@@ -434,6 +435,12 @@ lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
 		--config=.github/.golangci.yml \
 		$(LINT_CODE_TARGETS)
 	@go vet -tags $(ALL_TEST_TAGS) -vettool="$(ERRORTYPE)" -style-check=false $(LINT_CODE_TARGETS)
+
+.PHONY: lint-testx
+lint-testx: $(GOLANGCI_LINT)
+	@printf $(COLOR) "Linting testx..."
+	@cd testx && $(ROOT)/$(GOLANGCI_LINT) run --timeout 10m --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=$(ROOT)/.github/.golangci.yml ./...
+	@go -C testx vet ./...
 
 lint-yaml: $(YAMLFMT)
 	@printf $(COLOR) "Checking YAML formatting..."
@@ -534,6 +541,10 @@ build-tests:
 	@printf $(COLOR) "Build tests..."
 	@CGO_ENABLED=$(CGO_ENABLED) go test $(TEST_TAG_FLAG) -exec="true" -count=0 $(TEST_DIRS)
 
+testx-test:
+	@printf $(COLOR) "Run testx tests..."
+	@go -C testx test ./...
+
 unit-test: clean-test-output
 	@printf $(COLOR) "Run unit tests..."
 	@CGO_ENABLED=$(CGO_ENABLED) go test $(UNIT_TEST_DIRS) $(COMPILED_TEST_ARGS) 2>&1 | tee -a test.log
@@ -594,12 +605,12 @@ prepare-coverage-test: $(GOTESTSUM) $(TEST_OUTPUT_ROOT)
 
 unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
+	go tool test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(UNIT_TEST_DIRS)
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
+	go tool test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(INTEGRATION_TEST_DIRS)
 
 # MUST use the same build flags as functional-test-coverage and functional-test-{xdc,ndc}-coverage for best build caching.
@@ -608,30 +619,30 @@ pre-build-functional-test-coverage: prepare-coverage-test
 
 functional-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional tests with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
+	go tool test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-xdc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for cross DC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
+	go tool test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_XDC_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 functional-test-ndc-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run functional test for NDC with coverage with $(PERSISTENCE_DRIVER) driver..."
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
+	go tool test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(COVERPKG_FLAG) $(FUNCTIONAL_TEST_NDC_ROOT) \
 		-args -persistenceType=$(PERSISTENCE_TYPE) -persistenceDriver=$(PERSISTENCE_DRIVER)
 
 report-test-crash: $(TEST_OUTPUT_ROOT)
 	@printf $(COLOR) "Generate test crash junit report..."
-	@go run ./cmd/tools/test-runner report-crash --gotestsum=report-crash \
+	@go tool test-runner report-crash --gotestsum=report-crash \
 		--junitfile=$(TEST_OUTPUT_ROOT)/junit.crash.xml \
 		--crashreportname=$(CRASH_REPORT_NAME)
 
 generate-test-summary: $(TEST_OUTPUT_ROOT)
-	@go run ./cmd/tools/test-runner generate-summary \
+	@go tool test-runner generate-summary \
 		--junit-glob=$(TEST_OUTPUT_ROOT)/junit.*.xml \
 		--summary-output-dir=$(TEST_OUTPUT_ROOT)
 
@@ -788,7 +799,7 @@ update-dashboards:
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
 	@go mod tidy
-	@cd testkit && go mod tidy
+	@cd testx && go mod tidy
 
 update-dependencies:
 	@printf $(COLOR) "Update dependencies (minor versions only) ..."

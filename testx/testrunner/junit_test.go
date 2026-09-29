@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/server/tools/common/junit"
+	"github.com/temporalio/temporal/testx/junit"
 )
 
 func TestReadJUnitReport(t *testing.T) {
@@ -22,7 +22,7 @@ func TestReadJUnitReport(t *testing.T) {
 func TestGenerateJUnitReportForTimedoutTests(t *testing.T) {
 	out, err := os.CreateTemp("", "junit-report-*.xml")
 	require.NoError(t, err)
-	defer os.Remove(out.Name())
+	defer func() { _ = os.Remove(out.Name()) }()
 
 	testNames := []string{
 		"TestCallbacksSuite/TestWorkflowCallbacks_1",
@@ -60,7 +60,7 @@ func TestNode(t *testing.T) {
 func TestAppendAlertsSuite(t *testing.T) {
 	j := &junitReport{}
 	alerts := []alert{
-		{Type: failureTypeDataRace, Summary: "Data race detected", Details: "WARNING: DATA RACE\n...", Tests: []string{"go.temporal.io/server/tools/testrunner.TestShowPanic"}},
+		{Type: failureTypeDataRace, Summary: "Data race detected", Details: "WARNING: DATA RACE\n...", Tests: []string{"github.com/temporalio/temporal/testx/testrunner.TestShowPanic"}},
 		{Type: failureTypePanic, Summary: "This is a panic", Details: "panic: This is a panic\n...", Tests: []string{"TestPanicExample"}},
 	}
 	j.appendAlertsSuite(alerts)

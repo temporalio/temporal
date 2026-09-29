@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/temporalio/temporal/testkit/freeport"
+	"github.com/temporalio/temporal/testx/freeport"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"

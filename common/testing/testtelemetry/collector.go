@@ -7,7 +7,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/temporalio/temporal/testkit/freeport"
+	"github.com/temporalio/temporal/testx/freeport"
 	ctrace "go.opentelemetry.io/proto/otlp/collector/trace/v1"
 	trace "go.opentelemetry.io/proto/otlp/trace/v1"
 	"google.golang.org/grpc"

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"go.temporal.io/server/tools/common/junit"
+	"github.com/temporalio/temporal/testx/junit"
 )
 
 var finalRegex = regexp.MustCompile(`\s*\(final\)$`)
