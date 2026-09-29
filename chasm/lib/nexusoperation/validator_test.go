@@ -3,7 +3,6 @@ package nexusoperation
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -37,31 +36,6 @@ func newTestValidator(t *testing.T, config *Config) *validator {
 		test.NewCallbacksValidator(t, test.NewCallbacksValidatorConfig()),
 		newTestLinkValidator(10, 10),
 	)
-}
-
-func mustNewCallbackValidator() callbacks.Validator {
-	allowAllAddresses := callbacks.AddressMatchRules{
-		Rules: []callbacks.AddressMatchRule{
-			{Regexp: regexp.MustCompile(`.*`), AllowInsecure: true},
-		},
-	}
-	cfg := callbacks.ValidatorConfig{
-		MaxCallbacksPerExecution:         func(string) int { return 10 },
-		TotalCallbacksMaxSize:            func(string) int { return 2 * 1024 * 1024 },
-		MaxIDLengthLimit:                 func() int { return 10 },
-		URLMaxLength:                     func(string) int { return 1000 },
-		HeaderMaxSize:                    func(string) int { return 4096 },
-		EndpointRules:                    func(string) callbacks.AddressMatchRules { return allowAllAddresses },
-		MaxServiceNameLength:             func(string) int { return 10 },
-		MaxOperationNameLength:           func(string) int { return 10 },
-		NexusHandlerSourceContextMaxSize: func(string) int { return 1000 },
-	}
-
-	v, err := callbacks.NewValidator(cfg)
-	if err != nil {
-		panic("creating callback validator: " + err.Error())
-	}
-	return v
 }
 
 func newNexusCallback() *commonpb.Callback {
