@@ -1016,9 +1016,13 @@ func assertRunIDAndUpdateCurrentExecution(
 }
 
 func currentExecutionsEqual(a, b *sqlplugin.CurrentExecutionsRow) bool {
+	// Start time is written without the typeconv converters, so its sub-microsecond part is
+	// rounded (MySQL, PostgreSQL via lib/pq), truncated (pgx) or kept (SQLite) depending on the
+	// backend. A smaller difference is storage precision, not a change: Data embeds the exact
+	// start time and is compared byte for byte.
 	startTimesEqual := a.StartTime == nil && b.StartTime == nil ||
 		a.StartTime != nil && b.StartTime != nil &&
-			a.StartTime.Truncate(time.Microsecond).Equal(b.StartTime.Truncate(time.Microsecond))
+			a.StartTime.Sub(*b.StartTime).Abs() < time.Microsecond
 	return a.ShardID == b.ShardID &&
 		bytes.Equal(a.NamespaceID, b.NamespaceID) &&
 		a.WorkflowID == b.WorkflowID &&

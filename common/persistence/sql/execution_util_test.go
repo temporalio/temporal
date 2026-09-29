@@ -12,6 +12,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
+	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
@@ -21,6 +22,7 @@ type currentExecutionsTx struct {
 	sqlplugin.Tx
 	current *sqlplugin.CurrentExecutionsRow
 	updates int
+	updated *sqlplugin.CurrentExecutionsRow
 }
 
 func (t *currentExecutionsTx) LockCurrentExecutions(
@@ -32,15 +34,16 @@ func (t *currentExecutionsTx) LockCurrentExecutions(
 
 func (t *currentExecutionsTx) UpdateCurrentExecutions(
 	_ context.Context,
-	_ *sqlplugin.CurrentExecutionsRow,
+	row *sqlplugin.CurrentExecutionsRow,
 ) (sql.Result, error) {
 	t.updates++
+	t.updated = row
 	return driver.RowsAffected(1), nil
 }
 
-func TestCurrentExecutionsEqual(t *testing.T) {
+func newTestCurrentExecutionsRow() sqlplugin.CurrentExecutionsRow {
 	startTime := time.Unix(123, 456789123).UTC()
-	row := sqlplugin.CurrentExecutionsRow{
+	return sqlplugin.CurrentExecutionsRow{
 		ShardID:          1,
 		NamespaceID:      primitives.NewUUID(),
 		WorkflowID:       "workflow-id",
@@ -54,6 +57,10 @@ func TestCurrentExecutionsEqual(t *testing.T) {
 		Data:             []byte("data"),
 		DataEncoding:     "proto3",
 	}
+}
+
+func TestCurrentExecutionsEqual(t *testing.T) {
+	row := newTestCurrentExecutionsRow()
 	// TestCurrentExecutionsEqualCoversEveryField already proves every field is observed by the
 	// comparison; these cases cover what a generic per-field mutation can't: value equality
 	// (not identity) for the byte-slice fields, and the microsecond-precision boundary and nil
@@ -67,6 +74,18 @@ func TestCurrentExecutionsEqual(t *testing.T) {
 		equal.StartTime = &equalStartTime
 
 		require.True(t, currentExecutionsEqual(&row, &equal))
+	})
+
+	t.Run("start time rounded up by the database", func(t *testing.T) {
+		// MySQL DATETIME(6) and PostgreSQL (text protocol) round the sub-microsecond part on write.
+		desired := row
+		desiredStartTime := time.Unix(123, 456789623).UTC()
+		desired.StartTime = &desiredStartTime
+		stored := row
+		storedStartTime := time.Unix(123, 456790000).UTC()
+		stored.StartTime = &storedStartTime
+
+		require.True(t, currentExecutionsEqual(&stored, &desired))
 	})
 
 	t.Run("start time change at microsecond precision is detected", func(t *testing.T) {
@@ -109,8 +128,8 @@ func mutateFieldForCoverage(t *testing.T, field reflect.Value) {
 		}
 		next := time.Now()
 		if !field.IsNil() {
-			// currentExecutionsEqual truncates start time to microseconds, so a smaller delta
-			// would make this a false positive rather than a real coverage gap.
+			// currentExecutionsEqual treats sub-microsecond start time differences as equal, so a
+			// smaller delta would make this a false positive rather than a real coverage gap.
 			next = field.Interface().(*time.Time).Add(time.Second)
 		}
 		field.Set(reflect.ValueOf(&next))
@@ -124,21 +143,7 @@ func mutateFieldForCoverage(t *testing.T, field reflect.Value) {
 // reflection and requires the comparison to notice, so a new field fails this test by default
 // instead of silently making assertRunIDAndUpdateCurrentExecution skip a real change.
 func TestCurrentExecutionsEqualCoversEveryField(t *testing.T) {
-	startTime := time.Unix(123, 456789123).UTC()
-	base := sqlplugin.CurrentExecutionsRow{
-		ShardID:          1,
-		NamespaceID:      primitives.NewUUID(),
-		WorkflowID:       "workflow-id",
-		RunID:            primitives.NewUUID(),
-		ArchetypeID:      chasm.WorkflowArchetypeID,
-		CreateRequestID:  "request-id",
-		StartTime:        &startTime,
-		LastWriteVersion: 2,
-		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		Data:             []byte("data"),
-		DataEncoding:     "proto3",
-	}
+	base := newTestCurrentExecutionsRow()
 
 	typ := reflect.TypeOf(base)
 	for i := 0; i < typ.NumField(); i++ {
@@ -154,21 +159,7 @@ func TestCurrentExecutionsEqualCoversEveryField(t *testing.T) {
 }
 
 func TestAssertRunIDAndUpdateCurrentExecutionSkipsUnchangedRow(t *testing.T) {
-	startTime := time.Unix(123, 456789123).UTC()
-	current := sqlplugin.CurrentExecutionsRow{
-		ShardID:          1,
-		NamespaceID:      primitives.NewUUID(),
-		WorkflowID:       "workflow-id",
-		RunID:            primitives.NewUUID(),
-		ArchetypeID:      chasm.WorkflowArchetypeID,
-		CreateRequestID:  "request-id",
-		StartTime:        &startTime,
-		LastWriteVersion: 2,
-		State:            enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		Data:             []byte("data"),
-		DataEncoding:     "proto3",
-	}
+	current := newTestCurrentExecutionsRow()
 	tx := &currentExecutionsTx{current: &current}
 	serializer := serialization.NewSerializer()
 
@@ -191,4 +182,24 @@ func TestAssertRunIDAndUpdateCurrentExecutionSkipsUnchangedRow(t *testing.T) {
 		serializer,
 	))
 	require.Equal(t, 1, tx.updates)
+	require.Equal(t, changed, *tx.updated)
+}
+
+func TestAssertRunIDAndUpdateCurrentExecutionRunIDMismatch(t *testing.T) {
+	current := newTestCurrentExecutionsRow()
+	// Without serialized state the condition-failed error is built from the row columns.
+	current.Data = nil
+	tx := &currentExecutionsTx{current: &current}
+
+	err := assertRunIDAndUpdateCurrentExecution(
+		context.Background(),
+		tx,
+		current,
+		primitives.NewUUID(),
+		serialization.NewSerializer(),
+	)
+	var conditionFailedErr *p.CurrentWorkflowConditionFailedError
+	require.ErrorAs(t, err, &conditionFailedErr)
+	require.Equal(t, current.RunID.String(), conditionFailedErr.RunID)
+	require.Zero(t, tx.updates)
 }
