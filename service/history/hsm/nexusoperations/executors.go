@@ -323,16 +323,17 @@ func (e taskExecutor) executeInvocationTask(ctx context.Context, env hsm.Environ
 
 	methodTag := metrics.NexusMethodTag("StartOperation")
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
-	var destTag metrics.Tag
+	endpointName := args.endpointName
 	if endpoint != nil {
-		destTag = metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
-	} else {
-		destTag = metrics.DestinationTag(args.endpointName)
+		endpointName = endpoint.Endpoint.Spec.GetName()
 	}
+	destTag := metrics.DestinationTag(endpointName)
+	// Same value as destTag, under the label the other Nexus metrics use for the endpoint.
+	endpointTag := metrics.NexusEndpointTag(endpointName)
 	outcomeTag := metrics.OutcomeTag(startCallOutcomeTag(callCtx, result, callErr))
 	failureSourceTag := metrics.FailureSourceTag(failureSource)
-	chasmnexus.OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
-	chasmnexus.OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, outcomeTag, failureSourceTag)
+	chasmnexus.OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, endpointTag, methodTag, outcomeTag, failureSourceTag)
+	chasmnexus.OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, endpointTag, methodTag, outcomeTag, failureSourceTag)
 
 	e.logCallFailure(traceCtx, callErr, failureSource)
 
@@ -785,16 +786,17 @@ func (e taskExecutor) executeCancelationTask(ctx context.Context, env hsm.Enviro
 	failureSource := failureSourceFromContext(callCtx)
 	methodTag := metrics.NexusMethodTag("CancelOperation")
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
-	var destTag metrics.Tag
+	endpointName := args.endpointName
 	if endpoint != nil {
-		destTag = metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
-	} else {
-		destTag = metrics.DestinationTag(args.endpointName)
+		endpointName = endpoint.Endpoint.Spec.GetName()
 	}
+	destTag := metrics.DestinationTag(endpointName)
+	// Same value as destTag, under the label the other Nexus metrics use for the endpoint.
+	endpointTag := metrics.NexusEndpointTag(endpointName)
 	statusCodeTag := metrics.OutcomeTag(cancelCallOutcomeTag(callCtx, callErr))
 	failureSourceTag := metrics.FailureSourceTag(failureSource)
-	chasmnexus.OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, methodTag, statusCodeTag, failureSourceTag)
-	chasmnexus.OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, methodTag, statusCodeTag, failureSourceTag)
+	chasmnexus.OutboundRequestCounter.With(e.MetricsHandler).Record(1, namespaceTag, destTag, endpointTag, methodTag, statusCodeTag, failureSourceTag)
+	chasmnexus.OutboundRequestLatency.With(e.MetricsHandler).Record(time.Since(startTime), namespaceTag, destTag, endpointTag, methodTag, statusCodeTag, failureSourceTag)
 
 	e.logCallFailure(traceCtx, callErr, failureSource)
 

@@ -572,6 +572,7 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 				require.Equal(t, int64(1), counterRecordings[0].Value)
 				require.Equal(t, "ns-name", counterRecordings[0].Tags["namespace"])
 				require.Equal(t, "endpoint", counterRecordings[0].Tags["destination"])
+				require.Equal(t, "endpoint", counterRecordings[0].Tags["nexus_endpoint"])
 				require.Equal(t, "StartOperation", counterRecordings[0].Tags["method"])
 				require.Equal(t, tc.expectedMetricOutcome, counterRecordings[0].Tags["outcome"])
 				require.Equal(t, "_unknown_", counterRecordings[0].Tags["failure_source"])
@@ -1227,6 +1228,7 @@ func TestInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 			require.Equal(t, int64(1), counterRecordings[0].Value)
 			require.Equal(t, "ns-name", counterRecordings[0].Tags["namespace"])
 			require.Equal(t, commonnexus.SystemEndpoint, counterRecordings[0].Tags["destination"])
+			require.Equal(t, commonnexus.SystemEndpoint, counterRecordings[0].Tags["nexus_endpoint"])
 			require.Equal(t, "StartOperation", counterRecordings[0].Tags["method"])
 			require.Equal(t, tc.expectedMetricOutcome, counterRecordings[0].Tags["outcome"])
 

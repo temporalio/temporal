@@ -628,6 +628,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				counter.EXPECT().Record(int64(1),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag("endpoint"),
+					metrics.NexusEndpointTag("endpoint"),
 					metrics.NexusMethodTag("StartOperation"),
 					metrics.OutcomeTag(tc.expectedMetricOutcome),
 					metrics.FailureSourceTag("_unknown_"))
@@ -635,6 +636,7 @@ func TestProcessInvocationTask(t *testing.T) {
 				timer.EXPECT().Record(gomock.Any(),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag("endpoint"),
+					metrics.NexusEndpointTag("endpoint"),
 					metrics.NexusMethodTag("StartOperation"),
 					metrics.OutcomeTag(tc.expectedMetricOutcome),
 					metrics.FailureSourceTag("_unknown_"))
@@ -1198,6 +1200,7 @@ func TestProcessCancelationTask(t *testing.T) {
 				counter.EXPECT().Record(int64(1),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag("endpoint"),
+					metrics.NexusEndpointTag("endpoint"),
 					metrics.NexusMethodTag("CancelOperation"),
 					metrics.OutcomeTag(tc.expectedMetricOutcome),
 					metrics.FailureSourceTag("_unknown_"))
@@ -1205,6 +1208,7 @@ func TestProcessCancelationTask(t *testing.T) {
 				timer.EXPECT().Record(gomock.Any(),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag("endpoint"),
+					metrics.NexusEndpointTag("endpoint"),
 					metrics.NexusMethodTag("CancelOperation"),
 					metrics.OutcomeTag(tc.expectedMetricOutcome),
 					metrics.FailureSourceTag("_unknown_"))
@@ -1498,6 +1502,7 @@ func TestProcessCancelationTask_SystemEndpoint(t *testing.T) {
 				counter.EXPECT().Record(int64(1),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag(commonnexus.SystemEndpoint),
+					metrics.NexusEndpointTag(commonnexus.SystemEndpoint),
 					metrics.NexusMethodTag("CancelOperation"),
 					metrics.OutcomeTag(tc.expectedMetricOutcome),
 					metrics.FailureSourceTag("_unknown_"))
@@ -1505,6 +1510,7 @@ func TestProcessCancelationTask_SystemEndpoint(t *testing.T) {
 				timer.EXPECT().Record(gomock.Any(),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag(commonnexus.SystemEndpoint),
+					metrics.NexusEndpointTag(commonnexus.SystemEndpoint),
 					metrics.NexusMethodTag("CancelOperation"),
 					metrics.OutcomeTag(tc.expectedMetricOutcome),
 					metrics.FailureSourceTag("_unknown_"))
@@ -1920,6 +1926,7 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 				counter.EXPECT().Record(int64(1),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag(commonnexus.SystemEndpoint),
+					metrics.NexusEndpointTag(commonnexus.SystemEndpoint),
 					metrics.NexusMethodTag("StartOperation"),
 					metrics.OutcomeTag(tc.expectedMetricOutcome),
 					metrics.FailureSourceTag("_unknown_"))
@@ -1927,6 +1934,7 @@ func TestProcessInvocationTask_SystemEndpoint(t *testing.T) {
 				timer.EXPECT().Record(gomock.Any(),
 					metrics.NamespaceTag("ns-name"),
 					metrics.DestinationTag(commonnexus.SystemEndpoint),
+					metrics.NexusEndpointTag(commonnexus.SystemEndpoint),
 					metrics.NexusMethodTag("StartOperation"),
 					metrics.OutcomeTag(tc.expectedMetricOutcome),
 					metrics.FailureSourceTag("_unknown_"))

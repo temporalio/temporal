@@ -161,16 +161,17 @@ func (b *nexusTaskHandlerBase) recordCallOutcome(
 ) {
 	methodTag := metrics.NexusMethodTag(traceCtx.operationTag)
 	namespaceTag := metrics.NamespaceTag(traceCtx.namespaceName)
-	var destTag metrics.Tag
+	endpointName := traceCtx.endpointName
 	if endpoint != nil {
-		destTag = metrics.DestinationTag(endpoint.Endpoint.Spec.GetName())
-	} else {
-		destTag = metrics.DestinationTag(traceCtx.endpointName)
+		endpointName = endpoint.Endpoint.Spec.GetName()
 	}
+	destTag := metrics.DestinationTag(endpointName)
+	// Same value as destTag, under the label the other Nexus metrics use for the endpoint.
+	endpointTag := metrics.NexusEndpointTag(endpointName)
 	outcomeMetricTag := metrics.OutcomeTag(outcomeTag)
 	failureSourceTag := metrics.FailureSourceTag(failureSource)
-	OutboundRequestCounter.With(b.metricsHandler).Record(1, namespaceTag, destTag, methodTag, outcomeMetricTag, failureSourceTag)
-	OutboundRequestLatency.With(b.metricsHandler).Record(callDuration, namespaceTag, destTag, methodTag, outcomeMetricTag, failureSourceTag)
+	OutboundRequestCounter.With(b.metricsHandler).Record(1, namespaceTag, destTag, endpointTag, methodTag, outcomeMetricTag, failureSourceTag)
+	OutboundRequestLatency.With(b.metricsHandler).Record(callDuration, namespaceTag, destTag, endpointTag, methodTag, outcomeMetricTag, failureSourceTag)
 
 	b.logCallFailure(traceCtx, callErr, failureSource)
 }
