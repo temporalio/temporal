@@ -252,7 +252,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesFinalUpdateOnIdleUnload()
 	baseline := tm.getUpdateCount(s.physicalTaskQueueKey)
 
 	// The final update is skipped if nothing changed, so change something.
-	s.tqMgr.backlogMgr.getDB().updateBacklogStats(1, time.Time{})
+	updateBacklogStatsForTest(s.tqMgr.backlogMgr.getDB(), 1, time.Time{})
 
 	s.EventuallyWithT(func(collect *assert.CollectT) {
 		// will unload due to idleness

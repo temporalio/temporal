@@ -374,15 +374,6 @@ func (db *taskQueueDB) setKnownFairBacklogCount(subqueue subqueueIndex, count in
 	}
 }
 
-// updateApproximateBacklogCount updates the in-memory DB state with the given delta value
-// TODO(pri): old matcher cleanup
-func (db *taskQueueDB) updateBacklogStats(countDelta int64, oldestTime time.Time) {
-	db.Lock()
-	defer db.Unlock()
-	db.lastChange = time.Now()
-	db.updateBacklogStatsLocked(subqueueZero, countDelta, oldestTime)
-}
-
 func (db *taskQueueDB) updateBacklogStatsLocked(subqueue subqueueIndex, countDelta int64, oldestTime time.Time) {
 	// Prevent under-counting
 	count := &db.subqueues[subqueue].ApproximateBacklogCount

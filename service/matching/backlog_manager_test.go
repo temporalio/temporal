@@ -305,7 +305,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 	s.EqualValues(3, totalApproximateBacklogCount(s.blm))
 
 	// Inject backlog count divergence (simulating accumulated drift).
-	db.updateBacklogStats(2, time.Time{})
+	updateBacklogStatsForTest(db, 2, time.Time{})
 	s.EqualValues(5, totalApproximateBacklogCount(s.blm))
 
 	// Advance maxReadLevel past all task IDs to simulate a range renewal.
@@ -356,7 +356,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnGapDrain() 
 	// carried across a reload. Since nothing is spooled, there are no outstanding tasks and
 	// completeTask never runs, so the only thing that can reset the count is the gap-drain path
 	// (setReadLevelAfterGap), not the completeTask path.
-	db.updateBacklogStats(5, time.Time{})
+	updateBacklogStatsForTest(db, 5, time.Time{})
 	s.Require().EqualValues(5, db.getTotalApproximateBacklogCount())
 
 	// Advance maxReadLevel past the ack level to simulate a range renewal that left a gap of
@@ -382,6 +382,13 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnGapDrain() 
 	_, ackLevel := tr.getLevels()
 	s.Equal(maxRL, ackLevel)
 	s.Zero(db.getTotalApproximateBacklogCount())
+}
+
+func updateBacklogStatsForTest(db *taskQueueDB, countDelta int64, oldestTime time.Time) {
+	db.Lock()
+	defer db.Unlock()
+	db.lastChange = time.Now()
+	db.updateBacklogStatsLocked(subqueueZero, countDelta, oldestTime)
 }
 
 // initPriReaderAtEnd initializes the db without starting the background reader pump, and returns
