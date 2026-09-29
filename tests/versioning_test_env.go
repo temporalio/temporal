@@ -60,7 +60,7 @@ const (
 	versionStatusDraining = versionStatus(4)
 	versionStatusDrained  = versionStatus(5)
 
-	versioning3DeploymentWorkflowVersion = workerdeployment.TaskQueueFamilySummary
+	versioning3DeploymentWorkflowVersion = workerdeployment.VersionDataRevisionNumber
 )
 
 var _ = testhooks.MatchingIgnoreRoutingConfigRevisionCheck

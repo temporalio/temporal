@@ -250,14 +250,18 @@ func (d *WorkflowRunner) handlePropagationComplete(completion *deploymentspb.Pro
 }
 
 func (d *WorkflowRunner) updateVersionSummary(summary *deploymentspb.WorkerDeploymentVersionSummary) {
-	if _, ok := d.State.Versions[summary.GetVersion()]; !ok {
+	existingSummary, ok := d.State.Versions[summary.GetVersion()]
+	if !ok {
 		d.logger.Error("received summary for a non-existing version, ignoring it", "version", summary.GetVersion())
 		return
+	}
+	if summary.GetTaskQueueFamilySummary() == nil {
+		summary.TaskQueueFamilySummary = existingSummary.GetTaskQueueFamilySummary()
 	}
 
 	// Preserve create_time and first_activation_time if they exist in current summary. This is to ensure that if the version
 	// had already been activated before, we don't override the first activation time by setting it to a wrong value.
-	if existingSummary := d.State.Versions[summary.GetVersion()]; existingSummary.GetCreateTime() != nil {
+	if existingSummary.GetCreateTime() != nil {
 		summary.CreateTime = existingSummary.GetCreateTime()
 
 		if existingSummary.GetFirstActivationTime() != nil {
@@ -749,6 +753,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 	}).Get(ctx, nil)
 	if err != nil {
 		if isMaxTaskQueuesInVersionError(err) {
+			d.cacheTaskQueueFamilySummaryFromError(version, err)
 			if bloomFilterPassed {
 				d.recordTaskQueueFamilyBloomFilterOutcome(taskQueueFamilyBloomFilterOutcomeFalsePositive)
 			}
@@ -759,6 +764,9 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		}
 		return err
 	}
+	// Invalidating the task queue family count. This may be required so that if a Temporal Operator were to change the max task queues limit in the future,
+	// then we want our cached values to be invalidated. This is a best-effort approach to ensure that we are using the latest values.
+	d.invalidateTaskQueueFamilySummaryBelowLimit(version, args.GetMaxTaskQueues())
 	if bloomFilterPassed {
 		d.recordTaskQueueFamilyBloomFilterOutcome(taskQueueFamilyBloomFilterOutcomeAccepted)
 	}
@@ -772,16 +780,19 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 	return d.updateMemo(ctx)
 }
 
+func (d *WorkflowRunner) invalidateTaskQueueFamilySummaryBelowLimit(version string, maxTaskQueues int32) {
+	versionSummary := d.State.Versions[version]
+	if summary := versionSummary.GetTaskQueueFamilySummary(); summary != nil && summary.GetCount() < maxTaskQueues {
+		versionSummary.TaskQueueFamilySummary = nil
+	}
+}
+
 func (d *WorkflowRunner) validateRegisterWorker(args *deploymentspb.RegisterWorkerInWorkerDeploymentArgs) error {
 	_, err := d.validateRegisterWorkerWithBloomFilterResult(args)
 	return err
 }
 
 func (d *WorkflowRunner) validateRegisterWorkerWithBloomFilterResult(args *deploymentspb.RegisterWorkerInWorkerDeploymentArgs) (bool, error) {
-	if !d.hasMinVersion(TaskQueueFamilySummary) {
-		return false, nil
-	}
-
 	version := worker_versioning.WorkerDeploymentVersionToStringV31(args.GetVersion())
 	versionSummary := d.GetState().GetVersions()[version]
 	taskQueueFamilySummary := versionSummary.GetTaskQueueFamilySummary()
@@ -793,12 +804,30 @@ func (d *WorkflowRunner) validateRegisterWorkerWithBloomFilterResult(args *deplo
 		return true, nil
 	}
 
-	// The bloom filter thinks that adding this task queue would exceed the currently set limit
+	// The Bloom filter thinks that adding this task queue would exceed the currently set limit.
 	d.recordTaskQueueFamilyBloomFilterOutcome(taskQueueFamilyBloomFilterOutcomeRejected)
 	return false, temporal.NewApplicationError(
 		fmt.Sprintf("cannot add task queue %v since maximum number of task queues (%d) have been registered in deployment", args.GetTaskQueueName(), args.GetMaxTaskQueues()),
 		errMaxTaskQueuesInVersionType,
 	)
+}
+
+func (d *WorkflowRunner) cacheTaskQueueFamilySummaryFromError(version string, err error) {
+	applicationError, ok := errors.AsType[*temporal.ApplicationError](err)
+	if !ok || !applicationError.HasDetails() {
+		return
+	}
+
+	var details *deploymentspb.MaxTaskQueuesInVersionFailureDetails
+	if err := applicationError.Details(&details); err != nil {
+		d.logger.Error("could not decode max task queues failure details", "version", version, "error", err)
+		return
+	}
+	if details.GetTaskQueueFamilySummary() != nil {
+		if versionSummary := d.State.Versions[version]; versionSummary != nil {
+			versionSummary.TaskQueueFamilySummary = details.GetTaskQueueFamilySummary()
+		}
+	}
 }
 
 func (d *WorkflowRunner) recordTaskQueueFamilyBloomFilterOutcome(outcome string) {
@@ -1671,7 +1700,7 @@ func (d *WorkflowRunner) syncVersion(ctx workflow.Context, targetVersion string,
 			d.updateVersionSummary(sum)
 		} else {
 			//nolint:staticcheck // SA1019
-			d.updateVersionSummary(versionStateToSummary(res.GetVersionState(), false))
+			d.updateVersionSummary(versionStateToSummary(res.GetVersionState()))
 		}
 	} else if revisionNumber > 0 {
 		// Activity failed meaning the synchronous part of the sync request failed. we need to untrack the revision number.

@@ -153,13 +153,6 @@ message VersionLocalState {
 
   // Cached compute status, updated when WCI signals this version workflow.
   temporal.api.deployment.v1.ComputeStatus compute_status = 19;
-
-  // Active Current or Ramping v2 Version workflows do not publish task queue family Bloom filter snapshots.
-  // After a successful task queue registration changes their state, they continue as new into v3. The new run
-  // must publish a snapshot of this Bloom filter so that the Deployment workflow can learn about them and use it
-  // for validation. Note: this field, once set to true, is carried across every continues-as-new run of the
-  // version workflow. It only becomes false when the version workflow is deleted and is then later recreated.
-  bool task_queue_family_summary_signal_sent = 20;
 }
 
 // Data specific to a task queue, from the perspective of a worker deployment version.
@@ -247,8 +240,7 @@ message WorkerDeploymentVersionSummary {
   // Compute status for this version. Synced from the version workflow when WCI signals a status change.
   temporal.api.deployment.v1.ComputeStatus compute_status = 14;
 
-  // Snapshot of registered task queue families published by the Version workflow.
-  // It is refreshed periodically or after relevant state changes and may lag the Version workflow's exact state.
+  // Snapshot of registered task queue families returned by the Version workflow when the limit is reached.
   TaskQueueFamilySummary task_queue_family_summary = 15;
 }
 
@@ -646,4 +638,8 @@ message TaskQueueFamilySummary {
   int32 bloom_filter_hash_count = 3;
   // Bloom filter words containing the registered task queue family names.
   repeated int64 bloom_filter_words = 4;
+}
+
+message MaxTaskQueuesInVersionFailureDetails {
+  TaskQueueFamilySummary task_queue_family_summary = 1;
 }

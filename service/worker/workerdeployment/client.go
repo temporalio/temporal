@@ -2030,7 +2030,17 @@ func (d *ClientImpl) RegisterWorkerInVersion(
 
 	if failure := outcome.GetFailure(); failure.GetApplicationFailureInfo().GetType() == errMaxTaskQueuesInVersionType {
 		// translate to a non-retryable error
-		return temporal.NewNonRetryableApplicationError(failure.Message, errMaxTaskQueuesInVersionType, serviceerror.NewFailedPrecondition(failure.Message))
+		var details deploymentspb.MaxTaskQueuesInVersionFailureDetails
+		if err := sdk.PreferProtoDataConverter.FromPayloads(failure.GetApplicationFailureInfo().GetDetails(), &details); err != nil {
+			d.logger.Error("failed to decode max task queues failure details", tag.Error(err))
+			return temporal.NewNonRetryableApplicationError(failure.Message, errMaxTaskQueuesInVersionType, serviceerror.NewFailedPrecondition(failure.Message))
+		}
+		return temporal.NewNonRetryableApplicationError(
+			failure.Message,
+			errMaxTaskQueuesInVersionType,
+			serviceerror.NewFailedPrecondition(failure.Message),
+			&details,
+		)
 	} else if failure.GetApplicationFailureInfo().GetType() == errNoChangeType {
 		return nil
 	} else if failure != nil {

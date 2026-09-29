@@ -70,7 +70,135 @@ func TestBuildTaskQueueFamilySummary(t *testing.T) {
 	}
 }
 
-func TestVersionStateToSummaryTaskQueueFamilySummary(t *testing.T) {
+func TestMaxTaskQueuesInVersionErrorIncludesTaskQueueFamilySummary(t *testing.T) {
+	t.Parallel()
+
+	runner := &VersionWorkflowRunner{
+		WorkerDeploymentVersionWorkflowArgs: &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+			VersionState: &deploymentspb.VersionLocalState{
+				TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
+					"existing-queue": {},
+				},
+			},
+		},
+	}
+
+	err := runner.validateRegisterWorker(&deploymentspb.RegisterWorkerInVersionArgs{
+		TaskQueueName: "new-queue",
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		MaxTaskQueues: 1,
+	})
+
+	var applicationError *temporal.ApplicationError
+	require.ErrorAs(t, err, &applicationError)
+	require.Equal(t, errMaxTaskQueuesInVersionType, applicationError.Type())
+	var details *deploymentspb.MaxTaskQueuesInVersionFailureDetails
+	require.NoError(t, applicationError.Details(&details))
+	summary := details.GetTaskQueueFamilySummary()
+	require.Equal(t, int32(1), summary.GetCount())
+	require.True(t, taskQueueFamilyMayExist(summary, "existing-queue"))
+}
+
+func TestCacheTaskQueueFamilySummaryFromError(t *testing.T) {
+	t.Parallel()
+
+	version := "deployment.build-id"
+	summary := buildTaskQueueFamilySummary(map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
+		"existing-queue": {},
+	})
+	runner := &WorkflowRunner{
+		WorkerDeploymentWorkflowArgs: &deploymentspb.WorkerDeploymentWorkflowArgs{
+			State: &deploymentspb.WorkerDeploymentLocalState{
+				Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
+					version: {Version: version},
+				},
+			},
+		},
+	}
+	err := temporal.NewApplicationError(
+		"task queue limit reached",
+		errMaxTaskQueuesInVersionType,
+		&deploymentspb.MaxTaskQueuesInVersionFailureDetails{TaskQueueFamilySummary: summary},
+	)
+
+	runner.cacheTaskQueueFamilySummaryFromError(version, err)
+
+	require.Same(t, summary, runner.State.Versions[version].GetTaskQueueFamilySummary())
+}
+
+func TestUpdateVersionSummaryPreservesTaskQueueFamilySummary(t *testing.T) {
+	t.Parallel()
+
+	version := "deployment.build-id"
+	summary := buildTaskQueueFamilySummary(map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
+		"existing-queue": {},
+	})
+	runner := &WorkflowRunner{
+		WorkerDeploymentWorkflowArgs: &deploymentspb.WorkerDeploymentWorkflowArgs{
+			State: &deploymentspb.WorkerDeploymentLocalState{
+				Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
+					version: {
+						Version:                version,
+						TaskQueueFamilySummary: summary,
+					},
+				},
+			},
+		},
+	}
+
+	runner.updateVersionSummary(&deploymentspb.WorkerDeploymentVersionSummary{Version: version})
+
+	require.Same(t, summary, runner.State.Versions[version].GetTaskQueueFamilySummary())
+}
+
+func TestInvalidateTaskQueueFamilySummaryBelowLimit(t *testing.T) {
+	t.Parallel()
+
+	version := "deployment.build-id"
+	summary := buildTaskQueueFamilySummary(map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
+		"existing-queue": {},
+	})
+	testCases := []struct {
+		name          string
+		maxTaskQueues int32
+		wantSummary   bool
+	}{
+		{
+			name:          "same limit preserves summary",
+			maxTaskQueues: 1,
+			wantSummary:   true,
+		},
+		{
+			name:          "increased limit invalidates summary",
+			maxTaskQueues: 2,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			runner := &WorkflowRunner{
+				WorkerDeploymentWorkflowArgs: &deploymentspb.WorkerDeploymentWorkflowArgs{
+					State: &deploymentspb.WorkerDeploymentLocalState{
+						Versions: map[string]*deploymentspb.WorkerDeploymentVersionSummary{
+							version: {
+								Version:                version,
+								TaskQueueFamilySummary: summary,
+							},
+						},
+					},
+				},
+			}
+
+			runner.invalidateTaskQueueFamilySummaryBelowLimit(version, tc.maxTaskQueues)
+
+			require.Equal(t, tc.wantSummary, runner.State.Versions[version].GetTaskQueueFamilySummary() != nil)
+		})
+	}
+}
+
+func TestVersionStateToSummaryOmitsTaskQueueFamilySummary(t *testing.T) {
 	t.Parallel()
 
 	state := &deploymentspb.VersionLocalState{
@@ -83,37 +211,7 @@ func TestVersionStateToSummaryTaskQueueFamilySummary(t *testing.T) {
 		},
 	}
 
-	testCases := []struct {
-		name            string
-		workflowVersion DeploymentWorkflowVersion
-		wantSummary     bool
-	}{
-		{
-			name:            "v2 omits summary",
-			workflowVersion: VersionDataRevisionNumber,
-		},
-		{
-			name:            "v3 includes summary",
-			workflowVersion: TaskQueueFamilySummary,
-			wantSummary:     true,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			summary := versionStateToSummary(
-				state,
-				tc.workflowVersion >= TaskQueueFamilySummary,
-			).GetTaskQueueFamilySummary()
-			if !tc.wantSummary {
-				require.Nil(t, summary)
-				return
-			}
-			require.Equal(t, int32(1), summary.GetCount())
-		})
-	}
+	require.Nil(t, versionStateToSummary(state).GetTaskQueueFamilySummary())
 }
 
 func TestValidateRegisterWorkerTaskQueueFamilySummary(t *testing.T) {
@@ -129,49 +227,37 @@ func TestValidateRegisterWorkerTaskQueueFamilySummary(t *testing.T) {
 	})
 
 	testCases := []struct {
-		name            string
-		workflowVersion DeploymentWorkflowVersion
-		summary         *deploymentspb.TaskQueueFamilySummary
-		taskQueueName   string
-		maxTaskQueues   int32
-		wantLimitError  bool
-		wantBloomPass   bool
+		name           string
+		summary        *deploymentspb.TaskQueueFamilySummary
+		taskQueueName  string
+		maxTaskQueues  int32
+		wantLimitError bool
+		wantBloomPass  bool
 	}{
 		{
-			name:            "definite miss at limit",
-			workflowVersion: TaskQueueFamilySummary,
-			summary:         completeSummary,
-			taskQueueName:   "new-queue",
-			maxTaskQueues:   1,
-			wantLimitError:  true,
+			name:           "definite miss at limit",
+			summary:        completeSummary,
+			taskQueueName:  "new-queue",
+			maxTaskQueues:  1,
+			wantLimitError: true,
 		},
 		{
-			name:            "existing family at limit",
-			workflowVersion: TaskQueueFamilySummary,
-			summary:         completeSummary,
-			taskQueueName:   "existing-queue",
-			maxTaskQueues:   1,
-			wantBloomPass:   true,
+			name:          "existing family at limit",
+			summary:       completeSummary,
+			taskQueueName: "existing-queue",
+			maxTaskQueues: 1,
+			wantBloomPass: true,
 		},
 		{
-			name:            "below limit",
-			workflowVersion: TaskQueueFamilySummary,
-			summary:         completeSummary,
-			taskQueueName:   "new-queue",
-			maxTaskQueues:   2,
+			name:          "below limit",
+			summary:       completeSummary,
+			taskQueueName: "new-queue",
+			maxTaskQueues: 2,
 		},
 		{
-			name:            "missing summary fails open",
-			workflowVersion: TaskQueueFamilySummary,
-			taskQueueName:   "new-queue",
-			maxTaskQueues:   1,
-		},
-		{
-			name:            "old workflow version fails open",
-			workflowVersion: VersionDataRevisionNumber,
-			summary:         completeSummary,
-			taskQueueName:   "new-queue",
-			maxTaskQueues:   1,
+			name:          "missing summary fails open",
+			taskQueueName: "new-queue",
+			maxTaskQueues: 1,
 		},
 	}
 
@@ -187,8 +273,7 @@ func TestValidateRegisterWorkerTaskQueueFamilySummary(t *testing.T) {
 						},
 					},
 				},
-				metrics:         sdkclient.MetricsNopHandler,
-				workflowVersion: tc.workflowVersion,
+				metrics: sdkclient.MetricsNopHandler,
 			}
 			bloomFilterPassed, err := runner.validateRegisterWorkerWithBloomFilterResult(&deploymentspb.RegisterWorkerInWorkerDeploymentArgs{
 				TaskQueueName: tc.taskQueueName,

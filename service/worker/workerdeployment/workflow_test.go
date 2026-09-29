@@ -34,7 +34,7 @@ type WorkerDeploymentSuite struct {
 
 func TestWorkerDeploymentSuite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: TaskQueueFamilySummary})
+	suite.Run(t, &WorkerDeploymentSuite{workflowVersion: VersionDataRevisionNumber})
 }
 
 func (s *WorkerDeploymentSuite) SetupTest() {

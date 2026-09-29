@@ -320,7 +320,6 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionLimits() {
 
 func (s *WorkerDeploymentSuite) TestDeploymentVersionTaskQueueFamilyLimitAllowsNewType() {
 	env := s.newTestEnv(
-		testcore.WithDynamicConfig(dynamicconfig.MatchingDeploymentWorkflowVersion, int(workerdeployment.TaskQueueFamilySummary)),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion, 1),
 	)
 	tv := env.Tv()
@@ -329,6 +328,28 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionTaskQueueFamilyLimitAllowsN
 	s.ensureCreateVersionWithExpectedTaskQueues(env, tv, 1)
 
 	deploymentWorkflowID := workerdeployment.GenerateDeploymentWorkflowID(tv.DeploymentSeries())
+	metricCapture := env.StartNamespaceMetricCapture()
+	metricOutcomeCount := func(outcome string) int {
+		count := 0
+		for _, recording := range metricCapture.Metric(metrics.WorkerDeploymentTaskQueueFamilyBloomFilterOutcome.Name()) {
+			if recording.Tags["outcome"] == outcome {
+				count++
+			}
+		}
+		return count
+	}
+
+	expectedError := func(taskQueue *testvars.TestVars) string {
+		return fmt.Sprintf(
+			"cannot add task queue %v since maximum number of task queues (1) have been registered in deployment",
+			taskQueue.TaskQueue().GetName(),
+		)
+	}
+
+	// The first over-limit registration reaches the Version workflow and populates the lazy summary cache.
+	firstRejectedTaskQueue := tv.WithTaskQueueNumber(2)
+	s.pollFromDeploymentExpectFail(env, firstRejectedTaskQueue, expectedError(firstRejectedTaskQueue))
+
 	var taskQueueFamilySummary *deploymentspb.TaskQueueFamilySummary
 	s.Await(func(s *WorkerDeploymentSuite) {
 		queryResult, err := env.SdkClient().QueryWorkflow(
@@ -362,17 +383,6 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionTaskQueueFamilyLimitAllowsN
 		s.NotZero(taskQueueFamilySummary.GetBloomFilterHashCount())
 		s.NotEmpty(taskQueueFamilySummary.GetBloomFilterWords())
 	}, 10*time.Second, 200*time.Millisecond)
-
-	metricCapture := env.StartNamespaceMetricCapture()
-	metricOutcomeCount := func(outcome string) int {
-		count := 0
-		for _, recording := range metricCapture.Metric(metrics.WorkerDeploymentTaskQueueFamilyBloomFilterOutcome.Name()) {
-			if recording.Tags["outcome"] == outcome {
-				count++
-			}
-		}
-		return count
-	}
 
 	go pollActivityFromDeployment(s.Context(), env.TestEnv, tv)
 	s.Await(func(s *WorkerDeploymentSuite) {
@@ -429,12 +439,6 @@ func (s *WorkerDeploymentSuite) TestDeploymentVersionTaskQueueFamilyLimitAllowsN
 	}
 	firstRelevantRunID := currentDeploymentRunID()
 
-	expectedError := func(taskQueue *testvars.TestVars) string {
-		return fmt.Sprintf(
-			"cannot add task queue %v since maximum number of task queues (1) have been registered in deployment",
-			taskQueue.TaskQueue().GetName(),
-		)
-	}
 	s.pollFromDeploymentExpectFail(env, falsePositiveTaskQueue, expectedError(falsePositiveTaskQueue))
 	s.Await(func(s *WorkerDeploymentSuite) {
 		s.Equal(1, metricOutcomeCount("false_positive"))
