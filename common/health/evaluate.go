@@ -14,8 +14,7 @@ type SignalReader interface {
 	ErrorRatioByGroup(groupName string) (float64, bool)
 }
 
-// Evaluate returns the check results, state, and unenforced state
-func Evaluate(reader SignalReader, settings Settings, label string) ([]*healthspb.HealthCheck, enumspb.HealthState, enumspb.HealthState) {
+func Evaluate(reader SignalReader, settings Settings, label string) []*healthspb.HealthCheck {
 	var checks []*healthspb.HealthCheck
 
 	// //////////////////
@@ -84,10 +83,11 @@ func Evaluate(reader SignalReader, settings Settings, label string) ([]*healthsp
 		}
 	}
 
-	// //////////////////
-	// state
-	// //////////////////
+	return checks
+}
 
+// RollupState returns the state and the unenforced state
+func RollupState(checks []*healthspb.HealthCheck) (enumspb.HealthState, enumspb.HealthState) {
 	state := enumspb.HEALTH_STATE_SERVING
 	unenforcedState := enumspb.HEALTH_STATE_SERVING
 
@@ -104,7 +104,7 @@ func Evaluate(reader SignalReader, settings Settings, label string) ([]*healthsp
 		}
 	}
 
-	return checks, state, unenforcedState
+	return state, unenforcedState
 }
 
 func errorIfOverThreshold(checkType string, value float64, threshold float64, enforced bool) *healthspb.HealthCheck {
