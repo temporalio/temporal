@@ -2835,7 +2835,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled
 	}
 	logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
 		Level:   testlogger.Error,
-		Message: "Nexus StartOperation request failed",
+		Message: "Nexus request failed",
 		Tags: map[string]any{
 			"operation":                          "StartOperation",
 			"wf-namespace":                       env.Namespace().String(),
