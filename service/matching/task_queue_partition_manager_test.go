@@ -2441,6 +2441,20 @@ func TestUnloadIfNamespaceStateChanged(t *testing.T) {
 	}
 }
 
+func TestNamespaceFailoverSkipsReloadAfterConcurrentUnload(t *testing.T) {
+	env := newFailoverTestEnv(t, defaultTestConfig(), cluster.TestCurrentClusterName)
+	partition := newRootPartition(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	pm, _, err := env.engine.getTaskQueuePartitionManager(context.Background(), partition, true, loadCausePoll)
+	require.NoError(t, err)
+
+	env.engine.unloadTaskQueuePartition(pm, unloadCauseIdle)
+	env.current.Store(failoverTestNamespace(cluster.TestAlternativeClusterName))
+	//revive:disable-next-line:unchecked-type-assertion
+	require.True(t, pm.(*taskQueuePartitionManagerImpl).unloadIfNamespaceStateChanged())
+	require.Zero(t, env.rootReloads())
+	require.Empty(t, env.engine.getTaskQueuePartitions(10))
+}
+
 func TestNamespaceFailoverUnloadsWithBacklogMetricsDisabled(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		config := defaultTestConfig()
@@ -2480,7 +2494,7 @@ func TestNamespaceFailoverUnloadDuringInitialization(t *testing.T) {
 		_, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCausePoll)
 		loadErr <- err
 	}()
-	<-blocking.entered
+	await.Rcv(t, blocking.entered)
 	pms := e.getTaskQueuePartitions(10)
 	require.Len(t, pms, 1)
 
@@ -2491,13 +2505,8 @@ func TestNamespaceFailoverUnloadDuringInitialization(t *testing.T) {
 		//revive:disable-next-line:unchecked-type-assertion
 		unloaded <- pms[0].(*taskQueuePartitionManagerImpl).unloadIfNamespaceStateChanged()
 	}()
-	select {
-	case ok := <-unloaded:
-		require.True(t, ok)
-	case <-time.After(5 * time.Second):
-		require.FailNow(t, "unload blocked on partition initialization")
-	}
-	require.Error(t, <-loadErr)
+	require.True(t, await.Rcv(t, unloaded))
+	require.Error(t, await.Rcv(t, loadErr))
 	require.Empty(t, e.getTaskQueuePartitions(10))
 
 	reloaded, created, err := e.getTaskQueuePartitionManager(context.Background(), partition, true, loadCausePoll)
