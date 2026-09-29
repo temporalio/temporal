@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -72,6 +73,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -2192,7 +2194,8 @@ func (s *adminHandlerSuite) TestMigrateScheduleToWorkflowExistingWorkflow() {
 		},
 	}).Return(&historyservice.DescribeWorkflowExecutionResponse{
 		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
-			Type: &commonpb.WorkflowType{Name: legacyscheduler.WorkflowType},
+			Type:   &commonpb.WorkflowType{Name: legacyscheduler.WorkflowType},
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		},
 	}, nil)
 
@@ -2232,7 +2235,9 @@ func (s *adminHandlerSuite) TestMigrateScheduleToWorkflowBlockedByWorkflowSentin
 		},
 	}).Return(&historyservice.DescribeWorkflowExecutionResponse{
 		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
-			Type: &commonpb.WorkflowType{Name: dummy.DummyWFTypeName},
+			Type:      &commonpb.WorkflowType{Name: dummy.DummyWFTypeName},
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			StartTime: timestamppb.New(time.Now()),
 		},
 	}, nil)
 
@@ -2254,6 +2259,51 @@ func (s *adminHandlerSuite) TestMigrateScheduleToWorkflowBlockedByWorkflowSentin
 	s.ErrorIs(err, chasmscheduler.ErrSentinelBlocked)
 	var unavailableErr *serviceerror.Unavailable
 	s.ErrorAs(err, &unavailableErr)
+}
+
+// A dummy sentinel completes after its idle window rather than disappearing, and stays
+// describable for the namespace's whole retention period. Blocking on it would stall rollback
+// for days instead of the minutes the sentinel is meant to reserve, so a closed sentinel must
+// not block.
+func (s *adminHandlerSuite) TestMigrateScheduleToWorkflowClosedSentinelDoesNotBlock() {
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: s.namespaceID.String(),
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.namespace.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: legacyscheduler.WorkflowIDPrefix + "test-schedule",
+			},
+		},
+	}).Return(&historyservice.DescribeWorkflowExecutionResponse{
+		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+			Type:      &commonpb.WorkflowType{Name: dummy.DummyWFTypeName},
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			StartTime: timestamppb.New(time.Now().Add(-chasmscheduler.SentinelIdleTime)),
+			CloseTime: timestamppb.New(time.Now()),
+		},
+	}, nil)
+
+	var capturedReq *schedulerpb.MigrateToWorkflowRequest
+	fake := &fakeSchedulerClient{
+		migrateToWorkflowFn: func(_ context.Context, req *schedulerpb.MigrateToWorkflowRequest) (*schedulerpb.MigrateToWorkflowResponse, error) {
+			capturedReq = req
+			return &schedulerpb.MigrateToWorkflowResponse{}, nil
+		},
+	}
+	s.handler.schedulerClient = fake
+
+	resp, err := s.handler.MigrateSchedule(context.Background(), &adminservice.MigrateScheduleRequest{
+		Namespace:  s.namespace.String(),
+		ScheduleId: "test-schedule",
+		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
+		Identity:   "test-identity",
+		RequestId:  "test-request-id",
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Require().NotNil(capturedReq)
+	s.Equal("test-schedule", capturedReq.ScheduleId)
 }
 
 func (s *adminHandlerSuite) TestMigrateScheduleToWorkflowError() {
