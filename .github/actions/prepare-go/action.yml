@@ -38,15 +38,17 @@ runs:
       shell: bash
       run: |
         version="$(
-          awk '
-            $1 == "go" { go_version = $2 }
-            $1 == "toolchain" && $2 != "default" {
-              toolchain_version = $2
-              sub(/^go/, "", toolchain_version)
+          awk -v gotoolchain="${GOTOOLCHAIN:-}" '
+            gotoolchain != "local" && match($0, /^toolchain go1\.[0-9]+(\.[0-9]+|rc[0-9]+)?/) {
+              print substr($0, 13, RLENGTH - 12)
+              found = 1
+              exit
+            }
+            go_version == "" && match($0, /^go [0-9]+(\.[0-9]+)*/) {
+              go_version = substr($0, 4, RLENGTH - 3)
             }
             END {
-              if (toolchain_version != "") print toolchain_version
-              else print go_version
+              if (!found) print go_version
             }
           ' go.mod
         )"
