@@ -1,12 +1,16 @@
 package callback
 
 import (
+	"errors"
+	"fmt"
 	"time"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/backoff"
 	commoncallbacks "go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 )
 
 var MaxPerExecution = dynamicconfig.NewNamespaceIntSetting(
@@ -86,13 +90,35 @@ callback source namespace. Internal callbacks for all other archetypes must targ
 archetype here as an escape hatch; cross-namespace internal callbacks are not expected.`,
 )
 
-func (c *Config) internalCallbackRequiresSameNamespace(archetypeID chasm.ArchetypeID) bool {
-	for _, archetype := range c.InternalCallbackCrossNamespaceArchetypes() {
-		if chasm.GenerateTypeID(archetype) == archetypeID {
-			return false
+var (
+	ErrInvalidInternalCallbackRef        = errors.New("invalid CHASM ComponentRef")
+	ErrInternalCallbackNamespaceMismatch = errors.New("internal callback namespace mismatch")
+)
+
+// ValidateInternalCallbackRef checks that a temporal://internal callback's component ref is well formed and targets
+// the callback's source namespace, unless its archetype is in crossNamespaceArchetypes. The token is caller supplied,
+// so this must run on every internal delivery path (CHASM and HSM callbacks) before calling History.
+func ValidateInternalCallbackRef(
+	serializedRef []byte,
+	sourceNamespaceID namespace.ID,
+	crossNamespaceArchetypes []string,
+) error {
+	ref := &persistencespb.ChasmComponentRef{}
+	if err := ref.Unmarshal(serializedRef); err != nil {
+		return fmt.Errorf("%w: %w", ErrInvalidInternalCallbackRef, err)
+	}
+	if ref.GetNamespaceId() == "" || ref.GetBusinessId() == "" {
+		return ErrInvalidInternalCallbackRef
+	}
+	if ref.GetNamespaceId() == sourceNamespaceID.String() {
+		return nil
+	}
+	for _, archetype := range crossNamespaceArchetypes {
+		if chasm.GenerateTypeID(archetype) == ref.GetArchetypeId() {
+			return nil
 		}
 	}
-	return true
+	return ErrInternalCallbackNamespaceMismatch
 }
 
 var EncodeInternalTokenWithEnvelope = dynamicconfig.NewNamespaceBoolSetting(

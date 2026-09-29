@@ -11,6 +11,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
+	chasmcallbacks "go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -59,6 +60,10 @@ func (c chasmInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 	// Older tokens don't carry a request ID; fall back to the one on the callback state machine.
 	if requestID == "" {
 		requestID = c.requestID
+	}
+
+	if err := chasmcallbacks.ValidateInternalCallbackRef(ref, ns.ID(), e.Config.InternalCallbackCrossNamespaceArchetypes()); err != nil {
+		return invocationResultFail{logInternalError(e.Logger, "invalid internal callback", err)}
 	}
 
 	request, err := c.getHistoryRequest(ref, requestID)

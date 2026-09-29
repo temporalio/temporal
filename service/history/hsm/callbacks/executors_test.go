@@ -330,8 +330,36 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 	encodedRef := base64.RawURLEncoding.EncodeToString(serializedRef)
 	dummyTime := time.Now().UTC()
 
+	encodeRef := func(namespaceID, businessID string, archetypeID chasm.ArchetypeID) string {
+		b, err := (&persistencespb.ChasmComponentRef{
+			NamespaceId: namespaceID,
+			BusinessId:  businessID,
+			RunId:       "run-id",
+			ArchetypeId: archetypeID,
+		}).Marshal()
+		require.NoError(t, err)
+		return base64.RawURLEncoding.EncodeToString(b)
+	}
+	const crossNamespaceExemptArchetype = "test.crossNamespaceExempt"
+	crossNamespaceSchedulerRef, err := (&persistencespb.ChasmComponentRef{
+		NamespaceId: "other-namespace-id",
+		BusinessId:  "business-id",
+		ArchetypeId: chasm.SchedulerArchetypeID,
+	}).Marshal()
+	require.NoError(t, err)
+	crossNamespaceSchedulerEnvelope, err := chasm.GenerateNexusCallback(crossNamespaceSchedulerRef, "request-id", true)
+	require.NoError(t, err)
+	encodedCrossNamespaceSchedulerEnvelope := nexus.Header(crossNamespaceSchedulerEnvelope.GetNexus().GetHeader()).Get(commonnexus.CallbackTokenHeader)
+	require.NotEmpty(t, encodedCrossNamespaceSchedulerEnvelope)
+
 	createPayload := func(data []byte) *commonpb.Payload {
 		return &commonpb.Payload{Data: data}
+	}
+	noRPC := func(t *testing.T, ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+		return historyservicemock.NewMockHistoryServiceClient(ctrl)
+	}
+	assertFailed := func(t *testing.T, cb callbacks.Callback) {
+		require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
 	}
 
 	cases := []struct {
@@ -474,6 +502,47 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 				require.Equal(t, enumsspb.CALLBACK_STATE_FAILED, cb.State())
 			},
 		},
+		{
+			name:                 "invalid-component-ref",
+			setupHistoryClient:   noRPC,
+			completion:           nexusrpc.CompleteOperationOptions{Result: createPayload([]byte("result-data"))},
+			headerValue:          encodeRef("namespace-id", "", 1234),
+			expectsInternalError: true,
+			expectedLogMessage:   "invalid internal callback",
+			assertOutcome:        assertFailed,
+		},
+		{
+			name:                 "cross-namespace-legacy-token",
+			setupHistoryClient:   noRPC,
+			completion:           nexusrpc.CompleteOperationOptions{Result: createPayload([]byte("result-data"))},
+			headerValue:          encodeRef("other-namespace-id", "business-id", chasm.SchedulerArchetypeID),
+			expectsInternalError: true,
+			expectedLogMessage:   "invalid internal callback",
+			assertOutcome:        assertFailed,
+		},
+		{
+			name:                 "cross-namespace-enveloped-token",
+			setupHistoryClient:   noRPC,
+			completion:           nexusrpc.CompleteOperationOptions{Result: createPayload([]byte("result-data"))},
+			headerValue:          encodedCrossNamespaceSchedulerEnvelope,
+			expectsInternalError: true,
+			expectedLogMessage:   "invalid internal callback",
+			assertOutcome:        assertFailed,
+		},
+		{
+			name: "cross-namespace-exempt-archetype",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
+				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
+				client.EXPECT().CompleteNexusOperationChasm(gomock.Any(), gomock.Any()).
+					Return(&historyservice.CompleteNexusOperationChasmResponse{}, nil)
+				return client
+			},
+			completion:  nexusrpc.CompleteOperationOptions{Result: createPayload([]byte("result-data"))},
+			headerValue: encodeRef("other-namespace-id", "business-id", chasm.GenerateTypeID(crossNamespaceExemptArchetype)),
+			assertOutcome: func(t *testing.T, cb callbacks.Callback) {
+				require.Equal(t, enumsspb.CALLBACK_STATE_SUCCEEDED, cb.State())
+			},
+		},
 	}
 
 	for _, tc := range cases {
@@ -537,6 +606,9 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
+					},
+					InternalCallbackCrossNamespaceArchetypes: func() []string {
+						return []string{crossNamespaceExemptArchetype}
 					},
 				},
 			}))

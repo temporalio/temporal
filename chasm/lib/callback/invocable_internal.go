@@ -2,6 +2,7 @@ package callback
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -9,7 +10,6 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
@@ -92,14 +92,12 @@ func (c invocableInternal) Invoke(
 		requestID = c.requestID
 	}
 
-	ref := &persistencespb.ChasmComponentRef{}
-	if err := ref.Unmarshal(decodedRef); err != nil || ref.GetNamespaceId() == "" || ref.GetBusinessId() == "" {
+	if err := ValidateInternalCallbackRef(decodedRef, ns.ID(), h.config.InternalCallbackCrossNamespaceArchetypes()); err != nil {
 		outcome = outcomeInvalidRef
-		return invocationResultFail{logInternalError(h.logger, "invalid CHASM ComponentRef", err)}
-	}
-	if h.config.internalCallbackRequiresSameNamespace(ref.GetArchetypeId()) && ref.GetNamespaceId() != ns.ID().String() {
-		outcome = outcomeNamespaceMismatch
-		return invocationResultFail{logInternalError(h.logger, "internal callback namespace mismatch", nil)}
+		if errors.Is(err, ErrInternalCallbackNamespaceMismatch) {
+			outcome = outcomeNamespaceMismatch
+		}
+		return invocationResultFail{logInternalError(h.logger, "invalid internal callback", err)}
 	}
 
 	request, err := c.getHistoryRequest(decodedRef, requestID)

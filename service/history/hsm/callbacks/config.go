@@ -34,9 +34,10 @@ var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 )
 
 type Config struct {
-	RequestTimeout      dynamicconfig.DurationPropertyFnWithDestinationFilter
-	RetryPolicy         dynamicconfig.TypedPropertyFn[backoff.RetryPolicy]
-	InspectSourceHeader dynamicconfig.BoolPropertyFn
+	RequestTimeout                           dynamicconfig.DurationPropertyFnWithDestinationFilter
+	RetryPolicy                              dynamicconfig.TypedPropertyFn[backoff.RetryPolicy]
+	InspectSourceHeader                      dynamicconfig.BoolPropertyFn
+	InternalCallbackCrossNamespaceArchetypes dynamicconfig.TypedPropertyFn[[]string]
 }
 
 func ConfigProvider(dc *dynamicconfig.Collection) *Config {
@@ -51,7 +52,8 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 				backoff.NoInterval,
 			)
 		},
-		InspectSourceHeader: chasmcallbacks.InspectSourceHeader.Get(dc),
+		InspectSourceHeader:                      chasmcallbacks.InspectSourceHeader.Get(dc),
+		InternalCallbackCrossNamespaceArchetypes: chasmcallbacks.InternalCallbackCrossNamespaceArchetypes.Get(dc),
 	}
 }
 
