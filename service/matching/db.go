@@ -782,8 +782,13 @@ func (db *taskQueueDB) CompleteFairTasksLessThan(
 		ExclusiveMaxTaskID: exclusiveMaxLevel.id,
 		Subqueue:           int(subqueue),
 		Limit:              limit,
+		// We might have lost ownership without knowing it. A new owner assigns passes
+		// starting from the ack level it loaded, which may be below our in-memory ack level,
+		// so an unconditional delete could delete the new owner's tasks.
+		ConditionRangeID: db.RangeID(),
 	})
-	if err != nil {
+	// ConditionFailedError means we lost ownership: not a store failure, caller will unload.
+	if _, lostOwnership := errors.AsType[*persistence.ConditionFailedError](err); err != nil && !lostOwnership {
 		db.logger.Error("Persistent store operation failure",
 			tag.StoreOperationCompleteTasksLessThan,
 			tag.Error(err),

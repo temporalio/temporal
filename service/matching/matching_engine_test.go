@@ -5715,7 +5715,7 @@ func (m *testTaskManager) CompleteTasksLessThan(
 ) (int, error) {
 	if m.fairness && request.ExclusiveMaxPass < 1 {
 		return 0, serviceerror.NewInternal("invalid CompleteTasksLessThan request on fair queue")
-	} else if !m.fairness && request.ExclusiveMaxPass != 0 {
+	} else if !m.fairness && (request.ExclusiveMaxPass != 0 || request.ConditionRangeID != 0) {
 		return 0, serviceerror.NewInternal("invalid CompleteTasksLessThan request on queue")
 	}
 
@@ -5725,6 +5725,12 @@ func (m *testTaskManager) CompleteTasksLessThan(
 	tlm := m.getQueueData(request.TaskQueueName, request.NamespaceID, request.TaskType)
 	tlm.Lock()
 	defer tlm.Unlock()
+	if request.ConditionRangeID != 0 && tlm.rangeID != request.ConditionRangeID {
+		return 0, &persistence.ConditionFailedError{
+			Msg: fmt.Sprintf("CompleteTasksLessThan failed, range id mismatch. rangeID: %v, db rangeID: %v",
+				request.ConditionRangeID, tlm.rangeID),
+		}
+	}
 	keys := tlm.tasks.Keys()
 	for _, key := range keys {
 		level := key.(fairLevel)
