@@ -1482,11 +1482,8 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 
 	// Set a short long poll expiration so that we don't have to wait too long for 0 throttling cases
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(2 * time.Second)
-	s.matchingEngine.config.MinTaskThrottlingBurstSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(0)
 	s.matchingEngine.config.RangeSize = 30 // override to low number for the test
 
-	// Overriding the dynamic config so that the rate-limiter has a refresh rate of 0. By default, the rate-limiter has a refresh rate of 1 minute which is too long for this test.
-	s.matchingEngine.config.RateLimiterRefreshInterval = 0
 	s.matchingEngine.config.AdminNamespaceToPartitionDispatchRate = dynamicconfig.GetFloatPropertyFnFilteredByNamespace(25000)
 	s.matchingEngine.config.AdminNamespaceTaskqueueToPartitionDispatchRate = dynamicconfig.GetFloatPropertyFnFilteredByTaskQueue(25000)
 
@@ -1662,12 +1659,8 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 
 	// Set a short long poll expiration so that the pollers don't wait too long for tasks
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(5 * time.Second)
-	s.matchingEngine.config.MinTaskThrottlingBurstSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(0)
 	// Disable deployment versions since a nil DeploymentClient is used in unit tests
 	s.matchingEngine.config.EnableDeploymentVersions = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
-
-	// Overriding the dynamic config so that the rate-limiter has a refresh rate of 0. By default, the rate-limiter has a refresh rate of 1 minute which is too long for this test.
-	s.matchingEngine.config.RateLimiterRefreshInterval = 0
 
 	tl := "makeToast"
 	dbq := newUnversionedRootQueueKey(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
@@ -1868,7 +1861,6 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 ) int64 {
 	scope := tally.NewTestScope("test", nil)
 	s.matchingEngine.metricsHandler = metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(metrics.ServiceNameTag(primitives.MatchingService))
-	s.matchingEngine.config.MinTaskThrottlingBurstSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(0)
 
 	runID := uuid.NewString()
 	workflowID := "workflow1"

@@ -1280,11 +1280,6 @@ If value less or equal to 0, will fall back to MatchingRPS`,
 Fields: Enabled, RefreshInterval, LatencyThreshold, ErrorThreshold, RateBackoffStepSize, RateIncreaseStepSize, RateMultiMin, RateMultiMax.
 See DynamicRateLimitingParams comments for more details.`,
 	)
-	MatchingMinTaskThrottlingBurstSize = NewTaskQueueIntSetting(
-		"matching.minTaskThrottlingBurstSize",
-		1,
-		`MatchingMinTaskThrottlingBurstSize is the minimum burst size for task queue throttling`,
-	)
 	MatchingGetTasksBatchSize = NewTaskQueueIntSetting(
 		"matching.getTasksBatchSize",
 		1000,

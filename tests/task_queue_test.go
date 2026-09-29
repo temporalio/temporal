@@ -262,7 +262,7 @@ func (s *TaskQueueSuite) configureRateLimitAndLaunchWorkflows(
 
 // TestTaskQueueAPIRateLimitOverridesWorkerLimit tests that the API rate limit overrides the worker rate limit.
 // It sets the API rate limit on a task queue to 5 RPS and then launches 25 activities.
-// Burst = 5 i.e max(int(math.Ceil(effectiveRPSPartitionWise)), r.config.MinTaskThrottlingBurstSize())
+// Burst = 5 i.e int(math.Ceil(effectiveRPSPartitionWise)))
 // The expected time for all activities to complete is ~ 4 seconds ((25 - 5)/5) +/- 1 second buffer.
 // The first five activities should run immediately, and the rest should be throttled to 5 RPS.
 // The test verifies that the total time taken for all activities to complete is within the expected range
