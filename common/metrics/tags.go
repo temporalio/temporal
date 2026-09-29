@@ -302,6 +302,15 @@ func ChasmTaskTypeTag(value string) Tag {
 	return Tag{Key: ChasmTaskTypeTagName, Value: value}
 }
 
+// OutboundTaskGroupTag tags a metric with an outbound queue task group. Task groups are code-defined task
+// types, so the value is bounded.
+func OutboundTaskGroupTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: OutboundTaskGroupTagName, Value: value}
+}
+
 func PartitionTag(partition string) Tag {
 	return Tag{Key: PartitionTagName, Value: partition}
 }

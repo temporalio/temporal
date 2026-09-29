@@ -143,7 +143,8 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 								Task: queues.NewCircuitBreakerExecutable(
 									e,
 									params.CircuitBreakerPool.Get(key),
-									taggedMetricsHandler,
+									// Nexus and callback tasks can share a destination; the task group tells them apart.
+									taggedMetricsHandler.WithTags(metrics.OutboundTaskGroupTag(key.TaskGroup)),
 								),
 							},
 							rateLimiterPool.Get(key),
