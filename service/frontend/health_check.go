@@ -3,7 +3,6 @@ package frontend
 import (
 	"context"
 	"fmt"
-	"math"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	healthspb "go.temporal.io/server/api/health/v1"
@@ -27,12 +26,11 @@ type (
 	}
 
 	healthCheckerImpl struct {
-		serviceName                   primitives.ServiceName
-		membershipMonitor             membership.Monitor
-		hostFailurePercentage         dynamicconfig.FloatPropertyFn
-		hostDeclinedServingProportion dynamicconfig.FloatPropertyFn
-		healthCheckFn                 func(ctx context.Context, hostAddress string) (*historyservice.DeepHealthCheckResponse, error)
-		logger                        log.Logger
+		historyServiceName    primitives.ServiceName
+		membershipMonitor     membership.Monitor
+		hostFailurePercentage dynamicconfig.FloatPropertyFn
+		healthCheckFn         func(ctx context.Context, hostAddress string) (*historyservice.DeepHealthCheckResponse, error)
+		logger                log.Logger
 	}
 
 	hostResult struct {
@@ -42,30 +40,28 @@ type (
 )
 
 func NewHealthChecker(
-	serviceName primitives.ServiceName,
+	historyServiceName primitives.ServiceName,
 	membershipMonitor membership.Monitor,
 	hostFailurePercentage dynamicconfig.FloatPropertyFn,
-	hostDeclinedServingProportion dynamicconfig.FloatPropertyFn,
 	healthCheckFn func(ctx context.Context, hostAddress string) (*historyservice.DeepHealthCheckResponse, error),
 	logger log.Logger,
 ) HealthChecker {
 	return &healthCheckerImpl{
-		serviceName:                   serviceName,
-		membershipMonitor:             membershipMonitor,
-		hostFailurePercentage:         hostFailurePercentage,
-		hostDeclinedServingProportion: hostDeclinedServingProportion,
-		healthCheckFn:                 healthCheckFn,
-		logger:                        logger,
+		historyServiceName:    historyServiceName,
+		membershipMonitor:     membershipMonitor,
+		hostFailurePercentage: hostFailurePercentage,
+		healthCheckFn:         healthCheckFn,
+		logger:                logger,
 	}
 }
 
 func (h *healthCheckerImpl) Check(ctx context.Context) (HealthCheckResult, error) {
-	resolver, err := h.membershipMonitor.GetResolver(h.serviceName)
+	resolver, err := h.membershipMonitor.GetResolver(h.historyServiceName)
 	if err != nil {
 		return HealthCheckResult{
 			State: enumsspb.HEALTH_STATE_INTERNAL_ERROR,
 			ServiceDetail: &healthspb.ServiceHealthDetail{
-				Service: string(h.serviceName),
+				Service: string(h.historyServiceName),
 				State:   enumsspb.HEALTH_STATE_INTERNAL_ERROR,
 				Message: fmt.Sprintf("failed to get membership resolver: %v", err),
 			},
@@ -77,9 +73,10 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (HealthCheckResult, error
 		return HealthCheckResult{
 			State: enumsspb.HEALTH_STATE_NOT_SERVING,
 			ServiceDetail: &healthspb.ServiceHealthDetail{
-				Service: string(h.serviceName),
-				State:   enumsspb.HEALTH_STATE_NOT_SERVING,
-				Message: "no available hosts in membership",
+				Service:         string(h.historyServiceName),
+				State:           enumsspb.HEALTH_STATE_NOT_SERVING,
+				UnenforcedState: enumsspb.HEALTH_STATE_NOT_SERVING,
+				Message:         "no available hosts in membership",
 			},
 		}, nil
 	}
@@ -90,12 +87,14 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (HealthCheckResult, error
 			resp, err := h.checkHost(ctx, hostAddress)
 			if err != nil {
 				resp = &historyservice.DeepHealthCheckResponse{
-					State: enumsspb.HEALTH_STATE_NOT_SERVING,
+					State:           enumsspb.HEALTH_STATE_NOT_SERVING,
+					UnenforcedState: enumsspb.HEALTH_STATE_NOT_SERVING,
 					Checks: []*healthspb.HealthCheck{
 						{
 							CheckType: health.CheckTypeHostAvailability,
 							State:     enumsspb.HEALTH_STATE_NOT_SERVING,
 							Message:   fmt.Sprintf("failed to reach host for health check: %v", err),
+							Enforced:  true,
 						},
 					},
 				}
@@ -104,65 +103,32 @@ func (h *healthCheckerImpl) Check(ctx context.Context) (HealthCheckResult, error
 		}(host.GetAddress())
 	}
 
-	var failedHostCount float64
-	var hostDeclinedServingCount float64
 	var hostDetails []*healthspb.HostHealthDetail
-	var exampleFailedHost *healthspb.HostHealthDetail
+
 	for range hosts {
 		result := <-receiveCh
-		state := result.response.GetState()
 
 		detail := &healthspb.HostHealthDetail{
-			Address: result.address,
-			State:   state,
-			Checks:  result.response.GetChecks(),
+			Address:         result.address,
+			State:           result.response.GetState(),
+			Checks:          result.response.GetChecks(),
+			UnenforcedState: result.response.GetUnenforcedState(),
 		}
-		hostDetails = append(hostDetails, detail)
 
-		switch state {
-		case enumsspb.HEALTH_STATE_SERVING:
-			// Do nothing.
-		case enumsspb.HEALTH_STATE_DECLINED_SERVING:
-			hostDeclinedServingCount++
-		default:
-			// NOT_SERVING, UNSPECIFIED, INTERNAL_ERROR, or any unknown state.
-			failedHostCount++
-			if exampleFailedHost == nil {
-				exampleFailedHost = detail
-			}
-		}
+		hostDetails = append(hostDetails, detail)
 	}
+
 	close(receiveCh)
 
-	// Make sure that at lease 2 hosts must be not ready to trigger this check.
-	proportionOfDeclinedServiceHosts := ensureMinimumProportionOfHosts(h.hostDeclinedServingProportion(), len(hosts))
-
-	var overallState enumsspb.HealthState
-	hostDeclinedServingProportion := hostDeclinedServingCount / float64(len(hosts))
-	if hostDeclinedServingProportion > proportionOfDeclinedServiceHosts {
-		h.logger.Warn("health check exceeded host declined serving proportion threshold", tag.Float64("host declined serving proportion threshold", proportionOfDeclinedServiceHosts))
-		overallState = enumsspb.HEALTH_STATE_DECLINED_SERVING
-	} else {
-		failedHostCountProportion := failedHostCount / float64(len(hosts))
-		if failedHostCountProportion+hostDeclinedServingProportion > h.hostFailurePercentage() {
-			h.logger.Warn("health check exceeded host failure percentage threshold",
-				tag.Float64("host failure percentage threshold", h.hostFailurePercentage()),
-				tag.Float64("host failure percentage", failedHostCountProportion),
-				tag.Float64("host declined serving percentage", hostDeclinedServingProportion),
-				tag.NewStringTag("example_failed_host", failedHostSummary(exampleFailedHost)),
-			)
-			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
-		} else {
-			overallState = enumsspb.HEALTH_STATE_SERVING
-		}
-	}
+	overallState, unenforcedState := calculateStateAndUnenforcedState(hostDetails, h.hostFailurePercentage())
 
 	return HealthCheckResult{
 		State: overallState,
 		ServiceDetail: &healthspb.ServiceHealthDetail{
-			Service: string(h.serviceName),
-			State:   overallState,
-			Hosts:   hostDetails,
+			Service:         string(h.historyServiceName),
+			State:           overallState,
+			Hosts:           hostDetails,
+			UnenforcedState: unenforcedState,
 		},
 	}, nil
 }
@@ -172,17 +138,20 @@ func (h *healthCheckerImpl) checkHost(ctx context.Context, hostAddress string) (
 
 	resp, err := h.healthCheckFn(ctx, hostAddress)
 	if err != nil {
-		h.logger.Warn("failed to ping deep health check", tag.Error(err), tag.ServerName(string(h.serviceName)))
+		h.logger.Warn("failed to ping deep health check", tag.Error(err), tag.ServerName(string(h.historyServiceName)))
 		return nil, err
 	}
+
 	if resp == nil {
 		resp = &historyservice.DeepHealthCheckResponse{
-			State: enumsspb.HEALTH_STATE_NOT_SERVING,
+			State:           enumsspb.HEALTH_STATE_NOT_SERVING,
+			UnenforcedState: enumsspb.HEALTH_STATE_NOT_SERVING,
 			Checks: []*healthspb.HealthCheck{
 				{
 					CheckType: health.CheckTypeHostAvailability,
 					State:     enumsspb.HEALTH_STATE_NOT_SERVING,
 					Message:   "no response received from health check",
+					Enforced:  true,
 				},
 			},
 		}
@@ -190,20 +159,35 @@ func (h *healthCheckerImpl) checkHost(ctx context.Context, hostAddress string) (
 	return resp, nil
 }
 
-func failedHostSummary(host *healthspb.HostHealthDetail) string {
-	if host == nil {
-		return "unknown"
-	}
-	for _, check := range host.GetChecks() {
-		if check.GetState() != enumsspb.HEALTH_STATE_SERVING && check.GetMessage() != "" {
-			return fmt.Sprintf("%s: %s", host.GetAddress(), check.GetMessage())
+func calculateStateAndUnenforcedState(hostDetails []*healthspb.HostHealthDetail, failureProportionThreshold float64) (overallState enumsspb.HealthState, unenforcedState enumsspb.HealthState) {
+	var hostsNotHealthy float64
+	var hostsNotHealthyUnenforced float64
+
+	for _, hostDetail := range hostDetails {
+		if hostDetail.State != enumsspb.HEALTH_STATE_SERVING {
+			hostsNotHealthy++
+			hostsNotHealthyUnenforced++
+			continue
+		}
+
+		if hostDetail.UnenforcedState != enumsspb.HEALTH_STATE_SERVING {
+			hostsNotHealthyUnenforced++
 		}
 	}
-	return fmt.Sprintf("%s: %s", host.GetAddress(), host.GetState().String())
-}
 
-func ensureMinimumProportionOfHosts(proportionOfDeclinedServingHosts float64, totalHosts int) float64 {
-	const minimumHostsFailed = 2.0 // We want to ensure that at least 2 fail before we notify the upstream.
-	minimumProportion := minimumHostsFailed / float64(totalHosts)
-	return math.Max(proportionOfDeclinedServingHosts, minimumProportion)
+	overallState = enumsspb.HEALTH_STATE_SERVING
+	unenforcedState = enumsspb.HEALTH_STATE_SERVING
+
+	hostCount := float64(len(hostDetails))
+
+	if hostsNotHealthy/hostCount >= failureProportionThreshold {
+		overallState = enumsspb.HEALTH_STATE_NOT_SERVING
+		unenforcedState = enumsspb.HEALTH_STATE_NOT_SERVING
+	}
+
+	if hostsNotHealthyUnenforced/hostCount >= failureProportionThreshold {
+		unenforcedState = enumsspb.HEALTH_STATE_NOT_SERVING
+	}
+
+	return overallState, unenforcedState
 }

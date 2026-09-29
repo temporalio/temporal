@@ -45,7 +45,7 @@ TEMPORAL_DB ?= temporal
 VISIBILITY_DB ?= temporal_visibility
 
 # The `disable_grpc_modules` build tag excludes gRPC dependencies from cloud.google.com/go/storage,
-# reducing binary size by 16MB since we only use the REST client (storage.NewClient), not the
+# reducing binary size since we only use the REST client (storage.NewClient), not the
 # gRPC client (storage.NewGRPCClient). Related issue: https://github.com/googleapis/google-cloud-go/issues/12343
 ALL_BUILD_TAGS := disable_grpc_modules,$(BUILD_TAG)
 ALL_TEST_TAGS := $(ALL_BUILD_TAGS),test_dep,$(TEST_TAG)
@@ -470,8 +470,11 @@ fmt: fmt-gofix fmt-imports fmt-protos fmt-yaml
 # a fixed point. We check for "files updated" in the output rather than relying
 # on the exit code alone, since go fix can exit non-zero without actually
 # modifying any files (see https://github.com/golang/go/issues/77482).
+#
 # Note: go fix automatically skips generated files.
-GOFIX_FLAGS ?=
+#
+# embedlit is disabled because it rewrites large parts of the codebase.
+GOFIX_FLAGS ?= -embedlit=false
 GOFIX_MAX_ITERATIONS ?= 5
 fmt-gofix:
 	@printf $(COLOR) "Run go fix..."

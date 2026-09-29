@@ -198,6 +198,10 @@ linters:
         text: "panic"
         linters:
           - forbidigo
+      - path: chasm/lib/activity/model/.*\.go$ # the activity model transition function deliberately panics if it can't accept an event
+        text: "panic"
+        linters:
+          - forbidigo
       - path: tests/testcore/.*\.go$ # still needed in tests/testcore/ until we remove testify suites entirely
         text: "FunctionalTestBase"
         linters:

@@ -245,6 +245,18 @@ func (h *Handler) IsActivityTaskValid(ctx context.Context, request *historyservi
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
+	if componentRefBytes := request.GetComponentRef(); len(componentRefBytes) > 0 {
+		isValid, err := chasm.ReadComponent(
+			ctx,
+			componentRefBytes,
+			(*activity.Activity).IsDispatchTaskValid,
+			request.GetStamp(),
+		)
+		if err != nil {
+			return nil, h.convertError(err)
+		}
+		return &historyservice.IsActivityTaskValidResponse{IsValid: isValid}, nil
+	}
 	workflowID := request.Execution.WorkflowId
 
 	shardContext, err := h.controller.GetShardByNamespaceWorkflow(namespaceID, workflowID)

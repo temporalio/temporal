@@ -333,26 +333,30 @@ func TestActivityTerminate(t *testing.T) {
 		{
 			name:           "error on completed activity",
 			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
-			expectErr:      "invalid transition from Completed",
+			expectErr:      "no running activity execution: it closed with status Completed",
 		},
 		{
-			name:           "no-op on already terminated activity",
+			// This request carries no request id, so it cannot be recognized as a retry of the one
+			// that terminated the activity. TestRequestDeduplicationAfterTerminalState covers the
+			// retry that can be.
+			name:           "error on already terminated activity",
 			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+			expectErr:      "no running activity execution: it closed with status Terminated",
 		},
 		{
 			name:           "error on failed activity",
 			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
-			expectErr:      "invalid transition from Failed",
+			expectErr:      "no running activity execution: it closed with status Failed",
 		},
 		{
 			name:           "error on timed out activity",
 			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
-			expectErr:      "invalid transition from TimedOut",
+			expectErr:      "no running activity execution: it closed with status TimedOut",
 		},
 		{
 			name:           "error on canceled activity",
 			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
-			expectErr:      "invalid transition from Canceled",
+			expectErr:      "no running activity execution: it closed with status Canceled",
 		},
 	}
 

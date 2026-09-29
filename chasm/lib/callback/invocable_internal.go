@@ -3,6 +3,7 @@ package callback
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
@@ -15,6 +16,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -55,6 +57,18 @@ func (c invocableInternal) Invoke(
 	task *callbackspb.InvocationTask,
 	taskAttr chasm.TaskAttributes,
 ) invocationResult {
+	// nolint:forbidigo // Wall-clock RPC measurement, not component state; Invoke has no chasm.Context.
+	startTime := time.Now()
+	// Sentinel default: a return path that forgets to set outcome must not read as a success.
+	outcome := outcomeUnknown
+	defer func() {
+		namespaceTag := metrics.NamespaceTag(ns.Name().String())
+		destTag := metrics.DestinationTag(taskAttr.Destination)
+		outcomeMetricTag := metrics.OutcomeTag(string(outcome))
+		h.metricsHandler.Counter(InternalRequestCounter.Name()).Record(1, namespaceTag, destTag, outcomeMetricTag)
+		h.metricsHandler.Timer(InternalRequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, outcomeMetricTag)
+	}()
+
 	header := nexus.Header(c.callback.GetHeader())
 	if header == nil {
 		header = nexus.Header{}
@@ -63,11 +77,13 @@ func (c invocableInternal) Invoke(
 	// Get back the component ref and (optional) request ID from the callback token in the header.
 	encodedToken := header.Get(commonnexus.CallbackTokenHeader)
 	if encodedToken == "" {
+		outcome = outcomeMissingToken
 		return invocationResultFail{logInternalError(h.logger, "callback missing token", nil)}
 	}
 
 	decodedRef, requestID, err := chasm.UnpackNexusCallbackToken(encodedToken)
 	if err != nil {
+		outcome = outcomeTokenDecodeError
 		return invocationResultFail{logInternalError(h.logger, "failed to decode CHASM callback token", err)}
 	}
 
@@ -78,20 +94,28 @@ func (c invocableInternal) Invoke(
 
 	ref := &persistencespb.ChasmComponentRef{}
 	if err := ref.Unmarshal(decodedRef); err != nil || ref.GetNamespaceId() == "" || ref.GetBusinessId() == "" {
+		outcome = outcomeInvalidRef
 		return invocationResultFail{logInternalError(h.logger, "invalid CHASM ComponentRef", err)}
 	}
 	if h.config.internalCallbackRequiresSameNamespace(ref.GetArchetypeId()) && ref.GetNamespaceId() != ns.ID().String() {
+		outcome = outcomeNamespaceMismatch
 		return invocationResultFail{logInternalError(h.logger, "internal callback namespace mismatch", nil)}
 	}
 
 	request, err := c.getHistoryRequest(decodedRef, requestID)
 	if err != nil {
+		outcome = outcomeRequestBuildError
 		return invocationResultFail{logInternalError(h.logger, "failed to build history request", err)}
 	}
 
 	// RPC to History for cross-shard completion delivery.
 	_, err = h.historyClient.CompleteNexusOperationChasm(ctx, request)
 	if err != nil {
+		// Set the outcome tag based on the gRPC error received (if applicable).
+		outcome = grpcErrorOutcome(err)
+		if ctx.Err() != nil {
+			outcome = outcomeRequestTimeout
+		}
 		msg := logInternalError(h.logger, "failed to complete Nexus operation", err)
 		if common.IsRetryableRPCError(err) {
 			return invocationResultRetry{err: msg}
@@ -99,6 +123,7 @@ func (c invocableInternal) Invoke(
 		return invocationResultFail{msg}
 	}
 
+	outcome = outcomeSuccess
 	return invocationResultOK{}
 }
 
@@ -131,17 +156,10 @@ func (c invocableInternal) getHistoryRequest(
 			Completion: completion,
 		}
 	} else {
-		failure, err := nexusrpc.DefaultFailureConverter().ErrorToFailure(c.completion.Error)
+		// Convert the nexus.OperationError into a failurepb.Failure.
+		apiFailure, err := commonnexus.OperationErrorToTemporalFailure(c.completion.Error)
 		if err != nil {
-			return nil, fmt.Errorf("failed to convert error to failure: %w", err)
-		}
-		// Unwrap the operation error, the handler on the other side is expecting to receive the underlying cause.
-		if failure.Cause != nil {
-			failure = *failure.Cause
-		}
-		apiFailure, err := commonnexus.NexusFailureToTemporalFailure(failure)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert failure type: %w", err)
+			return nil, err
 		}
 
 		req = &historyservice.CompleteNexusOperationChasmRequest{

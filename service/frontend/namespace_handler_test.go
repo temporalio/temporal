@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/clock"
@@ -123,6 +124,228 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 
 func (s *namespaceHandlerCommonSuite) TearDownTest() {
 	s.controller.Finish()
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsCreatesRamp() {
+	s.fakeClock.Update(now)
+	ramps, err := s.handler.updateReplicationRamps(
+		nil,
+		[]string{"active"},
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: "active"},
+			{ClusterName: "standby", ReplicationRampDuration: durationpb.New(time.Hour)},
+		},
+		"active",
+	)
+	s.Require().NoError(err)
+	s.Equal(now, ramps["standby"].GetStartTime().AsTime())
+	s.Equal(time.Hour, ramps["standby"].GetDuration().AsDuration())
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsRepeatedRequestIsNoOp() {
+	s.fakeClock.Update(now)
+	request := []*replicationpb.ClusterReplicationConfig{
+		{ClusterName: "active"},
+		{ClusterName: "standby", ReplicationRampDuration: durationpb.New(time.Hour)},
+	}
+
+	ramps, err := s.handler.updateReplicationRamps(nil, []string{"active"}, request, "active")
+	s.Require().NoError(err)
+	ramp := ramps["standby"]
+	s.Require().NotNil(ramp)
+
+	ramps, err = s.handler.updateReplicationRamps(ramps, []string{"active", "standby"}, request, "active")
+	s.Require().NoError(err)
+	s.Same(ramp, ramps["standby"])
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsLifecycle() {
+	s.fakeClock.Update(now)
+
+	ramps, err := s.handler.updateReplicationRamps(
+		nil,
+		[]string{"active"},
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: "active"},
+			{ClusterName: "standby-1", ReplicationRampDuration: durationpb.New(time.Hour)},
+			{ClusterName: "standby-2", ReplicationRampDuration: durationpb.New(2 * time.Hour)},
+			{ClusterName: "without-ramp"},
+			{ClusterName: "zero-ramp", ReplicationRampDuration: durationpb.New(0)},
+			{ClusterName: "negative-ramp", ReplicationRampDuration: durationpb.New(-time.Hour)},
+		},
+		"active",
+	)
+	s.Require().NoError(err)
+	s.Equal(now, ramps["standby-1"].GetStartTime().AsTime())
+	s.Equal(time.Hour, ramps["standby-1"].GetDuration().AsDuration())
+	s.Equal(2*time.Hour, ramps["standby-2"].GetDuration().AsDuration())
+	s.NotContains(ramps, "active")
+	s.NotContains(ramps, "without-ramp")
+	s.NotContains(ramps, "zero-ramp")
+	s.NotContains(ramps, "negative-ramp")
+
+	unchanged, err := s.handler.updateReplicationRamps(
+		ramps,
+		[]string{"active", "standby-1", "standby-2"},
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: "active"},
+			{ClusterName: "standby-1"},
+		},
+		"active",
+	)
+	s.Require().NoError(err)
+	s.Same(ramps["standby-1"], unchanged["standby-1"])
+	s.NotContains(unchanged, "standby-2")
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsClear() {
+	ramp := &persistencespb.NamespaceReplicationRamp{
+		StartTime: timestamppb.New(now),
+		Duration:  durationpb.New(time.Hour),
+	}
+
+	ramps, err := s.handler.updateReplicationRamps(
+		map[string]*persistencespb.NamespaceReplicationRamp{"standby": ramp},
+		[]string{"active", "standby"},
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: "active"},
+			{ClusterName: "standby", ReplicationRampDuration: durationpb.New(0)},
+		},
+		"active",
+	)
+	s.Require().NoError(err)
+	s.NotContains(ramps, "standby")
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsRejectsChangingExistingRamp() {
+	ramp := &persistencespb.NamespaceReplicationRamp{
+		StartTime: timestamppb.New(now),
+		Duration:  durationpb.New(time.Hour),
+	}
+	clusters := []string{"active", "standby"}
+
+	unchanged, err := s.handler.updateReplicationRamps(
+		map[string]*persistencespb.NamespaceReplicationRamp{"standby": ramp},
+		clusters,
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: "active"},
+			{ClusterName: "standby", ReplicationRampDuration: durationpb.New(time.Hour)},
+		},
+		"active",
+	)
+	s.Require().NoError(err)
+	s.Same(ramp, unchanged["standby"])
+
+	_, err = s.handler.updateReplicationRamps(
+		map[string]*persistencespb.NamespaceReplicationRamp{"standby": ramp},
+		clusters,
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: "active"},
+			{ClusterName: "standby", ReplicationRampDuration: durationpb.New(30 * time.Minute)},
+		},
+		"active",
+	)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArgument)
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsRejectsStartingForExistingCluster() {
+	_, err := s.handler.updateReplicationRamps(
+		nil,
+		[]string{"active", "standby"},
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: "active"},
+			{ClusterName: "standby", ReplicationRampDuration: durationpb.New(time.Hour)},
+		},
+		"active",
+	)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArgument)
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateReplicationRampsRejectsInvalidDuration() {
+	_, err := s.handler.updateReplicationRamps(
+		nil,
+		[]string{"active"},
+		[]*replicationpb.ClusterReplicationConfig{
+			{ClusterName: "active"},
+			{
+				ClusterName:             "standby",
+				ReplicationRampDuration: &durationpb.Duration{Seconds: 1, Nanos: -1},
+			},
+		},
+		"active",
+	)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArgument)
+}
+
+func (s *namespaceHandlerCommonSuite) TestUpdateNamespacePersistsRampOnlyOnSource() {
+	const (
+		namespaceName = "test-ns"
+		active        = "active"
+		standby       = "standby"
+	)
+	s.fakeClock.Update(now)
+	detail := &persistencespb.NamespaceDetail{
+		Info: &persistencespb.NamespaceInfo{
+			Id:    uuid.NewString(),
+			Name:  namespaceName,
+			State: enumspb.NAMESPACE_STATE_REGISTERED,
+		},
+		Config: &persistencespb.NamespaceConfig{},
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: active,
+			Clusters:          []string{active},
+		},
+		ConfigVersion: 7,
+	}
+
+	s.mockMetadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(&persistence.GetMetadataResponse{
+		NotificationVersion: 11,
+	}, nil)
+	s.mockMetadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+		Name: namespaceName,
+	}).Return(&persistence.GetNamespaceResponse{
+		Namespace:         detail,
+		IsGlobalNamespace: true,
+	}, nil)
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		active:  {Enabled: true},
+		standby: {Enabled: true},
+	}).AnyTimes()
+	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true)
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
+			ramp := request.Namespace.GetReplicationConfig().GetClusterReplicationRamps()[standby]
+			s.Require().NotNil(ramp)
+			s.Equal(now, ramp.GetStartTime().AsTime())
+			s.Equal(time.Hour, ramp.GetDuration().AsDuration())
+			return nil
+		},
+	)
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, task *replicationspb.ReplicationTask) error {
+			for _, clusterConfig := range task.GetNamespaceTaskAttributes().GetReplicationConfig().GetClusters() {
+				s.Nil(clusterConfig.GetReplicationRampDuration())
+			}
+			return nil
+		},
+	)
+
+	response, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespaceName,
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			Clusters: []*replicationpb.ClusterReplicationConfig{
+				{ClusterName: active},
+				{ClusterName: standby, ReplicationRampDuration: durationpb.New(time.Hour)},
+			},
+		},
+	})
+	s.Require().NoError(err)
+	for _, clusterConfig := range response.GetReplicationConfig().GetClusters() {
+		s.Nil(clusterConfig.GetReplicationRampDuration())
+	}
 }
 
 func (s *namespaceHandlerCommonSuite) TestDeprecateNamespaceEventUsesPersistedAfterState() {
@@ -787,6 +1010,12 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_UpdateActiveClusterWit
 				ActiveClusterName: clusterName1,
 				Clusters:          []string{clusterName1, clusterName2},
 				State:             enumspb.REPLICATION_STATE_HANDOVER,
+				ClusterReplicationRamps: map[string]*persistencespb.NamespaceReplicationRamp{
+					clusterName2: {
+						StartTime: timestamppb.New(update1Time),
+						Duration:  durationpb.New(time.Hour),
+					},
+				},
 			},
 		},
 		IsGlobalNamespace: true,
