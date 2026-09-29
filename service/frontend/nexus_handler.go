@@ -470,7 +470,7 @@ func (h *nexusHandler) StartOperation(
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid input")
 	}
 	if startOperationRequest.Payload.Size() > h.payloadSizeLimit(oc.namespaceName) {
-		oc.logger.Error("payload size exceeds error limit for Nexus StartOperation request", tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
+		oc.logger.Warn("payload size exceeds error limit for Nexus StartOperation request", tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "input exceeds size limit")
 	}
 
