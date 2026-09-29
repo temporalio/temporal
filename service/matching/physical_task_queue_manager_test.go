@@ -810,10 +810,10 @@ func TestDrainCompletionNoReloadDraining(t *testing.T) {
 	// wait for drain completion (drainbacklogmgr becomes nil) and
 	// otherhastasks is false in persistence
 	require.Eventually(t, func() bool {
-		fairQueueData.Lock()
+		fairQueueData.mu.Lock()
 		fairQueueData.reload()
 		otherHasTasks := fairQueueData.info.GetOtherHasTasks()
-		fairQueueData.Unlock()
+		fairQueueData.mu.Unlock()
 		return tqMgr.getDrainBacklogMgr() == nil && !otherHasTasks
 	}, 5*time.Second, 50*time.Millisecond, "drain should complete")
 

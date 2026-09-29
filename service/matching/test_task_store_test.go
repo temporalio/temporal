@@ -52,7 +52,7 @@ type testTaskManager struct {
 	fairness bool
 	logger   log.Logger
 
-	sync.Mutex
+	mu sync.Mutex
 	stats          map[dbTaskQueueKey]*testQueuePersistenceStats
 	faultInjection map[string]float32 // "op:error" -> fraction of time
 	delayInjection time.Duration
@@ -141,10 +141,10 @@ func newMatchingSQLiteMemoryConfig() *config.SQL {
 }
 
 func (m *testTaskManager) Close() {
-	m.Lock()
+	m.mu.Lock()
 	factory := m.factory
 	m.factory = nil
-	m.Unlock()
+	m.mu.Unlock()
 	if factory != nil {
 		factory.Close()
 	}
@@ -159,8 +159,8 @@ func (m *testTaskManager) statsFor(q *PhysicalTaskQueueKey) testQueuePersistence
 }
 
 func (m *testTaskManager) statsSnapshot(key dbTaskQueueKey) testQueuePersistenceStats {
-	m.Lock()
-	defer m.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	st, ok := m.stats[key]
 	if !ok {
 		return testQueuePersistenceStats{}
@@ -178,8 +178,8 @@ func (m *testTaskManager) statsPtrLocked(key dbTaskQueueKey) *testQueuePersisten
 }
 
 func (m *testTaskManager) incStat(key dbTaskQueueKey, fn func(*testQueuePersistenceStats)) {
-	m.Lock()
-	defer m.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	fn(m.statsPtrLocked(key))
 }
 
@@ -201,8 +201,8 @@ func (m *testTaskManager) delay() {
 
 // all calls to addFault should be done before starting to call methods on testTaskManager
 func (m *testTaskManager) addFault(method, err string, fraction float32) {
-	m.Lock()
-	defer m.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.faultInjection == nil {
 		m.faultInjection = make(map[string]float32)
 	}
@@ -210,9 +210,9 @@ func (m *testTaskManager) addFault(method, err string, fraction float32) {
 }
 
 func (m *testTaskManager) shouldFault(method, err string) bool {
-	m.Lock()
+	m.mu.Lock()
 	frac := m.faultInjection[method+":"+err]
-	m.Unlock()
+	m.mu.Unlock()
 	return rand.Float32() < frac
 }
 
@@ -346,9 +346,9 @@ func (m *testTaskManager) GetTaskQueueUserData(
 		taskType:        enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 	}, func(st *testQueuePersistenceStats) { st.getUserDataCount++ })
 
-	m.Lock()
+	m.mu.Lock()
 	forced, ok := m.forcedUserData[userDataKey{namespaceID: request.NamespaceID, taskQueue: request.TaskQueue}]
-	m.Unlock()
+	m.mu.Unlock()
 	if ok {
 		return &persistence.GetTaskQueueUserDataResponse{UserData: common.CloneProto(forced)}, nil
 	}
@@ -356,8 +356,8 @@ func (m *testTaskManager) GetTaskQueueUserData(
 }
 
 func (m *testTaskManager) forceUserData(namespaceID, taskQueue string, data *persistencespb.VersionedTaskQueueUserData) {
-	m.Lock()
-	defer m.Unlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.forcedUserData[userDataKey{namespaceID: namespaceID, taskQueue: taskQueue}] = common.CloneProto(data)
 }
 
@@ -368,7 +368,7 @@ func (m *testTaskManager) getQueueDataByKey(dbq *PhysicalTaskQueueKey) *testQueu
 }
 
 type testQueueData struct {
-	sync.Mutex
+	mu sync.Mutex
 	mgr           *testTaskManager
 	key           *PhysicalTaskQueueKey
 	rangeID       int64
@@ -395,8 +395,8 @@ func (q *testQueueData) reload() {
 
 func (q *testQueueData) bumpRangeID(t testing.TB) {
 	t.Helper()
-	q.Lock()
-	defer q.Unlock()
+	q.mu.Lock()
+	defer q.mu.Unlock()
 	q.reload()
 	require.NotEqual(t, int64(0), q.loadedRangeID, "cannot bump range ID of a queue that has not been created")
 	info := common.CloneProto(q.info)
@@ -422,8 +422,8 @@ func (q *testQueueData) bumpRangeID(t testing.TB) {
 }
 
 func (q *testQueueData) RangeID() int64 {
-	q.Lock()
-	defer q.Unlock()
+	q.mu.Lock()
+	defer q.mu.Unlock()
 	q.reload()
 	return q.rangeID
 }

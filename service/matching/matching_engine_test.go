@@ -3995,7 +3995,7 @@ func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksNoDBErrors() {
 
 func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksDBErrors() {
 	if s.fairness {
-		s.T().Skip("test is flaky with fairness matcher")
+		s.T().Skip("test is flaky when fairness is enabled")
 	}
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
@@ -4089,7 +4089,7 @@ func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int,
 // TestResettingBacklogCounter tests the scenario where approximateBacklogCounter over-counts and resets it accordingly
 func (s *matchingEngineSuite) TestResetBacklogCounterNoDBErrors() {
 	if s.fairness {
-		s.T().Skip("test is flaky with fairness matcher")
+		s.T().Skip("test is flaky when fairness is enabled")
 	}
 
 	s.resetBacklogCounter(2, 2, 2, false)
@@ -4097,7 +4097,7 @@ func (s *matchingEngineSuite) TestResetBacklogCounterNoDBErrors() {
 
 func (s *matchingEngineSuite) TestResetBacklogCounterDBErrors() {
 	if s.fairness {
-		s.T().Skip("test is flaky with fairness matcher")
+		s.T().Skip("test is flaky when fairness is enabled")
 	}
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
@@ -4109,14 +4109,14 @@ func (s *matchingEngineSuite) TestResetBacklogCounterDBErrors() {
 
 func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterNoDBErrors() {
 	if s.fairness {
-		s.T().Skip("test is flaky with fairness matcher")
+		s.T().Skip("test is flaky when fairness is enabled")
 	}
 	s.resetBacklogCounter(10, 20, 2, false)
 }
 
 func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterDBErrors() {
 	if s.fairness {
-		s.T().Skip("test is flaky with fairness matcher")
+		s.T().Skip("test is flaky when fairness is enabled")
 	}
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
@@ -4170,7 +4170,7 @@ func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksNoDBErrors() {
 
 func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksDBErrors() {
 	if s.fairness {
-		s.T().Skip("test is flaky with fairness matcher")
+		s.T().Skip("test is flaky when fairness is enabled")
 	}
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
@@ -4182,14 +4182,14 @@ func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksDBErrors() {
 
 func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksNoDBErrors() {
 	if s.fairness {
-		s.T().Skip("test is flaky with fairness matcher")
+		s.T().Skip("test is flaky when fairness is enabled")
 	}
 	s.concurrentPublishAndConsumeValidateBacklogCounter(20, 100, 100, false)
 }
 
 func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksDBErrors() {
 	if s.fairness {
-		s.T().Skip("test is flaky with fairness matcher")
+		s.T().Skip("test is flaky when fairness is enabled")
 	}
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
@@ -4205,7 +4205,7 @@ func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasksNoDBErrors() {
 
 func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasksDBErrors() {
 	if s.fairness {
-		s.T().Skip("test is flaky with fairness matcher")
+		s.T().Skip("test is flaky when fairness is enabled")
 	}
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
@@ -4221,7 +4221,7 @@ func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksN
 
 func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksDBErrors() {
 	if s.fairness {
-		s.T().Skip("test is flaky with fairness matcher")
+		s.T().Skip("test is flaky when fairness is enabled")
 	}
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
