@@ -80,7 +80,7 @@ func configProvider(dc *dynamicconfig.Collection) *Config {
 
 var InternalCallbackCrossNamespaceArchetypes = dynamicconfig.NewGlobalTypedSetting(
 	"callback.internal.crossNamespaceArchetypes",
-	[]string{},
+	[]string(nil),
 	`The list of fully-qualified CHASM archetype names whose internal callbacks may target a namespace other than the
 callback source namespace. Internal callbacks for all other archetypes must target the source namespace. Only add an
 archetype here as an escape hatch; cross-namespace internal callbacks are not expected.`,
