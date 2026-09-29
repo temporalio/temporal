@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.uber.org/mock/gomock"
 )
@@ -16,8 +17,8 @@ func TestWriteManagers_ModeOff(t *testing.T) {
 	s := newDefaultManagerSelector(
 		primary,
 		secondary,
-		func(string) bool { return false },
-		func() string { return SecondaryVisibilityWritingModeOff },
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		dynamicconfig.GetStringPropertyFn(SecondaryVisibilityWritingModeOff),
 	)
 
 	managers, err := s.writeManagers()
@@ -33,8 +34,8 @@ func TestWriteManagers_ModeOn(t *testing.T) {
 	s := newDefaultManagerSelector(
 		primary,
 		secondary,
-		func(string) bool { return false },
-		func() string { return SecondaryVisibilityWritingModeOn },
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		dynamicconfig.GetStringPropertyFn(SecondaryVisibilityWritingModeOn),
 	)
 
 	managers, err := s.writeManagers()
@@ -50,8 +51,8 @@ func TestWriteManagers_ModeDual(t *testing.T) {
 	s := newDefaultManagerSelector(
 		primary,
 		secondary,
-		func(string) bool { return false },
-		func() string { return SecondaryVisibilityWritingModeDual },
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		dynamicconfig.GetStringPropertyFn(SecondaryVisibilityWritingModeDual),
 	)
 
 	managers, err := s.writeManagers()
@@ -67,14 +68,14 @@ func TestWriteManagers_UnknownMode(t *testing.T) {
 	s := newDefaultManagerSelector(
 		primary,
 		secondary,
-		func(string) bool { return false },
-		func() string { return "invalid" },
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		dynamicconfig.GetStringPropertyFn("invalid"),
 	)
 
 	managers, err := s.writeManagers()
 	require.Error(t, err)
 	require.Nil(t, managers)
-	require.Contains(t, err.Error(), "unknown secondary visibility writing mode: invalid")
+	require.ErrorContains(t, err, "unknown secondary visibility writing mode: invalid")
 }
 
 func TestReadManager_SecondaryEnabled(t *testing.T) {
@@ -85,8 +86,8 @@ func TestReadManager_SecondaryEnabled(t *testing.T) {
 	s := newDefaultManagerSelector(
 		primary,
 		secondary,
-		func(string) bool { return true },
-		func() string { return SecondaryVisibilityWritingModeOff },
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetStringPropertyFn(SecondaryVisibilityWritingModeOff),
 	)
 
 	require.Equal(t, secondary, s.readManager("test-ns"))
@@ -100,8 +101,8 @@ func TestReadManager_SecondaryDisabled(t *testing.T) {
 	s := newDefaultManagerSelector(
 		primary,
 		secondary,
-		func(string) bool { return false },
-		func() string { return SecondaryVisibilityWritingModeOff },
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		dynamicconfig.GetStringPropertyFn(SecondaryVisibilityWritingModeOff),
 	)
 
 	require.Equal(t, primary, s.readManager("test-ns"))
@@ -115,8 +116,8 @@ func TestReadManagers_SecondaryEnabled(t *testing.T) {
 	s := newDefaultManagerSelector(
 		primary,
 		secondary,
-		func(string) bool { return true },
-		func() string { return SecondaryVisibilityWritingModeOff },
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		dynamicconfig.GetStringPropertyFn(SecondaryVisibilityWritingModeOff),
 	)
 
 	managers, err := s.readManagers("test-ns")
@@ -132,8 +133,8 @@ func TestReadManagers_SecondaryDisabled(t *testing.T) {
 	s := newDefaultManagerSelector(
 		primary,
 		secondary,
-		func(string) bool { return false },
-		func() string { return SecondaryVisibilityWritingModeOff },
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		dynamicconfig.GetStringPropertyFn(SecondaryVisibilityWritingModeOff),
 	)
 
 	managers, err := s.readManagers("test-ns")
