@@ -143,6 +143,8 @@ func createTestMatchingEngine(
 func createMockNamespaceCache(controller *gomock.Controller, nsName namespace.Name) (*namespace.Namespace, *namespace.MockRegistry) {
 	ns := namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: nsName.String(), Id: uuid.NewString()}, nil, "")
 	mockNamespaceCache := namespace.NewMockRegistry(controller)
+	mockNamespaceCache.EXPECT().RegisterStateChangeCallback(gomock.Any(), gomock.Any()).AnyTimes()
+	mockNamespaceCache.EXPECT().UnregisterStateChangeCallback(gomock.Any()).AnyTimes()
 	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil).AnyTimes()
 	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(ns.Name(), nil).AnyTimes()
 	return ns, mockNamespaceCache

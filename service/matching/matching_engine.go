@@ -353,6 +353,7 @@ func (e *matchingEngineImpl) Start() {
 
 	go e.watchMembership()
 	_ = e.serviceResolver.AddListener(e.listenerKey(), e.membershipChangedCh)
+	e.namespaceRegistry.RegisterStateChangeCallback(e, e.onNamespaceStateChange)
 }
 
 func (e *matchingEngineImpl) Stop() {
@@ -364,6 +365,7 @@ func (e *matchingEngineImpl) Stop() {
 		return
 	}
 
+	e.namespaceRegistry.UnregisterStateChangeCallback(e)
 	_ = e.serviceResolver.RemoveListener(e.listenerKey())
 	close(e.membershipChangedCh)
 
@@ -372,6 +374,36 @@ func (e *matchingEngineImpl) Stop() {
 	for _, l := range e.getTaskQueuePartitions(math.MaxInt32) {
 		l.Stop(unloadCauseShuttingDown)
 	}
+}
+
+// onNamespaceStateChange unloads loaded partitions of a namespace that failed over to or away from this
+// cluster, because a partition's metrics carry a namespace_state tag fixed at load time. They reload
+// with the current state on their next poll or add.
+func (e *matchingEngineImpl) onNamespaceStateChange(ns *namespace.Namespace, deletedFromDB bool) {
+	// Callbacks can still arrive after UnregisterStateChangeCallback returns.
+	if deletedFromDB || atomic.LoadInt32(&e.status) != common.DaemonStatusStarted {
+		return
+	}
+	var partitionsToUnload []taskQueuePartitionManager
+	for _, pm := range e.getTaskQueuePartitions(math.MaxInt32) {
+		if pm.Namespace().ID() == ns.ID() && e.activeStateChanged(pm.Namespace(), ns) {
+			partitionsToUnload = append(partitionsToUnload, pm)
+		}
+	}
+	if len(partitionsToUnload) > 0 {
+		// The registry runs callbacks serially, and stopping a partition waits on persistence.
+		go func() {
+			for _, pm := range partitionsToUnload {
+				e.unloadTaskQueuePartition(pm, unloadCauseNamespaceStateChange)
+			}
+		}()
+	}
+}
+
+func (e *matchingEngineImpl) activeStateChanged(loaded, current *namespace.Namespace) bool {
+	currentCluster := e.clusterMeta.GetCurrentClusterName()
+	//nolint:forbidigo // partition lifecycle and metric tags are namespace-scoped
+	return loaded.ActiveInCluster(currentCluster) != current.ActiveInCluster(currentCluster)
 }
 
 func (e *matchingEngineImpl) listenerKey() string {
@@ -541,6 +573,11 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	e.partitionsLock.Unlock()
 
 	newPM.Start()
+	// A failover callback may have scanned the partitions before this one was inserted. The registry
+	// updates its cache before running callbacks, so this read catches what that scan missed.
+	if current, err := e.namespaceRegistry.GetNamespaceByID(namespaceEntry.ID()); err == nil && e.activeStateChanged(namespaceEntry, current) {
+		go e.unloadTaskQueuePartition(newPM, unloadCauseNamespaceStateChange)
+	}
 	return newPM, true, nil
 }
 
