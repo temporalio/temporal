@@ -1,6 +1,7 @@
 package callbacks
 
 import (
+	"cmp"
 	"context"
 	"fmt"
 	"reflect"
@@ -53,7 +54,7 @@ func newValidatorConfig() ValidatorConfig {
 	}
 	return ValidatorConfig{
 		MaxCallbacksPerExecution:         func(string) int { return 10 },
-		TotalCallbacksMaxSize:            func(string) int { return 0 }, // Unlimited.
+		TotalCallbacksMaxSize:            func(string) int { return 2 * 1024 * 1024 },
 		MaxIDLengthLimit:                 func() int { return 10 },
 		URLMaxLength:                     func(string) int { return 1000 },
 		HeaderMaxSize:                    func(string) int { return 4096 },
@@ -467,6 +468,7 @@ func TestValidateAdditions(t *testing.T) {
 		adding   int
 		wantErr  string
 	}{
+		// Tests for the max number of callbacks.
 		{
 			name:     "under count",
 			maxCount: 10,
@@ -493,39 +495,32 @@ func TestValidateAdditions(t *testing.T) {
 			adding:   0,
 			wantErr:  "cannot attach more than 2 callbacks to an execution (5 callbacks already attached)",
 		},
+
+		// Tests for the aggregate size of all attached callbacks.
 		{
 			name:     "under size",
 			maxCount: 10,
 			maxSize:  cbSize * 10,
-			existing: CurrentCallbacksInfo{TotalSize: cbSize},
+			existing: CurrentCallbacksInfo{Count: 1, TotalSize: cbSize},
 			adding:   2,
 		},
 		{
 			name:     "exactly at size",
 			maxCount: 10,
 			maxSize:  cbSize * 3,
-			existing: CurrentCallbacksInfo{TotalSize: cbSize},
+			existing: CurrentCallbacksInfo{Count: 1, TotalSize: cbSize},
 			adding:   2,
 		},
 		{
 			name:     "over size",
 			maxCount: 10,
-			maxSize:  cbSize*3 - 1,
-			existing: CurrentCallbacksInfo{TotalSize: cbSize},
+			maxSize:  3 * cbSize,
+			existing: CurrentCallbacksInfo{Count: 2, TotalSize: 2 * cbSize},
 			adding:   2,
 			wantErr: fmt.Sprintf(
 				"cannot attach more than %d bytes of callbacks to an execution "+
 					"(%d bytes already attached, %d more requested)",
-				cbSize*3-1, cbSize, cbSize*2),
-		},
-		{
-			// A zero limit disables the size check entirely, which is how the setting ships
-			// before it is rolled out.
-			name:     "size unlimited when max is zero",
-			maxCount: 10,
-			maxSize:  0,
-			existing: CurrentCallbacksInfo{TotalSize: 1 << 30},
-			adding:   2,
+				3*cbSize, 2*cbSize, 2*cbSize),
 		},
 		{
 			// Count is checked before size, so a request breaching both reports the count.
@@ -542,7 +537,9 @@ func TestValidateAdditions(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			cfg := newValidatorConfig()
 			cfg.MaxCallbacksPerExecution = func(string) int { return tc.maxCount }
-			cfg.TotalCallbacksMaxSize = func(string) int { return tc.maxSize }
+			cfg.TotalCallbacksMaxSize = func(string) int {
+				return cmp.Or(tc.maxSize, 1024) // Default to 1KiB if not specified
+			}
 			v := mustNewValidator(t, cfg)
 
 			newCBs := make([]*commonpb.Callback, tc.adding)
