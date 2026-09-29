@@ -136,7 +136,7 @@ func (m *sqlTaskManagerV2) GetTasks(
 		PageSize:          &request.PageSize,
 	})
 	if err != nil {
-		return nil, serviceerror.NewUnavailablef("GetTasks operation failed. Failed to get rows. Error: %v", err)
+		return nil, convertSQLError("GetTasks", "failed to get rows", err)
 	}
 
 	response := &persistence.InternalGetTasksResponse{
@@ -184,7 +184,7 @@ func (m *sqlTaskManagerV2) CompleteTasksLessThan(
 		Limit:             &request.Limit,
 	})
 	if err != nil {
-		return 0, serviceerror.NewUnavailable(err.Error())
+		return 0, convertSQLError("CompleteTasksLessThan", "", err)
 	}
 	nRows, err := result.RowsAffected()
 	if err != nil {

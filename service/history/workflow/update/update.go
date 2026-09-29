@@ -406,7 +406,11 @@ func (u *Update) AttachCallbacks(
 		// which means the previous transaction has already committed and provisional
 		// states have resolved. This guard is kept defensively in case future code
 		// paths call AttachCallbacks within the same transaction.
-		return false, serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW, "workflow update is not yet accepted, please retry")
+		return false, &serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: "workflow update is not yet accepted, please retry",
+		}
 
 	case stateSent:
 		// stateSent: the update has been sent to the worker but not yet accepted.

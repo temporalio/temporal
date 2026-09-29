@@ -690,7 +690,10 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 	}
 
 	if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
-		if err := wh.callbackValidator.Validate(ctx, namespaceName.String(), cbs); err != nil {
+		opts := callbacks.ValidatorOptions{
+			EnabledKinds: wh.config.WorkflowEnabledCallbackKinds(namespaceName.String()),
+		}
+		if err := wh.callbackValidator.Validate(ctx, namespaceName.String(), cbs, opts); err != nil {
 			return nil, err
 		}
 	}
@@ -727,6 +730,9 @@ func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 		defaultMaxSkipPerSession := wh.config.WorkflowTimeSkippingMaxSkipPerSession(ns.String())
 		tsc.MaxSessionSkipCount = max(1, int32(defaultMaxSkipPerSession))
 	}
+	if !tsc.GetEnabled() && tsc.GetFastForwardConfig() != nil {
+		return serviceerror.NewInvalidArgument("time_skipping_config: cannot set fast_forward when enabled is false")
+	}
 
 	if ff := tsc.GetFastForwardConfig(); ff != nil {
 		if ff.GetDuration().AsDuration() <= 0 {
@@ -735,13 +741,6 @@ func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 		if strings.TrimSpace(ff.GetId()) == "" {
 			return errTimeSkippingFastForwardIDNotSet
 		}
-	}
-
-	if !tsc.GetEnabled() {
-		if tsc.GetFastForwardConfig() != nil {
-			return serviceerror.NewInvalidArgument("time_skipping_config: cannot set fast_forward when enabled is false")
-		}
-		return nil
 	}
 	return nil
 }
@@ -5562,7 +5561,10 @@ func (wh *WorkflowHandler) prepareUpdateWorkflowRequest(
 	}
 
 	if cbs := request.GetRequest().GetCompletionCallbacks(); len(cbs) > 0 {
-		if err := wh.callbackValidator.Validate(ctx, namespaceName.String(), cbs); err != nil {
+		opts := callbacks.ValidatorOptions{
+			EnabledKinds: wh.config.WorkflowEnabledCallbackKinds(namespaceName.String()),
+		}
+		if err := wh.callbackValidator.Validate(ctx, namespaceName.String(), cbs, opts); err != nil {
 			return err
 		}
 	}

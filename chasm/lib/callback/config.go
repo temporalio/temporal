@@ -14,6 +14,18 @@ var MaxPerExecution = dynamicconfig.NewNamespaceIntSetting(
 	`MaxPerExecution is the maximum number of callbacks that can be attached to an execution (workflow or standalone activity).`,
 )
 
+// TODO(chrsmith): This just caps the size of an individual source context payload.
+// We also need to wire through an aggregate max size, for all callbacks in an execution.
+// (We expect that users will want fewer NexusHandler callbacks with larger payloads than the
+// full 2k execution callbacks, with a much smaller per-callback payload size.)
+
+var NexusHandlerSourceContextMaxSize = dynamicconfig.NewNamespaceIntSetting(
+	"callback.nexusHandler.sourceContext.maxSize",
+	1024*1024,
+	`The maximum allowed size, in bytes, of the opaque source context attached to a single NexusHandler
+completion callback. The server carries this payload to the callback's handler untouched.`,
+)
+
 var RequestTimeout = dynamicconfig.NewDestinationDurationSetting(
 	"callback.request.timeout",
 	time.Second*10,
@@ -32,9 +44,19 @@ var RetryPolicyMaximumInterval = dynamicconfig.NewGlobalDurationSetting(
 	`The maximum backoff interval between every callback request attempt for a given callback.`,
 )
 
+var InspectSourceHeader = dynamicconfig.NewGlobalBoolSetting(
+	"callback.inspectSourceHeader",
+	false,
+	`Controls whether the legacy "source" header should be inspected to determine if a Nexus callback request is internal
+or external. This header was used before worker callbacks used the temporal://system URL. Leave this disabled unless it
+is required for mixed-version compatibility because trusting a caller-controlled header can route external requests
+internally.`,
+)
+
 type Config struct {
-	RequestTimeout dynamicconfig.DurationPropertyFnWithDestinationFilter
-	RetryPolicy    func() backoff.RetryPolicy
+	RequestTimeout      dynamicconfig.DurationPropertyFnWithDestinationFilter
+	RetryPolicy         dynamicconfig.TypedPropertyFn[backoff.RetryPolicy]
+	InspectSourceHeader dynamicconfig.BoolPropertyFn
 }
 
 func configProvider(dc *dynamicconfig.Collection) *Config {
@@ -49,6 +71,7 @@ func configProvider(dc *dynamicconfig.Collection) *Config {
 				backoff.NoInterval,
 			)
 		},
+		InspectSourceHeader: InspectSourceHeader.Get(dc),
 	}
 }
 
