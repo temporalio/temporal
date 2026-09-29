@@ -1186,9 +1186,9 @@ func cherryPickHSMEvent(
 	return cherryPickApplied, nil
 }
 
-// logSkippedOperation records an event that reapply dropped because its component is in neither the HSM nor the
-// CHASM tree.
-func logSkippedOperation(
+// logSkippedStateMachineEvent records an event that reapply dropped because its state machine is in neither the
+// HSM nor the CHASM tree.
+func logSkippedStateMachineEvent(
 	mutableState historyi.MutableState,
 	event *historypb.HistoryEvent,
 	isReset bool,
@@ -1196,12 +1196,12 @@ func logSkippedOperation(
 ) {
 	logAtLevel := logger.Debug
 	if isReset {
-		// On the reset path a missing component means a completion is silently dropped from the reset run,
+		// On the reset path a missing state machine means a completion is silently dropped from the reset run,
 		// which is worth a warning.
 		logAtLevel = logger.Warn
 	}
 	workflowKey := mutableState.GetWorkflowKey()
-	logAtLevel("skipping reapply of event: operation not found in HSM or CHASM tree",
+	logAtLevel("skipping reapply of event: state machine not found in HSM or CHASM tree",
 		tag.WorkflowNamespaceID(workflowKey.NamespaceID),
 		tag.WorkflowID(workflowKey.WorkflowID),
 		tag.WorkflowRunID(workflowKey.RunID),
@@ -1247,7 +1247,7 @@ func cherryPickChasmEvent(
 		case isNotFound:
 			// The CHASM tree doesn't contain this operation either. HSM was tried first, so the operation is in
 			// neither tree and the event has nowhere to apply.
-			logSkippedOperation(mutableState, event, isReset, logger)
+			logSkippedStateMachineEvent(mutableState, event, isReset, logger)
 			return cherryPickSkipped, nil
 		}
 		return cherryPickSkipped, err

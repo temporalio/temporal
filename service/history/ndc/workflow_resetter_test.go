@@ -2239,7 +2239,7 @@ func (s *workflowResetterSuite) TestCherryPickChasmEvent() {
 			if tc.wantSkipLog != nil {
 				// Pin the run ID too: the log line is only actionable if it identifies the workflow.
 				ms.EXPECT().GetWorkflowKey().Return(workflowKey)
-				skipLog = logger.Expect(*tc.wantSkipLog, "operation not found in HSM or CHASM tree",
+				skipLog = logger.Expect(*tc.wantSkipLog, "state machine not found in HSM or CHASM tree",
 					tag.WorkflowRunID(workflowKey.RunID))
 			}
 
