@@ -50,7 +50,7 @@ require (
 	github.com/temporalio/ringpop-go v0.1.0
 	github.com/temporalio/sqlparser v0.1.0
 	github.com/temporalio/tchannel-go v1.22.1
-	github.com/temporalio/temporal/testx v0.1.0
+	github.com/temporalio/temporal/testx v0.0.0-20260929161908-ba1d17689950
 	github.com/tidwall/btree v1.8.1
 	github.com/uber-go/tally/v4 v4.1.17
 	github.com/urfave/cli v1.22.17
@@ -242,5 +242,5 @@ tool (
 )
 
 // Server code always builds against testx from the same commit. Downstream consumers ignore this
-// replace and resolve the required testx version, which .github/workflows/testx-tag.yml tags on merge.
+// replace, so they must require testx at the same commit as the server themselves (see testx/README.md).
 replace github.com/temporalio/temporal/testx => ./testx

@@ -37,24 +37,6 @@ jobs:
       - name: Check testx go.mod is tidy
         run: go -C testx mod tidy -diff
 
-      # Downstream consumers of the server resolve the testx version required in the root
-      # go.mod, which testx-tag.yml tags on the merge commit. Every testx change therefore
-      # needs a new version, or consumers would get a tag that doesn't contain the change.
-      - name: Check testx version was bumped
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          if git diff --quiet "$BASE_SHA" HEAD -- testx/; then
-            echo "No testx changes."
-            exit 0
-          fi
-          version=$(go list -m -f '{{.Version}}' github.com/temporalio/temporal/testx)
-          if git ls-remote --exit-code --tags origin "refs/tags/testx/$version" >/dev/null; then
-            echo "::error file=go.mod::testx/$version already exists; bump the github.com/temporalio/temporal/testx version in go.mod"
-            exit 1
-          fi
-          echo "testx changes will be released as testx/$version."
-
       - name: Test testx
         run: make testx-test
 

@@ -19,15 +19,21 @@ The server's `go.mod` requires this module and replaces it with the local `./tes
 server code always builds against the testx code in the same commit. A single PR can change testx
 and use the change in the server.
 
-Downstream consumers of the server ignore the `replace` and resolve the required version instead.
-So every PR that changes `testx/` must also bump the version in the root `go.mod`:
-
-```sh
-go mod edit -require=github.com/temporalio/temporal/testx@v0.2.0
-```
-
-CI rejects testx changes if that version is already tagged. After merging, the `testx-tag` workflow
-tags the merge commit as `testx/<version>`, which makes the version resolvable.
+The version required in the root `go.mod` is an older pseudo-version and isn't bumped with testx
+changes. There are no testx tags.
 
 Run tests and lint with `make testx-test` and `make lint-testx`; `./...` from the repo root doesn't
 include this module.
+
+## Depending on the server
+
+Consumers of `go.temporal.io/server` ignore its `replace`. If they build server packages that import
+testx (e.g. `temporaltest`, `tests/testcore`), they must require testx at the same commit as the
+server:
+
+```sh
+sha=$(go list -m -json go.temporal.io/server@<version> | jq -r .Origin.Hash)
+go get go.temporal.io/server@<version> github.com/temporalio/temporal/testx@$sha
+```
+
+Server release tags like `v1.30.0` don't apply to testx, so always use the commit.
