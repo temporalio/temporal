@@ -14,7 +14,7 @@ type SignalReader interface {
 	ErrorRatioByGroup(groupName string) (float64, bool)
 }
 
-func Evaluate(reader SignalReader, settings Settings, label string) []*healthspb.HealthCheck {
+func Evaluate(reader SignalReader, settings Settings) []*healthspb.HealthCheck {
 	var checks []*healthspb.HealthCheck
 
 	// //////////////////
