@@ -603,7 +603,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestVersioningBehaviorNormalization(
 					TaskToken:          serializedTaskToken,
 					Identity:           tv.Any().String(),
 					VersioningBehavior: tc.behavior,
-					Deployment:         tc.deployment,
+					Deployment:         tc.deployment, //nolint:staticcheck // SA1019: worker versioning v0.30
 					DeploymentOptions:  tc.deploymentOptions,
 				},
 			})
