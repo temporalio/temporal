@@ -1120,7 +1120,6 @@ func (s *activitiesSuite) TestProcessTaskWithRetriesRecordsMetrics() {
 				task{targetExecution: &commonpb.Execution{BusinessId: "activity-id", RunId: "run-id"}, attempts: 1},
 				respCh,
 				limiter,
-				nil,
 				s.mockFrontendClient,
 				metricsHandler,
 				log.NewTestLogger(),
