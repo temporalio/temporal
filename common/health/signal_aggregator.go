@@ -43,6 +43,8 @@ type SignalAggregator struct {
 	done      chan struct{}
 }
 
+var _ SignalReader = (*SignalAggregator)(nil)
+
 type Option func(*SignalAggregator)
 
 // WithIsUnhealthy sets the classifier that decides whether a (non-nil) error counts
