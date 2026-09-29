@@ -33,7 +33,7 @@ var LongPollBuffer = dynamicconfig.NewNamespaceDurationSetting(
 
 var Enabled = dynamicconfig.NewNamespaceBoolSetting(
 	"nexusoperation.enableStandalone",
-	true,
+	false,
 	`Toggles standalone Nexus operation functionality on the server.`,
 )
 
