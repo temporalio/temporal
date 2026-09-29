@@ -55,16 +55,16 @@ internally.`,
 )
 
 type Config struct {
-	RequestTimeout                          dynamicconfig.DurationPropertyFnWithDestinationFilter
-	RetryPolicy                             dynamicconfig.TypedPropertyFn[backoff.RetryPolicy]
-	InspectSourceHeader                     dynamicconfig.BoolPropertyFn
-	InternalCallbackSameNamespaceArchetypes dynamicconfig.TypedPropertyFn[[]string]
+	RequestTimeout                           dynamicconfig.DurationPropertyFnWithDestinationFilter
+	RetryPolicy                              dynamicconfig.TypedPropertyFn[backoff.RetryPolicy]
+	InspectSourceHeader                      dynamicconfig.BoolPropertyFn
+	InternalCallbackCrossNamespaceArchetypes dynamicconfig.TypedPropertyFn[[]string]
 }
 
 func configProvider(dc *dynamicconfig.Collection) *Config {
 	return &Config{
-		RequestTimeout:                          RequestTimeout.Get(dc),
-		InternalCallbackSameNamespaceArchetypes: InternalCallbackSameNamespaceArchetypes.Get(dc),
+		RequestTimeout:                           RequestTimeout.Get(dc),
+		InternalCallbackCrossNamespaceArchetypes: InternalCallbackCrossNamespaceArchetypes.Get(dc),
 		RetryPolicy: func() backoff.RetryPolicy {
 			return backoff.NewExponentialRetryPolicy(
 				RetryPolicyInitialInterval.Get(dc)(),
@@ -78,19 +78,21 @@ func configProvider(dc *dynamicconfig.Collection) *Config {
 	}
 }
 
-var InternalCallbackSameNamespaceArchetypes = dynamicconfig.NewGlobalTypedSetting(
-	"callback.internal.sameNamespaceArchetypes",
-	[]string{chasm.SchedulerArchetype},
-	`The list of fully-qualified CHASM archetype names whose internal callbacks must target the callback source namespace.`,
+var InternalCallbackCrossNamespaceArchetypes = dynamicconfig.NewGlobalTypedSetting(
+	"callback.internal.crossNamespaceArchetypes",
+	[]string{},
+	`The list of fully-qualified CHASM archetype names whose internal callbacks may target a namespace other than the
+callback source namespace. Internal callbacks for all other archetypes must target the source namespace. Only add an
+archetype here as an escape hatch; cross-namespace internal callbacks are not expected.`,
 )
 
 func (c *Config) internalCallbackRequiresSameNamespace(archetypeID chasm.ArchetypeID) bool {
-	for _, archetype := range c.InternalCallbackSameNamespaceArchetypes() {
+	for _, archetype := range c.InternalCallbackCrossNamespaceArchetypes() {
 		if chasm.GenerateTypeID(archetype) == archetypeID {
-			return true
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 var EncodeInternalTokenWithEnvelope = dynamicconfig.NewNamespaceBoolSetting(

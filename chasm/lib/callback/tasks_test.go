@@ -296,9 +296,6 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			handler := &invocationTaskHandler{
 				config: &Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
-					InternalCallbackSameNamespaceArchetypes: func() []string {
-						return []string{chasm.SchedulerArchetype}
-					},
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
@@ -421,6 +418,11 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 	serializedCrossNamespaceRef, err := crossNamespaceRef.Marshal()
 	require.NoError(t, err)
 	encodedCrossNamespaceRef := base64.RawURLEncoding.EncodeToString(serializedCrossNamespaceRef)
+	const crossNamespaceExemptArchetype = "test.crossNamespaceExempt"
+	crossNamespaceExemptRef := newRef("other-namespace-id", "business-id", chasm.GenerateTypeID(crossNamespaceExemptArchetype))
+	serializedCrossNamespaceExemptRef, err := crossNamespaceExemptRef.Marshal()
+	require.NoError(t, err)
+	encodedCrossNamespaceExemptRef := base64.RawURLEncoding.EncodeToString(serializedCrossNamespaceExemptRef)
 	crossNamespaceSchedulerRef := newRef("other-namespace-id", "business-id", chasm.SchedulerArchetypeID)
 	serializedCrossNamespaceSchedulerRef, err := crossNamespaceSchedulerRef.Marshal()
 	require.NoError(t, err)
@@ -700,7 +702,24 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			wantAttemptSample:   true,
 		},
 		{
-			name: "cross-namespace-non-scheduler-token",
+			name: "cross-namespace-non-exempt-token",
+			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
+				return historyservicemock.NewMockHistoryServiceClient(ctrl)
+			},
+			completion: nexusrpc.CompleteOperationOptions{
+				Result: createPayloadBytes([]byte("result-data")),
+			},
+			headerValue: encodedCrossNamespaceRef,
+			assertOutcome: func(t *testing.T, cb *Callback, err error) {
+				require.ErrorContains(t, err, "internal error, reference-id:")
+				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
+			},
+			wantDeliveryOutcome: "namespace-mismatch",
+			wantEvent:           "nonretryable-error",
+			wantAttemptSample:   true,
+		},
+		{
+			name: "cross-namespace-exempt-archetype-token",
 			setupHistoryClient: func(t *testing.T, ctrl *gomock.Controller) resource.HistoryClient {
 				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
 				client.EXPECT().CompleteNexusOperationChasm(gomock.Any(), gomock.Any()).
@@ -710,7 +729,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			completion: nexusrpc.CompleteOperationOptions{
 				Result: createPayloadBytes([]byte("result-data")),
 			},
-			headerValue: encodedCrossNamespaceRef,
+			headerValue: encodedCrossNamespaceExemptRef,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				require.NoError(t, err)
 				require.Equal(t, callbackspb.CALLBACK_STATUS_SUCCEEDED, cb.Status)
@@ -793,8 +812,8 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			handler := &invocationTaskHandler{
 				config: &Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
-					InternalCallbackSameNamespaceArchetypes: func() []string {
-						return []string{chasm.SchedulerArchetype}
+					InternalCallbackCrossNamespaceArchetypes: func() []string {
+						return []string{crossNamespaceExemptArchetype}
 					},
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
