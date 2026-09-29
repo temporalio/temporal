@@ -272,11 +272,10 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		require.Empty(t, op.Callbacks)
 	})
 
-	sumCallbackSizes := func(ctx chasm.MutableContext, o *Operation) int64 {
+	sumCallbackSizes := func(cbs []*commonpb.Callback) int64 {
 		var size int64
-		for _, chasmCB := range o.Callbacks {
-			apiCB := chasmCB.Get(ctx)
-			size += int64(apiCB.GetCallback().Size())
+		for _, cb := range cbs {
+			size += int64(cb.Size())
 		}
 		return size
 	}
@@ -286,19 +285,23 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		op := newScheduledTestOperation(t, ctx)
 		require.Zero(t, op.TotalCallbacksSize)
 
-		require.NoError(t, op.addCompletionCallbacks(ctx, "req-1", []*commonpb.Callback{
+		initialCallbacks := []*commonpb.Callback{
 			newNexusCallback(),
 			newNexusCallback(),
-		}, "ns-name", cbValidator))
+		}
+
+		require.NoError(t, op.addCompletionCallbacks(ctx, "req-1", initialCallbacks, "ns-name", cbValidator))
 		require.Positive(t, op.TotalCallbacksSize)
-		require.Equal(t, sumCallbackSizes(ctx, op), op.TotalCallbacksSize)
+		require.Equal(t, sumCallbackSizes(initialCallbacks), op.TotalCallbacksSize)
 		size1 := op.TotalCallbacksSize
 
-		require.NoError(t, op.addCompletionCallbacks(ctx, "req-2", []*commonpb.Callback{
+		addedCallbacks := []*commonpb.Callback{
 			newNexusCallback(),
-		}, "ns-name", cbValidator))
+		}
+
+		require.NoError(t, op.addCompletionCallbacks(ctx, "req-2", addedCallbacks, "ns-name", cbValidator))
 		require.Greater(t, op.TotalCallbacksSize, size1)
-		require.Equal(t, sumCallbackSizes(ctx, op), op.TotalCallbacksSize)
+		require.Equal(t, sumCallbackSizes(addedCallbacks)+size1, op.TotalCallbacksSize)
 	})
 
 	t.Run("RejectsExceedingTheTotalSizeLimit", func(t *testing.T) {
@@ -307,6 +310,7 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		require.NoError(t, op.addCompletionCallbacks(ctx, "req-1", []*commonpb.Callback{
 			newNexusCallback(),
 		}, "ns-name", cbValidator))
+		existingSize := op.TotalCallbacksSize
 
 		// A budget with no room left for a second callback of the same size.
 		cfg := test.NewCallbacksValidatorConfig()
@@ -318,8 +322,10 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		var failedPreconditionErr *serviceerror.FailedPrecondition
 		require.ErrorAs(t, err, &failedPreconditionErr)
 		require.ErrorContains(t, err, "bytes already attached")
+
+		// Confirm no changes to op.
 		require.Len(t, op.Callbacks, 1)
-		require.Equal(t, sumCallbackSizes(ctx, op), op.TotalCallbacksSize)
+		require.Equal(t, existingSize, op.TotalCallbacksSize)
 	})
 
 	t.Run("RejectsAnEmptyRequestID", func(t *testing.T) {
