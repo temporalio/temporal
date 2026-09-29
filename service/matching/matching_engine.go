@@ -1936,6 +1936,7 @@ func (e *matchingEngineImpl) UpdateWorkerVersioningRules(
 		}
 
 		updatedClock := hlc.Next(clk, e.timeSource)
+		updatedClock.ClusterId = e.clusterMeta.GetClusterID()
 		var versioningData *persistencespb.VersioningData
 		switch req.GetOperation().(type) {
 		case *workflowservice.UpdateWorkerVersioningRulesRequest_InsertAssignmentRule:
@@ -2090,6 +2091,22 @@ func (e *matchingEngineImpl) getUserDataClone(
 	return userData.GetData(), nil
 }
 
+func maxVersioningDataClock(clk *hlc.Clock, data *persistencespb.VersioningData) *hlc.Clock {
+	for _, set := range data.GetVersionSets() {
+		if stamp := set.GetBecameDefaultTimestamp(); stamp != nil {
+			clk = hlc.Max(clk, stamp)
+		}
+		for _, buildID := range set.GetBuildIds() {
+			for _, stamp := range []*hlc.Clock{buildID.GetStateUpdateTimestamp(), buildID.GetBecameDefaultTimestamp()} {
+				if stamp != nil {
+					clk = hlc.Max(clk, stamp)
+				}
+			}
+		}
+	}
+	return clk
+}
+
 func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 	ctx context.Context,
 	req *matchingservice.UpdateWorkerBuildIdCompatibilityRequest,
@@ -2123,7 +2140,10 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 			tmp := hlc.Zero(e.clusterMeta.GetClusterID())
 			clk = tmp
 		}
+		// Replicated V1 timestamps can be ahead of the selected V2/V3 snapshot clock.
+		clk = maxVersioningDataClock(clk, data.GetVersioningData())
 		updatedClock := hlc.Next(clk, e.timeSource)
+		updatedClock.ClusterId = e.clusterMeta.GetClusterID()
 		var versioningData *persistencespb.VersioningData
 		switch req.GetOperation().(type) {
 		case *matchingservice.UpdateWorkerBuildIdCompatibilityRequest_ApplyPublicRequest_:
@@ -2174,6 +2194,7 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdCompatibility(
 		opts := UserDataUpdateOptions{Source: "UpdateWorkerBuildIdCompatibility/clear-tombstones"}
 		_, err = pm.GetUserDataManager().UpdateUserData(ctx, opts, func(data *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 			updatedClock := hlc.Next(data.GetClock(), e.timeSource)
+			updatedClock.ClusterId = e.clusterMeta.GetClusterID()
 			// Avoid mutation
 			ret := common.CloneProto(data)
 			ret.Clock = updatedClock
@@ -2259,6 +2280,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 			clk = hlc.Zero(e.clusterMeta.GetClusterID())
 		}
 		now := hlc.Next(clk, e.timeSource)
+		now.ClusterId = e.clusterMeta.GetClusterID()
 		// clone the whole thing so we can just mutate
 		data = common.CloneProto(data)
 
@@ -2487,22 +2509,13 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 		}
 
 		// merge v1 sets
-		mergedData := MergeVersioningData(currentVersioningData, newVersioningData)
+		mergedData := common.CloneProto(MergeVersioningData(currentVersioningData, newVersioningData))
 
 		// take last writer for V2 rules and V3 data
 		currentClock := current.GetClock()
 		incomingClock := req.GetUserData().GetClock()
-		// Replication can persist user data without its clock, since we are wrongly setting the clock to nil while merging (to be fixed).
-		// Let incoming data win while the current data is clockless so it is not discarded during another replication. Future merge logic will resolve
-		// conflicts between all combinations of incoming and current data instead of relying on this compatibility fallback.
+		// Allow incoming snapshots to replace clockless data persisted by older replication code.
 		if currentClock != nil && (incomingClock == nil || hlc.Greater(currentClock, incomingClock)) {
-			if mergedData != nil {
-				// v2 rules
-				mergedData.AssignmentRules = currentVersioningData.GetAssignmentRules()
-				mergedData.RedirectRules = currentVersioningData.GetRedirectRules()
-			}
-			mergedUserData.PerType = current.GetPerType()
-
 			// We have wrongly discarded incoming per-type data and should investigate what information was lost.
 			// This is harmful since we might have lost information pertaining to worker-versioning, task queue config
 			// and fairness state.
@@ -2518,14 +2531,17 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 				)
 			}
 		} else {
-			if mergedData != nil {
-				// v2 rules
-				mergedData.AssignmentRules = newVersioningData.GetAssignmentRules()
-				mergedData.RedirectRules = newVersioningData.GetRedirectRules()
+			mergedUserData = common.CloneProto(req.GetUserData())
+			if mergedUserData == nil {
+				mergedUserData = &persistencespb.TaskQueueUserData{}
 			}
-			mergedUserData.PerType = req.GetUserData().GetPerType()
+		}
+		if mergedData != nil {
+			mergedData.AssignmentRules = mergedUserData.GetVersioningData().GetAssignmentRules()
+			mergedData.RedirectRules = mergedUserData.GetVersioningData().GetRedirectRules()
 		}
 
+		// V1 revivals use per-build-ID timestamps; the snapshot clock must stay coupled to the selected V2/V3 data.
 		for _, buildId := range buildIdsToRevive {
 			setIdx, buildIdIdx := worker_versioning.FindBuildId(mergedData, buildId)
 			if setIdx == -1 {
@@ -2533,7 +2549,6 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 			}
 			set := mergedData.VersionSets[setIdx]
 			set.BuildIds[buildIdIdx] = e.reviveBuildId(ns, req.GetTaskQueue(), set.GetBuildIds()[buildIdIdx])
-			mergedUserData.Clock = hlc.Max(mergedUserData.Clock, set.BuildIds[buildIdIdx].StateUpdateTimestamp)
 
 			setDefault := set.BuildIds[len(set.BuildIds)-1]
 			if setDefault.State == persistencespb.STATE_DELETED {
@@ -2541,7 +2556,6 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 				// x. We discovered we're still using the other one, so we revive it. now we also have to revive the default
 				// for set x, or it will be left with the wrong default.
 				set.BuildIds[len(set.BuildIds)-1] = e.reviveBuildId(ns, req.GetTaskQueue(), setDefault)
-				mergedUserData.Clock = hlc.Max(mergedUserData.Clock, setDefault.StateUpdateTimestamp)
 			}
 		}
 
@@ -3788,6 +3802,7 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(
 				existingClock = hlc.Zero(e.clusterMeta.GetClusterID())
 			}
 			now := hlc.Next(existingClock, e.timeSource)
+			now.ClusterId = e.clusterMeta.GetClusterID()
 			protoTs := hlc.ProtoTimestamp(now)
 
 			// Update relevant config fields

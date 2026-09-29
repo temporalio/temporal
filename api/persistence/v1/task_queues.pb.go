@@ -639,10 +639,10 @@ func (x *TaskQueueTypeUserData) GetFairnessState() v14.FairnessState {
 // has reasonable size limits imposed on it.
 type TaskQueueUserData struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The last recorded cluster-local Hybrid Logical Clock timestamp for _this_ task queue family.
-	// Updated whenever user data is directly updated due to a user action but not when applying replication events.
-	// The clock is referenced when new timestamps are generated to ensure it produces monotonically increasing
-	// timestamps.
+	// Hybrid Logical Clock timestamp for the last user data snapshot update to this task queue family.
+	// Local updates advance the clock; replication preserves the clock of the selected snapshot for V2 rules and
+	// per-type data. V1 build IDs merge using their own timestamps without advancing this clock.
+	// Referenced when generating new timestamps to ensure they increase monotonically.
 	Clock          *v1.HybridLogicalClock `protobuf:"bytes,1,opt,name=clock,proto3" json:"clock,omitempty"`
 	VersioningData *VersioningData        `protobuf:"bytes,2,opt,name=versioning_data,json=versioningData,proto3" json:"versioning_data,omitempty"`
 	// Map from task queue type (workflow, activity, nexus) to per-type data.
