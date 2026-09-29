@@ -7788,11 +7788,9 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
-	// Run time-skipping after closeTransactionHandleWorkflowTask so a just-scheduled
-	// workflow task is visible to (and suppresses) the idle check, and before isStateDirty
-	// so the transition event we emit here participates in the dirty-state computation.
-	// CONSIDER(time-skipping): Move CHASM time-skipping handling before isStateDirty so a
-	// time-skipping-only CHASM mutation participates in transition history.
+	// TODO: We currently make the reasonable but unenforced assumption that time skipping
+	// only occurs with a valid state change. This makes it safe to move this line after the
+	// isStateDirty check, but it is beffer to add enforcement of the assumption explicitly in code.
 	regenTimerTasksForWorkflowTimeSkipping := ms.closeTransactionHandleWorkflowTimeSkipping(ctx, transactionPolicy)
 
 	// Save if the state is dirty before closeTransactionPrepareEvents since it flushes the buffer
