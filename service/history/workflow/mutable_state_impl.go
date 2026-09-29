@@ -7803,14 +7803,13 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
-	// TODO: We currently make the reasonable but unenforced assumption that time skipping
-	// only occurs with a valid state change. This makes it safe to move this line after the
-	// isStateDirty check, but it is beffer to add enforcement of the assumption explicitly in code.
-	regenTimerTasksForWorkflowTimeSkipping := ms.closeTransactionHandleWorkflowTimeSkipping(ctx, transactionPolicy)
-
 	// Save if the state is dirty before closeTransactionPrepareEvents since it flushes the buffer
 	// events, and therefore change the dirty state.
 	isStateDirty := ms.isStateDirty()
+	var regenTimerTasksForWorkflowTimeSkipping bool
+	if isStateDirty {
+		regenTimerTasksForWorkflowTimeSkipping = ms.closeTransactionHandleWorkflowTimeSkipping(ctx, transactionPolicy)
+	}
 
 	// closeTransactionPrepareEvents must be called after closeTransactionHandleWorkflowTask because
 	// the latter might fail the workflow task and buffered events must be flushed afterwards.
