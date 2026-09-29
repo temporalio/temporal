@@ -2682,7 +2682,7 @@ func (e *matchingEngineImpl) CheckTaskQueueUserDataPropagation(ctx context.Conte
 		e.config.NumTaskqueueWritePartitions(nsName, tqName, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
 	)
 
-	err = pm.GetUserDataManager().CheckTaskQueueUserDataPropagation(ctx, req.Version, wfPartitions, actPartitions)
+	err = pm.GetUserDataManager().CheckTaskQueueUserDataPropagation(ctx, req, wfPartitions, actPartitions)
 	if err != nil {
 		return nil, err
 	}

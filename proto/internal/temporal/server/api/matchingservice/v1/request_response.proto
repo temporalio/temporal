@@ -572,7 +572,10 @@ message ReplicateTaskQueueUserDataResponse {}
 message CheckTaskQueueUserDataPropagationRequest {
   string namespace_id = 1;
   string task_queue = 2;
+  // Used when routing_config_target is absent, and by older Matching servers.
   int64 version = 3;
+  // If present, wait for this routing revision instead of the user data version.
+  temporal.server.api.deployment.v1.RoutingConfigPropagationTarget routing_config_target = 4;
 }
 
 message CheckTaskQueueUserDataPropagationResponse {}

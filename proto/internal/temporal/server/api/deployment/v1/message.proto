@@ -372,14 +372,28 @@ message SyncDeploymentVersionUserDataRequest {
   }
 }
 
+// Identifies the routing config that must reach each loaded task queue partition.
+message RoutingConfigPropagationTarget {
+  // Deployment whose routing config is being propagated.
+  string deployment_name = 1;
+  // Minimum routing config revision to observe in each task queue type.
+  int64 revision_number = 2;
+  // Task queue types updated by the routing config sync.
+  repeated temporal.api.enums.v1.TaskQueueType task_queue_types = 3;
+}
+
 // used as Worker Deployment Version workflow activity output:
 message SyncDeploymentVersionUserDataResponse {
   map<string, int64> task_queue_max_versions = 1;
+  // Routing targets take precedence over the corresponding legacy user data versions.
+  map<string, RoutingConfigPropagationTarget> task_queue_routing_config_targets = 2;
 }
 
 // used as Worker Deployment Version workflow activity input:
 message CheckWorkerDeploymentUserDataPropagationRequest {
   map<string, int64> task_queue_max_versions = 1;
+  // Routing targets take precedence over the corresponding legacy user data versions.
+  map<string, RoutingConfigPropagationTarget> task_queue_routing_config_targets = 2;
 }
 
 // used as Worker Deployment workflow activity input:

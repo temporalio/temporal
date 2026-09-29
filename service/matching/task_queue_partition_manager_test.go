@@ -2149,7 +2149,7 @@ func (m *mockUserDataManager) HandleGetUserDataRequest(ctx context.Context, req 
 	panic("unused")
 }
 
-func (m *mockUserDataManager) CheckTaskQueueUserDataPropagation(ctx context.Context, version int64, wfPartitions int, actPartitions int) error {
+func (m *mockUserDataManager) CheckTaskQueueUserDataPropagation(ctx context.Context, req *matchingservice.CheckTaskQueueUserDataPropagationRequest, wfPartitions int, actPartitions int) error {
 	panic("unused")
 }
 

@@ -662,12 +662,13 @@ func (d *VersionWorkflowRunner) deleteVersionFromTaskQueues(ctx workflow.Context
 	}
 
 	// wait for propagation
-	if len(syncRes.TaskQueueMaxVersions) > 0 {
+	if len(syncRes.TaskQueueMaxVersions) > 0 || len(syncRes.TaskQueueRoutingConfigTargets) > 0 {
 		err = workflow.ExecuteActivity(
 			activityCtx,
 			d.a.CheckWorkerDeploymentUserDataPropagation,
 			&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
-				TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
+				TaskQueueMaxVersions:          syncRes.TaskQueueMaxVersions,
+				TaskQueueRoutingConfigTargets: syncRes.TaskQueueRoutingConfigTargets,
 			}).Get(ctx, nil)
 		if err != nil {
 			return err
@@ -855,13 +856,14 @@ func (d *VersionWorkflowRunner) syncRegisteredTaskQueueOld(ctx workflow.Context,
 		return err
 	}
 
-	if len(syncRes.TaskQueueMaxVersions) > 0 {
+	if len(syncRes.TaskQueueMaxVersions) > 0 || len(syncRes.TaskQueueRoutingConfigTargets) > 0 {
 		// wait for propagation
 		err = workflow.ExecuteActivity(
 			activityCtx,
 			d.a.CheckWorkerDeploymentUserDataPropagation,
 			&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
-				TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
+				TaskQueueMaxVersions:          syncRes.TaskQueueMaxVersions,
+				TaskQueueRoutingConfigTargets: syncRes.TaskQueueRoutingConfigTargets,
 			}).Get(ctx, nil)
 		if err != nil {
 			return err
@@ -1336,13 +1338,14 @@ func (d *VersionWorkflowRunner) syncVersionDataToTaskQueues(ctx workflow.Context
 		if err != nil {
 			return err
 		}
-		if len(syncRes.TaskQueueMaxVersions) > 0 {
+		if len(syncRes.TaskQueueMaxVersions) > 0 || len(syncRes.TaskQueueRoutingConfigTargets) > 0 {
 			// wait for propagation
 			err = workflow.ExecuteActivity(
 				activityCtx,
 				d.a.CheckWorkerDeploymentUserDataPropagation,
 				&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
-					TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
+					TaskQueueMaxVersions:          syncRes.TaskQueueMaxVersions,
+					TaskQueueRoutingConfigTargets: syncRes.TaskQueueRoutingConfigTargets,
 				}).Get(ctx, nil)
 			if err != nil {
 				return err
@@ -1400,7 +1403,7 @@ func (d *VersionWorkflowRunner) executeAndTrackAsyncPropagation(
 	versionData *deploymentspb.WorkerDeploymentVersionData,
 ) {
 	// Number of batches to check might be less than the original batches because some TQ might not update.
-	var taskQueueMaxVersionsToCheck []map[string]int64
+	var taskQueueMaxVersionsToCheck []*deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest
 
 	for _, batch := range batches {
 		if d.cancelPropagations {
@@ -1408,16 +1411,29 @@ func (d *VersionWorkflowRunner) executeAndTrackAsyncPropagation(
 			return
 		}
 		res := d.executePropagationBatch(ctx, batch, routingConfig, versionData)
-		for _, tq := range workflow.DeterministicKeys(res) {
+		queues := make(map[string]int64, len(res.GetTaskQueueMaxVersions()))
+		for tq, version := range res.GetTaskQueueMaxVersions() {
+			queues[tq] = version
+		}
+		for tq := range res.GetTaskQueueRoutingConfigTargets() {
+			queues[tq] = res.GetTaskQueueMaxVersions()[tq]
+		}
+		for _, tq := range workflow.DeterministicKeys(queues) {
 			if len(taskQueueMaxVersionsToCheck) == 0 {
-				taskQueueMaxVersionsToCheck = []map[string]int64{{}}
+				taskQueueMaxVersionsToCheck = []*deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{{TaskQueueMaxVersions: map[string]int64{}}}
 			}
 			lastBatch := taskQueueMaxVersionsToCheck[len(taskQueueMaxVersionsToCheck)-1]
-			if len(lastBatch) >= int(d.VersionState.SyncBatchSize) {
-				taskQueueMaxVersionsToCheck = append(taskQueueMaxVersionsToCheck, map[string]int64{})
+			if len(lastBatch.TaskQueueMaxVersions) >= int(d.VersionState.SyncBatchSize) {
+				taskQueueMaxVersionsToCheck = append(taskQueueMaxVersionsToCheck, &deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{TaskQueueMaxVersions: map[string]int64{}})
 				lastBatch = taskQueueMaxVersionsToCheck[len(taskQueueMaxVersionsToCheck)-1]
 			}
-			lastBatch[tq] = res[tq]
+			lastBatch.TaskQueueMaxVersions[tq] = queues[tq]
+			if target := res.GetTaskQueueRoutingConfigTargets()[tq]; target != nil {
+				if lastBatch.TaskQueueRoutingConfigTargets == nil {
+					lastBatch.TaskQueueRoutingConfigTargets = make(map[string]*deploymentspb.RoutingConfigPropagationTarget)
+				}
+				lastBatch.TaskQueueRoutingConfigTargets[tq] = target
+			}
 		}
 	}
 	if d.cancelPropagations {
@@ -1431,9 +1447,7 @@ func (d *VersionWorkflowRunner) executeAndTrackAsyncPropagation(
 		err := workflow.ExecuteActivity(
 			activityCtx,
 			d.a.CheckWorkerDeploymentUserDataPropagation,
-			&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
-				TaskQueueMaxVersions: batch,
-			}).Get(ctx, nil)
+			batch).Get(ctx, nil)
 
 		if err != nil {
 			d.logger.Error("async propagation check failed", "error", err)
@@ -1479,13 +1493,13 @@ func (d *VersionWorkflowRunner) batchTaskQueuesForSync() [][]*deploymentspb.Sync
 	return batches
 }
 
-// executePropagationBatch executes a single batch of propagation and returns task queue max versions to check
+// executePropagationBatch executes a single batch of propagation and returns the targets to check
 func (d *VersionWorkflowRunner) executePropagationBatch(
 	ctx workflow.Context,
 	batch []*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData,
 	routingConfig *deploymentpb.RoutingConfig,
 	versionData *deploymentspb.WorkerDeploymentVersionData,
-) map[string]int64 {
+) *deploymentspb.SyncDeploymentVersionUserDataResponse {
 	state := d.GetVersionState()
 	activityCtx := workflow.WithActivityOptions(ctx, propagationActivityOptions)
 	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
@@ -1499,11 +1513,10 @@ func (d *VersionWorkflowRunner) executePropagationBatch(
 
 	if err != nil {
 		d.logger.Error("async propagation batch failed", "error", err)
-		// Return empty map on error
-		return map[string]int64(nil)
+		return nil
 	}
 
-	return syncRes.TaskQueueMaxVersions
+	return &syncRes
 }
 
 // signalPropagationComplete sends a signal to the deployment workflow when async propagation completes

@@ -15,6 +15,7 @@ import (
 	"github.com/dgryski/go-farm"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -59,7 +60,7 @@ type (
 		UpdateUserData(ctx context.Context, options UserDataUpdateOptions, updateFn UserDataUpdateFunc) (int64, error)
 		// Handles the maybe-long-poll GetUserData RPC.
 		HandleGetUserDataRequest(ctx context.Context, req *matchingservice.GetTaskQueueUserDataRequest) (*matchingservice.GetTaskQueueUserDataResponse, error)
-		CheckTaskQueueUserDataPropagation(context.Context, int64, int, int) error
+		CheckTaskQueueUserDataPropagation(context.Context, *matchingservice.CheckTaskQueueUserDataPropagationRequest, int, int) error
 		LocalBacklogPriorityChanged(map[PhysicalTaskQueueVersion]int64)
 		// SetPartitionScale is called on the root partition to propagate new scale info to child partitions.
 		SetPartitionScale(*taskqueuespb.PartitionScaleInfo)
@@ -663,20 +664,32 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 
 func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
 	ctx context.Context,
-	version int64,
+	req *matchingservice.CheckTaskQueueUserDataPropagationRequest,
 	wfPartitions int,
 	actPartitions int,
 ) error {
+	version := req.GetVersion()
+	target := req.GetRoutingConfigTarget()
+	firstWorkflowPartition := 1
+	if target != nil {
+		firstWorkflowPartition = 0
+	}
 	if m.store == nil {
 		return serviceerror.NewInvalidArgument("CheckTaskQueueUserDataPropagation must be called on root workflow task queue")
-	} else if version < 1 {
+	} else if target == nil && version < 1 {
 		return serviceerror.NewInvalidArgument("CheckTaskQueueUserDataPropagation must wait for version >= 1")
+	} else if target != nil && (target.GetDeploymentName() == "" || target.GetRevisionNumber() < 1 || len(target.GetTaskQueueTypes()) == 0) {
+		return serviceerror.NewInvalidArgument("routing config propagation requires a deployment, revision >= 1, and task queue types")
 	}
 
-	complete := make(chan error)
+	complete := make(chan error, 1)
 
 	var waitingForPartitions atomic.Int64
-	waitingForPartitions.Store(int64(wfPartitions - 1 + actPartitions))
+	partitionCount := wfPartitions - firstWorkflowPartition + actPartitions
+	if partitionCount == 0 {
+		return nil
+	}
+	waitingForPartitions.Store(int64(partitionCount))
 
 	policy := backoff.NewExponentialRetryPolicy(500 * time.Millisecond)
 	isRetryable := func(err error) bool {
@@ -689,22 +702,40 @@ func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
 	}
 
 	check := func(p int, tp enumspb.TaskQueueType) {
+		lastKnownVersion := version - 1
+		if target != nil {
+			lastKnownVersion = 0
+		}
 		err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
 			res, err := m.matchingClient.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
-				NamespaceId:              m.partition.NamespaceId(),
-				TaskQueue:                m.partition.TaskQueue().NormalPartition(p).RpcName(),
-				TaskQueueType:            tp,
-				LastKnownUserDataVersion: version - 1,
-				WaitNewData:              true,
-				OnlyIfLoaded:             true,
+				NamespaceId:                   m.partition.NamespaceId(),
+				TaskQueue:                     m.partition.TaskQueue().NormalPartition(p).RpcName(),
+				TaskQueueType:                 tp,
+				LastKnownUserDataVersion:      lastKnownVersion,
+				LastKnownEphemeralDataVersion: noEphemeralDataVersion,
+				WaitNewData:                   true,
+				OnlyIfLoaded:                  true,
 			})
 			if err != nil {
+				if target != nil && strings.Contains(err.Error(), errRequestedVersionTooLarge.Error()) {
+					// Ownership transfer can expose an older table version with a newer routing revision.
+					lastKnownVersion = 0
+				}
 				if _, ok := errors.AsType[*serviceerror.FailedPrecondition](err); ok {
 					// this means the partition was not loaded, so skip it (if it loads, it will get the newest data)
 					err = nil
 				}
 				return err
-			} else if res.GetUserData().GetVersion() < version {
+			}
+			if target != nil {
+				if routingConfigPropagated(res.GetUserData().GetData(), target) {
+					return nil
+				}
+				// Poll from the partition's observed user data version; routing revisions are independent of it.
+				lastKnownVersion = max(lastKnownVersion, res.GetUserData().GetVersion())
+				return serviceerror.NewUnavailable("retry")
+			}
+			if res.GetUserData().GetVersion() < version {
 				return serviceerror.NewUnavailable("retry")
 			}
 			return nil
@@ -716,7 +747,7 @@ func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
 		}
 	}
 
-	for i := 1; i < wfPartitions; i++ {
+	for i := firstWorkflowPartition; i < wfPartitions; i++ {
 		go check(i, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	}
 	for i := range actPartitions {
@@ -729,6 +760,16 @@ func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
 	case err := <-complete:
 		return err
 	}
+}
+
+func routingConfigPropagated(data *persistencespb.TaskQueueUserData, target *deploymentspb.RoutingConfigPropagationTarget) bool {
+	for _, tp := range target.GetTaskQueueTypes() {
+		deployment := data.GetPerType()[int32(tp)].GetDeploymentData().GetDeploymentsData()[target.GetDeploymentName()]
+		if deployment.GetRoutingConfig().GetRevisionNumber() < target.GetRevisionNumber() {
+			return false
+		}
+	}
+	return true
 }
 
 // LocalBacklogPriorityChanged can be called on any normal partition.

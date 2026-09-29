@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/namespace"
@@ -469,4 +470,18 @@ func makeNewVersionState(
 		LastModifierIdentity: identity,
 		ComputeConfig:        computeConfig,
 	}
+}
+
+func workerDeploymentPropagationRequests(namespaceID string, input *deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest) map[string]*matchingservice.CheckTaskQueueUserDataPropagationRequest {
+	requests := make(map[string]*matchingservice.CheckTaskQueueUserDataPropagationRequest, len(input.GetTaskQueueMaxVersions()))
+	for name, version := range input.GetTaskQueueMaxVersions() {
+		requests[name] = &matchingservice.CheckTaskQueueUserDataPropagationRequest{NamespaceId: namespaceID, TaskQueue: name, Version: version}
+	}
+	for name, target := range input.GetTaskQueueRoutingConfigTargets() {
+		if requests[name] == nil {
+			requests[name] = &matchingservice.CheckTaskQueueUserDataPropagationRequest{NamespaceId: namespaceID, TaskQueue: name}
+		}
+		requests[name].RoutingConfigTarget = target
+	}
+	return requests
 }
