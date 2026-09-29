@@ -432,7 +432,6 @@ func NewMutableState(
 	if s.config.EnableChasm(namespaceName) {
 		s.chasmTree = chasm.NewEmptyTree(
 			shard.ChasmRegistry(),
-			shard.GetTimeSource(),
 			s,
 			chasm.DefaultPathEncoder,
 			logger,
@@ -440,9 +439,6 @@ func NewMutableState(
 		)
 	}
 
-	if s.executionInfo.GetTimeSkippingInfo() != nil {
-		s.wrapTimeSourceWithTimeSkipping()
-	}
 	return s
 }
 
@@ -591,7 +587,6 @@ func NewMutableStateFromDB(
 		mutableState.chasmTree, err = chasm.NewTreeFromDB(
 			dbRecord.ChasmNodes,
 			shard.ChasmRegistry(),
-			shard.GetTimeSource(),
 			mutableState,
 			chasm.DefaultPathEncoder,
 			mutableState.logger, // this logger is tagged with execution key.
@@ -1788,8 +1783,6 @@ func (ms *MutableStateImpl) GetRetryBackoffDuration(
 		return backoff.NoBackoff, enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET
 	}
 
-	// todo@time-skipping: time skipping is naturally supported for cron backoff, and need to
-	// confirm it is the best default policy for cron
 	return getBackoffInterval(
 		ms.timeSource.Now(),
 		info.Attempt,
@@ -1808,8 +1801,6 @@ func (ms *MutableStateImpl) GetCronBackoffDuration() time.Duration {
 		return backoff.NoBackoff
 	}
 	executionTime := timestamp.TimeValue(ms.GetExecutionInfo().GetExecutionTime())
-	// todo@time-skipping: time skipping is naturally supported for cron backoff, and need to
-	// confirm it is the best default policy for cron
 	return backoff.GetBackoffForNextSchedule(ms.executionInfo.CronSchedule, executionTime, ms.timeSource.Now())
 }
 
@@ -2989,8 +2980,6 @@ func computeDeclinedTargetVersionUpgrade(
 
 func (ms *MutableStateImpl) ContinueAsNewMinBackoff(backoffDuration *durationpb.Duration) *durationpb.Duration {
 	// lifetime of previous execution
-	// todo@time-skipping: time skipping is naturally supported for continue as new backoff, and need to
-	// make sure the backoff is correctly applied in the time skipping case
 	now := ms.timeSource.Now()
 	lifetime := max(time.Duration(0), now.Sub(ms.executionState.StartTime.AsTime().UTC()))
 	if ms.executionInfo.ExecutionTime != nil {
@@ -3179,7 +3168,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		ms.executionInfo.RootRunId = execution.GetRunId()
 	}
 
-	// todo@time-skipping: apply time skipping to WorkflowStartDelay
 	ms.executionInfo.ExecutionTime = timestamppb.New(
 		ms.executionState.StartTime.AsTime().Add(event.GetFirstWorkflowTaskBackoff().AsDuration()),
 	)
@@ -3744,8 +3732,6 @@ func (ms *MutableStateImpl) addResetPointFromCompletion(
 		}
 	}
 
-	// todo@time-skipping: time skipping is naturally supported for auto reset points, and need to
-	// decide if this the best default policy for auto reset points
 	newPoint := &workflowpb.ResetPointInfo{
 		BinaryChecksum:               binaryChecksum,
 		BuildId:                      buildId,
@@ -7876,7 +7862,6 @@ func (ms *MutableStateImpl) closeTransaction(
 		}
 	}
 
-	// todo@TimeSkipping, we can move update versioned transition to inside closeTransactionHandleWorkflowTimeSkipping
 	ms.closeTransactionTrackLastUpdateVersionedTransition(
 		transactionPolicy,
 	)
@@ -8436,18 +8421,18 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 				firstEventVersion := common.EmptyVersion
 				nextEventID := common.EmptyEventID
 				var lastVersionHistoryItem *historyspb.VersionHistoryItem
+				currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.executionInfo.VersionHistories)
+				if err != nil {
+					return err
+				}
 				if len(eventBatches) > 0 {
 					firstEventID = eventBatches[0][0].EventId
 					firstEventVersion = eventBatches[0][0].Version
 					lastBatch := eventBatches[len(eventBatches)-1]
 					nextEventID = lastBatch[len(lastBatch)-1].EventId + 1
 				} else {
-					currentHistory, err := versionhistory.GetCurrentVersionHistory(ms.executionInfo.VersionHistories)
-					if err != nil {
-						return err
-					}
-					if !versionhistory.IsEmptyVersionHistory(currentHistory) {
-						item, err := versionhistory.GetLastVersionHistoryItem(currentHistory)
+					if !versionhistory.IsEmptyVersionHistory(currentVersionHistory) {
+						item, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
 						//nolint:revive // max-control-nesting: control flow nesting exceeds 5
 						if err != nil {
 							return err
@@ -8472,6 +8457,9 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 						NextEventID:            nextEventID,
 						TaskEquivalents:        replicationTasks,
 						LastVersionHistoryItem: lastVersionHistoryItem,
+						CurrentVersionHistory: &historyspb.VersionHistory{
+							Items: versionhistory.CopyVersionHistoryItems(currentVersionHistory.Items),
+						},
 					}
 
 					if ms.dbRecordVersion == 1 {
@@ -9658,6 +9646,9 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 	err := common.MergeProtoExcludingFields(current, incoming, doNotSync)
 	if err != nil {
 		return err
+	}
+	if current.GetTimeSkippingInfo() != nil {
+		ms.wrapTimeSourceWithTimeSkipping()
 	}
 
 	ms.ClearStickyTaskQueue()

@@ -4873,6 +4873,10 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareReplicationTasks_SyncVers
 	s.Equal(expectedTask.WorkflowKey, actualTask.WorkflowKey)
 	s.Equal(expectedTask.VersionedTransition, actualTask.VersionedTransition)
 	s.Equal(expectedTask.ArchetypeID, actualTask.ArchetypeID)
+	s.True(proto.Equal(&historyspb.VersionHistory{
+		Items: versionhistory.CopyVersionHistoryItems(ms.executionInfo.VersionHistories.Histories[0].Items),
+	}, actualTask.CurrentVersionHistory))
+	s.Empty(actualTask.CurrentVersionHistory.BranchToken)
 	s.Equal(3, len(actualTask.TaskEquivalents))
 	s.Equal(historyTasks[0], actualTask.TaskEquivalents[0])
 	s.Equal(historyTasks[1], actualTask.TaskEquivalents[1])
@@ -5903,8 +5907,9 @@ func (s *mutableStateSuite) buildSnapshot(state *MutableStateImpl) *persistences
 			},
 			SignalRequestIdsLastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1025},
 			WorkflowTaskLastUpdateVersionedTransition:     state.executionInfo.WorkflowTaskLastUpdateVersionedTransition,
-			UpdateInfos: state.executionInfo.UpdateInfos,
-			UpdateCount: state.executionInfo.UpdateCount,
+			TimeSkippingInfo: state.executionInfo.TimeSkippingInfo,
+			UpdateInfos:      state.executionInfo.UpdateInfos,
+			UpdateCount:      state.executionInfo.UpdateCount,
 		},
 		ExecutionState: &persistencespb.WorkflowExecutionState{
 			RunId:               state.executionState.RunId,
@@ -5969,6 +5974,9 @@ func (s *mutableStateSuite) TestApplySnapshot() {
 			currentMS.chasmTree = currentMockChasmTree
 
 			state = s.buildWorkflowMutableState()
+			state.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+				AccumulatedSkippedDuration: durationpb.New(2 * time.Hour),
+			}
 			state.ExecutionInfo.UpdateCount = 1
 			state.ExecutionInfo.UpdateInfos = map[string]*persistencespb.UpdateInfo{
 				"replicated-update": {
@@ -6039,6 +6047,8 @@ func (s *mutableStateSuite) TestApplySnapshot() {
 			err = currentMS.ApplySnapshot(snapshot)
 			s.NoError(err)
 			s.NotNil(currentMS.GetExecutionInfo().SubStateMachinesByType)
+			_, isTimeSkippingTimeSource := currentMS.timeSource.(*clock.TimeSkippingTimeSourceWrapper)
+			s.True(isTimeSkippingTimeSource)
 
 			s.verifyMutableState(currentMS, targetMS, originMS)
 			s.Equal(tc.expectedWorkflowTaskUpdated, currentMS.workflowTaskUpdated)
@@ -6130,6 +6140,9 @@ func (s *mutableStateSuite) TestApplyMutation() {
 			currentMS.GetExecutionInfo().SubStateMachineTombstoneBatches = tombstones
 
 			state = s.buildWorkflowMutableState()
+			state.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+				AccumulatedSkippedDuration: durationpb.New(2 * time.Hour),
+			}
 			state.ExecutionInfo.UpdateCount = 1
 			state.ExecutionInfo.UpdateInfos = map[string]*persistencespb.UpdateInfo{
 				"replicated-update": {
@@ -6277,6 +6290,8 @@ func (s *mutableStateSuite) TestApplyMutation() {
 
 			err = currentMS.ApplyMutation(mutation)
 			s.NoError(err)
+			_, isTimeSkippingTimeSource := currentMS.timeSource.(*clock.TimeSkippingTimeSourceWrapper)
+			s.True(isTimeSkippingTimeSource)
 			s.verifyMutableState(currentMS, targetMS, originMS)
 			s.Equal(tc.expectedWorkflowTaskUpdated, currentMS.workflowTaskUpdated)
 		})
@@ -8067,6 +8082,11 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
 		accumulated := ms.GetExecutionInfo().TimeSkippingInfo.AccumulatedSkippedDuration
 		s.Require().NotNil(accumulated)
 		s.Greater(accumulated.AsDuration(), time.Duration(0))
+		protorequire.ProtoEqual(
+			s.T(),
+			ms.CurrentVersionedTransition(),
+			ms.GetExecutionInfo().TimeSkippingInfo.GetLastUpdateVersionedTransition(),
+		)
 
 		// A WorkflowExecutionTimeSkippingTransitioned event must appear in the written batches.
 		var tsEvent *historypb.HistoryEvent

@@ -5,16 +5,13 @@ import (
 	"fmt"
 	"maps"
 	"slices"
-	"strings"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	failurepb "go.temporal.io/api/failure/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
@@ -22,7 +19,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -66,11 +62,6 @@ type Scheduler struct {
 var (
 	_ (chasm.VisibilitySearchAttributesProvider) = (*Scheduler)(nil)
 	_ (chasm.VisibilityMemoProvider)             = (*Scheduler)(nil)
-)
-
-const (
-	callbackIgnoredUnrecognizedRequest metrics.ReasonString = "unrecognized_request_id"
-	callbackIgnoredAlreadyCompleted    metrics.ReasonString = "already_completed"
 )
 
 var (
@@ -659,144 +650,6 @@ func (s *Scheduler) recordStartOnlyActions(
 
 func (s *Scheduler) recentActions(ctx chasm.Context) []*schedulepb.ScheduleActionResult {
 	return s.Invoker.Get(ctx).recentActions(s.Info.GetRecentActions())
-}
-
-var _ chasm.NexusCompletionHandler = &Scheduler{}
-
-func executionStatusFromFailure(failure *failurepb.Failure) enumspb.WorkflowExecutionStatus {
-	switch failure.FailureInfo.(type) {
-	case *failurepb.Failure_CanceledFailureInfo:
-		return enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED
-	case *failurepb.Failure_TimeoutFailureInfo:
-		return enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT
-	case *failurepb.Failure_TerminatedFailureInfo:
-		return enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
-	default:
-		return enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
-	}
-}
-
-func countsAsFailureForPause(status enumspb.WorkflowExecutionStatus) bool {
-	switch status {
-	case enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
-		return true
-	default:
-		return false
-	}
-}
-
-func (s *Scheduler) recordIgnoredCallback(
-	ctx chasm.MutableContext,
-	metricsHandler metrics.Handler,
-	requestID string,
-	reason metrics.ReasonString,
-	message string,
-) {
-	s.getOrCreateEventLog(ctx).LogEvent(ctx, fmt.Sprintf("%s: %s", message, requestID))
-	ctx.Logger().Warn(message, tag.RequestID(requestID), tag.ScheduleID(s.ScheduleId))
-	metricsHandler.Counter(metrics.ScheduleCallbackIgnored.Name()).Record(1, metrics.ReasonTag(reason))
-}
-
-// HandleNexusCompletion allows Scheduler to record workflow completions from
-// worfklows started by the same scheduler tree's Invoker.
-func (s *Scheduler) HandleNexusCompletion(
-	ctx chasm.MutableContext,
-	info *persistencespb.ChasmNexusCompletion,
-) error {
-	invoker := s.Invoker.Get(ctx)
-	metricsHandler := newTaggedMetricsHandler(ctx.MetricsHandler(), s)
-
-	var start *schedulespb.BufferedStart
-	for _, bufferedStart := range invoker.GetBufferedStarts() {
-		if bufferedStart.GetRequestId() == info.RequestId {
-			start = bufferedStart
-			break
-		}
-	}
-	if start == nil {
-		// Missing request IDs are expected for start-only ALLOW_ALL actions because
-		// their callbacks remain attached for rolling-upgrade compatibility.
-		// TODO: Restore warning and event logging once those callbacks can be safely omitted.
-		metricsHandler.Counter(metrics.ScheduleCallbackIgnored.Name()).Record(
-			1,
-			metrics.ReasonTag(callbackIgnoredUnrecognizedRequest),
-		)
-		return nil
-	}
-	if start.GetCompleted() != nil {
-		// Completion callbacks may be validly redelivered, for example after a workflow reset.
-		// Preserve state but keep the duplicate observable through the log and metric.
-		s.recordIgnoredCallback(
-			ctx,
-			metricsHandler,
-			info.RequestId,
-			callbackIgnoredAlreadyCompleted,
-			"handled Nexus completion for an already-completed buffered start",
-		)
-		return nil
-	}
-	workflowID := start.GetWorkflowId()
-	tracksCompletionResult := internal.TracksCompletionResult(start.GetOverlapPolicy())
-
-	// Record how long it took for the callback to arrive after the action completed.
-	// Use ctx.Now instead of time.Since to use a consistent time source across nodes,
-	// and clamp to zero in case of clock skew.
-	if closeTime := info.GetCloseTime().AsTime(); !closeTime.IsZero() {
-		latency := max(0, ctx.Now(s).Sub(closeTime))
-		metricsHandler.Timer(metrics.ScheduleCallbackLatency.Name()).Record(latency)
-	}
-
-	// Handle last completed/failed status and payloads.
-	//
-	// TODO - also record payload sizes once we have metrics wired into CHASM context.
-	var wfStatus enumspb.WorkflowExecutionStatus
-	switch outcome := info.Outcome.(type) {
-	case *persistencespb.ChasmNexusCompletion_Failure:
-		wfStatus = executionStatusFromFailure(outcome.Failure)
-		if tracksCompletionResult {
-			previousResult := s.LastCompletionResult.Get(ctx) // Most-recent success is kept after failure.
-			s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{
-				Failure: outcome.Failure,
-				Success: previousResult.Success,
-			})
-		}
-	case *persistencespb.ChasmNexusCompletion_Success:
-		wfStatus = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
-		if tracksCompletionResult {
-			s.LastCompletionResult = chasm.NewDataField(ctx, &schedulerpb.LastCompletionResult{
-				Success: outcome.Success,
-			})
-		}
-	default:
-		wfStatus = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
-	}
-
-	// Handle pause-on-failure.
-	if tracksCompletionResult && countsAsFailureForPause(wfStatus) &&
-		s.Schedule.Policies.PauseOnFailure && !s.Schedule.State.Paused {
-		s.Schedule.State.Paused = true
-		s.Schedule.State.Notes = fmt.Sprintf(
-			"paused, workflow %s: %s",
-			strings.ToLower(wfStatus.String()),
-			workflowID,
-		)
-		s.updateConflictToken()
-	}
-
-	// Record the completed action in the Invoker.
-	completed := &schedulespb.CompletedResult{
-		Status:    wfStatus,
-		CloseTime: info.CloseTime,
-	}
-	invoker.recordCompletedAction(ctx, completed, info.RequestId)
-
-	// Generate immediately after recording completions, so that an idle task
-	// can be scheduled if no more actions are remaining. Necessary as
-	// additional events invalidate in-flight idle tasks.
-	s.Generator.Get(ctx).Generate(ctx)
-
-	return nil
 }
 
 // Describe returns the current state of the Scheduler for DescribeSchedule requests.
