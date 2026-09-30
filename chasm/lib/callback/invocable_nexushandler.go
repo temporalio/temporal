@@ -36,6 +36,10 @@ type invocableNexusHandler struct {
 	callback   *callbackspb.Callback_NexusHandler
 	completion nexusrpc.CompleteOperationOptions
 
+	// sourceLinks describe the Callback which is triggering the Nexus handler, so it can
+	// link back to its source/trigger.
+	sourceLinks []*nexuspb.Link
+
 	// completionSourceTag is the fully qualified name of the CHASM component that produced this
 	// completion, e.g. "workflow.workflow" or "activity.activity".
 	completionSourceTag string
@@ -102,10 +106,7 @@ func (n invocableNexusHandler) buildDispatchRequest(
 	}
 	// The handler is a lang-SDK Nexus operation, so encode the input with the standard Temporal payload
 	// format (json/protobuf) that its data converter decodes back into an OnCompleteRequest.
-	//
-	// TODO(temporalio/temporal/issues/11891): Mark the Payload as a "system payload" to avoid the payload
-	// being decoded on the client-side by mistake.
-	input, err := payload.Encode(onComplete)
+	input, err := commonnexus.EncodeSystemPayload(onComplete)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode NexusHandler callback input: %w", err)
 	}
@@ -132,10 +133,10 @@ func (n invocableNexusHandler) buildDispatchRequest(
 					Operation: n.callback.GetOperation(),
 					RequestId: n.requestID,
 					Payload:   input,
-					// TODO(temporal/issues/11889): These links will be wrong. Backlinks to the source of the Nexus completion
-					// should be to the *callback attached* to the completion's source. Not the completion directly.
-					// e.g. a Link_Callback to "SANO xxx callback yyy", and not "SANO xxx".
-					Links: commonnexus.ConvertLinksToProto(n.completion.Links),
+					// We intentionally ignore n.completion.Links. We want to link to the *Callback* that
+					// triggered the Nexus handler's invocation. And not the source execution that produced
+					// the completion result.
+					Links: n.sourceLinks,
 				},
 			},
 			Capabilities: &nexuspb.Request_Capabilities{
@@ -242,7 +243,9 @@ func (n invocableNexusHandler) classifyDispatchResult(
 		// Both flavors of success count as delivered. An async start means the worker accepted the
 		// completion and started an operation to process it; either way the callback is done, it does
 		// not wait for that operation to finish.
-		return invocationResultOK{}
+		return invocationResultOK{
+			links: commonnexus.ConvertLinksFromProto(result.Links),
+		}
 	}
 
 	// Every remaining outcome carries an error: what the worker reported, or one that

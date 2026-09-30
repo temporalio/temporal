@@ -58,6 +58,14 @@ func validateFields(l *commonpb.Link) error {
 		if t.WorkflowEvent.GetEventRef().GetEventType() == enumspb.EVENT_TYPE_UNSPECIFIED && t.WorkflowEvent.GetEventRef().GetEventId() != 0 {
 			return serviceerror.NewInvalidArgument("workflow event link ref cannot have an unspecified event type and a non-zero event ID")
 		}
+		if requestIDRef := t.WorkflowEvent.GetRequestIdRef(); requestIDRef != nil {
+			if requestIDRef.GetRequestId() == "" {
+				return serviceerror.NewInvalidArgument("workflow event request ID ref must not have an empty request ID")
+			}
+			if requestIDRef.GetEventType() == enumspb.EVENT_TYPE_UNSPECIFIED {
+				return serviceerror.NewInvalidArgument("workflow event request ID ref must not have an unspecified event type")
+			}
+		}
 	case *commonpb.Link_BatchJob_:
 		if t.BatchJob.GetJobId() == "" {
 			return serviceerror.NewInvalidArgument("batch job link must not have an empty job ID")
