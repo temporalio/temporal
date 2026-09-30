@@ -3,8 +3,10 @@ package api
 import (
 	"context"
 
+	commonpb "go.temporal.io/api/common/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -122,4 +124,23 @@ func UpdateWorkflowWithNew(
 	}
 
 	return nil
+}
+
+// InFlightUpdateCallbacks returns the completion callbacks of Updates admitted but not yet accepted.
+// Every request handler that attaches new callbacks must reserve these against the execution's
+// limits, or it could consume the headroom those Updates were admitted against; see
+// update.Registry.VisitInFlightCallbacks.
+func InFlightUpdateCallbacks(updateReg update.Registry) ([]chasmworkflow.CallbackAddition, error) {
+	var inFlight []chasmworkflow.CallbackAddition
+	err := updateReg.VisitInFlightCallbacks(func(updateID string, requestID string, callbacks []*commonpb.Callback) {
+		inFlight = append(inFlight, chasmworkflow.CallbackAddition{
+			UpdateID:  updateID,
+			RequestID: requestID,
+			Callbacks: callbacks,
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+	return inFlight, nil
 }
