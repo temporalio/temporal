@@ -534,7 +534,7 @@ func TestRequestIDGeneratedWhenMissing(t *testing.T) {
 // the request's own links and those embedded in its completion callbacks reach the link
 // validator. Link shape and limit semantics are covered in common/links.
 func TestValidateAndPopulateStartRequest_CombinesRequestAndCallbackLinks(t *testing.T) {
-	callbackValidator, err := callbacks.NewValidator(test.NewCallbacksValidatorConfig())
+	callbackValidator, err := callbacks.NewValidator(test.NewCallbacksValidatorConfig(), nil)
 	require.NoError(t, err)
 
 	h := &frontendHandler{
