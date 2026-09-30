@@ -336,13 +336,13 @@ func (s *PriMatcherSuite) TestValidatorBatch_AllInvalidDropsAll() {
 	mockValidator.EXPECT().maybeValidate(gomock.Any(), gomock.Any()).Return(false).Times(3)
 
 	tm := s.newRootMatcher(ctx, mockValidator, 3)
-	tm.Start()
 	defer tm.Stop()
 
 	done := make(chan taskResponse, 3)
 	for id := int64(1); id <= 3; id++ {
 		s.Require().NoError(tm.AddTask(newBacklogTask(id, done)))
 	}
+	tm.Start()
 
 	for i := 0; i < 3; i++ {
 		select {
@@ -363,18 +363,18 @@ func (s *PriMatcherSuite) TestValidatorBatch_AllValidReprocessesAll() {
 	mockValidator.EXPECT().maybeValidate(gomock.Any(), gomock.Any()).Return(true).Times(3)
 
 	tm := s.newRootMatcher(ctx, mockValidator, 3)
-	tm.Start()
 	defer tm.Stop()
 
 	done := make(chan taskResponse, 3)
 	for id := int64(1); id <= 3; id++ {
 		s.Require().NoError(tm.AddTask(newBacklogTask(id, done)))
 	}
+	tm.Start()
 
 	for i := 0; i < 3; i++ {
 		select {
 		case res := <-done:
-			s.ErrorIs(res.err(), errReprocessTask) //nolint:testifylint
+			s.Require().ErrorIs(res.err(), errReprocessTask)
 		case <-time.After(2 * time.Second):
 			s.Fail("timed out waiting for validator to reprocess batch")
 		}
@@ -395,13 +395,13 @@ func (s *PriMatcherSuite) TestValidatorBatch_MixedInvalidContinuesImmediately() 
 		).AnyTimes()
 
 		tm := s.newRootMatcher(ctx, mockValidator, 2)
-		tm.Start()
 		defer tm.Stop()
 
 		done := make(chan taskResponse, 4)
 		for id := int64(1); id <= 2; id++ {
 			require.NoError(t, tm.AddTask(newBacklogTask(id, done)))
 		}
+		tm.Start()
 		// Drain first batch.
 		for i := 0; i < 2; i++ {
 			select {
@@ -414,11 +414,43 @@ func (s *PriMatcherSuite) TestValidatorBatch_MixedInvalidContinuesImmediately() 
 		require.NoError(t, tm.AddTask(newBacklogTask(3, done)))
 		select {
 		case <-done:
-			// If the validator slept (~1s backoff) synctest would still pass
-			// this receive only after time advanced. We never advance time, so
-			// a sleep would deadlock until the 1s wait below fires.
 		case <-time.After(100 * time.Millisecond):
 			t.Fatal("validator did not continue immediately after mixed batch")
+		}
+	})
+}
+
+func (s *PriMatcherSuite) TestValidatorBatch_ValidatesConcurrently() {
+	synctest.Test(s.T(), func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		started := make(chan int64, 2)
+		release := make(chan struct{})
+		mockValidator := NewMocktaskValidator(s.controller)
+		mockValidator.EXPECT().maybeValidate(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(task *persistencespb.AllocatedTaskInfo, _ enumspb.TaskQueueType) bool {
+				started <- task.TaskId
+				select {
+				case <-release:
+				case <-ctx.Done():
+				}
+				return true
+			},
+		).Times(2)
+
+		tm := s.newRootMatcher(ctx, mockValidator, 2)
+		defer tm.Stop()
+		done := make(chan taskResponse, 2)
+		for id := int64(1); id <= 2; id++ {
+			require.NoError(t, tm.AddTask(newBacklogTask(id, done)))
+		}
+		tm.Start()
+
+		require.ElementsMatch(t, []int64{1, 2}, []int64{await.Rcv(t, started), await.Rcv(t, started)})
+		close(release)
+		for range 2 {
+			require.ErrorIs(t, await.Rcv(t, done).err(), errReprocessTask)
 		}
 	})
 }

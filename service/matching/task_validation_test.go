@@ -77,7 +77,7 @@ func (s *taskValidatorSuite) SetupTest() {
 func (s *taskValidatorSuite) putCache(info taskValidationInfo) {
 	s.taskValidator.mu.Lock()
 	defer s.taskValidator.mu.Unlock()
-	s.taskValidator.cache[info.taskID] = info
+	s.taskValidator.putLocked(info)
 }
 
 func (s *taskValidatorSuite) cacheInfo(taskID int64) (taskValidationInfo, bool) {
@@ -94,10 +94,8 @@ func (s *taskValidatorSuite) TestPreValidateActive_NewTask_Skip_WithCreationTime
 	s.False(shouldValidate)
 	info, ok := s.cacheInfo(s.task.TaskId)
 	s.True(ok)
-	s.Equal(taskValidationInfo{
-		taskID:         s.task.TaskId,
-		validationTime: s.task.Data.CreateTime.AsTime(),
-	}, info)
+	s.Equal(s.task.TaskId, info.taskID)
+	s.Equal(s.task.Data.CreateTime.AsTime(), info.validationTime)
 }
 
 func (s *taskValidatorSuite) TestPreValidateActive_NewTask_Skip_WithoutCreationTime() {
@@ -136,10 +134,8 @@ func (s *taskValidatorSuite) TestPreValidatePassive_NewTask_Skip_WithCreationTim
 	s.False(shouldValidate)
 	info, ok := s.cacheInfo(s.task.TaskId)
 	s.True(ok)
-	s.Equal(taskValidationInfo{
-		taskID:         s.task.TaskId,
-		validationTime: s.task.Data.CreateTime.AsTime(),
-	}, info)
+	s.Equal(s.task.TaskId, info.taskID)
+	s.Equal(s.task.Data.CreateTime.AsTime(), info.validationTime)
 }
 
 func (s *taskValidatorSuite) TestPreValidatePassive_NewTask_Validate_WithCreationTime() {
@@ -149,10 +145,8 @@ func (s *taskValidatorSuite) TestPreValidatePassive_NewTask_Validate_WithCreatio
 	s.True(shouldValidate)
 	info, ok := s.cacheInfo(s.task.TaskId)
 	s.True(ok)
-	s.Equal(taskValidationInfo{
-		taskID:         s.task.TaskId,
-		validationTime: s.task.Data.CreateTime.AsTime(),
-	}, info)
+	s.Equal(s.task.TaskId, info.taskID)
+	s.Equal(s.task.Data.CreateTime.AsTime(), info.validationTime)
 }
 
 func (s *taskValidatorSuite) TestPreValidatePassive_NewTask_Skip_WithoutCreationTime() {
@@ -226,22 +220,25 @@ func (s *taskValidatorSuite) TestCache_ConcurrentFirstSeen() {
 	s.Len(s.taskValidator.cache, n)
 }
 
-func (s *taskValidatorSuite) TestCache_EvictsOldestWhenFull() {
+func (s *taskValidatorSuite) TestCache_EvictsLeastRecentlyAccessedWhenFull() {
 	now := time.Now()
 	for i := 0; i < taskValidatorCacheMaxSize; i++ {
 		s.putCache(taskValidationInfo{
 			taskID:         int64(i + 1),
-			validationTime: now.Add(time.Duration(i) * time.Second),
+			validationTime: now.Add(-time.Duration(i) * time.Second),
 		})
 	}
+	s.False(s.taskValidator.preValidateActive(&persistencespb.AllocatedTaskInfo{TaskId: 1}))
 	newTask := &persistencespb.AllocatedTaskInfo{
 		TaskId: int64(taskValidatorCacheMaxSize + 1),
 		Data:   &persistencespb.TaskInfo{CreateTime: timestamppb.Now()},
 	}
 	s.False(s.taskValidator.preValidateActive(newTask))
 
-	_, oldestStillThere := s.cacheInfo(1)
-	s.False(oldestStillThere, "oldest validationTime must be evicted")
+	_, recentlyAccessedKept := s.cacheInfo(1)
+	s.True(recentlyAccessedKept)
+	_, leastRecentlyAccessedKept := s.cacheInfo(2)
+	s.False(leastRecentlyAccessedKept, "least recently accessed entry must be evicted")
 	_, newestKept := s.cacheInfo(int64(taskValidatorCacheMaxSize))
 	s.True(newestKept)
 	_, inserted := s.cacheInfo(newTask.TaskId)
@@ -249,6 +246,51 @@ func (s *taskValidatorSuite) TestCache_EvictsOldestWhenFull() {
 	s.taskValidator.mu.Lock()
 	defer s.taskValidator.mu.Unlock()
 	s.Len(s.taskValidator.cache, taskValidatorCacheMaxSize)
+}
+
+func (s *taskValidatorSuite) TestCache_OldTasksValidateWhenFull() {
+	for id := int64(1); id <= taskValidatorCacheMaxSize; id++ {
+		s.taskValidator.postValidate(&persistencespb.AllocatedTaskInfo{TaskId: id})
+	}
+	tasks := []*persistencespb.AllocatedTaskInfo{
+		{TaskId: 129, Data: &persistencespb.TaskInfo{CreateTime: timestamppb.New(time.Now().Add(-time.Hour))}},
+		{TaskId: 130, Data: &persistencespb.TaskInfo{CreateTime: timestamppb.New(time.Now().Add(-time.Hour))}},
+	}
+	for _, task := range tasks {
+		s.False(s.taskValidator.preValidateActive(task))
+	}
+	for _, task := range tasks {
+		s.True(s.taskValidator.preValidateActive(task), "old task %d must validate on its second pass", task.TaskId)
+	}
+}
+
+func TestTaskValidatorValidationInterval(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		active bool
+		age    time.Duration
+		want   bool
+	}{
+		{name: "active within interval", active: true, age: 5 * time.Minute},
+		{name: "active past interval", active: true, age: 11 * time.Minute, want: true},
+		{name: "passive within interval", age: 5 * time.Minute},
+		{name: "passive past interval", age: 11 * time.Minute, want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			v := &taskValidatorImpl{cache: make(map[int64]taskValidationInfo)}
+			task := &persistencespb.AllocatedTaskInfo{
+				TaskId: 1,
+				Data:   &persistencespb.TaskInfo{CreateTime: timestamppb.New(time.Now().Add(-tc.age))},
+			}
+			if tc.active {
+				require.False(t, v.preValidateActive(task))
+				require.Equal(t, tc.want, v.preValidateActive(task))
+			} else {
+				require.Equal(t, tc.want, v.preValidatePassive(task))
+			}
+		})
+	}
 }
 
 func (s *taskValidatorSuite) TestIsTaskValid_ActivityTask_Valid() {
