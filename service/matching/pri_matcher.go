@@ -293,10 +293,14 @@ func (tm *priTaskMatcher) validateTasks(retrier backoff.Retrier) {
 			wg.Go(func() {
 				maybeValid := tm.validator == nil || tm.validator.maybeValidate(task.event.AllocatedTaskInfo, tm.partition.TaskType())
 				if !maybeValid {
+					// We found an invalid one, complete it and go back for another batch immediately.
 					task.finish(taskFinishResult{dropReason: getDroppedTaskExpiryReason(task)})
+
+					// Stay alive as long as we're invalidating tasks
 					tm.markAlive()
 					anyInvalid.Store(true)
 				} else {
+					// Task was valid, put it back and slow down checking if the whole batch is valid.
 					task.finish(taskFinishResult{err: errReprocessTask, consumedToken: true})
 				}
 			})
@@ -307,6 +311,8 @@ func (tm *priTaskMatcher) validateTasks(retrier backoff.Retrier) {
 			retrier.Reset()
 			continue
 		}
+		// retrier's max interval is BacklogTaskForwardTimeout, so for just valid tasks,
+		// this loop will essentially be limited to that interval.
 		_ = util.InterruptibleSleep(tm.tqCtx, retrier.NextBackOff(nil))
 	}
 }
