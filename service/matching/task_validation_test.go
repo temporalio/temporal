@@ -205,7 +205,7 @@ func (s *taskValidatorSuite) TestCache_ConcurrentFirstSeen() {
 	shouldValidate := make([]bool, n)
 	var wg sync.WaitGroup
 	wg.Add(n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		go func(i int) {
 			defer wg.Done()
 			task := &persistencespb.AllocatedTaskInfo{
@@ -230,7 +230,7 @@ func (s *taskValidatorSuite) TestCache_ConcurrentFirstSeen() {
 func (s *taskValidatorSuite) TestCache_EvictsLeastRecentlyAccessedWhenFull() {
 	maxSize := s.taskValidator.config.ValidatorCacheMaxSize()
 	now := time.Now()
-	for i := 0; i < maxSize; i++ {
+	for i := range maxSize {
 		s.putCache(taskValidationInfo{
 			taskID:         int64(i + 1),
 			validationTime: now.Add(-time.Duration(i) * time.Second),
