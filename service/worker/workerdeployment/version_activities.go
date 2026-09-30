@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"sync"
 	"time"
@@ -61,7 +62,7 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 
 	var lock sync.Mutex
 	maxVersionByName := make(map[string]int64)
-	routingConfigTargets := make(map[string]*deploymentspb.RoutingConfigPropagationTarget)
+	routingQueues := make(map[string]*deploymentspb.TaskQueuePropagationTarget)
 
 	for _, e := range input.Sync {
 		go func(syncData *deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData) {
@@ -102,10 +103,10 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 			} else {
 				lock.Lock()
 				if req.GetOperation() == nil && req.GetUpdateRoutingConfig().GetRevisionNumber() > 0 {
-					target := routingConfigTargets[syncData.Name]
+					target := routingQueues[syncData.Name]
 					if target == nil {
-						target = &deploymentspb.RoutingConfigPropagationTarget{DeploymentName: req.GetDeploymentName(), RevisionNumber: req.GetUpdateRoutingConfig().GetRevisionNumber()}
-						routingConfigTargets[syncData.Name] = target
+						target = &deploymentspb.TaskQueuePropagationTarget{Name: syncData.Name}
+						routingQueues[syncData.Name] = target
 					}
 					for _, tp := range syncData.Types {
 						if !slices.Contains(target.TaskQueueTypes, tp) {
@@ -128,7 +129,17 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 	if err != nil {
 		return nil, err
 	}
-	return &deploymentspb.SyncDeploymentVersionUserDataResponse{TaskQueueMaxVersions: maxVersionByName, TaskQueueRoutingConfigTargets: routingConfigTargets}, nil
+	response := &deploymentspb.SyncDeploymentVersionUserDataResponse{TaskQueueMaxVersions: maxVersionByName}
+	if len(routingQueues) > 0 {
+		response.DeploymentName = input.GetVersion().GetDeploymentName()
+		response.RevisionNumber = input.GetUpdateRoutingConfig().GetRevisionNumber()
+		for _, name := range slices.Sorted(maps.Keys(routingQueues)) {
+			queue := routingQueues[name]
+			slices.Sort(queue.TaskQueueTypes)
+			response.TaskQueues = append(response.TaskQueues, queue)
+		}
+	}
+	return response, nil
 }
 
 func (a *VersionActivities) checkSlowPropagation(ctx context.Context, logger log.Logger) {

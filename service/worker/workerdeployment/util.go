@@ -477,9 +477,15 @@ func workerDeploymentPropagationRequests(namespaceID string, input *deploymentsp
 	for name, version := range input.GetTaskQueueMaxVersions() {
 		requests[name] = &matchingservice.CheckTaskQueueUserDataPropagationRequest{NamespaceId: namespaceID, TaskQueue: name, Version: version}
 	}
-	for name, target := range input.GetTaskQueueRoutingConfigTargets() {
-		if target != nil {
-			requests[name] = &matchingservice.CheckTaskQueueUserDataPropagationRequest{NamespaceId: namespaceID, TaskQueue: name, RoutingConfigTarget: target}
+	for _, queue := range input.GetTaskQueues() {
+		requests[queue.GetName()] = &matchingservice.CheckTaskQueueUserDataPropagationRequest{
+			NamespaceId: namespaceID,
+			TaskQueue:   queue.GetName(),
+			RoutingConfigTarget: &deploymentspb.RoutingConfigPropagationTarget{
+				DeploymentName: input.GetDeploymentName(),
+				RevisionNumber: input.GetRevisionNumber(),
+				TaskQueueTypes: queue.GetTaskQueueTypes(),
+			},
 		}
 	}
 	return requests

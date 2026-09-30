@@ -1004,6 +1004,43 @@ func (this *RoutingConfigPropagationTarget) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type TaskQueuePropagationTarget to the protobuf v3 wire format
+func (val *TaskQueuePropagationTarget) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type TaskQueuePropagationTarget from the protobuf v3 wire format
+func (val *TaskQueuePropagationTarget) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *TaskQueuePropagationTarget) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two TaskQueuePropagationTarget values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *TaskQueuePropagationTarget) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *TaskQueuePropagationTarget
+	switch t := that.(type) {
+	case *TaskQueuePropagationTarget:
+		that1 = t
+	case TaskQueuePropagationTarget:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type SyncDeploymentVersionUserDataResponse to the protobuf v3 wire format
 func (val *SyncDeploymentVersionUserDataResponse) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

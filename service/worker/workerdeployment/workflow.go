@@ -1741,14 +1741,16 @@ func (d *WorkflowRunner) syncUnversionedRamp(ctx workflow.Context, versionUpdate
 			return err
 		}
 
-		if len(syncRes.TaskQueueMaxVersions) > 0 || len(syncRes.TaskQueueRoutingConfigTargets) > 0 {
+		if len(syncRes.TaskQueueMaxVersions) > 0 || len(syncRes.TaskQueues) > 0 {
 			// wait for propagation
 			err = workflow.ExecuteActivity(
 				activityCtx,
 				d.a.CheckUnversionedRampUserDataPropagation,
 				&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
-					TaskQueueMaxVersions:          syncRes.TaskQueueMaxVersions,
-					TaskQueueRoutingConfigTargets: syncRes.TaskQueueRoutingConfigTargets,
+					TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
+					DeploymentName:       syncRes.GetDeploymentName(),
+					RevisionNumber:       syncRes.GetRevisionNumber(),
+					TaskQueues:           syncRes.GetTaskQueues(),
 				}).Get(ctx, nil)
 			if err != nil {
 				// TODO (Shivam): Compensation functions required to roll back the local state + activity changes.

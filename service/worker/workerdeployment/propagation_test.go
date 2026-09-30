@@ -2,6 +2,7 @@ package workerdeployment
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -19,6 +20,7 @@ func TestAsyncPropagationRoutingConfigTargets(t *testing.T) {
 		t.Run(mode, func(t *testing.T) {
 			t.Parallel()
 			env := (&testsuite.WorkflowTestSuite{}).NewTestWorkflowEnvironment()
+			env.SetTestTimeout(5 * time.Second)
 			var a *VersionActivities
 			env.RegisterActivity(a.SyncDeploymentVersionUserData)
 			env.RegisterActivity(a.CheckWorkerDeploymentUserDataPropagation)
@@ -43,13 +45,13 @@ func TestAsyncPropagationRoutingConfigTargets(t *testing.T) {
 						checkRequest.TaskQueueMaxVersions[tq.Name] = syncResponse.TaskQueueMaxVersions[tq.Name]
 					}
 					if mode != "legacy" {
-						if syncResponse.TaskQueueRoutingConfigTargets == nil {
-							syncResponse.TaskQueueRoutingConfigTargets = map[string]*deploymentspb.RoutingConfigPropagationTarget{}
-							checkRequest.TaskQueueRoutingConfigTargets = map[string]*deploymentspb.RoutingConfigPropagationTarget{}
-						}
-						target := &deploymentspb.RoutingConfigPropagationTarget{DeploymentName: "deployment", RevisionNumber: 42, TaskQueueTypes: tq.Types}
-						syncResponse.TaskQueueRoutingConfigTargets[tq.Name] = target
-						checkRequest.TaskQueueRoutingConfigTargets[tq.Name] = target
+						syncResponse.DeploymentName = "deployment"
+						syncResponse.RevisionNumber = 42
+						checkRequest.DeploymentName = "deployment"
+						checkRequest.RevisionNumber = 42
+						target := &deploymentspb.TaskQueuePropagationTarget{Name: tq.Name, TaskQueueTypes: tq.Types}
+						syncResponse.TaskQueues = append([]*deploymentspb.TaskQueuePropagationTarget{target}, syncResponse.TaskQueues...)
+						checkRequest.TaskQueues = append(checkRequest.TaskQueues, target)
 					}
 				}
 				env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.MatchedBy(func(req *deploymentspb.SyncDeploymentVersionUserDataRequest) bool {

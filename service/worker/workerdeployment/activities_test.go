@@ -121,10 +121,12 @@ func TestSyncDeploymentVersionUserDataRoutingConfigTarget(t *testing.T) {
 	var response deploymentspb.SyncDeploymentVersionUserDataResponse
 	require.NoError(t, result.Get(&response))
 	require.Empty(t, response.GetTaskQueueMaxVersions())
-	require.Len(t, response.GetTaskQueueRoutingConfigTargets(), 1)
-	require.True(t, proto.Equal(&deploymentspb.RoutingConfigPropagationTarget{
-		DeploymentName: "deployment", RevisionNumber: 42, TaskQueueTypes: types,
-	}, response.GetTaskQueueRoutingConfigTargets()["queue"]))
+	require.Equal(t, "deployment", response.GetDeploymentName())
+	require.Equal(t, int64(42), response.GetRevisionNumber())
+	require.Len(t, response.GetTaskQueues(), 1)
+	require.True(t, proto.Equal(&deploymentspb.TaskQueuePropagationTarget{
+		Name: "queue", TaskQueueTypes: types,
+	}, response.GetTaskQueues()[0]))
 }
 
 func TestWorkerDeploymentPropagationActivitiesRoutingConfigTarget(t *testing.T) {
@@ -151,7 +153,8 @@ func TestWorkerDeploymentPropagationActivitiesRoutingConfigTarget(t *testing.T) 
 				env := (&testsuite.WorkflowTestSuite{}).NewTestActivityEnvironment()
 				env.SetTestTimeout(5 * time.Second)
 				input := &deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
-					TaskQueueRoutingConfigTargets: map[string]*deploymentspb.RoutingConfigPropagationTarget{"queue": target},
+					DeploymentName: "deployment", RevisionNumber: 42,
+					TaskQueues: []*deploymentspb.TaskQueuePropagationTarget{{Name: "queue", TaskQueueTypes: target.TaskQueueTypes}},
 				}
 				if legacyVersion > 0 {
 					input.TaskQueueMaxVersions = map[string]int64{"queue": legacyVersion}
