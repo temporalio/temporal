@@ -169,13 +169,11 @@ func HealthSignalAggregatorProvider(
 	if dynamicconfig.PersistenceHealthSignalMetricsEnabled.Get(dynamicCollection)() {
 		aggregator := persistence.NewHealthSignalAggregator(
 			dynamicconfig.PersistenceHealthSignalAggregationEnabled.Get(dynamicCollection)(),
-			dynamicconfig.PersistenceHealthSignalPercentilesEnabled.Get(dynamicCollection),
 			dynamicconfig.PersistenceHealthSignalWindowSize.Get(dynamicCollection)(),
 			dynamicconfig.PersistenceHealthSignalBufferSize.Get(dynamicCollection)(),
 			metricsHandler,
 			logger,
-			dynamicconfig.PersistenceHealthSignalLatencyWindowSize.Get(dynamicCollection)(),
-			dynamicconfig.PersistenceHealthSignalLatencyWindowCount.Get(dynamicCollection)(),
+			dynamicconfig.HealthCheckPersistenceSettings.Get(dynamicCollection),
 		)
 		lc.Append(fx.StopHook(aggregator.Stop))
 		return aggregator
