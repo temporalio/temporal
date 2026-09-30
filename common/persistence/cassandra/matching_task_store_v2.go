@@ -211,8 +211,7 @@ func (d *matchingTaskStoreV2) CompleteTasksLessThan(
 	}
 
 	rowType := rowTypeTaskInSubqueue(request.Subqueue)
-	query := d.Session.Query(
-		templateCompleteTasksLessThanQuery_v2,
+	args := []any{
 		request.NamespaceID,
 		request.TaskQueueName,
 		request.TaskType,
@@ -222,10 +221,39 @@ func (d *matchingTaskStoreV2) CompleteTasksLessThan(
 		rowType,
 		request.ExclusiveMaxPass,
 		request.ExclusiveMaxTaskID,
-	).WithContext(ctx)
-	err := query.Exec()
+	}
+
+	if request.ConditionRangeID == 0 {
+		err := d.Session.Query(templateCompleteTasksLessThanQuery_v2, args...).WithContext(ctx).Exec()
+		if err != nil {
+			return 0, gocql.ConvertError("CompleteTasksLessThan", err)
+		}
+		return p.UnknownNumRowsAffected, nil
+	}
+
+	// Tasks and task queue metadata are in the same partition, so we can make the delete
+	// conditional on the range id with a batch.
+	batch := d.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
+	batch.Query(templateCompleteTasksLessThanQuery_v2, args...)
+	batch.Query(switchTasksTable(templateCheckRangeIDQuery, matchingTaskVersion2),
+		request.ConditionRangeID,
+		request.NamespaceID,
+		request.TaskQueueName,
+		request.TaskType,
+		rowTypeTaskQueue,
+		taskQueueTaskID,
+		request.ConditionRangeID,
+	)
+	previous := make(map[string]any)
+	applied, _, err := d.Session.MapExecuteBatchCAS(batch, previous)
 	if err != nil {
 		return 0, gocql.ConvertError("CompleteTasksLessThan", err)
+	}
+	if !applied {
+		return 0, &p.ConditionFailedError{
+			Msg: fmt.Sprintf("Failed to complete tasks. TaskQueue: %v, taskQueueType: %v, rangeID: %v, db rangeID: %v",
+				request.TaskQueueName, request.TaskType, request.ConditionRangeID, previous["range_id"]),
+		}
 	}
 	return p.UnknownNumRowsAffected, nil
 }
