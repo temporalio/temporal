@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -64,6 +65,13 @@ func NewWorkflowWithSignal(
 		startTime,
 	)
 	if err != nil {
+		return nil, err
+	}
+
+	if err := newMutableState.ValidateCallbackAddition(chasmworkflow.CallbackAddition{
+		RequestID: startRequest.StartRequest.GetRequestId(),
+		Callbacks: startRequest.StartRequest.GetCompletionCallbacks(),
+	}); err != nil {
 		return nil, err
 	}
 
