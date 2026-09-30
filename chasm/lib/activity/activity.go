@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
@@ -360,10 +359,10 @@ func (a *Activity) addCompletionCallbacks(
 			return err
 		}
 
-		// Give each callback its own, unique request ID. Since using the same request ID as the
-		// operation which added the callbacks would be ambiguous if it added more than one callback.
-		cbRequestID := uuid.NewString()
-		callbackObj := callback.NewCallback(cbRequestID, registrationTime, chasmCB)
+		// TODO(https://github.com/temporalio/temporal/issues/11958): Reusing the source requestID in this
+		// way leads to ambiguities if multiple callbacks are attached in the same request that are routed
+		// to the same destination. Each callback should instead be given its own, unique request ID.
+		callbackObj := callback.NewCallback(requestID, registrationTime, chasmCB)
 		a.Callbacks[completionCallbackID(requestID, idx)] = chasm.NewComponentField(ctx, callbackObj)
 		a.TotalCallbacksSize += int64(cb.Size())
 	}
