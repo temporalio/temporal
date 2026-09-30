@@ -122,6 +122,28 @@ func TestIsControllerInput(t *testing.T) {
 	}
 }
 
+func TestIsControllerInput_ClassifiesEveryKnownCause(t *testing.T) {
+	expected := map[enumspb.ResourceExhaustedCause]bool{
+		enumspb.RESOURCE_EXHAUSTED_CAUSE_UNSPECIFIED:               false,
+		enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT:                 false,
+		enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT:          false,
+		enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED:         false,
+		enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_LIMIT:         true,
+		enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW:             false,
+		enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT:                 true,
+		enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT: false,
+		enumspb.RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN:      false,
+		enumspb.RESOURCE_EXHAUSTED_CAUSE_OPS_LIMIT:                 false,
+		enumspb.RESOURCE_EXHAUSTED_CAUSE_WORKER_DEPLOYMENT_LIMITS:  false,
+	}
+	for value, name := range enumspb.ResourceExhaustedCause_name {
+		cause := enumspb.ResourceExhaustedCause(value)
+		want, ok := expected[cause]
+		require.True(t, ok, "classify new resource exhausted cause %s", name)
+		require.Equal(t, want, IsControllerInput(cause, enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE), name)
+	}
+}
+
 func testKey() ThrottleKey {
 	return NewThrottleKey(enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT, "ns-1")
 }
@@ -317,8 +339,10 @@ func TestThrottleState_DisabledAlwaysAdmits(t *testing.T) {
 	key := testKey()
 
 	for range 100 {
-		reportThrottle(state, key, true)
-		require.True(t, admitOK(state, key))
+		allowed, metered := state.Admit(key)
+		require.True(t, allowed)
+		require.False(t, metered)
+		state.ReportThrottled(key, metered)
 	}
 	require.Zero(t, throttleLen(state), "a disabled controller must not accumulate state")
 }

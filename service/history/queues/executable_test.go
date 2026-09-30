@@ -1754,6 +1754,31 @@ func (s *executableSuite) TestNack_ThrottleScopedGoesToTheRescheduler() {
 	executable.Nack(throttleErr)
 }
 
+func (s *executableSuite) TestNack_ThrottleScopedKeepsFastPathWhenControllerOff() {
+	settings := dynamicconfig.DefaultTaskThrottleControllerSettings
+	settings.Enabled = false
+	throttleState := queues.NewThrottleState(
+		func() dynamicconfig.TaskThrottleControllerSettings { return settings },
+		s.timeSource,
+		metrics.NoopMetricsHandler,
+	)
+	executable := s.newTestExecutable(func(p *params) {
+		p.throttleState = throttleState
+	})
+	throttleErr := &serviceerror.ResourceExhausted{
+		Cause: enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT,
+		Scope: enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+	}
+
+	retryErr := executable.HandleErr(throttleErr)
+	s.Require().Error(retryErr)
+	s.Require().NotEqual(queues.ThrottleKey{}, queues.ThrottleKeyOf(executable))
+
+	s.mockScheduler.EXPECT().TrySubmit(executable).Return(true)
+	s.mockRescheduler.EXPECT().Add(gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	executable.Nack(retryErr)
+}
+
 func (s *executableSuite) TestHandleErr_DLQPatternClearsAStaleThrottleKey() {
 	throttleState := s.newTestThrottleState()
 	executable := s.newTestExecutable(func(p *params) {
