@@ -76,9 +76,8 @@ func (c *clientCacheImpl) GetClientForKey(key string, index int) (any, error) {
 func (c *clientCacheImpl) GetClientForClientKey(clientKey string) (any, error) {
 	c.cacheLock.RLock()
 	entry, ok := c.clients[clientKey]
-	valid := ok && entry.isValid()
 	c.cacheLock.RUnlock()
-	if valid {
+	if ok && entry.isValid() {
 		return entry.client, nil
 	}
 
