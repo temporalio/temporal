@@ -434,6 +434,70 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery(enableUnifiedQueryCon
 	s.Equal(3, searchVal)
 }
 
+// TestListWorkflow_KeywordListOrQuery verifies that OR conditions on the same keyword list field match workflows whose
+// list contains any of the values.
+func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordListOrQuery(enableUnifiedQueryConverter bool) {
+	env := s.newTestEnv(enableUnifiedQueryConverter)
+	id := "es-functional-list-workflow-keyword-list-or-query-test"
+	wt := "es-functional-list-workflow-keyword-list-or-query-test-type"
+	tl := "es-functional-list-workflow-keyword-list-or-query-test-taskqueue"
+	key := "CustomKeywordListOrField"
+	s.addCustomSearchAttribute(env, key, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+
+	values := map[string][]string{
+		id + "-1": {"red", "green"},
+		id + "-2": {"blue"},
+		id + "-3": {"yellow"},
+	}
+	for wid, vals := range values {
+		request := s.createStartWorkflowExecutionRequest(env, wid, wt, tl)
+		sa, err := searchattribute.Encode(map[string]any{key: vals}, nil)
+		s.NoError(err)
+		request.SearchAttributes = sa
+		_, err = env.FrontendClient().StartWorkflowExecution(s.Context(), request)
+		s.NoError(err)
+	}
+
+	testCases := []struct {
+		query    string
+		expected []string
+	}{
+		{
+			// The first workflow matches on the second element of its list.
+			query:    fmt.Sprintf(`%s = "green" OR %s = "blue"`, key, key),
+			expected: []string{id + "-1", id + "-2"},
+		},
+		{
+			query:    fmt.Sprintf(`%s = "blue" OR %s IN ("yellow", "purple")`, key, key),
+			expected: []string{id + "-2", id + "-3"},
+		},
+		{
+			query:    fmt.Sprintf(`%s IN ("red", "purple") OR %s = "yellow"`, key, key),
+			expected: []string{id + "-1", id + "-3"},
+		},
+	}
+	for _, tc := range testCases {
+		listRequest := &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: env.Namespace().String(),
+			PageSize:  testcore.DefaultPageSize,
+			Query:     tc.query,
+		}
+		s.Await(
+			func(s *AdvancedVisibilitySuite) {
+				resp, err := env.FrontendClient().ListWorkflowExecutions(s.Context(), listRequest)
+				s.NoError(err)
+				wids := make([]string, 0, len(resp.GetExecutions()))
+				for _, e := range resp.GetExecutions() {
+					wids = append(wids, e.GetExecution().GetWorkflowId())
+				}
+				s.ElementsMatch(tc.expected, wids, tc.query)
+			},
+			testcore.WaitForESToSettle,
+			esPollInterval,
+		)
+	}
+}
+
 func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery(enableUnifiedQueryConverter bool) {
 	env := s.newTestEnv(enableUnifiedQueryConverter)
 	id := "es-functional-list-workflow-keyword-query-test"
@@ -2650,7 +2714,7 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes(enable
 	s.Equal(listResponse.Schedules[0].ScheduleId, scheduleID)
 
 	// Test 2: List schedule with custom "scheduleId" search attribute
-	s.addCustomKeywordSearchAttribute(env, sadefs.ScheduleID)
+	s.addCustomSearchAttribute(env, sadefs.ScheduleID, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 
 	// Create the schedule with the new search attribute and verify it can be listed
 	customScheduleID := "test-schedule-" + uuid.NewString()
@@ -2752,11 +2816,15 @@ func (s *AdvancedVisibilitySuite) updateMaxResultWindow(env *testcore.TestEnv) {
 	)
 }
 
-func (s *AdvancedVisibilitySuite) addCustomKeywordSearchAttribute(env *testcore.TestEnv, attrName string) {
+func (s *AdvancedVisibilitySuite) addCustomSearchAttribute(
+	env *testcore.TestEnv,
+	attrName string,
+	valueType enumspb.IndexedValueType,
+) {
 	// Add new search attribute
 	_, err := env.OperatorClient().AddSearchAttributes(s.Context(), &operatorservice.AddSearchAttributesRequest{
 		SearchAttributes: map[string]enumspb.IndexedValueType{
-			attrName: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			attrName: valueType,
 		},
 		Namespace: env.Namespace().String(),
 	})
