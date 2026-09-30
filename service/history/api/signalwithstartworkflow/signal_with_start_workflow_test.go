@@ -2,7 +2,6 @@ package signalwithstartworkflow
 
 import (
 	"context"
-	"errors"
 	"testing"
 	"time"
 
@@ -184,21 +183,18 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {
 }
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_WorkflowTaskAtExecutionTime() {
-	s.assertWorkflowTaskScheduledAtExecutionTime(s.timeSource.Now(), "")
+	s.assertWorkflowTaskScheduledAtExecutionTime(s.timeSource.Now(), false)
 }
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_WorkflowTaskAfterExecutionTime() {
-	s.assertWorkflowTaskScheduledAtExecutionTime(s.timeSource.Now().Add(-time.Second), "")
+	s.assertWorkflowTaskScheduledAtExecutionTime(s.timeSource.Now().Add(-time.Second), false)
 }
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_WorkflowTaskBeforeExecutionTime() {
-	s.assertWorkflowTaskScheduledAtExecutionTime(
-		s.timeSource.Now().Add(time.Hour),
-		enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED.String(),
-	)
+	s.assertWorkflowTaskScheduledAtExecutionTime(s.timeSource.Now().Add(time.Hour), true)
 }
 
-func (s *signalWithStartWorkflowSuite) assertWorkflowTaskScheduledAtExecutionTime(executionTime time.Time, expectedInitiator string) {
+func (s *signalWithStartWorkflowSuite) assertWorkflowTaskScheduledAtExecutionTime(executionTime time.Time, expectBackoffMetric bool) {
 	s.currentExecutionInfo.ExecutionTime = timestamppb.New(executionTime)
 
 	ctx := context.Background()
@@ -224,7 +220,6 @@ func (s *signalWithStartWorkflowSuite) assertWorkflowTaskScheduledAtExecutionTim
 	s.currentMutableState.EXPECT().IsWorkflowExecutionStatusPaused().Return(false)
 	if executionTime.After(s.timeSource.Now()) {
 		s.currentMutableState.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)
-		s.currentMutableState.EXPECT().GetStartEvent(ctx).Return(signalWorkflowStartEvent(enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED), nil)
 		s.currentContext.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID))
 	}
 	s.currentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL).Return(&historyi.WorkflowTaskInfo{}, nil)
@@ -239,7 +234,7 @@ func (s *signalWithStartWorkflowSuite) assertWorkflowTaskScheduledAtExecutionTim
 		request,
 	)
 	s.Require().NoError(err)
-	s.assertWorkflowTaskBackoffMetric(capture, request, expectedInitiator)
+	s.assertWorkflowTaskBackoffMetric(capture, request, expectBackoffMetric)
 }
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_ContinuedAsNewWorkflowTaskBackoff_DefaultShadowBehavior() {
@@ -256,7 +251,6 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_ContinuedAsNewWorkflow
 	s.currentMutableState.EXPECT().HasPendingWorkflowTask().Return(false)
 	s.currentMutableState.EXPECT().IsWorkflowExecutionStatusPaused().Return(false)
 	s.currentMutableState.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)
-	s.currentMutableState.EXPECT().GetStartEvent(ctx).Return(signalWorkflowStartEvent(enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW), nil)
 	s.currentContext.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID))
 	s.currentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL).Return(&historyi.WorkflowTaskInfo{}, nil)
 	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
@@ -270,7 +264,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_ContinuedAsNewWorkflow
 		request,
 	)
 	s.Require().NoError(err)
-	s.assertWorkflowTaskBackoffMetric(capture, request, enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW.String())
+	s.assertWorkflowTaskBackoffMetric(capture, request, true)
 }
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_ContinuedAsNewWorkflowTaskBackoff_Enforced() {
@@ -289,7 +283,6 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_ContinuedAsNewWorkflow
 	s.currentMutableState.EXPECT().HasPendingWorkflowTask().Return(false)
 	s.currentMutableState.EXPECT().IsWorkflowExecutionStatusPaused().Return(false)
 	s.currentMutableState.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)
-	s.currentMutableState.EXPECT().GetStartEvent(ctx).Return(signalWorkflowStartEvent(enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW), nil)
 	s.currentContext.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID))
 	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
 
@@ -302,53 +295,7 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_ContinuedAsNewWorkflow
 		request,
 	)
 	s.Require().NoError(err)
-	s.assertWorkflowTaskBackoffMetric(capture, request, enumspb.CONTINUE_AS_NEW_INITIATOR_WORKFLOW.String())
-}
-
-func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_GetStartEventError() {
-	ctx := context.Background()
-	currentWorkflowLease := api.NewWorkflowLease(
-		s.currentContext,
-		wcache.NoopReleaseFn,
-		s.currentMutableState,
-	)
-	request := s.randomRequest()
-	s.currentExecutionInfo.ExecutionTime = timestamppb.New(s.timeSource.Now().Add(time.Hour))
-	startEventErr := errors.New("unable to load workflow start event")
-
-	s.expectSignalWorkflowEvent(request)
-	s.currentMutableState.EXPECT().HasPendingWorkflowTask().Return(false)
-	s.currentMutableState.EXPECT().IsWorkflowExecutionStatusPaused().Return(false)
-	s.currentMutableState.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)
-	s.currentMutableState.EXPECT().GetStartEvent(ctx).Return(nil, startEventErr)
-
-	err := signalWorkflow(
-		ctx,
-		s.shardContext,
-		currentWorkflowLease,
-		request,
-	)
-	s.Require().ErrorIs(err, startEventErr)
-}
-
-func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_RetryInitiatorDuringBackoff() {
-	s.assertWorkflowTaskScheduledDuringBackoff(enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY)
-}
-
-func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_RetryInitiatorDuringBackoff_Enforced() {
-	s.assertWorkflowTaskBackoff(enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY, true, false)
-}
-
-func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_CronInitiatorDuringBackoff() {
-	s.assertWorkflowTaskScheduledDuringBackoff(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE)
-}
-
-func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_CronInitiatorDuringBackoff_Enforced() {
-	s.assertWorkflowTaskBackoff(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, true, false)
-}
-
-func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_DelayStartDuringBackoff_Enforced() {
-	s.assertWorkflowTaskBackoff(enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED, true, false)
+	s.assertWorkflowTaskBackoffMetric(capture, request, true)
 }
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_OverdueWorkflowTaskBackoff() {
@@ -376,48 +323,6 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_OverdueWorkflowTaskBac
 	s.Require().NoError(err)
 }
 
-func (s *signalWithStartWorkflowSuite) assertWorkflowTaskScheduledDuringBackoff(initiator enumspb.ContinueAsNewInitiator) {
-	s.assertWorkflowTaskBackoff(initiator, false, true)
-}
-
-func (s *signalWithStartWorkflowSuite) assertWorkflowTaskBackoff(
-	initiator enumspb.ContinueAsNewInitiator,
-	enforceBackoff bool,
-	expectWorkflowTask bool,
-) {
-	ctx := context.Background()
-	currentWorkflowLease := api.NewWorkflowLease(
-		s.currentContext,
-		wcache.NoopReleaseFn,
-		s.currentMutableState,
-	)
-	request := s.randomRequest()
-	s.currentExecutionInfo.ExecutionTime = timestamppb.New(s.timeSource.Now().Add(time.Hour))
-	s.config.EnableSignalWithStartWorkflowTaskBackoff = func(string) bool { return enforceBackoff }
-
-	s.expectSignalWorkflowEvent(request)
-	s.currentMutableState.EXPECT().HasPendingWorkflowTask().Return(false)
-	s.currentMutableState.EXPECT().IsWorkflowExecutionStatusPaused().Return(false)
-	s.currentMutableState.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)
-	s.currentMutableState.EXPECT().GetStartEvent(ctx).Return(signalWorkflowStartEvent(initiator), nil)
-	s.currentContext.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID))
-	if expectWorkflowTask {
-		s.currentMutableState.EXPECT().AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL).Return(&historyi.WorkflowTaskInfo{}, nil)
-	}
-	s.currentContext.EXPECT().UpdateWorkflowExecutionAsActive(ctx, s.shardContext).Return(nil)
-
-	capture := s.metricsHandler.StartCapture()
-	defer s.metricsHandler.StopCapture(capture)
-	err := signalWorkflow(
-		ctx,
-		s.shardContext,
-		currentWorkflowLease,
-		request,
-	)
-	s.Require().NoError(err)
-	s.assertWorkflowTaskBackoffMetric(capture, request, initiator.String())
-}
-
 func (s *signalWithStartWorkflowSuite) expectSignalWorkflowEvent(request *workflowservice.SignalWithStartWorkflowExecutionRequest) {
 	s.currentMutableState.EXPECT().IsWorkflowCloseAttempted().Return(false)
 	s.currentMutableState.EXPECT().IsSignalRequested(request.GetRequestId()).Return(false)
@@ -435,17 +340,17 @@ func (s *signalWithStartWorkflowSuite) expectSignalWorkflowEvent(request *workfl
 func (s *signalWithStartWorkflowSuite) assertWorkflowTaskBackoffMetric(
 	capture *metricstest.Capture,
 	request *workflowservice.SignalWithStartWorkflowExecutionRequest,
-	expectedInitiator string,
+	expected bool,
 ) {
 	recordings := capture.Snapshot()[metrics.SignalWithStartWorkflowTaskBackoffCounter.Name()]
-	if expectedInitiator == "" {
+	if !expected {
 		s.Require().Empty(recordings)
 		return
 	}
 	s.Require().Len(recordings, 1)
 	s.Require().Equal(int64(1), recordings[0].Value)
 	s.Require().Equal(request.GetNamespace(), recordings[0].Tags[metrics.NamespaceTag("").Key])
-	s.Require().Equal(expectedInitiator, recordings[0].Tags[metrics.StringTag("initiator", "").Key])
+	s.Require().NotContains(recordings[0].Tags, metrics.StringTag("initiator", "").Key)
 }
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NoNewWorkflowTask() {
@@ -754,17 +659,4 @@ func (s *signalWithStartWorkflowSuite) randomRequest() *workflowservice.SignalWi
 	var request workflowservice.SignalWithStartWorkflowExecutionRequest
 	_ = fakedata.FakeStruct(&request)
 	return &request
-}
-
-func signalWorkflowStartEvent(
-	initiator enumspb.ContinueAsNewInitiator,
-) *historypb.HistoryEvent {
-	return &historypb.HistoryEvent{
-		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
-		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
-			WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-				Initiator: initiator,
-			},
-		},
-	}
 }

@@ -401,18 +401,10 @@ func signalWorkflow(
 		now := shardContext.GetTimeSource().Now()
 		executionTime := mutableState.GetExecutionInfo().GetExecutionTime().AsTime()
 
-		// Only runs still inside their backoff window can have the delay bypassed, so the start
-		// event is loaded lazily to keep it off the hot path.
 		if now.Before(executionTime) && mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() {
-			startEvent, err := mutableState.GetStartEvent(ctx)
-			if err != nil {
-				return err
-			}
-			startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 			metrics.SignalWithStartWorkflowTaskBackoffCounter.With(shardContext.GetMetricsHandler()).Record(
 				1,
 				metrics.NamespaceTag(request.GetNamespace()),
-				metrics.StringTag("initiator", startAttr.GetInitiator().String()),
 			)
 			if shardContext.GetConfig().EnableSignalWithStartWorkflowTaskBackoff(request.GetNamespace()) {
 				createWorkflowTask = false
