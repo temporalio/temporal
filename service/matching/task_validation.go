@@ -2,6 +2,7 @@
 package matching
 
 import (
+	"container/list"
 	"context"
 	"sync"
 	"time"
@@ -35,7 +36,6 @@ type (
 	taskValidationInfo struct {
 		taskID         int64
 		validationTime time.Time
-		lastAccess     uint64
 	}
 
 	taskValidatorImpl struct {
@@ -45,9 +45,9 @@ type (
 		namespaceRegistry namespace.Registry
 		historyClient     historyservice.HistoryServiceClient
 
-		mu            sync.Mutex
-		cache         map[int64]taskValidationInfo // taskID → last validation info; size-capped
-		accessCounter uint64
+		mu         sync.Mutex
+		cache      map[int64]*list.Element
+		cacheOrder *list.List
 	}
 )
 
@@ -64,7 +64,8 @@ func newTaskValidator(
 		clusterMetadata:   clusterMetadata,
 		namespaceRegistry: namespaceRegistry,
 		historyClient:     historyClient,
-		cache:             make(map[int64]taskValidationInfo, config.ValidatorCacheMaxSize()),
+		cache:             make(map[int64]*list.Element, config.ValidatorCacheMaxSize()),
+		cacheOrder:        list.New(),
 	}
 }
 
@@ -110,9 +111,10 @@ func (v *taskValidatorImpl) preValidate(
 func (v *taskValidatorImpl) lookupOrInit(task *persistencespb.AllocatedTaskInfo) (info taskValidationInfo, existed bool) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	if info, ok := v.cache[task.TaskId]; ok {
+	if element, ok := v.cache[task.TaskId]; ok {
+		info = element.Value.(taskValidationInfo) //nolint:revive // putLocked stores only taskValidationInfo values.
 		v.putLocked(info)
-		return v.cache[task.TaskId], true
+		return info, true
 	}
 	validationTime := time.Now().UTC()
 	if task.Data.CreateTime != nil {
@@ -120,26 +122,21 @@ func (v *taskValidatorImpl) lookupOrInit(task *persistencespb.AllocatedTaskInfo)
 	}
 	info = taskValidationInfo{taskID: task.TaskId, validationTime: validationTime}
 	v.putLocked(info)
-	return v.cache[task.TaskId], false
+	return info, false
 }
 
 func (v *taskValidatorImpl) putLocked(info taskValidationInfo) {
-	v.accessCounter++
-	info.lastAccess = v.accessCounter
-	v.cache[info.taskID] = info
+	if element, ok := v.cache[info.taskID]; ok {
+		element.Value = info
+		v.cacheOrder.MoveToFront(element)
+	} else {
+		v.cache[info.taskID] = v.cacheOrder.PushFront(info)
+	}
 	maxSize := v.config.ValidatorCacheMaxSize()
 	for len(v.cache) > maxSize {
-		var oldestID int64
-		var oldestAccess uint64
-		first := true
-		for id, cached := range v.cache {
-			if first || cached.lastAccess < oldestAccess {
-				oldestID = id
-				oldestAccess = cached.lastAccess
-				first = false
-			}
-		}
-		delete(v.cache, oldestID)
+		oldest := v.cacheOrder.Back()
+		v.cacheOrder.Remove(oldest)
+		delete(v.cache, oldest.Value.(taskValidationInfo).taskID)
 	}
 }
 

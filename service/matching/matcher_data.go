@@ -49,7 +49,7 @@ type taskForwarderType int32
 const (
 	notTaskForwarder       taskForwarderType = iota
 	parentTaskForwarder                      // forwards tasks to parent partition
-	validatorTaskForwarder                   // validates tasks on root partition
+	validatorTaskForwarder                   // validates local backlog tasks
 )
 
 // maxTokens is the maximum number of tokens we might consume at a time for simpleLimiter. This
@@ -470,7 +470,7 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 				// task forwarder only matches when forwarding is allowed
 				continue
 			} else if poller.taskForwarderType == validatorTaskForwarder && task.forwardCtx != nil {
-				// validator (root only) only matches local backlog tasks
+				// validator only matches local backlog tasks
 				continue
 			} else if mp := poller.minPriority(); mp > 0 && task.effectivePriority > effectivePriorityFactor*mp {
 				// Note the ">" above: "min" priority is a numeric max.

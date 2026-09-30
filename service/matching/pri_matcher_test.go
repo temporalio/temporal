@@ -345,13 +345,9 @@ func (s *PriMatcherSuite) TestValidatorBatch_AllInvalidDropsAll() {
 	tm.Start()
 
 	for range 3 {
-		select {
-		case res := <-done:
-			s.Require().NoError(res.err())
-			s.Equal(dropReasonInvalid, res.dropReason)
-		case <-time.After(2 * time.Second):
-			s.Fail("timed out waiting for validator to drop batch")
-		}
+		res := await.Rcv(s.T(), done)
+		s.Require().NoError(res.err())
+		s.Equal(dropReasonInvalid, res.dropReason)
 	}
 }
 
@@ -372,12 +368,7 @@ func (s *PriMatcherSuite) TestValidatorBatch_AllValidReprocessesAll() {
 	tm.Start()
 
 	for range 3 {
-		select {
-		case res := <-done:
-			s.Require().ErrorIs(res.err(), errReprocessTask)
-		case <-time.After(2 * time.Second):
-			s.Fail("timed out waiting for validator to reprocess batch")
-		}
+		s.Require().ErrorIs(await.Rcv(s.T(), done).err(), errReprocessTask)
 	}
 }
 
@@ -404,11 +395,7 @@ func (s *PriMatcherSuite) TestValidatorBatch_MixedInvalidContinuesImmediately() 
 		tm.Start()
 		// Drain first batch.
 		for range 2 {
-			select {
-			case <-done:
-			case <-time.After(time.Second):
-				t.Fatal("timed out waiting for first batch")
-			}
+			await.Rcv(t, done)
 		}
 
 		require.NoError(t, tm.AddTask(newBacklogTask(3, done)))
@@ -510,22 +497,10 @@ func (s *PriMatcherSuite) TestValidatorRunsOnChildBehindForwardedHead() {
 			require.NoError(t, tm.AddTask(newBacklogTask(id, done)))
 		}
 
-		select {
-		case <-forwardStarted:
-		case <-time.After(time.Second):
-			t.Fatal("forwarder never took the head")
-		}
+		await.Rcv(t, forwardStarted)
 
-		reprocessed := 0
-		deadline := time.After(time.Second)
-		for reprocessed < 2 {
-			select {
-			case res := <-done:
-				require.ErrorIs(t, res.err(), errReprocessTask)
-				reprocessed++
-			case <-deadline:
-				t.Fatalf("validator did not reprocess tasks behind the head, reprocessed=%d", reprocessed)
-			}
+		for range 2 {
+			require.ErrorIs(t, await.Rcv(t, done).err(), errReprocessTask)
 		}
 
 		close(forwardRelease)
