@@ -16,6 +16,7 @@ import (
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	commoncache "go.temporal.io/server/common/cache"
+	commoncallbacks "go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -74,6 +75,7 @@ var Module = fx.Options(
 	ChasmEngineModule,
 	chasmtests.Module,
 	fx.Provide(CallbackDestinationBlockedProvider),
+	fx.Provide(callbackValidatorProvider),
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
 	fx.Provide(ServiceErrorInterceptorProvider),
@@ -148,6 +150,23 @@ func CallbackDestinationBlockedProvider(
 		})
 		return cb.State() != gobreaker.StateClosed
 	}
+}
+
+// callbackValidatorProvider creates a callback Validator using the production dynamic config keys
+// so that existing operator configurations (callback.allowedAddresses) are honored.
+func callbackValidatorProvider(dc *dynamicconfig.Collection) (commoncallbacks.Validator, error) {
+	cfg := commoncallbacks.ValidatorConfig{
+		MaxCallbacksPerExecution:         callback.MaxPerExecution.Get(dc),
+		TotalCallbacksMaxSize:            callback.TotalMaxSizePerExecution.Get(dc),
+		MaxIDLengthLimit:                 dynamicconfig.MaxIDLengthLimit.Get(dc),
+		URLMaxLength:                     dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
+		HeaderMaxSize:                    dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
+		EndpointRules:                    callback.AllowedAddresses.Get(dc),
+		MaxServiceNameLength:             chasmnexus.MaxServiceNameLength.Get(dc),
+		MaxOperationNameLength:           chasmnexus.MaxOperationNameLength.Get(dc),
+		NexusHandlerSourceContextMaxSize: callback.NexusHandlerSourceContextMaxSize.Get(dc),
+	}
+	return commoncallbacks.NewValidator(cfg)
 }
 
 func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
