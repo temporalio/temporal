@@ -937,13 +937,13 @@ var queryConverterTestCases = []queryConverterTestCase{
 	},
 	{
 		// The two equality conditions on the same field are merged into a single terms
-		// condition, which leaves a single clause in the should clauses, so it becomes a
-		// filter clause.
+		// condition. It's the only clause left in the or expression, so it lands directly in
+		// the parent filter clauses instead of a bool query of its own.
 		name: "namespace division in complex query",
 		in:   "WorkflowId = 'wid' AND (TemporalNamespaceDivision = 'foo' OR TemporalNamespaceDivision = 'bar')",
 		sql:  "(workflow_id = 'wid' and (TemporalNamespaceDivision = 'foo' or TemporalNamespaceDivision = 'bar'))",
 		es: `{"bool":{"filter":[{"term":{"WorkflowId":"wid"}},` +
-			`{"bool":{"filter":{"terms":{"TemporalNamespaceDivision":["foo","bar"]}}}}]}}`,
+			`{"terms":{"TemporalNamespaceDivision":["foo","bar"]}}]}}`,
 	},
 
 	// Logical operators.
@@ -1165,12 +1165,13 @@ var queryConverterTestCases = []queryConverterTestCase{
 			`"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
-		// Equality conditions on the same field are merged into a single terms condition,
-		// which leaves a single clause in the should clauses, so it becomes a filter clause.
+		// Equality conditions on the same field are merged into a single terms condition.
+		// It's the only clause left in the or expression, so it lands directly in the parent
+		// filter clauses instead of a bool query of its own.
 		name: "merge equality conditions in or expression",
 		in:   "WorkflowId = 'wid1' OR WorkflowId = 'wid2'",
 		sql:  "TemporalNamespaceDivision is null and (workflow_id = 'wid1' or workflow_id = 'wid2')",
-		es: `{"bool":{"filter":{"bool":{"filter":{"terms":{"WorkflowId":["wid1","wid2"]}}}},` +
+		es: `{"bool":{"filter":{"terms":{"WorkflowId":["wid1","wid2"]}},` +
 			`"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
@@ -1178,7 +1179,7 @@ var queryConverterTestCases = []queryConverterTestCase{
 		in:   "WorkflowId IN ('wid1', 'wid2') OR WorkflowId = 'wid3'",
 		sql: "TemporalNamespaceDivision is null and " +
 			"(workflow_id in ('wid1', 'wid2') or workflow_id = 'wid3')",
-		es: `{"bool":{"filter":{"bool":{"filter":{"terms":{"WorkflowId":["wid1","wid2","wid3"]}}}},` +
+		es: `{"bool":{"filter":{"terms":{"WorkflowId":["wid1","wid2","wid3"]}},` +
 			`"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
@@ -1212,6 +1213,25 @@ var queryConverterTestCases = []queryConverterTestCase{
 			`{"bool":{"must_not":{"term":{"WorkflowId":"wid1"}}}},` +
 			`{"bool":{"must_not":{"term":{"WorkflowId":"wid2"}}}}]}},` +
 			`"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		// Negated equality conditions of an AND expression all land in the same must_not
+		// clauses. None of them may match, so the ones on the same field are merged into a
+		// single terms condition.
+		name: "merge negated equality conditions in and expression",
+		in:   "WorkflowId != 'wid1' AND WorkflowId != 'wid2'",
+		sql:  "TemporalNamespaceDivision is null and (workflow_id != 'wid1' and workflow_id != 'wid2')",
+		es: `{"bool":{"must_not":[{"exists":{"field":"TemporalNamespaceDivision"}},` +
+			`{"terms":{"WorkflowId":["wid1","wid2"]}}]}}`,
+	},
+	{
+		// A negated or expression turns its clauses into must_not clauses, so the equality
+		// conditions on the same field are merged into a single terms condition.
+		name: "merge equality conditions in not or expression",
+		in:   "NOT (WorkflowId = 'wid1' OR WorkflowId = 'wid2')",
+		sql:  "TemporalNamespaceDivision is null and (not (workflow_id = 'wid1' or workflow_id = 'wid2'))",
+		es: `{"bool":{"must_not":[{"exists":{"field":"TemporalNamespaceDivision"}},` +
+			`{"terms":{"WorkflowId":["wid1","wid2"]}}]}}`,
 	},
 	{
 		// Only filter clauses are merged: a negated range condition lands in the must_not

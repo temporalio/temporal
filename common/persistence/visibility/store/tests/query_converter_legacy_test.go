@@ -306,6 +306,9 @@ var legacyESDivergences = map[string]legacyDivergence{
 	"not is null expression": {
 		why: "legacy doesn't support the 'NOT' operator",
 	},
+	"merge equality conditions in not or expression": {
+		why: "legacy doesn't support the 'NOT' operator",
+	},
 	"complex query": {
 		why: "legacy doesn't support the 'NOT' operator",
 	},
