@@ -2,10 +2,7 @@ package schema
 
 import (
 	"bytes"
-	// In this context md5 is just used for versioning the current schema. It is a weak cryptographic primitive and
-	// should not be used for anything more important (password hashes etc.). Marking it as #nosec because of how it's
-	// being used.
-	"crypto/md5" // #nosec
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -300,8 +297,8 @@ func readManifest(fsys fs.FS, dirPath string) (*manifest, error) {
 
 	// See comment above. This is an appropriate usage of md5.
 	// #nosec
-	md5Bytes := md5.Sum(jsonBlob)
-	manifest.md5 = hex.EncodeToString(md5Bytes[:])
+	hashBytes := sha256.Sum256(jsonBlob)
+	manifest.md5 = hex.EncodeToString(hashBytes[:])
 
 	return &manifest, nil
 }
