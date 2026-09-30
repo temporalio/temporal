@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	"go.temporal.io/server/service/history/historybuilder"
-	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -26,9 +25,9 @@ var (
 type Workflow struct {
 	chasm.UnimplementedComponent
 
-	// For now, workflow state is managed by mutable_state_impl, not CHASM engine, leaving it empty as CHASM expects a
-	// state object.
-	*emptypb.Empty
+	// For now, the workflow's execution state is managed by mutable_state_impl, not the CHASM
+	// engine. WorkflowState only carries the bookkeeping that the CHASM tree itself owns.
+	*chasmworkflowpb.WorkflowState
 
 	// MSPointer is a special in-memory field for accessing the underlying mutable state.
 	chasm.MSPointer
@@ -52,7 +51,8 @@ func NewWorkflow(
 	msPointer chasm.MSPointer,
 ) *Workflow {
 	return &Workflow{
-		MSPointer: msPointer,
+		WorkflowState: &chasmworkflowpb.WorkflowState{},
+		MSPointer:     msPointer,
 	}
 }
 
@@ -149,18 +149,42 @@ func (w *Workflow) checkWorkflowCallbackLimit(ctx chasm.Context, newCount, maxCa
 	return nil
 }
 
-// addCallbacksToMap converts common callbacks to CHASM callback components and
-// inserts them into the target map, keyed by "<requestID>-<index>".
+// completionCallbackID defines the stable key used for keeping track of attached completion
+// callbacks. requestID (unique per API call) + idx (position within the request) ensures
+// unique, idempotent callback IDs. Unlike HSM callbacks, CHASM replicates entire trees rather
+// than replaying events, so deterministic cross-cluster IDs based on event version are not
+// needed.
+func completionCallbackID(requestID string, idx int) string {
+	return fmt.Sprintf("%s-%d", requestID, idx)
+}
+
+// hasCallbacksForRequest reports whether requestID has already attached its callbacks to
+// target. Attaching is atomic, so the presence of the first key means they are all present.
+func hasCallbacksForRequest(target chasm.Map[string, *callback.Callback], requestID string) bool {
+	_, ok := target[completionCallbackID(requestID, 0)]
+	return ok
+}
+
+// addCallbacksToMap converts common callbacks to CHASM callback components and inserts them
+// into the target map, and keeps the execution's denormalized callback totals in step. This is
+// the only place callbacks are attached, so the totals cannot drift from the maps: both change
+// together, in the same transaction.
 //
-// All callbacks are validated up front, so target is not mutated unless every
-// callback can be converted successfully (atomic from the caller's POV).
-func addCallbacksToMap(
+// All callbacks are converted up front, so target is not mutated unless every callback can be
+// converted successfully (atomic from the caller's POV). Re-attaching a request that is
+// already present is a no-op, which keeps the totals accurate when the same callbacks arrive
+// on more than one event (an update's admitted and accepted events, say).
+func (w *Workflow) addCallbacksToMap(
 	ctx chasm.MutableContext,
 	target chasm.Map[string, *callback.Callback],
 	requestID string,
 	eventTime *timestamppb.Timestamp,
 	completionCallbacks []*commonpb.Callback,
 ) error {
+	if hasCallbacksForRequest(target, requestID) {
+		return nil
+	}
+
 	chasmCBs := make([]*callbackspb.Callback, len(completionCallbacks))
 	for i, cb := range completionCallbacks {
 		chasmCB, err := callback.FromAPICallback(cb)
@@ -171,16 +195,10 @@ func addCallbacksToMap(
 	}
 
 	for idx, chasmCB := range chasmCBs {
-		// requestID (unique per API call) + idx (position within the request) ensures unique, idempotent callback IDs.
-		// Unlike HSM callbacks, CHASM replicates entire trees rather than replaying events, so deterministic
-		// cross-cluster IDs based on event version are not needed.
-		id := fmt.Sprintf("%s-%d", requestID, idx)
-		if _, exists := target[id]; exists {
-			// Already registered, skip to avoid overwriting.
-			continue
-		}
 		callbackObj := callback.NewCallback(requestID, eventTime, chasmCB)
-		target[id] = chasm.NewComponentField(ctx, callbackObj)
+		target[completionCallbackID(requestID, idx)] = chasm.NewComponentField(ctx, callbackObj)
+		w.TotalCallbacksCount++
+		w.TotalCallbacksSize += int64(completionCallbacks[idx].Size())
 	}
 	return nil
 }
@@ -202,7 +220,7 @@ func (w *Workflow) AddCompletionCallbacks(
 		w.Callbacks = make(chasm.Map[string, *callback.Callback], len(completionCallbacks))
 	}
 
-	return addCallbacksToMap(ctx, w.Callbacks, requestID, eventTime, completionCallbacks)
+	return w.addCallbacksToMap(ctx, w.Callbacks, requestID, eventTime, completionCallbacks)
 }
 
 // AddUpdateCompletionCallbacks creates completion callbacks using the CHASM implementation.
@@ -242,7 +260,7 @@ func (w *Workflow) AddUpdateCompletionCallbacks(
 		)
 	}
 
-	return addCallbacksToMap(ctx, update.Callbacks, requestID, eventTime, completionCallbacks)
+	return w.addCallbacksToMap(ctx, update.Callbacks, requestID, eventTime, completionCallbacks)
 }
 
 // addAndApplyHistoryEvent adds a history event to the workflow and applies the corresponding event definition,
