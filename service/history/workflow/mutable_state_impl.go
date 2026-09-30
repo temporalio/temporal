@@ -714,6 +714,12 @@ func (ms *MutableStateImpl) ChasmSignalBacklinksEnabled() bool {
 	return ms.ChasmEnabled() && ms.shard.GetConfig().EnableCHASMSignalBacklinks(ms.GetNamespaceEntry().Name().String())
 }
 
+// chasmWorkflowRootOnStartEnabled returns true if the CHASM Workflow root should be persisted when the
+// workflow starts.
+func (ms *MutableStateImpl) chasmWorkflowRootOnStartEnabled() bool {
+	return ms.ChasmEnabled() && ms.shard.GetConfig().EnableCHASMWorkflowRootOnStart(ms.GetNamespaceEntry().Name().String())
+}
+
 // ChasmWorkflowComponent gets the root workflow component from the CHASM tree.
 // Returns the workflow component (which is *chasmworkflow.Workflow) and the CHASM mutable context.
 // This method is for write operations. Callers can type assert to *chasmworkflow.Workflow if needed.
@@ -736,7 +742,8 @@ func (ms *MutableStateImpl) EnsureChasmWorkflowComponent(ctx context.Context) {
 	// chasmworkflow.NewWorkflow does not actually use it currently.
 	root, ok := ms.chasmTree.(*chasm.Node)
 	softassert.That(ms.logger, ok, "chasmTree cast failed")
-
+	// Consider removing this function. In tree, NewEmtpyTree and NewTreeFromDB sets ArchetypeID to
+	// WorkflowArchetypeID
 	if root.ArchetypeID() == chasm.UnspecifiedArchetypeID {
 		mutableContext := chasm.NewMutableContext(ctx, root)
 		if err := root.SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, chasm.NewMSPointer(ms))); err != nil {
@@ -3115,6 +3122,16 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 
 	ms.approximateSize -= ms.executionState.Size()
 	ms.executionState.FirstExecutionRunId = event.GetFirstExecutionRunId()
+	if ms.chasmWorkflowRootOnStartEnabled() {
+		// Accessing the root with a mutable context marks it dirty, so it is persisted in this
+		// transaction with an InitialVersionedTransition derived from the start event's version.
+		// Otherwise the root is only persisted on first use of a CHASM feature, and for executions
+		// loaded from DB it is synthesized before the current version is known.
+		if _, _, err := ms.ChasmWorkflowComponent(context.Background()); err != nil {
+			return err
+		}
+
+	}
 	if err := ms.addCompletionCallbacks(
 		startEvent,
 		requestID,
