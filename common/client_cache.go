@@ -124,23 +124,19 @@ func (c *clientCacheImpl) Evict(clientKey string) {
 	entry, ok := c.clients[clientKey]
 	if ok {
 		delete(c.clients, clientKey)
-	}
-	c.cacheLock.Unlock()
-
-	if ok {
 		c.release(entry)
 	}
+	c.cacheLock.Unlock()
 }
 
 func (c *clientCacheImpl) EvictAll() {
 	c.cacheLock.Lock()
 	entries := c.clients
 	c.clients = make(map[string]cachedEntry)
-	c.cacheLock.Unlock()
-
 	for _, entry := range entries {
 		c.release(entry)
 	}
+	c.cacheLock.Unlock()
 }
 
 func (e cachedEntry) isValid() bool {
