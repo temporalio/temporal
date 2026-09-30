@@ -7,6 +7,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/aggregate"
+	"go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 )
@@ -17,9 +18,10 @@ const (
 
 type (
 	HealthSignalAggregator interface {
+		health.SignalReader
+
 		Record(callerSegment int32, latency time.Duration, err error)
 		AverageLatency() float64
-		ErrorRatio() float64
 		Start()
 		Stop()
 	}
@@ -37,6 +39,8 @@ type (
 		latencyAverage aggregate.MovingWindowAverage
 		errorRatio     aggregate.MovingWindowAverage
 
+		signals *health.SignalAggregator
+
 		metricsHandler   metrics.Handler
 		emitMetricsTimer *time.Ticker
 
@@ -44,14 +48,20 @@ type (
 	}
 )
 
+var _ health.SignalReader = (*healthSignalAggregatorImpl)(nil)
+
 func NewHealthSignalAggregator(
 	aggregationEnabled bool,
 	windowSize time.Duration,
 	maxBufferSize int,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	getSettings func() health.Settings,
 ) *healthSignalAggregatorImpl {
+	signals := health.NewSignalAggregator(logger, getSettings, health.WithIsUnhealthy(isUnhealthyError))
+
 	ret := &healthSignalAggregatorImpl{
+		signals:            signals,
 		status:             common.DaemonStatusInitialized,
 		shutdownCh:         make(chan struct{}),
 		requestCounts:      make(map[int32]int64),
@@ -76,6 +86,7 @@ func (s *healthSignalAggregatorImpl) Start() {
 	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
+	s.signals.Start()
 	go s.emitMetricsLoop()
 }
 
@@ -83,6 +94,8 @@ func (s *healthSignalAggregatorImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
+
+	s.signals.Stop()
 	close(s.shutdownCh)
 	s.emitMetricsTimer.Stop()
 }
@@ -90,6 +103,8 @@ func (s *healthSignalAggregatorImpl) Stop() {
 func (s *healthSignalAggregatorImpl) Record(callerSegment int32, latency time.Duration, err error) {
 	if s.aggregationEnabled {
 		s.latencyAverage.Record(latency.Milliseconds())
+
+		s.signals.Record("TODO", latency, err)
 
 		if isUnhealthyError(err) {
 			s.errorRatio.Record(1)
@@ -107,8 +122,39 @@ func (s *healthSignalAggregatorImpl) AverageLatency() float64 {
 	return s.latencyAverage.Average()
 }
 
-func (s *healthSignalAggregatorImpl) ErrorRatio() float64 {
-	return s.errorRatio.Average()
+func (s *healthSignalAggregatorImpl) LatencyQuantile(quantile float64) (float64, bool) {
+	if !s.aggregationEnabled {
+		return 0, false
+	}
+
+	return s.signals.LatencyQuantile(quantile)
+}
+
+func (s *healthSignalAggregatorImpl) LatencyQuantileByGroup(groupName string, quantile float64) (float64, bool) {
+	if !s.aggregationEnabled {
+		return 0, false
+	}
+
+	return s.signals.LatencyQuantileByGroup(groupName, quantile)
+}
+
+// NOTE: this reads the original moving average rather than the signal aggregator's overall
+// bucket, since the dynamic rate limiter compares it against thresholds operators have
+// already tuned. it will move over once signals is proven out
+func (s *healthSignalAggregatorImpl) ErrorRatio() (float64, bool) {
+	if !s.aggregationEnabled {
+		return 0, false
+	}
+
+	return s.errorRatio.Average(), true
+}
+
+func (s *healthSignalAggregatorImpl) ErrorRatioByGroup(groupName string) (float64, bool) {
+	if !s.aggregationEnabled {
+		return 0, false
+	}
+
+	return s.signals.ErrorRatioByGroup(groupName)
 }
 
 func (s *healthSignalAggregatorImpl) incrementShardRequestCount(shardID int32) {
