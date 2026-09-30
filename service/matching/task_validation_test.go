@@ -90,8 +90,11 @@ func (s *taskValidatorSuite) putCache(info taskValidationInfo) {
 func (s *taskValidatorSuite) cacheInfo(taskID int64) (taskValidationInfo, bool) {
 	s.taskValidator.mu.Lock()
 	defer s.taskValidator.mu.Unlock()
-	info, ok := s.taskValidator.cache[taskID]
-	return info, ok
+	element, ok := s.taskValidator.cache[taskID]
+	if !ok {
+		return taskValidationInfo{}, false
+	}
+	return element.Value.(taskValidationInfo), true
 }
 
 func (s *taskValidatorSuite) TestPreValidateActive_NewTask_Skip_WithCreationTime() {
@@ -382,6 +385,36 @@ func TestTaskValidatorDynamicCacheCapacity(t *testing.T) {
 	v.postValidate(&persistencespb.AllocatedTaskInfo{TaskId: 129})
 	v.postValidate(&persistencespb.AllocatedTaskInfo{TaskId: 130})
 	require.Len(t, v.cache, 3)
+}
+
+func TestTaskValidatorPostValidateUpdatesRecency(t *testing.T) {
+	t.Parallel()
+	cfg := newTaskQueueConfig(
+		tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		NewConfig(dynamicconfig.NewNoopCollection()), "nsname",
+	)
+	cfg.ValidatorCacheMaxSize = func() int { return 2 }
+	v := newTaskValidator(context.Background(), cfg, nil, nil, nil)
+	tasks := make([]*persistencespb.AllocatedTaskInfo, 4)
+	for i := range tasks {
+		tasks[i] = &persistencespb.AllocatedTaskInfo{
+			TaskId: int64(i + 1),
+			Data:   &persistencespb.TaskInfo{CreateTime: timestamppb.New(time.Now().Add(-time.Hour))},
+		}
+	}
+	require.False(t, v.preValidateActive(tasks[0]))
+	require.False(t, v.preValidateActive(tasks[1]))
+	v.postValidate(tasks[0])
+	require.False(t, v.preValidateActive(tasks[0]))
+	require.False(t, v.preValidateActive(tasks[2]))
+	require.Contains(t, v.cache, tasks[0].TaskId)
+	require.NotContains(t, v.cache, tasks[1].TaskId)
+
+	require.False(t, v.preValidateActive(tasks[3]))
+	require.NotContains(t, v.cache, tasks[0].TaskId)
+	require.Contains(t, v.cache, tasks[2].TaskId)
+	require.Contains(t, v.cache, tasks[3].TaskId)
+	require.Len(t, v.cache, 2)
 }
 
 func (s *taskValidatorSuite) TestIsTaskValid_ActivityTask_Valid() {
