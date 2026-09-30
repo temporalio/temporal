@@ -8,9 +8,10 @@ import (
 
 type (
 	settingType struct {
-		Name      string
-		GoType    string
-		IsGeneric bool
+		Name         string
+		GoType       string
+		IsGeneric    bool
+		IsStringEnum bool
 	}
 	settingPrecedence struct {
 		Name   string
@@ -45,6 +46,11 @@ var (
 			{
 				Name:   "String",
 				GoType: "string",
+			},
+			{
+				Name:         "StringEnum",
+				GoType:       "string",
+				IsStringEnum: true,
 			},
 			{
 				Name:   "Duration",

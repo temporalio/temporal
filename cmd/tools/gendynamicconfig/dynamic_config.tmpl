@@ -197,6 +197,19 @@ func GetTypedPropertyFnFilteredBy{{$P.Name}}[T any](value T) TypedPropertyFnWith
 type {{$P.Name}}{{$T.Name}}Setting = {{$P.Name}}TypedSetting[{{$T.GoType}}]
 type {{$P.Name}}{{$T.Name}}ConstrainedDefaultSetting = {{$P.Name}}TypedConstrainedDefaultSetting[{{$T.GoType}}]
 
+{{if $T.IsStringEnum -}}
+func New{{$P.Name}}{{$T.Name}}Setting(key string, allowed StringEnum, def {{$T.GoType}}, description string) {{$P.Name}}{{$T.Name}}Setting {
+	allowed.mustContainDefault(key, def)
+	return New{{$P.Name}}TypedSettingWithConverter[{{$T.GoType}}](key, convert{{$T.Name}}(allowed), def, description)
+}
+
+func New{{$P.Name}}{{$T.Name}}SettingWithConstrainedDefault(key string, allowed StringEnum, cdef []TypedConstrainedValue[{{$T.GoType}}], description string) {{$P.Name}}{{$T.Name}}ConstrainedDefaultSetting {
+	for _, cv := range cdef {
+		allowed.mustContainDefault(key, cv.Value)
+	}
+	return New{{$P.Name}}TypedSettingWithConstrainedDefault[{{$T.GoType}}](key, convert{{$T.Name}}(allowed), cdef, description)
+}
+{{else -}}
 func New{{$P.Name}}{{$T.Name}}Setting(key string, def {{$T.GoType}}, description string) {{$P.Name}}{{$T.Name}}Setting {
 	return New{{$P.Name}}TypedSettingWithConverter[{{$T.GoType}}](key, convert{{$T.Name}}, def, description)
 }
@@ -204,7 +217,7 @@ func New{{$P.Name}}{{$T.Name}}Setting(key string, def {{$T.GoType}}, description
 func New{{$P.Name}}{{$T.Name}}SettingWithConstrainedDefault(key string, cdef []TypedConstrainedValue[{{$T.GoType}}], description string) {{$P.Name}}{{$T.Name}}ConstrainedDefaultSetting {
 	return New{{$P.Name}}TypedSettingWithConstrainedDefault[{{$T.GoType}}](key, convert{{$T.Name}}, cdef, description)
 }
-
+{{end}}
 {{if eq $P.Name "Global" -}}
 type {{$T.Name}}PropertyFn = TypedPropertyFn[{{$T.GoType}}]
 {{- else -}}
