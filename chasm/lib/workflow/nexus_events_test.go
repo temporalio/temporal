@@ -10,6 +10,8 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"go.temporal.io/server/service/history/hsm"
+	hsmnexusoperations "go.temporal.io/server/service/history/hsm/nexusoperations"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -452,4 +454,36 @@ func TestCancelRequestCompletedEventDefinitionApply(t *testing.T) {
 	cancellation, hasCancellation := op.Cancellation.TryGet(tcx.chasmCtx)
 	require.True(t, hasCancellation)
 	require.Equal(t, nexusoperationpb.CANCELLATION_STATUS_SUCCEEDED, cancellation.StateMachineState())
+}
+
+// TestNexusEventTypesAreAlsoDefinedInHSM guards an invariant that reset and replication event reapply quietly depend
+// on: every event type this library defines must also be defined by the HSM registry.
+//
+// reapplyEvents tries HSM first and only consults CHASM for an event type HSM does not define (cherryPickHSMEvent and
+// cherryPickChasmEvent in service/history/ndc/workflow_resetter.go). Today both frameworks register the same nine
+// Nexus event types, so that CHASM branch is never reached for them. An event type defined only here would be reached
+// for every workflow instead -- including workflows with no CHASM tree, where cherryPickChasmEvent fails the entire
+// reapply batch with Internal.
+//
+// If this test fails you have added an event definition with no HSM counterpart. That is not necessarily wrong, but it
+// changes reapply behaviour for workflows unrelated to the new feature, so choose deliberately:
+//   - add the matching definition in service/history/hsm/nexusoperations, or
+//   - teach cherryPickChasmEvent how to handle a CHASM-only event type on a workflow that has no CHASM tree.
+//
+// Background: https://github.com/temporalio/temporal/issues/11384.
+func TestNexusEventTypesAreAlsoDefinedInHSM(t *testing.T) {
+	hsmRegistry := hsm.NewRegistry()
+	require.NoError(t, hsmnexusoperations.RegisterEventDefinitions(hsmRegistry))
+
+	// Taken from the library rather than a registry: neither registry can enumerate what it holds, and the library's
+	// slice is the authoritative list of what this package defines.
+	defs := newNexusLibrary(nil, nil).EventDefinitions()
+	require.NotEmpty(t, defs)
+
+	for _, def := range defs {
+		_, ok := hsmRegistry.EventDefinition(def.Type())
+		require.True(t, ok,
+			"%v is defined by chasm/lib/workflow but not by HSM; see this test's comment for the two options",
+			def.Type())
+	}
 }
