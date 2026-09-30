@@ -119,12 +119,11 @@ type (
 		replicationTask   *replicationspb.ReplicationTask
 
 		// mutable data
-		taskState              int32
-		attempt                int32
-		namespace              atomic.Value
-		markPoisonPillAttempts int
-		isDuplicated           bool
-		taskExecuteStartTime   time.Time
+		taskState            int32
+		attempt              int32
+		namespace            atomic.Value
+		isDuplicated         bool
+		taskExecuteStartTime time.Time
 	}
 )
 
@@ -139,18 +138,17 @@ func NewExecutableTask(
 	replicationTask *replicationspb.ReplicationTask,
 ) *ExecutableTaskImpl {
 	return &ExecutableTaskImpl{
-		ProcessToolBox:         processToolBox,
-		taskID:                 taskID,
-		metricsTag:             metricsTag,
-		taskCreationTime:       taskCreationTime,
-		taskReceivedTime:       taskReceivedTime,
-		sourceClusterName:      sourceClusterName,
-		sourceShardKey:         sourceShardKey,
-		taskPriority:           replicationTask.GetPriority(),
-		replicationTask:        replicationTask,
-		taskState:              taskStatePending,
-		attempt:                1,
-		markPoisonPillAttempts: 0,
+		ProcessToolBox:    processToolBox,
+		taskID:            taskID,
+		metricsTag:        metricsTag,
+		taskCreationTime:  taskCreationTime,
+		taskReceivedTime:  taskReceivedTime,
+		sourceClusterName: sourceClusterName,
+		sourceShardKey:    sourceShardKey,
+		taskPriority:      replicationTask.GetPriority(),
+		replicationTask:   replicationTask,
+		taskState:         taskStatePending,
+		attempt:           1,
 	}
 }
 
@@ -915,20 +913,6 @@ FilterLoop:
 
 func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 	taskInfo := e.ReplicationTask().GetRawTaskInfo()
-
-	if e.markPoisonPillAttempts >= MarkPoisonPillMaxAttempts {
-		e.Logger.Error("MarkPoisonPill reached max attempts",
-			tag.SourceCluster(e.SourceClusterName()),
-			tag.ReplicationTask(taskInfo),
-		)
-		e.emitReplicationTaskError(wideevents.ReplOperationDLQWrite, "Writing replication task to DLQ reached maximum attempts", nil, map[string]any{
-			"dlq_attempt": e.markPoisonPillAttempts,
-			"disposition": wideevents.ReplDispositionDiscarded,
-			"terminal":    true,
-		})
-		return nil
-	}
-	e.markPoisonPillAttempts++
 
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
 		namespace.ID(e.replicationTask.RawTaskInfo.NamespaceId),
