@@ -449,6 +449,8 @@ message GetTaskQueueUserDataRequest {
   bool wait_new_data = 4;
   // If set, do not load task queue if unloaded. (Returns FailedPrecondition error in that case.)
   bool only_if_loaded = 6;
+  // If set, wait for these routing revisions and ignore the legacy version cursors.
+  temporal.server.api.deployment.v1.RoutingConfigPropagationTarget routing_config_target = 8;
 }
 
 message GetTaskQueueUserDataResponse {
@@ -572,7 +574,10 @@ message ReplicateTaskQueueUserDataResponse {}
 message CheckTaskQueueUserDataPropagationRequest {
   string namespace_id = 1;
   string task_queue = 2;
+  // Used when routing_config_target is absent, and by older Matching servers.
   int64 version = 3;
+  // If present, wait for this routing revision instead of the user data version.
+  temporal.server.api.deployment.v1.RoutingConfigPropagationTarget routing_config_target = 4;
 }
 
 message CheckTaskQueueUserDataPropagationResponse {}

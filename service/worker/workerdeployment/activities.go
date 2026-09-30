@@ -109,22 +109,20 @@ func (a *Activities) SyncUnversionedRamp(
 func (a *Activities) CheckUnversionedRampUserDataPropagation(ctx context.Context, input *deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest) error {
 	logger := activity.GetLogger(ctx)
 	errs := make(chan error)
-	for n, v := range input.TaskQueueMaxVersions {
-		go func(name string, version int64) {
+	requests := workerDeploymentPropagationRequests(a.namespace.ID().String(), input)
+	for n, request := range requests {
+		go func(name string, request *matchingservice.CheckTaskQueueUserDataPropagationRequest) {
+			version := request.GetVersion()
 			logger.Info("waiting for unversioned ramp userdata propagation", "taskQueue", name, "version", version)
-			_, err := a.MatchingClient.CheckTaskQueueUserDataPropagation(ctx, &matchingservice.CheckTaskQueueUserDataPropagationRequest{
-				NamespaceId: a.namespace.ID().String(),
-				TaskQueue:   name,
-				Version:     version,
-			})
+			_, err := a.MatchingClient.CheckTaskQueueUserDataPropagation(ctx, request)
 			if err != nil {
 				logger.Error("waiting for unversioned ramp userdata propagation", "taskQueue", name, "type", version, "error", err)
 			}
 			errs <- err
-		}(n, v)
+		}(n, request)
 	}
 	var err error
-	for range input.TaskQueueMaxVersions {
+	for range requests {
 		err = cmp.Or(err, <-errs)
 	}
 	return err

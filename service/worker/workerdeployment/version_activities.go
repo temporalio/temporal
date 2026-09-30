@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"sync"
 	"time"
 
@@ -60,6 +62,7 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 
 	var lock sync.Mutex
 	maxVersionByName := make(map[string]int64)
+	routingQueues := make(map[string]*deploymentspb.TaskQueuePropagationTarget)
 
 	for _, e := range input.Sync {
 		go func(syncData *deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData) {
@@ -100,6 +103,18 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 			} else {
 				lock.Lock()
 				maxVersionByName[syncData.Name] = max(maxVersionByName[syncData.Name], res.Version)
+				if req.GetOperation() == nil && req.GetUpdateRoutingConfig().GetRevisionNumber() > 0 {
+					target := routingQueues[syncData.Name]
+					if target == nil {
+						target = &deploymentspb.TaskQueuePropagationTarget{Name: syncData.Name}
+						routingQueues[syncData.Name] = target
+					}
+					for _, tp := range syncData.Types {
+						if !slices.Contains(target.TaskQueueTypes, tp) {
+							target.TaskQueueTypes = append(target.TaskQueueTypes, tp)
+						}
+					}
+				}
 				lock.Unlock()
 			}
 			errs <- err
@@ -113,7 +128,17 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 	if err != nil {
 		return nil, err
 	}
-	return &deploymentspb.SyncDeploymentVersionUserDataResponse{TaskQueueMaxVersions: maxVersionByName}, nil
+	response := &deploymentspb.SyncDeploymentVersionUserDataResponse{TaskQueueMaxVersions: maxVersionByName}
+	if len(routingQueues) > 0 {
+		response.DeploymentName = input.GetVersion().GetDeploymentName()
+		response.RevisionNumber = input.GetUpdateRoutingConfig().GetRevisionNumber()
+		for _, name := range slices.Sorted(maps.Keys(routingQueues)) {
+			queue := routingQueues[name]
+			slices.Sort(queue.TaskQueueTypes)
+			response.TaskQueues = append(response.TaskQueues, queue)
+		}
+	}
+	return response, nil
 }
 
 func (a *VersionActivities) checkSlowPropagation(ctx context.Context, logger log.Logger) {
@@ -130,23 +155,21 @@ func (a *VersionActivities) CheckWorkerDeploymentUserDataPropagation(ctx context
 
 	errs := make(chan error)
 
-	for n, v := range input.TaskQueueMaxVersions {
-		go func(name string, version int64) {
+	requests := workerDeploymentPropagationRequests(a.namespace.ID().String(), input)
+	for n, request := range requests {
+		go func(name string, request *matchingservice.CheckTaskQueueUserDataPropagationRequest) {
+			version := request.GetVersion()
 			logger.Info("waiting for userdata propagation", "taskQueue", name, "version", version)
-			_, err := a.MatchingClient.CheckTaskQueueUserDataPropagation(ctx, &matchingservice.CheckTaskQueueUserDataPropagationRequest{
-				NamespaceId: a.namespace.ID().String(),
-				TaskQueue:   name,
-				Version:     version,
-			})
+			_, err := a.MatchingClient.CheckTaskQueueUserDataPropagation(ctx, request)
 			if err != nil {
 				logger.Error("waiting for userdata", "taskQueue", name, "type", version, "error", err)
 			}
 			errs <- err
-		}(n, v)
+		}(n, request)
 	}
 
 	var err error
-	for range input.TaskQueueMaxVersions {
+	for range requests {
 		err = cmp.Or(err, <-errs)
 	}
 	return err

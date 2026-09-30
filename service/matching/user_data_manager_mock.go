@@ -44,7 +44,7 @@ func (m *MockuserDataManager) EXPECT() *MockuserDataManagerMockRecorder {
 }
 
 // CheckTaskQueueUserDataPropagation mocks base method.
-func (m *MockuserDataManager) CheckTaskQueueUserDataPropagation(arg0 context.Context, arg1 int64, arg2, arg3 int) error {
+func (m *MockuserDataManager) CheckTaskQueueUserDataPropagation(arg0 context.Context, arg1 *matchingservice.CheckTaskQueueUserDataPropagationRequest, arg2, arg3 int) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CheckTaskQueueUserDataPropagation", arg0, arg1, arg2, arg3)
 	ret0, _ := ret[0].(error)

@@ -661,12 +661,15 @@ func (d *VersionWorkflowRunner) deleteVersionFromTaskQueues(ctx workflow.Context
 	}
 
 	// wait for propagation
-	if len(syncRes.TaskQueueMaxVersions) > 0 {
+	if len(syncRes.TaskQueueMaxVersions) > 0 || len(syncRes.TaskQueues) > 0 {
 		err = workflow.ExecuteActivity(
 			activityCtx,
 			d.a.CheckWorkerDeploymentUserDataPropagation,
 			&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
 				TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
+				DeploymentName:       syncRes.GetDeploymentName(),
+				RevisionNumber:       syncRes.GetRevisionNumber(),
+				TaskQueues:           syncRes.GetTaskQueues(),
 			}).Get(ctx, nil)
 		if err != nil {
 			return err
@@ -854,13 +857,16 @@ func (d *VersionWorkflowRunner) syncRegisteredTaskQueueOld(ctx workflow.Context,
 		return err
 	}
 
-	if len(syncRes.TaskQueueMaxVersions) > 0 {
+	if len(syncRes.TaskQueueMaxVersions) > 0 || len(syncRes.TaskQueues) > 0 {
 		// wait for propagation
 		err = workflow.ExecuteActivity(
 			activityCtx,
 			d.a.CheckWorkerDeploymentUserDataPropagation,
 			&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
 				TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
+				DeploymentName:       syncRes.GetDeploymentName(),
+				RevisionNumber:       syncRes.GetRevisionNumber(),
+				TaskQueues:           syncRes.GetTaskQueues(),
 			}).Get(ctx, nil)
 		if err != nil {
 			return err
@@ -1335,13 +1341,16 @@ func (d *VersionWorkflowRunner) syncVersionDataToTaskQueues(ctx workflow.Context
 		if err != nil {
 			return err
 		}
-		if len(syncRes.TaskQueueMaxVersions) > 0 {
+		if len(syncRes.TaskQueueMaxVersions) > 0 || len(syncRes.TaskQueues) > 0 {
 			// wait for propagation
 			err = workflow.ExecuteActivity(
 				activityCtx,
 				d.a.CheckWorkerDeploymentUserDataPropagation,
 				&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
 					TaskQueueMaxVersions: syncRes.TaskQueueMaxVersions,
+					DeploymentName:       syncRes.GetDeploymentName(),
+					RevisionNumber:       syncRes.GetRevisionNumber(),
+					TaskQueues:           syncRes.GetTaskQueues(),
 				}).Get(ctx, nil)
 			if err != nil {
 				return err
@@ -1399,7 +1408,8 @@ func (d *VersionWorkflowRunner) executeAndTrackAsyncPropagation(
 	versionData *deploymentspb.WorkerDeploymentVersionData,
 ) {
 	// Number of batches to check might be less than the original batches because some TQ might not update.
-	var taskQueueMaxVersionsToCheck []map[string]int64
+	var taskQueueMaxVersionsToCheck []*deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest
+	lastBatchQueueCount := 0
 
 	for _, batch := range batches {
 		if d.cancelPropagations {
@@ -1407,16 +1417,32 @@ func (d *VersionWorkflowRunner) executeAndTrackAsyncPropagation(
 			return
 		}
 		res := d.executePropagationBatch(ctx, batch, routingConfig, versionData)
-		for _, tq := range workflow.DeterministicKeys(res) {
+		queues := make(map[string]*deploymentspb.TaskQueuePropagationTarget, len(res.GetTaskQueueMaxVersions()))
+		for _, tq := range workflow.DeterministicKeys(res.GetTaskQueueMaxVersions()) {
+			queues[tq] = nil
+		}
+		for _, queue := range res.GetTaskQueues() {
+			queues[queue.GetName()] = queue
+		}
+		for _, tq := range workflow.DeterministicKeys(queues) {
 			if len(taskQueueMaxVersionsToCheck) == 0 {
-				taskQueueMaxVersionsToCheck = []map[string]int64{{}}
+				taskQueueMaxVersionsToCheck = []*deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{{TaskQueueMaxVersions: map[string]int64{}}}
 			}
 			lastBatch := taskQueueMaxVersionsToCheck[len(taskQueueMaxVersionsToCheck)-1]
-			if len(lastBatch) >= int(d.VersionState.SyncBatchSize) {
-				taskQueueMaxVersionsToCheck = append(taskQueueMaxVersionsToCheck, map[string]int64{})
+			if lastBatchQueueCount >= int(d.VersionState.SyncBatchSize) {
+				taskQueueMaxVersionsToCheck = append(taskQueueMaxVersionsToCheck, &deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{TaskQueueMaxVersions: map[string]int64{}})
 				lastBatch = taskQueueMaxVersionsToCheck[len(taskQueueMaxVersionsToCheck)-1]
+				lastBatchQueueCount = 0
 			}
-			lastBatch[tq] = res[tq]
+			if version, ok := res.GetTaskQueueMaxVersions()[tq]; ok {
+				lastBatch.TaskQueueMaxVersions[tq] = version
+			}
+			if queue := queues[tq]; queue != nil {
+				lastBatch.DeploymentName = res.GetDeploymentName()
+				lastBatch.RevisionNumber = res.GetRevisionNumber()
+				lastBatch.TaskQueues = append(lastBatch.TaskQueues, queue)
+			}
+			lastBatchQueueCount++
 		}
 	}
 	if d.cancelPropagations {
@@ -1430,9 +1456,7 @@ func (d *VersionWorkflowRunner) executeAndTrackAsyncPropagation(
 		err := workflow.ExecuteActivity(
 			activityCtx,
 			d.a.CheckWorkerDeploymentUserDataPropagation,
-			&deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
-				TaskQueueMaxVersions: batch,
-			}).Get(ctx, nil)
+			batch).Get(ctx, nil)
 
 		if err != nil {
 			d.logger.Error("async propagation check failed", "error", err)
@@ -1478,13 +1502,13 @@ func (d *VersionWorkflowRunner) batchTaskQueuesForSync() [][]*deploymentspb.Sync
 	return batches
 }
 
-// executePropagationBatch executes a single batch of propagation and returns task queue max versions to check
+// executePropagationBatch executes a single batch of propagation and returns the targets to check
 func (d *VersionWorkflowRunner) executePropagationBatch(
 	ctx workflow.Context,
 	batch []*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData,
 	routingConfig *deploymentpb.RoutingConfig,
 	versionData *deploymentspb.WorkerDeploymentVersionData,
-) map[string]int64 {
+) *deploymentspb.SyncDeploymentVersionUserDataResponse {
 	state := d.GetVersionState()
 	activityCtx := workflow.WithActivityOptions(ctx, propagationActivityOptions)
 	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
@@ -1498,11 +1522,10 @@ func (d *VersionWorkflowRunner) executePropagationBatch(
 
 	if err != nil {
 		d.logger.Error("async propagation batch failed", "error", err)
-		// Return empty map on error
-		return map[string]int64(nil)
+		return nil
 	}
 
-	return syncRes.TaskQueueMaxVersions
+	return &syncRes
 }
 
 // signalPropagationComplete sends a signal to the deployment workflow when async propagation completes
