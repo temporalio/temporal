@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
@@ -32,8 +33,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func TestNewRegistry(t *testing.T) {
-	registry, err := all.NewRegistry(log.NewTestLogger())
+func TestNewNilRegistry(t *testing.T) {
+	registry, err := all.NewNilRegistry(log.NewTestLogger())
 	require.NoError(t, err)
 
 	// Decoding starts from the root node's component type ID, so every archetype must resolve.
@@ -53,17 +54,12 @@ func TestNewRegistry(t *testing.T) {
 // TestDetachedRead_StandaloneActivity covers what an offline reader has: persisted nodes,
 // execution metadata, and a registry with nil handlers.
 func TestDetachedRead_StandaloneActivity(t *testing.T) {
-	registry, err := all.NewRegistry(log.NewTestLogger())
+	registry, err := all.NewNilRegistry(log.NewTestLogger())
 	require.NoError(t, err)
 
 	mutableState := persistStandaloneActivity(t, registry)
 
-	// Archetype is readable before decoding, so a caller can dispatch on it.
-	archetype, err := chasm.RootArchetype(mutableState, registry)
-	require.NoError(t, err)
-	require.Equal(t, activity.Archetype, archetype)
-
-	act, ctx, err := chasm.DetachedRootComponent[*activity.Activity](context.Background(), mutableState, registry)
+	act, ctx, err := chasm.NewDetachedExecution[*activity.Activity](context.Background(), mutableState, registry)
 	require.NoError(t, err)
 
 	// State decoded from the root node and its data children.
@@ -80,31 +76,23 @@ func TestDetachedRead_StandaloneActivity(t *testing.T) {
 	require.Equal(t, "run-id-1", ctx.ExecutionKey().RunID)
 	require.Equal(t, time.Unix(900, 0).UTC(), ctx.ExecutionInfo().CloseTime)
 	require.Equal(t, int64(7), ctx.ExecutionInfo().StateTransitionCount)
+	require.Equal(t, proto.Size(mutableState), ctx.ExecutionInfo().ApproximateStateSize)
+
+	// Ref reads the current versioned transition from the record's transition history.
+	ref, err := ctx.Ref(act)
+	require.NoError(t, err)
+	require.NotEmpty(t, ref)
 }
 
-// TestDetachedRead_WritePathPanics documents the read only contract: a write path panics
-// rather than returning a result computed against a fabricated backend.
-func TestDetachedRead_WritePathPanics(t *testing.T) {
-	registry, err := all.NewRegistry(log.NewTestLogger())
-	require.NoError(t, err)
-
-	root, err := chasm.NewDetachedTree(persistStandaloneActivity(t, registry), registry)
-	require.NoError(t, err)
-
-	require.Panics(t, func() {
-		_, _ = root.CloseTransaction()
-	})
-}
-
-// TestDetachedRootComponent_Interface covers instantiating C as an interface rather than a
+// TestNewDetachedExecution_Interface covers instantiating C as an interface rather than a
 // concrete type, which is how a caller reaches DescribeComponent without naming the root's
 // type. The constraint stays Component, not RootComponent, so an interface like
 // DescribableComponent can be used here.
-func TestDetachedRootComponent_Interface(t *testing.T) {
-	registry, err := all.NewRegistry(log.NewTestLogger())
+func TestNewDetachedExecution_Interface(t *testing.T) {
+	registry, err := all.NewNilRegistry(log.NewTestLogger())
 	require.NoError(t, err)
 
-	component, ctx, err := chasm.DetachedRootComponent[chasm.Component](
+	component, ctx, err := chasm.NewDetachedExecution[chasm.Component](
 		context.Background(),
 		persistStandaloneActivity(t, registry),
 		registry,
@@ -113,13 +101,13 @@ func TestDetachedRootComponent_Interface(t *testing.T) {
 	require.True(t, component.LifecycleState(ctx).IsClosed())
 }
 
-// TestDetachedRootComponent_WrongType reports the mismatch rather than handing back a zero
+// TestNewDetachedExecution_WrongType reports the mismatch rather than handing back a zero
 // value.
-func TestDetachedRootComponent_WrongType(t *testing.T) {
-	registry, err := all.NewRegistry(log.NewTestLogger())
+func TestNewDetachedExecution_WrongType(t *testing.T) {
+	registry, err := all.NewNilRegistry(log.NewTestLogger())
 	require.NoError(t, err)
 
-	_, _, err = chasm.DetachedRootComponent[*chasm.Visibility](
+	_, _, err = chasm.NewDetachedExecution[*chasm.Visibility](
 		context.Background(),
 		persistStandaloneActivity(t, registry),
 		registry,
@@ -178,51 +166,44 @@ func persistStandaloneActivity(t *testing.T, registry *chasm.Registry) *persiste
 			WorkflowId:           "my-activity-id",
 			CloseTime:            timestamppb.New(time.Unix(900, 0).UTC()),
 			StateTransitionCount: 7,
+			TransitionHistory: []*persistencespb.VersionedTransition{
+				{NamespaceFailoverVersion: 1, TransitionCount: 7},
+			},
 		},
 		ExecutionState: &persistencespb.WorkflowExecutionState{RunId: "run-id-1"},
 	}
 }
 
-// TestDetachedRead_NodesOnly reads a record carrying only nodes. Decoding and component state
-// are unaffected; only the execution facts, which are not in the tree, come back zero.
-func TestDetachedRead_NodesOnly(t *testing.T) {
-	registry, err := all.NewRegistry(log.NewTestLogger())
+// TestNewDetachedExecution_IncompleteRecord rejects a record missing what the tree cannot
+// recover on its own, rather than describing an execution with empty identity fields.
+func TestNewDetachedExecution_IncompleteRecord(t *testing.T) {
+	registry, err := all.NewNilRegistry(log.NewTestLogger())
 	require.NoError(t, err)
 
-	nodesOnly := &persistencespb.WorkflowMutableState{
-		ChasmNodes: persistStandaloneActivity(t, registry).GetChasmNodes(),
+	for name, mutate := range map[string]func(*persistencespb.WorkflowMutableState){
+		"no execution info":  func(ms *persistencespb.WorkflowMutableState) { ms.ExecutionInfo = nil },
+		"no execution state": func(ms *persistencespb.WorkflowMutableState) { ms.ExecutionState = nil },
+	} {
+		t.Run(name, func(t *testing.T) {
+			mutableState := persistStandaloneActivity(t, registry)
+			mutate(mutableState)
+
+			_, _, err := chasm.NewDetachedExecution[*activity.Activity](context.Background(), mutableState, registry)
+			var internalErr *serviceerror.Internal
+			require.ErrorAs(t, err, &internalErr)
+		})
 	}
 
-	act, ctx, err := chasm.DetachedRootComponent[*activity.Activity](
-		context.Background(), nodesOnly, registry)
-	require.NoError(t, err)
-
-	// The component's own state is all there.
-	require.Equal(t, "MyActivity", act.GetActivityType().GetName())
-	require.Equal(t, "my-tq", act.GetTaskQueue().GetName())
-	require.Equal(t, int32(3), act.LastAttempt.Get(ctx).GetCount())
-	require.True(t, act.LifecycleState(ctx).IsClosed())
-
-	// What the record did not carry reads as zero, not as a panic or an error.
-	require.Equal(t, chasm.ExecutionKey{}, ctx.ExecutionKey())
-	require.Zero(t, ctx.ExecutionInfo().CloseTime)
-	require.Zero(t, ctx.ExecutionInfo().StateTransitionCount)
+	_, _, err = chasm.NewDetachedExecution[*activity.Activity](context.Background(), nil, registry)
+	var internalErr *serviceerror.Internal
+	require.ErrorAs(t, err, &internalErr)
 }
 
-// TestNewDetachedTree_NilMutableState is the one input the constructor rejects.
-func TestNewDetachedTree_NilMutableState(t *testing.T) {
-	registry, err := all.NewRegistry(log.NewTestLogger())
-	require.NoError(t, err)
-
-	_, err = chasm.NewDetachedTree(nil, registry)
-	require.ErrorContains(t, err, "nil")
-}
-
-// TestNewRegistry_TasksDecodable walks the tasks a real tree carries and checks each resolves
+// TestNewNilRegistry_TasksDecodable walks the tasks a real tree carries and checks each resolves
 // to a proto type and decodes. Nil libraries keep their Tasks(), so offline readers can render
 // logical tasks, and a library whose nil constructor dropped them would fail here.
-func TestNewRegistry_TasksDecodable(t *testing.T) {
-	registry, err := all.NewRegistry(log.NewTestLogger())
+func TestNewNilRegistry_TasksDecodable(t *testing.T) {
+	registry, err := all.NewNilRegistry(log.NewTestLogger())
 	require.NoError(t, err)
 
 	found := 0
@@ -262,7 +243,7 @@ func TestNewRegistry_TasksDecodable(t *testing.T) {
 // type the reader does not know, as happens when a newer server wrote the record. Tasks are
 // inert here: nothing validates or executes them, so an unrecognized one is ignored.
 func TestDetachedRead_UnknownTaskType(t *testing.T) {
-	registry, err := all.NewRegistry(log.NewTestLogger())
+	registry, err := all.NewNilRegistry(log.NewTestLogger())
 	require.NoError(t, err)
 
 	mutableState := persistStandaloneActivity(t, registry)
@@ -280,7 +261,7 @@ func TestDetachedRead_UnknownTaskType(t *testing.T) {
 		},
 	})
 
-	act, ctx, err := chasm.DetachedRootComponent[*activity.Activity](
+	act, ctx, err := chasm.NewDetachedExecution[*activity.Activity](
 		context.Background(), mutableState, registry)
 	require.NoError(t, err)
 	require.Equal(t, "MyActivity", act.GetActivityType().GetName())

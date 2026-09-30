@@ -12,7 +12,7 @@ import (
 	"go.temporal.io/server/common/log"
 )
 
-// NewRegistry returns a registry holding every CHASM library, with nil handlers. Callers
+// NewNilRegistry returns a registry holding every CHASM library, with nil handlers. Callers
 // needing libraries of their own can register them onto the result, as tdbg does.
 //
 // When adding a library under chasm/lib, export a NewNilLibrary() and add a line to the libs
@@ -20,7 +20,7 @@ import (
 //
 // A new entry makes that library's persisted state decodable by every offline reader,
 // including ones that write it to long lived external storage. Add deliberately.
-func NewRegistry(logger log.Logger) (*chasm.Registry, error) {
+func NewNilRegistry(logger log.Logger) (*chasm.Registry, error) {
 	libs := []chasm.Library{
 		&chasm.CoreLibrary{},
 		activity.NewNilLibrary(),

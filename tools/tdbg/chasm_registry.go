@@ -8,7 +8,7 @@ import (
 )
 
 func newChasmRegistry(logger log.Logger) (*chasm.Registry, error) {
-	registry, err := all.NewRegistry(logger)
+	registry, err := all.NewNilRegistry(logger)
 	if err != nil {
 		return nil, err
 	}
