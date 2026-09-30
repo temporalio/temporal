@@ -140,8 +140,8 @@ func (tm *priTaskMatcher) Start() {
 		WithExpirationInterval(backoff.NoInterval)
 	lim := quotas.NewDefaultOutgoingRateLimiter(tm.config.ForwarderMaxRatePerSecond)
 
-	// ForwarderMaxOutstandingTasks > 1 is now safe: the validator cache is
-	// keyed by task ID, so alternating tasks no longer skip validation.
+	// Forwarders share a synchronized per-task validation cache. Each worker owns
+	// its retrier so one worker's success cannot reset another worker's backoff.
 	for range tm.config.ForwarderMaxOutstandingTasks() {
 		retrier := backoff.NewRetrier(policy, clock.NewRealTimeSource())
 		go tm.forwardTasks(lim, retrier)
