@@ -122,6 +122,7 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 	}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
 
 	err := Invoke(s.T().Context(), request, s.workflowConsistencyChecker, s.shardContext, s.resendScheduler)
 	s.IsType(&serviceerror.NotFound{}, err)
@@ -189,6 +190,7 @@ func (s *VerifyFirstWorkflowTaskScheduledSuite) TestVerifyFirstWorkflowTaskSched
 		ResendChild: true,
 	}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
 
 	err := Invoke(s.T().Context(), request, s.workflowConsistencyChecker, s.shardContext, s.resendScheduler)
 	s.Require().ErrorAs(err, new(*serviceerror.NotFound))
