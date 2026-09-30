@@ -75,7 +75,7 @@ func NewClientCache(
 // report when their backing resources are no longer usable and need replacement.
 func NewClientCacheWithEntryProvider(
 	keyResolver keyResolver,
-	clientProvider ClientCacheEntryProvider,
+	clientCacheEntryProvider ClientCacheEntryProvider,
 	logger log.Logger,
 ) ClientCache {
 	return &clientCacheImpl{
