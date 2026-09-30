@@ -691,10 +691,6 @@ func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
 	if target == nil {
 		version = req.GetVersion()
 	}
-	firstWorkflowPartition := 1
-	if target != nil {
-		firstWorkflowPartition = 0
-	}
 	if !m.partition.IsRoot() || m.partition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 		return serviceerror.NewInvalidArgument("CheckTaskQueueUserDataPropagation must be called on root workflow task queue")
 	} else if target == nil && version < 1 {
@@ -706,7 +702,7 @@ func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
 	complete := make(chan error, 1)
 
 	var waitingForPartitions atomic.Int64
-	partitionCount := wfPartitions - firstWorkflowPartition + actPartitions
+	partitionCount := wfPartitions - 1 + actPartitions
 	if partitionCount == 0 {
 		return nil
 	}
@@ -763,7 +759,8 @@ func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
 		}
 	}
 
-	for i := firstWorkflowPartition; i < wfPartitions; i++ {
+	// TODO: Check the root Workflow partition too when user data moves to CHASM and root updates become asynchronous.
+	for i := 1; i < wfPartitions; i++ {
 		go check(i, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	}
 	for i := range actPartitions {
