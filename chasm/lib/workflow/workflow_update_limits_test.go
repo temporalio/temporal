@@ -10,14 +10,6 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func nexusCallback(url string) *commonpb.Callback {
-	return &commonpb.Callback{
-		Variant: &commonpb.Callback_Nexus_{
-			Nexus: &commonpb.Callback_Nexus{Url: url},
-		},
-	}
-}
-
 // TestAddUpdateCompletionCallbacks verifies that:
 //   - if per-update limit is exceeded while workflow-wide limit is not exceeded,
 //     we reject attaching callbacks onto that update.
@@ -75,7 +67,7 @@ func TestAddUpdateCompletionCallbacks_LimitsExceeded(t *testing.T) {
 			t.Parallel()
 
 			ctx := &chasm.MockMutableContext{}
-			wf := &Workflow{MSPointer: chasm.NewMSPointer(&chasm.MockNodeBackend{})}
+			wf := newTestWorkflow()
 			eventTime := timestamppb.Now()
 
 			// Add the first set of callbacks, expect this to succeed.
