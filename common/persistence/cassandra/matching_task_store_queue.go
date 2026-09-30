@@ -3,6 +3,7 @@ package cassandra
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -47,11 +48,16 @@ func switchTasksTable(baseQuery string, v matchingTaskVersion) string {
 }
 
 // Task queue management queries, written for v2 (rewritten for v1 by switchTasksTable)
+//
+// The task_encoding column is otherwise unused on task queue metadata rows. We use it to store
+// a fingerprint of the task_queue blob, which is written along with task_queue and can be
+// used as an additional condition (see taskQueueFingerprintCondition).
 const (
 	templateGetTaskQueueQuery = `SELECT ` +
 		`range_id, ` +
 		`task_queue, ` +
-		`task_queue_encoding ` +
+		`task_queue_encoding, ` +
+		`task_encoding ` +
 		`FROM tasks_v2 ` +
 		`WHERE namespace_id = ? ` +
 		`AND task_queue_name = ? ` +
@@ -61,13 +67,14 @@ const (
 		`AND task_id = ?`
 
 	templateInsertTaskQueueQuery = `INSERT INTO tasks_v2 ` +
-		`(namespace_id, task_queue_name, task_queue_type, type, pass, task_id, range_id, task_queue, task_queue_encoding) ` +
-		`VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?) IF NOT EXISTS`
+		`(namespace_id, task_queue_name, task_queue_type, type, pass, task_id, range_id, task_queue, task_queue_encoding, task_encoding) ` +
+		`VALUES (?, ?, ?, ?, 0, ?, ?, ?, ?, ?) IF NOT EXISTS`
 
 	templateUpdateTaskQueueQuery = `UPDATE tasks_v2 SET ` +
 		`range_id = ?, ` +
 		`task_queue = ?, ` +
-		`task_queue_encoding = ? ` +
+		`task_queue_encoding = ?, ` +
+		`task_encoding = ? ` +
 		`WHERE namespace_id = ? ` +
 		`AND task_queue_name = ? ` +
 		`AND task_queue_type = ? ` +
@@ -96,7 +103,8 @@ const (
 	templateUpdateTaskQueueQueryWithTTLPart2 = `UPDATE tasks_v2 USING TTL ? SET ` +
 		`range_id = ?, ` +
 		`task_queue = ?, ` +
-		`task_queue_encoding = ? ` +
+		`task_queue_encoding = ?, ` +
+		`task_encoding = ? ` +
 		`WHERE namespace_id = ? ` +
 		`AND task_queue_name = ? ` +
 		`AND task_queue_type = ? ` +
@@ -114,6 +122,22 @@ const (
 		`AND task_id = ? ` +
 		`IF range_id = ?`
 )
+
+const taskQueueFingerprintCondition = ` AND task_encoding = ?`
+
+func taskQueueFingerprint(data []byte) string {
+	return strconv.FormatUint(p.TaskQueueInfoFingerprint(data), 16)
+}
+
+func formatTaskQueueFingerprint(fp uint64) string {
+	return strconv.FormatUint(fp, 16)
+}
+
+func parseTaskQueueFingerprint(s string) uint64 {
+	// Rows written by older versions have no fingerprint: return zero for unknown.
+	fp, _ := strconv.ParseUint(s, 16, 64)
+	return fp
+}
 
 // taskQueueStore handles unified task queue operations for both v1 and v2
 type taskQueueStore struct {
@@ -134,6 +158,7 @@ func (d *taskQueueStore) CreateTaskQueue(
 		request.RangeID,
 		request.TaskQueueInfo.Data,
 		request.TaskQueueInfo.EncodingType.String(),
+		taskQueueFingerprint(request.TaskQueueInfo.Data),
 	).WithContext(ctx)
 
 	previous := make(map[string]any)
@@ -168,13 +193,16 @@ func (d *taskQueueStore) GetTaskQueue(
 	var rangeID int64
 	var tlBytes []byte
 	var tlEncoding string
-	if err := query.Scan(&rangeID, &tlBytes, &tlEncoding); err != nil {
+	var fingerprint string
+	if err := query.Scan(&rangeID, &tlBytes, &tlEncoding, &fingerprint); err != nil {
 		return nil, gocql.ConvertError("GetTaskQueue", err)
 	}
 
 	return &p.InternalGetTaskQueueResponse{
 		RangeID:       rangeID,
 		TaskQueueInfo: p.NewDataBlob(tlBytes, tlEncoding),
+		// Note this returns the stored fingerprint, which is what a condition compares to.
+		Fingerprint: parseTaskQueueFingerprint(fingerprint),
 	}, nil
 }
 
@@ -185,6 +213,14 @@ func (d *taskQueueStore) UpdateTaskQueue(
 	var err error
 	var applied bool
 	previous := make(map[string]any)
+
+	fingerprint := taskQueueFingerprint(request.TaskQueueInfo.Data)
+	condition := ""
+	var conditionArgs []any
+	if request.PrevFingerprint != 0 {
+		condition = taskQueueFingerprintCondition
+		conditionArgs = append(conditionArgs, formatTaskQueueFingerprint(request.PrevFingerprint))
+	}
 
 	if d.version == matchingTaskVersion1 && request.TaskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
 		// V1 TTL logic - only applies to V1
@@ -203,31 +239,37 @@ func (d *taskQueueStore) UpdateTaskQueue(
 			expiryTTL,
 		)
 
-		batch.Query(switchTasksTable(templateUpdateTaskQueueQueryWithTTLPart2, d.version),
-			expiryTTL,
-			request.RangeID,
-			request.TaskQueueInfo.Data,
-			request.TaskQueueInfo.EncodingType.String(),
-			request.NamespaceID,
-			request.TaskQueue,
-			request.TaskType,
-			rowTypeTaskQueue,
-			taskQueueTaskID,
-			request.PrevRangeID,
+		batch.Query(switchTasksTable(templateUpdateTaskQueueQueryWithTTLPart2, d.version)+condition,
+			append([]any{
+				expiryTTL,
+				request.RangeID,
+				request.TaskQueueInfo.Data,
+				request.TaskQueueInfo.EncodingType.String(),
+				fingerprint,
+				request.NamespaceID,
+				request.TaskQueue,
+				request.TaskType,
+				rowTypeTaskQueue,
+				taskQueueTaskID,
+				request.PrevRangeID,
+			}, conditionArgs...)...,
 		)
 		applied, _, err = d.Session.MapExecuteBatchCAS(batch, previous)
 	} else {
 		// Regular update logic for both V1 and V2
-		query := d.Session.Query(switchTasksTable(templateUpdateTaskQueueQuery, d.version),
-			request.RangeID,
-			request.TaskQueueInfo.Data,
-			request.TaskQueueInfo.EncodingType.String(),
-			request.NamespaceID,
-			request.TaskQueue,
-			request.TaskType,
-			rowTypeTaskQueue,
-			taskQueueTaskID,
-			request.PrevRangeID,
+		query := d.Session.Query(switchTasksTable(templateUpdateTaskQueueQuery, d.version)+condition,
+			append([]any{
+				request.RangeID,
+				request.TaskQueueInfo.Data,
+				request.TaskQueueInfo.EncodingType.String(),
+				fingerprint,
+				request.NamespaceID,
+				request.TaskQueue,
+				request.TaskType,
+				rowTypeTaskQueue,
+				taskQueueTaskID,
+				request.PrevRangeID,
+			}, conditionArgs...)...,
 		).WithContext(ctx)
 		applied, err = query.MapScanCAS(previous)
 	}

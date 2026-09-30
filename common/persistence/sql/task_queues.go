@@ -71,6 +71,7 @@ func (m *taskQueueStore) GetTaskQueue(
 		return &persistence.InternalGetTaskQueueResponse{
 			RangeID:       row.RangeID,
 			TaskQueueInfo: persistence.NewDataBlob(row.Data, row.DataEncoding),
+			Fingerprint:   persistence.TaskQueueInfoFingerprint(row.Data),
 		}, nil
 	case sql.ErrNoRows:
 		return nil, serviceerror.NewNotFoundf(
@@ -103,6 +104,22 @@ func (m *taskQueueStore) UpdateTaskQueue(
 			m.version,
 		); err != nil {
 			return err
+		}
+		if request.PrevFingerprint != 0 {
+			// The row is locked, so we can check the current data without racing.
+			rows, err := tx.SelectFromTaskQueues(ctx, sqlplugin.TaskQueuesFilter{
+				RangeHash:   tqHash,
+				TaskQueueID: tqId,
+			}, m.version)
+			if err != nil {
+				return err
+			} else if len(rows) != 1 {
+				return fmt.Errorf("%v rows were returned instead of 1", len(rows))
+			} else if fp := persistence.TaskQueueInfoFingerprint(rows[0].Data); fp != request.PrevFingerprint {
+				return &persistence.ConditionFailedError{
+					Msg: fmt.Sprintf("Task queue info fingerprint was %x when it should have been %x", fp, request.PrevFingerprint),
+				}
+			}
 		}
 		result, err := tx.UpdateTaskQueues(ctx, &sqlplugin.TaskQueuesRow{
 			RangeHash:    tqHash,

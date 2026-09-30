@@ -3,6 +3,7 @@ package persistence
 import (
 	"context"
 
+	"github.com/dgryski/go-farm"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -16,6 +17,13 @@ import (
 // multiple subqueues.
 // For Cassandra: subqueues are represented in the row type.
 const SubqueueZero = 0
+
+// TaskQueueInfoFingerprint returns a fingerprint of a serialized task queue info blob. It's
+// used to make a task queue takeover conditional on the metadata not changing since it was
+// read, even if a write in between didn't change the range id.
+func TaskQueueInfoFingerprint(data []byte) uint64 {
+	return farm.Fingerprint64(data)
+}
 
 type taskManagerImpl struct {
 	taskStore  TaskStore
@@ -98,7 +106,8 @@ func (m *taskManagerImpl) UpdateTaskQueue(
 		TaskQueueKind: request.TaskQueueInfo.GetKind(),
 		ExpiryTime:    taskQueueInfo.ExpiryTime,
 
-		PrevRangeID: request.PrevRangeID,
+		PrevRangeID:     request.PrevRangeID,
+		PrevFingerprint: request.PrevFingerprint,
 	}
 	return m.taskStore.UpdateTaskQueue(ctx, internalRequest)
 }
@@ -123,6 +132,7 @@ func (m *taskManagerImpl) GetTaskQueue(
 	return &GetTaskQueueResponse{
 		TaskQueueInfo: taskQueueInfo,
 		RangeID:       response.RangeID,
+		Fingerprint:   response.Fingerprint,
 	}, nil
 }
 

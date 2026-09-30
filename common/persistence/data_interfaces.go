@@ -510,6 +510,9 @@ type (
 		TaskQueueInfo *persistencespb.TaskQueueInfo
 
 		PrevRangeID int64
+		// If non-zero, the update is also conditional on the task queue info being unchanged
+		// since a GetTaskQueue that returned this Fingerprint.
+		PrevFingerprint uint64
 	}
 
 	// UpdateTaskQueueResponse is the response to UpdateTaskQueue
@@ -527,6 +530,9 @@ type (
 	GetTaskQueueResponse struct {
 		RangeID       int64
 		TaskQueueInfo *persistencespb.TaskQueueInfo
+		// Fingerprint identifies this version of TaskQueueInfo, for use as
+		// UpdateTaskQueueRequest.PrevFingerprint. Zero if unknown.
+		Fingerprint uint64
 	}
 
 	// GetTaskQueueUserDataRequest is the input type for the GetTaskQueueUserData API

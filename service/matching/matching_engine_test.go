@@ -5550,6 +5550,7 @@ type testQueueData struct {
 	sync.Mutex
 	rangeID  int64
 	info     *persistencespb.TaskQueueInfo
+	infoVer  uint64 // incremented on every write of info, used as fingerprint
 	tasks    treemap.Map
 	userData *persistencespb.VersionedTaskQueueUserData
 
@@ -5614,6 +5615,7 @@ func (m *testTaskManager) CreateTaskQueue(
 	}
 	tlm.rangeID = request.RangeID
 	tlm.info = common.CloneProto(tli)
+	tlm.infoVer++
 	return &persistence.CreateTaskQueueResponse{}, nil
 }
 
@@ -5637,8 +5639,14 @@ func (m *testTaskManager) UpdateTaskQueue(
 			Msg: fmt.Sprintf("Failed to update task queue: name=%v, type=%v", tli.Name, tli.TaskType),
 		}
 	}
+	if request.PrevFingerprint != 0 && tlm.infoVer != request.PrevFingerprint {
+		return nil, &persistence.ConditionFailedError{
+			Msg: fmt.Sprintf("Failed to update task queue: name=%v, type=%v, fingerprint mismatch", tli.Name, tli.TaskType),
+		}
+	}
 	tlm.rangeID = request.RangeID
 	tlm.info = common.CloneProto(tli)
+	tlm.infoVer++
 	return &persistence.UpdateTaskQueueResponse{}, nil
 }
 
@@ -5656,6 +5664,7 @@ func (m *testTaskManager) GetTaskQueue(
 	return &persistence.GetTaskQueueResponse{
 		RangeID:       tlm.rangeID,
 		TaskQueueInfo: common.CloneProto(tlm.info),
+		Fingerprint:   tlm.infoVer,
 	}, nil
 }
 
@@ -5815,6 +5824,7 @@ func (m *testTaskManager) CreateTasks(
 	resp := &persistence.CreateTasksResponse{}
 	if request.UpdateMetadata {
 		tlm.info = common.CloneProto(request.TaskQueueInfo.Data)
+		tlm.infoVer++
 		resp.UpdatedMetadata = true
 	}
 	return resp, nil
