@@ -13,6 +13,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -81,7 +82,10 @@ func (l *mockNexusCompletionGetterLibrary) Name() string {
 
 func (l *mockNexusCompletionGetterLibrary) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*mockNexusCompletionGetterComponent]("nexusCompletionGetter"),
+		chasm.NewRegistrableComponent[*mockNexusCompletionGetterComponent](
+			"nexusCompletionGetter",
+			chasm.WithExecutionType(enumspb.EXECUTION_TYPE_WORKFLOW),
+		),
 	}
 }
 
@@ -716,7 +720,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			require.NoError(t, err)
 
 			nodeBackend := &chasm.MockNodeBackend{}
-			root := chasm.NewEmptyTree(chasmRegistry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger, metricsHandler)
+			root := chasm.NewEmptyTree(chasmRegistry, nodeBackend, chasm.DefaultPathEncoder, logger, metricsHandler)
 
 			// Create headers
 			headers := nexus.Header{}

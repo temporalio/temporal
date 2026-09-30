@@ -73,8 +73,9 @@ pod-level rate limiting. Read once at process startup: changing this value requi
 		false,
 		`VisibilityEnableShadowReadMode is the config to enable shadow read from secondary visibility`,
 	)
-	SecondaryVisibilityWritingMode = NewGlobalStringSetting(
+	SecondaryVisibilityWritingMode = NewGlobalTypedSettingWithConverter(
 		"system.secondaryVisibilityWritingMode",
+		convertStringEnum([]string{"off", "on", "dual"}),
 		"off",
 		`SecondaryVisibilityWritingMode is key for how to write to secondary visibility`,
 	)
@@ -2964,6 +2965,12 @@ should be enabled for non continuedAsNew workflow UpdateWithNew case.`,
 		"history.ReplicationMultipleBatches",
 		false,
 		`ReplicationMultipleBatches is the flag to enable replication of multiple history event batches`,
+	)
+	ReplicationTaskConverterLowPriorityLockMaxAttempts = NewGlobalIntSetting(
+		"history.ReplicationTaskConverterLowPriorityLockMaxAttempts",
+		3,
+		`ReplicationTaskConverterLowPriorityLockMaxAttempts is the number of busy-workflow conversion failures using
+a low priority workflow lock before subsequent stream sender conversion attempts use a high priority lock.`,
 	)
 	HistoryTaskDLQEnabled = NewGlobalBoolSetting(
 		"history.TaskDLQEnabled",

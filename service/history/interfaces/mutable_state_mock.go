@@ -3428,6 +3428,18 @@ func (mr *MockMutableStateMockRecorder) RecordLastActivityCompleteTime(ai any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordLastActivityCompleteTime", reflect.TypeOf((*MockMutableState)(nil).RecordLastActivityCompleteTime), ai)
 }
 
+// RecordTimeSkippingTransition mocks base method.
+func (m *MockMutableState) RecordTimeSkippingTransition(transition *chasm.TimeSkippingTransition) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RecordTimeSkippingTransition", transition)
+}
+
+// RecordTimeSkippingTransition indicates an expected call of RecordTimeSkippingTransition.
+func (mr *MockMutableStateMockRecorder) RecordTimeSkippingTransition(transition any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordTimeSkippingTransition", reflect.TypeOf((*MockMutableState)(nil).RecordTimeSkippingTransition), transition)
+}
+
 // RefreshExpirationTimeoutTask mocks base method.
 func (m *MockMutableState) RefreshExpirationTimeoutTask(ctx context.Context) error {
 	m.ctrl.T.Helper()

@@ -428,11 +428,9 @@ func NewMutableState(
 
 	s.mustInitHSM()
 
-	// TODO@time-skipping: support time skipping for chasm
 	if s.config.EnableChasm(namespaceName) {
 		s.chasmTree = chasm.NewEmptyTree(
 			shard.ChasmRegistry(),
-			shard.GetTimeSource(),
 			s,
 			chasm.DefaultPathEncoder,
 			logger,
@@ -582,13 +580,11 @@ func NewMutableStateFromDB(
 		mutableState.chasmNodeSizes[key] = nodeSize
 	}
 
-	// TODO@time-skipping: support time skipping for chasm
 	if shard.GetConfig().EnableChasm(namespaceEntry.Name().String()) {
 		var err error
 		mutableState.chasmTree, err = chasm.NewTreeFromDB(
 			dbRecord.ChasmNodes,
 			shard.ChasmRegistry(),
-			shard.GetTimeSource(),
 			mutableState,
 			chasm.DefaultPathEncoder,
 			mutableState.logger, // this logger is tagged with execution key.
@@ -6070,6 +6066,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		tsc := attributes.GetTimeSkippingConfig()
 		tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
 		if tsi == nil {
+			// A workflow started without time skipping has no TimeSkippingInfo until an
+			// options-updated event first configures it.
 			ms.initTimeSkippingInfo(tsc, nil)
 		} else {
 			ms.updateTimeSkippingInfo(tsc)
@@ -6474,7 +6472,7 @@ func (ms *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	childTSC, childTSStateProp := propagateTimeSkippingToOtherExecution(ms.GetExecutionInfo().GetTimeSkippingInfo())
+	childTSC, childTSStateProp := chasm.PropagateTimeSkippingToOtherExecution(ms.GetExecutionInfo().GetTimeSkippingInfo())
 	event, batchID := ms.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
 		command,
@@ -7790,12 +7788,9 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
-	// Run time-skipping after closeTransactionHandleWorkflowTask so a just-scheduled
-	// workflow task is visible to (and suppresses) the idle check, and before isStateDirty
-	// so the transition event we emit here participates in the dirty-state computation.
-	// todo@time-skipping: but chasm close transaction logic is after isStateDirty,
-	// and need to reconsider the sequence of time skipping close trx handling in this function
-	// when supporting chasm.
+	// TODO: We currently make the reasonable but unenforced assumption that time skipping
+	// only occurs with a valid state change. This makes it safe to move this line after the
+	// isStateDirty check, but it is beffer to add enforcement of the assumption explicitly in code.
 	regenTimerTasksForWorkflowTimeSkipping := ms.closeTransactionHandleWorkflowTimeSkipping(ctx, transactionPolicy)
 
 	// Save if the state is dirty before closeTransactionPrepareEvents since it flushes the buffer
@@ -8348,7 +8343,7 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 		return err
 	}
 	if regenerateTimerTasksForTimeSkipping {
-		if err := ms.closeTransactionRegenTimerTasksForWorkflowTimeSkipping(transactionPolicy); err != nil {
+		if err := ms.regenerateTimerTasksForWorkflowTimeSkipping(transactionPolicy); err != nil {
 			return err
 		}
 	}
@@ -8423,18 +8418,18 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 				firstEventVersion := common.EmptyVersion
 				nextEventID := common.EmptyEventID
 				var lastVersionHistoryItem *historyspb.VersionHistoryItem
+				currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.executionInfo.VersionHistories)
+				if err != nil {
+					return err
+				}
 				if len(eventBatches) > 0 {
 					firstEventID = eventBatches[0][0].EventId
 					firstEventVersion = eventBatches[0][0].Version
 					lastBatch := eventBatches[len(eventBatches)-1]
 					nextEventID = lastBatch[len(lastBatch)-1].EventId + 1
 				} else {
-					currentHistory, err := versionhistory.GetCurrentVersionHistory(ms.executionInfo.VersionHistories)
-					if err != nil {
-						return err
-					}
-					if !versionhistory.IsEmptyVersionHistory(currentHistory) {
-						item, err := versionhistory.GetLastVersionHistoryItem(currentHistory)
+					if !versionhistory.IsEmptyVersionHistory(currentVersionHistory) {
+						item, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
 						//nolint:revive // max-control-nesting: control flow nesting exceeds 5
 						if err != nil {
 							return err
@@ -8459,6 +8454,9 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 						NextEventID:            nextEventID,
 						TaskEquivalents:        replicationTasks,
 						LastVersionHistoryItem: lastVersionHistoryItem,
+						CurrentVersionHistory: &historyspb.VersionHistory{
+							Items: versionhistory.CopyVersionHistoryItems(currentVersionHistory.Items),
+						},
 					}
 
 					if ms.dbRecordVersion == 1 {
@@ -9233,6 +9231,11 @@ func (ms *MutableStateImpl) ApplyMutation(
 	prevExecutionInfoSize := ms.executionInfo.Size()
 	currentVersionedTransition := ms.CurrentVersionedTransition()
 
+	// Capture the TimeSkippingInfo versioned transition and accumulated skip before syncExecutionInfo
+	// overwrites them, so we can detect whether a skip transition was applied in this delta.
+	prevTimeSkippingVT := ms.executionInfo.GetTimeSkippingInfo().GetLastUpdateVersionedTransition()
+	preAccumulatedSkipDuration := ms.accumulatedSkippedDuration()
+
 	ms.applySignalRequestedIds(mutation.SignalRequestedIds, mutation.ExecutionInfo)
 	err := ms.applyTombstones(mutation.SubStateMachineTombstoneBatches, currentVersionedTransition)
 	if err != nil {
@@ -9268,15 +9271,25 @@ func (ms *MutableStateImpl) ApplyMutation(
 	ms.approximateSize += ms.executionInfo.Size() - prevExecutionInfoSize
 
 	// approximateSize update will be handled upon closing transaction
-	return ms.chasmTree.ApplyMutation(chasm.NodesMutation{
+	if err := ms.chasmTree.ApplyMutation(chasm.NodesMutation{
 		UpdatedNodes: mutation.UpdatedChasmNodes,
-	})
+	}); err != nil {
+		return err
+	}
+	// Must run after syncExecutionInfo, which is where the incoming TimeSkippingInfo becomes
+	// visible. It only sets a flag consumed later at CloseTransaction, so its position relative
+	// to chasmTree.ApplyMutation does not matter.
+	ms.flagSkipDurationUpdateInPassive(prevTimeSkippingVT, preAccumulatedSkipDuration)
+
+	return nil
 }
 
 func (ms *MutableStateImpl) ApplySnapshot(
 	snapshot *persistencespb.WorkflowMutableState,
 ) error {
 	prevExecutionInfoSize := ms.executionInfo.Size()
+	prevTimeSkippingVT := ms.executionInfo.GetTimeSkippingInfo().GetLastUpdateVersionedTransition()
+	preAccumulatedSkipDuration := ms.accumulatedSkippedDuration()
 
 	ms.applySignalRequestedIds(snapshot.SignalRequestedIds, snapshot.ExecutionInfo)
 	err := ms.syncExecutionInfo(ms.executionInfo, snapshot.ExecutionInfo, true)
@@ -9309,9 +9322,16 @@ func (ms *MutableStateImpl) ApplySnapshot(
 	ms.approximateSize += ms.executionInfo.Size() - prevExecutionInfoSize
 
 	// approximateSize update will be handled upon closing transaction
-	return ms.chasmTree.ApplySnapshot(chasm.NodesSnapshot{
+	if err := ms.chasmTree.ApplySnapshot(chasm.NodesSnapshot{
 		Nodes: snapshot.ChasmNodes,
-	})
+	}); err != nil {
+		return err
+	}
+	// Must run after syncExecutionInfo, which is where the incoming TimeSkippingInfo becomes
+	// visible. It only sets a flag consumed later at CloseTransaction, so its position relative
+	// to chasmTree.ApplySnapshot does not matter.
+	ms.flagSkipDurationUpdateInPassive(prevTimeSkippingVT, preAccumulatedSkipDuration)
+	return nil
 }
 
 func (ms *MutableStateImpl) ShouldResetActivityTimerTaskMask(current, incoming *persistencespb.ActivityInfo) bool {
