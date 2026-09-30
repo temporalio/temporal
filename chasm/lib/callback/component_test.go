@@ -217,14 +217,15 @@ func newTestContext(t *testing.T, lib *Library) chasm.Context {
 	registry := chasm.NewRegistry(logger)
 	require.NoError(t, registry.Register(lib))
 
+	timeSource := clock.NewEventTimeSource()
 	backend := &chasm.MockNodeBackend{
+		HandleNow: timeSource.Now,
 		HandleGetWorkflowKey: func() definition.WorkflowKey {
 			return definition.NewWorkflowKey(testNamespaceID, "business-id", "run-id")
 		},
 	}
 	node := chasm.NewEmptyTree(
 		registry,
-		clock.NewEventTimeSource(),
 		backend,
 		chasm.DefaultPathEncoder,
 		logger,

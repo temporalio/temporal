@@ -130,7 +130,7 @@ func (m *sqlTaskManagerV1) GetTasks(
 		PageSize:           &request.PageSize,
 	})
 	if err != nil {
-		return nil, serviceerror.NewUnavailablef("GetTasks operation failed. Failed to get rows. Error: %v", err)
+		return nil, convertSQLError("GetTasks", "failed to get rows", err)
 	}
 
 	response := &persistence.InternalGetTasksResponse{
@@ -175,7 +175,7 @@ func (m *sqlTaskManagerV1) CompleteTasksLessThan(
 		Limit:              &request.Limit,
 	})
 	if err != nil {
-		return 0, serviceerror.NewUnavailable(err.Error())
+		return 0, convertSQLError("CompleteTasksLessThan", "", err)
 	}
 	nRows, err := result.RowsAffected()
 	if err != nil {
@@ -209,6 +209,6 @@ func lockTaskQueue(
 		return &persistence.ConditionFailedError{Msg: "Task queue does not exists"}
 
 	default:
-		return serviceerror.NewUnavailablef("Failed to lock task queue. Error: %v", err)
+		return convertSQLError("lockTaskQueue", "", err)
 	}
 }
