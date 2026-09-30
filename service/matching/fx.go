@@ -1,7 +1,6 @@
 package matching
 
 import (
-	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -11,14 +10,11 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/matching/configs"
 	"go.temporal.io/server/service/matching/workers"
@@ -42,6 +38,7 @@ var Module = fx.Options(
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
+	fx.Provide(VisibilityManagerConfigProvider),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(WorkersRegistryProvider),
 	fx.Provide(NewHandler),
@@ -197,41 +194,27 @@ func NamespaceReplicationQueueProvider(
 	return replicatorNamespaceReplicationQueue
 }
 
+func VisibilityManagerConfigProvider(serviceConfig *Config) *visibility.ManagerConfig {
+	return &visibility.ManagerConfig{
+		EsProcessorConfig: nil, // matching visibility never write
+
+		MaxReadQPS:                     serviceConfig.VisibilityPersistenceMaxReadQPS,
+		MaxWriteQPS:                    serviceConfig.VisibilityPersistenceMaxWriteQPS,
+		OperatorRPSRatio:               serviceConfig.OperatorRPSRatio,
+		SlowQueryThreshold:             serviceConfig.VisibilityPersistenceSlowQueryThreshold,
+		EnableReadFromSecondary:        serviceConfig.EnableReadFromSecondaryVisibility,
+		EnableShadowReadMode:           serviceConfig.VisibilityEnableShadowReadMode,
+		SecondaryVisibilityWritingMode: dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // matching visibility never write
+		DisableOrderByClause:           serviceConfig.VisibilityDisableOrderByClause,
+		EnableManualPagination:         serviceConfig.VisibilityEnableManualPagination,
+	}
+}
+
 func VisibilityManagerProvider(
-	logger log.Logger,
-	persistenceConfig *config.Persistence,
-	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
-	metricsHandler metrics.Handler,
-	serviceConfig *Config,
-	persistenceServiceResolver resolver.ServiceResolver,
-	searchAttributesMapperProvider searchattribute.MapperProvider,
-	saProvider searchattribute.Provider,
-	namespaceRegistry namespace.Registry,
-	chasmRegistry *chasm.Registry,
-	serializer serialization.Serializer,
+	managerParams visibility.ManagerParams,
+	managerConfig *visibility.ManagerConfig,
 ) (manager.VisibilityManager, error) {
-	return visibility.NewManager(
-		*persistenceConfig,
-		persistenceServiceResolver,
-		customVisibilityStoreFactory,
-		nil, // matching visibility never writes
-		saProvider,
-		searchAttributesMapperProvider,
-		namespaceRegistry,
-		chasmRegistry,
-		serviceConfig.VisibilityPersistenceMaxReadQPS,
-		serviceConfig.VisibilityPersistenceMaxWriteQPS,
-		serviceConfig.OperatorRPSRatio,
-		serviceConfig.VisibilityPersistenceSlowQueryThreshold,
-		serviceConfig.EnableReadFromSecondaryVisibility,
-		serviceConfig.VisibilityEnableShadowReadMode,
-		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // matching visibility never writes
-		serviceConfig.VisibilityDisableOrderByClause,
-		serviceConfig.VisibilityEnableManualPagination,
-		metricsHandler,
-		logger,
-		serializer,
-	)
+	return visibility.NewManager(&managerParams, managerConfig)
 }
 
 func ContextMetadataInterceptorProvider(logger log.Logger) *interceptor.ContextMetadataInterceptor {
