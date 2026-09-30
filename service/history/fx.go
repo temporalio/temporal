@@ -479,7 +479,6 @@ func VisibilityManagerProvider(
 		serviceConfig.SecondaryVisibilityWritingMode,
 		serviceConfig.VisibilityDisableOrderByClause,
 		serviceConfig.VisibilityEnableManualPagination,
-		serviceConfig.VisibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
 		serializer,

@@ -91,7 +91,6 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
-		dynamicconfig.GetBoolPropertyFn(true),
 		metrics.NoopMetricsHandler,
 		s.Logger,
 		serialization.NewSerializer(),
