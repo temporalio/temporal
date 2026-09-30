@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsregistry"
 	"go.temporal.io/server/common/persistence"
@@ -731,7 +732,11 @@ func TestGrantEagerActivityDispatchBatch(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			ms := historyi.NewMockMutableState(ctrl)
 			matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			t.Cleanup(func() { metricsHandler.StopCapture(capture) })
 			ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{NamespaceId: "namespace-id"})
+			ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
 			matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).DoAndReturn(
 				func(_ context.Context, request *matchingservice.GrantEagerDispatchRequest, _ ...grpc.CallOption) (*matchingservice.GrantEagerDispatchResponse, error) {
 					require.Equal(t, "namespace-id", request.GetNamespaceId())
@@ -749,19 +754,40 @@ func TestGrantEagerActivityDispatchBatch(t *testing.T) {
 			)
 
 			handler := &workflowTaskCompletedHandler{
-				mutableState:           ms,
-				matchingClient:         matchingClient,
+				mutableState:   ms,
+				matchingClient: matchingClient,
+				metricsHandler: metricsHandler,
+				config: &configs.Config{
+					BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+				},
 				workflowTaskDeployment: deployment,
 				eagerActivityCandidates: []eagerActivityCandidate{
 					{attr: candidates[0].attr},
 					{attr: candidates[1].attr},
 				},
 			}
-			handler.grantEagerActivityDispatchBatch(context.Background(), "activity-task-queue", []int{0, 1})
+			handler.grantEagerActivityDispatchBatch(
+				context.Background(),
+				"activity-task-queue",
+				[]int{0, 1},
+			)
 			require.Equal(t, test.granted[0], handler.eagerActivityCandidates[0].granted)
 			require.Equal(t, test.granted[1], handler.eagerActivityCandidates[1].granted)
+
+			requestMetrics := capture.SnapshotMetric(metrics.EagerDispatchRequestsSent.Name())
+			require.Len(t, requestMetrics, 1)
+			require.Equal(t, int64(2), requestMetrics[0].Value)
+			require.Equal(t, tests.LocalNamespaceEntry.Name().String(), requestMetrics[0].Tags[metrics.NamespaceTag("").Key])
+			require.Equal(t, "activity-task-queue", requestMetrics[0].Tags[metrics.UnsafeTaskQueueTag("").Key])
 		})
 	}
+}
+
+func TestEagerDispatchRequestCount(t *testing.T) {
+	require.Equal(t, int64(5), eagerDispatchRequestCount([]*matchingservice.GrantEagerDispatchRequest_Item{
+		{Count: 2},
+		{Count: 3},
+	}))
 }
 
 func TestHandleEagerActivityCandidatesBatchesByTaskQueue(t *testing.T) {
@@ -783,7 +809,7 @@ func TestHandleEagerActivityCandidatesBatchesByTaskQueue(t *testing.T) {
 	}
 
 	ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
-	ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
+	ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).Times(3)
 	for index, candidate := range candidates[:3] {
 		ms.EXPECT().GetActivityByActivityID(candidate.attr.GetActivityId()).Return(activityInfos[index], true)
 		ms.EXPECT().GenerateActivityTask(activityInfos[index].GetScheduledEventId()).Return(nil)
@@ -810,6 +836,7 @@ func TestHandleEagerActivityCandidatesBatchesByTaskQueue(t *testing.T) {
 	handler := &workflowTaskCompletedHandler{
 		mutableState:            ms,
 		matchingClient:          matchingClient,
+		metricsHandler:          metrics.NoopMetricsHandler,
 		eagerActivityCandidates: candidates,
 		config:                  newEagerActivityDispatchTestConfig(true),
 	}
@@ -1006,7 +1033,7 @@ func TestHandleEagerActivityCandidatesFallback(t *testing.T) {
 			activityInfo := &persistencespb.ActivityInfo{ScheduledEventId: 11}
 
 			ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
-			ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
+			ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).Times(2)
 			ms.EXPECT().GetActivityByActivityID(attr.GetActivityId()).Return(activityInfo, true)
 			ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{NamespaceId: "namespace-id"})
 			ms.EXPECT().GenerateActivityTask(int64(11)).Return(test.generateErr)
@@ -1015,6 +1042,7 @@ func TestHandleEagerActivityCandidatesFallback(t *testing.T) {
 			handler := &workflowTaskCompletedHandler{
 				mutableState:            ms,
 				matchingClient:          matchingClient,
+				metricsHandler:          metrics.NoopMetricsHandler,
 				eagerActivityCandidates: []eagerActivityCandidate{{attr: attr}},
 				config:                  newEagerActivityDispatchTestConfig(true),
 			}
