@@ -128,10 +128,11 @@ func TestHandleNamespaceReplicationTaskEmitsReceivedAndPassesProcessingContext(t
 	require.True(t, processingContextSet)
 	eventData, ok := wideevents.NewDefaultNamespaceReplicationTaskEventDataProvider().Extract(task)
 	require.True(t, ok)
+	sourceTaskID := int64(42)
 	require.Equal(t, wideevents.NamespaceReplicationTaskContext{
 		SourceCluster: "cluster-a",
 		TargetCluster: "cluster-b",
-		SourceTaskID:  42,
+		SourceTaskID:  &sourceTaskID,
 		AttemptCount:  1,
 		EventData:     eventData,
 	}, processingContext)
