@@ -17,8 +17,11 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/tqid"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -71,7 +74,11 @@ func (s *taskValidatorSuite) SetupTest() {
 		},
 	}
 
-	s.taskValidator = newTaskValidator(context.Background(), s.clusterMetadata, s.namespaceCache, s.historyClient)
+	cfg := newTaskQueueConfig(
+		tqid.UnsafeTaskQueueFamily(s.namespaceID, "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		NewConfig(dynamicconfig.NewNoopCollection()), "nsname",
+	)
+	s.taskValidator = newTaskValidator(context.Background(), cfg, s.clusterMetadata, s.namespaceCache, s.historyClient)
 }
 
 func (s *taskValidatorSuite) putCache(info taskValidationInfo) {
@@ -112,7 +119,7 @@ func (s *taskValidatorSuite) TestPreValidateActive_NewTask_Skip_WithoutCreationT
 func (s *taskValidatorSuite) TestPreValidateActive_ExistingTask_Validate() {
 	s.putCache(taskValidationInfo{
 		taskID:         s.task.TaskId,
-		validationTime: time.Now().Add(-taskReaderValidationThreshold * 2),
+		validationTime: time.Now().Add(-s.taskValidator.config.ValidatorValidationThreshold() * 2),
 	})
 	shouldValidate := s.taskValidator.preValidateActive(s.task)
 	s.True(shouldValidate)
@@ -121,14 +128,14 @@ func (s *taskValidatorSuite) TestPreValidateActive_ExistingTask_Validate() {
 func (s *taskValidatorSuite) TestPreValidateActive_ExistingTask_Skip() {
 	s.putCache(taskValidationInfo{
 		taskID:         s.task.TaskId,
-		validationTime: time.Now().Add(taskReaderValidationThreshold * 2),
+		validationTime: time.Now().Add(s.taskValidator.config.ValidatorValidationThreshold() * 2),
 	})
 	shouldValidate := s.taskValidator.preValidateActive(s.task)
 	s.False(shouldValidate)
 }
 
 func (s *taskValidatorSuite) TestPreValidatePassive_NewTask_Skip_WithCreationTime() {
-	s.task.Data.CreateTime = timestamppb.New(time.Now().Add(-taskReaderValidationThreshold / 2))
+	s.task.Data.CreateTime = timestamppb.New(time.Now().Add(-s.taskValidator.config.ValidatorValidationThreshold() / 2))
 
 	shouldValidate := s.taskValidator.preValidatePassive(s.task)
 	s.False(shouldValidate)
@@ -139,7 +146,7 @@ func (s *taskValidatorSuite) TestPreValidatePassive_NewTask_Skip_WithCreationTim
 }
 
 func (s *taskValidatorSuite) TestPreValidatePassive_NewTask_Validate_WithCreationTime() {
-	s.task.Data.CreateTime = timestamppb.New(time.Now().Add(-taskReaderValidationThreshold * 2))
+	s.task.Data.CreateTime = timestamppb.New(time.Now().Add(-s.taskValidator.config.ValidatorValidationThreshold() * 2))
 
 	shouldValidate := s.taskValidator.preValidatePassive(s.task)
 	s.True(shouldValidate)
@@ -163,7 +170,7 @@ func (s *taskValidatorSuite) TestPreValidatePassive_NewTask_Skip_WithoutCreation
 func (s *taskValidatorSuite) TestPreValidatePassive_ExistingTask_Validate() {
 	s.putCache(taskValidationInfo{
 		taskID:         s.task.TaskId,
-		validationTime: time.Now().Add(-taskReaderValidationThreshold * 2),
+		validationTime: time.Now().Add(-s.taskValidator.config.ValidatorValidationThreshold() * 2),
 	})
 	shouldValidate := s.taskValidator.preValidatePassive(s.task)
 	s.True(shouldValidate)
@@ -172,7 +179,7 @@ func (s *taskValidatorSuite) TestPreValidatePassive_ExistingTask_Validate() {
 func (s *taskValidatorSuite) TestPreValidatePassive_ExistingTask_Skip() {
 	s.putCache(taskValidationInfo{
 		taskID:         s.task.TaskId,
-		validationTime: time.Now().Add(taskReaderValidationThreshold * 2),
+		validationTime: time.Now().Add(s.taskValidator.config.ValidatorValidationThreshold() * 2),
 	})
 	shouldValidate := s.taskValidator.preValidatePassive(s.task)
 	s.False(shouldValidate)
@@ -182,7 +189,7 @@ func (s *taskValidatorSuite) TestCache_TwoTaskIDsIndependent() {
 	other := s.task.TaskId + 1
 	s.putCache(taskValidationInfo{
 		taskID:         other,
-		validationTime: time.Now().Add(-taskReaderValidationThreshold * 2),
+		validationTime: time.Now().Add(-s.taskValidator.config.ValidatorValidationThreshold() * 2),
 	})
 	s.task.Data.CreateTime = timestamppb.Now()
 
@@ -221,8 +228,9 @@ func (s *taskValidatorSuite) TestCache_ConcurrentFirstSeen() {
 }
 
 func (s *taskValidatorSuite) TestCache_EvictsLeastRecentlyAccessedWhenFull() {
+	maxSize := s.taskValidator.config.ValidatorCacheMaxSize()
 	now := time.Now()
-	for i := 0; i < taskValidatorCacheMaxSize; i++ {
+	for i := 0; i < maxSize; i++ {
 		s.putCache(taskValidationInfo{
 			taskID:         int64(i + 1),
 			validationTime: now.Add(-time.Duration(i) * time.Second),
@@ -230,7 +238,7 @@ func (s *taskValidatorSuite) TestCache_EvictsLeastRecentlyAccessedWhenFull() {
 	}
 	s.False(s.taskValidator.preValidateActive(&persistencespb.AllocatedTaskInfo{TaskId: 1}))
 	newTask := &persistencespb.AllocatedTaskInfo{
-		TaskId: int64(taskValidatorCacheMaxSize + 1),
+		TaskId: int64(maxSize + 1),
 		Data:   &persistencespb.TaskInfo{CreateTime: timestamppb.Now()},
 	}
 	s.False(s.taskValidator.preValidateActive(newTask))
@@ -239,22 +247,23 @@ func (s *taskValidatorSuite) TestCache_EvictsLeastRecentlyAccessedWhenFull() {
 	s.True(recentlyAccessedKept)
 	_, leastRecentlyAccessedKept := s.cacheInfo(2)
 	s.False(leastRecentlyAccessedKept, "least recently accessed entry must be evicted")
-	_, newestKept := s.cacheInfo(int64(taskValidatorCacheMaxSize))
+	_, newestKept := s.cacheInfo(int64(maxSize))
 	s.True(newestKept)
 	_, inserted := s.cacheInfo(newTask.TaskId)
 	s.True(inserted)
 	s.taskValidator.mu.Lock()
 	defer s.taskValidator.mu.Unlock()
-	s.Len(s.taskValidator.cache, taskValidatorCacheMaxSize)
+	s.Len(s.taskValidator.cache, maxSize)
 }
 
 func (s *taskValidatorSuite) TestCache_OldTasksValidateWhenFull() {
-	for id := int64(1); id <= taskValidatorCacheMaxSize; id++ {
+	maxSize := s.taskValidator.config.ValidatorCacheMaxSize()
+	for id := int64(1); id <= int64(maxSize); id++ {
 		s.taskValidator.postValidate(&persistencespb.AllocatedTaskInfo{TaskId: id})
 	}
 	tasks := []*persistencespb.AllocatedTaskInfo{
-		{TaskId: 129, Data: &persistencespb.TaskInfo{CreateTime: timestamppb.New(time.Now().Add(-time.Hour))}},
-		{TaskId: 130, Data: &persistencespb.TaskInfo{CreateTime: timestamppb.New(time.Now().Add(-time.Hour))}},
+		{TaskId: int64(maxSize + 1), Data: &persistencespb.TaskInfo{CreateTime: timestamppb.New(time.Now().Add(-time.Hour))}},
+		{TaskId: int64(maxSize + 2), Data: &persistencespb.TaskInfo{CreateTime: timestamppb.New(time.Now().Add(-time.Hour))}},
 	}
 	for _, task := range tasks {
 		s.False(s.taskValidator.preValidateActive(task))
@@ -278,7 +287,11 @@ func TestTaskValidatorValidationInterval(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			v := &taskValidatorImpl{cache: make(map[int64]taskValidationInfo)}
+			cfg := newTaskQueueConfig(
+				tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+				NewConfig(dynamicconfig.NewNoopCollection()), "nsname",
+			)
+			v := newTaskValidator(context.Background(), cfg, nil, nil, nil)
 			task := &persistencespb.AllocatedTaskInfo{
 				TaskId: 1,
 				Data:   &persistencespb.TaskInfo{CreateTime: timestamppb.New(time.Now().Add(-tc.age))},
@@ -291,6 +304,84 @@ func TestTaskValidatorValidationInterval(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTaskValidatorDynamicValidationThreshold(t *testing.T) {
+	for _, active := range []bool{true, false} {
+		name := "passive"
+		if active {
+			name = "active"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			client := dynamicconfig.NewMemoryClient()
+			cfg := newTaskQueueConfig(
+				tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+				NewConfig(dynamicconfig.NewCollection(client, log.NewNoopLogger())), "nsname",
+			)
+			v := newTaskValidator(context.Background(), cfg, nil, nil, nil)
+			task := &persistencespb.AllocatedTaskInfo{
+				TaskId: 1,
+				Data:   &persistencespb.TaskInfo{CreateTime: timestamppb.New(time.Now().Add(-5 * time.Minute))},
+			}
+			preValidate := v.preValidatePassive
+			if active {
+				preValidate = v.preValidateActive
+			}
+			require.False(t, preValidate(task))
+			require.False(t, preValidate(task))
+			for _, tc := range []struct {
+				threshold time.Duration
+				want      bool
+			}{
+				{threshold: time.Minute, want: true},
+				{threshold: 20 * time.Minute},
+				{threshold: 0, want: true},
+			} {
+				t.Cleanup(client.OverrideSetting(dynamicconfig.MatchingValidatorValidationThreshold, []dynamicconfig.ConstrainedValue{{
+					Constraints: dynamicconfig.Constraints{Namespace: "nsname", TaskQueueName: "tq", TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+					Value:       tc.threshold,
+				}}))
+				require.Equal(t, tc.want, preValidate(task))
+			}
+		})
+	}
+}
+
+func TestTaskValidatorDynamicCacheCapacity(t *testing.T) {
+	t.Parallel()
+	client := dynamicconfig.NewMemoryClient()
+	cfg := newTaskQueueConfig(
+		tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		NewConfig(dynamicconfig.NewCollection(client, log.NewNoopLogger())), "nsname",
+	)
+	v := newTaskValidator(context.Background(), cfg, nil, nil, nil)
+	for id := int64(1); id <= 128; id++ {
+		v.postValidate(&persistencespb.AllocatedTaskInfo{TaskId: id})
+	}
+	for _, tc := range []struct {
+		capacity int
+		wantIDs  []int64
+	}{
+		{capacity: 2, wantIDs: []int64{127, 128}},
+		{capacity: 0, wantIDs: []int64{128}},
+		{capacity: -1, wantIDs: []int64{128}},
+	} {
+		t.Cleanup(client.OverrideSetting(dynamicconfig.MatchingValidatorCacheMaxSize, []dynamicconfig.ConstrainedValue{{
+			Constraints: dynamicconfig.Constraints{Namespace: "nsname", TaskQueueName: "tq", TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+			Value:       tc.capacity,
+		}}))
+		require.False(t, v.preValidateActive(&persistencespb.AllocatedTaskInfo{TaskId: 128}))
+		var ids []int64
+		for id := range v.cache {
+			ids = append(ids, id)
+		}
+		require.ElementsMatch(t, tc.wantIDs, ids)
+	}
+	t.Cleanup(client.OverrideSetting(dynamicconfig.MatchingValidatorCacheMaxSize, 3))
+	v.postValidate(&persistencespb.AllocatedTaskInfo{TaskId: 129})
+	v.postValidate(&persistencespb.AllocatedTaskInfo{TaskId: 130})
+	require.Len(t, v.cache, 3)
 }
 
 func (s *taskValidatorSuite) TestIsTaskValid_ActivityTask_Valid() {

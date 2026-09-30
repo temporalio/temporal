@@ -102,13 +102,15 @@ type (
 		MaxFairnessKeyWeightOverrides dynamicconfig.IntPropertyFnWithTaskQueueFilter
 
 		// Time to hold a poll request before returning an empty response if there are no tasks
-		LongPollExpirationInterval  dynamicconfig.DurationPropertyFnWithTaskQueueFilter
-		BacklogTaskForwardTimeout   dynamicconfig.DurationPropertyFnWithTaskQueueFilter
-		ValidatorBatchSize          dynamicconfig.IntPropertyFnWithTaskQueueFilter
-		ForwardPollRetryMaxInterval dynamicconfig.DurationPropertyFnWithTaskQueueFilter
-		MinTaskThrottlingBurstSize  dynamicconfig.IntPropertyFnWithTaskQueueFilter
-		MaxTaskDeleteBatchSize      dynamicconfig.IntPropertyFnWithTaskQueueFilter
-		TaskDeleteInterval          dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		LongPollExpirationInterval   dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		BacklogTaskForwardTimeout    dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		ValidatorBatchSize           dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		ValidatorValidationThreshold dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		ValidatorCacheMaxSize        dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		ForwardPollRetryMaxInterval  dynamicconfig.DurationPropertyFnWithTaskQueueFilter
+		MinTaskThrottlingBurstSize   dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		MaxTaskDeleteBatchSize       dynamicconfig.IntPropertyFnWithTaskQueueFilter
+		TaskDeleteInterval           dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 
 		// taskWriter configuration
 		OutstandingTaskAppendsThreshold dynamicconfig.IntPropertyFnWithTaskQueueFilter
@@ -171,6 +173,8 @@ type (
 		LongPollExpirationInterval     func() time.Duration
 		BacklogTaskForwardTimeout      func() time.Duration
 		ValidatorBatchSize             func() int
+		ValidatorValidationThreshold   func() time.Duration
+		ValidatorCacheMaxSize          func() int
 		ForwardPollRetryMaxInterval    func() time.Duration
 		RangeSize                      int64
 		NewMatcher                     bool
@@ -309,6 +313,8 @@ func NewConfig(
 		LongPollExpirationInterval:               dynamicconfig.MatchingLongPollExpirationInterval.Get(dc),
 		BacklogTaskForwardTimeout:                dynamicconfig.MatchingBacklogTaskForwardTimeout.Get(dc),
 		ValidatorBatchSize:                       dynamicconfig.MatchingValidatorBatchSize.Get(dc),
+		ValidatorValidationThreshold:             dynamicconfig.MatchingValidatorValidationThreshold.Get(dc),
+		ValidatorCacheMaxSize:                    dynamicconfig.MatchingValidatorCacheMaxSize.Get(dc),
 		ForwardPollRetryMaxInterval:              dynamicconfig.MatchingForwardPollRetryMaxInterval.Get(dc),
 		MinTaskThrottlingBurstSize:               dynamicconfig.MatchingMinTaskThrottlingBurstSize.Get(dc),
 		MaxTaskDeleteBatchSize:                   dynamicconfig.MatchingMaxTaskDeleteBatchSize.Get(dc),
@@ -474,6 +480,12 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		ValidatorBatchSize: func() int {
 			return config.ValidatorBatchSize(ns.String(), taskQueueName, taskType)
+		},
+		ValidatorValidationThreshold: func() time.Duration {
+			return config.ValidatorValidationThreshold(ns.String(), taskQueueName, taskType)
+		},
+		ValidatorCacheMaxSize: func() int {
+			return max(1, config.ValidatorCacheMaxSize(ns.String(), taskQueueName, taskType))
 		},
 		ForwardPollRetryMaxInterval: func() time.Duration {
 			return config.ForwardPollRetryMaxInterval(ns.String(), taskQueueName, taskType)

@@ -16,11 +16,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-const (
-	taskReaderOfferTimeout        = 60 * time.Second // TODO(pri): old matcher cleanup
-	taskReaderValidationThreshold = 600 * time.Second
-	taskValidatorCacheMaxSize     = 128
-)
+const taskReaderOfferTimeout = 60 * time.Second // TODO(pri): old matcher cleanup
 
 type (
 	taskValidator interface {
@@ -44,6 +40,7 @@ type (
 
 	taskValidatorImpl struct {
 		tqCtx             context.Context
+		config            *taskQueueConfig
 		clusterMetadata   cluster.Metadata
 		namespaceRegistry namespace.Registry
 		historyClient     historyservice.HistoryServiceClient
@@ -56,16 +53,18 @@ type (
 
 func newTaskValidator(
 	tqCtx context.Context,
+	config *taskQueueConfig,
 	clusterMetadata cluster.Metadata,
 	namespaceRegistry namespace.Registry,
 	historyClient historyservice.HistoryServiceClient,
 ) *taskValidatorImpl {
 	return &taskValidatorImpl{
 		tqCtx:             tqCtx,
+		config:            config,
 		clusterMetadata:   clusterMetadata,
 		namespaceRegistry: namespaceRegistry,
 		historyClient:     historyClient,
-		cache:             make(map[int64]taskValidationInfo, taskValidatorCacheMaxSize),
+		cache:             make(map[int64]taskValidationInfo, config.ValidatorCacheMaxSize()),
 	}
 }
 
@@ -125,7 +124,11 @@ func (v *taskValidatorImpl) lookupOrInit(task *persistencespb.AllocatedTaskInfo)
 }
 
 func (v *taskValidatorImpl) putLocked(info taskValidationInfo) {
-	if _, exists := v.cache[info.taskID]; !exists && len(v.cache) >= taskValidatorCacheMaxSize {
+	v.accessCounter++
+	info.lastAccess = v.accessCounter
+	v.cache[info.taskID] = info
+	maxSize := v.config.ValidatorCacheMaxSize()
+	for len(v.cache) > maxSize {
 		var oldestID int64
 		var oldestAccess uint64
 		first := true
@@ -138,9 +141,6 @@ func (v *taskValidatorImpl) putLocked(info taskValidationInfo) {
 		}
 		delete(v.cache, oldestID)
 	}
-	v.accessCounter++
-	info.lastAccess = v.accessCounter
-	v.cache[info.taskID] = info
 }
 
 // preValidateActive track a task and return if validation should be done, if namespace is active
@@ -151,7 +151,7 @@ func (v *taskValidatorImpl) preValidateActive(
 	if !existed {
 		return false
 	}
-	return time.Since(info.validationTime) > taskReaderValidationThreshold
+	return time.Since(info.validationTime) > v.config.ValidatorValidationThreshold()
 }
 
 // preValidatePassive track a task and return if validation should be done, if namespace is passive
@@ -159,7 +159,7 @@ func (v *taskValidatorImpl) preValidatePassive(
 	task *persistencespb.AllocatedTaskInfo,
 ) bool {
 	info, _ := v.lookupOrInit(task)
-	return time.Since(info.validationTime) > taskReaderValidationThreshold
+	return time.Since(info.validationTime) > v.config.ValidatorValidationThreshold()
 }
 
 // postValidate update tracked task info

@@ -1627,6 +1627,19 @@ scoped by namespace and/or task queue.`,
 		`MatchingValidatorBatchSize is the number of local-backlog tasks the matcher
 validator pulls and validates concurrently per batch (requires new matcher).`,
 	)
+	MatchingValidatorValidationThreshold = NewTaskQueueDurationSetting(
+		"matching.validatorValidationThreshold",
+		600*time.Second,
+		`MatchingValidatorValidationThreshold is the minimum time since task creation or
+the last successful validation before the backlog task validator checks task validity.`,
+	)
+	MatchingValidatorCacheMaxSize = NewTaskQueueIntSetting(
+		"matching.validatorCacheMaxSize",
+		128,
+		`MatchingValidatorCacheMaxSize is the maximum number of tasks tracked by each
+backlog task validator. Values below 1 are treated as 1. Active tasks skip validation
+on cache misses, so frequent evictions can delay validation.`,
+	)
 	MatchingForwardPollRetryMaxInterval = NewTaskQueueDurationSetting(
 		"matching.forwardPollRetryMaxInterval",
 		10*time.Second,
