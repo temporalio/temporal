@@ -970,7 +970,7 @@ func TestDeepHealthCheck(t *testing.T) {
 			}
 
 			for _, r := range tc.persistRecords {
-				handler.persistenceHealthSignal.Record(1, r.latency, r.err)
+				handler.persistenceHealthSignal.Record(metrics.PersistenceGetWorkflowExecutionScope, 1, r.latency, r.err)
 			}
 
 			actual, err := handler.DeepHealthCheck(t.Context(), startupTime.Add(tc.timeSinceStartup))
