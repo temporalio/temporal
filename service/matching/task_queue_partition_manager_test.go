@@ -18,7 +18,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -1263,29 +1262,6 @@ func (s *PartitionManagerTestSuite) TestLegacyDescribeTaskQueue() {
 			s.Equal("bid", workerVersionCapabilities.GetBuildId())
 		}
 	}
-}
-
-func (s *PartitionManagerTestSuite) TestAutoEnable() {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	s.matchingClient.EXPECT().UpdateFairnessState(ctx, &matchingservice.UpdateFairnessStateRequest{
-		NamespaceId:   s.ns.ID().String(),
-		TaskQueue:     "my-test-tq",
-		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		FairnessState: enumsspb.FAIRNESS_STATE_V2,
-	}).Times(1).Return(nil, nil)
-	_, _, err := s.partitionMgr.AddTask(ctx, addTaskParams{
-		taskInfo: &persistencespb.TaskInfo{
-			NamespaceId: namespaceID,
-			RunId:       "run",
-			WorkflowId:  "wf",
-			Priority: &commonpb.Priority{
-				PriorityKey: 3,
-				FairnessKey: "myFairnessKey",
-			},
-		},
-	})
-	s.Require().NoError(err)
 }
 
 func (s *PartitionManagerTestSuite) validateAddTask(expectedBuildId string, expectedSyncMatch bool, versioningData *persistencespb.VersioningData, directive *taskqueuespb.TaskVersionDirective) {

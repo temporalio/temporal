@@ -209,8 +209,8 @@ type MatchingServiceClient interface {
 	// DescribeWorker retrieves a worker information in the specified namespace that match the provided instance key.
 	// Returns an error if the namespace or worker doesn't exist.
 	DescribeWorker(ctx context.Context, in *DescribeWorkerRequest, opts ...grpc.CallOption) (*DescribeWorkerResponse, error)
-	// UpdateFairnessState changes the fairness_state stored in UserData for automatically enabling
-	// priority and fairness.
+	// Deprecated: Do not use.
+	// Deprecated. Fairness selection is controlled by dynamic configuration.
 	// (-- api-linter: core::0134::method-signature=disabled
 	//     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::response-message-name=disabled
@@ -590,6 +590,7 @@ func (c *matchingServiceClient) DescribeWorker(ctx context.Context, in *Describe
 	return out, nil
 }
 
+// Deprecated: Do not use.
 func (c *matchingServiceClient) UpdateFairnessState(ctx context.Context, in *UpdateFairnessStateRequest, opts ...grpc.CallOption) (*UpdateFairnessStateResponse, error) {
 	out := new(UpdateFairnessStateResponse)
 	err := c.cc.Invoke(ctx, MatchingService_UpdateFairnessState_FullMethodName, in, out, opts...)
@@ -753,8 +754,8 @@ type MatchingServiceServer interface {
 	// DescribeWorker retrieves a worker information in the specified namespace that match the provided instance key.
 	// Returns an error if the namespace or worker doesn't exist.
 	DescribeWorker(context.Context, *DescribeWorkerRequest) (*DescribeWorkerResponse, error)
-	// UpdateFairnessState changes the fairness_state stored in UserData for automatically enabling
-	// priority and fairness.
+	// Deprecated: Do not use.
+	// Deprecated. Fairness selection is controlled by dynamic configuration.
 	// (-- api-linter: core::0134::method-signature=disabled
 	//     aip.dev/not-precedent: UpdateFairnessState RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::response-message-name=disabled

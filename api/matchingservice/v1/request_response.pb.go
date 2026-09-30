@@ -5418,6 +5418,7 @@ func (x *DescribeWorkerResponse) GetWorkerInfo() *v115.WorkerInfo {
 	return nil
 }
 
+// Deprecated. Fairness selection is controlled by dynamic configuration.
 // (-- api-linter: core::0134::request-resource-required=disabled
 //
 //	aip.dev/not-precedent: UpdateFairnessStateRequest RPC doesn't follow Google API format. --)
@@ -5497,6 +5498,7 @@ func (x *UpdateFairnessStateRequest) GetFairnessState() v116.FairnessState {
 	return v116.FairnessState(0)
 }
 
+// Deprecated. Fairness selection is controlled by dynamic configuration.
 type UpdateFairnessStateResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields

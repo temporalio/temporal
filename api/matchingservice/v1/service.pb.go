@@ -26,7 +26,7 @@ var File_temporal_server_api_matchingservice_v1_service_proto protoreflect.FileD
 
 const file_temporal_server_api_matchingservice_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"4temporal/server/api/matchingservice/v1/service.proto\x12&temporal.server.api.matchingservice.v1\x1a0temporal/server/api/common/v1/api_category.proto\x1a=temporal/server/api/matchingservice/v1/request_response.proto2\x96;\n" +
+	"4temporal/server/api/matchingservice/v1/service.proto\x12&temporal.server.api.matchingservice.v1\x1a0temporal/server/api/common/v1/api_category.proto\x1a=temporal/server/api/matchingservice/v1/request_response.proto2\x99;\n" +
 	"\x0fMatchingService\x12\xac\x01\n" +
 	"\x15PollWorkflowTaskQueue\x12D.temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueRequest\x1aE.temporal.server.api.matchingservice.v1.PollWorkflowTaskQueueResponse\"\x06\x8a\xb5\x18\x02\b\x02\x12\xac\x01\n" +
 	"\x15PollActivityTaskQueue\x12D.temporal.server.api.matchingservice.v1.PollActivityTaskQueueRequest\x1aE.temporal.server.api.matchingservice.v1.PollActivityTaskQueueResponse\"\x06\x8a\xb5\x18\x02\b\x02\x12\x9a\x01\n" +
@@ -67,8 +67,8 @@ const file_temporal_server_api_matchingservice_v1_service_proto_rawDesc = "" +
 	"\vListWorkers\x12:.temporal.server.api.matchingservice.v1.ListWorkersRequest\x1a;.temporal.server.api.matchingservice.v1.ListWorkersResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\x91\x01\n" +
 	"\fCountWorkers\x12;.temporal.server.api.matchingservice.v1.CountWorkersRequest\x1a<.temporal.server.api.matchingservice.v1.CountWorkersResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xac\x01\n" +
 	"\x15UpdateTaskQueueConfig\x12D.temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigRequest\x1aE.temporal.server.api.matchingservice.v1.UpdateTaskQueueConfigResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\x97\x01\n" +
-	"\x0eDescribeWorker\x12=.temporal.server.api.matchingservice.v1.DescribeWorkerRequest\x1a>.temporal.server.api.matchingservice.v1.DescribeWorkerResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xa6\x01\n" +
-	"\x13UpdateFairnessState\x12B.temporal.server.api.matchingservice.v1.UpdateFairnessStateRequest\x1aC.temporal.server.api.matchingservice.v1.UpdateFairnessStateResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xca\x01\n" +
+	"\x0eDescribeWorker\x12=.temporal.server.api.matchingservice.v1.DescribeWorkerRequest\x1a>.temporal.server.api.matchingservice.v1.DescribeWorkerResponse\"\x06\x8a\xb5\x18\x02\b\x01\x12\xa9\x01\n" +
+	"\x13UpdateFairnessState\x12B.temporal.server.api.matchingservice.v1.UpdateFairnessStateRequest\x1aC.temporal.server.api.matchingservice.v1.UpdateFairnessStateResponse\"\t\x8a\xb5\x18\x02\b\x01\x88\x02\x01\x12\xca\x01\n" +
 	"\x1fCheckTaskQueueVersionMembership\x12N.temporal.server.api.matchingservice.v1.CheckTaskQueueVersionMembershipRequest\x1aO.temporal.server.api.matchingservice.v1.CheckTaskQueueVersionMembershipResponse\"\x06\x8a\xb5\x18\x02\b\x01B>Z<go.temporal.io/server/api/matchingservice/v1;matchingserviceb\x06proto3"
 
 var file_temporal_server_api_matchingservice_v1_service_proto_goTypes = []any{

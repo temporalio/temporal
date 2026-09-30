@@ -417,11 +417,7 @@ type FairnessSuite struct {
 }
 
 func TestFairnessSuite(t *testing.T) {
-	parallelsuite.Run(t, &FairnessSuite{}, false)
-}
-
-func TestFairnessAutoEnableSuite(t *testing.T) {
-	parallelsuite.Run(t, &FairnessSuite{}, true)
+	parallelsuite.Run(t, &FairnessSuite{})
 }
 
 // fairnessPartitions is the number of read/write partitions used by FairnessSuite.
@@ -429,7 +425,7 @@ func (s *FairnessSuite) fairnessPartitions() int {
 	return 1
 }
 
-func (s *FairnessSuite) newTestEnv(doAutoEnable bool, opts ...testcore.TestOption) *testcore.TestEnv {
+func (s *FairnessSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	baseOpts := []testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.MatchingGetTasksBatchSize, 20),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingGetTasksReloadAt, 5),
@@ -437,94 +433,18 @@ func (s *FairnessSuite) newTestEnv(doAutoEnable bool, opts ...testcore.TestOptio
 		// TODO: disable this and use default later?
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, s.fairnessPartitions()),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, s.fairnessPartitions()),
-	}
-	if doAutoEnable {
-		baseOpts = append(baseOpts,
-			testcore.WithDynamicConfig(dynamicconfig.MatchingAutoEnableV2, true),
-			testcore.WithDynamicConfig(dynamicconfig.MatchingUseNewMatcher, false),
-			testcore.WithDynamicConfig(dynamicconfig.MatchingEnableFairness, false),
-		)
-	} else {
-		baseOpts = append(baseOpts,
-			testcore.WithDynamicConfig(dynamicconfig.MatchingUseNewMatcher, true),
-			testcore.WithDynamicConfig(dynamicconfig.MatchingEnableFairness, true),
-		)
+		testcore.WithDynamicConfig(dynamicconfig.MatchingUseNewMatcher, true),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingEnableFairness, true),
 	}
 	return testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
 }
 
-func (s *FairnessSuite) triggerAutoEnable(env *testcore.TestEnv) {
-	_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:    env.Namespace().String(),
-		WorkflowId:   "trigger",
-		WorkflowType: env.Tv().WorkflowType(),
-		TaskQueue:    env.Tv().TaskQueue(),
-		Priority: &commonpb.Priority{
-			PriorityKey: 3,
-		},
-	})
-	s.NoError(err)
-
-	s.Eventually(func() bool {
-		resp, err := env.AdminClient().GetTaskQueueTasks(s.Context(), &adminservice.GetTaskQueueTasksRequest{
-			Namespace:     env.Namespace().String(),
-			TaskQueue:     env.Tv().TaskQueue().Name,
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			BatchSize:     10,
-			MinPass:       1,
-		})
-		return err == nil && len(resp.GetTasks()) == 1
-	}, 10*time.Second, 100*time.Millisecond)
-
-	_, err = env.TaskPoller().PollAndHandleWorkflowTask(env.Tv(),
-		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
-			var commands []*commandpb.Command
-			commands = append(commands,
-				&commandpb.Command{
-					CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-					Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-						ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-							ActivityId:             "trigger",
-							ActivityType:           env.Tv().ActivityType(),
-							TaskQueue:              env.Tv().TaskQueue(),
-							ScheduleToCloseTimeout: durationpb.New(time.Minute),
-						},
-					},
-				},
-			)
-			return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: commands}, nil
-		},
-		taskpoller.WithContext(s.Context()),
-	)
-	s.NoError(err)
-
-	_, err = env.TaskPoller().PollAndHandleActivityTask(
-		env.Tv(),
-		func(task *workflowservice.PollActivityTaskQueueResponse) (*workflowservice.RespondActivityTaskCompletedRequest, error) {
-			return &workflowservice.RespondActivityTaskCompletedRequest{}, nil
-		},
-		taskpoller.WithContext(s.Context()),
-	)
-	s.NoError(err)
-
-	_, err = env.FrontendClient().DeleteWorkflowExecution(s.Context(), &workflowservice.DeleteWorkflowExecutionRequest{
-		Namespace: env.Namespace().String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: "trigger",
-		},
-	})
-	s.NoError(err)
-}
-
-func (s *FairnessSuite) Test_Activity_Basic(doAutoEnable bool) {
+func (s *FairnessSuite) Test_Activity_Basic() {
 	const Workflows = 15
 	const Tasks = 15
 	const Keys = 10
 
-	env := s.newTestEnv(doAutoEnable)
-	if doAutoEnable {
-		s.triggerAutoEnable(env)
-	}
+	env := s.newTestEnv()
 
 	zipf := rand.NewZipf(rand.New(rand.NewSource(12345)), 2, 2, Keys-1)
 
@@ -824,29 +744,26 @@ func (s *FairnessSuite) countTasksByDrainingActive(env *testcore.TestEnv, tp enu
 	return
 }
 
-func (s *FairnessSuite) TestMigration_FromClassic(doAutoEnable bool) {
+func (s *FairnessSuite) TestMigration_FromClassic() {
 	// classic->fair, fair->pri. fair metadata will be created on transition.
-	env := s.newTestEnv(doAutoEnable)
+	env := s.newTestEnv()
 	s.testMigration(env, false, false)
 }
 
-func (s *FairnessSuite) TestMigration_FromPri(doAutoEnable bool) {
+func (s *FairnessSuite) TestMigration_FromPri() {
 	// pri->fair, fair->pri. fair metadata will be created before transition.
-	env := s.newTestEnv(doAutoEnable)
+	env := s.newTestEnv()
 	s.testMigration(env, true, false)
 }
 
-func (s *FairnessSuite) TestMigration_FromFair(doAutoEnable bool) {
+func (s *FairnessSuite) TestMigration_FromFair() {
 	// fair->pri, pri->fair. fair metadata will be created first.
-	env := s.newTestEnv(doAutoEnable)
+	env := s.newTestEnv()
 	s.testMigration(env, true, true)
 }
 
-func (s *FairnessSuite) TestUpdateWorkflowExecutionOptions_InvalidatesPendingTask(doAutoEnable bool) {
-	if doAutoEnable {
-		s.T().Skip("flaky with autoenable")
-	}
-	env := s.newTestEnv(doAutoEnable)
+func (s *FairnessSuite) TestUpdateWorkflowExecutionOptions_InvalidatesPendingTask() {
+	env := s.newTestEnv()
 	capture := env.StartNamespaceMetricCapture()
 
 	originalPriority := &commonpb.Priority{FairnessKey: "KEY"}
