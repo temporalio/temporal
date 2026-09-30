@@ -109,6 +109,9 @@ func (rl *HealthRequestRateLimiterImpl) maybeRefresh() {
 func (rl *HealthRequestRateLimiterImpl) refreshRate() {
 	curOptions := *rl.curOptions.Load()
 	curRateMultiplier := *rl.curRateMultiplier.Load()
+
+	errorRatio, _ := rl.healthSignals.ErrorRatio()
+
 	if rl.latencyThresholdExceeded() || rl.errorThresholdExceeded() {
 		// limit exceeded, do backoff
 		curRateMultiplier = math.Max(curOptions.RateMultiMin, curRateMultiplier-curOptions.RateBackoffStepSize)
@@ -118,7 +121,7 @@ func (rl *HealthRequestRateLimiterImpl) refreshRate() {
 			tag.Float64("newMulti", curRateMultiplier),
 			tag.Float64("newRate", rl.rateLimiter.Rate()),
 			tag.Float64("latencyAvg", rl.healthSignals.AverageLatency()),
-			tag.Float64("errorRatio", rl.healthSignals.ErrorRatio()),
+			tag.Float64("errorRatio", errorRatio),
 		)
 	} else if curRateMultiplier < curOptions.RateMultiMax {
 		// already doing backoff and under thresholds, increase limit
@@ -129,7 +132,7 @@ func (rl *HealthRequestRateLimiterImpl) refreshRate() {
 			tag.Float64("newMulti", curRateMultiplier),
 			tag.Float64("newRate", rl.rateLimiter.Rate()),
 			tag.Float64("latencyAvg", rl.healthSignals.AverageLatency()),
-			tag.Float64("errorRatio", rl.healthSignals.ErrorRatio()),
+			tag.Float64("errorRatio", errorRatio),
 		)
 	}
 	rl.curRateMultiplier.Store(&curRateMultiplier)
@@ -155,5 +158,8 @@ func (rl *HealthRequestRateLimiterImpl) latencyThresholdExceeded() bool {
 
 func (rl *HealthRequestRateLimiterImpl) errorThresholdExceeded() bool {
 	curOptions := *rl.curOptions.Load()
-	return curOptions.ErrorThreshold > 0 && rl.healthSignals.ErrorRatio() > curOptions.ErrorThreshold
+
+	errorRatio, _ := rl.healthSignals.ErrorRatio()
+
+	return curOptions.ErrorThreshold > 0 && errorRatio > curOptions.ErrorThreshold
 }

@@ -172,23 +172,16 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 		true, // enforced
 	))
 
-	for _, settings := range h.config.HealthPersistenceLatencyPercentiles().PercentileSettings {
+	persistenceErrRatio, found := h.persistenceHealthSignal.ErrorRatio()
+	if found {
 		checks = append(checks, errorIfOverThreshold(
-			healthcheck.CheckTypePersistenceLatency+fmt.Sprintf("_P%0.2f", 100.0*settings.Percentile),
-			h.persistenceHealthSignal.LatencyQuantile(settings.Percentile),
-			float64(settings.Threshold.Milliseconds()),
-			fmt.Sprintf("persistenceservice percentile latency (P%0.2f < %d, enforced: %t)", 100.0*settings.Percentile, settings.Threshold.Milliseconds(), settings.Enforced),
-			settings.Enforced,
+			healthcheck.CheckTypePersistenceErrRatio,
+			persistenceErrRatio,
+			h.config.HealthPersistenceErrorRatio(),
+			"persistenceservice error ratio",
+			true,
 		))
 	}
-
-	checks = append(checks, errorIfOverThreshold(
-		healthcheck.CheckTypePersistenceErrRatio,
-		h.persistenceHealthSignal.ErrorRatio(),
-		h.config.HealthPersistenceErrorRatio(),
-		"persistenceservice error ratio",
-		true,
-	))
 
 	overallState := enumsspb.HEALTH_STATE_SERVING
 	unenforcedState := enumsspb.HEALTH_STATE_SERVING
