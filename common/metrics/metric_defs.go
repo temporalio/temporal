@@ -1025,6 +1025,10 @@ var (
 	SpeculativeWorkflowTaskRollbacks                 = NewCounterDef("speculative_workflow_task_rollbacks")
 
 	ActivityEagerExecutionCounter = NewCounterDef("activity_eager_execution")
+	EagerDispatchRequestsSent     = NewCounterDef(
+		"eager_dispatch_requests_sent",
+		WithDescription("Number of task grants sent by History through GrantEagerDispatch, summed from the request item counts."),
+	)
 	// WorkflowEagerExecutionCounter is emitted any time eager workflow start is requested.
 	WorkflowEagerExecutionCounter = NewCounterDef("workflow_eager_execution")
 	// WorkflowEagerExecutionDeniedCounter is emitted any time eager workflow start is requested and the serer fell back
@@ -1317,7 +1321,15 @@ var (
 	ConditionFailedErrorPerTaskQueueCounter   = NewCounterDef("condition_failed_errors")
 	RespondQueryTaskFailedPerTaskQueueCounter = NewCounterDef("respond_query_failed")
 	RespondNexusTaskFailedPerTaskQueueCounter = NewCounterDef("respond_nexus_failed")
-	NexusTaskRequests                         = NewCounterDef(
+	EagerDispatchRequests                     = NewCounterDef(
+		"eager_dispatch_requests",
+		WithDescription("Number of task grants requested through GrantEagerDispatch, summed from the request item counts."),
+	)
+	EagerDispatchResults = NewCounterDef(
+		"eager_dispatch_results",
+		WithDescription("Number of requested task grants by outcome: granted, error, backlog, rate_limit, or per_key_rate_limit."),
+	)
+	NexusTaskRequests = NewCounterDef(
 		"nexus_task_requests",
 		WithDescription("The number of Nexus task poll and respond requests received by the matching service, broken down by namespace, operation, client_name, and is_internal."),
 	)

@@ -648,6 +648,10 @@ func (handler *workflowTaskCompletedHandler) grantEagerActivityDispatchBatch(
 	}
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
+	namespaceName := handler.mutableState.GetNamespaceEntry().Name()
+	metrics.EagerDispatchRequestsSent.With(
+		workflow.GetPerTaskQueueFamilyScope(handler.metricsHandler, namespaceName, taskQueue, handler.config),
+	).Record(eagerDispatchRequestCount(items))
 	response, err := handler.matchingClient.GrantEagerDispatch(ctx, &matchingservice.GrantEagerDispatchRequest{
 		NamespaceId: executionInfo.GetNamespaceId(),
 		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
@@ -662,6 +666,16 @@ func (handler *workflowTaskCompletedHandler) grantEagerActivityDispatchBatch(
 	for index, item := range response.GetItems() {
 		handler.eagerActivityCandidates[candidateIndexes[index]].granted = item.GetGrantedCount() == 1
 	}
+}
+
+func eagerDispatchRequestCount(items []*matchingservice.GrantEagerDispatchRequest_Item) int64 {
+	var count int64
+	for _, item := range items {
+		if itemCount := item.GetCount(); itemCount > 0 {
+			count += int64(itemCount)
+		}
+	}
+	return count
 }
 
 func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivity(
