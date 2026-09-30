@@ -3,7 +3,6 @@
 package queues
 
 import (
-	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -229,24 +228,21 @@ func (r *reschedulerImpl) reschedule() {
 	metrics.TaskReschedulerPendingTasks.With(r.metricsHandler).Record(int64(r.numExecutables))
 	now := r.timeSource.Now()
 
-	for band := range numPriorityBands {
+	for _, priority := range ctasks.PriorityOrder {
 		for key, pq := range r.pqMap {
-			if priorityBand(key.Priority) != band || pq.IsEmpty() {
+			if key.Priority != priority || pq.IsEmpty() {
 				continue
 			}
 			r.drainClassLocked(key, pq, now)
 		}
 	}
-}
 
-// One band per named priority, plus a last one so a priority nobody named still drains.
-var numPriorityBands = len(ctasks.PriorityOrder) + 1
-
-func priorityBand(p ctasks.Priority) int {
-	if band := slices.Index(ctasks.PriorityOrder, p); band >= 0 {
-		return band
+	for key, pq := range r.pqMap {
+		if _, named := ctasks.PriorityName[key.Priority]; named || pq.IsEmpty() {
+			continue
+		}
+		r.drainClassLocked(key, pq, now)
 	}
-	return len(ctasks.PriorityOrder) // unnamed, so after every named band
 }
 
 func (r *reschedulerImpl) drainClassLocked(
