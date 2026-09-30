@@ -161,6 +161,10 @@ message ActivityState {
 
   // Used to de-dupe update requests.
   string last_update_options_request_id = 23;
+
+  // Total size in bytes of all [temporal.api.common.v1.Callback]s attached to this activity.
+  // Used to enforce aggregate size limits without needing to deserialize each callback.
+  int64 total_callbacks_size = 24;
 }
 
 message ActivityCancelState {

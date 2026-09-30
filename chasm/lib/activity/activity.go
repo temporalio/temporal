@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -301,44 +302,68 @@ func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx ch
 	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
 }
 
+// completionCallbackID defines the stable key used for keeping track of attached completion callbacks.
+func completionCallbackID(requestID string, idx int) string {
+	return fmt.Sprintf("%s-%d", requestID, idx)
+}
+
+// addCompletionCallbacks attaches newCallbacks as child CHASM callback components.
+//
+// Callbacks are keyed by request ID plus their position within the request, so re-attaching the same
+// request is a no-op rather than a duplicate. The idempotency probe runs before the closed check, so a
+// retry still succeeds if the operation closed after the first attach.
+//
+// The cumulative callback limits are checked here, because the frontend is only aware of the
+// callbacks on the request, and not the current state.
 func (a *Activity) addCompletionCallbacks(
 	ctx chasm.MutableContext,
 	requestID string,
-	completionCallbacks []*commonpb.Callback,
-	maxCallbacks int,
+	newCallbacks []*commonpb.Callback,
+	namespaceName string,
+	validator callbacks.Validator,
 ) error {
-	if len(completionCallbacks) == 0 {
+	if len(newCallbacks) == 0 {
+		return nil
+	}
+	if requestID == "" {
+		return serviceerror.NewInvalidArgument("cannot attach completion callbacks without a request ID")
+	}
+	// Idempotency check. Attaching is atomic, so if we see that the first callback has been attached we
+	// know they all are present.
+	if _, ok := a.Callbacks[completionCallbackID(requestID, 0)]; ok {
 		return nil
 	}
 	if a.LifecycleState(ctx).IsClosed() {
 		return serviceerror.NewFailedPrecondition("cannot attach callbacks to a closed activity")
 	}
 
-	currentCount := len(a.Callbacks)
-	if len(completionCallbacks)+currentCount > maxCallbacks {
-		return serviceerror.NewFailedPreconditionf(
-			"cannot attach more than %d callbacks to an activity (%d callbacks already attached)",
-			maxCallbacks,
-			currentCount,
-		)
+	// Validate
+	err := validator.ValidateAdditions(namespaceName, newCallbacks, callbacks.CurrentCallbacksInfo{
+		Count:     len(a.Callbacks),
+		TotalSize: int(a.TotalCallbacksSize),
+	})
+	if err != nil {
+		return err
 	}
 
+	// Attach
 	if a.Callbacks == nil {
-		a.Callbacks = make(chasm.Map[string, *callback.Callback], len(completionCallbacks))
+		a.Callbacks = make(chasm.Map[string, *callback.Callback], len(newCallbacks))
 	}
 
 	registrationTime := timestamppb.New(ctx.Now(a))
-
-	for idx, cb := range completionCallbacks {
+	for idx, cb := range newCallbacks {
 		chasmCB, err := callback.FromAPICallback(cb)
 		if err != nil {
 			return err
 		}
 
-		// requestID (unique per API call) + idx (position within the request) ensures unique, idempotent callback IDs.
-		id := fmt.Sprintf("%s-%d", requestID, idx)
+		// TODO(https://github.com/temporalio/temporal/issues/11958): Reusing the source requestID in this
+		// way leads to ambiguities if multiple callbacks are attached in the same request that are routed
+		// to the same destination. Each callback should instead be given its own, unique request ID.
 		callbackObj := callback.NewCallback(requestID, registrationTime, chasmCB)
-		a.Callbacks[id] = chasm.NewComponentField(ctx, callbackObj)
+		a.Callbacks[completionCallbackID(requestID, idx)] = chasm.NewComponentField(ctx, callbackObj)
+		a.TotalCallbacksSize += int64(cb.Size())
 	}
 	return nil
 }
