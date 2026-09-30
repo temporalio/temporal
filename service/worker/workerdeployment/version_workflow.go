@@ -1410,6 +1410,7 @@ func (d *VersionWorkflowRunner) executeAndTrackAsyncPropagation(
 ) {
 	// Number of batches to check might be less than the original batches because some TQ might not update.
 	var taskQueueMaxVersionsToCheck []*deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest
+	lastBatchQueueCount := 0
 
 	for _, batch := range batches {
 		if d.cancelPropagations {
@@ -1429,17 +1430,20 @@ func (d *VersionWorkflowRunner) executeAndTrackAsyncPropagation(
 				taskQueueMaxVersionsToCheck = []*deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{{TaskQueueMaxVersions: map[string]int64{}}}
 			}
 			lastBatch := taskQueueMaxVersionsToCheck[len(taskQueueMaxVersionsToCheck)-1]
-			if len(lastBatch.TaskQueueMaxVersions)+len(lastBatch.TaskQueues) >= int(d.VersionState.SyncBatchSize) {
+			if lastBatchQueueCount >= int(d.VersionState.SyncBatchSize) {
 				taskQueueMaxVersionsToCheck = append(taskQueueMaxVersionsToCheck, &deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{TaskQueueMaxVersions: map[string]int64{}})
 				lastBatch = taskQueueMaxVersionsToCheck[len(taskQueueMaxVersionsToCheck)-1]
+				lastBatchQueueCount = 0
+			}
+			if version, ok := res.GetTaskQueueMaxVersions()[tq]; ok {
+				lastBatch.TaskQueueMaxVersions[tq] = version
 			}
 			if queue := queues[tq]; queue != nil {
 				lastBatch.DeploymentName = res.GetDeploymentName()
 				lastBatch.RevisionNumber = res.GetRevisionNumber()
 				lastBatch.TaskQueues = append(lastBatch.TaskQueues, queue)
-			} else {
-				lastBatch.TaskQueueMaxVersions[tq] = res.GetTaskQueueMaxVersions()[tq]
 			}
+			lastBatchQueueCount++
 		}
 	}
 	if d.cancelPropagations {

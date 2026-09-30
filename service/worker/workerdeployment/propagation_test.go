@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -41,7 +42,7 @@ func TestAsyncPropagationRoutingConfigTargets(t *testing.T) {
 						}
 						syncResponse.TaskQueueMaxVersions[tq.Name] = 100
 					}
-					if mode == "legacy" {
+					if mode != "target only" {
 						checkRequest.TaskQueueMaxVersions[tq.Name] = syncResponse.TaskQueueMaxVersions[tq.Name]
 					}
 					if mode != "legacy" {
@@ -84,4 +85,26 @@ func TestWorkerDeploymentPropagationRequestsLegacyResult(t *testing.T) {
 	require.Len(t, requests, 1)
 	require.Equal(t, int64(100), requests["queue"].GetVersion())
 	require.Nil(t, requests["queue"].GetRoutingConfigTarget())
+}
+
+func TestWorkerDeploymentPropagationRequestsPreserveLegacyVersions(t *testing.T) {
+	t.Parallel()
+	input := &deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{
+		DeploymentName: "deployment", RevisionNumber: 42,
+		TaskQueueMaxVersions: map[string]int64{"queue-a": 100, "queue-b": 200},
+		TaskQueues: []*deploymentspb.TaskQueuePropagationTarget{
+			{Name: "queue-a", TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW}},
+			{Name: "queue-b", TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY}},
+		},
+	}
+	requests := workerDeploymentPropagationRequests("namespace", input)
+	// Older propagation activities only read this map and forward its versions.
+	for queue, version := range input.GetTaskQueueMaxVersions() {
+		legacyRequest := &matchingservice.CheckTaskQueueUserDataPropagationRequest{
+			NamespaceId: "namespace", TaskQueue: queue, Version: version,
+		}
+		require.Positive(t, legacyRequest.GetVersion())
+		require.Equal(t, legacyRequest.GetVersion(), requests[queue].GetVersion())
+		require.Equal(t, int64(42), requests[queue].GetRoutingConfigTarget().GetRevisionNumber())
+	}
 }

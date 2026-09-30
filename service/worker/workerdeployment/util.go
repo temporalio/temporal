@@ -481,6 +481,7 @@ func workerDeploymentPropagationRequests(namespaceID string, input *deploymentsp
 		requests[queue.GetName()] = &matchingservice.CheckTaskQueueUserDataPropagationRequest{
 			NamespaceId: namespaceID,
 			TaskQueue:   queue.GetName(),
+			Version:     input.GetTaskQueueMaxVersions()[queue.GetName()],
 			RoutingConfigTarget: &deploymentspb.RoutingConfigPropagationTarget{
 				DeploymentName: input.GetDeploymentName(),
 				RevisionNumber: input.GetRevisionNumber(),
