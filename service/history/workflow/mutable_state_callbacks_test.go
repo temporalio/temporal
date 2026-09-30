@@ -12,6 +12,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -70,12 +71,12 @@ func (s *mutableStateSuite) chasmWorkflowComponent(ms *MutableStateImpl) *chasmw
 func (s *mutableStateSuite) TestChasmCompletionCallbacks_ValidateCallbackAddition() {
 	ms := s.enableChasmCallbacks(2)
 
-	s.NoError(ms.ValidateCallbackAddition(chasmworkflow.CallbackAddition{
+	s.NoError(ms.ValidateCallbackAddition(nil, chasmworkflow.CallbackAddition{
 		RequestID: "req-1",
 		Callbacks: testCompletionCallbacks(2),
 	}))
 
-	err := ms.ValidateCallbackAddition(chasmworkflow.CallbackAddition{
+	err := ms.ValidateCallbackAddition(nil, chasmworkflow.CallbackAddition{
 		RequestID: "req-1",
 		Callbacks: testCompletionCallbacks(3),
 	})
@@ -191,7 +192,7 @@ func (s *mutableStateSuite) requireCarriedOverCallbacks(newRun historyi.MutableS
 	s.Len(wf.Callbacks, want)
 	s.Equal(int64(want), wf.GetTotalCallbacksCount())
 
-	err = newRun.ValidateCallbackAddition(chasmworkflow.CallbackAddition{
+	err = newRun.ValidateCallbackAddition(nil, chasmworkflow.CallbackAddition{
 		RequestID: "req-new",
 		Callbacks: testCompletionCallbacks(1),
 	})
@@ -252,11 +253,11 @@ func (s *mutableStateSuite) TestChasmCompletionCallbacks_ValidationIsReadOnly() 
 	root, ok := ms.chasmTree.(*chasm.Node)
 	s.True(ok)
 
-	s.NoError(ms.ValidateCallbackAddition(chasmworkflow.CallbackAddition{
+	s.NoError(ms.ValidateCallbackAddition(nil, chasmworkflow.CallbackAddition{
 		RequestID: "req-1",
 		Callbacks: testCompletionCallbacks(2),
 	}))
-	err := ms.ValidateCallbackAddition(chasmworkflow.CallbackAddition{
+	err := ms.ValidateCallbackAddition(nil, chasmworkflow.CallbackAddition{
 		RequestID: "req-1",
 		Callbacks: testCompletionCallbacks(3),
 	})
@@ -273,7 +274,7 @@ func (s *mutableStateSuite) TestHsmCompletionCallbacks_AggregateValidationNotApp
 	ms := s.enableChasmCallbacks(1)
 	s.mockConfig.EnableCHASMCallbacks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
 
-	s.NoError(ms.ValidateCallbackAddition(chasmworkflow.CallbackAddition{
+	s.NoError(ms.ValidateCallbackAddition(nil, chasmworkflow.CallbackAddition{
 		RequestID: "req-1",
 		Callbacks: testCompletionCallbacks(3),
 	}))
@@ -283,4 +284,108 @@ func (s *mutableStateSuite) TestHsmCompletionCallbacks_AggregateValidationNotApp
 	wf := s.chasmWorkflowComponent(ms)
 	s.Empty(wf.Callbacks)
 	s.Zero(wf.GetTotalCallbacksCount())
+}
+
+func (s *mutableStateSuite) TestChasmUpdateCallbacks_ValidateCallbackAddition() {
+	ms := s.enableChasmCallbacks(4)
+	s.mockConfig.MaxCallbacksPerUpdateID = dynamicconfig.GetIntPropertyFnFilteredByNamespace(2)
+	s.startWithCompletionCallbacks(ms, 2)
+
+	updateAddition := func(updateID string, n int) chasmworkflow.CallbackAddition {
+		return chasmworkflow.CallbackAddition{
+			UpdateID:  updateID,
+			RequestID: "req-" + updateID,
+			Callbacks: testCompletionCallbacks(n),
+		}
+	}
+	var failedPrecondition *serviceerror.FailedPrecondition
+
+	s.NoError(ms.ValidateCallbackAddition(nil, updateAddition("u1", 2)))
+
+	err := ms.ValidateCallbackAddition(nil, updateAddition("u1", 3))
+	s.ErrorAs(err, &failedPrecondition)
+	s.ErrorContains(err, `cannot attach more than 2 callbacks to update "u1"`)
+
+	// Within the per-update limit, but the workflow's own two callbacks leave room for only two.
+	s.mockConfig.MaxCallbacksPerUpdateID = dynamicconfig.GetIntPropertyFnFilteredByNamespace(10)
+	err = ms.ValidateCallbackAddition(nil, updateAddition("u1", 3))
+	s.ErrorAs(err, &failedPrecondition)
+	s.ErrorContains(err, "cannot attach more than 4 callbacks to an execution")
+
+	// Nothing validates update callbacks that would not be attached anyway.
+	s.mockConfig.EnableWorkflowUpdateCallbacks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+	s.NoError(ms.ValidateCallbackAddition(nil, updateAddition("u1", 3)))
+}
+
+// An Update's callbacks are validated when the Update is admitted, before it reaches a worker.
+// Once the worker has accepted it, its callbacks are attached as-is: rejecting them then would
+// fail the entire workflow task completion, not just the Update. Nor are callbacks reapplied by
+// reset or NDC conflict resolution checked again.
+func (s *mutableStateSuite) TestChasmUpdateCallbacks_AttachingDoesNotValidate() {
+	ms := s.enableChasmCallbacks(10)
+	s.startWithCompletionCallbacks(ms, 0)
+	_, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+	s.mockConfig.MaxCallbacksPerUpdateID = dynamicconfig.GetIntPropertyFnFilteredByNamespace(1)
+	s.lowerCallbackLimits()
+
+	updateRequest := func(updateID string) *updatepb.Request {
+		return &updatepb.Request{
+			Meta:                &updatepb.Meta{UpdateId: updateID},
+			RequestId:           "req-" + updateID,
+			CompletionCallbacks: testCompletionCallbacks(3),
+		}
+	}
+	_, err = ms.AddWorkflowExecutionUpdateAcceptedEvent("accepted", "msg-id", 1, updateRequest("accepted"))
+	s.NoError(err)
+	_, err = ms.AddWorkflowExecutionUpdateAdmittedEvent(updateRequest("reapplied"), enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_REAPPLY)
+	s.NoError(err)
+	_, err = ms.AddWorkflowExecutionOptionsUpdatedEvent(
+		nil, false, "req-attach", testCompletionCallbacks(3), nil, "", nil, nil, false, nil,
+	)
+	s.NoError(err)
+
+	wf, ctx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	s.NoError(err)
+	s.Len(wf.Callbacks, 3)
+	s.Len(wf.Updates["accepted"].Get(ctx).Callbacks, 3)
+	s.Len(wf.Updates["reapplied"].Get(ctx).Callbacks, 3)
+	s.Equal(int64(9), wf.GetTotalCallbacksCount())
+}
+
+// Callbacks of an Update in flight are reserved against the limits until it is accepted. Accepting
+// it moves them into the persisted totals, after which the Registry no longer reports them, so
+// they are counted exactly once throughout.
+func (s *mutableStateSuite) TestChasmUpdateCallbacks_InFlightReservedUntilAccepted() {
+	ms := s.enableChasmCallbacks(3)
+	s.startWithCompletionCallbacks(ms, 1)
+	_, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+	s.NoError(err)
+
+	inFlight := chasmworkflow.CallbackAddition{UpdateID: "u1", RequestID: "req-u1", Callbacks: testCompletionCallbacks(2)}
+	another := chasmworkflow.CallbackAddition{UpdateID: "u2", RequestID: "req-u2", Callbacks: testCompletionCallbacks(1)}
+	var failedPrecondition *serviceerror.FailedPrecondition
+
+	// One persisted and two in flight leave no room.
+	err = ms.ValidateCallbackAddition([]chasmworkflow.CallbackAddition{inFlight}, another)
+	s.ErrorAs(err, &failedPrecondition)
+	s.ErrorContains(err, "(3 callbacks already attached)")
+	// A retry of the in-flight request is not counted twice.
+	s.NoError(ms.ValidateCallbackAddition([]chasmworkflow.CallbackAddition{inFlight}, inFlight))
+
+	_, err = ms.AddWorkflowExecutionUpdateAcceptedEvent(inFlight.UpdateID, "msg-id", 1, &updatepb.Request{
+		Meta:                &updatepb.Meta{UpdateId: inFlight.UpdateID},
+		RequestId:           inFlight.RequestID,
+		CompletionCallbacks: inFlight.Callbacks,
+	})
+	s.NoError(err)
+	wf := s.chasmWorkflowComponent(ms)
+	s.Equal(int64(3), wf.GetTotalCallbacksCount())
+
+	err = ms.ValidateCallbackAddition(nil, another)
+	s.ErrorAs(err, &failedPrecondition)
+	s.ErrorContains(err, "(3 callbacks already attached)")
+	// Were the Registry still to report it, the persisted copy is recognized and not recounted.
+	err = ms.ValidateCallbackAddition([]chasmworkflow.CallbackAddition{inFlight}, another)
+	s.ErrorContains(err, "(3 callbacks already attached)")
 }

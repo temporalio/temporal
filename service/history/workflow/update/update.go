@@ -853,3 +853,32 @@ func (u *Update) GetSize() int {
 func (u *Update) AcceptedEventID() int64 {
 	return u.acceptedEventID
 }
+
+// IsCompleted reports whether the Update has completed, in which case its outcome is final and
+// no further callbacks will be attached to it.
+func (u *Update) IsCompleted() bool {
+	return u.state == stateCompleted
+}
+
+// visitInFlightCallbacks calls visit for the completion callbacks this Update will persist if it
+// is accepted. See Registry.VisitInFlightCallbacks.
+func (u *Update) visitInFlightCallbacks(visit func(updateID string, requestID string, callbacks []*commonpb.Callback)) error {
+	if !u.state.Matches(stateSet(stateProvisionallyAdmitted | stateAdmitted | stateSent)) {
+		return nil
+	}
+	// The request is nil for an Update admitted from an UpdateAdmitted event, whose callbacks
+	// were persisted along with that event.
+	if u.request != nil {
+		req := &updatepb.Request{}
+		if err := u.request.UnmarshalTo(req); err != nil {
+			return serviceerror.NewInternalf("unable to unmarshal original request: %v", err)
+		}
+		if len(req.GetCompletionCallbacks()) > 0 {
+			visit(u.id, req.GetRequestId(), req.GetCompletionCallbacks())
+		}
+	}
+	for _, pc := range u.pendingCallbacks {
+		visit(u.id, pc.requestID, pc.completionCallbacks)
+	}
+	return nil
+}
