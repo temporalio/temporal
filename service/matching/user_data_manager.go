@@ -580,11 +580,15 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 	ctx context.Context,
 	req *matchingservice.GetTaskQueueUserDataRequest,
 ) (*matchingservice.GetTaskQueueUserDataResponse, error) {
-	lastVersion := req.GetLastKnownUserDataVersion()
-	if lastVersion < 0 {
-		return nil, serviceerror.NewInvalidArgument("last_known_user_data_version must not be negative")
+	target := req.GetRoutingConfigTarget()
+	var lastVersion, lastEphVersion int64
+	if target == nil {
+		lastVersion = req.GetLastKnownUserDataVersion()
+		if lastVersion < 0 {
+			return nil, serviceerror.NewInvalidArgument("last_known_user_data_version must not be negative")
+		}
+		lastEphVersion = req.GetLastKnownEphemeralDataVersion()
 	}
-	lastEphVersion := req.GetLastKnownEphemeralDataVersion()
 
 	if req.WaitNewData {
 		var cancel context.CancelFunc
@@ -594,7 +598,6 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 
 	for {
 		userData, userDataChanged, err := m.GetUserData()
-		ephData, ephDataChanged := m.getMergedEphemeralData()
 		if errors.Is(err, errTaskQueueClosed) {
 			// If we're closing, return a success with no data, as if the request expired. We shouldn't
 			// close due to idleness (because of the MarkAlive above), so we're probably closing due to a
@@ -604,6 +607,21 @@ func (m *userDataManagerImpl) HandleGetUserDataRequest(
 		} else if err != nil {
 			return nil, err
 		}
+		if target != nil {
+			if routingConfigPropagated(userData.GetData(), target) {
+				return &matchingservice.GetTaskQueueUserDataResponse{UserData: userData}, nil
+			}
+			if !req.WaitNewData {
+				return &matchingservice.GetTaskQueueUserDataResponse{}, nil
+			}
+			select {
+			case <-ctx.Done():
+				return &matchingservice.GetTaskQueueUserDataResponse{}, nil
+			case <-userDataChanged:
+			}
+			continue
+		}
+		ephData, ephDataChanged := m.getMergedEphemeralData()
 		newUserData := userData.GetVersion() > lastVersion
 		// noEphemeralDataVersion means the caller does not want ephemeral data
 		newEphData := lastEphVersion != noEphemeralDataVersion && ephData.GetVersion() > lastEphVersion
@@ -668,13 +686,16 @@ func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
 	wfPartitions int,
 	actPartitions int,
 ) error {
-	version := req.GetVersion()
 	target := req.GetRoutingConfigTarget()
+	var version int64
+	if target == nil {
+		version = req.GetVersion()
+	}
 	firstWorkflowPartition := 1
 	if target != nil {
 		firstWorkflowPartition = 0
 	}
-	if m.store == nil {
+	if !m.partition.IsRoot() || m.partition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 		return serviceerror.NewInvalidArgument("CheckTaskQueueUserDataPropagation must be called on root workflow task queue")
 	} else if target == nil && version < 1 {
 		return serviceerror.NewInvalidArgument("CheckTaskQueueUserDataPropagation must wait for version >= 1")
@@ -693,7 +714,7 @@ func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
 
 	policy := backoff.NewExponentialRetryPolicy(500 * time.Millisecond)
 	isRetryable := func(err error) bool {
-		if strings.Contains(err.Error(), errRequestedVersionTooLarge.Error()) {
+		if target == nil && strings.Contains(err.Error(), errRequestedVersionTooLarge.Error()) {
 			// It is possible that multiple updates are happening at once and this partition has not
 			// caught up with all the previous updates when we ask for the latest update.
 			return true
@@ -702,9 +723,9 @@ func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
 	}
 
 	check := func(p int, tp enumspb.TaskQueueType) {
-		lastKnownVersion := version - 1
-		if target != nil {
-			lastKnownVersion = 0
+		var lastKnownVersion int64
+		if target == nil {
+			lastKnownVersion = version - 1
 		}
 		err := backoff.ThrottleRetryContext(ctx, func(ctx context.Context) error {
 			res, err := m.matchingClient.GetTaskQueueUserData(ctx, &matchingservice.GetTaskQueueUserDataRequest{
@@ -715,12 +736,9 @@ func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
 				LastKnownEphemeralDataVersion: noEphemeralDataVersion,
 				WaitNewData:                   true,
 				OnlyIfLoaded:                  true,
+				RoutingConfigTarget:           target,
 			})
 			if err != nil {
-				if target != nil && strings.Contains(err.Error(), errRequestedVersionTooLarge.Error()) {
-					// Ownership transfer can expose an older table version with a newer routing revision.
-					lastKnownVersion = 0
-				}
 				if _, ok := errors.AsType[*serviceerror.FailedPrecondition](err); ok {
 					// this means the partition was not loaded, so skip it (if it loads, it will get the newest data)
 					err = nil
@@ -731,8 +749,6 @@ func (m *userDataManagerImpl) CheckTaskQueueUserDataPropagation(
 				if routingConfigPropagated(res.GetUserData().GetData(), target) {
 					return nil
 				}
-				// Poll from the partition's observed user data version; routing revisions are independent of it.
-				lastKnownVersion = max(lastKnownVersion, res.GetUserData().GetVersion())
 				return serviceerror.NewUnavailable("retry")
 			}
 			if res.GetUserData().GetVersion() < version {

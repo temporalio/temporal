@@ -1098,7 +1098,6 @@ func TestUserData_CheckPropagationRoutingRevision(t *testing.T) {
 				{0, enumspb.TASK_QUEUE_TYPE_WORKFLOW}, {1, enumspb.TASK_QUEUE_TYPE_WORKFLOW}, {0, enumspb.TASK_QUEUE_TYPE_ACTIVITY},
 			} {
 				var calls []any
-				lastVersion := int64(0)
 				revisionsToRead := tc.revisions
 				if partition.id == 0 && partition.tp == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 					revisionsToRead = tc.revisions[len(tc.revisions)-1:]
@@ -1118,11 +1117,10 @@ func TestUserData_CheckPropagationRoutingRevision(t *testing.T) {
 					rpcName := manager.partition.TaskQueue().NormalPartition(partition.id).RpcName()
 					expected := &matchingservice.GetTaskQueueUserDataRequest{
 						NamespaceId: manager.partition.NamespaceId(), TaskQueue: rpcName, TaskQueueType: partition.tp,
-						LastKnownUserDataVersion: lastVersion, LastKnownEphemeralDataVersion: noEphemeralDataVersion,
+						RoutingConfigTarget: target, LastKnownEphemeralDataVersion: noEphemeralDataVersion,
 						WaitNewData: true, OnlyIfLoaded: true,
 					}
 					calls = append(calls, opts.matchingClientMock.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Cond(func(req *matchingservice.GetTaskQueueUserDataRequest) bool { return proto.Equal(req, expected) })).Return(&matchingservice.GetTaskQueueUserDataResponse{UserData: data}, nil))
-					lastVersion = version
 				}
 				gomock.InOrder(calls...)
 			}
@@ -1150,7 +1148,7 @@ func TestUserData_CheckPropagationRoutingRevisionUnloaded(t *testing.T) {
 	}, 2, 1))
 }
 
-func TestUserData_CheckPropagationRoutingRevisionAfterOwnershipTransfer(t *testing.T) {
+func TestUserData_CheckPropagationRoutingRevisionIgnoresVersions(t *testing.T) {
 	t.Parallel()
 	controller := gomock.NewController(t)
 	opts := defaultTqmTestOpts(controller)
@@ -1169,12 +1167,150 @@ func TestUserData_CheckPropagationRoutingRevisionAfterOwnershipTransfer(t *testi
 	}
 	gomock.InOrder(
 		opts.matchingClientMock.EXPECT().GetTaskQueueUserData(gomock.Any(), knownVersion(0)).Return(response(1000, 41), nil),
-		opts.matchingClientMock.EXPECT().GetTaskQueueUserData(gomock.Any(), knownVersion(1000)).Return(nil, errRequestedVersionTooLarge),
-		opts.matchingClientMock.EXPECT().GetTaskQueueUserData(gomock.Any(), knownVersion(0)).Return(response(900, 42), nil),
+		opts.matchingClientMock.EXPECT().GetTaskQueueUserData(gomock.Any(), knownVersion(0)).Return(response(1000, 41), nil),
+		opts.matchingClientMock.EXPECT().GetTaskQueueUserData(gomock.Any(), knownVersion(0)).Return(response(0, 42), nil),
 	)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	require.NoError(t, manager.CheckTaskQueueUserDataPropagation(ctx, &matchingservice.CheckTaskQueueUserDataPropagationRequest{
 		RoutingConfigTarget: &deploymentspb.RoutingConfigPropagationTarget{DeploymentName: "deployment", RevisionNumber: 42, TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW}},
 	}, 1, 0))
+}
+
+func TestUserData_CheckPropagationRoutingRevisionRootWithoutStore(t *testing.T) {
+	t.Parallel()
+	controller := gomock.NewController(t)
+	opts := defaultTqmTestOpts(controller)
+	manager := createUserDataManager(t, controller, opts)
+	manager.store = nil
+	opts.matchingClientMock.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewFailedPrecondition("not loaded"))
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	require.NoError(t, manager.CheckTaskQueueUserDataPropagation(ctx, &matchingservice.CheckTaskQueueUserDataPropagationRequest{
+		RoutingConfigTarget: &deploymentspb.RoutingConfigPropagationTarget{DeploymentName: "deployment", RevisionNumber: 42, TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW}},
+	}, 1, 0))
+}
+
+func routingRevisionUserData(version, workflowRevision, activityRevision int64, deployment string) *persistencespb.VersionedTaskQueueUserData {
+	return &persistencespb.VersionedTaskQueueUserData{Version: version, Data: &persistencespb.TaskQueueUserData{PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+		int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {DeploymentData: &persistencespb.DeploymentData{DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{deployment: {RoutingConfig: &deploymentpb.RoutingConfig{RevisionNumber: workflowRevision}}}}},
+		int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY): {DeploymentData: &persistencespb.DeploymentData{DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{deployment: {RoutingConfig: &deploymentpb.RoutingConfig{RevisionNumber: activityRevision}}}}},
+	}}}
+}
+
+func TestUserData_GetRoutingRevisionIgnoresVersion(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name            string
+		version, cursor int64
+	}{
+		{name: "zero version", version: 0},
+		{name: "equal version", version: 100, cursor: 100},
+		{name: "lower version", version: 1, cursor: 100},
+		{name: "negative cursor", cursor: -1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			controller := gomock.NewController(t)
+			manager := createUserDataManager(t, controller, defaultTqmTestOpts(controller))
+			data := routingRevisionUserData(tc.version, 42, 43, "deployment")
+			manager.lock.Lock()
+			manager.setUserDataLocked(data)
+			manager.lock.Unlock()
+			res, err := manager.HandleGetUserDataRequest(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+				LastKnownUserDataVersion: tc.cursor, LastKnownEphemeralDataVersion: -1,
+				RoutingConfigTarget: &deploymentspb.RoutingConfigPropagationTarget{DeploymentName: "deployment", RevisionNumber: 42, TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY}},
+			})
+			require.NoError(t, err)
+			require.Equal(t, data, res.GetUserData())
+		})
+	}
+}
+
+func TestUserData_GetRoutingRevisionWaitsForRevision(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name                        string
+		initial                     *persistencespb.VersionedTaskQueueUserData
+		finalVersion, finalRevision int64
+	}{
+		{name: "wrong deployment", initial: routingRevisionUserData(0, 100, 100, "other"), finalRevision: 42},
+		{name: "missing type", initial: routingRevisionUserData(0, 100, 0, "deployment"), finalRevision: 43},
+		{name: "stale revision with constant version", initial: routingRevisionUserData(100, 42, 41, "deployment"), finalVersion: 100, finalRevision: 42},
+		{name: "stale revision with regressing version", initial: routingRevisionUserData(100, 42, 41, "deployment"), finalVersion: 1, finalRevision: 42},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			controller := gomock.NewController(t)
+			manager := createUserDataManager(t, controller, defaultTqmTestOpts(controller))
+			manager.lock.Lock()
+			manager.setUserDataLocked(tc.initial)
+			manager.lock.Unlock()
+			request := &matchingservice.GetTaskQueueUserDataRequest{
+				LastKnownUserDataVersion: 1000, LastKnownEphemeralDataVersion: -1,
+				RoutingConfigTarget: &deploymentspb.RoutingConfigPropagationTarget{DeploymentName: "deployment", RevisionNumber: 42, TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY}},
+			}
+			response, err := manager.HandleGetUserDataRequest(context.Background(), request)
+			require.NoError(t, err)
+			require.Nil(t, response.GetUserData())
+			request.WaitNewData = true
+			manager.config.GetUserDataReturnBudget = 0
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			type result struct {
+				response *matchingservice.GetTaskQueueUserDataResponse
+				err      error
+			}
+			returned := make(chan result, 1)
+			go func() {
+				response, err := manager.HandleGetUserDataRequest(ctx, request)
+				returned <- result{response: response, err: err}
+			}()
+			finalData := routingRevisionUserData(tc.finalVersion, tc.finalRevision, tc.finalRevision, "deployment")
+			manager.lock.Lock()
+			manager.setUserDataLocked(finalData)
+			manager.lock.Unlock()
+			select {
+			case res := <-returned:
+				require.NoError(t, res.err)
+				require.Equal(t, finalData, res.response.GetUserData())
+			case <-ctx.Done():
+				t.Fatal("routing wait did not return when revisions propagated")
+			}
+		})
+	}
+}
+
+func TestUserData_GetRoutingRevisionWaitCanceledOrClosed(t *testing.T) {
+	t.Parallel()
+	for _, closed := range []bool{false, true} {
+		t.Run(fmt.Sprintf("closed=%v", closed), func(t *testing.T) {
+			t.Parallel()
+			controller := gomock.NewController(t)
+			manager := createUserDataManager(t, controller, defaultTqmTestOpts(controller))
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			done := make(chan error, 1)
+			go func() {
+				res, err := manager.HandleGetUserDataRequest(ctx, &matchingservice.GetTaskQueueUserDataRequest{
+					WaitNewData: true, RoutingConfigTarget: &deploymentspb.RoutingConfigPropagationTarget{DeploymentName: "deployment", RevisionNumber: 42, TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW}},
+				})
+				if err == nil && res.GetUserData() != nil {
+					err = fmt.Errorf("unexpected data: %v", res.GetUserData())
+				}
+				done <- err
+			}()
+			if closed {
+				manager.setUserDataState(userDataClosed, nil)
+			} else {
+				cancel()
+			}
+			select {
+			case err := <-done:
+				require.NoError(t, err)
+			case <-time.After(time.Second):
+				t.Fatal("routing wait did not stop")
+			}
+		})
+	}
 }

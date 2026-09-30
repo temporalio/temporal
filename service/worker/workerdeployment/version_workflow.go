@@ -1411,28 +1411,29 @@ func (d *VersionWorkflowRunner) executeAndTrackAsyncPropagation(
 			return
 		}
 		res := d.executePropagationBatch(ctx, batch, routingConfig, versionData)
-		queues := make(map[string]int64, len(res.GetTaskQueueMaxVersions()))
-		for tq, version := range res.GetTaskQueueMaxVersions() {
-			queues[tq] = version
+		queues := make(map[string]struct{}, len(res.GetTaskQueueMaxVersions()))
+		for tq := range res.GetTaskQueueMaxVersions() {
+			queues[tq] = struct{}{}
 		}
 		for tq := range res.GetTaskQueueRoutingConfigTargets() {
-			queues[tq] = res.GetTaskQueueMaxVersions()[tq]
+			queues[tq] = struct{}{}
 		}
 		for _, tq := range workflow.DeterministicKeys(queues) {
 			if len(taskQueueMaxVersionsToCheck) == 0 {
 				taskQueueMaxVersionsToCheck = []*deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{{TaskQueueMaxVersions: map[string]int64{}}}
 			}
 			lastBatch := taskQueueMaxVersionsToCheck[len(taskQueueMaxVersionsToCheck)-1]
-			if len(lastBatch.TaskQueueMaxVersions) >= int(d.VersionState.SyncBatchSize) {
+			if len(lastBatch.TaskQueueMaxVersions)+len(lastBatch.TaskQueueRoutingConfigTargets) >= int(d.VersionState.SyncBatchSize) {
 				taskQueueMaxVersionsToCheck = append(taskQueueMaxVersionsToCheck, &deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest{TaskQueueMaxVersions: map[string]int64{}})
 				lastBatch = taskQueueMaxVersionsToCheck[len(taskQueueMaxVersionsToCheck)-1]
 			}
-			lastBatch.TaskQueueMaxVersions[tq] = queues[tq]
 			if target := res.GetTaskQueueRoutingConfigTargets()[tq]; target != nil {
 				if lastBatch.TaskQueueRoutingConfigTargets == nil {
 					lastBatch.TaskQueueRoutingConfigTargets = make(map[string]*deploymentspb.RoutingConfigPropagationTarget)
 				}
 				lastBatch.TaskQueueRoutingConfigTargets[tq] = target
+			} else {
+				lastBatch.TaskQueueMaxVersions[tq] = res.GetTaskQueueMaxVersions()[tq]
 			}
 		}
 	}

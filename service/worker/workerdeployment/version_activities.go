@@ -101,7 +101,6 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 				logger.Error("syncing task queue userdata", "taskQueue", syncData.Name, "types", syncData.Types, "error", err)
 			} else {
 				lock.Lock()
-				maxVersionByName[syncData.Name] = max(maxVersionByName[syncData.Name], res.Version)
 				if req.GetOperation() == nil && req.GetUpdateRoutingConfig().GetRevisionNumber() > 0 {
 					target := routingConfigTargets[syncData.Name]
 					if target == nil {
@@ -113,6 +112,8 @@ func (a *VersionActivities) SyncDeploymentVersionUserData(
 							target.TaskQueueTypes = append(target.TaskQueueTypes, tp)
 						}
 					}
+				} else {
+					maxVersionByName[syncData.Name] = max(maxVersionByName[syncData.Name], res.Version)
 				}
 				lock.Unlock()
 			}

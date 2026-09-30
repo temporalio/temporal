@@ -120,7 +120,7 @@ func TestSyncDeploymentVersionUserDataRoutingConfigTarget(t *testing.T) {
 	require.NoError(t, err)
 	var response deploymentspb.SyncDeploymentVersionUserDataResponse
 	require.NoError(t, result.Get(&response))
-	require.Equal(t, map[string]int64{"queue": 100}, response.GetTaskQueueMaxVersions())
+	require.Empty(t, response.GetTaskQueueMaxVersions())
 	require.Len(t, response.GetTaskQueueRoutingConfigTargets(), 1)
 	require.True(t, proto.Equal(&deploymentspb.RoutingConfigPropagationTarget{
 		DeploymentName: "deployment", RevisionNumber: 42, TaskQueueTypes: types,
@@ -141,7 +141,7 @@ func TestWorkerDeploymentPropagationActivitiesRoutingConfigTarget(t *testing.T) 
 					TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY},
 				}
 				expected := &matchingservice.CheckTaskQueueUserDataPropagationRequest{
-					NamespaceId: tv.NamespaceID().String(), TaskQueue: "queue", Version: legacyVersion, RoutingConfigTarget: target,
+					NamespaceId: tv.NamespaceID().String(), TaskQueue: "queue", RoutingConfigTarget: target,
 				}
 				client.EXPECT().CheckTaskQueueUserDataPropagation(gomock.Any(), gomock.Cond(func(req *matchingservice.CheckTaskQueueUserDataPropagationRequest) bool {
 					return proto.Equal(req, expected)

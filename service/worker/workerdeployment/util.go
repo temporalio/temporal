@@ -478,10 +478,9 @@ func workerDeploymentPropagationRequests(namespaceID string, input *deploymentsp
 		requests[name] = &matchingservice.CheckTaskQueueUserDataPropagationRequest{NamespaceId: namespaceID, TaskQueue: name, Version: version}
 	}
 	for name, target := range input.GetTaskQueueRoutingConfigTargets() {
-		if requests[name] == nil {
-			requests[name] = &matchingservice.CheckTaskQueueUserDataPropagationRequest{NamespaceId: namespaceID, TaskQueue: name}
+		if target != nil {
+			requests[name] = &matchingservice.CheckTaskQueueUserDataPropagationRequest{NamespaceId: namespaceID, TaskQueue: name, RoutingConfigTarget: target}
 		}
-		requests[name].RoutingConfigTarget = target
 	}
 	return requests
 }

@@ -39,7 +39,9 @@ func TestAsyncPropagationRoutingConfigTargets(t *testing.T) {
 						}
 						syncResponse.TaskQueueMaxVersions[tq.Name] = 100
 					}
-					checkRequest.TaskQueueMaxVersions[tq.Name] = syncResponse.TaskQueueMaxVersions[tq.Name]
+					if mode == "legacy" {
+						checkRequest.TaskQueueMaxVersions[tq.Name] = syncResponse.TaskQueueMaxVersions[tq.Name]
+					}
 					if mode != "legacy" {
 						if syncResponse.TaskQueueRoutingConfigTargets == nil {
 							syncResponse.TaskQueueRoutingConfigTargets = map[string]*deploymentspb.RoutingConfigPropagationTarget{}
