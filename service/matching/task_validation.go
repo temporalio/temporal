@@ -18,7 +18,7 @@ import (
 
 const (
 	taskReaderValidationThreshold = 600 * time.Second
-	taskValidatorCacheMaxSize = 128
+	taskValidatorCacheMaxSize     = 128
 )
 
 type (
@@ -38,6 +38,7 @@ type (
 	taskValidationInfo struct {
 		taskID         int64
 		validationTime time.Time
+		lastAccess     uint64
 	}
 
 	taskValidatorImpl struct {
@@ -46,8 +47,9 @@ type (
 		namespaceRegistry namespace.Registry
 		historyClient     historyservice.HistoryServiceClient
 
-		mu    sync.Mutex
-		cache map[int64]taskValidationInfo // taskID → last validation info; size-capped
+		mu            sync.Mutex
+		cache         map[int64]taskValidationInfo // taskID → last validation info; size-capped
+		accessCounter uint64
 	}
 )
 
@@ -109,7 +111,8 @@ func (v *taskValidatorImpl) lookupOrInit(task *persistencespb.AllocatedTaskInfo)
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	if info, ok := v.cache[task.TaskId]; ok {
-		return info, true
+		v.putLocked(info)
+		return v.cache[task.TaskId], true
 	}
 	validationTime := time.Now().UTC()
 	if task.Data.CreateTime != nil {
@@ -117,23 +120,25 @@ func (v *taskValidatorImpl) lookupOrInit(task *persistencespb.AllocatedTaskInfo)
 	}
 	info = taskValidationInfo{taskID: task.TaskId, validationTime: validationTime}
 	v.putLocked(info)
-	return info, false
+	return v.cache[task.TaskId], false
 }
 
 func (v *taskValidatorImpl) putLocked(info taskValidationInfo) {
 	if _, exists := v.cache[info.taskID]; !exists && len(v.cache) >= taskValidatorCacheMaxSize {
 		var oldestID int64
-		var oldestTime time.Time
+		var oldestAccess uint64
 		first := true
 		for id, cached := range v.cache {
-			if first || cached.validationTime.Before(oldestTime) {
+			if first || cached.lastAccess < oldestAccess {
 				oldestID = id
-				oldestTime = cached.validationTime
+				oldestAccess = cached.lastAccess
 				first = false
 			}
 		}
 		delete(v.cache, oldestID)
 	}
+	v.accessCounter++
+	info.lastAccess = v.accessCounter
 	v.cache[info.taskID] = info
 }
 
