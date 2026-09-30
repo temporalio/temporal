@@ -1418,7 +1418,7 @@ func (d *VersionWorkflowRunner) executeAndTrackAsyncPropagation(
 		}
 		res := d.executePropagationBatch(ctx, batch, routingConfig, versionData)
 		queues := make(map[string]*deploymentspb.TaskQueuePropagationTarget, len(res.GetTaskQueueMaxVersions()))
-		for tq := range res.GetTaskQueueMaxVersions() {
+		for _, tq := range workflow.DeterministicKeys(res.GetTaskQueueMaxVersions()) {
 			queues[tq] = nil
 		}
 		for _, queue := range res.GetTaskQueues() {
