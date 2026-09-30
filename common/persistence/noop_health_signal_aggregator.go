@@ -22,10 +22,6 @@ func (a *noopSignalAggregator) AverageLatency() float64 {
 	return 0
 }
 
-func (a *noopSignalAggregator) LatencyQuantile(quantile float64) float64 {
-	return 0
-}
-
 func (*noopSignalAggregator) ErrorRatio() float64 {
 	return 0
 }
