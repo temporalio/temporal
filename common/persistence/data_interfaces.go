@@ -653,6 +653,9 @@ type (
 		ExclusiveMaxTaskID int64 // Tasks less than this ID will be completed
 		Subqueue           int
 		Limit              int // Limit on the max number of tasks that can be completed. Required param
+		// If set, only delete if the task queue's range id matches this value, otherwise return
+		// ConditionFailedError. Only supported for fair (v2) task queues.
+		ConditionRangeID int64
 	}
 
 	// CreateNamespaceRequest is used to create the namespace

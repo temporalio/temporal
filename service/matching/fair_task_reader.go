@@ -689,6 +689,7 @@ func (tr *fairTaskReader) doGCAt(ackLevel fairLevel) (int, error) {
 	n, err := tr.backlogMgr.db.CompleteFairTasksLessThan(ctx, ackLevel.inc(), batchSize, tr.subqueue)
 	if err != nil {
 		tr.logger.Warn("failed to gc tasks", tag.Error(err))
+		tr.backlogMgr.signalIfFatal(err)
 	}
 	return n, err
 }
