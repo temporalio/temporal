@@ -138,12 +138,12 @@ func (tm *priTaskMatcher) Start() {
 	policy := backoff.NewExponentialRetryPolicy(time.Second).
 		WithMaximumInterval(tm.config.BacklogTaskForwardTimeout()).
 		WithExpirationInterval(backoff.NoInterval)
-	retrier := backoff.NewRetrier(policy, clock.NewRealTimeSource())
 	lim := quotas.NewDefaultOutgoingRateLimiter(tm.config.ForwarderMaxRatePerSecond)
 
 	// ForwarderMaxOutstandingTasks > 1 is now safe: the validator cache is
 	// keyed by task ID, so alternating tasks no longer skip validation.
 	for range tm.config.ForwarderMaxOutstandingTasks() {
+		retrier := backoff.NewRetrier(policy, clock.NewRealTimeSource())
 		go tm.forwardTasks(lim, retrier)
 	}
 
@@ -170,7 +170,6 @@ func (tm *priTaskMatcher) Stop() {
 	// when applicable.
 }
 
-// TODO(pri): access to retrier is not synchronized
 func (tm *priTaskMatcher) forwardTasks(lim quotas.RateLimiter, retrier backoff.Retrier) {
 	ctxs := []context.Context{tm.tqCtx}
 	poller := waitingPoller{taskForwarderType: parentTaskForwarder}

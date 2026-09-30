@@ -531,3 +531,85 @@ func (s *PriMatcherSuite) TestValidatorRunsOnChildBehindForwardedHead() {
 		close(forwardRelease)
 	})
 }
+
+func (s *PriMatcherSuite) TestForwardTasksIndependentBackoff() {
+	synctest.Test(s.T(), func(t *testing.T) {
+		const workers = 16
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		tq := tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+		child := tq.NormalPartition(1)
+		cfg := newTaskQueueConfig(tq, NewConfig(dynamicconfig.NewNoopCollection()), "nsname")
+		cfg.ForwarderMaxOutstandingTasks = func() int { return workers }
+		cfg.ForwarderMaxOutstandingPolls = func() int { return 0 }
+		cfg.ForwarderMaxRatePerSecond = func() float64 { return 1000 }
+
+		started := make(chan struct{}, workers)
+		releaseErrors := make(chan struct{})
+		releaseSuccesses := make(chan struct{})
+		var calls atomic.Int32
+		rateLimitErr := serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "rate limit exceeded")
+		client := matchingservicemock.NewMockMatchingServiceClient(s.controller)
+		client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+			func(rpcCtx context.Context, _ *matchingservice.AddWorkflowTaskRequest, _ ...any) (*matchingservice.AddWorkflowTaskResponse, error) {
+				call := calls.Add(1)
+				started <- struct{}{}
+				release := releaseSuccesses
+				var forwardErr error
+				if call <= workers {
+					release = releaseErrors
+					forwardErr = rateLimitErr
+				}
+				select {
+				case <-release:
+					return &matchingservice.AddWorkflowTaskResponse{}, forwardErr
+				case <-rpcCtx.Done():
+					return nil, rpcCtx.Err()
+				}
+			},
+		).Times(workers * 2)
+		fwdr, err := newPriForwarder(&cfg.forwarderConfig, UnversionedQueueKey(child), client, testhooks.TestHooks{})
+		require.NoError(t, err)
+		manager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+		manager.Start()
+		tm := newPriTaskMatcher(ctx, cfg, child, fwdr, client, nil,
+			s.logger, metrics.NoopMetricsHandler, manager, func() {}, func() {})
+		defer tm.Stop()
+		done := make(chan taskResponse, workers)
+		addTasks := func(firstID int64) {
+			for id := firstID; id < firstID+workers; id++ {
+				task := newBacklogTask(id, done)
+				task.forwardCtx = ctx
+				require.NoError(t, tm.AddTask(task))
+			}
+		}
+		addTasks(1)
+		tm.Start()
+		for range workers {
+			await.Rcv(t, started)
+		}
+		close(releaseErrors)
+		for range workers {
+			require.ErrorIs(t, await.Rcv(t, done).forwardErr, rateLimitErr)
+		}
+		synctest.Wait()
+
+		// Each worker's first retry is at most one second, including jitter.
+		<-time.After(time.Second)
+		synctest.Wait()
+		tm.data.lock.Lock()
+		waitingPollers := tm.data.pollers.Len()
+		tm.data.lock.Unlock()
+		require.Equal(t, workers+1, waitingPollers, "all forwarding workers and the validator should be waiting")
+
+		addTasks(workers + 1)
+		for range workers {
+			await.Rcv(t, started)
+		}
+		close(releaseSuccesses)
+		for range workers {
+			require.NoError(t, await.Rcv(t, done).forwardErr)
+		}
+		synctest.Wait()
+	})
+}
