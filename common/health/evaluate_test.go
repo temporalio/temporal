@@ -305,4 +305,3 @@ func TestEvaluateAndRollupState(t *testing.T) {
 		})
 	}
 }
-
