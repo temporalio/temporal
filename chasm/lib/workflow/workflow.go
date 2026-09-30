@@ -128,30 +128,6 @@ func (w *Workflow) RejectUpdate(ctx chasm.MutableContext, updateID string, rejec
 	return callback.ScheduleStandbyCallbacks(ctx, upd.Callbacks)
 }
 
-// totalCallbackCount returns the total number of callbacks across workflow-level
-// and all update-level callback maps.
-func (w *Workflow) totalCallbackCount(ctx chasm.Context) int {
-	count := len(w.Callbacks)
-	for _, updateField := range w.Updates {
-		count += len(updateField.Get(ctx).Callbacks)
-	}
-	return count
-}
-
-// checkWorkflowCallbackLimit returns an error if adding newCount callbacks would
-// exceed the per-workflow maximum.
-func (w *Workflow) checkWorkflowCallbackLimit(ctx chasm.Context, newCount, maxCallbacksPerWorkflow int) error {
-	current := w.totalCallbackCount(ctx)
-	if newCount+current > maxCallbacksPerWorkflow {
-		return serviceerror.NewFailedPreconditionf(
-			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
-			maxCallbacksPerWorkflow,
-			current,
-		)
-	}
-	return nil
-}
-
 // CallbackAddition is a set of completion callbacks that a single request is about to attach
 // to an execution. UpdateID is empty when the callbacks target the workflow itself rather
 // than one of its updates.
@@ -193,18 +169,21 @@ func (w *Workflow) callbacksTarget(ctx chasm.Context, updateID string) chasm.Map
 // IMPORTANT: This should ONLY be called on initial request paths, and NEVER for replays.
 //
 // Like any other user input, callbacks are validated by the request handler that receives them,
-// not where they are attached. They are attached while applying history events, which also
+// and not where they are attached. They are attached while applying history events, which also
 // happens when replaying events that were accepted long ago (NDC replication, reset, history
 // import) or when carrying callbacks over to a new run (continue-as-new, retry). Rejecting them
 // there would stall the task rather than protect anything, and lowering a limit would
 // retroactively wedge every execution already above it. Callbacks are validated once, when a
 // request introduces them, and then kept as-is.
 //
-// NOTE: Update callbacks are not validated here yet. They are still checked against
-// MaxCallbacksPerWorkflow and MaxCallbacksPerUpdateID where they are attached, in
-// [Workflow.AddUpdateCompletionCallbacks].
+// inFlight lists callbacks the execution will attach if their Updates are accepted: those of
+// Updates admitted but not yet accepted, which the history service tracks in memory in its update
+// registry and which are therefore not yet reflected in WorkflowState. They are reserved against
+// the limits but not themselves validated, and an addition re-offering one of them (same UpdateID
+// and RequestID) is not counted a second time.
 func (w *Workflow) ValidateCallbackAddition(
 	ctx chasm.Context,
+	inFlight []CallbackAddition,
 	addition CallbackAddition,
 	namespaceName string,
 	validator callbacks.Validator,
@@ -222,20 +201,53 @@ func (w *Workflow) ValidateCallbackAddition(
 		return nil
 	}
 
-	if addition.UpdateID != "" && len(addition.Callbacks)+len(target) > maxCallbacksPerUpdateID {
-		return serviceerror.NewFailedPreconditionf(
-			"cannot attach more than %d callbacks to update %q (%d callbacks already attached)",
-			maxCallbacksPerUpdateID,
-			addition.UpdateID,
-			len(target),
-		)
-	}
-
 	currentCbInfo := callbacks.CurrentCallbacksInfo{
 		Count:     int(w.GetTotalCallbacksCount()),
 		TotalSize: int(w.GetTotalCallbacksSize()),
 	}
+	attachedToUpdate := len(target)
+	seen := make(map[callbackRequestKey]struct{}, len(inFlight))
+	for _, held := range inFlight {
+		key := callbackRequestKey{updateID: held.UpdateID, requestID: held.RequestID}
+		// A retry of the request that admitted an Update is buffered alongside it, so the same
+		// request can be reported twice.
+		if _, ok := seen[key]; ok || len(held.Callbacks) == 0 {
+			continue
+		}
+		seen[key] = struct{}{}
+		// Already attached, and so already in the totals: a retry of a request persisted with an
+		// UpdateAdmitted event can be buffered again.
+		if hasCallbacksForRequest(w.callbacksTarget(ctx, held.UpdateID), held.RequestID) {
+			continue
+		}
+		currentCbInfo.Count += len(held.Callbacks)
+		for _, cb := range held.Callbacks {
+			currentCbInfo.TotalSize += cb.Size()
+		}
+		if held.UpdateID == addition.UpdateID {
+			attachedToUpdate += len(held.Callbacks)
+		}
+	}
+	// The same request is already held in flight, and is counted above.
+	if _, ok := seen[callbackRequestKey{updateID: addition.UpdateID, requestID: addition.RequestID}]; ok {
+		return nil
+	}
+
+	if addition.UpdateID != "" && len(addition.Callbacks)+attachedToUpdate > maxCallbacksPerUpdateID {
+		return serviceerror.NewFailedPreconditionf(
+			"cannot attach more than %d callbacks to update %q (%d callbacks already attached)",
+			maxCallbacksPerUpdateID,
+			addition.UpdateID,
+			attachedToUpdate,
+		)
+	}
+
 	return validator.ValidateAdditions(namespaceName, addition.Callbacks, currentCbInfo)
+}
+
+type callbackRequestKey struct {
+	updateID  string
+	requestID string
 }
 
 // addCallbacksToMap converts common callbacks to CHASM callback components and inserts them
@@ -296,20 +308,19 @@ func (w *Workflow) AddCompletionCallbacks(
 	return w.addCallbacksToMap(ctx, w.Callbacks, requestID, eventTime, completionCallbacks)
 }
 
-// AddUpdateCompletionCallbacks creates completion callbacks using the CHASM implementation.
-// maxCallbacksPerWorkflow is the configured maximum number of callbacks allowed per workflow.
-// maxCallbacksPerUpdateID is the configured maximum number of callbacks allowed per update ID.
+// AddUpdateCompletionCallbacks creates update completion callbacks using the CHASM
+// implementation.
+//
+// NOTE: Aggregate limits are NOT checked here. See[ValidateCallbackAddition].
 func (w *Workflow) AddUpdateCompletionCallbacks(
 	ctx chasm.MutableContext,
 	eventTime *timestamppb.Timestamp,
 	updateID string,
 	requestID string,
 	completionCallbacks []*commonpb.Callback,
-	maxCallbacksPerWorkflow int,
-	maxCallbacksPerUpdateID int,
 ) error {
-	if err := w.checkWorkflowCallbackLimit(ctx, len(completionCallbacks), maxCallbacksPerWorkflow); err != nil {
-		return err
+	if len(completionCallbacks) == 0 {
+		return nil
 	}
 
 	if w.Updates == nil {
@@ -322,17 +333,9 @@ func (w *Workflow) AddUpdateCompletionCallbacks(
 	}
 
 	update := w.Updates[updateID].Get(ctx)
-
-	currentCallbackCount := len(update.Callbacks)
-	if len(completionCallbacks)+currentCallbackCount > maxCallbacksPerUpdateID {
-		return serviceerror.NewFailedPreconditionf(
-			"cannot attach more than %d callbacks to update %q (%d callbacks already attached)",
-			maxCallbacksPerUpdateID,
-			updateID,
-			currentCallbackCount,
-		)
+	if update.Callbacks == nil {
+		update.Callbacks = make(chasm.Map[string, *callback.Callback], len(completionCallbacks))
 	}
-
 	return w.addCallbacksToMap(ctx, update.Callbacks, requestID, eventTime, completionCallbacks)
 }
 

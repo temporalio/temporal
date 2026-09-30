@@ -3924,17 +3924,17 @@ func (mr *MockMutableStateMockRecorder) UpdateWorkflowStateStatus(state, status 
 }
 
 // ValidateCallbackAddition mocks base method.
-func (m *MockMutableState) ValidateCallbackAddition(addition workflow1.CallbackAddition) error {
+func (m *MockMutableState) ValidateCallbackAddition(inFlight []workflow1.CallbackAddition, addition workflow1.CallbackAddition) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ValidateCallbackAddition", addition)
+	ret := m.ctrl.Call(m, "ValidateCallbackAddition", inFlight, addition)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // ValidateCallbackAddition indicates an expected call of ValidateCallbackAddition.
-func (mr *MockMutableStateMockRecorder) ValidateCallbackAddition(addition any) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) ValidateCallbackAddition(inFlight, addition any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateCallbackAddition", reflect.TypeOf((*MockMutableState)(nil).ValidateCallbackAddition), addition)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateCallbackAddition", reflect.TypeOf((*MockMutableState)(nil).ValidateCallbackAddition), inFlight, addition)
 }
 
 // VisitUpdates mocks base method.

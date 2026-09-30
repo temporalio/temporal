@@ -788,10 +788,7 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 					incoming := s.request.StartRequest.GetPropagatedNexusSerializationContext()
 					nexusContextMatch = nexusSerializationContextMatch(existing, incoming)
 
-					err := mutableState.ValidateCallbackAddition(chasmworkflow.CallbackAddition{
-						RequestID: requestID,
-						Callbacks: completionCallbacks,
-					})
+					err := validateAttachedCallbacks(ctx, workflowLease, requestID, completionCallbacks)
 					if err != nil {
 						return nil, err
 					}
@@ -991,4 +988,26 @@ func (s StartOutcome) String() string {
 	default:
 		return "Unknown"
 	}
+}
+
+// validateAttachedCallbacks checks the completion callbacks attached to an existing workflow on
+// conflict against the execution's limits, reserving those of the workflow's in-flight Updates;
+// see api.InFlightUpdateCallbacks.
+func validateAttachedCallbacks(
+	ctx context.Context,
+	workflowLease api.WorkflowLease,
+	requestID string,
+	completionCallbacks []*commonpb.Callback,
+) error {
+	if len(completionCallbacks) == 0 {
+		return nil
+	}
+	inFlight, err := api.InFlightUpdateCallbacks(workflowLease.GetContext().UpdateRegistry(ctx))
+	if err != nil {
+		return err
+	}
+	return workflowLease.GetMutableState().ValidateCallbackAddition(inFlight, chasmworkflow.CallbackAddition{
+		RequestID: requestID,
+		Callbacks: completionCallbacks,
+	})
 }

@@ -3540,10 +3540,7 @@ func (ms *MutableStateImpl) addUpdateCallbacksChasm(
 		return err
 	}
 
-	nsName := ms.GetNamespaceEntry().Name().String()
-	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(nsName)
-	maxCallbacksPerUpdateID := ms.config.MaxCallbacksPerUpdateID(nsName)
-	return wf.AddUpdateCompletionCallbacks(ctx, event.EventTime, updateID, requestID, updateCallbacks, maxCallbacksPerWorkflow, maxCallbacksPerUpdateID)
+	return wf.AddUpdateCompletionCallbacks(ctx, event.EventTime, updateID, requestID, updateCallbacks)
 }
 
 func (ms *MutableStateImpl) addCompletionCallbacks(
@@ -3581,8 +3578,10 @@ func (ms *MutableStateImpl) addCompletionCallbacksHsm(
 	// drives during NDC replication, history import, and reset. If the check fails there (say
 	// MaxCallbacksPerWorkflow was lowered after the callbacks were attached) it rejects an
 	// event another cluster already committed, stalling the replication task or failing the
-	// reapply rather than protecting anything. The CHASM path validates in request handlers
-	// instead; see ValidateCallbackAddition.
+	// reapply rather than protecting anything.
+	//
+	// The newer CHASM path only validates in request handlers instead; see [ValidateCallbackAddition].
+	// This HSM path is kept as-is to avoid churn as we work on removing it.
 	if len(completionCallbacks)+coll.Size() > maxCallbacksPerWorkflow {
 		return serviceerror.NewFailedPreconditionf(
 			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
@@ -3641,14 +3640,28 @@ func (ms *MutableStateImpl) addCompletionCallbacksChasm(
 // breaching its aggregate callback limits; see chasmworkflow.Workflow.ValidateCallbackAddition
 // for why this is left to request handlers rather than done where callbacks are attached.
 //
+// inFlight holds the callbacks of Updates admitted but not yet accepted, which are reserved
+// against the limits. (So a Workflow cannot exceed callback limits if multiple updates are
+// accepted at the same time.)
+//
 // It is a no-op unless the callbacks would be attached to the CHASM tree (see
 // attachesCallbacksToChasm): the HSM path enforces its own limit while attaching. It only reads
 // the CHASM tree, so it is safe to call before deciding whether to write anything at all.
-func (ms *MutableStateImpl) ValidateCallbackAddition(addition chasmworkflow.CallbackAddition) error {
+func (ms *MutableStateImpl) ValidateCallbackAddition(
+	inFlight []chasmworkflow.CallbackAddition,
+	addition chasmworkflow.CallbackAddition,
+) error {
 	if !ms.attachesCallbacksToChasm(addition.UpdateID) {
 		return nil
 	}
 	nsName := ms.GetNamespaceEntry().Name().String()
+	// In-flight callbacks that will be dropped rather than attached take up none of the limits.
+	attachedInFlight := make([]chasmworkflow.CallbackAddition, 0, len(inFlight))
+	for _, held := range inFlight {
+		if ms.attachesCallbacksToChasm(held.UpdateID) {
+			attachedInFlight = append(attachedInFlight, held)
+		}
+	}
 
 	wf, ctx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
 	if err != nil {
@@ -3659,6 +3672,7 @@ func (ms *MutableStateImpl) ValidateCallbackAddition(addition chasmworkflow.Call
 	// (Since we are intentionally trying to not churn any HSM-code for now.)
 	return wf.ValidateCallbackAddition(
 		ctx,
+		attachedInFlight,
 		addition,
 		nsName,
 		ms.shard.CallbackValidator(),

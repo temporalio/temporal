@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	"go.opentelemetry.io/otel/trace"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
@@ -70,6 +71,27 @@ type (
 
 		// Len observes the number of incomplete (not completed or rejected) Updates in this Registry.
 		Len() int
+
+		// VisitInFlightCallbacks calls visit for every set of completion callbacks held by an
+		// Update that is admitted but not yet accepted: its original request's callbacks, and any
+		// buffered by AttachCallbacks while it was with the worker.
+		//
+		// These callbacks are not yet persisted, so they are missing from the execution's
+		// persisted callback totals, yet they will be persisted if the Update is accepted. By
+		// then the worker has already accepted the Update and run its handler, so they are
+		// attached without further checks. Admission therefore reserves them against the limits,
+		// so that concurrent Updates cannot each pass admission and then jointly exceed them.
+		//
+		// Holding this in memory is sound for the same reason the Registry itself is. An execution
+		// is owned by a single history host at a time, and every Update to it is admitted under
+		// the workflow lock, so no other host or request can admit a competing Update concurrently.
+		// Whenever the Registry is lost (shard movement, cache eviction, failover) its in-flight
+		// Updates are aborted along with it and are re-admitted on retry, against persisted state.
+		//
+		// Accepted Updates are excluded, including those provisionally accepted in the current
+		// transaction: applying the accepted event already added their callbacks to the persisted
+		// totals, and counting them here as well would double count them.
+		VisitInFlightCallbacks(visit func(updateID string, requestID string, callbacks []*commonpb.Callback)) error
 
 		// GetSize returns approximate size of the Registry in bytes.
 		GetSize() int
@@ -367,6 +389,15 @@ func (r *registry) Clear() {
 
 func (r *registry) Len() int {
 	return len(r.updates)
+}
+
+func (r *registry) VisitInFlightCallbacks(visit func(updateID string, requestID string, callbacks []*commonpb.Callback)) error {
+	for _, upd := range r.updates {
+		if err := upd.visitInFlightCallbacks(visit); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // remover is called when an Update gets into a terminal state (completed or rejected).
