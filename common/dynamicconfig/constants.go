@@ -687,8 +687,10 @@ is currently processing a task.
 		"worker.scheduleInvariantsScannerOptions",
 		DefaultScheduleInvariantsScannerParams,
 		`ScheduleInvariantsScannerOptions configures the schedule-invariants scanners.
-Fields: OverdueNextActionTimeEnabled, StuckOpenEnabled, UnknownStateEnabled (per-invariant
-toggles, all default false), OverdueNextActionTimeTolerance, OverdueNextActionTimeMaxChecksPerNamespace,
+Fields: OverdueNextActionTimeEnabled, StuckOpenEnabled, UnknownStateEnabled,
+StaleRunningWorkflowsEnabled (per-invariant toggles, all default false),
+OverdueNextActionTimeTolerance, OverdueNextActionTimeMaxChecksPerNamespace,
+StaleRunningWorkflowsCloseTimeTolerance, StaleRunningWorkflowsMaxChecksPerNamespace,
 VisibilityRPS, ScanInterval, and StuckOpenIdleTimeBufferMultiplier. See
 ScheduleInvariantsScannerParams comments for details.`,
 	)
