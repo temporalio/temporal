@@ -57,7 +57,6 @@ func persistWorkflowWithCallback(
 		timestamppb.Now(),
 		"req-1",
 		[]*commonpb.Callback{nexusCallback("http://cb-1")},
-		testMaxCallbacksPerExecution,
 	))
 
 	mutation, err := root.CloseTransaction(context.Background(), true)
