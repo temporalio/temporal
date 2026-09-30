@@ -12,17 +12,21 @@ import (
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/finalizer"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resourcetest"
+	"go.temporal.io/server/common/softassert"
+	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
@@ -138,10 +142,19 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 	taskCategoryRegistry := tasks.NewDefaultTaskCategoryRegistry()
 	taskCategoryRegistry.AddCategory(tasks.CategoryArchival)
 
+<<<<<<< HEAD
 	// A real shard context always has an owner unique to that instance.
 	owner := fmt.Sprintf("test-shard-owner-%v-%v", config.ShardInfo.GetShardId(), uuid.NewString())
 	if configured := config.ShardInfo.GetOwner(); configured != "" {
 		owner = configured
+=======
+	// Tests that attach completion callbacks need the shard to hand out a validator. The
+	// shared test limits apply; tests needing their own call SetCallbackValidator. Building
+	// only fails when a limit getter is unset, which the shared config never leaves nil.
+	callbackValidator, err := callbacks.NewValidator(test.NewCallbacksValidatorConfig(), nil)
+	if err != nil {
+		softassert.Fail(t.GetLogger(), "failed to build a callbacks validator for the test shard context", tag.Error(err))
+>>>>>>> 2ccceea5b (Validate aggregate callback limits for workflow starts and attach-on-conflict)
 	}
 
 	ctx := &ContextImpl{
@@ -169,6 +182,7 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 		namespaceRegistry:    registry,
 		stateMachineRegistry: hsm.NewRegistry(),
 		chasmRegistry:        chasm.NewRegistry(t.GetLogger()),
+		callbackValidator:    callbackValidator,
 		businessIDRateLimiters: cache.New(
 			config.Config.BusinessIDReuseLimiterCacheSize(),
 			&cache.Options{TTL: config.Config.BusinessIDReuseLimiterCacheTTL()},
@@ -243,6 +257,11 @@ func (s *ContextTest) SetChasmRegistry(reg *chasm.Registry) {
 
 func (s *ContextTest) SetChasmWorkflowRegistry(reg *chasmworkflow.Registry) {
 	s.chasmWorkflowRegistry = reg
+}
+
+// SetCallbackValidator sets s.callbackValidator. Only used by tests.
+func (s *ContextTest) SetCallbackValidator(v callbacks.Validator) {
+	s.callbackValidator = v
 }
 
 func (s *ContextTest) SetClusterMetadata(metadata cluster.Metadata) {

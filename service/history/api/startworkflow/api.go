@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log/tag"
@@ -851,11 +852,21 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 				if !mutableState.IsWorkflowExecutionRunning() {
 					return nil, consts.ErrWorkflowCompleted
 				}
+
 				if onConflictOptions.AttachCompletionCallbacks && len(completionCallbacks) > 0 {
 					existing := mutableState.GetExecutionInfo().GetPropagatedNexusSerializationContext()
 					incoming := s.request.StartRequest.GetPropagatedNexusSerializationContext()
 					nexusContextMatch = commonnexus.SerializationContextMatch(existing, incoming)
+
+					err := mutableState.ValidateCallbackAddition(chasmworkflow.CallbackAddition{
+						RequestID: requestID,
+						Callbacks: completionCallbacks,
+					})
+					if err != nil {
+						return nil, err
+					}
 				}
+
 				_, err := mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
 					nil,
 					false,
