@@ -166,7 +166,7 @@ func (h *NexusOperationHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w h
 	rWithAuthCtx, err := h.parseTLSAndAuthInfo(r, nc)
 	if err != nil {
 		logger.Error("failed to get claims", tag.Error(err))
-		h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthenticated, "unauthorized"))
+		h.writeFailure(w, r, convertNexusClaimMapperError(err))
 		return
 	}
 	r = rWithAuthCtx
@@ -229,7 +229,7 @@ func (h *NexusOperationHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseW
 	rWithAuthCtx, err := h.parseTLSAndAuthInfo(r, nc)
 	if err != nil {
 		logger.Error("failed to get claims", tag.Error(err))
-		h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthenticated, "unauthorized"))
+		h.writeFailure(w, r, convertNexusClaimMapperError(err))
 		return
 	}
 	r = rWithAuthCtx
@@ -319,12 +319,8 @@ func (h *NexusOperationHTTPHandler) parseTLSAndAuthInfo(r *http.Request, nc *nex
 		}
 	}
 
-	authInfo := h.auth.GetAuthInfo(tlsInfo, r.Header, func() string {
-		return "" // TODO: support audience getter
-	})
-
 	var err error
-	if authInfo != nil {
+	if authInfo := h.auth.ExtractAuthInfoForRequest(r.Context(), tlsInfo, r.Header); authInfo != nil {
 		nc.claims, err = h.auth.GetClaims(authInfo)
 		if err != nil {
 			return nil, err

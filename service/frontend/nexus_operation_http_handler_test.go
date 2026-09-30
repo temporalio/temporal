@@ -3,6 +3,7 @@ package frontend
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -71,6 +72,128 @@ func doNexusHTTPRequest(t *testing.T, router *mux.Router, endpointID string) *ht
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	return rec
+}
+
+func TestNexusOperationHTTPHandler_JWTAudience(t *testing.T) {
+	testCases := []struct {
+		name               string
+		token              string
+		tokenAudience      string
+		configuredAudience string
+		wantDenied         bool
+	}{
+		{
+			name:               "matching audience",
+			token:              "Bearer token",
+			tokenAudience:      "nexus-api",
+			configuredAudience: "nexus-api",
+		},
+		{
+			name:               "mismatching audience",
+			token:              "Bearer token",
+			tokenAudience:      "other-api",
+			configuredAudience: "nexus-api",
+			wantDenied:         true,
+		},
+		{
+			name:          "no configured audience",
+			token:         "Bearer token",
+			tokenAudience: "other-api",
+		},
+		{
+			name:               "no token",
+			configuredAudience: "nexus-api",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			h := &NexusOperationHTTPHandler{
+				auth: newAudienceTestInterceptor(tc.tokenAudience, tc.configuredAudience, mockAuthorizer{}),
+			}
+			r := httptest.NewRequest(http.MethodPost, "/", nil)
+			if tc.token != "" {
+				r.Header.Set("Authorization", tc.token)
+			}
+
+			_, err := h.parseTLSAndAuthInfo(r, &nexusContext{})
+			if tc.wantDenied {
+				var permissionDenied *serviceerror.PermissionDenied
+				require.ErrorAs(t, err, &permissionDenied)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestNexusOperationHTTPHandler_ClaimMapperErrors(t *testing.T) {
+	endpointEntry := &persistencespb.NexusEndpointEntry{
+		Id: "test-endpoint-id",
+		Endpoint: &persistencespb.NexusEndpoint{
+			Spec: &persistencespb.NexusEndpointSpec{
+				Name: "test-endpoint",
+				Target: &persistencespb.NexusEndpointTarget{
+					Variant: &persistencespb.NexusEndpointTarget_Worker_{
+						Worker: &persistencespb.NexusEndpointTarget_Worker{
+							NamespaceId: "test-ns-id",
+							TaskQueue:   "test-task-queue",
+						},
+					},
+				},
+			},
+		},
+	}
+	reg := nexustest.FakeEndpointRegistry{
+		OnGetByID: func(_ context.Context, _ string) (*persistencespb.NexusEndpointEntry, error) {
+			return endpointEntry, nil
+		},
+	}
+	nsReg := &fakeNamespaceRegistry{
+		getNamespaceName: func(namespace.ID) (namespace.Name, error) {
+			return "test-namespace", nil
+		},
+	}
+	testCases := []struct {
+		name       string
+		err        error
+		wantStatus int
+	}{
+		{
+			name:       "permission denied",
+			err:        serviceerror.NewPermissionDenied("audience mismatch", ""),
+			wantStatus: http.StatusUnauthorized,
+		},
+		{
+			name:       "internal error",
+			err:        serviceerror.NewInternal("claim mapper unavailable"),
+			wantStatus: http.StatusInternalServerError,
+		},
+		{
+			name:       "plain internal error",
+			err:        errors.New("claim mapper unavailable"),
+			wantStatus: http.StatusInternalServerError,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			h, router := newTestNexusOperationHTTPHandler(reg, nsReg)
+			h.auth = newTestAuthInterceptor(
+				errorClaimMapper{err: tc.err},
+				"nexus-api",
+				mockAuthorizer{},
+			)
+			path := "/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Path("test-endpoint-id") + "/test-service/test-operation"
+			req := httptest.NewRequest(http.MethodPost, path, nil)
+			req.Header.Set("Authorization", "Bearer token")
+			rec := httptest.NewRecorder()
+
+			router.ServeHTTP(rec, req)
+
+			require.Equal(t, tc.wantStatus, rec.Code)
+		})
+	}
 }
 
 func TestDispatchNexusTaskByEndpoint_NotFound_NonRetryable(t *testing.T) {
