@@ -46,8 +46,7 @@ type (
 	}
 )
 
-// NewClientCache creates a client cache that replaces clients whose gRPC
-// connections have shut down.
+// NewClientCache creates a new client cache based on membership
 func NewClientCache(
 	keyResolver keyResolver,
 	clientProvider clientProvider,
