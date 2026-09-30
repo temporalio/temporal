@@ -3491,10 +3491,7 @@ func (ms *MutableStateImpl) addUpdateCallbacksChasm(
 		return err
 	}
 
-	nsName := ms.GetNamespaceEntry().Name().String()
-	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(nsName)
-	maxCallbacksPerUpdateID := ms.config.MaxCallbacksPerUpdateID(nsName)
-	return wf.AddUpdateCompletionCallbacks(ctx, event.EventTime, updateID, requestID, updateCallbacks, maxCallbacksPerWorkflow, maxCallbacksPerUpdateID)
+	return wf.AddUpdateCompletionCallbacks(ctx, event.EventTime, updateID, requestID, updateCallbacks)
 }
 
 func (ms *MutableStateImpl) addCompletionCallbacks(
@@ -3588,17 +3585,26 @@ func (ms *MutableStateImpl) addCompletionCallbacksChasm(
 // breaching its aggregate callback limits; see chasmworkflow.Workflow.ValidateCallbackAddition
 // for why this is left to request handlers rather than done where callbacks are attached.
 //
+// inFlight holds the callbacks of Updates admitted but not yet accepted, which are reserved
+// against the limits; see api.InFlightUpdateCallbacks.
+//
 // It is a no-op unless the callbacks would be attached to the CHASM tree: the HSM path enforces
 // its own limit while attaching. It only reads the CHASM tree, so it is safe to call before
 // deciding whether to write anything at all.
-func (ms *MutableStateImpl) ValidateCallbackAddition(addition chasmworkflow.CallbackAddition) error {
+func (ms *MutableStateImpl) ValidateCallbackAddition(
+	inFlight []chasmworkflow.CallbackAddition,
+	addition chasmworkflow.CallbackAddition,
+) error {
 	if !ms.chasmCallbacksEnabled() {
 		return nil
 	}
 	nsName := ms.GetNamespaceEntry().Name().String()
-	// Skip what addUpdateCallbacks would drop anyway.
-	if addition.UpdateID != "" && !ms.config.EnableWorkflowUpdateCallbacks(nsName) {
-		return nil
+	// Skip what addUpdateCallbacks would drop anyway. Every in-flight callback is an update's.
+	if !ms.config.EnableWorkflowUpdateCallbacks(nsName) {
+		if addition.UpdateID != "" {
+			return nil
+		}
+		inFlight = nil
 	}
 
 	wf, ctx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
@@ -3607,6 +3613,7 @@ func (ms *MutableStateImpl) ValidateCallbackAddition(addition chasmworkflow.Call
 	}
 	return wf.ValidateCallbackAddition(
 		ctx,
+		inFlight,
 		addition,
 		nsName,
 		ms.shard.CallbackValidator(),

@@ -68,7 +68,7 @@ func NewWorkflowWithSignal(
 		return nil, err
 	}
 
-	if err := newMutableState.ValidateCallbackAddition(chasmworkflow.CallbackAddition{
+	if err := newMutableState.ValidateCallbackAddition(nil, chasmworkflow.CallbackAddition{
 		RequestID: startRequest.StartRequest.GetRequestId(),
 		Callbacks: startRequest.StartRequest.GetCompletionCallbacks(),
 	}); err != nil {
