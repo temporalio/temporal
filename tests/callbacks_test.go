@@ -320,6 +320,35 @@ func (s *CallbacksSuite) TestWorkflowCallbacks_InvalidArgument(opts []testcore.T
 	}
 }
 
+// The aggregate size of a start request's callbacks is only known to the history service, which
+// enforces it for callbacks attached to the CHASM tree.
+func (s *CallbacksSuite) TestWorkflowCallbacks_TotalSizeExceeded(opts []testcore.TestOption) {
+	env := s.newTestEnv(opts...)
+	env.OverrideDynamicConfig(dynamicconfig.EnableChasm, true)
+	env.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
+	env.OverrideDynamicConfig(callback.TotalMaxSizePerExecution, 50)
+
+	cbs := make([]*commonpb.Callback, 0, 3)
+	for _, url := range []string{"http://url-1/callback", "http://url-2/callback", "http://url-3/callback"} {
+		cbs = append(cbs, &commonpb.Callback{
+			Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: url}},
+		})
+	}
+	_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.NewString(),
+		Namespace:           env.Namespace().String(),
+		WorkflowId:          testcore.RandomizeStr(s.T().Name()),
+		WorkflowType:        &commonpb.WorkflowType{Name: "test"},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: testcore.RandomizeStr(s.T().Name()), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		WorkflowRunTimeout:  durationpb.New(100 * time.Second),
+		Identity:            s.T().Name(),
+		CompletionCallbacks: cbs,
+	})
+	var failedPrecondition *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPrecondition)
+	s.ErrorContains(err, "cannot attach more than 50 bytes of callbacks to an execution")
+}
+
 func (s *CallbacksSuite) TestWorkflowNexusCallbacks_CarriedOver(opts []testcore.TestOption) {
 	cases := []struct {
 		name       string

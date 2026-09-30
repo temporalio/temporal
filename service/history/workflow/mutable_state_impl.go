@@ -3524,6 +3524,12 @@ func (ms *MutableStateImpl) addCompletionCallbacksHsm(
 ) error {
 	coll := callbacks.MachineCollection(ms.HSM())
 	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerWorkflow(ms.GetNamespaceEntry().Name().String())
+	// BUG: This limit is checked from an Apply* function, which MutableStateRebuilder also
+	// drives during NDC replication, history import, and reset. If the check fails there (say
+	// MaxCallbacksPerWorkflow was lowered after the callbacks were attached) it rejects an
+	// event another cluster already committed, stalling the replication task or failing the
+	// reapply rather than protecting anything. The CHASM path validates in request handlers
+	// instead; see ValidateCallbackAddition.
 	if len(completionCallbacks)+coll.Size() > maxCallbacksPerWorkflow {
 		return serviceerror.NewFailedPreconditionf(
 			"cannot attach more than %d callbacks to a workflow (%d callbacks already attached)",
@@ -3575,8 +3581,37 @@ func (ms *MutableStateImpl) addCompletionCallbacksChasm(
 		return err
 	}
 
-	maxCallbacksPerWorkflow := ms.config.MaxCallbacksPerExecution(ms.GetNamespaceEntry().Name().String())
-	return wf.AddCompletionCallbacks(ctx, event.EventTime, requestID, completionCallbacks, maxCallbacksPerWorkflow)
+	return wf.AddCompletionCallbacks(ctx, event.EventTime, requestID, completionCallbacks)
+}
+
+// ValidateCallbackAddition checks that addition can be attached to this execution without
+// breaching its aggregate callback limits; see chasmworkflow.Workflow.ValidateCallbackAddition
+// for why this is left to request handlers rather than done where callbacks are attached.
+//
+// It is a no-op unless the callbacks would be attached to the CHASM tree: the HSM path enforces
+// its own limit while attaching. It only reads the CHASM tree, so it is safe to call before
+// deciding whether to write anything at all.
+func (ms *MutableStateImpl) ValidateCallbackAddition(addition chasmworkflow.CallbackAddition) error {
+	if !ms.chasmCallbacksEnabled() {
+		return nil
+	}
+	nsName := ms.GetNamespaceEntry().Name().String()
+	// Skip what addUpdateCallbacks would drop anyway.
+	if addition.UpdateID != "" && !ms.config.EnableWorkflowUpdateCallbacks(nsName) {
+		return nil
+	}
+
+	wf, ctx, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
+	if err != nil {
+		return err
+	}
+	return wf.ValidateCallbackAddition(
+		ctx,
+		addition,
+		nsName,
+		ms.shard.CallbackValidator(),
+		ms.config.MaxCallbacksPerUpdateID(nsName),
+	)
 }
 
 // AddFirstWorkflowTaskScheduled adds the first workflow task scheduled event unless it should be delayed as indicated
