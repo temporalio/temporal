@@ -344,7 +344,7 @@ func (s *PriMatcherSuite) TestValidatorBatch_AllInvalidDropsAll() {
 	}
 	tm.Start()
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		select {
 		case res := <-done:
 			s.Require().NoError(res.err())
@@ -371,7 +371,7 @@ func (s *PriMatcherSuite) TestValidatorBatch_AllValidReprocessesAll() {
 	}
 	tm.Start()
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		select {
 		case res := <-done:
 			s.Require().ErrorIs(res.err(), errReprocessTask)
@@ -403,7 +403,7 @@ func (s *PriMatcherSuite) TestValidatorBatch_MixedInvalidContinuesImmediately() 
 		}
 		tm.Start()
 		// Drain first batch.
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			select {
 			case <-done:
 			case <-time.After(time.Second):
