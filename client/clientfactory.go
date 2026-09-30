@@ -24,7 +24,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/testhooks"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/connectivity"
 )
 
 type (
@@ -134,11 +133,14 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 	}
 
 	keyResolver := newServiceKeyResolver(resolver)
-	clientProvider := newMatchingClientCacheProvider(cf.rpcFactory.CreateMatchingGRPCConnection)
+	clientProvider := func(clientKey string) (any, *grpc.ClientConn, error) {
+		connection := cf.rpcFactory.CreateMatchingGRPCConnection(clientKey)
+		return matchingservice.NewMatchingServiceClient(connection), connection, nil
+	}
 	client := matching.NewClient(
 		timeout,
 		longPollTimeout,
-		common.NewClientCacheWithEntryProvider(keyResolver, clientProvider, cf.logger),
+		common.NewClientCache(keyResolver, clientProvider, cf.logger),
 		cf.metricsHandler,
 		cf.logger,
 		matching.NewLoadBalancer(namespaceIDToName, cf.dynConfig, cf.testHooks),
@@ -152,24 +154,6 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 	}
 	return client, nil
 
-}
-
-func newMatchingClientCacheProvider(
-	createConnection func(string) *grpc.ClientConn,
-) common.ClientCacheEntryProvider {
-	return func(clientKey string) (common.ClientCacheEntry, error) {
-		connection := createConnection(clientKey)
-		return common.ClientCacheEntry{
-			Client:  matchingservice.NewMatchingServiceClient(connection),
-			IsValid: func() bool { return connection.GetState() != connectivity.Shutdown },
-			Release: func() error {
-				if connection.GetState() == connectivity.Shutdown {
-					return nil
-				}
-				return connection.Close()
-			},
-		}, nil
-	}
 }
 
 func (cf *rpcClientFactory) NewRemoteFrontendClientWithTimeout(
