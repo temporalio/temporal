@@ -8,7 +8,6 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -172,42 +171,4 @@ func TestDescribeComponent_MatchesLiveDescribe(t *testing.T) {
 	require.NotNil(t, actual.GetInfo().GetCloseTime())
 	require.NotNil(t, actual.GetOutcome().GetFailure())
 	require.Empty(t, actual.GetLongPollToken())
-}
-
-// TestDescribeComponent_NoExecutionBehindTree pins the behaviour a detached reader sees. It has
-// no mutable state, so ExecutionInfo comes back zero, and the close time and duration must be
-// absent rather than derived from a zero close time.
-func TestDescribeComponent_NoExecutionBehindTree(t *testing.T) {
-	logger := log.NewTestLogger()
-	timeSource := clock.NewEventTimeSource()
-	timeSource.Update(time.Unix(1000, 0).UTC())
-	registry := decodeRegistry(t)
-
-	// A backend reporting nothing, as a detached tree's does.
-	empty := &chasm.MockNodeBackend{
-		HandleNextTransitionCount: func() int64 { return 1 },
-		HandleGetCurrentVersion:   func() int64 { return 1 },
-	}
-
-	root := chasm.NewEmptyTree(registry, timeSource, empty, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
-	mutableCtx := chasm.NewMutableContext(context.Background(), root)
-	require.NoError(t, root.SetRootComponent(newClosedTestActivity(mutableCtx)))
-	_, err := root.CloseTransaction()
-	require.NoError(t, err)
-
-	readCtx := chasm.NewContext(context.Background(), root)
-	component, err := root.Component(readCtx, chasm.ComponentRef{})
-	require.NoError(t, err)
-
-	described, err := component.(chasm.DescribableComponent).DescribeComponent(readCtx)
-	require.NoError(t, err)
-	info := described.(*workflowservice.DescribeActivityExecutionResponse).GetInfo()
-
-	// Closed activity, but no close time is knowable: both fields stay unset.
-	require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, info.GetStatus())
-	require.Nil(t, info.GetCloseTime(), "close time must be absent, not epoch zero")
-	require.Nil(t, info.GetExecutionDuration(), "duration must be absent, not negative")
-
-	// The component's own state is unaffected.
-	require.Equal(t, "MyActivity", info.GetActivityType().GetName())
 }

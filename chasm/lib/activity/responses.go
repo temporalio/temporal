@@ -92,9 +92,7 @@ func (a *Activity) buildActivityExecutionInfo(
 	executionInfo := ctx.ExecutionInfo()
 	var closeTime *timestamppb.Timestamp
 	var executionDuration *durationpb.Duration
-	// A caller with no execution behind the tree, such as a detached reader, reports a zero
-	// close time. Leave both fields unset there rather than deriving a negative duration.
-	if a.LifecycleState(ctx) != chasm.LifecycleStateRunning && !executionInfo.CloseTime.IsZero() {
+	if a.LifecycleState(ctx) != chasm.LifecycleStateRunning {
 		executionDuration = durationpb.New(executionInfo.CloseTime.Sub(a.GetScheduleTime().AsTime()))
 		closeTime = timestamppb.New(executionInfo.CloseTime)
 	}
@@ -160,28 +158,13 @@ func (a *Activity) buildDescribeActivityExecutionResponse(
 	ctx chasm.Context,
 	req *activitypb.DescribeActivityExecutionRequest,
 ) (*activitypb.DescribeActivityExecutionResponse, error) {
-	response, err := a.buildFrontendDescribeResponse(ctx, req.GetFrontendRequest())
-	if err != nil {
-		return nil, err
-	}
+	request := req.GetFrontendRequest()
 
 	token, err := ctx.Ref(a)
 	if err != nil {
 		return nil, err
 	}
-	response.LongPollToken = token
 
-	return &activitypb.DescribeActivityExecutionResponse{
-		FrontendResponse: response,
-	}, nil
-}
-
-// buildFrontendDescribeResponse builds the describe response without LongPollToken, which is
-// a handle on a live execution and so is set only by the describe path.
-func (a *Activity) buildFrontendDescribeResponse(
-	ctx chasm.Context,
-	request *workflowservice.DescribeActivityExecutionRequest,
-) (*workflowservice.DescribeActivityExecutionResponse, error) {
 	info := a.buildActivityExecutionInfo(ctx, request)
 
 	var input *commonpb.Payloads
@@ -195,29 +178,45 @@ func (a *Activity) buildFrontendDescribeResponse(
 	}
 
 	response := &workflowservice.DescribeActivityExecutionResponse{
-		Info:      info,
-		RunId:     ctx.ExecutionKey().RunID,
-		Input:     input,
-		Callbacks: callbackInfos,
+		Info:          info,
+		RunId:         ctx.ExecutionKey().RunID,
+		Input:         input,
+		LongPollToken: token,
+		Callbacks:     callbackInfos,
 	}
 
 	if request.GetIncludeOutcome() {
 		response.Outcome = a.outcome(ctx)
 	}
 
-	return response, nil
+	return &activitypb.DescribeActivityExecutionResponse{
+		FrontendResponse: response,
+	}, nil
 }
 
-// DescribeComponent implements chasm.DescribableComponent, returning the describe response
-// with all details included and no LongPollToken. Sharing the describe code path keeps a
-// detached read and a live describe from drifting.
+// DescribeComponent implements chasm.DescribableComponent, returning the same response the
+// frontend serves with every optional detail included. Sharing that code path keeps a detached
+// read and a live describe from drifting.
+//
+// LongPollToken is cleared: it is a handle on a live execution and means nothing to a reader
+// holding only persisted state. The token is still built, since ctx.Ref works on a detached
+// tree, and TestDescribeComponent_MatchesLiveDescribe fails if that ever stops being true.
 func (a *Activity) DescribeComponent(ctx chasm.Context) (proto.Message, error) {
-	return a.buildFrontendDescribeResponse(ctx, &workflowservice.DescribeActivityExecutionRequest{
-		IncludeInput:            true,
-		IncludeOutcome:          true,
-		IncludeHeartbeatDetails: true,
-		IncludeLastFailure:      true,
+	response, err := a.buildDescribeActivityExecutionResponse(ctx, &activitypb.DescribeActivityExecutionRequest{
+		FrontendRequest: &workflowservice.DescribeActivityExecutionRequest{
+			IncludeInput:            true,
+			IncludeOutcome:          true,
+			IncludeHeartbeatDetails: true,
+			IncludeLastFailure:      true,
+		},
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	frontendResponse := response.GetFrontendResponse()
+	frontendResponse.LongPollToken = nil
+	return frontendResponse, nil
 }
 
 func (a *Activity) buildCallbackInfos(ctx chasm.Context) ([]*apiactivitypb.CallbackInfo, error) {

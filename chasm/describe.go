@@ -6,7 +6,7 @@ import (
 
 // DescribableComponent is implemented by components that can render their own state as a proto
 // message, for a reader holding persisted CHASM nodes but not the execution they came from.
-// Such a reader rehydrates the tree (see NewDetachedTree) and calls DescribeComponent on the
+// Such a reader rehydrates the tree (see NewDetachedExecution) and calls DescribeComponent on the
 // root component, rather than reconstructing the projection itself.
 //
 // Implementations must be read only, and must not consult library config or task handlers:
