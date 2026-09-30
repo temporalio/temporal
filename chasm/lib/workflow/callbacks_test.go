@@ -5,13 +5,17 @@ import (
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
+	"go.temporal.io/server/common/callbacks"
+	test "go.temporal.io/server/common/testing"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // testMaxCallbacksPerExecution and testMaxCallbacksPerUpdateID disable the per-workflow and
-// per-update limits that are still checked while attaching.
+// per-update limits that are still checked while attaching update callbacks, and the per-update
+// limit when validating.
 const (
 	testMaxCallbacksPerExecution = 1000
 	testMaxCallbacksPerUpdateID  = 1000
@@ -48,7 +52,7 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		wf := newTestWorkflow()
 		cbs := nexusCallbacks("http://cb-1", "http://cb-2")
 
-		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", cbs, testMaxCallbacksPerExecution))
+		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", cbs))
 		require.Len(t, wf.Callbacks, 2)
 		require.Equal(t, "http://cb-1", wf.Callbacks["req-1-0"].Get(ctx).GetCallback().GetNexus().GetUrl())
 		require.Equal(t, "http://cb-2", wf.Callbacks["req-1-1"].Get(ctx).GetCallback().GetNexus().GetUrl())
@@ -61,8 +65,8 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		ctx := &chasm.MockMutableContext{}
 		wf := newTestWorkflow()
 
-		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", nil, testMaxCallbacksPerExecution))
-		require.Empty(t, wf.Callbacks)
+		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", nil))
+		require.Nil(t, wf.Callbacks)
 		require.Zero(t, wf.GetTotalCallbacksCount())
 		require.Zero(t, wf.GetTotalCallbacksSize())
 	})
@@ -72,12 +76,12 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		wf := newTestWorkflow()
 		cbs := nexusCallbacks("http://cb-1", "http://cb-2")
 
-		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", cbs, testMaxCallbacksPerExecution))
+		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", cbs))
 		sizeAfterFirstAttach := wf.GetTotalCallbacksSize()
 
 		// The admitted and accepted events of an update both carry the same callbacks; the
 		// second attach must not be counted twice.
-		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", cbs, testMaxCallbacksPerExecution))
+		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", cbs))
 		require.Len(t, wf.Callbacks, 2)
 		require.Equal(t, int64(2), wf.GetTotalCallbacksCount())
 		require.Equal(t, sizeAfterFirstAttach, wf.GetTotalCallbacksSize())
@@ -87,8 +91,8 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		ctx := &chasm.MockMutableContext{}
 		wf := newTestWorkflow()
 
-		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", nexusCallbacks("http://cb-1"), testMaxCallbacksPerExecution))
-		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-2", nexusCallbacks("http://cb-2"), testMaxCallbacksPerExecution))
+		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", nexusCallbacks("http://cb-1")))
+		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-2", nexusCallbacks("http://cb-2")))
 		require.Len(t, wf.Callbacks, 2)
 		require.Equal(t, int64(2), wf.GetTotalCallbacksCount())
 	})
@@ -97,7 +101,7 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		ctx := &chasm.MockMutableContext{}
 		wf := newTestWorkflow()
 
-		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", nexusCallbacks("http://cb-1"), testMaxCallbacksPerExecution))
+		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", nexusCallbacks("http://cb-1")))
 		require.NoError(t, wf.AddUpdateCompletionCallbacks(ctx, timestamppb.Now(), "u1", "req-2", nexusCallbacks("http://cb-2"), testMaxCallbacksPerExecution, testMaxCallbacksPerUpdateID))
 		require.NoError(t, wf.AddUpdateCompletionCallbacks(ctx, timestamppb.Now(), "u2", "req-3", nexusCallbacks("http://cb-3", "http://cb-4"), testMaxCallbacksPerExecution, testMaxCallbacksPerUpdateID))
 
@@ -105,5 +109,158 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		require.Len(t, wf.Updates["u1"].Get(ctx).Callbacks, 1)
 		require.Len(t, wf.Updates["u2"].Get(ctx).Callbacks, 2)
 		require.Equal(t, int64(4), wf.GetTotalCallbacksCount())
+	})
+}
+
+func TestValidateCallbackAddition(t *testing.T) {
+	t.Parallel()
+
+	validatorWithMaxCount := func(t *testing.T, maxCount int) callbacks.Validator {
+		t.Helper()
+		cfg := test.NewCallbacksValidatorConfig()
+		cfg.MaxCallbacksPerExecution = func(string) int { return maxCount }
+		return test.NewCallbacksValidator(t, cfg)
+	}
+	var failedPrecondition *serviceerror.FailedPrecondition
+
+	t.Run("AllowsAdditionsWithinTheLimits", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		wf := newTestWorkflow()
+
+		require.NoError(t, wf.ValidateCallbackAddition(
+			ctx,
+			CallbackAddition{RequestID: "req-1", Callbacks: nexusCallbacks("http://cb-1", "http://cb-2")},
+			"ns-name",
+			validatorWithMaxCount(t, 3),
+			testMaxCallbacksPerUpdateID,
+		))
+	})
+
+	t.Run("RejectsExceedingTheExecutionCount", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		wf := newTestWorkflow()
+		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", nexusCallbacks("http://cb-1", "http://cb-2")))
+
+		err := wf.ValidateCallbackAddition(
+			ctx,
+			CallbackAddition{RequestID: "req-2", Callbacks: nexusCallbacks("http://cb-3", "http://cb-4")},
+			"ns-name",
+			validatorWithMaxCount(t, 3),
+			testMaxCallbacksPerUpdateID,
+		)
+		require.ErrorAs(t, err, &failedPrecondition)
+		require.ErrorContains(t, err, "cannot attach more than 3 callbacks to an execution (2 callbacks already attached)")
+	})
+
+	t.Run("CountsUpdateCallbacksAgainstTheExecutionLimit", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		wf := newTestWorkflow()
+		require.NoError(t, wf.AddUpdateCompletionCallbacks(
+			ctx, timestamppb.Now(), "u1", "req-1", nexusCallbacks("http://cb-1", "http://cb-2"), testMaxCallbacksPerExecution, testMaxCallbacksPerUpdateID,
+		))
+
+		err := wf.ValidateCallbackAddition(
+			ctx,
+			CallbackAddition{RequestID: "req-2", Callbacks: nexusCallbacks("http://cb-3", "http://cb-4")},
+			"ns-name",
+			validatorWithMaxCount(t, 3),
+			testMaxCallbacksPerUpdateID,
+		)
+		require.ErrorContains(t, err, "cannot attach more than 3 callbacks to an execution (2 callbacks already attached)")
+	})
+
+	t.Run("RejectsExceedingThePerUpdateLimit", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		wf := newTestWorkflow()
+		validator := validatorWithMaxCount(t, 100)
+		require.NoError(t, wf.AddUpdateCompletionCallbacks(
+			ctx, timestamppb.Now(), "u1", "req-1", nexusCallbacks("http://cb-1", "http://cb-2"), testMaxCallbacksPerExecution, testMaxCallbacksPerUpdateID,
+		))
+
+		err := wf.ValidateCallbackAddition(
+			ctx,
+			CallbackAddition{UpdateID: "u1", RequestID: "req-2", Callbacks: nexusCallbacks("http://cb-3")},
+			"ns-name",
+			validator,
+			2,
+		)
+		require.ErrorAs(t, err, &failedPrecondition)
+		require.ErrorContains(t, err, `cannot attach more than 2 callbacks to update "u1" (2 callbacks already attached)`)
+
+		// The workflow's own callbacks are not subject to the per-update limit.
+		require.NoError(t, wf.ValidateCallbackAddition(
+			ctx,
+			CallbackAddition{RequestID: "req-3", Callbacks: nexusCallbacks("http://cb-4", "http://cb-5", "http://cb-6")},
+			"ns-name",
+			validator,
+			2,
+		))
+	})
+
+	t.Run("RejectsExceedingTheAggregateSize", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		wf := newTestWorkflow()
+		cbs := nexusCallbacks("http://cb-1")
+
+		cfg := test.NewCallbacksValidatorConfig()
+		cfg.TotalCallbacksMaxSize = func(string) int { return cbs[0].Size() }
+		validator := test.NewCallbacksValidator(t, cfg)
+
+		require.NoError(t, wf.ValidateCallbackAddition(
+			ctx, CallbackAddition{RequestID: "req-1", Callbacks: cbs}, "ns-name", validator, testMaxCallbacksPerUpdateID,
+		))
+		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", cbs))
+
+		err := wf.ValidateCallbackAddition(
+			ctx,
+			CallbackAddition{RequestID: "req-2", Callbacks: nexusCallbacks("http://cb-2")},
+			"ns-name",
+			validator,
+			testMaxCallbacksPerUpdateID,
+		)
+		require.ErrorAs(t, err, &failedPrecondition)
+		require.ErrorContains(t, err, "bytes of callbacks to an execution")
+	})
+
+	t.Run("DoesNotRecountAnAlreadyAttachedRequest", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		wf := newTestWorkflow()
+		validator := validatorWithMaxCount(t, 3)
+		wfCBs := nexusCallbacks("http://cb-1", "http://cb-2")
+		updateCBs := nexusCallbacks("http://cb-3", "http://cb-4")
+		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", wfCBs))
+		require.NoError(t, wf.AddUpdateCompletionCallbacks(ctx, timestamppb.Now(), "u1", "req-2", updateCBs, testMaxCallbacksPerExecution, testMaxCallbacksPerUpdateID))
+
+		// A retried request whose callbacks are already attached is a no-op when attached, so it
+		// is not counted a second time, even though the execution and the update are at their limit.
+		require.NoError(t, wf.ValidateCallbackAddition(
+			ctx, CallbackAddition{RequestID: "req-1", Callbacks: wfCBs}, "ns-name", validator, 2,
+		))
+		require.NoError(t, wf.ValidateCallbackAddition(
+			ctx, CallbackAddition{UpdateID: "u1", RequestID: "req-2", Callbacks: updateCBs}, "ns-name", validator, 2,
+		))
+	})
+
+	t.Run("ToleratesAnUpdateWithoutAValue", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		wf := newTestWorkflow()
+		wf.Updates = chasm.Map[string, *WorkflowUpdate]{"u1": chasm.NewEmptyField[*WorkflowUpdate]()}
+
+		require.NoError(t, wf.ValidateCallbackAddition(
+			ctx,
+			CallbackAddition{UpdateID: "u1", RequestID: "req-1", Callbacks: nexusCallbacks("http://cb-1")},
+			"ns-name",
+			validatorWithMaxCount(t, 3),
+			testMaxCallbacksPerUpdateID,
+		))
+	})
+
+	t.Run("EmptyAdditionIsANoOp", func(t *testing.T) {
+		ctx := &chasm.MockMutableContext{}
+		wf := newTestWorkflow()
+
+		require.NoError(t, wf.ValidateCallbackAddition(
+			ctx, CallbackAddition{RequestID: "req-1"}, "ns-name", validatorWithMaxCount(t, 0), 0,
+		))
 	})
 }

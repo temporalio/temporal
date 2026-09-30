@@ -137,6 +137,15 @@ type (
 		AddWorkflowExecutionUpdateCompletedEvent(acceptedEventID int64, updResp *updatepb.Response) (*historypb.HistoryEvent, error)
 		RejectWorkflowExecutionUpdate(updateID string, failure *failurepb.Failure) error
 		AddWorkflowExecutionUpdateAdmittedEvent(request *updatepb.Request, origin enumspb.UpdateAdmittedEventOrigin) (*historypb.HistoryEvent, error)
+		// ValidateCallbackAddition checks that attaching the given completion callbacks would not
+		// breach the execution's aggregate callback limits. Callbacks are validated only by the
+		// request handlers that introduce them, never where they are attached:
+		//   - api.NewWorkflowWithSignal, for every workflow start
+		//   - startworkflow, for callbacks attached to an existing workflow on conflict
+		// Update callbacks do not go through here yet: they are still checked against
+		// MaxCallbacksPerWorkflow and MaxCallbacksPerUpdateID where they are attached, in
+		// chasmworkflow.Workflow.AddUpdateCompletionCallbacks.
+		ValidateCallbackAddition(addition chasmworkflow.CallbackAddition) error
 		ApplyWorkflowExecutionUpdateAdmittedEvent(event *historypb.HistoryEvent, batchId int64) error
 		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
