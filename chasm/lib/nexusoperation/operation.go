@@ -230,6 +230,16 @@ func (o *Operation) RequestCancel(
 	return nil
 }
 
+// rejectMismatchedRequestID reports whether an event belongs to a different operation than this one.
+// Reported as [chasm.ErrInvalidTransition] since it is a precondition of the transition.
+func (o *Operation) rejectMismatchedRequestID(requestID string) error {
+	if requestID != "" && o.GetRequestId() != requestID {
+		return fmt.Errorf("%w: event request ID %q does not match operation request ID %q",
+			chasm.ErrInvalidTransition, requestID, o.GetRequestId())
+	}
+	return nil
+}
+
 // onStarted applies the started transition or delegates to the store if one is present.
 func (o *Operation) onStarted(ctx chasm.MutableContext, operationToken string, startTime *time.Time, links []*commonpb.Link) error {
 	if store, ok := o.Store.TryGet(ctx); ok {

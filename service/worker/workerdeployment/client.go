@@ -1879,12 +1879,12 @@ func (d *ClientImpl) IsVersionMissingTaskQueues(ctx context.Context, namespaceEn
 	// Check if all the task-queues in the prevCurrentVersion are present in the newCurrentVersion (newVersion is either the new ramping version or the new current version)
 	prevCurrentVersionInfo, _, err := d.DescribeVersion(ctx, namespaceEntry, prevCurrentVersion, false)
 	if err != nil {
-		return false, serviceerror.NewFailedPreconditionf("Version %s not found in deployment with error: %v", prevCurrentVersion, err)
+		return false, describeVersionFailedPrecondition(prevCurrentVersion, err)
 	}
 
 	newVersionInfo, _, err := d.DescribeVersion(ctx, namespaceEntry, newVersion, false)
 	if err != nil {
-		return false, serviceerror.NewFailedPreconditionf("Version %s not found in deployment with error: %v", newVersion, err)
+		return false, describeVersionFailedPrecondition(newVersion, err)
 	}
 
 	missingTaskQueues, err := d.checkForMissingTaskQueues(prevCurrentVersionInfo, newVersionInfo)
@@ -1910,6 +1910,17 @@ func (d *ClientImpl) IsVersionMissingTaskQueues(ctx context.Context, namespaceEn
 
 	// all expected task queues are present in the new version
 	return false, nil
+}
+
+func describeVersionFailedPrecondition(version string, err error) error {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
+		return serviceerror.NewFailedPreconditionf("Version %s not found in deployment", version)
+	}
+	return serviceerror.NewFailedPreconditionf(
+		"Failed to describe version %s while checking for missing task queues: %v",
+		version,
+		err,
+	)
 }
 
 // isTaskQueueExpectedInNewVersion checks if a task queue is expected in the new version. A task queue is expected in the new version if:
