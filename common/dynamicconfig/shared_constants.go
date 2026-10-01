@@ -3,7 +3,6 @@ package dynamicconfig
 import (
 	"time"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/primitives"
 )
 
@@ -171,13 +170,10 @@ type PartitionScaleAllowedDrift struct {
 }
 
 type PartitionScaleManagerSettings struct {
-	// Mode controls whether the scaler is called at all, and whether its decisions are
-	// applied. Disabling the manager acts like a disabled scaler: managed scaling falls
-	// back to dynamic config.
-	//
-	// In dynamic config this is written as "PARTITION_SCALE_MODE_SHADOW" or simply
-	// "shadow"/"enabled"/"disabled" (case insensitive).
-	Mode enumsspb.PartitionScaleMode
+	// Enabled controls whether partition scaler decisions are put into effect. If Enabled is
+	// false (default), then the scaler acts in "shadow mode", where the scaler is consulted
+	// but the result is only logged and emitted as metrics.
+	Enabled bool
 	// MaxRate limits target change frequency.
 	MaxRate float32
 	// ShrinkRatio is how much smaller write partitions is allowed to be than read partitions
@@ -202,8 +198,8 @@ type PartitionScaleManagerSettings struct {
 	// that query/nexus tasks will be processed without interruption even after scale down.
 	DrainBufferTime time.Duration
 	// ShadowModeLogInterval controls how often shadow decisions are logged (in shadow mode
-	// only). If this is <= 0, shadow mode falls back to disabled mode. If the the partition
-	// scaler returns target: 0 (disabled), shadow mode doesn't log anything.
+	// only). If this is <= 0, or if the partition scaler returns 0 (disabled), shadow mode
+	// doesn't log anything.
 	ShadowModeLogInterval time.Duration
 }
 

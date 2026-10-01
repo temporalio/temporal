@@ -9,7 +9,6 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -181,11 +180,7 @@ func (sm *scaleManager) callScaler() {
 	}
 
 	settings := sm.settings()
-	// note: the code below assumes ShadowModeLogInterval > 0 when Mode == SHADOW
-	shadowMode := settings.Mode == enumsspb.PARTITION_SCALE_MODE_SHADOW && settings.ShadowModeLogInterval > 0
-	// Disabled (or unspecified) means we never call the scaler, and act as if it had returned
-	// a disabled decision.
-	disabled := !shadowMode && settings.Mode != enumsspb.PARTITION_SCALE_MODE_ENABLED
+	shadowMode := !settings.Enabled
 
 	// Entering shadow mode on top of a previously-applied managed target releases
 	// control back to the dynamic-config baseline: zero the managed target once so
@@ -201,16 +196,12 @@ func (sm *scaleManager) callScaler() {
 	// grab current batch (may be zero)
 	tasks := int(sm.batch.Swap(0))
 
-	// if disabled, leave NewTarget as 0 to mean disabled
-	decision := PartitionScalerDecision{NewTarget: 0}
-	if !disabled {
-		decision = sm.partitionScaler.OnTasks(PartitionScalerInput{
-			NumTasks:      tasks,
-			CurrentTarget: int(sm.scaleState.GetTarget()),
-			BacklogCounts: sm.scaleState.GetBacklogCounts(),
-			PrivateState:  sm.scaleState.GetPrivateScalerState(),
-		})
-	}
+	decision := sm.partitionScaler.OnTasks(PartitionScalerInput{
+		NumTasks:      tasks,
+		CurrentTarget: int(sm.scaleState.GetTarget()),
+		BacklogCounts: sm.scaleState.GetBacklogCounts(),
+		PrivateState:  sm.scaleState.GetPrivateScalerState(),
+	})
 	backlogCapC8 := number.EncodeCompact8(int64(decision.BacklogCap))
 	disabledStateNeedsCleanup := decision.NewTarget == 0 &&
 		(len(sm.scaleState.GetBacklogState()) > 0 ||
@@ -259,7 +250,8 @@ func (sm *scaleManager) callScaler() {
 	}
 
 	if shadowMode {
-		if sm.timeSource.Now().Before(sm.nextShadowLog) || // too early
+		if settings.ShadowModeLogInterval <= 0 || // no logging
+			sm.timeSource.Now().Before(sm.nextShadowLog) || // too early
 			sm.prevShadowTarget == target || // only log new changes
 			target <= 0 { // only log if scaler is enabled
 			// emit scale event metric as a heartbeat even if no shadow log
@@ -422,7 +414,7 @@ func (sm *scaleManager) describeRequest(id int32, versions []string) *matchingse
 }
 
 func (sm *scaleManager) updateBacklogAndDrainState(ctx context.Context) {
-	if sm.settings().Mode != enumsspb.PARTITION_SCALE_MODE_ENABLED {
+	if !sm.settings().Enabled {
 		// if we're not enabled, we don't have to do any of this
 		return
 	}

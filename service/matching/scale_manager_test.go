@@ -13,7 +13,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -111,7 +110,7 @@ func (s *ScaleManagerSuite) SetupTest() {
 	s.scaler.EXPECT().Stop().AnyTimes()
 
 	s.settings = dynamicconfig.PartitionScaleManagerSettings{
-		Mode:               enumsspb.PARTITION_SCALE_MODE_ENABLED,
+		Enabled:            true,
 		MaxRate:            10,  // 100ms cooldown
 		ShrinkRatio:        1.0, // no shrink limit by default
 		ShrinkDelta:        100, // no shrink limit by default
@@ -522,7 +521,7 @@ func metricValues(recs []*metricstest.CapturedRecording) []float64 {
 // exclusively from the two shadow decisions (one each), not from the release.
 func (s *ScaleManagerSuite) TestShadowModeEmitsExpectedGauges() {
 	s.metricsHandler = s.capture
-	s.settings.Mode = enumsspb.PARTITION_SCALE_MODE_SHADOW
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = 10 * time.Millisecond
 
 	inputs := make(chan PartitionScalerInput, 2)
@@ -604,53 +603,12 @@ func (s *ScaleManagerSuite) TestShadowLogIntervalDoesNotAffectApply() {
 	s.Equal(int32(2), info.Write)
 }
 
-// TestDisabledModeDisables verifies that disabling the manager acts like a disabled scaler:
-// the leftover managed target is zeroed and pushed once, without ever consulting the scaler.
-// Once there's nothing left to clean up, disabled mode does nothing at all.
-func (s *ScaleManagerSuite) TestDisabledModeDisables() {
-	s.settings.Mode = enumsspb.PARTITION_SCALE_MODE_DISABLED
-
-	dbWrites := make(chan *persistencespb.PartitionScaleState, 2)
-	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).
-		Do(func(state *persistencespb.PartitionScaleState, _ bool) {
-			dbWrites <- common.CloneProto(state)
-		}).
-		Return(nil).
-		Times(1)
-
-	scaleInfos := make(chan *taskqueuespb.PartitionScaleInfo, 2)
-	s.userData.EXPECT().SetPartitionScale(gomock.Any()).
-		Do(func(info *taskqueuespb.PartitionScaleInfo) { scaleInfos <- info }).
-		AnyTimes()
-
-	// Start with a leftover managed target, as if the manager had been enabled before.
-	s.startManager(4, &persistencespb.PartitionScaleState{Target: 5})
-	// Start itself pushes the leftover state; drain that push so the assertions below
-	// only see the fallback.
-	s.Equal(int32(5), waitRecv(s, scaleInfos, "no ephemeral data update at start").Read)
-
-	s.sm.AddedTasks(5)
-	state := waitRecv(s, dbWrites, "no db write")
-	s.Equal(int32(0), state.Target)
-	s.Empty(state.BacklogState)
-	s.Empty(state.BacklogCounts)
-
-	info := waitRecv(s, scaleInfos, "no ephemeral data update")
-	s.Equal(int32(0), info.Read)
-	s.Equal(int32(0), info.Write)
-
-	// Past the cooldown, a second pass has nothing to clean up and writes nothing.
-	s.timeSource.Advance(110 * time.Millisecond)
-	s.sm.AddedTasks(5)
-	assertNoRecv(s, dbWrites, 100*time.Millisecond, "disabled mode wrote state twice")
-}
-
 // TestShadowDecisionDoesNotPersistOrPush verifies that shadow mode observes the
 // scaler decision without applying it. Entering shadow mode does release a prior
 // managed target to baseline (one write, Target=0), but the scaler's hypothetical
 // decision (2) is never persisted.
 func (s *ScaleManagerSuite) TestShadowDecisionDoesNotPersistOrPush() {
-	s.settings.Mode = enumsspb.PARTITION_SCALE_MODE_SHADOW
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	inputs := make(chan PartitionScalerInput, 1)
@@ -691,7 +649,7 @@ func (s *ScaleManagerSuite) TestShadowDecisionDoesNotPersistOrPush() {
 // (Target 0, nil private state) on every call and never feeds hypothetical
 // decisions back into the state.
 func (s *ScaleManagerSuite) TestShadowModeColdStartsScalerFromBaseline() {
-	s.settings.Mode = enumsspb.PARTITION_SCALE_MODE_SHADOW
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 	realPriv := protoutils.MarshalAny(s.T(), wrapperspb.String("real-state"))
 	priv1 := protoutils.MarshalAny(s.T(), wrapperspb.String("shadow-decision-1"))
@@ -732,7 +690,7 @@ func (s *ScaleManagerSuite) TestShadowModeColdStartsScalerFromBaseline() {
 }
 
 func (s *ScaleManagerSuite) TestShadowModeDoesNotLogNoChange() {
-	s.settings.Mode = enumsspb.PARTITION_SCALE_MODE_SHADOW
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
@@ -751,7 +709,7 @@ func (s *ScaleManagerSuite) TestShadowModeDoesNotLogNoChange() {
 // TestShadowLoggingCadence verifies that shadow decisions are logged no more
 // frequently than the configured cadence and unchanged decisions are not logged.
 func (s *ScaleManagerSuite) TestShadowLoggingCadence() {
-	s.settings.Mode = enumsspb.PARTITION_SCALE_MODE_SHADOW
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
@@ -796,7 +754,7 @@ func (s *ScaleManagerSuite) TestShadowLoggingCadence() {
 }
 
 func (s *ScaleManagerSuite) TestShadowModeDoesNotLogDisabledScaler() {
-	s.settings.Mode = enumsspb.PARTITION_SCALE_MODE_SHADOW
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
@@ -820,7 +778,7 @@ func (s *ScaleManagerSuite) TestShadowModeDoesNotLogDisabledScaler() {
 // so a shadowing manager makes no outbound calls at all: the responses mocked here would
 // drain every partition if the guard regressed.
 func (s *ScaleManagerSuite) TestShadowModeSkipsDrain() {
-	s.settings.Mode = enumsspb.PARTITION_SCALE_MODE_SHADOW
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 	s.settings.BackgroundInterval = 50 * time.Millisecond
 	s.settings.DrainBufferTime = 0
@@ -855,7 +813,7 @@ func (s *ScaleManagerSuite) TestShadowModeSkipsDrain() {
 // state (one write), dropping the write side to baseline (Write=0) while
 // preserving read partitions (BacklogState unchanged).
 func (s *ScaleManagerSuite) TestShadowModeReleasesManagedTargetToBaseline() {
-	s.settings.Mode = enumsspb.PARTITION_SCALE_MODE_SHADOW
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 	priv := protoutils.MarshalAny(s.T(), wrapperspb.String("managed-state"))
 
@@ -900,7 +858,7 @@ func (s *ScaleManagerSuite) TestShadowModeReleasesManagedTargetToBaseline() {
 // are all logged. Releasing removes the stale non-zero baseline that would
 // otherwise short-circuit a decision returning to the prior real target.
 func (s *ScaleManagerSuite) TestShadowModeLogsOscillationFromBaseline() {
-	s.settings.Mode = enumsspb.PARTITION_SCALE_MODE_SHADOW
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
