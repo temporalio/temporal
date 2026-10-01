@@ -259,7 +259,7 @@ func (i *invocationSystem) Start(
 			OriginalFailure: &nexusFailure,
 		}
 	default:
-		i.logger.Error(fmt.Sprintf("unexpected response variant type: %T", v), tag.RequestID(args.requestID))
+		i.logger.Error("unexpected response variant type", tag.NewStringTag("variant-type", fmt.Sprintf("%T", v)), tag.RequestID(args.requestID))
 		he := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error (request ID: %s)", args.requestID)
 		he.RetryBehavior = nexus.HandlerErrorRetryBehaviorRetryable
 		return nil, he

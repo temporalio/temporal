@@ -1213,7 +1213,7 @@ func (e taskExecutor) startOnHistoryService(
 			OriginalFailure: &nexusFailure,
 		}
 	default:
-		e.Logger.Error(fmt.Sprintf("unexpected response variant type: %T", v), tag.RequestID(args.requestID))
+		e.Logger.Error("unexpected response variant type", tag.NewStringTag("variant-type", fmt.Sprintf("%T", v)), tag.RequestID(args.requestID))
 		he := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error (request ID: %s)", args.requestID)
 		he.RetryBehavior = nexus.HandlerErrorRetryBehaviorRetryable
 		return nil, he
