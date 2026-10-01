@@ -1,7 +1,9 @@
 package nexusoperation
 
 import (
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/server/common/metrics"
+	commonnexus "go.temporal.io/server/common/nexus"
 )
 
 var OutboundRequestCounter = metrics.NewCounterDef(
@@ -20,6 +22,36 @@ var NexusOperationFailedCount = metrics.NewCounterDef(
 	"nexus_operation_fail",
 	metrics.WithDescription("Nexus Operations failures."),
 )
+
+// FailedReasonOperationFailed is the NexusOperationFailedCount reason for an operation the handler
+// reported as failed, synchronously at start or later via a completion.
+const FailedReasonOperationFailed metrics.ReasonString = "operation_failed"
+
+// FailedReasonServerError is the NexusOperationFailedCount reason for an operation that the caller
+// failed itself after a start attempt, e.g. because the handler's response exceeded a size limit or the
+// request failed with a non-retryable server error.
+const FailedReasonServerError metrics.ReasonString = "server_error"
+
+// AttemptFailedReason returns the NexusOperationFailedCount reason for an operation that a start
+// attempt failed. failure is the failure the attempt resolved the operation with, not the
+// NexusOperationFailure wrapper recorded in history.
+//
+// A start attempt rejected with a non-retryable handler error resolves with the handler failure at
+// the top level; that reports "handler_error:<type>", with the type capped to the Nexus spec's
+// handler error types plus UNKNOWN so that a handler cannot mint new time series. A non-retryable
+// failure the caller raises itself reports FailedReasonServerError; CHASM records these as server
+// failures and HSM as "CallError" application failures. Any other failure, including a nil one,
+// reports FailedReasonOperationFailed: the handler reporting the operation as failed.
+func AttemptFailedReason(failure *failurepb.Failure) metrics.ReasonString {
+	if info := failure.GetNexusHandlerFailureInfo(); info != nil {
+		return metrics.ReasonString("handler_error:" + commonnexus.BoundHandlerErrorType(info.GetType()))
+	}
+	if failure.GetServerFailureInfo() != nil || failure.GetApplicationFailureInfo().GetType() == "CallError" {
+		return FailedReasonServerError
+	}
+	return FailedReasonOperationFailed
+}
+
 var NexusOperationCancelCount = metrics.NewCounterDef(
 	"nexus_operation_cancel",
 	metrics.WithDescription("Nexus Operations cancellations."),

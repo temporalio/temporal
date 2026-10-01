@@ -37,7 +37,7 @@ func TestOperationBackendMetricTag(t *testing.T) {
 			tagConfig := tc.config.ResolvedMetricTagConfig()
 			closeTime := scheduledTime.Add(2 * time.Second)
 			emitOperationSucceeded(handler, tagConfig, op, "namespace", "workflow", closeTime)
-			emitOperationFailed(handler, tagConfig, op, "namespace", "workflow", closeTime)
+			emitOperationFailed(handler, tagConfig, op, "namespace", "workflow", chasmnexus.FailedReasonOperationFailed, closeTime)
 			emitOperationCanceled(handler, tagConfig, op, "namespace", "workflow", closeTime)
 			emitOperationTimedOut(handler, tagConfig, op, "namespace", "workflow", "SCHEDULE_TO_CLOSE", closeTime)
 			emitScheduleToStartLatency(handler, tagConfig, op, "namespace", "workflow", op.StartedTime.AsTime())

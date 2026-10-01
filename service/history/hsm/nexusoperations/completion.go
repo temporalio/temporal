@@ -12,6 +12,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/service/history/hsm"
@@ -267,7 +268,8 @@ func (h *CompletionHandler) deferredCompletionMetric(
 		case opFailedError.State == nexus.OperationStateCanceled:
 			emitOperationCanceled(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, closeTime)
 		default:
-			emitOperationFailed(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, closeTime)
+			// A completion is the handler reporting the operation's outcome, never a rejected start attempt.
+			emitOperationFailed(metricsHandler, metricTagConfig, operation, namespaceName, workflowType, chasmnexus.FailedReasonOperationFailed, closeTime)
 		}
 	}
 }
