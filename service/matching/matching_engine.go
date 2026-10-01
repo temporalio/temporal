@@ -390,8 +390,11 @@ func (e *matchingEngineImpl) onNamespaceStateChange(ns *namespace.Namespace, del
 	}
 	var unloaded []taskQueuePartitionManager
 	for key, pm := range e.partitions {
-		if pm.Namespace().ID() == ns.ID() &&
-			(deletedFromDB || e.namespaceStateTagValue(pm.Namespace()) != e.namespaceStateTagValue(ns)) {
+		if pm.Namespace().ID() != ns.ID() {
+			continue
+		}
+		stateChanged := e.namespaceStateTagValue(pm.Namespace()) != e.namespaceStateTagValue(ns)
+		if deletedFromDB || stateChanged {
 			delete(e.partitions, key)
 			unloaded = append(unloaded, pm)
 		}
