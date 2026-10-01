@@ -2321,9 +2321,6 @@ func (s *matchingEngineSuite) TestForceUnloadTaskQueue() {
 }
 
 func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
-	if s.newMatcher {
-		s.T().Skip("test is flaky with new matcher")
-	}
 	runID := uuid.NewString()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -2418,10 +2415,12 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 					}),
 			}, nil
 		}).AnyTimes()
+	// If tasks are lost, we'd poll forever. Give up after a deadline and check below.
+	pollDeadline := time.Now().Add(30 * time.Second)
 	for range iterations {
 		for p := range engineCount {
 			engine := engines[p]
-			for i := int64(0); i < taskCount; /* incremented explicitly to skip empty polls */ {
+			for i := int64(0); i < taskCount && time.Now().Before(pollDeadline); /* incremented explicitly to skip empty polls */ {
 				result, err := engine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
 					NamespaceId: namespaceID,
 					PollRequest: &workflowservice.PollActivityTaskQueueRequest{
@@ -2466,8 +2465,12 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 		e.Stop()
 	}
 
-	s.Equal(0, s.taskManager.getTaskCount(tlID))
 	totalTasks := taskCount * engineCount * iterations
+	s.Len(startedTasks, totalTasks, "some tasks were never dispatched")
+	if !s.newMatcher {
+		// new matcher does gc lazily so some acked tasks may remain
+		s.Equal(0, s.taskManager.getTaskCount(tlID))
+	}
 	persisted := s.taskManager.getCreateTaskCount(tlID)
 	// No sync matching as all messages are published first
 	s.Equal(totalTasks, persisted)
@@ -2477,9 +2480,6 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 }
 
 func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
-	if s.newMatcher {
-		s.T().Skip("test is flaky with new matcher")
-	}
 	runID := uuid.NewString()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -2563,10 +2563,12 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 			}, nil
 		}).AnyTimes()
 
+	// If tasks are lost, we'd poll forever. Give up after a deadline and check below.
+	pollDeadline := time.Now().Add(30 * time.Second)
 	for range iterations {
 		for p := range engineCount {
 			engine := engines[p]
-			for i := int64(0); i < taskCount; /* incremented explicitly to skip empty polls */ {
+			for i := int64(0); i < taskCount && time.Now().Before(pollDeadline); /* incremented explicitly to skip empty polls */ {
 				result, err := engine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
 					NamespaceId: namespaceID,
 					PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -2610,8 +2612,12 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 		e.Stop()
 	}
 
-	s.Equal(0, s.taskManager.getTaskCount(tlID))
 	totalTasks := taskCount * engineCount * iterations
+	s.Len(startedTasks, totalTasks, "some tasks were never dispatched")
+	if !s.newMatcher {
+		// new matcher does gc lazily so some acked tasks may remain
+		s.Equal(0, s.taskManager.getTaskCount(tlID))
+	}
 	persisted := s.taskManager.getCreateTaskCount(tlID)
 	// No sync matching as all messages are published first
 	s.Equal(totalTasks, persisted)
@@ -4154,8 +4160,18 @@ func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(
 	wg.Wait()
 
 	ptqMgr := s.getPhysicalTaskQueueManagerImplFromKey(ptq)
-	dbTasks := int64(s.taskManager.getTaskCount(ptq))
 	backlogCount := totalApproximateBacklogCount(ptqMgr.backlogMgr)
+
+	// Only count tasks above the ack level: acked tasks may not have been gc'ed yet.
+	db := ptqMgr.backlogMgr.getDB()
+	db.Lock()
+	ackLevel := fairLevel{id: db.subqueues[subqueueZero].AckLevel}
+	if s.fairness {
+		ackLevel = fairLevelFromProto(db.subqueues[subqueueZero].FairAckLevel)
+	}
+	db.Unlock()
+	dbTasks := int64(s.taskManager.getTaskCountAbove(ptq, ackLevel))
+
 	if s.fairness {
 		// Relax this condition for fairBacklogManager: it can sometimes reset backlog count on
 		// read, making it more accurate in theory, but breaking this test's assumptions.
@@ -5672,6 +5688,20 @@ func (m *testTaskManager) minTaskID(dbq *PhysicalTaskQueueKey) (int64, bool) {
 	return key.id, ok
 }
 
+// getTaskCountAbove returns the number of tasks in a task queue above the given level.
+func (m *testTaskManager) getTaskCountAbove(q *PhysicalTaskQueueKey, level fairLevel) int {
+	tlm := m.getQueueDataByKey(q)
+	tlm.Lock()
+	defer tlm.Unlock()
+	count := 0
+	for _, k := range tlm.tasks.Keys() {
+		if level.less(k.(fairLevel)) {
+			count++
+		}
+	}
+	return count
+}
+
 // maxTaskID returns the maximum value of the TaskID present in testTaskManager
 func (m *testTaskManager) maxTaskID(dbq *PhysicalTaskQueueKey) (int64, bool) {
 	tlm := m.getQueueDataByKey(dbq)
@@ -5688,7 +5718,7 @@ func (m *testTaskManager) CompleteTasksLessThan(
 ) (int, error) {
 	if m.fairness && request.ExclusiveMaxPass < 1 {
 		return 0, serviceerror.NewInternal("invalid CompleteTasksLessThan request on fair queue")
-	} else if !m.fairness && request.ExclusiveMaxPass != 0 {
+	} else if !m.fairness && (request.ExclusiveMaxPass != 0 || request.ConditionRangeID != 0) {
 		return 0, serviceerror.NewInternal("invalid CompleteTasksLessThan request on queue")
 	}
 
@@ -5698,6 +5728,12 @@ func (m *testTaskManager) CompleteTasksLessThan(
 	tlm := m.getQueueData(request.TaskQueueName, request.NamespaceID, request.TaskType)
 	tlm.Lock()
 	defer tlm.Unlock()
+	if request.ConditionRangeID != 0 && tlm.rangeID != request.ConditionRangeID {
+		return 0, &persistence.ConditionFailedError{
+			Msg: fmt.Sprintf("CompleteTasksLessThan failed, range id mismatch. rangeID: %v, db rangeID: %v",
+				request.ConditionRangeID, tlm.rangeID),
+		}
+	}
 	keys := tlm.tasks.Keys()
 	for _, key := range keys {
 		level := key.(fairLevel)
