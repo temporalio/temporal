@@ -2,6 +2,7 @@ package workerdeployment
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
 	"testing"
@@ -16,7 +17,10 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	"go.temporal.io/server/common"
+	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
@@ -2756,4 +2760,266 @@ func (s *VersionWorkflowSuite) Test_SyncValidationStatus_FailedValidation() {
 	})
 
 	s.True(s.env.IsWorkflowCompleted())
+}
+
+func (s *VersionWorkflowSuite) Test_VersionDataHLC_ReusedAcrossBatchesAndActivityRetry() {
+	previousVersion := s.workflowVersion
+	s.workflowVersion = VersionDataHLC
+	defer func() { s.workflowVersion = previousVersion }()
+
+	tv := testvars.New(s.T())
+	seedClock := &clockspb.HybridLogicalClock{WallClock: 1}
+	taskQueueName1 := tv.TaskQueue().Name + "001"
+	taskQueueName2 := tv.TaskQueue().Name + "002"
+	routingTime := timestamppb.New(time.Now())
+
+	var attempts atomic.Int32
+	var clocks []*clockspb.HybridLogicalClock
+	var updateTimes []*timestamppb.Timestamp
+	var a *VersionActivities
+	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
+		func(_ context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
+			versionData := req.GetUpsertVersionData()
+			s.Require().NotNil(versionData)
+			s.Require().NotNil(versionData.GetStateUpdateClock())
+			clocks = append(clocks, common.CloneProto(versionData.GetStateUpdateClock()))
+			updateTimes = append(updateTimes, common.CloneProto(versionData.GetUpdateTime()))
+			if attempts.Add(1) == 1 {
+				return nil, errors.New("retry once")
+			}
+			return &deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil
+		},
+	).Times(3)
+	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(SyncVersionState, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) { s.Fail("sync state should not be rejected", err) },
+			OnAccept: func() {},
+			OnComplete: func(_ any, err error) {
+				s.Require().NoError(err)
+			},
+		}, &deploymentspb.SyncVersionStateUpdateArgs{
+			//nolint:staticcheck // SA1019 legacy field is still required by the update validator
+			RoutingUpdateTime: routingTime,
+			RoutingConfig: &deploymentpb.RoutingConfig{
+				CurrentDeploymentVersion:  tv.ExternalDeploymentVersion(),
+				CurrentVersionChangedTime: routingTime,
+				RevisionNumber:            1,
+			},
+		})
+	}, time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version:          tv.DeploymentVersion(),
+			Status:           enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+			VersionDataClock: seedClock,
+			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
+				taskQueueName1: {TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {}}},
+				taskQueueName2: {TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {}}},
+			},
+			SyncBatchSize: 1,
+		},
+	})
+
+	s.Require().Len(clocks, 3)
+	s.Require().Len(updateTimes, 3)
+	s.Equal(1, hlc.Compare(seedClock, clocks[0]))
+	for i := 1; i < len(clocks); i++ {
+		s.ProtoEqual(clocks[0], clocks[i])
+		s.ProtoEqual(updateTimes[0], updateTimes[i])
+	}
+}
+
+func (s *VersionWorkflowSuite) Test_VersionDataHLC_RoutingOnlyPropagationReusesClock() {
+	previousVersion := s.workflowVersion
+	s.workflowVersion = VersionDataHLC
+	defer func() { s.workflowVersion = previousVersion }()
+
+	tv := testvars.New(s.T())
+	seedClock := &clockspb.HybridLogicalClock{WallClock: time.Now().Add(-time.Hour).UnixMilli(), Version: 2}
+	oldRoutingTime := timestamppb.New(time.Now().Add(-time.Minute))
+	newRoutingTime := timestamppb.New(time.Now())
+	taskQueueName := tv.TaskQueue().Name
+
+	var a *VersionActivities
+	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
+		func(_ context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
+			versionData := req.GetUpsertVersionData()
+			s.Require().NotNil(versionData)
+			s.ProtoEqual(seedClock, versionData.GetStateUpdateClock())
+			s.Equal(seedClock.GetWallClock(), versionData.GetUpdateTime().AsTime().UnixMilli())
+			return &deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil
+		},
+	).Once()
+	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(SyncVersionState, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) { s.Fail("sync state should not be rejected", err) },
+			OnAccept: func() {},
+			OnComplete: func(_ any, err error) {
+				s.Require().NoError(err)
+			},
+		}, &deploymentspb.SyncVersionStateUpdateArgs{
+			//nolint:staticcheck // SA1019 legacy field is still required by the update validator
+			RoutingUpdateTime: newRoutingTime,
+			RoutingConfig: &deploymentpb.RoutingConfig{
+				CurrentDeploymentVersion:  tv.ExternalDeploymentVersion(),
+				CurrentVersionChangedTime: newRoutingTime,
+				RevisionNumber:            2,
+			},
+		})
+	}, time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version:           tv.DeploymentVersion(),
+			Status:            enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT,
+			CurrentSinceTime:  oldRoutingTime,
+			RoutingUpdateTime: oldRoutingTime,
+			VersionDataClock:  seedClock,
+			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
+				taskQueueName: {TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {}}},
+			},
+			SyncBatchSize: 1,
+		},
+	})
+}
+
+func (s *VersionWorkflowSuite) Test_VersionDataHLC_NewTaskQueueReusesClock() {
+	previousVersion := s.workflowVersion
+	s.workflowVersion = VersionDataHLC
+	defer func() { s.workflowVersion = previousVersion }()
+
+	tv := testvars.New(s.T())
+	seedClock := &clockspb.HybridLogicalClock{WallClock: time.Now().Add(-time.Hour).UnixMilli(), Version: 4}
+	taskQueueName := tv.TaskQueue().Name
+
+	var a *VersionActivities
+	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
+		func(_ context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
+			versionData := req.GetUpsertVersionData()
+			s.Require().NotNil(versionData)
+			s.ProtoEqual(seedClock, versionData.GetStateUpdateClock())
+			s.Equal(seedClock.GetWallClock(), versionData.GetUpdateTime().AsTime().UnixMilli())
+			return &deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil
+		},
+	).Once()
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(RegisterWorkerInDeploymentVersion, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) { s.Fail("register worker should not be rejected", err) },
+			OnAccept: func() {},
+			OnComplete: func(_ any, err error) {
+				s.Require().NoError(err)
+			},
+		}, &deploymentspb.RegisterWorkerInVersionArgs{
+			TaskQueueName: taskQueueName,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			MaxTaskQueues: 100,
+			Version:       tv.DeploymentVersionString(),
+			RoutingConfig: &deploymentpb.RoutingConfig{RevisionNumber: 1},
+		})
+	}, time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version:           tv.DeploymentVersion(),
+			Status:            enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+			VersionDataClock:  seedClock,
+			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{},
+			SyncBatchSize:     1,
+		},
+	})
+}
+
+func (s *VersionWorkflowSuite) Test_VersionDataHLC_DeleteAndReviveUseOrderedTombstone() {
+	previousVersion := s.workflowVersion
+	s.workflowVersion = VersionDataHLC
+	defer func() { s.workflowVersion = previousVersion }()
+
+	tv := testvars.New(s.T())
+	seedClock := &clockspb.HybridLogicalClock{WallClock: 1}
+	taskQueueName := tv.TaskQueue().Name
+	newTaskQueueName := taskQueueName + "_new"
+	var deletedClock *clockspb.HybridLogicalClock
+	var revivedClock *clockspb.HybridLogicalClock
+
+	var a *VersionActivities
+	s.env.OnActivity(a.DeleteWorkerControllerInstance, mock.Anything, mock.Anything).Return(nil).Maybe()
+	s.env.OnActivity(a.CheckIfTaskQueuesHavePollers, mock.Anything, mock.Anything).Return(false, nil).Once()
+	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
+		func(_ context.Context, req *deploymentspb.SyncDeploymentVersionUserDataRequest) (*deploymentspb.SyncDeploymentVersionUserDataResponse, error) {
+			versionData := req.GetUpsertVersionData()
+			s.Require().NotNil(versionData)
+			s.False(req.GetForgetVersion())
+			if versionData.GetDeleted() {
+				deletedClock = common.CloneProto(versionData.GetStateUpdateClock())
+				return &deploymentspb.SyncDeploymentVersionUserDataResponse{
+					TaskQueueMaxVersions: map[string]int64{taskQueueName: 1},
+				}, nil
+			}
+			revivedClock = common.CloneProto(versionData.GetStateUpdateClock())
+			return &deploymentspb.SyncDeploymentVersionUserDataResponse{}, nil
+		},
+	).Times(2)
+	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).
+		After(100 * time.Millisecond).
+		Return(nil).
+		Once()
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(DeleteVersion, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) { s.Fail("delete should not be rejected", err) },
+			OnAccept: func() {},
+			OnComplete: func(_ any, err error) {
+				s.Require().NoError(err)
+			},
+		}, &deploymentspb.DeleteVersionArgs{AsyncPropagation: true})
+	}, time.Millisecond)
+
+	s.env.RegisterDelayedCallback(func() {
+		s.env.UpdateWorkflow(RegisterWorkerInDeploymentVersion, "", &testsuite.TestUpdateCallback{
+			OnReject: func(err error) { s.Fail("register worker should not be rejected", err) },
+			OnAccept: func() {},
+			OnComplete: func(_ any, err error) {
+				s.Require().NoError(err)
+			},
+		}, &deploymentspb.RegisterWorkerInVersionArgs{
+			TaskQueueName: newTaskQueueName,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			MaxTaskQueues: 100,
+			Version:       tv.DeploymentVersionString(),
+			RoutingConfig: &deploymentpb.RoutingConfig{RevisionNumber: 2},
+		})
+	}, 50*time.Millisecond)
+
+	s.env.ExecuteWorkflow(WorkerDeploymentVersionWorkflowType, &deploymentspb.WorkerDeploymentVersionWorkflowArgs{
+		NamespaceName: tv.NamespaceName().String(),
+		NamespaceId:   tv.NamespaceID().String(),
+		VersionState: &deploymentspb.VersionLocalState{
+			Version:          tv.DeploymentVersion(),
+			Status:           enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
+			DrainageInfo:     &deploymentpb.VersionDrainageInfo{Status: enumspb.VERSION_DRAINAGE_STATUS_DRAINED},
+			RevisionNumber:   5,
+			VersionDataClock: seedClock,
+			TaskQueueFamilies: map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
+				taskQueueName: {TaskQueues: map[int32]*deploymentspb.TaskQueueVersionData{int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {}}},
+			},
+			SyncBatchSize: 1,
+		},
+	})
+
+	s.Require().NotNil(deletedClock)
+	s.Require().NotNil(revivedClock)
+	s.Equal(1, hlc.Compare(seedClock, deletedClock))
+	s.Equal(1, hlc.Compare(deletedClock, revivedClock))
 }

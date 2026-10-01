@@ -2382,13 +2382,26 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 				}
 				for buildID, versionData := range req.GetUpsertVersionsData() {
 					existing := tqWorkerDeploymentData.Versions[buildID]
-					// Skip if existing version data has a higher revision number to avoid stale writes.
-					// Equal revision number is accepted for now because we may roll back the workflow version
-					// and stop incrementing the revision number.
-					if existing != nil && existing.GetRevisionNumber() > versionData.GetRevisionNumber() {
-						continue
+					if existing != nil {
+						if existing.GetStateUpdateClock() == nil && versionData.GetStateUpdateClock() == nil {
+							// Equal revision number is accepted for legacy writers because a workflow may roll
+							// back to a version that does not increment the revision number.
+							if existing.GetRevisionNumber() > versionData.GetRevisionNumber() {
+								continue
+							}
+						} else {
+							comparison, err := compareClockedWorkerDeploymentVersionData(existing, versionData)
+							if err != nil {
+								return nil, false, err
+							}
+							if comparison > 0 {
+								continue
+							}
+							// Reapply equal values so a retry can publish replication after an earlier
+							// attempt persisted locally but failed to publish its replication task.
+						}
 					}
-					tqWorkerDeploymentData.Versions[buildID] = versionData
+					tqWorkerDeploymentData.Versions[buildID] = common.CloneProto(versionData)
 					changed = true
 					if versionData.GetDeleted() {
 						// Remove the version from the old deployment data format if present.
@@ -2457,7 +2470,7 @@ func (e *matchingEngineImpl) SyncDeploymentUserData(
 			return nil, false, errUserDataUnmodified
 		}
 
-		data.Clock = now
+		data.Clock = maxTaskQueueUserDataClock(data, now)
 		return data, true, nil
 	})
 	if err != nil {
@@ -2490,6 +2503,9 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 	}
 	_, err = pm.GetUserDataManager().UpdateUserData(ctx, updateOptions, func(current *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
 		mergedUserData := common.CloneProto(current)
+		if mergedUserData == nil {
+			mergedUserData = &persistencespb.TaskQueueUserData{}
+		}
 		currentVersioningData := current.GetVersioningData()
 		newVersioningData := req.GetUserData().GetVersioningData()
 		_, buildIdsRemoved := GetBuildIdDeltas(currentVersioningData, newVersioningData)
@@ -2515,14 +2531,15 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 		// Replication can persist user data without its clock, since we are wrongly setting the clock to nil while merging (to be fixed).
 		// Let incoming data win while the current data is clockless so it is not discarded during another replication. Future merge logic will resolve
 		// conflicts between all combinations of incoming and current data instead of relying on this compatibility fallback.
-		if currentClock != nil && (incomingClock == nil || hlc.Greater(currentClock, incomingClock)) {
+		currentWins := currentClock != nil && (incomingClock == nil || hlc.Greater(currentClock, incomingClock))
+		var selectedUserData *persistencespb.TaskQueueUserData
+		if currentWins {
 			if mergedData != nil {
 				// v2 rules
 				mergedData.AssignmentRules = currentVersioningData.GetAssignmentRules()
 				mergedData.RedirectRules = currentVersioningData.GetRedirectRules()
 			}
-			mergedUserData.PerType = current.GetPerType()
-
+			selectedUserData = mergedUserData
 			// We have wrongly discarded incoming per-type data and should investigate what information was lost.
 			// This is harmful since we might have lost information pertaining to worker-versioning, task queue config
 			// and fairness state.
@@ -2543,8 +2560,13 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 				mergedData.AssignmentRules = newVersioningData.GetAssignmentRules()
 				mergedData.RedirectRules = newVersioningData.GetRedirectRules()
 			}
-			mergedUserData.PerType = req.GetUserData().GetPerType()
-			mergedUserData.Clock = common.CloneProto(req.GetUserData().GetClock())
+			selectedUserData = common.CloneProto(req.GetUserData())
+		}
+		mergedUserData.PerType = selectedUserData.GetPerType()
+		mergedUserData.Clock = selectedUserData.GetClock()
+
+		if err := mergeClockedWorkerDeploymentVersions(current, req.GetUserData(), mergedUserData); err != nil {
+			return nil, false, err
 		}
 
 		for _, buildId := range buildIdsToRevive {
@@ -2570,6 +2592,7 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 			// No need to keep the v1 tombstones around after replication.
 			mergedUserData.VersioningData = ClearTombstones(mergedData)
 		}
+		mergedUserData.Clock = maxTaskQueueUserDataClock(mergedUserData, currentClock, incomingClock)
 		return mergedUserData, len(buildIdsToRevive) > 0, nil
 	})
 	return &matchingservice.ApplyTaskQueueUserDataReplicationEventResponse{}, err

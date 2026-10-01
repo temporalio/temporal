@@ -15,6 +15,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
@@ -2073,6 +2074,19 @@ func TestCleanupOldDeletedVersions(t *testing.T) {
 				"v2": {Deleted: false, UpdateTime: timestamp.TimePtr(now)},
 			},
 			maxVersions: 10,
+			wantCleaned: false,
+			wantRemoved: []string{},
+		},
+		{
+			name: "retains clocked tombstones regardless of age and limit",
+			versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+				"v1": {
+					Deleted:          true,
+					UpdateTime:       timestamp.TimePtr(eightDaysAgo),
+					StateUpdateClock: &clockspb.HybridLogicalClock{WallClock: 1},
+				},
+			},
+			maxVersions: 0,
 			wantCleaned: false,
 			wantRemoved: []string{},
 		},

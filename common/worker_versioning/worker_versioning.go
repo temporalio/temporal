@@ -1296,8 +1296,8 @@ func WorkerDeploymentVersionFromStringV32(s string) (*deploymentspb.WorkerDeploy
 	}, nil
 }
 
-// CleanupOldDeletedVersions removes versions deleted more than 7 days ago. Also removes more deleted versions if
-// the limit is being exceeded. Never removes undeleted versions.
+// CleanupOldDeletedVersions removes legacy versions deleted more than 7 days ago. Also removes more legacy deleted
+// versions if the limit is being exceeded. Never removes undeleted versions or clocked tombstones.
 // Deprecated. Versions now are deleted serially without using the deleted flag in versionData.
 // TODO: remove this cleanup logic after next major release.
 func CleanupOldDeletedVersions(deploymentData *persistencespb.WorkerDeploymentData, maxVersions int) bool {
@@ -1313,7 +1313,7 @@ func CleanupOldDeletedVersions(deploymentData *persistencespb.WorkerDeploymentDa
 	undeletedCount := 0
 
 	for buildID, versionData := range deploymentData.Versions {
-		if versionData.GetDeleted() {
+		if versionData.GetDeleted() && versionData.GetStateUpdateClock() == nil {
 			deletedVersions = append(deletedVersions, deletedVersion{
 				buildID:    buildID,
 				updateTime: versionData.GetUpdateTime().AsTime(),

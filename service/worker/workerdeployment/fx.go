@@ -33,6 +33,8 @@ const (
 	AsyncSetCurrentAndRamping
 	// Version Data has its own revision number with TaskQueue registration being async as well
 	VersionDataRevisionNumber
+	// Version Data changes carry a workflow-assigned HLC and deletes are retained as tombstones.
+	VersionDataHLC
 )
 
 type (

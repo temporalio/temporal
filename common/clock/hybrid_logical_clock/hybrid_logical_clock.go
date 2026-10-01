@@ -14,16 +14,21 @@ type Clock = clockspb.HybridLogicalClock
 // HybridLogicalClock requires the previous clock to ensure that time doesn't move backwards and the next clock is
 // monotonically increasing.
 func Next(prior *Clock, source commonclock.TimeSource) *Clock {
+	return NextAt(prior, source.Now())
+}
+
+// NextAt generates the next clock timestamp using an explicitly supplied wall clock time.
+func NextAt(prior *Clock, now time.Time) *Clock {
 	wallclock := max(
 		// Ensure time does not move backwards
-		source.Now().UnixMilli(), prior.GetWallClock())
+		now.UnixMilli(), prior.GetWallClock())
 	// Ensure timestamp is monotonically increasing
 	var version int32
 	if wallclock == prior.GetWallClock() {
 		version = prior.GetVersion() + 1
 	}
 
-	return &Clock{WallClock: wallclock, Version: version, ClusterId: prior.ClusterId}
+	return &Clock{WallClock: wallclock, Version: version, ClusterId: prior.GetClusterId()}
 }
 
 // Zero generates a zeroed logical clock for the cluster ID.

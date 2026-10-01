@@ -8,6 +8,7 @@ import "temporal/api/compute/v1/config.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/enums/v1/deployment.proto";
 import "temporal/api/enums/v1/task_queue.proto";
+import "temporal/server/api/clock/v1/message.proto";
 
 option go_package = "go.temporal.io/server/api/deployment/v1;deployment";
 
@@ -62,12 +63,17 @@ message WorkerDeploymentVersionData {
   // In order to protect against deletes being overwritten by delayed stale writes, we can't
   // immediately delete the version data from task queues. instead, we mark them as deleted while
   // keeping the revision number.
-  // Old enough deleted versions are GCed based on update_time.
-  // Deprecated. This mechanism is not safe against reactivation of versions after delete.
-  // Use forget_version flag for synchronous deletion of the version data from TQ.
+  // Legacy tombstones without state_update_clock are GCed based on update_time.
+  // Deprecated for writers that do not set state_update_clock because a reset revision number can
+  // let a stale tombstone defeat a recreated version. Clocked tombstones are retained and ordered
+  // with live values by state_update_clock.
   bool deleted = 3;
 
   temporal.api.enums.v1.WorkerDeploymentVersionStatus status = 6;
+
+  // Orders changes to this version across task queue user data replicas. The source workflow
+  // assigns this timestamp once per logical mutation and reuses it for every propagation attempt.
+  temporal.server.api.clock.v1.HybridLogicalClock state_update_clock = 7;
 }
 
 // Local state for Worker Deployment Version
@@ -153,6 +159,9 @@ message VersionLocalState {
 
   // Cached compute status, updated when WCI signals this version workflow.
   temporal.api.deployment.v1.ComputeStatus compute_status = 19;
+
+  // Last timestamp assigned to version data propagated to task queues.
+  temporal.server.api.clock.v1.HybridLogicalClock version_data_clock = 20;
 }
 
 // Data specific to a task queue, from the perspective of a worker deployment version.

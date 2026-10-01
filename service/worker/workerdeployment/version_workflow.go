@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -141,8 +142,12 @@ func (d *VersionWorkflowRunner) listenToSignals(ctx workflow.Context) {
 			d.VersionState.DrainageInfo = mergedInfo
 		}
 
-		if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINED {
+		if d.VersionState.GetDrainageInfo().GetStatus() == enumspb.VERSION_DRAINAGE_STATUS_DRAINED &&
+			d.VersionState.GetStatus() != enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED {
 			d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED
+			if d.hasMinVersion(VersionDataHLC) {
+				d.advanceVersionDataClock(ctx)
+			}
 		}
 		d.syncSummary(ctx)
 	})
@@ -258,6 +263,14 @@ func (d *VersionWorkflowRunner) run(ctx workflow.Context) error {
 	// TODO: remove this after next release because now the status should always be set at start.
 	if d.VersionState.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_UNSPECIFIED {
 		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE
+	}
+	if d.hasMinVersion(VersionDataHLC) && d.VersionState.GetVersionDataClock() == nil {
+		// CONSIDER(Shivam): A recreated Version workflow seeds its HLC from workflow time and does
+		// not inherit the completed execution's deletion clock. If its initial timestamp does not
+		// sort after that deletion clock, such as after clock regression or in the same wall-clock
+		// millisecond, the revival can fail to supersede the retained tombstone. Future hardening must
+		// durably carry the deletion HLC into the recreated workflow and advance from it.
+		d.advanceVersionDataClock(ctx)
 	}
 
 	// if we were draining and just continued-as-new, do another drainage check after waiting for appropriate time
@@ -584,7 +597,10 @@ func (d *VersionWorkflowRunner) handleDeleteVersion(ctx workflow.Context, args *
 		}
 	}
 
-	if args.AsyncPropagation {
+	if d.hasMinVersion(VersionDataHLC) {
+		d.deleteVersion = true
+		d.syncTaskQueuesAsync(ctx, nil, true)
+	} else if args.AsyncPropagation {
 		d.deleteVersion = true
 		if workflow.GetVersion(ctx, "serialDelete", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
 			if d.hasMinVersion(VersionDataRevisionNumber) {
@@ -751,6 +767,7 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 		}
 	}
 
+	versionDataChanged := false
 	if d.deleteVersion {
 		if workflow.GetVersion(ctx, "awaitSerialDelete", workflow.DefaultVersion, 1) == workflow.DefaultVersion {
 			// In case it was marked as deleted we make it undeleted
@@ -769,6 +786,7 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 				return err
 			}
 			d.reviveDeleted(ctx)
+			versionDataChanged = true
 		}
 	}
 
@@ -793,7 +811,11 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 	// Transition from CREATED to INACTIVE once a poller registers a task queue.
 	if d.VersionState.Status == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CREATED {
 		d.VersionState.Status = enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE
+		versionDataChanged = true
 		// deployment workflow updates the status in version summary to INACTIVE
+	}
+	if d.hasMinVersion(VersionDataHLC) && versionDataChanged {
+		d.advanceVersionDataClock(ctx)
 	}
 
 	if withRevisionNumbers && args.GetRoutingConfig() != nil {
@@ -807,6 +829,7 @@ func (d *VersionWorkflowRunner) handleRegisterWorker(ctx workflow.Context, args 
 }
 
 func (d *VersionWorkflowRunner) reviveDeleted(ctx workflow.Context) {
+	versionDataClock := d.VersionState.GetVersionDataClock()
 	// Resetting state to get rid of the info from the past life.
 	state := makeNewVersionState(d.VersionState.Version.DeploymentName,
 		d.VersionState.Version.BuildId,
@@ -815,6 +838,7 @@ func (d *VersionWorkflowRunner) reviveDeleted(ctx workflow.Context) {
 		enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
 		nil,
 		d.VersionState.SyncBatchSize)
+	state.VersionDataClock = versionDataClock
 	d.VersionState = state
 	d.deleteVersion = false
 }
@@ -835,13 +859,17 @@ func (d *VersionWorkflowRunner) syncRegisteredTaskQueueOld(ctx workflow.Context,
 	}
 
 	activityCtx := workflow.WithActivityOptions(ctx, propagationActivityOptions)
+	versionData := &deploymentspb.WorkerDeploymentVersionData{Status: d.VersionState.Status}
+	if d.hasMinVersion(VersionDataHLC) {
+		versionData = d.versionDataToSync(ctx)
+	}
 
 	// sync to user data
 	var syncRes deploymentspb.SyncDeploymentVersionUserDataResponse
 	err := workflow.ExecuteActivity(activityCtx, d.a.SyncDeploymentVersionUserData, &deploymentspb.SyncDeploymentVersionUserDataRequest{
 		Version:             d.VersionState.Version,
 		UpdateRoutingConfig: args.GetRoutingConfig(),
-		UpsertVersionData:   d.versionDataToSync(),
+		UpsertVersionData:   versionData,
 		Sync: []*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
 			{
 				Name:  args.TaskQueueName,
@@ -870,8 +898,23 @@ func (d *VersionWorkflowRunner) syncRegisteredTaskQueueOld(ctx workflow.Context,
 	return nil
 }
 
-func (d *VersionWorkflowRunner) versionDataToSync() *deploymentspb.WorkerDeploymentVersionData {
-	return &deploymentspb.WorkerDeploymentVersionData{Status: d.VersionState.Status}
+func (d *VersionWorkflowRunner) versionDataToSync(ctx workflow.Context) *deploymentspb.WorkerDeploymentVersionData {
+	state := d.GetVersionState()
+	versionData := &deploymentspb.WorkerDeploymentVersionData{
+		Status:         state.GetStatus(),
+		RevisionNumber: state.GetRevisionNumber(),
+		UpdateTime:     timestamppb.New(workflow.Now(ctx)),
+		Deleted:        d.deleteVersion,
+	}
+	if d.hasMinVersion(VersionDataHLC) {
+		versionData.StateUpdateClock = state.GetVersionDataClock()
+		versionData.UpdateTime = hlc.ProtoTimestamp(state.GetVersionDataClock())
+	}
+	return versionData
+}
+
+func (d *VersionWorkflowRunner) advanceVersionDataClock(ctx workflow.Context) {
+	d.VersionState.VersionDataClock = hlc.NextAt(d.VersionState.GetVersionDataClock(), workflow.Now(ctx))
 }
 
 // If routing update time has changed then we want to let the update through.
@@ -931,6 +974,7 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 	} else {
 		// SYNC MODE: propagate only version data (existing behavior)
 		newStatus = d.findNewVersionStatus(args)
+		versionDataChanged := state.GetStatus() != newStatus
 		versionData := &deploymentspb.DeploymentVersionData{
 			Version:           d.VersionState.Version,
 			RoutingUpdateTime: args.RoutingUpdateTime,
@@ -952,6 +996,9 @@ func (d *VersionWorkflowRunner) handleSyncState(ctx workflow.Context, args *depl
 		state.CurrentSinceTime = args.CurrentSinceTime
 		state.RampingSinceTime = args.RampingSinceTime
 		state.RampPercentage = args.RampPercentage
+		if d.hasMinVersion(VersionDataHLC) && versionDataChanged {
+			d.advanceVersionDataClock(ctx)
+		}
 
 		// Only needed for v0 workflow version. v1 and v2 are handled by updateStateFromRoutingConfig.
 		if newStatus == enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT &&
@@ -1361,13 +1408,11 @@ func (d *VersionWorkflowRunner) syncTaskQueuesAsync(ctx workflow.Context, routin
 	if withRevisionNumber && versionDataChanged {
 		d.GetVersionState().RevisionNumber++
 	}
-
-	versionData := &deploymentspb.WorkerDeploymentVersionData{
-		Status:         d.VersionState.Status,
-		RevisionNumber: d.GetVersionState().GetRevisionNumber(),
-		UpdateTime:     timestamppb.New(workflow.Now(ctx)),
-		Deleted:        d.deleteVersion,
+	if d.hasMinVersion(VersionDataHLC) && versionDataChanged {
+		d.advanceVersionDataClock(ctx)
 	}
+
+	versionData := d.versionDataToSync(ctx)
 
 	// Batches must be calculated within the lock otherwise previous update might be called on future task queues unintentionally.
 	batches := d.batchTaskQueuesForSync()
@@ -1543,11 +1588,7 @@ func (d *VersionWorkflowRunner) hasMinVersion(version DeploymentWorkflowVersion)
 func (d *VersionWorkflowRunner) syncRegisteredTaskQueueAsync(ctx workflow.Context, args *deploymentspb.RegisterWorkerInVersionArgs) {
 	startTime := workflow.Now(ctx)
 
-	versionData := &deploymentspb.WorkerDeploymentVersionData{
-		Status:         d.VersionState.Status,
-		RevisionNumber: d.GetVersionState().GetRevisionNumber(),
-		UpdateTime:     timestamppb.New(workflow.Now(ctx)),
-	}
+	versionData := d.versionDataToSync(ctx)
 
 	batch := []*deploymentspb.SyncDeploymentVersionUserDataRequest_SyncUserData{
 		{Name: args.GetTaskQueueName(), Types: []enumspb.TaskQueueType{args.GetTaskQueueType()}},

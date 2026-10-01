@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/clock"
 )
 
@@ -21,6 +22,20 @@ func Test_Next_ReturnsGreaterClock(t *testing.T) {
 	timesource.Update(time.Unix(0, 1).UTC())
 	t2 := Next(t1, timesource)
 	assert.Equal(t, 1, Compare(t1, t2))
+}
+
+func Test_NextAt_ReturnsGreaterClock(t *testing.T) {
+	t.Parallel()
+
+	tSeed := NextAt(nil, time.UnixMilli(8))
+	require.Equal(t, &Clock{WallClock: 8}, tSeed)
+
+	t0 := &Clock{WallClock: 10, Version: 2, ClusterId: 3}
+	t1 := NextAt(t0, time.UnixMilli(9))
+	require.Equal(t, &Clock{WallClock: 10, Version: 3, ClusterId: 3}, t1)
+
+	t2 := NextAt(t1, time.UnixMilli(11))
+	require.Equal(t, &Clock{WallClock: 11, Version: 0, ClusterId: 3}, t2)
 }
 
 func Test_Compare(t *testing.T) {

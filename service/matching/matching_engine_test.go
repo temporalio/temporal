@@ -3047,6 +3047,31 @@ func (s *matchingEngineSuite) seedTaskQueueUserData(taskQueue string, data *pers
 	}))
 }
 
+func taskQueueUserDataWithClockedDeploymentVersions(
+	dataClock *clockspb.HybridLogicalClock,
+	versions map[string]*deploymentspb.WorkerDeploymentVersionData,
+) *persistencespb.TaskQueueUserData {
+	return &persistencespb.TaskQueueUserData{
+		Clock: dataClock,
+		PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+			int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+				DeploymentData: &persistencespb.DeploymentData{
+					DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+						"deployment": {Versions: versions},
+					},
+				},
+			},
+		},
+	}
+}
+
+func clockedDeploymentVersions(data *persistencespb.TaskQueueUserData) map[string]*deploymentspb.WorkerDeploymentVersionData {
+	return data.GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].
+		GetDeploymentData().
+		GetDeploymentsData()["deployment"].
+		GetVersions()
+}
+
 func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventAcceptsClocklessData() {
 	deploymentData := &persistencespb.TaskQueueUserData{
 		PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
@@ -3225,6 +3250,213 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventRevivalU
 	s.Equal(persistencespb.STATE_ACTIVE, gotBuildID.GetState())
 	s.True(hlc.Greater(got.GetClock(), deletedClock))
 	protorequire.ProtoEqual(s.T(), gotBuildID.GetStateUpdateTimestamp(), got.GetClock())
+}
+
+func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventMergesClockedDeploymentVersion() {
+	s.Run("newer tombstone defeats stale live version", func() {
+		taskQueue := uuid.NewString()
+		deletedClock := &clockspb.HybridLogicalClock{WallClock: 20, ClusterId: 1}
+		current := taskQueueUserDataWithClockedDeploymentVersions(
+			&clockspb.HybridLogicalClock{WallClock: 20, ClusterId: 1},
+			map[string]*deploymentspb.WorkerDeploymentVersionData{
+				"A": {Deleted: true, StateUpdateClock: deletedClock},
+			},
+		)
+		incoming := taskQueueUserDataWithClockedDeploymentVersions(
+			&clockspb.HybridLogicalClock{WallClock: 30, ClusterId: 1},
+			map[string]*deploymentspb.WorkerDeploymentVersionData{
+				"A": {
+					Status:           enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+					StateUpdateClock: &clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1},
+				},
+			},
+		)
+		s.seedTaskQueueUserData(taskQueue, current)
+
+		got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, incoming)
+
+		gotVersion := clockedDeploymentVersions(got)["A"]
+		s.True(gotVersion.GetDeleted())
+		protorequire.ProtoEqual(s.T(), deletedClock, gotVersion.GetStateUpdateClock())
+	})
+
+	s.Run("newer live version revives tombstone", func() {
+		taskQueue := uuid.NewString()
+		liveClock := &clockspb.HybridLogicalClock{WallClock: 40, ClusterId: 1}
+		current := taskQueueUserDataWithClockedDeploymentVersions(
+			&clockspb.HybridLogicalClock{WallClock: 30, ClusterId: 1},
+			map[string]*deploymentspb.WorkerDeploymentVersionData{
+				"A": {
+					Deleted:          true,
+					StateUpdateClock: &clockspb.HybridLogicalClock{WallClock: 20, ClusterId: 1},
+				},
+			},
+		)
+		incoming := taskQueueUserDataWithClockedDeploymentVersions(
+			&clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1},
+			map[string]*deploymentspb.WorkerDeploymentVersionData{
+				"A": {
+					Status:           enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+					StateUpdateClock: liveClock,
+				},
+			},
+		)
+		s.seedTaskQueueUserData(taskQueue, current)
+
+		got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, incoming)
+
+		gotVersion := clockedDeploymentVersions(got)["A"]
+		s.False(gotVersion.GetDeleted())
+		s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, gotVersion.GetStatus())
+		protorequire.ProtoEqual(s.T(), liveClock, gotVersion.GetStateUpdateClock())
+	})
+}
+
+//nolint:staticcheck // SA1019 verifies removal from the deprecated deployment versions representation
+func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventClockedTombstoneRemovesOldFormatVersion() {
+	taskQueue := uuid.NewString()
+	current := taskQueueUserDataWithClockedDeploymentVersions(
+		&clockspb.HybridLogicalClock{WallClock: 30, ClusterId: 1},
+		map[string]*deploymentspb.WorkerDeploymentVersionData{
+			"A": {StateUpdateClock: &clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1}},
+		},
+	)
+	currentDeploymentData := current.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].DeploymentData
+	currentDeploymentData.Versions = []*deploymentspb.DeploymentVersionData{
+		{Version: &deploymentspb.WorkerDeploymentVersion{DeploymentName: "deployment", BuildId: "A"}},
+	}
+	incoming := taskQueueUserDataWithClockedDeploymentVersions(
+		&clockspb.HybridLogicalClock{WallClock: 20, ClusterId: 1},
+		map[string]*deploymentspb.WorkerDeploymentVersionData{
+			"A": {
+				Deleted:          true,
+				StateUpdateClock: &clockspb.HybridLogicalClock{WallClock: 20, ClusterId: 1},
+			},
+		},
+	)
+	s.seedTaskQueueUserData(taskQueue, current)
+
+	got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, incoming)
+
+	gotDeploymentData := got.GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData()
+	s.Empty(gotDeploymentData.GetVersions())
+	s.True(gotDeploymentData.GetDeploymentsData()["deployment"].GetVersions()["A"].GetDeleted())
+}
+
+func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventPreservesDisjointClockedVersions() {
+	taskQueue := uuid.NewString()
+	current := taskQueueUserDataWithClockedDeploymentVersions(
+		&clockspb.HybridLogicalClock{WallClock: 20, ClusterId: 1},
+		map[string]*deploymentspb.WorkerDeploymentVersionData{
+			"B": {StateUpdateClock: &clockspb.HybridLogicalClock{WallClock: 20, ClusterId: 1}},
+		},
+	)
+	current.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].FairnessState = enumsspb.FAIRNESS_STATE_V2
+	incoming := taskQueueUserDataWithClockedDeploymentVersions(
+		&clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1},
+		map[string]*deploymentspb.WorkerDeploymentVersionData{
+			"A": {StateUpdateClock: &clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1}},
+		},
+	)
+	incoming.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].FairnessState = enumsspb.FAIRNESS_STATE_V1
+	s.seedTaskQueueUserData(taskQueue, current)
+
+	got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, incoming)
+
+	versions := clockedDeploymentVersions(got)
+	s.Require().Len(versions, 2)
+	s.Contains(versions, "A")
+	s.Contains(versions, "B")
+	s.Equal(enumsspb.FAIRNESS_STATE_V2, got.GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetFairnessState())
+}
+
+func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventClockedVersionMergeConverges() {
+	snapshotA := taskQueueUserDataWithClockedDeploymentVersions(
+		&clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1},
+		map[string]*deploymentspb.WorkerDeploymentVersionData{
+			"A": {StateUpdateClock: &clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1}},
+		},
+	)
+	snapshotB := taskQueueUserDataWithClockedDeploymentVersions(
+		&clockspb.HybridLogicalClock{WallClock: 20, ClusterId: 1},
+		map[string]*deploymentspb.WorkerDeploymentVersionData{
+			"B": {StateUpdateClock: &clockspb.HybridLogicalClock{WallClock: 20, ClusterId: 1}},
+		},
+	)
+
+	forwardTaskQueue := uuid.NewString()
+	s.applyTaskQueueUserDataReplicationEvent(forwardTaskQueue, snapshotA)
+	forward := s.applyTaskQueueUserDataReplicationEvent(forwardTaskQueue, snapshotB)
+
+	reverseTaskQueue := uuid.NewString()
+	s.applyTaskQueueUserDataReplicationEvent(reverseTaskQueue, snapshotB)
+	reverse := s.applyTaskQueueUserDataReplicationEvent(reverseTaskQueue, snapshotA)
+
+	protorequire.ProtoEqual(s.T(), forward, reverse)
+
+	beforeRetry := common.CloneProto(forward)
+	afterRetry := s.applyTaskQueueUserDataReplicationEvent(forwardTaskQueue, snapshotB)
+	protorequire.ProtoEqual(s.T(), beforeRetry, afterRetry)
+}
+
+func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventUsesMaximumClockAndClonesVersion() {
+	taskQueue := uuid.NewString()
+	current := taskQueueUserDataWithClockedDeploymentVersions(
+		&clockspb.HybridLogicalClock{WallClock: 40, ClusterId: 1},
+		map[string]*deploymentspb.WorkerDeploymentVersionData{
+			"B": {StateUpdateClock: &clockspb.HybridLogicalClock{WallClock: 50, ClusterId: 1}},
+		},
+	)
+	incomingVersion := &deploymentspb.WorkerDeploymentVersionData{
+		Status:           enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+		StateUpdateClock: &clockspb.HybridLogicalClock{WallClock: 60, ClusterId: 1},
+	}
+	incoming := taskQueueUserDataWithClockedDeploymentVersions(
+		&clockspb.HybridLogicalClock{WallClock: 30, ClusterId: 1},
+		map[string]*deploymentspb.WorkerDeploymentVersionData{"A": incomingVersion},
+	)
+	s.seedTaskQueueUserData(taskQueue, current)
+
+	got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, incoming)
+	gotVersion := clockedDeploymentVersions(got)["A"]
+
+	protorequire.ProtoEqual(s.T(), incomingVersion.GetStateUpdateClock(), got.GetClock())
+	s.NotSame(incomingVersion, gotVersion)
+	s.NotSame(incomingVersion.GetStateUpdateClock(), gotVersion.GetStateUpdateClock())
+	incomingVersion.Deleted = true
+	incomingVersion.StateUpdateClock.WallClock++
+	s.False(gotVersion.GetDeleted())
+	s.Equal(int64(60), gotVersion.GetStateUpdateClock().GetWallClock())
+}
+
+func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventRejectsConflictingClockedVersion() {
+	taskQueue := uuid.NewString()
+	stamp := &clockspb.HybridLogicalClock{WallClock: 20, ClusterId: 1}
+	current := taskQueueUserDataWithClockedDeploymentVersions(
+		&clockspb.HybridLogicalClock{WallClock: 20, ClusterId: 1},
+		map[string]*deploymentspb.WorkerDeploymentVersionData{
+			"A": {
+				Status:           enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+				StateUpdateClock: stamp,
+			},
+		},
+	)
+	incoming := taskQueueUserDataWithClockedDeploymentVersions(
+		&clockspb.HybridLogicalClock{WallClock: 30, ClusterId: 1},
+		map[string]*deploymentspb.WorkerDeploymentVersionData{
+			"A": {Deleted: true, StateUpdateClock: common.CloneProto(stamp)},
+		},
+	)
+	s.seedTaskQueueUserData(taskQueue, current)
+	s.logger.Expect(testlogger.Error, "user data update function failed")
+
+	_, err := s.matchingEngine.ApplyTaskQueueUserDataReplicationEvent(context.Background(), &matchingservice.ApplyTaskQueueUserDataReplicationEventRequest{
+		NamespaceId: s.ns.ID().String(),
+		TaskQueue:   taskQueue,
+		UserData:    incoming,
+	})
+
+	s.ErrorContains(err, "different version values have the same state update clock")
 }
 
 func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {
@@ -5316,6 +5548,155 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_VersionDataRevisionGati
 	versions = res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetDeploymentData().GetDeploymentsData()[deploymentName].GetVersions()
 	s.Equal(int64(2), versions[buildID].GetRevisionNumber())
 	s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_CURRENT, versions[buildID].GetStatus())
+}
+
+func (s *matchingEngineSuite) TestSyncDeploymentUserData_VersionDataClockGating() {
+	tv := testvars.New(s.T())
+	namespaceID := tv.NamespaceID().String()
+	deploymentName := "deployment"
+	buildID := "A"
+
+	syncVersion := func(taskQueue string, versionData *deploymentspb.WorkerDeploymentVersionData) (*matchingservice.SyncDeploymentUserDataResponse, error) {
+		return s.matchingEngine.SyncDeploymentUserData(context.Background(), &matchingservice.SyncDeploymentUserDataRequest{
+			NamespaceId:    namespaceID,
+			TaskQueue:      taskQueue,
+			DeploymentName: deploymentName,
+			TaskQueueTypes: []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+			UpsertVersionsData: map[string]*deploymentspb.WorkerDeploymentVersionData{
+				buildID: versionData,
+			},
+		})
+	}
+	readVersion := func(taskQueue string) *deploymentspb.WorkerDeploymentVersionData {
+		res, err := s.matchingEngine.GetTaskQueueUserData(context.Background(), &matchingservice.GetTaskQueueUserDataRequest{
+			NamespaceId:              namespaceID,
+			TaskQueue:                taskQueue,
+			TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			LastKnownUserDataVersion: 0,
+		})
+		s.Require().NoError(err)
+		return res.GetUserData().GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].
+			GetDeploymentData().GetDeploymentsData()[deploymentName].GetVersions()[buildID]
+	}
+
+	s.Run("stale live version cannot overwrite newer tombstone", func() {
+		taskQueue := uuid.NewString()
+		deletedClock := &clockspb.HybridLogicalClock{WallClock: 20, ClusterId: 1}
+		_, err := syncVersion(taskQueue, &deploymentspb.WorkerDeploymentVersionData{
+			RevisionNumber:   1,
+			Deleted:          true,
+			StateUpdateClock: deletedClock,
+		})
+		s.Require().NoError(err)
+
+		_, err = syncVersion(taskQueue, &deploymentspb.WorkerDeploymentVersionData{
+			RevisionNumber:   100,
+			Status:           enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+			StateUpdateClock: &clockspb.HybridLogicalClock{WallClock: 10, ClusterId: 1},
+		})
+		s.Require().NoError(err)
+
+		got := readVersion(taskQueue)
+		s.True(got.GetDeleted())
+		protorequire.ProtoEqual(s.T(), deletedClock, got.GetStateUpdateClock())
+	})
+
+	s.Run("newer live version revives older tombstone", func() {
+		taskQueue := uuid.NewString()
+		_, err := syncVersion(taskQueue, &deploymentspb.WorkerDeploymentVersionData{
+			RevisionNumber:   100,
+			Deleted:          true,
+			StateUpdateClock: &clockspb.HybridLogicalClock{WallClock: 20, ClusterId: 1},
+		})
+		s.Require().NoError(err)
+		liveClock := &clockspb.HybridLogicalClock{WallClock: 30, ClusterId: 1}
+
+		_, err = syncVersion(taskQueue, &deploymentspb.WorkerDeploymentVersionData{
+			RevisionNumber:   1,
+			Status:           enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+			StateUpdateClock: liveClock,
+		})
+		s.Require().NoError(err)
+
+		got := readVersion(taskQueue)
+		s.False(got.GetDeleted())
+		s.Equal(enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE, got.GetStatus())
+		protorequire.ProtoEqual(s.T(), liveClock, got.GetStateUpdateClock())
+	})
+
+	s.Run("equal clock with different value is rejected", func() {
+		taskQueue := uuid.NewString()
+		stamp := &clockspb.HybridLogicalClock{WallClock: 20, ClusterId: 1}
+		_, err := syncVersion(taskQueue, &deploymentspb.WorkerDeploymentVersionData{
+			Status:           enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+			StateUpdateClock: stamp,
+		})
+		s.Require().NoError(err)
+		s.logger.Expect(testlogger.Error, "user data update function failed")
+
+		_, err = syncVersion(taskQueue, &deploymentspb.WorkerDeploymentVersionData{
+			Deleted:          true,
+			StateUpdateClock: common.CloneProto(stamp),
+		})
+
+		s.ErrorContains(err, "different version values have the same state update clock")
+	})
+
+	s.Run("identical retry is accepted", func() {
+		taskQueue := uuid.NewString()
+		originalNamespaceRegistry := s.matchingEngine.namespaceRegistry
+		originalMatchingRawClient := s.matchingEngine.matchingRawClient
+		defer func() {
+			s.matchingEngine.namespaceRegistry = originalNamespaceRegistry
+			s.matchingEngine.matchingRawClient = originalMatchingRawClient
+		}()
+
+		globalNamespace := namespace.NewGlobalNamespaceForTest(
+			&persistencespb.NamespaceInfo{Name: matchingTestNamespace, Id: namespaceID},
+			&persistencespb.NamespaceConfig{},
+			&persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []string{
+					cluster.TestCurrentClusterName,
+					cluster.TestAlternativeClusterName,
+				},
+			},
+			cluster.TestCurrentClusterInitialFailoverVersion,
+		)
+		globalNamespaceRegistry := namespace.NewMockRegistry(s.controller)
+		globalNamespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(globalNamespace, nil).AnyTimes()
+		globalNamespaceRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(globalNamespace.Name(), nil).AnyTimes()
+		s.matchingEngine.namespaceRegistry = globalNamespaceRegistry
+
+		matchingClient := matchingservicemock.NewMockMatchingServiceClient(s.controller)
+		matchingClient.EXPECT().GetTaskQueueUserData(gomock.Any(), gomock.Any()).
+			Return(&matchingservice.GetTaskQueueUserDataResponse{}, nil).AnyTimes()
+		matchingClient.EXPECT().UpdateTaskQueueUserData(gomock.Any(), gomock.Any()).
+			Return(&matchingservice.UpdateTaskQueueUserDataResponse{}, nil).AnyTimes()
+		matchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).
+			Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{WasUnloaded: true}, nil).AnyTimes()
+		replicationCalls := 0
+		matchingClient.EXPECT().ReplicateTaskQueueUserData(gomock.Any(), gomock.Any()).DoAndReturn(
+			func(context.Context, *matchingservice.ReplicateTaskQueueUserDataRequest, ...grpc.CallOption) (*matchingservice.ReplicateTaskQueueUserDataResponse, error) {
+				replicationCalls++
+				return &matchingservice.ReplicateTaskQueueUserDataResponse{}, nil
+			},
+		).AnyTimes()
+		s.matchingEngine.matchingRawClient = matchingClient
+
+		versionData := &deploymentspb.WorkerDeploymentVersionData{
+			Status:           enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE,
+			StateUpdateClock: &clockspb.HybridLogicalClock{WallClock: 20, ClusterId: 1},
+		}
+		first, err := syncVersion(taskQueue, versionData)
+		s.Require().NoError(err)
+
+		second, err := syncVersion(taskQueue, common.CloneProto(versionData))
+		s.Require().NoError(err)
+
+		s.Greater(second.GetVersion(), first.GetVersion())
+		s.Equal(2, replicationCalls)
+	})
 }
 
 //nolint:staticcheck // SA1019 deprecated versions will clean up later
