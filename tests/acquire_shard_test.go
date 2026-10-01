@@ -3,12 +3,14 @@ package tests
 import (
 	"context"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -76,9 +78,9 @@ func (r *logRecorder) record(msg string, tags ...tag.Tag) {
 }
 
 // newEnv builds a logs channel + logRecorder and starts a dedicated single-shard
-// cluster wired to that recorder with the given fault injection config. The
+// cluster wired to that recorder with the given fault injection option. The
 // cluster is torn down automatically via t.Cleanup inside NewEnv.
-func (s *AcquireShardSuite) newEnv(fi *config.FaultInjection) chan logRecord {
+func (s *AcquireShardSuite) newEnv(faultOpt testcore.TestOption) chan logRecord {
 	// Server startup happens when the cluster is created, but the test doesn't
 	// listen on the log channel until afterward. So the buffer needs to be big
 	// enough to hold all server-startup logs, which are currently about 190 lines.
@@ -87,7 +89,7 @@ func (s *AcquireShardSuite) newEnv(fi *config.FaultInjection) chan logRecord {
 		s.T(),
 		testcore.WithLogger(newLogRecorder(logs)),
 		testcore.WithHistoryShardCount(1),
-		testcore.WithPersistenceFaultInjection(fi),
+		faultOpt,
 	)
 	return logs
 }
@@ -95,8 +97,12 @@ func (s *AcquireShardSuite) newEnv(fi *config.FaultInjection) chan logRecord {
 // TestOwnershipLost_DoesNotRetry verifies that we do not retry acquiring the shard
 // when we get an ownership lost error.
 func (s *AcquireShardSuite) TestOwnershipLost_DoesNotRetry() {
-	logs := s.newEnv((&config.FaultInjection{}).
-		WithError(config.ShardStoreName, "UpdateShard", "ShardOwnershipLost", 1.0))
+	logs := s.newEnv(testcore.InjectPersistenceFault(s.T(),
+		func(config.FaultInjectionTarget) error {
+			return &persistence.ShardOwnershipLostError{Msg: "injected shard ownership lost"}
+		},
+		testcore.WithStore(config.ShardStoreName),
+		testcore.WithMethod("UpdateShard")))
 
 	ctx, cancel := context.WithTimeout(s.Context(), time.Second*10)
 	defer cancel()
@@ -130,8 +136,12 @@ func (s *AcquireShardSuite) TestOwnershipLost_DoesNotRetry() {
 // TestDeadlineExceeded_DoesRetry verifies that we do retry acquiring the shard when
 // we get a deadline exceeded error because that should be considered a transient error.
 func (s *AcquireShardSuite) TestDeadlineExceeded_DoesRetry() {
-	logs := s.newEnv((&config.FaultInjection{}).
-		WithError(config.ShardStoreName, "UpdateShard", "DeadlineExceeded", 1.0))
+	logs := s.newEnv(testcore.InjectPersistenceFault(s.T(),
+		func(config.FaultInjectionTarget) error {
+			return context.DeadlineExceeded
+		},
+		testcore.WithStore(config.ShardStoreName),
+		testcore.WithMethod("UpdateShard")))
 
 	ctx, cancel := context.WithTimeout(s.Context(), time.Second*10)
 	defer cancel()
@@ -160,11 +170,17 @@ func (s *AcquireShardSuite) TestDeadlineExceeded_DoesRetry() {
 
 // TestEventualSuccess verifies that we eventually succeed in acquiring the shard when
 // we get a deadline exceeded error followed by a successful acquire shard call.
-// To make this test deterministic, the fault injection method seed is fixed.
 func (s *AcquireShardSuite) TestEventualSuccess() {
-	logs := s.newEnv((&config.FaultInjection{}).
-		WithError(config.ShardStoreName, "UpdateShard", "DeadlineExceeded", 0.5).
-		WithMethodSeed(config.ShardStoreName, "UpdateShard", 43))
+	var updateShardCalls atomic.Int32
+	logs := s.newEnv(testcore.InjectPersistenceFault(s.T(),
+		func(config.FaultInjectionTarget) error {
+			if updateShardCalls.Add(1) == 1 {
+				return context.DeadlineExceeded
+			}
+			return nil
+		},
+		testcore.WithStore(config.ShardStoreName),
+		testcore.WithMethod("UpdateShard")))
 
 	ctx, cancel := context.WithTimeout(s.Context(), time.Second*10)
 	defer cancel()
@@ -191,6 +207,49 @@ func (s *AcquireShardSuite) TestEventualSuccess() {
 			}
 		case <-ctx.Done():
 			s.FailNow("timed out waiting for retry")
+		}
+	}
+}
+
+// TestBlockedUpdateShard_AcquiresAfterRelease verifies that the shard is not
+// acquired while UpdateShard is blocked, and that it is acquired after release.
+// Shard acquisition logs "Acquired shard" only after UpdateShard returns.
+func (s *AcquireShardSuite) TestBlockedUpdateShard_AcquiresAfterRelease() {
+	gate, opt := testcore.NewPersistenceCallGate(
+		s.T(),
+		testcore.WithStore(config.ShardStoreName),
+		testcore.WithMethod("UpdateShard"),
+	)
+
+	// s.newEnv(...) appends testcore.WithHistoryShardCount(1) to force history
+	// to have a single shard.
+	logs := s.newEnv(opt)
+
+	// The cluster has one shard, so one UpdateShard call blocks.
+	testcore.WaitForPersistenceCall(s.T(), gate, time.Second*10)
+	s.Equal(1, gate.NumArrived())
+
+	// Check the logs written so far, ensuring we cannot yet acquire the shard
+	// while UpdateShard has not returned.
+	for range len(logs) {
+		record := <-logs
+		s.NotContains(strings.ToLower(record.msg), "acquired shard",
+			"shard was acquired while UpdateShard was blocked")
+	}
+
+	gate.Release()
+
+	// Now verify that the shard is successfully acquired.
+	ctx, cancel := context.WithTimeout(s.Context(), time.Second*10)
+	defer cancel()
+	for {
+		select {
+		case record := <-logs:
+			if strings.Contains(strings.ToLower(record.msg), "acquired shard") {
+				return
+			}
+		case <-ctx.Done():
+			s.FailNow("timed out waiting for shard to be acquired after release")
 		}
 	}
 }
