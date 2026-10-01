@@ -3,6 +3,8 @@ package tdbg
 import (
 	"bytes"
 	"context"
+	"flag"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -20,6 +22,7 @@ type (
 		adminservice.AdminServiceClient
 		currentCluster string
 		lastRequest    *adminservice.StartAdminBatchOperationRequest
+		workflowID     string
 	}
 
 	batchTestWorkflowClient struct {
@@ -93,7 +96,7 @@ func (t *batchTestAdminClient) StartAdminBatchOperation(
 	_ ...grpc.CallOption,
 ) (*adminservice.StartAdminBatchOperationResponse, error) {
 	t.lastRequest = request
-	return &adminservice.StartAdminBatchOperationResponse{}, nil
+	return &adminservice.StartAdminBatchOperationResponse{WorkflowId: t.workflowID}, nil
 }
 
 const testCurrentCluster = "active-cluster"
@@ -105,7 +108,7 @@ func TestBatchCommandSuite(t *testing.T) {
 func (s *batchCommandTestSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.client = &batchTestClient{
-		admin:    &batchTestAdminClient{currentCluster: testCurrentCluster},
+		admin:    &batchTestAdminClient{currentCluster: testCurrentCluster, workflowID: "target-ns:my-job"},
 		workflow: &batchTestWorkflowClient{activeCluster: testCurrentCluster},
 	}
 	s.app = NewCliApp(func(params *Params) {
@@ -145,6 +148,32 @@ func (s *batchCommandTestSuite) TestAdminBatchStart() {
 		s.Contains(s.output.String(), "Batch workflow namespace: \"temporal-system\"")
 		s.Contains(s.output.String(), "Operation: terminate-workflows")
 		s.Contains(s.output.String(), "Currently matching: 3 workflows")
+	})
+
+	s.Run("Uses the server workflow ID", func() {
+		s.client.admin.workflowID = "server-returned-id"
+		defer func() { s.client.admin.workflowID = "target-ns:my-job" }()
+		s.NoError(s.run(
+			"--batch-type", batchTypeTerminateWorkflows,
+			"--query", "A=B",
+			"--reason", "cleanup",
+			"--job-id", "another-job",
+		))
+		s.Equal("another-job", s.client.admin.lastRequest.GetJobId())
+		s.Contains(s.output.String(), "with Job ID: server-returned-id")
+	})
+
+	s.Run("Colon in job ID is rejected", func() {
+		s.client.admin.lastRequest = nil
+		err := s.run(
+			"--batch-type", batchTypeTerminateWorkflows,
+			"--query", "A=B",
+			"--reason", "cleanup",
+			"--job-id", "target-ns:my-job",
+		)
+		s.ErrorContains(err, "cannot contain ':'")
+		s.ErrorContains(err, "use '-' or '_' instead")
+		s.Nil(s.client.admin.lastRequest)
 	})
 
 	s.Run("Terminate activities delegates the activity batch type", func() {
@@ -225,4 +254,62 @@ func (s *batchCommandTestSuite) TestAdminBatchRefreshTasksSendsRawJobID() {
 	s.NoError(err)
 	s.Equal("my-job", s.client.admin.lastRequest.GetJobId())
 	s.Contains(s.output.String(), "target-ns:my-job")
+
+	s.output.Reset()
+	s.client.admin.workflowID = "server-returned-id"
+	err = s.app.Run([]string{
+		"tdbg", "--namespace", "target-ns", "--yes", "execution", "refresh-tasks",
+		"--query", "WorkflowType='MyWorkflow'", "--reason", "refresh", "--job-id", "another-job",
+	})
+	s.NoError(err)
+	s.Equal("another-job", s.client.admin.lastRequest.GetJobId())
+	s.Contains(s.output.String(), "Job ID: server-returned-id")
+
+	s.client.admin.lastRequest = nil
+	err = s.app.Run([]string{
+		"tdbg", "--namespace", "target-ns", "--yes", "execution", "refresh-tasks",
+		"--query", "WorkflowType='MyWorkflow'", "--reason", "refresh", "--job-id", "target-ns:my-job",
+	})
+	s.ErrorContains(err, "cannot contain ':'")
+	s.ErrorContains(err, "use '-' or '_' instead")
+	s.Nil(s.client.admin.lastRequest)
+}
+
+func (s *batchCommandTestSuite) TestAdminBatchRefreshTasksConfirmationShowsClusterRole() {
+	tests := []struct {
+		name              string
+		isGlobalNamespace bool
+		activeCluster     string
+		wantRole          string
+	}{
+		{name: "local namespace", wantRole: "active"},
+		{name: "global namespace active here", isGlobalNamespace: true, activeCluster: testCurrentCluster, wantRole: "active"},
+		{name: "global namespace passive here", isGlobalNamespace: true, activeCluster: "other-cluster", wantRole: "passive"},
+	}
+
+	for _, tc := range tests {
+		s.Run(tc.name, func() {
+			s.output.Reset()
+			s.client.workflow.isGlobalNamespace = tc.isGlobalNamespace
+			s.client.workflow.activeCluster = tc.activeCluster
+			flags := flag.NewFlagSet("refresh-tasks", flag.ContinueOnError)
+			flags.String(FlagNamespace, "target-ns", "")
+			flags.String(FlagVisibilityQuery, "A=B", "")
+			flags.String(FlagReason, "refresh", "")
+			flags.String(FlagJobID, "my-job", "")
+			ctx := cli.NewContext(s.app, flags, nil)
+			ctx.Context = context.Background()
+			prompter := NewPrompter(ctx, func(params *PrompterParams) {
+				params.Writer = &s.output
+				params.Reader = strings.NewReader("y\n")
+				params.Exiter = func(int) { s.T().FailNow() }
+			})
+
+			s.Require().NoError(AdminBatchRefreshWorkflowTasks(ctx, s.client, prompter))
+			s.Contains(s.output.String(), "This cluster is "+tc.wantRole+" for namespace \"target-ns\"")
+			s.Contains(s.output.String(), "A batch workflow will be started in \"temporal-system\"")
+			s.Contains(s.output.String(), "Continue? [y/N]:")
+			s.Equal("my-job", s.client.admin.lastRequest.GetJobId())
+		})
+	}
 }

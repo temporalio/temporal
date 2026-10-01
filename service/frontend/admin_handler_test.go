@@ -2659,34 +2659,6 @@ func (s *adminHandlerSuite) TestGetSearchAttributes() {
 	})
 }
 
-func TestAdminBatchWorkflowID(t *testing.T) {
-	tests := []struct {
-		name            string
-		targetNamespace string
-		jobID           string
-		want            string
-	}{
-		{
-			name:            "raw job ID",
-			targetNamespace: "target-ns",
-			jobID:           "job-id",
-			want:            "target-ns:job-id",
-		},
-		{
-			name:            "already prefixed job ID",
-			targetNamespace: "target-ns",
-			jobID:           "target-ns:job-id",
-			want:            "target-ns:job-id",
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.want, adminBatchWorkflowID(tc.targetNamespace, tc.jobID))
-		})
-	}
-}
-
 func TestCreateDelegatedBatchRequest(t *testing.T) {
 	adminRequest := &adminservice.StartAdminBatchOperationRequest{
 		Namespace:       "target-namespace",

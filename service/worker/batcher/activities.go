@@ -423,6 +423,9 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	if err != nil {
 		metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
 		logger.Error("Failed to run batch operation due to namespace mismatch", tag.Error(err))
+		if errors.Is(err, errNamespaceMismatch) || errors.Is(err, errAdminBatchNamespaceNotSystem) {
+			return hbd, temporal.NewNonRetryableApplicationError(err.Error(), "NamespaceMismatch", err)
+		}
 		return hbd, err
 	}
 	sdkClientForTargetNS := a.ClientFactory.NewClient(sdkclient.Options{

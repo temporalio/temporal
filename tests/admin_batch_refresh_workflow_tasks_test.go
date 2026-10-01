@@ -113,7 +113,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_J
 	namespaces := []string{env.Namespace().String(), env.ExternalNamespace().String()}
 
 	for _, targetNamespace := range namespaces {
-		_, err := env.AdminClient().StartAdminBatchOperation(s.Context(), &adminservice.StartAdminBatchOperationRequest{
+		resp, err := env.AdminClient().StartAdminBatchOperation(s.Context(), &adminservice.StartAdminBatchOperationRequest{
 			Namespace:       targetNamespace,
 			VisibilityQuery: "WorkflowType='no-matching-workflows'",
 			JobId:           jobID,
@@ -124,6 +124,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_J
 			},
 		})
 		s.Require().NoError(err)
+		s.Require().Equal(targetNamespace+":"+jobID, resp.GetWorkflowId())
 
 		_, err = env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: primitives.SystemLocalNamespace,
@@ -131,25 +132,22 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_J
 		})
 		s.Require().NoError(err)
 	}
+}
 
-	legacyJobID := namespaces[0] + ":" + uuid.NewString()
+func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_InvalidArgument_ColonInJobId() {
+	env := s.newTestEnv()
 	_, err := env.AdminClient().StartAdminBatchOperation(s.Context(), &adminservice.StartAdminBatchOperationRequest{
-		Namespace:       namespaces[0],
+		Namespace:       env.Namespace().String(),
 		VisibilityQuery: "WorkflowType='no-matching-workflows'",
-		JobId:           legacyJobID,
-		Reason:          "test prefixed job ID",
+		JobId:           "other-ns:job-id",
+		Reason:          "test invalid job ID",
 		Identity:        "test-identity",
 		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
 			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
 		},
 	})
-	s.Require().NoError(err)
-
-	_, err = env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: primitives.SystemLocalNamespace,
-		Execution: &commonpb.WorkflowExecution{WorkflowId: legacyJobID},
-	})
-	s.Require().NoError(err)
+	s.Require().ErrorContains(err, "JobId cannot contain ':'")
+	s.Require().Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
 }
 
 // The job's execution is covered by the xdc suite; this test only covers tdbg starting it.
