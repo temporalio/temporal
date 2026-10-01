@@ -157,6 +157,6 @@ func TestDispatchNexusTaskByEndpoint_NamespaceNotFound_Retryable(t *testing.T) {
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&failure))
 	require.Equal(t, "invalid endpoint target", failure.Message)
 	require.Equal(t,
-		[]*metricstest.CapturedRecording{{Value: int64(1), Tags: map[string]string{"reason": "endpoint_target_invalid"}}},
+		[]*metricstest.CapturedRecording{{Value: int64(1), Tags: map[string]string{"reason": "endpoint_target_not_found"}}},
 		capture.SnapshotMetric(metrics.NexusRequestPreProcessErrors.Name()))
 }
