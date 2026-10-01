@@ -138,7 +138,7 @@ func (s *AdminBatchDelegationTestSuite) TestTdbgBatchTerminate_RunsInSystemNames
 		"--"+tdbg.FlagJobID, jobID,
 	))
 
-	// tdbg qualifies the job ID with the namespace: the batch workflow runs in the system namespace,
+	// The server qualifies the job ID with the namespace: the batch workflow runs in the system namespace,
 	// where job IDs from every namespace share one workflow ID space.
 	batchWorkflowID := ns + ":" + jobID
 

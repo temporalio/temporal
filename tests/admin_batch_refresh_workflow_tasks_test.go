@@ -107,6 +107,51 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_R
 	s.NotNil(resp)
 }
 
+func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_JobIDScopedToTargetNamespace() {
+	env := s.newTestEnv()
+	jobID := uuid.NewString()
+	namespaces := []string{env.Namespace().String(), env.ExternalNamespace().String()}
+
+	for _, targetNamespace := range namespaces {
+		_, err := env.AdminClient().StartAdminBatchOperation(s.Context(), &adminservice.StartAdminBatchOperationRequest{
+			Namespace:       targetNamespace,
+			VisibilityQuery: "WorkflowType='no-matching-workflows'",
+			JobId:           jobID,
+			Reason:          "test namespace-scoped job ID",
+			Identity:        "test-identity",
+			Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+				RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
+			},
+		})
+		s.Require().NoError(err)
+
+		_, err = env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: primitives.SystemLocalNamespace,
+			Execution: &commonpb.WorkflowExecution{WorkflowId: targetNamespace + ":" + jobID},
+		})
+		s.Require().NoError(err)
+	}
+
+	legacyJobID := namespaces[0] + ":" + uuid.NewString()
+	_, err := env.AdminClient().StartAdminBatchOperation(s.Context(), &adminservice.StartAdminBatchOperationRequest{
+		Namespace:       namespaces[0],
+		VisibilityQuery: "WorkflowType='no-matching-workflows'",
+		JobId:           legacyJobID,
+		Reason:          "test prefixed job ID",
+		Identity:        "test-identity",
+		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
+			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
+		},
+	})
+	s.Require().NoError(err)
+
+	_, err = env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: primitives.SystemLocalNamespace,
+		Execution: &commonpb.WorkflowExecution{WorkflowId: legacyJobID},
+	})
+	s.Require().NoError(err)
+}
+
 // The job's execution is covered by the xdc suite; this test only covers tdbg starting it.
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestTdbgRefreshTasks_StartsBatchJobInSystemNamespace() {
 	env := s.newTestEnv()
@@ -147,7 +192,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestTdbgRefreshTasks_StartsBat
 		"--"+tdbg.FlagJobID, jobID,
 	))
 
-	// tdbg qualifies the job ID with the namespace: the batch workflow runs in the system namespace,
+	// The server qualifies the job ID with the namespace: the batch workflow runs in the system namespace,
 	// where job IDs from every namespace share one workflow ID space.
 	batchWorkflowIDPrefix := ns + ":"
 	batchWorkflowID := batchWorkflowIDPrefix + jobID

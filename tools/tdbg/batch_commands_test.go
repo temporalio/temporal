@@ -138,7 +138,7 @@ func (s *batchCommandTestSuite) TestAdminBatchStart() {
 		s.Equal("target-ns", request.GetNamespace())
 		s.Equal("WorkflowType='MyWorkflow'", request.GetVisibilityQuery())
 		s.Equal("cleanup", request.GetReason())
-		s.Equal("target-ns:my-job", request.GetJobId())
+		s.Equal("my-job", request.GetJobId())
 		s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, request.GetDelegationOperation().GetBatchType())
 		s.Contains(s.output.String(), "DANGER: destructive delegated batch operation")
 		s.Contains(s.output.String(), "User namespace: \"target-ns\"")
@@ -215,4 +215,14 @@ func (s *batchCommandTestSuite) TestAdminBatchStart() {
 		s.ErrorContains(err, "must be started in the active cluster")
 		s.Nil(s.client.admin.lastRequest, "the job must not be started")
 	})
+}
+
+func (s *batchCommandTestSuite) TestAdminBatchRefreshTasksSendsRawJobID() {
+	err := s.app.Run([]string{
+		"tdbg", "--namespace", "target-ns", "--yes", "execution", "refresh-tasks",
+		"--query", "WorkflowType='MyWorkflow'", "--reason", "refresh", "--job-id", "my-job",
+	})
+	s.NoError(err)
+	s.Equal("my-job", s.client.admin.lastRequest.GetJobId())
+	s.Contains(s.output.String(), "target-ns:my-job")
 }
