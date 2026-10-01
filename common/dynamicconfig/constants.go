@@ -2943,10 +2943,10 @@ workflow resends.`,
 		true,
 		`ReplicationEnableDLQMetrics is the flag to emit DLQ metrics`,
 	)
-	ReplicationDropTaskAfterDLQFailure = NewGlobalBoolSetting(
-		"history.ReplicationDropTaskAfterDLQFailure",
-		false,
-		`ReplicationDropTaskAfterDLQFailure is a breakglass flag that discards a replication task after attempts to enqueue it to the DLQ. Enabling this may cause replication data loss.`,
+	ReplicationDLQMaxRetryAttempts = NewGlobalIntSetting(
+		"history.ReplicationDLQMaxRetryAttempts",
+		0,
+		`ReplicationDLQMaxRetryAttempts is the maximum number of failed attempts to enqueue a replication task to the DLQ before discarding it. Set to 0 to retry indefinitely. Discarding a task may cause replication data loss.`,
 	)
 	ReplicationEnableUpdateWithNewTaskMerge = NewGlobalBoolSetting(
 		"history.ReplicationEnableUpdateWithNewTaskMerge",

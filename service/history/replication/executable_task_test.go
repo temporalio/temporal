@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -1088,14 +1089,16 @@ func (s *executableTaskSuite) TestMarkPoisonPill() {
 
 func TestExecutableTaskTrackerHandlesRepeatedDLQFailures(t *testing.T) {
 	for _, tc := range []struct {
-		name            string
-		failShardLookup bool
-		dropAfterFive   bool
+		name             string
+		failShardLookup  bool
+		maxRetryAttempts int
 	}{
 		{name: "DLQ write failure"},
 		{name: "shard lookup failure", failShardLookup: true},
-		{name: "DLQ write failure with breakglass", dropAfterFive: true},
-		{name: "shard lookup failure with breakglass", failShardLookup: true, dropAfterFive: true},
+		{name: "DLQ write failure with two retries", maxRetryAttempts: 2},
+		{name: "shard lookup failure with two retries", failShardLookup: true, maxRetryAttempts: 2},
+		{name: "DLQ write failure with five retries", maxRetryAttempts: 5},
+		{name: "shard lookup failure with five retries", failShardLookup: true, maxRetryAttempts: 5},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			controller := gomock.NewController(t)
@@ -1104,9 +1107,7 @@ func TestExecutableTaskTrackerHandlesRepeatedDLQFailures(t *testing.T) {
 			shardContext := historyi.NewMockShardContext(controller)
 			shardContext.EXPECT().GetShardID().Return(int32(2)).AnyTimes()
 			config := tests.NewDynamicConfig()
-			if tc.dropAfterFive {
-				config.ReplicationDropTaskAfterDLQFailure = func() bool { return true }
-			}
+			config.ReplicationDLQMaxRetryAttempts = dynamicconfig.GetIntPropertyFn(tc.maxRetryAttempts)
 			toolBox := ProcessToolBox{
 				Config:          config,
 				ShardController: shardController,
@@ -1133,9 +1134,9 @@ func TestExecutableTaskTrackerHandlesRepeatedDLQFailures(t *testing.T) {
 			highWatermark := WatermarkInfo{Watermark: taskInfo.TaskId + 1, Timestamp: creationTime.Add(time.Second)}
 			tracker.TrackTasks(highWatermark, task)
 
-			failedAttempts := markPoisonPillBreakglassAttempts + 1
-			if tc.dropAfterFive {
-				failedAttempts = markPoisonPillBreakglassAttempts
+			failedAttempts := tc.maxRetryAttempts
+			if failedAttempts == 0 {
+				failedAttempts = 3
 			}
 			failure := serviceerror.NewUnavailable("temporarily unavailable")
 			request := &persistence.PutReplicationTaskToDLQRequest{
@@ -1146,7 +1147,7 @@ func TestExecutableTaskTrackerHandlesRepeatedDLQFailures(t *testing.T) {
 			if tc.failShardLookup {
 				shardLookupFailures := shardController.EXPECT().GetShardByNamespaceWorkflow(namespace.ID(taskInfo.NamespaceId), taskInfo.WorkflowId).
 					Return(nil, failure).Times(failedAttempts)
-				if !tc.dropAfterFive {
+				if tc.maxRetryAttempts == 0 {
 					gomock.InOrder(
 						shardLookupFailures,
 						shardController.EXPECT().GetShardByNamespaceWorkflow(namespace.ID(taskInfo.NamespaceId), taskInfo.WorkflowId).
@@ -1156,14 +1157,14 @@ func TestExecutableTaskTrackerHandlesRepeatedDLQFailures(t *testing.T) {
 				}
 			} else {
 				totalAttempts := failedAttempts
-				if !tc.dropAfterFive {
+				if tc.maxRetryAttempts == 0 {
 					totalAttempts++
 				}
 				shardController.EXPECT().GetShardByNamespaceWorkflow(namespace.ID(taskInfo.NamespaceId), taskInfo.WorkflowId).
 					Return(shardContext, nil).Times(totalAttempts)
 				dlqWriteFailures := executionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), request).
 					Return(failure).Times(failedAttempts)
-				if !tc.dropAfterFive {
+				if tc.maxRetryAttempts == 0 {
 					gomock.InOrder(
 						dlqWriteFailures,
 						executionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), request).Return(nil),
