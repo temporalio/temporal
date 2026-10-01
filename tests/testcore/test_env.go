@@ -101,6 +101,7 @@ type testOptions struct {
 	clusterOptions           []TestClusterOption
 	testVars                 func(*testvars.TestVars) *testvars.TestVars
 	historyTaskRecorder      bool
+	persistenceFaults        []PersistenceFault
 }
 
 type dynamicConfigOverride struct {
