@@ -862,11 +862,14 @@ func AdminHandlerProvider(
 }
 
 func NamespaceMutationTaskExecutorProvider(
+	configuration *Config,
 	clusterMetadata cluster.Metadata,
 	persistenceMetadataManager persistence.MetadataManager,
 	namespaceDataMerger nsreplication.NamespaceDataMerger,
 	namespaceAdmitter nsreplication.NamespaceReplicationAdmitter,
 	logger log.SnTaggedLogger,
+	eventLogger otellog.Logger,
+	metricsHandler metrics.Handler,
 	testHooks testhooks.TestHooks,
 ) nsreplication.MutationTaskExecutor {
 	return nsreplication.NewMutationTaskExecutor(
@@ -876,6 +879,11 @@ func NamespaceMutationTaskExecutorProvider(
 		namespaceAdmitter,
 		logger,
 		testHooks,
+		nsreplication.WithNamespaceReplicationMetrics(metricsHandler),
+		nsreplication.WithNamespaceReplicationLifecycleEvents(
+			eventLogger,
+			configuration.EmitNamespaceLifecycleEvents,
+		),
 	)
 }
 
