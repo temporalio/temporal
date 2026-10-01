@@ -21,7 +21,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	wciclient "go.temporal.io/auto-scaled-workers/wci/client"
 	computeprovider "go.temporal.io/auto-scaled-workers/wci/workflow/compute_provider"
+	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -78,6 +80,7 @@ func TestDeploymentVersionSuite(t *testing.T) {
 func (s *DeploymentVersionSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	baseOpts := []testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.MatchingDeploymentWorkflowVersion, int(workerdeployment.VersionDataRevisionNumber)),
+		testcore.WithDynamicConfig(wciclient.WorkerControllerEnabledComputeProviders, []string{string(wciiface.ComputeProviderTypeTestInvoke)}),
 
 		// Make sure we don't hit the rate limiter in tests
 		testcore.WithDynamicConfig(dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS, 1000),
