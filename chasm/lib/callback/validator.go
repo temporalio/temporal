@@ -7,7 +7,11 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"google.golang.org/grpc/status"
 )
 
@@ -21,6 +25,7 @@ type validator struct {
 	urlMaxLength             dynamicconfig.IntPropertyFnWithNamespaceFilter
 	headerMaxSize            dynamicconfig.IntPropertyFnWithNamespaceFilter
 	endpointRules            dynamicconfig.TypedPropertyFnWithNamespaceFilter[AddressMatchRules]
+	namespaceRegistry        namespace.Registry
 }
 
 func NewValidator(
@@ -28,12 +33,14 @@ func NewValidator(
 	urlMaxLength dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	headerMaxSize dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	endpointRules dynamicconfig.TypedPropertyFnWithNamespaceFilter[AddressMatchRules],
+	namespaceRegistry namespace.Registry,
 ) Validator {
 	return &validator{
 		maxCallbacksPerExecution: maxCallbacksPerExecution,
 		urlMaxLength:             urlMaxLength,
 		headerMaxSize:            headerMaxSize,
 		endpointRules:            endpointRules,
+		namespaceRegistry:        namespaceRegistry,
 	}
 }
 
@@ -74,11 +81,42 @@ func (v *validator) Validate(_ context.Context, namespaceName string, cbs []*com
 				)
 			}
 			variant.Nexus.Header = lowerCaseHeaders
+			if rawURL == chasm.NexusCompletionHandlerURL {
+				if err := v.validateInternalCallback(namespaceName, lowerCaseHeaders); err != nil {
+					return err
+				}
+			}
 		case *commonpb.Callback_Internal_:
 			continue
 		default:
 			return serviceerror.NewUnimplemented(fmt.Sprintf("unknown callback variant: %T", variant))
 		}
+	}
+	return nil
+}
+
+func (v *validator) validateInternalCallback(namespaceName string, lowerCaseHeaders map[string]string) error {
+	token := lowerCaseHeaders[strings.ToLower(commonnexus.CallbackTokenHeader)]
+	if token == "" {
+		return serviceerror.NewInvalidArgument("missing internal callback token")
+	}
+	serializedRef, _, err := chasm.UnpackNexusCallbackToken(token)
+	if err != nil {
+		return serviceerror.NewInvalidArgumentf("invalid internal callback token: %v", err)
+	}
+	ref := &persistencespb.ChasmComponentRef{}
+	if err := ref.Unmarshal(serializedRef); err != nil {
+		return serviceerror.NewInvalidArgumentf("invalid internal callback component reference: %v", err)
+	}
+	if ref.GetNamespaceId() == "" || ref.GetBusinessId() == "" {
+		return serviceerror.NewInvalidArgument("internal callback component reference requires namespace and business IDs")
+	}
+	namespaceID, err := v.namespaceRegistry.GetNamespaceID(namespace.Name(namespaceName))
+	if err != nil {
+		return err
+	}
+	if ref.GetNamespaceId() != namespaceID.String() {
+		return serviceerror.NewInvalidArgument("internal callback must target the same namespace")
 	}
 	return nil
 }
