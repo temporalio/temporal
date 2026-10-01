@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/number"
@@ -31,6 +32,7 @@ func TestSimplePartitionScalerEnabledDoesNotPanic(t *testing.T) {
 		}),
 		nil,
 		clock.NewEventTimeSource(),
+		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,
 	)
 
@@ -121,6 +123,7 @@ func TestOnTasksFixedIncludesBacklogCap(t *testing.T) {
 		dynamicconfig.GetTypedPropertyFn(cfg),
 		nil, // no legacy count
 		nil, // time source unused on the fixed path
+		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,
 	)
 	decision := scaler.OnTasks(PartitionScalerInput{CurrentTarget: 1})
@@ -134,7 +137,13 @@ func TestOnTasksFixedIncludesBacklogCap(t *testing.T) {
 func TestOnTasksFloorsAddTargetAtOne(t *testing.T) {
 	t.Parallel()
 	cfg := dynamicconfig.SimplePartitionScalerSettings{Enabled: true}
-	scaler := newSimplePartitionScaler(dynamicconfig.GetTypedPropertyFn(cfg), nil, nil, metrics.NoopMetricsHandler)
+	scaler := newSimplePartitionScaler(
+		dynamicconfig.GetTypedPropertyFn(cfg),
+		nil,
+		nil,
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+	)
 
 	decision := scaler.OnTasks(PartitionScalerInput{CurrentTarget: 0})
 	require.Equal(t, 1, decision.NewTarget, "add baseline must floor at 1, not disable scaling")
@@ -152,7 +161,13 @@ func TestOnTasksBacklogScalesUpAndDown(t *testing.T) {
 		BacklogCap:   1000,
 		Max:          4,
 	}
-	scaler := newSimplePartitionScaler(dynamicconfig.GetTypedPropertyFn(cfg), nil, nil, metrics.NoopMetricsHandler)
+	scaler := newSimplePartitionScaler(
+		dynamicconfig.GetTypedPropertyFn(cfg),
+		nil,
+		nil,
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
+	)
 
 	// One partition, occupied: baseline 1 + 1 occupied = 2.
 	d := scaler.OnTasks(PartitionScalerInput{CurrentTarget: 1, BacklogCounts: encodeCounts(500)})
@@ -240,6 +255,7 @@ func TestOnTasksReportsMaxClamping(t *testing.T) {
 				}),
 				legacyCount,
 				nil,
+				log.NewNoopLogger(),
 				metricsHandler,
 			)
 
@@ -385,6 +401,7 @@ func TestOnTasksLegacyMultiples(t *testing.T) {
 				dynamicconfig.GetTypedPropertyFn(tc.cfg),
 				tc.legacyCount,
 				nil, // time source unused with no Ups/Downs
+				log.NewNoopLogger(),
 				metrics.NoopMetricsHandler,
 			)
 			d := scaler.OnTasks(PartitionScalerInput{
@@ -409,6 +426,7 @@ func TestOnTasksFixedFromLegacyIncludesBacklogCap(t *testing.T) {
 		dynamicconfig.GetTypedPropertyFn(cfg),
 		func() int { return 4 },
 		nil, // time source unused on the fixed path
+		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,
 	)
 	d := scaler.OnTasks(PartitionScalerInput{CurrentTarget: 1})

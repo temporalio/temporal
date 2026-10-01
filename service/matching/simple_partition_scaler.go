@@ -7,6 +7,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/number"
@@ -33,11 +35,15 @@ func newSimplePartitionScalerFactory(
 }
 
 func (s *simplePartitionScalerFactory) New(
-	nsName namespace.Name, tqName string, tqType enumspb.TaskQueueType, metricsHandler metrics.Handler,
+	nsName namespace.Name,
+	tqName string,
+	tqType enumspb.TaskQueueType,
+	logger log.Logger,
+	metricsHandler metrics.Handler,
 ) PartitionScaler {
 	cfg := func() dynamicconfig.SimplePartitionScalerSettings { return s.cfg(nsName.String(), tqName, tqType) }
 	legacyCount := func() int { return s.legacyCount(nsName.String(), tqName, tqType) }
-	return newSimplePartitionScaler(cfg, legacyCount, clock.NewRealTimeSource(), metricsHandler)
+	return newSimplePartitionScaler(cfg, legacyCount, clock.NewRealTimeSource(), logger, metricsHandler)
 }
 
 // simplePartitionScaler uses task add rates to scale partitions.
@@ -47,6 +53,7 @@ type simplePartitionScaler struct {
 	// settings are relative to. May be nil, which disables those settings.
 	legacyCount    dynamicconfig.IntPropertyFn
 	ts             clock.TimeSource
+	logger         log.Logger
 	metricsHandler metrics.Handler
 	trackers       map[time.Duration]*taskTracker
 }
@@ -55,12 +62,14 @@ func newSimplePartitionScaler(
 	cfg scalerCfg,
 	legacyCount dynamicconfig.IntPropertyFn,
 	ts clock.TimeSource,
+	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) *simplePartitionScaler {
 	return &simplePartitionScaler{
 		cfg:            cfg,
 		legacyCount:    legacyCount,
 		ts:             ts,
+		logger:         logger,
 		metricsHandler: metricsHandler,
 		trackers:       make(map[time.Duration]*taskTracker),
 	}
@@ -148,6 +157,9 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 	}
 	if totalTarget < targetBeforeMax {
 		metrics.PartitionScaleMaxClamped.With(s.metricsHandler).Record(1)
+		s.logger.Info("partition scale target clamped by maximum",
+			tag.Int("target-before-max", targetBeforeMax),
+			tag.Int("target", totalTarget))
 	}
 
 	privateState, _ := anypb.New(&state) // ignore error, just use nil
