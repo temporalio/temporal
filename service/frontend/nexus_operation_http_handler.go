@@ -134,6 +134,7 @@ func (h *NexusOperationHTTPHandler) RegisterRoutes(r *mux.Router) {
 // Reasons for nexus_request_preprocess_errors.
 const (
 	nexusPreprocessErrorURLInvalid                metrics.ReasonString = "url_invalid"
+	nexusPreprocessErrorURLBuildError             metrics.ReasonString = "url_build_error"
 	nexusPreprocessErrorNamespaceInvalid          metrics.ReasonString = "namespace_invalid"
 	nexusPreprocessErrorNamespaceLookupError      metrics.ReasonString = "namespace_lookup_error"
 	nexusPreprocessErrorUnauthenticated           metrics.ReasonString = "unauthenticated"
@@ -142,7 +143,6 @@ const (
 	nexusPreprocessErrorEndpointTargetUnsupported metrics.ReasonString = "endpoint_target_unsupported"
 	nexusPreprocessErrorEndpointLookupTimeout     metrics.ReasonString = "endpoint_lookup_timeout"
 	nexusPreprocessErrorEndpointLookupError       metrics.ReasonString = "endpoint_lookup_error"
-	nexusPreprocessErrorInternal                  metrics.ReasonString = "internal"
 )
 
 func (h *NexusOperationHTTPHandler) writeFailure(writer http.ResponseWriter, r *http.Request, reason metrics.ReasonString, err error) {
@@ -188,7 +188,7 @@ func (h *NexusOperationHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w h
 	u, err := mux.CurrentRoute(r).URL("namespace", params.Namespace, "task_queue", params.TaskQueue)
 	if err != nil {
 		logger.Error("invalid URL", tag.Error(err))
-		h.writeFailure(w, r, nexusPreprocessErrorInternal, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"))
+		h.writeFailure(w, r, nexusPreprocessErrorURLBuildError, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"))
 		return
 	}
 
@@ -251,7 +251,7 @@ func (h *NexusOperationHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseW
 	u, err := mux.CurrentRoute(r).URL("endpoint", endpointIDEscaped)
 	if err != nil {
 		logger.Error("invalid URL", tag.Error(err))
-		h.writeFailure(w, r, nexusPreprocessErrorInternal, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"))
+		h.writeFailure(w, r, nexusPreprocessErrorURLBuildError, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"))
 		return
 	}
 
@@ -360,7 +360,7 @@ func (h *NexusOperationHTTPHandler) serveResolvedURL(w http.ResponseWriter, r *h
 	prefix, err := url.PathUnescape(u.Path)
 	if err != nil {
 		h.logger.Error("invalid URL", tag.Error(err))
-		h.writeFailure(w, r, nexusPreprocessErrorInternal, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"))
+		h.writeFailure(w, r, nexusPreprocessErrorURLBuildError, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"))
 		return
 	}
 	prefix = path.Dir(prefix)
