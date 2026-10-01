@@ -3,6 +3,7 @@ package frontend
 import (
 	"cmp"
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -31,8 +32,10 @@ import (
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
@@ -55,6 +58,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -5576,6 +5580,11 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 				)
 			}
 			cb.Nexus.Header = lowerCaseHeaders
+			if cb.Nexus.GetUrl() == chasm.NexusCompletionHandlerURL {
+				if err := wh.validateInternalCallback(ns, lowerCaseHeaders); err != nil {
+					return err
+				}
+			}
 		case *commonpb.Callback_Internal_:
 			// TODO(Tianyu): For now, there is nothing to validate given that this is an internal field.
 			continue
@@ -5584,6 +5593,48 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 		}
 	}
 	return nil
+}
+
+func (wh *WorkflowHandler) validateInternalCallback(ns namespace.Name, lowerCaseHeaders map[string]string) error {
+	token := lowerCaseHeaders[strings.ToLower(commonnexus.CallbackTokenHeader)]
+	if token == "" {
+		return serviceerror.NewInvalidArgument("missing internal callback token")
+	}
+	ref, err := unpackInternalCallbackRef(token)
+	if err != nil {
+		return serviceerror.NewInvalidArgumentf("invalid internal callback token: %v", err)
+	}
+	if ref.GetNamespaceId() == "" || ref.GetBusinessId() == "" {
+		return serviceerror.NewInvalidArgument("internal callback component reference requires namespace and business IDs")
+	}
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(ns)
+	if err != nil {
+		return err
+	}
+	if ref.GetNamespaceId() != namespaceID.String() {
+		return serviceerror.NewInvalidArgument("internal callback must target the same namespace")
+	}
+	return nil
+}
+
+// unpackInternalCallbackRef accepts both the legacy bare-ref token and the NexusOperationCompletion envelope written
+// by newer servers, so mixed-version clusters don't reject scheduler starts.
+func unpackInternalCallbackRef(token string) (*persistencespb.ChasmComponentRef, error) {
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return nil, err
+	}
+	ref := &persistencespb.ChasmComponentRef{}
+	completion := &tokenspb.NexusOperationCompletion{}
+	if proto.Unmarshal(raw, completion) == nil && len(completion.GetComponentRef()) > 0 &&
+		proto.Unmarshal(completion.GetComponentRef(), ref) == nil {
+		return ref, nil
+	}
+	ref.Reset()
+	if err := proto.Unmarshal(raw, ref); err != nil {
+		return nil, err
+	}
+	return ref, nil
 }
 
 func (wh *WorkflowHandler) validateCallbackURL(ns namespace.Name, rawURL string) error {
