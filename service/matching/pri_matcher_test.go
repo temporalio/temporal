@@ -2,6 +2,7 @@ package matching
 
 import (
 	"context"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -269,5 +270,75 @@ func (s *PriMatcherSuite) TestValidatorDrop_SetsDropReason() {
 				s.Fail("timed out waiting for validator to drop task")
 			}
 		})
+	}
+}
+
+// TestValidatorConcurrency verifies that the root partition runs TaskValidatorConcurrency
+// validators, each holding a different backlog task at the same time.
+func (s *PriMatcherSuite) TestValidatorConcurrency() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const concurrency = 3
+	cfg := newTaskQueueConfig(
+		tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		NewConfig(dynamicconfig.NewNoopCollection()),
+		"nsname",
+	)
+	cfg.TaskValidatorConcurrency = func() int { return concurrency }
+	partition := tqid.UnsafeTaskQueueFamily("nsid", "tq").
+		TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).
+		RootPartition()
+
+	// Each call blocks until all validators are inside maybeValidate, so this only
+	// completes if the validators run concurrently.
+	var inFlight sync.WaitGroup
+	inFlight.Add(concurrency)
+	mockValidator := NewMocktaskValidator(s.controller)
+	mockValidator.EXPECT().maybeValidate(gomock.Any(), gomock.Any()).DoAndReturn(func(*persistencespb.AllocatedTaskInfo, enumspb.TaskQueueType) bool {
+		inFlight.Done()
+		inFlight.Wait()
+		return false
+	}).Times(concurrency)
+
+	rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	rateLimitManager.Start()
+	tm := newPriTaskMatcher(
+		ctx,
+		cfg,
+		partition,
+		nil, // nil forwarder = root partition -> validateTasksOnRoot path
+		nil,
+		mockValidator,
+		s.logger,
+		metrics.NoopMetricsHandler,
+		rateLimitManager,
+		func() {},
+		func() {},
+	)
+	tm.Start()
+	defer tm.Stop()
+
+	completionCalled := make(chan taskResponse, concurrency)
+	for i := range concurrency {
+		task := newInternalTaskFromBacklog(&persistencespb.AllocatedTaskInfo{
+			TaskId: int64(i + 1),
+			Data: &persistencespb.TaskInfo{
+				CreateTime: timestamppb.Now(),
+			},
+		}, func(_ *internalTask, res taskResponse) {
+			completionCalled <- res
+		})
+		task.resetMatcherState()
+		_ = tm.AddTask(task)
+	}
+
+	for range concurrency {
+		select {
+		case res := <-completionCalled:
+			s.Equal(dropReasonInvalid, res.dropReason)
+		case <-time.After(2 * time.Second):
+			s.Fail("timed out waiting for concurrent validators to drop tasks")
+		}
 	}
 }

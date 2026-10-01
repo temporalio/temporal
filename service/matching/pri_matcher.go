@@ -124,19 +124,18 @@ func (tm *priTaskMatcher) Start() {
 	policy := backoff.NewExponentialRetryPolicy(time.Second).
 		WithMaximumInterval(tm.config.BacklogTaskForwardTimeout()).
 		WithExpirationInterval(backoff.NoInterval)
-	retrier := backoff.NewRetrier(policy, clock.NewRealTimeSource())
-	lim := quotas.NewDefaultOutgoingRateLimiter(tm.config.ForwarderMaxRatePerSecond)
 
 	if tm.fwdr == nil {
 		// Root/sticky doesn't forward. But it does need something to validate tasks.
-		go tm.validateTasksOnRoot(retrier)
+		for range tm.config.TaskValidatorConcurrency() {
+			go tm.validateTasksOnRoot(backoff.NewRetrier(policy, clock.NewRealTimeSource()))
+		}
 		return
 	}
 
 	// Non-root normal partitions:
-
-	// TODO(pri): ForwarderMaxOutstandingTasks > 1 is not supported: it will cause alternating
-	// tasks to be sent to the validator, which will make the validator not validate anything.
+	retrier := backoff.NewRetrier(policy, clock.NewRealTimeSource())
+	lim := quotas.NewDefaultOutgoingRateLimiter(tm.config.ForwarderMaxRatePerSecond)
 	for range tm.config.ForwarderMaxOutstandingTasks() {
 		go tm.forwardTasks(lim, retrier)
 	}

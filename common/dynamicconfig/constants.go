@@ -1621,6 +1621,11 @@ scoped by namespace and/or task queue.`,
 		60*time.Second,
 		`Timeout for forwarded backlog task (requires new matcher)`,
 	)
+	MatchingTaskValidatorConcurrency = NewTaskQueueIntSetting(
+		"matching.taskValidatorConcurrency",
+		1,
+		`Number of concurrent validators that drop invalid backlog tasks on the root partition (requires new matcher)`,
+	)
 	MatchingForwardPollRetryMaxInterval = NewTaskQueueDurationSetting(
 		"matching.forwardPollRetryMaxInterval",
 		10*time.Second,

@@ -3,6 +3,8 @@ package matching
 
 import (
 	"context"
+	"slices"
+	"sync"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -45,7 +47,11 @@ type (
 		namespaceRegistry namespace.Registry
 		historyClient     historyservice.HistoryServiceClient
 
-		lastValidatedTaskInfo taskValidationInfo
+		lock sync.Mutex
+		// recentTasks is a ring of the most recently tracked tasks, with one slot per concurrent
+		// caller so each caller's task stays tracked while it's put back and matched again.
+		recentTasks []taskValidationInfo
+		nextSlot    int
 	}
 )
 
@@ -54,12 +60,14 @@ func newTaskValidator(
 	clusterMetadata cluster.Metadata,
 	namespaceRegistry namespace.Registry,
 	historyClient historyservice.HistoryServiceClient,
+	concurrency int,
 ) *taskValidatorImpl {
 	return &taskValidatorImpl{
 		tqCtx:             tqCtx,
 		clusterMetadata:   clusterMetadata,
 		namespaceRegistry: namespaceRegistry,
 		historyClient:     historyClient,
+		recentTasks:       make([]taskValidationInfo, max(concurrency, 1)),
 	}
 }
 
@@ -106,57 +114,90 @@ func (v *taskValidatorImpl) preValidate(
 func (v *taskValidatorImpl) preValidateActive(
 	task *persistencespb.AllocatedTaskInfo,
 ) bool {
-	if v.lastValidatedTaskInfo.taskID != task.TaskId {
+	v.lock.Lock()
+	defer v.lock.Unlock()
+
+	info := v.findLocked(task.TaskId)
+	if info == nil {
 		// first time seen the task, caller should try to dispatch first
 		if task.Data.CreateTime != nil {
-			v.lastValidatedTaskInfo = taskValidationInfo{
+			v.trackLocked(taskValidationInfo{
 				taskID:         task.TaskId,
 				validationTime: task.Data.CreateTime.AsTime(), // task is valid when created
-			}
+			})
 		} else {
-			v.lastValidatedTaskInfo = taskValidationInfo{
+			v.trackLocked(taskValidationInfo{
 				taskID:         task.TaskId,
 				validationTime: time.Now().UTC(), // if no creation time specified, use now
-			}
+			})
 		}
 		return false
 	}
 
 	// this task has been validated before
-	return time.Since(v.lastValidatedTaskInfo.validationTime) > taskReaderValidationThreshold
+	return time.Since(info.validationTime) > taskReaderValidationThreshold
 }
 
 // preValidatePassive track a task and return if validation should be done, if namespace is passive
 func (v *taskValidatorImpl) preValidatePassive(
 	task *persistencespb.AllocatedTaskInfo,
 ) bool {
-	if v.lastValidatedTaskInfo.taskID != task.TaskId {
+	v.lock.Lock()
+	defer v.lock.Unlock()
+
+	info := v.findLocked(task.TaskId)
+	if info == nil {
 		// first time seen the task, make a decision based on task creation time
 		if task.Data.CreateTime != nil {
-			v.lastValidatedTaskInfo = taskValidationInfo{
+			info = v.trackLocked(taskValidationInfo{
 				taskID:         task.TaskId,
 				validationTime: task.Data.CreateTime.AsTime(), // task is valid when created
-			}
+			})
 		} else {
-			v.lastValidatedTaskInfo = taskValidationInfo{
+			info = v.trackLocked(taskValidationInfo{
 				taskID:         task.TaskId,
 				validationTime: time.Now().UTC(), // if no creation time specified, use now
-			}
+			})
 		}
 	}
 
 	// this task has been validated before
-	return time.Since(v.lastValidatedTaskInfo.validationTime) > taskReaderValidationThreshold
+	return time.Since(info.validationTime) > taskReaderValidationThreshold
 }
 
 // postValidate update tracked task info
 func (v *taskValidatorImpl) postValidate(
 	task *persistencespb.AllocatedTaskInfo,
 ) {
-	v.lastValidatedTaskInfo = taskValidationInfo{
+	v.lock.Lock()
+	defer v.lock.Unlock()
+
+	v.trackLocked(taskValidationInfo{
 		taskID:         task.TaskId,
 		validationTime: time.Now().UTC(),
+	})
+}
+
+// call with lock held
+func (v *taskValidatorImpl) findLocked(taskID int64) *taskValidationInfo {
+	i := slices.IndexFunc(v.recentTasks, func(info taskValidationInfo) bool { return info.taskID == taskID })
+	if i < 0 {
+		return nil
 	}
+	return &v.recentTasks[i]
+}
+
+// trackLocked updates the task's slot, or replaces the oldest tracked task if it has none.
+// Evicting a task only makes the next call treat it as unseen, which delays validation but
+// never drops a task. call with lock held
+func (v *taskValidatorImpl) trackLocked(info taskValidationInfo) *taskValidationInfo {
+	slot := v.findLocked(info.taskID)
+	if slot == nil {
+		slot = &v.recentTasks[v.nextSlot]
+		v.nextSlot = (v.nextSlot + 1) % len(v.recentTasks)
+	}
+	*slot = info
+	return slot
 }
 
 func (v *taskValidatorImpl) isTaskValid(

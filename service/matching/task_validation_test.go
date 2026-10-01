@@ -70,14 +70,14 @@ func (s *taskValidatorSuite) SetupTest() {
 		},
 	}
 
-	s.taskValidator = newTaskValidator(context.Background(), s.clusterMetadata, s.namespaceCache, s.historyClient)
+	s.taskValidator = newTaskValidator(context.Background(), s.clusterMetadata, s.namespaceCache, s.historyClient, 1)
 }
 
 func (s *taskValidatorSuite) TestPreValidateActive_NewTask_Skip_WithCreationTime() {
-	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
+	s.taskValidator.trackLocked(taskValidationInfo{
 		taskID:         s.task.TaskId - 1,
 		validationTime: time.Unix(0, rand.Int63()).UTC(),
-	}
+	})
 	s.task.Data.CreateTime = timestamppb.New(time.Unix(0, rand.Int63()))
 
 	shouldValidate := s.taskValidator.preValidateActive(s.task)
@@ -85,47 +85,70 @@ func (s *taskValidatorSuite) TestPreValidateActive_NewTask_Skip_WithCreationTime
 	s.Equal(taskValidationInfo{
 		taskID:         s.task.TaskId,
 		validationTime: s.task.Data.CreateTime.AsTime(),
-	}, s.taskValidator.lastValidatedTaskInfo)
+	}, *s.taskValidator.findLocked(s.task.TaskId))
 }
 
 func (s *taskValidatorSuite) TestPreValidateActive_NewTask_Skip_WithoutCreationTime() {
-	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
+	s.taskValidator.trackLocked(taskValidationInfo{
 		taskID:         s.task.TaskId - 1,
 		validationTime: time.Unix(0, rand.Int63()).UTC(),
-	}
+	})
 	s.task.Data.CreateTime = nil
 
 	shouldValidate := s.taskValidator.preValidateActive(s.task)
 	s.False(shouldValidate)
-	s.Equal(s.task.TaskId, s.taskValidator.lastValidatedTaskInfo.taskID)
-	s.True(time.Now().Sub(s.taskValidator.lastValidatedTaskInfo.validationTime) < time.Second)
+	s.Equal(s.task.TaskId, s.taskValidator.findLocked(s.task.TaskId).taskID)
+	s.Less(time.Since(s.taskValidator.findLocked(s.task.TaskId).validationTime), time.Second)
 }
 
 func (s *taskValidatorSuite) TestPreValidateActive_ExistingTask_Validate() {
-	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
+	s.taskValidator.trackLocked(taskValidationInfo{
 		taskID:         s.task.TaskId,
 		validationTime: time.Now().Add(-taskReaderValidationThreshold * 2),
-	}
+	})
 
 	shouldValidate := s.taskValidator.preValidateActive(s.task)
 	s.True(shouldValidate)
 }
 
 func (s *taskValidatorSuite) TestPreValidateActive_ExistingTask_Skip() {
-	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
+	s.taskValidator.trackLocked(taskValidationInfo{
 		taskID:         s.task.TaskId,
 		validationTime: time.Now().Add(taskReaderValidationThreshold * 2),
-	}
+	})
 
 	shouldValidate := s.taskValidator.preValidateActive(s.task)
 	s.False(shouldValidate)
 }
 
+func (s *taskValidatorSuite) TestPreValidateActive_ConcurrentTasks_TrackedIndependently() {
+	s.taskValidator = newTaskValidator(context.Background(), s.clusterMetadata, s.namespaceCache, s.historyClient, 2)
+	s.task.Data.CreateTime = timestamppb.New(time.Now().Add(-taskReaderValidationThreshold * 2))
+	task1 := &persistencespb.AllocatedTaskInfo{TaskId: 1, Data: s.task.Data}
+	task2 := &persistencespb.AllocatedTaskInfo{TaskId: 2, Data: s.task.Data}
+
+	s.False(s.taskValidator.preValidateActive(task1))
+	s.False(s.taskValidator.preValidateActive(task2))
+	s.True(s.taskValidator.preValidateActive(task1))
+	s.True(s.taskValidator.preValidateActive(task2))
+}
+
+func (s *taskValidatorSuite) TestPreValidateActive_EvictedTask_TreatedAsNew() {
+	s.task.Data.CreateTime = timestamppb.New(time.Now().Add(-taskReaderValidationThreshold * 2))
+	task1 := &persistencespb.AllocatedTaskInfo{TaskId: 1, Data: s.task.Data}
+	task2 := &persistencespb.AllocatedTaskInfo{TaskId: 2, Data: s.task.Data}
+
+	s.False(s.taskValidator.preValidateActive(task1))
+	s.False(s.taskValidator.preValidateActive(task2)) // evicts task1
+	s.False(s.taskValidator.preValidateActive(task1))
+	s.True(s.taskValidator.preValidateActive(task1))
+}
+
 func (s *taskValidatorSuite) TestPreValidatePassive_NewTask_Skip_WithCreationTime() {
-	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
+	s.taskValidator.trackLocked(taskValidationInfo{
 		taskID:         s.task.TaskId - 1,
 		validationTime: time.Unix(0, rand.Int63()).UTC(),
-	}
+	})
 	s.task.Data.CreateTime = timestamppb.New(time.Now().Add(-taskReaderValidationThreshold / 2))
 
 	shouldValidate := s.taskValidator.preValidatePassive(s.task)
@@ -133,14 +156,14 @@ func (s *taskValidatorSuite) TestPreValidatePassive_NewTask_Skip_WithCreationTim
 	s.Equal(taskValidationInfo{
 		taskID:         s.task.TaskId,
 		validationTime: s.task.Data.CreateTime.AsTime(),
-	}, s.taskValidator.lastValidatedTaskInfo)
+	}, *s.taskValidator.findLocked(s.task.TaskId))
 }
 
 func (s *taskValidatorSuite) TestPreValidatePassive_NewTask_Validate_WithCreationTime() {
-	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
+	s.taskValidator.trackLocked(taskValidationInfo{
 		taskID:         s.task.TaskId - 1,
 		validationTime: time.Unix(0, rand.Int63()).UTC(),
-	}
+	})
 	s.task.Data.CreateTime = timestamppb.New(time.Now().Add(-taskReaderValidationThreshold * 2))
 
 	shouldValidate := s.taskValidator.preValidatePassive(s.task)
@@ -148,37 +171,37 @@ func (s *taskValidatorSuite) TestPreValidatePassive_NewTask_Validate_WithCreatio
 	s.Equal(taskValidationInfo{
 		taskID:         s.task.TaskId,
 		validationTime: s.task.Data.CreateTime.AsTime(),
-	}, s.taskValidator.lastValidatedTaskInfo)
+	}, *s.taskValidator.findLocked(s.task.TaskId))
 }
 
 func (s *taskValidatorSuite) TestPreValidatePassive_NewTask_Skip_WithoutCreationTime() {
-	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
+	s.taskValidator.trackLocked(taskValidationInfo{
 		taskID:         s.task.TaskId - 1,
 		validationTime: time.Unix(0, rand.Int63()).UTC(),
-	}
+	})
 	s.task.Data.CreateTime = nil
 
 	shouldValidate := s.taskValidator.preValidatePassive(s.task)
 	s.False(shouldValidate)
-	s.Equal(s.task.TaskId, s.taskValidator.lastValidatedTaskInfo.taskID)
-	s.True(time.Now().Sub(s.taskValidator.lastValidatedTaskInfo.validationTime) < time.Second)
+	s.Equal(s.task.TaskId, s.taskValidator.findLocked(s.task.TaskId).taskID)
+	s.Less(time.Since(s.taskValidator.findLocked(s.task.TaskId).validationTime), time.Second)
 }
 
 func (s *taskValidatorSuite) TestPreValidatePassive_ExistingTask_Validate() {
-	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
+	s.taskValidator.trackLocked(taskValidationInfo{
 		taskID:         s.task.TaskId,
 		validationTime: time.Now().Add(-taskReaderValidationThreshold * 2),
-	}
+	})
 
 	shouldValidate := s.taskValidator.preValidatePassive(s.task)
 	s.True(shouldValidate)
 }
 
 func (s *taskValidatorSuite) TestPreValidatePassive_ExistingTask_Skip() {
-	s.taskValidator.lastValidatedTaskInfo = taskValidationInfo{
+	s.taskValidator.trackLocked(taskValidationInfo{
 		taskID:         s.task.TaskId,
 		validationTime: time.Now().Add(taskReaderValidationThreshold * 2),
-	}
+	})
 
 	shouldValidate := s.taskValidator.preValidatePassive(s.task)
 	s.False(shouldValidate)

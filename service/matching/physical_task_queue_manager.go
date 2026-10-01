@@ -186,6 +186,7 @@ func newPhysicalTaskQueueManager(
 		pqMgr.clusterMeta,
 		pqMgr.namespaceRegistry,
 		pqMgr.partitionMgr.engine.historyClient,
+		config.TaskValidatorConcurrency(),
 	)
 
 	switch {
