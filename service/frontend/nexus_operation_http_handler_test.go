@@ -89,7 +89,6 @@ func TestDispatchNexusTaskByEndpoint_NotFound_NonRetryable(t *testing.T) {
 		},
 	}
 	h, router := newTestNexusOperationHTTPHandler(reg, nil)
-
 	capture := capturePreprocessErrors(h)
 
 	rec := doNexusHTTPRequest(t, router, "test-endpoint-id")
@@ -112,7 +111,6 @@ func TestDispatchNexusTaskByEndpoint_NotFound_Retryable(t *testing.T) {
 		},
 	}
 	h, router := newTestNexusOperationHTTPHandler(reg, nil)
-
 	capture := capturePreprocessErrors(h)
 
 	rec := doNexusHTTPRequest(t, router, "test-endpoint-id")
@@ -158,7 +156,6 @@ func TestDispatchNexusTaskByEndpoint_NamespaceNotFound_Retryable(t *testing.T) {
 	}
 
 	h, router := newTestNexusOperationHTTPHandler(reg, nsReg)
-
 	capture := capturePreprocessErrors(h)
 
 	rec := doNexusHTTPRequest(t, router, "test-endpoint-id")
