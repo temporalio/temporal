@@ -19,6 +19,10 @@ on:
         description: "Number of times to repeat the test (start with n=25 or lower to avoid OOMKill)"
         type: number
         default: 1
+      max_test_attempts:
+        description: "Maximum test-runner attempts before reporting failure"
+        type: number
+        default: 3
       test_name:
         description: "Name of the test to run (e.g. 'TestFunctionalSuite/TestUpdateWorkflow')"
         type: string
@@ -38,6 +42,10 @@ on:
         description: '[Functional Test Only] DBs to test on (e.g. ["sqlite", "mysql8"])'
         type: string
         default: '["sqlite"]'
+      test_shard:
+        description: '[Functional Test Only] Shard as "index/total" (e.g. "4/5"); leave empty to run all tests'
+        type: string
+        default: ""
 
 permissions:
   contents: read
@@ -46,6 +54,7 @@ env:
   COMMIT: ${{ inputs.commit }}
   DOCKER_COMPOSE_FILE: ./develop/github/docker-compose.yml
   TEMPORAL_VERSION_CHECK_DISABLED: 1
+  MAX_TEST_ATTEMPTS: ${{ inputs.max_test_attempts }}
 
 jobs:
   unit-test:
@@ -154,8 +163,22 @@ jobs:
       - name: Run functional test
         if: ${{ contains(fromJSON(inputs.test_dbs), matrix.name) }}
         timeout-minutes: ${{ fromJSON(inputs.timeout_minutes) }}
-        run: make functional-test-coverage
+        run: |
+          if [[ -n "${TEST_SHARD}" ]]; then
+            if [[ ! "${TEST_SHARD}" =~ ^([0-9]+)/([1-9][0-9]*)$ ]]; then
+              echo "::error::test_shard must be index/total, for example 4/5"
+              exit 1
+            fi
+            export TEST_SHARD_INDEX="${BASH_REMATCH[1]}"
+            export TEST_TOTAL_SHARDS="${BASH_REMATCH[2]}"
+            if (( TEST_SHARD_INDEX >= TEST_TOTAL_SHARDS )); then
+              echo "::error::test_shard index must be lower than its total"
+              exit 1
+            fi
+          fi
+          make functional-test-coverage
         env:
+          TEST_SHARD: ${{ inputs.test_shard }}
           TEST_ARGS: "-run ${{ inputs.test_name }} -count ${{ inputs.n_runs }}"
           TEST_TIMEOUT: "${{ inputs.timeout_minutes }}m"
 
