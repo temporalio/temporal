@@ -1061,6 +1061,21 @@ func NexusEndpointID(endpointID string) ZapTag {
 	return NewStringTag("nexus-endpoint-id", endpointID)
 }
 
+// CallerNamespace returns a tag for the namespace of the workflow that called a Nexus operation.
+func CallerNamespace(namespace string) ZapTag {
+	return NewStringTag("caller-namespace", namespace)
+}
+
+// CallerWorkflowID returns a tag for the ID of the workflow that called a Nexus operation.
+func CallerWorkflowID(workflowID string) ZapTag {
+	return NewStringTag("caller-workflow-id", workflowID)
+}
+
+// CallerRunID returns a tag for the run ID of the workflow that called a Nexus operation.
+func CallerRunID(runID string) ZapTag {
+	return NewStringTag("caller-run-id", runID)
+}
+
 // WorkflowRuleID returns tag for WorkflowRuleID
 func WorkflowRuleID(ruleID string) ZapTag {
 	return NewStringTag("wf-rule-id", ruleID)
