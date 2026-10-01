@@ -2961,6 +2961,11 @@ should be enabled for non continuedAsNew workflow UpdateWithNew case.`,
 		false,
 		`ReplicationMultipleBatches is the flag to enable replication of multiple history event batches`,
 	)
+	ValidateReplicationTaskSourceCluster = NewGlobalBoolSetting(
+		"history.validateReplicationTaskSourceCluster",
+		true,
+		`ValidateReplicationTaskSourceCluster controls whether inbound workflow replication tasks are accepted only from clusters in the namespace cluster list.`,
+	)
 	ReplicationTaskConverterLowPriorityLockMaxAttempts = NewGlobalIntSetting(
 		"history.ReplicationTaskConverterLowPriorityLockMaxAttempts",
 		3,
