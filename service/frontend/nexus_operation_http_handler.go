@@ -135,14 +135,14 @@ func (h *NexusOperationHTTPHandler) RegisterRoutes(r *mux.Router) {
 const (
 	nexusPreprocessErrorURLInvalid                metrics.ReasonString = "url_invalid"
 	nexusPreprocessErrorURLBuildError             metrics.ReasonString = "url_build_error"
-	nexusPreprocessErrorNamespaceInvalid          metrics.ReasonString = "namespace_invalid"
-	nexusPreprocessErrorNamespaceLookupError      metrics.ReasonString = "namespace_lookup_error"
-	nexusPreprocessErrorUnauthenticated           metrics.ReasonString = "unauthenticated"
+	nexusPreprocessErrorNamespaceNameInvalid      metrics.ReasonString = "namespace_name_invalid"
+	nexusPreprocessErrorClaimsError               metrics.ReasonString = "claims_error"
 	nexusPreprocessErrorEndpointNotFound          metrics.ReasonString = "endpoint_not_found"
-	nexusPreprocessErrorEndpointTargetNotFound    metrics.ReasonString = "endpoint_target_not_found"
-	nexusPreprocessErrorEndpointTargetUnsupported metrics.ReasonString = "endpoint_target_unsupported"
 	nexusPreprocessErrorEndpointLookupTimeout     metrics.ReasonString = "endpoint_lookup_timeout"
 	nexusPreprocessErrorEndpointLookupError       metrics.ReasonString = "endpoint_lookup_error"
+	nexusPreprocessErrorEndpointTargetNotFound    metrics.ReasonString = "endpoint_target_not_found"
+	nexusPreprocessErrorEndpointTargetLookupError metrics.ReasonString = "endpoint_target_lookup_error"
+	nexusPreprocessErrorEndpointTargetUnsupported metrics.ReasonString = "endpoint_target_unsupported"
 )
 
 func (h *NexusOperationHTTPHandler) writeFailure(writer http.ResponseWriter, r *http.Request, reason metrics.ReasonString, err error) {
@@ -173,14 +173,14 @@ func (h *NexusOperationHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w h
 	}
 	if err = h.namespaceValidationInterceptor.ValidateName(nc.namespaceName); err != nil {
 		logger.Error("invalid namespace name", tag.Error(err))
-		h.writeFailure(w, r, nexusPreprocessErrorNamespaceInvalid, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "%v", err.Error()))
+		h.writeFailure(w, r, nexusPreprocessErrorNamespaceNameInvalid, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "%v", err.Error()))
 		return
 	}
 
 	rWithAuthCtx, err := h.parseTLSAndAuthInfo(r, nc)
 	if err != nil {
 		logger.Error("failed to get claims", tag.Error(err))
-		h.writeFailure(w, r, nexusPreprocessErrorUnauthenticated, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthenticated, "unauthorized"))
+		h.writeFailure(w, r, nexusPreprocessErrorClaimsError, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthenticated, "unauthorized"))
 		return
 	}
 	r = rWithAuthCtx
@@ -243,7 +243,7 @@ func (h *NexusOperationHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseW
 	rWithAuthCtx, err := h.parseTLSAndAuthInfo(r, nc)
 	if err != nil {
 		logger.Error("failed to get claims", tag.Error(err))
-		h.writeFailure(w, r, nexusPreprocessErrorUnauthenticated, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthenticated, "unauthorized"))
+		h.writeFailure(w, r, nexusPreprocessErrorClaimsError, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthenticated, "unauthorized"))
 		return
 	}
 	r = rWithAuthCtx
@@ -297,7 +297,7 @@ func (h *NexusOperationHTTPHandler) nexusContextFromEndpoint(
 					RetryBehavior: nexus.HandlerErrorRetryBehaviorRetryable,
 				})
 			} else {
-				h.writeFailure(w, r, nexusPreprocessErrorNamespaceLookupError, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"))
+				h.writeFailure(w, r, nexusPreprocessErrorEndpointTargetLookupError, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"))
 			}
 			return nil, false
 		}
