@@ -254,8 +254,8 @@ func TestNamespaceCountLimitInterceptorInternalNamespaceCollision(t *testing.T) 
 	internalPoll := &workflowservice.PollWorkflowTaskQueueRequest{
 		TaskQueue: &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
 	}
-	customerPoll := &workflowservice.PollWorkflowTaskQueueRequest{
-		TaskQueue: &taskqueuepb.TaskQueue{Name: "customer-tq"},
+	regularPoll := &workflowservice.PollWorkflowTaskQueueRequest{
+		TaskQueue: &taskqueuepb.TaskQueue{Name: "regular-tq"},
 	}
 	interceptor := NewConcurrentRequestLimitInterceptor(
 		nil,
@@ -276,7 +276,7 @@ func TestNamespaceCountLimitInterceptorInternalNamespaceCollision(t *testing.T) 
 	t.Cleanup(cleanup)
 	require.NoError(t, err)
 
-	cleanup, err = interceptor.Allow("foo/internal-per-ns", method, metrics.NoopMetricsHandler, customerPoll)
+	cleanup, err = interceptor.Allow("foo/internal-per-ns", method, metrics.NoopMetricsHandler, regularPoll)
 	t.Cleanup(cleanup)
 	require.NoError(t, err)
 }
@@ -314,14 +314,14 @@ func TestNamespaceCountLimitInterceptorPollerClassification(t *testing.T) {
 			internal: true,
 		},
 		{
-			name:    "activity customer queue",
+			name:    "activity regular queue",
 			method:  activityMethod,
-			request: &workflowservice.PollActivityTaskQueueRequest{TaskQueue: &taskqueuepb.TaskQueue{Name: "customer-tq"}},
+			request: &workflowservice.PollActivityTaskQueueRequest{TaskQueue: &taskqueuepb.TaskQueue{Name: "regular-tq"}},
 		},
 		{
-			name:    "nexus customer queue",
+			name:    "nexus regular queue",
 			method:  nexusMethod,
-			request: &workflowservice.PollNexusTaskQueueRequest{TaskQueue: &taskqueuepb.TaskQueue{Name: "customer-tq"}},
+			request: &workflowservice.PollNexusTaskQueueRequest{TaskQueue: &taskqueuepb.TaskQueue{Name: "regular-tq"}},
 		},
 		{
 			name:     "worker controller internal queue",
@@ -339,15 +339,15 @@ func TestNamespaceCountLimitInterceptorPollerClassification(t *testing.T) {
 			name:   "sticky internal normal name",
 			method: workflowMethod,
 			request: &workflowservice.PollWorkflowTaskQueueRequest{TaskQueue: &taskqueuepb.TaskQueue{
-				Name: "customer-sticky-tq", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: primitives.PerNSWorkerTaskQueue,
+				Name: "regular-sticky-tq", Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: primitives.PerNSWorkerTaskQueue,
 			}},
 			internal: true,
 		},
 		{
-			name:   "sticky customer normal name",
+			name:   "sticky regular normal name",
 			method: workflowMethod,
 			request: &workflowservice.PollWorkflowTaskQueueRequest{TaskQueue: &taskqueuepb.TaskQueue{
-				Name: primitives.PerNSWorkerTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: "customer-tq",
+				Name: primitives.PerNSWorkerTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_STICKY, NormalName: "regular-tq",
 			}},
 		},
 		{
@@ -362,11 +362,11 @@ func TestNamespaceCountLimitInterceptorPollerClassification(t *testing.T) {
 			name:   "normal queue ignores normal name",
 			method: workflowMethod,
 			request: &workflowservice.PollWorkflowTaskQueueRequest{TaskQueue: &taskqueuepb.TaskQueue{
-				Name: "customer-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL, NormalName: primitives.PerNSWorkerTaskQueue,
+				Name: "regular-tq", Kind: enumspb.TASK_QUEUE_KIND_NORMAL, NormalName: primitives.PerNSWorkerTaskQueue,
 			}},
 		},
 		{
-			name:    "nil queue uses customer quota",
+			name:    "nil queue uses default quota",
 			method:  workflowMethod,
 			request: &workflowservice.PollWorkflowTaskQueueRequest{},
 		},
@@ -393,16 +393,16 @@ func TestNamespaceCountLimitInterceptorPollerClassification(t *testing.T) {
 
 			cleanup, err := interceptor.Allow("test-namespace", tc.method, mh, tc.request)
 			defer cleanup()
-			wantScope := "namespace"
+			wantLimitGroup := "default"
 			if tc.internal {
 				require.ErrorIs(t, err, ErrNamespaceCountLimitServerBusy)
-				wantScope = "internal_per_ns"
+				wantLimitGroup = "internal_per_ns"
 			} else {
 				require.NoError(t, err)
 			}
 			recordings := capture.SnapshotMetric(metrics.ServicePendingRequests.Name())
 			require.Len(t, recordings, 1)
-			require.Equal(t, wantScope, recordings[0].Tags["poller_limit_scope"])
+			require.Equal(t, wantLimitGroup, recordings[0].Tags["concurrency_limit_group"])
 		})
 	}
 }
@@ -416,20 +416,20 @@ func TestNamespaceCountLimitInterceptorIndependentPollerQuotas(t *testing.T) {
 	)
 	for _, tc := range []struct {
 		name                string
-		customerPerInstance int
-		customerGlobal      int
+		defaultPerInstance  int
+		defaultGlobal       int
 		internalPerInstance int
 		internalGlobal      int
-		customerLimit       int
+		defaultLimit        int
 		internalLimit       int
 	}{
 		{
-			name: "per instance", customerPerInstance: 1, internalPerInstance: 2,
-			customerLimit: 1, internalLimit: 2,
+			name: "per instance", defaultPerInstance: 1, internalPerInstance: 2,
+			defaultLimit: 1, internalLimit: 2,
 		},
 		{
-			name: "global divided by members", customerPerInstance: 5, customerGlobal: 4,
-			internalPerInstance: 5, internalGlobal: 2, customerLimit: 2, internalLimit: 1,
+			name: "global divided by members", defaultPerInstance: 5, defaultGlobal: 4,
+			internalPerInstance: 5, internalGlobal: 2, defaultLimit: 2, internalLimit: 1,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -439,8 +439,8 @@ func TestNamespaceCountLimitInterceptorIndependentPollerQuotas(t *testing.T) {
 				quotastest.NewFakeMemberCounter(2),
 				log.NewNoopLogger(),
 				ConcurrentRequestQuotas{
-					PerInstance: dynamicconfig.GetIntPropertyFnFilteredByNamespace(tc.customerPerInstance),
-					Global:      dynamicconfig.GetIntPropertyFnFilteredByNamespace(tc.customerGlobal),
+					PerInstance: dynamicconfig.GetIntPropertyFnFilteredByNamespace(tc.defaultPerInstance),
+					Global:      dynamicconfig.GetIntPropertyFnFilteredByNamespace(tc.defaultGlobal),
 				},
 				ConcurrentRequestQuotas{
 					PerInstance: dynamicconfig.GetIntPropertyFnFilteredByNamespace(tc.internalPerInstance),
@@ -452,7 +452,7 @@ func TestNamespaceCountLimitInterceptorIndependentPollerQuotas(t *testing.T) {
 				queue string
 				limit int
 			}{
-				{queue: "customer-tq", limit: tc.customerLimit},
+				{queue: "regular-tq", limit: tc.defaultLimit},
 				{queue: primitives.PerNSWorkerTaskQueue, limit: tc.internalLimit},
 			} {
 				request := &workflowservice.PollWorkflowTaskQueueRequest{TaskQueue: &taskqueuepb.TaskQueue{Name: pool.queue}}
@@ -488,8 +488,8 @@ func TestNamespaceCountLimitInterceptorReleasesPollerQuota(t *testing.T) {
 		queue      string
 		handlerErr error
 	}{
-		{name: "customer handler success", queue: "customer-tq"},
-		{name: "customer handler error", queue: "customer-tq", handlerErr: handlerErr},
+		{name: "regular handler success", queue: "regular-tq"},
+		{name: "regular handler error", queue: "regular-tq", handlerErr: handlerErr},
 		{name: "internal handler success", queue: primitives.PerNSWorkerTaskQueue},
 		{name: "internal handler error", queue: primitives.PerNSWorkerTaskQueue, handlerErr: handlerErr},
 	} {

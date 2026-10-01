@@ -62,15 +62,15 @@ func NewConcurrentRequestLimitInterceptor(
 	namespaceRegistry namespace.Registry,
 	memberCounter calculator.MemberCounter,
 	logger log.Logger,
-	customer ConcurrentRequestQuotas,
-	internalPerNS ConcurrentRequestQuotas,
+	defaultQuotas ConcurrentRequestQuotas,
+	internalPerNSQuotas ConcurrentRequestQuotas,
 	tokens map[string]int,
 ) *ConcurrentRequestLimitInterceptor {
 	return &ConcurrentRequestLimitInterceptor{
 		namespaceRegistry:            namespaceRegistry,
 		logger:                       logger,
-		quotaCalculator:              newNamespaceCountQuotaCalculator(memberCounter, logger, customer),
-		internalPerNSQuotaCalculator: newNamespaceCountQuotaCalculator(memberCounter, logger, internalPerNS),
+		quotaCalculator:              newNamespaceCountQuotaCalculator(memberCounter, logger, defaultQuotas),
+		internalPerNSQuotaCalculator: newNamespaceCountQuotaCalculator(memberCounter, logger, internalPerNSQuotas),
 		tokens:                       tokens,
 		activeTokensCount:            make(map[concurrentRequestCounterKey]*int32),
 	}
@@ -127,9 +127,9 @@ func (ni *ConcurrentRequestLimitInterceptor) Allow(
 		return func() {}, nil
 	}
 
-	// Task-queue polls on an internal per-namespace queue use a separate budget so customer
+	// Task-queue polls on an internal per-namespace queue use a separate budget so regular
 	// pollers cannot exhaust the slots used by per-namespace system workers. Other long-running
-	// RPCs stay on the customer budget. Each budget is still applied per API method.
+	// RPCs stay on the default budget. Each budget is still applied per API method.
 	internal := isInternalPerNSPoll(req)
 	quotaCalculator := ni.quotaCalculator
 	if internal {
@@ -140,11 +140,11 @@ func (ni *ConcurrentRequestLimitInterceptor) Allow(
 	count := atomic.AddInt32(counter, int32(token))
 	cleanup := func() { atomic.AddInt32(counter, -int32(token)) }
 
-	scope := "namespace"
+	limitGroup := "default"
 	if internal {
-		scope = "internal_per_ns"
+		limitGroup = "internal_per_ns"
 	}
-	mh.WithTags(metrics.StringTag("poller_limit_scope", scope)).
+	mh.WithTags(metrics.StringTag("concurrency_limit_group", limitGroup)).
 		Gauge(metrics.ServicePendingRequests.Name()).
 		Record(float64(count))
 

@@ -69,7 +69,7 @@ func (s *NamespaceInterceptorTestSuite) TestInternalPerNamespacePollerLimits() {
 				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 				testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 			)
-			customerQueue := &taskqueuepb.TaskQueue{Name: "customer-" + uuid.NewString()}
+			regularQueue := &taskqueuepb.TaskQueue{Name: "regular-" + uuid.NewString()}
 			internalQueue := &taskqueuepb.TaskQueue{Name: "temporal-sys-per-ns-" + uuid.NewString()}
 
 			startPoll := func(tq *taskqueuepb.TaskQueue, identity string) func() {
@@ -114,9 +114,9 @@ func (s *NamespaceInterceptorTestSuite) TestInternalPerNamespacePollerLimits() {
 				require.Equal(t, enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE, resourceExhausted.Scope)
 			}
 
-			defer startPoll(customerQueue, "customer-poller")()
-			waitForPoller(customerQueue, "customer-poller")
-			assertLimitExceeded(customerQueue)
+			defer startPoll(regularQueue, "regular-poller")()
+			waitForPoller(regularQueue, "regular-poller")
+			assertLimitExceeded(regularQueue)
 
 			defer startPoll(internalQueue, "internal-poller")()
 			waitForPoller(internalQueue, "internal-poller")
