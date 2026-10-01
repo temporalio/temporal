@@ -37,7 +37,7 @@ const (
 	timeoutTypeTagName             = "timeout_type"
 	LastAttemptCauseTagName        = "last_attempt_cause"
 	AttemptStageTagName            = "attempt_stage"
-	OutboundTaskGroupTagName       = "task_group"
+	TaskGroupTagName               = "task_group"
 )
 
 // This package should hold all the metrics and tags for temporal

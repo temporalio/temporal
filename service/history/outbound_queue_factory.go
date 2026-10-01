@@ -146,7 +146,7 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 									// Nexus and callback tasks can share a destination; the task group tells their blocked
 									// counts apart. Tagged here rather than on taggedMetricsHandler so that the rate
 									// limiter's wait-time histogram doesn't get a series per task group.
-									taggedMetricsHandler.WithTags(metrics.OutboundTaskGroupTag(key.TaskGroup)),
+									taggedMetricsHandler.WithTags(metrics.TaskGroupTag(key.TaskGroup)),
 								),
 							},
 							rateLimiterPool.Get(key),
