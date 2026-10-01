@@ -313,7 +313,6 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	queue, err := pm.defaultQueueFuture.Get(context.Background())
 	if err == nil {
 		queue.Stop(unloadCause)
-		pm.emitZeroLogicalBacklogForQueue(queue.QueueKey().Version(), queue)
 	}
 
 	if pm.cancelFairnessSub != nil {
@@ -328,9 +327,8 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	pm.scaleManager.Stop()
 
 	pm.versionedQueuesLock.Lock()
-	for version, vq := range pm.versionedQueues {
+	for _, vq := range pm.versionedQueues {
 		vq.Stop(unloadCause)
-		pm.emitZeroLogicalBacklogForQueue(version, vq)
 	}
 	pm.versionedQueuesLock.Unlock()
 
@@ -1577,6 +1575,10 @@ func (pm *taskQueuePartitionManagerImpl) updateEphemeralDataIteration(prevBacklo
 }
 
 func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.Context) error {
+	var emitted map[string]*taskqueuespb.TaskQueueVersionInfoInternal
+	// Zeroing here rather than in Stop orders it after this goroutine's last emit, so an emit that was
+	// in flight when the partition stopped can't leave a stale value behind.
+	defer func() { pm.emitZeroLogicalBacklog(emitted) }()
 	for {
 		interval := pm.config.BacklogMetricsEmitInterval()
 		if interval == 0 { // disabled
@@ -1591,7 +1593,9 @@ func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.C
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(backoff.Jitter(interval, 0.05)):
-			pm.fetchAndEmitLogicalBacklogMetrics(ctx)
+			if versions := pm.fetchAndEmitLogicalBacklogMetrics(ctx); versions != nil {
+				emitted = versions
+			}
 		}
 	}
 }
@@ -1601,17 +1605,19 @@ func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.C
 // These metrics reflect versioning attribution: for current/ramping versions, a proportional
 // share of the unversioned queue's backlog is added to their count, and the unversioned queue's
 // count is reduced accordingly. This ensures metrics match what DescribeTaskQueue returns.
-func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx context.Context) {
+// Returns the versions it recorded, or nil if it didn't get to describe the partition.
+func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx context.Context) map[string]*taskqueuespb.TaskQueueVersionInfoInternal {
 	if !pm.config.BreakdownMetricsByTaskQueue() || !pm.config.BreakdownMetricsByPartition() {
-		return
+		return nil
 	}
 
 	buildIds := map[string]bool{"": true} // include unversioned
 	resp, err := pm.describe(ctx, buildIds, true, true, false, false, true)
 	if err != nil {
-		return
+		return nil
 	}
 
+	emitted := make(map[string]*taskqueuespb.TaskQueueVersionInfoInternal)
 	for versionKey, vInfo := range resp.GetVersionsInfoInternal() {
 		// When BreakdownMetricsByBuildID is disabled, all versioned queues share the same
 		// "__versioned__" tag value. Since gauges overwrite on each Record() call, emitting
@@ -1621,14 +1627,9 @@ func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx c
 			continue
 		}
 
+		emitted[versionKey] = vInfo
 		pqInfo := vInfo.GetPhysicalTaskQueueInfo()
-
-		deploymentName, buildID := parseDeploymentFromVersionKey(versionKey)
-		versionHandler := pm.metricsHandler.WithTags(
-			metrics.WorkerVersionTag(versionKey, pm.config.BreakdownMetricsByBuildID()),
-			metrics.WorkerDeploymentNameTag(deploymentName, pm.config.BreakdownMetricsByBuildID()),
-			metrics.WorkerDeploymentBuildIDTag(buildID, pm.config.BreakdownMetricsByBuildID()),
-		)
+		versionHandler := pm.logicalBacklogHandler(versionKey)
 
 		// Per-priority backlog count and age
 		for pri, stats := range pqInfo.GetTaskQueueStatsByPriorityKey() {
@@ -1644,11 +1645,33 @@ func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx c
 			)
 		}
 	}
+	return emitted
+}
+
+func (pm *taskQueuePartitionManagerImpl) logicalBacklogHandler(versionKey string) metrics.Handler {
+	deploymentName, buildID := parseDeploymentFromVersionKey(versionKey)
+	return pm.metricsHandler.WithTags(
+		metrics.WorkerVersionTag(versionKey, pm.config.BreakdownMetricsByBuildID()),
+		metrics.WorkerDeploymentNameTag(deploymentName, pm.config.BreakdownMetricsByBuildID()),
+		metrics.WorkerDeploymentBuildIDTag(buildID, pm.config.BreakdownMetricsByBuildID()),
+	)
+}
+
+// emitZeroLogicalBacklog zeroes out the logical backlog gauges that fetchAndEmitLogicalBacklogMetrics
+// recorded for versions, including priorities a version only has through attribution.
+func (pm *taskQueuePartitionManagerImpl) emitZeroLogicalBacklog(versions map[string]*taskqueuespb.TaskQueueVersionInfoInternal) {
+	for versionKey, vInfo := range versions {
+		handler := pm.logicalBacklogHandler(versionKey)
+		for pri := range vInfo.GetPhysicalTaskQueueInfo().GetTaskQueueStatsByPriorityKey() {
+			priorityTag := metrics.MatchingTaskPriorityTag(pri)
+			metrics.ApproximateBacklogCount.With(handler).Record(0, priorityTag)
+			metrics.ApproximateBacklogAgeSeconds.With(handler).Record(0, priorityTag)
+		}
+	}
 }
 
 // emitZeroLogicalBacklogForQueue zeroes out logical backlog gauges for a single physical queue
 // to prevent stale values after unloading. Called from:
-//   - Stop(): after each physical queue is stopped during full partition unload.
 //   - unloadPhysicalQueue(): before a versioned queue is removed from the map during individual
 //     unload (idle timeout, ownership conflict, init error, or other fatal backlog manager errors).
 //
