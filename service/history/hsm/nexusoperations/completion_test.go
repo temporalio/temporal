@@ -9,9 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
@@ -75,7 +77,7 @@ func TestCompletionHandler_EmitsCallerMetrics(t *testing.T) {
 			completionHandler := nexusoperations.NewCompletionHandler(captureHandler, &nexusoperations.Config{
 				MetricTagConfig: dynamicconfig.GetTypedPropertyFn(chasmnexus.NexusMetricTagConfig{IncludeBackendTag: tc.includeBackendTag}),
 			})
-			require.NoError(t, completionHandler.Handle(
+			resp, err := completionHandler.Handle(
 				context.Background(),
 				fakeEnv{node},
 				hsm.Ref{},
@@ -85,7 +87,14 @@ func TestCompletionHandler_EmitsCallerMetrics(t *testing.T) {
 				nil,     // links
 				tc.result,
 				tc.opErr,
-			))
+			)
+			require.NoError(t, err)
+			// The response identifies the operation so the frontend can tag its completion metrics.
+			protorequire.ProtoEqual(t, &historyservice.CompleteNexusOperationResponse{
+				Endpoint:  "endpoint",
+				Service:   "service",
+				Operation: "operation",
+			}, resp)
 
 			snapshot := capture.Snapshot()
 			for metric, recordings := range snapshot {

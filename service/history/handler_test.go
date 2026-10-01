@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/assert"
@@ -18,8 +19,11 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
 	"go.temporal.io/server/common/contextutil"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
@@ -27,10 +31,12 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/payload"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func TestDescribeHistoryHost(t *testing.T) {
@@ -292,6 +298,81 @@ func TestCompleteNexusOperationChasm_RunFallback(t *testing.T) {
 			} else {
 				require.ErrorContains(t, err, tc.wantErrContains)
 			}
+		})
+	}
+}
+
+// TestCompleteNexusOperationChasm_ReturnsOperation verifies that the response identifies the
+// completed operation so the frontend can tag its completion metrics.
+func TestCompleteNexusOperationChasm_ReturnsOperation(t *testing.T) {
+	t.Parallel()
+
+	const requestID = "request-id"
+	mockCtx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return time.Now() },
+			HandleExecutionKey: func() chasm.ExecutionKey {
+				return chasm.ExecutionKey{NamespaceID: "test-namespace-id"}
+			},
+			HandleNamespaceEntry: func() *namespace.Namespace {
+				return namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "test-namespace"}, nil, false, nil, 0)
+			},
+			GoCtx: context.WithValue(context.Background(), chasmnexus.OperationContextKey, &chasmnexus.OperationContext{
+				MetricTagConfig: dynamicconfig.GetTypedPropertyFn(chasmnexus.NexusMetricTagConfig{}),
+			}),
+		},
+	}
+	op := &chasmnexus.Operation{
+		OperationState: &nexusoperationpb.OperationState{
+			Status:        nexusoperationpb.OPERATION_STATUS_STARTED,
+			Endpoint:      "endpoint",
+			Service:       "service",
+			Operation:     "operation",
+			RequestId:     requestID,
+			ScheduledTime: timestamppb.Now(),
+		},
+		Outcome: chasm.NewDataField(mockCtx, &nexusoperationpb.OperationOutcome{}),
+	}
+
+	testCases := []struct {
+		name      string
+		component chasm.Component
+		want      *historyservice.CompleteNexusOperationChasmResponse
+	}{
+		{
+			name:      "Nexus operation",
+			component: op,
+			want: &historyservice.CompleteNexusOperationChasmResponse{
+				Endpoint:  "endpoint",
+				Service:   "service",
+				Operation: "operation",
+			},
+		},
+		{
+			name:      "other completion handler",
+			component: fakeNexusCompletionHandler{},
+			want:      &historyservice.CompleteNexusOperationChasmResponse{},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			engine := chasm.NewMockEngine(ctrl)
+			engine.EXPECT().UpdateComponent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+				DoAndReturn(func(_ context.Context, _ chasm.ComponentRef, fn func(chasm.MutableContext, chasm.Component) error, _ ...chasm.TransitionOption) ([]byte, error) {
+					return nil, fn(mockCtx, tc.component)
+				})
+
+			h := &Handler{
+				logger:         log.NewNoopLogger(),
+				metricsHandler: metrics.NoopMetricsHandler,
+			}
+			ctx := chasm.NewEngineContext(context.Background(), engine)
+
+			resp, err := h.CompleteNexusOperationChasm(ctx, newCompleteNexusOperationChasmRequest(t, chasm.WorkflowArchetypeID, "run-id", requestID))
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, tc.want, resp)
 		})
 	}
 }

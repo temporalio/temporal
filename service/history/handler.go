@@ -26,6 +26,7 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -2181,7 +2182,7 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 			}
 		}
 	}
-	err = h.nexusCompletionHandler.Handle(
+	resp, err := h.nexusCompletionHandler.Handle(
 		ctx,
 		engine.StateMachineEnvironment(metrics.OperationTag(metrics.HistoryCompleteNexusOperationScope)),
 		ref,
@@ -2195,7 +2196,7 @@ func (h *Handler) CompleteNexusOperation(ctx context.Context, request *historyse
 	if err != nil {
 		return nil, h.convertError(err)
 	}
-	return &historyservice.CompleteNexusOperationResponse{}, nil
+	return resp, nil
 }
 
 func (h *Handler) CompleteNexusOperationChasm(
@@ -2234,11 +2235,12 @@ func (h *Handler) CompleteNexusOperationChasm(
 
 	// First try the component as of its creation transition. This tolerates refs
 	// from before a reset while still ensuring the loaded state has the operation.
-	handlerInvoked, err := h.applyChasmNexusCompletion(ctx, componentRefBytes, completion, chasm.RefConsistencyLevelComponentCreation)
+	resp := &historyservice.CompleteNexusOperationChasmResponse{}
+	handlerInvoked, err := h.applyChasmNexusCompletion(ctx, componentRefBytes, completion, chasm.RefConsistencyLevelComponentCreation, resp)
 	if shouldFallBackToCurrentRun(handlerInvoked, err, completion) {
 		// If reset moved the operation to the current run, retry without the ref's
 		// run ID or transition tokens. Non-workflow refs cannot use this lookup.
-		if _, fbErr := h.applyChasmNexusCompletion(ctx, componentRefBytes, completion, chasm.RefConsistencyLevelCurrentRun); !errors.Is(fbErr, chasm.ErrInvalidRefConsistencyLevel) {
+		if _, fbErr := h.applyChasmNexusCompletion(ctx, componentRefBytes, completion, chasm.RefConsistencyLevelCurrentRun, resp); !errors.Is(fbErr, chasm.ErrInvalidRefConsistencyLevel) {
 			err = fbErr
 		}
 	}
@@ -2246,7 +2248,7 @@ func (h *Handler) CompleteNexusOperationChasm(
 		return nil, h.convertError(err)
 	}
 
-	return &historyservice.CompleteNexusOperationChasmResponse{}, nil
+	return resp, nil
 }
 
 // shouldFallBackToCurrentRun reports whether a pre-handler NotFound can be
@@ -2273,12 +2275,19 @@ func (h *Handler) applyChasmNexusCompletion(
 	componentRefBytes []byte,
 	completion *persistencespb.ChasmNexusCompletion,
 	level chasm.RefConsistencyLevel,
+	resp *historyservice.CompleteNexusOperationChasmResponse,
 ) (handlerInvoked bool, err error) {
 	_, _, err = chasm.UpdateComponent(
 		ctx,
 		componentRefBytes,
 		func(c chasm.NexusCompletionHandler, ctx chasm.MutableContext, completion *persistencespb.ChasmNexusCompletion) (chasm.NoValue, error) {
 			handlerInvoked = true
+			// Identify the completed operation so the frontend can tag its completion metrics.
+			if op, ok := c.(*chasmnexus.Operation); ok {
+				resp.Endpoint = op.GetEndpoint()
+				resp.Service = op.GetService()
+				resp.Operation = op.GetOperation()
+			}
 			return nil, c.HandleNexusCompletion(ctx, completion)
 		},
 		completion,

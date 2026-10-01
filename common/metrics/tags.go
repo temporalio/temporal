@@ -449,10 +449,16 @@ func NexusEndpointTag(value string) Tag {
 }
 
 func NexusServiceTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
 	return Tag{Key: nexusServiceTagName, Value: value}
 }
 
 func NexusOperationTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
 	return Tag{Key: nexusOperationTagName, Value: value}
 }
 
