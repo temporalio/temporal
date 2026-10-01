@@ -72,27 +72,39 @@ func TestDLQSuite(t *testing.T) {
 	parallelsuite.RunLegacySequential(t, &DLQSuite{}) //nolint:staticcheck // SA1019: DLQ tests use dedicated clusters with fault injection and worker-service DLQ jobs.
 }
 
+// newTestEnv starts a test env without persistence faults.
 func (s *DLQSuite) newTestEnv(opts ...testcore.TestOption) *dlqTestEnv {
+	return s.startTestEnv(false, opts...)
+}
+
+// newTestEnvWithDoomedWorkflows starts a test env where the workflows of executeDoomedWorkflow
+// fail, so that their workflow tasks go to the DLQ.
+func (s *DLQSuite) newTestEnvWithDoomedWorkflows(opts ...testcore.TestOption) *dlqTestEnv {
+	return s.startTestEnv(true, opts...)
+}
+
+func (s *DLQSuite) startTestEnv(failDoomedWorkflows bool, opts ...testcore.TestOption) *dlqTestEnv {
 	w := &dlqTestEnv{}
 	testPrefix := "dlq-test-terminal-wfts-"
 	w.failingWorkflowIDPrefix.Store(&testPrefix)
 
-	baseOpts := []testcore.TestOption{
+	if failDoomedWorkflows {
 		// Return a terminal error that will cause workflow task to be added to the DLQ.
-		testcore.WithPersistenceFaultInjection(&config.FaultInjection{
-			Injector: func(target config.FaultInjectionTarget) error {
-				if target.Store != config.ExecutionStoreName || target.Method != "GetWorkflowExecution" {
-					return nil
-				}
+		opts = append(opts, testcore.InjectPersistenceFault(s.T(),
+			func(target config.FaultInjectionTarget) error {
 				request, ok := target.Request.(*persistence.GetWorkflowExecutionRequest)
 				if !ok || !strings.HasPrefix(request.WorkflowID, *w.failingWorkflowIDPrefix.Load()) {
 					return nil
 				}
 				return serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, errors.New("test error"))
 			},
-		}),
+			testcore.WithStore(config.ExecutionStoreName),
+			testcore.WithMethod("GetWorkflowExecution"),
+		))
 	}
-	w.TestEnv = testcore.NewEnv(s.T(), append(baseOpts, opts...)...)
+	// The DLQ delete hook below is a global hook, so it needs a dedicated cluster.
+	opts = append(opts, testcore.WithDedicatedCluster())
+	w.TestEnv = testcore.NewEnv(s.T(), opts...)
 	w.SdkWorker().RegisterWorkflow(s.myWorkflow)
 
 	var err error
@@ -252,7 +264,7 @@ func (s *DLQSuite) TestReadArtificialDLQTasks() {
 // DLQ, this test then purges the DLQ and verifies that the task was deleted.
 // This test will then call DescribeDLQJob and CancelDLQJob api to verify.
 func (s *DLQSuite) TestPurgeRealWorkflow() {
-	env := s.newTestEnv(testcore.WithWorkerService("dlq purge workflow"))
+	env := s.newTestEnvWithDoomedWorkflows(testcore.WithWorkerService("dlq purge workflow"))
 
 	_, dlqMessageID := s.executeDoomedWorkflow(env)
 
@@ -281,7 +293,7 @@ func (s *DLQSuite) TestPurgeRealWorkflow() {
 // above test is more for testing specific CLI flags when reading from the DLQ.
 // This test will then call DescribeDLQJob and CancelDLQJob api to verify.
 func (s *DLQSuite) TestMergeRealWorkflow() {
-	env := s.newTestEnv(testcore.WithWorkerService("dlq merge workflow"))
+	env := s.newTestEnvWithDoomedWorkflows(testcore.WithWorkerService("dlq merge workflow"))
 
 	// Verify that we can execute a normal workflow.
 	run := s.executeWorkflow(env, "dlq-test-ok-workflow-id")
@@ -324,7 +336,7 @@ func (s *DLQSuite) TestMergeRealWorkflow() {
 }
 
 func (s *DLQSuite) TestCancelRunningMerge() {
-	env := s.newTestEnv(testcore.WithWorkerService("dlq merge workflow"))
+	env := s.newTestEnvWithDoomedWorkflows(testcore.WithWorkerService("dlq merge workflow"))
 	env.deleteBlockCh = make(chan any)
 
 	// Execute several doomed workflows.
