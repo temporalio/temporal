@@ -146,6 +146,7 @@ func createMockNamespaceCache(controller *gomock.Controller, nsName namespace.Na
 	mockNamespaceCache.EXPECT().RegisterStateChangeCallback(gomock.Any(), gomock.Any()).AnyTimes()
 	mockNamespaceCache.EXPECT().UnregisterStateChangeCallback(gomock.Any()).AnyTimes()
 	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil).AnyTimes()
+	mockNamespaceCache.EXPECT().GetNamespaceByIDWithOptions(gomock.Any(), gomock.Any()).Return(ns, nil).AnyTimes()
 	mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(ns.Name(), nil).AnyTimes()
 	return ns, mockNamespaceCache
 }

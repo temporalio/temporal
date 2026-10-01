@@ -1,76 +1,181 @@
 package matching
 
 import (
-	"context"
+	"fmt"
+	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
+	"testing/synctest"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/mock/gomock"
 )
 
 func TestOnNamespaceStateChange(t *testing.T) {
+	active := failoverTestNamespace(cluster.TestCurrentClusterName)
+	passive := failoverTestNamespace(cluster.TestAlternativeClusterName)
+	local := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: namespaceID, Name: namespaceName}, nil, cluster.TestCurrentClusterName)
+
 	for _, tc := range []struct {
 		name          string
-		from          string
-		to            string
+		loaded        *namespace.Namespace
+		current       *namespace.Namespace
+		count         int
 		deletedFromDB bool
-		stopped       bool
+		engineStopped bool
 		unload        bool
 	}{
-		{name: "active to passive", from: cluster.TestCurrentClusterName, to: cluster.TestAlternativeClusterName, unload: true},
-		{name: "passive to active", from: cluster.TestAlternativeClusterName, to: cluster.TestCurrentClusterName, unload: true},
-		{name: "unchanged active", from: cluster.TestCurrentClusterName, to: cluster.TestCurrentClusterName},
-		{name: "passive to other passive", from: cluster.TestAlternativeClusterName, to: "third-cluster"},
-		{name: "deleted namespace", from: cluster.TestCurrentClusterName, to: cluster.TestAlternativeClusterName, deletedFromDB: true},
-		{name: "stopped engine", from: cluster.TestCurrentClusterName, to: cluster.TestAlternativeClusterName, stopped: true},
+		// More than one batch of partitions.
+		{name: "active to passive", loaded: active, current: passive, count: 250, unload: true},
+		{name: "passive to active", loaded: passive, current: active, count: 1, unload: true},
+		{name: "unchanged active", loaded: active, current: active, count: 1},
+		{name: "passive to other passive", loaded: passive, current: failoverTestNamespace("third-cluster"), count: 1},
+		{name: "deleted from db", loaded: active, current: active, count: 1, deletedFromDB: true, unload: true},
+		{name: "local namespace updated", loaded: local, current: local, count: 1},
+		{name: "local namespace deleted from db", loaded: local, current: local, count: 1, deletedFromDB: true, unload: true},
+		{name: "stopped engine", loaded: active, current: passive, count: 1, engineStopped: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			e, current, _ := newFailoverTestEngine(t, tc.from)
-			partition := newRootPartition(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-			_, _, err := e.getTaskQueuePartitionManager(context.Background(), partition, true, loadCausePoll)
-			require.NoError(t, err)
-			if tc.stopped {
-				e.status = common.DaemonStatusStopped
-			}
+			synctest.Test(t, func(t *testing.T) {
+				ctrl := gomock.NewController(t)
+				e := newFailoverTestEngine(t, ctrl, namespace.NewMockRegistry(ctrl))
+				if tc.engineStopped {
+					e.Stop()
+				}
+				addMockPartitions(ctrl, e, tc.loaded, tc.count, tc.unload)
+				// Another namespace's partition must never be unloaded.
+				other := namespace.NewLocalNamespaceForTest(
+					&persistencespb.NamespaceInfo{Id: "other-ns-id", Name: "other-ns"}, nil, cluster.TestCurrentClusterName)
+				addMockPartitions(ctrl, e, other, 1, false)
 
-			newNS := failoverTestNamespace(tc.to)
-			current.Store(newNS)
-			e.onNamespaceStateChange(newNS, tc.deletedFromDB)
+				e.onNamespaceStateChange(tc.current, tc.deletedFromDB)
+				synctest.Wait()
 
-			if tc.unload {
-				await.RequireTrue(t, func() bool {
-					return len(e.getTaskQueuePartitions(10)) == 0
-				}, 5*time.Second, 10*time.Millisecond)
-			} else {
-				require.Len(t, e.getTaskQueuePartitions(10), 1)
-			}
+				if tc.unload {
+					require.Len(t, e.getTaskQueuePartitions(1000), 1)
+				} else {
+					require.Len(t, e.getTaskQueuePartitions(1000), tc.count+1)
+				}
+			})
 		})
 	}
 }
 
-func TestNamespaceFailoverDuringPartitionCreation(t *testing.T) {
-	e, _, nextLookup := newFailoverTestEngine(t, cluster.TestCurrentClusterName)
-	// The partition is built from a passive snapshot, but the failover to active lands before the
-	// post-insert check, as if the callback's scan had missed this partition.
-	nextLookup.Store(failoverTestNamespace(cluster.TestAlternativeClusterName))
+// Runs the callback and engine Stop concurrently, so that the race detector checks they only touch the
+// partition map under partitionsLock, and each partition is stopped by exactly one of them.
+func TestOnNamespaceStateChange_ConcurrentEngineStop(t *testing.T) {
+	for range 20 {
+		ctrl := gomock.NewController(t)
+		e := newFailoverTestEngine(t, ctrl, namespace.NewMockRegistry(ctrl))
+		for i := range 100 {
+			pm := NewMocktaskQueuePartitionManager(ctrl)
+			pm.EXPECT().Namespace().Return(failoverTestNamespace(cluster.TestCurrentClusterName)).AnyTimes()
+			pm.EXPECT().Stop(gomock.Any())
+			e.updateTaskQueue(newRootPartition(namespaceID, fmt.Sprintf("tq-%d", i), enumspb.TASK_QUEUE_TYPE_WORKFLOW), pm)
+		}
 
-	partition := newRootPartition(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	_, created, _ := e.getTaskQueuePartitionManager(context.Background(), partition, true, loadCausePoll)
-	require.True(t, created)
-	await.RequireTrue(t, func() bool {
-		return len(e.getTaskQueuePartitions(10)) == 0
-	}, 5*time.Second, 10*time.Millisecond)
+		start := make(chan struct{})
+		var wg sync.WaitGroup
+		wg.Go(func() {
+			<-start
+			e.onNamespaceStateChange(failoverTestNamespace(cluster.TestAlternativeClusterName), false)
+		})
+		wg.Go(func() {
+			<-start
+			e.Stop()
+		})
+		close(start)
+		wg.Wait()
+	}
+}
+
+func TestOnNamespaceStateChange_EngineStopWaitsForUnloads(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		e := newFailoverTestEngine(t, ctrl, namespace.NewMockRegistry(ctrl))
+
+		release := make(chan struct{})
+		pm := NewMocktaskQueuePartitionManager(ctrl)
+		pm.EXPECT().Namespace().Return(failoverTestNamespace(cluster.TestCurrentClusterName)).AnyTimes()
+		pm.EXPECT().Stop(unloadCauseNamespaceStateChange).Do(func(unloadCause) { <-release })
+		e.updateTaskQueue(newRootPartition(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW), pm)
+		e.onNamespaceStateChange(failoverTestNamespace(cluster.TestAlternativeClusterName), false)
+
+		var engineStopped atomic.Bool
+		go func() {
+			e.Stop()
+			engineStopped.Store(true)
+		}()
+		synctest.Wait()
+		require.False(t, engineStopped.Load())
+
+		close(release)
+		synctest.Wait()
+		require.True(t, engineStopped.Load())
+	})
+}
+
+func TestGetTaskQueuePartitionManager_NamespaceStateChange(t *testing.T) {
+	active := failoverTestNamespace(cluster.TestCurrentClusterName)
+	passive := failoverTestNamespace(cluster.TestAlternativeClusterName)
+
+	for _, tc := range []struct {
+		name      string
+		current   *namespace.Namespace
+		wantErr   bool
+		wantState *namespace.Namespace
+	}{
+		// The partition is built from an active snapshot, and the namespace fails over to passive before
+		// it's inserted, as if the callback's scan had already run.
+		{name: "failed over", current: passive, wantState: passive},
+		{name: "unchanged", current: active, wantState: active},
+		{name: "removed from registry", wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			registry := namespace.NewMockRegistry(ctrl)
+			var lookups atomic.Int32
+			registry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).DoAndReturn(func(namespace.ID) (*namespace.Namespace, error) {
+				if lookups.Add(1) == 1 || tc.current == nil {
+					return active, nil
+				}
+				return tc.current, nil
+			}).AnyTimes()
+			registry.EXPECT().GetNamespaceByIDWithOptions(
+				namespace.ID(namespaceID),
+				namespace.GetNamespaceOptions{DisableReadthrough: true},
+			).DoAndReturn(func(namespace.ID, namespace.GetNamespaceOptions) (*namespace.Namespace, error) {
+				if tc.current == nil {
+					return nil, serviceerror.NewNamespaceNotFound(namespaceID)
+				}
+				return tc.current, nil
+			}).AnyTimes()
+			registry.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(namespace.Name(namespaceName), nil).AnyTimes()
+			e := newFailoverTestEngine(t, ctrl, registry)
+
+			partition := newRootPartition(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+			pm, created, err := e.getTaskQueuePartitionManager(t.Context(), partition, true, loadCausePoll)
+			if tc.wantErr {
+				var notFound *serviceerror.NamespaceNotFound
+				require.ErrorAs(t, err, &notFound)
+				require.Empty(t, e.getTaskQueuePartitions(10))
+				return
+			}
+			require.NoError(t, err)
+			require.True(t, created)
+			require.Same(t, tc.wantState, pm.Namespace())
+			require.Len(t, e.getTaskQueuePartitions(10), 1)
+		})
+	}
 }
 
 func failoverTestNamespace(activeCluster string) *namespace.Namespace {
@@ -82,31 +187,31 @@ func failoverTestNamespace(activeCluster string) *namespace.Namespace {
 	)
 }
 
-// newFailoverTestEngine returns a started engine whose registry serves the namespace in current,
-// or the one in nextLookup for the next lookup only.
-func newFailoverTestEngine(
-	t *testing.T,
-	activeCluster string,
-) (e *matchingEngineImpl, current, nextLookup *atomic.Pointer[namespace.Namespace]) {
-	ctrl := gomock.NewController(t)
-	current, nextLookup = &atomic.Pointer[namespace.Namespace]{}, &atomic.Pointer[namespace.Namespace]{}
-	current.Store(failoverTestNamespace(activeCluster))
-	registry := namespace.NewMockRegistry(ctrl)
-	registry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).DoAndReturn(func(namespace.ID) (*namespace.Namespace, error) {
-		if ns := nextLookup.Swap(nil); ns != nil {
-			return ns, nil
-		}
-		return current.Load(), nil
-	}).AnyTimes()
-	registry.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(namespace.Name(namespaceName), nil).AnyTimes()
+// newFailoverTestEngine returns a started engine that's stopped when the test finishes.
+func newFailoverTestEngine(t *testing.T, ctrl *gomock.Controller, registry *namespace.MockRegistry) *matchingEngineImpl {
+	registry.EXPECT().RegisterStateChangeCallback(gomock.Any(), gomock.Any()).AnyTimes()
+	registry.EXPECT().UnregisterStateChangeCallback(gomock.Any()).AnyTimes()
 	client := matchingservicemock.NewMockMatchingServiceClient(ctrl)
 	client.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any()).Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{}, nil).AnyTimes()
-	e = createTestMatchingEngine(log.NewTestLogger(), ctrl, defaultTestConfig(), client, registry)
-	e.status = common.DaemonStatusStarted
-	t.Cleanup(func() {
-		for _, pm := range e.getTaskQueuePartitions(10) {
-			e.unloadTaskQueuePartition(pm, unloadCauseShuttingDown)
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+	e := createTestMatchingEngine(logger, ctrl, defaultTestConfig(), client, registry)
+	e.Start()
+	t.Cleanup(e.Stop)
+	return e
+}
+
+// addMockPartitions loads count mock partitions of ns into the engine. If expectUnload is set, each one
+// expects exactly one Stop, from the namespace state change; otherwise it may only be stopped when the
+// engine shuts down.
+func addMockPartitions(ctrl *gomock.Controller, e *matchingEngineImpl, ns *namespace.Namespace, count int, expectUnload bool) {
+	for i := range count {
+		pm := NewMocktaskQueuePartitionManager(ctrl)
+		pm.EXPECT().Namespace().Return(ns).AnyTimes()
+		if expectUnload {
+			pm.EXPECT().Stop(unloadCauseNamespaceStateChange)
+		} else {
+			pm.EXPECT().Stop(unloadCauseShuttingDown).AnyTimes()
 		}
-	})
-	return e, current, nextLookup
+		e.updateTaskQueue(newRootPartition(ns.ID().String(), fmt.Sprintf("tq-%d", i), enumspb.TASK_QUEUE_TYPE_WORKFLOW), pm)
+	}
 }

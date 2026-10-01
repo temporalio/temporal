@@ -163,7 +163,7 @@ func (s *FunctionalClustersTestSuite) TestNamespaceFailover_BacklogMetricsFollow
 	captures := make([]*metricstest.Capture, len(s.clusters))
 	for i, c := range s.clusters {
 		captureHandler, ok := c.Host().GetMetricsHandler().(*metricstest.CaptureHandler)
-		s.True(ok, "cluster metrics handler does not support capture")
+		s.Require().True(ok, "cluster metrics handler does not support capture")
 		capture := captureHandler.StartCapture()
 		captures[i] = capture
 		s.T().Cleanup(func() { captureHandler.StopCapture(capture) })
@@ -188,7 +188,6 @@ func (s *FunctionalClustersTestSuite) TestNamespaceFailover_BacklogMetricsFollow
 			if r.Tags["namespace"] != namespace || r.Tags["taskqueue"] != tq || r.Tags["task_type"] != "Workflow" {
 				continue
 			}
-			//revive:disable-next-line:unchecked-type-assertion
 			latest[[2]string{r.Tags["namespace_state"], r.Tags["partition"]}] = r.Value.(float64)
 		}
 		totals := make(map[string]float64)
