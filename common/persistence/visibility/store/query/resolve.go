@@ -31,6 +31,7 @@ func ResolveSearchAttributeAlias(
 		fieldName, fieldType = fn, ft
 		return true
 	}
+
 	// resolveChasmSA only returns true if `alias` is a CHASM search attribute.
 	resolveChasmSA := func(alias string) bool {
 		if chasmMapper == nil {
@@ -48,8 +49,20 @@ func ResolveSearchAttributeAlias(
 		return true
 	}
 
-	var err error
-	fieldName = alias
+	// resolveSystemSA only returns true if `fn` is a system/reserved search attribute.
+	resolveSystemSA := func(fn string) bool {
+		if sadefs.IsMappable(fn) {
+			// If it's mappable, then it's a field used for custom search attributes.
+			return false
+		}
+		ft, err := saTypeMap.GetType(fn)
+		if err != nil {
+			return false
+		}
+		fieldName, fieldType = fn, ft
+		return true
+	}
+
 	// First, check if it's a custom search attribute.
 	if sadefs.IsMappable(alias) && resolveCSA(alias) {
 		return
@@ -59,24 +72,23 @@ func ResolveSearchAttributeAlias(
 		return
 	}
 	// Third, check if it's a system/reserved search attribute.
-	fieldType, err = saTypeMap.GetType(fieldName)
-	if err == nil {
+	if resolveSystemSA(alias) {
 		return
 	}
 	// Fourth, check for special aliases or adding/removing the `Temporal` prefix.
+	fn := ""
 	if strings.TrimPrefix(alias, sadefs.ReservedPrefix) == sadefs.ScheduleID {
-		fieldName = sadefs.WorkflowID
+		fn = sadefs.WorkflowID
 	} else if archetypeID == chasm.SchedulerArchetypeID && alias == "TemporalSystemExecutionStatus" {
 		// To support querying Workflow based schedulers and CHASM based schedulers, we need to translate
 		// TemporalSystemExecutionStatus as an alias to the system search attribute ExecutionStatus.
-		fieldName = sadefs.ExecutionStatus
-	} else if strings.HasPrefix(fieldName, sadefs.ReservedPrefix) {
-		fieldName = fieldName[len(sadefs.ReservedPrefix):]
+		fn = sadefs.ExecutionStatus
+	} else if strings.HasPrefix(alias, sadefs.ReservedPrefix) {
+		fn = alias[len(sadefs.ReservedPrefix):]
 	} else {
-		fieldName = sadefs.ReservedPrefix + fieldName
+		fn = sadefs.ReservedPrefix + alias
 	}
-	fieldType, err = saTypeMap.GetType(fieldName)
-	if err == nil {
+	if resolveSystemSA(fn) {
 		return
 	}
 
