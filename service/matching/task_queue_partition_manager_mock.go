@@ -359,15 +359,15 @@ func (mr *MocktaskQueuePartitionManagerMockRecorder) PutCache(key, value any) *g
 }
 
 // RemovePoller mocks base method.
-func (m *MocktaskQueuePartitionManager) RemovePoller(identity pollerIdentity) {
+func (m *MocktaskQueuePartitionManager) RemovePoller(identity pollerIdentity, workerInstanceKey string) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RemovePoller", identity)
+	m.ctrl.Call(m, "RemovePoller", identity, workerInstanceKey)
 }
 
 // RemovePoller indicates an expected call of RemovePoller.
-func (mr *MocktaskQueuePartitionManagerMockRecorder) RemovePoller(identity any) *gomock.Call {
+func (mr *MocktaskQueuePartitionManagerMockRecorder) RemovePoller(identity, workerInstanceKey any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemovePoller", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).RemovePoller), identity)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemovePoller", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).RemovePoller), identity, workerInstanceKey)
 }
 
 // Start mocks base method.

@@ -1590,6 +1590,16 @@ second per poller by one physical queue manager`,
 dispatch rate above which a decision to scale up the number of pollers will be issued. If MatchingUseSignalsV2ForPollerScaling
 is true, this is instead the ratio of task add rate to task sync match rate.`,
 	)
+	MatchingPollerScalingFairnessBand = NewTaskQueueFloatSetting(
+		"matching.pollerScalingFairnessBand",
+		0,
+		`MatchingPollerScalingFairnessBand spreads poller scaling suggestions across a worker fleet in
+proportion to each worker's execution slot capacity, rather than letting them concentrate on
+whichever workers happen to receive the most tasks. Matching withholds scale-up from workers whose
+pollers-per-slot exceeds the fleet mean by more than this factor, and scale-down from workers below
+it by more than this factor, so this changes which workers grow, never how large the fleet gets.
+Values at or below 1 disable it; 1.15 is the suggested enabled value.`,
+	)
 	MatchingEnablePollerScalingDecisionMetrics = NewTaskQueueBoolSetting(
 		"matching.enablePollerScalingDecisionMetrics",
 		false,

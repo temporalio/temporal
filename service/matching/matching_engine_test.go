@@ -6770,7 +6770,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		mockPM := NewMocktaskQueuePartitionManager(ctrl)
 		mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
 		mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(rootPartition.TaskQueue(), config, nsName))
-		mockPM.EXPECT().RemovePoller(gomock.Any()).AnyTimes()
+		mockPM.EXPECT().RemovePoller(gomock.Any(), gomock.Any()).AnyTimes()
 		mockUDM := NewMockuserDataManager(ctrl)
 		mockUDM.EXPECT().PartitionScale().Return(nil)
 		mockPM.EXPECT().GetUserDataManager().Return(mockUDM)
@@ -6930,7 +6930,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		mockPM := NewMocktaskQueuePartitionManager(ctrl)
 		mockPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
 		mockPM.EXPECT().GetConfig().Return(newTaskQueueConfig(rootPartition.TaskQueue(), config, nsName)).AnyTimes()
-		mockPM.EXPECT().RemovePoller(gomock.Any()).AnyTimes()
+		mockPM.EXPECT().RemovePoller(gomock.Any(), gomock.Any()).AnyTimes()
 		mockUDM := NewMockuserDataManager(ctrl)
 		mockUDM.EXPECT().PartitionScale().Return(scaleInfo)
 		mockPM.EXPECT().GetUserDataManager().Return(mockUDM)
@@ -7229,7 +7229,7 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 				mockPM.EXPECT().GetUserDataManager().Return(mockUDM)
 			}
 			// Each partition must get RemovePoller called exactly once with the worker identity.
-			mockPM.EXPECT().RemovePoller(pollerIdentity("worker-identity")).Times(1)
+			mockPM.EXPECT().RemovePoller(pollerIdentity("worker-identity"), gomock.Any()).Times(1)
 			mockPMs[i] = mockPM
 			partitionsMap[partition.Key()] = mockPM
 		}

@@ -52,7 +52,7 @@ type (
 		MarkAlive()
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		// RemovePoller eagerly removes a poller from history (for graceful shutdown).
-		RemovePoller(identity pollerIdentity)
+		RemovePoller(identity pollerIdentity, workerInstanceKey string)
 		// HasPollerAfter checks pollers on the queue associated with the given buildId, or the unversioned queue if an empty string is given
 		HasPollerAfter(buildId string, accessTime time.Time) bool
 		// HasAnyPollerAfter checks pollers on all versioned and unversioned queues

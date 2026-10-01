@@ -119,6 +119,10 @@ type (
 		localPollStartTime        time.Time
 		workerInstanceKey         string
 		workerControlTaskQueue    string
+		// pollerScalingInfo is the poller pool state the worker reported on this poll:
+		// its current poller target and its slot capacity. Used to spread scaling
+		// suggestions across a fleet by share. nil for SDKs that don't report it.
+		pollerScalingInfo *taskqueuepb.PollerScalingInfo
 	}
 
 	userDataUpdate struct {
@@ -754,6 +758,7 @@ pollLoop:
 			conditions:                req.Conditions,
 			workerInstanceKey:         request.WorkerInstanceKey,
 			workerControlTaskQueue:    request.WorkerControlTaskQueue,
+			pollerScalingInfo:         request.PollerScalingInfo,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -1031,6 +1036,7 @@ pollLoop:
 			conditions:                req.Conditions,
 			workerInstanceKey:         request.WorkerInstanceKey,
 			workerControlTaskQueue:    request.WorkerControlTaskQueue,
+			pollerScalingInfo:         request.PollerScalingInfo,
 		}
 		task, versionSetUsed, err := e.pollTask(pollerCtx, partition, pollMetadata)
 		if err != nil {
@@ -1296,7 +1302,7 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 		e.shutdownWorkers.Put(request.WorkerInstanceKey, struct{}{})
 	}
 	cancelledCount := e.workerInstancePollers.CancelAll(request.WorkerInstanceKey)
-	e.removePollerFromHistory(ctx, partition, request.GetWorkerIdentity())
+	e.removePollerFromHistory(ctx, partition, request.GetWorkerIdentity(), request.GetWorkerInstanceKey())
 	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: cancelledCount}, nil
 }
 
@@ -1449,7 +1455,7 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPollsPartition(
 	for _, partitionProto := range request.GetPartitions() {
 		partition := tqid.PartitionFromPartitionProto(partitionProto, request.GetNamespaceId())
 		for _, worker := range request.GetWorkers() {
-			e.removePollerFromHistory(ctx, partition, worker.GetWorkerIdentity())
+			e.removePollerFromHistory(ctx, partition, worker.GetWorkerIdentity(), worker.GetWorkerInstanceKey())
 		}
 	}
 
@@ -1464,8 +1470,9 @@ func (e *matchingEngineImpl) removePollerFromHistory(
 	ctx context.Context,
 	partition tqid.Partition,
 	workerIdentity string,
+	workerInstanceKey string,
 ) {
-	if workerIdentity == "" {
+	if workerIdentity == "" && workerInstanceKey == "" {
 		return
 	}
 
@@ -1480,7 +1487,7 @@ func (e *matchingEngineImpl) removePollerFromHistory(
 		return
 	}
 
-	pm.RemovePoller(pollerIdentity(workerIdentity))
+	pm.RemovePoller(pollerIdentity(workerIdentity), workerInstanceKey)
 }
 
 func (e *matchingEngineImpl) DescribeTaskQueue(
