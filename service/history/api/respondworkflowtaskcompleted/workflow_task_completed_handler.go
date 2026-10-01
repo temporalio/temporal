@@ -464,7 +464,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandProtocolMessage(
 }
 
 func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
-	_ context.Context,
+	ctx context.Context,
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
 ) (*historypb.HistoryEvent, *handleCommandResponse, error) {
 	executionInfo := handler.mutableState.GetExecutionInfo()
@@ -545,6 +545,14 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	bypassActivityTaskGeneration := eagerStartActivity
 	if handler.mutableState.GetExecutionState().Status == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		bypassActivityTaskGeneration = true
+		eagerStartActivity = false
+	} else if eagerStartActivity &&
+		// This line makes an RPC call to matching
+		// TODO: batch possibly multiple activities in a single RPC call
+		!handler.eagerActivityDispatchAllowed(ctx, namespace, attr) {
+		// Matching grants are best-effort. On a denial or any matching failure, generate the
+		// activity task normally instead of failing workflow task completion.
+		bypassActivityTaskGeneration = false
 		eagerStartActivity = false
 	}
 
@@ -662,6 +670,41 @@ func (handler *workflowTaskCompletedHandler) grantEagerActivityDispatchBatch(
 	for index, item := range response.GetItems() {
 		handler.eagerActivityCandidates[candidateIndexes[index]].granted = item.GetGrantedCount() == 1
 	}
+}
+
+func (handler *workflowTaskCompletedHandler) eagerActivityDispatchAllowed(
+	ctx context.Context,
+	namespaceName string,
+	attr *commandpb.ScheduleActivityTaskCommandAttributes,
+) bool {
+	return !handler.config.EnableActivityEagerDispatchCheck(namespaceName) ||
+		handler.grantEagerActivityDispatch(ctx, attr)
+}
+
+func (handler *workflowTaskCompletedHandler) grantEagerActivityDispatch(
+	ctx context.Context,
+	attr *commandpb.ScheduleActivityTaskCommandAttributes,
+) bool {
+	if handler.matchingClient == nil {
+		return false
+	}
+
+	executionInfo := handler.mutableState.GetExecutionInfo()
+	response, err := handler.matchingClient.GrantEagerDispatch(ctx, &matchingservice.GrantEagerDispatchRequest{
+		NamespaceId: executionInfo.GetNamespaceId(),
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     attr.GetTaskQueue().GetName(),
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+		},
+		Items: []*matchingservice.GrantEagerDispatchRequest_Item{
+			{
+				Count:    1,
+				Priority: attr.GetPriority(),
+				Version:  worker_versioning.DeploymentVersionFromDeployment(handler.workflowTaskDeployment),
+			},
+		},
+	})
+	return err == nil && len(response.GetItems()) == 1 && response.GetItems()[0].GetGrantedCount() == 1
 }
 
 func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivity(
