@@ -177,18 +177,47 @@ func (m *sqlTaskManagerV2) CompleteTasksLessThan(
 		TaskPass: request.ExclusiveMaxPass,
 		TaskID:   request.ExclusiveMaxTaskID,
 	}
-	result, err := m.DB.DeleteFromTasksV2(ctx, sqlplugin.TasksFilterV2{
+	filter := sqlplugin.TasksFilterV2{
 		RangeHash:         tqHash,
 		TaskQueueID:       tqId,
 		ExclusiveMaxLevel: &exclusiveMaxLevel,
 		Limit:             &request.Limit,
+	}
+
+	if request.ConditionRangeID == 0 {
+		result, err := m.DB.DeleteFromTasksV2(ctx, filter)
+		if err != nil {
+			return 0, convertSQLError("CompleteTasksLessThan", "", err)
+		}
+		nRows, err := result.RowsAffected()
+		if err != nil {
+			return 0, serviceerror.NewUnavailablef("rowsAffected returned error: %v", err)
+		}
+		return int(nRows), nil
+	}
+
+	var nRows int64
+	err = m.SqlStore.txExecute(ctx, "CompleteTasksLessThan", func(tx sqlplugin.Tx) error {
+		// Lock task queue (subqueue zero holds the range id) and check range id first.
+		queueID, queueHash := taskQueueIdAndHash(nidBytes, request.TaskQueueName, request.TaskType, persistence.SubqueueZero)
+		if err := lockTaskQueue(ctx,
+			tx,
+			queueHash,
+			queueID,
+			request.ConditionRangeID,
+			sqlplugin.MatchingTaskVersion2,
+		); err != nil {
+			return err
+		}
+		result, err := tx.DeleteFromTasksV2(ctx, filter)
+		if err != nil {
+			return err
+		}
+		nRows, err = result.RowsAffected()
+		return err
 	})
 	if err != nil {
-		return 0, convertSQLError("CompleteTasksLessThan", "", err)
-	}
-	nRows, err := result.RowsAffected()
-	if err != nil {
-		return 0, serviceerror.NewUnavailablef("rowsAffected returned error: %v", err)
+		return 0, err
 	}
 	return int(nRows), nil
 }

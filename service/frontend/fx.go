@@ -961,7 +961,7 @@ func OperatorHandlerProvider(
 
 // callbackValidatorProvider creates a callback Validator using the production dynamic config keys
 // so that existing operator configurations (callback.allowedAddresses) are honored.
-func callbackValidatorProvider(dc *dynamicconfig.Collection) (callbacks.Validator, error) {
+func callbackValidatorProvider(dc *dynamicconfig.Collection, namespaceRegistry namespace.Registry) (callbacks.Validator, error) {
 	cfg := callbacks.ValidatorConfig{
 		MaxCallbacksPerExecution:         chasmcallback.MaxPerExecution.Get(dc),
 		MaxIDLengthLimit:                 dynamicconfig.MaxIDLengthLimit.Get(dc),
@@ -972,7 +972,7 @@ func callbackValidatorProvider(dc *dynamicconfig.Collection) (callbacks.Validato
 		MaxOperationNameLength:           chasmnexus.MaxOperationNameLength.Get(dc),
 		NexusHandlerSourceContextMaxSize: chasmcallback.NexusHandlerSourceContextMaxSize.Get(dc),
 	}
-	return callbacks.NewValidator(cfg)
+	return callbacks.NewValidator(cfg, namespaceRegistry)
 }
 
 func HandlerProvider(
