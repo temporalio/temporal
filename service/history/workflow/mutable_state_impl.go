@@ -3124,13 +3124,13 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionState.FirstExecutionRunId = event.GetFirstExecutionRunId()
 	if ms.chasmWorkflowRootOnStartEnabled() {
 		// Accessing the root with a mutable context marks it dirty, so it is persisted in this
-		// transaction with an InitialVersionedTransition derived from the start event's version.
-		// Otherwise the root is only persisted on first use of a CHASM feature, and for executions
-		// loaded from DB it is synthesized before the current version is known.
+		// transaction with the InitialVersionedTransition assigned when NewMutableState created the
+		// tree. Otherwise the root is only persisted on first use of a CHASM feature, and for
+		// executions loaded from DB it is synthesized before the current version is known.
+		// Failing here must not block the start; the root then falls back to lazy persistence.
 		if _, _, err := ms.ChasmWorkflowComponent(context.Background()); err != nil {
-			return err
+			softassert.Fail(ms.logger, "failed to persist CHASM workflow root on start", tag.Error(err))
 		}
-
 	}
 	if err := ms.addCompletionCallbacks(
 		startEvent,
