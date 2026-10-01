@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
-	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
 )
@@ -387,6 +386,7 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWor
 		s.Equal(int32(1), description.PendingActivities[0].Attempt)
 	}
 
+	startedActivityCount := internalWorkflow.startedActivityCount.Load()
 	internalWorkflow.letActivitySucceed.Store(true)
 
 	replacementWorker := sdkworker.New(env.SdkClient(), env.WorkerTaskQueue(), sdkworker.Options{})
@@ -395,11 +395,19 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWor
 	s.NoError(replacementWorker.Start())
 	defer replacementWorker.Stop()
 
-	// Extend the deadline for workflow completion after the polling above.
-	ctx := testcontext.EnsureRemaining(s.Context(), s.T(), testcontext.DefaultTimeout())
+	s.Await(func(s *ActivityAPIBatchResetClientTestSuite) {
+		s.GreaterOrEqual(internalWorkflow.startedActivityCount.Load(), startedActivityCount+workflowCount)
+
+		for _, workflowRun := range workflowRuns {
+			description, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowRun.GetID(), workflowRun.GetRunID())
+			s.NoError(err)
+			s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, description.GetWorkflowExecutionInfo().GetStatus())
+		}
+	}, 15*time.Second, 100*time.Millisecond)
+
 	for _, workflowRun := range workflowRuns {
 		var out string
-		err = workflowRun.Get(ctx, &out)
+		err = workflowRun.Get(s.Context(), &out)
 		s.NoError(err)
 	}
 }
