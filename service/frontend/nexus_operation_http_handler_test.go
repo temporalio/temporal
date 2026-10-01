@@ -73,14 +73,6 @@ func capturePreprocessErrors(h *NexusOperationHTTPHandler) *metricstest.Capture 
 	return metricsHandler.StartCapture()
 }
 
-func requirePreprocessErrorReason(t *testing.T, capture *metricstest.Capture, reason string) {
-	t.Helper()
-	recordings := capture.SnapshotMetric(metrics.NexusRequestPreProcessErrors.Name())
-	require.Len(t, recordings, 1)
-	require.Equal(t, int64(1), recordings[0].Value)
-	require.Equal(t, map[string]string{"reason": reason}, recordings[0].Tags)
-}
-
 func doNexusHTTPRequest(t *testing.T, router *mux.Router, endpointID string) *httptest.ResponseRecorder {
 	t.Helper()
 	path := "/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Path(endpointID) + "/test-service/test-operation"
@@ -108,7 +100,9 @@ func TestDispatchNexusTaskByEndpoint_NotFound_NonRetryable(t *testing.T) {
 	var failure nexus.Failure
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&failure))
 	require.Equal(t, "nexus endpoint not found", failure.Message)
-	requirePreprocessErrorReason(t, capture, "endpoint_not_found")
+	require.Equal(t,
+		[]*metricstest.CapturedRecording{{Value: int64(1), Tags: map[string]string{"reason": "endpoint_not_found"}}},
+		capture.SnapshotMetric(metrics.NexusRequestPreProcessErrors.Name()))
 }
 
 func TestDispatchNexusTaskByEndpoint_NotFound_Retryable(t *testing.T) {
@@ -129,7 +123,9 @@ func TestDispatchNexusTaskByEndpoint_NotFound_Retryable(t *testing.T) {
 	var failure nexus.Failure
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&failure))
 	require.Equal(t, "nexus endpoint not found", failure.Message)
-	requirePreprocessErrorReason(t, capture, "endpoint_not_found")
+	require.Equal(t,
+		[]*metricstest.CapturedRecording{{Value: int64(1), Tags: map[string]string{"reason": "endpoint_not_found"}}},
+		capture.SnapshotMetric(metrics.NexusRequestPreProcessErrors.Name()))
 }
 
 func TestDispatchNexusTaskByEndpoint_NamespaceNotFound_Retryable(t *testing.T) {
@@ -173,5 +169,7 @@ func TestDispatchNexusTaskByEndpoint_NamespaceNotFound_Retryable(t *testing.T) {
 	var failure nexus.Failure
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&failure))
 	require.Equal(t, "invalid endpoint target", failure.Message)
-	requirePreprocessErrorReason(t, capture, "invalid_endpoint_target")
+	require.Equal(t,
+		[]*metricstest.CapturedRecording{{Value: int64(1), Tags: map[string]string{"reason": "invalid_endpoint_target"}}},
+		capture.SnapshotMetric(metrics.NexusRequestPreProcessErrors.Name()))
 }
