@@ -131,9 +131,10 @@ func persistStandaloneActivity(t *testing.T, registry *chasm.Registry) *persiste
 		HandleGetExecutionInfo:    func() *persistencespb.WorkflowExecutionInfo { return &persistencespb.WorkflowExecutionInfo{} },
 		HandleNextTransitionCount: func() int64 { return 1 },
 		HandleGetCurrentVersion:   func() int64 { return 1 },
+		HandleNow:                 timeSource.Now,
 	}
 
-	root := chasm.NewEmptyTree(registry, timeSource, backend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
+	root := chasm.NewEmptyTree(registry, backend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
 	mutableCtx := chasm.NewMutableContext(context.Background(), root)
 
 	act := &activity.Activity{

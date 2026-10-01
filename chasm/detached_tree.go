@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -67,7 +68,7 @@ func NewDetachedExecution[C Component](
 
 // newDetachedTree builds the read only tree behind NewDetachedExecution.
 //
-// The clock, logger, and metrics handler are fixed. A read reaches the logger and metrics
+// The logger and metrics handler are fixed, as is the backend's clock. A read reaches the logger and metrics
 // handler only on paths unreachable here, and the clock only affects components that are still
 // running, which a detached reader does not observe.
 func newDetachedTree(
@@ -86,7 +87,6 @@ func newDetachedTree(
 	return NewTreeFromDB(
 		mutableState.GetChasmNodes(),
 		registry,
-		clock.NewRealTimeSource(),
 		newReadOnlyNodeBackend(mutableState),
 		DefaultPathEncoder,
 		log.NewNoopLogger(),
@@ -99,6 +99,7 @@ func newDetachedTree(
 // is a caller bug and failing quietly would return a plausible but wrong result.
 type readOnlyNodeBackend struct {
 	mutableState *persistencespb.WorkflowMutableState
+	timeSource   clock.TimeSource
 	// approximateSize is computed once, since the record never changes under a read only tree.
 	approximateSize int
 }
@@ -110,6 +111,7 @@ var _ NodeBackend = (*readOnlyNodeBackend)(nil)
 func newReadOnlyNodeBackend(mutableState *persistencespb.WorkflowMutableState) *readOnlyNodeBackend {
 	return &readOnlyNodeBackend{
 		mutableState:    mutableState,
+		timeSource:      clock.NewRealTimeSource(),
 		approximateSize: proto.Size(mutableState),
 	}
 }
@@ -144,6 +146,10 @@ func (b *readOnlyNodeBackend) CurrentVersionedTransition() *persistencespb.Versi
 	return transitionhistory.LastVersionedTransition(b.mutableState.GetExecutionInfo().GetTransitionHistory())
 }
 
+// Now is the real clock. It ignores any time skipping the execution recorded, which only
+// matters to components that are still running, and a detached reader does not observe those.
+func (b *readOnlyNodeBackend) Now() time.Time { return b.timeSource.Now() }
+
 // EndpointRegistry returns nil, which Context.EndpointByName reports as an error.
 func (b *readOnlyNodeBackend) EndpointRegistry() EndpointRegistry { return nil }
 
@@ -169,6 +175,14 @@ func (b *readOnlyNodeBackend) GetCurrentVersion() int64 {
 func (b *readOnlyNodeBackend) ChasmSkipPersistenceEnabled() bool {
 	b.unsupported("ChasmSkipPersistenceEnabled")
 	return false
+}
+
+func (b *readOnlyNodeBackend) SetTimeSkippingConfig(*commonpb.TimeSkippingConfig) {
+	b.unsupported("SetTimeSkippingConfig")
+}
+
+func (b *readOnlyNodeBackend) RecordTimeSkippingTransition(*TimeSkippingTransition) {
+	b.unsupported("RecordTimeSkippingTransition")
 }
 
 func (b *readOnlyNodeBackend) ChasmDLQScheduledPureTaskOnValidationEnabled() bool {
