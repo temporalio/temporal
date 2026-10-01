@@ -14,6 +14,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -64,14 +65,20 @@ func newTestNexusOperationHTTPHandler(
 	return h, router
 }
 
-// capturePreprocessErrors replaces the handler's preprocess error counter and returns the tags of every
-// recording.
-func capturePreprocessErrors(h *NexusOperationHTTPHandler) *[][]metrics.Tag {
-	var recorded [][]metrics.Tag
-	h.preprocessErrorCounter = func(_ int64, tags ...metrics.Tag) {
-		recorded = append(recorded, tags)
-	}
-	return &recorded
+// capturePreprocessErrors wires the handler's preprocess error counter to a capture handler, the same way
+// NewNexusOperationHTTPHandler wires it to the real metrics handler.
+func capturePreprocessErrors(h *NexusOperationHTTPHandler) *metricstest.Capture {
+	metricsHandler := metricstest.NewCaptureHandler()
+	h.preprocessErrorCounter = metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.Name()).Record
+	return metricsHandler.StartCapture()
+}
+
+func requirePreprocessErrorReason(t *testing.T, capture *metricstest.Capture, reason string) {
+	t.Helper()
+	recordings := capture.SnapshotMetric(metrics.NexusRequestPreProcessErrors.Name())
+	require.Len(t, recordings, 1)
+	require.Equal(t, int64(1), recordings[0].Value)
+	require.Equal(t, map[string]string{"reason": reason}, recordings[0].Tags)
 }
 
 func doNexusHTTPRequest(t *testing.T, router *mux.Router, endpointID string) *httptest.ResponseRecorder {
@@ -91,7 +98,7 @@ func TestDispatchNexusTaskByEndpoint_NotFound_NonRetryable(t *testing.T) {
 	}
 	h, router := newTestNexusOperationHTTPHandler(reg, nil)
 
-	recorded := capturePreprocessErrors(h)
+	capture := capturePreprocessErrors(h)
 
 	rec := doNexusHTTPRequest(t, router, "test-endpoint-id")
 
@@ -101,7 +108,7 @@ func TestDispatchNexusTaskByEndpoint_NotFound_NonRetryable(t *testing.T) {
 	var failure nexus.Failure
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&failure))
 	require.Equal(t, "nexus endpoint not found", failure.Message)
-	require.Equal(t, [][]metrics.Tag{{metrics.ReasonTag(preprocessErrorEndpointNotFound)}}, *recorded)
+	requirePreprocessErrorReason(t, capture, "endpoint_not_found")
 }
 
 func TestDispatchNexusTaskByEndpoint_NotFound_Retryable(t *testing.T) {
@@ -112,7 +119,7 @@ func TestDispatchNexusTaskByEndpoint_NotFound_Retryable(t *testing.T) {
 	}
 	h, router := newTestNexusOperationHTTPHandler(reg, nil)
 
-	recorded := capturePreprocessErrors(h)
+	capture := capturePreprocessErrors(h)
 
 	rec := doNexusHTTPRequest(t, router, "test-endpoint-id")
 
@@ -122,7 +129,7 @@ func TestDispatchNexusTaskByEndpoint_NotFound_Retryable(t *testing.T) {
 	var failure nexus.Failure
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&failure))
 	require.Equal(t, "nexus endpoint not found", failure.Message)
-	require.Equal(t, [][]metrics.Tag{{metrics.ReasonTag(preprocessErrorEndpointNotFound)}}, *recorded)
+	requirePreprocessErrorReason(t, capture, "endpoint_not_found")
 }
 
 func TestDispatchNexusTaskByEndpoint_NamespaceNotFound_Retryable(t *testing.T) {
@@ -156,7 +163,7 @@ func TestDispatchNexusTaskByEndpoint_NamespaceNotFound_Retryable(t *testing.T) {
 
 	h, router := newTestNexusOperationHTTPHandler(reg, nsReg)
 
-	recorded := capturePreprocessErrors(h)
+	capture := capturePreprocessErrors(h)
 
 	rec := doNexusHTTPRequest(t, router, "test-endpoint-id")
 
@@ -166,5 +173,5 @@ func TestDispatchNexusTaskByEndpoint_NamespaceNotFound_Retryable(t *testing.T) {
 	var failure nexus.Failure
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&failure))
 	require.Equal(t, "invalid endpoint target", failure.Message)
-	require.Equal(t, [][]metrics.Tag{{metrics.ReasonTag(preprocessErrorInvalidEndpointTarget)}}, *recorded)
+	requirePreprocessErrorReason(t, capture, "invalid_endpoint_target")
 }
