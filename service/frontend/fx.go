@@ -708,8 +708,14 @@ func NamespaceCountLimitInterceptorProvider(
 		namespaceRegistry,
 		serviceResolver,
 		logger,
-		serviceConfig.MaxConcurrentLongRunningRequestsPerInstance,
-		serviceConfig.MaxGlobalConcurrentLongRunningRequests,
+		interceptor.ConcurrentRequestQuotas{
+			PerInstance: serviceConfig.MaxConcurrentLongRunningRequestsPerInstance,
+			Global:      serviceConfig.MaxGlobalConcurrentLongRunningRequests,
+		},
+		interceptor.ConcurrentRequestQuotas{
+			PerInstance: serviceConfig.MaxInternalPerNSConcurrentLongRunningRequestsPerInstance,
+			Global:      serviceConfig.MaxGlobalInternalPerNSConcurrentLongRunningRequests,
+		},
 		configs.ExecutionAPICountLimitOverride,
 	)
 }
