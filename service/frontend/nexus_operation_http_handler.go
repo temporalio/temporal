@@ -137,8 +137,10 @@ const (
 	nexusPreprocessErrorInvalidNamespace      metrics.ReasonString = "invalid_namespace"
 	nexusPreprocessErrorUnauthenticated       metrics.ReasonString = "unauthenticated"
 	nexusPreprocessErrorEndpointNotFound      metrics.ReasonString = "endpoint_not_found"
-	nexusPreprocessErrorInvalidEndpointTarget metrics.ReasonString = "invalid_endpoint_target"
-	nexusPreprocessErrorRequestTimeout        metrics.ReasonString = "request_timeout"
+	nexusPreprocessErrorEndpointTargetInvalid metrics.ReasonString = "endpoint_target_invalid"
+	nexusPreprocessErrorEndpointLookupTimeout metrics.ReasonString = "endpoint_lookup_timeout"
+	nexusPreprocessErrorEndpointLookupError   metrics.ReasonString = "endpoint_lookup_error"
+	nexusPreprocessErrorNamespaceLookupError  metrics.ReasonString = "namespace_lookup_error"
 	nexusPreprocessErrorInternal              metrics.ReasonString = "internal"
 )
 
@@ -222,9 +224,9 @@ func (h *NexusOperationHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseW
 				RetryBehavior: retryBehavior,
 			})
 		case codes.DeadlineExceeded:
-			h.writeFailure(w, r, nexusPreprocessErrorRequestTimeout, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeRequestTimeout, "request timed out"))
+			h.writeFailure(w, r, nexusPreprocessErrorEndpointLookupTimeout, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeRequestTimeout, "request timed out"))
 		default:
-			h.writeFailure(w, r, nexusPreprocessErrorInternal, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"))
+			h.writeFailure(w, r, nexusPreprocessErrorEndpointLookupError, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"))
 		}
 		return
 	}
@@ -288,13 +290,13 @@ func (h *NexusOperationHTTPHandler) nexusContextFromEndpoint(
 				tag.NexusEndpointTargetNamespaceID(v.Worker.GetNamespaceId()),
 			)
 			if _, ok := errors.AsType[*serviceerror.NamespaceNotFound](err); ok {
-				h.writeFailure(w, r, nexusPreprocessErrorInvalidEndpointTarget, &nexus.HandlerError{
+				h.writeFailure(w, r, nexusPreprocessErrorEndpointTargetInvalid, &nexus.HandlerError{
 					Type:          nexus.HandlerErrorTypeNotFound,
 					Message:       "invalid endpoint target",
 					RetryBehavior: nexus.HandlerErrorRetryBehaviorRetryable,
 				})
 			} else {
-				h.writeFailure(w, r, nexusPreprocessErrorInternal, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"))
+				h.writeFailure(w, r, nexusPreprocessErrorNamespaceLookupError, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"))
 			}
 			return nil, false
 		}
@@ -306,7 +308,7 @@ func (h *NexusOperationHTTPHandler) nexusContextFromEndpoint(
 		return nc, true
 	default:
 		logger.Error("unsupported Nexus endpoint target type", tag.NewStringTag("target-type", fmt.Sprintf("%T", v)))
-		h.writeFailure(w, r, nexusPreprocessErrorInvalidEndpointTarget, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid endpoint target"))
+		h.writeFailure(w, r, nexusPreprocessErrorEndpointTargetInvalid, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid endpoint target"))
 		return nil, false
 	}
 }

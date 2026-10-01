@@ -66,6 +66,25 @@ func newTestNexusOperationHTTPHandler(
 	return router, metricsHandler.StartCapture()
 }
 
+func newTestWorkerEndpointEntry() *persistencespb.NexusEndpointEntry {
+	return &persistencespb.NexusEndpointEntry{
+		Id: "test-endpoint-id",
+		Endpoint: &persistencespb.NexusEndpoint{
+			Spec: &persistencespb.NexusEndpointSpec{
+				Name: "test-endpoint",
+				Target: &persistencespb.NexusEndpointTarget{
+					Variant: &persistencespb.NexusEndpointTarget_Worker_{
+						Worker: &persistencespb.NexusEndpointTarget_Worker{
+							NamespaceId: "test-ns-id",
+							TaskQueue:   "test-task-queue",
+						},
+					},
+				},
+			},
+		},
+	}
+}
+
 func doNexusHTTPRequest(t *testing.T, router *mux.Router, endpointID string) *httptest.ResponseRecorder {
 	t.Helper()
 	path := "/" + commonnexus.RouteDispatchNexusTaskByEndpoint.Path(endpointID) + "/test-service/test-operation"
@@ -118,26 +137,9 @@ func TestDispatchNexusTaskByEndpoint_NotFound_Retryable(t *testing.T) {
 }
 
 func TestDispatchNexusTaskByEndpoint_NamespaceNotFound_Retryable(t *testing.T) {
-	endpointEntry := &persistencespb.NexusEndpointEntry{
-		Id: "test-endpoint-id",
-		Endpoint: &persistencespb.NexusEndpoint{
-			Spec: &persistencespb.NexusEndpointSpec{
-				Name: "test-endpoint",
-				Target: &persistencespb.NexusEndpointTarget{
-					Variant: &persistencespb.NexusEndpointTarget_Worker_{
-						Worker: &persistencespb.NexusEndpointTarget_Worker{
-							NamespaceId: "test-ns-id",
-							TaskQueue:   "test-task-queue",
-						},
-					},
-				},
-			},
-		},
-	}
-
 	reg := nexustest.FakeEndpointRegistry{
 		OnGetByID: func(_ context.Context, _ string) (*persistencespb.NexusEndpointEntry, error) {
-			return endpointEntry, nil
+			return newTestWorkerEndpointEntry(), nil
 		},
 	}
 	nsReg := &fakeNamespaceRegistry{
@@ -157,6 +159,60 @@ func TestDispatchNexusTaskByEndpoint_NamespaceNotFound_Retryable(t *testing.T) {
 	require.NoError(t, json.NewDecoder(rec.Body).Decode(&failure))
 	require.Equal(t, "invalid endpoint target", failure.Message)
 	require.Equal(t,
-		[]*metricstest.CapturedRecording{{Value: int64(1), Tags: map[string]string{"reason": "invalid_endpoint_target"}}},
+		[]*metricstest.CapturedRecording{{Value: int64(1), Tags: map[string]string{"reason": "endpoint_target_invalid"}}},
 		capture.SnapshotMetric(metrics.NexusRequestPreProcessErrors.Name()))
+}
+
+func TestDispatchNexusTaskByEndpoint_LookupFailures(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		endpointErr  error
+		namespaceErr error
+		wantStatus   int
+		wantReason   string
+	}{
+		{
+			name:        "endpoint lookup timeout",
+			endpointErr: serviceerror.NewDeadlineExceeded("timed out"),
+			wantStatus:  http.StatusRequestTimeout,
+			wantReason:  "endpoint_lookup_timeout",
+		},
+		{
+			name:        "endpoint lookup error",
+			endpointErr: serviceerror.NewUnavailable("unavailable"),
+			wantStatus:  http.StatusInternalServerError,
+			wantReason:  "endpoint_lookup_error",
+		},
+		{
+			name:         "namespace lookup error",
+			namespaceErr: serviceerror.NewUnavailable("unavailable"),
+			wantStatus:   http.StatusInternalServerError,
+			wantReason:   "namespace_lookup_error",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			reg := nexustest.FakeEndpointRegistry{
+				OnGetByID: func(_ context.Context, _ string) (*persistencespb.NexusEndpointEntry, error) {
+					if tc.endpointErr != nil {
+						return nil, tc.endpointErr
+					}
+					return newTestWorkerEndpointEntry(), nil
+				},
+			}
+			nsReg := &fakeNamespaceRegistry{
+				getNamespaceName: func(id namespace.ID) (namespace.Name, error) {
+					return "", tc.namespaceErr
+				},
+			}
+
+			router, capture := newTestNexusOperationHTTPHandler(reg, nsReg)
+
+			rec := doNexusHTTPRequest(t, router, "test-endpoint-id")
+
+			require.Equal(t, tc.wantStatus, rec.Code)
+			require.Equal(t,
+				[]*metricstest.CapturedRecording{{Value: int64(1), Tags: map[string]string{"reason": tc.wantReason}}},
+				capture.SnapshotMetric(metrics.NexusRequestPreProcessErrors.Name()))
+		})
+	}
 }
