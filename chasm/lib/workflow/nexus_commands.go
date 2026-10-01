@@ -276,6 +276,11 @@ func (ch *nexusCommandHandler) handleCancelCommand(
 			Message: fmt.Sprintf("cancelation was already requested for an operation with scheduled event ID %d", attrs.ScheduledEventId),
 		}
 	}
+	if errors.As(err, new(*serviceerror.NotFound)) {
+		// This may happen if there's a buffered completion. Ignore. (Mirrors the HSM command handler's
+		// own hsm.ErrStateMachineNotFound tolerance for the same race, in nexusoperations/workflow/commands.go.)
+		return nil
+	}
 	return err
 }
 
