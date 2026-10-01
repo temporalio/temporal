@@ -142,6 +142,8 @@ func (s *componentRefSuite) TestForConsistencyLevel() {
 		level RefConsistencyLevel
 		// archetypeID overrides the ref's archetype; the zero value keeps newRef's WorkflowArchetypeID.
 		archetypeID ArchetypeID
+		// rootPath makes the ref point at the root component.
+		rootPath bool
 		// wantErr, when set, is the error forConsistencyLevel must return (verify is then skipped).
 		wantErr error
 		// verify asserts the level-specific expectations on the original (orig) and adjusted refs.
@@ -170,6 +172,18 @@ func (s *componentRefSuite) TestForConsistencyLevel() {
 			},
 		},
 		{
+			name:     "ComponentCreation skips the staleness check for the root",
+			level:    RefConsistencyLevelComponentCreation,
+			rootPath: true,
+			verify: func(orig, adjusted ComponentRef) {
+				// The root exists for the lifetime of the execution, so its creation transition is not
+				// used as a staleness token.
+				s.Nil(adjusted.executionLastUpdateVT)
+				s.ProtoEqual(orig.componentInitialVT, adjusted.componentInitialVT)
+				s.Equal(orig.RunID, adjusted.RunID)
+			},
+		},
+		{
 			name:  "CurrentRun drops both VTs and the run ID",
 			level: RefConsistencyLevelCurrentRun,
 			verify: func(orig, adjusted ComponentRef) {
@@ -193,6 +207,9 @@ func (s *componentRefSuite) TestForConsistencyLevel() {
 			ref := newRef()
 			if tc.archetypeID != UnspecifiedArchetypeID {
 				ref.archetypeID = tc.archetypeID
+			}
+			if tc.rootPath {
+				ref.componentPath = []string{}
 			}
 			adjusted, err := ref.forConsistencyLevel(tc.level)
 			if tc.wantErr != nil {
