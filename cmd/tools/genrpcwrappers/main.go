@@ -500,6 +500,7 @@ func findForwardedSource(t reflect.Type) fieldWithPath {
 
 func makeTaskQueuePartitionLoadBalancedFields(reqType reflect.Type, lb loadBalancedMethod, fields map[string]string) {
 	if lb.read || lb.longPoll {
+		// nolint:forbidigo // Panic is intended here to stop codegen
 		panic("task queue partition load balancing does not currently support reads or long polls")
 	}
 	t := reqType.Elem() // we know it's a pointer
