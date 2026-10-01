@@ -123,16 +123,18 @@ func (d CancelRequestCompletedEventDefinition) Apply(ctx chasm.MutableContext, w
 	if !ok {
 		return serviceerror.NewNotFoundf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId())
 	}
-	// Cancellation must be present to deliver a cancel request.
-	cancellation := field.Get(ctx).Cancellation.Get(ctx)
+	cancellation, ok := field.Get(ctx).Cancellation.TryGet(ctx)
+	if !ok {
+		// The operation has no cancellation to complete. Ignore it, as the HSM event definition does.
+		return nil
+	}
 	return nexusoperation.TransitionCancellationSucceeded.Apply(cancellation, ctx, nexusoperation.EventCancellationSucceeded{})
 }
 
-func (d CancelRequestCompletedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *Workflow, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
-	if _, ok := excludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS]; ok {
-		return ErrEventNotCherryPickable
-	}
-	return d.Apply(ctx, wf, event)
+func (d CancelRequestCompletedEventDefinition) CherryPick(_ chasm.MutableContext, _ *Workflow, _ *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
+	// Do not cherry-pick cancellation request events or their delivery outcomes.
+	// Instead, let user logic reissue the related command.
+	return ErrEventNotCherryPickable
 }
 
 // CancelRequestFailedEventDefinition handles the NexusOperationCancelRequestFailed history event.
@@ -153,18 +155,20 @@ func (d CancelRequestFailedEventDefinition) Apply(ctx chasm.MutableContext, wf *
 	if !ok {
 		return serviceerror.NewNotFoundf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId())
 	}
-	// Cancellation must be present to deliver a cancel request.
-	cancellation := field.Get(ctx).Cancellation.Get(ctx)
+	cancellation, ok := field.Get(ctx).Cancellation.TryGet(ctx)
+	if !ok {
+		// The operation has no cancellation to fail. Ignore it, as the HSM event definition does.
+		return nil
+	}
 	return nexusoperation.TransitionCancellationFailed.Apply(cancellation, ctx, nexusoperation.EventCancellationFailed{
 		Failure: attrs.GetFailure(),
 	})
 }
 
-func (d CancelRequestFailedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *Workflow, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
-	if _, ok := excludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS]; ok {
-		return ErrEventNotCherryPickable
-	}
-	return d.Apply(ctx, wf, event)
+func (d CancelRequestFailedEventDefinition) CherryPick(_ chasm.MutableContext, _ *Workflow, _ *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
+	// Do not cherry-pick cancellation request events or their delivery outcomes.
+	// Instead, let user logic reissue the related command.
+	return ErrEventNotCherryPickable
 }
 
 // StartedEventDefinition handles the NexusOperationStarted history event.
