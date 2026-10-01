@@ -133,16 +133,16 @@ func (h *NexusOperationHTTPHandler) RegisterRoutes(r *mux.Router) {
 
 // Reasons for nexus_request_preprocess_errors.
 const (
-	nexusPreprocessErrorURLInvalid                metrics.ReasonString = "url_invalid"
-	nexusPreprocessErrorURLBuildError             metrics.ReasonString = "url_build_error"
-	nexusPreprocessErrorNamespaceNameInvalid      metrics.ReasonString = "namespace_name_invalid"
-	nexusPreprocessErrorClaimsError               metrics.ReasonString = "claims_error"
-	nexusPreprocessErrorEndpointNotFound          metrics.ReasonString = "endpoint_not_found"
-	nexusPreprocessErrorEndpointLookupTimeout     metrics.ReasonString = "endpoint_lookup_timeout"
-	nexusPreprocessErrorEndpointLookupError       metrics.ReasonString = "endpoint_lookup_error"
-	nexusPreprocessErrorEndpointTargetNotFound    metrics.ReasonString = "endpoint_target_not_found"
-	nexusPreprocessErrorEndpointTargetLookupError metrics.ReasonString = "endpoint_target_lookup_error"
-	nexusPreprocessErrorEndpointTargetUnsupported metrics.ReasonString = "endpoint_target_unsupported"
+	nexusPreprocessErrorURLInvalid                 metrics.ReasonString = "url_invalid"
+	nexusPreprocessErrorURLBuildError              metrics.ReasonString = "url_build_error"
+	nexusPreprocessErrorNamespaceNameInvalid       metrics.ReasonString = "namespace_name_invalid"
+	nexusPreprocessErrorClaimsError                metrics.ReasonString = "claims_error"
+	nexusPreprocessErrorEndpointNotFound           metrics.ReasonString = "endpoint_not_found"
+	nexusPreprocessErrorEndpointLookupTimeout      metrics.ReasonString = "endpoint_lookup_timeout"
+	nexusPreprocessErrorEndpointLookupError        metrics.ReasonString = "endpoint_lookup_error"
+	nexusPreprocessErrorTargetTypeUnsupported      metrics.ReasonString = "target_type_unsupported"
+	nexusPreprocessErrorTargetNamespaceNotFound    metrics.ReasonString = "target_namespace_not_found"
+	nexusPreprocessErrorTargetNamespaceLookupError metrics.ReasonString = "target_namespace_lookup_error"
 )
 
 func (h *NexusOperationHTTPHandler) writeFailure(writer http.ResponseWriter, r *http.Request, reason metrics.ReasonString, err error) {
@@ -291,13 +291,13 @@ func (h *NexusOperationHTTPHandler) nexusContextFromEndpoint(
 				tag.NexusEndpointTargetNamespaceID(v.Worker.GetNamespaceId()),
 			)
 			if _, ok := errors.AsType[*serviceerror.NamespaceNotFound](err); ok {
-				h.writeFailure(w, r, nexusPreprocessErrorEndpointTargetNotFound, &nexus.HandlerError{
+				h.writeFailure(w, r, nexusPreprocessErrorTargetNamespaceNotFound, &nexus.HandlerError{
 					Type:          nexus.HandlerErrorTypeNotFound,
 					Message:       "invalid endpoint target",
 					RetryBehavior: nexus.HandlerErrorRetryBehaviorRetryable,
 				})
 			} else {
-				h.writeFailure(w, r, nexusPreprocessErrorEndpointTargetLookupError, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"))
+				h.writeFailure(w, r, nexusPreprocessErrorTargetNamespaceLookupError, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "internal error"))
 			}
 			return nil, false
 		}
@@ -309,7 +309,7 @@ func (h *NexusOperationHTTPHandler) nexusContextFromEndpoint(
 		return nc, true
 	default:
 		logger.Error("unsupported Nexus endpoint target type", tag.NewStringTag("target-type", fmt.Sprintf("%T", v)))
-		h.writeFailure(w, r, nexusPreprocessErrorEndpointTargetUnsupported, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid endpoint target"))
+		h.writeFailure(w, r, nexusPreprocessErrorTargetTypeUnsupported, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid endpoint target"))
 		return nil, false
 	}
 }
