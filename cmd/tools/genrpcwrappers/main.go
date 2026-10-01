@@ -480,7 +480,7 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 // balances across the partitions of a task queue.
 func makeLoadBalancedFields(reqType reflect.Type, lb loadBalancedMethod, fields map[string]string) {
 	if lb.taskQueueType == "" {
-		makeTaskQueuePartitionLoadBalancedFields(reqType, fields)
+		makeTaskQueuePartitionLoadBalancedFields(reqType, lb, fields)
 		return
 	}
 	makeTaskQueueLoadBalancedFields(reqType, lb, fields)
@@ -498,7 +498,11 @@ func findForwardedSource(t reflect.Type) fieldWithPath {
 	return forwardedSource
 }
 
-func makeTaskQueuePartitionLoadBalancedFields(reqType reflect.Type, fields map[string]string) {
+func makeTaskQueuePartitionLoadBalancedFields(reqType reflect.Type, lb loadBalancedMethod, fields map[string]string) {
+	if lb.read || lb.longPoll {
+		// nolint:forbidigo // Panic is intended here to stop codegen
+		panic("task queue partition load balancing does not currently support reads or long polls")
+	}
 	t := reqType.Elem() // we know it's a pointer
 	nsID := findOneNestedField(t, "NamespaceId", "request", 1)
 	forwardedSource := findForwardedSource(t)

@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -20,7 +21,7 @@ import (
 func TestEagerActivityWithMatchingGrant_Unversioned(t *testing.T) {
 	env := testcore.NewEnv(t,
 		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerExecution, true),
-		testcore.WithDynamicConfig(dynamicconfig.EnableEagerActivityDispatchCheck, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 4),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 4),
 	)
@@ -54,7 +55,7 @@ func TestEagerActivityWithMatchingGrant_Unversioned(t *testing.T) {
 func TestEagerActivityFallsBackWhenBacklogExists(t *testing.T) {
 	env := testcore.NewEnv(t,
 		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerExecution, true),
-		testcore.WithDynamicConfig(dynamicconfig.EnableEagerActivityDispatchCheck, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingBacklogNegligibleAge, time.Duration(0)),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
@@ -62,6 +63,7 @@ func TestEagerActivityFallsBackWhenBacklogExists(t *testing.T) {
 
 	tvBacklogged := env.Tv().WithWorkflowIDNumber(1).WithActivityIDNumber(1)
 	tvEager := env.Tv().WithWorkflowIDNumber(2).WithActivityIDNumber(2)
+	tvHighPriority := tvEager.WithActivityIDNumber(3)
 	poller := env.TaskPoller()
 
 	startEagerActivityTestWorkflow(t, env, tvBacklogged)
@@ -85,10 +87,22 @@ func TestEagerActivityFallsBackWhenBacklogExists(t *testing.T) {
 	startEagerActivityTestWorkflow(t, env, tvEager)
 	response, err = poller.PollAndHandleWorkflowTask(
 		tvEager,
-		scheduleActivityForEagerDispatchTest(t, tvEager, true),
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			require.Equal(t, tvEager.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{
+				Commands: []*commandpb.Command{
+					eagerActivityDispatchTestCommand(tvEager, true, 5),
+					eagerActivityDispatchTestCommand(tvHighPriority, true, 1),
+				},
+			}, nil
+		},
 	)
 	require.NoError(t, err)
-	require.Empty(t, response.GetActivityTasks(), "an eager activity must not jump an existing backlog")
+	require.Len(t, response.GetActivityTasks(), 1, "only the high-priority activity may jump the backlog")
+	eagerActivity := response.GetActivityTasks()[0]
+	require.Equal(t, tvHighPriority.ActivityID(), eagerActivity.GetActivityId())
+	_, err = poller.HandleActivityTask(tvHighPriority, eagerActivity, taskpoller.CompleteActivityTask(tvHighPriority))
+	require.NoError(t, err)
 
 	activityIDs := make([]string, 0, 2)
 	for _, tv := range []*testvars.TestVars{tvBacklogged, tvEager} {
@@ -128,19 +142,24 @@ func scheduleActivityForEagerDispatchTest(
 	return func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		require.Equal(t, tv.WorkflowID(), task.GetWorkflowExecution().GetWorkflowId())
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{
-			Commands: []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
-					ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:             tv.ActivityID(),
-						ActivityType:           tv.ActivityType(),
-						TaskQueue:              tv.TaskQueue(),
-						ScheduleToCloseTimeout: durationpb.New(time.Minute),
-						StartToCloseTimeout:    durationpb.New(time.Minute),
-						RequestEagerExecution:  eager,
-					},
-				},
-			}},
+			Commands: []*commandpb.Command{eagerActivityDispatchTestCommand(tv, eager, 0)},
 		}, nil
+	}
+}
+
+func eagerActivityDispatchTestCommand(tv *testvars.TestVars, eager bool, priority int32) *commandpb.Command {
+	return &commandpb.Command{
+		CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+		Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{
+			ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ActivityId:             tv.ActivityID(),
+				ActivityType:           tv.ActivityType(),
+				TaskQueue:              tv.TaskQueue(),
+				ScheduleToCloseTimeout: durationpb.New(time.Minute),
+				StartToCloseTimeout:    durationpb.New(time.Minute),
+				RequestEagerExecution:  eager,
+				Priority:               &commonpb.Priority{PriorityKey: priority},
+			},
+		},
 	}
 }

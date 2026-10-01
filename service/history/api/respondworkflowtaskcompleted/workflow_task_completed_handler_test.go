@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsregistry"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
@@ -812,9 +811,7 @@ func TestHandleEagerActivityCandidatesBatchesByTaskQueue(t *testing.T) {
 		mutableState:            ms,
 		matchingClient:          matchingClient,
 		eagerActivityCandidates: candidates,
-		config: &configs.Config{
-			EnableEagerActivityDispatchCheck: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
-		},
+		config:                  newEagerActivityDispatchTestConfig(true),
 	}
 	mutations, err := handler.handleEagerActivityCandidates(context.Background())
 	require.NoError(t, err)
@@ -882,9 +879,7 @@ func TestHandleEagerActivityCandidatesPartialGrant(t *testing.T) {
 		},
 	)
 
-	dcClient := dynamicconfig.StaticClient(nil)
-	config := configs.NewConfig(dynamicconfig.NewCollection(dcClient, log.NewNoopLogger()), 1)
-	config.EnableEagerActivityDispatchCheck = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	config := newEagerActivityDispatchTestConfig(true)
 	handler := &workflowTaskCompletedHandler{
 		identity:        "worker",
 		mutableState:    ms,
@@ -948,9 +943,7 @@ func TestHandleEagerActivityCandidatesDispatchCheckDisabled(t *testing.T) {
 	ms.EXPECT().GetWorkflowType().Return(&commonpb.WorkflowType{Name: "workflow-type"})
 	shardCtx.EXPECT().NewVectorClock().Return(clock, nil)
 
-	dcClient := dynamicconfig.StaticClient(nil)
-	config := configs.NewConfig(dynamicconfig.NewCollection(dcClient, log.NewNoopLogger()), 1)
-	config.EnableEagerActivityDispatchCheck = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+	config := newEagerActivityDispatchTestConfig(false)
 	handler := &workflowTaskCompletedHandler{
 		identity:        "worker",
 		mutableState:    ms,
@@ -1023,9 +1016,7 @@ func TestHandleEagerActivityCandidatesFallback(t *testing.T) {
 				mutableState:            ms,
 				matchingClient:          matchingClient,
 				eagerActivityCandidates: []eagerActivityCandidate{{attr: attr}},
-				config: &configs.Config{
-					EnableEagerActivityDispatchCheck: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
-				},
+				config:                  newEagerActivityDispatchTestConfig(true),
 			}
 			mutations, err := handler.handleEagerActivityCandidates(context.Background())
 			if test.generateErr != nil {
@@ -1066,18 +1057,10 @@ func TestHandleCommandScheduleActivityCollectsEagerCandidate(t *testing.T) {
 	ms := historyi.NewMockMutableState(ctrl)
 	namespaceRegistry := namespace.NewMockRegistry(ctrl)
 	logger := log.NewNoopLogger()
-	config := &configs.Config{
-		MaxIDLengthLimit: dynamicconfig.GetIntPropertyFn(1000),
-		DefaultActivityRetryPolicy: func(string) retrypolicy.DefaultRetrySettings {
-			return retrypolicy.DefaultDefaultRetrySettings
-		},
-		DefaultWorkflowRetryPolicy: func(string) retrypolicy.DefaultRetrySettings {
-			return retrypolicy.DefaultDefaultRetrySettings
-		},
-		EnableCrossNamespaceCommands:     dynamicconfig.GetBoolPropertyFn(true),
-		EnableActivityEagerExecution:     dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
-		EnableEagerActivityDispatchCheck: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
-	}
+	configClient := dynamicconfig.NewMemoryClient()
+	configClient.OverrideSetting(dynamicconfig.EnableActivityEagerExecution, true)
+	configClient.OverrideSetting(dynamicconfig.EnableActivityEagerDispatchCheck, true)
+	config := configs.NewConfig(dynamicconfig.NewCollection(configClient, logger), 100)
 	executionInfo := &persistencespb.WorkflowExecutionInfo{
 		NamespaceId: tests.NamespaceID.String(),
 		WorkflowId:  tests.WorkflowID,
@@ -1243,4 +1226,10 @@ func TestHandleCommandRequestCancelActivity_WorkerCommands(t *testing.T) {
 		require.Equal(t, cancelReqEvent, event)
 		require.Empty(t, handler.pendingWorkerCommandsByControlQueue)
 	})
+}
+
+func newEagerActivityDispatchTestConfig(checkEnabled bool) *configs.Config {
+	configClient := dynamicconfig.NewMemoryClient()
+	configClient.OverrideSetting(dynamicconfig.EnableActivityEagerDispatchCheck, checkEnabled)
+	return configs.NewConfig(dynamicconfig.NewCollection(configClient, log.NewNoopLogger()), 100)
 }

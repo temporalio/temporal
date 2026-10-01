@@ -61,55 +61,6 @@ type PartitionManagerTestSuite struct {
 	ns             *namespace.Namespace
 }
 
-type eagerDispatchPhysicalQueue struct {
-	physicalTaskQueueManager
-	backlogPriority priorityKey
-}
-
-func (*eagerDispatchPhysicalQueue) WaitUntilInitialized(context.Context) error {
-	return nil
-}
-
-func (*eagerDispatchPhysicalQueue) MarkAlive() {
-}
-
-func (q *eagerDispatchPhysicalQueue) NonNegligibleBacklogPriority() priorityKey {
-	return q.backlogPriority
-}
-
-func (s *PartitionManagerTestSuite) newEagerDispatchPartitionManager(
-	defaultBacklogPriority priorityKey,
-	versionBacklogPriorities map[PhysicalTaskQueueVersion]priorityKey,
-) *taskQueuePartitionManagerImpl {
-	defaultQueueFuture := future.NewFuture[physicalTaskQueueManager]()
-	defaultQueueFuture.Set(&eagerDispatchPhysicalQueue{backlogPriority: defaultBacklogPriority}, nil)
-
-	versionedQueues := make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager, len(versionBacklogPriorities))
-	for version, backlogPriority := range versionBacklogPriorities {
-		versionedQueues[version] = &eagerDispatchPhysicalQueue{backlogPriority: backlogPriority}
-	}
-
-	return &taskQueuePartitionManagerImpl{
-		engine:             s.partitionMgr.engine,
-		partition:          s.partitionMgr.partition,
-		ns:                 s.partitionMgr.ns,
-		config:             s.partitionMgr.config,
-		versionedQueues:    versionedQueues,
-		userDataManager:    s.partitionMgr.userDataManager,
-		logger:             s.partitionMgr.logger,
-		throttledLogger:    s.partitionMgr.throttledLogger,
-		rateLimitManager:   s.partitionMgr.rateLimitManager,
-		defaultQueueFuture: defaultQueueFuture,
-	}
-}
-
-func workerDeploymentVersion(buildID string) *deploymentspb.WorkerDeploymentVersion {
-	return &deploymentspb.WorkerDeploymentVersion{
-		DeploymentName: "deployment",
-		BuildId:        buildID,
-	}
-}
-
 // TODO(pri): cleanup; delete this
 func TestTaskQueuePartitionManager_Classic_Suite(t *testing.T) {
 	t.Parallel()
@@ -325,15 +276,9 @@ func (s *PartitionManagerTestSuite) TestGrantEagerDispatchReturnsPartialRateLimi
 		s.T().Skip("simple limiter is only used by the new matcher")
 	}
 
-	rateLimitManager := s.partitionMgr.rateLimitManager
-	rateLimitManager.mu.Lock()
-	rateLimitManager.timeSource = clock.NewEventTimeSource().Update(time.Now())
-	rateLimitManager.wholeQueueReady = 0
-	rateLimitManager.wholeQueueLimit = makeSimpleLimiterParams(1, 0)
-	rateLimitManager.perKeyLimit = simpleLimiterParams{}
-	rateLimitManager.mu.Unlock()
+	partitionMgr := s.newRateLimitedEagerDispatchPartitionManager()
 
-	items, err := s.partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
+	items, err := partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
 		{Count: 3},
 		{Count: 1},
 	})
@@ -372,23 +317,17 @@ func (s *PartitionManagerTestSuite) TestGrantEagerDispatchValidationDoesNotConsu
 		s.T().Skip("simple limiter is only used by the new matcher")
 	}
 
-	rateLimitManager := s.partitionMgr.rateLimitManager
-	rateLimitManager.mu.Lock()
-	rateLimitManager.timeSource = clock.NewEventTimeSource().Update(time.Now())
-	rateLimitManager.wholeQueueReady = 0
-	rateLimitManager.wholeQueueLimit = makeSimpleLimiterParams(1, 0)
-	rateLimitManager.perKeyLimit = simpleLimiterParams{}
-	rateLimitManager.mu.Unlock()
+	partitionMgr := s.newRateLimitedEagerDispatchPartitionManager()
 
-	_, err := s.partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
+	_, err := partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
 		{Count: 1},
-		{Count: 0},
+		{Count: 0}, // this causes the whole request to fail, so the previous item does not consume tokens
 	})
 	s.Require().Error(err)
 	var invalidArgument *serviceerror.InvalidArgument
 	s.Require().ErrorAs(err, &invalidArgument)
 
-	items, err := s.partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
+	items, err := partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
 		{Count: 1},
 	})
 	s.Require().NoError(err)
@@ -2667,4 +2606,54 @@ func TestStickyQueueAdjustedStats_VersioningAttributionSkipped(t *testing.T) {
 	require.NotNil(t, adjustedStats)
 	require.InDelta(t, rawStats[3].TasksAddRate, adjustedStats.TasksAddRate, 0)
 	require.InDelta(t, rawStats[3].TasksDispatchRate, adjustedStats.TasksDispatchRate, 0)
+}
+
+func (s *PartitionManagerTestSuite) newEagerDispatchPartitionManager(
+	defaultBacklogPriority priorityKey,
+	versionBacklogPriorities map[PhysicalTaskQueueVersion]priorityKey,
+) *taskQueuePartitionManagerImpl {
+	defaultQueueFuture := future.NewFuture[physicalTaskQueueManager]()
+	defaultQueueFuture.Set(s.newEagerDispatchPhysicalQueue(defaultBacklogPriority), nil)
+
+	versionedQueues := make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager, len(versionBacklogPriorities))
+	for version, backlogPriority := range versionBacklogPriorities {
+		versionedQueues[version] = s.newEagerDispatchPhysicalQueue(backlogPriority)
+	}
+
+	return &taskQueuePartitionManagerImpl{
+		engine:             s.partitionMgr.engine,
+		partition:          s.partitionMgr.partition,
+		ns:                 s.partitionMgr.ns,
+		config:             s.partitionMgr.config,
+		versionedQueues:    versionedQueues,
+		userDataManager:    s.partitionMgr.userDataManager,
+		logger:             s.partitionMgr.logger,
+		throttledLogger:    s.partitionMgr.throttledLogger,
+		rateLimitManager:   s.partitionMgr.rateLimitManager,
+		defaultQueueFuture: defaultQueueFuture,
+	}
+}
+
+func workerDeploymentVersion(buildID string) *deploymentspb.WorkerDeploymentVersion {
+	return &deploymentspb.WorkerDeploymentVersion{
+		DeploymentName: "deployment",
+		BuildId:        buildID,
+	}
+}
+
+func (s *PartitionManagerTestSuite) newEagerDispatchPhysicalQueue(backlogPriority priorityKey) *MockphysicalTaskQueueManager {
+	queue := NewMockphysicalTaskQueueManager(s.controller)
+	queue.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
+	queue.EXPECT().MarkAlive().AnyTimes()
+	queue.EXPECT().NonNegligibleBacklogPriority().Return(backlogPriority).AnyTimes()
+	return queue
+}
+
+func (s *PartitionManagerTestSuite) newRateLimitedEagerDispatchPartitionManager() *taskQueuePartitionManagerImpl {
+	partitionMgr := s.newEagerDispatchPartitionManager(0, nil)
+	limiter := newRateLimitManager(partitionMgr.userDataManager, partitionMgr.config, partitionMgr.partition.TaskQueue().TaskType())
+	limiter.timeSource = clock.NewEventTimeSource().Update(time.Now())
+	limiter.wholeQueueLimit = makeSimpleLimiterParams(1, 0)
+	partitionMgr.rateLimitManager = limiter
+	return partitionMgr
 }

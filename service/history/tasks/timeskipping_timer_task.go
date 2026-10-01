@@ -10,14 +10,14 @@ import (
 )
 
 var (
-	_ Task           = (*TimeSkippingTimerTask)(nil)
-	_ HasArchetypeID = (*TimeSkippingTimerTask)(nil)
+	_ Task           = (*TimeSkippingFastForwardTimerTask)(nil)
+	_ HasArchetypeID = (*TimeSkippingFastForwardTimerTask)(nil)
 )
 
 type (
-	// TimeSkippingTimerTask wakes a workflow when the fast-forward configured
+	// TimeSkippingFastForwardTimerTask wakes a workflow when the fast-forward configured
 	// on its TimeSkippingConfig should take effect.
-	TimeSkippingTimerTask struct {
+	TimeSkippingFastForwardTimerTask struct {
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		VersionedTransition *persistencespb.VersionedTransition
@@ -30,41 +30,41 @@ type (
 	}
 )
 
-func (t *TimeSkippingTimerTask) GetKey() Key {
+func (t *TimeSkippingFastForwardTimerTask) GetKey() Key {
 	return NewKey(t.VisibilityTimestamp, t.TaskID)
 }
 
-func (t *TimeSkippingTimerTask) GetArchetypeID() uint32 {
+func (t *TimeSkippingFastForwardTimerTask) GetArchetypeID() uint32 {
 	return t.ArchetypeID
 }
 
-func (t *TimeSkippingTimerTask) GetTaskID() int64 {
+func (t *TimeSkippingFastForwardTimerTask) GetTaskID() int64 {
 	return t.TaskID
 }
 
-func (t *TimeSkippingTimerTask) SetTaskID(id int64) {
+func (t *TimeSkippingFastForwardTimerTask) SetTaskID(id int64) {
 	t.TaskID = id
 }
 
-func (t *TimeSkippingTimerTask) GetVisibilityTime() time.Time {
+func (t *TimeSkippingFastForwardTimerTask) GetVisibilityTime() time.Time {
 	return t.VisibilityTimestamp
 }
 
-func (t *TimeSkippingTimerTask) SetVisibilityTime(visibilityTime time.Time) {
+func (t *TimeSkippingFastForwardTimerTask) SetVisibilityTime(visibilityTime time.Time) {
 	t.VisibilityTimestamp = visibilityTime
 }
 
-func (t *TimeSkippingTimerTask) GetCategory() Category {
+func (t *TimeSkippingFastForwardTimerTask) GetCategory() Category {
 	return CategoryTimer
 }
 
-func (t *TimeSkippingTimerTask) GetType() enumsspb.TaskType {
+func (t *TimeSkippingFastForwardTimerTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_TIMESKIPPING_TIMER
 }
 
-func (t *TimeSkippingTimerTask) String() string {
+func (t *TimeSkippingFastForwardTimerTask) String() string {
 	vt := t.VersionedTransition
-	return fmt.Sprintf("TimeSkippingTimerTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, FailoverVersion: %v, TransitionCount: %v, ArchetypeID: %v}",
+	return fmt.Sprintf("TimeSkippingFastForwardTimerTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, FailoverVersion: %v, TransitionCount: %v, ArchetypeID: %v}",
 		t.WorkflowKey.String(),
 		t.VisibilityTimestamp,
 		t.TaskID,

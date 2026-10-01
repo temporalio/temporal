@@ -321,11 +321,8 @@ func (c *fairBacklogManagerImpl) NonNegligibleBacklogPriority() priorityKey {
 	var highest priorityKey
 	for subqueue, priority := range c.priorityBySubqueue {
 		oldestBacklogTime := c.subqueues[subqueue].getOldestBacklogTime()
-		backlogAge := time.Duration(0)
-		if !oldestBacklogTime.IsZero() {
-			backlogAge = time.Since(oldestBacklogTime)
-		}
-		if backlogAge >= c.config.BacklogNegligibleAge() &&
+		if !oldestBacklogTime.IsZero() &&
+			time.Since(oldestBacklogTime) >= c.config.BacklogNegligibleAge() &&
 			(highest == 0 || priority < highest) {
 			highest = priority
 		}
