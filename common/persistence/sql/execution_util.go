@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -970,6 +971,7 @@ func assertRunIDAndUpdateCurrentExecution(
 	previousRunID primitives.UUID,
 	serializer serialization.Serializer,
 ) error {
+	shouldUpdate := true
 
 	assertFn := func(currentRow *sqlplugin.CurrentExecutionsRow) error {
 		if !bytes.Equal(currentRow.RunID, previousRunID) {
@@ -993,6 +995,7 @@ func assertRunIDAndUpdateCurrentExecution(
 				StartTime:           currentRow.StartTime,
 			}
 		}
+		shouldUpdate = !currentExecutionsEqual(currentRow, &row)
 		return nil
 	}
 	if err := assertCurrentExecution(ctx,
@@ -1005,8 +1008,29 @@ func assertRunIDAndUpdateCurrentExecution(
 	); err != nil {
 		return err
 	}
+	if !shouldUpdate {
+		return nil
+	}
 
 	return updateCurrentExecution(ctx, tx, row)
+}
+
+func currentExecutionsEqual(a, b *sqlplugin.CurrentExecutionsRow) bool {
+	startTimesEqual := a.StartTime == nil && b.StartTime == nil ||
+		a.StartTime != nil && b.StartTime != nil &&
+			a.StartTime.Truncate(time.Microsecond).Equal(b.StartTime.Truncate(time.Microsecond))
+	return a.ShardID == b.ShardID &&
+		bytes.Equal(a.NamespaceID, b.NamespaceID) &&
+		a.WorkflowID == b.WorkflowID &&
+		bytes.Equal(a.RunID, b.RunID) &&
+		a.ArchetypeID == b.ArchetypeID &&
+		a.CreateRequestID == b.CreateRequestID &&
+		startTimesEqual &&
+		a.LastWriteVersion == b.LastWriteVersion &&
+		a.State == b.State &&
+		a.Status == b.Status &&
+		bytes.Equal(a.Data, b.Data) &&
+		a.DataEncoding == b.DataEncoding
 }
 
 func assertCurrentExecution(

@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -1101,10 +1102,21 @@ func (s *executableTaskSuite) TestMarkPoisonPill_MaxAttemptsReached() {
 		TaskInfo:          s.task.replicationTask.RawTaskInfo,
 	}).Return(serviceerror.NewInternal("failed"))
 
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.task.MetricsHandler = metricsHandler
+
 	err := s.task.MarkPoisonPill()
 	s.Error(err)
+	s.Empty(capture.Snapshot()[metrics.ReplicationDLQDropped.Name()])
+
 	err = s.task.MarkPoisonPill()
 	s.NoError(err)
+	recordings := capture.Snapshot()[metrics.ReplicationDLQDropped.Name()]
+	s.Require().Len(recordings, 1)
+	s.Equal(int64(1), recordings[0].Value)
+	s.Equal(map[string]string{"source_cluster": s.task.sourceClusterName}, recordings[0].Tags)
 }
 
 func (s *executableTaskSuite) TestSyncState() {

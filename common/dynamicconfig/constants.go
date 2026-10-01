@@ -74,8 +74,9 @@ pod-level rate limiting. Read once at process startup: changing this value requi
 		false,
 		`VisibilityEnableShadowReadMode is the config to enable shadow read from secondary visibility`,
 	)
-	SecondaryVisibilityWritingMode = NewGlobalStringSetting(
+	SecondaryVisibilityWritingMode = NewGlobalTypedSettingWithConverter(
 		"system.secondaryVisibilityWritingMode",
+		convertStringEnum([]string{"off", "on", "dual"}),
 		"off",
 		`SecondaryVisibilityWritingMode is key for how to write to secondary visibility`,
 	)
@@ -211,6 +212,11 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 		"system.enableActivityEagerExecution",
 		true,
 		`EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace`,
+	)
+	EnableActivityEagerDispatchCheck = NewNamespaceBoolSetting(
+		"system.enableActivityEagerDispatchCheck",
+		false,
+		`EnableActivityEagerDispatchCheck controls whether history asks matching for a grant before eagerly dispatching an activity.`,
 	)
 	EnableCancelActivityWorkerCommand = NewNamespaceBoolSetting(
 		"system.enableCancelActivityWorkerCommand",

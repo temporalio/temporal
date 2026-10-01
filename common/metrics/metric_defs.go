@@ -1203,6 +1203,7 @@ var (
 	ReplicationTasksAttempt                        = NewDimensionlessHistogramDef("replication_tasks_attempt")
 	ReplicationTasksErrorByType                    = NewCounterDef("replication_tasks_error_by_type")
 	ReplicationDLQFailed                           = NewCounterDef("replication_dlq_enqueue_failed")
+	ReplicationDLQDropped                          = NewCounterDef("replication_dlq_dropped")
 	ReplicationDLQMaxLevelGauge                    = NewGaugeDef("replication_dlq_max_level")
 	ReplicationDLQAckLevelGauge                    = NewGaugeDef("replication_dlq_ack_level")
 	ReplicationNonEmptyDLQCount                    = NewCounterDef("replication_dlq_non_empty")
