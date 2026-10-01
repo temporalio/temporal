@@ -152,7 +152,6 @@ func (r *ConflictResolverImpl) rebuild(
 	if err != nil {
 		return nil, err
 	}
-	copyResetRequestIDs(rebuildMutableState, executionState)
 
 	// after rebuilt verification
 	rebuildVersionHistories := rebuildMutableState.GetExecutionInfo().GetVersionHistories()

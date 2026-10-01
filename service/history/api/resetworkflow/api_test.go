@@ -7,7 +7,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -62,12 +61,12 @@ func (s *resetWorkflowSuite) TestIsDuplicateResetRequest() {
 			expected: true,
 		},
 		{
-			name: "reset request marker",
+			name: "reset request event",
 			executionState: &persistencespb.WorkflowExecutionState{
 				RequestIds: map[string]*persistencespb.RequestIDInfo{
 					requestID: {
-						EventType: enumspb.EVENT_TYPE_UNSPECIFIED,
-						EventId:   common.EmptyEventID,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED,
+						EventId:   5,
 					},
 				},
 			},

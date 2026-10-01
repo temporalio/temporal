@@ -122,7 +122,7 @@ func Invoke(
 		defer func() { currentWorkflowLease.GetReleaseFn()(retError) }()
 	}
 
-	// Dedup by the create request ID for older reset runs, or by the reset request marker stored in RequestIds.
+	// Dedup by the create request ID for older reset runs, or by the reset event recorded in RequestIds.
 	duplicateResetRequest := false
 	if currentWorkflowLease != nil {
 		currentExecutionState := currentWorkflowLease.GetMutableState().GetExecutionState()
@@ -226,7 +226,8 @@ func isDuplicateResetRequest(executionState *persistencespb.WorkflowExecutionSta
 		return true
 	}
 	requestIDInfo, ok := executionState.GetRequestIds()[requestID]
-	return ok && ndc.IsResetRequestIDInfo(requestIDInfo)
+	return ok && requestIDInfo.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED &&
+		requestIDInfo.GetEventId() > common.EmptyEventID
 }
 
 // shouldTolerateMissingCurrentExecution reports whether a failure to resolve the current execution
