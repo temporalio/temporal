@@ -754,6 +754,7 @@ func peerOutcomeFromResult(result PeerApplyResult) (namespacereplicationpb.PeerA
 
 type peerOutcomeRecord struct {
 	outcome           namespacereplicationpb.PeerApplyOutcome
+	attemptedOutcome  namespacereplicationpb.PeerApplyOutcome
 	firstAttemptAt    time.Time
 	resolvedAt        time.Time
 	retryScheduled    bool
@@ -787,6 +788,8 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 			now := mctx.Now(c)
 			nextAttempt := task.GetAttempt() + 1
 			peer := c.GetPeerApply()[task.GetTargetCell()]
+			attemptedOutcome := outcome
+			persistedOutcome := outcome
 			firstAt := now
 			retryExhausted := false
 			if peer.GetFirstAttemptAt() != nil {
@@ -799,13 +802,14 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 			// once a temporarily-unreachable peer recovers. Only after the budget
 			// is spent do we give up as FAILED_TERMINAL so the component can still
 			// complete.
-			if outcome == namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE {
+			if attemptedOutcome == namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE {
 				if now.Sub(firstAt) < peerRetryBudget {
 					record := peerOutcomeRecord{
-						outcome:        namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE,
-						firstAttemptAt: firstAt,
-						resolvedAt:     now,
-						retryScheduled: true,
+						outcome:          namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE,
+						attemptedOutcome: attemptedOutcome,
+						firstAttemptAt:   firstAt,
+						resolvedAt:       now,
+						retryScheduled:   true,
 					}
 					err := TransitionPeerRetry.Apply(c, mctx, EventPeerRetry{
 						Time:       now,
@@ -816,20 +820,21 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 					return record, err
 				}
 				// Budget exhausted: fall through and record a terminal failure.
-				outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL
+				persistedOutcome = namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL
 				retryExhausted = true
 			}
 
 			record := peerOutcomeRecord{
-				outcome:        outcome,
-				firstAttemptAt: firstAt,
-				resolvedAt:     now,
-				retryExhausted: retryExhausted,
+				outcome:          persistedOutcome,
+				attemptedOutcome: attemptedOutcome,
+				firstAttemptAt:   firstAt,
+				resolvedAt:       now,
+				retryExhausted:   retryExhausted,
 			}
 			if err := TransitionPeerCompleted.Apply(c, mctx, EventPeerCompleted{
 				Time:       now,
 				TargetCell: task.GetTargetCell(),
-				Outcome:    outcome,
+				Outcome:    persistedOutcome,
 				Attempts:   nextAttempt,
 				Err:        execErr,
 			}); err != nil {
@@ -854,6 +859,9 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 	)
 	if recorded.outcome == namespacereplicationpb.PEER_APPLY_OUTCOME_UNSPECIFIED {
 		recorded.outcome = outcome
+	}
+	if recorded.attemptedOutcome == namespacereplicationpb.PEER_APPLY_OUTCOME_UNSPECIFIED {
+		recorded.attemptedOutcome = outcome
 	}
 	return recorded, updErr
 }

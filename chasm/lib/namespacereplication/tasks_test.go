@@ -1283,6 +1283,8 @@ func TestApplyPeerTask_Execute_RetryBudgetBoundary(t *testing.T) {
 					wantMetricOutcome,
 				)
 				require.Equal(t, true, details["retry_exhausted"])
+				require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE.String(), details["attempted_peer_outcome"])
+				require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL.String(), details["persisted_peer_outcome"])
 			} else {
 				requireAuthoritativeMetric(
 					t,

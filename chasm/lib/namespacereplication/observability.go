@@ -165,7 +165,7 @@ func (h *applyPeerTaskHandler) observePeerApply(
 	observationErr := applyErr
 	retryScheduled := saveErr == nil && recorded.retryScheduled
 	details := map[string]any{
-		"attempted_peer_outcome": recorded.outcome.String(),
+		"attempted_peer_outcome": recorded.attemptedOutcome.String(),
 		"retry_scheduled":        retryScheduled,
 		"retry_exhausted":        recorded.retryExhausted,
 	}
