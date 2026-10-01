@@ -9,6 +9,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/server/api/adminservice/v1"
 	batchspb "go.temporal.io/server/api/batch/v1"
@@ -73,6 +74,52 @@ func TestBatchActivityWithProtobuf_RejectsMismatchedRequestNamespace(t *testing.
 	_, err := env.ExecuteActivity(a.BatchActivityWithProtobuf, input)
 	require.Error(t, err)
 	require.ErrorContains(t, err, errNamespaceMismatch.Error())
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.Equal(t, "NamespaceMismatch", appErr.Type())
+	require.True(t, appErr.NonRetryable())
+}
+
+func TestBatchActivityWithProtobuf_RejectsMismatchedNamespaceIDWithoutRetry(t *testing.T) {
+	ts := testsuite.WorkflowTestSuite{}
+	env := ts.NewTestActivityEnvironment()
+	a := newBoundActivities(nil)
+	env.RegisterActivity(a.BatchActivityWithProtobuf)
+
+	input := &batchspb.BatchOperationInput{
+		NamespaceId: "other-ns-id",
+		Request: &workflowservice.StartBatchOperationRequest{
+			Namespace: boundNSName,
+		},
+	}
+
+	_, err := env.ExecuteActivity(a.BatchActivityWithProtobuf, input)
+	require.ErrorContains(t, err, errNamespaceMismatch.Error())
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.Equal(t, "NamespaceMismatch", appErr.Type())
+	require.True(t, appErr.NonRetryable())
+}
+
+func TestBatchActivityWithProtobuf_RejectsAdminBatchOutsideSystemNamespaceWithoutRetry(t *testing.T) {
+	ts := testsuite.WorkflowTestSuite{}
+	env := ts.NewTestActivityEnvironment()
+	a := newBoundActivities(nil)
+	env.RegisterActivity(a.BatchActivityWithProtobuf)
+
+	input := &batchspb.BatchOperationInput{
+		NamespaceId: boundNSID,
+		AdminRequest: &adminservice.StartAdminBatchOperationRequest{
+			Namespace: boundNSName,
+		},
+	}
+
+	_, err := env.ExecuteActivity(a.BatchActivityWithProtobuf, input)
+	require.ErrorContains(t, err, errAdminBatchNamespaceNotSystem.Error())
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.Equal(t, "NamespaceMismatch", appErr.Type())
+	require.True(t, appErr.NonRetryable())
 }
 
 func TestCheckAndGetTargetNamespace_AdminRequest(t *testing.T) {

@@ -48,7 +48,7 @@ func newAdminBatchCommands(clientFactory ClientFactory, prompterFactory Prompter
 				},
 				&cli.StringFlag{
 					Name:  FlagJobID,
-					Usage: "Optional job ID (auto-generated if not provided)",
+					Usage: "Optional job ID; use '-' or '_' instead of ':' (auto-generated if omitted)",
 				},
 			},
 			Action: func(c *cli.Context) error {
@@ -95,8 +95,9 @@ func AdminBatchStart(c *cli.Context, clientFactory ClientFactory, prompter *Prom
 	if jobID == "" {
 		jobID = fmt.Sprintf("batch-%s-%d", batchType, time.Now().UnixNano())
 	}
-	jobIDWithNS := fmt.Sprintf("%s:%s", nsName, jobID)
-
+	if strings.Contains(jobID, ":") {
+		return fmt.Errorf("job ID %q cannot contain ':'; use '-' or '_' instead", jobID)
+	}
 	ctx, cancel := newContext(c)
 	defer cancel()
 
@@ -139,7 +140,7 @@ func AdminBatchStart(c *cli.Context, clientFactory ClientFactory, prompter *Prom
 	}
 	prompter.Prompt(fmt.Sprintf("Proceed with %s on the currently matching %d %s?", batchType, matchCount, targetKind))
 
-	_, err = adminClient.StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
+	resp, err := adminClient.StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
 		Namespace:       nsName,
 		VisibilityQuery: query,
 		JobId:           jobID,
@@ -156,7 +157,7 @@ func AdminBatchStart(c *cli.Context, clientFactory ClientFactory, prompter *Prom
 	// nolint:errcheck // assuming that write will succeed.
 	fmt.Fprintf(c.App.Writer,
 		"Batch operation %q started successfully in namespace %s, targeting namespace %q, with Job ID: %s\n",
-		batchType, primitives.SystemLocalNamespace, nsName, jobIDWithNS)
+		batchType, primitives.SystemLocalNamespace, nsName, resp.GetWorkflowId())
 	return nil
 }
 

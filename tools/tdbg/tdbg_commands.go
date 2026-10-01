@@ -214,7 +214,7 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 				},
 				&cli.StringFlag{
 					Name:  FlagJobID,
-					Usage: "Optional job ID (auto-generated if not provided)",
+					Usage: "Optional job ID; use '-' or '_' instead of ':' (auto-generated if omitted)",
 				},
 			},
 			Action: func(c *cli.Context) error {

@@ -772,10 +772,28 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory,
 	if jobID == "" {
 		jobID = fmt.Sprintf("batch-refresh-%d", time.Now().UnixNano())
 	}
-	jobIDWithNS := fmt.Sprintf("%s:%s", nsName, jobID)
-
+	if strings.Contains(jobID, ":") {
+		return fmt.Errorf("job ID %q cannot contain ':'; use '-' or '_' instead", jobID)
+	}
 	ctx, cancel := newContext(c)
 	defer cancel()
+
+	nsResp, err := workflowClient.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+		Namespace: nsName,
+	})
+	if err != nil {
+		return fmt.Errorf("unable to describe namespace %q: %w", nsName, err)
+	}
+	clusterRole := "active"
+	if nsResp.GetIsGlobalNamespace() {
+		clusterResp, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
+		if err != nil {
+			return fmt.Errorf("unable to describe cluster: %w", err)
+		}
+		if nsResp.GetReplicationConfig().GetActiveClusterName() != clusterResp.GetClusterName() {
+			clusterRole = "passive"
+		}
+	}
 
 	// Count workflows matching the query to confirm with user
 	countResp, err := workflowClient.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
@@ -786,11 +804,11 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory,
 		return fmt.Errorf("unable to count workflow executions: %w", err)
 	}
 
-	msg := fmt.Sprintf("A workflow will be started in temporal-system to refresh tasks for %d execution(s) matching query %q in namespace %q. Continue Y/N?",
-		countResp.GetCount(), query, nsName)
+	msg := fmt.Sprintf("This cluster is %s for namespace %q. A batch workflow will be started in %q to refresh tasks for %d execution(s) matching query %q. Continue?",
+		clusterRole, nsName, primitives.SystemLocalNamespace, countResp.GetCount(), query)
 	prompter.Prompt(msg)
 
-	_, err = adminClient.StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
+	resp, err := adminClient.StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
 		Namespace:       nsName,
 		VisibilityQuery: query,
 		JobId:           jobID,
@@ -805,7 +823,7 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory,
 	}
 
 	// nolint:errcheck // assuming that write will succeed.
-	fmt.Fprintf(c.App.Writer, "Batch Refresh Workflow Tasks started successfully for Job ID: %s\n", jobIDWithNS)
+	fmt.Fprintf(c.App.Writer, "Batch Refresh Workflow Tasks started successfully for Job ID: %s\n", resp.GetWorkflowId())
 	return nil
 }
 
