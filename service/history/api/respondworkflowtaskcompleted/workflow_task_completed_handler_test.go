@@ -17,9 +17,12 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
@@ -40,8 +43,10 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 func TestCommandProtocolMessage(t *testing.T) {
@@ -676,6 +681,210 @@ func TestHandlePostCommandEagerExecuteActivity(t *testing.T) {
 	mutation, err := handler.handlePostCommandEagerExecuteActivity(context.Background(), attr)
 	require.NoError(t, err)
 	require.NotNil(t, mutation)
+}
+
+func TestGrantEagerActivityDispatch(t *testing.T) {
+	t.Parallel()
+
+	priority := &commonpb.Priority{PriorityKey: 2, FairnessKey: "fairness-key"}
+	deployment := &deploymentpb.Deployment{SeriesName: "deployment", BuildId: "build-id"}
+	attr := &commandpb.ScheduleActivityTaskCommandAttributes{
+		TaskQueue: &taskqueuepb.TaskQueue{Name: "activity-task-queue"},
+		Priority:  priority,
+	}
+
+	testCases := []struct {
+		name     string
+		response *matchingservice.GrantEagerDispatchResponse
+		err      error
+		granted  bool
+	}{
+		{
+			name: "granted",
+			response: &matchingservice.GrantEagerDispatchResponse{Items: []*matchingservice.GrantEagerDispatchResponse_Item{
+				{GrantedCount: 1},
+			}},
+			granted: true,
+		},
+		{
+			name: "denied",
+			response: &matchingservice.GrantEagerDispatchResponse{Items: []*matchingservice.GrantEagerDispatchResponse_Item{
+				{},
+			}},
+		},
+		{
+			name:     "matching error",
+			response: nil,
+			err:      errors.New("matching unavailable"),
+		},
+		{
+			name:     "missing response item",
+			response: &matchingservice.GrantEagerDispatchResponse{},
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctrl := gomock.NewController(t)
+			ms := historyi.NewMockMutableState(ctrl)
+			matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+			ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{NamespaceId: "namespace-id"})
+			matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, request *matchingservice.GrantEagerDispatchRequest, _ ...grpc.CallOption) (*matchingservice.GrantEagerDispatchResponse, error) {
+					require.Equal(t, "namespace-id", request.GetNamespaceId())
+					require.Equal(t, "activity-task-queue", request.GetTaskQueuePartition().GetTaskQueue())
+					require.Equal(t, enumspb.TASK_QUEUE_TYPE_ACTIVITY, request.GetTaskQueuePartition().GetTaskQueueType())
+					require.Len(t, request.GetItems(), 1)
+					require.Equal(t, int32(1), request.GetItems()[0].GetCount())
+					require.True(t, proto.Equal(priority, request.GetItems()[0].GetPriority()))
+					require.Equal(t, "deployment", request.GetItems()[0].GetVersion().GetDeploymentName())
+					require.Equal(t, "build-id", request.GetItems()[0].GetVersion().GetBuildId())
+					return test.response, test.err
+				},
+			)
+
+			handler := &workflowTaskCompletedHandler{
+				mutableState:           ms,
+				matchingClient:         matchingClient,
+				workflowTaskDeployment: deployment,
+			}
+			require.Equal(t, test.granted, handler.grantEagerActivityDispatch(context.Background(), attr))
+		})
+	}
+}
+
+func TestEagerActivityDispatchCheckDynamicConfig(t *testing.T) {
+	t.Parallel()
+
+	attr := &commandpb.ScheduleActivityTaskCommandAttributes{
+		TaskQueue: &taskqueuepb.TaskQueue{Name: "activity-task-queue"},
+	}
+
+	for _, enabled := range []bool{false, true} {
+		t.Run(fmt.Sprintf("enabled=%v", enabled), func(t *testing.T) {
+			t.Parallel()
+
+			ctrl := gomock.NewController(t)
+			ms := historyi.NewMockMutableState(ctrl)
+			matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+			if enabled {
+				ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{NamespaceId: "namespace-id"})
+				matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).Return(
+					&matchingservice.GrantEagerDispatchResponse{Items: []*matchingservice.GrantEagerDispatchResponse_Item{{GrantedCount: 1}}},
+					nil,
+				)
+			}
+
+			configClient := dynamicconfig.NewMemoryClient()
+			configClient.OverrideSetting(dynamicconfig.EnableActivityEagerDispatchCheck, enabled)
+
+			handler := &workflowTaskCompletedHandler{
+				mutableState:   ms,
+				matchingClient: matchingClient,
+				config:         configs.NewConfig(dynamicconfig.NewCollection(configClient, log.NewNoopLogger()), 100),
+			}
+			require.True(t, handler.eagerActivityDispatchAllowed(context.Background(), "namespace", attr))
+		})
+	}
+}
+
+func TestHandleCommandScheduleActivity_EagerDispatchGrant(t *testing.T) {
+	testCases := []struct {
+		name           string
+		response       *matchingservice.GrantEagerDispatchResponse
+		matchingErr    error
+		wantBypass     bool
+		wantPostAction bool
+	}{
+		{
+			name: "grant keeps eager dispatch",
+			response: &matchingservice.GrantEagerDispatchResponse{Items: []*matchingservice.GrantEagerDispatchResponse_Item{
+				{GrantedCount: 1},
+			}},
+			wantBypass:     true,
+			wantPostAction: true,
+		},
+		{
+			name: "denial falls back to normal dispatch",
+			response: &matchingservice.GrantEagerDispatchResponse{Items: []*matchingservice.GrantEagerDispatchResponse_Item{
+				{},
+			}},
+		},
+		{
+			name:        "matching error falls back to normal dispatch",
+			matchingErr: errors.New("matching unavailable"),
+		},
+	}
+
+	for _, test := range testCases {
+		t.Run(test.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			ms := historyi.NewMockMutableState(ctrl)
+			matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+			namespaceRegistry := namespace.NewMockRegistry(ctrl)
+			logger := log.NewNoopLogger()
+			configClient := dynamicconfig.NewMemoryClient()
+			configClient.OverrideSetting(dynamicconfig.EnableActivityEagerExecution, true)
+			configClient.OverrideSetting(dynamicconfig.EnableActivityEagerDispatchCheck, true)
+			config := configs.NewConfig(dynamicconfig.NewCollection(configClient, logger), 100)
+			executionInfo := &persistencespb.WorkflowExecutionInfo{
+				NamespaceId: tests.NamespaceID.String(),
+				WorkflowId:  tests.WorkflowID,
+				TaskQueue:   "workflow-task-queue",
+			}
+			executionState := &persistencespb.WorkflowExecutionState{
+				RunId:  tests.RunID,
+				Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			}
+			attr := &commandpb.ScheduleActivityTaskCommandAttributes{
+				ActivityId:            "activity-id",
+				ActivityType:          &commonpb.ActivityType{Name: "activity-type"},
+				TaskQueue:             &taskqueuepb.TaskQueue{Name: "activity-task-queue"},
+				StartToCloseTimeout:   durationpb.New(10 * time.Second),
+				RequestEagerExecution: true,
+			}
+			event := &historypb.HistoryEvent{EventId: 42}
+
+			ms.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
+			ms.EXPECT().GetExecutionState().Return(executionState).AnyTimes()
+			ms.EXPECT().GetAssignedBuildId().Return("").AnyTimes()
+			ms.EXPECT().GetPendingActivityInfos().Return(nil).AnyTimes()
+			ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+			ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
+			ms.EXPECT().GetMostRecentWorkerVersionStamp().Return(nil).AnyTimes()
+			ms.EXPECT().AddActivityTaskScheduledEvent(int64(123), attr, test.wantBypass).Return(event, nil, nil)
+			namespaceRegistry.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(tests.LocalNamespaceEntry, nil)
+			matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).Return(test.response, test.matchingErr)
+
+			handler := &workflowTaskCompletedHandler{
+				workflowTaskCompletedID: 123,
+				mutableState:            ms,
+				attrValidator: api.NewCommandAttrValidator(
+					namespaceRegistry,
+					config,
+					nil,
+				),
+				sizeLimitChecker: newWorkflowSizeChecker(
+					workflowSizeLimits{},
+					ms,
+					nil,
+					metrics.NoopMetricsHandler,
+					logger,
+				),
+				metricsHandler: metrics.NoopMetricsHandler,
+				config:         config,
+				matchingClient: matchingClient,
+			}
+
+			actualEvent, response, err := handler.handleCommandScheduleActivity(context.Background(), attr)
+			require.NoError(t, err)
+			require.Same(t, event, actualEvent)
+			require.NotNil(t, response)
+			require.Equal(t, test.wantPostAction, response.commandPostAction != nil)
+		})
+	}
 }
 
 func TestHandleCommandRequestCancelActivity_WorkerCommands(t *testing.T) {
