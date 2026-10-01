@@ -218,7 +218,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 	case nexus.OperationStateSucceeded:
 		var result *commonpb.Payload
 		if err := r.Result.Consume(&result); err != nil {
-			logger.Warn("cannot deserialize payload from completion result", tag.Error(err))
+			logger.Error("cannot deserialize payload from completion result", tag.Error(err))
 			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid result content")
 		}
 		if result.Size() > h.Config.BlobSizeLimitError(ns.Name().String()) {
@@ -228,7 +228,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		successPayload = result
 	default:
 		// The Nexus SDK ensures this never happens but just in case...
-		logger.Warn("invalid operation state in completion request", tag.String("state", string(r.State)))
+		logger.Error("invalid operation state in completion request", tag.String("state", string(r.State)))
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid completion state")
 	}
 

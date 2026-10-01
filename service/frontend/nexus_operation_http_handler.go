@@ -148,17 +148,17 @@ func (h *NexusOperationHTTPHandler) dispatchNexusTaskByNamespaceAndTaskQueue(w h
 	)
 
 	if nc.taskQueue, err = url.PathUnescape(params.TaskQueue); err != nil {
-		logger.Warn("invalid URL", tag.Error(err))
+		logger.Error("invalid URL", tag.Error(err))
 		h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid URL"))
 		return
 	}
 	if nc.namespaceName, err = url.PathUnescape(params.Namespace); err != nil {
-		logger.Warn("invalid URL", tag.Error(err))
+		logger.Error("invalid URL", tag.Error(err))
 		h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid URL"))
 		return
 	}
 	if err = h.namespaceValidationInterceptor.ValidateName(nc.namespaceName); err != nil {
-		logger.Warn("invalid namespace name", tag.Error(err))
+		logger.Error("invalid namespace name", tag.Error(err))
 		h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "%v", err.Error()))
 		return
 	}
@@ -188,7 +188,7 @@ func (h *NexusOperationHTTPHandler) dispatchNexusTaskByEndpoint(w http.ResponseW
 
 	endpointID, err := url.PathUnescape(endpointIDEscaped)
 	if err != nil {
-		logger.Warn("invalid URL", tag.Error(err))
+		logger.Error("invalid URL", tag.Error(err))
 		h.writeFailure(w, r, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid URL"))
 		return
 	}
