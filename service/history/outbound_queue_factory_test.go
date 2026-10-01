@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/sony/gobreaker"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
@@ -22,6 +21,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
@@ -61,7 +61,7 @@ func TestOutboundQueueFactory_CircuitBreakerBlockedTaggedWithTaskGroup(t *testin
 		return openCircuitBreaker{}
 	})
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
+	await.Require(t.Context(), t, func(c *await.T) {
 		recordings := capture.SnapshotMetric(metrics.CircuitBreakerExecutableBlocked.Name())
 		require.NotEmpty(c, recordings)
 		require.Equal(c, map[string]string{
