@@ -146,7 +146,7 @@ func AdminBatchStart(c *cli.Context, clientFactory ClientFactory, prompter *Prom
 		Reason:          reason,
 		Identity:        getCurrentUserFromEnv(),
 		Operation: &adminservice.StartAdminBatchOperationRequest_DelegationOperation{
-			DelegationOperation: &adminservice.BatchOperationDelegation{BatchType: delegatedType},
+			DelegationOperation: delegatedType,
 		},
 	})
 	if err != nil {

@@ -139,7 +139,7 @@ func (s *batchCommandTestSuite) TestAdminBatchStart() {
 		s.Equal("WorkflowType='MyWorkflow'", request.GetVisibilityQuery())
 		s.Equal("cleanup", request.GetReason())
 		s.Equal("my-job", request.GetJobId())
-		s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, request.GetDelegationOperation().GetBatchType())
+		s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW, request.GetDelegationOperation())
 		s.Contains(s.output.String(), "DANGER: destructive delegated batch operation")
 		s.Contains(s.output.String(), "User namespace: \"target-ns\"")
 		s.Contains(s.output.String(), "Batch workflow namespace: \"temporal-system\"")
@@ -155,7 +155,7 @@ func (s *batchCommandTestSuite) TestAdminBatchStart() {
 		))
 
 		request := s.client.admin.lastRequest
-		s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, request.GetDelegationOperation().GetBatchType())
+		s.Equal(enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY, request.GetDelegationOperation())
 		// The operation itself needs no payload: identity and reason travel on the envelope.
 		s.Equal("stuck activities", request.GetReason())
 		s.NotEmpty(request.GetIdentity())
@@ -171,7 +171,7 @@ func (s *batchCommandTestSuite) TestAdminBatchStart() {
 		))
 
 		request := s.client.admin.lastRequest
-		s.Equal(enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW, request.GetDelegationOperation().GetBatchType())
+		s.Equal(enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW, request.GetDelegationOperation())
 		s.Contains(s.output.String(), "Operation: delete-workflows")
 		s.Contains(s.output.String(), "Currently matching: 3 workflows")
 	})
@@ -184,7 +184,7 @@ func (s *batchCommandTestSuite) TestAdminBatchStart() {
 		))
 
 		request := s.client.admin.lastRequest
-		s.Equal(enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY, request.GetDelegationOperation().GetBatchType())
+		s.Equal(enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY, request.GetDelegationOperation())
 		s.Contains(s.output.String(), "Operation: delete-activities")
 		s.Contains(s.output.String(), "Currently matching: 5 activities")
 	})

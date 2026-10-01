@@ -65,9 +65,7 @@ func (s *AdminBatchDelegationTestSuite) TestDelegatedBatchOperation_OnlyInActive
 			Reason:          "xdc admin delegated batch",
 			Identity:        "test",
 			Operation: &adminservice.StartAdminBatchOperationRequest_DelegationOperation{
-				DelegationOperation: &adminservice.BatchOperationDelegation{
-					BatchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
-				},
+				DelegationOperation: enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
 			},
 		}
 	}
