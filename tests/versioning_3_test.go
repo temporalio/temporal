@@ -1250,7 +1250,7 @@ func (s *Versioning3Suite) TestEagerActivity() {
 func (s *Versioning3Suite) TestEagerActivityWithMatchingGrant() {
 	env := s.setupEnv(
 		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerExecution, true),
-		testcore.WithDynamicConfig(dynamicconfig.EnableEagerActivityDispatchCheck, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, true),
 	)
 	env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceWritePartition, 1))
 	env.InjectHook(testhooks.NewHook(testhooks.MatchingLBForceReadPartition, 1))

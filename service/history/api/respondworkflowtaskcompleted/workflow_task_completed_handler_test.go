@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsregistry"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
@@ -778,12 +777,13 @@ func TestEagerActivityDispatchCheckDynamicConfig(t *testing.T) {
 				)
 			}
 
+			configClient := dynamicconfig.NewMemoryClient()
+			configClient.OverrideSetting(dynamicconfig.EnableActivityEagerDispatchCheck, enabled)
+
 			handler := &workflowTaskCompletedHandler{
 				mutableState:   ms,
 				matchingClient: matchingClient,
-				config: &configs.Config{
-					EnableEagerActivityDispatchCheck: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(enabled),
-				},
+				config:         configs.NewConfig(dynamicconfig.NewCollection(configClient, log.NewNoopLogger()), 100),
 			}
 			require.True(t, handler.eagerActivityDispatchAllowed(context.Background(), "namespace", attr))
 		})
@@ -825,18 +825,10 @@ func TestHandleCommandScheduleActivity_EagerDispatchGrant(t *testing.T) {
 			matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
 			namespaceRegistry := namespace.NewMockRegistry(ctrl)
 			logger := log.NewNoopLogger()
-			config := &configs.Config{
-				MaxIDLengthLimit: dynamicconfig.GetIntPropertyFn(1000),
-				DefaultActivityRetryPolicy: func(string) retrypolicy.DefaultRetrySettings {
-					return retrypolicy.DefaultDefaultRetrySettings
-				},
-				DefaultWorkflowRetryPolicy: func(string) retrypolicy.DefaultRetrySettings {
-					return retrypolicy.DefaultDefaultRetrySettings
-				},
-				EnableCrossNamespaceCommands:     dynamicconfig.GetBoolPropertyFn(true),
-				EnableActivityEagerExecution:     dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
-				EnableEagerActivityDispatchCheck: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
-			}
+			configClient := dynamicconfig.NewMemoryClient()
+			configClient.OverrideSetting(dynamicconfig.EnableActivityEagerExecution, true)
+			configClient.OverrideSetting(dynamicconfig.EnableActivityEagerDispatchCheck, true)
+			config := configs.NewConfig(dynamicconfig.NewCollection(configClient, logger), 100)
 			executionInfo := &persistencespb.WorkflowExecutionInfo{
 				NamespaceId: tests.NamespaceID.String(),
 				WorkflowId:  tests.WorkflowID,

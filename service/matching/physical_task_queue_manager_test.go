@@ -72,6 +72,16 @@ func TestNonNegligibleBacklogPriority(t *testing.T) {
 	require.Zero(t, newPriorityBacklogManagerForTest(negligibleAge, nil).NonNegligibleBacklogPriority())
 }
 
+func TestNonNegligibleBacklogPriority_EmptySubqueueWithZeroThreshold(t *testing.T) {
+	priority := newPriorityBacklogManagerForTest(0, map[priorityKey]time.Duration{3: time.Second})
+	priority.subqueues[0].backlogAge = newBacklogAgeTracker()
+	fair := newFairBacklogManagerForTest(0, map[priorityKey]time.Duration{3: time.Second})
+	fair.subqueues[0].backlogAge = newBacklogAgeTracker()
+
+	require.Zero(t, priority.NonNegligibleBacklogPriority())
+	require.Zero(t, fair.NonNegligibleBacklogPriority())
+}
+
 func newPriorityBacklogManagerForTest(
 	negligibleAge time.Duration,
 	backlogs map[priorityKey]time.Duration,

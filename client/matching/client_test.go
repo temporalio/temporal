@@ -145,6 +145,8 @@ func TestDoGrantEagerDispatch_LoadBalancedRoot(t *testing.T) {
 }
 
 func TestDoGrantEagerDispatch_DirectPartition(t *testing.T) {
+	// Unlike AddWorkflowTask's task queue name, grants address an explicit partition
+	// proto. Direct routing must preserve that request without copying or load balancing.
 	controller := gomock.NewController(t)
 	serviceClient := matchingservicemock.NewMockMatchingServiceClient(controller)
 	taskQueue := testTaskQueue(t, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
