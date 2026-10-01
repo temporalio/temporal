@@ -46,7 +46,13 @@ type (
 		//    so we don't *need* to load the request into the Registry.
 		// 3. Furthermore, it is possible that many UpdateAdmitted events were created after a Reset or during conflict
 		//    resolution. In that situation, we *must not* attempt to load all the payloads into the Registry.
-		request         *anypb.Any // of type *updatepb.Request
+		request *anypb.Any // of type *updatepb.Request
+		// originalReqID holds the first requestID with this update's ID. It is used for building the right link for
+		// cases where a duplicate update arrives - with same updateID but different reqID - while the first update request
+		// isn't durable yet(in-flight). Such duplicates would get a link to the OptionsUpdated event type instead of a
+		// link to an UpdateAccepted event. As this is only required for cases where original update is not yet durable, we
+		// do not require persistence for this field - if registry is cleared, the request itself should get retried at which
+		// point the originalReqID will be set again.
 		originalReqID   string
 		acceptedEventID int64
 		onComplete      func()

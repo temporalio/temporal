@@ -842,15 +842,29 @@ func (s *WorkflowUpdateSuite) TestCompletedWorkflow() {
 		_, err := poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)
 		s.NoError(err)
 
-		// Send Update request.
-		updateResultCh := sendUpdateNoError(env, env.Tv())
+		sendUpdateWithRequestID := func(requestID string) <-chan updateResponseErr {
+			resultCh := make(chan updateResponseErr, 1)
+			request := updateWorkflowRequest(env, env.Tv(), nil)
+			request.Request.RequestId = requestID
+			go func() {
+				response, err := env.FrontendClient().UpdateWorkflowExecution(testcore.NewContext(), request)
+				resultCh <- updateResponseErr{response: response, err: err}
+			}()
+			waitUpdateAdmitted(env, env.Tv())
+			return resultCh
+		}
+
+		// Send Update request with a requestID to receive a link to the wf event.
+		updateResultCh := sendUpdateWithRequestID(env.Tv().RequestID())
 
 		// Complete Update and Workflow.
 		_, err = poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)
 		s.NoError(err)
 
 		// Receive Update result.
-		updateResult1 := <-updateResultCh
+		updateResult := <-updateResultCh
+		s.NoError(updateResult.err)
+		updateResult1 := updateResult.response
 		s.NotNil(updateResult1.GetOutcome().GetSuccess())
 
 		acceptedEvent := s.RequireHistoryEvent(
@@ -858,8 +872,10 @@ func (s *WorkflowUpdateSuite) TestCompletedWorkflow() {
 			enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
 		)
 		// Send the same Update request again, receiving the same result but with a link to the Accepted event.
-		updateResultCh = sendUpdateNoError(env, env.Tv())
-		updateResult2 := <-updateResultCh
+		updateResultCh = sendUpdateWithRequestID(env.Tv().Sub("request-2").RequestID())
+		updateResult = <-updateResultCh
+		s.NoError(updateResult.err)
+		updateResult2 := updateResult.response
 		updateResult1WithoutLink := common.CloneProto(updateResult1)
 		updateResult1WithoutLink.Link = nil
 		updateResult2WithoutLink := common.CloneProto(updateResult2)

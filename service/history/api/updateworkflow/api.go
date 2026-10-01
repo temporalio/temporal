@@ -253,7 +253,9 @@ func (u *Updater) applyRequest(
 //	  - Yes: use that event for a requestIdRef link.
 //	  - No: is the update accepted/completed?
 //	        - Yes: use the update accepted event for an eventRef link.
-//	        - No: use the projected event for a requestIDRef as the update is still in-flight.
+//	        - No: is there a valid requestID on the request?
+//	              - Yes: use the projected event for a requestIDRef as the update is still in-flight.
+//	              - No: use a workflow link.
 func (u *Updater) captureResponseLink(ctx context.Context, ms historyi.MutableState) (*commonpb.Link, error) {
 
 	request := u.req.GetRequest().GetRequest()
@@ -274,16 +276,8 @@ func (u *Updater) captureResponseLink(ctx context.Context, ms historyi.MutableSt
 				EventType: requestIDInfo.GetEventType(),
 			},
 		}
-	} else if acceptance := ms.GetExecutionInfo().GetUpdateInfos()[updateID].GetAcceptance(); acceptance != nil {
-		// The request ID has no event of its own, but the update is accepted - link to the accepted event.
-		linkWfEvent.Reference = &commonpb.Link_WorkflowEvent_EventRef{
-			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-				EventId:   acceptance.EventId,
-				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
-			},
-		}
-	} else if ms.GetExecutionInfo().GetUpdateInfos()[updateID].GetCompletion() != nil {
-		// If requestID doesn't have a history event but is completed already, link to the accepted event.
+	} else if updateInfo := ms.GetExecutionInfo().GetUpdateInfos()[updateID]; updateInfo.GetAcceptance() != nil || updateInfo.GetCompletion() != nil {
+		// The request ID has no event of its own, but the update is accepted or completed - link to the accepted event.
 		acceptedEventID, err := ms.GetUpdateAcceptedEventID(ctx, updateID)
 		if err != nil {
 			return nil, err
@@ -295,7 +289,20 @@ func (u *Updater) captureResponseLink(ctx context.Context, ms historyi.MutableSt
 			},
 		}
 	} else {
-		// If none of the above, the update is in flight - use the requestIDRef for projected event.
+		// If none of the above, the update is in flight.
+		if requestID == "" {
+			// Use a workflow link if the requestID is empty.
+			return &commonpb.Link{
+				Variant: &commonpb.Link_Workflow_{
+					Workflow: &commonpb.Link_Workflow{
+						Namespace:  u.req.Request.Namespace,
+						WorkflowId: u.wfKey.WorkflowID,
+						RunId:      u.wfKey.RunID,
+					},
+				},
+			}, nil
+		}
+		// Use a requestIDRef for the projected link iff the requestID isnt empty.
 		linkWfEvent.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
 			RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
 				RequestId: requestID,
