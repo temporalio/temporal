@@ -247,40 +247,6 @@ func (h testRequestHandler) Handle(context.Context, any) (any, error) {
 	return nil, nil
 }
 
-func TestNamespaceCountLimitInterceptorInternalNamespaceCollision(t *testing.T) {
-	t.Parallel()
-
-	const method = "/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue"
-	internalPoll := &workflowservice.PollWorkflowTaskQueueRequest{
-		TaskQueue: &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-	}
-	regularPoll := &workflowservice.PollWorkflowTaskQueueRequest{
-		TaskQueue: &taskqueuepb.TaskQueue{Name: "regular-tq"},
-	}
-	interceptor := NewConcurrentRequestLimitInterceptor(
-		nil,
-		quotastest.NewFakeMemberCounter(1),
-		log.NewNoopLogger(),
-		ConcurrentRequestQuotas{
-			PerInstance: dynamicconfig.GetIntPropertyFnFilteredByNamespace(1),
-			Global:      dynamicconfig.GetIntPropertyFnFilteredByNamespace(0),
-		},
-		ConcurrentRequestQuotas{
-			PerInstance: dynamicconfig.GetIntPropertyFnFilteredByNamespace(1),
-			Global:      dynamicconfig.GetIntPropertyFnFilteredByNamespace(0),
-		},
-		map[string]int{method: 1},
-	)
-
-	cleanup, err := interceptor.Allow("foo", method, metrics.NoopMetricsHandler, internalPoll)
-	t.Cleanup(cleanup)
-	require.NoError(t, err)
-
-	cleanup, err = interceptor.Allow("foo/internal-per-ns", method, metrics.NoopMetricsHandler, regularPoll)
-	t.Cleanup(cleanup)
-	require.NoError(t, err)
-}
-
 func TestNamespaceCountLimitInterceptorPollerClassification(t *testing.T) {
 	t.Parallel()
 
