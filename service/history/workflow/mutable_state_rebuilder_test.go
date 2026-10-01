@@ -60,9 +60,11 @@ type (
 
 		logger log.Logger
 
-		sourceCluster  string
-		executionInfo  *persistencespb.WorkflowExecutionInfo
-		stateRebuilder *MutableStateRebuilderImpl
+		sourceCluster     string
+		executionInfo     *persistencespb.WorkflowExecutionInfo
+		stateRebuilder    *MutableStateRebuilderImpl
+		chasmEnabled      bool
+		chasmEnabledCalls int
 	}
 
 	testTaskGeneratorProvider struct {
@@ -84,6 +86,8 @@ func (s *stateBuilderSuite) TearDownSuite() {
 
 func (s *stateBuilderSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.chasmEnabled = false
+	s.chasmEnabledCalls = 0
 
 	s.controller = gomock.NewController(s.T())
 	s.mockTaskGenerator = NewMockTaskGenerator(s.controller)
@@ -126,6 +130,11 @@ func (s *stateBuilderSuite) SetupTest() {
 		WorkflowExecutionTimerTaskStatus: TimerTaskStatusCreated,
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(s.executionInfo).AnyTimes()
+	s.mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
+	s.mockMutableState.EXPECT().ChasmEnabled().DoAndReturn(func() bool {
+		s.chasmEnabledCalls++
+		return s.chasmEnabled
+	}).AnyTimes()
 	s.mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	s.mockMutableState.EXPECT().NextTransitionCount().Return(int64(2)).AnyTimes()
 	s.mockMutableState.EXPECT().SetReplayEventBatchID(gomock.Any()).AnyTimes()
@@ -2189,8 +2198,6 @@ func (s *stateBuilderSuite) TestApplyEvents_HSMRegistry() {
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue()
 	s.mockUpdateVersion(event)
 	// CHASM disabled -> the create event is routed to the HSM tree (legacy behavior).
-	s.mockMutableState.EXPECT().ChasmEnabled().Return(false).AnyTimes()
-
 	_, err := s.stateRebuilder.ApplyEvents(context.Background(), tests.NamespaceID, requestID, execution, s.toHistory(event), nil, "")
 	s.NoError(err)
 	// Verify the event was applied.
@@ -2240,7 +2247,7 @@ func (s *stateBuilderSuite) TestApplyEvents_NexusScheduled_ChasmCreateSurfacesEr
 	// history-builder calls (set up by mockUpdateVersion) are never reached because the op create errors.
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue().AnyTimes()
 	s.mockMutableState.EXPECT().UpdateCurrentVersion(gomock.Any(), true).AnyTimes()
-	s.mockMutableState.EXPECT().ChasmEnabled().Return(true).AnyTimes()
+	s.chasmEnabled = true
 	s.mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
 	s.mockMutableState.EXPECT().EnsureChasmWorkflowComponent(gomock.Any()).AnyTimes()
 	s.mockMutableState.EXPECT().ChasmWorkflowComponent(gomock.Any()).
@@ -2251,6 +2258,72 @@ func (s *stateBuilderSuite) TestApplyEvents_NexusScheduled_ChasmCreateSurfacesEr
 	// The op must NOT have been created in the HSM tree (no error-fallback).
 	_, hsmErr := nexusoperations.MachineCollection(s.mockMutableState.HSM()).Data("5")
 	s.Error(hsmErr)
+}
+
+func (s *stateBuilderSuite) TestApplyEvents_NexusScheduled_UsesSingleChasmSelectionAcrossBatches() {
+	requestID := uuid.NewString()
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "wf-id",
+		RunId:      tests.RunID,
+	}
+	s.executionInfo.WorkflowId = execution.WorkflowId
+
+	event1 := nexusScheduledEvent()
+	event1.Version = 1
+	event1.TaskId = rand.Int63()
+	event2 := nexusScheduledEvent()
+	event2.EventId = 6
+	event2.Version = 1
+	event2.TaskId = rand.Int63()
+	history := [][]*historypb.HistoryEvent{{event1}, {event2}}
+
+	enableConfigCalls := 0
+	rolloutConfigCalls := 0
+	s.mockShard.GetConfig().EnableChasmNexusWorkflowOperations = func(string) bool {
+		enableConfigCalls++
+		return enableConfigCalls == 1
+	}
+	s.mockShard.GetConfig().ChasmNexusWorkflowOperationsRolloutPercent = func(string) int {
+		rolloutConfigCalls++
+		return 100
+	}
+
+	chasmApplied := false
+	hsmApplied := false
+	s.mockShard.SetChasmWorkflowRegistry(newFakeChasmRegistry(&fakeChasmEventDefinition{
+		eventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+		applied:   &chasmApplied,
+	}))
+	s.mockShard.SetStateMachineRegistry(newFakeHSMRegistry(&fakeHSMEventDefinition{
+		eventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+		applied:   &hsmApplied,
+	}))
+
+	s.mockMutableState.EXPECT().ClearStickyTaskQueue().Times(2)
+	s.mockMutableState.EXPECT().UpdateCurrentVersion(int64(1), true).Times(2)
+	s.chasmEnabled = true
+	s.mockMutableState.EXPECT().EnsureChasmWorkflowComponent(gomock.Any()).Times(2)
+	s.mockMutableState.EXPECT().ChasmWorkflowComponent(gomock.Any()).
+		Return(&chasmworkflow.Workflow{}, nil, nil).Times(2)
+	s.mockTaskGenerator.EXPECT().GenerateActivityTimerTasks().Return(nil)
+	s.mockTaskGenerator.EXPECT().GenerateUserTimerTasks().Return(nil)
+	s.mockMutableState.EXPECT().SetHistoryBuilder(historybuilder.NewImmutable(history...))
+
+	_, err := s.stateRebuilder.ApplyEvents(
+		context.Background(),
+		tests.NamespaceID,
+		requestID,
+		execution,
+		history,
+		nil,
+		"",
+	)
+	s.NoError(err)
+	s.Equal(1, enableConfigCalls)
+	s.Equal(1, rolloutConfigCalls)
+	s.Equal(1, s.chasmEnabledCalls)
+	s.True(chasmApplied)
+	s.False(hsmApplied)
 }
 
 func (p *testTaskGeneratorProvider) NewTaskGenerator(
@@ -2376,7 +2449,6 @@ func (s *stateBuilderSuite) runApplyStateMachineEvent(
 
 	ms := historyi.NewMockMutableState(s.controller)
 	ms.EXPECT().HSM().Return(nil).AnyTimes()
-	ms.EXPECT().ChasmEnabled().Return(tc.chasmEnabled).AnyTimes()
 	ms.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
 	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{WorkflowId: "test-workflow-id"}).AnyTimes()
 	ms.EXPECT().EnsureChasmWorkflowComponent(gomock.Any()).AnyTimes()
@@ -2384,7 +2456,7 @@ func (s *stateBuilderSuite) runApplyStateMachineEvent(
 		Return(&chasmworkflow.Workflow{}, nil, tc.chasmComponentErr).AnyTimes()
 
 	rebuilder := NewMutableStateRebuilder(s.mockShard, s.logger, ms)
-	err = rebuilder.applyStateMachineEvent(context.Background(), event)
+	err = rebuilder.applyStateMachineEvent(context.Background(), event, tc.chasmEnabled, rebuilder.useChasmForWorkflowNexusOperations())
 	return chasmApplied, hsmApplied, err
 }
 
