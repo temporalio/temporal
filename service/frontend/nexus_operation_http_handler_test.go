@@ -48,8 +48,9 @@ func (f *fakeNamespaceRegistry) GetNamespaceName(id namespace.ID) (namespace.Nam
 func newTestNexusOperationHTTPHandler(
 	endpointRegistry commonnexus.EndpointRegistry,
 	namespaceRegistry namespace.Registry,
-) (*NexusOperationHTTPHandler, *mux.Router) {
+) (*mux.Router, *metricstest.Capture) {
 	logger := log.NewTestLogger()
+	metricsHandler := metricstest.NewCaptureHandler()
 	h := &NexusOperationHTTPHandler{
 		base: nexusrpc.BaseHTTPHandler{
 			Logger:           log.NewSlogLogger(logger),
@@ -58,19 +59,11 @@ func newTestNexusOperationHTTPHandler(
 		logger:                 logger,
 		enpointRegistry:        endpointRegistry,
 		namespaceRegistry:      namespaceRegistry,
-		preprocessErrorCounter: metrics.CounterFunc(func(int64, ...metrics.Tag) {}),
+		preprocessErrorCounter: metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.Name()).Record,
 	}
 	router := mux.NewRouter()
 	h.RegisterRoutes(router)
-	return h, router
-}
-
-// capturePreprocessErrors wires the handler's preprocess error counter to a capture handler, the same way
-// NewNexusOperationHTTPHandler wires it to the real metrics handler.
-func capturePreprocessErrors(h *NexusOperationHTTPHandler) *metricstest.Capture {
-	metricsHandler := metricstest.NewCaptureHandler()
-	h.preprocessErrorCounter = metricsHandler.Counter(metrics.NexusRequestPreProcessErrors.Name()).Record
-	return metricsHandler.StartCapture()
+	return router, metricsHandler.StartCapture()
 }
 
 func doNexusHTTPRequest(t *testing.T, router *mux.Router, endpointID string) *httptest.ResponseRecorder {
@@ -88,8 +81,7 @@ func TestDispatchNexusTaskByEndpoint_NotFound_NonRetryable(t *testing.T) {
 			return nil, serviceerror.NewNotFound("endpoint not found")
 		},
 	}
-	h, router := newTestNexusOperationHTTPHandler(reg, nil)
-	capture := capturePreprocessErrors(h)
+	router, capture := newTestNexusOperationHTTPHandler(reg, nil)
 
 	rec := doNexusHTTPRequest(t, router, "test-endpoint-id")
 
@@ -110,8 +102,7 @@ func TestDispatchNexusTaskByEndpoint_NotFound_Retryable(t *testing.T) {
 			return nil, &retryableNotFoundError{msg: "endpoint temporarily unavailable"}
 		},
 	}
-	h, router := newTestNexusOperationHTTPHandler(reg, nil)
-	capture := capturePreprocessErrors(h)
+	router, capture := newTestNexusOperationHTTPHandler(reg, nil)
 
 	rec := doNexusHTTPRequest(t, router, "test-endpoint-id")
 
@@ -155,8 +146,7 @@ func TestDispatchNexusTaskByEndpoint_NamespaceNotFound_Retryable(t *testing.T) {
 		},
 	}
 
-	h, router := newTestNexusOperationHTTPHandler(reg, nsReg)
-	capture := capturePreprocessErrors(h)
+	router, capture := newTestNexusOperationHTTPHandler(reg, nsReg)
 
 	rec := doNexusHTTPRequest(t, router, "test-endpoint-id")
 
