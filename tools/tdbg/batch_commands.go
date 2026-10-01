@@ -95,7 +95,6 @@ func AdminBatchStart(c *cli.Context, clientFactory ClientFactory, prompter *Prom
 	if jobID == "" {
 		jobID = fmt.Sprintf("batch-%s-%d", batchType, time.Now().UnixNano())
 	}
-	// The workflow ID lives in the system namespace, so it has to distinguish target namespaces.
 	jobIDWithNS := fmt.Sprintf("%s:%s", nsName, jobID)
 
 	ctx, cancel := newContext(c)
@@ -143,7 +142,7 @@ func AdminBatchStart(c *cli.Context, clientFactory ClientFactory, prompter *Prom
 	_, err = adminClient.StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
 		Namespace:       nsName,
 		VisibilityQuery: query,
-		JobId:           jobIDWithNS,
+		JobId:           jobID,
 		Reason:          reason,
 		Identity:        getCurrentUserFromEnv(),
 		Operation: &adminservice.StartAdminBatchOperationRequest_DelegationOperation{

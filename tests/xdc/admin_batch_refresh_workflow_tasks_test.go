@@ -146,8 +146,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) refreshTasksInCluster(
 	})
 	s.NoError(err, "StartAdminBatchOperation should be accepted in %s", clusterName)
 
-	// StartAdminBatchOperation uses the job ID as the workflow ID.
-	batchWorkflowID := jobID
+	batchWorkflowID := ns + ":" + jobID
 
 	// The batch workflow lives in the system namespace, not in the namespace it operates on, and its
 	// tasks go to the system namespace's per-namespace worker task queue.

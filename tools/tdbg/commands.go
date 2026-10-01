@@ -793,7 +793,7 @@ func AdminBatchRefreshWorkflowTasks(c *cli.Context, clientFactory ClientFactory,
 	_, err = adminClient.StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
 		Namespace:       nsName,
 		VisibilityQuery: query,
-		JobId:           jobIDWithNS,
+		JobId:           jobID,
 		Reason:          reason,
 		Identity:        getCurrentUserFromEnv(),
 		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
