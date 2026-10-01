@@ -17,6 +17,7 @@ func computeConfigScalingGroupsToWCISpec(scalingGroups map[string]*computepb.Com
 	for name, sg := range scalingGroups {
 		groupSpec := wciiface.ScalingGroupSpec{
 			TaskTypes: sg.GetTaskQueueTypes(),
+			RegionId:  sg.GetRegionId(),
 			Compute: wciiface.ComputeProviderSpec{
 				ProviderType: wciiface.ComputeProviderType(sg.GetProvider().GetType()),
 			},
@@ -39,6 +40,7 @@ func scalingGroupUpdatesToWCI(updates map[string]*computepb.ComputeConfigScaling
 		sg := update.GetScalingGroup()
 		spec := wciiface.ScalingGroupSpec{
 			TaskTypes: sg.GetTaskQueueTypes(),
+			RegionId:  sg.GetRegionId(),
 			Compute: wciiface.ComputeProviderSpec{
 				ProviderType:  wciiface.ComputeProviderType(sg.GetProvider().GetType()),
 				Config:        sg.GetProvider().GetDetails(),
@@ -67,6 +69,7 @@ func wciSpecToComputeConfig(spec *wciiface.WorkerControllerInstanceSpec) *comput
 	for name, sg := range spec.ScalingGroupSpecs {
 		group := &computepb.ComputeConfigScalingGroup{
 			TaskQueueTypes: sg.TaskTypes,
+			RegionId:       sg.RegionId,
 			Provider: &computepb.ComputeProvider{
 				Type:    string(sg.Compute.ProviderType),
 				Details: sg.Compute.Config,
@@ -94,6 +97,7 @@ func wciSpecToComputeConfigSummary(spec *wciiface.WorkerControllerInstanceSpec) 
 		groups[name] = &computepb.ComputeConfigScalingGroupSummary{
 			TaskQueueTypes: sg.TaskTypes,
 			ProviderType:   string(sg.Compute.ProviderType),
+			RegionId:       sg.RegionId,
 		}
 	}
 	return &computepb.ComputeConfigSummary{ScalingGroups: groups}
