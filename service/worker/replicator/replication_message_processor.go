@@ -276,9 +276,18 @@ func (p *replicationMessageProcessor) handleTaskQueueUserDataReplicationTask(
 	ctx context.Context,
 	attrs *replicationspb.TaskQueueUserDataAttributes,
 ) error {
-	_, err := p.namespaceRegistry.GetNamespaceByID(namespace.ID(attrs.GetNamespaceId()))
+	namespaceEntry, err := p.namespaceRegistry.GetNamespaceByID(namespace.ID(attrs.GetNamespaceId()))
 	switch err.(type) {
 	case nil:
+		if !namespaceEntry.IsGlobalNamespace() {
+			p.logger.Warn(
+				"Task queue user data replication task skipped because namespace is local",
+				tag.WorkflowNamespaceID(attrs.GetNamespaceId()),
+				tag.WorkflowTaskQueueName(attrs.GetTaskQueueName()),
+				tag.SourceCluster(p.sourceCluster),
+			)
+			return nil
+		}
 	case *serviceerror.NamespaceNotFound:
 		// The namespace in the request isn't registered on this cluster, drop the replication task.
 		// This is okay and enables using the cluster-global replication queue to replicate different namespaces to
