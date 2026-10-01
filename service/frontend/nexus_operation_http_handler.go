@@ -133,15 +133,19 @@ func (h *NexusOperationHTTPHandler) RegisterRoutes(r *mux.Router) {
 
 // Reasons for nexus_request_preprocess_errors.
 const (
-	nexusPreprocessErrorURLInvalid            metrics.ReasonString = "url_invalid"
-	nexusPreprocessErrorNamespaceInvalid      metrics.ReasonString = "namespace_invalid"
-	nexusPreprocessErrorUnauthenticated       metrics.ReasonString = "unauthenticated"
+	nexusPreprocessErrorURLInvalid metrics.ReasonString = "url_invalid"
+
+	nexusPreprocessErrorNamespaceInvalid     metrics.ReasonString = "namespace_invalid"
+	nexusPreprocessErrorNamespaceLookupError metrics.ReasonString = "namespace_lookup_error"
+
+	nexusPreprocessErrorUnauthenticated metrics.ReasonString = "unauthenticated"
+
 	nexusPreprocessErrorEndpointNotFound      metrics.ReasonString = "endpoint_not_found"
 	nexusPreprocessErrorEndpointTargetInvalid metrics.ReasonString = "endpoint_target_invalid"
 	nexusPreprocessErrorEndpointLookupTimeout metrics.ReasonString = "endpoint_lookup_timeout"
 	nexusPreprocessErrorEndpointLookupError   metrics.ReasonString = "endpoint_lookup_error"
-	nexusPreprocessErrorNamespaceLookupError  metrics.ReasonString = "namespace_lookup_error"
-	nexusPreprocessErrorInternal              metrics.ReasonString = "internal"
+
+	nexusPreprocessErrorInternal metrics.ReasonString = "internal"
 )
 
 func (h *NexusOperationHTTPHandler) writeFailure(writer http.ResponseWriter, r *http.Request, reason metrics.ReasonString, err error) {
