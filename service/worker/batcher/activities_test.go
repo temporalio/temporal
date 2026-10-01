@@ -597,9 +597,7 @@ func (s *activitiesSuite) TestAdjustQueryAdminBatchType() {
 		adminReq := &adminservice.StartAdminBatchOperationRequest{
 			VisibilityQuery: "WorkflowType='MyWorkflow'",
 			Operation: &adminservice.StartAdminBatchOperationRequest_DelegationOperation{
-				DelegationOperation: &adminservice.BatchOperationDelegation{
-					BatchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
-				},
+				DelegationOperation: enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
 			},
 		}
 		adjustedQuery := a.adjustQueryAdminBatchType(&batchspb.BatchOperationInput{
@@ -962,9 +960,7 @@ func (s *activitiesSuite) TestStartTaskProcessor_AdminBatchRouting() {
 			AdminRequest: &adminservice.StartAdminBatchOperationRequest{
 				Namespace: targetNamespace,
 				Operation: &adminservice.StartAdminBatchOperationRequest_DelegationOperation{
-					DelegationOperation: &adminservice.BatchOperationDelegation{
-						BatchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
-					},
+					DelegationOperation: enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
 				},
 			},
 		}

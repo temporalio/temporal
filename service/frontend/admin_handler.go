@@ -1371,7 +1371,7 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 		if err := adh.checkTargetNamespaceActive(targetNS); err != nil {
 			return nil, err
 		}
-		delegatedBatchType := op.DelegationOperation.GetBatchType()
+		delegatedBatchType := op.DelegationOperation
 		delegatedBatchRequest, err := createDelegatedBatchRequest(adminRequest, delegatedBatchType)
 		if err != nil {
 			return nil, err
