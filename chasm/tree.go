@@ -2007,6 +2007,15 @@ func (n *Node) closeTransactionSerializeNodes() error {
 			continue
 		}
 
+		// A root persisted for the first time may have been synthesized while loading an execution with
+		// no CHASM nodes, before the backend's current version was known. Stamp its creation with the
+		// transition that actually persists it.
+		if node.parent == nil && prevVersionedTransition == nil {
+			node.serializedNode.GetMetadata().InitialVersionedTransition = common.CloneProto(
+				node.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
+			)
+		}
+
 		if componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes(); componentAttr != nil &&
 			componentAttr.TypeId == visibilityComponentTypeID &&
 			len(nodePath) != 1 {
