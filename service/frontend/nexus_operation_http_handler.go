@@ -131,8 +131,7 @@ func (h *NexusOperationHTTPHandler) RegisterRoutes(r *mux.Router) {
 	)
 }
 
-// Reasons for nexus_request_preprocess_errors. The endpoint ID and namespace of a failed request come from the
-// caller's URL before they are validated, so they must not become tags; the reason is the bounded dimension.
+// Reasons for nexus_request_preprocess_errors.
 const (
 	nexusPreprocessErrorInvalidURL            metrics.ReasonString = "invalid_url"
 	nexusPreprocessErrorInvalidNamespace      metrics.ReasonString = "invalid_namespace"
