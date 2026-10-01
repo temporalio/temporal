@@ -641,8 +641,6 @@ func TestHandlePostCommandEagerExecuteActivity(t *testing.T) {
 	expectedClock := &clockspb.VectorClock{ClusterId: 1, ShardId: 1, Clock: 42}
 	expectedDeployment := &deploymentpb.Deployment{SeriesName: "test-deployment", BuildId: "test-build-id"}
 
-	ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
-	ms.EXPECT().GetActivityByActivityID(activityID).Return(ai, true)
 	ms.EXPECT().GetAssignedBuildId().Return("")
 	ms.EXPECT().AddActivityTaskStartedEvent(
 		ai, scheduledEventID, gomock.Any(), "test-identity", gomock.Any(), expectedDeployment, nil, "/_sys/worker-commands/test-ns/key1", expectedClock,
@@ -680,7 +678,7 @@ func TestHandlePostCommandEagerExecuteActivity(t *testing.T) {
 		ActivityType: &commonpb.ActivityType{Name: "test-activity"},
 	}
 
-	mutation, err := handler.handlePostCommandEagerExecuteActivity(context.Background(), attr)
+	mutation, err := handler.handlePostCommandEagerExecuteActivity(attr, ai)
 	require.NoError(t, err)
 	require.NotNil(t, mutation)
 }
@@ -878,11 +876,11 @@ func TestHandleEagerActivityCandidatesPartialGrant(t *testing.T) {
 	executionState := &persistencespb.WorkflowExecutionState{RunId: "run-id"}
 	clock := &clockspb.VectorClock{ClusterId: 1, ShardId: 2, Clock: 3}
 
-	ms.EXPECT().IsWorkflowExecutionRunning().Return(true).Times(3)
+	ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
-	ms.EXPECT().GetActivityByActivityID(attrs[0].GetActivityId()).Return(activityInfos[0], true).Times(2)
+	ms.EXPECT().GetActivityByActivityID(attrs[0].GetActivityId()).Return(activityInfos[0], true)
 	ms.EXPECT().GetActivityByActivityID(attrs[1].GetActivityId()).Return(activityInfos[1], true)
-	ms.EXPECT().GetActivityByActivityID(attrs[2].GetActivityId()).Return(activityInfos[2], true).Times(2)
+	ms.EXPECT().GetActivityByActivityID(attrs[2].GetActivityId()).Return(activityInfos[2], true)
 	ms.EXPECT().GetExecutionInfo().Return(executionInfo).Times(3)
 	ms.EXPECT().GetAssignedBuildId().Return("").Times(2)
 	ms.EXPECT().AddActivityTaskStartedEvent(
@@ -955,9 +953,9 @@ func TestHandleEagerActivityCandidatesDispatchCheckDisabled(t *testing.T) {
 	}
 	clock := &clockspb.VectorClock{ClusterId: 1, ShardId: 2, Clock: 3}
 
-	ms.EXPECT().IsWorkflowExecutionRunning().Return(true).Times(2)
+	ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
-	ms.EXPECT().GetActivityByActivityID(attr.GetActivityId()).Return(activityInfo, true).Times(2)
+	ms.EXPECT().GetActivityByActivityID(attr.GetActivityId()).Return(activityInfo, true)
 	ms.EXPECT().GetAssignedBuildId().Return("")
 	ms.EXPECT().AddActivityTaskStartedEvent(
 		activityInfo, int64(11), gomock.Any(), "worker", gomock.Any(), nil, nil, "", clock,

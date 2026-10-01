@@ -613,7 +613,7 @@ func (handler *workflowTaskCompletedHandler) handleEagerActivityCandidates(
 			continue
 		}
 
-		mutation, err := handler.handlePostCommandEagerExecuteActivity(ctx, candidate.attr)
+		mutation, err := handler.handlePostCommandEagerExecuteActivity(candidate.attr, candidate.activityInfo)
 		if err != nil {
 			return nil, err
 		}
@@ -679,22 +679,9 @@ func eagerDispatchRequestCount(items []*matchingservice.GrantEagerDispatchReques
 }
 
 func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivity(
-	_ context.Context,
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
+	ai *persistencespb.ActivityInfo,
 ) (workflowTaskResponseMutation, error) {
-	if !handler.mutableState.IsWorkflowExecutionRunning() {
-		// workflow closed in the same workflow task
-		// this function is executed as a callback after all workflow commands
-		// are handled, so need to check for workflow completion case.
-		return nil, nil
-	}
-
-	ai, ok := handler.mutableState.GetActivityByActivityID(attr.ActivityId)
-	if !ok {
-		// activity cancelled in the same worflow task
-		return nil, nil
-	}
-
 	var stamp *commonpb.WorkerVersionStamp
 	// eager activity always uses workflow's build ID
 	buildId := handler.mutableState.GetAssignedBuildId()
