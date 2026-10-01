@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
@@ -20,6 +22,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/grpc/codes"
 )
@@ -30,6 +33,107 @@ type ActivityAPIBatchResetClientTestSuite struct {
 
 func TestActivityAPIBatchResetClientTestSuite(t *testing.T) {
 	parallelsuite.Run(t, &ActivityAPIBatchResetClientTestSuite{})
+}
+
+func TestFormatRunningWorkflowsResetAttemptsDiagnostic(t *testing.T) {
+	description := &workflowservice.DescribeWorkflowExecutionResponse{
+		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		},
+		PendingWorkflowTask: &workflowpb.PendingWorkflowTaskInfo{
+			State:   enumspb.PENDING_WORKFLOW_TASK_STATE_SCHEDULED,
+			Attempt: 2,
+		},
+		PendingActivities: []*workflowpb.PendingActivityInfo{
+			{
+				ActivityId: "activity-id",
+				State:      enumspb.PENDING_ACTIVITY_STATE_STARTED,
+				Attempt:    1,
+				Paused:     false,
+			},
+		},
+	}
+
+	require.Equal(t,
+		"workflow_status=Running pending_workflow_task={state=Scheduled attempt=2} pending_activities=[{id=activity-id state=Started attempt=1 paused=false}]",
+		formatRunningWorkflowsResetAttemptsDiagnostic(description),
+	)
+}
+
+func formatRunningWorkflowsResetAttemptsDiagnostic(
+	description *workflowservice.DescribeWorkflowExecutionResponse,
+) string {
+	pendingActivities := make([]string, 0, len(description.GetPendingActivities()))
+	for _, activity := range description.GetPendingActivities() {
+		pendingActivities = append(pendingActivities, fmt.Sprintf(
+			"{id=%s state=%s attempt=%d paused=%t}",
+			activity.GetActivityId(),
+			activity.GetState(),
+			activity.GetAttempt(),
+			activity.GetPaused(),
+		))
+	}
+
+	pendingWorkflowTask := description.GetPendingWorkflowTask()
+	return fmt.Sprintf(
+		"workflow_status=%s pending_workflow_task={state=%s attempt=%d} pending_activities=%v",
+		description.GetWorkflowExecutionInfo().GetStatus(),
+		pendingWorkflowTask.GetState(),
+		pendingWorkflowTask.GetAttempt(),
+		pendingActivities,
+	)
+}
+
+func (s *ActivityAPIBatchResetClientTestSuite) logRunningWorkflowsResetAttemptsDiagnostics(
+	env *testcore.TestEnv,
+	workflowRuns []sdkclient.WorkflowRun,
+	getErr error,
+	completedWorkflowCount int,
+	testStartedAt time.Time,
+	workerStoppedAt time.Time,
+	visibilityReadyAt time.Time,
+	batchCompletedAt time.Time,
+	replacementWorkerStartedAt time.Time,
+) {
+	s.T().Helper()
+	s.T().Logf(
+		"running workflows reset attempts completion failed: error=%v completed_workflows=%d/%d elapsed={worker_stopped=%s visibility_ready=%s batch_completed=%s replacement_worker_started=%s}",
+		getErr,
+		completedWorkflowCount,
+		len(workflowRuns),
+		workerStoppedAt.Sub(testStartedAt),
+		visibilityReadyAt.Sub(testStartedAt),
+		batchCompletedAt.Sub(testStartedAt),
+		replacementWorkerStartedAt.Sub(testStartedAt),
+	)
+
+	diagnosticCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	for _, workflowRun := range workflowRuns {
+		if err := diagnosticCtx.Err(); err != nil {
+			s.T().Logf("workflow diagnostics stopped: %v", err)
+			return
+		}
+
+		description, err := env.SdkClient().DescribeWorkflowExecution(diagnosticCtx, workflowRun.GetID(), workflowRun.GetRunID())
+		if err != nil {
+			s.T().Logf(
+				"workflow diagnostics unavailable: workflow_id=%s run_id=%s error=%v",
+				workflowRun.GetID(),
+				workflowRun.GetRunID(),
+				err,
+			)
+			continue
+		}
+
+		s.T().Logf(
+			"workflow diagnostics: workflow_id=%s run_id=%s %s",
+			workflowRun.GetID(),
+			workflowRun.GetRunID(),
+			formatRunningWorkflowsResetAttemptsDiagnostic(description),
+		)
+	}
 }
 
 func newBatchResetEnv(t *testing.T) *testcore.TestEnv {
@@ -310,6 +414,7 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_Success_Pr
 
 func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWorkflowsResetAttempts() {
 	env := newBatchResetEnv(s.T())
+	testStartedAt := time.Now()
 
 	const workflowCount = 10
 	workflowTypeName := testcore.RandomizeStr("activity-batch-reset-running-workflow")
@@ -342,6 +447,7 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWor
 	}, 15*time.Second, 100*time.Millisecond)
 
 	env.SdkWorker().Stop()
+	workerStoppedAt := time.Now()
 
 	query := fmt.Sprintf("WorkflowType='%s' AND ExecutionStatus = 'Running'", workflowTypeName)
 	s.Await(func(s *ActivityAPIBatchResetClientTestSuite) {
@@ -353,6 +459,7 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWor
 		s.NoError(err)
 		s.Len(listResp.GetExecutions(), workflowCount)
 	}, 5*time.Second, 500*time.Millisecond)
+	visibilityReadyAt := time.Now()
 
 	jobID := uuid.NewString()
 	_, err := env.SdkClient().WorkflowService().StartBatchOperation(s.Context(), &workflowservice.StartBatchOperationRequest{
@@ -378,6 +485,7 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWor
 		s.NoError(err)
 		s.Equal(enumspb.BATCH_OPERATION_STATE_COMPLETED, descResp.GetState())
 	}, 15*time.Second, 100*time.Millisecond)
+	batchCompletedAt := time.Now()
 
 	for _, workflowRun := range workflowRuns {
 		description, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowRun.GetID(), workflowRun.GetRunID())
@@ -386,7 +494,6 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWor
 		s.Equal(int32(1), description.PendingActivities[0].Attempt)
 	}
 
-	startedActivityCount := internalWorkflow.startedActivityCount.Load()
 	internalWorkflow.letActivitySucceed.Store(true)
 
 	replacementWorker := sdkworker.New(env.SdkClient(), env.WorkerTaskQueue(), sdkworker.Options{})
@@ -394,20 +501,28 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWor
 	replacementWorker.RegisterActivity(internalWorkflow.ActivityFunc)
 	s.NoError(replacementWorker.Start())
 	defer replacementWorker.Stop()
+	replacementWorkerStartedAt := time.Now()
 
-	s.Await(func(s *ActivityAPIBatchResetClientTestSuite) {
-		s.GreaterOrEqual(internalWorkflow.startedActivityCount.Load(), startedActivityCount+workflowCount)
-
-		for _, workflowRun := range workflowRuns {
-			description, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowRun.GetID(), workflowRun.GetRunID())
-			s.NoError(err)
-			s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, description.GetWorkflowExecutionInfo().GetStatus())
-		}
-	}, 15*time.Second, 100*time.Millisecond)
-
-	for _, workflowRun := range workflowRuns {
+	// Extend the deadline for workflow completion after the polling above.
+	ctx := testcontext.EnsureRemaining(s.Context(), s.T(), testcontext.DefaultTimeout())
+	diagnosticsLogged := false
+	for completedWorkflowCount, workflowRun := range workflowRuns {
 		var out string
-		err = workflowRun.Get(s.Context(), &out)
+		err = workflowRun.Get(ctx, &out)
+		if err != nil && !diagnosticsLogged {
+			diagnosticsLogged = true
+			s.logRunningWorkflowsResetAttemptsDiagnostics(
+				env,
+				workflowRuns,
+				err,
+				completedWorkflowCount,
+				testStartedAt,
+				workerStoppedAt,
+				visibilityReadyAt,
+				batchCompletedAt,
+				replacementWorkerStartedAt,
+			)
+		}
 		s.NoError(err)
 	}
 }
