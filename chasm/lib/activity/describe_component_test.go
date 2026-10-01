@@ -114,9 +114,10 @@ func TestDescribeComponent_MatchesLiveDescribe(t *testing.T) {
 
 	registry := decodeRegistry(t)
 	backend := describeTestBackend()
+	backend.HandleNow = timeSource.Now
 
 	// Build the activity the way the server does, then persist it.
-	liveRoot := chasm.NewEmptyTree(registry, timeSource, backend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
+	liveRoot := chasm.NewEmptyTree(registry, backend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
 	liveCtx := chasm.NewMutableContext(context.Background(), liveRoot)
 	require.NoError(t, liveRoot.SetRootComponent(newClosedTestActivity(liveCtx)))
 	_, err := liveRoot.CloseTransaction()
@@ -146,7 +147,7 @@ func TestDescribeComponent_MatchesLiveDescribe(t *testing.T) {
 	// Same route a reader takes: persisted nodes in, described state out.
 	persistedNodes := liveRoot.Snapshot(nil).Nodes
 	detachedRoot, err := chasm.NewTreeFromDB(
-		persistedNodes, registry, timeSource, backend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
+		persistedNodes, registry, backend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
 	require.NoError(t, err)
 
 	detachedCtx := chasm.NewContext(context.Background(), detachedRoot)
