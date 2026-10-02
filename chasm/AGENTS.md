@@ -24,7 +24,7 @@ root component. It panics on write paths rather than fabricating state. To route
 before decoding it, `chasm.ExecutionArchetypeID` reads the archetype ID from the root node alone,
 without a registry. A record with no CHASM nodes is a workflow that never used a CHASM
 feature: `ExecutionArchetypeID` reports it as the workflow archetype, and `NewDetachedExecution`
-returns an error for it, since its state lives outside the tree.
+returns `chasm.ErrNoChasmNodes` for it, since its state lives outside the tree.
 
 Pass the whole record, not just the nodes. `ChasmNodes`, `ExecutionInfo`, and `ExecutionState`
 are all required: the latter two supply the namespace, business ID, run ID, close time, and

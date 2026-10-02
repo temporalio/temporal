@@ -42,8 +42,9 @@ import (
 // than in the tree, so a caller storing nodes for later offline reads must store them
 // alongside, since nothing can recover them from the tree.
 //
-// A record with no CHASM nodes is an error: it is a workflow whose state lives outside the tree,
-// so there is no component to decode. Use ExecutionArchetypeID to route such records first.
+// A record with no CHASM nodes returns ErrNoChasmNodes: it is a workflow whose state lives
+// outside the tree, so there is no component to decode. Use ExecutionArchetypeID to route such
+// records first.
 func NewDetachedExecution[C Component](
 	goCtx context.Context,
 	mutableState *persistencespb.WorkflowMutableState,
@@ -68,6 +69,11 @@ func NewDetachedExecution[C Component](
 	}
 	return typed, chasmContext, nil
 }
+
+// ErrNoChasmNodes is returned by NewDetachedExecution for a record with no CHASM nodes: a
+// workflow that never used a CHASM feature, whose state lives outside the tree. A debugging tool
+// can match it with errors.Is to report that there is no CHASM state, rather than a failure.
+var ErrNoChasmNodes = serviceerror.NewInternal("detached CHASM execution: mutable state has no CHASM nodes")
 
 // rootEncodedPath is what DefaultPathEncoder produces for the root node.
 const rootEncodedPath = ""
@@ -131,8 +137,9 @@ func newDetachedTree(
 		return nil, serviceerror.NewInternal("detached CHASM execution: mutable state has no execution state")
 	case len(mutableState.GetChasmNodes()) == 0:
 		// A workflow that never used a CHASM feature. Its state lives in mutable state, outside the
-		// tree, so there is no component to decode.
-		return nil, serviceerror.NewInternal("detached CHASM execution: mutable state has no CHASM nodes")
+		// tree, so there is no component to decode. NewTreeFromDB would also build a new root
+		// here, stamping it with write-time values the read only backend cannot supply.
+		return nil, ErrNoChasmNodes
 	}
 
 	// Rejects a corrupt root up front rather than failing somewhere inside decoding.

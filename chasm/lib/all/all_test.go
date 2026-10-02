@@ -205,6 +205,33 @@ func TestNewDetachedExecution_IncompleteRecord(t *testing.T) {
 	require.ErrorAs(t, err, &internalErr)
 }
 
+// TestNewDetachedExecution_NoChasmNodes returns a sentinel for a workflow that never used a
+// CHASM feature, so a debugging tool can tell "no CHASM state" apart from a failure.
+func TestNewDetachedExecution_NoChasmNodes(t *testing.T) {
+	registry, err := all.NewNilRegistry(log.NewTestLogger())
+	require.NoError(t, err)
+
+	for name, nodes := range map[string]map[string]*persistencespb.ChasmNode{
+		"nil map":   nil,
+		"empty map": {},
+	} {
+		t.Run(name, func(t *testing.T) {
+			mutableState := persistStandaloneActivity(t, registry)
+			mutableState.ChasmNodes = nodes
+
+			_, _, err := chasm.NewDetachedExecution[chasm.Component](context.Background(), mutableState, registry)
+			require.ErrorIs(t, err, chasm.ErrNoChasmNodes)
+		})
+	}
+
+	// A corrupt tree is a failure, not "no CHASM state".
+	corrupt := persistStandaloneActivity(t, registry)
+	delete(corrupt.ChasmNodes, "")
+	_, _, err = chasm.NewDetachedExecution[chasm.Component](context.Background(), corrupt, registry)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, chasm.ErrNoChasmNodes)
+}
+
 // TestExecutionArchetypeID reads the archetype from the root node alone, so a caller can route a
 // record before decoding it.
 func TestExecutionArchetypeID(t *testing.T) {
