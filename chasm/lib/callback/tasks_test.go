@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/resource"
 	test "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/queues/common"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/mock/gomock"
@@ -287,7 +288,8 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			}
 
 			// Setup logger
-			logger := log.NewTestLogger()
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+			capture := logger.StartCapture()
 
 			// Create task handler with mock namespace registry
 			nsRegistry := namespace.NewMockRegistry(ctrl)
@@ -337,6 +339,21 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			readCallbackState(engineCtx, t, callbackRef, func(chasmCtx chasm.Context, c *Callback) {
 				tc.assertOutcome(t, c, executeErr)
 			})
+
+			if tc.expectedMetricOutcome != "success" {
+				// A callback that will be retried is logged as a warning; only a dropped one is an error.
+				level := testlogger.Error
+				if tc.expectedEvent == "retryable-error" {
+					level = testlogger.Warn
+				}
+				capture.RequireContains(t, testlogger.CapturedLogPattern{
+					Level:   level,
+					Message: "Callback request failed",
+					Tags: map[string]any{
+						"request-id": "request-id",
+					},
+				})
+			}
 		})
 	}
 }

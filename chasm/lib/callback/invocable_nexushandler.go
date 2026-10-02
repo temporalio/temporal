@@ -207,7 +207,11 @@ func (n invocableNexusHandler) dispatch(
 		handlerErr := commonnexus.ConvertGRPCError(rpcErr, false)
 		retryable := isRetryableCallError(handlerErr)
 		logger = log.With(logger, tag.Bool("retryable", retryable))
-		userFacingErr := logInternalError(logger, "NexusHandler callback dispatch failed", rpcErr)
+		logAtLevel := logger.Error
+		if retryable {
+			logAtLevel = logger.Warn
+		}
+		userFacingErr := logInternalErrorAt(logAtLevel, "NexusHandler callback dispatch failed", rpcErr)
 
 		// Derive the outcome metric based on the gRPC error received.
 		outcome := grpcErrorOutcome(rpcErr)
@@ -270,7 +274,11 @@ func (n invocableNexusHandler) classifyDispatchResult(
 		// handler errors synthesized above, so all three ask the same question.
 		handlerErr, ok := errors.AsType[*nexus.HandlerError](err)
 		retryable := ok && handlerErr.Retryable()
-		logger.Error("NexusHandler callback resulted in a handler error", tag.Error(err), tag.Bool("retryable", retryable))
+		logAtLevel := logger.Error
+		if retryable {
+			logAtLevel = logger.Warn
+		}
+		logAtLevel("NexusHandler callback resulted in a handler error", tag.Error(err), tag.Bool("retryable", retryable))
 		if retryable {
 			return invocationResultRetry{err}
 		}
@@ -279,7 +287,7 @@ func (n invocableNexusHandler) classifyDispatchResult(
 	default:
 		// An outcome this build does not know about and that Succeeded() did not vouch for. Treat it
 		// like an unreadable response and keep retrying, in the hope the mismatch is transient.
-		logger.Error("NexusHandler callback got an unhandled dispatch outcome",
+		logger.Warn("NexusHandler callback got an unhandled dispatch outcome",
 			tag.NewStringTag("dispatch-outcome", string(result.Outcome)), tag.Error(err))
 		return invocationResultRetry{err}
 	}

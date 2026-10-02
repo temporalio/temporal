@@ -33,6 +33,7 @@ type nexusInvocation struct {
 	nexus             *persistencespb.Callback_Nexus
 	completion        nexusrpc.CompleteOperationOptions
 	workflowID, runID string
+	requestID         string
 	attempt           int32
 }
 
@@ -54,6 +55,7 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 			tag.NexusCompletionSource(chasm.WorkflowArchetype),
 			tag.AttemptStart(time.Now().UTC()),
 			tag.Attempt(n.attempt),
+			tag.RequestID(n.requestID),
 		)
 		if trace := e.HTTPTraceProvider.NewTrace(n.attempt, traceLogger); trace != nil {
 			ctx = httptrace.WithClientTrace(ctx, trace)
@@ -82,7 +84,12 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 
 	if err != nil {
 		retryable := isRetryableCallError(err)
-		e.Logger.Error(
+		// Only a callback that is dropped for good is an error; one that will be retried is a warning.
+		logAtLevel := e.Logger.Error
+		if retryable {
+			logAtLevel = e.Logger.Warn
+		}
+		logAtLevel(
 			"Callback request failed",
 			tag.Error(err),
 			tag.WorkflowNamespace(ns.Name().String()),
@@ -91,6 +98,7 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 			tag.WorkflowRunID(n.runID),
 			tag.NexusCompletionSource(chasm.WorkflowArchetype),
 			tag.Attempt(n.attempt),
+			tag.RequestID(n.requestID),
 			tag.Bool("retryable", retryable),
 		)
 		if retryable {

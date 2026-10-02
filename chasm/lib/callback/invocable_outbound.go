@@ -28,6 +28,7 @@ type invocableOutbound struct {
 	// completion, e.g. "workflow.workflow" or "activity.activity".
 	completionSourceTag string
 	businessID, runID   string
+	requestID           string
 	attempt             int32
 }
 
@@ -55,6 +56,7 @@ func (n invocableOutbound) Invoke(
 			tag.NexusCompletionSource(n.completionSourceTag),
 			tag.AttemptStart(time.Now().UTC()),
 			tag.Attempt(n.attempt),
+			tag.RequestID(n.requestID),
 		)
 		if trace := h.httpTraceProvider.NewTrace(n.attempt, traceLogger); trace != nil {
 			ctx = httptrace.WithClientTrace(ctx, trace)
@@ -88,7 +90,12 @@ func (n invocableOutbound) Invoke(
 
 	if err != nil {
 		retryable := isRetryableCallError(err)
-		h.logger.Error(
+		// Only a callback that is dropped for good is an error; one that will be retried is a warning.
+		logAtLevel := h.logger.Error
+		if retryable {
+			logAtLevel = h.logger.Warn
+		}
+		logAtLevel(
 			"Callback request failed",
 			tag.Error(err),
 			tag.WorkflowNamespace(ns.Name().String()),
@@ -97,6 +104,7 @@ func (n invocableOutbound) Invoke(
 			tag.WorkflowRunID(n.runID),
 			tag.NexusCompletionSource(n.completionSourceTag),
 			tag.Attempt(n.attempt),
+			tag.RequestID(n.requestID),
 			tag.Bool("retryable", retryable),
 		)
 		if retryable {
