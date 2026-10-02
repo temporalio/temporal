@@ -29,6 +29,7 @@ type (
 		isPureTask              bool
 		outboundTaskGroup       string            // For grouping on the outbound queue. See [WithTaskGroup] for details.
 		singletonMode           SingletonTaskMode // If non-zero, at most one task of this type may exist per component instance.
+		taskCountMetricEnabled  *bool             // Nil means inherit from the component. See [WithTaskCountMetricOverride].
 
 		// Those two fields are initialized when the component is registered to a library.
 		library    namer
@@ -186,6 +187,15 @@ func (rt *RegistrableTask) GoType() reflect.Type {
 	return rt.goType
 }
 
+// taskCountMetricEnabledForComponent reports whether the task count metrics apply to this
+// task type on the given component. The task's own override wins over the component's setting.
+func (rt *RegistrableTask) taskCountMetricEnabledForComponent(rc *RegistrableComponent) bool {
+	if rt.taskCountMetricEnabled != nil {
+		return *rt.taskCountMetricEnabled
+	}
+	return rc != nil && rc.taskCountMetricEnabled
+}
+
 // fqType returns the fully qualified name of the task, which is a combination of
 // the library name and the task type. This is used to uniquely identify
 // the task in the registry.
@@ -218,5 +228,13 @@ func WithTaskGroup(taskgroup string) RegistrableTaskOption {
 func WithSingletonTask(mode SingletonTaskMode) RegistrableTaskOption {
 	return func(rt *RegistrableTask) {
 		rt.singletonMode = mode
+	}
+}
+
+// WithTaskCountMetricOverride overrides the component's [WithTaskCountMetric] setting for
+// this task type. Without it, the task type inherits the component's setting.
+func WithTaskCountMetricOverride(enabled bool) RegistrableTaskOption {
+	return func(rt *RegistrableTask) {
+		rt.taskCountMetricEnabled = &enabled
 	}
 }

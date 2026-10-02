@@ -49,6 +49,7 @@ func (l *TestLibrary) Components() []*RegistrableComponent {
 			WithExecutionType(enumspb.EXECUTION_TYPE_WORKFLOW),
 			WithBusinessIDAlias("TestBusinessId"),
 			WithSearchAttributes(TestComponentStartTimeSearchAttribute),
+			WithTaskCountMetric(),
 		),
 		NewRegistrableComponent[*TestTimeSkippingImplComponent](testTimeSkippingComponentName),
 		NewRegistrableComponent[*TestSubComponent1](testSubComponent1Name),
