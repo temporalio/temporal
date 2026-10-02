@@ -1684,21 +1684,22 @@ default as namespace cardinality can be high and this requires a metrics collect
 	MatchingPartitionScaleManager = NewTaskQueueTypedSetting(
 		"matching.partitionScaleManager",
 		PartitionScaleManagerSettings{
+			Enabled:               false,
 			MaxRate:               0.33,
 			ShrinkRatio:           0.1,
 			ShrinkDelta:           8,
 			BatchSize:             100,
 			BackgroundInterval:    23 * time.Second,
 			DrainBufferTime:       15 * time.Second,
-			ShadowModeLogInterval: 0,
+			ShadowModeLogInterval: 30 * time.Second,
 		},
-		`Settings for partition scale manager.`,
+		`Settings for partition scale manager. Note: Partition scale manager is experimental.`,
 	)
 	MatchingPartitionScaler = NewTaskQueueTypedSettingWithConverter(
 		"matching.partitionScaler",
 		ConvertSimplePartitionScalerSettings,
 		SimplePartitionScalerSettings{},
-		`Settings for simple partition scaler.`,
+		`Settings for simple partition scaler. Note: Partition scale manager is experimental.`,
 	)
 
 	// Worker registry settings
