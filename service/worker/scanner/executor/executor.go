@@ -36,8 +36,8 @@ type (
 		size           int
 		maxDeferred    int
 		runQ           *runQueue
-		outstanding    int64
-		status         int32
+		outstanding    atomic.Int64
+		status         atomic.Int32
 		metricsHandler metrics.Handler
 		stopC          chan struct{}
 		stopWG         sync.WaitGroup
@@ -74,7 +74,7 @@ func NewFixedSizePoolExecutor(size int, maxDeferred int, metricsHandler metrics.
 
 // Start starts the executor
 func (e *fixedPoolExecutor) Start() {
-	if !atomic.CompareAndSwapInt32(&e.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
+	if !e.status.CompareAndSwap(common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
 	for i := 0; i < e.size; i++ {
@@ -85,7 +85,7 @@ func (e *fixedPoolExecutor) Start() {
 
 // Stop stops the executor
 func (e *fixedPoolExecutor) Stop() {
-	if !atomic.CompareAndSwapInt32(&e.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
+	if !e.status.CompareAndSwap(common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
 	close(e.stopC)
@@ -99,14 +99,14 @@ func (e *fixedPoolExecutor) Submit(task Task) bool {
 	}
 	added := e.runQ.add(task)
 	if added {
-		atomic.AddInt64(&e.outstanding, 1)
+		e.outstanding.Add(1)
 	}
 	return added
 }
 
 // TaskCount returns the total of number of tasks currently outstanding
 func (e *fixedPoolExecutor) TaskCount() int64 {
-	return atomic.LoadInt64(&e.outstanding)
+	return e.outstanding.Load()
 }
 
 func (e *fixedPoolExecutor) worker() {
@@ -120,18 +120,18 @@ func (e *fixedPoolExecutor) worker() {
 		status := task.Run()
 		switch status {
 		case TaskStatusDone:
-			atomic.AddInt64(&e.outstanding, -1)
+			e.outstanding.Add(-1)
 			metrics.ExecutorTasksDoneCount.With(e.metricsHandler).Record(1)
 		case TaskStatusDefer:
 			if e.runQ.deferredCount() < e.maxDeferred {
 				e.runQ.addAndDefer(task)
 				metrics.ExecutorTasksDeferredCount.With(e.metricsHandler).Record(1)
 			} else {
-				atomic.AddInt64(&e.outstanding, -1)
+				e.outstanding.Add(-1)
 				metrics.ExecutorTasksDroppedCount.With(e.metricsHandler).Record(1)
 			}
 		case TaskStatusErr:
-			atomic.AddInt64(&e.outstanding, -1)
+			e.outstanding.Add(-1)
 			metrics.ExecutorTasksErrCount.With(e.metricsHandler).Record(1)
 		default:
 			panic(fmt.Sprintf("unknown task status: %v", status))
@@ -140,5 +140,5 @@ func (e *fixedPoolExecutor) worker() {
 }
 
 func (e *fixedPoolExecutor) alive() bool {
-	return atomic.LoadInt32(&e.status) == common.DaemonStatusStarted
+	return e.status.Load() == common.DaemonStatusStarted
 }

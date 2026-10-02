@@ -115,6 +115,9 @@ func (s *sealAfterRunSuite) TestAssertionAfterRun() {
 
 	// T() also panics after Run.
 	require.Panics(t, func() { s.T() })
+
+	// Context() resolves through T() and also panics after Run.
+	require.Panics(t, func() { s.Context() })
 }
 
 func TestRun_AcceptsSuite(t *testing.T) {

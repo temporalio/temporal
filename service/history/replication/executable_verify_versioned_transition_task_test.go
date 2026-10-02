@@ -1,6 +1,7 @@
 package replication
 
 import (
+	"encoding/json"
 	"errors"
 	"math/rand"
 	"testing"
@@ -9,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	otellog "go.opentelemetry.io/otel/log"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -175,7 +177,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 	}
 	s.executableTask.EXPECT().TerminalState().Return(false)
 	s.executableTask.EXPECT().MarkExecutionStart()
-	s.executableTask.EXPECT().ReplicationTask().Times(1).Return(replicationTask)
+	s.executableTask.EXPECT().ReplicationTask().Return(replicationTask).AnyTimes()
 	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
 		uuid.NewString(), true, nil,
 	).AnyTimes()
@@ -209,6 +211,226 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch
 
 	err := task.Execute()
 	s.NoError(err)
+}
+
+func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch_EventVersionHistoryVerifySuccess() {
+	replicationTask := &replicationspb.ReplicationTask{
+		TaskType:     enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
+		SourceTaskId: s.taskID,
+		RawTaskInfo: &persistencespb.ReplicationTaskInfo{
+			CurrentVersionHistory: &historyspb.VersionHistory{
+				Items: []*historyspb.VersionHistoryItem{
+					{EventId: 5, Version: 1},
+					{EventId: 9, Version: 3},
+				},
+			},
+		},
+		Attributes: &replicationspb.ReplicationTask_VerifyVersionedTransitionTaskAttributes{
+			VerifyVersionedTransitionTaskAttributes: &replicationspb.VerifyVersionedTransitionTaskAttributes{
+				NamespaceId: s.namespaceID,
+				WorkflowId:  s.workflowID,
+				RunId:       s.runID,
+				NextEventId: 10,
+				EventVersionHistory: []*historyspb.VersionHistoryItem{
+					{EventId: 5, Version: 1},
+					{EventId: 9, Version: 3},
+				},
+				ArchetypeId: chasm.WorkflowArchetypeID,
+			},
+		},
+		VersionedTransition: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: 3,
+			TransitionCount:          5,
+		},
+	}
+	s.executableTask.EXPECT().TerminalState().Return(false)
+	s.executableTask.EXPECT().MarkExecutionStart()
+	s.executableTask.EXPECT().ReplicationTask().Return(replicationTask).AnyTimes()
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
+		uuid.NewString(), true, nil,
+	).AnyTimes()
+
+	mu := historyi.NewMockMutableState(s.controller)
+	mu.EXPECT().CloneToProto().Return(
+		&persistencespb.WorkflowMutableState{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+				TransitionHistory: []*persistencespb.VersionedTransition{
+					{NamespaceFailoverVersion: 1, TransitionCount: 3},
+					{NamespaceFailoverVersion: 3, TransitionCount: 6},
+				},
+				VersionHistories: &historyspb.VersionHistories{
+					CurrentVersionHistoryIndex: 0,
+					Histories: []*historyspb.VersionHistory{
+						{
+							Items: []*historyspb.VersionHistoryItem{
+								{EventId: 5, Version: 1},
+								{EventId: 12, Version: 3},
+							},
+						},
+					},
+				},
+			},
+			NextEventId: 13,
+		},
+	).AnyTimes()
+	s.mockGetMutableState(s.namespaceID, s.workflowID, s.runID, mu, nil)
+
+	task := NewExecutableVerifyVersionedTransitionTask(
+		s.toolBox,
+		s.taskID,
+		time.Now(),
+		s.sourceClusterName,
+		s.sourceShardKey,
+		replicationTask,
+	)
+	task.ExecutableTask = s.executableTask
+
+	err := task.Execute()
+	s.NoError(err)
+}
+
+func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch_EventVersionHistoryMismatch() {
+	replicationTask := &replicationspb.ReplicationTask{
+		TaskType:     enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
+		SourceTaskId: s.taskID,
+		RawTaskInfo: &persistencespb.ReplicationTaskInfo{
+			CurrentVersionHistory: &historyspb.VersionHistory{
+				Items: []*historyspb.VersionHistoryItem{
+					{EventId: 5, Version: 1},
+					{EventId: 9, Version: 3},
+				},
+			},
+		},
+		Attributes: &replicationspb.ReplicationTask_VerifyVersionedTransitionTaskAttributes{
+			VerifyVersionedTransitionTaskAttributes: &replicationspb.VerifyVersionedTransitionTaskAttributes{
+				NamespaceId: s.namespaceID,
+				WorkflowId:  s.workflowID,
+				RunId:       s.runID,
+				NextEventId: 10,
+				EventVersionHistory: []*historyspb.VersionHistoryItem{
+					{EventId: 5, Version: 1},
+					{EventId: 9, Version: 3},
+				},
+				ArchetypeId: chasm.WorkflowArchetypeID,
+			},
+		},
+		VersionedTransition: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: 3,
+			TransitionCount:          5,
+		},
+	}
+	s.executableTask.EXPECT().TerminalState().Return(false)
+	s.executableTask.EXPECT().MarkExecutionStart()
+	s.executableTask.EXPECT().ReplicationTask().Return(replicationTask).AnyTimes()
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
+		uuid.NewString(), true, nil,
+	).AnyTimes()
+
+	mu := historyi.NewMockMutableState(s.controller)
+	mu.EXPECT().CloneToProto().Return(
+		&persistencespb.WorkflowMutableState{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+				TransitionHistory: []*persistencespb.VersionedTransition{
+					{NamespaceFailoverVersion: 1, TransitionCount: 3},
+					{NamespaceFailoverVersion: 3, TransitionCount: 6},
+				},
+				VersionHistories: &historyspb.VersionHistories{
+					CurrentVersionHistoryIndex: 0,
+					Histories: []*historyspb.VersionHistory{
+						{
+							Items: []*historyspb.VersionHistoryItem{
+								{EventId: 5, Version: 1},
+								{EventId: 12, Version: 4},
+							},
+						},
+					},
+				},
+			},
+			NextEventId: 13,
+		},
+	).AnyTimes()
+	s.mockGetMutableState(s.namespaceID, s.workflowID, s.runID, mu, nil)
+
+	task := NewExecutableVerifyVersionedTransitionTask(
+		s.toolBox,
+		s.taskID,
+		time.Now(),
+		s.sourceClusterName,
+		s.sourceShardKey,
+		replicationTask,
+	)
+	task.ExecutableTask = s.executableTask
+
+	err := task.Execute()
+	s.ErrorAs(err, new(*serviceerror.DataLoss))
+}
+
+func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch_LegacyTaskIgnoresEventVersionHistoryMismatch() {
+	replicationTask := &replicationspb.ReplicationTask{
+		TaskType:     enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
+		SourceTaskId: s.taskID,
+		Attributes: &replicationspb.ReplicationTask_VerifyVersionedTransitionTaskAttributes{
+			VerifyVersionedTransitionTaskAttributes: &replicationspb.VerifyVersionedTransitionTaskAttributes{
+				NamespaceId: s.namespaceID,
+				WorkflowId:  s.workflowID,
+				RunId:       s.runID,
+				NextEventId: 10,
+				EventVersionHistory: []*historyspb.VersionHistoryItem{
+					{EventId: 5, Version: 1},
+					{EventId: 9, Version: 3},
+				},
+				ArchetypeId: chasm.WorkflowArchetypeID,
+			},
+		},
+		VersionedTransition: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: 3,
+			TransitionCount:          5,
+		},
+	}
+	s.executableTask.EXPECT().TerminalState().Return(false)
+	s.executableTask.EXPECT().MarkExecutionStart()
+	s.executableTask.EXPECT().ReplicationTask().Return(replicationTask).AnyTimes()
+	s.executableTask.EXPECT().GetNamespaceInfo(gomock.Any(), s.task.NamespaceID, gomock.Any()).Return(
+		uuid.NewString(), true, nil,
+	).AnyTimes()
+
+	mu := historyi.NewMockMutableState(s.controller)
+	mu.EXPECT().CloneToProto().Return(
+		&persistencespb.WorkflowMutableState{
+			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+				TransitionHistory: []*persistencespb.VersionedTransition{
+					{NamespaceFailoverVersion: 1, TransitionCount: 3},
+					{NamespaceFailoverVersion: 3, TransitionCount: 6},
+				},
+				VersionHistories: &historyspb.VersionHistories{
+					CurrentVersionHistoryIndex: 0,
+					Histories: []*historyspb.VersionHistory{
+						{
+							Items: []*historyspb.VersionHistoryItem{
+								{EventId: 5, Version: 1},
+								{EventId: 12, Version: 4},
+							},
+						},
+					},
+				},
+			},
+			NextEventId: 13,
+		},
+	).AnyTimes()
+	s.mockGetMutableState(s.namespaceID, s.workflowID, s.runID, mu, nil)
+
+	task := NewExecutableVerifyVersionedTransitionTask(
+		s.toolBox,
+		s.taskID,
+		time.Now(),
+		s.sourceClusterName,
+		s.sourceShardKey,
+		replicationTask,
+	)
+	task.ExecutableTask = s.executableTask
+
+	err := task.Execute()
+	s.Require().NoError(err)
 }
 
 func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch_NewRunNotFound() {
@@ -273,9 +495,9 @@ func (s *executableVerifyVersionedTransitionTaskSuite) mockGetMutableState(
 	runId string,
 	mutableState historyi.MutableState,
 	err error,
-) {
+) *gomock.Call {
 	shardContext := historyi.NewMockShardContext(s.controller)
-	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
+	shardCall := s.shardController.EXPECT().GetShardByNamespaceWorkflow(
 		namespace.ID(s.task.NamespaceID),
 		s.task.WorkflowID,
 	).Return(shardContext, nil)
@@ -294,6 +516,7 @@ func (s *executableVerifyVersionedTransitionTaskSuite) mockGetMutableState(
 		chasm.WorkflowArchetypeID,
 		locks.PriorityHigh,
 	).Return(wfCtx, func(err error) {}, err)
+	return shardCall
 }
 
 func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_CurrentBranch_NotUpToDate() {
@@ -596,6 +819,16 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 }
 
 func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBranch_NotUpToDate() {
+	s.config.EmitReplicationLifecycleEvents = func() bool { return true }
+	eventCapture := &eventCaptureLogger{}
+	eventShard := historyi.NewMockShardContext(s.controller)
+	eventShard.EXPECT().GetEventLogger().Return(eventCapture).Times(2)
+	eventShard.EXPECT().GetShardID().Return(int32(1)).Times(2)
+	s.namespaceCache.EXPECT().GetNamespaceName(namespace.ID(s.namespaceID)).
+		Return(namespace.Name("test-namespace"), nil).Times(2)
+	s.executableTask.EXPECT().Attempt().Return(1)
+	s.executableTask.EXPECT().SourceShardKey().Return(s.sourceShardKey).AnyTimes()
+
 	taskNextEvent := int64(10)
 	replicationTask := &replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
@@ -654,7 +887,14 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 		},
 	).AnyTimes()
 
-	s.mockGetMutableState(s.namespaceID, s.workflowID, s.runID, mu, nil)
+	executingCall := s.shardController.EXPECT().GetShardByNamespaceWorkflow(
+		namespace.ID(s.namespaceID), s.workflowID,
+	).Return(eventShard, nil)
+	loadCall := s.mockGetMutableState(s.namespaceID, s.workflowID, s.runID, mu, nil)
+	appliedCall := s.shardController.EXPECT().GetShardByNamespaceWorkflow(
+		namespace.ID(s.namespaceID), s.workflowID,
+	).Return(eventShard, nil)
+	gomock.InOrder(executingCall, loadCall, appliedCall)
 
 	task := NewExecutableVerifyVersionedTransitionTask(
 		s.toolBox,
@@ -678,6 +918,27 @@ func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_NonCurrentBra
 
 	err := task.Execute()
 	s.NoError(err)
+	s.Require().Len(eventCapture.records, 2)
+	attrs := make(map[string]otellog.Value)
+	eventCapture.records[1].WalkAttributes(func(kv otellog.KeyValue) bool {
+		attrs[kv.Key] = kv.Value
+		return true
+	})
+	s.Equal("backfilled", attrs["outcome"].AsString())
+	s.Equal(s.newRunID, attrs["new_run_id"].AsString())
+	var details struct {
+		RecoveryAction    string `json:"recovery_action"`
+		FirstEventID      int64  `json:"first_event_id"`
+		FirstEventVersion int64  `json:"first_event_version"`
+		LastEventID       int64  `json:"last_event_id"`
+		LastEventVersion  int64  `json:"last_event_version"`
+	}
+	s.NoError(json.Unmarshal([]byte(attrs["details"].AsString()), &details))
+	s.Equal("resend_history", details.RecoveryAction)
+	s.Equal(int64(9), details.FirstEventID)
+	s.Equal(int64(1), details.FirstEventVersion)
+	s.Equal(int64(9), details.LastEventID)
+	s.Equal(int64(1), details.LastEventVersion)
 }
 
 func (s *executableVerifyVersionedTransitionTaskSuite) TestExecute_Skip_TerminalState() {

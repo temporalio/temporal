@@ -13,8 +13,11 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/grpcfaultstest"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
@@ -50,6 +53,7 @@ type (
 		ContextMetadataInterceptor    *interceptor.ContextMetadataInterceptor `optional:"true"`
 		AdditionalInterceptors        []grpc.UnaryServerInterceptor           `optional:"true"`
 		AdditionalStreamInterceptors  []grpc.StreamServerInterceptor          `optional:"true"`
+		TestHooks                     testhooks.TestHooks
 	}
 )
 
@@ -174,6 +178,11 @@ func getUnaryInterceptors(params GrpcServerOptionsParams) []grpc.UnaryServerInte
 
 	if params.ContextMetadataInterceptor != nil {
 		interceptors = append(interceptors, params.ContextMetadataInterceptor.Intercept)
+	}
+
+	faultGenerator := grpcfaultstest.NewGenerator(params.TestHooks)
+	if faultInterceptor := grpcfaults.UnaryServerInterceptor(faultGenerator); faultInterceptor != nil {
+		interceptors = append(interceptors, faultInterceptor)
 	}
 
 	return append(interceptors, params.RetryableInterceptor.Intercept)

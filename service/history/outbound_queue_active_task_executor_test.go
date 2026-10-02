@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -292,8 +293,9 @@ func (s *outboundQueueActiveTaskExecutorSuite) TestExecute_WorkerCommandsTask_Ex
 		},
 	}
 
+	s.mockShard.GetConfig().WorkerCommandsMaxAttempts = dynamicconfig.GetIntPropertyFn(3)
 	s.mockExecutable.EXPECT().GetTask().Return(task).AnyTimes()
-	s.mockExecutable.EXPECT().Attempt().Return(workercommands.MaxTaskAttempts + 1).AnyTimes()
+	s.mockExecutable.EXPECT().Attempt().Return(4).AnyTimes()
 	s.mockExecutable.EXPECT().GetWorkflowID().Return("").AnyTimes()
 
 	result := s.executor.Execute(ctx, s.mockExecutable)

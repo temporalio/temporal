@@ -103,6 +103,7 @@ func TestReplicationLifecycleEncodeApplied(t *testing.T) {
 		LastEventID:        9,
 		LastEventVersion:   5,
 		Outcome:            "applied",
+		NewRunID:           "continued-run",
 		NewExecutionRunID:  "new-run",
 		SignalCount:        6,
 		UpdateCount:        2,
@@ -110,6 +111,7 @@ func TestReplicationLifecycleEncodeApplied(t *testing.T) {
 	f := attrMap(p.Attributes())
 
 	require.Equal(t, "applied", f["phase"].AsString())
+	require.Equal(t, "continued-run", f["new_run_id"].AsString())
 	require.Equal(t, "new-run", f["new_execution_run_id"].AsString())
 	require.Equal(t, int64(6), f["signal_count"].AsInt64())
 	require.Equal(t, int64(2), f["update_count"].AsInt64())
@@ -161,6 +163,7 @@ func fullyPopulatedReplication(phase ReplicationPhase) ReplicationLifecyclePaylo
 		FirstEventID:             1,
 		NextEventID:              8,
 		TargetCluster:            "target-cluster",
+		TargetShard:              13,
 		Priority:                 "TASK_PRIORITY_LOW",
 		ArtifactKind:             ArtifactKindMutation,
 		ExclusiveStartVT:         &VersionedTransitionEntry{FailoverVersion: 5, TransitionCount: 4},
@@ -226,6 +229,7 @@ func TestReplicationLifecycleFieldSetLocked(t *testing.T) {
 			"next_event_id":  int64(8),
 			// what the task actually carried, as opposed to what the queue entry described.
 			"target_cluster":                       "target-cluster",
+			"target_shard":                         int64(13),
 			"priority":                             "TASK_PRIORITY_LOW",
 			"artifact_kind":                        ArtifactKindMutation,
 			"exclusive_start_versioned_transition": `{"failover_version":5,"transition_count":4}`,
@@ -243,6 +247,7 @@ func TestReplicationLifecycleFieldSetLocked(t *testing.T) {
 			"phase":                 "applied",
 			"outcome":               "applied",
 			"error":                 "boom",
+			"new_run_id":            "new-run",
 			"state":                 "Running",
 			"status":                "Unspecified",
 			"applied_next_event_id": int64(10),
@@ -262,6 +267,7 @@ func TestReplicationLifecycleFieldSetLocked(t *testing.T) {
 		ReplicationSkipped: mergeFields(base, map[string]any{
 			"phase":          "skipped",
 			"target_cluster": "target-cluster",
+			"target_shard":   int64(13),
 			"priority":       "TASK_PRIORITY_LOW",
 			"attempt":        int64(2),
 			"error":          "boom",

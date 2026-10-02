@@ -177,6 +177,7 @@ func (c *clients) ensureMatching() {
 			frontendTLSConfig,
 			nil,
 			nil,
+			nil,
 			monitor,
 			c.tokenProvider,
 		)

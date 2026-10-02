@@ -10,9 +10,11 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -63,6 +65,62 @@ func TestRequestCancelDeduplicationAfterTerminalState(t *testing.T) {
 
 		require.ErrorIs(t, err, ErrOperationAlreadyCompleted)
 		require.Equal(t, nexusoperationpb.OPERATION_STATUS_CANCELED, op.Status)
+	})
+}
+
+func TestTerminate(t *testing.T) {
+	t.Parallel()
+
+	newOpWithStatus := func(status nexusoperationpb.OperationStatus) (*Operation, *chasm.MockMutableContext) {
+		ctx := &chasm.MockMutableContext{
+			MockContext: chasm.MockContext{
+				HandleNow: func(chasm.Component) time.Time { return defaultTime },
+				HandleNamespaceEntry: func() *namespace.Namespace {
+					return namespace.NewNamespaceForTest(
+						&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0,
+					)
+				},
+				GoCtx: context.WithValue(context.Background(), OperationContextKey, &OperationContext{
+					MetricTagConfig: dynamicconfig.GetTypedPropertyFn(NexusMetricTagConfig{}),
+				}),
+			},
+		}
+		op := newTestOperation()
+		op.Status = status
+		return op, ctx
+	}
+
+	t.Run("TerminatesARunningOperation", func(t *testing.T) {
+		op, ctx := newOpWithStatus(nexusoperationpb.OPERATION_STATUS_STARTED)
+
+		_, err := op.Terminate(ctx, chasm.TerminateComponentRequest{RequestID: "req-id"})
+		require.NoError(t, err)
+		require.Equal(t, nexusoperationpb.OPERATION_STATUS_TERMINATED, op.Status)
+	})
+
+	// Terminating an operation that already reached a terminal outcome is a FailedPrecondition.
+	for _, status := range []nexusoperationpb.OperationStatus{
+		nexusoperationpb.OPERATION_STATUS_SUCCEEDED,
+		nexusoperationpb.OPERATION_STATUS_CANCELED,
+		nexusoperationpb.OPERATION_STATUS_FAILED,
+		nexusoperationpb.OPERATION_STATUS_TIMED_OUT,
+	} {
+		t.Run("Rejects"+status.String(), func(t *testing.T) {
+			op, ctx := newOpWithStatus(status)
+
+			_, err := op.Terminate(ctx, chasm.TerminateComponentRequest{RequestID: "req-id"})
+			require.ErrorIs(t, err, ErrOperationAlreadyCompleted)
+			require.Equal(t, status, op.Status)
+		})
+	}
+
+	t.Run("IsIdempotentForTheSameRequestID", func(t *testing.T) {
+		op, ctx := newOpWithStatus(nexusoperationpb.OPERATION_STATUS_STARTED)
+
+		_, err := op.Terminate(ctx, chasm.TerminateComponentRequest{RequestID: "req-id"})
+		require.NoError(t, err)
+		_, err = op.Terminate(ctx, chasm.TerminateComponentRequest{RequestID: "req-id"})
+		require.NoError(t, err)
 	})
 }
 
@@ -158,6 +216,17 @@ func TestHandleNexusCompletion(t *testing.T) {
 		require.NoError(t, TransitionStarted.Apply(op, ctx, EventStarted{OperationToken: "tok"}))
 		return op
 	}
+	newBackingOffOp := func(t *testing.T, ctx *chasm.MockMutableContext) *Operation {
+		t.Helper()
+		op := newScheduledTestOperation(t, ctx)
+		require.NoError(t, transitionAttemptFailed.Apply(op, ctx, EventAttemptFailed{
+			Failure: &failurepb.Failure{
+				Message: "retryable failure",
+			},
+			RetryPolicy: backoff.NewConstantDelayRetryPolicy(time.Minute),
+		}))
+		return op
+	}
 	ctrl := gomock.NewController(t)
 	nsRegistry := namespace.NewMockRegistry(ctrl)
 	nsRegistry.EXPECT().GetNamespaceName(namespace.ID("ns-id")).Return(namespace.Name("ns-name"), nil).AnyTimes()
@@ -225,6 +294,29 @@ func TestHandleNexusCompletion(t *testing.T) {
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, op.GetStatus())
 			require.Equal(t, "tok", op.GetOperationToken())
 			require.Equal(t, defaultTime, op.GetStartedTime().AsTime())
+		})
+
+		t.Run("CompletionDuringRetryBackoff", func(t *testing.T) {
+			ctx := newCtx()
+			op := newBackingOffOp(t, ctx)
+			startTime := defaultTime.Add(-time.Second)
+
+			err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+				StartTime:      timestamppb.New(startTime),
+				RequestId:      op.GetRequestId(),
+				OperationToken: "tok",
+				Outcome: &persistencespb.ChasmNexusCompletion_Success{
+					Success: mustToPayload(t, "result"),
+				},
+			})
+
+			require.NoError(t, err)
+			require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, op.GetStatus())
+			require.Equal(t, "tok", op.GetOperationToken())
+			require.Equal(t, startTime, op.GetStartedTime().AsTime())
+			require.Equal(t, startTime, op.GetLastAttemptCompleteTime().AsTime())
+			require.Nil(t, op.GetLastAttemptFailure())
+			require.Nil(t, op.GetNextAttemptScheduleTime())
 		})
 	})
 
@@ -303,6 +395,75 @@ func TestHandleNexusCompletion(t *testing.T) {
 			require.Equal(t, startTime, op.GetStartedTime().AsTime())
 		})
 	})
+}
+
+func TestDescribeCircuitBreaker(t *testing.T) {
+	t.Parallel()
+
+	for _, status := range protoutils.EnumValues[nexusoperationpb.OperationStatus]() {
+		for _, cancellationStatus := range protoutils.EnumValues[nexusoperationpb.CancellationStatus]() {
+			for _, breaker := range []string{"closed", "open", "unavailable"} {
+				t.Run(status.String()+"/"+cancellationStatus.String()+"/"+breaker, func(t *testing.T) {
+					t.Parallel()
+
+					ctx := newCallbackTestContext()
+					calls := 0
+					if breaker != "unavailable" {
+						ctx.GoCtx = context.WithValue(context.Background(), OperationContextKey, &OperationContext{
+							DestinationBlocked: func(namespaceID, destination string) bool {
+								calls++
+								require.Equal(t, "ns-id", namespaceID)
+								require.Equal(t, "test-endpoint", destination)
+								return breaker == "open"
+							},
+						})
+					}
+					op := newTestOperation()
+					op.Status = status
+					op.RequestData = chasm.NewDataField(ctx, &nexusoperationpb.OperationRequestData{})
+					op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibilityWithData(ctx, nil, nil))
+					if cancellationStatus != nexusoperationpb.CANCELLATION_STATUS_UNSPECIFIED {
+						op.Cancellation = chasm.NewComponentField(ctx, newCancellation(&nexusoperationpb.CancellationState{
+							Status: cancellationStatus,
+						}))
+					}
+
+					resp, err := op.buildDescribeResponse(ctx, &nexusoperationpb.DescribeNexusOperationRequest{
+						FrontendRequest: &workflowservice.DescribeNexusOperationExecutionRequest{},
+					})
+					require.NoError(t, err)
+					info := resp.GetFrontendResponse().GetInfo()
+					state, reason := PendingOperationState(status), ""
+					if status == nexusoperationpb.OPERATION_STATUS_SCHEDULED && breaker == "open" {
+						state, reason = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED, "The circuit breaker is open."
+					}
+					require.Equal(t, state, info.GetState())
+					require.Equal(t, reason, info.GetBlockedReason())
+					require.Equal(t, operationExecutionStatus(status), info.GetStatus())
+					cancelState, cancelReason := CancellationAPIState(cancellationStatus), ""
+					if cancellationStatus == nexusoperationpb.CANCELLATION_STATUS_SCHEDULED && breaker == "open" {
+						cancelState, cancelReason = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED, "The circuit breaker is open."
+					}
+					require.Equal(t, cancelState, info.GetCancellationInfo().GetState())
+					require.Equal(t, cancelReason, info.GetCancellationInfo().GetBlockedReason())
+					expectedCalls := 0
+					if breaker != "unavailable" {
+						if status == nexusoperationpb.OPERATION_STATUS_SCHEDULED {
+							expectedCalls++
+						}
+						if cancellationStatus == nexusoperationpb.CANCELLATION_STATUS_SCHEDULED {
+							expectedCalls++
+						}
+					}
+					require.Equal(t, expectedCalls, calls)
+					require.Equal(t, status, op.Status)
+					if cancellation, ok := op.Cancellation.TryGet(ctx); ok {
+						require.Equal(t, cancellationStatus, cancellation.Status)
+					}
+				})
+			}
+		}
+	}
 }
 
 func TestDescribeOutcome(t *testing.T) {
@@ -402,7 +563,7 @@ func TestOperation_BuildExecutionInfo_ReturnsIsolatedSearchAttributes(t *testing
 			return &persistencespb.VersionedTransition{NamespaceFailoverVersion: 1, TransitionCount: 1}
 		},
 	}
-	root := chasm.NewEmptyTree(registry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
+	root := chasm.NewEmptyTree(registry, nodeBackend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
 	ctx := chasm.NewMutableContext(context.Background(), root)
 
 	op := NewOperation(&nexusoperationpb.OperationState{Status: nexusoperationpb.OPERATION_STATUS_STARTED})

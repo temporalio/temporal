@@ -96,8 +96,7 @@ func (c *fairBacklogManagerImpl) signalIfFatal(err error) bool {
 	if err == nil {
 		return false
 	}
-	var condfail *persistence.ConditionFailedError
-	if errors.As(err, &condfail) {
+	if _, ok := errors.AsType[*persistence.ConditionFailedError](err); ok {
 		c.metricsHandler.Counter(metrics.ConditionFailedErrorPerTaskQueueCounter.Name()).Record(1)
 		c.skipFinalUpdate.Store(true)
 		c.pqMgr.UnloadFromPartitionManager(unloadCauseConflict)
@@ -312,6 +311,23 @@ func (c *fairBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb
 		}
 	}
 	return result
+}
+
+// NonNegligibleBacklogPriority returns 0 when no priority has a non-negligible backlog.
+func (c *fairBacklogManagerImpl) NonNegligibleBacklogPriority() priorityKey {
+	c.subqueueLock.Lock()
+	defer c.subqueueLock.Unlock()
+
+	var highest priorityKey
+	for subqueue, priority := range c.priorityBySubqueue {
+		oldestBacklogTime := c.subqueues[subqueue].getOldestBacklogTime()
+		if !oldestBacklogTime.IsZero() &&
+			time.Since(oldestBacklogTime) >= c.config.BacklogNegligibleAge() &&
+			(highest == 0 || priority < highest) {
+			highest = priority
+		}
+	}
+	return highest
 }
 
 func (c *fairBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {

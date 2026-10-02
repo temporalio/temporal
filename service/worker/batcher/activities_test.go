@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
@@ -371,31 +372,31 @@ func (s *activitiesSuite) TestAdjustQueryBatchTypeEnum() {
 		{
 			name:           "Acceptance",
 			query:          "A=B",
-			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
+			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningOrPausedQueryFilter),
 			batchType:      enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
 		},
 		{
 			name:           "Acceptance with parenthesis",
 			query:          "(A=B)",
-			expectedResult: fmt.Sprintf("((A=B)) AND (%s)", statusRunningQueryFilter),
+			expectedResult: fmt.Sprintf("((A=B)) AND (%s)", statusRunningOrPausedQueryFilter),
 			batchType:      enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
 		},
 		{
 			name:           "Acceptance with multiple conditions",
 			query:          "(A=B) OR C=D",
-			expectedResult: fmt.Sprintf("((A=B) OR C=D) AND (%s)", statusRunningQueryFilter),
+			expectedResult: fmt.Sprintf("((A=B) OR C=D) AND (%s)", statusRunningOrPausedQueryFilter),
 			batchType:      enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
 		},
 		{
 			name:           "Contains status - 1",
 			query:          "ExecutionStatus=Completed",
-			expectedResult: fmt.Sprintf("(ExecutionStatus=Completed) AND (%s)", statusRunningQueryFilter),
+			expectedResult: fmt.Sprintf("(ExecutionStatus=Completed) AND (%s)", statusRunningOrPausedQueryFilter),
 			batchType:      enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
 		},
 		{
 			name:           "Contains status - 2",
 			query:          "A=B OR ExecutionStatus='Completed'",
-			expectedResult: fmt.Sprintf("(A=B OR ExecutionStatus='Completed') AND (%s)", statusRunningQueryFilter),
+			expectedResult: fmt.Sprintf("(A=B OR ExecutionStatus='Completed') AND (%s)", statusRunningOrPausedQueryFilter),
 			batchType:      enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
 		},
 		{
@@ -407,53 +408,53 @@ func (s *activitiesSuite) TestAdjustQueryBatchTypeEnum() {
 		{
 			name:           "Terminate workflow variant",
 			query:          "A=B",
-			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
+			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningOrPausedQueryFilter),
 			batchType:      enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
 		},
 		//nolint:staticcheck // SA1019: verifies batches started before the enum split
 		{
 			name:           "Terminate legacy workflow variant",
 			query:          "A=B",
-			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
+			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningOrPausedQueryFilter),
 			batchType:      enumspb.BATCH_OPERATION_TYPE_TERMINATE,
 		},
 		{
 			name:           "Cancel workflow variant",
 			query:          "A=B",
-			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
+			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningOrPausedQueryFilter),
 			batchType:      enumspb.BATCH_OPERATION_TYPE_CANCEL_WORKFLOW,
 		},
 		//nolint:staticcheck // SA1019: verifies batches started before the enum split
 		{
 			name:           "Cancel legacy workflow variant",
 			query:          "A=B",
-			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
+			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningOrPausedQueryFilter),
 			batchType:      enumspb.BATCH_OPERATION_TYPE_CANCEL,
 		},
 		{
 			name:           "Signal workflow variant",
 			query:          "A=B",
-			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
+			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningOrPausedQueryFilter),
 			batchType:      enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
 		},
 		//nolint:staticcheck // SA1019: verifies batches started before the enum split
 		{
 			name:           "Signal legacy workflow variant",
 			query:          "A=B",
-			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
+			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningOrPausedQueryFilter),
 			batchType:      enumspb.BATCH_OPERATION_TYPE_SIGNAL,
 		},
 		{
 			name:           "Update workflow execution options variant",
 			query:          "A=B",
-			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
+			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningOrPausedQueryFilter),
 			batchType:      enumspb.BATCH_OPERATION_TYPE_UPDATE_WORKFLOW_EXECUTION_OPTIONS,
 		},
 		//nolint:staticcheck // SA1019: verifies batches started before the enum split
 		{
 			name:           "Update legacy workflow execution options variant",
 			query:          "A=B",
-			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningQueryFilter),
+			expectedResult: fmt.Sprintf("(A=B) AND (%s)", statusRunningOrPausedQueryFilter),
 			batchType:      enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS,
 		},
 		{
@@ -487,18 +488,36 @@ func (s *activitiesSuite) TestAdjustQueryBatchTypeEnum() {
 			batchType:      enumspb.BATCH_OPERATION_TYPE_DELETE,
 		},
 		{
-			// A caller must be able to terminate/cancel only running activities via
+			// A caller must be able to terminate/cancel non-terminal activities via
 			// query; the server adds the filter so the caller doesn't have to.
-			name:           "Terminate activity is filtered to running",
+			name:           "Terminate activity is filtered to running and paused",
 			query:          "ActivityType='foo'",
-			expectedResult: fmt.Sprintf("(ActivityType='foo') AND (%s)", statusRunningQueryFilter),
+			expectedResult: "(ActivityType='foo') AND (ExecutionStatus='Running' OR ExecutionStatus='Paused')",
 			batchType:      enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
 		},
 		{
-			name:           "Cancel activity is filtered to running",
+			name:           "Cancel activity is filtered to running and paused",
 			query:          "ActivityType='foo'",
-			expectedResult: fmt.Sprintf("(ActivityType='foo') AND (%s)", statusRunningQueryFilter),
+			expectedResult: "(ActivityType='foo') AND (ExecutionStatus='Running' OR ExecutionStatus='Paused')",
 			batchType:      enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY,
+		},
+		{
+			name:           "Unpause workflow activity is filtered to running and paused workflows",
+			query:          "WorkflowType='foo'",
+			expectedResult: "(WorkflowType='foo') AND (ExecutionStatus='Running' OR ExecutionStatus='Paused')",
+			batchType:      enumspb.BATCH_OPERATION_TYPE_UNPAUSE_ACTIVITY,
+		},
+		{
+			name:           "Update workflow activity options is filtered to running and paused workflows",
+			query:          "WorkflowType='foo'",
+			expectedResult: "(WorkflowType='foo') AND (ExecutionStatus='Running' OR ExecutionStatus='Paused')",
+			batchType:      enumspb.BATCH_OPERATION_TYPE_UPDATE_ACTIVITY_OPTIONS,
+		},
+		{
+			name:           "Reset workflow activity is filtered to running and paused workflows",
+			query:          "WorkflowType='foo'",
+			expectedResult: "(WorkflowType='foo') AND (ExecutionStatus='Running' OR ExecutionStatus='Paused')",
+			batchType:      enumspb.BATCH_OPERATION_TYPE_RESET_ACTIVITY,
 		},
 		{
 			// Delete applies regardless of execution status, so no filter is added.
@@ -906,6 +925,96 @@ func (s *activitiesSuite) TestStartTaskProcessor_RetryableErrorsDoNotDeadlock() 
 	}
 }
 
+func (s *activitiesSuite) TestProcessTaskWithRetriesRecordsMetrics() {
+	tests := []struct {
+		name               string
+		err                error
+		batchType          enumspb.BatchOperationType
+		wantSuccessRecords int
+		wantFailureRecords int
+	}{
+		{
+			name:      "expected cancel precondition does not record processor error",
+			err:       serviceerror.NewFailedPrecondition("activity is already terminal"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY,
+		},
+		{
+			name:      "expected terminate precondition does not record processor error",
+			err:       serviceerror.NewFailedPrecondition("activity is already terminal"),
+			batchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+		},
+		{
+			name:               "success records processor request",
+			batchType:          enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY,
+			wantSuccessRecords: 1,
+		},
+		{
+			name:               "transient cancel failure records processor error",
+			err:                serviceerror.NewUnavailable("history service is unavailable"),
+			batchType:          enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY,
+			wantFailureRecords: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+
+			batchOperation := &batchspb.BatchOperationInput{
+				BatchType: tt.batchType,
+				Request:   &workflowservice.StartBatchOperationRequest{},
+			}
+			switch tt.batchType {
+			case enumspb.BATCH_OPERATION_TYPE_CANCEL_ACTIVITY:
+				batchOperation.Request.Operation = &workflowservice.StartBatchOperationRequest_CancelActivitiesOperation{
+					CancelActivitiesOperation: &batchpb.BatchOperationCancelActivities{},
+				}
+				s.mockFrontendClient.EXPECT().
+					RequestCancelActivityExecution(gomock.Any(), gomock.Any()).
+					Return(nil, tt.err)
+			case enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY:
+				batchOperation.Request.Operation = &workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation{
+					TerminateActivitiesOperation: &batchpb.BatchOperationTerminateActivities{},
+				}
+				s.mockFrontendClient.EXPECT().
+					TerminateActivityExecution(gomock.Any(), gomock.Any()).
+					Return(nil, tt.err)
+			default:
+				s.FailNow("unsupported batch type", "batch type: %v", tt.batchType)
+			}
+
+			respCh := make(chan taskResponse, 1)
+			limiter := quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 { return 1000 }))
+			a := &activities{}
+			a.processTaskWithRetries(
+				context.Background(),
+				batchOperation,
+				"ns",
+				task{targetExecution: &commonpb.Execution{BusinessId: "activity-id", RunId: "run-id"}, attempts: 1},
+				respCh,
+				limiter,
+				nil,
+				s.mockFrontendClient,
+				metricsHandler,
+				log.NewTestLogger(),
+			)
+
+			resp := <-respCh
+			if tt.err == nil {
+				s.Require().NoError(resp.err)
+			} else {
+				s.Require().Error(resp.err)
+			}
+
+			snapshot := capture.Snapshot()
+			s.Require().Len(snapshot[metrics.BatcherProcessorSuccess.Name()], tt.wantSuccessRecords)
+			s.Require().Len(snapshot[metrics.BatcherProcessorFailures.Name()], tt.wantFailureRecords)
+		})
+	}
+}
+
 // TestStartTaskProcessor_ActivityTerminalStateIsNotRetried verifies that a
 // FailedPrecondition from an activity cancel is attempted exactly once. A
 // terminal activity never leaves its terminal state, so retrying can never
@@ -1053,7 +1162,7 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAll
 	}
 
 	// Fake worker pool: drain taskCh and report success for every real task.
-	var processed int64
+	var processed atomic.Int64
 	fakeWorker := func(
 		ctx context.Context,
 		taskCh chan task,
@@ -1072,7 +1181,7 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAll
 				if t.executionInfo == nil {
 					continue
 				}
-				atomic.AddInt64(&processed, 1)
+				processed.Add(1)
 				select {
 				case respCh <- taskResponse{err: nil, page: t.page}:
 				case <-ctx.Done():
@@ -1105,7 +1214,7 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAll
 	s.NoError(encoded.Get(&hbd))
 	s.Equal(total, hbd.SuccessCount)
 	s.Equal(0, hbd.ErrorCount)
-	s.Equal(int64(total), atomic.LoadInt64(&processed))
+	s.Equal(int64(total), processed.Load())
 	mockSdk.AssertExpectations(s.T())
 }
 
@@ -1144,8 +1253,8 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAll
 	mockSdk := &mocks.Client{}
 	mockSdk.On("WorkflowService").Return(s.mockFrontendClient)
 
-	var processed int64
-	var invalidTargets int64
+	var processed atomic.Int64
+	var invalidTargets atomic.Int64
 	fakeWorker := func(
 		ctx context.Context,
 		taskCh chan task,
@@ -1164,9 +1273,9 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAll
 				if task.targetExecution == nil ||
 					task.targetExecution.GetType() != enumspb.EXECUTION_TYPE_ACTIVITY ||
 					task.targetExecution.GetBusinessId() == "" || task.targetExecution.GetRunId() == "" {
-					atomic.AddInt64(&invalidTargets, 1)
+					invalidTargets.Add(1)
 				}
-				atomic.AddInt64(&processed, 1)
+				processed.Add(1)
 				select {
 				case respCh <- taskResponse{page: task.page}:
 				case <-ctx.Done():
@@ -1200,8 +1309,8 @@ func (s *activitiesSuite) TestProcessWorkflowsWithProactiveFetching_ProcessesAll
 	s.Require().NoError(encoded.Get(&hbd))
 	s.Equal(total, hbd.SuccessCount)
 	s.Equal(0, hbd.ErrorCount)
-	s.Equal(int64(total), atomic.LoadInt64(&processed))
-	s.Zero(atomic.LoadInt64(&invalidTargets))
+	s.Equal(int64(total), processed.Load())
+	s.Zero(invalidTargets.Load())
 	mockSdk.AssertExpectations(s.T())
 }
 

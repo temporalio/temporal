@@ -16,9 +16,17 @@ message Predicate {
     OrPredicateAttributes or_predicate_attributes = 5;
     NotPredicateAttributes not_predicate_attributes = 6;
     NamespaceIdPredicateAttributes namespace_id_predicate_attributes = 7;
-    TaskTypePredicateAttributes task_type_predicate_attributes = 8;
-    DestinationPredicateAttributes destination_predicate_attributes = 9;
-    OutboundTaskGroupPredicateAttributes outbound_task_group_predicate_attributes = 10;
+    // Deprecated: never built by any queue's grouper. Kept only so a shard that still holds one
+    // from before the outbound queue existed, and hasn't recompacted since, still deserializes
+    // correctly.
+    TaskTypePredicateAttributes task_type_predicate_attributes = 8 [deprecated = true];
+    // Deprecated: superseded by outbound_task_predicate_attributes (#6445), which combines
+    // task group, namespace and destination into one predicate. Kept only so a shard checkpointed
+    // before that change, and never checkpointed since, still deserializes correctly.
+    DestinationPredicateAttributes destination_predicate_attributes = 9 [deprecated = true];
+    // Deprecated: superseded by outbound_task_predicate_attributes (#6445); see above. Not to be
+    // confused with that message's own task_group field, which is very much in use.
+    OutboundTaskGroupPredicateAttributes outbound_task_group_predicate_attributes = 10 [deprecated = true];
     OutboundTaskPredicateAttributes outbound_task_predicate_attributes = 11;
   }
 }
@@ -43,14 +51,18 @@ message NamespaceIdPredicateAttributes {
   repeated string namespace_ids = 1;
 }
 
+// Deprecated: see the deprecated task_type_predicate_attributes field on Predicate.
 message TaskTypePredicateAttributes {
   repeated temporal.server.api.enums.v1.TaskType task_types = 1;
 }
 
+// Deprecated: see the deprecated destination_predicate_attributes field on Predicate.
 message DestinationPredicateAttributes {
   repeated string destinations = 1;
 }
 
+// Deprecated: see the deprecated outbound_task_group_predicate_attributes field on Predicate.
+// Not to be confused with OutboundTaskPredicateAttributes.Group.task_group, which is in use.
 message OutboundTaskGroupPredicateAttributes {
   repeated string groups = 1;
 }

@@ -3428,6 +3428,18 @@ func (mr *MockMutableStateMockRecorder) RecordLastActivityCompleteTime(ai any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordLastActivityCompleteTime", reflect.TypeOf((*MockMutableState)(nil).RecordLastActivityCompleteTime), ai)
 }
 
+// RecordTimeSkippingTransition mocks base method.
+func (m *MockMutableState) RecordTimeSkippingTransition(transition *chasm.TimeSkippingTransition) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RecordTimeSkippingTransition", transition)
+}
+
+// RecordTimeSkippingTransition indicates an expected call of RecordTimeSkippingTransition.
+func (mr *MockMutableStateMockRecorder) RecordTimeSkippingTransition(transition any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordTimeSkippingTransition", reflect.TypeOf((*MockMutableState)(nil).RecordTimeSkippingTransition), transition)
+}
+
 // RefreshExpirationTimeoutTask mocks base method.
 func (m *MockMutableState) RefreshExpirationTimeoutTask(ctx context.Context) error {
 	m.ctrl.T.Helper()
@@ -3835,6 +3847,22 @@ func (m *MockMutableState) UpdateDuplicatedResource(resourceDedupKey definition.
 func (mr *MockMutableStateMockRecorder) UpdateDuplicatedResource(resourceDedupKey any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDuplicatedResource", reflect.TypeOf((*MockMutableState)(nil).UpdateDuplicatedResource), resourceDedupKey)
+}
+
+// UpdateLastRunningClock mocks base method.
+func (m *MockMutableState) UpdateLastRunningClock(arg0 []*persistence0.WorkflowEvents) (*persistence.WorkflowExecutionInfo, []*persistence0.WorkflowEvents, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateLastRunningClock", arg0)
+	ret0, _ := ret[0].(*persistence.WorkflowExecutionInfo)
+	ret1, _ := ret[1].([]*persistence0.WorkflowEvents)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// UpdateLastRunningClock indicates an expected call of UpdateLastRunningClock.
+func (mr *MockMutableStateMockRecorder) UpdateLastRunningClock(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateLastRunningClock", reflect.TypeOf((*MockMutableState)(nil).UpdateLastRunningClock), arg0)
 }
 
 // UpdateResetRunID mocks base method.

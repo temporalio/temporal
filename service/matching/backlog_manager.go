@@ -46,6 +46,10 @@ type (
 		BacklogCountHint() int64
 		BacklogStatus() *taskqueuepb.TaskQueueStatus
 		BacklogStatsByPriority() map[int32]*taskqueuepb.TaskQueueStats
+		// NonNegligibleBacklogPriority returns the highest-priority backlog old enough to be
+		// non-negligible. It returns 0 as a sentinel when no such backlog exists; normalized
+		// priority keys start at 1.
+		NonNegligibleBacklogPriority() priorityKey
 		InternalStatus() []*taskqueuespb.InternalTaskQueueStatus
 		// FinalGC does a final gc pass before unloading.
 		// Used when unloading a draining queue that won't be reloaded.
@@ -115,8 +119,7 @@ func (c *backlogManagerImpl) signalIfFatal(err error) bool {
 	if err == nil {
 		return false
 	}
-	var condfail *persistence.ConditionFailedError
-	if errors.As(err, &condfail) {
+	if _, ok := errors.AsType[*persistence.ConditionFailedError](err); ok {
 		c.metricsHandler.Counter(metrics.ConditionFailedErrorPerTaskQueueCounter.Name()).Record(1)
 		c.skipFinalUpdate.Store(true)
 		c.pqMgr.UnloadFromPartitionManager(unloadCauseConflict)
@@ -205,6 +208,14 @@ func (c *backlogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb.Tas
 			ApproximateBacklogAge:   durationpb.New(c.taskReader.getBacklogHeadAge()),
 		},
 	}
+}
+
+// NonNegligibleBacklogPriority returns 0 when the backlog is absent or too new to be non-negligible.
+func (c *backlogManagerImpl) NonNegligibleBacklogPriority() priorityKey {
+	if c.taskReader.getBacklogHeadAge() < c.config.BacklogNegligibleAge() {
+		return 0
+	}
+	return c.config.DefaultPriorityKey
 }
 
 func (c *backlogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQueueStatus {

@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/workflowresend"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
@@ -55,6 +56,7 @@ type (
 		VersionMembershipCache          worker_versioning.VersionMembershipAndReactivationStatusCache
 		WorkerDeploymentClient          workerdeployment.Client
 		RoutingInfoCache                worker_versioning.RoutingInfoCache
+		WorkflowResendScheduler         workflowresend.Scheduler `optional:"true"`
 	}
 
 	historyEngineFactory struct {
@@ -94,5 +96,6 @@ func (f *historyEngineFactory) CreateEngine(
 		f.PersistenceRateLimiter,
 		f.TestHooks,
 		f.ChasmEngine,
+		WithWorkflowResendScheduler(f.WorkflowResendScheduler),
 	)
 }

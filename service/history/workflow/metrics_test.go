@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/clock"
@@ -20,6 +21,212 @@ import (
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func TestRecordWorkflowTaskMetrics(t *testing.T) {
+	for _, tc := range []struct {
+		name                      string
+		breakdownMetricsByBuildID bool
+		expectedDeploymentNameTag string
+		expectedBuildIDTag        string
+	}{
+		{
+			name:                      "breakdown enabled",
+			breakdownMetricsByBuildID: true,
+			expectedDeploymentNameTag: "deployment",
+			expectedBuildIDTag:        "build-id",
+		},
+		{
+			name:                      "breakdown disabled",
+			breakdownMetricsByBuildID: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			handler := metricstest.NewCaptureHandler()
+			capture := handler.StartCapture()
+			defer handler.StopCapture(capture)
+
+			config := &configs.Config{
+				BreakdownMetricsByBuildID: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(tc.breakdownMetricsByBuildID),
+			}
+			completion := WorkflowTaskCompletionMetrics{
+				VersioningInfo: VersioningMetricContext{
+					Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+					DeploymentVersion: &deploymentspb.WorkerDeploymentVersion{
+						DeploymentName: "deployment",
+						BuildId:        "build-id",
+					},
+				},
+				Attempt: 1,
+			}
+
+			RecordWorkflowTaskCompletedMetrics(
+				config,
+				handler,
+				namespace.Name("test-namespace"),
+				"test-task-queue",
+				completion,
+			)
+			RecordWorkflowTaskFailedMetrics(
+				config,
+				handler,
+				namespace.Name("test-namespace"),
+				"test-task-queue",
+				metrics.HistoryRespondWorkflowTaskFailedScope,
+				enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE.String(),
+				completion,
+			)
+
+			snapshot := capture.Snapshot()
+			for _, metricName := range []string{
+				metrics.WorkflowTasksCompleted.Name(),
+				metrics.FailedWorkflowTasksCounter.Name(),
+			} {
+				recordings := snapshot[metricName]
+				require.Len(t, recordings, 1)
+				require.Equal(t, tc.expectedDeploymentNameTag, recordings[0].Tags["worker_deployment_name"])
+				require.Equal(t, tc.expectedBuildIDTag, recordings[0].Tags["worker_build_id"])
+			}
+
+			failedRecording := snapshot[metrics.FailedWorkflowTasksCounter.Name()][0]
+			require.Equal(t, metrics.HistoryRespondWorkflowTaskFailedScope, failedRecording.Tags[metrics.OperationTagName])
+			require.Equal(
+				t,
+				enumspb.WORKFLOW_TASK_FAILED_CAUSE_WORKFLOW_WORKER_UNHANDLED_FAILURE.String(),
+				failedRecording.Tags[metrics.FailureTagName],
+			)
+		})
+	}
+}
+
+func TestRecordActivityCompletionMetrics_WorkerDeploymentTags(t *testing.T) {
+	for _, tc := range []struct {
+		name                      string
+		breakdownMetricsByBuildID bool
+		expectedDeploymentNameTag string
+		expectedBuildIDTag        string
+	}{
+		{
+			name:                      "breakdown enabled",
+			breakdownMetricsByBuildID: true,
+			expectedDeploymentNameTag: "deployment",
+			expectedBuildIDTag:        "build-id",
+		},
+		{
+			name:                      "breakdown disabled",
+			breakdownMetricsByBuildID: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			controller := gomock.NewController(t)
+			handler := metricstest.NewCaptureHandler()
+			capture := handler.StartCapture()
+			defer handler.StopCapture(capture)
+
+			config := &configs.Config{
+				BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+				BreakdownMetricsByBuildID: func(namespace string, taskQueue string, taskQueueType enumspb.TaskQueueType) bool {
+					require.Equal(t, "test-namespace", namespace)
+					require.Equal(t, "test-task-queue", taskQueue)
+					require.Equal(t, enumspb.TASK_QUEUE_TYPE_ACTIVITY, taskQueueType)
+					return tc.breakdownMetricsByBuildID
+				},
+			}
+			shard := historyi.NewMockShardContext(controller)
+			shard.EXPECT().GetConfig().Return(config).Times(4)
+			shard.EXPECT().GetMetricsHandler().Return(handler).Times(4)
+			shard.EXPECT().GetTimeSource().Return(clock.NewRealTimeSource()).Times(4)
+
+			completion := ActivityCompletionMetrics{
+				Status: ActivityStatusFailed,
+				Closed: true,
+				VersioningInfo: VersioningMetricContext{
+					Behavior: enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+					DeploymentVersion: &deploymentspb.WorkerDeploymentVersion{
+						DeploymentName: "deployment",
+						BuildId:        "build-id",
+					},
+				},
+				AttemptStartedTime: time.Now().Add(-time.Minute),
+				FirstScheduledTime: time.Now().Add(-2 * time.Minute),
+			}
+			RecordActivityCompletionMetrics(
+				shard,
+				namespace.Name("test-namespace"),
+				"test-task-queue",
+				completion,
+			)
+			completion.Status = ActivityStatusSucceeded
+			RecordActivityCompletionMetrics(
+				shard,
+				namespace.Name("test-namespace"),
+				"test-task-queue",
+				completion,
+			)
+			completion.Status = ActivityStatusCanceled
+			RecordActivityCompletionMetrics(
+				shard,
+				namespace.Name("test-namespace"),
+				"test-task-queue",
+				completion,
+			)
+			completion.Status = ActivityStatusTimeout
+			completion.TimerType = enumspb.TIMEOUT_TYPE_HEARTBEAT
+			RecordActivityCompletionMetrics(
+				shard,
+				namespace.Name("test-namespace"),
+				"test-task-queue",
+				completion,
+			)
+
+			snapshot := capture.Snapshot()
+			for _, metricName := range []string{
+				metrics.ActivityTaskFail.Name(),
+				metrics.ActivityFail.Name(),
+				metrics.ActivitySuccess.Name(),
+				metrics.ActivityCancel.Name(),
+				metrics.ActivityTaskTimeout.Name(),
+				metrics.ActivityTimeout.Name(),
+			} {
+				recordings := snapshot[metricName]
+				require.Len(t, recordings, 1)
+				require.Equal(t, tc.expectedDeploymentNameTag, recordings[0].Tags["worker_deployment_name"])
+				require.Equal(t, tc.expectedBuildIDTag, recordings[0].Tags["worker_build_id"])
+				require.Equal(
+					t,
+					enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE.String(),
+					recordings[0].Tags["versioning_behavior"],
+				)
+			}
+			for metricName, expectedCount := range map[string]int{
+				metrics.ActivityE2ELatency.Name():             3,
+				metrics.ActivityStartToCloseLatency.Name():    3,
+				metrics.ActivityScheduleToCloseLatency.Name(): 4,
+			} {
+				recordings := snapshot[metricName]
+				require.Len(t, recordings, expectedCount)
+				for _, recording := range recordings {
+					require.Equal(t, tc.expectedDeploymentNameTag, recording.Tags["worker_deployment_name"])
+					require.Equal(t, tc.expectedBuildIDTag, recording.Tags["worker_build_id"])
+					require.Equal(
+						t,
+						enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE.String(),
+						recording.Tags["versioning_behavior"],
+					)
+				}
+			}
+			require.Equal(
+				t,
+				enumspb.TIMEOUT_TYPE_HEARTBEAT.String(),
+				snapshot[metrics.ActivityTaskTimeout.Name()][0].Tags["timeout_type"],
+			)
+			require.Equal(
+				t,
+				enumspb.TIMEOUT_TYPE_HEARTBEAT.String(),
+				snapshot[metrics.ActivityTimeout.Name()][0].Tags["timeout_type"],
+			)
+		})
+	}
+}
 
 func TestEmitWorkflowCompletionStats_WorkflowDuration(t *testing.T) {
 	logger := log.NewTestLogger()
@@ -205,7 +412,10 @@ func TestRecordActivityCompletionMetrics_TimeoutWithStartedTimeSkipsLatency(t *t
 	expectActivityMetricsScope(handler, metrics.TimerActiveTaskActivityTimeoutScope)
 
 	timeoutCounter := metrics.NewMockCounterIface(controller)
-	timeoutCounter.EXPECT().Record(int64(1), metrics.StringTag("timeout_type", enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String())).Times(1)
+	timeoutCounter.EXPECT().Record(
+		int64(1),
+		metrics.StringTag("timeout_type", enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()),
+	).Times(1)
 	handler.EXPECT().Counter(metrics.ActivityTaskTimeout.Name()).Return(timeoutCounter)
 
 	RecordActivityCompletionMetrics(
@@ -228,7 +438,10 @@ func TestRecordActivityCompletionMetrics_TimeoutWithMissingStartedTimeSkipsLaten
 	expectActivityMetricsScope(handler, metrics.TimerActiveTaskActivityTimeoutScope)
 
 	timeoutCounter := metrics.NewMockCounterIface(controller)
-	timeoutCounter.EXPECT().Record(int64(1), metrics.StringTag("timeout_type", enumspb.TIMEOUT_TYPE_HEARTBEAT.String())).Times(1)
+	timeoutCounter.EXPECT().Record(
+		int64(1),
+		metrics.StringTag("timeout_type", enumspb.TIMEOUT_TYPE_HEARTBEAT.String()),
+	).Times(1)
 	handler.EXPECT().Counter(metrics.ActivityTaskTimeout.Name()).Return(timeoutCounter)
 
 	RecordActivityCompletionMetrics(
@@ -251,6 +464,7 @@ func newActivityMetricsTestShard(
 	shard.EXPECT().GetMetricsHandler().Return(handler).Times(1)
 	shard.EXPECT().GetConfig().Return(&configs.Config{
 		BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+		BreakdownMetricsByBuildID:   dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
 	}).Times(1)
 	shard.EXPECT().GetTimeSource().Return(clock.NewRealTimeSource()).Times(1)
 	return shard
@@ -261,6 +475,9 @@ func expectActivityMetricsScope(handler *metrics.MockHandler, operation string) 
 		metrics.OperationTag(operation),
 		metrics.WorkflowTypeTag("test-workflow"),
 		metrics.ActivityTypeTag("test-activity"),
+		metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
+		metrics.WorkerDeploymentNameTag("", true),
+		metrics.WorkerDeploymentBuildIDTag("", true),
 		metrics.NamespaceTag("test-namespace"),
 		metrics.UnsafeTaskQueueTag("test-task-queue"),
 	}

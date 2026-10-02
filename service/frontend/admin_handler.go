@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	otellog "go.opentelemetry.io/otel/log"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -85,6 +86,7 @@ type (
 		status int32
 
 		logger                     log.Logger
+		eventLogger                otellog.Logger
 		numberOfHistoryShards      int32
 		config                     *Config
 		namespaceDLQHandler        nsreplication.DLQMessageHandler
@@ -123,6 +125,7 @@ type (
 		ReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
 		visibilityMgr                       manager.VisibilityManager
 		Logger                              log.Logger
+		EventLogger                         otellog.Logger
 		TaskManager                         persistence.TaskManager
 		FairTaskManager                     persistence.FairTaskManager
 		PersistenceExecutionManager         persistence.ExecutionManager
@@ -151,9 +154,7 @@ type (
 	}
 )
 
-var (
-	_ adminservice.AdminServiceServer = (*AdminHandler)(nil)
-)
+var _ adminservice.AdminServiceServer = (*AdminHandler)(nil)
 
 // NewAdminHandler creates a gRPC handler for the adminservice
 func NewAdminHandler(
@@ -164,7 +165,6 @@ func NewAdminHandler(
 		primitives.HistoryService,
 		args.MembershipMonitor,
 		args.Config.HistoryHostErrorPercentage,
-		args.Config.HistoryHostSelfErrorProportion,
 		func(ctx context.Context, hostAddress string) (*historyservice.DeepHealthCheckResponse, error) {
 			return args.HistoryClient.DeepHealthCheck(ctx, &historyservice.DeepHealthCheckRequest{HostAddress: hostAddress})
 		},
@@ -173,6 +173,7 @@ func NewAdminHandler(
 
 	return &AdminHandler{
 		logger:                     args.Logger,
+		eventLogger:                args.EventLogger,
 		status:                     common.DaemonStatusInitialized,
 		numberOfHistoryShards:      args.PersistenceConfig.NumHistoryShards,
 		config:                     args.Config,
@@ -242,8 +243,9 @@ func (adh *AdminHandler) DeepHealthCheck(
 	}
 
 	return &adminservice.DeepHealthCheckResponse{
-		State:    result.State,
-		Services: services,
+		State:           result.State,
+		Services:        services,
+		UnenforcedState: result.ServiceDetail.GetUnenforcedState(),
 	}, nil
 }
 
@@ -398,8 +400,7 @@ func (adh *AdminHandler) unaliasAndValidateSearchAttributes(historyBatches []*co
 
 			unaliasedSas, err := searchattribute.UnaliasFields(adh.saMapperProvider, sas, nsName.String())
 			if err != nil {
-				var invArgErr *serviceerror.InvalidArgument
-				if !errors.As(err, &invArgErr) {
+				if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); !ok {
 					return nil, err
 				}
 				// Mapper returns InvalidArgument if alias is not found. It means that history has field names, not aliases.
@@ -471,7 +472,6 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 		SkipForceReload: request.GetSkipForceReload(),
 		ArchetypeId:     archetypeID,
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -646,7 +646,6 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
 ) error {
-
 	execution := request.Execution
 	if execution.GetWorkflowId() == "" {
 		return workflow.ErrWorkflowIDNotSet
@@ -864,7 +863,32 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 	ctx context.Context,
 	request *adminservice.AddOrUpdateRemoteClusterRequest,
 ) (_ *adminservice.AddOrUpdateRemoteClusterResponse, retError error) {
+	var (
+		lifecycleEvent     *remoteClusterLifecycleEvent
+		remoteResponse     *adminservice.DescribeClusterResponse
+		persistedBefore    *persistence.GetClusterMetadataResponse
+		persistenceRequest *persistence.SaveClusterMetadataRequest
+	)
+	// Bracket deferred emission with panic capture: the inner capture converts handler panics
+	// into retError for the event, while the outer capture recovers panics from emission itself.
 	defer log.CapturePanic(adh.logger, &retError)
+	defer func() {
+		lifecycleEvent.emitUpsertFailure(retError, remoteResponse, persistedBefore, persistenceRequest)
+	}()
+	defer log.CapturePanic(adh.logger, &retError)
+	lifecycleEvent = newRemoteClusterUpsertLifecycleEvent(
+		ctx,
+		adh.eventLogger,
+		adh.clusterMetadata,
+		adh.config,
+		remoteClusterAPIAdmin,
+		remoteClusterUpsertRequestFields{
+			FrontendAddress:               request.GetFrontendAddress(),
+			FrontendHTTPAddress:           request.GetFrontendHttpAddress(), //nolint:staticcheck // Audit the deprecated API request as received.
+			EnableRemoteClusterConnection: request.GetEnableRemoteClusterConnection(),
+			EnableReplication:             request.GetEnableReplication(),
+		},
+	)
 
 	adminClient := adh.clientFactory.NewRemoteAdminClientWithTimeout(
 		request.GetFrontendAddress(),
@@ -874,6 +898,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 
 	// Fetch cluster metadata from remote cluster
 	resp, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
+	remoteResponse = resp
 	if err != nil {
 		return nil, err
 	}
@@ -905,14 +930,14 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 	)
 	switch err.(type) {
 	case nil:
+		persistedBefore = clusterData
 		updateRequestVersion = clusterData.Version
 	case *serviceerror.NotFound:
 		updateRequestVersion = 0
 	default:
 		return nil, err
 	}
-
-	applied, err := clusterMetadataMrg.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
+	saveRequest := &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: &persistencespb.ClusterMetadata{
 			ClusterName:              resp.GetClusterName(),
 			HistoryShardCount:        resp.GetHistoryShardCount(),
@@ -927,7 +952,9 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 			Tags:                     resp.GetTags(),
 		},
 		Version: updateRequestVersion,
-	})
+	}
+	persistenceRequest = saveRequest
+	applied, err := clusterMetadataMrg.SaveClusterMetadata(ctx, saveRequest)
 	if err != nil {
 		return nil, err
 	}
@@ -935,6 +962,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 		return nil, serviceerror.NewInvalidArgument(
 			"Cannot update remote cluster due to update immutable fields")
 	}
+	lifecycleEvent.emitUpsertSuccess(persistedBefore, persistenceRequest)
 	return &adminservice.AddOrUpdateRemoteClusterResponse{}, nil
 }
 
@@ -944,18 +972,42 @@ func (adh *AdminHandler) RemoveRemoteCluster(
 	ctx context.Context,
 	request *adminservice.RemoveRemoteClusterRequest,
 ) (_ *adminservice.RemoveRemoteClusterResponse, retError error) {
+	var (
+		lifecycleEvent     *remoteClusterLifecycleEvent
+		cachedBefore       cachedRemoteClusterLookup
+		persistenceRequest *persistence.DeleteClusterMetadataRequest
+	)
+	// Bracket deferred emission with panic capture: the inner capture converts handler panics
+	// into retError for the event, while the outer capture recovers panics from emission itself.
 	defer log.CapturePanic(adh.logger, &retError)
-
-	if err := validateClusterNotInUseByNamespaces(adh.namespaceRegistry, adh.clusterMetadata.GetCurrentClusterName(), request.GetClusterName()); err != nil {
-		return nil, err
-	}
-
-	if err := adh.clusterMetadataManager.DeleteClusterMetadata(
+	defer func() {
+		lifecycleEvent.emitRemoveFailure(retError, cachedBefore, persistenceRequest)
+	}()
+	defer log.CapturePanic(adh.logger, &retError)
+	clusterName := request.GetClusterName()
+	lifecycleEvent = newRemoteClusterRemoveLifecycleEvent(
 		ctx,
-		&persistence.DeleteClusterMetadataRequest{ClusterName: request.GetClusterName()},
-	); err != nil {
+		adh.eventLogger,
+		adh.clusterMetadata,
+		adh.config,
+		remoteClusterAPIAdmin,
+		remoteClusterRemoveRequestFields{ClusterName: clusterName},
+	)
+	if lifecycleEvent != nil {
+		// Admin does not use the cluster cache for removal; this lookup is audit-only.
+		cachedBefore = lookupCachedRemoteCluster(adh.clusterMetadata, clusterName)
+	}
+
+	if err := validateClusterNotInUseByNamespaces(adh.namespaceRegistry, adh.clusterMetadata.GetCurrentClusterName(), clusterName); err != nil {
 		return nil, err
 	}
+
+	deleteRequest := &persistence.DeleteClusterMetadataRequest{ClusterName: clusterName}
+	persistenceRequest = deleteRequest
+	if err := adh.clusterMetadataManager.DeleteClusterMetadata(ctx, deleteRequest); err != nil {
+		return nil, err
+	}
+	lifecycleEvent.emitRemoveSuccess(cachedBefore, persistenceRequest)
 	return &adminservice.RemoveRemoteClusterResponse{}, nil
 }
 
@@ -1471,7 +1523,6 @@ func (adh *AdminHandler) DescribeTaskQueuePartition(
 		ReportPollers:                 true,
 		ReportInternalTaskQueueStatus: true,
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -1506,7 +1557,6 @@ func (adh *AdminHandler) ForceUnloadTaskQueuePartition(
 		NamespaceId:        namespaceID.String(),
 		TaskQueuePartition: request.GetTaskQueuePartition(),
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -1678,7 +1728,6 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 			if err != nil {
 				logger.Error("Failed to close AdminStreamReplicationMessages server", tag.Error(err))
 			}
-
 		}()
 
 		for !shutdownChan.IsShutdown() {
@@ -1734,7 +1783,6 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 				}); err != nil {
 					if err != io.EOF {
 						logger.Info("AdminStreamReplicationMessages server -> client encountered error", tag.Error(err))
-
 					}
 					return
 				}
@@ -2251,23 +2299,32 @@ func (adh *AdminHandler) migrateScheduleToWorkflow(
 			},
 		},
 	})
+	info := descResp.GetWorkflowExecutionInfo()
 	switch {
-	case common.IsNotFoundError(err):
-	case err != nil:
+	case err != nil && !common.IsNotFoundError(err):
 		return nil, err
-	case descResp.GetWorkflowExecutionInfo().GetType().GetName() == dummy.DummyWFTypeName:
-		sentinelIdleTimeRemaining := max(time.Until(descResp.GetWorkflowExecutionInfo().GetStartTime().AsTime().Add(chasmscheduler.SentinelIdleTime)), 0)
+	case common.IsNotFoundError(err) || info.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
+		// A closed workflow does not occupy the V1 ID: the create path only treats
+		// RUNNING workflows as occupying it (isRealSchedulerInV1KeySpace), and an
+		// expired sentinel completes rather than disappearing, staying describable
+		// for the namespace's whole retention period. Blocking on it here would
+		// stall rollback for days instead of the 15 minutes a sentinel reserves.
+	case info.GetType().GetName() == dummy.DummyWFTypeName:
+		startTime := info.GetStartTime().AsTime()
 		adh.logger.Warn(
 			"schedule migration to workflow blocked by workflow sentinel",
 			tag.ScheduleID(request.GetScheduleId()),
-			tag.Duration("sentinel-idle-time", sentinelIdleTimeRemaining),
+			tag.Duration("sentinel-idle-time", max(time.Until(startTime.Add(chasmscheduler.SentinelIdleTime)), 0)),
+			// Age disambiguates a sentinel still inside its idle window from one
+			// running past it (idle-time reads 0s in both cases).
+			tag.Duration("sentinel-age", time.Since(startTime)),
 		)
 		return nil, chasmscheduler.ErrSentinelBlocked
 	default:
 		adh.logger.Warn(
 			"schedule migration to workflow found existing workflow",
 			tag.ScheduleID(request.GetScheduleId()),
-			tag.WorkflowType(descResp.GetWorkflowExecutionInfo().GetType().GetName()),
+			tag.WorkflowType(info.GetType().GetName()),
 		)
 	}
 
