@@ -143,9 +143,8 @@ func NewOutboundQueueFactory(params outboundQueueFactoryParams) QueueFactory {
 								Task: queues.NewCircuitBreakerExecutable(
 									e,
 									params.CircuitBreakerPool.Get(key),
-									// Nexus and callback tasks can share a destination; the task group tells their blocked
-									// counts apart. Tagged here rather than on taggedMetricsHandler so that the rate
-									// limiter's wait-time histogram doesn't get a series per task group.
+									// Nexus and callback tasks can share a destination. The task group tag separates their blocked
+									// counts. Only this handler gets the tag, which keeps it off the rate limiter's wait-time histogram.
 									taggedMetricsHandler.WithTags(metrics.TaskGroupTag(key.TaskGroup)),
 								),
 							},
