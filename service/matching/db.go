@@ -34,6 +34,10 @@ const (
 	// Subqueue zero corresponds to "the queue" before migrating metadata to subqueues.
 	// For backwards compatibility, some operations only apply to subqueue zero for now.
 	subqueueZero = subqueueIndex(0)
+
+	// noMetadataCondition is used with updateTaskQueueConditionalLocked to indicate no
+	// condition on the previous metadata (fingerprint).
+	noMetadataCondition = 0
 )
 
 type (
@@ -164,7 +168,7 @@ func (db *taskQueueDB) RenewLease(
 			return taskQueueState{}, err
 		}
 	} else {
-		if err := db.updateTaskQueueLocked(ctx, true); err != nil {
+		if err := db.updateTaskQueueConditionalLocked(ctx, true, noMetadataCondition); err != nil {
 			return taskQueueState{}, err
 		}
 	}
@@ -268,12 +272,14 @@ func (db *taskQueueDB) createTaskQueueLocked(ctx context.Context) error {
 	return nil
 }
 
-func (db *taskQueueDB) updateTaskQueueLocked(ctx context.Context, incrementRangeID bool) error {
-	return db.updateTaskQueueConditionalLocked(ctx, incrementRangeID, 0)
+// updateTaskQueueLocked writes task queue metadata (with no rangeid update and no other
+// condition on the transaction).
+func (db *taskQueueDB) updateTaskQueueLocked(ctx context.Context) error {
+	return db.updateTaskQueueConditionalLocked(ctx, false, noMetadataCondition)
 }
 
-// updateTaskQueueConditionalLocked is like updateTaskQueueLocked, but if prevFingerprint is
-// non-zero, the update is also conditional on the stored metadata fingerprint matching it.
+// updateTaskQueueConditionalLocked writes task queue metadata with an optional rangeid
+// increment and an optional condition on the metadata in the transaction.
 func (db *taskQueueDB) updateTaskQueueConditionalLocked(ctx context.Context, incrementRangeID bool, prevFingerprint uint64) error {
 	newRangeID := db.rangeID
 	if incrementRangeID {
@@ -314,7 +320,7 @@ func (db *taskQueueDB) OldUpdateState(
 	prevAckLevel := db.subqueues[subqueueZero].AckLevel
 	db.subqueues[subqueueZero].AckLevel = ackLevel
 
-	err := db.updateTaskQueueLocked(ctx, false)
+	err := db.updateTaskQueueLocked(ctx)
 	if err != nil {
 		db.subqueues[subqueueZero].AckLevel = prevAckLevel
 	}
@@ -349,7 +355,7 @@ func (db *taskQueueDB) SyncState(ctx context.Context) error {
 		return db.verifyOwnershipLocked(ctx)
 	}
 
-	return db.updateTaskQueueLocked(ctx, false)
+	return db.updateTaskQueueLocked(ctx)
 }
 
 func (db *taskQueueDB) verifyOwnershipLocked(ctx context.Context) error {
@@ -537,7 +543,7 @@ func (db *taskQueueDB) SetOtherHasTasks(ctx context.Context, value bool) error {
 	}
 	db.otherHasTasks = value
 	db.lastChange = time.Now()
-	return db.updateTaskQueueLocked(ctx, false)
+	return db.updateTaskQueueLocked(ctx)
 }
 
 // UpdateScaleState sets the partition scale state (in memory). If syncToDB is true, it also tries to persist it to the DB.
@@ -548,7 +554,7 @@ func (db *taskQueueDB) UpdateScaleState(ctx context.Context, scaleState *persist
 	db.scaleState = scaleState
 	db.lastChange = time.Now()
 	if syncToDB {
-		return db.updateTaskQueueLocked(ctx, false)
+		return db.updateTaskQueueLocked(ctx)
 	}
 	return nil
 }
@@ -844,7 +850,7 @@ func (db *taskQueueDB) AllocateSubqueue(
 	db.subqueues = append(db.subqueues, newSubqueue)
 
 	// ensure written to metadata before returning
-	err := db.updateTaskQueueLocked(ctx, false)
+	err := db.updateTaskQueueLocked(ctx)
 	if err != nil {
 		// If this was a conflict, caller will shut down partition. Otherwise, we don't know
 		// for sure if this write made it to persistence or not. We should forget about the new
