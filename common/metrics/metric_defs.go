@@ -1579,9 +1579,9 @@ var (
 		"task_queue_user_data_replication_apply_end_to_end_latency",
 		WithDescription("Latency from source publication to a terminal task queue user data replication apply outcome."),
 	)
-	TaskQueueUserDataReplicationIncomingPerTypeDataDropped = NewCounterDef(
-		"task_queue_user_data_replication_incoming_per_type_data_dropped",
-		WithDescription("The number of task queue user data replication merges that discarded incoming, non-empty per-type data."),
+	TaskQueueUserDataReplicationEqualRevisionConflicts = NewCounterDef(
+		"task_queue_user_data_replication_equal_revision_conflicts",
+		WithDescription("The number of equal-revision conflicts encountered while merging task queue user data replication events."),
 	)
 	ParentClosePolicyProcessorSuccess       = NewCounterDef("parent_close_policy_processor_requests")
 	ParentClosePolicyProcessorFailures      = NewCounterDef("parent_close_policy_processor_errors")
