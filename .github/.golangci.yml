@@ -242,6 +242,11 @@ linters:
       - text: "SA1019: go.temporal.io/server/service/history/hsm/(callbacks|nexusoperations) is deprecated"
         linters:
           - staticcheck
+      # Underscores in method names are allowed in test code.
+      - path: _test\.go|tests/.+\.go|common/testing/
+        text: "ST1003:"
+        linters:
+          - staticcheck
 issues:
   max-issues-per-linter: 0
   max-same-issues: 0
