@@ -3377,11 +3377,13 @@ func (s *WorkflowHandlerSuite) TestStopBatchOperation() {
 		name         string
 		workflowType string
 		division     string
+		taskQueue    string
 	}{
 		{
 			name:         "protobuf batcher workflow",
 			workflowType: batcher.BatchWFTypeProtobufName,
 			division:     batcher.NamespaceDivision,
+			taskQueue:    primitives.PerNSWorkerTaskQueue,
 		},
 		{
 			// Batches started before the protobuf workflow type existed are still
@@ -3389,17 +3391,20 @@ func (s *WorkflowHandlerSuite) TestStopBatchOperation() {
 			name:         "legacy batcher workflow",
 			workflowType: batcher.BatchWFTypeName,
 			division:     batcher.NamespaceDivision,
+			taskQueue:    primitives.PerNSWorkerTaskQueue,
 		},
 		{
 			name:         "admin batcher workflow",
 			workflowType: batcher.BatchWFTypeProtobufName,
 			division:     batcher.AdminNamespaceDivision,
+			taskQueue:    primitives.PerNSWorkerTaskQueue,
 		},
 	} {
 		s.Run(tc.name, func() {
 			s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 				&historyservice.DescribeWorkflowExecutionResponse{
 					WorkflowExecutionInfo: batchJobExecutionInfo(jobID, runID, tc.workflowType, tc.division),
+					ExecutionConfig:       batchJobExecutionConfig(tc.taskQueue),
 				}, nil)
 			s.mockHistoryClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
 				func(
@@ -3444,6 +3449,14 @@ func batchJobSearchAttributes() *commonpb.SearchAttributes {
 	}
 }
 
+// batchJobExecutionConfig supplies the internal task queue describeBatchJob
+// requires of a batch job, since only the batcher worker polls it.
+func batchJobExecutionConfig(taskQueue string) *workflowpb.WorkflowExecutionConfig {
+	return &workflowpb.WorkflowExecutionConfig{
+		TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
+	}
+}
+
 func batchJobExecutionInfo(jobID, runID, workflowType, division string) *workflowpb.WorkflowExecutionInfo {
 	info := &workflowpb.WorkflowExecutionInfo{
 		Execution: &commonpb.WorkflowExecution{WorkflowId: jobID, RunId: runID},
@@ -3482,6 +3495,7 @@ func (s *WorkflowHandlerSuite) TestStopBatchOperation_NotBatchJob() {
 		name         string
 		workflowType string
 		division     string
+		taskQueue    string
 	}{
 		{
 			// The attack this guards against: a user workflow whose ID is passed
@@ -3489,6 +3503,7 @@ func (s *WorkflowHandlerSuite) TestStopBatchOperation_NotBatchJob() {
 			name:         "user workflow",
 			workflowType: "my-user-workflow",
 			division:     "",
+			taskQueue:    primitives.PerNSWorkerTaskQueue,
 		},
 		{
 			// A batcher workflow type alone is not enough: the type name is
@@ -3496,16 +3511,28 @@ func (s *WorkflowHandlerSuite) TestStopBatchOperation_NotBatchJob() {
 			name:         "batcher workflow type without the batcher division",
 			workflowType: batcher.BatchWFTypeProtobufName,
 			division:     "",
+			taskQueue:    primitives.PerNSWorkerTaskQueue,
 		},
 		{
 			name:         "batcher workflow type in another division",
 			workflowType: batcher.BatchWFTypeProtobufName,
 			division:     "TemporalScheduler",
+			taskQueue:    primitives.PerNSWorkerTaskQueue,
 		},
 		{
 			name:         "batcher division without a batcher workflow type",
 			workflowType: "my-user-workflow",
 			division:     batcher.NamespaceDivision,
+			taskQueue:    primitives.PerNSWorkerTaskQueue,
+		},
+		{
+			// The workflow type and namespace division are both caller-settable,
+			// so a user can start a batch-shaped workflow of their own. Only the
+			// internal task queue the batcher worker polls rules that out.
+			name:         "batcher workflow shape on a caller's task queue",
+			workflowType: batcher.BatchWFTypeProtobufName,
+			division:     batcher.NamespaceDivision,
+			taskQueue:    "my-user-task-queue",
 		},
 	} {
 		s.Run(tc.name, func() {
@@ -3514,6 +3541,7 @@ func (s *WorkflowHandlerSuite) TestStopBatchOperation_NotBatchJob() {
 			s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 				&historyservice.DescribeWorkflowExecutionResponse{
 					WorkflowExecutionInfo: batchJobExecutionInfo(jobID, runID, tc.workflowType, tc.division),
+					ExecutionConfig:       batchJobExecutionConfig(tc.taskQueue),
 				}, nil)
 
 			request := &workflowservice.StopBatchOperationRequest{
@@ -3588,6 +3616,7 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_CompletedStatus() {
 						Type:             batchJobWorkflowType(),
 						SearchAttributes: batchJobSearchAttributes(),
 					},
+					ExecutionConfig: batchJobExecutionConfig(primitives.PerNSWorkerTaskQueue),
 				}, nil
 			},
 		)
@@ -3631,6 +3660,7 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_CompletedStatus() {
 						Type:             batchJobWorkflowType(),
 						SearchAttributes: batchJobSearchAttributes(),
 					},
+					ExecutionConfig: batchJobExecutionConfig(primitives.PerNSWorkerTaskQueue),
 				}, nil
 			},
 		)
@@ -3692,6 +3722,7 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_RunningStatus() {
 					Type:             batchJobWorkflowType(),
 					SearchAttributes: batchJobSearchAttributes(),
 				},
+				ExecutionConfig: batchJobExecutionConfig(primitives.PerNSWorkerTaskQueue),
 				PendingActivities: []*workflowpb.PendingActivityInfo{
 					{
 						HeartbeatDetails: hbdPayload,
@@ -3752,6 +3783,7 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_FailedStatus() {
 					Type:             batchJobWorkflowType(),
 					SearchAttributes: batchJobSearchAttributes(),
 				},
+				ExecutionConfig: batchJobExecutionConfig(primitives.PerNSWorkerTaskQueue),
 			}, nil
 		},
 	)
@@ -3813,6 +3845,7 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_QueryAndExecutions() {
 						Type:             batchJobWorkflowType(),
 						SearchAttributes: batchJobSearchAttributes(),
 					},
+					ExecutionConfig: batchJobExecutionConfig(primitives.PerNSWorkerTaskQueue),
 				}, nil
 			},
 		)
@@ -3848,6 +3881,7 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_QueryAndExecutions() {
 						Type:             batchJobWorkflowType(),
 						SearchAttributes: batchJobSearchAttributes(),
 					},
+					ExecutionConfig: batchJobExecutionConfig(primitives.PerNSWorkerTaskQueue),
 				}, nil
 			},
 		)
@@ -3887,6 +3921,7 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_NotBatchJob() {
 		name         string
 		workflowType string
 		division     string
+		taskQueue    string
 	}{
 		{
 			// The probe this guards against: a user workflow whose ID is passed
@@ -3894,6 +3929,7 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_NotBatchJob() {
 			name:         "user workflow",
 			workflowType: "my-user-workflow",
 			division:     "",
+			taskQueue:    primitives.PerNSWorkerTaskQueue,
 		},
 		{
 			// A batcher workflow type alone is not enough: the type name is
@@ -3901,22 +3937,35 @@ func (s *WorkflowHandlerSuite) TestDescribeBatchOperation_NotBatchJob() {
 			name:         "batcher workflow type without the batcher division",
 			workflowType: batcher.BatchWFTypeProtobufName,
 			division:     "",
+			taskQueue:    primitives.PerNSWorkerTaskQueue,
 		},
 		{
 			name:         "batcher workflow type in another division",
 			workflowType: batcher.BatchWFTypeProtobufName,
 			division:     "TemporalScheduler",
+			taskQueue:    primitives.PerNSWorkerTaskQueue,
 		},
 		{
 			name:         "batcher division without a batcher workflow type",
 			workflowType: "my-user-workflow",
 			division:     batcher.NamespaceDivision,
+			taskQueue:    primitives.PerNSWorkerTaskQueue,
+		},
+		{
+			// The workflow type and namespace division are both caller-settable,
+			// so a user can start a batch-shaped workflow of their own. Only the
+			// internal task queue the batcher worker polls rules that out.
+			name:         "batcher workflow shape on a caller's task queue",
+			workflowType: batcher.BatchWFTypeProtobufName,
+			division:     batcher.NamespaceDivision,
+			taskQueue:    "my-user-task-queue",
 		},
 	} {
 		s.Run(tc.name, func() {
 			s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
 				&historyservice.DescribeWorkflowExecutionResponse{
 					WorkflowExecutionInfo: batchJobExecutionInfo(jobID, runID, tc.workflowType, tc.division),
+					ExecutionConfig:       batchJobExecutionConfig(tc.taskQueue),
 				}, nil)
 
 			request := &workflowservice.DescribeBatchOperationRequest{

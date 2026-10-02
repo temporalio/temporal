@@ -6214,6 +6214,10 @@ func (wh *WorkflowHandler) describeBatchJob(
 		return nil, errBatchJobIDNotValid
 	}
 
+	if resp.GetExecutionConfig().GetTaskQueue().GetName() != primitives.PerNSWorkerTaskQueue {
+		return nil, errBatchJobIDNotValid
+	}
+
 	var division string
 	if divisionPayload, ok := executionInfo.GetSearchAttributes().GetIndexedFields()[sadefs.TemporalNamespaceDivision]; ok {
 		if err := payload.Decode(divisionPayload, &division); err != nil {
