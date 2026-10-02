@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/clock"
 )
 
@@ -25,14 +26,15 @@ func TestStreamBatcher_MinDelay(t *testing.T) {
 		MaxDelay: 400 * time.Millisecond,
 		IdleTime: 1000 * time.Millisecond,
 	}
-	process := func(items []int) (total int) {
-		for _, i := range items {
-			total += i
+	process := func(items []int) []int {
+		results := make([]int, len(items))
+		for i, item := range items {
+			results[i] = 2 * item
 		}
 		clk.Sleep(50 * time.Millisecond)
-		return
+		return results
 	}
-	sb := NewBatcher(process, opts, clk)
+	sb := NewBatcherWithPerItemResults(process, opts, clk)
 
 	var wg sync.WaitGroup
 	wg.Add(3)
@@ -46,7 +48,7 @@ func TestStreamBatcher_MinDelay(t *testing.T) {
 		ctx := context.Background()
 		total, err := sb.Add(ctx, 100)
 		assert.NoError(t, err)
-		assert.Equal(t, 123, total)
+		assert.Equal(t, 200, total)
 		assert.Equal(t, targetMS, clk.Now().UnixMilli())
 	}()
 	go func() {
@@ -55,7 +57,7 @@ func TestStreamBatcher_MinDelay(t *testing.T) {
 		ctx := context.Background()
 		total, err := sb.Add(ctx, 20)
 		assert.NoError(t, err)
-		assert.Equal(t, 123, total)
+		assert.Equal(t, 40, total)
 		assert.Equal(t, targetMS, clk.Now().UnixMilli())
 	}()
 	go func() {
@@ -64,7 +66,7 @@ func TestStreamBatcher_MinDelay(t *testing.T) {
 		ctx := context.Background()
 		total, err := sb.Add(ctx, 3)
 		assert.NoError(t, err)
-		assert.Equal(t, 123, total)
+		assert.Equal(t, 6, total)
 		assert.Equal(t, targetMS, clk.Now().UnixMilli())
 	}()
 
@@ -236,14 +238,11 @@ func TestStreamBatcher_AddTimeout(t *testing.T) {
 		MaxDelay: 400 * time.Millisecond,
 		IdleTime: 1000 * time.Millisecond,
 	}
-	process := func(items []int) (total int) {
-		for _, i := range items {
-			total += i
-		}
+	process := func(items []int) []int {
 		clk.Sleep(5 * time.Second)
-		return
+		return append([]int(nil), items...)
 	}
-	sb := NewBatcher(process, opts, clk)
+	sb := NewBatcherWithPerItemResults(process, opts, clk)
 
 	var wg sync.WaitGroup
 	wg.Go(func() {
@@ -274,6 +273,26 @@ func TestStreamBatcher_AddTimeout(t *testing.T) {
 	time.Sleep(time.Millisecond)
 	clk.AdvanceNext()
 	wg.Wait()
+}
+
+func TestStreamBatcherWrongNumberOfPerItemResults(t *testing.T) {
+	testCases := map[string][]int{
+		"too few":  nil,
+		"too many": {1, 2},
+	}
+	for name, results := range testCases {
+		t.Run(name, func(t *testing.T) {
+			batcher := NewBatcherWithPerItemResults(
+				func([]int) []int { return results },
+				BatcherOptions{MaxItems: 1, IdleTime: time.Minute},
+				clock.NewRealTimeSource(),
+			)
+
+			result, err := batcher.Add(context.Background(), 1)
+			require.NoError(t, err)
+			require.Zero(t, result)
+		})
+	}
 }
 
 func TestStreamBatcher_Random(t *testing.T) {
