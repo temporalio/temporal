@@ -448,6 +448,7 @@ type Config struct {
 	EnableSignalWithStartRequestIDDeduplication dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	HealthCheckHistoryGRPCSettings  dynamicconfig.TypedPropertyFn[health.Settings]
+	HealthCheckPersistenceSettings  dynamicconfig.TypedPropertyFn[health.Settings]
 	HealthPersistenceLatencyFailure dynamicconfig.FloatPropertyFn
 	HealthPersistenceErrorRatio     dynamicconfig.FloatPropertyFn
 	HealthRPCLatencyFailure         dynamicconfig.FloatPropertyFn
@@ -870,6 +871,7 @@ func NewConfig(
 		EnableSignalWithStartRequestIDDeduplication: dynamicconfig.EnableSignalWithStartRequestIDDeduplication.Get(dc),
 
 		HealthCheckHistoryGRPCSettings:  dynamicconfig.HealthCheckHistoryGRPCSettings.Get(dc),
+		HealthCheckPersistenceSettings:  dynamicconfig.HealthCheckPersistenceSettings.Get(dc),
 		HealthPersistenceLatencyFailure: dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
 		HealthPersistenceErrorRatio:     dynamicconfig.HealthPersistenceErrorRatio.Get(dc),
 		HealthRPCLatencyFailure:         dynamicconfig.HealthRPCLatencyFailure.Get(dc),
