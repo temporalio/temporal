@@ -2,10 +2,14 @@ package github
 
 import (
 	"archive/zip"
+	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -66,4 +70,39 @@ func TestParseArtifactName(t *testing.T) {
 
 	_, ok = ParseArtifactName("test-results")
 	require.False(t, ok)
+}
+
+func TestDownloadArtifactRetriesIncompleteResponses(t *testing.T) {
+	attempts := 0
+	server := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		attempts++
+		if attempts < 3 {
+			writer.Header().Set("Content-Length", "8")
+			_, _ = writer.Write([]byte("bad"))
+			return
+		}
+		_, _ = writer.Write([]byte("complete"))
+	}))
+	defer server.Close()
+
+	restoreAPIClient(t, server.URL, server.Client())
+	t.Setenv("GH_TOKEN", "test-token")
+	outputDir := t.TempDir()
+
+	zipPath, err := downloadArtifactWithRetry(
+		context.Background(),
+		"temporalio/temporal",
+		42,
+		outputDir,
+		time.Nanosecond,
+	)
+	require.NoError(t, err)
+	require.Equal(t, 3, attempts)
+	content, err := os.ReadFile(zipPath)
+	require.NoError(t, err)
+	require.Equal(t, "complete", string(content))
+	entries, err := os.ReadDir(outputDir)
+	require.NoError(t, err)
+	require.Len(t, entries, 1)
+	require.Equal(t, filepath.Base(zipPath), entries[0].Name())
 }
