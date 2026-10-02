@@ -184,12 +184,17 @@ func TestNewDetachedExecution_IncompleteRecord(t *testing.T) {
 	for name, mutate := range map[string]func(*persistencespb.WorkflowMutableState){
 		"no execution info":  func(ms *persistencespb.WorkflowMutableState) { ms.ExecutionInfo = nil },
 		"no execution state": func(ms *persistencespb.WorkflowMutableState) { ms.ExecutionState = nil },
+		// A workflow that never used a CHASM feature. Decoding its empty root used to panic.
+		"no CHASM nodes": func(ms *persistencespb.WorkflowMutableState) { ms.ChasmNodes = nil },
+		"root without type ID": func(ms *persistencespb.WorkflowMutableState) {
+			ms.ChasmNodes[""].Metadata.GetComponentAttributes().TypeId = chasm.UnspecifiedArchetypeID
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			mutableState := persistStandaloneActivity(t, registry)
 			mutate(mutableState)
 
-			_, _, err := chasm.NewDetachedExecution[*activity.Activity](context.Background(), mutableState, registry)
+			_, _, err := chasm.NewDetachedExecution[chasm.Component](context.Background(), mutableState, registry)
 			var internalErr *serviceerror.Internal
 			require.ErrorAs(t, err, &internalErr)
 		})
@@ -216,6 +221,19 @@ func TestExecutionArchetypeID(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, registeredID, archetypeID)
 
+	// A workflow that never used a CHASM feature persists no nodes, and reads as a workflow, the
+	// way NewTreeFromDB treats it.
+	for name, noNodes := range map[string]*persistencespb.WorkflowMutableState{
+		"nil map":   {},
+		"empty map": {ChasmNodes: map[string]*persistencespb.ChasmNode{}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			archetypeID, err := chasm.ExecutionArchetypeID(noNodes)
+			require.NoError(t, err)
+			require.Equal(t, chasm.WorkflowArchetypeID, archetypeID)
+		})
+	}
+
 	for name, mutableState := range map[string]*persistencespb.WorkflowMutableState{
 		"nil record": nil,
 		"no root node": {ChasmNodes: map[string]*persistencespb.ChasmNode{
@@ -225,6 +243,13 @@ func TestExecutionArchetypeID(t *testing.T) {
 			"": {Metadata: &persistencespb.ChasmNodeMetadata{
 				Attributes: &persistencespb.ChasmNodeMetadata_DataAttributes{
 					DataAttributes: &persistencespb.ChasmDataAttributes{},
+				},
+			}},
+		}},
+		"root without type ID": {ChasmNodes: map[string]*persistencespb.ChasmNode{
+			"": {Metadata: &persistencespb.ChasmNodeMetadata{
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{},
 				},
 			}},
 		}},

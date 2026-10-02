@@ -41,6 +41,9 @@ import (
 // business ID, run ID, close time, and transition history. Those live on the record rather
 // than in the tree, so a caller storing nodes for later offline reads must store them
 // alongside, since nothing can recover them from the tree.
+//
+// A record with no CHASM nodes is an error: it is a workflow whose state lives outside the tree,
+// so there is no component to decode. Use ExecutionArchetypeID to route such records first.
 func NewDetachedExecution[C Component](
 	goCtx context.Context,
 	mutableState *persistencespb.WorkflowMutableState,
@@ -73,8 +76,25 @@ const rootEncodedPath = ""
 // node without decoding the tree, so a caller can decide how to handle a record before calling
 // NewDetachedExecution. It needs no registry, so it also works for archetypes the caller has
 // not registered.
+//
+// A record with no CHASM nodes is a workflow that never used a CHASM feature, and reports
+// WorkflowArchetypeID, matching how NewTreeFromDB reads it.
 func ExecutionArchetypeID(mutableState *persistencespb.WorkflowMutableState) (ArchetypeID, error) {
-	root, ok := mutableState.GetChasmNodes()[rootEncodedPath]
+	if mutableState == nil {
+		return UnspecifiedArchetypeID, serviceerror.NewInternal("detached CHASM execution: mutable state is nil")
+	}
+	return archetypeIDOfNodes(mutableState.GetChasmNodes())
+}
+
+// archetypeIDOfNodes is the one place detached reads derive an archetype, so
+// ExecutionArchetypeID, newDetachedTree, and readOnlyNodeBackend.IsWorkflow cannot disagree.
+func archetypeIDOfNodes(nodes map[string]*persistencespb.ChasmNode) (ArchetypeID, error) {
+	if len(nodes) == 0 {
+		return WorkflowArchetypeID, nil
+	}
+
+	// The root is written before any child and never deleted, so a tree without one is corrupt.
+	root, ok := nodes[rootEncodedPath]
 	if !ok {
 		return UnspecifiedArchetypeID, serviceerror.NewInternal("detached CHASM execution: mutable state has no root node")
 	}
@@ -84,7 +104,13 @@ func ExecutionArchetypeID(mutableState *persistencespb.WorkflowMutableState) (Ar
 	if attributes == nil {
 		return UnspecifiedArchetypeID, serviceerror.NewInternal("detached CHASM execution: root node is not a component")
 	}
-	return attributes.GetTypeId(), nil
+
+	// SetRootComponent always sets the type ID, so a persisted zero is a bug rather than an archetype.
+	archetypeID := attributes.GetTypeId()
+	if archetypeID == UnspecifiedArchetypeID {
+		return UnspecifiedArchetypeID, serviceerror.NewInternal("detached CHASM execution: root node has no type ID")
+	}
+	return archetypeID, nil
 }
 
 // newDetachedTree builds the read only tree behind NewDetachedExecution.
@@ -103,6 +129,15 @@ func newDetachedTree(
 		return nil, serviceerror.NewInternal("detached CHASM execution: mutable state has no execution info")
 	case mutableState.GetExecutionState() == nil:
 		return nil, serviceerror.NewInternal("detached CHASM execution: mutable state has no execution state")
+	case len(mutableState.GetChasmNodes()) == 0:
+		// A workflow that never used a CHASM feature. Its state lives in mutable state, outside the
+		// tree, so there is no component to decode.
+		return nil, serviceerror.NewInternal("detached CHASM execution: mutable state has no CHASM nodes")
+	}
+
+	// Rejects a corrupt root up front rather than failing somewhere inside decoding.
+	if _, err := archetypeIDOfNodes(mutableState.GetChasmNodes()); err != nil {
+		return nil, err
 	}
 
 	return NewTreeFromDB(
@@ -177,11 +212,8 @@ func (b *readOnlyNodeBackend) EndpointRegistry() EndpointRegistry { return nil }
 // IsWorkflow reports whether the root is a workflow, as the history service does. A record with
 // no CHASM nodes is a workflow, matching how NewTreeFromDB reads one.
 func (b *readOnlyNodeBackend) IsWorkflow() bool {
-	nodes := b.mutableState.GetChasmNodes()
-	if len(nodes) == 0 {
-		return true
-	}
-	return nodes[rootEncodedPath].GetMetadata().GetComponentAttributes().GetTypeId() == WorkflowArchetypeID
+	archetypeID, err := archetypeIDOfNodes(b.mutableState.GetChasmNodes())
+	return err == nil && archetypeID == WorkflowArchetypeID
 }
 
 // GetNamespaceEntry panics: the record carries only the namespace ID, and no read path a
