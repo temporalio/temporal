@@ -18,6 +18,7 @@ const (
 )
 
 var _ manager.VisibilityManager = (*visibilityManagerRateLimited)(nil)
+var _ manager.AdminVisibilityManager = (*visibilityManagerRateLimited)(nil)
 
 type visibilityManagerRateLimited struct {
 	delegate         manager.VisibilityManager
@@ -161,10 +162,40 @@ func (m *visibilityManagerRateLimited) AddSearchAttributes(
 	ctx context.Context,
 	request *manager.AddSearchAttributesRequest,
 ) error {
-	if ok := allow(ctx, "AddSearchAttributes", m.readRateLimiter); !ok {
+	if ok := allow(ctx, "AddSearchAttributes", m.writeRateLimiter); !ok {
 		return persistence.ErrPersistenceSystemLimitExceeded
 	}
 	return m.delegate.AddSearchAttributes(ctx, request)
+}
+
+// ListExecutions implements [manager.AdminVisibilityManager].
+func (m *visibilityManagerRateLimited) ListExecutions(
+	ctx context.Context,
+	request *manager.AdminListExecutionsRequest,
+) (*manager.AdminListExecutionsResponse, error) {
+	adminManager, ok := m.delegate.(manager.AdminVisibilityManager)
+	if !ok {
+		return nil, manager.ErrNotAdminVisibilityManager
+	}
+	if ok := allow(ctx, "ListExecutions", m.readRateLimiter); !ok {
+		return nil, persistence.ErrPersistenceSystemLimitExceeded
+	}
+	return adminManager.ListExecutions(ctx, request)
+}
+
+// CountExecutions implements [manager.AdminVisibilityManager].
+func (m *visibilityManagerRateLimited) CountExecutions(
+	ctx context.Context,
+	request *manager.AdminCountExecutionsRequest,
+) (*manager.AdminCountExecutionsResponse, error) {
+	adminManager, ok := m.delegate.(manager.AdminVisibilityManager)
+	if !ok {
+		return nil, manager.ErrNotAdminVisibilityManager
+	}
+	if ok := allow(ctx, "CountExecutions", m.readRateLimiter); !ok {
+		return nil, persistence.ErrPersistenceSystemLimitExceeded
+	}
+	return adminManager.CountExecutions(ctx, request)
 }
 
 func allow(

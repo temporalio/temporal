@@ -123,6 +123,7 @@ var Module = fx.Options(
 	fx.Provide(GrpcServerOptionsProvider),
 	fx.Provide(VisibilityManagerConfigProvider),
 	fx.Provide(VisibilityManagerProvider),
+	fx.Provide(AdminVisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
@@ -794,6 +795,16 @@ func VisibilityManagerProvider(
 	return visibility.NewManager(&managerParams, managerConfig)
 }
 
+func AdminVisibilityManagerProvider(
+	visManager manager.VisibilityManager,
+) (manager.AdminVisibilityManager, error) {
+	adminVisManager, ok := visManager.(manager.AdminVisibilityManager)
+	if !ok {
+		return nil, manager.ErrNotAdminVisibilityManager
+	}
+	return adminVisManager, nil
+}
+
 func FEReplicatorNamespaceReplicationQueueProvider(
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	clusterMetadata cluster.Metadata,
@@ -816,7 +827,7 @@ func AdminHandlerProvider(
 	persistenceConfig *config.Persistence,
 	configuration *Config,
 	replicatorNamespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
-	visibilityMgr manager.VisibilityManager,
+	visibilityMgr manager.AdminVisibilityManager,
 	logger log.SnTaggedLogger,
 	eventLogger otellog.Logger,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,

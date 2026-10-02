@@ -91,7 +91,7 @@ type (
 		config                     *Config
 		namespaceDLQHandler        nsreplication.DLQMessageHandler
 		eventSerializer            serialization.Serializer
-		visibilityMgr              manager.VisibilityManager
+		visibilityMgr              manager.AdminVisibilityManager
 		persistenceExecutionName   string
 		namespaceReplicationQueue  persistence.NamespaceReplicationQueue
 		taskManager                persistence.TaskManager
@@ -123,7 +123,7 @@ type (
 		Config                              *Config
 		NamespaceReplicationQueue           persistence.NamespaceReplicationQueue
 		ReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
-		visibilityMgr                       manager.VisibilityManager
+		visibilityMgr                       manager.AdminVisibilityManager
 		Logger                              log.Logger
 		EventLogger                         otellog.Logger
 		TaskManager                         persistence.TaskManager
@@ -2340,4 +2340,64 @@ func (adh *AdminHandler) migrateScheduleToWorkflow(
 		return nil, err
 	}
 	return &adminservice.MigrateScheduleResponse{}, nil
+}
+
+func (adh *AdminHandler) ListExecutions(
+	ctx context.Context,
+	request *adminservice.ListExecutionsRequest,
+) (_ *adminservice.ListExecutionsResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	pageSize := int(request.GetPageSize())
+	maxPageSize := adh.config.VisibilityMaxPageSize(request.GetNamespace())
+	if pageSize <= 0 || pageSize > maxPageSize {
+		pageSize = maxPageSize
+	}
+
+	resp, err := adh.visibilityMgr.ListExecutions(
+		ctx, &manager.AdminListExecutionsRequest{
+			Namespace:     namespace.Name(request.GetNamespace()),
+			Query:         request.GetQuery(),
+			PageSize:      pageSize,
+			NextPageToken: request.GetNextPageToken(),
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &adminservice.ListExecutionsResponse{
+		Executions:    resp.Executions,
+		NextPageToken: resp.NextPageToken,
+	}, nil
+}
+
+func (adh *AdminHandler) CountExecutions(
+	ctx context.Context,
+	request *adminservice.CountExecutionsRequest,
+) (_ *adminservice.CountExecutionsResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	resp, err := adh.visibilityMgr.CountExecutions(
+		ctx, &manager.AdminCountExecutionsRequest{
+			Namespace: namespace.Name(request.GetNamespace()),
+			Query:     request.GetQuery(),
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &adminservice.CountExecutionsResponse{
+		Count:  resp.Count,
+		Groups: resp.Groups,
+	}, nil
 }

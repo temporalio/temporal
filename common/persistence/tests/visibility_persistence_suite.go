@@ -11,6 +11,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -45,7 +47,7 @@ type (
 		taskID int64
 
 		*persistencetests.TestBase
-		NamespaceRegistry              namespace.Registry
+		NamespaceRegistry              *namespace.MockRegistry
 		VisibilityMgr                  manager.VisibilityManager
 		SearchAttributesProvider       searchattribute.Provider
 		SearchAttributesMapperProvider searchattribute.MapperProvider
@@ -1338,6 +1340,266 @@ func (s *VisibilityPersistenceSuite) TestCountGroupByWorkflowExecutions() {
 	)
 }
 
+// TestListExecutions covers the admin ListExecutions API, which unlike
+// ListWorkflowExecutions takes a namespace *name* (resolved through the namespace registry)
+// and treats it as optional: an empty namespace lists executions across all namespaces.
+func (s *VisibilityPersistenceSuite) TestListExecutions() {
+	// The test database is shared by every test in this suite, so the all-namespaces
+	// queries below are scoped by a workflow type unique to this test.
+	workflowType := "admin-list-executions-" + uuid.NewString()
+	ns1Name, ns1ID := s.registerTestNamespace()
+	ns2Name, ns2ID := s.registerTestNamespace()
+
+	startTime := time.Now().UTC().Add(-5 * time.Second)
+	closeTime := startTime.Add(time.Second)
+
+	ns1Open := s.createOpenWorkflowRecord(
+		ns1ID, "wf-ns1-open", workflowType, startTime, startTime, "test-queue")
+	ns1Open.Namespace = ns1Name
+	ns1ClosedStart := s.createOpenWorkflowRecord(
+		ns1ID, "wf-ns1-closed", workflowType, startTime, startTime, "test-queue")
+	ns1ClosedStart.Namespace = ns1Name
+	ns1Closed := s.createClosedWorkflowRecord(
+		ns1ClosedStart, closeTime, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
+	ns2Open := s.createOpenWorkflowRecord(
+		ns2ID, "wf-ns2-open", workflowType, startTime, startTime, "test-queue")
+	ns2Open.Namespace = ns2Name
+
+	typeQuery := fmt.Sprintf("%s = '%s'", sadefs.WorkflowType, workflowType)
+
+	// Single namespace: only that namespace's executions are returned.
+	s.assertListExecutions(
+		&manager.AdminListExecutionsRequest{
+			Namespace: ns1Name,
+			Query:     typeQuery,
+			PageSize:  10,
+		},
+		func(t require.TestingT, resp *manager.AdminListExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 2)
+			for _, exec := range resp.Executions {
+				require.Equal(t, ns1ID.String(), exec.GetNamespaceId())
+				require.Equal(t, ns1Name.String(), exec.GetNamespace())
+				require.Equal(t, workflowType, exec.GetWorkflowType().GetName())
+			}
+			require.ElementsMatch(
+				t,
+				[]string{
+					ns1Open.Execution.GetRunId(),
+					ns1ClosedStart.Execution.GetRunId(),
+				},
+				runIDsOf(resp.Executions),
+			)
+		},
+	)
+
+	s.assertListExecutions(
+		&manager.AdminListExecutionsRequest{
+			Namespace: ns2Name,
+			Query:     typeQuery,
+			PageSize:  10,
+		},
+		func(t require.TestingT, resp *manager.AdminListExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 1)
+			require.Equal(t, ns2ID.String(), resp.Executions[0].GetNamespaceId())
+			require.Equal(t, ns2Name.String(), resp.Executions[0].GetNamespace())
+			require.Equal(t, ns2Open.Execution.GetRunId(), resp.Executions[0].GetExecution().GetRunId())
+		},
+	)
+
+	// All namespaces: an empty namespace spans both, and each execution still carries the
+	// namespace it belongs to.
+	s.assertListExecutions(
+		&manager.AdminListExecutionsRequest{
+			Query:    typeQuery,
+			PageSize: 10,
+		},
+		func(t require.TestingT, resp *manager.AdminListExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 3)
+			require.ElementsMatch(
+				t,
+				[]string{
+					ns1Open.Execution.GetRunId(),
+					ns1ClosedStart.Execution.GetRunId(),
+					ns2Open.Execution.GetRunId(),
+				},
+				runIDsOf(resp.Executions),
+			)
+
+			byRunID := make(map[string]*persistencespb.VisibilityExecutionInfo, len(resp.Executions))
+			for _, exec := range resp.Executions {
+				byRunID[exec.GetExecution().GetRunId()] = exec
+			}
+			for _, startedRequest := range []*manager.RecordWorkflowExecutionStartedRequest{
+				ns1Open, ns1ClosedStart, ns2Open,
+			} {
+				runID := startedRequest.Execution.GetRunId()
+				require.Equal(t, startedRequest.NamespaceID.String(), byRunID[runID].GetNamespaceId())
+				require.Equal(t, startedRequest.Namespace.String(), byRunID[runID].GetNamespace())
+			}
+
+			// A running execution carries no close-time fields; a closed one does.
+			openExec := byRunID[ns1Open.Execution.GetRunId()]
+			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, openExec.GetStatus())
+			require.Nil(t, openExec.GetCloseTime())
+			require.Zero(t, openExec.GetHistoryLength())
+
+			closedExec := byRunID[ns1ClosedStart.Execution.GetRunId()]
+			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, closedExec.GetStatus())
+			require.Equal(
+				t,
+				ns1Closed.CloseTime.UnixNano(),
+				timestamp.TimeValue(closedExec.GetCloseTime()).UnixNano(),
+			)
+			require.Equal(
+				t,
+				ns1Closed.ExecutionDuration,
+				closedExec.GetExecutionDuration().AsDuration(),
+			)
+			require.Equal(t, ns1Closed.HistoryLength, closedExec.GetHistoryLength())
+		},
+	)
+
+	// All namespaces, paginated: the page token carries across namespaces.
+	s.assertListExecutions(
+		&manager.AdminListExecutionsRequest{
+			Query:    typeQuery,
+			PageSize: 2,
+		},
+		func(t require.TestingT, resp *manager.AdminListExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 2)
+			require.NotEmpty(t, resp.NextPageToken)
+
+			runIDs := runIDsOf(resp.Executions)
+			next, err := s.adminVisibilityMgr().ListExecutions(
+				s.ctx,
+				&manager.AdminListExecutionsRequest{
+					Query:         typeQuery,
+					PageSize:      2,
+					NextPageToken: resp.NextPageToken,
+				},
+			)
+			require.NoError(t, err)
+			require.Len(t, next.Executions, 1)
+			runIDs = append(runIDs, runIDsOf(next.Executions)...)
+			require.ElementsMatch(
+				t,
+				[]string{
+					ns1Open.Execution.GetRunId(),
+					ns1ClosedStart.Execution.GetRunId(),
+					ns2Open.Execution.GetRunId(),
+				},
+				runIDs,
+			)
+		},
+	)
+}
+
+// TestCountExecutions covers the admin CountExecutions API for a single namespace and
+// across all namespaces, with and without a GROUP BY clause.
+func (s *VisibilityPersistenceSuite) TestCountExecutions() {
+	// The test database is shared by every test in this suite, so the all-namespaces
+	// queries below are scoped by a workflow type unique to this test.
+	workflowType := "admin-count-executions-" + uuid.NewString()
+	ns1Name, ns1ID := s.registerTestNamespace()
+	ns2Name, ns2ID := s.registerTestNamespace()
+
+	startTime := time.Now().UTC().Add(-5 * time.Second)
+	closeTime := startTime.Add(time.Second)
+
+	for i := range 2 {
+		s.createOpenWorkflowRecord(
+			ns1ID, fmt.Sprintf("wf-ns1-%d", i), workflowType, startTime, startTime, "test-queue")
+	}
+	ns2Start := s.createOpenWorkflowRecord(
+		ns2ID, "wf-ns2-0", workflowType, startTime, startTime, "test-queue")
+	s.createClosedWorkflowRecord(ns2Start, closeTime, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
+	s.createOpenWorkflowRecord(
+		ns2ID, "wf-ns2-1", workflowType, startTime, startTime, "test-queue")
+
+	typeQuery := fmt.Sprintf("%s = '%s'", sadefs.WorkflowType, workflowType)
+
+	// Single namespace.
+	s.assertCountExecutions(
+		&manager.AdminCountExecutionsRequest{Namespace: ns1Name, Query: typeQuery},
+		func(t require.TestingT, resp *manager.AdminCountExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Equal(t, int64(2), resp.Count)
+			require.Empty(t, resp.Groups)
+		},
+	)
+
+	s.assertCountExecutions(
+		&manager.AdminCountExecutionsRequest{Namespace: ns2Name, Query: typeQuery},
+		func(t require.TestingT, resp *manager.AdminCountExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Equal(t, int64(2), resp.Count)
+		},
+	)
+
+	// All namespaces: the counts of both namespaces are summed.
+	s.assertCountExecutions(
+		&manager.AdminCountExecutionsRequest{Query: typeQuery},
+		func(t require.TestingT, resp *manager.AdminCountExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Equal(t, int64(4), resp.Count)
+		},
+	)
+
+	// All namespaces, grouped by the namespace division: the default division filter is
+	// suppressed by the GROUP BY and there is no namespace to filter on, leaving no query
+	// at all, which must count every execution rather than failing.
+	s.assertCountExecutions(
+		&manager.AdminCountExecutionsRequest{
+			Query: "GROUP BY " + sadefs.TemporalNamespaceDivision,
+		},
+		func(t require.TestingT, resp *manager.AdminCountExecutionsResponse, err error) {
+			require.NoError(t, err)
+			// Other tests in this suite share the database, so this count is not exact.
+			require.GreaterOrEqual(t, resp.Count, int64(4))
+			require.NotEmpty(t, resp.Groups)
+		},
+	)
+
+	// All namespaces, grouped by status: 3 running (2 in ns1, 1 in ns2) and 1 completed.
+	s.assertCountExecutions(
+		&manager.AdminCountExecutionsRequest{
+			Query: typeQuery + " GROUP BY " + sadefs.ExecutionStatus,
+		},
+		func(t require.TestingT, resp *manager.AdminCountExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Equal(t, int64(4), resp.Count)
+			require.ElementsMatch(
+				t,
+				[]*adminservice.CountExecutionsResponse_AggregationGroup{
+					{
+						GroupValues: []*commonpb.Payload{
+							sadefs.MustEncodeValue(
+								enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+								enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+							),
+						},
+						Count: 3,
+					},
+					{
+						GroupValues: []*commonpb.Payload{
+							sadefs.MustEncodeValue(
+								enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED.String(),
+								enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+							),
+						},
+						Count: 1,
+					},
+				},
+				resp.Groups,
+			)
+		},
+	)
+}
+
 func (s *VisibilityPersistenceSuite) listWithPagination(
 	namespaceID namespace.ID,
 	pageSize int,
@@ -1511,4 +1773,64 @@ func (s *VisibilityPersistenceSuite) assertGetWorkflowExecution(
 		4*time.Second,
 		200*time.Millisecond,
 	)
+}
+
+// adminVisibilityMgr returns the visibility manager as a manager.AdminVisibilityManager,
+// the interface backing the admin visibility APIs.
+func (s *VisibilityPersistenceSuite) adminVisibilityMgr() manager.AdminVisibilityManager {
+	adminMgr, ok := s.VisibilityMgr.(manager.AdminVisibilityManager)
+	s.True(ok, "visibility manager does not implement manager.AdminVisibilityManager")
+	return adminMgr
+}
+
+// registerTestNamespace returns a fresh namespace whose name and ID resolve through the
+// namespace registry, which the admin visibility APIs use to translate between the two.
+func (s *VisibilityPersistenceSuite) registerTestNamespace() (namespace.Name, namespace.ID) {
+	nsID := namespace.ID(uuid.NewString())
+	nsName := namespace.Name("namespace-" + nsID.String())
+
+	s.NamespaceRegistry.EXPECT().GetNamespaceID(nsName).Return(nsID, nil).AnyTimes()
+	s.NamespaceRegistry.EXPECT().GetNamespaceName(nsID).Return(nsName, nil).AnyTimes()
+
+	return nsName, nsID
+}
+
+func (s *VisibilityPersistenceSuite) assertListExecutions(
+	request *manager.AdminListExecutionsRequest,
+	assertFn func(t require.TestingT, resp *manager.AdminListExecutionsResponse, err error),
+) {
+	await.Require(
+		s.ctx,
+		s.T(),
+		func(t *await.T) {
+			resp, err := s.adminVisibilityMgr().ListExecutions(s.ctx, request)
+			assertFn(t, resp, err)
+		},
+		4*time.Second,
+		200*time.Millisecond,
+	)
+}
+
+func (s *VisibilityPersistenceSuite) assertCountExecutions(
+	request *manager.AdminCountExecutionsRequest,
+	assertFn func(t require.TestingT, resp *manager.AdminCountExecutionsResponse, err error),
+) {
+	await.Require(
+		s.ctx,
+		s.T(),
+		func(t *await.T) {
+			resp, err := s.adminVisibilityMgr().CountExecutions(s.ctx, request)
+			assertFn(t, resp, err)
+		},
+		4*time.Second,
+		200*time.Millisecond,
+	)
+}
+
+func runIDsOf(executions []*persistencespb.VisibilityExecutionInfo) []string {
+	runIDs := make([]string, len(executions))
+	for i, exec := range executions {
+		runIDs[i] = exec.GetExecution().GetRunId()
+	}
+	return runIDs
 }

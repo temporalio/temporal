@@ -48,8 +48,28 @@ type (
 		AddSearchAttributes(ctx context.Context, request *manager.AddSearchAttributesRequest) error
 	}
 
+	AdminVisibilityStore interface {
+		VisibilityStore
+
+		ListExecutions(
+			ctx context.Context,
+			request *manager.AdminListExecutionsRequest,
+		) (*InternalListExecutionsResponse, error)
+
+		CountExecutions(
+			ctx context.Context,
+			request *manager.AdminCountExecutionsRequest,
+		) (*InternalCountExecutionsResponse, error)
+
+		// AddSearchAttributes makes schema changes to add the search attributes. This function must be
+		// idempotent, ie., if a search attribute already exists, this function must be no-op, and must
+		// not return any error.
+		AddSearchAttributes(ctx context.Context, request *manager.AddSearchAttributesRequest) error
+	}
+
 	// InternalExecutionInfo is internal visibility info for workflow execution
 	InternalExecutionInfo struct {
+		NamespaceID          string
 		WorkflowID           string
 		RunID                string
 		TypeName             string

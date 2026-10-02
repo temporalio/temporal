@@ -231,4 +231,12 @@ service AdminService {
   rpc MigrateSchedule(MigrateScheduleRequest) returns (MigrateScheduleResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
   }
+
+  rpc ListExecutions(ListExecutionsRequest) returns (ListExecutionsResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
+
+  rpc CountExecutions(CountExecutionsRequest) returns (CountExecutionsResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 }

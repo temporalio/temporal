@@ -64,7 +64,10 @@ type (
 		chasmMapper   *chasm.VisibilitySearchAttributesMapper
 		archetypeID   chasm.ArchetypeID
 
-		seenNamespaceDivision bool
+		// If disableDefaultNsDivision is true, don't auto add TemporalNamespaceDivision
+		// filter if missing.
+		disableDefaultNsDivision bool
+		seenNamespaceDivision    bool
 
 		metricsHandler metrics.Handler
 		logger         log.Logger
@@ -150,7 +153,8 @@ func NewQueryConverter[ExprT any](
 		saTypeMap:     saTypeMap,
 		saMapper:      saMapper,
 
-		seenNamespaceDivision: false,
+		disableDefaultNsDivision: false,
+		seenNamespaceDivision:    false,
 
 		metricsHandler: metricsHandler,
 		logger:         logger,
@@ -182,6 +186,11 @@ func (c *QueryConverter[ExprT]) WithArchetypeID(
 	return c
 }
 
+func (c *QueryConverter[ExprT]) WithDisableDefaultNamespaceDivision() *QueryConverter[ExprT] {
+	c.disableDefaultNsDivision = true
+	return c
+}
+
 func (c *QueryConverter[ExprT]) SeenNamespaceDivision() bool {
 	return c.seenNamespaceDivision
 }
@@ -201,13 +210,13 @@ func (c *QueryConverter[ExprT]) Convert(
 	// If the query did not explicitly filter on TemporalNamespaceDivision,
 	// try setting the namespace division filter based on the archetype ID,
 	// else filter by null (no division).
-	var namespaceDivisionExpr ExprT
-	if !c.seenNamespaceDivision {
+	if !c.seenNamespaceDivision && !c.disableDefaultNsDivision {
 		nsDivisionCol := NamespaceDivisionSAColumn()
 		if err := c.saInterceptor.Intercept(nsDivisionCol); err != nil {
 			return nil, err
 		}
 
+		var namespaceDivisionExpr ExprT
 		if c.archetypeID != chasm.UnspecifiedArchetypeID {
 			// For CHASM queries, filter by archetype ID
 			namespaceDivisionExpr, err = c.storeQC.ConvertComparisonExpr(
@@ -225,11 +234,11 @@ func (c *QueryConverter[ExprT]) Convert(
 		if err != nil {
 			return nil, err
 		}
-	}
 
-	queryParams.QueryExpr, err = c.storeQC.BuildAndExpr(namespaceDivisionExpr, queryParams.QueryExpr)
-	if err != nil {
-		return nil, err
+		queryParams.QueryExpr, err = c.storeQC.BuildAndExpr(namespaceDivisionExpr, queryParams.QueryExpr)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return queryParams, nil
