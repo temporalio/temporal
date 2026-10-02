@@ -10,7 +10,7 @@ require (
 	go.temporal.io/api v1.63.6-0.20260909222256-20151aa90480
 	go.temporal.io/server v0.0.0-00010101000000-000000000000
 	google.golang.org/grpc v1.83.2
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.12
 )
 
 require (

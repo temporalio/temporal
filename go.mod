@@ -9,6 +9,8 @@ retract (
 )
 
 require (
+	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20260709200747-435963d16310.1
+	buf.build/go/protovalidate v1.3.0
 	cloud.google.com/go/storage v1.62.1
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/aws/aws-sdk-go-v2 v1.43.4
@@ -72,7 +74,7 @@ require (
 	go.opentelemetry.io/proto/otlp v1.10.0
 	go.temporal.io/api v1.63.6-0.20260909222256-20151aa90480
 	go.temporal.io/auto-scaled-workers v0.0.0-20260928183627-719679297cbe
-	go.temporal.io/sdk v1.48.0
+	go.temporal.io/sdk v1.49.0
 	go.uber.org/fx v1.24.0
 	go.uber.org/goleak v1.3.0
 	go.uber.org/mock v0.6.0
@@ -86,7 +88,7 @@ require (
 	golang.org/x/time v0.15.0
 	google.golang.org/api v0.276.0
 	google.golang.org/grpc v1.83.2
-	google.golang.org/protobuf v1.36.11
+	google.golang.org/protobuf v1.36.12
 	gopkg.in/validator.v2 v2.0.1
 	gopkg.in/yaml.v3 v3.0.1
 	modernc.org/sqlite v1.51.0
@@ -110,6 +112,7 @@ require (
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/aclements/go-moremath v0.0.0-20210112150236-f10218a38794 // indirect
+	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/apache/thrift v0.24.0 // indirect
 	github.com/aws/aws-sdk-go-v2/aws/protocol/eventstream v1.7.16 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.18.22 // indirect
@@ -151,6 +154,7 @@ require (
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/mock v1.6.0 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
+	github.com/google/cel-go v0.30.0 // indirect
 	github.com/google/gnostic-models v0.7.1 // indirect
 	github.com/google/s2a-go v0.1.9 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.15 // indirect
@@ -200,6 +204,7 @@ require (
 	go.uber.org/atomic v1.11.0 // indirect
 	go.uber.org/dig v1.19.0 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
+	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	golang.org/x/crypto v0.55.0 // indirect
 	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/perf v0.0.0-20260709024250-82a0b07e230d // indirect
@@ -224,3 +229,5 @@ require (
 )
 
 tool golang.org/x/perf/cmd/benchstat
+
+replace go.temporal.io/api => github.com/stephanos/api-go v0.0.0-20261002202133-417a1add1d35
