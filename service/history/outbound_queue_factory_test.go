@@ -33,7 +33,7 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestOutboundQueueFactory_ChasmTaskGroupWiring(t *testing.T) {
+func TestOutboundQueueFactory_SetsChasmTaskGroup(t *testing.T) {
 	t.Parallel()
 
 	cb := circuitbreaker.NewTwoStepCircuitBreakerWithDynamicSettings(circuitbreaker.Settings{Name: "test"})
@@ -50,7 +50,7 @@ func TestOutboundQueueFactory_ChasmTaskGroupWiring(t *testing.T) {
 	}
 }
 
-func TestOutboundQueueFactory_CircuitBreakerBlockedMetric(t *testing.T) {
+func TestOutboundQueueFactory_RecordsCircuitBreakerBlocked(t *testing.T) {
 	t.Parallel()
 
 	cb := circuitbreaker.NewTwoStepCircuitBreakerWithDynamicSettings(circuitbreaker.Settings{
