@@ -75,7 +75,7 @@ func configProvider(dc *dynamicconfig.Collection) *Config {
 	}
 }
 
-// todo (david.porter): remove this entirely
+// EncodeInternalTokenWithEnvelope controls token encoding. todo (david.porter): remove this entirely.
 var EncodeInternalTokenWithEnvelope = dynamicconfig.NewNamespaceBoolSetting(
 	"callback.encodeInternalTokenWithEnvelope",
 	true,
