@@ -6870,8 +6870,10 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		defer ctrl.Finish()
 		mockNsRegistry := namespace.NewMockRegistry(ctrl)
 		mockNsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
+		cfg := defaultTestConfig()
+		cfg.EnableMatchingFanOutForPollCancellation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
 		engine := &matchingEngineImpl{
-			config:                defaultTestConfig(),
+			config:                cfg,
 			namespaceRegistry:     mockNsRegistry,
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
