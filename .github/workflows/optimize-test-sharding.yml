@@ -2,11 +2,13 @@ name: Optimize Test Sharding
 
 on:
   schedule:
-    # Runs at 0700 UTC daily
-    - cron: "0 7 * * *"
+    # Mondays at 0700 UTC, covering the week that just ended. Running daily would mostly sample
+    # the same runs again and rewrite the salt based on noise rather than meaningful test changes.
+    - cron: "0 7 * * 1"
   workflow_dispatch: # Allow manual trigger
 
 permissions:
+  actions: read
   contents: read
   pull-requests: write
 
@@ -39,13 +41,27 @@ jobs:
           go-version-file: go.mod
           cache: true
 
+      - name: Read functional test shard count
+        id: shard-count
+        run: |
+          set -euo pipefail
+
+          count=$(sed -n 's/^[[:space:]]*SHARD_COUNT:[[:space:]]*\([0-9][0-9]*\).*/\1/p' .github/workflows/run-tests.yml | sort -u)
+          if [[ $(wc -l <<<"$count") -ne 1 || -z $count ]]; then
+            echo "Expected exactly one SHARD_COUNT value in run-tests.yml, found: ${count:-none}" >&2
+            exit 1
+          fi
+          echo "count=$count" >> "$GITHUB_OUTPUT"
+
       - name: Optimize functional test sharding
         run: |
-          # NOTE: shard count must match shards in run-tests.yml
+          # NOTE: shard count must match shards in run-tests.yml, so it is read from that file.
           go run ./cmd/tools/optimize-test-sharding \
-            -shards 5 \
+            -shards "${{ steps.shard-count.outputs.count }}" \
             -workflow run-tests.yml \
             -artifact-pattern 'junit-xml--*shard*--functional-test' \
+            -days 7 \
+            -runs 200 \
             -file "${{ env.SALT_FILE }}" \
             -threshold 0.05
         env:
@@ -92,3 +108,13 @@ jobs:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           PR_URL: ${{ steps.create-pr.outputs.pr_url }}
         run: gh pr merge "${PR_URL}" --auto --squash
+
+      - name: Notify Slack on failure
+        if: failure()
+        uses: slackapi/slack-github-action@dcb1066f776dd043e64d0e8ba94ca15cc7e1875d # v4.0.0
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK }}
+          webhook-type: incoming-webhook
+          errors: true
+          payload: |
+            {"text": "Test sharding salt optimization failed. Shard assignment is unchanged, but the salt will not track current test durations until the workflow is fixed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}
