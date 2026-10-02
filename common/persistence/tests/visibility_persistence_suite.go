@@ -830,6 +830,69 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 	)
 }
 
+// TestFilteringByValueWithQuestionMark verifies that a filter value containing a
+// question mark is treated as data rather than as a bind variable placeholder.
+// See https://github.com/temporalio/temporal/issues/11797.
+func (s *VisibilityPersistenceSuite) TestFilteringByValueWithQuestionMark() {
+	testNamespaceUUID := namespace.ID(uuid.NewString())
+	startTime := time.Now()
+
+	const workflowIDWithQuestionMark = "visibility-filtering-foo?-value"
+	openRecord := s.createOpenWorkflowRecord(
+		testNamespaceUUID,
+		workflowIDWithQuestionMark,
+		"visibility-workflow",
+		startTime,
+		startTime,
+		"test-queue",
+	)
+	s.createOpenWorkflowRecord(
+		testNamespaceUUID,
+		"visibility-filtering-foo-value",
+		"visibility-workflow",
+		startTime,
+		startTime,
+		"test-queue",
+	)
+
+	query := fmt.Sprintf("%s = '%s'", sadefs.WorkflowID, workflowIDWithQuestionMark)
+
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    2,
+			Query:       query,
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 1)
+			s.assertOpenExecutionEquals(t, openRecord, resp.Executions[0])
+		},
+	)
+
+	s.assertCountWorkflowExecutions(
+		&manager.CountWorkflowExecutionsRequest{
+			NamespaceID: testNamespaceUUID,
+			Query:       query,
+		},
+		func(t require.TestingT, resp *manager.CountWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Equal(t, int64(1), resp.Count)
+		},
+	)
+
+	s.assertCountWorkflowExecutions(
+		&manager.CountWorkflowExecutionsRequest{
+			NamespaceID: testNamespaceUUID,
+			Query:       query + " GROUP BY ExecutionStatus",
+		},
+		func(t require.TestingT, resp *manager.CountWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Equal(t, int64(1), resp.Count)
+		},
+	)
+}
+
 // TestFilteringByStatus test
 func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 	testNamespaceUUID := namespace.ID(uuid.NewString())
