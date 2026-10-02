@@ -312,6 +312,7 @@ type Config struct {
 	ReplicationDLQMaxRetryAttempts                       dynamicconfig.IntPropertyFn
 	ReplicationEnableUpdateWithNewTaskMerge              dynamicconfig.BoolPropertyFn
 	ReplicationMultipleBatches                           dynamicconfig.BoolPropertyFn
+	ValidateReplicationTaskSourceCluster                 dynamicconfig.BoolPropertyFn
 	ReplicationTaskConverterLowPriorityLockMaxAttempts   dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderErrorRetryWait                dynamicconfig.DurationPropertyFn
 	ReplicationStreamSenderErrorRetryBackoffCoefficient  dynamicconfig.FloatPropertyFn
@@ -665,6 +666,7 @@ func NewConfig(
 		ReplicationEnableDLQMetrics:                         dynamicconfig.ReplicationEnableDLQMetrics.Get(dc),
 		ReplicationDLQMaxRetryAttempts:                      dynamicconfig.ReplicationDLQMaxRetryAttempts.Get(dc),
 		ReplicationEnableUpdateWithNewTaskMerge:             dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge.Get(dc),
+		ValidateReplicationTaskSourceCluster:                dynamicconfig.ValidateReplicationTaskSourceCluster.Get(dc),
 		ReplicationStreamSyncStatusDuration:                 dynamicconfig.ReplicationStreamSyncStatusDuration.Get(dc),
 		ReplicationProcessorSchedulerQueueSize:              dynamicconfig.ReplicationProcessorSchedulerQueueSize.Get(dc),
 		ReplicationProcessorSchedulerWorkerCount:            dynamicconfig.ReplicationProcessorSchedulerWorkerCount.Subscribe(dc),
