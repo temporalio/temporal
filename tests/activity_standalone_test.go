@@ -1207,6 +1207,60 @@ func (s *standaloneActivityTestSuite) TestStart() {
 	})
 }
 
+func (s *standaloneActivityTestSuite) TestEagerStart() {
+	env := s.newTestEnv()
+	t := s.T()
+	ctx := s.Context()
+	activityID := testcore.RandomizeStr(t.Name())
+	taskQueue := testcore.RandomizeStr(t.Name())
+	requestID := testcore.RandomizeStr(t.Name())
+	request := &workflowservice.StartActivityExecutionRequest{
+		Namespace:             env.Namespace().String(),
+		RequestEagerExecution: true,
+		ActivityId:            activityID,
+		ActivityType:          env.Tv().ActivityType(),
+		Identity:              defaultIdentity,
+		Input:                 defaultInput,
+		TaskQueue:             &taskqueuepb.TaskQueue{Name: taskQueue},
+		StartToCloseTimeout:   durationpb.New(defaultStartToCloseTimeout),
+		RequestId:             requestID,
+	}
+
+	first, err := env.FrontendClient().StartActivityExecution(ctx, request)
+	require.NoError(t, err)
+	require.True(t, first.GetStarted())
+	require.NotNil(t, first.GetEagerActivityTask())
+	require.Equal(t, activityID, first.GetEagerActivityTask().GetActivityId())
+	require.Equal(t, first.GetRunId(), first.GetEagerActivityTask().GetActivityRunId())
+	require.EqualValues(t, 1, first.GetEagerActivityTask().GetAttempt())
+
+	retry, err := env.FrontendClient().StartActivityExecution(ctx, request)
+	require.NoError(t, err)
+	require.False(t, retry.GetStarted())
+	require.Nil(t, retry.GetEagerActivityTask())
+
+	useExisting := common.CloneProto(request)
+	useExisting.RequestId = testcore.RandomizeStr(t.Name())
+	useExisting.IdConflictPolicy = enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING
+	conflict, err := env.FrontendClient().StartActivityExecution(ctx, useExisting)
+	require.NoError(t, err)
+	require.False(t, conflict.GetStarted())
+	require.Nil(t, conflict.GetEagerActivityTask())
+
+	_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
+		TaskToken: first.GetEagerActivityTask().GetTaskToken(),
+		Result:    defaultResult,
+		Identity:  defaultIdentity,
+	})
+	require.NoError(t, err)
+
+	afterCompletion, err := env.FrontendClient().StartActivityExecution(ctx, request)
+	require.NoError(t, err)
+	require.False(t, afterCompletion.GetStarted())
+	require.Nil(t, afterCompletion.GetEagerActivityTask())
+}
+
 func (s *standaloneActivityTestSuite) TestComplete() {
 	env := s.newTestEnv()
 	t := s.T()

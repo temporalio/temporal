@@ -10,9 +10,71 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common/tasktoken"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+type eagerActivityTaskRequest struct {
+	namespaceID string
+	namespace   string
+	requestID   string
+}
+
+func (a *Activity) buildEagerActivityTask(
+	ctx chasm.Context,
+	request eagerActivityTaskRequest,
+) (*workflowservice.PollActivityTaskQueueResponse, error) {
+	attempt := a.LastAttempt.Get(ctx)
+	if !a.hasAttemptInProgress() || attempt.GetCount() != 1 || attempt.GetStartRequestId() != request.requestID {
+		return nil, nil
+	}
+
+	componentRef, err := ctx.Ref(a)
+	if err != nil {
+		return nil, err
+	}
+	key := ctx.ExecutionKey()
+	token, err := tasktoken.NewSerializer().Serialize(tasktoken.NewActivityTaskToken(
+		request.namespaceID,
+		"",
+		key.RunID,
+		0,
+		key.BusinessID,
+		a.GetActivityType().GetName(),
+		attempt.GetCount(),
+		nil,
+		0,
+		0,
+		componentRef,
+		attempt.GetStartedStamp(),
+	))
+	if err != nil {
+		return nil, err
+	}
+
+	requestData := a.RequestData.Get(ctx)
+	lastHeartbeat, _ := a.LastHeartbeat.TryGet(ctx)
+	return &workflowservice.PollActivityTaskQueueResponse{
+		TaskToken:                   token,
+		WorkflowNamespace:           request.namespace,
+		ActivityType:                a.GetActivityType(),
+		ActivityId:                  key.BusinessID,
+		Header:                      requestData.GetHeader(),
+		Input:                       requestData.GetInput(),
+		HeartbeatDetails:            lastHeartbeat.GetDetails(),
+		ScheduledTime:               a.GetScheduleTime(),
+		CurrentAttemptScheduledTime: a.dispatchTimeForAttempt(attempt),
+		StartedTime:                 attempt.GetStartedTime(),
+		Attempt:                     attempt.GetCount(),
+		ScheduleToCloseTimeout:      a.GetScheduleToCloseTimeout(),
+		StartToCloseTimeout:         a.GetStartToCloseTimeout(),
+		HeartbeatTimeout:            a.GetHeartbeatTimeout(),
+		RetryPolicy:                 a.GetRetryPolicy(),
+		Priority:                    a.GetPriority(),
+		ActivityRunId:               key.RunID,
+	}, nil
+}
 
 // Projection of activity state onto the API response protos.
 

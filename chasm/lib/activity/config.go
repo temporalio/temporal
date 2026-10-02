@@ -35,6 +35,12 @@ var (
 		`Allows non-zero start_delay on StartActivityExecution requests.`,
 	)
 
+	EnableEagerStart = dynamicconfig.NewNamespaceBoolSetting(
+		"activity.enableEagerStart",
+		true,
+		`Allows the first standalone activity task to be returned directly by StartActivityExecution.`,
+	)
+
 	EnableCallbacks = dynamicconfig.NewNamespaceBoolSetting(
 		"activity.enableCallbacks",
 		false,
@@ -63,6 +69,7 @@ type Config struct {
 	EnableCallbacks                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnabledCallbackKinds                      dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.Kind]
 	Enabled                                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableEagerStart                          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableStandaloneActivityOperatorCommands  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	LongPollBuffer                            dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	LongPollTimeout                           dynamicconfig.DurationPropertyFnWithNamespaceFilter
@@ -85,6 +92,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		EnableCallbacks:                           EnableCallbacks.Get(dc),
 		EnabledCallbackKinds:                      EnabledCallbackKinds.Get(dc),
 		Enabled:                                   Enabled.Get(dc),
+		EnableEagerStart:                          EnableEagerStart.Get(dc),
 		EnableStandaloneActivityOperatorCommands:  EnableStandaloneActivityOperatorCommands.Get(dc),
 		LongPollBuffer:                            LongPollBuffer.Get(dc),
 		LongPollTimeout:                           LongPollTimeout.Get(dc),
