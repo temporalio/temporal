@@ -922,7 +922,11 @@ func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 			tag.SourceCluster(e.SourceClusterName()),
 			tag.ReplicationTask(taskInfo),
 		)
-		e.emitReplicationTaskError(wideevents.ReplOperationDLQWrite, "Writing replication task to DLQ reached breakglass maximum attempts", nil, map[string]any{
+		metrics.ReplicationDLQDropped.With(e.MetricsHandler).Record(
+			1,
+			metrics.SourceClusterTag(e.SourceClusterName()),
+		)
+		e.emitReplicationTaskError(wideevents.ReplOperationDLQWrite, "Writing replication task to DLQ reached maximum attempts", nil, map[string]any{
 			"dlq_attempt": e.markPoisonPillAttempts,
 			"disposition": wideevents.ReplDispositionDiscarded,
 			"terminal":    true,

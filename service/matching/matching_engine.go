@@ -693,6 +693,26 @@ func (e *matchingEngineImpl) AddActivityTask(
 	})
 }
 
+func (e *matchingEngineImpl) GrantEagerDispatch(
+	ctx context.Context,
+	request *matchingservice.GrantEagerDispatchRequest,
+) (*matchingservice.GrantEagerDispatchResponse, error) {
+	partition := tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId())
+	if _, ok := partition.(*tqid.NormalPartition); !ok {
+		return nil, serviceerror.NewInvalidArgument("eager dispatch grants only support normal task queue partitions")
+	}
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseTask)
+	if err != nil {
+		return nil, err
+	}
+
+	items, err := pm.GrantEagerDispatch(ctx, request.GetItems())
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.GrantEagerDispatchResponse{Items: items}, nil
+}
+
 // PollWorkflowTaskQueue tries to get the workflow task using exponential backoff.
 func (e *matchingEngineImpl) PollWorkflowTaskQueue(
 	ctx context.Context,
@@ -1303,9 +1323,11 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 		)
 		return &matchingservice.CancelOutstandingWorkerPollsResponse{}, nil
 	}
-	cfg := rootPM.GetConfig()
-	// TODO(dynamic partitioning): get real num read partitions from the partition manager.
-	numPartitions := cfg.NumReadPartitions()
+	// Ephemeral data carries the real read partition count once dynamic partitioning is active.
+	numPartitions := int(rootPM.GetUserDataManager().PartitionScale().GetRead())
+	if numPartitions <= 0 {
+		numPartitions = rootPM.GetConfig().NumReadPartitions()
+	}
 
 	e.logger.Debug("Initiating fan-out for worker poll cancellation",
 		tag.WorkflowNamespaceID(request.GetNamespaceId()),
@@ -2500,6 +2522,21 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 				mergedData.RedirectRules = currentVersioningData.GetRedirectRules()
 			}
 			mergedUserData.PerType = current.GetPerType()
+
+			// We have wrongly discarded incoming per-type data and should investigate what information was lost.
+			// This is harmful since we might have lost information pertaining to worker-versioning, task queue config
+			// and fairness state.
+			if len(req.GetUserData().GetPerType()) > 0 {
+				metrics.TaskQueueUserDataReplicationIncomingPerTypeDataDropped.With(e.metricsHandler).Record(1,
+					metrics.NamespaceTag(ns.Name().String()),
+				)
+				e.logger.Warn("task queue user data replication discarded non-empty per-type data",
+					tag.WorkflowNamespace(ns.Name().String()),
+					tag.WorkflowNamespaceID(req.GetNamespaceId()),
+					tag.WorkflowTaskQueueName(req.GetTaskQueue()),
+					tag.NewAnyTag("current-clock", currentClock),
+				)
+			}
 		} else {
 			if mergedData != nil {
 				// v2 rules
@@ -2507,6 +2544,7 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 				mergedData.RedirectRules = newVersioningData.GetRedirectRules()
 			}
 			mergedUserData.PerType = req.GetUserData().GetPerType()
+			mergedUserData.Clock = common.CloneProto(req.GetUserData().GetClock())
 		}
 
 		for _, buildId := range buildIdsToRevive {

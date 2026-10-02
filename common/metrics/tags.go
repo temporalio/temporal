@@ -176,6 +176,22 @@ func ToClusterIDTag(value int32) Tag {
 	return Tag{Key: toCluster, Value: strconv.FormatInt(int64(value), 10)}
 }
 
+// FromClusterTag returns a new from cluster tag keyed by cluster name.
+func FromClusterTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: fromCluster, Value: value}
+}
+
+// ToClusterTag returns a new to cluster tag keyed by cluster name.
+func ToClusterTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: toCluster, Value: value}
+}
+
 // UnsafeTaskQueueTag returns a new task queue tag.
 // WARNING: Do not use this function directly in production code as it may create high number of unique task queue tag
 // values that can trouble the observability stack. Instead, use one of the following helper functions and pass a proper
@@ -497,6 +513,9 @@ type ReasonString string
 // ReasonTag is a generic tag can be used anywhere a reason is needed.
 // Make sure that the value is of limited cardinality.
 func ReasonTag(value ReasonString) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
 	return Tag{Key: reason, Value: string(value)}
 }
 

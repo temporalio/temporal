@@ -73,8 +73,9 @@ pod-level rate limiting. Read once at process startup: changing this value requi
 		false,
 		`VisibilityEnableShadowReadMode is the config to enable shadow read from secondary visibility`,
 	)
-	SecondaryVisibilityWritingMode = NewGlobalStringSetting(
+	SecondaryVisibilityWritingMode = NewGlobalTypedSettingWithConverter(
 		"system.secondaryVisibilityWritingMode",
+		convertStringEnum([]string{"off", "on", "dual"}),
 		"off",
 		`SecondaryVisibilityWritingMode is key for how to write to secondary visibility`,
 	)
@@ -210,6 +211,11 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 		"system.enableActivityEagerExecution",
 		true,
 		`EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace`,
+	)
+	EnableActivityEagerDispatchCheck = NewNamespaceBoolSetting(
+		"system.enableActivityEagerDispatchCheck",
+		false,
+		`EnableActivityEagerDispatchCheck controls whether history asks matching for a grant before eagerly dispatching an activity.`,
 	)
 	EnableCancelActivityWorkerCommand = NewNamespaceBoolSetting(
 		"system.enableCancelActivityWorkerCommand",
@@ -1678,21 +1684,22 @@ default as namespace cardinality can be high and this requires a metrics collect
 	MatchingPartitionScaleManager = NewTaskQueueTypedSetting(
 		"matching.partitionScaleManager",
 		PartitionScaleManagerSettings{
+			Enabled:               false,
 			MaxRate:               0.33,
 			ShrinkRatio:           0.1,
 			ShrinkDelta:           8,
 			BatchSize:             100,
 			BackgroundInterval:    23 * time.Second,
 			DrainBufferTime:       15 * time.Second,
-			ShadowModeLogInterval: 0,
+			ShadowModeLogInterval: 30 * time.Second,
 		},
-		`Settings for partition scale manager.`,
+		`Settings for partition scale manager. Note: Partition scale manager is experimental.`,
 	)
 	MatchingPartitionScaler = NewTaskQueueTypedSettingWithConverter(
 		"matching.partitionScaler",
 		ConvertSimplePartitionScalerSettings,
 		SimplePartitionScalerSettings{},
-		`Settings for simple partition scaler.`,
+		`Settings for simple partition scaler. Note: Partition scale manager is experimental.`,
 	)
 
 	// Worker registry settings
@@ -2532,6 +2539,12 @@ visibility if they were removed from the mutable state`,
 		100,
 		`ArchivalTaskBatchSize is batch size for archivalQueueProcessor`,
 	)
+	EnableVisibilityArchivalRecordDeduplication = NewNamespaceBoolSetting(
+		"history.enableVisibilityArchivalRecordDeduplication",
+		false,
+		`EnableVisibilityArchivalRecordDeduplication enables best-effort content-aware visibility archival deduplication for S3 and GCS.
+When enabled, the archival store must allow reading object metadata in addition to writing objects.`,
+	)
 	ArchivalProcessorMaxPollRPS = NewGlobalIntSetting(
 		"history.archivalProcessorMaxPollRPS",
 		20,
@@ -2959,6 +2972,12 @@ should be enabled for non continuedAsNew workflow UpdateWithNew case.`,
 		false,
 		`ReplicationMultipleBatches is the flag to enable replication of multiple history event batches`,
 	)
+	ReplicationTaskConverterLowPriorityLockMaxAttempts = NewGlobalIntSetting(
+		"history.ReplicationTaskConverterLowPriorityLockMaxAttempts",
+		3,
+		`ReplicationTaskConverterLowPriorityLockMaxAttempts is the number of busy-workflow conversion failures using
+a low priority workflow lock before subsequent stream sender conversion attempts use a high priority lock.`,
+	)
 	HistoryTaskDLQEnabled = NewGlobalBoolSetting(
 		"history.TaskDLQEnabled",
 		true,
@@ -3208,6 +3227,13 @@ time (mirrors gRPC MaxConnectionAge's +/-10% jitter). Values outside [0, 1] are 
 		"history.enableWorkflowIdReuseStartTimeValidation",
 		false,
 		`If true, validate the start time of the old workflow is older than WorkflowIdReuseMinimalInterval when reusing workflow ID.`,
+	)
+	EnableSignalWithStartRequestIDDeduplication = NewNamespaceBoolSetting(
+		"history.enableSignalWithStartRequestIdDeduplication",
+		true,
+		`If true, a SignalWithStartWorkflowExecution retry whose request ID was already handled by the
+current run returns that run instead of starting a second one, and reports Started=true when that
+request ID created the run (matching StartWorkflowExecution).`,
 	)
 	BusinessIDReuseRate = NewNamespaceIntSetting(
 		"history.businessIDReuseRate",
@@ -3754,7 +3780,7 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 
 	EnableCancelWorkerPollsOnShutdown = NewNamespaceBoolSetting(
 		"frontend.enableCancelWorkerPollsOnShutdown",
-		false,
+		true,
 		`EnableCancelWorkerPollsOnShutdown enables eager cancellation of outstanding polls when a worker shuts down.
 		When enabled, ShutdownWorker will cancel all outstanding polls for the worker before processing,
 		preventing task orphaning that can occur if tasks are dispatched to a shutting-down worker.`,
@@ -3762,11 +3788,10 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 
 	EnableMatchingFanOutForPollCancellation = NewNamespaceBoolSetting(
 		"frontend.enableMatchingFanOutForPollCancellation",
-		false,
+		true,
 		`EnableMatchingFanOutForPollCancellation controls where poll cancellation fan-out happens.
 		When enabled, frontend sends root partition only; matching fans out to all partitions.
-		When disabled, frontend iterates partitions; matching handles each partition locally.
-		Default is false for safe rollout: flip to true after both frontend and matching are deployed.`,
+		When disabled, frontend iterates partitions; matching handles each partition locally.`,
 	)
 
 	// Deprecated: ListWorkersEnabled is no longer honored. ListWorkers and DescribeWorker APIs are

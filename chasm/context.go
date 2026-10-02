@@ -6,6 +6,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
@@ -28,6 +29,12 @@ type Context interface {
 	ExecutionKey() ExecutionKey
 	// ExecutionInfo returns metadata information about the execution.
 	ExecutionInfo() ExecutionInfo
+	// GetTimeSkippingPropagateState returns the time-skipping configuration and state to propagate.
+	// It should be called when an execution with time skipping starts another execution.
+	GetTimeSkippingPropagateState() (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation)
+	// GetTimeSkippingInfo returns the execution's current time-skipping state for read APIs.
+	// It returns nil if the execution has never enabled time skipping.
+	GetTimeSkippingInfo() *commonpb.TimeSkippingInfo
 	// Logger returns a logger tagged with execution key and other chasm framework internal information.
 	Logger() log.Logger
 	// NamespaceEntry returns the namespace entry for the execution.
@@ -56,6 +63,13 @@ type Context interface {
 	RequestLinks(Component, string) ([]*commonpb.Link, error)
 	// UserMetadata returns the user metadata attached to the given component, or nil if none.
 	UserMetadata(Component) *sdkpb.UserMetadata
+	// Path returns the path of the given component relative to the root component of the execution,
+	// e.g. ["Updates", updateID] for a Workflow Update. The root component's path is empty.
+	// Returns nil for components that are not (yet) registered as tree nodes.
+	//
+	// Each segment is the name of the field (or, for a component inside a CHASM map, the map key)
+	// that holds the component, so a path is only as stable as the field names it traverses.
+	Path(Component) []string
 
 	// Intent() OperationIntent
 	// ComponentOptions(Component) []ComponentOption
@@ -69,6 +83,11 @@ type Context interface {
 }
 
 type ExecutionInfo struct {
+	// ExecutionType is how this execution is named outside of CHASM, e.g. in the links that address
+	// it. It comes from the root component of the execution, so every component of an execution
+	// reports the same value, and is [enumspb.EXECUTION_TYPE_UNSPECIFIED] if the root component was
+	// registered without a WithExecutionType option.
+	ExecutionType enumspb.ExecutionType
 	// StateTransitionCount is the number of create/update transactions in the history of this execution.
 	StateTransitionCount int64
 	// ApproximateStateSize is the approximate size in bytes of the persisted execution state of this execution.
@@ -85,6 +104,7 @@ type EndpointRegistry interface {
 
 type MutableContext interface {
 	Context
+	TimeSkippingConfigurator
 
 	// AddTask adds a task to be emitted as part of the current transaction.
 	// The task is associated with the given component and will be invoked via the registered handler for the given task
@@ -172,6 +192,10 @@ func (c *immutableCtx) UserMetadata(component Component) *sdkpb.UserMetadata {
 	return c.root.componentUserMetadata(component)
 }
 
+func (c *immutableCtx) Path(component Component) []string {
+	return c.root.componentPath(component)
+}
+
 func (c *immutableCtx) Now(_ Component) time.Time {
 	return c.now
 }
@@ -190,10 +214,25 @@ func (c *immutableCtx) ExecutionInfo() ExecutionInfo {
 	}
 
 	return ExecutionInfo{
+		ExecutionType:        c.root.executionType(),
 		StateTransitionCount: executionInfo.GetStateTransitionCount(),
 		ApproximateStateSize: c.root.backend.GetApproximatePersistedSize(),
 		CloseTime:            closeTime,
 	}
+}
+
+func (c *immutableCtx) GetTimeSkippingPropagateState() (
+	*commonpb.TimeSkippingConfig,
+	*commonpb.TimeSkippingStatePropagation,
+) {
+	return PropagateTimeSkippingToOtherExecution(c.root.backend.GetExecutionInfo().GetTimeSkippingInfo())
+}
+
+func (c *immutableCtx) GetTimeSkippingInfo() *commonpb.TimeSkippingInfo {
+	return timeSkippingInfoForDescribe(
+		c.root.backend.GetExecutionInfo().GetTimeSkippingInfo(),
+		c.Now(nil),
+	)
 }
 
 func (c *immutableCtx) Logger() log.Logger {
@@ -281,6 +320,13 @@ func (c *mutableCtx) withValue(key any, value any) Context {
 	return &mutableCtx{
 		immutableCtx: ContextWithValue(c.immutableCtx, key, value),
 	}
+}
+
+func (c *mutableCtx) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
+	if config == nil {
+		return
+	}
+	c.root.backend.SetTimeSkippingConfig(config)
 }
 
 // ContextWithValue returns a new Context with the given key-value pair added.
