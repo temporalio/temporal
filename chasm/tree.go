@@ -209,10 +209,8 @@ type (
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
 		GetApproximatePersistedSize() int
 		ChasmSkipPersistenceEnabled() bool
-		// ChasmLogicalTaskCountAlertThreshold returns the number of logical tasks of the
-		// given fully qualified task type that a component type may accumulate in this
-		// execution before the logical task count metrics are emitted. A value <= 0
-		// disables the metrics.
+		// Returns the logical task count that triggers the task count metrics for the
+		// given fully qualified task type. A value <= 0 disables them.
 		ChasmLogicalTaskCountAlertThreshold(chasmTaskType string) int
 		ChasmDLQScheduledPureTaskOnValidationEnabled() bool
 		GetNamespaceEntry() *namespace.Namespace
@@ -2025,8 +2023,7 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 	var firstPureTask *persistencespb.ChasmComponentAttributes_Task
 	var firstPureTaskNode *Node
 
-	// Logical task counts per (component type, task type), aggregated across the whole
-	// execution. Only populated for opted-in types, and stays nil otherwise.
+	// Aggregated across the whole execution. Stays nil unless a type opted in.
 	var taskCounts map[componentTaskTypePair]int
 
 	for nodePath, node := range n.andAllChildren() {
@@ -2090,8 +2087,7 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 			}
 		}
 
-		// Count the component's remaining logical tasks. Invalid tasks have been removed
-		// and this transaction's new tasks have been added, so the counts are final.
+		// Invalid tasks are removed and new tasks added by this point, so counts are final.
 		taskCounts = n.countLogicalTasks(componentAttr, taskCounts)
 
 		sideEffectTasks := componentAttr.GetSideEffectTasks()
@@ -2136,17 +2132,14 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 	)
 }
 
-// componentTaskTypePair identifies a (component type, task type) combination within a
-// single execution. Both are registered type IDs.
+// componentTaskTypePair keys task counts by registered component and task type IDs.
 type componentTaskTypePair struct {
 	componentTypeID uint32
 	taskTypeID      uint32
 }
 
-// countLogicalTasks adds componentAttr's logical task counts, grouped by task type, into
-// counts, and returns the (possibly newly allocated) map. Only (component type, task type)
-// pairs opted into the logical task count metrics are tracked, so counts stays nil for
-// executions that opted into nothing.
+// countLogicalTasks adds componentAttr's logical task counts into counts, tracking only
+// pairs opted into the task count metrics, and returns the possibly reallocated map.
 func (n *Node) countLogicalTasks(
 	componentAttr *persistencespb.ChasmComponentAttributes,
 	counts map[componentTaskTypePair]int,
@@ -2167,7 +2160,7 @@ func (n *Node) countLogicalTasks(
 	} {
 		for _, componentTask := range componentTasks {
 			registrableTask, ok := n.registry.TaskByID(componentTask.GetTypeId())
-			if !ok || !registrableTask.taskCountMetricEnabledFor(registrableComponent) {
+			if !ok || !registrableTask.taskCountMetricEnabledForComponent(registrableComponent) {
 				continue
 			}
 			if counts == nil {
@@ -2183,10 +2176,7 @@ func (n *Node) countLogicalTasks(
 	return counts
 }
 
-// emitLogicalTaskCountMetrics records the logical task count metrics for any
-// (component type, task type) pair whose count in this execution exceeds the configured
-// threshold. This is a sub-metric of the mutable state size metrics: it attributes
-// execution growth to task accumulation in a specific component and task type.
+// emitLogicalTaskCountMetrics records the task count metrics for each pair over threshold.
 func (n *Node) emitLogicalTaskCountMetrics(
 	counts map[componentTaskTypePair]int,
 	archetypeID ArchetypeID,
@@ -2195,7 +2185,7 @@ func (n *Node) emitLogicalTaskCountMetrics(
 		return
 	}
 
-	// Allocated on the first breach only; most transactions are under the threshold.
+	// Allocated on the first breach only.
 	var metricsHandler metrics.Handler
 
 	for pair, count := range counts {

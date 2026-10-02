@@ -29,10 +29,7 @@ type (
 		isPureTask              bool
 		outboundTaskGroup       string            // For grouping on the outbound queue. See [WithTaskGroup] for details.
 		singletonMode           SingletonTaskMode // If non-zero, at most one task of this type may exist per component instance.
-		// taskCountMetricEnabled overrides the owning component's task count metric
-		// setting for this task type. Nil means inherit.
-		// See [WithTaskCountMetricOverride].
-		taskCountMetricEnabled *bool
+		taskCountMetricEnabled  *bool             // Nil means inherit from the component. See [WithTaskCountMetricOverride].
 
 		// Those two fields are initialized when the component is registered to a library.
 		library    namer
@@ -190,10 +187,9 @@ func (rt *RegistrableTask) GoType() reflect.Type {
 	return rt.goType
 }
 
-// taskCountMetricEnabledFor resolves whether the logical task count metrics should be
-// emitted for this task type when it is held by the given component type. The task's own
-// override wins; otherwise the component's setting applies.
-func (rt *RegistrableTask) taskCountMetricEnabledFor(rc *RegistrableComponent) bool {
+// taskCountMetricEnabledForComponent reports whether the task count metrics apply to this
+// task type on the given component. The task's own override wins over the component's setting.
+func (rt *RegistrableTask) taskCountMetricEnabledForComponent(rc *RegistrableComponent) bool {
 	if rt.taskCountMetricEnabled != nil {
 		return *rt.taskCountMetricEnabled
 	}
@@ -235,13 +231,8 @@ func WithSingletonTask(mode SingletonTaskMode) RegistrableTaskOption {
 	}
 }
 
-// WithTaskCountMetricOverride overrides the owning component's logical task count metric
-// setting for this task type. Pass true to emit the metrics for this task type even when
-// the component did not opt in via [WithTaskCountMetric], or false to exclude this task
-// type from an opted-in component. Without this option, the task type inherits the
-// component's setting.
-//
-// See [WithTaskCountMetric] for what the metrics report.
+// WithTaskCountMetricOverride overrides the component's [WithTaskCountMetric] setting for
+// this task type. Without it, the task type inherits the component's setting.
 func WithTaskCountMetricOverride(enabled bool) RegistrableTaskOption {
 	return func(rt *RegistrableTask) {
 		rt.taskCountMetricEnabled = &enabled

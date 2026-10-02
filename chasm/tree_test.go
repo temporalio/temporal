@@ -5292,16 +5292,12 @@ func (s *nodeSuite) TestCloseTransaction_LogicalTaskCountMetrics() {
 	}
 }
 
-// Tasks removed by validation must not be counted, since the metric is meant to report
-// the task backlog that is actually persisted.
 func (s *nodeSuite) TestCloseTransaction_LogicalTaskCountMetrics_ExcludesInvalidatedTasks() {
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)
 	s.metricsHandler = metricsHandler
 
-	// Threshold of 1 is exceeded by the 2 valid tasks, but would also be exceeded by the
-	// single invalidated one if it were counted.
 	s.nodeBackend.HandleChasmLogicalTaskCountAlertThreshold = func(string) int { return 1 }
 
 	root := s.testComponentTree()
@@ -5319,7 +5315,7 @@ func (s *nodeSuite) TestCloseTransaction_LogicalTaskCountMetrics_ExcludesInvalid
 		})
 	}
 
-	// An invalid pure task is dropped before it is ever persisted.
+	// Dropped by validation, so it must not be counted.
 	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(false, nil).Times(1)
@@ -5353,8 +5349,8 @@ func (s *nodeSuite) TestCloseTransaction_LogicalTaskCountMetrics_NotEmittedForOp
 	s.NoError(err)
 	testComponent := c.(*TestComponent)
 
-	// TestSubComponent1 does not opt into the task count metric, so the very same task
-	// type that is reported for TestComponent must not be reported here.
+	// TestSubComponent1 did not opt in, so the same task type reported for TestComponent
+	// must not be reported here.
 	subComponent1 := testComponent.SubComponent1.Get(mutableContext)
 	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
