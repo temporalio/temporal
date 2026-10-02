@@ -174,6 +174,16 @@ func (b *readOnlyNodeBackend) Now() time.Time { return b.timeSource.Now() }
 // EndpointRegistry returns nil, which Context.EndpointByName reports as an error.
 func (b *readOnlyNodeBackend) EndpointRegistry() EndpointRegistry { return nil }
 
+// IsWorkflow reports whether the root is a workflow, as the history service does. A record with
+// no CHASM nodes is a workflow, matching how NewTreeFromDB reads one.
+func (b *readOnlyNodeBackend) IsWorkflow() bool {
+	nodes := b.mutableState.GetChasmNodes()
+	if len(nodes) == 0 {
+		return true
+	}
+	return nodes[rootEncodedPath].GetMetadata().GetComponentAttributes().GetTypeId() == WorkflowArchetypeID
+}
+
 // GetNamespaceEntry panics: the record carries only the namespace ID, and no read path a
 // detached reader uses needs the entry.
 func (b *readOnlyNodeBackend) GetNamespaceEntry() *namespace.Namespace {
@@ -182,11 +192,6 @@ func (b *readOnlyNodeBackend) GetNamespaceEntry() *namespace.Namespace {
 }
 
 // The methods below are reached only while closing a transaction or executing a task.
-
-func (b *readOnlyNodeBackend) IsWorkflow() bool {
-	b.unsupported("IsWorkflow")
-	return false
-}
 
 func (b *readOnlyNodeBackend) GetCurrentVersion() int64 {
 	b.unsupported("GetCurrentVersion")
