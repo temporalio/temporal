@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics/metricstest"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -2796,6 +2797,78 @@ func (s *NexusWorkflowTestSuite) TestNexusCallbackAfterCallerComplete(chasmEnabl
 		require.NotNil(ct, resp.Callbacks[0].LastAttemptFailure)
 		require.Contains(ct, resp.Callbacks[0].LastAttemptFailure.Message, "(NOT_FOUND)")
 	}, 3*time.Second, 200*time.Millisecond)
+}
+
+// TestNexusCallerAndHandlerLogsCorrelate walks through how the logs connect the two sides of a failed
+// Nexus call during an investigation: the handler-side log names the calling workflow, and both sides
+// carry the same request ID.
+func (s *NexusWorkflowTestSuite) TestNexusCallerAndHandlerLogsCorrelate(chasmEnabled bool) {
+	env := s.newTestEnv(chasmEnabled)
+	ctx := s.Context()
+	tv := env.Tv()
+
+	// The caller runs in the test namespace and calls an endpoint that targets the external namespace,
+	// which accepts smaller payloads. The caller sends the request, and the handler-side frontend
+	// rejects it, so both sides log the failed call.
+	env.GetTestCluster().OverrideDynamicConfig(s.T(), dynamicconfig.BlobSizeLimitError, []dynamicconfig.ConstrainedValue{
+		{Constraints: dynamicconfig.Constraints{Namespace: env.ExternalNamespace().String()}, Value: 1024},
+	})
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
+	env.createNexusEndpointForNamespace(ctx, s.T(), endpointName, env.ExternalNamespace().String(), tv.WithTaskQueueNumber(2).TaskQueue().GetName())
+
+	callerWF := func(ctx workflow.Context) error {
+		c := workflow.NewNexusClient(endpointName, "service")
+		return c.ExecuteOperation(ctx, "operation", strings.Repeat("a", 4096), workflow.NexusOperationOptions{}).Get(ctx, nil)
+	}
+	w := worker.New(env.SdkClient(), tv.TaskQueue().GetName(), worker.Options{})
+	w.RegisterWorkflow(callerWF)
+	s.NoError(w.Start())
+	s.T().Cleanup(w.Stop)
+
+	// Capture both sides: the caller's namespace and the handler's (external) one.
+	testLogger, ok := env.Logger.(*testlogger.TestLogger)
+	s.Require().True(ok, "expected a *testlogger.TestLogger, got %T", env.Logger)
+	logCapture := testLogger.StartCapture(
+		tag.WorkflowNamespace(env.Namespace().String()),
+		tag.WorkflowNamespace(env.ExternalNamespace().String()),
+	)
+	s.T().Cleanup(func() { testLogger.StopCapture(logCapture) })
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{TaskQueue: tv.TaskQueue().GetName()}, callerWF)
+	s.NoError(err)
+	s.Error(run.Get(ctx, nil))
+
+	// An investigation starts from the caller's history: the scheduled event records the request ID.
+	scheduled := s.RequireHistoryEvent(
+		env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID()}),
+		enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+	)
+	requestID := scheduled.GetNexusOperationScheduledEventAttributes().GetRequestId()
+	s.Require().NotEmpty(requestID)
+
+	// On the handler side, the log with that request ID names the calling workflow.
+	logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+		Level:   testlogger.Warn,
+		Message: "payload size exceeds error limit",
+		Tags: map[string]any{
+			"wf-namespace":       env.ExternalNamespace().String(),
+			"request-id":         requestID,
+			"caller-namespace":   env.Namespace().String(),
+			"caller-workflow-id": run.GetID(),
+			"caller-run-id":      run.GetRunID(),
+		},
+	})
+
+	// On the caller side, the failed call is logged under the same request ID.
+	logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+		Level:   testlogger.Error,
+		Message: "Nexus request failed",
+		Tags: map[string]any{
+			"wf-namespace": env.Namespace().String(),
+			"request-id":   requestID,
+			"wf-id":        run.GetID(),
+			"wf-run-id":    run.GetRunID(),
+		},
+	})
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled bool) {

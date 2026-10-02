@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,6 +26,7 @@ import (
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log/tag"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/nexus/nexustest"
@@ -33,6 +35,7 @@ import (
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -244,6 +247,68 @@ func standaloneNexusTestLink(env *NexusTestEnv, workflowID string) *commonpb.Lin
 			},
 		},
 	}
+}
+
+func (s *NexusStandaloneTestSuite) TestNexusCallerAndHandlerLogsCorrelate() {
+	env := s.newTestEnv()
+	ctx := s.Context()
+	tv := env.Tv()
+
+	env.GetTestCluster().OverrideDynamicConfig(s.T(), dynamicconfig.BlobSizeLimitError, []dynamicconfig.ConstrainedValue{
+		{Constraints: dynamicconfig.Constraints{Namespace: env.ExternalNamespace().String()}, Value: 1024},
+	})
+	endpointName := testcore.RandomizedNexusEndpoint(s.T().Name())
+	env.createNexusEndpointForNamespace(ctx, s.T(), endpointName, env.ExternalNamespace().String(), tv.TaskQueue().GetName())
+
+	testLogger, ok := env.Logger.(*testlogger.TestLogger)
+	s.Require().True(ok, "expected a *testlogger.TestLogger, got %T", env.Logger)
+	logCapture := testLogger.StartCapture(
+		tag.WorkflowNamespace(env.Namespace().String()),
+		tag.WorkflowNamespace(env.ExternalNamespace().String()),
+	)
+	s.T().Cleanup(func() { testLogger.StopCapture(logCapture) })
+
+	operationID := tv.Any().String()
+	startResp, err := env.startNexusOperation(ctx, &workflowservice.StartNexusOperationExecutionRequest{
+		OperationId: operationID,
+		Endpoint:    endpointName,
+		Input:       payload.EncodeString(strings.Repeat("a", 4096)),
+	})
+	s.Require().NoError(err)
+	pollResp, err := env.FrontendClient().PollNexusOperationExecution(ctx, &workflowservice.PollNexusOperationExecutionRequest{
+		Namespace:   env.Namespace().String(),
+		OperationId: operationID,
+		RunId:       startResp.GetRunId(),
+		WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
+	})
+	s.Require().NoError(err)
+	s.Require().Equal(enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED, pollResp.GetWaitStage())
+	descResp := env.describeNexusOperation(ctx, s.T(), operationID)
+	s.Require().Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_FAILED, descResp.GetInfo().GetStatus())
+	requestID := descResp.GetInfo().GetRequestId()
+	s.Require().NotEmpty(requestID)
+
+	logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+		Level:   testlogger.Warn,
+		Message: "payload size exceeds error limit",
+		Tags: map[string]any{
+			"wf-namespace":       env.ExternalNamespace().String(),
+			"request-id":         requestID,
+			"caller-namespace":   env.Namespace().String(),
+			"caller-workflow-id": operationID,
+			"caller-run-id":      startResp.GetRunId(),
+		},
+	})
+	logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+		Level:   testlogger.Error,
+		Message: "Nexus request failed",
+		Tags: map[string]any{
+			"wf-namespace": env.Namespace().String(),
+			"request-id":   requestID,
+			"wf-id":        operationID,
+			"wf-run-id":    startResp.GetRunId(),
+		},
+	})
 }
 
 // TestStandaloneNexusOperationLinks covers links a caller attaches to a standalone Nexus operation,
