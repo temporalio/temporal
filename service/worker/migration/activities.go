@@ -131,6 +131,7 @@ type (
 		namespaceReplicationQueue        persistence.NamespaceReplicationQueue
 		generateMigrationTaskViaFrontend dynamicconfig.BoolPropertyFn
 		enableHistoryRateLimiter         dynamicconfig.BoolPropertyFn
+		emitNamespaceLifecycleEvents     dynamicconfig.BoolPropertyFn
 		workflowVerifier                 WorkflowVerifier
 		chasmRegistry                    *chasm.Registry
 	}
@@ -170,13 +171,6 @@ const (
 func (r verifyResult) isVerified() bool {
 	return r.status == verified || r.status == skipped
 }
-
-// TODO: CallerTypePreemptablee should be set in activity background context for all migration activities.
-// However, activity background context is per-worker, which means once set, all activities processed by the
-// worker will use CallerType Preemptable, including those not related to migration. This is not ideal.
-// Using a different task queue and a dedicated worker for migration can solve the issue but requires
-// changing all existing tooling around namespace migration to start workflows & activities on the new task queue.
-// Another approach is to use separate workers for workflow tasks and activities and keep existing tooling unchanged.
 
 // GetMetadata returns history shard count and namespaceID for requested namespace.
 func (a *activities) GetMetadata(_ context.Context, request MetadataRequest) (*MetadataResponse, error) {
@@ -389,15 +383,7 @@ func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverR
 	var snapshot wideevents.HandoverLagSnapshot
 	start := time.Now()
 	defer func() {
-		wideevents.EmitHandoverIncomplete(
-			a.EventLogger,
-			waitRequest.Namespace,
-			a.namespaceIDForEvent(waitRequest.Namespace),
-			waitRequest.RemoteCluster,
-			&snapshot,
-			time.Since(start),
-			retErr,
-		)
+		a.emitHandoverIncomplete(waitRequest, &snapshot, time.Since(start), retErr)
 	}()
 
 	for {
@@ -412,6 +398,26 @@ func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverR
 		time.Sleep(time.Second)
 		activity.RecordHeartbeat(ctx, nil)
 	}
+}
+
+func (a *activities) emitHandoverIncomplete(
+	waitRequest waitHandoverRequest,
+	snapshot *wideevents.HandoverLagSnapshot,
+	elapsed time.Duration,
+	exitErr error,
+) {
+	if a.emitNamespaceLifecycleEvents == nil || !a.emitNamespaceLifecycleEvents() {
+		return
+	}
+	wideevents.EmitHandoverIncomplete(
+		a.EventLogger,
+		waitRequest.Namespace,
+		a.namespaceIDForEvent(waitRequest.Namespace),
+		waitRequest.RemoteCluster,
+		snapshot,
+		elapsed,
+		exitErr,
+	)
 }
 
 // Check if remote cluster has caught up on all shards on replication tasks

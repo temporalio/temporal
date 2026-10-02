@@ -83,7 +83,6 @@ func newInvocationTaskTestEnv(
 				MinRequestTimeout:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 				PayloadSizeLimit:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
 				CallbackURLTemplate:     dynamicconfig.GetTypedPropertyFn(callbackTmpl),
-				UseSystemCallbackURL:    dynamicconfig.GetBoolPropertyFn(false),
 				UseNewFailureWireFormat: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 				RetryPolicy: dynamicconfig.GetTypedPropertyFn[backoff.RetryPolicy](
 					backoff.NewExponentialRetryPolicy(time.Second),
@@ -116,7 +115,7 @@ func newInvocationTaskTestEnv(
 		},
 	}
 
-	root := chasm.NewEmptyTree(registry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
+	root := chasm.NewEmptyTree(registry, nodeBackend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
 	ctx := chasm.NewMutableContext(context.Background(), root)
 	require.NoError(t, root.SetRootComponent(&mockStoreComponent{
 		invocationData: invocationData,
@@ -583,6 +582,28 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestNewInvocationResult_CanceledBareFailure guards sync canceled completions whose
+// unwrapped cause is a bare Nexus failure.
+func TestNewInvocationResult_CanceledBareFailure(t *testing.T) {
+	t.Parallel()
+
+	opErr := &nexus.OperationError{
+		State:   nexus.OperationStateCanceled,
+		Message: "operation canceled from handler",
+		Cause:   &nexus.FailureError{Failure: nexus.Failure{Message: "cause"}},
+	}
+	require.NoError(t, nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr))
+
+	result, err := newInvocationResult(nil, opErr)
+	require.NoError(t, err)
+
+	cancel, ok := result.(invocationResultCancel)
+	require.True(t, ok, "canceled operation error must produce a cancel result")
+	require.NotNil(t, cancel.failure.GetCanceledFailureInfo(),
+		"bare canceled failures must surface as CanceledFailure")
+	require.Equal(t, "cause", cancel.failure.GetMessage())
 }
 
 func TestInvocationTaskHandler_Validate(t *testing.T) {

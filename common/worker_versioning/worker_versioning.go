@@ -349,8 +349,7 @@ func checkVersionMembershipAndReactivationEligibility(
 	if err != nil {
 		// If matching is on an older version that doesn't have this RPC,
 		// fall back to fetching full user data and checking version membership based on the received information.
-		var unimplErr *serviceerror.Unimplemented
-		if errors.As(err, &unimplErr) {
+		if _, ok := errors.AsType[*serviceerror.Unimplemented](err); ok {
 			return checkVersionMembershipViaUserData(ctx, matchingClient, namespaceID, tq, tqType, version)
 		}
 		return false, false, 0, err

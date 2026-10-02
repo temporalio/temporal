@@ -473,8 +473,7 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	}
 	response, respErr := m.persistence.GetWorkflowExecution(ctx, request)
 
-	var notFound *serviceerror.NotFound
-	if errors.As(respErr, &notFound) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](respErr); ok {
 		// strip persistence-specific error message
 		respErr = serviceerror.NewNotFoundf(
 			"workflow execution not found for workflow ID %q and run ID %q", request.WorkflowID, request.RunID)
@@ -894,8 +893,7 @@ func (m *executionManagerImpl) GetCurrentExecution(
 
 	response, respErr := m.persistence.GetCurrentExecution(ctx, request)
 
-	var notFound *serviceerror.NotFound
-	if errors.As(respErr, &notFound) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](respErr); ok {
 		// strip persistence-specific error message
 		respErr = serviceerror.NewNotFoundf("workflow not found for ID: %v", request.WorkflowID)
 	}

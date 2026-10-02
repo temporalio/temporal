@@ -16,15 +16,20 @@ func buildSuccessMessage(summary *ReportSummary, runID, repo string, days int) *
 	if summary.TotalWorkflowRuns > 0 {
 		ciSuccessRate = (float64(summary.SuccessfulRuns) / float64(summary.TotalWorkflowRuns)) * 100.0
 	}
+	testRunnerTimeouts := 0
+	for _, report := range summary.TestRunnerTimeouts {
+		testRunnerTimeouts += report.FailureCount
+	}
 
 	// Summary stats
-	summaryText := fmt.Sprintf("*CI Success Rate:* %d/%d (%.2f%%)\n*Total Test Runs:* %d\n*Total Failures:* %d\n*Failure Rate:* %.2f per 1000 tests\n\n*CI Breakers:* %d\n*Crashes:* %d\n*Flaky Tests:* %d\n*Timeouts:* %d",
+	summaryText := fmt.Sprintf("*CI Success Rate:* %d/%d (%.2f%%)\n*Total Test Runs:* %d\n*Total Failures:* %d\n*Failure Rate:* %.2f per 1000 tests\n\n*CI Execution Interruptions:* %d\n*Final-Retry Test Failures:* %d\n*Crashes:* %d\n*Flaky Tests:* %d\n*Timeouts:* %d",
 		summary.SuccessfulRuns,
 		summary.TotalWorkflowRuns,
 		ciSuccessRate,
 		summary.TotalTestRuns,
 		summary.TotalFailures,
 		summary.OverallFailureRate,
+		testRunnerTimeouts,
 		len(summary.CIBreakers),
 		len(summary.Crashes),
 		summary.TotalFlakyCount,
@@ -34,12 +39,12 @@ func buildSuccessMessage(summary *ReportSummary, runID, repo string, days int) *
 	msg.AddHeader(fmt.Sprintf("Flaky Tests Report - Last %d Days", days))
 	msg.AddSection(summaryText)
 
-	// Add CI breakers details
-	if lines := formatReportLines(summary.CIBreakers); len(lines) > 0 {
+	// Add final-retry test failure details.
+	if lines := formatOccurrenceLines(summary.CIBreakers, "affected artifacts"); len(lines) > 0 {
 		if len(lines) > slackMaxListItems {
 			lines = lines[:slackMaxListItems]
 		}
-		text := fmt.Sprintf("*CI Breakers (top %d):*\n%s", slackMaxListItems, strings.Join(lines, "\n"))
+		text := fmt.Sprintf("*Final-Retry Test Failures (top %d):*\n%s", slackMaxListItems, strings.Join(lines, "\n"))
 		msg.AddSection(text)
 	}
 

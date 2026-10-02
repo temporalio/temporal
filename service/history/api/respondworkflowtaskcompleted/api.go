@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/recordworkflowtaskstarted"
@@ -219,13 +220,29 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 	}
 
 	behavior := request.GetVersioningBehavior()
-	deployment := worker_versioning.DeploymentFromDeploymentVersion(worker_versioning.DeploymentVersionFromOptions(request.GetDeploymentOptions()))
-	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
-	if behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED && request.GetDeployment() == nil &&
-		(request.GetDeploymentOptions() == nil || request.GetDeploymentOptions().GetWorkerVersioningMode() != enumspb.WORKER_VERSIONING_MODE_VERSIONED) {
-		// Mutable state wasn't changed yet and doesn't have to be cleared.
-		releaseLeaseWithError = false
-		return nil, serviceerror.NewInvalidArgument("versioning behavior cannot be specified without deployment options being set with versioned mode")
+	deploymentOptions := request.GetDeploymentOptions()
+	wftDeploymentVersion := worker_versioning.DeploymentVersionFromOptions(deploymentOptions)
+	deployment := worker_versioning.DeploymentFromDeploymentVersion(wftDeploymentVersion)
+
+	// A reported behavior only applies when the worker identifies a valid versioned deployment.
+	if behavior != enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED {
+		if deploymentOptions == nil {
+			// Fall back to the deprecated Deployment field for legacy SDKs.
+			//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
+			if worker_versioning.DeploymentIfValid(request.GetDeployment()) == nil {
+				request.VersioningBehavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+			}
+		} else {
+			switch deploymentOptions.GetWorkerVersioningMode() {
+			case enumspb.WORKER_VERSIONING_MODE_VERSIONED:
+			case enumspb.WORKER_VERSIONING_MODE_UNVERSIONED:
+				request.VersioningBehavior = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
+			default:
+				// Mutable state wasn't changed yet and doesn't have to be cleared.
+				releaseLeaseWithError = false
+				return nil, serviceerror.NewInvalidArgument("versioning behavior cannot be specified with an unspecified or unknown worker versioning mode")
+			}
+		}
 	}
 
 	assignedBuildId := ms.GetAssignedBuildId()
@@ -421,6 +438,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 			request.GetIdentity(),
 			request.GetWorkerControlTaskQueue(),
 			completedEvent.GetEventId(), // If completedEvent is nil, then GetEventId() returns 0 and this value shouldn't be used in workflowTaskHandler.
+			deployment,
 			ms,
 			updateRegistry,
 			&effects,
@@ -491,13 +509,20 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 		// registryClearedErr, which may lead to continuous retries of UpdateWorkflowExecution API.
 		updateRegistry.Abort(update.AbortReasonWorkflowTaskFailed)
 
-		metrics.FailedWorkflowTasksCounter.With(handler.metricsHandler).Record(
-			1,
-			metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope),
-			metrics.NamespaceTag(namespaceEntry.Name().String()),
-			metrics.VersioningBehaviorTag(ms.GetEffectiveVersioningBehavior()),
-			metrics.FailureTag(wtFailedCause.failedCause.String()),
-			metrics.FirstAttemptTag(currentWorkflowTask.Attempt),
+		workflow.RecordWorkflowTaskFailedMetrics(
+			handler.config,
+			handler.metricsHandler,
+			namespaceEntry.Name(),
+			ms.GetExecutionInfo().GetTaskQueue(),
+			metrics.HistoryRespondWorkflowTaskCompletedScope,
+			wtFailedCause.failedCause.String(),
+			workflow.WorkflowTaskCompletionMetrics{
+				VersioningInfo: workflow.VersioningMetricContext{
+					Behavior:          ms.GetEffectiveVersioningBehavior(),
+					DeploymentVersion: wftDeploymentVersion,
+				},
+				Attempt: currentWorkflowTask.Attempt,
+			},
 		)
 		handler.logger.Info("Failing the workflow task.",
 			tag.Value(wtFailedCause.Message()),
@@ -658,6 +683,7 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				handler.shardContext.GetThrottledLogger(),
 				handler.shardContext.GetMetricsHandler(),
 				nil, // no pagination buffer limiter as it is a transient context
+				testhooks.TestHooks{},
 			),
 			newMutableState,
 		)
@@ -688,13 +714,15 @@ func (handler *WorkflowTaskCompletedHandler) Invoke(
 				return nil, err
 			}
 
-			if err := workflow.TerminateWorkflow(
+			if err := workflow.ForceTerminateWorkflow(
 				ms,
 				common.FailureReasonTransactionSizeExceedsLimit,
 				payloads.EncodeString(updateErr.Error()),
 				consts.IdentityHistoryService,
 				false,
 				nil, // no links necessary.
+				handler.metricsHandler,
+				chasm.ExecutionForceTerminationReasonEventBatchSizeExceedsLimit,
 			); err != nil {
 				return nil, err
 			}
@@ -908,8 +936,7 @@ func (handler *WorkflowTaskCompletedHandler) createPollWorkflowTaskQueueResponse
 		//  when data inconsistency occurs
 		//  long term solution should check event batch pointing backwards within history store
 		defer func() {
-			var dataLossErr *serviceerror.DataLoss
-			if errors.As(retError, &dataLossErr) {
+			if _, ok := errors.AsType[*serviceerror.DataLoss](retError); ok {
 				api.TrimHistoryNode(
 					ctx,
 					handler.shardContext,

@@ -616,8 +616,7 @@ func (d *WorkflowRunner) handleCreateWorkerDeploymentVersion(ctx workflow.Contex
 			UpsertScalingGroups: scalingGroupsToUpsertUpdates(computeConfig.GetScalingGroups()),
 		}).Get(ctx, &computeConfigSummary)
 		if err != nil {
-			var appErr *temporal.ApplicationError
-			if errors.As(err, &appErr) && appErr.Type() == errInvalidComputeConfig {
+			if appErr, ok := errors.AsType[*temporal.ApplicationError](err); ok {
 				return nil, appErr
 			}
 			return nil, serviceerror.NewInternalf("update worker controller instance: %v", err)
@@ -740,8 +739,7 @@ func (d *WorkflowRunner) handleRegisterWorker(ctx workflow.Context, args *deploy
 		RoutingConfig: routingConfigToSync,
 	}).Get(ctx, nil)
 	if err != nil {
-		var appError *temporal.ApplicationError
-		if errors.As(err, &appError) {
+		if appError, ok := errors.AsType[*temporal.ApplicationError](err); ok {
 			if appError.Type() == errMaxTaskQueuesInVersionType {
 				return temporal.NewApplicationError(
 					fmt.Sprintf("cannot add task queue %v since maximum number of task queues (%d) have been registered in deployment", args.TaskQueueName, args.MaxTaskQueues),

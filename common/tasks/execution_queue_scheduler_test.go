@@ -380,7 +380,7 @@ func (s *executionQueueSchedulerSuite) TestTTLExpiryRace_NoTaskOrphaning() {
 	defer scheduler.Stop()
 
 	const iterations = 50
-	var processedCount int32
+	var processedCount atomic.Int32
 	testWG := sync.WaitGroup{}
 
 	for range iterations {
@@ -390,7 +390,7 @@ func (s *executionQueueSchedulerSuite) TestTTLExpiryRace_NoTaskOrphaning() {
 		mockTask.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
 		mockTask.EXPECT().Execute().Return(nil).Times(1)
 		mockTask.EXPECT().Ack().Do(func() {
-			atomic.AddInt32(&processedCount, 1)
+			processedCount.Add(1)
 			testWG.Done()
 		}).Times(1)
 
@@ -416,10 +416,10 @@ func (s *executionQueueSchedulerSuite) TestTTLExpiryRace_NoTaskOrphaning() {
 		// Success
 	case <-time.After(30 * time.Second):
 		s.Fail("Timed out waiting for tasks — possible task orphaning",
-			"processed %d/%d tasks", atomic.LoadInt32(&processedCount), iterations)
+			"processed %d/%d tasks", processedCount.Load(), iterations)
 	}
 
-	s.Equal(int32(iterations), atomic.LoadInt32(&processedCount),
+	s.Equal(int32(iterations), processedCount.Load(),
 		"All tasks must be processed, none orphaned")
 }
 
@@ -523,7 +523,7 @@ func (s *executionQueueSchedulerSuite) TestParallelTrySubmit_SameWorkflow() {
 	numSubmitters := 50
 	tasksPerSubmitter := 20
 
-	var executionCount int32
+	var executionCount atomic.Int32
 	testWG := sync.WaitGroup{}
 	testWG.Add(numSubmitters * tasksPerSubmitter)
 
@@ -539,7 +539,7 @@ func (s *executionQueueSchedulerSuite) TestParallelTrySubmit_SameWorkflow() {
 				mockTask := NewMockTask(s.controller)
 				mockTask.EXPECT().RetryPolicy().Return(s.retryPolicy).AnyTimes()
 				mockTask.EXPECT().Execute().DoAndReturn(func() error {
-					atomic.AddInt32(&executionCount, 1)
+					executionCount.Add(1)
 					return nil
 				}).Times(1)
 				mockTask.EXPECT().Ack().Do(func() { testWG.Done() }).Times(1)
@@ -563,7 +563,7 @@ func (s *executionQueueSchedulerSuite) TestParallelTrySubmit_SameWorkflow() {
 		s.Fail("Timed out waiting for parallel tasks to same workflow")
 	}
 
-	s.Equal(int32(numSubmitters*tasksPerSubmitter), atomic.LoadInt32(&executionCount))
+	s.Equal(int32(numSubmitters*tasksPerSubmitter), executionCount.Load())
 }
 
 // =============================================================================

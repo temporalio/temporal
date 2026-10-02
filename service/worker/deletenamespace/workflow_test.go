@@ -30,7 +30,7 @@ func Test_DeleteNamespaceWorkflow_ByName(t *testing.T) {
 	env.OnActivity(la.ValidateNexusEndpointsActivity, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 	env.OnActivity(la.MarkNamespaceDeletedActivity, mock.Anything, namespace.Name("namespace")).Return(nil).Once()
 	env.OnActivity(la.GenerateDeletedNamespaceNameActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(namespace.Name("namespace-delete-220878"), nil).Once()
-	env.OnActivity(la.RenameNamespaceActivity, mock.Anything, namespace.Name("namespace"), namespace.Name("namespace-delete-220878")).Return(nil).Once()
+	env.OnActivity(la.RenameNamespaceActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), namespace.Name("namespace-delete-220878")).Return(nil).Once()
 
 	env.RegisterWorkflow(reclaimresources.ReclaimResourcesWorkflow)
 	env.OnWorkflow(reclaimresources.ReclaimResourcesWorkflow, mock.Anything, reclaimresources.ReclaimResourcesParams{DeleteExecutionsParams: deleteexecutions.DeleteExecutionsParams{
@@ -76,7 +76,7 @@ func Test_DeleteNamespaceWorkflow_ByID(t *testing.T) {
 	env.OnActivity(la.ValidateNexusEndpointsActivity, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 	env.OnActivity(la.MarkNamespaceDeletedActivity, mock.Anything, namespace.Name("namespace")).Return(nil).Once()
 	env.OnActivity(la.GenerateDeletedNamespaceNameActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(namespace.Name("namespace-delete-220878"), nil).Once()
-	env.OnActivity(la.RenameNamespaceActivity, mock.Anything, namespace.Name("namespace"), namespace.Name("namespace-delete-220878")).Return(nil).Once()
+	env.OnActivity(la.RenameNamespaceActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), namespace.Name("namespace-delete-220878")).Return(nil).Once()
 
 	env.RegisterWorkflow(reclaimresources.ReclaimResourcesWorkflow)
 	env.OnWorkflow(reclaimresources.ReclaimResourcesWorkflow, mock.Anything, reclaimresources.ReclaimResourcesParams{DeleteExecutionsParams: deleteexecutions.DeleteExecutionsParams{
@@ -143,7 +143,7 @@ func Test_DeleteReplicatedNamespace(t *testing.T) {
 		env.OnActivity(la.ValidateNexusEndpointsActivity, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 		env.OnActivity(la.MarkNamespaceDeletedActivity, mock.Anything, mock.Anything).Return(nil).Once()
 		env.OnActivity(la.GenerateDeletedNamespaceNameActivity, mock.Anything, mock.Anything, mock.Anything).Return(namespace.EmptyName, nil).Once()
-		env.OnActivity(la.RenameNamespaceActivity, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+		env.OnActivity(la.RenameNamespaceActivity, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 		env.RegisterWorkflow(reclaimresources.ReclaimResourcesWorkflow)
 		env.OnWorkflow(reclaimresources.ReclaimResourcesWorkflow, mock.Anything, mock.Anything).Return(reclaimresources.ReclaimResourcesResult{}, nil).Once()
 
@@ -192,7 +192,7 @@ func Test_DeleteReplicatedNamespace(t *testing.T) {
 		env.OnActivity(la.ValidateNexusEndpointsActivity, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 		env.OnActivity(la.MarkNamespaceDeletedActivity, mock.Anything, mock.Anything).Return(nil).Once()
 		env.OnActivity(la.GenerateDeletedNamespaceNameActivity, mock.Anything, mock.Anything, mock.Anything).Return(namespace.EmptyName, nil).Once()
-		env.OnActivity(la.RenameNamespaceActivity, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
+		env.OnActivity(la.RenameNamespaceActivity, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Once()
 		env.RegisterWorkflow(reclaimresources.ReclaimResourcesWorkflow)
 		env.OnWorkflow(reclaimresources.ReclaimResourcesWorkflow, mock.Anything, mock.Anything).Return(reclaimresources.ReclaimResourcesResult{}, nil).Once()
 

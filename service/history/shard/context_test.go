@@ -208,6 +208,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
 		time.Time{},
@@ -236,6 +237,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
 		time.Time{},
@@ -253,6 +255,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
 		time.Time{},
@@ -269,6 +272,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_Continue_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
 		time.Time{},
@@ -296,6 +300,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
 		time.Time{},
@@ -312,6 +317,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
 		time.Time{},
@@ -328,6 +334,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
 		time.Time{},
@@ -343,6 +350,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
 		time.Time{},
@@ -355,7 +363,8 @@ func (s *contextSuite) TestDeleteWorkflowExecution_ErrorAndContinue_Success() {
 }
 
 func (s *contextSuite) TestDeleteWorkflowExecution_EmitsReplicationTaskWhenWorkflowActiveInCurrentCluster() {
-	captured := s.runDeleteWorkflowExecutionForReplicationCheck(cluster.TestCurrentClusterName)
+	lastWriteVersion := tests.Version + 100
+	captured := s.runDeleteWorkflowExecutionForReplicationCheck(cluster.TestCurrentClusterName, lastWriteVersion)
 
 	replicationTasks := captured.Tasks[tasks.CategoryReplication]
 	s.Require().Len(replicationTasks, 1, "expected a DeleteExecutionReplicationTask when workflow is active in current cluster")
@@ -363,10 +372,11 @@ func (s *contextSuite) TestDeleteWorkflowExecution_EmitsReplicationTaskWhenWorkf
 	s.True(ok, "task should be *DeleteExecutionReplicationTask")
 	s.Equal(captured.WorkflowID, deleteTask.WorkflowID)
 	s.Equal(captured.NamespaceID, deleteTask.NamespaceID)
+	s.Equal(lastWriteVersion, deleteTask.Version)
 }
 
 func (s *contextSuite) TestDeleteWorkflowExecution_NoReplicationTaskWhenWorkflowActiveInOtherCluster() {
-	captured := s.runDeleteWorkflowExecutionForReplicationCheck(cluster.TestAlternativeClusterName)
+	captured := s.runDeleteWorkflowExecutionForReplicationCheck(cluster.TestAlternativeClusterName, tests.Version)
 
 	s.Empty(captured.Tasks[tasks.CategoryReplication],
 		"expected no DeleteExecutionReplicationTask when workflow is active in another cluster")
@@ -374,6 +384,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_NoReplicationTaskWhenWorkflow
 
 func (s *contextSuite) runDeleteWorkflowExecutionForReplicationCheck(
 	workflowActiveCluster string,
+	lastWriteVersion int64,
 ) *persistence.AddHistoryTasksRequest {
 	nsID := namespace.NewID()
 	nsEntry := namespace.NewGlobalNamespaceForTest(
@@ -412,6 +423,7 @@ func (s *contextSuite) runDeleteWorkflowExecutionForReplicationCheck(
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		lastWriteVersion,
 		[]byte("branchToken"),
 		0,
 		time.Time{},
@@ -439,6 +451,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
 		time.Time{},
@@ -457,6 +470,7 @@ func (s *contextSuite) TestDeleteWorkflowExecution_DeleteVisibilityTaskNotificti
 		context.Background(),
 		workflowKey,
 		chasm.WorkflowArchetypeID,
+		tests.Version,
 		branchToken,
 		0,
 		time.Time{},
@@ -992,6 +1006,102 @@ func (s *contextSuite) TestUpdateShardInfo_FirstUpdate() {
 	s.NoError(err)
 	s.True(called)
 	s.Equal(0, s.mockShard.tasksCompletedSinceLastUpdate)
+}
+
+func (s *contextSuite) TestUpdateShardInfo_RecordsSizeMetrics() {
+	s.mockShard.state = contextStateAcquired
+	s.setImmediateAckLevels(map[int32]int64{
+		int32(tasks.CategoryIDTransfer): 100,
+		int32(tasks.CategoryIDTimer):    200,
+	})
+
+	expectedTransferSize := int64(s.mockShard.shardInfo.QueueStates[int32(tasks.CategoryIDTransfer)].Size())
+	expectedTimerSize := int64(s.mockShard.shardInfo.QueueStates[int32(tasks.CategoryIDTimer)].Size())
+
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+	captureHandler := metricstest.NewCaptureHandler()
+	s.mockShard.SetMetricsHandler(captureHandler)
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	err := s.mockShard.updateShardInfo(0, func() {})
+	s.NoError(err)
+
+	snapshot := capture.Snapshot()
+
+	shardInfoSizeRecordings := snapshot[metrics.ShardInfoSize.Name()]
+	s.Require().Len(shardInfoSizeRecordings, 1)
+	s.GreaterOrEqual(shardInfoSizeRecordings[0].Value.(int64), expectedTransferSize)
+	s.GreaterOrEqual(shardInfoSizeRecordings[0].Value.(int64), expectedTimerSize)
+
+	queueStateSizeRecordings := snapshot[metrics.QueueStateSize.Name()]
+	s.Require().Len(queueStateSizeRecordings, 2)
+
+	sizeByCategory := make(map[string]int64, len(queueStateSizeRecordings))
+	for _, recording := range queueStateSizeRecordings {
+		sizeByCategory[recording.Tags["task_category"]] = recording.Value.(int64)
+	}
+	s.Equal(map[string]int64{
+		tasks.CategoryTransfer.Name(): expectedTransferSize,
+		tasks.CategoryTimer.Name():    expectedTimerSize,
+	}, sizeByCategory)
+}
+
+func (s *contextSuite) TestUpdateShardInfo_RecordsQueueStateSizeTotal() {
+	s.mockShard.state = contextStateAcquired
+	s.setImmediateAckLevels(map[int32]int64{
+		int32(tasks.CategoryIDTransfer): 100,
+		int32(tasks.CategoryIDTimer):    200,
+	})
+
+	expectedTransferSize := int64(s.mockShard.shardInfo.QueueStates[int32(tasks.CategoryIDTransfer)].Size())
+	expectedTimerSize := int64(s.mockShard.shardInfo.QueueStates[int32(tasks.CategoryIDTimer)].Size())
+
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+
+	captureHandler := metricstest.NewCaptureHandler()
+	s.mockShard.SetMetricsHandler(captureHandler)
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	err := s.mockShard.updateShardInfo(0, func() {})
+	s.NoError(err)
+
+	snapshot := capture.Snapshot()
+	recordings := snapshot[metrics.QueueStateSizeTotal.Name()]
+	s.Require().Len(recordings, 2)
+
+	sizeByCategory := make(map[string]int64, len(recordings))
+	for _, recording := range recordings {
+		sizeByCategory[recording.Tags["task_category"]] = recording.Value.(int64)
+	}
+	s.Equal(map[string]int64{
+		tasks.CategoryTransfer.Name(): expectedTransferSize,
+		tasks.CategoryTimer.Name():    expectedTimerSize,
+	}, sizeByCategory)
+}
+
+func (s *contextSuite) TestUpdateShardInfo_DoesNotRecordSizeMetrics_WhenThrottled() {
+	s.mockShard.state = contextStateAcquired
+
+	// First call always persists, establishing lastUpdated.
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	s.NoError(s.mockShard.updateShardInfo(0, func() {}))
+
+	captureHandler := metricstest.NewCaptureHandler()
+	s.mockShard.SetMetricsHandler(captureHandler)
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	// No time has passed and too few tasks completed: shouldn't persist, and shouldn't record size.
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Times(0)
+	s.NoError(s.mockShard.updateShardInfo(0, func() {}))
+
+	snapshot := capture.Snapshot()
+	s.Empty(snapshot[metrics.ShardInfoSize.Name()])
+	s.Empty(snapshot[metrics.QueueStateSize.Name()])
+	s.Empty(snapshot[metrics.QueueStateSizeTotal.Name()])
 }
 
 // setImmediateAckLevels replaces the shard's queue states so each given immediate category has its

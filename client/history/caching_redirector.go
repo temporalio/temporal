@@ -225,8 +225,7 @@ func (r *CachingRedirector[C]) handleSolError(opEntry cacheEntry[C], solErr *ser
 }
 
 func maybeHostDownError(opErr error) bool {
-	var unavail *serviceerror.Unavailable
-	if errors.As(opErr, &unavail) {
+	if _, ok := errors.AsType[*serviceerror.Unavailable](opErr); ok {
 		return true
 	}
 	return common.IsContextDeadlineExceededErr(opErr)

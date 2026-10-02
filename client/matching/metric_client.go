@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/tqid"
-	"google.golang.org/grpc"
 )
 
 var _ matchingservice.MatchingServiceClient = (*metricClient)(nil)
@@ -41,150 +40,6 @@ func NewMetricClient(
 	}
 }
 
-func (c *metricClient) AddActivityTask(
-	ctx context.Context,
-	request *matchingservice.AddActivityTaskRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.AddActivityTaskResponse, retError error) {
-
-	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientAddActivityTaskScope)
-	defer func() {
-		c.finishMetricsRecording(scope, stopwatch, retError)
-	}()
-
-	c.emitForwardedSourceStats(
-		scope,
-		request.GetForwardInfo().GetSourcePartition(),
-		request.TaskQueue,
-	)
-
-	return c.client.AddActivityTask(ctx, request, opts...)
-}
-
-func (c *metricClient) AddWorkflowTask(
-	ctx context.Context,
-	request *matchingservice.AddWorkflowTaskRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.AddWorkflowTaskResponse, retError error) {
-
-	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientAddWorkflowTaskScope)
-	defer func() {
-		c.finishMetricsRecording(scope, stopwatch, retError)
-	}()
-
-	c.emitForwardedSourceStats(
-		scope,
-		request.GetForwardInfo().GetSourcePartition(),
-		request.TaskQueue,
-	)
-
-	return c.client.AddWorkflowTask(ctx, request, opts...)
-}
-
-func (c *metricClient) PollActivityTaskQueue(
-	ctx context.Context,
-	request *matchingservice.PollActivityTaskQueueRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.PollActivityTaskQueueResponse, retError error) {
-
-	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientPollActivityTaskQueueScope)
-	defer func() {
-		c.finishMetricsRecording(scope, stopwatch, retError)
-	}()
-
-	if request.PollRequest != nil {
-		c.emitForwardedSourceStats(
-			scope,
-			request.GetForwardedSource(),
-			request.PollRequest.TaskQueue,
-		)
-	}
-
-	return c.client.PollActivityTaskQueue(ctx, request, opts...)
-}
-
-func (c *metricClient) PollWorkflowTaskQueue(
-	ctx context.Context,
-	request *matchingservice.PollWorkflowTaskQueueRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.PollWorkflowTaskQueueResponse, retError error) {
-
-	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientPollWorkflowTaskQueueScope)
-	defer func() {
-		c.finishMetricsRecording(scope, stopwatch, retError)
-	}()
-
-	if request.PollRequest != nil {
-		c.emitForwardedSourceStats(
-			scope,
-			request.GetForwardedSource(),
-			request.PollRequest.TaskQueue,
-		)
-	}
-
-	return c.client.PollWorkflowTaskQueue(ctx, request, opts...)
-}
-
-func (c *metricClient) QueryWorkflow(
-	ctx context.Context,
-	request *matchingservice.QueryWorkflowRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.QueryWorkflowResponse, retError error) {
-
-	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientQueryWorkflowScope)
-	defer func() {
-		c.finishMetricsRecording(scope, stopwatch, retError)
-	}()
-
-	c.emitForwardedSourceStats(
-		scope,
-		request.GetForwardInfo().GetSourcePartition(),
-		request.TaskQueue,
-	)
-
-	return c.client.QueryWorkflow(ctx, request, opts...)
-}
-
-func (c *metricClient) DispatchNexusTask(
-	ctx context.Context,
-	request *matchingservice.DispatchNexusTaskRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.DispatchNexusTaskResponse, retError error) {
-	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientDispatchNexusTaskScope)
-	defer func() {
-		c.finishMetricsRecording(scope, stopwatch, retError)
-	}()
-
-	c.emitForwardedSourceStats(
-		scope,
-		request.GetForwardInfo().GetSourcePartition(),
-		request.TaskQueue,
-	)
-
-	return c.client.DispatchNexusTask(ctx, request, opts...)
-}
-
-func (c *metricClient) PollNexusTaskQueue(
-	ctx context.Context,
-	request *matchingservice.PollNexusTaskQueueRequest,
-	opts ...grpc.CallOption,
-) (_ *matchingservice.PollNexusTaskQueueResponse, retError error) {
-	scope, stopwatch := c.startMetricsRecording(ctx, metrics.MatchingClientPollNexusTaskQueueScope)
-	defer func() {
-		c.finishMetricsRecording(scope, stopwatch, retError)
-	}()
-
-	if request.Request != nil {
-		c.emitForwardedSourceStats(
-			scope,
-			request.GetForwardedSource(),
-			request.Request.TaskQueue,
-		)
-	}
-
-	return c.client.PollNexusTaskQueue(ctx, request, opts...)
-}
-
 func (c *metricClient) emitForwardedSourceStats(
 	metricsHandler metrics.Handler,
 	forwardedFrom string,
@@ -193,16 +48,23 @@ func (c *metricClient) emitForwardedSourceStats(
 	if taskQueue == nil {
 		return
 	}
+	c.emitForwardedSourceStatsForTaskQueueName(metricsHandler, forwardedFrom, taskQueue.GetName())
+}
 
+func (c *metricClient) emitForwardedSourceStatsForTaskQueueName(
+	metricsHandler metrics.Handler,
+	forwardedFrom string,
+	taskQueueName string,
+) {
 	switch {
 	case forwardedFrom != "":
 		metrics.MatchingClientForwardedCounter.With(metricsHandler).Record(1)
 	default:
 		// TODO: confirmed from metrics, it seems this error does happen at the moment...
 		// it means some mangled name come here; need to check why
-		_, err := tqid.NewTaskQueueFamily("", taskQueue.GetName())
+		_, err := tqid.NewTaskQueueFamily("", taskQueueName)
 		if err != nil {
-			c.logger.Info("invalid tq name", tag.Error(err), tag.String("proto", taskQueue.GetName()))
+			c.logger.Info("invalid tq name", tag.Error(err), tag.String("proto", taskQueueName))
 			metrics.MatchingClientInvalidTaskQueueName.With(metricsHandler).Record(1)
 		}
 	}

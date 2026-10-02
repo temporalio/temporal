@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -21,6 +22,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -57,6 +59,7 @@ type (
 		identity                string
 		workerControlTaskQueue  string
 		workflowTaskCompletedID int64
+		workflowTaskDeployment  *deploymentpb.Deployment
 
 		// internal state
 		hasBufferedEventsOrMessages         bool
@@ -111,6 +114,7 @@ func newWorkflowTaskCompletedHandler(
 	identity string,
 	workerControlTaskQueue string,
 	workflowTaskCompletedID int64,
+	workflowTaskDeployment *deploymentpb.Deployment,
 	mutableState historyi.MutableState,
 	updateRegistry update.Registry,
 	effects effect.Controller,
@@ -132,6 +136,7 @@ func newWorkflowTaskCompletedHandler(
 		identity:                identity,
 		workerControlTaskQueue:  workerControlTaskQueue,
 		workflowTaskCompletedID: workflowTaskCompletedID,
+		workflowTaskDeployment:  workflowTaskDeployment,
 
 		// internal state
 		hasBufferedEventsOrMessages:     hasBufferedEventsOrMessages,
@@ -365,8 +370,7 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 			err = hsmHandler(ctx, handler.mutableState, validator, handlerOpts.WorkflowTaskCompletedEventID, command)
 		}
 
-		var failWFTErr chasmworkflow.FailWorkflowTaskError
-		if errors.As(err, &failWFTErr) {
+		if failWFTErr, ok := errors.AsType[chasmworkflow.FailWorkflowTaskError](err); ok {
 			if failWFTErr.TerminateWorkflow {
 				return nil, handler.terminateWorkflow(failWFTErr.Cause, failWFTErr)
 			}
@@ -465,7 +469,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandProtocolMessage(
 }
 
 func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
-	_ context.Context,
+	ctx context.Context,
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
 ) (*historypb.HistoryEvent, *handleCommandResponse, error) {
 	executionInfo := handler.mutableState.GetExecutionInfo()
@@ -547,6 +551,14 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	if handler.mutableState.GetExecutionState().Status == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		bypassActivityTaskGeneration = true
 		eagerStartActivity = false
+	} else if eagerStartActivity &&
+		// This line makes an RPC call to matching
+		// TODO: batch possibly multiple activities in a single RPC call
+		!handler.eagerActivityDispatchAllowed(ctx, namespace, attr) {
+		// Matching grants are best-effort. On a denial or any matching failure, generate the
+		// activity task normally instead of failing workflow task completion.
+		bypassActivityTaskGeneration = false
+		eagerStartActivity = false
 	}
 
 	event, _, err := handler.mutableState.AddActivityTaskScheduledEvent(
@@ -569,6 +581,41 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 			},
 		},
 		nil
+}
+
+func (handler *workflowTaskCompletedHandler) eagerActivityDispatchAllowed(
+	ctx context.Context,
+	namespaceName string,
+	attr *commandpb.ScheduleActivityTaskCommandAttributes,
+) bool {
+	return !handler.config.EnableActivityEagerDispatchCheck(namespaceName) ||
+		handler.grantEagerActivityDispatch(ctx, attr)
+}
+
+func (handler *workflowTaskCompletedHandler) grantEagerActivityDispatch(
+	ctx context.Context,
+	attr *commandpb.ScheduleActivityTaskCommandAttributes,
+) bool {
+	if handler.matchingClient == nil {
+		return false
+	}
+
+	executionInfo := handler.mutableState.GetExecutionInfo()
+	response, err := handler.matchingClient.GrantEagerDispatch(ctx, &matchingservice.GrantEagerDispatchRequest{
+		NamespaceId: executionInfo.GetNamespaceId(),
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     attr.GetTaskQueue().GetName(),
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+		},
+		Items: []*matchingservice.GrantEagerDispatchRequest_Item{
+			{
+				Count:    1,
+				Priority: attr.GetPriority(),
+				Version:  worker_versioning.DeploymentVersionFromDeployment(handler.workflowTaskDeployment),
+			},
+		},
+	})
+	return err == nil && len(response.GetItems()) == 1 && response.GetItems()[0].GetGrantedCount() == 1
 }
 
 func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivity(
@@ -604,7 +651,7 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		uuid.NewString(),
 		handler.identity,
 		stamp,
-		nil,
+		handler.workflowTaskDeployment,
 		nil,
 		handler.workerControlTaskQueue, // Eager: activity runs on the same worker that completed the WFT.
 		shardClock,
@@ -1456,7 +1503,7 @@ func (handler *workflowTaskCompletedHandler) handleRetry(
 		handler.mutableState.GetNamespaceEntry(),
 		handler.mutableState.GetWorkflowKey().WorkflowID,
 		newRunID,
-		handler.shard.GetTimeSource().Now(),
+		handler.mutableState.Now(),
 		handler.mutableState,
 	)
 	if err != nil {
@@ -1516,7 +1563,7 @@ func (handler *workflowTaskCompletedHandler) handleCron(
 		handler.mutableState.GetNamespaceEntry(),
 		handler.mutableState.GetWorkflowKey().WorkflowID,
 		newRunID,
-		handler.shard.GetTimeSource().Now(),
+		handler.mutableState.Now(),
 		handler.mutableState,
 	)
 	if err != nil {
@@ -1563,8 +1610,7 @@ func (handler *workflowTaskCompletedHandler) failWorkflowTaskOnInvalidArgument(
 	wtFailedCause enumspb.WorkflowTaskFailedCause,
 	err error,
 ) error {
-	var invalidArgument *serviceerror.InvalidArgument
-	if errors.As(err, &invalidArgument) {
+	if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
 		return handler.failWorkflowTask(wtFailedCause, err)
 	}
 	return err
