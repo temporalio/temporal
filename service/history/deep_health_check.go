@@ -11,6 +11,7 @@ import (
 	healthcheck "go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/configs"
 	"google.golang.org/grpc/health"
@@ -56,148 +57,21 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 		Enforced: true,
 	})
 
-	// TODO: Remove AverageLatency check once Latency is used by default.
-	checks = append(checks, errorIfOverThreshold(
-		healthcheck.CheckTypeRPCLatency,
-		h.historyHealthSignal.AverageLatency(),
-		h.config.HealthRPCLatencyFailure(),
-		"historyservice latency",
-		true, // enforced
-	))
+	// grpc
+	checks = append(checks, healthcheck.Evaluate(
+		h.historyHealthSignal,
+		h.config.HealthCheckHistoryGRPCSettings(),
+		healthcheck.Source{Service: primitives.HistoryService, Component: healthcheck.ComponentGRPC},
+	)...)
 
-	for _, settings := range h.config.HealthRPCLatencyPercentiles().PercentileSettings {
-		latency, found := h.historyHealthSignal.LatencyQuantile(settings.Percentile)
-		if !found {
-			continue
-		}
+	// persistence
+	checks = append(checks, healthcheck.Evaluate(
+		h.persistenceHealthSignal,
+		h.config.HealthCheckPersistenceSettings(), // TODO: use persistence settings
+		healthcheck.Source{Service: primitives.HistoryService, Component: healthcheck.ComponentPersistence},
+	)...)
 
-		checks = append(checks, errorIfOverThreshold(
-			healthcheck.CheckTypeRPCLatency+fmt.Sprintf("_P%0.2f", 100.0*settings.Percentile),
-			latency,
-			float64(settings.Threshold.Milliseconds()),
-			fmt.Sprintf("historyservice percentile latency (P%0.2f < %d, enforced: %t)", 100.0*settings.Percentile, settings.Threshold.Milliseconds(), settings.Enforced),
-			settings.Enforced,
-		))
-	}
-
-	errRatio, found := h.historyHealthSignal.ErrorRatio()
-	if found {
-		checks = append(checks, errorIfOverThreshold(
-			healthcheck.CheckTypeRPCErrorRatio,
-			errRatio,
-			h.config.HealthRPCErrorRatio(),
-			"historyservice error ratio",
-			true, // enforced
-		))
-	}
-
-	// //////////////////
-	// overall latency
-	// //////////////////
-
-	healthCheckSettings := h.config.HealthCheckHistoryGRPCSettings()
-
-	for _, qt := range healthCheckSettings.Overall.QuantileThresholds {
-		latency, found := h.historyHealthSignal.LatencyQuantile(qt.Quantile)
-		if !found {
-			continue
-		}
-
-		checks = append(checks, errorIfOverThreshold(
-			healthcheck.CheckTypeRPCLatencyOverall+fmt.Sprintf("_P%0.2f", 100.0*qt.Quantile),
-			latency,
-			float64(qt.Threshold.Milliseconds()),
-			fmt.Sprintf("history service overall percentile latency (P%0.2f < %dms, enforced: %t)", 100.0*qt.Quantile, qt.Threshold.Milliseconds(), healthCheckSettings.Overall.Enforced),
-			healthCheckSettings.Overall.Enforced,
-		))
-	}
-
-	// //////////////////
-	// overall error ratio
-	// //////////////////
-
-	if healthCheckSettings.Overall.ErrorRatioThreshold != nil {
-		errorRatio, found := h.historyHealthSignal.ErrorRatio()
-		if found {
-			checks = append(checks, errorIfOverThreshold(
-				healthcheck.CheckTypeRPCErrorRatioOverall,
-				errorRatio,
-				healthCheckSettings.Overall.ErrorRatioThreshold.Threshold,
-				fmt.Sprintf("history service overall error ratio (< %0.2f, enforced: %t)", healthCheckSettings.Overall.ErrorRatioThreshold.Threshold, healthCheckSettings.Overall.Enforced),
-				healthCheckSettings.Overall.Enforced,
-			))
-		}
-	}
-
-	// //////////////////
-	// groups
-	// //////////////////
-
-	for _, group := range healthCheckSettings.Groups {
-		for _, qt := range group.Thresholds.QuantileThresholds {
-			latency, found := h.historyHealthSignal.LatencyQuantileByGroup(group.Name, qt.Quantile)
-			if !found {
-				continue
-			}
-
-			checks = append(checks, errorIfOverThreshold(
-				fmt.Sprintf("%s_%s_P%0.2f", healthcheck.CheckTypeRPCLatencyGroup, group.Name, 100.0*qt.Quantile),
-				latency,
-				float64(qt.Threshold.Milliseconds()),
-				fmt.Sprintf("history service %s group percentile latency (P%0.2f < %dms, enforced: %t)", group.Name, 100.0*qt.Quantile, qt.Threshold.Milliseconds(), group.Thresholds.Enforced),
-				group.Thresholds.Enforced,
-			))
-		}
-
-		if group.Thresholds.ErrorRatioThreshold != nil {
-			errorRatio, found := h.historyHealthSignal.ErrorRatioByGroup(group.Name)
-			if found {
-				checks = append(checks, errorIfOverThreshold(
-					fmt.Sprintf("%s_%s", healthcheck.CheckTypeRPCErrorRatioGroup, group.Name),
-					errorRatio,
-					group.Thresholds.ErrorRatioThreshold.Threshold,
-					fmt.Sprintf("history service %s group error ratio (< %0.2f, enforced: %t)", group.Name, group.Thresholds.ErrorRatioThreshold.Threshold, group.Thresholds.Enforced),
-					group.Thresholds.Enforced,
-				))
-			}
-		}
-	}
-
-	// TODO: Remove AverageLatency check once Latency is used by default.
-	checks = append(checks, errorIfOverThreshold(
-		healthcheck.CheckTypePersistenceLatency,
-		h.persistenceHealthSignal.AverageLatency(),
-		h.config.HealthPersistenceLatencyFailure(),
-		"persistenceservice latency",
-		true, // enforced
-	))
-
-	persistenceErrRatio, found := h.persistenceHealthSignal.ErrorRatio()
-	if found {
-		checks = append(checks, errorIfOverThreshold(
-			healthcheck.CheckTypePersistenceErrRatio,
-			persistenceErrRatio,
-			h.config.HealthPersistenceErrorRatio(),
-			"persistenceservice error ratio",
-			true,
-		))
-	}
-
-	overallState := enumsspb.HEALTH_STATE_SERVING
-	unenforcedState := enumsspb.HEALTH_STATE_SERVING
-
-	for _, check := range checks {
-		if check.State == enumsspb.HEALTH_STATE_SERVING {
-			continue
-		}
-
-		// an unhealthy check always counts towards the unenforced state
-		unenforcedState = enumsspb.HEALTH_STATE_NOT_SERVING
-
-		if check.Enforced {
-			overallState = enumsspb.HEALTH_STATE_NOT_SERVING
-		}
-	}
+	overallState, unenforcedState := healthcheck.RollupState(checks)
 
 	metrics.HistoryHostHealthGauge.With(h.metricsHandler).Record(float64(overallState))
 
@@ -215,22 +89,6 @@ func suppressStartupErrors(status grpchealthspb.HealthCheckResponse_ServingStatu
 		return enumsspb.HEALTH_STATE_SERVING
 	}
 	return toLocalHealthProto(status)
-}
-
-func errorIfOverThreshold(checkType string, value float64, threshold float64, message string, enforced bool) *healthspb.HealthCheck {
-	state := enumsspb.HEALTH_STATE_SERVING
-	if value > threshold {
-		state = enumsspb.HEALTH_STATE_NOT_SERVING
-	}
-
-	return &healthspb.HealthCheck{
-		CheckType: checkType,
-		State:     state,
-		Value:     value,
-		Threshold: threshold,
-		Message:   message,
-		Enforced:  enforced,
-	}
 }
 
 func toLocalHealthProto(in grpchealthspb.HealthCheckResponse_ServingStatus) enumsspb.HealthState {
