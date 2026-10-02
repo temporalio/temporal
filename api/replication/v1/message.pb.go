@@ -429,18 +429,15 @@ type SyncReplicationState struct {
 	// lanes. The priority lives in the field name: a future LOW-lane extension adds
 	// its own throttle_low_namespace_ids rather than widening this one.
 	ThrottleHighNamespaceIds []string `protobuf:"bytes,5,rep,name=throttle_high_namespace_ids,json=throttleHighNamespaceIds,proto3" json:"throttle_high_namespace_ids,omitempty"`
-	// Low watermarks of the isolated per-namespace lanes, keyed by namespace ID.
-	// Absence of a key is ambiguous: it means either "the receiver has not tracked
-	// this lane yet" or "the lane retired and drained". A sender must therefore never
-	// treat absence alone as proof a lane drained — it must correlate with its own
-	// lane state (e.g. only conclude drain for lanes it has retired).
-	IsolatedLaneStates map[string]*ReplicationState `protobuf:"bytes,6,rep,name=isolated_lane_states,json=isolatedLaneStates,proto3" json:"isolated_lane_states,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	// True when the receiver understands per-namespace lane isolation (routing of
-	// isolated_namespace_id-tagged messages). The sender requires this before it emits
-	// lane-tagged traffic, so an old receiver is never sent lanes it would misroute.
-	SupportsNamespaceIsolation bool `protobuf:"varint,7,opt,name=supports_namespace_isolation,json=supportsNamespaceIsolation,proto3" json:"supports_namespace_isolation,omitempty"`
-	unknownFields              protoimpl.UnknownFields
-	sizeCache                  protoimpl.SizeCache
+	// Low watermarks of sender-defined lanes, keyed by opaque lane ID. Policy
+	// signals such as throttle_high_namespace_ids remain independent of lane IDs.
+	LaneStates map[string]*ReplicationState `protobuf:"bytes,6,rep,name=lane_states,json=laneStates,proto3" json:"lane_states,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// True when the receiver understands lane_id-tagged messages.
+	SupportsReplicationLanes bool `protobuf:"varint,7,opt,name=supports_replication_lanes,json=supportsReplicationLanes,proto3" json:"supports_replication_lanes,omitempty"`
+	// Highest version of the generic lane protocol supported by the receiver.
+	ReplicationLaneProtocolVersion int32 `protobuf:"varint,8,opt,name=replication_lane_protocol_version,json=replicationLaneProtocolVersion,proto3" json:"replication_lane_protocol_version,omitempty"`
+	unknownFields                  protoimpl.UnknownFields
+	sizeCache                      protoimpl.SizeCache
 }
 
 func (x *SyncReplicationState) Reset() {
@@ -508,18 +505,25 @@ func (x *SyncReplicationState) GetThrottleHighNamespaceIds() []string {
 	return nil
 }
 
-func (x *SyncReplicationState) GetIsolatedLaneStates() map[string]*ReplicationState {
+func (x *SyncReplicationState) GetLaneStates() map[string]*ReplicationState {
 	if x != nil {
-		return x.IsolatedLaneStates
+		return x.LaneStates
 	}
 	return nil
 }
 
-func (x *SyncReplicationState) GetSupportsNamespaceIsolation() bool {
+func (x *SyncReplicationState) GetSupportsReplicationLanes() bool {
 	if x != nil {
-		return x.SupportsNamespaceIsolation
+		return x.SupportsReplicationLanes
 	}
 	return false
+}
+
+func (x *SyncReplicationState) GetReplicationLaneProtocolVersion() int32 {
+	if x != nil {
+		return x.ReplicationLaneProtocolVersion
+	}
+	return 0
 }
 
 type ReplicationState struct {
@@ -659,17 +663,14 @@ type WorkflowReplicationMessages struct {
 	ExclusiveHighWatermark     int64                  `protobuf:"varint,2,opt,name=exclusive_high_watermark,json=exclusiveHighWatermark,proto3" json:"exclusive_high_watermark,omitempty"`
 	ExclusiveHighWatermarkTime *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=exclusive_high_watermark_time,json=exclusiveHighWatermarkTime,proto3" json:"exclusive_high_watermark_time,omitempty"`
 	Priority                   v1.TaskPriority        `protobuf:"varint,4,opt,name=priority,proto3,enum=temporal.server.api.enums.v1.TaskPriority" json:"priority,omitempty"`
-	// When set, this batch belongs to the named namespace's isolated lane rather
-	// than the shared priority lane. Used by the receiver only for tracker routing;
-	// scheduler priority still comes from `priority`. Each isolated lane is a
-	// monotonic stream for the life of the stream connection.
-	IsolatedNamespaceId string `protobuf:"bytes,5,opt,name=isolated_namespace_id,json=isolatedNamespaceId,proto3" json:"isolated_namespace_id,omitempty"`
-	// True on the final message of an isolated lane: the sender has merged the
-	// namespace back to the shared lane and will send no further traffic on this
-	// lane. The receiver drops the lane's tracking once its pending work drains.
-	RetireIsolatedLane bool `protobuf:"varint,6,opt,name=retire_isolated_lane,json=retireIsolatedLane,proto3" json:"retire_isolated_lane,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Opaque, stream-local ID for an independently ordered lane. The receiver uses
+	// it only for tracker routing; scheduler priority still comes from `priority`.
+	LaneId string `protobuf:"bytes,5,opt,name=lane_id,json=laneId,proto3" json:"lane_id,omitempty"`
+	// True on the final message for a lane. No later message on this stream may use
+	// the same lane ID.
+	RetireLane    bool `protobuf:"varint,6,opt,name=retire_lane,json=retireLane,proto3" json:"retire_lane,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *WorkflowReplicationMessages) Reset() {
@@ -730,16 +731,16 @@ func (x *WorkflowReplicationMessages) GetPriority() v1.TaskPriority {
 	return v1.TaskPriority(0)
 }
 
-func (x *WorkflowReplicationMessages) GetIsolatedNamespaceId() string {
+func (x *WorkflowReplicationMessages) GetLaneId() string {
 	if x != nil {
-		return x.IsolatedNamespaceId
+		return x.LaneId
 	}
 	return ""
 }
 
-func (x *WorkflowReplicationMessages) GetRetireIsolatedLane() bool {
+func (x *WorkflowReplicationMessages) GetRetireLane() bool {
 	if x != nil {
-		return x.RetireIsolatedLane
+		return x.RetireLane
 	}
 	return false
 }
@@ -2205,16 +2206,18 @@ const file_temporal_server_api_replication_v1_message_proto_rawDesc = "" +
 	"\x1elast_processed_visibility_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\x1blastProcessedVisibilityTime\"N\n" +
 	"\x0fSyncShardStatus\x12;\n" +
 	"\vstatus_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"statusTime\"\xf8\x05\n" +
+	"statusTime\"\x9d\x06\n" +
 	"\x14SyncReplicationState\x126\n" +
 	"\x17inclusive_low_watermark\x18\x01 \x01(\x03R\x15inclusiveLowWatermark\x12[\n" +
 	"\x1cinclusive_low_watermark_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x19inclusiveLowWatermarkTime\x12d\n" +
 	"\x13high_priority_state\x18\x03 \x01(\v24.temporal.server.api.replication.v1.ReplicationStateR\x11highPriorityState\x12b\n" +
 	"\x12low_priority_state\x18\x04 \x01(\v24.temporal.server.api.replication.v1.ReplicationStateR\x10lowPriorityState\x12=\n" +
-	"\x1bthrottle_high_namespace_ids\x18\x05 \x03(\tR\x18throttleHighNamespaceIds\x12\x82\x01\n" +
-	"\x14isolated_lane_states\x18\x06 \x03(\v2P.temporal.server.api.replication.v1.SyncReplicationState.IsolatedLaneStatesEntryR\x12isolatedLaneStates\x12@\n" +
-	"\x1csupports_namespace_isolation\x18\a \x01(\bR\x1asupportsNamespaceIsolation\x1a{\n" +
-	"\x17IsolatedLaneStatesEntry\x12\x10\n" +
+	"\x1bthrottle_high_namespace_ids\x18\x05 \x03(\tR\x18throttleHighNamespaceIds\x12i\n" +
+	"\vlane_states\x18\x06 \x03(\v2H.temporal.server.api.replication.v1.SyncReplicationState.LaneStatesEntryR\n" +
+	"laneStates\x12<\n" +
+	"\x1asupports_replication_lanes\x18\a \x01(\bR\x18supportsReplicationLanes\x12I\n" +
+	"!replication_lane_protocol_version\x18\b \x01(\x05R\x1ereplicationLaneProtocolVersion\x1as\n" +
+	"\x0fLaneStatesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12J\n" +
 	"\x05value\x18\x02 \x01(\v24.temporal.server.api.replication.v1.ReplicationStateR\x05value:\x028\x01\"\x96\x02\n" +
 	"\x10ReplicationState\x126\n" +
@@ -2225,14 +2228,15 @@ const file_temporal_server_api_replication_v1_message_proto_rawDesc = "" +
 	"\x11replication_tasks\x18\x01 \x03(\v23.temporal.server.api.replication.v1.ReplicationTaskR\x10replicationTasks\x129\n" +
 	"\x19last_retrieved_message_id\x18\x02 \x01(\x03R\x16lastRetrievedMessageId\x12\x19\n" +
 	"\bhas_more\x18\x03 \x01(\bR\ahasMore\x12_\n" +
-	"\x11sync_shard_status\x18\x04 \x01(\v23.temporal.server.api.replication.v1.SyncShardStatusR\x0fsyncShardStatus\"\xc6\x03\n" +
+	"\x11sync_shard_status\x18\x04 \x01(\v23.temporal.server.api.replication.v1.SyncShardStatusR\x0fsyncShardStatus\"\x9a\x03\n" +
 	"\x1bWorkflowReplicationMessages\x12`\n" +
 	"\x11replication_tasks\x18\x01 \x03(\v23.temporal.server.api.replication.v1.ReplicationTaskR\x10replicationTasks\x128\n" +
 	"\x18exclusive_high_watermark\x18\x02 \x01(\x03R\x16exclusiveHighWatermark\x12]\n" +
 	"\x1dexclusive_high_watermark_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x1aexclusiveHighWatermarkTime\x12F\n" +
-	"\bpriority\x18\x04 \x01(\x0e2*.temporal.server.api.enums.v1.TaskPriorityR\bpriority\x122\n" +
-	"\x15isolated_namespace_id\x18\x05 \x01(\tR\x13isolatedNamespaceId\x120\n" +
-	"\x14retire_isolated_lane\x18\x06 \x01(\bR\x12retireIsolatedLane\"\xa8\x03\n" +
+	"\bpriority\x18\x04 \x01(\x0e2*.temporal.server.api.enums.v1.TaskPriorityR\bpriority\x12\x17\n" +
+	"\alane_id\x18\x05 \x01(\tR\x06laneId\x12\x1f\n" +
+	"\vretire_lane\x18\x06 \x01(\bR\n" +
+	"retireLane\"\xa8\x03\n" +
 	"\x13ReplicationTaskInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -2406,7 +2410,7 @@ var file_temporal_server_api_replication_v1_message_proto_goTypes = []any{
 	(*SyncVersionedTransitionTaskAttributes)(nil),   // 20: temporal.server.api.replication.v1.SyncVersionedTransitionTaskAttributes
 	(*VersionedTransitionArtifact)(nil),             // 21: temporal.server.api.replication.v1.VersionedTransitionArtifact
 	(*MigrationExecutionInfo)(nil),                  // 22: temporal.server.api.replication.v1.MigrationExecutionInfo
-	nil,                                             // 23: temporal.server.api.replication.v1.SyncReplicationState.IsolatedLaneStatesEntry
+	nil,                                             // 23: temporal.server.api.replication.v1.SyncReplicationState.LaneStatesEntry
 	(v1.ReplicationTaskType)(0),                     // 24: temporal.server.api.enums.v1.ReplicationTaskType
 	(*v11.DataBlob)(nil),                            // 25: temporal.api.common.v1.DataBlob
 	(*timestamppb.Timestamp)(nil),                   // 26: google.protobuf.Timestamp
@@ -2453,7 +2457,7 @@ var file_temporal_server_api_replication_v1_message_proto_depIdxs = []int32{
 	26, // 18: temporal.server.api.replication.v1.SyncReplicationState.inclusive_low_watermark_time:type_name -> google.protobuf.Timestamp
 	4,  // 19: temporal.server.api.replication.v1.SyncReplicationState.high_priority_state:type_name -> temporal.server.api.replication.v1.ReplicationState
 	4,  // 20: temporal.server.api.replication.v1.SyncReplicationState.low_priority_state:type_name -> temporal.server.api.replication.v1.ReplicationState
-	23, // 21: temporal.server.api.replication.v1.SyncReplicationState.isolated_lane_states:type_name -> temporal.server.api.replication.v1.SyncReplicationState.IsolatedLaneStatesEntry
+	23, // 21: temporal.server.api.replication.v1.SyncReplicationState.lane_states:type_name -> temporal.server.api.replication.v1.SyncReplicationState.LaneStatesEntry
 	26, // 22: temporal.server.api.replication.v1.ReplicationState.inclusive_low_watermark_time:type_name -> google.protobuf.Timestamp
 	30, // 23: temporal.server.api.replication.v1.ReplicationState.flow_control_command:type_name -> temporal.server.api.enums.v1.ReplicationFlowControlCommand
 	0,  // 24: temporal.server.api.replication.v1.ReplicationMessages.replication_tasks:type_name -> temporal.server.api.replication.v1.ReplicationTask
@@ -2502,7 +2506,7 @@ var file_temporal_server_api_replication_v1_message_proto_depIdxs = []int32{
 	18, // 67: temporal.server.api.replication.v1.VersionedTransitionArtifact.sync_workflow_state_snapshot_attributes:type_name -> temporal.server.api.replication.v1.SyncWorkflowStateSnapshotAttributes
 	25, // 68: temporal.server.api.replication.v1.VersionedTransitionArtifact.event_batches:type_name -> temporal.api.common.v1.DataBlob
 	16, // 69: temporal.server.api.replication.v1.VersionedTransitionArtifact.new_run_info:type_name -> temporal.server.api.replication.v1.NewRunInfo
-	4,  // 70: temporal.server.api.replication.v1.SyncReplicationState.IsolatedLaneStatesEntry.value:type_name -> temporal.server.api.replication.v1.ReplicationState
+	4,  // 70: temporal.server.api.replication.v1.SyncReplicationState.LaneStatesEntry.value:type_name -> temporal.server.api.replication.v1.ReplicationState
 	71, // [71:71] is the sub-list for method output_type
 	71, // [71:71] is the sub-list for method input_type
 	71, // [71:71] is the sub-list for extension type_name

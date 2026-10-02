@@ -72,16 +72,13 @@ message SyncReplicationState {
   // lanes. The priority lives in the field name: a future LOW-lane extension adds
   // its own throttle_low_namespace_ids rather than widening this one.
   repeated string throttle_high_namespace_ids = 5;
-  // Low watermarks of the isolated per-namespace lanes, keyed by namespace ID.
-  // Absence of a key is ambiguous: it means either "the receiver has not tracked
-  // this lane yet" or "the lane retired and drained". A sender must therefore never
-  // treat absence alone as proof a lane drained — it must correlate with its own
-  // lane state (e.g. only conclude drain for lanes it has retired).
-  map<string, ReplicationState> isolated_lane_states = 6;
-  // True when the receiver understands per-namespace lane isolation (routing of
-  // isolated_namespace_id-tagged messages). The sender requires this before it emits
-  // lane-tagged traffic, so an old receiver is never sent lanes it would misroute.
-  bool supports_namespace_isolation = 7;
+  // Low watermarks of sender-defined lanes, keyed by opaque lane ID. Policy
+  // signals such as throttle_high_namespace_ids remain independent of lane IDs.
+  map<string, ReplicationState> lane_states = 6;
+  // True when the receiver understands lane_id-tagged messages.
+  bool supports_replication_lanes = 7;
+  // Highest version of the generic lane protocol supported by the receiver.
+  int32 replication_lane_protocol_version = 8;
 }
 message ReplicationState {
   int64 inclusive_low_watermark = 1;
@@ -104,15 +101,12 @@ message WorkflowReplicationMessages {
   int64 exclusive_high_watermark = 2;
   google.protobuf.Timestamp exclusive_high_watermark_time = 3;
   temporal.server.api.enums.v1.TaskPriority priority = 4;
-  // When set, this batch belongs to the named namespace's isolated lane rather
-  // than the shared priority lane. Used by the receiver only for tracker routing;
-  // scheduler priority still comes from `priority`. Each isolated lane is a
-  // monotonic stream for the life of the stream connection.
-  string isolated_namespace_id = 5;
-  // True on the final message of an isolated lane: the sender has merged the
-  // namespace back to the shared lane and will send no further traffic on this
-  // lane. The receiver drops the lane's tracking once its pending work drains.
-  bool retire_isolated_lane = 6;
+  // Opaque, stream-local ID for an independently ordered lane. The receiver uses
+  // it only for tracker routing; scheduler priority still comes from `priority`.
+  string lane_id = 5;
+  // True on the final message for a lane. No later message on this stream may use
+  // the same lane ID.
+  bool retire_lane = 6;
 }
 
 // TODO: Deprecate this definition, it only used by the deprecated replication DLQ v1 logic

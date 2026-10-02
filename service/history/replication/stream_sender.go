@@ -39,7 +39,9 @@ import (
 )
 
 const (
-	TaskMaxSkipCount = 1000
+	TaskMaxSkipCount     = 1000
+	laneTasksPerTurn     = 1
+	laneTaskScansPerTurn = TaskMaxSkipCount
 )
 
 type (
@@ -47,6 +49,11 @@ type (
 		IsValid() bool
 		Key() ClusterShardKeyPair
 		Stop()
+	}
+	laneTurnBudget struct {
+		maxTasks        int
+		maxScannedTasks int
+		onRetryStarted  func()
 	}
 	StreamSenderImpl struct {
 		server                  historyservice.HistoryService_StreamWorkflowReplicationMessagesServer
@@ -65,9 +72,20 @@ type (
 		config                  *configs.Config
 		isTieredStackEnabled    bool
 		readerGroup             *replicationReaderGroup
-		flowController          SenderFlowController
-		sendLock                sync.Mutex
-		ssRateLimiter           ServerSchedulerRateLimiter
+		laneController          *senderLaneController
+		laneRegistry            *senderLaneRegistry
+		laneInitializationError error
+		// initialLaneStateApplied is closed after the first sync state has been
+		// applied to the registry; lanesConfirmed is valid only after that.
+		initialLaneStateApplied     chan struct{}
+		initialLaneCapabilityOnce   sync.Once
+		initialLaneStateAppliedOnce sync.Once
+		lanesConfirmed              atomic.Bool
+		laneRateLimiters            []quotas.RateLimiter
+		laneClassWakeChannels       []chan struct{}
+		flowController              SenderFlowController
+		sendLock                    sync.Mutex
+		ssRateLimiter               ServerSchedulerRateLimiter
 	}
 )
 
@@ -94,6 +112,22 @@ func NewStreamSender(
 	// flip between two reads would leave the sender half in each mode until the recv
 	// loop's config guard restarts the stream.
 	tieredStackEnabled := config.EnableReplicationTaskTieredProcessing()
+	readerGroup := newReaderGroupIfEnabled(config.EnableReplicationReaderGroup, shardContext, clientShardKey, tieredStackEnabled, logger)
+	lanesEnabled := tieredStackEnabled && readerGroup != nil && config.EnableReplicationStreamLanes()
+	var laneClassCount int
+	var initialLaneStateApplied chan struct{}
+	if lanesEnabled {
+		laneClassCount = normalizedLaneClassCount(config.ReplicationStreamSenderLaneClassCount())
+		initialLaneStateApplied = make(chan struct{})
+	}
+	laneRegistry, laneController, laneInitializationError := newSenderLaneComponentsIfEnabled(
+		config,
+		shardContext,
+		clientShardKey,
+		lanesEnabled,
+		laneClassCount,
+		logger,
+	)
 	return &StreamSenderImpl{
 		server:                  server,
 		shardContext:            shardContext,
@@ -110,7 +144,13 @@ func NewStreamSender(
 		shutdownChan:            channel.NewShutdownOnce(),
 		config:                  config,
 		isTieredStackEnabled:    tieredStackEnabled,
-		readerGroup:             newReaderGroupIfEnabled(config.EnableReplicationReaderGroup, shardContext, clientShardKey, tieredStackEnabled, logger),
+		readerGroup:             readerGroup,
+		laneController:          laneController,
+		laneRegistry:            laneRegistry,
+		laneInitializationError: laneInitializationError,
+		initialLaneStateApplied: initialLaneStateApplied,
+		laneRateLimiters:        newLaneRateLimiters(config, lanesEnabled, laneClassCount),
+		laneClassWakeChannels:   newLaneClassWakeChannels(laneClassCount),
 		flowController:          NewSenderFlowController(config, logger),
 		ssRateLimiter:           ssRateLimiter,
 	}
@@ -135,6 +175,11 @@ func (s *StreamSenderImpl) Start() {
 		// Low Priority sender is used for force replication closed workflow
 		go WrapEventLoop(s.server.Context(), getSenderEventLoop(enumsspb.TASK_PRIORITY_HIGH), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
 		go WrapEventLoop(s.server.Context(), getSenderEventLoop(enumsspb.TASK_PRIORITY_LOW), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
+		if s.laneController != nil {
+			for class := 1; class <= s.laneController.policy.ClassCount(); class++ {
+				go WrapEventLoop(s.server.Context(), func() error { return s.sendLaneEventLoop(replicationLaneClass(class)) }, s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
+			}
+		}
 	} else {
 		go WrapEventLoop(s.server.Context(), getSenderEventLoop(enumsspb.TASK_PRIORITY_UNSPECIFIED), s.Stop, s.logger, s.metrics, s.clientShardKey, s.serverShardKey, s.config)
 	}
@@ -189,6 +234,9 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 	}()
 
 	defer log.CapturePanic(s.logger, &panicErr)
+	if s.laneInitializationError != nil {
+		return NewStreamError("StreamSender failed to restore replication lanes", s.laneInitializationError)
+	}
 
 	for !s.shutdownChan.IsShutdown() {
 		if s.isTieredStackEnabled != s.config.EnableReplicationTaskTieredProcessing() {
@@ -196,6 +244,13 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 		}
 		if (s.readerGroup != nil) != s.config.EnableReplicationReaderGroup() {
 			return NewStreamError("StreamSender detected reader group config change, restart the stream", nil)
+		}
+		lanesEnabled := s.isTieredStackEnabled && s.readerGroup != nil && s.config.EnableReplicationStreamLanes()
+		if (s.laneController != nil) != lanesEnabled {
+			return NewStreamError("StreamSender detected replication lane config change, restart the stream", nil)
+		}
+		if s.laneController != nil && s.laneController.policy.ClassCount() != normalizedLaneClassCount(s.config.ReplicationStreamSenderLaneClassCount()) {
+			return NewStreamError("StreamSender detected replication lane class count change, restart the stream", nil)
 		}
 
 		req, err := s.server.Recv()
@@ -236,6 +291,9 @@ func (s *StreamSenderImpl) sendEventLoop(priority enumsspb.TaskPriority) (retErr
 	}()
 
 	defer log.CapturePanic(s.logger, &panicErr)
+	if s.laneInitializationError != nil {
+		return NewStreamError("StreamSender failed to restore replication lanes", s.laneInitializationError)
+	}
 
 	newTaskNotificationChan, subscriberID := s.historyEngine.SubscribeReplicationNotification(s.clientClusterName)
 	defer s.historyEngine.UnsubscribeReplicationNotification(subscriberID)
@@ -257,6 +315,45 @@ func (s *StreamSenderImpl) sendEventLoop(priority enumsspb.TaskPriority) (retErr
 func (s *StreamSenderImpl) recvSyncReplicationState(
 	attr *replicationspb.SyncReplicationState,
 ) error {
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	if s.laneController != nil {
+		if attr.HighPriorityState == nil || attr.LowPriorityState == nil {
+			return NewStreamError("streamSender: missing priority state with replication lanes", nil)
+		}
+		if err := s.observeLaneCapability(attr); err != nil {
+			return err
+		}
+		s.flowController.RefreshReceiverFlowControlInfo(attr)
+		highAcked := attr.GetHighPriorityState().GetInclusiveLowWatermark()
+		if s.lanesConfirmed.Load() {
+			runnableClasses, err := s.laneController.Reconcile(
+				replicationLanePolicySignals{
+					throttleHighNamespaceIDs: attr.GetThrottleHighNamespaceIds(),
+					sharedHighWatermark:      highAcked,
+				},
+				attr.GetLaneStates(),
+			)
+			if err != nil {
+				return err
+			}
+			s.wakeLaneClasses(runnableClasses...)
+			if err := s.sendReadyLaneRetirements(); err != nil {
+				return err
+			}
+		} else {
+			s.laneRegistry.ClearLanes()
+		}
+		s.markInitialLaneStateApplied()
+		s.emitLaneMetrics()
+		if err := s.shardContext.UpdateReplicationQueueReaderState(readerID, s.laneRegistry.BuildReaderState(attr)); err != nil {
+			return err
+		}
+		taskID, ts := s.laneFailoverWatermark(attr)
+		return s.shardContext.UpdateRemoteReaderInfo(readerID, taskID, ts)
+	}
 	if s.readerGroup != nil {
 		readerState, err := s.readerGroup.BuildReaderState(attr)
 		if err != nil {
@@ -269,7 +366,6 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 		if s.isTieredStackEnabled {
 			s.flowController.RefreshReceiverFlowControlInfo(attr)
 		}
-		readerID := s.readerGroup.ReaderID()
 		if err := s.shardContext.UpdateReplicationQueueReaderState(readerID, readerState); err != nil {
 			return err
 		}
@@ -363,11 +459,6 @@ func (s *StreamSenderImpl) recvSyncReplicationState(
 		s.flowController.RefreshReceiverFlowControlInfo(attr)
 	}
 
-	readerID := shard.ReplicationReaderIDFromClusterShardID(
-		int64(s.clientShardKey.ClusterID),
-		s.clientShardKey.ShardID,
-	)
-
 	if err := s.shardContext.UpdateReplicationQueueReaderState(
 		readerID,
 		readerState,
@@ -396,14 +487,72 @@ func (s *StreamSenderImpl) sendCatchUp(priority enumsspb.TaskPriority) (int64, e
 	catchupEndExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
 
 	catchupBeginInclusiveWatermark := s.catchupBeginWatermark(priority, catchupEndExclusiveWatermark)
-	if err := s.sendTasks(
+	if s.laneRegistry != nil && priority == enumsspb.TASK_PRIORITY_HIGH {
+		// Snapshot the lane resume floor before the initial-state wait: the recv loop
+		// drops lane state once the receiver proves it does not understand lanes.
+		resumeFloor, _, hasLanes := s.laneRegistry.ResumeFloor()
+		// The receiver emits no sync state until both its priority trackers have
+		// observed a batch, and the lane capability handshake rides on the first
+		// sync state. Prime the receiver's HIGH tracker with an empty batch, or
+		// the handshake and this loop wait on each other forever. The watermark
+		// must not exceed the catch-up begin: the receiver drops batches whose
+		// watermark does not advance.
+		primeWatermark := catchupBeginInclusiveWatermark
+		if hasLanes {
+			primeWatermark = min(primeWatermark, resumeFloor)
+		}
+		if err := s.sendTasks(priority, primeWatermark, primeWatermark); err != nil {
+			return 0, err
+		}
+		if err := s.waitForInitialLaneState(); err != nil {
+			return 0, err
+		}
+		if !s.lanesConfirmed.Load() && hasLanes {
+			// The receiver does not understand lanes: re-cover their ranges on the
+			// default lane from the resume floor.
+			catchupBeginInclusiveWatermark = min(catchupBeginInclusiveWatermark, resumeFloor)
+		}
+	}
+	sent, err := s.sendDefaultTasks(
 		priority,
 		catchupBeginInclusiveWatermark,
 		catchupEndExclusiveWatermark,
-	); err != nil {
+	)
+	if err != nil {
 		return 0, err
 	}
+	if !sent {
+		return 0, serviceerror.NewInternal("replication default lane blocked during catch-up")
+	}
 	return catchupEndExclusiveWatermark, nil
+}
+
+func (s *StreamSenderImpl) observeLaneCapability(attr *replicationspb.SyncReplicationState) error {
+	supported := attr.GetSupportsReplicationLanes() && attr.GetReplicationLaneProtocolVersion() >= 1
+	s.initialLaneCapabilityOnce.Do(func() {
+		s.lanesConfirmed.Store(supported)
+	})
+	if s.lanesConfirmed.Load() != supported {
+		return NewStreamError("StreamSender detected replication lane capability change", nil)
+	}
+	return nil
+}
+
+func (s *StreamSenderImpl) markInitialLaneStateApplied() {
+	s.initialLaneStateAppliedOnce.Do(func() {
+		close(s.initialLaneStateApplied)
+	})
+}
+
+func (s *StreamSenderImpl) waitForInitialLaneState() error {
+	select {
+	case <-s.initialLaneStateApplied:
+		return nil
+	case <-s.shutdownChan.Channel():
+		return context.Canceled
+	case <-s.server.Context().Done():
+		return s.server.Context().Err()
+	}
 }
 
 // catchupBeginWatermark returns the inclusive begin watermark for the catch-up scan:
@@ -411,7 +560,15 @@ func (s *StreamSenderImpl) sendCatchUp(priority enumsspb.TaskPriority) (int64, e
 // current end watermark when no state is persisted for this reader.
 func (s *StreamSenderImpl) catchupBeginWatermark(priority enumsspb.TaskPriority, end int64) int64 {
 	if s.readerGroup != nil {
-		return s.readerGroup.CatchupBeginWatermark(end, priority)
+		watermark := s.readerGroup.CatchupBeginWatermark(end, priority)
+		if s.laneRegistry == nil && priority == enumsspb.TASK_PRIORITY_HIGH {
+			if queueState, ok := s.shardContext.GetQueueState(tasks.CategoryReplication); ok {
+				if recoveryWatermark, ok := persistedLaneRecoveryWatermark(queueState.ReaderStates[s.readerGroup.ReaderID()]); ok {
+					return recoveryWatermark
+				}
+			}
+		}
+		return watermark
 	}
 	queueState, ok := s.shardContext.GetQueueState(tasks.CategoryReplication)
 	if !ok {
@@ -427,7 +584,19 @@ func (s *StreamSenderImpl) catchupBeginWatermark(priority enumsspb.TaskPriority,
 		s.logger.Debug(fmt.Sprintf("StreamSender readerState not found, readerID %v", readerID))
 		return end
 	}
+	if s.laneRegistry == nil && priority == enumsspb.TASK_PRIORITY_HIGH {
+		if watermark, ok := persistedLaneRecoveryWatermark(readerState); ok {
+			return watermark
+		}
+	}
 	return s.getSendCatchupBeginInclusiveWatermark(readerState, priority)
+}
+
+func persistedLaneRecoveryWatermark(readerState *persistencespb.QueueReaderState) (int64, bool) {
+	if len(readerState.GetLanes()) == 0 || len(readerState.GetScopes()) == 0 {
+		return 0, false
+	}
+	return readerState.Scopes[readerOverallScopeIndex].Range.InclusiveMin.TaskId, true
 }
 
 func (s *StreamSenderImpl) getSendCatchupBeginInclusiveWatermark(readerState *persistencespb.QueueReaderState, priority enumsspb.TaskPriority) int64 {
@@ -452,6 +621,215 @@ func newReaderGroupIfEnabled(
 	return newReplicationReaderGroup(shardContext, clientShardKey, tieredStackEnabled, logger)
 }
 
+func newSenderLaneComponentsIfEnabled(
+	config *configs.Config,
+	shardContext historyi.ShardContext,
+	clientShardKey ClusterShardKey,
+	enabled bool,
+	classCount int,
+	logger log.Logger,
+) (*senderLaneRegistry, *senderLaneController, error) {
+	if !enabled {
+		return nil, nil, nil
+	}
+	persistedDefaultCursor, persisted := persistedReplicationLanes(shardContext, clientShardKey)
+	registry, err := newSenderLaneRegistry(persistedDefaultCursor, persisted, classCount)
+	if err != nil {
+		logger.DPanic("Failed to restore replication lanes", tag.Error(err))
+		registry, _ = newSenderLaneRegistry(persistedDefaultCursor, nil, classCount)
+	}
+	policy := newNamespaceIsolationPolicy(
+		classCount,
+		config.ReplicationStreamSenderLaneReclassificationCycles(),
+		config.ReplicationStreamSenderLaneReleaseCycles(),
+	)
+	return registry, newSenderLaneController(
+		registry,
+		policy,
+		config.ReplicationStreamSenderMaxLanes(),
+		logger,
+	), err
+}
+
+func persistedReplicationLanes(
+	shardContext historyi.ShardContext,
+	clientShardKey ClusterShardKey,
+) (int64, []*persistencespb.QueueReaderLane) {
+	queueState, ok := shardContext.GetQueueState(tasks.CategoryReplication)
+	if !ok {
+		return 0, nil
+	}
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(clientShardKey.ClusterID),
+		clientShardKey.ShardID,
+	)
+	readerState, ok := queueState.ReaderStates[readerID]
+	if !ok || len(readerState.Scopes) < 2 {
+		return 0, nil
+	}
+	return replicationLaneDefaultCursor(readerState), readerState.GetLanes()
+}
+
+func newLaneRateLimiters(config *configs.Config, enabled bool, classCount int) []quotas.RateLimiter {
+	if !enabled {
+		return nil
+	}
+	limiters := make([]quotas.RateLimiter, classCount)
+	for i := range limiters {
+		depth := i + 1
+		limiters[i] = quotas.NewDynamicRateLimiter(
+			quotas.NewRateBurst(func() float64 {
+				// Clamp the ratio to (0, 1]: larger values would invert the class
+				// ordering, and non-positive values would freeze lanes.
+				ratio := min(1, max(0.01, config.ReplicationStreamSenderLaneQPSRatio()))
+				return float64(config.ReplicationStreamSenderLowPriorityQPS()) *
+					math.Pow(ratio, float64(depth))
+			}, func() int { return 1 }),
+			time.Minute,
+		)
+	}
+	return limiters
+}
+
+func normalizedLaneClassCount(configured int) int {
+	return max(1, configured)
+}
+
+func (s *StreamSenderImpl) sendDefaultTasks(
+	priority enumsspb.TaskPriority,
+	beginInclusiveWatermark int64,
+	endExclusiveWatermark int64,
+) (bool, error) {
+	var belongsToLane func(tasks.Task) bool
+	defaultLeaseCompleted := false
+	if s.laneRegistry != nil && priority == enumsspb.TASK_PRIORITY_HIGH {
+		if s.lanesConfirmed.Load() {
+			var acquired bool
+			belongsToLane, acquired = s.laneRegistry.AcquireDefault(endExclusiveWatermark)
+			if !acquired {
+				return false, nil
+			}
+			defer func() {
+				s.wakeLaneClasses(s.laneRegistry.ReleaseDefault(endExclusiveWatermark, defaultLeaseCompleted)...)
+			}()
+		} else {
+			s.laneRegistry.AdvanceDefaultReservation(endExclusiveWatermark)
+		}
+	}
+	err := s.scanLaneToEnd(
+		priority,
+		beginInclusiveWatermark,
+		endExclusiveWatermark,
+		belongsToLane,
+		"",
+		sharedLaneTag,
+		nil,
+	)
+	defaultLeaseCompleted = err == nil && !s.shutdownChan.IsShutdown()
+	return true, err
+}
+
+func (s *StreamSenderImpl) sendLane(snapshot senderLaneSnapshot, end int64) (bool, error) {
+	lane, ownerClass, ok := s.laneRegistry.Acquire(snapshot)
+	if !ok {
+		s.wakeLaneClasses(ownerClass)
+		return false, nil
+	}
+	defer s.laneRegistry.Release(lane.id)
+	return s.sendAcquiredLane(lane, end, nil)
+}
+
+func (s *StreamSenderImpl) sendAcquiredLane(
+	lane senderLaneSnapshot,
+	end int64,
+	onRetryStarted func(),
+) (bool, error) {
+	if lane.cursor >= end {
+		return false, s.scanLaneToEnd(
+			enumsspb.TASK_PRIORITY_HIGH,
+			lane.cursor,
+			lane.cursor,
+			nil,
+			lane.id,
+			laneClassTag(lane.class),
+			nil,
+		)
+	}
+	nextCursor, err := s.scanLaneTurn(
+		enumsspb.TASK_PRIORITY_HIGH,
+		lane.cursor,
+		end,
+		lane.scope.Contains,
+		lane.id,
+		laneClassTag(lane.class),
+		s.laneRateLimiters[int(lane.class)-1],
+		laneTurnBudget{
+			maxTasks:        laneTasksPerTurn,
+			maxScannedTasks: laneTaskScansPerTurn,
+			onRetryStarted:  onRetryStarted,
+		},
+	)
+	if err != nil {
+		return false, err
+	}
+	s.laneRegistry.AdvanceLaneCursor(lane.id, nextCursor)
+	return nextCursor < end, nil
+}
+
+func (s *StreamSenderImpl) sendReadyLaneRetirements() error {
+	for _, lane := range s.laneRegistry.ReadyRetirements() {
+		if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
+			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
+				Messages: &replicationspb.WorkflowReplicationMessages{
+					ExclusiveHighWatermark:     s.laneRegistry.DefaultReservedCursor(),
+					ExclusiveHighWatermarkTime: timestamp.TimeNowPtrUtc(),
+					Priority:                   enumsspb.TASK_PRIORITY_HIGH,
+					LaneId:                     lane.id,
+					RetireLane:                 true,
+				},
+			},
+		}); err != nil {
+			return err
+		}
+		if !s.laneController.CompleteRetirement(lane.id) {
+			return serviceerror.NewInternalf("replication lane %q changed while its retirement marker was sent", lane.id)
+		}
+	}
+	return nil
+}
+
+func (s *StreamSenderImpl) laneFailoverWatermark(attr *replicationspb.SyncReplicationState) (int64, time.Time) {
+	watermark := attr.HighPriorityState.InclusiveLowWatermark
+	watermarkTime := attr.HighPriorityState.InclusiveLowWatermarkTime.AsTime()
+	for _, laneState := range attr.GetLaneStates() {
+		if laneState.GetInclusiveLowWatermark() < watermark {
+			watermark = laneState.GetInclusiveLowWatermark()
+			watermarkTime = laneState.GetInclusiveLowWatermarkTime().AsTime()
+		}
+	}
+	if s.lanesConfirmed.Load() {
+		if floor, floorTime, ok := s.laneRegistry.ResumeFloor(); ok && floor < watermark {
+			return floor - 1, floorTime
+		}
+	}
+	return watermark - 1, watermarkTime
+}
+
+func (s *StreamSenderImpl) emitLaneMetrics() {
+	counts := make(map[replicationLaneClass]int)
+	for _, lane := range s.laneRegistry.Snapshots() {
+		counts[lane.class]++
+	}
+	for class := 1; class <= s.laneController.policy.ClassCount(); class++ {
+		metrics.ReplicationStreamSenderLaneCount.With(s.metrics).Record(
+			float64(counts[replicationLaneClass(class)]),
+			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+			metrics.ReplicationStreamLaneTag(laneClassTag(replicationLaneClass(class))),
+		)
+	}
+}
+
 func (s *StreamSenderImpl) sendLive(
 	priority enumsspb.TaskPriority,
 	newTaskNotificationChan <-chan struct{},
@@ -461,14 +839,17 @@ func (s *StreamSenderImpl) sendLive(
 	defer syncStatusTimer.Stop()
 	sendTasks := func() error {
 		endExclusiveWatermark := s.shardContext.GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).TaskID
-		if err := s.sendTasks(
+		sent, err := s.sendDefaultTasks(
 			priority,
 			beginInclusiveWatermark,
 			endExclusiveWatermark,
-		); err != nil {
+		)
+		if err != nil {
 			return err
 		}
-		beginInclusiveWatermark = endExclusiveWatermark
+		if sent {
+			beginInclusiveWatermark = endExclusiveWatermark
+		}
 		if !syncStatusTimer.Stop() {
 			select {
 			case <-syncStatusTimer.C:
@@ -500,24 +881,69 @@ func (s *StreamSenderImpl) sendTasks(
 	beginInclusiveWatermark int64,
 	endExclusiveWatermark int64,
 ) error {
+	return s.scanLaneToEnd(
+		priority,
+		beginInclusiveWatermark,
+		endExclusiveWatermark,
+		nil,
+		"",
+		sharedLaneTag,
+		nil,
+	)
+}
+
+func (s *StreamSenderImpl) scanLaneToEnd(
+	priority enumsspb.TaskPriority,
+	beginInclusiveWatermark int64,
+	endExclusiveWatermark int64,
+	belongsToLane func(tasks.Task) bool,
+	laneID string,
+	laneTag string,
+	laneRateLimiter quotas.RateLimiter,
+) error {
+	_, err := s.scanLaneTurn(
+		priority,
+		beginInclusiveWatermark,
+		endExclusiveWatermark,
+		belongsToLane,
+		laneID,
+		laneTag,
+		laneRateLimiter,
+		laneTurnBudget{},
+	)
+	return err
+}
+
+func (s *StreamSenderImpl) scanLaneTurn(
+	priority enumsspb.TaskPriority,
+	beginInclusiveWatermark int64,
+	endExclusiveWatermark int64,
+	belongsToLane func(tasks.Task) bool,
+	laneID string,
+	laneTag string,
+	laneRateLimiter quotas.RateLimiter,
+	budget laneTurnBudget,
+) (int64, error) {
 	if beginInclusiveWatermark > endExclusiveWatermark {
 		err := serviceerror.NewInternalf("StreamWorkflowReplication encountered invalid task range [%v, %v)",
 			beginInclusiveWatermark,
 			endExclusiveWatermark,
 		)
-		return err
+		return beginInclusiveWatermark, err
 	}
 	if beginInclusiveWatermark == endExclusiveWatermark {
-		return s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
+		err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
 				Messages: &replicationspb.WorkflowReplicationMessages{
 					ReplicationTasks:           nil,
 					ExclusiveHighWatermark:     endExclusiveWatermark,
 					ExclusiveHighWatermarkTime: timestamp.TimeNowPtrUtc(),
 					Priority:                   priority,
+					LaneId:                     laneID,
 				},
 			},
 		})
+		return beginInclusiveWatermark, err
 	}
 
 	callerInfo := getReplicaitonCallerInfo(priority)
@@ -529,211 +955,359 @@ func (s *StreamSenderImpl) sendTasks(
 		endExclusiveWatermark,
 	)
 	if err != nil {
-		return err
+		return beginInclusiveWatermark, err
 	}
 	skipCount := 0
-Loop:
+	sentCount := 0
+	scannedCount := 0
+	nextCursor := beginInclusiveWatermark
 	for iter.HasNext() {
 		if s.shutdownChan.IsShutdown() {
-			return nil
+			return nextCursor, nil
 		}
 
 		item, err := iter.Next()
 		if err != nil {
-			return fmt.Errorf("streamSender unable to get next replication task: %w", err)
+			return beginInclusiveWatermark, fmt.Errorf("streamSender unable to get next replication task: %w", err)
 		}
 
 		skipCount++
-		// To avoid a situation: we are skipping a lot of tasks and never send any task, receiver side will not have updated high watermark,
-		// so it will not ACK back to sender, sender will not update the ACK level.
-		// i.e. in tiered stack, if no low priority task in queue, we should still send watermark info to receiver to let it update ACK level.
-		if skipCount > TaskMaxSkipCount {
-			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
-				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
-					Messages: &replicationspb.WorkflowReplicationMessages{
-						ExclusiveHighWatermark:     item.GetTaskID(),
-						ExclusiveHighWatermarkTime: timestamppb.New(item.GetVisibilityTime()),
-						Priority:                   priority,
-					},
-				},
-			}); err != nil {
-				return err
-			}
-			skipCount = 0
-		}
-		if priority != enumsspb.TASK_PRIORITY_UNSPECIFIED && // case: skip priority check. When priority is unspecified, send all tasks
-			priority != s.getTaskPriority(item) { // case: skip task with different priority than this loop
-			continue Loop
-		}
-		if !s.shouldProcessTask(item) {
-			continue Loop
-		}
-		metrics.ReplicationTaskLoadLatency.With(s.metrics).Record(
-			time.Since(item.GetVisibilityTime()),
+		scannedCount++
+		metrics.ReplicationTasksScanned.With(s.metrics).Record(
+			1,
 			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
 			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
-			metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
-			metrics.ReplicationTaskPriorityTag(priority),
+			metrics.ReplicationStreamLaneTag(laneTag),
 		)
-
-		var attempt int64
-		workflowLockPriority := locks.PriorityLow
-		lowPriorityLockAttempts := 0
-		operation := func() error {
-			attempt++
-			startTime := time.Now().UTC()
-			defer func() {
-				metrics.ReplicationTaskGenerationLatency.With(s.metrics).Record(
-					time.Since(startTime),
-					metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
-					metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
-					metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
-					metrics.ReplicationTaskPriorityTag(priority),
-				)
-			}()
-			task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID, priority, workflowLockPriority)
-			if err != nil {
-				if workflowLockPriority == locks.PriorityLow && errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) {
-					lowPriorityLockAttempts++
-					if lowPriorityLockAttempts >= max(1, s.config.ReplicationTaskConverterLowPriorityLockMaxAttempts()) {
-						workflowLockPriority = locks.PriorityHigh
-					}
-				}
-				// Wrap as convertError so isSkippable can tell "the task could not be built"
-				// (its source info is corrupt/unusable) apart from transient send/rate-limit
-				// failures, which must not be skipped.
-				return s.recordRetry(
-					item,
-					enumsspb.REPLICATION_TASK_TYPE_UNSPECIFIED,
-					priority,
-					attempt,
-					wideevents.ReplOperationTaskConversion,
-					&convertError{err: fmt.Errorf("convert: %w", err)},
-				)
-			}
-			if task == nil {
-				return nil
-			}
-			task.Priority = priority
-			if s.isTieredStackEnabled {
-				if err := s.flowController.Wait(s.server.Context(), priority); err != nil {
-					if errors.Is(err, context.Canceled) {
-						return err
-					}
-					// continue to send task if wait operation times out.
-				}
-			}
-			if s.config.ReplicationEnableRateLimit() && task.Priority == enumsspb.TASK_PRIORITY_LOW {
-				nsName, err := s.shardContext.GetNamespaceRegistry().GetNamespaceName(
-					namespace.ID(item.GetNamespaceID()),
-				)
-				if err != nil {
-					// if there is error, then blindly send the task, better safe than sorry
-					nsName = namespace.EmptyName
-				}
-				rlStartTime := time.Now().UTC()
-				if err := s.ssRateLimiter.Wait(s.server.Context(), quotas.NewRequest(
-					task.TaskType.String(),
-					taskSchedulerToken,
-					nsName.String(),
-					headers.SystemPreemptableCallerInfo.CallerType,
-					0,
-					"",
-				)); err != nil {
-					return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationRateLimit, fmt.Errorf("rate_limit: %w", err))
-				}
-				metrics.ReplicationRateLimitLatency.With(s.metrics).Record(time.Since(rlStartTime), metrics.OperationTag(TaskOperationTag(task)))
-			}
-			if s.config.EmitReplicationLifecycleEvents() {
-				s.emitReplicationSent(task, item)
-			}
-			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
-				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
-					Messages: &replicationspb.WorkflowReplicationMessages{
-						ReplicationTasks:           []*replicationspb.ReplicationTask{task},
-						ExclusiveHighWatermark:     task.SourceTaskId + 1,
-						ExclusiveHighWatermarkTime: task.VisibilityTime,
-						Priority:                   priority,
-					},
-				},
-			}); err != nil {
-				return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationStreamSend, fmt.Errorf("send: %w", err))
-			}
-			skipCount = 0
-			metrics.ReplicationTasksSend.With(s.metrics).Record(
-				int64(1),
-				metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
-				metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
-				metrics.OperationTag(TaskOperationTag(task)),
-			)
-			return nil
+		if err := s.sendLaneProgressIfNeeded(item, priority, laneID, &skipCount); err != nil {
+			return beginInclusiveWatermark, err
 		}
-
-		retryPolicy := backoff.NewExponentialRetryPolicy(s.config.ReplicationStreamSenderErrorRetryWait()).
-			WithBackoffCoefficient(s.config.ReplicationStreamSenderErrorRetryBackoffCoefficient()).
-			WithMaximumInterval(s.config.ReplicationStreamSenderErrorRetryMaxInterval()).
-			WithMaximumAttempts(s.config.ReplicationStreamSenderErrorRetryMaxAttempts()).
-			WithExpirationInterval(s.config.ReplicationStreamSenderErrorRetryExpiration())
-
-		err = backoff.ThrottleRetry(operation, retryPolicy, isRetryableError)
-		metrics.ReplicationTaskSendAttempt.With(s.metrics).Record(
-			attempt,
-			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
-			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
-			metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
-			metrics.ReplicationTaskPriorityTag(priority),
-		)
-		metrics.ReplicationTaskSendLatency.With(s.metrics).Record(
-			time.Since(item.GetVisibilityTime()),
-			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
-			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
-			metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
-			metrics.ReplicationTaskPriorityTag(priority),
+		sent, err := s.sendTaskOnLaneIfEligible(
+			item,
+			priority,
+			belongsToLane,
+			laneID,
+			laneTag,
+			laneRateLimiter,
+			budget.onRetryStarted,
 		)
 		if err != nil {
-			metrics.ReplicationTaskSendError.With(s.metrics).Record(
-				int64(1),
-				metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
-				metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
-				metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
-				metrics.ReplicationTaskPriorityTag(priority),
-			)
-			// Only skip a task that could not be *built* after exhausting retries (isSkippable):
-			// its source info is corrupt/unusable, so retrying or reconnecting will never make it
-			// send. Transient send/rate-limit failures are NOT skipped (dropping a task that would
-			// have succeeded on reconnect is silent data loss), and infra/teardown errors
-			// (shard-ownership-lost, stream error, context canceled) must still tear the stream
-			// down so shard handoff / reconnect can proceed. Deterministic non-retryable failures
-			// such as an oversized gRPC message are also intentionally NOT handled here: they
-			// surface from the send path as a (non-retryable) StreamError, are left to the
-			// transport-layer message-size fix, and remain observable via the throttled skip log
-			// and the ReplicationTaskSendSkipped metric.
-			if s.config.ReplicationStreamSenderSkipStuckTask() && isSkippable(err) {
-				s.recordStuckTaskSkipped(item, attempt, priority, err)
-				metrics.ReplicationTaskSendSkipped.With(s.metrics).Record(
-					int64(1),
-					metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
-					metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
-					metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
-					metrics.ReplicationTaskPriorityTag(priority),
-				)
-				// Skip (discard) the stuck task and keep going; the trailing watermark send
-				// below advances the receiver past it so the stream is not wedged.
-				continue Loop
-			}
-			return fmt.Errorf("failed to send task: %v, cause: %w", item, err)
+			return beginInclusiveWatermark, err
 		}
+		if sent {
+			skipCount = 0
+			sentCount++
+		}
+		if !budget.enabled() {
+			continue
+		}
+		nextCursor = item.GetTaskID() + 1
+		if !budget.exhausted(sentCount, scannedCount) {
+			continue
+		}
+		if !sent {
+			if err := s.sendLaneProgress(priority, laneID, nextCursor, item.GetVisibilityTime()); err != nil {
+				return beginInclusiveWatermark, err
+			}
+		}
+		return nextCursor, nil
 	}
-	return s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
+	err = s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 		Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
 			Messages: &replicationspb.WorkflowReplicationMessages{
 				ReplicationTasks:           nil,
 				ExclusiveHighWatermark:     endExclusiveWatermark,
 				ExclusiveHighWatermarkTime: timestamp.TimeNowPtrUtc(),
 				Priority:                   priority,
+				LaneId:                     laneID,
 			},
 		},
 	})
+	if err != nil {
+		return beginInclusiveWatermark, err
+	}
+	return endExclusiveWatermark, nil
+}
+
+func (b laneTurnBudget) enabled() bool {
+	return b.maxTasks > 0 || b.maxScannedTasks > 0
+}
+
+func (b laneTurnBudget) exhausted(sentTasks int, scannedTasks int) bool {
+	return (b.maxTasks > 0 && sentTasks >= b.maxTasks) ||
+		(b.maxScannedTasks > 0 && scannedTasks >= b.maxScannedTasks)
+}
+
+func (s *StreamSenderImpl) sendTaskOnLaneIfEligible(
+	item tasks.Task,
+	priority enumsspb.TaskPriority,
+	belongsToLane func(tasks.Task) bool,
+	laneID string,
+	laneTag string,
+	laneRateLimiter quotas.RateLimiter,
+	onRetryStarted func(),
+) (bool, error) {
+	if !s.shouldSendTaskOnLane(item, priority, belongsToLane) {
+		return false, nil
+	}
+	metrics.ReplicationTaskLoadLatency.With(s.metrics).Record(
+		time.Since(item.GetVisibilityTime()),
+		metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+		metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+		metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
+		metrics.ReplicationTaskPriorityTag(priority),
+	)
+
+	attempt, sent, err := s.sendTaskOnLane(item, priority, laneID, laneTag, laneRateLimiter, onRetryStarted)
+	if err != nil {
+		return sent, s.handleTaskSendError(item, attempt, priority, err)
+	}
+	return sent, nil
+}
+
+func (s *StreamSenderImpl) sendLaneProgressIfNeeded(
+	item tasks.Task,
+	priority enumsspb.TaskPriority,
+	laneID string,
+	skipCount *int,
+) error {
+	if *skipCount <= TaskMaxSkipCount {
+		return nil
+	}
+	if err := s.sendLaneProgress(priority, laneID, item.GetTaskID(), item.GetVisibilityTime()); err != nil {
+		return err
+	}
+	*skipCount = 0
+	return nil
+}
+
+func (s *StreamSenderImpl) sendLaneProgress(
+	priority enumsspb.TaskPriority,
+	laneID string,
+	watermark int64,
+	watermarkTime time.Time,
+) error {
+	return s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
+		Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
+			Messages: &replicationspb.WorkflowReplicationMessages{
+				ExclusiveHighWatermark:     watermark,
+				ExclusiveHighWatermarkTime: timestamppb.New(watermarkTime),
+				Priority:                   priority,
+				LaneId:                     laneID,
+			},
+		},
+	})
+}
+
+func (s *StreamSenderImpl) shouldSendTaskOnLane(
+	item tasks.Task,
+	priority enumsspb.TaskPriority,
+	belongsToLane func(tasks.Task) bool,
+) bool {
+	if priority != enumsspb.TASK_PRIORITY_UNSPECIFIED && priority != s.getTaskPriority(item) {
+		return false
+	}
+	if belongsToLane != nil && !belongsToLane(item) {
+		return false
+	}
+	return s.shouldProcessTask(item)
+}
+
+func (s *StreamSenderImpl) handleTaskSendError(
+	item tasks.Task,
+	attempt int64,
+	priority enumsspb.TaskPriority,
+	err error,
+) error {
+	// Only conversion failures are safe to skip: rate-limit, send, teardown, and
+	// message-size errors must leave the task for a later stream attempt.
+	if !s.config.ReplicationStreamSenderSkipStuckTask() || !isSkippable(err) {
+		return fmt.Errorf("failed to send task: %v, cause: %w", item, err)
+	}
+	s.recordStuckTaskSkipped(item, attempt, priority, err)
+	metrics.ReplicationTaskSendSkipped.With(s.metrics).Record(
+		int64(1),
+		metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+		metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+		metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
+		metrics.ReplicationTaskPriorityTag(priority),
+	)
+	return nil
+}
+
+func (s *StreamSenderImpl) sendTaskOnLane(
+	item tasks.Task,
+	priority enumsspb.TaskPriority,
+	laneID string,
+	laneTag string,
+	laneRateLimiter quotas.RateLimiter,
+	onRetryStarted func(),
+) (int64, bool, error) {
+	var attempt int64
+	sent := false
+	workflowLockPriority := locks.PriorityLow
+	lowPriorityLockAttempts := 0
+	operation := func() error {
+		attempt++
+		startTime := time.Now().UTC()
+		defer func() {
+			metrics.ReplicationTaskGenerationLatency.With(s.metrics).Record(
+				time.Since(startTime),
+				metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+				metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+				metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
+				metrics.ReplicationTaskPriorityTag(priority),
+			)
+		}()
+		task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID, priority, workflowLockPriority)
+		if err != nil {
+			if workflowLockPriority == locks.PriorityLow && errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) {
+				lowPriorityLockAttempts++
+				if lowPriorityLockAttempts >= max(1, s.config.ReplicationTaskConverterLowPriorityLockMaxAttempts()) {
+					workflowLockPriority = locks.PriorityHigh
+				}
+			}
+			return s.recordRetry(
+				item,
+				enumsspb.REPLICATION_TASK_TYPE_UNSPECIFIED,
+				priority,
+				attempt,
+				wideevents.ReplOperationTaskConversion,
+				&convertError{err: fmt.Errorf("convert: %w", err)},
+			)
+		}
+		if task == nil {
+			return nil
+		}
+		task.Priority = priority
+		if err := s.sendConvertedTaskOnLane(item, task, priority, attempt, laneID, laneTag, laneRateLimiter); err != nil {
+			return err
+		}
+		sent = true
+		return nil
+	}
+
+	retryPolicy := backoff.NewExponentialRetryPolicy(s.config.ReplicationStreamSenderErrorRetryWait()).
+		WithBackoffCoefficient(s.config.ReplicationStreamSenderErrorRetryBackoffCoefficient()).
+		WithMaximumInterval(s.config.ReplicationStreamSenderErrorRetryMaxInterval()).
+		WithMaximumAttempts(s.config.ReplicationStreamSenderErrorRetryMaxAttempts()).
+		WithExpirationInterval(s.config.ReplicationStreamSenderErrorRetryExpiration())
+
+	retryable := isRetryableError
+	if onRetryStarted != nil {
+		retryable = func(err error) bool {
+			if !isRetryableError(err) {
+				return false
+			}
+			onRetryStarted()
+			return true
+		}
+	}
+	err := backoff.ThrottleRetryContext(
+		s.server.Context(),
+		func(context.Context) error { return operation() },
+		retryPolicy,
+		retryable,
+	)
+	metrics.ReplicationTaskSendAttempt.With(s.metrics).Record(
+		attempt,
+		metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+		metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+		metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
+		metrics.ReplicationTaskPriorityTag(priority),
+	)
+	metrics.ReplicationTaskSendLatency.With(s.metrics).Record(
+		time.Since(item.GetVisibilityTime()),
+		metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+		metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+		metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
+		metrics.ReplicationTaskPriorityTag(priority),
+	)
+	if err != nil {
+		metrics.ReplicationTaskSendError.With(s.metrics).Record(
+			int64(1),
+			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+			metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
+			metrics.ReplicationTaskPriorityTag(priority),
+		)
+	}
+	return attempt, sent, err
+}
+
+func (s *StreamSenderImpl) sendConvertedTaskOnLane(
+	item tasks.Task,
+	task *replicationspb.ReplicationTask,
+	priority enumsspb.TaskPriority,
+	attempt int64,
+	laneID string,
+	laneTag string,
+	laneRateLimiter quotas.RateLimiter,
+) error {
+	if s.isTieredStackEnabled {
+		if err := s.flowController.Wait(s.server.Context(), priority); err != nil {
+			if errors.Is(err, context.Canceled) {
+				return err
+			}
+			// continue to send task if wait operation times out.
+		}
+	}
+	if s.config.ReplicationEnableRateLimit() && task.Priority == enumsspb.TASK_PRIORITY_LOW {
+		nsName, err := s.shardContext.GetNamespaceRegistry().GetNamespaceName(
+			namespace.ID(item.GetNamespaceID()),
+		)
+		if err != nil {
+			// if there is error, then blindly send the task, better safe than sorry
+			nsName = namespace.EmptyName
+		}
+		rlStartTime := time.Now().UTC()
+		if err := s.ssRateLimiter.Wait(s.server.Context(), quotas.NewRequest(
+			task.TaskType.String(),
+			taskSchedulerToken,
+			nsName.String(),
+			headers.SystemPreemptableCallerInfo.CallerType,
+			0,
+			"",
+		)); err != nil {
+			return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationRateLimit, fmt.Errorf("rate_limit: %w", err))
+		}
+		metrics.ReplicationRateLimitLatency.With(s.metrics).Record(time.Since(rlStartTime), metrics.OperationTag(TaskOperationTag(task)))
+	}
+	if laneRateLimiter != nil {
+		rlStartTime := time.Now().UTC()
+		if err := laneRateLimiter.Wait(s.server.Context()); err != nil {
+			return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationRateLimit, fmt.Errorf("lane rate limit: %w", err))
+		}
+		metrics.ReplicationRateLimitLatency.With(s.metrics).Record(
+			time.Since(rlStartTime),
+			metrics.OperationTag(TaskOperationTag(task)),
+			metrics.ReplicationStreamLaneTag(laneTag),
+		)
+	}
+	if s.config.EmitReplicationLifecycleEvents() {
+		s.emitReplicationSent(task, item)
+	}
+	if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
+		Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
+			Messages: &replicationspb.WorkflowReplicationMessages{
+				ReplicationTasks:           []*replicationspb.ReplicationTask{task},
+				ExclusiveHighWatermark:     task.SourceTaskId + 1,
+				ExclusiveHighWatermarkTime: task.VisibilityTime,
+				Priority:                   priority,
+				LaneId:                     laneID,
+			},
+		},
+	}); err != nil {
+		return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationStreamSend, fmt.Errorf("send: %w", err))
+	}
+	metrics.ReplicationTasksSend.With(s.metrics).Record(
+		int64(1),
+		metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+		metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+		metrics.OperationTag(TaskOperationTag(task)),
+		metrics.ReplicationStreamLaneTag(laneTag),
+	)
+	return nil
 }
 
 func (s *StreamSenderImpl) sendToStream(payload *historyservice.StreamWorkflowReplicationMessagesResponse) error {

@@ -1129,6 +1129,8 @@ var (
 	ReplicationStreamStuck                = NewCounterDef("replication_stream_stuck")
 	ReplicationStreamChannelFull          = NewCounterDef("replication_stream_channel_full")
 	ReplicationTasksSend                  = NewCounterDef("replication_tasks_send")
+	ReplicationTasksScanned               = NewCounterDef("replication_tasks_scanned")
+	ReplicationStreamSenderLaneCount      = NewGaugeDef("replication_stream_sender_lane_count")
 	// ReplicationStreamReadBufferHits counts replication queue read pages served from the
 	// shard's read-through buffer; ReplicationStreamReadBufferMisses counts pages that fell
 	// through to persistence while the buffer was enabled. With N streams/lanes scanning the

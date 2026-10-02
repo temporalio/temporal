@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -68,6 +69,19 @@ type (
 func TestStreamSenderSuite(t *testing.T) {
 	s := new(streamSenderSuite)
 	suite.Run(t, s)
+}
+
+func (s *streamSenderSuite) TestLaneCapability() {
+	s.streamSender.initialLaneStateApplied = make(chan struct{})
+	supported := &replicationspb.SyncReplicationState{
+		SupportsReplicationLanes:       true,
+		ReplicationLaneProtocolVersion: 1,
+	}
+	s.NoError(s.streamSender.observeLaneCapability(supported))
+	s.streamSender.markInitialLaneStateApplied()
+	s.NoError(s.streamSender.waitForInitialLaneState())
+	s.True(s.streamSender.lanesConfirmed.Load())
+	s.Error(s.streamSender.observeLaneCapability(&replicationspb.SyncReplicationState{}))
 }
 
 func (s *streamSenderSuite) SetupSuite() {
@@ -153,6 +167,1066 @@ func (s *streamSenderSuite) TestRecvSyncReplicationState_SingleStack_Success() {
 
 	err := s.streamSender.recvSyncReplicationState(replicationState)
 	s.NoError(err)
+}
+
+func (s *streamSenderSuite) TestRecvSyncReplicationState_CreatesGenericLane() {
+	registry, err := newSenderLaneRegistry(100, nil, 4)
+	s.NoError(err)
+	s.streamSender.laneRegistry = registry
+	s.streamSender.laneController = newSenderLaneController(
+		registry,
+		newNamespaceIsolationPolicy(4, 3, 3),
+		100,
+		log.NewNoopLogger(),
+	)
+	s.streamSender.initialLaneStateApplied = make(chan struct{})
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	state := syncReplicationState(100, 100, 200)
+	state.SupportsReplicationLanes = true
+	state.ReplicationLaneProtocolVersion = 1
+	state.ThrottleHighNamespaceIds = []string{"namespace-a"}
+	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(state)
+
+	var persisted *persistencespb.QueueReaderState
+	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(readerID, gomock.Any()).DoAndReturn(
+		func(_ int64, readerState *persistencespb.QueueReaderState) error {
+			persisted = readerState
+			return nil
+		},
+	)
+	s.shardContext.EXPECT().UpdateRemoteReaderInfo(readerID, int64(99), gomock.Any()).Return(nil)
+
+	s.NoError(s.streamSender.recvSyncReplicationState(state))
+	s.True(s.streamSender.lanesConfirmed.Load())
+	s.Len(persisted.Lanes, 1)
+	s.Equal("namespace:namespace-a", persisted.Lanes[0].LogicalKey)
+	s.Equal(int64(100), persisted.Lanes[0].Scope.Range.InclusiveMin.TaskId)
+	s.Equal(
+		[]string{"namespace-a"},
+		persisted.Lanes[0].Scope.Predicate.GetNamespaceIdPredicateAttributes().GetNamespaceIds(),
+	)
+	lane, ok := registry.SnapshotByKey("namespace:namespace-a")
+	s.True(ok)
+	s.NotEmpty(lane.id)
+}
+
+func (s *streamSenderSuite) TestSendLaneUsesOpaqueLaneID() {
+	registry, err := newSenderLaneRegistry(100, nil, 4)
+	s.NoError(err)
+	lane, _, err := registry.Create("namespace:namespace-a", namespaceLaneScope("namespace-a", 100), 1)
+	s.NoError(err)
+	s.streamSender.laneRegistry = registry
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(
+		func(response *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			messages := response.GetMessages()
+			s.Equal(lane.id, messages.GetLaneId())
+			s.Equal(enumsspb.TASK_PRIORITY_HIGH, messages.GetPriority())
+			s.False(messages.GetRetireLane())
+			s.Empty(messages.GetReplicationTasks())
+			return nil
+		},
+	)
+
+	more, err := s.streamSender.sendLane(lane, lane.cursor)
+	s.NoError(err)
+	s.False(more)
+}
+
+func (s *streamSenderSuite) TestSendLaneEventLoopWaitsForInitialLaneState() {
+	registry, err := newSenderLaneRegistry(100, nil, 4)
+	s.Require().NoError(err)
+	lane, _, err := registry.Create("namespace:namespace-a", namespaceLaneScope("namespace-a", 100), 1)
+	s.Require().NoError(err)
+	s.streamSender.laneRegistry = registry
+	s.streamSender.initialLaneStateApplied = make(chan struct{})
+	s.streamSender.lanesConfirmed.Store(true)
+
+	notifications := make(chan struct{})
+	subscribed := make(chan struct{})
+	s.historyEngine.EXPECT().SubscribeReplicationNotification("target_cluster").DoAndReturn(
+		func(string) (<-chan struct{}, string) {
+			close(subscribed)
+			return notifications, "lane-subscriber"
+		},
+	)
+	s.historyEngine.EXPECT().UnsubscribeReplicationNotification("lane-subscriber")
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
+		tasks.NewImmediateKey(lane.cursor),
+	)
+	sent := make(chan *replicationspb.WorkflowReplicationMessages, 1)
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(
+		func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			sent <- resp.GetMessages()
+			return nil
+		},
+	)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- s.streamSender.sendLaneEventLoop(1)
+	}()
+	await.Rcv(s.T(), subscribed)
+	s.Require().Never(func() bool { return len(sent) > 0 }, 100*time.Millisecond, 5*time.Millisecond)
+
+	s.streamSender.markInitialLaneStateApplied()
+	messages := await.Rcv(s.T(), sent)
+	s.Equal(lane.id, messages.GetLaneId())
+	s.streamSender.shutdownChan.Shutdown()
+	s.NoError(await.Rcv(s.T(), done))
+}
+
+func (s *streamSenderSuite) TestSendLaneEventLoopsWakeOnCreationAndReclassification() {
+	const watermark = int64(100)
+
+	s.config.ReplicationStreamSendEmptyTaskDuration = func() time.Duration { return time.Hour }
+	registry, err := newSenderLaneRegistry(watermark, nil, 2)
+	s.Require().NoError(err)
+	s.streamSender.laneRegistry = registry
+	s.streamSender.laneController = newSenderLaneController(
+		registry,
+		newNamespaceIsolationPolicy(2, 2, 100),
+		100,
+		log.NewNoopLogger(),
+	)
+	s.streamSender.laneRateLimiters = []quotas.RateLimiter{nil, nil}
+	s.streamSender.laneClassWakeChannels = newLaneClassWakeChannels(2)
+	s.streamSender.initialLaneStateApplied = make(chan struct{})
+	s.streamSender.lanesConfirmed.Store(true)
+	s.streamSender.markInitialLaneStateApplied()
+
+	notifications := make(chan struct{})
+	subscribed := make(chan struct{}, 2)
+	s.historyEngine.EXPECT().SubscribeReplicationNotification("target_cluster").DoAndReturn(
+		func(string) (<-chan struct{}, string) {
+			subscribed <- struct{}{}
+			return notifications, "lane-subscriber"
+		},
+	).Times(2)
+	s.historyEngine.EXPECT().UnsubscribeReplicationNotification("lane-subscriber").Times(2)
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
+		tasks.NewImmediateKey(watermark),
+	).AnyTimes()
+
+	firstSendStarted := make(chan struct{})
+	releaseFirstSend := make(chan struct{})
+	firstSendReleased := false
+	defer func() {
+		if !firstSendReleased {
+			close(releaseFirstSend)
+		}
+		s.streamSender.shutdownChan.Shutdown()
+	}()
+	sent := make(chan *replicationspb.WorkflowReplicationMessages, 2)
+	sendCount := 0
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(
+		func(response *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			sendCount++
+			sent <- response.GetMessages()
+			if sendCount == 1 {
+				close(firstSendStarted)
+				<-releaseFirstSend
+			} else {
+				s.streamSender.shutdownChan.Shutdown()
+			}
+			return nil
+		},
+	).Times(2)
+
+	done := make(chan error, 2)
+	for class := replicationLaneClass(1); class <= 2; class++ {
+		go func() {
+			done <- s.streamSender.sendLaneEventLoop(class)
+		}()
+	}
+	await.Rcv(s.T(), subscribed)
+	await.Rcv(s.T(), subscribed)
+	s.Require().Never(func() bool { return len(sent) != 0 }, 100*time.Millisecond, time.Millisecond)
+
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	state := syncReplicationState(watermark, watermark, watermark)
+	state.SupportsReplicationLanes = true
+	state.ReplicationLaneProtocolVersion = 1
+	state.ThrottleHighNamespaceIds = []string{"namespace-a"}
+	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(state).Times(2)
+	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(readerID, gomock.Any()).Return(nil).Times(2)
+	s.shardContext.EXPECT().UpdateRemoteReaderInfo(readerID, watermark-1, gomock.Any()).Return(nil).Times(2)
+
+	s.NoError(s.streamSender.recvSyncReplicationState(state))
+	await.Rcv(s.T(), firstSendStarted)
+	lane, ok := registry.SnapshotByKey("namespace:namespace-a")
+	s.True(ok)
+	s.Equal(replicationLaneClass(1), lane.class)
+
+	s.NoError(s.streamSender.recvSyncReplicationState(state))
+	lane, ok = registry.SnapshotByKey("namespace:namespace-a")
+	s.True(ok)
+	s.Equal(replicationLaneClass(2), lane.class)
+	await.RequireTruef(
+		s.T(),
+		func() bool { return len(s.streamSender.laneClassWakeChannels[1]) == 0 },
+		time.Second,
+		time.Millisecond,
+		"the class-2 worker did not consume its reclassification wake-up",
+	)
+
+	close(releaseFirstSend)
+	firstSendReleased = true
+	first := await.Rcv(s.T(), sent)
+	second := await.Rcv(s.T(), sent)
+	s.Equal(lane.id, first.GetLaneId())
+	s.Equal(lane.id, second.GetLaneId())
+
+	s.NoError(await.Rcv(s.T(), done))
+	s.NoError(await.Rcv(s.T(), done))
+}
+
+func (s *streamSenderSuite) TestSendLaneEventLoopPreservesWakeDuringContinuousRound() {
+	const (
+		begin = int64(100)
+		end   = int64(102)
+	)
+	s.config.ReplicationStreamSendEmptyTaskDuration = func() time.Duration { return time.Hour }
+	registry, err := newSenderLaneRegistry(begin, nil, 1)
+	s.Require().NoError(err)
+	laneA, _, err := registry.Create("namespace:namespace-a", namespaceLaneScope("namespace-a", begin), 1)
+	s.Require().NoError(err)
+	s.streamSender.laneRegistry = registry
+	s.streamSender.laneRateLimiters = []quotas.RateLimiter{nil}
+	s.streamSender.laneClassWakeChannels = newLaneClassWakeChannels(1)
+	s.streamSender.clientClusterShardCount = 1
+	s.streamSender.initialLaneStateApplied = make(chan struct{})
+	s.streamSender.lanesConfirmed.Store(true)
+	s.streamSender.markInitialLaneStateApplied()
+
+	visibilityTime := time.Now().UTC()
+	allTasks := []tasks.Task{
+		&tasks.HistoryReplicationTask{
+			WorkflowKey:         definition.NewWorkflowKey("namespace-a", "workflow-a-1", "run-a-1"),
+			TaskID:              begin,
+			VisibilityTimestamp: visibilityTime,
+		},
+		&tasks.HistoryReplicationTask{
+			WorkflowKey:         definition.NewWorkflowKey("namespace-a", "workflow-a-2", "run-a-2"),
+			TaskID:              begin + 1,
+			VisibilityTimestamp: visibilityTime,
+		},
+	}
+	namespaceRegistry := namespace.NewMockRegistry(s.controller)
+	namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID("namespace-a")).Return(namespace.NewGlobalNamespaceForTest(
+		nil,
+		nil,
+		&persistencespb.NamespaceReplicationConfig{Clusters: []string{"source_cluster", "target_cluster"}},
+		100,
+	), nil).AnyTimes()
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(namespaceRegistry).AnyTimes()
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
+		tasks.NewImmediateKey(end),
+	).AnyTimes()
+	s.historyEngine.EXPECT().GetReplicationTasksIter(
+		gomock.Any(),
+		string(s.clientShardKey.ClusterID),
+		gomock.Any(),
+		end,
+	).DoAndReturn(func(_ context.Context, _ string, scanBegin, _ int64) (collection.Iterator[tasks.Task], error) {
+		var scanTasks []tasks.Task
+		for _, task := range allTasks {
+			if task.GetTaskID() >= scanBegin {
+				scanTasks = append(scanTasks, task)
+			}
+		}
+		return collection.NewPagingIterator[tasks.Task](
+			func([]byte) ([]tasks.Task, []byte, error) {
+				return scanTasks, nil, nil
+			},
+		), nil
+	}).AnyTimes()
+	s.taskConverter.EXPECT().Convert(
+		gomock.Any(),
+		s.clientShardKey.ClusterID,
+		enumsspb.TASK_PRIORITY_HIGH,
+		locks.PriorityLow,
+	).DoAndReturn(func(task tasks.Task, _ int32, _ enumsspb.TaskPriority, _ locks.Priority) (*replicationspb.ReplicationTask, error) {
+		return &replicationspb.ReplicationTask{
+			SourceTaskId:   task.GetTaskID(),
+			VisibilityTime: timestamppb.New(task.GetVisibilityTime()),
+		}, nil
+	}).AnyTimes()
+
+	notifications := make(chan struct{})
+	s.historyEngine.EXPECT().SubscribeReplicationNotification("target_cluster").Return(notifications, "lane-subscriber")
+	s.historyEngine.EXPECT().UnsubscribeReplicationNotification("lane-subscriber")
+	laneBSent := make(chan struct{})
+	laneBID := ""
+	laneBObserved := false
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(
+		func(response *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			messages := response.GetMessages()
+			if laneBID == "" && messages.GetLaneId() == laneA.id && len(messages.GetReplicationTasks()) != 0 {
+				laneB, created, err := registry.Create(
+					"namespace:namespace-b",
+					namespaceLaneScope("namespace-b", end),
+					1,
+				)
+				if err != nil {
+					return err
+				}
+				if !created {
+					return errors.New("namespace-b lane already exists")
+				}
+				laneBID = laneB.id
+				s.streamSender.wakeLaneClasses(1)
+			}
+			if !laneBObserved && messages.GetLaneId() == laneBID {
+				laneBObserved = true
+				close(laneBSent)
+				s.streamSender.shutdownChan.Shutdown()
+			}
+			return nil
+		},
+	).AnyTimes()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- s.streamSender.sendLaneEventLoop(1)
+	}()
+	await.Rcv(s.T(), laneBSent)
+	s.NoError(await.Rcv(s.T(), done))
+}
+
+func (s *streamSenderSuite) TestSendLaneEventLoopRoundRobinsLanesInClass() {
+	const (
+		begin = int64(100)
+		end   = int64(104)
+	)
+	registry, err := newSenderLaneRegistry(begin, nil, 1)
+	s.Require().NoError(err)
+	laneA, _, err := registry.Create("namespace:namespace-a", namespaceLaneScope("namespace-a", begin), 1)
+	s.Require().NoError(err)
+	laneB, _, err := registry.Create("namespace:namespace-b", namespaceLaneScope("namespace-b", begin), 1)
+	s.Require().NoError(err)
+	s.streamSender.laneRegistry = registry
+	s.streamSender.laneRateLimiters = []quotas.RateLimiter{nil}
+	s.streamSender.clientClusterShardCount = 1
+	s.streamSender.initialLaneStateApplied = make(chan struct{})
+	s.streamSender.lanesConfirmed.Store(true)
+	s.streamSender.markInitialLaneStateApplied()
+
+	visibilityTime := time.Now().UTC()
+	allTasks := []tasks.Task{
+		&tasks.HistoryReplicationTask{
+			WorkflowKey:         definition.NewWorkflowKey("namespace-a", "workflow-a-1", "run-a-1"),
+			TaskID:              begin,
+			VisibilityTimestamp: visibilityTime,
+		},
+		&tasks.HistoryReplicationTask{
+			WorkflowKey:         definition.NewWorkflowKey("namespace-a", "workflow-a-2", "run-a-2"),
+			TaskID:              begin + 1,
+			VisibilityTimestamp: visibilityTime,
+		},
+		&tasks.HistoryReplicationTask{
+			WorkflowKey:         definition.NewWorkflowKey("namespace-b", "workflow-b-1", "run-b-1"),
+			TaskID:              begin + 2,
+			VisibilityTimestamp: visibilityTime,
+		},
+		&tasks.HistoryReplicationTask{
+			WorkflowKey:         definition.NewWorkflowKey("namespace-b", "workflow-b-2", "run-b-2"),
+			TaskID:              begin + 3,
+			VisibilityTimestamp: visibilityTime,
+		},
+	}
+	namespaceRegistry := namespace.NewMockRegistry(s.controller)
+	for _, namespaceID := range []namespace.ID{"namespace-a", "namespace-b"} {
+		namespaceRegistry.EXPECT().GetNamespaceByID(namespaceID).Return(namespace.NewGlobalNamespaceForTest(
+			nil,
+			nil,
+			&persistencespb.NamespaceReplicationConfig{Clusters: []string{"source_cluster", "target_cluster"}},
+			100,
+		), nil).AnyTimes()
+	}
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(namespaceRegistry).AnyTimes()
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
+		tasks.NewImmediateKey(end),
+	).AnyTimes()
+	s.historyEngine.EXPECT().GetReplicationTasksIter(
+		gomock.Any(),
+		string(s.clientShardKey.ClusterID),
+		gomock.Any(),
+		end,
+	).DoAndReturn(func(_ context.Context, _ string, scanBegin, _ int64) (collection.Iterator[tasks.Task], error) {
+		var scanTasks []tasks.Task
+		for _, task := range allTasks {
+			if task.GetTaskID() >= scanBegin {
+				scanTasks = append(scanTasks, task)
+			}
+		}
+		return collection.NewPagingIterator[tasks.Task](
+			func([]byte) ([]tasks.Task, []byte, error) {
+				return scanTasks, nil, nil
+			},
+		), nil
+	}).AnyTimes()
+	s.taskConverter.EXPECT().Convert(
+		gomock.Any(),
+		s.clientShardKey.ClusterID,
+		enumsspb.TASK_PRIORITY_HIGH,
+		locks.PriorityLow,
+	).DoAndReturn(func(task tasks.Task, _ int32, _ enumsspb.TaskPriority, _ locks.Priority) (*replicationspb.ReplicationTask, error) {
+		return &replicationspb.ReplicationTask{
+			SourceTaskId:   task.GetTaskID(),
+			VisibilityTime: timestamppb.New(task.GetVisibilityTime()),
+		}, nil
+	}).AnyTimes()
+
+	notifications := make(chan struct{})
+	s.historyEngine.EXPECT().SubscribeReplicationNotification("target_cluster").Return(notifications, "lane-subscriber")
+	s.historyEngine.EXPECT().UnsubscribeReplicationNotification("lane-subscriber")
+	sentLaneIDs := make(chan string, len(allTasks))
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(
+		func(response *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			messages := response.GetMessages()
+			if len(messages.GetReplicationTasks()) != 0 {
+				sentLaneIDs <- messages.GetLaneId()
+			}
+			return nil
+		},
+	).AnyTimes()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- s.streamSender.sendLaneEventLoop(1)
+	}()
+	firstLaneID := await.Rcv(s.T(), sentLaneIDs)
+	secondLaneID := await.Rcv(s.T(), sentLaneIDs)
+	s.NotEqual(firstLaneID, secondLaneID)
+	s.ElementsMatch([]string{laneA.id, laneB.id}, []string{firstLaneID, secondLaneID})
+	s.streamSender.shutdownChan.Shutdown()
+	s.NoError(await.Rcv(s.T(), done))
+}
+
+func (s *streamSenderSuite) TestSendLaneEventLoopRetryDoesNotBlockPeerLane() {
+	const (
+		begin = int64(100)
+		end   = int64(102)
+	)
+	s.config.ReplicationStreamSenderErrorRetryMaxAttempts = func() int { return 3 }
+	s.config.ReplicationStreamSenderErrorRetryWait = func() time.Duration { return time.Nanosecond }
+	s.config.ReplicationStreamSenderErrorRetryMaxInterval = func() time.Duration { return time.Nanosecond }
+
+	registry, err := newSenderLaneRegistry(begin, nil, 1)
+	s.Require().NoError(err)
+	_, _, err = registry.Create("namespace:namespace-a", namespaceLaneScope("namespace-a", begin), 1)
+	s.Require().NoError(err)
+	s.streamSender.laneRegistry = registry
+	s.streamSender.laneRateLimiters = []quotas.RateLimiter{nil}
+	s.streamSender.clientClusterShardCount = 1
+	s.streamSender.initialLaneStateApplied = make(chan struct{})
+	s.streamSender.lanesConfirmed.Store(true)
+	s.streamSender.markInitialLaneStateApplied()
+
+	visibilityTime := time.Now().UTC()
+	allTasks := []tasks.Task{
+		&tasks.HistoryReplicationTask{
+			WorkflowKey:         definition.NewWorkflowKey("namespace-a", "workflow-a", "run-a"),
+			TaskID:              begin,
+			VisibilityTimestamp: visibilityTime,
+		},
+		&tasks.HistoryReplicationTask{
+			WorkflowKey:         definition.NewWorkflowKey("namespace-b", "workflow-b", "run-b"),
+			TaskID:              begin + 1,
+			VisibilityTimestamp: visibilityTime,
+		},
+	}
+	namespaceRegistry := namespace.NewMockRegistry(s.controller)
+	for _, namespaceID := range []namespace.ID{"namespace-a", "namespace-b"} {
+		namespaceRegistry.EXPECT().GetNamespaceByID(namespaceID).Return(namespace.NewGlobalNamespaceForTest(
+			nil,
+			nil,
+			&persistencespb.NamespaceReplicationConfig{Clusters: []string{"source_cluster", "target_cluster"}},
+			100,
+		), nil).AnyTimes()
+	}
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(namespaceRegistry).AnyTimes()
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
+		tasks.NewImmediateKey(end),
+	).AnyTimes()
+	s.historyEngine.EXPECT().GetReplicationTasksIter(
+		gomock.Any(),
+		string(s.clientShardKey.ClusterID),
+		gomock.Any(),
+		end,
+	).DoAndReturn(func(_ context.Context, _ string, scanBegin, _ int64) (collection.Iterator[tasks.Task], error) {
+		var scanTasks []tasks.Task
+		for _, task := range allTasks {
+			if task.GetTaskID() >= scanBegin {
+				scanTasks = append(scanTasks, task)
+			}
+		}
+		return collection.NewPagingIterator[tasks.Task](
+			func([]byte) ([]tasks.Task, []byte, error) {
+				return scanTasks, nil, nil
+			},
+		), nil
+	}).AnyTimes()
+
+	retryBlocked := make(chan struct{})
+	releaseRetry := make(chan struct{})
+	retryReleased := false
+	defer func() {
+		if !retryReleased {
+			close(releaseRetry)
+		}
+		s.streamSender.shutdownChan.Shutdown()
+	}()
+	conversionAttempts := 0
+	s.taskConverter.EXPECT().Convert(
+		gomock.Any(),
+		s.clientShardKey.ClusterID,
+		enumsspb.TASK_PRIORITY_HIGH,
+		locks.PriorityLow,
+	).DoAndReturn(func(task tasks.Task, _ int32, _ enumsspb.TaskPriority, _ locks.Priority) (*replicationspb.ReplicationTask, error) {
+		if task.GetNamespaceID() == "namespace-a" {
+			conversionAttempts++
+			if conversionAttempts == 1 {
+				return nil, errors.New("retry namespace-a")
+			}
+			if conversionAttempts == 2 {
+				close(retryBlocked)
+				<-releaseRetry
+			}
+			return nil, errors.New("fail namespace-a")
+		}
+		return &replicationspb.ReplicationTask{
+			SourceTaskId:   task.GetTaskID(),
+			VisibilityTime: timestamppb.New(task.GetVisibilityTime()),
+		}, nil
+	}).AnyTimes()
+	s.senderFlowController.EXPECT().Wait(gomock.Any(), enumsspb.TASK_PRIORITY_HIGH).Return(nil).AnyTimes()
+
+	notifications := make(chan struct{}, 1)
+	s.historyEngine.EXPECT().SubscribeReplicationNotification("target_cluster").Return(notifications, "lane-subscriber")
+	s.historyEngine.EXPECT().UnsubscribeReplicationNotification("lane-subscriber")
+	sentTaskIDs := make(chan int64, len(allTasks))
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(
+		func(response *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			for _, task := range response.GetMessages().GetReplicationTasks() {
+				sentTaskIDs <- task.GetSourceTaskId()
+			}
+			return nil
+		},
+	).AnyTimes()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- s.streamSender.sendLaneEventLoop(1)
+	}()
+	await.Rcv(s.T(), retryBlocked)
+	_, _, err = registry.Create("namespace:namespace-b", namespaceLaneScope("namespace-b", begin), 1)
+	s.Require().NoError(err)
+	notifications <- struct{}{}
+
+	peerSentBeforeRetryReleased := false
+	select {
+	case taskID := <-sentTaskIDs:
+		peerSentBeforeRetryReleased = taskID == begin+1
+	case <-time.After(250 * time.Millisecond):
+	}
+
+	close(releaseRetry)
+	retryReleased = true
+	s.Error(await.Rcv(s.T(), done))
+	s.True(peerSentBeforeRetryReleased)
+}
+
+func (s *streamSenderSuite) TestSendLaneYieldsAfterScanLimit() {
+	const (
+		begin = int64(100)
+		end   = begin + laneTaskScansPerTurn + 100
+	)
+	registry, err := newSenderLaneRegistry(begin, nil, 1)
+	s.Require().NoError(err)
+	lane, _, err := registry.Create("namespace:namespace-a", namespaceLaneScope("namespace-a", begin), 1)
+	s.Require().NoError(err)
+	s.streamSender.laneRegistry = registry
+	s.streamSender.laneRateLimiters = []quotas.RateLimiter{nil}
+
+	scanTasks := make([]tasks.Task, laneTaskScansPerTurn)
+	visibilityTime := time.Now().UTC()
+	for i := range scanTasks {
+		scanTasks[i] = &tasks.HistoryReplicationTask{
+			WorkflowKey:         definition.NewWorkflowKey("namespace-b", "workflow-b", "run-b"),
+			TaskID:              begin + int64(i),
+			VisibilityTimestamp: visibilityTime,
+		}
+	}
+	s.historyEngine.EXPECT().GetReplicationTasksIter(
+		gomock.Any(),
+		string(s.clientShardKey.ClusterID),
+		begin,
+		end,
+	).Return(collection.NewPagingIterator[tasks.Task](
+		func([]byte) ([]tasks.Task, []byte, error) {
+			return scanTasks, nil, nil
+		},
+	), nil)
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(
+		func(response *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			messages := response.GetMessages()
+			s.Empty(messages.GetReplicationTasks())
+			s.Equal(lane.id, messages.GetLaneId())
+			s.Equal(begin+laneTaskScansPerTurn, messages.GetExclusiveHighWatermark())
+			return nil
+		},
+	)
+
+	more, err := s.streamSender.sendLane(lane, end)
+	s.NoError(err)
+	s.True(more)
+	updated, ok := registry.SnapshotByKey(lane.logicalKey)
+	s.True(ok)
+	s.Equal(begin+laneTaskScansPerTurn, updated.cursor)
+}
+
+func (s *streamSenderSuite) TestSendLaneDoesNotCheckpointFailedScanTurn() {
+	const (
+		begin = int64(100)
+		end   = begin + laneTaskScansPerTurn + 100
+	)
+	registry, err := newSenderLaneRegistry(begin, nil, 1)
+	s.Require().NoError(err)
+	lane, _, err := registry.Create("namespace:namespace-a", namespaceLaneScope("namespace-a", begin), 1)
+	s.Require().NoError(err)
+	s.streamSender.laneRegistry = registry
+	s.streamSender.laneRateLimiters = []quotas.RateLimiter{nil}
+
+	scanTasks := make([]tasks.Task, laneTaskScansPerTurn)
+	for i := range scanTasks {
+		scanTasks[i] = &tasks.HistoryReplicationTask{
+			WorkflowKey:         definition.NewWorkflowKey("namespace-b", "workflow-b", "run-b"),
+			TaskID:              begin + int64(i),
+			VisibilityTimestamp: time.Now().UTC(),
+		}
+	}
+	s.historyEngine.EXPECT().GetReplicationTasksIter(
+		gomock.Any(),
+		string(s.clientShardKey.ClusterID),
+		begin,
+		end,
+	).Return(collection.NewPagingIterator[tasks.Task](
+		func([]byte) ([]tasks.Task, []byte, error) {
+			return scanTasks, nil, nil
+		},
+	), nil)
+	s.server.EXPECT().Send(gomock.Any()).Return(errors.New("send failed"))
+
+	more, err := s.streamSender.sendLane(lane, end)
+	s.Error(err)
+	s.False(more)
+	updated, ok := registry.SnapshotByKey(lane.logicalKey)
+	s.True(ok)
+	s.Equal(begin, updated.cursor)
+}
+
+// The receiver emits no sync state until both its priority trackers have observed a
+// batch, and the lane capability handshake rides on the first sync state. Catch-up
+// must therefore prime the receiver's HIGH tracker with an empty batch before
+// waiting on the handshake; without priming no HIGH traffic ever flows and the
+// handshake never completes.
+func (s *streamSenderSuite) TestSendCatchUp_LanesPrimesHighTrackerBeforeCapabilityHandshake() {
+	s.streamSender.isTieredStackEnabled = true
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	laneFloor := int64(50)
+	beginInclusiveWatermark := int64(100)
+	endExclusiveWatermark := int64(200)
+
+	registry, err := newSenderLaneRegistry(beginInclusiveWatermark, nil, 4)
+	s.NoError(err)
+	_, _, err = registry.Create("namespace:namespace-a", namespaceLaneScope("namespace-a", laneFloor), 1)
+	s.NoError(err)
+	s.streamSender.laneRegistry = registry
+	s.streamSender.laneController = newSenderLaneController(
+		registry,
+		newNamespaceIsolationPolicy(4, 3, 3),
+		100,
+		log.NewNoopLogger(),
+	)
+	s.streamSender.initialLaneStateApplied = make(chan struct{})
+
+	scope := func(taskID int64) *persistencespb.QueueSliceScope {
+		return &persistencespb.QueueSliceScope{
+			Range: &persistencespb.QueueSliceRange{
+				InclusiveMin: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(taskID)),
+				ExclusiveMax: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(math.MaxInt64)),
+			},
+			Predicate: &persistencespb.Predicate{
+				PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+				Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+			},
+		}
+	}
+	s.shardContext.EXPECT().GetQueueState(tasks.CategoryReplication).Return(&persistencespb.QueueState{
+		ReaderStates: map[int64]*persistencespb.QueueReaderState{
+			readerID: {
+				Scopes: []*persistencespb.QueueSliceScope{
+					scope(beginInclusiveWatermark),
+					scope(beginInclusiveWatermark),
+					scope(beginInclusiveWatermark),
+				},
+			},
+		},
+	}, true)
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
+		tasks.NewImmediateKey(endExclusiveWatermark),
+	)
+
+	sent := make(chan *replicationspb.WorkflowReplicationMessages, 2)
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(
+		func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			sent <- resp.GetMessages()
+			return nil
+		},
+	).Times(2)
+	s.historyEngine.EXPECT().GetReplicationTasksIter(
+		gomock.Any(),
+		string(s.clientShardKey.ClusterID),
+		beginInclusiveWatermark,
+		endExclusiveWatermark,
+	).Return(collection.NewPagingIterator[tasks.Task](
+		func(paginationToken []byte) ([]tasks.Task, []byte, error) {
+			return []tasks.Task{}, nil, nil
+		},
+	), nil)
+
+	type catchupResult struct {
+		taskID int64
+		err    error
+	}
+	catchupDone := make(chan catchupResult, 1)
+	go func() {
+		taskID, err := s.streamSender.sendCatchUp(enumsspb.TASK_PRIORITY_HIGH)
+		catchupDone <- catchupResult{taskID, err}
+	}()
+
+	// The priming batch must go out while the receiver's lane capability is still
+	// unknown; without it this receive times out because the handshake below can
+	// never complete. Its watermark is the lowest point this catch-up may send
+	// from, so no later batch is dropped as non-advancing.
+	primed := await.Rcv(s.T(), sent)
+	s.Equal(enumsspb.TASK_PRIORITY_HIGH, primed.GetPriority())
+	s.Empty(primed.GetLaneId())
+	s.Empty(primed.GetReplicationTasks())
+	s.Equal(laneFloor, primed.GetExclusiveHighWatermark())
+
+	s.NoError(s.streamSender.observeLaneCapability(&replicationspb.SyncReplicationState{
+		SupportsReplicationLanes:       true,
+		ReplicationLaneProtocolVersion: 1,
+	}))
+	s.streamSender.markInitialLaneStateApplied()
+
+	trailing := await.Rcv(s.T(), sent)
+	s.Equal(endExclusiveWatermark, trailing.GetExclusiveHighWatermark())
+	result := await.Rcv(s.T(), catchupDone)
+	s.NoError(result.err)
+	s.Equal(endExclusiveWatermark, result.taskID)
+}
+
+func (s *streamSenderSuite) TestSendCatchUp_FirstCapabilityReconcilePrecedesDefaultScan() {
+	s.streamSender.isTieredStackEnabled = true
+	s.streamSender.clientClusterShardCount = 1
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	const (
+		namespaceID             = "namespace-a"
+		beginInclusiveWatermark = int64(100)
+		endExclusiveWatermark   = int64(200)
+	)
+
+	registry, err := newSenderLaneRegistry(beginInclusiveWatermark, nil, 4)
+	s.Require().NoError(err)
+	s.streamSender.laneRegistry = registry
+	s.streamSender.laneController = newSenderLaneController(
+		registry,
+		newNamespaceIsolationPolicy(4, 3, 3),
+		100,
+		log.NewNoopLogger(),
+	)
+	s.streamSender.initialLaneStateApplied = make(chan struct{})
+
+	state := syncReplicationState(beginInclusiveWatermark, beginInclusiveWatermark, beginInclusiveWatermark)
+	state.SupportsReplicationLanes = true
+	state.ReplicationLaneProtocolVersion = 1
+	state.ThrottleHighNamespaceIds = []string{namespaceID}
+
+	refreshStarted := make(chan struct{})
+	releaseRefresh := make(chan struct{})
+	released := false
+	defer func() {
+		if !released {
+			close(releaseRefresh)
+		}
+	}()
+	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(state).DoAndReturn(
+		func(*replicationspb.SyncReplicationState) {
+			close(refreshStarted)
+			<-releaseRefresh
+		},
+	)
+	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(readerID, gomock.Any()).Return(nil)
+	s.shardContext.EXPECT().UpdateRemoteReaderInfo(readerID, beginInclusiveWatermark-1, gomock.Any()).Return(nil)
+
+	scope := &persistencespb.QueueSliceScope{
+		Range: &persistencespb.QueueSliceRange{
+			InclusiveMin: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(beginInclusiveWatermark)),
+			ExclusiveMax: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(math.MaxInt64)),
+		},
+		Predicate: &persistencespb.Predicate{
+			PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+			Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+		},
+	}
+	s.shardContext.EXPECT().GetQueueState(tasks.CategoryReplication).Return(&persistencespb.QueueState{
+		ReaderStates: map[int64]*persistencespb.QueueReaderState{
+			readerID: {
+				Scopes: []*persistencespb.QueueSliceScope{scope, scope, scope},
+			},
+		},
+	}, true)
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
+		tasks.NewImmediateKey(endExclusiveWatermark),
+	)
+
+	item := &tasks.HistoryReplicationTask{
+		WorkflowKey: definition.WorkflowKey{
+			NamespaceID: namespaceID,
+			WorkflowID:  "workflow-a",
+		},
+		TaskID:              beginInclusiveWatermark + 1,
+		VisibilityTimestamp: time.Now().UTC(),
+	}
+	iter := collection.NewPagingIterator[tasks.Task](
+		func([]byte) ([]tasks.Task, []byte, error) {
+			return []tasks.Task{item}, nil, nil
+		},
+	)
+	s.historyEngine.EXPECT().GetReplicationTasksIter(
+		gomock.Any(),
+		string(s.clientShardKey.ClusterID),
+		beginInclusiveWatermark,
+		endExclusiveWatermark,
+	).Return(iter, nil)
+
+	namespaceRegistry := namespace.NewMockRegistry(s.controller)
+	namespaceRegistry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewGlobalNamespaceForTest(
+		nil,
+		nil,
+		&persistencespb.NamespaceReplicationConfig{Clusters: []string{"source_cluster", "target_cluster"}},
+		100,
+	), nil).AnyTimes()
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(namespaceRegistry).AnyTimes()
+	replicationTask := &replicationspb.ReplicationTask{
+		SourceTaskId:   item.GetTaskID(),
+		VisibilityTime: timestamppb.New(item.GetVisibilityTime()),
+	}
+	s.taskConverter.EXPECT().Convert(
+		item,
+		s.clientShardKey.ClusterID,
+		enumsspb.TASK_PRIORITY_HIGH,
+		locks.PriorityLow,
+	).Return(replicationTask, nil).AnyTimes()
+	s.senderFlowController.EXPECT().Wait(gomock.Any(), enumsspb.TASK_PRIORITY_HIGH).Return(nil).AnyTimes()
+
+	var sent []*replicationspb.WorkflowReplicationMessages
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(
+		func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			sent = append(sent, resp.GetMessages())
+			return nil
+		},
+	).AnyTimes()
+
+	recvDone := make(chan error, 1)
+	go func() {
+		recvDone <- s.streamSender.recvSyncReplicationState(state)
+	}()
+	await.Rcv(s.T(), refreshStarted)
+
+	type catchupResult struct {
+		taskID int64
+		err    error
+	}
+	catchupDone := make(chan catchupResult, 1)
+	go func() {
+		taskID, err := s.streamSender.sendCatchUp(enumsspb.TASK_PRIORITY_HIGH)
+		catchupDone <- catchupResult{taskID: taskID, err: err}
+	}()
+
+	var catchup catchupResult
+	select {
+	case <-s.streamSender.initialLaneStateApplied:
+		// If the initial lane state is marked applied before reconciliation, let catch-up finish
+		// while reconciliation remains blocked so the leaked task is deterministic.
+		catchup = await.Rcv(s.T(), catchupDone)
+		close(releaseRefresh)
+		released = true
+	default:
+		close(releaseRefresh)
+		released = true
+		catchup = await.Rcv(s.T(), catchupDone)
+	}
+	recvErr := await.Rcv(s.T(), recvDone)
+	s.Require().NoError(catchup.err)
+	s.Equal(endExclusiveWatermark, catchup.taskID)
+	s.Require().NoError(recvErr)
+	_, laneCreated := registry.SnapshotByKey(namespaceLaneKeyPrefix + namespaceID)
+	s.True(laneCreated)
+
+	var sharedTasks []*replicationspb.ReplicationTask
+	for _, messages := range sent {
+		if messages.GetLaneId() == "" {
+			sharedTasks = append(sharedTasks, messages.GetReplicationTasks()...)
+		}
+	}
+	s.Empty(sharedTasks, "throttled namespace task was sent on the shared lane before the first reconcile")
+}
+
+// A receiver that does not understand lanes must have the lane ranges re-covered by
+// the default lane from their resume floor.
+func (s *streamSenderSuite) TestSendCatchUp_LaneUnsupportedReCoversFromLaneFloor() {
+	s.streamSender.isTieredStackEnabled = true
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	laneFloor := int64(50)
+	beginInclusiveWatermark := int64(100)
+	endExclusiveWatermark := int64(200)
+
+	registry, err := newSenderLaneRegistry(beginInclusiveWatermark, nil, 4)
+	s.NoError(err)
+	_, _, err = registry.Create("namespace:namespace-a", namespaceLaneScope("namespace-a", laneFloor), 1)
+	s.NoError(err)
+	s.streamSender.laneRegistry = registry
+	s.streamSender.laneController = newSenderLaneController(
+		registry,
+		newNamespaceIsolationPolicy(4, 3, 3),
+		100,
+		log.NewNoopLogger(),
+	)
+	s.streamSender.initialLaneStateApplied = make(chan struct{})
+
+	scope := func(taskID int64) *persistencespb.QueueSliceScope {
+		return &persistencespb.QueueSliceScope{
+			Range: &persistencespb.QueueSliceRange{
+				InclusiveMin: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(taskID)),
+				ExclusiveMax: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(math.MaxInt64)),
+			},
+			Predicate: &persistencespb.Predicate{
+				PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+				Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+			},
+		}
+	}
+	s.shardContext.EXPECT().GetQueueState(tasks.CategoryReplication).Return(&persistencespb.QueueState{
+		ReaderStates: map[int64]*persistencespb.QueueReaderState{
+			readerID: {
+				Scopes: []*persistencespb.QueueSliceScope{
+					scope(beginInclusiveWatermark),
+					scope(beginInclusiveWatermark),
+					scope(beginInclusiveWatermark),
+				},
+			},
+		},
+	}, true)
+	s.shardContext.EXPECT().GetQueueExclusiveHighReadWatermark(tasks.CategoryReplication).Return(
+		tasks.NewImmediateKey(endExclusiveWatermark),
+	)
+
+	sent := make(chan *replicationspb.WorkflowReplicationMessages, 2)
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(
+		func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			sent <- resp.GetMessages()
+			return nil
+		},
+	).Times(2)
+	s.historyEngine.EXPECT().GetReplicationTasksIter(
+		gomock.Any(),
+		string(s.clientShardKey.ClusterID),
+		laneFloor,
+		endExclusiveWatermark,
+	).Return(collection.NewPagingIterator[tasks.Task](
+		func(paginationToken []byte) ([]tasks.Task, []byte, error) {
+			return []tasks.Task{}, nil, nil
+		},
+	), nil)
+
+	type catchupResult struct {
+		taskID int64
+		err    error
+	}
+	catchupDone := make(chan catchupResult, 1)
+	go func() {
+		taskID, err := s.streamSender.sendCatchUp(enumsspb.TASK_PRIORITY_HIGH)
+		catchupDone <- catchupResult{taskID, err}
+	}()
+
+	primed := await.Rcv(s.T(), sent)
+	s.Equal(laneFloor, primed.GetExclusiveHighWatermark())
+
+	s.NoError(s.streamSender.observeLaneCapability(&replicationspb.SyncReplicationState{}))
+	s.streamSender.markInitialLaneStateApplied()
+
+	trailing := await.Rcv(s.T(), sent)
+	s.Equal(endExclusiveWatermark, trailing.GetExclusiveHighWatermark())
+	result := await.Rcv(s.T(), catchupDone)
+	s.NoError(result.err)
+	s.Equal(endExclusiveWatermark, result.taskID)
+}
+
+// Once the receiver proves it does not understand lanes, lane state is dropped:
+// the default lane re-covers the lane ranges, so persisted reader state no longer
+// carries them.
+func (s *streamSenderSuite) TestRecvSyncReplicationState_LaneUnsupportedDropsLanes() {
+	registry, err := newSenderLaneRegistry(100, nil, 4)
+	s.NoError(err)
+	_, _, err = registry.Create("namespace:namespace-a", namespaceLaneScope("namespace-a", 100), 1)
+	s.NoError(err)
+	s.streamSender.laneRegistry = registry
+	s.streamSender.laneController = newSenderLaneController(
+		registry,
+		newNamespaceIsolationPolicy(4, 3, 3),
+		100,
+		log.NewNoopLogger(),
+	)
+	s.streamSender.initialLaneStateApplied = make(chan struct{})
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	state := syncReplicationState(100, 100, 200)
+	s.senderFlowController.EXPECT().RefreshReceiverFlowControlInfo(state)
+
+	var persisted *persistencespb.QueueReaderState
+	s.shardContext.EXPECT().UpdateReplicationQueueReaderState(readerID, gomock.Any()).DoAndReturn(
+		func(_ int64, readerState *persistencespb.QueueReaderState) error {
+			persisted = readerState
+			return nil
+		},
+	)
+	s.shardContext.EXPECT().UpdateRemoteReaderInfo(readerID, int64(99), gomock.Any()).Return(nil)
+
+	s.NoError(s.streamSender.recvSyncReplicationState(state))
+	s.False(s.streamSender.lanesConfirmed.Load())
+	s.Empty(registry.Snapshots())
+	s.Empty(persisted.Lanes)
 }
 
 // TestRecvSyncReplicationState_ReaderGroupEquivalence pins the PR's core claim: for
@@ -634,6 +1708,53 @@ func (s *streamSenderSuite) TestSendCatchUp_TieredStack_TieredReaderScope() {
 	s.Equal(endExclusiveWatermark, highPriorityCatchupTaskID)
 	s.NoError(lowPriorityCatchupErr)
 	s.Equal(endExclusiveWatermark, lowPriorityCatchupTaskID)
+}
+
+func (s *streamSenderSuite) TestCatchupBeginWatermark_RecoversPersistedLanesWithoutReaderGroup() {
+	s.streamSender.isTieredStackEnabled = true
+	s.streamSender.readerGroup = nil
+	s.streamSender.laneRegistry = nil
+	readerID := shard.ReplicationReaderIDFromClusterShardID(
+		int64(s.clientShardKey.ClusterID),
+		s.clientShardKey.ShardID,
+	)
+	makeScope := func(taskID int64) *persistencespb.QueueSliceScope {
+		return &persistencespb.QueueSliceScope{
+			Range: &persistencespb.QueueSliceRange{
+				InclusiveMin: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(taskID)),
+				ExclusiveMax: shard.ConvertToPersistenceTaskKey(tasks.NewImmediateKey(math.MaxInt64)),
+			},
+			Predicate: &persistencespb.Predicate{
+				PredicateType: enumsspb.PREDICATE_TYPE_UNIVERSAL,
+				Attributes:    &persistencespb.Predicate_UniversalPredicateAttributes{},
+			},
+		}
+	}
+	const (
+		overallWatermark = int64(50)
+		highWatermark    = int64(100)
+		lowWatermark     = int64(80)
+	)
+	s.shardContext.EXPECT().GetQueueState(tasks.CategoryReplication).Return(&persistencespb.QueueState{
+		ReaderStates: map[int64]*persistencespb.QueueReaderState{
+			readerID: {
+				Scopes: []*persistencespb.QueueSliceScope{
+					makeScope(overallWatermark),
+					makeScope(highWatermark),
+					makeScope(lowWatermark),
+				},
+				Lanes: []*persistencespb.QueueReaderLane{{
+					LogicalKey: "namespace:a",
+					Scope:      makeScope(overallWatermark),
+				}},
+			},
+		},
+	}, true)
+
+	s.Equal(
+		overallWatermark,
+		s.streamSender.catchupBeginWatermark(enumsspb.TASK_PRIORITY_HIGH, 200),
+	)
 }
 
 func (s *streamSenderSuite) TestSendCatchUp_SingleStack_NoReaderState() {
