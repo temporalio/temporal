@@ -99,6 +99,7 @@ var Module = fx.Options(
 	fx.Provide(RetryableInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(interceptor.NewHealthInterceptor),
+	fx.Provide(interceptor.NewProtoValidationInterceptor),
 	fx.Provide(NamespaceCountLimitInterceptorProvider),
 	fx.Provide(NamespaceValidatorInterceptorProvider),
 	fx.Provide(NamespaceRateLimitersProvider),
@@ -244,6 +245,7 @@ func GrpcServerOptionsProvider(
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	retryableInterceptor *interceptor.RetryableInterceptor,
 	healthInterceptor *interceptor.HealthInterceptor,
+	protoValidationInterceptor *interceptor.ProtoValidationInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 	traceStatsHandler telemetry.ServerStatsHandler,
 	metricsStatsHandler metrics.ServerStatsHandler,
@@ -311,6 +313,7 @@ func GrpcServerOptionsProvider(
 		slowRequestLoggerInterceptor.Intercept,
 		chasmRequestVisibilityInterceptor.Intercept,
 		contextMetadataInterceptor.Intercept,
+		protoValidationInterceptor.Intercept,
 	}
 	if len(customInterceptors) > 0 {
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
