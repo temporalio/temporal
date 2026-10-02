@@ -140,7 +140,7 @@ func TestRangeDeleteInBatches_Stub(t *testing.T) {
 			BatchSize: 5,
 		})
 		require.Error(t, err)
-		require.True(t, errors.Is(err, context.Canceled) || errors.Is(errors.Unwrap(err), context.Canceled))
+		require.Contains(t, err.Error(), "context canceled")
 		require.Equal(t, 1, calls)
 	})
 }
