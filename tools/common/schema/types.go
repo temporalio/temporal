@@ -152,6 +152,10 @@ const (
 	CLIFlagForce = CLIOptForce + ", f"
 	// CLIFlagDisableInitialHostLookup is the cli flag for only using supplied hosts to connect to the database
 	CLIFlagDisableInitialHostLookup = "disable-initial-host-lookup"
+	// CLIFlagIgnorePeerAddr instructs the driver to use the supplied address instead of the one in system.peers
+	CLIFlagIgnorePeerAddr = "ignore-peer-addr"
+	// CLIFlagDisableShardAwarePort disables connecting to ScyllaDB's shard-aware port
+	CLIFlagDisableShardAwarePort = "disable-shard-aware-port"
 
 	// CLIFlagEnableTLS enables cassandra client TLS
 	CLIFlagEnableTLS = "tls"

@@ -71,13 +71,16 @@ func NewTestCluster(keyspace, username, password, host string, port int, schemaD
 	}
 	result.schemaDir = schemaDir
 	result.cfg = config.Cassandra{
-		User:           username,
-		Password:       password,
-		Hosts:          host,
-		Port:           port,
-		MaxConns:       2,
-		ConnectTimeout: 30 * time.Second * debug.TimeoutMultiplier,
-		Keyspace:       keyspace,
+		User:                     username,
+		Password:                 password,
+		Hosts:                    host,
+		Port:                     port,
+		MaxConns:                 2,
+		ConnectTimeout:           30 * time.Second * debug.TimeoutMultiplier,
+		Keyspace:                 keyspace,
+		DisableInitialHostLookup: environment.GetCassandraDisableInitialHostLookup(),
+		IgnorePeerAddr:           environment.GetCassandraIgnorePeerAddr(),
+		DisableShardAwarePort:    environment.GetCassandraDisableShardAwarePort(),
 	}
 	result.faultInjection = faultInjection
 	return &result
@@ -146,7 +149,10 @@ func (s *TestCluster) CreateSession(
 								Consistency: "ONE",
 							},
 						},
-						ConnectTimeout: s.cfg.ConnectTimeout,
+						ConnectTimeout:           s.cfg.ConnectTimeout,
+						DisableInitialHostLookup: s.cfg.DisableInitialHostLookup,
+						IgnorePeerAddr:           s.cfg.IgnorePeerAddr,
+						DisableShardAwarePort:    s.cfg.DisableShardAwarePort,
 					},
 					resolver.NewNoopResolver(),
 				)

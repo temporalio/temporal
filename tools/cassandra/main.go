@@ -108,6 +108,16 @@ func buildCLIOptions() *cli.App {
 			EnvVar: "CASSANDRA_DISABLE_INITIAL_HOST_LOOKUP",
 		},
 		cli.BoolFlag{
+			Name:   schema.CLIFlagIgnorePeerAddr,
+			Usage:  "instructs gocql driver to use the supplied address instead of the address in system.peers, useful when behind NAT or port-forwarding",
+			EnvVar: "CASSANDRA_IGNORE_PEER_ADDR",
+		},
+		cli.BoolFlag{
+			Name:   schema.CLIFlagDisableShardAwarePort,
+			Usage:  "disables connecting to ScyllaDB's shard-aware port, required when running behind NAT or port-forwarding",
+			EnvVar: "CASSANDRA_DISABLE_SHARD_AWARE_PORT",
+		},
+		cli.BoolFlag{
 			Name:   schema.CLIFlagEnableTLS,
 			Usage:  "enable TLS",
 			EnvVar: "CASSANDRA_ENABLE_TLS",
