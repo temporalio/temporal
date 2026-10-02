@@ -244,7 +244,7 @@ linters:
           - staticcheck
       # Underscores in method names are allowed in test code.
       - path: _test\.go|tests/.+\.go|common/testing/
-        text: "ST1003:"
+        text: "ST1003: should not use underscores in Go names; (func|method) "
         linters:
           - staticcheck
 issues:
