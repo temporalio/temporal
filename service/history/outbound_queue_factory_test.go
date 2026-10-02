@@ -52,24 +52,24 @@ func TestOutboundQueueFactory_ChasmTaskGroupWiring(t *testing.T) {
 	}
 }
 
-func TestOutboundQueueFactory_CircuitBreakerBlockedTaggedWithTaskGroup(t *testing.T) {
+func TestOutboundQueueFactory_CircuitBreakerBlockedMetric(t *testing.T) {
 	t.Parallel()
 
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 	startOutboundQueueWithChasmTask(t, metricsHandler, func() circuitbreaker.TwoStepCircuitBreaker {
-		return openCircuitBreaker{}
+		return alwaysOpenCircuitBreaker{}
 	})
 
 	await.Require(t.Context(), t, func(c *await.T) {
 		recordings := capture.SnapshotMetric(metrics.CircuitBreakerExecutableBlocked.Name())
 		require.NotEmpty(c, recordings)
-		require.Equal(c, map[string]string{
+		require.Equal(c, &metricstest.CapturedRecording{Value: int64(1), Tags: map[string]string{
 			"operation":   metrics.OperationOutboundQueueProcessorScope,
 			"namespace":   "test-ns",
 			"destination": "test-destination",
 			"task_group":  "my-task-group",
-		}, recordings[0].Tags)
+		}}, recordings[0])
 	}, 10*time.Second, 10*time.Millisecond)
 }
 
@@ -182,13 +182,13 @@ func startOutboundQueueWithChasmTask(
 	return taskCh
 }
 
-// openCircuitBreaker rejects every request, like a circuit breaker that has tripped.
-type openCircuitBreaker struct{}
+// alwaysOpenCircuitBreaker rejects every request and never closes.
+type alwaysOpenCircuitBreaker struct{}
 
-func (openCircuitBreaker) Name() string               { return "open" }
-func (openCircuitBreaker) State() gobreaker.State     { return gobreaker.StateOpen }
-func (openCircuitBreaker) Counts() gobreaker.Counts   { return gobreaker.Counts{} }
-func (openCircuitBreaker) Allow() (func(bool), error) { return nil, gobreaker.ErrOpenState }
+func (alwaysOpenCircuitBreaker) Name() string               { return "always-open" }
+func (alwaysOpenCircuitBreaker) State() gobreaker.State     { return gobreaker.StateOpen }
+func (alwaysOpenCircuitBreaker) Counts() gobreaker.Counts   { return gobreaker.Counts{} }
+func (alwaysOpenCircuitBreaker) Allow() (func(bool), error) { return nil, gobreaker.ErrOpenState }
 
 // captureExecutorWrapper intercepts tasks at the executor level.
 type captureExecutorWrapper struct {
