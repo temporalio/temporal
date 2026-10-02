@@ -275,6 +275,56 @@ func TestOnTasksReportsMaxClamping(t *testing.T) {
 	}
 }
 
+func TestOnTasksReportsMaxClampingWhenUnclampedTargetChanges(t *testing.T) {
+	t.Parallel()
+
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	scaler := newSimplePartitionScaler(
+		dynamicconfig.GetTypedPropertyFn(dynamicconfig.SimplePartitionScalerSettings{
+			Enabled:      true,
+			BacklogReset: 100,
+			BacklogBase:  300,
+			Max:          2,
+		}),
+		nil,
+		nil,
+		log.NewNoopLogger(),
+		metricsHandler,
+	)
+	var decision PartitionScalerDecision
+	onTasks := func(wantTarget int, counts ...int64) {
+		decision = scaler.OnTasks(PartitionScalerInput{
+			CurrentTarget: 1,
+			BacklogCounts: encodeCounts(counts...),
+			PrivateState:  decision.PrivateState,
+		})
+		require.Equal(t, wantTarget, decision.NewTarget)
+	}
+	requireMetricCount := func(count int) {
+		require.Len(t, capture.SnapshotMetric(metrics.PartitionScaleMaxClamped.Name()), count)
+	}
+
+	// Entering the clamp reports once. Repeating the same calculation does not.
+	onTasks(2, 500, 500)
+	requireMetricCount(1)
+	onTasks(2, 500, 500)
+	requireMetricCount(1)
+
+	// A new unclamped target reports once, even though the clamped target is unchanged.
+	onTasks(2, 500, 500, 500)
+	requireMetricCount(2)
+	onTasks(2, 500, 500, 500)
+	requireMetricCount(2)
+
+	// Leaving the clamp resets deduplication, so re-entering reports again.
+	onTasks(1, 32, 32, 32)
+	onTasks(2, 500, 500)
+	requireMetricCount(3)
+}
+
 // TestOnTasksLegacyMultiples covers the *AsMultipleOfLegacy settings and how they combine
 // with the explicit Fixed/Min/Max: an explicit Fixed wins over the derived one, while derived
 // Min/Max apply in addition to explicit ones, so the more restrictive of the pair wins.

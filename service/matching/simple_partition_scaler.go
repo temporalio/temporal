@@ -51,11 +51,12 @@ type simplePartitionScaler struct {
 	cfg scalerCfg
 	// legacyCount returns the "legacy" static partition count that the *AsMultipleOfLegacy
 	// settings are relative to. May be nil, which disables those settings.
-	legacyCount    dynamicconfig.IntPropertyFn
-	ts             clock.TimeSource
-	logger         log.Logger
-	metricsHandler metrics.Handler
-	trackers       map[time.Duration]*taskTracker
+	legacyCount               dynamicconfig.IntPropertyFn
+	ts                        clock.TimeSource
+	logger                    log.Logger
+	metricsHandler            metrics.Handler
+	trackers                  map[time.Duration]*taskTracker
+	lastLoggedTargetBeforeMax int
 }
 
 func newSimplePartitionScaler(
@@ -88,6 +89,7 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 	cfg := s.cfg()
 
 	if !cfg.Enabled {
+		s.lastLoggedTargetBeforeMax = 0
 		return PartitionScalerDecision{NewTarget: 0}
 	}
 
@@ -103,8 +105,10 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 	}
 
 	if cfg.Fixed > 0 {
+		s.lastLoggedTargetBeforeMax = 0
 		return PartitionScalerDecision{NewTarget: int(cfg.Fixed), BacklogCap: int(cfg.BacklogCap)}
 	} else if fixed := multiplied(cfg.FixedAsMultipleOfLegacy); fixed > 0 {
+		s.lastLoggedTargetBeforeMax = 0
 		return PartitionScalerDecision{NewTarget: fixed, BacklogCap: int(cfg.BacklogCap)}
 	}
 
@@ -155,7 +159,10 @@ func (s *simplePartitionScaler) OnTasks(in PartitionScalerInput) PartitionScaler
 	if multipliedMax := multiplied(cfg.MaxAsMultipleOfLegacy); multipliedMax > 0 {
 		totalTarget = min(totalTarget, multipliedMax)
 	}
-	if totalTarget < targetBeforeMax {
+	if totalTarget >= targetBeforeMax {
+		s.lastLoggedTargetBeforeMax = 0
+	} else if targetBeforeMax != s.lastLoggedTargetBeforeMax {
+		s.lastLoggedTargetBeforeMax = targetBeforeMax
 		metrics.PartitionScaleMaxClamped.With(s.metricsHandler).Record(1)
 		s.logger.Info("partition scale target clamped by maximum",
 			tag.Int("target-before-max", targetBeforeMax),
