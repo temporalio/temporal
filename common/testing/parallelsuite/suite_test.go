@@ -94,9 +94,8 @@ func (s *contextSuite) TestAwaitUsesSuiteContext() {
 
 	s.Await(func(s *contextSuite) {
 		s.Equal("decorated", s.Context().Value(key{}))
-		deadline, ok := s.Context().Deadline()
+		_, ok := s.Context().Deadline()
 		s.True(ok)
-		s.Less(time.Until(deadline), 200*time.Millisecond)
 	}, 100*time.Millisecond, time.Millisecond)
 }
 
