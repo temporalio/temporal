@@ -3785,8 +3785,7 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		true,
 		`EnableMatchingFanOutForPollCancellation controls where poll cancellation fan-out happens.
 		When enabled, frontend sends root partition only; matching fans out to all partitions.
-		When disabled, frontend iterates partitions; matching handles each partition locally.
-		Safe rollout complete: both frontend and matching support this.`,
+		When disabled, frontend iterates partitions; matching handles each partition locally.`,
 	)
 
 	// Deprecated: ListWorkersEnabled is no longer honored. ListWorkers and DescribeWorker APIs are
