@@ -1183,6 +1183,23 @@ func TestExecutableTaskTrackerHandlesRepeatedDLQFailures(t *testing.T) {
 			require.Equal(t, &highWatermark, tracker.LowWatermark())
 		})
 	}
+}
+
+func (s *executableTaskSuite) TestMarkPoisonPill_MaxAttemptsReached() {
+	s.config.ReplicationDLQMaxRetryAttempts = dynamicconfig.GetIntPropertyFn(1)
+	shardID := rand.Int31()
+	shardContext := historyi.NewMockShardContext(s.controller)
+	s.shardController.EXPECT().GetShardByNamespaceWorkflow(
+		namespace.ID(s.namespaceId),
+		s.workflowId,
+	).Return(shardContext, nil).AnyTimes()
+	shardContext.EXPECT().GetShardID().Return(shardID).AnyTimes()
+	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), &persistence.PutReplicationTaskToDLQRequest{
+		ShardID:           shardID,
+		SourceClusterName: s.task.sourceClusterName,
+		TaskInfo:          s.task.replicationTask.RawTaskInfo,
+	}).Return(serviceerror.NewInternal("failed"))
+
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)
