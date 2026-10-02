@@ -62,10 +62,11 @@ type (
 	// queue, corresponding to a single versioned queue of a task queue partition.
 	// TODO(pri): rename this
 	physicalTaskQueueManagerImpl struct {
-		status       int32
-		partitionMgr *taskQueuePartitionManagerImpl
-		queue        *PhysicalTaskQueueKey
-		config       *taskQueueConfig
+		startStopLock sync.Mutex
+		status        int32
+		partitionMgr  *taskQueuePartitionManagerImpl
+		queue         *PhysicalTaskQueueKey
+		config        *taskQueueConfig
 
 		// This context is valid for lifetime of this physicalTaskQueueManagerImpl.
 		// It can be used to notify when the task queue is closing.
@@ -299,6 +300,10 @@ func newPhysicalTaskQueueManager(
 }
 
 func (c *physicalTaskQueueManagerImpl) Start() {
+	// Stop must not tear down components while they are still starting.
+	c.startStopLock.Lock()
+	defer c.startStopLock.Unlock()
+
 	if !atomic.CompareAndSwapInt32(
 		&c.status,
 		common.DaemonStatusInitialized,
@@ -317,11 +322,17 @@ func (c *physicalTaskQueueManagerImpl) Start() {
 // Stop does not unload the queue from its partition. It is intended to be called by the partition manager when
 // unloading a queues. For stopping and unloading a queue call UnloadFromPartitionManager instead.
 func (c *physicalTaskQueueManagerImpl) Stop(unloadCause unloadCause) {
-	if !atomic.CompareAndSwapInt32(
-		&c.status,
-		common.DaemonStatusStarted,
-		common.DaemonStatusStopped,
-	) {
+	c.startStopLock.Lock()
+	previousStatus := atomic.SwapInt32(&c.status, common.DaemonStatusStopped)
+	c.startStopLock.Unlock()
+
+	switch previousStatus {
+	case common.DaemonStatusInitialized:
+		// The queue may be unloaded after publication but before Start. Make
+		// that shutdown terminal without tearing down unstarted components.
+		c.tqCtxCancel()
+		return
+	case common.DaemonStatusStopped:
 		return
 	}
 	// this may attempt to write one final ack update, do this before canceling tqCtx
