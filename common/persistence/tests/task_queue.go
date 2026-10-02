@@ -258,7 +258,7 @@ func (s *TaskQueueSuite) TestUpdate_Fingerprint() {
 				PrevRangeID:     rangeID,
 				PrevFingerprint: fp1,
 			})
-			s.IsType(&p.ConditionFailedError{}, err)
+			s.ErrorAs(err, new(*p.ConditionFailedError))
 			s.assertEqualWithDB(rangeID, info2)
 
 			// a takeover based on the latest read succeeds

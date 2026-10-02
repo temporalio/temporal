@@ -268,15 +268,15 @@ func (db *taskQueueDB) createTaskQueueLocked(ctx context.Context) error {
 	return nil
 }
 
-func (db *taskQueueDB) updateTaskQueueLocked(ctx context.Context, incrementRangeId bool) error {
-	return db.updateTaskQueueConditionalLocked(ctx, incrementRangeId, 0)
+func (db *taskQueueDB) updateTaskQueueLocked(ctx context.Context, incrementRangeID bool) error {
+	return db.updateTaskQueueConditionalLocked(ctx, incrementRangeID, 0)
 }
 
 // updateTaskQueueConditionalLocked is like updateTaskQueueLocked, but if prevFingerprint is
 // non-zero, the update is also conditional on the stored metadata fingerprint matching it.
-func (db *taskQueueDB) updateTaskQueueConditionalLocked(ctx context.Context, incrementRangeId bool, prevFingerprint uint64) error {
+func (db *taskQueueDB) updateTaskQueueConditionalLocked(ctx context.Context, incrementRangeID bool, prevFingerprint uint64) error {
 	newRangeID := db.rangeID
-	if incrementRangeId {
+	if incrementRangeID {
 		newRangeID++
 	}
 	if _, err := db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{

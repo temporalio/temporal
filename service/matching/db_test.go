@@ -68,7 +68,7 @@ func TestTakeoverDoesNotClobberConcurrentWrite(t *testing.T) {
 
 	// the old owner is fenced out
 	_, err = dbA.AllocateSubqueue(ctx, &persistencespb.SubqueueKey{Priority: 3})
-	require.IsType(t, &persistence.ConditionFailedError{}, err)
+	require.ErrorAs(t, err, new(*persistence.ConditionFailedError))
 }
 
 // If someone else takes over while we're retrying, give up instead of fighting.
@@ -91,5 +91,5 @@ func TestTakeoverGivesUpIfRangeChanges(t *testing.T) {
 	}
 
 	_, err = dbB.RenewLease(ctx)
-	require.IsType(t, &persistence.ConditionFailedError{}, err)
+	require.ErrorAs(t, err, new(*persistence.ConditionFailedError))
 }
