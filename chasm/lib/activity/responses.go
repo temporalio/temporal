@@ -198,9 +198,17 @@ func (a *Activity) buildDescribeActivityExecutionResponse(
 // frontend serves with every optional detail included. Sharing that code path keeps a detached
 // read and a live describe from drifting.
 //
-// LongPollToken is cleared: it is a handle on a live execution and means nothing to a reader
-// holding only persisted state. The token is still built, since ctx.Ref works on a detached
-// tree, and TestDescribeComponent_MatchesLiveDescribe fails if that ever stops being true.
+// The response reflects persisted state only. Anything derived from the live process holding
+// the execution is either cleared or reads as its persisted value:
+//   - LongPollToken is cleared: it is a handle on a live execution. The token is still built,
+//     since ctx.Ref works on a detached tree, and TestDescribeComponent_MatchesLiveDescribe
+//     fails if that ever stops being true.
+//   - Outside the history service, a SCHEDULED callback is never reported as BLOCKED. BLOCKED
+//     is not persisted: it reflects the history service's outbound queue circuit breaker, which
+//     only that service can see, and elsewhere the callback library reports no destination as
+//     blocked.
+//   - Info.StateSizeBytes is computed from the record the reader supplied, not the history
+//     service's running total.
 func (a *Activity) DescribeComponent(ctx chasm.Context) (proto.Message, error) {
 	response, err := a.buildDescribeActivityExecutionResponse(ctx, &activitypb.DescribeActivityExecutionRequest{
 		FrontendRequest: &workflowservice.DescribeActivityExecutionRequest{
