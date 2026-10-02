@@ -35,6 +35,11 @@ func (a *Activity) SetStateMachineState(state activitypb.ActivityExecutionStatus
 }
 
 type (
+	eagerStartEvent struct {
+		requestID string
+		identity  string
+	}
+
 	rescheduleEvent struct {
 		retryInterval       time.Duration
 		retryIntervalSource activitypb.ActivityRetryIntervalSource
@@ -98,7 +103,22 @@ var TransitionScheduled = chasm.NewTransition(
 	},
 	activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 	func(a *Activity, ctx chasm.MutableContext, _ any) error {
-		return a.applyScheduled(ctx)
+		return a.applyScheduled(ctx, true)
+	},
+)
+
+// TransitionEagerStarted atomically schedules and starts the first attempt without creating a
+// Matching dispatch task. The task itself is returned by StartActivityExecution.
+var TransitionEagerStarted = chasm.NewTransition(
+	[]activitypb.ActivityExecutionStatus{
+		activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED,
+	},
+	activitypb.ACTIVITY_EXECUTION_STATUS_STARTED,
+	func(a *Activity, ctx chasm.MutableContext, event eagerStartEvent) error {
+		if err := a.applyScheduled(ctx, false); err != nil {
+			return err
+		}
+		return a.applyEagerStarted(ctx, event)
 	},
 )
 
@@ -346,7 +366,7 @@ var TransitionResetAttemptFailedToScheduled = chasm.NewTransition(
 // The methods below are transition bodies, invoked from the transitions above once the
 // source state has been validated. Do not call them from outside this file.
 
-func (a *Activity) applyScheduled(ctx chasm.MutableContext) error {
+func (a *Activity) applyScheduled(ctx chasm.MutableContext, dispatch bool) error {
 	attempt := a.LastAttempt.Get(ctx)
 
 	attempt.Count++
@@ -357,7 +377,8 @@ func (a *Activity) applyScheduled(ctx chasm.MutableContext) error {
 	dispatchTime := a.firstDispatchTime()
 	attempt.DispatchTime = timestamppb.New(dispatchTime)
 
-	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
+	if dispatch && a.GetScheduleToStartTimeout().AsDuration() > 0 {
+		timeout := a.GetScheduleToStartTimeout().AsDuration()
 		ctx.AddTask(
 			a,
 			chasm.TaskAttributes{
@@ -378,15 +399,41 @@ func (a *Activity) applyScheduled(ctx chasm.MutableContext) error {
 			&activitypb.ScheduleToCloseTimeoutTask{Stamp: a.GetScheduleToCloseStamp()})
 	}
 
-	dispatchAttrs := chasm.TaskAttributes{}
-	if dispatchTime.After(a.ScheduleTime.AsTime()) {
-		dispatchAttrs.ScheduledTime = dispatchTime
+	if dispatch {
+		dispatchAttrs := chasm.TaskAttributes{}
+		if dispatchTime.After(a.ScheduleTime.AsTime()) {
+			dispatchAttrs.ScheduledTime = dispatchTime
+		}
+		ctx.AddTask(
+			a,
+			dispatchAttrs,
+			a.newActivityDispatchTask(ctx))
 	}
+
+	return nil
+}
+
+func (a *Activity) applyEagerStarted(ctx chasm.MutableContext, event eagerStartEvent) error {
+	attempt := a.LastAttempt.Get(ctx)
+	attempt.StartedTime = timestamppb.New(ctx.Now(a))
+	attempt.StartedStamp = attempt.GetStamp()
+	if a.FirstAttemptStartedTime == nil {
+		a.FirstAttemptStartedTime = attempt.GetStartedTime()
+	}
+	attempt.StartRequestId = event.requestID
+	attempt.LastWorkerIdentity = event.identity
+	startTime := attempt.GetStartedTime().AsTime()
 	ctx.AddTask(
 		a,
-		dispatchAttrs,
-		a.newActivityDispatchTask(ctx))
+		chasm.TaskAttributes{ScheduledTime: startTime.Add(a.GetStartToCloseTimeout().AsDuration())},
+		&activitypb.StartToCloseTimeoutTask{Stamp: attempt.GetStamp()})
 
+	if heartbeatTimeout := a.GetHeartbeatTimeout().AsDuration(); heartbeatTimeout > 0 {
+		ctx.AddTask(
+			a,
+			chasm.TaskAttributes{ScheduledTime: startTime.Add(heartbeatTimeout)},
+			&activitypb.HeartbeatTimeoutTask{Stamp: attempt.GetStamp()})
+	}
 	return nil
 }
 

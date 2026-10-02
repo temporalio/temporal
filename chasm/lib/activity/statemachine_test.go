@@ -196,6 +196,46 @@ func TestTransitionScheduled(t *testing.T) {
 	}
 }
 
+func TestTransitionEagerStarted(t *testing.T) {
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return defaultTime },
+		},
+	}
+	attempt := &activitypb.ActivityAttemptState{}
+	activity := &Activity{
+		ActivityState: &activitypb.ActivityState{
+			ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+			ScheduleTime:           timestamppb.New(defaultTime),
+			ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
+			ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
+			StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+			HeartbeatTimeout:       durationpb.New(time.Minute),
+			Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+		},
+		LastAttempt: chasm.NewDataField(ctx, attempt),
+		Outcome:     chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+	}
+
+	err := TransitionEagerStarted.Apply(activity, ctx, eagerStartEvent{
+		requestID: "start-request-id",
+		identity:  "starter",
+	})
+	require.NoError(t, err)
+	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, activity.GetStatus())
+	require.EqualValues(t, 1, attempt.GetCount())
+	require.EqualValues(t, 1, attempt.GetStamp())
+	require.EqualValues(t, 1, attempt.GetStartedStamp())
+	require.Equal(t, "start-request-id", attempt.GetStartRequestId())
+	require.Equal(t, "starter", attempt.GetLastWorkerIdentity())
+
+	require.Len(t, ctx.Tasks, 3)
+	require.IsType(t, &activitypb.ScheduleToCloseTimeoutTask{}, ctx.Tasks[0].Payload)
+	require.IsType(t, &activitypb.StartToCloseTimeoutTask{}, ctx.Tasks[1].Payload)
+	require.IsType(t, &activitypb.HeartbeatTimeoutTask{}, ctx.Tasks[2].Payload)
+}
+
 func TestTransitionRescheduled(t *testing.T) {
 	testCases := []struct {
 		name                     string

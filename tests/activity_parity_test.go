@@ -41,8 +41,35 @@ func newActivityParityEnv(t *testing.T) *testcore.TestEnv {
 	cluster := env.GetTestCluster()
 	cluster.OverrideDynamicConfig(t, dynamicconfig.EnableChasm, nsValues(true))
 	cluster.OverrideDynamicConfig(t, activity.Enabled, nsValues(true))
+	cluster.OverrideDynamicConfig(t, dynamicconfig.EnableActivityEagerExecution, nsValues(true))
 	cluster.OverrideDynamicConfig(t, activity.EnableStandaloneActivityOperatorCommands, nsValues(true))
 	return env
+}
+
+func (s *activityParityTestSuite) TestEagerActivityStartParity() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{
+		EagerStart:    true,
+		MaxAttempts:   2,
+		RetryInterval: activityShortDispatchDelay,
+	}
+
+	// Both implementations return the first task already started. A retry of that task must then
+	// return to the ordinary Matching dispatch path before its second attempt starts.
+	trace := []model.Event{
+		model.Heartbeat,
+		model.FailRetryably,
+		model.BackoffElapses,
+		model.Poll,
+		model.Complete,
+	}
+
+	s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+		newWFADriver(s.T(), env, cfg).driveTrace(s.T(), trace)
+	})
+	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+		newSAADriver(s.T(), env, cfg).driveTrace(s.T(), trace)
+	})
 }
 
 func assertActivityTaskNotCancelRequested(t *testing.T, err error) {
