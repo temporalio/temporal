@@ -200,6 +200,43 @@ func TestNewDetachedExecution_IncompleteRecord(t *testing.T) {
 	require.ErrorAs(t, err, &internalErr)
 }
 
+// TestExecutionArchetypeID reads the archetype from the root node alone, so a caller can route a
+// record before decoding it.
+func TestExecutionArchetypeID(t *testing.T) {
+	registry, err := all.NewNilRegistry(log.NewTestLogger())
+	require.NoError(t, err)
+
+	mutableState := persistStandaloneActivity(t, registry)
+	archetypeID, err := chasm.ExecutionArchetypeID(mutableState)
+	require.NoError(t, err)
+	require.Equal(t, activity.ArchetypeID, archetypeID)
+
+	// Agrees with the registry's ID for the root's Go type, so the shortcut can't drift from it.
+	registeredID, ok := registry.ArchetypeIDOf(reflect.TypeFor[*activity.Activity]())
+	require.True(t, ok)
+	require.Equal(t, registeredID, archetypeID)
+
+	for name, mutableState := range map[string]*persistencespb.WorkflowMutableState{
+		"nil record": nil,
+		"no root node": {ChasmNodes: map[string]*persistencespb.ChasmNode{
+			"child": mutableState.GetChasmNodes()[""],
+		}},
+		"root not a component": {ChasmNodes: map[string]*persistencespb.ChasmNode{
+			"": {Metadata: &persistencespb.ChasmNodeMetadata{
+				Attributes: &persistencespb.ChasmNodeMetadata_DataAttributes{
+					DataAttributes: &persistencespb.ChasmDataAttributes{},
+				},
+			}},
+		}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := chasm.ExecutionArchetypeID(mutableState)
+			var internalErr *serviceerror.Internal
+			require.ErrorAs(t, err, &internalErr)
+		})
+	}
+}
+
 // TestNewNilRegistry_TasksDecodable walks the tasks a real tree carries and checks each resolves
 // to a proto type and decodes. Nil libraries keep their Tasks(), so offline readers can render
 // logical tasks, and a library whose nil constructor dropped them would fail here.

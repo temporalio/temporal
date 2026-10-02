@@ -66,6 +66,27 @@ func NewDetachedExecution[C Component](
 	return typed, chasmContext, nil
 }
 
+// rootEncodedPath is what DefaultPathEncoder produces for the root node.
+const rootEncodedPath = ""
+
+// ExecutionArchetypeID returns the archetype ID of a persisted execution, read from its root
+// node without decoding the tree, so a caller can decide how to handle a record before calling
+// NewDetachedExecution. It needs no registry, so it also works for archetypes the caller has
+// not registered.
+func ExecutionArchetypeID(mutableState *persistencespb.WorkflowMutableState) (ArchetypeID, error) {
+	root, ok := mutableState.GetChasmNodes()[rootEncodedPath]
+	if !ok {
+		return UnspecifiedArchetypeID, serviceerror.NewInternal("detached CHASM execution: mutable state has no root node")
+	}
+
+	// The archetype ID is the root component's type ID, as in Node.ArchetypeID.
+	attributes := root.GetMetadata().GetComponentAttributes()
+	if attributes == nil {
+		return UnspecifiedArchetypeID, serviceerror.NewInternal("detached CHASM execution: root node is not a component")
+	}
+	return attributes.GetTypeId(), nil
+}
+
 // newDetachedTree builds the read only tree behind NewDetachedExecution.
 //
 // The logger and metrics handler are fixed, as is the backend's clock. A read reaches the logger and metrics

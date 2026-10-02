@@ -20,7 +20,9 @@ registrations are what let offline readers resolve and decode the logical tasks 
 ## Reading a persisted tree outside the history service
 
 Use `chasm.NewDetachedExecution` to decode a persisted `WorkflowMutableState` into a typed
-root component. It panics on write paths rather than fabricating state.
+root component. It panics on write paths rather than fabricating state. To route a record
+before decoding it, `chasm.ExecutionArchetypeID` reads the archetype ID from the root node alone,
+without a registry.
 
 Pass the whole record, not just the nodes. `ChasmNodes`, `ExecutionInfo`, and `ExecutionState`
 are all required: the latter two supply the namespace, business ID, run ID, close time, and
