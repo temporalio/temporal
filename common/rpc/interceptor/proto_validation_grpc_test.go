@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
@@ -36,7 +37,7 @@ func TestProtoValidationInterceptorGRPC(t *testing.T) {
 	validation, err := NewProtoValidationInterceptor(log.NewZapLogger(zap.New(core)))
 	require.NoError(t, err)
 	server := grpc.NewServer(grpc.ChainUnaryInterceptor(
-		NewServiceErrorInterceptor(func() int { return 1000 }).Intercept,
+		NewServiceErrorInterceptor(func() int { return 1000 }, metrics.NoopMetricsHandler, log.NewZapLogger(zap.New(core))).Intercept,
 		validation.Intercept,
 	))
 	service := &protoValidationTestServer{}

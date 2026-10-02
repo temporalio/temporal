@@ -1,4 +1,4 @@
-//go:generate go run ../../../cmd/tools/genrpcvalidationinterceptor -out .
+//go:generate go run ../../../cmd/tools/genrpcvalidationdispatch -out .
 
 package interceptor
 
@@ -38,8 +38,7 @@ func (i *ProtoValidationInterceptor) Intercept(
 ) (any, error) {
 	if message, ok := req.(proto.Message); ok {
 		if err := i.validate(message); err != nil {
-			var violation *protovalidate.ValidationError
-			if errors.As(err, &violation) {
+			if _, ok := errors.AsType[*protovalidate.ValidationError](err); ok {
 				return nil, serviceerror.NewInvalidArgument(err.Error())
 			}
 			return nil, serviceerror.NewInternal(err.Error())

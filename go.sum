@@ -394,6 +394,8 @@ github.com/spf13/pflag v1.0.10 h1:4EBh2KAYBwaONj6b2Ye1GiHfwjqyROoF4RwYO+vPwFk=
 github.com/spf13/pflag v1.0.10/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An2Bg=
 github.com/spiffe/go-spiffe/v2 v2.7.0 h1:uXe1MflJoHw58wAUvxVlcM7WpKtijWG7I1UidcGh6g4=
 github.com/spiffe/go-spiffe/v2 v2.7.0/go.mod h1:47Q0Q9/AqGha8QLHp+kxpH4Wca7X7EnOtlIJy3mxZ3U=
+github.com/stephanos/api-go v0.0.0-20261002202133-417a1add1d35 h1:34dvirX15nIbOWjfcYighnxFYrA2SVaVTY3XIq36Fgs=
+github.com/stephanos/api-go v0.0.0-20261002202133-417a1add1d35/go.mod h1:7R9UY43Vz6oiO/i55DGKp0s5uK2Iw3J6/PQNMs4E3Kk=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.1.1/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/objx v0.4.0/go.mod h1:YvHI0jy2hoMjB+UWwv71VJQ9isScKT/TqJzVSSt89Yw=
@@ -491,8 +493,6 @@ go.opentelemetry.io/proto/slim/otlp/collector/profiles/v1development v0.3.0 h1:R
 go.opentelemetry.io/proto/slim/otlp/collector/profiles/v1development v0.3.0/go.mod h1:I89cynRj8y+383o7tEQVg2SVA6SRgDVIouWPUVXjx0U=
 go.opentelemetry.io/proto/slim/otlp/profiles/v1development v0.3.0 h1:CQvJSldHRUN6Z8jsUeYv8J0lXRvygALXIzsmAeCcZE0=
 go.opentelemetry.io/proto/slim/otlp/profiles/v1development v0.3.0/go.mod h1:xSQ+mEfJe/GjK1LXEyVOoSI1N9JV9ZI923X5kup43W4=
-go.temporal.io/api v1.63.6-0.20260909222256-20151aa90480 h1:1w2xEZFpL7R9NagEQeWTh7oZmZU3YUJGogusn9/LfCg=
-go.temporal.io/api v1.63.6-0.20260909222256-20151aa90480/go.mod h1:acM0I9WPuYg8W3Pd9jOZvEgi7mRUttUQ4+e7fowKVnM=
 go.temporal.io/auto-scaled-workers v0.0.0-20260928183627-719679297cbe h1:BlshPqVI1uh/AsdfGPPjfKc37HEZdGfcmvx+uW+rbe8=
 go.temporal.io/auto-scaled-workers v0.0.0-20260928183627-719679297cbe/go.mod h1:6Q4guHwlbJldBOZwvc201E0+Jz9Tly1L1Db6C7RJuLw=
 go.temporal.io/sdk v1.48.0 h1:WDctKDVuh0Z8Nf7euAyqs/EwcPg1JTIIq1Fut8Tq118=
