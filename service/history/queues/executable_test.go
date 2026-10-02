@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/queues"
@@ -611,6 +612,33 @@ func (s *executableSuite) TestHandleErr_ExpectedRetryableError_AttemptAndMetrics
 			s.EqualValues(finalAttempt, terminal[1].Value)
 		})
 	}
+}
+
+func (s *executableSuite) TestHandleErr_CircuitBreakerBlockedLoggedOnce() {
+	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
+	capture := logger.StartCapture()
+	defer logger.StopCapture(capture)
+
+	executable := s.newTestExecutable(func(p *params) {
+		p.logger = logger
+	})
+	blockedErr := &serviceerror.ResourceExhausted{
+		Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN,
+		Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+		Message: "circuit breaker rejection",
+	}
+	for range 3 {
+		s.Error(executable.HandleErr(blockedErr))
+	}
+
+	var blockedLogs []testlogger.CapturedLog
+	for _, record := range capture.Snapshot() {
+		if record.Message == "Task blocked by circuit breaker" {
+			blockedLogs = append(blockedLogs, record)
+		}
+	}
+	s.Len(blockedLogs, 1)
+	s.Equal(testlogger.Info, blockedLogs[0].Level)
 }
 
 func (s *executableSuite) TestHandleErr_IsAlertableError() {

@@ -152,6 +152,7 @@ type (
 		lastActiveness             bool
 		invalidTask                bool
 		resourceExhaustedCount     int // does NOT include consts.ErrResourceExhaustedBusyWorkflow
+		circuitBreakerBlockLogged  bool
 		dlqEnabled                 dynamicconfig.BoolPropertyFn
 		terminalFailureCause       error
 		unexpectedErrorAttempts    int
@@ -506,6 +507,22 @@ func classifyAlertableError(err error) (alertable bool, causeTag metrics.Tag) {
 	return true, metrics.LastAttemptCauseTag(metrics.ServiceErrorTypeTag(err).Value)
 }
 
+// logCircuitBreakerBlocked logs the first time an open circuit breaker holds this task back. The task is
+// retried for as long as the breaker stays open, so logging every rejection would flood the logs exactly
+// while a destination is down.
+func (e *executableImpl) logCircuitBreakerBlocked() {
+	if e.circuitBreakerBlockLogged {
+		return
+	}
+	e.circuitBreakerBlockLogged = true
+
+	var tags []tag.Tag
+	if dTask, ok := e.Task.(tasks.HasDestination); ok {
+		tags = append(tags, tag.Destination(dTask.GetDestination()))
+	}
+	e.logger.Info("Task blocked by circuit breaker", tags...)
+}
+
 // Returns true when the error is expected and should be retried. You're expected to return
 // an error in this case, as that possible-rewritten-error is what we'll return
 func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, retErr error) {
@@ -522,6 +539,9 @@ func (e *executableImpl) isExpectedRetryableError(err error) (isRetryable bool, 
 			err = consts.ErrResourceExhaustedBusyWorkflow
 		case enumspb.RESOURCE_EXHAUSTED_CAUSE_APS_LIMIT:
 			err = consts.ErrResourceExhaustedAPSLimit
+			e.resourceExhaustedCount++
+		case enumspb.RESOURCE_EXHAUSTED_CAUSE_CIRCUIT_BREAKER_OPEN:
+			e.logCircuitBreakerBlocked()
 			e.resourceExhaustedCount++
 		default:
 			e.resourceExhaustedCount++
