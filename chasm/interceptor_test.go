@@ -39,6 +39,8 @@ func NewServiceLibrary() *ServiceLibrary {
 	return &ServiceLibrary{}
 }
 
+func (l *ServiceLibrary) Name() string { return "interceptorTest" }
+
 func (l *ServiceLibrary) RegisterServices(server *grpc.Server) {
 	testspb.RegisterTestServiceServer(server, ServiceHandler{})
 }
