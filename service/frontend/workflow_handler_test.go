@@ -4123,6 +4123,18 @@ func (s *WorkflowHandlerSuite) TestValidateWorkflowCompletionCallbacks_InternalC
 		s.Require().NoError(err)
 		return base64.RawURLEncoding.EncodeToString(b)
 	}
+	// legacyRefTokenWithPath sets ArchetypeId and ComponentPath, which collide with the envelope's
+	// ref and component_ref fields on the wire and must still be parsed as the legacy format.
+	legacyRefTokenWithPath := func(nsID, businessID string) string {
+		b, err := (&persistencespb.ChasmComponentRef{
+			NamespaceId:   nsID,
+			BusinessId:    businessID,
+			ArchetypeId:   1,
+			ComponentPath: []string{"child"},
+		}).Marshal()
+		s.Require().NoError(err)
+		return base64.RawURLEncoding.EncodeToString(b)
+	}
 	envelopeToken := func(nsID, businessID string) string {
 		ref, err := (&persistencespb.ChasmComponentRef{NamespaceId: nsID, BusinessId: businessID}).Marshal()
 		s.Require().NoError(err)
@@ -4146,6 +4158,11 @@ func (s *WorkflowHandlerSuite) TestValidateWorkflowCompletionCallbacks_InternalC
 			name:    "same namespace envelope token",
 			url:     chasm.NexusCompletionHandlerURL,
 			headers: map[string]string{commonnexus.CallbackTokenHeader: envelopeToken(nsID.String(), "sched")},
+		},
+		{
+			name:    "same namespace legacy token with archetype id and component path",
+			url:     chasm.NexusCompletionHandlerURL,
+			headers: map[string]string{commonnexus.CallbackTokenHeader: legacyRefTokenWithPath(nsID.String(), "sched")},
 		},
 		{
 			name:    "different namespace legacy token",

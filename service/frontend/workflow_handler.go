@@ -520,8 +520,17 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
-	if err := wh.validateWorkflowCompletionCallbacks(namespaceName, request.GetCompletionCallbacks()); err != nil {
-		return nil, err
+	cbErr := wh.validateWorkflowCompletionCallbacks(namespaceName, request.GetCompletionCallbacks())
+	for _, cb := range request.GetCompletionCallbacks() {
+		if cb.GetNexus().GetUrl() == chasm.NexusCompletionHandlerURL {
+			wh.logger.Info("DEBUG internal callback validation",
+				tag.WorkflowNamespace(namespaceName.String()),
+				tag.WorkflowID(request.GetWorkflowId()),
+				tag.Error(cbErr))
+		}
+	}
+	if cbErr != nil {
+		return nil, cbErr
 	}
 
 	request.Links = dedupLinksFromCallbacks(request.GetLinks(), request.GetCompletionCallbacks())
@@ -5626,8 +5635,12 @@ func unpackInternalCallbackRef(token string) (*persistencespb.ChasmComponentRef,
 	}
 	ref := &persistencespb.ChasmComponentRef{}
 	completion := &tokenspb.NexusOperationCompletion{}
-	if proto.Unmarshal(raw, completion) == nil && len(completion.GetComponentRef()) > 0 &&
-		proto.Unmarshal(completion.GetComponentRef(), ref) == nil {
+	// A legacy bare ref can decode "successfully" as an envelope too, since protobuf-go stores
+	// field/wire-type mismatches as unknown fields instead of erroring (e.g. legacy archetype_id,
+	// a varint, lands on the envelope's message-typed ref field). Requiring no unknown fields rules
+	// those out, since a legacy ref always sets archetype_id.
+	if proto.Unmarshal(raw, completion) == nil && len(completion.ProtoReflect().GetUnknown()) == 0 &&
+		len(completion.GetComponentRef()) > 0 && proto.Unmarshal(completion.GetComponentRef(), ref) == nil {
 		return ref, nil
 	}
 	ref.Reset()
