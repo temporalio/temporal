@@ -36,11 +36,9 @@ import (
 func TestOutboundQueueFactory_ChasmTaskGroupWiring(t *testing.T) {
 	t.Parallel()
 
-	taskCh := startOutboundQueueWithChasmTask(t, metrics.NoopMetricsHandler, func() circuitbreaker.TwoStepCircuitBreaker {
-		cb := circuitbreaker.NewTwoStepCircuitBreakerWithDynamicSettings(circuitbreaker.Settings{Name: "test"})
-		cb.UpdateSettings(dynamicconfig.CircuitBreakerSettings{})
-		return cb
-	})
+	cb := circuitbreaker.NewTwoStepCircuitBreakerWithDynamicSettings(circuitbreaker.Settings{Name: "test"})
+	cb.UpdateSettings(dynamicconfig.CircuitBreakerSettings{})
+	taskCh := startOutboundQueueWithChasmTask(t, metrics.NoopMetricsHandler, cb)
 
 	select {
 	case executedTask := <-taskCh:
@@ -57,9 +55,7 @@ func TestOutboundQueueFactory_CircuitBreakerBlockedMetric(t *testing.T) {
 
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
-	startOutboundQueueWithChasmTask(t, metricsHandler, func() circuitbreaker.TwoStepCircuitBreaker {
-		return alwaysOpenCircuitBreaker{}
-	})
+	startOutboundQueueWithChasmTask(t, metricsHandler, alwaysOpenCircuitBreaker{})
 
 	await.Require(t.Context(), t, func(c *await.T) {
 		recordings := capture.SnapshotMetric(metrics.CircuitBreakerExecutableBlocked.Name())
@@ -78,7 +74,7 @@ func TestOutboundQueueFactory_CircuitBreakerBlockedMetric(t *testing.T) {
 func startOutboundQueueWithChasmTask(
 	t *testing.T,
 	metricsHandler metrics.Handler,
-	newCircuitBreaker func() circuitbreaker.TwoStepCircuitBreaker,
+	cb circuitbreaker.TwoStepCircuitBreaker,
 ) <-chan tasks.Task {
 	ctrl := gomock.NewController(t)
 
@@ -140,7 +136,7 @@ func startOutboundQueueWithChasmTask(
 	cbPool := &circuitbreakerpool.OutboundQueueCircuitBreakerPool{
 		CircuitBreakerPool: circuitbreakerpool.NewCircuitBreakerPool(
 			func(tasks.TaskGroupNamespaceIDAndDestination) circuitbreaker.TwoStepCircuitBreaker {
-				return newCircuitBreaker()
+				return cb
 			},
 		),
 	}
