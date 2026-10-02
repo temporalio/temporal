@@ -277,7 +277,7 @@ func TestStreamBatcher_AddTimeout(t *testing.T) {
 
 func TestStreamBatcherWrongNumberOfPerItemResults(t *testing.T) {
 	testCases := map[string][]int{
-		"too few":  nil,
+		"too few":  {},
 		"too many": {1, 2},
 	}
 	for name, results := range testCases {
