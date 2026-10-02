@@ -135,6 +135,7 @@ func newGenerator() (*generator, error) {
 	flag.StringVar(&gen.protocGenGoGrpcBin, "protoc-gen-go-grpc-bin", "", "Path to protoc-gen-go-grpc binary (required)")
 	flag.StringVar(&gen.protocGenGoChasmBin, "protoc-gen-go-chasm-bin", "", "Path to protoc-gen-go-chasm binary (required)")
 	flag.StringVar(&gen.protocGenGoHelpersBin, "protoc-gen-go-helpers-bin", "", "Path to protoc-gen-go-helpers binary (required)")
+	//nolint:revive // The CLI constructor registers and parses its flags together.
 	flag.Parse()
 
 	// Validate required flags
@@ -345,8 +346,8 @@ func (g *generator) modifyMatchingServiceFile() error {
 }
 
 func (g *generator) moveProtoFiles() error {
-	sourceApiDir := filepath.Join(g.tempOut, "temporal", "server", "api")
-	return os.Rename(sourceApiDir, g.protoOut)
+	sourceAPIDir := filepath.Join(g.tempOut, "temporal", "server", "api")
+	return os.Rename(sourceAPIDir, g.protoOut)
 }
 
 func (g *generator) moveGeneratedChasmFiles() error {

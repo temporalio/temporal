@@ -1,5 +1,5 @@
 // Generates all three generated files in this package:
-//go:generate go run ../../cmd/tools/genrpcwrappers -service operator
+//go:generate go run ../../cmd/tools/genrpcclientwrappers -service operator
 
 package operator
 

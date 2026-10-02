@@ -4,13 +4,14 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 )
 
 func TestWorkflowTagGetters(t *testing.T) {
+	t.Parallel()
 	testCases := []struct {
 		name              string
 		reqT              reflect.Type
@@ -92,13 +93,16 @@ func TestWorkflowTagGetters(t *testing.T) {
 
 	for _, tt := range testCases {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			rd := workflowTagGetters(tt.reqT, 0)
-			assert.Equal(t, tt.workflowIDGetter, rd.WorkflowIDGetter, "WorkflowIDGetter")
-			assert.Equal(t, tt.runIDGetter, rd.RunIDGetter, "RunIDGetter")
-			assert.Equal(t, tt.taskTokenGetter, rd.TaskTokenGetter, "TaskTokenGetter")
-			assert.Equal(t, tt.activityIDGetter, rd.ActivityIDGetter, "ActivityIDGetter")
-			assert.Equal(t, tt.operationIDGetter, rd.OperationIDGetter, "OperationIDGetter")
-			assert.Equal(t, tt.chasmRunIDGetter, rd.ChasmRunIDGetter, "ChasmRunIDGetter")
+			require.Equal(t, messageData{
+				WorkflowIDGetter:  tt.workflowIDGetter,
+				RunIDGetter:       tt.runIDGetter,
+				TaskTokenGetter:   tt.taskTokenGetter,
+				ActivityIDGetter:  tt.activityIDGetter,
+				OperationIDGetter: tt.operationIDGetter,
+				ChasmRunIDGetter:  tt.chasmRunIDGetter,
+			}, rd)
 		})
 	}
 }

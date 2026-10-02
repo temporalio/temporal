@@ -1,5 +1,5 @@
 // Generates all three generated files in this package:
-//go:generate go run ../../cmd/tools/genrpcwrappers -service history
+//go:generate go run ../../cmd/tools/genrpcclientwrappers -service history
 
 package history
 

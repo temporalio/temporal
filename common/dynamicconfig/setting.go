@@ -1,4 +1,4 @@
-//go:generate go run ../../cmd/tools/gendynamicconfig
+//go:generate go run ../../cmd/tools/gendynamicconfigsettings
 
 package dynamicconfig
 

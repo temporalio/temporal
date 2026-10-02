@@ -1,4 +1,4 @@
-//go:generate go run ../../../cmd/tools/genroutingkeyextractor -out .
+//go:generate go run ../../../cmd/tools/genrpcroutingkeyextractor -out .
 
 package interceptor
 

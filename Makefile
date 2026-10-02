@@ -313,7 +313,7 @@ endef
 ##### Proto #####
 $(API_BINPB): go.mod go.sum $(PROTO_FILES)
 	@printf $(COLOR) "Generating proto dependencies image..."
-	@./cmd/tools/getproto/run.sh --out $@
+	@./cmd/tools/exportapidescriptors/run.sh --out $@
 
 $(INTERNAL_BINPB): $(API_BINPB) $(PROTO_FILES)
 	@printf $(COLOR) "Generate proto image..."
@@ -324,7 +324,7 @@ $(CHASM_BINPB): $(API_BINPB) $(INTERNAL_BINPB) $(CHASM_PROTO_FILES)
 	@protoc --descriptor_set_in=$(API_BINPB):$(INTERNAL_BINPB) -I=. $(CHASM_PROTO_FILES) -o $@
 
 protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRPC) $(PROTOC_GEN_GO_HELPERS) $(API_BINPB) $(LOCALBIN)/protoc-gen-go-chasm
-	@go run ./cmd/tools/protogen \
+	@go run ./cmd/tools/genserverprotos \
 		-root=$(ROOT) \
 		-proto-out=$(PROTO_OUT) \
 		-proto-root=$(PROTO_ROOT) \
@@ -339,14 +339,14 @@ protoc: $(PROTOGEN) $(MOCKGEN) $(GOIMPORTS) $(PROTOC_GEN_GO) $(PROTOC_GEN_GO_GRP
 		$(PROTO_DIRS)
 
 proto-codegen:
-	@printf $(COLOR) "Generate service clients..."
-	@go generate -run genrpcwrappers ./client/...
+	@printf $(COLOR) "Generate RPC client wrappers..."
+	@go generate -run genrpcclientwrappers ./client/...
 	@printf $(COLOR) "Generate RPC log tag extractors..."
-	@go generate -run genrpclogtags ./common/rpc/interceptor/logtags/...
-	@printf $(COLOR) "Generate routing key extractor..."
-	@go generate -run genroutingkeyextractor ./common/rpc/interceptor/...
-	@printf $(COLOR) "Generate search attributes helpers..."
-	@go generate -run gensearchattributehelpers ./common/searchattribute/...
+	@go generate -run genrpclogtagextractors ./common/rpc/interceptor/logtags/...
+	@printf $(COLOR) "Generate RPC routing key extractor..."
+	@go generate -run genrpcroutingkeyextractor ./common/rpc/interceptor/...
+	@printf $(COLOR) "Generate search attribute event accessors..."
+	@go generate -run gensearchattributeeventaccessors ./common/searchattribute/...
 
 update-go-api:
 	@printf $(COLOR) "Update go.temporal.io/api@master..."

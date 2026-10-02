@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"go/format"
 	"io"
-	"log"
 	"os"
 	"reflect"
 	"regexp"
@@ -16,14 +15,13 @@ import (
 	"go.temporal.io/api/operatorservice/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/cmd/tools/codegen"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 	"google.golang.org/protobuf/reflect/protoregistry"
-
-	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 )
 
 type (
@@ -157,7 +155,7 @@ var getterRegexp = regexp.MustCompile(`Get(\w+)\(\)`)
 var historyRoutingProtoExtension = func() protoreflect.ExtensionType {
 	ext, err := protoregistry.GlobalTypes.FindExtensionByName("temporal.server.api.historyservice.v1.routing")
 	if err != nil {
-		log.Fatalf("Error finding extension: %s", err)
+		codegen.Fatalf("Error finding extension: %s", err)
 	}
 	return ext
 }()
@@ -239,19 +237,19 @@ func historyRoutingOptions(reqType reflect.Type) *historyservice.RoutingOptions 
 	inst := reflect.New(t)
 	reflectable, ok := inst.Interface().(interface{ ProtoReflect() protoreflect.Message })
 	if !ok {
-		log.Fatalf("Request has no ProtoReflect method %s", t)
+		codegen.Fatalf("Request has no ProtoReflect method %s", t)
 	}
 	opts := reflectable.ProtoReflect().Descriptor().Options()
 
 	// Retrieve the value of the custom option
 	optionValue := proto.GetExtension(opts, historyRoutingProtoExtension)
 	if optionValue == nil {
-		log.Fatalf("Got nil while retrieving extension from options")
+		codegen.Fatalf("Got nil while retrieving extension from options")
 	}
 
-	routingOptions := optionValue.(*historyservice.RoutingOptions)
-	if routingOptions == nil {
-		log.Fatalf("Request has no routing options: %s", t)
+	routingOptions, ok := optionValue.(*historyservice.RoutingOptions)
+	if !ok || routingOptions == nil {
+		codegen.Fatalf("Request has no routing options: %s", t)
 	}
 	return routingOptions
 }
@@ -286,7 +284,7 @@ func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.R
 		}
 	}
 	if routingDirectiveCount > 1 {
-		log.Fatalf("Found more than one routing directive in %s", t)
+		codegen.Fatalf("Found more than one routing directive in %s", t)
 	}
 	if routingOptions.AnyHost {
 		return "shardID := c.getRandomShard()"
@@ -325,21 +323,21 @@ func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.R
 		) + "\n"
 	}
 	if hasWorkflowIDRouting {
-		namespaceIdField := routingOptions.NamespaceId
-		if namespaceIdField == "" {
-			namespaceIdField = "namespace_id"
+		namespaceIDField := routingOptions.NamespaceId
+		if namespaceIDField == "" {
+			namespaceIDField = "namespace_id"
 		}
-		verifyFieldExists(t, namespaceIdField)
+		verifyFieldExists(t, namespaceIDField)
 		verifyFieldExists(t, routingOptions.WorkflowId)
-		return fmt.Sprintf("shardID := c.shardIDFromWorkflowID(%s, %s)", toGetter(namespaceIdField), toGetter(routingOptions.WorkflowId))
+		return fmt.Sprintf("shardID := c.shardIDFromWorkflowID(%s, %s)", toGetter(namespaceIDField), toGetter(routingOptions.WorkflowId))
 	}
 	if routingOptions.TaskToken != "" {
-		namespaceIdField := routingOptions.NamespaceId
-		if namespaceIdField == "" {
-			namespaceIdField = "namespace_id"
+		namespaceIDField := routingOptions.NamespaceId
+		if namespaceIDField == "" {
+			namespaceIDField = "namespace_id"
 		}
 
-		verifyFieldExists(t, namespaceIdField)
+		verifyFieldExists(t, namespaceIDField)
 		verifyFieldExists(t, routingOptions.TaskToken)
 		return fmt.Sprintf(`taskToken, err := c.tokenSerializer.Deserialize(%s)
 	if err != nil {
@@ -360,7 +358,7 @@ func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.R
 	}
 	shardID := c.shardIDFromWorkflowID(namespaceID, businessID)`,
 			toGetter(routingOptions.TaskToken),
-			toGetter(namespaceIdField),
+			toGetter(namespaceIDField),
 		) + "\n"
 	}
 	if hasComponentRefRouting {
@@ -384,7 +382,7 @@ func makeGetHistoryClient(reqType reflect.Type, routingOptions *historyservice.R
 	shardID := c.shardIDFromWorkflowID(%s[0].NamespaceId, %s[0].WorkflowId)`, p, p, p)
 	}
 
-	log.Fatalf("No routing directive specified on %s", t)
+	codegen.Fatalf("No routing directive specified on %s", t)
 	return ""
 }
 
@@ -473,7 +471,8 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 			partitionMaker)
 	}
 
-	panic("I don't know how to get a client from a " + t.String())
+	codegen.Fatalf("I don't know how to get a client from a %s", t)
+	return ""
 }
 
 // makeLoadBalancedFields computes the template fields for a matching method that load
@@ -654,7 +653,7 @@ func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.M
 		mt.NumOut() != 2 ||
 		mt.In(0).String() != "context.Context" ||
 		mt.Out(1).String() != "error" {
-		panic(key + " doesn't look like a grpc handler method")
+		codegen.Fatalf("%s doesn't look like a grpc handler method", key)
 	}
 
 	reqType := mt.In(1)
@@ -685,14 +684,16 @@ func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.M
 			tmpl = loadBalancedMetricClientTemplate
 		}
 	} else if impl == "client" {
-		if service.name == "history" {
+		switch service.name {
+		case "history":
 			routingOptions := historyRoutingOptions(reqType)
 			if routingOptions.Custom {
 				return
 			}
 			fields["GetClient"] = makeGetHistoryClient(reqType, routingOptions)
-		} else if service.name == "matching" {
+		case "matching":
 			fields["GetClient"] = makeGetMatchingClient(reqType)
+		default:
 		}
 	}
 
@@ -707,7 +708,7 @@ func writeTemplatedMethods(w io.Writer, service service, impl string, tmpl strin
 }
 
 func generateFrontendOrAdminClient(w io.Writer, service service) error {
-	writeTemplatedCode(w, service, `// Code generated by cmd/tools/genrpcwrappers. DO NOT EDIT.
+	writeTemplatedCode(w, service, `// Code generated by cmd/tools/genrpcclientwrappers. DO NOT EDIT.
 
 package {{.ServiceName}}
 
@@ -734,7 +735,7 @@ func (c *clientImpl) {{.Method}}(
 }
 
 func generateHistoryClient(w io.Writer, service service) error {
-	writeTemplatedCode(w, service, `// Code generated by cmd/tools/genrpcwrappers. DO NOT EDIT.
+	writeTemplatedCode(w, service, `// Code generated by cmd/tools/genrpcclientwrappers. DO NOT EDIT.
 
 package {{.ServiceName}}
 
@@ -834,7 +835,7 @@ func (c *metricClient) {{.Method}}(
 `
 
 func generateMatchingClient(w io.Writer, service service) error {
-	writeTemplatedCode(w, service, `// Code generated by cmd/tools/genrpcwrappers. DO NOT EDIT.
+	writeTemplatedCode(w, service, `// Code generated by cmd/tools/genrpcclientwrappers. DO NOT EDIT.
 
 package {{.ServiceName}}
 
@@ -874,7 +875,7 @@ func (c *clientImpl) {{.Method}}(
 }
 
 func generateMetricClient(w io.Writer, service service) error {
-	writeTemplatedCode(w, service, `// Code generated by cmd/tools/genrpcwrappers. DO NOT EDIT.
+	writeTemplatedCode(w, service, `// Code generated by cmd/tools/genrpcclientwrappers. DO NOT EDIT.
 
 package {{.ServiceName}}
 
@@ -905,7 +906,7 @@ func (c *metricClient) {{.Method}}(
 }
 
 func generateRetryableClient(w io.Writer, service service) error {
-	writeTemplatedCode(w, service, `// Code generated by cmd/tools/genrpcwrappers. DO NOT EDIT.
+	writeTemplatedCode(w, service, `// Code generated by cmd/tools/genrpcclientwrappers. DO NOT EDIT.
 
 package {{.ServiceName}}
 
