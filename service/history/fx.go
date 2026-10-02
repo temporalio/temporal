@@ -74,6 +74,7 @@ var Module = fx.Options(
 	ChasmEngineModule,
 	chasmtests.Module,
 	fx.Provide(CallbackDestinationBlockedProvider),
+	fx.Provide(NexusOperationDestinationBlockedProvider),
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(workflow.NewCommandHandlerRegistry),
 	fx.Provide(ServiceErrorInterceptorProvider),
@@ -143,6 +144,19 @@ func CallbackDestinationBlockedProvider(
 	return func(namespaceID string, destination string) bool {
 		cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
 			TaskGroup:   callback.InvocationTaskGroup,
+			NamespaceID: namespaceID,
+			Destination: destination,
+		})
+		return cb.State() != gobreaker.StateClosed
+	}
+}
+
+func NexusOperationDestinationBlockedProvider(
+	outboundQueueCBPool *circuitbreakerpool.OutboundQueueCircuitBreakerPool,
+) chasmnexus.DestinationBlockedFn {
+	return func(namespaceID string, destination string) bool {
+		cb := outboundQueueCBPool.Get(tasks.TaskGroupNamespaceIDAndDestination{
+			TaskGroup:   chasmnexus.TaskGroupName,
 			NamespaceID: namespaceID,
 			Destination: destination,
 		})
