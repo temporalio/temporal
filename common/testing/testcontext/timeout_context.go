@@ -11,28 +11,40 @@ import (
 // when Done closes and only moves forward through extend.
 type timeoutContext struct {
 	context.Context
-	ceiling time.Time
-	done    chan struct{}
+	parent            context.Context
+	parentDeadline    time.Time
+	hasParentDeadline bool
+	ceiling           time.Time
+	done              chan struct{}
+	owner             *contextState
 
 	mu                 sync.Mutex
 	activeExpiration   time.Time
 	timer              *time.Timer
 	stopParentCallback func() bool
+	cancelCause        context.CancelCauseFunc
 	err                error
 }
 
-func newTimeoutContext(parent context.Context, ceiling, activeExpiration time.Time) *timeoutContext {
-	if parentDeadline, ok := parent.Deadline(); ok && parentDeadline.Before(ceiling) {
+func newTimeoutContext(parent context.Context, ceiling, activeExpiration time.Time, owner *contextState) *timeoutContext {
+	parentDeadline, hasParentDeadline := parent.Deadline()
+	if hasParentDeadline && parentDeadline.Before(ceiling) {
 		ceiling = parentDeadline
 	}
 	if ceiling.Before(activeExpiration) {
 		activeExpiration = ceiling
 	}
+	causeContext, cancelCause := context.WithCancelCause(context.WithoutCancel(parent))
 	ctx := &timeoutContext{
-		Context:          context.WithoutCancel(parent),
-		ceiling:          ceiling,
-		done:             make(chan struct{}),
-		activeExpiration: activeExpiration,
+		Context:           causeContext,
+		parent:            parent,
+		parentDeadline:    parentDeadline,
+		hasParentDeadline: hasParentDeadline,
+		ceiling:           ceiling,
+		done:              make(chan struct{}),
+		owner:             owner,
+		activeExpiration:  activeExpiration,
+		cancelCause:       cancelCause,
 	}
 
 	// Either callback may run immediately, and finishLocked needs both handles
@@ -40,7 +52,7 @@ func newTimeoutContext(parent context.Context, ceiling, activeExpiration time.Ti
 	ctx.mu.Lock()
 	ctx.timer = time.AfterFunc(time.Until(activeExpiration), ctx.expire)
 	ctx.stopParentCallback = context.AfterFunc(parent, func() {
-		ctx.finish(parent.Err())
+		ctx.finish(parent.Err(), context.Cause(parent))
 	})
 	ctx.mu.Unlock()
 	return ctx
@@ -88,15 +100,22 @@ func (c *timeoutContext) effectiveExpiration() time.Time {
 	return c.activeExpiration
 }
 
-func (c *timeoutContext) cancel() {
-	c.finish(context.Canceled)
+func (c *timeoutContext) activeExpirationOwnership() (time.Time, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	owned := !c.hasParentDeadline || c.activeExpiration.Before(c.parentDeadline)
+	return c.activeExpiration, owned
 }
 
-func (c *timeoutContext) finish(err error) {
+func (c *timeoutContext) cancel() {
+	c.finish(context.Canceled, context.Canceled)
+}
+
+func (c *timeoutContext) finish(err, cause error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.finishLocked(err)
+	c.finishLocked(err, cause)
 }
 
 func (c *timeoutContext) expire() {
@@ -112,14 +131,23 @@ func (c *timeoutContext) expire() {
 		c.timer.Reset(remaining)
 		return
 	}
-	c.finishLocked(context.DeadlineExceeded)
+	err := error(context.DeadlineExceeded)
+	cause := err
+	if !c.hasParentDeadline || c.activeExpiration.Before(c.parentDeadline) {
+		cause = newDeadlineExceededCause(c.activeExpiration, c.owner)
+	} else if parentErr := c.parent.Err(); parentErr != nil {
+		err = parentErr
+		cause = context.Cause(c.parent)
+	}
+	c.finishLocked(err, cause)
 }
 
-func (c *timeoutContext) finishLocked(err error) {
+func (c *timeoutContext) finishLocked(err, cause error) {
 	if c.err != nil {
 		return
 	}
 	c.err = err
+	c.cancelCause(cause)
 	close(c.done)
 	c.timer.Stop()
 	c.stopParentCallback()
