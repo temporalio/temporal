@@ -916,8 +916,9 @@ FilterLoop:
 func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 	taskInfo := e.ReplicationTask().GetRawTaskInfo()
 
-	if e.markPoisonPillAttempts >= MarkPoisonPillMaxAttempts {
-		e.Logger.Error("MarkPoisonPill reached max attempts",
+	maxRetryAttempts := e.Config.ReplicationDLQMaxRetryAttempts()
+	if maxRetryAttempts > 0 && e.markPoisonPillAttempts >= maxRetryAttempts {
+		e.Logger.Error("MarkPoisonPill reached breakglass max attempts",
 			tag.SourceCluster(e.SourceClusterName()),
 			tag.ReplicationTask(taskInfo),
 		)
