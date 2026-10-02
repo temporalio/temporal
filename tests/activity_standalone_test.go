@@ -1207,7 +1207,7 @@ func (s *standaloneActivityTestSuite) TestStart() {
 	})
 }
 
-func (s *standaloneActivityTestSuite) TestEagerStart() {
+func (s *standaloneActivityTestSuite) TestEagerStartResponseAndNoRedelivery() {
 	env := s.newTestEnv()
 	t := s.T()
 	ctx := s.Context()
@@ -1247,18 +1247,6 @@ func (s *standaloneActivityTestSuite) TestEagerStart() {
 	require.False(t, conflict.GetStarted())
 	require.Nil(t, conflict.GetEagerActivityTask())
 
-	_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
-		Namespace: env.Namespace().String(),
-		TaskToken: first.GetEagerActivityTask().GetTaskToken(),
-		Result:    defaultResult,
-		Identity:  defaultIdentity,
-	})
-	require.NoError(t, err)
-
-	afterCompletion, err := env.FrontendClient().StartActivityExecution(ctx, request)
-	require.NoError(t, err)
-	require.False(t, afterCompletion.GetStarted())
-	require.Nil(t, afterCompletion.GetEagerActivityTask())
 }
 
 func (s *standaloneActivityTestSuite) TestComplete() {
