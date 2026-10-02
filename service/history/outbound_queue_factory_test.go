@@ -53,9 +53,18 @@ func TestOutboundQueueFactory_ChasmTaskGroupWiring(t *testing.T) {
 func TestOutboundQueueFactory_CircuitBreakerBlockedMetric(t *testing.T) {
 	t.Parallel()
 
+	cb := circuitbreaker.NewTwoStepCircuitBreakerWithDynamicSettings(circuitbreaker.Settings{
+		Name:        "test",
+		ReadyToTrip: func(gobreaker.Counts) bool { return true },
+	})
+	cb.UpdateSettings(dynamicconfig.CircuitBreakerSettings{Timeout: time.Hour})
+	done, err := cb.Allow()
+	require.NoError(t, err)
+	done(false) // one failure trips it; the hour-long timeout keeps it open for the test
+
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
-	startOutboundQueueWithChasmTask(t, metricsHandler, alwaysOpenCircuitBreaker{})
+	startOutboundQueueWithChasmTask(t, metricsHandler, cb)
 
 	await.Require(t.Context(), t, func(c *await.T) {
 		recordings := capture.SnapshotMetric(metrics.CircuitBreakerExecutableBlocked.Name())
@@ -177,14 +186,6 @@ func startOutboundQueueWithChasmTask(
 	queue.NotifyNewTasks([]tasks.Task{chasmTask})
 	return taskCh
 }
-
-// alwaysOpenCircuitBreaker rejects every request and never closes.
-type alwaysOpenCircuitBreaker struct{}
-
-func (alwaysOpenCircuitBreaker) Name() string               { return "always-open" }
-func (alwaysOpenCircuitBreaker) State() gobreaker.State     { return gobreaker.StateOpen }
-func (alwaysOpenCircuitBreaker) Counts() gobreaker.Counts   { return gobreaker.Counts{} }
-func (alwaysOpenCircuitBreaker) Allow() (func(bool), error) { return nil, gobreaker.ErrOpenState }
 
 // captureExecutorWrapper intercepts tasks at the executor level.
 type captureExecutorWrapper struct {
