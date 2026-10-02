@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -96,6 +97,13 @@ const (
 	versioningPollerSeenWindow        = 70 * time.Second
 	recordTaskStartedDefaultTimeout   = 10 * time.Second
 	recordTaskStartedSyncMatchTimeout = 1 * time.Second
+
+	taskQueueUserDataConflictSelectedSideCurrent  = "current"
+	taskQueueUserDataConflictSelectedSideIncoming = "incoming"
+	taskQueueUserDataConflictResolutionCurrent    = "current_parent_clock"
+	taskQueueUserDataConflictResolutionIncoming   = "incoming_parent_clock"
+	taskQueueUserDataConflictResolutionFallback   = "incoming_clock_fallback"
+	taskQueueUserDataConflictLogMessage           = "task queue user data replication encountered an equal-revision conflict"
 )
 
 type (
@@ -2489,7 +2497,6 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 		Source:                   "ApplyTaskQueueUserDataReplicationEvent",
 	}
 	_, err = pm.GetUserDataManager().UpdateUserData(ctx, updateOptions, func(current *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
-		mergedUserData := common.CloneProto(current)
 		currentVersioningData := current.GetVersioningData()
 		newVersioningData := req.GetUserData().GetVersioningData()
 		_, buildIdsRemoved := GetBuildIdDeltas(currentVersioningData, newVersioningData)
@@ -2509,43 +2516,41 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 		// merge v1 sets
 		mergedData := MergeVersioningData(currentVersioningData, newVersioningData)
 
-		// take last writer for V2 rules and V3 data
+		// The parent HLC orders snapshot-scoped data, but deployment cells carry independent revisions.
 		currentClock := current.GetClock()
 		incomingClock := req.GetUserData().GetClock()
-		// Replication can persist user data without its clock, since we are wrongly setting the clock to nil while merging (to be fixed).
-		// Let incoming data win while the current data is clockless so it is not discarded during another replication. Future merge logic will resolve
-		// conflicts between all combinations of incoming and current data instead of relying on this compatibility fallback.
-		if currentClock != nil && (incomingClock == nil || hlc.Greater(currentClock, incomingClock)) {
-			if mergedData != nil {
-				// v2 rules
-				mergedData.AssignmentRules = currentVersioningData.GetAssignmentRules()
-				mergedData.RedirectRules = currentVersioningData.GetRedirectRules()
-			}
-			mergedUserData.PerType = current.GetPerType()
-
-			// We have wrongly discarded incoming per-type data and should investigate what information was lost.
-			// This is harmful since we might have lost information pertaining to worker-versioning, task queue config
-			// and fairness state.
-			if len(req.GetUserData().GetPerType()) > 0 {
-				metrics.TaskQueueUserDataReplicationIncomingPerTypeDataDropped.With(e.metricsHandler).Record(1,
-					metrics.NamespaceTag(ns.Name().String()),
-				)
-				e.logger.Warn("task queue user data replication discarded non-empty per-type data",
-					tag.WorkflowNamespace(ns.Name().String()),
-					tag.WorkflowNamespaceID(req.GetNamespaceId()),
-					tag.WorkflowTaskQueueName(req.GetTaskQueue()),
-					tag.NewAnyTag("current-clock", currentClock),
-				)
-			}
-		} else {
-			if mergedData != nil {
-				// v2 rules
-				mergedData.AssignmentRules = newVersioningData.GetAssignmentRules()
-				mergedData.RedirectRules = newVersioningData.GetRedirectRules()
-			}
-			mergedUserData.PerType = req.GetUserData().GetPerType()
-			mergedUserData.Clock = common.CloneProto(req.GetUserData().GetClock())
+		// User data persisted before clock propagation was fixed may be clockless. Preserve the
+		// existing incoming fallback when the clocks cannot order the snapshots.
+		currentWins := currentClock != nil && (incomingClock == nil || hlc.Greater(currentClock, incomingClock))
+		preferredUserData := req.GetUserData()
+		otherUserData := current
+		selectedSide := taskQueueUserDataConflictSelectedSideIncoming
+		resolution := taskQueueUserDataConflictResolutionFallback
+		if currentWins {
+			preferredUserData = current
+			otherUserData = req.GetUserData()
+			selectedSide = taskQueueUserDataConflictSelectedSideCurrent
+			resolution = taskQueueUserDataConflictResolutionCurrent
+		} else if incomingClock != nil && (currentClock == nil || hlc.Greater(incomingClock, currentClock)) {
+			resolution = taskQueueUserDataConflictResolutionIncoming
 		}
+
+		mergedUserData, mergeConflicts := mergeTaskQueueUserDataDeployments(preferredUserData, otherUserData)
+		if mergedData != nil {
+			preferredVersioningData := preferredUserData.GetVersioningData()
+			// v2 rules
+			mergedData.AssignmentRules = preferredVersioningData.GetAssignmentRules()
+			mergedData.RedirectRules = preferredVersioningData.GetRedirectRules()
+		}
+		e.recordTaskQueueUserDataMergeConflicts(
+			ns,
+			req,
+			mergeConflicts,
+			selectedSide,
+			resolution,
+			currentClock,
+			incomingClock,
+		)
 
 		for _, buildId := range buildIdsToRevive {
 			setIdx, buildIdIdx := worker_versioning.FindBuildId(mergedData, buildId)
@@ -2573,6 +2578,45 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 		return mergedUserData, len(buildIdsToRevive) > 0, nil
 	})
 	return &matchingservice.ApplyTaskQueueUserDataReplicationEventResponse{}, err
+}
+
+func (e *matchingEngineImpl) recordTaskQueueUserDataMergeConflicts(
+	ns *namespace.Namespace,
+	req *matchingservice.ApplyTaskQueueUserDataReplicationEventRequest,
+	conflicts []taskQueueUserDataMergeConflict,
+	selectedSide string,
+	resolution string,
+	currentClock *clockspb.HybridLogicalClock,
+	incomingClock *clockspb.HybridLogicalClock,
+) {
+	for _, conflict := range conflicts {
+		taskQueueType := enumspb.TaskQueueType(conflict.taskQueueType)
+		conflictType := string(conflict.conflictType)
+		metrics.TaskQueueUserDataReplicationEqualRevisionConflicts.With(e.metricsHandler).Record(1,
+			metrics.NamespaceTag(ns.Name().String()),
+			metrics.TaskQueueTypeTag(taskQueueType),
+			metrics.StringTag("conflict_type", conflictType),
+			metrics.StringTag("resolution", resolution),
+		)
+
+		logTags := []tag.Tag{
+			tag.WorkflowNamespace(ns.Name().String()),
+			tag.WorkflowNamespaceID(req.GetNamespaceId()),
+			tag.WorkflowTaskQueueName(req.GetTaskQueue()),
+			tag.WorkflowTaskQueueType(taskQueueType),
+			tag.Deployment(conflict.deploymentName),
+			tag.NewStringTag("conflict-type", conflictType),
+			tag.NewInt64("revision", conflict.revisionNumber),
+			tag.NewStringTag("selected-side", selectedSide),
+			tag.NewStringTag("resolution", resolution),
+			tag.NewAnyTag("current-clock", currentClock),
+			tag.NewAnyTag("incoming-clock", incomingClock),
+		}
+		if conflict.buildID != "" {
+			logTags = append(logTags, tag.BuildId(conflict.buildID))
+		}
+		e.logger.Warn(taskQueueUserDataConflictLogMessage, logTags...)
+	}
 }
 
 func (e *matchingEngineImpl) GetBuildIdTaskQueueMapping(
