@@ -48,7 +48,8 @@ type BatcherOptions struct {
 	// resources on idle streams.
 	IdleTime time.Duration
 	// ClearInterval controls how often a KeyedBatcher clears its cached batchers.
-	// Zero disables clearing. This option is ignored by Batcher.
+	// Zero disables clearing, which guarantees serialization. This option is for
+	// KeyedBatcher only and is ignored by Batcher.
 	ClearInterval time.Duration
 }
 
