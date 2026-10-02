@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/util"
 )
 
@@ -387,8 +386,8 @@ func TestNexusInterceptRequest_HeadersSanitization(t *testing.T) {
 }
 
 func TestParseNexusCaller(t *testing.T) {
-	workflowLink := func(ns, workflowID, runID string) (*commonpb.Link_WorkflowEvent, nexus.Link) {
-		we := &commonpb.Link_WorkflowEvent{
+	workflowLink := func(ns, workflowID, runID string) nexus.Link {
+		return commonnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
 			Namespace:  ns,
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -398,11 +397,10 @@ func TestParseNexusCaller(t *testing.T) {
 					EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
 				},
 			},
-		}
-		return we, commonnexus.ConvertLinkWorkflowEventToNexusLink(we)
+		})
 	}
-	firstCaller, firstLink := workflowLink("caller-ns", "caller-wf", "caller-run")
-	_, secondLink := workflowLink("other-ns", "other-wf", "other-run")
+	firstLink := workflowLink("caller-ns", "caller-wf", "caller-run")
+	secondLink := workflowLink("other-ns", "other-wf", "other-run")
 	malformedLink := nexus.Link{
 		URL:  &url.URL{Scheme: "temporal", Path: "/malformed"},
 		Type: firstLink.Type,
@@ -419,41 +417,35 @@ func TestParseNexusCaller(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		name           string
-		links          []nexus.Link
-		expectedCaller *commonpb.Link_WorkflowEvent
-		expectedTags   []tag.Tag
+		name         string
+		links        []nexus.Link
+		expectedTags []tag.Tag
 	}{
 		{
 			name: "no links",
 		},
 		{
-			name:           "valid workflow link",
-			links:          []nexus.Link{firstLink},
-			expectedCaller: firstCaller,
-			expectedTags:   firstCallerTags,
+			name:         "valid workflow link",
+			links:        []nexus.Link{firstLink},
+			expectedTags: firstCallerTags,
 		},
 		{
-			name:           "malformed link is skipped",
-			links:          []nexus.Link{malformedLink, firstLink},
-			expectedCaller: firstCaller,
-			expectedTags:   firstCallerTags,
+			name:         "malformed link is skipped",
+			links:        []nexus.Link{malformedLink, firstLink},
+			expectedTags: firstCallerTags,
 		},
 		{
 			name:  "non-workflow link",
 			links: []nexus.Link{activityLink},
 		},
 		{
-			name:           "first valid workflow link wins",
-			links:          []nexus.Link{firstLink, secondLink},
-			expectedCaller: firstCaller,
-			expectedTags:   firstCallerTags,
+			name:         "first valid workflow link wins",
+			links:        []nexus.Link{firstLink, secondLink},
+			expectedTags: firstCallerTags,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			caller, tags := parseNexusCaller(tc.links)
-			protorequire.ProtoEqual(t, tc.expectedCaller, caller)
-			require.Equal(t, tc.expectedTags, tags)
+			require.Equal(t, tc.expectedTags, parseNexusCaller(tc.links))
 		})
 	}
 }

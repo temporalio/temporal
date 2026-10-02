@@ -16,7 +16,6 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.opentelemetry.io/otel/trace"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
@@ -339,22 +338,22 @@ func (c *operationContext) enrichNexusOperationLogs(service, operation, requestI
 	c.logger = log.With(c.logger, tags...)
 }
 
-// parseNexusCaller returns the first of the given links that parses as a workflow event link, i.e. the calling
-// workflow, together with log tags identifying it. Links that don't parse are skipped. Returns nil if no link parses,
-// e.g. for callers that aren't workflows.
-func parseNexusCaller(links []nexus.Link) (*commonpb.Link_WorkflowEvent, []tag.Tag) {
+// parseNexusCaller returns log tags identifying the calling workflow, taken from the first of the given links that
+// parses as a workflow event link. Links that don't parse are skipped. Returns nil if no link parses, e.g. for callers
+// that aren't workflows.
+func parseNexusCaller(links []nexus.Link) []tag.Tag {
 	for _, link := range links {
 		caller, err := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(link)
 		if err != nil {
 			continue
 		}
-		return caller, []tag.Tag{
+		return []tag.Tag{
 			tag.CallerNamespace(caller.GetNamespace()),
 			tag.CallerWorkflowID(caller.GetWorkflowId()),
 			tag.CallerRunID(caller.GetRunId()),
 		}
 	}
-	return nil, nil
+	return nil
 }
 
 // Key to extract a nexusContext object from a context.Context.
@@ -446,7 +445,7 @@ func (h *nexusHandler) StartOperation(
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
 	oc.enrichNexusOperationLogs(service, operation, options.RequestID)
-	if _, callerTags := parseNexusCaller(options.Links); len(callerTags) > 0 {
+	if callerTags := parseNexusCaller(options.Links); len(callerTags) > 0 {
 		oc.logger = log.With(oc.logger, callerTags...)
 	}
 	oc.annotateServerSpan(ctx, service, operation, options.RequestID)
