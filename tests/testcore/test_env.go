@@ -23,7 +23,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -101,6 +100,7 @@ type testOptions struct {
 	clusterOptions           []TestClusterOption
 	testVars                 func(*testvars.TestVars) *testvars.TestVars
 	historyTaskRecorder      bool
+	persistenceFaults        []PersistenceFault
 }
 
 type dynamicConfigOverride struct {
@@ -171,15 +171,6 @@ func WithMTLS() TestOption {
 		o.dedicatedCluster = true
 		o.clusterOptions = append(o.clusterOptions, withMTLS())
 		o.dedicatedReason = "mTLS enabled"
-	}
-}
-
-// WithPersistenceFaultInjection requests a dedicated cluster with the given persistence fault injection config.
-func WithPersistenceFaultInjection(cfg *config.FaultInjection) TestOption {
-	return func(o *testOptions) {
-		o.dedicatedCluster = true
-		o.clusterOptions = append(o.clusterOptions, WithFaultInjectionConfig(cfg))
-		o.dedicatedReason = "fault injection config used"
 	}
 }
 
