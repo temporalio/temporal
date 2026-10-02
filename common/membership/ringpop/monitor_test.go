@@ -222,6 +222,38 @@ func (s *RpoSuite) TestCompareMembersWithDraining() {
 	s.Len(resolver.AvailableMembers(), 2)
 }
 
+func (s *RpoSuite) TestAvailableMembersExcludeLeaving() {
+	running := newHostInfo("a", nil)
+	draining := newHostInfo("b", map[string]string{drainingKey: "true"})
+	stopping := newHostInfo("c", map[string]string{stopAtKey: "9999999999"})
+	hosts := []*hostInfo{running, draining, stopping}
+
+	ring := newHashRing(100)
+	for _, h := range hosts {
+		ring.AddMembers(h)
+	}
+	resolver := &serviceResolver{}
+	resolver.ringAndHosts.Store(ringAndHosts{
+		ring: ring,
+		hosts: map[string]*hostInfo{
+			running.GetAddress():  running,
+			draining.GetAddress(): draining,
+			stopping.GetAddress(): stopping,
+		},
+	})
+
+	// Leaving hosts stay visible but are not available for new requests.
+	s.Len(resolver.Members(), 3)
+	s.Equal(3, resolver.MemberCount())
+	s.Len(resolver.AvailableMembers(), 1)
+	s.Equal(1, resolver.AvailableMemberCount())
+	s.Equal(running.GetAddress(), resolver.AvailableMembers()[0].GetAddress())
+
+	// But they remain in the lookup ring, so ownership transfers only at eviction.
+	addrs := ring.LookupN("some-key", 3)
+	s.ElementsMatch([]string{"a", "b", "c"}, addrs)
+}
+
 func eventToString(event *membership.ChangedEvent) []string {
 	var diff []string
 	for _, a := range event.HostsAdded {
