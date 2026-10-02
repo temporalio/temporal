@@ -46,7 +46,14 @@ type (
 		//    so we don't *need* to load the request into the Registry.
 		// 3. Furthermore, it is possible that many UpdateAdmitted events were created after a Reset or during conflict
 		//    resolution. In that situation, we *must not* attempt to load all the payloads into the Registry.
-		request         *anypb.Any // of type *updatepb.Request
+		request *anypb.Any // of type *updatepb.Request
+		// originalReqID holds the first requestID with this update's ID. It is used for building the right link for
+		// cases where a duplicate update arrives - with same updateID but different reqID - while the first update request
+		// isn't durable yet(in-flight). Such duplicates would get a link to the OptionsUpdated event type instead of a
+		// link to an UpdateAccepted event. As this is only required for cases where original update is not yet durable, we
+		// do not require persistence for this field - if registry is cleared, the request itself should get retried at which
+		// point the originalReqID will be set again.
+		originalReqID   string
 		acceptedEventID int64
 		onComplete      func()
 		checkLimits     func(*updatepb.Request) error
@@ -349,6 +356,7 @@ func (u *Update) Admit(
 		return serviceerror.NewInvalidArgumentf("unable to unmarshal request: %v", err)
 	}
 	u.request = reqAny
+	u.originalReqID = req.GetRequestId()
 
 	prevState := u.setState(stateProvisionallyAdmitted)
 	eventStore.OnAfterCommit(func(context.Context) {
@@ -452,6 +460,14 @@ func (u *Update) AttachCallbacks(
 	}
 }
 
+// EventLinkType reports the projected event type for an Update's RequestIDRef link.
+func (u *Update) EventLinkType(requestID string) enumspb.EventType {
+	if u.originalReqID == requestID {
+		return enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED
+	}
+	return enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED
+}
+
 // persistPendingCallbacks writes one WorkflowExecutionOptionsUpdatedEvent per
 // buffered AttachCallbacks callback, skipping any whose requestID is already persisted.
 // Called from onAcceptanceMsg after the acceptance event has been written.
@@ -488,8 +504,13 @@ func (u *Update) persistCallback(
 	if requestID != "" && eventStore.HasRequestID(requestID) {
 		return true, nil
 	}
+	// Copy callback links to the event so that backlinks are preserved in history.
+	var callbackLinks []*commonpb.Link
+	for _, callback := range completionCallbacks {
+		callbackLinks = append(callbackLinks, callback.GetLinks()...)
+	}
 	_, err = eventStore.AddWorkflowExecutionOptionsUpdatedEvent(
-		nil, false, "", nil, nil, "", nil, nil, false,
+		nil, false, "", nil, callbackLinks, "", nil, nil, false,
 		[]*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate{{
 			UpdateId:                    u.id,
 			AttachedRequestId:           requestID,

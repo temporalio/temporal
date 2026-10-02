@@ -1555,6 +1555,20 @@ func (ms *MutableStateImpl) GetUpdateOutcome(
 	return event.GetWorkflowExecutionUpdateCompletedEventAttributes().GetOutcome(), nil
 }
 
+func (ms *MutableStateImpl) GetUpdateAcceptedEventID(
+	ctx context.Context,
+	updateID string,
+) (int64, error) {
+	if acceptance := ms.executionInfo.GetUpdateInfos()[updateID].GetAcceptance(); acceptance != nil {
+		return acceptance.GetEventId(), nil
+	}
+	event, err := ms.getUpdateOutcomeEvent(ctx, updateID)
+	if err != nil {
+		return 0, err
+	}
+	return event.GetWorkflowExecutionUpdateCompletedEventAttributes().GetAcceptedEventId(), nil
+}
+
 func (ms *MutableStateImpl) getUpdateOutcomeEvent(
 	ctx context.Context,
 	updateID string,

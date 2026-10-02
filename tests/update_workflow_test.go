@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -841,21 +842,55 @@ func (s *WorkflowUpdateSuite) TestCompletedWorkflow() {
 		_, err := poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)
 		s.NoError(err)
 
-		// Send Update request.
-		updateResultCh := sendUpdateNoError(env, env.Tv())
+		sendUpdateWithRequestID := func(requestID string) <-chan updateResponseErr {
+			resultCh := make(chan updateResponseErr, 1)
+			request := updateWorkflowRequest(env, env.Tv(), nil)
+			request.Request.RequestId = requestID
+			go func() {
+				response, err := env.FrontendClient().UpdateWorkflowExecution(testcore.NewContext(), request)
+				resultCh <- updateResponseErr{response: response, err: err}
+			}()
+			waitUpdateAdmitted(env, env.Tv())
+			return resultCh
+		}
+
+		// Send Update request with a requestID to receive a link to the wf event.
+		updateResultCh := sendUpdateWithRequestID(env.Tv().RequestID())
 
 		// Complete Update and Workflow.
 		_, err = poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)
 		s.NoError(err)
 
 		// Receive Update result.
-		updateResult1 := <-updateResultCh
+		updateResult := <-updateResultCh
+		s.NoError(updateResult.err)
+		updateResult1 := updateResult.response
 		s.NotNil(updateResult1.GetOutcome().GetSuccess())
 
-		// Send same Update request again, receiving the same Update result.
-		updateResultCh = sendUpdateNoError(env, env.Tv())
-		updateResult2 := <-updateResultCh
-		s.Equal(updateResult1, updateResult2)
+		acceptedEvent := s.RequireHistoryEvent(
+			env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution()),
+			enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+		)
+		// Send the same Update request again, receiving the same result but with a link to the Accepted event.
+		updateResultCh = sendUpdateWithRequestID(env.Tv().Sub("request-2").RequestID())
+		updateResult = <-updateResultCh
+		s.NoError(updateResult.err)
+		updateResult2 := updateResult.response
+		updateResult1WithoutLink := common.CloneProto(updateResult1)
+		updateResult1WithoutLink.Link = nil
+		updateResult2WithoutLink := common.CloneProto(updateResult2)
+		updateResult2WithoutLink.Link = nil
+		protorequire.ProtoEqual(s.T(), updateResult1WithoutLink, updateResult2WithoutLink)
+
+		acceptedReqLink := updateResult1.GetLink().GetWorkflowEvent().GetRequestIdRef()
+		s.NotNil(acceptedReqLink)
+		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, acceptedReqLink.GetEventType())
+
+		acceptedEventLink := updateResult2.GetLink().GetWorkflowEvent().GetEventRef()
+		s.NotNil(acceptedEventLink)
+		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, acceptedEventLink.GetEventType())
+
+		s.Equal(acceptedEvent.GetEventId(), acceptedEventLink.GetEventId())
 	})
 
 	s.Run("receive update failure from accepted Update", func(s *WorkflowUpdateSuite) {
