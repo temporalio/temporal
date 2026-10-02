@@ -404,6 +404,8 @@ func TestDescribeCircuitBreaker(t *testing.T) {
 		for _, cancellationStatus := range protoutils.EnumValues[nexusoperationpb.CancellationStatus]() {
 			for _, breaker := range []string{"closed", "open", "unavailable"} {
 				t.Run(status.String()+"/"+cancellationStatus.String()+"/"+breaker, func(t *testing.T) {
+					t.Parallel()
+
 					ctx := newCallbackTestContext()
 					calls := 0
 					if breaker != "unavailable" {
@@ -444,11 +446,16 @@ func TestDescribeCircuitBreaker(t *testing.T) {
 					}
 					require.Equal(t, cancelState, info.GetCancellationInfo().GetState())
 					require.Equal(t, cancelReason, info.GetCancellationInfo().GetBlockedReason())
+					expectedCalls := 0
 					if breaker != "unavailable" {
-						require.Equal(t, 1, calls)
-					} else {
-						require.Zero(t, calls)
+						if status == nexusoperationpb.OPERATION_STATUS_SCHEDULED {
+							expectedCalls++
+						}
+						if cancellationStatus == nexusoperationpb.CANCELLATION_STATUS_SCHEDULED {
+							expectedCalls++
+						}
 					}
+					require.Equal(t, expectedCalls, calls)
 					require.Equal(t, status, op.Status)
 					if cancellation, ok := op.Cancellation.TryGet(ctx); ok {
 						require.Equal(t, cancellationStatus, cancellation.Status)

@@ -20,6 +20,8 @@ func TestLibraryOptionalDestinationBlocked(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			var library *Library
 			opts := []fx.Option{
 				fx.NopLogger,

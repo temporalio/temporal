@@ -94,33 +94,32 @@ type Library struct {
 type libraryParams struct {
 	fx.In
 
-	DestinationBlocked DestinationBlockedFn `optional:"true"`
+	Handler                                    *handler
+	OperationBackoffTaskHandler                *operationBackoffTaskHandler
+	OperationInvocationTaskHandler             *operationInvocationTaskHandler
+	OperationScheduleToCloseTimeoutTaskHandler *operationScheduleToCloseTimeoutTaskHandler
+	OperationScheduleToStartTimeoutTaskHandler *operationScheduleToStartTimeoutTaskHandler
+	OperationStartToCloseTimeoutTaskHandler    *operationStartToCloseTimeoutTaskHandler
+	CancellationInvocationTaskHandler          *cancellationInvocationTaskHandler
+	CancellationBackoffTaskHandler             *cancellationBackoffTaskHandler
+	DynamicConfig                              *dynamicconfig.Collection
+	DestinationBlocked                         DestinationBlockedFn `optional:"true"`
 }
 
-func newLibrary(
-	handler *handler,
-	operationBackoffTaskHandler *operationBackoffTaskHandler,
-	operationInvocationTaskHandler *operationInvocationTaskHandler,
-	operationScheduleToCloseTimeoutTaskHandler *operationScheduleToCloseTimeoutTaskHandler,
-	operationScheduleToStartTimeoutTaskHandler *operationScheduleToStartTimeoutTaskHandler,
-	operationStartToCloseTimeoutTaskHandler *operationStartToCloseTimeoutTaskHandler,
-	cancellationInvocationTaskHandler *cancellationInvocationTaskHandler,
-	cancellationBackoffTaskHandler *cancellationBackoffTaskHandler,
-	dc *dynamicconfig.Collection,
-	params libraryParams,
-) *Library {
-	componentLibrary := newComponentOnlyLibrary(dc)
-	componentLibrary.destinationBlocked = params.DestinationBlocked
+func newLibrary(params libraryParams) *Library {
 	return &Library{
-		componentOnlyLibrary:                       *componentLibrary,
-		handler:                                    handler,
-		operationBackoffTaskHandler:                operationBackoffTaskHandler,
-		operationInvocationTaskHandler:             operationInvocationTaskHandler,
-		operationScheduleToCloseTimeoutTaskHandler: operationScheduleToCloseTimeoutTaskHandler,
-		operationScheduleToStartTimeoutTaskHandler: operationScheduleToStartTimeoutTaskHandler,
-		operationStartToCloseTimeoutTaskHandler:    operationStartToCloseTimeoutTaskHandler,
-		cancellationInvocationTaskHandler:          cancellationInvocationTaskHandler,
-		cancellationBackoffTaskHandler:             cancellationBackoffTaskHandler,
+		componentOnlyLibrary: componentOnlyLibrary{
+			metricTagConfig:    MetricTagConfiguration.Get(params.DynamicConfig),
+			destinationBlocked: params.DestinationBlocked,
+		},
+		handler:                                    params.Handler,
+		operationBackoffTaskHandler:                params.OperationBackoffTaskHandler,
+		operationInvocationTaskHandler:             params.OperationInvocationTaskHandler,
+		operationScheduleToCloseTimeoutTaskHandler: params.OperationScheduleToCloseTimeoutTaskHandler,
+		operationScheduleToStartTimeoutTaskHandler: params.OperationScheduleToStartTimeoutTaskHandler,
+		operationStartToCloseTimeoutTaskHandler:    params.OperationStartToCloseTimeoutTaskHandler,
+		cancellationInvocationTaskHandler:          params.CancellationInvocationTaskHandler,
+		cancellationBackoffTaskHandler:             params.CancellationBackoffTaskHandler,
 	}
 }
 
