@@ -1,3 +1,4 @@
+// revive:disable:epoch-naming
 package simplelimiter
 
 import (
