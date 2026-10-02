@@ -283,11 +283,6 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		5*time.Second,
 		`historyHealthSignalLatencyWindowSize is the time window size in seconds for aggregating latencies`,
 	)
-	HistoryHealthSignalPercentileLatencySettings = NewGlobalTypedSetting(
-		"system.historyHealthSignalPercentileLatencySettings",
-		LatencyHealthChecksPerPercentile{},
-		"historyHealthSignalPercentileLatencySettings controls what latency health checks are enabled and enforced for the history system",
-	)
 	HealthCheckHistoryGRPCSettings = NewGlobalTypedSetting(
 		"system.healthCheckHistoryGRPCSettings",
 		health.Settings{},
@@ -3231,26 +3226,6 @@ cached on a single history shard. Requires service restart to take effect.`,
 		60*time.Second,
 		`BusinessIDReuseLimiterCacheTTL is the TTL for per-(namespace, businessID, archetype) rate limiter cache entries.
 Requires service restart to take effect.`,
-	)
-	HealthPersistenceLatencyFailure = NewGlobalFloatSetting(
-		"history.healthPersistenceLatencyFailure",
-		500,
-		"History service health check on persistence average latency (millisecond) threshold",
-	)
-	HealthPersistenceErrorRatio = NewGlobalFloatSetting(
-		"history.healthPersistenceErrorRatio",
-		0.90,
-		"History service health check on persistence error ratio",
-	)
-	HealthRPCLatencyFailure = NewGlobalFloatSetting(
-		"history.healthRPCLatencyFailure",
-		500,
-		"History service health check on RPC average latency (millisecond) threshold",
-	)
-	HealthRPCErrorRatio = NewGlobalFloatSetting(
-		"history.healthRPCErrorRatio",
-		0.90,
-		"History service health check on RPC error ratio",
 	)
 	HealthHistoryInitializationTime = NewGlobalDurationSetting(
 		"history.healthHistoryInitializationTime",

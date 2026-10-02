@@ -9,7 +9,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	healthspb "go.temporal.io/server/api/health/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/common/dynamicconfig"
 	health2 "go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -30,7 +29,6 @@ func TestDeepHealthCheck(t *testing.T) {
 	testCases := []struct {
 		desc                           string
 		timeSinceStartup               time.Duration
-		percentilesEnforced            bool
 		grpcHealthStatus               healthpb.HealthCheckResponse_ServingStatus
 		healthCheckSettings            health2.Settings
 		persistenceHealthCheckSettings health2.Settings
@@ -397,34 +395,9 @@ func TestDeepHealthCheck(t *testing.T) {
 				healthServer:   health.NewServer(),
 				metricsHandler: metrics.NoopMetricsHandler,
 				config: &configs.Config{
-					HealthPersistenceLatencyFailure: func() float64 { return 1000 },
-					HealthRPCLatencyFailure:         func() float64 { return 1000 },
-					HealthPersistenceErrorRatio:     func() float64 { return 0.1 },
-					HealthRPCErrorRatio:             func() float64 { return 0.1 },
 					HealthHistoryInitializationTime: func() time.Duration { return time.Minute },
 					HealthCheckHistoryGRPCSettings:  func() health2.Settings { return tc.healthCheckSettings },
 					HealthCheckPersistenceSettings:  func() health2.Settings { return tc.persistenceHealthCheckSettings },
-					HealthRPCLatencyPercentiles: func() dynamicconfig.LatencyHealthChecksPerPercentile {
-						return dynamicconfig.LatencyHealthChecksPerPercentile{
-							PercentileSettings: []dynamicconfig.LatencyHealthCheckSettings{
-								{
-									Percentile: 0.99,
-									Threshold:  2 * time.Second,
-									Enforced:   tc.percentilesEnforced,
-								},
-								{
-									Percentile: 0.90,
-									Threshold:  1 * time.Second,
-									Enforced:   tc.percentilesEnforced,
-								},
-								{
-									Percentile: 0.50,
-									Threshold:  500 * time.Millisecond,
-									Enforced:   tc.percentilesEnforced,
-								},
-							},
-						}
-					},
 				},
 				historyHealthSignal:     interceptor.NewHealthSignalAggregator(testLogger, func() bool { return true }, func() bool { return true }, func() health2.Settings { return tc.healthCheckSettings }, time.Second, 10),
 				persistenceHealthSignal: persistence.NewHealthSignalAggregator(true, time.Second, 100, metrics.NoopMetricsHandler, testLogger, func() health2.Settings { return health2.Settings{} }),

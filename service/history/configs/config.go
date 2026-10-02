@@ -449,11 +449,6 @@ type Config struct {
 
 	HealthCheckHistoryGRPCSettings  dynamicconfig.TypedPropertyFn[health.Settings]
 	HealthCheckPersistenceSettings  dynamicconfig.TypedPropertyFn[health.Settings]
-	HealthPersistenceLatencyFailure dynamicconfig.FloatPropertyFn
-	HealthPersistenceErrorRatio     dynamicconfig.FloatPropertyFn
-	HealthRPCLatencyFailure         dynamicconfig.FloatPropertyFn
-	HealthRPCLatencyPercentiles     dynamicconfig.TypedPropertyFn[dynamicconfig.LatencyHealthChecksPerPercentile]
-	HealthRPCErrorRatio             dynamicconfig.FloatPropertyFn
 	HealthHistoryInitializationTime dynamicconfig.DurationPropertyFn
 	BreakdownMetricsByTaskQueue     dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 	BreakdownMetricsByBuildID       dynamicconfig.BoolPropertyFnWithTaskQueueFilter
@@ -872,11 +867,6 @@ func NewConfig(
 
 		HealthCheckHistoryGRPCSettings:  dynamicconfig.HealthCheckHistoryGRPCSettings.Get(dc),
 		HealthCheckPersistenceSettings:  dynamicconfig.HealthCheckPersistenceSettings.Get(dc),
-		HealthPersistenceLatencyFailure: dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
-		HealthPersistenceErrorRatio:     dynamicconfig.HealthPersistenceErrorRatio.Get(dc),
-		HealthRPCLatencyFailure:         dynamicconfig.HealthRPCLatencyFailure.Get(dc),
-		HealthRPCLatencyPercentiles:     dynamicconfig.HistoryHealthSignalPercentileLatencySettings.Get(dc),
-		HealthRPCErrorRatio:             dynamicconfig.HealthRPCErrorRatio.Get(dc),
 		HealthHistoryInitializationTime: dynamicconfig.HealthHistoryInitializationTime.Get(dc),
 
 		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
