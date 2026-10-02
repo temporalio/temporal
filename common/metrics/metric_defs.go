@@ -1203,6 +1203,7 @@ var (
 	ReplicationTasksAttempt                        = NewDimensionlessHistogramDef("replication_tasks_attempt")
 	ReplicationTasksErrorByType                    = NewCounterDef("replication_tasks_error_by_type")
 	ReplicationDLQFailed                           = NewCounterDef("replication_dlq_enqueue_failed")
+	ReplicationDLQDropped                          = NewCounterDef("replication_dlq_dropped")
 	ReplicationDLQMaxLevelGauge                    = NewGaugeDef("replication_dlq_max_level")
 	ReplicationDLQAckLevelGauge                    = NewGaugeDef("replication_dlq_ack_level")
 	ReplicationNonEmptyDLQCount                    = NewCounterDef("replication_dlq_non_empty")
@@ -1378,7 +1379,11 @@ var (
 		"fair_reader_stuck_detected",
 		WithDescription("Count of times the fair task reader detected a stuck state (atEnd=false, loadedTasks=0, readPending=false, backoffTimer=nil) on the write path"),
 	)
-	PartitionScaleEvents = NewCounterDef("partition_scale_events")
+	PartitionScaleEvents     = NewCounterDef("partition_scale_events")
+	PartitionScaleMaxClamped = NewCounterDef(
+		"partition_scale_max_clamped",
+		WithDescription("Count of partition scaler decisions whose target was reduced by a configured maximum"),
+	)
 	PartitionScaleRead   = NewGaugeDef("partition_scale_read")
 	PartitionScaleWrite  = NewGaugeDef("partition_scale_write")
 	PartitionScaleTarget = NewGaugeDef("partition_scale_target")
