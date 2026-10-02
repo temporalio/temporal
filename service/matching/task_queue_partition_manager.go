@@ -158,6 +158,8 @@ func newTaskQueuePartitionManager(
 			ns.Name(),
 			partition.TaskQueue().Name(),
 			partition.TaskQueue().TaskType(),
+			logger,
+			metricsHandler,
 		)
 		if partitionScaler != nil {
 			baseCtx := headers.SetCallerInfo(context.Background(), headers.NewBackgroundLowCallerInfo(ns.Name().String()))
