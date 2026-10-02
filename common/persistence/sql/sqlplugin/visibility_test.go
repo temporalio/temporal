@@ -1,6 +1,7 @@
 package sqlplugin
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -50,4 +51,52 @@ func TestParseCountGroupByGroupValue(t *testing.T) {
 			require.Equal(t, tc.expected, got)
 		})
 	}
+}
+
+// fakeRows reports a fixed number of rows and then whatever Err returns, the
+// way database/sql behaves when a read ends before the rows do: Next returns
+// false and only Err separates that from a clean end.
+type fakeRows struct {
+	remaining int
+	err       error
+}
+
+func (r *fakeRows) Next() bool {
+	if r.remaining == 0 {
+		return false
+	}
+	r.remaining--
+	return true
+}
+
+func (r *fakeRows) Scan(dest ...any) error {
+	for i := range dest {
+		p, ok := dest[i].(*any)
+		if !ok {
+			return errors.New("unexpected scan destination")
+		}
+		*p = int64(1)
+	}
+	return nil
+}
+
+func (r *fakeRows) Close() error { return nil }
+
+func (r *fakeRows) Err() error { return r.err }
+
+func TestParseCountGroupByRows_TruncatedRead(t *testing.T) {
+	errTruncated := errors.New("connection lost mid-iteration")
+	rows := &fakeRows{remaining: 2, err: errTruncated}
+
+	got, err := ParseCountGroupByRows(rows, []string{sadefs.ExecutionStatus})
+	require.ErrorIs(t, err, errTruncated)
+	require.Nil(t, got)
+}
+
+func TestParseCountGroupByRows_CompleteRead(t *testing.T) {
+	rows := &fakeRows{remaining: 2}
+
+	got, err := ParseCountGroupByRows(rows, []string{sadefs.ExecutionStatus})
+	require.NoError(t, err)
+	require.Len(t, got, 2)
 }
