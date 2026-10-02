@@ -34,6 +34,7 @@ type (
 		sqlStore                       persistencesql.SqlStore
 		searchAttributesProvider       searchattribute.Provider
 		searchAttributesMapperProvider searchattribute.MapperProvider
+		namespaceRegistry              namespace.Registry
 		chasmRegistry                  *chasm.Registry
 		metricsHandler                 metrics.Handler
 		logger                         log.Logger
@@ -66,6 +67,7 @@ type (
 )
 
 var _ store.VisibilityStore = (*VisibilityStore)(nil)
+var _ store.AdminVisibilityStore = (*VisibilityStore)(nil)
 
 var maxDatetime, _ = time.Parse(time.RFC3339, "9999-12-31T23:59:59Z")
 
@@ -75,6 +77,7 @@ func NewSQLVisibilityStore(
 	r resolver.ServiceResolver,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
+	namespaceRegistry namespace.Registry,
 	chasmRegistry *chasm.Registry,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
@@ -89,6 +92,7 @@ func NewSQLVisibilityStore(
 		sqlStore:                       persistencesql.NewSQLStore(db, logger, serializer),
 		searchAttributesProvider:       searchAttributesProvider,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
+		namespaceRegistry:              namespaceRegistry,
 		chasmRegistry:                  chasmRegistry,
 		metricsHandler:                 metricsHandler,
 		logger:                         logger,
@@ -595,6 +599,86 @@ func (s *VisibilityStore) AddSearchAttributes(
 	return serviceerror.NewUnimplemented("AddSearchAttributes operation not supported in SQL visibility")
 }
 
+// ListExecutions implements [store.AdminVisibilityStore].
+func (s *VisibilityStore) ListExecutions(
+	ctx context.Context,
+	request *manager.AdminListExecutionsRequest,
+) (*store.InternalListExecutionsResponse, error) {
+	namespaceID := namespace.EmptyID
+	if request.Namespace != namespace.EmptyName {
+		var err error
+		namespaceID, err = s.namespaceRegistry.GetNamespaceID(request.Namespace)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	queryConverter, err := s.newQueryConverter(
+		request.Namespace,
+		nil, // chasmMapper
+		chasm.UnspecifiedArchetypeID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	queryConverter.WithDisableDefaultNamespaceDivision()
+
+	internalRequest := &listExecutionsRequestInternal{
+		NamespaceID:   namespaceID,
+		Namespace:     request.Namespace,
+		Query:         request.Query,
+		PageSize:      request.PageSize,
+		NextPageToken: request.NextPageToken,
+		ArchetypeID:   chasm.UnspecifiedArchetypeID,
+		ChasmMapper:   nil,
+	}
+
+	return s.listExecutionsInternal(
+		ctx,
+		internalRequest,
+		queryConverter,
+		metrics.VisibilityPersistenceListExecutionsScope,
+	)
+}
+
+// CountExecutions implements [store.AdminVisibilityStore].
+func (s *VisibilityStore) CountExecutions(
+	ctx context.Context,
+	request *manager.AdminCountExecutionsRequest,
+) (*store.InternalCountExecutionsResponse, error) {
+	namespaceID := namespace.EmptyID
+	if request.Namespace != namespace.EmptyName {
+		var err error
+		namespaceID, err = s.namespaceRegistry.GetNamespaceID(request.Namespace)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	queryConverter, err := s.newQueryConverter(
+		request.Namespace,
+		nil, // chasmMapper
+		chasm.UnspecifiedArchetypeID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	queryConverter.WithDisableDefaultNamespaceDivision()
+
+	internalRequest := &countExecutionsInternalRequest{
+		NamespaceID: namespaceID,
+		Namespace:   request.Namespace,
+		Query:       request.Query,
+	}
+
+	return s.countExecutionsInternal(
+		ctx,
+		internalRequest,
+		queryConverter,
+		metrics.VisibilityPersistenceCountExecutionsScope,
+	)
+}
+
 func (s *VisibilityStore) getSearchAttributesTypeMap() (searchattribute.NameTypeMap, error) {
 	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
 	if err != nil {
@@ -618,9 +702,12 @@ func (s *VisibilityStore) newQueryConverter(
 		return nil, err
 	}
 
-	saMapper, err := s.searchAttributesMapperProvider.GetMapper(namespaceName)
-	if err != nil {
-		return nil, err
+	var saMapper searchattribute.Mapper
+	if namespaceName != namespace.EmptyName {
+		saMapper, err = s.searchAttributesMapperProvider.GetMapper(namespaceName)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	queryConverter := query.NewQueryConverter(
@@ -660,19 +747,21 @@ func buildQueryParams(
 		return nil, err
 	}
 
-	sqlQC := queryConverter.sqlQueryConverter
-	nsFilterExpr, err := sqlQC.ConvertComparisonExpr(
-		sqlparser.EqualStr,
-		query.NamespaceIDSAColumn,
-		namespaceID.String(),
-	)
-	if err != nil {
-		return nil, err
-	}
+	if namespaceID != namespace.EmptyID {
+		sqlQC := queryConverter.sqlQueryConverter
+		nsFilterExpr, err := sqlQC.ConvertComparisonExpr(
+			sqlparser.EqualStr,
+			query.NamespaceIDSAColumn,
+			namespaceID.String(),
+		)
+		if err != nil {
+			return nil, err
+		}
 
-	queryParams.QueryExpr, err = sqlQC.BuildAndExpr(nsFilterExpr, queryParams.QueryExpr)
-	if err != nil {
-		return nil, err
+		queryParams.QueryExpr, err = sqlQC.BuildAndExpr(nsFilterExpr, queryParams.QueryExpr)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// ORDER BY is not support in SQL visibility store
@@ -691,6 +780,7 @@ func rowToInfo(
 		row.ExecutionTime = row.StartTime
 	}
 	info := &store.InternalExecutionInfo{
+		NamespaceID:    row.NamespaceID,
 		WorkflowID:     row.WorkflowID,
 		RunID:          row.RunID,
 		TypeName:       row.WorkflowTypeName,

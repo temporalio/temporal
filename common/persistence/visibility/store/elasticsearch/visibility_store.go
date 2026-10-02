@@ -51,6 +51,7 @@ type (
 		index                          string
 		searchAttributesProvider       searchattribute.Provider
 		searchAttributesMapperProvider searchattribute.MapperProvider
+		namespaceRegistry              namespace.Registry
 		chasmRegistry                  *chasm.Registry
 		processor                      Processor
 		processorAckTimeout            dynamicconfig.DurationPropertyFn
@@ -88,6 +89,7 @@ type (
 )
 
 var _ store.VisibilityStore = (*VisibilityStore)(nil)
+var _ store.AdminVisibilityStore = (*VisibilityStore)(nil)
 
 var (
 	errUnexpectedJSONFieldType = errors.New("unexpected JSON field type")
@@ -132,6 +134,7 @@ func NewVisibilityStore(
 	processorConfig *ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
+	namespaceRegistry namespace.Registry,
 	chasmRegistry *chasm.Registry,
 	disableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	enableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
@@ -157,6 +160,7 @@ func NewVisibilityStore(
 		index:                          cfg.GetVisibilityIndex(),
 		searchAttributesProvider:       searchAttributesProvider,
 		searchAttributesMapperProvider: searchAttributesMapperProvider,
+		namespaceRegistry:              namespaceRegistry,
 		chasmRegistry:                  chasmRegistry,
 		processor:                      processor,
 		processorAckTimeout:            processorAckTimeout,
@@ -710,11 +714,15 @@ func (s *VisibilityStore) processPageToken(
 		return nil
 	}
 
-	boolQuery, ok := params.Query.(*elastic.BoolQuery)
+	if params.Query == nil {
+		params.Query = newBoolQuery()
+	}
+
+	bq, ok := params.Query.(*boolQuery)
 	if !ok {
 		return serviceerror.NewInternalf(
 			"unexpected query type: expected %T, got %T",
-			&elastic.BoolQuery{},
+			&boolQuery{},
 			params.Query,
 		)
 	}
@@ -732,8 +740,8 @@ func (s *VisibilityStore) processPageToken(
 		return err
 	}
 
-	boolQuery.Should(shouldQueries...)
-	boolQuery.MinimumNumberShouldMatch(1)
+	bq.Should(shouldQueries...)
+	bq.MinimumNumberShouldMatch(1)
 	return nil
 }
 
@@ -755,17 +763,23 @@ func (s *VisibilityStore) convertQuery(
 		return nil, err
 	}
 
-	// queryParams.QueryExpr may be nil (e.g. "GROUP BY TemporalNamespaceDivision"
-	// with no other filter, which suppresses the default namespace division
-	// filter). Avoid adding a nil clause to the bool query, which would panic on
-	// serialization.
-	namespaceFilter := elastic.NewBoolQuery().Filter(
-		elastic.NewTermQuery(sadefs.NamespaceID, namespaceID.String()),
-	)
-	if queryParams.QueryExpr != nil {
-		namespaceFilter.Filter(queryParams.QueryExpr)
+	if namespaceID != namespace.EmptyID {
+		// queryParams.QueryExpr may be nil (e.g. "GROUP BY TemporalNamespaceDivision"
+		// with no other filter, which suppresses the default namespace division
+		// filter). Avoid adding a nil clause to the bool query, which would panic on
+		// serialization.
+		namespaceFilter := newBoolQuery().Filter(
+			elastic.NewTermQuery(sadefs.NamespaceID, namespaceID.String()),
+		)
+		if queryParams.QueryExpr != nil {
+			namespaceFilter.Filter(queryParams.QueryExpr)
+		}
+		queryParams.QueryExpr = namespaceFilter
 	}
-	queryParams.QueryExpr = namespaceFilter
+
+	if _, ok := queryParams.QueryExpr.(*boolQuery); !ok && queryParams.QueryExpr != nil {
+		queryParams.QueryExpr = newBoolQuery().Filter(queryParams.QueryExpr)
+	}
 
 	orderBy := make([]elastic.Sorter, 0, len(queryParams.OrderBy))
 	for _, orderByExpr := range queryParams.OrderBy {
@@ -1021,11 +1035,15 @@ func (s *VisibilityStore) ParseESDoc(
 	)
 	record := &store.InternalExecutionInfo{}
 	for fieldName, fieldValue := range sourceMap {
+		var fieldType enumspb.IndexedValueType
 		switch fieldName {
-		case sadefs.NamespaceID,
-			sadefs.VisibilityTaskKey:
+		case sadefs.VisibilityTaskKey:
 			// Ignore these fields.
 			continue
+		case sadefs.NamespaceID:
+			// NamespaceId is a reserved field name, so it is not in the search attribute
+			// type map and field type must be set as Keyword to be parsed.
+			fieldType = enumspb.INDEXED_VALUE_TYPE_KEYWORD
 		case sadefs.Memo:
 			var memoStr string
 			if memoStr, isValidType = fieldValue.(string); !isValidType {
@@ -1041,16 +1059,17 @@ func (s *VisibilityStore) ParseESDoc(
 				return nil, logParseError(fieldName, fieldValue, fmt.Errorf("%w: expected string got %T", errUnexpectedJSONFieldType, fieldValue), docID)
 			}
 			continue
-		}
-
-		fieldType, err := combinedTypeMap.GetType(fieldName)
-		if err != nil {
-			// Silently ignore ErrInvalidName because it indicates an unknown field in an Elasticsearch document.
-			if errors.Is(err, sadefs.ErrInvalidName) {
-				continue
+		default:
+			var err error
+			fieldType, err = combinedTypeMap.GetType(fieldName)
+			if err != nil {
+				// Silently ignore ErrInvalidName because it indicates an unknown field in an Elasticsearch document.
+				if errors.Is(err, sadefs.ErrInvalidName) {
+					continue
+				}
+				metrics.ElasticsearchDocumentParseFailuresCount.With(s.metricsHandler).Record(1)
+				return nil, serviceerror.NewInternalf("Unable to get type for Elasticsearch document(%s) field %q: %v", docID, fieldName, err)
 			}
-			metrics.ElasticsearchDocumentParseFailuresCount.With(s.metricsHandler).Record(1)
-			return nil, serviceerror.NewInternalf("Unable to get type for Elasticsearch document(%s) field %q: %v", docID, fieldName, err)
 		}
 
 		fieldValueParsed, err := finishParseJSONValue(fieldValue, fieldType)
@@ -1059,6 +1078,8 @@ func (s *VisibilityStore) ParseESDoc(
 		}
 
 		switch fieldName {
+		case sadefs.NamespaceID:
+			record.NamespaceID = fieldValueParsed.(string)
 		case sadefs.WorkflowID:
 			record.WorkflowID = fieldValueParsed.(string)
 		case sadefs.RunID:
@@ -1512,4 +1533,106 @@ func (s *VisibilityStore) AddSearchAttributes(
 	}
 	_, err = s.esClient.WaitForYellowStatus(ctx, s.GetIndexName())
 	return err
+}
+
+// ListExecutions implements [store.AdminVisibilityStore].
+func (s *VisibilityStore) ListExecutions(
+	ctx context.Context,
+	request *manager.AdminListExecutionsRequest,
+) (*store.InternalListExecutionsResponse, error) {
+	namespaceID := namespace.EmptyID
+	if request.Namespace != namespace.EmptyName {
+		var err error
+		namespaceID, err = s.namespaceRegistry.GetNamespaceID(request.Namespace)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	queryConverter, err := s.newQueryConverter(
+		request.Namespace,
+		nil, // chasmMapper
+		chasm.UnspecifiedArchetypeID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	queryConverter.WithDisableDefaultNamespaceDivision()
+
+	p, err := s.buildSearchParametersInternal(
+		&searchParametersInternal{
+			NamespaceName: request.Namespace,
+			NamespaceID:   namespaceID,
+			Query:         request.Query,
+			PageSize:      request.PageSize,
+			NextPageToken: request.NextPageToken,
+			ChasmMapper:   nil,
+			ArchetypeID:   chasm.UnspecifiedArchetypeID,
+		},
+		queryConverter,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	searchResult, err := s.esClient.Search(ctx, p)
+	if err != nil {
+		return nil, ConvertElasticsearchClientError(
+			metrics.VisibilityPersistenceListExecutionsScope,
+			err,
+			s.logger,
+		)
+	}
+
+	return s.GetListWorkflowExecutionsResponse(searchResult, request.PageSize, nil)
+}
+
+// CountExecutions implements [store.AdminVisibilityStore].
+func (s *VisibilityStore) CountExecutions(
+	ctx context.Context,
+	request *manager.AdminCountExecutionsRequest,
+) (*store.InternalCountExecutionsResponse, error) {
+	namespaceID := namespace.EmptyID
+	if request.Namespace != namespace.EmptyName {
+		var err error
+		namespaceID, err = s.namespaceRegistry.GetNamespaceID(request.Namespace)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	queryConverter, err := s.newQueryConverter(
+		request.Namespace,
+		nil, // chasmMapper
+		chasm.UnspecifiedArchetypeID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	queryConverter.WithDisableDefaultNamespaceDivision()
+
+	queryParams, err := s.convertQuery(namespaceID, queryConverter, request.Query)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(queryParams.GroupBy) > 0 {
+		return s.countGroupByExecutions(
+			ctx,
+			queryParams,
+			nil,
+			metrics.VisibilityPersistenceCountExecutionsScope,
+		)
+	}
+
+	count, err := s.esClient.Count(ctx, s.index, queryParams.Query)
+	if err != nil {
+		return nil, ConvertElasticsearchClientError(
+			metrics.VisibilityPersistenceCountExecutionsScope,
+			err,
+			s.logger,
+		)
+	}
+
+	return &store.InternalCountExecutionsResponse{Count: count}, nil
 }

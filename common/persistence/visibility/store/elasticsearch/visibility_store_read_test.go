@@ -45,6 +45,7 @@ type (
 		mockProcessor                      *MockProcessor
 		mockMetricsHandler                 *metrics.MockHandler
 		mockSearchAttributesMapperProvider *searchattribute.MockMapperProvider
+		mockNamespaceRegistry              *namespace.MockRegistry
 		chasmRegistry                      *chasm.Registry
 	}
 
@@ -137,6 +138,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.mockProcessor = NewMockProcessor(s.controller)
 	s.mockESClient = client.NewMockClient(s.controller)
 	s.mockSearchAttributesMapperProvider = searchattribute.NewMockMapperProvider(s.controller)
+	s.mockNamespaceRegistry = namespace.NewMockRegistry(s.controller)
 
 	// Setup CHASM registry for tests
 	library := chasm.NewMockLibrary(s.controller)
@@ -164,6 +166,7 @@ func (s *ESVisibilitySuite) SetupTest() {
 		index:                          testIndex,
 		searchAttributesProvider:       searchattribute.NewTestEsProvider(),
 		searchAttributesMapperProvider: s.mockSearchAttributesMapperProvider,
+		namespaceRegistry:              s.mockNamespaceRegistry,
 		chasmRegistry:                  s.chasmRegistry,
 		processor:                      s.mockProcessor,
 		processorAckTimeout:            esProcessorAckTimeout,
@@ -220,7 +223,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersInternal() {
 	// test for open
 	request.Query = `WorkflowId="guid-2208"`
 	filterQuery = elastic.NewTermQuery(sadefs.WorkflowID, "guid-2208")
-	boolQuery := elastic.NewBoolQuery().Filter(
+	boolQuery := newBoolQuery().Filter(
 		matchNamespaceQuery,
 		newBoolQuery().Filter(filterQuery).MustNot(namespaceDivisionExists),
 	)
@@ -245,7 +248,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersInternal() {
 	request.Query = `WorkflowId="guid-2208" and TemporalNamespaceDivision="hidden-stuff"`
 	// note namespace division appears in the filterQuery, not the boolQuery like the negative version
 	filterQuery = newBoolQuery().Filter(elastic.NewTermQuery(sadefs.WorkflowID, "guid-2208"), matchNSDivision)
-	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery, filterQuery)
+	boolQuery = newBoolQuery().Filter(matchNamespaceQuery, filterQuery)
 	queryConverter, err = s.visibilityStore.newQueryConverter(
 		testNamespace,
 		nil, // chasmMapper
@@ -265,7 +268,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersInternal() {
 
 	// test custom sort
 	request.Query = `Order bY WorkflowId`
-	boolQuery = elastic.NewBoolQuery().Filter(matchNamespaceQuery, namespaceDivisionIsNull)
+	boolQuery = newBoolQuery().Filter(matchNamespaceQuery, namespaceDivisionIsNull)
 	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(request.NamespaceName.String())).
 		Return(s.mockMetricsHandler).AnyTimes()
 	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchCustomOrderByClauseCount.Name()).
@@ -319,7 +322,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersInternal_DisableOrderByClau
 	// test valid query
 	request.Query = `WorkflowId="guid-2208"`
 	filterQuery := elastic.NewTermQuery(sadefs.WorkflowID, "guid-2208")
-	boolQuery := elastic.NewBoolQuery().Filter(
+	boolQuery := newBoolQuery().Filter(
 		matchNamespaceQuery,
 		newBoolQuery().Filter(filterQuery).MustNot(namespaceDivisionExists),
 	)
@@ -390,7 +393,7 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 			name:  "empty",
 			query: "",
 			want: &esQueryParams{
-				Query: elastic.NewBoolQuery().Filter(
+				Query: newBoolQuery().Filter(
 					namespaceIDQuery,
 					namespaceDivisionIsNull,
 				),
@@ -402,7 +405,7 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 			name:  "one comparison",
 			query: "WorkflowId = 'wid'",
 			want: &esQueryParams{
-				Query: elastic.NewBoolQuery().Filter(
+				Query: newBoolQuery().Filter(
 					namespaceIDQuery,
 					newBoolQuery().
 						Filter(elastic.NewTermQuery(sadefs.WorkflowID, "wid")).
@@ -416,7 +419,7 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 			name:  "custom order by",
 			query: "WorkflowId = 'wid' ORDER BY WorkflowId",
 			want: &esQueryParams{
-				Query: elastic.NewBoolQuery().Filter(
+				Query: newBoolQuery().Filter(
 					namespaceIDQuery,
 					newBoolQuery().
 						Filter(elastic.NewTermQuery(sadefs.WorkflowID, "wid")).
@@ -430,7 +433,7 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 			name:  "group by",
 			query: "WorkflowId = 'wid' GROUP BY ExecutionStatus",
 			want: &esQueryParams{
-				Query: elastic.NewBoolQuery().Filter(
+				Query: newBoolQuery().Filter(
 					namespaceIDQuery,
 					newBoolQuery().
 						Filter(elastic.NewTermQuery(sadefs.WorkflowID, "wid")).
@@ -444,7 +447,7 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 			name:  "custom search attributes",
 			query: "WorkflowId = 'wid' AND AliasForCustomKeywordField = 'foo' OR AliasForCustomIntField = 123 ORDER BY AliasForCustomKeywordField",
 			want: &esQueryParams{
-				Query: elastic.NewBoolQuery().Filter(
+				Query: newBoolQuery().Filter(
 					namespaceIDQuery,
 					newBoolQuery().
 						Filter(
@@ -609,63 +612,118 @@ func (s *ESVisibilitySuite) TestSerializePageToken() {
 
 func (s *ESVisibilitySuite) TestParseESDoc() {
 	saTypeMap := searchattribute.TestEsNameTypeMap()
-	docSource := []byte(`{"ExecutionStatus": "Running",
-          "NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
-          "HistoryLength": 29,
-          "StateTransitionCount": 10,
-          "VisibilityTaskKey": "7-619",
-          "RunId": "e481009e-14b3-45ae-91af-dce6e2a88365",
-          "StartTime": "2021-06-11T15:04:07.980-07:00",
-          "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
-          "WorkflowType": "TestWorkflowExecute"}`)
-	// test for open
-	info, err := s.visibilityStore.ParseESDoc("", docSource, saTypeMap, nil)
-	s.NoError(err)
-	s.NotNil(info)
-	s.Equal("6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256", info.WorkflowID)
-	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", info.RunID)
-	s.Equal("TestWorkflowExecute", info.TypeName)
-	s.Equal(int64(10), info.StateTransitionCount)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.Status)
-	expectedStartTime, err := time.Parse(time.RFC3339Nano, "2021-06-11T15:04:07.980-07:00")
-	s.NoError(err)
-	s.Equal(expectedStartTime, info.StartTime)
-	s.Nil(info.SearchAttributes)
 
-	// test for close
-	docSource = []byte(`{"ExecutionStatus": "Completed",
-          "CloseTime": "2021-06-11T16:04:07Z",
-          "NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
-          "HistoryLength": 29,
-          "StateTransitionCount": 20,
-          "VisibilityTaskKey": "7-619",
-          "RunId": "e481009e-14b3-45ae-91af-dce6e2a88365",
-          "StartTime": "2021-06-11T15:04:07.980-07:00",
-          "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
-          "WorkflowType": "TestWorkflowExecute"}`)
-	info, err = s.visibilityStore.ParseESDoc("", docSource, saTypeMap, nil)
+	startTime, err := time.Parse(time.RFC3339Nano, "2021-06-11T15:04:07.980-07:00")
 	s.NoError(err)
-	s.NotNil(info)
-	s.Equal("6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256", info.WorkflowID)
-	s.Equal("e481009e-14b3-45ae-91af-dce6e2a88365", info.RunID)
-	s.Equal("TestWorkflowExecute", info.TypeName)
-	s.Equal(int64(20), info.StateTransitionCount)
-	expectedStartTime, err = time.Parse(time.RFC3339Nano, "2021-06-11T15:04:07.980-07:00")
+	closeTime, err := time.Parse(time.RFC3339Nano, "2021-06-11T16:04:07Z")
 	s.NoError(err)
-	expectedCloseTime, err := time.Parse(time.RFC3339Nano, "2021-06-11T16:04:07Z")
-	s.NoError(err)
-	s.Equal(expectedStartTime, info.StartTime)
-	s.Equal(expectedCloseTime, info.CloseTime)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, info.Status)
-	s.Equal(int64(29), info.HistoryLength)
-	s.Nil(info.SearchAttributes)
 
-	// test for error case
-	docSource = []byte(`corrupted data`)
-	s.mockMetricsHandler.EXPECT().Counter(metrics.ElasticsearchDocumentParseFailuresCount.Name()).Return(metrics.NoopCounterMetricFunc)
-	info, err = s.visibilityStore.ParseESDoc("", docSource, saTypeMap, nil)
-	s.Error(err)
-	s.Nil(info)
+	testCases := []struct {
+		name      string
+		docSource string
+		want      *store.InternalExecutionInfo
+		// wantParseFailure is true when the document parse failure metric is expected.
+		wantParseFailure bool
+		err              string
+	}{
+		{
+			name: "running execution",
+			docSource: `{"ExecutionStatus": "Running",
+              "NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
+              "HistoryLength": 29,
+              "StateTransitionCount": 10,
+              "VisibilityTaskKey": "7-619",
+              "RunId": "e481009e-14b3-45ae-91af-dce6e2a88365",
+              "StartTime": "2021-06-11T15:04:07.980-07:00",
+              "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
+              "WorkflowType": "TestWorkflowExecute"}`,
+			want: &store.InternalExecutionInfo{
+				NamespaceID:          "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
+				WorkflowID:           "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
+				RunID:                "e481009e-14b3-45ae-91af-dce6e2a88365",
+				TypeName:             "TestWorkflowExecute",
+				StartTime:            startTime,
+				Status:               enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				HistoryLength:        29,
+				StateTransitionCount: 10,
+			},
+		},
+
+		{
+			name: "closed execution",
+			docSource: `{"ExecutionStatus": "Completed",
+              "CloseTime": "2021-06-11T16:04:07Z",
+              "NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
+              "HistoryLength": 29,
+              "StateTransitionCount": 20,
+              "VisibilityTaskKey": "7-619",
+              "RunId": "e481009e-14b3-45ae-91af-dce6e2a88365",
+              "StartTime": "2021-06-11T15:04:07.980-07:00",
+              "WorkflowId": "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
+              "WorkflowType": "TestWorkflowExecute"}`,
+			want: &store.InternalExecutionInfo{
+				NamespaceID:          "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
+				WorkflowID:           "6bfbc1e5-6ce4-4e22-bbfb-e0faa9a7a604-1-2256",
+				RunID:                "e481009e-14b3-45ae-91af-dce6e2a88365",
+				TypeName:             "TestWorkflowExecute",
+				StartTime:            startTime,
+				CloseTime:            closeTime,
+				Status:               enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				HistoryLength:        29,
+				StateTransitionCount: 20,
+			},
+		},
+
+		{
+			// NamespaceId is a reserved field name rather than a search attribute, so it
+			// is not in the search attribute type map. The admin visibility APIs need it
+			// to resolve the namespace of each execution.
+			name:      "namespace id is not a search attribute",
+			docSource: `{"NamespaceId": "bfd5c907-f899-4baf-a7b2-2ab85e623ebd"}`,
+			want: &store.InternalExecutionInfo{
+				NamespaceID: "bfd5c907-f899-4baf-a7b2-2ab85e623ebd",
+			},
+		},
+
+		{
+			name:      "without namespace id",
+			docSource: `{"WorkflowId": "test-workflow-id"}`,
+			want:      &store.InternalExecutionInfo{WorkflowID: "test-workflow-id"},
+		},
+
+		{
+			name:             "fail namespace id of unexpected type",
+			docSource:        `{"NamespaceId": 123}`,
+			wantParseFailure: true,
+			err:              "unexpected JSON field type",
+		},
+
+		{
+			name:             "fail corrupted document",
+			docSource:        `corrupted data`,
+			wantParseFailure: true,
+			err:              "unable to unmarshal JSON",
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			if tc.wantParseFailure {
+				s.mockMetricsHandler.EXPECT().
+					Counter(metrics.ElasticsearchDocumentParseFailuresCount.Name()).
+					Return(metrics.NoopCounterMetricFunc)
+			}
+
+			info, err := s.visibilityStore.ParseESDoc("", []byte(tc.docSource), saTypeMap, nil)
+			if tc.err != "" {
+				s.ErrorContains(err, tc.err)
+				s.Nil(info)
+			} else {
+				s.NoError(err)
+				s.Equal(tc.want, info)
+			}
+		})
+	}
 }
 
 func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes() {
@@ -747,7 +805,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 		func(ctx context.Context, p *client.SearchParameters) (*elastic.SearchResult, error) {
 			s.Equal(testIndex, p.Index)
 			s.Equal(
-				elastic.NewBoolQuery().Filter(
+				newBoolQuery().Filter(
 					elastic.NewTermQuery(sadefs.NamespaceID, testNamespaceID.String()),
 					newBoolQuery().
 						Filter(elastic.NewTermQuery("ExecutionStatus", "Terminated")).
@@ -850,7 +908,7 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 	s.mockESClient.EXPECT().Count(gomock.Any(), testIndex, gomock.Any()).DoAndReturn(
 		func(ctx context.Context, index string, query elastic.Query) (int64, error) {
 			s.Equal(
-				elastic.NewBoolQuery().Filter(
+				newBoolQuery().Filter(
 					elastic.NewTermQuery(sadefs.NamespaceID, testNamespaceID.String()),
 					newBoolQuery().
 						Filter(elastic.NewTermQuery("ExecutionStatus", "Terminated")).
@@ -874,7 +932,7 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 	s.mockESClient.EXPECT().Count(gomock.Any(), testIndex, gomock.Any()).DoAndReturn(
 		func(ctx context.Context, index string, query elastic.Query) (int64, error) {
 			s.Equal(
-				elastic.NewBoolQuery().Filter(
+				newBoolQuery().Filter(
 					elastic.NewTermQuery(sadefs.NamespaceID, testNamespaceID.String()),
 					newBoolQuery().
 						Filter(elastic.NewTermQuery("ExecutionStatus", "Terminated")).
@@ -910,7 +968,7 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions_GroupBy() {
 		CountGroupBy(
 			gomock.Any(),
 			testIndex,
-			elastic.NewBoolQuery().
+			newBoolQuery().
 				Filter(
 					elastic.NewTermQuery(sadefs.NamespaceID, testNamespaceID.String()),
 					namespaceDivisionIsNull,
@@ -956,7 +1014,7 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions_GroupBy() {
 		CountGroupBy(
 			gomock.Any(),
 			testIndex,
-			elastic.NewBoolQuery().
+			newBoolQuery().
 				Filter(
 					elastic.NewTermQuery(sadefs.NamespaceID, testNamespaceID.String()),
 				),
@@ -1296,7 +1354,7 @@ func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
 	for _, tc := range testCases {
 		s.T().Run(tc.name, func(t *testing.T) {
 			searchParams := &esQueryParams{
-				Query: elastic.NewBoolQuery().
+				Query: newBoolQuery().
 					Filter(
 						elastic.NewTermQuery(sadefs.NamespaceID, testNamespaceID.String()),
 						namespaceDivisionIsNull,
@@ -1307,7 +1365,7 @@ func (s *ESVisibilitySuite) TestCountGroupByWorkflowExecutions() {
 				CountGroupBy(
 					gomock.Any(),
 					testIndex,
-					elastic.NewBoolQuery().
+					newBoolQuery().
 						Filter(
 							elastic.NewTermQuery(sadefs.NamespaceID, testNamespaceID.String()),
 							namespaceDivisionIsNull,
@@ -1369,92 +1427,146 @@ func (s *ESVisibilitySuite) TestGetWorkflowExecution() {
 func (s *ESVisibilitySuite) TestProcessPageToken() {
 	closeTime := time.Now().UTC()
 	startTime := closeTime.Add(-1 * time.Minute)
-	baseQuery := elastic.NewBoolQuery().
-		Filter(elastic.NewTermQuery(sadefs.NamespaceID, testNamespace.String()))
+	// A fresh query per use: processPageToken mutates the query in place, so sharing one
+	// instance between the input and the expectation would make the comparison vacuous.
+	baseQuery := func() *boolQuery {
+		return newBoolQuery().
+			Filter(elastic.NewTermQuery(sadefs.NamespaceID, testNamespace.String()))
+	}
+	// Pagination clauses appended for a page token at closeTime/startTime.
+	paginationClauses := []elastic.Query{
+		elastic.NewBoolQuery().Filter(
+			elastic.NewRangeQuery(sadefs.CloseTime).Lt(closeTime.Format(paginationDatetimeFormat)),
+		),
+		elastic.NewBoolQuery().Filter(
+			elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(paginationDatetimeFormat)),
+			elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(paginationDatetimeFormat)),
+		),
+	}
+	defaultSorterPageToken := func() *visibilityPageToken {
+		return &visibilityPageToken{
+			SearchAfter: []any{
+				json.Number(fmt.Sprintf("%d", closeTime.UnixNano())),
+				json.Number(fmt.Sprintf("%d", startTime.UnixNano())),
+			},
+		}
+	}
 
 	testCases := []struct {
 		name             string
 		manualPagination bool
 		sorter           []elastic.Sorter
-		pageToken        *visibilityPageToken
-		resSearchAfter   []any
-		resQuery         elastic.Query
-		resError         error
+		// query is the query processPageToken starts from. A nil query means match-all,
+		// which is what the admin APIs produce for a request with no namespace and no
+		// query to filter on.
+		query          elastic.Query
+		pageToken      *visibilityPageToken
+		resSearchAfter []any
+		resQuery       elastic.Query
+		resError       error
 	}{
 		{
 			name:             "nil page token",
 			manualPagination: false,
 			sorter:           docSorter,
+			query:            baseQuery(),
 			pageToken:        nil,
 			resSearchAfter:   nil,
-			resQuery:         baseQuery,
+			resQuery:         baseQuery(),
 			resError:         nil,
 		},
 		{
 			name:             "empty page token",
 			manualPagination: false,
 			sorter:           docSorter,
+			query:            baseQuery(),
 			pageToken:        &visibilityPageToken{SearchAfter: []any{}},
 			resSearchAfter:   nil,
-			resQuery:         baseQuery,
+			resQuery:         baseQuery(),
 			resError:         nil,
 		},
 		{
 			name:             "page token doesn't match sorter size",
 			manualPagination: false,
 			sorter:           docSorter,
+			query:            baseQuery(),
 			pageToken:        &visibilityPageToken{SearchAfter: []any{"foo", "bar"}},
 			resSearchAfter:   nil,
-			resQuery:         baseQuery,
+			resQuery:         baseQuery(),
 			resError:         serviceerror.NewInvalidArgument("invalid page token for given sort fields: expected 1 fields, got 2"),
 		},
 		{
 			name:             "not using default sorter",
 			manualPagination: false,
 			sorter:           docSorter,
+			query:            baseQuery(),
 			pageToken:        &visibilityPageToken{SearchAfter: []any{123}},
 			resSearchAfter:   []any{123},
-			resQuery:         baseQuery,
+			resQuery:         baseQuery(),
 			resError:         nil,
 		},
 		{
 			name:             "default sorter without manual pagination",
 			manualPagination: false,
 			sorter:           defaultSorter,
-			pageToken: &visibilityPageToken{
-				SearchAfter: []any{
-					json.Number(fmt.Sprintf("%d", closeTime.UnixNano())),
-					json.Number(fmt.Sprintf("%d", startTime.UnixNano())),
-				},
-			},
-			resSearchAfter: []any{
-				json.Number(fmt.Sprintf("%d", closeTime.UnixNano())),
-				json.Number(fmt.Sprintf("%d", startTime.UnixNano())),
-			},
-			resQuery: baseQuery,
-			resError: nil,
+			query:            baseQuery(),
+			pageToken:        defaultSorterPageToken(),
+			resSearchAfter:   defaultSorterPageToken().SearchAfter,
+			resQuery:         baseQuery(),
+			resError:         nil,
 		},
 		{
 			name:             "default sorter with manual pagination",
 			manualPagination: true,
 			sorter:           defaultSorter,
-			pageToken: &visibilityPageToken{
-				SearchAfter: []any{
-					json.Number(fmt.Sprintf("%d", closeTime.UnixNano())),
-					json.Number(fmt.Sprintf("%d", startTime.UnixNano())),
-				},
-			},
-			resSearchAfter: nil,
-			resQuery: baseQuery.MinimumNumberShouldMatch(1).Should(
-				elastic.NewBoolQuery().Filter(
-					elastic.NewRangeQuery(sadefs.CloseTime).Lt(closeTime.Format(time.RFC3339Nano)),
-				),
-				elastic.NewBoolQuery().Filter(
-					elastic.NewTermQuery(sadefs.CloseTime, closeTime.Format(time.RFC3339Nano)),
-					elastic.NewRangeQuery(sadefs.StartTime).Lt(startTime.Format(time.RFC3339Nano)),
-				),
-			),
+			query:            baseQuery(),
+			pageToken:        defaultSorterPageToken(),
+			resSearchAfter:   nil,
+			resQuery: baseQuery().
+				Should(paginationClauses...).
+				MinimumNumberShouldMatch(1),
 			resError: nil,
+		},
+		{
+			// A request with no namespace and no query converts to a nil (match-all)
+			// query. Manual pagination must still have a bool query to append its
+			// clauses to, so processPageToken creates one.
+			name:             "no query with manual pagination",
+			manualPagination: true,
+			sorter:           defaultSorter,
+			query:            nil,
+			pageToken:        defaultSorterPageToken(),
+			resSearchAfter:   nil,
+			resQuery: newBoolQuery().
+				Should(paginationClauses...).
+				MinimumNumberShouldMatch(1),
+			resError: nil,
+		},
+		{
+			// Without manual pagination the page token is passed to Elasticsearch as
+			// search_after, so a nil query must be left as match-all.
+			name:             "no query without manual pagination",
+			manualPagination: false,
+			sorter:           defaultSorter,
+			query:            nil,
+			pageToken:        defaultSorterPageToken(),
+			resSearchAfter:   defaultSorterPageToken().SearchAfter,
+			resQuery:         nil,
+			resError:         nil,
+		},
+		{
+			// Only a nil query is created on demand; any other non-bool query is a bug
+			// in the caller, since the pagination clauses cannot be attached to it.
+			name:             "non-bool query with manual pagination",
+			manualPagination: true,
+			sorter:           defaultSorter,
+			query:            elastic.NewTermQuery(sadefs.NamespaceID, testNamespace.String()),
+			pageToken:        defaultSorterPageToken(),
+			resSearchAfter:   nil,
+			resQuery:         elastic.NewTermQuery(sadefs.NamespaceID, testNamespace.String()),
+			resError: serviceerror.NewInternal(
+				"unexpected query type: expected *elasticsearch.boolQuery, got *elastic.TermQuery",
+			),
 		},
 	}
 
@@ -1474,7 +1586,7 @@ func (s *ESVisibilitySuite) TestProcessPageToken() {
 			}
 			params := &client.SearchParameters{
 				Index:  testIndex,
-				Query:  baseQuery,
+				Query:  tc.query,
 				Sorter: tc.sorter,
 			}
 			err := visibilityStore.processPageToken(params, tc.pageToken, testNamespace)
@@ -1801,7 +1913,7 @@ func (s *ESVisibilitySuite) Test_convertQuery_ChasmMapper() {
 			name:  "chasm bool attribute",
 			query: "ChasmCompleted = true",
 			want: &esQueryParams{
-				Query: elastic.NewBoolQuery().Filter(
+				Query: newBoolQuery().Filter(
 					namespaceIDQuery,
 					newBoolQuery().
 						Filter(elastic.NewTermQuery("TemporalBool01", true)).
@@ -1815,7 +1927,7 @@ func (s *ESVisibilitySuite) Test_convertQuery_ChasmMapper() {
 			name:  "chasm keyword attribute",
 			query: "ChasmStatus = 'active'",
 			want: &esQueryParams{
-				Query: elastic.NewBoolQuery().Filter(
+				Query: newBoolQuery().Filter(
 					namespaceIDQuery,
 					newBoolQuery().
 						Filter(elastic.NewTermQuery("TemporalKeyword01", "active")).
@@ -1829,7 +1941,7 @@ func (s *ESVisibilitySuite) Test_convertQuery_ChasmMapper() {
 			name:  "chasm int attribute",
 			query: "ChasmCount = 42",
 			want: &esQueryParams{
-				Query: elastic.NewBoolQuery().Filter(
+				Query: newBoolQuery().Filter(
 					namespaceIDQuery,
 					newBoolQuery().
 						Filter(elastic.NewTermQuery("TemporalInt01", int64(42))).
@@ -1843,7 +1955,7 @@ func (s *ESVisibilitySuite) Test_convertQuery_ChasmMapper() {
 			name:  "chasm attribute with order by",
 			query: "ChasmCompleted = true ORDER BY ChasmStatus",
 			want: &esQueryParams{
-				Query: elastic.NewBoolQuery().Filter(
+				Query: newBoolQuery().Filter(
 					namespaceIDQuery,
 					newBoolQuery().
 						Filter(elastic.NewTermQuery("TemporalBool01", true)).
@@ -1857,7 +1969,7 @@ func (s *ESVisibilitySuite) Test_convertQuery_ChasmMapper() {
 			name:  "chasm and regular attribute",
 			query: "ChasmStatus = 'active' AND WorkflowId = 'wid'",
 			want: &esQueryParams{
-				Query: elastic.NewBoolQuery().Filter(
+				Query: newBoolQuery().Filter(
 					namespaceIDQuery,
 					newBoolQuery().
 						Filter(
@@ -1923,7 +2035,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersInternal_ChasmMapper() {
 
 	request.Query = `ChasmCompleted = true`
 	filterQuery := elastic.NewTermQuery("TemporalBool01", true)
-	boolQuery := elastic.NewBoolQuery().Filter(
+	boolQuery := newBoolQuery().Filter(
 		matchNamespaceQuery,
 		newBoolQuery().Filter(filterQuery).MustNot(namespaceDivisionExists),
 	)
@@ -1945,7 +2057,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersInternal_ChasmMapper() {
 
 	request.Query = `ChasmStatus = 'active' ORDER BY ChasmStatus`
 	filterQuery = elastic.NewTermQuery("TemporalKeyword01", "active")
-	boolQuery = elastic.NewBoolQuery().Filter(
+	boolQuery = newBoolQuery().Filter(
 		matchNamespaceQuery,
 		newBoolQuery().Filter(filterQuery).MustNot(namespaceDivisionExists),
 	)

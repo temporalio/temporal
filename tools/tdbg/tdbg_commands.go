@@ -71,6 +71,12 @@ func getCommands(
 			Subcommands: newAdminScheduleCommands(clientFactory),
 		},
 		{
+			Name:        "visibility",
+			Aliases:     []string{"vis"},
+			Usage:       "Run admin operation on visibility",
+			Subcommands: newAdminVisibilityCommands(clientFactory),
+		},
+		{
 			Name:        "decode",
 			Usage:       "Decode payload",
 			Subcommands: newDecodeCommands(taskBlobEncoder),
@@ -934,6 +940,52 @@ func getDLQFlags(taskCategoryRegistry tasks.TaskCategoryRegistry) []cli.Flag {
 		&cli.StringFlag{
 			Name:  FlagTargetCluster,
 			Usage: "Target cluster, v2 only. If not provided, current cluster is used.",
+		},
+	}
+}
+
+func newAdminVisibilityCommands(clientFactory ClientFactory) []*cli.Command {
+	return []*cli.Command{
+		{
+			Name:  "list",
+			Usage: "List executions.",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:    FlagVisibilityQuery,
+					Aliases: FlagVisibilityQueryAlias,
+					Usage:   "Visibility query to select workflows",
+				},
+				&cli.IntFlag{
+					Name:  FlagPageSize,
+					Value: 10,
+					Usage: "Result page size",
+				},
+				&cli.BoolFlag{
+					Name:  FlagMore,
+					Usage: "List more pages, default is to list one page of default page size 10",
+				},
+				&cli.BoolFlag{
+					Name:  FlagPrintJSON,
+					Usage: "Print in raw json format",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminListExecutions(c, clientFactory)
+			},
+		},
+		{
+			Name:  "count",
+			Usage: "Count executions.",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:    FlagVisibilityQuery,
+					Aliases: FlagVisibilityQueryAlias,
+					Usage:   "Visibility query to select workflows",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminCountExecutions(c, clientFactory)
+			},
 		},
 	}
 }

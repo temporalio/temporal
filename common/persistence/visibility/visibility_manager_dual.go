@@ -29,6 +29,7 @@ type (
 )
 
 var _ manager.VisibilityManager = (*VisibilityManagerDual)(nil)
+var _ manager.AdminVisibilityManager = (*VisibilityManagerDual)(nil)
 
 // NewVisibilityManagerDual create a visibility manager that operate on multiple manager
 // implementations based on dynamic config.
@@ -216,6 +217,46 @@ func (v *VisibilityManagerDual) AddSearchAttributes(
 		return err
 	}
 	return v.secondaryVisibilityManager.AddSearchAttributes(ctx, request)
+}
+
+// ListExecutions implements [manager.AdminVisibilityManager].
+func (v *VisibilityManagerDual) ListExecutions(
+	ctx context.Context,
+	request *manager.AdminListExecutionsRequest,
+) (*manager.AdminListExecutionsResponse, error) {
+	// If namespace is not set in the request (ie., x-namespace request), and dual
+	// visibility is set, the read manager will select according to the default
+	// value of the dynamic config system.enableReadFromSecondaryVisibility since
+	// it will be evaluated against an empty string.
+	// This might produce unexpected results if a namespace is expected to read
+	// from secondary store, and the default value is to read from primary store
+	// (or vice-versa).
+	readManager := v.managerSelector.readManager(request.Namespace)
+	adminReadManager, ok := readManager.(manager.AdminVisibilityManager)
+	if !ok {
+		return nil, manager.ErrNotAdminVisibilityManager
+	}
+	return adminReadManager.ListExecutions(ctx, request)
+}
+
+// CountExecutions implements [manager.AdminVisibilityManager].
+func (v *VisibilityManagerDual) CountExecutions(
+	ctx context.Context,
+	request *manager.AdminCountExecutionsRequest,
+) (*manager.AdminCountExecutionsResponse, error) {
+	// If namespace is not set in the request (ie., x-namespace request), and dual
+	// visibility is set, the read manager will select according to the default
+	// value of the dynamic config system.enableReadFromSecondaryVisibility since
+	// it will be evaluated against an empty string.
+	// This might produce unexpected results if a namespace is expected to read
+	// from secondary store, and the default value is to read from primary store
+	// (or vice-versa).
+	readManager := v.managerSelector.readManager(request.Namespace)
+	adminReadManager, ok := readManager.(manager.AdminVisibilityManager)
+	if !ok {
+		return nil, manager.ErrNotAdminVisibilityManager
+	}
+	return adminReadManager.CountExecutions(ctx, request)
 }
 
 func dualWriteWrapper[RequestT any](

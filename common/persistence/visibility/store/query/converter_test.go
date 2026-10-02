@@ -115,7 +115,7 @@ func TestQueryConverter_Convert(t *testing.T) {
 			// applied and SeenNamespaceDivision() is expected to be true.
 			name:                  "success group by TemporalNamespaceDivision suppresses default filter",
 			in:                    "group by TemporalNamespaceDivision",
-			mockBuildFinalAndExpr: true,
+			mockBuildFinalAndExpr: false,
 			mockBuildFinalAndRes:  nil,
 		},
 
@@ -157,19 +157,17 @@ func TestQueryConverter_Convert(t *testing.T) {
 					Return(e2, nil)
 				storeQCMock.EXPECT().BuildAndExpr(e1, e2).Return(e1e2, nil)
 			},
-			mockBuildFinalAndExpr: true,
-			mockBuildFinalAndRes: &sqlparser.ParenExpr{
-				Expr: &sqlparser.AndExpr{
-					Left: &sqlparser.ComparisonExpr{
-						Operator: sqlparser.EqualStr,
-						Left:     keywordCol,
-						Right:    NewUnsafeSQLString("foo"),
-					},
-					Right: &sqlparser.ComparisonExpr{
-						Operator: sqlparser.EqualStr,
-						Left:     NamespaceDivisionSAColumn(),
-						Right:    NewUnsafeSQLString("bar"),
-					},
+			mockBuildFinalAndExpr: false,
+			mockBuildFinalAndRes: &sqlparser.AndExpr{
+				Left: &sqlparser.ComparisonExpr{
+					Operator: sqlparser.EqualStr,
+					Left:     keywordCol,
+					Right:    NewUnsafeSQLString("foo"),
+				},
+				Right: &sqlparser.ComparisonExpr{
+					Operator: sqlparser.EqualStr,
+					Left:     NamespaceDivisionSAColumn(),
+					Right:    NewUnsafeSQLString("bar"),
 				},
 			},
 		},
@@ -271,6 +269,88 @@ func TestQueryConverter_Convert(t *testing.T) {
 					r.True(queryConverter.SeenNamespaceDivision())
 				}
 			}
+		})
+	}
+}
+
+// TestQueryConverter_Convert_DisableDefaultNamespaceDivision covers
+// WithDisableDefaultNamespaceDivision, used by queries that span all namespaces (admin
+// visibility APIs) and must not be narrowed to the default namespace division. The store
+// converter mocks have no expectation for ConvertIsExpr/BuildAndExpr, so gomock fails the
+// test if the default filter is built or applied.
+func TestQueryConverter_Convert_DisableDefaultNamespaceDivision(t *testing.T) {
+	t.Parallel()
+
+	keywordCol := NewSAColumn(
+		"AliasForKeyword01",
+		"Keyword01",
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	)
+	keywordExpr := &sqlparser.ComparisonExpr{
+		Operator: sqlparser.EqualStr,
+		Left:     keywordCol,
+		Right:    NewUnsafeSQLString("foo"),
+	}
+	nsDivisionExpr := &sqlparser.ComparisonExpr{
+		Operator: sqlparser.EqualStr,
+		Left:     NamespaceDivisionSAColumn(),
+		Right:    NewUnsafeSQLString("bar"),
+	}
+
+	testCases := []struct {
+		name                  string
+		in                    string
+		setupMocks            func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr])
+		out                   sqlparser.Expr
+		seenNamespaceDivision bool
+	}{
+		{
+			name: "success empty",
+			in:   "",
+			out:  nil,
+		},
+
+		{
+			name: "success query is not wrapped",
+			in:   "AliasForKeyword01 = 'foo'",
+			setupMocks: func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr]) {
+				storeQCMock.EXPECT().
+					ConvertKeywordComparisonExpr(sqlparser.EqualStr, keywordCol, "foo").
+					Return(keywordExpr, nil)
+			},
+			out: keywordExpr,
+		},
+
+		{
+			// An explicit namespace division filter is still honored.
+			name: "success explicit namespace division",
+			in:   "TemporalNamespaceDivision = 'bar'",
+			setupMocks: func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr]) {
+				storeQCMock.EXPECT().
+					ConvertKeywordComparisonExpr(sqlparser.EqualStr, NamespaceDivisionSAColumn(), "bar").
+					Return(nsDivisionExpr, nil)
+			},
+			out:                   nsDivisionExpr,
+			seenNamespaceDivision: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			ctrl := gomock.NewController(t)
+			storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
+			queryConverter := newTestQueryConverter(storeQCMock).
+				WithDisableDefaultNamespaceDivision()
+
+			if tc.setupMocks != nil {
+				tc.setupMocks(storeQCMock)
+			}
+
+			out, err := queryConverter.Convert(tc.in)
+			r.NoError(err)
+			r.Equal(tc.out, out.QueryExpr)
+			r.Equal(tc.seenNamespaceDivision, queryConverter.SeenNamespaceDivision())
 		})
 	}
 }

@@ -62,16 +62,17 @@ type (
 
 		// internal services clients
 
-		SDKClientFactory     *sdk.MockClientFactory
-		FrontendClient       *workflowservicemock.MockWorkflowServiceClient
-		MatchingClient       *matchingservicemock.MockMatchingServiceClient
-		HistoryClient        *historyservicemock.MockHistoryServiceClient
-		RemoteAdminClient    *adminservicemock.MockAdminServiceClient
-		RemoteFrontendClient *workflowservicemock.MockWorkflowServiceClient
-		ClientBean           *client.MockBean
-		ClientFactory        *client.MockFactory
-		ESClient             *esclient.MockClient
-		VisibilityManager    *manager.MockVisibilityManager
+		SDKClientFactory       *sdk.MockClientFactory
+		FrontendClient         *workflowservicemock.MockWorkflowServiceClient
+		MatchingClient         *matchingservicemock.MockMatchingServiceClient
+		HistoryClient          *historyservicemock.MockHistoryServiceClient
+		RemoteAdminClient      *adminservicemock.MockAdminServiceClient
+		RemoteFrontendClient   *workflowservicemock.MockWorkflowServiceClient
+		ClientBean             *client.MockBean
+		ClientFactory          *client.MockFactory
+		ESClient               *esclient.MockClient
+		VisibilityManager      *manager.MockVisibilityManager
+		AdminVisibilityManager *manager.MockAdminVisibilityManager
 
 		// persistence clients
 
@@ -164,16 +165,17 @@ func NewTest(controller *gomock.Controller, serviceName primitives.ServiceName) 
 
 		// internal services clients
 
-		SDKClientFactory:     sdk.NewMockClientFactory(controller),
-		FrontendClient:       frontendClient,
-		MatchingClient:       matchingClient,
-		HistoryClient:        historyClient,
-		RemoteAdminClient:    remoteAdminClient,
-		RemoteFrontendClient: remoteFrontendClient,
-		ClientBean:           clientBean,
-		ClientFactory:        clientFactory,
-		ESClient:             esclient.NewMockClient(controller),
-		VisibilityManager:    manager.NewMockVisibilityManager(controller),
+		SDKClientFactory:       sdk.NewMockClientFactory(controller),
+		FrontendClient:         frontendClient,
+		MatchingClient:         matchingClient,
+		HistoryClient:          historyClient,
+		RemoteAdminClient:      remoteAdminClient,
+		RemoteFrontendClient:   remoteFrontendClient,
+		ClientBean:             clientBean,
+		ClientFactory:          clientFactory,
+		ESClient:               esclient.NewMockClient(controller),
+		VisibilityManager:      manager.NewMockVisibilityManager(controller),
+		AdminVisibilityManager: manager.NewMockAdminVisibilityManager(controller),
 
 		// persistence clients
 

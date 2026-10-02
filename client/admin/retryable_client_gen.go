@@ -86,6 +86,21 @@ func (c *retryableClient) CloseShard(
 	return resp, err
 }
 
+func (c *retryableClient) CountExecutions(
+	ctx context.Context,
+	request *adminservice.CountExecutionsRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.CountExecutionsResponse, error) {
+	var resp *adminservice.CountExecutionsResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CountExecutions(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) DeepHealthCheck(
 	ctx context.Context,
 	request *adminservice.DeepHealthCheckRequest,
@@ -440,6 +455,21 @@ func (c *retryableClient) ListClusters(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.ListClusters(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) ListExecutions(
+	ctx context.Context,
+	request *adminservice.ListExecutionsRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListExecutionsResponse, error) {
+	var resp *adminservice.ListExecutionsResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.ListExecutions(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
