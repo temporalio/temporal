@@ -22,10 +22,10 @@ type (
 	// ConcurrentRequestLimitInterceptor intercepts requests to the server and enforces a limit on the number of
 	// requests that can be in-flight at any given time, according to the configured quotas.
 	ConcurrentRequestLimitInterceptor struct {
-		namespaceRegistry            namespace.Registry
-		logger                       log.Logger
-		quotaCalculator              calculator.NamespaceCalculator
-		internalPerNSQuotaCalculator calculator.NamespaceCalculator
+		namespaceRegistry       namespace.Registry
+		logger                  log.Logger
+		quotaCalculator         calculator.NamespaceCalculator
+		internalQuotaCalculator calculator.NamespaceCalculator
 		// tokens is a map of method name to the number of tokens that should be consumed for that method. If there is
 		// no entry for a method, then no tokens will be consumed, so the method will not be limited.
 		tokens map[string]int
@@ -67,12 +67,12 @@ func NewConcurrentRequestLimitInterceptor(
 	tokens map[string]int,
 ) *ConcurrentRequestLimitInterceptor {
 	return &ConcurrentRequestLimitInterceptor{
-		namespaceRegistry:            namespaceRegistry,
-		logger:                       logger,
-		quotaCalculator:              newNamespaceCountQuotaCalculator(memberCounter, logger, defaultQuotas),
-		internalPerNSQuotaCalculator: newNamespaceCountQuotaCalculator(memberCounter, logger, internalPerNSQuotas),
-		tokens:                       tokens,
-		activeTokensCount:            make(map[concurrentRequestCounterKey]*int32),
+		namespaceRegistry:       namespaceRegistry,
+		logger:                  logger,
+		quotaCalculator:         newNamespaceCountQuotaCalculator(memberCounter, logger, defaultQuotas),
+		internalQuotaCalculator: newNamespaceCountQuotaCalculator(memberCounter, logger, internalPerNSQuotas),
+		tokens:                  tokens,
+		activeTokensCount:       make(map[concurrentRequestCounterKey]*int32),
 	}
 }
 
@@ -133,7 +133,7 @@ func (ni *ConcurrentRequestLimitInterceptor) Allow(
 	internal := isInternalPerNSPoll(req)
 	quotaCalculator := ni.quotaCalculator
 	if internal {
-		quotaCalculator = ni.internalPerNSQuotaCalculator
+		quotaCalculator = ni.internalQuotaCalculator
 	}
 
 	counter := ni.counter(namespaceName, methodName, internal)
