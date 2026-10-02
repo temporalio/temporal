@@ -333,16 +333,22 @@ func (s *VersioningIntegSuite) TestCommitBuildID() {
 	s.Equal(float32(100), res.GetAssignmentRules()[0].GetRule().GetPercentageRamp().GetRampPercentage())
 
 	// recent versioned poller on wrong build ID --> failure
-	s.registerWorkflowAndPollVersionedTaskQueue(env, tq, "3", true)
+	w3 := s.registerWorkflowAndPollVersionedTaskQueue(env, tq, "3", true)
 	s.commitBuildID(env, tq, "2", false, cT, false)
+	w3.Stop()
 
 	// recent unversioned poller on build ID 2 --> failure
-	s.registerWorkflowAndPollVersionedTaskQueue(env, tq, "2", false)
+	w2u := s.registerWorkflowAndPollVersionedTaskQueue(env, tq, "2", false)
 	s.commitBuildID(env, tq, "2", false, cT, false)
+	w2u.Stop()
 
-	// recent versioned poller on build ID 2 --> success
-	s.registerWorkflowAndPollVersionedTaskQueue(env, tq, "2", true)
+	// recent versioned poller on build ID 2 --> success.
+	// Worker must be alive during commit: worker.Stop() calls ShutdownWorker
+	// which removes the poller from history, and commitBuildID requires a
+	// recent poller to be present.
+	w2v := s.registerWorkflowAndPollVersionedTaskQueue(env, tq, "2", true)
 	s.commitBuildID(env, tq, "2", false, cT, true)
+	w2v.Stop()
 	res = s.getVersioningRules(env, tq)
 	s.Len(res.GetAssignmentRules(), 1)
 	s.Empty(res.GetCompatibleRedirectRules())
@@ -4688,10 +4694,15 @@ func (s *VersioningIntegSuite) commitBuildID(
 	}
 }
 
+// registerWorkflowAndPollVersionedTaskQueue starts a worker that polls the
+// given task queue with the specified build ID. The caller owns the returned
+// worker and must call Stop() when done. This lets callers control the worker
+// lifetime — important because worker.Stop() triggers ShutdownWorker which
+// eagerly removes the poller from history.
 func (s *VersioningIntegSuite) registerWorkflowAndPollVersionedTaskQueue(
 	env *testcore.TestEnv,
 	tq, buildID string, useVersioning bool,
-) {
+) worker.Worker {
 	wf := func(ctx workflow.Context) (string, error) {
 		return "done!", nil
 	}
@@ -4703,10 +4714,10 @@ func (s *VersioningIntegSuite) registerWorkflowAndPollVersionedTaskQueue(
 	})
 	w1.RegisterWorkflow(wf)
 	s.NoError(w1.Start())
-	defer w1.Stop()
 
 	// wait for it to start polling
 	time.Sleep(200 * time.Millisecond) //nolint:forbidigo
+	return w1
 }
 
 func (s *VersioningIntegSuite) getBuildIDReachability(
