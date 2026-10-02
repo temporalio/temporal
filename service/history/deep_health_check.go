@@ -67,7 +67,7 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 	// persistence
 	checks = append(checks, healthcheck.Evaluate(
 		h.persistenceHealthSignal,
-		h.config.HealthCheckPersistenceSettings(), // TODO: use persistence settings
+		h.config.HealthCheckPersistenceSettings(),
 		healthcheck.Source{Service: primitives.HistoryService, Component: healthcheck.ComponentPersistence},
 	)...)
 
