@@ -20,6 +20,7 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/temporalnexus"
 	"go.temporal.io/server/api/matchingservice/v1"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
@@ -338,19 +339,26 @@ func (c *operationContext) enrichNexusOperationLogs(service, operation, requestI
 	c.logger = log.With(c.logger, tags...)
 }
 
-// parseNexusCaller returns log tags identifying the calling workflow, taken from the first of the given links that
-// parses as a workflow event link. Links that don't parse are skipped. Returns nil if no link parses, e.g. for callers
-// that aren't workflows.
+// parseNexusCaller returns log tags identifying the caller, taken from the first of the given links that
+// parses as a workflow event or standalone Nexus operation link. Links that don't parse are skipped.
+// Returns nil if no supported caller link parses.
 func parseNexusCaller(links []nexus.Link) []tag.Tag {
 	for _, link := range links {
-		caller, err := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(link)
-		if err != nil {
+		if link.URL == nil {
+			continue
+		}
+		var callerNamespace, callerID, callerRunID string
+		if caller, err := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(link); err == nil {
+			callerNamespace, callerID, callerRunID = caller.GetNamespace(), caller.GetWorkflowId(), caller.GetRunId()
+		} else if caller, err := temporalnexus.ConvertNexusLinkToLinkNexusOperation(link); err == nil {
+			callerNamespace, callerID, callerRunID = caller.GetNamespace(), caller.GetOperationId(), caller.GetRunId()
+		} else {
 			continue
 		}
 		return []tag.Tag{
-			tag.CallerNamespace(caller.GetNamespace()),
-			tag.CallerWorkflowID(caller.GetWorkflowId()),
-			tag.CallerRunID(caller.GetRunId()),
+			tag.CallerNamespace(callerNamespace),
+			tag.CallerWorkflowID(callerID),
+			tag.CallerRunID(callerRunID),
 		}
 	}
 	return nil
