@@ -322,7 +322,9 @@ const (
 // non-COMPLETED status paused a PauseOnFailure schedule (and terminated runs
 // were mislabeled FAILED), so a manual cancel/terminate would silently stop all
 // future runs.
-func testPauseOnFailureIgnoresCancelTerminate(t *testing.T, newContext contextFactory, stop terminalStop) {
+func testPauseOnFailureIgnoresCancelTerminate(suite *ScheduleCHASMSuite, stop terminalStop) {
+	t := suite.T()
+	newContext := chasmContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 	ctx := newContext(testcore.NewContext())
 
@@ -412,61 +414,62 @@ func testPauseOnFailureIgnoresCancelTerminate(t *testing.T, newContext contextFa
 			"(CanceledTerminatedCountAsFailures defaults to false)", wantStatus)
 }
 
+func (suite *ScheduleCHASMSuite) TestPauseOnFailureCancelDoesNotPause() {
+	testPauseOnFailureIgnoresCancelTerminate(suite, stopByCancel)
+}
+
+func (suite *ScheduleCHASMSuite) TestPauseOnFailureTerminateDoesNotPause() {
+	testPauseOnFailureIgnoresCancelTerminate(suite, stopByTerminate)
+}
+
 func TestScheduleCHASM(t *testing.T) {
 	t.Parallel()
 	runSharedScheduleTests(t, chasmContextFactory)
-
-	// CHASM-only tests
-	newContext := chasmContextFactory
-	t.Run("TestCreateScheduleAlreadyExists", func(t *testing.T) { t.Parallel(); testCreateScheduleAlreadyExists(t, newContext) })
-	t.Run("TestCreateScheduleDuplicateSdkError", func(t *testing.T) { t.Parallel(); testCreateScheduleDuplicateSdkError(t, true) })
-	t.Run("TestPatchRejectsExcessBackfillers", func(t *testing.T) { t.Parallel(); testPatchRejectsExcessBackfillers(t, newContext) })
-	t.Run("TestDoubleReset_HSMCallbacks", func(t *testing.T) { t.Parallel(); testScheduledWorkflowDoubleReset(t, newContext, false) })
-	t.Run("TestDoubleReset_ChasmCallbacks", func(t *testing.T) { t.Parallel(); testScheduledWorkflowDoubleReset(t, newContext, true) })
-	t.Run("TestResetWithAdditionalCallback_HSMCallbacks", func(t *testing.T) { t.Parallel(); testResetWithAdditionalCallback(t, newContext, false) })
-	t.Run("TestResetWithAdditionalCallback_ChasmCallbacks", func(t *testing.T) { t.Parallel(); testResetWithAdditionalCallback(t, newContext, true) })
-	t.Run("TestMigrationCallbackAttach", func(t *testing.T) { t.Parallel(); testMigrationCallbackAttach(t, newContext) })
-	t.Run("TestMigrationCallbackReattachSynthesized", func(t *testing.T) {
+	t.Run("TestCreateScheduleDuplicateSdkError", func(t *testing.T) {
 		t.Parallel()
-		testMigrationCallbackReattachSynthesized(t, newContext)
-	})
-	t.Run("TestCallbackCompletionMetrics", func(t *testing.T) { t.Parallel(); testCallbackCompletionMetrics(t, newContext) })
-	t.Run("TestCreatesWorkflowSentinel", func(t *testing.T) { t.Parallel(); testCreatesWorkflowSentinel(t, newContext) })
-	t.Run("TestSkipsWorkflowSentinelWhenDisabled", func(t *testing.T) { t.Parallel(); testSkipsWorkflowSentinelWhenDisabled(t, newContext) })
-	t.Run("TestLargeScheduleID", func(t *testing.T) { t.Parallel(); testLargeScheduleID(t, newContext) })
-	t.Run("TestUpdateScheduleMemo", func(t *testing.T) { t.Parallel(); testUpdateScheduleMemo(t, newContext) })
-	t.Run("TestStateSizeBytesReported", func(t *testing.T) { t.Parallel(); testStateSizeBytesReported(t, newContext) })
-	t.Run("TestBufferOverrunDropsActions", func(t *testing.T) { t.Parallel(); testBufferOverrunDropsActions(t, newContext) })
-	t.Run("TestDescribeCatchupWindowAfterCreateAndUpdate", func(t *testing.T) {
-		t.Parallel()
-		testDescribeCatchupWindowAfterCreateAndUpdate(t)
-	})
-	t.Run("IdleClose", func(t *testing.T) {
-		t.Parallel()
-		testScheduleClosesFromIdle(t, newContext)
-		t.Run("ManualOnly", func(t *testing.T) { t.Parallel(); testManualOnlyUnpausedClosesFromIdle(t, newContext) })
-		t.Run("PauseDuringWindow", func(t *testing.T) { t.Parallel(); testPauseDuringIdleWindow(t, newContext) })
-		t.Run("BackfillBlocks", func(t *testing.T) { t.Parallel(); testBackfillBlocksIdleClose(t, newContext) })
-	})
-	t.Run("PausedBehavior", func(t *testing.T) {
-		t.Parallel()
-		t.Run("DropsCatchup", func(t *testing.T) { t.Parallel(); testPausedDropsCatchup(t, newContext) })
-		t.Run("RecentActionsAdvance", func(t *testing.T) { t.Parallel(); testRecentActionsAdvanceWhilePaused(t, newContext) })
-		t.Run("FutureActionTimesAdvance", func(t *testing.T) { t.Parallel(); testFutureActionTimesAdvanceWhilePaused(t, newContext) })
-		t.Run("BackfillDrains", func(t *testing.T) { t.Parallel(); testBackfillOnPausedSchedule(t, newContext) })
-	})
-	t.Run("TestScheduledWorkflowContinueAsNewCompletion", func(t *testing.T) { t.Parallel(); testScheduledWorkflowContinueAsNewCompletion(t, newContext) })
-	t.Run("PauseOnFailure_CancelDoesNotPause", func(t *testing.T) {
-		t.Parallel()
-		testPauseOnFailureIgnoresCancelTerminate(t, newContext, stopByCancel)
-	})
-	t.Run("PauseOnFailure_TerminateDoesNotPause", func(t *testing.T) {
-		t.Parallel()
-		testPauseOnFailureIgnoresCancelTerminate(t, newContext, stopByTerminate)
+		testCreateScheduleDuplicateSdkError(t, true)
 	})
 }
 
-func testDescribeCatchupWindowAfterCreateAndUpdate(t *testing.T) {
+func (suite *ScheduleCHASMSuite) TestIdleClose() {
+	t := suite.T()
+	newContext := chasmContextFactory
+	t.Run("ManualOnly", func(t *testing.T) {
+		t.Parallel()
+		testManualOnlyUnpausedClosesFromIdle(t, newContext)
+	})
+	t.Run("PauseDuringWindow", func(t *testing.T) {
+		t.Parallel()
+		testPauseDuringIdleWindow(t, newContext)
+	})
+	t.Run("BackfillBlocks", func(t *testing.T) {
+		t.Parallel()
+		testBackfillBlocksIdleClose(t, newContext)
+	})
+}
+
+func (suite *ScheduleCHASMSuite) TestPausedBehavior() {
+	t := suite.T()
+	newContext := chasmContextFactory
+	t.Run("DropsCatchup", func(t *testing.T) {
+		t.Parallel()
+		testPausedDropsCatchup(t, newContext)
+	})
+	t.Run("RecentActionsAdvance", func(t *testing.T) {
+		t.Parallel()
+		testRecentActionsAdvanceWhilePaused(t, newContext)
+	})
+	t.Run("FutureActionTimesAdvance", func(t *testing.T) {
+		t.Parallel()
+		testFutureActionTimesAdvanceWhilePaused(t, newContext)
+	})
+	t.Run("BackfillDrains", func(t *testing.T) {
+		testBackfillOnPausedSchedule(t, newContext)
+	})
+}
+
+func (suite *ScheduleCHASMSuite) TestDescribeCatchupWindowAfterCreateAndUpdate() {
+	t := suite.T()
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	ctx := chasmContextFactory(testcontext.For(t))
@@ -899,7 +902,7 @@ func testBufferSizeReportedWhenBuffered(t *testing.T, newContext contextFactory)
 		},
 	}
 
-	ctx := newContext(s.Context())
+	ctx := newContext(testcontext.For(t))
 	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
@@ -907,7 +910,7 @@ func testBufferSizeReportedWhenBuffered(t *testing.T, newContext contextFactory)
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	var lastDescribe *workflowservice.DescribeScheduleResponse
 	s.Eventually(func() bool {
@@ -928,7 +931,9 @@ func testBufferSizeReportedWhenBuffered(t *testing.T, newContext contextFactory)
 
 // A full buffer (MaxBufferSize reached) makes the CHASM generator drop further
 // fires and increment ScheduleInfo.BufferDropped.
-func testBufferOverrunDropsActions(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleCHASMSuite) TestBufferOverrunDropsActions() {
+	t := suite.T()
+	newContext := chasmContextFactory
 	// A small buffer plus a gated workflow under BUFFER_ALL fills within a few
 	// fast-interval ticks. Only the CHASM scheduler reads these tweakables.
 	tweakables := chasmscheduler.DefaultTweakables
@@ -1172,7 +1177,7 @@ func testDeletedScheduleOperations(t *testing.T, newContext contextFactory) {
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// Delete the schedule.
 	_, err = s.FrontendClient().DeleteSchedule(newContext(s.Context()), &workflowservice.DeleteScheduleRequest{
@@ -1180,7 +1185,7 @@ func testDeletedScheduleOperations(t *testing.T, newContext contextFactory) {
 		ScheduleId: sid,
 		Identity:   "test",
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// Describe should return NotFound.
 	var notFoundErr *serviceerror.NotFound
@@ -1857,7 +1862,9 @@ func testScheduleContinuesAfterWorkflowRetryFailure(t *testing.T, newContext con
 // It asserts the schedule records several COMPLETED actions (the buffer only drains as completions
 // are observed) and that the completion callback is written intact into both the original and the
 // continued-as-new run. CHASM-only: V1 uses no Nexus completion callbacks.
-func testScheduledWorkflowContinueAsNewCompletion(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleCHASMSuite) TestScheduledWorkflowContinueAsNewCompletion() {
+	t := suite.T()
+	newContext := chasmContextFactory
 	// The scheduler matches the continued-as-new run's completion by the request ID carried in the
 	// completion callback token, which only survives continue-as-new in the envelope token format.
 	// That format is gated off by default for safe rollout, so enable it explicitly here.
@@ -2792,7 +2799,9 @@ func testScheduleInternalTaskQueue(t *testing.T, newContext contextFactory) {
 	})
 }
 
-func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, enableCHASMCallbacks bool) {
+func testScheduledWorkflowDoubleReset(suite *ScheduleCHASMSuite, enableCHASMCallbacks bool) {
+	t := suite.T()
+	newContext := chasmContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, enableCHASMCallbacks)
 
@@ -2807,7 +2816,7 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 		return nil
 	}, workflow.RegisterOptions{Name: wt})
 
-	ctx := newContext(s.Context())
+	ctx := newContext(testcontext.For(t))
 
 	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
 		Namespace:  s.Namespace().String(),
@@ -2833,7 +2842,7 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 		},
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// Wait for scheduler to start the workflow and show it as RUNNING.
 	listEntry := getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
@@ -2860,7 +2869,7 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 		Namespace: s.Namespace().String(),
 		Execution: wfExec,
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 	var originalStartReqID string
 	for reqID, info := range origDesc.GetWorkflowExtendedInfo().GetRequestIdInfos() {
 		if info.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
@@ -2877,18 +2886,18 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 		WorkflowTaskFinishEventId: 3,
 		RequestId:                 uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 	resetRun1 := &commonpb.WorkflowExecution{
 		WorkflowId: wfExec.WorkflowId,
 		RunId:      resp1.RunId,
 	}
 
-	s.EventuallyWithT(func(col *assert.CollectT) {
+	suite.Await(func(suite *ScheduleCHASMSuite) {
 		resetDesc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.Namespace().String(),
 			Execution: resetRun1,
 		})
-		require.NoError(col, err)
+		suite.NoError(err)
 		var resetStartReqID string
 		for reqID, info := range resetDesc.GetWorkflowExtendedInfo().GetRequestIdInfos() {
 			if info.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
@@ -2896,7 +2905,7 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 				break
 			}
 		}
-		require.Equal(col, originalStartReqID, resetStartReqID,
+		suite.Equal(originalStartReqID, resetStartReqID,
 			"start request ID must be preserved across first reset")
 	}, 10*time.Second, 100*time.Millisecond)
 
@@ -2907,18 +2916,18 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 		WorkflowTaskFinishEventId: 3,
 		RequestId:                 uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 	resetRun2 := &commonpb.WorkflowExecution{
 		WorkflowId: wfExec.WorkflowId,
 		RunId:      resp2.RunId,
 	}
 
-	s.EventuallyWithT(func(col *assert.CollectT) {
+	suite.Await(func(suite *ScheduleCHASMSuite) {
 		resetDesc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.Namespace().String(),
 			Execution: resetRun2,
 		})
-		require.NoError(col, err)
+		suite.NoError(err)
 		var resetStartReqID string
 		for reqID, info := range resetDesc.GetWorkflowExtendedInfo().GetRequestIdInfos() {
 			if info.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
@@ -2926,7 +2935,7 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 				break
 			}
 		}
-		require.Equal(col, originalStartReqID, resetStartReqID,
+		suite.Equal(originalStartReqID, resetStartReqID,
 			"start request ID must be preserved across double reset")
 	}, 10*time.Second, 100*time.Millisecond)
 
@@ -2937,7 +2946,7 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 		},
 		SignalName: "complete",
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
 		for _, action := range ent.Info.RecentActions {
@@ -2949,7 +2958,17 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 	})
 }
 
-func testResetWithAdditionalCallback(t *testing.T, newContext contextFactory, enableCHASMCallbacks bool) {
+func (suite *ScheduleCHASMSuite) TestDoubleReset_HSMCallbacks() {
+	testScheduledWorkflowDoubleReset(suite, false)
+}
+
+func (suite *ScheduleCHASMSuite) TestDoubleReset_ChasmCallbacks() {
+	testScheduledWorkflowDoubleReset(suite, true)
+}
+
+func testResetWithAdditionalCallback(suite *ScheduleCHASMSuite, enableCHASMCallbacks bool) {
+	t := suite.T()
+	newContext := chasmContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, enableCHASMCallbacks)
 	s.OverrideDynamicConfig(
@@ -2970,7 +2989,7 @@ func testResetWithAdditionalCallback(t *testing.T, newContext contextFactory, en
 		return nil
 	}, workflow.RegisterOptions{Name: wt})
 
-	ctx := newContext(s.Context())
+	ctx := newContext(testcontext.For(t))
 
 	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
 		Namespace:  s.Namespace().String(),
@@ -2996,7 +3015,7 @@ func testResetWithAdditionalCallback(t *testing.T, newContext contextFactory, en
 		},
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	listEntry := getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
 		return len(ent.Info.RecentActions) >= 1 &&
@@ -3040,7 +3059,7 @@ func testResetWithAdditionalCallback(t *testing.T, newContext contextFactory, en
 			},
 		},
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 	s.False(attachResp.Started, "expected to attach to existing run, not start a new one")
 
 	s.WaitForHistoryEvents(`
@@ -3061,32 +3080,32 @@ func testResetWithAdditionalCallback(t *testing.T, newContext contextFactory, en
 		WorkflowTaskFinishEventId: 3,
 		RequestId:                 uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 	resetRun := &commonpb.WorkflowExecution{
 		WorkflowId: wfExec.WorkflowId,
 		RunId:      resetResp.RunId,
 	}
 
 	var startRequestID string
-	s.EventuallyWithT(func(col *assert.CollectT) {
+	suite.Await(func(suite *ScheduleCHASMSuite) {
 		descResp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.Namespace().String(),
 			Execution: resetRun,
 		})
-		require.NoError(col, err)
-		require.Len(col, descResp.Callbacks, 2)
+		suite.NoError(err)
+		suite.Len(descResp.Callbacks, 2)
 		reqIDs := descResp.GetWorkflowExtendedInfo().GetRequestIdInfos()
 		attachInfo, ok := reqIDs[attachRequestID]
-		require.True(col, ok, "attachRequestId not found in RequestIdInfos")
-		require.Equal(col, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, attachInfo.GetEventType())
+		suite.True(ok, "attachRequestId not found in RequestIdInfos")
+		suite.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, attachInfo.GetEventType())
 		for reqID, info := range reqIDs {
 			if info.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 				startRequestID = reqID
 				break
 			}
 		}
-		require.NotEmpty(col, startRequestID, "no request ID found for WorkflowExecutionStarted")
-		require.NotEqual(col, startRequestID, attachRequestID,
+		suite.NotEmpty(startRequestID, "no request ID found for WorkflowExecutionStarted")
+		suite.NotEqual(startRequestID, attachRequestID,
 			"schedule callback and manually-attached callback must have different request IDs")
 	}, 10*time.Second, 100*time.Millisecond)
 
@@ -3097,7 +3116,7 @@ func testResetWithAdditionalCallback(t *testing.T, newContext contextFactory, en
 		},
 		SignalName: "complete",
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
 		for _, action := range ent.Info.RecentActions {
@@ -3117,9 +3136,19 @@ func testResetWithAdditionalCallback(t *testing.T, newContext contextFactory, en
 	}
 }
 
+func (suite *ScheduleCHASMSuite) TestResetWithAdditionalCallback_HSMCallbacks() {
+	testResetWithAdditionalCallback(suite, false)
+}
+
+func (suite *ScheduleCHASMSuite) TestResetWithAdditionalCallback_ChasmCallbacks() {
+	testResetWithAdditionalCallback(suite, true)
+}
+
 // testCreatesWorkflowSentinel tests that creating a CHASM schedule also starts a
 // dummy workflow to reserve the schedule ID in the V1 workflow ID-space.
-func testCreatesWorkflowSentinel(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleCHASMSuite) TestCreatesWorkflowSentinel() {
+	t := suite.T()
+	newContext := chasmContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := testcore.RandomizeStr("sid")
@@ -3182,7 +3211,9 @@ func testCreatesWorkflowSentinel(t *testing.T, newContext contextFactory) {
 	s.Equal(int64(1), countResp.Count)
 }
 
-func testStateSizeBytesReported(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleCHASMSuite) TestStateSizeBytesReported() {
+	t := suite.T()
+	newContext := chasmContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := testcore.RandomizeStr("sched-state-size")
@@ -3314,7 +3345,9 @@ func (suite *ScheduleV1Suite) TestCreatesCHASMSentinel() {
 
 // testSkipsWorkflowSentinelWhenDisabled asserts that a CHASM CreateSchedule
 // does not start the dummy V1 workflow when EnableCHASMSchedulerSentinels is off.
-func testSkipsWorkflowSentinelWhenDisabled(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleCHASMSuite) TestSkipsWorkflowSentinelWhenDisabled() {
+	t := suite.T()
+	newContext := chasmContextFactory
 	s := newScheduleEnv(t, append(scheduleCommonOpts(t),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, false),
 	)...)
@@ -3419,7 +3452,9 @@ func (suite *ScheduleV1Suite) TestSkipsCHASMSentinelWhenDisabled() {
 	s.NoError(createErr, "no CHASM sentinel should block CreateSchedule when sentinels are disabled, got: %v", createErr)
 }
 
-func testCreateScheduleAlreadyExists(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleCHASMSuite) TestCreateScheduleAlreadyExists() {
+	t := suite.T()
+	newContext := chasmContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-already-exists"
@@ -3494,7 +3529,9 @@ func testCreateScheduleDuplicateSdkError(t *testing.T, useCHASM bool) {
 	s.ErrorIs(err, temporal.ErrScheduleAlreadyRunning)
 }
 
-func testPatchRejectsExcessBackfillers(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleCHASMSuite) TestPatchRejectsExcessBackfillers() {
+	t := suite.T()
+	newContext := chasmContextFactory
 	// Hold all 100 backfillers alive through legitimate buffer backpressure rather
 	// than starvation. Backfillers are given a real (non-zero) share of an empty
 	// buffer, but each is pointed at a range far larger than the buffer under
@@ -3665,7 +3702,9 @@ func awaitReattachMetric(t *testing.T, capture *testcore.NamespaceMetricCapture,
 	}, awaitTimeout, pollInterval, "re-attach should record outcome=%s reason=%s", outcome, reason)
 }
 
-func testMigrationCallbackAttach(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleCHASMSuite) TestMigrationCallbackAttach() {
+	t := suite.T()
+	newContext := chasmContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := testcore.RandomizeStr("sid")
@@ -3807,7 +3846,9 @@ func requireInternalCallbackDelivered(t *testing.T, capture *testcore.NamespaceM
 // only through that callback, so a delivery that is dropped leaves the schedule
 // believing the action is still running -- and before this instrumentation that drop
 // left no trace beyond a log line.
-func testCallbackCompletionMetrics(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleCHASMSuite) TestCallbackCompletionMetrics() {
+	t := suite.T()
+	newContext := chasmContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 	// The instrumented delivery path is the CHASM callback implementation. It is the
 	// default, but pin it: under the HSM implementation these metrics never fire.
@@ -3857,7 +3898,9 @@ func testCallbackCompletionMetrics(t *testing.T, newContext contextFactory) {
 // completion for the schedule from a describe rather than from a callback, so they are
 // the paths where a migrated schedule can silently record an outcome the workflow never
 // had.
-func testMigrationCallbackReattachSynthesized(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleCHASMSuite) TestMigrationCallbackReattachSynthesized() {
+	t := suite.T()
+	newContext := chasmContextFactory
 	cases := []struct {
 		name string
 		// targetMissing points the buffered start at a workflow that never existed,
@@ -4395,7 +4438,9 @@ func assertRecentActionsNoDuplicateRunIDs(t *testing.T, actions []*schedulepb.Sc
 		seen[runID] = i
 	}
 }
-func testUpdateScheduleMemo(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleCHASMSuite) TestUpdateScheduleMemo() {
+	t := suite.T()
+	newContext := chasmContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-update-memo"
@@ -5164,7 +5209,9 @@ func testUpdateScheduleRequestIDTooLong(t *testing.T, newContext contextFactory)
 	require.ErrorAs(t, err, &invalidArgReqID)
 }
 
-func testLargeScheduleID(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleCHASMSuite) TestLargeScheduleID() {
+	t := suite.T()
+	newContext := chasmContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 	ctx := newContext(testcore.NewContext())
 
@@ -5255,7 +5302,8 @@ func testUpdateScheduleBlobSizeLimit(t *testing.T, newContext contextFactory) {
 // CHASMSchedulerCreationRolloutPercent acts as a per-schedule sampling gate
 // after EnableCHASMSchedulerCreation is on: at 50%, two schedules whose IDs
 // bucket on opposite sides of the rollout land on different stacks.
-func TestScheduleCreationRolloutPercent(t *testing.T) {
+func (suite *ScheduleCHASMSuite) TestScheduleCreationRolloutPercent() {
+	t := suite.T()
 	opts := append(scheduleCommonOpts(t),
 		// V1 worker is needed because at 50% rollout some schedules land on V1.
 		testcore.WithWorkerService("V1 scheduler"),
@@ -5744,7 +5792,8 @@ func (suite *ScheduleCHASMSuite) TestScheduleNextActionTimeVisibility() {
 		v2Sid, query)
 }
 
-func TestListSchedulesPreservesV2ScheduleIDWithV1Prefix(t *testing.T) {
+func (suite *ScheduleCHASMSuite) TestListSchedulesPreservesV2ScheduleIDWithV1Prefix() {
+	t := suite.T()
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 	ctx := chasmContextFactory(testcontext.For(t))
 
@@ -5778,7 +5827,8 @@ func TestListSchedulesPreservesV2ScheduleIDWithV1Prefix(t *testing.T) {
 		"ListSchedules must preserve both V2 IDs %q and %q", plainID, prefixedID)
 }
 
-func TestScheduleRejectsInvalidRequests(t *testing.T) {
+func (suite *ScheduleCHASMSuite) TestScheduleRejectsInvalidRequests() {
+	t := suite.T()
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 	ctx := chasmContextFactory(testcontext.For(t))
 	invalidPolicy := enumspb.ScheduleOverlapPolicy(99)
@@ -6025,7 +6075,8 @@ func TestScheduleRejectsInvalidRequests(t *testing.T) {
 
 // TestMirroredIncludeExcludeSpec sets identical interval and exclusion
 // specifications that match every 1s, effectively cancelling each other out.
-func TestMirroredIncludeExcludeSpec(t *testing.T) {
+func (suite *ScheduleCHASMSuite) TestMirroredIncludeExcludeSpec() {
+	t := suite.T()
 	// A tiny compute bound trips the mirrored spec near-instantly; the default (~1.2M candidate
 	// scans per GetNextTime) makes this test burn seconds of CPU on every scheduler code path.
 	opts := append(scheduleCommonOpts(t), testcore.WithDynamicConfig(dynamicconfig.SchedulerSpecMaxIterations, 1000))
@@ -6059,7 +6110,8 @@ func TestMirroredIncludeExcludeSpec(t *testing.T) {
 
 // TestMirroredIncludeExcludeSpecOnUpdate is like TestMirroredIncludeExcludeSpec but reaches the
 // mirrored spec via UpdateSchedule, exercising the spec-recompile path on an existing schedule.
-func TestMirroredIncludeExcludeSpecOnUpdate(t *testing.T) {
+func (suite *ScheduleCHASMSuite) TestMirroredIncludeExcludeSpecOnUpdate() {
+	t := suite.T()
 	// A tiny compute bound trips the mirrored spec near-instantly (see TestMirroredIncludeExcludeSpec).
 	opts := append(scheduleCommonOpts(t), testcore.WithDynamicConfig(dynamicconfig.SchedulerSpecMaxIterations, 1000))
 	s := testcore.NewEnv(t, opts...)
@@ -6107,7 +6159,8 @@ func TestMirroredIncludeExcludeSpecOnUpdate(t *testing.T) {
 // TestScheduleFarFutureActionTimes verifies that a schedule firing far beyond the compute
 // horizon (an interval 10x the horizon) still fills FutureActionTimes, since each far-future
 // time is found in a single interval step rather than by scanning.
-func TestScheduleFarFutureActionTimes(t *testing.T) {
+func (suite *ScheduleCHASMSuite) TestScheduleFarFutureActionTimes() {
+	t := suite.T()
 	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := testcore.RandomizeStr("sched-far-future")
@@ -6163,7 +6216,8 @@ func TestScheduleFarFutureActionTimes(t *testing.T) {
 // TestScheduleManyCalendars verifies that a spec with 50 calendars and 50 excludes still
 // evaluates cheaply, so the schedule keeps dispatching actions while RecentActions and
 // FutureActionTimes keep updating.
-func TestScheduleManyCalendars(t *testing.T) {
+func (suite *ScheduleCHASMSuite) TestScheduleManyCalendars() {
+	t := suite.T()
 	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := testcore.RandomizeStr("sched-many-calendars")
@@ -6247,7 +6301,8 @@ func TestScheduleManyCalendars(t *testing.T) {
 // workflow that blocks, settles into one running workflow with one fire buffered
 // behind it. The counts aren't surfaced on the list entry, so we assert via the
 // query rather than by reading the entry's SAs.
-func TestScheduleCountsVisibility(t *testing.T) {
+func (suite *ScheduleCHASMSuite) TestScheduleCountsVisibility() {
+	t := suite.T()
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 	newContext := chasmContextFactory
 
