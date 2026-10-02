@@ -1,4 +1,4 @@
-package stream_batcher
+package streambatcher
 
 import (
 	"context"
@@ -297,7 +297,7 @@ func TestStreamBatcherWrongNumberOfPerItemResults(t *testing.T) {
 
 func TestStreamBatcher_Random(t *testing.T) {
 	// throw a lot of concurrent calls at the batcher and make sure there are no errors at
-	// least. with log statements in stream_batcher.go, you can see this does (or did at some
+	// least. with log statements in batcher.go, you can see this does (or did at some
 	// point) exercise all of the tricky spots.
 
 	clk := clock.NewEventTimeSource()

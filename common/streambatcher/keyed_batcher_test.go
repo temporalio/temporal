@@ -1,4 +1,4 @@
-package stream_batcher
+package streambatcher
 
 import (
 	"testing"
