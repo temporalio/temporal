@@ -322,7 +322,7 @@ func (s *ActivityAPIBatchResetClientTestSuite) TestActivityBatchReset_RunningWor
 	internalWorkflow := newInternalWorkflow()
 	internalWorkflow.initialRetryInterval = 100 * time.Millisecond
 	internalWorkflow.activityRetryPolicy.InitialInterval = internalWorkflow.initialRetryInterval
-	// Keep this short so an activity claimed just before the old worker stops is retried promptly on the new worker.
+	// Keep this short so an activity claimed just before the old worker stops times out quickly and is SCHEDULED again before the reset.
 	internalWorkflow.startToCloseTimeout = activityStartToCloseTimeout
 
 	env.SdkWorker().RegisterWorkflowWithOptions(internalWorkflow.WorkflowFunc, workflow.RegisterOptions{Name: workflowTypeName})
