@@ -261,7 +261,6 @@ func (sm *scaleManager) callScaler() {
 		// Untagged: read == write == 0 marks this as a shadow target rather than an applied one.
 		// Emit only when the target decision changed (like in real mode).
 		sm.emitGaugeMetricsIfEnabled(0, 0, float64(target))
-		// note: we checked ShadowModeLogInterval > 0 when we set shadowMode above
 		sm.nextShadowLog = sm.timeSource.Now().Add(settings.ShadowModeLogInterval)
 		sm.prevShadowTarget = target
 	} else {

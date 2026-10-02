@@ -199,7 +199,7 @@ type PartitionScaleManagerSettings struct {
 	DrainBufferTime time.Duration
 	// ShadowModeLogInterval controls how often shadow decisions are logged (in shadow mode
 	// only). If this is <= 0, or if the partition scaler returns 0 (disabled), shadow mode
-	// doesn't log anything.
+	// doesn't log anything or emit gauge metrics.
 	ShadowModeLogInterval time.Duration
 }
 
