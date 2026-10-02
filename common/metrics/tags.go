@@ -318,6 +318,14 @@ func ChasmTaskTypeTag(value string) Tag {
 	return Tag{Key: ChasmTaskTypeTagName, Value: value}
 }
 
+// TaskGroupTag tags a metric with an outbound queue task group.
+func TaskGroupTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: TaskGroupTagName, Value: value}
+}
+
 func PartitionTag(partition string) Tag {
 	return Tag{Key: PartitionTagName, Value: partition}
 }
