@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -126,12 +127,14 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationBackedByQuery(chasmEnabled bo
 			s.Equal("handler-status", result)
 
 			s.Require().Len(links, 1)
-			workflowLink := links[0].GetWorkflow()
-			s.NotNil(workflowLink, "caller must carry a link of type workflow")
-			s.Equal(env.Namespace().String(), workflowLink.GetNamespace())
-			s.Equal(handlerWorkflowID, workflowLink.GetWorkflowId())
-			s.Equal(handlerRun.GetRunID(), workflowLink.GetRunId())
-			s.Equal("Query processed", workflowLink.GetReason())
+			protorequire.ProtoEqual(s.T(), &commonpb.Link{
+				Variant: &commonpb.Link_Workflow_{Workflow: &commonpb.Link_Workflow{
+					Namespace:  env.Namespace().String(),
+					WorkflowId: handlerWorkflowID,
+					RunId:      handlerRun.GetRunID(),
+					Reason:     "Query processed",
+				}},
+			}, links[0])
 		})
 	}
 

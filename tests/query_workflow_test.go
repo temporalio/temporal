@@ -144,37 +144,35 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 
 func (s *QueryWorkflowSuite) TestQueryWorkflowResult_LinkResolvesRunID() {
 	env := testcore.NewEnv(s.T())
-	queryName := "query"
-	canSignalName := "continue-as-new"
+	tv := env.Tv()
 
 	var workflowFn func(ctx workflow.Context, gen int) error
 
 	workflowFn = func(ctx workflow.Context, gen int) error {
-		_ = workflow.SetQueryHandler(ctx, queryName, func() (int, error) {
+		_ = workflow.SetQueryHandler(ctx, tv.QueryType(), func() (int, error) {
 			return gen, nil
 		})
-		workflow.GetSignalChannel(ctx, canSignalName).Receive(ctx, nil)
+		workflow.GetSignalChannel(ctx, tv.SignalName()).Receive(ctx, nil)
 		return workflow.NewContinueAsNewError(ctx, workflowFn, gen+1)
 	}
 
 	ctx := s.Context()
 	env.SdkWorker().RegisterWorkflow(workflowFn)
-	wid := testcore.RandomizeStr(s.T().Name())
 
 	query := func(s *QueryWorkflowSuite, runID string) (int, *commonpb.Link_Workflow) {
 		resp, err := env.FrontendClient().QueryWorkflow(
 			ctx,
 			&workflowservice.QueryWorkflowRequest{
 				Namespace: env.Namespace().String(),
-				Execution: &commonpb.WorkflowExecution{WorkflowId: wid, RunId: runID},
-				Query:     &querypb.WorkflowQuery{QueryType: queryName},
+				Execution: tv.WithRunID(runID).WorkflowExecution(),
+				Query:     &querypb.WorkflowQuery{QueryType: tv.QueryType()},
 			},
 		)
 		s.NoError(err)
 		link := resp.GetLink().GetWorkflow()
 		s.NotNil(link, "query must carry a link of type workflow")
 		s.Equal(env.Namespace().String(), link.GetNamespace())
-		s.Equal(wid, link.GetWorkflowId())
+		s.Equal(tv.WorkflowID(), link.GetWorkflowId())
 		s.Equal("Query processed", link.GetReason())
 		var result int
 		s.NoError(payloads.Decode(resp.QueryResult, &result))
@@ -184,8 +182,9 @@ func (s *QueryWorkflowSuite) TestQueryWorkflowResult_LinkResolvesRunID() {
 	firstRun, err := env.SdkClient().ExecuteWorkflow(
 		ctx,
 		sdkclient.StartWorkflowOptions{
-			ID:        wid,
-			TaskQueue: env.WorkerTaskQueue()},
+			ID:        tv.WorkflowID(),
+			TaskQueue: env.WorkerTaskQueue(),
+		},
 		workflowFn,
 		0,
 	)
@@ -193,10 +192,10 @@ func (s *QueryWorkflowSuite) TestQueryWorkflowResult_LinkResolvesRunID() {
 	firstRunID := firstRun.GetRunID()
 
 	// continue-as-new, then wait for the new run to become the current one
-	s.NoError(env.SdkClient().SignalWorkflow(ctx, wid, firstRunID, canSignalName, nil))
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, tv.WorkflowID(), firstRunID, tv.SignalName(), nil))
 	var secondRunID string
 	s.Await(func(s *QueryWorkflowSuite) {
-		desc, err := env.SdkClient().DescribeWorkflowExecution(ctx, wid, "")
+		desc, err := env.SdkClient().DescribeWorkflowExecution(ctx, tv.WorkflowID(), "")
 		s.NoError(err)
 		secondRunID = desc.GetWorkflowExecutionInfo().GetExecution().GetRunId()
 		s.NotEqual(firstRunID, secondRunID)
@@ -218,7 +217,7 @@ func (s *QueryWorkflowSuite) TestQueryWorkflowResult_LinkResolvesRunID() {
 	s.RunSequential("empty run ID resolves to the reset run", func(s *QueryWorkflowSuite) {
 		var workflowTaskCompletedEventID int64
 		s.Await(func(s *QueryWorkflowSuite) {
-			hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: wid, RunId: secondRunID})
+			hist := env.GetHistory(env.Namespace().String(), tv.WithRunID(secondRunID).WorkflowExecution())
 			for _, event := range hist {
 				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
 					workflowTaskCompletedEventID = event.GetEventId()
@@ -231,9 +230,9 @@ func (s *QueryWorkflowSuite) TestQueryWorkflowResult_LinkResolvesRunID() {
 			ctx,
 			&workflowservice.ResetWorkflowExecutionRequest{
 				Namespace:                 env.Namespace().String(),
-				WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: wid, RunId: secondRunID},
+				WorkflowExecution:         tv.WithRunID(secondRunID).WorkflowExecution(),
 				Reason:                    "reset for query link test",
-				RequestId:                 env.Tv().RequestID(),
+				RequestId:                 tv.RequestID(),
 				WorkflowTaskFinishEventId: workflowTaskCompletedEventID,
 			},
 		)
