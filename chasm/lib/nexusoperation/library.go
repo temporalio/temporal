@@ -5,6 +5,7 @@ import (
 	"go.temporal.io/server/chasm"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
 
@@ -24,16 +25,21 @@ type operationContextKeyType struct{}
 // context value. Exported for use in tests that need to set up MockContext.
 var OperationContextKey = operationContextKeyType{}
 
+// DestinationBlockedFn reports whether the outbound queue is blocking an endpoint.
+type DestinationBlockedFn func(namespaceID string, destination string) bool
+
 // OperationContext holds dependencies injected into the chasm.Context for use by Operation methods.
 type OperationContext struct {
-	MetricTagConfig dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
+	MetricTagConfig    dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
+	DestinationBlocked DestinationBlockedFn
 }
 
 // componentOnlyLibrary registers just the components without task executors or gRPC handlers.
 // Used in the frontend to enable component ref serialization.
 type componentOnlyLibrary struct {
 	chasm.UnimplementedLibrary
-	metricTagConfig dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
+	metricTagConfig    dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
+	destinationBlocked DestinationBlockedFn
 }
 
 func newComponentOnlyLibrary(dc *dynamicconfig.Collection) *componentOnlyLibrary {
@@ -61,7 +67,8 @@ func (l *componentOnlyLibrary) Components() []*chasm.RegistrableComponent {
 			chasm.WithBusinessIDAlias("OperationId"),
 			chasm.WithContextValues(map[any]any{
 				OperationContextKey: &OperationContext{
-					MetricTagConfig: l.metricTagConfig,
+					MetricTagConfig:    l.metricTagConfig,
+					DestinationBlocked: l.destinationBlocked,
 				},
 			}),
 		),
@@ -84,6 +91,12 @@ type Library struct {
 	cancellationBackoffTaskHandler    *cancellationBackoffTaskHandler
 }
 
+type libraryParams struct {
+	fx.In
+
+	DestinationBlocked DestinationBlockedFn `optional:"true"`
+}
+
 func newLibrary(
 	handler *handler,
 	operationBackoffTaskHandler *operationBackoffTaskHandler,
@@ -94,9 +107,12 @@ func newLibrary(
 	cancellationInvocationTaskHandler *cancellationInvocationTaskHandler,
 	cancellationBackoffTaskHandler *cancellationBackoffTaskHandler,
 	dc *dynamicconfig.Collection,
+	params libraryParams,
 ) *Library {
+	componentLibrary := newComponentOnlyLibrary(dc)
+	componentLibrary.destinationBlocked = params.DestinationBlocked
 	return &Library{
-		componentOnlyLibrary:                       *newComponentOnlyLibrary(dc),
+		componentOnlyLibrary:                       *componentLibrary,
 		handler:                                    handler,
 		operationBackoffTaskHandler:                operationBackoffTaskHandler,
 		operationInvocationTaskHandler:             operationInvocationTaskHandler,

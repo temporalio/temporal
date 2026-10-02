@@ -841,6 +841,20 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 		}
 	}
 
+	if opCtx, ok := ctx.Value(OperationContextKey).(*OperationContext); ok && opCtx.DestinationBlocked != nil {
+		destBlocked := opCtx.DestinationBlocked(key.NamespaceID, o.Endpoint)
+
+		if info.State == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED && destBlocked {
+			info.State = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
+			info.BlockedReason = "The circuit breaker is open."
+		}
+
+		if info.GetCancellationInfo().GetState() == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED && destBlocked {
+			info.CancellationInfo.State = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
+			info.CancellationInfo.BlockedReason = "The circuit breaker is open."
+		}
+	}
+
 	return info
 }
 
