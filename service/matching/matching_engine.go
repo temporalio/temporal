@@ -168,6 +168,7 @@ type (
 		metricsHandler                metrics.Handler
 		partitionsLock                sync.RWMutex // locks mutation of partitions
 		partitions                    map[tqid.PartitionKey]taskQueuePartitionManager
+		namespaceStateUnloads         sync.WaitGroup
 		gaugeMetrics                  gaugeMetrics // per-namespace task queue counters
 		config                        *Config
 		partitionScalerFactory        PartitionScalerFactory
@@ -353,6 +354,7 @@ func (e *matchingEngineImpl) Start() {
 
 	go e.watchMembership()
 	_ = e.serviceResolver.AddListener(e.listenerKey(), e.membershipChangedCh)
+	e.namespaceRegistry.RegisterStateChangeCallback(e, e.onNamespaceStateChange)
 }
 
 func (e *matchingEngineImpl) Stop() {
@@ -364,6 +366,7 @@ func (e *matchingEngineImpl) Stop() {
 		return
 	}
 
+	e.namespaceRegistry.UnregisterStateChangeCallback(e)
 	_ = e.serviceResolver.RemoveListener(e.listenerKey())
 	close(e.membershipChangedCh)
 
@@ -372,6 +375,48 @@ func (e *matchingEngineImpl) Stop() {
 	for _, l := range e.getTaskQueuePartitions(math.MaxInt32) {
 		l.Stop(unloadCauseShuttingDown)
 	}
+	e.namespaceStateUnloads.Wait()
+}
+
+// onNamespaceStateChange unloads a namespace's partitions when it fails over to or away from this
+// cluster, or is deleted from the DB, since their namespace_state metric tag is fixed at load time.
+// Removal and the status check happen under partitionsLock, so each partition is stopped exactly once.
+func (e *matchingEngineImpl) onNamespaceStateChange(ns *namespace.Namespace, deletedFromDB bool) {
+	e.partitionsLock.Lock()
+	defer e.partitionsLock.Unlock()
+	// Callbacks can still arrive after UnregisterStateChangeCallback returns.
+	if atomic.LoadInt32(&e.status) != common.DaemonStatusStarted {
+		return
+	}
+	var unloaded []taskQueuePartitionManager
+	for key, pm := range e.partitions {
+		if pm.Namespace().ID() != ns.ID() {
+			continue
+		}
+		stateChanged := e.namespaceStateTagValue(pm.Namespace()) != e.namespaceStateTagValue(ns)
+		if deletedFromDB || stateChanged {
+			delete(e.partitions, key)
+			unloaded = append(unloaded, pm)
+		}
+	}
+	// Stopping a partition waits on persistence, so it runs in the background.
+	const batchSize = 100
+	for i := 0; i < len(unloaded); i += batchSize {
+		batch := unloaded[i:min(len(unloaded), i+batchSize)]
+		e.namespaceStateUnloads.Go(func() {
+			for _, pm := range batch {
+				pm.Stop(unloadCauseNamespaceStateChange)
+			}
+		})
+	}
+}
+
+func (e *matchingEngineImpl) namespaceStateTagValue(ns *namespace.Namespace) string {
+	//nolint:forbidigo // metric tag for namespace state, not per-workflow
+	if ns.ActiveInCluster(e.clusterMeta.GetCurrentClusterName()) {
+		return metrics.ActiveNamespaceStateTagValue
+	}
+	return metrics.PassiveNamespaceStateTagValue
 }
 
 func (e *matchingEngineImpl) listenerKey() string {
@@ -494,6 +539,48 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		return nil, false, err
 	}
 
+	newPM, err := e.buildTaskQueuePartitionManager(namespaceEntry, partition, loadCause)
+	if err != nil {
+		return nil, false, err
+	}
+
+	// If it gets here, write lock and check again in case a task queue is created between the two locks
+	e.partitionsLock.Lock()
+	pm, ok = e.partitions[key]
+	if ok {
+		e.partitionsLock.Unlock()
+		// Lost the race with a concurrent load of the same partition. The unstarted
+		// newPM holds no external references (subscriptions etc. are only registered
+		// in Start), so it can simply be dropped and garbage collected.
+		return pm, false, nil
+	}
+
+	// Catches a failover or deletion whose onNamespaceStateChange scan ran before this insert.
+	currentEntry, err := e.namespaceRegistry.GetNamespaceByIDWithOptions(
+		namespaceEntry.ID(),
+		namespace.GetNamespaceOptions{DisableReadthrough: true},
+	)
+	if err == nil && e.namespaceStateTagValue(currentEntry) != e.namespaceStateTagValue(namespaceEntry) {
+		// Rarely taken, so rebuilding under the lock is fine. The dropped newPM was never started.
+		newPM, err = e.buildTaskQueuePartitionManager(currentEntry, partition, loadCause)
+	}
+	if err != nil {
+		e.partitionsLock.Unlock()
+		return nil, false, err
+	}
+
+	e.partitions[key] = newPM
+	e.partitionsLock.Unlock()
+
+	newPM.Start()
+	return newPM, true, nil
+}
+
+func (e *matchingEngineImpl) buildTaskQueuePartitionManager(
+	namespaceEntry *namespace.Namespace,
+	partition tqid.Partition,
+	loadCause loadCause,
+) (*taskQueuePartitionManagerImpl, error) {
 	var newPM *taskQueuePartitionManagerImpl
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), e.config, namespaceEntry.Name())
 	tqConfig.loadCause = loadCause
@@ -512,7 +599,7 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		logger,
 		e.namespaceRegistry,
 	)
-	newPM, err = newTaskQueuePartitionManager(
+	newPM, err := newTaskQueuePartitionManager(
 		e,
 		namespaceEntry,
 		partition,
@@ -522,26 +609,7 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		metricsHandler,
 		userDataManager,
 	)
-	if err != nil {
-		return nil, false, err
-	}
-
-	// If it gets here, write lock and check again in case a task queue is created between the two locks
-	e.partitionsLock.Lock()
-	pm, ok = e.partitions[key]
-	if ok {
-		e.partitionsLock.Unlock()
-		// Lost the race with a concurrent load of the same partition. The unstarted
-		// newPM holds no external references (subscriptions etc. are only registered
-		// in Start), so it can simply be dropped and garbage collected.
-		return pm, false, nil
-	}
-
-	e.partitions[key] = newPM
-	e.partitionsLock.Unlock()
-
-	newPM.Start()
-	return newPM, true, nil
+	return newPM, err
 }
 
 func (e *matchingEngineImpl) loggerAndMetricsForPartition(
@@ -550,13 +618,7 @@ func (e *matchingEngineImpl) loggerAndMetricsForPartition(
 	tqConfig *taskQueueConfig,
 ) (log.Logger, log.Logger, metrics.Handler) {
 	nsName := nsEntry.Name().String()
-	var nsState string
-	//nolint:forbidigo // metric tag for namespace state, not per-workflow
-	if nsEntry.ActiveInCluster(e.clusterMeta.GetCurrentClusterName()) {
-		nsState = metrics.ActiveNamespaceStateTagValue
-	} else {
-		nsState = metrics.PassiveNamespaceStateTagValue
-	}
+	nsState := e.namespaceStateTagValue(nsEntry)
 	logger := log.With(e.logger,
 		tag.WorkflowTaskQueueName(partition.RpcName()),
 		tag.WorkflowTaskQueueType(partition.TaskType()),
