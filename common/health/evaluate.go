@@ -1,8 +1,6 @@
 package health
 
 import (
-	"fmt"
-
 	enumspb "go.temporal.io/server/api/enums/v1"
 	healthspb "go.temporal.io/server/api/health/v1"
 )
@@ -14,7 +12,10 @@ type SignalReader interface {
 	ErrorRatioByGroup(groupName string) (float64, bool)
 }
 
-func Evaluate(reader SignalReader, settings Settings) []*healthspb.HealthCheck {
+// Evaluate compares the reader's signals against the settings and returns one check per
+// configured threshold. Checks are named after the source, so callers evaluating more than
+// one source (e.g. gRPC and persistence) get names that stay distinct in a single response.
+func Evaluate(reader SignalReader, settings Settings, source Source) []*healthspb.HealthCheck {
 	var checks []*healthspb.HealthCheck
 
 	// //////////////////
@@ -28,7 +29,7 @@ func Evaluate(reader SignalReader, settings Settings) []*healthspb.HealthCheck {
 		}
 
 		checks = append(checks, errorIfOverThreshold(
-			CheckTypeRPCLatencyOverall+fmt.Sprintf("_P%0.2f", 100.0*qt.Quantile),
+			source.overallCheckType(CheckTypeLatency, qt.Quantile),
 			latency,
 			float64(qt.Threshold.Milliseconds()),
 			settings.Overall.Enforced,
@@ -43,7 +44,7 @@ func Evaluate(reader SignalReader, settings Settings) []*healthspb.HealthCheck {
 		errorRatio, found := reader.ErrorRatio()
 		if found {
 			checks = append(checks, errorIfOverThreshold(
-				CheckTypeRPCErrorRatioOverall,
+				source.overallCheckType(CheckTypeErrorRatio, 0),
 				errorRatio,
 				settings.Overall.ErrorRatioThreshold.Threshold,
 				settings.Overall.Enforced,
@@ -63,7 +64,7 @@ func Evaluate(reader SignalReader, settings Settings) []*healthspb.HealthCheck {
 			}
 
 			checks = append(checks, errorIfOverThreshold(
-				fmt.Sprintf("%s_%s_P%0.2f", CheckTypeRPCLatencyGroup, group.Name, 100.0*qt.Quantile),
+				source.groupCheckType(group.Name, CheckTypeLatency, qt.Quantile),
 				latency,
 				float64(qt.Threshold.Milliseconds()),
 				group.Thresholds.Enforced,
@@ -74,7 +75,7 @@ func Evaluate(reader SignalReader, settings Settings) []*healthspb.HealthCheck {
 			errorRatio, found := reader.ErrorRatioByGroup(group.Name)
 			if found {
 				checks = append(checks, errorIfOverThreshold(
-					fmt.Sprintf("%s_%s", CheckTypeRPCErrorRatioGroup, group.Name),
+					source.groupCheckType(group.Name, CheckTypeErrorRatio, 0),
 					errorRatio,
 					group.Thresholds.ErrorRatioThreshold.Threshold,
 					group.Thresholds.Enforced,

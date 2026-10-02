@@ -9,11 +9,14 @@ import (
 	enumspb "go.temporal.io/server/api/enums/v1"
 	healthspb "go.temporal.io/server/api/health/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/stats"
 )
 
 func TestEvaluateAndRollupState(t *testing.T) {
 	const rpcMethod = "/temporal.server.api.historyservice.v1.HistoryService/StartWorkflowExecution"
+
+	source := Source{Service: primitives.HistoryService, Component: ComponentGRPC}
 
 	type record struct {
 		latency time.Duration
@@ -45,14 +48,14 @@ func TestEvaluateAndRollupState(t *testing.T) {
 			},
 			expectedChecks: []*healthspb.HealthCheck{
 				{
-					CheckType: CheckTypeRPCLatencyOverall + "_P99.00",
+					CheckType: "history.grpc.overall.latency.p99",
 					State:     enumspb.HEALTH_STATE_SERVING,
 					Value:     100,
 					Threshold: 2000,
 					Enforced:  true,
 				},
 				{
-					CheckType: CheckTypeRPCErrorRatioOverall,
+					CheckType: "history.grpc.overall.error_ratio",
 					State:     enumspb.HEALTH_STATE_SERVING,
 					Value:     0,
 					Threshold: 0.1,
@@ -90,7 +93,7 @@ func TestEvaluateAndRollupState(t *testing.T) {
 			},
 			expectedChecks: []*healthspb.HealthCheck{
 				{
-					CheckType: CheckTypeRPCLatencyOverall + "_P99.00",
+					CheckType: "history.grpc.overall.latency.p99",
 					State:     enumspb.HEALTH_STATE_SERVING,
 					Value:     900,
 					Threshold: 2000,
@@ -98,14 +101,14 @@ func TestEvaluateAndRollupState(t *testing.T) {
 				},
 				// the group is enforced, so this is what drives the overall NOT_SERVING
 				{
-					CheckType: CheckTypeRPCLatencyGroup + "_critical_P99.00",
+					CheckType: "history.grpc.group.critical.latency.p99",
 					State:     enumspb.HEALTH_STATE_NOT_SERVING,
 					Value:     900,
 					Threshold: 200,
 					Enforced:  true,
 				},
 				{
-					CheckType: CheckTypeRPCErrorRatioGroup + "_critical",
+					CheckType: "history.grpc.group.critical.error_ratio",
 					State:     enumspb.HEALTH_STATE_SERVING,
 					Value:     0,
 					Threshold: 0.1,
@@ -132,14 +135,14 @@ func TestEvaluateAndRollupState(t *testing.T) {
 			},
 			expectedChecks: []*healthspb.HealthCheck{
 				{
-					CheckType: CheckTypeRPCLatencyOverall + "_P99.00",
+					CheckType: "history.grpc.overall.latency.p99",
 					State:     enumspb.HEALTH_STATE_SERVING,
 					Value:     100,
 					Threshold: 2000,
 					Enforced:  true,
 				},
 				{
-					CheckType: CheckTypeRPCErrorRatioOverall,
+					CheckType: "history.grpc.overall.error_ratio",
 					State:     enumspb.HEALTH_STATE_NOT_SERVING,
 					Value:     0.5,
 					Threshold: 0.1,
@@ -165,7 +168,7 @@ func TestEvaluateAndRollupState(t *testing.T) {
 			},
 			expectedChecks: []*healthspb.HealthCheck{
 				{
-					CheckType: CheckTypeRPCLatencyOverall + "_P99.00",
+					CheckType: "history.grpc.overall.latency.p99",
 					State:     enumspb.HEALTH_STATE_NOT_SERVING,
 					Value:     600,
 					Threshold: 500,
@@ -188,14 +191,14 @@ func TestEvaluateAndRollupState(t *testing.T) {
 			records: nil,
 			expectedChecks: []*healthspb.HealthCheck{
 				{
-					CheckType: CheckTypeRPCLatencyOverall + "_P99.00",
+					CheckType: "history.grpc.overall.latency.p99",
 					State:     enumspb.HEALTH_STATE_SERVING,
 					Value:     0,
 					Threshold: 2000,
 					Enforced:  true,
 				},
 				{
-					CheckType: CheckTypeRPCErrorRatioOverall,
+					CheckType: "history.grpc.overall.error_ratio",
 					State:     enumspb.HEALTH_STATE_SERVING,
 					Value:     0,
 					Threshold: 0.1,
@@ -241,14 +244,14 @@ func TestEvaluateAndRollupState(t *testing.T) {
 			},
 			expectedChecks: []*healthspb.HealthCheck{
 				{
-					CheckType: CheckTypeRPCLatencyOverall + "_P99.00",
+					CheckType: "history.grpc.overall.latency.p99",
 					State:     enumspb.HEALTH_STATE_SERVING,
 					Value:     900,
 					Threshold: 2000,
 					Enforced:  true,
 				},
 				{
-					CheckType: CheckTypeRPCErrorRatioGroup + "_critical",
+					CheckType: "history.grpc.group.critical.error_ratio",
 					State:     enumspb.HEALTH_STATE_SERVING,
 					Value:     0,
 					Threshold: 0.1,
@@ -274,7 +277,7 @@ func TestEvaluateAndRollupState(t *testing.T) {
 			},
 			expectedChecks: []*healthspb.HealthCheck{
 				{
-					CheckType: CheckTypeRPCLatencyOverall + "_P99.00",
+					CheckType: "history.grpc.overall.latency.p99",
 					State:     enumspb.HEALTH_STATE_SERVING,
 					Value:     100,
 					Threshold: 2000,
@@ -296,7 +299,7 @@ func TestEvaluateAndRollupState(t *testing.T) {
 				agg.Record(rpcMethod, r.latency, r.err)
 			}
 
-			checks := Evaluate(agg, tc.settings)
+			checks := Evaluate(agg, tc.settings, source)
 			require.Equal(t, tc.expectedChecks, checks)
 
 			state, unenforcedState := RollupState(checks)
