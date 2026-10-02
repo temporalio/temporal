@@ -50,7 +50,7 @@ type taskForwarderType int32
 const (
 	notTaskForwarder       taskForwarderType = iota
 	parentTaskForwarder                      // forwards tasks to parent partition
-	validatorTaskForwarder                   // validates tasks on root partition
+	validatorTaskForwarder                   // validates local backlog tasks
 )
 
 // maxTokens is the maximum number of tokens we might consume at a time for simpleLimiter. This
@@ -64,7 +64,9 @@ const maxTokens = 1
 // pollerList is an intrusive doubly-linked list of waiting pollers. Pollers are matched
 // by walking from the head, so the list is kept in the order we want to match them:
 // FIFO (insertion order), except that task forwarders/validators are kept after all
-// local pollers so a task is matched to a local poller in preference to a forwarder.
+// local pollers so a task is matched to a local poller in preference to a forwarder,
+// and parentTaskForwarder is kept before validatorTaskForwarder so the child forwarder
+// takes the head before the batch validator.
 //
 // It's intrusive (next/prev live in waitingPoller) so there's no per-poller allocation
 // and removal is O(1) given the poller. There are only ever a handful of forwarders, so
@@ -75,6 +77,11 @@ type pollerList struct {
 	count      int
 }
 
+// less orders local pollers before parent forwarders, and parent forwarders before validators.
+func (p *waitingPoller) less(other *waitingPoller) bool {
+	return p.taskForwarderType < other.taskForwarderType
+}
+
 func (p *pollerList) Len() int {
 	return p.count
 }
@@ -83,13 +90,12 @@ func (p *pollerList) Add(poller *waitingPoller) {
 	softassert.That(p.logger, !poller.queued, "adding poller that is already queued")
 	poller.queued = true
 
-	// Insert after the last local poller: at the tail for a forwarder, or just before
-	// the forwarders (which stay grouped at the tail) for a local poller.
+	// Match order is head→tail: local pollers, parentTaskForwarder, then
+	// validatorTaskForwarder. Locals must win over both. On child partitions
+	// the task forwarder must take the head before the batch validator.
 	at := p.tail
-	if poller.taskForwarderType == notTaskForwarder {
-		for at != nil && at.taskForwarderType != notTaskForwarder {
-			at = at.prev
-		}
+	for at != nil && poller.less(at) {
+		at = at.prev
 	}
 
 	next := p.head
@@ -461,7 +467,7 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 				// task forwarder only matches when forwarding is allowed
 				continue
 			} else if poller.taskForwarderType == validatorTaskForwarder && task.forwardCtx != nil {
-				// validator (root only) only matches local backlog tasks
+				// validator only matches local backlog tasks
 				continue
 			} else if mp := poller.minPriority(); mp > 0 && task.effectivePriority > effectivePriorityFactor*mp {
 				// Note the ">" above: "min" priority is a numeric max.
