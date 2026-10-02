@@ -125,6 +125,8 @@ type Config struct {
 	QueuePendingTaskMaxCount           dynamicconfig.IntPropertyFn
 	QueueMaxPredicateSize              dynamicconfig.IntPropertyFn
 	QueueShrinkPredicateMaxPendingKeys dynamicconfig.IntPropertyFn
+	QueueRangeCompleteBatchSize        dynamicconfig.IntPropertyFn
+	QueueRangeCompleteTimeout          dynamicconfig.DurationPropertyFn
 	QueueMoveGroupTaskCountBase        dynamicconfig.IntPropertyFn
 	QueueMoveGroupTaskCountMultiplier  dynamicconfig.FloatPropertyFn
 
@@ -585,6 +587,8 @@ func NewConfig(
 		QueuePendingTaskMaxCount:           dynamicconfig.QueuePendingTaskMaxCount.Get(dc),
 		QueueMaxPredicateSize:              dynamicconfig.QueueMaxPredicateSize.Get(dc),
 		QueueShrinkPredicateMaxPendingKeys: dynamicconfig.QueueShrinkPredicateMaxPendingKeys.Get(dc),
+		QueueRangeCompleteBatchSize:        dynamicconfig.QueueRangeCompleteBatchSize.Get(dc),
+		QueueRangeCompleteTimeout:          dynamicconfig.QueueRangeCompleteTimeout.Get(dc),
 		QueueMoveGroupTaskCountBase:        dynamicconfig.QueueMoveGroupTaskCountBase.Get(dc),
 		QueueMoveGroupTaskCountMultiplier:  dynamicconfig.QueueMoveGroupTaskCountMultiplier.Get(dc),
 

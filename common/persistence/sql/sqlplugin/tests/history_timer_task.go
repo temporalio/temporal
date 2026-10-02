@@ -360,6 +360,46 @@ func (s *historyHistoryTimerTaskSuite) TestInsertDeleteSelect_Multiple() {
 	s.Equal([]sqlplugin.TimerTasksRow(nil), rows)
 }
 
+func (s *historyHistoryTimerTaskSuite) TestInsertDeleteSelect_Multiple_PageSize() {
+	numTasks := 20
+	pageSize := 5
+
+	shardID := rand.Int31()
+	timestamp := s.now()
+	minTimestamp := timestamp
+	taskID := int64(1)
+	maxTimestamp := timestamp.Add(time.Duration(numTasks) * time.Millisecond)
+
+	var tasks []sqlplugin.TimerTasksRow
+	for range numTasks {
+		task := s.newRandomTimerTaskRow(shardID, timestamp, taskID)
+		timestamp = timestamp.Add(time.Millisecond)
+		taskID++
+		tasks = append(tasks, task)
+	}
+	result, err := s.store.InsertIntoTimerTasks(newExecutionContext(), tasks)
+	s.NoError(err)
+	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
+	s.Equal(numTasks, int(rowsAffected))
+
+	filter := sqlplugin.TimerTasksRangeFilter{
+		ShardID:                         shardID,
+		InclusiveMinVisibilityTimestamp: minTimestamp,
+		ExclusiveMaxVisibilityTimestamp: maxTimestamp,
+		PageSize:                        pageSize,
+	}
+	result, err = s.store.RangeDeleteFromTimerTasks(newExecutionContext(), filter)
+	s.NoError(err)
+	rowsAffected, err = result.RowsAffected()
+	s.NoError(err)
+	s.Equal(pageSize, int(rowsAffected))
+
+	rows, err := s.store.RangeSelectFromTimerTasks(newExecutionContext(), filter)
+	s.NoError(err)
+	s.Equal(numTasks-pageSize, len(rows))
+}
+
 func (s *historyHistoryTimerTaskSuite) now() time.Time {
 	return time.Now().UTC().Truncate(time.Millisecond)
 }
