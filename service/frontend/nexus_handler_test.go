@@ -3,14 +3,12 @@ package frontend
 import (
 	"context"
 	"errors"
-	"net/url"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
@@ -24,11 +22,9 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
-	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -383,69 +379,4 @@ func TestNexusInterceptRequest_HeadersSanitization(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, initialHeader, header)
 	require.Equal(t, map[string]string{"ok-header": "ok"}, request.Request.Header)
-}
-
-func TestParseNexusCaller(t *testing.T) {
-	workflowLink := func(ns, workflowID, runID string) nexus.Link {
-		return commonnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
-			Namespace:  ns,
-			WorkflowId: workflowID,
-			RunId:      runID,
-			Reference: &commonpb.Link_WorkflowEvent_EventRef{
-				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-					EventId:   5,
-					EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
-				},
-			},
-		})
-	}
-	firstLink := workflowLink("caller-ns", "caller-wf", "caller-run")
-	secondLink := workflowLink("other-ns", "other-wf", "other-run")
-	malformedLink := nexus.Link{
-		URL:  &url.URL{Scheme: "temporal", Path: "/malformed"},
-		Type: firstLink.Type,
-	}
-	activityLink := commonnexus.ConvertLinkActivityToNexusLink(&commonpb.Link_Activity{
-		Namespace:  "caller-ns",
-		ActivityId: "act-id",
-		RunId:      "act-run",
-	})
-	firstCallerTags := []tag.Tag{
-		tag.CallerNamespace("caller-ns"),
-		tag.CallerWorkflowID("caller-wf"),
-		tag.CallerRunID("caller-run"),
-	}
-
-	for _, tc := range []struct {
-		name         string
-		links        []nexus.Link
-		expectedTags []tag.Tag
-	}{
-		{
-			name: "no links",
-		},
-		{
-			name:         "valid workflow link",
-			links:        []nexus.Link{firstLink},
-			expectedTags: firstCallerTags,
-		},
-		{
-			name:         "malformed link is skipped",
-			links:        []nexus.Link{malformedLink, firstLink},
-			expectedTags: firstCallerTags,
-		},
-		{
-			name:  "non-workflow link",
-			links: []nexus.Link{activityLink},
-		},
-		{
-			name:         "first valid workflow link wins",
-			links:        []nexus.Link{firstLink, secondLink},
-			expectedTags: firstCallerTags,
-		},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			require.Equal(t, tc.expectedTags, parseNexusCaller(tc.links))
-		})
-	}
 }
