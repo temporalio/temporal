@@ -231,6 +231,60 @@ func (s *TaskQueueSuite) TesList() {
 	// TODO there exists a SQL impl, but no cassandra impl ...
 }
 
+func (s *TaskQueueSuite) TestUpdate_Fingerprint() {
+	for _, kind := range []enumspb.TaskQueueKind{enumspb.TASK_QUEUE_KIND_NORMAL, enumspb.TASK_QUEUE_KIND_STICKY} {
+		s.Run(kind.String(), func() {
+			s.taskQueueName = uuid.New().String()
+			rangeID := rand.Int63()
+			info1 := s.createTaskQueue(rangeID, kind)
+			fp1 := s.getFingerprint(info1)
+			s.NotZero(fp1)
+
+			// a write that doesn't change the range id (e.g. the previous owner syncing state)
+			info2 := s.randomTaskQueueInfo(kind)
+			_, err := s.taskManager.UpdateTaskQueue(s.ctx, &p.UpdateTaskQueueRequest{
+				RangeID:       rangeID,
+				TaskQueueInfo: info2,
+				PrevRangeID:   rangeID,
+			})
+			s.NoError(err)
+			fp2 := s.getFingerprint(info2)
+			s.NotEqual(fp1, fp2)
+
+			// a takeover based on the first read fails and doesn't change anything
+			_, err = s.taskManager.UpdateTaskQueue(s.ctx, &p.UpdateTaskQueueRequest{
+				RangeID:         rangeID + 1,
+				TaskQueueInfo:   s.randomTaskQueueInfo(kind),
+				PrevRangeID:     rangeID,
+				PrevFingerprint: fp1,
+			})
+			s.ErrorAs(err, new(*p.ConditionFailedError))
+			s.assertEqualWithDB(rangeID, info2)
+
+			// a takeover based on the latest read succeeds
+			info3 := s.randomTaskQueueInfo(kind)
+			_, err = s.taskManager.UpdateTaskQueue(s.ctx, &p.UpdateTaskQueueRequest{
+				RangeID:         rangeID + 1,
+				TaskQueueInfo:   info3,
+				PrevRangeID:     rangeID,
+				PrevFingerprint: fp2,
+			})
+			s.NoError(err)
+			s.assertEqualWithDB(rangeID+1, info3)
+		})
+	}
+}
+
+func (s *TaskQueueSuite) getFingerprint(taskQueueInfo *persistencespb.TaskQueueInfo) uint64 {
+	resp, err := s.taskManager.GetTaskQueue(s.ctx, &p.GetTaskQueueRequest{
+		NamespaceID: taskQueueInfo.NamespaceId,
+		TaskQueue:   taskQueueInfo.Name,
+		TaskType:    taskQueueInfo.TaskType,
+	})
+	s.NoError(err)
+	return resp.Fingerprint
+}
+
 func (s *TaskQueueSuite) createTaskQueue(
 	rangeID int64,
 	taskQueueKind enumspb.TaskQueueKind,

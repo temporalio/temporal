@@ -92,6 +92,7 @@ func (d *matchingTaskStoreV2) CreateTasks(
 			request.RangeID,
 			request.TaskQueueInfo.Data,
 			request.TaskQueueInfo.EncodingType.String(),
+			taskQueueFingerprint(request.TaskQueueInfo.Data),
 			namespaceID,
 			taskQueue,
 			taskQueueType,
