@@ -30,16 +30,16 @@ type DestinationBlockedFn func(namespaceID string, destination string) bool
 
 // OperationContext holds dependencies injected into the chasm.Context for use by Operation methods.
 type OperationContext struct {
-	MetricTagConfig    dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
 	DestinationBlocked DestinationBlockedFn
+	MetricTagConfig    dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
 }
 
 // componentOnlyLibrary registers just the components without task executors or gRPC handlers.
 // Used in the frontend to enable component ref serialization.
 type componentOnlyLibrary struct {
 	chasm.UnimplementedLibrary
-	metricTagConfig    dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
 	destinationBlocked DestinationBlockedFn
+	metricTagConfig    dynamicconfig.TypedPropertyFn[NexusMetricTagConfig]
 }
 
 func newComponentOnlyLibrary(dc *dynamicconfig.Collection) *componentOnlyLibrary {

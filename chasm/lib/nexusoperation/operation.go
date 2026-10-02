@@ -841,6 +841,7 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 		}
 	}
 
+	// If the Nexus operation is SCHEDULED, check the circuit breaker and upgrade it to BLOCKED if applicable.
 	if opCtx, ok := ctx.Value(OperationContextKey).(*OperationContext); ok && opCtx.DestinationBlocked != nil {
 		if info.State == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED &&
 			opCtx.DestinationBlocked(key.NamespaceID, o.Endpoint) {
