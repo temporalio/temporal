@@ -39,9 +39,8 @@ type (
 		nexusServices          map[string]*nexus.Service // service name -> nexus service
 		NexusEndpointProcessor *NexusEndpointProcessor
 
-		// taskCountMetricEnabled is true if any registered component or task opted into
-		// the logical task count metrics. It lets CloseTransaction skip counting entirely
-		// when nothing opted in.
+		// True if any registered component or task opted into the task count metrics,
+		// letting CloseTransaction skip counting entirely when nothing did.
 		taskCountMetricEnabled bool
 
 		logger log.Logger

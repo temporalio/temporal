@@ -948,14 +948,13 @@ var (
 	)
 	ChasmLogicalTaskCount = NewDimensionlessHistogramDef(
 		"chasm_logical_task_count",
-		WithDescription("The number of logical CHASM tasks of a given task type held by a given component type in "+
-			"a single execution, recorded at CloseTransaction only when the count exceeds "+
-			"history.chasmLogicalTaskCountAlertThreshold."),
+		WithDescription("The number of logical CHASM tasks of one task type held by a component type in a single "+
+			"execution, recorded only when it exceeds history.chasmLogicalTaskCountAlertThreshold."),
 	)
 	ChasmLogicalTaskCountExceeded = NewCounterDef(
 		"chasm_logical_task_count_exceeded",
-		WithDescription("The number of times a component type's logical CHASM task count for a given task type "+
-			"exceeded history.chasmLogicalTaskCountAlertThreshold at CloseTransaction."),
+		WithDescription("The number of times a component type's logical CHASM task count exceeded "+
+			"history.chasmLogicalTaskCountAlertThreshold."),
 	)
 	ChasmIncomingSignalWritten = NewCounterDef(
 		"chasm_incoming_signal_written",
