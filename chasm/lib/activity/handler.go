@@ -99,7 +99,14 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 				}
 			}
 
-			err = TransitionScheduled.Apply(newActivity, mutableContext, nil)
+			if request.GetRequestEagerExecution() {
+				err = TransitionEagerStarted.Apply(newActivity, mutableContext, eagerStartEvent{
+					requestID: request.GetRequestId(),
+					identity:  request.GetIdentity(),
+				})
+			} else {
+				err = TransitionScheduled.Apply(newActivity, mutableContext, nil)
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -127,6 +134,23 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			),
 			frontendReq.GetInput().Size(),
 		)
+	}
+
+	var eagerTask *workflowservice.PollActivityTaskQueueResponse
+	if result.Created && frontendReq.GetRequestEagerExecution() {
+		eagerTask, err = chasm.ReadComponent(
+			ctx,
+			result.ExecutionRef,
+			(*Activity).buildEagerActivityTask,
+			eagerActivityTaskRequest{
+				namespaceID: req.GetNamespaceId(),
+				namespace:   frontendReq.GetNamespace(),
+				requestID:   frontendReq.GetRequestId(),
+			},
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Apply on_conflict_options to an existing activity.
@@ -165,8 +189,9 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 
 	return &activitypb.StartActivityExecutionResponse{
 		FrontendResponse: &workflowservice.StartActivityExecutionResponse{
-			RunId:   result.ExecutionKey.RunID,
-			Started: result.Created,
+			RunId:             result.ExecutionKey.RunID,
+			Started:           result.Created,
+			EagerActivityTask: eagerTask,
 			Link: &commonpb.Link{
 				Variant: &commonpb.Link_Activity_{
 					Activity: &commonpb.Link_Activity{
@@ -176,7 +201,6 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 					},
 				},
 			},
-			// EagerTask: TODO when supported, need to call the same code that would handle the HandleStarted API
 		},
 	}, nil
 }
