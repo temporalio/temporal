@@ -76,6 +76,11 @@ type pollerList struct {
 	count      int
 }
 
+// less orders local pollers before parent forwarders, and parent forwarders before validators.
+func (p *waitingPoller) less(other *waitingPoller) bool {
+	return p.taskForwarderType < other.taskForwarderType
+}
+
 func (p *pollerList) Len() int {
 	return p.count
 }
@@ -88,17 +93,8 @@ func (p *pollerList) Add(poller *waitingPoller) {
 	// validatorTaskForwarder. Locals must win over both. On child partitions
 	// the task forwarder must take the head before the batch validator.
 	at := p.tail
-	switch poller.taskForwarderType {
-	case notTaskForwarder:
-		for at != nil && at.taskForwarderType != notTaskForwarder {
-			at = at.prev
-		}
-	case parentTaskForwarder:
-		for at != nil && at.taskForwarderType == validatorTaskForwarder {
-			at = at.prev
-		}
-	default:
-		// validatorTaskForwarder: insert at tail
+	for at != nil && poller.less(at) {
+		at = at.prev
 	}
 
 	next := p.head

@@ -2,7 +2,6 @@
 package matching
 
 import (
-	"container/list"
 	"context"
 	"sync"
 	"time"
@@ -12,12 +11,16 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-const taskReaderOfferTimeout = 60 * time.Second // TODO(pri): old matcher cleanup
+const (
+	taskReaderOfferTimeout    = 60 * time.Second // TODO(pri): old matcher cleanup
+	taskValidatorCacheMaxSize = 1024
+)
 
 type (
 	taskValidator interface {
@@ -45,9 +48,8 @@ type (
 		namespaceRegistry namespace.Registry
 		historyClient     historyservice.HistoryServiceClient
 
-		mu         sync.Mutex
-		cache      map[int64]*list.Element
-		cacheOrder *list.List
+		mu    sync.Mutex
+		cache cache.Cache
 	}
 )
 
@@ -64,8 +66,7 @@ func newTaskValidator(
 		clusterMetadata:   clusterMetadata,
 		namespaceRegistry: namespaceRegistry,
 		historyClient:     historyClient,
-		cache:             make(map[int64]*list.Element, config.ValidatorCacheMaxSize()),
-		cacheOrder:        list.New(),
+		cache:             cache.New(taskValidatorCacheMaxSize, nil),
 	}
 }
 
@@ -111,9 +112,7 @@ func (v *taskValidatorImpl) preValidate(
 func (v *taskValidatorImpl) lookupOrInit(task *persistencespb.AllocatedTaskInfo) (info taskValidationInfo, existed bool) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	if element, ok := v.cache[task.TaskId]; ok {
-		info = element.Value.(taskValidationInfo) //nolint:revive // putLocked stores only taskValidationInfo values.
-		v.putLocked(info)
+	if info, ok := v.cache.Get(task.TaskId).(taskValidationInfo); ok {
 		return info, true
 	}
 	validationTime := time.Now().UTC()
@@ -121,23 +120,8 @@ func (v *taskValidatorImpl) lookupOrInit(task *persistencespb.AllocatedTaskInfo)
 		validationTime = task.Data.CreateTime.AsTime()
 	}
 	info = taskValidationInfo{taskID: task.TaskId, validationTime: validationTime}
-	v.putLocked(info)
+	v.cache.Put(task.TaskId, info)
 	return info, false
-}
-
-func (v *taskValidatorImpl) putLocked(info taskValidationInfo) {
-	if element, ok := v.cache[info.taskID]; ok {
-		element.Value = info
-		v.cacheOrder.MoveToFront(element)
-	} else {
-		v.cache[info.taskID] = v.cacheOrder.PushFront(info)
-	}
-	maxSize := v.config.ValidatorCacheMaxSize()
-	for len(v.cache) > maxSize {
-		oldest := v.cacheOrder.Back()
-		v.cacheOrder.Remove(oldest)
-		delete(v.cache, oldest.Value.(taskValidationInfo).taskID)
-	}
 }
 
 // preValidateActive track a task and return if validation should be done, if namespace is active
@@ -165,7 +149,7 @@ func (v *taskValidatorImpl) postValidate(
 ) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	v.putLocked(taskValidationInfo{
+	v.cache.Put(task.TaskId, taskValidationInfo{
 		taskID:         task.TaskId,
 		validationTime: time.Now().UTC(),
 	})

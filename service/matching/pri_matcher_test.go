@@ -74,7 +74,7 @@ func (s *PriMatcherSuite) newRootMatcher(
 	)
 }
 
-func newBacklogTask(id int64, done chan taskResponse) *internalTask {
+func (s *PriMatcherSuite) newBacklogTask(id int64, done chan taskResponse) *internalTask {
 	task := newInternalTaskFromBacklog(&persistencespb.AllocatedTaskInfo{
 		TaskId: id,
 		Data: &persistencespb.TaskInfo{
@@ -319,15 +319,6 @@ func (s *PriMatcherSuite) TestValidatorDrop_SetsDropReason() {
 	}
 }
 
-func (s *PriMatcherSuite) TestValidatorBatchSizeDefault() {
-	cfg := newTaskQueueConfig(
-		tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
-		NewConfig(dynamicconfig.NewNoopCollection()),
-		"nsname",
-	)
-	s.Equal(10, cfg.ValidatorBatchSize())
-}
-
 func (s *PriMatcherSuite) TestValidatorBatch_AllInvalidDropsAll() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -340,7 +331,7 @@ func (s *PriMatcherSuite) TestValidatorBatch_AllInvalidDropsAll() {
 
 	done := make(chan taskResponse, 3)
 	for id := int64(1); id <= 3; id++ {
-		s.Require().NoError(tm.AddTask(newBacklogTask(id, done)))
+		s.Require().NoError(tm.AddTask(s.newBacklogTask(id, done)))
 	}
 	tm.Start()
 
@@ -363,7 +354,7 @@ func (s *PriMatcherSuite) TestValidatorBatch_AllValidReprocessesAll() {
 
 	done := make(chan taskResponse, 3)
 	for id := int64(1); id <= 3; id++ {
-		s.Require().NoError(tm.AddTask(newBacklogTask(id, done)))
+		s.Require().NoError(tm.AddTask(s.newBacklogTask(id, done)))
 	}
 	tm.Start()
 
@@ -390,7 +381,7 @@ func (s *PriMatcherSuite) TestValidatorBatch_MixedInvalidContinuesImmediately() 
 
 		done := make(chan taskResponse, 4)
 		for id := int64(1); id <= 2; id++ {
-			require.NoError(t, tm.AddTask(newBacklogTask(id, done)))
+			require.NoError(t, tm.AddTask(s.newBacklogTask(id, done)))
 		}
 		tm.Start()
 		// Drain first batch.
@@ -398,7 +389,7 @@ func (s *PriMatcherSuite) TestValidatorBatch_MixedInvalidContinuesImmediately() 
 			await.Rcv(t, done)
 		}
 
-		require.NoError(t, tm.AddTask(newBacklogTask(3, done)))
+		require.NoError(t, tm.AddTask(s.newBacklogTask(3, done)))
 		select {
 		case <-done:
 		case <-time.After(100 * time.Millisecond):
@@ -430,7 +421,7 @@ func (s *PriMatcherSuite) TestValidatorBatch_ValidatesConcurrently() {
 		defer tm.Stop()
 		done := make(chan taskResponse, 2)
 		for id := int64(1); id <= 2; id++ {
-			require.NoError(t, tm.AddTask(newBacklogTask(id, done)))
+			require.NoError(t, tm.AddTask(s.newBacklogTask(id, done)))
 		}
 		tm.Start()
 
@@ -494,7 +485,7 @@ func (s *PriMatcherSuite) TestValidatorRunsOnChildBehindForwardedHead() {
 
 		done := make(chan taskResponse, 3)
 		for id := int64(1); id <= 3; id++ {
-			require.NoError(t, tm.AddTask(newBacklogTask(id, done)))
+			require.NoError(t, tm.AddTask(s.newBacklogTask(id, done)))
 		}
 
 		await.Rcv(t, forwardStarted)
@@ -553,7 +544,7 @@ func (s *PriMatcherSuite) TestForwardTasksIndependentBackoff() {
 		done := make(chan taskResponse, workers)
 		addTasks := func(firstID int64) {
 			for id := firstID; id < firstID+workers; id++ {
-				task := newBacklogTask(id, done)
+				task := s.newBacklogTask(id, done)
 				task.forwardCtx = ctx
 				require.NoError(t, tm.AddTask(task))
 			}

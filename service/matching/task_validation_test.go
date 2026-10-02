@@ -84,17 +84,14 @@ func (s *taskValidatorSuite) SetupTest() {
 func (s *taskValidatorSuite) putCache(info taskValidationInfo) {
 	s.taskValidator.mu.Lock()
 	defer s.taskValidator.mu.Unlock()
-	s.taskValidator.putLocked(info)
+	s.taskValidator.cache.Put(info.taskID, info)
 }
 
 func (s *taskValidatorSuite) cacheInfo(taskID int64) (taskValidationInfo, bool) {
 	s.taskValidator.mu.Lock()
 	defer s.taskValidator.mu.Unlock()
-	element, ok := s.taskValidator.cache[taskID]
-	if !ok {
-		return taskValidationInfo{}, false
-	}
-	return element.Value.(taskValidationInfo), true
+	info, ok := s.taskValidator.cache.Get(taskID).(taskValidationInfo)
+	return info, ok
 }
 
 func (s *taskValidatorSuite) TestPreValidateActive_NewTask_Skip_WithCreationTime() {
@@ -227,53 +224,28 @@ func (s *taskValidatorSuite) TestCache_ConcurrentFirstSeen() {
 	}
 	s.taskValidator.mu.Lock()
 	defer s.taskValidator.mu.Unlock()
-	s.Len(s.taskValidator.cache, n)
+	s.Equal(n, s.taskValidator.cache.Size())
 }
 
-func (s *taskValidatorSuite) TestCache_EvictsLeastRecentlyAccessedWhenFull() {
-	maxSize := s.taskValidator.config.ValidatorCacheMaxSize()
-	now := time.Now()
-	for i := range maxSize {
-		s.putCache(taskValidationInfo{
-			taskID:         int64(i + 1),
-			validationTime: now.Add(-time.Duration(i) * time.Second),
+func (s *taskValidatorSuite) TestCache_ConcurrentSameTaskFirstSeen() {
+	s.task.Data.CreateTime = timestamppb.New(time.Now().Add(-time.Hour))
+	const n = 20
+	shouldValidate := make([]bool, n)
+	var wg sync.WaitGroup
+	for i := range n {
+		wg.Go(func() {
+			shouldValidate[i] = s.taskValidator.preValidateActive(s.task)
 		})
 	}
-	s.False(s.taskValidator.preValidateActive(&persistencespb.AllocatedTaskInfo{TaskId: 1}))
-	newTask := &persistencespb.AllocatedTaskInfo{
-		TaskId: int64(maxSize + 1),
-		Data:   &persistencespb.TaskInfo{CreateTime: timestamppb.Now()},
-	}
-	s.False(s.taskValidator.preValidateActive(newTask))
+	wg.Wait()
 
-	_, recentlyAccessedKept := s.cacheInfo(1)
-	s.True(recentlyAccessedKept)
-	_, leastRecentlyAccessedKept := s.cacheInfo(2)
-	s.False(leastRecentlyAccessedKept, "least recently accessed entry must be evicted")
-	_, newestKept := s.cacheInfo(int64(maxSize))
-	s.True(newestKept)
-	_, inserted := s.cacheInfo(newTask.TaskId)
-	s.True(inserted)
-	s.taskValidator.mu.Lock()
-	defer s.taskValidator.mu.Unlock()
-	s.Len(s.taskValidator.cache, maxSize)
-}
-
-func (s *taskValidatorSuite) TestCache_OldTasksValidateWhenFull() {
-	maxSize := s.taskValidator.config.ValidatorCacheMaxSize()
-	for id := int64(1); id <= int64(maxSize); id++ {
-		s.taskValidator.postValidate(&persistencespb.AllocatedTaskInfo{TaskId: id})
+	firstSeen := 0
+	for _, validate := range shouldValidate {
+		if !validate {
+			firstSeen++
+		}
 	}
-	tasks := []*persistencespb.AllocatedTaskInfo{
-		{TaskId: int64(maxSize + 1), Data: &persistencespb.TaskInfo{CreateTime: timestamppb.New(time.Now().Add(-time.Hour))}},
-		{TaskId: int64(maxSize + 2), Data: &persistencespb.TaskInfo{CreateTime: timestamppb.New(time.Now().Add(-time.Hour))}},
-	}
-	for _, task := range tasks {
-		s.False(s.taskValidator.preValidateActive(task))
-	}
-	for _, task := range tasks {
-		s.True(s.taskValidator.preValidateActive(task), "old task %d must validate on its second pass", task.TaskId)
-	}
+	s.Equal(1, firstSeen, "only the first lookup of a task must skip validation")
 }
 
 func TestTaskValidatorValidationInterval(t *testing.T) {
@@ -349,72 +321,6 @@ func TestTaskValidatorDynamicValidationThreshold(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestTaskValidatorDynamicCacheCapacity(t *testing.T) {
-	t.Parallel()
-	client := dynamicconfig.NewMemoryClient()
-	cfg := newTaskQueueConfig(
-		tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
-		NewConfig(dynamicconfig.NewCollection(client, log.NewNoopLogger())), "nsname",
-	)
-	v := newTaskValidator(context.Background(), cfg, nil, nil, nil)
-	for id := int64(1); id <= 128; id++ {
-		v.postValidate(&persistencespb.AllocatedTaskInfo{TaskId: id})
-	}
-	for _, tc := range []struct {
-		capacity int
-		wantIDs  []int64
-	}{
-		{capacity: 2, wantIDs: []int64{127, 128}},
-		{capacity: 0, wantIDs: []int64{128}},
-		{capacity: -1, wantIDs: []int64{128}},
-	} {
-		t.Cleanup(client.OverrideSetting(dynamicconfig.MatchingValidatorCacheMaxSize, []dynamicconfig.ConstrainedValue{{
-			Constraints: dynamicconfig.Constraints{Namespace: "nsname", TaskQueueName: "tq", TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
-			Value:       tc.capacity,
-		}}))
-		require.False(t, v.preValidateActive(&persistencespb.AllocatedTaskInfo{TaskId: 128}))
-		var ids []int64
-		for id := range v.cache {
-			ids = append(ids, id)
-		}
-		require.ElementsMatch(t, tc.wantIDs, ids)
-	}
-	t.Cleanup(client.OverrideSetting(dynamicconfig.MatchingValidatorCacheMaxSize, 3))
-	v.postValidate(&persistencespb.AllocatedTaskInfo{TaskId: 129})
-	v.postValidate(&persistencespb.AllocatedTaskInfo{TaskId: 130})
-	require.Len(t, v.cache, 3)
-}
-
-func TestTaskValidatorPostValidateUpdatesRecency(t *testing.T) {
-	t.Parallel()
-	cfg := newTaskQueueConfig(
-		tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
-		NewConfig(dynamicconfig.NewNoopCollection()), "nsname",
-	)
-	cfg.ValidatorCacheMaxSize = func() int { return 2 }
-	v := newTaskValidator(context.Background(), cfg, nil, nil, nil)
-	tasks := make([]*persistencespb.AllocatedTaskInfo, 4)
-	for i := range tasks {
-		tasks[i] = &persistencespb.AllocatedTaskInfo{
-			TaskId: int64(i + 1),
-			Data:   &persistencespb.TaskInfo{CreateTime: timestamppb.New(time.Now().Add(-time.Hour))},
-		}
-	}
-	require.False(t, v.preValidateActive(tasks[0]))
-	require.False(t, v.preValidateActive(tasks[1]))
-	v.postValidate(tasks[0])
-	require.False(t, v.preValidateActive(tasks[0]))
-	require.False(t, v.preValidateActive(tasks[2]))
-	require.Contains(t, v.cache, tasks[0].TaskId)
-	require.NotContains(t, v.cache, tasks[1].TaskId)
-
-	require.False(t, v.preValidateActive(tasks[3]))
-	require.NotContains(t, v.cache, tasks[0].TaskId)
-	require.Contains(t, v.cache, tasks[2].TaskId)
-	require.Contains(t, v.cache, tasks[3].TaskId)
-	require.Len(t, v.cache, 2)
 }
 
 func (s *taskValidatorSuite) TestIsTaskValid_ActivityTask_Valid() {

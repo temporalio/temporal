@@ -123,21 +123,16 @@ func newPriTaskMatcher(
 }
 
 func (tm *priTaskMatcher) Start() {
-	validatorRetrier := backoff.NewRetrier(
-		backoff.NewExponentialRetryPolicy(time.Second).
-			WithMaximumInterval(tm.config.BacklogTaskForwardTimeout()).
-			WithExpirationInterval(backoff.NoInterval),
-		clock.NewRealTimeSource(),
-	)
+	policy := backoff.NewExponentialRetryPolicy(time.Second).
+		WithMaximumInterval(tm.config.BacklogTaskForwardTimeout()).
+		WithExpirationInterval(backoff.NoInterval)
+	validatorRetrier := backoff.NewRetrier(policy, clock.NewRealTimeSource())
 	go tm.validateTasks(validatorRetrier)
 
 	if tm.fwdr == nil {
 		return
 	}
 
-	policy := backoff.NewExponentialRetryPolicy(time.Second).
-		WithMaximumInterval(tm.config.BacklogTaskForwardTimeout()).
-		WithExpirationInterval(backoff.NoInterval)
 	lim := quotas.NewDefaultOutgoingRateLimiter(tm.config.ForwarderMaxRatePerSecond)
 
 	// Forwarders share a synchronized per-task validation cache. Each worker owns
