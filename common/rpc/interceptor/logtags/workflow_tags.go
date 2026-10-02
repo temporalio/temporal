@@ -1,5 +1,5 @@
 // Generates all generated files in this package:
-//go:generate go run ../../../../cmd/tools/genrpcserverinterceptors
+//go:generate go run ../../../../cmd/tools/genrpclogtags
 
 package logtags
 

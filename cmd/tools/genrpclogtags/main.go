@@ -39,8 +39,8 @@ type (
 )
 
 var (
-	//go:embed server_interceptors.tmpl
-	serverInterceptorsTemplate string
+	//go:embed logtags.tmpl
+	logtagsTemplate string
 
 	// List of types for which Workflow tag getters are generated.
 	grpcServers = []reflect.Type{
@@ -84,7 +84,7 @@ func main() {
 	flag.Parse()
 
 	for _, grpcServerT := range grpcServers {
-		codegen.GenerateTemplateToFile(serverInterceptorsTemplate, getGrpcServerData(grpcServerT), *outPathFlag, codegen.CamelCaseToSnakeCase(grpcServerT.Name()))
+		codegen.GenerateTemplateToFile(logtagsTemplate, getGrpcServerData(grpcServerT), *outPathFlag, codegen.CamelCaseToSnakeCase(grpcServerT.Name()))
 	}
 }
 
