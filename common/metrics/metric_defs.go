@@ -1496,6 +1496,8 @@ var (
 	ScheduleInvariantsScannerOverdueNextActionTimeStaleCandidateCount = NewCounterDef("schedule_invariants_scanner_overdue_next_action_time_stale_candidate")
 	ScheduleInvariantsScannerStuckOpenCount                           = NewCounterDef("schedule_invariants_scanner_stuck_open")
 	ScheduleInvariantsScannerUnknownStateCount                        = NewCounterDef("schedule_invariants_scanner_unknown_state")
+	ScheduleInvariantsScannerStaleRunningWorkflowsCount               = NewCounterDef("schedule_invariants_scanner_stale_running_workflows")
+	ScheduleInvariantsScannerStaleRunningWorkflowsCapHitCount         = NewCounterDef("schedule_invariants_scanner_stale_running_workflows_cap_hit")
 	ScheduleInvariantsScannerErrorCount                               = NewCounterDef("schedule_invariants_scanner_errors")
 	ExecutionsOutstandingCount                                        = NewGaugeDef("executions_outstanding")
 	ScavengerValidationRequestsCount                                  = NewCounterDef("scavenger_validation_requests")
