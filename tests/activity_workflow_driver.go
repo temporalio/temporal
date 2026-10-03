@@ -38,7 +38,7 @@ type wfaDriver struct {
 	env      *testcore.TestEnv
 	t        *testing.T
 	cfg      activityConfig
-	holdOpen bool
+	holdOpen bool // keep the workflow running so that assertions can be made about closed activities
 }
 
 // newWFADriver builds a driver. cfg.StartDelay is ignored: a workflow activity has no per-activity
