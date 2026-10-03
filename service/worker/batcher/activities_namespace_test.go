@@ -9,6 +9,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/server/api/adminservice/v1"
 	batchspb "go.temporal.io/server/api/batch/v1"
@@ -16,6 +17,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.uber.org/mock/gomock"
@@ -72,11 +74,34 @@ func TestBatchActivityWithProtobuf_RejectsMismatchedRequestNamespace(t *testing.
 	_, err := env.ExecuteActivity(a.BatchActivityWithProtobuf, input)
 	require.Error(t, err)
 	require.ErrorContains(t, err, errNamespaceMismatch.Error())
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.Equal(t, "NamespaceMismatch", appErr.Type())
+	require.True(t, appErr.NonRetryable())
 }
 
-// TestBatchActivityWithProtobuf_RejectsMismatchedAdminRequestNamespace verifies
-// that the same namespace mismatch check applies to admin batch requests.
-func TestBatchActivityWithProtobuf_RejectsMismatchedAdminRequestNamespace(t *testing.T) {
+func TestBatchActivityWithProtobuf_RejectsMismatchedNamespaceIDWithoutRetry(t *testing.T) {
+	ts := testsuite.WorkflowTestSuite{}
+	env := ts.NewTestActivityEnvironment()
+	a := newBoundActivities(nil)
+	env.RegisterActivity(a.BatchActivityWithProtobuf)
+
+	input := &batchspb.BatchOperationInput{
+		NamespaceId: "other-ns-id",
+		Request: &workflowservice.StartBatchOperationRequest{
+			Namespace: boundNSName,
+		},
+	}
+
+	_, err := env.ExecuteActivity(a.BatchActivityWithProtobuf, input)
+	require.ErrorContains(t, err, errNamespaceMismatch.Error())
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.Equal(t, "NamespaceMismatch", appErr.Type())
+	require.True(t, appErr.NonRetryable())
+}
+
+func TestBatchActivityWithProtobuf_RejectsAdminBatchOutsideSystemNamespaceWithoutRetry(t *testing.T) {
 	ts := testsuite.WorkflowTestSuite{}
 	env := ts.NewTestActivityEnvironment()
 	a := newBoundActivities(nil)
@@ -85,14 +110,41 @@ func TestBatchActivityWithProtobuf_RejectsMismatchedAdminRequestNamespace(t *tes
 	input := &batchspb.BatchOperationInput{
 		NamespaceId: boundNSID,
 		AdminRequest: &adminservice.StartAdminBatchOperationRequest{
-			Namespace:  otherNSName, // mismatched — must be rejected
-			Executions: []*commonpb.WorkflowExecution{{WorkflowId: "w"}},
+			Namespace: boundNSName,
 		},
 	}
 
 	_, err := env.ExecuteActivity(a.BatchActivityWithProtobuf, input)
-	require.Error(t, err)
-	require.ErrorContains(t, err, errNamespaceMismatch.Error())
+	require.ErrorContains(t, err, errAdminBatchNamespaceNotSystem.Error())
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.Equal(t, "NamespaceMismatch", appErr.Type())
+	require.True(t, appErr.NonRetryable())
+}
+
+func TestCheckAndGetTargetNamespace_AdminRequest(t *testing.T) {
+	input := &batchspb.BatchOperationInput{
+		AdminRequest: &adminservice.StartAdminBatchOperationRequest{
+			Namespace: otherNSName,
+		},
+	}
+
+	t.Run("rejects request outside system namespace", func(t *testing.T) {
+		targetNamespace, err := newBoundActivities(nil).checkAndGetTargetNamespace(input)
+
+		require.ErrorIs(t, err, errAdminBatchNamespaceNotSystem)
+		require.Empty(t, targetNamespace)
+	})
+
+	t.Run("returns target namespace for system worker", func(t *testing.T) {
+		a := newBoundActivities(nil)
+		a.namespaceID = namespace.ID(primitives.SystemNamespaceID)
+
+		targetNamespace, err := a.checkAndGetTargetNamespace(input)
+
+		require.NoError(t, err)
+		require.Equal(t, otherNSName, targetNamespace)
+	})
 }
 
 // TestStartTaskProcessor_UsesWorkerBoundNamespaceForSignal verifies that when
