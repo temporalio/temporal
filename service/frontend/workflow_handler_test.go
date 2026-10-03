@@ -4274,6 +4274,21 @@ func (s *WorkflowHandlerSuite) TestValidateWorkflowCompletionCallbacks_InternalC
 		s.Require().NoError(err)
 		return base64.RawURLEncoding.EncodeToString(b)
 	}
+	// collidingToken builds a bare ref for outerNsID/outerBusinessID whose component_path entry is
+	// itself a marshaled ChasmComponentRef for innerNsID/innerBusinessID. ChasmComponentRef's
+	// component_path (field 6, repeated string) and NexusOperationCompletion's component_ref (field 6,
+	// bytes) share a wire type, so these bytes also decode as an envelope wrapping the inner ref.
+	collidingToken := func(outerNsID, outerBusinessID, innerNsID, innerBusinessID string) string {
+		inner, err := (&persistencespb.ChasmComponentRef{NamespaceId: innerNsID, BusinessId: innerBusinessID}).Marshal()
+		s.Require().NoError(err)
+		b, err := (&persistencespb.ChasmComponentRef{
+			NamespaceId:   outerNsID,
+			BusinessId:    outerBusinessID,
+			ComponentPath: []string{string(inner)},
+		}).Marshal()
+		s.Require().NoError(err)
+		return base64.RawURLEncoding.EncodeToString(b)
+	}
 
 	testCases := []struct {
 		name    string
@@ -4324,6 +4339,17 @@ func (s *WorkflowHandlerSuite) TestValidateWorkflowCompletionCallbacks_InternalC
 			url:     chasm.NexusCompletionHandlerURL,
 			headers: map[string]string{commonnexus.CallbackTokenHeader: refToken(nsID.String(), "")},
 			errMsg:  "internal callback component reference requires namespace and business IDs",
+		},
+		{
+			// Regression test: the bare-ref reading (what history actually acts on) targets a
+			// different namespace, while the colliding envelope reading targets the caller's own
+			// namespace. Validating only the envelope reading would let this through.
+			name: "bare ref targets different namespace than colliding envelope reading",
+			url:  chasm.NexusCompletionHandlerURL,
+			headers: map[string]string{commonnexus.CallbackTokenHeader: collidingToken(
+				uuid.NewString(), "victim-business", nsID.String(), "sched",
+			)},
+			errMsg: "internal callback must target the same namespace",
 		},
 		{
 			name: "system callback is not checked",
