@@ -18,8 +18,8 @@ func (s *validSuite) TestA() {
 	s.NotNil(s.T())
 
 	ch := make(chan int, 1)
-	s.Snd((chan<- int)(ch), 42)
-	s.Equal(42, s.Rcv((<-chan int)(ch)))
+	s.Snd(ch, 42)
+	s.Equal(42, s.Rcv(ch))
 }
 
 type validWithArgsSuite struct{ Suite[*validWithArgsSuite] }
