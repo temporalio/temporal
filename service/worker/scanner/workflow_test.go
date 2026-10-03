@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/dynamicconfig"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resourcetest"
@@ -44,6 +45,28 @@ func (s *scannerWorkflowTestSuite) TestWorkflow() {
 	env.OnActivity(taskQueueScavengerActivityName, mock.Anything).Return(nil)
 	env.ExecuteWorkflow(tqScannerWFTypeName)
 	s.True(env.IsWorkflowCompleted())
+}
+
+func (s *scannerWorkflowTestSuite) TestHistoryScavengerRPS_FallsBackToPersistenceMaxQPS() {
+	cfg := &Config{
+		PersistenceMaxQPS: dynamicconfig.GetIntPropertyFn(100),
+		HistoryScannerRPS: dynamicconfig.GetIntPropertyFn(0),
+	}
+	s.Equal(100, historyScavengerRPS(cfg)())
+}
+
+func (s *scannerWorkflowTestSuite) TestHistoryScavengerRPS_OverridesPersistenceMaxQPS() {
+	historyScannerRPS := 0
+	cfg := &Config{
+		PersistenceMaxQPS: dynamicconfig.GetIntPropertyFn(100),
+		HistoryScannerRPS: func() int { return historyScannerRPS },
+	}
+	rps := historyScavengerRPS(cfg)
+	s.Equal(100, rps())
+
+	// The scavenger activity is long running, so the override has to be picked up while it runs.
+	historyScannerRPS = 5
+	s.Equal(5, rps())
 }
 
 func (s *scannerWorkflowTestSuite) TestScavengerActivity() {
