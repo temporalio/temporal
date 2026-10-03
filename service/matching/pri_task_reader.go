@@ -149,6 +149,9 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 	tr.maybeGCLocked()
 
 	// use == so we just signal once when we cross this threshold
+	// This assumes the threshold stays fixed while loadedTasks falls. If a live config
+	// change raises it above loadedTasks, completions can drain the buffer without another
+	// signal, leaving unread backlog waiting for a write or reader restart to wake the pump.
 	if tr.loadedTasks == tr.backlogMgr.config.GetTasksReloadAt() {
 		tr.SignalTaskLoading()
 	}
