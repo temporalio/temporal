@@ -73,9 +73,9 @@ pod-level rate limiting. Read once at process startup: changing this value requi
 		false,
 		`VisibilityEnableShadowReadMode is the config to enable shadow read from secondary visibility`,
 	)
-	SecondaryVisibilityWritingMode = NewGlobalTypedSettingWithConverter(
+	SecondaryVisibilityWritingMode = NewGlobalStringEnumSetting(
 		"system.secondaryVisibilityWritingMode",
-		convertStringEnum([]string{"off", "on", "dual"}),
+		StringEnum{"off", "on", "dual"},
 		"off",
 		`SecondaryVisibilityWritingMode is key for how to write to secondary visibility`,
 	)

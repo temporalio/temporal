@@ -566,6 +566,174 @@ func GetStringPropertyFnFilteredByChasmTaskType(value string) StringPropertyFnWi
 	return GetTypedPropertyFnFilteredByChasmTaskType(value)
 }
 
+type GlobalStringEnumSetting = GlobalTypedSetting[string]
+type GlobalStringEnumConstrainedDefaultSetting = GlobalTypedConstrainedDefaultSetting[string]
+
+func NewGlobalStringEnumSetting(key string, allowed StringEnum, def string, description string) GlobalStringEnumSetting {
+	allowed.mustContainDefault(key, def)
+	return NewGlobalTypedSettingWithConverter[string](key, convertStringEnum(allowed), def, description)
+}
+
+func NewGlobalStringEnumSettingWithConstrainedDefault(key string, allowed StringEnum, cdef []TypedConstrainedValue[string], description string) GlobalStringEnumConstrainedDefaultSetting {
+	for _, cv := range cdef {
+		allowed.mustContainDefault(key, cv.Value)
+	}
+	return NewGlobalTypedSettingWithConstrainedDefault[string](key, convertStringEnum(allowed), cdef, description)
+}
+
+type StringEnumPropertyFn = TypedPropertyFn[string]
+
+func GetStringEnumPropertyFn(value string) StringEnumPropertyFn {
+	return GetTypedPropertyFn(value)
+}
+
+type NamespaceStringEnumSetting = NamespaceTypedSetting[string]
+type NamespaceStringEnumConstrainedDefaultSetting = NamespaceTypedConstrainedDefaultSetting[string]
+
+func NewNamespaceStringEnumSetting(key string, allowed StringEnum, def string, description string) NamespaceStringEnumSetting {
+	allowed.mustContainDefault(key, def)
+	return NewNamespaceTypedSettingWithConverter[string](key, convertStringEnum(allowed), def, description)
+}
+
+func NewNamespaceStringEnumSettingWithConstrainedDefault(key string, allowed StringEnum, cdef []TypedConstrainedValue[string], description string) NamespaceStringEnumConstrainedDefaultSetting {
+	for _, cv := range cdef {
+		allowed.mustContainDefault(key, cv.Value)
+	}
+	return NewNamespaceTypedSettingWithConstrainedDefault[string](key, convertStringEnum(allowed), cdef, description)
+}
+
+type StringEnumPropertyFnWithNamespaceFilter = TypedPropertyFnWithNamespaceFilter[string]
+
+func GetStringEnumPropertyFnFilteredByNamespace(value string) StringEnumPropertyFnWithNamespaceFilter {
+	return GetTypedPropertyFnFilteredByNamespace(value)
+}
+
+type NamespaceIDStringEnumSetting = NamespaceIDTypedSetting[string]
+type NamespaceIDStringEnumConstrainedDefaultSetting = NamespaceIDTypedConstrainedDefaultSetting[string]
+
+func NewNamespaceIDStringEnumSetting(key string, allowed StringEnum, def string, description string) NamespaceIDStringEnumSetting {
+	allowed.mustContainDefault(key, def)
+	return NewNamespaceIDTypedSettingWithConverter[string](key, convertStringEnum(allowed), def, description)
+}
+
+func NewNamespaceIDStringEnumSettingWithConstrainedDefault(key string, allowed StringEnum, cdef []TypedConstrainedValue[string], description string) NamespaceIDStringEnumConstrainedDefaultSetting {
+	for _, cv := range cdef {
+		allowed.mustContainDefault(key, cv.Value)
+	}
+	return NewNamespaceIDTypedSettingWithConstrainedDefault[string](key, convertStringEnum(allowed), cdef, description)
+}
+
+type StringEnumPropertyFnWithNamespaceIDFilter = TypedPropertyFnWithNamespaceIDFilter[string]
+
+func GetStringEnumPropertyFnFilteredByNamespaceID(value string) StringEnumPropertyFnWithNamespaceIDFilter {
+	return GetTypedPropertyFnFilteredByNamespaceID(value)
+}
+
+type TaskQueueStringEnumSetting = TaskQueueTypedSetting[string]
+type TaskQueueStringEnumConstrainedDefaultSetting = TaskQueueTypedConstrainedDefaultSetting[string]
+
+func NewTaskQueueStringEnumSetting(key string, allowed StringEnum, def string, description string) TaskQueueStringEnumSetting {
+	allowed.mustContainDefault(key, def)
+	return NewTaskQueueTypedSettingWithConverter[string](key, convertStringEnum(allowed), def, description)
+}
+
+func NewTaskQueueStringEnumSettingWithConstrainedDefault(key string, allowed StringEnum, cdef []TypedConstrainedValue[string], description string) TaskQueueStringEnumConstrainedDefaultSetting {
+	for _, cv := range cdef {
+		allowed.mustContainDefault(key, cv.Value)
+	}
+	return NewTaskQueueTypedSettingWithConstrainedDefault[string](key, convertStringEnum(allowed), cdef, description)
+}
+
+type StringEnumPropertyFnWithTaskQueueFilter = TypedPropertyFnWithTaskQueueFilter[string]
+
+func GetStringEnumPropertyFnFilteredByTaskQueue(value string) StringEnumPropertyFnWithTaskQueueFilter {
+	return GetTypedPropertyFnFilteredByTaskQueue(value)
+}
+
+type ShardIDStringEnumSetting = ShardIDTypedSetting[string]
+type ShardIDStringEnumConstrainedDefaultSetting = ShardIDTypedConstrainedDefaultSetting[string]
+
+func NewShardIDStringEnumSetting(key string, allowed StringEnum, def string, description string) ShardIDStringEnumSetting {
+	allowed.mustContainDefault(key, def)
+	return NewShardIDTypedSettingWithConverter[string](key, convertStringEnum(allowed), def, description)
+}
+
+func NewShardIDStringEnumSettingWithConstrainedDefault(key string, allowed StringEnum, cdef []TypedConstrainedValue[string], description string) ShardIDStringEnumConstrainedDefaultSetting {
+	for _, cv := range cdef {
+		allowed.mustContainDefault(key, cv.Value)
+	}
+	return NewShardIDTypedSettingWithConstrainedDefault[string](key, convertStringEnum(allowed), cdef, description)
+}
+
+type StringEnumPropertyFnWithShardIDFilter = TypedPropertyFnWithShardIDFilter[string]
+
+func GetStringEnumPropertyFnFilteredByShardID(value string) StringEnumPropertyFnWithShardIDFilter {
+	return GetTypedPropertyFnFilteredByShardID(value)
+}
+
+type TaskTypeStringEnumSetting = TaskTypeTypedSetting[string]
+type TaskTypeStringEnumConstrainedDefaultSetting = TaskTypeTypedConstrainedDefaultSetting[string]
+
+func NewTaskTypeStringEnumSetting(key string, allowed StringEnum, def string, description string) TaskTypeStringEnumSetting {
+	allowed.mustContainDefault(key, def)
+	return NewTaskTypeTypedSettingWithConverter[string](key, convertStringEnum(allowed), def, description)
+}
+
+func NewTaskTypeStringEnumSettingWithConstrainedDefault(key string, allowed StringEnum, cdef []TypedConstrainedValue[string], description string) TaskTypeStringEnumConstrainedDefaultSetting {
+	for _, cv := range cdef {
+		allowed.mustContainDefault(key, cv.Value)
+	}
+	return NewTaskTypeTypedSettingWithConstrainedDefault[string](key, convertStringEnum(allowed), cdef, description)
+}
+
+type StringEnumPropertyFnWithTaskTypeFilter = TypedPropertyFnWithTaskTypeFilter[string]
+
+func GetStringEnumPropertyFnFilteredByTaskType(value string) StringEnumPropertyFnWithTaskTypeFilter {
+	return GetTypedPropertyFnFilteredByTaskType(value)
+}
+
+type DestinationStringEnumSetting = DestinationTypedSetting[string]
+type DestinationStringEnumConstrainedDefaultSetting = DestinationTypedConstrainedDefaultSetting[string]
+
+func NewDestinationStringEnumSetting(key string, allowed StringEnum, def string, description string) DestinationStringEnumSetting {
+	allowed.mustContainDefault(key, def)
+	return NewDestinationTypedSettingWithConverter[string](key, convertStringEnum(allowed), def, description)
+}
+
+func NewDestinationStringEnumSettingWithConstrainedDefault(key string, allowed StringEnum, cdef []TypedConstrainedValue[string], description string) DestinationStringEnumConstrainedDefaultSetting {
+	for _, cv := range cdef {
+		allowed.mustContainDefault(key, cv.Value)
+	}
+	return NewDestinationTypedSettingWithConstrainedDefault[string](key, convertStringEnum(allowed), cdef, description)
+}
+
+type StringEnumPropertyFnWithDestinationFilter = TypedPropertyFnWithDestinationFilter[string]
+
+func GetStringEnumPropertyFnFilteredByDestination(value string) StringEnumPropertyFnWithDestinationFilter {
+	return GetTypedPropertyFnFilteredByDestination(value)
+}
+
+type ChasmTaskTypeStringEnumSetting = ChasmTaskTypeTypedSetting[string]
+type ChasmTaskTypeStringEnumConstrainedDefaultSetting = ChasmTaskTypeTypedConstrainedDefaultSetting[string]
+
+func NewChasmTaskTypeStringEnumSetting(key string, allowed StringEnum, def string, description string) ChasmTaskTypeStringEnumSetting {
+	allowed.mustContainDefault(key, def)
+	return NewChasmTaskTypeTypedSettingWithConverter[string](key, convertStringEnum(allowed), def, description)
+}
+
+func NewChasmTaskTypeStringEnumSettingWithConstrainedDefault(key string, allowed StringEnum, cdef []TypedConstrainedValue[string], description string) ChasmTaskTypeStringEnumConstrainedDefaultSetting {
+	for _, cv := range cdef {
+		allowed.mustContainDefault(key, cv.Value)
+	}
+	return NewChasmTaskTypeTypedSettingWithConstrainedDefault[string](key, convertStringEnum(allowed), cdef, description)
+}
+
+type StringEnumPropertyFnWithChasmTaskTypeFilter = TypedPropertyFnWithChasmTaskTypeFilter[string]
+
+func GetStringEnumPropertyFnFilteredByChasmTaskType(value string) StringEnumPropertyFnWithChasmTaskTypeFilter {
+	return GetTypedPropertyFnFilteredByChasmTaskType(value)
+}
+
 type GlobalDurationSetting = GlobalTypedSetting[time.Duration]
 type GlobalDurationConstrainedDefaultSetting = GlobalTypedConstrainedDefaultSetting[time.Duration]
 
