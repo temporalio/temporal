@@ -73,8 +73,9 @@ pod-level rate limiting. Read once at process startup: changing this value requi
 		false,
 		`VisibilityEnableShadowReadMode is the config to enable shadow read from secondary visibility`,
 	)
-	SecondaryVisibilityWritingMode = NewGlobalStringSetting(
+	SecondaryVisibilityWritingMode = NewGlobalTypedSettingWithConverter(
 		"system.secondaryVisibilityWritingMode",
+		convertStringEnum([]string{"off", "on", "dual"}),
 		"off",
 		`SecondaryVisibilityWritingMode is key for how to write to secondary visibility`,
 	)
@@ -210,6 +211,11 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 		"system.enableActivityEagerExecution",
 		true,
 		`EnableActivityEagerExecution indicates if activity eager execution is enabled per namespace`,
+	)
+	EnableActivityEagerDispatchCheck = NewNamespaceBoolSetting(
+		"system.enableActivityEagerDispatchCheck",
+		false,
+		`EnableActivityEagerDispatchCheck controls whether history asks matching for a grant before eagerly dispatching an activity.`,
 	)
 	EnableCancelActivityWorkerCommand = NewNamespaceBoolSetting(
 		"system.enableCancelActivityWorkerCommand",
@@ -805,6 +811,24 @@ exceeded, not when it is only reached.`,
 instances in the cluster, for a given namespace, per-API method. If this is set to 0 (the default), then it is
 ignored. The name 'frontend.globalNamespaceCount' is kept for consistency with the per-instance limit name,
 'frontend.namespaceCount'.`,
+	)
+	FrontendInternalPerNSMaxConcurrentLongRunningRequestsPerInstance = NewNamespaceIntSetting(
+		"frontend.internalPerNSNamespaceCount",
+		1200,
+		`FrontendInternalPerNSMaxConcurrentLongRunningRequestsPerInstance limits concurrent PollWorkflowTaskQueue,
+PollActivityTaskQueue, and PollNexusTaskQueue requests whose task queue is an internal per-namespace queue
+(temporal-sys-per-ns-* and temporal-sys-worker-controller-per-ns-tq). The limit is per frontend instance, per
+namespace, per API method, and is independent of frontend.namespaceCount. Sticky workflow polls are classified by
+TaskQueue.NormalName. This value is ignored if FrontendGlobalInternalPerNSMaxConcurrentLongRunningRequests is
+greater than zero. Warning: setting this to zero rejects all such polls. Requests are only throttled when the
+limit is exceeded, not when it is only reached.`,
+	)
+	FrontendGlobalInternalPerNSMaxConcurrentLongRunningRequests = NewNamespaceIntSetting(
+		"frontend.globalInternalPerNSNamespaceCount",
+		0,
+		`FrontendGlobalInternalPerNSMaxConcurrentLongRunningRequests limits concurrent internal per-namespace task-queue
+polls across all frontend instances in the cluster, for a given namespace, per API method. If this is set to 0
+(the default), then it is ignored and frontend.internalPerNSNamespaceCount is used.`,
 	)
 	FrontendMaxNamespaceVisibilityRPSPerInstance = NewNamespaceIntSetting(
 		"frontend.namespaceRPS.visibility",
@@ -1685,21 +1709,22 @@ default as namespace cardinality can be high and this requires a metrics collect
 	MatchingPartitionScaleManager = NewTaskQueueTypedSetting(
 		"matching.partitionScaleManager",
 		PartitionScaleManagerSettings{
+			Enabled:               false,
 			MaxRate:               0.33,
 			ShrinkRatio:           0.1,
 			ShrinkDelta:           8,
 			BatchSize:             100,
 			BackgroundInterval:    23 * time.Second,
 			DrainBufferTime:       15 * time.Second,
-			ShadowModeLogInterval: 0,
+			ShadowModeLogInterval: 30 * time.Second,
 		},
-		`Settings for partition scale manager.`,
+		`Settings for partition scale manager. Note: Partition scale manager is experimental.`,
 	)
 	MatchingPartitionScaler = NewTaskQueueTypedSettingWithConverter(
 		"matching.partitionScaler",
 		ConvertSimplePartitionScalerSettings,
 		SimplePartitionScalerSettings{},
-		`Settings for simple partition scaler.`,
+		`Settings for simple partition scaler. Note: Partition scale manager is experimental.`,
 	)
 
 	// Worker registry settings
@@ -2956,6 +2981,11 @@ workflow resends.`,
 		true,
 		`ReplicationEnableDLQMetrics is the flag to emit DLQ metrics`,
 	)
+	ReplicationDLQMaxRetryAttempts = NewGlobalIntSetting(
+		"history.ReplicationDLQMaxRetryAttempts",
+		0,
+		`ReplicationDLQMaxRetryAttempts is the maximum number of failed attempts to enqueue a replication task to the DLQ before discarding it. Set to 0 to retry indefinitely. Discarding a task may cause replication data loss.`,
+	)
 	ReplicationEnableUpdateWithNewTaskMerge = NewGlobalBoolSetting(
 		"history.ReplicationEnableUpdateWithNewTaskMerge",
 		false,
@@ -3775,7 +3805,7 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 
 	EnableCancelWorkerPollsOnShutdown = NewNamespaceBoolSetting(
 		"frontend.enableCancelWorkerPollsOnShutdown",
-		false,
+		true,
 		`EnableCancelWorkerPollsOnShutdown enables eager cancellation of outstanding polls when a worker shuts down.
 		When enabled, ShutdownWorker will cancel all outstanding polls for the worker before processing,
 		preventing task orphaning that can occur if tasks are dispatched to a shutting-down worker.`,
@@ -3783,11 +3813,10 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 
 	EnableMatchingFanOutForPollCancellation = NewNamespaceBoolSetting(
 		"frontend.enableMatchingFanOutForPollCancellation",
-		false,
+		true,
 		`EnableMatchingFanOutForPollCancellation controls where poll cancellation fan-out happens.
 		When enabled, frontend sends root partition only; matching fans out to all partitions.
-		When disabled, frontend iterates partitions; matching handles each partition locally.
-		Default is false for safe rollout: flip to true after both frontend and matching are deployed.`,
+		When disabled, frontend iterates partitions; matching handles each partition locally.`,
 	)
 
 	// Deprecated: ListWorkersEnabled is no longer honored. ListWorkers and DescribeWorker APIs are

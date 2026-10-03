@@ -72,6 +72,8 @@ type Config struct {
 	MaxNamespaceBurstRatioPerInstance                                 dynamicconfig.FloatPropertyFnWithNamespaceFilter
 	MaxConcurrentLongRunningRequestsPerInstance                       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxGlobalConcurrentLongRunningRequests                            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxInternalPerNSConcurrentLongRunningRequestsPerInstance          dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxGlobalInternalPerNSConcurrentLongRunningRequests               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PollWaitForNamespaceRateLimitToken                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityRPSPerInstance                              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityBurstRatioPerInstance                       dynamicconfig.FloatPropertyFnWithNamespaceFilter
@@ -332,6 +334,8 @@ func NewConfig(
 		MaxNamespaceBurstRatioPerInstance:                                 dynamicconfig.FrontendMaxNamespaceBurstRatioPerInstance.Get(dc),
 		MaxConcurrentLongRunningRequestsPerInstance:                       dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance.Get(dc),
 		MaxGlobalConcurrentLongRunningRequests:                            dynamicconfig.FrontendGlobalMaxConcurrentLongRunningRequests.Get(dc),
+		MaxInternalPerNSConcurrentLongRunningRequestsPerInstance:          dynamicconfig.FrontendInternalPerNSMaxConcurrentLongRunningRequestsPerInstance.Get(dc),
+		MaxGlobalInternalPerNSConcurrentLongRunningRequests:               dynamicconfig.FrontendGlobalInternalPerNSMaxConcurrentLongRunningRequests.Get(dc),
 		PollWaitForNamespaceRateLimitToken:                                dynamicconfig.PollWaitForNamespaceRateLimitToken.Get(dc),
 		MaxNamespaceVisibilityRPSPerInstance:                              dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Get(dc),
 		MaxNamespaceVisibilityBurstRatioPerInstance:                       dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance.Get(dc),
