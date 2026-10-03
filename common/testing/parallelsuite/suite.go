@@ -131,12 +131,17 @@ func (s *Suite[T]) Context() context.Context {
 	return testcontext.For(s.T())
 }
 
+// Rcv waits for and returns the next value from ch.
+// A closed ch yields the zero value, as with a plain receive.
+// It fails the test if the context ends before ch produces a value.
 func (s *Suite[T]) Rcv[V any](ch <-chan V) V {
 	t := s.T()
 	t.Helper()
 	return await.Rcv(t, ch)
 }
 
+// Snd waits to send value to ch.
+// It fails the test if the context ends or ch closes before accepting the value.
 func (s *Suite[T]) Snd[V any](ch chan<- V, value V) {
 	t := s.T()
 	t.Helper()
