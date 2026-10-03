@@ -159,6 +159,11 @@ func (a *localActivities) MarkNamespaceDeletedActivity(ctx context.Context, nsNa
 		return err
 	}
 
+	// A previous reclaim workflow may remove this namespace after the read.
+	// Avoid writing its deleted state back and recreating it in persistence.
+	if ns.Namespace.Info.State == enumspb.NAMESPACE_STATE_DELETED {
+		return nil
+	}
 	ns.Namespace.Info.State = enumspb.NAMESPACE_STATE_DELETED
 
 	updateRequest := &persistence.UpdateNamespaceRequest{
