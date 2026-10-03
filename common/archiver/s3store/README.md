@@ -30,6 +30,19 @@ namespaceDefaults:
       URI: "s3://<bucket-name>"
 ```
 
+### S3-compatible endpoints
+
+The archiver uses the AWS SDK, so it also works against any S3-compatible object store. Amazon S3 needs no extra settings. For other stores (Backblaze B2, Cloudflare R2, MinIO) set `endpoint` to the store's S3 API endpoint, and set `s3ForcePathStyle` to `true` if the store does not support virtual-hosted-style bucket addressing.
+```
+      s3store:
+        region: "us-east-1"
+        endpoint: "https://s3.example-region.example.com"
+        s3ForcePathStyle: true
+        logLevel: 0
+```
+
+`config/development-cass-s3.yaml` contains a complete example that points at a local endpoint.
+
 ## Visibility query syntax
 You can query the visibility store by using the `tctl workflow listarchived` command
 
