@@ -45,10 +45,10 @@ func emitOperationSucceeded(base metrics.Handler, tagConfig chasmnexus.NexusMetr
 	emitOperationOutcome(base, tagConfig, op, namespaceName, workflowType, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, closeTime, chasmnexus.NexusOperationSuccessCount.With)
 }
 
-// emitOperationFailed emits the failure counter and latency metrics for an operation that
-// failed non-retryably.
-func emitOperationFailed(base metrics.Handler, tagConfig chasmnexus.NexusMetricTagConfig, op Operation, namespaceName, workflowType string, closeTime time.Time) {
-	emitOperationOutcome(base, tagConfig, op, namespaceName, workflowType, nexusoperationpb.OPERATION_STATUS_FAILED, closeTime, chasmnexus.NexusOperationFailedCount.With)
+// emitOperationFailed emits the failure counter (tagged with the failure reason) and latency
+// metrics for an operation that failed non-retryably.
+func emitOperationFailed(base metrics.Handler, tagConfig chasmnexus.NexusMetricTagConfig, op Operation, namespaceName, workflowType string, reason metrics.ReasonString, closeTime time.Time) {
+	emitOperationOutcome(base, tagConfig, op, namespaceName, workflowType, nexusoperationpb.OPERATION_STATUS_FAILED, closeTime, chasmnexus.NexusOperationFailedCount.With, metrics.ReasonTag(reason))
 }
 
 // emitOperationCanceled emits the cancel counter and latency metrics for an operation that
@@ -66,7 +66,7 @@ func emitOperationTimedOut(base metrics.Handler, tagConfig chasmnexus.NexusMetri
 // emitOperationOutcome records the terminal outcome counter and the shared latency metrics for a
 // closed operation. The outcome-specific counter is supplied as a metric definition's With method
 // (e.g. NexusOperationSuccessCount.With), so each per-outcome recorder differs only by its counter
-// and any extra counter tags (the timeout type, for timeouts).
+// and any extra counter tags (the timeout type, for timeouts; the reason, for failures).
 func emitOperationOutcome(
 	base metrics.Handler,
 	tagConfig chasmnexus.NexusMetricTagConfig,
