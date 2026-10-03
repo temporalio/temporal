@@ -272,6 +272,66 @@ func TestIsSystemWorker(t *testing.T) {
 	})
 }
 
+func TestEnvironmentMetricsEmittedWhenPresent(t *testing.T) {
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:       dynamicconfig.GetIntPropertyFn(1),
+		TTL:              dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:      dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:         dynamicconfig.GetIntPropertyFn(10),
+		EvictionInterval: dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:   captureHandler,
+		MetricsConfig:    WorkerMetricsConfig{},
+	})
+	defer m.Stop()
+
+	nsID := namespace.ID("ns")
+	nsName := namespace.Name("ns_name")
+
+	// First heartbeat with environment info — should emit metric
+	hb := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: "go-worker",
+		Status:            enumspb.WORKER_STATUS_RUNNING,
+		Environment: &workerpb.EnvironmentInfo{
+			Runtimes: []*workerpb.EnvironmentInfo_Runtime{
+				{Type: workerpb.EnvironmentInfo_Runtime_RUNTIME_TYPE_GO},
+			},
+			Platform: &workerpb.EnvironmentInfo_Platform{
+				Variant: &workerpb.EnvironmentInfo_Platform_Linux{
+					Linux: &workerpb.EnvironmentInfo_LinuxPlatform{
+						Architecture: workerpb.EnvironmentInfo_ARCHITECTURE_AMD64,
+					},
+				},
+			},
+		},
+	}
+	m.RecordWorkerHeartbeats(nsID, nsName, nil, []*workerpb.WorkerHeartbeat{hb})
+
+	snapshot := capture.Snapshot()
+	envMetrics := snapshot[metrics.WorkerEnvironmentRuntimeMetric.Name()]
+	require.Len(t, envMetrics, 1, "should emit environment metric when environment info is present")
+	require.Equal(t, "go", envMetrics[0].Tags[metrics.WorkerRuntimeTypeTagName])
+
+	// Subsequent heartbeat without environment info (SDK clears it after first accepted)
+	// — should NOT emit metric
+	captureHandler.StopCapture(capture)
+	capture2 := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture2)
+
+	hbNoEnv := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: "go-worker",
+		Status:            enumspb.WORKER_STATUS_RUNNING,
+	}
+	m.RecordWorkerHeartbeats(nsID, nsName, nil, []*workerpb.WorkerHeartbeat{hbNoEnv})
+
+	snapshot2 := capture2.Snapshot()
+	envMetrics2 := snapshot2[metrics.WorkerEnvironmentRuntimeMetric.Name()]
+	require.Empty(t, envMetrics2, "should NOT emit environment metric when environment info is absent")
+}
+
 func TestEvictByTTL(t *testing.T) {
 	// Use capture handler to verify metrics
 	captureHandler := metricstest.NewCaptureHandler()

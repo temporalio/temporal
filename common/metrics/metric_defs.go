@@ -31,6 +31,9 @@ const (
 	PersistenceDBKindTagName       = "db_kind"
 	WorkerPluginNameTagName        = "worker_plugin_name"
 	WorkerStorageDriverTypeTagName = "worker_storage_driver_type"
+	WorkerRuntimeTypeTagName       = "worker_runtime_type"
+	WorkerOSTagName                = "worker_os"
+	WorkerArchitectureTagName      = "worker_architecture"
 	headerCallsiteTagName          = "header_callsite"
 	ArchetypeTagName               = "archetype"
 	ChasmTaskTypeTagName           = "chasm_task_type"
@@ -1427,6 +1430,14 @@ var (
 		"worker_plugin_name",
 		WithDescription(
 			"Set if the worker was configured with a plugin. Dimensions: namespace, plugin_name"),
+	)
+
+	// ----------------------------------------------------------------------------------------------------------------
+	// Matching service: Metrics to understand worker runtime environments.
+	WorkerEnvironmentRuntimeMetric = NewCounterDef(
+		"worker_environment_runtime",
+		WithDescription(
+			"Emitted when a heartbeat includes environment info. Dimensions: namespace, runtime_type, os, architecture."),
 	)
 
 	// ----------------------------------------------------------------------------------------------------------------

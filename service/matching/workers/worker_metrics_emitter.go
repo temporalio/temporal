@@ -1,6 +1,8 @@
 package workers
 
 import (
+	"strings"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -72,6 +74,10 @@ func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, he
 				}
 			}
 		}
+
+		if env := hb.GetEnvironment(); env != nil {
+			e.emitEnvironmentInfo(nsName, env)
+		}
 	}
 }
 
@@ -97,5 +103,54 @@ func (e *workerMetricsEmitter) emitPollerAutoscaling(nsID namespace.ID, nsName n
 	}
 	if hb.NexusPollerInfo.GetIsAutoscaling() {
 		recordAutoscaling(enumspb.TASK_QUEUE_TYPE_NEXUS)
+	}
+}
+
+// emitEnvironmentInfo emits a counter per runtime in the environment info.
+func (e *workerMetricsEmitter) emitEnvironmentInfo(nsName namespace.Name, env *workerpb.EnvironmentInfo) {
+	osTag, archTag := platformTags(env.GetPlatform())
+
+	for _, rt := range env.GetRuntimes() {
+		metrics.WorkerEnvironmentRuntimeMetric.With(e.handler).Record(
+			1,
+			metrics.NamespaceTag(nsName.String()),
+			metrics.WorkerRuntimeTypeTag(runtimeTypeName(rt.GetType())),
+			metrics.WorkerOSTag(osTag),
+			metrics.WorkerArchitectureTag(archTag),
+		)
+	}
+}
+
+// runtimeTypeName returns a clean tag value for a RuntimeType enum, e.g. "go", "cpython", "jvm".
+func runtimeTypeName(rt workerpb.EnvironmentInfo_Runtime_RuntimeType) string {
+	if rt == workerpb.EnvironmentInfo_Runtime_RUNTIME_TYPE_UNSPECIFIED {
+		return "unknown"
+	}
+	raw := string(rt.Descriptor().Values().ByNumber(rt.Number()).Name())
+	return strings.ToLower(strings.TrimPrefix(raw, "RUNTIME_TYPE_"))
+}
+
+func architectureName(a workerpb.EnvironmentInfo_Architecture) string {
+	if a == workerpb.EnvironmentInfo_ARCHITECTURE_UNSPECIFIED {
+		return "unknown"
+	}
+	raw := string(a.Descriptor().Values().ByNumber(a.Number()).Name())
+	return strings.ToLower(strings.TrimPrefix(raw, "ARCHITECTURE_"))
+}
+
+// platformTags extracts OS and architecture tag values from the platform oneof.
+func platformTags(p *workerpb.EnvironmentInfo_Platform) (os string, arch string) {
+	if p == nil {
+		return "unknown", "unknown"
+	}
+	switch v := p.GetVariant().(type) {
+	case *workerpb.EnvironmentInfo_Platform_Linux:
+		return "linux", architectureName(v.Linux.GetArchitecture())
+	case *workerpb.EnvironmentInfo_Platform_Macos:
+		return "macos", architectureName(v.Macos.GetArchitecture())
+	case *workerpb.EnvironmentInfo_Platform_Windows:
+		return "windows", architectureName(v.Windows.GetArchitecture())
+	default:
+		return "unknown", "unknown"
 	}
 }

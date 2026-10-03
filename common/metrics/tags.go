@@ -421,6 +421,18 @@ func WorkerStorageDriverTypeTag(value string) Tag {
 	return Tag{Key: WorkerStorageDriverTypeTagName, Value: value}
 }
 
+func WorkerRuntimeTypeTag(value string) Tag {
+	return Tag{Key: WorkerRuntimeTypeTagName, Value: value}
+}
+
+func WorkerOSTag(value string) Tag {
+	return Tag{Key: WorkerOSTagName, Value: value}
+}
+
+func WorkerArchitectureTag(value string) Tag {
+	return Tag{Key: WorkerArchitectureTagName, Value: value}
+}
+
 // VersionedTag represents whether a loaded task queue manager represents a specific version set or build ID or not.
 func VersionedTag(versioned string) Tag {
 	return Tag{Key: versionedTagName, Value: versioned}
