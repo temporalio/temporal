@@ -3,6 +3,7 @@ package frontend
 import (
 	"cmp"
 	"context"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -31,8 +32,10 @@ import (
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
@@ -55,6 +58,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -516,8 +520,17 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
-	if err := wh.validateWorkflowCompletionCallbacks(namespaceName, request.GetCompletionCallbacks()); err != nil {
-		return nil, err
+	cbErr := wh.validateWorkflowCompletionCallbacks(namespaceName, request.GetCompletionCallbacks())
+	for _, cb := range request.GetCompletionCallbacks() {
+		if cb.GetNexus().GetUrl() == chasm.NexusCompletionHandlerURL {
+			wh.logger.Info("DEBUG internal callback validation",
+				tag.WorkflowNamespace(namespaceName.String()),
+				tag.WorkflowID(request.GetWorkflowId()),
+				tag.Error(cbErr))
+		}
+	}
+	if cbErr != nil {
+		return nil, cbErr
 	}
 
 	request.Links = dedupLinksFromCallbacks(request.GetLinks(), request.GetCompletionCallbacks())
@@ -5576,6 +5589,11 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 				)
 			}
 			cb.Nexus.Header = lowerCaseHeaders
+			if cb.Nexus.GetUrl() == chasm.NexusCompletionHandlerURL {
+				if err := wh.validateInternalCallback(ns, lowerCaseHeaders); err != nil {
+					return err
+				}
+			}
 		case *commonpb.Callback_Internal_:
 			// TODO(Tianyu): For now, there is nothing to validate given that this is an internal field.
 			continue
@@ -5584,6 +5602,71 @@ func (wh *WorkflowHandler) validateWorkflowCompletionCallbacks(
 		}
 	}
 	return nil
+}
+
+func (wh *WorkflowHandler) validateInternalCallback(ns namespace.Name, lowerCaseHeaders map[string]string) error {
+	token := lowerCaseHeaders[strings.ToLower(commonnexus.CallbackTokenHeader)]
+	if token == "" {
+		return serviceerror.NewInvalidArgument("missing internal callback token")
+	}
+	raw, err := base64.RawURLEncoding.DecodeString(token)
+	if err != nil {
+		return serviceerror.NewInvalidArgumentf("invalid internal callback token: %v", err)
+	}
+	refs, err := unpackInternalCallbackRefs(raw)
+	if err != nil {
+		return serviceerror.NewInvalidArgumentf("invalid internal callback token: %v", err)
+	}
+	if len(refs) == 0 {
+		return serviceerror.NewInvalidArgument("internal callback component reference requires namespace and business IDs")
+	}
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(ns)
+	if err != nil {
+		return err
+	}
+	for _, ref := range refs {
+		if ref.GetNamespaceId() == "" || ref.GetBusinessId() == "" {
+			return serviceerror.NewInvalidArgument("internal callback component reference requires namespace and business IDs")
+		}
+		if ref.GetNamespaceId() != namespaceID.String() {
+			return serviceerror.NewInvalidArgument("internal callback must target the same namespace")
+		}
+	}
+	return nil
+}
+
+// unpackInternalCallbackRefs returns every ChasmComponentRef reading the token's bytes can plausibly
+// produce: the bare-ref reading, which is the only one history's chasm_invocation.go ever consumes,
+// and, when the bytes also parse as a NexusOperationCompletion envelope carrying a component ref, that
+// inner ref too. Every reading returned here gets validated against the request namespace: since
+// history always acts on the bare reading, a token can't be allowed to look safe under one reading
+// while meaning something else to history (field 6 of ChasmComponentRef, component_path, and field 6
+// of NexusOperationCompletion, component_ref, share the same wire type, so a bare ref can be crafted
+// to also decode as an envelope wrapping a different, attacker-chosen ref). A reading with neither a
+// namespace nor a business ID set is a side effect of the other format's bytes landing on these fields
+// rather than an actual reference, so it's dropped instead of being validated.
+func unpackInternalCallbackRefs(raw []byte) ([]*persistencespb.ChasmComponentRef, error) {
+	var refs []*persistencespb.ChasmComponentRef
+
+	bareRef := &persistencespb.ChasmComponentRef{}
+	bareErr := proto.Unmarshal(raw, bareRef)
+	if bareErr == nil && (bareRef.GetNamespaceId() != "" || bareRef.GetBusinessId() != "") {
+		refs = append(refs, bareRef)
+	}
+
+	completion := &tokenspb.NexusOperationCompletion{}
+	if proto.Unmarshal(raw, completion) == nil && len(completion.GetComponentRef()) > 0 {
+		envelopeRef := &persistencespb.ChasmComponentRef{}
+		if proto.Unmarshal(completion.GetComponentRef(), envelopeRef) == nil &&
+			(envelopeRef.GetNamespaceId() != "" || envelopeRef.GetBusinessId() != "") {
+			refs = append(refs, envelopeRef)
+		}
+	}
+
+	if len(refs) == 0 && bareErr != nil {
+		return nil, bareErr
+	}
+	return refs, nil
 }
 
 func (wh *WorkflowHandler) validateCallbackURL(ns namespace.Name, rawURL string) error {
