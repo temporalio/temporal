@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	otellog "go.opentelemetry.io/otel/log"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -76,6 +77,7 @@ type (
 		EvictionInterval dynamicconfig.DurationPropertyFn
 		MetricsHandler   metrics.Handler
 		MetricsConfig    WorkerMetricsConfig
+		EventLogger      otellog.Logger
 	}
 )
 
@@ -245,8 +247,9 @@ func newRegistryImpl(params RegistryParams) *registryImpl {
 		quit:               make(chan struct{}),
 		metricsHandler:     params.MetricsHandler,
 		metricsEmitter: &workerMetricsEmitter{
-			handler: params.MetricsHandler,
-			config:  params.MetricsConfig,
+			handler:     params.MetricsHandler,
+			config:      params.MetricsConfig,
+			eventLogger: params.EventLogger,
 		},
 	}
 

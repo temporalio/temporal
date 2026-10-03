@@ -1,6 +1,7 @@
 package workers
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -9,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	otellog "go.opentelemetry.io/otel/log"
+	"go.opentelemetry.io/otel/log/embedded"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workerpb "go.temporal.io/api/worker/v1"
@@ -19,6 +22,19 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/testing/testvars"
 )
+
+// captureEventLogger records emitted OTEL log records for test assertions.
+type captureEventLogger struct {
+	embedded.Logger
+	records []otellog.Record
+}
+
+func (c *captureEventLogger) Emit(_ context.Context, r otellog.Record) {
+	c.records = append(c.records, r)
+}
+func (c *captureEventLogger) Enabled(context.Context, otellog.EnabledParameters) bool {
+	return true
+}
 
 // alwaysTrue predicate for convenience
 func alwaysTrue(_ *workerpb.WorkerHeartbeat) bool { return true }
@@ -907,4 +923,83 @@ func TestPluginMetricsDisabled(t *testing.T) {
 	snapshot := capture.Snapshot()
 	pluginMetrics := snapshot[metrics.WorkerPluginNameMetric.Name()]
 	assert.Empty(t, pluginMetrics, "should not record any plugin metrics when disabled")
+}
+
+func TestEnvironmentWideEvent(t *testing.T) {
+	captureHandler := metricstest.NewCaptureHandler()
+	eventLogger := &captureEventLogger{}
+
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:       dynamicconfig.GetIntPropertyFn(1),
+		TTL:              dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:      dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:         dynamicconfig.GetIntPropertyFn(10),
+		EvictionInterval: dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:   captureHandler,
+		MetricsConfig:    WorkerMetricsConfig{},
+		EventLogger:      eventLogger,
+	})
+	defer m.Stop()
+
+	m.RecordWorkerHeartbeats(namespace.ID("ns"), namespace.Name("test-ns"), nil, []*workerpb.WorkerHeartbeat{
+		{
+			WorkerInstanceKey: "go-worker",
+			Environment: &workerpb.EnvironmentInfo{
+				Runtimes: []*workerpb.EnvironmentInfo_Runtime{
+					{Type: workerpb.EnvironmentInfo_Runtime_RUNTIME_TYPE_GO},
+				},
+				Platform: &workerpb.EnvironmentInfo_Platform{
+					Variant: &workerpb.EnvironmentInfo_Platform_Linux{
+						Linux: &workerpb.EnvironmentInfo_LinuxPlatform{
+							Architecture: workerpb.EnvironmentInfo_ARCHITECTURE_AMD64,
+						},
+					},
+				},
+			},
+		},
+		{WorkerInstanceKey: "old-worker"},
+	})
+
+	require.Len(t, eventLogger.records, 1)
+	rec := eventLogger.records[0]
+	require.Equal(t, "worker_environment", rec.EventName())
+
+	attrs := map[string]otellog.Value{}
+	rec.WalkAttributes(func(kv otellog.KeyValue) bool {
+		attrs[kv.Key] = kv.Value
+		return true
+	})
+	require.Equal(t, "test-ns", attrs["namespace"].AsString())
+	require.Equal(t, "go", attrs["runtime_type"].AsString())
+	require.Equal(t, "linux", attrs["os"].AsString())
+	require.Equal(t, "amd64", attrs["architecture"].AsString())
+}
+
+func TestEnvironmentWideEventNilLogger(t *testing.T) {
+	captureHandler := metricstest.NewCaptureHandler()
+
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:       dynamicconfig.GetIntPropertyFn(1),
+		TTL:              dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:      dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:         dynamicconfig.GetIntPropertyFn(10),
+		EvictionInterval: dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:   captureHandler,
+		MetricsConfig:    WorkerMetricsConfig{},
+		EventLogger:      nil,
+	})
+	defer m.Stop()
+
+	require.NotPanics(t, func() {
+		m.RecordWorkerHeartbeats(namespace.ID("ns"), namespace.Name("ns"), nil, []*workerpb.WorkerHeartbeat{
+			{
+				WorkerInstanceKey: "worker",
+				Environment: &workerpb.EnvironmentInfo{
+					Runtimes: []*workerpb.EnvironmentInfo_Runtime{
+						{Type: workerpb.EnvironmentInfo_Runtime_RUNTIME_TYPE_GO},
+					},
+				},
+			},
+		})
+	})
 }

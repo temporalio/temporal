@@ -139,3 +139,4 @@ func TestPollerAutoscalingMetricsDisabled(t *testing.T) {
 	autoscalingMetrics := snapshot[metrics.PollerAutoscalingHeartbeatCount.Name()]
 	assert.Empty(t, autoscalingMetrics, "should not record autoscaling metrics when disabled")
 }
+
