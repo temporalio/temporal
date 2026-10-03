@@ -62,6 +62,7 @@ type (
 			baseRebuildLastEventVersion int64,
 			baseNextEventID int64,
 			resetRunID string,
+			resetRequestID string,
 			baseWorkflow Workflow,
 			currentWorkflow Workflow,
 			resetReason string,
@@ -117,6 +118,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	baseRebuildLastEventVersion int64,
 	baseNextEventID int64,
 	resetRunID string,
+	resetRequestID string,
 	baseWorkflow Workflow,
 	currentWorkflow Workflow,
 	resetReason string,
@@ -247,6 +249,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		baseRebuildLastEventVersion,
 		resetRunID,
 		startRequestID,
+		resetRequestID,
 		resetWorkflowVersion,
 		resetReason,
 		allowResetWithPendingChildren,
@@ -299,7 +302,8 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	baseRebuildLastEventID int64,
 	baseRebuildLastEventVersion int64,
 	resetRunID string,
-	requestID string,
+	startRequestID string,
+	resetRequestID string,
 	resetWorkflowVersion int64,
 	resetReason string,
 	allowResetWithPendingChildren bool,
@@ -314,7 +318,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		baseRebuildLastEventID,
 		baseRebuildLastEventVersion,
 		resetRunID,
-		requestID,
+		startRequestID,
 	)
 	if err != nil {
 		return nil, err
@@ -351,6 +355,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 		baseRebuildLastEventID,
 		baseRebuildLastEventVersion,
 		resetRunID,
+		resetRequestID,
 		resetReason,
 	); err != nil {
 		return nil, err
@@ -589,6 +594,7 @@ func (r *workflowResetterImpl) failWorkflowTask(
 	baseRebuildLastEventID int64,
 	baseRebuildLastEventVersion int64,
 	resetRunID string,
+	resetRequestID string,
 	resetReason string,
 ) error {
 
@@ -624,7 +630,7 @@ func (r *workflowResetterImpl) failWorkflowTask(
 		}
 	}
 
-	_, err = resetMutableState.AddWorkflowTaskFailedEvent(
+	event, err := resetMutableState.AddWorkflowTaskFailedEvent(
 		workflowTask,
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
 		failure.NewResetWorkflowFailure(resetReason, nil),
@@ -635,7 +641,17 @@ func (r *workflowResetterImpl) failWorkflowTask(
 		resetRunID,
 		baseRebuildLastEventVersion,
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if resetRequestID != "" {
+		if event == nil {
+			return serviceerror.NewInternal("Reset workflow did not generate a workflow task failed event")
+		}
+		event.GetWorkflowTaskFailedEventAttributes().ResetRequestId = resetRequestID
+		resetMutableState.AttachRequestID(resetRequestID, event.GetEventType(), event.GetEventId())
+	}
+	return nil
 }
 
 func (r *workflowResetterImpl) failInflightActivity(
