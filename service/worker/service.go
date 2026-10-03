@@ -212,6 +212,7 @@ func NewConfig(
 			TaskQueueScannerEnabled:                 dynamicconfig.TaskQueueScannerEnabled.Get(dc),
 			BuildIdScavengerEnabled:                 dynamicconfig.BuildIdScavengerEnabled.Get(dc),
 			HistoryScannerEnabled:                   dynamicconfig.HistoryScannerEnabled.Get(dc),
+			HistoryScannerCronSchedule:              dynamicconfig.HistoryScannerCronSchedule.Get(dc),
 			ExecutionsScannerEnabled:                dynamicconfig.ExecutionsScannerEnabled.Get(dc),
 			HistoryScannerDataMinAge:                dynamicconfig.HistoryScannerDataMinAge.Get(dc),
 			HistoryScannerVerifyRetention:           dynamicconfig.HistoryScannerVerifyRetention.Get(dc),
