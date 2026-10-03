@@ -2,9 +2,11 @@ package startworkflow
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"time"
 
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -65,6 +67,7 @@ type Starter struct {
 	reactivationSignaler       api.VersionReactivationSignalerFn
 	shouldSkipReactivation     bool
 	revisionNumber             int64
+	derivedRunID               bool
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -86,6 +89,7 @@ type mutableStateInfo struct {
 	lastEventID         int64
 	workflowTask        *historyi.WorkflowTaskInfo
 	firstExecutionRunID string
+	status              enumspb.WorkflowExecutionStatus
 }
 
 // NewStarter creates a new starter, fails if getting the active namespace fails.
@@ -98,6 +102,9 @@ func NewStarter(
 	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	reactivationSignaler api.VersionReactivationSignalerFn,
 	createLeaseFn api.CreateOrUpdateLeaseFunc,
+	// allowDerivedRunID must be false when createLeaseFn holds a real cache lock on the new run.
+	// TODO: remove once Update-with-Start supports derived run IDs.
+	allowDerivedRunID bool,
 ) (*Starter, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()), request.StartRequest.WorkflowId)
 	if err != nil {
@@ -116,6 +123,9 @@ func NewStarter(
 		createOrUpdateLeaseFn:      createLeaseFn,
 		versionCache:               versionCache,
 		reactivationSignaler:       reactivationSignaler,
+		derivedRunID: allowDerivedRunID &&
+			shardContext.GetConfig().EnableCrossRunRequestIDDedup(namespaceEntry.Name().String()) &&
+			request.StartRequest.GetRequestId() != "",
 	}, nil
 }
 
@@ -180,6 +190,81 @@ func (s *Starter) requestEagerStart() bool {
 	return s.request.StartRequest.GetRequestEagerExecution()
 }
 
+// uuidSpaceRunID is a randomly generated UUIDv5 namespace for derived run IDs
+var uuidSpaceRunID = uuid.MustParse("e96ecb9a-482c-4f69-9b66-a40bc6b50553")
+
+// newRunID is deterministic when derivation is active.
+func (s *Starter) newRunID() string {
+	if s.derivedRunID {
+		return DeriveRunID(
+			s.namespace.ID().String(),
+			s.request.StartRequest.GetWorkflowId(),
+			chasm.WorkflowArchetypeID,
+			s.request.StartRequest.GetRequestId(),
+			s.shardContext.GetClusterMetadata().GetClusterID(),
+		)
+	}
+	return primitives.NewUUID().String()
+}
+
+// DeriveRunID returns the UUIDv5, in uuidSpaceRunID, of (namespaceID, workflowID, archetypeID, requestID,
+// clusterID), with the string fields length-prefixed. clusterID gives each cluster its own run ID for a
+// request, so runs created in two clusters never collide.
+func DeriveRunID(namespaceID, workflowID string, archetypeID uint32, requestID string, clusterID int64) string {
+	var data []byte
+	data = appendLenPrefixed(data, namespaceID)
+	data = appendLenPrefixed(data, workflowID)
+	data = binary.BigEndian.AppendUint32(data, archetypeID)
+	data = appendLenPrefixed(data, requestID)
+	data = binary.BigEndian.AppendUint64(data, uint64(clusterID))
+	return uuid.NewSHA1(uuidSpaceRunID, data).String()
+}
+
+func appendLenPrefixed(dst []byte, s string) []byte {
+	dst = binary.BigEndian.AppendUint32(dst, uint32(len(s)))
+	return append(dst, s...)
+}
+
+// runIDDedupResponse turns a conflict on the run ID we just attempted into a dedup response, and returns
+// err unchanged otherwise.
+func (s *Starter) runIDDedupResponse(
+	ctx context.Context,
+	attemptedRunID string,
+	err error,
+) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
+	if !s.derivedRunID {
+		return nil, StartErr, err
+	}
+	var conflictErr *persistence.WorkflowConditionFailedError
+	if !errors.As(err, &conflictErr) {
+		return nil, StartErr, err
+	}
+	// On the terminate path the error can come from the current run's version check instead, which is not a dedup.
+	if conflictErr.RunID != attemptedRunID {
+		return nil, StartErr, err
+	}
+
+	info, loadErr := s.getMutableStateInfo(ctx, attemptedRunID)
+	if loadErr != nil {
+		return nil, StartErr, loadErr
+	}
+
+	metrics.StartWorkflowRequestDeduped.With(s.getMetricsHandler()).Record(1)
+
+	if s.requestEagerStart() {
+		metrics.WorkflowEagerExecutionDeniedCounter.With(s.getMetricsHandler()).
+			Record(1, metrics.ReasonTag(eagerStartDeniedReasonTaskAlreadyDispatched))
+	}
+
+	return &historyservice.StartWorkflowExecutionResponse{
+		RunId:               attemptedRunID,
+		FirstExecutionRunId: attemptedRunID,
+		Started:             true,
+		Status:              info.status,
+		Link:                s.generateStartedEventRefLink(attemptedRunID),
+	}, StartDeduped, nil
+}
+
 // Invoke starts a new workflow execution.
 // NOTE: `beforeCreateHook` might be invoked more than once in the case where the workflow policy
 // requires terminating the running workflow first; it is then invoked again on the newly started workflow.
@@ -221,7 +306,7 @@ func (s *Starter) Invoke(
 			}
 			return resp, outcome, conflictErr
 		}
-		return nil, StartErr, err
+		return s.runIDDedupResponse(ctx, creationParams.runID, err)
 	}
 
 	// Notify version workflow if we're pinning to a potentially drained version
@@ -256,7 +341,7 @@ func (s *Starter) lockCurrentWorkflowExecution(
 // prepareNewWorkflow creates a new workflow context, and closes its mutable state transaction as snapshot.
 // It returns the creationContext which can later be used to insert into the executions table.
 func (s *Starter) prepareNewWorkflow(ctx context.Context, workflowID string) (*creationParams, error) {
-	runID := primitives.NewUUID().String()
+	runID := s.newRunID()
 	mutableState, err := api.NewWorkflowWithSignal(
 		s.shardContext,
 		s.namespace,
@@ -273,6 +358,9 @@ func (s *Starter) prepareNewWorkflow(ctx context.Context, workflowID string) (*c
 	if err != nil {
 		return nil, err
 	}
+
+	// A derived run ID is not unique by construction, so the store must verify it.
+	workflowLease.GetContext().SetVerifyRunIDUniqueness(s.derivedRunID)
 
 	workflowTaskInfo := mutableState.GetStartedWorkflowTask()
 	if s.requestEagerStart() && workflowTaskInfo == nil {
@@ -374,7 +462,7 @@ func (s *Starter) handleConflict(
 	}
 
 	if err := s.createAsCurrent(ctx, creationParams, currentWorkflowConditionFailed); err != nil {
-		return nil, StartErr, err
+		return s.runIDDedupResponse(ctx, creationParams.runID, err)
 	}
 	resp, err := s.generateResponse(
 		creationParams.runID,
@@ -462,10 +550,10 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		currentWorkflowConditionFailed.RunID,
 	)
 
-	// Using a new RunID here to simplify locking: MultiOperation, that re-uses the Starter, is creating
-	// a locked workflow context for each new workflow. Using a fresh RunID prevents a deadlock with the
-	// previously created workflow context.
-	newRunID := primitives.NewUUID().String()
+	// MultiOperation, which re-uses the Starter, creates a locked workflow context for each new workflow, so
+	// this run ID must differ from the one prepareNewWorkflow used to avoid a deadlock. A random run ID does;
+	// a derived one repeats it, which is why derivation is disabled for MultiOperation (see allowDerivedRunID).
+	newRunID := s.newRunID()
 
 	var currentExecutionUpdateAction api.UpdateWorkflowActionFunc
 	var err error
@@ -549,6 +637,8 @@ func (s *Starter) resolveDuplicateWorkflowID(
 				return nil, nil, err
 			}
 
+			workflowLease.GetContext().SetVerifyRunIDUniqueness(s.derivedRunID)
+
 			// extract information from MutableState in case this is an eager start
 			mutableState := workflowLease.GetMutableState()
 			mutableStateInfo, err = extractMutableStateInfo(ctx, mutableState)
@@ -607,7 +697,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		// NOTE: This WorkflowIDReusePolicy cannot be RejectDuplicate as the frontend will reject that.
 		return nil, StartErr, serviceerror.NewUnavailablef("Termination failed: %v", err)
 	default:
-		return nil, StartErr, err
+		return s.runIDDedupResponse(ctx, newRunID, err)
 	}
 }
 
@@ -711,6 +801,7 @@ func extractMutableStateInfo(ctx context.Context, mutableState historyi.MutableS
 		lastEventID:         mutableState.GetNextEventID() - 1,
 		workflowTask:        &workflowTask,
 		firstExecutionRunID: firstRunID,
+		status:              mutableState.GetExecutionState().GetStatus(),
 	}, nil
 }
 

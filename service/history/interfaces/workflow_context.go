@@ -49,6 +49,13 @@ type (
 			workflowEventsSlice ...*persistence.WorkflowEvents,
 		) (int64, error)
 
+		// SetVerifyRunIDUniqueness makes the store confirm this run's derived run ID is unused on create.
+		// Set when the run ID is derived rather than random.
+		SetVerifyRunIDUniqueness(verify bool)
+		// VerifyRunIDUniqueness reports whether the run ID is derived rather than random, so creating the run must
+		// fail if it already exists.
+		VerifyRunIDUniqueness() bool
+
 		CreateWorkflowExecution(
 			ctx context.Context,
 			shardContext ShardContext,

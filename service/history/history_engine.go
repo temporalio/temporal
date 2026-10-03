@@ -453,6 +453,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		e.versionCache,
 		e.workerDeploymentClient.SignalVersionReactivation,
 		api.NewWorkflowLeaseAndContext,
+		/* allowDerivedRunID */ true,
 	)
 	if err != nil {
 		return nil, err
