@@ -170,6 +170,7 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_CompletionMetrics() {
 	s.mockShard.EXPECT().GetMetricsHandler().Return(metricsHandler).AnyTimes()
 	s.mockShard.EXPECT().GetClusterMetadata().Return(clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(true, true))).AnyTimes()
 	s.mockShard.EXPECT().GetConfig().Return(tests.NewDynamicConfig()).AnyTimes()
+	s.mockShard.EXPECT().GetSearchAttributesMapperProvider().Return(nil).AnyTimes()
 
 	s.mockShard.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil).AnyTimes()
 	s.mockEngine.EXPECT().NotifyNewTasks(gomock.Any()).AnyTimes()
@@ -273,6 +274,7 @@ func (s *transactionSuite) TestConflictResolveWorkflowExecution_CompletionMetric
 	s.mockShard.EXPECT().GetMetricsHandler().Return(metricsHandler).AnyTimes()
 	s.mockShard.EXPECT().GetClusterMetadata().Return(clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(true, true))).AnyTimes()
 	s.mockShard.EXPECT().GetConfig().Return(tests.NewDynamicConfig()).AnyTimes()
+	s.mockShard.EXPECT().GetSearchAttributesMapperProvider().Return(nil).AnyTimes()
 
 	resp := &persistence.ConflictResolveWorkflowExecutionResponse{
 		ResetMutableStateStats: persistence.MutableStateStatistics{

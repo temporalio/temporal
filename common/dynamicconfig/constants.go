@@ -1427,6 +1427,17 @@ contain actual deployment and build ID values. When disabled, the deployment and
 is too high for your observability stack. Disabling this option will disable all the per-Task Queue gauges such as
 backlog lag, count, and age for VERSIONED queues.`,
 	)
+	MetricsSearchAttributeLabels = NewNamespaceTypedSetting(
+		"metrics.searchAttributeLabels",
+		[]string(nil),
+		`MetricsSearchAttributeLabels lists search attribute keys whose values are attached as metric labels
+to workflow completion metrics (workflow_success, workflow_failed, workflow_canceled, workflow_timeout,
+workflow_terminate, workflow_continued_as_new and workflow_schedule_to_close_latency) in History. Empty
+(default) disables the feature. Only set registered search attribute keys whose values have limited
+cardinality - every distinct value of every listed key becomes a new metric series. Values longer than 256
+characters are truncated, and non-scalar values are skipped. Disable this option if the cardinality is too
+high for your observability stack.`,
+	)
 	MatchingForwarderMaxOutstandingPolls = NewTaskQueueIntSetting(
 		"matching.forwarderMaxOutstandingPolls",
 		1,
