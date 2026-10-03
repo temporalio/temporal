@@ -35,6 +35,10 @@ type (
 		BacklogCountHint() int64
 		BacklogStatus() *taskqueuepb.TaskQueueStatus
 		BacklogStatsByPriority() map[int32]*taskqueuepb.TaskQueueStats
+		// NonNegligibleBacklogPriority returns the highest-priority backlog old enough to be
+		// non-negligible. It returns 0 as a sentinel when no such backlog exists; normalized
+		// priority keys start at 1.
+		NonNegligibleBacklogPriority() priorityKey
 		InternalStatus() []*taskqueuespb.InternalTaskQueueStatus
 		// FinalGC does a final gc pass before unloading.
 		// Used when unloading a draining queue that won't be reloaded.

@@ -2266,7 +2266,6 @@ func (s *matchingEngineSuite) TestForceUnloadTaskQueue() {
 }
 
 func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
-	s.T().Skip("test is flaky with new matcher")
 	runID := uuid.NewString()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -2361,10 +2360,12 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 					}),
 			}, nil
 		}).AnyTimes()
+	// If tasks are lost, we'd poll forever. Give up after a deadline and check below.
+	pollDeadline := time.Now().Add(30 * time.Second)
 	for range iterations {
 		for p := range engineCount {
 			engine := engines[p]
-			for i := int64(0); i < taskCount; /* incremented explicitly to skip empty polls */ {
+			for i := int64(0); i < taskCount && time.Now().Before(pollDeadline); /* incremented explicitly to skip empty polls */ {
 				result, err := engine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
 					NamespaceId: namespaceID,
 					PollRequest: &workflowservice.PollActivityTaskQueueRequest{
@@ -2409,8 +2410,12 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 		e.Stop()
 	}
 
-	s.Equal(0, s.taskManager.getTaskCount(tlID))
 	totalTasks := taskCount * engineCount * iterations
+	s.Len(startedTasks, totalTasks, "some tasks were never dispatched")
+	if !s.newMatcher {
+		// new matcher does gc lazily so some acked tasks may remain
+		s.Equal(0, s.taskManager.getTaskCount(tlID))
+	}
 	persisted := s.taskManager.getCreateTaskCount(tlID)
 	// No sync matching as all messages are published first
 	s.Equal(totalTasks, persisted)
@@ -2420,7 +2425,6 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 }
 
 func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
-	s.T().Skip("test is flaky with new matcher")
 	runID := uuid.NewString()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -2504,10 +2508,12 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 			}, nil
 		}).AnyTimes()
 
+	// If tasks are lost, we'd poll forever. Give up after a deadline and check below.
+	pollDeadline := time.Now().Add(30 * time.Second)
 	for range iterations {
 		for p := range engineCount {
 			engine := engines[p]
-			for i := int64(0); i < taskCount; /* incremented explicitly to skip empty polls */ {
+			for i := int64(0); i < taskCount && time.Now().Before(pollDeadline); /* incremented explicitly to skip empty polls */ {
 				result, err := engine.PollWorkflowTaskQueue(context.Background(), &matchingservice.PollWorkflowTaskQueueRequest{
 					NamespaceId: namespaceID,
 					PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
@@ -2551,8 +2557,12 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 		e.Stop()
 	}
 
-	s.Equal(0, s.taskManager.getTaskCount(tlID))
 	totalTasks := taskCount * engineCount * iterations
+	s.Len(startedTasks, totalTasks, "some tasks were never dispatched")
+	if !s.newMatcher {
+		// new matcher does gc lazily so some acked tasks may remain
+		s.Equal(0, s.taskManager.getTaskCount(tlID))
+	}
 	persisted := s.taskManager.getCreateTaskCount(tlID)
 	// No sync matching as all messages are published first
 	s.Equal(totalTasks, persisted)
@@ -2854,6 +2864,74 @@ func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventKeepsClo
 			}
 		})
 	}
+}
+
+func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventPreservesSelectedClock() {
+	s.Run("incoming wins", func() {
+		incomingClock := &clockspb.HybridLogicalClock{WallClock: 20, Version: 2, ClusterId: 3}
+		incoming := &persistencespb.TaskQueueUserData{
+			Clock: incomingClock,
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V2},
+			},
+		}
+		wantClock := common.CloneProto(incomingClock)
+
+		got := s.applyTaskQueueUserDataReplicationEvent(uuid.NewString(), incoming)
+
+		protorequire.ProtoEqual(s.T(), wantClock, got.GetClock())
+		s.NotSame(incomingClock, got.GetClock())
+		incomingClock.WallClock++
+		protorequire.ProtoEqual(s.T(), wantClock, got.GetClock())
+	})
+
+	s.Run("current is newer", func() {
+		taskQueue := uuid.NewString()
+		currentClock := &clockspb.HybridLogicalClock{WallClock: 20, Version: 2, ClusterId: 3}
+		current := &persistencespb.TaskQueueUserData{
+			Clock: currentClock,
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V1},
+			},
+		}
+		incoming := &persistencespb.TaskQueueUserData{
+			Clock: &clockspb.HybridLogicalClock{WallClock: 10, Version: 2, ClusterId: 3},
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V2},
+			},
+		}
+		s.seedTaskQueueUserData(taskQueue, current)
+
+		got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, incoming)
+
+		protorequire.ProtoEqual(s.T(), currentClock, got.GetClock())
+		s.Equal(enumsspb.FAIRNESS_STATE_V1, got.GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].GetFairnessState())
+	})
+}
+
+func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventRevivalUsesMaxClock() {
+	taskQueue := uuid.NewString()
+	activeClock := &clockspb.HybridLogicalClock{WallClock: 1, ClusterId: 2}
+	deletedClock := &clockspb.HybridLogicalClock{WallClock: 2, ClusterId: 2}
+	current := &persistencespb.TaskQueueUserData{
+		Clock: activeClock,
+		VersioningData: &persistencespb.VersioningData{
+			VersionSets: []*persistencespb.CompatibleVersionSet{mkNewSet("build-id", activeClock)},
+		},
+	}
+	incoming := common.CloneProto(current)
+	incoming.Clock = deletedClock
+	incoming.VersioningData.VersionSets[0].BuildIds[0].State = persistencespb.STATE_DELETED
+	incoming.VersioningData.VersionSets[0].BuildIds[0].StateUpdateTimestamp = deletedClock
+	s.seedTaskQueueUserData(taskQueue, current)
+	s.mockVisibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 1}, nil)
+
+	got := s.applyTaskQueueUserDataReplicationEvent(taskQueue, incoming)
+
+	gotBuildID := got.GetVersioningData().GetVersionSets()[0].GetBuildIds()[0]
+	s.Equal(persistencespb.STATE_ACTIVE, gotBuildID.GetState())
+	s.True(hlc.Greater(got.GetClock(), deletedClock))
+	protorequire.ProtoEqual(s.T(), gotBuildID.GetStateUpdateTimestamp(), got.GetClock())
 }
 
 func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {
@@ -3752,8 +3830,18 @@ func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(
 	wg.Wait()
 
 	ptqMgr := s.getPhysicalTaskQueueManagerImplFromKey(ptq)
-	dbTasks := int64(s.taskManager.getTaskCount(ptq))
 	backlogCount := totalApproximateBacklogCount(ptqMgr.backlogMgr)
+
+	// Only count tasks above the ack level: acked tasks may not have been gc'ed yet.
+	db := ptqMgr.backlogMgr.getDB()
+	db.Lock()
+	ackLevel := fairLevel{id: db.subqueues[subqueueZero].AckLevel}
+	if s.fairness {
+		ackLevel = fairLevelFromProto(db.subqueues[subqueueZero].FairAckLevel)
+	}
+	db.Unlock()
+	dbTasks := int64(s.taskManager.getTaskCountAbove(ptq, ackLevel))
+
 	if s.fairness {
 		// Relax this condition for fairBacklogManager: it can sometimes reset backlog count on
 		// read, making it more accurate in theory, but breaking this test's assumptions.
@@ -5268,6 +5356,20 @@ func (m *testTaskManager) minTaskID(dbq *PhysicalTaskQueueKey) (int64, bool) {
 	return key.id, ok
 }
 
+// getTaskCountAbove returns the number of tasks in a task queue above the given level.
+func (m *testTaskManager) getTaskCountAbove(q *PhysicalTaskQueueKey, level fairLevel) int {
+	tlm := m.getQueueDataByKey(q)
+	tlm.Lock()
+	defer tlm.Unlock()
+	count := 0
+	for _, k := range tlm.tasks.Keys() {
+		if level.less(k.(fairLevel)) {
+			count++
+		}
+	}
+	return count
+}
+
 // maxTaskID returns the maximum value of the TaskID present in testTaskManager
 func (m *testTaskManager) maxTaskID(dbq *PhysicalTaskQueueKey) (int64, bool) {
 	tlm := m.getQueueDataByKey(dbq)
@@ -5284,7 +5386,7 @@ func (m *testTaskManager) CompleteTasksLessThan(
 ) (int, error) {
 	if m.fairness && request.ExclusiveMaxPass < 1 {
 		return 0, serviceerror.NewInternal("invalid CompleteTasksLessThan request on fair queue")
-	} else if !m.fairness && request.ExclusiveMaxPass != 0 {
+	} else if !m.fairness && (request.ExclusiveMaxPass != 0 || request.ConditionRangeID != 0) {
 		return 0, serviceerror.NewInternal("invalid CompleteTasksLessThan request on queue")
 	}
 
@@ -5294,6 +5396,12 @@ func (m *testTaskManager) CompleteTasksLessThan(
 	tlm := m.getQueueData(request.TaskQueueName, request.NamespaceID, request.TaskType)
 	tlm.Lock()
 	defer tlm.Unlock()
+	if request.ConditionRangeID != 0 && tlm.rangeID != request.ConditionRangeID {
+		return 0, &persistence.ConditionFailedError{
+			Msg: fmt.Sprintf("CompleteTasksLessThan failed, range id mismatch. rangeID: %v, db rangeID: %v",
+				request.ConditionRangeID, tlm.rangeID),
+		}
+	}
 	keys := tlm.tasks.Keys()
 	for _, key := range keys {
 		level := key.(fairLevel)
@@ -6360,8 +6468,10 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		defer ctrl.Finish()
 		mockNsRegistry := namespace.NewMockRegistry(ctrl)
 		mockNsRegistry.EXPECT().GetNamespaceName(gomock.Any()).Return(namespace.Name("test-namespace"), nil).AnyTimes()
+		cfg := defaultTestConfig()
+		cfg.EnableMatchingFanOutForPollCancellation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
 		engine := &matchingEngineImpl{
-			config:                defaultTestConfig(),
+			config:                cfg,
 			namespaceRegistry:     mockNsRegistry,
 			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
