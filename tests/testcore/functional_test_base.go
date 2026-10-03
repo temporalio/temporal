@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/taskpoller"
@@ -253,23 +252,6 @@ func (s *FunctionalTestBase) TaskQueue() string {
 
 func (s *FunctionalTestBase) TaskPoller() *taskpoller.TaskPoller {
 	return s.taskPoller
-}
-
-// Rcv waits for and returns the next value from ch.
-// A closed ch yields the zero value, as with a plain receive.
-// It fails the test if the context ends before ch produces a value.
-func (s *FunctionalTestBase) Rcv[T any](ch <-chan T) T {
-	t := s.T()
-	t.Helper()
-	return await.Rcv(t, ch)
-}
-
-// Snd waits to send value to ch.
-// It fails the test if the context ends or ch closes before accepting the value.
-func (s *FunctionalTestBase) Snd[T any](ch chan<- T, value T) {
-	t := s.T()
-	t.Helper()
-	await.Snd(t, ch, value)
 }
 
 func (s *FunctionalTestBase) SetupSuite() {
