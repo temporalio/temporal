@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -18,23 +17,28 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
 )
 
 type ActivityApiResetClientTestSuite struct {
-	testcore.FunctionalTestBase //nolint:forbidigo
-	tv                          *testvars.TestVars
-	initialRetryInterval        time.Duration
-	scheduleToCloseTimeout      time.Duration
-	startToCloseTimeout         time.Duration
-	activityRetryPolicy         *temporal.RetryPolicy
+	parallelsuite.Suite[*ActivityApiResetClientTestSuite]
+}
+
+type activityResetTestEnv struct {
+	*testcore.TestEnv
+	tv                     *testvars.TestVars
+	initialRetryInterval   time.Duration
+	scheduleToCloseTimeout time.Duration
+	startToCloseTimeout    time.Duration
+	activityRetryPolicy    *temporal.RetryPolicy
 
 	// apiName selects which reset API variant to exercise ("legacy-api" or "execution-api").
-	// Set before suite.Run; used by SetupTest to initialise resetFn.
+	// Passed through parallelsuite.Run; used by newActivityResetTestEnv to initialise resetFn.
 	apiName string
-	// resetFn is the adapter for the API under test, initialised in SetupTest.
+	// resetFn is the adapter for the API under test, initialised in newActivityResetTestEnv.
 	resetFn func(ctx context.Context, wfID, actID string, resetHeartbeat, keepPaused bool) error
 }
 
@@ -43,31 +47,34 @@ type ActivityApiResetClientTestSuite struct {
 func TestActivityApiResetClientTestSuite(t *testing.T) {
 	for _, apiName := range []string{"legacy-api", "execution-api"} {
 		t.Run(apiName, func(t *testing.T) {
-			s := new(ActivityApiResetClientTestSuite)
-			s.apiName = apiName
-			suite.Run(t, s)
+			parallelsuite.Run(t, &ActivityApiResetClientTestSuite{}, apiName)
 		})
 	}
 }
 
-func (s *ActivityApiResetClientTestSuite) SetupTest() {
-	s.FunctionalTestBase.SetupTest() //nolint:forbidigo
+func newActivityResetTestEnv(t *testing.T, apiName string) *activityResetTestEnv {
+	t.Helper()
 
-	s.tv = testvars.New(s.T()).WithTaskQueue(s.TaskQueue()).WithNamespaceName(s.Namespace())
+	env := &activityResetTestEnv{
+		TestEnv: testcore.NewEnv(t),
+		apiName: apiName,
+	}
 
-	s.initialRetryInterval = 1 * time.Second
-	s.scheduleToCloseTimeout = 30 * time.Minute
-	s.startToCloseTimeout = 15 * time.Minute
+	env.tv = testvars.New(t).WithTaskQueue(env.WorkerTaskQueue()).WithNamespaceName(env.Namespace())
 
-	s.activityRetryPolicy = &temporal.RetryPolicy{
-		InitialInterval:    s.initialRetryInterval,
+	env.initialRetryInterval = 1 * time.Second
+	env.scheduleToCloseTimeout = 30 * time.Minute
+	env.startToCloseTimeout = 15 * time.Minute
+
+	env.activityRetryPolicy = &temporal.RetryPolicy{
+		InitialInterval:    env.initialRetryInterval,
 		BackoffCoefficient: 1,
 	}
 
-	if s.apiName == "execution-api" {
-		s.resetFn = func(ctx context.Context, wfID, actID string, resetHeartbeat, keepPaused bool) error {
-			_, err := s.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
-				Namespace:      s.Namespace().String(),
+	if env.apiName == "execution-api" {
+		env.resetFn = func(ctx context.Context, wfID, actID string, resetHeartbeat, keepPaused bool) error {
+			_, err := env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
+				Namespace:      env.Namespace().String(),
 				WorkflowId:     wfID,
 				ActivityId:     actID,
 				ResetHeartbeat: resetHeartbeat,
@@ -76,9 +83,9 @@ func (s *ActivityApiResetClientTestSuite) SetupTest() {
 			return err
 		}
 	} else {
-		s.resetFn = func(ctx context.Context, wfID, actID string, resetHeartbeat, keepPaused bool) error {
-			_, err := s.FrontendClient().ResetActivity(ctx, &workflowservice.ResetActivityRequest{
-				Namespace:      s.Namespace().String(),
+		env.resetFn = func(ctx context.Context, wfID, actID string, resetHeartbeat, keepPaused bool) error {
+			_, err := env.FrontendClient().ResetActivity(ctx, &workflowservice.ResetActivityRequest{
+				Namespace:      env.Namespace().String(),
 				Execution:      &commonpb.WorkflowExecution{WorkflowId: wfID},
 				Activity:       &workflowservice.ResetActivityRequest_Id{Id: actID},
 				ResetHeartbeat: resetHeartbeat,
@@ -87,44 +94,49 @@ func (s *ActivityApiResetClientTestSuite) SetupTest() {
 			return err
 		}
 	}
+	return env
 }
 
-func (s *ActivityApiResetClientTestSuite) makeWorkflowFunc(activityFunction ActivityFunctions) WorkflowFunction {
+func (env *activityResetTestEnv) makeWorkflowFunc(activityFunction ActivityFunctions) WorkflowFunction {
 	return func(ctx workflow.Context) error {
 
 		var ret string
 		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			ActivityID:             "activity-id",
 			DisableEagerExecution:  true,
-			StartToCloseTimeout:    s.startToCloseTimeout,
-			ScheduleToCloseTimeout: s.scheduleToCloseTimeout,
-			RetryPolicy:            s.activityRetryPolicy,
+			StartToCloseTimeout:    env.startToCloseTimeout,
+			ScheduleToCloseTimeout: env.scheduleToCloseTimeout,
+			RetryPolicy:            env.activityRetryPolicy,
 		}), activityFunction).Get(ctx, &ret)
 		return err
 	}
 }
 
-func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterWorkflowCompleted() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterWorkflowCompleted(apiName string) {
+	env := newActivityResetTestEnv(s.T(), apiName)
+
+	ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 	defer cancel()
 
 	workflowFn := func(workflow.Context) error { return nil }
-	s.SdkWorker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
 
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
-		TaskQueue: s.TaskQueue(),
+		TaskQueue: env.WorkerTaskQueue(),
 	}, workflowFn)
 	s.Require().NoError(err)
 	s.Require().NoError(workflowRun.Get(ctx, nil))
 
-	err = s.resetFn(ctx, workflowRun.GetID(), "activity-id", false, false)
+	err = env.resetFn(ctx, workflowRun.GetID(), "activity-id", false, false)
 	s.Require().ErrorContains(err, "workflow execution already completed")
 }
 
-func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry() {
+func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry(apiName string) {
+	env := newActivityResetTestEnv(s.T(), apiName)
+
 	// activity reset is called after multiple attempts,
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 	defer cancel()
 
 	var activityWasReset atomic.Bool
@@ -139,39 +151,39 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry() {
 			return "", activityErr
 		}
 
-		await.Rcv(s.T(), activityCompleteCh)
+		s.Rcv(activityCompleteCh)
 		return "done!", nil
 	}
 
-	workflowFn := s.makeWorkflowFunc(activityFunction)
+	workflowFn := env.makeWorkflowFunc(activityFunction)
 
-	s.SdkWorker().RegisterWorkflow(workflowFn)
-	s.SdkWorker().RegisterActivity(activityFunction)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterActivity(activityFunction)
 
 	wfId := testcore.RandomizeStr("wfid-" + s.T().Name())
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        wfId,
-		TaskQueue: s.TaskQueue(),
+		TaskQueue: env.WorkerTaskQueue(),
 	}
 
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
 
 	// wait for activity to start/fail few times
 	await.Require(ctx, s.T(), func(t *await.T) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
 		require.Greater(t, startedActivityCount.Load(), int32(1))
 	}, 5*time.Second, 200*time.Millisecond)
 
-	s.NoError(s.resetFn(ctx, workflowRun.GetID(), "activity-id", false, false))
+	s.NoError(env.resetFn(ctx, workflowRun.GetID(), "activity-id", false, false))
 
 	activityWasReset.Store(true)
 
 	// wait for activity to be running
 	await.Require(ctx, s.T(), func(t *await.T) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
@@ -181,7 +193,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry() {
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// let activity finish
-	activityCompleteCh <- struct{}{}
+	s.Snd(activityCompleteCh, struct{}{})
 
 	// wait for workflow to complete
 	var out string
@@ -189,48 +201,50 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_AfterRetry() {
 	s.NoError(err)
 }
 
-func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhileRunning() {
+func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhileRunning(apiName string) {
+	env := newActivityResetTestEnv(s.T(), apiName)
+
 	// activity reset is called while activity is running
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 	defer cancel()
 
 	activityCompleteCh := make(chan struct{})
 	var startedActivityCount atomic.Int32
 	activityFunction := func() (string, error) {
 		startedActivityCount.Add(1)
-		await.Rcv(s.T(), activityCompleteCh)
+		s.Rcv(activityCompleteCh)
 		return "done!", nil
 	}
 
-	workflowFn := s.makeWorkflowFunc(activityFunction)
+	workflowFn := env.makeWorkflowFunc(activityFunction)
 
-	s.SdkWorker().RegisterWorkflow(workflowFn)
-	s.SdkWorker().RegisterActivity(activityFunction)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterActivity(activityFunction)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:        s.tv.WorkflowID(),
-		TaskQueue: s.TaskQueue(),
+		ID:        env.tv.WorkflowID(),
+		TaskQueue: env.WorkerTaskQueue(),
 	}
 
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
 
 	// wait for activity to start
 	await.Require(ctx, s.T(), func(t *await.T) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
 	}, 5*time.Second, 200*time.Millisecond)
 
-	s.NoError(s.resetFn(ctx, workflowRun.GetID(), "activity-id", false, false))
+	s.NoError(env.resetFn(ctx, workflowRun.GetID(), "activity-id", false, false))
 
 	// wait a bit
 	util.InterruptibleSleep(ctx, 1*time.Second)
 
 	// check if workflow and activity are still running
 	await.Require(ctx, s.T(), func(t *await.T) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
@@ -239,7 +253,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhileRunning() {
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// let activity finish
-	activityCompleteCh <- struct{}{}
+	s.Snd(activityCompleteCh, struct{}{})
 
 	// wait for workflow to complete
 	var out string
@@ -250,44 +264,46 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhileRunning() {
 	s.Equal(int32(1), startedActivityCount.Load())
 }
 
-func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_UnpausesRunningActivity() {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_UnpausesRunningActivity(apiName string) {
+	env := newActivityResetTestEnv(s.T(), apiName)
+
+	ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 	defer cancel()
 
 	activityCompleteCh := make(chan struct{})
 	var startedActivityCount atomic.Int32
 	activityFunction := func() (string, error) {
 		startedActivityCount.Add(1)
-		await.Rcv(s.T(), activityCompleteCh)
+		s.Rcv(activityCompleteCh)
 		return "done!", nil
 	}
 
-	workflowFn := s.makeWorkflowFunc(activityFunction)
-	s.SdkWorker().RegisterWorkflow(workflowFn)
-	s.SdkWorker().RegisterActivity(activityFunction)
+	workflowFn := env.makeWorkflowFunc(activityFunction)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterActivity(activityFunction)
 
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
-		ID:        s.tv.WorkflowID(),
-		TaskQueue: s.TaskQueue(),
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:        env.tv.WorkflowID(),
+		TaskQueue: env.WorkerTaskQueue(),
 	}, workflowFn)
 	s.Require().NoError(err)
 
 	await.Require(ctx, s.T(), func(t *await.T) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
 	}, 5*time.Second, 200*time.Millisecond)
 
-	_, err = s.FrontendClient().PauseActivity(ctx, &workflowservice.PauseActivityRequest{
-		Namespace: s.Namespace().String(),
+	_, err = env.FrontendClient().PauseActivity(ctx, &workflowservice.PauseActivityRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID()},
 		Activity:  &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
 	})
 	s.Require().NoError(err)
 
 	await.Require(ctx, s.T(), func(t *await.T) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED, description.PendingActivities[0].State)
@@ -295,11 +311,11 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_UnpausesRunningAc
 		require.NotNil(t, description.PendingActivities[0].PauseInfo)
 	}, 5*time.Second, 200*time.Millisecond)
 
-	s.Require().NoError(s.resetFn(ctx, workflowRun.GetID(), "activity-id", false, false))
+	s.Require().NoError(env.resetFn(ctx, workflowRun.GetID(), "activity-id", false, false))
 
 	// keepPaused=false must clear both the paused flag and its associated metadata.
 	await.Require(ctx, s.T(), func(t *await.T) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
@@ -308,39 +324,41 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_UnpausesRunningAc
 		require.Equal(t, int32(1), description.PendingActivities[0].Attempt)
 	}, 5*time.Second, 200*time.Millisecond)
 
-	activityCompleteCh <- struct{}{}
+	s.Snd(activityCompleteCh, struct{}{})
 
 	s.Require().NoError(workflowRun.Get(ctx, nil))
 	s.Equal(int32(1), startedActivityCount.Load())
 }
 
-func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_TimesOutOnUnpause() {
-	s.startToCloseTimeout = time.Second
-	s.activityRetryPolicy = &temporal.RetryPolicy{MaximumAttempts: 1}
+func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_TimesOutOnUnpause(apiName string) {
+	env := newActivityResetTestEnv(s.T(), apiName)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	env.startToCloseTimeout = time.Second
+	env.activityRetryPolicy = &temporal.RetryPolicy{MaximumAttempts: 1}
+
+	ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 	defer cancel()
 
 	activityCompleteCh := make(chan struct{})
 	defer close(activityCompleteCh)
 	activityFunction := func() (string, error) {
-		<-activityCompleteCh
+		s.Rcv(activityCompleteCh)
 		return "done!", nil
 	}
 
-	workflowFn := s.makeWorkflowFunc(activityFunction)
-	s.SdkWorker().RegisterWorkflow(workflowFn)
-	s.SdkWorker().RegisterActivity(activityFunction)
+	workflowFn := env.makeWorkflowFunc(activityFunction)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterActivity(activityFunction)
 
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
-		ID:        s.tv.WorkflowID(),
-		TaskQueue: s.TaskQueue(),
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:        env.tv.WorkflowID(),
+		TaskQueue: env.WorkerTaskQueue(),
 	}, workflowFn)
 	s.Require().NoError(err)
 
 	var activityStartedAt time.Time
 	await.Require(ctx, s.T(), func(t *await.T) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
 		pendingActivity := description.PendingActivities[0]
@@ -349,15 +367,15 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_TimesOutOnUnpause
 		activityStartedAt = pendingActivity.LastStartedTime.AsTime()
 	}, 5*time.Second, 200*time.Millisecond)
 
-	_, err = s.FrontendClient().PauseActivity(ctx, &workflowservice.PauseActivityRequest{
-		Namespace: s.Namespace().String(),
+	_, err = env.FrontendClient().PauseActivity(ctx, &workflowservice.PauseActivityRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowRun.GetID()},
 		Activity:  &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
 	})
 	s.Require().NoError(err)
 
 	await.Require(ctx, s.T(), func(t *await.T) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED, description.PendingActivities[0].State)
@@ -365,17 +383,17 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_TimesOutOnUnpause
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// Allow the original timeout task to be processed while the activity is paused.
-	originalDeadline := activityStartedAt.Add(s.startToCloseTimeout)
+	originalDeadline := activityStartedAt.Add(env.startToCloseTimeout)
 	await.RequireTrue(s.T(), func() bool {
 		return time.Now().After(originalDeadline.Add(2 * time.Second))
 	}, 5*time.Second, 100*time.Millisecond)
 
-	description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+	description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 	s.Require().NoError(err)
 	s.Require().Len(description.GetPendingActivities(), 1)
 	s.True(description.PendingActivities[0].Paused)
 
-	s.Require().NoError(s.resetFn(ctx, workflowRun.GetID(), "activity-id", false, false))
+	s.Require().NoError(env.resetFn(ctx, workflowRun.GetID(), "activity-id", false, false))
 
 	workflowResultCtx, workflowResultCancel := context.WithTimeout(ctx, 10*time.Second)
 	defer workflowResultCancel()
@@ -388,15 +406,17 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_TimesOutOnUnpause
 	s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timeoutErr.TimeoutType())
 }
 
-func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
+func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry(apiName string) {
+	env := newActivityResetTestEnv(s.T(), apiName)
+
 	// reset is called while activity is in retry
-	s.initialRetryInterval = 1 * time.Minute
-	s.activityRetryPolicy = &temporal.RetryPolicy{
-		InitialInterval:    s.initialRetryInterval,
+	env.initialRetryInterval = 1 * time.Minute
+	env.activityRetryPolicy = &temporal.RetryPolicy{
+		InitialInterval:    env.initialRetryInterval,
 		BackoffCoefficient: 1,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 	defer cancel()
 
 	var startedActivityCount atomic.Int32
@@ -410,38 +430,38 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
 			return "", activityErr
 		}
 
-		await.Rcv(s.T(), activityCompleteCh)
+		s.Rcv(activityCompleteCh)
 		return "done!", nil
 	}
 
-	workflowFn := s.makeWorkflowFunc(activityFunction)
+	workflowFn := env.makeWorkflowFunc(activityFunction)
 
-	s.SdkWorker().RegisterWorkflow(workflowFn)
-	s.SdkWorker().RegisterActivity(activityFunction)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterActivity(activityFunction)
 
 	wfId := testcore.RandomizeStr("wf_id-" + s.T().Name())
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        wfId,
-		TaskQueue: s.TaskQueue(),
+		TaskQueue: env.WorkerTaskQueue(),
 	}
 
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
 
 	// wait for activity to start, fail and wait for retry
 	await.Require(ctx, s.T(), func(t *await.T) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.PendingActivities, 1)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, description.PendingActivities[0].State)
 		require.Equal(t, int32(1), startedActivityCount.Load())
 	}, 5*time.Second, 200*time.Millisecond)
 
-	s.NoError(s.resetFn(ctx, workflowRun.GetID(), "activity-id", false, false))
+	s.NoError(env.resetFn(ctx, workflowRun.GetID(), "activity-id", false, false))
 
 	// wait for activity to start. Wait time is shorter than original retry interval
 	await.Require(ctx, s.T(), func(t *await.T) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.GetPendingActivities(), 1)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, description.PendingActivities[0].State)
@@ -451,7 +471,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
 	}, 2*time.Second, 200*time.Millisecond)
 
 	// let previous activity complete
-	activityCompleteCh <- struct{}{}
+	s.Snd(activityCompleteCh, struct{}{})
 
 	// wait for workflow to complete
 	var out string
@@ -459,15 +479,17 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_InRetry() {
 	s.NoError(err)
 }
 
-func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
+func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused(apiName string) {
+	env := newActivityResetTestEnv(s.T(), apiName)
+
 	// reset is called while activity is in retry
-	s.initialRetryInterval = 1 * time.Minute
-	s.activityRetryPolicy = &temporal.RetryPolicy{
-		InitialInterval:    s.initialRetryInterval,
+	env.initialRetryInterval = 1 * time.Minute
+	env.activityRetryPolicy = &temporal.RetryPolicy{
+		InitialInterval:    env.initialRetryInterval,
 		BackoffCoefficient: 1,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 	defer cancel()
 
 	var startedActivityCount atomic.Int32
@@ -482,27 +504,27 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 			return "", activityErr
 		}
 
-		await.Rcv(s.T(), activityCompleteCh)
+		s.Rcv(activityCompleteCh)
 		return "done!", nil
 	}
 
-	workflowFn := s.makeWorkflowFunc(activityFunction)
+	workflowFn := env.makeWorkflowFunc(activityFunction)
 
-	s.SdkWorker().RegisterWorkflow(workflowFn)
-	s.SdkWorker().RegisterActivity(activityFunction)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterActivity(activityFunction)
 
 	wfId := testcore.RandomizeStr("wf_id-" + s.T().Name())
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:        wfId,
-		TaskQueue: s.TaskQueue(),
+		TaskQueue: env.WorkerTaskQueue(),
 	}
 
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
 
 	// wait for activity to start, fail few times and wait for retry
 	await.Require(ctx, s.T(), func(t *await.T) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.PendingActivities, 1)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, description.PendingActivities[0].State)
@@ -511,19 +533,19 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 
 	// pause the activity
 	pauseRequest := &workflowservice.PauseActivityRequest{
-		Namespace: s.Namespace().String(),
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowRun.GetID(),
 		},
 		Activity: &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
 	}
-	pauseResp, err := s.FrontendClient().PauseActivity(ctx, pauseRequest)
+	pauseResp, err := env.FrontendClient().PauseActivity(ctx, pauseRequest)
 	s.NoError(err)
 	s.NotNil(pauseResp)
 
 	// verify that activity is paused
 	await.Require(ctx, s.T(), func(t *await.T) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.NotNil(t, description)
 		require.Len(t, description.GetPendingActivities(), 1)
@@ -534,11 +556,11 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// reset the activity, while keeping it paused
-	s.NoError(s.resetFn(ctx, workflowRun.GetID(), "activity-id", false, true))
+	s.NoError(env.resetFn(ctx, workflowRun.GetID(), "activity-id", false, true))
 
 	// verify that activity is still paused, and reset
 	await.Require(ctx, s.T(), func(t *await.T) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.NotNil(t, description)
 		require.Len(t, description.GetPendingActivities(), 1)
@@ -552,18 +574,18 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_KeepPaused() {
 
 	// unpause the activity
 	unpauseRequest := &workflowservice.UnpauseActivityRequest{
-		Namespace: s.Namespace().String(),
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowRun.GetID(),
 		},
 		Activity: &workflowservice.UnpauseActivityRequest_Id{Id: "activity-id"},
 	}
-	unpauseResp, err := s.FrontendClient().UnpauseActivity(ctx, unpauseRequest)
+	unpauseResp, err := env.FrontendClient().UnpauseActivity(ctx, unpauseRequest)
 	s.NoError(err)
 	s.NotNil(unpauseResp)
 
 	// let  activity complete
-	activityCompleteCh <- struct{}{}
+	s.Snd(activityCompleteCh, struct{}{})
 
 	// wait for workflow to complete
 	var out string
@@ -583,19 +605,23 @@ func requirePayload(t require.TestingT, expected string, pls *commonpb.Payloads)
 
 // TestActivityReset_HeartbeatDetails covers the default: a reset rewinds the attempt count but
 // keeps the heartbeat checkpoint.
-func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetails() {
-	s.runResetHeartbeatDetails(false, true)
+func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetails(apiName string) {
+	env := newActivityResetTestEnv(s.T(), apiName)
+
+	s.runResetHeartbeatDetails(env, false, true)
 }
 
 // TestActivityReset_HeartbeatDetailsWithResetHeartbeatFlag covers the opt-in discard.
-func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetailsWithResetHeartbeatFlag() {
-	s.runResetHeartbeatDetails(true, false)
+func (s *ActivityApiResetClientTestSuite) TestActivityReset_HeartbeatDetailsWithResetHeartbeatFlag(apiName string) {
+	env := newActivityResetTestEnv(s.T(), apiName)
+
+	s.runResetHeartbeatDetails(env, true, false)
 }
 
 // runResetHeartbeatDetails runs an activity that heartbeats "first", resets it mid-attempt, then
 // lets that attempt fail so the reset lands on the retry, and checks whether the checkpoint
 // survived. The retried attempt heartbeats "second" to show heartbeating still works afterwards.
-func (s *ActivityApiResetClientTestSuite) runResetHeartbeatDetails(resetHeartbeat, expectPreserved bool) {
+func (s *ActivityApiResetClientTestSuite) runResetHeartbeatDetails(env *activityResetTestEnv, resetHeartbeat, expectPreserved bool) {
 	activityCompleteCh := make(chan struct{})
 	var activityIteration atomic.Int32
 	var activityShouldBreak atomic.Bool
@@ -610,7 +636,7 @@ func (s *ActivityApiResetClientTestSuite) runResetHeartbeatDetails(resetHeartbea
 			return "", errors.New("bad-luck-please-retry")
 		}
 		// not the first iteration
-		await.Rcv(s.T(), activityCompleteCh)
+		s.Rcv(activityCompleteCh)
 		for activityShouldFinish.Load() == false {
 			activity.RecordHeartbeat(ctx, "second")
 			time.Sleep(time.Second) //nolint:forbidigo
@@ -624,25 +650,25 @@ func (s *ActivityApiResetClientTestSuite) runResetHeartbeatDetails(resetHeartbea
 		err := workflow.ExecuteActivity(workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			ActivityID:             activityId,
 			DisableEagerExecution:  true,
-			StartToCloseTimeout:    s.startToCloseTimeout,
-			ScheduleToCloseTimeout: s.scheduleToCloseTimeout,
-			RetryPolicy:            s.activityRetryPolicy,
+			StartToCloseTimeout:    env.startToCloseTimeout,
+			ScheduleToCloseTimeout: env.scheduleToCloseTimeout,
+			RetryPolicy:            env.activityRetryPolicy,
 		}), activityFn).Get(ctx, &ret)
 		return ret, err
 	}
 
-	s.SdkWorker().RegisterActivity(activityFn)
-	s.SdkWorker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterActivity(activityFn)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
 
 	wfID := testcore.RandomizeStr("wfid-" + s.T().Name())
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 wfID,
-		TaskQueue:          s.TaskQueue(),
+		TaskQueue:          env.WorkerTaskQueue(),
 		WorkflowRunTimeout: 20 * time.Second,
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 	defer cancel()
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
 
 	s.NotNil(workflowRun)
@@ -651,21 +677,21 @@ func (s *ActivityApiResetClientTestSuite) runResetHeartbeatDetails(resetHeartbea
 
 	// make sure activity is running and sending heartbeats
 	await.Require(ctx, s.T(), func(t *await.T) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.PendingActivities, 1)
 		requirePayload(t, "first", description.PendingActivities[0].GetHeartbeatDetails())
 		require.Equal(t, int32(0), activityIteration.Load())
 	}, 5*time.Second, 500*time.Millisecond)
 
-	s.NoError(s.resetFn(ctx, workflowRun.GetID(), activityId, resetHeartbeat, false))
+	s.NoError(env.resetFn(ctx, workflowRun.GetID(), activityId, resetHeartbeat, false))
 
 	activityIteration.Store(1)
 	activityShouldBreak.Store(true)
 
 	// wait for activity to fail and retried
 	await.Require(ctx, s.T(), func(t *await.T) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, description.PendingActivities, 1)
 		ap := description.PendingActivities[0]
@@ -680,11 +706,11 @@ func (s *ActivityApiResetClientTestSuite) runResetHeartbeatDetails(resetHeartbea
 	}, 5*time.Second, 500*time.Millisecond)
 
 	// let activity start producing heartbeats
-	activityCompleteCh <- struct{}{}
+	s.Snd(activityCompleteCh, struct{}{})
 
 	// make sure activity is running and sending heartbeats
 	await.Require(ctx, s.T(), func(t *await.T) {
-		description, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Equal(t, int32(1), activityIteration.Load())
 		require.Len(t, description.PendingActivities, 1)
@@ -701,16 +727,18 @@ func (s *ActivityApiResetClientTestSuite) runResetHeartbeatDetails(resetHeartbea
 	s.NotEmpty(out)
 }
 
-func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhilePaused() {
+func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhilePaused(apiName string) {
+	env := newActivityResetTestEnv(s.T(), apiName)
+
 	// Reset is called while the activity is in PAUSED state (SCHEDULED→PAUSED via TransitionPaused).
 	// The activity should remain PAUSED with attempt count reset to 1. After unpause it should complete.
-	s.initialRetryInterval = 1 * time.Minute
-	s.activityRetryPolicy = &temporal.RetryPolicy{
-		InitialInterval:    s.initialRetryInterval,
+	env.initialRetryInterval = 1 * time.Minute
+	env.activityRetryPolicy = &temporal.RetryPolicy{
+		InitialInterval:    env.initialRetryInterval,
 		BackoffCoefficient: 1,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 	defer cancel()
 
 	var startedActivityCount atomic.Int32
@@ -722,24 +750,24 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhilePaused() {
 		if !activityWasReset.Load() {
 			return "", errors.New("bad-luck-please-retry")
 		}
-		await.Rcv(s.T(), activityCompleteCh)
+		s.Rcv(activityCompleteCh)
 		return "done!", nil
 	}
 
-	workflowFn := s.makeWorkflowFunc(activityFunction)
-	s.SdkWorker().RegisterWorkflow(workflowFn)
-	s.SdkWorker().RegisterActivity(activityFunction)
+	workflowFn := env.makeWorkflowFunc(activityFunction)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterActivity(activityFunction)
 
 	wfID := testcore.RandomizeStr("wf_id-" + s.T().Name())
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        wfID,
-		TaskQueue: s.TaskQueue(),
+		TaskQueue: env.WorkerTaskQueue(),
 	}, workflowFn)
 	s.NoError(err)
 
 	// wait for activity to fail and enter retry backoff (SCHEDULED state waiting for retry)
 	await.Require(ctx, s.T(), func(t *await.T) {
-		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		desc, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, desc.PendingActivities, 1)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, desc.PendingActivities[0].State)
@@ -747,8 +775,8 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhilePaused() {
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// pause the activity (transitions SCHEDULED→PAUSED)
-	_, err = s.FrontendClient().PauseActivity(ctx, &workflowservice.PauseActivityRequest{
-		Namespace: s.Namespace().String(),
+	_, err = env.FrontendClient().PauseActivity(ctx, &workflowservice.PauseActivityRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: wfID},
 		Activity:  &workflowservice.PauseActivityRequest_Id{Id: "activity-id"},
 	})
@@ -756,7 +784,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhilePaused() {
 
 	// wait for PAUSED state
 	await.Require(ctx, s.T(), func(t *await.T) {
-		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		desc, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, desc.PendingActivities, 1)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, desc.PendingActivities[0].State)
@@ -764,10 +792,10 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhilePaused() {
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// reset while paused — activity should stay PAUSED, but attempt resets to 1
-	s.NoError(s.resetFn(ctx, wfID, "activity-id", false, true))
+	s.NoError(env.resetFn(ctx, wfID, "activity-id", false, true))
 
 	await.Require(ctx, s.T(), func(t *await.T) {
-		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		desc, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, desc.PendingActivities, 1)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, desc.PendingActivities[0].State)
@@ -777,23 +805,25 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhilePaused() {
 	activityWasReset.Store(true)
 
 	// unpause — activity should run and complete
-	_, err = s.FrontendClient().UnpauseActivity(ctx, &workflowservice.UnpauseActivityRequest{
-		Namespace: s.Namespace().String(),
+	_, err = env.FrontendClient().UnpauseActivity(ctx, &workflowservice.UnpauseActivityRequest{
+		Namespace: env.Namespace().String(),
 		Execution: &commonpb.WorkflowExecution{WorkflowId: wfID},
 		Activity:  &workflowservice.UnpauseActivityRequest_Id{Id: "activity-id"},
 	})
 	s.NoError(err)
 
-	activityCompleteCh <- struct{}{}
+	s.Snd(activityCompleteCh, struct{}{})
 
 	s.NoError(workflowRun.Get(ctx, nil))
 }
 
-func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_TerminateWhileDeferredReset() {
+func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_TerminateWhileDeferredReset(apiName string) {
+	env := newActivityResetTestEnv(s.T(), apiName)
+
 	// Reset is called while activity is STARTED (sets ActivityReset=true as a deferred flag).
 	// The workflow is then terminated before the activity retries. Verifies the activity
 	// and workflow terminate cleanly without the deferred reset flag causing issues.
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
 	defer cancel()
 
 	activityBlockCh := make(chan struct{})
@@ -801,34 +831,34 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_TerminateWhileDef
 
 	activityFunction := func() (string, error) {
 		startedActivityCount.Add(1)
-		await.Rcv(s.T(), activityBlockCh)
+		s.Rcv(activityBlockCh)
 		return "done!", nil
 	}
 
-	workflowFn := s.makeWorkflowFunc(activityFunction)
-	s.SdkWorker().RegisterWorkflow(workflowFn)
-	s.SdkWorker().RegisterActivity(activityFunction)
+	workflowFn := env.makeWorkflowFunc(activityFunction)
+	env.SdkWorker().RegisterWorkflow(workflowFn)
+	env.SdkWorker().RegisterActivity(activityFunction)
 
 	wfID := testcore.RandomizeStr("wf_id-" + s.T().Name())
-	workflowRun, err := s.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
 		ID:        wfID,
-		TaskQueue: s.TaskQueue(),
+		TaskQueue: env.WorkerTaskQueue(),
 	}, workflowFn)
 	s.NoError(err)
 
 	// wait for activity to start
 	await.Require(ctx, s.T(), func(t *await.T) {
-		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		desc, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Len(t, desc.PendingActivities, 1)
 		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_STARTED, desc.PendingActivities[0].State)
 	}, 5*time.Second, 200*time.Millisecond)
 
 	// reset while running — sets ActivityReset=true as deferred flag
-	s.NoError(s.resetFn(ctx, wfID, "activity-id", false, false))
+	s.NoError(env.resetFn(ctx, wfID, "activity-id", false, false))
 
 	// terminate the workflow before the activity retries
-	err = s.SdkClient().TerminateWorkflow(ctx, wfID, workflowRun.GetRunID(), "test termination")
+	err = env.SdkClient().TerminateWorkflow(ctx, wfID, workflowRun.GetRunID(), "test termination")
 	s.NoError(err)
 
 	// unblock the activity worker so it can respond
@@ -836,7 +866,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_TerminateWhileDef
 
 	// verify the workflow is terminated
 	await.Require(ctx, s.T(), func(t *await.T) {
-		desc, err := s.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		desc, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 		require.NoError(t, err)
 		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, desc.GetWorkflowExecutionInfo().GetStatus())
 	}, 10*time.Second, 200*time.Millisecond)
