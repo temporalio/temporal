@@ -110,7 +110,7 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestRefreshWorkflowTasks_Activ
 		s.refreshTasksInCluster(ctx, cluster, ns, visibilityQuery)
 	}
 
-	// Both executions still have a dispatchable workflow task after being refreshed in both clusters.
+	// The executions can still complete on the active cluster after both refresh batches.
 	sdkClient, worker := s.newClientAndWorker(s.clusters[0].Host().FrontendGRPCAddress(), ns, taskQueue, "worker0")
 	defer sdkClient.Close()
 	worker.RegisterWorkflowWithOptions(
