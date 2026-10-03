@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/tqid"
 )
 
@@ -64,24 +63,9 @@ func (s *RateLimitManagerSuite) TestUpdatePerKeySimpleRateLimitLocked_WhenFairne
 }
 
 func TestRateLimitManagerGrantTokens(t *testing.T) {
-	t.Run("classic matcher returns a partial grant", func(t *testing.T) {
-		timeSource := clock.NewEventTimeSource().Update(time.Now().Add(time.Second))
-		manager := &rateLimitManager{
-			config:     &taskQueueConfig{NewMatcher: false},
-			timeSource: timeSource,
-			dynamicRateLimiter: quotas.NewDynamicRateLimiter(
-				quotas.NewMutableRateBurst(2, 2),
-				time.Hour,
-			),
-		}
-
-		require.Equal(t, int32(2), manager.grantTokens(nil, 5))
-		require.Equal(t, int32(0), manager.grantTokens(nil, 1))
-	})
-
 	t.Run("new matcher applies the whole queue limit", func(t *testing.T) {
 		manager := &rateLimitManager{
-			config:          &taskQueueConfig{NewMatcher: true},
+			config:          &taskQueueConfig{},
 			timeSource:      clock.NewEventTimeSource().Update(time.Now()),
 			perKeyReady:     cache.New(10, nil),
 			wholeQueueLimit: makeSimpleLimiterParams(2, 500*time.Millisecond),
@@ -94,7 +78,7 @@ func TestRateLimitManagerGrantTokens(t *testing.T) {
 	t.Run("new matcher isolates fairness keys", func(t *testing.T) {
 		timeSource := clock.NewEventTimeSource().Update(time.Now())
 		manager := &rateLimitManager{
-			config:          &taskQueueConfig{NewMatcher: true},
+			config:          &taskQueueConfig{},
 			timeSource:      timeSource,
 			perKeyReady:     cache.New(10, nil),
 			wholeQueueLimit: simpleLimiterParams{},

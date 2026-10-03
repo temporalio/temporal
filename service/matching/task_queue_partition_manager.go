@@ -96,7 +96,6 @@ type (
 		initCtx               context.Context
 		initCancel            func()
 
-		cancelNewMatcherSub func()
 		cancelFairnessSub   func()
 		cancelAutoEnableSub func()
 
@@ -207,11 +206,10 @@ func newTaskQueuePartitionManager(
 	return pm, nil
 }
 
-// computeEffectiveConfig determines the effective NewMatcher and EnableFairness config values
-// based on fairnessState, autoEnable, and the base dynamic config values.
-func (pm *taskQueuePartitionManagerImpl) computeEffectiveConfig(autoEnable, fairness, newMatcher bool) (effectiveNewMatcher, effectiveEnableFairness bool) {
+// computeEffectiveConfig determines the effective EnableFairness config value
+// based on fairnessState, autoEnable, and the base dynamic config value.
+func (pm *taskQueuePartitionManagerImpl) computeEffectiveConfig(autoEnable, fairness bool) (effectiveEnableFairness bool) {
 	effectiveEnableFairness = fairness && pm.partition.SupportsFairness()
-	effectiveNewMatcher = newMatcher || fairness
 	if !autoEnable {
 		return
 	}
@@ -220,13 +218,10 @@ func (pm *taskQueuePartitionManagerImpl) computeEffectiveConfig(autoEnable, fair
 	case enumsspb.FAIRNESS_STATE_UNSPECIFIED:
 		// use values from config
 	case enumsspb.FAIRNESS_STATE_V0:
-		effectiveNewMatcher = false
 		effectiveEnableFairness = false
 	case enumsspb.FAIRNESS_STATE_V1:
-		effectiveNewMatcher = true
 		effectiveEnableFairness = false
 	case enumsspb.FAIRNESS_STATE_V2:
-		effectiveNewMatcher = true
 		effectiveEnableFairness = pm.partition.SupportsFairness()
 	default:
 		pm.logger.Error("unknown fairnessState in user data")
@@ -250,7 +245,7 @@ func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 	pm.fairnessState = data.GetFairnessState()
 	changeKey := pm.partition.GradualChangeKey()
 
-	var autoEnable, fairness, newMatcher bool
+	var autoEnable, fairness bool
 	autoEnable, pm.cancelAutoEnableSub = pm.config.AutoEnableV2Sub(pm.autoEnableChanged)
 
 	unloadOnBaseConfigChange := func(bool) {
@@ -259,13 +254,11 @@ func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 		}
 	}
 
-	newMatcher, pm.cancelNewMatcherSub = dynamicconfig.SubscribeGradualChange(
-		pm.config.NewMatcherSub, changeKey, unloadOnBaseConfigChange, pm.engine.timeSource)
 	fairness, pm.cancelFairnessSub = dynamicconfig.SubscribeGradualChange(
 		pm.config.EnableFairnessSub, changeKey, unloadOnBaseConfigChange, pm.engine.timeSource)
 
 	// Determine initial config values
-	pm.config.NewMatcher, pm.config.EnableFairness = pm.computeEffectiveConfig(autoEnable, fairness, newMatcher)
+	pm.config.EnableFairness = pm.computeEffectiveConfig(autoEnable, fairness)
 
 	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(pm.partition))
 	if err != nil {
@@ -320,9 +313,6 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 
 	if pm.cancelFairnessSub != nil {
 		pm.cancelFairnessSub()
-	}
-	if pm.cancelNewMatcherSub != nil {
-		pm.cancelNewMatcherSub()
 	}
 	if pm.cancelAutoEnableSub != nil {
 		pm.cancelAutoEnableSub()
@@ -513,33 +503,18 @@ func (pm *taskQueuePartitionManagerImpl) autoEnableChanged(en bool) {
 	fairnessGC, _ := pm.config.EnableFairnessSub(nil)
 	fairness := fairnessGC.Value(changeKey, now)
 
-	newMatcherGC, _ := pm.config.NewMatcherSub(nil)
-	newMatcher := newMatcherGC.Value(changeKey, now)
+	effectiveEnableFairness := pm.computeEffectiveConfig(en, fairness)
 
-	effectiveNewMatcher, effectiveEnableFairness := pm.computeEffectiveConfig(en, fairness, newMatcher)
-
-	if effectiveNewMatcher != pm.config.NewMatcher || effectiveEnableFairness != pm.config.EnableFairness {
+	if effectiveEnableFairness != pm.config.EnableFairness {
 		pm.unloadFromEngine(unloadCauseConfigChange)
 	}
 }
 
 func (pm *taskQueuePartitionManagerImpl) autoEnableIfNeeded(ctx context.Context, params addTaskParams) {
-	if pm.fairnessState != enumsspb.FAIRNESS_STATE_UNSPECIFIED {
-		return
-	}
-	if params.taskInfo.Priority.GetFairnessKey() == "" {
-		if params.taskInfo.Priority.GetPriorityKey() == int32(0) {
-			return
-		}
-		// Do not auto enable if we only see priority and we're using new matcher already
-		if pm.config.NewMatcher {
-			return
-		}
-	}
-	if !pm.Partition().IsRoot() || !pm.Partition().SupportsFairness() || !pm.config.AutoEnableV2() {
-		return
-	}
-	if !pm.autoEnableRateLimiter.Allow() {
+	if pm.fairnessState != enumsspb.FAIRNESS_STATE_UNSPECIFIED ||
+		params.taskInfo.Priority.GetFairnessKey() == "" ||
+		!pm.Partition().IsRoot() || !pm.Partition().SupportsFairness() || !pm.config.AutoEnableV2() ||
+		!pm.autoEnableRateLimiter.Allow() {
 		return
 	}
 	req := &matchingservice.UpdateFairnessStateRequest{
@@ -1031,70 +1006,6 @@ func (pm *taskQueuePartitionManagerImpl) GetPhysicalQueueAdjustedStats(
 		return nil
 	}
 	return info.GetPhysicalTaskQueueInfo().GetTaskQueueStats()
-}
-
-// TODO(pri): old matcher cleanup
-func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
-	ctx context.Context,
-	task *internalTask,
-	backlogQueue *PhysicalTaskQueueKey,
-) error {
-	taskInfo := task.event.GetData()
-	// This task came from taskReader so task.event is always set here.
-	directive := taskInfo.GetVersionDirective()
-	assignedBuildId := backlogQueue.Version().BuildId()
-	if assignedBuildId != "" {
-		// construct directive based on the build ID of the spool queue
-		directive = worker_versioning.MakeBuildIdDirective(assignedBuildId)
-	}
-	// Redirect and re-resolve if we're blocked in matcher and user data changes.
-	for {
-		newBacklogQueue, syncMatchQueue, userDataChanged, taskDispatchRevisionNumber, targetVersion, err := pm.getPhysicalQueuesForAdd(ctx,
-			directive,
-			nil,
-			taskInfo.GetRunId(),
-			taskInfo.GetWorkflowId(),
-			false)
-		if err != nil {
-			return err
-		}
-
-		task.targetWorkerDeploymentVersion = targetVersion
-
-		// Update the task dispatch revision number on the task since the routingConfig of the partition
-		// may have changed after the task was spooled.
-		task.taskDispatchRevisionNumber = taskDispatchRevisionNumber
-
-		// set redirect info if spoolQueue and syncMatchQueue build ids are different
-		if assignedBuildId != syncMatchQueue.QueueKey().Version().BuildId() {
-			task.redirectInfo = &taskqueuespb.BuildIdRedirectInfo{
-				AssignedBuildId: assignedBuildId,
-			}
-		} else {
-			// make sure to reset redirectInfo in case it was set in a previous loop cycle
-			task.redirectInfo = nil
-		}
-		if !backlogQueue.version.Deployment().Equal(newBacklogQueue.QueueKey().version.Deployment()) {
-			// Backlog queue has changed, spool to the new queue. This should happen rarely: when
-			// activity of pinned workflow was determined independent and sent to the default queue
-			// but now at dispatch time, the determination is different because the activity pollers
-			// on the pinned deployment have reached server.
-			// TODO: before spooling, try to sync-match the task on the new queue
-			err = newBacklogQueue.SpoolTask(taskInfo)
-			if err != nil {
-				// return the error so task_reader retries the outer call
-				return err
-			}
-			// Finish the task because now it is copied to the other backlog. It should be considered
-			// invalid because a poller did not receive the task.
-			task.finish(taskFinishResult{})
-			return nil
-		}
-		err = syncMatchQueue.DispatchSpooledTask(ctx, task, userDataChanged)
-		if err != errInterrupted {
-			return err
-		}
-	}
 }
 
 func (pm *taskQueuePartitionManagerImpl) AddSpooledTask(
@@ -1662,8 +1573,7 @@ func (pm *taskQueuePartitionManagerImpl) describe(
 func (pm *taskQueuePartitionManagerImpl) updateEphemeralData(ctx context.Context) error {
 	// for now, this only applies to normal workflow task queues, only with new matcher
 	if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_NORMAL ||
-		pm.partition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW ||
-		!pm.config.NewMatcher {
+		pm.partition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 		return nil
 	}
 

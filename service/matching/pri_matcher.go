@@ -20,6 +20,8 @@ import (
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // priTaskMatcher matches a task producer with a task consumer
@@ -75,8 +77,7 @@ type remotePriorityBacklog struct {
 type remotePriorityBacklogSet = map[remotePriorityBacklog]struct{}
 
 var (
-	// TODO(pri): old matcher cleanup, move to here
-	// errNoRecentPoller = status.Error(codes.FailedPrecondition, "no poller seen for task queue recently, worker may be down")
+	errNoRecentPoller = status.Error(codes.FailedPrecondition, "no poller seen for task queue recently, worker may be down")
 
 	// This is a fake error used to force reprocessing of task redirection as used by versioning.
 	// Situations where we do this:

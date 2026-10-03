@@ -24,7 +24,6 @@ type (
 		PersistencePerShardNamespaceMaxQPS   dynamicconfig.IntPropertyFnWithNamespaceFilter
 		PersistenceDynamicRateLimitingParams dynamicconfig.TypedPropertyFn[dynamicconfig.DynamicRateLimitingParams]
 		PersistenceQPSBurstRatio             dynamicconfig.FloatPropertyFn
-		SyncMatchWaitDuration                dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		RPS                                  dynamicconfig.IntPropertyFn
 		NamespaceRPS                         dynamicconfig.IntPropertyFnWithNamespaceFilter
 		OperatorRPSRatio                     dynamicconfig.FloatPropertyFn
@@ -42,7 +41,6 @@ type (
 		// task queue configuration
 
 		RangeSize                                int64
-		NewMatcherSub                            dynamicconfig.TypedSubscribableWithTaskQueueFilter[dynamicconfig.GradualChange[bool]]
 		EnableFairnessSub                        dynamicconfig.TypedSubscribableWithTaskQueueFilter[dynamicconfig.GradualChange[bool]]
 		AutoEnableV2Sub                          dynamicconfig.TypedSubscribableWithTaskQueueFilter[bool]
 		GetTasksBatchSize                        dynamicconfig.IntPropertyFnWithTaskQueueFilter
@@ -97,7 +95,6 @@ type (
 
 		RateLimitFractionProvider TaskQueueRateLimitFractionProvider
 
-		RateLimiterRefreshInterval    time.Duration
 		FairnessKeyRateLimitCacheSize dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		MaxFairnessKeyWeightOverrides dynamicconfig.IntPropertyFnWithTaskQueueFilter
 
@@ -105,7 +102,6 @@ type (
 		LongPollExpirationInterval  dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		BacklogTaskForwardTimeout   dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 		ForwardPollRetryMaxInterval dynamicconfig.DurationPropertyFnWithTaskQueueFilter
-		MinTaskThrottlingBurstSize  dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		MaxTaskDeleteBatchSize      dynamicconfig.IntPropertyFnWithTaskQueueFilter
 		TaskDeleteInterval          dynamicconfig.DurationPropertyFnWithTaskQueueFilter
 
@@ -157,7 +153,6 @@ type (
 
 	taskQueueConfig struct {
 		forwarderConfig
-		SyncMatchWaitDuration              func() time.Duration
 		EphemeralDataUpdateInterval        func() time.Duration
 		BacklogMetricsEmitInterval         func() time.Duration
 		PriorityBacklogForwarding          func() bool
@@ -171,8 +166,6 @@ type (
 		BacklogTaskForwardTimeout      func() time.Duration
 		ForwardPollRetryMaxInterval    func() time.Duration
 		RangeSize                      int64
-		NewMatcher                     bool
-		NewMatcherSub                  func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
 		EnableFairness                 bool
 		EnableFairnessSub              func(func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func())
 		AutoEnableV2                   func() bool
@@ -182,7 +175,6 @@ type (
 		UpdateAckInterval              func() time.Duration
 		MetadataUpdateOnAppendInterval func() time.Duration
 		MaxTaskQueueIdleTime           func() time.Duration
-		MinTaskThrottlingBurstSize     func() int
 		MaxTaskDeleteBatchSize         func() int
 		TaskDeleteInterval             func() time.Duration
 		PriorityLevels                 priorityKey
@@ -217,7 +209,6 @@ type (
 
 		// Rate limiting
 		RateLimitFraction             func() float64
-		RateLimiterRefreshInterval    time.Duration
 		FairnessKeyRateLimitCacheSize func() int
 		MaxFairnessKeyWeightOverrides func() int
 
@@ -284,7 +275,6 @@ func NewConfig(
 		PersistencePerShardNamespaceMaxQPS:       dynamicconfig.DefaultPerShardNamespaceRPSMax,
 		PersistenceDynamicRateLimitingParams:     dynamicconfig.MatchingPersistenceDynamicRateLimitingParams.Get(dc),
 		PersistenceQPSBurstRatio:                 dynamicconfig.PersistenceQPSBurstRatio.Get(dc),
-		SyncMatchWaitDuration:                    dynamicconfig.MatchingSyncMatchWaitDuration.Get(dc),
 		HistoryMaxPageSize:                       dynamicconfig.MatchingHistoryMaxPageSize.Get(dc),
 		EnableDeployments:                        dynamicconfig.EnableDeployments.Get(dc), // [cleanup-wv-pre-release]
 		EnableDeploymentVersions:                 dynamicconfig.EnableDeploymentVersions.Get(dc),
@@ -296,7 +286,6 @@ func NewConfig(
 		OperatorRPSRatio:                         dynamicconfig.OperatorRPSRatio.Get(dc),
 		PollWaitForNamespaceRateLimitToken:       dynamicconfig.PollWaitForNamespaceRateLimitToken.Get(dc),
 		RangeSize:                                100000,
-		NewMatcherSub:                            dynamicconfig.MatchingUseNewMatcher.Subscribe(dc),
 		EnableFairnessSub:                        dynamicconfig.MatchingEnableFairness.Subscribe(dc),
 		AutoEnableV2Sub:                          dynamicconfig.MatchingAutoEnableV2.Subscribe(dc),
 		GetTasksBatchSize:                        dynamicconfig.MatchingGetTasksBatchSize.Get(dc),
@@ -307,7 +296,6 @@ func NewConfig(
 		LongPollExpirationInterval:               dynamicconfig.MatchingLongPollExpirationInterval.Get(dc),
 		BacklogTaskForwardTimeout:                dynamicconfig.MatchingBacklogTaskForwardTimeout.Get(dc),
 		ForwardPollRetryMaxInterval:              dynamicconfig.MatchingForwardPollRetryMaxInterval.Get(dc),
-		MinTaskThrottlingBurstSize:               dynamicconfig.MatchingMinTaskThrottlingBurstSize.Get(dc),
 		MaxTaskDeleteBatchSize:                   dynamicconfig.MatchingMaxTaskDeleteBatchSize.Get(dc),
 		TaskDeleteInterval:                       dynamicconfig.MatchingTaskDeleteInterval.Get(dc),
 		OutstandingTaskAppendsThreshold:          dynamicconfig.MatchingOutstandingTaskAppendsThreshold.Get(dc),
@@ -359,7 +347,6 @@ func NewConfig(
 		MembershipUnloadDelay:                    dynamicconfig.MatchingMembershipUnloadDelay.Get(dc),
 		TaskQueueInfoByBuildIdTTL:                dynamicconfig.TaskQueueInfoByBuildIdTTL.Get(dc),
 		PriorityLevels:                           dynamicconfig.MatchingPriorityLevels.Get(dc),
-		RateLimiterRefreshInterval:               time.Minute,
 		FairnessKeyRateLimitCacheSize:            dynamicconfig.MatchingFairnessKeyRateLimitCacheSize.Get(dc),
 		MaxFairnessKeyWeightOverrides:            dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),
 		MaxIDLengthLimit:                         dynamicconfig.MaxIDLengthLimit.Get(dc),
@@ -409,9 +396,6 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 
 	return &taskQueueConfig{
 		RangeSize: config.RangeSize,
-		NewMatcherSub: func(cb func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
-			return config.NewMatcherSub(ns.String(), taskQueueName, taskType, cb)
-		},
 		EnableFairnessSub: func(cb func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
 			return config.EnableFairnessSub(ns.String(), taskQueueName, taskType, cb)
 		},
@@ -436,12 +420,6 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		},
 		MaxTaskQueueIdleTime: func() time.Duration {
 			return config.MaxTaskQueueIdleTime(ns.String(), taskQueueName, taskType)
-		},
-		MinTaskThrottlingBurstSize: func() int {
-			return config.MinTaskThrottlingBurstSize(ns.String(), taskQueueName, taskType)
-		},
-		SyncMatchWaitDuration: func() time.Duration {
-			return config.SyncMatchWaitDuration(ns.String(), taskQueueName, taskType)
 		},
 		EphemeralDataUpdateInterval: func() time.Duration {
 			return config.EphemeralDataUpdateInterval(ns.String(), taskQueueName, taskType)
@@ -542,7 +520,6 @@ func newTaskQueueConfig(tq *tqid.TaskQueue, config *Config, ns namespace.Name) *
 		RateLimitFraction: func() float64 {
 			return config.RateLimitFractionProvider.GetRateLimitFraction(ns, taskQueueName, taskType)
 		},
-		RateLimiterRefreshInterval: config.RateLimiterRefreshInterval,
 		FairnessKeyRateLimitCacheSize: func() int {
 			return config.FairnessKeyRateLimitCacheSize(ns.String(), taskQueueName, taskType)
 		},

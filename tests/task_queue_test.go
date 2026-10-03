@@ -67,14 +67,13 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit() {
 }
 
 func (s *TaskQueueSuite) runTaskQueueRateLimitTest(nPartitions, nWorkers int, timeToDrain time.Duration, useNewMatching bool) {
-	s.Run(s.testTaskQueueRateLimitName(nPartitions, nWorkers, useNewMatching), func(s *TaskQueueSuite) {
-		s.taskQueueRateLimitTest(nPartitions, nWorkers, timeToDrain, useNewMatching)
+	s.Run(s.testTaskQueueRateLimitName(nPartitions, nWorkers), func(s *TaskQueueSuite) {
+		s.taskQueueRateLimitTest(nPartitions, nWorkers, timeToDrain)
 	})
 }
 
-func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeToDrain time.Duration, useNewMatching bool) {
+func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeToDrain time.Duration) {
 	env := s.newTestEnv(
-		testcore.WithDynamicConfig(dynamicconfig.MatchingUseNewMatcher, useNewMatching),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, nPartitions),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, nPartitions),
 		// exclude the effect of the default forwarding rate limit (10)
@@ -175,12 +174,8 @@ func (s *TaskQueueSuite) getBacklogCount(env *testcore.TestEnv, tv *testvars.Tes
 	return resp.GetVersionsInfo()[""].GetTypesInfo()[sdkclient.TaskQueueTypeWorkflow].GetStats().GetApproximateBacklogCount()
 }
 
-func (s *TaskQueueSuite) testTaskQueueRateLimitName(nPartitions, nWorkers int, useNewMatching bool) string {
-	ret := fmt.Sprintf("%vPartitions_%vWorkers", nPartitions, nWorkers)
-	if useNewMatching {
-		return "NewMatching_" + ret
-	}
-	return "OldMatching_" + ret
+func (s *TaskQueueSuite) testTaskQueueRateLimitName(nPartitions, nWorkers int) string {
+	return fmt.Sprintf("%vPartitions_%vWorkers", nPartitions, nWorkers)
 }
 
 // configureRateLimitAndLaunchWorkflows sets up the test environment to validate task queue API rate limiting behavior.
@@ -267,7 +262,7 @@ func (s *TaskQueueSuite) configureRateLimitAndLaunchWorkflows(
 
 // TestTaskQueueAPIRateLimitOverridesWorkerLimit tests that the API rate limit overrides the worker rate limit.
 // It sets the API rate limit on a task queue to 5 RPS and then launches 25 activities.
-// Burst = 5 i.e max(int(math.Ceil(effectiveRPSPartitionWise)), r.config.MinTaskThrottlingBurstSize())
+// Burst = 5 i.e int(math.Ceil(effectiveRPSPartitionWise)))
 // The expected time for all activities to complete is ~ 4 seconds ((25 - 5)/5) +/- 1 second buffer.
 // The first five activities should run immediately, and the rest should be throttled to 5 RPS.
 // The test verifies that the total time taken for all activities to complete is within the expected range
