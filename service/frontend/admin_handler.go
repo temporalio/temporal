@@ -1257,7 +1257,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 		}
 
 		return &adminservice.MergeDLQMessagesResponse{
-			NextPageToken: request.GetNextPageToken(),
+			NextPageToken: resp.GetNextPageToken(),
 		}, nil
 	case enumsspb.DEAD_LETTER_QUEUE_TYPE_NAMESPACE:
 		token, err := adh.namespaceDLQHandler.Merge(
