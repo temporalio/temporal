@@ -16,7 +16,7 @@ func TestKeyedBatcherReusesBatcherForKey(t *testing.T) {
 		timeSource,
 	)
 
-	require.Same(t, batcher.get("a"), batcher.get("a"))
+	require.Same(t, batcher.get("a"), batcher.get("a")) // nolint:testifylint // this is a valid test
 	require.NotSame(t, batcher.get("a"), batcher.get("b"))
 }
 
