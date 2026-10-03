@@ -5635,16 +5635,11 @@ func (wh *WorkflowHandler) validateInternalCallback(ns namespace.Name, lowerCase
 	return nil
 }
 
-// unpackInternalCallbackRefs returns every ChasmComponentRef reading the token's bytes can plausibly
-// produce: the bare-ref reading, which is the only one history's chasm_invocation.go ever consumes,
-// and, when the bytes also parse as a NexusOperationCompletion envelope carrying a component ref, that
-// inner ref too. Every reading returned here gets validated against the request namespace: since
-// history always acts on the bare reading, a token can't be allowed to look safe under one reading
-// while meaning something else to history (field 6 of ChasmComponentRef, component_path, and field 6
-// of NexusOperationCompletion, component_ref, share the same wire type, so a bare ref can be crafted
-// to also decode as an envelope wrapping a different, attacker-chosen ref). A reading with neither a
-// namespace nor a business ID set is a side effect of the other format's bytes landing on these fields
-// rather than an actual reference, so it's dropped instead of being validated.
+// unpackInternalCallbackRefs returns every ChasmComponentRef reading the token's bytes can produce: the
+// bare-ref reading, which is what history's chasm_invocation.go consumes, and the inner ref of a
+// NexusOperationCompletion envelope when the bytes also parse as one. Both get validated, so the
+// namespace check never disagrees with what history will actually use. A reading with no namespace or
+// business ID is dropped as incidental overlap between the two formats rather than an actual reference.
 func unpackInternalCallbackRefs(raw []byte) ([]*persistencespb.ChasmComponentRef, error) {
 	var refs []*persistencespb.ChasmComponentRef
 
