@@ -47,8 +47,8 @@ func TestActivityApiResetClientTestSuiteExecutionAPI(t *testing.T) {
 	parallelsuite.Run(t, &ActivityApiResetClientTestSuite{}, "execution-api")
 }
 
-// apiName selects which reset API variant to exercise ("legacy-api" or "execution-api").
-// Passed through parallelsuite.Run; used by newActivityResetTestEnv to initialise resetFn.
+// newActivityResetTestEnv returns an env whose resetFn calls ResetActivityExecution for
+// "execution-api" and ResetActivity otherwise.
 func newActivityResetTestEnv(t *testing.T, apiName string) *activityResetTestEnv {
 	t.Helper()
 
