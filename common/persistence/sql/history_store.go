@@ -44,7 +44,7 @@ func (m *sqlExecutionStore) AppendHistoryNodes(
 		PrevTxnID:    node.PrevTransactionID,
 		TxnID:        node.TransactionID,
 		Data:         node.Events.Data,
-		DataEncoding: node.Events.EncodingType.String(),
+		DataEncoding: p.HistoryNodeEncodingString(node),
 		ShardID:      request.ShardID,
 	}
 
