@@ -48,7 +48,7 @@ func newAdminBatchCommands(clientFactory ClientFactory, prompterFactory Prompter
 				},
 				&cli.StringFlag{
 					Name:  FlagJobID,
-					Usage: "Optional job ID; use '-' or '_' instead of ':' (auto-generated if omitted)",
+					Usage: "Optional job ID (auto-generated if not provided)",
 				},
 			},
 			Action: func(c *cli.Context) error {
