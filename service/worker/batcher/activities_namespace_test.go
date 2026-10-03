@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.uber.org/mock/gomock"
@@ -74,25 +75,29 @@ func TestBatchActivityWithProtobuf_RejectsMismatchedRequestNamespace(t *testing.
 	require.ErrorContains(t, err, errNamespaceMismatch.Error())
 }
 
-// TestBatchActivityWithProtobuf_RejectsMismatchedAdminRequestNamespace verifies
-// that the same namespace mismatch check applies to admin batch requests.
-func TestBatchActivityWithProtobuf_RejectsMismatchedAdminRequestNamespace(t *testing.T) {
-	ts := testsuite.WorkflowTestSuite{}
-	env := ts.NewTestActivityEnvironment()
-	a := newBoundActivities(nil)
-	env.RegisterActivity(a.BatchActivityWithProtobuf)
-
+func TestCheckAndGetTargetNamespace_AdminRequest(t *testing.T) {
 	input := &batchspb.BatchOperationInput{
-		NamespaceId: boundNSID,
 		AdminRequest: &adminservice.StartAdminBatchOperationRequest{
-			Namespace:  otherNSName, // mismatched — must be rejected
-			Executions: []*commonpb.WorkflowExecution{{WorkflowId: "w"}},
+			Namespace: otherNSName,
 		},
 	}
 
-	_, err := env.ExecuteActivity(a.BatchActivityWithProtobuf, input)
-	require.Error(t, err)
-	require.ErrorContains(t, err, errNamespaceMismatch.Error())
+	t.Run("rejects request outside system namespace", func(t *testing.T) {
+		targetNamespace, err := newBoundActivities(nil).checkAndGetTargetNamespace(input)
+
+		require.ErrorIs(t, err, errAdminBatchNamespaceNotSystem)
+		require.Empty(t, targetNamespace)
+	})
+
+	t.Run("returns target namespace for system worker", func(t *testing.T) {
+		a := newBoundActivities(nil)
+		a.namespaceID = namespace.ID(primitives.SystemNamespaceID)
+
+		targetNamespace, err := a.checkAndGetTargetNamespace(input)
+
+		require.NoError(t, err)
+		require.Equal(t, otherNSName, targetNamespace)
+	})
 }
 
 // TestStartTaskProcessor_UsesWorkerBoundNamespaceForSignal verifies that when

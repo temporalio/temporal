@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/worker_versioning"
@@ -46,7 +47,8 @@ const (
 )
 
 var (
-	errNamespaceMismatch = errors.New("namespace mismatch")
+	errNamespaceMismatch            = errors.New("namespace mismatch")
+	errAdminBatchNamespaceNotSystem = errors.New("admin batches should run in the system namespace")
 
 	batchQuotaRequest = quotas.Request{
 		Token: 1,
@@ -380,22 +382,30 @@ type activities struct {
 	concurrency dynamicconfig.IntPropertyFnWithNamespaceFilter
 }
 
-// checkNamespace validates that batchParams targets the worker's own namespace.
-// The NamespaceId, Request.Namespace (if set), and AdminRequest.Namespace (if set)
-// must all agree with the worker's bound namespace. This prevents cross-namespace
-// escalation via the privileged internal-frontend connection (NoopClaimMapper → RoleAdmin).
-func (a *activities) checkNamespace(batchParams *batchspb.BatchOperationInput) error {
-	if batchParams.NamespaceId != a.namespaceID.String() {
-		return errNamespaceMismatch
+func (a *activities) checkAndGetTargetNamespace(batchParams *batchspb.BatchOperationInput) (string, error) {
+	activityNamespaceID := a.namespaceID.String()
+	batchInputNamespaceID := batchParams.GetNamespaceId()
+	// admin batches
+	if isAdminRequest(batchParams) {
+		if activityNamespaceID != primitives.SystemNamespaceID {
+			return "", errAdminBatchNamespaceNotSystem
+		}
+		adminReq := batchParams.GetAdminRequest()
+		return adminReq.Namespace, nil
 	}
-	ns := a.namespace.String()
-	if req := batchParams.GetRequest(); req != nil && req.GetNamespace() != ns {
-		return errNamespaceMismatch
+	// user batch
+	if batchInputNamespaceID != activityNamespaceID {
+		return "", errNamespaceMismatch
 	}
-	if req := batchParams.GetAdminRequest(); req != nil && req.GetNamespace() != ns {
-		return errNamespaceMismatch
+	if req := batchParams.GetRequest(); req != nil && req.GetNamespace() != a.namespace.String() {
+		return "", errNamespaceMismatch
 	}
-	return nil
+	return a.namespace.String(), nil
+}
+
+// todo: check if this a solid and safe way
+func isAdminRequest(batchParams *batchspb.BatchOperationInput) bool {
+	return batchParams.AdminRequest != nil
 }
 
 // BatchActivityWithProtobuf is an activity for processing batch operations using protobuf as the input type.
@@ -405,18 +415,18 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 	hbd := HeartBeatDetails{}
 	metricsHandler := a.MetricsHandler.WithTags(metrics.OperationTag(metrics.BatcherScope), metrics.NamespaceIDTag(batchParams.NamespaceId))
 
-	if err := a.checkNamespace(batchParams); err != nil {
+	targetNS, err := a.checkAndGetTargetNamespace(batchParams)
+	if err != nil {
 		metrics.BatcherOperationFailures.With(metricsHandler).Record(1)
 		logger.Error("Failed to run batch operation due to namespace mismatch", tag.Error(err))
 		return hbd, err
 	}
-	ns := a.namespace.String()
 
-	sdkClient := a.ClientFactory.NewClient(sdkclient.Options{
-		Namespace:     ns,
+	sdkClientForTargetNS := a.ClientFactory.NewClient(sdkclient.Options{
+		Namespace:     targetNS,
 		DataConverter: sdk.PreferProtoDataConverter,
 	})
-	defer sdkClient.Close()
+	defer sdkClientForTargetNS.Close()
 	startOver := true
 	if activity.HasHeartbeatDetails(ctx) {
 		if err := activity.GetHeartbeatDetails(ctx, &hbd); err == nil {
@@ -445,7 +455,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		executions = batchParams.Request.Executions
 		targetExecutions = batchParams.Request.GetTargetExecutions()
 		rateLimiter = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 {
-			return float64(a.rps(ns))
+			return float64(a.rps(targetNS))
 		}))
 	}
 
@@ -458,8 +468,8 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 				// Activity batch types operate on activity executions, which are
 				// counted via CountActivityExecutions rather than CountWorkflow.
 				var resp *workflowservice.CountActivityExecutionsResponse
-				resp, err = sdkClient.WorkflowService().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
-					Namespace: ns,
+				resp, err = sdkClientForTargetNS.WorkflowService().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
+					Namespace: targetNS,
 					Query:     visibilityQuery,
 				})
 				if err == nil {
@@ -467,7 +477,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 				}
 			} else {
 				var resp *workflowservice.CountWorkflowExecutionsResponse
-				resp, err = sdkClient.CountWorkflow(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+				resp, err = sdkClientForTargetNS.CountWorkflow(ctx, &workflowservice.CountWorkflowExecutionsRequest{
 					Query: visibilityQuery,
 				})
 				if err == nil {
@@ -489,7 +499,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 
 	// Prepare configuration for shared processing function
 	config := batchProcessorConfig{
-		namespace:               ns,
+		namespace:               targetNS,
 		adjustedQuery:           visibilityQuery,
 		batchType:               batchParams.BatchType,
 		concurrency:             a.getOperationConcurrency(int(batchParams.Concurrency)),
@@ -509,10 +519,10 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		metricsHandler metrics.Handler,
 		logger log.Logger,
 	) {
-		a.startTaskProcessor(ctx, batchParams, ns, taskCh, respCh, rateLimiter, sdkClient, frontendClient, metricsHandler, logger)
+		a.startTaskProcessor(ctx, batchParams, targetNS, taskCh, respCh, rateLimiter, sdkClient, frontendClient, metricsHandler, logger)
 	}
 
-	return a.processWorkflowsWithProactiveFetching(ctx, config, workerProcessor, rateLimiter, sdkClient, metricsHandler, logger, hbd)
+	return a.processWorkflowsWithProactiveFetching(ctx, config, workerProcessor, rateLimiter, sdkClientForTargetNS, metricsHandler, logger, hbd)
 }
 
 func (a *activities) getActivityLogger(ctx context.Context) log.Logger {
