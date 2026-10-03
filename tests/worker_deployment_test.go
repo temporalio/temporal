@@ -111,6 +111,75 @@ func (s *WorkerDeploymentSuite) pollFromDeploymentExpectFail(env *VersioningTest
 	s.Equal(expectedError, err.Error())
 }
 
+// pollDeploymentReturnErr does a single auto-create poll for tv's deployment + task queue and
+// returns the error (if any), so callers can detect rate-limit rejections. Unlike
+// pollFromDeployment it surfaces the error instead of discarding it.
+func (s *WorkerDeploymentSuite) pollDeploymentReturnErr(ctx context.Context, env *VersioningTestEnv, tv *testvars.TestVars) error {
+	_, err := env.FrontendClient().PollWorkflowTaskQueue(ctx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:         env.Namespace().String(),
+		TaskQueue:         tv.TaskQueue(),
+		Identity:          "random",
+		DeploymentOptions: tv.WorkerDeploymentOptions(true),
+	})
+	return err
+}
+
+// TestNamespaceDeployments_AutoCreateRateLimiter_RejectsBurst verifies end-to-end that the
+// per-namespace auto-create rate limiter actually throttles the expensive visibility count:
+// a burst of distinct, never-seen deployment names that exceeds the limiter burst must produce
+// rate-limit rejections. If the limiter were removed, none would be rejected and this fails.
+func (s *WorkerDeploymentSuite) TestNamespaceDeployments_AutoCreateRateLimiter_RejectsBurst() {
+	env := s.newTestEnv(
+		// Keep the hard cap far above the burst so the only possible rejection cause is the
+		// per-namespace auto-create rate limiter, not "reached maximum deployments".
+		testcore.WithDynamicConfig(dynamicconfig.MatchingMaxDeployments, 10000),
+	)
+	// Avoid the 5s backoff matching applies after a failed registration so rejected polls
+	// return promptly.
+	env.InjectHook(testhooks.NewHook(testhooks.MatchingDeploymentRegisterErrorBackoff, 0*time.Second))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// The suite uses the default visibility-query RPS (5 => burst 10). Firing many more
+	// distinct, never-seen deployment names than the burst, concurrently (each on its own
+	// task queue so registrations are not serialized by the per-task-queue lock), must
+	// produce rate-limit rejections regardless of the bucket's starting fill.
+	const numNames = 50
+	tv := env.Tv()
+
+	results := make(chan error, numNames)
+	for i := range numNames {
+		go func(i int) {
+			results <- s.pollDeploymentReturnErr(ctx, env, tv.WithDeploymentSeriesNumber(i).WithTaskQueueNumber(i))
+		}(i)
+	}
+
+	// Rate-limit rejections return promptly; the polls that pass the burst block on the
+	// long-poll and are cancelled when the test returns. Tally whatever comes back within a
+	// short window.
+	rateLimited := 0
+	collected := 0
+	deadline := time.After(10 * time.Second)
+collect:
+	for collected < numNames {
+		select {
+		case err := <-results:
+			collected++
+			if err != nil && strings.Contains(err.Error(), "rate limited") {
+				rateLimited++
+			}
+		case <-deadline:
+			break collect
+		}
+	}
+
+	// If the limiter were absent/broken, none of the polls would be rate limited. Requiring
+	// >0 rejections makes this test fail on regression.
+	s.Positive(rateLimited,
+		"expected the auto-create rate limiter to reject part of the burst of new deployment names")
+}
+
 func (s *WorkerDeploymentSuite) ensureCreateVersionWithExpectedTaskQueues(env *VersioningTestEnv, tv *testvars.TestVars, expectedTaskQueues int) {
 	s.EventuallyWithT(func(t *assert.CollectT) {
 		a := require.New(t)
