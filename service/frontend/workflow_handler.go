@@ -3990,6 +3990,10 @@ func (wh *WorkflowHandler) validateStartWorkflowArgsForSchedule(
 		return nil
 	}
 
+	if startWorkflow.WorkflowId == "" {
+		startWorkflow.WorkflowId = uuid.NewString()
+	}
+
 	if err := wh.validator.ValidateWorkflowID(startWorkflow.WorkflowId + scheduler.AppendedTimestampForValidation); err != nil {
 		return err
 	}
