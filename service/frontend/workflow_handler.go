@@ -5609,45 +5609,64 @@ func (wh *WorkflowHandler) validateInternalCallback(ns namespace.Name, lowerCase
 	if token == "" {
 		return serviceerror.NewInvalidArgument("missing internal callback token")
 	}
-	ref, err := unpackInternalCallbackRef(token)
+	raw, err := base64.RawURLEncoding.DecodeString(token)
 	if err != nil {
 		return serviceerror.NewInvalidArgumentf("invalid internal callback token: %v", err)
 	}
-	if ref.GetNamespaceId() == "" || ref.GetBusinessId() == "" {
+	refs, err := unpackInternalCallbackRefs(raw)
+	if err != nil {
+		return serviceerror.NewInvalidArgumentf("invalid internal callback token: %v", err)
+	}
+	if len(refs) == 0 {
 		return serviceerror.NewInvalidArgument("internal callback component reference requires namespace and business IDs")
 	}
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(ns)
 	if err != nil {
 		return err
 	}
-	if ref.GetNamespaceId() != namespaceID.String() {
-		return serviceerror.NewInvalidArgument("internal callback must target the same namespace")
+	for _, ref := range refs {
+		if ref.GetNamespaceId() == "" || ref.GetBusinessId() == "" {
+			return serviceerror.NewInvalidArgument("internal callback component reference requires namespace and business IDs")
+		}
+		if ref.GetNamespaceId() != namespaceID.String() {
+			return serviceerror.NewInvalidArgument("internal callback must target the same namespace")
+		}
 	}
 	return nil
 }
 
-// unpackInternalCallbackRef accepts both the legacy bare-ref token and the NexusOperationCompletion envelope written
-// by newer servers, so mixed-version clusters don't reject scheduler starts.
-func unpackInternalCallbackRef(token string) (*persistencespb.ChasmComponentRef, error) {
-	raw, err := base64.RawURLEncoding.DecodeString(token)
-	if err != nil {
-		return nil, err
+// unpackInternalCallbackRefs returns every ChasmComponentRef reading the token's bytes can plausibly
+// produce: the bare-ref reading, which is the only one history's chasm_invocation.go ever consumes,
+// and, when the bytes also parse as a NexusOperationCompletion envelope carrying a component ref, that
+// inner ref too. Every reading returned here gets validated against the request namespace: since
+// history always acts on the bare reading, a token can't be allowed to look safe under one reading
+// while meaning something else to history (field 6 of ChasmComponentRef, component_path, and field 6
+// of NexusOperationCompletion, component_ref, share the same wire type, so a bare ref can be crafted
+// to also decode as an envelope wrapping a different, attacker-chosen ref). A reading with neither a
+// namespace nor a business ID set is a side effect of the other format's bytes landing on these fields
+// rather than an actual reference, so it's dropped instead of being validated.
+func unpackInternalCallbackRefs(raw []byte) ([]*persistencespb.ChasmComponentRef, error) {
+	var refs []*persistencespb.ChasmComponentRef
+
+	bareRef := &persistencespb.ChasmComponentRef{}
+	bareErr := proto.Unmarshal(raw, bareRef)
+	if bareErr == nil && (bareRef.GetNamespaceId() != "" || bareRef.GetBusinessId() != "") {
+		refs = append(refs, bareRef)
 	}
-	ref := &persistencespb.ChasmComponentRef{}
+
 	completion := &tokenspb.NexusOperationCompletion{}
-	// A legacy bare ref can decode "successfully" as an envelope too, since protobuf-go stores
-	// field/wire-type mismatches as unknown fields instead of erroring (e.g. legacy archetype_id,
-	// a varint, lands on the envelope's message-typed ref field). Requiring no unknown fields rules
-	// those out, since a legacy ref always sets archetype_id.
-	if proto.Unmarshal(raw, completion) == nil && len(completion.ProtoReflect().GetUnknown()) == 0 &&
-		len(completion.GetComponentRef()) > 0 && proto.Unmarshal(completion.GetComponentRef(), ref) == nil {
-		return ref, nil
+	if proto.Unmarshal(raw, completion) == nil && len(completion.GetComponentRef()) > 0 {
+		envelopeRef := &persistencespb.ChasmComponentRef{}
+		if proto.Unmarshal(completion.GetComponentRef(), envelopeRef) == nil &&
+			(envelopeRef.GetNamespaceId() != "" || envelopeRef.GetBusinessId() != "") {
+			refs = append(refs, envelopeRef)
+		}
 	}
-	ref.Reset()
-	if err := proto.Unmarshal(raw, ref); err != nil {
-		return nil, err
+
+	if len(refs) == 0 && bareErr != nil {
+		return nil, bareErr
 	}
-	return ref, nil
+	return refs, nil
 }
 
 func (wh *WorkflowHandler) validateCallbackURL(ns namespace.Name, rawURL string) error {
