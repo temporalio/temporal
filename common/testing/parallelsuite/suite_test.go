@@ -123,6 +123,7 @@ func (s *sealAfterRunSuite) TestAssertionAfterRun() {
 	// Context() resolves through T() and also panics after Run.
 	require.Panics(t, func() { s.Context() })
 
+	// Channel helpers resolve through T() and also panic after Run.
 	ch := make(chan int, 1)
 	require.Panics(t, func() { s.Snd(ch, 42) })
 	require.Panics(t, func() { s.Rcv(ch) })
