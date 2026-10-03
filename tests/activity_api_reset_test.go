@@ -18,7 +18,6 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
-	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -29,7 +28,6 @@ type ActivityApiResetClientTestSuite struct {
 
 type activityResetTestEnv struct {
 	*testcore.TestEnv
-	tv                     *testvars.TestVars
 	initialRetryInterval   time.Duration
 	scheduleToCloseTimeout time.Duration
 	startToCloseTimeout    time.Duration
@@ -39,14 +37,14 @@ type activityResetTestEnv struct {
 	resetFn func(ctx context.Context, wfID, actID string, resetHeartbeat, keepPaused bool) error
 }
 
-// TestActivityApiResetClientTestSuite runs the suite twice: once with the legacy
-// ResetActivity API and once with the newer ResetActivityExecution API.
-func TestActivityApiResetClientTestSuite(t *testing.T) {
-	for _, apiName := range []string{"legacy-api", "execution-api"} {
-		t.Run(apiName, func(t *testing.T) {
-			parallelsuite.Run(t, &ActivityApiResetClientTestSuite{}, apiName)
-		})
-	}
+// TestActivityApiResetClientTestSuiteLegacyAPI runs the suite with the legacy ResetActivity API.
+func TestActivityApiResetClientTestSuiteLegacyAPI(t *testing.T) {
+	parallelsuite.Run(t, &ActivityApiResetClientTestSuite{}, "legacy-api")
+}
+
+// TestActivityApiResetClientTestSuiteExecutionAPI runs the suite with the newer ResetActivityExecution API.
+func TestActivityApiResetClientTestSuiteExecutionAPI(t *testing.T) {
+	parallelsuite.Run(t, &ActivityApiResetClientTestSuite{}, "execution-api")
 }
 
 // apiName selects which reset API variant to exercise ("legacy-api" or "execution-api").
@@ -57,8 +55,6 @@ func newActivityResetTestEnv(t *testing.T, apiName string) *activityResetTestEnv
 	env := &activityResetTestEnv{
 		TestEnv: testcore.NewEnv(t),
 	}
-
-	env.tv = testvars.New(t).WithTaskQueue(env.WorkerTaskQueue()).WithNamespaceName(env.Namespace())
 
 	env.initialRetryInterval = 1 * time.Second
 	env.scheduleToCloseTimeout = 30 * time.Minute
@@ -220,7 +216,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_WhileRunning(apiN
 	env.SdkWorker().RegisterActivity(activityFunction)
 
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:        env.tv.WorkflowID(),
+		ID:        env.Tv().WorkflowID(),
 		TaskQueue: env.WorkerTaskQueue(),
 	}
 
@@ -281,7 +277,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_UnpausesRunningAc
 	env.SdkWorker().RegisterActivity(activityFunction)
 
 	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
-		ID:        env.tv.WorkflowID(),
+		ID:        env.Tv().WorkflowID(),
 		TaskQueue: env.WorkerTaskQueue(),
 	}, workflowFn)
 	s.Require().NoError(err)
@@ -350,7 +346,7 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_TimesOutOnUnpause
 	env.SdkWorker().RegisterActivity(activityFunction)
 
 	workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
-		ID:        env.tv.WorkflowID(),
+		ID:        env.Tv().WorkflowID(),
 		TaskQueue: env.WorkerTaskQueue(),
 	}, workflowFn)
 	s.Require().NoError(err)
