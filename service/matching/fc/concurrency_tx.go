@@ -12,6 +12,8 @@ type concurrencyTx struct {
 	configUpdate        *taskqueuepb.ConcurrencyLimit
 	configUpdateVersion int64
 	pri                 wakePriority
+	// once we've called reserve, the slots hint from the server supersedes our check token
+	calledReserve bool
 }
 
 func newConcurrencyTx(
@@ -35,10 +37,13 @@ func (ct *concurrencyTx) check(cb ReadinessCallback) error {
 }
 
 func (ct *concurrencyTx) cancelCheck() {
-	ct.cs.cancelCheck()
+	if !ct.calledReserve {
+		ct.cs.cancelCheck()
+	}
 }
 
 func (ct *concurrencyTx) reserve(ctx context.Context) error {
+	ct.calledReserve = true
 	return ct.cs.reserve(ctx, ct.slotID, ct.configUpdate, ct.configUpdateVersion)
 }
 

@@ -1717,7 +1717,7 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_RateLimited() {
 	defer cleanup()
 
 	// Set rate limit to zero RPS — this blocks all sync matches due to rate limiting.
-	pm.rateLimitManager.SetEffectiveRPSAndSourceForTesting(0, enumspb.RATE_LIMIT_SOURCE_API)
+	pm.rateLimitManager.SetAPIConfigRPSForTesting(0)
 	pm.rateLimitManager.UpdateSimpleRateLimitWithBurstForTesting(0)
 
 	// Set up a waiting poller so sync match would succeed if not rate-limited.

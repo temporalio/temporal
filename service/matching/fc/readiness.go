@@ -115,7 +115,7 @@ func (r *Readiness) Stop() {
 
 func (rs *readinessShard) stop() {
 	rs.lock.Lock()
-	defer rs.lock.Lock()
+	defer rs.lock.Unlock()
 
 	clear(rs.fwd)
 	clear(rs.rev)
@@ -142,7 +142,7 @@ func (rs *readinessShard) cancelAllCallbacks(cb ReadinessCallback) {
 	defer toNotify.notify() // outside lock
 
 	rs.lock.Lock()
-	defer rs.lock.Lock()
+	defer rs.lock.Unlock()
 
 	rEnts := rs.rev[cb]
 	// note: clone slice before iterating over it, removeEdgeLocked may modify slices
@@ -168,14 +168,11 @@ func (rs *readinessShard) syncLimiter(limiter limiterState, toNotify *deferedNot
 	}
 }
 
-func (rs *readinessShard) getWaiters(limiter limiterState) []fwdMapEntry {
-	rs.lock.Lock()
-	defer rs.lock.Unlock()
-
-	return rs.fwd[limiter]
-}
-
 func (rs *readinessShard) addEdgeLocked(limiter limiterState, cb ReadinessCallback, pri wakePriority) {
+	// fwd is sorted by pri, so if cb is already present with a different pri, we have to
+	// remove the old entry first or we'll leave a stale one behind.
+	rs.removeEdgeLocked(limiter, cb)
+
 	newFEnt := fwdMapEntry{pri: pri, cb: cb}
 	fEnts := rs.fwd[limiter]
 	if i, found := slices.BinarySearchFunc(fEnts, newFEnt, fwdMapEntryCmp); found {
@@ -243,9 +240,17 @@ func (rsu *readinessSyncUpdate) wake(n int) {
 }
 
 func (dn *deferedNotify) notify() {
-	for _, cb := range *dn {
-		cb.OnReady()
+	cbs := *dn
+	if len(cbs) == 0 {
+		return
 	}
+	// Callers of Tx.Check etc. may be holding their own lock (e.g. matcherData.lock), and
+	// OnReady may need that same lock, so we can't call OnReady synchronously here.
+	go func() {
+		for _, cb := range cbs {
+			cb.OnReady()
+		}
+	}()
 }
 
 func (dn *deferedNotify) add(cb ...ReadinessCallback) {

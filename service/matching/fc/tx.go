@@ -198,6 +198,13 @@ func (tx *Tx) Commit(ctx context.Context) (retErr error) {
 	}
 	wg.Wait()
 
+	for i, err := range errs {
+		if err != nil {
+			tx.state[i] = txStateCommitFailed
+		} else {
+			tx.state[i] = txStateCommitted
+		}
+	}
 	return errors.Join(errs...)
 }
 

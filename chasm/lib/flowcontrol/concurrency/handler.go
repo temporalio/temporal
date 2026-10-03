@@ -176,8 +176,10 @@ func updateFn(c *Component, cctx chasm.MutableContext, creq chasmReq) ([]*fcpb.C
 	}
 
 	// capture Generation after maybe incrementing
+	availableSlots := c.availableSlots()
 	for i := range creq.items {
 		ress[i].Generation = c.Generation
+		ress[i].AvailableSlotsHint = availableSlots
 	}
 
 	return ress, nil

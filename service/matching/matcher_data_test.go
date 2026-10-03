@@ -111,9 +111,8 @@ func (s *MatcherDataSuite) pollImmediately(meta *pollMetadata) *matchResult {
 }
 
 func (s *MatcherDataSuite) doFlowControl(pres *matchResult) {
-	tx := s.fcReadiness.NewTx("nsid", pres.task, &s.md)
-	s.NoError(tx.Reserve(context.Background()))
-	s.NoError(tx.Commit(context.Background()))
+	s.NoError(pres.task.fcTx.Reserve(context.Background()))
+	s.NoError(pres.task.fcTx.Commit(context.Background()))
 }
 
 func (s *MatcherDataSuite) queryFakeTime(duration time.Duration, respC chan<- taskResponse) {
@@ -543,7 +542,7 @@ func (s *MatcherDataSuite) TestPerKeyRateLimitCancelWakesBlockedMatch() {
 	res := s.pollFakeTime(time.Second)
 	s.Require().Equal(task1a, res.task)
 
-	tx := s.fcReadiness.NewTx("nsid", res.task, &s.md)
+	tx := res.task.fcTx
 	s.NoError(tx.Reserve(context.Background()))
 
 	// Enqueue a second key1 task. key1 is now rate-limited, so it cannot match yet.
@@ -588,7 +587,7 @@ func (s *MatcherDataSuite) TestRateLimitCancelWakesBlockedMatch() {
 	res := s.pollFakeTime(time.Second)
 	s.Require().Equal(task1, res.task)
 
-	tx := s.fcReadiness.NewTx("nsid", res.task, &s.md)
+	tx := res.task.fcTx
 	s.NoError(tx.Reserve(context.Background()))
 
 	// Enqueue a second key1 task. The partition is now rate-limited, so it cannot match yet.

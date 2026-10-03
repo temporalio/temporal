@@ -172,7 +172,10 @@ func (cs *concurrencyState) syncLocked(rsu *readinessSyncUpdate) {
 }
 
 func (cs *concurrencyState) makeWaitRequest() *fcpb.ConcurrencyWaitRequest {
-	waiters := cs.rs.getWaiters(cs)
+	cs.rs.lock.Lock()
+	defer cs.rs.lock.Unlock()
+
+	waiters := cs.rs.fwd[cs]
 	if len(waiters) == 0 {
 		return nil
 	}
@@ -202,7 +205,12 @@ func (cs *concurrencyState) callWait(ctx context.Context) {
 			continue
 		}
 		res, err := cs.rs.r.concurrencyServiceClient.Wait(ctx, req)
-		if err != nil {
+		if _, ok := err.(*serviceerror.NotFound); ok {
+			// The limiter is only created by Reserve, so there's nothing to wait on yet. Let one
+			// waiter through to Reserve, which will create it with the initial config.
+			cs.reportSlotsHint(req.Generation, 1)
+			continue
+		} else if err != nil {
 			util.InterruptibleSleep(ctx, retrier.NextBackOff(err))
 			continue
 		}
