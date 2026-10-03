@@ -55,13 +55,15 @@ type Scheduler struct {
 	Visibility chasm.Field[*chasm.Visibility]
 
 	// Locally-cached state, invalidated whenever cacheConflictToken != ConflictToken.
-	cacheConflictToken int64
-	compiledSpec       *scheduler.CompiledSpec // compiledSpec is only ever replaced whole, not mutated.
+	cacheConflictToken     int64
+	compiledSpec           *scheduler.CompiledSpec // compiledSpec is only ever replaced whole, not mutated.
+	visibilityForcePublish bool
 }
 
 var (
 	_ (chasm.VisibilitySearchAttributesProvider) = (*Scheduler)(nil)
 	_ (chasm.VisibilityMemoProvider)             = (*Scheduler)(nil)
+	_ (chasm.VisibilityTransactionPreparer)      = (*Scheduler)(nil)
 )
 
 var (
@@ -888,6 +890,7 @@ func (s *Scheduler) Update(
 	}
 
 	s.Schedule = req.FrontendRequest.Schedule
+	s.visibilityForcePublish = true
 	s.setNullableFields()
 
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
@@ -919,6 +922,7 @@ func (s *Scheduler) Patch(
 		return nil, ErrMigrationPending
 	}
 	s.applyPausePatch(ctx, req.FrontendRequest.Patch)
+	s.visibilityForcePublish = true
 
 	if err := s.handlePatch(ctx, req.FrontendRequest.Patch); err != nil {
 		return nil, err
@@ -958,6 +962,13 @@ func (s *Scheduler) executionStatus() string {
 
 // SearchAttributes returns the Temporal-managed key values for visibility.
 func (s *Scheduler) SearchAttributes(ctx chasm.Context) []chasm.SearchAttributeKeyValue {
+	if s.VisibilityPublication != nil && !s.Sentinel {
+		return s.publishedSearchAttributes()
+	}
+	return s.liveSearchAttributes(ctx)
+}
+
+func (s *Scheduler) liveSearchAttributes(ctx chasm.Context) []chasm.SearchAttributeKeyValue {
 	if s.Sentinel {
 		return []chasm.SearchAttributeKeyValue{
 			executionStatusSearchAttribute.Value(s.executionStatus()),
@@ -994,6 +1005,9 @@ func (s *Scheduler) Memo(
 ) proto.Message {
 	if s.Sentinel {
 		return nil
+	}
+	if s.VisibilityPublication != nil {
+		return s.VisibilityPublication.ListInfo
 	}
 	return s.ListInfo(ctx)
 }
