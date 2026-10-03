@@ -290,7 +290,7 @@ func TestEmitMutableStateStatusArchetypeTag(t *testing.T) {
 	recordings := snapshot[metrics.MutableStateSize.Name()]
 	require.Len(t, recordings, 1)
 	require.Equal(t, int64(42), recordings[0].Value)
-	require.Equal(t, chasm.WorkflowComponentName, recordings[0].Tags[metrics.ArchetypeTagName])
+	require.Equal(t, chasm.WorkflowArchetype, recordings[0].Tags[metrics.ArchetypeTagName])
 
 	recordings = snapshot[metrics.HistorySize.Name()]
 	require.Len(t, recordings, 1)
@@ -313,7 +313,7 @@ func TestGetArchetypeMetricTag(t *testing.T) {
 
 	tag, ok = getArchetypeMetricTag(registry, chasm.WorkflowArchetypeID)
 	require.True(t, ok)
-	require.Equal(t, metrics.ArchetypeTag(chasm.WorkflowComponentName), tag)
+	require.Equal(t, metrics.ArchetypeTag(chasm.WorkflowArchetype), tag)
 
 	tag, ok = getArchetypeMetricTag(registry, chasm.ArchetypeID(9999))
 	require.True(t, ok)
