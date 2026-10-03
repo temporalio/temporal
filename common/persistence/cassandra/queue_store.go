@@ -92,6 +92,8 @@ func (q *QueueStore) tryEnqueue(
 	messageID int64,
 	blob *commonpb.DataBlob,
 ) (int64, error) {
+	// IF NOT EXISTS detects an occupied ID, but does not fence a delayed producer after cleanup
+	// removes that ID. Such an insert can succeed behind the main queue's acknowledged read cursor.
 	query := q.session.Query(templateEnqueueMessageQuery, queueType, messageID, blob.Data, blob.EncodingType.String()).WithContext(ctx)
 	previous := make(map[string]any)
 	applied, err := query.MapScanCAS(previous)
