@@ -250,6 +250,7 @@ func (r *taskProcessorManagerImpl) checkReplicationDLQEmptyLoop() {
 }
 
 func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
+	rangeID := r.shard.GetRangeID()
 	clusterMetadata := r.shard.GetClusterMetadata()
 	allClusterInfo := clusterMetadata.GetAllClusterInfo()
 	currentClusterName := clusterMetadata.GetCurrentClusterName()
@@ -298,6 +299,7 @@ func (r *taskProcessorManagerImpl) cleanupReplicationTasks() error {
 		ctx,
 		&persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             r.shard.GetShardID(),
+			RangeID:             rangeID,
 			TaskCategory:        tasks.CategoryReplication,
 			ExclusiveMaxTaskKey: tasks.NewImmediateKey(minAckedTaskID + 1),
 		},

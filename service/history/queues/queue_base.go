@@ -293,6 +293,8 @@ func (p *queueBase) processNewRange() {
 }
 
 func (p *queueBase) checkpoint() {
+	rangeID := p.shard.GetRangeID()
+
 	var tasksCompleted int
 	p.readerGroup.ForEach(func(_ int64, r Reader) {
 		tasksCompleted += r.ShrinkSlices()
@@ -345,10 +347,10 @@ func (p *queueBase) checkpoint() {
 	// for the queue.
 	metrics.TaskBatchCompleteCounter.With(p.metricsHandler).Record(1)
 	if newExclusiveDeletionHighWatermark.CompareTo(p.exclusiveDeletionHighWatermark) > 0 ||
-		(p.updateShardRangeID() && newExclusiveDeletionHighWatermark.CompareTo(tasks.MinimumKey) > 0) {
+		(p.updateShardRangeID(rangeID) && newExclusiveDeletionHighWatermark.CompareTo(tasks.MinimumKey) > 0) {
 		// When shard rangeID is updated, perform range completion again in case the underlying persistence implementation
 		// serves traffic based on the persisted shardInfo.
-		err := p.rangeCompleteTasks(p.exclusiveDeletionHighWatermark, newExclusiveDeletionHighWatermark)
+		err := p.rangeCompleteTasks(rangeID, p.exclusiveDeletionHighWatermark, newExclusiveDeletionHighWatermark)
 		if err != nil {
 			p.resetCheckpointTimer(err)
 			return
@@ -361,8 +363,7 @@ func (p *queueBase) checkpoint() {
 	p.resetCheckpointTimer(err)
 }
 
-func (p *queueBase) updateShardRangeID() bool {
-	newRangeID := p.shard.GetRangeID()
+func (p *queueBase) updateShardRangeID(newRangeID int64) bool {
 	if p.lastRangeID < newRangeID {
 		p.lastRangeID = newRangeID
 		return true
@@ -371,6 +372,7 @@ func (p *queueBase) updateShardRangeID() bool {
 }
 
 func (p *queueBase) rangeCompleteTasks(
+	rangeID int64,
 	oldExclusiveDeletionHighWatermark tasks.Key,
 	newExclusiveDeletionHighWatermark tasks.Key,
 ) error {
@@ -384,6 +386,7 @@ func (p *queueBase) rangeCompleteTasks(
 
 	if err := p.shard.GetExecutionManager().RangeCompleteHistoryTasks(ctx, &persistence.RangeCompleteHistoryTasksRequest{
 		ShardID:             p.shard.GetShardID(),
+		RangeID:             rangeID,
 		TaskCategory:        p.category,
 		InclusiveMinTaskKey: oldExclusiveDeletionHighWatermark,
 		ExclusiveMaxTaskKey: newExclusiveDeletionHighWatermark,

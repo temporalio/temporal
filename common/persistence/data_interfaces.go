@@ -452,6 +452,7 @@ type (
 	// task category type. Min TaskID or FireTime is optional.
 	RangeCompleteHistoryTasksRequest struct {
 		ShardID             int32
+		RangeID             int64
 		TaskCategory        tasks.Category
 		InclusiveMinTaskKey tasks.Key
 		ExclusiveMaxTaskKey tasks.Key
@@ -489,9 +490,11 @@ type (
 
 	// RangeDeleteReplicationTaskFromDLQRequest is used to delete replication tasks from DLQ
 	RangeDeleteReplicationTaskFromDLQRequest struct {
-		RangeCompleteHistoryTasksRequest
-
-		SourceClusterName string
+		ShardID             int32
+		TaskCategory        tasks.Category
+		InclusiveMinTaskKey tasks.Key
+		ExclusiveMaxTaskKey tasks.Key
+		SourceClusterName   string
 	}
 
 	// CreateTaskQueueRequest create a new task queue

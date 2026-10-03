@@ -23,13 +23,17 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/debug"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -524,6 +528,204 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie() {
 
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, newSnapshot, currentMutation)
 	s.AssertHEEqualWithDB(branchToken, newEvents, currentEvents)
+}
+
+func (s *ExecutionMutableStateSuite) TestRangeCompleteHistoryTasksStaleOwnerDoesNotDeleteNewOwnerTimerTask() {
+	capturedTime := time.Now().UTC()
+	dOld := capturedTime.Truncate(time.Millisecond)
+	dNew := dOld.Add(time.Second)
+	taskVisibilityTime := dOld.Add(time.Millisecond)
+	timerID := "new-owner-user-timer"
+
+	branchToken, snapshot, _ := s.CreateWorkflow(
+		1,
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		1,
+	)
+
+	baselineState, err := s.ExecutionManager.GetWorkflowExecution(s.Ctx, &p.GetWorkflowExecutionRequest{
+		ShardID:     s.ShardID,
+		NamespaceID: s.NamespaceID,
+		WorkflowID:  s.WorkflowID,
+		RunID:       s.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+	})
+	s.Require().NoError(err)
+	s.Require().NotContains(baselineState.State.TimerInfos, timerID)
+
+	timerTaskRange := &p.GetHistoryTasksRequest{
+		ShardID:             s.ShardID,
+		TaskCategory:        tasks.CategoryTimer,
+		InclusiveMinTaskKey: tasks.NewKey(dOld, 0),
+		ExclusiveMaxTaskKey: tasks.NewKey(dNew, 0),
+		BatchSize:           10,
+	}
+	baselineTasks, err := s.ExecutionManager.GetHistoryTasks(s.Ctx, timerTaskRange)
+	s.Require().NoError(err)
+	s.Require().Empty(baselineTasks.Tasks)
+
+	oldOwnerShard, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
+		ShardID: s.ShardID,
+		InitialShardInfo: &persistencespb.ShardInfo{
+			ShardId: s.ShardID,
+			RangeId: s.RangeID,
+		},
+	})
+	s.Require().NoError(err)
+	oldOwnerRangeID := oldOwnerShard.ShardInfo.RangeId
+	oldOwnerShardInfo := proto.Clone(oldOwnerShard.ShardInfo).(*persistencespb.ShardInfo)
+	oldOwnerShardInfo.Owner = "old-owner"
+	oldOwnerShardInfo.QueueStates = map[int32]*persistencespb.QueueState{
+		int32(tasks.CategoryTimer.ID()): {
+			ReaderStates: make(map[int64]*persistencespb.QueueReaderState),
+			ExclusiveReaderHighWatermark: &persistencespb.TaskKey{
+				FireTime: timestamppb.New(dOld),
+				TaskId:   0,
+			},
+		},
+	}
+	err = s.ShardManager.UpdateShard(s.Ctx, &p.UpdateShardRequest{
+		ShardInfo:       oldOwnerShardInfo,
+		PreviousRangeID: oldOwnerRangeID,
+	})
+	s.Require().NoError(err)
+
+	persistedOldOwnerShard, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
+		ShardID:          s.ShardID,
+		InitialShardInfo: oldOwnerShardInfo,
+	})
+	s.Require().NoError(err)
+	s.Require().Equal(oldOwnerRangeID, persistedOldOwnerShard.ShardInfo.RangeId)
+	s.Require().Equal("old-owner", persistedOldOwnerShard.ShardInfo.Owner)
+	s.Require().Equal(
+		dOld,
+		persistedOldOwnerShard.ShardInfo.QueueStates[int32(tasks.CategoryTimer.ID())].ExclusiveReaderHighWatermark.FireTime.AsTime(),
+	)
+
+	staleRangeCompletion := &p.RangeCompleteHistoryTasksRequest{
+		ShardID:             s.ShardID,
+		RangeID:             oldOwnerRangeID,
+		TaskCategory:        tasks.CategoryTimer,
+		InclusiveMinTaskKey: tasks.NewKey(dOld, 0),
+		ExclusiveMaxTaskKey: tasks.NewKey(dNew, 0),
+	}
+	staleOwnerCheckpoint := proto.Clone(oldOwnerShardInfo).(*persistencespb.ShardInfo)
+	staleOwnerCheckpoint.QueueStates[int32(tasks.CategoryTimer.ID())].ExclusiveReaderHighWatermark = &persistencespb.TaskKey{
+		FireTime: timestamppb.New(dNew),
+		TaskId:   0,
+	}
+
+	newOwnerRangeID := oldOwnerRangeID + 1
+	newOwnerShardInfo := proto.Clone(oldOwnerShardInfo).(*persistencespb.ShardInfo)
+	newOwnerShardInfo.RangeId = newOwnerRangeID
+	newOwnerShardInfo.Owner = "new-owner"
+	err = s.ShardManager.UpdateShard(s.Ctx, &p.UpdateShardRequest{
+		ShardInfo:       newOwnerShardInfo,
+		PreviousRangeID: oldOwnerRangeID,
+	})
+	s.Require().NoError(err)
+
+	persistedNewOwnerShard, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
+		ShardID:          s.ShardID,
+		InitialShardInfo: newOwnerShardInfo,
+	})
+	s.Require().NoError(err)
+	s.Require().Equal(newOwnerRangeID, persistedNewOwnerShard.ShardInfo.RangeId)
+	s.Require().Equal("new-owner", persistedNewOwnerShard.ShardInfo.Owner)
+
+	startedEventID := snapshot.NextEventID
+	taskID := newOwnerRangeID << 20
+	timerInfo := &persistencespb.TimerInfo{
+		Version:        1,
+		StartedEventId: startedEventID,
+		ExpiryTime:     timestamppb.New(dOld),
+		TaskStatus:     workflow.TimerTaskStatusCreated,
+		TimerId:        timerID,
+	}
+	timerTask := &tasks.UserTimerTask{
+		WorkflowKey:         definition.NewWorkflowKey(s.NamespaceID, s.WorkflowID, s.RunID),
+		VisibilityTimestamp: taskVisibilityTime,
+		TaskID:              taskID,
+		EventID:             startedEventID,
+	}
+	mutation, mutationEvents := RandomMutation(
+		s.T(),
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		startedEventID,
+		1,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		snapshot.DBRecordVersion+1,
+		branchToken,
+	)
+	mutation.UpsertTimerInfos = map[string]*persistencespb.TimerInfo{timerID: timerInfo}
+	mutation.DeleteTimerInfos = map[string]struct{}{}
+	mutation.Tasks[tasks.CategoryTimer] = []tasks.Task{timerTask}
+	_, err = s.ExecutionManager.UpdateWorkflowExecution(s.Ctx, &p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: newOwnerRangeID,
+		Mode:    p.UpdateWorkflowModeUpdateCurrent,
+
+		ArchetypeID: chasm.WorkflowArchetypeID,
+
+		UpdateWorkflowMutation: *mutation,
+		UpdateWorkflowEvents:   mutationEvents,
+	})
+	s.Require().NoError(err)
+
+	preDeleteState, err := s.ExecutionManager.GetWorkflowExecution(s.Ctx, &p.GetWorkflowExecutionRequest{
+		ShardID:     s.ShardID,
+		NamespaceID: s.NamespaceID,
+		WorkflowID:  s.WorkflowID,
+		RunID:       s.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+	})
+	s.Require().NoError(err)
+	persistedTimerInfo, ok := preDeleteState.State.TimerInfos[timerID]
+	s.Require().True(ok)
+	s.Require().Equal(int64(workflow.TimerTaskStatusCreated), persistedTimerInfo.TaskStatus)
+	s.Require().Equal(dOld, persistedTimerInfo.ExpiryTime.AsTime())
+
+	preDeleteTasks, err := s.ExecutionManager.GetHistoryTasks(s.Ctx, timerTaskRange)
+	s.Require().NoError(err)
+	s.Require().Len(preDeleteTasks.Tasks, 1)
+	persistedTimerTask, ok := preDeleteTasks.Tasks[0].(*tasks.UserTimerTask)
+	s.Require().True(ok)
+	s.Require().Equal(timerTask.WorkflowKey, persistedTimerTask.WorkflowKey)
+	s.Require().Equal(taskVisibilityTime, persistedTimerTask.VisibilityTimestamp)
+	s.Require().Equal(taskID, persistedTimerTask.TaskID)
+	s.Require().Equal(startedEventID, persistedTimerTask.EventID)
+
+	err = s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, staleRangeCompletion)
+	var rangeCompletionOwnershipLostErr *p.ShardOwnershipLostError
+	s.Require().ErrorAs(err, &rangeCompletionOwnershipLostErr)
+
+	err = s.ShardManager.UpdateShard(s.Ctx, &p.UpdateShardRequest{
+		ShardInfo:       staleOwnerCheckpoint,
+		PreviousRangeID: oldOwnerRangeID,
+	})
+	var checkpointOwnershipLostErr *p.ShardOwnershipLostError
+	s.Require().ErrorAs(err, &checkpointOwnershipLostErr)
+
+	postDeleteState, err := s.ExecutionManager.GetWorkflowExecution(s.Ctx, &p.GetWorkflowExecutionRequest{
+		ShardID:     s.ShardID,
+		NamespaceID: s.NamespaceID,
+		WorkflowID:  s.WorkflowID,
+		RunID:       s.RunID,
+		ArchetypeID: chasm.WorkflowArchetypeID,
+	})
+	s.Require().NoError(err)
+	persistedTimerInfo, ok = postDeleteState.State.TimerInfos[timerID]
+	s.Require().True(ok)
+	s.Require().Equal(int64(workflow.TimerTaskStatusCreated), persistedTimerInfo.TaskStatus)
+	s.Require().Equal(dOld, persistedTimerInfo.ExpiryTime.AsTime())
+
+	postDeleteTasks, err := s.ExecutionManager.GetHistoryTasks(s.Ctx, timerTaskRange)
+	s.Require().NoError(err)
+	s.Require().Len(postDeleteTasks.Tasks, 1)
 }
 
 func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CHASM() {
