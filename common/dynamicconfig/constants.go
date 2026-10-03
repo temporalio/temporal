@@ -100,12 +100,6 @@ pod-level rate limiting. Read once at process startup: changing this value requi
 		`SuppressErrorSetSystemSearchAttribute suppresses errors when trying to set
 values in system search attributes.`,
 	)
-	VisibilityEnableUnifiedQueryConverter = NewGlobalBoolSetting(
-		"system.visibilityEnableUnifiedQueryConverter",
-		true,
-		`VisibilityEnableUnifiedQueryConverter enables the unified query converter for parsing the
-query.`,
-	)
 
 	HistoryArchivalState = NewGlobalStringSetting(
 		"system.historyArchivalState",
