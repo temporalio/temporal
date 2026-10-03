@@ -342,7 +342,8 @@ func (s *ActivityApiResetClientTestSuite) TestActivityResetApi_TimesOutOnUnpause
 	activityCompleteCh := make(chan struct{})
 	defer close(activityCompleteCh)
 	activityFunction := func() (string, error) {
-		s.Rcv(activityCompleteCh)
+		// This activity can finish during cleanup, after the test context is canceled.
+		<-activityCompleteCh
 		return "done!", nil
 	}
 
