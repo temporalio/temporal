@@ -371,6 +371,87 @@ func (s *redirectionInterceptorSuite) TestHandleGlobalAPIInvocation_NamespaceNot
 	s.IsType(&serviceerror.NamespaceNotFound{}, err)
 }
 
+func (s *redirectionInterceptorSuite) TestRecordForwardedRequestOnPassiveCluster() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	namespaceName := namespace.Name("test-namespace")
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: uuid.NewString(), Name: namespaceName.String()},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		1,
+	)
+	s.namespaceCache.EXPECT().GetNamespace(namespaceName).Return(namespaceEntry, nil)
+
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
+		DCRedirectionSourceCellHeaderName: cluster.TestAlternativeClusterName,
+	}))
+	s.redirector.metricsHandler = metricsHandler
+	s.redirector.recordForwardedRequestOnPassiveCluster(ctx, "SignalWorkflowExecution", namespaceName)
+
+	recordings := capture.Snapshot()[metrics.ClientDuplicatedRedirects.Name()]
+	s.Len(recordings, 1)
+	s.Equal(int64(1), recordings[0].Value)
+	s.Equal(map[string]string{
+		"namespace":      namespaceName.String(),
+		"operation":      "DCRedirectionSignalWorkflowExecution",
+		"service_role":   metrics.DCRedirectionRoleTagValue,
+		"source_cluster": cluster.TestAlternativeClusterName,
+	}, recordings[0].Tags)
+}
+
+func (s *redirectionInterceptorSuite) TestRecordForwardedRequestOnActiveCluster_NoMetric() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	namespaceName := namespace.Name("test-namespace")
+	namespaceEntry := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: uuid.NewString(), Name: namespaceName.String()},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		1,
+	)
+	s.namespaceCache.EXPECT().GetNamespace(namespaceName).Return(namespaceEntry, nil)
+
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
+		DCRedirectionSourceCellHeaderName: cluster.TestAlternativeClusterName,
+	}))
+	s.redirector.metricsHandler = metricsHandler
+	s.redirector.recordForwardedRequestOnPassiveCluster(ctx, "SignalWorkflowExecution", namespaceName)
+
+	s.Empty(capture.Snapshot()[metrics.ClientDuplicatedRedirects.Name()])
+}
+
+func (s *redirectionInterceptorSuite) TestRecordNonForwardedRequestOnPassiveCluster_NoMetric() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+
+	s.redirector.metricsHandler = metricsHandler
+	s.redirector.recordForwardedRequestOnPassiveCluster(context.Background(), "SignalWorkflowExecution", namespace.Name("test-namespace"))
+	localSourceContext := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{
+		DCRedirectionSourceCellHeaderName: cluster.TestCurrentClusterName,
+	}))
+	s.redirector.recordForwardedRequestOnPassiveCluster(localSourceContext, "SignalWorkflowExecution", namespace.Name("test-namespace"))
+
+	s.Empty(capture.Snapshot()[metrics.ClientDuplicatedRedirects.Name()])
+}
+
 func (s *redirectionInterceptorSuite) TestRedirectionAllowed_Empty() {
 	ctx := metadata.NewIncomingContext(context.Background(), metadata.New(map[string]string{}))
 	allowed := s.redirector.RedirectionAllowed(ctx)
