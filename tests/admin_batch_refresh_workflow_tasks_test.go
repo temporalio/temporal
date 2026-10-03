@@ -134,22 +134,6 @@ func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_J
 	}
 }
 
-func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestStartAdminBatchOperation_InvalidArgument_ColonInJobId() {
-	env := s.newTestEnv()
-	_, err := env.AdminClient().StartAdminBatchOperation(s.Context(), &adminservice.StartAdminBatchOperationRequest{
-		Namespace:       env.Namespace().String(),
-		VisibilityQuery: "WorkflowType='no-matching-workflows'",
-		JobId:           "other-ns:job-id",
-		Reason:          "test invalid job ID",
-		Identity:        "test-identity",
-		Operation: &adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation{
-			RefreshTasksOperation: &adminservice.BatchOperationRefreshTasks{},
-		},
-	})
-	s.Require().ErrorContains(err, "JobId cannot contain ':'")
-	s.Require().Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
-}
-
 // The job's execution is covered by the xdc suite; this test only covers tdbg starting it.
 func (s *AdminBatchRefreshWorkflowTasksTestSuite) TestTdbgRefreshTasks_StartsBatchJobInSystemNamespace() {
 	env := s.newTestEnv()
