@@ -673,14 +673,6 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 	}
 
 	cbErr := wh.validateWorkflowCompletionCallbacks(namespaceName, request.GetCompletionCallbacks())
-	for _, cb := range request.GetCompletionCallbacks() {
-		if cb.GetNexus().GetUrl() == chasm.NexusCompletionHandlerURL {
-			wh.logger.Info("DEBUG internal callback validation",
-				tag.WorkflowNamespace(namespaceName.String()),
-				tag.WorkflowID(request.GetWorkflowId()),
-				tag.Error(cbErr))
-		}
-	}
 	if cbErr != nil {
 		return nil, cbErr
 	}
