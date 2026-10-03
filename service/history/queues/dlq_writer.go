@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"sync"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -74,15 +75,6 @@ func (q *DLQWriter) WriteTaskToDLQ(
 		SourceCluster: sourceCluster,
 		TargetCluster: targetCluster,
 	}
-	_, err := q.dlqWriter.CreateQueue(ctx, &persistence.CreateQueueRequest{
-		QueueKey: queueKey,
-	})
-	if err != nil {
-		if !errors.Is(err, persistence.ErrQueueAlreadyExists) {
-			return fmt.Errorf("%w: %v", ErrCreateDLQ, err)
-		}
-	}
-
 	resp, err := func() (*persistence.EnqueueTaskResponse, error) {
 		// Acquire a process-level lock for this specific DLQ to prevent concurrent writes
 		// from multiple shards causing CAS conflicts in the persistence layer.
@@ -90,16 +82,29 @@ func (q *DLQWriter) WriteTaskToDLQ(
 		mu.Lock()
 		defer mu.Unlock()
 
-		return q.dlqWriter.EnqueueTask(ctx, &persistence.EnqueueTaskRequest{
+		request := &persistence.EnqueueTaskRequest{
 			QueueType:     queueKey.QueueType,
 			SourceCluster: queueKey.SourceCluster,
 			TargetCluster: queueKey.TargetCluster,
 			Task:          task,
 			SourceShardID: sourceShardID,
-		})
+		}
+		resp, err := q.dlqWriter.EnqueueTask(ctx, request)
+		if errors.As(err, new(*serviceerror.NotFound)) {
+			// A missing queue is reported before persistence inserts the task, so it is safe to retry.
+			_, err = q.dlqWriter.CreateQueue(ctx, &persistence.CreateQueueRequest{QueueKey: queueKey})
+			if err != nil && !errors.Is(err, persistence.ErrQueueAlreadyExists) {
+				return nil, fmt.Errorf("%w: %v", ErrCreateDLQ, err)
+			}
+			resp, err = q.dlqWriter.EnqueueTask(ctx, request)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrSendTaskToDLQ, err)
+		}
+		return resp, nil
 	}()
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrSendTaskToDLQ, err)
+		return err
 	}
 
 	nsMetricTag := metrics.NamespaceUnknownTag()
