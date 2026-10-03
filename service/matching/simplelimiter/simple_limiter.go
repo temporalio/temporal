@@ -14,13 +14,19 @@ type Params struct {
 	Burst    time.Duration // burst duration
 }
 
+// MaxBurst is the maximum supported burst duration. MakeParams clips the burst duration to this.
 const MaxBurst = time.Minute
-const Never = Ready(7 << 60) // this is in the year 2225
 
+// never is a value of Ready (timestamp in unix nanos) that will never happen, but that won't
+// overflow when we do math with it (unlike math.MaxInt64).
+const never = Ready(7 << 60) // this is in the year 2225
+
+// NoLimit returns Params that correspond to an unlimited rate limiter.
 func NoLimit() Params {
 	return Params{}
 }
 
+// MakeParams returns Params for the given rate and burst duration.
 func MakeParams(rate float64, burstDuration time.Duration) Params {
 	// 1e-9 would make interval overflow int64
 	if rate <= 1e-9 {
@@ -73,7 +79,7 @@ func (ready Ready) Consume(p Params, now int64, tokens int64) Ready {
 	// Alternatively, if now is > ready by more than burst, then we end up subtracting the full
 	// burst from now and adding one interval.
 	if p.Never() {
-		return Never
+		return never
 	}
 	clippedReady := max(now, int64(ready)+p.Burst.Nanoseconds()) - p.Burst.Nanoseconds()
 	return Ready(clippedReady + tokens*p.Interval.Nanoseconds())
@@ -83,7 +89,7 @@ func (ready Ready) Consume(p Params, now int64, tokens int64) Ready {
 // Note the result has to be assigned back to the state.
 func (ready Ready) Clip(p Params, now int64, maxTokens int64) Ready {
 	if p.Never() {
-		return Never
+		return never
 	}
 	// If ready was set very far in the future (e.g. because the rate was zero), then we can
 	// clip it back to now + maxTokens*interval + burst.
