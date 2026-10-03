@@ -35,9 +35,6 @@ type activityResetTestEnv struct {
 	startToCloseTimeout    time.Duration
 	activityRetryPolicy    *temporal.RetryPolicy
 
-	// apiName selects which reset API variant to exercise ("legacy-api" or "execution-api").
-	// Passed through parallelsuite.Run; used by newActivityResetTestEnv to initialise resetFn.
-	apiName string
 	// resetFn is the adapter for the API under test, initialised in newActivityResetTestEnv.
 	resetFn func(ctx context.Context, wfID, actID string, resetHeartbeat, keepPaused bool) error
 }
@@ -52,12 +49,13 @@ func TestActivityApiResetClientTestSuite(t *testing.T) {
 	}
 }
 
+// apiName selects which reset API variant to exercise ("legacy-api" or "execution-api").
+// Passed through parallelsuite.Run; used by newActivityResetTestEnv to initialise resetFn.
 func newActivityResetTestEnv(t *testing.T, apiName string) *activityResetTestEnv {
 	t.Helper()
 
 	env := &activityResetTestEnv{
 		TestEnv: testcore.NewEnv(t),
-		apiName: apiName,
 	}
 
 	env.tv = testvars.New(t).WithTaskQueue(env.WorkerTaskQueue()).WithNamespaceName(env.Namespace())
@@ -71,7 +69,7 @@ func newActivityResetTestEnv(t *testing.T, apiName string) *activityResetTestEnv
 		BackoffCoefficient: 1,
 	}
 
-	if env.apiName == "execution-api" {
+	if apiName == "execution-api" {
 		env.resetFn = func(ctx context.Context, wfID, actID string, resetHeartbeat, keepPaused bool) error {
 			_, err := env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
 				Namespace:      env.Namespace().String(),
