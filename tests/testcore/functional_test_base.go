@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/taskpoller"
@@ -252,6 +253,18 @@ func (s *FunctionalTestBase) TaskQueue() string {
 
 func (s *FunctionalTestBase) TaskPoller() *taskpoller.TaskPoller {
 	return s.taskPoller
+}
+
+func (s *FunctionalTestBase) Rcv[T any](ch <-chan T) T {
+	t := s.T()
+	t.Helper()
+	return await.Rcv(t, ch)
+}
+
+func (s *FunctionalTestBase) Snd[T any](ch chan<- T, value T) {
+	t := s.T()
+	t.Helper()
+	await.Snd(t, ch, value)
 }
 
 func (s *FunctionalTestBase) SetupSuite() {
