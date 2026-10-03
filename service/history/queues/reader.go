@@ -455,11 +455,7 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 	tasks, err := loadSlice.SelectTasks(r.readerID, r.options.BatchSize())
 	if err != nil {
 		r.logger.Error("Queue reader unable to retrieve tasks", tag.Error(err))
-		if common.IsResourceExhausted(err) {
-			r.pauseLocked(throttleRetryDelay)
-		} else {
-			r.pauseLocked(r.retrier.NextBackOff(err))
-		}
+		r.pauseLocked(r.pauseDurationForError(err))
 		return
 	}
 	r.retrier.Reset()
@@ -484,6 +480,18 @@ func (r *ReaderImpl) loadAndSubmitTasks() {
 
 	// No more tasks to load, trigger completion callback.
 	r.completionFn(r.readerID)
+}
+
+// pauseDurationForError returns how long the reader should pause after failing to
+// load tasks. Congestion errors (ResourceExhausted, Unavailable, DeadlineExceeded)
+// all take the fixed throttle delay, so that a brief persistence outage (e.g. a
+// database failover) doesn't put every reader in the fleet on the fast retry path
+// at once and produce a synchronized read burst on recovery.
+func (r *ReaderImpl) pauseDurationForError(err error) time.Duration {
+	if common.IsCongestionError(err) {
+		return throttleRetryDelay
+	}
+	return r.retrier.NextBackOff(err)
 }
 
 func (r *ReaderImpl) resetNextReadSliceLocked() {
