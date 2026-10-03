@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.worker.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/worker/gen/workerpb;workerpb";
+
+import "google/protobuf/timestamp.proto";
+import "temporal/api/worker/v1/message.proto";
+
+// Metadata about the worker.
+message WorkerState {
+    // Current status of the worker.
+    WorkerStatus status = 1;
+
+    // Worker heartbeat information including metadata and capabilities.
+    temporal.api.worker.v1.WorkerHeartbeat worker_heartbeat = 2;
+
+    // Time when the lease expires. (Active to Inactive state transition).
+    google.protobuf.Timestamp lease_expiration_time = 3;
+
+    // Sequence number for optimistic locking. Client must echo this in subsequent heartbeats.
+    // Used to recover from lost responses (server succeeded but client didn't receive new token).
+    int64 conflict_token = 4;
+}
+
+// Status of a worker.
+enum WorkerStatus {
+    WORKER_STATUS_UNSPECIFIED = 0;
+    WORKER_STATUS_ACTIVE = 1;    // Worker is actively sending heartbeats
+    WORKER_STATUS_INACTIVE = 2;  // Worker lease has expired. Terminal state.
+}
