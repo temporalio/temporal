@@ -152,6 +152,22 @@ func NewTestMapperProvider(customMapper Mapper) MapperProvider {
 	return &testMapperProvider{mapper: customMapper}
 }
 
+// NewTestBackCompMapperProvider returns a MapperProvider that wraps customMapper with the
+// same legacy custom search attribute fallback NewMapperProvider applies, so the search
+// attributes of nameTypeMap that were registered through cluster metadata keep resolving to
+// themselves when customMapper has no alias for them.
+func NewTestBackCompMapperProvider(customMapper Mapper, nameTypeMap NameTypeMap) MapperProvider {
+	if customMapper == nil {
+		customMapper = &NoopMapper{}
+	}
+	return &testMapperProvider{
+		mapper: &backCompMapper{
+			mapper:              customMapper,
+			fallbackNameTypeMap: legacyCustomSearchAttributes(nameTypeMap),
+		},
+	}
+}
+
 func (p *testMapperProvider) GetMapper(namespace.Name) (Mapper, error) {
 	return p.mapper, nil
 }

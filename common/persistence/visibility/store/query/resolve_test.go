@@ -211,6 +211,38 @@ func TestResolveSearchAttributeAlias(t *testing.T) {
 		},
 
 		{
+			// Custom search attributes must be referenced by their alias, never by the
+			// field name backing them.
+			name: "invalid custom field name",
+			in:   "Int01",
+			err:  "invalid search attribute: Int01",
+		},
+
+		{
+			// Even when the field name has an alias defined, the field name itself is
+			// not a valid search attribute.
+			name: "invalid custom field name with alias defined",
+			in:   "Keyword01",
+			err:  "invalid search attribute: Keyword01",
+		},
+
+		{
+			// Stripping the reserved prefix must not resolve to a custom field name.
+			name: "invalid reserved prefix stripped to custom field name",
+			in:   "TemporalInt01",
+			err:  "invalid search attribute: TemporalInt01",
+		},
+
+		{
+			// The field name backing the custom ScheduleId search attribute is not a
+			// valid search attribute either.
+			name:                 "invalid custom ScheduleId field name",
+			in:                   searchattribute.TestScheduleIDFieldName,
+			withCustomScheduleID: true,
+			err:                  "invalid search attribute: " + searchattribute.TestScheduleIDFieldName,
+		},
+
+		{
 			name: "invalid empty search attribute",
 			in:   "",
 			err:  "invalid search attribute: ",
@@ -314,6 +346,23 @@ func TestResolveSearchAttributeAlias_WithChasmMapper(t *testing.T) {
 			expectedFieldName:       "Keyword01",
 			expectedFieldType:       enumspb.INDEXED_VALUE_TYPE_KEYWORD,
 			expectedErr:             false,
+			expectNamespaceDivision: false,
+		},
+		{
+			// CHASM search attributes must be referenced by their alias: the field name
+			// backing them must not fall back to the custom search attribute with the
+			// same suffix.
+			name:                    "TemporalKeyword01",
+			expectedFieldName:       "",
+			expectedFieldType:       enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED,
+			expectedErr:             true,
+			expectNamespaceDivision: false,
+		},
+		{
+			name:                    "TemporalBool01",
+			expectedFieldName:       "",
+			expectedFieldType:       enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED,
+			expectedErr:             true,
 			expectNamespaceDivision: false,
 		},
 		{

@@ -40,13 +40,12 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
 		*require.Assertions
 		protorequire.ProtoAssertions
-		controller                         *gomock.Controller
-		visibilityStore                    *VisibilityStore
-		mockESClient                       *client.MockClient
-		mockProcessor                      *MockProcessor
-		mockMetricsHandler                 *metrics.MockHandler
-		mockSearchAttributesMapperProvider *searchattribute.MockMapperProvider
-		chasmRegistry                      *chasm.Registry
+		controller         *gomock.Controller
+		visibilityStore    *VisibilityStore
+		mockESClient       *client.MockClient
+		mockProcessor      *MockProcessor
+		mockMetricsHandler *metrics.MockHandler
+		chasmRegistry      *chasm.Registry
 	}
 
 	// Test component for CHASM visibility tests
@@ -138,7 +137,6 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.mockMetricsHandler.EXPECT().WithTags(metrics.NamespaceTag(testNamespace.String())).Return(s.mockMetricsHandler).AnyTimes()
 	s.mockProcessor = NewMockProcessor(s.controller)
 	s.mockESClient = client.NewMockClient(s.controller)
-	s.mockSearchAttributesMapperProvider = searchattribute.NewMockMapperProvider(s.controller)
 
 	// Setup CHASM registry for tests
 	library := chasm.NewMockLibrary(s.controller)
@@ -162,22 +160,24 @@ func (s *ESVisibilitySuite) SetupTest() {
 	s.NoError(err)
 
 	s.visibilityStore = &VisibilityStore{
-		esClient:                       s.mockESClient,
-		index:                          testIndex,
-		searchAttributesProvider:       searchattribute.NewTestEsProvider(),
-		searchAttributesMapperProvider: s.mockSearchAttributesMapperProvider,
-		chasmRegistry:                  s.chasmRegistry,
-		processor:                      s.mockProcessor,
-		processorAckTimeout:            esProcessorAckTimeout,
-		disableOrderByClause:           visibilityDisableOrderByClause,
-		enableManualPagination:         visibilityEnableManualPagination,
-		enableUnifiedQueryConverter:    visibilityEnableUnifiedQueryConverter,
-		metricsHandler:                 s.mockMetricsHandler,
-		logger:                         log.NewNoopLogger(),
+		esClient:                 s.mockESClient,
+		index:                    testIndex,
+		searchAttributesProvider: searchattribute.NewTestEsProvider(),
+		// The custom search attributes of the test index are registered through cluster
+		// metadata, so they must keep resolving by field name, like in production.
+		searchAttributesMapperProvider: searchattribute.NewTestBackCompMapperProvider(
+			&searchattribute.TestMapper{},
+			searchattribute.TestEsNameTypeMap(),
+		),
+		chasmRegistry:               s.chasmRegistry,
+		processor:                   s.mockProcessor,
+		processorAckTimeout:         esProcessorAckTimeout,
+		disableOrderByClause:        visibilityDisableOrderByClause,
+		enableManualPagination:      visibilityEnableManualPagination,
+		enableUnifiedQueryConverter: visibilityEnableUnifiedQueryConverter,
+		metricsHandler:              s.mockMetricsHandler,
+		logger:                      log.NewNoopLogger(),
 	}
-
-	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(testNamespace).
-		Return(&searchattribute.TestMapper{}, nil).AnyTimes()
 }
 
 func (s *ESVisibilitySuite) TearDownTest() {
@@ -2351,7 +2351,7 @@ func (s *ESVisibilitySuite) TestNameInterceptor_ChasmMapper() {
 	ni := NewNameInterceptor(
 		testNamespace,
 		searchattribute.TestEsNameTypeMap(),
-		s.mockSearchAttributesMapperProvider,
+		s.visibilityStore.searchAttributesMapperProvider,
 		chasmMapper,
 		chasm.UnspecifiedArchetypeID,
 	)
