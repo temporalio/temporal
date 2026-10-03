@@ -263,10 +263,6 @@ func (s *PartitionManagerTestSuite) TestGrantEagerDispatchChecksVersionBacklog()
 }
 
 func (s *PartitionManagerTestSuite) TestGrantEagerDispatchReturnsPartialRateLimitGrant() {
-	if !s.newMatcher {
-		s.T().Skip("simple limiter is only used by the new matcher")
-	}
-
 	partitionMgr := s.newRateLimitedEagerDispatchPartitionManager()
 
 	items, err := partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
@@ -281,10 +277,6 @@ func (s *PartitionManagerTestSuite) TestGrantEagerDispatchReturnsPartialRateLimi
 }
 
 func (s *PartitionManagerTestSuite) TestGrantEagerDispatchValidationDoesNotConsumeTokens() {
-	if !s.newMatcher {
-		s.T().Skip("simple limiter is only used by the new matcher")
-	}
-
 	partitionMgr := s.newRateLimitedEagerDispatchPartitionManager()
 
 	_, err := partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{

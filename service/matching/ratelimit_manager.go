@@ -341,14 +341,6 @@ func (r *rateLimitManager) consumeTokens(now int64, task *internalTask, tokens i
 
 func (r *rateLimitManager) grantTokens(priority *commonpb.Priority, requested int32) int32 {
 	now := r.timeSource.Now()
-	if !r.config.NewMatcher {
-		available := r.dynamicRateLimiter.TokensAt(now)
-		granted := min(requested, int32(max(available, 0)))
-		if granted > 0 && r.dynamicRateLimiter.AllowN(now, int(granted)) {
-			return granted
-		}
-		return 0
-	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()

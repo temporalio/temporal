@@ -2412,10 +2412,6 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 
 	totalTasks := taskCount * engineCount * iterations
 	s.Len(startedTasks, totalTasks, "some tasks were never dispatched")
-	if !s.newMatcher {
-		// new matcher does gc lazily so some acked tasks may remain
-		s.Equal(0, s.taskManager.getTaskCount(tlID))
-	}
 	persisted := s.taskManager.getCreateTaskCount(tlID)
 	// No sync matching as all messages are published first
 	s.Equal(totalTasks, persisted)
@@ -2559,10 +2555,6 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 
 	totalTasks := taskCount * engineCount * iterations
 	s.Len(startedTasks, totalTasks, "some tasks were never dispatched")
-	if !s.newMatcher {
-		// new matcher does gc lazily so some acked tasks may remain
-		s.Equal(0, s.taskManager.getTaskCount(tlID))
-	}
 	persisted := s.taskManager.getCreateTaskCount(tlID)
 	// No sync matching as all messages are published first
 	s.Equal(totalTasks, persisted)

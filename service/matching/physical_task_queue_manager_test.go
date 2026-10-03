@@ -37,17 +37,6 @@ import (
 
 func TestNonNegligibleBacklogPriority(t *testing.T) {
 	const negligibleAge = time.Minute
-	classicReader := &taskReader{}
-	classicReader.backlogHeadCreateTime.Store(time.Now().Add(-2 * negligibleAge).UnixNano())
-	classic := &backlogManagerImpl{
-		taskReader: classicReader,
-		config: &taskQueueConfig{
-			DefaultPriorityKey: 4,
-			BacklogNegligibleAge: func() time.Duration {
-				return negligibleAge
-			},
-		},
-	}
 	active := newPriorityBacklogManagerForTest(negligibleAge, map[priorityKey]time.Duration{
 		1: negligibleAge / 2,
 		3: 2 * negligibleAge,
@@ -63,7 +52,6 @@ func TestNonNegligibleBacklogPriority(t *testing.T) {
 		drainBacklogMgr: draining,
 	}
 
-	require.Equal(t, priorityKey(4), classic.NonNegligibleBacklogPriority())
 	require.Equal(t, priorityKey(3), active.NonNegligibleBacklogPriority())
 	require.Equal(t, priorityKey(2), draining.NonNegligibleBacklogPriority())
 	require.Equal(t, priorityKey(2), physicalQueue.NonNegligibleBacklogPriority())
