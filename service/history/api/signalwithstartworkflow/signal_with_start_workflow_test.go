@@ -463,7 +463,7 @@ func (s *signalWithStartWorkflowSuite) TestStartAndSignalWithoutCurrentWorkflow_
 	).Return(failedErr)
 	newWorkflowLease := api.NewWorkflowLease(newContext, wcache.NoopReleaseFn, newMutableState)
 
-	outcome, err := startAndSignalWithoutCurrentWorkflow(ctx, s.shardContext, nil, newWorkflowLease)
+	outcome, err := startAndSignalWithoutCurrentWorkflow(ctx, s.shardContext, nil, newWorkflowLease, enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE)
 	s.ErrorIs(err, failedErr)
 	s.Equal(startOutcome{}, outcome)
 }
