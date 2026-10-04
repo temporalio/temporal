@@ -322,9 +322,7 @@ const (
 // non-COMPLETED status paused a PauseOnFailure schedule (and terminated runs
 // were mislabeled FAILED), so a manual cancel/terminate would silently stop all
 // future runs.
-func testPauseOnFailureIgnoresCancelTerminate(suite *ScheduleCHASMSuite, stop terminalStop) {
-	t := suite.T()
-	newContext := chasmContextFactory
+func testPauseOnFailureIgnoresCancelTerminate(t *testing.T, newContext contextFactory, stop terminalStop) {
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 	ctx := newContext(testcore.NewContext())
 
@@ -415,11 +413,11 @@ func testPauseOnFailureIgnoresCancelTerminate(suite *ScheduleCHASMSuite, stop te
 }
 
 func (suite *ScheduleCHASMSuite) TestPauseOnFailureCancelDoesNotPause() {
-	testPauseOnFailureIgnoresCancelTerminate(suite, stopByCancel)
+	testPauseOnFailureIgnoresCancelTerminate(suite.T(), chasmContextFactory, stopByCancel)
 }
 
 func (suite *ScheduleCHASMSuite) TestPauseOnFailureTerminateDoesNotPause() {
-	testPauseOnFailureIgnoresCancelTerminate(suite, stopByTerminate)
+	testPauseOnFailureIgnoresCancelTerminate(suite.T(), chasmContextFactory, stopByTerminate)
 }
 
 func TestScheduleCHASM(t *testing.T) {
@@ -434,37 +432,31 @@ func TestScheduleCHASM(t *testing.T) {
 func (suite *ScheduleCHASMSuite) TestIdleClose() {
 	t := suite.T()
 	newContext := chasmContextFactory
-	t.Run("ManualOnly", func(t *testing.T) {
-		t.Parallel()
-		testManualOnlyUnpausedClosesFromIdle(t, newContext)
+	testScheduleClosesFromIdle(t, newContext)
+	suite.Run("ManualOnly", func(suite *ScheduleCHASMSuite) {
+		testManualOnlyUnpausedClosesFromIdle(suite.T(), newContext)
 	})
-	t.Run("PauseDuringWindow", func(t *testing.T) {
-		t.Parallel()
-		testPauseDuringIdleWindow(t, newContext)
+	suite.Run("PauseDuringWindow", func(suite *ScheduleCHASMSuite) {
+		testPauseDuringIdleWindow(suite.T(), newContext)
 	})
-	t.Run("BackfillBlocks", func(t *testing.T) {
-		t.Parallel()
-		testBackfillBlocksIdleClose(t, newContext)
+	suite.Run("BackfillBlocks", func(suite *ScheduleCHASMSuite) {
+		testBackfillBlocksIdleClose(suite.T(), newContext)
 	})
 }
 
 func (suite *ScheduleCHASMSuite) TestPausedBehavior() {
-	t := suite.T()
 	newContext := chasmContextFactory
-	t.Run("DropsCatchup", func(t *testing.T) {
-		t.Parallel()
-		testPausedDropsCatchup(t, newContext)
+	suite.Run("DropsCatchup", func(suite *ScheduleCHASMSuite) {
+		testPausedDropsCatchup(suite.T(), newContext)
 	})
-	t.Run("RecentActionsAdvance", func(t *testing.T) {
-		t.Parallel()
-		testRecentActionsAdvanceWhilePaused(t, newContext)
+	suite.Run("RecentActionsAdvance", func(suite *ScheduleCHASMSuite) {
+		testRecentActionsAdvanceWhilePaused(suite.T(), newContext)
 	})
-	t.Run("FutureActionTimesAdvance", func(t *testing.T) {
-		t.Parallel()
-		testFutureActionTimesAdvanceWhilePaused(t, newContext)
+	suite.Run("FutureActionTimesAdvance", func(suite *ScheduleCHASMSuite) {
+		testFutureActionTimesAdvanceWhilePaused(suite.T(), newContext)
 	})
-	t.Run("BackfillDrains", func(t *testing.T) {
-		testBackfillOnPausedSchedule(t, newContext)
+	suite.Run("BackfillDrains", func(suite *ScheduleCHASMSuite) {
+		testBackfillOnPausedSchedule(suite.T(), newContext)
 	})
 }
 
