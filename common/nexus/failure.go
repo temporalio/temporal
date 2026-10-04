@@ -15,6 +15,7 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/proto"
@@ -181,6 +182,27 @@ func TemporalFailureToNexusFailureInPlace(failure *failurepb.Failure) (nexus.Fai
 		Details: data,
 		Cause:   causep,
 	}, nil
+}
+
+// CoerceToCanceledFailure replaces failure's FailureInfo with CanceledFailureInfo so it
+// surfaces as a Temporal CanceledError. Every other field is left unchanged. A nil failure yields an empty
+// CanceledFailure rather than nil. A canceled operation must always carry a cause bearing CanceledFailureInfo.
+//
+// Call it only for canceled operations: old SDKs and non-Temporal handlers may send a canceled
+// completion whose converted cause is a plain ApplicationFailure, which would otherwise surface as
+// an ApplicationError to the caller.
+func CoerceToCanceledFailure(failure *failurepb.Failure) *failurepb.Failure {
+	if failure.GetCanceledFailureInfo() != nil {
+		return failure
+	}
+	canceled := &failurepb.Failure{}
+	if failure != nil {
+		canceled = common.CloneProto(failure)
+	}
+	canceled.FailureInfo = &failurepb.Failure_CanceledFailureInfo{
+		CanceledFailureInfo: &failurepb.CanceledFailureInfo{},
+	}
+	return canceled
 }
 
 // NexusFailureToTemporalFailure converts a Nexus Failure to an API proto Failure.
@@ -432,4 +454,22 @@ func AdaptAuthorizeError(permissionDeniedError *serviceerror.PermissionDenied) e
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied: %s", permissionDeniedError.Reason)
 	}
 	return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnauthorized, "permission denied")
+}
+
+func OperationErrorToTemporalFailure(opErr *nexus.OperationError) (*failurepb.Failure, error) {
+	var nf nexus.Failure
+	if opErr.OriginalFailure != nil {
+		nf = *opErr.OriginalFailure
+	} else {
+		var err error
+		nf, err = nexusrpc.DefaultFailureConverter().ErrorToFailure(opErr)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// The Nexus failure may contain a metadata key requesting that the unwrapped
+	// [Cause] of the failure is sent, to avoid an unnecessary layer of indirection.
+	unwrappedFailure := nexusrpc.UnwrapFailure(&nf)
+	return NexusFailureToTemporalFailure(*unwrappedFailure)
 }

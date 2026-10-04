@@ -102,7 +102,7 @@ func (h *operationInvocationTaskHandler) Execute(
 		return err
 	}
 
-	callbackURL, err := buildCallbackURL(h.config.UseSystemCallbackURL(), h.config.CallbackURLTemplate(), ns, endpoint)
+	callbackURL, err := buildCallbackURL(h.config.CallbackURLTemplate(), ns, endpoint)
 	if err != nil {
 		return fmt.Errorf("failed to build callback URL: %w", err)
 	}

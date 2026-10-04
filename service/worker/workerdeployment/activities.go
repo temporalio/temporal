@@ -11,7 +11,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/temporal"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/metrics"
@@ -175,11 +174,10 @@ func (a *Activities) DeleteWorkerDeploymentVersion(ctx context.Context, args *de
 		},
 	)
 	if err != nil {
-		var notFoundErr *serviceerror.NotFound
 		// History returns NotFound when the Version workflow is already closed without
 		// this update or when its history no longer exists. Allow the Deployment workflow
 		// to remove its stale reference.
-		if errors.As(err, &notFoundErr) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			metrics.WorkerDeploymentVersionNotFoundDuringDelete.With(a.MetricsHandler).Record(
 				1,
 				metrics.NamespaceTag(a.namespace.Info().GetName()),
@@ -306,10 +304,7 @@ func (a *Activities) UpdateWorkerControllerInstanceFromDeployment(ctx context.Co
 	upserts := scalingGroupUpdatesToWCI(input.GetUpsertScalingGroups())
 	resp, err := a.WorkerControllerInstanceClient.UpdateWorkerControllerInstance(ctx, a.namespace, input.GetVersion(), nil, input.GetIdentity(), upserts, input.GetRemoveScalingGroups())
 	if err != nil {
-		if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
-			return nil, temporal.NewNonRetryableApplicationError(err.Error(), errInvalidComputeConfig, nil)
-		}
-		return nil, err
+		return nil, wciClientErrorToActivityError(err)
 	}
 	if resp == nil {
 		return nil, nil

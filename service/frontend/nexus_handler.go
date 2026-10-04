@@ -406,7 +406,7 @@ func (h *nexusHandler) finalStartHandler(
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid input")
 	}
 	if startOperationRequest.Payload.Size() > h.payloadSizeLimit(oc.namespaceName) {
-		oc.logger.Error("payload size exceeds error limit for Nexus StartOperation request", tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
+		oc.logger.Warn("payload size exceeds error limit")
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "input exceeds size limit")
 	}
 
@@ -415,7 +415,7 @@ func (h *nexusHandler) finalStartHandler(
 	// RPC.
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
-		oc.logger.Error("received error from matching service for Nexus StartOperation request", tag.Error(err))
+		oc.logger.Error("received error from matching service", tag.Error(err))
 		return nil, &interceptornexus.InterceptorError{
 			Err:     err,
 			Outcome: "matching_timeout",
@@ -539,7 +539,7 @@ func (h *nexusHandler) finalCancelHandler(
 	// RPC.
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
-		oc.logger.Error("received error from matching service for Nexus CancelOperation request", tag.Error(err))
+		oc.logger.Error("received error from matching service", tag.Error(err))
 		return nil, &interceptornexus.InterceptorError{
 			Err:     err,
 			Outcome: "matching_timeout",

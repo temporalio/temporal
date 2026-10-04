@@ -9,8 +9,10 @@ import (
 // that returns the given parent value when Get or TryGet is called.
 // This is intended for use in unit tests where a full CHASM tree is not needed.
 func NewMockParentPtr[T any](parent T) ParentPtr[T] {
+	logger := log.NewNoopLogger()
 	base := &nodeBase{
-		logger: log.NewNoopLogger(),
+		logger:   logger,
+		registry: NewRegistry(logger),
 	}
 
 	parentNode := newNode(base, nil, "")

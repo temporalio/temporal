@@ -49,14 +49,39 @@ func (p ParentPtr[T]) Get(chasmContext Context) T {
 // application.
 func (p ParentPtr[T]) TryGet(chasmContext Context) (T, bool) {
 	var nilT T
+	parent, ok := p.parentNode()
+	if !ok {
+		return nilT, false
+	}
+
+	if err := parent.prepareComponentValue(chasmContext); err != nil {
+		// nolint:forbidigo // Panic is intended here for framework error handling.
+		panic(err)
+	}
+
+	if parent.value == nil {
+		return nilT, false
+	}
+
+	vT, isT := parent.value.(T)
+	if !isT {
+		// nolint:forbidigo // Panic is intended here for framework error handling.
+		panic(serviceerror.NewInternalf("parent component value doesn't implement %s", reflect.TypeFor[T]().Name()))
+	}
+	return vT, true
+}
+
+// parentNode returns the nearest ancestor node that is a component, skipping CHASM maps, and a
+// boolean indicating whether one was found.
+func (p ParentPtr[T]) parentNode() (*Node, bool) {
 	if p.Internal.currentNode == nil {
 		// ParentPtr not initialized
-		return nilT, false
+		return nil, false
 	}
 
 	parent := p.Internal.currentNode.parent
 	if parent == nil {
-		return nilT, false
+		return nil, false
 	}
 
 	for parent.isMap() {
@@ -84,19 +109,26 @@ func (p ParentPtr[T]) TryGet(chasmContext Context) (T, bool) {
 		))
 	}
 
-	if err := parent.prepareComponentValue(chasmContext); err != nil {
-		// nolint:forbidigo // Panic is intended here for framework error handling.
-		panic(err)
+	return parent, true
+}
+
+// Fqn returns the fully qualified name that the parent component is registered under, e.g.
+// "workflow.workflow". Returns "" if the ParentPtr is not initialized or the parent's type is not registered.
+func (p ParentPtr[T]) Fqn() string {
+	parent, ok := p.parentNode()
+	if !ok {
+		return ""
 	}
 
-	if parent.value == nil {
-		return nilT, false
+	if typeID := parent.serializedNode.GetMetadata().GetComponentAttributes().GetTypeId(); typeID != 0 {
+		if fqn, ok := parent.registry.ComponentFqnByID(typeID); ok {
+			return fqn
+		}
+	}
+	if rc, ok := parent.registry.componentFor(parent.value); ok {
+		return rc.fqType()
 	}
 
-	vT, isT := parent.value.(T)
-	if !isT {
-		// nolint:forbidigo // Panic is intended here for framework error handling.
-		panic(serviceerror.NewInternalf("parent component value doesn't implement %s", reflect.TypeFor[T]().Name()))
-	}
-	return vT, true
+	softassert.Fail(parent.logger, "parent component type is not registered with CHASM")
+	return ""
 }

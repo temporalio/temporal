@@ -1,11 +1,15 @@
 package nexus
 
 import (
+	"context"
 	"testing"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
+	"go.temporal.io/api/notificationservice/v1"
+	"go.temporal.io/api/proxy"
 	"go.temporal.io/sdk/converter"
 )
 
@@ -14,6 +18,25 @@ func mustToPayload(t *testing.T, v any) *commonpb.Payload {
 	payload, err := conv.ToPayload(v)
 	require.NoError(t, err)
 	return payload
+}
+
+func TestEncodeSystemPayload(t *testing.T) {
+	t.Parallel()
+
+	payload, err := EncodeSystemPayload(&notificationservice.OnCompleteRequest{
+		SourceContext: &commonpb.Payload{Data: []byte("source-context")},
+	})
+	require.NoError(t, err)
+	require.Equal(t, []byte("true"), payload.GetMetadata()[SystemPayloadMetadataKey])
+	require.Equal(t, []byte("binary/protobuf"), payload.GetMetadata()["encoding"])
+	require.Equal(t, []byte("temporal.api.notificationservice.v1.OnCompleteRequest"), payload.GetMetadata()["messageType"])
+
+	err = proxy.VisitPayloads(context.Background(), &nexuspb.StartOperationRequest{Payload: payload}, proxy.VisitPayloadsOptions{
+		Visitor: func(_ *proxy.VisitPayloadsContext, payloads []*commonpb.Payload) ([]*commonpb.Payload, error) {
+			return payloads, nil
+		},
+	})
+	require.NoError(t, err)
 }
 
 func TestNexusPayloadSerializer(t *testing.T) {

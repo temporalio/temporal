@@ -703,6 +703,19 @@ func CloneProtoMap[K comparable, T proto.Message](src map[K]T) map[K]T {
 	return result
 }
 
+// CloneProtoSlice returns a new slice containing a clone of each individual proto.
+func CloneProtoSlice[T proto.Message](src []T) []T {
+	if src == nil {
+		return nil
+	}
+
+	result := make([]T, len(src))
+	for i, v := range src {
+		result[i] = CloneProto(v)
+	}
+	return result
+}
+
 // DiscardUnknownProto discards unknown fields in a proto message.
 func DiscardUnknownProto(m proto.Message) error {
 	return protorange.Range(m.ProtoReflect(), func(values protopath.Values) error {

@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
@@ -655,6 +656,7 @@ func (s *streamReceiverMonitorSuite) TestGenerateStatusMap_Success() {
 }
 
 func (s *streamReceiverMonitorSuite) TestEvaluateStreamStatus() {
+	s.clusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, gomock.Any()).Return("some cluster name").AnyTimes()
 	keyPair := &ClusterShardKeyPair{
 		Client: NewClusterShardKey(2, 1),
 		Server: NewClusterShardKey(1, 1),
@@ -735,4 +737,27 @@ func (s *streamReceiverMonitorSuite) TestEvaluateStreamStatus() {
 		},
 	),
 	)
+}
+
+func (s *streamReceiverMonitorSuite) TestEvaluateStreamStatus_StuckMetricUsesClusterNames() {
+	s.clusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, int64(1)).Return("server-cluster").AnyTimes()
+	s.clusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, int64(2)).Return("client-cluster").AnyTimes()
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.streamReceiverMonitor.MetricsHandler = metricsHandler
+
+	s.False(s.streamReceiverMonitor.evaluateSingleStreamConnection(
+		&ClusterShardKeyPair{
+			Client: NewClusterShardKey(2, 1),
+			Server: NewClusterShardKey(1, 1),
+		},
+		&streamStatus{defaultAckLevel: 50, maxReplicationTaskId: 1000},
+		&streamStatus{defaultAckLevel: 50, maxReplicationTaskId: 500},
+	))
+
+	recordings := capture.Snapshot()[metrics.ReplicationStreamStuck.Name()]
+	s.Require().Len(recordings, 1)
+	s.Equal("server-cluster", recordings[0].Tags["from_cluster"])
+	s.Equal("client-cluster", recordings[0].Tags["to_cluster"])
 }
