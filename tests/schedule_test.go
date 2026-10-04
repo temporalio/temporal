@@ -528,26 +528,16 @@ type ScheduleV1Suite struct {
 	parallelsuite.Suite[*ScheduleV1Suite]
 }
 
-type ScheduleV1SequentialSuite struct {
-	parallelsuite.Suite[*ScheduleV1SequentialSuite]
-}
-
 func TestScheduleV1Suite(t *testing.T) {
 	parallelsuite.Run(t, &ScheduleV1Suite{})
 }
 
-func TestScheduleV1SequentialSuite(t *testing.T) {
-	parallelsuite.RunLegacySequential(t, &ScheduleV1SequentialSuite{}) //nolint:staticcheck // SA1019: mutates package-level scheduler tweakables.
-}
-
-func (suite *ScheduleV1SequentialSuite) TestActionDelayMetrics() {
-	t := suite.T()
+func TestScheduleV1ActionDelayMetrics(t *testing.T) {
 	newContext := v1ContextFactory
 	// The short-refresh DesiredTime path this test exercises is gated behind
 	// RefreshCompletionDesiredTime; the shipped default stays at TriggerImmediatelyTimestamp
-	// until a follow-up deploy activates it. Force it on for this run (see the caller: this
-	// subtest is intentionally not run with t.Parallel(), since this override is shared
-	// package state).
+	// until a follow-up deploy activates it. Force it on for this run. This top-level
+	// test must stay nonparallel because the override is shared package state.
 	prevVersion := scheduler.CurrentTweakablePolicies.Version
 	scheduler.CurrentTweakablePolicies.Version = scheduler.RefreshCompletionDesiredTime
 	t.Cleanup(func() { scheduler.CurrentTweakablePolicies.Version = prevVersion })
@@ -3225,7 +3215,7 @@ func testStateSizeBytesReported(t *testing.T, newContext contextFactory) {
 	s.Positive(desc.GetInfo().GetStateSizeBytes(), "Describe should report a non-zero StateSizeBytes")
 }
 
-// testCreatesCHASMSentinel tests that creating a V1 schedule also creates a
+// TestCreatesCHASMSentinel tests that creating a V1 schedule also creates a
 // CHASM sentinel to reserve the schedule ID in the CHASM execution space.
 func (suite *ScheduleV1Suite) TestCreatesCHASMSentinel() {
 	t := suite.T()
@@ -3361,7 +3351,7 @@ func testSkipsWorkflowSentinelWhenDisabled(t *testing.T, newContext contextFacto
 	s.ErrorAs(descErr, &notFoundErr, "no dummy sentinel workflow should be created when sentinels are disabled")
 }
 
-// testSkipsCHASMSentinelWhenDisabled asserts that a V1 CreateSchedule does not
+// TestSkipsCHASMSentinelWhenDisabled asserts that a V1 CreateSchedule does not
 // create a CHASM sentinel when EnableCHASMSchedulerSentinels is off.
 func (suite *ScheduleV1Suite) TestSkipsCHASMSentinelWhenDisabled() {
 	t := suite.T()
@@ -3942,7 +3932,7 @@ func testMigrationCallbackReattachSynthesized(t *testing.T, newContext contextFa
 	}
 }
 
-// testCHASMCanListV1Schedules tests that a schedule created in the V1 stack
+// TestCHASMCanListV1Schedules tests that a schedule created in the V1 stack
 // will also be visible in the V2 stack.
 func (suite *ScheduleV1Suite) TestCHASMCanListV1Schedules() {
 	t := suite.T()
@@ -4016,7 +4006,7 @@ func (suite *ScheduleV1Suite) TestCHASMCanListV1Schedules() {
 	s.Equal(v1CountResp.Count, chasmCountResp.Count, "CHASM and V1 counts should match")
 }
 
-// testRefresh applies to V1 scheduler only; V2 does not support/need manual refresh.
+// TestRefresh applies to V1 scheduler only; V2 does not support/need manual refresh.
 func (suite *ScheduleV1Suite) TestRefresh() {
 	t := suite.T()
 	newContext := v1ContextFactory
@@ -4127,7 +4117,7 @@ func (suite *ScheduleV1Suite) TestRefresh() {
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
-// testListBeforeRun only applies to V1, as V2 scheduler does not involve the
+// TestListBeforeRun only applies to V1, as V2 scheduler does not involve the
 // per-NS worker or workflow.
 func (suite *ScheduleV1Suite) TestListBeforeRun() {
 	t := suite.T()
@@ -4178,7 +4168,7 @@ func (suite *ScheduleV1Suite) TestListBeforeRun() {
 	s.True(entry.Info.FutureActionTimes[0].AsTime().After(startTime))
 }
 
-// testRateLimit applies only to V1, as V2 scheduler does not impose its own rate limiting.
+// TestRateLimit applies only to V1, as V2 scheduler does not impose its own rate limiting.
 func (suite *ScheduleV1Suite) TestRateLimit() {
 	t := suite.T()
 	newContext := v1ContextFactory
@@ -4235,7 +4225,7 @@ func (suite *ScheduleV1Suite) TestRateLimit() {
 	s.Less(runs.Load(), int32(10))
 }
 
-// testNextTimeCache only applies to V1.
+// TestNextTimeCache only applies to V1.
 func (suite *ScheduleV1Suite) TestNextTimeCache() {
 	t := suite.T()
 	newContext := v1ContextFactory
