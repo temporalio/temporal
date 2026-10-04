@@ -85,6 +85,7 @@ func (pq *priorityQueueImpl[T]) Push(item any) {
 // Pop pop an item from priority queue, used by go internal heap implementation
 func (pq *priorityQueueImpl[T]) Pop() any {
 	pqItem := pq.items[pq.Len()-1]
+	clear(pq.items[pq.Len()-1:])
 	pq.items = pq.items[0 : pq.Len()-1]
 	return pqItem
 }
