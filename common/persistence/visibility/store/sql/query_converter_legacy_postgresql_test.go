@@ -105,13 +105,22 @@ func (s *postgresqlQueryConverterSuite) TestConvertTextComparisonExpr() {
 		{
 			name:   "valid equal expression",
 			input:  "AliasForText01 = 'foo bar'",
-			output: "Text01 @@ 'foo | bar'::tsquery",
+			output: "Text01 @@ (plainto_tsquery('simple', 'foo') || plainto_tsquery('simple', 'bar'))",
 			err:    nil,
 		},
 		{
 			name:   "valid not equal expression",
 			input:  "AliasForText01 != 'foo bar'",
-			output: "not Text01 @@ 'foo | bar'::tsquery",
+			output: "not Text01 @@ (plainto_tsquery('simple', 'foo') || plainto_tsquery('simple', 'bar'))",
+			err:    nil,
+		},
+		{
+			// A value with a ':' inside a token used to render as a raw
+			// ::tsquery cast (e.g. 'World:Jurassic') and fail with
+			// "syntax error in tsquery". plainto_tsquery normalizes it.
+			name:   "value with colon token",
+			input:  "AliasForText01 = 'The Lost World:Jurassic Park'",
+			output: "Text01 @@ (plainto_tsquery('simple', 'The') || plainto_tsquery('simple', 'Lost') || plainto_tsquery('simple', 'World:Jurassic') || plainto_tsquery('simple', 'Park'))",
 			err:    nil,
 		},
 	}
