@@ -3461,7 +3461,6 @@ func (suite *ScheduleCHASMSuite) TestCreateScheduleAlreadyExists() {
 // the handler. A similar test exists in the features repository.
 func (suite *ScheduleSuite) TestCreateScheduleDuplicateSdkError(chasmEnabled bool) {
 	t := suite.T()
-	newContext := contextFactoryFor(chasmEnabled)
 	opts := scheduleCommonOpts(t)
 	if chasmEnabled {
 		opts = append(opts, testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, true))
@@ -3480,7 +3479,7 @@ func (suite *ScheduleSuite) TestCreateScheduleDuplicateSdkError(chasmEnabled boo
 		Paused: true,
 	}
 
-	ctx := newContext(testcontext.For(t))
+	ctx := testcontext.For(t)
 	handle, err := s.SdkClient().ScheduleClient().Create(ctx, schedOpts)
 	s.NoError(err)
 	defer func() { _ = handle.Delete(context.Background()) }()
@@ -5684,42 +5683,40 @@ func TestScheduleCHASMSharedSuite(t *testing.T) {
 }
 
 func (suite *ScheduleSuite) TestTriggerImmediately(chasmEnabled bool) {
-	t := suite.T()
 	newContext := contextFactoryFor(chasmEnabled)
-	t.Run("OnActiveSchedule", func(t *testing.T) {
-		testTriggerImmediatelyOnActiveSchedule(t, newContext)
+	suite.Run("OnActiveSchedule", func(suite *ScheduleSuite) {
+		testTriggerImmediatelyOnActiveSchedule(suite.T(), newContext)
 	})
-	t.Run("OnPausedSchedule", func(t *testing.T) {
-		testTriggerImmediatelyOnPausedSchedule(t, newContext)
+	suite.Run("OnPausedSchedule", func(suite *ScheduleSuite) {
+		testTriggerImmediatelyOnPausedSchedule(suite.T(), newContext)
 	})
-	t.Run("AfterActionsExhausted", func(t *testing.T) {
-		testTriggerImmediatelyAfterActionsExhausted(t, newContext)
+	suite.Run("AfterActionsExhausted", func(suite *ScheduleSuite) {
+		testTriggerImmediatelyAfterActionsExhausted(suite.T(), newContext)
 	})
 }
 
 func (suite *ScheduleSuite) TestBackfill(chasmEnabled bool) {
-	t := suite.T()
 	newContext := contextFactoryFor(chasmEnabled)
-	t.Run("ReprocessCompletedActionExactTimePaused", func(t *testing.T) {
-		testBackfillReprocessesCompletedAction(t, newContext, true, 0)
+	suite.Run("ReprocessCompletedActionExactTimePaused", func(suite *ScheduleSuite) {
+		testBackfillReprocessesCompletedAction(suite.T(), newContext, true, 0)
 	})
-	t.Run("ReprocessCompletedActionExactTimeActive", func(t *testing.T) {
-		testBackfillReprocessesCompletedAction(t, newContext, false, 0)
+	suite.Run("ReprocessCompletedActionExactTimeActive", func(suite *ScheduleSuite) {
+		testBackfillReprocessesCompletedAction(suite.T(), newContext, false, 0)
 	})
-	t.Run("ReprocessCompletedActionInRange", func(t *testing.T) {
-		testBackfillReprocessesCompletedAction(t, newContext, true, 1)
+	suite.Run("ReprocessCompletedActionInRange", func(suite *ScheduleSuite) {
+		testBackfillReprocessesCompletedAction(suite.T(), newContext, true, 1)
 	})
-	t.Run("SkipOverlap", func(t *testing.T) {
-		testBackfillWithSkipOverlap(t, newContext)
+	suite.Run("SkipOverlap", func(suite *ScheduleSuite) {
+		testBackfillWithSkipOverlap(suite.T(), newContext)
 	})
-	t.Run("BufferOneOverlap", func(t *testing.T) {
-		testBackfillWithBufferOneOverlap(t, newContext)
+	suite.Run("BufferOneOverlap", func(suite *ScheduleSuite) {
+		testBackfillWithBufferOneOverlap(suite.T(), newContext)
 	})
-	t.Run("MultiRangeCountedExactlyOnce", func(t *testing.T) {
-		testMultiRangeBackfillCountedExactlyOnce(t, newContext)
+	suite.Run("MultiRangeCountedExactlyOnce", func(suite *ScheduleSuite) {
+		testMultiRangeBackfillCountedExactlyOnce(suite.T(), newContext)
 	})
-	t.Run("RangeSmallerThanInterval", func(t *testing.T) {
-		testBackfillRangeSmallerThanInterval(t, newContext)
+	suite.Run("RangeSmallerThanInterval", func(suite *ScheduleSuite) {
+		testBackfillRangeSmallerThanInterval(suite.T(), newContext)
 	})
 }
 
