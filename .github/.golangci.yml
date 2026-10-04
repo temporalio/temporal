@@ -210,7 +210,7 @@ linters:
           - forbidigo
       # Existing legacy call sites are tracked separately; keep this PR scoped
       # to preventing new usage while migrating touched tests.
-      - path: tests/(nexus_standalone|nexus_workflow|schedule_migration)_test\.go$
+      - path: tests/(nexus_standalone|nexus_workflow)_test\.go$
         text: "Eventually"
         linters:
           - forbidigo
