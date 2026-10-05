@@ -12,7 +12,6 @@ import (
 	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/aggregate"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/log"
@@ -40,7 +39,6 @@ type (
 	// confuse with a healthy zero reading.
 	HealthSignalAggregator interface {
 		Record(rpcMethod string, latency time.Duration, err error)
-		AverageLatency() float64
 		LatencyQuantile(quantile float64) (float64, bool)
 		LatencyQuantileByGroup(groupName string, quantile float64) (float64, bool)
 		ErrorRatio() (float64, bool)
@@ -50,11 +48,7 @@ type (
 
 	// HealthSignalAggregatorImpl implements HealthSignalAggregator
 	healthSignalAggregatorImpl struct {
-		latencyAverage aggregate.MovingWindowAverage
-		errorRatio     aggregate.MovingWindowAverage
-		healthSignals  *health.SignalAggregator
-
-		logger log.Logger
+		healthSignals *health.SignalAggregator
 	}
 )
 
@@ -170,34 +164,17 @@ func specialCaseAPIIsPolling(req any) bool {
 func NewHealthSignalAggregator(
 	logger log.Logger,
 	getSettings dynamicconfig.TypedPropertyFn[health.Settings],
-	windowSize time.Duration,
-	maxBufferSize int,
 ) *healthSignalAggregatorImpl {
 	signals := health.NewSignalAggregator(logger, getSettings, health.WithIsUnhealthy(isUnhealthyError))
 	signals.Start()
 
 	return &healthSignalAggregatorImpl{
-		logger:         logger,
-		latencyAverage: aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
-		errorRatio:     aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
-		healthSignals:  signals,
+		healthSignals: signals,
 	}
 }
 
 func (s *healthSignalAggregatorImpl) Record(rpcMethod string, latency time.Duration, err error) {
-	s.latencyAverage.Record(latency.Milliseconds())
-
 	s.healthSignals.Record(rpcMethod, latency, err)
-
-	if isUnhealthyError(err) {
-		s.errorRatio.Record(1)
-	} else {
-		s.errorRatio.Record(0)
-	}
-}
-
-func (s *healthSignalAggregatorImpl) AverageLatency() float64 {
-	return s.latencyAverage.Average()
 }
 
 func (s *healthSignalAggregatorImpl) LatencyQuantile(quantile float64) (float64, bool) {
@@ -208,11 +185,8 @@ func (s *healthSignalAggregatorImpl) LatencyQuantileByGroup(groupName string, qu
 	return s.healthSignals.LatencyQuantileByGroup(groupName, quantile)
 }
 
-// NOTE: as of right now, this is just using the original error ratio instead of the
-// signals overall one. this is fine for now and will be removed once we know signals
-// is good to go
 func (s *healthSignalAggregatorImpl) ErrorRatio() (float64, bool) {
-	return s.errorRatio.Average(), true
+	return s.healthSignals.ErrorRatio()
 }
 
 func (s *healthSignalAggregatorImpl) ErrorRatioByGroup(groupName string) (float64, bool) {
