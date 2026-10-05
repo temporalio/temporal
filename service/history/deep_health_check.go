@@ -12,7 +12,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/configs"
 	"google.golang.org/grpc/health"
 	grpchealthspb "google.golang.org/grpc/health/grpc_health_v1"
@@ -22,7 +21,7 @@ type deepHealthCheckHandler struct {
 	healthServer            *health.Server
 	metricsHandler          metrics.Handler
 	config                  *configs.Config
-	historyHealthSignal     interceptor.HealthSignalAggregator
+	historyHealthSignal     healthcheck.SignalReader
 	persistenceHealthSignal persistence.HealthSignalAggregator
 	startupTime             time.Time
 }
