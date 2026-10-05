@@ -14,12 +14,14 @@ import (
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/chasmtest"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	serverclient "go.temporal.io/server/client"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	historytasks "go.temporal.io/server/service/history/tasks"
@@ -982,13 +984,18 @@ func TestAdminClientPeerApplier_Apply(t *testing.T) {
 		return bean, admin, newAdminClientPeerApplier(bean)
 	}
 
-	t.Run("sends shadow request with fingerprint", func(t *testing.T) {
+	t.Run("sends shadow request with payload fingerprint", func(t *testing.T) {
 		bean, admin, applier := newApplier(t)
 		bean.EXPECT().GetRemoteAdminClient("cellB").Return(admin, nil)
 		admin.EXPECT().ApplyNamespaceMutation(gomock.Any(), gomock.Any()).DoAndReturn(
 			func(_ context.Context, request *adminservice.ApplyNamespaceMutationRequest, _ ...grpc.CallOption) (*adminservice.ApplyNamespaceMutationResponse, error) {
 				require.True(t, request.GetShadow())
-				require.NotEmpty(t, request.GetFingerprint())
+				payload := request.GetNamespaceTaskPayload()
+				require.NotEmpty(t, payload)
+				require.Equal(t, nsreplication.NamespaceTaskFingerprintFromPayload(payload), request.GetFingerprint())
+				payloadTask := &replicationspb.NamespaceTaskAttributes{}
+				require.NoError(t, proto.Unmarshal(payload, payloadTask))
+				require.True(t, proto.Equal(payloadTask, request.GetNamespaceTask()))
 				return &adminservice.ApplyNamespaceMutationResponse{
 					Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH,
 				}, nil

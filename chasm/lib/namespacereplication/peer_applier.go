@@ -82,20 +82,22 @@ func (a *adminClientPeerApplier) Apply(
 	shadow bool,
 ) (PeerApplyResult, error) {
 	namespaceTask := nsreplication.NamespaceDetailToTaskAttributes(operation, detail)
-	fingerprint, err := nsreplication.NamespaceTaskFingerprint(namespaceTask)
+	namespaceTaskPayload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
 	if err != nil {
 		return PeerApplyResultUnspecified, serviceerror.NewInvalidArgument(
-			fmt.Sprintf("fingerprint namespace mutation: %v", err),
+			fmt.Sprintf("marshal namespace mutation: %v", err),
 		)
 	}
+	fingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(namespaceTaskPayload)
 	adminClient, err := a.clientBean.GetRemoteAdminClient(targetCell)
 	if err != nil {
 		return PeerApplyResultUnspecified, err
 	}
 	resp, err := adminClient.ApplyNamespaceMutation(ctx, &adminservice.ApplyNamespaceMutationRequest{
-		NamespaceTask: namespaceTask,
-		Shadow:        shadow,
-		Fingerprint:   fingerprint,
+		NamespaceTask:        namespaceTask,
+		Shadow:               shadow,
+		Fingerprint:          fingerprint,
+		NamespaceTaskPayload: namespaceTaskPayload,
 	})
 	if err != nil {
 		return PeerApplyResultUnspecified, err

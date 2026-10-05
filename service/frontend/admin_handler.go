@@ -71,6 +71,7 @@ import (
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/grpc/health"
 	grpchealthspb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -1044,21 +1045,33 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 	if !request.GetShadow() {
 		return nil, serviceerror.NewFailedPrecondition("authoritative CHASM namespace replication is not enabled")
 	}
+	if request.NamespaceTaskPayload == nil {
+		return nil, serviceerror.NewInvalidArgument("namespace_task_payload is required")
+	}
 
-	actualFingerprint, err := nsreplication.NamespaceTaskFingerprint(request.GetNamespaceTask())
-	if err != nil {
-		return nil, serviceerror.NewInternalf("fingerprint namespace mutation: %v", err)
-	}
+	actualFingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(request.GetNamespaceTaskPayload())
 	outcome := adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH
-	if !bytes.Equal(request.GetFingerprint(), actualFingerprint) {
-		adh.logger.Warn(
-			"namespace replication shadow receive mismatch",
-			tag.WorkflowNamespaceID(request.GetNamespaceTask().GetId()),
-			tag.NewStringTag("expected_fingerprint", hex.EncodeToString(request.GetFingerprint())),
-			tag.NewStringTag("actual_fingerprint", hex.EncodeToString(actualFingerprint)),
-		)
-		outcome = adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH
+	if bytes.Equal(request.GetFingerprint(), actualFingerprint) {
+		payloadTask := &replicationspb.NamespaceTaskAttributes{}
+		if err := proto.Unmarshal(request.GetNamespaceTaskPayload(), payloadTask); err != nil {
+			return nil, serviceerror.NewInvalidArgumentf("decode namespace_task_payload: %v", err)
+		}
+		if proto.Equal(payloadTask, request.GetNamespaceTask()) {
+			return &adminservice.ApplyNamespaceMutationResponse{Outcome: outcome}, nil
+		}
+		var err error
+		actualFingerprint, err = nsreplication.NamespaceTaskFingerprint(request.GetNamespaceTask())
+		if err != nil {
+			return nil, serviceerror.NewInvalidArgumentf("fingerprint namespace_task: %v", err)
+		}
 	}
+	adh.logger.Warn(
+		"namespace replication shadow receive mismatch",
+		tag.WorkflowNamespaceID(request.GetNamespaceTask().GetId()),
+		tag.NewStringTag("expected_fingerprint", hex.EncodeToString(request.GetFingerprint())),
+		tag.NewStringTag("actual_fingerprint", hex.EncodeToString(actualFingerprint)),
+	)
+	outcome = adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH
 
 	return &adminservice.ApplyNamespaceMutationResponse{
 		Outcome: outcome,
