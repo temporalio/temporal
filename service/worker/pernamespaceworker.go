@@ -427,9 +427,13 @@ func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 	defer w.lock.Unlock()
 
 	if args.ns != w.ns {
-		// stale refresh goroutine, do nothing
+		// Namespace changed since we snapshotted — another goroutine will handle the new one.
 		return nil
 	}
+	// Note: opts/count may have changed since our snapshot. If so, componentSet (derived from
+	// the snapshot) won't match w.componentSet, causing a spurious worker restart. This is
+	// benign: startWorker reads w.opts/w.ns under the lock, so the worker always gets current
+	// options. The stale componentSet key self-corrects on the next refresh.
 
 	if componentSet.String() == w.componentSet {
 		// no change in set of components enabled, leave existing running
@@ -450,7 +454,7 @@ func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 	// create new one. note that even before startWorker returns, the worker may have started
 	// and already called the fatal error handler. we need to set w.client+worker+componentSet
 	// before releasing the lock to keep our state consistent.
-	client, worker, err := w.startWorker(args, enabledComponents, workerAllocation)
+	client, worker, err := w.startWorker(enabledComponents, workerAllocation)
 	if err != nil {
 		// TODO: add metric also
 		w.stopWorkerLocked() // for calling cleanup
@@ -464,11 +468,10 @@ func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 }
 
 func (w *perNamespaceWorker) startWorker(
-	args refreshArgs,
 	components []workercommon.PerNSWorkerComponent,
 	allocation workerAllocation,
 ) (sdkclient.Client, sdkworker.Worker, error) {
-	nsName := args.ns.Name().String()
+	nsName := w.ns.Name().String()
 	// this should not block because it uses an existing grpc connection
 	client := w.wm.sdkClientFactory.NewClient(sdkclient.Options{
 		Namespace:     nsName,
@@ -479,14 +482,14 @@ func (w *perNamespaceWorker) startWorker(
 
 	// copy from dynamic config. apply explicit defaults for some instead of using the sdk
 	// defaults so that we can multiply below.
-	sdkoptions.MaxConcurrentActivityExecutionSize = cmp.Or(args.opts.MaxConcurrentActivityExecutionSize, 1000)
-	sdkoptions.WorkerActivitiesPerSecond = args.opts.WorkerActivitiesPerSecond
-	sdkoptions.MaxConcurrentLocalActivityExecutionSize = cmp.Or(args.opts.MaxConcurrentLocalActivityExecutionSize, 1000)
-	sdkoptions.WorkerLocalActivitiesPerSecond = args.opts.WorkerLocalActivitiesPerSecond
-	sdkoptions.MaxConcurrentActivityTaskPollers = max(cmp.Or(args.opts.MaxConcurrentActivityTaskPollers, 2), 2)
-	sdkoptions.MaxConcurrentWorkflowTaskExecutionSize = cmp.Or(args.opts.MaxConcurrentWorkflowTaskExecutionSize, 1000)
-	sdkoptions.MaxConcurrentWorkflowTaskPollers = max(cmp.Or(args.opts.MaxConcurrentWorkflowTaskPollers, 2), 2)
-	sdkoptions.StickyScheduleToStartTimeout = args.opts.StickyScheduleToStartTimeout
+	sdkoptions.MaxConcurrentActivityExecutionSize = cmp.Or(w.opts.MaxConcurrentActivityExecutionSize, 1000)
+	sdkoptions.WorkerActivitiesPerSecond = w.opts.WorkerActivitiesPerSecond
+	sdkoptions.MaxConcurrentLocalActivityExecutionSize = cmp.Or(w.opts.MaxConcurrentLocalActivityExecutionSize, 1000)
+	sdkoptions.WorkerLocalActivitiesPerSecond = w.opts.WorkerLocalActivitiesPerSecond
+	sdkoptions.MaxConcurrentActivityTaskPollers = max(cmp.Or(w.opts.MaxConcurrentActivityTaskPollers, 2), 2)
+	sdkoptions.MaxConcurrentWorkflowTaskExecutionSize = cmp.Or(w.opts.MaxConcurrentWorkflowTaskExecutionSize, 1000)
+	sdkoptions.MaxConcurrentWorkflowTaskPollers = max(cmp.Or(w.opts.MaxConcurrentWorkflowTaskPollers, 2), 2)
+	sdkoptions.StickyScheduleToStartTimeout = w.opts.StickyScheduleToStartTimeout
 
 	sdkoptions.BackgroundActivityContext = headers.SetCallerInfo(context.Background(), headers.NewBackgroundHighCallerInfo(nsName))
 	sdkoptions.Identity = fmt.Sprintf("temporal-system@%s@%s", w.wm.hostName, nsName)
@@ -505,7 +508,7 @@ func (w *perNamespaceWorker) startWorker(
 		Multiplicity: allocation.local,
 	}
 	for _, cmp := range components {
-		cleanup := cmp.Register(worker, args.ns, details)
+		cleanup := cmp.Register(worker, w.ns, details)
 		if cleanup != nil {
 			w.cleanup = append(w.cleanup, cleanup)
 		}
