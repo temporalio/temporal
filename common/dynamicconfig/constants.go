@@ -7,7 +7,6 @@ import (
 
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/common/debug"
-	"go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/util"
@@ -283,10 +282,15 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		5*time.Second,
 		`historyHealthSignalLatencyWindowSize is the time window size in seconds for aggregating latencies`,
 	)
-	HealthCheckHistoryGRPCSettings = NewGlobalTypedSetting(
-		"system.healthCheckHistoryGRPCSettings",
-		health.Settings{},
-		"controls history gRPC latency and error-ratio health check thresholds: an overall bucket across all endpoints plus optional named endpoint groups; empty disables the group checks",
+	HealthHistoryGRPCSettings = NewGlobalTypedSetting(
+		"health.history.grpc",
+		DefaultHealthSettings,
+		"controls history gRPC latency and error-ratio health check thresholds: an overall bucket across all endpoints plus optional named endpoint groups; empty disables every check",
+	)
+	HealthHistoryPersistenceSettings = NewGlobalTypedSetting(
+		"health.history.persistence",
+		DefaultHealthSettings,
+		"controls persistence latency and error-ratio health check thresholds: an overall bucket across all operations plus optional named operation groups; empty disables every check",
 	)
 	// TODO: This should be removed once percentiles are the default.
 	HistoryHealthSignalUsePercentiles = NewGlobalBoolSetting(
@@ -298,11 +302,6 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		"system.persistenceHealthSignalAggregationEnabled",
 		true,
 		`PersistenceHealthSignalAggregationEnabled determines whether persistence latency and error averages are tracked`,
-	)
-	HealthCheckPersistenceSettings = NewGlobalTypedSetting(
-		"system.healthCheckPersistenceSettings",
-		health.Settings{},
-		"controls persistence latency and error-ratio health check thresholds: an overall bucket across all operations plus optional named operation groups; empty disables the group checks",
 	)
 	PersistenceHealthSignalWindowSize = NewGlobalDurationSetting(
 		"system.persistenceHealthSignalWindowSize",
