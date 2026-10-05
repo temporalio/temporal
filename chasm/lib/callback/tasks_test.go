@@ -340,7 +340,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				tc.assertOutcome(t, c, executeErr)
 			})
 
-			if tc.expectedMetricOutcome != "success" {
+			if tc.expectedEvent != "success" {
 				capture.RequireContains(t, testlogger.CapturedLogPattern{
 					Level:   testlogger.Error,
 					Message: "Callback request failed",
