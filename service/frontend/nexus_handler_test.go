@@ -129,7 +129,7 @@ func newOperationContext(options contextOptions) *operationContext {
 		"",
 		dynamicconfig.GetBoolPropertyFn(false), // exposeAuthorizerErrors
 		dynamicconfig.GetBoolPropertyFn(false), // enableCrossNamespaceCommands
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalPropagation
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // enablePrincipalHeader
 		dynamicconfig.GetBoolPropertyFn(false),                    // disableStreamingAuthorizer
 	)
 	oc.namespaceConcurrencyLimitInterceptor = interceptor.NewConcurrentRequestLimitInterceptor(
