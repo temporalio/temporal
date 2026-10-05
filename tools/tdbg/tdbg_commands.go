@@ -381,7 +381,7 @@ OUTPUT FORMAT
     namespace, schedule_id, workflow_type
     window {start, end}            the audited time range
     as_of                         stable observation time used for trailing-edge maturity
-    audit_status                   complete, inconclusive_schedule_changed, or inconclusive_jitter_seed
+    audit_status                   complete or inconclusive_schedule_changed
     delay_threshold                effective late threshold (defaults to 1m when the flag is unset)
     overlap_policy                 the schedule's overlap policy (short name, e.g. BufferAll)
     overlap_class                  how that policy treats overlaps, which drives classification:
@@ -427,7 +427,7 @@ OUTPUT FORMAT
                                    (durations are Go duration strings, e.g. "5m0s")
 
 CAVEATS AND LIMITATIONS
-  Retention: when --start is older than the namespace's retention boundary (now - retention), the window start is
+  Retention: when --lookback-start is older than the namespace's retention boundary (now - retention), the window start is
     clamped to that boundary and a warning is logged to stderr. Visibility purges closed workflows after retention, so
     querying past it would surface purged data as false-positive real_miss; clamping audits only the portion that still
     has data.
@@ -435,9 +435,8 @@ CAVEATS AND LIMITATIONS
   Schedule modified after the window start: audit_status is inconclusive_schedule_changed. The audit can't compute the
     historical spec, so it emits the schedule without per-fire verdicts.
 
-  Jittered schedules: legacy V1 schedules used a different jitter seed and DescribeSchedule does not expose which seed
-    produced a historical interval. These are emitted with audit_status=inconclusive_jitter_seed instead of making a
-    seed-dependent miss or overlap claim.
+  Jittered schedules: the audit uses the modern V1/CHASM seed: namespace UUID plus schedule ID.
+    Historical V1 actions before NewCacheAndJitter used an empty seed and are outside this reconstruction contract.
 
   Paused / exhausted schedules: exhausted schedules are always dropped. Paused schedules are dropped unless
     --include-paused, which audits them and classifies unmatched times as 'paused' (benign) -- or as
@@ -465,45 +464,45 @@ INPUT STREAM (for --file / stdin)
     {"namespace":"analytics-staging","schedule_id":"my-schedule"}
 
 PRECEDENCE
-  With a --file/stdin stream, the stream is the source of targets and the flags are constraints: every streamed
-  target must agree with --namespace and --schedule-id when those are set, otherwise the run errors. Pass --namespace
+  With a --file/stdin stream, the stream is the source of targets; environment/default namespaces are ignored.
+  Explicit flags are constraints: every streamed target must agree with --namespace and --schedule-id when those are set, otherwise the run errors. Pass --namespace
   to guarantee the audit stays within a single namespace.
-  With no stream (an interactive terminal and no --file), the flags define the target directly: --namespace alone
-  audits that whole namespace; --namespace + --schedule-id audits that one schedule.
+  With no stream (an interactive terminal and no --file), namespace comes from an explicit flag, then
+  TEMPORAL_CLI_NAMESPACE, then default. --schedule-id selects one schedule within that namespace.
 
 TIME WINDOW
-  --start / --end take a duration before now (e.g. 24h, 3d, 90m, 0s); "d" means exactly 24h. --start-time / --end-time
-  take an absolute RFC3339 timestamp instead. --start is required (or --start-time); --end defaults to now. The
-  duration and timestamp forms of a bound are mutually exclusive.
+  --lookback-start / --lookback-end take a duration before now (e.g. 24h, 3d, 90m, 0s); "d" means exactly 24h.
+  --start-time / --end-time take an absolute RFC3339 timestamp instead. --lookback-start is required (or --start-time);
+  --lookback-end defaults to now. The duration and timestamp forms of a bound are mutually exclusive.
 
 EXAMPLES
   Last 24 hours of a namespace, save to a file:
-    tdbg schedule audit --namespace my-ns --start 24h > audit.jsonl
+    tdbg schedule audit --namespace my-ns --lookback-start 24h > audit.jsonl
 
   Last 3 days ending 6 hours ago:
-    tdbg schedule audit --namespace my-ns --start 3d --end 6h > audit.jsonl
+    tdbg schedule audit --namespace my-ns --lookback-start 3d --lookback-end 6h > audit.jsonl
 
   Absolute window from a file of targets:
     tdbg schedule audit -f ./targets.jsonl \
       --start-time 2026-05-01T19:30:00Z --end-time 2026-05-02T10:00:00Z > audit.jsonl
 
   Pipe a JSONL target stream from stdin (jq, psql, awk, etc.):
-    cat ./targets.jsonl | tdbg schedule audit --start 2d
+    cat ./targets.jsonl | tdbg schedule audit --lookback-start 2d
 
   Single schedule deep-dive over an absolute window:
     tdbg schedule audit --namespace my-ns --schedule-id my-schedule \
       --start-time 2026-05-19T18:00:00Z --end-time 2026-05-19T22:00:00Z
 
   Pipe stdout through jq (e.g. only schedules with real misses):
-    tdbg schedule audit -f ./targets.jsonl --start 1d | jq 'select(.counts.real_miss > 0)'`,
+    tdbg schedule audit -f ./targets.jsonl --lookback-start 1d | jq 'select(.counts.real_miss > 0)'`,
 			Flags: []cli.Flag{
-				&cli.StringFlag{
+				&namespaceFlag{StringFlag: cli.StringFlag{
 					Name:    FlagNamespace,
 					Aliases: FlagNamespaceAlias,
-					Usage: "Audit this namespace. With no stream, audits the whole namespace. With a --file/stdin " +
+					Usage: "Audit this namespace. Without a stream, defaults to TEMPORAL_CLI_NAMESPACE or default. With a --file/stdin " +
 						"stream, it is a constraint: every streamed target must be in this namespace or the run errors, " +
 						"guaranteeing the audit stays within a single namespace.",
-				},
+				}},
 				&cli.StringFlag{
 					Name:    FlagFile,
 					Aliases: FlagFileAlias,
@@ -524,7 +523,7 @@ EXAMPLES
 				},
 				&cli.StringFlag{
 					Name:  FlagStartTime,
-					Usage: "Window start as an absolute RFC3339 timestamp. Mutually exclusive with --start.",
+					Usage: "Window start as an absolute RFC3339 timestamp. Mutually exclusive with --lookback-start.",
 				},
 				&cli.StringFlag{
 					Name: FlagEnd,
@@ -533,7 +532,7 @@ EXAMPLES
 				},
 				&cli.StringFlag{
 					Name:  FlagEndTime,
-					Usage: "Window end as an absolute RFC3339 timestamp. Defaults to now; mutually exclusive with --end.",
+					Usage: "Window end as an absolute RFC3339 timestamp. Defaults to now; mutually exclusive with --lookback-end.",
 				},
 				&cli.IntFlag{
 					Name:  FlagConcurrency,

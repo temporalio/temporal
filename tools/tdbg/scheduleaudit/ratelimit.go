@@ -2,6 +2,7 @@ package scheduleaudit
 
 import (
 	"context"
+	"hash/fnv"
 
 	"golang.org/x/time/rate"
 )
@@ -37,14 +38,7 @@ func (n *NamespaceRateLimiter) Wait(ctx context.Context, namespace string) error
 }
 
 func (n *NamespaceRateLimiter) limiterFor(namespace string) *rate.Limiter {
-	const (
-		offset64 = 14695981039346656037
-		prime64  = 1099511628211
-	)
-	hash := uint64(offset64)
-	for i := range len(namespace) {
-		hash ^= uint64(namespace[i])
-		hash *= prime64
-	}
-	return n.shards[hash%uint64(len(n.shards))]
+	hash := fnv.New64a()
+	_, _ = hash.Write([]byte(namespace))
+	return n.shards[hash.Sum64()%uint64(len(n.shards))]
 }

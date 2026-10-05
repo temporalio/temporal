@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
@@ -205,7 +205,7 @@ func (l *grpcExecutionLoader) ListExecutions(ctx context.Context, namespace stri
 func executionQuery(scheduleIDs []string, queryStart, windowEnd time.Time) string {
 	quotedIDs := make([]string, len(scheduleIDs))
 	for i, id := range scheduleIDs {
-		quotedIDs[i] = strconv.Quote(id)
+		quotedIDs[i] = sqlparser.String(sqlparser.NewStrVal([]byte(id)))
 	}
 	start := queryStart.UTC().Format(time.RFC3339)
 	end := windowEnd.UTC().Format(time.RFC3339)

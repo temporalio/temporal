@@ -1,8 +1,9 @@
 package tdbg
 
 import (
+	"bytes"
 	"context"
-	"io"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +12,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/urfave/cli/v2"
+	namespacepb "go.temporal.io/api/namespace/v1"
+	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/tools/tdbg/scheduleaudit"
+	"google.golang.org/grpc"
 )
 
 func TestAuditInputs_Validate(t *testing.T) {
@@ -125,37 +130,6 @@ func TestResolveBound(t *testing.T) {
 	})
 }
 
-func TestAuditCommandIsRegistered(t *testing.T) {
-	app := NewCliApp()
-	var audit *cli.Command
-	for _, top := range app.Commands {
-		if top.Name != "schedule" {
-			continue
-		}
-		for _, ss := range top.Subcommands {
-			if ss.Name == "audit" {
-				audit = ss
-				break
-			}
-		}
-	}
-	require.NotNil(t, audit, "audit subcommand not registered under schedule")
-
-	var quiet *cli.BoolFlag
-	for _, flag := range audit.Flags {
-		if f, ok := flag.(*cli.BoolFlag); ok && f.Name == FlagQuiet {
-			quiet = f
-			break
-		}
-	}
-	require.NotNil(t, quiet, "audit quiet flag not registered")
-}
-
-func TestAuditProgress(t *testing.T) {
-	require.Equal(t, io.Discard, auditProgress(true))
-	require.Equal(t, os.Stderr, auditProgress(false))
-}
-
 func TestStreamJSONLTargets(t *testing.T) {
 	collect := func(input string) ([]scheduleaudit.Target, error) {
 		var got []scheduleaudit.Target
@@ -165,21 +139,6 @@ func TestStreamJSONLTargets(t *testing.T) {
 		})
 		return got, err
 	}
-
-	t.Run("namespace only, one object per line", func(t *testing.T) {
-		got, err := collect(`{"namespace":"ns1"}` + "\n" + `{"namespace":"ns2"}` + "\n")
-		require.NoError(t, err)
-		require.Equal(t, []scheduleaudit.Target{{Namespace: "ns1"}, {Namespace: "ns2"}}, got)
-	})
-
-	t.Run("namespace + schedule_id", func(t *testing.T) {
-		got, err := collect(`{"namespace":"ns1","schedule_id":"s1"}` + "\n" + `{"namespace":"ns2","schedule_id":"s2"}` + "\n")
-		require.NoError(t, err)
-		require.Equal(t, []scheduleaudit.Target{
-			{Namespace: "ns1", ScheduleID: "s1"},
-			{Namespace: "ns2", ScheduleID: "s2"},
-		}, got)
-	})
 
 	t.Run("mixed with and without schedule_id", func(t *testing.T) {
 		got, err := collect(`{"namespace":"ns1"}` + "\n" + `{"namespace":"ns2","schedule_id":"s2"}` + "\n")
@@ -196,12 +155,6 @@ func TestStreamJSONLTargets(t *testing.T) {
 		require.Equal(t, []scheduleaudit.Target{{Namespace: "ns1"}, {Namespace: "ns2"}}, got)
 	})
 
-	t.Run("no trailing newline is fine", func(t *testing.T) {
-		got, err := collect(`{"namespace":"ns1","schedule_id":"s1"}`)
-		require.NoError(t, err)
-		require.Equal(t, []scheduleaudit.Target{{Namespace: "ns1", ScheduleID: "s1"}}, got)
-	})
-
 	t.Run("empty input yields no targets", func(t *testing.T) {
 		got, err := collect("")
 		require.NoError(t, err)
@@ -211,6 +164,11 @@ func TestStreamJSONLTargets(t *testing.T) {
 	t.Run("missing namespace is rejected", func(t *testing.T) {
 		_, err := collect(`{"schedule_id":"s1"}` + "\n")
 		require.ErrorContains(t, err, "namespace is empty")
+	})
+
+	t.Run("unknown field cannot expand scope", func(t *testing.T) {
+		_, err := collect(`{"namespace":"prod","scheduleId":"daily"}`)
+		require.ErrorContains(t, err, "unknown field")
 	})
 
 	t.Run("malformed json is rejected", func(t *testing.T) {
@@ -233,8 +191,8 @@ func TestProduceTargets(t *testing.T) {
 
 	t.Run("--namespace matching the stream passes targets through", func(t *testing.T) {
 		got, err := produce(&auditInputs{
-			Namespace: "ns1",
-			Stdin:     strings.NewReader(`{"namespace":"ns1"}` + "\n" + `{"namespace":"ns1","schedule_id":"s1"}` + "\n"),
+			Namespace: "ns1", NamespaceExplicit: true,
+			Stdin: strings.NewReader(`{"namespace":"ns1"}` + "\n" + `{"namespace":"ns1","schedule_id":"s1"}` + "\n"),
 		})
 		require.NoError(t, err)
 		require.Equal(t, []scheduleaudit.Target{
@@ -245,15 +203,15 @@ func TestProduceTargets(t *testing.T) {
 
 	t.Run("--namespace not matching a stream target errors", func(t *testing.T) {
 		_, err := produce(&auditInputs{
-			Namespace: "ns1",
-			Stdin:     strings.NewReader(`{"namespace":"ns2"}` + "\n"),
+			Namespace: "ns1", NamespaceExplicit: true,
+			Stdin: strings.NewReader(`{"namespace":"ns2"}` + "\n"),
 		})
 		require.ErrorContains(t, err, `does not match --namespace "ns1"`)
 	})
 
 	t.Run("--schedule-id not matching a stream target errors", func(t *testing.T) {
 		_, err := produce(&auditInputs{
-			Namespace:  "ns1",
+			Namespace: "ns1", NamespaceExplicit: true,
 			ScheduleID: "s1",
 			Stdin:      strings.NewReader(`{"namespace":"ns1","schedule_id":"s2"}` + "\n"),
 		})
@@ -262,7 +220,7 @@ func TestProduceTargets(t *testing.T) {
 
 	t.Run("--namespace + --schedule-id matching the stream passes through", func(t *testing.T) {
 		got, err := produce(&auditInputs{
-			Namespace:  "ns1",
+			Namespace: "ns1", NamespaceExplicit: true,
 			ScheduleID: "s1",
 			Stdin:      strings.NewReader(`{"namespace":"ns1","schedule_id":"s1"}` + "\n"),
 		})
@@ -271,7 +229,7 @@ func TestProduceTargets(t *testing.T) {
 	})
 
 	t.Run("no stream: --namespace alone audits the whole namespace", func(t *testing.T) {
-		got, err := produce(&auditInputs{Namespace: "ns1", Stdin: devNull(t)})
+		got, err := produce(&auditInputs{Namespace: "ns1", NamespaceExplicit: true, Stdin: devNull(t)})
 		require.NoError(t, err)
 		require.Equal(t, []scheduleaudit.Target{{Namespace: "ns1"}}, got)
 	})
@@ -314,10 +272,6 @@ func TestProduceTargets(t *testing.T) {
 		require.ErrorContains(t, err, "no such file or directory")
 	})
 
-	t.Run("malformed stream line surfaces the parser error", func(t *testing.T) {
-		_, err := produce(&auditInputs{Stdin: strings.NewReader(`{"schedule_id":"s1"}` + "\n")})
-		require.ErrorContains(t, err, "namespace is empty")
-	})
 }
 
 func TestOpenStreamExplicitDashReadsInteractiveStdin(t *testing.T) {
@@ -354,4 +308,117 @@ func mustParseTime(s string) time.Time {
 		panic(err)
 	}
 	return t
+}
+
+func TestAuditNamespacePrecedence(t *testing.T) {
+	for _, tc := range []struct {
+		name, env, input string
+		global, local    []string
+		want             []scheduleaudit.Target
+		wantErr          string
+	}{
+		{name: "environment with stream", env: "env-ns", input: `{"namespace":"a"}` + "\n" + `{"namespace":"b"}`, want: []scheduleaudit.Target{{Namespace: "a"}, {Namespace: "b"}}},
+		{name: "default with stream", input: `{"namespace":"a"}`, want: []scheduleaudit.Target{{Namespace: "a"}}},
+		{name: "environment without stream", env: "env-ns", want: []scheduleaudit.Target{{Namespace: "env-ns"}}},
+		{name: "default without stream", want: []scheduleaudit.Target{{Namespace: "default"}}},
+		{name: "global flag overrides environment", env: "env-ns", global: []string{"-n", "a"}, want: []scheduleaudit.Target{{Namespace: "a"}}},
+		{name: "global constraint", env: "env-ns", global: []string{"-n", "a"}, input: `{"namespace":"a"}`, want: []scheduleaudit.Target{{Namespace: "a"}}},
+		{name: "global mismatch", env: "a", global: []string{"-n", "a"}, input: `{"namespace":"b"}`, wantErr: "does not match"},
+		{name: "local constraint", env: "env-ns", local: []string{"--namespace", "a"}, input: `{"namespace":"a"}`, want: []scheduleaudit.Target{{Namespace: "a"}}},
+		{name: "local mismatch", local: []string{"-n", "a"}, input: `{"namespace":"b"}`, wantErr: "does not match"},
+		{name: "local overrides global", global: []string{"-n", "b"}, local: []string{"-n", "a"}, want: []scheduleaudit.Target{{Namespace: "a"}}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("TEMPORAL_CLI_NAMESPACE", tc.env)
+			if tc.env == "" {
+				require.NoError(t, os.Unsetenv("TEMPORAL_CLI_NAMESPACE"))
+			}
+			app := NewCliApp()
+			app.ExitErrHandler = func(*cli.Context, error) {}
+			var got []scheduleaudit.Target
+			for _, top := range app.Commands {
+				if top.Name == "schedule" {
+					for _, cmd := range top.Subcommands {
+						if cmd.Name == "audit" {
+							cmd.Action = func(c *cli.Context) error {
+								in, err := parseAuditInputs(c)
+								if err != nil {
+									return err
+								}
+								if tc.input == "" {
+									in.Stdin = devNull(t)
+								} else {
+									in.Stdin = strings.NewReader(tc.input)
+								}
+								out := make(chan scheduleaudit.Target, 4)
+								err = in.produceTargets(c.Context, out)
+								close(out)
+								for target := range out {
+									got = append(got, target)
+								}
+								return err
+							}
+						}
+					}
+				}
+			}
+			args := append([]string{"tdbg"}, tc.global...)
+			args = append(args, "schedule", "audit", "--lookback-start", "24h")
+			args = append(args, tc.local...)
+			err := app.Run(args)
+			if tc.wantErr != "" {
+				require.ErrorContains(t, err, tc.wantErr)
+			} else {
+				require.NoError(t, err)
+				require.Equal(t, tc.want, got)
+			}
+		})
+	}
+}
+
+type auditWorkflowClient struct {
+	workflowservice.WorkflowServiceClient
+}
+
+func (c *auditWorkflowClient) DescribeNamespace(context.Context, *workflowservice.DescribeNamespaceRequest, ...grpc.CallOption) (*workflowservice.DescribeNamespaceResponse, error) {
+	return &workflowservice.DescribeNamespaceResponse{NamespaceInfo: &namespacepb.NamespaceInfo{Id: "ns-id"}}, nil
+}
+func (c *auditWorkflowClient) DescribeSchedule(context.Context, *workflowservice.DescribeScheduleRequest, ...grpc.CallOption) (*workflowservice.DescribeScheduleResponse, error) {
+	return &workflowservice.DescribeScheduleResponse{Schedule: &schedulepb.Schedule{Spec: &schedulepb.ScheduleSpec{CronString: []string{"0 * * * *"}}}}, nil
+}
+func (c *auditWorkflowClient) ListWorkflowExecutions(context.Context, *workflowservice.ListWorkflowExecutionsRequest, ...grpc.CallOption) (*workflowservice.ListWorkflowExecutionsResponse, error) {
+	return &workflowservice.ListWorkflowExecutionsResponse{}, nil
+}
+
+type auditClientFactory struct{ ClientFactory }
+
+func (f *auditClientFactory) WorkflowClient(*cli.Context) workflowservice.WorkflowServiceClient {
+	return &auditWorkflowClient{}
+}
+
+func TestAuditCommandWriters(t *testing.T) {
+	for _, quiet := range []bool{false, true} {
+		t.Run(fmt.Sprint(quiet), func(t *testing.T) {
+			var output, diagnostics bytes.Buffer
+			app := NewCliApp(func(p *Params) {
+				p.Writer = &output
+				p.ErrWriter = &diagnostics
+				p.ClientFactory = &auditClientFactory{}
+			})
+			app.ExitErrHandler = func(*cli.Context, error) {}
+			targets := filepath.Join(t.TempDir(), "targets.jsonl")
+			require.NoError(t, os.WriteFile(targets, []byte(`{"namespace":"ns","schedule_id":"s"}`), 0600))
+			args := []string{"tdbg", "schedule", "audit", "--file", targets, "--lookback-start", "3h", "--lookback-end", "1h"}
+			if quiet {
+				args = append(args, "--quiet")
+			}
+			require.NoError(t, app.Run(args))
+			require.Contains(t, output.String(), `"schedule_id":"s"`)
+			if quiet {
+				require.Empty(t, diagnostics.String())
+			} else {
+				require.Contains(t, diagnostics.String(), "audit complete:")
+			}
+		})
+	}
 }

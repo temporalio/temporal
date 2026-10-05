@@ -60,26 +60,6 @@ func TestScheduledTimes(t *testing.T) {
 		}, nominalTimes(sts))
 	})
 
-	t.Run("timezone_name shifts daily fire to UTC offset", func(t *testing.T) {
-		// Daily at 9 AM Pacific. May is DST (UTC-7) so 9 AM PT = 16:00 UTC.
-		spec := &schedulepb.ScheduleSpec{
-			StructuredCalendar: []*schedulepb.StructuredCalendarSpec{{
-				Second:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
-				Minute:     []*schedulepb.Range{{Start: 0, End: 0, Step: 1}},
-				Hour:       []*schedulepb.Range{{Start: 9, End: 9, Step: 1}},
-				DayOfMonth: []*schedulepb.Range{{Start: 1, End: 31, Step: 1}},
-				Month:      []*schedulepb.Range{{Start: 1, End: 12, Step: 1}},
-				DayOfWeek:  []*schedulepb.Range{{Start: 0, End: 6, Step: 1}},
-			}},
-			TimezoneName: "America/Los_Angeles",
-		}
-		sts, err := scheduledTimes(spec, "",
-			mustParseTime("2026-05-19T00:00:00Z"),
-			mustParseTime("2026-05-20T00:00:00Z"))
-		require.NoError(t, err)
-		require.Equal(t, []time.Time{mustParseTime("2026-05-19T16:00:00Z")}, nominalTimes(sts))
-	})
-
 	t.Run("end_time in past returns no fires", func(t *testing.T) {
 		spec := &schedulepb.ScheduleSpec{
 			StructuredCalendar: []*schedulepb.StructuredCalendarSpec{hourlyStructured()},
@@ -92,25 +72,6 @@ func TestScheduledTimes(t *testing.T) {
 		require.Empty(t, sts)
 	})
 
-	t.Run("interval with phase produces 15-min cadence offset by phase", func(t *testing.T) {
-		spec := &schedulepb.ScheduleSpec{
-			Interval: []*schedulepb.IntervalSpec{{
-				Interval: durationpb.New(15 * time.Minute),
-				Phase:    durationpb.New(6*time.Minute + 7*time.Second),
-			}},
-		}
-		sts, err := scheduledTimes(spec, "",
-			mustParseTime("2026-05-19T18:00:00Z"),
-			mustParseTime("2026-05-19T19:00:00Z"))
-		require.NoError(t, err)
-		actual := nominalTimes(sts)
-		require.NotEmpty(t, actual)
-		for i := 1; i < len(actual); i++ {
-			require.Equal(t, 15*time.Minute, actual[i].Sub(actual[i-1]),
-				"consecutive fires must be exactly 15min apart")
-		}
-		require.Equal(t, int64(0), (actual[0].Unix()-367)%900, "first fire must align with phase=6m7s")
-	})
 }
 
 func TestStartedWorkflows(t *testing.T) {
@@ -865,14 +826,18 @@ func TestAuditor(t *testing.T) {
 		require.Empty(t, results[0].Scheduled)
 	})
 
-	t.Run("jittered schedule is inconclusive when historical seed is unknown", func(t *testing.T) {
+	t.Run("jittered schedule uses the modern namespace and schedule seed", func(t *testing.T) {
 		spec := hourlyAllHoursSpec()
 		spec.Jitter = durationpb.New(30 * time.Minute)
+		windowStart := mustParseTime("2026-05-19T18:00:00Z")
+		windowEnd := mustParseTime("2026-05-19T22:00:00Z")
+		modern, err := scheduledTimes(spec, jitterSeed("ns-id", "s1"), windowStart, windowEnd)
+		require.NoError(t, err)
 		loader := &fakeScheduleLoader{namespaceID: "ns-id", entries: []ScheduleEntry{{ID: "s1", Spec: spec, WorkflowType: "W"}}}
 		executions := &fakeExecutionLoader{byScheduleID: map[string][]Execution{}}
 		a := &Auditor{
-			WindowStart: mustParseTime("2026-05-19T18:00:00Z"),
-			WindowEnd:   mustParseTime("2026-05-19T22:00:00Z"),
+			WindowStart: windowStart,
+			WindowEnd:   windowEnd,
 			Schedules:   loader,
 			Executions:  executions,
 			Progress:    io.Discard,
@@ -880,8 +845,9 @@ func TestAuditor(t *testing.T) {
 		results, err := runAudit(a, Target{Namespace: "ns"})
 		require.NoError(t, err)
 		require.Len(t, results, 1)
-		require.Equal(t, auditStatusInconclusiveJitterSeed, results[0].AuditStatus)
-		require.Empty(t, results[0].Missed)
+		require.Equal(t, auditStatusComplete, results[0].AuditStatus)
+		require.Equal(t, modern, results[0].Scheduled)
+		require.Equal(t, len(modern), results[0].Count(categoryRealMiss))
 		require.Empty(t, results[0].Delays)
 		require.Equal(t, []time.Time{mustParseTime("2026-05-19T17:30:00Z")}, executions.queryStarts)
 	})

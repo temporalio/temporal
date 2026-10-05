@@ -27,7 +27,10 @@ func AdminAuditSchedules(c *cli.Context, factory ClientFactory) error {
 	}
 
 	wfClient := factory.WorkflowClient(c)
-	progress := auditProgress(in.Quiet)
+	progress := c.App.ErrWriter
+	if in.Quiet {
+		progress = io.Discard
+	}
 	limiter := scheduleaudit.NewNamespaceRateLimiter(in.RPS)
 	listLimiter := scheduleaudit.NewNamespaceRateLimiter(in.ListRPS)
 	stats := scheduleaudit.NewStats()
@@ -45,7 +48,7 @@ func AdminAuditSchedules(c *cli.Context, factory ClientFactory) error {
 	}
 
 	auditStart := time.Now()
-	rw := scheduleaudit.NewRowWriter(os.Stdout, in.DelayThreshold)
+	rw := scheduleaudit.NewRowWriter(c.App.Writer, in.DelayThreshold)
 	var flagged int
 
 	g, ctx := errgroup.WithContext(c.Context)
@@ -73,23 +76,17 @@ func AdminAuditSchedules(c *cli.Context, factory ClientFactory) error {
 	return nil
 }
 
-func auditProgress(quiet bool) io.Writer {
-	if quiet {
-		return io.Discard
-	}
-	return os.Stderr
-}
-
 // auditInputs holds the parsed, validated CLI inputs. Targets are not materialized here -- they are streamed by
 // produceTargets so processing can begin before the whole target stream is read.
 type auditInputs struct {
-	Namespace   string
-	ScheduleID  string
-	File        string
-	Stdin       io.Reader
-	WindowStart time.Time
-	WindowEnd   time.Time
-	AsOf        time.Time
+	Namespace         string
+	NamespaceExplicit bool
+	ScheduleID        string
+	File              string
+	Stdin             io.Reader
+	WindowStart       time.Time
+	WindowEnd         time.Time
+	AsOf              time.Time
 
 	Concurrency    int
 	RPS            int
@@ -100,17 +97,19 @@ type auditInputs struct {
 }
 
 func parseAuditInputs(c *cli.Context) (*auditInputs, error) {
+	namespace, explicit := auditNamespace(c)
 	in := &auditInputs{
-		Namespace:      c.String(FlagNamespace),
-		ScheduleID:     c.String(FlagScheduleID),
-		File:           c.String(FlagFile),
-		Stdin:          os.Stdin,
-		Concurrency:    c.Int(FlagConcurrency),
-		RPS:            c.Int(FlagRPS),
-		ListRPS:        c.Int(FlagListRPS),
-		DelayThreshold: c.Duration(FlagDelayThreshold),
-		IncludePaused:  c.Bool(FlagIncludePaused),
-		Quiet:          c.Bool(FlagQuiet),
+		Namespace:         namespace,
+		NamespaceExplicit: explicit,
+		ScheduleID:        c.String(FlagScheduleID),
+		File:              c.String(FlagFile),
+		Stdin:             os.Stdin,
+		Concurrency:       c.Int(FlagConcurrency),
+		RPS:               c.Int(FlagRPS),
+		ListRPS:           c.Int(FlagListRPS),
+		DelayThreshold:    c.Duration(FlagDelayThreshold),
+		IncludePaused:     c.Bool(FlagIncludePaused),
+		Quiet:             c.Bool(FlagQuiet),
 	}
 	if in.Concurrency <= 0 {
 		in.Concurrency = 1
@@ -126,16 +125,16 @@ func parseAuditInputs(c *cli.Context) (*auditInputs, error) {
 	in.AsOf = now
 	start, ok, err := resolveBound(c.String(FlagStart), c.String(FlagStartTime), now)
 	if err != nil {
-		return nil, fmt.Errorf("--start/--start-time: %w", err)
+		return nil, fmt.Errorf("--lookback-start/--start-time: %w", err)
 	}
 	if !ok {
-		return nil, errors.New("one of --start (duration before now) or --start-time (RFC3339) is required")
+		return nil, errors.New("one of --lookback-start (duration before now) or --start-time (RFC3339) is required")
 	}
 	in.WindowStart = start
 
 	end, ok, err := resolveBound(c.String(FlagEnd), c.String(FlagEndTime), now)
 	if err != nil {
-		return nil, fmt.Errorf("--end/--end-time: %w", err)
+		return nil, fmt.Errorf("--lookback-end/--end-time: %w", err)
 	}
 	if !ok {
 		end = now // default: audit up to now
@@ -190,19 +189,19 @@ func (in *auditInputs) validate(now time.Time) error {
 		return errors.New("--schedule-id is only valid with --namespace")
 	}
 	if !in.WindowEnd.After(in.WindowStart) {
-		return fmt.Errorf("--end (%s) must be after --start (%s)",
+		return fmt.Errorf("--lookback-end (%s) must be after --lookback-start (%s)",
 			in.WindowEnd.UTC().Format(time.RFC3339),
 			in.WindowStart.UTC().Format(time.RFC3339))
 	}
 	if in.WindowEnd.After(now) {
-		return fmt.Errorf("--end (%s) must not be in the future", in.WindowEnd.UTC().Format(time.RFC3339))
+		return fmt.Errorf("--lookback-end (%s) must not be in the future", in.WindowEnd.UTC().Format(time.RFC3339))
 	}
 	return nil
 }
 
 // produceTargets streams audit targets into out. When a JSONL stream is present (--file, or piped/redirected stdin),
-// it is the source of targets and the --namespace / --schedule-id flags act as constraints: every streamed target
-// must agree with any flag that is set, otherwise produceTargets errors. This lets a caller pass --namespace to
+// it is the source of targets and explicit --namespace / --schedule-id flags act as constraints: every streamed target
+// must agree with any flag that is set, otherwise produceTargets errors. Environment/default namespaces do not constrain streams. This lets a caller pass --namespace to
 // guarantee a run stays within a single namespace. When no stream is present (an interactive terminal, no --file), the
 // flags define a single target directly: --namespace alone audits that whole namespace, and --namespace +
 // --schedule-id audits that one schedule.
@@ -235,7 +234,7 @@ func (in *auditInputs) produceTargets(ctx context.Context, out chan<- scheduleau
 
 	// Stream present: the flags, when set, must match every streamed target.
 	return streamJSONLTargets(r, func(t scheduleaudit.Target) error {
-		if in.Namespace != "" && t.Namespace != in.Namespace {
+		if in.NamespaceExplicit && t.Namespace != in.Namespace {
 			return fmt.Errorf("stream target namespace %q does not match --namespace %q", t.Namespace, in.Namespace)
 		}
 		if in.ScheduleID != "" && t.ScheduleID != in.ScheduleID {
@@ -284,6 +283,7 @@ type targetLine struct {
 // auditor as they are read rather than being buffered. A missing namespace is a hard error.
 func streamJSONLTargets(r io.Reader, emit func(scheduleaudit.Target) error) error {
 	dec := json.NewDecoder(r)
+	dec.DisallowUnknownFields()
 	for dec.More() {
 		var tl targetLine
 		if err := dec.Decode(&tl); err != nil {

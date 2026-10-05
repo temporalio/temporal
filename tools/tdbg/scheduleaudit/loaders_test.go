@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"github.com/temporalio/sqlparser"
 	commonpb "go.temporal.io/api/common/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
@@ -167,18 +168,25 @@ func TestGRPCExecutionLoaderBatchesAndPaginates(t *testing.T) {
 	require.Equal(t, []byte("next"), client.requests[1].GetNextPageToken())
 	require.Equal(t, int32(visibilityPageSize), client.requests[0].GetPageSize())
 	require.Equal(t,
-		`TemporalScheduledById IN ("s1", "s2") AND ((TemporalScheduledStartTime >= "2026-05-19T18:00:00Z" AND TemporalScheduledStartTime <= "2026-05-19T22:00:00Z") OR (TemporalScheduledStartTime <= "2026-05-19T18:00:00Z" AND (CloseTime >= "2026-05-19T18:00:00Z" OR CloseTime IS NULL)))`,
+		`TemporalScheduledById IN ('s1', 's2') AND ((TemporalScheduledStartTime >= "2026-05-19T18:00:00Z" AND TemporalScheduledStartTime <= "2026-05-19T22:00:00Z") OR (TemporalScheduledStartTime <= "2026-05-19T18:00:00Z" AND (CloseTime >= "2026-05-19T18:00:00Z" OR CloseTime IS NULL)))`,
 		client.requests[0].GetQuery())
 }
 
-func TestExecutionQueryEscapesScheduleIDs(t *testing.T) {
-	query := executionQuery(
-		[]string{`quote"and\\slash`},
-		time.Date(2026, 5, 19, 18, 0, 0, 0, time.FixedZone("offset", -5*60*60)),
-		mustParseTime("2026-05-20T00:00:00Z"),
-	)
-	require.Contains(t, query, `TemporalScheduledById IN ("quote\"and\\\\slash")`)
-	require.Contains(t, query, `TemporalScheduledStartTime >= "2026-05-19T23:00:00Z"`)
+func TestExecutionQueryPreservesLiterals(t *testing.T) {
+	ids := []string{`quote"and\\slash`, "single'quote", "a') OR CloseTime IS NULL --", "unicode-東京"}
+	start := time.Date(2026, 5, 19, 18, 0, 0, 0, time.FixedZone("offset", -5*60*60))
+	end := mustParseTime("2026-05-20T00:00:00Z")
+	stmt, err := sqlparser.Parse("select * from table1 where " + executionQuery(ids, start, end))
+	require.NoError(t, err)
+	var values []string
+	require.NoError(t, sqlparser.Walk(func(node sqlparser.SQLNode) (bool, error) {
+		if value, ok := node.(*sqlparser.SQLVal); ok && value.Type == sqlparser.StrVal {
+			values = append(values, string(value.Val))
+		}
+		return true, nil
+	}, stmt))
+	want := append(append([]string{}, ids...), start.UTC().Format(time.RFC3339), end.Format(time.RFC3339), start.UTC().Format(time.RFC3339), start.UTC().Format(time.RFC3339))
+	require.Equal(t, want, values)
 }
 
 func TestGRPCExecutionLoaderTwentyFiveSchedulesOneRequest(t *testing.T) {

@@ -37,8 +37,7 @@ var errScheduledTimesExceededCap = errors.New("scheduled times exceeded cap (100
 // scheduledTimes returns the fires whose jittered fire time falls in (start, end]. It uses the server's spec compiler.
 //
 // jitterSeed must be the same seed the scheduler uses (see jitterSeed) so the returned Jittered times match the real
-// ones. Historical V1 executions may have used an empty seed; callers must not issue a confident verdict when that
-// historical version cannot be established.
+// ones. The audit targets modern V1 and CHASM schedules; historical V1 actions with an empty seed are outside this contract.
 func scheduledTimes(spec *schedulepb.ScheduleSpec, jitterSeed string, start, end time.Time) ([]ScheduledTime, error) {
 	if spec == nil {
 		return nil, nil
@@ -606,7 +605,6 @@ func (s *Stats) Snapshot() StatsSnapshot {
 const (
 	auditStatusComplete                    = "complete"
 	auditStatusInconclusiveScheduleChanged = "inconclusive_schedule_changed"
-	auditStatusInconclusiveJitterSeed      = "inconclusive_jitter_seed"
 
 	categoryOnTime              = "on_time"
 	categoryLate                = "late"
@@ -1230,11 +1228,7 @@ func (a *Auditor) prepareJob(ctx context.Context, job scheduleJob) (*preparedJob
 	if len(scheduled) == 0 {
 		return nil, nil
 	}
-	auditStatus := auditStatusComplete
-	if timestamp.DurationValue(entry.Spec.GetJitter()) > 0 {
-		auditStatus = auditStatusInconclusiveJitterSeed
-	}
-	return &preparedJob{scheduleJob: job, entry: entry, scheduled: scheduled, auditStatus: auditStatus}, nil
+	return &preparedJob{scheduleJob: job, entry: entry, scheduled: scheduled, auditStatus: auditStatusComplete}, nil
 }
 
 // analyzeSchedule classifies one prepared schedule against its visibility rows.
@@ -1252,16 +1246,6 @@ func (a *Auditor) analyzeSchedule(p preparedJob, entries []Execution) *Result {
 	inWindow := groupExecutions(inWindowEntries)
 	r := a.baseResult(p, inWindowEntries)
 	if p.scheduleChangedInWindow() {
-		r.Actual = len(inWindow)
-		return r
-	}
-	if p.auditStatus == auditStatusInconclusiveJitterSeed {
-		r.Expected = len(nominals)
-		for _, st := range nominals {
-			if inWindow.matchNominal(st) != nil {
-				r.Matched++
-			}
-		}
 		r.Actual = len(inWindow)
 		return r
 	}
