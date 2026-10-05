@@ -26,6 +26,7 @@ Express each rule as a concise, direct statement of the expected code or review 
 
 Before writing, reviewing, or running tests, read and follow the [testing guide](../docs/development/testing.md) for setup, assertions, polling, parallelization, and test helpers.
 
+- Subtests use their own `t` parameter rather than the parent's `t` or `s.T()`.
 - Tests use a table-driven structure when multiple cases exercise the same behavior. Every case has a descriptive name and runs as a subtest.
 - Tests compare a function's complete result with an expected value rather than asserting each field separately; field-level assertions are reserved for cases where only part of the result is relevant.
 - A goroutine that maintains a precondition for later assertions, such as `go s.someHelper(ctx, ...)`, loops until context cancellation or reports success before the test waits for its effect. This prevents a transiently failed attempt from exiting silently and leaving downstream eventual-consistency waits unable to succeed.
