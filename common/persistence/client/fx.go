@@ -173,7 +173,7 @@ func HealthSignalAggregatorProvider(
 			dynamicconfig.PersistenceHealthSignalBufferSize.Get(dynamicCollection)(),
 			metricsHandler,
 			logger,
-			dynamicconfig.HealthCheckPersistenceSettings.Get(dynamicCollection),
+			dynamicconfig.HealthHistoryPersistenceSettings.Get(dynamicCollection),
 		)
 		lc.Append(fx.StopHook(aggregator.Stop))
 		return aggregator
