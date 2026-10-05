@@ -209,12 +209,31 @@ func ValidateBranchTokenForExecution(
 	execution *commonpb.WorkflowExecution,
 	requestBranchToken []byte,
 ) ([]byte, error) {
+	branchToken, _, err := ValidateBranchTokenForExecutionWithMutableState(
+		ctx, shardContext, workflowConsistencyChecker, eventNotifier,
+		namespaceName, namespaceID, execution, requestBranchToken,
+	)
+	return branchToken, err
+}
+
+// ValidateBranchTokenForExecutionWithMutableState returns the state loaded during validation,
+// or nil when validation is disabled.
+func ValidateBranchTokenForExecutionWithMutableState(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	workflowConsistencyChecker WorkflowConsistencyChecker,
+	eventNotifier events.Notifier,
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
+	execution *commonpb.WorkflowExecution,
+	requestBranchToken []byte,
+) ([]byte, *historyservice.GetMutableStateResponse, error) {
 	config := shardContext.GetConfig()
 	if !config.EnablePaginationTokenBranchValidation() {
-		return requestBranchToken, nil
+		return requestBranchToken, nil, nil
 	}
 	if len(requestBranchToken) == 0 {
-		return nil, consts.ErrInvalidNextPageToken
+		return nil, nil, consts.ErrInvalidNextPageToken
 	}
 	shadowMode := config.EnablePaginationTokenBranchValidationShadowMode()
 
@@ -229,7 +248,7 @@ func ValidateBranchTokenForExecution(
 		eventNotifier,
 	)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	currentBranchToken := response.GetCurrentBranchToken()
@@ -240,7 +259,7 @@ func ValidateBranchTokenForExecution(
 		response.GetVersionHistories(),
 	)
 	if mismatchReason == "" {
-		return currentBranchToken, nil
+		return currentBranchToken, response, nil
 	}
 
 	reportBranchTokenMismatch(
@@ -252,11 +271,11 @@ func ValidateBranchTokenForExecution(
 		requestBranchToken,
 	)
 	if shadowMode {
-		return requestBranchToken, nil
+		return requestBranchToken, response, nil
 	}
 	if mismatchReason == branchTokenMismatchReasonSameBranchMetadata &&
 		config.EnablePaginationTokenBranchReplacement() {
-		return currentBranchToken, nil
+		return currentBranchToken, response, nil
 	}
-	return nil, serviceerror.NewInvalidArgument("request branchToken is not current.")
+	return nil, nil, serviceerror.NewInvalidArgument("request branchToken is not current.")
 }

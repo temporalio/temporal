@@ -6900,11 +6900,18 @@ func (wh *WorkflowHandler) getArchivedHistory(
 	for _, batch := range resp.HistoryBatches {
 		history.Events = append(history.Events, batch.Events...)
 	}
-	return &workflowservice.GetWorkflowExecutionHistoryResponse{
+	response := &workflowservice.GetWorkflowExecutionHistoryResponse{
 		History:       history,
 		NextPageToken: resp.NextPageToken,
 		Archived:      true,
-	}, nil
+	}
+	for _, event := range history.Events {
+		if started := event.GetWorkflowExecutionStartedEventAttributes(); started != nil {
+			response.PropagatedNexusSerializationContext = started.GetPropagatedNexusSerializationContext()
+			break
+		}
+	}
+	return response, nil
 }
 
 // cancelOutstandingPoll cancel outstanding poll if context was canceled and returns true. Otherwise returns false.

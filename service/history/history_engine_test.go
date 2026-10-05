@@ -18,6 +18,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -5576,6 +5577,11 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 
 func (s *engineSuite) TestEagerWorkflowStart_DoesNotCreateTransferTask() {
 	var recordedTasks []tasks.Task
+	serializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
 
 	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
 		recordedTasks = request.NewWorkflowSnapshot.Tasks[tasks.CategoryTransfer]
@@ -5593,13 +5599,14 @@ func (s *engineSuite) TestEagerWorkflowStart_DoesNotCreateTransferTask() {
 			NamespaceId: tests.NamespaceID.String(),
 			Attempt:     1,
 			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowId:            "test",
-				Namespace:             tests.Namespace.String(),
-				WorkflowType:          &commonpb.WorkflowType{Name: "test"},
-				TaskQueue:             &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "test"},
-				Identity:              "test",
-				RequestId:             "test",
-				RequestEagerExecution: true,
+				WorkflowId:                          "test",
+				Namespace:                           tests.Namespace.String(),
+				WorkflowType:                        &commonpb.WorkflowType{Name: "test"},
+				TaskQueue:                           &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "test"},
+				Identity:                            "test",
+				RequestId:                           "test",
+				RequestEagerExecution:               true,
+				PropagatedNexusSerializationContext: serializationContext,
 			},
 		})
 		return response, err
@@ -5773,6 +5780,11 @@ func (s *engineSuite) TestGetHistory() {
 func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.NewString()}
 	newRunID := uuid.NewString()
+	serializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
 
 	req := &historyservice.GetWorkflowExecutionHistoryRequest{
 		NamespaceId: tests.NamespaceID.String(),
@@ -5802,12 +5814,13 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 		},
 		NextEventId: 6,
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
-			NamespaceId:         tests.NamespaceID.String(),
-			WorkflowId:          we.WorkflowId,
-			VersionHistories:    versionHistories,
-			WorkflowTypeName:    "mytype",
-			LastFirstEventId:    5,
-			LastFirstEventTxnId: 100,
+			NamespaceId:                         tests.NamespaceID.String(),
+			WorkflowId:                          we.WorkflowId,
+			VersionHistories:                    versionHistories,
+			WorkflowTypeName:                    "mytype",
+			LastFirstEventId:                    5,
+			LastFirstEventTxnId:                 100,
+			PropagatedNexusSerializationContext: serializationContext,
 		},
 	}
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
@@ -5859,6 +5872,7 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 	resp, err := engine.GetWorkflowExecutionHistory(ctx, req)
 	s.NoError(err)
 	s.False(resp.Response.Archived)
+	s.ProtoEqual(serializationContext, resp.Response.GetPropagatedNexusSerializationContext())
 	event := resp.Response.History.Events[0]
 	s.Equal(int64(5), event.EventId)
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, event.EventType)
@@ -5874,6 +5888,7 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 	resp, err = engine.GetWorkflowExecutionHistory(ctx, req)
 	s.NoError(err)
 	s.False(resp.Response.Archived)
+	s.ProtoEqual(serializationContext, resp.Response.GetPropagatedNexusSerializationContext())
 	event = resp.Response.History.Events[0]
 	s.Equal(int64(5), event.EventId)
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW, event.EventType)
@@ -7105,6 +7120,11 @@ func (s *engineSuite) mockExecutionWithCurrentBranchToken(
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
 				NamespaceId: tests.NamespaceID.String(),
 				WorkflowId:  we.WorkflowId,
+				PropagatedNexusSerializationContext: &nexuspb.PropagatedSerializationContext{
+					Endpoint:  "endpoint",
+					Service:   "service",
+					Operation: "operation",
+				},
 				VersionHistories: &historyspb.VersionHistories{
 					CurrentVersionHistoryIndex: 0,
 					Histories: []*historyspb.VersionHistory{
@@ -7230,7 +7250,7 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_ForeignBranchTokenServedWh
 	} {
 		s.config.EnablePaginationTokenBranchValidation = dynamicconfig.GetBoolPropertyFn(tc.validation)
 		s.config.EnablePaginationTokenBranchValidationShadowMode = dynamicconfig.GetBoolPropertyFn(tc.shadow)
-		_, err = engine.GetWorkflowExecutionHistory(
+		resp, err := engine.GetWorkflowExecutionHistory(
 			context.Background(),
 			s.getHistoryRequestWithPageToken(&we, &tokenspb.HistoryContinuation{
 				RunId:             we.GetRunId(),
@@ -7241,7 +7261,12 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_ForeignBranchTokenServedWh
 				IsWorkflowRunning: true,
 			}, false),
 		)
-		s.NoError(err, tc.name)
+		s.Require().NoError(err, tc.name)
+		s.ProtoEqual(&nexuspb.PropagatedSerializationContext{
+			Endpoint:  "endpoint",
+			Service:   "service",
+			Operation: "operation",
+		}, resp.Response.GetPropagatedNexusSerializationContext())
 	}
 }
 

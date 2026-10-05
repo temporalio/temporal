@@ -20,6 +20,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
@@ -7342,6 +7343,29 @@ func (s *mutableStateSuite) TestSetContextMetadata() {
 	tq, ok := contextutil.ContextMetadataGet(ctx, contextutil.MetadataKeyWorkflowTaskQueue)
 	s.True(ok)
 	s.Equal(taskQueue, tq)
+}
+
+func (s *mutableStateSuite) TestWorkflowStartPersistsNexusSerializationContext() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).Times(1)
+	serializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
+	event, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:                        &commonpb.WorkflowType{Name: "workflow"},
+				TaskQueue:                           &taskqueuepb.TaskQueue{Name: "task-queue"},
+				PropagatedNexusSerializationContext: serializationContext,
+			},
+		},
+	)
+	s.Require().NoError(err)
+	s.Require().Equal(serializationContext, event.GetWorkflowExecutionStartedEventAttributes().GetPropagatedNexusSerializationContext())
+	s.Require().Equal(serializationContext, s.mutableState.GetExecutionInfo().GetPropagatedNexusSerializationContext())
 }
 
 func (s *mutableStateSuite) TestSetContextMetadata_ActivityResolution() {

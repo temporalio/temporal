@@ -174,6 +174,7 @@ message GetMutableStateResponse {
   // Transient or speculative workflow task events which are not yet persisted in the history.
   // These events should be appended to the history when it is returned to the worker.
   temporal.server.api.history.v1.TransientWorkflowTaskInfo transient_or_speculative_tasks = 26;
+  temporal.api.nexus.v1.PropagatedSerializationContext propagated_nexus_serialization_context = 27;
 }
 
 message PollMutableStateRequest {
@@ -398,6 +399,7 @@ message RecordActivityTaskStartedResponse {
   int64 start_version = 12;
   // ID of the activity run (applicable for standalone activities only)
   string activity_run_id = 13;
+  temporal.api.nexus.v1.PropagatedSerializationContext propagated_nexus_serialization_context = 14;
 }
 
 message RespondWorkflowTaskCompletedRequest {

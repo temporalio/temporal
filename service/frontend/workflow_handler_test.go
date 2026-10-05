@@ -23,6 +23,7 @@ import (
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
@@ -2297,9 +2298,21 @@ func (s *WorkflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespaceEntry, nil).AnyTimes()
 
 	nextPageToken := []byte{'1', '2', '3'}
+	serializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
 	historyBatch1 := &historypb.History{
 		Events: []*historypb.HistoryEvent{
-			{EventId: 1},
+			{
+				EventId: 1,
+				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+					WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+						PropagatedNexusSerializationContext: serializationContext,
+					},
+				},
+			},
 			{EventId: 2},
 		},
 	}
@@ -2328,6 +2341,7 @@ func (s *WorkflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 	s.Equal(history, resp.History)
 	s.Equal(nextPageToken, resp.NextPageToken)
 	s.True(resp.GetArchived())
+	s.ProtoEqual(serializationContext, resp.GetPropagatedNexusSerializationContext())
 }
 
 func (s *WorkflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidRequest() {
@@ -4067,6 +4081,11 @@ func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_InternalRawHistor
 	wh := s.getWorkflowHandler(config)
 	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New().String()}
 	newRunID := uuid.New().String()
+	serializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).Times(2)
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), gomock.Any()).Return(searchattribute.TestNameTypeMap(), nil).Times(2)
@@ -4083,7 +4102,8 @@ func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_InternalRawHistor
 		Request:     req,
 	}).Return(&historyservice.GetWorkflowExecutionHistoryResponse{
 		Response: &workflowservice.GetWorkflowExecutionHistoryResponse{
-			History: &historypb.History{},
+			History:                             &historypb.History{},
+			PropagatedNexusSerializationContext: serializationContext,
 		},
 		History: &historypb.History{
 			Events: []*historypb.HistoryEvent{
@@ -4120,6 +4140,7 @@ func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_InternalRawHistor
 	resp, err := wh.GetWorkflowExecutionHistory(ctx, req)
 	s.NoError(err)
 	s.False(resp.Archived)
+	s.ProtoEqual(serializationContext, resp.GetPropagatedNexusSerializationContext())
 	event := resp.History.Events[0]
 	s.Equal(int64(5), event.EventId)
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED, event.EventType)
