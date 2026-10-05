@@ -48,6 +48,7 @@ func (n invocableOutbound) Invoke(
 ) invocationResult {
 	callbackLogger := log.With(h.logger,
 		tag.WorkflowNamespace(ns.Name().String()),
+		tag.Operation("CompleteNexusOperation"),
 		tag.Destination(taskAttr.Destination),
 		tag.WorkflowID(n.businessID),
 		tag.WorkflowRunID(n.runID),
@@ -56,10 +57,8 @@ func (n invocableOutbound) Invoke(
 		tag.RequestID(n.requestID),
 	)
 	if h.httpTraceProvider != nil {
-		traceLogger := log.With(callbackLogger,
-			tag.Operation("CompleteNexusOperation"),
-			tag.AttemptStart(time.Now().UTC()),
-		)
+		// nolint:forbidigo // Wall-clock RPC timestamp, not component state; Invoke has no chasm.Context.
+		traceLogger := log.With(callbackLogger, tag.AttemptStart(time.Now().UTC()))
 		if trace := h.httpTraceProvider.NewTrace(n.attempt, traceLogger); trace != nil {
 			ctx = httptrace.WithClientTrace(ctx, trace)
 		}

@@ -247,6 +247,7 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 					Message: "Callback request failed",
 					Tags: map[string]any{
 						"nexus-stage":             "handler-outbound",
+						"operation":               "CompleteNexusOperation",
 						"error":                   testlogger.AnyTagValue,
 						"wf-namespace":            "namespace-name",
 						"destination":             "http://localhost",
