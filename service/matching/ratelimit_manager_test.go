@@ -75,12 +75,10 @@ func TestRateLimitManagerGrantTokens(t *testing.T) {
 			),
 		}
 
-		granted, limitedBy := manager.grantTokens(nil, 5)
+		granted := manager.grantTokens(nil, 5)
 		require.Equal(t, int32(2), granted)
-		require.Equal(t, eagerDispatchRateLimitGeneral, limitedBy)
-		granted, limitedBy = manager.grantTokens(nil, 1)
+		granted = manager.grantTokens(nil, 1)
 		require.Equal(t, int32(0), granted)
-		require.Equal(t, eagerDispatchRateLimitGeneral, limitedBy)
 	})
 
 	t.Run("new matcher applies the whole queue limit", func(t *testing.T) {
@@ -91,12 +89,10 @@ func TestRateLimitManagerGrantTokens(t *testing.T) {
 			wholeQueueLimit: makeSimpleLimiterParams(2, 500*time.Millisecond),
 		}
 
-		granted, limitedBy := manager.grantTokens(nil, 5)
+		granted := manager.grantTokens(nil, 5)
 		require.Equal(t, int32(2), granted)
-		require.Equal(t, eagerDispatchRateLimitGeneral, limitedBy)
-		granted, limitedBy = manager.grantTokens(nil, 1)
+		granted = manager.grantTokens(nil, 1)
 		require.Equal(t, int32(0), granted)
-		require.Equal(t, eagerDispatchRateLimitGeneral, limitedBy)
 	})
 
 	t.Run("new matcher isolates fairness keys", func(t *testing.T) {
@@ -111,20 +107,16 @@ func TestRateLimitManagerGrantTokens(t *testing.T) {
 
 		keyOne := &commonpb.Priority{FairnessKey: "one"}
 		keyTwo := &commonpb.Priority{FairnessKey: "two"}
-		granted, limitedBy := manager.grantTokens(keyOne, 20)
+		granted := manager.grantTokens(keyOne, 20)
 		require.Equal(t, int32(1), granted)
-		require.Equal(t, eagerDispatchRateLimitPerKey, limitedBy)
-		granted, limitedBy = manager.grantTokens(keyOne, 1)
+		granted = manager.grantTokens(keyOne, 1)
 		require.Equal(t, int32(0), granted)
-		require.Equal(t, eagerDispatchRateLimitPerKey, limitedBy)
-		granted, limitedBy = manager.grantTokens(keyTwo, 1)
+		granted = manager.grantTokens(keyTwo, 1)
 		require.Equal(t, int32(1), granted)
-		require.Equal(t, eagerDispatchRateLimitNone, limitedBy)
 
 		timeSource.Advance(time.Second)
-		granted, limitedBy = manager.grantTokens(keyOne, 2)
+		granted = manager.grantTokens(keyOne, 2)
 		require.Equal(t, int32(1), granted)
-		require.Equal(t, eagerDispatchRateLimitPerKey, limitedBy)
 	})
 }
 

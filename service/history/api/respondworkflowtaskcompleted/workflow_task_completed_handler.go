@@ -572,8 +572,8 @@ func (handler *workflowTaskCompletedHandler) handleEagerActivityCandidates(
 		return nil, nil
 	}
 
-	namespace := handler.mutableState.GetNamespaceEntry().Name().String()
-	checkEnabled := handler.config.EnableActivityEagerDispatchCheck(namespace)
+	namespaceName := handler.mutableState.GetNamespaceEntry().Name().String()
+	checkEnabled := handler.config.EnableActivityEagerDispatchCheck(namespaceName)
 	candidateIndexesByTaskQueue := make(map[string][]int)
 	for index := range handler.eagerActivityCandidates {
 		candidate := &handler.eagerActivityCandidates[index]

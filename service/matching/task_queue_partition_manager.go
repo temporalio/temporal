@@ -1,12 +1,13 @@
 package matching
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"maps"
 	"math"
 	"math/bits"
-	"sort"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -687,25 +688,22 @@ type eagerDispatchGrantTarget struct {
 }
 
 const (
-	eagerDispatchOutcomeGranted         = "granted"
-	eagerDispatchOutcomeError           = "error"
-	eagerDispatchOutcomeBacklog         = "backlog"
-	eagerDispatchOutcomeRateLimit       = "rate_limit"
-	eagerDispatchOutcomePerKeyRateLimit = "per_key_rate_limit"
+	eagerDispatchOutcomeGranted   = "granted"
+	eagerDispatchOutcomeError     = "error"
+	eagerDispatchOutcomeBacklog   = "backlog"
+	eagerDispatchOutcomeRateLimit = "rate_limit"
 )
 
 type eagerDispatchOutcomeCounts struct {
-	granted         int64
-	backlog         int64
-	rateLimit       int64
-	perKeyRateLimit int64
+	granted   int64
+	backlog   int64
+	rateLimit int64
 }
 
 func (counts eagerDispatchOutcomeCounts) record(metricsHandler metrics.Handler) {
 	recordEagerDispatchResult(metricsHandler, eagerDispatchOutcomeGranted, counts.granted)
 	recordEagerDispatchResult(metricsHandler, eagerDispatchOutcomeBacklog, counts.backlog)
 	recordEagerDispatchResult(metricsHandler, eagerDispatchOutcomeRateLimit, counts.rateLimit)
-	recordEagerDispatchResult(metricsHandler, eagerDispatchOutcomePerKeyRateLimit, counts.perKeyRateLimit)
 }
 
 func recordEagerDispatchResult(metricsHandler metrics.Handler, outcome string, count int64) {
@@ -825,10 +823,10 @@ func (pm *taskQueuePartitionManagerImpl) grantEagerDispatch(
 	}
 	// Allocate shared rate-limit capacity to higher-priority items first. Keep responseItems
 	// indexed by the original request order, as required by the RPC contract.
-	sort.SliceStable(grantOrder, func(left, right int) bool {
-		leftPriority := pm.config.clipPriority(priorityKey(items[grantOrder[left]].GetPriority().GetPriorityKey()))
-		rightPriority := pm.config.clipPriority(priorityKey(items[grantOrder[right]].GetPriority().GetPriorityKey()))
-		return leftPriority < rightPriority
+	slices.SortStableFunc(grantOrder, func(left, right int) int {
+		leftPriority := pm.config.clipPriority(priorityKey(items[left].GetPriority().GetPriorityKey()))
+		rightPriority := pm.config.clipPriority(priorityKey(items[right].GetPriority().GetPriorityKey()))
+		return cmp.Compare(leftPriority, rightPriority)
 	})
 
 	for _, index := range grantOrder {
@@ -843,16 +841,9 @@ func (pm *taskQueuePartitionManagerImpl) grantEagerDispatch(
 		// backlog priority is higher and prevents eager dispatch when it is <= priority.
 		granted := int32(0)
 		if backlogPriority == 0 || backlogPriority > priority {
-			var limitedBy eagerDispatchRateLimit
-			granted, limitedBy = pm.rateLimitManager.grantTokens(item.GetPriority(), item.GetCount())
+			granted = pm.rateLimitManager.grantTokens(item.GetPriority(), item.GetCount())
 			outcomeCounts.granted += int64(granted)
-			denied := int64(item.GetCount() - granted)
-			switch limitedBy {
-			case eagerDispatchRateLimitGeneral:
-				outcomeCounts.rateLimit += denied
-			case eagerDispatchRateLimitPerKey:
-				outcomeCounts.perKeyRateLimit += denied
-			}
+			outcomeCounts.rateLimit += int64(item.GetCount() - granted)
 		} else {
 			outcomeCounts.backlog += int64(item.GetCount())
 		}

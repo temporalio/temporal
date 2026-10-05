@@ -395,8 +395,8 @@ func (s *PartitionManagerTestSuite) TestGrantEagerDispatchMetrics() {
 			},
 			expectedRequest: 3,
 			expectedResults: map[string]int64{
-				eagerDispatchOutcomeGranted:         1,
-				eagerDispatchOutcomePerKeyRateLimit: 2,
+				eagerDispatchOutcomeGranted:   1,
+				eagerDispatchOutcomeRateLimit: 2,
 			},
 		},
 		{

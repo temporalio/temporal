@@ -61,13 +61,7 @@ const (
 	// 100/second and burst duration of 2 seconds, the capacity of a bucket-type limiting
 	// algorithm would be 200.
 	defaultBurstDuration = time.Second
-
-	eagerDispatchRateLimitNone eagerDispatchRateLimit = iota
-	eagerDispatchRateLimitGeneral
-	eagerDispatchRateLimitPerKey
 )
-
-type eagerDispatchRateLimit int
 
 // Create a new rate limit manager for the task queue partition. This only allocates;
 // dynamic config subscriptions are registered in Start, so an unstarted manager holds
@@ -386,18 +380,15 @@ func (r *rateLimitManager) consumeTokens(now int64, task *internalTask, tokens i
 func (r *rateLimitManager) grantTokens(
 	priority *commonpb.Priority,
 	requested int32,
-) (int32, eagerDispatchRateLimit) {
+) int32 {
 	now := r.timeSource.Now()
 	if !r.config.NewMatcher {
 		available := r.dynamicRateLimiter.TokensAt(now)
 		granted := min(requested, int32(max(available, 0)))
 		if granted > 0 && r.dynamicRateLimiter.AllowN(now, int(granted)) {
-			if granted < requested {
-				return granted, eagerDispatchRateLimitGeneral
-			}
-			return granted, eagerDispatchRateLimitNone
+			return granted
 		}
-		return 0, eagerDispatchRateLimitGeneral
+		return 0
 	}
 
 	r.mu.Lock()
@@ -406,10 +397,6 @@ func (r *rateLimitManager) grantTokens(
 	nowNanos := now.UnixNano()
 	wholeQueueAvailable := r.wholeQueueReady.availableSimpleLimiterTokens(r.wholeQueueLimit, nowNanos)
 	granted := min(requested, wholeQueueAvailable)
-	limitedBy := eagerDispatchRateLimitNone
-	if granted < requested {
-		limitedBy = eagerDispatchRateLimitGeneral
-	}
 	if r.perKeyLimit.limited() {
 		key := priority.GetFairnessKey()
 		var ready simpleLimiter
@@ -418,12 +405,9 @@ func (r *rateLimitManager) grantTokens(
 		}
 		params := r.perKeyLimit.divideInterval(getEffectiveWeight(r.perKeyOverrides, priority))
 		perKeyAvailable := ready.availableSimpleLimiterTokens(params, nowNanos)
-		if perKeyAvailable < granted {
-			limitedBy = eagerDispatchRateLimitPerKey
-		}
 		granted = min(granted, perKeyAvailable)
 		if granted == 0 {
-			return 0, limitedBy
+			return 0
 		}
 		r.perKeyReady.Put(key, ready.consume(params, nowNanos, int64(granted)))
 	}
@@ -431,7 +415,7 @@ func (r *rateLimitManager) grantTokens(
 	if granted > 0 {
 		r.wholeQueueReady = r.wholeQueueReady.consume(r.wholeQueueLimit, nowNanos, int64(granted))
 	}
-	return granted, limitedBy
+	return granted
 }
 
 // GetFairnessWeightOverrides returns the current fairness weight overrides.
