@@ -28,7 +28,6 @@ Before writing, reviewing, or running tests, read and follow the [testing guide]
 
 - Tests use a table-driven structure when multiple cases exercise the same behavior. Every case has a descriptive name and runs as a subtest.
 - Tests compare a function's complete result with an expected value rather than asserting each field separately; field-level assertions are reserved for cases where only part of the result is relevant.
-- Polling loops have a comment explaining why polling is required, such as eventual consistency.
 - A goroutine that maintains a precondition for later assertions, such as `go s.someHelper(ctx, ...)`, loops until context cancellation or reports success before the test waits for its effect. This prevents a transiently failed attempt from exiting silently and leaving downstream eventual-consistency waits unable to succeed.
 - Assertions run in the test goroutine. Worker goroutines return results or errors through buffered channels so an assertion cannot panic the binary after the test has completed.
 - Tests do not write to package-level or global variables. Values are threaded through function parameters because parallel tests share the same process.
