@@ -24,6 +24,9 @@ Express each rule as a concise, direct statement of the expected code or review 
 
 ## 3. Testing Correctness and Reliability
 
+- Write tests for new functionality and run tests after altering code or tests. Start with unit tests for fastest feedback.
+- Test both successful behavior and failure modes.
+- Always include `-tags test_dep` when running tests. Include the `integration` tag only for integration tests.
 - Subtests use their `t` parameter rather than `s.T()`.
 - Eventually blocks containing assertions use `EventuallyWithT` and its block-local `t`.
 - Specific error type assertions use `require.ErrorAs(t, err, &specificErr)`.
@@ -52,6 +55,7 @@ Express each rule as a concise, direct statement of the expected code or review 
 
 ## 5. Proper Error Handling
 
+- Use `softassert.That` or `softassert.Fail` to report programming errors and invariant violations.
 - Temporal errors use standard types such as `InvalidArgument`, `NotFound`, and `FailedPrecondition` rather than custom error types.
 - Errors are non-retryable when their tasks must not retry in the queue.
 - Wrapped errors add useful context, for example `fmt.Errorf("multi-operation part 2: %w", err)`; wrappers without additional information are omitted.
@@ -62,6 +66,8 @@ Express each rule as a concise, direct statement of the expected code or review 
 
 ## 6. Consistency with Codebase
 
+- Do not introduce new third-party libraries unless specifically requested.
+- Check existing imports and `go.mod` before assuming a library is available.
 - Code follows the patterns already established in the codebase. For example, libraries pass the frontend request through as other libraries do.
 - Existing utilities are reused before new ones are created.
 - Logger messages are static, and dynamic content is recorded in structured tags.
