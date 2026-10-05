@@ -10,22 +10,44 @@ var _ Logger = (*lazyLogger)(nil)
 var _ WithLogger = (*lazyLogger)(nil)
 
 type (
+	// debugEnabledLogger can prove that Debug is disabled before lazy tags are
+	// materialized. Implementations return true when they cannot safely decide.
+	debugEnabledLogger interface {
+		debugEnabled() bool
+	}
+
 	lazyLogger struct {
-		logger Logger
-		tagFn  func() []tag.Tag
+		logger       Logger
+		debugChecker debugEnabledLogger // immutable: logger changes during materialization
+		tagFn        func() []tag.Tag
 
 		once sync.Once
 	}
 )
 
+// NewLazyLogger defers adding tagFn's tags until an operation requires them.
+// A disabled Debug call on a supported logger does not evaluate tagFn. Other
+// operations retain their existing materialization behavior. tagFn runs at most once.
 func NewLazyLogger(logger Logger, tagFn func() []tag.Tag) *lazyLogger {
+	var checker debugEnabledLogger
+	if supported, ok := logger.(debugEnabledLogger); ok {
+		checker = supported
+	}
 	return &lazyLogger{
-		logger: logger,
-		tagFn:  tagFn,
+		logger:       logger,
+		debugChecker: checker,
+		tagFn:        tagFn,
 	}
 }
 
+func (l *lazyLogger) debugEnabled() bool {
+	return l.debugChecker == nil || l.debugChecker.debugEnabled()
+}
+
 func (l *lazyLogger) Debug(msg string, tags ...tag.Tag) {
+	if !l.debugEnabled() {
+		return
+	}
 	l.once.Do(l.tagLogger)
 	l.logger.Debug(msg, tags...)
 }
