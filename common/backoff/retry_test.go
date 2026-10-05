@@ -2,12 +2,15 @@ package backoff
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -275,4 +278,22 @@ var retryEverything IsRetryable = nil
 
 func (e *someError) Error() string {
 	return "Some Error"
+}
+
+// TestExponentialBackoffOverflow verifies overflow handling when
+// initInterval * coefficient^(attempt-1) exceeds MaxInt64.
+func TestExponentialBackoffOverflow(t *testing.T) {
+	t.Run("Calculation clamps to MaxInt64", func(t *testing.T) {
+		interval := ExponentialBackoffAlgorithm(durationpb.New(time.Nanosecond), 2.0, 65)
+		require.Equal(t, time.Duration(math.MaxInt64), interval)
+	})
+
+	t.Run("Interval still capped to MaximumInterval", func(t *testing.T) {
+		interval := CalculateExponentialRetryInterval(&commonpb.RetryPolicy{
+			InitialInterval:    durationpb.New(time.Second),
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    durationpb.New(100 * time.Second),
+		}, 100)
+		require.Equal(t, 100*time.Second, interval)
+	})
 }

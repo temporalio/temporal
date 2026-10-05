@@ -6,11 +6,15 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/tqid"
 )
 
@@ -35,6 +39,7 @@ func (s *RateLimitManagerSuite) TestUpdatePerKeySimpleRateLimitLocked_WhenFairne
 		"test-namespace",
 	)
 	rateLimitManager := newRateLimitManager(mockUserDataManager, config, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	rateLimitManager.Start()
 	rateLimitManager.mu.Lock()
 	// Simulate the condition where fairnessKeyRateLimitDefault is nil
 	rateLimitManager.fairnessKeyRateLimitDefault = nil
@@ -56,6 +61,55 @@ func (s *RateLimitManagerSuite) TestUpdatePerKeySimpleRateLimitLocked_WhenFairne
 	s.Equal(0, rateLimitManager.perKeyReady.Size(), "All per-key ready entries should be cleared")
 	s.False(rateLimitManager.perKeyLimit.limited(), "Per-key limit should be cleared")
 	rateLimitManager.mu.Unlock()
+}
+
+func TestRateLimitManagerGrantTokens(t *testing.T) {
+	t.Run("classic matcher returns a partial grant", func(t *testing.T) {
+		timeSource := clock.NewEventTimeSource().Update(time.Now().Add(time.Second))
+		manager := &rateLimitManager{
+			config:     &taskQueueConfig{NewMatcher: false},
+			timeSource: timeSource,
+			dynamicRateLimiter: quotas.NewDynamicRateLimiter(
+				quotas.NewMutableRateBurst(2, 2),
+				time.Hour,
+			),
+		}
+
+		require.Equal(t, int32(2), manager.grantTokens(nil, 5))
+		require.Equal(t, int32(0), manager.grantTokens(nil, 1))
+	})
+
+	t.Run("new matcher applies the whole queue limit", func(t *testing.T) {
+		manager := &rateLimitManager{
+			config:          &taskQueueConfig{NewMatcher: true},
+			timeSource:      clock.NewEventTimeSource().Update(time.Now()),
+			perKeyReady:     cache.New(10, nil),
+			wholeQueueLimit: makeSimpleLimiterParams(2, 500*time.Millisecond),
+		}
+
+		require.Equal(t, int32(2), manager.grantTokens(nil, 5))
+		require.Equal(t, int32(0), manager.grantTokens(nil, 1))
+	})
+
+	t.Run("new matcher isolates fairness keys", func(t *testing.T) {
+		timeSource := clock.NewEventTimeSource().Update(time.Now())
+		manager := &rateLimitManager{
+			config:          &taskQueueConfig{NewMatcher: true},
+			timeSource:      timeSource,
+			perKeyReady:     cache.New(10, nil),
+			wholeQueueLimit: simpleLimiterParams{},
+			perKeyLimit:     makeSimpleLimiterParams(1, 0),
+		}
+
+		keyOne := &commonpb.Priority{FairnessKey: "one"}
+		keyTwo := &commonpb.Priority{FairnessKey: "two"}
+		require.Equal(t, int32(1), manager.grantTokens(keyOne, 20))
+		require.Equal(t, int32(0), manager.grantTokens(keyOne, 1))
+		require.Equal(t, int32(1), manager.grantTokens(keyTwo, 1))
+
+		timeSource.Advance(time.Second)
+		require.Equal(t, int32(1), manager.grantTokens(keyOne, 2))
+	})
 }
 
 // Additions to rateLimitManager for use by other unit tests:
@@ -144,6 +198,7 @@ func (s *RateLimitManagerSuite) TestFractionScaling_ApiConfigRPS() {
 		cfg, "test-ns",
 	)
 	rlm := newRateLimitManager(&mockUserDataManager{}, config, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	rlm.Start()
 	defer rlm.Stop()
 
 	rlm.SetAPIConfigRPSForTesting(100.0)
@@ -162,6 +217,7 @@ func (s *RateLimitManagerSuite) TestFractionScaling_WorkerRPS() {
 		cfg, "test-ns",
 	)
 	rlm := newRateLimitManager(&mockUserDataManager{}, config, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	rlm.Start()
 	defer rlm.Stop()
 
 	rlm.SetWorkerRPSForTesting(100.0)
@@ -197,6 +253,7 @@ func (s *RateLimitManagerSuite) TestFractionScaling_FairnessKeyRateLimitDefault(
 		},
 	}
 	rlm := newRateLimitManager(udm, config, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	rlm.Start()
 	defer rlm.Stop()
 
 	rlm.UserDataChanged()
@@ -218,6 +275,7 @@ func (s *RateLimitManagerSuite) TestFractionScaling_ZeroFraction() {
 		cfg, "test-ns",
 	)
 	rlm := newRateLimitManager(&mockUserDataManager{}, config, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	rlm.Start()
 	defer rlm.Stop()
 
 	rlm.SetAPIConfigRPSForTesting(100.0)

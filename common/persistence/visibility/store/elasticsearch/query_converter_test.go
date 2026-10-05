@@ -13,7 +13,7 @@ import (
 )
 
 func TestQueryConverter_GetDatetimeFormat(t *testing.T) {
-	qc := &queryConverter{}
+	qc := &esQueryConverter{}
 	require.Equal(t, time.RFC3339Nano, qc.GetDatetimeFormat())
 }
 
@@ -43,7 +43,7 @@ func TestQueryConverter_BuildParenExpr(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			qc := &queryConverter{}
+			qc := &esQueryConverter{}
 			out, err := qc.BuildParenExpr(tc.in)
 			r.NoError(err)
 			r.Equal(tc.out, out)
@@ -88,7 +88,7 @@ func TestQueryConverter_BuildNotExpr(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			qc := &queryConverter{}
+			qc := &esQueryConverter{}
 			out, err := qc.BuildNotExpr(tc.in)
 			r.NoError(err)
 			r.Equal(tc.out, out)
@@ -169,7 +169,7 @@ func TestQueryConverter_BuildAndExpr(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			qc := &queryConverter{}
+			qc := &esQueryConverter{}
 			out, err := qc.BuildAndExpr(tc.in...)
 			r.NoError(err)
 			r.Equal(tc.out, out)
@@ -250,7 +250,7 @@ func TestQueryConverter_BuildOrExpr(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			qc := &queryConverter{}
+			qc := &esQueryConverter{}
 			out, err := qc.BuildOrExpr(tc.in...)
 			r.NoError(err)
 			r.Equal(tc.out, out)
@@ -278,28 +278,28 @@ func TestQueryConverter_ConvertComparisonExpr(t *testing.T) {
 			operator: sqlparser.GreaterEqualStr,
 			col:      intCol,
 			value:    123,
-			out:      elastic.NewRangeQuery(intCol.FieldName).Gte(123),
+			out:      &rangeQuery{field: intCol.FieldName, lower: incl(123)},
 		},
 		{
 			name:     "operator less equal",
 			operator: sqlparser.LessEqualStr,
 			col:      intCol,
 			value:    123,
-			out:      elastic.NewRangeQuery(intCol.FieldName).Lte(123),
+			out:      &rangeQuery{field: intCol.FieldName, upper: incl(123)},
 		},
 		{
 			name:     "operator greater than",
 			operator: sqlparser.GreaterThanStr,
 			col:      intCol,
 			value:    123,
-			out:      elastic.NewRangeQuery(intCol.FieldName).Gt(123),
+			out:      &rangeQuery{field: intCol.FieldName, lower: excl(123)},
 		},
 		{
 			name:     "operator less than",
 			operator: sqlparser.LessThanStr,
 			col:      intCol,
 			value:    123,
-			out:      elastic.NewRangeQuery(intCol.FieldName).Lt(123),
+			out:      &rangeQuery{field: intCol.FieldName, upper: excl(123)},
 		},
 		{
 			name:     "operator equal",
@@ -346,7 +346,7 @@ func TestQueryConverter_ConvertComparisonExpr(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			qc := &queryConverter{}
+			qc := &esQueryConverter{}
 			out, err := qc.ConvertComparisonExpr(tc.operator, tc.col, tc.value)
 			if tc.err != "" {
 				r.Error(err)
@@ -381,28 +381,28 @@ func TestQueryConverter_ConvertKeywordComparisonExpr(t *testing.T) {
 			operator: sqlparser.GreaterEqualStr,
 			col:      keywordCol,
 			value:    "foo",
-			out:      elastic.NewRangeQuery(keywordCol.FieldName).Gte("foo"),
+			out:      &rangeQuery{field: keywordCol.FieldName, lower: incl("foo")},
 		},
 		{
 			name:     "operator less equal",
 			operator: sqlparser.LessEqualStr,
 			col:      keywordCol,
 			value:    "foo",
-			out:      elastic.NewRangeQuery(keywordCol.FieldName).Lte("foo"),
+			out:      &rangeQuery{field: keywordCol.FieldName, upper: incl("foo")},
 		},
 		{
 			name:     "operator greater than",
 			operator: sqlparser.GreaterThanStr,
 			col:      keywordCol,
 			value:    "foo",
-			out:      elastic.NewRangeQuery(keywordCol.FieldName).Gt("foo"),
+			out:      &rangeQuery{field: keywordCol.FieldName, lower: excl("foo")},
 		},
 		{
 			name:     "operator less than",
 			operator: sqlparser.LessThanStr,
 			col:      keywordCol,
 			value:    "foo",
-			out:      elastic.NewRangeQuery(keywordCol.FieldName).Lt("foo"),
+			out:      &rangeQuery{field: keywordCol.FieldName, upper: excl("foo")},
 		},
 		{
 			name:     "operator equal",
@@ -483,7 +483,7 @@ func TestQueryConverter_ConvertKeywordComparisonExpr(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			qc := &queryConverter{}
+			qc := &esQueryConverter{}
 			out, err := qc.ConvertKeywordComparisonExpr(tc.operator, tc.col, tc.value)
 			if tc.err != "" {
 				r.Error(err)
@@ -558,7 +558,7 @@ func TestQueryConverter_ConvertKeywordListComparisonExpr(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			qc := &queryConverter{}
+			qc := &esQueryConverter{}
 			out, err := qc.ConvertKeywordListComparisonExpr(tc.operator, tc.col, tc.value)
 			if tc.err != "" {
 				r.Error(err)
@@ -617,7 +617,7 @@ func TestQueryConverter_ConvertTextComparisonExpr(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			qc := &queryConverter{}
+			qc := &esQueryConverter{}
 			out, err := qc.ConvertTextComparisonExpr(tc.operator, tc.col, tc.value)
 			if tc.err != "" {
 				r.Error(err)
@@ -654,7 +654,7 @@ func TestQueryConverter_ConvertRangeExpr(t *testing.T) {
 			col:      keywordCol,
 			from:     "123",
 			to:       "456",
-			out:      elastic.NewRangeQuery(keywordCol.FieldName).Gte("123").Lte("456"),
+			out:      &rangeQuery{field: keywordCol.FieldName, lower: incl("123"), upper: incl("456")},
 		},
 		{
 			name:     "operator not between",
@@ -663,7 +663,7 @@ func TestQueryConverter_ConvertRangeExpr(t *testing.T) {
 			from:     "123",
 			to:       "456",
 			out: newBoolQuery().MustNot(
-				elastic.NewRangeQuery(keywordCol.FieldName).Gte("123").Lte("456"),
+				&rangeQuery{field: keywordCol.FieldName, lower: incl("123"), upper: incl("456")},
 			),
 		},
 		{
@@ -681,7 +681,7 @@ func TestQueryConverter_ConvertRangeExpr(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			qc := &queryConverter{}
+			qc := &esQueryConverter{}
 			out, err := qc.ConvertRangeExpr(tc.operator, tc.col, tc.from, tc.to)
 			if tc.err != "" {
 				r.Error(err)
@@ -736,7 +736,7 @@ func TestQueryConverter_ConvertIsExpr(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			r := require.New(t)
-			qc := &queryConverter{}
+			qc := &esQueryConverter{}
 			out, err := qc.ConvertIsExpr(tc.operator, tc.col)
 			if tc.err != "" {
 				r.Error(err)

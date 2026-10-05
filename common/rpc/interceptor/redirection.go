@@ -83,6 +83,7 @@ var (
 		"ExecuteMultiOperation":              func() any { return &workflowservice.ExecuteMultiOperationResponse{} },
 		"UpdateWorkflowExecution":            func() any { return &workflowservice.UpdateWorkflowExecutionResponse{} },
 		"PollWorkflowExecutionUpdate":        func() any { return &workflowservice.PollWorkflowExecutionUpdateResponse{} },
+		"PollWorkflowExecutionTimeSkipping":  func() any { return &workflowservice.PollWorkflowExecutionTimeSkippingResponse{} },
 		"TerminateWorkflowExecution":         func() any { return &workflowservice.TerminateWorkflowExecutionResponse{} },
 		"DeleteWorkflowExecution":            func() any { return &workflowservice.DeleteWorkflowExecutionResponse{} },
 		"ListTaskQueuePartitions":            func() any { return &workflowservice.ListTaskQueuePartitionsResponse{} },
@@ -232,6 +233,16 @@ func (i *Redirection) WithRedirectResponses(responses map[string]func() any) *Re
 	return &clone
 }
 
+// WithAdditionalAllowedMethods returns a copy of the interceptor whose policy also
+// forwards the given full gRPC methods. Embedder uses this to extend its own methods.
+func (i *Redirection) WithAdditionalAllowedMethods(fullMethods ...string) *Redirection {
+	clone := *i
+	if policy, ok := i.redirectionPolicy.(*SelectedAPIsForwardingRedirectionPolicy); ok {
+		clone.redirectionPolicy = policy.WithAdditionalAllowedMethods(fullMethods...)
+	}
+	return &clone
+}
+
 var _ grpc.UnaryServerInterceptor = (*Redirection)(nil).Intercept
 
 func (i *Redirection) Intercept(
@@ -311,7 +322,9 @@ func (i *Redirection) handleRedirectAPIInvocation(
 		i.AfterCall(scope, startTime, targetClusterName, namespaceName.String(), retError)
 	}()
 
-	err = i.redirectionPolicy.WithNamespaceRedirect(ctx, namespaceName, methodName, req, func(targetDC string) error {
+	// The policy matches on the full method; methodName stays bare for metrics, whose
+	// operation names are keyed that way.
+	err = i.redirectionPolicy.WithNamespaceRedirect(ctx, namespaceName, info.FullMethod, req, func(targetDC string) error {
 		targetClusterName = targetDC
 		if targetClusterName == i.currentClusterName {
 			resp, err = handler(ctx, req)

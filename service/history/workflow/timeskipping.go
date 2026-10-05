@@ -9,10 +9,12 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/components/nexusoperations"
+	"go.temporal.io/server/common/persistence/transitionhistory"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -22,166 +24,138 @@ import (
 // =============================================================================
 // Time Skipping Configuration Management
 // =============================================================================
+// initTimeSkippingInfo creates TimeSkippingInfo when an execution first receives a time-skipping
+// config or propagated virtual-time state. This can happen at execution start, through an options
+// update on an existing execution, or when a CHASM component first sets its config.
 func (ms *MutableStateImpl) initTimeSkippingInfo(
 	config *commonpb.TimeSkippingConfig,
-	timeSkippingStatePropagation *commonpb.TimeSkippingStatePropagation,
-) error {
-	initialSkip := timeSkippingStatePropagation.GetInitialSkippedDuration()
+	propagatedState *commonpb.TimeSkippingStatePropagation,
+) {
+	initialSkip := propagatedState.GetInitialSkippedDuration()
 	if config == nil && initialSkip == nil {
-		return nil
+		return
 	}
-
-	if ms.executionInfo.TimeSkippingInfo != nil {
-		return serviceerror.NewInternal("time skipping info already initialized")
-	}
-
 	ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 		Config:                     config,
 		AccumulatedSkippedDuration: initialSkip,
+		SessionSkipCount:           propagatedState.GetInitialSkipCount(),
 	}
 	ms.wrapTimeSourceWithTimeSkipping()
-	ms.wrapExecutionTimes(initialSkip)
-	ms.applyFastForward(timeSkippingStatePropagation.GetFastForwardTargetTime())
+	ms.applyFastForward(propagatedState.GetFastForwardTargetTime())
 	ms.timeSkippingInfoUpdated = true
-	return nil
 }
 
 func (ms *MutableStateImpl) updateTimeSkippingInfo(
 	config *commonpb.TimeSkippingConfig,
-) error {
+) {
 	tsi := ms.executionInfo.GetTimeSkippingInfo()
 	if tsi == nil {
-		return serviceerror.NewInternal("time skipping info not initialized when updating")
+		return
 	}
+	// we allow setting config to nil in updating tsc
 	ms.executionInfo.TimeSkippingInfo.Config = config
+	tsi.SessionSkipCount = 0
 	ms.applyFastForward(nil)
 	ms.timeSkippingInfoUpdated = true
-	return nil
+}
+
+func (ms *MutableStateImpl) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
+	// todo: migrate workflow init and update to this unified method
+	if ms.executionInfo.GetTimeSkippingInfo() == nil {
+		ms.initTimeSkippingInfo(config, nil)
+	} else {
+		ms.updateTimeSkippingInfo(config)
+	}
 }
 
 // applyFastForward (re)computes the FastForwardInfo using the new TimeSkippingConfig (TSC) and propagated time-skippingstates.
 // This method should be called whenever the TimeSkippingConfig is initialized or updated.
-// An invariant of the FastForwardInfo is that after this method is called, if the current TSC has a FastForward value,
-// the FastForwardInfo should never be nil.
+//
+// Invariant: FastForwardInfo is non-nil whenever the config still has a fast-forward config, and nil
+// otherwise. Keeping it alive even when skipping is disabled lets a poller still observe a completed
+// fast-forward carried over from a prior run.
 func (ms *MutableStateImpl) applyFastForward(propagatedTargetTime *timestamppb.Timestamp) {
-	tsc := ms.GetExecutionInfo().GetTimeSkippingInfo().GetConfig()
-	tsi := ms.executionInfo.TimeSkippingInfo
+	tsi := ms.executionInfo.GetTimeSkippingInfo()
+	if tsi == nil {
+		return
+	}
+	tsc := tsi.GetConfig()
+	ffConfig := tsc.GetFastForwardConfig()
 
-	if !tsc.GetEnabled() || tsc.GetFastForward().AsDuration() <= 0 {
+	// no ff
+	if ffConfig == nil {
 		if tsi.FastForwardInfo != nil {
-			tsi.FastForwardInfo = nil
+			ms.setAndStampFastForwardInfo(nil)
 		}
 		return
 	}
 
+	// ff of different states:
 	var targetTime time.Time
+	var hasReached bool
 	if propagatedTargetTime != nil {
 		targetTime = propagatedTargetTime.AsTime()
+		// A propagated target may already be due; a due target is a completed fast-forward.
+		hasReached = !ms.Now().Before(targetTime)
 	} else {
 		// if there is no propagated target time,
 		// fast-forward refers to a new duration from now.
-		targetTime = ms.Now().Add(tsc.GetFastForward().AsDuration())
+		targetTime = ms.Now().Add(ffConfig.GetDuration().AsDuration())
 	}
 
-	currentVersionedTransition := &persistencespb.VersionedTransition{
+	ms.setAndStampFastForwardInfo(&persistencespb.FastForwardInfo{
+		TargetTime: timestamppb.New(targetTime),
+		HasReached: hasReached,
+	})
+
+	// actions based on ff states: 1) disable time skipping 2) add ff timer task
+	if hasReached {
+		tsc.Enabled = false
+		return
+	}
+
+	// schedule the wake-up timer only while skipping is still enabled
+	if tsc.GetEnabled() {
+		ms.addTimeSkippingFastForwardTask()
+	}
+}
+
+// setAndStampFastForwardInfo sets the fast-forward info and stamps it with the current transaction's versioned transition.
+// Nothing else may write these two fields; routing every update through here is what keeps them in lockstep.
+func (ms *MutableStateImpl) setAndStampFastForwardInfo(
+	ffInfo *persistencespb.FastForwardInfo,
+) *persistencespb.VersionedTransition {
+	tsi := ms.executionInfo.TimeSkippingInfo
+	tsi.FastForwardInfo = ffInfo
+	tsi.FastForwardInfoLastUpdateVersionedTransition = &persistencespb.VersionedTransition{
 		NamespaceFailoverVersion: ms.GetCurrentVersion(),
 		TransitionCount:          ms.NextTransitionCount(),
 	}
-
-	tsi.FastForwardInfo = &persistencespb.FastForwardInfo{
-		TargetTime:                    timestamppb.New(targetTime),
-		HasReached:                    false,
-		LastUpdateVersionedTransition: currentVersionedTransition,
-	}
-	ms.AddTasks(&tasks.TimeSkippingTimerTask{
-		WorkflowKey:         ms.GetWorkflowKey(),
-		VisibilityTimestamp: targetTime,
-		VersionedTransition: currentVersionedTransition,
-		ArchetypeID:         ms.ChasmTree().ArchetypeID(),
-	})
-}
-
-func (ms *MutableStateImpl) wrapExecutionTimes(initialSkippedDuration *durationpb.Duration) {
-	if initialSkippedDuration == nil || initialSkippedDuration.AsDuration() == 0 {
-		return
-	}
-	accum := initialSkippedDuration.AsDuration()
-	if !timeNotSet(ms.executionState.StartTime) {
-		ms.executionState.StartTime = timestamppb.New(ms.executionState.StartTime.AsTime().Add(accum))
-	}
-	if !timeNotSet(ms.executionInfo.StartTime) {
-		ms.executionInfo.StartTime = timestamppb.New(ms.executionInfo.StartTime.AsTime().Add(accum))
-	}
-	if !timeNotSet(ms.executionInfo.ExecutionTime) {
-		ms.executionInfo.ExecutionTime = timestamppb.New(ms.executionInfo.ExecutionTime.AsTime().Add(accum))
-	}
-	if !timeNotSet(ms.executionInfo.WorkflowRunExpirationTime) {
-		ms.executionInfo.WorkflowRunExpirationTime = timestamppb.New(ms.executionInfo.WorkflowRunExpirationTime.AsTime().Add(accum))
-	}
-	if !timeNotSet(ms.executionInfo.WorkflowExecutionExpirationTime) {
-		ms.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(ms.executionInfo.WorkflowExecutionExpirationTime.AsTime().Add(accum))
-	}
+	return tsi.FastForwardInfoLastUpdateVersionedTransition
 }
 
 // -- Propagation Methods of Time Skipping
 
-// propagateTimeSkippingToNextRun propagates both time skipping config and state to the next run in
-// the chain (CaN, retry, cron). The config is deep-cloned so the next run can mutate it without
-// affecting the source.
+// propagateTimeSkippingToNextRun propagates both the time-skipping config and state to the next run
+// in the chain of runs(continue-as-new, retry, cron). The config is propagated regardless of whether time
+// skipping is actively running, so reading APIs can always retrieve the latest effective configuration from the current run.
 func propagateTimeSkippingToNextRun(
-	source *persistencespb.WorkflowExecutionInfo,
+	tsi *persistencespb.TimeSkippingInfo,
 ) (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation) {
-	previousTSC := source.GetTimeSkippingInfo().GetConfig()
-
-	// if disabled, we just return nil for the new TSC
+	if tsi == nil {
+		return nil, nil
+	}
+	util := NewTimeSkippingInfoUtil(tsi)
 	var newTSC *commonpb.TimeSkippingConfig
-	if previousTSC.GetEnabled() {
-		newTSC = common.CloneProto(previousTSC)
+	if tsi.Config != nil {
+		newTSC = common.CloneProto(tsi.GetConfig())
 	}
-
-	var stateProp *commonpb.TimeSkippingStatePropagation
-	if accum := accumulatedSkippedDuration(source); accum > 0 {
-		stateProp = &commonpb.TimeSkippingStatePropagation{
-			InitialSkippedDuration: durationpb.New(accum),
-		}
-	}
-
-	if ff := source.GetTimeSkippingInfo().GetFastForwardInfo(); ff != nil && !ff.GetHasReached() {
-		if stateProp == nil {
-			stateProp = &commonpb.TimeSkippingStatePropagation{}
-		}
-		stateProp.FastForwardTargetTime = ff.GetTargetTime()
+	stateProp := &commonpb.TimeSkippingStatePropagation{
+		InitialSkipCount:       tsi.GetSessionSkipCount(),
+		InitialSkippedDuration: durationpb.New(util.GetAccumulatedSkippedDuration()),
+		FastForwardTargetTime:  util.GetFastForwardTargetTime(),
 	}
 	return newTSC, stateProp
-}
-
-// propagateTimeSkippingToChild makes sure the start time of the child workflow execution
-// is shifted forward by the accumulated skipped duration.
-// FastForward is never propagated to children.
-func propagateTimeSkippingToChild(
-	source *persistencespb.WorkflowExecutionInfo,
-) (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation) {
-	accum := accumulatedSkippedDuration(source)
-	var stateProp *commonpb.TimeSkippingStatePropagation
-	if accum > 0 {
-		stateProp = &commonpb.TimeSkippingStatePropagation{
-			InitialSkippedDuration: durationpb.New(accum),
-		}
-	}
-
-	enabled := source.GetTimeSkippingInfo().GetConfig().GetEnabled()
-	disablePropagation := source.GetTimeSkippingInfo().GetConfig().GetDisablePropagation()
-	if !enabled || disablePropagation {
-		return nil, stateProp
-	}
-
-	return &commonpb.TimeSkippingConfig{
-		Enabled: enabled,
-	}, stateProp
-}
-
-func accumulatedSkippedDuration(source *persistencespb.WorkflowExecutionInfo) time.Duration {
-	return source.GetTimeSkippingInfo().GetAccumulatedSkippedDuration().AsDuration()
 }
 
 // =============================================================================
@@ -189,8 +163,8 @@ func accumulatedSkippedDuration(source *persistencespb.WorkflowExecutionInfo) ti
 // =============================================================================
 // wrapTimeSourceWithTimeSkipping wraps ms.timeSource (and the hBuilder's copy) with a time-skipping
 // wrapper. The closure captures ms so the offset tracks ms.executionInfo.TimeSkippingInfo as it
-// evolves — no need to re-wrap when TimeSkippingInfo is created or replaced. Called once per MS
-// lifetime from the constructors; the type-assertion guard makes any repeat call a no-op.
+// evolves — no need to re-wrap when TimeSkippingInfo is replaced. The type-assertion guard makes
+// repeat calls from initialization, DB loading, or replication a no-op.
 func (ms *MutableStateImpl) wrapTimeSourceWithTimeSkipping() {
 	if _, ok := ms.timeSource.(*clock.TimeSkippingTimeSourceWrapper); ok {
 		return
@@ -201,67 +175,25 @@ func (ms *MutableStateImpl) wrapTimeSourceWithTimeSkipping() {
 }
 
 func (ms *MutableStateImpl) accumulatedSkippedDuration() time.Duration {
-	return accumulatedSkippedDuration(ms.executionInfo)
-}
-
-// =============================================================================
-// Time Skipping Runtime Data Structure
-// =============================================================================
-type timeSkippingTransition struct {
-	CurrentTime              time.Time
-	TargetTime               time.Time
-	DisabledAfterFastForward bool
-}
-
-// NewTimeSkippingTransition creates a new time-skipping transition with the current time.
-// Methods provided by this data structure cannot be used without a current time.
-//
-// todo@time-skipping: the methods will be used by CHASM so keep as public.
-func NewTimeSkippingTransition(currentTime time.Time) *timeSkippingTransition {
-	return &timeSkippingTransition{CurrentTime: currentTime}
-}
-
-// IsValid reports whether the transition is worth applying: a real skip target, or a bare disable
-// signal. Nil-safe. A transition without a current time is never valid — every meaningful field is
-// derived relative to the current time, so without it there is nothing to apply.
-func (t *timeSkippingTransition) IsValid() bool {
-	return t != nil && !t.CurrentTime.IsZero() && (!t.TargetTime.IsZero() || t.DisabledAfterFastForward)
-}
-
-func (t *timeSkippingTransition) TrackEarliestFutureTime(candidate time.Time) {
-	if t == nil || t.CurrentTime.IsZero() || candidate.IsZero() || candidate.Before(t.CurrentTime) {
-		return
-	}
-	if t.TargetTime.IsZero() || candidate.Before(t.TargetTime) {
-		t.TargetTime = candidate
-	}
-}
-
-func (t *timeSkippingTransition) GateByFastForward(ff *persistencespb.FastForwardInfo) {
-	if t == nil || t.CurrentTime.IsZero() {
-		return
-	}
-	if ff == nil || ff.GetHasReached() || ff.GetTargetTime() == nil ||
-		ff.GetTargetTime().AsTime().IsZero() {
-		return
-	}
-	ffTargetTime := ff.GetTargetTime().AsTime()
-	// If a real candidate is scheduled strictly before the fast-forward target, we skip to
-	// that and the fast-forward budget is not yet exhausted — leave time skipping enabled.
-	if !t.TargetTime.IsZero() && t.TargetTime.Before(ffTargetTime) {
-		return
-	}
-	// Otherwise the fast-forward target is the earliest target: skip to it (clamped to the
-	// present by TrackEarliestFutureTime) and disable time skipping — the budget is reached.
-	// This is what lets the budget cap a chain of runs: a run with no earlier candidate
-	// consumes the remaining budget by skipping to the fast-forward and disabling.
-	t.TrackEarliestFutureTime(ffTargetTime)
-	t.DisabledAfterFastForward = true
+	return NewTimeSkippingInfoUtil(ms.GetExecutionInfo().GetTimeSkippingInfo()).GetAccumulatedSkippedDuration()
 }
 
 // =============================================================================
 // Time Skipping Utility Functions
 // =============================================================================
+
+// AdjustNowWithTimeSkipping converts a real clock reading to the virtual clock frame inherited
+// through time-skipping state propagation.
+func AdjustNowWithTimeSkipping(
+	now time.Time,
+	statePropagation *commonpb.TimeSkippingStatePropagation,
+) time.Time {
+	return now.Add(statePropagation.GetInitialSkippedDuration().AsDuration())
+}
+
+func NewTimeSkippingInfoUtil(tsi *persistencespb.TimeSkippingInfo) *TimeSkippingInfoUtil {
+	return &TimeSkippingInfoUtil{tsi: tsi}
+}
 
 // TimeSkippingInfoUtil provides read-only helpers over a TimeSkippingInfo, guarding against nil
 // info/config/fast-forward so callers don't have to repeat the nil checks.
@@ -269,8 +201,11 @@ type TimeSkippingInfoUtil struct {
 	tsi *persistencespb.TimeSkippingInfo
 }
 
-func NewTimeSkippingInfoUtil(tsi *persistencespb.TimeSkippingInfo) *TimeSkippingInfoUtil {
-	return &TimeSkippingInfoUtil{tsi: tsi}
+func (util *TimeSkippingInfoUtil) GetAccumulatedSkippedDuration() time.Duration {
+	if util == nil || util.tsi == nil {
+		return 0
+	}
+	return util.tsi.GetAccumulatedSkippedDuration().AsDuration()
 }
 
 // HasPendingFastForward reports whether time skipping is enabled and carries a fast-forward that has
@@ -282,19 +217,65 @@ func (util *TimeSkippingInfoUtil) HasPendingFastForward() bool {
 		return false
 	}
 	ff := util.tsi.GetFastForwardInfo()
-	return ff != nil &&
-		!ff.GetHasReached() &&
-		ff.GetTargetTime() != nil &&
-		!ff.GetTargetTime().AsTime().IsZero()
+	ffTargetTime := util.GetFastForwardTargetTime()
+	if ff == nil || ffTargetTime == nil {
+		return false
+	}
+	return !ff.GetHasReached()
 }
 
-// IsEnabled reports whether time skipping is enabled. Nil-safe: a nil util, nil info, or nil config
-// all yield false.
+func (util *TimeSkippingInfoUtil) GetFastForwardTargetTime() *timestamppb.Timestamp {
+	if util == nil || util.tsi == nil {
+		return nil
+	}
+	ff := util.tsi.GetFastForwardInfo()
+	if ff == nil || ff.GetTargetTime() == nil {
+		return nil
+	}
+	targetTime := ff.GetTargetTime().AsTime()
+	if targetTime.IsZero() {
+		return nil
+	}
+	return ff.TargetTime
+}
+
+// IsEnabled reports whether time skipping is still running for this execution. Prefer this over
+// reading the config's Enabled flag directly.
+// The `enabled` field is disabled internally in three places:
+// 1) initTimeSkippingInfo and updateTimeSkippingInfo, 2) runtime time-skipping transition, 3) fast-forward timer task.
 func (util *TimeSkippingInfoUtil) IsEnabled() bool {
-	if util == nil {
+	if util == nil || util.tsi == nil {
 		return false
 	}
 	return util.tsi.GetConfig().GetEnabled()
+}
+
+func (util *TimeSkippingInfoUtil) ToDescribeInfo(currentTime time.Time) *commonpb.TimeSkippingInfo {
+	if util == nil || util.tsi == nil {
+		return nil
+	}
+	return &commonpb.TimeSkippingInfo{
+		CurrentTime:     timestamppb.New(currentTime),
+		EffectiveConfig: common.CloneProto(util.tsi.GetConfig()),
+		FastForwardInfo: util.ToFastForwardInfo(),
+	}
+}
+
+func (util *TimeSkippingInfoUtil) ToFastForwardInfo() *commonpb.TimeSkippingFastForwardInfo {
+	if util == nil || util.tsi == nil {
+		return nil
+	}
+	ff := util.tsi.GetFastForwardInfo()
+	if ff == nil {
+		return nil
+	}
+	config := util.tsi.GetConfig()
+	return &commonpb.TimeSkippingFastForwardInfo{
+		TargetTime:          ff.GetTargetTime(),
+		HasCompleted:        ff.GetHasReached(),
+		FastForwardId:       config.GetFastForwardConfig().GetId(),
+		FastForwardDuration: config.GetFastForwardConfig().GetDuration(),
+	}
 }
 
 // =============================================================================
@@ -374,8 +355,8 @@ func (ms *MutableStateImpl) isWorkflowSkippable() bool {
 // findNextSkipTarget finds the next skip target from the pending timers, activity-retries,
 // workflow backoff timers, and workflow execution timeout, etc that those are skippable and scheduled in the future
 // it should only be called after isWorkflowSkippable returns true
-func (ms *MutableStateImpl) findNextSkipTarget() *timeSkippingTransition {
-	transition := NewTimeSkippingTransition(ms.Now())
+func (ms *MutableStateImpl) findNextSkipTarget() *chasm.TimeSkippingTransition {
+	transition := chasm.NewTimeSkippingTransition(ms.Now())
 	for _, timerInfo := range ms.GetPendingTimerInfos() {
 		transition.TrackEarliestFutureTime(timerInfo.ExpiryTime.AsTime())
 	}
@@ -449,7 +430,7 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 		}
 		// 3. state change.
 		_, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(
-			ctx, transition.TargetTime, transition.DisabledAfterFastForward)
+			ctx, transition.GetTargetTime(), transition.DisabledAfterFastForward)
 		if err != nil {
 			ms.logger.Error("failed to add workflow execution time skipping transitioned event", tag.Error(err))
 			return false
@@ -479,7 +460,6 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippingTransitionedEvent(
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error {
-
 	attr := event.GetWorkflowExecutionTimeSkippingTransitionedEventAttributes()
 	tsi := ms.executionInfo.GetTimeSkippingInfo()
 
@@ -494,24 +474,25 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 		return invalidTransitionError
 	}
 
-	// update time
-	if !timeNotSet(attr.TargetTime) {
-		asd := ms.accumulatedSkippedDuration() + attr.TargetTime.AsTime().Sub(event.GetEventTime().AsTime())
-		tsi.AccumulatedSkippedDuration = durationpb.New(asd)
+	hasSkipTarget := !timeNotSet(attr.TargetTime)
+	var skippedDuration time.Duration
+	if hasSkipTarget {
+		skippedDuration = attr.TargetTime.AsTime().Sub(event.GetEventTime().AsTime())
 	}
-	// update enabled state
-	tsi.Config.Enabled = !attr.GetDisabledAfterFastForward()
-	if attr.GetDisabledAfterFastForward() && tsi.GetFastForwardInfo() != nil {
-		tsi.FastForwardInfo.HasReached = true
-	}
-
-	ms.timeSkippingInfoUpdated = true
+	ms.executeTimeSkippingTransition(
+		skippedDuration,
+		hasSkipTarget,
+		attr.GetDisabledAfterFastForward(),
+	)
 	return nil
 }
 
-func (ms *MutableStateImpl) closeTransactionRegenTimerTasksForWorkflowTimeSkipping(
+func (ms *MutableStateImpl) regenerateTimerTasksForWorkflowTimeSkipping(
 	transactionPolicy historyi.TransactionPolicy,
 ) error {
+	if !ms.IsWorkflow() {
+		return nil
+	}
 	switch transactionPolicy {
 	case historyi.TransactionPolicyActive:
 		return ms.taskGenerator.RegenerateTimerTasksForTimeSkipping()
@@ -520,4 +501,95 @@ func (ms *MutableStateImpl) closeTransactionRegenTimerTasksForWorkflowTimeSkippi
 	default:
 		return serviceerror.NewInternalf("unknown transaction policy: %v", transactionPolicy)
 	}
+}
+
+// =============================================================================
+// Time Skipping Runtime Methods for Chasm-based Executions
+// =============================================================================
+
+func (ms *MutableStateImpl) RecordTimeSkippingTransition(transition *chasm.TimeSkippingTransition) {
+	if ms.IsWorkflow() || !transition.IsValid() {
+		return
+	}
+
+	tsi := ms.executionInfo.GetTimeSkippingInfo()
+	if tsi == nil {
+		return
+	}
+
+	skippedDuration := transition.GetSkippedDuration()
+	ms.executeTimeSkippingTransition(
+		skippedDuration,
+		!transition.GetTargetTime().IsZero(),
+		transition.DisabledAfterFastForward,
+	)
+	if skippedDuration > 0 {
+		ms.addTimeSkippingFastForwardTask()
+	}
+}
+
+func (ms *MutableStateImpl) executeTimeSkippingTransition(
+	skippedDuration time.Duration,
+	hasSkipTarget bool,
+	disabledAfterFastForward bool,
+) {
+	tsi := ms.executionInfo.GetTimeSkippingInfo()
+	if hasSkipTarget {
+		tsi.AccumulatedSkippedDuration = durationpb.New(
+			ms.accumulatedSkippedDuration() + skippedDuration)
+	}
+	if disabledAfterFastForward && tsi.GetFastForwardInfo() != nil {
+		reachedFFInfo := tsi.GetFastForwardInfo()
+		reachedFFInfo.HasReached = true
+		ms.setAndStampFastForwardInfo(reachedFFInfo)
+		tsi.Config.Enabled = false
+	}
+
+	tsi.SessionSkipCount++
+	if tsi.SessionSkipCount >= tsi.GetConfig().GetMaxSessionSkipCount() && tsi.GetConfig().GetEnabled() {
+		tsi.Config.Enabled = false
+	}
+	ms.timeSkippingInfoUpdated = true
+}
+
+// flagSkipDurationUpdateInPassive marks the chasm tree to re-stamp timer tasks against the
+// replicated accumulated skip, detected via changes to TimeSkippingInfo. On the active cluster,
+// tasks are regenerated as time is skipped; on a passive cluster those time changes instead arrive
+// via replication from the active cluster, so this flag is how the passive side triggers the
+// equivalent task regeneration. It is called from the replication paths in ApplyMutation and
+// ApplySnapshot.
+func (ms *MutableStateImpl) flagSkipDurationUpdateInPassive(
+	prevTimeSkippingVT *persistencespb.VersionedTransition,
+	preAccumulatedSkipDuration time.Duration,
+) {
+	if ms.IsWorkflow() {
+		// Workflow executions now re-stamp time-skipping timers via TaskRefresher.refreshTasksForTimeSkipping.
+		return
+	}
+	currTimeSkippingVT := ms.executionInfo.GetTimeSkippingInfo().GetLastUpdateVersionedTransition()
+	if transitionhistory.Compare(currTimeSkippingVT, prevTimeSkippingVT) <= 0 {
+		return
+	}
+	if ms.accumulatedSkippedDuration() == preAccumulatedSkipDuration {
+		return
+	}
+	ms.chasmTree.MarkTotalTimeSkippedUpdatedInPassive()
+	ms.addTimeSkippingFastForwardTask()
+}
+
+// =============================================================================
+// Time Skipping Utility Methods
+// =============================================================================
+
+func (ms *MutableStateImpl) addTimeSkippingFastForwardTask() {
+	tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
+	if !NewTimeSkippingInfoUtil(tsi).HasPendingFastForward() {
+		return
+	}
+	ms.AddTasks(&tasks.TimeSkippingFastForwardTimerTask{
+		WorkflowKey:         ms.GetWorkflowKey(),
+		VisibilityTimestamp: tsi.GetFastForwardInfo().GetTargetTime().AsTime(),
+		VersionedTransition: tsi.GetFastForwardInfoLastUpdateVersionedTransition(),
+		ArchetypeID:         ms.ChasmTree().ArchetypeID(),
+	})
 }

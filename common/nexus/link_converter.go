@@ -1,25 +1,3 @@
-// The MIT License
-//
-// Copyright (c) 2024 Temporal Technologies Inc.  All rights reserved.
-//
-// Permission is hereby granted, free of charge, to any person obtaining a copy
-// of this software and associated documentation files (the "Software"), to deal
-// in the Software without restriction, including without limitation the rights
-// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-// copies of the Software, and to permit persons to whom the Software is
-// furnished to do so, subject to the following conditions:
-//
-// The above copyright notice and this permission notice shall be included in
-// all copies or substantial portions of the Software.
-//
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
-// THE SOFTWARE.
-
 // This file is duplicated in sdk-go/temporalnexus/link_converter.go.
 // Any changes here or there must be replicated. This is temporary until the
 // temporal repo updates to the most recent SDK version.
@@ -47,19 +25,41 @@ const (
 	urlPathWorkflowEventTemplate  = "/namespaces/%s/workflows/%s/%s/history"
 	urlPathNexusOperationTemplate = "/namespaces/%s/nexus-operations/%s/%s/details"
 	urlPathActivityTemplate       = "/namespaces/%s/activities/%s/%s/details"
+	urlPathCallbackTemplate       = "/namespaces/%s/%s/%s/%s/callbacks/%s" // The execution type (e.g. "workflows" or "activities") is variable.
+
+	urlPathExecutionTypeKey     = "executionType"
+	urlPathBusinessIDKey        = "businessID"
+	urlPathCallbackRequestIDKey = "callbackRequestID"
 
 	linkWorkflowEventReferenceTypeKey = "referenceType"
 	linkEventIDKey                    = "eventID"
 	linkEventTypeKey                  = "eventType"
 	linkRequestIDKey                  = "requestID"
+
+	// linkComponentPathKey carries Link_Callback.component_path, repeated once per segment, in order.
+	// So this URL query parameter key may show up multiple times.
+	linkComponentPathKey = "componentPath"
 )
 
 var (
-	rePatternNamespace  = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathNamespaceKey)
-	rePatternWorkflowID = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathWorkflowIDKey)
-	rePatternActivityID = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathActivityIDKey)
-	rePatternRunID      = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathRunIDKey)
-	urlPathRE           = regexp.MustCompile(fmt.Sprintf(
+	rePatternActivityID        = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathActivityIDKey)
+	rePatternBusinessID        = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathBusinessIDKey)
+	rePatternCallbackRequestID = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathCallbackRequestIDKey)
+	rePatternExecutionType     = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathExecutionTypeKey)
+	rePatternNamespace         = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathNamespaceKey)
+	rePatternRunID             = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathRunIDKey)
+	rePatternWorkflowID        = fmt.Sprintf(`(?P<%s>[^/]+)`, urlPathWorkflowIDKey)
+
+	// executionTypeNames maps the type of execution a callback is attached to onto the URL
+	// path segment naming it. The values intentionally match the way existing URLs are rendered,
+	// so every temporal:// link addresses an execution the same way.
+	executionTypeNames = map[enumspb.ExecutionType]string{
+		enumspb.EXECUTION_TYPE_WORKFLOW:        "workflows",
+		enumspb.EXECUTION_TYPE_ACTIVITY:        "activities",
+		enumspb.EXECUTION_TYPE_NEXUS_OPERATION: "nexus-operations",
+	}
+
+	urlPathRE = regexp.MustCompile(fmt.Sprintf(
 		`^/namespaces/%s/workflows/%s/%s/history$`,
 		rePatternNamespace,
 		rePatternWorkflowID,
@@ -70,6 +70,14 @@ var (
 		rePatternNamespace,
 		rePatternActivityID,
 		rePatternRunID,
+	))
+	urlPathCallbackRE = regexp.MustCompile(fmt.Sprintf(
+		`^/namespaces/%s/%s/%s/%s/callbacks/%s$`,
+		rePatternNamespace,
+		rePatternExecutionType,
+		rePatternBusinessID,
+		rePatternRunID,
+		rePatternCallbackRequestID,
 	))
 	eventReferenceType     = string((&commonpb.Link_WorkflowEvent_EventReference{}).ProtoReflect().Descriptor().Name())
 	requestIDReferenceType = string((&commonpb.Link_WorkflowEvent_RequestIdReference{}).ProtoReflect().Descriptor().Name())
@@ -298,4 +306,118 @@ func convertURLQueryToLinkWorkflowEventRequestIdReference(queryValues url.Values
 		return nil, err
 	}
 	return requestIDRef, nil
+}
+
+// ConvertLinkCallbackToNexusLink converts a Link_Callback type to a Nexus Link. It fails when the
+// callback's execution type has no URL path segment.
+func ConvertLinkCallbackToNexusLink(cb *commonpb.Link_Callback) (nexus.Link, error) {
+	execution := cb.GetExecution()
+	executionType, ok := executionTypeNames[execution.GetType()]
+	if !ok {
+		return nexus.Link{}, fmt.Errorf(
+			"failed to convert Link_Callback to link: unsupported execution type: %s",
+			execution.GetType(),
+		)
+	}
+
+	u := &url.URL{
+		Scheme: urlSchemeTemporalKey,
+		Path: fmt.Sprintf(
+			urlPathCallbackTemplate,
+			cb.GetNamespace(),
+			executionType,
+			execution.GetBusinessId(),
+			execution.GetRunId(),
+			cb.GetRequestId(),
+		),
+		RawPath: fmt.Sprintf(
+			urlPathCallbackTemplate,
+			url.PathEscape(cb.GetNamespace()),
+			executionType,
+			url.PathEscape(execution.GetBusinessId()),
+			url.PathEscape(execution.GetRunId()),
+			url.PathEscape(cb.GetRequestId()),
+		),
+	}
+
+	if componentPath := cb.GetComponentPath(); len(componentPath) > 0 {
+		// Each segment is its own value of the same key. Encode sorts by key but keeps each key's
+		// values in insertion order, so the segment order survives.
+		values := url.Values{}
+		for _, segment := range componentPath {
+			values.Add(linkComponentPathKey, segment)
+		}
+		u.RawQuery = values.Encode()
+	}
+
+	return nexus.Link{
+		URL:  u,
+		Type: string(cb.ProtoReflect().Descriptor().FullName()),
+	}, nil
+}
+
+// ConvertNexusLinkToLinkCallback converts a Nexus Link to Link_Callback variant.
+func ConvertNexusLinkToLinkCallback(link nexus.Link) (*commonpb.Link_Callback, error) {
+	cb := &commonpb.Link_Callback{}
+	if link.Type != string(cb.ProtoReflect().Descriptor().FullName()) {
+		return nil, fmt.Errorf(
+			"cannot parse link type %q to %q",
+			link.Type,
+			cb.ProtoReflect().Descriptor().FullName(),
+		)
+	}
+
+	if link.URL.Scheme != urlSchemeTemporalKey {
+		return nil, fmt.Errorf(
+			"failed to parse link to Link_Callback: invalid scheme: %s",
+			link.URL.Scheme,
+		)
+	}
+
+	matches := urlPathCallbackRE.FindStringSubmatch(link.URL.EscapedPath())
+	if len(matches) != 6 {
+		return nil, errors.New("failed to parse link to Link_Callback: malformed URL path")
+	}
+
+	// Determine the execution type from the string found in the regex.
+	exType := enumspb.EXECUTION_TYPE_UNSPECIFIED
+	segment := matches[urlPathCallbackRE.SubexpIndex(urlPathExecutionTypeKey)]
+	for knownType, knownTypeName := range executionTypeNames {
+		if knownTypeName == segment {
+			exType = knownType
+			break
+		}
+	}
+	if exType == enumspb.EXECUTION_TYPE_UNSPECIFIED {
+		return nil, fmt.Errorf(
+			"failed to parse link to Link_Callback: unsupported execution type: %q",
+			segment,
+		)
+	}
+	execution := &commonpb.Execution{Type: exType}
+	cb.Execution = execution
+
+	var err error
+	cb.Namespace, err = url.PathUnescape(matches[urlPathCallbackRE.SubexpIndex(urlPathNamespaceKey)])
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse link to Link_Callback: %w", err)
+	}
+
+	execution.BusinessId, err = url.PathUnescape(matches[urlPathCallbackRE.SubexpIndex(urlPathBusinessIDKey)])
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse link to Link_Callback: %w", err)
+	}
+
+	execution.RunId, err = url.PathUnescape(matches[urlPathCallbackRE.SubexpIndex(urlPathRunIDKey)])
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse link to Link_Callback: %w", err)
+	}
+
+	cb.RequestId, err = url.PathUnescape(matches[urlPathCallbackRE.SubexpIndex(urlPathCallbackRequestIDKey)])
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse link to Link_Callback: %w", err)
+	}
+
+	cb.ComponentPath = link.URL.Query()[linkComponentPathKey]
+	return cb, nil
 }

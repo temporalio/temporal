@@ -35,7 +35,12 @@ func (ch *nexusCommandHandler) handleScheduleCommand(
 	ns := ctx.NamespaceEntry()
 	nsName := ns.Name().String()
 
-	if !ch.config.EnableChasmNexusWorkflowOperations(nsName) {
+	// Use the shared rollout predicate. If it rejects, let HSM create the operation.
+	if !nexusoperation.UseChasmForWorkflow(
+		ch.config.EnableChasmNexusWorkflowOperations(nsName),
+		ch.config.ChasmNexusWorkflowOperationsRolloutPercent(nsName),
+		nsName, ctx.ExecutionKey().BusinessID,
+	) {
 		return ErrCommandNotSupported
 	}
 
@@ -64,8 +69,7 @@ func (ch *nexusCommandHandler) handleScheduleCommand(
 			// Links are not needed for validation.
 		}, attrs.Service, attrs.Operation, attrs.Input)
 		if err != nil {
-			var handlerErr *nexus.HandlerError
-			if errors.As(err, &handlerErr) {
+			if handlerErr, ok := errors.AsType[*nexus.HandlerError](err); ok {
 				//nolint:exhaustive
 				switch handlerErr.Type {
 				case nexus.HandlerErrorTypeNotFound, nexus.HandlerErrorTypeBadRequest:

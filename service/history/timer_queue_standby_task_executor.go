@@ -110,11 +110,12 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 	case *tasks.ChasmTask:
 		task.Attempt = executable.Attempt()
 		err = t.executeChasmSideEffectTimerTask(ctx, task)
-	case *tasks.TimeSkippingTimerTask:
+	case *tasks.TimeSkippingFastForwardTimerTask:
 		err = t.executeTimeSkippingTimerTask(ctx, task)
 	default:
 		err = queueserrors.NewUnprocessableTaskError("unknown task type")
 	}
+	emitStandbyTaskError(t.shardContext, executable, taskTypeTagValue, nil, err)
 
 	return queues.ExecuteResponse{
 		ExecutionMetricTags: metricsTags,
@@ -237,7 +238,7 @@ func (t *timerQueueStandbyTaskExecutor) discardChasmTask(
 // task is retried until the discard delay elapses; otherwise it is acked.
 func (t *timerQueueStandbyTaskExecutor) executeTimeSkippingTimerTask(
 	ctx context.Context,
-	timerTask *tasks.TimeSkippingTimerTask,
+	timerTask *tasks.TimeSkippingFastForwardTimerTask,
 ) error {
 
 	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
@@ -249,7 +250,7 @@ func (t *timerQueueStandbyTaskExecutor) executeTimeSkippingTimerTask(
 
 		// the fast-forward this timer task is associated with is still valid and has not been reached so keep waiting
 		if ffi != nil &&
-			transitionhistory.Compare(ffi.GetLastUpdateVersionedTransition(), timerTask.VersionedTransition) == 0 &&
+			transitionhistory.Compare(tsi.GetFastForwardInfoLastUpdateVersionedTransition(), timerTask.VersionedTransition) == 0 &&
 			!ffi.GetHasReached() {
 			return &struct{}{}, nil
 		}

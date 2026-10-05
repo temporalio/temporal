@@ -3,6 +3,7 @@ package ndc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -31,14 +32,17 @@ import (
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/components/nexusoperations"
+	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -108,7 +112,7 @@ func (s *workflowResetterSuite) SetupTest() {
 
 	s.workflowResetter = NewWorkflowResetter(
 		s.mockShard,
-		wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler),
+		wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{}),
 		s.logger,
 	)
 	s.workflowResetter.stateRebuilder = s.mockStateRebuilder
@@ -372,6 +376,69 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentExecutionMissing() {
 func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 	ctx := context.Background()
 	baseBranchToken := []byte("some random base branch token")
+	forkedBaseBranchToken := []byte("some random forked base branch token")
+	baseRebuildLastEventID := int64(1233)
+	baseRebuildLastEventVersion := int64(12)
+
+	resetBranchToken := []byte("some random reset branch token")
+	resetRequestID := uuid.NewString()
+	resetStats := RebuildStats{
+		HistorySize:          4411,
+		ExternalPayloadSize:  1234,
+		ExternalPayloadCount: 56,
+	}
+	resetMutableState := historyi.NewMockMutableState(s.controller)
+
+	s.mockExecutionMgr.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).Return(
+		&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken, BaseBranchToken: forkedBaseBranchToken}, nil,
+	)
+
+	s.mockStateRebuilder.EXPECT().Rebuild(
+		ctx,
+		gomock.Any(),
+		definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			s.workflowID,
+			s.baseRunID,
+		),
+		forkedBaseBranchToken,
+		baseRebuildLastEventID,
+		new(baseRebuildLastEventVersion),
+		definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			s.workflowID,
+			s.resetRunID,
+		),
+		resetBranchToken,
+		resetRequestID,
+	).Return(resetMutableState, resetStats, nil)
+	resetMutableState.EXPECT().SetBaseWorkflow(
+		s.baseRunID,
+		baseRebuildLastEventID,
+		baseRebuildLastEventVersion,
+	)
+	resetMutableState.EXPECT().AddHistorySize(resetStats.HistorySize)
+	resetMutableState.EXPECT().AddExternalPayloadSize(resetStats.ExternalPayloadSize)
+	resetMutableState.EXPECT().AddExternalPayloadCount(resetStats.ExternalPayloadCount)
+
+	resetWorkflow, err := s.workflowResetter.replayResetWorkflow(
+		ctx,
+		s.namespaceID,
+		s.workflowID,
+		s.baseRunID,
+		baseBranchToken,
+		baseRebuildLastEventID,
+		baseRebuildLastEventVersion,
+		s.resetRunID,
+		resetRequestID,
+	)
+	s.NoError(err)
+	s.Equal(resetMutableState, resetWorkflow.GetMutableState())
+}
+
+func (s *workflowResetterSuite) TestReplayResetWorkflow_EmptyBaseBranchToken() {
+	ctx := context.Background()
+	baseBranchToken := []byte("some random base branch token")
 	baseRebuildLastEventID := int64(1233)
 	baseRebuildLastEventVersion := int64(12)
 
@@ -596,6 +663,31 @@ func (s *workflowResetterSuite) TestFailInflightActivity() {
 
 func (s *workflowResetterSuite) TestGenerateBranchToken() {
 	baseBranchToken := []byte("some random base branch token")
+	resurrectedBaseBranchToken := []byte("some random resurrected new base branch token")
+	baseNodeID := int64(1234)
+
+	resetBranchToken := []byte("some random reset branch token")
+
+	shardID := s.mockShard.GetShardID()
+	s.mockExecutionMgr.EXPECT().ForkHistoryBranch(gomock.Any(), &persistence.ForkHistoryBranchRequest{
+		ForkBranchToken: baseBranchToken,
+		ForkNodeID:      baseNodeID,
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID.String(), s.workflowID, s.resetRunID),
+		ShardID:         shardID,
+		NamespaceID:     s.namespaceID.String(),
+		NewRunID:        s.resetRunID,
+	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken, BaseBranchToken: resurrectedBaseBranchToken}, nil)
+
+	newBranchToken, newBaseBranchToken, err := s.workflowResetter.forkAndGenerateBranchToken(
+		context.Background(), s.namespaceID, s.workflowID, baseBranchToken, baseNodeID, s.resetRunID,
+	)
+	s.NoError(err)
+	s.Equal(resetBranchToken, newBranchToken)
+	s.Equal(resurrectedBaseBranchToken, newBaseBranchToken)
+}
+
+func (s *workflowResetterSuite) TestGenerateBranchToken_EmptyBaseBranchToken() {
+	baseBranchToken := []byte("some random base branch token")
 	baseNodeID := int64(1234)
 
 	resetBranchToken := []byte("some random reset branch token")
@@ -610,11 +702,12 @@ func (s *workflowResetterSuite) TestGenerateBranchToken() {
 		NewRunID:        s.resetRunID,
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil)
 
-	newBranchToken, err := s.workflowResetter.forkAndGenerateBranchToken(
+	newBranchToken, newBaseBranchToken, err := s.workflowResetter.forkAndGenerateBranchToken(
 		context.Background(), s.namespaceID, s.workflowID, baseBranchToken, baseNodeID, s.resetRunID,
 	)
 	s.NoError(err)
 	s.Equal(resetBranchToken, newBranchToken)
+	s.Equal(baseBranchToken, newBaseBranchToken)
 }
 
 func (s *workflowResetterSuite) TestTerminateWorkflow() {
@@ -1197,7 +1290,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_WithPendingChildren() {
 
 		for _, tc := range testcases {
 			s.Run(tc.name+" "+tcReset.name, func() {
-				_, err := reapplyEvents(context.Background(), mutableState, nil, nil, chasmworkflow.NewRegistry(), tc.events, nil, "", tcReset.isReset)
+				_, err := reapplyEvents(context.Background(), mutableState, nil, nil, chasmworkflow.NewRegistry(), tc.events, nil, "", tcReset.isReset, s.logger)
 				s.NoError(err)
 			})
 		}
@@ -1264,7 +1357,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_WithNoPendingChildren() {
 
 		for _, tc := range testCases {
 			s.Run(tc.name+" "+tcReset.name, func() {
-				_, err := reapplyEvents(context.Background(), mutableState, nil, nil, chasmworkflow.NewRegistry(), tc.events, nil, "", tcReset.isReset)
+				_, err := reapplyEvents(context.Background(), mutableState, nil, nil, chasmworkflow.NewRegistry(), tc.events, nil, "", tcReset.isReset, s.logger)
 				s.NoError(err)
 			})
 		}
@@ -1499,7 +1592,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 				}
 			}
 
-			appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), events, nil, "", tc.isReset)
+			appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), events, nil, "", tc.isReset, s.logger)
 			s.NoError(err)
 
 			s.Equal(tc.expected, appliedEvents)
@@ -1570,7 +1663,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_Excludes() {
 		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_UPDATE: {},
 		enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS:  {},
 	}
-	reappliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), events, excludes, "", false)
+	reappliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), events, excludes, "", false, s.logger)
 	s.Empty(reappliedEvents)
 	s.NoError(err)
 
@@ -1596,7 +1689,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_Excludes() {
 		},
 	}
 	events = append(events, event7, event8)
-	reappliedEvents, err = reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), events, excludes, "", true)
+	reappliedEvents, err = reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), events, excludes, "", true, s.logger)
 	s.Empty(reappliedEvents)
 	s.NoError(err)
 }
@@ -1891,7 +1984,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_Complet
 			events := []*historypb.HistoryEvent{event}
 
 			// Call reapplyEvents and expect an error
-			appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), events, nil, "", true)
+			appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), events, nil, "", true, s.logger)
 			s.Error(err)
 			s.Contains(err.Error(), tc.expectedErrorContains)
 			s.Empty(appliedEvents)
@@ -1939,7 +2032,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_Complet
 	events := []*historypb.HistoryEvent{event}
 
 	// Call reapplyEvents - should skip the event (no error, no applied events)
-	appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), events, nil, "", true)
+	appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), events, nil, "", true, s.logger)
 	s.NoError(err)
 	s.Empty(appliedEvents) // Event should be skipped
 }
@@ -1977,7 +2070,7 @@ func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_WithTim
 		attr.GetWorkflowUpdateOptions(),
 	).Return(&historypb.HistoryEvent{}, nil)
 
-	appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), []*historypb.HistoryEvent{event}, nil, "", true)
+	appliedEvents, err := reapplyEvents(context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(), []*historypb.HistoryEvent{event}, nil, "", true, s.logger)
 	s.NoError(err)
 	s.Len(appliedEvents, 1)
 }
@@ -1987,6 +2080,9 @@ func (s *workflowResetterSuite) TestReapplyEvents_WorkflowOptionsUpdated_WithTim
 type fakeChasmEventDefinition struct {
 	eventType     enumspb.EventType
 	cherryPickErr error
+	// cherryPickErrByEventID overrides cherryPickErr per event, so one registry can model a batch in which
+	// different operations resolve differently.
+	cherryPickErrByEventID map[int64]error
 }
 
 func (d *fakeChasmEventDefinition) Type() enumspb.EventType     { return d.eventType }
@@ -1994,7 +2090,10 @@ func (d *fakeChasmEventDefinition) IsWorkflowTaskTrigger() bool { return false }
 func (d *fakeChasmEventDefinition) Apply(chasm.MutableContext, *chasmworkflow.Workflow, *historypb.HistoryEvent) error {
 	return nil
 }
-func (d *fakeChasmEventDefinition) CherryPick(chasm.MutableContext, *chasmworkflow.Workflow, *historypb.HistoryEvent, map[enumspb.ResetReapplyExcludeType]struct{}) error {
+func (d *fakeChasmEventDefinition) CherryPick(_ chasm.MutableContext, _ *chasmworkflow.Workflow, event *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
+	if d.cherryPickErrByEventID != nil {
+		return d.cherryPickErrByEventID[event.GetEventId()]
+	}
 	return d.cherryPickErr
 }
 
@@ -2009,11 +2108,13 @@ func (l fakeChasmLibrary) CommandHandlers() map[enumspb.CommandType]chasmworkflo
 
 func (l fakeChasmLibrary) EventDefinitions() []chasmworkflow.EventDefinition { return l.defs }
 
-func newChasmRegistryWithEvent(eventType enumspb.EventType, cherryPickErr error) *chasmworkflow.Registry {
+// newChasmRegistryWithEvent registers a single fake definition. chasmworkflow.Registry.Register
+// dedupes by Go type, so one fakeChasmEventDefinition per registry is the limit.
+func (s *workflowResetterSuite) newChasmRegistryWithEvent(eventType enumspb.EventType, cherryPickErr error) *chasmworkflow.Registry {
 	reg := chasmworkflow.NewRegistry()
-	_ = reg.Register(fakeChasmLibrary{defs: []chasmworkflow.EventDefinition{
+	s.Require().NoError(reg.Register(fakeChasmLibrary{defs: []chasmworkflow.EventDefinition{
 		&fakeChasmEventDefinition{eventType: eventType, cherryPickErr: cherryPickErr},
-	}})
+	}}))
 	return reg
 }
 
@@ -2022,13 +2123,19 @@ func (s *workflowResetterSuite) TestCherryPickChasmEvent() {
 	event := &historypb.HistoryEvent{EventType: eventType}
 	cherryPickErr := errors.New("cherry-pick failed")
 
+	workflowKey := definition.NewWorkflowKey("test-namespace-id", "test-workflow-id", "test-run-id")
+	warnLevel, debugLevel := testlogger.Warn, testlogger.Debug
+	notFoundErr := fmt.Errorf("wrapped: %w", serviceerror.NewNotFound("nexus operation not found"))
+
 	testCases := []struct {
 		name        string
 		registry    *chasmworkflow.Registry
 		setupMock   func(ms *historyi.MockMutableState)
+		isReset     bool
 		wantOutcome cherryPickOutcome
 		wantErr     error
-		wantErrMsg  string
+		// wantSkipLog, when set, is the level the missing-operation log line must be emitted at.
+		wantSkipLog *testlogger.Level
 	}{
 		{
 			// Event type unknown to CHASM is rejected by the registry lookup before mutable state is consulted, so
@@ -2039,16 +2146,19 @@ func (s *workflowResetterSuite) TestCherryPickChasmEvent() {
 			wantOutcome: cherryPickSkipped,
 		},
 		{
-			// A CHASM-defined event on a workflow without CHASM enabled is an error, not a silent skip.
-			name:        "chasm disabled is an error",
-			registry:    newChasmRegistryWithEvent(eventType, nil),
-			setupMock:   func(ms *historyi.MockMutableState) { ms.EXPECT().ChasmEnabled().Return(false) },
+			// The tree was not hydrated, so the operation this event addresses may exist in persistence and
+			// simply be unreachable. Skipping would drop the event silently, so this must fail instead.
+			name:     "chasm disabled is an error, not a silent skip",
+			registry: s.newChasmRegistryWithEvent(eventType, nil),
+			setupMock: func(ms *historyi.MockMutableState) {
+				ms.EXPECT().ChasmEnabled().Return(false)
+			},
 			wantOutcome: cherryPickSkipped,
-			wantErrMsg:  "CHASM is not enabled for this workflow",
+			wantErr:     errChasmDisabled,
 		},
 		{
 			name:     "component lookup error is skipped",
-			registry: newChasmRegistryWithEvent(eventType, nil),
+			registry: s.newChasmRegistryWithEvent(eventType, nil),
 			setupMock: func(ms *historyi.MockMutableState) {
 				ms.EXPECT().ChasmEnabled().Return(true)
 				ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(nil, nil, cherryPickErr)
@@ -2058,7 +2168,7 @@ func (s *workflowResetterSuite) TestCherryPickChasmEvent() {
 		},
 		{
 			name:     "not-cherry-pickable is skipped without error",
-			registry: newChasmRegistryWithEvent(eventType, chasmworkflow.ErrEventNotCherryPickable),
+			registry: s.newChasmRegistryWithEvent(eventType, chasmworkflow.ErrEventNotCherryPickable),
 			setupMock: func(ms *historyi.MockMutableState) {
 				ms.EXPECT().ChasmEnabled().Return(true)
 				ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(nil, nil, nil)
@@ -2066,8 +2176,41 @@ func (s *workflowResetterSuite) TestCherryPickChasmEvent() {
 			wantOutcome: cherryPickSkipped,
 		},
 		{
+			// The CHASM tree owns the operation, but the event cannot apply from its current state.
+			name:     "invalid transition is skipped without error",
+			registry: s.newChasmRegistryWithEvent(eventType, fmt.Errorf("wrapped: %w", chasm.ErrInvalidTransition)),
+			setupMock: func(ms *historyi.MockMutableState) {
+				ms.EXPECT().ChasmEnabled().Return(true)
+				ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(nil, nil, nil)
+			},
+			wantOutcome: cherryPickSkipped,
+		},
+		{
+			// An operation found in neither the HSM nor the CHASM tree must be skipped, not surfaced as an error.
+			name:     "component not found on the replication path is skipped and logged at debug",
+			registry: s.newChasmRegistryWithEvent(eventType, notFoundErr),
+			setupMock: func(ms *historyi.MockMutableState) {
+				ms.EXPECT().ChasmEnabled().Return(true)
+				ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(nil, nil, nil)
+			},
+			wantOutcome: cherryPickSkipped,
+			wantSkipLog: &debugLevel,
+		},
+		{
+			// On the reset path the same condition drops a completion from the reset run, so it warns instead.
+			name:     "component not found on the reset path warns",
+			registry: s.newChasmRegistryWithEvent(eventType, notFoundErr),
+			setupMock: func(ms *historyi.MockMutableState) {
+				ms.EXPECT().ChasmEnabled().Return(true)
+				ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(nil, nil, nil)
+			},
+			isReset:     true,
+			wantOutcome: cherryPickSkipped,
+			wantSkipLog: &warnLevel,
+		},
+		{
 			name:     "cherry-pick error is skipped and surfaced",
-			registry: newChasmRegistryWithEvent(eventType, cherryPickErr),
+			registry: s.newChasmRegistryWithEvent(eventType, cherryPickErr),
 			setupMock: func(ms *historyi.MockMutableState) {
 				ms.EXPECT().ChasmEnabled().Return(true)
 				ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(nil, nil, nil)
@@ -2077,7 +2220,7 @@ func (s *workflowResetterSuite) TestCherryPickChasmEvent() {
 		},
 		{
 			name:     "owned by chasm is applied",
-			registry: newChasmRegistryWithEvent(eventType, nil),
+			registry: s.newChasmRegistryWithEvent(eventType, nil),
 			setupMock: func(ms *historyi.MockMutableState) {
 				ms.EXPECT().ChasmEnabled().Return(true)
 				ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(nil, nil, nil)
@@ -2091,16 +2234,25 @@ func (s *workflowResetterSuite) TestCherryPickChasmEvent() {
 			ms := historyi.NewMockMutableState(s.controller)
 			tc.setupMock(ms)
 
-			outcome, err := cherryPickChasmEvent(context.Background(), ms, tc.registry, event, nil)
+			logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
+			var skipLog *testlogger.Expectation
+			if tc.wantSkipLog != nil {
+				// Pin the run ID too: the log line is only actionable if it identifies the workflow.
+				ms.EXPECT().GetWorkflowKey().Return(workflowKey)
+				skipLog = logger.Expect(*tc.wantSkipLog, "state machine not found in HSM or CHASM tree",
+					tag.WorkflowRunID(workflowKey.RunID))
+			}
+
+			outcome, err := cherryPickChasmEvent(context.Background(), ms, tc.registry, event, nil, tc.isReset, logger)
 
 			s.Equal(tc.wantOutcome, outcome)
-			switch {
-			case tc.wantErr != nil:
+			if tc.wantErr != nil {
 				s.ErrorIs(err, tc.wantErr)
-			case tc.wantErrMsg != "":
-				s.ErrorContains(err, tc.wantErrMsg)
-			default:
+			} else {
 				s.NoError(err)
+			}
+			if skipLog != nil {
+				s.True(skipLog.Matched(), "expected the skipped-operation line at the %v level", *tc.wantSkipLog)
 			}
 		})
 	}
@@ -2118,8 +2270,8 @@ func (s *workflowResetterSuite) TestReapplyEventsHSMToChasmFallback() {
 		ms.EXPECT().AddHistoryEvent(eventType, gomock.Any()).Return(&historypb.HistoryEvent{})
 
 		applied, err := reapplyEvents(
-			context.Background(), ms, nil, smReg, newChasmRegistryWithEvent(eventType, nil),
-			[]*historypb.HistoryEvent{event}, nil, "", true,
+			context.Background(), ms, nil, smReg, s.newChasmRegistryWithEvent(eventType, nil),
+			[]*historypb.HistoryEvent{event}, nil, "", true, s.logger,
 		)
 		s.NoError(err)
 		s.Equal([]*historypb.HistoryEvent{event}, applied)
@@ -2130,11 +2282,130 @@ func (s *workflowResetterSuite) TestReapplyEventsHSMToChasmFallback() {
 
 		applied, err := reapplyEvents(
 			context.Background(), ms, nil, smReg, chasmworkflow.NewRegistry(),
-			[]*historypb.HistoryEvent{event}, nil, "", true,
+			[]*historypb.HistoryEvent{event}, nil, "", true, s.logger,
 		)
 		s.NoError(err)
 		s.Empty(applied)
 	})
+}
+
+// TestReapplyEventsHSMNotFoundFallsBackToChasm: an operation HSM reports as missing is looked up in CHASM instead of
+// being dropped, and an operation neither tree owns is skipped without an error.
+func (s *workflowResetterSuite) TestReapplyEventsHSMNotFoundFallsBackToChasm() {
+	const eventType = enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED
+	event := &historypb.HistoryEvent{EventId: 5, EventType: eventType}
+	// Both reset and replication reach this branch, and one isReset value covers both: reapplyEvents reads isReset
+	// only in the hardcoded CancelRequested and Terminated cases, which a Nexus event never reaches.
+	hsmNotFound := newHSMRegistryWithEvent(eventType, hsm.ErrStateMachineNotFound)
+
+	s.Run("chasm owns the operation, so the completion is reapplied", func() {
+		ms := historyi.NewMockMutableState(s.controller)
+		ms.EXPECT().HSM().Return(nil)
+		ms.EXPECT().ChasmEnabled().Return(true)
+		ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(nil, nil, nil)
+		ms.EXPECT().AddHistoryEvent(eventType, gomock.Any()).Return(&historypb.HistoryEvent{})
+
+		applied, err := reapplyEvents(
+			context.Background(), ms, nil, hsmNotFound, s.newChasmRegistryWithEvent(eventType, nil),
+			[]*historypb.HistoryEvent{event}, nil, "", false, s.logger,
+		)
+
+		s.NoError(err)
+		s.Equal([]*historypb.HistoryEvent{event}, applied, "a CHASM-owned completion must be reapplied")
+	})
+
+	s.Run("neither tree owns the operation, so the event is skipped", func() {
+		ms := historyi.NewMockMutableState(s.controller)
+		ms.EXPECT().HSM().Return(nil)
+		ms.EXPECT().ChasmEnabled().Return(true)
+		ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(nil, nil, nil)
+		ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey)
+		// No AddHistoryEvent expectation: applying the event would fail on an unexpected call.
+
+		applied, err := reapplyEvents(
+			context.Background(), ms, nil, hsmNotFound,
+			s.newChasmRegistryWithEvent(eventType, serviceerror.NewNotFound("nexus operation not found")),
+			[]*historypb.HistoryEvent{event}, nil, "", false, s.logger,
+		)
+
+		s.NoError(err, "an operation in neither tree must not surface as an error")
+		s.Empty(applied, "the event must be skipped, not applied")
+	})
+}
+
+// TestReapplyEventsOrphanedOperationDoesNotDiscardBatch tests that a Nexus operation not found in either trees (HSM and
+// CHASM) does not cause discard of all events before that operation event.
+func (s *workflowResetterSuite) TestReapplyEventsOrphanedOperationDoesNotDiscardBatch() {
+	const eventType = enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED
+	const ownedEventID, orphanEventID = int64(1), int64(9)
+
+	batch := make([]*historypb.HistoryEvent, 9)
+	for i := range batch {
+		batch[i] = &historypb.HistoryEvent{EventId: int64(i + 1), EventType: eventType}
+	}
+
+	// Index 0 is applied, index 8 is in neither tree, and the events between them are recognized but not
+	// cherry-pickable -- the ordinary mix a replication batch carries.
+	errByEventID := map[int64]error{
+		ownedEventID:  nil,
+		orphanEventID: serviceerror.NewNotFound("nexus operation not found"),
+	}
+	for id := ownedEventID + 1; id < orphanEventID; id++ {
+		errByEventID[id] = chasmworkflow.ErrEventNotCherryPickable
+	}
+	chasmRegistry := chasmworkflow.NewRegistry()
+	s.Require().NoError(chasmRegistry.Register(fakeChasmLibrary{defs: []chasmworkflow.EventDefinition{
+		&fakeChasmEventDefinition{eventType: eventType, cherryPickErrByEventID: errByEventID},
+	}}))
+
+	ms := historyi.NewMockMutableState(s.controller)
+	ms.EXPECT().HSM().Return(nil).Times(len(batch))
+	ms.EXPECT().ChasmEnabled().Return(true).Times(len(batch))
+	ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(nil, nil, nil).Times(len(batch))
+	ms.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey)
+	// Exactly one event may be written back: the orphan must not take the applied one down with it.
+	ms.EXPECT().AddHistoryEvent(eventType, gomock.Any()).Return(&historypb.HistoryEvent{}).Times(1)
+
+	applied, err := reapplyEvents(
+		context.Background(), ms, nil,
+		newHSMRegistryWithEvent(eventType, hsm.ErrStateMachineNotFound), chasmRegistry,
+		batch, nil, "", false, s.logger,
+	)
+
+	s.NoError(err, "one orphaned operation must not fail the batch")
+	s.Len(applied, 1, "only the CHASM-owned completion should be reapplied")
+	s.Equal(ownedEventID, applied[0].GetEventId())
+}
+
+// TestReapplyEventsFailsWhenChasmDisabled: when the CHASM tree was not hydrated the addressed operation may
+// exist in persistence and simply be unreachable, so reapply must fail rather than drop the event.
+func (s *workflowResetterSuite) TestReapplyEventsFailsWhenChasmDisabled() {
+	const hsmOwnedType = enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED
+	const unreachableType = enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED
+
+	hsmOwned := &historypb.HistoryEvent{EventId: 1, EventType: hsmOwnedType}
+	unreachable := &historypb.HistoryEvent{EventId: 2, EventType: unreachableType}
+	afterAbort := &historypb.HistoryEvent{EventId: 3, EventType: unreachableType}
+
+	hsmRegistry := hsm.NewRegistry()
+	s.Require().NoError(hsmRegistry.RegisterEventDefinition(&fakeHSMEventDefinition{eventType: hsmOwnedType}))
+	s.Require().NoError(hsmRegistry.RegisterEventDefinition(
+		&fakeHSMEventDefinition{eventType: unreachableType, cherryPickErr: hsm.ErrStateMachineNotFound}))
+
+	ms := historyi.NewMockMutableState(s.controller)
+	ms.EXPECT().HSM().Return(nil).Times(2)
+	ms.EXPECT().AddHistoryEvent(hsmOwnedType, gomock.Any()).Return(&historypb.HistoryEvent{}).Times(1)
+	ms.EXPECT().ChasmEnabled().Return(false).Times(1)
+
+	applied, err := reapplyEvents(
+		context.Background(), ms, nil, hsmRegistry,
+		s.newChasmRegistryWithEvent(unreachableType, nil),
+		[]*historypb.HistoryEvent{hsmOwned, unreachable, afterAbort}, nil, "", false, s.logger,
+	)
+
+	s.ErrorIs(err, errChasmDisabled, "an unreachable operation must fail reapplyEvents, not be skipped")
+	s.Len(applied, 1, "reapply is fail-fast and stops at the unreachable event")
+	s.Equal(hsmOwned.GetEventId(), applied[0].GetEventId())
 }
 
 // fakeHSMEventDefinition is an hsm.EventDefinition whose CherryPick returns a configurable error, letting tests drive
@@ -2159,9 +2430,8 @@ func newHSMRegistryWithEvent(eventType enumspb.EventType, cherryPickErr error) *
 
 func (s *workflowResetterSuite) TestCherryPickHSMEvent() {
 	const eventType = enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED
-	event := &historypb.HistoryEvent{EventType: eventType}
+	event := &historypb.HistoryEvent{EventId: 5, EventType: eventType}
 	cherryPickErr := errors.New("cherry-pick failed")
-
 	testCases := []struct {
 		name        string
 		registry    *hsm.Registry
@@ -2175,7 +2445,8 @@ func (s *workflowResetterSuite) TestCherryPickHSMEvent() {
 			wantOutcome: cherryPickFallback,
 		},
 		{
-			name:        "state machine not found falls back",
+			// The operation may still live in the CHASM tree, so this falls back rather than skipping.
+			name:        "state machine not found falls back to chasm",
 			registry:    newHSMRegistryWithEvent(eventType, hsm.ErrStateMachineNotFound),
 			expectHSM:   true,
 			wantOutcome: cherryPickFallback,

@@ -14,6 +14,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -77,13 +78,27 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 	newRunHistory []*historypb.HistoryEvent,
 	newRunID string,
 ) (historyi.MutableState, error) {
+	// Keep every persistence batch in this rebuild on the same backend if dynamic config changes mid-rebuild.
+	useChasmForNexus := b.useChasmForWorkflowNexusOperations()
+	chasmEnabled := b.mutableState.ChasmEnabled()
+
 	for i := 0; i < len(history)-1; i++ {
-		_, err := b.applyEvents(ctx, namespaceID, requestID, execution, history[i], nil, "")
+		_, err := b.applyEvents(ctx, namespaceID, requestID, execution, history[i], nil, "", chasmEnabled, useChasmForNexus)
 		if err != nil {
 			return nil, err
 		}
 	}
-	newMutableState, err := b.applyEvents(ctx, namespaceID, requestID, execution, history[len(history)-1], newRunHistory, newRunID)
+	newMutableState, err := b.applyEvents(
+		ctx,
+		namespaceID,
+		requestID,
+		execution,
+		history[len(history)-1],
+		newRunHistory,
+		newRunID,
+		chasmEnabled,
+		useChasmForNexus,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -101,6 +116,17 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 	return newMutableState, nil
 }
 
+func (b *MutableStateRebuilderImpl) useChasmForWorkflowNexusOperations() bool {
+	namespaceName := b.mutableState.GetNamespaceEntry().Name().String()
+	config := b.shard.GetConfig()
+	return nexusoperation.UseChasmForWorkflow(
+		config.EnableChasmNexusWorkflowOperations(namespaceName),
+		config.ChasmNexusWorkflowOperationsRolloutPercent(namespaceName),
+		namespaceName,
+		b.mutableState.GetExecutionInfo().WorkflowId,
+	)
+}
+
 func (b *MutableStateRebuilderImpl) applyEvents(
 	ctx context.Context,
 	namespaceID namespace.ID,
@@ -109,6 +135,8 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 	history []*historypb.HistoryEvent,
 	newRunHistory []*historypb.HistoryEvent,
 	newRunID string,
+	chasmEnabled bool,
+	useChasmForWorkflow bool,
 ) (historyi.MutableState, error) {
 
 	if len(history) == 0 {
@@ -683,7 +711,7 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			}
 
 		default:
-			if err := b.applyStateMachineEvent(ctx, event); err != nil {
+			if err := b.applyStateMachineEvent(ctx, event, chasmEnabled, useChasmForWorkflow); err != nil {
 				return nil, err
 			}
 		}
@@ -720,8 +748,14 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 func (b *MutableStateRebuilderImpl) applyStateMachineEvent(
 	ctx context.Context,
 	event *historypb.HistoryEvent,
+	chasmEnabled bool,
+	useChasmForWorkflow bool,
 ) error {
-	applied, err := b.applyChasmEvent(ctx, event)
+	if !chasmEnabled {
+		return b.applyHSMEvent(event)
+	}
+
+	applied, err := b.applyChasmEvent(ctx, event, useChasmForWorkflow)
 	if err != nil {
 		return err
 	}
@@ -747,22 +781,15 @@ func (b *MutableStateRebuilderImpl) applyHSMEvent(event *historypb.HistoryEvent)
 func (b *MutableStateRebuilderImpl) applyChasmEvent(
 	ctx context.Context,
 	event *historypb.HistoryEvent,
+	useChasmForNexus bool,
 ) (bool, error) {
-	if !b.mutableState.ChasmEnabled() {
+	// Create events use the same rollout predicate as live commands so reset does
+	// not move out-of-rollout workflows to CHASM. Non-create events apply wherever
+	// the operation already lives.
+	if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED && !useChasmForNexus {
 		return false, nil
 	}
-	// Creating a Nexus operation is routed by the per-namespace nexusoperation.enableChasmWorkflowOperations
-	// flag: when off, new operations are created in the HSM tree (legacy behavior). This routing applies only
-	// to the create event; non-create events are matched against wherever the operation already lives. A reset
-	// therefore realigns an operation to whichever framework new operations are created in today.
-	if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED {
-		nsName := b.mutableState.GetNamespaceEntry().Name().String()
-		if !b.shard.GetConfig().EnableChasmNexusWorkflowOperations(nsName) {
-			return false, nil
-		}
-	}
-	chasmWorkflowRegistry := b.shard.ChasmWorkflowRegistry()
-	def, ok := chasmWorkflowRegistry.EventDefinitionByEventType(event.GetEventType())
+	def, ok := b.shard.ChasmWorkflowRegistry().EventDefinitionByEventType(event.GetEventType())
 	if !ok {
 		return false, nil
 	}

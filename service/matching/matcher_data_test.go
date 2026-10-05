@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"math"
 	"math/rand"
 	"runtime"
 	"sync/atomic"
@@ -50,6 +51,7 @@ func (s *MatcherDataSuite) SetupTest() {
 	s.ts = clock.NewEventTimeSource().Update(time.Now())
 	s.ts.UseAsyncTimers(true)
 	rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	rateLimitManager.Start()
 	s.rateLimitedCount.Store(0)
 	s.md = newMatcherData(cfg, logger, s.ts, true, rateLimitManager, func() { s.rateLimitedCount.Add(1) })
 }
@@ -975,7 +977,8 @@ func (s *MatcherDataSuite) TestFindMatch() {
 					MinPriority: tc.pollerMinPriority,
 				}
 			}
-			s.md.pollers.heap = []*waitingPoller{poller}
+			s.md.pollers = pollerList{logger: s.md.logger}
+			s.md.pollers.Add(poller)
 
 			// Call findMatch
 			s.md.lock.Lock()
@@ -1127,6 +1130,14 @@ func TestCheckConstants(t *testing.T) {
 	assert.Greater(t, pollForwarderPriority, 1000*maxPriorityLevels)
 }
 
+func TestAvailableSimpleLimiterTokens(t *testing.T) {
+	nowNs := time.Now().UnixNano()
+	require.Equal(t, int32(11), simpleLimiter(0).availableSimpleLimiterTokens(makeSimpleLimiterParams(10, time.Second), nowNs))
+	require.Equal(t, int32(0), simpleLimiter(nowNs+1).availableSimpleLimiterTokens(makeSimpleLimiterParams(10, time.Second), nowNs))
+	require.Equal(t, int32(0), simpleLimiter(0).availableSimpleLimiterTokens(makeSimpleLimiterParams(0, time.Second), nowNs))
+	require.Equal(t, int32(math.MaxInt32), simpleLimiter(0).availableSimpleLimiterTokens(makeSimpleLimiterParams(1e12, 0), nowNs))
+}
+
 func FuzzMatcherData(f *testing.F) {
 	f.Fuzz(func(t *testing.T, tape []byte) {
 		cfg := newTaskQueueConfig(
@@ -1138,6 +1149,7 @@ func FuzzMatcherData(f *testing.F) {
 		ts.UseAsyncTimers(true)
 		logger := log.NewNoopLogger()
 		rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+		rateLimitManager.Start()
 		md := newMatcherData(cfg, logger, ts, true, rateLimitManager, func() {})
 
 		next := func() int {
