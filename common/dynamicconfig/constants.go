@@ -292,12 +292,6 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		DefaultHealthSettings,
 		"controls persistence latency and error-ratio health check thresholds: an overall bucket across all operations plus optional named operation groups; empty disables every check",
 	)
-	// TODO: This should be removed once percentiles are the default.
-	HistoryHealthSignalUsePercentiles = NewGlobalBoolSetting(
-		"system.historyHealthSignalUsePercentiles",
-		false,
-		`historyHealthSignalUsePercentiles controls whether we use the p99 latency for health checking instead of the mean latency`,
-	)
 	PersistenceHealthSignalAggregationEnabled = NewGlobalBoolSetting(
 		"system.persistenceHealthSignalAggregationEnabled",
 		true,

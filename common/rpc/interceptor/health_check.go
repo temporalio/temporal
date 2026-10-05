@@ -50,8 +50,7 @@ type (
 
 	// HealthSignalAggregatorImpl implements HealthSignalAggregator
 	healthSignalAggregatorImpl struct {
-		aggregatorEnabled  dynamicconfig.BoolPropertyFn
-		percentilesEnabled dynamicconfig.BoolPropertyFn
+		aggregatorEnabled dynamicconfig.BoolPropertyFn
 
 		latencyAverage aggregate.MovingWindowAverage
 		errorRatio     aggregate.MovingWindowAverage
@@ -173,7 +172,6 @@ func specialCaseAPIIsPolling(req any) bool {
 func NewHealthSignalAggregator(
 	logger log.Logger,
 	aggregatorEnabled dynamicconfig.BoolPropertyFn,
-	percentilesEnabled dynamicconfig.BoolPropertyFn,
 	getSettings dynamicconfig.TypedPropertyFn[health.Settings],
 	windowSize time.Duration,
 	maxBufferSize int,
@@ -182,12 +180,11 @@ func NewHealthSignalAggregator(
 	signals.Start()
 
 	return &healthSignalAggregatorImpl{
-		logger:             logger,
-		aggregatorEnabled:  aggregatorEnabled,
-		percentilesEnabled: percentilesEnabled,
-		latencyAverage:     aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
-		errorRatio:         aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
-		healthSignals:      signals,
+		logger:            logger,
+		aggregatorEnabled: aggregatorEnabled,
+		latencyAverage:    aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
+		errorRatio:        aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
+		healthSignals:     signals,
 	}
 }
 
@@ -199,9 +196,7 @@ func (s *healthSignalAggregatorImpl) Record(rpcMethod string, latency time.Durat
 
 	s.latencyAverage.Record(latency.Milliseconds())
 
-	if s.percentilesEnabled() {
-		s.healthSignals.Record(rpcMethod, latency, err)
-	}
+	s.healthSignals.Record(rpcMethod, latency, err)
 
 	if isUnhealthyError(err) {
 		s.errorRatio.Record(1)
@@ -220,8 +215,8 @@ func (s *healthSignalAggregatorImpl) AverageLatency() float64 {
 }
 
 func (s *healthSignalAggregatorImpl) LatencyQuantile(quantile float64) (float64, bool) {
-	if !s.percentilesEnabled() {
-		s.logger.Debug("health signal percentile aggregator is disabled")
+	if !s.aggregatorEnabled() {
+		s.logger.Debug("health signal aggregator is disabled")
 		return 0, false
 	}
 
@@ -229,8 +224,8 @@ func (s *healthSignalAggregatorImpl) LatencyQuantile(quantile float64) (float64,
 }
 
 func (s *healthSignalAggregatorImpl) LatencyQuantileByGroup(groupName string, quantile float64) (float64, bool) {
-	if !s.percentilesEnabled() {
-		s.logger.Debug("health signal percentile aggregator is disabled")
+	if !s.aggregatorEnabled() {
+		s.logger.Debug("health signal aggregator is disabled")
 		return 0, false
 	}
 
@@ -249,12 +244,9 @@ func (s *healthSignalAggregatorImpl) ErrorRatio() (float64, bool) {
 	return s.errorRatio.Average(), true
 }
 
-// TODO: (temporary) this gates the per-group error ratio behind the percentiles flag
-// even though it isn't a percentile. having the health signal aggregator impl that is here
-// will likely change in future PRs once we finalize the design
 func (s *healthSignalAggregatorImpl) ErrorRatioByGroup(groupName string) (float64, bool) {
-	if !s.percentilesEnabled() {
-		s.logger.Debug("health signal percentile aggregator is disabled")
+	if !s.aggregatorEnabled() {
+		s.logger.Debug("health signal aggregator is disabled")
 		return 0, false
 	}
 
