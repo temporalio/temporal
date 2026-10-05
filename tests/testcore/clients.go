@@ -66,8 +66,9 @@ type historyClients struct {
 }
 
 type matchingClient struct {
-	once   sync.Once
-	client matchingservice.MatchingServiceClient
+	once    sync.Once
+	client  matchingservice.MatchingServiceClient
+	cleanup func()
 }
 
 func newClients(
@@ -146,6 +147,9 @@ func (c *clients) ensureHistory() {
 
 func (c *clients) MatchingClient() matchingservice.MatchingServiceClient {
 	c.ensureMatching()
+	if c.matching.client == nil {
+		panic("matching test client used after cluster shutdown")
+	}
 	return c.matching.client
 }
 
@@ -164,7 +168,10 @@ func (c *clients) ensureMatching() {
 
 		monitor := static.NewMonitor(c.hostsByService)
 		monitor.Start()
-		frontendMembershipAddress := membership.GRPCResolverURLForTesting(monitor, primitives.FrontendService)
+		frontendMembershipAddress, unregisterResolver := membership.GRPCResolverURLForTesting(
+			monitor,
+			primitives.FrontendService,
+		)
 		rpcFactory := rpc.NewFactory(
 			&config.Config{},
 			primitives.FrontendService,
@@ -181,6 +188,10 @@ func (c *clients) ensureMatching() {
 			monitor,
 			c.tokenProvider,
 		)
+		cleanup := func() {
+			rpcFactory.Close()
+			unregisterResolver()
+		}
 		clientFactory := client.NewFactoryProvider().NewFactory(
 			rpcFactory,
 			monitor,
@@ -204,9 +215,11 @@ func (c *clients) ensureMatching() {
 			matchingclient.DefaultLongPollTimeout,
 		)
 		if err != nil {
+			cleanup()
 			c.logger.Fatal("unable to create matching test client", tag.Error(err))
 		}
 		c.matching.client = matchingClient
+		c.matching.cleanup = cleanup
 	})
 }
 
@@ -222,6 +235,11 @@ func (c *clients) close() []error {
 	}
 	c.frontend.conn = nil
 	c.history.conn = nil
+	if c.matching.cleanup != nil {
+		c.matching.cleanup()
+		c.matching.cleanup = nil
+		c.matching.client = nil
+	}
 	return errs
 }
 

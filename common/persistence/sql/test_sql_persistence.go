@@ -130,6 +130,8 @@ func (s *TestCluster) DropDatabase() {
 	cfg2 := s.cfg
 
 	if cfg2.PluginName == "sqlite" && cfg2.DatabaseName != ":memory:" && cfg2.ConnectAttributes["mode"] != "memory" {
+		// Release pooled connections before removing the files they hold open.
+		s.dropDatabase(cfg2)
 		if len(cfg2.DatabaseName) > 3 { // 3 should mean not ., .., empty, or /
 			// Remove main database file
 			_ = os.Remove(cfg2.DatabaseName)
@@ -140,6 +142,10 @@ func (s *TestCluster) DropDatabase() {
 		return
 	}
 
+	s.dropDatabase(cfg2)
+}
+
+func (s *TestCluster) dropDatabase(cfg2 config.SQL) {
 	// NOTE need to connect with empty name to drop the database
 	cfg2.DatabaseName = ""
 	db := s.newAdminDB(sqlplugin.DbKindUnknown, &cfg2)
