@@ -1702,7 +1702,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowNexusHandlerCallbackLinks() {
 		},
 	})
 	s.NoError(err)
-	s.NoError(await.Rcv(s.T(), pollerErrCh))
+	s.NoError(s.Rcv(pollerErrCh))
 
 	cbInfo := wfExec.awaitCallbackState(s.T(), workflowID, env.TestEnv, enumspb.CALLBACK_STATE_SUCCEEDED, nil)
 	protorequire.ProtoSliceEqual(s.T(),
@@ -1720,7 +1720,7 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowNexusHandlerCallbackLinks() {
 	s.Require().True(ok, "callback request ID should be the one that started the workflow")
 	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, startRequestInfo.GetEventType())
 
-	gotLinks := await.Rcv(s.T(), inboundLinks)
+	gotLinks := s.Rcv(inboundLinks)
 	s.Require().Len(gotLinks, 1)
 	gotCallbackLink, err := commonnexus.ConvertNexusLinkToLinkCallback(commonnexus.ConvertLinksFromProto(gotLinks)[0])
 	s.NoError(err)
@@ -1828,11 +1828,11 @@ func (s *NexusWorkflowUpdateTestSuite) TestWorkflowUpdateNexusHandlerCallbackLin
 		},
 	})
 	s.NoError(err)
-	s.NoError(await.Rcv(s.T(), pollerErrCh))
+	s.NoError(s.Rcv(pollerErrCh))
 
 	// Outbound half: the handler was handed a Link_Callback addressing the Update's callback. The
 	// component path is what distinguishes it from a callback attached to the workflow itself.
-	gotLinks := await.Rcv(s.T(), inboundLinks)
+	gotLinks := s.Rcv(inboundLinks)
 	s.Require().Len(gotLinks, 1)
 	gotCallbackLink, err := commonnexus.ConvertNexusLinkToLinkCallback(commonnexus.ConvertLinksFromProto(gotLinks)[0])
 	s.NoError(err)
