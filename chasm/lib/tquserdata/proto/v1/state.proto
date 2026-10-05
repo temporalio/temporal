@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.tquserdata.proto.v1;
+
+option go_package = "go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapb";
+
+message UserDataState {
+  reserved 1;
+  reserved "legacy_version";
+  bool closed = 2;
+  int64 version = 3;
+}
