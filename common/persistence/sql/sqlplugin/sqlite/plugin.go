@@ -66,6 +66,7 @@ func (p *plugin) CreateDB(
 		return nil, err
 	}
 	db := newDB(dbKind, cfg.DatabaseName, conn, nil, logger)
+	db.connPool = p.connPool
 	db.OnClose(func() { p.connPool.Close(cfg) }) // remove reference
 	return db, nil
 }

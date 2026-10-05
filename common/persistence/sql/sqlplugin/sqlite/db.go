@@ -24,6 +24,7 @@ type db struct {
 	conn      sqlplugin.Conn
 	converter DataConverter
 	logger    log.Logger
+	connPool  *connPool
 }
 
 var _ sqlplugin.AdminDB = (*db)(nil)

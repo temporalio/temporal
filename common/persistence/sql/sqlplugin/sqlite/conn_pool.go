@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"errors"
 	"sync"
 
 	"github.com/jmoiron/sqlx"
@@ -14,17 +15,18 @@ import (
 // the SQLite concept of safety only within a single thread.
 type connPool struct {
 	mu   sync.Mutex
-	pool map[string]entry
+	pool map[string]*entry
 }
 
 type entry struct {
-	db       *sqlx.DB
-	refCount int
+	db           *sqlx.DB
+	databaseName string
+	refCount     int
 }
 
 func newConnPool() *connPool {
 	return &connPool{
-		pool: make(map[string]entry),
+		pool: make(map[string]*entry),
 	}
 }
 
@@ -54,7 +56,7 @@ func (cp *connPool) Allocate(
 		return nil, err
 	}
 
-	cp.pool[dsn] = entry{db: db, refCount: 1}
+	cp.pool[dsn] = &entry{db: db, databaseName: cfg.DatabaseName, refCount: 1}
 
 	return db, nil
 }
@@ -83,4 +85,21 @@ func (cp *connPool) Close(cfg *config.SQL) {
 	// 	e.db.Close()
 	// 	delete(cp.pool, dsn)
 	// }
+}
+
+// closeDatabase closes and removes every pooled connection to the named database, regardless of outstanding
+// references. For in-memory databases this destroys the database.
+func (cp *connPool) closeDatabase(databaseName string) error {
+	cp.mu.Lock()
+	defer cp.mu.Unlock()
+
+	var errs []error
+	for dsn, e := range cp.pool {
+		if e.databaseName != databaseName {
+			continue
+		}
+		errs = append(errs, e.db.Close())
+		delete(cp.pool, dsn)
+	}
+	return errors.Join(errs...)
 }

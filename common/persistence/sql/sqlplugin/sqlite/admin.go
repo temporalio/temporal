@@ -99,8 +99,11 @@ func (mdb *db) CreateDatabase(name string) error {
 	return nil
 }
 
-// DropDatabase drops a database
+// DropDatabase closes the pooled connections to the database. For in-memory databases this destroys the database;
+// file-backed databases leave their files for the caller to remove.
 func (mdb *db) DropDatabase(name string) error {
-	// // SQLite does not need to drop database
-	return nil
+	if mdb.connPool == nil {
+		return nil
+	}
+	return mdb.connPool.closeDatabase(name)
 }
