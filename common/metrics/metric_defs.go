@@ -1025,6 +1025,8 @@ var (
 	SpeculativeWorkflowTaskRollbacks                 = NewCounterDef("speculative_workflow_task_rollbacks")
 
 	ActivityEagerExecutionCounter = NewCounterDef("activity_eager_execution")
+	StandaloneActivityEagerStartAcceptedCounter = NewCounterDef("standalone_activity_eager_start_accepted")
+	StandaloneActivityEagerStartDeniedCounter   = NewCounterDef("standalone_activity_eager_start_denied")
 	// WorkflowEagerExecutionCounter is emitted any time eager workflow start is requested.
 	WorkflowEagerExecutionCounter = NewCounterDef("workflow_eager_execution")
 	// WorkflowEagerExecutionDeniedCounter is emitted any time eager workflow start is requested and the serer fell back

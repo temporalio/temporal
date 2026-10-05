@@ -59,6 +59,7 @@ func (a *Activity) buildEagerActivityTask(
 	return &workflowservice.PollActivityTaskQueueResponse{
 		TaskToken:                   token,
 		WorkflowNamespace:           request.namespace,
+		WorkflowExecution:           &commonpb.WorkflowExecution{RunId: key.RunID},
 		ActivityType:                a.GetActivityType(),
 		ActivityId:                  key.BusinessID,
 		Header:                      requestData.GetHeader(),

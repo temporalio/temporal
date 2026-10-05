@@ -1210,7 +1210,10 @@ func (s *standaloneActivityTestSuite) TestStart() {
 func (s *standaloneActivityTestSuite) TestEagerStartResponseAndNoRedelivery() {
 	env := s.newTestEnv()
 	t := s.T()
-	ctx := s.Context()
+	ctx := metadata.NewOutgoingContext(s.Context(), metadata.Pairs(
+		headers.ClientNameHeaderName, headers.ClientNameGoSDK,
+		headers.ClientVersionHeaderName, temporal.SDKVersion,
+	))
 	activityID := testcore.RandomizeStr(t.Name())
 	taskQueue := testcore.RandomizeStr(t.Name())
 	requestID := testcore.RandomizeStr(t.Name())
@@ -1232,7 +1235,19 @@ func (s *standaloneActivityTestSuite) TestEagerStartResponseAndNoRedelivery() {
 	require.NotNil(t, first.GetEagerActivityTask())
 	require.Equal(t, activityID, first.GetEagerActivityTask().GetActivityId())
 	require.Equal(t, first.GetRunId(), first.GetEagerActivityTask().GetActivityRunId())
+	require.NotNil(t, first.GetEagerActivityTask().GetWorkflowExecution())
+	require.Empty(t, first.GetEagerActivityTask().GetWorkflowExecution().GetWorkflowId())
+	require.Equal(t, first.GetRunId(), first.GetEagerActivityTask().GetWorkflowExecution().GetRunId())
 	require.EqualValues(t, 1, first.GetEagerActivityTask().GetAttempt())
+
+	describe, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      first.GetRunId(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, headers.ClientNameGoSDK, describe.GetInfo().GetSdkName())
+	require.Equal(t, temporal.SDKVersion, describe.GetInfo().GetSdkVersion())
 
 	retry, err := env.FrontendClient().StartActivityExecution(ctx, request)
 	require.NoError(t, err)

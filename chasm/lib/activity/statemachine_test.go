@@ -200,6 +200,7 @@ func TestTransitionEagerStarted(t *testing.T) {
 	ctx := &chasm.MockMutableContext{
 		MockContext: chasm.MockContext{
 			HandleNow: func(chasm.Component) time.Time { return defaultTime },
+			GoCtx:     headers.SetVersionsForTests(context.Background(), temporal.SDKVersion, headers.ClientNameGoSDK, "", ""),
 		},
 	}
 	attempt := &activitypb.ActivityAttemptState{}
@@ -229,6 +230,8 @@ func TestTransitionEagerStarted(t *testing.T) {
 	require.EqualValues(t, 1, attempt.GetStartedStamp())
 	require.Equal(t, "start-request-id", attempt.GetStartRequestId())
 	require.Equal(t, "starter", attempt.GetLastWorkerIdentity())
+	require.Equal(t, headers.ClientNameGoSDK, attempt.GetSdkName())
+	require.Equal(t, temporal.SDKVersion, attempt.GetSdkVersion())
 
 	require.Len(t, ctx.Tasks, 3)
 	require.IsType(t, &activitypb.ScheduleToCloseTimeoutTask{}, ctx.Tasks[0].Payload)

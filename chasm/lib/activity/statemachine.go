@@ -422,6 +422,8 @@ func (a *Activity) applyEagerStarted(ctx chasm.MutableContext, event eagerStartE
 	}
 	attempt.StartRequestId = event.requestID
 	attempt.LastWorkerIdentity = event.identity
+	attempt.SdkName = ctx.RequestHeader(headers.ClientNameHeaderName)
+	attempt.SdkVersion = ctx.RequestHeader(headers.ClientVersionHeaderName)
 	startTime := attempt.GetStartedTime().AsTime()
 	ctx.AddTask(
 		a,

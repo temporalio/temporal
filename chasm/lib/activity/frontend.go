@@ -42,6 +42,11 @@ var ErrStandaloneActivityDisabled = serviceerror.NewUnimplemented("Standalone ac
 
 var ErrStandaloneActivityOperatorCommandsDisabled = serviceerror.NewUnimplemented("Standalone activity operator commands are disabled")
 
+const (
+	eagerStartDeniedReasonDynamicConfigDisabled metrics.ReasonString = "dynamic_config_disabled"
+	eagerStartDeniedReasonStartDelay            metrics.ReasonString = "start_delay"
+)
+
 type frontendHandler struct {
 	FrontendHandler
 	callbackValidator callbacks.Validator
@@ -386,9 +391,23 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	if req.GetStartDelay().AsDuration() > 0 && !h.config.StartDelayEnabled(req.GetNamespace()) {
 		return nil, serviceerror.NewInvalidArgument("start_delay is not enabled for this namespace")
 	}
-	if req.GetRequestEagerExecution() &&
-		(req.GetStartDelay().AsDuration() > 0 || !h.config.EnableEagerStart(req.GetNamespace())) {
-		req.RequestEagerExecution = false
+	if req.GetRequestEagerExecution() {
+		metricsHandler := h.metricsHandler.WithTags(
+			metrics.NamespaceTag(req.GetNamespace()),
+			metrics.OperationTag("StartActivityExecution"),
+		)
+		switch {
+		case !h.config.EnableEagerStart(req.GetNamespace()):
+			metrics.StandaloneActivityEagerStartDeniedCounter.With(metricsHandler).
+				Record(1, metrics.ReasonTag(eagerStartDeniedReasonDynamicConfigDisabled))
+			req.RequestEagerExecution = false
+		case req.GetStartDelay().AsDuration() > 0:
+			metrics.StandaloneActivityEagerStartDeniedCounter.With(metricsHandler).
+				Record(1, metrics.ReasonTag(eagerStartDeniedReasonStartDelay))
+			req.RequestEagerExecution = false
+		default:
+			metrics.StandaloneActivityEagerStartAcceptedCounter.With(metricsHandler).Record(1)
+		}
 	}
 
 	opts := activityOptionsFromStartRequest(req)
