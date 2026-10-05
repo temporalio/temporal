@@ -695,6 +695,13 @@ func normalizedLaneClassCount(configured int) int {
 	return max(1, configured)
 }
 
+func replicationLaneInfo(laneID string) *replicationspb.ReplicationLaneInfo {
+	if laneID == "" {
+		return nil
+	}
+	return &replicationspb.ReplicationLaneInfo{LaneId: laneID}
+}
+
 func (s *StreamSenderImpl) sendDefaultTasks(
 	priority enumsspb.TaskPriority,
 	beginInclusiveWatermark int64,
@@ -784,8 +791,7 @@ func (s *StreamSenderImpl) sendReadyLaneRetirements() error {
 					ExclusiveHighWatermark:     s.laneRegistry.DefaultReservedCursor(),
 					ExclusiveHighWatermarkTime: timestamp.TimeNowPtrUtc(),
 					Priority:                   enumsspb.TASK_PRIORITY_HIGH,
-					LaneId:                     lane.id,
-					RetireLane:                 true,
+					LaneInfo:                   &replicationspb.ReplicationLaneInfo{LaneId: lane.id, RetireLane: true},
 				},
 			},
 		}); err != nil {
@@ -939,7 +945,7 @@ func (s *StreamSenderImpl) scanLaneTurn(
 					ExclusiveHighWatermark:     endExclusiveWatermark,
 					ExclusiveHighWatermarkTime: timestamp.TimeNowPtrUtc(),
 					Priority:                   priority,
-					LaneId:                     laneID,
+					LaneInfo:                   replicationLaneInfo(laneID),
 				},
 			},
 		})
@@ -1019,7 +1025,7 @@ func (s *StreamSenderImpl) scanLaneTurn(
 				ExclusiveHighWatermark:     endExclusiveWatermark,
 				ExclusiveHighWatermarkTime: timestamp.TimeNowPtrUtc(),
 				Priority:                   priority,
-				LaneId:                     laneID,
+				LaneInfo:                   replicationLaneInfo(laneID),
 			},
 		},
 	})
@@ -1093,7 +1099,7 @@ func (s *StreamSenderImpl) sendLaneProgress(
 				ExclusiveHighWatermark:     watermark,
 				ExclusiveHighWatermarkTime: timestamppb.New(watermarkTime),
 				Priority:                   priority,
-				LaneId:                     laneID,
+				LaneInfo:                   replicationLaneInfo(laneID),
 			},
 		},
 	})
@@ -1294,7 +1300,7 @@ func (s *StreamSenderImpl) sendConvertedTaskOnLane(
 				ExclusiveHighWatermark:     task.SourceTaskId + 1,
 				ExclusiveHighWatermarkTime: task.VisibilityTime,
 				Priority:                   priority,
-				LaneId:                     laneID,
+				LaneInfo:                   replicationLaneInfo(laneID),
 			},
 		},
 	}); err != nil {

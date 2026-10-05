@@ -101,12 +101,17 @@ message WorkflowReplicationMessages {
   int64 exclusive_high_watermark = 2;
   google.protobuf.Timestamp exclusive_high_watermark_time = 3;
   temporal.server.api.enums.v1.TaskPriority priority = 4;
+  // Absent for the default priority lane. Scheduler priority still comes from `priority`.
+  ReplicationLaneInfo lane_info = 5;
+}
+
+message ReplicationLaneInfo {
   // Opaque, stream-local ID for an independently ordered lane. The receiver uses
-  // it only for tracker routing; scheduler priority still comes from `priority`.
-  string lane_id = 5;
+  // it only for tracker routing.
+  string lane_id = 1;
   // True on the final message for a lane. No later message on this stream may use
   // the same lane ID.
-  bool retire_lane = 6;
+  bool retire_lane = 2;
 }
 
 // TODO: Deprecate this definition, it only used by the deprecated replication DLQ v1 logic

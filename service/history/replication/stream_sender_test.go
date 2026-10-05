@@ -222,9 +222,9 @@ func (s *streamSenderSuite) TestSendLaneUsesOpaqueLaneID() {
 	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(
 		func(response *historyservice.StreamWorkflowReplicationMessagesResponse) error {
 			messages := response.GetMessages()
-			s.Equal(lane.id, messages.GetLaneId())
+			s.Equal(lane.id, messages.GetLaneInfo().GetLaneId())
 			s.Equal(enumsspb.TASK_PRIORITY_HIGH, messages.GetPriority())
-			s.False(messages.GetRetireLane())
+			s.False(messages.GetLaneInfo().GetRetireLane())
 			s.Empty(messages.GetReplicationTasks())
 			return nil
 		},
@@ -273,7 +273,7 @@ func (s *streamSenderSuite) TestSendLaneEventLoopWaitsForInitialLaneState() {
 
 	s.streamSender.markInitialLaneStateApplied()
 	messages := await.Rcv(s.T(), sent)
-	s.Equal(lane.id, messages.GetLaneId())
+	s.Equal(lane.id, messages.GetLaneInfo().GetLaneId())
 	s.streamSender.shutdownChan.Shutdown()
 	s.NoError(await.Rcv(s.T(), done))
 }
@@ -379,8 +379,8 @@ func (s *streamSenderSuite) TestSendLaneEventLoopsWakeOnCreationAndReclassificat
 	firstSendReleased = true
 	first := await.Rcv(s.T(), sent)
 	second := await.Rcv(s.T(), sent)
-	s.Equal(lane.id, first.GetLaneId())
-	s.Equal(lane.id, second.GetLaneId())
+	s.Equal(lane.id, first.GetLaneInfo().GetLaneId())
+	s.Equal(lane.id, second.GetLaneInfo().GetLaneId())
 
 	s.NoError(await.Rcv(s.T(), done))
 	s.NoError(await.Rcv(s.T(), done))
@@ -467,7 +467,7 @@ func (s *streamSenderSuite) TestSendLaneEventLoopPreservesWakeDuringContinuousRo
 	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(
 		func(response *historyservice.StreamWorkflowReplicationMessagesResponse) error {
 			messages := response.GetMessages()
-			if laneBID == "" && messages.GetLaneId() == laneA.id && len(messages.GetReplicationTasks()) != 0 {
+			if laneBID == "" && messages.GetLaneInfo().GetLaneId() == laneA.id && len(messages.GetReplicationTasks()) != 0 {
 				laneB, created, err := registry.Create(
 					"namespace:namespace-b",
 					namespaceLaneScope("namespace-b", end),
@@ -482,7 +482,7 @@ func (s *streamSenderSuite) TestSendLaneEventLoopPreservesWakeDuringContinuousRo
 				laneBID = laneB.id
 				s.streamSender.wakeLaneClasses(1)
 			}
-			if !laneBObserved && messages.GetLaneId() == laneBID {
+			if !laneBObserved && messages.GetLaneInfo().GetLaneId() == laneBID {
 				laneBObserved = true
 				close(laneBSent)
 				s.streamSender.shutdownChan.Shutdown()
@@ -591,7 +591,7 @@ func (s *streamSenderSuite) TestSendLaneEventLoopRoundRobinsLanesInClass() {
 		func(response *historyservice.StreamWorkflowReplicationMessagesResponse) error {
 			messages := response.GetMessages()
 			if len(messages.GetReplicationTasks()) != 0 {
-				sentLaneIDs <- messages.GetLaneId()
+				sentLaneIDs <- messages.GetLaneInfo().GetLaneId()
 			}
 			return nil
 		},
@@ -778,7 +778,7 @@ func (s *streamSenderSuite) TestSendLaneYieldsAfterScanLimit() {
 		func(response *historyservice.StreamWorkflowReplicationMessagesResponse) error {
 			messages := response.GetMessages()
 			s.Empty(messages.GetReplicationTasks())
-			s.Equal(lane.id, messages.GetLaneId())
+			s.Equal(lane.id, messages.GetLaneInfo().GetLaneId())
 			s.Equal(begin+laneTaskScansPerTurn, messages.GetExclusiveHighWatermark())
 			return nil
 		},
@@ -921,7 +921,7 @@ func (s *streamSenderSuite) TestSendCatchUp_LanesPrimesHighTrackerBeforeCapabili
 	// from, so no later batch is dropped as non-advancing.
 	primed := await.Rcv(s.T(), sent)
 	s.Equal(enumsspb.TASK_PRIORITY_HIGH, primed.GetPriority())
-	s.Empty(primed.GetLaneId())
+	s.Nil(primed.GetLaneInfo())
 	s.Empty(primed.GetReplicationTasks())
 	s.Equal(laneFloor, primed.GetExclusiveHighWatermark())
 
@@ -1091,7 +1091,7 @@ func (s *streamSenderSuite) TestSendCatchUp_FirstCapabilityReconcilePrecedesDefa
 
 	var sharedTasks []*replicationspb.ReplicationTask
 	for _, messages := range sent {
-		if messages.GetLaneId() == "" {
+		if messages.GetLaneInfo() == nil {
 			sharedTasks = append(sharedTasks, messages.GetReplicationTasks()...)
 		}
 	}

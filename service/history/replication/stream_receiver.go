@@ -405,8 +405,8 @@ func (r *StreamReceiverImpl) processMessages(
 		)
 		exclusiveHighWatermark := messages.ExclusiveHighWatermark
 		exclusiveHighWatermarkTime := timestamp.TimeValue(messages.ExclusiveHighWatermarkTime)
-		laneID := messages.GetLaneId()
-		taskTracker, err := r.getTaskTrackerForLane(priority, laneID, messages.GetRetireLane())
+		laneInfo := messages.GetLaneInfo()
+		taskTracker, err := r.getTaskTrackerForLane(priority, laneInfo)
 		if err != nil {
 			return NewStreamError("ReplicationTask invalid lane", err)
 		}
@@ -428,8 +428,8 @@ func (r *StreamReceiverImpl) processMessages(
 			Watermark: exclusiveHighWatermark,
 			Timestamp: exclusiveHighWatermarkTime,
 		}, convertedTasks...)
-		if laneID != "" {
-			r.laneRegistry.FinishBatchRegistration(laneID, messages.GetRetireLane())
+		if laneInfo != nil {
+			r.laneRegistry.FinishBatchRegistration(laneInfo.GetLaneId(), laneInfo.GetRetireLane())
 		}
 		for _, task := range trackedTasks {
 			schedulerPriority, err := r.getTaskSchedulerPriority(priority, task)
@@ -491,13 +491,12 @@ func (r *StreamReceiverImpl) getTaskTracker(priority enumsspb.TaskPriority) (Exe
 
 func (r *StreamReceiverImpl) getTaskTrackerForLane(
 	priority enumsspb.TaskPriority,
-	laneID string,
-	retire bool,
+	laneInfo *replicationspb.ReplicationLaneInfo,
 ) (ExecutableTaskTracker, error) {
-	if laneID == "" {
+	if laneInfo == nil {
 		return r.getTaskTracker(priority)
 	}
-	return r.laneRegistry.Resolve(laneID, priority, retire)
+	return r.laneRegistry.Resolve(laneInfo.GetLaneId(), priority, laneInfo.GetRetireLane())
 }
 
 func (r *StreamReceiverImpl) finishLaneBatchRegistration(laneID string, retire bool) {
