@@ -7366,19 +7366,10 @@ func (ms *MutableStateImpl) processCloseCallbacksHsm() error {
 	return nil
 }
 
-// processCloseCallbacksChasm triggers "WorkflowClosed" callbacks using the CHASM implementation.
+// processCloseCallbacksChasm dirties the CHASM tree and triggers "WorkflowClosed" callbacks.
 func (ms *MutableStateImpl) processCloseCallbacksChasm() error {
-	wf, _, err := ms.ChasmWorkflowComponentReadOnly(context.Background())
-	if err != nil {
-		return err
-	}
-
-	// Return early if there are no chasm callbacks to process.
-	if len(wf.Callbacks) == 0 && len(wf.Updates) == 0 {
-		return nil
-	}
-
-	// If there are callbacks to process, create a writable workflow component.
+	// Mutable access to the root marks the whole tree dirty so CloseTransaction
+	// revalidates component tasks against the workflow's closed lifecycle.
 	wf, ctx, err := ms.ChasmWorkflowComponent(context.Background())
 	if err != nil {
 		return err

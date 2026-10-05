@@ -23,6 +23,22 @@ func NewMSPointer(backend NodeBackend) MSPointer {
 	}
 }
 
+func (m MSPointer) LifecycleState() LifecycleState {
+	st := m.backend.GetExecutionState().GetStatus()
+	switch st {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED:
+		return LifecycleStateRunning
+	case enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+		return LifecycleStateFailed
+	default:
+		return LifecycleStateCompleted
+	}
+}
+
 // WorkflowRunTimeout returns the workflow run timeout duration. Returns 0 if no timeout is set.
 func (m MSPointer) WorkflowRunTimeout() time.Duration {
 	return m.backend.GetExecutionInfo().GetWorkflowRunTimeout().AsDuration()

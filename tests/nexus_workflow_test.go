@@ -580,6 +580,86 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletion(chasmEnabled b
 	s.Empty(desc.DatabaseMutableState.GetExecutionInfo().SubStateMachinesByType)
 }
 
+func (s *NexusWorkflowTestSuite) TestNexusOperationSyncCompletionAfterWorkflowTermination(chasmEnabled bool) {
+	if !chasmEnabled {
+		s.T().Skip("this test verifies lifecycle cleanup of a workflow-owned CHASM operation")
+	}
+
+	env := s.newTestEnv(chasmEnabled)
+	ctx := s.Context()
+	taskQueue := testcore.RandomizeStr(s.T().Name())
+	workflowID := testcore.RandomizeStr(s.T().Name())
+
+	var handlerCalls atomic.Int32
+	terminationErrCh := make(chan error, 1)
+	handlerReturnedCh := make(chan struct{}, 1)
+	h := nexustest.Handler{
+		OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+			defer func() {
+				select {
+				case handlerReturnedCh <- struct{}{}:
+				default:
+				}
+			}()
+			handlerCalls.Add(1)
+			err := env.SdkClient().TerminateWorkflow(ctx, workflowID, "", "test")
+			select {
+			case terminationErrCh <- err:
+			default:
+			}
+			if err != nil {
+				return nil, err
+			}
+			return &nexus.HandlerStartOperationResultSync[any]{Value: "result"}, nil
+		},
+	}
+	endpointName := env.createRandomExternalNexusServer(ctx, s.T(), h)
+
+	callerWF := func(ctx workflow.Context) (string, error) {
+		c := workflow.NewNexusClient(endpointName, "service")
+		var result string
+		err := c.ExecuteOperation(ctx, "operation", "input", workflow.NexusOperationOptions{}).Get(ctx, &result)
+		return result, err
+	}
+
+	w := worker.New(env.SdkClient(), taskQueue, worker.Options{})
+	w.RegisterWorkflow(callerWF)
+	s.NoError(w.Start())
+	s.T().Cleanup(w.Stop)
+
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, client.StartWorkflowOptions{
+		ID:        workflowID,
+		TaskQueue: taskQueue,
+	}, callerWF)
+	s.NoError(err)
+	s.NoError(await.Rcv(s.T(), terminationErrCh))
+	await.Rcv(s.T(), handlerReturnedCh)
+
+	var terminatedErr *temporal.TerminatedError
+	s.ErrorAs(run.Get(ctx, nil), &terminatedErr)
+	s.EqualValues(1, handlerCalls.Load())
+
+	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
+		WorkflowId: run.GetID(),
+		RunId:      run.GetRunID(),
+	})
+	scheduledEvent := s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED)
+	s.RequireNoHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED)
+
+	desc, err := env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: run.GetID(),
+			RunId:      run.GetRunID(),
+		},
+		Archetype: chasm.WorkflowArchetype,
+	})
+	s.NoError(err)
+	opNode := desc.DatabaseMutableState.GetChasmNodes()["Operations#"+strconv.FormatInt(scheduledEvent.GetEventId(), 10)]
+	s.Require().NotNil(opNode)
+	s.Empty(opNode.GetMetadata().GetComponentAttributes().GetSideEffectTasks())
+}
+
 func (s *NexusWorkflowTestSuite) TestNexusOperationRetriesAfterHTTPFault(chasmEnabled bool) {
 	const retryInterval = 50 * time.Millisecond
 	env := s.newTestEnv(
