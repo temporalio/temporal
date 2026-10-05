@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/testing/testhooks"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	wcache "go.temporal.io/server/service/history/workflow/cache"
@@ -49,13 +50,18 @@ func NewWorkflowWithSignal(
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
 ) (historyi.MutableState, error) {
-	newMutableState, err := CreateMutableState(
+	startTime := workflow.AdjustNowWithTimeSkipping(
+		shard.GetTimeSource().Now(),
+		startRequest.GetTimeSkippingStatePropagation(),
+	)
+	newMutableState, err := createMutableState(
 		shard,
 		namespaceEntry,
 		startRequest.StartRequest.WorkflowExecutionTimeout,
 		startRequest.StartRequest.WorkflowRunTimeout,
 		workflowID,
 		runID,
+		startTime,
 	)
 	if err != nil {
 		return nil, err
@@ -147,19 +153,22 @@ func NewWorkflowLeaseAndContext(
 			shardCtx.GetLogger(),
 			shardCtx.GetThrottledLogger(),
 			shardCtx.GetMetricsHandler(),
+			nil, // no pagination buffer limiter as it is a transient context
+			testhooks.TestHooks{},
 		),
 		wcache.NoopReleaseFn,
 		ms,
 	), nil
 }
 
-func CreateMutableState(
+func createMutableState(
 	shard historyi.ShardContext,
 	namespaceEntry *namespace.Namespace,
 	executionTimeout *durationpb.Duration,
 	runTimeout *durationpb.Duration,
 	workflowID string,
 	runID string,
+	startTime time.Time,
 ) (historyi.MutableState, error) {
 	newMutableState := workflow.NewMutableState(
 		shard,
@@ -168,7 +177,7 @@ func CreateMutableState(
 		namespaceEntry,
 		workflowID,
 		runID,
-		shard.GetTimeSource().Now(),
+		startTime,
 	)
 	if err := newMutableState.SetHistoryTree(executionTimeout, runTimeout, runID); err != nil {
 		return nil, err

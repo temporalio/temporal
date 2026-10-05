@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
@@ -39,6 +40,7 @@ type visibilityArchiverSuite struct {
 
 	controller      *gomock.Controller
 	testArchivalURI archiver.URI
+	fsEmulation     *s3FsEmulation
 }
 
 func TestVisibilityArchiverSuite(t *testing.T) {
@@ -119,7 +121,7 @@ func (s *visibilityArchiverSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	s.s3cli = mocks.NewMockS3API(s.controller)
-	setupFsEmulation(s.s3cli)
+	s.fsEmulation = setupFsEmulation(s.s3cli)
 	s.setupVisibilityDirectory()
 }
 
@@ -204,6 +206,61 @@ func (s *visibilityArchiverSuite) TestArchive_Success() {
 	err = encoder.Decode(data, archivedRecord)
 	s.NoError(err)
 	s.Equal(request, archivedRecord)
+}
+
+func (s *visibilityArchiverSuite) TestArchive_ContentAwareDeduplication() {
+	visibilityArchiver := s.newTestVisibilityArchiver()
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	visibilityArchiver.metricsHandler = metricsHandler
+	closeTimestamp := timestamp.TimeNowPtrUtc()
+	request := &archiverspb.VisibilityRecord{
+		NamespaceId:      testNamespaceID,
+		Namespace:        testNamespace,
+		WorkflowId:       testWorkflowID,
+		RunId:            testRunID,
+		WorkflowTypeName: testWorkflowTypeName,
+		StartTime:        timestamppb.New(closeTimestamp.AsTime().Add(-time.Hour)),
+		CloseTime:        closeTimestamp,
+		Status:           enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		HistoryLength:    100,
+	}
+	URI, err := archiver.NewURI(testBucketURI + "/test-content-aware-deduplication")
+	s.Require().NoError(err)
+	initialPutCount := s.fsEmulation.putCount
+
+	err = visibilityArchiver.Archive(context.Background(), URI, request)
+	s.Require().NoError(err)
+	s.Equal(initialPutCount+4, s.fsEmulation.putCount)
+
+	deduplicationOption := archiver.GetVisibilityArchivalRecordDeduplicationOption()
+	err = visibilityArchiver.Archive(context.Background(), URI, request, deduplicationOption)
+	s.Require().NoError(err)
+	s.Equal(initialPutCount+8, s.fsEmulation.putCount)
+
+	err = visibilityArchiver.Archive(context.Background(), URI, request, deduplicationOption)
+	s.Require().NoError(err)
+	s.Equal(initialPutCount+8, s.fsEmulation.putCount)
+
+	request.HistoryLength++
+	err = visibilityArchiver.Archive(context.Background(), URI, request, deduplicationOption)
+	s.Require().NoError(err)
+	s.Equal(initialPutCount+12, s.fsEmulation.putCount)
+	s.Require().Len(capture.Snapshot()[metrics.VisibilityArchiverBlobExistsCount.Name()], 4)
+}
+
+func (s *visibilityArchiverSuite) TestUploadIfHashChangedFailsWhenMetadataCannotBeRead() {
+	s3cli := mocks.NewMockS3API(s.controller)
+	URI, err := archiver.NewURI(testBucketURI + "/test-content-aware-deduplication")
+	s.Require().NoError(err)
+	accessErr := errors.New("access denied")
+
+	s3cli.EXPECT().HeadObject(gomock.Any(), gomock.Any()).Return(nil, accessErr)
+
+	uploaded, err := UploadIfHashChanged(context.Background(), s3cli, URI, "test-key", []byte("{}"), "test-hash")
+	s.Require().ErrorIs(err, accessErr)
+	s.Require().False(uploaded)
 }
 
 func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidURI() {
@@ -533,9 +590,9 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 
 		mockParser = NewMockQueryParser(s.controller)
 		mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-			closeTime:        new(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
-			searchPrecision:  new(testData.precision),
-			workflowTypeName: new(testWorkflowTypeName),
+			closeTime:       new(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
+			searchPrecision: new(testData.precision),
+			workflowType:    new(testWorkflowTypeName),
 		}, nil).AnyTimes()
 		visibilityArchiver.queryParser = mockParser
 
@@ -546,9 +603,9 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 
 		mockParser = NewMockQueryParser(s.controller)
 		mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-			startTime:        new(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
-			searchPrecision:  new(testData.precision),
-			workflowTypeName: new(testWorkflowTypeName),
+			startTime:       new(time.Date(2000, 1, testData.day, testData.hour, testData.minute, testData.second, 0, time.UTC)),
+			searchPrecision: new(testData.precision),
+			workflowType:    new(testWorkflowTypeName),
 		}, nil).AnyTimes()
 		visibilityArchiver.queryParser = mockParser
 
@@ -601,7 +658,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 
 	mockParser = NewMockQueryParser(s.controller)
 	mockParser.EXPECT().Parse(gomock.Any()).Return(&parsedQuery{
-		workflowTypeName: new(testWorkflowTypeName),
+		workflowType: new(testWorkflowTypeName),
 	}, nil).AnyTimes()
 	visibilityArchiver.queryParser = mockParser
 	request = &archiver.QueryVisibilityRequest{

@@ -6,12 +6,17 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/workercommands"
+	"go.temporal.io/server/service/history/configs"
 )
 
 func TestCancelCommandDispatchTaskHandler_Validate(t *testing.T) {
+	maxAttempts := 3
 	handler := &cancelCommandDispatchTaskHandler{
+		config: &configs.Config{
+			WorkerCommandsMaxAttempts: dynamicconfig.GetIntPropertyFn(maxAttempts),
+		},
 		logger: log.NewNoopLogger(),
 	}
 
@@ -54,13 +59,13 @@ func TestCancelCommandDispatchTaskHandler_Validate(t *testing.T) {
 		{
 			name:     "cancel requested at max attempts",
 			status:   activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-			attempt:  workercommands.MaxTaskAttempts,
+			attempt:  maxAttempts,
 			expected: true,
 		},
 		{
 			name:     "cancel requested exceeds max attempts",
 			status:   activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
-			attempt:  workercommands.MaxTaskAttempts + 1,
+			attempt:  maxAttempts + 1,
 			expected: false,
 		},
 	}

@@ -136,8 +136,14 @@ func newOperationContext(options contextOptions) *operationContext {
 		nil,
 		nil,
 		oc.logger,
-		func(ns string) int { return options.quota },
-		func(ns string) int { return options.quota },
+		interceptor.ConcurrentRequestQuotas{
+			PerInstance: func(ns string) int { return options.quota },
+			Global:      func(ns string) int { return options.quota },
+		},
+		interceptor.ConcurrentRequestQuotas{
+			PerInstance: func(ns string) int { return options.quota },
+			Global:      func(ns string) int { return options.quota },
+		},
 		map[string]int{
 			oc.apiName: 1,
 		},
@@ -145,7 +151,6 @@ func newOperationContext(options contextOptions) *operationContext {
 	oc.namespaceRateLimitInterceptor = interceptor.NewNamespaceRateLimitInterceptor(
 		nil,
 		mockRateLimiter{options.namespaceRateLimitAllow},
-		make(map[string]int),
 		map[string]struct{}{},
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		metrics.NoopMetricsHandler,

@@ -26,6 +26,7 @@ const (
 	namespaceState          = "namespace_state"
 	sourceCluster           = "source_cluster"
 	targetCluster           = "target_cluster"
+	transport               = "transport"
 	taskSourceTag           = "source"
 	forwardedTag            = "forwarded"
 	pollResultTagName       = "poll_result"
@@ -37,6 +38,7 @@ const (
 	activityType            = "activityType"
 	commandType             = "commandType"
 	serviceName             = "service_name"
+	concurrencyLimitGroup   = "concurrency_limit_group"
 	actionType              = "action_type"
 	workerVersion           = "worker_version"
 	workerDeploymentName    = "worker_deployment_name"
@@ -47,7 +49,6 @@ const (
 	// See server.api.enums.v1.ReplicationTaskType
 	replicationTaskType                            = "replicationTaskType"
 	replicationTaskPriority                        = "replicationTaskPriority"
-	taskExpireStage                                = "task_expire_stage"
 	taskAddResult                                  = "task_add_result"
 	versioningBehavior                             = "versioning_behavior"
 	continueAsNewVersioningBehavior                = "continue_as_new_versioning_behavior"
@@ -65,7 +66,6 @@ const (
 	namespaceAllValue                              = "all"
 	clientName                                     = "client_name"
 	isInternal                                     = "is_internal"
-	activityTargetingMethod                        = "activity_targeting_method"
 	unknownValue                                   = "_unknown_"
 	totalMetricSuffix                              = "_total"
 	tagExcludedValue                               = "_tag_excluded_"
@@ -159,6 +159,14 @@ func TargetClusterTag(value string) Tag {
 	return Tag{Key: targetCluster, Value: value}
 }
 
+// TransportTag returns a new transport tag.
+func TransportTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: transport, Value: value}
+}
+
 // FromClusterIDTag returns a new from cluster tag.
 func FromClusterIDTag(value int32) Tag {
 	return Tag{Key: fromCluster, Value: strconv.FormatInt(int64(value), 10)}
@@ -167,6 +175,22 @@ func FromClusterIDTag(value int32) Tag {
 // ToClusterIDTag returns a new to cluster tag.
 func ToClusterIDTag(value int32) Tag {
 	return Tag{Key: toCluster, Value: strconv.FormatInt(int64(value), 10)}
+}
+
+// FromClusterTag returns a new from cluster tag keyed by cluster name.
+func FromClusterTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: fromCluster, Value: value}
+}
+
+// ToClusterTag returns a new to cluster tag keyed by cluster name.
+func ToClusterTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: toCluster, Value: value}
 }
 
 // UnsafeTaskQueueTag returns a new task queue tag.
@@ -226,11 +250,6 @@ func ActivityTypeTag(value string) Tag {
 		value = unknownValue
 	}
 	return Tag{Key: activityType, Value: value}
-}
-
-// ActivityTargetingMethodTag returns a tag indicating how the activity was targeted: "id" or "type".
-func ActivityTargetingMethodTag(value string) Tag {
-	return Tag{Key: activityTargetingMethod, Value: value}
 }
 
 // CommandTypeTag returns a new command type tag.
@@ -342,10 +361,11 @@ const (
 )
 
 const (
-	PollerScaleReasonIdle        ReasonString = "idle"
-	PollerScaleReasonBacklog     ReasonString = "backlog"
-	PollerScaleReasonTaskRate    ReasonString = "task_rate"
-	PollerScaleReasonRateLimited ReasonString = "rate_limited"
+	PollerScaleReasonIdle                 ReasonString = "idle"
+	PollerScaleReasonDelay                ReasonString = "delay"
+	PollerScaleReasonRatio                ReasonString = "ratio"
+	PollerScaleReasonRateLimited          ReasonString = "rate_limited"
+	PollerScaleReasonTaskQueueRateLimited ReasonString = "task_queue_rate_limited"
 )
 
 // PollerScaleDecisionTag records the direction of a poller scaling decision (scale up, scale
@@ -447,6 +467,29 @@ func ResourceExhaustedScopeTag(scope enumspb.ResourceExhaustedScope) Tag {
 	return Tag{Key: resourceExhaustedScopeTag, Value: scope.String()}
 }
 
+func ConcurrencyLimitGroupTag(value string) Tag {
+	if len(value) == 0 {
+		value = "not_applicable"
+	}
+	return Tag{Key: concurrencyLimitGroup, Value: value}
+}
+
+func LastAttemptCauseTag(value string) Tag {
+	return Tag{Key: LastAttemptCauseTagName, Value: value}
+}
+
+// Values for AttemptStageTagName, identifying whether TaskAlertableAttempt was recorded
+// mid-retry or at the attempt's final resolution.
+const (
+	AttemptStageInFlight = "in_flight"
+	AttemptStageTerminal = "terminal"
+)
+
+var (
+	AttemptStageInFlightTag = Tag{Key: AttemptStageTagName, Value: AttemptStageInFlight}
+	AttemptStageTerminalTag = Tag{Key: AttemptStageTagName, Value: AttemptStageTerminal}
+)
+
 func ServiceNameTag(value primitives.ServiceName) Tag {
 	return Tag{Key: serviceName, Value: string(value)}
 }
@@ -478,6 +521,9 @@ type ReasonString string
 // ReasonTag is a generic tag can be used anywhere a reason is needed.
 // Make sure that the value is of limited cardinality.
 func ReasonTag(value ReasonString) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
 	return Tag{Key: reason, Value: string(value)}
 }
 
@@ -494,6 +540,16 @@ func ReplicationTaskPriorityTag(value enumsspb.TaskPriority) Tag {
 // DestinationTag is a tag for metrics emitted by outbound task executors for the task's destination.
 func DestinationTag(value string) Tag {
 	return Tag{Key: destination, Value: value}
+}
+
+// NexusCompletionSourceTag identifies the CHASM component that delivered a completion callback, by
+// its fully qualified name, e.g. "workflow.workflow". An empty value means the framework could not
+// resolve the callback's parent.
+func NexusCompletionSourceTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: nexusCompletionSourceTagName, Value: value}
 }
 
 func VersioningBehaviorTag(behavior enumspb.VersioningBehavior) Tag {
@@ -586,10 +642,6 @@ func ToUnversionedTag(version string) Tag {
 	}
 	return Tag{Key: toUnversioned, Value: falseValue}
 }
-
-var TaskExpireStageReadTag = Tag{Key: taskExpireStage, Value: "read"}
-var TaskExpireStageMemoryTag = Tag{Key: taskExpireStage, Value: "memory"}
-var TaskInvalidTag = Tag{Key: taskExpireStage, Value: "invalid"}
 
 // ClientNameTag returns a new client_name tag for the SDK client name.
 func ClientNameTag(value string) Tag {

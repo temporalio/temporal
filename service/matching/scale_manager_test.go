@@ -3,6 +3,7 @@ package matching
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -10,6 +11,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -26,6 +29,7 @@ import (
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -53,18 +57,49 @@ type ScaleManagerSuite struct {
 
 	// newTarget counts "new target" logs, which are also used for test synchronization
 	newTarget *testlogger.Expectation
+
+	userDataValue *persistencespb.VersionedTaskQueueUserData
+	userDataErr   error
 }
 
 func TestScaleManagerSuite(t *testing.T) {
 	suite.Run(t, new(ScaleManagerSuite))
 }
 
+func TestScaleManagerAddedTasksBatchThreshold(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		currentWrite    int32
+		callsBeforeWake int
+	}{
+		{name: "current write", currentWrite: 2, callsBeforeWake: 3},
+		{name: "estimate fallback", callsBeforeWake: 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			sm := &scaleManager{batchSize: 5, wakeup: make(chan struct{}, 1)}
+			sm.currentWrite.Store(tc.currentWrite)
+			for range tc.callsBeforeWake {
+				sm.AddedTasks(3)
+			}
+			require.Empty(t, sm.wakeup)
+
+			sm.AddedTasks(3)
+			require.Len(t, sm.wakeup, 1)
+		})
+	}
+}
+
 func (s *ScaleManagerSuite) SetupTest() {
 	s.ProtoAssertions = protorequire.New(s.T())
+	s.userDataValue = nil
+	s.userDataErr = nil
 	s.controller = gomock.NewController(s.T())
 	s.scaler = NewMockPartitionScaler(s.controller)
 	s.scaleDB = NewMockscaleDB(s.controller)
 	s.userData = NewMockuserDataManager(s.controller)
+	s.userData.EXPECT().GetUserData().DoAndReturn(func() (*persistencespb.VersionedTaskQueueUserData, chan struct{}, error) {
+		return s.userDataValue, nil, s.userDataErr
+	}).AnyTimes()
 	s.matching = matchingservicemock.NewMockMatchingServiceClient(s.controller)
 	s.timeSource = clock.NewEventTimeSource()
 	s.capture = metricstest.NewCaptureHandler()
@@ -75,6 +110,7 @@ func (s *ScaleManagerSuite) SetupTest() {
 	s.scaler.EXPECT().Stop().AnyTimes()
 
 	s.settings = dynamicconfig.PartitionScaleManagerSettings{
+		Enabled:            true,
 		MaxRate:            10,  // 100ms cooldown
 		ShrinkRatio:        1.0, // no shrink limit by default
 		ShrinkDelta:        100, // no shrink limit by default
@@ -183,8 +219,102 @@ func assertNoNewLogs(s *ScaleManagerSuite, e *testlogger.Expectation, d time.Dur
 
 // --- tests ---
 
+func (s *ScaleManagerSuite) TestVersionsForDescribe() {
+	legacyActive := &deploymentspb.WorkerDeploymentVersion{
+		DeploymentName: "legacy-deployment",
+		BuildId:        "active",
+	}
+	s.userDataValue = &persistencespb.VersionedTaskQueueUserData{
+		Data: &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+					DeploymentData: &persistencespb.DeploymentData{
+						Versions: []*deploymentspb.DeploymentVersionData{
+							{Version: legacyActive, Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE},
+							{
+								Version: &deploymentspb.WorkerDeploymentVersion{
+									DeploymentName: "legacy-deployment",
+									BuildId:        "drained",
+								},
+								Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED,
+							},
+						},
+						DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+							"new-deployment": {
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									"active":  {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE},
+									"deleted": {Deleted: true},
+									"drained": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_DRAINED},
+								},
+							},
+							"legacy-deployment": {
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									"active": {Status: enumspb.WORKER_DEPLOYMENT_VERSION_STATUS_INACTIVE},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	s.startManager(1, nil)
+
+	versions, err := s.sm.versionsForDescribe()
+
+	s.Require().NoError(err)
+	s.ElementsMatch([]string{
+		worker_versioning.WorkerDeploymentVersionToStringV32(legacyActive),
+		worker_versioning.BuildIDToStringV32("new-deployment", "active"),
+	}, versions)
+}
+
+func (s *ScaleManagerSuite) TestUserDataErrorPreservesBacklogState() {
+	s.userDataErr = errors.New("user data unavailable")
+	initial := &persistencespb.PartitionScaleState{
+		Target:        2,
+		BacklogState:  bitSet(nil).set(0).set(1),
+		BacklogCounts: []byte{number.EncodeCompact8(100), number.EncodeCompact8(200)},
+	}
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).AnyTimes()
+	s.startManager(2, initial)
+
+	s.sm.updateBacklogAndDrainState(context.Background())
+
+	s.Same(initial, s.sm.scaleState)
+}
+
+func (s *ScaleManagerSuite) TestUnavailablePartitionPreservesBacklogAndDrainState() {
+	initial := &persistencespb.PartitionScaleState{
+		Target:        1,
+		BacklogState:  bitSet(nil).set(0).set(1),
+		BacklogCounts: []byte{number.EncodeCompact8(100), number.EncodeCompact8(200)},
+	}
+	s.matching.EXPECT().DescribeTaskQueuePartition(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(
+			_ context.Context,
+			req *matchingservice.DescribeTaskQueuePartitionRequest,
+			_ ...grpc.CallOption,
+		) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
+			s.Require().True(req.GetOnlyIfLoaded())
+			if req.GetTaskQueuePartition().GetNormalPartitionId() == 1 {
+				return nil, serviceerror.NewFailedPrecondition("partition was not loaded")
+			}
+			return backlogDescribeResponse(50, false), nil
+		}).Times(2)
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), false).
+		Do(func(state *persistencespb.PartitionScaleState, _ bool) {
+			s.Equal([]byte{number.EncodeCompact8(50), number.EncodeCompact8(200)}, state.BacklogCounts)
+			s.Equal(int32(2), bitSet(state.BacklogState).len())
+		}).Return(nil)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).AnyTimes()
+	s.startManager(2, initial)
+
+	s.sm.updateBacklogAndDrainState(context.Background())
+}
+
 // TestAddedTasksWakesScalerOnFullBatch verifies that the scaler is only called
-// once cumulative batch reaches numTasks*BatchSize.
+// once cumulative batch reaches BatchSize*numPartitions.
 func (s *ScaleManagerSuite) TestAddedTasksWakesScalerOnFullBatch() {
 	s.settings.BatchSize = 5
 
@@ -196,13 +326,13 @@ func (s *ScaleManagerSuite) TestAddedTasksWakesScalerOnFullBatch() {
 	s.startManager(4, nil)
 
 	for range 4 {
-		s.sm.AddedTasks(1)
+		s.sm.AddedTasks(4)
 	}
 	assertNoRecv(s, inputs, 30*time.Millisecond, "scaler called below threshold")
 
-	s.sm.AddedTasks(1) // cumulative 5 hits threshold
+	s.sm.AddedTasks(4) // cumulative 20 hits threshold
 	in := waitRecv(s, inputs, "scaler never called")
-	s.Equal(5, in.NumTasks, "all 5 tasks should accumulate before firing")
+	s.Equal(20, in.NumTasks, "all 20 tasks should accumulate before firing")
 }
 
 // TestPeriodicTimerCallsScaler verifies that the scaler is called periodically
@@ -248,7 +378,7 @@ func (s *ScaleManagerSuite) TestDecisionPersistsAndUpdatesEphemeralData() {
 
 	s.startManager(4, nil) // 4 write partitions in dynamic config
 
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(4)
 	state := waitRecv(s, dbWrites, "no db write")
 	s.Equal(int32(2), state.Target)
 	s.Equal(int32(2), state.MaxTarget)
@@ -259,6 +389,53 @@ func (s *ScaleManagerSuite) TestDecisionPersistsAndUpdatesEphemeralData() {
 	info := waitRecv(s, scaleInfos, "no ephemeral data update")
 	s.Equal(int32(4), info.Read)
 	s.Equal(int32(2), info.Write)
+}
+
+func (s *ScaleManagerSuite) TestDisabledScalerClearsManagedScaleState() {
+	s.settings.ShrinkRatio = 0.1
+	s.settings.ShrinkDelta = 8
+	priv := protoutils.MarshalAny(s.T(), wrapperspb.String("managed-state"))
+	s.scaler.EXPECT().OnTasks(gomock.Any()).
+		Return(PartitionScalerDecision{NewTarget: 0})
+
+	dbWrites := make(chan *persistencespb.PartitionScaleState, 1)
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), true).
+		Do(func(state *persistencespb.PartitionScaleState, _ bool) {
+			dbWrites <- common.CloneProto(state)
+		}).
+		Return(nil)
+
+	scaleInfos := make(chan *taskqueuespb.PartitionScaleInfo, 2)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).
+		Do(func(info *taskqueuespb.PartitionScaleInfo) { scaleInfos <- info }).Times(2)
+
+	initial := &persistencespb.PartitionScaleState{
+		Target:             0,
+		MaxTarget:          4,
+		BacklogState:       bitSet(nil).set(0).set(1).set(2).set(3),
+		BacklogCounts:      []byte{1, 2, 3, 4},
+		BacklogCap:         5,
+		PrivateScalerState: priv,
+	}
+	s.startManager(4, initial)
+	s.sm.AddedTasks(3)
+
+	state := waitRecv(s, dbWrites, "disabled state was not cleaned up")
+	s.Zero(state.Target)
+	s.Equal(int32(4), state.MaxTarget)
+	s.Empty(state.BacklogState)
+	s.Empty(state.BacklogCounts)
+	s.Zero(state.BacklogCap)
+	s.Nil(state.PrivateScalerState)
+
+	stale := waitRecv(s, scaleInfos, "initial scale info was not pushed")
+	s.Equal(int32(4), stale.Read)
+	s.Equal(int32(3), stale.Write)
+	disabled := waitRecv(s, scaleInfos, "disabled scale info was not pushed")
+	s.Zero(disabled.Read)
+	s.Zero(disabled.Write)
+	s.Empty(disabled.BacklogCounts)
+	s.Zero(disabled.BacklogCap)
 }
 
 // TestEmitsGaugeMetrics verifies that when gauge emission is enabled, a scale
@@ -282,7 +459,7 @@ func (s *ScaleManagerSuite) TestEmitsGaugeMetrics() {
 
 	s.startManager(4, nil) // 4 write partitions in dynamic config
 
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(4)
 	waitRecv(s, dbWrites, "no db write")
 
 	// setState records the gauges after the ephemeral push, so poll the snapshot
@@ -308,9 +485,98 @@ func (s *ScaleManagerSuite) TestEmitsGaugeMetrics() {
 	s.InDelta(float64(2), target, 0.001, "target gauge")
 }
 
-// TestNonPositiveShadowLogIntervalDisabled verifies that ShadowModeLogInterval
-// <= 0 uses the normal apply path.
-func (s *ScaleManagerSuite) TestNonPositiveShadowLogIntervalDisabled() {
+// awaitMetric blocks until at least n recordings of the named metric exist and
+// returns them (a snapshot of the values recorded so far).
+func (s *ScaleManagerSuite) awaitMetric(capt *metricstest.Capture, name string, n int) []*metricstest.CapturedRecording {
+	s.T().Helper()
+	var recs []*metricstest.CapturedRecording
+	await.RequireTruef(s.T(), func() bool {
+		recs = capt.Snapshot()[name]
+		return len(recs) >= n
+	}, time.Second, time.Millisecond, "metric %q not recorded %d time(s)", name, n)
+	return recs
+}
+
+// metricValues extracts recorded values as float64. Gauges record float64 and
+// counters record int64, so handle both.
+func metricValues(recs []*metricstest.CapturedRecording) []float64 {
+	out := make([]float64, len(recs))
+	for i, r := range recs {
+		switch v := r.Value.(type) {
+		case float64:
+			out[i] = v
+		case int64:
+			out[i] = float64(v)
+		default:
+			panic(fmt.Sprintf("unexpected metric value type %T", r.Value))
+		}
+	}
+	return out
+}
+
+// TestShadowModeEmitsExpectedGauges verifies that entering shadow
+// mode on top of a leftover managed target keeps the release path gauge-silent:
+// the release-to-baseline still performs its one-time DB write, but setState no
+// longer emits gauges in shadow mode. The read=0/write=0 sentinels therefore come
+// exclusively from the two shadow decisions (one each), not from the release.
+func (s *ScaleManagerSuite) TestShadowModeEmitsExpectedGauges() {
+	s.metricsHandler = s.capture
+	s.settings.Enabled = false
+	s.settings.ShadowModeLogInterval = 10 * time.Millisecond
+
+	inputs := make(chan PartitionScalerInput, 2)
+	gomock.InOrder(
+		s.scaler.EXPECT().OnTasks(gomock.Any()).
+			Do(func(in PartitionScalerInput) { inputs <- in }).
+			Return(PartitionScalerDecision{NewTarget: 2}),
+		s.scaler.EXPECT().OnTasks(gomock.Any()).
+			Do(func(in PartitionScalerInput) { inputs <- in }).
+			Return(PartitionScalerDecision{NewTarget: 3}),
+		s.scaler.EXPECT().OnTasks(gomock.Any()).
+			Do(func(in PartitionScalerInput) { inputs <- in }).
+			Return(PartitionScalerDecision{NewTarget: 3}),
+	)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).AnyTimes()
+
+	// Start with a leftover managed target so entering shadow mode triggers the
+	// one-time release-to-baseline (the only persisted write). The release itself
+	// records no gauges.
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).Return(nil).Times(1)
+	s.startManager(4, &persistencespb.PartitionScaleState{Target: 5})
+	capt := s.capture.StartCapture()
+	defer s.capture.StopCapture(capt)
+
+	// call AddedTasks 2x (# of tasks added does not impact decision, decision is mocked)
+	for i, tasks := range []int{5, 4} {
+		s.sm.AddedTasks(tasks)
+		waitRecv(s, inputs, "shadow call missing")
+
+		// wait for log indicating nextDecision was set before we advance
+		s.awaitDecisionApplied(int64(i + 1))
+
+		// wait for the 100ms cooldown + 10ms shadow log interval
+		s.timeSource.Advance(110 * time.Millisecond)
+	}
+	// call a third time, but don't expect the decision applied log, because shadow target didn't change
+	s.sm.AddedTasks(4)
+	waitRecv(s, inputs, "third shadow call missing")
+
+	// Wait for three scale events (the first two record gauges, the last does not).
+	events := s.awaitMetric(capt, "partition_scale_events", 3)
+	s.Equal([]float64{1, 1, 1}, metricValues(events), "target gauge per changed decision")
+
+	// Target, read, and write should only have 2 recordings because the third shadow target was "no change".
+	target := s.awaitMetric(capt, "partition_scale_target", 3)
+	s.Equal([]float64{0, 2, 3}, metricValues(target), "target gauge per changed decision")
+	snap := capt.Snapshot()
+	s.Equal([]float64{0, 0, 0}, metricValues(snap["partition_scale_read"]), "read gauge per changed decision")
+	s.Equal([]float64{0, 0, 0}, metricValues(snap["partition_scale_write"]), "read gauge per changed decision")
+}
+
+// TestShadowLogIntervalDoesNotAffectApply verifies that ShadowModeLogInterval no longer
+// affects whether decisions are applied: only Mode decides that, so an enabled manager applies
+// decisions even with a non-positive interval.
+func (s *ScaleManagerSuite) TestShadowLogIntervalDoesNotAffectApply() {
 	s.settings.ShadowModeLogInterval = -time.Second
 
 	s.scaler.EXPECT().OnTasks(gomock.Any()).
@@ -329,7 +595,7 @@ func (s *ScaleManagerSuite) TestNonPositiveShadowLogIntervalDisabled() {
 
 	s.startManager(4, nil)
 
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(4)
 	state := waitRecv(s, dbWrites, "no db write")
 	s.Equal(int32(2), state.Target)
 	info := waitRecv(s, scaleInfos, "no ephemeral data update")
@@ -342,6 +608,7 @@ func (s *ScaleManagerSuite) TestNonPositiveShadowLogIntervalDisabled() {
 // managed target to baseline (one write, Target=0), but the scaler's hypothetical
 // decision (2) is never persisted.
 func (s *ScaleManagerSuite) TestShadowDecisionDoesNotPersistOrPush() {
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	inputs := make(chan PartitionScalerInput, 1)
@@ -382,6 +649,7 @@ func (s *ScaleManagerSuite) TestShadowDecisionDoesNotPersistOrPush() {
 // (Target 0, nil private state) on every call and never feeds hypothetical
 // decisions back into the state.
 func (s *ScaleManagerSuite) TestShadowModeColdStartsScalerFromBaseline() {
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 	realPriv := protoutils.MarshalAny(s.T(), wrapperspb.String("real-state"))
 	priv1 := protoutils.MarshalAny(s.T(), wrapperspb.String("shadow-decision-1"))
@@ -411,7 +679,7 @@ func (s *ScaleManagerSuite) TestShadowModeColdStartsScalerFromBaseline() {
 
 	s.awaitDecisionApplied(1)                    // barrier: nextDecision set before we advance
 	s.timeSource.Advance(110 * time.Millisecond) // past the 100ms cooldown
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(4)
 	in2 := waitRecv(s, inputs, "second shadow call missing")
 	s.Equal(0, in2.CurrentTarget)
 	s.Nil(in2.PrivateState)
@@ -422,6 +690,7 @@ func (s *ScaleManagerSuite) TestShadowModeColdStartsScalerFromBaseline() {
 }
 
 func (s *ScaleManagerSuite) TestShadowModeDoesNotLogNoChange() {
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
@@ -432,7 +701,7 @@ func (s *ScaleManagerSuite) TestShadowModeDoesNotLogNoChange() {
 
 	s.startManagerWithLogger(logger, 4, nil)
 
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(4)
 	waitRecv(s, inputs, "shadow scaler call missing")
 	assertNoNewLogs(s, s.newTarget, 30*time.Millisecond, "NoChange decision should not log")
 }
@@ -440,6 +709,7 @@ func (s *ScaleManagerSuite) TestShadowModeDoesNotLogNoChange() {
 // TestShadowLoggingCadence verifies that shadow decisions are logged no more
 // frequently than the configured cadence and unchanged decisions are not logged.
 func (s *ScaleManagerSuite) TestShadowLoggingCadence() {
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
@@ -461,29 +731,30 @@ func (s *ScaleManagerSuite) TestShadowLoggingCadence() {
 
 	s.startManagerWithLogger(logger, 4, nil)
 
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(4)
 	waitRecv(s, inputs, "first shadow call missing")
 	waitLogMatches(s, s.newTarget, 1, "first shadow log missing")
 
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(4)
 	assertNoRecv(s, inputs, 30*time.Millisecond, "shadow scaler called inside cooldown")
 
 	s.timeSource.Advance(110 * time.Millisecond) // past the 100ms cooldown
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(4)
 	waitRecv(s, inputs, "second shadow call missing")
 	assertNoNewLogs(s, s.newTarget, 30*time.Millisecond, "shadow log repeated before cadence")
 
 	s.timeSource.Advance(time.Minute)
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(4)
 	waitRecv(s, inputs, "third shadow call missing")
 	assertNoNewLogs(s, s.newTarget, 30*time.Millisecond, "unchanged shadow decision logged after cadence")
 
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(4)
 	waitRecv(s, inputs, "fourth shadow call missing")
 	waitLogMatches(s, s.newTarget, 2, "second shadow log missing")
 }
 
 func (s *ScaleManagerSuite) TestShadowModeDoesNotLogDisabledScaler() {
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
@@ -497,14 +768,17 @@ func (s *ScaleManagerSuite) TestShadowModeDoesNotLogDisabledScaler() {
 	s.userData.EXPECT().SetPartitionScale(gomock.Any()).Times(2)
 
 	s.startManagerWithLogger(logger, 4, &persistencespb.PartitionScaleState{Target: 2})
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(2)
 	waitRecv(s, inputs, "shadow scaler call missing")
 	assertNoNewLogs(s, s.newTarget, 30*time.Millisecond, "disabled scaler should not log")
 }
 
 // TestShadowModeSkipsDrain verifies that shadow mode does not change real read
-// partitions by clearing backlog bits.
+// partitions by clearing backlog bits. The drain path bails before its Describe fan-out,
+// so a shadowing manager makes no outbound calls at all: the responses mocked here would
+// drain every partition if the guard regressed.
 func (s *ScaleManagerSuite) TestShadowModeSkipsDrain() {
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 	s.settings.BackgroundInterval = 50 * time.Millisecond
 	s.settings.DrainBufferTime = 0
@@ -525,32 +799,11 @@ func (s *ScaleManagerSuite) TestShadowModeSkipsDrain() {
 		TargetVersion: 0,
 		BacklogState:  bitSet(nil).set(0).set(1).set(2).set(3),
 	}
-	drainedResp := &matchingservice.DescribeTaskQueuePartitionResponse{
-		ScaleInfo: &taskqueuespb.PartitionScaleInfo{Read: 4, Write: 2, Version: 0},
-		VersionsInfoInternal: map[string]*taskqueuespb.TaskQueueVersionInfoInternal{
-			"v1": {
-				PhysicalTaskQueueInfo: &taskqueuespb.PhysicalTaskQueueInfo{
-					InternalTaskQueueStatus: []*taskqueuespb.InternalTaskQueueStatus{
-						{BacklogDrained: true},
-					},
-				},
-			},
-		},
-	}
-	describeCalls := make(chan struct{}, 4)
-	s.matching.EXPECT().DescribeTaskQueuePartition(gomock.Any(), gomock.Any()).
-		Do(func(context.Context, *matchingservice.DescribeTaskQueuePartitionRequest, ...grpc.CallOption) {
-			describeCalls <- struct{}{}
-		}).
-		Return(drainedResp, nil).
-		Times(4)
+	// note: no expected DescribeTaskQueuePartition calls
 
 	s.startManager(4, initial)
 	s.fireBackgroundTimer()
 	waitRecv(s, inputs, "timer did not call scaler")
-	for range 4 {
-		waitRecv(s, describeCalls, "shadow drain did not describe read partition")
-	}
 
 	s.Equal(int32(4), bitSet(s.sm.scaleState.BacklogState).len())
 }
@@ -560,6 +813,7 @@ func (s *ScaleManagerSuite) TestShadowModeSkipsDrain() {
 // state (one write), dropping the write side to baseline (Write=0) while
 // preserving read partitions (BacklogState unchanged).
 func (s *ScaleManagerSuite) TestShadowModeReleasesManagedTargetToBaseline() {
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 	priv := protoutils.MarshalAny(s.T(), wrapperspb.String("managed-state"))
 
@@ -585,7 +839,7 @@ func (s *ScaleManagerSuite) TestShadowModeReleasesManagedTargetToBaseline() {
 	}
 	s.startManager(4, initial)
 
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(10)
 
 	w := waitRecv(s, dbWrites, "release write missing")
 	s.Equal(int32(0), w.Target)
@@ -604,6 +858,7 @@ func (s *ScaleManagerSuite) TestShadowModeReleasesManagedTargetToBaseline() {
 // are all logged. Releasing removes the stale non-zero baseline that would
 // otherwise short-circuit a decision returning to the prior real target.
 func (s *ScaleManagerSuite) TestShadowModeLogsOscillationFromBaseline() {
+	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
 
 	logger := testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
@@ -626,17 +881,17 @@ func (s *ScaleManagerSuite) TestShadowModeLogsOscillationFromBaseline() {
 
 	s.startManagerWithLogger(logger, 4, &persistencespb.PartitionScaleState{Target: 2})
 
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(2)
 	waitRecv(s, inputs, "first shadow call missing")
 	waitLogMatches(s, s.newTarget, 1, "shadow target 3 not logged")
 
 	s.timeSource.Advance(time.Minute) // past cooldown and cadence
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(4)
 	waitRecv(s, inputs, "second shadow call missing")
 	waitLogMatches(s, s.newTarget, 2, "shadow target 2 not logged")
 
 	s.timeSource.Advance(time.Minute)
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(4)
 	waitRecv(s, inputs, "third shadow call missing")
 	waitLogMatches(s, s.newTarget, 3, "shadow target 3 after oscillation not logged")
 }
@@ -671,9 +926,9 @@ func (s *ScaleManagerSuite) TestNoChangeDecisionSkipsWrite() {
 		time.Second, time.Millisecond)
 	baseline := scalePushes.Load()
 
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(3)
 	waitRecv(s, inputs, "first decision never delivered")
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(3)
 	waitRecv(s, inputs, "second decision never delivered")
 
 	s.Require().Never(func() bool {
@@ -708,9 +963,9 @@ func (s *ScaleManagerSuite) TestCooldown() {
 	s.startManager(4, nil)
 
 	// First decision lands immediately (lastDecision is zero, no cooldown).
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(4)
 	in1 := waitRecv(s, inputs, "first decision never delivered")
-	s.Equal(1, in1.NumTasks)
+	s.Equal(4, in1.NumTasks)
 	waitRecv(s, dbWrites, "first db write missing")
 
 	// Within cooldown: another wakeup carrying 7 tasks. Scaler must NOT be
@@ -756,14 +1011,14 @@ func (s *ScaleManagerSuite) TestPrivateStatePropagation() {
 
 	s.startManager(4, nil)
 
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(4)
 	in1 := waitRecv(s, inputs, "first call missing")
 	s.Nil(in1.PrivateState, "first call should have no private state")
 	waitRecv(s, dbWrites, "first db write missing")
 
 	s.awaitDecisionApplied(1)                    // barrier: nextDecision set before we advance
 	s.timeSource.Advance(110 * time.Millisecond) // past 100ms cooldown
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(2)
 	in2 := waitRecv(s, inputs, "second call missing")
 	s.ProtoEqual(priv1, in2.PrivateState)
 	w2 := waitRecv(s, dbWrites, "second db write missing")
@@ -1173,14 +1428,14 @@ func (s *ScaleManagerSuite) TestDBWriteFailureKeepsState() {
 
 	// First decision: scaler called, DB write fails. lastDecision is not set,
 	// so cooldown is not engaged.
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(4)
 	waitRecv(s, inputs, "first decision missing")
 
 	// No ephemeral push yet; the failed write must not have advanced state.
 	assertNoRecv(s, scaleInfos, 30*time.Millisecond, "ephemeral data pushed after failed write")
 
 	// Recovery: trigger another decision; this one persists.
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(4)
 	waitRecv(s, inputs, "second decision missing")
 	state := waitRecv(s, dbWrites, "second db write missing")
 	s.Equal(int32(3), state.Target, "second decision's target landed (first was dropped)")
@@ -1310,7 +1565,7 @@ func (s *ScaleManagerSuite) TestBacklogCapChangePersists() {
 	// Current target is already 3, so only the backlog cap differs from the decision.
 	s.startManager(4, &persistencespb.PartitionScaleState{Target: 3, MaxTarget: 3})
 
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(3)
 	state := waitRecv(s, dbWrites, "cap-only change never persisted")
 	s.Equal(int32(3), state.Target, "target unchanged; the cap change alone must trigger the write")
 	s.Equal(int32(number.EncodeCompact8(1000)), state.BacklogCap)
@@ -1345,7 +1600,7 @@ func (s *ScaleManagerSuite) TestSameTargetAndCapSkipsWrite() {
 	}
 	s.startManager(4, initial)
 
-	s.sm.AddedTasks(1)
+	s.sm.AddedTasks(3)
 	in := waitRecv(s, inputs, "scaler never called")
 	s.Equal([]byte{c500, c500, c500}, in.BacklogCounts, "stored backlog counts must be fed to the scaler")
 

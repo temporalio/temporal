@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"slices"
 	"testing"
 	"text/template"
 	"time"
@@ -84,7 +83,6 @@ func newInvocationTaskTestEnv(
 				MinRequestTimeout:       dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Millisecond),
 				PayloadSizeLimit:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(2 * 1024 * 1024),
 				CallbackURLTemplate:     dynamicconfig.GetTypedPropertyFn(callbackTmpl),
-				UseSystemCallbackURL:    dynamicconfig.GetBoolPropertyFn(false),
 				UseNewFailureWireFormat: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 				RetryPolicy: dynamicconfig.GetTypedPropertyFn[backoff.RetryPolicy](
 					backoff.NewExponentialRetryPolicy(time.Second),
@@ -117,7 +115,7 @@ func newInvocationTaskTestEnv(
 		},
 	}
 
-	root := chasm.NewEmptyTree(registry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
+	root := chasm.NewEmptyTree(registry, nodeBackend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
 	ctx := chasm.NewMutableContext(context.Background(), root)
 	require.NoError(t, root.SetRootComponent(&mockStoreComponent{
 		invocationData: invocationData,
@@ -238,16 +236,10 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 		{
 			name: "async start",
 			onStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
-				if len(options.Links) != 2 {
-					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "expected 2 links, got %d", len(options.Links))
+				if len(options.Links) != 1 {
+					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "expected 1 link, got %d", len(options.Links))
 				}
-				workflowEventLinkIdx := slices.IndexFunc(options.Links, func(link nexus.Link) bool {
-					return link.Type == string((&commonpb.Link_WorkflowEvent{}).ProtoReflect().Descriptor().FullName())
-				})
-				if workflowEventLinkIdx == -1 {
-					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "missing workflow event link")
-				}
-				link, err := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(options.Links[workflowEventLinkIdx])
+				link, err := commonnexus.ConvertNexusLinkToLinkWorkflowEvent(options.Links[0])
 				if err != nil {
 					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to convert link: %v", err)
 				}
@@ -264,13 +256,6 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 				}
 				if !proto.Equal(expectedLink, link) {
 					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "link mismatch: got %v, want %v", link, expectedLink)
-				}
-				protoLinks := commonnexus.ConvertLinksToProto(options.Links)
-				if protoLinks[1].GetType() != "temporal.api.common.v1.Link.NexusOperation" {
-					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "unexpected nexus operation link type: %v", protoLinks[1].GetType())
-				}
-				if protoLinks[1].GetUrl() != "temporal:///namespaces/ns-name/nexus-operations/wf-id/run-id/details" {
-					return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "unexpected nexus operation link URL: %v", protoLinks[1].GetUrl())
 				}
 				nexus.AddHandlerLinks(ctx, handlerNexusLink)
 				return &nexus.HandlerStartOperationResultAsync{
@@ -597,6 +582,28 @@ func TestInvocationTaskHandler_HTTP(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestNewInvocationResult_CanceledBareFailure guards sync canceled completions whose
+// unwrapped cause is a bare Nexus failure.
+func TestNewInvocationResult_CanceledBareFailure(t *testing.T) {
+	t.Parallel()
+
+	opErr := &nexus.OperationError{
+		State:   nexus.OperationStateCanceled,
+		Message: "operation canceled from handler",
+		Cause:   &nexus.FailureError{Failure: nexus.Failure{Message: "cause"}},
+	}
+	require.NoError(t, nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr))
+
+	result, err := newInvocationResult(nil, opErr)
+	require.NoError(t, err)
+
+	cancel, ok := result.(invocationResultCancel)
+	require.True(t, ok, "canceled operation error must produce a cancel result")
+	require.NotNil(t, cancel.failure.GetCanceledFailureInfo(),
+		"bare canceled failures must surface as CanceledFailure")
+	require.Equal(t, "cause", cancel.failure.GetMessage())
 }
 
 func TestInvocationTaskHandler_Validate(t *testing.T) {
@@ -990,9 +997,8 @@ func TestInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 			setupHistoryClient: func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
 				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
 				client.EXPECT().StartNexusOperation(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *historyservice.StartNexusOperationRequest, _ ...grpc.CallOption) (*historyservice.StartNexusOperationResponse, error) {
-					require.Len(t, request.GetRequest().GetLinks(), 2)
+					require.Len(t, request.GetRequest().GetLinks(), 1)
 					require.Equal(t, "temporal.api.common.v1.Link.WorkflowEvent", request.GetRequest().GetLinks()[0].GetType())
-					require.Equal(t, "temporal.api.common.v1.Link.NexusOperation", request.GetRequest().GetLinks()[1].GetType())
 
 					return &historyservice.StartNexusOperationResponse{
 						Response: &nexuspb.StartOperationResponse{
@@ -1028,9 +1034,8 @@ func TestInvocationTaskHandler_SystemEndpoint(t *testing.T) {
 			setupHistoryClient: func(ctrl *gomock.Controller) *historyservicemock.MockHistoryServiceClient {
 				client := historyservicemock.NewMockHistoryServiceClient(ctrl)
 				client.EXPECT().StartNexusOperation(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, request *historyservice.StartNexusOperationRequest, opts ...grpc.CallOption) (*historyservice.StartNexusOperationResponse, error) {
-					require.Len(t, request.GetRequest().GetLinks(), 2)
+					require.Len(t, request.GetRequest().GetLinks(), 1)
 					require.Equal(t, "temporal.api.common.v1.Link.WorkflowEvent", request.GetRequest().GetLinks()[0].GetType())
-					require.Equal(t, "temporal.api.common.v1.Link.NexusOperation", request.GetRequest().GetLinks()[1].GetType())
 
 					var input testProcessorInput
 					if err := payloads.Decode(&commonpb.Payloads{Payloads: []*commonpb.Payload{request.Request.Payload}}, &input); err != nil {

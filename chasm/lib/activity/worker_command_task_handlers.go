@@ -56,7 +56,7 @@ func (h *cancelCommandDispatchTaskHandler) Validate(
 	invocation chasm.TaskInvocation,
 	_ *activitypb.CancelCommandDispatchTask,
 ) (bool, error) {
-	if invocation.Attempt > workercommands.MaxTaskAttempts {
+	if invocation.Attempt > h.config.WorkerCommandsMaxAttempts() {
 		key := ctx.ExecutionKey()
 		h.logger.Info("Cancel command dispatch task exceeded max attempts, dropping",
 			tag.WorkflowNamespaceID(key.NamespaceID),

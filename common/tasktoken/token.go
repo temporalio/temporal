@@ -50,6 +50,7 @@ func NewStandaloneActivityTaskToken(
 		0,   // version
 		0,   // startVersion
 		componentRef,
+		0, // activityAttemptStamp
 	)
 }
 
@@ -58,25 +59,27 @@ func NewActivityTaskToken(
 	workflowID string,
 	runID string,
 	scheduledEventID int64,
-	activityID string,
+	activityId string,
 	activityType string,
 	attempt int32,
 	clock *clockspb.VectorClock,
 	version int64,
 	startVersion int64,
 	componentRef []byte,
+	activityAttemptStamp int32,
 ) *tokenspb.Task {
 	return &tokenspb.Task{
-		NamespaceId:      namespaceID,
-		WorkflowId:       workflowID,
-		RunId:            runID,
-		ScheduledEventId: scheduledEventID,
-		ActivityType:     activityType,
-		Attempt:          attempt,
-		ActivityId:       activityID,
-		Clock:            clock,
-		Version:          version,
-		StartVersion:     startVersion,
-		ComponentRef:     componentRef,
+		NamespaceId:          namespaceID,
+		WorkflowId:           workflowID,
+		RunId:                runID,
+		ScheduledEventId:     scheduledEventID,
+		ActivityType:         activityType,
+		Attempt:              attempt,
+		ActivityId:           activityId,
+		Clock:                clock,
+		Version:              version,
+		StartVersion:         startVersion,
+		ComponentRef:         componentRef,
+		ActivityAttemptStamp: activityAttemptStamp,
 	}
 }

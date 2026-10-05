@@ -5,10 +5,11 @@ import (
 	"net"
 
 	"github.com/gorilla/mux"
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity"
-	"go.temporal.io/server/chasm/lib/callback"
+	chasmcallback "go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
@@ -20,6 +21,7 @@ import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -41,10 +43,12 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/grpcfaultstest"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
@@ -63,6 +67,22 @@ type (
 
 	namespaceChecker struct {
 		r namespace.Registry
+	}
+
+	// NamespaceRateLimiters holds the three per-category namespace rate limiters that
+	// NamespaceRateLimitInterceptorProvider combines into a single routing rate limiter.
+	NamespaceRateLimiters struct {
+		Execution                    quotas.RequestRateLimiter
+		Visibility                   quotas.RequestRateLimiter
+		NamespaceReplicationInducing quotas.RequestRateLimiter
+	}
+
+	// RateLimiters holds the three per-category pod-level rate limiters that
+	// RateLimitInterceptorProvider combines into a single routing rate limiter.
+	RateLimiters struct {
+		Execution                    quotas.RequestRateLimiter
+		Visibility                   quotas.RequestRateLimiter
+		NamespaceReplicationInducing quotas.RequestRateLimiter
 	}
 )
 
@@ -89,10 +109,12 @@ var Module = fx.Options(
 	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
+	fx.Provide(RateLimitersProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(interceptor.NewHealthInterceptor),
 	fx.Provide(NamespaceCountLimitInterceptorProvider),
 	fx.Provide(NamespaceValidatorInterceptorProvider),
+	fx.Provide(NamespaceRateLimitersProvider),
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
 	fx.Provide(SDKVersionInterceptorProvider),
 	fx.Provide(CallerInfoInterceptorProvider),
@@ -133,7 +155,7 @@ var Module = fx.Options(
 	chasmnexus.Module,
 	chasmscheduler.Module,
 	chasmworkflow.Module,
-	callback.Module,
+	chasmcallback.Module,
 	activity.FrontendModule,
 	fx.Provide(visibility.ChasmVisibilityManagerProvider),
 	fx.Provide(chasm.ChasmVisibilityInterceptorProvider),
@@ -248,6 +270,7 @@ func GrpcServerOptionsProvider(
 	customInterceptors []grpc.UnaryServerInterceptor,
 	customStreamInterceptors []grpc.StreamServerInterceptor,
 	metricsHandler metrics.Handler,
+	testHooks testhooks.TestHooks,
 ) GrpcServerOptions {
 	kep := keepalive.EnforcementPolicy{
 		MinTime:             serviceConfig.KeepAliveMinTime(),
@@ -307,6 +330,10 @@ func GrpcServerOptionsProvider(
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
 		unaryInterceptors = append(unaryInterceptors, customInterceptors...)
 	}
+	faultGenerator := grpcfaultstest.NewGenerator(testHooks)
+	if faultInterceptor := grpcfaults.UnaryServerInterceptor(faultGenerator); faultInterceptor != nil {
+		unaryInterceptors = append(unaryInterceptors, faultInterceptor)
+	}
 	// retry interceptor should be the most inner interceptor
 	unaryInterceptors = append(unaryInterceptors, retryableInterceptor.Intercept)
 
@@ -351,9 +378,13 @@ func ConfigProvider(
 
 func ServiceErrorInterceptorProvider(
 	dc *dynamicconfig.Collection,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
 ) *interceptor.ServiceErrorInterceptor {
 	return interceptor.NewServiceErrorInterceptor(
 		dynamicconfig.MaxServiceErrorMessageLength.Get(dc),
+		metricsHandler,
+		logger,
 	)
 }
 
@@ -471,12 +502,12 @@ func getRateFnWithMetrics(rateFn quotas.RateFn, handler metrics.Handler) quotas.
 	}
 }
 
-func RateLimitInterceptorProvider(
+func RateLimitersProvider(
 	serviceConfig *Config,
 	frontendServiceResolver membership.ServiceResolver,
 	handler metrics.Handler,
 	logger log.SnTaggedLogger,
-) *interceptor.RateLimitInterceptor {
+) RateLimiters {
 	rateFn := calculator.NewLoggedCalculator(
 		calculator.ClusterAwareQuotaCalculator{
 			MemberCounter:    frontendServiceResolver,
@@ -491,13 +522,44 @@ func RateLimitInterceptorProvider(
 		return float64(serviceConfig.NamespaceReplicationInducingAPIsRPS())
 	}
 
+	return RateLimiters{
+		Execution: configs.NewExecutionPriorityRateLimiter(
+			quotas.NewDefaultIncomingRateBurst(rateFnWithMetrics), serviceConfig.OperatorRPSRatio),
+		Visibility: configs.NewVisibilityPriorityRateLimiter(
+			quotas.NewDefaultIncomingRateBurst(rateFn), serviceConfig.OperatorRPSRatio),
+		NamespaceReplicationInducing: configs.NewNamespaceReplicationInducingAPIPriorityRateLimiter(
+			quotas.NewDefaultIncomingRateBurst(namespaceReplicationInducingRateFn), serviceConfig.OperatorRPSRatio),
+	}
+}
+
+func RateLimitInterceptorProvider(
+	serviceConfig *Config,
+	rateLimiters RateLimiters,
+) *interceptor.RateLimitInterceptor {
+	mapping := make(map[string]quotas.RequestRateLimiter)
+	for api := range configs.APIToPriority {
+		mapping[api] = rateLimiters.Execution
+	}
+	for api := range configs.VisibilityAPIToPriority {
+		mapping[api] = rateLimiters.Visibility
+	}
+	for api := range configs.NamespaceReplicationInducingAPIToPriority {
+		mapping[api] = rateLimiters.NamespaceReplicationInducing
+	}
+	for api := range configs.PodOnlyAPIToPriority { // do not mirror this loop in NamespaceRateLimitInterceptorProvider
+		mapping[api] = rateLimiters.Execution
+	}
+	// EnableDescribeMutableStateRateLimit is read once, here, at fx-graph construction time — toggling
+	// it in production requires bouncing frontend pods to pick up the new value. Once DescribeMutableState's
+	// rollout is complete, move its entry into PodOnlyAPIToPriority above and delete this branch.
+	if serviceConfig.EnableDescribeMutableStateRateLimit() {
+		for api := range configs.DescribeMutableStateAPIToPriority { // do not mirror this loop in NamespaceRateLimitInterceptorProvider
+			mapping[api] = rateLimiters.Execution
+		}
+	}
+
 	return interceptor.NewRateLimitInterceptor(
-		configs.NewRequestToRateLimiter(
-			quotas.NewDefaultIncomingRateBurst(rateFnWithMetrics),
-			quotas.NewDefaultIncomingRateBurst(rateFn),
-			quotas.NewDefaultIncomingRateBurst(namespaceReplicationInducingRateFn),
-			serviceConfig.OperatorRPSRatio,
-		),
+		quotas.NewRoutingRateLimiter(mapping),
 		map[string]int{
 			healthpb.Health_Check_FullMethodName:                     0, // exclude health check requests from rate limiting.
 			adminservice.AdminService_DeepHealthCheck_FullMethodName: 0, // exclude deep health check requests from rate limiting.
@@ -523,14 +585,12 @@ func MaskInternalErrorDetailsInterceptorProvider(
 	)
 }
 
-func NamespaceRateLimitInterceptorProvider(
+func NamespaceRateLimitersProvider(
 	serviceName primitives.ServiceName,
 	serviceConfig *Config,
-	namespaceRegistry namespace.Registry,
 	frontendServiceResolver membership.ServiceResolver,
-	metricsHandler metrics.Handler,
 	logger log.SnTaggedLogger,
-) interceptor.NamespaceRateLimitInterceptor {
+) NamespaceRateLimiters {
 	var globalNamespaceRPS, globalNamespaceVisibilityRPS, globalNamespaceNamespaceReplicationInducingAPIsRPS dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	switch serviceName {
@@ -571,32 +631,67 @@ func NamespaceRateLimitInterceptorProvider(
 		},
 		log.With(logger, tag.ComponentNamespaceReplication, tag.ScopeNamespace),
 	).GetQuota
-	namespaceRateLimiter := quotas.NewNamespaceRequestRateLimiter(
-		func(req quotas.Request) quotas.RequestRateLimiter {
-			return configs.NewRequestToRateLimiter(
-				quotas.NewNamespaceRateBurst(
-					req.Caller,
-					namespaceRateFn,
-					quotas.NamespaceBurstRatioFn(serviceConfig.MaxNamespaceBurstRatioPerInstance),
-				),
-				quotas.NewNamespaceRateBurst(
-					req.Caller,
-					visibilityRateFn,
-					quotas.NamespaceBurstRatioFn(serviceConfig.MaxNamespaceVisibilityBurstRatioPerInstance),
-				),
-				quotas.NewNamespaceRateBurst(
-					req.Caller,
-					namespaceReplicationInducingRateFn,
-					quotas.NamespaceBurstRatioFn(serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance),
-				),
-				serviceConfig.OperatorRPSRatio,
-			)
-		},
-	)
+
+	return NamespaceRateLimiters{
+		Execution: quotas.NewNamespaceRequestRateLimiter(
+			func(req quotas.Request) quotas.RequestRateLimiter {
+				return configs.NewExecutionPriorityRateLimiter(
+					quotas.NewNamespaceRateBurst(
+						req.Caller,
+						namespaceRateFn,
+						quotas.NamespaceBurstRatioFn(serviceConfig.MaxNamespaceBurstRatioPerInstance),
+					),
+					serviceConfig.OperatorRPSRatio,
+				)
+			},
+		),
+		Visibility: quotas.NewNamespaceRequestRateLimiter(
+			func(req quotas.Request) quotas.RequestRateLimiter {
+				return configs.NewVisibilityPriorityRateLimiter(
+					quotas.NewNamespaceRateBurst(
+						req.Caller,
+						visibilityRateFn,
+						quotas.NamespaceBurstRatioFn(serviceConfig.MaxNamespaceVisibilityBurstRatioPerInstance),
+					),
+					serviceConfig.OperatorRPSRatio,
+				)
+			},
+		),
+		NamespaceReplicationInducing: quotas.NewNamespaceRequestRateLimiter(
+			func(req quotas.Request) quotas.RequestRateLimiter {
+				return configs.NewNamespaceReplicationInducingAPIPriorityRateLimiter(
+					quotas.NewNamespaceRateBurst(
+						req.Caller,
+						namespaceReplicationInducingRateFn,
+						quotas.NamespaceBurstRatioFn(serviceConfig.MaxNamespaceNamespaceReplicationInducingAPIsBurstRatioPerInstance),
+					),
+					serviceConfig.OperatorRPSRatio,
+				)
+			},
+		),
+	}
+}
+
+func NamespaceRateLimitInterceptorProvider(
+	namespaceRegistry namespace.Registry,
+	rateLimiters NamespaceRateLimiters,
+	serviceConfig *Config,
+	metricsHandler metrics.Handler,
+) interceptor.NamespaceRateLimitInterceptor {
+	mapping := make(map[string]quotas.RequestRateLimiter)
+	for api := range configs.APIToPriority {
+		mapping[api] = rateLimiters.Execution
+	}
+	for api := range configs.VisibilityAPIToPriority {
+		mapping[api] = rateLimiters.Visibility
+	}
+	for api := range configs.NamespaceReplicationInducingAPIToPriority {
+		mapping[api] = rateLimiters.NamespaceReplicationInducing
+	}
+
 	return interceptor.NewNamespaceRateLimitInterceptor(
 		namespaceRegistry,
-		namespaceRateLimiter,
-		map[string]int{}, // no token overrides
+		quotas.NewRoutingRateLimiter(mapping),
 		configs.PollTaskAPISet,
 		serviceConfig.PollWaitForNamespaceRateLimitToken,
 		metricsHandler,
@@ -613,8 +708,14 @@ func NamespaceCountLimitInterceptorProvider(
 		namespaceRegistry,
 		serviceResolver,
 		logger,
-		serviceConfig.MaxConcurrentLongRunningRequestsPerInstance,
-		serviceConfig.MaxGlobalConcurrentLongRunningRequests,
+		interceptor.ConcurrentRequestQuotas{
+			PerInstance: serviceConfig.MaxConcurrentLongRunningRequestsPerInstance,
+			Global:      serviceConfig.MaxGlobalConcurrentLongRunningRequests,
+		},
+		interceptor.ConcurrentRequestQuotas{
+			PerInstance: serviceConfig.MaxInternalPerNSConcurrentLongRunningRequestsPerInstance,
+			Global:      serviceConfig.MaxGlobalInternalPerNSConcurrentLongRunningRequests,
+		},
 		configs.ExecutionAPICountLimitOverride,
 	)
 }
@@ -738,6 +839,7 @@ func AdminHandlerProvider(
 	replicatorNamespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
 	visibilityMgr manager.VisibilityManager,
 	logger log.SnTaggedLogger,
+	eventLogger otellog.Logger,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
 	taskManager persistence.TaskManager,
 	fairTaskManager persistence.FairTaskManager,
@@ -745,16 +847,13 @@ func AdminHandlerProvider(
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	persistenceMetadataManager persistence.MetadataManager,
 	clientFactory client.Factory,
-	clientBean client.Bean,
 	historyClient resource.HistoryClient,
 	sdkClientFactory sdk.ClientFactory,
 	membershipMonitor membership.Monitor,
 	hostInfoProvider membership.HostInfoProvider,
-	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
-	saProvider searchattribute.Provider,
-	saManager searchattribute.Manager,
 	saMapperProvider searchattribute.MapperProvider,
+	saValidator *searchattribute.Validator,
 	clusterMetadata cluster.Metadata,
 	healthServer *health.Server,
 	eventSerializer serialization.Serializer,
@@ -773,22 +872,20 @@ func AdminHandlerProvider(
 		replicatorNamespaceReplicationQueue,
 		visibilityMgr,
 		logger,
+		eventLogger,
 		taskManager,
 		fairTaskManager,
 		persistenceExecutionManager,
 		clusterMetadataManager,
 		persistenceMetadataManager,
 		clientFactory,
-		clientBean,
 		historyClient,
 		sdkClientFactory,
 		membershipMonitor,
 		hostInfoProvider,
-		metricsHandler,
 		namespaceRegistry,
-		saProvider,
-		saManager,
 		saMapperProvider,
+		saValidator,
 		clusterMetadata,
 		healthServer,
 		eventSerializer,
@@ -830,6 +927,7 @@ func NamespaceDLQHandlerProvider(
 func OperatorHandlerProvider(
 	configuration *Config,
 	logger log.SnTaggedLogger,
+	eventLogger otellog.Logger,
 	sdkClientFactory sdk.ClientFactory,
 	metricsHandler metrics.Handler,
 	visibilityMgr manager.VisibilityManager,
@@ -845,6 +943,7 @@ func OperatorHandlerProvider(
 	args := NewOperatorHandlerImplArgs{
 		configuration,
 		logger,
+		eventLogger,
 		sdkClientFactory,
 		metricsHandler,
 		visibilityMgr,
@@ -862,13 +961,18 @@ func OperatorHandlerProvider(
 
 // callbackValidatorProvider creates a callback Validator using the production dynamic config keys
 // so that existing operator configurations (callback.allowedAddresses) are honored.
-func callbackValidatorProvider(dc *dynamicconfig.Collection) callback.Validator {
-	return callback.NewValidator(
-		callback.MaxPerExecution.Get(dc),
-		dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
-		dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
-		callback.AllowedAddresses.Get(dc),
-	)
+func callbackValidatorProvider(dc *dynamicconfig.Collection, namespaceRegistry namespace.Registry) (callbacks.Validator, error) {
+	cfg := callbacks.ValidatorConfig{
+		MaxCallbacksPerExecution:         chasmcallback.MaxPerExecution.Get(dc),
+		MaxIDLengthLimit:                 dynamicconfig.MaxIDLengthLimit.Get(dc),
+		URLMaxLength:                     dynamicconfig.FrontendCallbackURLMaxLength.Get(dc),
+		HeaderMaxSize:                    dynamicconfig.FrontendCallbackHeaderMaxSize.Get(dc),
+		EndpointRules:                    chasmcallback.AllowedAddresses.Get(dc),
+		MaxServiceNameLength:             chasmnexus.MaxServiceNameLength.Get(dc),
+		MaxOperationNameLength:           chasmnexus.MaxOperationNameLength.Get(dc),
+		NexusHandlerSourceContextMaxSize: chasmcallback.NexusHandlerSourceContextMaxSize.Get(dc),
+	}
+	return callbacks.NewValidator(cfg, namespaceRegistry)
 }
 
 func HandlerProvider(
@@ -882,6 +986,7 @@ func HandlerProvider(
 	visibilityMgr manager.VisibilityManager,
 	chasmVisibilityMgr chasm.VisibilityManager,
 	logger log.SnTaggedLogger,
+	eventLogger otellog.Logger,
 	throttledLogger log.ThrottledLogger,
 	persistenceExecutionManager persistence.ExecutionManager,
 	clusterMetadataManager persistence.ClusterMetadataManager,
@@ -906,7 +1011,7 @@ func HandlerProvider(
 	healthInterceptor *interceptor.HealthInterceptor,
 	scheduleSpecBuilder *scheduler.SpecBuilder,
 	activityHandler activity.FrontendHandler,
-	callbackValidator callback.Validator,
+	callbackValidator callbacks.Validator,
 	nexusOperationHandler chasmnexus.FrontendHandler,
 	registry *chasm.Registry,
 	frontendServiceResolver membership.ServiceResolver,
@@ -924,6 +1029,7 @@ func HandlerProvider(
 		namespaceReplicationQueue,
 		visibilityMgr,
 		logger,
+		eventLogger,
 		throttledLogger,
 		persistenceExecutionManager.GetName(),
 		clusterMetadataManager,

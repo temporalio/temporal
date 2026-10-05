@@ -45,7 +45,7 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer() {
 		Identity:            identity,
 	}
 
-	creatResp, err0 := env.FrontendClient().StartWorkflowExecution(env.Context(), request)
+	creatResp, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: id,
@@ -169,7 +169,7 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer_CancelFiredAndBuffered() {
 		Identity:            identity,
 	}
 
-	creatResp, err0 := env.FrontendClient().StartWorkflowExecution(env.Context(), request)
+	creatResp, err0 := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
 	s.NoError(err0)
 	workflowExecution := &commonpb.WorkflowExecution{
 		WorkflowId: id,

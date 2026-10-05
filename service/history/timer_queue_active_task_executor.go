@@ -10,6 +10,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -26,6 +27,7 @@ import (
 	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/deletemanager"
@@ -126,7 +128,7 @@ func (t *timerQueueActiveTaskExecutor) Execute(
 	case *tasks.ChasmTask:
 		task.Attempt = executable.Attempt()
 		err = t.executeChasmSideEffectTimerTask(ctx, task)
-	case *tasks.TimeSkippingTimerTask:
+	case *tasks.TimeSkippingFastForwardTimerTask:
 		err = t.executeTimeSkippingTimerTask(ctx, task)
 	default:
 		err = queueserrors.NewUnprocessableTaskError("unknown task type")
@@ -304,6 +306,7 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 
 	failureMsg := fmt.Sprintf(common.FailureReasonActivityTimeout, timerSequenceID.TimerType.String())
 	timeoutFailure := failure.NewTimeoutFailure(failureMsg, timerSequenceID.TimerType)
+	activityAttemptStarted := ai.GetStartedEventId() != common.EmptyEventID
 	retryState, err := mutableState.RetryActivity(ai, timeoutFailure)
 	if err != nil {
 		return result, nil
@@ -315,11 +318,18 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 	// always resolved as failed.
 	if retryState == enumspb.RETRY_STATE_TIMEOUT && timerSequenceID.TimerType != enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START {
 		timeoutFailure = failure.NewTimeoutFailure(
-			"Not enough time to schedule next retry before activity ScheduleToClose timeout, giving up retrying",
+			common.FailureReasonActivityRetryScheduleToCloseTimeout,
 			enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
 		)
 	}
 
+	var deploymentVersion *deploymentspb.WorkerDeploymentVersion
+	if activityAttemptStarted && ai.GetLastDeploymentVersion() != nil {
+		deploymentVersion = &deploymentspb.WorkerDeploymentVersion{
+			DeploymentName: ai.GetLastDeploymentVersion().GetDeploymentName(),
+			BuildId:        ai.GetLastDeploymentVersion().GetBuildId(),
+		}
+	}
 	workflow.RecordActivityCompletionMetrics(
 		t.shardContext,
 		mutableState.GetNamespaceEntry().Name(),
@@ -330,11 +340,14 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 			FirstScheduledTime: timestamp.TimeValue(ai.FirstScheduledTime),
 			Closed:             retryState != enumspb.RETRY_STATE_IN_PROGRESS,
 			TimerType:          timerSequenceID.TimerType,
+			VersioningInfo: workflow.VersioningMetricContext{
+				Behavior:          mutableState.GetEffectiveVersioningBehavior(),
+				DeploymentVersion: deploymentVersion,
+			},
 		},
 		metrics.OperationTag(metrics.TimerActiveTaskActivityTimeoutScope),
 		metrics.WorkflowTypeTag(mutableState.GetWorkflowType().GetName()),
-		metrics.ActivityTypeTag(ai.ActivityType.GetName()),
-		metrics.VersioningBehaviorTag(mutableState.GetEffectiveVersioningBehavior()))
+		metrics.ActivityTypeTag(ai.ActivityType.GetName()))
 
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
 		// TODO uncommment once RETRY_STATE_PAUSED is supported
@@ -731,8 +744,6 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	// TODO@time-skipping: if time skipping happened, the virtual time is
-	// propagated to the new mutable state, need to check the fast-forward works correctly in the retry.
 	newMutableState, err := workflow.NewMutableStateInChain(
 		t.shardContext,
 		t.shardContext.GetEventsCache(),
@@ -788,6 +799,8 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowRunTimeoutTask(
 			t.logger,
 			t.shardContext.GetThrottledLogger(),
 			t.shardContext.GetMetricsHandler(),
+			nil, // no pagination buffer limiter as it is a transient context
+			testhooks.TestHooks{},
 		),
 		newMutableState,
 	)
@@ -909,7 +922,7 @@ func (t *timerQueueActiveTaskExecutor) getTimerSequence(
 // so by the time we get here the user-visible elapsed budget is genuinely exhausted.
 func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 	ctx context.Context,
-	task *tasks.TimeSkippingTimerTask,
+	task *tasks.TimeSkippingFastForwardTimerTask,
 ) (retError error) {
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
@@ -929,16 +942,9 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 		return consts.ErrWorkflowExecutionNotFound
 	}
 
-	// Route by execution archetype. Treat an unspecified archetype — a record persisted before
-	// archetype IDs existed, or a not-yet-initialized chasm tree — as the built-in workflow archetype.
 	archetypeID := mutableState.ChasmTree().ArchetypeID()
 	if archetypeID == chasm.UnspecifiedArchetypeID {
 		archetypeID = chasm.WorkflowArchetypeID
-	}
-	if archetypeID != chasm.WorkflowArchetypeID {
-		// TODO@time-skipping: chasm execution path is not implemented yet.
-		release(nil)
-		return nil
 	}
 
 	if !mutableState.IsWorkflowExecutionRunning() {
@@ -961,7 +967,7 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 		return errNoTimerFired
 	}
 
-	ffVT := tsi.GetFastForwardInfo().GetLastUpdateVersionedTransition()
+	ffVT := tsi.GetFastForwardInfoLastUpdateVersionedTransition()
 	if ffVT == nil || task.VersionedTransition == nil {
 		// Invariant: when a pending fast-forward and a task both exist, they must both have a
 		// non-nil versioned transition. A nil here is a "should never happen" state bug, not lost
@@ -988,7 +994,13 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 	}
 
 	// 3) firing fast-forward timer (only turns off time skipping, and no task regeneration)
-	// TODO@time-skipping: chasm execution path is not implemented yet.
+	if archetypeID != chasm.WorkflowArchetypeID {
+		transition := chasm.NewTimeSkippingTransition(mutableState.Now())
+		transition.DisabledAfterFastForward = true
+		mutableState.RecordTimeSkippingTransition(transition)
+		return t.updateWorkflowExecution(ctx, weContext, mutableState, false)
+	}
+
 	_, err = mutableState.AddWorkflowExecutionTimeSkippingTransitionedEvent(
 		ctx, time.Time{}, true)
 	if err != nil {
@@ -1122,7 +1134,6 @@ func (t *timerQueueActiveTaskExecutor) executeChasmPureTimerTask(
 	ctx context.Context,
 	task *tasks.ChasmTaskPure,
 ) error {
-	// TODO@time-skipping: if time skipping happened, check if virtual time is needed here.
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 

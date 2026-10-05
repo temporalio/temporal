@@ -25,6 +25,9 @@ message HealthCheck {
   // Human-readable detail describing what happened, e.g.
   // "RPC latency 850.00ms exceeded 500.00ms threshold".
   string message = 5;
+  // Whether a breach of this check actually affects the reported state. When false the
+  // `state` is always set to SERVING.
+  bool enforced = 6;
 }
 
 // Health details for a single host.
@@ -32,6 +35,8 @@ message HostHealthDetail {
   string address = 1;
   temporal.server.api.enums.v1.HealthState state = 2;
   repeated HealthCheck checks = 3;
+  // the state that also takes HealthCheck.enforced = false into account
+  temporal.server.api.enums.v1.HealthState unenforced_state = 4;
 }
 
 // Health details for a service (history, frontend, matching).
@@ -41,4 +46,6 @@ message ServiceHealthDetail {
   repeated HostHealthDetail hosts = 3;
   // Service-level diagnostic message (e.g. "no available hosts", "resolver error").
   string message = 4;
+  // the state that also takes HealthCheck.enforced = false into account
+  temporal.server.api.enums.v1.HealthState unenforced_state = 5;
 }

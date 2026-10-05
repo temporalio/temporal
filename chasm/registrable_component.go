@@ -23,6 +23,7 @@ type (
 		ephemeral     bool
 		singleCluster bool
 		detached      bool
+		executionType enumspb.ExecutionType // May be unset, defaulting to UNSPECIFIED.
 
 		searchAttributesMapper *VisibilitySearchAttributesMapper
 
@@ -75,6 +76,20 @@ func (rc *RegistrableComponent) IsDetached() bool {
 	return rc.detached
 }
 
+// WithExecutionType declares how executions of this archetype are named outside of CHASM, e.g. in
+// the links that address them. It only has an effect on a component registered as the root of an
+// execution; components nested inside an execution are named by their path within it.
+//
+// An archetype registered without this option has no external representation, and reports
+// [enumspb.EXECUTION_TYPE_UNSPECIFIED].
+func WithExecutionType(
+	executionType enumspb.ExecutionType,
+) RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		rc.executionType = executionType
+	}
+}
+
 // WithBusinessIDAlias allows specifying the business ID alias of the component.
 // This option must be specified if the archetype uses the Visibility component.
 func WithBusinessIDAlias(
@@ -82,15 +97,7 @@ func WithBusinessIDAlias(
 ) RegistrableComponentOption {
 	return func(rc *RegistrableComponent) {
 		if rc.searchAttributesMapper == nil {
-			rc.searchAttributesMapper = &VisibilitySearchAttributesMapper{
-				aliasToField:       make(map[string]string),
-				fieldToAlias:       make(map[string]string),
-				saTypeMap:          make(map[string]enumspb.IndexedValueType),
-				systemAliasToField: make(map[string]string),
-			}
-		}
-		if rc.searchAttributesMapper.systemAliasToField == nil {
-			rc.searchAttributesMapper.systemAliasToField = make(map[string]string)
+			rc.searchAttributesMapper = newVisibilitySearchAttributesMapper()
 		}
 		if _, ok := rc.searchAttributesMapper.aliasToField[alias]; ok {
 			//nolint:forbidigo
@@ -115,18 +122,29 @@ func WithSearchAttributes(
 		}
 
 		if rc.searchAttributesMapper == nil {
-			rc.searchAttributesMapper = &VisibilitySearchAttributesMapper{
-				aliasToField:       make(map[string]string, len(searchAttributes)),
-				fieldToAlias:       make(map[string]string, len(searchAttributes)),
-				saTypeMap:          make(map[string]enumspb.IndexedValueType, len(searchAttributes)),
-				systemAliasToField: make(map[string]string),
-			}
+			rc.searchAttributesMapper = newVisibilitySearchAttributesMapper()
 		}
 
 		for _, sa := range searchAttributes {
 			alias := sa.definition().alias
 			field := sa.definition().field
 			valueType := sa.definition().valueType
+
+			// An identity-mapped system search attribute (alias == field, e.g. TaskQueue,
+			// ExecutionTime) overrides that system column directly, so it is recorded only in
+			// overriddenSystemFields; queries resolve via the system column.
+			if field == alias && sadefs.IsSystem(field) {
+				if !sadefs.IsChasmOverridableSystem(field) {
+					//nolint:forbidigo
+					panic(fmt.Sprintf("registrable component validation error: system search attribute %q cannot be overridden by a CHASM component", field))
+				}
+				if _, ok := rc.searchAttributesMapper.overriddenSystemFields[field]; ok {
+					//nolint:forbidigo
+					panic(fmt.Sprintf("registrable component validation error: system search attribute override %q is already defined", field))
+				}
+				rc.searchAttributesMapper.overriddenSystemFields[field] = valueType
+				continue
+			}
 
 			if sadefs.IsChasmSystem(alias) {
 				//nolint:forbidigo

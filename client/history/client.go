@@ -32,6 +32,9 @@ var (
 const (
 	// DefaultTimeout is the default timeout used to make calls
 	DefaultTimeout = time.Second * 30 * debug.TimeoutMultiplier
+	// DefaultStateSyncTimeout is a backstop for SyncWorkflowState, which ships a workflow's state
+	// across clusters. Callers set the real deadline; the smaller one wins.
+	DefaultStateSyncTimeout = 10 * time.Minute * debug.TimeoutMultiplier
 )
 
 type clientImpl struct {
@@ -286,6 +289,10 @@ func (c *clientImpl) getRandomShard() int32 {
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(parent, c.timeout)
+}
+
+func (c *clientImpl) createContextWithStateSyncTimeout(parent context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(parent, DefaultStateSyncTimeout)
 }
 
 func (c *clientImpl) shardIDFromWorkflowID(namespaceID, workflowID string) int32 {

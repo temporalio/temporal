@@ -87,7 +87,7 @@ func getWorkflowRuns(branch, workflowName string, since time.Time) ([]github.Run
 		Branch:   branch,
 		Workflow: workflowName,
 		Created:  ">=" + sinceDate,
-		Limit:    1000,
+		Limit:    2000,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get workflow runs: %w", err)
@@ -103,18 +103,39 @@ func getWorkflowRuns(branch, workflowName string, since time.Time) ([]github.Run
 	return runs, nil
 }
 
-// BuildDigest builds a digest report for the specified time range
+// BuildDigest builds a digest report for the specified time range.
 func BuildDigest(branch, workflowName string, days int) (*DigestReport, error) {
 	// Calculate the start date
 	endDate := time.Now()
 	startDate := endDate.AddDate(0, 0, -days)
+	previousStartDate := startDate.AddDate(0, 0, -days)
 
 	// Fetch workflow runs
-	runs, err := getWorkflowRuns(branch, workflowName, startDate)
+	runs, err := getWorkflowRuns(branch, workflowName, previousStartDate)
 	if err != nil {
 		return nil, err
 	}
 
+	var currentRuns, previousRuns []github.Run
+	for _, run := range runs {
+		if !run.CreatedAt.Before(startDate) {
+			currentRuns = append(currentRuns, run)
+		} else if !run.CreatedAt.Before(previousStartDate) {
+			previousRuns = append(previousRuns, run)
+		}
+	}
+
+	return &DigestReport{
+		Branch:       branch,
+		WorkflowName: workflowName,
+		StartDate:    startDate,
+		EndDate:      endDate,
+		DigestPeriod: summarizeDigestPeriod(currentRuns),
+		Previous:     summarizeDigestPeriod(previousRuns),
+	}, nil
+}
+
+func summarizeDigestPeriod(runs []github.Run) DigestPeriod {
 	// Filter to only completed runs
 	completedRuns := filterCompleted(runs)
 
@@ -146,20 +167,17 @@ func BuildDigest(branch, workflowName string, days int) (*DigestReport, error) {
 	under25 := calculatePercentUnder(durations, 25*time.Minute)
 	under30 := calculatePercentUnder(durations, 30*time.Minute)
 
-	return &DigestReport{
-		Branch:                branch,
-		WorkflowName:          workflowName,
-		StartDate:             startDate,
-		EndDate:               endDate,
+	return DigestPeriod{
 		TotalRuns:             totalRuns,
 		SuccessfulRuns:        successCount,
 		FailedRuns:            failureCount,
 		SuccessRate:           successRate,
+		DurationSamples:       len(durations),
 		AverageDuration:       calculateAverage(durations),
 		MedianDuration:        calculateMedian(durations),
 		Under20MinutesPercent: under20,
 		Under25MinutesPercent: under25,
 		Under30MinutesPercent: under30,
 		Runs:                  completedRuns,
-	}, nil
+	}
 }

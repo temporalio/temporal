@@ -815,15 +815,9 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		deploymentName = request.GetDeployment().GetSeriesName()
 	}
 
-	vb := request.VersioningBehavior
-	if request.DeploymentOptions != nil && request.DeploymentOptions.GetWorkerVersioningMode() != enumspb.WORKER_VERSIONING_MODE_VERSIONED {
-		// SDK has a bug that reports behavior if user has specified a default behavior without enabling versioning.
-		// Until that is fixed, we should adjust this value so the workflow works correctly.
-		vb = enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED
-	}
-
+	wftDeploymentVersion := worker_versioning.DeploymentVersionFromOptions(request.DeploymentOptions)
 	//nolint:staticcheck // SA1019 deprecated Deployment will clean up later
-	wftDeployment := worker_versioning.DeploymentOrVersion(request.Deployment, worker_versioning.DeploymentVersionFromOptions(request.DeploymentOptions))
+	wftDeployment := worker_versioning.DeploymentOrVersion(request.Deployment, wftDeploymentVersion)
 
 	// Now write the completed event
 	event := m.ms.hBuilder.AddWorkflowTaskCompletedEvent(
@@ -836,7 +830,7 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 		request.MeteringMetadata,
 		deploymentName,
 		wftDeployment,
-		vb,
+		request.VersioningBehavior,
 	)
 
 	override := m.ms.GetExecutionInfo().GetVersioningInfo().GetVersioningOverride()
@@ -864,10 +858,18 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 			tag.BuildId(oneTimeTarget.GetBuildId()))
 	}
 
-	metrics.WorkflowTasksCompleted.With(m.metricsHandler).Record(1,
-		metrics.NamespaceTag(m.ms.GetNamespaceEntry().Name().String()),
-		metrics.VersioningBehaviorTag(vb),
-		metrics.FirstAttemptTag(workflowTask.Attempt),
+	RecordWorkflowTaskCompletedMetrics(
+		m.ms.config,
+		m.metricsHandler,
+		m.ms.GetNamespaceEntry().Name(),
+		m.ms.GetExecutionInfo().GetTaskQueue(),
+		WorkflowTaskCompletionMetrics{
+			VersioningInfo: VersioningMetricContext{
+				Behavior:          request.VersioningBehavior,
+				DeploymentVersion: wftDeploymentVersion,
+			},
+			Attempt: workflowTask.Attempt,
+		},
 	)
 
 	numConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute := m.ms.config.NumConsecutiveWorkflowTaskProblemsToTriggerSearchAttribute(m.ms.GetNamespaceEntry().Name().String())

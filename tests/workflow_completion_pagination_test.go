@@ -48,7 +48,8 @@ func (s *WorkflowCompletionPaginationTestSuite) newPaginationEnv() *testcore.Tes
 	return testcore.NewEnv(s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.MaximumEventBatchSizeInBytes, 1024*1024),
 		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowTaskCompletionPagination, true),
-		testcore.WithDynamicConfig(dynamicconfig.WorkflowTaskCompletionBufferSizeLimit, 32*1024*1024),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTaskCompletionBufferTotalSizeLimit, 1024*1024*1024),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTaskCompletionBufferSizeLimit, 256*1024*1024),
 	)
 }
 
@@ -61,7 +62,7 @@ func (s *WorkflowCompletionPaginationTestSuite) startWorkflowAndStartWFT(
 	id := uuid.NewString()
 	taskQueue := &taskqueuepb.TaskQueue{Name: id, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
 
-	startResp, err := env.FrontendClient().StartWorkflowExecution(env.Context(), &workflowservice.StartWorkflowExecutionRequest{
+	startResp, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.NewString(),
 		Namespace:           env.Namespace().String(),
 		WorkflowId:          id,
@@ -75,7 +76,7 @@ func (s *WorkflowCompletionPaginationTestSuite) startWorkflowAndStartWFT(
 
 	we := &commonpb.WorkflowExecution{WorkflowId: id, RunId: startResp.RunId}
 
-	pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(env.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+	pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: env.Namespace().String(),
 		TaskQueue: taskQueue,
 		Identity:  "worker1",
@@ -127,7 +128,7 @@ func (s *WorkflowCompletionPaginationTestSuite) sendIntermediatePages(
 	pages [][]*commandpb.Command,
 ) int32 {
 	for i, page := range pages {
-		resp, err := env.FrontendClient().RespondWorkflowTaskCompleted(env.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		resp, err := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Namespace:        env.Namespace().String(),
 			TaskToken:        taskToken,
 			Commands:         page,
@@ -165,7 +166,7 @@ func (s *WorkflowCompletionPaginationTestSuite) TestLargeMergedCompletion() {
 		},
 	})
 
-	_, err := env.FrontendClient().RespondWorkflowTaskCompleted(env.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace:  env.Namespace().String(),
 		TaskToken:  taskToken,
 		Commands:   finalCommands,
@@ -208,7 +209,7 @@ func (s *WorkflowCompletionPaginationTestSuite) TestLargeMergedContinueAsNew() {
 		},
 	}}
 
-	_, err := env.FrontendClient().RespondWorkflowTaskCompleted(env.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace:  env.Namespace().String(),
 		TaskToken:  taskToken,
 		Commands:   finalCommands,
@@ -233,7 +234,7 @@ func (s *WorkflowCompletionPaginationTestSuite) TestBufferLostOnShardClose() {
 
 	we, _, taskToken := s.startWorkflowAndStartWFT(env, time.Minute)
 
-	_, err := env.FrontendClient().RespondWorkflowTaskCompleted(env.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace:        env.Namespace().String(),
 		TaskToken:        taskToken,
 		Commands:         makeMarkerCommands(1),
@@ -247,7 +248,7 @@ func (s *WorkflowCompletionPaginationTestSuite) TestBufferLostOnShardClose() {
 	env.CloseShard(env.NamespaceID().String(), we.WorkflowId)
 
 	// The final page can no longer find its buffered pages.
-	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(env.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: env.Namespace().String(),
 		TaskToken: taskToken,
 		Commands: []*commandpb.Command{{
@@ -276,7 +277,7 @@ func (s *WorkflowCompletionPaginationTestSuite) TestPaginationDisabledRejected()
 	env := testcore.NewEnv(s.T()) // pagination disabled by default
 	_, _, taskToken := s.startWorkflowAndStartWFT(env, time.Minute)
 
-	_, err := env.FrontendClient().RespondWorkflowTaskCompleted(env.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace:        env.Namespace().String(),
 		TaskToken:        taskToken,
 		Commands:         makeMarkerCommands(1),
@@ -299,7 +300,7 @@ func (s *WorkflowCompletionPaginationTestSuite) TestBufferOverflowFailsWorkflowT
 	we, _, taskToken := s.startWorkflowAndStartWFT(env, time.Minute)
 
 	// A single marker already exceeds the limit, failing the workflow task.
-	_, err := env.FrontendClient().RespondWorkflowTaskCompleted(env.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace:        env.Namespace().String(),
 		TaskToken:        taskToken,
 		Commands:         makeMarkerCommands(1),
@@ -312,6 +313,11 @@ func (s *WorkflowCompletionPaginationTestSuite) TestBufferOverflowFailsWorkflowT
 	history := env.GetHistory(env.Namespace().String(), we)
 	s.Equal(1, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED))
 	s.Equal(0, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
+	for _, e := range history {
+		if e.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED {
+			s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_REQUEST_TOO_LARGE, e.GetWorkflowTaskFailedEventAttributes().GetCause())
+		}
+	}
 }
 
 // TestOutOfOrderPagesReassemble verifies that pages buffered out of arrival order
@@ -322,7 +328,7 @@ func (s *WorkflowCompletionPaginationTestSuite) TestOutOfOrderPagesReassemble() 
 
 	markers := makeMarkerCommands(3)
 	for _, p := range []int32{2, 0, 1} {
-		_, err := env.FrontendClient().RespondWorkflowTaskCompleted(env.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		_, err := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Namespace:        env.Namespace().String(),
 			TaskToken:        taskToken,
 			Commands:         []*commandpb.Command{markers[p]},
@@ -333,7 +339,7 @@ func (s *WorkflowCompletionPaginationTestSuite) TestOutOfOrderPagesReassemble() 
 		s.NoError(err)
 	}
 
-	_, err := env.FrontendClient().RespondWorkflowTaskCompleted(env.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: env.Namespace().String(),
 		TaskToken: taskToken,
 		Commands: []*commandpb.Command{{
@@ -366,7 +372,7 @@ func (s *WorkflowCompletionPaginationTestSuite) TestResendAfterBufferLost() {
 	we, _, taskToken := s.startWorkflowAndStartWFT(env, time.Minute)
 
 	bufferPage0 := func() {
-		_, err := env.FrontendClient().RespondWorkflowTaskCompleted(env.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		_, err := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Namespace:        env.Namespace().String(),
 			TaskToken:        taskToken,
 			Commands:         makeMarkerCommands(1),
@@ -377,7 +383,7 @@ func (s *WorkflowCompletionPaginationTestSuite) TestResendAfterBufferLost() {
 		s.NoError(err)
 	}
 	completeFinalPage := func() error {
-		_, err := env.FrontendClient().RespondWorkflowTaskCompleted(env.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		_, err := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 			Namespace: env.Namespace().String(),
 			TaskToken: taskToken,
 			Commands: []*commandpb.Command{{
@@ -406,6 +412,90 @@ func (s *WorkflowCompletionPaginationTestSuite) TestResendAfterBufferLost() {
 	s.NoError(completeFinalPage())
 
 	history := env.GetHistory(env.Namespace().String(), we)
+	s.Equal(1, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
+	s.Equal(0, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED))
+}
+
+// TestBufferLimits drives two intermediate marker pages against different total /
+// per-namespace limit combinations
+func (s *WorkflowCompletionPaginationTestSuite) TestBufferLimits() {
+	// process total exhausted
+	s.Run("process total exhausted", func(s *WorkflowCompletionPaginationTestSuite) {
+		s.runBufferLimitCase(markerPayloadSize+markerPayloadSize/2, 1.0, true)
+	})
+	// namespace share exhausted
+	s.Run("namespace share exhausted", func(s *WorkflowCompletionPaginationTestSuite) {
+		s.runBufferLimitCase(markerPayloadSize*3, 0.5, true)
+	})
+	// both sufficiently large
+	s.Run("both limits sufficiently large", func(s *WorkflowCompletionPaginationTestSuite) {
+		s.runBufferLimitCase(markerPayloadSize*100, 1.0, false)
+	})
+}
+
+// runBufferLimitCase buffers page 0 (always fits), then buffers page 1. When
+// expectRejected, page 1 must fail with a transient buffer-lost error and write no
+// events; otherwise page 1 buffers and a final page completes the workflow.
+func (s *WorkflowCompletionPaginationTestSuite) runBufferLimitCase(
+	totalSizeLimit int,
+	namespaceRatio float64,
+	expectRejected bool,
+) {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowTaskCompletionPagination, true),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTaskCompletionBufferTotalSizeLimit, totalSizeLimit),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTaskCompletionBufferNamespaceRatio, namespaceRatio),
+	)
+	we, _, taskToken := s.startWorkflowAndStartWFT(env, time.Minute)
+
+	bufferMarkerPage := func(page int32) error {
+		_, err := env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Namespace:        env.Namespace().String(),
+			TaskToken:        taskToken,
+			Commands:         makeMarkerCommands(1),
+			IntermediatePage: true,
+			PageNumber:       page,
+			Identity:         "worker1",
+		})
+		return err
+	}
+
+	// Page 0 always fits.
+	s.NoError(bufferMarkerPage(0))
+
+	err := bufferMarkerPage(1)
+	if expectRejected {
+		// buffer-lost is transient: no WorkflowTaskFailed event, unlike the
+		// per-workflow limit which fails the workflow task.
+		var bufferLost *serviceerror.WorkflowTaskCompletionBufferLost
+		s.ErrorAs(err, &bufferLost)
+
+		history := env.GetHistory(env.Namespace().String(), we)
+		s.Equal(0, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED))
+		s.Equal(0, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
+		return
+	}
+
+	// Both pages buffered; the final page completes the workflow.
+	s.NoError(err)
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
+		TaskToken: taskToken,
+		Commands: []*commandpb.Command{{
+			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+				CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
+					Result: payloads.EncodeString("done"),
+				},
+			},
+		}},
+		PageNumber: 2,
+		Identity:   "worker1",
+	})
+	s.NoError(err)
+
+	history := env.GetHistory(env.Namespace().String(), we)
+	s.Equal(2, countEvents(history, enumspb.EVENT_TYPE_MARKER_RECORDED))
 	s.Equal(1, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED))
 	s.Equal(0, countEvents(history, enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED))
 }

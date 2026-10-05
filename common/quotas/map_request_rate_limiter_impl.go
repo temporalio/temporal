@@ -2,7 +2,6 @@ package quotas
 
 import (
 	"context"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -23,8 +22,8 @@ type (
 	}
 
 	// MapRequestRateLimiterImpl is a generic wrapper rate limiter for a set of rate limiters
-	// identified by a key. It periodically evicts entries that have not been accessed for
-	// longer than the TTL.
+	// identified by a key. It evicts entries idle past the TTL; eviction is traffic-triggered
+	// (once per interval) and swept in a short-lived goroutine.
 	MapRequestRateLimiterImpl[K comparable] struct {
 		rateLimiterGenFn RequestRateLimiterFn
 		rateLimiterKeyFn RequestRateLimiterKeyFn[K]
@@ -32,7 +31,8 @@ type (
 		sync.RWMutex
 		rateLimiters map[K]*rateLimiterEntry
 		ttlNano      int64 // TTL in nanoseconds
-		stopCh       chan struct{}
+
+		cleanupTicker *time.Ticker
 	}
 )
 
@@ -40,26 +40,13 @@ func NewMapRequestRateLimiter[K comparable](
 	rateLimiterGenFn RequestRateLimiterFn,
 	rateLimiterKeyFn RequestRateLimiterKeyFn[K],
 ) *MapRequestRateLimiterImpl[K] {
-	// Create channel before struct to pass to AddCleanup without capturing r
-	stopCh := make(chan struct{})
-
-	r := &MapRequestRateLimiterImpl[K]{
+	return &MapRequestRateLimiterImpl[K]{
 		rateLimiterGenFn: rateLimiterGenFn,
 		rateLimiterKeyFn: rateLimiterKeyFn,
 		rateLimiters:     make(map[K]*rateLimiterEntry),
 		ttlNano:          int64(rateLimiterTTL),
-		stopCh:           stopCh,
+		cleanupTicker:    time.NewTicker(rateLimiterCleanupInterval),
 	}
-
-	// Start background cleanup goroutine
-	go r.cleanupLoop()
-
-	// Register cleanup to stop goroutine when r is GC'd
-	runtime.AddCleanup(r, func(ch chan struct{}) {
-		close(ch)
-	}, stopCh)
-
-	return r
 }
 
 func namespaceRequestRateLimiterKeyFn(req Request) string {
@@ -107,6 +94,8 @@ func (r *MapRequestRateLimiterImpl[K]) getOrInitRateLimiter(
 	now time.Time,
 	req Request,
 ) RequestRateLimiter {
+	r.maybeCleanup(now)
+
 	key := r.rateLimiterKeyFn(req)
 	nowNano := now.UnixNano()
 
@@ -134,17 +123,14 @@ func (r *MapRequestRateLimiterImpl[K]) getOrInitRateLimiter(
 	return newRateLimiter
 }
 
-func (r *MapRequestRateLimiterImpl[K]) cleanupLoop() {
-	ticker := time.NewTicker(rateLimiterCleanupInterval)
-	defer ticker.Stop()
-
-	for {
-		select {
-		case <-r.stopCh:
-			return
-		case now := <-ticker.C:
-			r.cleanup(now)
-		}
+// maybeCleanup sweeps once per interval, off the request path. The non-blocking
+// receive drains at most one ticker tick, so only one sweeper starts even if many
+// callers reach here at once.
+func (r *MapRequestRateLimiterImpl[K]) maybeCleanup(now time.Time) {
+	select {
+	case <-r.cleanupTicker.C:
+		go r.cleanup(now)
+	default:
 	}
 }
 
