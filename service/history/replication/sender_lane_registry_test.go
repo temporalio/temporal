@@ -176,15 +176,14 @@ func TestSenderLaneRegistryCreationWaitsForDefaultLease(t *testing.T) {
 	lane, created, err := registry.Create("namespace:a", namespaceLaneScope("a", 100), 1)
 	require.NoError(t, err)
 	require.True(t, created)
-	require.Empty(t, registry.ClassSnapshots(1))
 	_, _, acquired = registry.Acquire(lane)
 	require.False(t, acquired)
 
 	_, acquired = registry.AcquireDefault(300)
 	require.False(t, acquired)
-	require.Equal(t, []replicationLaneClass{1}, registry.ReleaseDefault(200, true))
+	registry.ReleaseDefault(200, true)
 
-	lanes := registry.ClassSnapshots(1)
+	lanes := registry.Snapshots()
 	require.Len(t, lanes, 1)
 	require.Equal(t, lane.id, lanes[0].id)
 	require.Equal(t, int64(200), lanes[0].cursor)
@@ -201,7 +200,7 @@ func TestSenderLaneRegistryRecoversFailedDefaultLeaseBeforeHandoff(t *testing.T)
 	lane, created, err := registry.Create("namespace:b", namespaceLaneScope("b", 100), 1)
 	require.NoError(t, err)
 	require.True(t, created)
-	require.Empty(t, registry.ReleaseDefault(200, false))
+	registry.ReleaseDefault(200, false)
 
 	_, _, acquired = registry.Acquire(lane)
 	require.False(t, acquired)
@@ -216,12 +215,12 @@ func TestSenderLaneRegistryRecoversFailedDefaultLeaseBeforeHandoff(t *testing.T)
 		WorkflowKey: definition.NewWorkflowKey("b", "workflow-b", "run-b"),
 		TaskID:      100,
 	}))
-	require.Empty(t, registry.ReleaseDefault(300, false))
+	registry.ReleaseDefault(300, false)
 
 	belongsToDefaultLane, acquired = registry.AcquireDefault(400)
 	require.True(t, acquired)
 	require.NotNil(t, belongsToDefaultLane)
-	require.Equal(t, []replicationLaneClass{1}, registry.ReleaseDefault(400, true))
+	registry.ReleaseDefault(400, true)
 	recovered, ok := registry.SnapshotByKey("namespace:b")
 	require.True(t, ok)
 	require.Equal(t, lane.id, recovered.id)
@@ -252,10 +251,9 @@ func TestSenderLaneRegistryHandoffSurvivesCrashBeforeRetirementPersistence(t *te
 	lane, created, err := registry.Create("namespace:a", namespaceLaneScope("a", initialCursor), 1)
 	require.NoError(t, err)
 	require.True(t, created)
-	require.Empty(t, registry.ClassSnapshots(1))
 	_, _, acquired = registry.Acquire(lane)
 	require.False(t, acquired)
-	require.Equal(t, []replicationLaneClass{1}, registry.ReleaseDefault(handoffCursor, true))
+	registry.ReleaseDefault(handoffCursor, true)
 
 	lane, ok := registry.SnapshotByKey(lane.logicalKey)
 	require.True(t, ok)
@@ -279,7 +277,7 @@ func TestSenderLaneRegistryHandoffSurvivesCrashBeforeRetirementPersistence(t *te
 	require.NotNil(t, sharedFilter)
 	require.False(t, sharedFilter(namespaceATask))
 	require.True(t, sharedFilter(namespaceBTask))
-	require.Empty(t, registry.ReleaseDefault(retireCursor, true))
+	registry.ReleaseDefault(retireCursor, true)
 	registry.ObserveAcks(map[string]*replicationspb.ReplicationState{
 		lane.id: {InclusiveLowWatermark: retireCursor},
 	})
@@ -311,7 +309,7 @@ func TestSenderLaneRegistryHandoffSurvivesCrashBeforeRetirementPersistence(t *te
 	require.Equal(t, handoffCursor, leasedLane.cursor)
 	restored.AdvanceLaneCursor(restoredLane.id, retireCursor)
 	restored.Release(restoredLane.id)
-	require.Empty(t, restored.ReleaseDefault(retireCursor, true))
+	restored.ReleaseDefault(retireCursor, true)
 	restored.ObserveAcks(map[string]*replicationspb.ReplicationState{
 		restoredLane.id: {InclusiveLowWatermark: retireCursor},
 	})

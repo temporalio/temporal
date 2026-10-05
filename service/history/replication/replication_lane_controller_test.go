@@ -19,18 +19,16 @@ func TestNamespaceIsolationPolicyReclassifiesAndRetiresThroughRegistry(t *testin
 		log.NewNoopLogger(),
 	)
 
-	runnableClasses, err := controller.Reconcile(replicationLanePolicySignals{throttleHighNamespaceIDs: []string{"a", "b", "c"}, sharedHighWatermark: 10}, nil)
+	err = controller.Reconcile(replicationLanePolicySignals{throttleHighNamespaceIDs: []string{"a", "b", "c"}, sharedHighWatermark: 10}, nil)
 	require.NoError(t, err)
-	require.Equal(t, []replicationLaneClass{1, 1}, runnableClasses)
 	require.Len(t, registry.Snapshots(), 2)
 	laneA, ok := registry.SnapshotByKey("namespace:a")
 	require.True(t, ok)
 	_, ok = registry.SnapshotByKey("namespace:c")
 	require.False(t, ok)
 
-	runnableClasses, err = controller.Reconcile(replicationLanePolicySignals{throttleHighNamespaceIDs: []string{"a", "b"}, sharedHighWatermark: 10}, nil)
+	err = controller.Reconcile(replicationLanePolicySignals{throttleHighNamespaceIDs: []string{"a", "b"}, sharedHighWatermark: 10}, nil)
 	require.NoError(t, err)
-	require.Equal(t, []replicationLaneClass{2, 2}, runnableClasses)
 	laneA, ok = registry.SnapshotByKey("namespace:a")
 	require.True(t, ok)
 	require.Equal(t, replicationLaneClass(2), laneA.class)
@@ -39,16 +37,15 @@ func TestNamespaceIsolationPolicyReclassifiesAndRetiresThroughRegistry(t *testin
 	for _, lane := range registry.Snapshots() {
 		acks[lane.id] = &replicationspb.ReplicationState{InclusiveLowWatermark: 100}
 	}
-	_, err = controller.Reconcile(replicationLanePolicySignals{sharedHighWatermark: 10}, acks)
+	err = controller.Reconcile(replicationLanePolicySignals{sharedHighWatermark: 10}, acks)
 	require.NoError(t, err)
 	require.Empty(t, registry.ReadyRetirements())
-	_, err = controller.Reconcile(replicationLanePolicySignals{sharedHighWatermark: 10}, acks)
+	err = controller.Reconcile(replicationLanePolicySignals{sharedHighWatermark: 10}, acks)
 	require.NoError(t, err)
 	require.Len(t, registry.ReadyRetirements(), 2)
 
-	runnableClasses, err = controller.Reconcile(replicationLanePolicySignals{throttleHighNamespaceIDs: []string{"a"}, sharedHighWatermark: 10}, acks)
+	err = controller.Reconcile(replicationLanePolicySignals{throttleHighNamespaceIDs: []string{"a"}, sharedHighWatermark: 10}, acks)
 	require.NoError(t, err)
-	require.Equal(t, []replicationLaneClass{2}, runnableClasses)
 	laneA, ok = registry.SnapshotByKey("namespace:a")
 	require.True(t, ok)
 	require.False(t, laneA.retiring)
@@ -68,8 +65,23 @@ func TestSenderLaneControllerBoundsTenfoldSignalGrowth(t *testing.T) {
 		namespaces[i] = fmt.Sprintf("namespace-%d", i)
 	}
 
-	_, err = controller.Reconcile(replicationLanePolicySignals{throttleHighNamespaceIDs: namespaces, sharedHighWatermark: 10}, nil)
+	err = controller.Reconcile(replicationLanePolicySignals{throttleHighNamespaceIDs: namespaces, sharedHighWatermark: 10}, nil)
 	require.NoError(t, err)
 	require.Len(t, registry.Snapshots(), 100)
 	require.Len(t, controller.policy.(*namespaceIsolationPolicy).streaks, 100)
+}
+
+func TestSenderLaneControllerNonPositiveLimitDisablesCreation(t *testing.T) {
+	for _, limit := range []int{0, -1} {
+		t.Run(fmt.Sprint(limit), func(t *testing.T) {
+			registry, err := newSenderLaneRegistry(100, nil, 4)
+			require.NoError(t, err)
+			controller := newSenderLaneController(registry, newNamespaceIsolationPolicy(4, 3, 3), limit, log.NewNoopLogger())
+			require.NoError(t, controller.Reconcile(replicationLanePolicySignals{
+				throttleHighNamespaceIDs: []string{"a", "b"}, sharedHighWatermark: 10,
+			}, nil))
+			require.Empty(t, registry.Snapshots())
+			require.Empty(t, controller.policy.(*namespaceIsolationPolicy).streaks)
+		})
+	}
 }

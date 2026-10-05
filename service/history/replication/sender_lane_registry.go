@@ -46,6 +46,7 @@ type senderLaneRegistry struct {
 	byKey                  map[string]*senderLane
 	byID                   map[string]*senderLane
 	generateLaneID         func() string
+	changed                chan struct{}
 }
 
 // The registry owns the durable logical-key/scope association and the ephemeral
@@ -58,6 +59,7 @@ func newSenderLaneRegistry(persistedDefaultCursor int64, persisted []*persistenc
 		byKey:                  make(map[string]*senderLane, len(persisted)),
 		byID:                   make(map[string]*senderLane, len(persisted)),
 		generateLaneID:         uuid.NewString,
+		changed:                make(chan struct{}),
 	}
 	for i, persistedLane := range persisted {
 		if persistedLane.GetLogicalKey() == "" || persistedLane.GetScope() == nil {
@@ -74,9 +76,29 @@ func newSenderLaneRegistry(persistedDefaultCursor int64, persisted []*persistenc
 	return r, nil
 }
 
+func (r *senderLaneRegistry) Changed() <-chan struct{} {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.changed
+}
+
+func (r *senderLaneRegistry) notifyChanged() {
+	close(r.changed)
+	r.changed = make(chan struct{})
+}
+
+func (r *senderLaneRegistry) SnapshotByID(laneID string) (senderLaneSnapshot, bool) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	lane, ok := r.byID[laneID]
+	if !ok {
+		return senderLaneSnapshot{}, false
+	}
+	return lane.senderLaneSnapshot, true
+}
+
 // restoreLaneClass clamps a persisted service class into [1, classCount]: zero
-// predates the field, and a class above the current count would never be served
-// by a class event loop.
+// predates the field, and a class above the current count has no rate limiter.
 func restoreLaneClass(persisted int32, classCount int) replicationLaneClass {
 	return replicationLaneClass(min(max(int(persisted), 1), max(1, classCount)))
 }
@@ -116,6 +138,7 @@ func (r *senderLaneRegistry) Create(logicalKey string, scope queues.Scope, class
 	}
 	r.byKey[logicalKey] = lane
 	r.byID[lane.id] = lane
+	r.notifyChanged()
 	return lane.senderLaneSnapshot, true, nil
 }
 
@@ -139,18 +162,6 @@ func (r *senderLaneRegistry) Snapshots() []senderLaneSnapshot {
 	return out
 }
 
-func (r *senderLaneRegistry) ClassSnapshots(class replicationLaneClass) []senderLaneSnapshot {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	var out []senderLaneSnapshot
-	for _, lane := range r.byKey {
-		if lane.class == class && !lane.pending && !lane.retiring {
-			out = append(out, lane.senderLaneSnapshot)
-		}
-	}
-	return out
-}
-
 func (r *senderLaneRegistry) SetClass(logicalKey string, class replicationLaneClass) (senderLaneSnapshot, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -159,6 +170,7 @@ func (r *senderLaneRegistry) SetClass(logicalKey string, class replicationLaneCl
 		return senderLaneSnapshot{}, false
 	}
 	lane.class = class
+	r.notifyChanged()
 	return lane.senderLaneSnapshot, true
 }
 
@@ -188,6 +200,7 @@ func (r *senderLaneRegistry) RequestRetirement(logicalKey string) bool {
 		return false
 	}
 	lane.retiring = true
+	r.notifyChanged()
 	return true
 }
 
@@ -199,6 +212,7 @@ func (r *senderLaneRegistry) CancelRetirement(logicalKey string) bool {
 		return false
 	}
 	lane.retiring = false
+	r.notifyChanged()
 	return true
 }
 
@@ -223,6 +237,7 @@ func (r *senderLaneRegistry) CompleteRetirement(laneID string) (senderLaneSnapsh
 	}
 	delete(r.byID, laneID)
 	delete(r.byKey, lane.logicalKey)
+	r.notifyChanged()
 	return lane.senderLaneSnapshot, true
 }
 
@@ -304,7 +319,7 @@ func (r *senderLaneRegistry) AcquireDefault(endExclusive int64) (func(tasks.Task
 	}, true
 }
 
-func (r *senderLaneRegistry) ReleaseDefault(endExclusive int64, completed bool) []replicationLaneClass {
+func (r *senderLaneRegistry) ReleaseDefault(endExclusive int64, completed bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if completed {
@@ -316,17 +331,19 @@ func (r *senderLaneRegistry) ReleaseDefault(endExclusive int64, completed bool) 
 		r.defaultLeases--
 	}
 	if r.defaultLeases != 0 || r.defaultRecoveryPending {
-		return nil
+		return
 	}
-	var runnableClasses []replicationLaneClass
+	changed := false
 	for _, lane := range r.byKey {
 		if lane.pending {
 			lane.cursor = max(lane.cursor, r.defaultCompletedCursor)
 			lane.pending = false
-			runnableClasses = append(runnableClasses, lane.class)
+			changed = true
 		}
 	}
-	return runnableClasses
+	if changed {
+		r.notifyChanged()
+	}
 }
 
 func (r *senderLaneRegistry) DefaultReservedCursor() int64 {
@@ -364,6 +381,7 @@ func (r *senderLaneRegistry) ClearLanes() {
 	defer r.mu.Unlock()
 	clear(r.byKey)
 	clear(r.byID)
+	r.notifyChanged()
 }
 
 func (r *senderLaneRegistry) BuildReaderState(attr *replicationspb.SyncReplicationState) *persistencespb.QueueReaderState {

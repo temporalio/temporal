@@ -169,14 +169,14 @@ func newSenderLaneController(
 func (c *senderLaneController) Reconcile(
 	signals replicationLanePolicySignals,
 	laneStates map[string]*replicationspb.ReplicationState,
-) ([]replicationLaneClass, error) {
+) error {
 	c.registry.ObserveAcks(laneStates)
 	lanes := c.registry.Snapshots()
 	laneCount := len(lanes)
 	for _, directive := range c.policy.Evaluate(signals, lanes) {
 		switch directive.kind {
 		case replicationLaneCreate:
-			if c.maxLanes > 0 && laneCount >= c.maxLanes {
+			if laneCount >= c.maxLanes {
 				c.observer.CreationDenied(directive.logicalKey, laneCount, c.maxLanes)
 				continue
 			}
@@ -186,7 +186,7 @@ func (c *senderLaneController) Reconcile(
 				directive.class,
 			)
 			if err != nil {
-				return nil, err
+				return err
 			}
 			if created {
 				laneCount++
@@ -206,25 +206,10 @@ func (c *senderLaneController) Reconcile(
 		case replicationLaneKeep:
 			c.registry.CancelRetirement(directive.logicalKey)
 		default:
-			return nil, fmt.Errorf("unknown replication lane directive kind: %d", directive.kind)
+			return fmt.Errorf("unknown replication lane directive kind: %d", directive.kind)
 		}
 	}
-	return runnableLaneClasses(lanes, c.registry.Snapshots()), nil
-}
-
-func runnableLaneClasses(before, after []senderLaneSnapshot) []replicationLaneClass {
-	previous := make(map[string]senderLaneSnapshot, len(before))
-	for _, lane := range before {
-		previous[lane.logicalKey] = lane
-	}
-	var classes []replicationLaneClass
-	for _, lane := range after {
-		prior, existed := previous[lane.logicalKey]
-		if !existed || prior.class != lane.class || (prior.retiring && !lane.retiring) {
-			classes = append(classes, lane.class)
-		}
-	}
-	return classes
+	return nil
 }
 
 func (c *senderLaneController) CompleteRetirement(laneID string) bool {

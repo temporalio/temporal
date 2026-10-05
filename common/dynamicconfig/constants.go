@@ -3082,7 +3082,8 @@ before a lane moves to the next slower service class.`,
 	ReplicationStreamSenderMaxLanes = NewGlobalIntSetting(
 		"history.ReplicationStreamSenderMaxLanes",
 		100,
-		`ReplicationStreamSenderMaxLanes bounds active sender-defined lanes per stream. Zero means no limit.`,
+		`ReplicationStreamSenderMaxLanes bounds active sender-defined lanes per stream.
+Non-positive values disable lane support. Changing it restarts replication streams.`,
 	)
 	ReplicationStreamSenderHighPriorityQPS = NewGlobalIntSetting(
 		"history.ReplicationStreamSenderHighPriorityQPS",
