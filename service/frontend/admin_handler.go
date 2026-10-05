@@ -72,6 +72,7 @@ import (
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/grpc/health"
 	grpchealthspb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -1048,20 +1049,48 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 	if !request.GetShadow() {
 		return nil, serviceerror.NewFailedPrecondition("authoritative CHASM namespace replication is not enabled")
 	}
-
-	actualFingerprint, err := nsreplication.NamespaceTaskFingerprint(request.GetNamespaceTask())
-	if err != nil {
+	if request.NamespaceTaskPayload == nil {
+		err := serviceerror.NewInvalidArgument("namespace_task_payload is required")
 		adh.recordShadowReceiveComparison(
 			request.GetNamespaceTask().GetNamespaceOperation(),
 			request.GetSourceCluster(),
 			namespaceReplicationShadowOutcomeError,
 		)
 		adh.emitShadowReceiveComparison(request, request.GetFingerprint(), nil, namespaceReplicationShadowOutcomeError, err)
-		return nil, serviceerror.NewInternalf("fingerprint namespace mutation: %v", err)
+		return nil, err
 	}
+
+	actualFingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(request.GetNamespaceTaskPayload())
 	outcome := adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH
 	metricsOutcome := namespaceReplicationShadowOutcomeMatch
-	if !bytes.Equal(request.GetFingerprint(), actualFingerprint) {
+	matches := bytes.Equal(request.GetFingerprint(), actualFingerprint)
+	if matches {
+		payloadTask := &replicationspb.NamespaceTaskAttributes{}
+		if err := proto.Unmarshal(request.GetNamespaceTaskPayload(), payloadTask); err != nil {
+			adh.recordShadowReceiveComparison(
+				request.GetNamespaceTask().GetNamespaceOperation(),
+				request.GetSourceCluster(),
+				namespaceReplicationShadowOutcomeError,
+			)
+			adh.emitShadowReceiveComparison(request, request.GetFingerprint(), actualFingerprint, namespaceReplicationShadowOutcomeError, err)
+			return nil, serviceerror.NewInvalidArgumentf("decode namespace_task_payload: %v", err)
+		}
+		matches = proto.Equal(payloadTask, request.GetNamespaceTask())
+		if !matches {
+			var err error
+			actualFingerprint, err = nsreplication.NamespaceTaskFingerprint(request.GetNamespaceTask())
+			if err != nil {
+				adh.recordShadowReceiveComparison(
+					request.GetNamespaceTask().GetNamespaceOperation(),
+					request.GetSourceCluster(),
+					namespaceReplicationShadowOutcomeError,
+				)
+				adh.emitShadowReceiveComparison(request, request.GetFingerprint(), nil, namespaceReplicationShadowOutcomeError, err)
+				return nil, serviceerror.NewInvalidArgumentf("fingerprint namespace_task: %v", err)
+			}
+		}
+	}
+	if !matches {
 		adh.logger.Warn(
 			"namespace replication shadow receive mismatch",
 			tag.WorkflowNamespaceID(request.GetNamespaceTask().GetId()),

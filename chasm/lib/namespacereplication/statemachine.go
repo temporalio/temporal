@@ -108,11 +108,12 @@ var TransitionLocalFailed = chasm.NewTransition(
 )
 
 // EventPeerCompleted is emitted by ApplyPeerTask after a peer reaches a terminal
-// outcome. Updates the peer's status; if all peers are now terminal, the
-// component transitions to COMPLETED.
+// outcome (Applied, ShadowMatch, ShadowMismatch, NoOpStale, NotAdmitted, or
+// FailedTerminal). It updates the peer's status; the caller then transitions the
+// component to COMPLETED once all peers are terminal.
 //
-// For per-peer success/no-op cases, see Outcome on PeerApplyStatus. Failure detail is
-// in LastFailure when Outcome is FAILED_*.
+// For per-peer success/no-op cases, see Outcome on PeerApplyStatus. Failure detail
+// is in LastFailure when Outcome is FAILED_TERMINAL.
 type EventPeerCompleted struct {
 	Time       time.Time
 	TargetCell string
@@ -179,16 +180,17 @@ const (
 	peerRetryBudget = 7 * 24 * time.Hour
 )
 
-// peerRetryBackoff returns the delay before the given attempt: exponential
-// (base * 2^(attempt-1)) capped at peerRetryMaxInterval, overflow-safe.
-func peerRetryBackoff(attempt int32) time.Duration {
-	if attempt < 1 {
+// peerRetryBackoff returns the delay after the given number of completed
+// attempts: exponential (base * 2^(attempts-1)) capped at
+// peerRetryMaxInterval, overflow-safe.
+func peerRetryBackoff(completedAttempts int32) time.Duration {
+	if completedAttempts < 1 {
 		return peerRetryBaseInterval
 	}
-	if attempt > 20 { // 2^19s already dwarfs the cap; avoid shift overflow
+	if completedAttempts > 20 { // 2^19s already dwarfs the cap; avoid shift overflow
 		return peerRetryMaxInterval
 	}
-	d := peerRetryBaseInterval * time.Duration(int64(1)<<uint(attempt-1))
+	d := peerRetryBaseInterval * time.Duration(int64(1)<<uint(completedAttempts-1))
 	if d <= 0 || d > peerRetryMaxInterval {
 		return peerRetryMaxInterval
 	}
@@ -204,7 +206,7 @@ func peerRetryBackoff(attempt int32) time.Duration {
 type EventPeerRetry struct {
 	Time       time.Time
 	TargetCell string
-	Attempt    int32
+	Attempts   int32
 	Err        error
 }
 
@@ -221,7 +223,7 @@ var TransitionPeerRetry = chasm.NewTransition(
 		}
 		// Keep PENDING: the peer isn't done, it's between retries.
 		status.Outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING
-		status.AttemptCount = event.Attempt
+		status.AttemptCount = event.Attempts
 		status.LastAttemptAt = timestamppb.New(event.Time)
 		if event.Err != nil {
 			status.LastFailure = &failurepb.Failure{Message: event.Err.Error()}
@@ -232,10 +234,10 @@ var TransitionPeerRetry = chasm.NewTransition(
 		// a pure timer task. Its attempt matches the peer's AttemptCount, allowing
 		// Validate to drop stale or duplicate timers from an earlier attempt.
 		ctx.AddTask(c, chasm.TaskAttributes{
-			ScheduledTime: event.Time.Add(peerRetryBackoff(event.Attempt)),
+			ScheduledTime: event.Time.Add(peerRetryBackoff(event.Attempts)),
 		}, &namespacereplicationpb.ApplyPeerBackoffTask{
 			TargetCell: event.TargetCell,
-			Attempt:    event.Attempt,
+			Attempt:    event.Attempts,
 		})
 		return nil
 	},
