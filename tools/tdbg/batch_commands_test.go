@@ -246,6 +246,43 @@ func (s *batchCommandTestSuite) TestAdminBatchStart() {
 	})
 }
 
+func (s *batchCommandTestSuite) TestAdminBatchStartConfirmationWarnsOnlyForTermination() {
+	for _, tc := range []struct {
+		batchType   string
+		wantWarning bool
+	}{
+		{batchTypeTerminateWorkflows, true},
+		{batchTypeTerminateActivities, true},
+		{batchTypeDeleteWorkflows, false},
+		{batchTypeDeleteActivities, false},
+	} {
+		s.Run(tc.batchType, func() {
+			s.output.Reset()
+			flags := flag.NewFlagSet("delegated-batch", flag.ContinueOnError)
+			flags.String(FlagNamespace, "target-ns", "")
+			flags.String(FlagVisibilityQuery, "A=B", "")
+			flags.String(FlagReason, "cleanup", "")
+			flags.String(FlagBatchType, tc.batchType, "")
+			ctx := cli.NewContext(s.app, flags, nil)
+			ctx.Context = context.Background()
+			prompter := NewPrompter(ctx, func(params *PrompterParams) {
+				params.Writer = &s.output
+				params.Reader = strings.NewReader("y\n")
+				params.Exiter = func(int) { s.T().FailNow() }
+			})
+
+			s.Require().NoError(AdminBatchStart(ctx, s.client, prompter))
+			warning := "Termination applies only to Running or Paused executions"
+			if tc.wantWarning {
+				s.Contains(s.output.String(), warning)
+			} else {
+				s.NotContains(s.output.String(), warning)
+			}
+			s.Contains(s.output.String(), "Proceed with "+tc.batchType)
+		})
+	}
+}
+
 func (s *batchCommandTestSuite) TestAdminBatchRefreshTasksSendsRawJobID() {
 	err := s.app.Run([]string{
 		"tdbg", "--namespace", "target-ns", "--yes", "execution", "refresh-tasks",

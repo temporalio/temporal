@@ -138,7 +138,12 @@ func AdminBatchStart(c *cli.Context, clientFactory ClientFactory, prompter *Prom
 	if _, err := fmt.Fprintln(c.App.Writer, summary); err != nil {
 		return fmt.Errorf("unable to write batch operation summary: %w", err)
 	}
-	prompter.Prompt(fmt.Sprintf("Proceed with %s on the currently matching %d %s?", batchType, matchCount, targetKind))
+	confirmation := fmt.Sprintf("Proceed with %s on the currently matching %d %s?", batchType, matchCount, targetKind)
+	if delegatedType == enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW ||
+		delegatedType == enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY {
+		confirmation = "Termination applies only to Running or Paused executions; the number affected may be lower than the query match count.\n" + confirmation
+	}
+	prompter.Prompt(confirmation)
 
 	resp, err := adminClient.StartAdminBatchOperation(ctx, &adminservice.StartAdminBatchOperationRequest{
 		Namespace:       nsName,

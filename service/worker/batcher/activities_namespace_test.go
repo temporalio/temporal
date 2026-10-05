@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.uber.org/mock/gomock"
 )
@@ -190,6 +191,7 @@ func TestStartTaskProcessor_UsesWorkerBoundNamespaceForSignal(t *testing.T) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -198,9 +200,9 @@ func TestStartTaskProcessor_UsesWorkerBoundNamespaceForSignal(t *testing.T) {
 			nil, mockFE, metrics.NoopMetricsHandler, log.NewTestLogger())
 	}()
 
-	<-respCh
+	await.Rcv(t, respCh)
 	cancel()
-	<-done
+	await.Rcv(t, done)
 
 	r.NotNil(captured)
 	r.Equal(boundNSName, captured.Namespace,

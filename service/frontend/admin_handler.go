@@ -1327,7 +1327,7 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 		return nil, err
 	}
 
-	// admin batch workflows runs in the temporal-system namespace to operate on target namespaces
+	// Admin batch workflows run in the temporal-system namespace to operate on target namespaces.
 	targetNS := adminRequest.GetNamespace()
 	targetNSID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(targetNS))
 	if err != nil {

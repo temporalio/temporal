@@ -72,7 +72,7 @@ func getCommands(
 		},
 		{
 			Name:        "delegated-batch",
-			Usage:       "Delegate workflow or activity termination from a user namespace to temporal-system",
+			Usage:       "Delegate workflow or activity termination or deletion from a user namespace to temporal-system",
 			Subcommands: newAdminBatchCommands(clientFactory, prompterFactory),
 		},
 		{
