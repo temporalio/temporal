@@ -299,7 +299,7 @@ var File_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto pr
 
 const file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"Dtemporal/server/chasm/lib/tquserdata/proto/v1/request_response.proto\x12-temporal.server.chasm.lib.tquserdata.proto.v1\x1a4temporal/server/api/persistence/v1/task_queues.proto\"\xe9\x02\n" +
+	"Dtemporal/server/chasm/lib/tquserdata/proto/v1/request_response.proto\x12-temporal.server.chasm.lib.tquserdata.proto.v1\x1a4temporal/server/api/persistence/v1/task_queues.proto\"\xd3\x02\n" +
 	"\x1eUpsertTaskQueueUserDataRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1d\n" +
 	"\n" +
@@ -309,7 +309,7 @@ const file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_
 	"businessId\x12'\n" +
 	"\x0eexpect_missing\x18\x06 \x01(\bH\x00R\rexpectMissing\x12+\n" +
 	"\x10expected_version\x18\b \x01(\x03H\x00R\x0fexpectedVersionB\x0e\n" +
-	"\fpreconditionJ\x04\b\x04\x10\x05J\x04\b\a\x10\bR\x0elegacy_versionR\x0eexpected_clock\";\n" +
+	"\fpreconditionJ\x04\b\a\x10\bR\x0eexpected_clock\";\n" +
 	"\x1fUpsertTaskQueueUserDataResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\"\x80\x01\n" +
 	"\x1bGetTaskQueueUserDataRequest\x12!\n" +

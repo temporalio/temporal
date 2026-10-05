@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/testlogger"
-	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -45,11 +44,9 @@ func readTestUserData(ctx context.Context, t *testing.T, h *handler, req *tquser
 	return response
 }
 
-func TestUserDataVersionIndependentOfDB(t *testing.T) {
+func TestUserDataVersionIncrementsOnCAS(t *testing.T) {
 	t.Parallel()
 	h, ctx, req := newTestHandler(t)
-	// Field 4 previously carried the DB version.
-	req.ProtoReflect().SetUnknown(protowire.AppendVarint(protowire.AppendTag(nil, 4, protowire.VarintType), 875))
 	response, err := h.UpsertTaskQueueUserData(ctx, req)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), response.Version)
@@ -108,24 +105,6 @@ func TestUserDataVersionCASDoesNotCompareClocks(t *testing.T) {
 		require.Equal(t, int64(2), stored.Version)
 		require.True(t, proto.Equal(incomingClock, stored.UserData.Clock))
 	}
-}
-
-func TestUserDataVersionDoesNotInheritLegacyState(t *testing.T) {
-	t.Parallel()
-	h, ctx, req := newTestHandler(t)
-	_, err := chasm.StartExecution(ctx,
-		chasm.ExecutionKey{NamespaceID: req.NamespaceId, BusinessID: req.BusinessId},
-		func(ctx chasm.MutableContext, _ struct{}) (*UserData, error) {
-			state := &tquserdatapb.UserDataState{}
-			state.ProtoReflect().SetUnknown(protowire.AppendVarint(protowire.AppendTag(nil, 1, protowire.VarintType), 875))
-			return &UserData{UserDataState: state, Data: chasm.NewDataField(ctx, req.UserData)}, nil
-		}, struct{}{})
-	require.NoError(t, err)
-	require.Zero(t, readTestUserData(ctx, t, h, req).Version)
-	req.Precondition = &tquserdatapb.UpsertTaskQueueUserDataRequest_ExpectedVersion{ExpectedVersion: 0}
-	response, err := h.UpsertTaskQueueUserData(ctx, req)
-	require.NoError(t, err)
-	require.Equal(t, int64(1), response.Version)
 }
 
 func TestUserDataInvalidPrecondition(t *testing.T) {

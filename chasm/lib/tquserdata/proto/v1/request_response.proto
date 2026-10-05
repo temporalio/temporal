@@ -10,8 +10,8 @@ message UpsertTaskQueueUserDataRequest {
   string namespace_id = 1;
   string task_queue = 2;
   temporal.server.api.persistence.v1.TaskQueueUserData user_data = 3;
-  reserved 4, 7;
-  reserved "legacy_version", "expected_clock";
+  reserved 7;
+  reserved "expected_clock";
   string business_id = 5;
   oneof precondition {
     bool expect_missing = 6;

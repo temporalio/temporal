@@ -78,10 +78,10 @@ var File_temporal_server_chasm_lib_tquserdata_proto_v1_state_proto protoreflect.
 
 const file_temporal_server_chasm_lib_tquserdata_proto_v1_state_proto_rawDesc = "" +
 	"\n" +
-	"9temporal/server/chasm/lib/tquserdata/proto/v1/state.proto\x12-temporal.server.chasm.lib.tquserdata.proto.v1\"W\n" +
+	"9temporal/server/chasm/lib/tquserdata/proto/v1/state.proto\x12-temporal.server.chasm.lib.tquserdata.proto.v1\"A\n" +
 	"\rUserDataState\x12\x16\n" +
 	"\x06closed\x18\x02 \x01(\bR\x06closed\x12\x18\n" +
-	"\aversion\x18\x03 \x01(\x03R\aversionJ\x04\b\x01\x10\x02R\x0elegacy_versionBJZHgo.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapbb\x06proto3"
+	"\aversion\x18\x03 \x01(\x03R\aversionBJZHgo.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_tquserdata_proto_v1_state_proto_rawDescOnce sync.Once
