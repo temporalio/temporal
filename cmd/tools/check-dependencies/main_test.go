@@ -48,6 +48,61 @@ func TestFindRequiredModuleVersion(t *testing.T) {
 	})
 }
 
+func TestFindReplacement(t *testing.T) {
+	f := parseGoMod(t, `module test
+
+go 1.21
+
+require go.temporal.io/api v1.2.4-0.20240101000000-abcdef012345
+
+replace go.temporal.io/api => github.com/example/api-go v1.2.4-0.20240101000000-abcdef012345
+`)
+
+	replacement, ok := findReplacement(f, module.Version{
+		Path:    "go.temporal.io/api",
+		Version: "v1.2.4-0.20240101000000-abcdef012345",
+	})
+	require.True(t, ok)
+	require.Equal(t, "github.com/example/api-go", replacement.Path)
+	require.Equal(t, "v1.2.4-0.20240101000000-abcdef012345", replacement.Version)
+}
+
+func TestValidateTemporaryAPIReplacement(t *testing.T) {
+	const version = "v1.2.4-0.20240101000000-abcdef012345"
+	originalResolver := replacementContainsCommit
+	t.Cleanup(func() { replacementContainsCommit = originalResolver })
+
+	var gotRepoURL string
+	var gotRevision string
+	replacementContainsCommit = func(_ context.Context, repoURL, revision string) (bool, error) {
+		gotRepoURL = repoURL
+		gotRevision = revision
+		return true, nil
+	}
+
+	required := module.Version{Path: apiModulePath, Version: version}
+	replacement := module.Version{Path: "github.com/example/api-go", Version: version}
+	require.NoError(t, validateTemporaryAPIReplacement(context.Background(), required, replacement))
+	require.Equal(t, "https://github.com/example/api-go.git", gotRepoURL)
+	require.Equal(t, "abcdef012345", gotRevision)
+
+	t.Run("rejects a different revision", func(t *testing.T) {
+		err := validateTemporaryAPIReplacement(context.Background(), required, module.Version{
+			Path:    replacement.Path,
+			Version: "v1.2.4-0.20240101000000-fedcba987654",
+		})
+		require.ErrorContains(t, err, "names a different commit")
+	})
+
+	t.Run("rejects a non api-go repository", func(t *testing.T) {
+		err := validateTemporaryAPIReplacement(context.Background(), required, module.Version{
+			Path:    "github.com/example/not-api-go",
+			Version: version,
+		})
+		require.ErrorContains(t, err, "must point to a GitHub api-go repository")
+	})
+}
+
 func TestValidateReleaseBranch(t *testing.T) {
 	tests := []struct {
 		name           string

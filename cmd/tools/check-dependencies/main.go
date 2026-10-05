@@ -43,6 +43,8 @@ type moduleSpec struct {
 // strict rule.
 const apiModulePath = "go.temporal.io/api"
 
+var replacementContainsCommit = repositoryContainsCommit
+
 var knownModules = []moduleSpec{
 	{
 		modulePath:    apiModulePath,
@@ -325,6 +327,12 @@ func validateMainModule(
 	version := modVersion.Version
 
 	fmt.Printf("Found %s version: %s\n", mod.modulePath, version)
+	if replacement, ok := findReplacement(modFile, modVersion); ok {
+		if mod.modulePath != apiModulePath {
+			return fmt.Errorf("%s@%s: replacements are not allowed", mod.modulePath, version)
+		}
+		return validateTemporaryAPIReplacement(ctx, modVersion, replacement)
+	}
 
 	if !module.IsPseudoVersion(version) {
 		if !semver.IsValid(version) {
@@ -360,6 +368,83 @@ func findRequiredModuleVersion(modFile *modfile.File, modulePath string) (module
 		}
 	}
 	return module.Version{}, false
+}
+
+func findReplacement(modFile *modfile.File, required module.Version) (module.Version, bool) {
+	for _, replacement := range modFile.Replace {
+		if replacement.Old.Path == required.Path &&
+			(replacement.Old.Version == "" || replacement.Old.Version == required.Version) {
+			return replacement.New, true
+		}
+	}
+	return module.Version{}, false
+}
+
+func validateTemporaryAPIReplacement(
+	ctx context.Context,
+	required module.Version,
+	replacement module.Version,
+) error {
+	if !module.IsPseudoVersion(required.Version) || !module.IsPseudoVersion(replacement.Version) {
+		return fmt.Errorf("%s@%s: temporary replacement %s@%s must use matching pseudo-versions",
+			required.Path, required.Version, replacement.Path, replacement.Version)
+	}
+
+	requiredRevision, err := module.PseudoVersionRev(required.Version)
+	if err != nil {
+		return fmt.Errorf("%s@%s: failed to parse pseudo-version revision: %w", required.Path, required.Version, err)
+	}
+	replacementRevision, err := module.PseudoVersionRev(replacement.Version)
+	if err != nil {
+		return fmt.Errorf("%s@%s: failed to parse temporary replacement revision: %w", replacement.Path, replacement.Version, err)
+	}
+	if requiredRevision != replacementRevision {
+		return fmt.Errorf("%s@%s: temporary replacement %s@%s names a different commit",
+			required.Path, required.Version, replacement.Path, replacement.Version)
+	}
+
+	parts := strings.Split(replacement.Path, "/")
+	if len(parts) != 3 || parts[0] != "github.com" || parts[2] != "api-go" {
+		return fmt.Errorf("%s@%s: temporary replacement must point to a GitHub api-go repository, got %s",
+			required.Path, required.Version, replacement.Path)
+	}
+
+	repoURL := "https://" + replacement.Path + ".git"
+	available, err := replacementContainsCommit(ctx, repoURL, replacementRevision)
+	if err != nil {
+		return fmt.Errorf("%s@%s: failed to resolve temporary replacement: %w", required.Path, required.Version, err)
+	}
+	if !available {
+		return fmt.Errorf("%s@%s: temporary replacement commit %s is not available from %s",
+			required.Path, required.Version, replacementRevision, repoURL)
+	}
+
+	fmt.Printf("  - %s@%s temporarily replaced by %s@%s (ok)\n",
+		required.Path, required.Version, replacement.Path, replacement.Version)
+	return nil
+}
+
+func repositoryContainsCommit(ctx context.Context, repoURL string, shortHash string) (bool, error) {
+	tmpRepo, err := os.MkdirTemp("", "check-dependencies-*")
+	if err != nil {
+		return false, fmt.Errorf("failed to create temp repo dir: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpRepo) }()
+
+	out, err := exec.CommandContext(ctx, "git", "clone", "--bare", "--filter=blob:none", repoURL, tmpRepo).CombinedOutput()
+	if err != nil {
+		return false, fmt.Errorf("git clone failed: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+
+	out, err = exec.CommandContext(ctx, "git", "-C", tmpRepo, "cat-file", "-e", shortHash+"^{commit}").CombinedOutput()
+	if err == nil {
+		return true, nil
+	}
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+		return false, nil
+	}
+	return false, fmt.Errorf("git cat-file failed: %w: %s", err, strings.TrimSpace(string(out)))
 }
 
 // resolveModuleOriginForSpec reports whether shortHash is reachable from the
