@@ -145,9 +145,9 @@ func checkOpenTelemetryBenchmarkSeries(b *testing.B, collected metricdata.Resour
 	metrics := 0
 	points := 0
 	for _, scope := range collected.ScopeMetrics {
-		for _, metric := range scope.Metrics {
+		for _, collectedMetric := range scope.Metrics {
 			metrics++
-			switch data := metric.Data.(type) {
+			switch data := collectedMetric.Data.(type) {
 			case metricdata.Sum[int64]:
 				points += len(data.DataPoints)
 			case metricdata.Histogram[int64]:
