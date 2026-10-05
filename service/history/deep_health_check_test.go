@@ -399,7 +399,7 @@ func TestDeepHealthCheck(t *testing.T) {
 					HealthHistoryGRPCSettings:        func() health2.Settings { return tc.healthCheckSettings },
 					HealthHistoryPersistenceSettings: func() health2.Settings { return tc.persistenceHealthCheckSettings },
 				},
-				historyHealthSignal:     interceptor.NewHealthSignalAggregator(testLogger, func() bool { return true }, func() health2.Settings { return tc.healthCheckSettings }, time.Second, 10),
+				historyHealthSignal:     interceptor.NewHealthSignalAggregator(testLogger, func() health2.Settings { return tc.healthCheckSettings }, time.Second, 10),
 				persistenceHealthSignal: persistence.NewHealthSignalAggregator(true, time.Second, 100, metrics.NoopMetricsHandler, testLogger, func() health2.Settings { return health2.Settings{} }),
 				startupTime:             startupTime,
 			}

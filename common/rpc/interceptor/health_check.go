@@ -50,8 +50,6 @@ type (
 
 	// HealthSignalAggregatorImpl implements HealthSignalAggregator
 	healthSignalAggregatorImpl struct {
-		aggregatorEnabled dynamicconfig.BoolPropertyFn
-
 		latencyAverage aggregate.MovingWindowAverage
 		errorRatio     aggregate.MovingWindowAverage
 		healthSignals  *health.SignalAggregator
@@ -171,7 +169,6 @@ func specialCaseAPIIsPolling(req any) bool {
 // NewHealthSignalAggregator creates a new instance of HealthSignalAggregatorImpl
 func NewHealthSignalAggregator(
 	logger log.Logger,
-	aggregatorEnabled dynamicconfig.BoolPropertyFn,
 	getSettings dynamicconfig.TypedPropertyFn[health.Settings],
 	windowSize time.Duration,
 	maxBufferSize int,
@@ -180,20 +177,14 @@ func NewHealthSignalAggregator(
 	signals.Start()
 
 	return &healthSignalAggregatorImpl{
-		logger:            logger,
-		aggregatorEnabled: aggregatorEnabled,
-		latencyAverage:    aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
-		errorRatio:        aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
-		healthSignals:     signals,
+		logger:         logger,
+		latencyAverage: aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
+		errorRatio:     aggregate.NewMovingWindowAvgImpl(windowSize, maxBufferSize),
+		healthSignals:  signals,
 	}
 }
 
 func (s *healthSignalAggregatorImpl) Record(rpcMethod string, latency time.Duration, err error) {
-	if !s.aggregatorEnabled() {
-		s.logger.Debug("health signal aggregator is disabled")
-		return
-	}
-
 	s.latencyAverage.Record(latency.Milliseconds())
 
 	s.healthSignals.Record(rpcMethod, latency, err)
@@ -206,29 +197,14 @@ func (s *healthSignalAggregatorImpl) Record(rpcMethod string, latency time.Durat
 }
 
 func (s *healthSignalAggregatorImpl) AverageLatency() float64 {
-	if !s.aggregatorEnabled() {
-		s.logger.Debug("health signal average aggregator is disabled")
-		return 0
-	}
-
 	return s.latencyAverage.Average()
 }
 
 func (s *healthSignalAggregatorImpl) LatencyQuantile(quantile float64) (float64, bool) {
-	if !s.aggregatorEnabled() {
-		s.logger.Debug("health signal aggregator is disabled")
-		return 0, false
-	}
-
 	return s.healthSignals.LatencyQuantile(quantile)
 }
 
 func (s *healthSignalAggregatorImpl) LatencyQuantileByGroup(groupName string, quantile float64) (float64, bool) {
-	if !s.aggregatorEnabled() {
-		s.logger.Debug("health signal aggregator is disabled")
-		return 0, false
-	}
-
 	return s.healthSignals.LatencyQuantileByGroup(groupName, quantile)
 }
 
@@ -236,20 +212,10 @@ func (s *healthSignalAggregatorImpl) LatencyQuantileByGroup(groupName string, qu
 // signals overall one. this is fine for now and will be removed once we know signals
 // is good to go
 func (s *healthSignalAggregatorImpl) ErrorRatio() (float64, bool) {
-	if !s.aggregatorEnabled() {
-		s.logger.Debug("health signal aggregator is disabled")
-		return 0, false
-	}
-
 	return s.errorRatio.Average(), true
 }
 
 func (s *healthSignalAggregatorImpl) ErrorRatioByGroup(groupName string) (float64, bool) {
-	if !s.aggregatorEnabled() {
-		s.logger.Debug("health signal aggregator is disabled")
-		return 0, false
-	}
-
 	return s.healthSignals.ErrorRatioByGroup(groupName)
 }
 

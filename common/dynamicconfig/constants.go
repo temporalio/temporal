@@ -267,11 +267,6 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		true,
 		`PersistenceHealthSignalMetricsEnabled determines whether persistence shard RPS metrics are emitted`,
 	)
-	HistoryHealthSignalMetricsEnabled = NewGlobalBoolSetting(
-		"system.historyHealthSignalMetricsEnabled",
-		true,
-		`HistoryHealthSignalMetricsEnabled determines whether history service RPC metrics are emitted`,
-	)
 	HistoryHealthSignalLatencyWindowCount = NewGlobalIntSetting(
 		"system.historyHealthSignalLatencyWindowCount",
 		10,
