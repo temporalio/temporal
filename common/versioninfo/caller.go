@@ -2,6 +2,7 @@ package versioninfo
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -21,6 +22,10 @@ func NewCaller() Caller {
 }
 
 func (c Caller) Call(r *VersionCheckRequest) (*VersionCheckResponse, error) {
+	return c.CallContext(context.Background(), r)
+}
+
+func (c Caller) CallContext(ctx context.Context, r *VersionCheckRequest) (*VersionCheckResponse, error) {
 	err := validateRequest(r)
 	if err != nil {
 		return nil, err
@@ -38,7 +43,7 @@ func (c Caller) Call(r *VersionCheckRequest) (*VersionCheckResponse, error) {
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(reqBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", u.String(), bytes.NewReader(reqBody))
 	if err != nil {
 		return nil, err
 	}
