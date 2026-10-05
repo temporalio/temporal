@@ -34,7 +34,6 @@ const (
 	headerCallsiteTagName          = "header_callsite"
 	ArchetypeTagName               = "archetype"
 	ChasmTaskTypeTagName           = "chasm_task_type"
-	ChasmComponentTypeTagName      = "chasm_component_type"
 	timeoutTypeTagName             = "timeout_type"
 	LastAttemptCauseTagName        = "last_attempt_cause"
 	AttemptStageTagName            = "attempt_stage"
@@ -948,12 +947,12 @@ var (
 	)
 	ChasmLogicalTaskCount = NewDimensionlessHistogramDef(
 		"chasm_logical_task_count",
-		WithDescription("The number of logical CHASM tasks of one task type held by a component type in a single "+
-			"execution, recorded only when it exceeds history.chasmLogicalTaskCountAlertThreshold."),
+		WithDescription("The number of logical CHASM tasks of one task type in a single execution, recorded "+
+			"only when it exceeds history.chasmLogicalTaskCountAlertThreshold."),
 	)
 	ChasmLogicalTaskCountExceeded = NewCounterDef(
 		"chasm_logical_task_count_exceeded",
-		WithDescription("The number of times a component type's logical CHASM task count exceeded "+
+		WithDescription("The number of times an execution's logical CHASM task count for one task type exceeded "+
 			"history.chasmLogicalTaskCountAlertThreshold."),
 	)
 	ChasmIncomingSignalWritten = NewCounterDef(

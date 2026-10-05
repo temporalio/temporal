@@ -5281,12 +5281,10 @@ func (s *nodeSuite) TestCloseTransaction_LogicalTaskCountMetrics() {
 			s.Len(counts, 1)
 			s.Equal(int64(taskCount), counts[0].Value)
 			s.Equal(testComponentName, counts[0].Tags[metrics.ArchetypeTagName])
-			s.Equal(testComponentFQN, counts[0].Tags[metrics.ChasmComponentTypeTagName])
 			s.Equal(testSideEffectTaskFQN, counts[0].Tags[metrics.ChasmTaskTypeTagName])
 
 			s.Len(exceeded, 1)
 			s.Equal(int64(1), exceeded[0].Value)
-			s.Equal(testComponentFQN, exceeded[0].Tags[metrics.ChasmComponentTypeTagName])
 			s.Equal(testSideEffectTaskFQN, exceeded[0].Tags[metrics.ChasmTaskTypeTagName])
 		})
 	}

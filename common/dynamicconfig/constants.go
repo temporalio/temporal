@@ -3348,10 +3348,10 @@ terminates the task via DLQ. Immediate pure tasks are never affected by this set
 	ChasmLogicalTaskCountAlertThreshold = NewChasmTaskTypeIntSetting(
 		"history.chasmLogicalTaskCountAlertThreshold",
 		1000,
-		`ChasmLogicalTaskCountAlertThreshold is the number of logical CHASM tasks of one task type a component
-type may accumulate in a single execution before chasm_logical_task_count and chasm_logical_task_count_exceeded
-are emitted. Only applies to component types registered with chasm.WithTaskCountMetric. A value <= 0 disables
-the metrics. The chasmTaskType constraint takes a task's fully qualified name, e.g. "callback.invoke".`,
+		`ChasmLogicalTaskCountAlertThreshold is the number of logical CHASM tasks of one task type a single execution
+may accumulate before chasm_logical_task_count and chasm_logical_task_count_exceeded are emitted. Only counts
+tasks on component types registered with chasm.WithTaskCountMetric. A value <= 0 disables the metrics.
+The chasmTaskType constraint takes a task's fully qualified name, e.g. "callback.invoke".`,
 	)
 
 	EnableCHASMSchedulerCreation = NewNamespaceBoolSetting(

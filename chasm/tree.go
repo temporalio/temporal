@@ -2023,8 +2023,9 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 	var firstPureTask *persistencespb.ChasmComponentAttributes_Task
 	var firstPureTaskNode *Node
 
-	// Aggregated across the whole execution. Stays nil unless a type opted in.
-	var taskCounts map[componentTaskTypePair]int
+	// Keyed by task type ID and aggregated across the whole execution. Stays nil unless a
+	// type opted in.
+	var taskCounts map[uint32]int
 
 	for nodePath, node := range n.andAllChildren() {
 		// no-op if node is not a component
@@ -2132,24 +2133,18 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 	)
 }
 
-// componentTaskTypePair keys task counts by registered component and task type IDs.
-type componentTaskTypePair struct {
-	componentTypeID uint32
-	taskTypeID      uint32
-}
-
-// countLogicalTasks adds componentAttr's logical task counts into counts, tracking only
-// pairs opted into the task count metrics, and returns the possibly reallocated map.
+// countLogicalTasks adds componentAttr's logical task counts, keyed by task type ID, into
+// counts, tracking only task types opted into the task count metrics on this component, and
+// returns the possibly reallocated map.
 func (n *Node) countLogicalTasks(
 	componentAttr *persistencespb.ChasmComponentAttributes,
-	counts map[componentTaskTypePair]int,
-) map[componentTaskTypePair]int {
+	counts map[uint32]int,
+) map[uint32]int {
 	if !n.registry.taskCountMetricEnabled {
 		return counts
 	}
 
-	componentTypeID := componentAttr.GetTypeId()
-	registrableComponent, ok := n.registry.ComponentByID(componentTypeID)
+	registrableComponent, ok := n.registry.ComponentByID(componentAttr.GetTypeId())
 	if !ok {
 		return counts
 	}
@@ -2164,21 +2159,18 @@ func (n *Node) countLogicalTasks(
 				continue
 			}
 			if counts == nil {
-				counts = make(map[componentTaskTypePair]int)
+				counts = make(map[uint32]int)
 			}
-			counts[componentTaskTypePair{
-				componentTypeID: componentTypeID,
-				taskTypeID:      componentTask.GetTypeId(),
-			}]++
+			counts[componentTask.GetTypeId()]++
 		}
 	}
 
 	return counts
 }
 
-// emitLogicalTaskCountMetrics records the task count metrics for each pair over threshold.
+// emitLogicalTaskCountMetrics records the task count metrics for each task type over threshold.
 func (n *Node) emitLogicalTaskCountMetrics(
-	counts map[componentTaskTypePair]int,
+	counts map[uint32]int,
 	archetypeID ArchetypeID,
 ) {
 	if len(counts) == 0 {
@@ -2188,8 +2180,8 @@ func (n *Node) emitLogicalTaskCountMetrics(
 	// Allocated on the first breach only.
 	var metricsHandler metrics.Handler
 
-	for pair, count := range counts {
-		taskFqn, ok := n.registry.TaskFqnByID(pair.taskTypeID)
+	for taskTypeID, count := range counts {
+		taskFqn, ok := n.registry.TaskFqnByID(taskTypeID)
 		if !ok {
 			continue
 		}
@@ -2197,11 +2189,6 @@ func (n *Node) emitLogicalTaskCountMetrics(
 		if threshold <= 0 || count <= threshold {
 			continue
 		}
-		componentFqn, ok := n.registry.ComponentFqnByID(pair.componentTypeID)
-		if !ok {
-			continue
-		}
-
 		if metricsHandler == nil {
 			archetypeTag := metrics.ArchetypeTag("")
 			if name, ok := n.registry.ArchetypeDisplayName(archetypeID); ok {
@@ -2210,12 +2197,9 @@ func (n *Node) emitLogicalTaskCountMetrics(
 			metricsHandler = n.metricsHandler.WithTags(archetypeTag)
 		}
 
-		tags := []metrics.Tag{
-			metrics.ChasmComponentTypeTag(componentFqn),
-			metrics.ChasmTaskTypeTag(taskFqn),
-		}
-		metrics.ChasmLogicalTaskCount.With(metricsHandler).Record(int64(count), tags...)
-		metrics.ChasmLogicalTaskCountExceeded.With(metricsHandler).Record(1, tags...)
+		taskTypeTag := metrics.ChasmTaskTypeTag(taskFqn)
+		metrics.ChasmLogicalTaskCount.With(metricsHandler).Record(int64(count), taskTypeTag)
+		metrics.ChasmLogicalTaskCountExceeded.With(metricsHandler).Record(1, taskTypeTag)
 	}
 }
 
