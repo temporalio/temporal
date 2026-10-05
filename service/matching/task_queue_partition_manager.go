@@ -1725,8 +1725,9 @@ func (pm *taskQueuePartitionManagerImpl) updateEphemeralDataIteration(prevBacklo
 
 func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.Context) error {
 	var emitted map[string]*taskqueuespb.TaskQueueVersionInfoInternal
-	// Zeroing here rather than in Stop orders it after this goroutine's last emit, so an emit that was
-	// in flight when the partition stopped can't leave a stale value behind.
+	// This goroutine is the only writer of the logical backlog gauges. Zeroing here, both for series that
+	// drop out between emits and on exit, orders it after the last real emit, so an emit that was in
+	// flight when a queue unloaded can't leave a stale value behind.
 	defer func() { pm.emitZeroLogicalBacklog(emitted) }()
 	for {
 		interval := pm.config.BacklogMetricsEmitInterval()
@@ -1742,9 +1743,20 @@ func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.C
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(backoff.Jitter(interval, 0.05)):
-			if versions := pm.fetchAndEmitLogicalBacklogMetrics(ctx); versions != nil {
-				emitted = versions
+			versions := pm.fetchAndEmitLogicalBacklogMetrics(ctx)
+			if versions == nil {
+				continue // keep the last snapshot so a failed describe doesn't zero live series
 			}
+			// Reduce the last snapshot to the series missing from this one: a version whose queue
+			// unloaded, or a priority a version only had through attribution. Then zero just those.
+			for versionKey, vInfo := range versions {
+				previous := emitted[versionKey].GetPhysicalTaskQueueInfo().GetTaskQueueStatsByPriorityKey()
+				for pri := range vInfo.GetPhysicalTaskQueueInfo().GetTaskQueueStatsByPriorityKey() {
+					delete(previous, pri)
+				}
+			}
+			pm.emitZeroLogicalBacklog(emitted)
+			emitted = versions
 		}
 	}
 }
@@ -1816,33 +1828,6 @@ func (pm *taskQueuePartitionManagerImpl) emitZeroLogicalBacklog(versions map[str
 			metrics.ApproximateBacklogCount.With(handler).Record(0, priorityTag)
 			metrics.ApproximateBacklogAgeSeconds.With(handler).Record(0, priorityTag)
 		}
-	}
-}
-
-// emitZeroLogicalBacklogForQueue zeroes out logical backlog gauges for a single physical queue
-// to prevent stale values after unloading. Called from:
-//   - unloadPhysicalQueue(): before a versioned queue is removed from the map during individual
-//     unload (idle timeout, ownership conflict, init error, or other fatal backlog manager errors).
-//
-// Only zeroes priority keys that actually exist in the queue's own subqueues to avoid creating
-// noisy zero-value series. Note: for current/ramping versions, fetchAndEmitLogicalBacklogMetrics
-// may emit additional priority keys attributed from the default queue via mergeStatsByPriority.
-// Those attributed-only keys are not zeroed here, which could leave stale gauge values for
-// priority keys that existed only through attribution.
-func (pm *taskQueuePartitionManagerImpl) emitZeroLogicalBacklogForQueue(version PhysicalTaskQueueVersion, pq physicalTaskQueueManager) {
-	if !pm.config.BreakdownMetricsByTaskQueue() || !pm.config.BreakdownMetricsByPartition() {
-		return
-	}
-	deploymentName, buildID := parseDeploymentFromVersionKey(version.MetricsTagValue())
-	handler := pm.metricsHandler.WithTags(
-		metrics.WorkerVersionTag(version.MetricsTagValue(), pm.config.BreakdownMetricsByBuildID()),
-		metrics.WorkerDeploymentNameTag(deploymentName, pm.config.BreakdownMetricsByBuildID()),
-		metrics.WorkerDeploymentBuildIDTag(buildID, pm.config.BreakdownMetricsByBuildID()),
-	)
-	for pri := range pq.GetStatsByPriority(false) {
-		priorityTag := metrics.MatchingTaskPriorityTag(pri)
-		metrics.ApproximateBacklogCount.With(handler).Record(0, priorityTag)
-		metrics.ApproximateBacklogAgeSeconds.With(handler).Record(0, priorityTag)
 	}
 }
 
@@ -2136,8 +2121,6 @@ func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physica
 	pm.versionedQueuesLock.Lock()
 	foundDbq, ok := pm.versionedQueues[version]
 	if ok && foundDbq == unloadedDbq {
-		// Zero logical backlog metrics before removing from map to prevent stale gauges.
-		pm.emitZeroLogicalBacklogForQueue(version, foundDbq)
 		delete(pm.versionedQueues, version)
 	}
 	pm.versionedQueuesLock.Unlock()

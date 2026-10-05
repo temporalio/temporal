@@ -867,8 +867,17 @@ func latestLogicalBacklogCount(snap map[string][]*metricstest.CapturedRecording,
 // latestLogicalBacklogCountsByPriority returns the most recent approximate_backlog_count recording
 // for the given worker_version tag value, per task_priority tag value.
 func latestLogicalBacklogCountsByPriority(snap map[string][]*metricstest.CapturedRecording, workerVersion string) map[string]float64 {
+	return latestLogicalBacklogByPriority(snap, metrics.ApproximateBacklogCount.Name(), workerVersion)
+}
+
+// latestLogicalBacklogAgesByPriority is latestLogicalBacklogCountsByPriority for approximate_backlog_age_seconds.
+func latestLogicalBacklogAgesByPriority(snap map[string][]*metricstest.CapturedRecording, workerVersion string) map[string]float64 {
+	return latestLogicalBacklogByPriority(snap, metrics.ApproximateBacklogAgeSeconds.Name(), workerVersion)
+}
+
+func latestLogicalBacklogByPriority(snap map[string][]*metricstest.CapturedRecording, metricName, workerVersion string) map[string]float64 {
 	latest := make(map[string]float64)
-	for _, rec := range snap[metrics.ApproximateBacklogCount.Name()] {
+	for _, rec := range snap[metricName] {
 		if rec.Tags["worker_version"] == workerVersion {
 			latest[rec.Tags[metrics.TaskPriorityTagName]] = rec.Value.(float64)
 		}
@@ -1080,27 +1089,8 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_AttributedSeriesZe
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	for i := range 4 {
-		err := pm.defaultQueue().SpoolTask(&persistencespb.TaskInfo{
-			NamespaceId: namespaceID,
-			RunId:       "run",
-			WorkflowId:  fmt.Sprintf("wf-%d", i),
-			Priority:    &commonpb.Priority{PriorityKey: priorityKey},
-		})
-		s.Require().NoError(err)
-	}
-	// Load the current version's queue, with nothing in it, so its series is emitted with backlog
-	// attributed from the unversioned queue only. The emitter can't describe it until it's initialized.
-	currentQ, err := pm.getVersionedQueue(ctx, "", "", &deploymentpb.Deployment{
-		SeriesName: deploymentName,
-		BuildId:    currentBuildID,
-	}, true)
-	s.Require().NoError(err)
-	s.Require().NoError(currentQ.WaitUntilInitialized(ctx))
+	_, currentVersionTag := s.loadCurrentVersionWithAttributedBacklog(ctx, pm, deploymentName, currentBuildID, priorityKey)
 
-	currentVersionTag := worker_versioning.ExternalWorkerDeploymentVersionToString(
-		&deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: currentBuildID},
-	)
 	attributedPriority := metrics.MatchingTaskPriorityTag(priorityKey).Value
 	await.RequireTrue(s.T(), func() bool {
 		return latestLogicalBacklogCountsByPriority(capture.Snapshot(), currentVersionTag)[attributedPriority] > 0
@@ -1115,6 +1105,154 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_AttributedSeriesZe
 			}
 		}
 		return true
+	}, 2*time.Second, 10*time.Millisecond)
+}
+
+// loadCurrentVersionWithAttributedBacklog spools tasks at priorityKey onto the unversioned queue and loads
+// the (empty) current version's queue, so the emitter reports that version with backlog it only has
+// through attribution. Returns the loaded queue and its worker_version tag value.
+func (s *PartitionManagerTestSuite) loadCurrentVersionWithAttributedBacklog(
+	ctx context.Context,
+	pm *taskQueuePartitionManagerImpl,
+	deploymentName, currentBuildID string,
+	priorityKey int32,
+) (physicalTaskQueueManager, string) {
+	for i := range 4 {
+		err := pm.defaultQueue().SpoolTask(&persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  fmt.Sprintf("wf-%d", i),
+			Priority:    &commonpb.Priority{PriorityKey: priorityKey},
+		})
+		s.Require().NoError(err)
+	}
+	// The emitter can't describe the version until its queue is initialized.
+	currentQ, err := pm.getVersionedQueue(ctx, "", "", &deploymentpb.Deployment{
+		SeriesName: deploymentName,
+		BuildId:    currentBuildID,
+	}, true)
+	s.Require().NoError(err)
+	s.Require().NoError(currentQ.WaitUntilInitialized(ctx))
+
+	versionTag := worker_versioning.ExternalWorkerDeploymentVersionToString(
+		&deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: currentBuildID},
+	)
+	return currentQ, versionTag
+}
+
+func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_SeriesZeroedOnVersionedQueueUnload() {
+	if s.newMatcher {
+		s.T().Skip("new matcher re-adds the tasks its matcher held when a queue stops, reloading it before the next emit")
+	}
+	const (
+		deploymentName = "foo"
+		buildID        = "C" // not current, so nothing routes to or reloads its queue once unloaded
+	)
+	s.addRoutingConfigUserData(deploymentName, "A", "", 0)
+
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{
+		loadTime:                   1 * time.Minute,
+		backlogMetricsEmitInterval: 10 * time.Millisecond,
+	})
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	s.spoolDefaultTasks(pm, 3)
+	versionedQ, err := pm.getVersionedQueue(ctx, "", "", &deploymentpb.Deployment{
+		SeriesName: deploymentName,
+		BuildId:    buildID,
+	}, true)
+	s.Require().NoError(err)
+	s.Require().NoError(versionedQ.WaitUntilInitialized(ctx))
+	for i := range 4 {
+		s.Require().NoError(versionedQ.SpoolTask(&persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  fmt.Sprintf("wf-%d", i),
+			VersionDirective: &taskqueuespb.TaskVersionDirective{
+				Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+				DeploymentVersion: &deploymentspb.WorkerDeploymentVersion{
+					DeploymentName: deploymentName,
+					BuildId:        buildID,
+				},
+				RevisionNumber: 1,
+			},
+		}))
+	}
+
+	versionTag := worker_versioning.ExternalWorkerDeploymentVersionToString(
+		&deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: buildID},
+	)
+	await.RequireTrue(s.T(), func() bool {
+		for _, count := range latestLogicalBacklogCountsByPriority(capture.Snapshot(), versionTag) {
+			if count > 0 {
+				return true
+			}
+		}
+		return false
+	}, 10*time.Second, 10*time.Millisecond)
+
+	// Unload just the versioned queue; the partition and its emitter keep running.
+	pm.unloadPhysicalQueue(versionedQ, unloadCauseIdle)
+
+	await.RequireTrue(s.T(), func() bool {
+		snap := capture.Snapshot()
+		for _, byPriority := range []map[string]float64{
+			latestLogicalBacklogCountsByPriority(snap, versionTag),
+			latestLogicalBacklogAgesByPriority(snap, versionTag),
+		} {
+			for _, v := range byPriority {
+				if v != 0 {
+					return false
+				}
+			}
+		}
+		return true
+	}, 2*time.Second, 10*time.Millisecond)
+	// The current version's series, which carries the unversioned backlog, is unaffected.
+	currentVersionTag := worker_versioning.ExternalWorkerDeploymentVersionToString(
+		&deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: "A"},
+	)
+	s.Require().Positive(latestLogicalBacklogCountsByPriority(capture.Snapshot(), currentVersionTag)[defaultPriorityTag])
+}
+
+func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_AttributedSeriesZeroedWhenNoLongerCurrent() {
+	if !s.newMatcher {
+		s.T().Skip("classic matcher has no per-priority subqueues, so there's no attributed-only priority")
+	}
+	const (
+		deploymentName = "foo"
+		currentBuildID = "A"
+		priorityKey    = 1 // not the default, so the current version's queue has no subqueue for it
+	)
+	s.addRoutingConfigUserData(deploymentName, currentBuildID, "", 0)
+
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{
+		loadTime:                   1 * time.Minute,
+		backlogMetricsEmitInterval: 10 * time.Millisecond,
+	})
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, currentVersionTag := s.loadCurrentVersionWithAttributedBacklog(ctx, pm, deploymentName, currentBuildID, priorityKey)
+
+	attributedPriority := metrics.MatchingTaskPriorityTag(priorityKey).Value
+	await.RequireTrue(s.T(), func() bool {
+		return latestLogicalBacklogCountsByPriority(capture.Snapshot(), currentVersionTag)[attributedPriority] > 0
+	}, 10*time.Second, 10*time.Millisecond)
+
+	// Make another build current. A's queue stays loaded but no longer gets any attributed backlog,
+	// so the priority it only had through attribution must be zeroed.
+	s.userDataMgr.Lock()
+	s.addRoutingConfigUserData(deploymentName, "B", "", 0)
+	s.userDataMgr.Unlock()
+
+	await.RequireTrue(s.T(), func() bool {
+		snap := capture.Snapshot()
+		return latestLogicalBacklogCountsByPriority(snap, currentVersionTag)[attributedPriority] == 0 &&
+			latestLogicalBacklogAgesByPriority(snap, currentVersionTag)[attributedPriority] == 0
 	}, 2*time.Second, 10*time.Millisecond)
 }
 
