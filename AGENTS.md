@@ -24,7 +24,6 @@ Before authoring or reviewing code, read and follow the [code guidelines](.githu
 - Formatting imports: `make fmt-imports`
 - Code generation: `make proto`
 - Update API proto: `make update-go-api`
-- Unit testing: `make unit-test`
 
 ## Primary Workflows
 
