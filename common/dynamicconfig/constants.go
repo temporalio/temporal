@@ -812,6 +812,24 @@ instances in the cluster, for a given namespace, per-API method. If this is set 
 ignored. The name 'frontend.globalNamespaceCount' is kept for consistency with the per-instance limit name,
 'frontend.namespaceCount'.`,
 	)
+	FrontendInternalPerNSMaxConcurrentLongRunningRequestsPerInstance = NewNamespaceIntSetting(
+		"frontend.internalPerNSNamespaceCount",
+		1200,
+		`FrontendInternalPerNSMaxConcurrentLongRunningRequestsPerInstance limits concurrent PollWorkflowTaskQueue,
+PollActivityTaskQueue, and PollNexusTaskQueue requests whose task queue is an internal per-namespace queue
+(temporal-sys-per-ns-* and temporal-sys-worker-controller-per-ns-tq). The limit is per frontend instance, per
+namespace, per API method, and is independent of frontend.namespaceCount. Sticky workflow polls are classified by
+TaskQueue.NormalName. This value is ignored if FrontendGlobalInternalPerNSMaxConcurrentLongRunningRequests is
+greater than zero. Warning: setting this to zero rejects all such polls. Requests are only throttled when the
+limit is exceeded, not when it is only reached.`,
+	)
+	FrontendGlobalInternalPerNSMaxConcurrentLongRunningRequests = NewNamespaceIntSetting(
+		"frontend.globalInternalPerNSNamespaceCount",
+		0,
+		`FrontendGlobalInternalPerNSMaxConcurrentLongRunningRequests limits concurrent internal per-namespace task-queue
+polls across all frontend instances in the cluster, for a given namespace, per API method. If this is set to 0
+(the default), then it is ignored and frontend.internalPerNSNamespaceCount is used.`,
+	)
 	FrontendMaxNamespaceVisibilityRPSPerInstance = NewNamespaceIntSetting(
 		"frontend.namespaceRPS.visibility",
 		10,

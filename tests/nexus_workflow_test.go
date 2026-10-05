@@ -49,7 +49,6 @@ import (
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/rpc/httpfaults"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -2108,8 +2107,8 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 		require.NotNil(t, desc.PendingNexusOperations[0].CancellationInfo)
 	}, time.Second*10, time.Millisecond*100)
 
-	await.Snd(s.T(), canStartCh, struct{}{})
-	await.Rcv(s.T(), cancelSentCh)
+	s.Snd(canStartCh, struct{}{})
+	s.Rcv(cancelSentCh)
 
 	// Terminate the workflow for good measure.
 	err = env.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test")
@@ -2858,7 +2857,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationSyncNexusFailure(chasmEnabled
 	s.NoError(json.Unmarshal(failure.Details, &details))
 	s.Equal("details", details)
 
-	handlerRequestID := await.Rcv(s.T(), handlerRequestIDs)
+	handlerRequestID := s.Rcv(handlerRequestIDs)
 	s.Require().NotEmpty(handlerRequestID)
 
 	// The attempt tag is off by one between implementations: HSM's task carries the count of
