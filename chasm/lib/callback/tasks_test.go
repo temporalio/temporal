@@ -295,20 +295,20 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			nsRegistry := namespace.NewMockRegistry(ctrl)
 			nsRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
 
-			handler := &invocationTaskHandler{
-				config: &Config{
+			handler := newInvocationTaskHandler(invocationTaskHandlerOptions{
+				Config: &Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
 				},
-				namespaceRegistry: nsRegistry,
-				metricsHandler:    metricsHandler,
-				logger:            logger,
-				httpCallerProvider: func(nid common.NamespaceIDAndDestination) HTTPCaller {
+				NamespaceRegistry: nsRegistry,
+				MetricsHandler:    metricsHandler,
+				Logger:            logger,
+				HTTPCallerProvider: func(nid common.NamespaceIDAndDestination) HTTPCaller {
 					return tc.caller
 				},
-			}
+			})
 
 			callback := &Callback{
 				CallbackState: &callbackspb.CallbackState{
@@ -350,7 +350,16 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 					Level:   level,
 					Message: "Callback request failed",
 					Tags: map[string]any{
-						"request-id": "request-id",
+						"nexus-stage":             "handler-outbound",
+						"error":                   testlogger.AnyTagValue,
+						"wf-namespace":            ns.Name().String(),
+						"destination":             "http://localhost",
+						"wf-id":                   "workflow-id",
+						"wf-run-id":               "run-id",
+						"nexus-completion-source": testCompletionSourceFqn,
+						"attempt":                 int32(0),
+						"request-id":              "request-id",
+						"retryable":               tc.expectedEvent == "retryable-error",
 					},
 				})
 			}
