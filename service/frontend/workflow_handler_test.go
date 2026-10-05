@@ -2,6 +2,7 @@ package frontend
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"regexp"
@@ -37,6 +38,8 @@ import (
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -46,6 +49,7 @@ import (
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
@@ -4104,4 +4108,136 @@ func (s *WorkflowHandlerSuite) TestUpdateActivityOptions_Priority() {
 	s.ErrorAs(err, &invalidArg)
 	s.ErrorContains(err, "priority key can't be negative")
 	// NOTE: only testing a single validation scenario here; the priority validation has its own unit tests
+}
+
+func (s *WorkflowHandlerSuite) TestValidateWorkflowCompletionCallbacks_InternalCallbackNamespace() {
+	nsName := namespace.Name("test-namespace")
+	nsID := namespace.ID(uuid.NewString())
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(nsName).Return(nsID, nil).AnyTimes()
+
+	config := s.newConfig()
+	wh := s.getWorkflowHandler(config)
+
+	refToken := func(nsID, businessID string) string {
+		b, err := (&persistencespb.ChasmComponentRef{NamespaceId: nsID, BusinessId: businessID}).Marshal()
+		s.Require().NoError(err)
+		return base64.RawURLEncoding.EncodeToString(b)
+	}
+	// legacyRefTokenWithPath sets ArchetypeId and ComponentPath, which collide with the envelope's
+	// ref and component_ref fields on the wire and must still be parsed as the legacy format.
+	legacyRefTokenWithPath := func(nsID, businessID string) string {
+		b, err := (&persistencespb.ChasmComponentRef{
+			NamespaceId:   nsID,
+			BusinessId:    businessID,
+			ArchetypeId:   1,
+			ComponentPath: []string{"child"},
+		}).Marshal()
+		s.Require().NoError(err)
+		return base64.RawURLEncoding.EncodeToString(b)
+	}
+	envelopeToken := func(nsID, businessID string) string {
+		ref, err := (&persistencespb.ChasmComponentRef{NamespaceId: nsID, BusinessId: businessID}).Marshal()
+		s.Require().NoError(err)
+		b, err := (&tokenspb.NexusOperationCompletion{ComponentRef: ref, RequestId: "req"}).Marshal()
+		s.Require().NoError(err)
+		return base64.RawURLEncoding.EncodeToString(b)
+	}
+	// collidingToken builds a bare ref whose component_path entry is itself a marshaled ref, so the
+	// same bytes also decode as an envelope wrapping that inner ref (component_path and component_ref
+	// are both field 6, same wire type).
+	collidingToken := func(outerNsID, outerBusinessID, innerNsID, innerBusinessID string) string {
+		inner, err := (&persistencespb.ChasmComponentRef{NamespaceId: innerNsID, BusinessId: innerBusinessID}).Marshal()
+		s.Require().NoError(err)
+		b, err := (&persistencespb.ChasmComponentRef{
+			NamespaceId:   outerNsID,
+			BusinessId:    outerBusinessID,
+			ComponentPath: []string{string(inner)},
+		}).Marshal()
+		s.Require().NoError(err)
+		return base64.RawURLEncoding.EncodeToString(b)
+	}
+
+	testCases := []struct {
+		name    string
+		url     string
+		headers map[string]string
+		errMsg  string
+	}{
+		{
+			name:    "same namespace legacy token",
+			url:     chasm.NexusCompletionHandlerURL,
+			headers: map[string]string{commonnexus.CallbackTokenHeader: refToken(nsID.String(), "sched")},
+		},
+		{
+			name:    "same namespace envelope token",
+			url:     chasm.NexusCompletionHandlerURL,
+			headers: map[string]string{commonnexus.CallbackTokenHeader: envelopeToken(nsID.String(), "sched")},
+		},
+		{
+			name:    "same namespace legacy token with archetype id and component path",
+			url:     chasm.NexusCompletionHandlerURL,
+			headers: map[string]string{commonnexus.CallbackTokenHeader: legacyRefTokenWithPath(nsID.String(), "sched")},
+		},
+		{
+			name:    "different namespace legacy token",
+			url:     chasm.NexusCompletionHandlerURL,
+			headers: map[string]string{commonnexus.CallbackTokenHeader: refToken(uuid.NewString(), "sched")},
+			errMsg:  "internal callback must target the same namespace",
+		},
+		{
+			name:    "different namespace envelope token",
+			url:     chasm.NexusCompletionHandlerURL,
+			headers: map[string]string{commonnexus.CallbackTokenHeader: envelopeToken(uuid.NewString(), "sched")},
+			errMsg:  "internal callback must target the same namespace",
+		},
+		{
+			name:   "missing token",
+			url:    chasm.NexusCompletionHandlerURL,
+			errMsg: "missing internal callback token",
+		},
+		{
+			name:    "invalid token encoding",
+			url:     chasm.NexusCompletionHandlerURL,
+			headers: map[string]string{commonnexus.CallbackTokenHeader: "!!!"},
+			errMsg:  "invalid internal callback token",
+		},
+		{
+			name:    "missing business ID",
+			url:     chasm.NexusCompletionHandlerURL,
+			headers: map[string]string{commonnexus.CallbackTokenHeader: refToken(nsID.String(), "")},
+			errMsg:  "internal callback component reference requires namespace and business IDs",
+		},
+		{
+			// Bare-ref reading (what history acts on) and envelope reading disagree on namespace;
+			// both must be checked.
+			name: "bare ref targets different namespace than colliding envelope reading",
+			url:  chasm.NexusCompletionHandlerURL,
+			headers: map[string]string{commonnexus.CallbackTokenHeader: collidingToken(
+				uuid.NewString(), "victim-business", nsID.String(), "sched",
+			)},
+			errMsg: "internal callback must target the same namespace",
+		},
+		{
+			name: "system callback is not checked",
+			url:  "temporal://system",
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			cbs := []*commonpb.Callback{{
+				Variant: &commonpb.Callback_Nexus_{
+					Nexus: &commonpb.Callback_Nexus{Url: tc.url, Header: tc.headers},
+				},
+			}}
+			err := wh.validateWorkflowCompletionCallbacks(nsName, cbs)
+			if tc.errMsg == "" {
+				s.Require().NoError(err)
+				return
+			}
+			var invalidArgument *serviceerror.InvalidArgument
+			s.Require().ErrorAs(err, &invalidArgument)
+			s.Require().ErrorContains(err, tc.errMsg)
+		})
+	}
 }
