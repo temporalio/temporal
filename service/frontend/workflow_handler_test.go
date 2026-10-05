@@ -508,6 +508,66 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_StartRequestNot
 	s.Equal(errRequestNotSet, err)
 }
 
+func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_NexusSerializationContextLength() {
+	const maxLength = 64
+	atLimit := strings.Repeat("x", maxLength)
+	tooLong := strings.Repeat("x", maxLength+1)
+
+	for _, tc := range []struct {
+		name      string
+		context   *nexuspb.PropagatedSerializationContext
+		wantError string
+	}{
+		{
+			name:    "at limit",
+			context: &nexuspb.PropagatedSerializationContext{Endpoint: atLimit, Service: atLimit, Operation: atLimit},
+		},
+		{
+			name:      "endpoint too long",
+			context:   &nexuspb.PropagatedSerializationContext{Endpoint: tooLong},
+			wantError: "Nexus serialization context endpoint field too long",
+		},
+		{
+			name:      "service too long",
+			context:   &nexuspb.PropagatedSerializationContext{Service: tooLong},
+			wantError: "Nexus serialization context service field too long",
+		},
+		{
+			name:      "operation too long",
+			context:   &nexuspb.PropagatedSerializationContext{Operation: tooLong},
+			wantError: "Nexus serialization context operation field too long",
+		},
+	} {
+		s.Run(tc.name, func() {
+			config := s.newConfig()
+			config.MaxIDLengthLimit = dc.GetIntPropertyFn(maxLength)
+			wh := s.getWorkflowHandler(config)
+			if tc.wantError == "" {
+				s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
+				s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.NewID(), nil)
+				s.mockHistoryClient.EXPECT().StartWorkflowExecution(gomock.Any(), gomock.Any()).Return(&historyservice.StartWorkflowExecutionResponse{Started: true}, nil)
+			}
+			response, err := wh.StartWorkflowExecution(context.Background(), &workflowservice.StartWorkflowExecutionRequest{
+				Namespace:                           "test-namespace",
+				WorkflowId:                          "workflow-id",
+				WorkflowType:                        &commonpb.WorkflowType{Name: "workflow-type"},
+				TaskQueue:                           &taskqueuepb.TaskQueue{Name: "task-queue"},
+				RequestId:                           uuid.NewString(),
+				PropagatedNexusSerializationContext: tc.context,
+			})
+			if tc.wantError == "" {
+				s.Require().NoError(err)
+				s.Require().NotNil(response)
+			} else {
+				var invalidArgument *serviceerror.InvalidArgument
+				s.Require().ErrorAs(err, &invalidArgument)
+				s.Require().ErrorContains(err, tc.wantError)
+				s.Require().Nil(response)
+			}
+		})
+	}
+}
+
 func (s *WorkflowHandlerSuite) TestValidateStartWorkflowArgsForSchedule_Failed_InvalidVersioningOverride() {
 	wh := s.getWorkflowHandler(s.newConfig())
 	err := wh.validateStartWorkflowArgsForSchedule(s.testNamespace, &workflowpb.NewWorkflowExecutionInfo{

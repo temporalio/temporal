@@ -660,7 +660,18 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
-	if err := validateRequestId(&request.RequestId, wh.config.MaxIDLengthLimit()); err != nil {
+	maxIDLength := wh.config.MaxIDLengthLimit()
+	if err := validateRequestId(&request.RequestId, maxIDLength); err != nil {
+		return nil, err
+	}
+	serializationContext := request.GetPropagatedNexusSerializationContext()
+	if err := validateStringField("Nexus serialization context endpoint", serializationContext.GetEndpoint(), maxIDLength, false); err != nil {
+		return nil, err
+	}
+	if err := validateStringField("Nexus serialization context service", serializationContext.GetService(), maxIDLength, false); err != nil {
+		return nil, err
+	}
+	if err := validateStringField("Nexus serialization context operation", serializationContext.GetOperation(), maxIDLength, false); err != nil {
 		return nil, err
 	}
 
