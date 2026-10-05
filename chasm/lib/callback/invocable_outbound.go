@@ -90,7 +90,12 @@ func (n invocableOutbound) Invoke(
 
 	if err != nil {
 		retryable := isRetryableCallError(err)
-		h.logger.Error(
+		// Only a callback that is dropped for good is an error; one that will be retried is a warning.
+		logAtLevel := h.logger.Error
+		if retryable {
+			logAtLevel = h.logger.Warn
+		}
+		logAtLevel(
 			"Callback request failed",
 			tag.Error(err),
 			tag.WorkflowNamespace(ns.Name().String()),

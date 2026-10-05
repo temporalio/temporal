@@ -242,8 +242,13 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			tc.assertOutcome(t, cb)
 
 			if tc.expectedMetricOutcome != "success" {
+				// A callback that will be retried is logged as a warning; only a dropped one is an error.
+				level := testlogger.Error
+				if tc.retryable {
+					level = testlogger.Warn
+				}
 				capture.RequireContains(t, testlogger.CapturedLogPattern{
-					Level:   testlogger.Error,
+					Level:   level,
 					Message: "Callback request failed",
 					Tags: map[string]any{
 						"request-id": "request-id",
