@@ -100,6 +100,11 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 		})
 		s.NoError(err)
 		s.Equal(enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED, pollResp.GetWaitStage())
+		s.ProtoEqual(&nexuspb.PropagatedSerializationContext{
+			Endpoint:  endpointName,
+			Service:   "test-service",
+			Operation: "test-operation",
+		}, pollResp.GetPropagatedNexusSerializationContext())
 
 		for _, tc := range []struct {
 			name  string
@@ -207,6 +212,7 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 	s.Run("IDConflictPolicyUseExisting", func(s *NexusStandaloneTestSuite) {
 		env := s.newTestEnv()
 		endpointName := env.createRandomNexusEndpoint(s.Context(), s.T()).GetSpec().GetName()
+		otherEndpointName := env.createRandomNexusEndpoint(s.Context(), s.T()).GetSpec().GetName()
 
 		resp1, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "test-op",
@@ -223,6 +229,28 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 		s.NoError(err)
 		s.Equal(resp1.RunId, resp2.RunId)
 		s.False(resp2.GetStarted())
+
+		resp3, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId:      "test-op",
+			Endpoint:         otherEndpointName,
+			Service:          "different-service",
+			Operation:        "different-operation",
+			RequestId:        "third-request-id",
+			IdConflictPolicy: enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_USE_EXISTING,
+		})
+		s.NoError(err)
+		s.Equal(resp1.RunId, resp3.RunId)
+		s.False(resp3.GetStarted())
+
+		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       resp1.RunId,
+		})
+		s.NoError(err)
+		s.Equal(endpointName, descResp.GetInfo().GetEndpoint())
+		s.Equal("test-service", descResp.GetInfo().GetService())
+		s.Equal("test-operation", descResp.GetInfo().GetOperation())
 	})
 }
 
@@ -330,6 +358,24 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationLinks() {
 		s.NoError(err)
 		gotLinks = describeLinks(s, operationID)
 		protorequire.ProtoElementsMatch(t, expected, gotLinks)
+
+		thirdLink := standaloneNexusTestLink(env, "merge-wf-3")
+		attachResp, err = s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId:      operationID,
+			Endpoint:         endpointName,
+			Operation:        "different-operation",
+			RequestId:        "third-request",
+			Links:            []*commonpb.Link{thirdLink},
+			IdConflictPolicy: enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_USE_EXISTING,
+			OnConflictOptions: &nexusoperationpb.OnConflictOptions{
+				AttachLinks: true,
+			},
+		})
+		s.NoError(err)
+		s.Equal(startResp.GetRunId(), attachResp.GetRunId())
+		s.False(attachResp.GetStarted())
+		expected = append(expected, thirdLink)
+		protorequire.ProtoElementsMatch(t, expected, describeLinks(s, operationID))
 	})
 
 	s.Run("LinksIgnoredOnConflictWithoutAttachLinks", func(s *NexusStandaloneTestSuite) {
@@ -633,6 +679,11 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 			})
 			require.NoError(t, err)
 			protorequire.ProtoEqual(t, expectedResult, pollResp.GetResult())
+			protorequire.ProtoEqual(t, &nexuspb.PropagatedSerializationContext{
+				Endpoint:  endpointName,
+				Service:   "test-service",
+				Operation: "test-operation",
+			}, pollResp.GetPropagatedNexusSerializationContext())
 		}, 10*time.Second, 100*time.Millisecond)
 
 		s.NoError(s.Rcv(pollerErrCh))
