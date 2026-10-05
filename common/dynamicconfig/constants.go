@@ -267,16 +267,6 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		true,
 		`PersistenceHealthSignalMetricsEnabled determines whether persistence shard RPS metrics are emitted`,
 	)
-	HistoryHealthSignalLatencyWindowCount = NewGlobalIntSetting(
-		"system.historyHealthSignalLatencyWindowCount",
-		10,
-		`historyHealthSignalLatencyWindowCount is the number of signal windows to compute latencies over`,
-	)
-	HistoryHealthSignalLatencyWindowSize = NewGlobalDurationSetting(
-		"system.historyHealthSignalLatencyWindowSize",
-		5*time.Second,
-		`historyHealthSignalLatencyWindowSize is the time window size in seconds for aggregating latencies`,
-	)
 	HealthHistoryGRPCSettings = NewGlobalTypedSetting(
 		"health.history.grpc",
 		DefaultHealthSettings,
