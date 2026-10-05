@@ -4274,6 +4274,20 @@ func (s *WorkflowHandlerSuite) TestValidateWorkflowCompletionCallbacks_InternalC
 		s.Require().NoError(err)
 		return base64.RawURLEncoding.EncodeToString(b)
 	}
+	// collidingToken builds a bare ref whose component_path entry is itself a marshaled ref, so the
+	// same bytes also decode as an envelope wrapping that inner ref (component_path and component_ref
+	// are both field 6, same wire type).
+	collidingToken := func(outerNsID, outerBusinessID, innerNsID, innerBusinessID string) string {
+		inner, err := (&persistencespb.ChasmComponentRef{NamespaceId: innerNsID, BusinessId: innerBusinessID}).Marshal()
+		s.Require().NoError(err)
+		b, err := (&persistencespb.ChasmComponentRef{
+			NamespaceId:   outerNsID,
+			BusinessId:    outerBusinessID,
+			ComponentPath: []string{string(inner)},
+		}).Marshal()
+		s.Require().NoError(err)
+		return base64.RawURLEncoding.EncodeToString(b)
+	}
 
 	testCases := []struct {
 		name    string
@@ -4324,6 +4338,16 @@ func (s *WorkflowHandlerSuite) TestValidateWorkflowCompletionCallbacks_InternalC
 			url:     chasm.NexusCompletionHandlerURL,
 			headers: map[string]string{commonnexus.CallbackTokenHeader: refToken(nsID.String(), "")},
 			errMsg:  "internal callback component reference requires namespace and business IDs",
+		},
+		{
+			// Bare-ref reading (what history acts on) and envelope reading disagree on namespace;
+			// both must be checked.
+			name: "bare ref targets different namespace than colliding envelope reading",
+			url:  chasm.NexusCompletionHandlerURL,
+			headers: map[string]string{commonnexus.CallbackTokenHeader: collidingToken(
+				uuid.NewString(), "victim-business", nsID.String(), "sched",
+			)},
+			errMsg: "internal callback must target the same namespace",
 		},
 		{
 			name: "system callback is not checked",
