@@ -464,11 +464,11 @@ INPUT STREAM (for --file / stdin)
     {"namespace":"analytics-staging","schedule_id":"my-schedule"}
 
 PRECEDENCE
-  With a --file/stdin stream, the stream is the source of targets; environment/default namespaces are ignored.
-  Explicit flags are constraints: every streamed target must agree with --namespace and --schedule-id when those are set, otherwise the run errors. Pass --namespace
+  With a --file/stdin stream, the stream is the source of targets and the flags are constraints: every streamed
+  target must agree with --namespace and --schedule-id when those are set, otherwise the run errors. Pass --namespace
   to guarantee the audit stays within a single namespace.
-  With no stream (an interactive terminal and no --file), namespace comes from an explicit flag, then
-  TEMPORAL_CLI_NAMESPACE, then default. --schedule-id selects one schedule within that namespace.
+  With no stream (an interactive terminal and no --file), the flags define the target directly: --namespace alone
+  audits that whole namespace; --namespace + --schedule-id audits that one schedule.
 
 TIME WINDOW
   --lookback-start / --lookback-end take a duration before now (e.g. 24h, 3d, 90m, 0s); "d" means exactly 24h.
@@ -496,13 +496,13 @@ EXAMPLES
   Pipe stdout through jq (e.g. only schedules with real misses):
     tdbg schedule audit -f ./targets.jsonl --lookback-start 1d | jq 'select(.counts.real_miss > 0)'`,
 			Flags: []cli.Flag{
-				&namespaceFlag{StringFlag: cli.StringFlag{
+				&cli.StringFlag{
 					Name:    FlagNamespace,
 					Aliases: FlagNamespaceAlias,
-					Usage: "Audit this namespace. Without a stream, defaults to TEMPORAL_CLI_NAMESPACE or default. With a --file/stdin " +
+					Usage: "Audit this namespace. With no stream, audits the whole namespace. With a --file/stdin " +
 						"stream, it is a constraint: every streamed target must be in this namespace or the run errors, " +
 						"guaranteeing the audit stays within a single namespace.",
-				}},
+				},
 				&cli.StringFlag{
 					Name:    FlagFile,
 					Aliases: FlagFileAlias,

@@ -191,8 +191,8 @@ func TestProduceTargets(t *testing.T) {
 
 	t.Run("--namespace matching the stream passes targets through", func(t *testing.T) {
 		got, err := produce(&auditInputs{
-			Namespace: "ns1", NamespaceExplicit: true,
-			Stdin: strings.NewReader(`{"namespace":"ns1"}` + "\n" + `{"namespace":"ns1","schedule_id":"s1"}` + "\n"),
+			Namespace: "ns1",
+			Stdin:     strings.NewReader(`{"namespace":"ns1"}` + "\n" + `{"namespace":"ns1","schedule_id":"s1"}` + "\n"),
 		})
 		require.NoError(t, err)
 		require.Equal(t, []scheduleaudit.Target{
@@ -203,15 +203,15 @@ func TestProduceTargets(t *testing.T) {
 
 	t.Run("--namespace not matching a stream target errors", func(t *testing.T) {
 		_, err := produce(&auditInputs{
-			Namespace: "ns1", NamespaceExplicit: true,
-			Stdin: strings.NewReader(`{"namespace":"ns2"}` + "\n"),
+			Namespace: "ns1",
+			Stdin:     strings.NewReader(`{"namespace":"ns2"}` + "\n"),
 		})
 		require.ErrorContains(t, err, `does not match --namespace "ns1"`)
 	})
 
 	t.Run("--schedule-id not matching a stream target errors", func(t *testing.T) {
 		_, err := produce(&auditInputs{
-			Namespace: "ns1", NamespaceExplicit: true,
+			Namespace:  "ns1",
 			ScheduleID: "s1",
 			Stdin:      strings.NewReader(`{"namespace":"ns1","schedule_id":"s2"}` + "\n"),
 		})
@@ -220,7 +220,7 @@ func TestProduceTargets(t *testing.T) {
 
 	t.Run("--namespace + --schedule-id matching the stream passes through", func(t *testing.T) {
 		got, err := produce(&auditInputs{
-			Namespace: "ns1", NamespaceExplicit: true,
+			Namespace:  "ns1",
 			ScheduleID: "s1",
 			Stdin:      strings.NewReader(`{"namespace":"ns1","schedule_id":"s1"}` + "\n"),
 		})
@@ -229,7 +229,7 @@ func TestProduceTargets(t *testing.T) {
 	})
 
 	t.Run("no stream: --namespace alone audits the whole namespace", func(t *testing.T) {
-		got, err := produce(&auditInputs{Namespace: "ns1", NamespaceExplicit: true, Stdin: devNull(t)})
+		got, err := produce(&auditInputs{Namespace: "ns1", Stdin: devNull(t)})
 		require.NoError(t, err)
 		require.Equal(t, []scheduleaudit.Target{{Namespace: "ns1"}}, got)
 	})
@@ -308,72 +308,6 @@ func mustParseTime(s string) time.Time {
 		panic(err)
 	}
 	return t
-}
-
-func TestAuditNamespacePrecedence(t *testing.T) {
-	for _, tc := range []struct {
-		name, env, input string
-		global, local    []string
-		want             []scheduleaudit.Target
-		wantErr          string
-	}{
-		{name: "environment with stream", env: "env-ns", input: `{"namespace":"a"}` + "\n" + `{"namespace":"b"}`, want: []scheduleaudit.Target{{Namespace: "a"}, {Namespace: "b"}}},
-		{name: "default with stream", input: `{"namespace":"a"}`, want: []scheduleaudit.Target{{Namespace: "a"}}},
-		{name: "environment without stream", env: "env-ns", want: []scheduleaudit.Target{{Namespace: "env-ns"}}},
-		{name: "default without stream", want: []scheduleaudit.Target{{Namespace: "default"}}},
-		{name: "global flag overrides environment", env: "env-ns", global: []string{"-n", "a"}, want: []scheduleaudit.Target{{Namespace: "a"}}},
-		{name: "global constraint", env: "env-ns", global: []string{"-n", "a"}, input: `{"namespace":"a"}`, want: []scheduleaudit.Target{{Namespace: "a"}}},
-		{name: "global mismatch", env: "a", global: []string{"-n", "a"}, input: `{"namespace":"b"}`, wantErr: "does not match"},
-		{name: "local constraint", env: "env-ns", local: []string{"--namespace", "a"}, input: `{"namespace":"a"}`, want: []scheduleaudit.Target{{Namespace: "a"}}},
-		{name: "local mismatch", local: []string{"-n", "a"}, input: `{"namespace":"b"}`, wantErr: "does not match"},
-		{name: "local overrides global", global: []string{"-n", "b"}, local: []string{"-n", "a"}, want: []scheduleaudit.Target{{Namespace: "a"}}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("TEMPORAL_CLI_NAMESPACE", tc.env)
-			if tc.env == "" {
-				require.NoError(t, os.Unsetenv("TEMPORAL_CLI_NAMESPACE"))
-			}
-			app := NewCliApp()
-			app.ExitErrHandler = func(*cli.Context, error) {}
-			var got []scheduleaudit.Target
-			for _, top := range app.Commands {
-				if top.Name == "schedule" {
-					for _, cmd := range top.Subcommands {
-						if cmd.Name == "audit" {
-							cmd.Action = func(c *cli.Context) error {
-								in, err := parseAuditInputs(c)
-								if err != nil {
-									return err
-								}
-								if tc.input == "" {
-									in.Stdin = devNull(t)
-								} else {
-									in.Stdin = strings.NewReader(tc.input)
-								}
-								out := make(chan scheduleaudit.Target, 4)
-								err = in.produceTargets(c.Context, out)
-								close(out)
-								for target := range out {
-									got = append(got, target)
-								}
-								return err
-							}
-						}
-					}
-				}
-			}
-			args := append([]string{"tdbg"}, tc.global...)
-			args = append(args, "schedule", "audit", "--lookback-start", "24h")
-			args = append(args, tc.local...)
-			err := app.Run(args)
-			if tc.wantErr != "" {
-				require.ErrorContains(t, err, tc.wantErr)
-			} else {
-				require.NoError(t, err)
-				require.Equal(t, tc.want, got)
-			}
-		})
-	}
 }
 
 type auditWorkflowClient struct {

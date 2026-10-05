@@ -79,14 +79,13 @@ func AdminAuditSchedules(c *cli.Context, factory ClientFactory) error {
 // auditInputs holds the parsed, validated CLI inputs. Targets are not materialized here -- they are streamed by
 // produceTargets so processing can begin before the whole target stream is read.
 type auditInputs struct {
-	Namespace         string
-	NamespaceExplicit bool
-	ScheduleID        string
-	File              string
-	Stdin             io.Reader
-	WindowStart       time.Time
-	WindowEnd         time.Time
-	AsOf              time.Time
+	Namespace   string
+	ScheduleID  string
+	File        string
+	Stdin       io.Reader
+	WindowStart time.Time
+	WindowEnd   time.Time
+	AsOf        time.Time
 
 	Concurrency    int
 	RPS            int
@@ -97,19 +96,17 @@ type auditInputs struct {
 }
 
 func parseAuditInputs(c *cli.Context) (*auditInputs, error) {
-	namespace, explicit := auditNamespace(c)
 	in := &auditInputs{
-		Namespace:         namespace,
-		NamespaceExplicit: explicit,
-		ScheduleID:        c.String(FlagScheduleID),
-		File:              c.String(FlagFile),
-		Stdin:             os.Stdin,
-		Concurrency:       c.Int(FlagConcurrency),
-		RPS:               c.Int(FlagRPS),
-		ListRPS:           c.Int(FlagListRPS),
-		DelayThreshold:    c.Duration(FlagDelayThreshold),
-		IncludePaused:     c.Bool(FlagIncludePaused),
-		Quiet:             c.Bool(FlagQuiet),
+		Namespace:      c.String(FlagNamespace),
+		ScheduleID:     c.String(FlagScheduleID),
+		File:           c.String(FlagFile),
+		Stdin:          os.Stdin,
+		Concurrency:    c.Int(FlagConcurrency),
+		RPS:            c.Int(FlagRPS),
+		ListRPS:        c.Int(FlagListRPS),
+		DelayThreshold: c.Duration(FlagDelayThreshold),
+		IncludePaused:  c.Bool(FlagIncludePaused),
+		Quiet:          c.Bool(FlagQuiet),
 	}
 	if in.Concurrency <= 0 {
 		in.Concurrency = 1
@@ -200,8 +197,8 @@ func (in *auditInputs) validate(now time.Time) error {
 }
 
 // produceTargets streams audit targets into out. When a JSONL stream is present (--file, or piped/redirected stdin),
-// it is the source of targets and explicit --namespace / --schedule-id flags act as constraints: every streamed target
-// must agree with any flag that is set, otherwise produceTargets errors. Environment/default namespaces do not constrain streams. This lets a caller pass --namespace to
+// it is the source of targets and the --namespace / --schedule-id flags act as constraints: every streamed target
+// must agree with any flag that is set, otherwise produceTargets errors. This lets a caller pass --namespace to
 // guarantee a run stays within a single namespace. When no stream is present (an interactive terminal, no --file), the
 // flags define a single target directly: --namespace alone audits that whole namespace, and --namespace +
 // --schedule-id audits that one schedule.
@@ -234,7 +231,7 @@ func (in *auditInputs) produceTargets(ctx context.Context, out chan<- scheduleau
 
 	// Stream present: the flags, when set, must match every streamed target.
 	return streamJSONLTargets(r, func(t scheduleaudit.Target) error {
-		if in.NamespaceExplicit && t.Namespace != in.Namespace {
+		if in.Namespace != "" && t.Namespace != in.Namespace {
 			return fmt.Errorf("stream target namespace %q does not match --namespace %q", t.Namespace, in.Namespace)
 		}
 		if in.ScheduleID != "" && t.ScheduleID != in.ScheduleID {

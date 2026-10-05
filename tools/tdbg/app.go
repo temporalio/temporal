@@ -55,13 +55,13 @@ func NewCliApp(opts ...Option) *cli.App {
 			Usage:   "host:port for Temporal frontend service",
 			EnvVars: []string{"TEMPORAL_CLI_ADDRESS"},
 		},
-		&namespaceFlag{StringFlag: cli.StringFlag{
+		&cli.StringFlag{
 			Name:    FlagNamespace,
 			Aliases: FlagNamespaceAlias,
 			Value:   "default",
 			Usage:   "Temporal workflow namespace",
 			EnvVars: []string{"TEMPORAL_CLI_NAMESPACE"},
-		}},
+		},
 		&cli.IntFlag{
 			Name:    FlagContextTimeout,
 			Aliases: FlagContextTimeoutAlias,
