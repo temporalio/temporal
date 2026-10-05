@@ -76,16 +76,6 @@ const (
 		`AND task_id = ? ` +
 		`IF range_id = ?`
 
-	templateCheckRangeIDQuery = `UPDATE tasks_v2 SET ` +
-		`range_id = ? ` +
-		`WHERE namespace_id = ? ` +
-		`AND task_queue_name = ? ` +
-		`AND task_queue_type = ? ` +
-		`AND type = ? ` +
-		`AND pass = 0 ` +
-		`AND task_id = ? ` +
-		`IF range_id = ?`
-
 	templateUpdateTaskQueueQueryWithTTLPart1 = `INSERT INTO tasks_v2 ` +
 		`(namespace_id, task_queue_name, task_queue_type, type, pass, task_id) ` +
 		`VALUES (?, ?, ?, ?, 0, ?) USING TTL ?`

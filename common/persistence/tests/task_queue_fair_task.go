@@ -152,56 +152,6 @@ func (s *TaskQueueFairTaskSuite) TestCreateDelete_Range() {
 	s.Nil(resp.NextPageToken)
 }
 
-func (s *TaskQueueFairTaskSuite) TestCreateDeleteWithConditionRangeID() {
-	rangeID := rand.Int63()
-	taskQueue := s.createTaskQueue(rangeID)
-
-	var tasks []*persistencespb.AllocatedTaskInfo
-	for pass := int64(1); pass <= 5; pass++ {
-		tasks = append(tasks, s.randomTask(pass, pass))
-	}
-	_, err := s.taskManager.CreateTasks(s.ctx, &p.CreateTasksRequest{
-		TaskQueueInfo: &p.PersistedTaskQueueInfo{RangeID: rangeID, Data: taskQueue},
-		Tasks:         tasks,
-	})
-	s.NoError(err)
-
-	completeLessThan := func(pass, conditionRangeID int64) error {
-		_, err := s.taskManager.CompleteTasksLessThan(s.ctx, &p.CompleteTasksLessThanRequest{
-			NamespaceID:        s.namespaceID,
-			TaskQueueName:      s.taskQueueName,
-			TaskType:           s.taskQueueType,
-			ExclusiveMaxPass:   pass,
-			ExclusiveMaxTaskID: 0,
-			Limit:              10,
-			ConditionRangeID:   conditionRangeID,
-		})
-		return err
-	}
-	getTasks := func() []*persistencespb.AllocatedTaskInfo {
-		resp, err := s.taskManager.GetTasks(s.ctx, &p.GetTasksRequest{
-			NamespaceID:        s.namespaceID,
-			TaskQueue:          s.taskQueueName,
-			TaskType:           s.taskQueueType,
-			InclusiveMinPass:   1,
-			InclusiveMinTaskID: 0,
-			ExclusiveMaxTaskID: math.MaxInt64,
-			PageSize:           10,
-		})
-		s.NoError(err)
-		return resp.Tasks
-	}
-
-	// matching range id: tasks are deleted
-	s.NoError(completeLessThan(3, rangeID))
-	protorequire.ProtoSliceEqual(s.T(), tasks[2:], getTasks())
-
-	// wrong range id: condition fails and nothing is deleted
-	err = completeLessThan(5, rangeID-1)
-	s.ErrorAs(err, new(*p.ConditionFailedError))
-	protorequire.ProtoSliceEqual(s.T(), tasks[2:], getTasks())
-}
-
 func (s *TaskQueueFairTaskSuite) createTaskQueue(rangeID int64) *persistencespb.TaskQueueInfo {
 	taskQueueKind := enumspb.TaskQueueKind(rand.Int31n(int32(len(enumspb.TaskQueueKind_name)) + 1))
 	taskQueue := s.randomTaskQueueInfo(taskQueueKind)

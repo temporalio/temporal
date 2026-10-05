@@ -2,7 +2,6 @@ package matching
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math"
 	"slices"
@@ -709,11 +708,6 @@ func (db *taskQueueDB) CompleteFairTasksLessThan(
 	limit int,
 	subqueue subqueueIndex,
 ) (int, error) {
-	// For fair tasks, we do an LWT to avoid issues with lost ownership, therefore we should
-	// serialize this with other LWTs by holding db.lock to avoid timeouts or conflicts.
-	db.Lock()
-	defer db.Unlock()
-
 	n, err := db.store.CompleteTasksLessThan(ctx, &persistence.CompleteTasksLessThanRequest{
 		NamespaceID:        db.queue.NamespaceId(),
 		TaskQueueName:      db.queue.PersistenceName(),
@@ -722,13 +716,8 @@ func (db *taskQueueDB) CompleteFairTasksLessThan(
 		ExclusiveMaxTaskID: exclusiveMaxLevel.id,
 		Subqueue:           int(subqueue),
 		Limit:              limit,
-		// We might have lost ownership without knowing it. A new owner assigns passes
-		// starting from the ack level it loaded, which may be below our in-memory ack level,
-		// so an unconditional delete could delete the new owner's tasks.
-		ConditionRangeID: db.rangeID,
 	})
-	// ConditionFailedError means we lost ownership: not a store failure, caller will unload.
-	if _, lostOwnership := errors.AsType[*persistence.ConditionFailedError](err); err != nil && !lostOwnership {
+	if err != nil {
 		db.logger.Error("Persistent store operation failure",
 			tag.StoreOperationCompleteTasksLessThan,
 			tag.Error(err),
