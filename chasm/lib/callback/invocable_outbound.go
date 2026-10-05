@@ -46,17 +46,19 @@ func (n invocableOutbound) Invoke(
 	task *callbackspb.InvocationTask,
 	taskAttr chasm.TaskAttributes,
 ) invocationResult {
+	callbackLogger := log.With(h.logger,
+		tag.WorkflowNamespace(ns.Name().String()),
+		tag.Destination(taskAttr.Destination),
+		tag.WorkflowID(n.businessID),
+		tag.WorkflowRunID(n.runID),
+		tag.NexusCompletionSource(n.completionSourceTag),
+		tag.Attempt(n.attempt),
+		tag.RequestID(n.requestID),
+	)
 	if h.httpTraceProvider != nil {
-		traceLogger := log.With(h.logger,
-			tag.WorkflowNamespace(ns.Name().String()),
+		traceLogger := log.With(callbackLogger,
 			tag.Operation("CompleteNexusOperation"),
-			tag.Destination(taskAttr.Destination),
-			tag.WorkflowID(n.businessID),
-			tag.WorkflowRunID(n.runID),
-			tag.NexusCompletionSource(n.completionSourceTag),
 			tag.AttemptStart(time.Now().UTC()),
-			tag.Attempt(n.attempt),
-			tag.RequestID(n.requestID),
 		)
 		if trace := h.httpTraceProvider.NewTrace(n.attempt, traceLogger); trace != nil {
 			ctx = httptrace.WithClientTrace(ctx, trace)
@@ -91,20 +93,13 @@ func (n invocableOutbound) Invoke(
 	if err != nil {
 		retryable := isRetryableCallError(err)
 		// Only a callback that is dropped for good is an error; one that will be retried is a warning.
-		logAtLevel := h.logger.Error
+		logAtLevel := callbackLogger.Error
 		if retryable {
-			logAtLevel = h.logger.Warn
+			logAtLevel = callbackLogger.Warn
 		}
 		logAtLevel(
 			"Callback request failed",
 			tag.Error(err),
-			tag.WorkflowNamespace(ns.Name().String()),
-			tag.Destination(taskAttr.Destination),
-			tag.WorkflowID(n.businessID),
-			tag.WorkflowRunID(n.runID),
-			tag.NexusCompletionSource(n.completionSourceTag),
-			tag.Attempt(n.attempt),
-			tag.RequestID(n.requestID),
 			tag.Bool("retryable", retryable),
 		)
 		if retryable {

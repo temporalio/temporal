@@ -45,17 +45,19 @@ func (n nexusInvocation) WrapError(result invocationResult, err error) error {
 }
 
 func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) invocationResult {
+	callbackLogger := log.With(e.Logger,
+		tag.WorkflowNamespace(ns.Name().String()),
+		tag.Destination(task.destination),
+		tag.WorkflowID(n.workflowID),
+		tag.WorkflowRunID(n.runID),
+		tag.NexusCompletionSource(chasm.WorkflowArchetype),
+		tag.Attempt(n.attempt),
+		tag.RequestID(n.requestID),
+	)
 	if e.HTTPTraceProvider != nil {
-		traceLogger := log.With(e.Logger,
-			tag.WorkflowNamespace(ns.Name().String()),
+		traceLogger := log.With(callbackLogger,
 			tag.Operation("CompleteNexusOperation"),
-			tag.Destination(task.destination),
-			tag.WorkflowID(n.workflowID),
-			tag.WorkflowRunID(n.runID),
-			tag.NexusCompletionSource(chasm.WorkflowArchetype),
 			tag.AttemptStart(time.Now().UTC()),
-			tag.Attempt(n.attempt),
-			tag.RequestID(n.requestID),
 		)
 		if trace := e.HTTPTraceProvider.NewTrace(n.attempt, traceLogger); trace != nil {
 			ctx = httptrace.WithClientTrace(ctx, trace)
@@ -85,20 +87,13 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 	if err != nil {
 		retryable := isRetryableCallError(err)
 		// Only a callback that is dropped for good is an error; one that will be retried is a warning.
-		logAtLevel := e.Logger.Error
+		logAtLevel := callbackLogger.Error
 		if retryable {
-			logAtLevel = e.Logger.Warn
+			logAtLevel = callbackLogger.Warn
 		}
 		logAtLevel(
 			"Callback request failed",
 			tag.Error(err),
-			tag.WorkflowNamespace(ns.Name().String()),
-			tag.Destination(task.destination),
-			tag.WorkflowID(n.workflowID),
-			tag.WorkflowRunID(n.runID),
-			tag.NexusCompletionSource(chasm.WorkflowArchetype),
-			tag.Attempt(n.attempt),
-			tag.RequestID(n.requestID),
 			tag.Bool("retryable", retryable),
 		)
 		if retryable {
