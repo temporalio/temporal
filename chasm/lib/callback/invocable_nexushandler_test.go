@@ -29,7 +29,6 @@ import (
 	"go.temporal.io/server/common/payload"
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/protorequire"
-	"go.temporal.io/server/common/testing/testlogger"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -153,11 +152,6 @@ func requireTerminalFailure(t *testing.T, cb *Callback, want string) {
 // TestExecuteInvocationTaskNexusHandler_Outcomes runs the invocation task end-to-end against a CHASM tree with a
 // mocked matching client, covering how each dispatch outcome maps onto the callback's state.
 func TestExecuteInvocationTaskNexusHandler_Outcomes(t *testing.T) {
-	const (
-		operationErrorLog = "NexusHandler callback resulted in an operation error"
-		handlerErrorLog   = "NexusHandler callback resulted in a handler error"
-		dispatchFailedLog = "NexusHandler callback dispatch failed"
-	)
 	cases := []struct {
 		name        string
 		response    *matchingservice.DispatchNexusTaskResponse
@@ -167,11 +161,7 @@ func TestExecuteInvocationTaskNexusHandler_Outcomes(t *testing.T) {
 		// Outcome tag for the aggregate InvocationEventCounter, InvocationAttemptsHistogram which
 		// is just one of outcomeEvent{ Success, RetryableError, NonRetryableError }.
 		expectedEventOutcome coarseOutcomeTag
-		// The failure log, if any: a callback that will be retried is logged as a warning, and only one
-		// that is dropped permanently as an error.
-		expectedLogLevel   testlogger.Level
-		expectedLogMessage string
-		assertOutcome      func(*testing.T, *Callback, error)
+		assertOutcome        func(*testing.T, *Callback, error)
 	}{
 		{
 			name:                 "sync-success",
@@ -215,8 +205,6 @@ func TestExecuteInvocationTaskNexusHandler_Outcomes(t *testing.T) {
 			}),
 			expectedOutcome:      outcomeFailure,
 			expectedEventOutcome: outcomeEventNonRetryableError,
-			expectedLogLevel:     testlogger.Error,
-			expectedLogMessage:   operationErrorLog,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				require.NoError(t, err)
 				requireTerminalFailure(t, cb, "handler rejected the completion")
@@ -237,8 +225,6 @@ func TestExecuteInvocationTaskNexusHandler_Outcomes(t *testing.T) {
 			}),
 			expectedOutcome:      outcomeLegacyFailure,
 			expectedEventOutcome: outcomeEventNonRetryableError,
-			expectedLogLevel:     testlogger.Error,
-			expectedLogMessage:   operationErrorLog,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				require.NoError(t, err)
 				requireTerminalFailure(t, cb, "handler rejected the completion")
@@ -259,8 +245,6 @@ func TestExecuteInvocationTaskNexusHandler_Outcomes(t *testing.T) {
 			},
 			expectedOutcome:      outcomeTag("handler_error:BAD_REQUEST"),
 			expectedEventOutcome: outcomeEventNonRetryableError,
-			expectedLogLevel:     testlogger.Error,
-			expectedLogMessage:   handlerErrorLog,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				require.NoError(t, err)
 				requireTerminalFailure(t, cb, "BAD_REQUEST")
@@ -285,8 +269,6 @@ func TestExecuteInvocationTaskNexusHandler_Outcomes(t *testing.T) {
 			},
 			expectedOutcome:      outcomeTag("handler_error:UNKNOWN"),
 			expectedEventOutcome: outcomeEventNonRetryableError,
-			expectedLogLevel:     testlogger.Error,
-			expectedLogMessage:   handlerErrorLog,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				require.Equal(t, callbackspb.CALLBACK_STATUS_FAILED, cb.Status)
 				require.Contains(t, cb.LastAttemptFailure.GetMessage(), "worker rejected the task")
@@ -298,8 +280,6 @@ func TestExecuteInvocationTaskNexusHandler_Outcomes(t *testing.T) {
 			response:             handlerFailureResponse("INTERNAL"),
 			expectedOutcome:      outcomeTag("handler_error:INTERNAL"),
 			expectedEventOutcome: outcomeEventRetryableError,
-			expectedLogLevel:     testlogger.Warn,
-			expectedLogMessage:   handlerErrorLog,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				// Retryable handler errors will trip the circuit breaker. So we expect this to have
 				// be a DestinationDownError and open the circuit breaker if it persists.
@@ -318,8 +298,6 @@ func TestExecuteInvocationTaskNexusHandler_Outcomes(t *testing.T) {
 			response:             handlerFailureResponse("BAD_REQUEST"),
 			expectedOutcome:      outcomeTag("handler_error:BAD_REQUEST"),
 			expectedEventOutcome: outcomeEventNonRetryableError,
-			expectedLogLevel:     testlogger.Error,
-			expectedLogMessage:   handlerErrorLog,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				require.NoError(t, err)
 				requireTerminalFailure(t, cb, "BAD_REQUEST")
@@ -336,8 +314,6 @@ func TestExecuteInvocationTaskNexusHandler_Outcomes(t *testing.T) {
 			},
 			expectedOutcome:      outcomeTag("handler_timeout"),
 			expectedEventOutcome: outcomeEventRetryableError,
-			expectedLogLevel:     testlogger.Warn,
-			expectedLogMessage:   handlerErrorLog,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				var destDownErr *queueserrors.DestinationDownError
 				require.ErrorAs(t, err, &destDownErr)
@@ -349,8 +325,6 @@ func TestExecuteInvocationTaskNexusHandler_Outcomes(t *testing.T) {
 			responseErr:          status.Error(codes.Unavailable, "matching unavailable"),
 			expectedOutcome:      outcomeTag("error:Unavailable"),
 			expectedEventOutcome: outcomeEventRetryableError,
-			expectedLogLevel:     testlogger.Warn,
-			expectedLogMessage:   dispatchFailedLog,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				var destDownErr *queueserrors.DestinationDownError
 				require.ErrorAs(t, err, &destDownErr)
@@ -363,8 +337,6 @@ func TestExecuteInvocationTaskNexusHandler_Outcomes(t *testing.T) {
 			responseErr:          fmt.Errorf("wrapped gRPC error: %w", status.Error(codes.InvalidArgument, "malformed task queue name")),
 			expectedOutcome:      outcomeTag("error:InvalidArgument"),
 			expectedEventOutcome: outcomeEventNonRetryableError,
-			expectedLogLevel:     testlogger.Error,
-			expectedLogMessage:   dispatchFailedLog,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				require.NoError(t, err)
 				requireTerminalFailure(t, cb, "internal error, reference-id:")
@@ -378,8 +350,6 @@ func TestExecuteInvocationTaskNexusHandler_Outcomes(t *testing.T) {
 				enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "namespace rps limit exceeded"),
 			expectedOutcome:      outcomeTag("error:ResourceExhausted"),
 			expectedEventOutcome: outcomeEventRetryableError,
-			expectedLogLevel:     testlogger.Warn,
-			expectedLogMessage:   dispatchFailedLog,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				var destDownErr *queueserrors.DestinationDownError
 				require.ErrorAs(t, err, &destDownErr)
@@ -393,8 +363,6 @@ func TestExecuteInvocationTaskNexusHandler_Outcomes(t *testing.T) {
 			responseErr:          status.Error(codes.NotFound, "namespace not found"),
 			expectedOutcome:      outcomeTag("error:NotFound"),
 			expectedEventOutcome: outcomeEventNonRetryableError,
-			expectedLogLevel:     testlogger.Error,
-			expectedLogMessage:   dispatchFailedLog,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				require.NoError(t, err)
 				require.NotContains(t, cb.LastAttemptFailure.GetMessage(), "namespace not found")
@@ -409,8 +377,6 @@ func TestExecuteInvocationTaskNexusHandler_Outcomes(t *testing.T) {
 			response:             &matchingservice.DispatchNexusTaskResponse{},
 			expectedOutcome:      outcomeTag("handler_error:EMPTY_OUTCOME"),
 			expectedEventOutcome: outcomeEventRetryableError,
-			expectedLogLevel:     testlogger.Warn,
-			expectedLogMessage:   handlerErrorLog,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				var destDownErr *queueserrors.DestinationDownError
 				require.ErrorAs(t, err, &destDownErr)
@@ -425,8 +391,6 @@ func TestExecuteInvocationTaskNexusHandler_Outcomes(t *testing.T) {
 			response:             handlerFailureResponse("SOMETHING_MADE_UP"),
 			expectedOutcome:      outcomeTag("handler_error:UNKNOWN"),
 			expectedEventOutcome: outcomeEventRetryableError,
-			expectedLogLevel:     testlogger.Warn,
-			expectedLogMessage:   handlerErrorLog,
 			assertOutcome: func(t *testing.T, cb *Callback, err error) {
 				// The error is retryable by spec, so it gets wrapped as a DestinationDown to potentially
 				// open the circuit breaker as applicable.
@@ -496,9 +460,6 @@ func TestExecuteInvocationTaskNexusHandler_Outcomes(t *testing.T) {
 			nsRegistry := namespace.NewMockRegistry(ctrl)
 			nsRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
 
-			logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
-			capture := logger.StartCapture()
-
 			// Invoke the NexusHandler callback.
 			handler := &invocationTaskHandler{
 				config: &Config{
@@ -509,7 +470,7 @@ func TestExecuteInvocationTaskNexusHandler_Outcomes(t *testing.T) {
 				},
 				namespaceRegistry: nsRegistry,
 				metricsHandler:    metricsHandler,
-				logger:            logger,
+				logger:            log.NewTestLogger(),
 				matchingClient:    matchingClient,
 			}
 
@@ -527,13 +488,6 @@ func TestExecuteInvocationTaskNexusHandler_Outcomes(t *testing.T) {
 				t.Helper()
 				tc.assertOutcome(t, c, executeErr)
 			})
-
-			if tc.expectedLogMessage != "" {
-				capture.RequireContains(t, testlogger.CapturedLogPattern{
-					Level:   tc.expectedLogLevel,
-					Message: tc.expectedLogMessage,
-				})
-			}
 		})
 	}
 }
@@ -765,13 +719,10 @@ func TestInvocableNexusHandlerCannotDispatch(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
-			capture := logger.StartCapture()
-
 			handler := &invocationTaskHandler{
 				config:         &Config{},
 				metricsHandler: metrics.NoopMetricsHandler,
-				logger:         logger,
+				logger:         log.NewTestLogger(),
 				// Dispatch must not be attempted, so the mock is left without expectations.
 				matchingClient: matchingservicemock.NewMockMatchingServiceClient(ctrl),
 			}
@@ -782,33 +733,8 @@ func TestInvocableNexusHandlerCannotDispatch(t *testing.T) {
 
 			require.IsType(t, invocationResultFail{}, result)
 			require.ErrorContains(t, result.error(), tc.wantMessage)
-			capture.RequireContains(t, testlogger.CapturedLogPattern{
-				Level:   testlogger.Error,
-				Message: "Failed to build NexusHandler callback request",
-			})
 		})
 	}
-}
-
-// A dispatch outcome this build does not know how to handle is retried, so it is logged as a warning
-// rather than an error.
-func TestInvocableNexusHandlerUnhandledDispatchOutcome(t *testing.T) {
-	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
-	capture := logger.StartCapture()
-
-	const madeUpOutcome = commonnexus.DispatchOutcome("made-up-outcome")
-	result := invocableNexusHandler{}.classifyDispatchResult(logger, commonnexus.DispatchResult{
-		Outcome: madeUpOutcome,
-	})
-
-	require.IsType(t, invocationResultRetry{}, result)
-	capture.RequireContains(t, testlogger.CapturedLogPattern{
-		Level:   testlogger.Warn,
-		Message: "NexusHandler callback got an unhandled dispatch outcome",
-		Tags: map[string]any{
-			"dispatch-outcome": string(madeUpOutcome),
-		},
-	})
 }
 
 // handlerWorkflowLink returns the Link a worker returns when its completion handler starts a

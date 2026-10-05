@@ -84,12 +84,7 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 
 	if err != nil {
 		retryable := isRetryableCallError(err)
-		// Only a callback that is dropped for good is an error; one that will be retried is a warning.
-		logAtLevel := e.Logger.Error
-		if retryable {
-			logAtLevel = e.Logger.Warn
-		}
-		logAtLevel(
+		e.Logger.Error(
 			"Callback request failed",
 			tag.Error(err),
 			tag.WorkflowNamespace(ns.Name().String()),
