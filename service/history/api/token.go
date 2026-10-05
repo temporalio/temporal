@@ -209,31 +209,12 @@ func ValidateBranchTokenForExecution(
 	execution *commonpb.WorkflowExecution,
 	requestBranchToken []byte,
 ) ([]byte, error) {
-	branchToken, _, err := ValidateBranchTokenForExecutionWithMutableState(
-		ctx, shardContext, workflowConsistencyChecker, eventNotifier,
-		namespaceName, namespaceID, execution, requestBranchToken,
-	)
-	return branchToken, err
-}
-
-// ValidateBranchTokenForExecutionWithMutableState returns the state loaded during validation,
-// or nil when validation is disabled.
-func ValidateBranchTokenForExecutionWithMutableState(
-	ctx context.Context,
-	shardContext historyi.ShardContext,
-	workflowConsistencyChecker WorkflowConsistencyChecker,
-	eventNotifier events.Notifier,
-	namespaceName namespace.Name,
-	namespaceID namespace.ID,
-	execution *commonpb.WorkflowExecution,
-	requestBranchToken []byte,
-) ([]byte, *historyservice.GetMutableStateResponse, error) {
 	config := shardContext.GetConfig()
 	if !config.EnablePaginationTokenBranchValidation() {
-		return requestBranchToken, nil, nil
+		return requestBranchToken, nil
 	}
 	if len(requestBranchToken) == 0 {
-		return nil, nil, consts.ErrInvalidNextPageToken
+		return nil, consts.ErrInvalidNextPageToken
 	}
 	shadowMode := config.EnablePaginationTokenBranchValidationShadowMode()
 
@@ -248,7 +229,7 @@ func ValidateBranchTokenForExecutionWithMutableState(
 		eventNotifier,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	currentBranchToken := response.GetCurrentBranchToken()
@@ -259,7 +240,7 @@ func ValidateBranchTokenForExecutionWithMutableState(
 		response.GetVersionHistories(),
 	)
 	if mismatchReason == "" {
-		return currentBranchToken, response, nil
+		return currentBranchToken, nil
 	}
 
 	reportBranchTokenMismatch(
@@ -271,11 +252,11 @@ func ValidateBranchTokenForExecutionWithMutableState(
 		requestBranchToken,
 	)
 	if shadowMode {
-		return requestBranchToken, response, nil
+		return requestBranchToken, nil
 	}
 	if mismatchReason == branchTokenMismatchReasonSameBranchMetadata &&
 		config.EnablePaginationTokenBranchReplacement() {
-		return currentBranchToken, response, nil
+		return currentBranchToken, nil
 	}
-	return nil, nil, serviceerror.NewInvalidArgument("request branchToken is not current.")
+	return nil, serviceerror.NewInvalidArgument("request branchToken is not current.")
 }

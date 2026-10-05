@@ -7400,8 +7400,13 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory_LongPollDiscardsRequestBra
 		IsWorkflowRunning: true,
 	}, true)
 
-	_, err = engine.GetWorkflowExecutionHistory(context.Background(), req)
-	s.NoError(err)
+	resp, err := engine.GetWorkflowExecutionHistory(context.Background(), req)
+	s.Require().NoError(err)
+	s.ProtoEqual(&nexuspb.PropagatedSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}, resp.Response.GetPropagatedNexusSerializationContext())
 }
 
 func (s *engineSuite) TestGetWorkflowExecutionHistoryReverse_BranchTokenNotOwnedByExecution() {

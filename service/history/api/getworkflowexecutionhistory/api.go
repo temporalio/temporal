@@ -260,9 +260,7 @@ func Invoke(
 			continuationToken.NextEventId = nextEventID
 			continuationToken.IsWorkflowRunning = isWorkflowRunning
 		} else {
-			// Page tokens are client-controlled, so load the serialization context from mutable state.
-			var mutableStateResponse *historyservice.GetMutableStateResponse
-			continuationToken.BranchToken, mutableStateResponse, err = api.ValidateBranchTokenForExecutionWithMutableState(
+			if continuationToken.BranchToken, err = api.ValidateBranchTokenForExecution(
 				ctx,
 				shardContext,
 				workflowConsistencyChecker,
@@ -271,26 +269,9 @@ func Invoke(
 				namespaceID,
 				execution,
 				continuationToken.BranchToken,
-			)
-			if err != nil {
+			); err != nil {
 				return nil, err
 			}
-			if mutableStateResponse == nil {
-				mutableStateResponse, err = api.GetOrPollWorkflowMutableState(
-					ctx,
-					shardContext,
-					&historyservice.GetMutableStateRequest{
-						NamespaceId: namespaceID.String(),
-						Execution:   execution,
-					},
-					workflowConsistencyChecker,
-					eventNotifier,
-				)
-				if err != nil {
-					return nil, err
-				}
-			}
-			propagatedNexusSerializationContext = mutableStateResponse.GetPropagatedNexusSerializationContext()
 		}
 	} else {
 		continuationToken = &tokenspb.HistoryContinuation{}
