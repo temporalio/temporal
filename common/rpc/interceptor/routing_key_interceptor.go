@@ -122,6 +122,7 @@ func (i *RoutingKeyInterceptor) Intercept(
 	return handler(ctx, req)
 }
 
+// InterceptNexus publishes the completion workflow ID for namespace routing decisions.
 func (i *RoutingKeyInterceptor) InterceptNexus(
 	ctx context.Context,
 	in nexus.InterceptorInput,

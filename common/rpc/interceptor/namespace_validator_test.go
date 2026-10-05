@@ -129,8 +129,11 @@ func (s *namespaceValidatorSuite) TestInterceptNexus() {
 	}{
 		{
 			name: "resolved namespace",
-			input: interceptornexus.NewStartOpInput(
-				"s", "o", testNamespace, time.Now(), nexus.StartOperationOptions{}, nil,
+			input: interceptornexus.NewStartOpInput("s",
+				"o",
+				time.Now(),
+				nexus.StartOperationOptions{},
+				nil,
 				interceptornexus.ForwardingInfo{},
 				interceptornexus.RequestMetadata{
 					APIName: api.NexusServicePrefix + "DispatchNexusTask",
@@ -141,14 +144,16 @@ func (s *namespaceValidatorSuite) TestInterceptNexus() {
 						nil,
 						0,
 					),
-				},
-			),
+				}),
 			nextCalled: true,
 		},
 		{
 			name: "invalid namespace state",
-			input: interceptornexus.NewStartOpInput(
-				"s", "o", testNamespace, time.Now(), nexus.StartOperationOptions{}, nil,
+			input: interceptornexus.NewStartOpInput("s",
+				"o",
+				time.Now(),
+				nexus.StartOperationOptions{},
+				nil,
 				interceptornexus.ForwardingInfo{},
 				interceptornexus.RequestMetadata{
 					APIName: api.NexusServicePrefix + "DispatchNexusTask",
@@ -159,18 +164,8 @@ func (s *namespaceValidatorSuite) TestInterceptNexus() {
 						nil,
 						0,
 					),
-				},
-			),
+				}),
 			expectedOutcome: "invalid_namespace_state",
-		},
-		{
-			name: "missing namespace",
-			input: interceptornexus.NewStartOpInput(
-				"s", "o", testNamespace, time.Now(), nexus.StartOperationOptions{}, nil,
-				interceptornexus.ForwardingInfo{},
-				interceptornexus.RequestMetadata{APIName: "NexusAPI"},
-			),
-			expectedOutcome: "interceptor_failed",
 		},
 	} {
 		s.Run(tc.name, func() {

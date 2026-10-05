@@ -91,6 +91,7 @@ type (
 var _ grpc.UnaryServerInterceptor = (*NamespaceRateLimitInterceptorImpl)(nil).Intercept
 var _ NamespaceRateLimitInterceptor = (*NamespaceRateLimitInterceptorImpl)(nil)
 
+// NewNamespaceRateLimitInterceptorWrapper adapts the namespace limiter to both transports.
 func NewNamespaceRateLimitInterceptorWrapper(ni NamespaceRateLimitInterceptor) *NamespaceRateLimitInterceptorWrapper {
 	return &NamespaceRateLimitInterceptorWrapper{
 		ni: ni,
@@ -102,6 +103,7 @@ type NamespaceRateLimitInterceptorWrapper struct {
 	ni NamespaceRateLimitInterceptor
 }
 
+// Intercept delegates to the gRPC namespace limiter.
 func (n *NamespaceRateLimitInterceptorWrapper) Intercept(
 	ctx context.Context,
 	req any,
@@ -111,12 +113,13 @@ func (n *NamespaceRateLimitInterceptorWrapper) Intercept(
 	return n.ni.Intercept(ctx, req, info, handler)
 }
 
+// InterceptNexus applies the namespace limiter to a resolved Nexus request.
 func (n *NamespaceRateLimitInterceptorWrapper) InterceptNexus(
 	ctx context.Context,
 	in nexus.InterceptorInput,
 	next nexus.HandlerFunc,
 ) (out any, retErr error) {
-	if err := n.ni.Allow(ctx, namespace.Name(in.NamespaceName()), in.APIName(), in.Header()); err != nil {
+	if err := n.ni.Allow(ctx, namespace.Name(in.NamespaceEntry().Name().String()), in.APIName(), in.Header()); err != nil {
 		return nil, &nexus.InterceptorError{
 			Err:           err,
 			Outcome:       "namespace_rate_limited",

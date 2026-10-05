@@ -82,7 +82,6 @@ func NewNexusOperationHTTPHandler(
 				requestErrorHandler,
 				serviceConfig.BlobSizeLimitError,
 				serviceConfig.NexusRequestHeadersBlacklist,
-				serviceConfig.NexusOperationsMetricTagConfig,
 				interceptorsProvider.nexusInterceptors(),
 			),
 			GetResultTimeout: serviceConfig.KeepAliveMaxConnectionIdle(),

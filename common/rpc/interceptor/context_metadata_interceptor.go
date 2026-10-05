@@ -63,6 +63,7 @@ func (c *ContextMetadataInterceptor) Intercept(
 	return resp, err
 }
 
+// InterceptNexus is a no-op because [ContextMetadataInterceptor] only targets gRPC requests.
 func (c *ContextMetadataInterceptor) InterceptNexus(
 	ctx context.Context,
 	in nexus.InterceptorInput,

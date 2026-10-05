@@ -229,7 +229,7 @@ func newTestNexusInterceptorChain(
 	wrapError bool,
 	exposeDetails bool,
 ) interceptornexus.HandlerFunc {
-	telemetry := rpcinterceptor.NewTelemetryInterceptor(nil, metricsHandler, log.NewNoopLogger(), nil, nil)
+	telemetry := rpcinterceptor.NewTelemetryInterceptor(nil, metricsHandler, log.NewNoopLogger(), nil, nil, nil)
 	mask := rpcinterceptor.NewMaskInternalErrorDetailsInterceptor(
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(maskErrors),
 		nil,
@@ -259,14 +259,11 @@ func newTestNexusInterceptorChain(
 }
 
 func newTestNexusStartInput() interceptornexus.StartOpInput {
-	return interceptornexus.NewStartOpInput(
-		"s",
+	return interceptornexus.NewStartOpInput("s",
 		"o",
-		testNamespace,
 		time.Now(),
 		nexus.StartOperationOptions{},
 		nil,
 		interceptornexus.ForwardingInfo{},
-		interceptornexus.RequestMetadata{NamespaceEntry: testOperationContext().namespace},
-	)
+		interceptornexus.RequestMetadata{NamespaceEntry: testOperationContext().namespace})
 }

@@ -160,6 +160,7 @@ func (a *Interceptor) Intercept(
 	return handler(ctx, req)
 }
 
+// InterceptNexus authorizes the Nexus request. Errors and Outcomes retain Nexus semantics.
 func (a *Interceptor) InterceptNexus(
 	ctx context.Context,
 	in nexus.InterceptorInput,
@@ -170,7 +171,7 @@ func (a *Interceptor) InterceptNexus(
 	if a.authorizer == nil {
 		return next(ctx, in)
 	}
-	namespaceName := in.NamespaceName()
+	namespaceName := in.NamespaceEntry().Name().String()
 	apiName := in.APIName()
 	endpointName := in.EndpointName()
 	claims, _ := ctx.Value(MappedClaims).(*Claims) //nolint:revive // unchecked-type-assertion: empty claims will 403

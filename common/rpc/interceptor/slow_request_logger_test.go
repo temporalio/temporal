@@ -9,8 +9,10 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/interceptor"
 	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.uber.org/mock/gomock"
@@ -116,16 +118,13 @@ func (s *slowRequestLoggerSuite) TestInterceptNexus() {
 
 	// The operation name here is deliberately not a known API name: the interceptor
 	// must key off APIName, not OperationName.
-	input := interceptornexus.NewStartOpInput(
-		"test-service",
+	input := interceptornexus.NewStartOpInput("test-service",
 		"user-defined-operation",
-		"namespace-name",
 		time.Now(),
 		nexus.StartOperationOptions{},
 		nil,
 		interceptornexus.ForwardingInfo{},
-		interceptornexus.RequestMetadata{APIName: nexusDispatchAPIName},
-	)
+		interceptornexus.RequestMetadata{NamespaceEntry: namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: "namespace-name"}, nil, ""), APIName: nexusDispatchAPIName})
 
 	// Ensure fast requests aren't logged.
 	_, err := s.interceptor.InterceptNexus(ctx, input, fastNext)

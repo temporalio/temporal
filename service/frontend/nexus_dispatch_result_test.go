@@ -13,9 +13,11 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	rpcinterceptor "go.temporal.io/server/common/rpc/interceptor"
 	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
@@ -49,7 +51,7 @@ func requireRecordedDispatchOutcome(
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)
 
-	telemetry := rpcinterceptor.NewTelemetryInterceptor(nil, metricsHandler, log.NewNoopLogger(), nil, nil)
+	telemetry := rpcinterceptor.NewTelemetryInterceptor(nil, metricsHandler, log.NewNoopLogger(), nil, nil, nil)
 	_, err := telemetry.InterceptNexusOutermost(
 		context.Background(),
 		input,
@@ -117,7 +119,14 @@ func TestDispatchErrorsPreserveOutcomeForTelemetry(t *testing.T) {
 		t.Run("start "+tc.name, func(t *testing.T) {
 			requireRecordedDispatchOutcome(
 				t,
-				interceptornexus.NewStartOpInput("s", "o", "n", time.Now(), nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{}),
+				interceptornexus.NewStartOpInput(
+					"s",
+					"o",
+					time.Now(),
+					nexus.StartOperationOptions{},
+					nil,
+					interceptornexus.ForwardingInfo{},
+					interceptornexus.RequestMetadata{NamespaceEntry: namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: "n"}, nil, "")}),
 				tc.outcome,
 				func(oc *operationContext) error {
 					_, _, err := oc.handleStartOperationResponse(tc.response, "op")
@@ -139,7 +148,14 @@ func TestDispatchErrorsPreserveOutcomeForTelemetry(t *testing.T) {
 		t.Run("cancel "+tc.name, func(t *testing.T) {
 			requireRecordedDispatchOutcome(
 				t,
-				interceptornexus.NewCancelOpInput("s", "o", "n", time.Now(), nexus.CancelOperationOptions{}, "t", interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{}),
+				interceptornexus.NewCancelOpInput(
+					"s",
+					"o",
+					time.Now(),
+					nexus.CancelOperationOptions{},
+					"t",
+					interceptornexus.ForwardingInfo{},
+					interceptornexus.RequestMetadata{NamespaceEntry: namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: "n"}, nil, "")}),
 				tc.outcome,
 				func(oc *operationContext) error {
 					return oc.handleCancelOperationResponse(tc.response, "op")

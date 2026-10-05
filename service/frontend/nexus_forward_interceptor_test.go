@@ -161,7 +161,11 @@ func TestNexusForwardingInterceptorInterceptNexus(t *testing.T) {
 				},
 			}
 			in := interceptornexus.NewStartOpInput(
-				"s", "o", testNamespace, time.Now(), options, requestInput,
+				"s",
+				"o",
+				time.Now(),
+				options,
+				requestInput,
 				forwardingInfo,
 				interceptornexus.RequestMetadata{NamespaceEntry: tc.namespace},
 			)
@@ -189,7 +193,10 @@ func TestNexusForwardingInterceptorInterceptNexus(t *testing.T) {
 			case requestHandledLocally:
 				require.Equal(t, requestHandledLocally, result)
 			case requestForwarded:
-				require.IsType(t, &nexus.HandlerStartOperationResultAsync{}, result)
+				require.IsType(t, interceptornexus.InterceptorResult{}, result)
+				forwardedResult := result.(interceptornexus.InterceptorResult)
+				require.Equal(t, "request_forwarded", forwardedResult.Outcome)
+				require.IsType(t, &nexus.HandlerStartOperationResultAsync{}, forwardedResult.Value)
 				require.Equal(t, "true", receivedHeaders.Get(interceptor.DCRedirectionAPIHeaderName))
 				require.Equal(t, currentCluster, receivedHeaders.Get(interceptor.DCRedirectionSourceCellHeaderName))
 				require.Equal(t, "original", receivedHeaders.Get("X-Original"))

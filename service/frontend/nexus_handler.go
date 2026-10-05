@@ -19,7 +19,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -66,7 +65,7 @@ type operationContext struct {
 	// pre-baked tags than the "normal" metricsHandler.
 	metricsHandlerForInterceptors metrics.Handler
 	logger                        log.Logger
-	requestErrorHandler           *interceptor.RequestErrorHandler
+	requestErrorHandler           interceptor.ErrorHandler
 }
 
 func (c *operationContext) matchingRequest(req *nexuspb.Request) *matchingservice.DispatchNexusTaskRequest {
@@ -217,10 +216,9 @@ type nexusHandler struct {
 	metricsHandler      metrics.Handler
 	namespaceRegistry   namespace.Registry
 	matchingClient      matchingservice.MatchingServiceClient
-	requestErrorHandler *interceptor.RequestErrorHandler
+	requestErrorHandler interceptor.ErrorHandler
 	payloadSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	headersBlacklist    dynamicconfig.TypedPropertyFn[*regexp.Regexp]
-	metricTagConfig     dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
 	chainedHandler      interceptornexus.HandlerFunc
 }
 
@@ -232,7 +230,6 @@ func newNexusHandler(
 	requestErrorHandler *interceptor.RequestErrorHandler,
 	payloadSizeLimit dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	headersBlacklist dynamicconfig.TypedPropertyFn[*regexp.Regexp],
-	metricTagConfig dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig],
 	nexusInterceptors []interceptornexus.Interceptor,
 ) *nexusHandler {
 	h := &nexusHandler{
@@ -243,28 +240,9 @@ func newNexusHandler(
 		requestErrorHandler: requestErrorHandler,
 		payloadSizeLimit:    payloadSizeLimit,
 		headersBlacklist:    headersBlacklist,
-		metricTagConfig:     metricTagConfig,
 	}
 	h.chainedHandler = interceptornexus.ChainInterceptors(h.finalHandler, nexusInterceptors)
 	return h
-}
-
-// nexusMetricTags resolves the operator-configurable tags for this request's Nexus metrics. Only the
-// frontend can read the configuration, so the tags travel to the telemetry interceptor as request
-// metadata rather than being built where they are recorded.
-func (h *nexusHandler) nexusMetricTags(service, operation string, header nexus.Header) []metrics.Tag {
-	conf := h.metricTagConfig()
-	var tags []metrics.Tag
-	if conf.IncludeServiceTag {
-		tags = append(tags, metrics.NexusServiceTag(service))
-	}
-	if conf.IncludeOperationTag {
-		tags = append(tags, metrics.NexusOperationTag(operation))
-	}
-	for _, mapping := range conf.HeaderTagMappings {
-		tags = append(tags, metrics.StringTag(mapping.TargetTag, header.Get(mapping.SourceHeader)))
-	}
-	return tags
 }
 
 // Extracts a nexusContext from the given ctx and returns an operationContext with tagged metrics and logging.
@@ -318,7 +296,6 @@ func (h *nexusHandler) StartOperation(
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationLogs(service, operation, options.RequestID)
 	oc.annotateServerSpan(ctx, service, operation, options.RequestID)
-	// to handle edge case where the operation panics before the interceptor chain is invoked
 	defer finalizeOperationRequest(oc, &retErr)
 
 	ctx = withOperationContext(ctx, oc)
@@ -350,7 +327,6 @@ func (h *nexusHandler) StartOperation(
 	nexusOpInput := interceptornexus.NewStartOpInput(
 		service,
 		operation,
-		oc.namespaceName,
 		oc.requestStartTime,
 		options,
 		input,
@@ -364,7 +340,6 @@ func (h *nexusHandler) StartOperation(
 			APIName:        oc.apiName,
 			NamespaceEntry: oc.namespace,
 			EndpointName:   oc.endpointName,
-			MetricTags:     h.nexusMetricTags(service, operation, options.Header),
 			Request:        request,
 		},
 	)
@@ -382,26 +357,24 @@ func (h *nexusHandler) StartOperation(
 //nolint:revive,cognitive-complexity: justified to keep the flow intact
 func (h *nexusHandler) finalStartHandler(
 	ctx context.Context,
-	in interceptornexus.InterceptorInput,
+	in interceptornexus.StartOpInput,
 ) (any, error) {
 	oc, ocok := operationContextFromContext(ctx)
 	if !ocok {
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "invalid operation context for nexus start operation")
 	}
 	operation := in.OperationName()
-	soi, ok := in.(interceptornexus.StartOpInput)
-	if !ok {
-		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "invalid request for nexus start operation")
-	}
-	request, ok := soi.Request().(*matchingservice.DispatchNexusTaskRequest)
+	request, ok := in.Request().(*matchingservice.DispatchNexusTaskRequest)
 	if !ok || request.GetRequest().GetStartOperation() == nil {
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "invalid dispatch request for nexus start operation")
 	}
 	startOperationRequest := request.GetRequest().GetStartOperation()
+	originalHeaders := request.Request.Header
 	h.sanitizeRequestHeaders(request)
+	defer func() { request.Request.Header = originalHeaders }()
 	var err error
 	// Transform nexus Content to temporal Payload with common/nexus PayloadSerializer.
-	if err = soi.StartOperationInput.Consume(&startOperationRequest.Payload); err != nil {
+	if err = in.StartOperationInput.Consume(&startOperationRequest.Payload); err != nil {
 		oc.logger.Warn("invalid input", tag.Error(err))
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid input")
 	}
@@ -456,7 +429,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationLogs(service, operation, "")
 	oc.annotateServerSpan(ctx, service, operation, "")
-	// for edge case where the operation panics before the interceptor chain is invoked
+	// Handle case where the operation panics before the interceptor chain is invoked.
 	defer finalizeOperationRequest(oc, &retErr)
 	request := oc.matchingRequest(&nexuspb.Request{
 		Header:        options.Header,
@@ -478,7 +451,6 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	nexusInterceptorInput := interceptornexus.NewCancelOpInput(
 		service,
 		operation,
-		oc.namespaceName,
 		oc.requestStartTime,
 		options,
 		token,
@@ -492,7 +464,6 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 			APIName:        oc.apiName,
 			NamespaceEntry: oc.namespace,
 			EndpointName:   oc.endpointName,
-			MetricTags:     h.nexusMetricTags(service, operation, options.Header),
 			Request:        request,
 		},
 	)
@@ -505,7 +476,7 @@ func (h *nexusHandler) finalHandler(
 	ctx context.Context,
 	in interceptornexus.InterceptorInput,
 ) (any, error) {
-	switch in.(type) {
+	switch in := in.(type) {
 	case interceptornexus.StartOpInput:
 		return h.finalStartHandler(ctx, in)
 	case interceptornexus.CancelOpInput:
@@ -517,22 +488,20 @@ func (h *nexusHandler) finalHandler(
 
 func (h *nexusHandler) finalCancelHandler(
 	ctx context.Context,
-	in interceptornexus.InterceptorInput,
+	in interceptornexus.CancelOpInput,
 ) (any, error) {
 	oc, ocok := operationContextFromContext(ctx)
 	if !ocok {
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "invalid operation context for nexus cancel operation")
 	}
-	coi, ok := in.(interceptornexus.CancelOpInput)
-	if !ok {
-		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "invalid request for nexus cancel operation")
-	}
 	operation := in.OperationName()
-	request, ok := coi.Request().(*matchingservice.DispatchNexusTaskRequest)
+	request, ok := in.Request().(*matchingservice.DispatchNexusTaskRequest)
 	if !ok || request.GetRequest().GetCancelOperation() == nil {
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "invalid dispatch request for nexus cancel operation")
 	}
+	originalHeaders := request.Request.Header
 	h.sanitizeRequestHeaders(request)
+	defer func() { request.Request.Header = originalHeaders }()
 
 	// Dispatch the request to be sync matched with a worker polling on the nexusContext taskQueue.
 	// matchingClient sets a context timeout of 60 seconds for this request, this should be enough for any Nexus

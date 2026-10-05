@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -41,8 +42,20 @@ func (s *namespaceRateLimitInterceptorSuite) TestInterceptNexus() {
 		nextCalled      bool
 		expectedOutcome string
 	}{
-		{name: "allowed", input: interceptornexus.NewStartOpInput("s", "o", testNamespace, time.Now(), nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{APIName: "NexusOperation"}), allow: true, nextCalled: true},
-		{name: "rate limited", input: interceptornexus.NewStartOpInput("s", "o", testNamespace, time.Now(), nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{APIName: "NexusOperation"}), expectedOutcome: "namespace_rate_limited"},
+		{name: "allowed", input: interceptornexus.NewStartOpInput("s",
+			"o",
+			time.Now(),
+			nexus.StartOperationOptions{},
+			nil,
+			interceptornexus.ForwardingInfo{},
+			interceptornexus.RequestMetadata{NamespaceEntry: namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: testNamespace}, nil, ""), APIName: "NexusOperation"}), allow: true, nextCalled: true},
+		{name: "rate limited", input: interceptornexus.NewStartOpInput("s",
+			"o",
+			time.Now(),
+			nexus.StartOperationOptions{},
+			nil,
+			interceptornexus.ForwardingInfo{},
+			interceptornexus.RequestMetadata{NamespaceEntry: namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: testNamespace}, nil, ""), APIName: "NexusOperation"}), expectedOutcome: "namespace_rate_limited"},
 	} {
 		s.Run(tc.name, func() {
 			ctx := context.Background()

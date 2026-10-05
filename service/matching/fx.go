@@ -111,6 +111,7 @@ func TelemetryInterceptorProvider(
 		logger,
 		serviceConfig.LogAllReqErrors,
 		requestErrorHandler,
+		nil,
 	)
 }
 

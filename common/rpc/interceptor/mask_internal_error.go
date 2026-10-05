@@ -59,6 +59,7 @@ func (mi *MaskInternalErrorDetailsInterceptor) Intercept(
 	return resp, err
 }
 
+// InterceptNexus masks internal details while retaining Nexus outcome and reporting metadata.
 func (mi *MaskInternalErrorDetailsInterceptor) InterceptNexus(
 	ctx context.Context,
 	in interceptornexus.InterceptorInput,

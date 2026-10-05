@@ -50,6 +50,7 @@ func (i *ServiceErrorInterceptor) Intercept(
 	return resp, i.transformError(err)
 }
 
+// InterceptNexus translates service errors while retaining Nexus outcome and reporting metadata.
 func (i *ServiceErrorInterceptor) InterceptNexus(
 	ctx context.Context,
 	in interceptornexus.InterceptorInput,
@@ -101,7 +102,7 @@ func (i *ServiceErrorInterceptor) capturePanicHandlerNexus(
 ) (_ any, retError error) {
 	logTags := []tag.Tag{
 		tag.Operation(in.MethodName()),
-		tag.WorkflowNamespace(in.NamespaceName()),
+		tag.WorkflowNamespace(in.NamespaceEntry().Name().String()),
 	}
 	if endpointName := in.EndpointName(); endpointName != "" {
 		logTags = append(logTags, tag.Endpoint(endpointName))

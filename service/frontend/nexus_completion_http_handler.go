@@ -46,7 +46,7 @@ type nexusCompletionHandler struct {
 	Config                  *Config
 	CallbackTokenGenerator  *commonnexus.CallbackTokenGenerator
 	HistoryClient           resource.HistoryClient
-	RequestErrorHandler     *interceptor.RequestErrorHandler
+	RequestErrorHandler     interceptor.ErrorHandler
 	telemetryInterceptor    *interceptor.TelemetryInterceptor
 	AuthInterceptor         *authorization.Interceptor // required for parsing auth info, not used as an interceptor
 	preProcessErrorsCounter metrics.CounterIface
@@ -208,7 +208,6 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 	}
 
 	interceptorInput, err := interceptornexus.NewCompleteOpInput(
-		ns.Name().String(),
 		requestStartTime,
 		r,
 		completion,

@@ -12,6 +12,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -164,11 +165,13 @@ func TestConcurrentRequestLimitInterceptor_InterceptNexus(t *testing.T) {
 		},
 		map[string]int{"NexusAPI": 1},
 	)
-	input := interceptornexus.NewStartOpInput(
-		"s", "o", testNamespace, time.Now(), nexus.StartOperationOptions{}, nil,
+	input := interceptornexus.NewStartOpInput("s",
+		"o",
+		time.Now(),
+		nexus.StartOperationOptions{},
+		nil,
 		interceptornexus.ForwardingInfo{},
-		interceptornexus.RequestMetadata{APIName: "NexusAPI"},
-	)
+		interceptornexus.RequestMetadata{NamespaceEntry: namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: testNamespace}, nil, ""), APIName: "NexusAPI"})
 
 	ctx := context.Background()
 

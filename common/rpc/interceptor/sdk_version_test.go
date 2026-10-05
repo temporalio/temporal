@@ -9,7 +9,9 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/namespace"
 	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/versioninfo"
 )
@@ -103,7 +105,13 @@ func TestSDKVersionInterceptNexus(t *testing.T) {
 			nextCalled := false
 			_, err := interceptor.InterceptNexus(
 				tc.ctx,
-				interceptornexus.NewStartOpInput("s", "o", testNamespace, time.Now(), nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{}),
+				interceptornexus.NewStartOpInput("s",
+					"o",
+					time.Now(),
+					nexus.StartOperationOptions{},
+					nil,
+					interceptornexus.ForwardingInfo{},
+					interceptornexus.RequestMetadata{NamespaceEntry: namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: testNamespace}, nil, "")}),
 				func(context.Context, interceptornexus.InterceptorInput) (any, error) {
 					nextCalled = true
 					return nil, nil

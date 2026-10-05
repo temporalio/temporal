@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/rpc/interceptor"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
@@ -439,7 +440,25 @@ func TelemetryInterceptorProvider(
 		logger,
 		serviceConfig.LogAllReqErrors,
 		requestErrorHandler,
+		func(in interceptornexus.InterceptorInput) []metrics.Tag {
+			return nexusMetricTags(serviceConfig.NexusOperationsMetricTagConfig(), in)
+		},
 	)
+}
+
+// nexusMetricTags adds metric tags based on the dynamic config.
+func nexusMetricTags(conf chasmnexus.NexusMetricTagConfig, in interceptornexus.InterceptorInput) []metrics.Tag {
+	var tags []metrics.Tag
+	if conf.IncludeServiceTag {
+		tags = append(tags, metrics.NexusServiceTag(in.ServiceName()))
+	}
+	if conf.IncludeOperationTag {
+		tags = append(tags, metrics.NexusOperationTag(in.OperationName()))
+	}
+	for _, mapping := range conf.HeaderTagMappings {
+		tags = append(tags, metrics.StringTag(mapping.TargetTag, in.Header().Get(mapping.SourceHeader)))
+	}
+	return tags
 }
 
 func getRateFnWithMetrics(rateFn quotas.RateFn, handler metrics.Handler) quotas.RateFn {
@@ -686,6 +705,7 @@ func NamespaceValidatorInterceptorProvider(
 	)
 }
 
+// NamespaceLengthValidatorInterceptorProvider supplies the frontend namespace length validator.
 func NamespaceLengthValidatorInterceptorProvider(
 	params NamespaceValidatorInterceptorParams,
 ) *interceptor.NamespaceLengthValidatorInterceptor {
@@ -715,6 +735,7 @@ func SlowRequestLoggerInterceptorProvider(
 	)
 }
 
+// FrontendServiceErrorInterceptorProvider supplies service error translation for the shared chain.
 func FrontendServiceErrorInterceptorProvider(
 	logger log.Logger,
 ) *interceptor.FrontendServiceErrorInterceptor {
@@ -789,6 +810,7 @@ func FEReplicatorNamespaceReplicationQueueProvider(
 	return replicatorNamespaceReplicationQueue
 }
 
+// NewFaultsInterceptorProvider supplies gRPC fault injection from the frontend test hooks.
 func NewFaultsInterceptorProvider(hooks testhooks.TestHooks) *grpcfaults.FaultsInterceptor {
 	return grpcfaults.NewFaultsInterceptor(
 		grpcfaultstest.NewGenerator(hooks),

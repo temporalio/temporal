@@ -65,6 +65,22 @@ func (i *RateLimitInterceptor) Intercept(
 	return handler(ctx, req)
 }
 
+// InterceptNexus enforces the global rate limit for a Nexus request.
+func (i *RateLimitInterceptor) InterceptNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (any, error) {
+	if err := i.Allow(in.APIName(), in.Header()); err != nil {
+		return nil, &nexus.InterceptorError{
+			Err:           err,
+			Outcome:       "global_rate_limited",
+			ExposeDetails: true,
+		}
+	}
+	return next(ctx, in)
+}
+
 func (i *RateLimitInterceptor) Allow(
 	methodName string,
 	headerGetter headers.HeaderGetter,
@@ -90,20 +106,4 @@ func (i *RateLimitInterceptor) Allow(
 		return RateLimitServerBusy
 	}
 	return nil
-}
-
-// InterceptNexus enforces the global rate limit for a Nexus request.
-func (i *RateLimitInterceptor) InterceptNexus(
-	ctx context.Context,
-	in nexus.InterceptorInput,
-	next nexus.HandlerFunc,
-) (any, error) {
-	if err := i.Allow(in.APIName(), in.Header()); err != nil {
-		return nil, &nexus.InterceptorError{
-			Err:           err,
-			Outcome:       "global_rate_limited",
-			ExposeDetails: true,
-		}
-	}
-	return next(ctx, in)
 }

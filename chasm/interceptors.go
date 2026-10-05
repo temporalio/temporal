@@ -61,6 +61,7 @@ func (i *ChasmVisibilityInterceptor) Intercept(
 	return handler(ctx, req)
 }
 
+// InterceptNexus publishes the CHASM visibility manager to the Nexus handler context.
 func (i *ChasmVisibilityInterceptor) InterceptNexus(
 	ctx context.Context,
 	in interceptornexus.InterceptorInput,

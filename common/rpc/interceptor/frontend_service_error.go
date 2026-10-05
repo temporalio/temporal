@@ -22,6 +22,7 @@ const (
 	ResourceExhaustedScopeHeader = "X-Resource-Exhausted-Scope"
 )
 
+// FrontendServiceErrorInterceptor masks internal service details and propagates gRPC exhaustion headers.
 type FrontendServiceErrorInterceptor struct {
 	logger log.Logger
 }
@@ -43,6 +44,7 @@ func NewFrontendServiceErrorInterceptor(logger log.Logger) grpc.UnaryServerInter
 	return t.Intercept
 }
 
+// Intercept transforms frontend service errors and sets gRPC exhaustion headers.
 func (f *FrontendServiceErrorInterceptor) Intercept(
 	ctx context.Context,
 	req any,
@@ -54,6 +56,7 @@ func (f *FrontendServiceErrorInterceptor) Intercept(
 	return resp, f.transformError(ctx, info.FullMethod, err, true)
 }
 
+// InterceptNexus transforms service errors while preserving Nexus outcome and reporting metadata.
 func (f *FrontendServiceErrorInterceptor) InterceptNexus(
 	ctx context.Context,
 	in nexus.InterceptorInput,

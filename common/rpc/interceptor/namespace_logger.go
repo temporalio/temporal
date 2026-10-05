@@ -61,6 +61,7 @@ func (nli *NamespaceLogInterceptor) Intercept(
 	return handler(ctx, req)
 }
 
+// InterceptNexus logs the resolved namespace and TLS peer details for a Nexus request.
 func (nli *NamespaceLogInterceptor) InterceptNexus(
 	ctx context.Context,
 	in nexus.InterceptorInput,

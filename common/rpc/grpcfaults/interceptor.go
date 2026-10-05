@@ -39,16 +39,19 @@ func UnaryServerInterceptor(generator Generator) grpc.UnaryServerInterceptor {
 	}
 }
 
+// NewFaultsInterceptor adapts the gRPC fault generator to the shared interceptor chain.
 func NewFaultsInterceptor(generator Generator) *FaultsInterceptor {
 	return &FaultsInterceptor{
 		h: UnaryServerInterceptor(generator),
 	}
 }
 
+// FaultsInterceptor injects configured faults into gRPC requests.
 type FaultsInterceptor struct {
 	h grpc.UnaryServerInterceptor
 }
 
+// Intercept injects faults before and after the gRPC handler.
 func (g *FaultsInterceptor) Intercept(
 	ctx context.Context,
 	req any,
@@ -61,6 +64,8 @@ func (g *FaultsInterceptor) Intercept(
 	return g.h(ctx, req, info, handler)
 }
 
+// InterceptNexus is a no-op because the gRPC fault generator does
+// not target Nexus(HTTP only).
 func (g *FaultsInterceptor) InterceptNexus(
 	ctx context.Context,
 	in nexus.InterceptorInput,

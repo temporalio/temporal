@@ -54,6 +54,7 @@ func newNexusForwardingInterceptor(
 	}
 }
 
+// InterceptNexus forwards eligible requests to the namespace's active cluster.
 func (i *nexusForwardingInterceptor) InterceptNexus(
 	ctx context.Context,
 	in interceptornexus.InterceptorInput,
@@ -61,14 +62,7 @@ func (i *nexusForwardingInterceptor) InterceptNexus(
 ) (out any, retErr error) {
 	info := in.ForwardingInfo()
 	header := in.Header()
-	namespaceEntry, err := in.NamespaceEntry()
-	if err != nil {
-		return nil, &interceptornexus.InterceptorError{
-			Err:                       err,
-			Outcome:                   "interceptor_failed",
-			SkipServiceErrorReporting: true,
-		}
-	}
+	namespaceEntry := in.NamespaceEntry()
 	currentCluster := i.clusterMetadata.GetCurrentClusterName()
 	targetCluster := namespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: info.BusinessID})
 	if !namespaceEntry.IsGlobalNamespace() || targetCluster == currentCluster {
@@ -81,8 +75,6 @@ func (i *nexusForwardingInterceptor) InterceptNexus(
 			SkipServiceErrorReporting: true,
 		}
 	}
-
-	interceptornexus.SetOutcomeOverride(ctx, "request_forwarded")
 
 	metricsHandler, forwardStartTime := i.redirectionInterceptor.BeforeCall(
 		interceptor.DCRedirectionMetricsPrefix + api.MethodName(in.APIName()),
@@ -130,6 +122,9 @@ func (i *nexusForwardingInterceptor) InterceptNexus(
 			Err:                       nexus.NewHandlerErrorf(nexus.HandlerErrorTypeUnavailable, "forwarding failed, unknown operation type"),
 			SkipServiceErrorReporting: true,
 		}
+	}
+	if retErr == nil {
+		out = interceptornexus.InterceptorResult{Value: out, Outcome: "request_forwarded"}
 	}
 	return out, retErr
 }
@@ -336,6 +331,7 @@ type nexusForwardingHTTPHeaderWrapper struct {
 	setFailureSource       func(string)
 }
 
+// Do preserves incoming forwarding headers while using the transport-generated request body.
 func (f *nexusForwardingHTTPHeaderWrapper) Do(request *http.Request) (*http.Response, error) {
 	// for forwarded requests, copy the original HTTP headers without sanitization.
 	for name, values := range f.originalRequestHeaders {

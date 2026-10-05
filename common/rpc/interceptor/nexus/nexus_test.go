@@ -9,6 +9,8 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 )
 
@@ -76,7 +78,11 @@ func TestOperationInputOutcomes(t *testing.T) {
 	}
 
 	require.Equal(t, "interceptor error (): <nil>", (&InterceptorError{}).Error())
-	_, err := NewCompleteOpInput("namespace", time.Now(), nil, nil, ForwardingInfo{}, RequestMetadata{})
+	_, err := NewCompleteOpInput(time.Now(),
+		nil,
+		nil,
+		ForwardingInfo{},
+		RequestMetadata{NamespaceEntry: namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: "namespace"}, nil, "")})
 	require.EqualError(t, err, "nexus completion request not found")
 }
 
@@ -85,8 +91,20 @@ func TestInterceptorInputRequest(t *testing.T) {
 	requestStartTime := time.Date(2026, time.May, 5, 17, 0, 0, 123456789, time.UTC)
 	requestMetadata := RequestMetadata{Request: dispatchRequest}
 	inputs := []InterceptorInput{
-		NewStartOpInput("s", "o", "n", requestStartTime, nexus.StartOperationOptions{}, nil, ForwardingInfo{}, requestMetadata),
-		NewCancelOpInput("s", "o", "n", requestStartTime, nexus.CancelOperationOptions{}, "t", ForwardingInfo{}, requestMetadata),
+		NewStartOpInput("s",
+			"o",
+			requestStartTime,
+			nexus.StartOperationOptions{},
+			nil,
+			ForwardingInfo{},
+			requestMetadata),
+		NewCancelOpInput("s",
+			"o",
+			requestStartTime,
+			nexus.CancelOperationOptions{},
+			"t",
+			ForwardingInfo{},
+			requestMetadata),
 	}
 	for _, input := range inputs {
 		require.Same(t, dispatchRequest, input.Request())
@@ -94,7 +112,11 @@ func TestInterceptorInputRequest(t *testing.T) {
 	}
 
 	completionRequest := &nexusrpc.CompletionRequest{HTTPRequest: &http.Request{}}
-	completionInput, err := NewCompleteOpInput("n", requestStartTime, completionRequest, nil, ForwardingInfo{}, RequestMetadata{})
+	completionInput, err := NewCompleteOpInput(requestStartTime,
+		completionRequest,
+		nil,
+		ForwardingInfo{},
+		RequestMetadata{NamespaceEntry: namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: "n"}, nil, "")})
 	require.NoError(t, err)
 	require.Same(t, completionRequest, completionInput.Request())
 	require.True(t, completionInput.StartTime().Equal(requestStartTime))

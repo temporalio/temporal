@@ -18,6 +18,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -34,11 +35,13 @@ import (
 
 func TestTelemetryInterceptNexusOutermost(t *testing.T) {
 	extraTag := metrics.StringTag("configured", "tag")
-	input := interceptornexus.NewStartOpInput(
-		"s", "o", testNamespace, time.Now(), nexus.StartOperationOptions{}, nil,
+	input := interceptornexus.NewStartOpInput("s",
+		"o",
+		time.Now(),
+		nexus.StartOperationOptions{},
+		nil,
 		interceptornexus.ForwardingInfo{},
-		interceptornexus.RequestMetadata{MetricTags: []metrics.Tag{extraTag}},
-	)
+		interceptornexus.RequestMetadata{NamespaceEntry: namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: testNamespace}, nil, "")})
 	for _, tc := range []struct {
 		name            string
 		handlerOut      any
@@ -88,7 +91,7 @@ func TestTelemetryInterceptNexusOutermost(t *testing.T) {
 			capture := metricsHandler.StartCapture()
 			defer metricsHandler.StopCapture(capture)
 
-			telemetry := NewTelemetryInterceptor(nil, metricsHandler, log.NewNoopLogger(), nil, nil)
+			telemetry := NewTelemetryInterceptor(nil, metricsHandler, log.NewNoopLogger(), nil, nil, func(interceptornexus.InterceptorInput) []metrics.Tag { return []metrics.Tag{extraTag} })
 			nextCalled := false
 			out, err := telemetry.InterceptNexusOutermost(
 				context.Background(),
@@ -98,7 +101,7 @@ func TestTelemetryInterceptNexusOutermost(t *testing.T) {
 					// Downstream interceptors read the published handler from the context.
 					require.NotNil(t, GetMetricsHandlerFromContext(ctx, log.NewNoopLogger()))
 					if tc.setOverride != "" {
-						interceptornexus.SetOutcomeOverride(ctx, tc.setOverride)
+						return interceptornexus.InterceptorResult{Value: tc.handlerOut, Outcome: tc.setOverride}, tc.handlerErr
 					}
 					return tc.handlerOut, tc.handlerErr
 				},
@@ -136,11 +139,17 @@ func TestTelemetryInterceptNexusRecordsNothing(t *testing.T) {
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)
 
-	telemetry := NewTelemetryInterceptor(nil, metricsHandler, log.NewNoopLogger(), nil, nil)
+	telemetry := NewTelemetryInterceptor(nil, metricsHandler, log.NewNoopLogger(), nil, nil, nil)
 	nextCalled := false
 	_, err := telemetry.InterceptNexus(
 		context.Background(),
-		interceptornexus.NewStartOpInput("s", "o", testNamespace, time.Now(), nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{}),
+		interceptornexus.NewStartOpInput("s",
+			"o",
+			time.Now(),
+			nexus.StartOperationOptions{},
+			nil,
+			interceptornexus.ForwardingInfo{},
+			interceptornexus.RequestMetadata{NamespaceEntry: namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: testNamespace}, nil, "")}),
 		func(context.Context, interceptornexus.InterceptorInput) (any, error) {
 			nextCalled = true
 			return nil, nil
@@ -167,7 +176,7 @@ func TestEmitActionMetric(t *testing.T) {
 		metricsHandler,
 		logger,
 		logAllReqErrors,
-		requestErrorHandler)
+		requestErrorHandler, nil)
 
 	testCases := []struct {
 		methodName        string

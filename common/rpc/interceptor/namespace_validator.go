@@ -178,6 +178,7 @@ func NewNamespaceValidatorInterceptor(
 	}
 }
 
+// NewNamespaceLengthValidatorInterceptor constructs a validator for namespace name length.
 func NewNamespaceLengthValidatorInterceptor(
 	namespaceRegistry namespace.Registry,
 	maxNamespaceLength dynamicconfig.IntPropertyFn,
@@ -189,6 +190,7 @@ func NewNamespaceLengthValidatorInterceptor(
 	}
 }
 
+// Intercept resolves the gRPC namespace and validates its name length.
 func (nsvi *NamespaceLengthValidatorInterceptor) Intercept(
 	ctx context.Context,
 	req any,
@@ -207,19 +209,13 @@ func (nsvi *NamespaceLengthValidatorInterceptor) Intercept(
 	return handler(ctx, req)
 }
 
+// InterceptNexus validates the resolved Nexus namespace name length.
 func (nsvi *NamespaceLengthValidatorInterceptor) InterceptNexus(
 	ctx context.Context,
 	in nexus.InterceptorInput,
 	next nexus.HandlerFunc,
 ) (any, error) {
-	ns, err := in.NamespaceEntry()
-	if err != nil {
-		return nil, &nexus.InterceptorError{
-			Err:                       err,
-			Outcome:                   "interceptor_failed",
-			SkipServiceErrorReporting: true,
-		}
-	}
+	ns := in.NamespaceEntry()
 	if len(ns.Info().GetName()) > nsvi.maxNamespaceLength() {
 		return nil, &nexus.InterceptorError{
 			Err:                       errNamespaceTooLong,
@@ -303,7 +299,7 @@ func setNamespace(
 	}
 }
 
-// Intercept runs ValidateState - see docstring for that method.
+// Intercept validates the namespace state for a gRPC request.
 func (ni *NamespaceValidatorInterceptor) Intercept(
 	ctx context.Context,
 	req any,
@@ -322,6 +318,23 @@ func (ni *NamespaceValidatorInterceptor) Intercept(
 	return handler(ctx, req)
 }
 
+// InterceptNexus validates the namespace state for a Nexus request.
+func (ni *NamespaceValidatorInterceptor) InterceptNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (any, error) {
+	namespaceEntry := in.NamespaceEntry()
+	if err := ni.ValidateState(namespaceEntry, in.APIName(), in.ForwardingInfo().BusinessID); err != nil {
+		return nil, &nexus.InterceptorError{
+			Err:                       err,
+			Outcome:                   "invalid_namespace_state",
+			SkipServiceErrorReporting: true,
+		}
+	}
+	return next(ctx, in)
+}
+
 // ValidateState validates:
 // 1. Namespace is specified in task token if there is a `task_token` field.
 // 2. Namespace is specified in request if there is a `namespace` field and no `task_token` field.
@@ -333,30 +346,6 @@ func (ni *NamespaceValidatorInterceptor) ValidateState(namespaceEntry *namespace
 		return err
 	}
 	return ni.checkReplicationState(namespaceEntry, fullMethod, businessID)
-}
-
-// InterceptNexus validates the namespace state for a Nexus request.
-func (ni *NamespaceValidatorInterceptor) InterceptNexus(
-	ctx context.Context,
-	in nexus.InterceptorInput,
-	next nexus.HandlerFunc,
-) (any, error) {
-	namespaceEntry, err := in.NamespaceEntry()
-	if err != nil {
-		return nil, &nexus.InterceptorError{
-			Err:                       err,
-			Outcome:                   "interceptor_failed",
-			SkipServiceErrorReporting: true,
-		}
-	}
-	if err := ni.ValidateState(namespaceEntry, in.APIName(), in.ForwardingInfo().BusinessID); err != nil {
-		return nil, &nexus.InterceptorError{
-			Err:                       err,
-			Outcome:                   "invalid_namespace_state",
-			SkipServiceErrorReporting: true,
-		}
-	}
-	return next(ctx, in)
 }
 
 func (ni *NamespaceValidatorInterceptor) extractNamespace(req any) (*namespace.Namespace, error) {

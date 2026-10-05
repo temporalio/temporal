@@ -100,16 +100,6 @@ func (i *NamespaceHandoverInterceptor) handlesMethod(fullMethod string) bool {
 	return false
 }
 
-// InterceptNexus is a no-op: the handover gate only applies to WorkflowService
-// methods- see [NamespaceHandoverInterceptor.handlesMethod] for details.
-func (i *NamespaceHandoverInterceptor) InterceptNexus(
-	ctx context.Context,
-	in nexus.InterceptorInput,
-	next nexus.HandlerFunc,
-) (any, error) {
-	return next(ctx, in)
-}
-
 func (i *NamespaceHandoverInterceptor) Intercept(
 	ctx context.Context,
 	req any,
@@ -158,6 +148,16 @@ func (i *NamespaceHandoverInterceptor) Intercept(
 	}
 
 	return handler(ctx, req)
+}
+
+// InterceptNexus is a no-op: the handover gate only applies to WorkflowService
+// methods- see [NamespaceHandoverInterceptor.handlesMethod] for details.
+func (i *NamespaceHandoverInterceptor) InterceptNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (any, error) {
+	return next(ctx, in)
 }
 
 func (i *NamespaceHandoverInterceptor) waitNamespaceHandoverUpdate(

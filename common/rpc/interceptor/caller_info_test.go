@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/workflowservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -130,14 +131,11 @@ func (s *callerInfoSuite) TestIntercept_CallerName() {
 }
 
 func (s *callerInfoSuite) TestInterceptNexus() {
-	completeInput, err := interceptornexus.NewCompleteOpInput(
-		testNamespace,
-		time.Now(),
+	completeInput, err := interceptornexus.NewCompleteOpInput(time.Now(),
 		&nexusrpc.CompletionRequest{HTTPRequest: &http.Request{}},
 		nil,
 		interceptornexus.ForwardingInfo{},
-		interceptornexus.RequestMetadata{},
-	)
+		interceptornexus.RequestMetadata{NamespaceEntry: namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: testNamespace}, nil, "")})
 	s.NoError(err)
 	for _, tc := range []struct {
 		name           string
@@ -146,13 +144,25 @@ func (s *callerInfoSuite) TestInterceptNexus() {
 		expectedOrigin string
 	}{
 		{
-			name:           "start",
-			input:          interceptornexus.NewStartOpInput("s", "o", testNamespace, time.Now(), nexus.StartOperationOptions{}, nil, interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{}),
+			name: "start",
+			input: interceptornexus.NewStartOpInput("s",
+				"o",
+				time.Now(),
+				nexus.StartOperationOptions{},
+				nil,
+				interceptornexus.ForwardingInfo{},
+				interceptornexus.RequestMetadata{NamespaceEntry: namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: testNamespace}, nil, "")}),
 			expectedOrigin: "StartNexusOperation",
 		},
 		{
-			name:       "cancel - preserves background origin",
-			input:      interceptornexus.NewCancelOpInput("s", "o", testNamespace, time.Now(), nexus.CancelOperationOptions{}, "t", interceptornexus.ForwardingInfo{}, interceptornexus.RequestMetadata{}),
+			name: "cancel - preserves background origin",
+			input: interceptornexus.NewCancelOpInput("s",
+				"o",
+				time.Now(),
+				nexus.CancelOperationOptions{},
+				"t",
+				interceptornexus.ForwardingInfo{},
+				interceptornexus.RequestMetadata{NamespaceEntry: namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: testNamespace}, nil, "")}),
 			callerInfo: headers.SystemBackgroundHighCallerInfo,
 		},
 		{

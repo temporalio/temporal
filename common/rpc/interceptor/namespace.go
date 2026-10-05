@@ -59,11 +59,7 @@ func GetNamespaceName(
 		return namespaceName, nil
 
 	case nexus.InterceptorInput:
-		ns, err := request.NamespaceEntry()
-		if err != nil {
-			return namespace.EmptyName, err
-		}
-		return ns.Name(), nil
+		return request.NamespaceEntry().Name(), nil
 
 	default:
 		return namespace.EmptyName, serviceerror.NewInternalf("unable to extract namespace info from request of type %T", req)

@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
@@ -75,20 +76,17 @@ func TestAuthorizerInterceptorSuite(t *testing.T) {
 func (s *authorizerInterceptorSuite) TestInterceptNexus() {
 	apiName, endpoint := "NexusAPI", "endpoint"
 	authorizationRequest := &matchingservice.DispatchNexusTaskRequest{}
-	input := interceptornexus.NewStartOpInput(
-		"s",
+	input := interceptornexus.NewStartOpInput("s",
 		"o",
-		testNamespace,
 		time.Now(),
 		nexus.StartOperationOptions{},
 		nil,
 		interceptornexus.ForwardingInfo{},
-		interceptornexus.RequestMetadata{
+		interceptornexus.RequestMetadata{NamespaceEntry: namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: testNamespace}, nil, ""),
 			APIName:      apiName,
 			EndpointName: endpoint,
 			Request:      authorizationRequest,
-		},
-	)
+		})
 	expectedTarget := &CallTarget{
 		APIName:           apiName,
 		NexusEndpointName: endpoint,

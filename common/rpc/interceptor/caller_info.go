@@ -49,7 +49,7 @@ func (i *CallerInfoInterceptor) InterceptNexus(
 ) (any, error) {
 	ctx = PopulateCallerInfo(
 		ctx,
-		in.NamespaceName,
+		func() string { return in.NamespaceEntry().Name().String() },
 		in.MethodName,
 	)
 	return next(headers.Propagate(ctx), in)

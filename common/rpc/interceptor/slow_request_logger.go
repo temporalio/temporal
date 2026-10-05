@@ -43,6 +43,7 @@ func (i *SlowRequestLoggerInterceptor) Intercept(
 	return handler(ctx, request)
 }
 
+// InterceptNexus logs Nexus requests that exceed the configured duration threshold.
 func (i *SlowRequestLoggerInterceptor) InterceptNexus(
 	ctx context.Context,
 	in nexus.InterceptorInput,
