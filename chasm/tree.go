@@ -209,8 +209,9 @@ type (
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
 		GetApproximatePersistedSize() int
 		ChasmSkipPersistenceEnabled() bool
-		// Returns the logical task count that triggers the task count metrics for the
-		// given fully qualified task type. A value <= 0 disables them.
+		// Returns the operator override of the logical task count that triggers the task count
+		// metrics for the given fully qualified task type. Zero means not set, so the registered
+		// threshold applies, and a negative value disables the metrics.
 		ChasmLogicalTaskCountAlertThreshold(chasmTaskType string) int
 		ChasmDLQScheduledPureTaskOnValidationEnabled() bool
 		GetNamespaceEntry() *namespace.Namespace
@@ -2181,11 +2182,14 @@ func (n *Node) emitLogicalTaskCountMetrics(
 	var metricsHandler metrics.Handler
 
 	for taskTypeID, count := range counts {
-		taskFqn, ok := n.registry.TaskFqnByID(taskTypeID)
+		registrableTask, ok := n.registry.TaskByID(taskTypeID)
 		if !ok {
 			continue
 		}
-		threshold := n.backend.ChasmLogicalTaskCountAlertThreshold(taskFqn)
+		taskFqn := registrableTask.fqType()
+		threshold := registrableTask.resolveTaskCountMetricThreshold(
+			n.backend.ChasmLogicalTaskCountAlertThreshold(taskFqn),
+		)
 		if threshold <= 0 || count <= threshold {
 			continue
 		}

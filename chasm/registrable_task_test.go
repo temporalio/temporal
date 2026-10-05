@@ -61,6 +61,55 @@ func TestTaskCountMetricEnabledFor(t *testing.T) {
 	}
 }
 
+func TestResolveTaskCountMetricThreshold(t *testing.T) {
+	testCases := []struct {
+		name                   string
+		task                   *RegistrableTask
+		dynamicConfigThreshold int
+		expected               int
+	}{
+		{
+			name:     "framework default",
+			task:     newTestRegistrableTask(),
+			expected: defaultTaskCountMetricThreshold,
+		},
+		{
+			name:     "registered threshold",
+			task:     newTestRegistrableTask(WithTaskCountMetricThreshold(50)),
+			expected: 50,
+		},
+		{
+			name:     "non-positive registered threshold falls back to default",
+			task:     newTestRegistrableTask(WithTaskCountMetricThreshold(-1)),
+			expected: defaultTaskCountMetricThreshold,
+		},
+		{
+			name:                   "dynamic config overrides default",
+			task:                   newTestRegistrableTask(),
+			dynamicConfigThreshold: 20,
+			expected:               20,
+		},
+		{
+			name:                   "dynamic config overrides registered threshold",
+			task:                   newTestRegistrableTask(WithTaskCountMetricThreshold(50)),
+			dynamicConfigThreshold: 20,
+			expected:               20,
+		},
+		{
+			name:                   "negative dynamic config disables",
+			task:                   newTestRegistrableTask(WithTaskCountMetricThreshold(50)),
+			dynamicConfigThreshold: -1,
+			expected:               -1,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expected, tc.task.resolveTaskCountMetricThreshold(tc.dynamicConfigThreshold))
+		})
+	}
+}
+
 func newTestRegistrableComponent(opts ...RegistrableComponentOption) *RegistrableComponent {
 	rc := &RegistrableComponent{}
 	for _, opt := range opts {

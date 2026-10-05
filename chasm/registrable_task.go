@@ -17,19 +17,24 @@ const (
 	SingletonTaskModeIgnore
 )
 
+// defaultTaskCountMetricThreshold is the logical task count above which the task count metrics
+// are emitted for an opted in task type that sets no threshold of its own.
+const defaultTaskCountMetricThreshold = 1000
+
 type (
 	RegistrableTask struct {
-		taskType                string
-		goType                  reflect.Type
-		componentGoType         reflect.Type // It is not clear how this one is used.
-		validateFn              validateFn
-		pureTaskExecuteFn       pureTaskExecuteFn
-		sideEffectTaskExecuteFn sideEffectTaskExecuteFn
-		sideEffectTaskDiscardFn sideEffectTaskDiscardFn
-		isPureTask              bool
-		outboundTaskGroup       string            // For grouping on the outbound queue. See [WithTaskGroup] for details.
-		singletonMode           SingletonTaskMode // If non-zero, at most one task of this type may exist per component instance.
-		taskCountMetricEnabled  *bool             // Nil means inherit from the component. See [WithTaskCountMetricOverride].
+		taskType                 string
+		goType                   reflect.Type
+		componentGoType          reflect.Type // It is not clear how this one is used.
+		validateFn               validateFn
+		pureTaskExecuteFn        pureTaskExecuteFn
+		sideEffectTaskExecuteFn  sideEffectTaskExecuteFn
+		sideEffectTaskDiscardFn  sideEffectTaskDiscardFn
+		isPureTask               bool
+		outboundTaskGroup        string            // For grouping on the outbound queue. See [WithTaskGroup] for details.
+		singletonMode            SingletonTaskMode // If non-zero, at most one task of this type may exist per component instance.
+		taskCountMetricEnabled   *bool             // Nil means inherit from the component. See [WithTaskCountMetricOverride].
+		taskCountMetricThreshold int               // Non-positive means use the framework default. See [WithTaskCountMetricThreshold].
 
 		// Those two fields are initialized when the component is registered to a library.
 		library    namer
@@ -196,6 +201,20 @@ func (rt *RegistrableTask) taskCountMetricEnabledForComponent(rc *RegistrableCom
 	return rc != nil && rc.taskCountMetricEnabled
 }
 
+// resolveTaskCountMetricThreshold returns the logical task count above which the task count
+// metrics are emitted for this task type, or a value <= 0 if they are disabled. A non-zero
+// dynamicConfigThreshold is an operator override and wins, then the registered threshold,
+// then [defaultTaskCountMetricThreshold].
+func (rt *RegistrableTask) resolveTaskCountMetricThreshold(dynamicConfigThreshold int) int {
+	if dynamicConfigThreshold != 0 {
+		return dynamicConfigThreshold
+	}
+	if rt.taskCountMetricThreshold > 0 {
+		return rt.taskCountMetricThreshold
+	}
+	return defaultTaskCountMetricThreshold
+}
+
 // fqType returns the fully qualified name of the task, which is a combination of
 // the library name and the task type. This is used to uniquely identify
 // the task in the registry.
@@ -228,6 +247,16 @@ func WithTaskGroup(taskgroup string) RegistrableTaskOption {
 func WithSingletonTask(mode SingletonTaskMode) RegistrableTaskOption {
 	return func(rt *RegistrableTask) {
 		rt.singletonMode = mode
+	}
+}
+
+// WithTaskCountMetricThreshold sets the logical task count above which the task count metrics
+// are emitted for this task type, replacing [defaultTaskCountMetricThreshold]. It only takes
+// effect when the task type is opted in, via [WithTaskCountMetric] on the component or
+// [WithTaskCountMetricOverride]. history.chasmLogicalTaskCountAlertThreshold overrides it when set.
+func WithTaskCountMetricThreshold(threshold int) RegistrableTaskOption {
+	return func(rt *RegistrableTask) {
+		rt.taskCountMetricThreshold = threshold
 	}
 }
 
