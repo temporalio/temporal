@@ -21,7 +21,7 @@ func (*library) Name() string {
 
 func (*library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*UserData]("userData"),
+		chasm.NewRegistrableComponent[*TaskQueueUserData]("userData"),
 	}
 }
 

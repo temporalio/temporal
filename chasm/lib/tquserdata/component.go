@@ -6,25 +6,25 @@ import (
 	"go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb/v1"
 )
 
-// UserData is the CHASM mirror of one root task queue's persisted user data.
-type UserData struct {
+// TaskQueueUserData is the CHASM mirror of one root task queue's persisted user data.
+type TaskQueueUserData struct {
 	chasm.UnimplementedComponent
 	*tquserdatapb.UserDataState
 	Data chasm.Field[*persistencespb.TaskQueueUserData]
 }
 
-func (u *UserData) LifecycleState(chasm.Context) chasm.LifecycleState {
+func (u *TaskQueueUserData) LifecycleState(chasm.Context) chasm.LifecycleState {
 	if u.Closed {
 		return chasm.LifecycleStateCompleted
 	}
 	return chasm.LifecycleStateRunning
 }
 
-func (*UserData) ContextMetadata(chasm.Context) map[string]string {
+func (*TaskQueueUserData) ContextMetadata(chasm.Context) map[string]string {
 	return nil
 }
 
-func (u *UserData) Terminate(chasm.MutableContext, chasm.TerminateComponentRequest) (chasm.TerminateComponentResponse, error) {
+func (u *TaskQueueUserData) Terminate(chasm.MutableContext, chasm.TerminateComponentRequest) (chasm.TerminateComponentResponse, error) {
 	u.Closed = true
 	return chasm.TerminateComponentResponse{}, nil
 }

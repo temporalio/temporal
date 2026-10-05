@@ -40,8 +40,8 @@ func (h *handler) GetTaskQueueUserData(
 	}
 	return chasm.ReadComponent(
 		ctx,
-		chasm.NewComponentRef[*UserData](chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: req.GetBusinessId()}),
-		func(userData *UserData, chasmContext chasm.Context, _ *tquserdatapb.GetTaskQueueUserDataRequest) (*tquserdatapb.GetTaskQueueUserDataResponse, error) {
+		chasm.NewComponentRef[*TaskQueueUserData](chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: req.GetBusinessId()}),
+		func(userData *TaskQueueUserData, chasmContext chasm.Context, _ *tquserdatapb.GetTaskQueueUserDataRequest) (*tquserdatapb.GetTaskQueueUserDataResponse, error) {
 			return &tquserdatapb.GetTaskQueueUserDataResponse{
 				UserData: proto.Clone(userData.Data.Get(chasmContext)).(*persistencespb.TaskQueueUserData),
 				Version:  userData.Version,
@@ -82,8 +82,8 @@ func (*handler) writeUserData(ctx context.Context, req *tquserdatapb.UpsertTaskQ
 		_, err := chasm.StartExecution(
 			ctx,
 			key,
-			func(mutableContext chasm.MutableContext, _ *tquserdatapb.UpsertTaskQueueUserDataRequest) (*UserData, error) {
-				return &UserData{
+			func(mutableContext chasm.MutableContext, _ *tquserdatapb.UpsertTaskQueueUserDataRequest) (*TaskQueueUserData, error) {
+				return &TaskQueueUserData{
 					UserDataState: &tquserdatapb.UserDataState{Version: 1},
 					Data:          chasm.NewDataField(mutableContext, proto.Clone(req.GetUserData()).(*persistencespb.TaskQueueUserData)),
 				}, nil
@@ -108,8 +108,8 @@ func (*handler) writeUserData(ctx context.Context, req *tquserdatapb.UpsertTaskQ
 	}
 	response, _, err := chasm.UpdateComponent(
 		ctx,
-		chasm.NewComponentRef[*UserData](key),
-		func(userData *UserData, mutableContext chasm.MutableContext, _ *tquserdatapb.UpsertTaskQueueUserDataRequest) (*tquserdatapb.UpsertTaskQueueUserDataResponse, error) {
+		chasm.NewComponentRef[*TaskQueueUserData](key),
+		func(userData *TaskQueueUserData, mutableContext chasm.MutableContext, _ *tquserdatapb.UpsertTaskQueueUserDataRequest) (*tquserdatapb.UpsertTaskQueueUserDataResponse, error) {
 			if condition.ExpectedVersion != userData.Version {
 				return nil, serviceerror.NewFailedPrecondition("task queue user data version changed")
 			}
