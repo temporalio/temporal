@@ -47,6 +47,7 @@ func (n nexusInvocation) WrapError(result invocationResult, err error) error {
 func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) invocationResult {
 	callbackLogger := log.With(e.Logger,
 		tag.WorkflowNamespace(ns.Name().String()),
+		tag.Operation("CompleteNexusOperation"),
 		tag.Destination(task.destination),
 		tag.WorkflowID(n.workflowID),
 		tag.WorkflowRunID(n.runID),
@@ -55,10 +56,7 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 		tag.RequestID(n.requestID),
 	)
 	if e.HTTPTraceProvider != nil {
-		traceLogger := log.With(callbackLogger,
-			tag.Operation("CompleteNexusOperation"),
-			tag.AttemptStart(time.Now().UTC()),
-		)
+		traceLogger := log.With(callbackLogger, tag.AttemptStart(time.Now().UTC()))
 		if trace := e.HTTPTraceProvider.NewTrace(n.attempt, traceLogger); trace != nil {
 			ctx = httptrace.WithClientTrace(ctx, trace)
 		}
