@@ -92,8 +92,6 @@ require (
 	modernc.org/sqlite v1.51.0
 )
 
-replace go.temporal.io/api => github.com/wenlong-gu/api-go v1.63.7-0.20261002150604-6b55806007ed
-
 require (
 	cel.dev/expr v0.25.2 // indirect
 	cloud.google.com/go v0.123.0 // indirect; indirect e
@@ -224,5 +222,7 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.0 // indirect
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
+
+replace go.temporal.io/api => github.com/wenlong-gu/api-go v1.63.7-0.20261002150604-6b55806007ed
 
 tool golang.org/x/perf/cmd/benchstat
