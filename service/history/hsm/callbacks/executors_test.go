@@ -193,7 +193,7 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 			require.NoError(t, err)
 			env := fakeEnv{node}
 
-			key := definition.NewWorkflowKey("namespace-id", "", "")
+			key := definition.NewWorkflowKey("namespace-id", "workflow-id", "run-id")
 			reg := hsm.NewRegistry()
 			require.NoError(t, callbacks.RegisterExecutor(
 				reg,
@@ -246,7 +246,16 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 					Level:   testlogger.Error,
 					Message: "Callback request failed",
 					Tags: map[string]any{
-						"request-id": "request-id",
+						"nexus-stage":             "handler-outbound",
+						"error":                   testlogger.AnyTagValue,
+						"wf-namespace":            "namespace-name",
+						"destination":             "http://localhost",
+						"wf-id":                   "workflow-id",
+						"wf-run-id":               "run-id",
+						"nexus-completion-source": chasm.WorkflowArchetype,
+						"attempt":                 int32(0),
+						"request-id":              "request-id",
+						"retryable":               tc.retryable,
 					},
 				})
 			}
