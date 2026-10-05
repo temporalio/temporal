@@ -12,7 +12,6 @@ import (
 	commonspb "go.temporal.io/server/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/log"
 	"google.golang.org/grpc"
@@ -29,26 +28,16 @@ const (
 
 type (
 
-	// HealthCheckInterceptor is a gRPC interceptor that records health metrics
+	// HealthCheckInterceptor is a gRPC interceptor that records health signals
 	HealthCheckInterceptor struct {
 		healthSignalAggregator HealthSignalAggregator
 	}
 
-	// HealthSignalAggregator interface for aggregating health signals.
-	// The accessors return false when no signal is available, which callers must not
-	// confuse with a healthy zero reading.
+	// HealthSignalAggregator is the write side of the health signals. The interceptor
+	// only records; the deep health check reads the same aggregator through
+	// health.SignalReader.
 	HealthSignalAggregator interface {
 		Record(rpcMethod string, latency time.Duration, err error)
-		LatencyQuantile(quantile float64) (float64, bool)
-		LatencyQuantileByGroup(groupName string, quantile float64) (float64, bool)
-		ErrorRatio() (float64, bool)
-		ErrorRatioByGroup(groupName string) (float64, bool)
-		Stop()
-	}
-
-	// HealthSignalAggregatorImpl implements HealthSignalAggregator
-	healthSignalAggregatorImpl struct {
-		healthSignals *health.SignalAggregator
 	}
 )
 
@@ -107,6 +96,14 @@ func isExcludedAPI(fullMethod string) bool {
 	return excludedAPIs[fullMethod]
 }
 
+// NewHealthSignals builds the aggregator behind the gRPC health signals. It lives here
+// so the classifier deciding which errors count against the error ratio stays with the
+// rest of the gRPC concerns. The aggregator is returned directly because the deep health
+// check reads it independently of the interceptor.
+func NewHealthSignals(logger log.Logger, getSettings func() health.Settings) *health.SignalAggregator {
+	return health.NewSignalAggregator(logger, getSettings, health.WithIsUnhealthy(isUnhealthyError))
+}
+
 // NewHealthCheckInterceptor creates a new health check interceptor
 func NewHealthCheckInterceptor(healthSignalAggregator HealthSignalAggregator) *HealthCheckInterceptor {
 	return &HealthCheckInterceptor{
@@ -158,44 +155,6 @@ func specialCaseAPIIsPolling(req any) bool {
 	default:
 		return false
 	}
-}
-
-// NewHealthSignalAggregator creates a new instance of HealthSignalAggregatorImpl
-func NewHealthSignalAggregator(
-	logger log.Logger,
-	getSettings dynamicconfig.TypedPropertyFn[health.Settings],
-) *healthSignalAggregatorImpl {
-	signals := health.NewSignalAggregator(logger, getSettings, health.WithIsUnhealthy(isUnhealthyError))
-	signals.Start()
-
-	return &healthSignalAggregatorImpl{
-		healthSignals: signals,
-	}
-}
-
-func (s *healthSignalAggregatorImpl) Record(rpcMethod string, latency time.Duration, err error) {
-	s.healthSignals.Record(rpcMethod, latency, err)
-}
-
-func (s *healthSignalAggregatorImpl) LatencyQuantile(quantile float64) (float64, bool) {
-	return s.healthSignals.LatencyQuantile(quantile)
-}
-
-func (s *healthSignalAggregatorImpl) LatencyQuantileByGroup(groupName string, quantile float64) (float64, bool) {
-	return s.healthSignals.LatencyQuantileByGroup(groupName, quantile)
-}
-
-func (s *healthSignalAggregatorImpl) ErrorRatio() (float64, bool) {
-	return s.healthSignals.ErrorRatio()
-}
-
-func (s *healthSignalAggregatorImpl) ErrorRatioByGroup(groupName string) (float64, bool) {
-	return s.healthSignals.ErrorRatioByGroup(groupName)
-}
-
-// Stop halts the underlying signal aggregator's settings refresh loop.
-func (s *healthSignalAggregatorImpl) Stop() {
-	s.healthSignals.Stop()
 }
 
 func isUnhealthyError(err error) bool {
