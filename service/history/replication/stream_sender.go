@@ -27,6 +27,8 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/transitionhistory"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/wideevents"
@@ -532,6 +534,33 @@ func (s *StreamSenderImpl) sendTasks(
 		return err
 	}
 	skipCount := 0
+
+	// While the sender lags, a run's queued tasks become a streak of verify tasks once its state
+	// has been synced. Only the last verify of a consecutive same-run streak needs to be sent: it
+	// checks a superset of what the earlier ones check, and its watermark acks them. The held
+	// verify is never sent out of order: it is either dropped in favor of the next verify or sent
+	// before anything else (task or watermark) goes out.
+	coalesceVerifyTasks := s.config.ReplicationStreamSenderCoalesceVerifyTasks()
+	var held *heldVerifyTask
+	sendHeld := func(attempt int64) error {
+		if err := s.sendConvertedTask(held.item, held.task, priority, attempt); err != nil {
+			return err
+		}
+		held = nil
+		skipCount = 0
+		return nil
+	}
+	flushHeld := func() error {
+		if held == nil {
+			return nil
+		}
+		var attempt int64
+		return backoff.ThrottleRetry(func() error {
+			attempt++
+			return sendHeld(attempt)
+		}, s.newSendRetryPolicy(), isRetryableError)
+	}
+
 Loop:
 	for iter.HasNext() {
 		if s.shutdownChan.IsShutdown() {
@@ -548,6 +577,9 @@ Loop:
 		// so it will not ACK back to sender, sender will not update the ACK level.
 		// i.e. in tiered stack, if no low priority task in queue, we should still send watermark info to receiver to let it update ACK level.
 		if skipCount > TaskMaxSkipCount {
+			if err := flushHeld(); err != nil {
+				return fmt.Errorf("failed to send held verify task: %w", err)
+			}
 			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
 					Messages: &replicationspb.WorkflowReplicationMessages{
@@ -615,67 +647,28 @@ Loop:
 				return nil
 			}
 			task.Priority = priority
-			if s.isTieredStackEnabled {
-				if err := s.flowController.Wait(s.server.Context(), priority); err != nil {
-					if errors.Is(err, context.Canceled) {
+			if coalesceVerifyTasks {
+				if held != nil {
+					if canCoalesceVerifyTasks(held.task, task) {
+						s.recordVerifyTaskCoalesced(held.item, priority)
+						held = nil
+					} else if err := sendHeld(attempt); err != nil {
 						return err
 					}
-					// continue to send task if wait operation times out.
+				}
+				if isCoalescableVerifyTask(task) {
+					held = &heldVerifyTask{item: item, task: task}
+					return nil
 				}
 			}
-			if s.config.ReplicationEnableRateLimit() && task.Priority == enumsspb.TASK_PRIORITY_LOW {
-				nsName, err := s.shardContext.GetNamespaceRegistry().GetNamespaceName(
-					namespace.ID(item.GetNamespaceID()),
-				)
-				if err != nil {
-					// if there is error, then blindly send the task, better safe than sorry
-					nsName = namespace.EmptyName
-				}
-				rlStartTime := time.Now().UTC()
-				if err := s.ssRateLimiter.Wait(s.server.Context(), quotas.NewRequest(
-					task.TaskType.String(),
-					taskSchedulerToken,
-					nsName.String(),
-					headers.SystemPreemptableCallerInfo.CallerType,
-					0,
-					"",
-				)); err != nil {
-					return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationRateLimit, fmt.Errorf("rate_limit: %w", err))
-				}
-				metrics.ReplicationRateLimitLatency.With(s.metrics).Record(time.Since(rlStartTime), metrics.OperationTag(TaskOperationTag(task)))
-			}
-			if s.config.EmitReplicationLifecycleEvents() {
-				s.emitReplicationSent(task, item)
-			}
-			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
-				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
-					Messages: &replicationspb.WorkflowReplicationMessages{
-						ReplicationTasks:           []*replicationspb.ReplicationTask{task},
-						ExclusiveHighWatermark:     task.SourceTaskId + 1,
-						ExclusiveHighWatermarkTime: task.VisibilityTime,
-						Priority:                   priority,
-					},
-				},
-			}); err != nil {
-				return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationStreamSend, fmt.Errorf("send: %w", err))
+			if err := s.sendConvertedTask(item, task, priority, attempt); err != nil {
+				return err
 			}
 			skipCount = 0
-			metrics.ReplicationTasksSend.With(s.metrics).Record(
-				int64(1),
-				metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
-				metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
-				metrics.OperationTag(TaskOperationTag(task)),
-			)
 			return nil
 		}
 
-		retryPolicy := backoff.NewExponentialRetryPolicy(s.config.ReplicationStreamSenderErrorRetryWait()).
-			WithBackoffCoefficient(s.config.ReplicationStreamSenderErrorRetryBackoffCoefficient()).
-			WithMaximumInterval(s.config.ReplicationStreamSenderErrorRetryMaxInterval()).
-			WithMaximumAttempts(s.config.ReplicationStreamSenderErrorRetryMaxAttempts()).
-			WithExpirationInterval(s.config.ReplicationStreamSenderErrorRetryExpiration())
-
-		err = backoff.ThrottleRetry(operation, retryPolicy, isRetryableError)
+		err = backoff.ThrottleRetry(operation, s.newSendRetryPolicy(), isRetryableError)
 		metrics.ReplicationTaskSendAttempt.With(s.metrics).Record(
 			attempt,
 			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
@@ -724,6 +717,9 @@ Loop:
 			return fmt.Errorf("failed to send task: %v, cause: %w", item, err)
 		}
 	}
+	if err := flushHeld(); err != nil {
+		return fmt.Errorf("failed to send held verify task: %w", err)
+	}
 	return s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 		Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
 			Messages: &replicationspb.WorkflowReplicationMessages{
@@ -734,6 +730,127 @@ Loop:
 			},
 		},
 	})
+}
+
+func (s *StreamSenderImpl) newSendRetryPolicy() backoff.RetryPolicy {
+	return backoff.NewExponentialRetryPolicy(s.config.ReplicationStreamSenderErrorRetryWait()).
+		WithBackoffCoefficient(s.config.ReplicationStreamSenderErrorRetryBackoffCoefficient()).
+		WithMaximumInterval(s.config.ReplicationStreamSenderErrorRetryMaxInterval()).
+		WithMaximumAttempts(s.config.ReplicationStreamSenderErrorRetryMaxAttempts()).
+		WithExpirationInterval(s.config.ReplicationStreamSenderErrorRetryExpiration())
+}
+
+// sendConvertedTask applies flow control and rate limiting to an already converted task and sends it.
+func (s *StreamSenderImpl) sendConvertedTask(
+	item tasks.Task,
+	task *replicationspb.ReplicationTask,
+	priority enumsspb.TaskPriority,
+	attempt int64,
+) error {
+	if s.isTieredStackEnabled {
+		if err := s.flowController.Wait(s.server.Context(), priority); err != nil {
+			if errors.Is(err, context.Canceled) {
+				return err
+			}
+			// continue to send task if wait operation times out.
+		}
+	}
+	if s.config.ReplicationEnableRateLimit() && task.Priority == enumsspb.TASK_PRIORITY_LOW {
+		nsName, err := s.shardContext.GetNamespaceRegistry().GetNamespaceName(
+			namespace.ID(item.GetNamespaceID()),
+		)
+		if err != nil {
+			// if there is error, then blindly send the task, better safe than sorry
+			nsName = namespace.EmptyName
+		}
+		rlStartTime := time.Now().UTC()
+		if err := s.ssRateLimiter.Wait(s.server.Context(), quotas.NewRequest(
+			task.TaskType.String(),
+			taskSchedulerToken,
+			nsName.String(),
+			headers.SystemPreemptableCallerInfo.CallerType,
+			0,
+			"",
+		)); err != nil {
+			return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationRateLimit, fmt.Errorf("rate_limit: %w", err))
+		}
+		metrics.ReplicationRateLimitLatency.With(s.metrics).Record(time.Since(rlStartTime), metrics.OperationTag(TaskOperationTag(task)))
+	}
+	if s.config.EmitReplicationLifecycleEvents() {
+		s.emitReplicationSent(task, item)
+	}
+	if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
+		Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
+			Messages: &replicationspb.WorkflowReplicationMessages{
+				ReplicationTasks:           []*replicationspb.ReplicationTask{task},
+				ExclusiveHighWatermark:     task.SourceTaskId + 1,
+				ExclusiveHighWatermarkTime: task.VisibilityTime,
+				Priority:                   priority,
+			},
+		},
+	}); err != nil {
+		return s.recordRetry(item, task.GetTaskType(), priority, attempt, wideevents.ReplOperationStreamSend, fmt.Errorf("send: %w", err))
+	}
+	metrics.ReplicationTasksSend.With(s.metrics).Record(
+		int64(1),
+		metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+		metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+		metrics.OperationTag(TaskOperationTag(task)),
+	)
+	return nil
+}
+
+func (s *StreamSenderImpl) recordVerifyTaskCoalesced(item tasks.Task, priority enumsspb.TaskPriority) {
+	metrics.ReplicationTaskVerifyCoalesced.With(s.metrics).Record(
+		int64(1),
+		metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+		metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+		metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
+		metrics.ReplicationTaskPriorityTag(priority),
+	)
+}
+
+type heldVerifyTask struct {
+	item tasks.Task
+	task *replicationspb.ReplicationTask
+}
+
+// isCoalescableVerifyTask reports whether a converted task may be held back and possibly dropped
+// in favor of a later verify task of the same run. A verify carrying a new run ID is never
+// dropped because the receiver uses it to verify that the new run exists.
+func isCoalescableVerifyTask(task *replicationspb.ReplicationTask) bool {
+	attr := task.GetVerifyVersionedTransitionTaskAttributes()
+	return attr != nil && attr.GetNewRunId() == ""
+}
+
+// canCoalesceVerifyTasks reports whether the verify task prev can be dropped because next, the
+// immediately following converted task, verifies a superset of it: same execution, a versioned
+// transition that is not older, and an event version history that contains prev's last event. A
+// verify whose events sit on a different branch can make the receiver backfill that branch, so it
+// is never dropped in favor of a verify on another branch.
+func canCoalesceVerifyTasks(prev *replicationspb.ReplicationTask, next *replicationspb.ReplicationTask) bool {
+	prevAttr := prev.GetVerifyVersionedTransitionTaskAttributes()
+	nextAttr := next.GetVerifyVersionedTransitionTaskAttributes()
+	if prevAttr == nil || nextAttr == nil || prevAttr.GetNewRunId() != "" {
+		return false
+	}
+	if prevAttr.GetNamespaceId() != nextAttr.GetNamespaceId() ||
+		prevAttr.GetWorkflowId() != nextAttr.GetWorkflowId() ||
+		prevAttr.GetRunId() != nextAttr.GetRunId() ||
+		prevAttr.GetArchetypeId() != nextAttr.GetArchetypeId() {
+		return false
+	}
+	if transitionhistory.Compare(prev.GetVersionedTransition(), next.GetVersionedTransition()) > 0 {
+		return false
+	}
+	prevItems := prevAttr.GetEventVersionHistory()
+	if len(prevItems) == 0 {
+		return true
+	}
+	return versionhistory.ContainsVersionHistoryItem(
+		versionhistory.NewVersionHistory(nil, nextAttr.GetEventVersionHistory()),
+		prevItems[len(prevItems)-1],
+	)
 }
 
 func (s *StreamSenderImpl) sendToStream(payload *historyservice.StreamWorkflowReplicationMessagesResponse) error {

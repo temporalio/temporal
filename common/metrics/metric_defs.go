@@ -1143,6 +1143,7 @@ var (
 	ReplicationTaskSendAttempt         = NewDimensionlessHistogramDef("replication_task_send_attempt")
 	ReplicationTaskSendError           = NewCounterDef("replication_task_send_error")
 	ReplicationTaskSendSkipped         = NewCounterDef("replication_task_send_skipped")
+	ReplicationTaskVerifyCoalesced     = NewCounterDef("replication_task_verify_coalesced")
 	ReplicationTaskGenerationLatency   = NewTimerDef("replication_task_generation_latency")
 	ReplicationTaskLoadLatency         = NewTimerDef("replication_task_load_latency")
 	ReplicationTaskLoadSize            = NewDimensionlessHistogramDef("replication_task_load_size")
