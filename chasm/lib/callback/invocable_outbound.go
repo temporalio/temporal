@@ -46,17 +46,19 @@ func (n invocableOutbound) Invoke(
 	task *callbackspb.InvocationTask,
 	taskAttr chasm.TaskAttributes,
 ) invocationResult {
+	callbackLogger := log.With(h.logger,
+		tag.WorkflowNamespace(ns.Name().String()),
+		tag.Destination(taskAttr.Destination),
+		tag.WorkflowID(n.businessID),
+		tag.WorkflowRunID(n.runID),
+		tag.NexusCompletionSource(n.completionSourceTag),
+		tag.Attempt(n.attempt),
+		tag.RequestID(n.requestID),
+	)
 	if h.httpTraceProvider != nil {
-		traceLogger := log.With(h.logger,
-			tag.WorkflowNamespace(ns.Name().String()),
+		traceLogger := log.With(callbackLogger,
 			tag.Operation("CompleteNexusOperation"),
-			tag.Destination(taskAttr.Destination),
-			tag.WorkflowID(n.businessID),
-			tag.WorkflowRunID(n.runID),
-			tag.NexusCompletionSource(n.completionSourceTag),
 			tag.AttemptStart(time.Now().UTC()),
-			tag.Attempt(n.attempt),
-			tag.RequestID(n.requestID),
 		)
 		if trace := h.httpTraceProvider.NewTrace(n.attempt, traceLogger); trace != nil {
 			ctx = httptrace.WithClientTrace(ctx, trace)
@@ -90,16 +92,9 @@ func (n invocableOutbound) Invoke(
 
 	if err != nil {
 		retryable := isRetryableCallError(err)
-		h.logger.Error(
+		callbackLogger.Error(
 			"Callback request failed",
 			tag.Error(err),
-			tag.WorkflowNamespace(ns.Name().String()),
-			tag.Destination(taskAttr.Destination),
-			tag.WorkflowID(n.businessID),
-			tag.WorkflowRunID(n.runID),
-			tag.NexusCompletionSource(n.completionSourceTag),
-			tag.Attempt(n.attempt),
-			tag.RequestID(n.requestID),
 			tag.Bool("retryable", retryable),
 		)
 		if retryable {
