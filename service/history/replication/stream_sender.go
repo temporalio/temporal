@@ -293,6 +293,8 @@ func (s *StreamSenderImpl) sendEventLoop(priority enumsspb.TaskPriority) (retErr
 		if panicErr != nil {
 			retErr = panicErr
 			metrics.ReplicationStreamPanic.With(s.metrics).Record(1)
+		} else if errors.Is(retErr, context.Canceled) && s.ctx.Err() != nil {
+			retErr = nil
 		}
 	}()
 
