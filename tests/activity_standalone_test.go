@@ -942,6 +942,16 @@ func (s *standaloneActivityTestSuite) TestStart() {
 	t.Run("AttachLinksOnConflictUnionsLinks", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
+		serializationContext := &nexuspb.PropagatedSerializationContext{
+			Endpoint:  "endpoint",
+			Service:   "service",
+			Operation: "operation",
+		}
+		otherSerializationContext := &nexuspb.PropagatedSerializationContext{
+			Endpoint:  "other-endpoint",
+			Service:   "service",
+			Operation: "operation",
+		}
 
 		firstLinks := []*commonpb.Link{
 			{
@@ -981,10 +991,11 @@ func (s *standaloneActivityTestSuite) TestStart() {
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
-			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
-			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
-			Links:               firstLinks,
+			StartToCloseTimeout:                 durationpb.New(defaultStartToCloseTimeout),
+			RequestId:                           env.Tv().Any().String(),
+			IdConflictPolicy:                    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+			Links:                               firstLinks,
+			PropagatedNexusSerializationContext: serializationContext,
 		})
 		require.NoError(t, err)
 		require.True(t, firstResp.Started)
@@ -998,10 +1009,11 @@ func (s *standaloneActivityTestSuite) TestStart() {
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
-			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
-			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
-			Links:               secondLinks,
+			StartToCloseTimeout:                 durationpb.New(defaultStartToCloseTimeout),
+			RequestId:                           env.Tv().Any().String(),
+			IdConflictPolicy:                    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+			Links:                               secondLinks,
+			PropagatedNexusSerializationContext: otherSerializationContext,
 			OnConflictOptions: &commonpb.OnConflictOptions{
 				AttachLinks: true,
 			},
@@ -1016,6 +1028,7 @@ func (s *standaloneActivityTestSuite) TestStart() {
 			RunId:      firstResp.RunId,
 		})
 		require.NoError(t, err)
+		protorequire.ProtoEqual(t, serializationContext, descResp.GetInfo().GetPropagatedNexusSerializationContext())
 		expected := append([]*commonpb.Link{}, firstLinks...)
 		expected = append(expected, secondLinks...)
 		// Links across requests are stored in a map keyed by request ID, so their relative order is non-deterministic.
