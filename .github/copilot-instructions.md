@@ -24,8 +24,6 @@ Express each rule as a concise, direct statement of the expected code or review 
 
 ## 3. Testing Correctness and Reliability
 
-- Write tests for new functionality and run tests after altering code or tests. Start with unit tests for fastest feedback.
-- Test both successful behavior and failure modes.
 - Always include `-tags test_dep` when running tests. Include the `integration` tag only for integration tests.
 - Subtests use their `t` parameter rather than `s.T()`.
 - Eventually blocks containing assertions use `EventuallyWithT` and its block-local `t`.
