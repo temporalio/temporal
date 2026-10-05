@@ -40,19 +40,17 @@ type (
 	StreamReceiverImpl struct {
 		ProcessToolBox
 
-		status                  int32
-		clientShardKey          ClusterShardKey
-		serverShardKey          ClusterShardKey
-		highPriorityTaskTracker ExecutableTaskTracker
-		lowPriorityTaskTracker  ExecutableTaskTracker
-		laneRegistry            *receiverLaneRegistry
-		shutdownChan            channel.ShutdownOnce
-		logger                  log.Logger
-		stream                  Stream
-		taskConverter           ExecutableTaskConverter
-		receiverMode            ReceiverMode
-		flowController          ReceiverFlowController
-		recvSignalChan          chan struct{}
+		status         int32
+		clientShardKey ClusterShardKey
+		serverShardKey ClusterShardKey
+		laneRegistry   *receiverLaneRegistry
+		shutdownChan   channel.ShutdownOnce
+		logger         log.Logger
+		stream         Stream
+		taskConverter  ExecutableTaskConverter
+		receiverMode   ReceiverMode
+		flowController ReceiverFlowController
+		recvSignalChan chan struct{}
 
 		slowSubmissionMu         sync.RWMutex
 		slowSubmissionTimestamps map[enumsspb.TaskPriority]time.Time
@@ -91,18 +89,14 @@ func NewStreamReceiver(
 		tag.ShardID(clientShardKey.ShardID), // client is the local cluster (target cluster, passive cluster)
 		tag.Operation("replication-stream-receiver"),
 	)
-	highPriorityTaskTracker := NewExecutableTaskTracker(logger, processToolBox.MetricsHandler)
-	lowPriorityTaskTracker := NewExecutableTaskTracker(logger, processToolBox.MetricsHandler)
 	receiver := &StreamReceiverImpl{
 		ProcessToolBox: processToolBox,
 
-		status:                  common.DaemonStatusInitialized,
-		clientShardKey:          clientShardKey,
-		serverShardKey:          serverShardKey,
-		highPriorityTaskTracker: highPriorityTaskTracker,
-		lowPriorityTaskTracker:  lowPriorityTaskTracker,
-		shutdownChan:            channel.NewShutdownOnce(),
-		logger:                  logger,
+		status:         common.DaemonStatusInitialized,
+		clientShardKey: clientShardKey,
+		serverShardKey: serverShardKey,
+		shutdownChan:   channel.NewShutdownOnce(),
+		logger:         logger,
 		stream: newStream(
 			processToolBox,
 			clientShardKey,
@@ -117,13 +111,13 @@ func NewStreamReceiver(
 	taskTrackerMap := make(map[enumsspb.TaskPriority]FlowControlSignalProvider)
 	taskTrackerMap[enumsspb.TASK_PRIORITY_HIGH] = func() *FlowControlSignal {
 		return &FlowControlSignal{
-			taskTrackingCount:  receiver.priorityTrackingCount(enumsspb.TASK_PRIORITY_HIGH),
+			taskTrackingCount:  receiver.laneRegistry.TrackingCount(enumsspb.TASK_PRIORITY_HIGH),
 			lastSlowSubmission: receiver.getLastSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_HIGH),
 		}
 	}
 	taskTrackerMap[enumsspb.TASK_PRIORITY_LOW] = func() *FlowControlSignal {
 		return &FlowControlSignal{
-			taskTrackingCount:  receiver.priorityTrackingCount(enumsspb.TASK_PRIORITY_LOW),
+			taskTrackingCount:  receiver.laneRegistry.TrackingCount(enumsspb.TASK_PRIORITY_LOW),
 			lastSlowSubmission: receiver.getLastSlowSubmissionTimestamp(enumsspb.TASK_PRIORITY_LOW),
 		}
 	}
@@ -176,8 +170,6 @@ func (r *StreamReceiverImpl) Stop() {
 
 	r.shutdownChan.Shutdown()
 	r.stream.Close()
-	r.highPriorityTaskTracker.Cancel()
-	r.lowPriorityTaskTracker.Cancel()
 	r.laneRegistry.Close()
 
 	r.logger.Info("StreamReceiver shutting down.")
@@ -245,10 +237,8 @@ func (r *StreamReceiverImpl) recvEventLoop() error {
 func (r *StreamReceiverImpl) ackMessage(
 	stream Stream,
 ) (int64, error) {
-	highPriorityWaterMarkInfo := r.highPriorityTaskTracker.LowWatermark()
-	lowPriorityWaterMarkInfo := r.lowPriorityTaskTracker.LowWatermark()
-	size := r.highPriorityTaskTracker.Size() + r.lowPriorityTaskTracker.Size() +
-		r.laneRegistry.TrackingCount(enumsspb.TASK_PRIORITY_HIGH) +
+	highPriorityWaterMarkInfo, lowPriorityWaterMarkInfo := r.laneRegistry.DefaultWatermarks()
+	size := r.laneRegistry.TrackingCount(enumsspb.TASK_PRIORITY_HIGH) +
 		r.laneRegistry.TrackingCount(enumsspb.TASK_PRIORITY_LOW)
 
 	var highPriorityWatermark, lowPriorityWatermark *replicationspb.ReplicationState
@@ -295,7 +285,7 @@ func (r *StreamReceiverImpl) ackMessage(
 			inclusiveLowWaterMark = lowPriorityWaterMarkInfo.Watermark
 			inclusiveLowWaterMarkTime = lowPriorityWaterMarkInfo.Timestamp
 		}
-		laneWatermarks := r.laneWatermarks()
+		laneWatermarks := r.laneRegistry.Watermarks()
 		if len(laneWatermarks) > 0 {
 			laneStates = make(map[string]*replicationspb.ReplicationState, len(laneWatermarks))
 		}
@@ -406,7 +396,10 @@ func (r *StreamReceiverImpl) processMessages(
 		exclusiveHighWatermark := messages.ExclusiveHighWatermark
 		exclusiveHighWatermarkTime := timestamp.TimeValue(messages.ExclusiveHighWatermarkTime)
 		laneInfo := messages.GetLaneInfo()
-		taskTracker, err := r.getTaskTrackerForLane(priority, laneInfo)
+		trackedTasks, err := r.laneRegistry.TrackBatch(priority, laneInfo, WatermarkInfo{
+			Watermark: exclusiveHighWatermark,
+			Timestamp: exclusiveHighWatermarkTime,
+		}, convertedTasks...)
 		if err != nil {
 			return NewStreamError("ReplicationTask invalid lane", err)
 		}
@@ -424,13 +417,6 @@ func (r *StreamReceiverImpl) processMessages(
 
 		submissionThreshold := r.Config.ReplicationReceiverSlowSubmissionLatencyThreshold()
 
-		trackedTasks := taskTracker.TrackTasks(WatermarkInfo{
-			Watermark: exclusiveHighWatermark,
-			Timestamp: exclusiveHighWatermarkTime,
-		}, convertedTasks...)
-		if laneInfo != nil {
-			r.laneRegistry.FinishBatchRegistration(laneInfo.GetLaneId(), laneInfo.GetRetireLane())
-		}
 		for _, task := range trackedTasks {
 			schedulerPriority, err := r.getTaskSchedulerPriority(priority, task)
 			if err != nil {
@@ -476,47 +462,6 @@ func (r *StreamReceiverImpl) recordSlowSubmission(priority enumsspb.TaskPriority
 	r.slowSubmissionMu.Lock()
 	defer r.slowSubmissionMu.Unlock()
 	r.slowSubmissionTimestamps[priority] = ts
-}
-
-func (r *StreamReceiverImpl) getTaskTracker(priority enumsspb.TaskPriority) (ExecutableTaskTracker, error) {
-	switch priority {
-	case enumsspb.TASK_PRIORITY_UNSPECIFIED, enumsspb.TASK_PRIORITY_HIGH:
-		return r.highPriorityTaskTracker, nil
-	case enumsspb.TASK_PRIORITY_LOW:
-		return r.lowPriorityTaskTracker, nil
-	default:
-		return nil, serviceerror.NewInvalidArgumentf("Unknown task priority: %v", priority)
-	}
-}
-
-func (r *StreamReceiverImpl) getTaskTrackerForLane(
-	priority enumsspb.TaskPriority,
-	laneInfo *replicationspb.ReplicationLaneInfo,
-) (ExecutableTaskTracker, error) {
-	if laneInfo == nil {
-		return r.getTaskTracker(priority)
-	}
-	return r.laneRegistry.Resolve(laneInfo.GetLaneId(), priority, laneInfo.GetRetireLane())
-}
-
-func (r *StreamReceiverImpl) finishLaneBatchRegistration(laneID string, retire bool) {
-	r.laneRegistry.FinishBatchRegistration(laneID, retire)
-}
-
-func (r *StreamReceiverImpl) laneWatermarks() map[string]WatermarkInfo {
-	return r.laneRegistry.Watermarks()
-}
-
-func (r *StreamReceiverImpl) priorityTrackingCount(priority enumsspb.TaskPriority) int {
-	switch priority {
-	case enumsspb.TASK_PRIORITY_HIGH:
-		return r.highPriorityTaskTracker.Size() + r.laneRegistry.TrackingCount(priority)
-	case enumsspb.TASK_PRIORITY_LOW:
-		return r.lowPriorityTaskTracker.Size() + r.laneRegistry.TrackingCount(priority)
-	default:
-		r.logger.DPanic("Replication lane tracking count requested for invalid priority")
-		return 0
-	}
 }
 
 func (r *StreamReceiverImpl) getTaskSchedulerPriority(priority enumsspb.TaskPriority, task TrackableExecutableTask) (enumsspb.TaskPriority, error) {

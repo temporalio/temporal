@@ -6,46 +6,59 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 )
 
 type receiverLaneRegistry struct {
-	mu             sync.Mutex
-	lanes          map[string]*receiverLane
-	closed         bool
-	logger         log.Logger
-	metricsHandler metrics.Handler
+	mu                  sync.Mutex
+	highPriorityTracker ExecutableTaskTracker
+	lowPriorityTracker  ExecutableTaskTracker
+	lanes               map[string]*receiverLane
+	closed              bool
+	logger              log.Logger
+	metricsHandler      metrics.Handler
 }
 
 // receiverLane intentionally contains no logical key or policy state. The receiver
 // only preserves ordering and progress for the sender's stream-local lane ID.
 
 type receiverLane struct {
-	tracker                    ExecutableTaskTracker
-	priority                   enumsspb.TaskPriority
-	retiring                   bool
-	batchRegistrationsInFlight int
+	tracker  ExecutableTaskTracker
+	priority enumsspb.TaskPriority
+	retiring bool
 }
 
 func newReceiverLaneRegistry(logger log.Logger, metricsHandler metrics.Handler) *receiverLaneRegistry {
 	return &receiverLaneRegistry{
-		lanes:          make(map[string]*receiverLane),
-		logger:         logger,
-		metricsHandler: metricsHandler,
+		highPriorityTracker: NewExecutableTaskTracker(logger, metricsHandler),
+		lowPriorityTracker:  NewExecutableTaskTracker(logger, metricsHandler),
+		lanes:               make(map[string]*receiverLane),
+		logger:              logger,
+		metricsHandler:      metricsHandler,
 	}
 }
 
-func (r *receiverLaneRegistry) Resolve(
-	laneID string,
+func (r *receiverLaneRegistry) TrackBatch(
 	priority enumsspb.TaskPriority,
-	retire bool,
-) (ExecutableTaskTracker, error) {
+	laneInfo *replicationspb.ReplicationLaneInfo,
+	watermark WatermarkInfo,
+	tasks ...TrackableExecutableTask,
+) ([]TrackableExecutableTask, error) {
+	if laneInfo == nil {
+		tracker, err := r.defaultTracker(priority)
+		if err != nil {
+			return nil, err
+		}
+		return tracker.TrackTasks(watermark, tasks...), nil
+	}
+	laneID := laneInfo.GetLaneId()
 	if laneID == "" {
 		return nil, serviceerror.NewInternal("empty replication lane ID")
 	}
-	if priority == enumsspb.TASK_PRIORITY_UNSPECIFIED {
-		return nil, serviceerror.NewInternal("replication lanes require tiered processing")
+	if priority != enumsspb.TASK_PRIORITY_HIGH && priority != enumsspb.TASK_PRIORITY_LOW {
+		return nil, serviceerror.NewInternalf("invalid replication lane priority: %v", priority)
 	}
 
 	r.mu.Lock()
@@ -67,28 +80,37 @@ func (r *receiverLaneRegistry) Resolve(
 			lane.priority,
 			priority,
 		)
-	} else if lane.retiring && !retire {
+	} else if lane.retiring && !laneInfo.GetRetireLane() {
 		return nil, serviceerror.NewInternalf("replication lane %q received traffic after retirement", laneID)
 	}
-	lane.batchRegistrationsInFlight++
-	return lane.tracker, nil
-}
-
-func (r *receiverLaneRegistry) FinishBatchRegistration(laneID string, retire bool) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	lane, ok := r.lanes[laneID]
-	if !ok || lane.batchRegistrationsInFlight == 0 {
-		r.logger.DPanic("Replication lane batch finished without a matching resolution")
-		return
-	}
-	lane.batchRegistrationsInFlight--
-	if retire {
+	trackedTasks := lane.tracker.TrackTasks(watermark, tasks...)
+	if laneInfo.GetRetireLane() {
 		lane.retiring = true
 	}
+	return trackedTasks, nil
+}
+
+func (r *receiverLaneRegistry) defaultTracker(priority enumsspb.TaskPriority) (ExecutableTaskTracker, error) {
+	switch priority {
+	case enumsspb.TASK_PRIORITY_UNSPECIFIED, enumsspb.TASK_PRIORITY_HIGH:
+		return r.highPriorityTracker, nil
+	case enumsspb.TASK_PRIORITY_LOW:
+		return r.lowPriorityTracker, nil
+	default:
+		return nil, serviceerror.NewInvalidArgumentf("Unknown task priority: %v", priority)
+	}
+}
+
+func (r *receiverLaneRegistry) DefaultWatermarks() (highPriority, lowPriority *WatermarkInfo) {
+	return r.highPriorityTracker.LowWatermark(), r.lowPriorityTracker.LowWatermark()
 }
 
 func (r *receiverLaneRegistry) TrackingCount(priority enumsspb.TaskPriority) int {
+	tracker, err := r.defaultTracker(priority)
+	if err != nil || priority == enumsspb.TASK_PRIORITY_UNSPECIFIED {
+		r.logger.DPanic("Replication lane tracking count requested for invalid priority")
+		return 0
+	}
 	r.mu.Lock()
 	lanes := make([]*receiverLane, 0, len(r.lanes))
 	for _, lane := range r.lanes {
@@ -98,7 +120,7 @@ func (r *receiverLaneRegistry) TrackingCount(priority enumsspb.TaskPriority) int
 	}
 	r.mu.Unlock()
 
-	count := 0
+	count := tracker.Size()
 	for _, lane := range lanes {
 		count += lane.tracker.Size()
 	}
@@ -121,7 +143,7 @@ func (r *receiverLaneRegistry) Watermarks() map[string]WatermarkInfo {
 			r.mu.Unlock()
 			continue
 		}
-		if lane.retiring && lane.batchRegistrationsInFlight == 0 && lane.tracker.Size() == 0 && watermark != nil {
+		if lane.retiring && lane.tracker.Size() == 0 && watermark != nil {
 			delete(r.lanes, laneID)
 			r.mu.Unlock()
 			continue
@@ -138,6 +160,8 @@ func (r *receiverLaneRegistry) Close() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.closed = true
+	r.highPriorityTracker.Cancel()
+	r.lowPriorityTracker.Cancel()
 	for _, lane := range r.lanes {
 		lane.tracker.Cancel()
 	}
