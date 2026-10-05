@@ -340,7 +340,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 				tc.assertOutcome(t, c, executeErr)
 			})
 
-			if tc.expectedMetricOutcome != "success" {
+			if tc.expectedEvent != "success" {
 				// A callback that will be retried is logged as a warning; only a dropped one is an error.
 				level := testlogger.Error
 				if tc.expectedEvent == "retryable-error" {
