@@ -4,8 +4,6 @@ import (
 	"cmp"
 	"context"
 	"fmt"
-	"os"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -16,6 +14,7 @@ import (
 	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/trace"
 	otelnoop "go.opentelemetry.io/otel/trace/noop"
+	"go.temporal.io/server/common/debug"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials/insecure"
@@ -23,8 +22,6 @@ import (
 )
 
 const (
-	debugModeEnvVar = "TEMPORAL_OTEL_DEBUG"
-
 	// the following defaults were taken from the grpc docs as of grpc v1.46.
 	// they are not available programmatically
 
@@ -417,11 +414,7 @@ func (e *exporter) UnmarshalYAML(n *yaml.Node) error {
 }
 
 func DebugMode() bool {
-	isDebug, err := strconv.ParseBool(os.Getenv(debugModeEnvVar))
-	if err != nil {
-		return false
-	}
-	return isDebug
+	return debug.OTelDebugMode()
 }
 
 func IsEnabled(t trace.Tracer) bool {

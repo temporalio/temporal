@@ -7,7 +7,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/debug"
 )
 
 // ErrInvalidTransition is returned from [Transition.Apply] on an invalid state transition.
@@ -53,7 +53,7 @@ func (t Transition[S, SM, E]) Apply(sm SM, ctx MutableContext, event E) (retErr 
 	prevState := sm.StateMachineState()
 
 	// Defer to always emit the transition telemetry event.
-	if telemetry.DebugMode() {
+	if debug.OTelDebugMode() {
 		defer func() {
 			attrs := []attribute.KeyValue{
 				attribute.String("chasm.transition.source", fmt.Sprintf("%v", prevState)),
