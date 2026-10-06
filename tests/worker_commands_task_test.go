@@ -750,7 +750,10 @@ func (s *WorkerCommandsTaskSuite) TestPollWorkerCommandsWithDeploymentOptions() 
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
-	tv := env.Tv()
+	tv := env.Tv().
+		WithTaskQueue("worker-commands-tq").
+		WithDeploymentSeries("worker-commands-deployment").
+		WithBuildID("worker-commands-build")
 	poller := env.TaskPoller()
 	controlQueueName := tv.ControlQueueName(env.Namespace().String())
 	deploymentOptions := tv.WorkerDeploymentOptions(true)
