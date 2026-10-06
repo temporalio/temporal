@@ -58,11 +58,21 @@ type (
 
 var Module = workercommon.AnnotateWorkerComponentProvider(newComponent)
 
+var WorkerDeleteNamespaceActivityLimits = dynamicconfig.NewGlobalTypedSetting(
+	"worker.deleteNamespaceActivityLimitsConfig",
+	sdkworker.Options{},
+	`WorkerDeleteNamespaceActivityLimitsConfig is a struct with relevant sdkworker.Options
+settings for controlling remote activity concurrency for delete namespace workflows.
+Valid fields: MaxConcurrentActivityExecutionSize, TaskQueueActivitiesPerSecond,
+WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
+`,
+)
+
 func newComponent(
 	params componentParams,
 ) workercommon.WorkerComponent {
 	return &deleteNamespaceComponent{
-		atWorkerCfg:                  dynamicconfig.WorkerDeleteNamespaceActivityLimits.Get(params.DynamicCollection)(),
+		atWorkerCfg:                  WorkerDeleteNamespaceActivityLimits.Get(params.DynamicCollection)(),
 		visibilityManager:            params.VisibilityManager,
 		metadataManager:              params.MetadataManager,
 		clusterMetadata:              params.ClusterMetadata,

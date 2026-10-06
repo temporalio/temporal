@@ -230,7 +230,7 @@ func NewConfig(
 		EnableParentClosePolicyWorker:        dynamicconfig.EnableParentClosePolicyWorker.Get(dc),
 		EmitNamespaceLifecycleEvents:         dynamicconfig.EmitNamespaceLifecycleEvents.Get(dc),
 		PerNamespaceWorkerCount:              dynamicconfig.WorkerPerNamespaceWorkerCount.Subscribe(dc),
-		PerNamespaceWorkerOptions:            dynamicconfig.WorkerPerNamespaceWorkerOptions.Subscribe(dc),
+		PerNamespaceWorkerOptions:            WorkerPerNamespaceWorkerOptions.Subscribe(dc),
 		PerNamespaceWorkerStartRate:          dynamicconfig.WorkerPerNamespaceWorkerStartRate.Get(dc),
 		ThrottledLogRPS:                      dynamicconfig.WorkerThrottledLogRPS.Get(dc),
 		PersistenceMaxQPS:                    dynamicconfig.WorkerPersistenceMaxQPS.Get(dc),

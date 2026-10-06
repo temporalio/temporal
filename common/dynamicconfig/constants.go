@@ -5,7 +5,6 @@ import (
 	"os"
 	"time"
 
-	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/primitives"
@@ -3690,11 +3689,6 @@ The configured value will be divided by the number of worker hosts to get the pe
 		1,
 		`WorkerPerNamespaceWorkerCount controls number of per-ns (scheduler, batcher, etc.) workers to run per namespace`,
 	)
-	WorkerPerNamespaceWorkerOptions = NewNamespaceTypedSetting(
-		"worker.perNamespaceWorkerOptions",
-		sdkworker.Options{},
-		`WorkerPerNamespaceWorkerOptions are SDK worker options for per-namespace workers`,
-	)
 	WorkerPerNamespaceWorkerStartRate = NewGlobalFloatSetting(
 		"worker.perNamespaceWorkerStartRate",
 		10.0,
@@ -3748,15 +3742,6 @@ Operational notes: (1) A ceiling below 12 holds fresh or not-yet-advanced runs b
 		-1,
 		`SchedulerV1VersionOverride selects a supported V1 scheduler workflow version without waiting for a server release to change the default. Set it to a version from the current default through the latest version supported by this binary. A negative value (the default), a value below the default, or a value above the latest supported version is ignored.
 The override is reread during every scheduler tweakables evaluation through MutableSideEffect. It can advance the version in the current workflow run at the next evaluation, subject to the current SchedulerV1VersionCeiling. Neither a lower override nor a newly lower ceiling can reduce a version already recorded in that run.`,
-	)
-	WorkerDeleteNamespaceActivityLimits = NewGlobalTypedSetting(
-		"worker.deleteNamespaceActivityLimitsConfig",
-		sdkworker.Options{},
-		`WorkerDeleteNamespaceActivityLimitsConfig is a struct with relevant sdkworker.Options
-settings for controlling remote activity concurrency for delete namespace workflows.
-Valid fields: MaxConcurrentActivityExecutionSize, TaskQueueActivitiesPerSecond,
-WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
-`,
 	)
 	WorkerGenerateMigrationTaskViaFrontend = NewGlobalBoolSetting(
 		"worker.generateMigrationTaskViaFrontend",

@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/worker_versioning"
+	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/workerdeployment"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
@@ -56,7 +57,7 @@ func (s *WorkerDeploymentSuite) newTestEnv(opts ...testcore.TestOption) *Version
 
 		// To increase the rate at which the per-ns worker can consume tasks from a task queue. Required since
 		// tests in this suite create a lot of tasks and expect them to be consumed quickly.
-		testcore.WithDynamicConfig(dynamicconfig.WorkerPerNamespaceWorkerOptions, sdkworker.Options{
+		testcore.WithDynamicConfig(worker.WorkerPerNamespaceWorkerOptions, sdkworker.Options{
 			MaxConcurrentWorkflowTaskPollers: 100,
 			MaxConcurrentActivityTaskPollers: 100,
 		}),

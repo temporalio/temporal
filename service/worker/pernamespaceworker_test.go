@@ -663,7 +663,7 @@ func TestPerNsWorkerManagerSubscription(t *testing.T) {
 	// change options
 	expectStop()
 	expectWorker(2, 2, 200)
-	revert2 := mem.OverrideSetting(dynamicconfig.WorkerPerNamespaceWorkerOptions, sdkworker.Options{
+	revert2 := mem.OverrideSetting(WorkerPerNamespaceWorkerOptions, sdkworker.Options{
 		MaxConcurrentWorkflowTaskPollers: 100,
 	})
 	<-wait
