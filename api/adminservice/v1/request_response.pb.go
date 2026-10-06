@@ -45,11 +45,11 @@ type ApplyNamespaceMutationResponse_Outcome int32
 
 const (
 	ApplyNamespaceMutationResponse_OUTCOME_UNSPECIFIED ApplyNamespaceMutationResponse_Outcome = 0
-	ApplyNamespaceMutationResponse_OUTCOME_APPLIED     ApplyNamespaceMutationResponse_Outcome = // An existing namespace was updated (incoming ConfigVersion or
-	// FailoverVersion was strictly higher than current).
+	ApplyNamespaceMutationResponse_OUTCOME_APPLIED     ApplyNamespaceMutationResponse_Outcome = // An existing namespace was updated because an incoming version was
+	// strictly higher or NamespaceDataMerger produced merged namespace data.
 	1
-	ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE ApplyNamespaceMutationResponse_Outcome = // The receiver's current state is >= incoming state on both versions.
-	// No write was performed. Success outcome.
+	ApplyNamespaceMutationResponse_OUTCOME_NO_OP_STALE ApplyNamespaceMutationResponse_Outcome = // Neither incoming version was higher and NamespaceDataMerger produced no
+	// change. No write was performed. Success outcome.
 	2
 	ApplyNamespaceMutationResponse_OUTCOME_CREATED ApplyNamespaceMutationResponse_Outcome = // The namespace did not exist on this cell and was created from the
 	// incoming state.

@@ -212,11 +212,11 @@ message ApplyNamespaceMutationRequest {
 message ApplyNamespaceMutationResponse {
   enum Outcome {
     OUTCOME_UNSPECIFIED = 0;
-    // An existing namespace was updated (incoming ConfigVersion or
-    // FailoverVersion was strictly higher than current).
+    // An existing namespace was updated because an incoming version was
+    // strictly higher or NamespaceDataMerger produced merged namespace data.
     OUTCOME_APPLIED = 1;
-    // The receiver's current state is >= incoming state on both versions.
-    // No write was performed. Success outcome.
+    // Neither incoming version was higher and NamespaceDataMerger produced no
+    // change. No write was performed. Success outcome.
     OUTCOME_NO_OP_STALE = 2;
     // The namespace did not exist on this cell and was created from the
     // incoming state.
