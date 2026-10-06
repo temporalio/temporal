@@ -227,5 +227,5 @@ require (
 tool golang.org/x/perf/cmd/benchstat
 
 // Server code always builds against testx from the same commit. Consumers of the server ignore this
-// replace and get the required testx version instead.
+// replace and get the required testx version, which .github/workflows/testx-bump.yml keeps current.
 replace go.temporal.io/testx => ./testx
