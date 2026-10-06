@@ -244,7 +244,6 @@ func (a *Activity) buildCancelCommandTaskToken(ctx chasm.Context, activityRef ch
 	return token.Marshal()
 }
 
-
 // HandleStarted updates the activity on recording activity task started and populates the response.
 func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservice.RecordActivityTaskStartedRequest) (
 	*historyservice.RecordActivityTaskStartedResponse, error,
@@ -621,7 +620,6 @@ func (a *Activity) addCancelCommandDispatchTask(ctx chasm.MutableContext) {
 		&activitypb.CancelCommandDispatchTask{},
 	)
 }
-
 
 // lastHeartbeatDetails returns the details recorded by the most recent heartbeat, or nil if
 // the activity never heartbeated.
