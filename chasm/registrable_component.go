@@ -25,9 +25,6 @@ type (
 		detached      bool
 		executionType enumspb.ExecutionType // May be unset, defaulting to UNSPECIFIED.
 
-		// See [WithTaskCountMetric].
-		taskCountMetricEnabled bool
-
 		searchAttributesMapper *VisibilitySearchAttributesMapper
 
 		contextValues map[any]any
@@ -90,18 +87,6 @@ func WithExecutionType(
 ) RegistrableComponentOption {
 	return func(rc *RegistrableComponent) {
 		rc.executionType = executionType
-	}
-}
-
-// WithTaskCountMetric emits chasm_logical_task_count and chasm_logical_task_count_exceeded
-// at CloseTransaction for each of the component's task types whose logical task count in the
-// execution exceeds its threshold. The threshold is [defaultTaskCountMetricThreshold] unless the
-// task type sets one via [WithTaskCountMetricThreshold], and history.chasmLogicalTaskCountAlertThreshold
-// overrides both when set.
-// Individual task types can opt in or out via [WithTaskCountMetricOverride].
-func WithTaskCountMetric() RegistrableComponentOption {
-	return func(rc *RegistrableComponent) {
-		rc.taskCountMetricEnabled = true
 	}
 }
 

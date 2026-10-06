@@ -5344,7 +5344,42 @@ func (s *nodeSuite) TestCloseTransaction_LogicalTaskCountMetrics_ExcludesInvalid
 	s.Equal(testSideEffectTaskFQN, counts[0].Tags[metrics.ChasmTaskTypeTagName])
 }
 
-func (s *nodeSuite) TestCloseTransaction_LogicalTaskCountMetrics_NotEmittedForOptedOutComponent() {
+func (s *nodeSuite) TestCloseTransaction_LogicalTaskCountMetrics_AggregatesAcrossComponents() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.metricsHandler = metricsHandler
+
+	s.nodeBackend.HandleChasmLogicalTaskCountAlertThreshold = func(string) int { return 2 }
+
+	root := s.testComponentTree()
+	mutableContext := NewMutableContext(context.Background(), root)
+	c, err := root.Component(mutableContext, ComponentRef{})
+	s.NoError(err)
+	testComponent := c.(*TestComponent)
+	subComponent1 := testComponent.SubComponent1.Get(mutableContext)
+
+	// Neither component alone exceeds the threshold, but the execution as a whole does.
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(true, nil).Times(3)
+	mutableContext.AddTask(testComponent, TaskAttributes{}, &TestSideEffectTask{Data: []byte("root")})
+	for i := range 2 {
+		mutableContext.AddTask(subComponent1, TaskAttributes{}, &TestSideEffectTask{
+			Data: []byte(fmt.Sprintf("sub-%d", i)),
+		})
+	}
+
+	_, err = root.CloseTransaction()
+	s.NoError(err)
+
+	counts := capture.Snapshot()[metrics.ChasmLogicalTaskCount.Name()]
+	s.Len(counts, 1)
+	s.Equal(int64(3), counts[0].Value)
+	s.Equal(testSideEffectTaskFQN, counts[0].Tags[metrics.ChasmTaskTypeTagName])
+}
+
+func (s *nodeSuite) TestCloseTransaction_LogicalTaskCountMetrics_NotEmittedForTaskTypeNotOptedIn() {
 	metricsHandler := metricstest.NewCaptureHandler()
 	capture := metricsHandler.StartCapture()
 	defer metricsHandler.StopCapture(capture)
@@ -5358,16 +5393,12 @@ func (s *nodeSuite) TestCloseTransaction_LogicalTaskCountMetrics_NotEmittedForOp
 	s.NoError(err)
 	testComponent := c.(*TestComponent)
 
-	// TestSubComponent1 did not opt in, so the same task type reported for TestComponent
-	// must not be reported here.
-	subComponent1 := testComponent.SubComponent1.Get(mutableContext)
-	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+	// TestDiscardableSideEffectTask is not registered with WithTaskCountMetric.
+	s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(true, nil).Times(2)
-	for i := range 2 {
-		mutableContext.AddTask(subComponent1, TaskAttributes{}, &TestSideEffectTask{
-			Data: []byte(fmt.Sprintf("sub-%d", i)),
-		})
+	for range 2 {
+		mutableContext.AddTask(testComponent, TaskAttributes{}, &TestDiscardableSideEffectTask{})
 	}
 
 	_, err = root.CloseTransaction()

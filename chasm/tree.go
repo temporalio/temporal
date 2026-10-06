@@ -2135,18 +2135,13 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 }
 
 // countLogicalTasks adds componentAttr's logical task counts, keyed by task type ID, into
-// counts, tracking only task types opted into the task count metrics on this component, and
-// returns the possibly reallocated map.
+// counts, tracking only task types opted into the task count metrics, and returns the
+// possibly reallocated map.
 func (n *Node) countLogicalTasks(
 	componentAttr *persistencespb.ChasmComponentAttributes,
 	counts map[uint32]int,
 ) map[uint32]int {
 	if !n.registry.taskCountMetricEnabled {
-		return counts
-	}
-
-	registrableComponent, ok := n.registry.ComponentByID(componentAttr.GetTypeId())
-	if !ok {
 		return counts
 	}
 
@@ -2156,7 +2151,7 @@ func (n *Node) countLogicalTasks(
 	} {
 		for _, componentTask := range componentTasks {
 			registrableTask, ok := n.registry.TaskByID(componentTask.GetTypeId())
-			if !ok || !registrableTask.taskCountMetricEnabledForComponent(registrableComponent) {
+			if !ok || !registrableTask.taskCountMetricEnabled {
 				continue
 			}
 			if counts == nil {

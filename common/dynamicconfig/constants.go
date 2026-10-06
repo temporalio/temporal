@@ -3350,8 +3350,8 @@ terminates the task via DLQ. Immediate pure tasks are never affected by this set
 		0,
 		`ChasmLogicalTaskCountAlertThreshold overrides the number of logical CHASM tasks of one task type a single
 execution may accumulate before chasm_logical_task_count and chasm_logical_task_count_exceeded are emitted.
-Only counts tasks on component types registered with chasm.WithTaskCountMetric. A value of 0 means not set, so
-the threshold registered via chasm.WithTaskCountMetricThreshold (or the framework default of 1000) applies.
+Only applies to task types registered with chasm.WithTaskCountMetric. A value of 0 means not set, so the
+threshold registered via chasm.WithTaskCountMetric (or the framework default of 1000) applies.
 A negative value disables the metrics. The chasmTaskType constraint takes a task's fully qualified name,
 e.g. "callback.invoke".`,
 	)

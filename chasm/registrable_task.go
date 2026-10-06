@@ -33,8 +33,8 @@ type (
 		isPureTask               bool
 		outboundTaskGroup        string            // For grouping on the outbound queue. See [WithTaskGroup] for details.
 		singletonMode            SingletonTaskMode // If non-zero, at most one task of this type may exist per component instance.
-		taskCountMetricEnabled   *bool             // Nil means inherit from the component. See [WithTaskCountMetricOverride].
-		taskCountMetricThreshold int               // Non-positive means use the framework default. See [WithTaskCountMetricThreshold].
+		taskCountMetricEnabled   bool              // See [WithTaskCountMetric].
+		taskCountMetricThreshold int               // Non-positive means use the framework default. See [WithTaskCountMetric].
 
 		// Those two fields are initialized when the component is registered to a library.
 		library    namer
@@ -192,15 +192,6 @@ func (rt *RegistrableTask) GoType() reflect.Type {
 	return rt.goType
 }
 
-// taskCountMetricEnabledForComponent reports whether the task count metrics apply to this
-// task type on the given component. The task's own override wins over the component's setting.
-func (rt *RegistrableTask) taskCountMetricEnabledForComponent(rc *RegistrableComponent) bool {
-	if rt.taskCountMetricEnabled != nil {
-		return *rt.taskCountMetricEnabled
-	}
-	return rc != nil && rc.taskCountMetricEnabled
-}
-
 // resolveTaskCountMetricThreshold returns the logical task count above which the task count
 // metrics are emitted for this task type, or a value <= 0 if they are disabled. A non-zero
 // dynamicConfigThreshold is an operator override and wins, then the registered threshold,
@@ -250,20 +241,14 @@ func WithSingletonTask(mode SingletonTaskMode) RegistrableTaskOption {
 	}
 }
 
-// WithTaskCountMetricThreshold sets the logical task count above which the task count metrics
-// are emitted for this task type, replacing [defaultTaskCountMetricThreshold]. It only takes
-// effect when the task type is opted in, via [WithTaskCountMetric] on the component or
-// [WithTaskCountMetricOverride]. history.chasmLogicalTaskCountAlertThreshold overrides it when set.
-func WithTaskCountMetricThreshold(threshold int) RegistrableTaskOption {
+// WithTaskCountMetric opts the task type into the logical task count metrics. At
+// CloseTransaction, the framework counts the execution's logical tasks of this type and emits
+// chasm_logical_task_count and chasm_logical_task_count_exceeded when the count exceeds the
+// threshold. A threshold <= 0 uses [defaultTaskCountMetricThreshold].
+// history.chasmLogicalTaskCountAlertThreshold overrides the threshold when set.
+func WithTaskCountMetric(threshold int) RegistrableTaskOption {
 	return func(rt *RegistrableTask) {
+		rt.taskCountMetricEnabled = true
 		rt.taskCountMetricThreshold = threshold
-	}
-}
-
-// WithTaskCountMetricOverride overrides the component's [WithTaskCountMetric] setting for
-// this task type. Without it, the task type inherits the component's setting.
-func WithTaskCountMetricOverride(enabled bool) RegistrableTaskOption {
-	return func(rt *RegistrableTask) {
-		rt.taskCountMetricEnabled = &enabled
 	}
 }
