@@ -22,10 +22,7 @@ import (
 
 // goleakOpts are the goleak options applied to every Find/VerifyNone call.
 // TODO entries are known leaks to be fixed; remove each ignore once fixed.
-var goleakOpts = []goleak.Option{
-	// By design: sqlite keeps one *sql.DB per file DSN for the process lifetime.
-	goleak.IgnoreTopFunction("database/sql.(*DB).connectionOpener"),
-}
+var goleakOpts = []goleak.Option{}
 
 var objectLeakOpts = []objectleak.Option{
 	objectleak.WithPruneType("google.golang.org/protobuf/internal/impl.*"),
