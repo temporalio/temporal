@@ -134,19 +134,7 @@ jobs:
         run: |
           version=$(go list -m -f '{{.Version}}' go.temporal.io/testx)
           pinned=${version##*-}
-          if git rev-parse -q --verify "${pinned}^{commit}" >/dev/null && git diff --quiet "${pinned}" HEAD -- testx/; then
-            exit 0
-          fi
-
-          # The oldest testx change missing from the required version.
-          range=HEAD
-          if git rev-parse -q --verify "${pinned}^{commit}" >/dev/null; then
-            range="${pinned}..HEAD"
-          fi
-          oldest=$(git log --format=%ct "${range}" -- testx/ | tail -1)
-          age=$(( $(date +%s) - oldest ))
-          # Leave time for a bump PR from a late testx change to finish CI.
-          if [ "${age}" -gt 10800 ]; then
+          if ! git rev-parse -q --verify "${pinned}^{commit}" >/dev/null || ! git diff --quiet "${pinned}" HEAD -- testx/; then
             echo "::error file=go.mod::Required testx version doesn't match testx/."
             exit 1
           fi
