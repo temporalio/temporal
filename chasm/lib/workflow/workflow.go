@@ -47,6 +47,13 @@ type Workflow struct {
 	// Updates indexed by update ID, used to store the update components.
 	Updates chasm.Map[string, *WorkflowUpdate]
 
+	// Native is set for a workflow created by NewNativeWorkflow, which holds its history events and
+	// workflow task in this tree instead of in mutable state.
+	Native chasm.Field[*chasmworkflowpb.NativeWorkflowState]
+
+	// NativeHistory holds a native workflow's history events, keyed by event ID.
+	NativeHistory chasm.Map[int64, *historypb.HistoryEvent]
+
 	// Activities holds the workflow's activities, keyed by scheduled event ID. Only used when the
 	// workflow's activity commands are handled by NewActivityLibrary; the server runs workflow
 	// activities in mutable state.
@@ -68,8 +75,11 @@ func NewWorkflow(
 }
 
 func (w *Workflow) LifecycleState(
-	_ chasm.Context,
+	ctx chasm.Context,
 ) chasm.LifecycleState {
+	if state, ok := w.Native.TryGet(ctx); ok {
+		return nativeLifecycleState(state)
+	}
 	// NOTE: closeTransactionHandleRootLifecycleChange() is bypassed in tree.go
 	//
 	// NOTE: detached mode is not implemented yet, so always return Running here.

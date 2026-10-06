@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.workflow.proto.v1;
+
+import "google/protobuf/duration.proto";
+import "temporal/api/enums/v1/workflow.proto";
+import "temporal/api/history/v1/message.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpb";
+
+// NativeWorkflowState is the state of a workflow whose history events and workflow tasks are held
+// in its CHASM tree instead of in mutable state.
+message NativeWorkflowState {
+  temporal.api.enums.v1.WorkflowExecutionStatus status = 1;
+  string workflow_type = 2;
+  string task_queue = 3;
+  google.protobuf.Duration workflow_task_timeout = 4;
+  google.protobuf.Duration workflow_run_timeout = 5;
+  // ID the next history event will get.
+  int64 next_event_id = 6;
+  // Total serialized size of history events, reported in WORKFLOW_TASK_STARTED.
+  int64 history_size_bytes = 7;
+  // Non-zero while a workflow task is scheduled or started.
+  int64 workflow_task_scheduled_event_id = 8;
+  // Non-zero while a workflow task is started.
+  int64 workflow_task_started_event_id = 9;
+  int32 workflow_task_attempt = 10;
+  // Incremented each time a workflow task is scheduled; fences stale dispatch tasks.
+  int32 workflow_task_stamp = 11;
+  // Started event ID of the last completed workflow task.
+  int64 last_completed_workflow_task_started_event_id = 12;
+  // Events added while a workflow task was started. They get event IDs when the workflow task
+  // closes.
+  repeated temporal.api.history.v1.HistoryEvent buffered_events = 13;
+}
+
+// WorkflowTaskDispatchTask adds a scheduled workflow task to its task queue.
+message WorkflowTaskDispatchTask {
+  int32 stamp = 1;
+}

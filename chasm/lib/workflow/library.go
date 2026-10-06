@@ -16,6 +16,7 @@ type library struct {
 	config                      Config
 	saMapperProvider            searchattribute.MapperProvider
 	saValidator                 *searchattribute.Validator
+	workflowTaskDispatcher      WorkflowTaskDispatcher
 }
 
 func newLibrary(
@@ -41,6 +42,24 @@ func newLibrary(
 // Use newLibrary (via fx) for the full setup including Nexus services.
 func NewLibrary(registry *Registry) chasm.Library {
 	return &library{registry: registry}
+}
+
+// NewNativeLibrary creates a CHASM library for the workflow package that also dispatches the
+// workflow tasks of native workflows (see NewNativeWorkflow).
+func NewNativeLibrary(registry *Registry, dispatcher WorkflowTaskDispatcher) chasm.Library {
+	return &library{registry: registry, workflowTaskDispatcher: dispatcher}
+}
+
+func (l *library) Tasks() []*chasm.RegistrableTask {
+	if l.workflowTaskDispatcher == nil {
+		return nil
+	}
+	return []*chasm.RegistrableTask{
+		chasm.NewRegistrableSideEffectTask(
+			"dispatchWorkflowTask",
+			&workflowTaskDispatchTaskHandler{dispatcher: l.workflowTaskDispatcher},
+		),
+	}
 }
 
 // NewNilLibrary returns a Library with nil handlers, for decoding contexts such as tdbg where

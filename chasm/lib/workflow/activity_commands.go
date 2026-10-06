@@ -89,8 +89,8 @@ func (h *activityCommandHandler) normalizeAttributes(
 		ctx.NamespaceEntry().Name(),
 		options,
 		attrs.GetPriority(),
-		durationpb.New(wf.WorkflowRunTimeout()),
-		wf.WorkflowTaskQueue(),
+		durationpb.New(wf.runTimeout(ctx)),
+		wf.taskQueue(ctx),
 	); err != nil {
 		return err
 	}
