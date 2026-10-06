@@ -3432,7 +3432,7 @@ the IncomingSignals CHASM field.`,
 	)
 	EnableCHASMWorkflowRootOnStart = NewNamespaceBoolSetting(
 		"history.enableCHASMWorkflowRootOnStart",
-		false,
+		true,
 		`Controls whether the CHASM Workflow root component is persisted in the transaction that
 applies the WorkflowExecutionStarted event, instead of lazily on first use of a CHASM feature.
 Requires EnableChasm.`,
