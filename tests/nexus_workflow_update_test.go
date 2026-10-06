@@ -2095,7 +2095,6 @@ func (s *NexusWorkflowUpdateTestSuite) TestLinksOnRepeatedUpdates() {
 		[]*commonpb.Link{callbackLink},
 		updateOptions[0].GetAttachedCompletionCallbacks()[0].GetLinks(),
 	)
-	protorequire.ProtoSliceEqual(s.T(), []*commonpb.Link{callbackLink}, updatedEvent.GetLinks())
 
 	thirdRequestID := uuid.NewString()
 	thirdResp, err := sendUpdate(thirdRequestID, nil)

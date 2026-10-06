@@ -460,7 +460,9 @@ func (u *Update) AttachCallbacks(
 	}
 }
 
-// EventLinkType reports the projected event type for an Update's RequestIDRef link.
+// EventLinkType reports the projected event type for an in-flight Update's RequestIDRef link.
+// Persisted updates resolve their links from mutable state before reaching this method,
+// so originalReqID is not persisted.
 func (u *Update) EventLinkType(requestID string) enumspb.EventType {
 	if u.originalReqID == requestID {
 		return enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED
@@ -504,13 +506,8 @@ func (u *Update) persistCallback(
 	if requestID != "" && eventStore.HasRequestID(requestID) {
 		return true, nil
 	}
-	// Copy callback links to the event so that backlinks are preserved in history.
-	var callbackLinks []*commonpb.Link
-	for _, callback := range completionCallbacks {
-		callbackLinks = append(callbackLinks, callback.GetLinks()...)
-	}
 	_, err = eventStore.AddWorkflowExecutionOptionsUpdatedEvent(
-		nil, false, "", nil, callbackLinks, "", nil, nil, false,
+		nil, false, "", nil, nil, "", nil, nil, false,
 		[]*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate{{
 			UpdateId:                    u.id,
 			AttachedRequestId:           requestID,

@@ -116,7 +116,7 @@ func (u *Updater) ApplyRequest(
 	}
 	// Capture the anticipated link for the response after the request has been applied.
 	// If the request itself fails/is rejected, OnSuccess will link to the workflow itself instead.
-	if u.responseLink, err = u.captureResponseLink(ctx, ms); err != nil {
+	if u.responseLink, err = u.captureTentativeResponseLink(ctx, ms); err != nil {
 		return nil, err
 	}
 	return action, nil
@@ -245,7 +245,9 @@ func (u *Updater) applyRequest(
 	}, nil
 }
 
-// captureResponseLink determines the link to be attached to the update.
+// captureTentativeResponseLink determines the tentative link to be attached to the update.
+// It needs to run in OnApply as it needs access to the mutable state which isnt
+// available in OnSuccess.
 //
 // Cases:
 //
@@ -256,7 +258,7 @@ func (u *Updater) applyRequest(
 //	        - No: is there a valid requestID on the request?
 //	              - Yes: use the projected event for a requestIDRef as the update is still in-flight.
 //	              - No: use a workflow link.
-func (u *Updater) captureResponseLink(ctx context.Context, ms historyi.MutableState) (*commonpb.Link, error) {
+func (u *Updater) captureTentativeResponseLink(ctx context.Context, ms historyi.MutableState) (*commonpb.Link, error) {
 
 	request := u.req.GetRequest().GetRequest()
 	requestID := request.GetRequestId()
