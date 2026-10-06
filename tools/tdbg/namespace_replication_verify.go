@@ -20,6 +20,9 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common"
+	"google.golang.org/grpc/codes"
+	grpcstatus "google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -120,17 +123,24 @@ func (p cliNamespaceReplicationAdminClientProvider) open(
 }
 
 type namespaceReplicationVerifier struct {
-	clients    namespaceReplicationAdminClientProvider
-	rpcTimeout time.Duration
-	now        func() time.Time
+	clients          namespaceReplicationAdminClientProvider
+	dataKeysToIgnore map[string]struct{}
+	rpcTimeout       time.Duration
+	now              func() time.Time
 }
 
 func newNamespaceReplicationVerifier(
 	clients namespaceReplicationAdminClientProvider,
+	options namespaceReplicationOptions,
 ) *namespaceReplicationVerifier {
+	ignoredDataKeys := make(map[string]struct{}, len(options.dataKeysToIgnore))
+	for _, key := range options.dataKeysToIgnore {
+		ignoredDataKeys[key] = struct{}{}
+	}
 	return &namespaceReplicationVerifier{
-		clients:    clients,
-		rpcTimeout: defaultContextTimeout,
+		clients:          clients,
+		dataKeysToIgnore: ignoredDataKeys,
+		rpcTimeout:       defaultContextTimeout,
 		now: func() time.Time {
 			return time.Now().UTC()
 		},
@@ -185,7 +195,7 @@ func (v *namespaceReplicationVerifier) Verify(
 	result.NamespaceName = source.GetInfo().GetName()
 	result.NamespaceID = source.GetInfo().GetId()
 
-	configProjection, failoverProjection, err := namespaceReplicationProjections(source)
+	configProjection, failoverProjection, err := namespaceReplicationProjections(source, v.dataKeysToIgnore)
 	if err != nil {
 		return result, fmt.Errorf("project source namespace: %w", err)
 	}
@@ -284,7 +294,7 @@ func (v *namespaceReplicationVerifier) Verify(
 		result.StatusDetail = fmt.Sprintf("final source read failed: %v", err)
 		return result, nil
 	}
-	equal, err := namespaceReplicationSnapshotsEqual(source, finalSource)
+	equal, err := namespaceReplicationSnapshotsEqual(source, finalSource, v.dataKeysToIgnore)
 	if err != nil {
 		return result, err
 	}
@@ -392,7 +402,7 @@ func (v *namespaceReplicationVerifier) inspectTarget(
 		return result
 	}
 
-	configProjection, failoverProjection, err := namespaceReplicationProjections(byID)
+	configProjection, failoverProjection, err := namespaceReplicationProjections(byID, v.dataKeysToIgnore)
 	if err != nil {
 		result.Error = fmt.Sprintf("project namespace: %v", err)
 		return result
@@ -423,7 +433,12 @@ func (v *namespaceReplicationVerifier) inspectTarget(
 	if proto.Equal(sourceFailoverProjection, failoverProjection) {
 		result.FailoverMatch = namespaceReplicationMatchMatch
 	}
-	result.Differences = namespaceReplicationDifferences(source, byID)
+	result.Differences = namespaceReplicationDifferences(
+		sourceConfigProjection,
+		configProjection,
+		sourceFailoverProjection,
+		failoverProjection,
+	)
 	result.Error = ""
 	return result
 }
@@ -642,6 +657,7 @@ func validateNamespaceReplicationAddressOverrides(
 
 func namespaceReplicationProjections(
 	response *adminservice.GetNamespaceResponse,
+	dataKeysToIgnore map[string]struct{},
 ) (configProjection *replicationspb.NamespaceTaskAttributes, failoverProjection *replicationspb.NamespaceTaskAttributes, err error) {
 	if err := validateNamespaceResponse(response); err != nil {
 		return nil, nil, err
@@ -665,7 +681,7 @@ func namespaceReplicationProjections(
 			State:       info.GetState(),
 			Description: info.GetDescription(),
 			OwnerEmail:  info.GetOwnerEmail(),
-			Data:        cloneNonEmptyStringMap(info.GetData()),
+			Data:        cloneNamespaceDataExcluding(info.GetData(), dataKeysToIgnore),
 		},
 		Config: &namespacepb.NamespaceConfig{
 			BadBinaries:                  badBinaries,
@@ -697,6 +713,12 @@ func namespaceReplicationProjections(
 		},
 		FailoverHistory: failoverHistory,
 	}
+	if err := common.DiscardUnknownProto(configProjection); err != nil {
+		return nil, nil, fmt.Errorf("discard unknown config projection fields: %w", err)
+	}
+	if err := common.DiscardUnknownProto(failoverProjection); err != nil {
+		return nil, nil, fmt.Errorf("discard unknown failover projection fields: %w", err)
+	}
 	return configProjection, failoverProjection, nil
 }
 
@@ -705,6 +727,25 @@ func cloneNonEmptyStringMap(input map[string]string) map[string]string {
 		return nil
 	}
 	return maps.Clone(input)
+}
+
+func cloneNamespaceDataExcluding(
+	input map[string]string,
+	keysToIgnore map[string]struct{},
+) map[string]string {
+	if len(input) == 0 {
+		return nil
+	}
+	result := make(map[string]string, len(input))
+	for key, value := range input {
+		if _, ignored := keysToIgnore[key]; !ignored {
+			result[key] = value
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
 func normalizedClusterReplicationConfigs(
@@ -738,75 +779,73 @@ func namespaceReplicationFingerprint(message proto.Message) (string, error) {
 }
 
 func namespaceReplicationDifferences(
-	expected *adminservice.GetNamespaceResponse,
-	actual *adminservice.GetNamespaceResponse,
+	expectedConfig *replicationspb.NamespaceTaskAttributes,
+	actualConfig *replicationspb.NamespaceTaskAttributes,
+	expectedFailover *replicationspb.NamespaceTaskAttributes,
+	actualFailover *replicationspb.NamespaceTaskAttributes,
 ) []string {
 	var differences []string
-	if expected.GetInfo().GetId() != actual.GetInfo().GetId() {
+	if expectedConfig.GetId() != actualConfig.GetId() {
 		differences = append(differences, "namespace.id")
 	}
-	if expected.GetInfo().GetName() != actual.GetInfo().GetName() {
+	if expectedConfig.GetInfo().GetName() != actualConfig.GetInfo().GetName() {
 		differences = append(differences, "namespace.name")
 	}
-	if expected.GetInfo().GetState() != actual.GetInfo().GetState() {
+	if expectedConfig.GetInfo().GetState() != actualConfig.GetInfo().GetState() {
 		differences = append(differences, "info.state")
 	}
-	if expected.GetInfo().GetDescription() != actual.GetInfo().GetDescription() {
+	if expectedConfig.GetInfo().GetDescription() != actualConfig.GetInfo().GetDescription() {
 		differences = append(differences, "info.description")
 	}
-	if expected.GetInfo().GetOwnerEmail() != actual.GetInfo().GetOwnerEmail() {
+	if expectedConfig.GetInfo().GetOwnerEmail() != actualConfig.GetInfo().GetOwnerEmail() {
 		differences = append(differences, "info.owner_email")
 	}
-	if !maps.Equal(expected.GetInfo().GetData(), actual.GetInfo().GetData()) {
+	if !maps.Equal(expectedConfig.GetInfo().GetData(), actualConfig.GetInfo().GetData()) {
 		differences = append(differences, "info.data")
 	}
-	if !proto.Equal(expected.GetConfig().GetWorkflowExecutionRetentionTtl(), actual.GetConfig().GetWorkflowExecutionRetentionTtl()) {
+	if !proto.Equal(expectedConfig.GetConfig().GetWorkflowExecutionRetentionTtl(), actualConfig.GetConfig().GetWorkflowExecutionRetentionTtl()) {
 		differences = append(differences, "config.workflow_execution_retention_ttl")
 	}
-	if !proto.Equal(normalizedBadBinaries(expected.GetConfig().GetBadBinaries()), normalizedBadBinaries(actual.GetConfig().GetBadBinaries())) {
+	if !proto.Equal(expectedConfig.GetConfig().GetBadBinaries(), actualConfig.GetConfig().GetBadBinaries()) {
 		differences = append(differences, "config.bad_binaries")
 	}
-	if expected.GetConfig().GetHistoryArchivalState() != actual.GetConfig().GetHistoryArchivalState() {
+	if expectedConfig.GetConfig().GetHistoryArchivalState() != actualConfig.GetConfig().GetHistoryArchivalState() {
 		differences = append(differences, "config.history_archival_state")
 	}
-	if expected.GetConfig().GetHistoryArchivalUri() != actual.GetConfig().GetHistoryArchivalUri() {
+	if expectedConfig.GetConfig().GetHistoryArchivalUri() != actualConfig.GetConfig().GetHistoryArchivalUri() {
 		differences = append(differences, "config.history_archival_uri")
 	}
-	if expected.GetConfig().GetVisibilityArchivalState() != actual.GetConfig().GetVisibilityArchivalState() {
+	if expectedConfig.GetConfig().GetVisibilityArchivalState() != actualConfig.GetConfig().GetVisibilityArchivalState() {
 		differences = append(differences, "config.visibility_archival_state")
 	}
-	if expected.GetConfig().GetVisibilityArchivalUri() != actual.GetConfig().GetVisibilityArchivalUri() {
+	if expectedConfig.GetConfig().GetVisibilityArchivalUri() != actualConfig.GetConfig().GetVisibilityArchivalUri() {
 		differences = append(differences, "config.visibility_archival_uri")
 	}
-	if !maps.Equal(expected.GetConfig().GetCustomSearchAttributeAliases(), actual.GetConfig().GetCustomSearchAttributeAliases()) {
+	if !maps.Equal(expectedConfig.GetConfig().GetCustomSearchAttributeAliases(), actualConfig.GetConfig().GetCustomSearchAttributeAliases()) {
 		differences = append(differences, "config.custom_search_attribute_aliases")
 	}
 	if !slices.Equal(
-		clusterNames(expected.GetReplicationConfig().GetClusters()),
-		clusterNames(actual.GetReplicationConfig().GetClusters()),
+		clusterNames(expectedConfig.GetReplicationConfig().GetClusters()),
+		clusterNames(actualConfig.GetReplicationConfig().GetClusters()),
 	) {
 		differences = append(differences, "replication.clusters")
 	}
-	if expected.GetReplicationConfig().GetActiveClusterName() != actual.GetReplicationConfig().GetActiveClusterName() {
+	if expectedFailover.GetReplicationConfig().GetActiveClusterName() != actualFailover.GetReplicationConfig().GetActiveClusterName() {
 		differences = append(differences, "replication.active_cluster")
 	}
-	if expected.GetReplicationConfig().GetState() != actual.GetReplicationConfig().GetState() {
+	if expectedFailover.GetReplicationConfig().GetState() != actualFailover.GetReplicationConfig().GetState() {
 		differences = append(differences, "replication.state")
 	}
-	if !proto.Equal(
-		&replicationspb.NamespaceTaskAttributes{FailoverHistory: expected.GetFailoverHistory()},
-		&replicationspb.NamespaceTaskAttributes{FailoverHistory: actual.GetFailoverHistory()},
+	if !slices.EqualFunc(
+		expectedFailover.GetFailoverHistory(),
+		actualFailover.GetFailoverHistory(),
+		func(expected, actual *replicationpb.FailoverStatus) bool {
+			return proto.Equal(expected, actual)
+		},
 	) {
 		differences = append(differences, "replication.failover_history")
 	}
 	return differences
-}
-
-func normalizedBadBinaries(input *namespacepb.BadBinaries) *namespacepb.BadBinaries {
-	if len(input.GetBinaries()) == 0 {
-		return nil
-	}
-	return input
 }
 
 func clusterNames(clusters []*replicationpb.ClusterReplicationConfig) []string {
@@ -823,12 +862,13 @@ func clusterNames(clusters []*replicationpb.ClusterReplicationConfig) []string {
 func namespaceReplicationSnapshotsEqual(
 	first *adminservice.GetNamespaceResponse,
 	second *adminservice.GetNamespaceResponse,
+	dataKeysToIgnore map[string]struct{},
 ) (bool, error) {
-	firstConfig, firstFailover, err := namespaceReplicationProjections(first)
+	firstConfig, firstFailover, err := namespaceReplicationProjections(first, dataKeysToIgnore)
 	if err != nil {
 		return false, err
 	}
-	secondConfig, secondFailover, err := namespaceReplicationProjections(second)
+	secondConfig, secondFailover, err := namespaceReplicationProjections(second, dataKeysToIgnore)
 	if err != nil {
 		return false, err
 	}
@@ -902,5 +942,5 @@ func isNamespaceNotFound(err error) bool {
 		return false
 	}
 	var namespaceNotFound *serviceerror.NamespaceNotFound
-	return errors.As(err, &namespaceNotFound)
+	return errors.As(err, &namespaceNotFound) || grpcstatus.Code(err) == codes.NotFound
 }

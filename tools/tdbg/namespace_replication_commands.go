@@ -13,7 +13,14 @@ import (
 
 const namespaceReplicationRepairRequiredExitCode = 3
 
-func newNamespaceReplicationCommands(clientFactory ClientFactory) []*cli.Command {
+type namespaceReplicationOptions struct {
+	dataKeysToIgnore []string
+}
+
+func newNamespaceReplicationCommands(
+	clientFactory ClientFactory,
+	options namespaceReplicationOptions,
+) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:  "replication",
@@ -41,7 +48,7 @@ func newNamespaceReplicationCommands(clientFactory ClientFactory) []*cli.Command
 						},
 					},
 					Action: func(c *cli.Context) error {
-						return verifyNamespaceReplication(c, clientFactory)
+						return verifyNamespaceReplication(c, clientFactory, options)
 					},
 				},
 			},
@@ -49,7 +56,11 @@ func newNamespaceReplicationCommands(clientFactory ClientFactory) []*cli.Command
 	}
 }
 
-func verifyNamespaceReplication(c *cli.Context, clientFactory ClientFactory) error {
+func verifyNamespaceReplication(
+	c *cli.Context,
+	clientFactory ClientFactory,
+	options namespaceReplicationOptions,
+) error {
 	selector, err := namespaceReplicationSelectorFromCLI(c)
 	if err != nil {
 		return cli.Exit(err.Error(), 2)
@@ -66,7 +77,7 @@ func verifyNamespaceReplication(c *cli.Context, clientFactory ClientFactory) err
 	verifier := newNamespaceReplicationVerifier(cliNamespaceReplicationAdminClientProvider{
 		cliContext: c,
 		factory:    namespaceReplicationFactory,
-	})
+	}, options)
 	verifier.rpcTimeout = namespaceReplicationRPCTimeout(c)
 	result, err := verifier.Verify(c.Context, namespaceReplicationVerifyRequest{
 		SourceAddress:    namespaceReplicationFactory.FrontendAddress(c),

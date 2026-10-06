@@ -19,6 +19,9 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protowire"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -165,6 +168,70 @@ func TestNamespaceReplicationVerifier_Status(t *testing.T) {
 	}
 }
 
+func TestNamespaceReplicationVerifier_IgnoresConfiguredNamespaceDataKeys(t *testing.T) {
+	const ignoredKey = "__MCNConfig"
+
+	tests := []struct {
+		name           string
+		mutate         func(map[string]string)
+		wantStatus     string
+		wantDifference bool
+	}{
+		{
+			name: "ignored key differs",
+			mutate: func(data map[string]string) {
+				data[ignoredKey] = "target-local-value"
+			},
+			wantStatus: namespaceReplicationStatusHealthy,
+		},
+		{
+			name: "ordinary key differs",
+			mutate: func(data map[string]string) {
+				data["replicated-key"] = "different"
+			},
+			wantStatus:     namespaceReplicationStatusRepairRequired,
+			wantDifference: true,
+		},
+		{
+			name: "similarly named key differs",
+			mutate: func(data map[string]string) {
+				data[ignoredKey+"Extra"] = "different"
+			},
+			wantStatus:     namespaceReplicationStatusRepairRequired,
+			wantDifference: true,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
+			source.Info.Data = map[string]string{
+				ignoredKey:           "source-value",
+				"replicated-key":     "value",
+				ignoredKey + "Extra": "value",
+			}
+			target := proto.Clone(source).(*adminservice.GetNamespaceResponse)
+			test.mutate(target.Info.Data)
+
+			verifier := testNamespaceReplicationVerifier(source, map[string]*adminservice.GetNamespaceResponse{
+				"cluster-b": target,
+			})
+			verifier.dataKeysToIgnore = map[string]struct{}{ignoredKey: {}}
+			result, err := verifier.Verify(context.Background(), testNamespaceReplicationVerifyRequest())
+			require.NoError(t, err)
+			require.Equal(t, test.wantStatus, result.Status)
+			if test.wantDifference {
+				require.Contains(t, result.Clusters[1].Differences, "info.data")
+			} else {
+				require.NotContains(t, result.Clusters[1].Differences, "info.data")
+			}
+			if test.wantStatus == namespaceReplicationStatusHealthy {
+				require.Equal(t, result.SourceConfigFingerprint, result.Clusters[1].ConfigFingerprint)
+			}
+		})
+	}
+}
+
 func TestNamespaceReplicationVerifier_SourceOnlyDoesNotListClusterMetadata(t *testing.T) {
 	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a"}, 10, 20)
 	sourceClient := testNamespaceReplicationSourceClient(source)
@@ -221,6 +288,22 @@ func TestNamespaceReplicationVerifier_IDCollisionBlocksRepair(t *testing.T) {
 	require.Equal(t, namespaceReplicationStatusBlocked, result.Status)
 	require.Equal(t, namespaceReplicationPresenceIDCollision, result.Clusters[1].Presence)
 	require.NotContains(t, result.Clusters[1].Error, "other-name")
+}
+
+func TestNamespaceReplicationVerifier_WireNamespaceNotFoundRequiresRepair(t *testing.T) {
+	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
+	client := testNamespaceReplicationTargetClient("cluster-b", nil)
+	client.getNamespaceFn = func(*adminservice.GetNamespaceRequest) (*adminservice.GetNamespaceResponse, error) {
+		return nil, status.Error(codes.NotFound, "namespace not found")
+	}
+	verifier := testNamespaceReplicationVerifierWithClients(source, map[string]*testNamespaceReplicationAdminClient{
+		"cluster-b-address": client,
+	})
+
+	result, err := verifier.Verify(context.Background(), testNamespaceReplicationVerifyRequest())
+	require.NoError(t, err)
+	require.Equal(t, namespaceReplicationStatusRepairRequired, result.Status)
+	require.Equal(t, namespaceReplicationPresenceMissing, result.Clusters[1].Presence)
 }
 
 func TestNamespaceReplicationVerifier_UnavailableTargetBlocksRepair(t *testing.T) {
@@ -418,28 +501,71 @@ func TestNamespaceReplicationProjectionsCoverReplicatedFields(t *testing.T) {
 		{name: "failover history", difference: "replication.failover_history", failoverChange: true, mutate: func(r *adminservice.GetNamespaceResponse) { r.FailoverHistory[0].FailoverVersion++ }},
 	}
 
-	sourceConfig, sourceFailover, err := namespaceReplicationProjections(source)
+	sourceConfig, sourceFailover, err := namespaceReplicationProjections(source, nil)
 	require.NoError(t, err)
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			target := proto.Clone(source).(*adminservice.GetNamespaceResponse)
 			test.mutate(target)
-			targetConfig, targetFailover, err := namespaceReplicationProjections(target)
+			targetConfig, targetFailover, err := namespaceReplicationProjections(target, nil)
 			require.NoError(t, err)
 			require.Equal(t, !test.configChange, proto.Equal(sourceConfig, targetConfig))
 			require.Equal(t, !test.failoverChange, proto.Equal(sourceFailover, targetFailover))
-			require.Contains(t, namespaceReplicationDifferences(source, target), test.difference)
+			require.Contains(t, namespaceReplicationDifferences(
+				sourceConfig,
+				targetConfig,
+				sourceFailover,
+				targetFailover,
+			), test.difference)
 		})
 	}
 
 	versionOnly := proto.Clone(source).(*adminservice.GetNamespaceResponse)
 	versionOnly.ConfigVersion++
 	versionOnly.FailoverVersion++
-	versionConfig, versionFailover, err := namespaceReplicationProjections(versionOnly)
+	versionConfig, versionFailover, err := namespaceReplicationProjections(versionOnly, nil)
 	require.NoError(t, err)
 	require.True(t, proto.Equal(sourceConfig, versionConfig))
 	require.True(t, proto.Equal(sourceFailover, versionFailover))
-	require.Empty(t, namespaceReplicationDifferences(source, versionOnly))
+	require.Empty(t, namespaceReplicationDifferences(
+		sourceConfig,
+		versionConfig,
+		sourceFailover,
+		versionFailover,
+	))
+}
+
+func TestNamespaceReplicationProjectionsDiscardNestedUnknownFields(t *testing.T) {
+	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
+	target := proto.Clone(source).(*adminservice.GetNamespaceResponse)
+	unknown := protowire.AppendTag(nil, 1000, protowire.VarintType)
+	unknown = protowire.AppendVarint(unknown, 1)
+	target.GetConfig().GetBadBinaries().GetBinaries()["checksum"].ProtoReflect().SetUnknown(unknown)
+	target.GetFailoverHistory()[0].ProtoReflect().SetUnknown(unknown)
+
+	sourceConfig, sourceFailover, err := namespaceReplicationProjections(source, nil)
+	require.NoError(t, err)
+	targetConfig, targetFailover, err := namespaceReplicationProjections(target, nil)
+	require.NoError(t, err)
+
+	require.True(t, proto.Equal(sourceConfig, targetConfig))
+	require.True(t, proto.Equal(sourceFailover, targetFailover))
+	require.Empty(t, namespaceReplicationDifferences(
+		sourceConfig,
+		targetConfig,
+		sourceFailover,
+		targetFailover,
+	))
+	sourceConfigFingerprint, err := namespaceReplicationFingerprint(sourceConfig)
+	require.NoError(t, err)
+	targetConfigFingerprint, err := namespaceReplicationFingerprint(targetConfig)
+	require.NoError(t, err)
+	require.Equal(t, sourceConfigFingerprint, targetConfigFingerprint)
+	sourceFailoverFingerprint, err := namespaceReplicationFingerprint(sourceFailover)
+	require.NoError(t, err)
+	targetFailoverFingerprint, err := namespaceReplicationFingerprint(targetFailover)
+	require.NoError(t, err)
+	require.Equal(t, sourceFailoverFingerprint, targetFailoverFingerprint)
 }
 
 func TestParseNamespaceReplicationAddressOverrides(t *testing.T) {
@@ -523,7 +649,11 @@ func TestNamespaceReplicationVerifyRequiresExplicitSelector(t *testing.T) {
 }
 
 func TestNamespaceReplicationVerifyCommandUsesConfiguredAddressAndOverrides(t *testing.T) {
+	const ignoredKey = "__MCNConfig"
 	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
+	source.Info.Data[ignoredKey] = "source-value"
+	target := proto.Clone(source).(*adminservice.GetNamespaceResponse)
+	target.Info.Data[ignoredKey] = "target-local-value"
 	sourceClient := testNamespaceReplicationSourceClient(source)
 	sourceClient.listClustersFn = func(*adminservice.ListClustersRequest) (*adminservice.ListClustersResponse, error) {
 		return nil, errors.New("ListClusters must not be called when every target has an override")
@@ -532,10 +662,10 @@ func TestNamespaceReplicationVerifyCommandUsesConfiguredAddressAndOverrides(t *t
 		sourceAddress: "configured-source-address",
 		clients: map[string]*testNamespaceReplicationAdminClient{
 			"configured-source-address": sourceClient,
-			"override-address":          testNamespaceReplicationTargetClient("cluster-b", source),
+			"override-address":          testNamespaceReplicationTargetClient("cluster-b", target),
 		},
 	}
-	app, output := testNamespaceReplicationCLIApp(factory)
+	app, output := testNamespaceReplicationCLIApp(factory, ignoredKey)
 
 	err := app.Run([]string{
 		"tdbg",
@@ -639,13 +769,17 @@ func TestNamespaceReplicationVerifyCommandPropagatesJSONWriteFailure(t *testing.
 
 func testNamespaceReplicationCLIApp(
 	factory ClientFactory,
+	dataKeysToIgnore ...string,
 ) (*cli.App, *bytes.Buffer) {
 	output := &bytes.Buffer{}
-	app := NewCliApp(func(params *Params) {
-		params.ClientFactory = factory
-		params.Writer = output
-		params.ErrWriter = &bytes.Buffer{}
-	})
+	app := NewCliApp(
+		WithNamespaceReplicationDataKeysToIgnore(dataKeysToIgnore...),
+		func(params *Params) {
+			params.ClientFactory = factory
+			params.Writer = output
+			params.ErrWriter = &bytes.Buffer{}
+		},
+	)
 	app.ExitErrHandler = func(*cli.Context, error) {}
 	return app, output
 }
@@ -670,7 +804,10 @@ func testNamespaceReplicationVerifierWithClients(
 	if clients["source-address"] == nil {
 		clients["source-address"] = testNamespaceReplicationSourceClient(source)
 	}
-	verifier := newNamespaceReplicationVerifier(&testNamespaceReplicationClientProvider{clients: clients})
+	verifier := newNamespaceReplicationVerifier(
+		&testNamespaceReplicationClientProvider{clients: clients},
+		namespaceReplicationOptions{},
+	)
 	verifier.now = func() time.Time { return time.Unix(123, 0).UTC() }
 	return verifier
 }

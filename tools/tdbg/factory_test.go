@@ -143,3 +143,19 @@ func TestCreateTLSConfigUsesPerAddressServerName(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "target.example.com", targetTLS.ServerName)
 }
+
+func TestAdminClientForAddressReturnsTLSConfigurationError(t *testing.T) {
+	app := NewCliApp()
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	for _, cliFlag := range app.Flags {
+		require.NoError(t, cliFlag.Apply(flagSet))
+	}
+	require.NoError(t, flagSet.Set(FlagTLSCaPath, "testdata/does-not-exist.pem"))
+	ctx := cli.NewContext(app, flagSet, nil)
+	factory := NewClientFactory().(*clientFactory)
+
+	client, closer, err := factory.AdminClientForAddress(ctx, "target.example.com:7233", "")
+	require.ErrorContains(t, err, "load server CA certificate")
+	require.Nil(t, client)
+	require.Nil(t, closer)
+}

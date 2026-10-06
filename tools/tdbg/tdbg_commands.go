@@ -20,12 +20,13 @@ func getCommands(
 	taskCategoryRegistry tasks.TaskCategoryRegistry,
 	prompterFactory PrompterFactory,
 	taskBlobEncoder TaskBlobEncoder,
+	namespaceReplicationOptions namespaceReplicationOptions,
 ) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:        "namespace",
 			Usage:       "Run admin operations on namespaces",
-			Subcommands: newNamespaceReplicationCommands(clientFactory),
+			Subcommands: newNamespaceReplicationCommands(clientFactory, namespaceReplicationOptions),
 		},
 		{
 			Name:        "execution",

@@ -115,7 +115,7 @@ func (b *clientFactory) AdminClientForAddress(
 	address string,
 	tlsServerName string,
 ) (adminservice.AdminServiceClient, io.Closer, error) {
-	connection, err := b.createGRPCConnection(c, address, tlsServerName)
+	connection, err := b.createGRPCConnectionWithError(c, address, tlsServerName)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -123,6 +123,19 @@ func (b *clientFactory) AdminClientForAddress(
 }
 
 func (b *clientFactory) createGRPCConnection(
+	c *cli.Context,
+	frontendAddress string,
+	tlsServerName string,
+) (*grpc.ClientConn, error) {
+	connection, err := b.createGRPCConnectionWithError(c, frontendAddress, tlsServerName)
+	if err != nil {
+		b.logger.Fatal("Failed to create connection", tag.Error(err))
+		return nil, err
+	}
+	return connection, nil
+}
+
+func (b *clientFactory) createGRPCConnectionWithError(
 	c *cli.Context,
 	frontendAddress string,
 	tlsServerName string,
@@ -144,8 +157,7 @@ func (b *clientFactory) createGRPCConnection(
 
 	connection, err := grpc.NewClient(frontendAddress, dialOpts...)
 	if err != nil {
-		b.logger.Fatal("Failed to create connection", tag.Error(err))
-		return nil, err
+		return nil, fmt.Errorf("create gRPC connection: %w", err)
 	}
 	return connection, nil
 }
@@ -171,16 +183,14 @@ func (b *clientFactory) createTLSConfig(
 	if caPath != "" {
 		caCertPool, err := fetchCACert(caPath)
 		if err != nil {
-			b.logger.Fatal("Failed to load server CA certificate", tag.Error(err))
-			return nil, err
+			return nil, fmt.Errorf("load server CA certificate: %w", err)
 		}
 		caPool = caCertPool
 	}
 	if certPath != "" {
 		myCert, err := tls.LoadX509KeyPair(certPath, keyPath)
 		if err != nil {
-			b.logger.Fatal("Failed to load client certificate", tag.Error(err))
-			return nil, err
+			return nil, fmt.Errorf("load client certificate: %w", err)
 		}
 		cert = &myCert
 	}
