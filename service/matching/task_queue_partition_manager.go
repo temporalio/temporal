@@ -1743,19 +1743,19 @@ func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.C
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(backoff.Jitter(interval, 0.05)):
-			versions := pm.fetchAndEmitLogicalBacklogMetrics(ctx)
-			if versions == nil {
+			versions, err := pm.fetchAndEmitLogicalBacklogMetrics(ctx)
+			if err != nil {
+				// Stop closes the user data manager before cancelling this goroutine, so a tick in
+				// that window fails with errTaskQueueClosed; neither that nor cancellation is a problem.
+				if !common.IsContextCanceledErr(err) && !errors.Is(err, errTaskQueueClosed) {
+					pm.logger.Error("failed to emit logical backlog metrics", tag.Error(err))
+				}
 				continue // keep the last snapshot so a failed describe doesn't zero live series
 			}
-			// Reduce the last snapshot to the series missing from this one: a version whose queue
-			// unloaded, or a priority a version only had through attribution. Then zero just those.
-			for versionKey, vInfo := range versions {
-				previous := emitted[versionKey].GetPhysicalTaskQueueInfo().GetTaskQueueStatsByPriorityKey()
-				for pri := range vInfo.GetPhysicalTaskQueueInfo().GetTaskQueueStatsByPriorityKey() {
-					delete(previous, pri)
-				}
+			if versions == nil {
+				continue // disabled
 			}
-			pm.emitZeroLogicalBacklog(emitted)
+			pm.emitZeroLogicalBacklog(staleLogicalBacklog(emitted, versions))
 			emitted = versions
 		}
 	}
@@ -1766,16 +1766,16 @@ func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.C
 // These metrics reflect versioning attribution: for current/ramping versions, a proportional
 // share of the unversioned queue's backlog is added to their count, and the unversioned queue's
 // count is reduced accordingly. This ensures metrics match what DescribeTaskQueue returns.
-// Returns the versions it recorded, or nil if it didn't get to describe the partition.
-func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx context.Context) map[string]*taskqueuespb.TaskQueueVersionInfoInternal {
+// Returns the versions it recorded, or nil if the metrics are disabled.
+func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx context.Context) (map[string]*taskqueuespb.TaskQueueVersionInfoInternal, error) {
 	if !pm.config.BreakdownMetricsByTaskQueue() || !pm.config.BreakdownMetricsByPartition() {
-		return nil
+		return nil, nil
 	}
 
 	buildIds := map[string]bool{"": true} // include unversioned
 	resp, err := pm.describe(ctx, buildIds, true, true, false, false, true)
 	if err != nil {
-		return nil
+		return nil, err
 	}
 
 	emitted := make(map[string]*taskqueuespb.TaskQueueVersionInfoInternal)
@@ -1806,7 +1806,29 @@ func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx c
 			)
 		}
 	}
-	return emitted
+	return emitted, nil
+}
+
+// staleLogicalBacklog returns the series in prev that cur no longer reports: every priority of a
+// version whose queue unloaded, and any priority a still-loaded version only had through
+// attribution, e.g. after it stops being current.
+func staleLogicalBacklog(prev, cur map[string]*taskqueuespb.TaskQueueVersionInfoInternal) map[string]*taskqueuespb.TaskQueueVersionInfoInternal {
+	stale := make(map[string]*taskqueuespb.TaskQueueVersionInfoInternal)
+	for versionKey, prevInfo := range prev {
+		curInfo, stillLoaded := cur[versionKey]
+		if !stillLoaded {
+			stale[versionKey] = prevInfo
+			continue
+		}
+		prevStats := prevInfo.GetPhysicalTaskQueueInfo().GetTaskQueueStatsByPriorityKey()
+		for pri := range curInfo.GetPhysicalTaskQueueInfo().GetTaskQueueStatsByPriorityKey() {
+			delete(prevStats, pri)
+		}
+		if len(prevStats) > 0 {
+			stale[versionKey] = prevInfo
+		}
+	}
+	return stale
 }
 
 func (pm *taskQueuePartitionManagerImpl) logicalBacklogHandler(versionKey string) metrics.Handler {
