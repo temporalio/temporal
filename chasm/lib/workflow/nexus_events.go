@@ -190,6 +190,7 @@ func (d StartedEventDefinition) Apply(ctx chasm.MutableContext, wf *Workflow, ev
 	startTime := event.GetEventTime().AsTime()
 	return nexusoperation.TransitionStarted.Apply(op, ctx, nexusoperation.EventStarted{
 		OperationToken: attrs.GetOperationToken(),
+		RequestID:      attrs.GetRequestId(),
 		StartTime:      &startTime,
 	})
 }
@@ -225,6 +226,7 @@ func (d CompletedEventDefinition) Apply(ctx chasm.MutableContext, wf *Workflow, 
 	if err := nexusoperation.TransitionSucceeded.Apply(op, ctx, nexusoperation.EventSucceeded{
 		CompleteTime: &completeTime,
 		Result:       attrs.GetResult(),
+		RequestID:    attrs.GetRequestId(),
 	}); err != nil {
 		return err
 	}
@@ -263,6 +265,7 @@ func (d FailedEventDefinition) Apply(ctx chasm.MutableContext, wf *Workflow, eve
 	if err := nexusoperation.TransitionFailed.Apply(op, ctx, nexusoperation.EventFailed{
 		CompleteTime: &completeTime,
 		Failure:      attrs.GetFailure().GetCause(),
+		RequestID:    attrs.GetRequestId(),
 	}); err != nil {
 		return err
 	}
@@ -301,6 +304,7 @@ func (d CanceledEventDefinition) Apply(ctx chasm.MutableContext, wf *Workflow, e
 	if err := nexusoperation.TransitionCanceled.Apply(op, ctx, nexusoperation.EventCanceled{
 		CompleteTime: &completeTime,
 		Failure:      attrs.GetFailure().GetCause(),
+		RequestID:    attrs.GetRequestId(),
 	}); err != nil {
 		return err
 	}

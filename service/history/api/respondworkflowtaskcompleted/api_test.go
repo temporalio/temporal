@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
 	commandpb "go.temporal.io/api/command/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
@@ -35,9 +36,11 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/historyrequire"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/protoutils"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/testing/updateutils"
 	"go.temporal.io/server/service/history/api"
@@ -120,7 +123,7 @@ func (s *WorkflowTaskCompletedHandlerSuite) SetupSubTest() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 	s.logger = s.mockShard.GetLogger()
 
-	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler)
+	s.workflowCache = wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{})
 	s.workflowTaskCompletedHandler = NewWorkflowTaskCompletedHandler(
 		s.mockShard,
 		tasktoken.NewSerializer(),
@@ -529,6 +532,122 @@ func (s *WorkflowTaskCompletedHandlerSuite) TestForceCreateNewWorkflowTaskOnPaus
 		s.True(ok, "context task queue MUST be set even for paused workflow error")
 		s.Equal(tv.TaskQueue().GetName(), contextTaskQueue)
 	})
+}
+
+func (s *WorkflowTaskCompletedHandlerSuite) TestVersioningBehaviorNormalization() {
+	for _, tc := range []struct {
+		name              string
+		behavior          enumspb.VersioningBehavior
+		deployment        *deploymentpb.Deployment
+		deploymentOptions *deploymentpb.WorkerDeploymentOptions
+		expectedBehavior  enumspb.VersioningBehavior
+	}{
+		{
+			name:              "unversioned pinned",
+			behavior:          enumspb.VERSIONING_BEHAVIOR_PINNED,
+			deploymentOptions: &deploymentpb.WorkerDeploymentOptions{WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_UNVERSIONED},
+			expectedBehavior:  enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
+		},
+		{
+			name:              "unversioned auto-upgrade",
+			behavior:          enumspb.VERSIONING_BEHAVIOR_AUTO_UPGRADE,
+			deploymentOptions: &deploymentpb.WorkerDeploymentOptions{WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_UNVERSIONED},
+			expectedBehavior:  enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
+		},
+		{
+			name:     "versioned pinned",
+			behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+			deploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+				DeploymentName:       "deployment",
+				BuildId:              "build-id",
+				WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_VERSIONED,
+			},
+			expectedBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+		},
+		{
+			name:             "missing deployment metadata",
+			behavior:         enumspb.VERSIONING_BEHAVIOR_PINNED,
+			expectedBehavior: enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
+		},
+		{
+			name:             "invalid legacy deployment",
+			behavior:         enumspb.VERSIONING_BEHAVIOR_PINNED,
+			deployment:       &deploymentpb.Deployment{BuildId: "build-id"},
+			expectedBehavior: enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
+		},
+		{
+			name:             "valid legacy deployment",
+			behavior:         enumspb.VERSIONING_BEHAVIOR_PINNED,
+			deployment:       &deploymentpb.Deployment{SeriesName: "deployment", BuildId: "build-id"},
+			expectedBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+		},
+		{
+			name:              "unversioned takes precedence over legacy deployment",
+			behavior:          enumspb.VERSIONING_BEHAVIOR_PINNED,
+			deployment:        &deploymentpb.Deployment{SeriesName: "deployment", BuildId: "build-id"},
+			deploymentOptions: &deploymentpb.WorkerDeploymentOptions{WorkerVersioningMode: enumspb.WORKER_VERSIONING_MODE_UNVERSIONED},
+			expectedBehavior:  enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
+		},
+	} {
+		s.Run(tc.name, func() {
+			tv := testvars.New(s.T())
+			tv = tv.WithRunID(tv.Any().RunID())
+			s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+
+			_, serializedTaskToken := s.createStartedWorkflowWithStartedWFT(tv)
+			writtenHistoryCh := s.captureWrittenHistory(1)
+
+			_, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+				NamespaceId: tv.NamespaceID().String(),
+				CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+					TaskToken:          serializedTaskToken,
+					Identity:           tv.Any().String(),
+					VersioningBehavior: tc.behavior,
+					Deployment:         tc.deployment, //nolint:staticcheck // SA1019: worker versioning v0.30
+					DeploymentOptions:  tc.deploymentOptions,
+				},
+			})
+			s.Require().NoError(err)
+
+			historyEvents := await.Rcv(s.T(), writtenHistoryCh)
+			s.Require().Len(historyEvents, 1)
+			s.Require().Equal(
+				tc.expectedBehavior,
+				historyEvents[0].GetWorkflowTaskCompletedEventAttributes().GetVersioningBehavior(),
+			)
+		})
+	}
+}
+
+func (s *WorkflowTaskCompletedHandlerSuite) TestVersioningBehaviorWithoutWorkerVersioningModeIsRejected() {
+	for _, tc := range []struct {
+		name           string
+		versioningMode enumspb.WorkerVersioningMode
+	}{
+		{name: "unspecified versioning mode"},
+		{name: "unknown versioning mode", versioningMode: enumspb.WorkerVersioningMode(99)},
+	} {
+		s.Run(tc.name, func() {
+			tv := testvars.New(s.T())
+			tv = tv.WithRunID(tv.Any().RunID())
+			s.mockNamespaceCache.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(tv.Namespace(), nil).AnyTimes()
+
+			_, serializedTaskToken := s.createStartedWorkflowWithStartedWFT(tv)
+			_, err := s.workflowTaskCompletedHandler.Invoke(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+				NamespaceId: tv.NamespaceID().String(),
+				CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+					TaskToken:          serializedTaskToken,
+					Identity:           tv.Any().String(),
+					VersioningBehavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+					DeploymentOptions: &deploymentpb.WorkerDeploymentOptions{
+						WorkerVersioningMode: tc.versioningMode,
+					},
+				},
+			})
+			var invalidArgument *serviceerror.InvalidArgument
+			s.Require().ErrorAs(err, &invalidArgument)
+		})
+	}
 }
 
 func (s *WorkflowTaskCompletedHandlerSuite) TestHandleBufferedQueries() {

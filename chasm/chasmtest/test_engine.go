@@ -550,6 +550,7 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 	)
 
 	backend := &chasm.MockNodeBackend{
+		HandleNow: e.timeSource.Now,
 		// NextTransitionCount is the count the in-flight transaction will commit as.
 		HandleNextTransitionCount: func() int64 {
 			bsMu.Lock()
@@ -566,6 +567,11 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 			}
 		},
 		HandleGetCurrentVersion: func() int64 { return 1 },
+		// Always run the post-execution validation for scheduled pure tasks so that
+		// FirePureTasks surfaces a TaskNotInvalidatedError when a component fails to
+		// invalidate its task after a successful Execute. Nothing is DLQ'd in unit tests
+		// (there is no queue executor here); the error is returned for tests to assert on.
+		HandleChasmDLQScheduledPureTaskOnValidationEnabled: func() bool { return true },
 		HandleGetWorkflowKey: func() definition.WorkflowKey {
 			return definition.NewWorkflowKey(key.NamespaceID, key.BusinessID, key.RunID)
 		},
@@ -603,7 +609,6 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 		backend: backend,
 		node: chasm.NewEmptyTree(
 			e.registry,
-			e.timeSource,
 			backend,
 			chasm.DefaultPathEncoder,
 			e.logger,

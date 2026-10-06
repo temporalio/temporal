@@ -23,19 +23,22 @@ var _ MutableContext = (*MockMutableContext)(nil)
 
 // MockContext is a mock implementation of [Context].
 type MockContext struct {
-	HandleExecutionKey         func() ExecutionKey
-	HandleNow                  func(component Component) time.Time
-	HandleRef                  func(component Component) ([]byte, error)
-	HandleExecutionCloseTime   func() time.Time
-	HandleStateTransitionCount func() int64
-	HandleExecutionInfo        func() ExecutionInfo
-	HandleLibrary              func(name string) (Library, bool)
-	HandleNamespaceEntry       func() *namespace.Namespace
-	HandleEndpointByName       func(string) (*persistencespb.NexusEndpointEntry, error)
-	HandleMetricsHandler       func() metrics.Handler
-	HandleLinks                func(component Component) []*commonpb.Link
-	HandleRequestLinks         func(component Component, requestID string) ([]*commonpb.Link, error)
-	HandleUserMetadata         func(component Component) *sdkpb.UserMetadata
+	HandleExecutionKey                  func() ExecutionKey
+	HandleNow                           func(component Component) time.Time
+	HandleRef                           func(component Component) ([]byte, error)
+	HandleExecutionCloseTime            func() time.Time
+	HandleStateTransitionCount          func() int64
+	HandleExecutionInfo                 func() ExecutionInfo
+	HandleLibrary                       func(name string) (Library, bool)
+	HandleNamespaceEntry                func() *namespace.Namespace
+	HandleEndpointByName                func(string) (*persistencespb.NexusEndpointEntry, error)
+	HandleMetricsHandler                func() metrics.Handler
+	HandleLinks                         func(component Component) []*commonpb.Link
+	HandleRequestLinks                  func(component Component, requestID string) ([]*commonpb.Link, error)
+	HandleUserMetadata                  func(component Component) *sdkpb.UserMetadata
+	HandlePath                          func(component Component) []string
+	HandleGetTimeSkippingPropagateState func() (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation)
+	HandleGetTimeSkippingInfo           func() *commonpb.TimeSkippingInfo
 
 	// GoCtx is the underlying context.Context used for context value lookups.
 	// Any values set on it will be available via the CHASM mock context's Value method,
@@ -66,6 +69,23 @@ func (c *MockContext) goContext() context.Context {
 		c.GoCtx = context.Background()
 	}
 	return c.GoCtx
+}
+
+func (c *MockContext) GetTimeSkippingPropagateState() (
+	*commonpb.TimeSkippingConfig,
+	*commonpb.TimeSkippingStatePropagation,
+) {
+	if c.HandleGetTimeSkippingPropagateState == nil {
+		return nil, nil
+	}
+	return c.HandleGetTimeSkippingPropagateState()
+}
+
+func (c *MockContext) GetTimeSkippingInfo() *commonpb.TimeSkippingInfo {
+	if c.HandleGetTimeSkippingInfo == nil {
+		return nil
+	}
+	return c.HandleGetTimeSkippingInfo()
 }
 
 func (c *MockContext) RequestHeader(key string) string {
@@ -162,19 +182,29 @@ func (c *MockContext) UserMetadata(component Component) *sdkpb.UserMetadata {
 	return nil
 }
 
+func (c *MockContext) Path(component Component) []string {
+	if c.HandlePath != nil {
+		return c.HandlePath(component)
+	}
+	return nil
+}
+
 func (c *MockContext) withValue(key any, value any) Context {
 	return &MockContext{
-		HandleExecutionKey:   c.HandleExecutionKey,
-		HandleNow:            c.HandleNow,
-		HandleRef:            c.HandleRef,
-		HandleExecutionInfo:  c.HandleExecutionInfo,
-		HandleMetricsHandler: c.HandleMetricsHandler,
-		GoCtx:                context.WithValue(c.goContext(), key, value),
-		HandleNamespaceEntry: c.HandleNamespaceEntry,
-		HandleEndpointByName: c.HandleEndpointByName,
-		HandleLinks:          c.HandleLinks,
-		HandleRequestLinks:   c.HandleRequestLinks,
-		HandleUserMetadata:   c.HandleUserMetadata,
+		HandleExecutionKey:                  c.HandleExecutionKey,
+		HandleNow:                           c.HandleNow,
+		HandleRef:                           c.HandleRef,
+		HandleExecutionInfo:                 c.HandleExecutionInfo,
+		HandleMetricsHandler:                c.HandleMetricsHandler,
+		GoCtx:                               context.WithValue(c.goContext(), key, value),
+		HandleNamespaceEntry:                c.HandleNamespaceEntry,
+		HandleEndpointByName:                c.HandleEndpointByName,
+		HandleLinks:                         c.HandleLinks,
+		HandleRequestLinks:                  c.HandleRequestLinks,
+		HandleUserMetadata:                  c.HandleUserMetadata,
+		HandlePath:                          c.HandlePath,
+		HandleGetTimeSkippingPropagateState: c.HandleGetTimeSkippingPropagateState,
+		HandleGetTimeSkippingInfo:           c.HandleGetTimeSkippingInfo,
 	}
 }
 
@@ -187,6 +217,7 @@ type MockMutableContext struct {
 	Tasks                   []MockTask
 	LinksByRequest          map[Component]map[string][]*commonpb.Link
 	UserMetadataByComponent map[Component]*sdkpb.UserMetadata
+	TimeSkippingConfig      *commonpb.TimeSkippingConfig
 }
 
 func (c *MockMutableContext) AddTask(component Component, attributes TaskAttributes, payload any) {
@@ -229,6 +260,12 @@ func (c *MockMutableContext) withValue(key any, value any) Context {
 		MockContext: *ContextWithValue(&c.MockContext, key, value),
 		Tasks:       slices.Clone(c.Tasks),
 	}
+}
+
+func (c *MockMutableContext) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.TimeSkippingConfig = config
 }
 
 type MockTask struct {

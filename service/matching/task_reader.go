@@ -184,7 +184,7 @@ Loop:
 		case <-updateAckTimer.C:
 			err := tr.persistAckBacklogCountLevel(ctx)
 			isConditionFailed := tr.backlogMgr.signalIfFatal(err)
-			if err != nil && !isConditionFailed {
+			if err != nil && !isConditionFailed && !common.IsContextCanceledErr(err) {
 				tr.logger().Error("Persistent store operation failure",
 					tag.StoreOperationUpdateTaskQueue,
 					tag.Error(err))

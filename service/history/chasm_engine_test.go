@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/hsm"
@@ -89,6 +90,7 @@ func (s *chasmEngineSuite) SetupTest() {
 		s.mockShard.GetConfig(),
 		s.mockShard.GetLogger(),
 		metrics.NoopMetricsHandler,
+		testhooks.TestHooks{},
 	)
 	s.namespaceEntry = tests.GlobalNamespaceEntry
 

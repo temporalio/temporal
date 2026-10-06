@@ -250,7 +250,7 @@ func TestGetQueryFields(t *testing.T) {
 			name:           "invalid custom search attribute",
 			input:          "Foo = 'bar'",
 			expectedFields: nil,
-			expectedErrMsg: "'Foo' is not a valid search attribute",
+			expectedErrMsg: "invalid search attribute: Foo",
 		},
 	}
 
@@ -334,7 +334,7 @@ func TestValidateVisibilityQuery(t *testing.T) {
 		{
 			name:           "invalid custom search attribute",
 			input:          "Foo = foo",
-			expectedErrMsg: "'Foo' is not a valid search attribute",
+			expectedErrMsg: "invalid search attribute: Foo",
 		},
 	}
 

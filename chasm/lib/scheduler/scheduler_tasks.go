@@ -127,6 +127,7 @@ type SchedulerCallbacksTaskHandlerOptions struct {
 	Config         *Config
 	HistoryClient  resource.HistoryClient
 	FrontendClient workflowservice.WorkflowServiceClient
+	MetricsHandler metrics.Handler
 }
 
 type SchedulerCallbacksTaskHandler struct {
@@ -134,6 +135,7 @@ type SchedulerCallbacksTaskHandler struct {
 	config         *Config
 	historyClient  resource.HistoryClient
 	frontendClient workflowservice.WorkflowServiceClient
+	metricsHandler metrics.Handler
 }
 
 func NewSchedulerCallbacksTaskHandler(opts SchedulerCallbacksTaskHandlerOptions) *SchedulerCallbacksTaskHandler {
@@ -141,6 +143,7 @@ func NewSchedulerCallbacksTaskHandler(opts SchedulerCallbacksTaskHandlerOptions)
 		config:         opts.Config,
 		historyClient:  opts.HistoryClient,
 		frontendClient: opts.FrontendClient,
+		metricsHandler: opts.MetricsHandler,
 	}
 }
 
@@ -149,6 +152,9 @@ func NewSchedulerCallbacksTaskHandler(opts SchedulerCallbacksTaskHandlerOptions)
 // workflow is still running.
 type watchResult struct {
 	completed *schedulespb.CompletedResult
+
+	// reason attributes how completed was arrived at, for ScheduleCallbackReattach.
+	reason metrics.ReasonString
 }
 
 func (r *SchedulerCallbacksTaskHandler) Execute(
@@ -211,14 +217,19 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 		func(s *Scheduler, ctx chasm.MutableContext, _ any) (chasm.NoValue, error) {
 			generator := s.Generator.Get(ctx)
 			invoker := s.Invoker.Get(ctx)
+			var completedRequestIDs []string
 
 			for _, start := range invoker.BufferedStarts {
 				if result, ok := results[start.RequestId]; ok {
-					start.HasCallback = true
 					if result.completed != nil {
-						start.Completed = result.completed
+						completedRequestIDs = append(completedRequestIDs, start.RequestId)
+					} else {
+						start.HasCallback = true
 					}
 				}
+			}
+			for _, requestID := range completedRequestIDs {
+				s.completeAction(ctx, requestID, results[requestID].completed, nil)
 			}
 
 			s.getOrCreateEventLog(ctx).LogEvent(ctx,
@@ -235,6 +246,18 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 	)
 	if err != nil {
 		return fmt.Errorf("failed to update component state: %w", err)
+	}
+
+	// Only after the update commits, so a rolled-back re-attach isn't counted.
+	metricsHandler := newTaggedMetricsHandler(r.metricsHandler, scheduler)
+	for _, result := range results {
+		outcome := outcomeReattachAttached
+		if result.completed != nil {
+			outcome = outcomeReattachCompleted
+		}
+		metrics.ScheduleCallbackReattach.With(metricsHandler).Record(1,
+			metrics.OutcomeTag(outcome),
+			metrics.ReasonTag(result.reason))
 	}
 
 	return nil
@@ -267,21 +290,21 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 					Status:    enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 					CloseTime: timestamppb.Now(),
 				},
+				reason: reasonReattachNotFound,
 			}, nil
 		}
 		return nil, err
 	}
 
 	wfInfo := descResp.GetWorkflowExecutionInfo()
-	wfProgressing := wfInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING ||
-		wfInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
-
-	if !wfProgressing {
+	completed, err := completedResultFromWorkflowInfo(wfInfo)
+	if err != nil {
+		return nil, err
+	}
+	if completed != nil {
 		return &watchResult{
-			completed: &schedulespb.CompletedResult{
-				Status:    wfInfo.GetStatus(),
-				CloseTime: wfInfo.GetCloseTime(),
-			},
+			completed: completed,
+			reason:    reasonReattachAlreadyClosed,
 		}, nil
 	}
 
@@ -314,21 +337,14 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 		},
 	})
 	if err != nil {
-		// WorkflowExecutionAlreadyStarted: workflow completed between describe
-		// and this attach call (REJECT_DUPLICATE rejects completed workflows).
-		if isAlreadyStartedError(err) {
-			return &watchResult{
-				completed: &schedulespb.CompletedResult{
-					Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-					CloseTime: timestamppb.Now(),
-				},
-			}, nil
-		}
+		// CONSIDER(scheduler): When this is WorkflowExecutionAlreadyStarted after a
+		// continued-as-new successor closes, retrying describes the predecessor and
+		// cannot observe the successor's terminal status. Follow the chain instead.
 		return nil, err
 	}
 
 	// Callback attached successfully.
-	return &watchResult{}, nil
+	return &watchResult{reason: reasonNone}, nil
 }
 
 func (r *SchedulerCallbacksTaskHandler) Validate(

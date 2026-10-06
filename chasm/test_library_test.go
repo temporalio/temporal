@@ -2,6 +2,7 @@
 package chasm
 
 import (
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.uber.org/mock/gomock"
 )
 
@@ -45,9 +46,11 @@ func (l *TestLibrary) Components() []*RegistrableComponent {
 	return []*RegistrableComponent{
 		NewRegistrableComponent[*TestComponent](
 			testComponentName,
+			WithExecutionType(enumspb.EXECUTION_TYPE_WORKFLOW),
 			WithBusinessIDAlias("TestBusinessId"),
 			WithSearchAttributes(TestComponentStartTimeSearchAttribute),
 		),
+		NewRegistrableComponent[*TestTimeSkippingImplComponent](testTimeSkippingComponentName),
 		NewRegistrableComponent[*TestSubComponent1](testSubComponent1Name),
 		NewRegistrableComponent[*TestSubComponent11](testSubComponent11Name),
 		NewRegistrableComponent[*TestSubComponent2](testSubComponent2Name),

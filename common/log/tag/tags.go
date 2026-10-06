@@ -394,6 +394,10 @@ func component(component string) ZapTag {
 	return NewStringTag("component", component)
 }
 
+func nexusStage(stage string) ZapTag {
+	return NewStringTag("nexus-stage", stage)
+}
+
 // Lifecycle returns tag for Lifecycle
 func lifecycle(lifecycle string) ZapTag {
 	return NewStringTag("lifecycle", lifecycle)
@@ -1031,6 +1035,11 @@ func Cause(cause string) ZapTag {
 
 func NexusOperation(operation string) ZapTag {
 	return NewStringTag("nexus-operation", operation)
+}
+
+// NexusCompletionSource retuns a tag for the source of the Nexus completion callback.
+func NexusCompletionSource(source string) ZapTag {
+	return NewStringTag("nexus-completion-source", source)
 }
 
 func NexusService(service string) ZapTag {

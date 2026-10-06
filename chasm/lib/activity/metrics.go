@@ -41,15 +41,15 @@ func (a *Activity) enrichedMetricsHandler(ctx chasm.Context, operation string) m
 	actCtx := activityContextFromChasm(ctx)
 	breakdownMetricsByTaskQueue := actCtx.config.BreakdownMetricsByTaskQueue
 	taskQueueFamily := a.GetTaskQueue().GetName()
-	return metrics.GetPerTaskQueueFamilyScope(
+	return metrics.GetPerActivityScope(
 		ctx.MetricsHandler(),
 		namespaceName.String(),
 		tqid.UnsafeTaskQueueFamily(namespaceName.String(), taskQueueFamily),
 		breakdownMetricsByTaskQueue(namespaceName.String(), taskQueueFamily, enumspb.TASK_QUEUE_TYPE_ACTIVITY),
-		metrics.OperationTag(operation),
-		metrics.ActivityTypeTag(a.GetActivityType().GetName()),
-		metrics.VersioningBehaviorTag(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED),
-		metrics.WorkflowTypeTag(WorkflowTypeTag),
+		operation,
+		a.GetActivityType().GetName(),
+		WorkflowTypeTag,
+		enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED,
 	)
 }
 

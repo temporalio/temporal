@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
@@ -132,6 +133,7 @@ func (s *workflowReplicatorSuite) SetupTest() {
 		quotas.NoopRequestRateLimiter,
 		s.logger,
 		nil,
+		testhooks.NewTestHooks(),
 	)
 }
 
@@ -723,6 +725,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		quotas.NoopRequestRateLimiter,
 		s.logger,
 		nil,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -816,6 +819,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_DifferentBra
 		quotas.NoopRequestRateLimiter,
 		s.logger,
 		nil,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -903,6 +907,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_SameBranch_S
 		quotas.NoopRequestRateLimiter,
 		s.logger,
 		nil,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -1001,6 +1006,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_FirstTask_Ca
 		quotas.NoopRequestRateLimiter,
 		s.logger,
 		eventCapture,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -1088,6 +1094,7 @@ func (s *workflowReplicatorSuite) Test_ReplicateVersionedTransition_MutationProv
 		quotas.NoopRequestRateLimiter,
 		s.logger,
 		nil,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -1720,6 +1727,7 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_WithSnapshot_S
 		quotas.NoopRequestRateLimiter,
 		s.logger,
 		nil,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -1800,6 +1808,7 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_WithMutation_S
 		quotas.NoopRequestRateLimiter,
 		s.logger,
 		nil,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -1875,6 +1884,7 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_InvalidArtifac
 		quotas.NoopRequestRateLimiter,
 		s.logger,
 		nil,
+		testhooks.NewTestHooks(),
 	)
 
 	versionedTransitionArtifact := &replicationspb.VersionedTransitionArtifact{}
@@ -1902,6 +1912,7 @@ func (s *workflowReplicatorSuite) Test_handleFirstReplicationTask_CreateWorkflow
 		quotas.NoopRequestRateLimiter,
 		s.logger,
 		nil,
+		testhooks.NewTestHooks(),
 	)
 	mockTransactionManager := NewMockTransactionManager(s.controller)
 	mockTaskRefresher := workflow.NewMockTaskRefresher(s.controller)
@@ -2010,8 +2021,8 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_C
 		},
 	}
 
-	mockMutableState := historyi.NewMockMutableState(s.controller)
-	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+	// Tip of local-branchToken1, above the fork point.
+	executionInfo := &persistencespb.WorkflowExecutionInfo{
 		NamespaceId:      namespaceID,
 		WorkflowId:       s.workflowID,
 		VersionHistories: localVersionHistoryies,
@@ -2022,7 +2033,10 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_C
 		ExecutionStats: &persistencespb.ExecutionStats{
 			HistorySize: 100,
 		},
-	}).AnyTimes()
+		LastFirstEventTxnId: 45,
+	}
+	mockMutableState := historyi.NewMockMutableState(s.controller)
+	mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: s.runID,
 	}).AnyTimes()
@@ -2031,6 +2045,15 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_C
 	mockWeCtx := historyi.NewMockWorkflowContext(s.controller)
 	s.mockNamespaceCache.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(namespace.Name("test-namespace"), nil).AnyTimes()
 	forkedBranchToken := []byte("forked-branchToken")
+	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+		ShardID:     s.mockShard.GetShardID(),
+		BranchToken: forkedBranchToken,
+		MinEventID:  1,
+		MaxEventID:  31,
+		PageSize:    defaultPageSize,
+	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
+		TransactionIDs: []int64{12, 17},
+	}, nil)
 	s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any(), &persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: localVersionHistoryies.Histories[0].BranchToken,
 		ForkNodeID:      31,
@@ -2058,6 +2081,181 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_C
 	s.Equal(forkedBranchToken, localVersionHistoryies.Histories[2].BranchToken)
 	s.Equal(int32(2), localVersionHistoryies.CurrentVersionHistoryIndex)
 	s.NotNil(newRunBranch)
+	s.Equal(int64(17), executionInfo.LastFirstEventTxnId)
+}
+
+func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_CreateNewBranch_LinksToForkPoint() {
+	// Local diverged after event 30, so 31-32 go on a new branch that should chain onto event 30's node.
+	localVersionHistories := &historyspb.VersionHistories{
+		CurrentVersionHistoryIndex: 0,
+		Histories: []*historyspb.VersionHistory{
+			{
+				BranchToken: []byte("local-branchToken"),
+				Items:       []*historyspb.VersionHistoryItem{{EventId: 40, Version: 1}},
+			},
+		},
+	}
+	sourceVersionHistories := &historyspb.VersionHistories{
+		CurrentVersionHistoryIndex: 0,
+		Histories: []*historyspb.VersionHistory{
+			{
+				BranchToken: []byte("source-branchToken"),
+				Items:       []*historyspb.VersionHistoryItem{{EventId: 30, Version: 1}, {EventId: 32, Version: 2}},
+			},
+		},
+	}
+	forkedBranchToken := []byte("forked-branchToken")
+	s.testAppendAfterBranchChange(
+		localVersionHistories,
+		sourceVersionHistories,
+		func(namespaceID string) {
+			s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any(), &persistence.ForkHistoryBranchRequest{
+				ForkBranchToken: localVersionHistories.Histories[0].BranchToken,
+				ForkNodeID:      31,
+				NamespaceID:     namespaceID,
+				Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID, s.workflowID, s.runID),
+				ShardID:         0,
+				NewRunID:        s.runID,
+			}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: forkedBranchToken}, nil)
+		},
+		forkedBranchToken,
+		true,
+		30,
+	)
+	s.Equal(int32(1), localVersionHistories.CurrentVersionHistoryIndex)
+}
+
+func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_SwitchToExistingBranch_LinksToItsTip() {
+	// Replication switches to the second branch and appends 32, which should chain onto that branch's tip.
+	localVersionHistories := &historyspb.VersionHistories{
+		CurrentVersionHistoryIndex: 0,
+		Histories: []*historyspb.VersionHistory{
+			{
+				BranchToken: []byte("local-branchToken1"),
+				Items:       []*historyspb.VersionHistoryItem{{EventId: 40, Version: 1}},
+			},
+			{
+				BranchToken: []byte("local-branchToken2"),
+				Items:       []*historyspb.VersionHistoryItem{{EventId: 30, Version: 1}, {EventId: 31, Version: 2}},
+			},
+		},
+	}
+	sourceVersionHistories := &historyspb.VersionHistories{
+		CurrentVersionHistoryIndex: 0,
+		Histories: []*historyspb.VersionHistory{
+			{
+				BranchToken: []byte("source-branchToken"),
+				Items:       []*historyspb.VersionHistoryItem{{EventId: 30, Version: 1}, {EventId: 32, Version: 2}},
+			},
+		},
+	}
+	s.testAppendAfterBranchChange(
+		localVersionHistories,
+		sourceVersionHistories,
+		func(string) {},
+		localVersionHistories.Histories[1].BranchToken,
+		false,
+		31,
+	)
+	s.Equal(int32(1), localVersionHistories.CurrentVersionHistoryIndex)
+}
+
+// testAppendAfterBranchChange replicates events appendAfterEventID+1..32 onto a non-current branch and
+// checks the appended node chains onto that branch.
+func (s *workflowReplicatorSuite) testAppendAfterBranchChange(
+	localVersionHistories *historyspb.VersionHistories,
+	sourceVersionHistories *historyspb.VersionHistories,
+	expectFork func(namespaceID string),
+	appendBranchToken []byte,
+	isNewBranch bool,
+	appendAfterEventID int64,
+) {
+	namespaceID := uuid.NewString()
+	var appendEvents []*historypb.HistoryEvent
+	for id := appendAfterEventID + 1; id <= 32; id++ {
+		appendEvents = append(appendEvents, &historypb.HistoryEvent{EventId: id, Version: 2})
+	}
+	blob, err := s.serializer.SerializeEvents(appendEvents)
+	s.NoError(err)
+
+	// Tip of the current branch, which the append must not chain onto.
+	executionInfo := &persistencespb.WorkflowExecutionInfo{
+		NamespaceId:         namespaceID,
+		WorkflowId:          s.workflowID,
+		VersionHistories:    localVersionHistories,
+		ExecutionStats:      &persistencespb.ExecutionStats{HistorySize: 100},
+		LastFirstEventTxnId: 45,
+	}
+	mockMutableState := historyi.NewMockMutableState(s.controller)
+	mockMutableState.EXPECT().GetExecutionInfo().Return(executionInfo).AnyTimes()
+	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{RunId: s.runID}).AnyTimes()
+	mockMutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(namespaceID, s.workflowID, s.runID)).AnyTimes()
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: namespaceID, Name: "test-namespace"},
+		&persistencespb.NamespaceConfig{},
+		"test-cluster",
+	)).AnyTimes()
+	mockMutableState.EXPECT().AddExternalPayloadSize(gomock.Any()).AnyTimes()
+	mockMutableState.EXPECT().AddExternalPayloadCount(gomock.Any()).AnyTimes()
+	mockMutableState.EXPECT().SetHistoryBuilder(gomock.Any()).Times(1)
+	for _, event := range appendEvents {
+		mockMutableState.EXPECT().AddReapplyCandidateEvent(&historyEventMatcher{expected: event}).Times(1)
+	}
+
+	mockShard := historyi.NewMockShardContext(s.controller)
+	appendTxnID := int64(50)
+	mockShard.EXPECT().GenerateTaskID().Return(appendTxnID, nil).Times(1)
+	mockShard.EXPECT().GetShardID().Return(int32(0)).AnyTimes()
+	mockShard.EXPECT().GetMetricsHandler().Return(s.mockShard.GetMetricsHandler()).AnyTimes()
+	mockShard.EXPECT().GetConfig().Return(s.mockShard.GetConfig()).AnyTimes()
+	mockShard.EXPECT().GetNamespaceRegistry().Return(s.mockNamespaceCache).AnyTimes()
+	mockShard.EXPECT().GetClusterMetadata().Return(s.mockShard.GetClusterMetadata()).AnyTimes()
+	mockShard.EXPECT().GetExecutionManager().Return(s.mockExecutionManager).AnyTimes()
+	s.workflowStateReplicator.shardContext = mockShard
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "test-namespace"},
+		nil,
+		false,
+		nil,
+		int64(100),
+	), nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(namespace.ID(namespaceID)).Return(namespace.Name("test-namespace"), nil).AnyTimes()
+
+	expectFork(namespaceID)
+	forkPointTxnID := int64(17)
+	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
+		ShardID:     0,
+		BranchToken: appendBranchToken,
+		MinEventID:  1,
+		MaxEventID:  appendAfterEventID + 1,
+		PageSize:    defaultPageSize,
+	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
+		TransactionIDs: []int64{12, forkPointTxnID},
+	}, nil)
+	s.mockExecutionManager.EXPECT().AppendRawHistoryNodes(gomock.Any(), &persistence.AppendRawHistoryNodesRequest{
+		ShardID:           0,
+		IsNewBranch:       isNewBranch,
+		BranchToken:       appendBranchToken,
+		History:           blob,
+		PrevTransactionID: forkPointTxnID,
+		TransactionID:     appendTxnID,
+		NodeID:            appendAfterEventID + 1,
+		Info:              persistence.BuildHistoryGarbageCleanupInfo(namespaceID, s.workflowID, s.runID),
+	}).Return(nil, nil).Times(1)
+
+	_, err = s.workflowStateReplicator.bringLocalEventsUpToSourceCurrentBranch(
+		context.Background(),
+		namespace.ID(namespaceID),
+		s.workflowID,
+		s.runID,
+		"test-cluster",
+		historyi.NewMockWorkflowContext(s.controller),
+		mockMutableState,
+		sourceVersionHistories,
+		[]*commonpb.DataBlob{blob},
+		false)
+	s.NoError(err)
+	s.Equal(appendTxnID, executionInfo.LastFirstEventTxnId)
 }
 
 func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_ExternalPayloadStats() {
