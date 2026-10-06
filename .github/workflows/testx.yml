@@ -4,7 +4,6 @@ on:
   pull_request:
     paths:
       - "testx/**"
-      - "go.mod"
       - ".github/workflows/testx*.yml"
 
 permissions:
