@@ -22,6 +22,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	querypb "go.temporal.io/api/query/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
@@ -6904,18 +6905,17 @@ func (wh *WorkflowHandler) getArchivedHistory(
 	for _, batch := range resp.HistoryBatches {
 		history.Events = append(history.Events, batch.Events...)
 	}
-	response := &workflowservice.GetWorkflowExecutionHistoryResponse{
-		History:       history,
-		NextPageToken: resp.NextPageToken,
-		Archived:      true,
+	var serializationContext *nexuspb.PropagatedSerializationContext
+	// A nil request token starts at the workflow's first event, which carries this context.
+	if request.GetNextPageToken() == nil && len(history.Events) > 0 {
+		serializationContext = history.Events[0].GetWorkflowExecutionStartedEventAttributes().GetPropagatedNexusSerializationContext()
 	}
-	for _, event := range history.Events {
-		if started := event.GetWorkflowExecutionStartedEventAttributes(); started != nil {
-			response.PropagatedNexusSerializationContext = started.GetPropagatedNexusSerializationContext()
-			break
-		}
-	}
-	return response, nil
+	return &workflowservice.GetWorkflowExecutionHistoryResponse{
+		History:                             history,
+		NextPageToken:                       resp.NextPageToken,
+		Archived:                            true,
+		PropagatedNexusSerializationContext: serializationContext,
+	}, nil
 }
 
 // cancelOutstandingPoll cancel outstanding poll if context was canceled and returns true. Otherwise returns false.
