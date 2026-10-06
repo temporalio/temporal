@@ -33,7 +33,7 @@ func newTestHandler(t *testing.T) (*handler, context.Context, *tquserdatapb.Upse
 	return h, ctx, &tquserdatapb.UpsertTaskQueueUserDataRequest{
 		NamespaceId: "namespace-id",
 		TaskQueue:   "task-queue",
-		UserData: &tquserdatapb.TaskQueueUserData{
+		TaskQueueUserData: &tquserdatapb.TaskQueueUserData{
 			Clock: &clockspb.HybridLogicalClock{WallClock: 10, Version: 1, ClusterId: 2},
 			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
 				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
@@ -70,7 +70,7 @@ func newTestHandler(t *testing.T) (*handler, context.Context, *tquserdatapb.Upse
 	}
 }
 
-func readTestUserData(ctx context.Context, t *testing.T, h *handler, req *tquserdatapb.UpsertTaskQueueUserDataRequest) *tquserdatapb.GetTaskQueueUserDataSnapshotResponse {
+func readTestTaskQueueUserData(ctx context.Context, t *testing.T, h *handler, req *tquserdatapb.UpsertTaskQueueUserDataRequest) *tquserdatapb.GetTaskQueueUserDataSnapshotResponse {
 	t.Helper()
 	response, err := h.GetTaskQueueUserDataSnapshot(ctx, &tquserdatapb.GetTaskQueueUserDataSnapshotRequest{
 		NamespaceId: req.NamespaceId,
@@ -80,24 +80,24 @@ func readTestUserData(ctx context.Context, t *testing.T, h *handler, req *tquser
 	return response
 }
 
-func TestUserDataVersionIncrementsOnCAS(t *testing.T) {
+func TestTaskQueueUserDataVersionIncrementsOnCAS(t *testing.T) {
 	t.Parallel()
 	h, ctx, req := newTestHandler(t)
 	response, err := h.UpsertTaskQueueUserData(ctx, req)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), response.Version)
-	require.Equal(t, int64(1), readTestUserData(ctx, t, h, req).Version)
+	require.Equal(t, int64(1), readTestTaskQueueUserData(ctx, t, h, req).Version)
 
 	for version := int64(1); version < 3; version++ {
 		req.Precondition = &tquserdatapb.UpsertTaskQueueUserDataRequest_ExpectedVersion{ExpectedVersion: version}
 		response, err = h.UpsertTaskQueueUserData(ctx, req)
 		require.NoError(t, err)
 		require.Equal(t, version+1, response.Version)
-		require.Equal(t, version+1, readTestUserData(ctx, t, h, req).Version)
+		require.Equal(t, version+1, readTestTaskQueueUserData(ctx, t, h, req).Version)
 	}
 }
 
-func TestUserDataCASConflictPreservesVersionAndData(t *testing.T) {
+func TestTaskQueueUserDataCASConflictPreservesVersionAndData(t *testing.T) {
 	t.Parallel()
 	for _, testCase := range []struct {
 		name      string
@@ -115,23 +115,23 @@ func TestUserDataCASConflictPreservesVersionAndData(t *testing.T) {
 			h, ctx, req := newTestHandler(t)
 			_, err := h.UpsertTaskQueueUserData(ctx, req)
 			require.NoError(t, err)
-			req.UserData.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].FairnessState = enumsspb.FAIRNESS_STATE_V2
-			req.UserData.Clock.WallClock = 20
+			req.TaskQueueUserData.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].FairnessState = enumsspb.FAIRNESS_STATE_V2
+			req.TaskQueueUserData.Clock.WallClock = 20
 			testCase.condition(req)
 			_, err = h.UpsertTaskQueueUserData(ctx, req)
 			require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
-			response := readTestUserData(ctx, t, h, req)
+			response := readTestTaskQueueUserData(ctx, t, h, req)
 			require.Equal(t, int64(1), response.Version)
-			require.Equal(t, int64(10), response.UserData.Clock.WallClock)
-			require.Equal(t, enumsspb.FAIRNESS_STATE_V1, response.UserData.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].FairnessState)
+			require.Equal(t, int64(10), response.TaskQueueUserData.Clock.WallClock)
+			require.Equal(t, enumsspb.FAIRNESS_STATE_V1, response.TaskQueueUserData.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].FairnessState)
 		})
 	}
 }
 
-func TestUserDataRoundTrip(t *testing.T) {
+func TestTaskQueueUserDataRoundTrip(t *testing.T) {
 	t.Parallel()
 	h, ctx, req := newTestHandler(t)
-	expected := proto.Clone(req.UserData).(*tquserdatapb.TaskQueueUserData)
+	expected := proto.Clone(req.TaskQueueUserData).(*tquserdatapb.TaskQueueUserData)
 	encoded, err := proto.Marshal(req)
 	require.NoError(t, err)
 	decoded := &tquserdatapb.UpsertTaskQueueUserDataRequest{}
@@ -139,20 +139,20 @@ func TestUserDataRoundTrip(t *testing.T) {
 	_, err = h.UpsertTaskQueueUserData(ctx, decoded)
 	require.NoError(t, err)
 
-	stored := readTestUserData(ctx, t, h, req)
-	require.True(t, proto.Equal(expected, stored.UserData))
-	stored.UserData.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].DeploymentData.DeploymentsData["deployment"].RoutingConfig.RevisionNumber = 20
-	require.True(t, proto.Equal(expected, readTestUserData(ctx, t, h, req).UserData))
+	stored := readTestTaskQueueUserData(ctx, t, h, req)
+	require.True(t, proto.Equal(expected, stored.TaskQueueUserData))
+	stored.TaskQueueUserData.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].DeploymentData.DeploymentsData["deployment"].RoutingConfig.RevisionNumber = 20
+	require.True(t, proto.Equal(expected, readTestTaskQueueUserData(ctx, t, h, req).TaskQueueUserData))
 
 	req.Precondition = &tquserdatapb.UpsertTaskQueueUserDataRequest_ExpectedVersion{ExpectedVersion: 1}
-	req.UserData.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].FairnessState = enumsspb.FAIRNESS_STATE_V2
+	req.TaskQueueUserData.PerType[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)].FairnessState = enumsspb.FAIRNESS_STATE_V2
 	response, err := h.UpsertTaskQueueUserData(ctx, req)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), response.Version)
-	require.True(t, proto.Equal(req.UserData, readTestUserData(ctx, t, h, req).UserData))
+	require.True(t, proto.Equal(req.TaskQueueUserData, readTestTaskQueueUserData(ctx, t, h, req).TaskQueueUserData))
 }
 
-func TestUserDataInvalidPrecondition(t *testing.T) {
+func TestTaskQueueUserDataInvalidPrecondition(t *testing.T) {
 	t.Parallel()
 	h, ctx, req := newTestHandler(t)
 	_, err := h.UpsertTaskQueueUserData(ctx, req)
@@ -165,11 +165,11 @@ func TestUserDataInvalidPrecondition(t *testing.T) {
 		req.Precondition = condition.Precondition
 		_, err := h.UpsertTaskQueueUserData(ctx, req)
 		require.ErrorAs(t, err, new(*serviceerror.InvalidArgument))
-		require.Equal(t, int64(1), readTestUserData(ctx, t, h, req).Version)
+		require.Equal(t, int64(1), readTestTaskQueueUserData(ctx, t, h, req).Version)
 	}
 }
 
-func TestUserDataTerminationIsUnimplemented(t *testing.T) {
+func TestTaskQueueUserDataTerminationIsUnimplemented(t *testing.T) {
 	t.Parallel()
 	h, ctx, req := newTestHandler(t)
 	_, err := h.UpsertTaskQueueUserData(ctx, req)
@@ -178,15 +178,15 @@ func TestUserDataTerminationIsUnimplemented(t *testing.T) {
 	_, _, err = chasm.UpdateComponent(
 		ctx,
 		chasm.NewComponentRef[*TaskQueueUserData](chasm.ExecutionKey{NamespaceID: req.NamespaceId, BusinessID: req.TaskQueue}),
-		func(userData *TaskQueueUserData, mutableContext chasm.MutableContext, request chasm.TerminateComponentRequest) (chasm.TerminateComponentResponse, error) {
-			return userData.Terminate(mutableContext, request)
+		func(taskQueueUserData *TaskQueueUserData, mutableContext chasm.MutableContext, request chasm.TerminateComponentRequest) (chasm.TerminateComponentResponse, error) {
+			return taskQueueUserData.Terminate(mutableContext, request)
 		},
 		chasm.TerminateComponentRequest{},
 	)
 	require.ErrorAs(t, err, new(*serviceerror.Unimplemented))
-	stored := readTestUserData(ctx, t, h, req)
+	stored := readTestTaskQueueUserData(ctx, t, h, req)
 	require.Equal(t, int64(1), stored.Version)
-	require.True(t, proto.Equal(req.UserData, stored.UserData))
+	require.True(t, proto.Equal(req.TaskQueueUserData, stored.TaskQueueUserData))
 
 	req.Precondition = &tquserdatapb.UpsertTaskQueueUserDataRequest_ExpectedVersion{ExpectedVersion: 1}
 	response, err := h.UpsertTaskQueueUserData(ctx, req)
@@ -194,7 +194,7 @@ func TestUserDataTerminationIsUnimplemented(t *testing.T) {
 	require.Equal(t, int64(2), response.Version)
 }
 
-func TestUserDataVersionCASPreservesIncomingClock(t *testing.T) {
+func TestTaskQueueUserDataVersionCASPreservesIncomingClock(t *testing.T) {
 	t.Parallel()
 	for _, testCase := range []struct {
 		name  string
@@ -210,25 +210,25 @@ func TestUserDataVersionCASPreservesIncomingClock(t *testing.T) {
 			_, err := h.UpsertTaskQueueUserData(ctx, req)
 			require.NoError(t, err)
 			req.Precondition = &tquserdatapb.UpsertTaskQueueUserDataRequest_ExpectedVersion{ExpectedVersion: 1}
-			req.UserData.Clock = testCase.clock
+			req.TaskQueueUserData.Clock = testCase.clock
 			response, err := h.UpsertTaskQueueUserData(ctx, req)
 			require.NoError(t, err)
 			require.Equal(t, int64(2), response.Version)
-			stored := readTestUserData(ctx, t, h, req)
+			stored := readTestTaskQueueUserData(ctx, t, h, req)
 			require.Equal(t, int64(2), stored.Version)
-			require.True(t, proto.Equal(testCase.clock, stored.UserData.Clock))
+			require.True(t, proto.Equal(testCase.clock, stored.TaskQueueUserData.Clock))
 		})
 	}
 }
 
-func TestUserDataUsesTaskQueueNameForExecutionKey(t *testing.T) {
+func TestTaskQueueUserDataUsesTaskQueueNameForExecutionKey(t *testing.T) {
 	t.Parallel()
 	h, ctx, original := newTestHandler(t)
 	req := &tquserdatapb.UpsertTaskQueueUserDataRequest{
-		NamespaceId:  original.NamespaceId,
-		TaskQueue:    original.TaskQueue,
-		UserData:     original.UserData,
-		Precondition: original.Precondition,
+		NamespaceId:       original.NamespaceId,
+		TaskQueue:         original.TaskQueue,
+		TaskQueueUserData: original.TaskQueueUserData,
+		Precondition:      original.Precondition,
 	}
 	_, err := h.UpsertTaskQueueUserData(ctx, req)
 	require.NoError(t, err)
@@ -236,13 +236,13 @@ func TestUserDataUsesTaskQueueNameForExecutionKey(t *testing.T) {
 	stored, err := chasm.ReadComponent(
 		ctx,
 		chasm.NewComponentRef[*TaskQueueUserData](chasm.ExecutionKey{NamespaceID: req.NamespaceId, BusinessID: req.TaskQueue}),
-		func(userData *TaskQueueUserData, chasmContext chasm.Context, _ struct{}) (*tquserdatapb.TaskQueueUserData, error) {
-			return userData.Data.Get(chasmContext), nil
+		func(taskQueueUserData *TaskQueueUserData, chasmContext chasm.Context, _ struct{}) (*tquserdatapb.TaskQueueUserData, error) {
+			return taskQueueUserData.Data.Get(chasmContext), nil
 		},
 		struct{}{},
 	)
 	require.NoError(t, err)
-	require.True(t, proto.Equal(req.UserData, stored))
+	require.True(t, proto.Equal(req.TaskQueueUserData, stored))
 
 	response, err := h.GetTaskQueueUserDataSnapshot(ctx, &tquserdatapb.GetTaskQueueUserDataSnapshotRequest{
 		NamespaceId: req.NamespaceId,
@@ -250,10 +250,10 @@ func TestUserDataUsesTaskQueueNameForExecutionKey(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), response.Version)
-	require.True(t, proto.Equal(req.UserData, response.UserData))
+	require.True(t, proto.Equal(req.TaskQueueUserData, response.TaskQueueUserData))
 }
 
-func TestUserDataOperationsAreUnimplemented(t *testing.T) {
+func TestTaskQueueUserDataOperationsAreUnimplemented(t *testing.T) {
 	t.Parallel()
 	h, ctx, req := newTestHandler(t)
 	_, err := h.UpsertTaskQueueUserData(ctx, req)
@@ -267,11 +267,11 @@ func TestUserDataOperationsAreUnimplemented(t *testing.T) {
 			name: "GetTaskQueueUserData",
 			call: func(t *testing.T) error {
 				response, err := server.GetTaskQueueUserData(ctx, &tquserdatapb.GetTaskQueueUserDataRequest{
-					NamespaceId:              req.NamespaceId,
-					TaskQueue:                req.TaskQueue,
-					TaskQueueType:            enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-					LastKnownUserDataVersion: 1,
-					WaitNewData:              true,
+					NamespaceId:                       req.NamespaceId,
+					TaskQueue:                         req.TaskQueue,
+					TaskQueueType:                     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+					LastKnownTaskQueueUserDataVersion: 1,
+					WaitNewData:                       true,
 				})
 				require.Nil(t, response)
 				return err
@@ -322,9 +322,9 @@ func TestUserDataOperationsAreUnimplemented(t *testing.T) {
 	for _, operation := range operations {
 		t.Run(operation.name, func(t *testing.T) {
 			require.Equal(t, codes.Unimplemented, status.Code(operation.call(t)))
-			data := readTestUserData(ctx, t, h, req)
+			data := readTestTaskQueueUserData(ctx, t, h, req)
 			require.Equal(t, int64(1), data.Version)
-			require.True(t, proto.Equal(req.UserData, data.UserData))
+			require.True(t, proto.Equal(req.TaskQueueUserData, data.TaskQueueUserData))
 		})
 	}
 }

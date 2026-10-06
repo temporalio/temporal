@@ -9,7 +9,7 @@ import (
 // TaskQueueUserData is the CHASM component for one task queue family's user data.
 type TaskQueueUserData struct {
 	chasm.UnimplementedComponent
-	*tquserdatapb.UserDataState
+	*tquserdatapb.TaskQueueUserDataState
 	Data chasm.Field[*tquserdatapb.TaskQueueUserData]
 }
 
@@ -22,6 +22,6 @@ func (*TaskQueueUserData) ContextMetadata(chasm.Context) map[string]string {
 }
 
 func (*TaskQueueUserData) Terminate(chasm.MutableContext, chasm.TerminateComponentRequest) (chasm.TerminateComponentResponse, error) {
-	// TODO: Terminate user data when task queue termination is implemented, since its lifecycle is tied to the task queue.
+	// TODO: Terminate task queue user data when task queue termination is implemented, since its lifecycle is tied to the task queue.
 	return chasm.TerminateComponentResponse{}, serviceerror.NewUnimplemented("task queue user data termination is not implemented")
 }

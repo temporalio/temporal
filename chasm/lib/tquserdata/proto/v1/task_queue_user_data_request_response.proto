@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.tquserdata.proto.v1;
 
-import "chasm/lib/tquserdata/proto/v1/user_data.proto";
+import "chasm/lib/tquserdata/proto/v1/task_queue_user_data.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/taskqueue/v1/message.proto";
@@ -16,7 +16,7 @@ option go_package = "go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb
 message UpsertTaskQueueUserDataRequest {
   string namespace_id = 1;
   string task_queue = 2;
-  TaskQueueUserData user_data = 3;
+  TaskQueueUserData task_queue_user_data = 3;
   oneof precondition {
     bool expect_missing = 4;
     int64 expected_version = 5;
@@ -33,7 +33,7 @@ message GetTaskQueueUserDataSnapshotRequest {
 }
 
 message GetTaskQueueUserDataSnapshotResponse {
-  TaskQueueUserData user_data = 1;
+  TaskQueueUserData task_queue_user_data = 1;
   int64 version = 2;
 }
 
@@ -43,11 +43,11 @@ message GetTaskQueueUserDataRequest {
   // queue, since sticky queues have no user data.
   string task_queue = 2;
   temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
-  // Zero means the requester has no cached user data. Must not be negative.
-  int64 last_known_user_data_version = 4;
+  // Zero means the requester has no cached task queue user data. Must not be negative.
+  int64 last_known_task_queue_user_data_version = 4;
   // Zero means no cached ephemeral data; -1 excludes ephemeral data from the response.
   int64 last_known_ephemeral_data_version = 5;
-  // If set and last_known_{user_data,ephemeral_data}_version is the current version,
+  // If set and last_known_{task_queue_user_data,ephemeral_data}_version is the current version,
   // block until new data is available (or timeout).
   bool wait_new_data = 6;
   // If set, do not load task queue if unloaded. (Returns FailedPrecondition error in that case.)
@@ -60,7 +60,7 @@ message VersionedTaskQueueUserData {
 }
 
 message GetTaskQueueUserDataResponse {
-  VersionedTaskQueueUserData user_data = 1;
+  VersionedTaskQueueUserData task_queue_user_data = 1;
   temporal.server.api.taskqueue.v1.VersionedEphemeralData ephemeral_data = 2;
 }
 

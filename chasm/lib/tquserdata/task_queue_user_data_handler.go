@@ -40,10 +40,10 @@ func (h *handler) GetTaskQueueUserDataSnapshot(
 	return chasm.ReadComponent(
 		ctx,
 		chasm.NewComponentRef[*TaskQueueUserData](chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: req.GetTaskQueue()}),
-		func(userData *TaskQueueUserData, chasmContext chasm.Context, _ *tquserdatapb.GetTaskQueueUserDataSnapshotRequest) (*tquserdatapb.GetTaskQueueUserDataSnapshotResponse, error) {
+		func(taskQueueUserData *TaskQueueUserData, chasmContext chasm.Context, _ *tquserdatapb.GetTaskQueueUserDataSnapshotRequest) (*tquserdatapb.GetTaskQueueUserDataSnapshotResponse, error) {
 			return &tquserdatapb.GetTaskQueueUserDataSnapshotResponse{
-				UserData: proto.Clone(userData.Data.Get(chasmContext)).(*tquserdatapb.TaskQueueUserData),
-				Version:  userData.Version,
+				TaskQueueUserData: proto.Clone(taskQueueUserData.Data.Get(chasmContext)).(*tquserdatapb.TaskQueueUserData),
+				Version:           taskQueueUserData.Version,
 			}, nil
 		},
 		req,
@@ -68,13 +68,13 @@ func (h *handler) UpsertTaskQueueUserData(
 		}
 		metrics.TaskQueueUserDataChasmWrite.With(h.metricsHandler).Record(1, metrics.ReasonTag(reason), metrics.OutcomeTag(outcome))
 	}()
-	if req.GetNamespaceId() == "" || req.GetTaskQueue() == "" || req.GetUserData() == nil {
+	if req.GetNamespaceId() == "" || req.GetTaskQueue() == "" || req.GetTaskQueueUserData() == nil {
 		return nil, serviceerror.NewInvalidArgument("invalid task queue user data write request")
 	}
-	return h.writeUserData(ctx, req)
+	return h.writeTaskQueueUserData(ctx, req)
 }
 
-func (*handler) writeUserData(ctx context.Context, req *tquserdatapb.UpsertTaskQueueUserDataRequest) (*tquserdatapb.UpsertTaskQueueUserDataResponse, error) {
+func (*handler) writeTaskQueueUserData(ctx context.Context, req *tquserdatapb.UpsertTaskQueueUserDataRequest) (*tquserdatapb.UpsertTaskQueueUserDataResponse, error) {
 	key := chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: req.GetTaskQueue()}
 	if req.GetExpectMissing() {
 		_, err := chasm.StartExecution(
@@ -82,8 +82,8 @@ func (*handler) writeUserData(ctx context.Context, req *tquserdatapb.UpsertTaskQ
 			key,
 			func(mutableContext chasm.MutableContext, _ *tquserdatapb.UpsertTaskQueueUserDataRequest) (*TaskQueueUserData, error) {
 				return &TaskQueueUserData{
-					UserDataState: &tquserdatapb.UserDataState{Version: 1},
-					Data:          chasm.NewDataField(mutableContext, proto.Clone(req.GetUserData()).(*tquserdatapb.TaskQueueUserData)),
+					TaskQueueUserDataState: &tquserdatapb.TaskQueueUserDataState{Version: 1},
+					Data:                   chasm.NewDataField(mutableContext, proto.Clone(req.GetTaskQueueUserData()).(*tquserdatapb.TaskQueueUserData)),
 				}, nil
 			},
 			req,
@@ -107,13 +107,13 @@ func (*handler) writeUserData(ctx context.Context, req *tquserdatapb.UpsertTaskQ
 	response, _, err := chasm.UpdateComponent(
 		ctx,
 		chasm.NewComponentRef[*TaskQueueUserData](key),
-		func(userData *TaskQueueUserData, mutableContext chasm.MutableContext, _ *tquserdatapb.UpsertTaskQueueUserDataRequest) (*tquserdatapb.UpsertTaskQueueUserDataResponse, error) {
-			if condition.ExpectedVersion != userData.Version {
+		func(taskQueueUserData *TaskQueueUserData, mutableContext chasm.MutableContext, _ *tquserdatapb.UpsertTaskQueueUserDataRequest) (*tquserdatapb.UpsertTaskQueueUserDataResponse, error) {
+			if condition.ExpectedVersion != taskQueueUserData.Version {
 				return nil, serviceerror.NewFailedPrecondition("task queue user data version changed")
 			}
-			userData.Version++
-			userData.Data = chasm.NewDataField(mutableContext, proto.Clone(req.GetUserData()).(*tquserdatapb.TaskQueueUserData))
-			return &tquserdatapb.UpsertTaskQueueUserDataResponse{Version: userData.Version}, nil
+			taskQueueUserData.Version++
+			taskQueueUserData.Data = chasm.NewDataField(mutableContext, proto.Clone(req.GetTaskQueueUserData()).(*tquserdatapb.TaskQueueUserData))
+			return &tquserdatapb.UpsertTaskQueueUserDataResponse{Version: taskQueueUserData.Version}, nil
 		},
 		req,
 	)

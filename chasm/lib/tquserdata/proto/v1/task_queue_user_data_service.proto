@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.tquserdata.proto.v1;
 
-import "chasm/lib/tquserdata/proto/v1/request_response.proto";
+import "chasm/lib/tquserdata/proto/v1/task_queue_user_data_request_response.proto";
 import "temporal/server/api/common/v1/api_category.proto";
 import "temporal/server/api/routing/v1/extension.proto";
 

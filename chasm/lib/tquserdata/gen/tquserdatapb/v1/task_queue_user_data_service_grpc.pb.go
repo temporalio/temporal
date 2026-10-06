@@ -2,7 +2,7 @@
 // plugins:
 // - protoc-gen-go-grpc
 // - protoc
-// source: temporal/server/chasm/lib/tquserdata/proto/v1/service.proto
+// source: temporal/server/chasm/lib/tquserdata/proto/v1/task_queue_user_data_service.proto
 
 package tquserdatapb
 
@@ -292,5 +292,5 @@ var TaskQueueUserDataService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
-	Metadata: "temporal/server/chasm/lib/tquserdata/proto/v1/service.proto",
+	Metadata: "temporal/server/chasm/lib/tquserdata/proto/v1/task_queue_user_data_service.proto",
 }
