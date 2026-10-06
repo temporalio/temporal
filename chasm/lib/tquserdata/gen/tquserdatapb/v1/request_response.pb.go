@@ -494,8 +494,7 @@ type SyncDeploymentUserDataRequest struct {
 	TaskQueue   string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	// Required, unless deprecated fields are used.
 	// (-- api-linter: core::0203::required=disabled
-	//
-	//	aip.dev/not-precedent: Not following Google API format --)
+	//     aip.dev/not-precedent: Not following Google API format --)
 	DeploymentName string             `protobuf:"bytes,3,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
 	TaskQueueTypes []v1.TaskQueueType `protobuf:"varint,4,rep,packed,name=task_queue_types,json=taskQueueTypes,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_types,omitempty"`
 	// Types that are valid to be assigned to Operation:
@@ -508,8 +507,7 @@ type SyncDeploymentUserDataRequest struct {
 	UpdateRoutingConfig *v12.RoutingConfig `protobuf:"bytes,7,opt,name=update_routing_config,json=updateRoutingConfig,proto3" json:"update_routing_config,omitempty"`
 	// Optional map of build id to upsert version data.
 	// (-- api-linter: core::0203::required=disabled
-	//
-	//	aip.dev/not-precedent: Not following Google API format --)
+	//     aip.dev/not-precedent: Not following Google API format --)
 	UpsertVersionsData map[string]*v13.WorkerDeploymentVersionData `protobuf:"bytes,8,rep,name=upsert_versions_data,json=upsertVersionsData,proto3" json:"upsert_versions_data,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// List of build ids to forget from task queue.
 	ForgetVersions []string `protobuf:"bytes,9,rep,name=forget_versions,json=forgetVersions,proto3" json:"forget_versions,omitempty"`
