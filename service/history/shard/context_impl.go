@@ -186,6 +186,7 @@ type (
 const (
 	stopReasonUnspecified stopReason = iota
 	stopReasonOwnershipLost
+	stopReasonIOSemaphoreStuck
 )
 
 var _ historyi.ShardContext = (*ContextImpl)(nil)
@@ -255,13 +256,36 @@ func (s *ContextImpl) GetPingChecks() []pingable.Check {
 			// of 10 sec.
 			Timeout: 10*time.Second + 30*time.Second,
 			Ping: func() []pingable.Pingable {
-				_ = s.ioSemaphore.Acquire(context.Background(), locks.PriorityHigh, 1)
-				s.ioSemaphore.Release(1)
+				// Bound by the lifecycle context so that a probe stuck behind an orphaned holder
+				// returns once the shard is unloaded, instead of pinning a detector worker forever.
+				if err := s.ioSemaphore.Acquire(s.lifecycleCtx, locks.PriorityHigh, 1); err == nil {
+					s.ioSemaphore.Release(1)
+				}
 				return nil
 			},
 			MetricsName: metrics.DDShardIOSemaphoreLatency.Name(),
+			OnTimeout:   s.onIOSemaphoreStuck,
 		},
 	}
+}
+
+// onIOSemaphoreStuck runs when the deadlock detector could not acquire ioSemaphore within the
+// ping timeout. The cause is a persistence call that never returns: lib/pq blocked in a socket
+// read on a connection whose peer went away without a reset keeps blocking after the call's
+// context deadline has passed (its cancellation only marks the connection bad and sends a
+// CancelRequest over a new connection), and with ShardIOConcurrency=1 that single call stops
+// every write on the shard. Callers queued behind it time out on the semaphore, which is not a
+// persistence error, so no ownership-lost transition happens and the shard would stay stuck
+// until the process restarts. Stopping the shard lets the controller re-acquire it
+// with a fresh context, semaphore and task tracker (the persistence managers and their connection
+// pool are shared and reused); the stuck goroutine is left behind, keeps its pooled connection
+// checked out, and returns into a cancelled lifecycle context when its socket finally errors.
+func (s *ContextImpl) onIOSemaphoreStuck() {
+	if !s.config.ShardUnloadOnIOSemaphoreStuck() {
+		return
+	}
+	s.contextTaggedLogger.Error("shard io semaphore could not be acquired within the deadlock detector timeout, unloading shard")
+	_ = s.transition(contextRequestStop{reason: stopReasonIOSemaphoreStuck})
 }
 
 func (s *ContextImpl) GetEngine(
@@ -1658,7 +1682,34 @@ func (s *ContextImpl) ioSemaphoreAcquire(
 		}
 	}()
 
-	return s.ioSemaphore.Acquire(ctx, priority, 1)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if s.ioSemaphore.TryAcquire(priority, 1) {
+		return nil
+	}
+
+	// A waiter must also give up when the shard is unloaded, otherwise callers queued behind
+	// an orphaned holder would wait on the old semaphore for as long as their own context
+	// allows, which for a queue task is until the next retry attempt and for the deadlock
+	// detector's probe is forever.
+	waitCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	stop := context.AfterFunc(s.lifecycleCtx, cancel)
+	defer stop()
+
+	if err := s.ioSemaphore.Acquire(waitCtx, priority, 1); err != nil {
+		if callerErr := ctx.Err(); callerErr != nil {
+			return callerErr
+		}
+		if s.lifecycleCtx.Err() != nil {
+			// released by the unload, not by the caller: report it like any other call that
+			// reaches a stopped shard
+			return s.newShardClosedErrorWithShardID()
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *ContextImpl) ioSemaphoreRelease() {

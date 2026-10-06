@@ -5,6 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"regexp"
+	"runtime"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -21,11 +25,14 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/await"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -1321,4 +1328,208 @@ func (s *contextSuite) TestOldestImmediateTaskVisibilityTime() {
 		_, ok := s.mockShard.oldestImmediateTaskVisibilityTime(tasks.CategoryTransfer, minKey, maxKey)
 		s.False(ok)
 	})
+}
+
+// waitUntilBlockedInSemaphore waits until exactly n goroutines are parked inside
+// PrioritySemaphoreImpl.Acquire, so a test can act on an established waiter rather than on a
+// goroutine that has not reached the semaphore yet.
+func (s *contextSuite) waitUntilBlockedInSemaphore(n int) {
+	re := regexp.MustCompile(`\[select\]:\n\S*\(\*PrioritySemaphoreImpl\)\.Acquire`)
+	await.RequireTrue(s.T(), func() bool {
+		buf := make([]byte, 1<<20)
+		size := runtime.Stack(buf, true)
+		return len(re.FindAllIndex(buf[:size], -1)) == n
+	}, 10*time.Second, 20*time.Millisecond)
+}
+
+// gatedSemaphore holds the result of Acquire until the test opens the gate, so the test can
+// change the caller's context between the semaphore returning and the error being classified.
+type gatedSemaphore struct {
+	locks.PrioritySemaphore
+	acquired chan error    // receives the delegated Acquire's result as soon as it returns
+	gate     chan struct{} // Acquire returns to its caller only once this is closed
+}
+
+func (g *gatedSemaphore) Acquire(ctx context.Context, priority locks.Priority, n int) error {
+	err := g.PrioritySemaphore.Acquire(ctx, priority, n)
+	g.acquired <- err
+	<-g.gate
+	return err
+}
+
+func (s *contextSuite) shardState() (contextState, stopReason) {
+	s.mockShard.stateLock.Lock()
+	defer s.mockShard.stateLock.Unlock()
+	return s.mockShard.state, s.mockShard.stopReason
+}
+
+func (s *contextSuite) ioSemaphorePingCheck() pingable.Check {
+	for _, check := range s.mockShard.GetPingChecks() {
+		if strings.HasSuffix(check.Name, "-io-semaphore") {
+			return check
+		}
+	}
+	s.FailNow("io-semaphore ping check not found")
+	return pingable.Check{}
+}
+
+func (s *contextSuite) TestOnIOSemaphoreStuck_UnloadsShard() {
+	s.mockShard.config.ShardUnloadOnIOSemaphoreStuck = dynamicconfig.GetBoolPropertyFn(true)
+	closed := make(chan struct{}, 2)
+	s.mockShard.closeCallback = func(historyi.ControllableContext) { closed <- struct{}{} }
+
+	s.mockShard.onIOSemaphoreStuck()
+	// a second notification for the same stuck semaphore is a no-op
+	s.mockShard.onIOSemaphoreStuck()
+
+	state, reason := s.shardState()
+	s.Equal(contextStateStopping, state)
+	s.Equal(stopReasonIOSemaphoreStuck, reason)
+	s.Error(s.mockShard.lifecycleCtx.Err())
+	select {
+	case <-closed:
+	case <-time.After(10 * time.Second):
+		s.FailNow("close callback was not invoked")
+	}
+	select {
+	case <-closed:
+		s.FailNow("close callback must run once")
+	case <-time.After(200 * time.Millisecond):
+	}
+}
+
+func (s *contextSuite) TestOnIOSemaphoreStuck_Disabled() {
+	s.mockShard.config.ShardUnloadOnIOSemaphoreStuck = dynamicconfig.GetBoolPropertyFn(false)
+	before, _ := s.shardState()
+
+	s.mockShard.onIOSemaphoreStuck()
+
+	after, _ := s.shardState()
+	s.Equal(before, after)
+	s.NoError(s.mockShard.lifecycleCtx.Err())
+}
+
+func (s *contextSuite) TestIOSemaphorePingCheck_HasOnTimeout() {
+	s.NotNil(s.ioSemaphorePingCheck().OnTimeout)
+}
+
+func (s *contextSuite) TestIOSemaphorePingCheck_ProbeReturnsAfterUnloadWithoutReleasing() {
+	s.mockShard.config.ShardUnloadOnIOSemaphoreStuck = dynamicconfig.GetBoolPropertyFn(true)
+	// an orphaned holder that never returns
+	s.True(s.mockShard.ioSemaphore.TryAcquire(locks.PriorityHigh, 1))
+	defer s.mockShard.ioSemaphore.Release(1)
+
+	probe := s.ioSemaphorePingCheck()
+	probeDone := make(chan struct{})
+	go func() {
+		probe.Ping()
+		close(probeDone)
+	}()
+	s.waitUntilBlockedInSemaphore(1)
+
+	s.mockShard.onIOSemaphoreStuck()
+
+	select {
+	case <-probeDone:
+	case <-time.After(10 * time.Second):
+		s.FailNow("probe stayed blocked after the shard was unloaded")
+	}
+	// the probe must not have released a token it never acquired
+	s.False(s.mockShard.ioSemaphore.TryAcquire(locks.PriorityHigh, 1))
+}
+
+func (s *contextSuite) TestIOSemaphoreAcquire_WaiterReturnsAfterUnload() {
+	s.mockShard.config.ShardUnloadOnIOSemaphoreStuck = dynamicconfig.GetBoolPropertyFn(true)
+	s.True(s.mockShard.ioSemaphore.TryAcquire(locks.PriorityHigh, 1))
+	defer s.mockShard.ioSemaphore.Release(1)
+
+	result := make(chan error, 1)
+	go func() { result <- s.mockShard.ioSemaphoreAcquire(s.T().Context()) }()
+	s.waitUntilBlockedInSemaphore(1)
+
+	s.mockShard.onIOSemaphoreStuck()
+
+	select {
+	case err := <-result:
+		var shardClosed *persistence.ShardOwnershipLostError
+		s.ErrorAs(err, &shardClosed, "a waiter released by the unload must see the shard-closed error, got %v", err)
+	case <-time.After(10 * time.Second):
+		s.FailNow("waiter stayed blocked after the shard was unloaded")
+	}
+}
+
+func (s *contextSuite) TestIOSemaphoreAcquire_CallerCancelStillWins() {
+	s.True(s.mockShard.ioSemaphore.TryAcquire(locks.PriorityHigh, 1))
+	defer s.mockShard.ioSemaphore.Release(1)
+	ctx, cancel := context.WithCancel(s.T().Context())
+
+	result := make(chan error, 1)
+	go func() { result <- s.mockShard.ioSemaphoreAcquire(ctx) }()
+	s.waitUntilBlockedInSemaphore(1)
+	cancel()
+
+	select {
+	case err := <-result:
+		s.ErrorIs(err, context.Canceled)
+	case <-time.After(10 * time.Second):
+		s.FailNow("waiter ignored its own context")
+	}
+	s.NoError(s.mockShard.lifecycleCtx.Err(), "the shard itself must be untouched")
+}
+
+func (s *contextSuite) TestIOSemaphoreAcquire_UncontendedFastPath() {
+	s.NoError(s.mockShard.ioSemaphoreAcquire(s.T().Context()))
+	s.False(s.mockShard.ioSemaphore.TryAcquire(locks.PriorityHigh, 1), "the token must be held after acquire")
+	s.mockShard.ioSemaphoreRelease()
+	s.True(s.mockShard.ioSemaphore.TryAcquire(locks.PriorityHigh, 1))
+	s.mockShard.ioSemaphore.Release(1)
+}
+
+func (s *contextSuite) TestIOSemaphoreAcquire_CancelledCallerDoesNotTakeFreeToken() {
+	ctx, cancel := context.WithCancel(s.T().Context())
+	cancel()
+
+	s.ErrorIs(s.mockShard.ioSemaphoreAcquire(ctx), context.Canceled)
+	s.True(s.mockShard.ioSemaphore.TryAcquire(locks.PriorityHigh, 1), "the token must still be free")
+	s.mockShard.ioSemaphore.Release(1)
+}
+
+func (s *contextSuite) TestIOSemaphoreAcquire_CallerErrorWinsWhenBothEnd() {
+	s.mockShard.config.ShardUnloadOnIOSemaphoreStuck = dynamicconfig.GetBoolPropertyFn(true)
+	gated := &gatedSemaphore{
+		PrioritySemaphore: s.mockShard.ioSemaphore,
+		acquired:          make(chan error, 1),
+		gate:              make(chan struct{}),
+	}
+	openGate := sync.OnceFunc(func() { close(gated.gate) })
+	defer openGate()
+	s.mockShard.ioSemaphore = gated
+	s.True(s.mockShard.ioSemaphore.TryAcquire(locks.PriorityHigh, 1))
+	defer s.mockShard.ioSemaphore.Release(1)
+	ctx, cancel := context.WithTimeout(s.T().Context(), 300*time.Millisecond)
+	defer cancel()
+
+	result := make(chan error, 1)
+	go func() { result <- s.mockShard.ioSemaphoreAcquire(ctx) }()
+	s.waitUntilBlockedInSemaphore(1)
+
+	// the unload ends the wait while the caller is still live ...
+	s.mockShard.onIOSemaphoreStuck()
+	select {
+	case err := <-gated.acquired:
+		s.ErrorIs(err, context.Canceled)
+		s.NoError(ctx.Err(), "the caller must still be live when the wait ends")
+	case <-time.After(10 * time.Second):
+		s.FailNow("wait did not end after the unload")
+	}
+	// ... then the caller's own deadline passes before the error is classified
+	<-ctx.Done()
+	openGate()
+
+	select {
+	case err := <-result:
+		s.ErrorIs(err, context.DeadlineExceeded, "the caller's own error takes precedence, got %v", err)
+	case <-time.After(10 * time.Second):
+		s.FailNow("waiter stayed blocked")
+	}
 }

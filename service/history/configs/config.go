@@ -102,14 +102,15 @@ type Config struct {
 	EventsHostLevelCacheMaxSizeBytes dynamicconfig.IntPropertyFn
 
 	// ShardController settings
-	RangeSizeBits                uint
-	AcquireShardInterval         dynamicconfig.DurationPropertyFn
-	AcquireShardConcurrency      dynamicconfig.IntPropertyFn
-	ShardIOConcurrency           dynamicconfig.IntPropertyFn
-	ShardIOTimeout               dynamicconfig.DurationPropertyFn
-	ShardLingerOwnershipCheckQPS dynamicconfig.IntPropertyFn
-	ShardLingerTimeLimit         dynamicconfig.DurationPropertyFn
-	ShardFinalizerTimeout        dynamicconfig.DurationPropertyFn
+	RangeSizeBits                 uint
+	AcquireShardInterval          dynamicconfig.DurationPropertyFn
+	AcquireShardConcurrency       dynamicconfig.IntPropertyFn
+	ShardIOConcurrency            dynamicconfig.IntPropertyFn
+	ShardIOTimeout                dynamicconfig.DurationPropertyFn
+	ShardUnloadOnIOSemaphoreStuck dynamicconfig.BoolPropertyFn
+	ShardLingerOwnershipCheckQPS  dynamicconfig.IntPropertyFn
+	ShardLingerTimeLimit          dynamicconfig.DurationPropertyFn
+	ShardFinalizerTimeout         dynamicconfig.DurationPropertyFn
 
 	HistoryClientOwnershipCachingEnabled dynamicconfig.BoolPropertyFn
 
@@ -566,13 +567,14 @@ func NewConfig(
 
 		RangeSizeBits: 20, // 20 bits for sequencer, 2^20 sequence number for any range
 
-		AcquireShardInterval:         dynamicconfig.AcquireShardInterval.Get(dc),
-		AcquireShardConcurrency:      dynamicconfig.AcquireShardConcurrency.Get(dc),
-		ShardIOConcurrency:           dynamicconfig.ShardIOConcurrency.Get(dc),
-		ShardIOTimeout:               dynamicconfig.ShardIOTimeout.Get(dc),
-		ShardLingerOwnershipCheckQPS: dynamicconfig.ShardLingerOwnershipCheckQPS.Get(dc),
-		ShardLingerTimeLimit:         dynamicconfig.ShardLingerTimeLimit.Get(dc),
-		ShardFinalizerTimeout:        dynamicconfig.ShardFinalizerTimeout.Get(dc),
+		AcquireShardInterval:          dynamicconfig.AcquireShardInterval.Get(dc),
+		AcquireShardConcurrency:       dynamicconfig.AcquireShardConcurrency.Get(dc),
+		ShardIOConcurrency:            dynamicconfig.ShardIOConcurrency.Get(dc),
+		ShardIOTimeout:                dynamicconfig.ShardIOTimeout.Get(dc),
+		ShardUnloadOnIOSemaphoreStuck: dynamicconfig.ShardUnloadOnIOSemaphoreStuck.Get(dc),
+		ShardLingerOwnershipCheckQPS:  dynamicconfig.ShardLingerOwnershipCheckQPS.Get(dc),
+		ShardLingerTimeLimit:          dynamicconfig.ShardLingerTimeLimit.Get(dc),
+		ShardFinalizerTimeout:         dynamicconfig.ShardFinalizerTimeout.Get(dc),
 
 		HistoryClientOwnershipCachingEnabled: dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc),
 
