@@ -344,6 +344,7 @@ func (p *clusterRouter) getDedicated(t *testing.T, req clusterRequest) *function
 
 		// Register cleanup to tear down the cluster when the test completes.
 		t.Cleanup(func() {
+			defer func() { cluster = nil }()
 			if err := cluster.tearDownTestCluster(); err != nil {
 				t.Logf("Failed to tear down cluster: %v", err)
 			}
