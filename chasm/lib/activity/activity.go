@@ -2,7 +2,6 @@ package activity
 
 import (
 	"errors"
-	"fmt"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
@@ -303,11 +302,6 @@ func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx ch
 	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
 }
 
-// completionCallbackID defines the stable key used for keeping track of attached completion callbacks.
-func completionCallbackID(requestID string, idx int) string {
-	return fmt.Sprintf("%s-%d", requestID, idx)
-}
-
 // addCompletionCallbacks attaches newCallbacks as child CHASM callback components.
 //
 // Callbacks are keyed by request ID plus their position within the request, so re-attaching the same
@@ -331,7 +325,7 @@ func (a *Activity) addCompletionCallbacks(
 	}
 	// Idempotency check. Attaching is atomic, so if we see that the first callback has been attached we
 	// know they all are present.
-	if _, ok := a.Callbacks[completionCallbackID(requestID, 0)]; ok {
+	if callback.HasCallbacksForRequest(a.Callbacks, requestID) {
 		return nil
 	}
 	if a.LifecycleState(ctx).IsClosed() {
@@ -362,8 +356,9 @@ func (a *Activity) addCompletionCallbacks(
 		// TODO(https://github.com/temporalio/temporal/issues/11958): Reusing the source requestID in this
 		// way leads to ambiguities if multiple callbacks are attached in the same request that are routed
 		// to the same destination. Each callback should instead be given its own, unique request ID.
+		callbackID := callback.CompletionCallbackID(requestID, idx)
 		callbackObj := callback.NewCallback(requestID, registrationTime, chasmCB)
-		a.Callbacks[completionCallbackID(requestID, idx)] = chasm.NewComponentField(ctx, callbackObj)
+		a.Callbacks[callbackID] = chasm.NewComponentField(ctx, callbackObj)
 		a.TotalCallbacksSize += int64(cb.Size())
 	}
 	return nil

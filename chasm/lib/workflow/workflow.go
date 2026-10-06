@@ -1,8 +1,6 @@
 package workflow
 
 import (
-	"fmt"
-
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -137,20 +135,11 @@ type CallbackAddition struct {
 	Callbacks []*commonpb.Callback
 }
 
-// completionCallbackID defines the stable key used for keeping track of attached completion callbacks.
-func completionCallbackID(requestID string, idx int) string {
-	return fmt.Sprintf("%s-%d", requestID, idx)
-}
-
-// hasCallbacksForRequest reports whether requestID has already attached its callbacks to
-// target. Attaching is atomic, so the presence of the first key means they are all present.
-func hasCallbacksForRequest(target chasm.Map[string, *callback.Callback], requestID string) bool {
-	_, ok := target[completionCallbackID(requestID, 0)]
-	return ok
-}
-
 // callbacksTarget returns the map holding the callbacks for updateID, or the workflow's own
 // callbacks when updateID is empty. It is nil for an update with no callbacks attached yet.
+//
+// NOTE: The returned map may be nil if the component was just created, or [Workflow.Updates]
+// hasn't been initialized.
 func (w *Workflow) callbacksTarget(ctx chasm.Context, updateID string) chasm.Map[string, *callback.Callback] {
 	if updateID == "" {
 		return w.Callbacks
@@ -197,7 +186,7 @@ func (w *Workflow) ValidateCallbackAddition(
 	// again here would reject retries that are actually within the limits. This has to precede
 	// the limit checks: target already holds the callbacks being re-offered.
 	target := w.callbacksTarget(ctx, addition.UpdateID)
-	if hasCallbacksForRequest(target, addition.RequestID) {
+	if callback.HasCallbacksForRequest(target, addition.RequestID) {
 		return nil
 	}
 
@@ -217,7 +206,7 @@ func (w *Workflow) ValidateCallbackAddition(
 		seen[key] = struct{}{}
 		// Already attached, and so already in the totals: a retry of a request persisted with an
 		// UpdateAdmitted event can be buffered again.
-		if hasCallbacksForRequest(w.callbacksTarget(ctx, held.UpdateID), held.RequestID) {
+		if callback.HasCallbacksForRequest(w.callbacksTarget(ctx, held.UpdateID), held.RequestID) {
 			continue
 		}
 		currentCbInfo.Count += len(held.Callbacks)
@@ -266,7 +255,7 @@ func (w *Workflow) addCallbacksToMap(
 	eventTime *timestamppb.Timestamp,
 	completionCallbacks []*commonpb.Callback,
 ) error {
-	if hasCallbacksForRequest(target, requestID) {
+	if callback.HasCallbacksForRequest(target, requestID) {
 		return nil
 	}
 
@@ -281,7 +270,8 @@ func (w *Workflow) addCallbacksToMap(
 
 	for idx, chasmCB := range chasmCBs {
 		callbackObj := callback.NewCallback(requestID, eventTime, chasmCB)
-		target[completionCallbackID(requestID, idx)] = chasm.NewComponentField(ctx, callbackObj)
+		callbackID := callback.CompletionCallbackID(requestID, idx)
+		target[callbackID] = chasm.NewComponentField(ctx, callbackObj)
 		w.TotalCallbacksCount++
 		w.TotalCallbacksSize += int64(completionCallbacks[idx].Size())
 	}
