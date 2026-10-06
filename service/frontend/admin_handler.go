@@ -1576,12 +1576,7 @@ func (adh *AdminHandler) GetTaskQueueUserData(
 	if request == nil {
 		return nil, errRequestNotSet
 	}
-	if len(request.Namespace) == 0 {
-		return nil, errNamespaceNotSet
-	}
-
-	// Admin API takes namespace name; matching requires namespace ID.
-	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceID, err := adh.taskQueueUserDataNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -1631,36 +1626,16 @@ func (adh *AdminHandler) UpdateTaskQueueUserData(
 	if request == nil {
 		return nil, errRequestNotSet
 	}
-	if len(request.Namespace) == 0 {
-		return nil, errNamespaceNotSet
-	}
-	if len(request.TaskQueue) == 0 {
-		return nil, serviceerror.NewInvalidArgument("Task queue is not set on request.")
-	}
-	if request.GetKnownVersion() <= 0 {
-		return nil, serviceerror.NewInvalidArgument("Known version is not set on request.")
-	}
-
-	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceID, err := adh.taskQueueUserDataNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
 
-	// User data is owned by the family, so only the root (family) name is accepted.
-	family, err := tqid.NewTaskQueueFamily(namespaceID.String(), request.GetTaskQueue())
-	if err != nil {
-		return nil, err
-	}
-
-	taskQueueType := request.GetTaskQueueType()
-	if taskQueueType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
-		taskQueueType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
-	}
-
+	// Remaining fields are validated by matching, which owns the user data.
 	resp, err := adh.matchingClient.ForceSetTaskQueueTypeUserData(ctx, &matchingservice.ForceSetTaskQueueTypeUserDataRequest{
 		NamespaceId:   namespaceID.String(),
-		TaskQueue:     family.Name(),
-		TaskQueueType: taskQueueType,
+		TaskQueue:     request.GetTaskQueue(),
+		TaskQueueType: request.GetTaskQueueType(),
 		UserData:      request.GetUserData(),
 		KnownVersion:  request.GetKnownVersion(),
 	})
@@ -1671,6 +1646,14 @@ func (adh *AdminHandler) UpdateTaskQueueUserData(
 	return &adminservice.UpdateTaskQueueUserDataResponse{
 		Version: resp.GetVersion(),
 	}, nil
+}
+
+// taskQueueUserDataNamespaceID resolves the namespace name taken by the admin user data APIs to the ID matching requires.
+func (adh *AdminHandler) taskQueueUserDataNamespaceID(namespaceName string) (namespace.ID, error) {
+	if len(namespaceName) == 0 {
+		return "", errNamespaceNotSet
+	}
+	return adh.namespaceRegistry.GetNamespaceID(namespace.Name(namespaceName))
 }
 
 func (adh *AdminHandler) DeleteWorkflowExecution(

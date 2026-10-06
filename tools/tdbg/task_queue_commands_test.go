@@ -238,6 +238,8 @@ func TestUpdateTaskQueueUserData(t *testing.T) {
 	require.NoError(t, os.WriteFile(validFile, []byte(`{"config": {"queueRateLimit": {"rateLimit": {"requestsPerSecond": 10}}}, "fairnessState": "FAIRNESS_STATE_V2"}`), 0o600))
 	invalidFile := filepath.Join(dir, "invalid.json")
 	require.NoError(t, os.WriteFile(invalidFile, []byte(`{"config": `), 0o600))
+	emptyFile := filepath.Join(dir, "empty.json")
+	require.NoError(t, os.WriteFile(emptyFile, []byte(`{}`), 0o600))
 
 	baseArgs := func(extra ...string) []string {
 		return append([]string{"tdbg", "--yes", "taskqueue", "update-user-data", "--namespace", "default", "--task-queue", "test"}, extra...)
@@ -285,9 +287,9 @@ func TestUpdateTaskQueueUserData(t *testing.T) {
 			expectErr: FlagKnownVersion,
 		},
 		{
-			name:      "non-positive known version",
-			args:      baseArgs("--input-filename", validFile, "--known-version", "0"),
-			expectErr: "must be a positive version",
+			name:      "empty user data",
+			args:      baseArgs("--input-filename", emptyFile, "--known-version", "7"),
+			expectErr: "input file contains no user data",
 		},
 		{
 			name:      "unreadable input file",

@@ -1700,7 +1700,7 @@ func (s *TaskQueueSuite) TestAdminUpdateTaskQueueUserData() {
 		TaskQueueType:              enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		SetFairnessWeightOverrides: map[string]float32{"key1": 1.5},
 	})
-	s.NoError(err)
+	s.Require().NoError(err)
 
 	getReq := &adminservice.GetTaskQueueUserDataRequest{
 		Namespace:     env.Namespace().String(),
@@ -1708,7 +1708,7 @@ func (s *TaskQueueSuite) TestAdminUpdateTaskQueueUserData() {
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 	}
 	before, err := env.AdminClient().GetTaskQueueUserData(s.Context(), getReq)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Positive(before.GetVersion())
 
 	// Changing fairness_state would unload the partitions, so edit fairness weight overrides instead.
@@ -1721,11 +1721,11 @@ func (s *TaskQueueSuite) TestAdminUpdateTaskQueueUserData() {
 		UserData:      updated,
 		KnownVersion:  before.GetVersion(),
 	})
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal(before.GetVersion()+1, updateResp.GetVersion())
 
 	after, err := env.AdminClient().GetTaskQueueUserData(s.Context(), getReq)
-	s.NoError(err)
+	s.Require().NoError(err)
 	s.Equal(updateResp.GetVersion(), after.GetVersion())
 	s.InDelta(2.5, after.GetUserData().GetConfig().GetFairnessWeightOverrides()["key1"], 0.001)
 
@@ -1740,12 +1740,25 @@ func (s *TaskQueueSuite) TestAdminUpdateTaskQueueUserData() {
 		return err == nil && resp.GetVersion() == updateResp.GetVersion()
 	}, 15*time.Second, 200*time.Millisecond)
 
-	// Reusing the now-stale version is rejected.
-	_, err = env.AdminClient().UpdateTaskQueueUserData(s.Context(), &adminservice.UpdateTaskQueueUserDataRequest{
+	// Retrying the identical request with the now-stale version is treated as already applied.
+	retryResp, err := env.AdminClient().UpdateTaskQueueUserData(s.Context(), &adminservice.UpdateTaskQueueUserDataRequest{
 		Namespace:     env.Namespace().String(),
 		TaskQueue:     tv.TaskQueue().GetName(),
 		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		UserData:      updated,
+		KnownVersion:  before.GetVersion(),
+	})
+	s.Require().NoError(err)
+	s.Greater(retryResp.GetVersion(), updateResp.GetVersion())
+
+	// Different data with a stale version is rejected.
+	conflicting := common.CloneProto(updated)
+	conflicting.Config.FairnessWeightOverrides = map[string]float32{"key1": 3.5}
+	_, err = env.AdminClient().UpdateTaskQueueUserData(s.Context(), &adminservice.UpdateTaskQueueUserDataRequest{
+		Namespace:     env.Namespace().String(),
+		TaskQueue:     tv.TaskQueue().GetName(),
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		UserData:      conflicting,
 		KnownVersion:  before.GetVersion(),
 	})
 	var failedPrecondition *serviceerror.FailedPrecondition

@@ -2507,16 +2507,6 @@ func (s *adminHandlerSuite) TestUpdateTaskQueueUserData() {
 			Request:  &adminservice.UpdateTaskQueueUserDataRequest{TaskQueue: "my-queue", KnownVersion: 1},
 			Expected: &serviceerror.InvalidArgument{Message: "Namespace is not set on request."},
 		},
-		{
-			Name:     "empty task queue",
-			Request:  &adminservice.UpdateTaskQueueUserDataRequest{Namespace: s.namespace.String(), KnownVersion: 1},
-			Expected: &serviceerror.InvalidArgument{Message: "Task queue is not set on request."},
-		},
-		{
-			Name:     "missing known version",
-			Request:  &adminservice.UpdateTaskQueueUserDataRequest{Namespace: s.namespace.String(), TaskQueue: "my-queue"},
-			Expected: &serviceerror.InvalidArgument{Message: "Known version is not set on request."},
-		},
 	}
 	for _, tc := range errorCases {
 		s.Run(tc.Name, func() {
@@ -2537,17 +2527,7 @@ func (s *adminHandlerSuite) TestUpdateTaskQueueUserData() {
 		s.Nil(resp)
 	})
 
-	s.Run("non-root task queue name", func() {
-		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
-		resp, err := handler.UpdateTaskQueueUserData(ctx, &adminservice.UpdateTaskQueueUserDataRequest{
-			Namespace:    s.namespace.String(),
-			TaskQueue:    "/_sys/my-queue/1",
-			KnownVersion: 1,
-		})
-		s.Error(err)
-		s.Nil(resp)
-	})
-
+	// The remaining fields are passed through as-is; matching validates them and applies defaults.
 	s.Run("success", func() {
 		userData := &persistencespb.TaskQueueTypeUserData{FairnessState: enumsspb.FAIRNESS_STATE_V2}
 		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
@@ -2566,25 +2546,7 @@ func (s *adminHandlerSuite) TestUpdateTaskQueueUserData() {
 			UserData:      userData,
 			KnownVersion:  5,
 		})
-		s.NoError(err)
-		s.Equal(int64(6), resp.GetVersion())
-	})
-
-	s.Run("unspecified type defaults to workflow", func() {
-		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
-		s.mockMatchingClient.EXPECT().ForceSetTaskQueueTypeUserData(ctx, &matchingservice.ForceSetTaskQueueTypeUserDataRequest{
-			NamespaceId:   s.namespaceID.String(),
-			TaskQueue:     "my-queue",
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-			KnownVersion:  5,
-		}).Return(&matchingservice.ForceSetTaskQueueTypeUserDataResponse{Version: 6}, nil)
-
-		resp, err := handler.UpdateTaskQueueUserData(ctx, &adminservice.UpdateTaskQueueUserDataRequest{
-			Namespace:    s.namespace.String(),
-			TaskQueue:    "my-queue",
-			KnownVersion: 5,
-		})
-		s.NoError(err)
+		s.Require().NoError(err)
 		s.Equal(int64(6), resp.GetVersion())
 	})
 

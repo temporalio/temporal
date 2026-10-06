@@ -5503,10 +5503,11 @@ type UpdateTaskQueueUserDataRequest struct {
 	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	TaskQueue     string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	TaskQueueType v16.TaskQueueType      `protobuf:"varint,3,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
-	// Replaces the user data for this task queue type. Other types' data is left unchanged.
+	// Replaces the user data for this task queue type. Other types' data is left unchanged. Must be set.
 	UserData *v12.TaskQueueTypeUserData `protobuf:"bytes,4,opt,name=user_data,json=userData,proto3" json:"user_data,omitempty"`
 	// Task queue user data version this update is based on (as returned by GetTaskQueueUserData).
-	// The update fails if the current version differs. Must be set.
+	// The update fails if the current version differs, unless the current data for this type already
+	// equals user_data (e.g. a retry of an applied update), in which case it is re-applied. Must be set.
 	KnownVersion  int64 `protobuf:"varint,5,opt,name=known_version,json=knownVersion,proto3" json:"known_version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

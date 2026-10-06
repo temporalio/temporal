@@ -12,6 +12,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/codec"
+	"google.golang.org/protobuf/proto"
 )
 
 // AdminListTaskQueueTasks displays task information
@@ -185,25 +186,32 @@ func AdminDescribeTaskQueuePartition(c *cli.Context, clientFactory ClientFactory
 	return nil
 }
 
-// AdminGetTaskQueueUserData returns the per-type user data for a task queue partition
-func AdminGetTaskQueueUserData(c *cli.Context, clientFactory ClientFactory) error {
-	namespace, err := getRequiredOption(c, FlagNamespace)
+// parseTaskQueueUserDataFlags parses the flags shared by the user data commands; the type defaults to workflow.
+func parseTaskQueueUserDataFlags(c *cli.Context) (namespace string, tqName string, tqType enumspb.TaskQueueType, err error) {
+	namespace, err = getRequiredOption(c, FlagNamespace)
 	if err != nil {
-		return err
+		return "", "", 0, err
 	}
-
-	tqName, err := getRequiredOption(c, FlagTaskQueue)
+	tqName, err = getRequiredOption(c, FlagTaskQueue)
 	if err != nil {
-		return err
+		return "", "", 0, err
 	}
-
 	tlTypeInt, err := StringToEnum(c.String(FlagTaskQueueType), enumspb.TaskQueueType_value)
 	if err != nil {
-		return fmt.Errorf("invalid task queue type: %w", err)
+		return "", "", 0, fmt.Errorf("invalid task queue type: %w", err)
 	}
-	tqType := enumspb.TaskQueueType(tlTypeInt)
+	tqType = enumspb.TaskQueueType(tlTypeInt)
 	if tqType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
 		tqType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
+	}
+	return namespace, tqName, tqType, nil
+}
+
+// AdminGetTaskQueueUserData returns the per-type user data for a task queue partition
+func AdminGetTaskQueueUserData(c *cli.Context, clientFactory ClientFactory) error {
+	namespace, tqName, tqType, err := parseTaskQueueUserDataFlags(c)
+	if err != nil {
+		return err
 	}
 
 	partitionID := 0
@@ -231,33 +239,15 @@ func AdminGetTaskQueueUserData(c *cli.Context, clientFactory ClientFactory) erro
 
 // AdminUpdateTaskQueueUserData overwrites the per-type user data for a task queue
 func AdminUpdateTaskQueueUserData(c *cli.Context, clientFactory ClientFactory, prompter *Prompter) error {
-	namespace, err := getRequiredOption(c, FlagNamespace)
+	namespace, tqName, tqType, err := parseTaskQueueUserDataFlags(c)
 	if err != nil {
 		return err
 	}
-
-	tqName, err := getRequiredOption(c, FlagTaskQueue)
-	if err != nil {
-		return err
-	}
-
-	tlTypeInt, err := StringToEnum(c.String(FlagTaskQueueType), enumspb.TaskQueueType_value)
-	if err != nil {
-		return fmt.Errorf("invalid task queue type: %w", err)
-	}
-	tqType := enumspb.TaskQueueType(tlTypeInt)
-	if tqType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
-		tqType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
-	}
-
 	inputFile, err := getRequiredOption(c, FlagInputFilename)
 	if err != nil {
 		return err
 	}
 	knownVersion := c.Int64(FlagKnownVersion)
-	if knownVersion <= 0 {
-		return fmt.Errorf("option %s must be a positive version", FlagKnownVersion)
-	}
 
 	data, err := os.ReadFile(inputFile)
 	if err != nil {
@@ -266,6 +256,10 @@ func AdminUpdateTaskQueueUserData(c *cli.Context, clientFactory ClientFactory, p
 	userData := &persistencespb.TaskQueueTypeUserData{}
 	if err := codec.NewJSONPBEncoder().Decode(data, userData); err != nil {
 		return fmt.Errorf("unable to parse user data: %w", err)
+	}
+	// An empty message would wipe all of this type's user data; that's almost always a wrong or truncated file.
+	if proto.Size(userData) == 0 {
+		return errors.New("input file contains no user data; refusing to overwrite with empty user data")
 	}
 
 	msg := fmt.Sprintf("Namespace: %s TaskQueue: %s Type: %s KnownVersion: %d\nOverwrite task queue user data for the above task queue type?",
