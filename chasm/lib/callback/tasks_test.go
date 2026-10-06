@@ -279,7 +279,8 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			eventCounter := metrics.NewMockCounterIface(ctrl)
 			metricsHandler.EXPECT().Counter(InvocationEventCounter.Name()).Return(eventCounter)
 			eventCounter.EXPECT().Record(int64(1), eventTags)
-			if tc.expectedEvent != string(outcomeEventRetryableError) {
+			retryable := tc.expectedEvent == string(outcomeEventRetryableError)
+			if !retryable {
 				attemptHistogram := metrics.NewMockHistogramIface(ctrl)
 				metricsHandler.EXPECT().
 					Histogram(InvocationAttemptsHistogram.Name(), InvocationAttemptsHistogram.Unit()).
@@ -343,7 +344,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			if tc.expectedEvent != "success" {
 				// A callback that will be retried is logged as a warning; only a dropped one is an error.
 				level := testlogger.Error
-				if tc.expectedEvent == "retryable-error" {
+				if retryable {
 					level = testlogger.Warn
 				}
 				capture.RequireContains(t, testlogger.CapturedLogPattern{
@@ -360,7 +361,7 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 						"nexus-completion-source": testCompletionSourceFqn,
 						"attempt":                 int32(0),
 						"request-id":              "request-id",
-						"retryable":               tc.expectedEvent == "retryable-error",
+						"retryable":               retryable,
 					},
 				})
 			}
