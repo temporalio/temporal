@@ -226,5 +226,5 @@ require (
 
 tool golang.org/x/perf/cmd/benchstat
 
-// Use the local testx; consumers of the server ignore this replace.
+// Use the local testx; consumers of the server ignore this replace (see .github/workflows/testx-bump.yml).
 replace go.temporal.io/testx => ./testx
