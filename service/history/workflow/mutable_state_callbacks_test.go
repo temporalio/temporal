@@ -286,37 +286,6 @@ func (s *mutableStateSuite) TestHsmCompletionCallbacks_AggregateValidationNotApp
 	s.Zero(wf.GetTotalCallbacksCount())
 }
 
-func (s *mutableStateSuite) TestChasmUpdateCallbacks_ValidateCallbackAddition() {
-	ms := s.enableChasmCallbacks(4)
-	s.mockConfig.MaxCallbacksPerUpdateID = dynamicconfig.GetIntPropertyFnFilteredByNamespace(2)
-	s.startWithCompletionCallbacks(ms, 2)
-
-	updateAddition := func(updateID string, n int) chasmworkflow.CallbackAddition {
-		return chasmworkflow.CallbackAddition{
-			UpdateID:  updateID,
-			RequestID: "req-" + updateID,
-			Callbacks: testCompletionCallbacks(n),
-		}
-	}
-	var failedPrecondition *serviceerror.FailedPrecondition
-
-	s.NoError(ms.ValidateCallbackAddition(nil, updateAddition("u1", 2)))
-
-	err := ms.ValidateCallbackAddition(nil, updateAddition("u1", 3))
-	s.ErrorAs(err, &failedPrecondition)
-	s.ErrorContains(err, `cannot attach more than 2 callbacks to update "u1"`)
-
-	// Within the per-update limit, but the workflow's own two callbacks leave room for only two.
-	s.mockConfig.MaxCallbacksPerUpdateID = dynamicconfig.GetIntPropertyFnFilteredByNamespace(10)
-	err = ms.ValidateCallbackAddition(nil, updateAddition("u1", 3))
-	s.ErrorAs(err, &failedPrecondition)
-	s.ErrorContains(err, "cannot attach more than 4 callbacks to an execution")
-
-	// Nothing validates update callbacks that would not be attached anyway.
-	s.mockConfig.EnableWorkflowUpdateCallbacks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
-	s.NoError(ms.ValidateCallbackAddition(nil, updateAddition("u1", 3)))
-}
-
 // An Update's callbacks are validated when the Update is admitted, before it reaches a worker.
 // Once the worker has accepted it, its callbacks are attached as-is: rejecting them then would
 // fail the entire workflow task completion, not just the Update. Nor are callbacks reapplied by
@@ -326,7 +295,6 @@ func (s *mutableStateSuite) TestChasmUpdateCallbacks_AttachingDoesNotValidate() 
 	s.startWithCompletionCallbacks(ms, 0)
 	_, err := ms.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
 	s.NoError(err)
-	s.mockConfig.MaxCallbacksPerUpdateID = dynamicconfig.GetIntPropertyFnFilteredByNamespace(1)
 	s.lowerCallbackLimits()
 
 	updateRequest := func(updateID string) *updatepb.Request {

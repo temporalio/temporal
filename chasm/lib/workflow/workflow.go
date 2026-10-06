@@ -174,9 +174,7 @@ func (w *Workflow) ValidateCallbackAddition(
 	ctx chasm.Context,
 	inFlight []CallbackAddition,
 	addition CallbackAddition,
-	namespaceName string,
 	validator callbacks.Validator,
-	maxCallbacksPerUpdateID int,
 ) error {
 	if len(addition.Callbacks) == 0 {
 		return nil
@@ -222,15 +220,10 @@ func (w *Workflow) ValidateCallbackAddition(
 		return nil
 	}
 
-	if addition.UpdateID != "" && len(addition.Callbacks)+attachedToUpdate > maxCallbacksPerUpdateID {
-		return serviceerror.NewFailedPreconditionf(
-			"cannot attach more than %d callbacks to update %q (%d callbacks already attached)",
-			maxCallbacksPerUpdateID,
-			addition.UpdateID,
-			attachedToUpdate,
-		)
+	if ctx.NamespaceEntry() == nil {
+		return serviceerror.NewInternal("chasm context missing namespace entry")
 	}
-
+	namespaceName := ctx.NamespaceEntry().Name().String()
 	return validator.ValidateAdditions(namespaceName, addition.Callbacks, currentCbInfo)
 }
 

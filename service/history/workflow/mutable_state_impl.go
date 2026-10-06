@@ -3654,7 +3654,6 @@ func (ms *MutableStateImpl) ValidateCallbackAddition(
 	if !ms.attachesCallbacksToChasm(addition.UpdateID) {
 		return nil
 	}
-	nsName := ms.GetNamespaceEntry().Name().String()
 	// In-flight callbacks that will be dropped rather than attached take up none of the limits.
 	attachedInFlight := make([]chasmworkflow.CallbackAddition, 0, len(inFlight))
 	for _, held := range inFlight {
@@ -3674,9 +3673,7 @@ func (ms *MutableStateImpl) ValidateCallbackAddition(
 		ctx,
 		attachedInFlight,
 		addition,
-		nsName,
 		ms.shard.CallbackValidator(),
-		ms.config.MaxCallbacksPerUpdateID(nsName),
 	)
 }
 
