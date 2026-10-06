@@ -76,6 +76,12 @@ func getCommands(
 			Subcommands: newAdminBatchCommands(clientFactory, prompterFactory),
 		},
 		{
+			Name:        "worker-deployment",
+			Aliases:     []string{"wd"},
+			Usage:       "Run admin operation on a worker deployment",
+			Subcommands: newAdminWorkerDeploymentCommands(clientFactory),
+		},
+		{
 			Name:        "decode",
 			Usage:       "Decode payload",
 			Subcommands: newDecodeCommands(taskBlobEncoder),
@@ -297,6 +303,30 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 			},
 			Action: func(c *cli.Context) error {
 				return AdminDeleteWorkflow(c, clientFactory, prompterFactory(c))
+			},
+		},
+	}
+}
+
+func newAdminWorkerDeploymentCommands(clientFactory ClientFactory) []*cli.Command {
+	return []*cli.Command{
+		{
+			Name:  "describe",
+			Usage: "Print the worker deployment workflow's state as JSON, followed by its version count",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     FlagDeploymentName,
+					Usage:    "Worker deployment name",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:    FlagRunID,
+					Aliases: FlagRunIDAlias,
+					Usage:   "Run ID of the worker deployment workflow (default: current run)",
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminDescribeWorkerDeployment(c, clientFactory)
 			},
 		},
 	}
