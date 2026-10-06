@@ -1484,7 +1484,7 @@ func refComponentInitialVT(
 	componentPath []string,
 	initialVT *persistencespb.VersionedTransition,
 ) *persistencespb.VersionedTransition {
-	if len(componentPath) == 0 {
+	if isRootPath(componentPath) {
 		return nil
 	}
 	return initialVT

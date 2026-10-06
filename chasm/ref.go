@@ -100,14 +100,6 @@ func (r *ComponentRef) forConsistencyLevel(level RefConsistencyLevel) (Component
 		// component), while no longer requiring the ref to match the latest execution transition.
 		// The creation transition is also matched in [Node.Component]; identity is otherwise the
 		// caller's responsibility (e.g. request ID).
-		if isRootPath(ref.componentPath) {
-			// The root component exists for as long as the execution does, so any reference to the
-			// root component cannot be stale if using component creation level check. Its
-			// InitialVersionedTransition is also not trustworthy for a Workflow root synthesized
-			// while loading an execution with no CHASM nodes.
-			ref.executionLastUpdateVT = nil
-			return ref, nil
-		}
 		ref.executionLastUpdateVT = ref.componentInitialVT
 		return ref, nil
 	case RefConsistencyLevelCurrentRun:
