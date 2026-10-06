@@ -1146,15 +1146,18 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_SeriesZeroedOnVers
 	}
 	const (
 		deploymentName = "foo"
-		buildID        = "C" // not current, so nothing routes to or reloads its queue once unloaded
+		buildID        = "C" // not current, so the unversioned backlog is attributed elsewhere
 	)
 	s.addRoutingConfigUserData(deploymentName, "A", "", 0)
 
+	gate := newBacklogWriteGate()
 	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{
 		loadTime:                   1 * time.Minute,
 		backlogMetricsEmitInterval: 10 * time.Millisecond,
+		wrapMetricsHandler:         gate.wrap,
 	})
 	defer cleanup()
+	defer gate.open()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -1193,8 +1196,16 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_SeriesZeroedOnVers
 		return false
 	}, 10*time.Second, 10*time.Millisecond)
 
-	// Unload just the versioned queue; the partition and its emitter keep running.
+	// Pause after describe so it cannot reload C while the test unloads it.
+	// The next emit must clear the paused write.
+	gate.arm()
+	select {
+	case <-gate.paused:
+	case <-ctx.Done():
+		s.T().Fatal("emitter did not reach the write gate")
+	}
 	pm.unloadPhysicalQueue(versionedQ, unloadCauseIdle)
+	gate.open()
 
 	await.RequireTrue(s.T(), func() bool {
 		snap := capture.Snapshot()
