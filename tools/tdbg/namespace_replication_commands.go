@@ -17,7 +17,7 @@ func newNamespaceReplicationCommands(clientFactory ClientFactory) []*cli.Command
 	return []*cli.Command{
 		{
 			Name:  "replication",
-			Usage: "Verify or repair namespace replication state",
+			Usage: "Verify namespace replication state",
 			Subcommands: []*cli.Command{
 				{
 					Name:  "verify",
@@ -80,7 +80,6 @@ func verifyNamespaceReplication(c *cli.Context, clientFactory ClientFactory) err
 			}
 			result.Status = namespaceReplicationStatusBlocked
 			result.StatusDetail = err.Error()
-			markNamespaceReplicationPlanBlocked(result)
 			if printErr := printNamespaceReplicationVerification(c, result); printErr != nil {
 				return cli.Exit(errors.Join(err, printErr).Error(), 2)
 			}
@@ -149,13 +148,11 @@ func printNamespaceReplicationVerification(
 	}
 	if _, err := fmt.Fprintf(
 		c.App.Writer,
-		"Verification ID: %s\nStatus: %s\nNamespace: %s (%s)\nSource cluster: %s\nProposed source config version: %d\n",
-		result.VerificationID,
+		"Status: %s\nNamespace: %s (%s)\nSource cluster: %s\n",
 		result.Status,
 		result.NamespaceName,
 		result.NamespaceID,
 		result.SourceCluster,
-		result.ProposedSourceConfigVersion,
 	); err != nil {
 		return err
 	}
@@ -175,7 +172,6 @@ func printNamespaceReplicationVerification(
 			ConfigMatch:     cluster.ConfigMatch,
 			FailoverVersion: optionalInt64String(cluster.FailoverVersion),
 			FailoverMatch:   cluster.FailoverMatch,
-			Action:          cluster.Action,
 			Differences:     strings.Join(cluster.Differences, ","),
 			Error:           cluster.Error,
 		})
@@ -191,7 +187,6 @@ type namespaceReplicationVerificationTableRow struct {
 	ConfigMatch     string
 	FailoverVersion string
 	FailoverMatch   string
-	Action          string
 	Differences     string
 	Error           string
 }

@@ -159,8 +159,7 @@ func handleError(c *cli.Context, err error) {
 }
 
 func tdbgExitCode(err error) int {
-	var exitCoder cli.ExitCoder
-	if errors.As(err, &exitCoder) {
+	if exitCoder, ok := errors.AsType[cli.ExitCoder](err); ok {
 		return exitCoder.ExitCode()
 	}
 	return 1

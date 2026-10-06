@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"testing"
 	"time"
 
@@ -25,33 +24,145 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
-func TestNamespaceReplicationVerifier_HealthyWithHarmlessVersionSkew(t *testing.T) {
-	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-b", "cluster-a"}, 10, 20)
-	source.Info.Data = nil
-	source.Config.CustomSearchAttributeAliases = nil
-	source.Config.BadBinaries = nil
-	target := proto.Clone(source).(*adminservice.GetNamespaceResponse)
-	target.ConfigVersion = 9
-	target.ReplicationConfig.Clusters = []*replicationpb.ClusterReplicationConfig{
-		{ClusterName: "cluster-a"},
-		{ClusterName: "cluster-b"},
+func TestNamespaceReplicationVerifier_Status(t *testing.T) {
+	tests := []struct {
+		name              string
+		sourceVersion     int64
+		targetVersion     int64
+		mutate            func(*adminservice.GetNamespaceResponse, *adminservice.GetNamespaceResponse)
+		missing           bool
+		wantStatus        string
+		wantPresence      string
+		wantConfigMatch   string
+		wantFailoverMatch string
+		wantDifference    string
+		wantError         string
+	}{
+		{
+			name:          "healthy with harmless normalization and version skew",
+			sourceVersion: 10,
+			targetVersion: 9,
+			mutate: func(source, target *adminservice.GetNamespaceResponse) {
+				source.Info.Data = nil
+				source.Config.CustomSearchAttributeAliases = nil
+				source.Config.BadBinaries = nil
+				target.ReplicationConfig.Clusters = []*replicationpb.ClusterReplicationConfig{
+					{ClusterName: "cluster-b"},
+					{ClusterName: "cluster-a"},
+				}
+				target.Info.Data = map[string]string{}
+				target.Config.CustomSearchAttributeAliases = map[string]string{}
+				target.Config.BadBinaries = &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}}
+			},
+			wantStatus:        namespaceReplicationStatusHealthy,
+			wantPresence:      namespaceReplicationPresencePresent,
+			wantConfigMatch:   namespaceReplicationMatchMatch,
+			wantFailoverMatch: namespaceReplicationMatchMatch,
+		},
+		{
+			name:          "config mismatch",
+			sourceVersion: 11,
+			targetVersion: 10,
+			mutate: func(_, target *adminservice.GetNamespaceResponse) {
+				target.Info.Description = "different and must not be printed"
+			},
+			wantStatus:        namespaceReplicationStatusRepairRequired,
+			wantPresence:      namespaceReplicationPresencePresent,
+			wantConfigMatch:   namespaceReplicationMatchMismatch,
+			wantFailoverMatch: namespaceReplicationMatchMatch,
+			wantDifference:    "info.description",
+		},
+		{
+			name:              "matching target version ahead",
+			sourceVersion:     10,
+			targetVersion:     12,
+			wantStatus:        namespaceReplicationStatusRepairRequired,
+			wantPresence:      namespaceReplicationPresencePresent,
+			wantConfigMatch:   namespaceReplicationMatchMatch,
+			wantFailoverMatch: namespaceReplicationMatchMatch,
+		},
+		{
+			name:          "missing target",
+			sourceVersion: 10,
+			missing:       true,
+			wantStatus:    namespaceReplicationStatusRepairRequired,
+			wantPresence:  namespaceReplicationPresenceMissing,
+		},
+		{
+			name:          "failover projection mismatch",
+			sourceVersion: 10,
+			targetVersion: 10,
+			mutate: func(_, target *adminservice.GetNamespaceResponse) {
+				target.ReplicationConfig.ActiveClusterName = "cluster-b"
+			},
+			wantStatus:        namespaceReplicationStatusBlocked,
+			wantPresence:      namespaceReplicationPresencePresent,
+			wantConfigMatch:   namespaceReplicationMatchMatch,
+			wantFailoverMatch: namespaceReplicationMatchMismatch,
+			wantDifference:    "replication.active_cluster",
+		},
+		{
+			name:          "target failover version ahead",
+			sourceVersion: 10,
+			targetVersion: 10,
+			mutate: func(_, target *adminservice.GetNamespaceResponse) {
+				target.FailoverVersion++
+			},
+			wantStatus:        namespaceReplicationStatusBlocked,
+			wantPresence:      namespaceReplicationPresencePresent,
+			wantConfigMatch:   namespaceReplicationMatchMatch,
+			wantFailoverMatch: namespaceReplicationMatchMatch,
+		},
+		{
+			name:          "local target",
+			sourceVersion: 10,
+			targetVersion: 10,
+			mutate: func(_, target *adminservice.GetNamespaceResponse) {
+				target.IsGlobalNamespace = false
+			},
+			wantStatus:     namespaceReplicationStatusBlocked,
+			wantPresence:   namespaceReplicationPresencePresent,
+			wantDifference: "namespace.is_global",
+			wantError:      "not global",
+		},
 	}
-	target.Info.Data = map[string]string{}
-	target.Config.CustomSearchAttributeAliases = map[string]string{}
-	target.Config.BadBinaries = &namespacepb.BadBinaries{Binaries: map[string]*namespacepb.BadBinaryInfo{}}
 
-	verifier := testNamespaceReplicationVerifier(source, map[string]*adminservice.GetNamespaceResponse{
-		"cluster-b": target,
-	})
-	result, err := verifier.Verify(context.Background(), testNamespaceReplicationVerifyRequest())
-	require.NoError(t, err)
-	require.Equal(t, namespaceReplicationStatusHealthy, result.Status)
-	require.Equal(t, int64(10), result.ProposedSourceConfigVersion)
-	require.Len(t, result.Clusters, 2)
-	require.Equal(t, namespaceReplicationActionNone, result.Clusters[0].Action)
-	require.Equal(t, namespaceReplicationActionNone, result.Clusters[1].Action)
-	require.Equal(t, namespaceReplicationMatchMatch, result.Clusters[1].ConfigMatch)
-	require.Equal(t, result.SourceConfigFingerprint, result.Clusters[1].ConfigFingerprint)
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, test.sourceVersion, 20)
+			var target *adminservice.GetNamespaceResponse
+			if !test.missing {
+				target = proto.Clone(source).(*adminservice.GetNamespaceResponse)
+				target.ConfigVersion = test.targetVersion
+			}
+			if test.mutate != nil {
+				test.mutate(source, target)
+			}
+
+			verifier := testNamespaceReplicationVerifier(source, map[string]*adminservice.GetNamespaceResponse{"cluster-b": target})
+			result, err := verifier.Verify(context.Background(), testNamespaceReplicationVerifyRequest())
+			require.NoError(t, err)
+			require.Equal(t, test.wantStatus, result.Status)
+			require.Len(t, result.Clusters, 2)
+			cluster := result.Clusters[1]
+			require.Equal(t, test.wantPresence, cluster.Presence)
+			if test.wantConfigMatch != "" {
+				require.Equal(t, test.wantConfigMatch, cluster.ConfigMatch)
+			}
+			if test.wantFailoverMatch != "" {
+				require.Equal(t, test.wantFailoverMatch, cluster.FailoverMatch)
+			}
+			if test.wantDifference != "" {
+				require.Contains(t, cluster.Differences, test.wantDifference)
+			}
+			if test.wantError != "" {
+				require.Contains(t, cluster.Error, test.wantError)
+			}
+			if test.wantStatus == namespaceReplicationStatusHealthy {
+				require.Equal(t, result.SourceConfigFingerprint, cluster.ConfigFingerprint)
+			}
+		})
+	}
 }
 
 func TestNamespaceReplicationVerifier_SourceOnlyDoesNotListClusterMetadata(t *testing.T) {
@@ -68,88 +179,6 @@ func TestNamespaceReplicationVerifier_SourceOnlyDoesNotListClusterMetadata(t *te
 	require.NoError(t, err)
 	require.Equal(t, namespaceReplicationStatusHealthy, result.Status)
 	require.Len(t, result.Clusters, 1)
-}
-
-func TestNamespaceReplicationVerifier_DivergentEqualVersionPreparesSourceAndApplies(t *testing.T) {
-	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
-	target := proto.Clone(source).(*adminservice.GetNamespaceResponse)
-	target.Info.Description = "different and must not be printed"
-
-	verifier := testNamespaceReplicationVerifier(source, map[string]*adminservice.GetNamespaceResponse{
-		"cluster-b": target,
-	})
-	result, err := verifier.Verify(context.Background(), testNamespaceReplicationVerifyRequest())
-	require.NoError(t, err)
-	require.Equal(t, namespaceReplicationStatusRepairRequired, result.Status)
-	require.Equal(t, int64(11), result.ProposedSourceConfigVersion)
-	require.Equal(t, namespaceReplicationActionPrepareSource, result.Clusters[0].Action)
-	require.Equal(t, namespaceReplicationActionPrepareSourceAndApply, result.Clusters[1].Action)
-	require.Equal(t, []string{"info.description"}, result.Clusters[1].Differences)
-}
-
-func TestNamespaceReplicationVerifier_DivergentTargetWhenSourceAlreadyHigher(t *testing.T) {
-	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 11, 20)
-	target := proto.Clone(source).(*adminservice.GetNamespaceResponse)
-	target.ConfigVersion = 10
-	target.Config.HistoryArchivalUri = "different"
-
-	verifier := testNamespaceReplicationVerifier(source, map[string]*adminservice.GetNamespaceResponse{
-		"cluster-b": target,
-	})
-	result, err := verifier.Verify(context.Background(), testNamespaceReplicationVerifyRequest())
-	require.NoError(t, err)
-	require.Equal(t, int64(11), result.ProposedSourceConfigVersion)
-	require.Equal(t, namespaceReplicationActionNone, result.Clusters[0].Action)
-	require.Equal(t, namespaceReplicationActionApplySource, result.Clusters[1].Action)
-}
-
-func TestNamespaceReplicationVerifier_MatchingTargetAheadPreparesSource(t *testing.T) {
-	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
-	target := proto.Clone(source).(*adminservice.GetNamespaceResponse)
-	target.ConfigVersion = 12
-
-	verifier := testNamespaceReplicationVerifier(source, map[string]*adminservice.GetNamespaceResponse{
-		"cluster-b": target,
-	})
-	result, err := verifier.Verify(context.Background(), testNamespaceReplicationVerifyRequest())
-	require.NoError(t, err)
-	require.Equal(t, namespaceReplicationStatusRepairRequired, result.Status)
-	require.Equal(t, int64(12), result.ProposedSourceConfigVersion)
-	require.Equal(t, namespaceReplicationActionPrepareSource, result.Clusters[0].Action)
-	require.Equal(t, namespaceReplicationActionPrepareSource, result.Clusters[1].Action)
-}
-
-func TestNamespaceReplicationVerifier_DivergentLowerTargetAndMatchingHigherTarget(t *testing.T) {
-	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b", "cluster-c"}, 11, 20)
-	divergent := proto.Clone(source).(*adminservice.GetNamespaceResponse)
-	divergent.ConfigVersion = 10
-	divergent.Info.OwnerEmail = "different@example.com"
-	matchingAhead := proto.Clone(source).(*adminservice.GetNamespaceResponse)
-	matchingAhead.ConfigVersion = 12
-
-	verifier := testNamespaceReplicationVerifier(source, map[string]*adminservice.GetNamespaceResponse{
-		"cluster-b": divergent,
-		"cluster-c": matchingAhead,
-	})
-	result, err := verifier.Verify(context.Background(), testNamespaceReplicationVerifyRequest())
-	require.NoError(t, err)
-	require.Equal(t, namespaceReplicationStatusRepairRequired, result.Status)
-	require.Equal(t, int64(12), result.ProposedSourceConfigVersion)
-	require.Equal(t, namespaceReplicationActionPrepareSource, result.Clusters[0].Action)
-	require.Equal(t, namespaceReplicationActionPrepareSourceAndApply, result.Clusters[1].Action)
-	require.Equal(t, namespaceReplicationActionPrepareSource, result.Clusters[2].Action)
-}
-
-func TestNamespaceReplicationVerifier_MissingTargetPlansCreate(t *testing.T) {
-	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
-	verifier := testNamespaceReplicationVerifier(source, map[string]*adminservice.GetNamespaceResponse{
-		"cluster-b": nil,
-	})
-	result, err := verifier.Verify(context.Background(), testNamespaceReplicationVerifyRequest())
-	require.NoError(t, err)
-	require.Equal(t, namespaceReplicationStatusRepairRequired, result.Status)
-	require.Equal(t, namespaceReplicationPresenceMissing, result.Clusters[1].Presence)
-	require.Equal(t, namespaceReplicationActionCreate, result.Clusters[1].Action)
 }
 
 func TestNamespaceReplicationVerifier_NameCollisionBlocksRepair(t *testing.T) {
@@ -170,7 +199,6 @@ func TestNamespaceReplicationVerifier_NameCollisionBlocksRepair(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, namespaceReplicationStatusBlocked, result.Status)
 	require.Equal(t, namespaceReplicationPresenceNameCollision, result.Clusters[1].Presence)
-	require.Equal(t, namespaceReplicationActionBlocked, result.Clusters[1].Action)
 	require.NotContains(t, result.Clusters[1].Error, "other-id")
 }
 
@@ -192,7 +220,6 @@ func TestNamespaceReplicationVerifier_IDCollisionBlocksRepair(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, namespaceReplicationStatusBlocked, result.Status)
 	require.Equal(t, namespaceReplicationPresenceIDCollision, result.Clusters[1].Presence)
-	require.Equal(t, namespaceReplicationActionBlocked, result.Clusters[1].Action)
 	require.NotContains(t, result.Clusters[1].Error, "other-name")
 }
 
@@ -204,7 +231,6 @@ func TestNamespaceReplicationVerifier_UnavailableTargetBlocksRepair(t *testing.T
 	require.NoError(t, err)
 	require.Equal(t, namespaceReplicationStatusBlocked, result.Status)
 	require.Equal(t, namespaceReplicationPresenceUnavailable, result.Clusters[1].Presence)
-	require.Equal(t, namespaceReplicationActionBlocked, result.Clusters[1].Action)
 }
 
 func TestNamespaceReplicationVerifier_ClusterMetadataFailureReturnsBlockedResult(t *testing.T) {
@@ -221,52 +247,6 @@ func TestNamespaceReplicationVerifier_ClusterMetadataFailureReturnsBlockedResult
 	require.NoError(t, err)
 	require.Equal(t, namespaceReplicationStatusBlocked, result.Status)
 	require.Contains(t, result.StatusDetail, "metadata unavailable")
-	require.Equal(t, namespaceReplicationActionBlocked, result.Clusters[0].Action)
-}
-
-func TestNamespaceReplicationVerifier_FailoverMismatchBlocksRepair(t *testing.T) {
-	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
-	target := proto.Clone(source).(*adminservice.GetNamespaceResponse)
-	target.ReplicationConfig.ActiveClusterName = "cluster-b"
-
-	verifier := testNamespaceReplicationVerifier(source, map[string]*adminservice.GetNamespaceResponse{
-		"cluster-b": target,
-	})
-	result, err := verifier.Verify(context.Background(), testNamespaceReplicationVerifyRequest())
-	require.NoError(t, err)
-	require.Equal(t, namespaceReplicationStatusBlocked, result.Status)
-	require.Equal(t, namespaceReplicationMatchMismatch, result.Clusters[1].FailoverMatch)
-	require.Contains(t, result.Clusters[1].Differences, "replication.active_cluster")
-}
-
-func TestNamespaceReplicationVerifier_TargetFailoverVersionAheadBlocksRepair(t *testing.T) {
-	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
-	target := proto.Clone(source).(*adminservice.GetNamespaceResponse)
-	target.FailoverVersion = 21
-
-	verifier := testNamespaceReplicationVerifier(source, map[string]*adminservice.GetNamespaceResponse{
-		"cluster-b": target,
-	})
-	result, err := verifier.Verify(context.Background(), testNamespaceReplicationVerifyRequest())
-	require.NoError(t, err)
-	require.Equal(t, namespaceReplicationStatusBlocked, result.Status)
-	require.Equal(t, namespaceReplicationMatchMatch, result.Clusters[1].FailoverMatch)
-	require.Equal(t, namespaceReplicationActionBlocked, result.Clusters[1].Action)
-}
-
-func TestNamespaceReplicationVerifier_LocalTargetBlocksRepair(t *testing.T) {
-	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, 10, 20)
-	target := proto.Clone(source).(*adminservice.GetNamespaceResponse)
-	target.IsGlobalNamespace = false
-
-	verifier := testNamespaceReplicationVerifier(source, map[string]*adminservice.GetNamespaceResponse{
-		"cluster-b": target,
-	})
-	result, err := verifier.Verify(context.Background(), testNamespaceReplicationVerifyRequest())
-	require.NoError(t, err)
-	require.Equal(t, namespaceReplicationStatusBlocked, result.Status)
-	require.Equal(t, []string{"namespace.is_global"}, result.Clusters[1].Differences)
-	require.Contains(t, result.Clusters[1].Error, "not global")
 }
 
 func TestNamespaceReplicationVerifier_SourceMovementIsInconclusive(t *testing.T) {
@@ -292,23 +272,6 @@ func TestNamespaceReplicationVerifier_SourceMovementIsInconclusive(t *testing.T)
 	result, err := verifier.Verify(context.Background(), testNamespaceReplicationVerifyRequest())
 	require.NoError(t, err)
 	require.Equal(t, namespaceReplicationStatusInconclusiveSourceChanged, result.Status)
-	for _, cluster := range result.Clusters {
-		require.Equal(t, namespaceReplicationActionBlocked, cluster.Action)
-	}
-}
-
-func TestNamespaceReplicationVerifier_ConfigVersionOverflowBlocksRepair(t *testing.T) {
-	source := testNamespaceResponse("namespace", "namespace-id", "cluster-a", []string{"cluster-a", "cluster-b"}, math.MaxInt64, 20)
-	target := proto.Clone(source).(*adminservice.GetNamespaceResponse)
-	target.Info.Description = "different"
-
-	verifier := testNamespaceReplicationVerifier(source, map[string]*adminservice.GetNamespaceResponse{
-		"cluster-b": target,
-	})
-	result, err := verifier.Verify(context.Background(), testNamespaceReplicationVerifyRequest())
-	require.NoError(t, err)
-	require.Equal(t, namespaceReplicationStatusBlocked, result.Status)
-	require.Contains(t, result.StatusDetail, "maximum int64")
 }
 
 func TestValidateSourceNamespace(t *testing.T) {
@@ -617,7 +580,6 @@ func TestNamespaceReplicationVerifyCommandPrintsBlockedResult(t *testing.T) {
 	require.NoError(t, json.Unmarshal(output.Bytes(), &result))
 	require.Equal(t, namespaceReplicationStatusBlocked, result.Status)
 	require.Contains(t, result.StatusDetail, "not NORMAL")
-	require.Equal(t, namespaceReplicationActionBlocked, result.Clusters[0].Action)
 }
 
 func TestNamespaceReplicationVerifyCommandPrintsRepairTable(t *testing.T) {
@@ -645,7 +607,7 @@ func TestNamespaceReplicationVerifyCommandPrintsRepairTable(t *testing.T) {
 	require.Error(t, err)
 	require.Equal(t, namespaceReplicationRepairRequiredExitCode, tdbgExitCode(err))
 	require.Contains(t, output.String(), "REPAIR_REQUIRED")
-	require.Contains(t, output.String(), namespaceReplicationActionApplySource)
+	require.Contains(t, output.String(), "info.description")
 }
 
 func TestNamespaceReplicationVerifyCommandPropagatesJSONWriteFailure(t *testing.T) {
@@ -710,7 +672,6 @@ func testNamespaceReplicationVerifierWithClients(
 	}
 	verifier := newNamespaceReplicationVerifier(&testNamespaceReplicationClientProvider{clients: clients})
 	verifier.now = func() time.Time { return time.Unix(123, 0).UTC() }
-	verifier.newID = func() string { return "verification-id" }
 	return verifier
 }
 

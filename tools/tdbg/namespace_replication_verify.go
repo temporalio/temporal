@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"io"
 	"maps"
-	"math"
 	"slices"
 	"strings"
 	"time"
@@ -21,7 +20,6 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common/primitives"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -43,13 +41,6 @@ const (
 	namespaceReplicationMatchMatch    = "MATCH"
 	namespaceReplicationMatchMismatch = "MISMATCH"
 	namespaceReplicationMatchUnknown  = "UNKNOWN"
-
-	namespaceReplicationActionNone                  = "NONE"
-	namespaceReplicationActionCreate                = "CREATE"
-	namespaceReplicationActionApplySource           = "APPLY_SOURCE"
-	namespaceReplicationActionPrepareSourceAndApply = "PREPARE_SOURCE_AND_APPLY"
-	namespaceReplicationActionPrepareSource         = "PREPARE_SOURCE"
-	namespaceReplicationActionBlocked               = "BLOCKED"
 )
 
 type namespaceReplicationSelector struct {
@@ -64,18 +55,16 @@ type namespaceReplicationVerifyRequest struct {
 }
 
 type namespaceReplicationVerificationResult struct {
-	VerificationTime            time.Time                                 `json:"verification_time"`
-	VerificationID              string                                    `json:"verification_id"`
-	NamespaceName               string                                    `json:"namespace_name,omitempty"`
-	NamespaceID                 string                                    `json:"namespace_id,omitempty"`
-	SourceCluster               string                                    `json:"source_cluster,omitempty"`
-	ExpectedClusters            []string                                  `json:"expected_clusters,omitempty"`
-	SourceConfigFingerprint     string                                    `json:"source_config_fingerprint,omitempty"`
-	SourceFailoverFingerprint   string                                    `json:"source_failover_fingerprint,omitempty"`
-	ProposedSourceConfigVersion int64                                     `json:"proposed_source_config_version"`
-	Status                      string                                    `json:"status"`
-	StatusDetail                string                                    `json:"status_detail,omitempty"`
-	Clusters                    []namespaceReplicationClusterVerification `json:"clusters,omitempty"`
+	VerificationTime          time.Time                                 `json:"verification_time"`
+	NamespaceName             string                                    `json:"namespace_name,omitempty"`
+	NamespaceID               string                                    `json:"namespace_id,omitempty"`
+	SourceCluster             string                                    `json:"source_cluster,omitempty"`
+	ExpectedClusters          []string                                  `json:"expected_clusters,omitempty"`
+	SourceConfigFingerprint   string                                    `json:"source_config_fingerprint,omitempty"`
+	SourceFailoverFingerprint string                                    `json:"source_failover_fingerprint,omitempty"`
+	Status                    string                                    `json:"status"`
+	StatusDetail              string                                    `json:"status_detail,omitempty"`
+	Clusters                  []namespaceReplicationClusterVerification `json:"clusters,omitempty"`
 }
 
 type namespaceReplicationClusterVerification struct {
@@ -89,7 +78,6 @@ type namespaceReplicationClusterVerification struct {
 	FailoverFingerprint string   `json:"failover_fingerprint,omitempty"`
 	FailoverMatch       string   `json:"failover_match"`
 	Differences         []string `json:"differences,omitempty"`
-	Action              string   `json:"action"`
 	Error               string   `json:"error,omitempty"`
 }
 
@@ -135,7 +123,6 @@ type namespaceReplicationVerifier struct {
 	clients    namespaceReplicationAdminClientProvider
 	rpcTimeout time.Duration
 	now        func() time.Time
-	newID      func() string
 }
 
 func newNamespaceReplicationVerifier(
@@ -146,9 +133,6 @@ func newNamespaceReplicationVerifier(
 		rpcTimeout: defaultContextTimeout,
 		now: func() time.Time {
 			return time.Now().UTC()
-		},
-		newID: func() string {
-			return primitives.NewUUID().String()
 		},
 	}
 }
@@ -169,7 +153,6 @@ func (v *namespaceReplicationVerifier) Verify(
 ) (_ *namespaceReplicationVerificationResult, retErr error) {
 	result := &namespaceReplicationVerificationResult{
 		VerificationTime: v.now(),
-		VerificationID:   v.newID(),
 		Status:           namespaceReplicationStatusBlocked,
 	}
 
@@ -216,7 +199,6 @@ func (v *namespaceReplicationVerifier) Verify(
 	}
 	sourceConfigVersion := source.GetConfigVersion()
 	sourceFailoverVersion := source.GetFailoverVersion()
-	result.ProposedSourceConfigVersion = sourceConfigVersion
 	result.Clusters = append(result.Clusters, namespaceReplicationClusterVerification{
 		Cluster:             result.SourceCluster,
 		Role:                "SOURCE",
@@ -227,7 +209,6 @@ func (v *namespaceReplicationVerifier) Verify(
 		FailoverVersion:     &sourceFailoverVersion,
 		FailoverFingerprint: result.SourceFailoverFingerprint,
 		FailoverMatch:       namespaceReplicationMatchMatch,
-		Action:              namespaceReplicationActionNone,
 	})
 
 	if err := validateSourceNamespace(source, result.SourceCluster); err != nil {
@@ -301,7 +282,6 @@ func (v *namespaceReplicationVerifier) Verify(
 	if err != nil {
 		result.Status = namespaceReplicationStatusInconclusiveSourceChanged
 		result.StatusDetail = fmt.Sprintf("final source read failed: %v", err)
-		markNamespaceReplicationPlanBlocked(result)
 		return result, nil
 	}
 	equal, err := namespaceReplicationSnapshotsEqual(source, finalSource)
@@ -311,14 +291,12 @@ func (v *namespaceReplicationVerifier) Verify(
 	if !equal {
 		result.Status = namespaceReplicationStatusInconclusiveSourceChanged
 		result.StatusDetail = "source namespace changed while replicas were scanned"
-		markNamespaceReplicationPlanBlocked(result)
 		return result, nil
 	}
 
-	if err := deriveNamespaceReplicationPlan(result); err != nil {
+	if err := deriveNamespaceReplicationStatus(result); err != nil {
 		result.Status = namespaceReplicationStatusBlocked
 		result.StatusDetail = err.Error()
-		markNamespaceReplicationPlanBlocked(result)
 	}
 	return result, nil
 }
@@ -337,7 +315,6 @@ func (v *namespaceReplicationVerifier) inspectTarget(
 		Presence:      namespaceReplicationPresenceUnavailable,
 		ConfigMatch:   namespaceReplicationMatchUnknown,
 		FailoverMatch: namespaceReplicationMatchUnknown,
-		Action:        namespaceReplicationActionBlocked,
 	}
 	connection, err := v.clients.OpenTarget(address)
 	if err != nil {
@@ -349,7 +326,6 @@ func (v *namespaceReplicationVerifier) inspectTarget(
 			result.Presence = namespaceReplicationPresenceUnavailable
 			result.ConfigMatch = namespaceReplicationMatchUnknown
 			result.FailoverMatch = namespaceReplicationMatchUnknown
-			result.Action = namespaceReplicationActionBlocked
 			result.Error = fmt.Sprintf("close connection: %v", err)
 		}
 	}()
@@ -388,7 +364,6 @@ func (v *namespaceReplicationVerifier) inspectTarget(
 	}
 	if nameMissing && idMissing {
 		result.Presence = namespaceReplicationPresenceMissing
-		result.Action = namespaceReplicationActionCreate
 		result.Error = ""
 		return result
 	}
@@ -864,135 +839,45 @@ func namespaceReplicationSnapshotsEqual(
 		proto.Equal(firstFailover, secondFailover), nil
 }
 
-func deriveNamespaceReplicationPlan(result *namespaceReplicationVerificationResult) error {
+func deriveNamespaceReplicationStatus(result *namespaceReplicationVerificationResult) error {
 	if len(result.Clusters) == 0 || result.Clusters[0].Role != "SOURCE" {
 		return errors.New("verification result has no source cluster")
 	}
-	source := &result.Clusters[0]
+	source := result.Clusters[0]
 	if source.ConfigVersion == nil || source.FailoverVersion == nil {
 		return errors.New("verification result has incomplete source versions")
 	}
-	sourceConfigVersion := *source.ConfigVersion
-	sourceFailoverVersion := *source.FailoverVersion
-	summary := summarizeNamespaceReplicationPlan(
-		result.Clusters[1:],
-		sourceConfigVersion,
-		sourceFailoverVersion,
-	)
-	proposedVersion, err := proposedNamespaceReplicationConfigVersion(sourceConfigVersion, summary)
-	if err != nil {
-		return err
-	}
-	result.ProposedSourceConfigVersion = proposedVersion
-	if proposedVersion != sourceConfigVersion {
-		source.Action = namespaceReplicationActionPrepareSource
-	}
 
-	repairRequired := source.Action != namespaceReplicationActionNone
-	for i := 1; i < len(result.Clusters); i++ {
-		cluster := &result.Clusters[i]
-		cluster.Action = namespaceReplicationRepairAction(
-			cluster,
-			sourceConfigVersion,
-			sourceFailoverVersion,
-			proposedVersion,
-		)
-		switch cluster.Action {
-		case namespaceReplicationActionCreate,
-			namespaceReplicationActionApplySource,
-			namespaceReplicationActionPrepareSourceAndApply,
-			namespaceReplicationActionPrepareSource:
+	repairRequired := false
+	blocked := false
+	for _, cluster := range result.Clusters[1:] {
+		switch cluster.Presence {
+		case namespaceReplicationPresenceMissing:
 			repairRequired = true
+		case namespaceReplicationPresencePresent:
+			if cluster.ConfigVersion == nil || cluster.FailoverVersion == nil ||
+				namespaceReplicationFailoverBlocks(&cluster, *source.FailoverVersion) {
+				blocked = true
+				continue
+			}
+			if cluster.ConfigMatch != namespaceReplicationMatchMatch ||
+				*cluster.ConfigVersion > *source.ConfigVersion {
+				repairRequired = true
+			}
 		default:
-			// No executable repair action is required for this cluster.
+			blocked = true
 		}
 	}
 
-	if summary.blocked {
+	if blocked {
 		result.Status = namespaceReplicationStatusBlocked
-		result.StatusDetail = "one or more replicas cannot be safely repaired"
+		result.StatusDetail = "one or more replicas block safe repair"
 	} else if repairRequired {
 		result.Status = namespaceReplicationStatusRepairRequired
 	} else {
 		result.Status = namespaceReplicationStatusHealthy
 	}
 	return nil
-}
-
-type namespaceReplicationPlanSummary struct {
-	maxConfigVersion           int64
-	anyConfigMismatch          bool
-	needsStrictlyHigherVersion bool
-	blocked                    bool
-}
-
-func summarizeNamespaceReplicationPlan(
-	clusters []namespaceReplicationClusterVerification,
-	sourceConfigVersion int64,
-	sourceFailoverVersion int64,
-) namespaceReplicationPlanSummary {
-	summary := namespaceReplicationPlanSummary{maxConfigVersion: sourceConfigVersion}
-	for i := range clusters {
-		cluster := &clusters[i]
-		if cluster.ConfigVersion != nil && *cluster.ConfigVersion > summary.maxConfigVersion {
-			summary.maxConfigVersion = *cluster.ConfigVersion
-		}
-		if cluster.Presence == namespaceReplicationPresenceMissing {
-			continue
-		}
-		if cluster.Presence != namespaceReplicationPresencePresent ||
-			namespaceReplicationFailoverBlocks(cluster, sourceFailoverVersion) {
-			summary.blocked = true
-			continue
-		}
-		if cluster.ConfigMatch == namespaceReplicationMatchMismatch {
-			summary.anyConfigMismatch = true
-			summary.needsStrictlyHigherVersion = summary.needsStrictlyHigherVersion ||
-				(cluster.ConfigVersion != nil && sourceConfigVersion <= *cluster.ConfigVersion)
-		}
-	}
-	return summary
-}
-
-func proposedNamespaceReplicationConfigVersion(
-	sourceConfigVersion int64,
-	summary namespaceReplicationPlanSummary,
-) (int64, error) {
-	if summary.anyConfigMismatch && summary.needsStrictlyHigherVersion {
-		if summary.maxConfigVersion == math.MaxInt64 {
-			return 0, errors.New("cannot prepare source config version: maximum int64 version observed")
-		}
-		return summary.maxConfigVersion + 1, nil
-	}
-	if summary.maxConfigVersion > sourceConfigVersion {
-		return summary.maxConfigVersion, nil
-	}
-	return sourceConfigVersion, nil
-}
-
-func namespaceReplicationRepairAction(
-	cluster *namespaceReplicationClusterVerification,
-	sourceConfigVersion int64,
-	sourceFailoverVersion int64,
-	proposedVersion int64,
-) string {
-	if cluster.Presence == namespaceReplicationPresenceMissing {
-		return namespaceReplicationActionCreate
-	}
-	if cluster.Presence != namespaceReplicationPresencePresent ||
-		namespaceReplicationFailoverBlocks(cluster, sourceFailoverVersion) {
-		return namespaceReplicationActionBlocked
-	}
-	if cluster.ConfigMatch == namespaceReplicationMatchMismatch {
-		if proposedVersion != sourceConfigVersion {
-			return namespaceReplicationActionPrepareSourceAndApply
-		}
-		return namespaceReplicationActionApplySource
-	}
-	if cluster.ConfigVersion != nil && sourceConfigVersion < *cluster.ConfigVersion {
-		return namespaceReplicationActionPrepareSource
-	}
-	return namespaceReplicationActionNone
 }
 
 func namespaceReplicationFailoverBlocks(
@@ -1003,19 +888,12 @@ func namespaceReplicationFailoverBlocks(
 		(cluster.FailoverVersion != nil && *cluster.FailoverVersion > sourceFailoverVersion)
 }
 
-func markNamespaceReplicationPlanBlocked(result *namespaceReplicationVerificationResult) {
-	for i := range result.Clusters {
-		result.Clusters[i].Action = namespaceReplicationActionBlocked
-	}
-}
-
 func blockNamespaceReplicationVerification(
 	result *namespaceReplicationVerificationResult,
 	err error,
 ) *namespaceReplicationVerificationResult {
 	result.Status = namespaceReplicationStatusBlocked
 	result.StatusDetail = err.Error()
-	markNamespaceReplicationPlanBlocked(result)
 	return result
 }
 
