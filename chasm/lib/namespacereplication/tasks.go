@@ -143,12 +143,12 @@ func (h *applyLocalTaskHandler) Execute(
 	case namespacereplicationpb.NAMESPACE_OPERATION_CREATE:
 		_, applyErr = h.metadataManager.CreateNamespace(ctx, &persistence.CreateNamespaceRequest{
 			Namespace:         loaded.Detail,
-			IsGlobalNamespace: loaded.IsGlobal,
+			IsGlobalNamespace: true,
 		})
 	case namespacereplicationpb.NAMESPACE_OPERATION_UPDATE:
 		applyErr = h.metadataManager.UpdateNamespace(ctx, &persistence.UpdateNamespaceRequest{
 			Namespace:           loaded.Detail,
-			IsGlobalNamespace:   loaded.IsGlobal,
+			IsGlobalNamespace:   true,
 			NotificationVersion: loaded.ExpectedVer,
 		})
 	default:
@@ -161,19 +161,18 @@ func (h *applyLocalTaskHandler) Execute(
 	}
 	if applyErr != nil {
 		if shouldReconcileLocalApply(loaded.Operation, applyErr) {
-			alreadyApplied, reconcileErr := h.localMutationAlreadyApplied(
+			isCurrentPersistedState, reconcileErr := h.localMutationIsCurrentPersistedState(
 				ctx,
 				loaded.Operation,
 				loaded.Detail,
 				loaded.ExpectedVer,
-				loaded.IsGlobal,
 			)
 			if reconcileErr != nil {
 				// Keep the component pending until the durable task can determine
 				// whether the metadata write committed.
 				return fmt.Errorf("reconcile local namespace mutation after %v: %w", applyErr, reconcileErr)
 			}
-			if alreadyApplied {
+			if isCurrentPersistedState {
 				h.logger.Info(
 					"namespacereplication recovered committed local apply",
 					tag.WorkflowNamespaceID(loaded.Detail.GetInfo().GetId()),
@@ -269,12 +268,15 @@ func shouldReconcileLocalApply(
 		(operation == namespacereplicationpb.NAMESPACE_OPERATION_CREATE && errType == localFailureAlreadyExists)
 }
 
-func (h *applyLocalTaskHandler) localMutationAlreadyApplied(
+// localMutationIsCurrentPersistedState reports whether the current namespace
+// row can be attributed to this mutation. It deliberately returns false when a
+// later same-namespace update has superseded this mutation, even if the complete
+// namespace snapshots happen to match.
+func (h *applyLocalTaskHandler) localMutationIsCurrentPersistedState(
 	ctx context.Context,
 	operation namespacereplicationpb.NamespaceOperation,
 	detail *persistencespb.NamespaceDetail,
 	expectedVersion int64,
-	isGlobal bool,
 ) (bool, error) {
 	namespaceID := detail.GetInfo().GetId()
 	if namespaceID == "" {
@@ -289,10 +291,16 @@ func (h *applyLocalTaskHandler) localMutationAlreadyApplied(
 		return false, err
 	}
 
-	if response.IsGlobalNamespace != isGlobal ||
+	// The CHASM transport is global-only. IsGlobalNamespace is persisted outside
+	// NamespaceDetail, so it must be checked separately from the proto comparison.
+	if !response.IsGlobalNamespace ||
 		!namespaceDetailsEqualAfterPersistenceRead(detail, response.Namespace, h.currentCluster) {
 		return false, nil
 	}
+	// An UPDATE stores the CAS version it consumed on the namespace row before
+	// advancing the cell-global metadata version. Exact equality therefore ties
+	// the observed row to this mutation. A larger row version means a later
+	// same-namespace mutation has superseded it, even if the snapshots match.
 	if operation == namespacereplicationpb.NAMESPACE_OPERATION_UPDATE &&
 		response.NotificationVersion != expectedVersion {
 		return false, nil
@@ -314,17 +322,15 @@ func namespaceDetailsEqualAfterPersistenceRead(
 		return expected == actual
 	}
 
-	expectedCopy := &persistencespb.NamespaceDetail{}
-	proto.Merge(expectedCopy, expected)
-	expected = expectedCopy
-	actualCopy := &persistencespb.NamespaceDetail{}
-	proto.Merge(actualCopy, actual)
-	actual = actualCopy
+	expected = common.CloneProto(expected)
+	actual = common.CloneProto(actual)
 	normalizeNamespaceDetailAfterPersistenceRead(expected, currentCluster)
 	normalizeNamespaceDetailAfterPersistenceRead(actual, currentCluster)
 	return proto.Equal(expected, actual)
 }
 
+// Keep this in sync with the defaults materialized by
+// persistence.ConvertInternalGetNamespaceResponse.
 func normalizeNamespaceDetailAfterPersistenceRead(
 	detail *persistencespb.NamespaceDetail,
 	currentCluster string,
@@ -592,6 +598,10 @@ func (h *applyPeerTaskHandler) Execute(
 			applyErr,
 		)
 		if isPeerDestinationDown(applyErr) {
+			// Signal the outbound queue's per-destination circuit breaker without
+			// introducing a second retry path. The queue unwraps this and returns
+			// saveErr: nil acknowledges this task after the CHASM backoff was saved;
+			// a non-nil saveErr retries the task because its state was not saved.
 			return queueserrors.NewDestinationDownError(applyErr.Error(), saveErr)
 		}
 		return saveErr
@@ -658,7 +668,7 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 		ref,
 		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (chasm.NoValue, error) {
 			now := mctx.Now(c)
-			nextAttempt := task.GetAttempt() + 1
+			completedAttempts := task.GetAttempt() + 1
 
 			// Retriable failure: keep the peer PENDING and reschedule with capped
 			// exponential backoff until the total retry budget (measured from the
@@ -676,7 +686,7 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 					return nil, TransitionPeerRetry.Apply(c, mctx, EventPeerRetry{
 						Time:       now,
 						TargetCell: task.GetTargetCell(),
-						Attempt:    nextAttempt,
+						Attempts:   completedAttempts,
 						Err:        execErr,
 					})
 				}
@@ -688,7 +698,7 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 				Time:       now,
 				TargetCell: task.GetTargetCell(),
 				Outcome:    outcome,
-				Attempts:   nextAttempt,
+				Attempts:   completedAttempts,
 				Err:        execErr,
 			}); err != nil {
 				return nil, err
