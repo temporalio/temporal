@@ -178,7 +178,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 	healthInterceptor := interceptor.NewHealthInterceptor()
 	healthInterceptor.SetHealthy(true)
 
-	cbValidator, err := callbacks.NewValidator(test.NewCallbacksValidatorConfig())
+	cbValidator, err := callbacks.NewValidator(test.NewCallbacksValidatorConfig(), s.mockNamespaceCache)
 	s.NoError(err)
 
 	saValidator := searchattribute.NewValidator(

@@ -715,6 +715,19 @@ func (c *physicalTaskQueueManagerImpl) GetStatsByPriority(includeRates bool) map
 	return stats
 }
 
+// NonNegligibleBacklogPriority returns 0 when neither active nor draining queues have a
+// non-negligible backlog.
+func (c *physicalTaskQueueManagerImpl) NonNegligibleBacklogPriority() priorityKey {
+	highest := c.backlogMgr.NonNegligibleBacklogPriority()
+	if draining := c.getDrainBacklogMgr(); draining != nil {
+		drainingHighest := draining.NonNegligibleBacklogPriority()
+		if drainingHighest != 0 && (highest == 0 || drainingHighest < highest) {
+			highest = drainingHighest
+		}
+	}
+	return highest
+}
+
 func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() []*taskqueuespb.InternalTaskQueueStatus {
 	status := c.backlogMgr.InternalStatus()
 	if m := c.getDrainBacklogMgr(); m != nil {
@@ -761,6 +774,10 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		return err
 	}
 	if workerDeployment == nil {
+		return nil
+	}
+	// Skip registration for partitions that don't support versioning (e.g. worker commands).
+	if !c.partitionMgr.partition.SupportsVersioning() {
 		return nil
 	}
 	if !c.partitionMgr.engine.config.EnableDeploymentVersions(namespaceEntry.Name().String()) {
