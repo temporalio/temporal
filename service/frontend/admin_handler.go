@@ -72,6 +72,7 @@ import (
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/grpc/health"
 	grpchealthspb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -1049,7 +1050,7 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 	if request == nil || request.GetNamespaceTask() == nil {
 		return nil, serviceerror.NewInvalidArgument("namespace_task is required")
 	}
-	actualFingerprint, err := nsreplication.NamespaceTaskFingerprint(request.GetNamespaceTask())
+	payloadTask, actualFingerprint, matches, err := validateNamespaceMutationPayload(request)
 	if err != nil {
 		if request.GetShadow() {
 			adh.recordShadowReceiveComparison(
@@ -1057,21 +1058,25 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 				request.GetSourceCluster(),
 				namespaceReplicationShadowOutcomeError,
 			)
-			adh.emitShadowReceiveComparison(request, request.GetFingerprint(), nil, namespaceReplicationShadowOutcomeError, err)
+			adh.emitShadowReceiveComparison(request, request.GetFingerprint(), actualFingerprint, namespaceReplicationShadowOutcomeError, err)
 		} else {
+			details := map[string]any{
+				"expected_task_fingerprint": hex.EncodeToString(request.GetFingerprint()),
+			}
+			if len(actualFingerprint) > 0 {
+				details["actual_task_fingerprint"] = hex.EncodeToString(actualFingerprint)
+			}
 			adh.observeAuthoritativeNamespaceMutation(
 				request,
 				nsreplication.CHASMApplyOutcomeFingerprintError,
 				err,
 				startTime,
-				map[string]any{
-					"expected_task_fingerprint": hex.EncodeToString(request.GetFingerprint()),
-				},
+				details,
 			)
 		}
-		return nil, serviceerror.NewInternalf("fingerprint namespace mutation: %v", err)
+		return nil, err
 	}
-	if !bytes.Equal(request.GetFingerprint(), actualFingerprint) {
+	if !matches {
 		adh.logger.Warn(
 			"namespace replication receive mismatch",
 			tag.WorkflowNamespaceID(request.GetNamespaceTask().GetId()),
@@ -1125,14 +1130,13 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH,
 		}, nil
 	}
-
 	ctx = nsreplication.WithTaskMetricsContext(ctx, nsreplication.TaskMetricsContext{
 		SourceCluster: request.GetSourceCluster(),
 		TargetCluster: adh.clusterMetadata.GetCurrentClusterName(),
 		Transport:     nsreplication.CHASMReplicationTransport,
 	})
 	ctx = adh.withAuthoritativeNamespaceMutationEvent(ctx, request)
-	outcome, err := adh.namespaceMutationExecutor.ExecuteWithOutcome(ctx, request.GetNamespaceTask())
+	outcome, err := adh.namespaceMutationExecutor.ExecuteWithOutcome(ctx, payloadTask)
 	if err != nil {
 		adh.observeAuthoritativeNamespaceMutation(
 			request,
@@ -1156,6 +1160,35 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 	}
 	adh.recordAuthoritativeNamespaceMutation(request, authoritativeReceiveOutcome(outcome), nil, startTime, nil)
 	return &adminservice.ApplyNamespaceMutationResponse{Outcome: wireOutcome}, nil
+}
+
+func validateNamespaceMutationPayload(
+	request *adminservice.ApplyNamespaceMutationRequest,
+) (*replicationspb.NamespaceTaskAttributes, []byte, bool, error) {
+	if request.NamespaceTaskPayload == nil {
+		return nil, nil, false, serviceerror.NewInvalidArgument("namespace_task_payload is required")
+	}
+
+	actualFingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(request.GetNamespaceTaskPayload())
+	if !bytes.Equal(request.GetFingerprint(), actualFingerprint) {
+		return nil, actualFingerprint, false, nil
+	}
+
+	payloadTask := &replicationspb.NamespaceTaskAttributes{}
+	if err := proto.Unmarshal(request.GetNamespaceTaskPayload(), payloadTask); err != nil {
+		return nil, actualFingerprint, false,
+			serviceerror.NewInvalidArgumentf("decode namespace_task_payload: %v", err)
+	}
+	if proto.Equal(payloadTask, request.GetNamespaceTask()) {
+		return payloadTask, actualFingerprint, true, nil
+	}
+
+	typedFingerprint, err := nsreplication.NamespaceTaskFingerprint(request.GetNamespaceTask())
+	if err != nil {
+		return nil, actualFingerprint, false,
+			serviceerror.NewInvalidArgumentf("fingerprint namespace_task: %v", err)
+	}
+	return nil, typedFingerprint, false, nil
 }
 
 func namespaceMutationResponseOutcome(

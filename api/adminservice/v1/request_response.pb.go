@@ -1744,8 +1744,9 @@ type ApplyNamespaceMutationRequest struct {
 	NamespaceTask *v15.NamespaceTaskAttributes `protobuf:"bytes,1,opt,name=namespace_task,json=namespaceTask,proto3" json:"namespace_task,omitempty"`
 	// Shadow requests validate transport equivalence but never mutate receiver state.
 	Shadow bool `protobuf:"varint,2,opt,name=shadow,proto3" json:"shadow,omitempty"`
-	// SHA-256 of the deterministic namespace_task protobuf encoding computed by
-	// the sender. The receiver recomputes it to detect transport drift.
+	// SHA-256 of namespace_task_payload computed by the sender. The receiver
+	// hashes the original bytes rather than re-encoding namespace_task, because
+	// protobuf deterministic encoding is not canonical across schema versions.
 	Fingerprint []byte `protobuf:"bytes,3,opt,name=fingerprint,proto3" json:"fingerprint,omitempty"`
 	// Observability metadata for correlating a receiver attempt with its source
 	// CHASM component. These fields do not affect apply semantics.
@@ -1753,9 +1754,12 @@ type ApplyNamespaceMutationRequest struct {
 	ComponentBusinessId string `protobuf:"bytes,5,opt,name=component_business_id,json=componentBusinessId,proto3" json:"component_business_id,omitempty"`
 	ComponentRunId      string `protobuf:"bytes,6,opt,name=component_run_id,json=componentRunId,proto3" json:"component_run_id,omitempty"`
 	// One-based delivery attempt count.
-	AttemptCount  int32 `protobuf:"varint,7,opt,name=attempt_count,json=attemptCount,proto3" json:"attempt_count,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	AttemptCount int32 `protobuf:"varint,7,opt,name=attempt_count,json=attemptCount,proto3" json:"attempt_count,omitempty"`
+	// Exact deterministic protobuf encoding of namespace_task. The receiver
+	// verifies these bytes before decoding them with its local schema.
+	NamespaceTaskPayload []byte `protobuf:"bytes,8,opt,name=namespace_task_payload,json=namespaceTaskPayload,proto3" json:"namespace_task_payload,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *ApplyNamespaceMutationRequest) Reset() {
@@ -1835,6 +1839,13 @@ func (x *ApplyNamespaceMutationRequest) GetAttemptCount() int32 {
 		return x.AttemptCount
 	}
 	return 0
+}
+
+func (x *ApplyNamespaceMutationRequest) GetNamespaceTaskPayload() []byte {
+	if x != nil {
+		return x.NamespaceTaskPayload
+	}
+	return nil
 }
 
 type ApplyNamespaceMutationResponse struct {
@@ -2874,13 +2885,15 @@ func (*RemoveRemoteClusterResponse) Descriptor() ([]byte, []int) {
 type ListClusterMembersRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//     aip.dev/not-precedent: "within" is used to indicate a time range. --)
+	//
+	//	aip.dev/not-precedent: "within" is used to indicate a time range. --)
 	LastHeartbeatWithin *durationpb.Duration  `protobuf:"bytes,1,opt,name=last_heartbeat_within,json=lastHeartbeatWithin,proto3" json:"last_heartbeat_within,omitempty"`
 	RpcAddress          string                `protobuf:"bytes,2,opt,name=rpc_address,json=rpcAddress,proto3" json:"rpc_address,omitempty"`
 	HostId              string                `protobuf:"bytes,3,opt,name=host_id,json=hostId,proto3" json:"host_id,omitempty"`
 	Role                v14.ClusterMemberRole `protobuf:"varint,4,opt,name=role,proto3,enum=temporal.server.api.enums.v1.ClusterMemberRole" json:"role,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//     aip.dev/not-precedent: "after" is used to indicate a time range. --)
+	//
+	//	aip.dev/not-precedent: "after" is used to indicate a time range. --)
 	SessionStartedAfterTime *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=session_started_after_time,json=sessionStartedAfterTime,proto3" json:"session_started_after_time,omitempty"`
 	PageSize                int32                  `protobuf:"varint,6,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	NextPageToken           []byte                 `protobuf:"bytes,7,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
@@ -6284,7 +6297,7 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x19last_processed_message_id\x18\x02 \x01(\x03R\x16lastProcessedMessageId\x12!\n" +
 	"\fcluster_name\x18\x03 \x01(\tR\vclusterName\"~\n" +
 	"'GetNamespaceReplicationMessagesResponse\x12S\n" +
-	"\bmessages\x18\x01 \x01(\v27.temporal.server.api.replication.v1.ReplicationMessagesR\bmessages\"\xe7\x02\n" +
+	"\bmessages\x18\x01 \x01(\v27.temporal.server.api.replication.v1.ReplicationMessagesR\bmessages\"\x9d\x03\n" +
 	"\x1dApplyNamespaceMutationRequest\x12b\n" +
 	"\x0enamespace_task\x18\x01 \x01(\v2;.temporal.server.api.replication.v1.NamespaceTaskAttributesR\rnamespaceTask\x12\x16\n" +
 	"\x06shadow\x18\x02 \x01(\bR\x06shadow\x12 \n" +
@@ -6292,7 +6305,8 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x0esource_cluster\x18\x04 \x01(\tR\rsourceCluster\x122\n" +
 	"\x15component_business_id\x18\x05 \x01(\tR\x13componentBusinessId\x12(\n" +
 	"\x10component_run_id\x18\x06 \x01(\tR\x0ecomponentRunId\x12#\n" +
-	"\rattempt_count\x18\a \x01(\x05R\fattemptCount\"\xd7\x02\n" +
+	"\rattempt_count\x18\a \x01(\x05R\fattemptCount\x124\n" +
+	"\x16namespace_task_payload\x18\b \x01(\fR\x14namespaceTaskPayload\"\xd7\x02\n" +
 	"\x1eApplyNamespaceMutationResponse\x12e\n" +
 	"\aoutcome\x18\x01 \x01(\x0e2K.temporal.server.api.adminservice.v1.ApplyNamespaceMutationResponse.OutcomeR\aoutcome\"\xcd\x01\n" +
 	"\aOutcome\x12\x17\n" +

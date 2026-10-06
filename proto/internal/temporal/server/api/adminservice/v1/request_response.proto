@@ -210,8 +210,9 @@ message ApplyNamespaceMutationRequest {
   // Shadow requests validate transport equivalence but never mutate receiver state.
   bool shadow = 2;
 
-  // SHA-256 of the deterministic namespace_task protobuf encoding computed by
-  // the sender. The receiver recomputes it to detect transport drift.
+  // SHA-256 of namespace_task_payload computed by the sender. The receiver
+  // hashes the original bytes rather than re-encoding namespace_task, because
+  // protobuf deterministic encoding is not canonical across schema versions.
   bytes fingerprint = 3;
 
   // Observability metadata for correlating a receiver attempt with its source
@@ -221,6 +222,10 @@ message ApplyNamespaceMutationRequest {
   string component_run_id = 6;
   // One-based delivery attempt count.
   int32 attempt_count = 7;
+
+  // Exact deterministic protobuf encoding of namespace_task. The receiver
+  // verifies these bytes before decoding them with its local schema.
+  bytes namespace_task_payload = 8;
 }
 
 message ApplyNamespaceMutationResponse {

@@ -11,12 +11,22 @@ import (
 
 // NamespaceTaskFingerprint returns a stable fingerprint of the receiver wire payload.
 func NamespaceTaskFingerprint(task *replicationspb.NamespaceTaskAttributes) ([]byte, error) {
-	payload, err := proto.MarshalOptions{Deterministic: true}.Marshal(task)
+	payload, err := MarshalNamespaceTask(task)
 	if err != nil {
 		return nil, err
 	}
+	return NamespaceTaskFingerprintFromPayload(payload), nil
+}
+
+// MarshalNamespaceTask returns the deterministic wire payload used for transport validation.
+func MarshalNamespaceTask(task *replicationspb.NamespaceTaskAttributes) ([]byte, error) {
+	return proto.MarshalOptions{Deterministic: true}.Marshal(task)
+}
+
+// NamespaceTaskFingerprintFromPayload fingerprints an exact namespace task wire payload.
+func NamespaceTaskFingerprintFromPayload(payload []byte) []byte {
 	fingerprint := sha256.Sum256(payload)
-	return fingerprint[:], nil
+	return fingerprint[:]
 }
 
 // DifferingNamespaceTaskFields reports the top-level wire fields that differ.
