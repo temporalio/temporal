@@ -71,7 +71,7 @@ jobs:
           fi
 
           title="Bump go.temporal.io/testx to ${{ steps.bump.outputs.sha }}"
-          if gh pr list --head ${{ env.BRANCH }} --state open --json title -q '.[].title' | grep -qxF "${title}"; then
+          if gh pr list --head ${{ env.BRANCH }} --author app/temporal-cicd --state open --json title -q '.[].title' | grep -qxF "${title}"; then
             echo "An open PR already bumps to this commit"
             exit 0
           fi
