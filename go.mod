@@ -72,7 +72,7 @@ require (
 	go.opentelemetry.io/proto/otlp v1.10.0
 	go.temporal.io/api v1.63.7-0.20261006170555-05ff170da40c
 	go.temporal.io/auto-scaled-workers v0.0.0-20260928183627-719679297cbe
-	go.temporal.io/sdk v1.48.0
+	go.temporal.io/sdk v1.49.0
 	go.uber.org/fx v1.24.0
 	go.uber.org/goleak v1.3.0
 	go.uber.org/mock v0.6.0
