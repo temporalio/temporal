@@ -27,6 +27,7 @@ func MustGetFreePort() int {
 		// try ipv6
 		port, err = getFreePort("[::1]")
 		if err != nil {
+			// nolint:forbidigo // Panic is intended here, as signaled by the Must prefix.
 			panic(fmt.Errorf("failed assigning ephemeral port: %w", err))
 		}
 	}
