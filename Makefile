@@ -416,6 +416,7 @@ lint-code-fast:
 		git diff --no-renames --name-only "$$base" -- '*.go'; \
 		git ls-files --others --exclude-standard -- '*.go'; \
 	} | sed 's|^|./|; s|/[^/]*$$||' | sort -u \
+	  | grep -v "^\./testx/" \
 	  | while read -r dir; do [ -d "$$dir" ] && printf '%s ' "$$dir"; done); \
 	if [ -z "$$targets" ]; then \
 		printf $(COLOR) "No changed Go packages to lint."; \
