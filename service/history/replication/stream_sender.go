@@ -27,8 +27,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/transitionhistory"
-	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/wideevents"
@@ -49,6 +47,11 @@ type (
 		IsValid() bool
 		Key() ClusterShardKeyPair
 		Stop()
+	}
+	convertedReplicationTask struct {
+		sourceTask tasks.Task
+		task       *replicationspb.ReplicationTask
+		attempts   int64
 	}
 	StreamSenderImpl struct {
 		server                  historyservice.HistoryService_StreamWorkflowReplicationMessagesServer
@@ -534,31 +537,18 @@ func (s *StreamSenderImpl) sendTasks(
 		return err
 	}
 	skipCount := 0
-
-	// While the sender lags, a run's queued tasks become a streak of verify tasks once its state
-	// has been synced. Only the last verify of a consecutive same-run streak needs to be sent: it
-	// checks a superset of what the earlier ones check, and its watermark acks them. The held
-	// verify is never sent out of order: it is either dropped in favor of the next verify or sent
-	// before anything else (task or watermark) goes out.
-	coalesceVerifyTasks := s.config.ReplicationStreamSenderCoalesceVerifyTasks()
-	var held *heldVerifyTask
-	sendHeld := func(attempt int64) error {
-		if err := s.sendConvertedTask(held.item, held.task, priority, attempt); err != nil {
-			return err
+	batcher := newStreamSenderTaskBatcher(s.config.ReplicationStreamSenderCoalesceVerifyTasks())
+	sendReady := func(ready []convertedReplicationTask) error {
+		for _, task := range ready {
+			if err := s.sendConvertedTaskWithRetry(task, priority); err != nil {
+				return fmt.Errorf("failed to send task: %v, cause: %w", task.sourceTask, err)
+			}
+			skipCount = 0
 		}
-		held = nil
-		skipCount = 0
 		return nil
 	}
-	flushHeld := func() error {
-		if held == nil {
-			return nil
-		}
-		var attempt int64
-		return backoff.ThrottleRetry(func() error {
-			attempt++
-			return sendHeld(attempt)
-		}, s.newSendRetryPolicy(), isRetryableError)
+	flushBatcher := func() error {
+		return sendReady(batcher.Flush())
 	}
 
 Loop:
@@ -577,8 +567,8 @@ Loop:
 		// so it will not ACK back to sender, sender will not update the ACK level.
 		// i.e. in tiered stack, if no low priority task in queue, we should still send watermark info to receiver to let it update ACK level.
 		if skipCount > TaskMaxSkipCount {
-			if err := flushHeld(); err != nil {
-				return fmt.Errorf("failed to send held verify task: %w", err)
+			if err := flushBatcher(); err != nil {
+				return err
 			}
 			if err := s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 				Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
@@ -608,89 +598,9 @@ Loop:
 			metrics.ReplicationTaskPriorityTag(priority),
 		)
 
-		var attempt int64
-		workflowLockPriority := locks.PriorityLow
-		lowPriorityLockAttempts := 0
-		operation := func() error {
-			attempt++
-			startTime := time.Now().UTC()
-			defer func() {
-				metrics.ReplicationTaskGenerationLatency.With(s.metrics).Record(
-					time.Since(startTime),
-					metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
-					metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
-					metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
-					metrics.ReplicationTaskPriorityTag(priority),
-				)
-			}()
-			task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID, priority, workflowLockPriority)
-			if err != nil {
-				if workflowLockPriority == locks.PriorityLow && errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) {
-					lowPriorityLockAttempts++
-					if lowPriorityLockAttempts >= max(1, s.config.ReplicationTaskConverterLowPriorityLockMaxAttempts()) {
-						workflowLockPriority = locks.PriorityHigh
-					}
-				}
-				// Wrap as convertError so isSkippable can tell "the task could not be built"
-				// (its source info is corrupt/unusable) apart from transient send/rate-limit
-				// failures, which must not be skipped.
-				return s.recordRetry(
-					item,
-					enumsspb.REPLICATION_TASK_TYPE_UNSPECIFIED,
-					priority,
-					attempt,
-					wideevents.ReplOperationTaskConversion,
-					&convertError{err: fmt.Errorf("convert: %w", err)},
-				)
-			}
-			if task == nil {
-				return nil
-			}
-			task.Priority = priority
-			if coalesceVerifyTasks {
-				if held != nil {
-					if canCoalesceVerifyTasks(held.task, task) {
-						s.recordVerifyTaskCoalesced(held.item, priority)
-						held = nil
-					} else if err := sendHeld(attempt); err != nil {
-						return err
-					}
-				}
-				if isCoalescableVerifyTask(task) {
-					held = &heldVerifyTask{item: item, task: task}
-					return nil
-				}
-			}
-			if err := s.sendConvertedTask(item, task, priority, attempt); err != nil {
-				return err
-			}
-			skipCount = 0
-			return nil
-		}
-
-		err = backoff.ThrottleRetry(operation, s.newSendRetryPolicy(), isRetryableError)
-		metrics.ReplicationTaskSendAttempt.With(s.metrics).Record(
-			attempt,
-			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
-			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
-			metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
-			metrics.ReplicationTaskPriorityTag(priority),
-		)
-		metrics.ReplicationTaskSendLatency.With(s.metrics).Record(
-			time.Since(item.GetVisibilityTime()),
-			metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
-			metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
-			metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
-			metrics.ReplicationTaskPriorityTag(priority),
-		)
+		converted, err := s.convertTaskWithRetry(item, priority)
 		if err != nil {
-			metrics.ReplicationTaskSendError.With(s.metrics).Record(
-				int64(1),
-				metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
-				metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
-				metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
-				metrics.ReplicationTaskPriorityTag(priority),
-			)
+			s.recordTaskSendResult(converted, priority, err)
 			// Only skip a task that could not be *built* after exhausting retries (isSkippable):
 			// its source info is corrupt/unusable, so retrying or reconnecting will never make it
 			// send. Transient send/rate-limit failures are NOT skipped (dropping a task that would
@@ -702,7 +612,7 @@ Loop:
 			// transport-layer message-size fix, and remain observable via the throttled skip log
 			// and the ReplicationTaskSendSkipped metric.
 			if s.config.ReplicationStreamSenderSkipStuckTask() && isSkippable(err) {
-				s.recordStuckTaskSkipped(item, attempt, priority, err)
+				s.recordStuckTaskSkipped(item, converted.attempts, priority, err)
 				metrics.ReplicationTaskSendSkipped.With(s.metrics).Record(
 					int64(1),
 					metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
@@ -716,9 +626,22 @@ Loop:
 			}
 			return fmt.Errorf("failed to send task: %v, cause: %w", item, err)
 		}
+		if converted.task == nil {
+			s.recordTaskSendResult(converted, priority, nil)
+			continue Loop
+		}
+		converted.task.Priority = priority
+		ready, coalesced := batcher.Batch(converted)
+		if coalesced != nil {
+			s.recordVerifyTaskCoalesced(coalesced.sourceTask, priority)
+			s.recordTaskSendResult(*coalesced, priority, nil)
+		}
+		if err := sendReady(ready); err != nil {
+			return err
+		}
 	}
-	if err := flushHeld(); err != nil {
-		return fmt.Errorf("failed to send held verify task: %w", err)
+	if err := flushBatcher(); err != nil {
+		return err
 	}
 	return s.sendToStream(&historyservice.StreamWorkflowReplicationMessagesResponse{
 		Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
@@ -730,6 +653,84 @@ Loop:
 			},
 		},
 	})
+}
+
+func (s *StreamSenderImpl) convertTaskWithRetry(
+	item tasks.Task,
+	priority enumsspb.TaskPriority,
+) (convertedReplicationTask, error) {
+	converted := convertedReplicationTask{sourceTask: item}
+	workflowLockPriority := locks.PriorityLow
+	lowPriorityLockAttempts := 0
+	operation := func() error {
+		converted.attempts++
+		startTime := time.Now().UTC()
+		defer func() {
+			metrics.ReplicationTaskGenerationLatency.With(s.metrics).Record(
+				time.Since(startTime),
+				metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+				metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+				metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
+				metrics.ReplicationTaskPriorityTag(priority),
+			)
+		}()
+
+		task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID, priority, workflowLockPriority)
+		if err == nil {
+			converted.task = task
+			return nil
+		}
+		if workflowLockPriority == locks.PriorityLow && errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) {
+			lowPriorityLockAttempts++
+			if lowPriorityLockAttempts >= max(1, s.config.ReplicationTaskConverterLowPriorityLockMaxAttempts()) {
+				workflowLockPriority = locks.PriorityHigh
+			}
+		}
+		return s.recordRetry(
+			item,
+			enumsspb.REPLICATION_TASK_TYPE_UNSPECIFIED,
+			priority,
+			converted.attempts,
+			wideevents.ReplOperationTaskConversion,
+			&convertError{err: fmt.Errorf("convert: %w", err)},
+		)
+	}
+
+	err := backoff.ThrottleRetry(operation, s.newSendRetryPolicy(), isRetryableError)
+	return converted, err
+}
+
+func (s *StreamSenderImpl) sendConvertedTaskWithRetry(
+	converted convertedReplicationTask,
+	priority enumsspb.TaskPriority,
+) error {
+	attempt := max(int64(0), converted.attempts-1)
+	err := backoff.ThrottleRetry(func() error {
+		attempt++
+		return s.sendConvertedTask(converted.sourceTask, converted.task, priority, attempt)
+	}, s.newSendRetryPolicy(), isRetryableError)
+	converted.attempts = attempt
+	s.recordTaskSendResult(converted, priority, err)
+	return err
+}
+
+func (s *StreamSenderImpl) recordTaskSendResult(
+	converted convertedReplicationTask,
+	priority enumsspb.TaskPriority,
+	err error,
+) {
+	item := converted.sourceTask
+	metricTags := []metrics.Tag{
+		metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
+		metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
+		metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
+		metrics.ReplicationTaskPriorityTag(priority),
+	}
+	metrics.ReplicationTaskSendAttempt.With(s.metrics).Record(converted.attempts, metricTags...)
+	metrics.ReplicationTaskSendLatency.With(s.metrics).Record(time.Since(item.GetVisibilityTime()), metricTags...)
+	if err != nil {
+		metrics.ReplicationTaskSendError.With(s.metrics).Record(1, metricTags...)
+	}
 }
 
 func (s *StreamSenderImpl) newSendRetryPolicy() backoff.RetryPolicy {
@@ -807,49 +808,6 @@ func (s *StreamSenderImpl) recordVerifyTaskCoalesced(item tasks.Task, priority e
 		metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
 		metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
 		metrics.ReplicationTaskPriorityTag(priority),
-	)
-}
-
-type heldVerifyTask struct {
-	item tasks.Task
-	task *replicationspb.ReplicationTask
-}
-
-// isCoalescableVerifyTask reports whether a converted task may be held back and possibly dropped
-// in favor of a later verify task of the same run. A verify carrying a new run ID is never
-// dropped because the receiver uses it to verify that the new run exists.
-func isCoalescableVerifyTask(task *replicationspb.ReplicationTask) bool {
-	attr := task.GetVerifyVersionedTransitionTaskAttributes()
-	return attr != nil && attr.GetNewRunId() == ""
-}
-
-// canCoalesceVerifyTasks reports whether the verify task prev can be dropped because next, the
-// immediately following converted task, verifies a superset of it: same execution, a versioned
-// transition that is not older, and an event version history that contains prev's last event. A
-// verify whose events sit on a different branch can make the receiver backfill that branch, so it
-// is never dropped in favor of a verify on another branch.
-func canCoalesceVerifyTasks(prev *replicationspb.ReplicationTask, next *replicationspb.ReplicationTask) bool {
-	prevAttr := prev.GetVerifyVersionedTransitionTaskAttributes()
-	nextAttr := next.GetVerifyVersionedTransitionTaskAttributes()
-	if prevAttr == nil || nextAttr == nil || prevAttr.GetNewRunId() != "" {
-		return false
-	}
-	if prevAttr.GetNamespaceId() != nextAttr.GetNamespaceId() ||
-		prevAttr.GetWorkflowId() != nextAttr.GetWorkflowId() ||
-		prevAttr.GetRunId() != nextAttr.GetRunId() ||
-		prevAttr.GetArchetypeId() != nextAttr.GetArchetypeId() {
-		return false
-	}
-	if transitionhistory.Compare(prev.GetVersionedTransition(), next.GetVersionedTransition()) > 0 {
-		return false
-	}
-	prevItems := prevAttr.GetEventVersionHistory()
-	if len(prevItems) == 0 {
-		return true
-	}
-	return versionhistory.ContainsVersionHistoryItem(
-		versionhistory.NewVersionHistory(nil, nextAttr.GetEventVersionHistory()),
-		prevItems[len(prevItems)-1],
 	)
 }
 
