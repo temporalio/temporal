@@ -956,7 +956,7 @@ func assertCompleteUpdateInRegistry(
 	require.Equal(t, startRegistryLen-1, reg.Len(), "update should have been removed")
 }
 
-func TestVisitInFlightCallbacks(t *testing.T) {
+func TestInFlightCallbacks(t *testing.T) {
 	t.Parallel()
 
 	callbacks := func(n int) []*commonpb.Callback {
@@ -979,11 +979,13 @@ func TestVisitInFlightCallbacks(t *testing.T) {
 	// inFlight reports what the Registry holds as "updateID/requestID/callback count".
 	inFlight := func(t *testing.T, reg update.Registry) []string {
 		t.Helper()
-		var visited []string
-		require.NoError(t, reg.VisitInFlightCallbacks(func(updateID string, requestID string, cbs []*commonpb.Callback) {
-			visited = append(visited, fmt.Sprintf("%s/%s/%d", updateID, requestID, len(cbs)))
-		}))
-		return visited
+		additions, err := reg.InFlightCallbacks()
+		require.NoError(t, err)
+		var reported []string
+		for _, a := range additions {
+			reported = append(reported, fmt.Sprintf("%s/%s/%d", a.UpdateID, a.RequestID, len(a.Callbacks)))
+		}
+		return reported
 	}
 
 	t.Run("reports callbacks until the update is accepted", func(t *testing.T) {
