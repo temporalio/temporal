@@ -1,6 +1,7 @@
 package tdbg
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -154,5 +155,13 @@ func handleError(c *cli.Context, err error) {
 		_, _ = fmt.Fprintf(c.App.ErrWriter, "('export %s=1' to see stack traces)\n", showErrorStackEnv)
 	}
 
-	cli.OsExiter(1)
+	cli.OsExiter(tdbgExitCode(err))
+}
+
+func tdbgExitCode(err error) int {
+	var exitCoder cli.ExitCoder
+	if errors.As(err, &exitCoder) {
+		return exitCoder.ExitCode()
+	}
+	return 1
 }

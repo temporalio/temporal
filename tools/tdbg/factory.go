@@ -35,6 +35,10 @@ type (
 		AdminClient(c *cli.Context) adminservice.AdminServiceClient
 		WorkflowClient(c *cli.Context) workflowservice.WorkflowServiceClient
 	}
+	namespaceReplicationClientFactory interface {
+		AdminClientForAddress(c *cli.Context, address string, tlsServerName string) (adminservice.AdminServiceClient, io.Closer, error)
+		FrontendAddress(c *cli.Context) string
+	}
 	// ClientFactoryOption is used to configure the ClientFactory via NewClientFactory.
 	ClientFactoryOption func(params *clientFactoryParams)
 	// DefaultFrontendAddressProvider uses FlagAddress to determine the frontend address, defaulting to
@@ -83,21 +87,47 @@ func WithFrontendAddress(address string) ClientFactoryOption {
 
 // AdminClient builds an admin client.
 func (b *clientFactory) AdminClient(c *cli.Context) adminservice.AdminServiceClient {
-	connection, _ := b.createGRPCConnection(c)
+	connection, _ := b.createGRPCConnection(
+		c,
+		b.frontendAddressProvider.GetFrontendAddress(c),
+		c.String(FlagTLSServerName),
+	)
 
 	return adminservice.NewAdminServiceClient(connection)
 }
 
 func (b *clientFactory) WorkflowClient(c *cli.Context) workflowservice.WorkflowServiceClient {
-	connection, _ := b.createGRPCConnection(c)
+	connection, _ := b.createGRPCConnection(
+		c,
+		b.frontendAddressProvider.GetFrontendAddress(c),
+		c.String(FlagTLSServerName),
+	)
 
 	return workflowservice.NewWorkflowServiceClient(connection)
 }
 
-func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, error) {
-	frontendAddress := b.frontendAddressProvider.GetFrontendAddress(c)
+func (b *clientFactory) FrontendAddress(c *cli.Context) string {
+	return b.frontendAddressProvider.GetFrontendAddress(c)
+}
 
-	tlsConfig, err := b.createTLSConfig(c)
+func (b *clientFactory) AdminClientForAddress(
+	c *cli.Context,
+	address string,
+	tlsServerName string,
+) (adminservice.AdminServiceClient, io.Closer, error) {
+	connection, err := b.createGRPCConnection(c, address, tlsServerName)
+	if err != nil {
+		return nil, nil, err
+	}
+	return adminservice.NewAdminServiceClient(connection), connection, nil
+}
+
+func (b *clientFactory) createGRPCConnection(
+	c *cli.Context,
+	frontendAddress string,
+	tlsServerName string,
+) (*grpc.ClientConn, error) {
+	tlsConfig, err := b.createTLSConfig(c, frontendAddress, tlsServerName)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +150,11 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, 
 	return connection, nil
 }
 
-func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
+func (b *clientFactory) createTLSConfig(
+	c *cli.Context,
+	frontendAddress string,
+	tlsServerName string,
+) (*tls.Config, error) {
 	certPath := c.String(FlagTLSCertPath)
 	keyPath := c.String(FlagTLSKeyPath)
 	caPath := c.String(FlagTLSCaPath)
@@ -129,8 +163,6 @@ func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("unable to read TLS disable host verification flag: %s", err)
 	}
-
-	serverName := c.String(FlagTLSServerName)
 
 	var host string
 	var cert *tls.Certificate
@@ -152,15 +184,14 @@ func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
 		}
 		cert = &myCert
 	}
-	// If we are given arguments to verify either server or client, configure TLS
-	if caPool != nil || cert != nil {
-		if serverName != "" {
-			host = serverName
+	// If we are given arguments to verify either server or client, configure TLS.
+	// A configured global server name also enables TLS for per-cluster connections,
+	// but only the source connection uses that name as its identity override.
+	if caPool != nil || cert != nil || c.String(FlagTLSServerName) != "" {
+		if tlsServerName != "" {
+			host = tlsServerName
 		} else {
-			hostPort := c.String(FlagAddress)
-			if hostPort == "" {
-				hostPort = DefaultFrontendAddress
-			}
+			hostPort := frontendAddress
 			// Ignoring error as we'll fail to dial anyway, and that will produce a meaningful error
 			host, _, _ = net.SplitHostPort(hostPort)
 		}
@@ -172,12 +203,6 @@ func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
 			tlsConfig.Certificates = []tls.Certificate{*cert}
 		}
 
-		return tlsConfig, nil
-	}
-	// If we are given a server name, set the TLS server name for DNS resolution
-	if serverName != "" {
-		host = serverName
-		tlsConfig := auth.NewTLSConfigForServer(host, !disableHostNameVerification)
 		return tlsConfig, nil
 	}
 

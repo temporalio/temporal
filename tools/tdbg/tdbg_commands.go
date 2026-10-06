@@ -23,6 +23,11 @@ func getCommands(
 ) []*cli.Command {
 	return []*cli.Command{
 		{
+			Name:        "namespace",
+			Usage:       "Run admin operations on namespaces",
+			Subcommands: newNamespaceReplicationCommands(clientFactory),
+		},
+		{
 			Name:        "execution",
 			Aliases:     []string{"e", "w", "workflow"},
 			Usage:       "Run admin operation on an execution (workflow)",
