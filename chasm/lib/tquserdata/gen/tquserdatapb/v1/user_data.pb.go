@@ -2,7 +2,7 @@
 // plugins:
 // 	protoc-gen-go
 // 	protoc
-// source: temporal/server/chasm/lib/tquserdata/proto/v1/task_queue_user_data.proto
+// source: temporal/server/chasm/lib/tquserdata/proto/v1/user_data.proto
 
 package tquserdatapb
 
@@ -34,7 +34,7 @@ type TaskQueueUserData struct {
 
 func (x *TaskQueueUserData) Reset() {
 	*x = TaskQueueUserData{}
-	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_msgTypes[0]
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_msgTypes[0]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -46,7 +46,7 @@ func (x *TaskQueueUserData) String() string {
 func (*TaskQueueUserData) ProtoMessage() {}
 
 func (x *TaskQueueUserData) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_msgTypes[0]
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_msgTypes[0]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -59,7 +59,7 @@ func (x *TaskQueueUserData) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TaskQueueUserData.ProtoReflect.Descriptor instead.
 func (*TaskQueueUserData) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_rawDescGZIP(), []int{0}
+	return file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_rawDescGZIP(), []int{0}
 }
 
 func (x *TaskQueueUserData) GetPerType() map[int32]*v1.TaskQueueTypeUserData {
@@ -76,11 +76,11 @@ func (x *TaskQueueUserData) GetClock() *v11.HybridLogicalClock {
 	return nil
 }
 
-var File_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto protoreflect.FileDescriptor
+var File_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto protoreflect.FileDescriptor
 
-const file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_rawDesc = "" +
+const file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_rawDesc = "" +
 	"\n" +
-	"Htemporal/server/chasm/lib/tquserdata/proto/v1/task_queue_user_data.proto\x12-temporal.server.chasm.lib.tquserdata.proto.v1\x1a*temporal/server/api/clock/v1/message.proto\x1a4temporal/server/api/persistence/v1/task_queues.proto\"\xbc\x02\n" +
+	"=temporal/server/chasm/lib/tquserdata/proto/v1/user_data.proto\x12-temporal.server.chasm.lib.tquserdata.proto.v1\x1a*temporal/server/api/clock/v1/message.proto\x1a4temporal/server/api/persistence/v1/task_queues.proto\"\xbc\x02\n" +
 	"\x11TaskQueueUserData\x12h\n" +
 	"\bper_type\x18\x01 \x03(\v2M.temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserData.PerTypeEntryR\aperType\x12F\n" +
 	"\x05clock\x18\x02 \x01(\v20.temporal.server.api.clock.v1.HybridLogicalClockR\x05clock\x1au\n" +
@@ -89,25 +89,25 @@ const file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_pr
 	"\x05value\x18\x02 \x01(\v29.temporal.server.api.persistence.v1.TaskQueueTypeUserDataR\x05value:\x028\x01BJZHgo.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapbb\x06proto3"
 
 var (
-	file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_rawDescOnce sync.Once
-	file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_rawDescData []byte
+	file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_rawDescOnce sync.Once
+	file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_rawDescData []byte
 )
 
-func file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_rawDescGZIP() []byte {
-	file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_rawDescOnce.Do(func() {
-		file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_rawDesc), len(file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_rawDesc)))
+func file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_rawDescGZIP() []byte {
+	file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_rawDescOnce.Do(func() {
+		file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_rawDescData = protoimpl.X.CompressGZIP(unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_rawDesc), len(file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_rawDesc)))
 	})
-	return file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_rawDescData
+	return file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
-var file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_goTypes = []any{
+var file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_goTypes = []any{
 	(*TaskQueueUserData)(nil),        // 0: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserData
 	nil,                              // 1: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserData.PerTypeEntry
 	(*v11.HybridLogicalClock)(nil),   // 2: temporal.server.api.clock.v1.HybridLogicalClock
 	(*v1.TaskQueueTypeUserData)(nil), // 3: temporal.server.api.persistence.v1.TaskQueueTypeUserData
 }
-var file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_depIdxs = []int32{
+var file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_depIdxs = []int32{
 	1, // 0: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserData.per_type:type_name -> temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserData.PerTypeEntry
 	2, // 1: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserData.clock:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
 	3, // 2: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserData.PerTypeEntry.value:type_name -> temporal.server.api.persistence.v1.TaskQueueTypeUserData
@@ -118,26 +118,26 @@ var file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_prot
 	0, // [0:3] is the sub-list for field type_name
 }
 
-func init() { file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_init() }
-func file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_init() {
-	if File_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto != nil {
+func init() { file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_init() }
+func file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_init() {
+	if File_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto != nil {
 		return
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
-			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_rawDesc), len(file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_rawDesc)),
+			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_rawDesc), len(file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_rawDesc)),
 			NumEnums:      0,
 			NumMessages:   2,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
-		GoTypes:           file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_goTypes,
-		DependencyIndexes: file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_depIdxs,
-		MessageInfos:      file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_msgTypes,
+		GoTypes:           file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_goTypes,
+		DependencyIndexes: file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_depIdxs,
+		MessageInfos:      file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_msgTypes,
 	}.Build()
-	File_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto = out.File
-	file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_goTypes = nil
-	file_temporal_server_chasm_lib_tquserdata_proto_v1_task_queue_user_data_proto_depIdxs = nil
+	File_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto = out.File
+	file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_goTypes = nil
+	file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_depIdxs = nil
 }
