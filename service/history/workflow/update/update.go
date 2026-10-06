@@ -485,8 +485,8 @@ func (u *Update) EventLinkType(requestID string) enumspb.EventType {
 //
 // In practice, the number of buffered callbacks is very small (1-2): it requires
 // multiple concurrent callers to call AttachCallbacks while the update is in
-// stateSent. The per-update callback limit (MaxCallbacksPerUpdateID) bounds the
-// worst case.
+// stateSent. The execution's aggregate callback limits, which reserve buffered
+// callbacks at admission, bound the worst case.
 func (u *Update) persistPendingCallbacks(eventStore EventStore) error {
 	for _, pc := range u.pendingCallbacks {
 		if _, err := u.persistCallback(eventStore, pc.requestID, pc.completionCallbacks); err != nil {
