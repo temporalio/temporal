@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
@@ -91,4 +92,29 @@ func TestExecutionTypeAndPath(t *testing.T) {
 		[]string{"Updates", update.UpdateId, "Callbacks", updateCallback.RequestId},
 		ctx.Path(updateCallback),
 	)
+}
+
+// TestLifecycleState verifies that the workflow root mirrors the execution status kept in mutable
+// state, including transitions made after the component was created.
+func TestLifecycleState(t *testing.T) {
+	status := enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	nodeBackend := &chasm.MockNodeBackend{
+		HandleGetExecutionState: func() *persistencespb.WorkflowExecutionState {
+			return &persistencespb.WorkflowExecutionState{Status: status}
+		},
+	}
+	wf := &Workflow{MSPointer: chasm.NewMSPointer(nodeBackend)}
+
+	require.Equal(t, chasm.LifecycleStateRunning, wf.LifecycleState(nil))
+
+	status = enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
+	require.Equal(t, chasm.LifecycleStateRunning, wf.LifecycleState(nil))
+
+	status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	require.Equal(t, chasm.LifecycleStateCompleted, wf.LifecycleState(nil))
+	require.True(t, wf.LifecycleState(nil).IsClosed())
+
+	status = enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
+	require.Equal(t, chasm.LifecycleStateFailed, wf.LifecycleState(nil))
+	require.True(t, wf.LifecycleState(nil).IsClosed())
 }

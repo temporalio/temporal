@@ -33,6 +33,10 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
+	chasmcallback "go.temporal.io/server/chasm/lib/callback"
+	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -43,6 +47,7 @@ import (
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payloads"
@@ -9367,4 +9372,145 @@ func (s *mutableStateSuite) TestFlagSkipDurationUpdateInPassive() {
 		// VT advanced and accumulated skip grew from 0 → 1h in this delta.
 		s.mutableState.flagSkipDurationUpdateInPassive(timeSkippingVT(5), 0)
 	})
+}
+
+func (s *mutableStateSuite) TestCloseTransactionInvalidateChasmTasksOnClose() {
+	type workflowChild int
+	const (
+		noChild workflowChild = iota
+		callbackChild
+		operationChild
+	)
+
+	// newChasmTree installs a real workflow CHASM tree whose initial state is already persisted, so any
+	// dirtiness observed afterwards comes from the hook under test.
+	newChasmTree := func(child workflowChild) *chasm.Node {
+		registry := chasm.NewRegistry(s.logger)
+		s.NoError(registry.Register(&chasm.CoreLibrary{}))
+		s.NoError(registry.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry())))
+		s.NoError(registry.Register(&chasmcallback.Library{}))
+		s.NoError(registry.Register(chasmnexus.NewNilLibrary()))
+
+		tree := chasm.NewEmptyTree(registry, s.mutableState, chasm.DefaultPathEncoder, s.logger, metrics.NoopMetricsHandler)
+		s.mutableState.chasmTree = tree
+
+		mutableCtx := chasm.NewMutableContext(context.Background(), tree)
+		wf := chasmworkflow.NewWorkflow(mutableCtx, chasm.NewMSPointer(s.mutableState))
+		switch child {
+		case callbackChild:
+			cb := chasmcallback.NewCallback("request-id", timestamppb.Now(), &callbackspb.Callback{
+				Variant: &callbackspb.Callback_Nexus_{
+					Nexus: &callbackspb.Callback_Nexus{Url: "http://localhost"},
+				},
+			})
+			wf.Callbacks = chasm.Map[string, *chasmcallback.Callback]{
+				cb.RequestId: chasm.NewComponentField(mutableCtx, cb),
+			}
+		case operationChild:
+			op := chasmnexus.NewOperation(&nexusoperationpb.OperationState{})
+			wf.Operations = chasm.Map[int64, *chasmnexus.Operation]{
+				5: chasm.NewComponentField(mutableCtx, op),
+			}
+		case noChild:
+		default:
+			s.FailNow("unknown workflow child", child)
+		}
+		s.NoError(tree.SetRootComponent(wf))
+		_, err := tree.CloseTransaction()
+		s.NoError(err)
+		s.False(tree.IsStateDirty())
+		return tree
+	}
+
+	setState := func(stateInDB, state enumsspb.WorkflowExecutionState) {
+		s.mutableState.stateInDB = stateInDB
+		s.mutableState.executionState.State = state
+	}
+
+	s.Run("ClosingWithOperationDirtiesTree", func() {
+		tree := newChasmTree(operationChild)
+		setState(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED)
+
+		s.NoError(s.mutableState.closeTransactionInvalidateChasmTasksOnClose(context.Background(), historyi.TransactionPolicyActive))
+		s.True(tree.IsStateDirty())
+	})
+
+	s.Run("StillRunning", func() {
+		tree := newChasmTree(operationChild)
+		setState(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING)
+
+		s.NoError(s.mutableState.closeTransactionInvalidateChasmTasksOnClose(context.Background(), historyi.TransactionPolicyActive))
+		s.False(tree.IsStateDirty())
+	})
+
+	s.Run("AlreadyClosedInDB", func() {
+		tree := newChasmTree(operationChild)
+		setState(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED)
+
+		s.NoError(s.mutableState.closeTransactionInvalidateChasmTasksOnClose(context.Background(), historyi.TransactionPolicyActive))
+		s.False(tree.IsStateDirty())
+	})
+
+	s.Run("NoSubComponents", func() {
+		tree := newChasmTree(noChild)
+		setState(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED)
+
+		s.NoError(s.mutableState.closeTransactionInvalidateChasmTasksOnClose(context.Background(), historyi.TransactionPolicyActive))
+		s.False(tree.IsStateDirty())
+	})
+
+	s.Run("OnlyDetachedCallbacks", func() {
+		tree := newChasmTree(callbackChild)
+		setState(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED)
+
+		s.NoError(s.mutableState.closeTransactionInvalidateChasmTasksOnClose(context.Background(), historyi.TransactionPolicyActive))
+		s.False(tree.IsStateDirty())
+	})
+
+	s.Run("PassivePolicy", func() {
+		tree := newChasmTree(operationChild)
+		setState(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED)
+
+		s.NoError(s.mutableState.closeTransactionInvalidateChasmTasksOnClose(context.Background(), historyi.TransactionPolicyPassive))
+		s.False(tree.IsStateDirty())
+	})
+
+	s.Run("ChasmDisabled", func() {
+		s.mutableState.chasmTree = &noopChasmTree{}
+		setState(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED)
+
+		s.NoError(s.mutableState.closeTransactionInvalidateChasmTasksOnClose(context.Background(), historyi.TransactionPolicyActive))
+	})
+}
+
+func (s *mutableStateSuite) TestCloseTransactionInvalidateChasmTasksOnClose_CoversWorkflowChildren() {
+	// Every CHASM child of the workflow root must be classified here. Children whose tasks depend on the
+	// workflow being open must also be checked in closeTransactionInvalidateChasmTasksOnClose.
+	knownChildren := map[string]bool{ // field name -> checked by the close hook
+		"Operations":      true,  // attached, owns tasks
+		"Callbacks":       false, // detached
+		"Updates":         false, // no tasks of its own, only holds detached callbacks
+		"IncomingSignals": false, // data nodes, no tasks
+	}
+
+	chasmPkgPath := reflect.TypeFor[chasm.MSPointer]().PkgPath()
+	wfType := reflect.TypeFor[chasmworkflow.Workflow]()
+	foundChildren := make(map[string]struct{})
+	for i := range wfType.NumField() {
+		field := wfType.Field(i)
+		typeName := field.Type.Name()
+		if field.Type.PkgPath() != chasmPkgPath ||
+			(!strings.HasPrefix(typeName, "Map[") && !strings.HasPrefix(typeName, "Field[")) {
+			continue
+		}
+		foundChildren[field.Name] = struct{}{}
+		_, ok := knownChildren[field.Name]
+		s.Truef(ok, "new workflow CHASM child %q: classify it here and update "+
+			"closeTransactionInvalidateChasmTasksOnClose if its tasks depend on the workflow being open", field.Name)
+	}
+	for name := range knownChildren {
+		_, ok := foundChildren[name]
+		s.Truef(ok, "workflow CHASM child %q no longer exists: remove it here and from "+
+			"closeTransactionInvalidateChasmTasksOnClose if checked there", name)
+	}
 }

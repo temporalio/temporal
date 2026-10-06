@@ -56,8 +56,14 @@ func NewWorkflow(
 	}
 }
 
+// LifecycleState reports the workflow's lifecycle as derived from mutable state.
+//
+// NOTE: For legacy reasons this is the reverse of other archetypes. Elsewhere the root component's
+// LifecycleState drives the execution state in mutable state (see closeTransactionHandleRootLifecycleChange,
+// which is bypassed for workflows). Here mutableStateImpl updates the execution state directly and this method
+// only reflects it, so it is meant for the read path (e.g. task validation), not for driving state transitions.
 func (w *Workflow) LifecycleState(
-	ctx chasm.Context,
+	_ chasm.Context,
 ) chasm.LifecycleState {
 	return w.MSPointer.LifecycleState()
 }
