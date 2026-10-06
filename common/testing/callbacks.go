@@ -35,7 +35,7 @@ func NewCallbacksValidatorConfig() callbacks.ValidatorConfig {
 func NewCallbacksValidator(t *testing.T, cfg callbacks.ValidatorConfig) callbacks.Validator {
 	t.Helper()
 
-	v, err := callbacks.NewValidator(cfg)
+	v, err := callbacks.NewValidator(cfg, nil)
 	require.NoError(t, err)
 	return v
 }
