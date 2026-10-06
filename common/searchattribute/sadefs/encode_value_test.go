@@ -172,7 +172,7 @@ func Test_DecodeValue_Error(t *testing.T) {
 		encodedValue.Metadata[MetadataType] = []byte("Keyword")
 		require.NoError(t, err)
 		_, err = DecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, false)
-		require.ErrorIs(t, err, converter.ErrUnableToDecode)
+		require.ErrorIs(t, err, payload.ErrUnableToDecode)
 	})
 
 	t.Run("incorrect input type", func(t *testing.T) {
@@ -180,7 +180,7 @@ func Test_DecodeValue_Error(t *testing.T) {
 		encodedValue, err := payload.Encode(value)
 		require.NoError(t, err)
 		_, err = DecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_KEYWORD, false)
-		require.ErrorIs(t, err, converter.ErrUnableToDecode)
+		require.ErrorIs(t, err, payload.ErrUnableToDecode)
 	})
 
 	t.Run("incorrect input type with correct metadata type", func(t *testing.T) {
@@ -189,7 +189,7 @@ func Test_DecodeValue_Error(t *testing.T) {
 		encodedValue.Metadata[MetadataType] = []byte("Int")
 		require.NoError(t, err)
 		_, err = DecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_KEYWORD, false)
-		require.ErrorIs(t, err, converter.ErrUnableToDecode)
+		require.ErrorIs(t, err, payload.ErrUnableToDecode)
 	})
 
 	t.Run("list not allowed", func(t *testing.T) {
@@ -197,7 +197,7 @@ func Test_DecodeValue_Error(t *testing.T) {
 		encodedValue, err := payload.Encode(value)
 		require.NoError(t, err)
 		_, err = DecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_INT, false)
-		require.ErrorIs(t, err, converter.ErrUnableToDecode)
+		require.ErrorIs(t, err, payload.ErrUnableToDecode)
 	})
 
 	t.Run("single value invalid for KeywordList", func(t *testing.T) {
@@ -205,7 +205,7 @@ func Test_DecodeValue_Error(t *testing.T) {
 		encodedValue, err := payload.Encode(value)
 		require.NoError(t, err)
 		_, err = DecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
-		require.ErrorIs(t, err, converter.ErrUnableToDecode)
+		require.ErrorIs(t, err, payload.ErrUnableToDecode)
 	})
 
 	t.Run("list of KeywordList never allowed", func(t *testing.T) {
@@ -213,7 +213,7 @@ func Test_DecodeValue_Error(t *testing.T) {
 		encodedValue, err := payload.Encode(value)
 		require.NoError(t, err)
 		_, err = DecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
-		require.ErrorIs(t, err, converter.ErrUnableToDecode)
+		require.ErrorIs(t, err, payload.ErrUnableToDecode)
 	})
 
 	// TODO(rodrigozhou): test disabled as it an existing bug
@@ -222,7 +222,7 @@ func Test_DecodeValue_Error(t *testing.T) {
 	// 	encodedValue, err := payload.Encode(value)
 	// 	require.NoError(t, err)
 	// 	_, err = DecodeValue(encodedValue, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST, true)
-	// 	require.ErrorIs(t, err, converter.ErrUnableToDecode)
+	// 	require.ErrorIs(t, err, payload.ErrUnableToDecode)
 	// })
 }
 
@@ -267,7 +267,7 @@ func Test_DecodeKeywordList(t *testing.T) {
 		encodedValue, err := payload.Encode(value)
 		require.NoError(t, err)
 		_, err = DecodeKeywordList(encodedValue)
-		require.ErrorIs(t, err, converter.ErrUnableToDecode)
+		require.ErrorIs(t, err, payload.ErrUnableToDecode)
 	})
 
 	t.Run("error: non-string value in list", func(t *testing.T) {
@@ -275,7 +275,7 @@ func Test_DecodeKeywordList(t *testing.T) {
 		encodedValue, err := payload.Encode(value)
 		require.NoError(t, err)
 		_, err = DecodeKeywordList(encodedValue)
-		require.ErrorIs(t, err, converter.ErrUnableToDecode)
+		require.ErrorIs(t, err, payload.ErrUnableToDecode)
 	})
 
 	t.Run("error: not a list", func(t *testing.T) {
@@ -283,7 +283,7 @@ func Test_DecodeKeywordList(t *testing.T) {
 		encodedValue, err := payload.Encode(value)
 		require.NoError(t, err)
 		_, err = DecodeKeywordList(encodedValue)
-		require.ErrorIs(t, err, converter.ErrUnableToDecode)
+		require.ErrorIs(t, err, payload.ErrUnableToDecode)
 	})
 
 	t.Run("error: list of lists", func(t *testing.T) {
@@ -291,7 +291,7 @@ func Test_DecodeKeywordList(t *testing.T) {
 		encodedValue, err := payload.Encode(value)
 		require.NoError(t, err)
 		_, err = DecodeKeywordList(encodedValue)
-		require.ErrorIs(t, err, converter.ErrUnableToDecode)
+		require.ErrorIs(t, err, payload.ErrUnableToDecode)
 	})
 }
 

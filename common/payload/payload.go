@@ -5,13 +5,10 @@ import (
 	"maps"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/common/util"
 )
 
 var (
-	defaultDataConverter = converter.GetDefaultDataConverter()
-
 	nilPayload, _        = Encode(nil)           // Data: nil
 	nilSlicePayload, _   = Encode([]string(nil)) // Data: "null" (nil value is json encoded as null)
 	emptySlicePayload, _ = Encode([]string{})    // Data: "[]"
@@ -19,26 +16,26 @@ var (
 
 func EncodeString(str string) *commonpb.Payload {
 	// Error can be safely ignored here because string always can be converted to JSON
-	p, _ := defaultDataConverter.ToPayload(str)
+	p, _ := toPayload(str)
 	return p
 }
 
 func EncodeBytes(bytes []byte) *commonpb.Payload {
 	// Error can be safely ignored here because []byte always can be raw encoded
-	p, _ := defaultDataConverter.ToPayload(bytes)
+	p, _ := toPayload(bytes)
 	return p
 }
 
 func Encode(value any) (*commonpb.Payload, error) {
-	return defaultDataConverter.ToPayload(value)
+	return toPayload(value)
 }
 
 func Decode(p *commonpb.Payload, valuePtr any) error {
-	return defaultDataConverter.FromPayload(p, valuePtr)
+	return fromPayload(p, valuePtr)
 }
 
 func ToString(p *commonpb.Payload) string {
-	return defaultDataConverter.ToString(p)
+	return payloadToString(p)
 }
 
 // MergeMapOfPayload returns a new map resulting from merging map `src` into `dst`.

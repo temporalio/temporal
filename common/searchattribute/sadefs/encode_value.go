@@ -7,7 +7,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/sdk/converter"
 	"go.temporal.io/server/common/payload"
 )
 
@@ -129,7 +128,7 @@ func decodeValueTyped[T any](value *commonpb.Payload, allowList bool) (any, erro
 	}
 	return nil, fmt.Errorf(
 		"%w: list of values not allowed for type %T",
-		converter.ErrUnableToDecode,
+		payload.ErrUnableToDecode,
 		listVal[0],
 	)
 }
@@ -159,7 +158,7 @@ func DecodeKeywordList(value *commonpb.Payload) ([]string, error) {
 		default:
 			return nil, fmt.Errorf(
 				"%w: invalid item value type in KeywordList value (got: %T, expected: string)",
-				converter.ErrUnableToDecode,
+				payload.ErrUnableToDecode,
 				dv,
 			)
 		}
