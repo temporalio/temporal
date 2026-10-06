@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/client"
@@ -236,6 +237,35 @@ func (s *executableHistoryTaskSuite) TestExecute_Skip_Namespace() {
 
 	err := s.task.Execute()
 	s.NoError(err)
+}
+
+func (s *executableHistoryTaskSuite) TestExecute_LocalNamespace_SkipsTask() {
+	s.processToolBox.Config.ValidateReplicationTaskSourceCluster = dynamicconfig.GetBoolPropertyFn(true)
+	namespaceEntry := namespace.NewNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Id:   s.replicationTask.NamespaceId,
+			Name: "local-namespace",
+		},
+		&persistencespb.NamespaceConfig{},
+		false,
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestCurrentClusterName,
+			Clusters:          []string{cluster.TestCurrentClusterName},
+		},
+		cluster.TestCurrentClusterInitialFailoverVersion,
+	)
+	s.namespaceCache.EXPECT().GetNamespaceByID(namespace.ID(s.replicationTask.NamespaceId)).Return(namespaceEntry, nil)
+
+	task := NewExecutableHistoryTask(
+		s.processToolBox,
+		s.taskID,
+		time.Unix(0, rand.Int63()),
+		s.replicationTask,
+		cluster.TestAlternativeClusterName,
+		s.sourceShardKey,
+		&replicationspb.ReplicationTask{Priority: enumsspb.TASK_PRIORITY_HIGH},
+	)
+	s.NoError(task.Execute())
 }
 
 func (s *executableHistoryTaskSuite) TestExecute_Err() {
