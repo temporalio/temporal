@@ -2,7 +2,7 @@ package activity
 
 import (
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1/activitypbclient"
 	"go.temporal.io/server/common/resource"
 	"go.uber.org/fx"
 )
@@ -29,7 +29,7 @@ var FrontendModule = fx.Module(
 	"activity-frontend",
 	fx.Provide(ConfigProvider),
 	fx.Provide(linkValidatorProvider),
-	fx.Provide(activitypb.NewActivityServiceLayeredClient),
+	fx.Provide(activitypbclient.NewActivityServiceLayeredClient),
 	fx.Provide(NewFrontendHandler),
 	fx.Provide(resource.SearchAttributeValidatorProvider),
 	fx.Provide(newComponentOnlyLibrary),

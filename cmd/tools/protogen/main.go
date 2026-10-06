@@ -356,6 +356,9 @@ func (g *generator) moveGeneratedChasmFiles() error {
 		if err != nil {
 			return fmt.Errorf("error walking source chasm directory %s: %w", sourceChasmDir, err)
 		}
+		if info.IsDir() {
+			return nil
+		}
 
 		// Calculate relative path from sourceChasmDir
 		relPath, err := filepath.Rel(sourceChasmDir, path)

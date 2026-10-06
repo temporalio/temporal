@@ -10,7 +10,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
-	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1/schedulerpbclient"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -58,7 +58,7 @@ var Module = fx.Options(
 	wcicomponent.Module,
 	dlq.Module,
 	dummy.Module,
-	fx.Provide(schedulerpb.NewSchedulerServiceLayeredClient),
+	fx.Provide(schedulerpbclient.NewSchedulerServiceLayeredClient),
 	fx.Provide(
 		func(c resource.HistoryClient) dlq.HistoryClient {
 			return c

@@ -8,7 +8,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
-	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
+	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1/nexusoperationpbclient"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -53,7 +53,7 @@ var FrontendModule = fx.Module(
 	"chasm.lib.nexusoperation.frontend",
 	fx.Provide(configProvider),
 	fx.Provide(linkValidatorProvider),
-	fx.Provide(nexusoperationpb.NewNexusOperationServiceLayeredClient),
+	fx.Provide(nexusoperationpbclient.NewNexusOperationServiceLayeredClient),
 	fx.Provide(NewFrontendHandler),
 	fx.Provide(newComponentOnlyLibrary),
 	fx.Invoke(func(l *componentOnlyLibrary, registry *chasm.Registry) error {
