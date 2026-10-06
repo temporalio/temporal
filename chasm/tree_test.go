@@ -2560,13 +2560,33 @@ func (s *nodeSuite) TestRef_RootComponentIgnoresInitialVT() {
 	s.NoError(err)
 	s.Equal(rootComponent, component)
 
-	// A ref carrying the malformed InitialVersionedTransition would be rejected, since no
-	// transition in the execution's history has failover version 0.
+	// A root ref that still carries the malformed InitialVersionedTransition, e.g. one issued before
+	// refs stopped embedding it for the root, is validated without it.
 	refWithInitialVT := ref
 	refWithInitialVT.componentInitialVT = malformedInitialVT
 	adjustedRef, err = refWithInitialVT.forConsistencyLevel(RefConsistencyLevelComponentCreation)
 	s.NoError(err)
-	s.ErrorIs(root.IsStale(adjustedRef), consts.ErrStaleReference)
+	s.Nil(adjustedRef.executionLastUpdateVT)
+	s.NoError(root.IsStale(adjustedRef))
+
+	component, err = root.Component(chasmContext, adjustedRef)
+	s.NoError(err)
+	s.Equal(rootComponent, component)
+
+	// The root is not matched on InitialVersionedTransition, even when the ref's value differs from
+	// the persisted one.
+	refWithMismatchedVT := ref
+	refWithMismatchedVT.componentInitialVT = currentVT
+	component, err = root.Component(chasmContext, refWithMismatchedVT)
+	s.NoError(err)
+	s.Equal(rootComponent, component)
+
+	// Without ignoring it, the malformed value would fail the staleness check, since no transition in
+	// the execution's history has failover version 0.
+	s.ErrorIs(
+		root.IsStale(ComponentRef{executionLastUpdateVT: malformedInitialVT}),
+		consts.ErrStaleReference,
+	)
 }
 
 func (s *nodeSuite) TestSerializeDeserializeTask() {
