@@ -100,7 +100,7 @@ func (x MigrateScheduleRequest_SchedulerTarget) Number() protoreflect.EnumNumber
 
 // Deprecated: Use MigrateScheduleRequest_SchedulerTarget.Descriptor instead.
 func (MigrateScheduleRequest_SchedulerTarget) EnumDescriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{95, 0}
+	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{93, 0}
 }
 
 type RebuildMutableStateRequest struct {
@@ -5491,137 +5491,6 @@ func (x *GetTaskQueueUserDataResponse) GetVersion() int64 {
 	return 0
 }
 
-// (-- api-linter: core::0134::request-resource-required=disabled
-//
-//	aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
-//
-// (-- api-linter: core::0134::request-mask-required=disabled
-//
-//	aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
-type UpdateTaskQueueUserDataRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
-	TaskQueue     string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	TaskQueueType v16.TaskQueueType      `protobuf:"varint,3,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
-	// Replaces the user data for this task queue type. Other types' data is left unchanged. Must be set.
-	UserData *v12.TaskQueueTypeUserData `protobuf:"bytes,4,opt,name=user_data,json=userData,proto3" json:"user_data,omitempty"`
-	// Task queue user data version this update is based on (as returned by GetTaskQueueUserData).
-	// The update fails if the current version differs, unless the current data for this type already
-	// equals user_data (e.g. a retry of an applied update), in which case it is re-applied. Must be set.
-	KnownVersion  int64 `protobuf:"varint,5,opt,name=known_version,json=knownVersion,proto3" json:"known_version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *UpdateTaskQueueUserDataRequest) Reset() {
-	*x = UpdateTaskQueueUserDataRequest{}
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[90]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *UpdateTaskQueueUserDataRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*UpdateTaskQueueUserDataRequest) ProtoMessage() {}
-
-func (x *UpdateTaskQueueUserDataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[90]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use UpdateTaskQueueUserDataRequest.ProtoReflect.Descriptor instead.
-func (*UpdateTaskQueueUserDataRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{90}
-}
-
-func (x *UpdateTaskQueueUserDataRequest) GetNamespace() string {
-	if x != nil {
-		return x.Namespace
-	}
-	return ""
-}
-
-func (x *UpdateTaskQueueUserDataRequest) GetTaskQueue() string {
-	if x != nil {
-		return x.TaskQueue
-	}
-	return ""
-}
-
-func (x *UpdateTaskQueueUserDataRequest) GetTaskQueueType() v16.TaskQueueType {
-	if x != nil {
-		return x.TaskQueueType
-	}
-	return v16.TaskQueueType(0)
-}
-
-func (x *UpdateTaskQueueUserDataRequest) GetUserData() *v12.TaskQueueTypeUserData {
-	if x != nil {
-		return x.UserData
-	}
-	return nil
-}
-
-func (x *UpdateTaskQueueUserDataRequest) GetKnownVersion() int64 {
-	if x != nil {
-		return x.KnownVersion
-	}
-	return 0
-}
-
-type UpdateTaskQueueUserDataResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Version       int64                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *UpdateTaskQueueUserDataResponse) Reset() {
-	*x = UpdateTaskQueueUserDataResponse{}
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[91]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *UpdateTaskQueueUserDataResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*UpdateTaskQueueUserDataResponse) ProtoMessage() {}
-
-func (x *UpdateTaskQueueUserDataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[91]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use UpdateTaskQueueUserDataResponse.ProtoReflect.Descriptor instead.
-func (*UpdateTaskQueueUserDataResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{91}
-}
-
-func (x *UpdateTaskQueueUserDataResponse) GetVersion() int64 {
-	if x != nil {
-		return x.Version
-	}
-	return 0
-}
-
 // StartAdminBatchOperationRequest starts an admin batch operation.
 // WARNING: Batch Operations are exposed to all users of the namespace. Admin Batch Operations should be exercised with caution.
 type StartAdminBatchOperationRequest struct {
@@ -5654,7 +5523,7 @@ type StartAdminBatchOperationRequest struct {
 
 func (x *StartAdminBatchOperationRequest) Reset() {
 	*x = StartAdminBatchOperationRequest{}
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[92]
+	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[90]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5666,7 +5535,7 @@ func (x *StartAdminBatchOperationRequest) String() string {
 func (*StartAdminBatchOperationRequest) ProtoMessage() {}
 
 func (x *StartAdminBatchOperationRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[92]
+	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[90]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5679,7 +5548,7 @@ func (x *StartAdminBatchOperationRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartAdminBatchOperationRequest.ProtoReflect.Descriptor instead.
 func (*StartAdminBatchOperationRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{92}
+	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{90}
 }
 
 func (x *StartAdminBatchOperationRequest) GetNamespace() string {
@@ -5778,7 +5647,7 @@ type StartAdminBatchOperationResponse struct {
 
 func (x *StartAdminBatchOperationResponse) Reset() {
 	*x = StartAdminBatchOperationResponse{}
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[93]
+	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[91]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5790,7 +5659,7 @@ func (x *StartAdminBatchOperationResponse) String() string {
 func (*StartAdminBatchOperationResponse) ProtoMessage() {}
 
 func (x *StartAdminBatchOperationResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[93]
+	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[91]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5803,7 +5672,7 @@ func (x *StartAdminBatchOperationResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StartAdminBatchOperationResponse.ProtoReflect.Descriptor instead.
 func (*StartAdminBatchOperationResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{93}
+	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{91}
 }
 
 func (x *StartAdminBatchOperationResponse) GetWorkflowId() string {
@@ -5823,7 +5692,7 @@ type BatchOperationRefreshTasks struct {
 
 func (x *BatchOperationRefreshTasks) Reset() {
 	*x = BatchOperationRefreshTasks{}
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[94]
+	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[92]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5835,7 +5704,7 @@ func (x *BatchOperationRefreshTasks) String() string {
 func (*BatchOperationRefreshTasks) ProtoMessage() {}
 
 func (x *BatchOperationRefreshTasks) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[94]
+	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[92]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5848,7 +5717,7 @@ func (x *BatchOperationRefreshTasks) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BatchOperationRefreshTasks.ProtoReflect.Descriptor instead.
 func (*BatchOperationRefreshTasks) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{94}
+	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{92}
 }
 
 type MigrateScheduleRequest struct {
@@ -5869,7 +5738,7 @@ type MigrateScheduleRequest struct {
 
 func (x *MigrateScheduleRequest) Reset() {
 	*x = MigrateScheduleRequest{}
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[95]
+	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[93]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5881,7 +5750,7 @@ func (x *MigrateScheduleRequest) String() string {
 func (*MigrateScheduleRequest) ProtoMessage() {}
 
 func (x *MigrateScheduleRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[95]
+	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[93]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5894,7 +5763,7 @@ func (x *MigrateScheduleRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MigrateScheduleRequest.ProtoReflect.Descriptor instead.
 func (*MigrateScheduleRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{95}
+	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{93}
 }
 
 func (x *MigrateScheduleRequest) GetNamespace() string {
@@ -5940,7 +5809,7 @@ type MigrateScheduleResponse struct {
 
 func (x *MigrateScheduleResponse) Reset() {
 	*x = MigrateScheduleResponse{}
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[96]
+	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[94]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5952,7 +5821,7 @@ func (x *MigrateScheduleResponse) String() string {
 func (*MigrateScheduleResponse) ProtoMessage() {}
 
 func (x *MigrateScheduleResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[96]
+	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[94]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5965,7 +5834,138 @@ func (x *MigrateScheduleResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MigrateScheduleResponse.ProtoReflect.Descriptor instead.
 func (*MigrateScheduleResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{94}
+}
+
+// (-- api-linter: core::0134::request-resource-required=disabled
+//
+//	aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
+//
+// (-- api-linter: core::0134::request-mask-required=disabled
+//
+//	aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
+type UpdateTaskQueueUserDataRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Namespace     string                 `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	TaskQueue     string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	TaskQueueType v16.TaskQueueType      `protobuf:"varint,3,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
+	// Replaces the user data for this task queue type. Other types' data is left unchanged. Must be set.
+	UserData *v12.TaskQueueTypeUserData `protobuf:"bytes,4,opt,name=user_data,json=userData,proto3" json:"user_data,omitempty"`
+	// Task queue user data version this update is based on (as returned by GetTaskQueueUserData).
+	// The update fails if the current version differs, unless the current data for this type already
+	// equals user_data (e.g. a retry of an applied update), in which case it is re-applied. Must be set.
+	KnownVersion  int64 `protobuf:"varint,5,opt,name=known_version,json=knownVersion,proto3" json:"known_version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateTaskQueueUserDataRequest) Reset() {
+	*x = UpdateTaskQueueUserDataRequest{}
+	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[95]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateTaskQueueUserDataRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateTaskQueueUserDataRequest) ProtoMessage() {}
+
+func (x *UpdateTaskQueueUserDataRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[95]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateTaskQueueUserDataRequest.ProtoReflect.Descriptor instead.
+func (*UpdateTaskQueueUserDataRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{95}
+}
+
+func (x *UpdateTaskQueueUserDataRequest) GetNamespace() string {
+	if x != nil {
+		return x.Namespace
+	}
+	return ""
+}
+
+func (x *UpdateTaskQueueUserDataRequest) GetTaskQueue() string {
+	if x != nil {
+		return x.TaskQueue
+	}
+	return ""
+}
+
+func (x *UpdateTaskQueueUserDataRequest) GetTaskQueueType() v16.TaskQueueType {
+	if x != nil {
+		return x.TaskQueueType
+	}
+	return v16.TaskQueueType(0)
+}
+
+func (x *UpdateTaskQueueUserDataRequest) GetUserData() *v12.TaskQueueTypeUserData {
+	if x != nil {
+		return x.UserData
+	}
+	return nil
+}
+
+func (x *UpdateTaskQueueUserDataRequest) GetKnownVersion() int64 {
+	if x != nil {
+		return x.KnownVersion
+	}
+	return 0
+}
+
+type UpdateTaskQueueUserDataResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Version       int64                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateTaskQueueUserDataResponse) Reset() {
+	*x = UpdateTaskQueueUserDataResponse{}
+	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[96]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateTaskQueueUserDataResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateTaskQueueUserDataResponse) ProtoMessage() {}
+
+func (x *UpdateTaskQueueUserDataResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[96]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateTaskQueueUserDataResponse.ProtoReflect.Descriptor instead.
+func (*UpdateTaskQueueUserDataResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{96}
+}
+
+func (x *UpdateTaskQueueUserDataResponse) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
 }
 
 type AddTasksRequest_Task struct {
@@ -6490,16 +6490,7 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\fpartition_id\x18\x04 \x01(\x05R\vpartitionId\"\x90\x01\n" +
 	"\x1cGetTaskQueueUserDataResponse\x12V\n" +
 	"\tuser_data\x18\x01 \x01(\v29.temporal.server.api.persistence.v1.TaskQueueTypeUserDataR\buserData\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x03R\aversion\"\xa8\x02\n" +
-	"\x1eUpdateTaskQueueUserDataRequest\x12\x1c\n" +
-	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1d\n" +
-	"\n" +
-	"task_queue\x18\x02 \x01(\tR\ttaskQueue\x12L\n" +
-	"\x0ftask_queue_type\x18\x03 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x12V\n" +
-	"\tuser_data\x18\x04 \x01(\v29.temporal.server.api.persistence.v1.TaskQueueTypeUserDataR\buserData\x12#\n" +
-	"\rknown_version\x18\x05 \x01(\x03R\fknownVersion\";\n" +
-	"\x1fUpdateTaskQueueUserDataResponse\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\x03R\aversion\"\xe8\x03\n" +
+	"\aversion\x18\x02 \x01(\x03R\aversion\"\xe8\x03\n" +
 	"\x1fStartAdminBatchOperationRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12)\n" +
 	"\x10visibility_query\x18\x02 \x01(\tR\x0fvisibilityQuery\x12\x15\n" +
@@ -6529,7 +6520,16 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\x1cSCHEDULER_TARGET_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16SCHEDULER_TARGET_CHASM\x10\x01\x12\x1d\n" +
 	"\x19SCHEDULER_TARGET_WORKFLOW\x10\x02\"\x19\n" +
-	"\x17MigrateScheduleResponseB8Z6go.temporal.io/server/api/adminservice/v1;adminserviceb\x06proto3"
+	"\x17MigrateScheduleResponse\"\xa8\x02\n" +
+	"\x1eUpdateTaskQueueUserDataRequest\x12\x1c\n" +
+	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x1d\n" +
+	"\n" +
+	"task_queue\x18\x02 \x01(\tR\ttaskQueue\x12L\n" +
+	"\x0ftask_queue_type\x18\x03 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x12V\n" +
+	"\tuser_data\x18\x04 \x01(\v29.temporal.server.api.persistence.v1.TaskQueueTypeUserDataR\buserData\x12#\n" +
+	"\rknown_version\x18\x05 \x01(\x03R\fknownVersion\";\n" +
+	"\x1fUpdateTaskQueueUserDataResponse\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\x03R\aversionB8Z6go.temporal.io/server/api/adminservice/v1;adminserviceb\x06proto3"
 
 var (
 	file_temporal_server_api_adminservice_v1_request_response_proto_rawDescOnce sync.Once
@@ -6637,13 +6637,13 @@ var file_temporal_server_api_adminservice_v1_request_response_proto_goTypes = []
 	(*ForceUnloadTaskQueuePartitionResponse)(nil),       // 88: temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionResponse
 	(*GetTaskQueueUserDataRequest)(nil),                 // 89: temporal.server.api.adminservice.v1.GetTaskQueueUserDataRequest
 	(*GetTaskQueueUserDataResponse)(nil),                // 90: temporal.server.api.adminservice.v1.GetTaskQueueUserDataResponse
-	(*UpdateTaskQueueUserDataRequest)(nil),              // 91: temporal.server.api.adminservice.v1.UpdateTaskQueueUserDataRequest
-	(*UpdateTaskQueueUserDataResponse)(nil),             // 92: temporal.server.api.adminservice.v1.UpdateTaskQueueUserDataResponse
-	(*StartAdminBatchOperationRequest)(nil),             // 93: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest
-	(*StartAdminBatchOperationResponse)(nil),            // 94: temporal.server.api.adminservice.v1.StartAdminBatchOperationResponse
-	(*BatchOperationRefreshTasks)(nil),                  // 95: temporal.server.api.adminservice.v1.BatchOperationRefreshTasks
-	(*MigrateScheduleRequest)(nil),                      // 96: temporal.server.api.adminservice.v1.MigrateScheduleRequest
-	(*MigrateScheduleResponse)(nil),                     // 97: temporal.server.api.adminservice.v1.MigrateScheduleResponse
+	(*StartAdminBatchOperationRequest)(nil),             // 91: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest
+	(*StartAdminBatchOperationResponse)(nil),            // 92: temporal.server.api.adminservice.v1.StartAdminBatchOperationResponse
+	(*BatchOperationRefreshTasks)(nil),                  // 93: temporal.server.api.adminservice.v1.BatchOperationRefreshTasks
+	(*MigrateScheduleRequest)(nil),                      // 94: temporal.server.api.adminservice.v1.MigrateScheduleRequest
+	(*MigrateScheduleResponse)(nil),                     // 95: temporal.server.api.adminservice.v1.MigrateScheduleResponse
+	(*UpdateTaskQueueUserDataRequest)(nil),              // 96: temporal.server.api.adminservice.v1.UpdateTaskQueueUserDataRequest
+	(*UpdateTaskQueueUserDataResponse)(nil),             // 97: temporal.server.api.adminservice.v1.UpdateTaskQueueUserDataResponse
 	nil,                                                 // 98: temporal.server.api.adminservice.v1.GetReplicationMessagesResponse.ShardMessagesEntry
 	nil,                                                 // 99: temporal.server.api.adminservice.v1.AddSearchAttributesRequest.SearchAttributesEntry
 	nil,                                                 // 100: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.CustomAttributesEntry
@@ -6788,12 +6788,12 @@ var file_temporal_server_api_adminservice_v1_request_response_proto_depIdxs = []
 	147, // 83: temporal.server.api.adminservice.v1.ForceUnloadTaskQueuePartitionRequest.task_queue_partition:type_name -> temporal.server.api.taskqueue.v1.TaskQueuePartition
 	129, // 84: temporal.server.api.adminservice.v1.GetTaskQueueUserDataRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
 	150, // 85: temporal.server.api.adminservice.v1.GetTaskQueueUserDataResponse.user_data:type_name -> temporal.server.api.persistence.v1.TaskQueueTypeUserData
-	129, // 86: temporal.server.api.adminservice.v1.UpdateTaskQueueUserDataRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
-	150, // 87: temporal.server.api.adminservice.v1.UpdateTaskQueueUserDataRequest.user_data:type_name -> temporal.server.api.persistence.v1.TaskQueueTypeUserData
-	108, // 88: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.executions:type_name -> temporal.api.common.v1.WorkflowExecution
-	95,  // 89: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.refresh_tasks_operation:type_name -> temporal.server.api.adminservice.v1.BatchOperationRefreshTasks
-	151, // 90: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.delegation_operation:type_name -> temporal.api.enums.v1.BatchOperationType
-	0,   // 91: temporal.server.api.adminservice.v1.MigrateScheduleRequest.target:type_name -> temporal.server.api.adminservice.v1.MigrateScheduleRequest.SchedulerTarget
+	108, // 86: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.executions:type_name -> temporal.api.common.v1.WorkflowExecution
+	93,  // 87: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.refresh_tasks_operation:type_name -> temporal.server.api.adminservice.v1.BatchOperationRefreshTasks
+	151, // 88: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.delegation_operation:type_name -> temporal.api.enums.v1.BatchOperationType
+	0,   // 89: temporal.server.api.adminservice.v1.MigrateScheduleRequest.target:type_name -> temporal.server.api.adminservice.v1.MigrateScheduleRequest.SchedulerTarget
+	129, // 90: temporal.server.api.adminservice.v1.UpdateTaskQueueUserDataRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	150, // 91: temporal.server.api.adminservice.v1.UpdateTaskQueueUserDataRequest.user_data:type_name -> temporal.server.api.persistence.v1.TaskQueueTypeUserData
 	118, // 92: temporal.server.api.adminservice.v1.GetReplicationMessagesResponse.ShardMessagesEntry.value:type_name -> temporal.server.api.replication.v1.ReplicationMessages
 	152, // 93: temporal.server.api.adminservice.v1.AddSearchAttributesRequest.SearchAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
 	152, // 94: temporal.server.api.adminservice.v1.GetSearchAttributesResponse.CustomAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
@@ -6822,7 +6822,7 @@ func file_temporal_server_api_adminservice_v1_request_response_proto_init() {
 		(*GetNamespaceRequest_Namespace)(nil),
 		(*GetNamespaceRequest_Id)(nil),
 	}
-	file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[92].OneofWrappers = []any{
+	file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[90].OneofWrappers = []any{
 		(*StartAdminBatchOperationRequest_RefreshTasksOperation)(nil),
 		(*StartAdminBatchOperationRequest_DelegationOperation)(nil),
 	}

@@ -65,8 +65,8 @@ const (
 	AdminService_DescribeTaskQueuePartition_FullMethodName          = "/temporal.server.api.adminservice.v1.AdminService/DescribeTaskQueuePartition"
 	AdminService_ForceUnloadTaskQueuePartition_FullMethodName       = "/temporal.server.api.adminservice.v1.AdminService/ForceUnloadTaskQueuePartition"
 	AdminService_GetTaskQueueUserData_FullMethodName                = "/temporal.server.api.adminservice.v1.AdminService/GetTaskQueueUserData"
-	AdminService_UpdateTaskQueueUserData_FullMethodName             = "/temporal.server.api.adminservice.v1.AdminService/UpdateTaskQueueUserData"
 	AdminService_MigrateSchedule_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/MigrateSchedule"
+	AdminService_UpdateTaskQueueUserData_FullMethodName             = "/temporal.server.api.adminservice.v1.AdminService/UpdateTaskQueueUserData"
 )
 
 // AdminServiceClient is the client API for AdminService service.
@@ -157,14 +157,14 @@ type AdminServiceClient interface {
 	DescribeTaskQueuePartition(ctx context.Context, in *DescribeTaskQueuePartitionRequest, opts ...grpc.CallOption) (*DescribeTaskQueuePartitionResponse, error)
 	ForceUnloadTaskQueuePartition(ctx context.Context, in *ForceUnloadTaskQueuePartitionRequest, opts ...grpc.CallOption) (*ForceUnloadTaskQueuePartitionResponse, error)
 	GetTaskQueueUserData(ctx context.Context, in *GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*GetTaskQueueUserDataResponse, error)
+	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
+	MigrateSchedule(ctx context.Context, in *MigrateScheduleRequest, opts ...grpc.CallOption) (*MigrateScheduleResponse, error)
 	// UpdateTaskQueueUserData overwrites the user data of a single task queue type. Intended for debugging and repair.
 	// (-- api-linter: core::0134::method-signature=disabled
 	//     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::response-message-name=disabled
 	//     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
 	UpdateTaskQueueUserData(ctx context.Context, in *UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*UpdateTaskQueueUserDataResponse, error)
-	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
-	MigrateSchedule(ctx context.Context, in *MigrateScheduleRequest, opts ...grpc.CallOption) (*MigrateScheduleResponse, error)
 }
 
 type adminServiceClient struct {
@@ -602,18 +602,18 @@ func (c *adminServiceClient) GetTaskQueueUserData(ctx context.Context, in *GetTa
 	return out, nil
 }
 
-func (c *adminServiceClient) UpdateTaskQueueUserData(ctx context.Context, in *UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*UpdateTaskQueueUserDataResponse, error) {
-	out := new(UpdateTaskQueueUserDataResponse)
-	err := c.cc.Invoke(ctx, AdminService_UpdateTaskQueueUserData_FullMethodName, in, out, opts...)
+func (c *adminServiceClient) MigrateSchedule(ctx context.Context, in *MigrateScheduleRequest, opts ...grpc.CallOption) (*MigrateScheduleResponse, error) {
+	out := new(MigrateScheduleResponse)
+	err := c.cc.Invoke(ctx, AdminService_MigrateSchedule_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
-func (c *adminServiceClient) MigrateSchedule(ctx context.Context, in *MigrateScheduleRequest, opts ...grpc.CallOption) (*MigrateScheduleResponse, error) {
-	out := new(MigrateScheduleResponse)
-	err := c.cc.Invoke(ctx, AdminService_MigrateSchedule_FullMethodName, in, out, opts...)
+func (c *adminServiceClient) UpdateTaskQueueUserData(ctx context.Context, in *UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*UpdateTaskQueueUserDataResponse, error) {
+	out := new(UpdateTaskQueueUserDataResponse)
+	err := c.cc.Invoke(ctx, AdminService_UpdateTaskQueueUserData_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -708,14 +708,14 @@ type AdminServiceServer interface {
 	DescribeTaskQueuePartition(context.Context, *DescribeTaskQueuePartitionRequest) (*DescribeTaskQueuePartitionResponse, error)
 	ForceUnloadTaskQueuePartition(context.Context, *ForceUnloadTaskQueuePartitionRequest) (*ForceUnloadTaskQueuePartitionResponse, error)
 	GetTaskQueueUserData(context.Context, *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error)
+	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
+	MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error)
 	// UpdateTaskQueueUserData overwrites the user data of a single task queue type. Intended for debugging and repair.
 	// (-- api-linter: core::0134::method-signature=disabled
 	//     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
 	// (-- api-linter: core::0134::response-message-name=disabled
 	//     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
 	UpdateTaskQueueUserData(context.Context, *UpdateTaskQueueUserDataRequest) (*UpdateTaskQueueUserDataResponse, error)
-	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
-	MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error)
 	mustEmbedUnimplementedAdminServiceServer()
 }
 
@@ -858,11 +858,11 @@ func (UnimplementedAdminServiceServer) ForceUnloadTaskQueuePartition(context.Con
 func (UnimplementedAdminServiceServer) GetTaskQueueUserData(context.Context, *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetTaskQueueUserData not implemented")
 }
-func (UnimplementedAdminServiceServer) UpdateTaskQueueUserData(context.Context, *UpdateTaskQueueUserDataRequest) (*UpdateTaskQueueUserDataResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method UpdateTaskQueueUserData not implemented")
-}
 func (UnimplementedAdminServiceServer) MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MigrateSchedule not implemented")
+}
+func (UnimplementedAdminServiceServer) UpdateTaskQueueUserData(context.Context, *UpdateTaskQueueUserDataRequest) (*UpdateTaskQueueUserDataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateTaskQueueUserData not implemented")
 }
 func (UnimplementedAdminServiceServer) mustEmbedUnimplementedAdminServiceServer() {}
 
@@ -1695,24 +1695,6 @@ func _AdminService_GetTaskQueueUserData_Handler(srv interface{}, ctx context.Con
 	return interceptor(ctx, in, info, handler)
 }
 
-func _AdminService_UpdateTaskQueueUserData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(UpdateTaskQueueUserDataRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(AdminServiceServer).UpdateTaskQueueUserData(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: AdminService_UpdateTaskQueueUserData_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(AdminServiceServer).UpdateTaskQueueUserData(ctx, req.(*UpdateTaskQueueUserDataRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _AdminService_MigrateSchedule_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(MigrateScheduleRequest)
 	if err := dec(in); err != nil {
@@ -1727,6 +1709,24 @@ func _AdminService_MigrateSchedule_Handler(srv interface{}, ctx context.Context,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AdminServiceServer).MigrateSchedule(ctx, req.(*MigrateScheduleRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_UpdateTaskQueueUserData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateTaskQueueUserDataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).UpdateTaskQueueUserData(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_UpdateTaskQueueUserData_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).UpdateTaskQueueUserData(ctx, req.(*UpdateTaskQueueUserDataRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1915,12 +1915,12 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _AdminService_GetTaskQueueUserData_Handler,
 		},
 		{
-			MethodName: "UpdateTaskQueueUserData",
-			Handler:    _AdminService_UpdateTaskQueueUserData_Handler,
-		},
-		{
 			MethodName: "MigrateSchedule",
 			Handler:    _AdminService_MigrateSchedule_Handler,
+		},
+		{
+			MethodName: "UpdateTaskQueueUserData",
+			Handler:    _AdminService_UpdateTaskQueueUserData_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
