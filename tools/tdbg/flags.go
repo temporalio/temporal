@@ -68,6 +68,7 @@ var (
 	FlagTaskCategoryID             = "task-category-id"
 	FlagEncoding                   = "encoding"
 	FlagPartitionID                = "partition-id"
+	FlagKnownVersion               = "known-version"
 	FlagStickyName                 = "sticky-name"
 	FlagBuildIDs                   = "select-build-id"
 	FlagUnversioned                = "select-unversioned"
