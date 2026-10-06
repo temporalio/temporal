@@ -1,0 +1,25 @@
+name: Auto-approve temporal-cicd[bot] PRs on main
+on:
+  pull_request:
+    branches:
+      - main
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  auto_approve:
+    runs-on: ubuntu-latest
+    if: ${{ github.actor == 'temporal-cicd[bot]' }}
+    steps:
+      - name: Approve PR
+        run: |
+          if [[ "$PR_TITLE" == "Bump go.temporal.io/testx to"* ]]; then
+            gh pr review --approve "$PR_URL"
+            echo "Auto-approved testx bump PR"
+          else
+            echo "PR title does not match approved patterns, skipping approval"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
