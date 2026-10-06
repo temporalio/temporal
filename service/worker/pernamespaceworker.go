@@ -419,9 +419,6 @@ func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 	// ensure this changes if multiplicity changes
 	fmt.Fprintf(&componentSet, "%d,", workerAllocation.local)
 
-	// get sdk worker options
-	fmt.Fprintf(&componentSet, "%+v,", args.opts)
-
 	// we do need a worker, but maybe we have one already
 	w.lock.Lock()
 	defer w.lock.Unlock()
@@ -430,10 +427,10 @@ func (w *perNamespaceWorker) refresh(args refreshArgs) (retErr error) {
 		// Namespace changed since we snapshotted — another goroutine will handle the new one.
 		return nil
 	}
-	// Note: opts/count may have changed since our snapshot. If so, componentSet (derived from
-	// the snapshot) won't match w.componentSet, causing a spurious worker restart. This is
-	// benign: startWorker reads w.opts/w.ns under the lock, so the worker always gets current
-	// options. The stale componentSet key self-corrects on the next refresh.
+
+	// Format opts under the lock so the cache key describes the worker actually being started
+	// (startWorker reads w.opts, not the snapshot).
+	fmt.Fprintf(&componentSet, "%+v,", w.opts)
 
 	if componentSet.String() == w.componentSet {
 		// no change in set of components enabled, leave existing running
