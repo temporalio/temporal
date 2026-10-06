@@ -40,7 +40,6 @@ func newChasmCallbacksMutableState(t *testing.T) *workflow.MutableStateImpl {
 	config.EnableChasm = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	config.EnableCHASMCallbacks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	config.EnableWorkflowUpdateCallbacks = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
-	config.MaxCallbacksPerUpdateID = dynamicconfig.GetIntPropertyFnFilteredByNamespace(1)
 
 	shardCtx := shard.NewTestContext(ctrl, &persistencespb.ShardInfo{ShardId: 1, RangeId: 1}, config)
 	t.Cleanup(shardCtx.StopForTest)
