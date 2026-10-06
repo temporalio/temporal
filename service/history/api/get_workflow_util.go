@@ -408,13 +408,13 @@ func MutableStateToGetResponse(
 		VersionHistories: versionhistory.CopyVersionHistories(
 			mutableState.GetExecutionInfo().GetVersionHistories(),
 		),
-		FirstExecutionRunId:                 executionInfo.FirstExecutionRunId,
-		AssignedBuildId:                     mutableState.GetAssignedBuildId(),
-		InheritedBuildId:                    mutableState.GetInheritedBuildId(),
-		MostRecentWorkerVersionStamp:        mostRecentWorkerVersionStamp,
-		TransitionHistory:                   transitionhistory.CopyVersionedTransitions(mutableState.GetExecutionInfo().TransitionHistory),
-		VersioningInfo:                      common.CloneProto(mutableState.GetExecutionInfo().VersioningInfo),
-		TransientOrSpeculativeTasks:         transientOrSpeculativeTasks,
-		PropagatedNexusSerializationContext: common.CloneProto(executionInfo.GetPropagatedNexusSerializationContext()),
+		FirstExecutionRunId:          executionInfo.FirstExecutionRunId,
+		AssignedBuildId:              mutableState.GetAssignedBuildId(),
+		InheritedBuildId:             mutableState.GetInheritedBuildId(),
+		MostRecentWorkerVersionStamp: mostRecentWorkerVersionStamp,
+		TransitionHistory:            transitionhistory.CopyVersionedTransitions(mutableState.GetExecutionInfo().TransitionHistory),
+		VersioningInfo:               common.CloneProto(mutableState.GetExecutionInfo().VersioningInfo),
+		TransientOrSpeculativeTasks:  transientOrSpeculativeTasks,
+		NexusSerializationContext:    common.CloneProto(executionInfo.GetPropagatedNexusSerializationContext()),
 	}, nil
 }

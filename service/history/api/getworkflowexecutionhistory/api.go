@@ -196,7 +196,7 @@ func Invoke(
 		if err != nil {
 			return nil, "", 0, 0, false, nil, nil, nil, err
 		}
-		propagatedNexusSerializationContext = response.GetPropagatedNexusSerializationContext()
+		propagatedNexusSerializationContext = response.GetNexusSerializationContext()
 
 		isWorkflowRunning := response.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(response.GetVersionHistories())

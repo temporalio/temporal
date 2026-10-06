@@ -585,10 +585,11 @@ type GetMutableStateResponse struct {
 	VersioningInfo    *v15.WorkflowExecutionVersioningInfo `protobuf:"bytes,25,opt,name=versioning_info,json=versioningInfo,proto3" json:"versioning_info,omitempty"`
 	// Transient or speculative workflow task events which are not yet persisted in the history.
 	// These events should be appended to the history when it is returned to the worker.
-	TransientOrSpeculativeTasks         *v19.TransientWorkflowTaskInfo       `protobuf:"bytes,26,opt,name=transient_or_speculative_tasks,json=transientOrSpeculativeTasks,proto3" json:"transient_or_speculative_tasks,omitempty"`
-	PropagatedNexusSerializationContext *v113.PropagatedSerializationContext `protobuf:"bytes,27,opt,name=propagated_nexus_serialization_context,json=propagatedNexusSerializationContext,proto3" json:"propagated_nexus_serialization_context,omitempty"`
-	unknownFields                       protoimpl.UnknownFields
-	sizeCache                           protoimpl.SizeCache
+	TransientOrSpeculativeTasks *v19.TransientWorkflowTaskInfo `protobuf:"bytes,26,opt,name=transient_or_speculative_tasks,json=transientOrSpeculativeTasks,proto3" json:"transient_or_speculative_tasks,omitempty"`
+	// Nexus operation context for this workflow, used by workers to select payload serialization.
+	NexusSerializationContext *v113.PropagatedSerializationContext `protobuf:"bytes,27,opt,name=nexus_serialization_context,json=nexusSerializationContext,proto3" json:"nexus_serialization_context,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *GetMutableStateResponse) Reset() {
@@ -768,9 +769,9 @@ func (x *GetMutableStateResponse) GetTransientOrSpeculativeTasks() *v19.Transien
 	return nil
 }
 
-func (x *GetMutableStateResponse) GetPropagatedNexusSerializationContext() *v113.PropagatedSerializationContext {
+func (x *GetMutableStateResponse) GetNexusSerializationContext() *v113.PropagatedSerializationContext {
 	if x != nil {
-		return x.PropagatedNexusSerializationContext
+		return x.NexusSerializationContext
 	}
 	return nil
 }
@@ -1923,10 +1924,11 @@ type RecordActivityTaskStartedResponse struct {
 	RetryPolicy                 *v14.RetryPolicy       `protobuf:"bytes,11,opt,name=retry_policy,json=retryPolicy,proto3" json:"retry_policy,omitempty"`
 	StartVersion                int64                  `protobuf:"varint,12,opt,name=start_version,json=startVersion,proto3" json:"start_version,omitempty"`
 	// ID of the activity run (applicable for standalone activities only)
-	ActivityRunId                       string                               `protobuf:"bytes,13,opt,name=activity_run_id,json=activityRunId,proto3" json:"activity_run_id,omitempty"`
-	PropagatedNexusSerializationContext *v113.PropagatedSerializationContext `protobuf:"bytes,14,opt,name=propagated_nexus_serialization_context,json=propagatedNexusSerializationContext,proto3" json:"propagated_nexus_serialization_context,omitempty"`
-	unknownFields                       protoimpl.UnknownFields
-	sizeCache                           protoimpl.SizeCache
+	ActivityRunId string `protobuf:"bytes,13,opt,name=activity_run_id,json=activityRunId,proto3" json:"activity_run_id,omitempty"`
+	// Nexus operation context for this activity, used by workers to select payload serialization.
+	NexusSerializationContext *v113.PropagatedSerializationContext `protobuf:"bytes,14,opt,name=nexus_serialization_context,json=nexusSerializationContext,proto3" json:"nexus_serialization_context,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *RecordActivityTaskStartedResponse) Reset() {
@@ -2050,9 +2052,9 @@ func (x *RecordActivityTaskStartedResponse) GetActivityRunId() string {
 	return ""
 }
 
-func (x *RecordActivityTaskStartedResponse) GetPropagatedNexusSerializationContext() *v113.PropagatedSerializationContext {
+func (x *RecordActivityTaskStartedResponse) GetNexusSerializationContext() *v113.PropagatedSerializationContext {
 	if x != nil {
-		return x.PropagatedNexusSerializationContext
+		return x.NexusSerializationContext
 	}
 	return nil
 }
@@ -10849,7 +10851,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x16expected_next_event_id\x18\x03 \x01(\x03R\x13expectedNextEventId\x120\n" +
 	"\x14current_branch_token\x18\x04 \x01(\fR\x12currentBranchToken\x12d\n" +
 	"\x14version_history_item\x18\x05 \x01(\v22.temporal.server.api.history.v1.VersionHistoryItemR\x12versionHistoryItem\x12j\n" +
-	"\x14versioned_transition\x18\x06 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x13versionedTransition:\x1b\x92\xc4\x03\x17*\x15execution.workflow_id\"\x80\x0e\n" +
+	"\x14versioned_transition\x18\x06 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x13versionedTransition:\x1b\x92\xc4\x03\x17*\x15execution.workflow_id\"\xea\r\n" +
 	"\x17GetMutableStateResponse\x12G\n" +
 	"\texecution\x18\x01 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\x12I\n" +
 	"\rworkflow_type\x18\x02 \x01(\v2$.temporal.api.common.v1.WorkflowTypeR\fworkflowType\x12\"\n" +
@@ -10872,8 +10874,8 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x12inherited_build_id\x18\x17 \x01(\tR\x10inheritedBuildId\x12f\n" +
 	"\x12transition_history\x18\x18 \x03(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x11transitionHistory\x12b\n" +
 	"\x0fversioning_info\x18\x19 \x01(\v29.temporal.api.workflow.v1.WorkflowExecutionVersioningInfoR\x0eversioningInfo\x12~\n" +
-	"\x1etransient_or_speculative_tasks\x18\x1a \x01(\v29.temporal.server.api.history.v1.TransientWorkflowTaskInfoR\x1btransientOrSpeculativeTasks\x12\x8a\x01\n" +
-	"&propagated_nexus_serialization_context\x18\x1b \x01(\v25.temporal.api.nexus.v1.PropagatedSerializationContextR#propagatedNexusSerializationContextJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
+	"\x1etransient_or_speculative_tasks\x18\x1a \x01(\v29.temporal.server.api.history.v1.TransientWorkflowTaskInfoR\x1btransientOrSpeculativeTasks\x12u\n" +
+	"\x1bnexus_serialization_context\x18\x1b \x01(\v25.temporal.api.nexus.v1.PropagatedSerializationContextR\x19nexusSerializationContextJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\n" +
 	"\x10\vJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0f\"\xef\x02\n" +
 	"\x17PollMutableStateRequest\x12!\n" +
@@ -11005,7 +11007,7 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	" \x01(\v2&.temporal.api.deployment.v1.DeploymentR\x13scheduledDeployment\x12c\n" +
 	"\x11version_directive\x18\f \x01(\v26.temporal.server.api.taskqueue.v1.TaskVersionDirectiveR\x10versionDirective\x12A\n" +
 	"\x1dtask_dispatch_revision_number\x18\r \x01(\x03R\x1ataskDispatchRevisionNumber\x12#\n" +
-	"\rcomponent_ref\x18\x0e \x01(\fR\fcomponentRef:\x06\x92\xc4\x03\x02\b\x01J\x04\b\x04\x10\x05J\x04\b\v\x10\f\"\xb1\a\n" +
+	"\rcomponent_ref\x18\x0e \x01(\fR\fcomponentRef:\x06\x92\xc4\x03\x02\b\x01J\x04\b\x04\x10\x05J\x04\b\v\x10\f\"\x9b\a\n" +
 	"!RecordActivityTaskStartedResponse\x12N\n" +
 	"\x0fscheduled_event\x18\x01 \x01(\v2%.temporal.api.history.v1.HistoryEventR\x0escheduledEvent\x12=\n" +
 	"\fstarted_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\vstartedTime\x12\x18\n" +
@@ -11020,8 +11022,8 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	" \x01(\v2 .temporal.api.common.v1.PriorityR\bpriority\x12F\n" +
 	"\fretry_policy\x18\v \x01(\v2#.temporal.api.common.v1.RetryPolicyR\vretryPolicy\x12#\n" +
 	"\rstart_version\x18\f \x01(\x03R\fstartVersion\x12&\n" +
-	"\x0factivity_run_id\x18\r \x01(\tR\ractivityRunId\x12\x8a\x01\n" +
-	"&propagated_nexus_serialization_context\x18\x0e \x01(\v25.temporal.api.nexus.v1.PropagatedSerializationContextR#propagatedNexusSerializationContext\"\xdc\x01\n" +
+	"\x0factivity_run_id\x18\r \x01(\tR\ractivityRunId\x12u\n" +
+	"\x1bnexus_serialization_context\x18\x0e \x01(\v25.temporal.api.nexus.v1.PropagatedSerializationContextR\x19nexusSerializationContext\"\xdc\x01\n" +
 	"#RespondWorkflowTaskCompletedRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12o\n" +
 	"\x10complete_request\x18\x02 \x01(\v2D.temporal.api.workflowservice.v1.RespondWorkflowTaskCompletedRequestR\x0fcompleteRequest:!\x92\xc4\x03\x1d2\x1bcomplete_request.task_token\"\xa7\x03\n" +
@@ -11930,7 +11932,7 @@ var file_temporal_server_api_historyservice_v1_request_response_proto_depIdxs = 
 	194, // 31: temporal.server.api.historyservice.v1.GetMutableStateResponse.transition_history:type_name -> temporal.server.api.persistence.v1.VersionedTransition
 	199, // 32: temporal.server.api.historyservice.v1.GetMutableStateResponse.versioning_info:type_name -> temporal.api.workflow.v1.WorkflowExecutionVersioningInfo
 	200, // 33: temporal.server.api.historyservice.v1.GetMutableStateResponse.transient_or_speculative_tasks:type_name -> temporal.server.api.history.v1.TransientWorkflowTaskInfo
-	201, // 34: temporal.server.api.historyservice.v1.GetMutableStateResponse.propagated_nexus_serialization_context:type_name -> temporal.api.nexus.v1.PropagatedSerializationContext
+	201, // 34: temporal.server.api.historyservice.v1.GetMutableStateResponse.nexus_serialization_context:type_name -> temporal.api.nexus.v1.PropagatedSerializationContext
 	192, // 35: temporal.server.api.historyservice.v1.PollMutableStateRequest.execution:type_name -> temporal.api.common.v1.WorkflowExecution
 	193, // 36: temporal.server.api.historyservice.v1.PollMutableStateRequest.version_history_item:type_name -> temporal.server.api.history.v1.VersionHistoryItem
 	192, // 37: temporal.server.api.historyservice.v1.PollMutableStateResponse.execution:type_name -> temporal.api.common.v1.WorkflowExecution
@@ -11984,7 +11986,7 @@ var file_temporal_server_api_historyservice_v1_request_response_proto_depIdxs = 
 	188, // 85: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.clock:type_name -> temporal.server.api.clock.v1.VectorClock
 	210, // 86: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.priority:type_name -> temporal.api.common.v1.Priority
 	211, // 87: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.retry_policy:type_name -> temporal.api.common.v1.RetryPolicy
-	201, // 88: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.propagated_nexus_serialization_context:type_name -> temporal.api.nexus.v1.PropagatedSerializationContext
+	201, // 88: temporal.server.api.historyservice.v1.RecordActivityTaskStartedResponse.nexus_serialization_context:type_name -> temporal.api.nexus.v1.PropagatedSerializationContext
 	212, // 89: temporal.server.api.historyservice.v1.RespondWorkflowTaskCompletedRequest.complete_request:type_name -> temporal.api.workflowservice.v1.RespondWorkflowTaskCompletedRequest
 	12,  // 90: temporal.server.api.historyservice.v1.RespondWorkflowTaskCompletedResponse.started_response:type_name -> temporal.server.api.historyservice.v1.RecordWorkflowTaskStartedResponse
 	213, // 91: temporal.server.api.historyservice.v1.RespondWorkflowTaskCompletedResponse.activity_tasks:type_name -> temporal.api.workflowservice.v1.PollActivityTaskQueueResponse

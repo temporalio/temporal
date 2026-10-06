@@ -325,6 +325,7 @@ message WorkflowExecutionInfo {
   // was never rebuilt.
   google.protobuf.Timestamp mutable_state_rebuild_time = 116;
 
+  // Nexus operation context retained across runs so workers can select payload serialization.
   temporal.api.nexus.v1.PropagatedSerializationContext propagated_nexus_serialization_context = 117;
 }
 
