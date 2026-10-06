@@ -38,6 +38,7 @@ const (
 	activityType            = "activityType"
 	commandType             = "commandType"
 	serviceName             = "service_name"
+	concurrencyLimitGroup   = "concurrency_limit_group"
 	actionType              = "action_type"
 	workerVersion           = "worker_version"
 	workerDeploymentName    = "worker_deployment_name"
@@ -174,6 +175,22 @@ func FromClusterIDTag(value int32) Tag {
 // ToClusterIDTag returns a new to cluster tag.
 func ToClusterIDTag(value int32) Tag {
 	return Tag{Key: toCluster, Value: strconv.FormatInt(int64(value), 10)}
+}
+
+// FromClusterTag returns a new from cluster tag keyed by cluster name.
+func FromClusterTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: fromCluster, Value: value}
+}
+
+// ToClusterTag returns a new to cluster tag keyed by cluster name.
+func ToClusterTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: toCluster, Value: value}
 }
 
 // UnsafeTaskQueueTag returns a new task queue tag.
@@ -450,6 +467,13 @@ func ResourceExhaustedScopeTag(scope enumspb.ResourceExhaustedScope) Tag {
 	return Tag{Key: resourceExhaustedScopeTag, Value: scope.String()}
 }
 
+func ConcurrencyLimitGroupTag(value string) Tag {
+	if len(value) == 0 {
+		value = "not_applicable"
+	}
+	return Tag{Key: concurrencyLimitGroup, Value: value}
+}
+
 func LastAttemptCauseTag(value string) Tag {
 	return Tag{Key: LastAttemptCauseTagName, Value: value}
 }
@@ -497,6 +521,9 @@ type ReasonString string
 // ReasonTag is a generic tag can be used anywhere a reason is needed.
 // Make sure that the value is of limited cardinality.
 func ReasonTag(value ReasonString) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
 	return Tag{Key: reason, Value: string(value)}
 }
 

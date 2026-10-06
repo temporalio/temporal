@@ -106,6 +106,8 @@ var transitionRescheduled = chasm.NewTransition(
 // asynchronous operation.
 type EventStarted struct {
 	OperationToken string
+	// RequestID is the request ID the source of this event carried, or empty when it carried none.
+	RequestID string
 	// If not nil, uses the provided time instead of the current component time.
 	// Used when a completion comes in before start is recorded (rare race).
 	StartTime *time.Time
@@ -118,6 +120,9 @@ var TransitionStarted = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_STARTED,
 	func(o *Operation, ctx chasm.MutableContext, event EventStarted) error {
+		if err := o.rejectMismatchedRequestID(event.RequestID); err != nil {
+			return err
+		}
 		startTime := ctx.Now(o)
 		if event.StartTime != nil {
 			startTime = *event.StartTime
@@ -166,6 +171,8 @@ type EventSucceeded struct {
 	// Used when a completion comes in before start is recorded (rare race).
 	CompleteTime *time.Time
 	Result       *commonpb.Payload
+	// RequestID is the request ID the source of this event carried, or empty when it carried none.
+	RequestID string
 }
 
 var TransitionSucceeded = chasm.NewTransition(
@@ -176,6 +183,9 @@ var TransitionSucceeded = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_SUCCEEDED,
 	func(o *Operation, ctx chasm.MutableContext, event EventSucceeded) error {
+		if err := o.rejectMismatchedRequestID(event.RequestID); err != nil {
+			return err
+		}
 		// Clear the next attempt schedule time when leaving BACKING_OFF state. This field is only valid in
 		// BACKING_OFF state.
 		closeTime := ctx.Now(o)
@@ -201,6 +211,8 @@ type EventFailed struct {
 	// Used when a completion comes in before start is recorded (rare race).
 	CompleteTime *time.Time
 	Failure      *failurepb.Failure
+	// RequestID is the request ID the source of this event carried, or empty when it carried none.
+	RequestID string
 }
 
 var TransitionFailed = chasm.NewTransition(
@@ -211,6 +223,9 @@ var TransitionFailed = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_FAILED,
 	func(o *Operation, ctx chasm.MutableContext, event EventFailed) error {
+		if err := o.rejectMismatchedRequestID(event.RequestID); err != nil {
+			return err
+		}
 		closeTime := ctx.Now(o)
 		if event.CompleteTime != nil {
 			closeTime = *event.CompleteTime
@@ -228,6 +243,8 @@ type EventCanceled struct {
 	// Used when a completion comes in before start is recorded (rare race).
 	CompleteTime *time.Time
 	Failure      *failurepb.Failure
+	// RequestID is the request ID the source of this event carried, or empty when it carried none.
+	RequestID string
 }
 
 var TransitionCanceled = chasm.NewTransition(
@@ -238,6 +255,9 @@ var TransitionCanceled = chasm.NewTransition(
 	},
 	nexusoperationpb.OPERATION_STATUS_CANCELED,
 	func(o *Operation, ctx chasm.MutableContext, event EventCanceled) error {
+		if err := o.rejectMismatchedRequestID(event.RequestID); err != nil {
+			return err
+		}
 		closeTime := ctx.Now(o)
 		if event.CompleteTime != nil {
 			closeTime = *event.CompleteTime
