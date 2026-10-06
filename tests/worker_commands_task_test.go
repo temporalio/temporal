@@ -799,16 +799,18 @@ func (s *WorkerCommandsTaskSuite) TestPollWorkerCommandsWithDeploymentOptions() 
 
 	s.verifyCancelCommand(nexusPollResp, activityPollResp.TaskToken)
 
-	// Verify the worker commands TQ was NOT registered in the deployment version.
+	// Verify the normal TQ is registered but the worker commands TQ is not.
 	descResp, err := env.FrontendClient().DescribeWorkerDeploymentVersion(s.Context(), &workflowservice.DescribeWorkerDeploymentVersionRequest{
 		Namespace:         env.Namespace().String(),
 		DeploymentVersion: tv.ExternalDeploymentVersion(),
 	})
 	s.NoError(err)
+	tqNames := make([]string, 0, len(descResp.GetVersionTaskQueues()))
 	for _, tq := range descResp.GetVersionTaskQueues() {
-		s.NotContains(tq.GetName(), "worker-commands",
-			"Worker commands TQ %q should NOT be registered in the deployment version", tq.GetName())
+		tqNames = append(tqNames, tq.GetName())
 	}
+	s.Contains(tqNames, tv.TaskQueue().GetName(), "normal TQ should be registered in the deployment version")
+	s.NotContains(tqNames, controlQueueName, "worker commands TQ should NOT be registered in the deployment version")
 }
 
 // TestPollWorkerCommandsWithWorkerVersionCapabilities verifies that cancel commands are
