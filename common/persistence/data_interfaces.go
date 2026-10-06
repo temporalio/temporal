@@ -168,16 +168,27 @@ type (
 		TaskQueueType enumspb.TaskQueueType
 	}
 
-	// GetOrCreateShardRequest is used to get shard information, or supply
-	// initial information to create a shard in executions table
+	// GetOrCreateShardRequest is used to load shard information when acquiring a shard,
+	// or supply initial information to create a shard in executions table.
+	// Use GetShard to read shard information without acquiring the shard.
 	GetOrCreateShardRequest struct {
 		ShardID          int32
 		InitialShardInfo *persistencespb.ShardInfo // optional, zero value will be used if missing
-		LifecycleContext context.Context           // cancelled when shard is unloaded
+		LifecycleContext context.Context           // required, cancelled when shard is unloaded
 	}
 
 	// GetOrCreateShardResponse is the response to GetOrCreateShard
 	GetOrCreateShardResponse struct {
+		ShardInfo *persistencespb.ShardInfo
+	}
+
+	// GetShardRequest is used to read shard information without acquiring the shard
+	GetShardRequest struct {
+		ShardID int32
+	}
+
+	// GetShardResponse is the response to GetShard
+	GetShardResponse struct {
 		ShardInfo *persistencespb.ShardInfo
 	}
 
@@ -1120,7 +1131,12 @@ type (
 		Closeable
 		GetName() string
 
+		// GetOrCreateShard loads the shard when acquiring it, creating it if it does not exist.
+		// The caller is expected to follow up with UpdateShard to take ownership of the shard.
 		GetOrCreateShard(ctx context.Context, request *GetOrCreateShardRequest) (*GetOrCreateShardResponse, error)
+		// GetShard reads the shard without acquiring or creating it.
+		// Returns NotFound if the shard does not exist.
+		GetShard(ctx context.Context, request *GetShardRequest) (*GetShardResponse, error)
 		UpdateShard(ctx context.Context, request *UpdateShardRequest) error
 		AssertShardOwnership(ctx context.Context, request *AssertShardOwnershipRequest) error
 	}
