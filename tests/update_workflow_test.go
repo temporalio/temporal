@@ -854,7 +854,6 @@ func (s *WorkflowUpdateSuite) TestCompletedWorkflow() {
 			return resultCh
 		}
 
-		// Send Update request with a requestID to receive a link to the wf event.
 		updateResultCh := sendUpdateWithRequestID(env.Tv().RequestID())
 
 		// Complete Update and Workflow.
@@ -871,26 +870,17 @@ func (s *WorkflowUpdateSuite) TestCompletedWorkflow() {
 			env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution()),
 			enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
 		)
-		// Send the same Update request again, receiving the same result but with a link to the Accepted event.
+		// The Update was pending when requested and had no callbacks, so it links directly to the Accepted event.
+		acceptedEventLink := updateResult1.GetLink().GetWorkflowEvent().GetEventRef()
+		s.NotNil(acceptedEventLink)
+		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, acceptedEventLink.GetEventType())
+		s.Equal(acceptedEvent.GetEventId(), acceptedEventLink.GetEventId())
+
+		// Send the same Update request again (now completed), receiving the same result and link.
 		updateResultCh = sendUpdateWithRequestID(env.Tv().Sub("request-2").RequestID())
 		updateResult = <-updateResultCh
 		s.NoError(updateResult.err)
-		updateResult2 := updateResult.response
-		updateResult1WithoutLink := common.CloneProto(updateResult1)
-		updateResult1WithoutLink.Link = nil
-		updateResult2WithoutLink := common.CloneProto(updateResult2)
-		updateResult2WithoutLink.Link = nil
-		protorequire.ProtoEqual(s.T(), updateResult1WithoutLink, updateResult2WithoutLink)
-
-		acceptedReqLink := updateResult1.GetLink().GetWorkflowEvent().GetRequestIdRef()
-		s.NotNil(acceptedReqLink)
-		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, acceptedReqLink.GetEventType())
-
-		acceptedEventLink := updateResult2.GetLink().GetWorkflowEvent().GetEventRef()
-		s.NotNil(acceptedEventLink)
-		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, acceptedEventLink.GetEventType())
-
-		s.Equal(acceptedEvent.GetEventId(), acceptedEventLink.GetEventId())
+		protorequire.ProtoEqual(s.T(), updateResult1, updateResult.response)
 	})
 
 	s.Run("receive update failure from accepted Update", func(s *WorkflowUpdateSuite) {

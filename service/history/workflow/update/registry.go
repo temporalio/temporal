@@ -471,10 +471,15 @@ func (r *registry) Find(ctx context.Context, id string) *Update {
 	// Other errors go to the future of completed Update,
 	// because it means that Update exists, was found, but there is something broken in it
 	// (UpdateInfo in mutable state is invalid or Update completion event is not found).
+	acceptedEventID := common.EmptyEventID
+	if err == nil {
+		acceptedEventID, err = r.store.GetUpdateAcceptedEventID(ctx, id)
+	}
 
 	// The Update is completed and its outcome loaded from the corresponding history event.
 	return newCompleted(
 		id,
+		acceptedEventID,
 		future.NewReadyFuture(updOutcome, err),
 		withInstrumentation(&r.instrumentation),
 	)

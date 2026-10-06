@@ -125,12 +125,14 @@ func newAccepted(id string, acceptedEventID int64, opts ...updateOpt) *Update {
 
 func newCompleted(
 	id string,
+	acceptedEventID int64,
 	outcomeFuture *future.ReadyFutureImpl[*updatepb.Outcome],
 	opts ...updateOpt,
 ) *Update {
 	upd := &Update{
 		id:              id,
 		state:           stateCompleted,
+		acceptedEventID: acceptedEventID,
 		onComplete:      func() {},
 		instrumentation: &noopInstrumentation,
 		accepted:        future.NewReadyFuture[*failurepb.Failure](nil, nil),
@@ -868,6 +870,12 @@ func (u *Update) GetSize() int {
 	return size
 }
 
+// AcceptedEventID should only be invoked after the accepted/outcome futures are set.
+// This is because acceptedEventID is only written while holding the workflow lock and
+// before the accepted/outcome futures are set.
 func (u *Update) AcceptedEventID() int64 {
+	if !u.accepted.Ready() && !u.outcome.Ready() {
+		return common.EmptyEventID
+	}
 	return u.acceptedEventID
 }

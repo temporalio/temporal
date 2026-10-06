@@ -54,10 +54,10 @@ type Updater struct {
 	scheduledEventID       int64
 	scheduleToStartTimeout time.Duration
 	workflowTaskStamp      int32
-	// responseLink is the link attached to the response. It is set in ApplyRequest
-	// and read in OnSuccess - which runs after workflow lock is released and so doesn't
-	// have access to MutableState to derive it.
-	responseLink *commonpb.Link
+	// requestIDLink is the projected requestIDRef link for requests that have- or will have on acceptance-
+	// an event in history. It is set in ApplyRequest because deriving it needs MutableState, which
+	// OnSuccess doesn't have. See [Updater.responseLink] for details.
+	requestIDLink *commonpb.Link
 }
 
 func NewUpdater(
@@ -116,9 +116,7 @@ func (u *Updater) ApplyRequest(
 	}
 	// Capture the anticipated link for the response after the request has been applied.
 	// If the request itself fails/is rejected, OnSuccess will link to the workflow itself instead.
-	if u.responseLink, err = u.captureTentativeResponseLink(ctx, ms); err != nil {
-		return nil, err
-	}
+	u.requestIDLink = u.captureRequestIDLink(ms)
 	return action, nil
 }
 
@@ -245,77 +243,51 @@ func (u *Updater) applyRequest(
 	}, nil
 }
 
-// captureTentativeResponseLink determines the tentative link to be attached to the update.
-// It needs to run in OnApply as it needs access to the mutable state which isnt
-// available in OnSuccess.
+// captureRequestIDLink returns a RequestIdRef link if this request's requestID has, or will have, its own event in history.
+// The link is projected- it is only valid if the Update is (or becomes) accepted and is checked in OnSuccess.
 //
 // Cases:
 //
-//	requestID has an event recorded on it?
-//	  - Yes: use that event for a requestIdRef link.
-//	  - No: is the update accepted/completed?
-//	        - Yes: use the update accepted event for an eventRef link.
-//	        - No: is there a valid requestID on the request?
-//	              - Yes: use the projected event for a requestIDRef as the update is still in-flight.
-//	              - No: use a workflow link.
-func (u *Updater) captureTentativeResponseLink(ctx context.Context, ms historyi.MutableState) (*commonpb.Link, error) {
-
+//	requestID already has an event recorded on it?
+//	  - Yes: link to that event.
+//	  - No: is the Update already accepted/completed, or does the request have no callbacks?
+//	        - Yes: return nil as a hint to OnSuccess to link to the accepted event.
+//	        - No: link to the projected event.
+func (u *Updater) captureRequestIDLink(ms historyi.MutableState) *commonpb.Link {
 	request := u.req.GetRequest().GetRequest()
 	requestID := request.GetRequestId()
-	updateID := request.GetMeta().GetUpdateId()
-
-	linkWfEvent := &commonpb.Link_WorkflowEvent{
-		Namespace:  u.req.Request.Namespace,
-		WorkflowId: u.wfKey.WorkflowID,
-		RunId:      u.wfKey.RunID,
+	if requestID == "" {
+		return nil
 	}
 
+	var eventType enumspb.EventType
 	if requestIDInfo := ms.GetExecutionState().GetRequestIds()[requestID]; requestIDInfo != nil {
-		// If the requestID already has an event in history, defer to it as it is the canonical event itself.
-		linkWfEvent.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
-			RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-				RequestId: requestID,
-				EventType: requestIDInfo.GetEventType(),
-			},
-		}
-	} else if updateInfo := ms.GetExecutionInfo().GetUpdateInfos()[updateID]; updateInfo.GetAcceptance() != nil || updateInfo.GetCompletion() != nil {
-		// The request ID has no event of its own, but the update is accepted or completed - link to the accepted event.
-		acceptedEventID, err := ms.GetUpdateAcceptedEventID(ctx, updateID)
-		if err != nil {
-			return nil, err
-		}
-		linkWfEvent.Reference = &commonpb.Link_WorkflowEvent_EventRef{
-			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
-				EventId:   acceptedEventID,
-				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
-			},
-		}
+		eventType = requestIDInfo.GetEventType()
 	} else {
-		// If none of the above, the update is in flight.
-		if requestID == "" {
-			// Use a workflow link if the requestID is empty.
-			return &commonpb.Link{
-				Variant: &commonpb.Link_Workflow_{
-					Workflow: &commonpb.Link_Workflow{
-						Namespace:  u.req.Request.Namespace,
-						WorkflowId: u.wfKey.WorkflowID,
-						RunId:      u.wfKey.RunID,
-					},
-				},
-			}, nil
+		updateInfo := ms.GetExecutionInfo().GetUpdateInfos()[request.GetMeta().GetUpdateId()]
+		// For requests that are not carrying any callbacks or are already persisted(accepted/completed)
+		// skip setting a requestIDRef link so OnSuccess can point to the Accepted event directly.
+		if len(request.GetCompletionCallbacks()) == 0 || updateInfo.GetAcceptance() != nil || updateInfo.GetCompletion() != nil {
+			return nil
 		}
-		// Use a requestIDRef for the projected link iff the requestID isnt empty.
-		linkWfEvent.Reference = &commonpb.Link_WorkflowEvent_RequestIdRef{
-			RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
-				RequestId: requestID,
-				EventType: u.upd.EventLinkType(requestID),
-			},
-		}
+		eventType = u.upd.EventLinkType(requestID)
 	}
 
 	return &commonpb.Link{
-		Variant: &commonpb.Link_WorkflowEvent_{WorkflowEvent: linkWfEvent},
-	}, nil
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  u.req.Request.Namespace,
+				WorkflowId: u.wfKey.WorkflowID,
+				RunId:      u.wfKey.RunID,
+				Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+						RequestId: requestID,
+						EventType: eventType,
+					},
+				},
+			},
+		},
+	}
 }
 
 func (u *Updater) OnSuccess(
@@ -369,13 +341,25 @@ func (u *Updater) OnSuccess(
 	}
 	resp := u.CreateResponse(u.wfKey, status.Outcome, status.Stage)
 
-	// Attach a link to the response. For accepted/completed updates, use the WorkflowEvent
-	// link captured in ApplyRequest. For rejected updates (stage COMPLETED with a failure
-	// outcome and no acceptance), use a Workflow link since rejected updates don't write
-	// any event to history.
-	if status.Outcome.GetFailure() != nil && status.Stage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
-		// Rejected update: no event in history, link to the workflow itself.
-		resp.Response.Link = &commonpb.Link{
+	resp.Response.Link = u.responseLink(status)
+	return resp, nil
+}
+
+// responseLink returns the link to the response if the status is Accepted or Completed.
+// Rejected updates (stage COMPLETED with a failure outcome and no acceptance)
+// use a Workflow link since rejected updates don't write any event to history.
+// If a requestIdRef link is already captured in ApplyRequest, use that link. Else,
+// link to the Accepted event.
+func (u *Updater) responseLink(status *update.Status) *commonpb.Link {
+	if status.Stage != enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED &&
+		status.Stage != enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
+		return nil
+	}
+	// Rejected updates- which do not have an AcceptedEventID- don't
+	// write any event to history, so link to the workflow itself.
+	acceptedEventID := u.upd.AcceptedEventID()
+	if acceptedEventID == common.EmptyEventID {
+		return &commonpb.Link{
 			Variant: &commonpb.Link_Workflow_{
 				Workflow: &commonpb.Link_Workflow{
 					Namespace:  u.req.Request.Namespace,
@@ -385,10 +369,29 @@ func (u *Updater) OnSuccess(
 				},
 			},
 		}
-	} else if status.Stage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED || status.Stage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
-		resp.Response.Link = u.responseLink
 	}
-	return resp, nil
+	// Use the requestIDLink if set, this is to cater for cases where request resulted
+	// in an OptionsUpdated event instead of Accepted.
+	if u.requestIDLink != nil {
+		return u.requestIDLink
+	}
+	// If there isnt a requestIdRef link- due to empty callbacks/requestID- link
+	// to the Accepted event itself.
+	return &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  u.req.Request.Namespace,
+				WorkflowId: u.wfKey.WorkflowID,
+				RunId:      u.wfKey.RunID,
+				Reference: &commonpb.Link_WorkflowEvent_EventRef{
+					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+						EventId:   acceptedEventID,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+					},
+				},
+			},
+		},
+	}
 }
 
 // TODO (alex-update): Consider moving this func to a better place.
