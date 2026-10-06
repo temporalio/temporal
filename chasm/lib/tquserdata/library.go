@@ -11,6 +11,11 @@ type library struct {
 	handler *handler
 }
 
+// NewNilLibrary returns a library with nil handlers for offline state decoding.
+func NewNilLibrary() chasm.Library {
+	return newLibrary(nil)
+}
+
 func newLibrary(handler *handler) *library {
 	return &library{handler: handler}
 }

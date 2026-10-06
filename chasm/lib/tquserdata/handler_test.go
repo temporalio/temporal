@@ -169,7 +169,7 @@ func TestTaskQueueUserDataInvalidPrecondition(t *testing.T) {
 	}
 }
 
-func TestTaskQueueUserDataTerminationIsUnimplemented(t *testing.T) {
+func TestTaskQueueUserDataTerminationPreservesWrites(t *testing.T) {
 	t.Parallel()
 	h, ctx, req := newTestHandler(t)
 	_, err := h.UpsertTaskQueueUserData(ctx, req)
@@ -184,14 +184,24 @@ func TestTaskQueueUserDataTerminationIsUnimplemented(t *testing.T) {
 		chasm.TerminateComponentRequest{},
 	)
 	require.ErrorAs(t, err, new(*serviceerror.Unimplemented))
+
+	duplicate := proto.Clone(req).(*tquserdatapb.UpsertTaskQueueUserDataRequest)
+	duplicate.TaskQueueUserData.Clock.WallClock = 20
+	_, err = h.UpsertTaskQueueUserData(ctx, duplicate)
+	require.ErrorAs(t, err, new(*serviceerror.FailedPrecondition))
+
 	stored := readTestTaskQueueUserData(ctx, t, h, req)
 	require.Equal(t, int64(1), stored.Version)
 	require.True(t, proto.Equal(req.TaskQueueUserData, stored.TaskQueueUserData))
 
 	req.Precondition = &tquserdatapb.UpsertTaskQueueUserDataRequest_ExpectedVersion{ExpectedVersion: 1}
+	req.TaskQueueUserData.Clock.WallClock = 30
 	response, err := h.UpsertTaskQueueUserData(ctx, req)
 	require.NoError(t, err)
 	require.Equal(t, int64(2), response.Version)
+	stored = readTestTaskQueueUserData(ctx, t, h, req)
+	require.Equal(t, int64(2), stored.Version)
+	require.True(t, proto.Equal(req.TaskQueueUserData, stored.TaskQueueUserData))
 }
 
 func TestTaskQueueUserDataVersionCASPreservesIncomingClock(t *testing.T) {

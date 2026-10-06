@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/scheduler"
+	"go.temporal.io/server/chasm/lib/tquserdata"
 	"go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/log"
 )
@@ -27,6 +28,7 @@ func NewNilRegistry(logger log.Logger) (*chasm.Registry, error) {
 		callback.NewNilLibrary(),
 		nexusoperation.NewNilLibrary(),
 		scheduler.NewNilLibrary(),
+		tquserdata.NewNilLibrary(),
 		workflow.NewNilLibrary(),
 	}
 
