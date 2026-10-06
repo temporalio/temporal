@@ -192,7 +192,7 @@ linters:
         text: "Unix|UnixMilli|UnixNano"
         linters:
           - forbidigo
-      - path: _test\.go|tests/.+\.go|common/testing/|testx/
+      - path: _test\.go|tests/.+\.go|common/testing/
         text: "panic"
         linters:
           - forbidigo
@@ -221,11 +221,11 @@ linters:
       - text: "use of `softassert\\.\\w+`"
         linters:
           - forbidigo
-      - path: _test\.go|tests/.+\.go|common/testing/|testx/
+      - path: _test\.go|tests/.+\.go|common/testing/
         text: "(cyclomatic|cognitive)" # false positives when using subtests
         linters:
           - revive
-      - path: _test\.go|tests/.+\.go|common/testing/|testx/
+      - path: _test\.go|tests/.+\.go|common/testing/
         text: "(dot-imports|unchecked-type-assertion)" # helpful in tests
         linters:
           - revive
