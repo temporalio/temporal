@@ -9496,8 +9496,7 @@ func (s *mutableStateSuite) TestCloseTransactionInvalidateChasmTasksOnClose_Cove
 	chasmPkgPath := reflect.TypeFor[chasm.MSPointer]().PkgPath()
 	wfType := reflect.TypeFor[chasmworkflow.Workflow]()
 	foundChildren := make(map[string]struct{})
-	for i := range wfType.NumField() {
-		field := wfType.Field(i)
+	for field := range wfType.Fields() {
 		typeName := field.Type.Name()
 		if field.Type.PkgPath() != chasmPkgPath ||
 			(!strings.HasPrefix(typeName, "Map[") && !strings.HasPrefix(typeName, "Field[")) {
