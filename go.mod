@@ -226,6 +226,5 @@ require (
 
 tool golang.org/x/perf/cmd/benchstat
 
-// Server code always builds against testx from the same commit. Consumers of the server ignore this
-// replace and get the required testx version instead.
+// Use the local testx; consumers of the server ignore this replace.
 replace go.temporal.io/testx => ./testx
