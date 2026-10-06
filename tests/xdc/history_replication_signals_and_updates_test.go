@@ -24,6 +24,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/sdklogger"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -114,7 +115,7 @@ func (t *hrsuTest) newHrsuTestCluster(ns string, cluster *testcore.TestCluster) 
 	sdkClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  cluster.Host().FrontendGRPCAddress(),
 		Namespace: ns,
-		Logger:    log.NewSdkLogger(t.s.logger),
+		Logger:    sdklogger.New(t.s.logger),
 	})
 	t.s.NoError(err)
 

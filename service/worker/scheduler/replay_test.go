@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/sdklogger"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/service/worker/scheduler"
 	"google.golang.org/protobuf/proto"
@@ -91,7 +92,7 @@ func TestReplaysWithDynamicConfigChange(t *testing.T) {
 	files, err := filepath.Glob("testdata/replay_*.json.gz")
 	require.NoError(t, err)
 
-	logger := log.NewSdkLogger(log.NewTestLogger())
+	logger := sdklogger.New(log.NewTestLogger())
 
 	// loadHistory reads a fresh copy of the history. A fresh copy is needed per replay because
 	// the replayer consumes/mutates the passed History.
@@ -191,7 +192,7 @@ func replay(t *testing.T, h *historypb.History) {
 	t.Helper()
 	replayer := worker.NewWorkflowReplayer()
 	replayer.RegisterWorkflowWithOptions(scheduler.SchedulerWorkflow, workflow.RegisterOptions{Name: scheduler.WorkflowType})
-	require.NoError(t, replayer.ReplayWorkflowHistory(log.NewSdkLogger(log.NewTestLogger()), h))
+	require.NoError(t, replayer.ReplayWorkflowHistory(sdklogger.New(log.NewTestLogger()), h))
 }
 
 // loadHistory reads a gzipped JSON history fixture.

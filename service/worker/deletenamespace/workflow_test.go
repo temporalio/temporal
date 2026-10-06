@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/sdklogger"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
@@ -17,7 +18,7 @@ import (
 
 func Test_DeleteNamespaceWorkflow_ByName(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
-	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
+	testSuite.SetLogger(sdklogger.New(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 	var la *localActivities
 
@@ -63,7 +64,7 @@ func Test_DeleteNamespaceWorkflow_ByName(t *testing.T) {
 
 func Test_DeleteNamespaceWorkflow_ByID(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
-	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
+	testSuite.SetLogger(sdklogger.New(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 	var la *localActivities
 
@@ -108,7 +109,7 @@ func Test_DeleteNamespaceWorkflow_ByID(t *testing.T) {
 
 func Test_DeleteNamespaceWorkflow_ByNameAndID(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
-	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
+	testSuite.SetLogger(sdklogger.New(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	// Delete by name and ID.

@@ -27,6 +27,7 @@ import (
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/sdklogger"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -198,7 +199,7 @@ func (s *historyReplicationDLQSuite) TestWorkflowReplicationTaskFailure() {
 	activeClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
 		Namespace: ns,
-		Logger:    log.NewSdkLogger(s.logger),
+		Logger:    sdklogger.New(s.logger),
 	})
 	s.NoError(err)
 	tq := "history-replication-dlq-test-task-queue"

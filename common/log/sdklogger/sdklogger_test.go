@@ -1,11 +1,12 @@
-package log
+package sdklogger
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/sdk/log"
+	sdk "go.temporal.io/sdk/log"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.uber.org/mock/gomock"
 )
@@ -15,8 +16,8 @@ type SdkLoggerSuite struct {
 	suite.Suite
 
 	controller       *gomock.Controller
-	sdkLogger        log.Logger
-	underlyingLogger *MockLogger
+	sdkLogger        sdk.Logger
+	underlyingLogger *log.MockLogger
 }
 
 func TestSdkLoggerSuite(t *testing.T) {
@@ -27,8 +28,8 @@ func (s *SdkLoggerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 
-	s.underlyingLogger = NewMockLogger(s.controller)
-	s.sdkLogger = NewSdkLogger(s.underlyingLogger)
+	s.underlyingLogger = log.NewMockLogger(s.controller)
+	s.sdkLogger = New(s.underlyingLogger)
 }
 
 func (s *SdkLoggerSuite) TearDownTest() {

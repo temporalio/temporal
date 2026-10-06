@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/sdklogger"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
@@ -190,7 +191,7 @@ func (s *ReplicationEnableTestSuite) TestReplicationEnableFlow() {
 	activeSDKClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  activeCluster.Host().FrontendGRPCAddress(),
 		Namespace: activeNamespace,
-		Logger:    log.NewSdkLogger(s.logger),
+		Logger:    sdklogger.New(s.logger),
 	})
 	s.Require().NoError(err)
 	defer activeSDKClient.Close()

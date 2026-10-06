@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/sdklogger"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/grpcfaults"
@@ -558,7 +559,7 @@ func (e *TestEnv) SdkClient() sdkclient.Client {
 		clientOptions := sdkclient.Options{
 			HostPort:  e.FrontendGRPCAddress(),
 			Namespace: e.nsName.String(),
-			Logger:    log.NewSdkLogger(e.Logger),
+			Logger:    sdklogger.New(e.Logger),
 		}
 
 		if provider := e.cluster.host.tlsConfigProvider; provider != nil {

@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/sdklogger"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -23,7 +24,7 @@ import (
 
 func Test_ReclaimResourcesWorkflow_Success(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
-	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
+	testSuite.SetLogger(sdklogger.New(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	var a *Activities
@@ -75,7 +76,7 @@ func Test_ReclaimResourcesWorkflow_Success(t *testing.T) {
 
 func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_Error(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
-	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
+	testSuite.SetLogger(sdklogger.New(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	var a *Activities
@@ -124,7 +125,7 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_Error(t *testing.T
 
 func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_ExecutionsStillExist(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
-	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
+	testSuite.SetLogger(sdklogger.New(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	var a *Activities
@@ -173,7 +174,7 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_ExecutionsStillExi
 
 func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
-	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
+	testSuite.SetLogger(sdklogger.New(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	ctrl := gomock.NewController(t)
@@ -268,7 +269,7 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
 
 func Test_ReclaimResourcesWorkflow_NoActivityMocks_NoProgressMade(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
-	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
+	testSuite.SetLogger(sdklogger.New(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	ctrl := gomock.NewController(t)
@@ -345,7 +346,7 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_NoProgressMade(t *testing.T) 
 
 func Test_ReclaimResourcesWorkflow_UpdateDeleteDelay(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
-	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
+	testSuite.SetLogger(sdklogger.New(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	var a *Activities

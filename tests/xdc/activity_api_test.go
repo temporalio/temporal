@@ -18,7 +18,7 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/sdklogger"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -77,7 +77,7 @@ func (s *ActivityApiStateReplicationSuite) TestPauseActivityFailover() {
 	activeSDKClient, err := sdkclient.Dial(sdkclient.Options{
 		HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
 		Namespace: ns,
-		Logger:    log.NewSdkLogger(s.logger),
+		Logger:    sdklogger.New(s.logger),
 	})
 	s.NoError(err)
 

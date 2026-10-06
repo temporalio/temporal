@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/sdklogger"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
@@ -30,7 +31,7 @@ import (
 
 func Test_DeleteExecutionsWorkflow_Success(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
-	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
+	testSuite.SetLogger(sdklogger.New(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	var a *Activities
@@ -69,7 +70,7 @@ func Test_DeleteExecutionsWorkflow_Success(t *testing.T) {
 
 func Test_DeleteExecutionsWorkflow_NoActivityMocks_NoExecutions(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
-	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
+	testSuite.SetLogger(sdklogger.New(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	ctrl := gomock.NewController(t)
@@ -118,7 +119,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_NoExecutions(t *testing.T) {
 
 func Test_DeleteExecutionsWorkflow_ManyExecutions_NoContinueAsNew(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
-	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
+	testSuite.SetLogger(sdklogger.New(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	var a *Activities
@@ -176,7 +177,7 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_NoContinueAsNew(t *testing.T) 
 
 func Test_DeleteExecutionsWorkflow_ManyExecutions_ContinueAsNew(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
-	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
+	testSuite.SetLogger(sdklogger.New(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	var a *Activities
@@ -211,7 +212,7 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ContinueAsNew(t *testing.T) {
 
 func Test_DeleteExecutionsWorkflow_ManyExecutions_ActivityError(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
-	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
+	testSuite.SetLogger(sdklogger.New(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	var a *Activities
@@ -242,7 +243,7 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ActivityError(t *testing.T) {
 
 func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
-	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
+	testSuite.SetLogger(sdklogger.New(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	ctrl := gomock.NewController(t)
@@ -348,7 +349,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 
 func Test_DeleteExecutionsWorkflow_NoActivityMocks_ChasmExecutions(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
-	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
+	testSuite.SetLogger(sdklogger.New(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	execution1 := &commonpb.WorkflowExecution{
@@ -451,7 +452,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ChasmExecutions(t *testing.T)
 
 func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
-	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
+	testSuite.SetLogger(sdklogger.New(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	ctrl := gomock.NewController(t)
@@ -551,7 +552,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 
 func Test_DeleteExecutionsWorkflow_QueryStats(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
-	testSuite.SetLogger(log.NewSdkLogger(log.NewTestLogger()))
+	testSuite.SetLogger(sdklogger.New(log.NewTestLogger()))
 	env := testSuite.NewTestWorkflowEnvironment()
 	startTime := env.Now().UTC()
 

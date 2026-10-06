@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/sdklogger"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
@@ -64,7 +65,7 @@ func NewClientFactory(
 		tlsConfig:       tlsConfig,
 		metricsHandler:  NewMetricsHandler(metricsHandler),
 		logger:          logger,
-		sdklogger:       log.NewSdkLogger(logger),
+		sdklogger:       sdklogger.New(logger),
 		stickyCacheSize: stickyCacheSize,
 	}
 }

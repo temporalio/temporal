@@ -1,9 +1,11 @@
-package log
+// Package sdklogger adapts the server logger to the Go SDK logger interface.
+package sdklogger
 
 import (
 	"fmt"
 
-	"go.temporal.io/sdk/log"
+	sdk "go.temporal.io/sdk/log"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 )
 
@@ -12,23 +14,23 @@ const (
 	noValue               = "no value"
 )
 
-type SdkLogger struct {
-	logger Logger
+type Logger struct {
+	logger log.Logger
 }
 
-var _ log.Logger = (*SdkLogger)(nil)
+var _ sdk.Logger = (*Logger)(nil)
 
-func NewSdkLogger(logger Logger) *SdkLogger {
-	if sl, ok := logger.(SkipLogger); ok {
+func New(logger log.Logger) *Logger {
+	if sl, ok := logger.(log.SkipLogger); ok {
 		logger = sl.Skip(extraSkipForSdkLogger)
 	}
 
-	return &SdkLogger{
+	return &Logger{
 		logger: logger,
 	}
 }
 
-func (l *SdkLogger) tags(keyvals []any) []tag.Tag {
+func (l *Logger) tags(keyvals []any) []tag.Tag {
 	var tags []tag.Tag
 	for i := 0; i < len(keyvals); i++ {
 		if t, keyvalIsTag := keyvals[i].(tag.Tag); keyvalIsTag {
@@ -54,23 +56,23 @@ func (l *SdkLogger) tags(keyvals []any) []tag.Tag {
 	return tags
 }
 
-func (l *SdkLogger) Debug(msg string, keyvals ...any) {
+func (l *Logger) Debug(msg string, keyvals ...any) {
 	l.logger.Debug(msg, l.tags(keyvals)...)
 }
 
-func (l *SdkLogger) Info(msg string, keyvals ...any) {
+func (l *Logger) Info(msg string, keyvals ...any) {
 	l.logger.Info(msg, l.tags(keyvals)...)
 }
 
-func (l *SdkLogger) Warn(msg string, keyvals ...any) {
+func (l *Logger) Warn(msg string, keyvals ...any) {
 	l.logger.Warn(msg, l.tags(keyvals)...)
 }
 
-func (l *SdkLogger) Error(msg string, keyvals ...any) {
+func (l *Logger) Error(msg string, keyvals ...any) {
 	l.logger.Error(msg, l.tags(keyvals)...)
 }
 
-func (l *SdkLogger) With(keyvals ...any) log.Logger {
-	return NewSdkLogger(
-		With(l.logger, l.tags(keyvals)...))
+func (l *Logger) With(keyvals ...any) sdk.Logger {
+	return New(
+		log.With(l.logger, l.tags(keyvals)...))
 }

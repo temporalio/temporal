@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/sdklogger"
 	"go.temporal.io/server/service/worker/workerdeployment"
 )
 
@@ -82,7 +83,7 @@ func testReplays(t *testing.T, versionDemotionSignalEnabled bool) {
 		replayer.RegisterWorkflowWithOptions(versionWorkflow, workflow.RegisterOptions{Name: workerdeployment.WorkerDeploymentVersionWorkflowType})
 		replayer.RegisterWorkflowWithOptions(deploymentWorkflow, workflow.RegisterOptions{Name: workerdeployment.WorkerDeploymentWorkflowType})
 
-		logger := log.NewSdkLogger(log.NewTestLogger())
+		logger := sdklogger.New(log.NewTestLogger())
 
 		// Test all run directories (default behavior for comprehensive replay testing)
 		testAllRunDirectories(t, replayer, logger, wv)
@@ -91,7 +92,7 @@ func testReplays(t *testing.T, versionDemotionSignalEnabled bool) {
 
 // testAllRunDirectories tests all directories prepended with "run_" since they contain replay test data.
 // For each workflow implementation version we run all the replay tests for snapshots created by that version or older versions
-func testAllRunDirectories(t *testing.T, replayer worker.WorkflowReplayer, logger *log.SdkLogger, workflowImplementationVersion workerdeployment.DeploymentWorkflowVersion) {
+func testAllRunDirectories(t *testing.T, replayer worker.WorkflowReplayer, logger *sdklogger.Logger, workflowImplementationVersion workerdeployment.DeploymentWorkflowVersion) {
 	// Warning: the pattern here might not work if workflowImplementationVersion grow more than 9. But by then we should be in CHASM!
 	runDirs, err := filepath.Glob(fmt.Sprintf("testdata/v[0-%d]/run_*", workflowImplementationVersion))
 	require.NoError(t, err)
@@ -111,7 +112,7 @@ func testAllRunDirectories(t *testing.T, replayer worker.WorkflowReplayer, logge
 }
 
 // testRunDirectory tests all workflow histories in a specific run directory
-func testRunDirectory(t *testing.T, replayer worker.WorkflowReplayer, logger *log.SdkLogger, runDir string) {
+func testRunDirectory(t *testing.T, replayer worker.WorkflowReplayer, logger *sdklogger.Logger, runDir string) {
 	files, err := filepath.Glob(filepath.Join(runDir, "replay_*.json.gz"))
 	require.NoError(t, err)
 
@@ -129,7 +130,7 @@ func testRunDirectory(t *testing.T, replayer worker.WorkflowReplayer, logger *lo
 }
 
 // replayWorkflowHistory replays a single workflow history file and validates it
-func replayWorkflowHistory(t *testing.T, replayer worker.WorkflowReplayer, logger *log.SdkLogger, filename string) {
+func replayWorkflowHistory(t *testing.T, replayer worker.WorkflowReplayer, logger *sdklogger.Logger, filename string) {
 	logger.Info("Replaying", "file", filename)
 	f, err := os.Open(filename)
 	require.NoError(t, err)

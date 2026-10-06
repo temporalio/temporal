@@ -27,7 +27,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/sdklogger"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	cnexus "go.temporal.io/server/common/nexus"
@@ -529,7 +529,7 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 			activeSDKClient, err := client.Dial(client.Options{
 				HostPort:  s.clusters[0].Host().FrontendGRPCAddress(),
 				Namespace: ns,
-				Logger:    log.NewSdkLogger(s.logger),
+				Logger:    sdklogger.New(s.logger),
 			})
 			s.NoError(err)
 
