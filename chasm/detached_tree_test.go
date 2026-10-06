@@ -17,11 +17,12 @@ func TestReadOnlyNodeBackend_UnsupportedPanics(t *testing.T) {
 	})
 
 	for name, call := range map[string]func(){
-		"NextTransitionCount":  func() { backend.NextTransitionCount() },
-		"AddTasks":             func() { backend.AddTasks() },
-		"DeleteCHASMPureTasks": func() { backend.DeleteCHASMPureTasks(time.Time{}) },
-		"GetNamespaceEntry":    func() { backend.GetNamespaceEntry() },
-		"GetCurrentVersion":    func() { backend.GetCurrentVersion() },
+		"NextTransitionCount":    func() { backend.NextTransitionCount() },
+		"AddChasmSideEffectTask": func() { backend.AddChasmSideEffectTask(TaskCategoryTransfer, PhysicalSideEffectTask{}) },
+		"AddChasmPureTask":       func() { backend.AddChasmPureTask(PhysicalPureTask{}) },
+		"DeleteCHASMPureTasks":   func() { backend.DeleteCHASMPureTasks(time.Time{}) },
+		"GetNamespaceEntry":      func() { backend.GetNamespaceEntry() },
+		"GetCurrentVersion":      func() { backend.GetCurrentVersion() },
 		"ChasmSkipPersistenceEnabled": func() {
 			backend.ChasmSkipPersistenceEnabled()
 		},

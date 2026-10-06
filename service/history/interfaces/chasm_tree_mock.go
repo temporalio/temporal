@@ -17,7 +17,6 @@ import (
 	persistence "go.temporal.io/server/api/persistence/v1"
 	chasm "go.temporal.io/server/chasm"
 	metrics "go.temporal.io/server/common/metrics"
-	tasks "go.temporal.io/server/service/history/tasks"
 	gomock "go.uber.org/mock/gomock"
 )
 
@@ -176,7 +175,7 @@ func (mr *MockChasmTreeMockRecorder) EachPureTask(deadline, callback any) *gomoc
 }
 
 // ExecuteSideEffectDiscardTask mocks base method.
-func (m *MockChasmTree) ExecuteSideEffectDiscardTask(ctx context.Context, executionKey chasm.ExecutionKey, task *tasks.ChasmTask, validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error) error {
+func (m *MockChasmTree) ExecuteSideEffectDiscardTask(ctx context.Context, executionKey chasm.ExecutionKey, task *chasm.PhysicalSideEffectTask, validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ExecuteSideEffectDiscardTask", ctx, executionKey, task, validate)
 	ret0, _ := ret[0].(error)
@@ -190,7 +189,7 @@ func (mr *MockChasmTreeMockRecorder) ExecuteSideEffectDiscardTask(ctx, execution
 }
 
 // ExecuteSideEffectTask mocks base method.
-func (m *MockChasmTree) ExecuteSideEffectTask(ctx context.Context, executionKey chasm.ExecutionKey, task *tasks.ChasmTask, validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error) error {
+func (m *MockChasmTree) ExecuteSideEffectTask(ctx context.Context, executionKey chasm.ExecutionKey, task *chasm.PhysicalSideEffectTask, validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ExecuteSideEffectTask", ctx, executionKey, task, validate)
 	ret0, _ := ret[0].(error)
@@ -315,7 +314,7 @@ func (mr *MockChasmTreeMockRecorder) Terminate(arg0, arg1 any) *gomock.Call {
 }
 
 // ValidateSideEffectTask mocks base method.
-func (m *MockChasmTree) ValidateSideEffectTask(ctx context.Context, task *tasks.ChasmTask) (bool, bool, error) {
+func (m *MockChasmTree) ValidateSideEffectTask(ctx context.Context, task *chasm.PhysicalSideEffectTask) (bool, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ValidateSideEffectTask", ctx, task)
 	ret0, _ := ret[0].(bool)

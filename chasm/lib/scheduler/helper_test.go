@@ -514,7 +514,7 @@ func (e *testEnv) AllowStuck(reason string) {
 // HasTask returns true if the given task type was added with the given visibilityTime.
 func (e *testEnv) HasTask(task any, visibilityTime time.Time) bool {
 	taskType := reflect.TypeOf(task)
-	for _, categoryTasks := range e.NodeBackend.TasksByCategory {
+	for _, categoryTasks := range chasmtest.HistoryTasks(e.NodeBackend) {
 		for _, t := range categoryTasks {
 			if reflect.TypeOf(t) == taskType &&
 				t.GetVisibilityTime().Equal(visibilityTime) {
@@ -529,7 +529,7 @@ func (e *testEnv) HasTask(task any, visibilityTime time.Time) bool {
 // distinguish tasks that share a physical type but land in different queues.
 func (e *testEnv) HasTaskInCategory(task any, category tasks.Category, visibilityTime time.Time) bool {
 	taskType := reflect.TypeOf(task)
-	for _, t := range e.NodeBackend.TasksByCategory[category] {
+	for _, t := range chasmtest.HistoryTasks(e.NodeBackend)[category] {
 		if reflect.TypeOf(t) == taskType &&
 			t.GetVisibilityTime().Equal(visibilityTime) {
 			return true

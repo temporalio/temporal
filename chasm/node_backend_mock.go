@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/service/history/tasks"
 )
 
 var _ NodeBackend = (*MockNodeBackend)(nil)
@@ -49,7 +48,8 @@ type MockNodeBackend struct {
 
 	// Recorded calls (protected by mu).
 	mu                  sync.Mutex
-	TasksByCategory     map[tasks.Category][]tasks.Task
+	SideEffectTasks     map[TaskCategory][]*PhysicalSideEffectTask
+	PureTasks           []*PhysicalPureTask
 	DeletePureTaskCalls []time.Time
 	UpdateCalls         []struct {
 		State  enumsspb.WorkflowExecutionState
@@ -120,16 +120,27 @@ func (m *MockNodeBackend) GetWorkflowKey() definition.WorkflowKey {
 	return definition.WorkflowKey{}
 }
 
-func (m *MockNodeBackend) AddTasks(ts ...tasks.Task) {
+func (m *MockNodeBackend) AddChasmSideEffectTask(category TaskCategory, task PhysicalSideEffectTask) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.TasksByCategory == nil {
-		m.TasksByCategory = make(map[tasks.Category][]tasks.Task, 1)
+	if m.SideEffectTasks == nil {
+		m.SideEffectTasks = make(map[TaskCategory][]*PhysicalSideEffectTask, 1)
 	}
-	for _, task := range ts {
-		category := task.GetCategory()
-		m.TasksByCategory[category] = append(m.TasksByCategory[category], task)
-	}
+	m.SideEffectTasks[category] = append(m.SideEffectTasks[category], &task)
+}
+
+func (m *MockNodeBackend) AddChasmPureTask(task PhysicalPureTask) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.PureTasks = append(m.PureTasks, &task)
+}
+
+// ClearTasks discards the recorded side effect and pure tasks.
+func (m *MockNodeBackend) ClearTasks() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.SideEffectTasks = nil
+	m.PureTasks = nil
 }
 
 func (m *MockNodeBackend) DeleteCHASMPureTasks(maxScheduledTime time.Time) {
@@ -286,8 +297,8 @@ func (m *MockNodeBackend) GetNexusUpdateCompletion(
 func (m *MockNodeBackend) NumTasksAdded() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	count := 0
-	for _, ts := range m.TasksByCategory {
+	count := len(m.PureTasks)
+	for _, ts := range m.SideEffectTasks {
 		count += len(ts)
 	}
 	return count

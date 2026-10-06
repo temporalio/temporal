@@ -78,7 +78,7 @@ func TestInvoker_AddTasks_AllDeferredEmitsNothing(t *testing.T) {
 		ActualTime: timestamppb.New(now),
 	}}
 
-	env.NodeBackend.TasksByCategory = nil
+	env.NodeBackend.ClearTasks()
 	invoker.EnqueueBufferedStarts(ctx, nil)
 	require.NoError(t, env.CloseTransaction())
 

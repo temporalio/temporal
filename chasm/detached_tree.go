@@ -18,7 +18,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/persistence/transitionhistory"
-	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -260,8 +259,12 @@ func (b *readOnlyNodeBackend) NextTransitionCount() int64 {
 	return 0
 }
 
-func (b *readOnlyNodeBackend) AddTasks(...tasks.Task) {
-	b.unsupported("AddTasks")
+func (b *readOnlyNodeBackend) AddChasmSideEffectTask(TaskCategory, PhysicalSideEffectTask) {
+	b.unsupported("AddChasmSideEffectTask")
+}
+
+func (b *readOnlyNodeBackend) AddChasmPureTask(PhysicalPureTask) {
+	b.unsupported("AddChasmPureTask")
 }
 
 func (b *readOnlyNodeBackend) DeleteCHASMPureTasks(time.Time) {

@@ -7441,6 +7441,23 @@ func (ms *MutableStateImpl) PopTasks() map[tasks.Category][]tasks.Task {
 	return insertTasks
 }
 
+// AddChasmSideEffectTask adds the history task for a CHASM side effect task.
+func (ms *MutableStateImpl) AddChasmSideEffectTask(
+	category chasm.TaskCategory,
+	task chasm.PhysicalSideEffectTask,
+) {
+	ms.AddTasks(tasks.NewChasmTask(ms.GetWorkflowKey(), category, task))
+}
+
+// AddChasmPureTask adds the history task for a CHASM physical pure task.
+func (ms *MutableStateImpl) AddChasmPureTask(task chasm.PhysicalPureTask) {
+	ms.AddTasks(&tasks.ChasmTaskPure{
+		WorkflowKey:         ms.GetWorkflowKey(),
+		VisibilityTimestamp: task.VisibilityTimestamp,
+		ArchetypeID:         task.ArchetypeID,
+	})
+}
+
 func (ms *MutableStateImpl) DeleteCHASMPureTasks(maxScheduledTime time.Time) {
 	for lastTaskIdx, task := range slices.Backward(ms.chasmPureTasks) {
 

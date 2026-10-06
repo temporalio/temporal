@@ -660,12 +660,17 @@ func (s *taskSerializerSuite) assertEqualTasks(
 	deserializedTask, err := s.serializer.DeserializeTask(task.GetCategory(), blob)
 	s.NoError(err)
 
-	// Find all top-level protobuf fields and compare them, then unset them, as their
-	// internal state parameters can cause direct struct comparison to fail.
+	// Find all protobuf fields of the task and of its embedded structs and compare them, then
+	// unset them, as their internal state parameters can cause direct struct comparison to fail.
 	taskValue := reflect.ValueOf(task).Elem()
 	deserializedTaskValue := reflect.ValueOf(deserializedTask).Elem()
 	s.Equal(taskValue.Type(), deserializedTaskValue.Type())
+	s.compareAndUnsetProtoFields(taskValue, deserializedTaskValue)
 
+	s.Equal(task, deserializedTask)
+}
+
+func (s *taskSerializerSuite) compareAndUnsetProtoFields(taskValue, deserializedTaskValue reflect.Value) {
 	for i := range deserializedTaskValue.NumField() {
 		deField := deserializedTaskValue.Field(i)
 		if !deField.CanInterface() {
@@ -678,8 +683,8 @@ func (s *taskSerializerSuite) assertEqualTasks(
 
 			taskValue.Field(i).SetZero()
 			deserializedTaskValue.Field(i).SetZero()
+		} else if deserializedTaskValue.Type().Field(i).Anonymous && deField.Kind() == reflect.Struct {
+			s.compareAndUnsetProtoFields(taskValue.Field(i), deField)
 		}
 	}
-
-	s.Equal(task, deserializedTask)
 }

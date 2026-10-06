@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -3054,7 +3053,7 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 	mutation, err := root.CloseTransaction()
 	s.NoError(err)
 
-	s.Equal(tasks.MaximumKey.FireTime, s.nodeBackend.LastDeletePureTaskCall())
+	s.Equal(maxPureTaskScheduledTime, s.nodeBackend.LastDeletePureTaskCall())
 
 	s.Len(mutation.UpdatedNodes, 2)
 	for _, updatedNode := range mutation.UpdatedNodes {
@@ -3587,8 +3586,8 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 		VersionedTransitionOffset: 1,
 		PhysicalTaskStatus:        physicalTaskStatusCreated,
 	}, newSideEffectTask)
-	s.Len(s.nodeBackend.TasksByCategory[tasks.CategoryTransfer], 1)
-	chasmTask := s.nodeBackend.TasksByCategory[tasks.CategoryTransfer][0].(*tasks.ChasmTask)
+	s.Len(s.nodeBackend.SideEffectTasks[TaskCategoryTransfer], 1)
+	chasmTask := s.nodeBackend.SideEffectTasks[TaskCategoryTransfer][0]
 	s.ProtoEqual(&persistencespb.ChasmTaskInfo{
 		ComponentInitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
 		ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
@@ -3610,9 +3609,9 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 		VersionedTransitionOffset: 2,
 		PhysicalTaskStatus:        physicalTaskStatusCreated,
 	}, newPureTask)
-	s.Len(s.nodeBackend.TasksByCategory[tasks.CategoryTimer], 1)
-	chasmPureTask := s.nodeBackend.TasksByCategory[tasks.CategoryTimer][0].(*tasks.ChasmTaskPure)
-	s.Equal(tasks.CategoryTimer, chasmPureTask.GetCategory())
+	s.Empty(s.nodeBackend.SideEffectTasks[TaskCategoryTimer])
+	s.Len(s.nodeBackend.PureTasks, 1)
+	chasmPureTask := s.nodeBackend.PureTasks[0]
 	s.True(chasmPureTask.VisibilityTimestamp.Equal(s.timeSource.Now()))
 
 	subComponent2Attr := mutation.UpdatedNodes["SubComponent2"].GetMetadata().GetComponentAttributes()
@@ -3626,8 +3625,8 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 		VersionedTransitionOffset: 3,
 		PhysicalTaskStatus:        physicalTaskStatusCreated,
 	}, newOutboundSideEffectTask)
-	s.Len(s.nodeBackend.TasksByCategory[tasks.CategoryOutbound], 1)
-	chasmTask = s.nodeBackend.TasksByCategory[tasks.CategoryOutbound][0].(*tasks.ChasmTask)
+	s.Len(s.nodeBackend.SideEffectTasks[TaskCategoryOutbound], 1)
+	chasmTask = s.nodeBackend.SideEffectTasks[TaskCategoryOutbound][0]
 	s.ProtoEqual(&persistencespb.ChasmTaskInfo{
 		ComponentInitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
 		ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 2},
@@ -3714,14 +3713,8 @@ func (s *nodeSuite) TestCloseTransaction_ApplyMutation_SideEffectTasks() {
 	err = root.ApplyMutation(incomingMutation)
 	s.NoError(err)
 
-	expectedCategories := []tasks.Category{tasks.CategoryTimer, tasks.CategoryOutbound, tasks.CategoryTransfer}
 	_, err = root.CloseTransaction()
-	for _, category := range expectedCategories {
-		for _, task := range s.nodeBackend.TasksByCategory[category] {
-			s.IsType(&tasks.ChasmTask{}, task)
-			s.Equal(category, task.GetCategory())
-		}
-	}
+	s.Empty(s.nodeBackend.PureTasks)
 
 	s.NoError(err)
 }
@@ -3811,10 +3804,10 @@ func (s *nodeSuite) TestCloseTransaction_ApplyMutation_PureTasks() {
 	// and need to persist that as well.
 	s.Len(mutation.UpdatedNodes, 2)
 
-	s.Len(s.nodeBackend.TasksByCategory[tasks.CategoryTimer], 1)
-	task := s.nodeBackend.TasksByCategory[tasks.CategoryTimer][0]
-	s.IsType(&tasks.ChasmTaskPure{}, task)
-	s.True(now.Add(time.Minute).Equal(task.GetKey().FireTime))
+	s.Empty(s.nodeBackend.SideEffectTasks[TaskCategoryTimer])
+	s.Len(s.nodeBackend.PureTasks, 1)
+	task := s.nodeBackend.PureTasks[0]
+	s.True(now.Add(time.Minute).Equal(task.VisibilityTimestamp))
 }
 
 func (s *nodeSuite) TestTerminate() {
@@ -4052,7 +4045,7 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 	s.Empty(mutations.DeletedNodes)
 
 	// immedidate pure tasks will be executed inline and no physical chasm pure task will be generated.
-	s.Equal(tasks.MaximumKey.FireTime, s.nodeBackend.LastDeletePureTaskCall())
+	s.Equal(maxPureTaskScheduledTime, s.nodeBackend.LastDeletePureTaskCall())
 }
 
 func (s *nodeSuite) TestImmediatePureTaskNowStableWithinTaskOnly() {
@@ -4527,18 +4520,15 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 		primitives.NewUUID().String(),
 		primitives.NewUUID().String(),
 	)
-	chasmTask := &tasks.ChasmTask{
-		WorkflowKey:         workflowKey,
+	chasmTask := &PhysicalSideEffectTask{
 		VisibilityTimestamp: s.timeSource.Now(),
-		TaskID:              123,
-		Category:            tasks.CategoryOutbound,
 		Destination:         "destination",
 		Info:                taskInfo,
 	}
 	executionKey := ExecutionKey{
-		NamespaceID: chasmTask.NamespaceID,
-		BusinessID:  chasmTask.WorkflowID,
-		RunID:       chasmTask.RunID,
+		NamespaceID: workflowKey.NamespaceID,
+		BusinessID:  workflowKey.WorkflowID,
+		RunID:       workflowKey.RunID,
 	}
 
 	root, err := s.newTestTree(persistenceNodes)
@@ -4570,7 +4560,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 				gomock.Any(),
 				gomock.Any(),
 				gomock.Eq(TaskAttributes{
-					ScheduledTime: chasmTask.GetVisibilityTime(),
+					ScheduledTime: chasmTask.VisibilityTimestamp,
 					Destination:   chasmTask.Destination,
 				}),
 				gomock.Any(),
@@ -4641,11 +4631,8 @@ func (s *nodeSuite) TestExecuteSideEffectTask_RootComponentIgnoresInitialVT() {
 		primitives.NewUUID().String(),
 		primitives.NewUUID().String(),
 	)
-	chasmTask := &tasks.ChasmTask{
-		WorkflowKey:         workflowKey,
+	chasmTask := &PhysicalSideEffectTask{
 		VisibilityTimestamp: s.timeSource.Now(),
-		TaskID:              123,
-		Category:            tasks.CategoryOutbound,
 		Destination:         "destination",
 		Info: &persistencespb.ChasmTaskInfo{
 			// Deliberately differs from the root node's InitialVersionedTransition.
@@ -4663,9 +4650,9 @@ func (s *nodeSuite) TestExecuteSideEffectTask_RootComponentIgnoresInitialVT() {
 		},
 	}
 	executionKey := ExecutionKey{
-		NamespaceID: chasmTask.NamespaceID,
-		BusinessID:  chasmTask.WorkflowID,
-		RunID:       chasmTask.RunID,
+		NamespaceID: workflowKey.NamespaceID,
+		BusinessID:  workflowKey.WorkflowID,
+		RunID:       workflowKey.RunID,
 	}
 
 	root, err := s.newTestTree(persistenceNodes)
@@ -4700,7 +4687,7 @@ func (s *nodeSuite) TestExecuteSideEffectTask_RootComponentIgnoresInitialVT() {
 }
 
 func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
-	setup := func() (*Node, *tasks.ChasmTask, ExecutionKey, context.Context, Context) {
+	setup := func() (*Node, *PhysicalSideEffectTask, ExecutionKey, context.Context, Context) {
 		persistenceNodes := map[string]*persistencespb.ChasmNode{
 			"": {
 				Metadata: &persistencespb.ChasmNodeMetadata{
@@ -4734,11 +4721,8 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 			primitives.NewUUID().String(),
 		)
 		emptyTaskBlob := s.emptyDataBlob()
-		chasmTask := &tasks.ChasmTask{
-			WorkflowKey:         workflowKey,
+		chasmTask := &PhysicalSideEffectTask{
 			VisibilityTimestamp: s.timeSource.Now(),
-			TaskID:              123,
-			Category:            tasks.CategoryOutbound,
 			Destination:         "destination",
 			Info: &persistencespb.ChasmTaskInfo{
 				ComponentInitialVersionedTransition: &persistencespb.VersionedTransition{
@@ -4754,9 +4738,9 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 			},
 		}
 		executionKey := ExecutionKey{
-			NamespaceID: chasmTask.NamespaceID,
-			BusinessID:  chasmTask.WorkflowID,
-			RunID:       chasmTask.RunID,
+			NamespaceID: workflowKey.NamespaceID,
+			BusinessID:  workflowKey.WorkflowID,
+			RunID:       workflowKey.RunID,
 		}
 
 		mockEngine := NewMockEngine(s.controller)
@@ -4885,16 +4869,8 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 		TypeId: testSideEffectTaskTypeID,
 		Data:   emptyTaskBlob,
 	}
-	workflowKey := definition.NewWorkflowKey(
-		primitives.NewUUID().String(),
-		primitives.NewUUID().String(),
-		primitives.NewUUID().String(),
-	)
-	chasmTask := &tasks.ChasmTask{
-		WorkflowKey:         workflowKey,
+	chasmTask := &PhysicalSideEffectTask{
 		VisibilityTimestamp: s.timeSource.Now(),
-		TaskID:              123,
-		Category:            tasks.CategoryTransfer,
 		Info:                taskInfo,
 	}
 
@@ -4910,7 +4886,7 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 				gomock.AssignableToTypeOf(componentType),
 				gomock.Eq(TaskInvocation{
 					TaskAttributes: TaskAttributes{
-						ScheduledTime: chasmTask.GetVisibilityTime(),
+						ScheduledTime: chasmTask.VisibilityTimestamp,
 						Destination:   chasmTask.Destination,
 					},
 				}),
@@ -4964,16 +4940,8 @@ func (s *nodeSuite) TestValidateSideEffectTask() {
 	// Succeed validation as valid for a sub component.
 	childTaskInfo := taskInfo
 	childTaskInfo.Path = []string{"SubComponent1"}
-	childWorkflowKey := definition.NewWorkflowKey(
-		primitives.NewUUID().String(),
-		primitives.NewUUID().String(),
-		primitives.NewUUID().String(),
-	)
-	childChasmTask := &tasks.ChasmTask{
-		WorkflowKey:         childWorkflowKey,
+	childChasmTask := &PhysicalSideEffectTask{
 		VisibilityTimestamp: s.timeSource.Now(),
-		TaskID:              124,
-		Category:            tasks.CategoryTransfer,
 		Info:                childTaskInfo,
 	}
 	expectValidate((*TestSubComponent1)(nil), true, nil)
@@ -6104,7 +6072,7 @@ func (s *nodeSuite) TestRegenerateTimerTasksForTimeSkipping() {
 		s.NoError(root.regenerateTimerTasksForTimeSkipping())
 
 		s.Equal(1, s.nodeBackend.NumTasksAdded(), "only the side-effect timer task is regenerated")
-		s.Equal(tasks.MaximumKey.FireTime, s.nodeBackend.LastDeletePureTaskCall(),
+		s.Equal(maxPureTaskScheduledTime, s.nodeBackend.LastDeletePureTaskCall(),
 			"with no pure tasks, deletion sweeps up to the maximum key")
 	})
 
@@ -6224,18 +6192,8 @@ func (s *nodeSuite) TestCloseTransaction_MarkTotalTimeSkippedUpdatedInPassive() 
 
 		s.Equal(2, s.nodeBackend.NumTasksAdded(),
 			"the timer side-effect task and the single earliest pure task are re-stamped")
-		var sideEffectTimers, pureTimers int
-		for _, task := range s.nodeBackend.TasksByCategory[tasks.CategoryTimer] {
-			switch task.(type) {
-			case *tasks.ChasmTask:
-				sideEffectTimers++
-			case *tasks.ChasmTaskPure:
-				pureTimers++
-			default:
-			}
-		}
-		s.Equal(1, sideEffectTimers, "the side-effect timer physical task is regenerated")
-		s.Equal(1, pureTimers, "the single earliest pure physical task is regenerated")
+		s.Len(s.nodeBackend.SideEffectTasks[TaskCategoryTimer], 1, "the side-effect timer physical task is regenerated")
+		s.Len(s.nodeBackend.PureTasks, 1, "the single earliest pure physical task is regenerated")
 
 		rootAttrs := root.serializedNode.Metadata.GetComponentAttributes()
 		s.Equal(physicalTaskStatusCreated, rootAttrs.SideEffectTasks[0].PhysicalTaskStatus)

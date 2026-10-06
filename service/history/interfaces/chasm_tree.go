@@ -9,7 +9,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/service/history/tasks"
 )
 
 var _ ChasmTree = (*chasm.Node)(nil)
@@ -37,18 +36,18 @@ type ChasmTree interface {
 	ExecuteSideEffectTask(
 		ctx context.Context,
 		executionKey chasm.ExecutionKey,
-		task *tasks.ChasmTask,
+		task *chasm.PhysicalSideEffectTask,
 		validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
 	) error
 	ExecuteSideEffectDiscardTask(
 		ctx context.Context,
 		executionKey chasm.ExecutionKey,
-		task *tasks.ChasmTask,
+		task *chasm.PhysicalSideEffectTask,
 		validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
 	) error
 	ValidateSideEffectTask(
 		ctx context.Context,
-		task *tasks.ChasmTask,
+		task *chasm.PhysicalSideEffectTask,
 	) (isTaskInTree bool, isValidByComponent bool, err error)
 	IsStale(chasm.ComponentRef) error
 	Component(chasm.Context, chasm.ComponentRef) (chasm.Component, error)

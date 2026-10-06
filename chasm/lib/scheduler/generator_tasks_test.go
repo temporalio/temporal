@@ -417,7 +417,7 @@ func TestUnpause_ResumesProcessing(t *testing.T) {
 	require.NoError(t, env.CloseTransaction())
 
 	// Clear tasks from setup, then unpause. UpdateTime is captured at T0.
-	env.NodeBackend.TasksByCategory = nil
+	env.NodeBackend.ClearTasks()
 	ctx := env.MutableContext()
 	_, err := env.Scheduler.Patch(ctx, &schedulerpb.PatchScheduleRequest{
 		FrontendRequest: &workflowservice.PatchScheduleRequest{

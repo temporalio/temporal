@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	schedulespb "go.temporal.io/server/api/schedule/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/chasmtest"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/payload"
@@ -498,7 +499,7 @@ func TestCreateSchedulerFromMigration_NoRunning(t *testing.T) {
 
 	hasGeneratorTask := false
 outer:
-	for _, taskList := range infra.nodeBackend.TasksByCategory {
+	for _, taskList := range chasmtest.HistoryTasks(infra.nodeBackend) {
 		for _, task := range taskList {
 			chasmTask, ok := task.(*tasks.ChasmTask)
 			if ok && chasmTask.GetVisibilityTime().Equal(chasm.TaskScheduledTimeImmediate) {
@@ -795,11 +796,11 @@ func TestTerminate(t *testing.T) {
 		require.NoError(t, err)
 
 		// Discard setup tasks; assert only on what closing the terminated schedule emits.
-		env.NodeBackend.TasksByCategory = nil
+		env.NodeBackend.ClearTasks()
 		require.NoError(t, env.Node.SetRootComponent(sched))
 		require.NoError(t, env.CloseTransaction())
 
-		require.NotEmpty(t, env.NodeBackend.TasksByCategory[tasks.CategoryVisibility],
+		require.NotEmpty(t, chasmtest.HistoryTasks(env.NodeBackend)[tasks.CategoryVisibility],
 			"terminate must enqueue a visibility task so the closed status reaches ListSchedules")
 	})
 }

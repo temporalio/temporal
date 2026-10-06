@@ -37,7 +37,7 @@ func validateChasmSideEffectTask(
 		return false, false, errNoChasmTree
 	}
 
-	return tree.ValidateSideEffectTask(ctx, task)
+	return tree.ValidateSideEffectTask(ctx, &task.PhysicalSideEffectTask)
 }
 
 // executeChasmSideEffectTask completes execution of a CHASM side effect task
@@ -80,7 +80,7 @@ func executeChasmSideEffectTask(
 	return tree.ExecuteSideEffectTask(
 		engineCtx,
 		executionKey,
-		task,
+		&task.PhysicalSideEffectTask,
 		validate,
 	)
 }
@@ -137,7 +137,7 @@ func discardChasmSideEffectTask(
 	err := tree.ExecuteSideEffectDiscardTask(
 		engineCtx,
 		executionKey,
-		task,
+		&task.PhysicalSideEffectTask,
 		validate,
 	)
 	if errors.Is(err, chasm.ErrTaskDiscarded) {

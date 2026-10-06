@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
 	"sync"
 	"testing"
 	"time"
@@ -142,10 +141,28 @@ func (e *Engine) Tasks(ref chasm.ComponentRef) (map[tasks.Category][]tasks.Task,
 	if err != nil {
 		return nil, err
 	}
-	// Return a shallow copy so callers cannot mutate the internal task lists.
-	result := make(map[tasks.Category][]tasks.Task, len(exec.backend.TasksByCategory))
-	maps.Copy(result, exec.backend.TasksByCategory)
-	return result, nil
+	return HistoryTasks(exec.backend), nil
+}
+
+// HistoryTasks returns the physical tasks recorded by backend as the history service persists
+// them, grouped by category. Within a category, side effect tasks precede pure tasks.
+func HistoryTasks(backend *chasm.MockNodeBackend) map[tasks.Category][]tasks.Task {
+	workflowKey := backend.GetWorkflowKey()
+	result := make(map[tasks.Category][]tasks.Task)
+	for category, sideEffectTasks := range backend.SideEffectTasks {
+		for _, t := range sideEffectTasks {
+			task := tasks.NewChasmTask(workflowKey, category, *t)
+			result[task.Category] = append(result[task.Category], task)
+		}
+	}
+	for _, t := range backend.PureTasks {
+		result[tasks.CategoryTimer] = append(result[tasks.CategoryTimer], &tasks.ChasmTaskPure{
+			WorkflowKey:         workflowKey,
+			VisibilityTimestamp: t.VisibilityTimestamp,
+			ArchetypeID:         t.ArchetypeID,
+		})
+	}
+	return result
 }
 
 func (e *Engine) StartExecution(

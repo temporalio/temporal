@@ -67,7 +67,7 @@ const (
 // or invalidated, so counting physical tasks reports a schedule as armed when
 // it is in fact stuck. Side-effect tasks count because some valid states, such
 // as migration callback attachment, rely on one before arming pure tasks.
-// (chasmtest.Engine.Tasks and testEnv.NodeBackend.TasksByCategory both expose
+// (chasmtest.Engine.Tasks and chasmtest.HistoryTasks both expose
 // physical tasks, and are the wrong source for this check.)
 //
 // node must be the root and the tree must be clean; Node.Snapshot panics

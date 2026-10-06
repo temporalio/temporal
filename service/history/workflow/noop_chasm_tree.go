@@ -9,7 +9,6 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/metrics"
 	historyi "go.temporal.io/server/service/history/interfaces"
-	"go.temporal.io/server/service/history/tasks"
 )
 
 var _ historyi.ChasmTree = (*noopChasmTree)(nil)
@@ -90,7 +89,7 @@ func (*noopChasmTree) ComponentByPath(chasm.Context, []string) (chasm.Component,
 func (*noopChasmTree) ExecuteSideEffectTask(
 	ctx context.Context,
 	executionKey chasm.ExecutionKey,
-	task *tasks.ChasmTask,
+	task *chasm.PhysicalSideEffectTask,
 	validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
 ) error {
 	return nil
@@ -99,7 +98,7 @@ func (*noopChasmTree) ExecuteSideEffectTask(
 func (*noopChasmTree) ExecuteSideEffectDiscardTask(
 	ctx context.Context,
 	executionKey chasm.ExecutionKey,
-	task *tasks.ChasmTask,
+	task *chasm.PhysicalSideEffectTask,
 	validate func(chasm.NodeBackend, chasm.Context, chasm.Component) error,
 ) error {
 	return nil
@@ -107,7 +106,7 @@ func (*noopChasmTree) ExecuteSideEffectDiscardTask(
 
 func (*noopChasmTree) ValidateSideEffectTask(
 	ctx context.Context,
-	task *tasks.ChasmTask,
+	task *chasm.PhysicalSideEffectTask,
 ) (isTaskInTree bool, isValidByComponent bool, err error) {
 	return false, false, nil
 }
