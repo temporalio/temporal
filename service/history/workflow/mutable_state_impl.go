@@ -3532,20 +3532,10 @@ func (ms *MutableStateImpl) addUpdateCallbacks(
 		return nil
 	}
 
-	reqs := []bool{
-		ms.chasmCallbacksEnabled(),
-		ms.config.EnableWorkflowUpdateCallbacks(ms.GetNamespaceEntry().Name().String()),
-		ms.attachesCallbacksToChasm(updateID),
-	}
-	updateEnabled := true
-	for _, req := range reqs {
-		if !req {
-			updateEnabled = false
-			break
+	if ms.chasmCallbacksEnabled() && ms.config.EnableWorkflowUpdateCallbacks(ms.GetNamespaceEntry().Name().String()) {
+		if ms.attachesCallbacksToChasm(updateID) {
+			return ms.addUpdateCallbacksChasm(event, updateID, requestID, updateCallbacks)
 		}
-	}
-	if updateEnabled {
-		return ms.addUpdateCallbacksChasm(event, updateID, requestID, updateCallbacks)
 	}
 
 	return nil
