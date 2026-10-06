@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/chasm/lib/timer"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -34,7 +35,7 @@ import (
 )
 
 // componentTestEnv runs a Workflow root in a CHASM tree whose backend records history events, with
-// the activity command library registered.
+// the activity and timer command libraries registered.
 type componentTestEnv struct {
 	t        *testing.T
 	node     *chasm.Node
@@ -67,6 +68,7 @@ func newComponentTestEnv(t *testing.T) *componentTestEnv {
 		matching: &recordingMatchingClient{},
 	}
 	require.NoError(t, env.registry.Register(NewActivityLibrary(NewConfig(dynamicconfig.NewNoopCollection()))))
+	require.NoError(t, env.registry.Register(NewTimerLibrary()))
 
 	chasmRegistry := newChasmTestRegistry(t, NewLibrary(env.registry), env.matching)
 
@@ -111,6 +113,7 @@ func newChasmTestRegistry(t *testing.T, workflowLibrary chasm.Library, matching 
 			MutableStateActivityFailureSizeLimitError: func(string) int { return 1 << 20 },
 			StartDelayEnabled:                         func(string) bool { return false },
 		}),
+		timer.NewLibrary(),
 		callback.NewNilLibrary(),
 		nexusoperation.NewNilLibrary(),
 	} {
@@ -293,4 +296,81 @@ func TestActivityScheduleToStartTimeout(t *testing.T) {
 
 	ctx := chasm.NewContext(env.context(), env.node)
 	require.Empty(t, env.workflow(ctx).Activities)
+}
+
+func startTimerCommand(timerID string, timeout time.Duration) *commandpb.Command {
+	return &commandpb.Command{
+		CommandType: enumspb.COMMAND_TYPE_START_TIMER,
+		Attributes: &commandpb.Command_StartTimerCommandAttributes{
+			StartTimerCommandAttributes: &commandpb.StartTimerCommandAttributes{
+				TimerId:            timerID,
+				StartToFireTimeout: durationpb.New(timeout),
+			},
+		},
+	}
+}
+
+func cancelTimerCommand(timerID string) *commandpb.Command {
+	return &commandpb.Command{
+		CommandType: enumspb.COMMAND_TYPE_CANCEL_TIMER,
+		Attributes: &commandpb.Command_CancelTimerCommandAttributes{
+			CancelTimerCommandAttributes: &commandpb.CancelTimerCommandAttributes{TimerId: timerID},
+		},
+	}
+}
+
+func TestTimerFires(t *testing.T) {
+	env := newComponentTestEnv(t)
+	env.update(func(ctx chasm.MutableContext) {
+		require.NoError(t, env.handleCommand(ctx, startTimerCommand("timer-id", time.Minute)))
+	})
+	require.Len(t, env.history, 1)
+	started := env.history[0]
+	require.Equal(t, enumspb.EVENT_TYPE_TIMER_STARTED, started.GetEventType())
+	require.Equal(t, "timer-id", started.GetTimerStartedEventAttributes().GetTimerId())
+	require.Equal(t, int64(100), started.GetTimerStartedEventAttributes().GetWorkflowTaskCompletedEventId())
+
+	env.runPureTasks(env.now.Add(time.Minute - time.Second))
+	require.Len(t, env.history, 1, "not yet due")
+
+	env.runPureTasks(env.now.Add(time.Second))
+	require.Len(t, env.history, 2)
+	fired := env.history[1]
+	require.Equal(t, enumspb.EVENT_TYPE_TIMER_FIRED, fired.GetEventType())
+	require.Equal(t, "timer-id", fired.GetTimerFiredEventAttributes().GetTimerId())
+	require.Equal(t, started.GetEventId(), fired.GetTimerFiredEventAttributes().GetStartedEventId())
+
+	ctx := chasm.NewContext(env.context(), env.node)
+	require.Empty(t, env.workflow(ctx).Timers)
+}
+
+func TestTimerCanceled(t *testing.T) {
+	env := newComponentTestEnv(t)
+	env.update(func(ctx chasm.MutableContext) {
+		require.NoError(t, env.handleCommand(ctx, startTimerCommand("timer-id", time.Minute)))
+	})
+	env.update(func(ctx chasm.MutableContext) {
+		require.NoError(t, env.handleCommand(ctx, cancelTimerCommand("timer-id")))
+	})
+	require.Len(t, env.history, 2)
+	canceled := env.history[1]
+	require.Equal(t, enumspb.EVENT_TYPE_TIMER_CANCELED, canceled.GetEventType())
+	require.Equal(t, env.history[0].GetEventId(), canceled.GetTimerCanceledEventAttributes().GetStartedEventId())
+
+	env.runPureTasks(env.now.Add(time.Hour))
+	require.Len(t, env.history, 2, "a canceled timer does not fire")
+}
+
+func TestTimerCommandErrors(t *testing.T) {
+	env := newComponentTestEnv(t)
+	env.update(func(ctx chasm.MutableContext) {
+		require.NoError(t, env.handleCommand(ctx, startTimerCommand("timer-id", time.Minute)))
+
+		var failErr FailWorkflowTaskError
+		require.ErrorAs(t, env.handleCommand(ctx, startTimerCommand("timer-id", time.Minute)), &failErr)
+		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_START_TIMER_DUPLICATE_ID, failErr.Cause)
+
+		require.ErrorAs(t, env.handleCommand(ctx, cancelTimerCommand("other-timer-id")), &failErr)
+		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_CANCEL_TIMER_ATTRIBUTES, failErr.Cause)
+	})
 }

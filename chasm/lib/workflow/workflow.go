@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/chasm/lib/timer"
 	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -50,6 +51,11 @@ type Workflow struct {
 	// workflow's activity commands are handled by NewActivityLibrary; the server runs workflow
 	// activities in mutable state.
 	Activities chasm.Map[int64, *activity.Activity]
+
+	// Timers holds the workflow's running timers, keyed by timer ID. Only used when the workflow's
+	// timer commands are handled by NewTimerLibrary; the server runs workflow timers in mutable
+	// state.
+	Timers chasm.Map[string, *timer.Timer]
 }
 
 func NewWorkflow(
