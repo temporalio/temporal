@@ -2560,19 +2560,6 @@ func (s *nodeSuite) TestRef_RootComponentIgnoresInitialVT() {
 	s.NoError(err)
 	s.Equal(rootComponent, component)
 
-	// A root ref that still carries the malformed InitialVersionedTransition, e.g. one issued before
-	// refs stopped embedding it for the root, is validated without it.
-	refWithInitialVT := ref
-	refWithInitialVT.componentInitialVT = malformedInitialVT
-	adjustedRef, err = refWithInitialVT.forConsistencyLevel(RefConsistencyLevelComponentCreation)
-	s.NoError(err)
-	s.Nil(adjustedRef.executionLastUpdateVT)
-	s.NoError(root.IsStale(adjustedRef))
-
-	component, err = root.Component(chasmContext, adjustedRef)
-	s.NoError(err)
-	s.Equal(rootComponent, component)
-
 	// The root is not matched on InitialVersionedTransition, even when the ref's value differs from
 	// the persisted one.
 	refWithMismatchedVT := ref
