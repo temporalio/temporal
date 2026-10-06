@@ -736,22 +736,6 @@ func (ms *MutableStateImpl) ChasmWorkflowComponent(ctx context.Context) (*chasmw
 	return wf, chasmCtx, nil
 }
 
-func (ms *MutableStateImpl) EnsureChasmWorkflowComponent(ctx context.Context) {
-	// Initialize chasm tree once for new workflows.
-	// Using context.Background() because this is done outside an actual request context and the
-	// chasmworkflow.NewWorkflow does not actually use it currently.
-	root, ok := ms.chasmTree.(*chasm.Node)
-	softassert.That(ms.logger, ok, "chasmTree cast failed")
-	// Consider removing this function. In tree, NewEmtpyTree and NewTreeFromDB sets ArchetypeID to
-	// WorkflowArchetypeID
-	if root.ArchetypeID() == chasm.UnspecifiedArchetypeID {
-		mutableContext := chasm.NewMutableContext(ctx, root)
-		if err := root.SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, chasm.NewMSPointer(ms))); err != nil {
-			softassert.Fail(ms.logger, "SetRootComponent failed", tag.Error(err))
-		}
-	}
-}
-
 // ChasmWorkflowComponentReadOnly gets the root workflow component from the CHASM tree.
 // Returns both the workflow component and a read-only CHASM context.
 // This method is for read-only operations.
@@ -3487,10 +3471,6 @@ func (ms *MutableStateImpl) addUpdateCallbacks(
 		return nil
 	}
 	if ms.chasmCallbacksEnabled() && ms.config.EnableWorkflowUpdateCallbacks(ms.GetNamespaceEntry().Name().String()) {
-		// Initialize chasm tree once for new workflows.
-		// Using context.Background() because this is done outside an actual request context and the
-		// chasmworkflow.NewWorkflow does not actually use it currently.
-		ms.EnsureChasmWorkflowComponent(context.Background())
 		return ms.addUpdateCallbacksChasm(event, updateID, requestID, updateCallbacks)
 	}
 
@@ -3523,10 +3503,6 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 		return nil
 	}
 	if ms.chasmCallbacksEnabled() {
-		// Initialize chasm tree once for new workflows.
-		// Using context.Background() because this is done outside an actual request context and the
-		// chasmworkflow.NewWorkflow does not actually use it currently.
-		ms.EnsureChasmWorkflowComponent(context.Background())
 		return ms.addCompletionCallbacksChasm(event, requestID, completionCallbacks)
 	}
 
@@ -6305,9 +6281,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionSignaled(
 	}
 	requestID := signalEventAttrs.WorkflowExecutionSignaledEventAttributes.GetRequestId()
 	if requestID != "" && ms.ChasmSignalBacklinksEnabled() {
-		ctx := context.Background()
-		ms.EnsureChasmWorkflowComponent(ctx)
-		wf, chasmCtx, err := ms.ChasmWorkflowComponent(ctx)
+		wf, chasmCtx, err := ms.ChasmWorkflowComponent(context.Background())
 		if err != nil {
 			return err
 		}

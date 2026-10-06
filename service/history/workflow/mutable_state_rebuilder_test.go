@@ -2249,7 +2249,6 @@ func (s *stateBuilderSuite) TestApplyEvents_NexusScheduled_ChasmCreateSurfacesEr
 	s.mockMutableState.EXPECT().UpdateCurrentVersion(gomock.Any(), true).AnyTimes()
 	s.chasmEnabled = true
 	s.mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
-	s.mockMutableState.EXPECT().EnsureChasmWorkflowComponent(gomock.Any()).AnyTimes()
 	s.mockMutableState.EXPECT().ChasmWorkflowComponent(gomock.Any()).
 		Return(nil, nil, serviceerror.NewInternal("chasm unavailable")).AnyTimes()
 
@@ -2302,7 +2301,6 @@ func (s *stateBuilderSuite) TestApplyEvents_NexusScheduled_UsesSingleChasmSelect
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue().Times(2)
 	s.mockMutableState.EXPECT().UpdateCurrentVersion(int64(1), true).Times(2)
 	s.chasmEnabled = true
-	s.mockMutableState.EXPECT().EnsureChasmWorkflowComponent(gomock.Any()).Times(2)
 	s.mockMutableState.EXPECT().ChasmWorkflowComponent(gomock.Any()).
 		Return(&chasmworkflow.Workflow{}, nil, nil).Times(2)
 	s.mockTaskGenerator.EXPECT().GenerateActivityTimerTasks().Return(nil)
@@ -2451,7 +2449,6 @@ func (s *stateBuilderSuite) runApplyStateMachineEvent(
 	ms.EXPECT().HSM().Return(nil).AnyTimes()
 	ms.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
 	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{WorkflowId: "test-workflow-id"}).AnyTimes()
-	ms.EXPECT().EnsureChasmWorkflowComponent(gomock.Any()).AnyTimes()
 	ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).
 		Return(&chasmworkflow.Workflow{}, nil, tc.chasmComponentErr).AnyTimes()
 
