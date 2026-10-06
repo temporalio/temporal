@@ -2589,6 +2589,60 @@ func (s *nodeSuite) TestRef_RootComponentIgnoresInitialVT() {
 	)
 }
 
+func (s *nodeSuite) TestCloseTransaction_StampsRootInitialVTOnFirstPersist() {
+	// Mimic loading an execution with no CHASM nodes before the backend's current version is known.
+	currentVersion := int64(0)
+	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return currentVersion }
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 6 }
+
+	root, err := s.newTestTree(nil)
+	s.NoError(err)
+	s.ProtoEqual(
+		&persistencespb.VersionedTransition{NamespaceFailoverVersion: 0, TransitionCount: 6},
+		root.serializedNode.GetMetadata().GetInitialVersionedTransition(),
+	)
+
+	currentVersion = 101
+	s.NoError(root.SetRootComponent(&TestComponent{
+		ComponentData: &protoMessageType{CreateRequestId: primitives.NewUUID().String()},
+	}))
+	mutation, err := root.CloseTransaction()
+	s.NoError(err)
+
+	expectedVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 101, TransitionCount: 6}
+	rootNode, ok := mutation.UpdatedNodes[""]
+	s.True(ok)
+	s.ProtoEqual(expectedVT, rootNode.GetMetadata().GetInitialVersionedTransition())
+	s.ProtoEqual(expectedVT, rootNode.GetMetadata().GetLastUpdateVersionedTransition())
+}
+
+func (s *nodeSuite) TestCloseTransaction_KeepsPersistedRootInitialVT() {
+	// Validate we don't existing data with the root saved
+	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 101 }
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 6 }
+
+	persistedInitialVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 0, TransitionCount: 1}
+	serializedNodes := testComponentSerializedNodes()
+	serializedNodes[""].Metadata.InitialVersionedTransition = common.CloneProto(persistedInitialVT)
+	root, err := s.newTestTree(serializedNodes)
+	s.NoError(err)
+
+	chasmContext := NewMutableContext(context.Background(), root)
+	component, err := root.ComponentByPath(chasmContext, nil)
+	s.NoError(err)
+	component.(*TestComponent).ComponentData = &protoMessageType{CreateRequestId: primitives.NewUUID().String()}
+	mutation, err := root.CloseTransaction()
+	s.NoError(err)
+
+	rootNode, ok := mutation.UpdatedNodes[""]
+	s.True(ok)
+	s.ProtoEqual(persistedInitialVT, rootNode.GetMetadata().GetInitialVersionedTransition())
+	s.ProtoEqual(
+		&persistencespb.VersionedTransition{NamespaceFailoverVersion: 101, TransitionCount: 6},
+		rootNode.GetMetadata().GetLastUpdateVersionedTransition(),
+	)
+}
+
 func (s *nodeSuite) TestSerializeDeserializeTask() {
 	payload := &commonpb.Payload{
 		Data: []byte("some-random-data"),
