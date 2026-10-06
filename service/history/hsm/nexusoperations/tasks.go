@@ -9,7 +9,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
 	"google.golang.org/protobuf/proto"
@@ -108,7 +108,7 @@ func (InvocationTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttribute
 	var info persistencespb.NexusInvocationTaskInfo
 	err := proto.Unmarshal(data, &info)
 	if err != nil {
-		return nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
+		return nil, codec.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 	return InvocationTask{EndpointName: attrs.Destination, Attempt: info.Attempt}, nil
 }
@@ -189,7 +189,7 @@ func (CancelationTaskSerializer) Deserialize(data []byte, attrs hsm.TaskAttribut
 	var info persistencespb.NexusCancelationTaskInfo
 	err := proto.Unmarshal(data, &info)
 	if err != nil {
-		return nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
+		return nil, codec.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 	return CancelationTask{EndpointName: attrs.Destination, Attempt: info.Attempt}, nil
 }

@@ -1,9 +1,6 @@
 package serialization
 
 import (
-	"fmt"
-	"strings"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -14,6 +11,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/service/history/tasks"
 	"google.golang.org/protobuf/proto"
 )
@@ -111,24 +109,6 @@ type (
 		Decoder
 	}
 
-	// SerializationError is an error type for serialization
-	SerializationError struct {
-		encodingType enumspb.EncodingType
-		wrappedErr   error
-	}
-
-	// DeserializationError is an error type for deserialization
-	DeserializationError struct {
-		encodingType enumspb.EncodingType
-		wrappedErr   error
-	}
-
-	// UnknownEncodingTypeError is an error type for unknown or unsupported encoding type
-	UnknownEncodingTypeError struct {
-		providedType        string
-		expectedEncodingStr []string
-	}
-
 	serializerImpl struct {
 		encodingType enumspb.EncodingType
 	}
@@ -139,7 +119,7 @@ type (
 )
 
 func NewSerializer() Serializer {
-	return &serializerImpl{encodingType: encodingTypeFromEnv()}
+	return &serializerImpl{encodingType: codec.EncodingTypeFromEnv()}
 }
 
 func (t *serializerImpl) EncodingType() enumspb.EncodingType {
@@ -203,7 +183,7 @@ func (t *serializerImpl) DeserializeEvents(data *commonpb.DataBlob) ([]*historyp
 	}
 
 	events := &historypb.History{}
-	err := Decode(data, events)
+	err := codec.Decode(data, events)
 	if err != nil {
 		return nil, err
 	}
@@ -232,11 +212,11 @@ func (t *serializerImpl) DeserializeStrippedEvents(data *commonpb.DataBlob) ([]*
 			DiscardUnknown: true,
 		}.Unmarshal(data.Data, events)
 	default:
-		return nil, NewUnknownEncodingTypeError(data.EncodingType.String(),
+		return nil, codec.NewUnknownEncodingTypeError(data.EncodingType.String(),
 			enumspb.ENCODING_TYPE_PROTO3, enumspb.ENCODING_TYPE_JSON)
 	}
 	if err != nil {
-		return nil, NewDeserializationError(data.EncodingType, err)
+		return nil, codec.NewDeserializationError(data.EncodingType, err)
 	}
 	return events.Events, nil
 }
@@ -257,7 +237,7 @@ func (t *serializerImpl) DeserializeEvent(data *commonpb.DataBlob) (*historypb.H
 	}
 
 	event := &historypb.HistoryEvent{}
-	err := Decode(data, event)
+	err := codec.Decode(data, event)
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +260,7 @@ func (t *serializerImpl) DeserializeClusterMetadata(data *commonpb.DataBlob) (*p
 	}
 
 	cm := &persistencespb.ClusterMetadata{}
-	err := Decode(data, cm)
+	err := codec.Decode(data, cm)
 	if err != nil {
 		return nil, err
 	}
@@ -291,93 +271,20 @@ func (t *serializerImpl) serialize(p proto.Message) (*commonpb.DataBlob, error) 
 	if p == nil {
 		return nil, nil
 	}
-	blob, err := encodeBlob(p, t.encodingType)
+	blob, err := codec.EncodeBlob(p, t.encodingType)
 	if err != nil {
-		return nil, NewSerializationError(t.encodingType, err)
+		return nil, codec.NewSerializationError(t.encodingType, err)
 	}
 	return blob, nil
 }
 
-// NewUnknownEncodingTypeError returns a new instance of encoding type error
-func NewUnknownEncodingTypeError(
-	providedType string,
-	expectedEncoding ...enumspb.EncodingType,
-) error {
-	if len(expectedEncoding) == 0 {
-		for encodingType := range enumspb.EncodingType_name {
-			expectedEncoding = append(expectedEncoding, enumspb.EncodingType(encodingType))
-		}
-	}
-	expectedEncodingStr := make([]string, 0, len(expectedEncoding))
-	for _, encodingType := range expectedEncoding {
-		expectedEncodingStr = append(expectedEncodingStr, encodingType.String())
-	}
-	return &UnknownEncodingTypeError{
-		providedType:        providedType,
-		expectedEncodingStr: expectedEncodingStr,
-	}
-}
-
-func (e *UnknownEncodingTypeError) Error() string {
-	return fmt.Sprintf("unknown or unsupported encoding type %v, supported types: %v",
-		e.providedType,
-		strings.Join(e.expectedEncodingStr, ","),
-	)
-}
-
-// IsTerminalTaskError informs our task processing subsystem that it is impossible
-// to retry this error
-func (e *UnknownEncodingTypeError) IsTerminalTaskError() bool { return true }
-
-// NewSerializationError returns a SerializationError
-func NewSerializationError(
-	encodingType enumspb.EncodingType,
-	serializationErr error,
-) error {
-	return &SerializationError{
-		encodingType: encodingType,
-		wrappedErr:   serializationErr,
-	}
-}
-
-func (e *SerializationError) Error() string {
-	return fmt.Sprintf("error serializing using %v encoding: %v", e.encodingType, e.wrappedErr)
-}
-
-func (e *SerializationError) Unwrap() error {
-	return e.wrappedErr
-}
-
-// NewDeserializationError returns a DeserializationError
-func NewDeserializationError(
-	encodingType enumspb.EncodingType,
-	deserializationErr error,
-) error {
-	return &DeserializationError{
-		encodingType: encodingType,
-		wrappedErr:   deserializationErr,
-	}
-}
-
-func (e *DeserializationError) Error() string {
-	return fmt.Sprintf("error deserializing using %v encoding: %v", e.encodingType, e.wrappedErr)
-}
-
-func (e *DeserializationError) Unwrap() error {
-	return e.wrappedErr
-}
-
-// IsTerminalTaskError informs our task processing subsystem that it is impossible to
-// retry this error and that the task should be sent to a DLQ
-func (e *DeserializationError) IsTerminalTaskError() bool { return true }
-
 func (t *serializerImpl) ShardInfoToBlob(info *persistencespb.ShardInfo) (*commonpb.DataBlob, error) {
-	return encodeBlob(info, t.encodingType)
+	return codec.EncodeBlob(info, t.encodingType)
 }
 
 func (t *serializerImpl) ShardInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ShardInfo, error) {
 	shardInfo := &persistencespb.ShardInfo{}
-	err := Decode(data, shardInfo)
+	err := codec.Decode(data, shardInfo)
 
 	if err != nil {
 		return nil, err
@@ -405,40 +312,40 @@ func (t *serializerImpl) ShardInfoFromBlob(data *commonpb.DataBlob) (*persistenc
 }
 
 func (t *serializerImpl) NamespaceDetailToBlob(info *persistencespb.NamespaceDetail) (*commonpb.DataBlob, error) {
-	return encodeBlob(info, t.encodingType)
+	return codec.EncodeBlob(info, t.encodingType)
 }
 
 func (t *serializerImpl) NamespaceDetailFromBlob(data *commonpb.DataBlob) (*persistencespb.NamespaceDetail, error) {
 	result := &persistencespb.NamespaceDetail{}
-	return result, Decode(data, result)
+	return result, codec.Decode(data, result)
 }
 
 func (t *serializerImpl) HistoryTreeInfoToBlob(info *persistencespb.HistoryTreeInfo) (*commonpb.DataBlob, error) {
-	return encodeBlob(info, t.encodingType)
+	return codec.EncodeBlob(info, t.encodingType)
 }
 
 func (t *serializerImpl) HistoryTreeInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.HistoryTreeInfo, error) {
 	result := &persistencespb.HistoryTreeInfo{}
-	return result, Decode(data, result)
+	return result, codec.Decode(data, result)
 }
 
 func (t *serializerImpl) HistoryBranchToBlob(info *persistencespb.HistoryBranch) (*commonpb.DataBlob, error) {
-	return encodeBlob(info, t.encodingType)
+	return codec.EncodeBlob(info, t.encodingType)
 }
 
 // NOTE: HistoryBranch does not have an encoding type; so we use the serializer's encoding type.
 func (t *serializerImpl) HistoryBranchFromBlob(data []byte) (*persistencespb.HistoryBranch, error) {
 	result := &persistencespb.HistoryBranch{}
-	return result, Decode(&commonpb.DataBlob{Data: data, EncodingType: t.encodingType}, result)
+	return result, codec.Decode(&commonpb.DataBlob{Data: data, EncodingType: t.encodingType}, result)
 }
 
 func (t *serializerImpl) WorkflowExecutionInfoToBlob(info *persistencespb.WorkflowExecutionInfo) (*commonpb.DataBlob, error) {
-	return encodeBlob(info, t.encodingType)
+	return codec.EncodeBlob(info, t.encodingType)
 }
 
 func (t *serializerImpl) WorkflowExecutionInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionInfo, error) {
 	result := &persistencespb.WorkflowExecutionInfo{}
-	err := Decode(data, result)
+	err := codec.Decode(data, result)
 	if err != nil {
 		return nil, err
 	}
@@ -450,12 +357,12 @@ func (t *serializerImpl) WorkflowExecutionInfoFromBlob(data *commonpb.DataBlob) 
 }
 
 func (t *serializerImpl) WorkflowExecutionStateToBlob(info *persistencespb.WorkflowExecutionState) (*commonpb.DataBlob, error) {
-	return encodeBlob(info, t.encodingType)
+	return codec.EncodeBlob(info, t.encodingType)
 }
 
 func (t *serializerImpl) WorkflowExecutionStateFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionState, error) {
 	result := &persistencespb.WorkflowExecutionState{}
-	if err := Decode(data, result); err != nil {
+	if err := codec.Decode(data, result); err != nil {
 		return nil, err
 	}
 	// Initialize the WorkflowExecutionStateDetails for old records.
@@ -472,75 +379,75 @@ func (t *serializerImpl) WorkflowExecutionStateFromBlob(data *commonpb.DataBlob)
 }
 
 func (t *serializerImpl) ActivityInfoToBlob(info *persistencespb.ActivityInfo) (*commonpb.DataBlob, error) {
-	return encodeBlob(info, t.encodingType)
+	return codec.EncodeBlob(info, t.encodingType)
 }
 
 func (t *serializerImpl) ActivityInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ActivityInfo, error) {
 	result := &persistencespb.ActivityInfo{}
-	return result, Decode(data, result)
+	return result, codec.Decode(data, result)
 }
 
 func (t *serializerImpl) ChildExecutionInfoToBlob(info *persistencespb.ChildExecutionInfo) (*commonpb.DataBlob, error) {
-	return encodeBlob(info, t.encodingType)
+	return codec.EncodeBlob(info, t.encodingType)
 }
 
 func (t *serializerImpl) ChildExecutionInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ChildExecutionInfo, error) {
 	result := &persistencespb.ChildExecutionInfo{}
-	return result, Decode(data, result)
+	return result, codec.Decode(data, result)
 }
 
 func (t *serializerImpl) SignalInfoToBlob(info *persistencespb.SignalInfo) (*commonpb.DataBlob, error) {
-	return encodeBlob(info, t.encodingType)
+	return codec.EncodeBlob(info, t.encodingType)
 }
 
 func (t *serializerImpl) SignalInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.SignalInfo, error) {
 	result := &persistencespb.SignalInfo{}
-	return result, Decode(data, result)
+	return result, codec.Decode(data, result)
 }
 
 func (t *serializerImpl) RequestCancelInfoToBlob(info *persistencespb.RequestCancelInfo) (*commonpb.DataBlob, error) {
-	return encodeBlob(info, t.encodingType)
+	return codec.EncodeBlob(info, t.encodingType)
 }
 
 func (t *serializerImpl) RequestCancelInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.RequestCancelInfo, error) {
 	result := &persistencespb.RequestCancelInfo{}
-	return result, Decode(data, result)
+	return result, codec.Decode(data, result)
 }
 
 func (t *serializerImpl) TimerInfoToBlob(info *persistencespb.TimerInfo) (*commonpb.DataBlob, error) {
-	return encodeBlob(info, t.encodingType)
+	return codec.EncodeBlob(info, t.encodingType)
 }
 
 func (t *serializerImpl) TimerInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TimerInfo, error) {
 	result := &persistencespb.TimerInfo{}
-	return result, Decode(data, result)
+	return result, codec.Decode(data, result)
 }
 
 func (t *serializerImpl) TaskInfoToBlob(info *persistencespb.AllocatedTaskInfo) (*commonpb.DataBlob, error) {
-	return encodeBlob(info, t.encodingType)
+	return codec.EncodeBlob(info, t.encodingType)
 }
 
 func (t *serializerImpl) TaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.AllocatedTaskInfo, error) {
 	result := &persistencespb.AllocatedTaskInfo{}
-	return result, Decode(data, result)
+	return result, codec.Decode(data, result)
 }
 
 func (t *serializerImpl) TaskQueueInfoToBlob(info *persistencespb.TaskQueueInfo) (*commonpb.DataBlob, error) {
-	return encodeBlob(info, t.encodingType)
+	return codec.EncodeBlob(info, t.encodingType)
 }
 
 func (t *serializerImpl) TaskQueueInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TaskQueueInfo, error) {
 	result := &persistencespb.TaskQueueInfo{}
-	return result, Decode(data, result)
+	return result, codec.Decode(data, result)
 }
 
 func (t *serializerImpl) TaskQueueUserDataToBlob(data *persistencespb.TaskQueueUserData) (*commonpb.DataBlob, error) {
-	return encodeBlob(data, t.encodingType)
+	return codec.EncodeBlob(data, t.encodingType)
 }
 
 func (t *serializerImpl) TaskQueueUserDataFromBlob(data *commonpb.DataBlob) (*persistencespb.TaskQueueUserData, error) {
 	result := &persistencespb.TaskQueueUserData{}
-	return result, Decode(data, result)
+	return result, codec.Decode(data, result)
 }
 
 func (t *serializerImpl) ChecksumToBlob(checksum *persistencespb.Checksum) (*commonpb.DataBlob, error) {
@@ -548,12 +455,12 @@ func (t *serializerImpl) ChecksumToBlob(checksum *persistencespb.Checksum) (*com
 	if checksum == nil {
 		checksum = &persistencespb.Checksum{}
 	}
-	return encodeBlob(checksum, t.encodingType)
+	return codec.EncodeBlob(checksum, t.encodingType)
 }
 
 func (t *serializerImpl) ChecksumFromBlob(data *commonpb.DataBlob) (*persistencespb.Checksum, error) {
 	result := &persistencespb.Checksum{}
-	err := Decode(data, result)
+	err := codec.Decode(data, result)
 	if err != nil || result.GetFlavor() == enumsspb.CHECKSUM_FLAVOR_UNSPECIFIED {
 		// If result is an empty struct (Flavor is unspecified), replace it with nil, because everywhere in the code checksum is pointer type.
 		return nil, err
@@ -563,34 +470,34 @@ func (t *serializerImpl) ChecksumFromBlob(data *commonpb.DataBlob) (*persistence
 
 func (t *serializerImpl) QueueMetadataToBlob(metadata *persistencespb.QueueMetadata) (*commonpb.DataBlob, error) {
 	// TODO change ENCODING_TYPE_JSON to ENCODING_TYPE_PROTO3
-	return encodeBlob(metadata, enumspb.ENCODING_TYPE_JSON)
+	return codec.EncodeBlob(metadata, enumspb.ENCODING_TYPE_JSON)
 }
 
 func (t *serializerImpl) QueueMetadataFromBlob(data *commonpb.DataBlob) (*persistencespb.QueueMetadata, error) {
 	result := &persistencespb.QueueMetadata{}
-	return result, Decode(data, result)
+	return result, codec.Decode(data, result)
 }
 
 func (t *serializerImpl) ReplicationTaskToBlob(replicationTask *replicationspb.ReplicationTask) (*commonpb.DataBlob, error) {
-	return encodeBlob(replicationTask, t.encodingType)
+	return codec.EncodeBlob(replicationTask, t.encodingType)
 }
 
 func (t *serializerImpl) ReplicationTaskFromBlob(data *commonpb.DataBlob) (*replicationspb.ReplicationTask, error) {
 	result := &replicationspb.ReplicationTask{}
-	return result, Decode(data, result)
+	return result, codec.Decode(data, result)
 }
 
 func (t *serializerImpl) NexusEndpointToBlob(endpoint *persistencespb.NexusEndpoint) (*commonpb.DataBlob, error) {
-	return encodeBlob(endpoint, t.encodingType)
+	return codec.EncodeBlob(endpoint, t.encodingType)
 }
 
 func (t *serializerImpl) NexusEndpointFromBlob(data *commonpb.DataBlob) (*persistencespb.NexusEndpoint, error) {
 	result := &persistencespb.NexusEndpoint{}
-	return result, Decode(data, result)
+	return result, codec.Decode(data, result)
 }
 
 func (t *serializerImpl) ChasmNodeToBlobs(node *persistencespb.ChasmNode) (metadata *commonpb.DataBlob, nodedata *commonpb.DataBlob, retErr error) {
-	metadata, retErr = encodeBlob(node.Metadata, t.encodingType)
+	metadata, retErr = codec.EncodeBlob(node.Metadata, t.encodingType)
 	if retErr != nil {
 		return nil, nil, retErr
 	}
@@ -602,79 +509,79 @@ func (t *serializerImpl) ChasmNodeFromBlobs(metadata *commonpb.DataBlob, data *c
 		Metadata: &persistencespb.ChasmNodeMetadata{},
 		Data:     data,
 	}
-	return result, Decode(metadata, result.Metadata)
+	return result, codec.Decode(metadata, result.Metadata)
 }
 
 func (t *serializerImpl) ChasmNodeToBlob(node *persistencespb.ChasmNode) (*commonpb.DataBlob, error) {
-	return encodeBlob(node, t.encodingType)
+	return codec.EncodeBlob(node, t.encodingType)
 }
 
 func (t *serializerImpl) ChasmNodeFromBlob(blob *commonpb.DataBlob) (*persistencespb.ChasmNode, error) {
 	result := &persistencespb.ChasmNode{}
-	return result, Decode(blob, result)
+	return result, codec.Decode(blob, result)
 }
 
 func (t *serializerImpl) TransferTaskInfoToBlob(info *persistencespb.TransferTaskInfo) (*commonpb.DataBlob, error) {
-	return encodeBlob(info, t.encodingType)
+	return codec.EncodeBlob(info, t.encodingType)
 }
 
 func (t *serializerImpl) TransferTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TransferTaskInfo, error) {
 	result := &persistencespb.TransferTaskInfo{}
-	return result, Decode(data, result)
+	return result, codec.Decode(data, result)
 }
 
 func (t *serializerImpl) TimerTaskInfoToBlob(info *persistencespb.TimerTaskInfo) (*commonpb.DataBlob, error) {
-	return encodeBlob(info, t.encodingType)
+	return codec.EncodeBlob(info, t.encodingType)
 }
 
 func (t *serializerImpl) TimerTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TimerTaskInfo, error) {
 	result := &persistencespb.TimerTaskInfo{}
-	return result, Decode(data, result)
+	return result, codec.Decode(data, result)
 }
 
 func (t *serializerImpl) ReplicationTaskInfoToBlob(info *persistencespb.ReplicationTaskInfo) (*commonpb.DataBlob, error) {
-	return encodeBlob(info, t.encodingType)
+	return codec.EncodeBlob(info, t.encodingType)
 }
 
 func (t *serializerImpl) ReplicationTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ReplicationTaskInfo, error) {
 	result := &persistencespb.ReplicationTaskInfo{}
-	return result, Decode(data, result)
+	return result, codec.Decode(data, result)
 }
 
 func (t *serializerImpl) VisibilityTaskInfoToBlob(info *persistencespb.VisibilityTaskInfo) (*commonpb.DataBlob, error) {
-	return encodeBlob(info, t.encodingType)
+	return codec.EncodeBlob(info, t.encodingType)
 }
 
 func (t *serializerImpl) VisibilityTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.VisibilityTaskInfo, error) {
 	result := &persistencespb.VisibilityTaskInfo{}
-	return result, Decode(data, result)
+	return result, codec.Decode(data, result)
 }
 
 func (t *serializerImpl) ArchivalTaskInfoToBlob(info *persistencespb.ArchivalTaskInfo) (*commonpb.DataBlob, error) {
-	return encodeBlob(info, t.encodingType)
+	return codec.EncodeBlob(info, t.encodingType)
 }
 
 func (t *serializerImpl) ArchivalTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ArchivalTaskInfo, error) {
 	result := &persistencespb.ArchivalTaskInfo{}
-	return result, Decode(data, result)
+	return result, codec.Decode(data, result)
 }
 
 func (t *serializerImpl) OutboundTaskInfoToBlob(info *persistencespb.OutboundTaskInfo) (*commonpb.DataBlob, error) {
-	return encodeBlob(info, t.encodingType)
+	return codec.EncodeBlob(info, t.encodingType)
 }
 
 func (t *serializerImpl) OutboundTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.OutboundTaskInfo, error) {
 	result := &persistencespb.OutboundTaskInfo{}
-	return result, Decode(data, result)
+	return result, codec.Decode(data, result)
 }
 
 func (t *serializerImpl) QueueStateToBlob(info *persistencespb.QueueState) (*commonpb.DataBlob, error) {
-	return encodeBlob(info, t.encodingType)
+	return codec.EncodeBlob(info, t.encodingType)
 }
 
 func (t *serializerImpl) QueueStateFromBlob(data *commonpb.DataBlob) (*persistencespb.QueueState, error) {
 	result := &persistencespb.QueueState{}
-	return result, Decode(data, result)
+	return result, codec.Decode(data, result)
 }
 
 // ReencodeEventBlobsAsProto3 re-encodes event blobs as proto3 if the serializer uses a different encoding.

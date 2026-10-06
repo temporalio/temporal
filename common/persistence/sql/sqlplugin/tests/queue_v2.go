@@ -11,6 +11,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
@@ -530,7 +531,7 @@ func testInvalidMetadataPayload(ctx context.Context, t *testing.T, baseDB sqlplu
 		PageSize:  10,
 	})
 	assert.Error(t, err)
-	assert.ErrorAs(t, err, new(*serialization.DeserializationError))
+	require.ErrorAs(t, err, new(*codec.DeserializationError))
 }
 
 func testInvalidMetadataEncoding(ctx context.Context, t *testing.T, baseDB sqlplugin.DB) {
@@ -553,10 +554,10 @@ func testInvalidMetadataEncoding(ctx context.Context, t *testing.T, baseDB sqlpl
 		PageSize:  10,
 	})
 	assert.Error(t, err)
-	assert.ErrorAs(t, err, new(*serialization.UnknownEncodingTypeError))
+	require.ErrorAs(t, err, new(*codec.UnknownEncodingTypeError))
 	_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueName)
 	assert.Error(t, err)
-	assert.ErrorAs(t, err, new(*serialization.UnknownEncodingTypeError))
+	require.ErrorAs(t, err, new(*codec.UnknownEncodingTypeError))
 	_, err = q.RangeDeleteMessages(context.Background(), &persistence.InternalRangeDeleteMessagesRequest{
 		QueueType:                   queueType,
 		QueueName:                   queueName,
@@ -708,5 +709,5 @@ func testListQueueFailsToExtractQueueMetadata(ctx context.Context, t *testing.T,
 	assert.NoError(t, err)
 	_, err = persistencetest.EnqueueMessage(context.Background(), q, queueType, queueName)
 	assert.Error(t, err)
-	assert.ErrorAs(t, err, new(*serialization.UnknownEncodingTypeError))
+	require.ErrorAs(t, err, new(*codec.UnknownEncodingTypeError))
 }

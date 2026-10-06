@@ -10,8 +10,8 @@ import (
 	activitylib "go.temporal.io/server/chasm/lib/activity"
 	activitypb "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
+	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/persistence/serialization"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -19,7 +19,7 @@ func TestDecodeNode_DecodesCallbackState(t *testing.T) {
 	registry, err := newChasmRegistry(log.NewNoopLogger())
 	require.NoError(t, err)
 
-	blob, err := serialization.Encode(&callbackspb.CallbackState{
+	blob, err := codec.Encode(&callbackspb.CallbackState{
 		RequestId:        "request-id",
 		RegistrationTime: timestamppb.New(time.Now().UTC()),
 	})
@@ -47,7 +47,7 @@ func TestDecodeNode_DecodesActivityState(t *testing.T) {
 	registry, err := newChasmRegistry(log.NewNoopLogger())
 	require.NoError(t, err)
 
-	blob, err := serialization.Encode(&activitylib.Activity{
+	blob, err := codec.Encode(&activitylib.Activity{
 		ActivityState: &activitypb.ActivityState{
 			Status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
 		},

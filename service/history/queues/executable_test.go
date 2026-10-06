@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
@@ -24,7 +25,6 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/util"
@@ -774,7 +774,7 @@ func (s *executableSuite) TestExecuteHandleErr_Corrupted() {
 
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
 		func(_ context.Context, _ queues.Executable) queues.ExecuteResponse {
-			panic(serialization.NewUnknownEncodingTypeError("unknownEncoding", enumspb.ENCODING_TYPE_PROTO3))
+			panic(codec.NewUnknownEncodingTypeError("unknownEncoding", enumspb.ENCODING_TYPE_PROTO3))
 		},
 	).Times(2)
 	err := executable.Execute()
@@ -884,7 +884,7 @@ func (s *executableSuite) TestExecute_SendToDLQAfterMaxAttemptsThenDisableDropCo
 			return 1
 		}
 	})
-	execError := serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, errors.New("random error"))
+	execError := codec.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, errors.New("random error"))
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(queues.ExecuteResponse{
 		ExecutionMetricTags: nil,
 		ExecutedAsActive:    false,
@@ -1031,7 +1031,7 @@ func (s *executableSuite) TestExecute_DLQ() {
 
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
 		func(_ context.Context, _ queues.Executable) queues.ExecuteResponse {
-			panic(serialization.NewUnknownEncodingTypeError("unknownEncoding", enumspb.ENCODING_TYPE_PROTO3))
+			panic(codec.NewUnknownEncodingTypeError("unknownEncoding", enumspb.ENCODING_TYPE_PROTO3))
 		},
 	)
 	err := executable.Execute()
@@ -1053,7 +1053,7 @@ func (s *executableSuite) TestExecute_DLQThenDisable() {
 
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
 		func(_ context.Context, _ queues.Executable) queues.ExecuteResponse {
-			panic(serialization.NewUnknownEncodingTypeError("unknownEncoding", enumspb.ENCODING_TYPE_PROTO3))
+			panic(codec.NewUnknownEncodingTypeError("unknownEncoding", enumspb.ENCODING_TYPE_PROTO3))
 		},
 	)
 	err := executable.Execute()
@@ -1076,7 +1076,7 @@ func (s *executableSuite) TestExecute_DLQFailThenRetry() {
 	capture := s.metricsHandler.StartCapture()
 	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).DoAndReturn(
 		func(_ context.Context, _ queues.Executable) queues.ExecuteResponse {
-			panic(serialization.NewUnknownEncodingTypeError("unknownEncoding", enumspb.ENCODING_TYPE_PROTO3))
+			panic(codec.NewUnknownEncodingTypeError("unknownEncoding", enumspb.ENCODING_TYPE_PROTO3))
 		},
 	)
 	err := executable.Execute()

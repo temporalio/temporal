@@ -5,10 +5,10 @@ import (
 	"errors"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/util"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
@@ -44,8 +44,8 @@ func (i *ServiceErrorInterceptor) Intercept(
 ) (any, error) {
 	resp, err := i.capturePanicHandler(ctx, req, handler)
 
-	var deserializationError *serialization.DeserializationError
-	var serializationError *serialization.SerializationError
+	var deserializationError *codec.DeserializationError
+	var serializationError *codec.SerializationError
 	// convert serialization errors to be captured as serviceerrors across gRPC calls
 	if errors.As(err, &deserializationError) || errors.As(err, &serializationError) {
 		err = serviceerror.NewDataLoss(err.Error())

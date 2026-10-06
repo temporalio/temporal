@@ -10,11 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -72,8 +72,8 @@ func TestServiceErrorInterceptorSer(t *testing.T) {
 		log.NewTestLogger(),
 	)
 	serErrors := []error{
-		serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, nil),
-		serialization.NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, nil),
+		codec.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, nil),
+		codec.NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, nil),
 	}
 	for _, inErr := range serErrors {
 		_, err := interceptor.Intercept(t.Context(), nil, nil,

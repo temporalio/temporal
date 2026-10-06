@@ -1180,7 +1180,7 @@ func describeSchedulerChasmState(c *cli.Context, adminClient adminservice.AdminS
 		return v2ScheduleStatus{}, nil
 	}
 	var state schedulerpb.SchedulerState
-	if err := serialization.Decode(node.GetData(), &state); err != nil {
+	if err := codec.Decode(node.GetData(), &state); err != nil {
 		return v2ScheduleStatus{}, fmt.Errorf("failed to decode scheduler state: %w", err)
 	}
 	return v2ScheduleStatus{

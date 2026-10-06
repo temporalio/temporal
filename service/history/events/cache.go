@@ -10,12 +10,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/configs"
 )
 
@@ -189,7 +189,7 @@ func (e *CacheImpl) getHistoryEventFromStore(
 	switch err.(type) {
 	case nil:
 		// noop
-	case *serviceerror.DataLoss, *serialization.DeserializationError, *serialization.SerializationError:
+	case *serviceerror.DataLoss, *codec.DeserializationError, *codec.SerializationError:
 		// log event
 		e.logger.Error("encounter data corruption event",
 			tag.WorkflowNamespaceID(key.NamespaceID.String()),

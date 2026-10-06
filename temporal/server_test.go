@@ -20,11 +20,11 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/persistence/serialization"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite" // needed to register the sqlite plugin
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/freeport"
@@ -64,7 +64,7 @@ func TestNewServerWithOTEL(t *testing.T) {
 
 // TestNewServerWithJSONEncoding verifies that NewServer works when JSON encoding is enabled.
 func TestNewServerWithJSONEncoding(t *testing.T) {
-	t.Setenv(serialization.SerializerDataEncodingEnvVar, enumspb.ENCODING_TYPE_JSON.String())
+	t.Setenv(codec.SerializerDataEncodingEnvVar, enumspb.ENCODING_TYPE_JSON.String())
 	runAndTestServer(t)
 }
 

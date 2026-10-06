@@ -11,7 +11,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/service/history/hsm"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -137,7 +137,7 @@ func (stateMachineDefinition) Type() string {
 func (stateMachineDefinition) Deserialize(d []byte) (any, error) {
 	info := &persistencespb.CallbackInfo{}
 	if err := proto.Unmarshal(d, info); err != nil {
-		return nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
+		return nil, codec.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 	return Callback{info}, nil
 }

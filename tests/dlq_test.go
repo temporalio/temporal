@@ -27,7 +27,6 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
@@ -88,7 +87,7 @@ func (s *DLQSuite) newTestEnv(opts ...testcore.TestOption) *dlqTestEnv {
 				if !ok || !strings.HasPrefix(request.WorkflowID, *w.failingWorkflowIDPrefix.Load()) {
 					return nil
 				}
-				return serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, errors.New("test error"))
+				return codec.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, errors.New("test error"))
 			},
 		}),
 	}

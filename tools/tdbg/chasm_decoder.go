@@ -10,7 +10,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/codec"
-	"go.temporal.io/server/common/persistence/serialization"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -93,7 +92,7 @@ func decodeTask(
 	dataBlob := task.GetData()
 	if dataBlob != nil && len(dataBlob.GetData()) > 0 {
 		message = message.ProtoReflect().New().Interface()
-		if err := serialization.Decode(dataBlob, message); err != nil {
+		if err := codec.Decode(dataBlob, message); err != nil {
 			decoded.RawData = dataBlob
 			return decoded, nil
 		}
@@ -150,7 +149,7 @@ func decodeNode(node *persistencespb.ChasmNode, registry *chasm.Registry) (*deco
 		dataBlob := node.GetData()
 		if dataBlob != nil && len(dataBlob.GetData()) > 0 {
 			message = message.ProtoReflect().New().Interface()
-			if err := serialization.Decode(dataBlob, message); err != nil {
+			if err := codec.Decode(dataBlob, message); err != nil {
 				result.RawData = dataBlob
 				result.NodeType = "component (decode error)"
 			} else {

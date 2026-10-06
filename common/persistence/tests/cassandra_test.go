@@ -17,6 +17,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
@@ -714,7 +715,7 @@ func testCassandraQueueV2ErrInvalidQueueMessageEncodingType(t *testing.T, cluste
 		PageSize:  1,
 	})
 	require.Error(t, err)
-	assert.ErrorAs(t, err, new(*serialization.UnknownEncodingTypeError))
+	require.ErrorAs(t, err, new(*codec.UnknownEncodingTypeError))
 }
 
 func (q failingQuery) MapScanCAS(map[string]any) (bool, error) {
@@ -800,7 +801,7 @@ func testCassandraQueueV2ErrInvalidPayloadEncodingType(t *testing.T, cluster *ca
 		PageSize:  1,
 	})
 	require.Error(t, err)
-	assert.ErrorAs(t, err, new(*serialization.UnknownEncodingTypeError))
+	require.ErrorAs(t, err, new(*codec.UnknownEncodingTypeError))
 	assert.ErrorContains(t, err, "bad-encoding-type")
 	assert.ErrorContains(t, err, strconv.Itoa(int(queueType)))
 	assert.ErrorContains(t, err, queueName)
@@ -810,7 +811,7 @@ func testCassandraQueueV2ErrInvalidPayloadEncodingType(t *testing.T, cluster *ca
 		PageSize:  100,
 	})
 	require.Error(t, err)
-	assert.ErrorAs(t, err, new(*serialization.UnknownEncodingTypeError))
+	require.ErrorAs(t, err, new(*codec.UnknownEncodingTypeError))
 	assert.ErrorContains(t, err, "bad-encoding-type")
 	assert.ErrorContains(t, err, strconv.Itoa(int(queueType)))
 	assert.ErrorContains(t, err, queueName)
@@ -839,7 +840,7 @@ func testCassandraQueueV2ErrInvalidPayload(t *testing.T, cluster *cassandra.Test
 		PageSize:  1,
 	})
 	require.Error(t, err)
-	assert.ErrorAs(t, err, new(*serialization.DeserializationError))
+	require.ErrorAs(t, err, new(*codec.DeserializationError))
 	assert.ErrorContains(t, err, "unmarshal")
 	assert.ErrorContains(t, err, strconv.Itoa(int(queueType)))
 	assert.ErrorContains(t, err, queueName)

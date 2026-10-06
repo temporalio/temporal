@@ -12,6 +12,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -158,8 +159,8 @@ func GetHistory(
 ) (history *historypb.History, token []byte, retError error) {
 	defer func() {
 		var dataLossErr *serviceerror.DataLoss
-		var serializationErr *serialization.DeserializationError
-		var deserializationErr *serialization.SerializationError
+		var serializationErr *codec.DeserializationError
+		var deserializationErr *codec.SerializationError
 		if errors.As(retError, &dataLossErr) || errors.As(retError, &serializationErr) || errors.As(retError, &deserializationErr) {
 			// log event
 			shardContext.GetLogger().Error("encountered data loss event in GetHistory",
@@ -280,8 +281,8 @@ func GetHistoryReverse(
 
 	defer func() {
 		var dataLossErr *serviceerror.DataLoss
-		var serializationErr *serialization.DeserializationError
-		var deserializationErr *serialization.SerializationError
+		var serializationErr *codec.DeserializationError
+		var deserializationErr *codec.SerializationError
 		if errors.As(retError, &dataLossErr) || errors.As(retError, &serializationErr) || errors.As(retError, &deserializationErr) {
 			shardContext.GetLogger().Error("encountered data loss event in GetHistoryReverse",
 				tag.WorkflowNamespaceID(namespaceID.String()),

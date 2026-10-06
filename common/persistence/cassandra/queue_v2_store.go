@@ -8,10 +8,10 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
-	"go.temporal.io/server/common/persistence/serialization"
 )
 
 type (
@@ -185,7 +185,7 @@ func (s *queueV2Store) ReadMessages(
 		}
 		encoding, err := enumspb.EncodingTypeFromString(messageEncoding)
 		if err != nil {
-			return nil, serialization.NewUnknownEncodingTypeError(messageEncoding)
+			return nil, codec.NewUnknownEncodingTypeError(messageEncoding)
 		}
 
 		encodingType := enumspb.EncodingType(encoding)
@@ -418,7 +418,7 @@ func getQueueFromMetadata(
 	if queueEncodingStr != enumspb.ENCODING_TYPE_PROTO3.String() {
 		return nil, fmt.Errorf(
 			"%w: invalid queue encoding type: queue with type %v and name %v has invalid encoding",
-			serialization.NewUnknownEncodingTypeError(queueEncodingStr, enumspb.ENCODING_TYPE_PROTO3),
+			codec.NewUnknownEncodingTypeError(queueEncodingStr, enumspb.ENCODING_TYPE_PROTO3),
 			queueType,
 			queueName,
 		)
@@ -427,7 +427,7 @@ func getQueueFromMetadata(
 	q := &persistencespb.Queue{}
 	err := q.Unmarshal(queueBytes)
 	if err != nil {
-		return nil, serialization.NewDeserializationError(
+		return nil, codec.NewDeserializationError(
 			enumspb.ENCODING_TYPE_PROTO3,
 			fmt.Errorf("%w: unmarshal queue payload: failed for queue with type %v and name %v",
 				err, queueType, queueName),

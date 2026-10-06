@@ -15,7 +15,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
-	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
@@ -131,7 +131,7 @@ func (c *describeMutableStateAdminClient) DescribeMutableState(
 // sentinel.
 func chasmSchedulerStateResponse(t *testing.T, sentinel bool) *adminservice.DescribeMutableStateResponse {
 	t.Helper()
-	blob, err := serialization.Encode(&schedulerpb.SchedulerState{Sentinel: sentinel})
+	blob, err := codec.Encode(&schedulerpb.SchedulerState{Sentinel: sentinel})
 	require.NoError(t, err)
 	return &adminservice.DescribeMutableStateResponse{
 		DatabaseMutableState: &persistencespb.WorkflowMutableState{

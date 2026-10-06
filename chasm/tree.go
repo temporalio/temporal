@@ -20,13 +20,13 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/service/history/tasks"
@@ -1423,7 +1423,7 @@ func unmarshalProto(
 		}
 	}
 
-	if err := serialization.Decode(dataBlob, value.Interface().(proto.Message)); err != nil {
+	if err := codec.Decode(dataBlob, value.Interface().(proto.Message)); err != nil {
 		return reflect.Value{}, err
 	}
 
@@ -3976,7 +3976,7 @@ func makeValidationFn(
 // encodeChasmBlob encodes CHASM data and task payloads through the env-aware
 // serializer while preserving deterministic proto3 bytes for byte comparisons.
 func encodeChasmBlob(m proto.Message) (*commonpb.DataBlob, error) {
-	return serialization.Encode(m, serialization.WithDeterministicProto3)
+	return codec.Encode(m, codec.WithDeterministicProto3)
 }
 
 func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) error {

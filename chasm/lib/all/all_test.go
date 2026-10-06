@@ -24,10 +24,10 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/chasm/lib/all"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/persistence/serialization"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -321,7 +321,7 @@ func TestNewNilRegistry_TasksDecodable(t *testing.T) {
 			require.True(t, isProto, "task %s Go type is not a proto message", fqn)
 
 			if blob := task.GetData(); blob != nil && len(blob.GetData()) > 0 {
-				require.NoError(t, serialization.Decode(blob, message.ProtoReflect().New().Interface()),
+				require.NoError(t, codec.Decode(blob, message.ProtoReflect().New().Interface()),
 					"task %s did not decode", fqn)
 			}
 		}

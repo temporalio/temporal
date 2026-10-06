@@ -15,6 +15,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -690,7 +691,7 @@ func (s *testSerializer) DeserializeTask(
 
 	taskInfo := &persistencespb.TransferTaskInfo{}
 	if err := proto.Unmarshal(blob.Data, taskInfo); err != nil {
-		return nil, serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
+		return nil, codec.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, err)
 	}
 
 	fakeTask := tasks.NewFakeTask(

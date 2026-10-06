@@ -17,6 +17,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -24,7 +25,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -687,7 +687,7 @@ func (s *chasmEngineSuite) validateCreateRequest(
 	s.True(ok)
 
 	activityInfo := &persistencespb.ActivityInfo{}
-	err := serialization.Decode(updatedNode.Data, activityInfo)
+	err := codec.Decode(updatedNode.Data, activityInfo)
 	s.NoError(err)
 	s.Equal(expectedActivityID, activityInfo.ActivityId)
 }
@@ -938,7 +938,7 @@ func (s *chasmEngineSuite) TestUpdateComponent_Success() {
 			s.True(ok)
 
 			activityInfo := &persistencespb.ActivityInfo{}
-			err := serialization.Decode(updatedNode.Data, activityInfo)
+			err := codec.Decode(updatedNode.Data, activityInfo)
 			s.NoError(err)
 			s.Equal(newActivityID, activityInfo.ActivityId)
 			return tests.UpdateWorkflowExecutionResponse, nil
@@ -1802,7 +1802,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingRunning() {
 			s.True(ok)
 
 			activityInfo := &persistencespb.ActivityInfo{}
-			err := serialization.Decode(updatedNode.Data, activityInfo)
+			err := codec.Decode(updatedNode.Data, activityInfo)
 			s.NoError(err)
 			s.Equal("updated-"+existingActivityID, activityInfo.ActivityId)
 
@@ -1925,7 +1925,7 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_NotFound() {
 			s.True(ok)
 
 			newActivityInfo := &persistencespb.ActivityInfo{}
-			err := serialization.Decode(newNode.Data, newActivityInfo)
+			err := codec.Decode(newNode.Data, newActivityInfo)
 			s.NoError(err)
 			// Verify both newFn and updateFn effects are present
 			s.Equal("updated-"+newActivityID, newActivityInfo.ActivityId)
@@ -2377,7 +2377,7 @@ func (s *chasmEngineSuite) buildPersistenceMutableState(
 func (s *chasmEngineSuite) serializeComponentState(
 	state proto.Message,
 ) *commonpb.DataBlob {
-	blob, err := serialization.Encode(state, serialization.WithDeterministicProto3)
+	blob, err := codec.Encode(state, codec.WithDeterministicProto3)
 	s.NoError(err)
 	return blob
 }

@@ -14,8 +14,8 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/codec"
 	p "go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/testing/fakedata"
 	"go.temporal.io/server/service/history/tasks"
@@ -167,7 +167,7 @@ func RandomChasmNode() *persistencespb.ChasmNode {
 	// Some arbitrary random data to ensure the chasm node's attributes are preserved.
 	var blobInfo persistencespb.WorkflowExecutionInfo
 	_ = fakedata.FakeStruct(&blobInfo)
-	blob, _ := serialization.Encode(&blobInfo)
+	blob, _ := codec.Encode(&blobInfo)
 
 	var versionedTransition persistencespb.VersionedTransition
 	_ = fakedata.FakeStruct(&versionedTransition)

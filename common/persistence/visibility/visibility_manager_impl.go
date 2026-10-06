@@ -15,10 +15,10 @@ import (
 	chasmspb "go.temporal.io/server/api/chasm/v1"
 	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/searchattribute"
@@ -293,7 +293,7 @@ func splitUserAndChasmMemo(exec *store.InternalExecutionInfo) (userMemo *commonp
 		// Archetype exists - split memo into user and chasm parts
 		userPayload := combinedMemo.Fields[chasm.UserMemoKey]
 		if err := payload.Decode(userPayload, &userMemo); err != nil {
-			return nil, nil, serialization.NewDeserializationError(
+			return nil, nil, codec.NewDeserializationError(
 				enumspb.ENCODING_TYPE_PROTO3, fmt.Errorf("unable to decode user memo from combined memo payload: %w", err))
 		}
 		chasmMemoPayload = combinedMemo.Fields[chasm.ChasmMemoKey]
@@ -546,12 +546,12 @@ func deserializeMemo(data *commonpb.DataBlob) (*commonpb.Memo, error) {
 		memo := &commonpb.Memo{}
 		err := proto.Unmarshal(data.Data, memo)
 		if err != nil {
-			return nil, serialization.NewDeserializationError(
+			return nil, codec.NewDeserializationError(
 				enumspb.ENCODING_TYPE_PROTO3, fmt.Errorf("unable to deserialize memo from data blob: %w", err))
 		}
 		return memo, nil
 	default:
-		return nil, serialization.NewUnknownEncodingTypeError(data.GetEncodingType().String(), enumspb.ENCODING_TYPE_PROTO3)
+		return nil, codec.NewUnknownEncodingTypeError(data.GetEncodingType().String(), enumspb.ENCODING_TYPE_PROTO3)
 	}
 }
 

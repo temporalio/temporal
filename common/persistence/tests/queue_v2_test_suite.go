@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/persistencetest"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/tests"
 )
@@ -100,7 +100,7 @@ func RunQueueV2TestSuite(t *testing.T, q persistence.QueueV2) {
 			PageSize:  10,
 		})
 		require.Error(t, err)
-		assert.ErrorAs(t, err, new(*serialization.UnknownEncodingTypeError))
+		require.ErrorAs(t, err, new(*codec.UnknownEncodingTypeError))
 	})
 	t.Run("InvalidEncodingForQueueMetadata", func(t *testing.T) {
 		queueType := persistence.QueueTypeHistoryNormal
@@ -120,7 +120,7 @@ func RunQueueV2TestSuite(t *testing.T, q persistence.QueueV2) {
 			PageSize:  10,
 		})
 		require.Error(t, err)
-		assert.ErrorAs(t, err, new(*serialization.UnknownEncodingTypeError))
+		require.ErrorAs(t, err, new(*codec.UnknownEncodingTypeError))
 	})
 	t.Run("TestRangeDeleteMessages", func(t *testing.T) {
 		t.Parallel()
