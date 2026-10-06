@@ -27,11 +27,11 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite" // needed to register the sqlite plugin
 	"go.temporal.io/server/common/testing/await"
-	"go.temporal.io/server/common/testing/freeport"
 	"go.temporal.io/server/common/testing/testtelemetry"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/temporal"
 	"go.temporal.io/server/tests/testutils"
+	"go.temporal.io/testx/freeport"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/durationpb"
