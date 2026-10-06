@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.activity.proto.v1;
 
-option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypb";
+option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1;activitypb";
 
 enum DispatchReason {
   DISPATCH_REASON_UNSPECIFIED = 0;

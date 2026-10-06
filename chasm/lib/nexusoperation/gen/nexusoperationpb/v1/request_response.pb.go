@@ -616,7 +616,7 @@ const file_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_pr
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12n\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2C.temporal.api.workflowservice.v1.PollNexusOperationExecutionRequestR\x0ffrontendRequest\"\x8f\x01\n" +
 	"\x1aPollNexusOperationResponse\x12q\n" +
-	"\x11frontend_response\x18\x01 \x01(\v2D.temporal.api.workflowservice.v1.PollNexusOperationExecutionResponseR\x10frontendResponseBVZTgo.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpbb\x06proto3"
+	"\x11frontend_response\x18\x01 \x01(\v2D.temporal.api.workflowservice.v1.PollNexusOperationExecutionResponseR\x10frontendResponseBYZWgo.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1;nexusoperationpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_nexusoperation_proto_v1_request_response_proto_rawDescOnce sync.Once

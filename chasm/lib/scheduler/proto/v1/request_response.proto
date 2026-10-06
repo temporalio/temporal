@@ -5,7 +5,7 @@ package temporal.server.chasm.lib.scheduler.proto.v1;
 import "chasm/lib/scheduler/proto/v1/message.proto";
 import "temporal/api/workflowservice/v1/request_response.proto";
 
-option go_package = "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpb";
+option go_package = "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1;schedulerpb";
 
 message CreateScheduleRequest {
   // Internal namespace ID (UUID).

@@ -459,7 +459,7 @@ const file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc = "" 
 	"\x18START_DELAY_BUCKET_6H_1D\x10\x06\x12\x1c\n" +
 	"\x18START_DELAY_BUCKET_1D_7D\x10\a\x12\x1d\n" +
 	"\x19START_DELAY_BUCKET_7D_30D\x10\b\x12\x1d\n" +
-	"\x19START_DELAY_BUCKET_GT_30D\x10\tBDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
+	"\x19START_DELAY_BUCKET_GT_30D\x10\tBGZEgo.temporal.io/server/chasm/lib/activity/gen/activitypb/v1;activitypbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescOnce sync.Once

@@ -129,7 +129,7 @@ const file_temporal_server_chasm_lib_tests_proto_v1_request_response_proto_rawDe
 	"\fTestResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12$\n" +
-	"\x0ehas_engine_ctx\x18\x02 \x01(\bR\fhasEngineCtxB;Z9go.temporal.io/server/chasm/lib/tests/gen/testspb;testspbb\x06proto3"
+	"\x0ehas_engine_ctx\x18\x02 \x01(\bR\fhasEngineCtxB>Z<go.temporal.io/server/chasm/lib/tests/gen/testspb/v1;testspbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_tests_proto_v1_request_response_proto_rawDescOnce sync.Once

@@ -983,7 +983,7 @@ const file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_ra
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12q\n" +
 	"\x10frontend_request\x18\x02 \x01(\v2F.temporal.api.workflowservice.v1.UpdateActivityExecutionOptionsRequestR\x0ffrontendRequest\"\x9e\x01\n" +
 	"&UpdateActivityExecutionOptionsResponse\x12t\n" +
-	"\x11frontend_response\x18\x01 \x01(\v2G.temporal.api.workflowservice.v1.UpdateActivityExecutionOptionsResponseR\x10frontendResponseBDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
+	"\x11frontend_response\x18\x01 \x01(\v2G.temporal.api.workflowservice.v1.UpdateActivityExecutionOptionsResponseR\x10frontendResponseBGZEgo.temporal.io/server/chasm/lib/activity/gen/activitypb/v1;activitypbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_activity_proto_v1_request_response_proto_rawDescOnce sync.Once

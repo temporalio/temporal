@@ -319,7 +319,7 @@ const file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDesc = ""
 	"\x12InvokerExecuteTask\"&\n" +
 	"\x0eBackfillerTask\x12\x14\n" +
 	"\x05stamp\x18\x01 \x01(\x03R\x05stamp\" \n" +
-	"\x1eSchedulerMigrateToWorkflowTaskBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
+	"\x1eSchedulerMigrateToWorkflowTaskBJZHgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1;schedulerpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_scheduler_proto_v1_tasks_proto_rawDescOnce sync.Once

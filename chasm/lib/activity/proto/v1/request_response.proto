@@ -4,7 +4,7 @@ package temporal.server.chasm.lib.activity.proto.v1;
 
 import "temporal/api/workflowservice/v1/request_response.proto";
 
-option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypb";
+option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1;activitypb";
 
 message StartActivityExecutionRequest {
   string namespace_id = 1;

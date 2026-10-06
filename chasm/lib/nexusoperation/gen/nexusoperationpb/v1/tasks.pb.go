@@ -321,7 +321,7 @@ const file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDesc
 	"\x10CancellationTask\x12\x18\n" +
 	"\aattempt\x18\x01 \x01(\x05R\aattempt\"3\n" +
 	"\x17CancellationBackoffTask\x12\x18\n" +
-	"\aattempt\x18\x01 \x01(\x05R\aattemptBVZTgo.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpbb\x06proto3"
+	"\aattempt\x18\x01 \x01(\x05R\aattemptBYZWgo.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1;nexusoperationpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_nexusoperation_proto_v1_tasks_proto_rawDescOnce sync.Once

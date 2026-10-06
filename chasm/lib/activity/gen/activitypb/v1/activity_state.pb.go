@@ -1345,7 +1345,7 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\x1bActivityRetryIntervalSource\x12.\n" +
 	"*ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED\x10\x00\x12/\n" +
 	"+ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY\x10\x01\x122\n" +
-	".ACTIVITY_RETRY_INTERVAL_SOURCE_WORKER_OVERRIDE\x10\x02BDZBgo.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypbb\x06proto3"
+	".ACTIVITY_RETRY_INTERVAL_SOURCE_WORKER_OVERRIDE\x10\x02BGZEgo.temporal.io/server/chasm/lib/activity/gen/activitypb/v1;activitypbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawDescOnce sync.Once

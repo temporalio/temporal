@@ -6,7 +6,7 @@ import "chasm/lib/tests/proto/v1/request_response.proto";
 import "temporal/server/api/common/v1/api_category.proto";
 import "temporal/server/api/routing/v1/extension.proto";
 
-option go_package = "go.temporal.io/server/chasm/lib/tests/gen/testspb;testspb";
+option go_package = "go.temporal.io/server/chasm/lib/tests/gen/testspb/v1;testspb";
 
 service TestService {
   rpc Test(TestRequest) returns (TestResponse) {

@@ -209,7 +209,7 @@ const file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDesc = "" +
 	"payloadKey\"?\n" +
 	"\x1cTestPayloadTTLSideEffectTask\x12\x1f\n" +
 	"\vpayload_key\x18\x01 \x01(\tR\n" +
-	"payloadKeyB;Z9go.temporal.io/server/chasm/lib/tests/gen/testspb;testspbb\x06proto3"
+	"payloadKeyB>Z<go.temporal.io/server/chasm/lib/tests/gen/testspb/v1;testspbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_tests_proto_v1_message_proto_rawDescOnce sync.Once

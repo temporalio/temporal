@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.tests.proto.v1;
 
-option go_package = "go.temporal.io/server/chasm/lib/tests/gen/testspb;testspb";
+option go_package = "go.temporal.io/server/chasm/lib/tests/gen/testspb/v1;testspb";
 
 message TestRequest {
   string request_id = 1;

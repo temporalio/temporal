@@ -8,7 +8,7 @@ import "temporal/api/failure/v1/message.proto";
 import "temporal/api/schedule/v1/message.proto";
 import "temporal/server/api/schedule/v1/message.proto";
 
-option go_package = "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpb";
+option go_package = "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1;schedulerpb";
 
 // CHASM scheduler top-level state.
 message SchedulerState {

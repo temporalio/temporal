@@ -515,7 +515,7 @@ const file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDesc = "
 	"\x19CALLBACK_STATUS_SCHEDULED\x10\x02\x12\x1f\n" +
 	"\x1bCALLBACK_STATUS_BACKING_OFF\x10\x03\x12\x1a\n" +
 	"\x16CALLBACK_STATUS_FAILED\x10\x04\x12\x1d\n" +
-	"\x19CALLBACK_STATUS_SUCCEEDED\x10\x05BGZEgo.temporal.io/server/chasm/lib/callbacks/gen/callbackspb;callbackspbb\x06proto3"
+	"\x19CALLBACK_STATUS_SUCCEEDED\x10\x05BHZFgo.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1;callbackspbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_callback_proto_v1_message_proto_rawDescOnce sync.Once

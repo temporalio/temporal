@@ -6,7 +6,7 @@ import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
 
-option go_package = "go.temporal.io/server/chasm/lib/callbacks/gen/callbackspb;callbackspb";
+option go_package = "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1;callbackspb";
 
 message CallbackState {
   // Trigger for when the workflow is closed.

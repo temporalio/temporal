@@ -808,7 +808,7 @@ const file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDesc = 
 	"\x06events\x18\x01 \x03(\v23.temporal.server.chasm.lib.scheduler.proto.v1.EventR\x06events\"Q\n" +
 	"\x05Event\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessageBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
+	"\amessage\x18\x02 \x01(\tR\amessageBJZHgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1;schedulerpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_scheduler_proto_v1_message_proto_rawDescOnce sync.Once

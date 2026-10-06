@@ -4,7 +4,7 @@ package temporal.server.chasm.lib.workflow.proto.v1;
 
 import "temporal/api/failure/v1/message.proto";
 
-option go_package = "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpb";
+option go_package = "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1;workflowpb";
 
 message UpdateState {
   string update_id = 1;

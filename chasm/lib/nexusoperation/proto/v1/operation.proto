@@ -9,7 +9,7 @@ import "temporal/api/common/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/sdk/v1/user_metadata.proto";
 
-option go_package = "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpb";
+option go_package = "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1;nexusoperationpb";
 
 message OperationState {
   // Current status of the operation.

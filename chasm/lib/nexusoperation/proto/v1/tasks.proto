@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.nexusoperation.proto.v1;
 
-option go_package = "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpb";
+option go_package = "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1;nexusoperationpb";
 
 message ScheduleToStartTimeoutTask {}
 

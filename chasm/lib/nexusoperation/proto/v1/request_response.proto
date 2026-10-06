@@ -4,7 +4,7 @@ package temporal.server.chasm.lib.nexusoperation.proto.v1;
 
 import "temporal/api/workflowservice/v1/request_response.proto";
 
-option go_package = "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpb";
+option go_package = "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1;nexusoperationpb";
 
 message StartNexusOperationRequest {
   string namespace_id = 1;

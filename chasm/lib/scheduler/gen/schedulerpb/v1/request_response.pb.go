@@ -951,7 +951,7 @@ const file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_r
 	"\bidentity\x18\x03 \x01(\tR\bidentity\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x04 \x01(\tR\trequestId\"\x1b\n" +
-	"\x19MigrateToWorkflowResponseBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
+	"\x19MigrateToWorkflowResponseBJZHgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1;schedulerpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_scheduler_proto_v1_request_response_proto_rawDescOnce sync.Once

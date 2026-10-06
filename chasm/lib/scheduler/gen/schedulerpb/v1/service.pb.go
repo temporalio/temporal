@@ -37,7 +37,7 @@ const file_temporal_server_chasm_lib_scheduler_proto_v1_service_proto_rawDesc = 
 	"\x19ListScheduleMatchingTimes\x12N.temporal.server.chasm.lib.scheduler.proto.v1.ListScheduleMatchingTimesRequest\x1aO.temporal.server.chasm.lib.scheduler.proto.v1.ListScheduleMatchingTimesResponse\"(\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\x1e\x1a\x1cfrontend_request.schedule_id\x12\xe2\x01\n" +
 	"\x18CreateFromMigrationState\x12M.temporal.server.chasm.lib.scheduler.proto.v1.CreateFromMigrationStateRequest\x1aN.temporal.server.chasm.lib.scheduler.proto.v1.CreateFromMigrationStateResponse\"'\xd2\xc3\x18#\x1a!state.scheduler_state.schedule_id\x12\xae\x01\n" +
 	"\x0eCreateSentinel\x12C.temporal.server.chasm.lib.scheduler.proto.v1.CreateSentinelRequest\x1aD.temporal.server.chasm.lib.scheduler.proto.v1.CreateSentinelResponse\"\x11\xd2\xc3\x18\r\x1a\vschedule_id\x12\xb7\x01\n" +
-	"\x11MigrateToWorkflow\x12F.temporal.server.chasm.lib.scheduler.proto.v1.MigrateToWorkflowRequest\x1aG.temporal.server.chasm.lib.scheduler.proto.v1.MigrateToWorkflowResponse\"\x11\xd2\xc3\x18\r\x1a\vschedule_idBGZEgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb;schedulerpbb\x06proto3"
+	"\x11MigrateToWorkflow\x12F.temporal.server.chasm.lib.scheduler.proto.v1.MigrateToWorkflowRequest\x1aG.temporal.server.chasm.lib.scheduler.proto.v1.MigrateToWorkflowResponse\"\x11\xd2\xc3\x18\r\x1a\vschedule_idBJZHgo.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1;schedulerpbb\x06proto3"
 
 var file_temporal_server_chasm_lib_scheduler_proto_v1_service_proto_goTypes = []any{
 	(*CreateScheduleRequest)(nil),             // 0: temporal.server.chasm.lib.scheduler.proto.v1.CreateScheduleRequest

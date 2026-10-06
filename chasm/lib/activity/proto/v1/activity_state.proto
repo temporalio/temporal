@@ -12,7 +12,7 @@ import "temporal/api/failure/v1/message.proto";
 import "temporal/api/sdk/v1/user_metadata.proto";
 import "temporal/api/taskqueue/v1/message.proto";
 
-option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb;activitypb";
+option go_package = "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1;activitypb";
 
 enum ActivityExecutionStatus {
   ACTIVITY_EXECUTION_STATUS_UNSPECIFIED = 0;
