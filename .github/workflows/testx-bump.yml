@@ -109,6 +109,8 @@ jobs:
   # the replace.
   check-pin:
     runs-on: ubuntu-latest
+    outputs:
+      message: ${{ steps.check.outputs.message }}
 
     steps:
       - name: Checkout code
@@ -124,6 +126,7 @@ jobs:
           cache: true
 
       - name: Check required testx version is current
+        id: check
         run: |
           version=$(go list -m -f '{{.Version}}' go.temporal.io/testx)
           pinned=${version##*-}
@@ -140,7 +143,9 @@ jobs:
           oldest=$(git log --format=%ct "${range}" -- testx/ | tail -1)
           age=$(( $(date +%s) - oldest ))
           if [ "${age}" -gt 86400 ]; then
-            echo "::error file=go.mod::Required testx version ${version} has been behind testx/ for $(( age / 3600 ))h; check the testx-bump workflow and its PR."
+            message="Required testx version ${version} has been behind testx/ for $(( age / 3600 ))h; check the testx-bump workflow and its PR."
+            echo "::error file=go.mod::${message}"
+            echo "message=${message}" >> "${GITHUB_OUTPUT}"
             exit 1
           fi
           echo "Required testx version ${version} is behind testx/ for $(( age / 3600 ))h; not alerting yet."
@@ -150,24 +155,25 @@ jobs:
     if: failure()
     needs: [bump, check-pin]
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
     steps:
-      - name: Checkout code
-        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
-
-      - name: Set up Go
-        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
-        with:
-          go-version-file: go.mod
-          cache: true
-
       - name: Send Slack notification
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
-          GH_TOKEN: ${{ github.token }}
+          BUMP_RESULT: ${{ needs.bump.result }}
+          CHECK_PIN_MESSAGE: ${{ needs.check-pin.outputs.message }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          BUMP_PRS_URL: ${{ github.server_url }}/${{ github.repository }}/pulls?q=head%3A${{ env.BRANCH }}
         run: |
-          go run ./cmd/tools/ci-notify alert \
-            --run-id "${{ github.run_id }}" \
-            --slack-webhook "$SLACK_WEBHOOK"
+          details=()
+          if [ "${BUMP_RESULT}" = "failure" ]; then
+            details+=("The bump job failed.")
+          fi
+          if [ -n "${CHECK_PIN_MESSAGE}" ]; then
+            details+=("${CHECK_PIN_MESSAGE}")
+          fi
+          text=$(printf '%s\n' \
+            ":warning: *go.temporal.io/testx version on main needs attention*" \
+            "${details[@]}" \
+            "<${RUN_URL}|View run> · <${BUMP_PRS_URL}|Bump PR>")
+          jq -n --arg text "${text}" '{text: $text}' |
+            curl -fsS -X POST -H 'Content-Type: application/json' --data @- "${SLACK_WEBHOOK}"
