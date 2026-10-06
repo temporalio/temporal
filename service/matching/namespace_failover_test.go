@@ -134,8 +134,8 @@ func TestGetTaskQueuePartitionManager_NamespaceStateChange(t *testing.T) {
 		wantErr   bool
 		wantState *namespace.Namespace
 	}{
-		// The partition is built from an active snapshot, and the namespace fails over to passive before
-		// it's inserted, as if the callback's scan had already run.
+		// The namespace fails over to passive after the readthrough lookup but before the partition is
+		// built under the lock, as if the callback's scan had already run.
 		{name: "failed over", current: passive, wantState: passive},
 		{name: "unchanged", current: active, wantState: active},
 		{name: "removed from registry", wantErr: true},
@@ -143,13 +143,7 @@ func TestGetTaskQueuePartitionManager_NamespaceStateChange(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			registry := namespace.NewMockRegistry(ctrl)
-			var lookups atomic.Int32
-			registry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).DoAndReturn(func(namespace.ID) (*namespace.Namespace, error) {
-				if lookups.Add(1) == 1 || tc.current == nil {
-					return active, nil
-				}
-				return tc.current, nil
-			}).AnyTimes()
+			registry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(active, nil).AnyTimes()
 			registry.EXPECT().GetNamespaceByIDWithOptions(
 				namespace.ID(namespaceID),
 				namespace.GetNamespaceOptions{DisableReadthrough: true},

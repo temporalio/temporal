@@ -534,13 +534,10 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		return nil, false, nil
 	}
 
-	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(namespace.ID(partition.NamespaceId()))
-	if err != nil {
-		return nil, false, err
-	}
-
-	newPM, err := e.buildTaskQueuePartitionManager(namespaceEntry, partition, loadCause)
-	if err != nil {
+	// Outside the lock because this may read through to persistence. It also makes the cache-only
+	// read below succeed, since a readthrough populates the cache.
+	namespaceID := namespace.ID(partition.NamespaceId())
+	if _, err := e.namespaceRegistry.GetNamespaceByID(namespaceID); err != nil {
 		return nil, false, err
 	}
 
@@ -549,26 +546,25 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 	pm, ok = e.partitions[key]
 	if ok {
 		e.partitionsLock.Unlock()
-		// Lost the race with a concurrent load of the same partition. The unstarted
-		// newPM holds no external references (subscriptions etc. are only registered
-		// in Start), so it can simply be dropped and garbage collected.
 		return pm, false, nil
 	}
 
-	// Catches a failover or deletion whose onNamespaceStateChange scan ran before this insert.
-	currentEntry, err := e.namespaceRegistry.GetNamespaceByIDWithOptions(
-		namespaceEntry.ID(),
+	// Building under the lock is cheap, and reading the namespace here sees any failover or deletion
+	// whose onNamespaceStateChange scan already ran, since the registry updates its cache before it
+	// invokes callbacks.
+	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByIDWithOptions(
+		namespaceID,
 		namespace.GetNamespaceOptions{DisableReadthrough: true},
 	)
-	if err == nil && e.namespaceStateTagValue(currentEntry) != e.namespaceStateTagValue(namespaceEntry) {
-		// Rarely taken, so rebuilding under the lock is fine. The dropped newPM was never started.
-		newPM, err = e.buildTaskQueuePartitionManager(currentEntry, partition, loadCause)
-	}
 	if err != nil {
 		e.partitionsLock.Unlock()
 		return nil, false, err
 	}
-
+	newPM, err := e.buildTaskQueuePartitionManager(namespaceEntry, partition, loadCause)
+	if err != nil {
+		e.partitionsLock.Unlock()
+		return nil, false, err
+	}
 	e.partitions[key] = newPM
 	e.partitionsLock.Unlock()
 
