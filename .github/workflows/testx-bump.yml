@@ -109,8 +109,6 @@ jobs:
   # the replace.
   check-pin:
     runs-on: ubuntu-latest
-    outputs:
-      message: ${{ steps.check.outputs.message }}
 
     steps:
       - name: Checkout code
@@ -126,12 +124,10 @@ jobs:
           cache: true
 
       - name: Check required testx version is current
-        id: check
         run: |
           version=$(go list -m -f '{{.Version}}' go.temporal.io/testx)
           pinned=${version##*-}
           if git rev-parse -q --verify "${pinned}^{commit}" >/dev/null && git diff --quiet "${pinned}" HEAD -- testx/; then
-            echo "Required testx version ${version} is current."
             exit 0
           fi
 
@@ -143,12 +139,9 @@ jobs:
           oldest=$(git log --format=%ct "${range}" -- testx/ | tail -1)
           age=$(( $(date +%s) - oldest ))
           if [ "${age}" -gt 86400 ]; then
-            message="Required testx version ${version} has been behind testx/ for $(( age / 3600 ))h; check the testx-bump workflow and its PR."
-            echo "::error file=go.mod::${message}"
-            echo "message=${message}" >> "${GITHUB_OUTPUT}"
+            echo "::error file=go.mod::Required testx version doesn't match testx/."
             exit 1
           fi
-          echo "Required testx version ${version} is behind testx/ for $(( age / 3600 ))h; not alerting yet."
 
   notify-failure:
     name: Notify Slack on Failure
@@ -160,7 +153,7 @@ jobs:
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           BUMP_RESULT: ${{ needs.bump.result }}
-          CHECK_PIN_MESSAGE: ${{ needs.check-pin.outputs.message }}
+          CHECK_PIN_RESULT: ${{ needs.check-pin.result }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           BUMP_PRS_URL: ${{ github.server_url }}/${{ github.repository }}/pulls?q=head%3A${{ env.BRANCH }}
         run: |
@@ -168,8 +161,8 @@ jobs:
           if [ "${BUMP_RESULT}" = "failure" ]; then
             details+=("The bump job failed.")
           fi
-          if [ -n "${CHECK_PIN_MESSAGE}" ]; then
-            details+=("${CHECK_PIN_MESSAGE}")
+          if [ "${CHECK_PIN_RESULT}" = "failure" ]; then
+            details+=("Required testx version doesn't match testx/.")
           fi
           text=$(printf '%s\n' \
             ":warning: *go.temporal.io/testx version on main needs attention*" \
