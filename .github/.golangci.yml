@@ -44,8 +44,6 @@ linters:
           msg: "Do not use .UnixMilli() for Cassandra timestamps. Use p.UnixMilliseconds() for consistency and proper zero-time handling."
         - pattern: "^UnixNano$"
           msg: "Do not use .UnixNano() for Cassandra timestamps. Use p.UnixMilliseconds() which returns milliseconds."
-        - pattern: FunctionalTestBase
-          msg: "FunctionalTestBase is deprecated. Use testcore.NewEnv(t) instead. See docs/development/testing.md for details."
         - pattern: context\.Background\(\)
           msg: "Avoid context.Background() in tests; use t.Context() to respect test timeouts and cancellation"
         - pattern: '(^|\.)(Eventually|Eventuallyf|EventuallyWithT|EventuallyWithTf)(\(|$)'
@@ -200,10 +198,6 @@ linters:
           - forbidigo
       - path: chasm/lib/activity/model/.*\.go$ # the activity model transition function deliberately panics if it can't accept an event
         text: "panic"
-        linters:
-          - forbidigo
-      - path: tests/testcore/.*\.go$ # still needed in tests/testcore/ until we remove testify suites entirely
-        text: "FunctionalTestBase"
         linters:
           - forbidigo
       - path: common/namespace/(namespace|replication_resolver)(_test)?\.go$ # ActiveInCluster definition and direct unit tests
