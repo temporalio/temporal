@@ -90,7 +90,13 @@ func (v *RequestValidator) ValidateRetryPolicy(namespaceName string, retryPolicy
 		return nil
 	}
 
-	retrypolicy.EnsureDefaults(retryPolicy, v.config.defaultWorkflowRetrySettings(namespaceName))
+	defaultSettings := v.config.defaultWorkflowRetrySettings(namespaceName)
+	// Don't override explicit MaximumAttempts=0 (unlimited).
+	// Proto3 int32 can't distinguish "unset" from "explicitly set to 0".
+	if defaultSettings.MaximumAttempts != 0 {
+		defaultSettings.MaximumAttempts = 0
+	}
+	retrypolicy.EnsureDefaults(retryPolicy, defaultSettings)
 	return retrypolicy.Validate(retryPolicy)
 }
 

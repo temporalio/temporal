@@ -563,6 +563,14 @@ func (v *CommandAttrValidator) validateActivityRetryPolicy(
 		return nil
 	}
 	defaultActivityRetrySettings := v.getDefaultActivityRetrySettings(namespaceName.String())
+	// Don't override explicit MaximumAttempts=0 (unlimited).
+	// Proto3 int32 can't distinguish "unset" from "explicitly set to 0",
+	// so preserve the caller's value when the dynamic config has a non-zero default.
+	// The dynamic config docs say it applies "where the user has not specified an
+	// explicit RetryPolicy" — by the time we reach here, the user has.
+	if defaultActivityRetrySettings.MaximumAttempts != 0 {
+		defaultActivityRetrySettings.MaximumAttempts = 0
+	}
 	retrypolicy.EnsureDefaults(retryPolicy, defaultActivityRetrySettings)
 	return retrypolicy.Validate(retryPolicy)
 }
@@ -578,6 +586,11 @@ func (v *CommandAttrValidator) validateWorkflowRetryPolicy(
 
 	// Otherwise, for any unset fields on the retry policy, set with defaults
 	defaultWorkflowRetrySettings := v.getDefaultWorkflowRetrySettings(namespaceName.String())
+	// Don't override explicit MaximumAttempts=0 (unlimited).
+	// Proto3 int32 can't distinguish "unset" from "explicitly set to 0".
+	if defaultWorkflowRetrySettings.MaximumAttempts != 0 {
+		defaultWorkflowRetrySettings.MaximumAttempts = 0
+	}
 	retrypolicy.EnsureDefaults(retryPolicy, defaultWorkflowRetrySettings)
 	return retrypolicy.Validate(retryPolicy)
 }
