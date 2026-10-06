@@ -1,8 +1,9 @@
-package metrics
+package metricsbackend
 
 import (
 	"context"
 
+	"go.temporal.io/server/common/metrics"
 	"go.uber.org/fx"
 )
 
@@ -15,7 +16,7 @@ var RuntimeMetricsReporterLifetimeHooksModule = fx.Options(
 
 func RuntimeMetricsReporterLifetimeHooks(
 	lc fx.Lifecycle,
-	reporter *RuntimeMetricsReporter,
+	reporter *metrics.RuntimeMetricsReporter,
 ) {
 	lc.Append(
 		fx.Hook{

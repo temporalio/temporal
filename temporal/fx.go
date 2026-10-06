@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/membership/ringpop"
 	"go.temporal.io/server/common/membership/static"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricsbackend"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
@@ -208,7 +209,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	// MetricsHandler
 	metricHandler := so.metricHandler
 	if metricHandler == nil {
-		metricHandler, err = metrics.MetricsHandlerFromConfig(logger, so.config.Global.Metrics)
+		metricHandler, err = metricsbackend.MetricsHandlerFromConfig(logger, so.config.Global.Metrics)
 		if err != nil {
 			return serverOptionsProvider{}, fmt.Errorf("unable to create metrics handler: %w", err)
 		}

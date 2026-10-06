@@ -68,7 +68,7 @@ const (
 	isInternal                                     = "is_internal"
 	unknownValue                                   = "_unknown_"
 	totalMetricSuffix                              = "_total"
-	tagExcludedValue                               = "_tag_excluded_"
+	TagExcludedValue                               = "_tag_excluded_"
 	falseValue                                     = "false"
 	trueValue                                      = "true"
 	errorPrefix                                    = "*"

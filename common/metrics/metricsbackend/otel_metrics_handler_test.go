@@ -1,4 +1,4 @@
-package metrics
+package metricsbackend
 
 import (
 	"context"
@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.uber.org/mock/gomock"
 )
 
@@ -44,33 +45,33 @@ func TestMeter(t *testing.T) {
 			sdkmetrics.NewView(
 				sdkmetrics.Instrument{
 					Kind: sdkmetrics.InstrumentKindHistogram,
-					Unit: Bytes,
+					Unit: metrics.Bytes,
 				},
 				sdkmetrics.Stream{
 					Aggregation: sdkmetrics.AggregationExplicitBucketHistogram{
-						Boundaries: defaultConfig.PerUnitHistogramBoundaries[Bytes],
+						Boundaries: defaultConfig.PerUnitHistogramBoundaries[metrics.Bytes],
 					},
 				},
 			),
 			sdkmetrics.NewView(
 				sdkmetrics.Instrument{
 					Kind: sdkmetrics.InstrumentKindHistogram,
-					Unit: Dimensionless,
+					Unit: metrics.Dimensionless,
 				},
 				sdkmetrics.Stream{
 					Aggregation: sdkmetrics.AggregationExplicitBucketHistogram{
-						Boundaries: defaultConfig.PerUnitHistogramBoundaries[Dimensionless],
+						Boundaries: defaultConfig.PerUnitHistogramBoundaries[metrics.Dimensionless],
 					},
 				},
 			),
 			sdkmetrics.NewView(
 				sdkmetrics.Instrument{
 					Kind: sdkmetrics.InstrumentKindHistogram,
-					Unit: Milliseconds,
+					Unit: metrics.Milliseconds,
 				},
 				sdkmetrics.Stream{
 					Aggregation: sdkmetrics.AggregationExplicitBucketHistogram{
-						Boundaries: defaultConfig.PerUnitHistogramBoundaries[Milliseconds],
+						Boundaries: defaultConfig.PerUnitHistogramBoundaries[metrics.Milliseconds],
 					},
 				},
 			),
@@ -124,7 +125,7 @@ func TestMeter(t *testing.T) {
 				DataPoints: []metricdata.DataPoint[int64]{
 					{
 
-						Attributes: attribute.NewSet(attribute.String("taskqueue", tagExcludedValue)),
+						Attributes: attribute.NewSet(attribute.String("taskqueue", metrics.TagExcludedValue)),
 						Value:      14,
 						Exemplars:  []metricdata.Exemplar[int64]{},
 					},
@@ -148,7 +149,7 @@ func TestMeter(t *testing.T) {
 				},
 				Temporality: metricdata.CumulativeTemporality,
 			},
-			Unit: Milliseconds,
+			Unit: metrics.Milliseconds,
 		},
 		{
 			Name: "temp",
@@ -177,7 +178,7 @@ func TestMeter(t *testing.T) {
 				},
 				Temporality: metricdata.CumulativeTemporality,
 			},
-			Unit: Bytes,
+			Unit: metrics.Bytes,
 		},
 	}
 	if diff := cmp.Diff(want, got.ScopeMetrics[0].Metrics,
@@ -210,11 +211,11 @@ func TestMeter_TimerInSeconds(t *testing.T) {
 			sdkmetrics.NewView(
 				sdkmetrics.Instrument{
 					Kind: sdkmetrics.InstrumentKindHistogram,
-					Unit: Seconds,
+					Unit: metrics.Seconds,
 				},
 				sdkmetrics.Stream{
 					Aggregation: sdkmetrics.AggregationExplicitBucketHistogram{
-						Boundaries: defaultConfig.PerUnitHistogramBoundaries[Seconds],
+						Boundaries: defaultConfig.PerUnitHistogramBoundaries[metrics.Seconds],
 					},
 				},
 			),
@@ -251,7 +252,7 @@ func TestMeter_TimerInSeconds(t *testing.T) {
 				},
 				Temporality: metricdata.CumulativeTemporality,
 			},
-			Unit: Seconds,
+			Unit: metrics.Seconds,
 		},
 	}
 	if diff := cmp.Diff(want, got.ScopeMetrics[0].Metrics,
@@ -270,23 +271,23 @@ func TestMeter_TimerInSeconds(t *testing.T) {
 	}
 }
 
-func recordMetrics(mp Handler) {
+func recordMetrics(mp metrics.Handler) {
 	hitsCounter := mp.Counter("hits")
 	gauge := mp.Gauge("temp")
-	histogram := mp.Histogram("transmission", Bytes)
+	histogram := mp.Histogram("transmission", metrics.Bytes)
 	hitsTaggedCounter := mp.Counter("hits-tagged")
 	hitsTaggedExcludedCounter := mp.Counter("hits-tagged-excluded")
 
 	hitsCounter.Record(8)
-	gauge.Record(100, StringTag("location", "Mare Imbrium"))
+	gauge.Record(100, metrics.StringTag("location", "Mare Imbrium"))
 	histogram.Record(int64(testBytes))
-	hitsTaggedCounter.Record(11, UnsafeTaskQueueTag("__sticky__"))
-	hitsTaggedExcludedCounter.Record(14, UnsafeTaskQueueTag("filtered"))
+	hitsTaggedCounter.Record(11, metrics.UnsafeTaskQueueTag("__sticky__"))
+	hitsTaggedExcludedCounter.Record(14, metrics.UnsafeTaskQueueTag("filtered"))
 
 	recordTimer(mp)
 }
 
-func recordTimer(mp Handler) {
+func recordTimer(mp metrics.Handler) {
 	timer := mp.Timer("latency")
 	timer.Record(time.Duration(minLatency) * time.Millisecond)
 	timer.Record(time.Duration(maxLatency) * time.Millisecond)
@@ -318,7 +319,7 @@ func TestOtelMetricsHandler_Error(t *testing.T) {
 	logger := log.NewMockLogger(ctrl)
 	meter := erroneousMeter{err: testErr}
 	provider := &testProvider{meter: meter}
-	cfg := ClientConfig{}
+	cfg := metrics.ClientConfig{}
 	handler, err := NewOtelMetricsHandler(logger, provider, cfg, false)
 	require.NoError(t, err)
 	msg := "error getting metric"
@@ -331,5 +332,5 @@ func TestOtelMetricsHandler_Error(t *testing.T) {
 	logger.EXPECT().Error(msg, tag.String("MetricName", "gauge"), errTag)
 	handler.Gauge("gauge").Record(1.0)
 	logger.EXPECT().Error(msg, tag.String("MetricName", "histogram"), errTag)
-	handler.Histogram("histogram", Bytes).Record(1)
+	handler.Histogram("histogram", metrics.Bytes).Record(1)
 }

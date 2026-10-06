@@ -1,4 +1,4 @@
-package metrics
+package metricsbackend
 
 import (
 	"encoding/binary"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/uber-go/tally/v4"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 )
 
 // defaultTagsCacheMaxSize is the default upper bound on cached scope/handler entries.
@@ -16,7 +17,7 @@ const defaultTagsCacheMaxSize = 10000
 
 type histogramCacheKey struct {
 	name string
-	unit MetricUnit
+	unit metrics.MetricUnit
 }
 
 var sanitizer = tally.NewSanitizer(tally.SanitizeOptions{
@@ -95,24 +96,24 @@ type (
 
 	tallyMetricsHandler struct {
 		scope          tally.Scope
-		perUnitBuckets map[MetricUnit]tally.Buckets
+		perUnitBuckets map[metrics.MetricUnit]tally.Buckets
 		excludeTags    excludeTags
 		cache          *sharedScopeCache
 		scopeKey       string   // unique prefix for this handler in the shared cache
-		counters       sync.Map // metric name -> CounterIface
-		gauges         sync.Map // metric name -> GaugeIface
-		timers         sync.Map // metric name -> TimerIface
-		histograms     sync.Map // metric name + unit -> HistogramIface
+		counters       sync.Map // metric name -> metrics.CounterIface
+		gauges         sync.Map // metric name -> metrics.GaugeIface
+		timers         sync.Map // metric name -> metrics.TimerIface
+		histograms     sync.Map // metric name + unit -> metrics.HistogramIface
 	}
 )
 
-var _ Handler = (*tallyMetricsHandler)(nil)
+var _ metrics.Handler = (*tallyMetricsHandler)(nil)
 
-func NewTallyMetricsHandler(cfg ClientConfig, scope tally.Scope) *tallyMetricsHandler {
-	perUnitBuckets := make(map[MetricUnit]tally.Buckets)
+func NewTallyMetricsHandler(cfg metrics.ClientConfig, scope tally.Scope) *tallyMetricsHandler {
+	perUnitBuckets := make(map[metrics.MetricUnit]tally.Buckets)
 
 	for unit, boundariesList := range cfg.PerUnitHistogramBoundaries {
-		perUnitBuckets[MetricUnit(unit)] = tally.ValueBuckets(boundariesList)
+		perUnitBuckets[metrics.MetricUnit(unit)] = tally.ValueBuckets(boundariesList)
 	}
 
 	maxSize := cfg.TagsCacheMaxSize
@@ -131,7 +132,7 @@ func NewTallyMetricsHandler(cfg ClientConfig, scope tally.Scope) *tallyMetricsHa
 
 // tagsCacheKey builds a compact string key from a tag slice for use as a
 // map lookup key.
-func tagsCacheKey(tags []Tag) string {
+func tagsCacheKey(tags []metrics.Tag) string {
 	size := 0
 	for i := range tags {
 		size += len(tags[i].Key) + len(tags[i].Value) + 2*binary.MaxVarintLen64
@@ -155,7 +156,7 @@ func appendCacheKeyPart(sb *strings.Builder, value string) {
 // WithTags creates a new MetricProvider with provided []Tag
 // Tags are merged with registered Tags from the source MetricsHandler.
 // Handlers are cached by tag combination so repeated calls avoid allocations.
-func (tmh *tallyMetricsHandler) WithTags(tags ...Tag) Handler {
+func (tmh *tallyMetricsHandler) WithTags(tags ...metrics.Tag) metrics.Handler {
 	if len(tags) == 0 {
 		return tmh
 	}
@@ -177,7 +178,7 @@ func (tmh *tallyMetricsHandler) WithTags(tags ...Tag) Handler {
 // allocating a new map and tally scope lookup. Tags are normalized through
 // excludeTags before cache key computation so that different raw values which
 // map to the same excluded placeholder share a single cache entry.
-func (tmh *tallyMetricsHandler) cachedTaggedScope(tags []Tag) tally.Scope {
+func (tmh *tallyMetricsHandler) cachedTaggedScope(tags []metrics.Tag) tally.Scope {
 	if len(tags) == 0 {
 		return tmh.scope
 	}
@@ -189,10 +190,10 @@ func (tmh *tallyMetricsHandler) cachedTaggedScope(tags []Tag) tally.Scope {
 
 // normalizeTag applies excludeTags substitution to a single tag.
 // Returns the (possibly modified) tag and whether it was normalized.
-func normalizeTag(t Tag, excl excludeTags) (Tag, bool) {
+func normalizeTag(t metrics.Tag, excl excludeTags) (metrics.Tag, bool) {
 	if vals, ok := excl[t.Key]; ok {
 		if _, ok := vals[t.Value]; !ok {
-			return Tag{Key: t.Key, Value: tagExcludedValue}, true
+			return metrics.Tag{Key: t.Key, Value: metrics.TagExcludedValue}, true
 		}
 	}
 	return t, false
@@ -201,11 +202,11 @@ func normalizeTag(t Tag, excl excludeTags) (Tag, bool) {
 // normalizeTagsForCaching applies excludeTags substitution to produce
 // canonical tag values for cache key computation. Returns the original slice
 // unchanged if no tags need normalization (zero-alloc fast path).
-func normalizeTagsForCaching(tags []Tag, excl excludeTags) []Tag {
+func normalizeTagsForCaching(tags []metrics.Tag, excl excludeTags) []metrics.Tag {
 	if len(excl) == 0 {
 		return tags
 	}
-	var normalized []Tag
+	var normalized []metrics.Tag
 	for i, t := range tags {
 		nt, changed := normalizeTag(t, excl)
 		if changed {
@@ -222,52 +223,52 @@ func normalizeTagsForCaching(tags []Tag, excl excludeTags) []Tag {
 }
 
 // Counter obtains a counter for the given name.
-func (tmh *tallyMetricsHandler) Counter(counter string) CounterIface {
+func (tmh *tallyMetricsHandler) Counter(counter string) metrics.CounterIface {
 	if v, ok := tmh.counters.Load(counter); ok {
-		return v.(CounterIface) //nolint:revive // type-safe: only CounterIface is stored
+		return v.(metrics.CounterIface) //nolint:revive // type-safe: only metrics.CounterIface is stored
 	}
-	c := CounterFunc(func(i int64, t ...Tag) {
+	c := metrics.CounterFunc(func(i int64, t ...metrics.Tag) {
 		tmh.cachedTaggedScope(t).Counter(counter).Inc(i)
 	})
 	actual, _ := tmh.counters.LoadOrStore(counter, c)
-	return actual.(CounterIface) //nolint:revive // type-safe: only CounterIface is stored
+	return actual.(metrics.CounterIface) //nolint:revive // type-safe: only metrics.CounterIface is stored
 }
 
 // Gauge obtains a gauge for the given name.
-func (tmh *tallyMetricsHandler) Gauge(gauge string) GaugeIface {
+func (tmh *tallyMetricsHandler) Gauge(gauge string) metrics.GaugeIface {
 	if v, ok := tmh.gauges.Load(gauge); ok {
-		return v.(GaugeIface) //nolint:revive // type-safe: only GaugeIface is stored
+		return v.(metrics.GaugeIface) //nolint:revive // type-safe: only metrics.GaugeIface is stored
 	}
-	g := GaugeFunc(func(f float64, t ...Tag) {
+	g := metrics.GaugeFunc(func(f float64, t ...metrics.Tag) {
 		tmh.cachedTaggedScope(t).Gauge(gauge).Update(f)
 	})
 	actual, _ := tmh.gauges.LoadOrStore(gauge, g)
-	return actual.(GaugeIface) //nolint:revive // type-safe: only GaugeIface is stored
+	return actual.(metrics.GaugeIface) //nolint:revive // type-safe: only metrics.GaugeIface is stored
 }
 
 // Timer obtains a timer for the given name.
-func (tmh *tallyMetricsHandler) Timer(timer string) TimerIface {
+func (tmh *tallyMetricsHandler) Timer(timer string) metrics.TimerIface {
 	if v, ok := tmh.timers.Load(timer); ok {
-		return v.(TimerIface) //nolint:revive // type-safe: only TimerIface is stored
+		return v.(metrics.TimerIface) //nolint:revive // type-safe: only metrics.TimerIface is stored
 	}
-	ti := TimerFunc(func(d time.Duration, t ...Tag) {
+	ti := metrics.TimerFunc(func(d time.Duration, t ...metrics.Tag) {
 		tmh.cachedTaggedScope(t).Timer(timer).Record(d)
 	})
 	actual, _ := tmh.timers.LoadOrStore(timer, ti)
-	return actual.(TimerIface) //nolint:revive // type-safe: only TimerIface is stored
+	return actual.(metrics.TimerIface) //nolint:revive // type-safe: only metrics.TimerIface is stored
 }
 
 // Histogram obtains a histogram for the given name.
-func (tmh *tallyMetricsHandler) Histogram(histogram string, unit MetricUnit) HistogramIface {
+func (tmh *tallyMetricsHandler) Histogram(histogram string, unit metrics.MetricUnit) metrics.HistogramIface {
 	key := histogramCacheKey{name: histogram, unit: unit}
 	if v, ok := tmh.histograms.Load(key); ok {
-		return v.(HistogramIface) //nolint:revive // type-safe: only HistogramIface is stored
+		return v.(metrics.HistogramIface) //nolint:revive // type-safe: only metrics.HistogramIface is stored
 	}
-	h := HistogramFunc(func(i int64, t ...Tag) {
+	h := metrics.HistogramFunc(func(i int64, t ...metrics.Tag) {
 		tmh.cachedTaggedScope(t).Histogram(histogram, tmh.perUnitBuckets[unit]).RecordValue(float64(i))
 	})
 	actual, _ := tmh.histograms.LoadOrStore(key, h)
-	return actual.(HistogramIface) //nolint:revive // type-safe: only HistogramIface is stored
+	return actual.(metrics.HistogramIface) //nolint:revive // type-safe: only metrics.HistogramIface is stored
 }
 
 func (*tallyMetricsHandler) Stop(log.Logger) {}
@@ -276,11 +277,11 @@ func (*tallyMetricsHandler) Close() error {
 	return nil
 }
 
-func (tmh *tallyMetricsHandler) StartBatch(_ string) BatchHandler {
+func (tmh *tallyMetricsHandler) StartBatch(_ string) metrics.BatchHandler {
 	return tmh
 }
 
-func tagsToMap(t1 []Tag, e excludeTags) map[string]string {
+func tagsToMap(t1 []metrics.Tag, e excludeTags) map[string]string {
 	if len(t1) == 0 {
 		return nil
 	}

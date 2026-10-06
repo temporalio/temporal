@@ -1,4 +1,4 @@
-package metrics
+package metricsbackend
 
 import (
 	"context"
@@ -8,14 +8,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 )
 
 func TestStatsdExporter(t *testing.T) {
 	// Test configuration
-	config := &StatsdConfig{
+	config := &metrics.StatsdConfig{
 		HostPort: "localhost:8125",
 		Prefix:   "test",
-		Reporter: StatsdReporterConfig{
+		Reporter: metrics.StatsdReporterConfig{
 			TagSeparator: ",",
 		},
 	}
@@ -47,19 +48,19 @@ func TestNewOpenTelemetryProviderWithStatsD(t *testing.T) {
 	logger := log.NewNoopLogger()
 
 	// Test configuration
-	clientConfig := &ClientConfig{
+	clientConfig := &metrics.ClientConfig{
 		PerUnitHistogramBoundaries: map[string][]float64{
-			Dimensionless: {1, 5, 10, 25, 50, 100},
-			Bytes:         {1024, 4096, 16384, 65536},
-			Milliseconds:  {1, 5, 10, 25, 50, 100, 250, 500, 1000},
-			Seconds:       {0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0},
+			metrics.Dimensionless: {1, 5, 10, 25, 50, 100},
+			metrics.Bytes:         {1024, 4096, 16384, 65536},
+			metrics.Milliseconds:  {1, 5, 10, 25, 50, 100, 250, 500, 1000},
+			metrics.Seconds:       {0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0},
 		},
 	}
 
-	statsdConfig := &StatsdConfig{
+	statsdConfig := &metrics.StatsdConfig{
 		HostPort: "localhost:8125",
 		Prefix:   "temporal_test",
-		Reporter: StatsdReporterConfig{
+		Reporter: metrics.StatsdReporterConfig{
 			TagSeparator: ",",
 		},
 	}
@@ -92,16 +93,16 @@ func TestNewOpenTelemetryProviderWithPrometheus(t *testing.T) {
 	logger := log.NewNoopLogger()
 
 	// Test configuration
-	clientConfig := &ClientConfig{
+	clientConfig := &metrics.ClientConfig{
 		PerUnitHistogramBoundaries: map[string][]float64{
-			Dimensionless: {1, 5, 10, 25, 50, 100},
-			Bytes:         {1024, 4096, 16384, 65536},
-			Milliseconds:  {1, 5, 10, 25, 50, 100, 250, 500, 1000},
-			Seconds:       {0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0},
+			metrics.Dimensionless: {1, 5, 10, 25, 50, 100},
+			metrics.Bytes:         {1024, 4096, 16384, 65536},
+			metrics.Milliseconds:  {1, 5, 10, 25, 50, 100, 250, 500, 1000},
+			metrics.Seconds:       {0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0},
 		},
 	}
 
-	prometheusConfig := &PrometheusConfig{
+	prometheusConfig := &metrics.PrometheusConfig{
 		ListenAddress: "127.0.0.1:0", // Use port 0 to get a random available port
 		HandlerPath:   "/metrics",
 	}

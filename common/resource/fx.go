@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricsbackend"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsregistry"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -100,7 +101,7 @@ var Module = fx.Options(
 	fx.Provide(AdminClientProvider),
 	fx.Provide(GrpcListenerProvider),
 	fx.Provide(RuntimeMetricsReporterProvider),
-	metrics.RuntimeMetricsReporterLifetimeHooksModule,
+	metricsbackend.RuntimeMetricsReporterLifetimeHooksModule,
 	fx.Provide(HistoryRawClientProvider),
 	fx.Provide(HistoryClientProvider),
 	fx.Provide(MatchingRawClientProvider),

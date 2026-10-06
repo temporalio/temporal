@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricsbackend"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
@@ -61,7 +62,7 @@ func (s *EagerNamespaceRefresherSuite) SetupTest() {
 	s.clientBean.EXPECT().GetRemoteAdminClient(gomock.Any()).Return(s.remoteAdminClient, nil).AnyTimes()
 	scope := tally.NewTestScope("test", nil)
 	s.mockReplicationTaskExecutor = nsreplication.NewMockTaskExecutor(s.controller)
-	s.mockMetricsHandler = metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(
+	s.mockMetricsHandler = metricsbackend.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(
 		metrics.ServiceNameTag("serviceName"))
 	s.eagerNamespaceRefresher = NewEagerNamespaceRefresher(
 		s.mockMetadataManager,

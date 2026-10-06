@@ -17,6 +17,7 @@ import (
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricsbackend"
 )
 
 type (
@@ -83,7 +84,7 @@ func NewHandler(logger log.Logger, clientConfig metrics.ClientConfig) (*Handler,
 	)
 	meter := provider.Meter("temporal")
 
-	otelHandler, err := metrics.NewOtelMetricsHandler(logger, &otelProvider{meter: meter}, clientConfig, false)
+	otelHandler, err := metricsbackend.NewOtelMetricsHandler(logger, &otelProvider{meter: meter}, clientConfig, false)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +163,7 @@ func collectSamples(name string, family *dto.MetricFamily, m *dto.Metric, sample
 	}
 }
 
-var _ metrics.OpenTelemetryProvider = (*otelProvider)(nil)
+var _ metricsbackend.OpenTelemetryProvider = (*otelProvider)(nil)
 
 type otelProvider struct {
 	meter metric.Meter

@@ -1,4 +1,4 @@
-package metrics
+package metricsbackend
 
 import (
 	"context"
@@ -10,6 +10,7 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 )
 
 // otelMetricsHandler is an adapter around an OpenTelemetry [metric.Meter] that implements the [Handler] interface.
@@ -19,7 +20,7 @@ type (
 		set                  attribute.Set
 		provider             OpenTelemetryProvider
 		excludeTags          map[string]map[string]struct{}
-		catalog              catalog
+		catalog              metrics.Catalog
 		gauges               *sync.Map // string -> *gaugeAdapter. note: shared between multiple otelMetricsHandlers
 		recordTimerInSeconds bool
 	}
@@ -45,20 +46,20 @@ type (
 	}
 )
 
-var _ Handler = (*otelMetricsHandler)(nil)
+var _ metrics.Handler = (*otelMetricsHandler)(nil)
 
 // NewOtelMetricsHandler returns a new Handler that uses the provided OpenTelemetry [metric.Meter] to record metrics.
 // This OTel handler supports metric descriptions for metrics registered with the New*Def functions. However, those
 // functions must be called before this constructor. Otherwise, the descriptions will be empty. This is because the
-// OTel metric descriptions are generated from the globalRegistry. You may also record metrics that are not registered
+// OTel metric descriptions are generated from the metrics defined with the metrics.New*Def functions. You may also record metrics that are not registered
 // via the New*Def functions. In that case, the metric description will be the OTel default (the metric name itself).
 func NewOtelMetricsHandler(
 	l log.Logger,
 	o OpenTelemetryProvider,
-	cfg ClientConfig,
+	cfg metrics.ClientConfig,
 	shouldRecordTimerInSeconds bool,
 ) (*otelMetricsHandler, error) {
-	c, err := globalRegistry.buildCatalog()
+	c, err := metrics.BuildCatalog()
 	if err != nil {
 		return nil, fmt.Errorf("failed to build metrics catalog: %w", err)
 	}
@@ -76,22 +77,22 @@ func NewOtelMetricsHandler(
 
 // WithTags creates a new Handler with the provided Tag list.
 // Tags are merged with the existing tags.
-func (omp *otelMetricsHandler) WithTags(tags ...Tag) Handler {
+func (omp *otelMetricsHandler) WithTags(tags ...metrics.Tag) metrics.Handler {
 	newHandler := *omp
 	newHandler.set = newHandler.makeSet(tags)
 	return &newHandler
 }
 
 // Counter obtains a counter for the given name.
-func (omp *otelMetricsHandler) Counter(counter string) CounterIface {
+func (omp *otelMetricsHandler) Counter(counter string) metrics.CounterIface {
 	opts := addOptions(omp, counterOptions{}, counter)
 	c, err := omp.provider.GetMeter().Int64Counter(counter, opts...)
 	if err != nil {
 		omp.l.Error("error getting metric", tag.String("MetricName", counter), tag.Error(err))
-		return CounterFunc(func(i int64, t ...Tag) {})
+		return metrics.CounterFunc(func(i int64, t ...metrics.Tag) {})
 	}
 
-	return CounterFunc(func(i int64, t ...Tag) {
+	return metrics.CounterFunc(func(i int64, t ...metrics.Tag) {
 		option := metric.WithAttributeSet(omp.makeSet(t))
 		c.Add(context.Background(), i, option)
 	})
@@ -123,10 +124,10 @@ func (omp *otelMetricsHandler) getGaugeAdapter(gauge string) (*gaugeAdapter, err
 }
 
 // Gauge obtains a gauge for the given name.
-func (omp *otelMetricsHandler) Gauge(gauge string) GaugeIface {
+func (omp *otelMetricsHandler) Gauge(gauge string) metrics.GaugeIface {
 	adapter, err := omp.getGaugeAdapter(gauge)
 	if err != nil {
-		return GaugeFunc(func(i float64, t ...Tag) {})
+		return metrics.GaugeFunc(func(i float64, t ...metrics.Tag) {})
 	}
 	return &gaugeAdapterGauge{
 		omp:     omp,
@@ -143,7 +144,7 @@ func (a *gaugeAdapter) callback(ctx context.Context, o metric.Float64Observer) e
 	return nil
 }
 
-func (g *gaugeAdapterGauge) Record(v float64, tags ...Tag) {
+func (g *gaugeAdapterGauge) Record(v float64, tags ...metrics.Tag) {
 	set := g.omp.makeSet(tags)
 	g.adapter.lock.Lock()
 	defer g.adapter.lock.Unlock()
@@ -151,51 +152,51 @@ func (g *gaugeAdapterGauge) Record(v float64, tags ...Tag) {
 }
 
 // Timer obtains a timer for the given name.
-func (omp *otelMetricsHandler) Timer(timer string) TimerIface {
+func (omp *otelMetricsHandler) Timer(timer string) metrics.TimerIface {
 	if omp.recordTimerInSeconds {
 		return omp.timerInSeconds(timer)
 	}
 	return omp.timerInMilliseconds(timer)
 }
 
-func (omp *otelMetricsHandler) timerInMilliseconds(timer string) TimerIface {
-	opts := addOptions(omp, int64HistogramOptions{metric.WithUnit(Milliseconds)}, timer)
+func (omp *otelMetricsHandler) timerInMilliseconds(timer string) metrics.TimerIface {
+	opts := addOptions(omp, int64HistogramOptions{metric.WithUnit(metrics.Milliseconds)}, timer)
 	c, err := omp.provider.GetMeter().Int64Histogram(timer, opts...)
 	if err != nil {
 		omp.l.Error("error getting metric", tag.String("MetricName", timer), tag.Error(err))
-		return TimerFunc(func(i time.Duration, t ...Tag) {})
+		return metrics.TimerFunc(func(i time.Duration, t ...metrics.Tag) {})
 	}
 
-	return TimerFunc(func(i time.Duration, t ...Tag) {
+	return metrics.TimerFunc(func(i time.Duration, t ...metrics.Tag) {
 		option := metric.WithAttributeSet(omp.makeSet(t))
 		c.Record(context.Background(), i.Milliseconds(), option)
 	})
 }
 
-func (omp *otelMetricsHandler) timerInSeconds(timer string) TimerIface {
-	opts := addOptions(omp, float64HistogramOptions{metric.WithUnit(Seconds)}, timer)
+func (omp *otelMetricsHandler) timerInSeconds(timer string) metrics.TimerIface {
+	opts := addOptions(omp, float64HistogramOptions{metric.WithUnit(metrics.Seconds)}, timer)
 	c, err := omp.provider.GetMeter().Float64Histogram(timer, opts...)
 	if err != nil {
 		omp.l.Error("error getting metric", tag.String("MetricName", timer), tag.Error(err))
-		return TimerFunc(func(i time.Duration, t ...Tag) {})
+		return metrics.TimerFunc(func(i time.Duration, t ...metrics.Tag) {})
 	}
 
-	return TimerFunc(func(i time.Duration, t ...Tag) {
+	return metrics.TimerFunc(func(i time.Duration, t ...metrics.Tag) {
 		option := metric.WithAttributeSet(omp.makeSet(t))
 		c.Record(context.Background(), i.Seconds(), option)
 	})
 }
 
 // Histogram obtains a histogram for the given name.
-func (omp *otelMetricsHandler) Histogram(histogram string, unit MetricUnit) HistogramIface {
+func (omp *otelMetricsHandler) Histogram(histogram string, unit metrics.MetricUnit) metrics.HistogramIface {
 	opts := addOptions(omp, int64HistogramOptions{metric.WithUnit(string(unit))}, histogram)
 	c, err := omp.provider.GetMeter().Int64Histogram(histogram, opts...)
 	if err != nil {
 		omp.l.Error("error getting metric", tag.String("MetricName", histogram), tag.Error(err))
-		return HistogramFunc(func(i int64, t ...Tag) {})
+		return metrics.HistogramFunc(func(i int64, t ...metrics.Tag) {})
 	}
 
-	return HistogramFunc(func(i int64, t ...Tag) {
+	return metrics.HistogramFunc(func(i int64, t ...metrics.Tag) {
 		option := metric.WithAttributeSet(omp.makeSet(t))
 		c.Record(context.Background(), i, option)
 	})
@@ -209,13 +210,13 @@ func (omp *otelMetricsHandler) Close() error {
 	return nil
 }
 
-func (omp *otelMetricsHandler) StartBatch(_ string) BatchHandler {
+func (omp *otelMetricsHandler) StartBatch(_ string) metrics.BatchHandler {
 	return omp
 }
 
 // makeSet returns an otel attribute.Set with the given tags merged with the
 // otelMetricsHandler's tags.
-func (omp *otelMetricsHandler) makeSet(tags []Tag) attribute.Set {
+func (omp *otelMetricsHandler) makeSet(tags []metrics.Tag) attribute.Set {
 	if len(tags) == 0 {
 		return omp.set
 	}
@@ -229,13 +230,13 @@ func (omp *otelMetricsHandler) makeSet(tags []Tag) attribute.Set {
 	return attribute.NewSet(attrs...)
 }
 
-func (omp *otelMetricsHandler) convertTag(tag Tag) attribute.KeyValue {
-	if vals, ok := omp.excludeTags[tag.Key]; ok {
-		if _, ok := vals[tag.Value]; !ok {
-			return attribute.String(tag.Key, tagExcludedValue)
+func (omp *otelMetricsHandler) convertTag(t metrics.Tag) attribute.KeyValue {
+	if vals, ok := omp.excludeTags[t.Key]; ok {
+		if _, ok := vals[t.Value]; !ok {
+			return attribute.String(t.Key, metrics.TagExcludedValue)
 		}
 	}
-	return attribute.String(tag.Key, tag.Value)
+	return attribute.String(t.Key, t.Value)
 }
 
 func makeInitialSet(tags map[string]string) attribute.Set {

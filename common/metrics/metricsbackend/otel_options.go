@@ -1,4 +1,4 @@
-package metrics
+package metricsbackend
 
 import (
 	"go.opentelemetry.io/otel/metric"
@@ -21,16 +21,16 @@ type (
 )
 
 func addOptions[T optionSet[T]](omp *otelMetricsHandler, opts T, metricName string) T {
-	metricDef, ok := omp.catalog.getMetric(metricName)
+	metricDef, ok := omp.catalog.GetMetric(metricName)
 	if !ok {
 		return opts
 	}
 
-	if description := metricDef.description; description != "" {
+	if description := metricDef.Description(); description != "" {
 		opts = opts.addOption(metric.WithDescription(description))
 	}
 
-	if unit := metricDef.unit; unit != "" {
+	if unit := metricDef.Unit(); unit != "" {
 		opts = opts.addOption(metric.WithUnit(string(unit)))
 	}
 

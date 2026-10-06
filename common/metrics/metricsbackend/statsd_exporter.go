@@ -1,4 +1,4 @@
-package metrics
+package metricsbackend
 
 import (
 	"context"
@@ -13,13 +13,14 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 )
 
 var _ metric.Exporter = (*statsdExporter)(nil)
 
 type statsdExporter struct {
 	client       statsd.Statter
-	config       *StatsdConfig
+	config       *metrics.StatsdConfig
 	logger       log.Logger
 	tagSeparator string
 	mu           sync.Mutex
@@ -27,7 +28,7 @@ type statsdExporter struct {
 }
 
 // NewStatsdExporter creates a new StatsD exporter that implements the OpenTelemetry metric.Exporter interface
-func NewStatsdExporter(config *StatsdConfig, logger log.Logger) (*statsdExporter, error) {
+func NewStatsdExporter(config *metrics.StatsdConfig, logger log.Logger) (*statsdExporter, error) {
 	if config == nil {
 		return nil, errors.New("StatsdConfig cannot be nil")
 	}

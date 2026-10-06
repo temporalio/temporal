@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricsbackend"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -133,7 +134,7 @@ func NewTest(controller *gomock.Controller, serviceName primitives.ServiceName) 
 	membershipMonitor.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
 
 	scope := tally.NewTestScope("test", nil)
-	metricsHandler := metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(
+	metricsHandler := metricsbackend.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(
 		metrics.ServiceNameTag(serviceName),
 	)
 

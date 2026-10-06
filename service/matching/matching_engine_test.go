@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricsbackend"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
@@ -1516,7 +1517,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
 
 	scope := tally.NewTestScope("test", nil)
-	s.matchingEngine.metricsHandler = metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(metrics.ServiceNameTag(primitives.MatchingService))
+	s.matchingEngine.metricsHandler = metricsbackend.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(metrics.ServiceNameTag(primitives.MatchingService))
 
 	// Set a short long poll expiration so that we don't have to wait too long for 0 throttling cases
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(2 * time.Second)
@@ -1698,7 +1699,7 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
 
 	scope := tally.NewTestScope("test", nil)
-	s.matchingEngine.metricsHandler = metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(metrics.ServiceNameTag(primitives.MatchingService))
+	s.matchingEngine.metricsHandler = metricsbackend.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(metrics.ServiceNameTag(primitives.MatchingService))
 
 	// Set a short long poll expiration so that the pollers don't wait too long for tasks
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(5 * time.Second)
@@ -1909,7 +1910,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	dispatchLimitFn func(int, int64) float64,
 ) int64 {
 	scope := tally.NewTestScope("test", nil)
-	s.matchingEngine.metricsHandler = metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(metrics.ServiceNameTag(primitives.MatchingService))
+	s.matchingEngine.metricsHandler = metricsbackend.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(metrics.ServiceNameTag(primitives.MatchingService))
 	s.matchingEngine.config.MinTaskThrottlingBurstSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(0)
 
 	runID := uuid.NewString()

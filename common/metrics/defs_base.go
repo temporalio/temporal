@@ -28,3 +28,7 @@ func (md metricDefinition) Name() string {
 func (md metricDefinition) Unit() MetricUnit {
 	return md.unit
 }
+
+func (md metricDefinition) Description() string {
+	return md.description
+}

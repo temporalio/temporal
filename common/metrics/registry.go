@@ -13,8 +13,8 @@ type (
 		sync.Mutex
 		definitions []metricDefinition
 	}
-	// catalog is a map of metric name to definition. It should not be modified after it is built.
-	catalog map[string]metricDefinition
+	// Catalog is a map of metric name to definition. It should not be modified after it is built.
+	Catalog map[string]metricDefinition
 )
 
 var (
@@ -50,11 +50,11 @@ func (c *registry) register(d metricDefinition) {
 
 // buildCatalog builds a catalog from the list of pending metric definitions. It is safe to call this method multiple
 // times. This method is thread-safe.
-func (c *registry) buildCatalog() (catalog, error) {
+func (c *registry) buildCatalog() (Catalog, error) {
 	c.Lock()
 	defer c.Unlock()
 
-	r := make(catalog, len(c.definitions))
+	r := make(Catalog, len(c.definitions))
 	for _, d := range c.definitions {
 		if original, ok := r[d.name]; ok {
 			return nil, fmt.Errorf(
@@ -69,7 +69,12 @@ func (c *registry) buildCatalog() (catalog, error) {
 	return r, nil
 }
 
-func (c catalog) getMetric(name string) (metricDefinition, bool) {
+// BuildCatalog builds a catalog of the metrics defined with the New*Def functions.
+func BuildCatalog() (Catalog, error) {
+	return globalRegistry.buildCatalog()
+}
+
+func (c Catalog) GetMetric(name string) (metricDefinition, bool) {
 	def, ok := c[name]
 	return def, ok
 }

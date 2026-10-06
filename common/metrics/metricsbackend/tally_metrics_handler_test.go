@@ -1,4 +1,4 @@
-package metrics
+package metricsbackend
 
 import (
 	"math"
@@ -10,9 +10,10 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/uber-go/tally/v4"
+	"go.temporal.io/server/common/metrics"
 )
 
-var defaultConfig = ClientConfig{
+var defaultConfig = metrics.ClientConfig{
 	Tags: nil,
 	ExcludeTags: map[string][]string{
 		"taskqueue":    {"__sticky__"},
@@ -21,10 +22,10 @@ var defaultConfig = ClientConfig{
 	},
 	Prefix: "",
 	PerUnitHistogramBoundaries: map[string][]float64{
-		Dimensionless: {0, 10, 100},
-		Bytes:         {1024, 2048},
-		Milliseconds:  {10, 500, 1000, 5000, 10000},
-		Seconds:       {0.01, 0.5, 1, 5, 10},
+		metrics.Dimensionless: {0, 10, 100},
+		metrics.Bytes:         {1024, 2048},
+		metrics.Milliseconds:  {10, 500, 1000, 5000, 10000},
+		metrics.Seconds:       {0.01, 0.5, 1, 5, 10},
 	},
 }
 
@@ -42,8 +43,8 @@ func TestTallyScope(t *testing.T) {
 	require.EqualValues(t, 11, counters["test.hits-tagged+taskqueue=__sticky__"].Value())
 	require.Equal(t, map[string]string{"taskqueue": "__sticky__"}, counters["test.hits-tagged+taskqueue=__sticky__"].Tags())
 
-	require.EqualValues(t, 14, counters["test.hits-tagged-excluded+taskqueue="+tagExcludedValue].Value())
-	require.Equal(t, map[string]string{"taskqueue": tagExcludedValue}, counters["test.hits-tagged-excluded+taskqueue="+tagExcludedValue].Tags())
+	require.EqualValues(t, 14, counters["test.hits-tagged-excluded+taskqueue="+metrics.TagExcludedValue].Value())
+	require.Equal(t, map[string]string{"taskqueue": metrics.TagExcludedValue}, counters["test.hits-tagged-excluded+taskqueue="+metrics.TagExcludedValue].Tags())
 
 	require.InDelta(t, float64(-100), gauges["test.temp+location=Mare Imbrium"].Value(), 0.01)
 	require.Equal(t, map[string]string{
@@ -64,7 +65,7 @@ func TestTallyScope(t *testing.T) {
 	require.Equal(t, map[time.Duration]int64(nil), histograms["test.transmission+"].Durations())
 	require.Equal(t, map[string]string{}, histograms["test.transmission+"].Tags())
 
-	newTaggedHandler := mp.WithTags(NamespaceTag(uuid.NewString()))
+	newTaggedHandler := mp.WithTags(metrics.NamespaceTag(uuid.NewString()))
 	recordTallyMetrics(newTaggedHandler)
 	snap = scope.Snapshot()
 	counters = snap.Counters()
@@ -73,21 +74,21 @@ func TestTallyScope(t *testing.T) {
 	require.Equal(t, map[string]string{"taskqueue": "__sticky__"}, counters["test.hits-tagged+taskqueue=__sticky__"].Tags())
 }
 
-func recordTallyMetrics(h Handler) {
+func recordTallyMetrics(h metrics.Handler) {
 	hitsCounter := h.Counter("hits")
 	gauge := h.Gauge("temp")
 	timer := h.Timer("latency")
-	histogram := h.Histogram("transmission", Bytes)
+	histogram := h.Histogram("transmission", metrics.Bytes)
 	hitsTaggedCounter := h.Counter("hits-tagged")
 	hitsTaggedExcludedCounter := h.Counter("hits-tagged-excluded")
 
 	hitsCounter.Record(8)
-	gauge.Record(-100, StringTag("location", "Mare Imbrium"))
+	gauge.Record(-100, metrics.StringTag("location", "Mare Imbrium"))
 	timer.Record(1248 * time.Millisecond)
 	timer.Record(5255 * time.Millisecond)
 	histogram.Record(1234567)
-	hitsTaggedCounter.Record(11, UnsafeTaskQueueTag("__sticky__"))
-	hitsTaggedExcludedCounter.Record(14, UnsafeTaskQueueTag("filtered"))
+	hitsTaggedCounter.Record(11, metrics.UnsafeTaskQueueTag("__sticky__"))
+	hitsTaggedExcludedCounter.Record(14, metrics.UnsafeTaskQueueTag("filtered"))
 }
 
 func TestWithTags_EmptyTagsReturnsSelf(t *testing.T) {
@@ -102,8 +103,8 @@ func TestWithTags_CacheHitReturnsSamePointer(t *testing.T) {
 	scope := tally.NewTestScope("test", map[string]string{})
 	h := NewTallyMetricsHandler(defaultConfig, scope)
 
-	h1 := h.WithTags(OperationTag("op1"))
-	h2 := h.WithTags(OperationTag("op1"))
+	h1 := h.WithTags(metrics.OperationTag("op1"))
+	h2 := h.WithTags(metrics.OperationTag("op1"))
 	require.Same(t, h1, h2, "repeated WithTags with identical args should return the same handler")
 }
 
@@ -111,13 +112,13 @@ func TestWithTags_DifferentTagsReturnDifferentHandlers(t *testing.T) {
 	scope := tally.NewTestScope("test", map[string]string{})
 	h := NewTallyMetricsHandler(defaultConfig, scope)
 
-	h1 := h.WithTags(OperationTag("op1"))
-	h2 := h.WithTags(OperationTag("op2"))
+	h1 := h.WithTags(metrics.OperationTag("op1"))
+	h2 := h.WithTags(metrics.OperationTag("op2"))
 	require.NotSame(t, h1, h2, "WithTags with different values must produce different handlers")
 
 	// Different keys with same value.
-	h3 := h.WithTags(StringTag("key_a", "val"))
-	h4 := h.WithTags(StringTag("key_b", "val"))
+	h3 := h.WithTags(metrics.StringTag("key_a", "val"))
+	h4 := h.WithTags(metrics.StringTag("key_b", "val"))
 	require.NotSame(t, h3, h4, "WithTags with different keys must produce different handlers")
 }
 
@@ -125,13 +126,13 @@ func TestWithTags_CachedHandlerRecordsMetricsCorrectly(t *testing.T) {
 	scope := tally.NewTestScope("test", map[string]string{})
 	h := NewTallyMetricsHandler(defaultConfig, scope)
 
-	tagged := h.WithTags(StringTag("env", "prod"))
+	tagged := h.WithTags(metrics.StringTag("env", "prod"))
 
 	// Record via first call.
 	tagged.Counter("requests").Record(5)
 
 	// Record via second (cached) call.
-	cached := h.WithTags(StringTag("env", "prod"))
+	cached := h.WithTags(metrics.StringTag("env", "prod"))
 	cached.Counter("requests").Record(3)
 
 	snap := scope.Snapshot()
@@ -145,7 +146,7 @@ func TestWithTags_MultipleTagsCacheCorrectly(t *testing.T) {
 	scope := tally.NewTestScope("test", map[string]string{})
 	h := NewTallyMetricsHandler(defaultConfig, scope)
 
-	tags := []Tag{OperationTag("op1"), StringTag("env", "staging")}
+	tags := []metrics.Tag{metrics.OperationTag("op1"), metrics.StringTag("env", "staging")}
 	h1 := h.WithTags(tags...)
 	h2 := h.WithTags(tags...)
 	require.Same(t, h1, h2, "multi-tag WithTags should be cached")
@@ -164,8 +165,8 @@ func TestWithTags_TagOrderMatters(t *testing.T) {
 
 	// Different ordering of the same two tags should be separate cache
 	// entries (the tally scope will merge them, but the cache keys differ).
-	h1 := h.WithTags(StringTag("a", "1"), StringTag("b", "2"))
-	h2 := h.WithTags(StringTag("b", "2"), StringTag("a", "1"))
+	h1 := h.WithTags(metrics.StringTag("a", "1"), metrics.StringTag("b", "2"))
+	h2 := h.WithTags(metrics.StringTag("b", "2"), metrics.StringTag("a", "1"))
 
 	// They must both work — record via each.
 	h1.Counter("c").Record(1)
@@ -181,15 +182,15 @@ func TestWithTags_ChildCachesAreIndependent(t *testing.T) {
 	scope := tally.NewTestScope("test", map[string]string{})
 	h := NewTallyMetricsHandler(defaultConfig, scope)
 
-	child := h.WithTags(OperationTag("parent_op"))
-	grandchild := child.WithTags(StringTag("env", "dev"))
+	child := h.WithTags(metrics.OperationTag("parent_op"))
+	grandchild := child.WithTags(metrics.StringTag("env", "dev"))
 
 	// Grandchild should be cached on child, not on root.
-	grandchild2 := child.WithTags(StringTag("env", "dev"))
+	grandchild2 := child.WithTags(metrics.StringTag("env", "dev"))
 	require.Same(t, grandchild, grandchild2)
 
 	// Root should not have the grandchild cached.
-	fromRoot := h.WithTags(StringTag("env", "dev"))
+	fromRoot := h.WithTags(metrics.StringTag("env", "dev"))
 	require.NotSame(t, grandchild, fromRoot, "child and root caches should be independent")
 }
 
@@ -198,12 +199,12 @@ func TestWithTags_ExcludeTagsStillApply(t *testing.T) {
 	h := NewTallyMetricsHandler(defaultConfig, scope)
 
 	// "activityType" is in excludeTags with empty allow-list, so any value
-	// should be replaced with tagExcludedValue.
-	tagged := h.WithTags(ActivityTypeTag("MyActivity"))
+	// should be replaced with metrics.TagExcludedValue.
+	tagged := h.WithTags(metrics.ActivityTypeTag("MyActivity"))
 	tagged.Counter("hits").Record(1)
 
 	snap := scope.Snapshot()
-	c := snap.Counters()["test.hits+activityType="+tagExcludedValue]
+	c := snap.Counters()["test.hits+activityType="+metrics.TagExcludedValue]
 	require.NotNil(t, c, "excluded tag value should be sanitized")
 	require.EqualValues(t, 1, c.Value())
 }
@@ -214,9 +215,9 @@ func TestWithTags_ExcludedTagsShareChildHandler(t *testing.T) {
 
 	// Different excluded-tag values should produce the same cached child handler,
 	// preventing unbounded childCache growth from high-cardinality excluded tags.
-	h1 := h.WithTags(ActivityTypeTag("TypeA"))
-	h2 := h.WithTags(ActivityTypeTag("TypeB"))
-	h3 := h.WithTags(ActivityTypeTag("TypeC"))
+	h1 := h.WithTags(metrics.ActivityTypeTag("TypeA"))
+	h2 := h.WithTags(metrics.ActivityTypeTag("TypeB"))
+	h3 := h.WithTags(metrics.ActivityTypeTag("TypeC"))
 	require.Same(t, h1, h2, "excluded tag variants should share the same child handler")
 	require.Same(t, h2, h3, "excluded tag variants should share the same child handler")
 
@@ -226,7 +227,7 @@ func TestWithTags_ExcludedTagsShareChildHandler(t *testing.T) {
 	h3.Counter("hits").Record(4)
 
 	snap := scope.Snapshot()
-	c := snap.Counters()["test.hits+activityType="+tagExcludedValue]
+	c := snap.Counters()["test.hits+activityType="+metrics.TagExcludedValue]
 	require.NotNil(t, c)
 	require.EqualValues(t, 7, c.Value())
 }
@@ -238,15 +239,15 @@ func TestWithTags_ConcurrentAccess(t *testing.T) {
 	const goroutines = 32
 	const iterations = 100
 	var wg sync.WaitGroup
-	handlers := make([]Handler, goroutines)
+	handlers := make([]metrics.Handler, goroutines)
 
 	wg.Add(goroutines)
 	for i := range goroutines {
 		go func(idx int) {
 			defer wg.Done()
-			var last Handler
+			var last metrics.Handler
 			for range iterations {
-				last = h.WithTags(OperationTag("concurrent_op"))
+				last = h.WithTags(metrics.OperationTag("concurrent_op"))
 				last.Counter("concurrent_count").Record(1)
 			}
 			handlers[idx] = last
@@ -269,49 +270,49 @@ func TestWithTags_ConcurrentAccess(t *testing.T) {
 func TestTagsCacheKey(t *testing.T) {
 	tests := []struct {
 		name string
-		a, b []Tag
+		a, b []metrics.Tag
 		same bool
 	}{
 		{
 			name: "identical single tags",
-			a:    []Tag{{Key: "op", Value: "foo"}},
-			b:    []Tag{{Key: "op", Value: "foo"}},
+			a:    []metrics.Tag{{Key: "op", Value: "foo"}},
+			b:    []metrics.Tag{{Key: "op", Value: "foo"}},
 			same: true,
 		},
 		{
 			name: "different values",
-			a:    []Tag{{Key: "op", Value: "foo"}},
-			b:    []Tag{{Key: "op", Value: "bar"}},
+			a:    []metrics.Tag{{Key: "op", Value: "foo"}},
+			b:    []metrics.Tag{{Key: "op", Value: "bar"}},
 			same: false,
 		},
 		{
 			name: "different keys",
-			a:    []Tag{{Key: "op", Value: "x"}},
-			b:    []Tag{{Key: "ns", Value: "x"}},
+			a:    []metrics.Tag{{Key: "op", Value: "x"}},
+			b:    []metrics.Tag{{Key: "ns", Value: "x"}},
 			same: false,
 		},
 		{
 			name: "identical multi tags",
-			a:    []Tag{{Key: "a", Value: "1"}, {Key: "b", Value: "2"}},
-			b:    []Tag{{Key: "a", Value: "1"}, {Key: "b", Value: "2"}},
+			a:    []metrics.Tag{{Key: "a", Value: "1"}, {Key: "b", Value: "2"}},
+			b:    []metrics.Tag{{Key: "a", Value: "1"}, {Key: "b", Value: "2"}},
 			same: true,
 		},
 		{
 			name: "different ordering",
-			a:    []Tag{{Key: "a", Value: "1"}, {Key: "b", Value: "2"}},
-			b:    []Tag{{Key: "b", Value: "2"}, {Key: "a", Value: "1"}},
+			a:    []metrics.Tag{{Key: "a", Value: "1"}, {Key: "b", Value: "2"}},
+			b:    []metrics.Tag{{Key: "b", Value: "2"}, {Key: "a", Value: "1"}},
 			same: false,
 		},
 		{
 			name: "single vs multi",
-			a:    []Tag{{Key: "a", Value: "1"}},
-			b:    []Tag{{Key: "a", Value: "1"}, {Key: "b", Value: "2"}},
+			a:    []metrics.Tag{{Key: "a", Value: "1"}},
+			b:    []metrics.Tag{{Key: "a", Value: "1"}, {Key: "b", Value: "2"}},
 			same: false,
 		},
 		{
 			name: "key boundary ambiguity",
-			a:    []Tag{{Key: "ab", Value: "c"}},
-			b:    []Tag{{Key: "a", Value: "bc"}},
+			a:    []metrics.Tag{{Key: "ab", Value: "c"}},
+			b:    []metrics.Tag{{Key: "a", Value: "bc"}},
 			same: false,
 		},
 	}
@@ -333,9 +334,9 @@ func TestScopeCache_CounterWithInlineTags(t *testing.T) {
 	h := NewTallyMetricsHandler(defaultConfig, scope)
 
 	c := h.Counter("requests")
-	c.Record(1, StringTag("status", "ok"))
-	c.Record(2, StringTag("status", "ok"))
-	c.Record(5, StringTag("status", "err"))
+	c.Record(1, metrics.StringTag("status", "ok"))
+	c.Record(2, metrics.StringTag("status", "ok"))
+	c.Record(5, metrics.StringTag("status", "err"))
 
 	snap := scope.Snapshot()
 	ok := snap.Counters()["test.requests+status=ok"]
@@ -352,8 +353,8 @@ func TestScopeCache_GaugeWithInlineTags(t *testing.T) {
 	h := NewTallyMetricsHandler(defaultConfig, scope)
 
 	g := h.Gauge("temp")
-	g.Record(42.0, StringTag("location", "cpu"))
-	g.Record(99.0, StringTag("location", "cpu"))
+	g.Record(42.0, metrics.StringTag("location", "cpu"))
+	g.Record(99.0, metrics.StringTag("location", "cpu"))
 
 	snap := scope.Snapshot()
 	gauge := snap.Gauges()["test.temp+location=cpu"]
@@ -366,8 +367,8 @@ func TestScopeCache_TimerWithInlineTags(t *testing.T) {
 	h := NewTallyMetricsHandler(defaultConfig, scope)
 
 	ti := h.Timer("latency")
-	ti.Record(100*time.Millisecond, StringTag("op", "read"))
-	ti.Record(200*time.Millisecond, StringTag("op", "read"))
+	ti.Record(100*time.Millisecond, metrics.StringTag("op", "read"))
+	ti.Record(200*time.Millisecond, metrics.StringTag("op", "read"))
 
 	snap := scope.Snapshot()
 	timer := snap.Timers()["test.latency+op=read"]
@@ -379,9 +380,9 @@ func TestScopeCache_HistogramWithInlineTags(t *testing.T) {
 	scope := tally.NewTestScope("test", map[string]string{})
 	h := NewTallyMetricsHandler(defaultConfig, scope)
 
-	hist := h.Histogram("size", Bytes)
-	hist.Record(512, StringTag("type", "payload"))
-	hist.Record(4096, StringTag("type", "payload"))
+	hist := h.Histogram("size", metrics.Bytes)
+	hist.Record(512, metrics.StringTag("type", "payload"))
+	hist.Record(4096, metrics.StringTag("type", "payload"))
 
 	snap := scope.Snapshot()
 	histo := snap.Histograms()["test.size+type=payload"]
@@ -409,10 +410,10 @@ func TestScopeCache_ExcludeTagsApply(t *testing.T) {
 	scope := tally.NewTestScope("test", map[string]string{})
 	h := NewTallyMetricsHandler(defaultConfig, scope)
 
-	h.Counter("hits").Record(1, ActivityTypeTag("MyActivity"))
+	h.Counter("hits").Record(1, metrics.ActivityTypeTag("MyActivity"))
 
 	snap := scope.Snapshot()
-	c := snap.Counters()["test.hits+activityType="+tagExcludedValue]
+	c := snap.Counters()["test.hits+activityType="+metrics.TagExcludedValue]
 	require.NotNil(t, c, "excluded tag value should be sanitized via scope cache")
 	require.EqualValues(t, 1, c.Value())
 }
@@ -421,11 +422,11 @@ func TestScopeCache_IndependentPerHandler(t *testing.T) {
 	scope := tally.NewTestScope("test", map[string]string{})
 	h := NewTallyMetricsHandler(defaultConfig, scope)
 
-	child1 := h.WithTags(OperationTag("op1"))
-	child2 := h.WithTags(OperationTag("op2"))
+	child1 := h.WithTags(metrics.OperationTag("op1"))
+	child2 := h.WithTags(metrics.OperationTag("op2"))
 
-	child1.Counter("hits").Record(1, StringTag("env", "prod"))
-	child2.Counter("hits").Record(2, StringTag("env", "prod"))
+	child1.Counter("hits").Record(1, metrics.StringTag("env", "prod"))
+	child2.Counter("hits").Record(2, metrics.StringTag("env", "prod"))
 
 	snap := scope.Snapshot()
 	c1 := snap.Counters()["test.hits+env=prod,operation=op1"]
@@ -450,7 +451,7 @@ func TestScopeCache_ConcurrentRecordWithTags(t *testing.T) {
 			defer wg.Done()
 			c := h.Counter("concurrent")
 			for range iterations {
-				c.Record(1, StringTag("shard", "0"))
+				c.Record(1, metrics.StringTag("shard", "0"))
 			}
 		}()
 	}
@@ -468,12 +469,12 @@ func TestScopeCache_ExcludedTagsMergeInCache(t *testing.T) {
 
 	// "activityType" has empty allow-list, so all values are excluded.
 	// Different raw values should normalize to the same cache entry.
-	h.Counter("hits").Record(1, ActivityTypeTag("TypeA"))
-	h.Counter("hits").Record(2, ActivityTypeTag("TypeB"))
-	h.Counter("hits").Record(4, ActivityTypeTag("TypeC"))
+	h.Counter("hits").Record(1, metrics.ActivityTypeTag("TypeA"))
+	h.Counter("hits").Record(2, metrics.ActivityTypeTag("TypeB"))
+	h.Counter("hits").Record(4, metrics.ActivityTypeTag("TypeC"))
 
 	snap := scope.Snapshot()
-	c := snap.Counters()["test.hits+activityType="+tagExcludedValue]
+	c := snap.Counters()["test.hits+activityType="+metrics.TagExcludedValue]
 	require.NotNil(t, c)
 	require.EqualValues(t, 7, c.Value(), "all excluded tag values should map to the same counter")
 
@@ -493,14 +494,14 @@ func TestScopeCache_BoundedSize(t *testing.T) {
 
 	// Fill the cache to the limit.
 	for i := range 100 {
-		h.Counter("c").Record(1, StringTag("id", strconv.Itoa(i)))
+		h.Counter("c").Record(1, metrics.StringTag("id", strconv.Itoa(i)))
 	}
 	h.cache.mu.Lock()
 	require.Len(t, h.cache.scopes, 100)
 	h.cache.mu.Unlock()
 
 	// Beyond the limit, cache is cleared and new entry is stored.
-	h.Counter("c").Record(1, StringTag("id", "overflow"))
+	h.Counter("c").Record(1, metrics.StringTag("id", "overflow"))
 	h.cache.mu.Lock()
 	require.LessOrEqual(t, len(h.cache.scopes), 2,
 		"scope cache should have been cleared on overflow")
@@ -512,7 +513,7 @@ func TestScopeCache_BoundedSize(t *testing.T) {
 	require.EqualValues(t, 1, c.Value())
 
 	// Entries are re-cached after clear.
-	h.Counter("c").Record(1, StringTag("id", "0"))
+	h.Counter("c").Record(1, metrics.StringTag("id", "0"))
 	snap = scope.Snapshot()
 	c0 := snap.Counters()["test.c+id=0"]
 	require.NotNil(t, c0)
@@ -527,14 +528,14 @@ func TestWithTags_BoundedChildCacheSize(t *testing.T) {
 
 	// Fill the handler cache to the limit.
 	for i := range 100 {
-		h.WithTags(StringTag("id", strconv.Itoa(i)))
+		h.WithTags(metrics.StringTag("id", strconv.Itoa(i)))
 	}
 	h.cache.mu.Lock()
 	require.Len(t, h.cache.handlers, 100)
 	h.cache.mu.Unlock()
 
 	// Beyond the limit, WithTags still works; cache is cleared.
-	overflow := h.WithTags(StringTag("id", "overflow"))
+	overflow := h.WithTags(metrics.StringTag("id", "overflow"))
 	h.cache.mu.Lock()
 	require.LessOrEqual(t, len(h.cache.handlers), 2,
 		"handler cache should have been cleared on overflow")
@@ -548,8 +549,8 @@ func TestWithTags_BoundedChildCacheSize(t *testing.T) {
 	require.EqualValues(t, 1, c.Value())
 
 	// Cached entries are re-cached on next access.
-	cached := h.WithTags(StringTag("id", "0"))
-	cached2 := h.WithTags(StringTag("id", "0"))
+	cached := h.WithTags(metrics.StringTag("id", "0"))
+	cached2 := h.WithTags(metrics.StringTag("id", "0"))
 	require.Same(t, cached, cached2, "re-cached entries should hit")
 }
 
@@ -560,45 +561,45 @@ func TestNormalizeTagsForCaching(t *testing.T) {
 	}
 
 	t.Run("no excluded tags returns original slice", func(t *testing.T) {
-		tags := []Tag{{Key: "env", Value: "prod"}}
+		tags := []metrics.Tag{{Key: "env", Value: "prod"}}
 		result := normalizeTagsForCaching(tags, excl)
 		require.Same(t, &tags[0], &result[0], "should return the same slice when no normalization needed")
 	})
 
 	t.Run("excluded tag gets normalized", func(t *testing.T) {
-		tags := []Tag{{Key: "activityType", Value: "MyActivity"}}
+		tags := []metrics.Tag{{Key: "activityType", Value: "MyActivity"}}
 		result := normalizeTagsForCaching(tags, excl)
-		require.Equal(t, tagExcludedValue, result[0].Value)
+		require.Equal(t, metrics.TagExcludedValue, result[0].Value)
 	})
 
 	t.Run("allowed tag value is not normalized", func(t *testing.T) {
-		tags := []Tag{{Key: "taskqueue", Value: "__sticky__"}}
+		tags := []metrics.Tag{{Key: "taskqueue", Value: "__sticky__"}}
 		result := normalizeTagsForCaching(tags, excl)
 		require.Same(t, &tags[0], &result[0], "allowed value should not trigger normalization")
 	})
 
 	t.Run("mixed tags normalize only excluded ones", func(t *testing.T) {
-		tags := []Tag{
+		tags := []metrics.Tag{
 			{Key: "env", Value: "prod"},
 			{Key: "activityType", Value: "DoSomething"},
 			{Key: "taskqueue", Value: "non-sticky"},
 		}
 		result := normalizeTagsForCaching(tags, excl)
 		require.Equal(t, "prod", result[0].Value)
-		require.Equal(t, tagExcludedValue, result[1].Value)
-		require.Equal(t, tagExcludedValue, result[2].Value)
+		require.Equal(t, metrics.TagExcludedValue, result[1].Value)
+		require.Equal(t, metrics.TagExcludedValue, result[2].Value)
 	})
 
 	t.Run("empty excludeTags returns original", func(t *testing.T) {
-		tags := []Tag{{Key: "anything", Value: "val"}}
+		tags := []metrics.Tag{{Key: "anything", Value: "val"}}
 		result := normalizeTagsForCaching(tags, nil)
 		require.Same(t, &tags[0], &result[0])
 	})
 }
 
 func TestTagsCacheKey_NoCollisionsForEmbeddedNulls(t *testing.T) {
-	tagsA := []Tag{{Key: "a", Value: "\x00b"}}
-	tagsB := []Tag{{Key: "a\x00", Value: "b"}}
+	tagsA := []metrics.Tag{{Key: "a", Value: "\x00b"}}
+	tagsB := []metrics.Tag{{Key: "a\x00", Value: "b"}}
 
 	require.NotEqual(t, tagsCacheKey(tagsA), tagsCacheKey(tagsB))
 }
@@ -607,8 +608,8 @@ func TestWithTags_DistinguishesEmbeddedNullTags(t *testing.T) {
 	scope := tally.NewTestScope("test", map[string]string{})
 	h := NewTallyMetricsHandler(defaultConfig, scope)
 
-	h1 := h.WithTags(StringTag("a", "\x00b"))
-	h2 := h.WithTags(StringTag("a\x00", "b"))
+	h1 := h.WithTags(metrics.StringTag("a", "\x00b"))
+	h2 := h.WithTags(metrics.StringTag("a\x00", "b"))
 
 	require.NotSame(t, h1, h2)
 }
@@ -617,8 +618,8 @@ func TestHistogram_CacheKeyDistinguishesNameAndUnit(t *testing.T) {
 	scope := tally.NewTestScope("test", map[string]string{})
 	h := NewTallyMetricsHandler(defaultConfig, scope)
 
-	h.Histogram("ab", MetricUnit("c"))
-	h.Histogram("ab\x00c", MetricUnit(""))
+	h.Histogram("ab", metrics.MetricUnit("c"))
+	h.Histogram("ab\x00c", metrics.MetricUnit(""))
 
 	count := 0
 	h.histograms.Range(func(_, _ any) bool {

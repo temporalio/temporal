@@ -41,6 +41,10 @@ func (md metricDefinition) Unit() MetricUnit {
 	return md.unit
 }
 
+func (md metricDefinition) Description() string {
+	return md.description
+}
+
 func (md metricDefinition) File() string {
 	return md.file
 }

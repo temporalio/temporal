@@ -1,4 +1,4 @@
-package metrics
+package metricsbackend
 
 import (
 	"testing"
@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.uber.org/mock/gomock"
 )
 
@@ -27,32 +28,32 @@ func (s *MetricsSuite) SetupTest() {
 }
 
 func (s *MetricsSuite) TestStatsd() {
-	statsd := &StatsdConfig{
+	statsd := &metrics.StatsdConfig{
 		HostPort: "127.0.0.1:8125",
 		Prefix:   "testStatsd",
 	}
 
-	config := new(Config)
+	config := new(metrics.Config)
 	config.Statsd = statsd
 	scope := NewScope(log.NewNoopLogger(), config)
 	s.NotNil(scope)
 }
 
 func (s *MetricsSuite) TestPrometheus() {
-	prom := &PrometheusConfig{
+	prom := &metrics.PrometheusConfig{
 		OnError:       "panic",
 		TimerType:     "histogram",
 		ListenAddress: "127.0.0.1:0",
 	}
-	config := new(Config)
+	config := new(metrics.Config)
 	config.Prometheus = prom
 	scope := NewScope(log.NewNoopLogger(), config)
 	s.NotNil(scope)
 }
 
 func (s *MetricsSuite) TestPrometheusWithSanitizeOptions() {
-	validChars := &ValidCharacters{
-		Ranges: []SanitizeRange{
+	validChars := &metrics.ValidCharacters{
+		Ranges: []metrics.SanitizeRange{
 			{
 				StartRange: "a",
 				EndRange:   "z",
@@ -69,25 +70,25 @@ func (s *MetricsSuite) TestPrometheusWithSanitizeOptions() {
 		SafeCharacters: "-",
 	}
 
-	prom := &PrometheusConfig{
+	prom := &metrics.PrometheusConfig{
 		OnError:       "panic",
 		TimerType:     "histogram",
 		ListenAddress: "127.0.0.1:0",
-		SanitizeOptions: &SanitizeOptions{
+		SanitizeOptions: &metrics.SanitizeOptions{
 			NameCharacters:       validChars,
 			KeyCharacters:        validChars,
 			ValueCharacters:      validChars,
 			ReplacementCharacter: "_",
 		},
 	}
-	config := new(Config)
+	config := new(metrics.Config)
 	config.Prometheus = prom
 	scope := NewScope(log.NewNoopLogger(), config)
 	s.NotNil(scope)
 }
 
 func (s *MetricsSuite) TestNoop() {
-	config := &Config{}
+	config := &metrics.Config{}
 	scope := NewScope(log.NewNoopLogger(), config)
 	s.Equal(tally.NoopScope, scope)
 }
@@ -102,29 +103,29 @@ func (s *MetricsSuite) TestSetDefaultPerUnitHistogramBoundaries() {
 		{
 			input: nil,
 			expectResult: map[string][]float64{
-				Dimensionless: defaultPerUnitHistogramBoundaries[Dimensionless],
-				Milliseconds:  defaultPerUnitHistogramBoundaries[Milliseconds],
-				Seconds:       {0.001, 0.002, 0.005, 0.010, 0.020, 0.050, 0.100, 0.200, 0.500, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1_000},
-				Bytes:         defaultPerUnitHistogramBoundaries[Bytes],
+				metrics.Dimensionless: defaultPerUnitHistogramBoundaries[metrics.Dimensionless],
+				metrics.Milliseconds:  defaultPerUnitHistogramBoundaries[metrics.Milliseconds],
+				metrics.Seconds:       {0.001, 0.002, 0.005, 0.010, 0.020, 0.050, 0.100, 0.200, 0.500, 1, 2, 5, 10, 20, 50, 100, 200, 500, 1_000},
+				metrics.Bytes:         defaultPerUnitHistogramBoundaries[metrics.Bytes],
 			},
 		},
 		{
 			input: map[string][]float64{
-				UnitNameDimensionless: {1},
-				UnitNameMilliseconds:  {10, 1000, 2000},
-				"notDefine":           {1},
+				metrics.UnitNameDimensionless: {1},
+				metrics.UnitNameMilliseconds:  {10, 1000, 2000},
+				"notDefine":                   {1},
 			},
 			expectResult: map[string][]float64{
-				Dimensionless: {1},
-				Milliseconds:  {10, 1000, 2000},
-				Seconds:       {0.01, 1, 2},
-				Bytes:         defaultPerUnitHistogramBoundaries[Bytes],
+				metrics.Dimensionless: {1},
+				metrics.Milliseconds:  {10, 1000, 2000},
+				metrics.Seconds:       {0.01, 1, 2},
+				metrics.Bytes:         defaultPerUnitHistogramBoundaries[metrics.Bytes],
 			},
 		},
 	}
 
 	for _, test := range testCases {
-		config := &ClientConfig{PerUnitHistogramBoundaries: test.input}
+		config := &metrics.ClientConfig{PerUnitHistogramBoundaries: test.input}
 		setDefaultPerUnitHistogramBoundaries(config)
 		s.Equal(test.expectResult, config.PerUnitHistogramBoundaries)
 	}
@@ -137,19 +138,19 @@ func TestMetricsHandlerFromConfig(t *testing.T) {
 
 	for _, c := range []struct {
 		name         string
-		cfg          *Config
+		cfg          *metrics.Config
 		expectedType any
 	}{
 		{
 			name:         "nil config",
 			cfg:          nil,
-			expectedType: &noopMetricsHandler{},
+			expectedType: metrics.NoopMetricsHandler,
 		},
 		{
 			name: "tally",
-			cfg: &Config{
-				Prometheus: &PrometheusConfig{
-					Framework:     FrameworkTally,
+			cfg: &metrics.Config{
+				Prometheus: &metrics.PrometheusConfig{
+					Framework:     metrics.FrameworkTally,
 					ListenAddress: "localhost:0",
 				},
 			},
@@ -157,9 +158,9 @@ func TestMetricsHandlerFromConfig(t *testing.T) {
 		},
 		{
 			name: "opentelemetry",
-			cfg: &Config{
-				Prometheus: &PrometheusConfig{
-					Framework:     FrameworkOpentelemetry,
+			cfg: &metrics.Config{
+				Prometheus: &metrics.PrometheusConfig{
+					Framework:     metrics.FrameworkOpentelemetry,
 					ListenAddress: "localhost:0",
 				},
 			},

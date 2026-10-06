@@ -1,4 +1,4 @@
-package metrics
+package metricsbackend
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	sdkmetrics "go.opentelemetry.io/otel/sdk/metric"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 )
 
 var _ OpenTelemetryProvider = (*openTelemetryProviderImpl)(nil)
@@ -25,7 +26,7 @@ type (
 
 	openTelemetryProviderImpl struct {
 		meter          metric.Meter
-		config         *PrometheusConfig
+		config         *metrics.PrometheusConfig
 		server         *http.Server
 		statsdExporter *statsdExporter
 	}
@@ -34,8 +35,8 @@ type (
 // NewOpenTelemetryProviderWithStatsd creates a new OpenTelemetry provider with a StatsD exporter.
 func NewOpenTelemetryProviderWithStatsd(
 	logger log.Logger,
-	statsdConfig *StatsdConfig,
-	clientConfig *ClientConfig,
+	statsdConfig *metrics.StatsdConfig,
+	clientConfig *metrics.ClientConfig,
 ) (*openTelemetryProviderImpl, error) {
 	// Set up StatsD exporter if config is provided
 	if statsdConfig == nil {
@@ -55,8 +56,8 @@ func NewOpenTelemetryProviderWithStatsd(
 // NewOpenTelemetryProviderWithPrometheus creates a new OpenTelemetry provider with a Prometheus exporter.
 func NewOpenTelemetryProviderWithPrometheus(
 	logger log.Logger,
-	prometheusConfig *PrometheusConfig,
-	clientConfig *ClientConfig,
+	prometheusConfig *metrics.PrometheusConfig,
+	clientConfig *metrics.ClientConfig,
 	fatalOnListenerError bool,
 ) (*openTelemetryProviderImpl, error) {
 	// Set up Prometheus exporter if config is provided
@@ -86,14 +87,14 @@ func NewOpenTelemetryProviderWithPrometheus(
 func newOpenTelemetryProvider(
 	logger log.Logger,
 	reader sdkmetrics.Reader,
-	statsdConfig *StatsdConfig,
+	statsdConfig *metrics.StatsdConfig,
 	statsdExporter *statsdExporter,
-	prometheusConfig *PrometheusConfig,
+	prometheusConfig *metrics.PrometheusConfig,
 	prometheusServer *http.Server,
-	clientConfig *ClientConfig,
+	clientConfig *metrics.ClientConfig,
 ) (*openTelemetryProviderImpl, error) {
 	var views []sdkmetrics.View
-	for _, u := range []string{Dimensionless, Bytes, Milliseconds, Seconds} {
+	for _, u := range []string{metrics.Dimensionless, metrics.Bytes, metrics.Milliseconds, metrics.Seconds} {
 		views = append(views, sdkmetrics.NewView(
 			sdkmetrics.Instrument{
 				Kind: sdkmetrics.InstrumentKindHistogram,
@@ -122,7 +123,7 @@ func newOpenTelemetryProvider(
 }
 
 func initPrometheusListener(
-	config *PrometheusConfig,
+	config *metrics.PrometheusConfig,
 	reg *prometheus.Registry,
 	logger log.Logger,
 	fatalOnListenerError bool,
