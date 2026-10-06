@@ -43,7 +43,7 @@ const (
 
 type (
 	xdcBaseSuite struct {
-		// TODO (alex): use FunctionalTestBase instead.
+		// TODO (alex): use TestEnv instead.
 		suite.Suite
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
