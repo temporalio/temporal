@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc/interceptor"
 	sdkconverter "go.temporal.io/server/common/sdk"
@@ -714,7 +715,7 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, req *historyservice.Des
 	// if option 2/3 is provided, we want to check on the shard ownership to return the correct host address.
 	shardID := req.GetShardId()
 	if len(req.GetNamespaceId()) != 0 && req.GetWorkflowExecution() != nil {
-		shardID = common.WorkflowIDToHistoryShard(req.GetNamespaceId(), req.GetWorkflowExecution().GetWorkflowId(), h.config.NumberOfShards)
+		shardID = primitives.WorkflowIDToHistoryShard(req.GetNamespaceId(), req.GetWorkflowExecution().GetWorkflowId(), h.config.NumberOfShards)
 	}
 	if shardID > 0 {
 		_, err := h.controller.GetShardByID(shardID)
@@ -2039,7 +2040,7 @@ func (h *Handler) ForceDeleteWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	shardID := common.WorkflowIDToHistoryShard(
+	shardID := primitives.WorkflowIDToHistoryShard(
 		namespaceID.String(),
 		request.Request.Execution.WorkflowId,
 		h.config.NumberOfShards,

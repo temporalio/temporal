@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
@@ -98,7 +99,7 @@ func Invoke(
 		}, nil
 	}
 	pageSize := int(req.GetMaximumPageSize())
-	shardID := common.WorkflowIDToHistoryShard(
+	shardID := primitives.WorkflowIDToHistoryShard(
 		ns.ID().String(),
 		execution.GetWorkflowId(),
 		shardContext.GetConfig().NumberOfShards,

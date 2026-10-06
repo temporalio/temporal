@@ -6,7 +6,7 @@ import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/primitives"
 )
 
 type (
@@ -54,5 +54,5 @@ type (
 // GetShardIDForTask computes the shardID for a given task using the task's namespace, workflow ID and the number of
 // history shards in the cluster.
 func GetShardIDForTask(task Task, numShards int) int {
-	return int(common.WorkflowIDToHistoryShard(task.GetNamespaceID(), task.GetWorkflowID(), int32(numShards)))
+	return int(primitives.WorkflowIDToHistoryShard(task.GetNamespaceID(), task.GetWorkflowID(), int32(numShards)))
 }

@@ -7,6 +7,11 @@ import (
 )
 
 const (
+	// ScheduledTaskMinPrecision is the precision of scheduled history task fire times.
+	ScheduledTaskMinPrecision = time.Millisecond
+)
+
+const (
 	// DefaultTransactionSizeLimit is the largest allowed transaction size to persistence
 	DefaultTransactionSizeLimit = 4 * 1024 * 1024
 )

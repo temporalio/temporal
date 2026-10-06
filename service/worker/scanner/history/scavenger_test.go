@@ -17,7 +17,6 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -415,25 +414,25 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), protomock.Eq(&persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken1,
-		ShardID:     common.WorkflowIDToHistoryShard("namespaceID1", "workflowID1", s.numShards),
+		ShardID:     primitives.WorkflowIDToHistoryShard("namespaceID1", "workflowID1", s.numShards),
 	})).Return(nil)
 	branchToken2, err := s.historyBranchUtil.NewHistoryBranch(uuid.NewString(), uuid.NewString(), uuid.NewString(), treeID2, &branchID2, []*persistencespb.HistoryBranchRange{}, 0, 0, 0)
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), protomock.Eq(&persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken2,
-		ShardID:     common.WorkflowIDToHistoryShard("namespaceID2", "workflowID2", s.numShards),
+		ShardID:     primitives.WorkflowIDToHistoryShard("namespaceID2", "workflowID2", s.numShards),
 	})).Return(nil)
 	branchToken3, err := s.historyBranchUtil.NewHistoryBranch(uuid.NewString(), uuid.NewString(), uuid.NewString(), treeID3, &branchID3, []*persistencespb.HistoryBranchRange{}, 0, 0, 0)
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), protomock.Eq(&persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
-		ShardID:     common.WorkflowIDToHistoryShard("namespaceID3", "workflowID3", s.numShards),
+		ShardID:     primitives.WorkflowIDToHistoryShard("namespaceID3", "workflowID3", s.numShards),
 	})).Return(nil)
 	branchToken4, err := s.historyBranchUtil.NewHistoryBranch(uuid.NewString(), uuid.NewString(), uuid.NewString(), treeID4, &branchID4, []*persistencespb.HistoryBranchRange{}, 0, 0, 0)
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), protomock.Eq(&persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
-		ShardID:     common.WorkflowIDToHistoryShard("namespaceID4", "workflowID4", s.numShards),
+		ShardID:     primitives.WorkflowIDToHistoryShard("namespaceID4", "workflowID4", s.numShards),
 	})).Return(nil)
 
 	hbd, err := s.scavenger.Run(context.Background())
@@ -551,14 +550,14 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), protomock.Eq(&persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
-		ShardID:     common.WorkflowIDToHistoryShard("namespaceID3", "workflowID3", s.numShards),
+		ShardID:     primitives.WorkflowIDToHistoryShard("namespaceID3", "workflowID3", s.numShards),
 	})).Return(nil)
 
 	branchToken4, err := s.historyBranchUtil.NewHistoryBranch(uuid.NewString(), uuid.NewString(), uuid.NewString(), treeID4, &branchID4, []*persistencespb.HistoryBranchRange{}, 0, 0, 0)
 	s.Nil(err)
 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any(), protomock.Eq(&persistence.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
-		ShardID:     common.WorkflowIDToHistoryShard("namespaceID4", "workflowID4", s.numShards),
+		ShardID:     primitives.WorkflowIDToHistoryShard("namespaceID4", "workflowID4", s.numShards),
 	})).Return(fmt.Errorf("failed to delete history"))
 
 	hbd, err := s.scavenger.Run(context.Background())

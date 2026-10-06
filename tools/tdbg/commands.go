@@ -440,7 +440,7 @@ func AdminGetShardID(c *cli.Context) error {
 	if numberOfShards <= 0 {
 		return fmt.Errorf("missing required parameter number of Shards")
 	}
-	shardID := common.WorkflowIDToHistoryShard(namespaceID, wid, numberOfShards)
+	shardID := primitives.WorkflowIDToHistoryShard(namespaceID, wid, numberOfShards)
 	// nolint:errcheck // assuming that write will succeed.
 	fmt.Fprintf(c.App.Writer, "ShardId for namespace, workflowId: %v, %v is %v \n", namespaceID, wid, shardID)
 	return nil

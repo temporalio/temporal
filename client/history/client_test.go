@@ -12,11 +12,11 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client/history"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/nettest"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
@@ -165,8 +165,8 @@ func TestIsActivityTaskValidRouting(t *testing.T) {
 		workflowID     = "test-workflow-id"
 		numberOfShards = int32(128)
 	)
-	standaloneShardID := common.WorkflowIDToHistoryShard(namespaceID, businessID, numberOfShards)
-	workflowShardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, numberOfShards)
+	standaloneShardID := primitives.WorkflowIDToHistoryShard(namespaceID, businessID, numberOfShards)
+	workflowShardID := primitives.WorkflowIDToHistoryShard(namespaceID, workflowID, numberOfShards)
 	require.NotEqual(t, standaloneShardID, workflowShardID)
 
 	for _, tc := range []struct {
@@ -186,7 +186,7 @@ func TestIsActivityTaskValidRouting(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
-			expectedShardID := common.WorkflowIDToHistoryShard(namespaceID, tc.routingID, numberOfShards)
+			expectedShardID := primitives.WorkflowIDToHistoryShard(namespaceID, tc.routingID, numberOfShards)
 
 			serviceResolver := membership.NewMockServiceResolver(ctrl)
 			serviceResolver.EXPECT().Lookup(convert.Int32ToString(expectedShardID)).Return(membership.NewHostInfoFromAddress("localhost"), nil)

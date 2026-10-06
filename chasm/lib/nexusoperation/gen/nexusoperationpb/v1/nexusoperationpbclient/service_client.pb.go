@@ -88,7 +88,7 @@ func (c *NexusOperationServiceLayeredClient) callStartNexusOperationNoRetry(
 		}
 		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 	}()
-	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetOperationId(), c.numShards)
+	shardID := primitives.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetOperationId(), c.numShards)
 	op := func(ctx context.Context, client nexusoperationpb.NexusOperationServiceClient) error {
 		var err error
 		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
@@ -131,7 +131,7 @@ func (c *NexusOperationServiceLayeredClient) callDescribeNexusOperationNoRetry(
 		}
 		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 	}()
-	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetOperationId(), c.numShards)
+	shardID := primitives.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetOperationId(), c.numShards)
 	op := func(ctx context.Context, client nexusoperationpb.NexusOperationServiceClient) error {
 		var err error
 		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
@@ -174,7 +174,7 @@ func (c *NexusOperationServiceLayeredClient) callRequestCancelNexusOperationNoRe
 		}
 		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 	}()
-	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetOperationId(), c.numShards)
+	shardID := primitives.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetOperationId(), c.numShards)
 	op := func(ctx context.Context, client nexusoperationpb.NexusOperationServiceClient) error {
 		var err error
 		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
@@ -217,7 +217,7 @@ func (c *NexusOperationServiceLayeredClient) callTerminateNexusOperationNoRetry(
 		}
 		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 	}()
-	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetOperationId(), c.numShards)
+	shardID := primitives.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetOperationId(), c.numShards)
 	op := func(ctx context.Context, client nexusoperationpb.NexusOperationServiceClient) error {
 		var err error
 		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
@@ -260,7 +260,7 @@ func (c *NexusOperationServiceLayeredClient) callDeleteNexusOperationNoRetry(
 		}
 		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 	}()
-	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetOperationId(), c.numShards)
+	shardID := primitives.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetOperationId(), c.numShards)
 	op := func(ctx context.Context, client nexusoperationpb.NexusOperationServiceClient) error {
 		var err error
 		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
@@ -303,7 +303,7 @@ func (c *NexusOperationServiceLayeredClient) callPollNexusOperationNoRetry(
 		}
 		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 	}()
-	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetOperationId(), c.numShards)
+	shardID := primitives.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetFrontendRequest().GetOperationId(), c.numShards)
 	op := func(ctx context.Context, client nexusoperationpb.NexusOperationServiceClient) error {
 		var err error
 		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)

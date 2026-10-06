@@ -157,7 +157,7 @@ func genAssignShard(m *protogen.Method) (string, error) {
 	}
 
 	if len(opts.BusinessId) == 1 {
-		return fmt.Sprintf("shardID := common.WorkflowIDToHistoryShard(request%s, request%s, c.numShards)", namespaceIDFieldGetter, primaryFieldGetter), nil
+		return fmt.Sprintf("shardID := primitives.WorkflowIDToHistoryShard(request%s, request%s, c.numShards)", namespaceIDFieldGetter, primaryFieldGetter), nil
 	}
 
 	// Multiple business_id fields: use the first non-empty value as the routing key.
@@ -170,7 +170,7 @@ func genAssignShard(m *protogen.Method) (string, error) {
 		}
 		fmt.Fprintf(&sb, "if businessID == \"\" { businessID = request%s }\n", fallbackGetter)
 	}
-	fmt.Fprintf(&sb, "shardID := common.WorkflowIDToHistoryShard(request%s, businessID, c.numShards)", namespaceIDFieldGetter)
+	fmt.Fprintf(&sb, "shardID := primitives.WorkflowIDToHistoryShard(request%s, businessID, c.numShards)", namespaceIDFieldGetter)
 	return sb.String(), nil
 }
 

@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/pingable"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc"
@@ -1942,7 +1943,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 		// taskMinScheduledTime = util.MaxTime(taskMinScheduledTime, maxReadTime)
 		taskMinScheduledTime = util.MaxTime(
 			taskMinScheduledTime,
-			exclusiveMaxReadTime.Add(common.ScheduledTaskMinPrecision).Truncate(common.ScheduledTaskMinPrecision),
+			exclusiveMaxReadTime.Add(primitives.ScheduledTaskMinPrecision).Truncate(primitives.ScheduledTaskMinPrecision),
 		)
 
 		if clusterName != currentClusterName {

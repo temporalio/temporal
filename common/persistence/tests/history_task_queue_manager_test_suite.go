@@ -11,11 +11,11 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client/history/historytest"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/persistencetest"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/api/deletedlqtasks/deletedlqtaskstest"
 	"go.temporal.io/server/service/history/api/getdlqtasks/getdlqtaskstest"
 	"go.temporal.io/server/service/history/api/listqueues/listqueuestest"
@@ -149,7 +149,7 @@ func testHistoryTaskQueueManagerEnqueueTasks(t *testing.T, manager persistence.H
 	workflowID := "test-workflow-id"
 	workflowKey := definition.NewWorkflowKey(namespaceID, workflowID, "test-run-id")
 	shardID := 2
-	assert.Equal(t, int32(shardID), common.WorkflowIDToHistoryShard(namespaceID, workflowID, int32(numHistoryShards)))
+	require.Equal(t, int32(shardID), primitives.WorkflowIDToHistoryShard(namespaceID, workflowID, int32(numHistoryShards)))
 
 	queueKey := persistencetest.GetQueueKey(t)
 	_, err := manager.CreateQueue(ctx, &persistence.CreateQueueRequest{

@@ -17,11 +17,11 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/api/forcedeleteworkflowexecution"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
@@ -79,7 +79,7 @@ func (s *historyAPISuite) TestDeleteWorkflowExecution_DeleteCurrentExecution() {
 		WorkflowId: "workflowID",
 	}
 
-	shardID := common.WorkflowIDToHistoryShard(
+	shardID := primitives.WorkflowIDToHistoryShard(
 		tests.NamespaceID.String(),
 		execution.GetWorkflowId(),
 		1,
@@ -172,7 +172,7 @@ func (s *historyAPISuite) TestDeleteWorkflowExecution_LoadMutableStateFailed() {
 		RunId:      uuid.NewString(),
 	}
 
-	shardID := common.WorkflowIDToHistoryShard(
+	shardID := primitives.WorkflowIDToHistoryShard(
 		tests.NamespaceID.String(),
 		execution.GetWorkflowId(),
 		1,

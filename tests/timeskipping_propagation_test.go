@@ -39,9 +39,9 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testvars"
 	historytasks "go.temporal.io/server/service/history/tasks"
@@ -900,7 +900,7 @@ func (s *TimeSkippingPropagationTestSuite) drivePollsUntilRunNotRunning(
 // getMutableState loads the persistence-layer mutable state for a workflow run.
 // Mirrors the helper in timeskipping_test.go to keep this file self-contained.
 func (s *TimeSkippingPropagationTestSuite) getMutableState(env *testcore.TestEnv, workflowID, runID string) *persistence.GetWorkflowExecutionResponse {
-	shardID := common.WorkflowIDToHistoryShard(
+	shardID := primitives.WorkflowIDToHistoryShard(
 		env.NamespaceID().String(),
 		workflowID,
 		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,

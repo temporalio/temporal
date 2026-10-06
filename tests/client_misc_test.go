@@ -25,9 +25,9 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/worker_versioning"
@@ -246,7 +246,7 @@ func (s *ClientMiscTestSuite) TestTooManyCancelRequests() {
 			return env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()})
 		}, 5*time.Second, 500*time.Millisecond)
 
-		shardID := common.WorkflowIDToHistoryShard(env.NamespaceID().String(), run.GetID(), env.GetTestClusterConfig().HistoryConfig.NumHistoryShards)
+		shardID := primitives.WorkflowIDToHistoryShard(env.NamespaceID().String(), run.GetID(), env.GetTestClusterConfig().HistoryConfig.NumHistoryShards)
 		workflowExecution, err := env.GetTestCluster().ExecutionManager().GetWorkflowExecution(s.Context(), &persistence.GetWorkflowExecutionRequest{
 			ShardID:     shardID,
 			NamespaceID: env.NamespaceID().String(),

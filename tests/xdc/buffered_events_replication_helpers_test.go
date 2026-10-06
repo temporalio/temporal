@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protoutils"
@@ -993,7 +994,7 @@ func (s *xdcBaseSuite) findNonCurrentHistoryBranch(
 	versionHistories := description.GetDatabaseMutableState().GetExecutionInfo().GetVersionHistories()
 	s.Require().GreaterOrEqual(len(versionHistories.GetHistories()), 2)
 
-	shardID := common.WorkflowIDToHistoryShard(namespaceID, execution.WorkflowId, s.numHistoryShards)
+	shardID := primitives.WorkflowIDToHistoryShard(namespaceID, execution.WorkflowId, s.numHistoryShards)
 	for index, versionHistory := range versionHistories.GetHistories() {
 		if int32(index) == versionHistories.GetCurrentVersionHistoryIndex() {
 			continue

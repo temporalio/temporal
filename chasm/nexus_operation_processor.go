@@ -6,9 +6,9 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/primitives"
 )
 
 // NexusOperationProcessorContext contains context for processing a Nexus operation's input, including the target
@@ -43,7 +43,7 @@ type NexusOperationRoutingKeyExecution struct {
 
 // ShardID returns the shard that owns the execution identified by the namespace and business IDs.
 func (r NexusOperationRoutingKeyExecution) ShardID(numShards int32) int32 {
-	return common.WorkflowIDToHistoryShard(r.NamespaceID, r.BusinessID, numShards)
+	return primitives.WorkflowIDToHistoryShard(r.NamespaceID, r.BusinessID, numShards)
 }
 
 // NexusOperationRoutingKeyRandom routes operations to a random shard.

@@ -23,12 +23,12 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -1474,10 +1474,10 @@ func workflowIDsOnDifferentShards(
 	numHistoryShards int32,
 ) (parentID string, childID string, parentShardID int32, childShardID int32) {
 	parentID = "parent-" + uuid.NewString()
-	parentShardID = common.WorkflowIDToHistoryShard(namespaceID, parentID, numHistoryShards)
+	parentShardID = primitives.WorkflowIDToHistoryShard(namespaceID, parentID, numHistoryShards)
 	for {
 		childID = "child-" + uuid.NewString()
-		childShardID = common.WorkflowIDToHistoryShard(namespaceID, childID, numHistoryShards)
+		childShardID = primitives.WorkflowIDToHistoryShard(namespaceID, childID, numHistoryShards)
 		if childShardID != parentShardID {
 			return parentID, childID, parentShardID, childShardID
 		}

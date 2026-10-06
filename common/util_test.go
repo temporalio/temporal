@@ -19,6 +19,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"google.golang.org/protobuf/testing/protopack"
 )
@@ -48,8 +49,8 @@ func TestIsContextCanceledErr(t *testing.T) {
 func TestMapShardID_ByNamespaceWorkflow_4And16(t *testing.T) {
 	namespaceID := uuid.NewString()
 	workflowID := uuid.NewString()
-	shardID4 := WorkflowIDToHistoryShard(namespaceID, workflowID, 4)
-	shardID16 := WorkflowIDToHistoryShard(namespaceID, workflowID, 16)
+	shardID4 := primitives.WorkflowIDToHistoryShard(namespaceID, workflowID, 4)
+	shardID16 := primitives.WorkflowIDToHistoryShard(namespaceID, workflowID, 16)
 
 	targetShardIDs := MapShardID(16, 4, shardID16)
 	require.Equal(t, []int32{

@@ -13,13 +13,13 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/tasktoken"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
@@ -296,7 +296,7 @@ func (c *clientImpl) createContextWithStateSyncTimeout(parent context.Context) (
 }
 
 func (c *clientImpl) shardIDFromWorkflowID(namespaceID, workflowID string) int32 {
-	return common.WorkflowIDToHistoryShard(namespaceID, workflowID, c.numberOfShards)
+	return primitives.WorkflowIDToHistoryShard(namespaceID, workflowID, c.numberOfShards)
 }
 
 // Stop stops the membership watcher and closes pooled connections.

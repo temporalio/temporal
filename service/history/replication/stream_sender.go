@@ -27,6 +27,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/wideevents"
@@ -747,7 +748,7 @@ func (s *StreamSenderImpl) sendToStream(payload *historyservice.StreamWorkflowRe
 }
 
 func (s *StreamSenderImpl) shouldProcessTask(item tasks.Task) bool {
-	clientShardID := common.WorkflowIDToHistoryShard(item.GetNamespaceID(), item.GetWorkflowID(), s.clientClusterShardCount)
+	clientShardID := primitives.WorkflowIDToHistoryShard(item.GetNamespaceID(), item.GetWorkflowID(), s.clientClusterShardCount)
 	if clientShardID != s.clientShardKey.ShardID {
 		return false
 	}

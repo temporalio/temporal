@@ -15,9 +15,9 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/tests/testcore"
@@ -319,7 +319,7 @@ func (s *namespaceTestSuite) Test_NamespaceDelete_WithMissingWorkflows() {
 	// Delete some workflow executions from DB but not from visibility.
 	// Every subsequent delete (from deleteexecutions.Workflow) from ES will take at least 1s due to bulk processor.
 	for _, execution := range executions[0:5] {
-		shardID := common.WorkflowIDToHistoryShard(
+		shardID := primitives.WorkflowIDToHistoryShard(
 			nsID,
 			execution.GetWorkflowId(),
 			env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,

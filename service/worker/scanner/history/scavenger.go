@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -22,6 +21,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 )
@@ -226,7 +226,7 @@ func (s *Scavenger) filterTask(
 		s.hbd.ErrorCount++
 		return nil
 	}
-	shardID := common.WorkflowIDToHistoryShard(namespaceID, workflowID, s.numShards)
+	shardID := primitives.WorkflowIDToHistoryShard(namespaceID, workflowID, s.numShards)
 
 	branchToken, err := s.serializer.HistoryBranchToBlob(branch.BranchInfo)
 	if err != nil {

@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoassert"
@@ -379,7 +380,7 @@ func (s *ArchivalSuite) workflowIsArchived(env *archivalTestEnv, namespaceID nam
 }
 
 func (s *ArchivalSuite) historyIsDeleted(env *archivalTestEnv, workflowInfo archivalWorkflowInfo) {
-	shardID := common.WorkflowIDToHistoryShard(
+	shardID := primitives.WorkflowIDToHistoryShard(
 		env.archivalNamespaceID.String(),
 		workflowInfo.execution.WorkflowId,
 		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
@@ -406,7 +407,7 @@ func (s *ArchivalSuite) historyIsDeleted(env *archivalTestEnv, workflowInfo arch
 }
 
 func (s *ArchivalSuite) mutableStateIsDeleted(env *archivalTestEnv, namespaceID namespace.ID, execution *commonpb.WorkflowExecution) {
-	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(),
+	shardID := primitives.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(),
 		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards)
 	request := &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,

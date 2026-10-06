@@ -10,7 +10,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
@@ -1198,7 +1197,7 @@ func (e *ChasmEngine) getShardContext(
 	ref chasm.ComponentRef,
 ) (historyi.ShardContext, error) {
 	shardContext, err := e.shardController.GetShardByID(
-		common.WorkflowIDToHistoryShard(
+		primitives.WorkflowIDToHistoryShard(
 			ref.NamespaceID,
 			ref.BusinessID,
 			e.config.NumberOfShards,

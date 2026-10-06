@@ -3,10 +3,10 @@ package configs
 import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
 )
 
@@ -916,5 +916,5 @@ func NewConfig(
 
 // GetShardID return the corresponding shard ID for a given namespaceID and workflowID pair
 func (config *Config) GetShardID(namespaceID namespace.ID, workflowID string) int32 {
-	return common.WorkflowIDToHistoryShard(namespaceID.String(), workflowID, config.NumberOfShards)
+	return primitives.WorkflowIDToHistoryShard(namespaceID.String(), workflowID, config.NumberOfShards)
 }

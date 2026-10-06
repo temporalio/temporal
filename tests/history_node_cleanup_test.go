@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
@@ -40,7 +41,7 @@ func (s *HistoryNodeCleanupSuite) TestDeletionOfSingleWorkflow() {
 	tv := testvars.New(s.T())
 	ctx := s.Context()
 
-	shardID := common.WorkflowIDToHistoryShard(
+	shardID := primitives.WorkflowIDToHistoryShard(
 		env.NamespaceID().String(),
 		tv.WorkflowID(),
 		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
@@ -94,7 +95,7 @@ func (s *HistoryNodeCleanupSuite) TestDeletionOfWorkflowAfterReset() {
 	tv := testvars.New(s.T())
 	ctx := s.Context()
 
-	shardID := common.WorkflowIDToHistoryShard(
+	shardID := primitives.WorkflowIDToHistoryShard(
 		env.NamespaceID().String(),
 		tv.WorkflowID(),
 		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
