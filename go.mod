@@ -73,6 +73,7 @@ require (
 	go.temporal.io/api v1.63.6-0.20260909222256-20151aa90480
 	go.temporal.io/auto-scaled-workers v0.0.0-20260928183627-719679297cbe
 	go.temporal.io/sdk v1.48.0
+	go.temporal.io/testx v0.0.0-00010101000000-000000000000
 	go.uber.org/fx v1.24.0
 	go.uber.org/goleak v1.3.0
 	go.uber.org/mock v0.6.0
@@ -224,3 +225,7 @@ require (
 )
 
 tool golang.org/x/perf/cmd/benchstat
+
+// Server code always builds against testx from the same commit. Consumers of the server ignore this
+// replace and get the required testx version, which .github/workflows/testx-bump.yml keeps current.
+replace go.temporal.io/testx => ./testx

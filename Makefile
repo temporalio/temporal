@@ -118,7 +118,7 @@ ALL_SCRIPTS     := $(shell find . -name "*.sh")
 MAIN_BRANCH    := main
 
 # If you update these dirs, please also update in CategoryDirs find_altered_tests.go
-TEST_DIRS       := $(sort $(dir $(filter %_test.go,$(ALL_SRC))))
+TEST_DIRS       := $(filter-out ./testx/%,$(sort $(dir $(filter %_test.go,$(ALL_SRC)))))
 FUNCTIONAL_TEST_ROOT          := ./tests
 FUNCTIONAL_TEST_XDC_ROOT      := ./tests/xdc
 FUNCTIONAL_TEST_NDC_ROOT      := ./tests/ndc
@@ -416,6 +416,7 @@ lint-code-fast:
 		git diff --no-renames --name-only "$$base" -- '*.go'; \
 		git ls-files --others --exclude-standard -- '*.go'; \
 	} | sed 's|^|./|; s|/[^/]*$$||' | sort -u \
+	  | grep -v "^\./testx/" \
 	  | while read -r dir; do [ -d "$$dir" ] && printf '%s ' "$$dir"; done); \
 	if [ -z "$$targets" ]; then \
 		printf $(COLOR) "No changed Go packages to lint."; \
@@ -434,6 +435,12 @@ lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
 		--config=.github/.golangci.yml \
 		$(LINT_CODE_TARGETS)
 	@go vet -tags $(ALL_TEST_TAGS) -vettool="$(ERRORTYPE)" -style-check=false $(LINT_CODE_TARGETS)
+
+.PHONY: lint-testx
+lint-testx: $(GOLANGCI_LINT)
+	@printf $(COLOR) "Linting testx..."
+	@cd testx && $(ROOT)/$(GOLANGCI_LINT) run --timeout 10m --new-from-rev=$(GOLANGCI_LINT_BASE_REV) --config=$(ROOT)/.github/.golangci.yml ./...
+	@go -C testx vet ./...
 
 lint-yaml: $(YAMLFMT)
 	@printf $(COLOR) "Checking YAML formatting..."
@@ -533,6 +540,10 @@ clean-test-output:
 build-tests:
 	@printf $(COLOR) "Build tests..."
 	@CGO_ENABLED=$(CGO_ENABLED) go test $(TEST_TAG_FLAG) -exec="true" -count=0 $(TEST_DIRS)
+
+testx-test:
+	@printf $(COLOR) "Run testx tests..."
+	@go -C testx test ./...
 
 unit-test: clean-test-output
 	@printf $(COLOR) "Run unit tests..."
@@ -788,6 +799,7 @@ update-dashboards:
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
 	@go mod tidy
+	@go -C testx mod tidy
 
 update-dependencies:
 	@printf $(COLOR) "Update dependencies (minor versions only) ..."
