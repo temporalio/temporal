@@ -12,6 +12,9 @@ permissions:
 jobs:
   testx:
     runs-on: ubuntu-24.04-arm
+    defaults:
+      run:
+        working-directory: testx
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -28,7 +31,7 @@ jobs:
 
       - name: Check testx does not depend on other go.temporal.io modules
         run: |
-          mods=$(go -C testx list -m -f '{{if not .Main}}{{.Path}}{{end}}' all)
+          mods=$(go list -m -f '{{if not .Main}}{{.Path}}{{end}}' all)
           deps=$(echo "$mods" | grep '^go.temporal.io/' || true)
           if [ -n "$deps" ]; then
             echo "::error file=testx/go.mod::testx must not depend on go.temporal.io modules: $(echo "$deps" | tr "\n" " ")"
@@ -36,12 +39,12 @@ jobs:
           fi
 
       - name: Check testx go.mod is tidy
-        run: go -C testx mod tidy -diff
+        run: go mod tidy -diff
 
       - name: Test testx
-        run: make -C testx test
+        run: make test
 
       - name: Lint testx
         env:
           GOLANGCI_LINT_BASE_REV: ${{ github.event.pull_request.base.sha }}
-        run: make -C testx lint
+        run: make lint
