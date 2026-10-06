@@ -21,7 +21,7 @@ import (
 const (
 	// Nexus specific headers.
 	headerOperationState     = "nexus-operation-state"
-	headerRequestID          = "nexus-request-id"
+	HeaderRequestID          = "nexus-request-id"
 	headerLink               = "nexus-link"
 	headerOperationStartTime = "nexus-operation-start-time"
 	headerOperationCloseTime = "nexus-operation-close-time"

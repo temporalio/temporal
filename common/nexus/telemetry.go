@@ -1,10 +1,11 @@
-package nexusrpc
+package nexus
 
 import (
 	"net/http"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
+	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/telemetry"
 )
 
@@ -41,7 +42,7 @@ func AnnotateClientRequest(req *http.Request, targetNamespaceName string) *http.
 	if targetNamespaceName != "" {
 		attrs = append(attrs, attribute.String(telemetry.NexusNamespaceKey, targetNamespaceName))
 	}
-	if requestID := req.Header.Get(headerRequestID); requestID != "" {
+	if requestID := req.Header.Get(nexusrpc.HeaderRequestID); requestID != "" {
 		attrs = append(attrs, attribute.String(telemetry.NexusRequestIDKey, requestID))
 	}
 	if len(attrs) > 0 {

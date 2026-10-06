@@ -189,7 +189,7 @@ func clientProviderFactory(
 			// Add Nexus attributes when the HTTP transport will create a client span.
 			baseHTTPCaller := httpCaller
 			httpCaller = func(r *http.Request) (*http.Response, error) {
-				r = nexusrpc.AnnotateClientRequest(r, targetNamespaceName)
+				r = commonnexus.AnnotateClientRequest(r, targetNamespaceName)
 				return baseHTTPCaller(r)
 			}
 		}

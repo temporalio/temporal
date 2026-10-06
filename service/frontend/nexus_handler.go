@@ -92,7 +92,7 @@ func (c *operationContext) annotateServerSpan(
 	ctx context.Context,
 	service, operation, requestID string,
 ) {
-	nexusrpc.AnnotateServerSpan(trace.SpanFromContext(ctx), nexusrpc.ServerSpanAttributes{
+	commonnexus.AnnotateServerSpan(trace.SpanFromContext(ctx), commonnexus.ServerSpanAttributes{
 		Endpoint:  c.endpointName,
 		Service:   service,
 		Operation: operation,
