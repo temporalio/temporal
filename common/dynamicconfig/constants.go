@@ -1176,10 +1176,17 @@ so forwarding by endpoint ID will not work out of the box.`,
 		true,
 		`FrontendEnableBatcher enables batcher-related RPCs in the frontend`,
 	)
+	// Deprecated: FrontendMaxConcurrentAdminBatchOperationPerNamespace is no longer honored. Use
+	// FrontendMaxConcurrentAdminBatchOperation instead.
 	FrontendMaxConcurrentAdminBatchOperationPerNamespace = NewNamespaceIntSetting(
 		"frontend.MaxConcurrentAdminBatchOperationPerNamespace",
 		1,
-		`FrontendMaxConcurrentAdminBatchOperationPerNamespace is the max concurrent admin batch operation job count per namespace`,
+		`Deprecated: no longer honored. Use frontend.MaxConcurrentAdminBatchOperation instead.`,
+	)
+	FrontendMaxConcurrentAdminBatchOperation = NewGlobalIntSetting(
+		"frontend.MaxConcurrentAdminBatchOperation",
+		10,
+		`FrontendMaxConcurrentAdminBatchOperation is the max concurrent admin batch operation job count. Admin batch operations only run in the temporal-system namespace.`,
 	)
 	FrontendEnableBatchOperationsForStandaloneActivities = NewNamespaceBoolSetting(
 		"frontend.enableBatchOperationsForStandaloneActivities",
@@ -2824,6 +2831,11 @@ the number of children greater than or equal to this threshold`,
 		false,
 		`EnableDropRepeatedWorkflowTaskFailures whether to silently drop repeated workflow task failures`,
 	)
+	EnableSignalWithStartWorkflowTaskBackoff = NewNamespaceBoolSetting(
+		"history.enableSignalWithStartWorkflowTaskBackoff",
+		false,
+		`EnableSignalWithStartWorkflowTaskBackoff enables SignalWithStart to honor first workflow task backoff.`,
+	)
 	SendTransientOrSpeculativeWorkflowTaskEvents = NewNamespaceBoolSetting(
 		"history.sendTransientOrSpeculativeWorkflowTaskEvents",
 		true,
@@ -3417,6 +3429,13 @@ instead of the previous HSM backed implementation.`,
 map to enable DescribeWorkflow to resolve RequestIDRef signal backlinks. Requires EnableChasm.
 Only enable once all servers in the fleet have been upgraded to a version that understands
 the IncomingSignals CHASM field.`,
+	)
+	EnableCHASMWorkflowRootOnStart = NewNamespaceBoolSetting(
+		"history.enableCHASMWorkflowRootOnStart",
+		false,
+		`Controls whether the CHASM Workflow root component is persisted in the transaction that
+applies the WorkflowExecutionStarted event, instead of lazily on first use of a CHASM feature.
+Requires EnableChasm.`,
 	)
 	EnableWorkflowUpdateCallbacks = NewNamespaceBoolSetting(
 		"history.enableUpdateCallbacks",

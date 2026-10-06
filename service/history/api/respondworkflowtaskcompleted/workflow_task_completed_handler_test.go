@@ -93,7 +93,6 @@ func TestCommandProtocolMessage(t *testing.T) {
 			mockCtx := &chasm.MockMutableContext{}
 			wf := chasmworkflow.NewWorkflow(mockCtx, chasm.MSPointer{})
 			out.ms.EXPECT().ChasmEnabled().Return(true).AnyTimes()
-			out.ms.EXPECT().EnsureChasmWorkflowComponent(gomock.Any()).AnyTimes()
 			out.ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).Return(wf, mockCtx, nil)
 			dcClient = dynamicconfig.StaticClient(map[dynamicconfig.Key]any{
 				dynamicconfig.EnableChasm.Key(): true,
