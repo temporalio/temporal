@@ -184,8 +184,7 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 							},
 						},
 					},
-					State:     enumsspb.CALLBACK_STATE_SCHEDULED,
-					RequestId: "request-id",
+					State: enumsspb.CALLBACK_STATE_SCHEDULED,
 				},
 			}
 			coll := callbacks.MachineCollection(root)
@@ -252,7 +251,6 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 					Message: "Callback request failed",
 					Tags: map[string]any{
 						"nexus-stage":             "handler-outbound",
-						"operation":               "CompleteNexusOperation",
 						"error":                   testlogger.AnyTagValue,
 						"wf-namespace":            "namespace-name",
 						"destination":             "http://localhost",
@@ -260,7 +258,6 @@ func TestProcessInvocationTaskNexus_Outcomes(t *testing.T) {
 						"wf-run-id":               "run-id",
 						"nexus-completion-source": chasm.WorkflowArchetype,
 						"attempt":                 int32(0),
-						"request-id":              "request-id",
 						"retryable":               tc.retryable,
 					},
 				})

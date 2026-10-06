@@ -173,7 +173,6 @@ func (e taskExecutor) loadInvocationArgs(
 				completion: completion,
 				workflowID: ref.WorkflowKey.WorkflowID,
 				runID:      ref.WorkflowKey.RunID,
-				requestID:  callback.RequestId,
 				attempt:    callback.Attempt,
 			}
 		}

@@ -28,7 +28,6 @@ type invocableOutbound struct {
 	// completion, e.g. "workflow.workflow" or "activity.activity".
 	completionSourceTag string
 	businessID, runID   string
-	requestID           string
 	attempt             int32
 }
 
@@ -46,19 +45,17 @@ func (n invocableOutbound) Invoke(
 	task *callbackspb.InvocationTask,
 	taskAttr chasm.TaskAttributes,
 ) invocationResult {
-	callbackLogger := log.With(h.logger,
-		tag.WorkflowNamespace(ns.Name().String()),
-		tag.Operation("CompleteNexusOperation"),
-		tag.Destination(taskAttr.Destination),
-		tag.WorkflowID(n.businessID),
-		tag.WorkflowRunID(n.runID),
-		tag.NexusCompletionSource(n.completionSourceTag),
-		tag.Attempt(n.attempt),
-		tag.RequestID(n.requestID),
-	)
 	if h.httpTraceProvider != nil {
-		// nolint:forbidigo // Wall-clock RPC timestamp, not component state; Invoke has no chasm.Context.
-		traceLogger := log.With(callbackLogger, tag.AttemptStart(time.Now().UTC()))
+		traceLogger := log.With(h.logger,
+			tag.WorkflowNamespace(ns.Name().String()),
+			tag.Operation("CompleteNexusOperation"),
+			tag.Destination(taskAttr.Destination),
+			tag.WorkflowID(n.businessID),
+			tag.WorkflowRunID(n.runID),
+			tag.NexusCompletionSource(n.completionSourceTag),
+			tag.AttemptStart(time.Now().UTC()),
+			tag.Attempt(n.attempt),
+		)
 		if trace := h.httpTraceProvider.NewTrace(n.attempt, traceLogger); trace != nil {
 			ctx = httptrace.WithClientTrace(ctx, trace)
 		}
@@ -92,13 +89,19 @@ func (n invocableOutbound) Invoke(
 	if err != nil {
 		retryable := isRetryableCallError(err)
 		// Only a callback that is dropped for good is an error; one that will be retried is a warning.
-		logAtLevel := callbackLogger.Error
+		logAtLevel := h.logger.Error
 		if retryable {
-			logAtLevel = callbackLogger.Warn
+			logAtLevel = h.logger.Warn
 		}
 		logAtLevel(
 			"Callback request failed",
 			tag.Error(err),
+			tag.WorkflowNamespace(ns.Name().String()),
+			tag.Destination(taskAttr.Destination),
+			tag.WorkflowID(n.businessID),
+			tag.WorkflowRunID(n.runID),
+			tag.NexusCompletionSource(n.completionSourceTag),
+			tag.Attempt(n.attempt),
 			tag.Bool("retryable", retryable),
 		)
 		if retryable {

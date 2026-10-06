@@ -72,6 +72,8 @@ type Config struct {
 	MaxNamespaceBurstRatioPerInstance                                 dynamicconfig.FloatPropertyFnWithNamespaceFilter
 	MaxConcurrentLongRunningRequestsPerInstance                       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxGlobalConcurrentLongRunningRequests                            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxInternalPerNSConcurrentLongRunningRequestsPerInstance          dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxGlobalInternalPerNSConcurrentLongRunningRequests               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PollWaitForNamespaceRateLimitToken                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityRPSPerInstance                              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityBurstRatioPerInstance                       dynamicconfig.FloatPropertyFnWithNamespaceFilter
@@ -208,8 +210,8 @@ type Config struct {
 	// Batch operation dynamic configs
 	MaxConcurrentBatchOperation     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxExecutionCountBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
-	// Admin Batch operation dynamic config
-	MaxConcurrentAdminBatchOperation             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	// Admin batch operations only run in the temporal-system namespace, so this limit is global.
+	MaxConcurrentAdminBatchOperation             dynamicconfig.IntPropertyFn
 	EnableBatchOperationsForStandaloneActivities dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	EnableUpdateWorkflowExecution                              dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -332,6 +334,8 @@ func NewConfig(
 		MaxNamespaceBurstRatioPerInstance:                                 dynamicconfig.FrontendMaxNamespaceBurstRatioPerInstance.Get(dc),
 		MaxConcurrentLongRunningRequestsPerInstance:                       dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance.Get(dc),
 		MaxGlobalConcurrentLongRunningRequests:                            dynamicconfig.FrontendGlobalMaxConcurrentLongRunningRequests.Get(dc),
+		MaxInternalPerNSConcurrentLongRunningRequestsPerInstance:          dynamicconfig.FrontendInternalPerNSMaxConcurrentLongRunningRequestsPerInstance.Get(dc),
+		MaxGlobalInternalPerNSConcurrentLongRunningRequests:               dynamicconfig.FrontendGlobalInternalPerNSMaxConcurrentLongRunningRequests.Get(dc),
 		PollWaitForNamespaceRateLimitToken:                                dynamicconfig.PollWaitForNamespaceRateLimitToken.Get(dc),
 		MaxNamespaceVisibilityRPSPerInstance:                              dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Get(dc),
 		MaxNamespaceVisibilityBurstRatioPerInstance:                       dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance.Get(dc),
@@ -410,7 +414,7 @@ func NewConfig(
 		EnableBatcher:                                dynamicconfig.FrontendEnableBatcher.Get(dc),
 		MaxConcurrentBatchOperation:                  dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Get(dc),
 		MaxExecutionCountBatchOperation:              dynamicconfig.FrontendMaxExecutionCountBatchOperationPerNamespace.Get(dc),
-		MaxConcurrentAdminBatchOperation:             dynamicconfig.FrontendMaxConcurrentAdminBatchOperationPerNamespace.Get(dc),
+		MaxConcurrentAdminBatchOperation:             dynamicconfig.FrontendMaxConcurrentAdminBatchOperation.Get(dc),
 		EnableBatchOperationsForStandaloneActivities: dynamicconfig.FrontendEnableBatchOperationsForStandaloneActivities.Get(dc),
 
 		EnableUpdateWorkflowExecution:                              dynamicconfig.FrontendEnableUpdateWorkflowExecution.Get(dc),

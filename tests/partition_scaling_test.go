@@ -35,6 +35,7 @@ const (
 
 func scalerEnvOptions(dcPartitions int, shrink scalerShrink) []testcore.TestOption {
 	settings := dynamicconfig.PartitionScaleManagerSettings{
+		Enabled:            true,
 		MaxRate:            100,         // don't limit speed of changes
 		BatchSize:          1,           // always go directly to scaler
 		BackgroundInterval: time.Second, // ping scaler often and drain faster

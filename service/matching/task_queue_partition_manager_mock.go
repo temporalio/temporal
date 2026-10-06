@@ -190,6 +190,21 @@ func (mr *MocktaskQueuePartitionManagerMockRecorder) GetUserDataManager() *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUserDataManager", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).GetUserDataManager))
 }
 
+// GrantEagerDispatch mocks base method.
+func (m *MocktaskQueuePartitionManager) GrantEagerDispatch(ctx context.Context, items []*matchingservice.GrantEagerDispatchRequest_Item) ([]*matchingservice.GrantEagerDispatchResponse_Item, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GrantEagerDispatch", ctx, items)
+	ret0, _ := ret[0].([]*matchingservice.GrantEagerDispatchResponse_Item)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GrantEagerDispatch indicates an expected call of GrantEagerDispatch.
+func (mr *MocktaskQueuePartitionManagerMockRecorder) GrantEagerDispatch(ctx, items any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GrantEagerDispatch", reflect.TypeOf((*MocktaskQueuePartitionManager)(nil).GrantEagerDispatch), ctx, items)
+}
+
 // HasAnyPollerAfter mocks base method.
 func (m *MocktaskQueuePartitionManager) HasAnyPollerAfter(accessTime time.Time) bool {
 	m.ctrl.T.Helper()

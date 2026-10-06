@@ -562,6 +562,39 @@ func TestIsRetryableQueryError(t *testing.T) {
 	})
 }
 
+func TestDescribeVersionFailedPrecondition(t *testing.T) {
+	version := "deployment.build-id"
+	testCases := []struct {
+		name        string
+		err         error
+		expectedMsg string
+	}{
+		{
+			name:        "version not found",
+			err:         serviceerror.NewNotFound("Worker Deployment Version not found"),
+			expectedMsg: "Version deployment.build-id not found in deployment",
+		},
+		{
+			name: "describe failed",
+			err: &serviceerror.ResourceExhausted{
+				Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
+				Message: "too many requests issued to Worker Deployment 'deployment'",
+			},
+			expectedMsg: "Failed to describe version deployment.build-id while checking for missing task queues: too many requests issued to Worker Deployment 'deployment'",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := describeVersionFailedPrecondition(version, tc.err)
+
+			var failedPrecondition *serviceerror.FailedPrecondition
+			require.ErrorAs(t, err, &failedPrecondition)
+			require.EqualError(t, err, tc.expectedMsg)
+		})
+	}
+}
+
 // TestSignalVersionReactivation_RequestIdFormat verifies that SignalVersionReactivation
 // produces a deterministic UUID v5 RequestId derived from the revision number. Every
 // history pod that observes the same revisionNumber must produce the same RequestId so
