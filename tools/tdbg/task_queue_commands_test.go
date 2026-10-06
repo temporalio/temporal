@@ -1,15 +1,21 @@
 package tdbg
 
 import (
+	"bytes"
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/urfave/cli/v2"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/codec"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
@@ -20,6 +26,7 @@ type (
 		describeTaskQueuePartitionFn    func(request *adminservice.DescribeTaskQueuePartitionRequest) (*adminservice.DescribeTaskQueuePartitionResponse, error)
 		forceUnloadTaskQueuePartitionFn func(request *adminservice.ForceUnloadTaskQueuePartitionRequest) (*adminservice.ForceUnloadTaskQueuePartitionResponse, error)
 		getTaskQueueUserDataFn          func(request *adminservice.GetTaskQueueUserDataRequest) (*adminservice.GetTaskQueueUserDataResponse, error)
+		updateTaskQueueUserDataFn       func(request *adminservice.UpdateTaskQueueUserDataRequest) (*adminservice.UpdateTaskQueueUserDataResponse, error)
 	}
 )
 
@@ -85,6 +92,10 @@ func (t *testClient) ForceUnloadTaskQueuePartition(_ context.Context, request *a
 
 func (t *testClient) GetTaskQueueUserData(_ context.Context, request *adminservice.GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*adminservice.GetTaskQueueUserDataResponse, error) {
 	return t.getTaskQueueUserDataFn(request)
+}
+
+func (t *testClient) UpdateTaskQueueUserData(_ context.Context, request *adminservice.UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*adminservice.UpdateTaskQueueUserDataResponse, error) {
+	return t.updateTaskQueueUserDataFn(request)
 }
 
 func (s *taskQueueCommandTestSuite) SetupTest() {
@@ -219,4 +230,112 @@ func (s *taskQueueCommandTestSuite) TestGetTaskQueueUserData() {
 	resp := errorApp.Run([]string{"tdbg", "taskqueue", "get-user-data",
 		"--namespace", "default", "--task-queue", "test"})
 	s.ErrorContains(resp, "unable to get Task Queue User Data")
+}
+
+func TestUpdateTaskQueueUserData(t *testing.T) {
+	dir := t.TempDir()
+	validFile := filepath.Join(dir, "valid.json")
+	require.NoError(t, os.WriteFile(validFile, []byte(`{"config": {"queueRateLimit": {"rateLimit": {"requestsPerSecond": 10}}}, "fairnessState": "FAIRNESS_STATE_V2"}`), 0o600))
+	invalidFile := filepath.Join(dir, "invalid.json")
+	require.NoError(t, os.WriteFile(invalidFile, []byte(`{"config": `), 0o600))
+
+	baseArgs := func(extra ...string) []string {
+		return append([]string{"tdbg", "--yes", "taskqueue", "update-user-data", "--namespace", "default", "--task-queue", "test"}, extra...)
+	}
+
+	tests := []struct {
+		name      string
+		args      []string
+		rpcErr    error
+		expectErr string
+		verify    func(t *testing.T, req *adminservice.UpdateTaskQueueUserDataRequest)
+	}{
+		{
+			name: "success with default type",
+			args: baseArgs("--input-filename", validFile, "--known-version", "7"),
+			verify: func(t *testing.T, req *adminservice.UpdateTaskQueueUserDataRequest) {
+				require.Equal(t, "default", req.GetNamespace())
+				require.Equal(t, "test", req.GetTaskQueue())
+				require.Equal(t, enumspb.TASK_QUEUE_TYPE_WORKFLOW, req.GetTaskQueueType())
+				require.Equal(t, int64(7), req.GetKnownVersion())
+				require.InDelta(t, 10, req.GetUserData().GetConfig().GetQueueRateLimit().GetRateLimit().GetRequestsPerSecond(), 0.001)
+				require.Equal(t, enumsspb.FAIRNESS_STATE_V2, req.GetUserData().GetFairnessState())
+			},
+		},
+		{
+			name: "success with activity type",
+			args: baseArgs("--input-filename", validFile, "--known-version", "7", "--task-queue-type", "TASK_QUEUE_TYPE_ACTIVITY"),
+			verify: func(t *testing.T, req *adminservice.UpdateTaskQueueUserDataRequest) {
+				require.Equal(t, enumspb.TASK_QUEUE_TYPE_ACTIVITY, req.GetTaskQueueType())
+			},
+		},
+		{
+			name:      "invalid task queue type",
+			args:      baseArgs("--input-filename", validFile, "--known-version", "7", "--task-queue-type", "bogus"),
+			expectErr: "invalid task queue type",
+		},
+		{
+			name:      "missing input file flag",
+			args:      baseArgs("--known-version", "7"),
+			expectErr: FlagInputFilename,
+		},
+		{
+			name:      "missing known version flag",
+			args:      baseArgs("--input-filename", validFile),
+			expectErr: FlagKnownVersion,
+		},
+		{
+			name:      "non-positive known version",
+			args:      baseArgs("--input-filename", validFile, "--known-version", "0"),
+			expectErr: "must be a positive version",
+		},
+		{
+			name:      "unreadable input file",
+			args:      baseArgs("--input-filename", filepath.Join(dir, "missing.json"), "--known-version", "7"),
+			expectErr: "unable to read input file",
+		},
+		{
+			name:      "invalid json",
+			args:      baseArgs("--input-filename", invalidFile, "--known-version", "7"),
+			expectErr: "unable to parse user data",
+		},
+		{
+			name:      "rpc error",
+			args:      baseArgs("--input-filename", validFile, "--known-version", "7"),
+			rpcErr:    errors.New("user data version mismatch"),
+			expectErr: "unable to update Task Queue User Data",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotReq *adminservice.UpdateTaskQueueUserDataRequest
+			client := &testClient{
+				updateTaskQueueUserDataFn: func(request *adminservice.UpdateTaskQueueUserDataRequest) (*adminservice.UpdateTaskQueueUserDataResponse, error) {
+					gotReq = request
+					if tc.rpcErr != nil {
+						return nil, tc.rpcErr
+					}
+					return &adminservice.UpdateTaskQueueUserDataResponse{Version: 8}, nil
+				},
+			}
+			var stdout bytes.Buffer
+			app := NewCliApp(func(params *Params) {
+				params.ClientFactory = client
+				params.Writer = &stdout
+			})
+			app.ExitErrHandler = func(context *cli.Context, err error) {}
+
+			err := app.Run(tc.args)
+			if tc.expectErr != "" {
+				require.ErrorContains(t, err, tc.expectErr)
+				return
+			}
+			require.NoError(t, err)
+			require.NotNil(t, gotReq)
+			tc.verify(t, gotReq)
+			var resp adminservice.UpdateTaskQueueUserDataResponse
+			require.NoError(t, codec.NewJSONPBEncoder().Decode(stdout.Bytes(), &resp))
+			require.Equal(t, int64(8), resp.GetVersion())
+		})
+	}
 }

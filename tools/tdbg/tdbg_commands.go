@@ -44,7 +44,7 @@ func getCommands(
 			Name:        "taskqueue",
 			Aliases:     []string{"tq"},
 			Usage:       "Run admin operation on taskQueue",
-			Subcommands: newAdminTaskQueueCommands(clientFactory),
+			Subcommands: newAdminTaskQueueCommands(clientFactory, prompterFactory),
 		},
 		{
 			Name:        "membership",
@@ -587,7 +587,7 @@ func newAdminHistoryHostCommands(clientFactory ClientFactory) []*cli.Command {
 	}
 }
 
-func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
+func newAdminTaskQueueCommands(clientFactory ClientFactory, prompterFactory PrompterFactory) []*cli.Command {
 	return []*cli.Command{
 		{
 			Name:  "list-tasks",
@@ -753,6 +753,40 @@ func newAdminTaskQueueCommands(clientFactory ClientFactory) []*cli.Command {
 			},
 			Action: func(c *cli.Context) error {
 				return AdminGetTaskQueueUserData(c, clientFactory)
+			},
+		},
+		{
+			Name:  "update-user-data",
+			Usage: "Overwrite per-type user data stored for a task queue",
+			Flags: []cli.Flag{
+				&cli.StringFlag{
+					Name:     FlagNamespace,
+					Usage:    "Namespace name",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:     FlagTaskQueue,
+					Usage:    "Task Queue name",
+					Required: true,
+				},
+				&cli.StringFlag{
+					Name:  FlagTaskQueueType,
+					Value: "TASK_QUEUE_TYPE_WORKFLOW",
+					Usage: "Task Queue type: TASK_QUEUE_TYPE_WORKFLOW, TASK_QUEUE_TYPE_ACTIVITY, TASK_QUEUE_TYPE_NEXUS (default TASK_QUEUE_TYPE_WORKFLOW)",
+				},
+				&cli.StringFlag{
+					Name:     FlagInputFilename,
+					Usage:    "JSON file containing the new per-type user data (the user_data field from get-user-data)",
+					Required: true,
+				},
+				&cli.Int64Flag{
+					Name:     FlagKnownVersion,
+					Usage:    "User data version the update is based on (the version field from get-user-data); the update fails if it has changed",
+					Required: true,
+				},
+			},
+			Action: func(c *cli.Context) error {
+				return AdminUpdateTaskQueueUserData(c, clientFactory, prompterFactory(c))
 			},
 		},
 	}

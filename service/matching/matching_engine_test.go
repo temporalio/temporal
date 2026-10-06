@@ -3047,6 +3047,106 @@ func (s *matchingEngineSuite) seedTaskQueueUserData(taskQueue string, data *pers
 	}))
 }
 
+func (s *matchingEngineSuite) loadRootUserData(taskQueue string) *persistencespb.VersionedTaskQueueUserData {
+	taskQueueFamily, err := tqid.NewTaskQueueFamily(s.ns.ID().String(), taskQueue)
+	s.Require().NoError(err)
+	pm, _, err := s.matchingEngine.getTaskQueuePartitionManager(
+		context.Background(),
+		taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(),
+		true,
+		loadCauseUserData,
+	)
+	s.Require().NoError(err)
+	s.Require().NoError(pm.GetUserDataManager().WaitUntilInitialized(context.Background()))
+	userData, _, err := pm.GetUserDataManager().GetUserData()
+	s.Require().NoError(err)
+	return userData
+}
+
+func (s *matchingEngineSuite) TestForceSetTaskQueueTypeUserData() {
+	seedClock := &clockspb.HybridLogicalClock{WallClock: 123456, ClusterId: 1}
+	versioningData := &persistencespb.VersioningData{
+		VersionSets: []*persistencespb.CompatibleVersionSet{{SetIds: []string{"set"}}},
+	}
+	activityData := &persistencespb.TaskQueueTypeUserData{FairnessState: enumsspb.FAIRNESS_STATE_V1}
+	seed := func() (string, int64) {
+		taskQueue := uuid.NewString()
+		s.seedTaskQueueUserData(taskQueue, &persistencespb.TaskQueueUserData{
+			Clock:          seedClock,
+			VersioningData: versioningData,
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V1},
+				int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY): activityData,
+			},
+		})
+		return taskQueue, s.loadRootUserData(taskQueue).GetVersion()
+	}
+
+	s.Run("replaces only the requested type", func() {
+		taskQueue, version := seed()
+		newData := &persistencespb.TaskQueueTypeUserData{FairnessState: enumsspb.FAIRNESS_STATE_V2}
+
+		resp, err := s.matchingEngine.ForceSetTaskQueueTypeUserData(context.Background(), &matchingservice.ForceSetTaskQueueTypeUserDataRequest{
+			NamespaceId:   s.ns.ID().String(),
+			TaskQueue:     taskQueue,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			UserData:      newData,
+			KnownVersion:  version,
+		})
+		s.Require().NoError(err)
+		s.Equal(version+1, resp.GetVersion())
+
+		got := s.loadRootUserData(taskQueue)
+		s.Equal(version+1, got.GetVersion())
+		protorequire.ProtoEqual(s.T(), newData, got.GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)])
+		protorequire.ProtoEqual(s.T(), activityData, got.GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY)])
+		protorequire.ProtoEqual(s.T(), versioningData, got.GetData().GetVersioningData())
+		s.True(hlc.Greater(got.GetData().GetClock(), seedClock))
+	})
+
+	s.Run("nil user data removes the type entry", func() {
+		taskQueue, version := seed()
+
+		_, err := s.matchingEngine.ForceSetTaskQueueTypeUserData(context.Background(), &matchingservice.ForceSetTaskQueueTypeUserDataRequest{
+			NamespaceId:   s.ns.ID().String(),
+			TaskQueue:     taskQueue,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			KnownVersion:  version,
+		})
+		s.Require().NoError(err)
+
+		perType := s.loadRootUserData(taskQueue).GetData().GetPerType()
+		s.NotContains(perType, int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY))
+		s.Contains(perType, int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW))
+	})
+
+	s.Run("stale known version is rejected", func() {
+		taskQueue, version := seed()
+
+		_, err := s.matchingEngine.ForceSetTaskQueueTypeUserData(context.Background(), &matchingservice.ForceSetTaskQueueTypeUserDataRequest{
+			NamespaceId:   s.ns.ID().String(),
+			TaskQueue:     taskQueue,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			UserData:      &persistencespb.TaskQueueTypeUserData{},
+			KnownVersion:  version + 1,
+		})
+		var failedPrecondition *serviceerror.FailedPrecondition
+		s.ErrorAs(err, &failedPrecondition)
+		s.Equal(version, s.loadRootUserData(taskQueue).GetVersion())
+	})
+
+	s.Run("invalid arguments", func() {
+		for _, req := range []*matchingservice.ForceSetTaskQueueTypeUserDataRequest{
+			{NamespaceId: s.ns.ID().String(), TaskQueue: "tq", TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW},
+			{NamespaceId: s.ns.ID().String(), TaskQueue: "tq", KnownVersion: 1},
+		} {
+			_, err := s.matchingEngine.ForceSetTaskQueueTypeUserData(context.Background(), req)
+			var invalidArgument *serviceerror.InvalidArgument
+			s.ErrorAs(err, &invalidArgument)
+		}
+	})
+}
+
 func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventAcceptsClocklessData() {
 	deploymentData := &persistencespb.TaskQueueUserData{
 		PerType: map[int32]*persistencespb.TaskQueueTypeUserData{

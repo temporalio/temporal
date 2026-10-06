@@ -3897,6 +3897,55 @@ func (e *matchingEngineImpl) UpdateFairnessState(
 	return &matchingservice.UpdateFairnessStateResponse{}, nil
 }
 
+func (e *matchingEngineImpl) ForceSetTaskQueueTypeUserData(
+	ctx context.Context,
+	req *matchingservice.ForceSetTaskQueueTypeUserDataRequest,
+) (*matchingservice.ForceSetTaskQueueTypeUserDataResponse, error) {
+	if req.GetKnownVersion() <= 0 {
+		return nil, serviceerror.NewInvalidArgument("known_version must be set")
+	}
+	if req.GetTaskQueueType() == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
+		return nil, serviceerror.NewInvalidArgument("task_queue_type must be set")
+	}
+	partition, err := tqid.NormalPartitionFromRpcName(req.GetTaskQueue(), req.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	if err != nil {
+		return nil, err
+	}
+
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseOtherWrite)
+	if err != nil {
+		return nil, err
+	}
+
+	updateFn := func(old *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+		data := common.CloneProto(old)
+		clk := data.GetClock()
+		if clk == nil {
+			clk = hlc.Zero(e.clusterMeta.GetClusterID())
+		}
+		data.Clock = hlc.Next(clk, e.timeSource)
+		if data.PerType == nil {
+			data.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
+		}
+		typ := int32(req.GetTaskQueueType())
+		if req.GetUserData() == nil {
+			delete(data.PerType, typ)
+		} else {
+			data.PerType[typ] = common.CloneProto(req.GetUserData())
+		}
+		return data, true, nil
+	}
+	version, err := pm.GetUserDataManager().UpdateUserData(
+		ctx,
+		UserDataUpdateOptions{KnownVersion: req.GetKnownVersion(), Source: "ForceSetTaskQueueTypeUserData"},
+		updateFn,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.ForceSetTaskQueueTypeUserDataResponse{Version: version}, nil
+}
+
 func (e *matchingEngineImpl) newTaskTracker() *taskTracker {
 	return newTaskTracker(e.timeSource, 5*time.Second, 30*time.Second)
 }

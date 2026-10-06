@@ -83,6 +83,10 @@ func (wt *WorkflowTags) extractFromMatchingServiceServerMessage(message any) []t
 		return nil
 	case *matchingservice.ForceLoadTaskQueuePartitionResponse:
 		return nil
+	case *matchingservice.ForceSetTaskQueueTypeUserDataRequest:
+		return nil
+	case *matchingservice.ForceSetTaskQueueTypeUserDataResponse:
+		return nil
 	case *matchingservice.ForceUnloadTaskQueueRequest:
 		return nil
 	case *matchingservice.ForceUnloadTaskQueueResponse:

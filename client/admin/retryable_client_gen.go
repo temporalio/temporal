@@ -685,3 +685,18 @@ func (c *retryableClient) SyncWorkflowState(
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
 	return resp, err
 }
+
+func (c *retryableClient) UpdateTaskQueueUserData(
+	ctx context.Context,
+	request *adminservice.UpdateTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.UpdateTaskQueueUserDataResponse, error) {
+	var resp *adminservice.UpdateTaskQueueUserDataResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.UpdateTaskQueueUserData(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}

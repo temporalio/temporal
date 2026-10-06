@@ -3,12 +3,15 @@ package tdbg
 import (
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/urfave/cli/v2"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
+	"go.temporal.io/server/common/codec"
 )
 
 // AdminListTaskQueueTasks displays task information
@@ -221,6 +224,68 @@ func AdminGetTaskQueueUserData(c *cli.Context, clientFactory ClientFactory) erro
 	response, e := client.GetTaskQueueUserData(ctx, req)
 	if e != nil {
 		return fmt.Errorf("unable to get Task Queue User Data: %w", e)
+	}
+	prettyPrintJSONObject(c, response)
+	return nil
+}
+
+// AdminUpdateTaskQueueUserData overwrites the per-type user data for a task queue
+func AdminUpdateTaskQueueUserData(c *cli.Context, clientFactory ClientFactory, prompter *Prompter) error {
+	namespace, err := getRequiredOption(c, FlagNamespace)
+	if err != nil {
+		return err
+	}
+
+	tqName, err := getRequiredOption(c, FlagTaskQueue)
+	if err != nil {
+		return err
+	}
+
+	tlTypeInt, err := StringToEnum(c.String(FlagTaskQueueType), enumspb.TaskQueueType_value)
+	if err != nil {
+		return fmt.Errorf("invalid task queue type: %w", err)
+	}
+	tqType := enumspb.TaskQueueType(tlTypeInt)
+	if tqType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
+		tqType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
+	}
+
+	inputFile, err := getRequiredOption(c, FlagInputFilename)
+	if err != nil {
+		return err
+	}
+	knownVersion := c.Int64(FlagKnownVersion)
+	if knownVersion <= 0 {
+		return fmt.Errorf("option %s must be a positive version", FlagKnownVersion)
+	}
+
+	data, err := os.ReadFile(inputFile)
+	if err != nil {
+		return fmt.Errorf("unable to read input file: %w", err)
+	}
+	userData := &persistencespb.TaskQueueTypeUserData{}
+	if err := codec.NewJSONPBEncoder().Decode(data, userData); err != nil {
+		return fmt.Errorf("unable to parse user data: %w", err)
+	}
+
+	msg := fmt.Sprintf("Namespace: %s TaskQueue: %s Type: %s KnownVersion: %d\nOverwrite task queue user data for the above task queue type?",
+		namespace, tqName, tqType, knownVersion)
+	prompter.Prompt(msg)
+
+	client := clientFactory.AdminClient(c)
+	req := &adminservice.UpdateTaskQueueUserDataRequest{
+		Namespace:     namespace,
+		TaskQueue:     tqName,
+		TaskQueueType: tqType,
+		UserData:      userData,
+		KnownVersion:  knownVersion,
+	}
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+	response, err := client.UpdateTaskQueueUserData(ctx, req)
+	if err != nil {
+		return fmt.Errorf("unable to update Task Queue User Data: %w", err)
 	}
 	prettyPrintJSONObject(c, response)
 	return nil

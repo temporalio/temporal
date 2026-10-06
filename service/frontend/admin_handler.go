@@ -1622,6 +1622,57 @@ func (adh *AdminHandler) GetTaskQueueUserData(
 	}, nil
 }
 
+func (adh *AdminHandler) UpdateTaskQueueUserData(
+	ctx context.Context,
+	request *adminservice.UpdateTaskQueueUserDataRequest,
+) (_ *adminservice.UpdateTaskQueueUserDataResponse, err error) {
+	defer log.CapturePanic(adh.logger, &err)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	if len(request.Namespace) == 0 {
+		return nil, errNamespaceNotSet
+	}
+	if len(request.TaskQueue) == 0 {
+		return nil, serviceerror.NewInvalidArgument("Task queue is not set on request.")
+	}
+	if request.GetKnownVersion() <= 0 {
+		return nil, serviceerror.NewInvalidArgument("Known version is not set on request.")
+	}
+
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// User data is owned by the family, so only the root (family) name is accepted.
+	family, err := tqid.NewTaskQueueFamily(namespaceID.String(), request.GetTaskQueue())
+	if err != nil {
+		return nil, err
+	}
+
+	taskQueueType := request.GetTaskQueueType()
+	if taskQueueType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
+		taskQueueType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
+	}
+
+	resp, err := adh.matchingClient.ForceSetTaskQueueTypeUserData(ctx, &matchingservice.ForceSetTaskQueueTypeUserDataRequest{
+		NamespaceId:   namespaceID.String(),
+		TaskQueue:     family.Name(),
+		TaskQueueType: taskQueueType,
+		UserData:      request.GetUserData(),
+		KnownVersion:  request.GetKnownVersion(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &adminservice.UpdateTaskQueueUserDataResponse{
+		Version: resp.GetVersion(),
+	}, nil
+}
+
 func (adh *AdminHandler) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *adminservice.DeleteWorkflowExecutionRequest,
