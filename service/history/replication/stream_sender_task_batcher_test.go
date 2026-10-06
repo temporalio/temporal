@@ -4,7 +4,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 func TestCanCoalesceVerifyTasks(t *testing.T) {
@@ -84,23 +88,36 @@ func TestCanCoalesceVerifyTasks(t *testing.T) {
 }
 
 func TestStreamSenderTaskBatcher(t *testing.T) {
-	batcher := newStreamSenderTaskBatcher(true)
-	first := convertedReplicationTask{task: newVerifyTaskForTest(1, "run-a", 1, eventHistoryForTest(10, 1), "")}
-	second := convertedReplicationTask{task: newVerifyTaskForTest(2, "run-a", 2, eventHistoryForTest(12, 1), "")}
-	otherRun := convertedReplicationTask{task: newVerifyTaskForTest(3, "run-b", 1, eventHistoryForTest(5, 1), "")}
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	batcher := newStreamSenderTaskBatcher(true, metricsHandler, 1, 2, enumsspb.TASK_PRIORITY_HIGH)
+	first := convertedReplicationTask{
+		sourceTask: &tasks.SyncVersionedTransitionTask{},
+		task:       newVerifyTaskForTest(1, "run-a", 1, eventHistoryForTest(10, 1), ""),
+	}
+	second := convertedReplicationTask{
+		sourceTask: &tasks.SyncVersionedTransitionTask{},
+		task:       newVerifyTaskForTest(2, "run-a", 2, eventHistoryForTest(12, 1), ""),
+	}
+	otherRun := convertedReplicationTask{
+		sourceTask: &tasks.SyncVersionedTransitionTask{},
+		task:       newVerifyTaskForTest(3, "run-b", 1, eventHistoryForTest(5, 1), ""),
+	}
 
-	ready, coalesced := batcher.Batch(first)
+	ready := batcher.Batch(first)
 	require.Empty(t, ready)
-	require.Nil(t, coalesced)
 
-	ready, coalesced = batcher.Batch(second)
+	ready = batcher.Batch(second)
 	require.Empty(t, ready)
-	require.Same(t, first.task, coalesced.task)
+	recordings := capture.SnapshotMetric(metrics.ReplicationTaskVerifyCoalesced.Name())
+	require.Len(t, recordings, 1)
+	require.Equal(t, int64(1), recordings[0].Value)
+	require.Contains(t, recordings[0].Tags, metrics.OperationTagName)
 
-	ready, coalesced = batcher.Batch(otherRun)
+	ready = batcher.Batch(otherRun)
 	require.Len(t, ready, 1)
 	require.Same(t, second.task, ready[0].task)
-	require.Nil(t, coalesced)
 
 	ready = batcher.Flush()
 	require.Len(t, ready, 1)
@@ -109,12 +126,11 @@ func TestStreamSenderTaskBatcher(t *testing.T) {
 }
 
 func TestStreamSenderTaskBatcherDisabled(t *testing.T) {
-	batcher := newStreamSenderTaskBatcher(false)
+	batcher := newStreamSenderTaskBatcher(false, metrics.NoopMetricsHandler, 1, 2, enumsspb.TASK_PRIORITY_HIGH)
 	task := convertedReplicationTask{task: newVerifyTaskForTest(1, "run-a", 1, eventHistoryForTest(10, 1), "")}
 
-	ready, coalesced := batcher.Batch(task)
+	ready := batcher.Batch(task)
 	require.Len(t, ready, 1)
 	require.Same(t, task.task, ready[0].task)
-	require.Nil(t, coalesced)
 	require.Empty(t, batcher.Flush())
 }

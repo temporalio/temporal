@@ -537,7 +537,13 @@ func (s *StreamSenderImpl) sendTasks(
 		return err
 	}
 	skipCount := 0
-	batcher := newStreamSenderTaskBatcher(s.config.ReplicationStreamSenderCoalesceVerifyTasks())
+	batcher := newStreamSenderTaskBatcher(
+		s.config.ReplicationStreamSenderCoalesceVerifyTasks(),
+		s.metrics,
+		s.serverShardKey.ClusterID,
+		s.clientShardKey.ClusterID,
+		priority,
+	)
 	sendReady := func(ready []convertedReplicationTask) error {
 		for _, task := range ready {
 			if err := s.sendConvertedTaskWithRetry(task, priority); err != nil {
@@ -631,12 +637,7 @@ Loop:
 			continue Loop
 		}
 		converted.task.Priority = priority
-		ready, coalesced := batcher.Batch(converted)
-		if coalesced != nil {
-			s.recordVerifyTaskCoalesced(coalesced.sourceTask, priority)
-			s.recordTaskSendResult(*coalesced, priority, nil)
-		}
-		if err := sendReady(ready); err != nil {
+		if err := sendReady(batcher.Batch(converted)); err != nil {
 			return err
 		}
 	}
@@ -799,16 +800,6 @@ func (s *StreamSenderImpl) sendConvertedTask(
 		metrics.OperationTag(TaskOperationTag(task)),
 	)
 	return nil
-}
-
-func (s *StreamSenderImpl) recordVerifyTaskCoalesced(item tasks.Task, priority enumsspb.TaskPriority) {
-	metrics.ReplicationTaskVerifyCoalesced.With(s.metrics).Record(
-		int64(1),
-		metrics.FromClusterIDTag(s.serverShardKey.ClusterID),
-		metrics.ToClusterIDTag(s.clientShardKey.ClusterID),
-		metrics.OperationTag(TaskOperationTagFromTask(item.GetType())),
-		metrics.ReplicationTaskPriorityTag(priority),
-	)
 }
 
 func (s *StreamSenderImpl) sendToStream(payload *historyservice.StreamWorkflowReplicationMessagesResponse) error {
