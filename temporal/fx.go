@@ -152,7 +152,7 @@ var (
 		dynamicconfig.Module,
 		pprof.Module,
 		TraceExportModule,
-		chasm.Module,
+		chasmModule,
 		serialization.Module,
 		FxLogAdapter,
 		fx.Invoke(ServerLifetimeHooks),
@@ -494,7 +494,7 @@ func (params ServiceProviderParamsCommon) GetCommonServiceOptions(serviceName pr
 		resource.DefaultOptions,
 		membershipModule,
 		FxLogAdapter,
-		chasm.Module,
+		chasmModule,
 		fx.Supply(params.AdditionalStreamInterceptors),
 	)
 }
@@ -964,6 +964,14 @@ type SpanExporterInputs struct {
 // types can be overriden/augmented with fx.Replace/fx.Decorate:
 //
 // - []go.opentelemetry.io/otel/sdk/trace.SpanExporter
+var chasmModule = fx.Module(
+	"chasm",
+	fx.Provide(chasm.NewRegistry),
+	fx.Invoke(func(registry *chasm.Registry) error {
+		return registry.Register(&chasm.CoreLibrary{})
+	}),
+)
+
 var TraceExportModule = fx.Options(
 	fx.Provide(func(inputs SpanExporterInputs) ([]otelsdktrace.SpanExporter, error) {
 		// (1) Exporters from config.
