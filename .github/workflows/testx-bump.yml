@@ -94,3 +94,71 @@ jobs:
           GH_TOKEN: ${{ steps.generate-token.outputs.token }}
           PR_URL: ${{ steps.create-pr.outputs.pr_url }}
         run: gh pr merge "${PR_URL}" --auto --squash
+
+  # Fails if the testx version required on main has been behind testx/ for more than a day, e.g.
+  # because the bump failed or its PR got stuck. Builds in this repo don't notice, since they use
+  # the replace.
+  check-pin:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Check required testx version is current
+        run: |
+          version=$(go list -m -f '{{.Version}}' go.temporal.io/testx)
+          pinned=${version##*-}
+          if git rev-parse -q --verify "${pinned}^{commit}" >/dev/null && git diff --quiet "${pinned}" HEAD -- testx/; then
+            echo "Required testx version ${version} is current."
+            exit 0
+          fi
+
+          # The oldest testx change missing from the required version.
+          range=HEAD
+          if git rev-parse -q --verify "${pinned}^{commit}" >/dev/null; then
+            range="${pinned}..HEAD"
+          fi
+          oldest=$(git log --format=%ct "${range}" -- testx/ | tail -1)
+          age=$(( $(date +%s) - oldest ))
+          if [ "${age}" -gt 86400 ]; then
+            echo "::error file=go.mod::Required testx version ${version} has been behind testx/ for $(( age / 3600 ))h; check the testx-bump workflow and its PR."
+            exit 1
+          fi
+          echo "Required testx version ${version} is behind testx/ for $(( age / 3600 ))h; not alerting yet."
+
+  notify-failure:
+    name: Notify Slack on Failure
+    if: failure()
+    needs: [bump, check-pin]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6.4.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Send Slack notification
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          go run ./cmd/tools/ci-notify alert \
+            --run-id "${{ github.run_id }}" \
+            --slack-webhook "$SLACK_WEBHOOK"
