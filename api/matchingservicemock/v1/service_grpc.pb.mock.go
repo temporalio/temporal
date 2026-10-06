@@ -382,6 +382,26 @@ func (mr *MockMatchingServiceClientMockRecorder) ForceLoadTaskQueuePartition(ctx
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceLoadTaskQueuePartition", reflect.TypeOf((*MockMatchingServiceClient)(nil).ForceLoadTaskQueuePartition), varargs...)
 }
 
+// ForceSetTaskQueueTypeUserData mocks base method.
+func (m *MockMatchingServiceClient) ForceSetTaskQueueTypeUserData(ctx context.Context, in *matchingservice.ForceSetTaskQueueTypeUserDataRequest, opts ...grpc.CallOption) (*matchingservice.ForceSetTaskQueueTypeUserDataResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ForceSetTaskQueueTypeUserData", varargs...)
+	ret0, _ := ret[0].(*matchingservice.ForceSetTaskQueueTypeUserDataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ForceSetTaskQueueTypeUserData indicates an expected call of ForceSetTaskQueueTypeUserData.
+func (mr *MockMatchingServiceClientMockRecorder) ForceSetTaskQueueTypeUserData(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceSetTaskQueueTypeUserData", reflect.TypeOf((*MockMatchingServiceClient)(nil).ForceSetTaskQueueTypeUserData), varargs...)
+}
+
 // ForceUnloadTaskQueue mocks base method.
 func (m *MockMatchingServiceClient) ForceUnloadTaskQueue(ctx context.Context, in *matchingservice.ForceUnloadTaskQueueRequest, opts ...grpc.CallOption) (*matchingservice.ForceUnloadTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
@@ -1179,6 +1199,21 @@ func (m *MockMatchingServiceServer) ForceLoadTaskQueuePartition(arg0 context.Con
 func (mr *MockMatchingServiceServerMockRecorder) ForceLoadTaskQueuePartition(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceLoadTaskQueuePartition", reflect.TypeOf((*MockMatchingServiceServer)(nil).ForceLoadTaskQueuePartition), arg0, arg1)
+}
+
+// ForceSetTaskQueueTypeUserData mocks base method.
+func (m *MockMatchingServiceServer) ForceSetTaskQueueTypeUserData(arg0 context.Context, arg1 *matchingservice.ForceSetTaskQueueTypeUserDataRequest) (*matchingservice.ForceSetTaskQueueTypeUserDataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ForceSetTaskQueueTypeUserData", arg0, arg1)
+	ret0, _ := ret[0].(*matchingservice.ForceSetTaskQueueTypeUserDataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ForceSetTaskQueueTypeUserData indicates an expected call of ForceSetTaskQueueTypeUserData.
+func (mr *MockMatchingServiceServerMockRecorder) ForceSetTaskQueueTypeUserData(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForceSetTaskQueueTypeUserData", reflect.TypeOf((*MockMatchingServiceServer)(nil).ForceSetTaskQueueTypeUserData), arg0, arg1)
 }
 
 // ForceUnloadTaskQueue mocks base method.

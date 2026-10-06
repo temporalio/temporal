@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/priorities"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
@@ -67,6 +68,7 @@ import (
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/matching/hooks"
 	"go.temporal.io/server/service/worker/workerdeployment"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -3895,6 +3897,117 @@ func (e *matchingEngineImpl) UpdateFairnessState(
 		return nil, err
 	}
 	return &matchingservice.UpdateFairnessStateResponse{}, nil
+}
+
+func (e *matchingEngineImpl) ForceSetTaskQueueTypeUserData(
+	ctx context.Context,
+	req *matchingservice.ForceSetTaskQueueTypeUserDataRequest,
+) (*matchingservice.ForceSetTaskQueueTypeUserDataResponse, error) {
+	if req.GetTaskQueue() == "" {
+		return nil, serviceerror.NewInvalidArgument("task_queue must be set")
+	}
+	if req.GetKnownVersion() <= 0 {
+		return nil, serviceerror.NewInvalidArgument("known_version must be set")
+	}
+	if req.GetUserData() == nil {
+		return nil, serviceerror.NewInvalidArgument("user_data must be set")
+	}
+	taskQueueType := req.GetTaskQueueType()
+	if taskQueueType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
+		taskQueueType = enumspb.TASK_QUEUE_TYPE_WORKFLOW
+	}
+	// User data is owned by the task queue family, so only root (family) names are accepted.
+	taskQueueFamily, err := tqid.NewTaskQueueFamily(req.GetNamespaceId(), req.GetTaskQueue())
+	if err != nil {
+		return nil, err
+	}
+
+	pm, _, err := e.getTaskQueuePartitionManager(ctx,
+		taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(),
+		true, loadCauseOtherWrite)
+	if err != nil {
+		return nil, err
+	}
+	if err := validateTaskQueueTypeUserData(taskQueueType, req.GetUserData(), pm.GetConfig().MaxFairnessKeyWeightOverrides()); err != nil {
+		return nil, err
+	}
+
+	typ := int32(taskQueueType)
+	updateFn := func(old *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
+		data := common.CloneProto(old)
+		clk := data.GetClock()
+		if clk == nil {
+			clk = hlc.Zero(e.clusterMeta.GetClusterID())
+		}
+		data.Clock = hlc.Next(clk, e.timeSource)
+		if data.PerType == nil {
+			data.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
+		}
+		data.PerType[typ] = common.CloneProto(req.GetUserData())
+		return data, true, nil
+	}
+	udm := pm.GetUserDataManager()
+	updateOptions := UserDataUpdateOptions{KnownVersion: req.GetKnownVersion(), Source: "ForceSetTaskQueueTypeUserData"}
+	version, err := udm.UpdateUserData(ctx, updateOptions, updateFn)
+	var failedPrecondition *serviceerror.FailedPrecondition
+	if errors.As(err, &failedPrecondition) {
+		// The request may already have been applied by an earlier attempt that failed afterwards (e.g. publishing the
+		// replication task failed and the client retried). Reporting a version mismatch would make the operator think
+		// nothing was written, so re-apply on top of the current version, which also re-publishes replication.
+		current, _, getErr := udm.GetUserData()
+		if getErr == nil && current.GetVersion() > req.GetKnownVersion() &&
+			proto.Equal(current.GetData().GetPerType()[typ], req.GetUserData()) {
+			updateOptions.KnownVersion = current.GetVersion()
+			version, err = udm.UpdateUserData(ctx, updateOptions, updateFn)
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.ForceSetTaskQueueTypeUserDataResponse{Version: version}, nil
+}
+
+// validateTaskQueueTypeUserData applies the same constraints UpdateTaskQueueConfig enforces, so that a forced write
+// can't produce config the regular APIs would reject.
+func validateTaskQueueTypeUserData(
+	taskQueueType enumspb.TaskQueueType,
+	data *persistencespb.TaskQueueTypeUserData,
+	maxFairnessKeyWeightOverrides int,
+) error {
+	cfg := data.GetConfig()
+	rateLimits := map[string]*taskqueuepb.RateLimitConfig{
+		"queue_rate_limit":                 cfg.GetQueueRateLimit(),
+		"fairness_keys_rate_limit_default": cfg.GetFairnessKeysRateLimitDefault(),
+	}
+	for name, rl := range rateLimits {
+		if rl.GetRateLimit() == nil {
+			continue
+		}
+		if taskQueueType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+			return serviceerror.NewInvalidArgumentf("%s is not allowed on workflow task queues", name)
+		}
+		if rl.GetRateLimit().GetRequestsPerSecond() < 0 {
+			return serviceerror.NewInvalidArgumentf("%s requests_per_second must be non-negative", name)
+		}
+	}
+
+	overrides := cfg.GetFairnessWeightOverrides()
+	if len(overrides) > maxFairnessKeyWeightOverrides {
+		return serviceerror.NewInvalidArgumentf("too many fairness weight overrides: got %d, maximum %d",
+			len(overrides), maxFairnessKeyWeightOverrides)
+	}
+	for k, w := range overrides {
+		if k == "" {
+			return serviceerror.NewInvalidArgument("fairness weight override key must not be empty")
+		}
+		if err := priorities.ValidateFairnessKey(k); err != nil {
+			return serviceerror.NewInvalidArgumentf("invalid fairness weight override key %q: %v", k, err)
+		}
+		if err := priorities.ValidateFairnessWeight(w); err != nil {
+			return serviceerror.NewInvalidArgumentf("invalid fairness weight for key %q: %v", k, err)
+		}
+	}
+	return nil
 }
 
 func (e *matchingEngineImpl) newTaskTracker() *taskTracker {

@@ -63,6 +63,7 @@ const (
 	MatchingService_DescribeWorker_FullMethodName                         = "/temporal.server.api.matchingservice.v1.MatchingService/DescribeWorker"
 	MatchingService_UpdateFairnessState_FullMethodName                    = "/temporal.server.api.matchingservice.v1.MatchingService/UpdateFairnessState"
 	MatchingService_CheckTaskQueueVersionMembership_FullMethodName        = "/temporal.server.api.matchingservice.v1.MatchingService/CheckTaskQueueVersionMembership"
+	MatchingService_ForceSetTaskQueueTypeUserData_FullMethodName          = "/temporal.server.api.matchingservice.v1.MatchingService/ForceSetTaskQueueTypeUserData"
 )
 
 // MatchingServiceClient is the client API for MatchingService service.
@@ -237,6 +238,9 @@ type MatchingServiceClient interface {
 	UpdateFairnessState(ctx context.Context, in *UpdateFairnessStateRequest, opts ...grpc.CallOption) (*UpdateFairnessStateResponse, error)
 	// CheckTaskQueueVersionMembership checks if a task queue is part of a specific deployment version.
 	CheckTaskQueueVersionMembership(ctx context.Context, in *CheckTaskQueueVersionMembershipRequest, opts ...grpc.CallOption) (*CheckTaskQueueVersionMembershipResponse, error)
+	// ForceSetTaskQueueTypeUserData overwrites the user data of a single task queue type via the root workflow
+	// partition, so that loaded partitions and other clusters observe the change. Used by admin tooling.
+	ForceSetTaskQueueTypeUserData(ctx context.Context, in *ForceSetTaskQueueTypeUserDataRequest, opts ...grpc.CallOption) (*ForceSetTaskQueueTypeUserDataResponse, error)
 }
 
 type matchingServiceClient struct {
@@ -634,6 +638,15 @@ func (c *matchingServiceClient) CheckTaskQueueVersionMembership(ctx context.Cont
 	return out, nil
 }
 
+func (c *matchingServiceClient) ForceSetTaskQueueTypeUserData(ctx context.Context, in *ForceSetTaskQueueTypeUserDataRequest, opts ...grpc.CallOption) (*ForceSetTaskQueueTypeUserDataResponse, error) {
+	out := new(ForceSetTaskQueueTypeUserDataResponse)
+	err := c.cc.Invoke(ctx, MatchingService_ForceSetTaskQueueTypeUserData_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // MatchingServiceServer is the server API for MatchingService service.
 // All implementations must embed UnimplementedMatchingServiceServer
 // for forward compatibility
@@ -806,6 +819,9 @@ type MatchingServiceServer interface {
 	UpdateFairnessState(context.Context, *UpdateFairnessStateRequest) (*UpdateFairnessStateResponse, error)
 	// CheckTaskQueueVersionMembership checks if a task queue is part of a specific deployment version.
 	CheckTaskQueueVersionMembership(context.Context, *CheckTaskQueueVersionMembershipRequest) (*CheckTaskQueueVersionMembershipResponse, error)
+	// ForceSetTaskQueueTypeUserData overwrites the user data of a single task queue type via the root workflow
+	// partition, so that loaded partitions and other clusters observe the change. Used by admin tooling.
+	ForceSetTaskQueueTypeUserData(context.Context, *ForceSetTaskQueueTypeUserDataRequest) (*ForceSetTaskQueueTypeUserDataResponse, error)
 	mustEmbedUnimplementedMatchingServiceServer()
 }
 
@@ -941,6 +957,9 @@ func (UnimplementedMatchingServiceServer) UpdateFairnessState(context.Context, *
 }
 func (UnimplementedMatchingServiceServer) CheckTaskQueueVersionMembership(context.Context, *CheckTaskQueueVersionMembershipRequest) (*CheckTaskQueueVersionMembershipResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CheckTaskQueueVersionMembership not implemented")
+}
+func (UnimplementedMatchingServiceServer) ForceSetTaskQueueTypeUserData(context.Context, *ForceSetTaskQueueTypeUserDataRequest) (*ForceSetTaskQueueTypeUserDataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ForceSetTaskQueueTypeUserData not implemented")
 }
 func (UnimplementedMatchingServiceServer) mustEmbedUnimplementedMatchingServiceServer() {}
 
@@ -1729,6 +1748,24 @@ func _MatchingService_CheckTaskQueueVersionMembership_Handler(srv interface{}, c
 	return interceptor(ctx, in, info, handler)
 }
 
+func _MatchingService_ForceSetTaskQueueTypeUserData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ForceSetTaskQueueTypeUserDataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(MatchingServiceServer).ForceSetTaskQueueTypeUserData(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: MatchingService_ForceSetTaskQueueTypeUserData_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(MatchingServiceServer).ForceSetTaskQueueTypeUserData(ctx, req.(*ForceSetTaskQueueTypeUserDataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // MatchingService_ServiceDesc is the grpc.ServiceDesc for MatchingService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1907,6 +1944,10 @@ var MatchingService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CheckTaskQueueVersionMembership",
 			Handler:    _MatchingService_CheckTaskQueueVersionMembership_Handler,
+		},
+		{
+			MethodName: "ForceSetTaskQueueTypeUserData",
+			Handler:    _MatchingService_ForceSetTaskQueueTypeUserData_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

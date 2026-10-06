@@ -811,6 +811,19 @@ message UpdateFairnessStateRequest {
 
 message UpdateFairnessStateResponse {}
 
+message ForceSetTaskQueueTypeUserDataRequest {
+  string namespace_id = 1;
+  string task_queue = 2;
+  temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
+  temporal.server.api.persistence.v1.TaskQueueTypeUserData user_data = 4;
+  // The update fails if the current user data version differs. Must be set.
+  int64 known_version = 5;
+}
+
+message ForceSetTaskQueueTypeUserDataResponse {
+  int64 version = 1;
+}
+
 message CheckTaskQueueVersionMembershipRequest {
   string namespace_id = 1;
   string task_queue = 2;

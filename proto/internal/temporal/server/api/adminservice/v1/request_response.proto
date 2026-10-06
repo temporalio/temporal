@@ -620,6 +620,26 @@ message GetTaskQueueUserDataResponse {
   int64 version = 2;
 }
 
+// (-- api-linter: core::0134::request-resource-required=disabled
+//     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
+// (-- api-linter: core::0134::request-mask-required=disabled
+//     aip.dev/not-precedent: UpdateTaskQueueUserData RPC doesn't follow Google API format. --)
+message UpdateTaskQueueUserDataRequest {
+  string namespace = 1;
+  string task_queue = 2;
+  temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
+  // Replaces the user data for this task queue type. Other types' data is left unchanged. Must be set.
+  temporal.server.api.persistence.v1.TaskQueueTypeUserData user_data = 4;
+  // Task queue user data version this update is based on (as returned by GetTaskQueueUserData).
+  // The update fails if the current version differs, unless the current data for this type already
+  // equals user_data (e.g. a retry of an applied update), in which case it is re-applied. Must be set.
+  int64 known_version = 5;
+}
+
+message UpdateTaskQueueUserDataResponse {
+  int64 version = 1;
+}
+
 // StartAdminBatchOperationRequest starts an admin batch operation.
 // WARNING: Batch Operations are exposed to all users of the namespace. Admin Batch Operations should be exercised with caution.
 message StartAdminBatchOperationRequest {

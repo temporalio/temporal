@@ -638,3 +638,17 @@ func (c *metricClient) SyncWorkflowState(
 
 	return c.client.SyncWorkflowState(ctx, request, opts...)
 }
+
+func (c *metricClient) UpdateTaskQueueUserData(
+	ctx context.Context,
+	request *adminservice.UpdateTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (_ *adminservice.UpdateTaskQueueUserDataResponse, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "AdminClientUpdateTaskQueueUserData")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	return c.client.UpdateTaskQueueUserData(ctx, request, opts...)
+}

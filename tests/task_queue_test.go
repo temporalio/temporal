@@ -14,6 +14,7 @@ import (
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	querypb "go.temporal.io/api/query/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -1687,4 +1688,79 @@ func (s *TaskQueueSuite) TestAdminGetTaskQueueUserData_NonRootPartition() {
 	s.NoError(err)
 	s.Equal(rootResp.GetVersion(), resp.GetVersion())
 	s.NotNil(resp.GetUserData())
+}
+
+func (s *TaskQueueSuite) TestAdminUpdateTaskQueueUserData() {
+	env := s.newTestEnv()
+	tv := testvars.New(s.T())
+
+	_, err := env.FrontendClient().UpdateTaskQueueConfig(s.Context(), &workflowservice.UpdateTaskQueueConfigRequest{
+		Namespace:                  env.Namespace().String(),
+		TaskQueue:                  tv.TaskQueue().GetName(),
+		TaskQueueType:              enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		SetFairnessWeightOverrides: map[string]float32{"key1": 1.5},
+	})
+	s.Require().NoError(err)
+
+	getReq := &adminservice.GetTaskQueueUserDataRequest{
+		Namespace:     env.Namespace().String(),
+		TaskQueue:     tv.TaskQueue().GetName(),
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+	}
+	before, err := env.AdminClient().GetTaskQueueUserData(s.Context(), getReq)
+	s.Require().NoError(err)
+	s.Positive(before.GetVersion())
+
+	// Changing fairness_state would unload the partitions, so edit fairness weight overrides instead.
+	updated := common.CloneProto(before.GetUserData())
+	updated.Config.FairnessWeightOverrides = map[string]float32{"key1": 2.5}
+	updateResp, err := env.AdminClient().UpdateTaskQueueUserData(s.Context(), &adminservice.UpdateTaskQueueUserDataRequest{
+		Namespace:     env.Namespace().String(),
+		TaskQueue:     tv.TaskQueue().GetName(),
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		UserData:      updated,
+		KnownVersion:  before.GetVersion(),
+	})
+	s.Require().NoError(err)
+	s.Equal(before.GetVersion()+1, updateResp.GetVersion())
+
+	after, err := env.AdminClient().GetTaskQueueUserData(s.Context(), getReq)
+	s.Require().NoError(err)
+	s.Equal(updateResp.GetVersion(), after.GetVersion())
+	s.InDelta(2.5, after.GetUserData().GetConfig().GetFairnessWeightOverrides()["key1"], 0.001)
+
+	// Non-root partitions pick up the change from root.
+	s.AwaitTrue(func() bool {
+		resp, err := env.AdminClient().GetTaskQueueUserData(s.Context(), &adminservice.GetTaskQueueUserDataRequest{
+			Namespace:     env.Namespace().String(),
+			TaskQueue:     tv.TaskQueue().GetName(),
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			PartitionId:   1,
+		})
+		return err == nil && resp.GetVersion() == updateResp.GetVersion()
+	}, 15*time.Second, 200*time.Millisecond)
+
+	// Retrying the identical request with the now-stale version is treated as already applied.
+	retryResp, err := env.AdminClient().UpdateTaskQueueUserData(s.Context(), &adminservice.UpdateTaskQueueUserDataRequest{
+		Namespace:     env.Namespace().String(),
+		TaskQueue:     tv.TaskQueue().GetName(),
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		UserData:      updated,
+		KnownVersion:  before.GetVersion(),
+	})
+	s.Require().NoError(err)
+	s.Greater(retryResp.GetVersion(), updateResp.GetVersion())
+
+	// Different data with a stale version is rejected.
+	conflicting := common.CloneProto(updated)
+	conflicting.Config.FairnessWeightOverrides = map[string]float32{"key1": 3.5}
+	_, err = env.AdminClient().UpdateTaskQueueUserData(s.Context(), &adminservice.UpdateTaskQueueUserDataRequest{
+		Namespace:     env.Namespace().String(),
+		TaskQueue:     tv.TaskQueue().GetName(),
+		TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		UserData:      conflicting,
+		KnownVersion:  before.GetVersion(),
+	})
+	var failedPrecondition *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPrecondition)
 }

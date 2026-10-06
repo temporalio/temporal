@@ -1668,12 +1668,7 @@ func (adh *AdminHandler) GetTaskQueueUserData(
 	if request == nil {
 		return nil, errRequestNotSet
 	}
-	if len(request.Namespace) == 0 {
-		return nil, errNamespaceNotSet
-	}
-
-	// Admin API takes namespace name; matching requires namespace ID.
-	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	namespaceID, err := adh.taskQueueUserDataNamespaceID(request.GetNamespace())
 	if err != nil {
 		return nil, err
 	}
@@ -1712,6 +1707,45 @@ func (adh *AdminHandler) GetTaskQueueUserData(
 		UserData: perType[int32(request.GetTaskQueueType())],
 		Version:  resp.GetUserData().GetVersion(),
 	}, nil
+}
+
+func (adh *AdminHandler) UpdateTaskQueueUserData(
+	ctx context.Context,
+	request *adminservice.UpdateTaskQueueUserDataRequest,
+) (_ *adminservice.UpdateTaskQueueUserDataResponse, err error) {
+	defer log.CapturePanic(adh.logger, &err)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+	namespaceID, err := adh.taskQueueUserDataNamespaceID(request.GetNamespace())
+	if err != nil {
+		return nil, err
+	}
+
+	// Remaining fields are validated by matching, which owns the user data.
+	resp, err := adh.matchingClient.ForceSetTaskQueueTypeUserData(ctx, &matchingservice.ForceSetTaskQueueTypeUserDataRequest{
+		NamespaceId:   namespaceID.String(),
+		TaskQueue:     request.GetTaskQueue(),
+		TaskQueueType: request.GetTaskQueueType(),
+		UserData:      request.GetUserData(),
+		KnownVersion:  request.GetKnownVersion(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &adminservice.UpdateTaskQueueUserDataResponse{
+		Version: resp.GetVersion(),
+	}, nil
+}
+
+// taskQueueUserDataNamespaceID resolves the namespace name taken by the admin user data APIs to the ID matching requires.
+func (adh *AdminHandler) taskQueueUserDataNamespaceID(namespaceName string) (namespace.ID, error) {
+	if len(namespaceName) == 0 {
+		return "", errNamespaceNotSet
+	}
+	return adh.namespaceRegistry.GetNamespaceID(namespace.Name(namespaceName))
 }
 
 func (adh *AdminHandler) DeleteWorkflowExecution(
