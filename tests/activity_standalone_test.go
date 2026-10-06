@@ -949,8 +949,8 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		}
 		otherSerializationContext := &nexuspb.PropagatedSerializationContext{
 			Endpoint:  "other-endpoint",
-			Service:   "service",
-			Operation: "operation",
+			Service:   "other-service",
+			Operation: "other-operation",
 		}
 
 		firstLinks := []*commonpb.Link{
