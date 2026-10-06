@@ -154,6 +154,9 @@ func (ds *DataStore) GetIndexName() string {
 
 // Validate validates the data store config
 func (ds *DataStore) Validate() error {
+	if err := ds.FaultInjection.Validate(); err != nil {
+		return fmt.Errorf("faultInjection: %w", err)
+	}
 	storeConfigCount := 0
 	if ds.SQL != nil {
 		storeConfigCount++

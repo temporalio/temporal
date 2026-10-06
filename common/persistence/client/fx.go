@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
@@ -208,6 +209,10 @@ func DataStoreFactoryProvider(
 	}
 
 	if defaultStoreCfg.FaultInjection != nil {
+		if err := defaultStoreCfg.FaultInjection.Validate(); err != nil {
+			dataStoreFactory.Close()
+			logger.Fatal("invalid persistence fault injection config", tag.Error(err))
+		}
 		dataStoreFactory = faultinjection.NewFaultInjectionDatastoreFactory(defaultStoreCfg.FaultInjection, dataStoreFactory)
 	}
 

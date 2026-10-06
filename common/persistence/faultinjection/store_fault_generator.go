@@ -2,6 +2,7 @@ package faultinjection
 
 import (
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/probability"
 )
 
 type (
@@ -44,26 +45,24 @@ func runtimeFaultInjector(injector config.FaultInjector) faultInjector {
 		if err == nil {
 			return nil
 		}
-		f := newFaultFromError(err, 1.0)
-		return &f
+		return &fault{err: err}
 	}
 }
 
 func configuredFaultInjector(cfg *config.FaultInjectionDataStoreConfig) faultInjector {
-	methodFaultGenerators := make(map[string]faultGenerator, len(cfg.Methods))
+	methodFaultGenerators := make(map[string]*probability.Sampler[*fault], len(cfg.Methods))
 	for methodName, methodConfig := range cfg.Methods {
-		var faults []fault
-		for errName, errRate := range methodConfig.Errors {
-			faults = append(faults, newFault(errName, errRate, methodName))
-		}
-		methodFaultGenerators[methodName] = newMethodFaultGenerator(faults, methodConfig.Seed)
+		methodFaultGenerators[methodName] = probability.NewSampler(methodConfig.Errors, methodConfig.Seed, func(name string, rate float64) *fault {
+			return newFault(name, rate, methodName)
+		})
 	}
 	return func(target config.FaultInjectionTarget) *fault {
 		methodGenerator, ok := methodFaultGenerators[target.Method]
 		if !ok {
 			return nil
 		}
-		return methodGenerator.generate(target.Method)
+		f, _ := methodGenerator.Sample()
+		return f
 	}
 }
 

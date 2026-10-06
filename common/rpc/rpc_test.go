@@ -8,12 +8,14 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/telemetry"
 	"google.golang.org/grpc"
 )
 
 func TestCreateLocalFrontendGRPCConnectionIsCached(t *testing.T) {
+	var instrumenter telemetry.HTTPClientTransportInstrumenter
 	f := NewFactory(nil, primitives.FrontendService, log.NewNoopLogger(),
-		metrics.NoopMetricsHandler, nil, "localhost:7233", "", 0, nil, nil, nil, nil, nil, nil)
+		metrics.NoopMetricsHandler, nil, "localhost:7233", "", 0, nil, instrumenter, nil, nil, nil, nil)
 	first := f.CreateLocalFrontendGRPCConnection()
 	second := f.CreateLocalFrontendGRPCConnection()
 	require.NotNil(t, first)

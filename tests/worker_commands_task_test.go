@@ -744,6 +744,9 @@ func TestDispatchCancelToWorkerWithEagerActivity(t *testing.T) {
 func (s *WorkerCommandsTaskSuite) TestPollWorkerCommandsWithDeploymentOptions() {
 	env := testcore.NewEnv(s.T(),
 		testcore.WithWorkerService("deployment version registration"),
+		testcore.WithTestVars(func(tv *testvars.TestVars) *testvars.TestVars {
+			return tv.WithDeploymentSeries("wd").WithBuildID("b")
+		}),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCancelActivityWorkerCommand, true),
 		testcore.WithDynamicConfig(dynamicconfig.EnableDeploymentVersions, true),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, true),

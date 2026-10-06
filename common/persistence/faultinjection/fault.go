@@ -14,45 +14,37 @@ type (
 		err error
 		// execOp indicates whether the operation should be executed before returning the error.
 		execOp bool
-		// How often this fault should be injected. 0.0 means never, 1.0 means always.
-		rate float64
 	}
 )
 
-func newFaultFromError(err error, rate float64) fault {
-	return fault{
-		err:  err,
-		rate: rate,
-	}
-}
-
 // newFault returns an error based on the provided name. If the name is not recognized, then this method will
 // panic.
-func newFault(errName string, errRate float64, methodName string) fault {
+func newFault(errName string, errRate float64, methodName string) *fault {
 	header := fmt.Sprintf("fault injection error at %s with %.2f rate", methodName, errRate)
 	switch errName {
 	case "ShardOwnershipLost":
-		return newFaultFromError(&persistence.ShardOwnershipLostError{Msg: fmt.Sprintf("%s: persistence.ShardOwnershipLostError", header)}, errRate)
+		return &fault{err: &persistence.ShardOwnershipLostError{Msg: fmt.Sprintf("%s: persistence.ShardOwnershipLostError", header)}}
 	case "DeadlineExceeded":
 		// Real persistence store never returns context.DeadlineExceeded error. It returns persistence.TimeoutError instead.
 		// Therefor "DeadlineExceeded" shouldn't be used with fault injection. Use "Timeout" instead.
-		return newFaultFromError(fmt.Errorf("%s: %w", header, context.DeadlineExceeded), errRate)
+		return &fault{err: fmt.Errorf("%s: %w", header, context.DeadlineExceeded)}
 	case "Timeout":
-		return newFaultFromError(&persistence.TimeoutError{Msg: fmt.Sprintf("%s: persistence.TimeoutError", header)}, errRate)
+		return &fault{err: &persistence.TimeoutError{Msg: fmt.Sprintf("%s: persistence.TimeoutError", header)}}
 	case "ExecuteAndTimeout":
 		// Special error which emulates case, when caller got a Timeout error,
 		// but operation actually reached persistence and was executed successfully.
-		f := newFaultFromError(&persistence.TimeoutError{Msg: fmt.Sprintf("%s: persistence.TimeoutError", header)}, errRate)
-		f.execOp = true
-		return f
+		return &fault{
+			err:    &persistence.TimeoutError{Msg: fmt.Sprintf("%s: persistence.TimeoutError", header)},
+			execOp: true,
+		}
 	case "ResourceExhausted":
-		return newFaultFromError(&serviceerror.ResourceExhausted{
+		return &fault{err: &serviceerror.ResourceExhausted{
 			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
 			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
 			Message: fmt.Sprintf("%s: serviceerror.ResourceExhausted", header),
-		}, errRate)
+		}}
 	case "Unavailable":
-		return newFaultFromError(serviceerror.NewUnavailablef("%s: serviceerror.Unavailable", header), errRate)
+		return &fault{err: serviceerror.NewUnavailablef("%s: serviceerror.Unavailable", header)}
 	default:
 		panic(fmt.Sprintf("unsupported error type: %v", errName))
 	}
