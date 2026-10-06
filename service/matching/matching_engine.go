@@ -892,7 +892,7 @@ pollLoop:
 				}
 			default:
 				task.finish(taskFinishResult{err: err})
-				if err.Error() == common.ErrNamespaceHandover.Error() {
+				if err.Error() == namespace.ErrNamespaceHandover.Error() {
 					// do not keep polling new tasks when namespace is in handover state
 					// as record start request will be rejected by history service
 					return nil, err
@@ -1136,7 +1136,7 @@ pollLoop:
 				}
 			default:
 				task.finish(taskFinishResult{err: err})
-				if err.Error() == common.ErrNamespaceHandover.Error() {
+				if err.Error() == namespace.ErrNamespaceHandover.Error() {
 					// do not keep polling new tasks when namespace is in handover state
 					// as record start request will be rejected by history service
 					return nil, err

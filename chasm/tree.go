@@ -1985,7 +1985,7 @@ func (n *Node) closeTransactionSerializeNodes() error {
 		// LastUpdateVersionedTransition means the node is brand new and must be written.
 		// prevData captures the pre-serialize blob pointer; serialize() allocates a new
 		// blob, leaving prevData pointing at the original for comparison.
-		prevVersionedTransition := common.CloneProto(
+		prevVersionedTransition := proto.CloneOf(
 			node.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
 		)
 		skipIfClean := skipPersistenceIfClean &&
@@ -2011,7 +2011,7 @@ func (n *Node) closeTransactionSerializeNodes() error {
 		// no CHASM nodes, before the backend's current version was known. Stamp its creation with the
 		// transition that actually persists it.
 		if node.parent == nil && prevVersionedTransition == nil {
-			node.serializedNode.GetMetadata().InitialVersionedTransition = common.CloneProto(
+			node.serializedNode.GetMetadata().InitialVersionedTransition = proto.CloneOf(
 				node.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
 			)
 		}

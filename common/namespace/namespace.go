@@ -12,9 +12,9 @@ import (
 	rulespb "go.temporal.io/api/rules/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/util"
 	expmaps "golang.org/x/exp/maps"
+	"google.golang.org/protobuf/proto"
 )
 
 type (
@@ -107,8 +107,8 @@ func (ns *Namespace) Clone(mutations ...Mutation) *Namespace {
 	clonedResolver := ns.replicationResolver.Clone()
 
 	cloned := &Namespace{
-		info:          common.CloneProto(ns.info),
-		config:        common.CloneProto(ns.config),
+		info:          proto.CloneOf(ns.info),
+		config:        proto.CloneOf(ns.config),
 		configVersion: ns.configVersion,
 		customSearchAttributesMapper: CustomSearchAttributesMapper{
 			fieldToAlias: ns.customSearchAttributesMapper.fieldToAlias,

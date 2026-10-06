@@ -5,8 +5,8 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/service/history/consts"
+	"google.golang.org/protobuf/proto"
 )
 
 func CopyVersionedTransitions(
@@ -28,7 +28,7 @@ func CopyVersionedTransition(
 	if transition == nil {
 		return nil
 	}
-	return common.CloneProto(transition)
+	return proto.CloneOf(transition)
 }
 
 func LastVersionedTransition(

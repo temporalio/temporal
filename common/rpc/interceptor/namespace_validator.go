@@ -10,7 +10,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -457,5 +456,5 @@ func (ni *NamespaceValidatorInterceptor) checkReplicationState(namespaceEntry *n
 		return nil
 	}
 
-	return common.ErrNamespaceHandover
+	return namespace.ErrNamespaceHandover
 }

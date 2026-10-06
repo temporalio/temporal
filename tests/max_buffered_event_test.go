@@ -12,10 +12,10 @@ import (
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -235,6 +235,6 @@ func (s *MaxBufferedEventSuite) TestBufferedEventsMutableStateSizeLimit() {
 		}
 	}
 	s.True(terminated, "Expected workflow to be terminated")
-	s.Equal(common.FailureReasonMutableStateSizeExceedsLimit, terminationReason,
+	s.Equal(consts.FailureReasonMutableStateSizeExceedsLimit, terminationReason,
 		"Expected workflow to be terminated due to mutable state size limit")
 }

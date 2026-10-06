@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -187,7 +186,7 @@ func (s *namespaceValidatorSuite) Test_StateValidationIntercept_StatusFromNamesp
 		{
 			state:            enumspb.NAMESPACE_STATE_REGISTERED,
 			replicationState: enumspb.REPLICATION_STATE_HANDOVER,
-			expectedErr:      common.ErrNamespaceHandover,
+			expectedErr:      namespace.ErrNamespaceHandover,
 			method:           api.WorkflowServicePrefix + "StartWorkflowExecution",
 			req:              &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
 		},

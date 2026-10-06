@@ -7,7 +7,6 @@ import (
 
 	"github.com/google/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -195,7 +194,7 @@ func (i *NamespaceHandoverInterceptor) waitNamespaceHandoverUpdate(
 		var handoverErr error
 		select {
 		case <-returnTimer.C:
-			handoverErr = common.ErrNamespaceHandover
+			handoverErr = namespace.ErrNamespaceHandover
 		case <-waitReplicationStateUpdate:
 			returnTimer.Stop()
 		}

@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"google.golang.org/grpc/codes"
@@ -103,12 +104,6 @@ const (
 	FailureReasonCancelDetailsExceedsLimit = "Cancel details exceed size limit."
 	// FailureReasonHeartbeatExceedsLimit is failureReason for heartbeat exceeds limit
 	FailureReasonHeartbeatExceedsLimit = "Heartbeat details exceed size limit."
-	// FailureReasonHistorySizeExceedsLimit is reason to fail workflow when history size exceeds limit
-	FailureReasonHistorySizeExceedsLimit = "Workflow history size exceeds limit."
-	// FailureReasonHistorySizeExceedsLimit is reason to fail workflow when history count exceeds limit
-	FailureReasonHistoryCountExceedsLimit = "Workflow history count exceeds limit."
-	// FailureReasonMutableStateSizeExceedsLimit is reason to fail workflow when mutable state size exceeds limit
-	FailureReasonMutableStateSizeExceedsLimit = "Workflow mutable state size exceeds limit."
 	// FailureReasonTransactionSizeExceedsLimit is the failureReason for when transaction cannot be committed because it exceeds size limit
 	FailureReasonTransactionSizeExceedsLimit = "Transaction size exceeds limit."
 	// FailureReasonWorkflowTerminationDueToVersionConflict is the failureReason for when workflow is terminated due to version conflict
@@ -124,11 +119,6 @@ var (
 	ErrContextTimeoutTooShort = serviceerror.NewFailedPrecondition("Context timeout is too short.")
 	// ErrContextTimeoutNotSet is error for not setting a context timeout when calling a long poll API
 	ErrContextTimeoutNotSet = serviceerror.NewInvalidArgument("Context timeout is not set.")
-)
-
-var (
-	// ErrNamespaceHandover is error indicating namespace is in handover state and cannot process request.
-	ErrNamespaceHandover = serviceerror.NewUnavailablef("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER)
 )
 
 // AwaitWaitGroup calls Wait on the given wait
@@ -374,7 +364,7 @@ func IsServiceHandlerRetryableError(err error) bool {
 }
 
 func IsNamespaceHandoverError(err error) bool {
-	return err.Error() == ErrNamespaceHandover.Error()
+	return err.Error() == namespace.ErrNamespaceHandover.Error()
 }
 
 func IsStickyWorkerUnavailable(err error) bool {

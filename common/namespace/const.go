@@ -1,6 +1,11 @@
 package namespace
 
-import "time"
+import (
+	"time"
+
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+)
 
 const (
 	// MinRetentionGlobal is a hard limit for the minimun retention duration for global
@@ -12,3 +17,6 @@ const (
 	// interpreting zero as infinite.
 	MinRetentionLocal = 1 * time.Hour
 )
+
+// ErrNamespaceHandover is error indicating namespace is in handover state and cannot process request.
+var ErrNamespaceHandover = serviceerror.NewUnavailablef("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER)

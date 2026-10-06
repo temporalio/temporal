@@ -15,7 +15,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
@@ -161,7 +160,7 @@ SignalLoop:
 	}
 	// Signalling workflow should result in force terminating the workflow execution and returns with ResourceExhausted
 	// error. InvalidArgument is returned by the client.
-	s.EqualError(signalErr, common.FailureReasonHistoryCountExceedsLimit)
+	s.EqualError(signalErr, consts.FailureReasonHistoryCountExceedsLimit)
 	s.ErrorAs(signalErr, new(*serviceerror.InvalidArgument))
 
 	historyEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
@@ -391,7 +390,7 @@ func (s *SizeLimitSuite) TestTerminateWorkflowCausedByMsSizeLimit() {
 		env.Logger.Info("PollAndHandleWorkflowTask", tag.Error(err))
 
 		// Workflow should be force terminated at this point
-		s.EqualError(err, common.FailureReasonMutableStateSizeExceedsLimit)
+		s.EqualError(err, consts.FailureReasonMutableStateSizeExceedsLimit)
 	}
 
 	// Send another signal without RunID
@@ -503,7 +502,7 @@ SignalLoop:
 	}
 	// Signalling workflow should result in force terminating the workflow execution and returns with ResourceExhausted
 	// error. InvalidArgument is returned by the client.
-	s.EqualError(signalErr, common.FailureReasonHistorySizeExceedsLimit)
+	s.EqualError(signalErr, consts.FailureReasonHistorySizeExceedsLimit)
 	s.ErrorAs(signalErr, new(*serviceerror.InvalidArgument))
 
 	historyEvents := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{

@@ -16,7 +16,6 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/limiter"
@@ -1455,7 +1454,7 @@ func (c *ContextImpl) enforceHistorySizeCheck(
 		if err := c.forceTerminateWorkflow(
 			ctx,
 			shardContext,
-			common.FailureReasonHistorySizeExceedsLimit,
+			consts.FailureReasonHistorySizeExceedsLimit,
 			chasm.ExecutionForceTerminationReasonHistorySizeExceedsLimit,
 		); err != nil {
 			return false, err
@@ -1498,7 +1497,7 @@ func (c *ContextImpl) enforceHistoryCountCheck(
 		if err := c.forceTerminateWorkflow(
 			ctx,
 			shardContext,
-			common.FailureReasonHistoryCountExceedsLimit,
+			consts.FailureReasonHistoryCountExceedsLimit,
 			chasm.ExecutionForceTerminationReasonHistoryCountExceedsLimit,
 		); err != nil {
 			return false, err
@@ -1539,7 +1538,7 @@ func (c *ContextImpl) enforceMutableStateSizeCheck(ctx context.Context, shardCon
 		if err := c.forceTerminateWorkflow(
 			ctx,
 			shardContext,
-			common.FailureReasonMutableStateSizeExceedsLimit,
+			consts.FailureReasonMutableStateSizeExceedsLimit,
 			chasm.ExecutionForceTerminationReasonMutableStateSizeExceedsLimit,
 		); err != nil {
 			return false, err

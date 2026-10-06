@@ -6,13 +6,22 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/namespace"
 )
 
 const (
 	IdentityHistoryService = "history-service"
 	IdentityResetter       = "history-resetter"
 	LibraryName            = "go.temporal.io/service/history"
+)
+
+const (
+	// FailureReasonHistorySizeExceedsLimit is reason to fail workflow when history size exceeds limit
+	FailureReasonHistorySizeExceedsLimit = "Workflow history size exceeds limit."
+	// FailureReasonHistoryCountExceedsLimit is reason to fail workflow when history count exceeds limit
+	FailureReasonHistoryCountExceedsLimit = "Workflow history count exceeds limit."
+	// FailureReasonMutableStateSizeExceedsLimit is reason to fail workflow when mutable state size exceeds limit
+	FailureReasonMutableStateSizeExceedsLimit = "Workflow mutable state size exceeds limit."
 )
 
 var (
@@ -78,11 +87,11 @@ var (
 	// ErrEmptyHistoryRawEventBatch indicate that one single batch of history raw events is of size 0
 	ErrEmptyHistoryRawEventBatch = serviceerror.NewInvalidArgument("encountered empty history batch")
 	// ErrHistorySizeExceedsLimit is error indicating workflow execution has exceeded system defined history size limit
-	ErrHistorySizeExceedsLimit = serviceerror.NewInvalidArgument(common.FailureReasonHistorySizeExceedsLimit)
+	ErrHistorySizeExceedsLimit = serviceerror.NewInvalidArgument(FailureReasonHistorySizeExceedsLimit)
 	// ErrHistoryCountExceedsLimit is error indicating workflow execution has exceeded system defined history count limit
-	ErrHistoryCountExceedsLimit = serviceerror.NewInvalidArgument(common.FailureReasonHistoryCountExceedsLimit)
+	ErrHistoryCountExceedsLimit = serviceerror.NewInvalidArgument(FailureReasonHistoryCountExceedsLimit)
 	// ErrMutableStateSizeExceedsLimit is error indicating workflow execution has exceeded system defined mutable state size limit
-	ErrMutableStateSizeExceedsLimit = serviceerror.NewInvalidArgument(common.FailureReasonMutableStateSizeExceedsLimit)
+	ErrMutableStateSizeExceedsLimit = serviceerror.NewInvalidArgument(FailureReasonMutableStateSizeExceedsLimit)
 	// ErrUnknownCluster is error indicating unknown cluster
 	ErrUnknownCluster = serviceerror.NewInvalidArgument("unknown cluster")
 	// ErrBufferedQueryCleared is error indicating mutable state is cleared while buffered query is pending
@@ -96,7 +105,7 @@ var (
 	// ErrWorkflowTaskNotScheduled is error indicating workflow task is not scheduled yet.
 	ErrWorkflowTaskNotScheduled = serviceerror.NewWorkflowNotReady("Workflow task is not scheduled yet.")
 	// ErrNamespaceHandover is error indicating namespace is in handover state and cannot process request.
-	ErrNamespaceHandover = common.ErrNamespaceHandover
+	ErrNamespaceHandover = namespace.ErrNamespaceHandover
 	// ErrWorkflowTaskStateInconsistent is error indicating workflow task state is inconsistent, for example there was no workflow task scheduled but buffered events are present.
 	ErrWorkflowTaskStateInconsistent = serviceerror.NewUnavailable("Workflow task state is inconsistent.")
 	// ErrResourceExhaustedBusyWorkflow is an error indicating workflow resource is exhausted and should not be retried by service handler and client
