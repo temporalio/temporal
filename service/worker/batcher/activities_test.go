@@ -2000,19 +2000,7 @@ func (s *activitiesSuite) TestDeterministicRequestID_ScopedToJob() {
 }
 
 func (s *activitiesSuite) TestGetOperationRPS() {
-	const (
-		configuredRPS   = 50
-		targetNamespace = "target-namespace"
-	)
-	a := &activities{
-		// A delegated admin batch runs in a namespace other than the one it
-		// targets, and the limit belongs to the namespace being acted on.
-		namespace: "worker-namespace",
-		rps: func(ns string) int {
-			s.Equal(targetNamespace, ns)
-			return configuredRPS
-		},
-	}
+	const configuredRPS = 50
 	for _, tc := range []struct {
 		name      string
 		requested float64
@@ -2027,10 +2015,11 @@ func (s *activitiesSuite) TestGetOperationRPS() {
 		{"far above max is capped", 10000, configuredRPS},
 	} {
 		s.Run(tc.name, func() {
-			s.InDelta(tc.expected, a.getOperationRPS(targetNamespace, tc.requested), 0)
+			s.InDelta(tc.expected, getOperationRPS(configuredRPS, tc.requested), 0)
 		})
 	}
 }
+
 func (s *activitiesSuite) TestHeartbeatInterval() {
 	for _, tc := range []struct {
 		name             string

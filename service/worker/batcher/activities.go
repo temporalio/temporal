@@ -471,7 +471,7 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		targetExecutions = batchParams.Request.GetTargetExecutions()
 		requestedRPS := float64(batchParams.Request.GetMaxOperationsPerSecond())
 		rateLimiter = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 {
-			return a.getOperationRPS(targetNS, requestedRPS)
+			return getOperationRPS(float64(a.rps(targetNS)), requestedRPS)
 		}))
 	}
 
@@ -589,8 +589,7 @@ func (a *activities) adjustQueryAdminBatchType(
 
 // getOperationRPS returns the rate for a batch operation.
 // It is the requested RPS (if set), capped by the configured RPS.
-func (a *activities) getOperationRPS(targetNamespace string, requestedRPS float64) float64 {
-	maxRPS := float64(a.rps(targetNamespace))
+func getOperationRPS(maxRPS, requestedRPS float64) float64 {
 	if requestedRPS <= 0 {
 		return maxRPS
 	}
