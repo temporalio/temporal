@@ -365,6 +365,8 @@ const (
 	PollerScaleReasonRatio                ReasonString = "ratio"
 	PollerScaleReasonRateLimited          ReasonString = "rate_limited"
 	PollerScaleReasonTaskQueueRateLimited ReasonString = "task_queue_rate_limited"
+	PollerScaleReasonOverShare            ReasonString = "over_share"
+	PollerScaleReasonUnderShare           ReasonString = "under_share"
 )
 
 // PollerScaleDecisionTag records the direction of a poller scaling decision (scale up, scale

@@ -992,7 +992,7 @@ func (pm *taskQueuePartitionManagerImpl) PollTask(
 
 	task, err := dbq.PollTask(ctx, pollMetadata)
 	if task != nil {
-		task.pollerScalingDecision = dbq.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime, task)
+		task.pollerScalingDecision = dbq.MakePollerScalingDecision(ctx, pollMetadata.localPollStartTime, task, pollMetadata)
 	}
 
 	// Update poller timestamp when poll ends, unless cancelled (e.g., shutdown/disconnect).

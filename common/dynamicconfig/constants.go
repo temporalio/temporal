@@ -1590,6 +1590,17 @@ second per poller by one physical queue manager`,
 dispatch rate above which a decision to scale up the number of pollers will be issued. If MatchingUseSignalsV2ForPollerScaling
 is true, this is instead the ratio of task add rate to task sync match rate.`,
 	)
+	MatchingPollerScalingFairnessBand = NewTaskQueueFloatSetting(
+		"matching.pollerScalingFairnessBand",
+		0,
+		`MatchingPollerScalingFairnessBand spreads poller scaling suggestions evenly across the workers
+polling a task queue, rather than letting them concentrate on whichever workers happen to win the
+most poll races. Matching compares each worker's share of the parked polls on a queue against the
+mean and withholds scale-up from workers above it by more than this factor, and scale-down from
+workers below it by more than this factor, so this changes which workers grow, never how large the
+fleet gets. Values at or below 1 disable it; 1.2 is the suggested enabled value. Workers that do
+not send a worker instance key, and queues with fewer than two such workers, are unaffected.`,
+	)
 	MatchingEnablePollerScalingDecisionMetrics = NewTaskQueueBoolSetting(
 		"matching.enablePollerScalingDecisionMetrics",
 		false,
