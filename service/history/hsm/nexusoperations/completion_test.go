@@ -10,6 +10,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/service/history/hsm"
 	"go.temporal.io/server/service/history/hsm/hsmtest"
@@ -28,15 +29,17 @@ func TestCompletionHandler_EmitsCallerMetrics(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name        string
-		result      *commonpb.Payload
-		opErr       *nexus.OperationError
-		wantCounter string
+		name              string
+		result            *commonpb.Payload
+		opErr             *nexus.OperationError
+		wantCounter       string
+		includeBackendTag bool
 	}{
 		{
-			name:        "succeeded",
-			result:      &commonpb.Payload{},
-			wantCounter: chasmnexus.NexusOperationSuccessCount.Name(),
+			name:              "succeeded",
+			result:            &commonpb.Payload{},
+			wantCounter:       chasmnexus.NexusOperationSuccessCount.Name(),
+			includeBackendTag: true,
 		},
 		{
 			name: "failed",
@@ -69,7 +72,9 @@ func TestCompletionHandler_EmitsCallerMetrics(t *testing.T) {
 			capture := captureHandler.StartCapture()
 			defer captureHandler.StopCapture(capture)
 
-			completionHandler := nexusoperations.NewCompletionHandler(captureHandler, &nexusoperations.Config{})
+			completionHandler := nexusoperations.NewCompletionHandler(captureHandler, &nexusoperations.Config{
+				MetricTagConfig: dynamicconfig.GetTypedPropertyFn(chasmnexus.NexusMetricTagConfig{IncludeBackendTag: tc.includeBackendTag}),
+			})
 			require.NoError(t, completionHandler.Handle(
 				context.Background(),
 				fakeEnv{node},
@@ -83,6 +88,15 @@ func TestCompletionHandler_EmitsCallerMetrics(t *testing.T) {
 			))
 
 			snapshot := capture.Snapshot()
+			for metric, recordings := range snapshot {
+				for _, recording := range recordings {
+					if tc.includeBackendTag {
+						require.Equal(t, "hsm", recording.Tags["nexus_op_backend"], metric)
+					} else {
+						require.NotContains(t, recording.Tags, "nexus_op_backend", metric)
+					}
+				}
+			}
 
 			counter := snapshot[tc.wantCounter]
 			require.Len(t, counter, 1)

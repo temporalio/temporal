@@ -21,6 +21,7 @@ const (
 	nexusEndpointTagName           = "nexus_endpoint"
 	nexusServiceTagName            = "nexus_service"
 	nexusOperationTagName          = "nexus_operation"
+	nexusOperationBackendTagName   = "nexus_op_backend"
 	outcomeTagName                 = "outcome"
 	nexusCompletionSourceTagName   = "nexus_completion_source"
 	versionedTagName               = "versioned"

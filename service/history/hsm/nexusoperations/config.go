@@ -137,7 +137,8 @@ var MetricTagConfiguration = dynamicconfig.NewGlobalTypedSetting(
 	`Controls which metric tags are included with Nexus operation metrics. This configuration supports:
 1. Service name tag - adds the Nexus service name as a metric dimension (IncludeServiceTag). Used by callers and handlers.
 2. Operation name tag - adds the Nexus operation name as a metric dimension (IncludeOperationTag). Used by callers and handlers.
-3. Header-based tags - maps values from request headers to metric tags (HeaderTagMappings). Only used by handlers.
+3. Backend tag - adds the HSM or CHASM backend to workflow caller outcome and latency metrics (IncludeBackendTag).
+4. Header-based tags - maps values from request headers to metric tags (HeaderTagMappings). Only used by handlers.
 
 Note: default metric tags (like namespace, endpoint) are always included and not affected by this configuration.
 Adding high-cardinality tags (like unique operation names) can significantly increase metric storage

@@ -51,6 +51,8 @@ type NexusMetricTagConfig struct {
 	IncludeServiceTag bool
 	// Include operation name as a metric tag. Used for caller and handler metrics.
 	IncludeOperationTag bool
+	// Include the operation backend as a metric tag. Only used for workflow caller metrics.
+	IncludeBackendTag bool
 	// Configuration for mapping request headers to metric tags. Only used for handler metrics.
 	HeaderTagMappings []NexusHeaderTagMapping
 }
