@@ -8,6 +8,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -42,6 +43,9 @@ const (
 	eagerStartDeniedReasonTaskAlreadyDispatched      metrics.ReasonString = "task_already_dispatched"
 	orphanedChildReplacementReplaced                                      = "replaced"
 	orphanedChildReplacementRejectedUnsupportedState                      = "rejected_unsupported_state"
+	nexusWorkflowUseExistingSameContext                                   = "same"
+	nexusWorkflowUseExistingDifferentContext                              = "different"
+	nexusWorkflowUseExistingMissingContext                                = "existing_missing"
 )
 
 const (
@@ -752,6 +756,7 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 
 	var err error
 	onConflictOptions := s.request.StartRequest.GetOnConflictOptions()
+	var nexusContextMatch string
 	if onConflictOptions != nil {
 		requestID := ""
 		if onConflictOptions.AttachRequestId {
@@ -775,6 +780,10 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 				if !mutableState.IsWorkflowExecutionRunning() {
 					return nil, consts.ErrWorkflowCompleted
 				}
+				if incoming := s.request.StartRequest.GetPropagatedNexusSerializationContext(); incoming != nil && onConflictOptions.AttachCompletionCallbacks && len(completionCallbacks) > 0 {
+					existing := mutableState.GetExecutionInfo().GetPropagatedNexusSerializationContext()
+					nexusContextMatch = nexusSerializationContextMatch(existing, incoming)
+				}
 				_, err := mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
 					nil,
 					false,
@@ -797,6 +806,10 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 
 	switch err {
 	case nil:
+		if nexusContextMatch != "" {
+			// Count attached Nexus callers by whether their context matches the existing workflow's context.
+			metrics.NexusWorkflowUseExisting.With(s.getMetricsHandler()).Record(1, metrics.StringTag("context_match", nexusContextMatch))
+		}
 		resp := &historyservice.StartWorkflowExecutionResponse{
 			RunId:               workflowKey.RunID,
 			FirstExecutionRunId: currentWorkflowConditionFailed.FirstExecutionRunID,
@@ -827,6 +840,23 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 		return nil, StartNew, nil
 	default:
 		return nil, StartErr, err
+	}
+}
+
+// nexusSerializationContextMatch classifies contexts for the USE_EXISTING callback attachment metric.
+func nexusSerializationContextMatch(existing, incoming *nexuspb.PropagatedSerializationContext) string {
+	switch {
+	case existing == nil:
+		// The caller has Nexus context, but the existing workflow has none.
+		return nexusWorkflowUseExistingMissingContext
+	case existing.GetEndpoint() == incoming.GetEndpoint() &&
+		existing.GetService() == incoming.GetService() &&
+		existing.GetOperation() == incoming.GetOperation():
+		// The endpoint, service, and operation match the existing workflow.
+		return nexusWorkflowUseExistingSameContext
+	default:
+		// At least one of the endpoint, service, or operation differs.
+		return nexusWorkflowUseExistingDifferentContext
 	}
 }
 
