@@ -26,10 +26,12 @@ jobs:
             go.sum
             testx/go.sum
 
-      - name: Check testx does not depend on the server
+      - name: Check testx does not depend on other go.temporal.io modules
         run: |
-          if go -C testx list -m all | grep -q '^go.temporal.io/server[ /]'; then
-            echo "::error file=testx/go.mod::testx must not depend on go.temporal.io/server"
+          mods=$(go -C testx list -m -f '{{if not .Main}}{{.Path}}{{end}}' all)
+          deps=$(echo "$mods" | grep '^go.temporal.io/' || true)
+          if [ -n "$deps" ]; then
+            echo "::error file=testx/go.mod::testx must not depend on go.temporal.io modules: $(echo "$deps" | tr "\n" " ")"
             exit 1
           fi
 
