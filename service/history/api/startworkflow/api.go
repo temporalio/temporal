@@ -992,7 +992,7 @@ func (s StartOutcome) String() string {
 
 // validateAttachedCallbacks checks the completion callbacks attached to an existing workflow on
 // conflict against the execution's limits, reserving those of the workflow's in-flight Updates;
-// see api.InFlightUpdateCallbacks.
+// see update.Registry.InFlightCallbacks.
 func validateAttachedCallbacks(
 	ctx context.Context,
 	workflowLease api.WorkflowLease,
@@ -1002,7 +1002,8 @@ func validateAttachedCallbacks(
 	if len(completionCallbacks) == 0 {
 		return nil
 	}
-	inFlight, err := api.InFlightUpdateCallbacks(workflowLease.GetContext().UpdateRegistry(ctx))
+	registry := workflowLease.GetContext().UpdateRegistry(ctx)
+	inFlight, err := registry.InFlightCallbacks()
 	if err != nil {
 		return err
 	}

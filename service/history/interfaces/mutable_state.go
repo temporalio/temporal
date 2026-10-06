@@ -144,7 +144,7 @@ type (
 		//   - startworkflow, for callbacks attached to an existing workflow on conflict
 		//   - updateworkflow, for an Update's callbacks, before it is sent to a worker
 		// inFlight holds the callbacks of Updates admitted but not yet accepted, which must be
-		// reserved against the limits; see api.InFlightUpdateCallbacks.
+		// reserved against the limits; see update.Registry.InFlightCallbacks.
 		ValidateCallbackAddition(inFlight []chasmworkflow.CallbackAddition, addition chasmworkflow.CallbackAddition) error
 		ApplyWorkflowExecutionUpdateAdmittedEvent(event *historypb.HistoryEvent, batchId int64) error
 		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))

@@ -12,6 +12,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/future"
@@ -886,25 +887,34 @@ func (u *Update) IsCompleted() bool {
 	return u.state == stateCompleted
 }
 
-// visitInFlightCallbacks calls visit for the completion callbacks this Update will persist if it
-// is accepted. See Registry.VisitInFlightCallbacks.
-func (u *Update) visitInFlightCallbacks(visit func(updateID string, requestID string, callbacks []*commonpb.Callback)) error {
+// inFlightCallbacks returns the completion callbacks this Update will persist if it is accepted.
+// See Registry.InFlightCallbacks.
+func (u *Update) inFlightCallbacks() ([]chasmworkflow.CallbackAddition, error) {
 	if !u.state.Matches(stateSet(stateProvisionallyAdmitted | stateAdmitted | stateSent)) {
-		return nil
+		return nil, nil
 	}
+	var inFlight []chasmworkflow.CallbackAddition
 	// The request is nil for an Update admitted from an UpdateAdmitted event, whose callbacks
 	// were persisted along with that event.
 	if u.request != nil {
 		req := &updatepb.Request{}
 		if err := u.request.UnmarshalTo(req); err != nil {
-			return serviceerror.NewInternalf("unable to unmarshal original request: %v", err)
+			return nil, serviceerror.NewInternalf("unable to unmarshal original request: %v", err)
 		}
 		if len(req.GetCompletionCallbacks()) > 0 {
-			visit(u.id, req.GetRequestId(), req.GetCompletionCallbacks())
+			inFlight = append(inFlight, chasmworkflow.CallbackAddition{
+				UpdateID:  u.id,
+				RequestID: req.GetRequestId(),
+				Callbacks: req.GetCompletionCallbacks(),
+			})
 		}
 	}
 	for _, pc := range u.pendingCallbacks {
-		visit(u.id, pc.requestID, pc.completionCallbacks)
+		inFlight = append(inFlight, chasmworkflow.CallbackAddition{
+			UpdateID:  u.id,
+			RequestID: pc.requestID,
+			Callbacks: pc.completionCallbacks,
+		})
 	}
-	return nil
+	return inFlight, nil
 }

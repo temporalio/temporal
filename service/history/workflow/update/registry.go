@@ -8,12 +8,12 @@ import (
 	"slices"
 
 	"go.opentelemetry.io/otel/trace"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/future"
@@ -72,8 +72,8 @@ type (
 		// Len observes the number of incomplete (not completed or rejected) Updates in this Registry.
 		Len() int
 
-		// VisitInFlightCallbacks calls visit for every set of completion callbacks held by an
-		// Update that is admitted but not yet accepted: its original request's callbacks, and any
+		// InFlightCallbacks returns every set of completion callbacks held by an Update that is
+		// admitted but not yet accepted: its original request's callbacks, and any
 		// buffered by AttachCallbacks while it was with the worker.
 		//
 		// These callbacks are not yet persisted, so they are missing from the execution's
@@ -91,7 +91,7 @@ type (
 		// Accepted Updates are excluded, including those provisionally accepted in the current
 		// transaction: applying the accepted event already added their callbacks to the persisted
 		// totals, and counting them here as well would double count them.
-		VisitInFlightCallbacks(visit func(updateID string, requestID string, callbacks []*commonpb.Callback)) error
+		InFlightCallbacks() ([]chasmworkflow.CallbackAddition, error)
 
 		// GetSize returns approximate size of the Registry in bytes.
 		GetSize() int
@@ -391,13 +391,16 @@ func (r *registry) Len() int {
 	return len(r.updates)
 }
 
-func (r *registry) VisitInFlightCallbacks(visit func(updateID string, requestID string, callbacks []*commonpb.Callback)) error {
+func (r *registry) InFlightCallbacks() ([]chasmworkflow.CallbackAddition, error) {
+	var inFlight []chasmworkflow.CallbackAddition
 	for _, upd := range r.updates {
-		if err := upd.visitInFlightCallbacks(visit); err != nil {
-			return err
+		updInFlight, err := upd.inFlightCallbacks()
+		if err != nil {
+			return nil, err
 		}
+		inFlight = append(inFlight, updInFlight...)
 	}
-	return nil
+	return inFlight, nil
 }
 
 // remover is called when an Update gets into a terminal state (completed or rejected).
