@@ -108,7 +108,7 @@ func Invoke(
 		if entry, err := shardContext.GetNamespaceRegistry().GetNamespaceByID(namespaceID); err == nil {
 			namespaceName = entry.Name()
 		}
-		if err = api.ValidateBranchTokenForExecution(
+		continuationToken.BranchToken, err = api.ValidateBranchTokenForExecution(
 			ctx,
 			shardContext,
 			workflowConsistencyChecker,
@@ -117,7 +117,8 @@ func Invoke(
 			namespaceID,
 			execution,
 			continuationToken.BranchToken,
-		); err != nil {
+		)
+		if err != nil {
 			return nil, err
 		}
 	}

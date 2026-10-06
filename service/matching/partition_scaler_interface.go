@@ -4,6 +4,8 @@ package matching
 
 import (
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"google.golang.org/protobuf/types/known/anypb"
 )
@@ -11,8 +13,8 @@ import (
 // PartitionScalerFactory is a pluggable interface to control partition scaling.
 type PartitionScalerFactory interface {
 	// New will be called for a new root partition. It should return a new PartitionScaler
-	// (or nil to disable).
-	New(nsName namespace.Name, tqName string, tqType enumspb.TaskQueueType) PartitionScaler
+	// (or nil to disable). logger and metricsHandler are scoped to that task queue.
+	New(nsName namespace.Name, tqName string, tqType enumspb.TaskQueueType, logger log.Logger, metricsHandler metrics.Handler) PartitionScaler
 }
 
 // PartitionScaler is an instance of a scaler for one task queue.
@@ -24,7 +26,7 @@ type PartitionScaler interface {
 	// It will be given the current partition count target, current backlog counts, and its
 	// private state (optional). It returns a PartitionScalerDecision, which will usually be
 	// "no change". To make a change, it should return a number in NewTarget. Zero means
-	// disable managed scaling.
+	// disable managed scaling and requires BacklogCap to also be zero.
 	//
 	// Changes may be ignored if values are out of range, if changed too often, or other
 	// reasons. Private state will not be updated if target doesn't also change, or if the
@@ -38,7 +40,7 @@ type PartitionScaler interface {
 }
 
 type PartitionScalerInput struct {
-	NumTasks      int // new tasks added since last call
+	NumTasks      int // estimated tasks added since last call
 	CurrentTarget int
 	BacklogCounts []byte
 	PrivateState  *anypb.Any
@@ -47,6 +49,6 @@ type PartitionScalerInput struct {
 type PartitionScalerDecision struct {
 	NoChange     bool       // if true, don't do anything
 	NewTarget    int        // if zero, disable managed scaling, otherwise set partition target
-	BacklogCap   int        // target cap for backlog count
+	BacklogCap   int        // target cap for backlog count; must be zero when NewTarget is zero
 	PrivateState *anypb.Any // optional private state to be stored with target
 }

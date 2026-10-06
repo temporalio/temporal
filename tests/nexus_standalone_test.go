@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,6 +16,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
+	nexusoperationpb "go.temporal.io/api/nexusoperation/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -28,7 +30,6 @@ import (
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/searchattribute/sadefs"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
@@ -225,6 +226,143 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 	})
 }
 
+// standaloneNexusTestLink returns a new workflow event link.
+func standaloneNexusTestLink(env *NexusTestEnv, workflowID string) *commonpb.Link {
+	return &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  env.Namespace().String(),
+				WorkflowId: workflowID,
+				RunId:      "wf-run-id",
+				Reference: &commonpb.Link_WorkflowEvent_EventRef{
+					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+						EventId:   1,
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					},
+				},
+			},
+		},
+	}
+}
+
+// TestStandaloneNexusOperationLinks covers links a caller attaches to a standalone Nexus operation,
+// on start and via on_conflict_options, along with the limits enforced on both paths.
+func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationLinks() {
+	ctx := context.Background()
+	env := s.newTestEnv()
+
+	// The async operation remains STARTED, so it remains open for on-conflict attaches.
+	endpointName := env.createAsyncEndpoint(ctx, s.T())
+
+	// Calls Describe- and returns the attached links.
+	describeLinks := func(s *NexusStandaloneTestSuite, operationID string) []*commonpb.Link {
+		t := s.T()
+		t.Helper()
+		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(
+			ctx,
+			&workflowservice.DescribeNexusOperationExecutionRequest{
+				Namespace:   env.Namespace().String(),
+				OperationId: operationID,
+			})
+		require.NoError(t, err)
+		return descResp.GetInfo().GetLinks()
+	}
+
+	s.Run("AttachedOnStart", func(s *NexusStandaloneTestSuite) {
+		t := s.T()
+		operationID := uuid.NewString()
+		links := []*commonpb.Link{
+			standaloneNexusTestLink(env, "start-wf-1"),
+			standaloneNexusTestLink(env, "start-wf-2"),
+		}
+
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: operationID,
+			Endpoint:    endpointName,
+			Links:       links,
+		})
+		s.NoError(err)
+		s.True(startResp.GetStarted())
+
+		gotLinks := describeLinks(s, operationID)
+		protorequire.ProtoSliceEqual(t, links, gotLinks)
+	})
+
+	s.Run("AttachLinksOnConflictMergesLinks", func(s *NexusStandaloneTestSuite) {
+		t := s.T()
+		operationID := uuid.NewString()
+		firstLink := standaloneNexusTestLink(env, "merge-wf-1")
+		secondLink := standaloneNexusTestLink(env, "merge-wf-2")
+
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: operationID,
+			Endpoint:    endpointName,
+			RequestId:   "first-request",
+			Links:       []*commonpb.Link{firstLink},
+		})
+		s.NoError(err)
+		s.True(startResp.GetStarted())
+
+		// Call Start again with the same operation ID, with the conflict policy to
+		// use the existing SANO but attach links.
+		attachReq := &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId:      operationID,
+			Endpoint:         endpointName,
+			RequestId:        "second-request",
+			Links:            []*commonpb.Link{secondLink},
+			IdConflictPolicy: enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_USE_EXISTING,
+			OnConflictOptions: &nexusoperationpb.OnConflictOptions{
+				AttachLinks: true,
+			},
+		}
+		attachResp, err := s.startNexusOperation(env, attachReq)
+		s.NoError(err)
+		s.False(attachResp.GetStarted())
+		s.Equal(startResp.GetRunId(), attachResp.GetRunId())
+
+		expected := []*commonpb.Link{firstLink, secondLink}
+		// Links are stored per request ID, so their relative order is non-deterministic.
+		gotLinks := describeLinks(s, operationID)
+		protorequire.ProtoElementsMatch(t, expected, gotLinks)
+
+		// Replaying the same request must not duplicate the links it already attached.
+		_, err = s.startNexusOperation(env, attachReq)
+		s.NoError(err)
+		gotLinks = describeLinks(s, operationID)
+		protorequire.ProtoElementsMatch(t, expected, gotLinks)
+	})
+
+	s.Run("LinksIgnoredOnConflictWithoutAttachLinks", func(s *NexusStandaloneTestSuite) {
+		t := s.T()
+		operationID := uuid.NewString()
+		firstLink := standaloneNexusTestLink(env, "ignored-wf-1")
+
+		_, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: operationID,
+			Endpoint:    endpointName,
+			RequestId:   "first-request",
+			Links:       []*commonpb.Link{firstLink},
+		})
+		s.NoError(err)
+
+		_, err = s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId:      operationID,
+			Endpoint:         endpointName,
+			RequestId:        "second-request",
+			Links:            []*commonpb.Link{standaloneNexusTestLink(env, "ignored-wf-2")},
+			IdConflictPolicy: enumspb.NEXUS_OPERATION_ID_CONFLICT_POLICY_USE_EXISTING,
+			// attach_links intentionally omitted — the second request's links must be dropped.
+		})
+		s.NoError(err)
+
+		gotLinks := describeLinks(s, operationID)
+		protorequire.ProtoSliceEqual(t, []*commonpb.Link{firstLink}, gotLinks)
+	})
+
+	// The per-request and per-execution link caps are covered by unit tests
+	// TestNewStandaloneOperationAttachesLinks and TestOperationAttachLinks.
+}
+
 func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 	s.Run("NotFound", func(s *NexusStandaloneTestSuite) {
 		env := s.newTestEnv()
@@ -296,10 +434,10 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 			terminateErrCh <- err
 		}()
 
-		s.NoError(await.Rcv(s.T(), terminateErrCh))
+		s.NoError(s.Rcv(terminateErrCh))
 
 		// Verify the longpoll result.
-		result := await.Rcv(s.T(), describeResultCh)
+		result := s.Rcv(describeResultCh)
 		s.NoError(result.err)
 		longPollResp := result.resp
 
@@ -497,7 +635,7 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 			protorequire.ProtoEqual(t, expectedResult, pollResp.GetResult())
 		}, 10*time.Second, 100*time.Millisecond)
 
-		s.NoError(await.Rcv(s.T(), pollerErrCh))
+		s.NoError(s.Rcv(pollerErrCh))
 	})
 
 	s.Run("IncludeOutcome_Failure", func(s *NexusStandaloneTestSuite) {
@@ -813,7 +951,7 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 					tc.assertOutcome(t, descResp, pollResp)
 				}, 10*time.Second, 100*time.Millisecond)
 
-				s.NoError(await.Rcv(s.T(), pollerErrCh))
+				s.NoError(s.Rcv(pollerErrCh))
 			})
 		}
 	})
@@ -1194,7 +1332,9 @@ func (s *NexusStandaloneTestSuite) TestTerminateStandaloneNexusOperation() {
 		s.Contains(err.Error(), "already terminated")
 	})
 
-	s.Run("AlreadyCanceled", func(s *NexusStandaloneTestSuite) {
+	// A cancel request on a running operation only records the cancellation; the operation stays
+	// running, so terminate is still accepted and closes it as TERMINATED.
+	s.Run("CancelRequestedThenTerminated", func(s *NexusStandaloneTestSuite) {
 		env := s.newTestEnv()
 		endpointName := env.createRandomNexusEndpoint(s.Context(), s.T()).GetSpec().GetName()
 
@@ -1204,7 +1344,7 @@ func (s *NexusStandaloneTestSuite) TestTerminateStandaloneNexusOperation() {
 		})
 		s.NoError(err)
 
-		// Cancel the operation first.
+		// Request cancellation first.
 		_, err = env.FrontendClient().RequestCancelNexusOperationExecution(s.Context(), &workflowservice.RequestCancelNexusOperationExecutionRequest{
 			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
@@ -1212,7 +1352,16 @@ func (s *NexusStandaloneTestSuite) TestTerminateStandaloneNexusOperation() {
 		})
 		s.NoError(err)
 
-		// Terminate a canceled operation — should succeed.
+		// No worker services this endpoint, so the operation is still running.
+		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+		})
+		s.NoError(err)
+		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_RUNNING, descResp.GetInfo().GetStatus())
+		s.NotNil(descResp.GetInfo().GetCancellationInfo())
+
 		_, err = env.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
 			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
@@ -1222,14 +1371,70 @@ func (s *NexusStandaloneTestSuite) TestTerminateStandaloneNexusOperation() {
 		})
 		s.NoError(err)
 
-		// Verify state changed to terminated (terminate overrides cancel request).
-		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+		descResp, err = env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
 			Namespace:   env.Namespace().String(),
 			OperationId: "test-op",
 			RunId:       startResp.RunId,
 		})
 		s.NoError(err)
 		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_TERMINATED, descResp.GetInfo().GetStatus())
+	})
+
+	s.Run("AlreadyCanceled", func(s *NexusStandaloneTestSuite) {
+		env := s.newTestEnv()
+		// The handler cancels on start, closing the operation as CANCELED.
+		endpointName := env.createRandomExternalNexusServer(s.Context(), s.T(), nexustest.Handler{
+			OnStartOperation: func(ctx context.Context, service, operation string, input *nexus.LazyValue, options nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+				return nil, &nexus.OperationError{
+					State: nexus.OperationStateCanceled,
+					Cause: &nexus.FailureError{Failure: nexus.Failure{Message: "canceled by handler"}},
+				}
+			},
+		})
+
+		startResp, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
+			OperationId: "test-op",
+			Endpoint:    endpointName,
+		})
+		s.NoError(err)
+
+		// Ensure the operation actually reached CANCELED before terminating.
+		_, err = env.FrontendClient().PollNexusOperationExecution(s.Context(), &workflowservice.PollNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+			WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
+		})
+		s.NoError(err)
+
+		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+		})
+		s.NoError(err)
+		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_CANCELED, descResp.GetInfo().GetStatus())
+
+		// Terminating a canceled operation is rejected.
+		_, err = env.FrontendClient().TerminateNexusOperationExecution(s.Context(), &workflowservice.TerminateNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+			RequestId:   "terminate-request-id",
+			Reason:      "test termination",
+		})
+		var failedPrecondition *serviceerror.FailedPrecondition
+		s.ErrorAs(err, &failedPrecondition)
+		s.ErrorContains(err, "operation already completed")
+
+		// The rejected terminate left the outcome untouched.
+		descResp, err = env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
+			Namespace:   env.Namespace().String(),
+			OperationId: "test-op",
+			RunId:       startResp.RunId,
+		})
+		s.NoError(err)
+		s.Equal(enumspb.NEXUS_OPERATION_EXECUTION_STATUS_CANCELED, descResp.GetInfo().GetStatus())
 	})
 
 	s.Run("NotFound", func(s *NexusStandaloneTestSuite) {
@@ -1884,7 +2089,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 			pollResultCh <- pollResult{resp: resp, err: err}
 		}()
 
-		await.Rcv(s.T(), pollStartedCh)
+		s.Rcv(pollStartedCh)
 
 		// PollNexusOperationExecution should not resolve before the operation is started.
 		select {
@@ -1936,7 +2141,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 		s.NoError(err)
 
 		// Verify the poll result.
-		result := await.Rcv(s.T(), pollResultCh)
+		result := s.Rcv(pollResultCh)
 		s.NoError(result.err)
 		protorequire.ProtoEqual(s.T(), &workflowservice.PollNexusOperationExecutionResponse{
 			RunId:          startResp.RunId,
@@ -2001,7 +2206,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 					pollResultCh <- pollResult{resp: resp, err: err}
 				}()
 
-				await.Rcv(s.T(), pollStartedCh)
+				s.Rcv(pollStartedCh)
 
 				// PollNexusOperationExecution should not resolve before the operation is closed.
 				select {
@@ -2023,10 +2228,10 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 					terminateErrCh <- err
 				}()
 
-				s.NoError(await.Rcv(s.T(), terminateErrCh))
+				s.NoError(s.Rcv(terminateErrCh))
 
 				// Verify the poll result.
-				result := await.Rcv(s.T(), pollResultCh)
+				result := s.Rcv(pollResultCh)
 				s.NoError(result.err)
 				pollResp := result.resp
 
@@ -2140,7 +2345,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 			}, pollResp.GetFailure())
 		}, 10*time.Second, 100*time.Millisecond)
 
-		s.NoError(await.Rcv(s.T(), pollerErrCh))
+		s.NoError(s.Rcv(pollerErrCh))
 	})
 
 	s.Run("NamespaceNotFound", func(s *NexusStandaloneTestSuite) {
@@ -2243,7 +2448,7 @@ func (s *NexusStandaloneTestSuite) TestAsyncCompletionIgnoresExecutionTransition
 		Endpoint:    endpointName,
 	})
 	s.NoError(err)
-	callback := await.Rcv(s.T(), callbackCh)
+	callback := s.Rcv(callbackCh)
 	callbackToken := callback.token
 	callbackURL := callback.url
 

@@ -5,6 +5,7 @@ package temporal.server.api.adminservice.v1;
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
+import "temporal/api/enums/v1/batch_operation.proto";
 import "temporal/api/enums/v1/common.proto";
 import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/namespace/v1/message.proto";
@@ -136,9 +137,9 @@ message RemoveTaskRequest {
 message RemoveTaskResponse {}
 
 /**
-  * StartEventId defines the beginning of the event to fetch. The first event is exclusive.
-  * EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
-  **/
+ * StartEventId defines the beginning of the event to fetch. The first event is exclusive.
+ * EndEventId and EndEventVersion defines the end of the event to fetch. The end event is exclusive.
+ **/
 message GetWorkflowExecutionRawHistoryV2Request {
   reserved 1;
   string namespace_id = 9;
@@ -549,6 +550,7 @@ message DeepHealthCheckResponse {
   temporal.server.api.enums.v1.HealthState state = 1;
   // Per-service diagnostic details including per-host breakdown.
   repeated temporal.server.api.health.v1.ServiceHealthDetail services = 2;
+  temporal.server.api.enums.v1.HealthState unenforced_state = 3;
 }
 
 message SyncWorkflowStateRequest {
@@ -628,7 +630,8 @@ message StartAdminBatchOperationRequest {
   // This field and `executions` are mutually exclusive.
   string visibility_query = 2;
 
-  // A unique job identifier for this batch operation.
+  // A unique job identifier for this batch operation. The server prefixes it with the target
+  // namespace to form the workflow ID in temporal-system. Read the workflow ID from the response.
   string job_id = 3;
 
   // Reason for the operation.
@@ -644,10 +647,15 @@ message StartAdminBatchOperationRequest {
   // The admin batch operation to perform.
   oneof operation {
     BatchOperationRefreshTasks refresh_tasks_operation = 10;
+    // Supported types are workflow and activity termination and deletion.
+    temporal.api.enums.v1.BatchOperationType delegation_operation = 11;
   }
 }
 
-message StartAdminBatchOperationResponse {}
+message StartAdminBatchOperationResponse {
+  // Workflow ID of the batch operation in the temporal-system namespace.
+  string workflow_id = 1;
+}
 
 // BatchOperationRefreshTasks refreshes tasks for batch executions.
 // This regenerates all pending tasks for each execution.

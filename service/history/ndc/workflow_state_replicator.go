@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"slices"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -42,6 +43,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -78,6 +80,7 @@ type (
 		logger                       log.Logger
 		eventLogger                  otellog.Logger
 		taskRefresher                workflow.TaskRefresher
+		testHooks                    testhooks.TestHooks
 	}
 )
 
@@ -89,6 +92,7 @@ func NewWorkflowStateReplicator(
 	persistenceRateLimiter quotas.RequestRateLimiter,
 	logger log.Logger,
 	eventLogger otellog.Logger,
+	testHooks testhooks.TestHooks,
 ) *WorkflowStateReplicatorImpl {
 
 	logger = log.With(logger, tag.ComponentWorkflowStateReplicator)
@@ -105,6 +109,7 @@ func NewWorkflowStateReplicator(
 		logger:                       logger,
 		eventLogger:                  eventLogger,
 		taskRefresher:                workflow.NewTaskRefresher(shardContext),
+		testHooks:                    testHooks,
 	}
 }
 
@@ -228,6 +233,53 @@ func (r *WorkflowStateReplicatorImpl) SyncWorkflowState(
 	)
 }
 
+func (r *WorkflowStateReplicatorImpl) getWorkflowContext(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	execution *commonpb.WorkflowExecution,
+	archetypeID chasm.ArchetypeID,
+) (historyi.WorkflowContext, historyi.ReleaseWorkflowContextFunc, error) {
+	hook, ok := testhooks.Get(
+		r.testHooks,
+		testhooks.HistoryPassiveReplicationTest,
+		namespaceID,
+	)
+	if ok && hook.UseTransientWorkflowContextForReplication(ctx) {
+		metrics.HistoryPassiveReplicationTestHookCounter.With(r.shardContext.GetMetricsHandler()).Record(
+			1,
+			metrics.OperationTag("ReplicateVersionedTransition"),
+		)
+		wfCtx := workflow.NewContext(
+			r.shardContext.GetConfig(),
+			definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
+			archetypeID,
+			r.logger,
+			r.shardContext.GetThrottledLogger(),
+			r.shardContext.GetMetricsHandler(),
+			nil,
+			r.testHooks,
+		)
+		if err := wfCtx.Lock(ctx, locks.PriorityHigh); err != nil {
+			return nil, nil, err
+		}
+		var releaseOnce sync.Once
+		return wfCtx, func(error) {
+			releaseOnce.Do(func() {
+				wfCtx.Clear()
+				wfCtx.Unlock()
+			})
+		}, nil
+	}
+	return r.workflowCache.GetOrCreateChasmExecution(
+		ctx,
+		r.shardContext,
+		namespaceID,
+		execution,
+		archetypeID,
+		locks.PriorityHigh,
+	)
+}
+
 //nolint:revive // cognitive complexity 37 (> max enabled 25)
 func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 	ctx context.Context,
@@ -268,16 +320,11 @@ func (r *WorkflowStateReplicatorImpl) ReplicateVersionedTransition(
 		}
 	}()
 
-	wfCtx, releaseFn, err := r.workflowCache.GetOrCreateChasmExecution(
+	wfCtx, releaseFn, err := r.getWorkflowContext(
 		ctx,
-		r.shardContext,
 		namespaceID,
-		&commonpb.WorkflowExecution{
-			WorkflowId: wid,
-			RunId:      rid,
-		},
+		&commonpb.WorkflowExecution{WorkflowId: wid, RunId: rid},
 		archetypeID,
-		locks.PriorityHigh,
 	)
 	if err != nil {
 		return err
@@ -1253,6 +1300,7 @@ func (r *WorkflowStateReplicatorImpl) getNewRunWorkflow(
 		r.shardContext.GetThrottledLogger(),
 		r.shardContext.GetMetricsHandler(),
 		nil, // no pagination buffer limiter as it is a transient context
+		testhooks.TestHooks{},
 	)
 
 	return NewWorkflow(
@@ -1380,6 +1428,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		return nil, nil
 	}
 
+	originalIndex := localVersionHistories.CurrentVersionHistoryIndex
 	index, isNewBranch, err := r.getBranchToAppend(
 		ctx,
 		wfCtx,
@@ -1408,6 +1457,14 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		localLastItem, err = versionhistory.GetLastVersionHistoryItem(versionHistoryToAppend)
 		if err != nil {
 			return newBranchToken, err
+		}
+		// LastFirstEventTxnId still points at the branch we moved off. Chain onto this branch instead.
+		if isNewBranch || index != originalIndex {
+			lastTxnID, err := r.lastTransactionID(ctx, versionHistoryToAppend.GetBranchToken(), localLastItem.GetEventId())
+			if err != nil {
+				return newBranchToken, err
+			}
+			localMutableState.GetExecutionInfo().LastFirstEventTxnId = lastTxnID
 		}
 	}
 
@@ -1632,6 +1689,41 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 	localMutableState.SetHistoryBuilder(historybuilder.NewImmutableForUpdateNextEventID(sourceLastItem))
 	localMutableState.GetExecutionInfo().LastFirstEventTxnId = prevTxnID
 	return newBranchToken, nil
+}
+
+// lastTransactionID returns the txn ID of the node containing lastEventID. Nodes are keyed by their
+// first event ID, so this has to read from the start of the branch.
+func (r *WorkflowStateReplicatorImpl) lastTransactionID(
+	ctx context.Context,
+	branchToken []byte,
+	lastEventID int64,
+) (int64, error) {
+	lastTxnID := common.EmptyEventTaskID
+	var pageToken []byte
+	for {
+		resp, err := r.executionMgr.ReadHistoryBranchByBatch(ctx, &persistence.ReadHistoryBranchRequest{
+			ShardID:       r.shardContext.GetShardID(),
+			BranchToken:   branchToken,
+			MinEventID:    common.FirstEventID,
+			MaxEventID:    lastEventID + 1,
+			PageSize:      defaultPageSize,
+			NextPageToken: pageToken,
+		})
+		if err != nil {
+			return 0, err
+		}
+		if n := len(resp.TransactionIDs); n > 0 {
+			lastTxnID = resp.TransactionIDs[n-1]
+		}
+		pageToken = resp.NextPageToken
+		if len(pageToken) == 0 {
+			break
+		}
+	}
+	if lastTxnID == common.EmptyEventTaskID {
+		return 0, serviceerror.NewInternalf("no history node found up to event %v", lastEventID)
+	}
+	return lastTxnID, nil
 }
 
 func (r *WorkflowStateReplicatorImpl) getBranchToAppend(
