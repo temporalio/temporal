@@ -10,6 +10,9 @@ on:
       - main
     paths:
       - "testx/**"
+  schedule:
+    # Runs at 0800 UTC daily, to retry a failed or stuck bump.
+    - cron: "0 8 * * *"
   workflow_dispatch: # Allow manual trigger
 
 # The PR is approved by auto-approve-cicd-bot-pr.yml.
