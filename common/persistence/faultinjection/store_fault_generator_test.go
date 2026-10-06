@@ -25,9 +25,10 @@ func TestFaultInjection_DataStoreFactory_CreateErr(t *testing.T) {
 	errCreate := errors.New("error creating QueueV2")
 	dataStoreFactory.EXPECT().NewQueueV2().Return(nil, errCreate)
 
-	factory := NewFaultInjectionDatastoreFactory(&config.FaultInjection{}, dataStoreFactory)
+	factory, err := NewFaultInjectionDatastoreFactory(&config.FaultInjection{}, dataStoreFactory)
+	require.NoError(t, err)
 
-	_, err := factory.NewQueueV2()
+	_, err = factory.NewQueueV2()
 	assert.ErrorIs(t, err, errCreate)
 }
 
@@ -88,7 +89,8 @@ func TestFaultInjection_Inject(t *testing.T) {
 
 			ctrl := gomock.NewController(t)
 			baseFactory := mock.NewMockDataStoreFactory(ctrl)
-			factory := NewFaultInjectionDatastoreFactory(faultInjectionConfig, baseFactory)
+			factory, err := NewFaultInjectionDatastoreFactory(faultInjectionConfig, baseFactory)
+			require.NoError(t, err)
 			baseQueue := mock.NewMockQueueV2(ctrl)
 			baseFactory.EXPECT().NewQueueV2().Return(baseQueue, nil)
 
@@ -141,7 +143,8 @@ func TestFaultInjection_StoreNotConfigured(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	baseFactory := mock.NewMockDataStoreFactory(ctrl)
-	factory := NewFaultInjectionDatastoreFactory(faultInjectionConfig, baseFactory)
+	factory, err := NewFaultInjectionDatastoreFactory(faultInjectionConfig, baseFactory)
+	require.NoError(t, err)
 	baseQueue := mock.NewMockQueueV2(ctrl)
 	baseFactory.EXPECT().NewQueueV2().Return(baseQueue, nil)
 
@@ -162,4 +165,68 @@ func TestFaultInjection_StoreNotConfigured(t *testing.T) {
 	resp2, err := e.CreateWorkflowExecution(context.Background(), nil)
 	require.NoError(t, err)
 	require.NotNil(t, resp2)
+}
+
+func TestConfiguredFaultInjectorExecuteAndTimeout(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name         string
+		operationErr error
+	}{{name: "success"}, {name: "failure", operationErr: errors.New("operation failed")}} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			generator := configuredFaultInjector(&config.FaultInjectionDataStoreConfig{Methods: map[string]config.FaultInjectionMethodConfig{
+				"method": {Errors: map[string]float64{"ExecuteAndTimeout": 1}, Seed: 123},
+			}})
+			called := false
+			err := generator(config.FaultInjectionTarget{Method: "method"}).inject(func() error {
+				called = true
+				return tc.operationErr
+			})
+			require.True(t, called)
+			if tc.operationErr != nil {
+				require.ErrorIs(t, err, tc.operationErr)
+			} else {
+				var timeout *persistence.TimeoutError
+				require.ErrorAs(t, err, &timeout)
+			}
+		})
+	}
+}
+
+func TestConfiguredFaultInjectorDeterministic(t *testing.T) {
+	t.Parallel()
+	cfg := &config.FaultInjectionDataStoreConfig{Methods: map[string]config.FaultInjectionMethodConfig{
+		"method": {Errors: map[string]float64{"Timeout": 0.2, "Unavailable": 0.3}, Seed: 123},
+	}}
+	first := configuredFaultInjector(cfg)
+	second := configuredFaultInjector(cfg)
+	target := config.FaultInjectionTarget{Method: "method"}
+	for range 1000 {
+		require.Equal(t, first(target), second(target))
+	}
+	require.Nil(t, first(config.FaultInjectionTarget{Method: "other method"}))
+}
+
+func TestStoreFaultInjectorRuntimePrecedence(t *testing.T) {
+	t.Parallel()
+	cfg := &config.FaultInjectionDataStoreConfig{Methods: map[string]config.FaultInjectionMethodConfig{
+		"method": {Errors: map[string]float64{"Unavailable": 1}},
+	}}
+	runtimeErr := errors.New("runtime fault")
+	request := &struct{}{}
+	generator, enabled := newStoreFaultInjector(config.ExecutionStoreName, cfg, func(target config.FaultInjectionTarget) error {
+		require.Equal(t, config.FaultInjectionTarget{Store: config.ExecutionStoreName, Method: "method", Request: request}, target)
+		return runtimeErr
+	})
+	require.True(t, enabled)
+	require.ErrorIs(t, generator.generate("method", request).err, runtimeErr)
+}
+
+func TestDataStoreFactoryInvalidProbabilities(t *testing.T) {
+	t.Parallel()
+	cfg := (&config.FaultInjection{}).WithError(config.QueueV2Name, "method", "Unavailable", 1.1)
+	factory, err := NewFaultInjectionDatastoreFactory(cfg, nil)
+	require.ErrorContains(t, err, "probability must be between 0 and 1")
+	require.Nil(t, factory)
 }

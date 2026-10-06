@@ -1,6 +1,6 @@
 //go:build test_dep
 
-package faultinjection_test
+package faults_test
 
 import (
 	"context"
@@ -10,15 +10,15 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common/rpc/faultinjection"
+	"go.temporal.io/server/common/rpc/faults"
 	"go.temporal.io/server/common/testing/await"
 )
 
 type scopedRequest struct {
-	scope faultinjection.Scope
+	scope faults.Scope
 }
 
-func (r scopedRequest) FaultScope() faultinjection.Scope { return r.scope }
+func (r scopedRequest) FaultScope() faults.Scope { return r.scope }
 
 func TestCallbackGenerator_Generate(t *testing.T) {
 	t.Parallel()
@@ -28,11 +28,11 @@ func TestCallbackGenerator_Generate(t *testing.T) {
 	handlerResponse := &struct{}{}
 	handlerErr := errors.New("handler")
 	injectedErr := errors.New("injected")
-	bothNamespaces := faultinjection.Scope{NamespaceID: "namespace-id", NamespaceName: "namespace-name"}
+	bothNamespaces := faults.Scope{NamespaceID: "namespace-id", NamespaceName: "namespace-name"}
 
 	type callback struct {
 		name     string
-		scope    faultinjection.Scope
+		scope    faults.Scope
 		miss     bool
 		response any
 		err      error
@@ -69,7 +69,7 @@ func TestCallbackGenerator_Generate(t *testing.T) {
 				name:    "namespace before global",
 				request: &matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
 				callbacks: []callback{
-					{name: "namespace", scope: faultinjection.Scope{NamespaceID: "namespace-id"}, response: "namespace response"},
+					{name: "namespace", scope: faults.Scope{NamespaceID: "namespace-id"}, response: "namespace response"},
 					{name: "global", response: "global response"},
 				},
 				expectedResp:  "namespace response",
@@ -79,7 +79,7 @@ func TestCallbackGenerator_Generate(t *testing.T) {
 				name:    "global after namespace miss",
 				request: &matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
 				callbacks: []callback{
-					{name: "namespace", scope: faultinjection.Scope{NamespaceID: "namespace-id"}, miss: true},
+					{name: "namespace", scope: faults.Scope{NamespaceID: "namespace-id"}, miss: true},
 					{name: "global", response: "response"},
 				},
 				expectedResp:  "response",
@@ -89,7 +89,7 @@ func TestCallbackGenerator_Generate(t *testing.T) {
 				name:    "namespace mismatch",
 				request: &matchingservice.AddWorkflowTaskRequest{NamespaceId: "other-namespace-id"},
 				callbacks: []callback{
-					{name: "namespace", scope: faultinjection.Scope{NamespaceID: "namespace-id"}, err: injectedErr},
+					{name: "namespace", scope: faults.Scope{NamespaceID: "namespace-id"}, err: injectedErr},
 				},
 				expectedMiss: true,
 			},
@@ -97,7 +97,7 @@ func TestCallbackGenerator_Generate(t *testing.T) {
 				name:    "matched error",
 				request: &matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
 				callbacks: []callback{
-					{name: "namespace", scope: faultinjection.Scope{NamespaceID: "namespace-id"}, err: injectedErr},
+					{name: "namespace", scope: faults.Scope{NamespaceID: "namespace-id"}, err: injectedErr},
 				},
 				expectedErr:   injectedErr,
 				expectedCalls: []string{"namespace"},
@@ -106,9 +106,9 @@ func TestCallbackGenerator_Generate(t *testing.T) {
 				name:    "first match wins",
 				request: &matchingservice.AddWorkflowTaskRequest{NamespaceId: "namespace-id"},
 				callbacks: []callback{
-					{name: "first", scope: faultinjection.Scope{NamespaceID: "namespace-id"}, miss: true},
-					{name: "second", scope: faultinjection.Scope{NamespaceID: "namespace-id"}, response: "response"},
-					{name: "third", scope: faultinjection.Scope{NamespaceID: "namespace-id"}, response: "other response"},
+					{name: "first", scope: faults.Scope{NamespaceID: "namespace-id"}, miss: true},
+					{name: "second", scope: faults.Scope{NamespaceID: "namespace-id"}, response: "response"},
+					{name: "third", scope: faults.Scope{NamespaceID: "namespace-id"}, response: "other response"},
 				},
 				expectedResp:  "response",
 				expectedCalls: []string{"first", "second"},
@@ -145,9 +145,9 @@ func TestCallbackGenerator_Generate(t *testing.T) {
 			t.Run(stage.name+"/"+test.name, func(t *testing.T) {
 				t.Parallel()
 
-				generator := faultinjection.NewCallbackGenerator[any, any]()
+				generator := faults.NewCallbackGenerator[any, any]()
 				var calls []string
-				invoke := func(callback callback, actualCtx context.Context, actualOperation string, actualRequest, actualResponse any, actualErr error) *faultinjection.Outcome[any] {
+				invoke := func(callback callback, actualCtx context.Context, actualOperation string, actualRequest, actualResponse any, actualErr error) *faults.Outcome[any] {
 					calls = append(calls, callback.name)
 					require.Equal(t, ctx, actualCtx)
 					require.Equal(t, operation, actualOperation)
@@ -159,23 +159,23 @@ func TestCallbackGenerator_Generate(t *testing.T) {
 					if callback.miss {
 						return nil
 					}
-					return &faultinjection.Outcome[any]{Response: callback.response, Error: callback.err}
+					return &faults.Outcome[any]{Response: callback.response, Error: callback.err}
 				}
 
 				for _, callback := range test.callbacks {
 					callback := callback
 					if stage.response {
-						generator.RegisterResponseCallback(callback.scope, func(actualCtx context.Context, actualOperation string, actualRequest, actualResponse any, actualErr error) *faultinjection.Outcome[any] {
+						generator.RegisterResponseCallback(callback.scope, func(actualCtx context.Context, actualOperation string, actualRequest, actualResponse any, actualErr error) *faults.Outcome[any] {
 							return invoke(callback, actualCtx, actualOperation, actualRequest, actualResponse, actualErr)
 						})
 					} else {
-						generator.RegisterRequestCallback(callback.scope, func(actualCtx context.Context, actualOperation string, actualRequest any) *faultinjection.Outcome[any] {
+						generator.RegisterRequestCallback(callback.scope, func(actualCtx context.Context, actualOperation string, actualRequest any) *faults.Outcome[any] {
 							return invoke(callback, actualCtx, actualOperation, actualRequest, nil, nil)
 						})
 					}
 				}
 
-				var outcome *faultinjection.Outcome[any]
+				var outcome *faults.Outcome[any]
 				if stage.response {
 					outcome = generator.GenerateResponse(ctx, operation, test.request, handlerResponse, handlerErr)
 				} else {
@@ -206,9 +206,9 @@ func TestCallbackGenerator_Unregister(t *testing.T) {
 	t.Run("idempotent", func(t *testing.T) {
 		t.Parallel()
 
-		generator := faultinjection.NewCallbackGenerator[any, any]()
-		unregister := generator.RegisterRequestCallback(faultinjection.Scope{NamespaceID: "namespace-id"}, func(context.Context, string, any) *faultinjection.Outcome[any] {
-			return &faultinjection.Outcome[any]{Response: "response"}
+		generator := faults.NewCallbackGenerator[any, any]()
+		unregister := generator.RegisterRequestCallback(faults.Scope{NamespaceID: "namespace-id"}, func(context.Context, string, any) *faults.Outcome[any] {
+			return &faults.Outcome[any]{Response: "response"}
 		})
 
 		unregister()
@@ -225,9 +225,9 @@ func TestCallbackGenerator_Unregister(t *testing.T) {
 	t.Run("removes namespace ID and name registrations", func(t *testing.T) {
 		t.Parallel()
 
-		generator := faultinjection.NewCallbackGenerator[any, any]()
-		unregister := generator.RegisterRequestCallback(faultinjection.Scope{NamespaceID: "namespace-id", NamespaceName: "namespace-name"}, func(context.Context, string, any) *faultinjection.Outcome[any] {
-			return &faultinjection.Outcome[any]{Response: "response"}
+		generator := faults.NewCallbackGenerator[any, any]()
+		unregister := generator.RegisterRequestCallback(faults.Scope{NamespaceID: "namespace-id", NamespaceName: "namespace-name"}, func(context.Context, string, any) *faults.Outcome[any] {
+			return &faults.Outcome[any]{Response: "response"}
 		})
 		unregister()
 
@@ -255,16 +255,16 @@ func TestCallbackGenerator_Unregister(t *testing.T) {
 	t.Run("during generate", func(t *testing.T) {
 		t.Parallel()
 
-		generator := faultinjection.NewCallbackGenerator[any, any]()
+		generator := faults.NewCallbackGenerator[any, any]()
 		callbackStarted := make(chan struct{})
 		continueCallback := make(chan struct{})
-		unregister := generator.RegisterRequestCallback(faultinjection.Scope{NamespaceID: "namespace-id"}, func(context.Context, string, any) *faultinjection.Outcome[any] {
+		unregister := generator.RegisterRequestCallback(faults.Scope{NamespaceID: "namespace-id"}, func(context.Context, string, any) *faults.Outcome[any] {
 			await.Snd(t, callbackStarted, struct{}{})
 			await.Rcv(t, continueCallback)
-			return &faultinjection.Outcome[any]{Response: "response"}
+			return &faults.Outcome[any]{Response: "response"}
 		})
 		type result struct {
-			outcome *faultinjection.Outcome[any]
+			outcome *faults.Outcome[any]
 		}
 		resultCh := make(chan result, 1)
 		go func() {

@@ -12,9 +12,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/rpc/httpfaults"
-	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/common/testing/httpfaultstest"
-	"go.temporal.io/server/common/testing/testhooks"
 	queuescommon "go.temporal.io/server/service/history/queues/common"
 	"go.uber.org/fx"
 )
@@ -33,8 +30,7 @@ func httpCallerProviderProvider(
 	rpcFactory common.RPCFactory,
 	httpClientCache *cluster.FrontendHTTPClientCache,
 	logger log.Logger,
-	httpClientTransportInstrumenter telemetry.HTTPClientTransportInstrumenter,
-	testHooks testhooks.TestHooks,
+	transportWrapper httpfaults.TransportWrapper,
 	config *Config,
 ) (HTTPCallerProvider, error) {
 	localClient, err := rpcFactory.CreateLocalFrontendHTTPClient()
@@ -46,15 +42,14 @@ func httpCallerProviderProvider(
 		return nil, err
 	}
 	externalClient := &http.Client{
-		Transport: httpClientTransportInstrumenter.Instrument(externalTransport),
+		Transport: transportWrapper.Wrap(externalTransport),
 	}
 	callbackTokenGenerator := commonnexus.NewCallbackTokenGenerator()
-	httpFaultGenerator := httpfaultstest.NewGenerator(testHooks)
 
 	m := collection.NewOnceMap(func(key queuescommon.NamespaceIDAndDestination) HTTPCaller {
 		scope := httpfaults.Scope{NamespaceID: namespace.ID(key.NamespaceID)}
 		caller := func(r *http.Request) (*http.Response, error) {
-			return routeRequest(r,
+			return routeRequest(httpfaults.WithScope(r, scope),
 				clusterMetadata,
 				namespaceRegistry,
 				httpClientCache,
@@ -65,7 +60,7 @@ func httpCallerProviderProvider(
 				config.InspectSourceHeader(),
 			)
 		}
-		return httpfaults.Wrap(httpFaultGenerator, scope, caller)
+		return caller
 	})
 	return m.Get, nil
 }

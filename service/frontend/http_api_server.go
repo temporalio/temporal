@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/rpc/httpfaults"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -78,6 +79,7 @@ func NewHTTPAPIServer(
 	router *mux.Router,
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
+	faultGenerator httpfaults.Generator,
 ) (*HTTPAPIServer, error) {
 	// Create a TCP listener the same as the frontend one but with different port
 	tcpAddrRef, _ := grpcListener.Addr().(*net.TCPAddr)
@@ -177,7 +179,7 @@ func NewHTTPAPIServer(
 	// Set the / handler as our function that wraps serve mux.
 	router.PathPrefix("/").HandlerFunc(h.serveHTTP)
 	// Register the router as the HTTP server handler.
-	h.server.Handler = router
+	h.server.Handler = httpfaults.WrapHandler(faultGenerator, router)
 
 	// Put the remote address on the context
 	h.server.ConnContext = func(ctx context.Context, c net.Conn) context.Context {

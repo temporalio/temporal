@@ -246,6 +246,78 @@ env.InjectHTTPRequestFault(func(ctx context.Context, req *http.Request) *httpfau
 })
 ```
 
+### Configured gRPC and HTTP fault injection
+
+The server's top-level YAML `faultInjection` config injects random transient failures uniformly
+for each transport and direction. gRPC covers inbound unary calls and streams, and outbound
+RPC factory and server SDK connections. HTTP covers the inbound frontend router (including
+Nexus routes), and outbound frontend, callback delivery, and Nexus operation clients.
+It is independent of persistence fault injection and works without `test_dep`.
+HTTP gateway requests use HTTP config; shared application interceptors do not apply gRPC config.
+
+```yaml
+faultInjection:
+  grpc:
+    inbound:
+      request:
+        errors:
+          Unavailable: 0.05
+          Internal: 0.02
+          ResourceExhausted: 0.03
+      response:
+        errors:
+          Unavailable: 0.05
+    outbound:
+      request:
+        errors:
+          Unavailable: 0.02
+  http:
+    inbound:
+      response:
+        errors:
+          Internal: 0.02
+    outbound:
+      request:
+        errors:
+          Unavailable: 0.05
+          ResourceExhausted: 0.03
+```
+
+Each probability is an absolute chance per call at that stage. In the inbound gRPC request example,
+5% of calls fail with `Unavailable`, 2% with `Internal`, 3% with `ResourceExhausted`, and 90%
+proceed. Each stage's probabilities must be finite, between 0 and 1, and sum to at most 1.
+Unsupported error names and invalid probabilities fail startup. Omitted configs and zero
+probabilities disable injection.
+
+Persistence and transport fault injection share probability validation and the seeded sampling
+engine. The same probability bounds and total apply independently to each configured persistence
+method.
+
+| Error name | gRPC error | HTTP status |
+| --- | --- | --- |
+| `Unavailable` | Unavailable | 503 Service Unavailable |
+| `Internal` | Internal | 500 Internal Server Error |
+| `ResourceExhausted` | ResourceExhausted (system overloaded, system scope) | 429 Too Many Requests |
+
+Request faults skip execution. Response faults apply after execution if the call returned no
+error, modeling an operation that executed but whose response was lost. Both stages can be
+configured; response faults are sampled only for calls that pass the request stage.
+Replaced HTTP response bodies are closed. HTTP error responses (status 400 and above) are preserved.
+Inbound HTTP responses are buffered when fault injection is enabled. A flush or connection
+hijack commits the response and prevents subsequent response faults; request faults still apply.
+A gRPC stream's response fault is sampled once on successful completion, so messages already
+delivered are unaffected. On the client, completion is EOF for server streams and receipt of the
+single response for client streams.
+
+Each configured direction samples independently. Enabling both inbound and outbound injection
+can compound failures on a call that crosses both hooks.
+
+Each stage accepts an optional `seed` alongside `errors`. A nonzero seed makes the sampling
+sequence repeatable; zero or an omitted seed uses the current time. Concurrent calls consume
+that sequence in scheduling order, and restarting the server resets it. Runtime test faults
+take precedence over configured faults. No endpoint or namespace filters are applied to
+configured faults.
+
 ### testhooks package
 
 The `testhooks` package injects test-specific behavior into production code paths that are otherwise

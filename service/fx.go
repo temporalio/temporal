@@ -16,8 +16,6 @@ import (
 	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/common/testing/grpcfaultstest"
-	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 )
@@ -53,7 +51,7 @@ type (
 		ContextMetadataInterceptor    *interceptor.ContextMetadataInterceptor `optional:"true"`
 		AdditionalInterceptors        []grpc.UnaryServerInterceptor           `optional:"true"`
 		AdditionalStreamInterceptors  []grpc.StreamServerInterceptor          `optional:"true"`
-		TestHooks                     testhooks.TestHooks
+		FaultGenerators               grpcfaults.Generators
 	}
 )
 
@@ -152,6 +150,9 @@ func GrpcServerOptionsProvider(
 	if len(params.AdditionalStreamInterceptors) > 0 {
 		streamInterceptors = append(streamInterceptors, params.AdditionalStreamInterceptors...)
 	}
+	if faultInterceptor := grpcfaults.StreamServerInterceptor(params.FaultGenerators.Inbound); faultInterceptor != nil {
+		streamInterceptors = append(streamInterceptors, faultInterceptor)
+	}
 
 	return append(
 		grpcServerOptions,
@@ -180,8 +181,7 @@ func getUnaryInterceptors(params GrpcServerOptionsParams) []grpc.UnaryServerInte
 		interceptors = append(interceptors, params.ContextMetadataInterceptor.Intercept)
 	}
 
-	faultGenerator := grpcfaultstest.NewGenerator(params.TestHooks)
-	if faultInterceptor := grpcfaults.UnaryServerInterceptor(faultGenerator); faultInterceptor != nil {
+	if faultInterceptor := grpcfaults.UnaryServerInterceptor(params.FaultGenerators.Inbound); faultInterceptor != nil {
 		interceptors = append(interceptors, faultInterceptor)
 	}
 

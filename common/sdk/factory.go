@@ -42,6 +42,7 @@ type (
 		systemSdkClient sdkclient.Client
 		stickyCacheSize dynamicconfig.IntPropertyFn
 		once            sync.Once
+		dialOptions     []grpc.DialOption
 
 		clientsLock sync.Mutex
 		closed      bool
@@ -58,6 +59,7 @@ func NewClientFactory(
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 	stickyCacheSize dynamicconfig.IntPropertyFn,
+	dialOptions ...grpc.DialOption,
 ) *clientFactory {
 	return &clientFactory{
 		hostPort:        hostPort,
@@ -66,6 +68,7 @@ func NewClientFactory(
 		logger:          logger,
 		sdklogger:       log.NewSdkLogger(logger),
 		stickyCacheSize: stickyCacheSize,
+		dialOptions:     dialOptions,
 	}
 }
 
@@ -74,10 +77,8 @@ func (f *clientFactory) options(options sdkclient.Options) sdkclient.Options {
 	options.MetricsHandler = f.metricsHandler
 	options.Logger = f.sdklogger
 	options.ConnectionOptions = sdkclient.ConnectionOptions{
-		TLS: f.tlsConfig,
-		DialOptions: []grpc.DialOption{
-			grpc.WithUnaryInterceptor(sdkClientNameHeadersInjectorInterceptor()),
-		},
+		TLS:         f.tlsConfig,
+		DialOptions: append([]grpc.DialOption{grpc.WithUnaryInterceptor(sdkClientNameHeadersInjectorInterceptor())}, f.dialOptions...),
 	}
 	return options
 }

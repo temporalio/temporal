@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"time"
 
@@ -42,10 +43,14 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/rpc/grpcfaults"
+	"go.temporal.io/server/common/rpc/httpfaults"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/grpcfaultstest"
+	"go.temporal.io/server/common/testing/httpfaultstest"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
@@ -99,6 +104,9 @@ var Module = fx.Options(
 	fx.Provide(FrontendClientProvider),
 	fx.Provide(AdminClientProvider),
 	fx.Provide(GrpcListenerProvider),
+	fx.Provide(GRPCFaultGeneratorsProvider),
+	fx.Provide(HTTPFaultGeneratorsProvider),
+	fx.Provide(HTTPTransportWrapperProvider),
 	fx.Provide(RuntimeMetricsReporterProvider),
 	metrics.RuntimeMetricsReporterLifetimeHooksModule,
 	fx.Provide(HistoryRawClientProvider),
@@ -142,6 +150,23 @@ func ThrottledLoggerProvider(
 
 func GrpcListenerProvider(factory common.RPCFactory) net.Listener {
 	return factory.GetGRPCListener()
+}
+
+func GRPCFaultGeneratorsProvider(cfg *config.Config, hooks testhooks.TestHooks) (grpcfaults.Generators, error) {
+	return grpcfaults.NewConfiguredGenerators(cfg.FaultInjection.GRPC, grpcfaults.Generators{Inbound: grpcfaultstest.NewGenerator(hooks)})
+}
+
+func HTTPFaultGeneratorsProvider(cfg *config.Config, hooks testhooks.TestHooks) (httpfaults.Generators, error) {
+	return httpfaults.NewConfiguredGenerators(cfg.FaultInjection.HTTP, httpfaults.Generators{Outbound: httpfaultstest.NewGenerator(hooks)})
+}
+
+func HTTPTransportWrapperProvider(instrumenter telemetry.HTTPClientTransportInstrumenter, generators httpfaults.Generators) httpfaults.TransportWrapper {
+	if instrumenter == nil && generators.Outbound == nil {
+		return nil
+	}
+	return func(transport http.RoundTripper) http.RoundTripper {
+		return httpfaults.WrapTransport(generators.Outbound, instrumenter.Instrument(transport))
+	}
 }
 
 func HostNameProvider() (HostName, error) {
@@ -392,6 +417,7 @@ func SdkClientFactoryProvider(
 	logger log.SnTaggedLogger,
 	resolver *membership.GRPCResolver,
 	dc *dynamicconfig.Collection,
+	faultGenerators grpcfaults.Generators,
 ) (sdk.ClientFactory, error) {
 	frontendURL, _, _, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
@@ -403,6 +429,7 @@ func SdkClientFactoryProvider(
 		metricsHandler,
 		logger,
 		dynamicconfig.WorkerStickyCacheSize.Get(dc),
+		grpcfaults.ClientDialOptions(faultGenerators.Outbound)...,
 	)
 	lc.Append(fx.StopHook(factory.Close))
 	return factory, nil
@@ -436,14 +463,15 @@ func RPCFactoryProvider(
 	monitor membership.Monitor,
 	dc *dynamicconfig.Collection,
 	tokenProvider auth.TokenProvider,
-	frontendHTTPTransportInstrumenter telemetry.HTTPClientTransportInstrumenter,
+	frontendHTTPTransportWrapper httpfaults.TransportWrapper,
+	faultGenerators grpcfaults.Generators,
 ) (common.RPCFactory, error) {
 	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
 		return nil, err
 	}
 
-	var options []grpc.DialOption
+	options := grpcfaults.ClientDialOptions(faultGenerators.Outbound)
 	if tracingStatsHandler != nil {
 		options = append(options, grpc.WithStatsHandler(tracingStatsHandler))
 	}
@@ -459,7 +487,7 @@ func RPCFactoryProvider(
 		frontendHTTPURL,
 		frontendHTTPPort,
 		frontendTLSConfig,
-		frontendHTTPTransportInstrumenter,
+		frontendHTTPTransportWrapper,
 		options,
 		perServiceDialOptions,
 		monitor,
@@ -475,8 +503,9 @@ func RPCFactoryProvider(
 func FrontendHTTPClientCacheProvider(
 	metadata cluster.Metadata,
 	tlsConfigProvider encryption.TLSConfigProvider,
+	transportWrapper httpfaults.TransportWrapper,
 ) *cluster.FrontendHTTPClientCache {
-	return cluster.NewFrontendHTTPClientCache(metadata, tlsConfigProvider)
+	return cluster.NewFrontendHTTPClientCache(metadata, tlsConfigProvider, transportWrapper)
 }
 
 func getFrontendConnectionDetails(
