@@ -11,7 +11,7 @@ on:
     paths:
       - "testx/**"
   schedule:
-    # Runs at 0800 UTC daily, to retry a failed or stuck bump.
+    # Runs at 0800 UTC (night in the US) daily, to retry a failed or stuck bump and check the pin.
     - cron: "0 8 * * *"
   workflow_dispatch: # Allow manual trigger
 
@@ -110,10 +110,11 @@ jobs:
           PR_URL: ${{ steps.create-pr.outputs.pr_url }}
         run: gh pr merge "${PR_URL}" --auto --squash
 
-  # Fails if the testx version required on main has been behind testx/ for more than a day, e.g.
-  # because the bump failed or its PR got stuck. Builds in this repo don't notice, since they use
-  # the replace.
+  # Fails if the testx version required on main doesn't match testx/, e.g. because the bump failed
+  # or its PR got stuck. Builds in this repo don't notice, since they use the replace.
+  # Runs nightly (US time), when the bump for the day's testx changes should have landed.
   check-pin:
+    if: github.event_name != 'push'
     runs-on: ubuntu-latest
 
     steps:
@@ -144,7 +145,8 @@ jobs:
           fi
           oldest=$(git log --format=%ct "${range}" -- testx/ | tail -1)
           age=$(( $(date +%s) - oldest ))
-          if [ "${age}" -gt 86400 ]; then
+          # Leave time for a bump PR from a late testx change to finish CI.
+          if [ "${age}" -gt 10800 ]; then
             echo "::error file=go.mod::Required testx version doesn't match testx/."
             exit 1
           fi
