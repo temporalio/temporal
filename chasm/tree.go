@@ -466,7 +466,7 @@ func (n *Node) Component(
 	}
 
 	// The root is identified by the execution key and archetype alone; see refComponentInitialVT.
-	if len(ref.componentPath) != 0 && ref.componentInitialVT != nil && transitionhistory.Compare(
+	if !isRootPath(ref.componentPath) && ref.componentInitialVT != nil && transitionhistory.Compare(
 		ref.componentInitialVT,
 		node.serializedNode.Metadata.InitialVersionedTransition,
 	) != 0 {

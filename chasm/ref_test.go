@@ -209,7 +209,7 @@ func (s *componentRefSuite) TestForConsistencyLevel() {
 				ref.archetypeID = tc.archetypeID
 			}
 			if tc.rootPath {
-				ref.componentPath = []string{}
+				ref.componentPath = rootPath
 			}
 			adjusted, err := ref.forConsistencyLevel(tc.level)
 			if tc.wantErr != nil {
