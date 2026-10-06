@@ -312,7 +312,7 @@ func newAdminWorkerDeploymentCommands(clientFactory ClientFactory) []*cli.Comman
 	return []*cli.Command{
 		{
 			Name:  "describe",
-			Usage: "Print the worker deployment workflow's state as JSON, followed by its version count",
+			Usage: "Print the worker deployment workflow's state as of the start of its current (or given) run as JSON, followed by its version count",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:     FlagDeploymentName,
