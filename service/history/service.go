@@ -39,6 +39,7 @@ type (
 		// membershipJoinCancel interrupts the (possibly delayed) membership join started in Start.
 		// membershipJoinDone is closed once that join attempt has either completed or been abandoned,
 		// after which membershipJoined is safe to read.
+		membershipJoinCtx    context.Context
 		membershipJoinCancel context.CancelFunc
 		membershipJoinDone   chan struct{}
 		membershipJoined     bool
@@ -57,6 +58,7 @@ func NewService(
 	healthServer *health.Server,
 	chasmRegistry *chasm.Registry,
 ) *Service {
+	membershipJoinCtx, membershipJoinCancel := context.WithCancel(context.Background())
 	return &Service{
 		server:            server,
 		handler:           handler,
@@ -68,6 +70,10 @@ func NewService(
 		metricsHandler:    metricsHandler,
 		healthServer:      healthServer,
 		chasmRegistry:     chasmRegistry,
+
+		membershipJoinCtx:    membershipJoinCtx,
+		membershipJoinCancel: membershipJoinCancel,
+		membershipJoinDone:   make(chan struct{}),
 	}
 }
 
@@ -109,9 +115,6 @@ func (s *Service) Start() {
 	// so we should try to start this after starting the gRPC server.
 	// Stop synchronizes with this goroutine so that we never join membership after Stop has
 	// evicted us (which would leave a dead host in the ring after the process exits).
-	membershipJoinCtx, membershipJoinCancel := context.WithCancel(context.Background())
-	s.membershipJoinCancel = membershipJoinCancel
-	s.membershipJoinDone = make(chan struct{})
 	go func() {
 		defer close(s.membershipJoinDone)
 		if delay := s.config.StartupMembershipJoinDelay(); delay > 0 {
@@ -120,7 +123,7 @@ func (s *Service) Start() {
 			// caused by another history instance terminating with this instance starting.
 			s.logger.Info("history start: delaying before membership start",
 				tag.Duration("startupMembershipJoinDelay", delay))
-			if util.InterruptibleSleep(membershipJoinCtx, delay) != nil {
+			if util.InterruptibleSleep(s.membershipJoinCtx, delay) != nil {
 				s.logger.Info("history start: stopped during membership join delay, not joining membership")
 				return
 			}

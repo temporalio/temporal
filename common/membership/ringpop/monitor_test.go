@@ -1,6 +1,7 @@
 package ringpop
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/util"
 	expmaps "golang.org/x/exp/maps"
 )
@@ -30,7 +32,7 @@ func (s *RpoSuite) SetupTest() {
 
 func (s *RpoSuite) TestMonitor() {
 	serviceName := primitives.HistoryService
-	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1", nil, true)
+	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1", nil, nil, true)
 	s.NotNil(testService, "Failed to create test service")
 
 	rpm := testService.rings[0]
@@ -119,7 +121,7 @@ func (s *RpoSuite) TestScheduledUpdates() {
 		time.Time{},
 		start.Add(4 * time.Second),
 	}
-	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1", joinTimes, false)
+	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1", joinTimes, nil, false)
 	s.NotNil(testService, "Failed to create test service")
 
 	observer := rand.Intn(3)
@@ -162,6 +164,38 @@ func (s *RpoSuite) TestScheduledUpdates() {
 	s.Greater(time.Since(start), 3*time.Second)
 
 	testService.Stop()
+}
+
+func (s *RpoSuite) TestEvictBeforeStart() {
+	serviceName := primitives.HistoryService
+	// Host 2 is evicted (e.g. its process began shutting down) before its membership monitor started.
+	evictBeforeStart := []bool{false, false, true}
+	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1", nil, evictBeforeStart, false)
+	s.NotNil(testService, "Failed to create test service")
+	defer testService.Stop()
+
+	r, err := testService.rings[0].GetResolver(serviceName)
+	s.NoError(err)
+
+	await.RequireTrue(s.T(), func() bool {
+		return len(r.Members()) == 2
+	}, 10*time.Second, 100*time.Millisecond)
+	// We're asserting that host 2 never shows up, so there's no condition to wait for. Give its
+	// labels time to propagate if it (incorrectly) joined.
+	time.Sleep(2 * time.Second) //nolint:forbidigo
+	addrs := util.MapSlice(r.Members(), func(h membership.HostInfo) string { return h.GetAddress() })
+	s.ElementsMatch([]string{testService.hostAddrs[0], testService.hostAddrs[1]}, addrs)
+
+	// The evicted monitor never finishes initializing.
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	s.ErrorIs(testService.rings[2].WaitUntilInitialized(ctx), context.DeadlineExceeded)
+
+	// Evicting again is still a no-op success.
+	s.NoError(testService.rings[2].EvictSelf())
+	waitTime, err := testService.rings[2].EvictSelfAt(time.Now().Add(5 * time.Second))
+	s.NoError(err)
+	s.Zero(waitTime)
 }
 
 func (s *RpoSuite) TestCompareMembers() {

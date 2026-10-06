@@ -39,6 +39,7 @@ func newTestCluster(
 	serviceName primitives.ServiceName,
 	broadcastAddress string,
 	joinTimes []time.Time,
+	evictBeforeStart []bool,
 	testInitialBootstrapFailure bool,
 ) *testCluster {
 	logger := log.NewTestLogger()
@@ -154,6 +155,10 @@ func newTestCluster(
 			joinTime,
 			100,
 		)
+		if i < len(evictBeforeStart) && evictBeforeStart[i] {
+			// Tests assert on the outcome (membership), not the error.
+			_ = cluster.rings[i].EvictSelf()
+		}
 		cluster.rings[i].Start()
 	}
 	return cluster
