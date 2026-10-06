@@ -27,27 +27,53 @@ var File_temporal_server_chasm_lib_tquserdata_proto_v1_service_proto protoreflec
 
 const file_temporal_server_chasm_lib_tquserdata_proto_v1_service_proto_rawDesc = "" +
 	"\n" +
-	";temporal/server/chasm/lib/tquserdata/proto/v1/service.proto\x12-temporal.server.chasm.lib.tquserdata.proto.v1\x1aDtemporal/server/chasm/lib/tquserdata/proto/v1/request_response.proto\x1a0temporal/server/api/common/v1/api_category.proto\x1a.temporal/server/api/routing/v1/extension.proto2\xb9\x03\n" +
-	"\x18TaskQueueUserDataService\x12\xc8\x01\n" +
-	"\x14GetTaskQueueUserData\x12J.temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataRequest\x1aK.temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataResponse\"\x17\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\r\x1a\vbusiness_id\x12\xd1\x01\n" +
-	"\x17UpsertTaskQueueUserData\x12M.temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataRequest\x1aN.temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataResponse\"\x17\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\r\x1a\vbusiness_idBJZHgo.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapbb\x06proto3"
+	";temporal/server/chasm/lib/tquserdata/proto/v1/service.proto\x12-temporal.server.chasm.lib.tquserdata.proto.v1\x1aDtemporal/server/chasm/lib/tquserdata/proto/v1/request_response.proto\x1a0temporal/server/api/common/v1/api_category.proto\x1a.temporal/server/api/routing/v1/extension.proto2\x95\n" +
+	"\n" +
+	"\x18TaskQueueUserDataService\x12\xc7\x01\n" +
+	"\x14GetTaskQueueUserData\x12J.temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataRequest\x1aK.temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataResponse\"\x16\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\f\x1a\n" +
+	"task_queue\x12\xcd\x01\n" +
+	"\x16SyncDeploymentUserData\x12L.temporal.server.chasm.lib.tquserdata.proto.v1.SyncDeploymentUserDataRequest\x1aM.temporal.server.chasm.lib.tquserdata.proto.v1.SyncDeploymentUserDataResponse\"\x16\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\f\x1a\n" +
+	"task_queue\x12\xe2\x01\n" +
+	"\x15UpdateTaskQueueConfig\x12K.temporal.server.chasm.lib.tquserdata.proto.v1.UpdateTaskQueueConfigRequest\x1aL.temporal.server.chasm.lib.tquserdata.proto.v1.UpdateTaskQueueConfigResponse\".\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18$\x1a\"update_taskqueue_config.task_queue\x12\xc4\x01\n" +
+	"\x13UpdateFairnessState\x12I.temporal.server.chasm.lib.tquserdata.proto.v1.UpdateFairnessStateRequest\x1aJ.temporal.server.chasm.lib.tquserdata.proto.v1.UpdateFairnessStateResponse\"\x16\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\f\x1a\n" +
+	"task_queue\x12\xdf\x01\n" +
+	"\x1cGetTaskQueueUserDataSnapshot\x12R.temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataSnapshotRequest\x1aS.temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataSnapshotResponse\"\x16\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\f\x1a\n" +
+	"task_queue\x12\xd0\x01\n" +
+	"\x17UpsertTaskQueueUserData\x12M.temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataRequest\x1aN.temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataResponse\"\x16\x8a\xb5\x18\x02\b\x01\xd2\xc3\x18\f\x1a\n" +
+	"task_queueBJZHgo.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapbb\x06proto3"
 
 var file_temporal_server_chasm_lib_tquserdata_proto_v1_service_proto_goTypes = []any{
-	(*GetTaskQueueUserDataRequest)(nil),     // 0: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataRequest
-	(*UpsertTaskQueueUserDataRequest)(nil),  // 1: temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataRequest
-	(*GetTaskQueueUserDataResponse)(nil),    // 2: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataResponse
-	(*UpsertTaskQueueUserDataResponse)(nil), // 3: temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataResponse
+	(*GetTaskQueueUserDataRequest)(nil),          // 0: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataRequest
+	(*SyncDeploymentUserDataRequest)(nil),        // 1: temporal.server.chasm.lib.tquserdata.proto.v1.SyncDeploymentUserDataRequest
+	(*UpdateTaskQueueConfigRequest)(nil),         // 2: temporal.server.chasm.lib.tquserdata.proto.v1.UpdateTaskQueueConfigRequest
+	(*UpdateFairnessStateRequest)(nil),           // 3: temporal.server.chasm.lib.tquserdata.proto.v1.UpdateFairnessStateRequest
+	(*GetTaskQueueUserDataSnapshotRequest)(nil),  // 4: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataSnapshotRequest
+	(*UpsertTaskQueueUserDataRequest)(nil),       // 5: temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataRequest
+	(*GetTaskQueueUserDataResponse)(nil),         // 6: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataResponse
+	(*SyncDeploymentUserDataResponse)(nil),       // 7: temporal.server.chasm.lib.tquserdata.proto.v1.SyncDeploymentUserDataResponse
+	(*UpdateTaskQueueConfigResponse)(nil),        // 8: temporal.server.chasm.lib.tquserdata.proto.v1.UpdateTaskQueueConfigResponse
+	(*UpdateFairnessStateResponse)(nil),          // 9: temporal.server.chasm.lib.tquserdata.proto.v1.UpdateFairnessStateResponse
+	(*GetTaskQueueUserDataSnapshotResponse)(nil), // 10: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataSnapshotResponse
+	(*UpsertTaskQueueUserDataResponse)(nil),      // 11: temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataResponse
 }
 var file_temporal_server_chasm_lib_tquserdata_proto_v1_service_proto_depIdxs = []int32{
-	0, // 0: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService.GetTaskQueueUserData:input_type -> temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataRequest
-	1, // 1: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService.UpsertTaskQueueUserData:input_type -> temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataRequest
-	2, // 2: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService.GetTaskQueueUserData:output_type -> temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataResponse
-	3, // 3: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService.UpsertTaskQueueUserData:output_type -> temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataResponse
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	0,  // 0: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService.GetTaskQueueUserData:input_type -> temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataRequest
+	1,  // 1: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService.SyncDeploymentUserData:input_type -> temporal.server.chasm.lib.tquserdata.proto.v1.SyncDeploymentUserDataRequest
+	2,  // 2: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService.UpdateTaskQueueConfig:input_type -> temporal.server.chasm.lib.tquserdata.proto.v1.UpdateTaskQueueConfigRequest
+	3,  // 3: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService.UpdateFairnessState:input_type -> temporal.server.chasm.lib.tquserdata.proto.v1.UpdateFairnessStateRequest
+	4,  // 4: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService.GetTaskQueueUserDataSnapshot:input_type -> temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataSnapshotRequest
+	5,  // 5: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService.UpsertTaskQueueUserData:input_type -> temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataRequest
+	6,  // 6: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService.GetTaskQueueUserData:output_type -> temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataResponse
+	7,  // 7: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService.SyncDeploymentUserData:output_type -> temporal.server.chasm.lib.tquserdata.proto.v1.SyncDeploymentUserDataResponse
+	8,  // 8: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService.UpdateTaskQueueConfig:output_type -> temporal.server.chasm.lib.tquserdata.proto.v1.UpdateTaskQueueConfigResponse
+	9,  // 9: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService.UpdateFairnessState:output_type -> temporal.server.chasm.lib.tquserdata.proto.v1.UpdateFairnessStateResponse
+	10, // 10: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService.GetTaskQueueUserDataSnapshot:output_type -> temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataSnapshotResponse
+	11, // 11: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService.UpsertTaskQueueUserData:output_type -> temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataResponse
+	6,  // [6:12] is the sub-list for method output_type
+	0,  // [0:6] is the sub-list for method input_type
+	0,  // [0:0] is the sub-list for extension type_name
+	0,  // [0:0] is the sub-list for extension extendee
+	0,  // [0:0] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_tquserdata_proto_v1_service_proto_init() }

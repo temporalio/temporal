@@ -20,8 +20,12 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	TaskQueueUserDataService_GetTaskQueueUserData_FullMethodName    = "/temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService/GetTaskQueueUserData"
-	TaskQueueUserDataService_UpsertTaskQueueUserData_FullMethodName = "/temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService/UpsertTaskQueueUserData"
+	TaskQueueUserDataService_GetTaskQueueUserData_FullMethodName         = "/temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService/GetTaskQueueUserData"
+	TaskQueueUserDataService_SyncDeploymentUserData_FullMethodName       = "/temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService/SyncDeploymentUserData"
+	TaskQueueUserDataService_UpdateTaskQueueConfig_FullMethodName        = "/temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService/UpdateTaskQueueConfig"
+	TaskQueueUserDataService_UpdateFairnessState_FullMethodName          = "/temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService/UpdateFairnessState"
+	TaskQueueUserDataService_GetTaskQueueUserDataSnapshot_FullMethodName = "/temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService/GetTaskQueueUserDataSnapshot"
+	TaskQueueUserDataService_UpsertTaskQueueUserData_FullMethodName      = "/temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataService/UpsertTaskQueueUserData"
 )
 
 // TaskQueueUserDataServiceClient is the client API for TaskQueueUserDataService service.
@@ -29,6 +33,10 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type TaskQueueUserDataServiceClient interface {
 	GetTaskQueueUserData(ctx context.Context, in *GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*GetTaskQueueUserDataResponse, error)
+	SyncDeploymentUserData(ctx context.Context, in *SyncDeploymentUserDataRequest, opts ...grpc.CallOption) (*SyncDeploymentUserDataResponse, error)
+	UpdateTaskQueueConfig(ctx context.Context, in *UpdateTaskQueueConfigRequest, opts ...grpc.CallOption) (*UpdateTaskQueueConfigResponse, error)
+	UpdateFairnessState(ctx context.Context, in *UpdateFairnessStateRequest, opts ...grpc.CallOption) (*UpdateFairnessStateResponse, error)
+	GetTaskQueueUserDataSnapshot(ctx context.Context, in *GetTaskQueueUserDataSnapshotRequest, opts ...grpc.CallOption) (*GetTaskQueueUserDataSnapshotResponse, error)
 	UpsertTaskQueueUserData(ctx context.Context, in *UpsertTaskQueueUserDataRequest, opts ...grpc.CallOption) (*UpsertTaskQueueUserDataResponse, error)
 }
 
@@ -49,6 +57,42 @@ func (c *taskQueueUserDataServiceClient) GetTaskQueueUserData(ctx context.Contex
 	return out, nil
 }
 
+func (c *taskQueueUserDataServiceClient) SyncDeploymentUserData(ctx context.Context, in *SyncDeploymentUserDataRequest, opts ...grpc.CallOption) (*SyncDeploymentUserDataResponse, error) {
+	out := new(SyncDeploymentUserDataResponse)
+	err := c.cc.Invoke(ctx, TaskQueueUserDataService_SyncDeploymentUserData_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *taskQueueUserDataServiceClient) UpdateTaskQueueConfig(ctx context.Context, in *UpdateTaskQueueConfigRequest, opts ...grpc.CallOption) (*UpdateTaskQueueConfigResponse, error) {
+	out := new(UpdateTaskQueueConfigResponse)
+	err := c.cc.Invoke(ctx, TaskQueueUserDataService_UpdateTaskQueueConfig_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *taskQueueUserDataServiceClient) UpdateFairnessState(ctx context.Context, in *UpdateFairnessStateRequest, opts ...grpc.CallOption) (*UpdateFairnessStateResponse, error) {
+	out := new(UpdateFairnessStateResponse)
+	err := c.cc.Invoke(ctx, TaskQueueUserDataService_UpdateFairnessState_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *taskQueueUserDataServiceClient) GetTaskQueueUserDataSnapshot(ctx context.Context, in *GetTaskQueueUserDataSnapshotRequest, opts ...grpc.CallOption) (*GetTaskQueueUserDataSnapshotResponse, error) {
+	out := new(GetTaskQueueUserDataSnapshotResponse)
+	err := c.cc.Invoke(ctx, TaskQueueUserDataService_GetTaskQueueUserDataSnapshot_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *taskQueueUserDataServiceClient) UpsertTaskQueueUserData(ctx context.Context, in *UpsertTaskQueueUserDataRequest, opts ...grpc.CallOption) (*UpsertTaskQueueUserDataResponse, error) {
 	out := new(UpsertTaskQueueUserDataResponse)
 	err := c.cc.Invoke(ctx, TaskQueueUserDataService_UpsertTaskQueueUserData_FullMethodName, in, out, opts...)
@@ -63,6 +107,10 @@ func (c *taskQueueUserDataServiceClient) UpsertTaskQueueUserData(ctx context.Con
 // for forward compatibility
 type TaskQueueUserDataServiceServer interface {
 	GetTaskQueueUserData(context.Context, *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error)
+	SyncDeploymentUserData(context.Context, *SyncDeploymentUserDataRequest) (*SyncDeploymentUserDataResponse, error)
+	UpdateTaskQueueConfig(context.Context, *UpdateTaskQueueConfigRequest) (*UpdateTaskQueueConfigResponse, error)
+	UpdateFairnessState(context.Context, *UpdateFairnessStateRequest) (*UpdateFairnessStateResponse, error)
+	GetTaskQueueUserDataSnapshot(context.Context, *GetTaskQueueUserDataSnapshotRequest) (*GetTaskQueueUserDataSnapshotResponse, error)
 	UpsertTaskQueueUserData(context.Context, *UpsertTaskQueueUserDataRequest) (*UpsertTaskQueueUserDataResponse, error)
 	mustEmbedUnimplementedTaskQueueUserDataServiceServer()
 }
@@ -73,6 +121,18 @@ type UnimplementedTaskQueueUserDataServiceServer struct {
 
 func (UnimplementedTaskQueueUserDataServiceServer) GetTaskQueueUserData(context.Context, *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetTaskQueueUserData not implemented")
+}
+func (UnimplementedTaskQueueUserDataServiceServer) SyncDeploymentUserData(context.Context, *SyncDeploymentUserDataRequest) (*SyncDeploymentUserDataResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method SyncDeploymentUserData not implemented")
+}
+func (UnimplementedTaskQueueUserDataServiceServer) UpdateTaskQueueConfig(context.Context, *UpdateTaskQueueConfigRequest) (*UpdateTaskQueueConfigResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateTaskQueueConfig not implemented")
+}
+func (UnimplementedTaskQueueUserDataServiceServer) UpdateFairnessState(context.Context, *UpdateFairnessStateRequest) (*UpdateFairnessStateResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateFairnessState not implemented")
+}
+func (UnimplementedTaskQueueUserDataServiceServer) GetTaskQueueUserDataSnapshot(context.Context, *GetTaskQueueUserDataSnapshotRequest) (*GetTaskQueueUserDataSnapshotResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetTaskQueueUserDataSnapshot not implemented")
 }
 func (UnimplementedTaskQueueUserDataServiceServer) UpsertTaskQueueUserData(context.Context, *UpsertTaskQueueUserDataRequest) (*UpsertTaskQueueUserDataResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method UpsertTaskQueueUserData not implemented")
@@ -109,6 +169,78 @@ func _TaskQueueUserDataService_GetTaskQueueUserData_Handler(srv interface{}, ctx
 	return interceptor(ctx, in, info, handler)
 }
 
+func _TaskQueueUserDataService_SyncDeploymentUserData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SyncDeploymentUserDataRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TaskQueueUserDataServiceServer).SyncDeploymentUserData(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TaskQueueUserDataService_SyncDeploymentUserData_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TaskQueueUserDataServiceServer).SyncDeploymentUserData(ctx, req.(*SyncDeploymentUserDataRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TaskQueueUserDataService_UpdateTaskQueueConfig_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateTaskQueueConfigRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TaskQueueUserDataServiceServer).UpdateTaskQueueConfig(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TaskQueueUserDataService_UpdateTaskQueueConfig_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TaskQueueUserDataServiceServer).UpdateTaskQueueConfig(ctx, req.(*UpdateTaskQueueConfigRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TaskQueueUserDataService_UpdateFairnessState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateFairnessStateRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TaskQueueUserDataServiceServer).UpdateFairnessState(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TaskQueueUserDataService_UpdateFairnessState_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TaskQueueUserDataServiceServer).UpdateFairnessState(ctx, req.(*UpdateFairnessStateRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _TaskQueueUserDataService_GetTaskQueueUserDataSnapshot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTaskQueueUserDataSnapshotRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TaskQueueUserDataServiceServer).GetTaskQueueUserDataSnapshot(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TaskQueueUserDataService_GetTaskQueueUserDataSnapshot_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TaskQueueUserDataServiceServer).GetTaskQueueUserDataSnapshot(ctx, req.(*GetTaskQueueUserDataSnapshotRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _TaskQueueUserDataService_UpsertTaskQueueUserData_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(UpsertTaskQueueUserDataRequest)
 	if err := dec(in); err != nil {
@@ -137,6 +269,22 @@ var TaskQueueUserDataService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetTaskQueueUserData",
 			Handler:    _TaskQueueUserDataService_GetTaskQueueUserData_Handler,
+		},
+		{
+			MethodName: "SyncDeploymentUserData",
+			Handler:    _TaskQueueUserDataService_SyncDeploymentUserData_Handler,
+		},
+		{
+			MethodName: "UpdateTaskQueueConfig",
+			Handler:    _TaskQueueUserDataService_UpdateTaskQueueConfig_Handler,
+		},
+		{
+			MethodName: "UpdateFairnessState",
+			Handler:    _TaskQueueUserDataService_UpdateFairnessState_Handler,
+		},
+		{
+			MethodName: "GetTaskQueueUserDataSnapshot",
+			Handler:    _TaskQueueUserDataService_GetTaskQueueUserDataSnapshot_Handler,
 		},
 		{
 			MethodName: "UpsertTaskQueueUserData",

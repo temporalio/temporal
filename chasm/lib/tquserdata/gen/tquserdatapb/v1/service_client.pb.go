@@ -87,7 +87,7 @@ func (c *TaskQueueUserDataServiceLayeredClient) callGetTaskQueueUserDataNoRetry(
 		}
 		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 	}()
-	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetBusinessId(), c.numShards)
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetTaskQueue(), c.numShards)
 	op := func(ctx context.Context, client TaskQueueUserDataServiceClient) error {
 		var err error
 		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
@@ -105,6 +105,178 @@ func (c *TaskQueueUserDataServiceLayeredClient) GetTaskQueueUserData(
 ) (*GetTaskQueueUserDataResponse, error) {
 	call := func(ctx context.Context) (*GetTaskQueueUserDataResponse, error) {
 		return c.callGetTaskQueueUserDataNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}
+func (c *TaskQueueUserDataServiceLayeredClient) callSyncDeploymentUserDataNoRetry(
+	ctx context.Context,
+	request *SyncDeploymentUserDataRequest,
+	opts ...grpc.CallOption,
+) (*SyncDeploymentUserDataResponse, error) {
+	var response *SyncDeploymentUserDataResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("TaskQueueUserDataService.SyncDeploymentUserData"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetTaskQueue(), c.numShards)
+	op := func(ctx context.Context, client TaskQueueUserDataServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.SyncDeploymentUserData(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *TaskQueueUserDataServiceLayeredClient) SyncDeploymentUserData(
+	ctx context.Context,
+	request *SyncDeploymentUserDataRequest,
+	opts ...grpc.CallOption,
+) (*SyncDeploymentUserDataResponse, error) {
+	call := func(ctx context.Context) (*SyncDeploymentUserDataResponse, error) {
+		return c.callSyncDeploymentUserDataNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}
+func (c *TaskQueueUserDataServiceLayeredClient) callUpdateTaskQueueConfigNoRetry(
+	ctx context.Context,
+	request *UpdateTaskQueueConfigRequest,
+	opts ...grpc.CallOption,
+) (*UpdateTaskQueueConfigResponse, error) {
+	var response *UpdateTaskQueueConfigResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("TaskQueueUserDataService.UpdateTaskQueueConfig"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetUpdateTaskqueueConfig().GetTaskQueue(), c.numShards)
+	op := func(ctx context.Context, client TaskQueueUserDataServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.UpdateTaskQueueConfig(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *TaskQueueUserDataServiceLayeredClient) UpdateTaskQueueConfig(
+	ctx context.Context,
+	request *UpdateTaskQueueConfigRequest,
+	opts ...grpc.CallOption,
+) (*UpdateTaskQueueConfigResponse, error) {
+	call := func(ctx context.Context) (*UpdateTaskQueueConfigResponse, error) {
+		return c.callUpdateTaskQueueConfigNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}
+func (c *TaskQueueUserDataServiceLayeredClient) callUpdateFairnessStateNoRetry(
+	ctx context.Context,
+	request *UpdateFairnessStateRequest,
+	opts ...grpc.CallOption,
+) (*UpdateFairnessStateResponse, error) {
+	var response *UpdateFairnessStateResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("TaskQueueUserDataService.UpdateFairnessState"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetTaskQueue(), c.numShards)
+	op := func(ctx context.Context, client TaskQueueUserDataServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.UpdateFairnessState(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *TaskQueueUserDataServiceLayeredClient) UpdateFairnessState(
+	ctx context.Context,
+	request *UpdateFairnessStateRequest,
+	opts ...grpc.CallOption,
+) (*UpdateFairnessStateResponse, error) {
+	call := func(ctx context.Context) (*UpdateFairnessStateResponse, error) {
+		return c.callUpdateFairnessStateNoRetry(ctx, request, opts...)
+	}
+	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
+}
+func (c *TaskQueueUserDataServiceLayeredClient) callGetTaskQueueUserDataSnapshotNoRetry(
+	ctx context.Context,
+	request *GetTaskQueueUserDataSnapshotRequest,
+	opts ...grpc.CallOption,
+) (*GetTaskQueueUserDataSnapshotResponse, error) {
+	var response *GetTaskQueueUserDataSnapshotResponse
+	var err error
+	startTime := time.Now().UTC()
+	// the caller is a namespace, hence the tag below.
+	caller := headers.GetCallerInfo(ctx).CallerName
+	metricsHandler := c.metricsHandler.WithTags(
+		metrics.OperationTag("TaskQueueUserDataService.GetTaskQueueUserDataSnapshot"),
+		metrics.NamespaceTag(caller),
+		metrics.ServiceRoleTag(metrics.HistoryRoleTagValue),
+	)
+	metrics.ClientRequests.With(metricsHandler).Record(1)
+	defer func() {
+		if err != nil {
+			metrics.ClientFailures.With(metricsHandler).Record(1, metrics.ServiceErrorTypeTag(err))
+		}
+		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
+	}()
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetTaskQueue(), c.numShards)
+	op := func(ctx context.Context, client TaskQueueUserDataServiceClient) error {
+		var err error
+		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)
+		defer cancel()
+		response, err = client.GetTaskQueueUserDataSnapshot(ctx, request, opts...)
+		return err
+	}
+	err = c.redirector.Execute(ctx, shardID, op)
+	return response, err
+}
+func (c *TaskQueueUserDataServiceLayeredClient) GetTaskQueueUserDataSnapshot(
+	ctx context.Context,
+	request *GetTaskQueueUserDataSnapshotRequest,
+	opts ...grpc.CallOption,
+) (*GetTaskQueueUserDataSnapshotResponse, error) {
+	call := func(ctx context.Context) (*GetTaskQueueUserDataSnapshotResponse, error) {
+		return c.callGetTaskQueueUserDataSnapshotNoRetry(ctx, request, opts...)
 	}
 	return backoff.ThrottleRetryContextWithReturn(ctx, call, c.retryPolicy, common.IsServiceClientTransientError)
 }
@@ -130,7 +302,7 @@ func (c *TaskQueueUserDataServiceLayeredClient) callUpsertTaskQueueUserDataNoRet
 		}
 		metrics.ClientLatency.With(metricsHandler).Record(time.Since(startTime))
 	}()
-	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetBusinessId(), c.numShards)
+	shardID := common.WorkflowIDToHistoryShard(request.GetNamespaceId(), request.GetTaskQueue(), c.numShards)
 	op := func(ctx context.Context, client TaskQueueUserDataServiceClient) error {
 		var err error
 		ctx, cancel := context.WithTimeout(ctx, history.DefaultTimeout)

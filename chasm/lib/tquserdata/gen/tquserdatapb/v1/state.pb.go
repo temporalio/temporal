@@ -24,8 +24,7 @@ const (
 
 type UserDataState struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Closed        bool                   `protobuf:"varint,2,opt,name=closed,proto3" json:"closed,omitempty"`
-	Version       int64                  `protobuf:"varint,3,opt,name=version,proto3" json:"version,omitempty"`
+	Version       int64                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -60,13 +59,6 @@ func (*UserDataState) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_tquserdata_proto_v1_state_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *UserDataState) GetClosed() bool {
-	if x != nil {
-		return x.Closed
-	}
-	return false
-}
-
 func (x *UserDataState) GetVersion() int64 {
 	if x != nil {
 		return x.Version
@@ -78,10 +70,9 @@ var File_temporal_server_chasm_lib_tquserdata_proto_v1_state_proto protoreflect.
 
 const file_temporal_server_chasm_lib_tquserdata_proto_v1_state_proto_rawDesc = "" +
 	"\n" +
-	"9temporal/server/chasm/lib/tquserdata/proto/v1/state.proto\x12-temporal.server.chasm.lib.tquserdata.proto.v1\"A\n" +
-	"\rUserDataState\x12\x16\n" +
-	"\x06closed\x18\x02 \x01(\bR\x06closed\x12\x18\n" +
-	"\aversion\x18\x03 \x01(\x03R\aversionBJZHgo.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapbb\x06proto3"
+	"9temporal/server/chasm/lib/tquserdata/proto/v1/state.proto\x12-temporal.server.chasm.lib.tquserdata.proto.v1\")\n" +
+	"\rUserDataState\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\x03R\aversionBJZHgo.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_tquserdata_proto_v1_state_proto_rawDescOnce sync.Once

@@ -11,7 +11,13 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
-	v1 "go.temporal.io/server/api/persistence/v1"
+	v12 "go.temporal.io/api/deployment/v1"
+	v1 "go.temporal.io/api/enums/v1"
+	v15 "go.temporal.io/api/taskqueue/v1"
+	v14 "go.temporal.io/api/workflowservice/v1"
+	v13 "go.temporal.io/server/api/deployment/v1"
+	v16 "go.temporal.io/server/api/enums/v1"
+	v11 "go.temporal.io/server/api/taskqueue/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
@@ -27,8 +33,7 @@ type UpsertTaskQueueUserDataRequest struct {
 	state       protoimpl.MessageState `protogen:"open.v1"`
 	NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	TaskQueue   string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	UserData    *v1.TaskQueueUserData  `protobuf:"bytes,3,opt,name=user_data,json=userData,proto3" json:"user_data,omitempty"`
-	BusinessId  string                 `protobuf:"bytes,5,opt,name=business_id,json=businessId,proto3" json:"business_id,omitempty"`
+	UserData    *TaskQueueUserData     `protobuf:"bytes,3,opt,name=user_data,json=userData,proto3" json:"user_data,omitempty"`
 	// Types that are valid to be assigned to Precondition:
 	//
 	//	*UpsertTaskQueueUserDataRequest_ExpectMissing
@@ -82,18 +87,11 @@ func (x *UpsertTaskQueueUserDataRequest) GetTaskQueue() string {
 	return ""
 }
 
-func (x *UpsertTaskQueueUserDataRequest) GetUserData() *v1.TaskQueueUserData {
+func (x *UpsertTaskQueueUserDataRequest) GetUserData() *TaskQueueUserData {
 	if x != nil {
 		return x.UserData
 	}
 	return nil
-}
-
-func (x *UpsertTaskQueueUserDataRequest) GetBusinessId() string {
-	if x != nil {
-		return x.BusinessId
-	}
-	return ""
 }
 
 func (x *UpsertTaskQueueUserDataRequest) GetPrecondition() isUpsertTaskQueueUserDataRequest_Precondition {
@@ -126,11 +124,11 @@ type isUpsertTaskQueueUserDataRequest_Precondition interface {
 }
 
 type UpsertTaskQueueUserDataRequest_ExpectMissing struct {
-	ExpectMissing bool `protobuf:"varint,6,opt,name=expect_missing,json=expectMissing,proto3,oneof"`
+	ExpectMissing bool `protobuf:"varint,4,opt,name=expect_missing,json=expectMissing,proto3,oneof"`
 }
 
 type UpsertTaskQueueUserDataRequest_ExpectedVersion struct {
-	ExpectedVersion int64 `protobuf:"varint,8,opt,name=expected_version,json=expectedVersion,proto3,oneof"`
+	ExpectedVersion int64 `protobuf:"varint,5,opt,name=expected_version,json=expectedVersion,proto3,oneof"`
 }
 
 func (*UpsertTaskQueueUserDataRequest_ExpectMissing) isUpsertTaskQueueUserDataRequest_Precondition() {
@@ -183,18 +181,133 @@ func (x *UpsertTaskQueueUserDataResponse) GetVersion() int64 {
 	return 0
 }
 
-type GetTaskQueueUserDataRequest struct {
+type GetTaskQueueUserDataSnapshotRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	NamespaceId   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	TaskQueue     string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	BusinessId    string                 `protobuf:"bytes,3,opt,name=business_id,json=businessId,proto3" json:"business_id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetTaskQueueUserDataSnapshotRequest) Reset() {
+	*x = GetTaskQueueUserDataSnapshotRequest{}
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetTaskQueueUserDataSnapshotRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTaskQueueUserDataSnapshotRequest) ProtoMessage() {}
+
+func (x *GetTaskQueueUserDataSnapshotRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTaskQueueUserDataSnapshotRequest.ProtoReflect.Descriptor instead.
+func (*GetTaskQueueUserDataSnapshotRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *GetTaskQueueUserDataSnapshotRequest) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
+}
+
+func (x *GetTaskQueueUserDataSnapshotRequest) GetTaskQueue() string {
+	if x != nil {
+		return x.TaskQueue
+	}
+	return ""
+}
+
+type GetTaskQueueUserDataSnapshotResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UserData      *TaskQueueUserData     `protobuf:"bytes,1,opt,name=user_data,json=userData,proto3" json:"user_data,omitempty"`
+	Version       int64                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetTaskQueueUserDataSnapshotResponse) Reset() {
+	*x = GetTaskQueueUserDataSnapshotResponse{}
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetTaskQueueUserDataSnapshotResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetTaskQueueUserDataSnapshotResponse) ProtoMessage() {}
+
+func (x *GetTaskQueueUserDataSnapshotResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetTaskQueueUserDataSnapshotResponse.ProtoReflect.Descriptor instead.
+func (*GetTaskQueueUserDataSnapshotResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *GetTaskQueueUserDataSnapshotResponse) GetUserData() *TaskQueueUserData {
+	if x != nil {
+		return x.UserData
+	}
+	return nil
+}
+
+func (x *GetTaskQueueUserDataSnapshotResponse) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
+}
+
+type GetTaskQueueUserDataRequest struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	// The task queue to fetch data from. The task queue is always considered as a normal
+	// queue, since sticky queues have no user data.
+	TaskQueue     string           `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	TaskQueueType v1.TaskQueueType `protobuf:"varint,3,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
+	// Zero means the requester has no cached user data. Must not be negative.
+	LastKnownUserDataVersion int64 `protobuf:"varint,4,opt,name=last_known_user_data_version,json=lastKnownUserDataVersion,proto3" json:"last_known_user_data_version,omitempty"`
+	// Zero means no cached ephemeral data; -1 excludes ephemeral data from the response.
+	LastKnownEphemeralDataVersion int64 `protobuf:"varint,5,opt,name=last_known_ephemeral_data_version,json=lastKnownEphemeralDataVersion,proto3" json:"last_known_ephemeral_data_version,omitempty"`
+	// If set and last_known_{user_data,ephemeral_data}_version is the current version,
+	// block until new data is available (or timeout).
+	WaitNewData bool `protobuf:"varint,6,opt,name=wait_new_data,json=waitNewData,proto3" json:"wait_new_data,omitempty"`
+	// If set, do not load task queue if unloaded. (Returns FailedPrecondition error in that case.)
+	OnlyIfLoaded  bool `protobuf:"varint,7,opt,name=only_if_loaded,json=onlyIfLoaded,proto3" json:"only_if_loaded,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetTaskQueueUserDataRequest) Reset() {
 	*x = GetTaskQueueUserDataRequest{}
-	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[2]
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -206,7 +319,7 @@ func (x *GetTaskQueueUserDataRequest) String() string {
 func (*GetTaskQueueUserDataRequest) ProtoMessage() {}
 
 func (x *GetTaskQueueUserDataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[2]
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -219,7 +332,7 @@ func (x *GetTaskQueueUserDataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTaskQueueUserDataRequest.ProtoReflect.Descriptor instead.
 func (*GetTaskQueueUserDataRequest) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDescGZIP(), []int{2}
+	return file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *GetTaskQueueUserDataRequest) GetNamespaceId() string {
@@ -236,24 +349,104 @@ func (x *GetTaskQueueUserDataRequest) GetTaskQueue() string {
 	return ""
 }
 
-func (x *GetTaskQueueUserDataRequest) GetBusinessId() string {
+func (x *GetTaskQueueUserDataRequest) GetTaskQueueType() v1.TaskQueueType {
 	if x != nil {
-		return x.BusinessId
+		return x.TaskQueueType
 	}
-	return ""
+	return v1.TaskQueueType(0)
+}
+
+func (x *GetTaskQueueUserDataRequest) GetLastKnownUserDataVersion() int64 {
+	if x != nil {
+		return x.LastKnownUserDataVersion
+	}
+	return 0
+}
+
+func (x *GetTaskQueueUserDataRequest) GetLastKnownEphemeralDataVersion() int64 {
+	if x != nil {
+		return x.LastKnownEphemeralDataVersion
+	}
+	return 0
+}
+
+func (x *GetTaskQueueUserDataRequest) GetWaitNewData() bool {
+	if x != nil {
+		return x.WaitNewData
+	}
+	return false
+}
+
+func (x *GetTaskQueueUserDataRequest) GetOnlyIfLoaded() bool {
+	if x != nil {
+		return x.OnlyIfLoaded
+	}
+	return false
+}
+
+type VersionedTaskQueueUserData struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Data          *TaskQueueUserData     `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
+	Version       int64                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *VersionedTaskQueueUserData) Reset() {
+	*x = VersionedTaskQueueUserData{}
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *VersionedTaskQueueUserData) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*VersionedTaskQueueUserData) ProtoMessage() {}
+
+func (x *VersionedTaskQueueUserData) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use VersionedTaskQueueUserData.ProtoReflect.Descriptor instead.
+func (*VersionedTaskQueueUserData) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *VersionedTaskQueueUserData) GetData() *TaskQueueUserData {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *VersionedTaskQueueUserData) GetVersion() int64 {
+	if x != nil {
+		return x.Version
+	}
+	return 0
 }
 
 type GetTaskQueueUserDataResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	UserData      *v1.TaskQueueUserData  `protobuf:"bytes,1,opt,name=user_data,json=userData,proto3" json:"user_data,omitempty"`
-	Version       int64                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	state         protoimpl.MessageState      `protogen:"open.v1"`
+	UserData      *VersionedTaskQueueUserData `protobuf:"bytes,1,opt,name=user_data,json=userData,proto3" json:"user_data,omitempty"`
+	EphemeralData *v11.VersionedEphemeralData `protobuf:"bytes,2,opt,name=ephemeral_data,json=ephemeralData,proto3" json:"ephemeral_data,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetTaskQueueUserDataResponse) Reset() {
 	*x = GetTaskQueueUserDataResponse{}
-	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[3]
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -265,7 +458,7 @@ func (x *GetTaskQueueUserDataResponse) String() string {
 func (*GetTaskQueueUserDataResponse) ProtoMessage() {}
 
 func (x *GetTaskQueueUserDataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[3]
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -278,49 +471,504 @@ func (x *GetTaskQueueUserDataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetTaskQueueUserDataResponse.ProtoReflect.Descriptor instead.
 func (*GetTaskQueueUserDataResponse) Descriptor() ([]byte, []int) {
-	return file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDescGZIP(), []int{3}
+	return file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *GetTaskQueueUserDataResponse) GetUserData() *v1.TaskQueueUserData {
+func (x *GetTaskQueueUserDataResponse) GetUserData() *VersionedTaskQueueUserData {
 	if x != nil {
 		return x.UserData
 	}
 	return nil
 }
 
-func (x *GetTaskQueueUserDataResponse) GetVersion() int64 {
+func (x *GetTaskQueueUserDataResponse) GetEphemeralData() *v11.VersionedEphemeralData {
+	if x != nil {
+		return x.EphemeralData
+	}
+	return nil
+}
+
+type SyncDeploymentUserDataRequest struct {
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	TaskQueue   string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	// Required, unless deprecated fields are used.
+	// (-- api-linter: core::0203::required=disabled
+	//
+	//	aip.dev/not-precedent: Not following Google API format --)
+	DeploymentName string             `protobuf:"bytes,3,opt,name=deployment_name,json=deploymentName,proto3" json:"deployment_name,omitempty"`
+	TaskQueueTypes []v1.TaskQueueType `protobuf:"varint,4,rep,packed,name=task_queue_types,json=taskQueueTypes,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_types,omitempty"`
+	// Types that are valid to be assigned to Operation:
+	//
+	//	*SyncDeploymentUserDataRequest_UpdateVersionData
+	//	*SyncDeploymentUserDataRequest_ForgetVersion
+	Operation isSyncDeploymentUserDataRequest_Operation `protobuf_oneof:"operation"`
+	// Absent means no change.
+	// Ignored by the task queue if new revision number is not greater that what it has.
+	UpdateRoutingConfig *v12.RoutingConfig `protobuf:"bytes,7,opt,name=update_routing_config,json=updateRoutingConfig,proto3" json:"update_routing_config,omitempty"`
+	// Optional map of build id to upsert version data.
+	// (-- api-linter: core::0203::required=disabled
+	//
+	//	aip.dev/not-precedent: Not following Google API format --)
+	UpsertVersionsData map[string]*v13.WorkerDeploymentVersionData `protobuf:"bytes,8,rep,name=upsert_versions_data,json=upsertVersionsData,proto3" json:"upsert_versions_data,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// List of build ids to forget from task queue.
+	ForgetVersions []string `protobuf:"bytes,9,rep,name=forget_versions,json=forgetVersions,proto3" json:"forget_versions,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *SyncDeploymentUserDataRequest) Reset() {
+	*x = SyncDeploymentUserDataRequest{}
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncDeploymentUserDataRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncDeploymentUserDataRequest) ProtoMessage() {}
+
+func (x *SyncDeploymentUserDataRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncDeploymentUserDataRequest.ProtoReflect.Descriptor instead.
+func (*SyncDeploymentUserDataRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *SyncDeploymentUserDataRequest) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
+}
+
+func (x *SyncDeploymentUserDataRequest) GetTaskQueue() string {
+	if x != nil {
+		return x.TaskQueue
+	}
+	return ""
+}
+
+func (x *SyncDeploymentUserDataRequest) GetDeploymentName() string {
+	if x != nil {
+		return x.DeploymentName
+	}
+	return ""
+}
+
+func (x *SyncDeploymentUserDataRequest) GetTaskQueueTypes() []v1.TaskQueueType {
+	if x != nil {
+		return x.TaskQueueTypes
+	}
+	return nil
+}
+
+func (x *SyncDeploymentUserDataRequest) GetOperation() isSyncDeploymentUserDataRequest_Operation {
+	if x != nil {
+		return x.Operation
+	}
+	return nil
+}
+
+// Deprecated: Marked as deprecated in temporal/server/chasm/lib/tquserdata/proto/v1/request_response.proto.
+func (x *SyncDeploymentUserDataRequest) GetUpdateVersionData() *v13.DeploymentVersionData {
+	if x != nil {
+		if x, ok := x.Operation.(*SyncDeploymentUserDataRequest_UpdateVersionData); ok {
+			return x.UpdateVersionData
+		}
+	}
+	return nil
+}
+
+// Deprecated: Marked as deprecated in temporal/server/chasm/lib/tquserdata/proto/v1/request_response.proto.
+func (x *SyncDeploymentUserDataRequest) GetForgetVersion() *v13.WorkerDeploymentVersion {
+	if x != nil {
+		if x, ok := x.Operation.(*SyncDeploymentUserDataRequest_ForgetVersion); ok {
+			return x.ForgetVersion
+		}
+	}
+	return nil
+}
+
+func (x *SyncDeploymentUserDataRequest) GetUpdateRoutingConfig() *v12.RoutingConfig {
+	if x != nil {
+		return x.UpdateRoutingConfig
+	}
+	return nil
+}
+
+func (x *SyncDeploymentUserDataRequest) GetUpsertVersionsData() map[string]*v13.WorkerDeploymentVersionData {
+	if x != nil {
+		return x.UpsertVersionsData
+	}
+	return nil
+}
+
+func (x *SyncDeploymentUserDataRequest) GetForgetVersions() []string {
+	if x != nil {
+		return x.ForgetVersions
+	}
+	return nil
+}
+
+type isSyncDeploymentUserDataRequest_Operation interface {
+	isSyncDeploymentUserDataRequest_Operation()
+}
+
+type SyncDeploymentUserDataRequest_UpdateVersionData struct {
+	// The deployment version and its data that is being updated.
+	//
+	// Deprecated: Marked as deprecated in temporal/server/chasm/lib/tquserdata/proto/v1/request_response.proto.
+	UpdateVersionData *v13.DeploymentVersionData `protobuf:"bytes,5,opt,name=update_version_data,json=updateVersionData,proto3,oneof"`
+}
+
+type SyncDeploymentUserDataRequest_ForgetVersion struct {
+	// The version whose data should be cleaned from the task queue.
+	//
+	// Deprecated: Marked as deprecated in temporal/server/chasm/lib/tquserdata/proto/v1/request_response.proto.
+	ForgetVersion *v13.WorkerDeploymentVersion `protobuf:"bytes,6,opt,name=forget_version,json=forgetVersion,proto3,oneof"`
+}
+
+func (*SyncDeploymentUserDataRequest_UpdateVersionData) isSyncDeploymentUserDataRequest_Operation() {}
+
+func (*SyncDeploymentUserDataRequest_ForgetVersion) isSyncDeploymentUserDataRequest_Operation() {}
+
+type SyncDeploymentUserDataResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// New task queue user data version. Can be used to wait for propagation.
+	Version int64 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	// Deprecated because retries can lose the indication that an earlier attempt changed routing.
+	//
+	// Deprecated: Marked as deprecated in temporal/server/chasm/lib/tquserdata/proto/v1/request_response.proto.
+	RoutingConfigChanged bool `protobuf:"varint,2,opt,name=routing_config_changed,json=routingConfigChanged,proto3" json:"routing_config_changed,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *SyncDeploymentUserDataResponse) Reset() {
+	*x = SyncDeploymentUserDataResponse{}
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SyncDeploymentUserDataResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SyncDeploymentUserDataResponse) ProtoMessage() {}
+
+func (x *SyncDeploymentUserDataResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SyncDeploymentUserDataResponse.ProtoReflect.Descriptor instead.
+func (*SyncDeploymentUserDataResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *SyncDeploymentUserDataResponse) GetVersion() int64 {
 	if x != nil {
 		return x.Version
 	}
 	return 0
 }
 
+// Deprecated: Marked as deprecated in temporal/server/chasm/lib/tquserdata/proto/v1/request_response.proto.
+func (x *SyncDeploymentUserDataResponse) GetRoutingConfigChanged() bool {
+	if x != nil {
+		return x.RoutingConfigChanged
+	}
+	return false
+}
+
+type UpdateTaskQueueConfigRequest struct {
+	state                 protoimpl.MessageState            `protogen:"open.v1"`
+	NamespaceId           string                            `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	UpdateTaskqueueConfig *v14.UpdateTaskQueueConfigRequest `protobuf:"bytes,2,opt,name=update_taskqueue_config,json=updateTaskqueueConfig,proto3" json:"update_taskqueue_config,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *UpdateTaskQueueConfigRequest) Reset() {
+	*x = UpdateTaskQueueConfigRequest{}
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateTaskQueueConfigRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateTaskQueueConfigRequest) ProtoMessage() {}
+
+func (x *UpdateTaskQueueConfigRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateTaskQueueConfigRequest.ProtoReflect.Descriptor instead.
+func (*UpdateTaskQueueConfigRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *UpdateTaskQueueConfigRequest) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
+}
+
+func (x *UpdateTaskQueueConfigRequest) GetUpdateTaskqueueConfig() *v14.UpdateTaskQueueConfigRequest {
+	if x != nil {
+		return x.UpdateTaskqueueConfig
+	}
+	return nil
+}
+
+type UpdateTaskQueueConfigResponse struct {
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	UpdatedTaskqueueConfig *v15.TaskQueueConfig   `protobuf:"bytes,1,opt,name=updated_taskqueue_config,json=updatedTaskqueueConfig,proto3" json:"updated_taskqueue_config,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
+}
+
+func (x *UpdateTaskQueueConfigResponse) Reset() {
+	*x = UpdateTaskQueueConfigResponse{}
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateTaskQueueConfigResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateTaskQueueConfigResponse) ProtoMessage() {}
+
+func (x *UpdateTaskQueueConfigResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateTaskQueueConfigResponse.ProtoReflect.Descriptor instead.
+func (*UpdateTaskQueueConfigResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *UpdateTaskQueueConfigResponse) GetUpdatedTaskqueueConfig() *v15.TaskQueueConfig {
+	if x != nil {
+		return x.UpdatedTaskqueueConfig
+	}
+	return nil
+}
+
+type UpdateFairnessStateRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	NamespaceId   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	TaskQueue     string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	TaskQueueType v1.TaskQueueType       `protobuf:"varint,3,opt,name=task_queue_type,json=taskQueueType,proto3,enum=temporal.api.enums.v1.TaskQueueType" json:"task_queue_type,omitempty"`
+	FairnessState v16.FairnessState      `protobuf:"varint,4,opt,name=fairness_state,json=fairnessState,proto3,enum=temporal.server.api.enums.v1.FairnessState" json:"fairness_state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateFairnessStateRequest) Reset() {
+	*x = UpdateFairnessStateRequest{}
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateFairnessStateRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateFairnessStateRequest) ProtoMessage() {}
+
+func (x *UpdateFairnessStateRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateFairnessStateRequest.ProtoReflect.Descriptor instead.
+func (*UpdateFairnessStateRequest) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *UpdateFairnessStateRequest) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
+}
+
+func (x *UpdateFairnessStateRequest) GetTaskQueue() string {
+	if x != nil {
+		return x.TaskQueue
+	}
+	return ""
+}
+
+func (x *UpdateFairnessStateRequest) GetTaskQueueType() v1.TaskQueueType {
+	if x != nil {
+		return x.TaskQueueType
+	}
+	return v1.TaskQueueType(0)
+}
+
+func (x *UpdateFairnessStateRequest) GetFairnessState() v16.FairnessState {
+	if x != nil {
+		return x.FairnessState
+	}
+	return v16.FairnessState(0)
+}
+
+type UpdateFairnessStateResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *UpdateFairnessStateResponse) Reset() {
+	*x = UpdateFairnessStateResponse{}
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *UpdateFairnessStateResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*UpdateFairnessStateResponse) ProtoMessage() {}
+
+func (x *UpdateFairnessStateResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use UpdateFairnessStateResponse.ProtoReflect.Descriptor instead.
+func (*UpdateFairnessStateResponse) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDescGZIP(), []int{12}
+}
+
 var File_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"Dtemporal/server/chasm/lib/tquserdata/proto/v1/request_response.proto\x12-temporal.server.chasm.lib.tquserdata.proto.v1\x1a4temporal/server/api/persistence/v1/task_queues.proto\"\xd3\x02\n" +
+	"Dtemporal/server/chasm/lib/tquserdata/proto/v1/request_response.proto\x12-temporal.server.chasm.lib.tquserdata.proto.v1\x1a=temporal/server/chasm/lib/tquserdata/proto/v1/user_data.proto\x1a(temporal/api/deployment/v1/message.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a6temporal/api/workflowservice/v1/request_response.proto\x1a/temporal/server/api/deployment/v1/message.proto\x1a1temporal/server/api/enums/v1/fairness_state.proto\x1a.temporal/server/api/taskqueue/v1/message.proto\"\xa7\x02\n" +
 	"\x1eUpsertTaskQueueUserDataRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1d\n" +
 	"\n" +
-	"task_queue\x18\x02 \x01(\tR\ttaskQueue\x12R\n" +
-	"\tuser_data\x18\x03 \x01(\v25.temporal.server.api.persistence.v1.TaskQueueUserDataR\buserData\x12\x1f\n" +
-	"\vbusiness_id\x18\x05 \x01(\tR\n" +
-	"businessId\x12'\n" +
-	"\x0eexpect_missing\x18\x06 \x01(\bH\x00R\rexpectMissing\x12+\n" +
-	"\x10expected_version\x18\b \x01(\x03H\x00R\x0fexpectedVersionB\x0e\n" +
-	"\fpreconditionJ\x04\b\a\x10\bR\x0eexpected_clock\";\n" +
+	"task_queue\x18\x02 \x01(\tR\ttaskQueue\x12]\n" +
+	"\tuser_data\x18\x03 \x01(\v2@.temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataR\buserData\x12'\n" +
+	"\x0eexpect_missing\x18\x04 \x01(\bH\x00R\rexpectMissing\x12+\n" +
+	"\x10expected_version\x18\x05 \x01(\x03H\x00R\x0fexpectedVersionB\x0e\n" +
+	"\fprecondition\";\n" +
 	"\x1fUpsertTaskQueueUserDataResponse\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\x03R\aversion\"\x80\x01\n" +
+	"\aversion\x18\x01 \x01(\x03R\aversion\"g\n" +
+	"#GetTaskQueueUserDataSnapshotRequest\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1d\n" +
+	"\n" +
+	"task_queue\x18\x02 \x01(\tR\ttaskQueue\"\x9f\x01\n" +
+	"$GetTaskQueueUserDataSnapshotResponse\x12]\n" +
+	"\tuser_data\x18\x01 \x01(\v2@.temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataR\buserData\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\x03R\aversion\"\x81\x03\n" +
 	"\x1bGetTaskQueueUserDataRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1d\n" +
 	"\n" +
-	"task_queue\x18\x02 \x01(\tR\ttaskQueue\x12\x1f\n" +
-	"\vbusiness_id\x18\x03 \x01(\tR\n" +
-	"businessId\"\x8c\x01\n" +
-	"\x1cGetTaskQueueUserDataResponse\x12R\n" +
-	"\tuser_data\x18\x01 \x01(\v25.temporal.server.api.persistence.v1.TaskQueueUserDataR\buserData\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x03R\aversionBJZHgo.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapbb\x06proto3"
+	"task_queue\x18\x02 \x01(\tR\ttaskQueue\x12L\n" +
+	"\x0ftask_queue_type\x18\x03 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x12>\n" +
+	"\x1clast_known_user_data_version\x18\x04 \x01(\x03R\x18lastKnownUserDataVersion\x12H\n" +
+	"!last_known_ephemeral_data_version\x18\x05 \x01(\x03R\x1dlastKnownEphemeralDataVersion\x12\"\n" +
+	"\rwait_new_data\x18\x06 \x01(\bR\vwaitNewData\x12$\n" +
+	"\x0eonly_if_loaded\x18\a \x01(\bR\fonlyIfLoaded\"\x8c\x01\n" +
+	"\x1aVersionedTaskQueueUserData\x12T\n" +
+	"\x04data\x18\x01 \x01(\v2@.temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataR\x04data\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\x03R\aversion\"\xe7\x01\n" +
+	"\x1cGetTaskQueueUserDataResponse\x12f\n" +
+	"\tuser_data\x18\x01 \x01(\v2I.temporal.server.chasm.lib.tquserdata.proto.v1.VersionedTaskQueueUserDataR\buserData\x12_\n" +
+	"\x0eephemeral_data\x18\x02 \x01(\v28.temporal.server.api.taskqueue.v1.VersionedEphemeralDataR\rephemeralData\"\xe9\x06\n" +
+	"\x1dSyncDeploymentUserDataRequest\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1d\n" +
+	"\n" +
+	"task_queue\x18\x02 \x01(\tR\ttaskQueue\x12'\n" +
+	"\x0fdeployment_name\x18\x03 \x01(\tR\x0edeploymentName\x12N\n" +
+	"\x10task_queue_types\x18\x04 \x03(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\x0etaskQueueTypes\x12n\n" +
+	"\x13update_version_data\x18\x05 \x01(\v28.temporal.server.api.deployment.v1.DeploymentVersionDataB\x02\x18\x01H\x00R\x11updateVersionData\x12g\n" +
+	"\x0eforget_version\x18\x06 \x01(\v2:.temporal.server.api.deployment.v1.WorkerDeploymentVersionB\x02\x18\x01H\x00R\rforgetVersion\x12]\n" +
+	"\x15update_routing_config\x18\a \x01(\v2).temporal.api.deployment.v1.RoutingConfigR\x13updateRoutingConfig\x12\x96\x01\n" +
+	"\x14upsert_versions_data\x18\b \x03(\v2d.temporal.server.chasm.lib.tquserdata.proto.v1.SyncDeploymentUserDataRequest.UpsertVersionsDataEntryR\x12upsertVersionsData\x12'\n" +
+	"\x0fforget_versions\x18\t \x03(\tR\x0eforgetVersions\x1a\x85\x01\n" +
+	"\x17UpsertVersionsDataEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12T\n" +
+	"\x05value\x18\x02 \x01(\v2>.temporal.server.api.deployment.v1.WorkerDeploymentVersionDataR\x05value:\x028\x01B\v\n" +
+	"\toperation\"t\n" +
+	"\x1eSyncDeploymentUserDataResponse\x12\x18\n" +
+	"\aversion\x18\x01 \x01(\x03R\aversion\x128\n" +
+	"\x16routing_config_changed\x18\x02 \x01(\bB\x02\x18\x01R\x14routingConfigChanged\"\xb8\x01\n" +
+	"\x1cUpdateTaskQueueConfigRequest\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12u\n" +
+	"\x17update_taskqueue_config\x18\x02 \x01(\v2=.temporal.api.workflowservice.v1.UpdateTaskQueueConfigRequestR\x15updateTaskqueueConfig\"\x85\x01\n" +
+	"\x1dUpdateTaskQueueConfigResponse\x12d\n" +
+	"\x18updated_taskqueue_config\x18\x01 \x01(\v2*.temporal.api.taskqueue.v1.TaskQueueConfigR\x16updatedTaskqueueConfig\"\x80\x02\n" +
+	"\x1aUpdateFairnessStateRequest\x12!\n" +
+	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1d\n" +
+	"\n" +
+	"task_queue\x18\x02 \x01(\tR\ttaskQueue\x12L\n" +
+	"\x0ftask_queue_type\x18\x03 \x01(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\rtaskQueueType\x12R\n" +
+	"\x0efairness_state\x18\x04 \x01(\x0e2+.temporal.server.api.enums.v1.FairnessStateR\rfairnessState\"\x1d\n" +
+	"\x1bUpdateFairnessStateResponseBJZHgo.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDescOnce sync.Once
@@ -334,22 +982,55 @@ func file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_r
 	return file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_goTypes = []any{
-	(*UpsertTaskQueueUserDataRequest)(nil),  // 0: temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataRequest
-	(*UpsertTaskQueueUserDataResponse)(nil), // 1: temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataResponse
-	(*GetTaskQueueUserDataRequest)(nil),     // 2: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataRequest
-	(*GetTaskQueueUserDataResponse)(nil),    // 3: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataResponse
-	(*v1.TaskQueueUserData)(nil),            // 4: temporal.server.api.persistence.v1.TaskQueueUserData
+	(*UpsertTaskQueueUserDataRequest)(nil),       // 0: temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataRequest
+	(*UpsertTaskQueueUserDataResponse)(nil),      // 1: temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataResponse
+	(*GetTaskQueueUserDataSnapshotRequest)(nil),  // 2: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataSnapshotRequest
+	(*GetTaskQueueUserDataSnapshotResponse)(nil), // 3: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataSnapshotResponse
+	(*GetTaskQueueUserDataRequest)(nil),          // 4: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataRequest
+	(*VersionedTaskQueueUserData)(nil),           // 5: temporal.server.chasm.lib.tquserdata.proto.v1.VersionedTaskQueueUserData
+	(*GetTaskQueueUserDataResponse)(nil),         // 6: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataResponse
+	(*SyncDeploymentUserDataRequest)(nil),        // 7: temporal.server.chasm.lib.tquserdata.proto.v1.SyncDeploymentUserDataRequest
+	(*SyncDeploymentUserDataResponse)(nil),       // 8: temporal.server.chasm.lib.tquserdata.proto.v1.SyncDeploymentUserDataResponse
+	(*UpdateTaskQueueConfigRequest)(nil),         // 9: temporal.server.chasm.lib.tquserdata.proto.v1.UpdateTaskQueueConfigRequest
+	(*UpdateTaskQueueConfigResponse)(nil),        // 10: temporal.server.chasm.lib.tquserdata.proto.v1.UpdateTaskQueueConfigResponse
+	(*UpdateFairnessStateRequest)(nil),           // 11: temporal.server.chasm.lib.tquserdata.proto.v1.UpdateFairnessStateRequest
+	(*UpdateFairnessStateResponse)(nil),          // 12: temporal.server.chasm.lib.tquserdata.proto.v1.UpdateFairnessStateResponse
+	nil,                                          // 13: temporal.server.chasm.lib.tquserdata.proto.v1.SyncDeploymentUserDataRequest.UpsertVersionsDataEntry
+	(*TaskQueueUserData)(nil),                    // 14: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserData
+	(v1.TaskQueueType)(0),                        // 15: temporal.api.enums.v1.TaskQueueType
+	(*v11.VersionedEphemeralData)(nil),           // 16: temporal.server.api.taskqueue.v1.VersionedEphemeralData
+	(*v13.DeploymentVersionData)(nil),            // 17: temporal.server.api.deployment.v1.DeploymentVersionData
+	(*v13.WorkerDeploymentVersion)(nil),          // 18: temporal.server.api.deployment.v1.WorkerDeploymentVersion
+	(*v12.RoutingConfig)(nil),                    // 19: temporal.api.deployment.v1.RoutingConfig
+	(*v14.UpdateTaskQueueConfigRequest)(nil),     // 20: temporal.api.workflowservice.v1.UpdateTaskQueueConfigRequest
+	(*v15.TaskQueueConfig)(nil),                  // 21: temporal.api.taskqueue.v1.TaskQueueConfig
+	(v16.FairnessState)(0),                       // 22: temporal.server.api.enums.v1.FairnessState
+	(*v13.WorkerDeploymentVersionData)(nil),      // 23: temporal.server.api.deployment.v1.WorkerDeploymentVersionData
 }
 var file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_depIdxs = []int32{
-	4, // 0: temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataRequest.user_data:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData
-	4, // 1: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataResponse.user_data:type_name -> temporal.server.api.persistence.v1.TaskQueueUserData
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	14, // 0: temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataRequest.user_data:type_name -> temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserData
+	14, // 1: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataSnapshotResponse.user_data:type_name -> temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserData
+	15, // 2: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	14, // 3: temporal.server.chasm.lib.tquserdata.proto.v1.VersionedTaskQueueUserData.data:type_name -> temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserData
+	5,  // 4: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataResponse.user_data:type_name -> temporal.server.chasm.lib.tquserdata.proto.v1.VersionedTaskQueueUserData
+	16, // 5: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataResponse.ephemeral_data:type_name -> temporal.server.api.taskqueue.v1.VersionedEphemeralData
+	15, // 6: temporal.server.chasm.lib.tquserdata.proto.v1.SyncDeploymentUserDataRequest.task_queue_types:type_name -> temporal.api.enums.v1.TaskQueueType
+	17, // 7: temporal.server.chasm.lib.tquserdata.proto.v1.SyncDeploymentUserDataRequest.update_version_data:type_name -> temporal.server.api.deployment.v1.DeploymentVersionData
+	18, // 8: temporal.server.chasm.lib.tquserdata.proto.v1.SyncDeploymentUserDataRequest.forget_version:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersion
+	19, // 9: temporal.server.chasm.lib.tquserdata.proto.v1.SyncDeploymentUserDataRequest.update_routing_config:type_name -> temporal.api.deployment.v1.RoutingConfig
+	13, // 10: temporal.server.chasm.lib.tquserdata.proto.v1.SyncDeploymentUserDataRequest.upsert_versions_data:type_name -> temporal.server.chasm.lib.tquserdata.proto.v1.SyncDeploymentUserDataRequest.UpsertVersionsDataEntry
+	20, // 11: temporal.server.chasm.lib.tquserdata.proto.v1.UpdateTaskQueueConfigRequest.update_taskqueue_config:type_name -> temporal.api.workflowservice.v1.UpdateTaskQueueConfigRequest
+	21, // 12: temporal.server.chasm.lib.tquserdata.proto.v1.UpdateTaskQueueConfigResponse.updated_taskqueue_config:type_name -> temporal.api.taskqueue.v1.TaskQueueConfig
+	15, // 13: temporal.server.chasm.lib.tquserdata.proto.v1.UpdateFairnessStateRequest.task_queue_type:type_name -> temporal.api.enums.v1.TaskQueueType
+	22, // 14: temporal.server.chasm.lib.tquserdata.proto.v1.UpdateFairnessStateRequest.fairness_state:type_name -> temporal.server.api.enums.v1.FairnessState
+	23, // 15: temporal.server.chasm.lib.tquserdata.proto.v1.SyncDeploymentUserDataRequest.UpsertVersionsDataEntry.value:type_name -> temporal.server.api.deployment.v1.WorkerDeploymentVersionData
+	16, // [16:16] is the sub-list for method output_type
+	16, // [16:16] is the sub-list for method input_type
+	16, // [16:16] is the sub-list for extension type_name
+	16, // [16:16] is the sub-list for extension extendee
+	0,  // [0:16] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_init() }
@@ -357,9 +1038,14 @@ func file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_i
 	if File_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto != nil {
 		return
 	}
+	file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_init()
 	file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[0].OneofWrappers = []any{
 		(*UpsertTaskQueueUserDataRequest_ExpectMissing)(nil),
 		(*UpsertTaskQueueUserDataRequest_ExpectedVersion)(nil),
+	}
+	file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[7].OneofWrappers = []any{
+		(*SyncDeploymentUserDataRequest_UpdateVersionData)(nil),
+		(*SyncDeploymentUserDataRequest_ForgetVersion)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -367,7 +1053,7 @@ func file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_i
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDesc), len(file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

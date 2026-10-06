@@ -1,22 +1,19 @@
 package tquserdata
 
 import (
-	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb/v1"
 )
 
-// TaskQueueUserData is the CHASM mirror of one root task queue's persisted user data.
+// TaskQueueUserData is the CHASM component for one task queue family's user data.
 type TaskQueueUserData struct {
 	chasm.UnimplementedComponent
 	*tquserdatapb.UserDataState
-	Data chasm.Field[*persistencespb.TaskQueueUserData]
+	Data chasm.Field[*tquserdatapb.TaskQueueUserData]
 }
 
-func (u *TaskQueueUserData) LifecycleState(chasm.Context) chasm.LifecycleState {
-	if u.Closed {
-		return chasm.LifecycleStateCompleted
-	}
+func (*TaskQueueUserData) LifecycleState(chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
 
@@ -24,7 +21,7 @@ func (*TaskQueueUserData) ContextMetadata(chasm.Context) map[string]string {
 	return nil
 }
 
-func (u *TaskQueueUserData) Terminate(chasm.MutableContext, chasm.TerminateComponentRequest) (chasm.TerminateComponentResponse, error) {
-	u.Closed = true
-	return chasm.TerminateComponentResponse{}, nil
+func (*TaskQueueUserData) Terminate(chasm.MutableContext, chasm.TerminateComponentRequest) (chasm.TerminateComponentResponse, error) {
+	// TODO: Terminate user data when task queue termination is implemented, since its lifecycle is tied to the task queue.
+	return chasm.TerminateComponentResponse{}, serviceerror.NewUnimplemented("task queue user data termination is not implemented")
 }

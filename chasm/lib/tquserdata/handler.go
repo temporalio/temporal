@@ -5,7 +5,6 @@ import (
 	"errors"
 
 	"go.temporal.io/api/serviceerror"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb/v1"
 	"go.temporal.io/server/common/metrics"
@@ -21,10 +20,10 @@ func newHandler(metricsHandler metrics.Handler) *handler {
 	return &handler{metricsHandler: metricsHandler}
 }
 
-func (h *handler) GetTaskQueueUserData(
+func (h *handler) GetTaskQueueUserDataSnapshot(
 	ctx context.Context,
-	req *tquserdatapb.GetTaskQueueUserDataRequest,
-) (_ *tquserdatapb.GetTaskQueueUserDataResponse, retErr error) {
+	req *tquserdatapb.GetTaskQueueUserDataSnapshotRequest,
+) (_ *tquserdatapb.GetTaskQueueUserDataSnapshotResponse, retErr error) {
 	defer func() {
 		outcome := "success"
 		if retErr != nil {
@@ -35,15 +34,15 @@ func (h *handler) GetTaskQueueUserData(
 		}
 		metrics.TaskQueueUserDataChasmRead.With(h.metricsHandler).Record(1, metrics.OutcomeTag(outcome))
 	}()
-	if req.GetNamespaceId() == "" || req.GetTaskQueue() == "" || req.GetBusinessId() != BusinessID(req.GetTaskQueue()) {
+	if req.GetNamespaceId() == "" || req.GetTaskQueue() == "" {
 		return nil, serviceerror.NewInvalidArgument("invalid task queue user data read request")
 	}
 	return chasm.ReadComponent(
 		ctx,
-		chasm.NewComponentRef[*TaskQueueUserData](chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: req.GetBusinessId()}),
-		func(userData *TaskQueueUserData, chasmContext chasm.Context, _ *tquserdatapb.GetTaskQueueUserDataRequest) (*tquserdatapb.GetTaskQueueUserDataResponse, error) {
-			return &tquserdatapb.GetTaskQueueUserDataResponse{
-				UserData: proto.Clone(userData.Data.Get(chasmContext)).(*persistencespb.TaskQueueUserData),
+		chasm.NewComponentRef[*TaskQueueUserData](chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: req.GetTaskQueue()}),
+		func(userData *TaskQueueUserData, chasmContext chasm.Context, _ *tquserdatapb.GetTaskQueueUserDataSnapshotRequest) (*tquserdatapb.GetTaskQueueUserDataSnapshotResponse, error) {
+			return &tquserdatapb.GetTaskQueueUserDataSnapshotResponse{
+				UserData: proto.Clone(userData.Data.Get(chasmContext)).(*tquserdatapb.TaskQueueUserData),
 				Version:  userData.Version,
 			}, nil
 		},
@@ -69,15 +68,14 @@ func (h *handler) UpsertTaskQueueUserData(
 		}
 		metrics.TaskQueueUserDataChasmWrite.With(h.metricsHandler).Record(1, metrics.ReasonTag(reason), metrics.OutcomeTag(outcome))
 	}()
-	if req.GetNamespaceId() == "" || req.GetTaskQueue() == "" || req.GetUserData() == nil ||
-		req.GetBusinessId() != BusinessID(req.GetTaskQueue()) {
+	if req.GetNamespaceId() == "" || req.GetTaskQueue() == "" || req.GetUserData() == nil {
 		return nil, serviceerror.NewInvalidArgument("invalid task queue user data write request")
 	}
 	return h.writeUserData(ctx, req)
 }
 
 func (*handler) writeUserData(ctx context.Context, req *tquserdatapb.UpsertTaskQueueUserDataRequest) (*tquserdatapb.UpsertTaskQueueUserDataResponse, error) {
-	key := chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: req.GetBusinessId()}
+	key := chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: req.GetTaskQueue()}
 	if req.GetExpectMissing() {
 		_, err := chasm.StartExecution(
 			ctx,
@@ -85,7 +83,7 @@ func (*handler) writeUserData(ctx context.Context, req *tquserdatapb.UpsertTaskQ
 			func(mutableContext chasm.MutableContext, _ *tquserdatapb.UpsertTaskQueueUserDataRequest) (*TaskQueueUserData, error) {
 				return &TaskQueueUserData{
 					UserDataState: &tquserdatapb.UserDataState{Version: 1},
-					Data:          chasm.NewDataField(mutableContext, proto.Clone(req.GetUserData()).(*persistencespb.TaskQueueUserData)),
+					Data:          chasm.NewDataField(mutableContext, proto.Clone(req.GetUserData()).(*tquserdatapb.TaskQueueUserData)),
 				}, nil
 			},
 			req,
@@ -114,7 +112,7 @@ func (*handler) writeUserData(ctx context.Context, req *tquserdatapb.UpsertTaskQ
 				return nil, serviceerror.NewFailedPrecondition("task queue user data version changed")
 			}
 			userData.Version++
-			userData.Data = chasm.NewDataField(mutableContext, proto.Clone(req.GetUserData()).(*persistencespb.TaskQueueUserData))
+			userData.Data = chasm.NewDataField(mutableContext, proto.Clone(req.GetUserData()).(*tquserdatapb.TaskQueueUserData))
 			return &tquserdatapb.UpsertTaskQueueUserDataResponse{Version: userData.Version}, nil
 		},
 		req,

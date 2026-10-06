@@ -5,6 +5,5 @@ package temporal.server.chasm.lib.tquserdata.proto.v1;
 option go_package = "go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapb";
 
 message UserDataState {
-  bool closed = 2;
-  int64 version = 3;
+  int64 version = 1;
 }

@@ -10,11 +10,27 @@ option go_package = "go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb
 
 service TaskQueueUserDataService {
   rpc GetTaskQueueUserData(GetTaskQueueUserDataRequest) returns (GetTaskQueueUserDataResponse) {
-    option (temporal.server.api.routing.v1.routing).business_id = "business_id";
+    option (temporal.server.api.routing.v1.routing).business_id = "task_queue";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+  rpc SyncDeploymentUserData(SyncDeploymentUserDataRequest) returns (SyncDeploymentUserDataResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "task_queue";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+  rpc UpdateTaskQueueConfig(UpdateTaskQueueConfigRequest) returns (UpdateTaskQueueConfigResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "update_taskqueue_config.task_queue";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+  rpc UpdateFairnessState(UpdateFairnessStateRequest) returns (UpdateFairnessStateResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "task_queue";
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+  rpc GetTaskQueueUserDataSnapshot(GetTaskQueueUserDataSnapshotRequest) returns (GetTaskQueueUserDataSnapshotResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "task_queue";
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
   rpc UpsertTaskQueueUserData(UpsertTaskQueueUserDataRequest) returns (UpsertTaskQueueUserDataResponse) {
-    option (temporal.server.api.routing.v1.routing).business_id = "business_id";
+    option (temporal.server.api.routing.v1.routing).business_id = "task_queue";
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
 }
