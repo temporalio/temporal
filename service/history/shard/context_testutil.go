@@ -144,7 +144,7 @@ func newTestContext(t *resourcetest.Test, eventsCache events.Cache, config Conte
 	// Tests that attach completion callbacks need the shard to hand out a validator. The
 	// shared test limits apply; tests needing their own call SetCallbackValidator. Building
 	// only fails when a limit getter is unset, which the shared config never leaves nil.
-	callbackValidator, err := callbacks.NewValidator(test.NewCallbacksValidatorConfig())
+	callbackValidator, err := callbacks.NewValidator(test.NewCallbacksValidatorConfig(), nil)
 	if err != nil {
 		softassert.Fail(t.GetLogger(), "failed to build a callbacks validator for the test shard context", tag.Error(err))
 	}

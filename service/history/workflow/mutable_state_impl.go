@@ -3506,24 +3506,10 @@ func (ms *MutableStateImpl) addUpdateCallbacks(
 		return nil
 	}
 
-	reqs := []bool{
-		ms.chasmCallbacksEnabled(),
-		ms.config.EnableWorkflowUpdateCallbacks(ms.GetNamespaceEntry().Name().String()),
-		ms.attachesCallbacksToChasm(updateID),
-	}
-	updateEnabled := true
-	for _, req := range reqs {
-		if !req {
-			updateEnabled = false
-			break
+	if ms.chasmCallbacksEnabled() && ms.config.EnableWorkflowUpdateCallbacks(ms.GetNamespaceEntry().Name().String()) {
+		if ms.attachesCallbacksToChasm(updateID) {
+			return ms.addUpdateCallbacksChasm(event, updateID, requestID, updateCallbacks)
 		}
-	}
-	if  updateEnabled {
-		// Initialize chasm tree once for new workflows.
-		// Using context.Background() because this is done outside an actual request context and the
-		// chasmworkflow.NewWorkflow does not actually use it currently.
-		ms.EnsureChasmWorkflowComponent(context.Background())
-		return ms.addUpdateCallbacksChasm(event, updateID, requestID, updateCallbacks)
 	}
 
 	return nil
@@ -3551,15 +3537,7 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 	if len(completionCallbacks) == 0 {
 		return nil
 	}
-<<<<<<< HEAD
-	if ms.chasmCallbacksEnabled() {
-=======
 	if ms.attachesCallbacksToChasm("") {
-		// Initialize chasm tree once for new workflows.
-		// Using context.Background() because this is done outside an actual request context and the
-		// chasmworkflow.NewWorkflow does not actually use it currently.
-		ms.EnsureChasmWorkflowComponent(context.Background())
->>>>>>> 253ed5b5e (Validate aggregate callback limits for workflow starts and attach-on-conflict)
 		return ms.addCompletionCallbacksChasm(event, requestID, completionCallbacks)
 	}
 
