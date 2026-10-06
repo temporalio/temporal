@@ -8,7 +8,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/namespace"
-	sdkconverter "go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/payload"
 )
 
 // NexusOperationProcessorContext contains context for processing a Nexus operation's input, including the target
@@ -81,23 +81,23 @@ type RegisterableNexusOperationProcessor struct {
 func nexusOperationProcessorAdapter[I any](processor NexusOperationProcessor[I]) func(ctx NexusOperationProcessorContext, input *commonpb.Payload) (*NexusOperationProcessorResult, error) {
 	return func(ctx NexusOperationProcessorContext, input *commonpb.Payload) (*NexusOperationProcessorResult, error) {
 		var i I
-		if err := sdkconverter.PreferProtoDataConverter.FromPayloads(&commonpb.Payloads{Payloads: []*commonpb.Payload{input}}, &i); err != nil {
-			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to decode input payload: %v", err)
+		// The error text matches what the SDK's PreferProtoDataConverter.FromPayloads produces.
+		if err := payload.DecodeAllowUnknownFields(input, &i); err != nil {
+			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "failed to decode input payload: payload item 0: %v", err)
 		}
 		result, err := processor.ProcessInput(ctx, i)
 		if err != nil {
 			return nil, err
 		}
 		if ctx.ReserializeInputPayload {
-			pls, err := sdkconverter.PreferProtoDataConverter.ToPayloads(i)
+			// The error text matches what the SDK's PreferProtoDataConverter.ToPayloads produces.
+			p, err := payload.EncodePreferProto(i)
 			if err != nil {
-				herr := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "failed to re-encode input payload: %v", err)
+				herr := nexus.NewHandlerErrorf(nexus.HandlerErrorTypeInternal, "failed to re-encode input payload: values[0]: %v", err)
 				herr.RetryBehavior = nexus.HandlerErrorRetryBehaviorNonRetryable
 				return nil, herr
 			}
-			if len(pls.Payloads) == 1 {
-				result.ReserializedInputPayload = pls.Payloads[0]
-			}
+			result.ReserializedInputPayload = p
 		}
 		return result, nil
 	}

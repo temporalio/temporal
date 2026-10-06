@@ -16,22 +16,34 @@ var (
 
 func EncodeString(str string) *commonpb.Payload {
 	// Error can be safely ignored here because string always can be converted to JSON
-	p, _ := toPayload(str)
+	p, _ := toPayload(str, false)
 	return p
 }
 
 func EncodeBytes(bytes []byte) *commonpb.Payload {
 	// Error can be safely ignored here because []byte always can be raw encoded
-	p, _ := toPayload(bytes)
+	p, _ := toPayload(bytes, false)
 	return p
 }
 
 func Encode(value any) (*commonpb.Payload, error) {
-	return toPayload(value)
+	return toPayload(value, false)
+}
+
+// EncodePreferProto is like Encode, except that it encodes protobuf messages as binary
+// rather than JSON. It produces the same payloads as common/sdk.PreferProtoDataConverter.
+func EncodePreferProto(value any) (*commonpb.Payload, error) {
+	return toPayload(value, true)
 }
 
 func Decode(p *commonpb.Payload, valuePtr any) error {
-	return fromPayload(p, valuePtr)
+	return fromPayload(p, valuePtr, false)
+}
+
+// DecodeAllowUnknownFields is like Decode, except that it ignores unknown fields in JSON
+// protobuf payloads, as common/sdk.PreferProtoDataConverter does.
+func DecodeAllowUnknownFields(p *commonpb.Payload, valuePtr any) error {
+	return fromPayload(p, valuePtr, true)
 }
 
 func ToString(p *commonpb.Payload) string {

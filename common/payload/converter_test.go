@@ -8,12 +8,36 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/sdk/converter"
+	"go.temporal.io/server/common/sdk"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-func TestConverterMatchesSDKDefaultDataConverter(t *testing.T) {
-	sdk := converter.GetDefaultDataConverter()
+type converterCase struct {
+	name   string
+	sdk    converter.DataConverter
+	encode func(any) (*commonpb.Payload, error)
+	decode func(*commonpb.Payload, any) error
+}
+
+var converterCases = []converterCase{
+	{"default", converter.GetDefaultDataConverter(), Encode, Decode},
+	{"prefer proto", sdk.PreferProtoDataConverter, EncodePreferProto, DecodeAllowUnknownFields},
+}
+
+func TestConverterMatchesSDKDataConverter(t *testing.T) {
+	for _, cc := range converterCases {
+		t.Run(cc.name, func(t *testing.T) { testEncodeMatchesSDK(t, cc) })
+	}
+}
+
+func TestDecodeMatchesSDKDataConverter(t *testing.T) {
+	for _, cc := range converterCases {
+		t.Run(cc.name, func(t *testing.T) { testDecodeMatchesSDK(t, cc) })
+	}
+}
+
+func testEncodeMatchesSDK(t *testing.T, cc converterCase) {
 	memo := &commonpb.Memo{Fields: map[string]*commonpb.Payload{"k": EncodeString("v")}}
 	values := []any{
 		nil,
@@ -38,21 +62,20 @@ func TestConverterMatchesSDKDefaultDataConverter(t *testing.T) {
 	}
 	for _, v := range values {
 		t.Run(fmt.Sprintf("%T", v), func(t *testing.T) {
-			expected, expectedErr := sdk.ToPayload(v)
-			actual, actualErr := Encode(v)
+			expected, expectedErr := cc.sdk.ToPayload(v)
+			actual, actualErr := cc.encode(v)
 			requireSameError(t, expectedErr, actualErr)
 			require.True(t, proto.Equal(expected, actual), "expected %v, got %v", expected, actual)
-			require.Equal(t, sdk.ToString(expected), ToString(actual))
+			require.Equal(t, cc.sdk.ToString(expected), ToString(actual))
 		})
 	}
 }
 
-func TestDecodeMatchesSDKDefaultDataConverter(t *testing.T) {
-	sdk := converter.GetDefaultDataConverter()
+func testDecodeMatchesSDK(t *testing.T, cc converterCase) {
 	memo := &commonpb.Memo{Fields: map[string]*commonpb.Payload{"k": EncodeString("v")}}
 	memoBinary, err := converter.NewProtoPayloadConverter().ToPayload(memo)
 	require.NoError(t, err)
-	payloads := []*commonpb.Payload{
+	inputs := []*commonpb.Payload{
 		nil,
 		{},
 		{Metadata: map[string][]byte{}},
@@ -65,6 +88,7 @@ func TestDecodeMatchesSDKDefaultDataConverter(t *testing.T) {
 		mustEncode(t, memo),
 		{Metadata: map[string][]byte{metadataEncoding: []byte(encodingProtoJSON)}, Data: []byte("null")},
 		{Metadata: map[string][]byte{metadataEncoding: []byte(encodingProtoJSON)}, Data: []byte("{")},
+		{Metadata: map[string][]byte{metadataEncoding: []byte(encodingProtoJSON)}, Data: []byte(`{"unknownField": 1}`)},
 		memoBinary,
 	}
 	targets := []func() any{
@@ -79,12 +103,12 @@ func TestDecodeMatchesSDKDefaultDataConverter(t *testing.T) {
 		func() any { return new(commonpb.Memo) },
 		func() any { return "not a pointer" },
 	}
-	for i, p := range payloads {
+	for i, p := range inputs {
 		for j, newTarget := range targets {
 			t.Run(fmt.Sprintf("%d/%d", i, j), func(t *testing.T) {
 				expected, actual := newTarget(), newTarget()
-				expectedErr := sdk.FromPayload(p, expected)
-				actualErr := Decode(p, actual)
+				expectedErr := cc.sdk.FromPayload(p, expected)
+				actualErr := cc.decode(p, actual)
 				requireSameError(t, expectedErr, actualErr)
 				if m, ok := expected.(proto.Message); ok {
 					require.True(t, proto.Equal(m, actual.(proto.Message)))
@@ -93,7 +117,7 @@ func TestDecodeMatchesSDKDefaultDataConverter(t *testing.T) {
 				} else {
 					require.Equal(t, expected, actual)
 				}
-				require.Equal(t, sdk.ToString(p), ToString(p))
+				require.Equal(t, cc.sdk.ToString(p), ToString(p))
 			})
 		}
 	}

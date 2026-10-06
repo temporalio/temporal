@@ -42,7 +42,7 @@ var (
 	errTypeIsNotByteSlice           = errors.New("type is not *[]byte")
 )
 
-func toPayload(value any) (*commonpb.Payload, error) {
+func toPayload(value any, preferBinaryProto bool) (*commonpb.Payload, error) {
 	if isInterfaceNil(value) {
 		return newPayload(nil, encodingNil), nil
 	}
@@ -50,11 +50,15 @@ func toPayload(value any) (*commonpb.Payload, error) {
 		return newPayload(b, encodingBinary), nil
 	}
 	if m, ok := asProtoMessage(value); ok {
-		data, err := protojson.MarshalOptions{}.Marshal(m)
+		marshal, encoding := protojson.MarshalOptions{}.Marshal, encodingProtoJSON
+		if preferBinaryProto {
+			marshal, encoding = proto.Marshal, encodingProto
+		}
+		data, err := marshal(m)
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", errUnableToEncode, err)
 		}
-		p := newPayload(data, encodingProtoJSON)
+		p := newPayload(data, encoding)
 		p.Metadata[metadataMessageType] = []byte(m.ProtoReflect().Descriptor().FullName())
 		return p, nil
 	}
@@ -65,7 +69,7 @@ func toPayload(value any) (*commonpb.Payload, error) {
 	return newPayload(data, encodingJSON), nil
 }
 
-func fromPayload(p *commonpb.Payload, valuePtr any) error {
+func fromPayload(p *commonpb.Payload, valuePtr any, discardUnknownJSONFields bool) error {
 	if p == nil {
 		return nil
 	}
@@ -79,7 +83,8 @@ func fromPayload(p *commonpb.Payload, valuePtr any) error {
 	case encodingBinary:
 		return fromBinaryPayload(p, valuePtr)
 	case encodingProtoJSON:
-		return fromProtoPayload(p, valuePtr, true, protojson.UnmarshalOptions{}.Unmarshal)
+		unmarshal := protojson.UnmarshalOptions{DiscardUnknown: discardUnknownJSONFields}.Unmarshal
+		return fromProtoPayload(p, valuePtr, true, unmarshal)
 	case encodingProto:
 		return fromProtoPayload(p, valuePtr, false, proto.Unmarshal)
 	case encodingJSON:
