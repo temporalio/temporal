@@ -436,11 +436,6 @@ lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
 		$(LINT_CODE_TARGETS)
 	@go vet -tags $(ALL_TEST_TAGS) -vettool="$(ERRORTYPE)" -style-check=false $(LINT_CODE_TARGETS)
 
-.PHONY: lint-testx
-lint-testx: $(GOLANGCI_LINT)
-	@printf $(COLOR) "Linting testx..."
-	@$(MAKE) --no-print-directory -C testx lint GOLANGCI_LINT=$(ROOT)/$(GOLANGCI_LINT) GOLANGCI_LINT_BASE_REV=$(GOLANGCI_LINT_BASE_REV)
-
 lint-yaml: $(YAMLFMT)
 	@printf $(COLOR) "Checking YAML formatting..."
 	@$(YAMLFMT) -conf .github/.yamlfmt -lint .
@@ -539,10 +534,6 @@ clean-test-output:
 build-tests:
 	@printf $(COLOR) "Build tests..."
 	@CGO_ENABLED=$(CGO_ENABLED) go test $(TEST_TAG_FLAG) -exec="true" -count=0 $(TEST_DIRS)
-
-testx-test:
-	@printf $(COLOR) "Run testx tests..."
-	@$(MAKE) --no-print-directory -C testx test
 
 unit-test: clean-test-output
 	@printf $(COLOR) "Run unit tests..."
@@ -798,7 +789,6 @@ update-dashboards:
 gomodtidy:
 	@printf $(COLOR) "go mod tidy..."
 	@go mod tidy
-	@$(MAKE) --no-print-directory -C testx tidy
 
 update-dependencies:
 	@printf $(COLOR) "Update dependencies (minor versions only) ..."

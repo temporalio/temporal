@@ -38,9 +38,9 @@ jobs:
         run: go -C testx mod tidy -diff
 
       - name: Test testx
-        run: make testx-test
+        run: make -C testx test
 
       - name: Lint testx
         env:
           GOLANGCI_LINT_BASE_REV: ${{ github.event.pull_request.base.sha }}
-        run: make lint-testx
+        run: make -C testx lint
