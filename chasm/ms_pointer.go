@@ -28,6 +28,11 @@ func (m MSPointer) WorkflowRunTimeout() time.Duration {
 	return m.backend.GetExecutionInfo().GetWorkflowRunTimeout().AsDuration()
 }
 
+// WorkflowTaskQueue returns the name of the workflow's task queue.
+func (m MSPointer) WorkflowTaskQueue() string {
+	return m.backend.GetExecutionInfo().GetTaskQueue()
+}
+
 // AddHistoryEvent adds a history event via the underlying mutable state.
 func (m MSPointer) AddHistoryEvent(t enumspb.EventType, setAttributes func(*historypb.HistoryEvent)) *historypb.HistoryEvent {
 	return m.backend.AddHistoryEvent(t, setAttributes)

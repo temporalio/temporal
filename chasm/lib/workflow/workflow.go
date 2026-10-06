@@ -8,6 +8,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/callback"
 	callbackspb "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
@@ -44,6 +45,11 @@ type Workflow struct {
 
 	// Updates indexed by update ID, used to store the update components.
 	Updates chasm.Map[string, *WorkflowUpdate]
+
+	// Activities holds the workflow's activities, keyed by scheduled event ID. Only used when the
+	// workflow's activity commands are handled by NewActivityLibrary; the server runs workflow
+	// activities in mutable state.
+	Activities chasm.Map[int64, *activity.Activity]
 }
 
 func NewWorkflow(
@@ -255,7 +261,7 @@ func addAndApplyHistoryEvent[D EventDefinition](
 	if !ok {
 		return nil, serviceerror.NewInternalf("no event definition registered for Go type %T", (*D)(nil))
 	}
-	event := w.AddHistoryEvent(def.Type(), setAttributes)
+	event := w.eventStore(ctx).AddHistoryEvent(def.Type(), setAttributes)
 	return event, def.Apply(ctx, w, event)
 }
 

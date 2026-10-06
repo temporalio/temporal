@@ -220,11 +220,22 @@ func NewStandaloneActivity(
 	return activity, nil
 }
 
+// NewEmbeddedActivity returns an activity to be embedded in an ActivityStore, such as a workflow,
+// with the given options and input. The activity reaches its store through its parent pointer once
+// it is added to the store as a child component.
 func NewEmbeddedActivity(
 	ctx chasm.MutableContext,
 	state *activitypb.ActivityState,
-	parent ActivityStore,
-) {
+	requestData *activitypb.ActivityRequestData,
+) *Activity {
+	activity := &Activity{
+		ActivityState: state,
+		LastAttempt:   chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
+		RequestData:   chasm.NewDataField(ctx, requestData),
+		Outcome:       chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+	}
+	activity.ScheduleTime = timestamppb.New(ctx.Now(activity))
+	return activity
 }
 
 // HandleStarted updates the activity on recording activity task started and populates the response.
