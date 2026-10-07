@@ -2141,7 +2141,7 @@ func (n *Node) countLogicalTasks(
 	componentAttr *persistencespb.ChasmComponentAttributes,
 	counts map[uint32]int,
 ) map[uint32]int {
-	if !n.registry.taskCountMetricEnabled {
+	if _, ok := n.registry.taskCountMetricComponentIDs[componentAttr.GetTypeId()]; !ok {
 		return counts
 	}
 
