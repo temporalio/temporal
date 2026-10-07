@@ -88,6 +88,17 @@ func (d *Dispatcher) Execute(
 		return nil
 	}
 
+	// Defensive check to avoid dispatching worker commands to an empty queue.
+	if task.ControlQueue == "" {
+		d.logger.Warn("Worker commands task has empty control queue, dropping",
+			tag.WorkflowNamespace(namespaceName),
+			tag.WorkflowID(task.WorkflowID),
+			tag.WorkflowRunID(task.RunID),
+		)
+		d.recordCommandMetrics(task.Commands, namespaceName, "empty_control_queue")
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(ctx, d.config.WorkerCommandsDispatchTimeout())
 	defer cancel()
 
