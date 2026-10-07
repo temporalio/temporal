@@ -4460,8 +4460,10 @@ type TransferTaskInfo_CloseExecutionTaskDetails struct {
 	// can_skip_visibility_archival is set to true when we can guarantee that visibility records will be archived
 	// by some other task, so this task doesn't need to worry about it.
 	CanSkipVisibilityArchival bool `protobuf:"varint,1,opt,name=can_skip_visibility_archival,json=canSkipVisibilityArchival,proto3" json:"can_skip_visibility_archival,omitempty"`
-	unknownFields             protoimpl.UnknownFields
-	sizeCache                 protoimpl.SizeCache
+	// Only standby execution skips verification; active execution still notifies the parent.
+	SkipParentVerification bool `protobuf:"varint,2,opt,name=skip_parent_verification,json=skipParentVerification,proto3" json:"skip_parent_verification,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *TransferTaskInfo_CloseExecutionTaskDetails) Reset() {
@@ -4497,6 +4499,13 @@ func (*TransferTaskInfo_CloseExecutionTaskDetails) Descriptor() ([]byte, []int) 
 func (x *TransferTaskInfo_CloseExecutionTaskDetails) GetCanSkipVisibilityArchival() bool {
 	if x != nil {
 		return x.CanSkipVisibilityArchival
+	}
+	return false
+}
+
+func (x *TransferTaskInfo_CloseExecutionTaskDetails) GetSkipParentVerification() bool {
+	if x != nil {
+		return x.SkipParentVerification
 	}
 	return false
 }
@@ -5143,7 +5152,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"event_type\x18\x01 \x01(\x0e2 .temporal.api.enums.v1.EventTypeR\teventType\x12\x19\n" +
 	"\bevent_id\x18\x02 \x01(\x03R\aeventId\x12;\n" +
 	"\vattach_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"attachTime\"\xdf\a\n" +
+	"attachTime\"\x9a\b\n" +
 	"\x10TransferTaskInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -5164,9 +5173,10 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x12delete_after_close\x18\x0f \x01(\bR\x10deleteAfterClose\x12\x91\x01\n" +
 	"\x1cclose_execution_task_details\x18\x10 \x01(\v2N.temporal.server.api.persistence.v1.TransferTaskInfo.CloseExecutionTaskDetailsH\x00R\x19closeExecutionTaskDetails\x12[\n" +
 	"\x0fchasm_task_info\x18\x12 \x01(\v21.temporal.server.api.persistence.v1.ChasmTaskInfoH\x00R\rchasmTaskInfo\x12\x14\n" +
-	"\x05stamp\x18\x11 \x01(\x05R\x05stamp\x1a\\\n" +
+	"\x05stamp\x18\x11 \x01(\x05R\x05stamp\x1a\x96\x01\n" +
 	"\x19CloseExecutionTaskDetails\x12?\n" +
-	"\x1ccan_skip_visibility_archival\x18\x01 \x01(\bR\x19canSkipVisibilityArchivalB\x0e\n" +
+	"\x1ccan_skip_visibility_archival\x18\x01 \x01(\bR\x19canSkipVisibilityArchival\x128\n" +
+	"\x18skip_parent_verification\x18\x02 \x01(\bR\x16skipParentVerificationB\x0e\n" +
 	"\ftask_detailsJ\x04\b\x0e\x10\x0f\"\xc0\t\n" +
 	"\x13ReplicationTaskInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
