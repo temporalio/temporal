@@ -21,8 +21,12 @@ import (
 const VersionCheckInterval = 24 * time.Hour
 
 type VersionChecker struct {
-	config                 *Config
-	shutdownChan           chan struct{}
+	config       *Config
+	shutdownChan chan struct{}
+	// cancel stops an in-flight version check. Closing shutdownChan only ends the
+	// loop between ticks; without this a check already blocked in the HTTP call
+	// keeps the goroutine and its connection alive past Stop.
+	cancel                 context.CancelFunc
 	metricsHandler         metrics.Handler
 	clusterMetadataManager persistence.ClusterMetadataManager
 	startOnce              sync.Once
@@ -48,11 +52,9 @@ func NewVersionChecker(
 func (vc *VersionChecker) Start() {
 	if vc.config.EnableServerVersionCheck() {
 		vc.startOnce.Do(func() {
-			// TODO: specify a timeout for the context
-			ctx := headers.SetCallerInfo(
-				context.TODO(),
-				headers.SystemBackgroundHighCallerInfo,
-			)
+			ctx, cancel := context.WithCancel(context.Background())
+			vc.cancel = cancel
+			ctx = headers.SetCallerInfo(ctx, headers.SystemBackgroundHighCallerInfo)
 
 			go vc.versionCheckLoop(ctx)
 		})
@@ -63,6 +65,11 @@ func (vc *VersionChecker) Stop() {
 	if vc.config.EnableServerVersionCheck() {
 		vc.stopOnce.Do(func() {
 			close(vc.shutdownChan)
+			// Set only inside startOnce, and Stop without Start is a no-op path
+			// callers already rely on, so guard rather than assume.
+			if vc.cancel != nil {
+				vc.cancel()
+			}
 		})
 	}
 }
@@ -105,7 +112,7 @@ func (vc *VersionChecker) performVersionCheck(
 		metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
 		return
 	}
-	resp, err := vc.getVersionInfo(req)
+	resp, err := vc.getVersionInfo(ctx, req)
 	if err != nil {
 		metrics.VersionCheckRequestFailedCount.With(vc.metricsHandler).Record(1)
 		metrics.VersionCheckFailedCount.With(vc.metricsHandler).Record(1)
@@ -146,8 +153,8 @@ func (vc *VersionChecker) createVersionCheckRequest(metadata *persistence.GetClu
 	}, nil
 }
 
-func (vc *VersionChecker) getVersionInfo(req *versioninfo.VersionCheckRequest) (*versioninfo.VersionCheckResponse, error) {
-	return versioninfo.NewCaller().Call(req)
+func (vc *VersionChecker) getVersionInfo(ctx context.Context, req *versioninfo.VersionCheckRequest) (*versioninfo.VersionCheckResponse, error) {
+	return versioninfo.NewCaller().Call(ctx, req)
 }
 
 func (vc *VersionChecker) saveVersionInfo(ctx context.Context, resp *versioninfo.VersionCheckResponse) error {

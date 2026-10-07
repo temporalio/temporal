@@ -1,6 +1,7 @@
 package versioninfo_test
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -69,7 +70,7 @@ func TestPostInfo(t *testing.T) {
 		Name:    "sdk-java",
 		Version: "3.11",
 	}}
-	_, err = caller.Call(&versioninfo.VersionCheckRequest{
+	_, err = caller.Call(t.Context(), &versioninfo.VersionCheckRequest{
 		Product:   "server",
 		Version:   "0.1",
 		ClusterID: "foo",
@@ -81,5 +82,56 @@ func TestPostInfo(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("Request failed: %s", err)
+	}
+}
+
+// TestCallIsBoundedByContext pins the fix for #11943. A server that accepts the
+// request and never responds used to block Call forever: the client had no
+// Timeout and the request carried no context, so neither the caller's deadline
+// nor VersionChecker.Stop could reach it.
+func TestCallIsBoundedByContext(t *testing.T) {
+	t.Parallel()
+
+	released := make(chan struct{})
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		<-released // accept, then never answer
+	}))
+	defer func() {
+		close(released)
+		ts.Close()
+	}()
+
+	u, err := url.Parse(ts.URL)
+	if err != nil {
+		t.Fatalf("parse url: %s", err)
+	}
+	caller := &versioninfo.Caller{Scheme: u.Scheme, Host: u.Host}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() {
+		_, callErr := caller.Call(ctx, &versioninfo.VersionCheckRequest{
+			Product:   "server",
+			Version:   "0.1",
+			ClusterID: "foo",
+			DB:        "cassandra",
+			OS:        "linux",
+			Arch:      "arm64",
+			Timestamp: time.Now().UnixNano(),
+			SDKInfo:   []versioninfo.SDKInfo{{Name: "sdk-java", Version: "3.11"}},
+		})
+		done <- callErr
+	}()
+
+	// Cancelling must unblock the in-flight request, which is what Stop relies on.
+	cancel()
+
+	select {
+	case callErr := <-done:
+		if callErr == nil {
+			t.Fatal("Call returned nil error after its context was cancelled")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Call did not return after its context was cancelled; the request is not bound to the context")
 	}
 }
