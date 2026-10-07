@@ -3002,6 +3002,11 @@ should be enabled for non continuedAsNew workflow UpdateWithNew case.`,
 		false,
 		`ReplicationMultipleBatches is the flag to enable replication of multiple history event batches`,
 	)
+	ValidateReplicationTaskSourceCluster = NewGlobalBoolSetting(
+		"history.validateReplicationTaskSourceCluster",
+		true,
+		`ValidateReplicationTaskSourceCluster controls whether inbound workflow replication tasks are accepted only from clusters in the namespace cluster list.`,
+	)
 	ReplicationTaskConverterLowPriorityLockMaxAttempts = NewGlobalIntSetting(
 		"history.ReplicationTaskConverterLowPriorityLockMaxAttempts",
 		3,
@@ -3432,7 +3437,7 @@ the IncomingSignals CHASM field.`,
 	)
 	EnableCHASMWorkflowRootOnStart = NewNamespaceBoolSetting(
 		"history.enableCHASMWorkflowRootOnStart",
-		false,
+		true,
 		`Controls whether the CHASM Workflow root component is persisted in the transaction that
 applies the WorkflowExecutionStarted event, instead of lazily on first use of a CHASM feature.
 Requires EnableChasm.`,
