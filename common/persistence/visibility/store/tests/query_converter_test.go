@@ -862,10 +862,16 @@ var queryConverterTestCases = []queryConverterTestCase{
 
 	// Search attribute name resolution.
 	{
-		name: "custom search attribute by field name",
+		// Custom search attributes must be referenced by their alias, never by the field
+		// name backing them.
+		name: "custom search attribute field name is not a search attribute",
 		in:   "Keyword01 = 'foo'",
-		sql:  "TemporalNamespaceDivision is null and Keyword01 = 'foo'",
-		es:   `{"bool":{"filter":{"term":{"Keyword01":"foo"}},"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+		err:  "invalid search attribute: Keyword01",
+	},
+	{
+		name: "custom search attribute field name with reserved prefix",
+		in:   "TemporalKeyword01 = 'foo'",
+		err:  "invalid search attribute: TemporalKeyword01",
 	},
 	{
 		name: "custom search attribute with backticks",
