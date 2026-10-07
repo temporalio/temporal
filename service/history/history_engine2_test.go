@@ -2032,7 +2032,8 @@ func (s *engine2Suite) TestStartWorkflowExecution_DerivedRunID_CurrentRunConflic
 	startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING)
 	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
 
-	s.IsType(&persistence.WorkflowConditionFailedError{}, err)
+	var conditionFailedErr *persistence.WorkflowConditionFailedError
+	s.ErrorAs(err, &conditionFailedErr)
 	s.Nil(resp)
 }
 
