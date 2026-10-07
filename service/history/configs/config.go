@@ -46,18 +46,19 @@ type Config struct {
 	VisibilityAllowList                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	SuppressErrorSetSystemSearchAttribute   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	EmitShardLagLog                            dynamicconfig.BoolPropertyFn
-	EmitImmediateQueueBacklogAge               dynamicconfig.BoolPropertyFn
-	EnableDataLossMetrics                      dynamicconfig.BoolPropertyFn
-	ThrottledLogRPS                            dynamicconfig.IntPropertyFn
-	EnableStickyQuery                          dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableWorkflowTaskCompletionPagination     dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	AlignMembershipChange                      dynamicconfig.DurationPropertyFn
-	WorkflowTaskCompletionBufferTotalSizeLimit dynamicconfig.IntPropertyFn
-	WorkflowTaskCompletionBufferSizeLimit      dynamicconfig.IntPropertyFnWithNamespaceFilter
-	WorkflowTaskCompletionBufferNamespaceRatio dynamicconfig.FloatPropertyFnWithNamespaceFilter
-	ShutdownDrainDuration                      dynamicconfig.DurationPropertyFn
-	StartupMembershipJoinDelay                 dynamicconfig.DurationPropertyFn
+	EmitShardLagLog                                dynamicconfig.BoolPropertyFn
+	EmitImmediateQueueBacklogAge                   dynamicconfig.BoolPropertyFn
+	EnableDataLossMetrics                          dynamicconfig.BoolPropertyFn
+	ThrottledLogRPS                                dynamicconfig.IntPropertyFn
+	EnableStickyQuery                              dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableWorkflowTaskCompletionPagination         dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	AlignMembershipChange                          dynamicconfig.DurationPropertyFn
+	WorkflowTaskCompletionBufferTotalSizeLimit     dynamicconfig.IntPropertyFn
+	WorkflowTaskCompletionBufferSizeLimit          dynamicconfig.IntPropertyFnWithNamespaceFilter
+	WorkflowTaskCompletionBufferNamespaceRatio     dynamicconfig.FloatPropertyFnWithNamespaceFilter
+	WorkflowTaskCompletionBufferNewPaginationRatio dynamicconfig.FloatPropertyFnWithNamespaceFilter
+	ShutdownDrainDuration                          dynamicconfig.DurationPropertyFn
+	StartupMembershipJoinDelay                     dynamicconfig.DurationPropertyFn
 
 	// Workflow reset related settings.
 	AllowResetWithPendingChildren dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -907,10 +908,11 @@ func NewConfig(
 		RoutingInfoCacheMaxSize:              dynamicconfig.RoutingInfoCacheMaxSize.Get(dc),
 
 		// Workflow task completion pagination
-		EnableWorkflowTaskCompletionPagination:     dynamicconfig.EnableWorkflowTaskCompletionPagination.Get(dc),
-		WorkflowTaskCompletionBufferTotalSizeLimit: dynamicconfig.WorkflowTaskCompletionBufferTotalSizeLimit.Get(dc),
-		WorkflowTaskCompletionBufferSizeLimit:      dynamicconfig.WorkflowTaskCompletionBufferSizeLimit.Get(dc),
-		WorkflowTaskCompletionBufferNamespaceRatio: dynamicconfig.WorkflowTaskCompletionBufferNamespaceRatio.Get(dc),
+		EnableWorkflowTaskCompletionPagination:         dynamicconfig.EnableWorkflowTaskCompletionPagination.Get(dc),
+		WorkflowTaskCompletionBufferTotalSizeLimit:     dynamicconfig.WorkflowTaskCompletionBufferTotalSizeLimit.Get(dc),
+		WorkflowTaskCompletionBufferSizeLimit:          dynamicconfig.WorkflowTaskCompletionBufferSizeLimit.Get(dc),
+		WorkflowTaskCompletionBufferNamespaceRatio:     dynamicconfig.WorkflowTaskCompletionBufferNamespaceRatio.Get(dc),
+		WorkflowTaskCompletionBufferNewPaginationRatio: dynamicconfig.WorkflowTaskCompletionBufferNewPaginationRatio.Get(dc),
 	}
 
 	return cfg
