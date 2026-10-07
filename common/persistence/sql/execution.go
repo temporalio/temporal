@@ -91,6 +91,12 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 	workflowID := newWorkflow.WorkflowID
 	runID := primitives.MustParseUUID(newWorkflow.RunID)
 
+	if request.VerifyRunIDUniqueness {
+		if err := assertRunNotExists(ctx, tx, shardID, namespaceID, workflowID, runID, m.serializer); err != nil {
+			return nil, err
+		}
+	}
+
 	var err error
 	var currentRow *sqlplugin.CurrentExecutionsRow
 	if currentRow, err = lockCurrentExecutionIfExists(ctx,
@@ -371,6 +377,20 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 	runID := primitives.MustParseUUID(updateWorkflow.ExecutionState.RunId)
 
 	shardID := request.ShardID
+
+	if newWorkflow != nil && request.VerifyRunIDUniqueness {
+		if err := assertRunNotExists(
+			ctx,
+			tx,
+			shardID,
+			primitives.MustParseUUID(newWorkflow.NamespaceID),
+			newWorkflow.WorkflowID,
+			primitives.MustParseUUID(newWorkflow.ExecutionState.RunId),
+			m.serializer,
+		); err != nil {
+			return err
+		}
+	}
 
 	switch request.Mode {
 	case p.UpdateWorkflowModeIgnoreCurrent:

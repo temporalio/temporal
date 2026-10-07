@@ -386,7 +386,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Conflict() {
 		NewWorkflowSnapshot: *newSnapshot,
 		NewWorkflowEvents:   newEvents,
 	})
-	s.AssertWorkflowConditionFailed(err, newSnapshot.ExecutionState.RunId)
+	s.IsType(&p.WorkflowConditionFailedError{}, err)
 }
 
 func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_DuplicateRunID_OtherRunCurrent() {
@@ -408,9 +408,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_DuplicateRunID_OtherRun
 		NewWorkflowSnapshot: *dupSnapshot,
 		NewWorkflowEvents:   dupEvents,
 	})
-	var currentErr *p.CurrentWorkflowConditionFailedError
-	s.ErrorAs(err, &currentErr)
-	s.Equal(secondRunID, currentErr.RunID)
+	s.assertWorkflowRunAlreadyExists(err, firstMutation.ExecutionState)
 
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, firstSnapshot, firstMutation)
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, secondSnapshot)
@@ -461,7 +459,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_UpdateCurrent_DuplicateRunID_Oth
 		NewWorkflowSnapshot: *dupSnapshot,
 		NewWorkflowEvents:   dupEvents,
 	})
-	s.AssertWorkflowConditionFailed(err, s.RunID)
+	s.assertWorkflowRunAlreadyExists(err, firstMutation.ExecutionState)
 
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, firstSnapshot, firstMutation)
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, secondSnapshot, secondMutation)
@@ -725,7 +723,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_Conflict() {
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
 	})
-	s.AssertWorkflowConditionFailed(err, currentMutation.ExecutionState.RunId)
+	s.IsType(&p.WorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, newSnapshot)
 	s.AssertHEPrefixWithDB(branchToken, newEvents)
@@ -895,7 +893,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_WithNew_DuplicateRunID
 		NewWorkflowSnapshot: dupSnapshot,
 		NewWorkflowEvents:   dupEvents,
 	})
-	s.AssertWorkflowConditionFailed(err, s.RunID)
+	s.assertWorkflowRunAlreadyExists(err, firstMutation.ExecutionState)
 
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, firstSnapshot, firstMutation)
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, secondSnapshot)
@@ -1070,7 +1068,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_Conflict() {
 		NewWorkflowSnapshot: nil,
 		NewWorkflowEvents:   nil,
 	})
-	s.AssertWorkflowConditionFailed(err, zombieMutation.ExecutionState.RunId)
+	s.IsType(&p.WorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, zombieSnapshot)
 	s.AssertHEPrefixWithDB(zombieBranchToken, zombieEvents1)
@@ -1521,7 +1519,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 		CurrentWorkflowMutation: currentMutation,
 		CurrentWorkflowEvents:   currentEvents2,
 	})
-	s.AssertWorkflowConditionFailed(err, currentMutation.ExecutionState.RunId)
+	s.IsType(&p.WorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, baseSnapshot)
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, currentSnapshot)
@@ -1605,7 +1603,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 		CurrentWorkflowMutation: currentMutation,
 		CurrentWorkflowEvents:   currentEvents2,
 	})
-	s.AssertWorkflowConditionFailed(err, resetSnapshot.ExecutionState.RunId)
+	s.IsType(&p.WorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, baseSnapshot)
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, currentSnapshot)
@@ -1966,7 +1964,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_Conflict()
 		CurrentWorkflowMutation: nil,
 		CurrentWorkflowEvents:   nil,
 	})
-	s.AssertWorkflowConditionFailed(err, resetSnapshot.ExecutionState.RunId)
+	s.IsType(&p.WorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, baseSnapshot)
 	s.AssertHEPrefixWithDB(branchToken, baseEvents)
@@ -2206,7 +2204,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_Conflict() {
 		CurrentWorkflowMutation: nil,
 		CurrentWorkflowEvents:   nil,
 	})
-	s.AssertWorkflowConditionFailed(err, resetSnapshot.ExecutionState.RunId)
+	s.IsType(&p.WorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, baseSnapshot)
 	s.AssertHEPrefixWithDB(baseBranchToken, baseEvents)
@@ -2353,7 +2351,7 @@ func (s *ExecutionMutableStateSuite) TestSet_Conflict() {
 
 		SetWorkflowSnapshot: *setSnapshot,
 	})
-	s.AssertWorkflowConditionFailed(err, setSnapshot.ExecutionState.RunId)
+	s.IsType(&p.WorkflowConditionFailedError{}, err)
 
 	s.AssertMSEqualWithDB(chasm.WorkflowArchetypeID, snapshot)
 	s.AssertHEEqualWithDB(branchToken, events)
@@ -2876,8 +2874,6 @@ func (s *ExecutionMutableStateSuite) CreateCHASMExecution(
 	return snapshot
 }
 
-// AssertWorkflowConditionFailed asserts err is a run-record condition failure for the given run.
-// Callers (run-ID dedup) rely on every store populating the run ID.
 func (s *ExecutionMutableStateSuite) assertCurrentRunID(expectedRunID string) {
 	resp, err := s.ExecutionManager.GetCurrentExecution(s.Ctx, &p.GetCurrentExecutionRequest{
 		ShardID:     s.ShardID,
@@ -2889,10 +2885,14 @@ func (s *ExecutionMutableStateSuite) assertCurrentRunID(expectedRunID string) {
 	s.Equal(expectedRunID, resp.RunID)
 }
 
-func (s *ExecutionMutableStateSuite) AssertWorkflowConditionFailed(err error, expectedRunID string) {
-	var condFailedErr *p.WorkflowConditionFailedError
-	s.ErrorAs(err, &condFailedErr)
-	s.Equal(expectedRunID, condFailedErr.RunID, "the error must identify the run whose condition failed")
+func (s *ExecutionMutableStateSuite) assertWorkflowRunAlreadyExists(
+	err error,
+	existingState *persistencespb.WorkflowExecutionState,
+) {
+	var existsErr *p.WorkflowRunAlreadyExistsError
+	s.ErrorAs(err, &existsErr)
+	s.Equal(existingState.RunId, existsErr.RunID)
+	s.Equal(existingState.Status, existsErr.Status)
 }
 
 func (s *ExecutionMutableStateSuite) AssertMissingFromDB(

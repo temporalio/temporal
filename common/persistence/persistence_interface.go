@@ -346,8 +346,9 @@ type (
 		ArchetypeID chasm.ArchetypeID
 
 		// VerifyRunIDUniqueness is set when the run ID was derived rather than randomly generated. The store must
-		// then reject the create with WorkflowConditionFailedError{RunID} if a run with this run ID already exists.
-		// Stores whose primary key already rejects a duplicate run ID satisfy this without reading the flag.
+		// then reject the create with WorkflowRunAlreadyExistsError, describing the existing run, if a run with this
+		// run ID already exists. It takes precedence over CurrentWorkflowConditionFailedError when the current run
+		// condition also fails.
 		VerifyRunIDUniqueness bool
 
 		NewWorkflowSnapshot  InternalWorkflowSnapshot
@@ -367,6 +368,7 @@ type (
 
 		ArchetypeID chasm.ArchetypeID
 
+		// VerifyRunIDUniqueness is as on InternalCreateWorkflowExecutionRequest, for NewWorkflowSnapshot only.
 		VerifyRunIDUniqueness bool
 
 		UpdateWorkflowMutation  InternalWorkflowMutation

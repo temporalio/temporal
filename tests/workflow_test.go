@@ -255,8 +255,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_RunIDDedup() {
 		runIDDedupAssertResponse(s, env, retry, workflowID, run1.RunId, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
 	})
 
-	s.Run("USE_EXISTING while the current run is running behaves exactly as today", func(s *WorkflowTestSuite) {
-		// USE_EXISTING with a running current run is unchanged by the feature.
+	s.Run("USE_EXISTING retry returns the original run, not the current run", func(s *WorkflowTestSuite) {
 		env := testcore.NewEnv(s.T(),
 			testcore.WithDynamicConfig(dynamicconfig.EnableCrossRunRequestIDDedup, true),
 			testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
@@ -276,15 +275,39 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_RunIDDedup() {
 		run2 := start(uuid.NewString(), enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING)
 		s.NotEqual(run1.RunId, run2.RunId)
 
-		// Returns the current run, not run1.
-		reused := start(req1, enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING)
-		s.Equal(run2.RunId, reused.RunId)
-		s.False(reused.Started)
-		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, reused.Status)
-		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, runIDDedupStatus(s, env, workflowID, run1.RunId))
+		retry := start(req1, enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING)
+		runIDDedupAssertResponse(s, env, retry, workflowID, run1.RunId, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, runIDDedupStatus(s, env, workflowID, run2.RunId))
 	})
 
-	s.Run("USE_EXISTING once the current run has closed does dedup", func(s *WorkflowTestSuite) {
+	s.Run("FAIL retry returns the original run instead of AlreadyStarted", func(s *WorkflowTestSuite) {
+		env := testcore.NewEnv(s.T(),
+			testcore.WithDynamicConfig(dynamicconfig.EnableCrossRunRequestIDDedup, true),
+			testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
+		tv := testvars.New(s.T())
+		workflowID := testcore.RandomizeStr(s.T().Name())
+		req1 := uuid.NewString()
+
+		start := func(requestID string) (*workflowservice.StartWorkflowExecutionResponse, error) {
+			req := newStartRequest(env, tv, workflowID, requestID)
+			req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
+			return env.FrontendClient().StartWorkflowExecution(s.Context(), req)
+		}
+
+		run1, err := start(req1)
+		s.NoError(err)
+		runIDDedupCompleteWorkflow(s, env, tv)
+		run2, err := start(uuid.NewString())
+		s.NoError(err)
+		s.NotEqual(run1.RunId, run2.RunId)
+
+		retry, err := start(req1)
+		s.NoError(err)
+		runIDDedupAssertResponse(s, env, retry, workflowID, run1.RunId, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, runIDDedupStatus(s, env, workflowID, run2.RunId))
+	})
+
+	s.Run("USE_EXISTING retry after the current run closed returns the original run", func(s *WorkflowTestSuite) {
 		// USE_EXISTING with a completed current run goes through the reuse policy and gets dedup.
 		env := testcore.NewEnv(s.T(),
 			testcore.WithDynamicConfig(dynamicconfig.EnableCrossRunRequestIDDedup, true),
@@ -375,7 +398,7 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution_RunIDDedup() {
 		s.True(retry.Started)
 	})
 
-	s.Run("same request ID while still current dedups as before", func(s *WorkflowTestSuite) {
+	s.Run("retry while the original run is still current returns it", func(s *WorkflowTestSuite) {
 		// Current-run request-ID dedup still works.
 		env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.EnableCrossRunRequestIDDedup, true))
 		tv := testvars.New(s.T())

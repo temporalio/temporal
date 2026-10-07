@@ -77,6 +77,7 @@ func (s *transactionSuite) TestOperationMayApplied() {
 	}{
 		{err: &persistence.CurrentWorkflowConditionFailedError{}, mayApplied: false},
 		{err: &persistence.WorkflowConditionFailedError{}, mayApplied: false},
+		{err: &persistence.WorkflowRunAlreadyExistsError{}, mayApplied: false},
 		{err: &persistence.ConditionFailedError{}, mayApplied: false},
 		{err: &persistence.ShardOwnershipLostError{}, mayApplied: false},
 		{err: &persistence.InvalidPersistenceRequestError{}, mayApplied: false},

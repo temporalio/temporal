@@ -226,44 +226,27 @@ func appendLenPrefixed(dst []byte, s string) []byte {
 	return append(dst, s...)
 }
 
-// runIDDedupResponse turns a conflict on the run ID we just attempted into a dedup response, and returns
+// runIDDedupResponse turns WorkflowRunAlreadyExistsError into a dedup response for the existing run, and returns
 // err unchanged otherwise.
 func (s *Starter) runIDDedupResponse(
 	ctx context.Context,
-	attemptedRunID string,
 	err error,
 ) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
-	if !s.derivedRunID {
+	var existsErr *persistence.WorkflowRunAlreadyExistsError
+	if !errors.As(err, &existsErr) {
 		return nil, StartErr, err
-	}
-	var conflictErr *persistence.WorkflowConditionFailedError
-	if !errors.As(err, &conflictErr) {
-		return nil, StartErr, err
-	}
-	// On the terminate path the error can come from the current run's version check instead, which is not a dedup.
-	if conflictErr.RunID != attemptedRunID {
-		return nil, StartErr, err
-	}
-
-	info, loadErr := s.getMutableStateInfo(ctx, attemptedRunID)
-	if loadErr != nil {
-		return nil, StartErr, loadErr
 	}
 
 	metrics.StartWorkflowRequestDeduped.With(s.getMetricsHandler()).Record(1)
 
-	if s.requestEagerStart() {
-		metrics.WorkflowEagerExecutionDeniedCounter.With(s.getMetricsHandler()).
-			Record(1, metrics.ReasonTag(eagerStartDeniedReasonTaskAlreadyDispatched))
+	// WorkflowRunAlreadyExistsError error outranks CurrentWorkflowConditionFailedError, so a retry while the run is still
+	// current lands here rather than in handleConflict. respondToRetriedRequest keeps returning its eager workflow task in that case.
+	resp, err := s.respondToRetriedRequest(ctx, existsErr.RunID, existsErr.RunID)
+	if err != nil {
+		return nil, StartErr, err
 	}
-
-	return &historyservice.StartWorkflowExecutionResponse{
-		RunId:               attemptedRunID,
-		FirstExecutionRunId: attemptedRunID,
-		Started:             true,
-		Status:              info.status,
-		Link:                s.generateStartedEventRefLink(attemptedRunID),
-	}, StartDeduped, nil
+	resp.Status = existsErr.Status
+	return resp, StartDeduped, nil
 }
 
 // Invoke starts a new workflow execution.
@@ -307,7 +290,7 @@ func (s *Starter) Invoke(
 			}
 			return resp, outcome, conflictErr
 		}
-		return s.runIDDedupResponse(ctx, creationParams.runID, err)
+		return s.runIDDedupResponse(ctx, err)
 	}
 
 	// Notify version workflow if we're pinning to a potentially drained version
@@ -463,7 +446,7 @@ func (s *Starter) handleConflict(
 	}
 
 	if err := s.createAsCurrent(ctx, creationParams, currentWorkflowConditionFailed); err != nil {
-		return s.runIDDedupResponse(ctx, creationParams.runID, err)
+		return s.runIDDedupResponse(ctx, err)
 	}
 	resp, err := s.generateResponse(
 		creationParams.runID,
@@ -698,7 +681,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		// NOTE: This WorkflowIDReusePolicy cannot be RejectDuplicate as the frontend will reject that.
 		return nil, StartErr, serviceerror.NewUnavailablef("Termination failed: %v", err)
 	default:
-		return s.runIDDedupResponse(ctx, newRunID, err)
+		return s.runIDDedupResponse(ctx, err)
 	}
 }
 
