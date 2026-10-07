@@ -2,6 +2,7 @@ package ringpop
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"math/rand"
@@ -149,12 +150,17 @@ func (rpo *monitor) Start() {
 	// we must know our seed nodes before bootstrapping
 
 	if err = rpo.startHeartbeat(broadcastAddress); err != nil {
+		if rpo.lifecycleCtx.Err() != nil {
+			// Stop() called during Start()'s execution. This is ok
+			return
+		}
 		rpo.logger.Fatal("unable to initialize membership heartbeats", tag.Error(err))
 	}
 
 	if err = rpo.bootstrapRingPop(); err != nil {
-		// Stop() called during Start()'s execution. This is ok
-		if strings.Contains(err.Error(), "destroyed while attempting to join") {
+		// Stop() cancels lifecycleCtx before destroying ringpop, so any failure caused by a
+		// concurrent Stop() (including ringpop's "destroyed while attempting to join") lands here.
+		if rpo.lifecycleCtx.Err() != nil {
 			return
 		}
 		rpo.logger.Fatal("failed to start ringpop", tag.Error(err))
@@ -216,7 +222,7 @@ func (rpo *monitor) bootstrapRingPop() error {
 	policy := backoff.NewExponentialRetryPolicy(healthyHostLastHeartbeatCutoff / 2).
 		WithBackoffCoefficient(1).
 		WithMaximumAttempts(maxBootstrapRetries)
-	op := func() error {
+	op := func(context.Context) error {
 		hostPorts, err := rpo.fetchCurrentBootstrapHostports()
 		if err != nil {
 			return err
@@ -236,7 +242,8 @@ func (rpo *monitor) bootstrapRingPop() error {
 		return err
 	}
 
-	if err := backoff.ThrottleRetry(op, policy, nil); err != nil {
+	// Use lifecycleCtx so that Stop() interrupts the backoff between attempts.
+	if err := backoff.ThrottleRetryContext(rpo.lifecycleCtx, op, policy, nil); err != nil {
 		return fmt.Errorf("exhausted all retries: %w", err)
 	}
 	return nil
@@ -403,7 +410,12 @@ func (rpo *monitor) startHeartbeatUpsertLoop(request *persistence.UpsertClusterM
 
 // Stop the membership monitor and all associated rings. This holds the state lock
 // for the entire call as the individual ring Start/Stop functions may not be safe to
-// call concurrently
+// call concurrently.
+//
+// If we joined the ring, Stop evicts us before destroying ringpop, since destroying it just
+// stops gossip without telling peers we're gone, and they'd keep routing to us until failure
+// detection removes us. Callers should still call EvictSelf/EvictSelfAt and drain before
+// stopping the gRPC server; this is a backstop for when they didn't.
 func (rpo *monitor) Stop() {
 	rpo.stateLock.Lock()
 	defer rpo.stateLock.Unlock()
@@ -416,6 +428,14 @@ func (rpo *monitor) Stop() {
 
 	for _, ring := range rpo.rings {
 		ring.Stop()
+	}
+
+	if rpo.joined {
+		rpo.evicted = true
+		// Returns ErrSelfEvictionInProgress if EvictSelf/EvictSelfAt already evicted us.
+		if err := rpo.rp.SelfEvict(); err != nil && !errors.Is(err, swim.ErrSelfEvictionInProgress) {
+			rpo.logger.Warn("unable to evict self from membership on stop", tag.Error(err))
+		}
 	}
 
 	rpo.rp.Destroy()

@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/await"
@@ -196,6 +197,91 @@ func (s *RpoSuite) TestEvictBeforeStart() {
 	waitTime, err := testService.rings[2].EvictSelfAt(time.Now().Add(5 * time.Second))
 	s.NoError(err)
 	s.Zero(waitTime)
+}
+
+func (s *RpoSuite) TestEvictDuringBootstrap() {
+	serviceName := primitives.HistoryService
+	testService := newTestCluster(s.T(), "rpm-test", 2, "127.0.0.1", "", serviceName, "127.0.0.1", nil, nil, false)
+	s.NotNil(testService, "Failed to create test service")
+	defer testService.Stop()
+
+	logger := &fatalRecordingLogger{Logger: log.NewTestLogger()}
+	m := newGatedTestMonitor(s.T(), "rpm-test", testService.GetSeedNode(), serviceName, logger)
+	startDone := make(chan struct{})
+	go func() {
+		defer close(startDone)
+		m.Start()
+	}()
+
+	// Evict while Start is bootstrapping, then let bootstrap finish.
+	s.waitForChannel(m.entered, "Start never reached bootstrap")
+	evictErr := m.EvictSelf()
+	m.release()
+	s.waitForChannel(startDone, "Start did not return")
+
+	r, err := testService.rings[0].GetResolver(serviceName)
+	s.NoError(err)
+	// We're asserting that the evicted host never shows up, so there's no condition to wait for.
+	// Give its labels time to propagate if it (incorrectly) joined.
+	time.Sleep(2 * time.Second) //nolint:forbidigo
+	addrs := util.MapSlice(r.Members(), func(h membership.HostInfo) string { return h.GetAddress() })
+	s.ElementsMatch(testService.hostAddrs, addrs)
+	s.NotContains(addrs, m.addr)
+
+	s.NoError(evictErr)
+	s.Zero(logger.fatals.Load())
+}
+
+func (s *RpoSuite) TestStopDuringBootstrap() {
+	serviceName := primitives.HistoryService
+	testService := newTestCluster(s.T(), "rpm-test", 2, "127.0.0.1", "", serviceName, "127.0.0.1", nil, nil, false)
+	s.NotNil(testService, "Failed to create test service")
+	defer testService.Stop()
+
+	logger := &fatalRecordingLogger{Logger: log.NewTestLogger()}
+	m := newGatedTestMonitor(s.T(), "rpm-test", testService.GetSeedNode(), serviceName, logger)
+	startDone := make(chan struct{})
+	go func() {
+		defer close(startDone)
+		m.Start()
+	}()
+
+	// Stop while Start is bootstrapping. Start should return promptly and cleanly, rather than
+	// retrying bootstrap and then crashing the process.
+	s.waitForChannel(m.entered, "Start never reached bootstrap")
+	m.Stop()
+	s.waitForChannel(startDone, "Start did not return after Stop")
+	s.Zero(logger.fatals.Load())
+}
+
+func (s *RpoSuite) TestStopEvictsSelf() {
+	serviceName := primitives.HistoryService
+	testService := newTestCluster(s.T(), "rpm-test", 3, "127.0.0.1", "", serviceName, "127.0.0.1", nil, nil, false)
+	s.NotNil(testService, "Failed to create test service")
+	defer testService.Stop()
+
+	r, err := testService.rings[0].GetResolver(serviceName)
+	s.NoError(err)
+	await.RequireTrue(s.T(), func() bool {
+		return len(r.Members()) == 3
+	}, 10*time.Second, 100*time.Millisecond)
+
+	// Stop host 2 without calling EvictSelf first. Peers should drop it via its self-eviction
+	// gossip, well before failure detection (ping + ping-req + suspect timeouts, >10s) would.
+	testService.rings[2].Stop()
+	await.RequireTrue(s.T(), func() bool {
+		return len(r.Members()) == 2
+	}, 3*time.Second, 100*time.Millisecond)
+	addrs := util.MapSlice(r.Members(), func(h membership.HostInfo) string { return h.GetAddress() })
+	s.NotContains(addrs, testService.hostAddrs[2])
+}
+
+func (s *RpoSuite) waitForChannel(ch <-chan struct{}, msg string) {
+	select {
+	case <-ch:
+	case <-time.After(5 * time.Second):
+		s.FailNow(msg)
+	}
 }
 
 func (s *RpoSuite) TestCompareMembers() {

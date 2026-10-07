@@ -42,7 +42,9 @@ type (
 		// called, other members will discover that this node is no longer part of the
 		// ring. This primitive is useful to carry out graceful host shutdown during deployments.
 		// If called before this member has joined the ring (including concurrently with or
-		// before Start), the member will never join.
+		// before Start), the member will never join. Implementations also evict when stopped,
+		// but callers should evict and drain before they stop serving requests, so that peers
+		// stop routing to this member while it can still serve them.
 		EvictSelf() error
 		// EvictSelfAt is similar to EvictSelf but causes the change to take effect on all
 		// hosts at that absolute time (assuming it's in the future). This process should stay
