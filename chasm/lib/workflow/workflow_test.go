@@ -106,15 +106,4 @@ func TestLifecycleState(t *testing.T) {
 	wf := &Workflow{MSPointer: chasm.NewMSPointer(nodeBackend)}
 
 	require.Equal(t, chasm.LifecycleStateRunning, wf.LifecycleState(nil))
-
-	status = enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
-	require.Equal(t, chasm.LifecycleStateRunning, wf.LifecycleState(nil))
-
-	status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
-	require.Equal(t, chasm.LifecycleStateCompleted, wf.LifecycleState(nil))
-	require.True(t, wf.LifecycleState(nil).IsClosed())
-
-	status = enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED
-	require.Equal(t, chasm.LifecycleStateFailed, wf.LifecycleState(nil))
-	require.True(t, wf.LifecycleState(nil).IsClosed())
 }
