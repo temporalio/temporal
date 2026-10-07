@@ -392,7 +392,7 @@ func TestDeepHealthCheck(t *testing.T) {
 			startupTime := time.Unix(0, 0)
 
 			historySignals := interceptor.NewHealthSignals(testLogger, func() health2.Settings { return tc.healthCheckSettings })
-			persistenceSignals := persistence.NewHealthSignalAggregator(true, time.Second, 100, metrics.NoopMetricsHandler, testLogger, func() health2.Settings { return health2.Settings{} })
+			persistenceSignals := persistence.NewHealthSignalAggregator(true, time.Second, 100, metrics.NoopMetricsHandler, testLogger, func() health2.Settings { return tc.persistenceHealthCheckSettings })
 
 			handler := deepHealthCheckHandler{
 				healthServer:   health.NewServer(),
