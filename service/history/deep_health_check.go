@@ -60,14 +60,14 @@ func (h *deepHealthCheckHandler) DeepHealthCheck(
 	// grpc
 	checks = append(checks, healthcheck.Evaluate(
 		h.historyHealthSignal,
-		h.config.HealthCheckHistoryGRPCSettings(),
+		h.config.HealthHistoryGRPCSettings(),
 		healthcheck.Source{Service: primitives.HistoryService, Component: healthcheck.ComponentGRPC},
 	)...)
 
 	// persistence
 	checks = append(checks, healthcheck.Evaluate(
 		h.persistenceHealthSignal,
-		h.config.HealthCheckPersistenceSettings(),
+		h.config.HealthHistoryPersistenceSettings(),
 		healthcheck.Source{Service: primitives.HistoryService, Component: healthcheck.ComponentPersistence},
 	)...)
 

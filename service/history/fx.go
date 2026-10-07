@@ -323,11 +323,7 @@ func HealthSignalAggregatorProvider(
 ) interceptor.HealthSignalAggregator {
 	aggregator := interceptor.NewHealthSignalAggregator(
 		logger,
-		dynamicconfig.HistoryHealthSignalMetricsEnabled.Get(dynamicCollection),
-		dynamicconfig.HistoryHealthSignalUsePercentiles.Get(dynamicCollection),
-		dynamicconfig.HealthCheckHistoryGRPCSettings.Get(dynamicCollection),
-		dynamicconfig.PersistenceHealthSignalWindowSize.Get(dynamicCollection)(),
-		dynamicconfig.PersistenceHealthSignalBufferSize.Get(dynamicCollection)(),
+		dynamicconfig.HealthHistoryGRPCSettings.Get(dynamicCollection),
 	)
 	lc.Append(fx.StopHook(aggregator.Stop))
 

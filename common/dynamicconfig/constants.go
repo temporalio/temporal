@@ -7,7 +7,6 @@ import (
 
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/server/common/debug"
-	"go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/util"
@@ -268,46 +267,20 @@ response to a StartWorkflowExecution request and skipping the trip through match
 		true,
 		`PersistenceHealthSignalMetricsEnabled determines whether persistence shard RPS metrics are emitted`,
 	)
-	HistoryHealthSignalMetricsEnabled = NewGlobalBoolSetting(
-		"system.historyHealthSignalMetricsEnabled",
-		true,
-		`HistoryHealthSignalMetricsEnabled determines whether history service RPC metrics are emitted`,
+	HealthHistoryGRPCSettings = NewGlobalTypedSetting(
+		"health.history.grpc",
+		DefaultHealthSettings,
+		"controls history gRPC latency and error-ratio health check thresholds: an overall bucket across all endpoints plus optional named endpoint groups; empty disables every check",
 	)
-	HistoryHealthSignalLatencyWindowCount = NewGlobalIntSetting(
-		"system.historyHealthSignalLatencyWindowCount",
-		10,
-		`historyHealthSignalLatencyWindowCount is the number of signal windows to compute latencies over`,
-	)
-	HistoryHealthSignalLatencyWindowSize = NewGlobalDurationSetting(
-		"system.historyHealthSignalLatencyWindowSize",
-		5*time.Second,
-		`historyHealthSignalLatencyWindowSize is the time window size in seconds for aggregating latencies`,
-	)
-	HistoryHealthSignalPercentileLatencySettings = NewGlobalTypedSetting(
-		"system.historyHealthSignalPercentileLatencySettings",
-		LatencyHealthChecksPerPercentile{},
-		"historyHealthSignalPercentileLatencySettings controls what latency health checks are enabled and enforced for the history system",
-	)
-	HealthCheckHistoryGRPCSettings = NewGlobalTypedSetting(
-		"system.healthCheckHistoryGRPCSettings",
-		health.Settings{},
-		"controls history gRPC latency and error-ratio health check thresholds: an overall bucket across all endpoints plus optional named endpoint groups; empty disables the group checks",
-	)
-	// TODO: This should be removed once percentiles are the default.
-	HistoryHealthSignalUsePercentiles = NewGlobalBoolSetting(
-		"system.historyHealthSignalUsePercentiles",
-		false,
-		`historyHealthSignalUsePercentiles controls whether we use the p99 latency for health checking instead of the mean latency`,
+	HealthHistoryPersistenceSettings = NewGlobalTypedSetting(
+		"health.history.persistence",
+		DefaultHealthSettings,
+		"controls persistence latency and error-ratio health check thresholds: an overall bucket across all operations plus optional named operation groups; empty disables every check",
 	)
 	PersistenceHealthSignalAggregationEnabled = NewGlobalBoolSetting(
 		"system.persistenceHealthSignalAggregationEnabled",
 		true,
 		`PersistenceHealthSignalAggregationEnabled determines whether persistence latency and error averages are tracked`,
-	)
-	HealthCheckPersistenceSettings = NewGlobalTypedSetting(
-		"system.healthCheckPersistenceSettings",
-		health.Settings{},
-		"controls persistence latency and error-ratio health check thresholds: an overall bucket across all operations plus optional named operation groups; empty disables the group checks",
 	)
 	PersistenceHealthSignalWindowSize = NewGlobalDurationSetting(
 		"system.persistenceHealthSignalWindowSize",
@@ -3231,26 +3204,6 @@ cached on a single history shard. Requires service restart to take effect.`,
 		60*time.Second,
 		`BusinessIDReuseLimiterCacheTTL is the TTL for per-(namespace, businessID, archetype) rate limiter cache entries.
 Requires service restart to take effect.`,
-	)
-	HealthPersistenceLatencyFailure = NewGlobalFloatSetting(
-		"history.healthPersistenceLatencyFailure",
-		500,
-		"History service health check on persistence average latency (millisecond) threshold",
-	)
-	HealthPersistenceErrorRatio = NewGlobalFloatSetting(
-		"history.healthPersistenceErrorRatio",
-		0.90,
-		"History service health check on persistence error ratio",
-	)
-	HealthRPCLatencyFailure = NewGlobalFloatSetting(
-		"history.healthRPCLatencyFailure",
-		500,
-		"History service health check on RPC average latency (millisecond) threshold",
-	)
-	HealthRPCErrorRatio = NewGlobalFloatSetting(
-		"history.healthRPCErrorRatio",
-		0.90,
-		"History service health check on RPC error ratio",
 	)
 	HealthHistoryInitializationTime = NewGlobalDurationSetting(
 		"history.healthHistoryInitializationTime",

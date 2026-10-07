@@ -447,16 +447,11 @@ type Config struct {
 
 	EnableSignalWithStartRequestIDDeduplication dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	HealthCheckHistoryGRPCSettings  dynamicconfig.TypedPropertyFn[health.Settings]
-	HealthCheckPersistenceSettings  dynamicconfig.TypedPropertyFn[health.Settings]
-	HealthPersistenceLatencyFailure dynamicconfig.FloatPropertyFn
-	HealthPersistenceErrorRatio     dynamicconfig.FloatPropertyFn
-	HealthRPCLatencyFailure         dynamicconfig.FloatPropertyFn
-	HealthRPCLatencyPercentiles     dynamicconfig.TypedPropertyFn[dynamicconfig.LatencyHealthChecksPerPercentile]
-	HealthRPCErrorRatio             dynamicconfig.FloatPropertyFn
-	HealthHistoryInitializationTime dynamicconfig.DurationPropertyFn
-	BreakdownMetricsByTaskQueue     dynamicconfig.BoolPropertyFnWithTaskQueueFilter
-	BreakdownMetricsByBuildID       dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+	HealthHistoryGRPCSettings        dynamicconfig.TypedPropertyFn[health.Settings]
+	HealthHistoryPersistenceSettings dynamicconfig.TypedPropertyFn[health.Settings]
+	HealthHistoryInitializationTime  dynamicconfig.DurationPropertyFn
+	BreakdownMetricsByTaskQueue      dynamicconfig.BoolPropertyFnWithTaskQueueFilter
+	BreakdownMetricsByBuildID        dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -870,14 +865,9 @@ func NewConfig(
 
 		EnableSignalWithStartRequestIDDeduplication: dynamicconfig.EnableSignalWithStartRequestIDDeduplication.Get(dc),
 
-		HealthCheckHistoryGRPCSettings:  dynamicconfig.HealthCheckHistoryGRPCSettings.Get(dc),
-		HealthCheckPersistenceSettings:  dynamicconfig.HealthCheckPersistenceSettings.Get(dc),
-		HealthPersistenceLatencyFailure: dynamicconfig.HealthPersistenceLatencyFailure.Get(dc),
-		HealthPersistenceErrorRatio:     dynamicconfig.HealthPersistenceErrorRatio.Get(dc),
-		HealthRPCLatencyFailure:         dynamicconfig.HealthRPCLatencyFailure.Get(dc),
-		HealthRPCLatencyPercentiles:     dynamicconfig.HistoryHealthSignalPercentileLatencySettings.Get(dc),
-		HealthRPCErrorRatio:             dynamicconfig.HealthRPCErrorRatio.Get(dc),
-		HealthHistoryInitializationTime: dynamicconfig.HealthHistoryInitializationTime.Get(dc),
+		HealthHistoryGRPCSettings:        dynamicconfig.HealthHistoryGRPCSettings.Get(dc),
+		HealthHistoryPersistenceSettings: dynamicconfig.HealthHistoryPersistenceSettings.Get(dc),
+		HealthHistoryInitializationTime:  dynamicconfig.HealthHistoryInitializationTime.Get(dc),
 
 		BreakdownMetricsByTaskQueue: dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 		BreakdownMetricsByBuildID:   dynamicconfig.MetricsBreakdownByBuildID.Get(dc),

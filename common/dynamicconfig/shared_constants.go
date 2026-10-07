@@ -3,7 +3,9 @@ package dynamicconfig
 import (
 	"time"
 
+	"go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/stats"
 )
 
 const GlobalDefaultNumTaskQueuePartitions = 4
@@ -270,4 +272,22 @@ type LatencyHealthCheckSettings struct {
 type LatencyHealthChecksPerPercentile struct {
 	// PercentileSettings stores settings for the health check of each percentile.
 	PercentileSettings []LatencyHealthCheckSettings
+}
+
+// DefaultHealthSettings is the starting point for every health check: an overall bucket
+// across all keys, with no groups
+var DefaultHealthSettings = health.Settings{
+	Overall: health.Thresholds{
+		// how latency samples are retained: ten 5s windows
+		WindowConfig: &stats.WindowConfig{WindowSize: 5 * time.Second, WindowCount: 10},
+
+		// the median call must stay under 500ms
+		QuantileThresholds: []health.QuantileThreshold{{Quantile: 0.5, Threshold: 500 * time.Millisecond}},
+
+		// no more than 90% of calls in the last 10s (up to 5000 samples) may be errors
+		ErrorRatioThreshold: &health.ErrorRatioThreshold{WindowSize: 10 * time.Second, BufferSize: 5000, Threshold: 0.90},
+
+		// a breach of any threshold marks the host unhealthy
+		Enforced: true,
+	},
 }
