@@ -43,9 +43,9 @@ const (
 	eagerStartDeniedReasonTaskAlreadyDispatched      metrics.ReasonString = "task_already_dispatched"
 	orphanedChildReplacementReplaced                                      = "replaced"
 	orphanedChildReplacementRejectedUnsupportedState                      = "rejected_unsupported_state"
-	nexusWorkflowUseExistingSameContext                                   = "same"
-	nexusWorkflowUseExistingDifferentContext                              = "different"
-	nexusWorkflowUseExistingMissingContext                                = "existing_missing"
+	nexusWorkflowUseExistingSameContext              metrics.ReasonString = "same_nexus_context"
+	nexusWorkflowUseExistingDifferentContext         metrics.ReasonString = "different_nexus_context"
+	nexusWorkflowUseExistingMissingContext           metrics.ReasonString = "existing_nexus_context_missing"
 )
 
 const (
@@ -756,7 +756,7 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 
 	var err error
 	onConflictOptions := s.request.StartRequest.GetOnConflictOptions()
-	var nexusContextMatch string
+	var nexusContextMatch metrics.ReasonString
 	if onConflictOptions != nil {
 		requestID := ""
 		if onConflictOptions.AttachRequestId {
@@ -808,7 +808,7 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 	case nil:
 		if nexusContextMatch != "" {
 			// Count attached Nexus callers by whether their context matches the existing workflow's context.
-			metrics.NexusWorkflowUseExisting.With(s.getMetricsHandler()).Record(1, metrics.StringTag("context_match", nexusContextMatch))
+			metrics.NexusWorkflowUseExisting.With(s.getMetricsHandler()).Record(1, metrics.NexusSerializationContextMatchTag(nexusContextMatch))
 		}
 		resp := &historyservice.StartWorkflowExecutionResponse{
 			RunId:               workflowKey.RunID,
@@ -844,7 +844,7 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 }
 
 // nexusSerializationContextMatch classifies contexts for the USE_EXISTING callback attachment metric.
-func nexusSerializationContextMatch(existing, incoming *nexuspb.PropagatedSerializationContext) string {
+func nexusSerializationContextMatch(existing, incoming *nexuspb.PropagatedSerializationContext) metrics.ReasonString {
 	switch {
 	case existing == nil:
 		// The caller has Nexus context, but the existing workflow has none.
