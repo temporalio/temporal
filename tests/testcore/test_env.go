@@ -65,12 +65,12 @@ type Env interface {
 }
 
 type TestEnv struct {
-	*FunctionalTestBase
+	*functionalTestBase
 
-	// Shadows FunctionalTestBase.Assertions with a per-test instance bound to
+	// Shadows functionalTestBase.Assertions with a per-test instance bound to
 	// this TestEnv's own *testing.T, avoiding data races when parallel tests
-	// share the same *FunctionalTestBase cluster.
-	// TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
+	// share the same *functionalTestBase cluster.
+	// TODO: remove once all tests are migrated to TestEnv (and no longer use functionalTestBase directly).
 	*require.Assertions
 
 	Logger log.Logger
@@ -324,7 +324,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	testcontext.EnsureRemaining(testcontext.For(t), t, testcontext.DefaultTimeout())
 
 	env := &TestEnv{
-		FunctionalTestBase: base,
+		functionalTestBase: base,
 		Assertions:         require.New(t),
 		cluster:            cluster,
 		nsName:             ns,
@@ -430,7 +430,7 @@ func (e *TestEnv) TaskPoller() *taskpoller.TaskPoller {
 // NoError asserts that err is nil.
 //
 // Deprecated: use require.NoError with the parent test or suite instead.
-// TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
+// TODO: remove once all tests are migrated to TestEnv (and no longer use functionalTestBase directly).
 func (e *TestEnv) NoError(err error, msgAndArgs ...any) {
 	e.Assertions.NoError(err, msgAndArgs...)
 }
@@ -438,7 +438,7 @@ func (e *TestEnv) NoError(err error, msgAndArgs ...any) {
 // Error asserts that err is not nil.
 //
 // Deprecated: use require.Error with the parent test or suite instead.
-// TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
+// TODO: remove once all tests are migrated to TestEnv (and no longer use functionalTestBase directly).
 func (e *TestEnv) Error(err error, msgAndArgs ...any) {
 	e.Assertions.Error(err, msgAndArgs...)
 }
@@ -446,9 +446,9 @@ func (e *TestEnv) Error(err error, msgAndArgs ...any) {
 // Run executes a subtest.
 //
 // Deprecated: use the suite's Run method instead.
-// TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
+// TODO: remove once all tests are migrated to TestEnv (and no longer use functionalTestBase directly).
 func (e *TestEnv) Run(name string, subtest func()) bool {
-	return e.FunctionalTestBase.Run(name, subtest)
+	return e.functionalTestBase.Run(name, subtest)
 }
 
 // T returns the *testing.T.

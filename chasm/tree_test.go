@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
@@ -2440,14 +2441,11 @@ func (s *nodeSuite) TestRef() {
 		expectedInitalVT *persistencespb.VersionedTransition
 	}{
 		{
-			name:         "root",
-			component:    testComponent,
-			expectErr:    false,
-			expectedPath: nil, // same as []string{}
-			expectedInitalVT: &persistencespb.VersionedTransition{
-				NamespaceFailoverVersion: 1,
-				TransitionCount:          1,
-			},
+			name:             "root",
+			component:        testComponent,
+			expectErr:        false,
+			expectedPath:     nil, // same as []string{}
+			expectedInitalVT: nil,
 		},
 		{
 			name:         "subComponent1",
@@ -2506,6 +2504,130 @@ func (s *nodeSuite) TestRef() {
 			s.Equal(expectedRef, actualRef)
 		})
 	}
+}
+
+func (s *nodeSuite) TestRef_RootComponentIgnoresInitialVT() {
+	workflowKey := definition.NewWorkflowKey(
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+	)
+	currentVT := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 101,
+		TransitionCount:          5,
+	}
+	s.nodeBackend = &MockNodeBackend{
+		HandleCurrentVersionedTransition: func() *persistencespb.VersionedTransition {
+			return currentVT
+		},
+		HandleGetWorkflowKey: func() definition.WorkflowKey {
+			return workflowKey
+		},
+		HandleGetExecutionInfo: func() *persistencespb.WorkflowExecutionInfo {
+			return &persistencespb.WorkflowExecutionInfo{
+				TransitionHistory: []*persistencespb.VersionedTransition{currentVT},
+			}
+		},
+	}
+
+	serializedNodes := testComponentSerializedNodes()
+	// Mimic a root synthesized while loading an execution with no CHASM nodes, before the
+	// backend's current version was known.
+	malformedInitialVT := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 0,
+		TransitionCount:          6,
+	}
+	serializedNodes[""].Metadata.InitialVersionedTransition = malformedInitialVT
+	root, err := s.newTestTree(serializedNodes)
+	s.NoError(err)
+
+	chasmContext := NewContext(context.Background(), root)
+	rootComponent, err := root.ComponentByPath(chasmContext, nil)
+	s.NoError(err)
+
+	encodedRef, err := root.Ref(rootComponent)
+	s.NoError(err)
+	ref, err := DeserializeComponentRef(encodedRef)
+	s.NoError(err)
+	s.Nil(ref.componentInitialVT)
+
+	adjustedRef, err := ref.forConsistencyLevel(RefConsistencyLevelComponentCreation)
+	s.NoError(err)
+	s.Nil(adjustedRef.executionLastUpdateVT)
+	s.NoError(root.IsStale(adjustedRef))
+
+	component, err := root.Component(chasmContext, adjustedRef)
+	s.NoError(err)
+	s.Equal(rootComponent, component)
+
+	// The root is not matched on InitialVersionedTransition, even when the ref's value differs from
+	// the persisted one.
+	refWithMismatchedVT := ref
+	refWithMismatchedVT.componentInitialVT = currentVT
+	component, err = root.Component(chasmContext, refWithMismatchedVT)
+	s.NoError(err)
+	s.Equal(rootComponent, component)
+
+	// Without ignoring it, the malformed value would fail the staleness check, since no transition in
+	// the execution's history has failover version 0.
+	s.ErrorIs(
+		root.IsStale(ComponentRef{executionLastUpdateVT: malformedInitialVT}),
+		consts.ErrStaleReference,
+	)
+}
+
+func (s *nodeSuite) TestCloseTransaction_StampsRootInitialVTOnFirstPersist() {
+	// Mimic loading an execution with no CHASM nodes before the backend's current version is known.
+	currentVersion := int64(0)
+	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return currentVersion }
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 6 }
+
+	root, err := s.newTestTree(nil)
+	s.NoError(err)
+	s.ProtoEqual(
+		&persistencespb.VersionedTransition{NamespaceFailoverVersion: 0, TransitionCount: 6},
+		root.serializedNode.GetMetadata().GetInitialVersionedTransition(),
+	)
+
+	currentVersion = 101
+	s.NoError(root.SetRootComponent(&TestComponent{
+		ComponentData: &protoMessageType{CreateRequestId: primitives.NewUUID().String()},
+	}))
+	mutation, err := root.CloseTransaction()
+	s.NoError(err)
+
+	expectedVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 101, TransitionCount: 6}
+	rootNode, ok := mutation.UpdatedNodes[""]
+	s.True(ok)
+	s.ProtoEqual(expectedVT, rootNode.GetMetadata().GetInitialVersionedTransition())
+	s.ProtoEqual(expectedVT, rootNode.GetMetadata().GetLastUpdateVersionedTransition())
+}
+
+func (s *nodeSuite) TestCloseTransaction_KeepsPersistedRootInitialVT() {
+	// Validate we don't existing data with the root saved
+	s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 101 }
+	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 6 }
+
+	persistedInitialVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 0, TransitionCount: 1}
+	serializedNodes := testComponentSerializedNodes()
+	serializedNodes[""].Metadata.InitialVersionedTransition = common.CloneProto(persistedInitialVT)
+	root, err := s.newTestTree(serializedNodes)
+	s.NoError(err)
+
+	chasmContext := NewMutableContext(context.Background(), root)
+	component, err := root.ComponentByPath(chasmContext, nil)
+	s.NoError(err)
+	component.(*TestComponent).ComponentData = &protoMessageType{CreateRequestId: primitives.NewUUID().String()}
+	mutation, err := root.CloseTransaction()
+	s.NoError(err)
+
+	rootNode, ok := mutation.UpdatedNodes[""]
+	s.True(ok)
+	s.ProtoEqual(persistedInitialVT, rootNode.GetMetadata().GetInitialVersionedTransition())
+	s.ProtoEqual(
+		&persistencespb.VersionedTransition{NamespaceFailoverVersion: 101, TransitionCount: 6},
+		rootNode.GetMetadata().GetLastUpdateVersionedTransition(),
+	)
 }
 
 func (s *nodeSuite) TestSerializeDeserializeTask() {
@@ -4499,6 +4621,82 @@ func (s *nodeSuite) TestExecuteSideEffectTask() {
 	s.ErrorIs(executionErr, err)
 	s.True(backendValidtionFnCalled)
 	s.False(chasmTask.DeserializedTask.IsValid())
+}
+
+func (s *nodeSuite) TestExecuteSideEffectTask_RootComponentIgnoresInitialVT() {
+	persistenceNodes := map[string]*persistencespb.ChasmNode{
+		"": {
+			Metadata: &persistencespb.ChasmNodeMetadata{
+				InitialVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+				Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+					ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+						TypeId: testComponentTypeID,
+					},
+				},
+			},
+		},
+	}
+	workflowKey := definition.NewWorkflowKey(
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+		primitives.NewUUID().String(),
+	)
+	chasmTask := &tasks.ChasmTask{
+		WorkflowKey:         workflowKey,
+		VisibilityTimestamp: s.timeSource.Now(),
+		TaskID:              123,
+		Category:            tasks.CategoryOutbound,
+		Destination:         "destination",
+		Info: &persistencespb.ChasmTaskInfo{
+			// Deliberately differs from the root node's InitialVersionedTransition.
+			ComponentInitialVersionedTransition: &persistencespb.VersionedTransition{
+				NamespaceFailoverVersion: 2,
+				TransitionCount:          1,
+			},
+			ComponentLastUpdateVersionedTransition: &persistencespb.VersionedTransition{
+				TransitionCount: 1,
+			},
+			Path:        []string{},
+			TypeId:      testSideEffectTaskTypeID,
+			ArchetypeId: testComponentTypeID,
+			Data:        s.emptyDataBlob(),
+		},
+	}
+	executionKey := ExecutionKey{
+		NamespaceID: chasmTask.NamespaceID,
+		BusinessID:  chasmTask.WorkflowID,
+		RunID:       chasmTask.RunID,
+	}
+
+	root, err := s.newTestTree(persistenceNodes)
+	s.NoError(err)
+
+	ctx := NewEngineContext(context.Background(), NewMockEngine(s.controller))
+	chasmContext := NewMutableContext(ctx, root)
+
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(true, nil).Times(1)
+	s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+		Execute(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestSideEffectTask) error {
+			s.Nil(ref.componentInitialVT)
+
+			component, err := root.Component(chasmContext, ref)
+			if err != nil {
+				return err
+			}
+			s.IsType(&TestComponent{}, component)
+			return nil
+		}).Times(1)
+
+	err = root.ExecuteSideEffectTask(
+		ctx,
+		executionKey,
+		chasmTask,
+		func(_ NodeBackend, _ Context, _ Component) error { return nil },
+	)
+	s.NoError(err)
 }
 
 func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
