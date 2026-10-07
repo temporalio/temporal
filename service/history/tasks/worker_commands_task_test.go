@@ -10,7 +10,7 @@ import (
 
 func TestWorkerCommandsTask_GetDestination_ReturnsEmpty(t *testing.T) {
 	task := &WorkerCommandsTask{
-		WorkflowKey: definition.NewWorkflowKey("ns-id", "wf-id", "run-id"),
+		WorkflowKey:  definition.NewWorkflowKey("ns-id", "wf-id", "run-id"),
 		ControlQueue: "control-queue-xyz",
 		Commands: []*workerpb.WorkerCommand{
 			{Type: &workerpb.WorkerCommand_CancelActivity{

@@ -44,7 +44,7 @@ func TestGrouperStateMachineNamespaceIDAndDestination_Key(t *testing.T) {
 func TestGrouperWorkerCommandsTask_Key(t *testing.T) {
 	g := GrouperStateMachineNamespaceIDAndDestination{}
 	task := &tasks.WorkerCommandsTask{
-		WorkflowKey: definition.NewWorkflowKey("nid", "wid", "rid"),
+		WorkflowKey:  definition.NewWorkflowKey("nid", "wid", "rid"),
 		ControlQueue: "control-queue-xyz", // routing destination, not used for grouping
 	}
 	k := g.Key(task)
