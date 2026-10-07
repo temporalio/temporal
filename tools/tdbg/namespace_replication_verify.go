@@ -84,6 +84,13 @@ type namespaceReplicationClusterVerification struct {
 	Error               string   `json:"error,omitempty"`
 }
 
+type namespaceReplicationObservation struct {
+	result           *namespaceReplicationVerificationResult
+	sourceSnapshot   *adminservice.GetNamespaceResponse
+	targetSnapshots  map[string]*adminservice.GetNamespaceResponse
+	clusterAddresses map[string]string
+}
+
 type namespaceReplicationAdminClientConnection struct {
 	client adminservice.AdminServiceClient
 	closer io.Closer
@@ -160,15 +167,30 @@ func namespaceReplicationRPCCall[T any](
 func (v *namespaceReplicationVerifier) Verify(
 	ctx context.Context,
 	request namespaceReplicationVerifyRequest,
-) (_ *namespaceReplicationVerificationResult, retErr error) {
+) (*namespaceReplicationVerificationResult, error) {
+	observation, err := v.observe(ctx, request)
+	if observation == nil {
+		return nil, err
+	}
+	return observation.result, err
+}
+
+func (v *namespaceReplicationVerifier) observe(
+	ctx context.Context,
+	request namespaceReplicationVerifyRequest,
+) (_ *namespaceReplicationObservation, retErr error) {
 	result := &namespaceReplicationVerificationResult{
 		VerificationTime: v.now(),
 		Status:           namespaceReplicationStatusBlocked,
 	}
+	observation := &namespaceReplicationObservation{
+		result:          result,
+		targetSnapshots: make(map[string]*adminservice.GetNamespaceResponse),
+	}
 
 	sourceConnection, err := v.clients.OpenSource(request.SourceAddress)
 	if err != nil {
-		return result, fmt.Errorf("connect to source: %w", err)
+		return observation, fmt.Errorf("connect to source: %w", err)
 	}
 	defer func() {
 		retErr = errors.Join(retErr, sourceConnection.closer.Close())
@@ -178,34 +200,35 @@ func (v *namespaceReplicationVerifier) Verify(
 		return sourceConnection.client.DescribeCluster(rpcCtx, &adminservice.DescribeClusterRequest{})
 	})
 	if err != nil {
-		return result, fmt.Errorf("describe source cluster: %w", err)
+		return observation, fmt.Errorf("describe source cluster: %w", err)
 	}
 	result.SourceCluster = describeSource.GetClusterName()
 	if result.SourceCluster == "" {
-		return result, errors.New("source DescribeCluster returned an empty cluster name")
+		return observation, errors.New("source DescribeCluster returned an empty cluster name")
 	}
 
 	source, err := getNamespace(ctx, v.rpcTimeout, sourceConnection.client, request.Selector)
 	if err != nil {
-		return result, fmt.Errorf("read source namespace: %w", err)
+		return observation, fmt.Errorf("read source namespace: %w", err)
 	}
 	if err := validateNamespaceResponse(source); err != nil {
-		return result, fmt.Errorf("invalid source namespace: %w", err)
+		return observation, fmt.Errorf("invalid source namespace: %w", err)
 	}
+	observation.sourceSnapshot = source
 	result.NamespaceName = source.GetInfo().GetName()
 	result.NamespaceID = source.GetInfo().GetId()
 
 	configProjection, failoverProjection, err := namespaceReplicationProjections(source, v.dataKeysToIgnore)
 	if err != nil {
-		return result, fmt.Errorf("project source namespace: %w", err)
+		return observation, fmt.Errorf("project source namespace: %w", err)
 	}
 	result.SourceConfigFingerprint, err = namespaceReplicationFingerprint(configProjection)
 	if err != nil {
-		return result, err
+		return observation, err
 	}
 	result.SourceFailoverFingerprint, err = namespaceReplicationFingerprint(failoverProjection)
 	if err != nil {
-		return result, err
+		return observation, err
 	}
 	sourceConfigVersion := source.GetConfigVersion()
 	sourceFailoverVersion := source.GetFailoverVersion()
@@ -222,11 +245,13 @@ func (v *namespaceReplicationVerifier) Verify(
 	})
 
 	if err := validateSourceNamespace(source, result.SourceCluster); err != nil {
-		return blockNamespaceReplicationVerification(result, err), nil
+		blockNamespaceReplicationVerification(result, err)
+		return observation, nil
 	}
 	expectedClusters, err := validateExpectedClusters(source, result.SourceCluster)
 	if err != nil {
-		return blockNamespaceReplicationVerification(result, err), nil
+		blockNamespaceReplicationVerification(result, err)
+		return observation, nil
 	}
 	result.ExpectedClusters = expectedClusters
 	if err := validateNamespaceReplicationAddressOverrides(
@@ -234,7 +259,8 @@ func (v *namespaceReplicationVerifier) Verify(
 		result.SourceCluster,
 		request.AddressOverrides,
 	); err != nil {
-		return blockNamespaceReplicationVerification(result, err), nil
+		blockNamespaceReplicationVerification(result, err)
+		return observation, nil
 	}
 
 	targetsRequiringMetadata := namespaceReplicationTargetsRequiringMetadata(
@@ -251,10 +277,11 @@ func (v *namespaceReplicationVerifier) Verify(
 			targetsRequiringMetadata,
 		)
 		if err != nil {
-			return blockNamespaceReplicationVerification(
+			blockNamespaceReplicationVerification(
 				result,
 				fmt.Errorf("list source cluster metadata: %w", err),
-			), nil
+			)
+			return observation, nil
 		}
 	}
 	addresses, err := resolveClusterAddresses(
@@ -265,14 +292,16 @@ func (v *namespaceReplicationVerifier) Verify(
 		request.AddressOverrides,
 	)
 	if err != nil {
-		return blockNamespaceReplicationVerification(result, err), nil
+		blockNamespaceReplicationVerification(result, err)
+		return observation, nil
 	}
+	observation.clusterAddresses = maps.Clone(addresses)
 
 	for _, cluster := range expectedClusters {
 		if cluster == result.SourceCluster {
 			continue
 		}
-		verification := v.inspectTarget(
+		verification, target := v.inspectTarget(
 			ctx,
 			addresses[cluster],
 			cluster,
@@ -280,6 +309,7 @@ func (v *namespaceReplicationVerifier) Verify(
 			configProjection,
 			failoverProjection,
 		)
+		observation.targetSnapshots[cluster] = target
 		result.Clusters = append(result.Clusters, verification)
 	}
 
@@ -292,23 +322,24 @@ func (v *namespaceReplicationVerifier) Verify(
 	if err != nil {
 		result.Status = namespaceReplicationStatusInconclusiveSourceChanged
 		result.StatusDetail = fmt.Sprintf("final source read failed: %v", err)
-		return result, nil
+		return observation, nil
 	}
 	equal, err := namespaceReplicationSnapshotsEqual(source, finalSource, v.dataKeysToIgnore)
 	if err != nil {
-		return result, err
+		return observation, err
 	}
 	if !equal {
 		result.Status = namespaceReplicationStatusInconclusiveSourceChanged
 		result.StatusDetail = "source namespace changed while replicas were scanned"
-		return result, nil
+		return observation, nil
 	}
+	observation.sourceSnapshot = finalSource
 
 	if err := deriveNamespaceReplicationStatus(result); err != nil {
 		result.Status = namespaceReplicationStatusBlocked
 		result.StatusDetail = err.Error()
 	}
-	return result, nil
+	return observation, nil
 }
 
 func (v *namespaceReplicationVerifier) inspectTarget(
@@ -318,7 +349,7 @@ func (v *namespaceReplicationVerifier) inspectTarget(
 	source *adminservice.GetNamespaceResponse,
 	sourceConfigProjection *replicationspb.NamespaceTaskAttributes,
 	sourceFailoverProjection *replicationspb.NamespaceTaskAttributes,
-) (result namespaceReplicationClusterVerification) {
+) (result namespaceReplicationClusterVerification, namespace *adminservice.GetNamespaceResponse) {
 	result = namespaceReplicationClusterVerification{
 		Cluster:       cluster,
 		Role:          "TARGET",
@@ -329,7 +360,7 @@ func (v *namespaceReplicationVerifier) inspectTarget(
 	connection, err := v.clients.OpenTarget(address)
 	if err != nil {
 		result.Error = fmt.Sprintf("connect: %v", err)
-		return result
+		return result, nil
 	}
 	defer func() {
 		if err := connection.closer.Close(); err != nil && result.Error == "" {
@@ -337,6 +368,7 @@ func (v *namespaceReplicationVerifier) inspectTarget(
 			result.ConfigMatch = namespaceReplicationMatchUnknown
 			result.FailoverMatch = namespaceReplicationMatchUnknown
 			result.Error = fmt.Sprintf("close connection: %v", err)
+			namespace = nil
 		}
 	}()
 
@@ -345,7 +377,7 @@ func (v *namespaceReplicationVerifier) inspectTarget(
 	})
 	if err != nil {
 		result.Error = fmt.Sprintf("describe cluster: %v", err)
-		return result
+		return result, nil
 	}
 	if describe.GetClusterName() != cluster {
 		result.Error = fmt.Sprintf(
@@ -353,7 +385,7 @@ func (v *namespaceReplicationVerifier) inspectTarget(
 			cluster,
 			describe.GetClusterName(),
 		)
-		return result
+		return result, nil
 	}
 
 	byName, nameErr := getNamespace(ctx, v.rpcTimeout, connection.client, namespaceReplicationSelector{
@@ -366,30 +398,30 @@ func (v *namespaceReplicationVerifier) inspectTarget(
 	idMissing := isNamespaceNotFound(idErr)
 	if nameErr != nil && !nameMissing {
 		result.Error = fmt.Sprintf("lookup namespace by name: %v", nameErr)
-		return result
+		return result, nil
 	}
 	if idErr != nil && !idMissing {
 		result.Error = fmt.Sprintf("lookup namespace by ID: %v", idErr)
-		return result
+		return result, nil
 	}
 	if nameMissing && idMissing {
 		result.Presence = namespaceReplicationPresenceMissing
 		result.Error = ""
-		return result
+		return result, nil
 	}
 	if !nameMissing && byName.GetInfo().GetId() != source.GetInfo().GetId() {
 		result.Presence = namespaceReplicationPresenceNameCollision
 		result.Error = "namespace name resolves to a different namespace ID"
-		return result
+		return result, nil
 	}
 	if !idMissing && byID.GetInfo().GetName() != source.GetInfo().GetName() {
 		result.Presence = namespaceReplicationPresenceIDCollision
 		result.Error = "namespace ID resolves to a different namespace name"
-		return result
+		return result, nil
 	}
 	if nameMissing || idMissing {
 		result.Error = "namespace identity lookup was inconsistent between name and ID"
-		return result
+		return result, nil
 	}
 	if !byID.GetIsGlobalNamespace() {
 		configVersion := byID.GetConfigVersion()
@@ -399,23 +431,23 @@ func (v *namespaceReplicationVerifier) inspectTarget(
 		result.FailoverVersion = &failoverVersion
 		result.Differences = []string{"namespace.is_global"}
 		result.Error = "target namespace is not global"
-		return result
+		return result, byID
 	}
 
 	configProjection, failoverProjection, err := namespaceReplicationProjections(byID, v.dataKeysToIgnore)
 	if err != nil {
 		result.Error = fmt.Sprintf("project namespace: %v", err)
-		return result
+		return result, nil
 	}
 	configFingerprint, err := namespaceReplicationFingerprint(configProjection)
 	if err != nil {
 		result.Error = fmt.Sprintf("fingerprint config: %v", err)
-		return result
+		return result, nil
 	}
 	failoverFingerprint, err := namespaceReplicationFingerprint(failoverProjection)
 	if err != nil {
 		result.Error = fmt.Sprintf("fingerprint failover: %v", err)
-		return result
+		return result, nil
 	}
 
 	configVersion := byID.GetConfigVersion()
@@ -440,7 +472,7 @@ func (v *namespaceReplicationVerifier) inspectTarget(
 		failoverProjection,
 	)
 	result.Error = ""
-	return result
+	return result, byID
 }
 
 func getNamespace(
@@ -931,10 +963,9 @@ func namespaceReplicationFailoverBlocks(
 func blockNamespaceReplicationVerification(
 	result *namespaceReplicationVerificationResult,
 	err error,
-) *namespaceReplicationVerificationResult {
+) {
 	result.Status = namespaceReplicationStatusBlocked
 	result.StatusDetail = err.Error()
-	return result
 }
 
 func isNamespaceNotFound(err error) bool {

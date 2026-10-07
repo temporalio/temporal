@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"testing"
 	"time"
 
@@ -166,6 +167,48 @@ func TestNamespaceReplicationVerifier_Status(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNamespaceReplicationVerifier_ObserveCapturesReusableState(t *testing.T) {
+	source := testNamespaceResponse(
+		"namespace",
+		"namespace-id",
+		"cluster-a",
+		[]string{"cluster-a", "cluster-b", "cluster-c"},
+		10,
+		20,
+	)
+	finalSource := proto.Clone(source).(*adminservice.GetNamespaceResponse)
+	slices.Reverse(finalSource.ReplicationConfig.Clusters)
+	target := proto.Clone(source).(*adminservice.GetNamespaceResponse)
+
+	sourceClient := testNamespaceReplicationSourceClient(source)
+	sourceReads := 0
+	sourceClient.getNamespaceFn = func(*adminservice.GetNamespaceRequest) (*adminservice.GetNamespaceResponse, error) {
+		sourceReads++
+		if sourceReads == 1 {
+			return proto.Clone(source).(*adminservice.GetNamespaceResponse), nil
+		}
+		return proto.Clone(finalSource).(*adminservice.GetNamespaceResponse), nil
+	}
+	verifier := testNamespaceReplicationVerifierWithClients(source, map[string]*testNamespaceReplicationAdminClient{
+		"source-address":    sourceClient,
+		"cluster-b-address": testNamespaceReplicationTargetClient("cluster-b", target),
+		"cluster-c-address": testNamespaceReplicationTargetClient("cluster-c", nil),
+	})
+
+	observation, err := verifier.observe(context.Background(), testNamespaceReplicationVerifyRequest())
+	require.NoError(t, err)
+	require.Equal(t, 2, sourceReads)
+	require.Equal(t, namespaceReplicationStatusRepairRequired, observation.result.Status)
+	require.True(t, proto.Equal(finalSource, observation.sourceSnapshot))
+	require.Equal(t, "source-address", observation.clusterAddresses["cluster-a"])
+	require.Equal(t, "cluster-b-address", observation.clusterAddresses["cluster-b"])
+	require.Equal(t, "cluster-c-address", observation.clusterAddresses["cluster-c"])
+	require.True(t, proto.Equal(target, observation.targetSnapshots["cluster-b"]))
+	missing, found := observation.targetSnapshots["cluster-c"]
+	require.True(t, found)
+	require.Nil(t, missing)
 }
 
 func TestNamespaceReplicationVerifier_IgnoresConfiguredNamespaceDataKeys(t *testing.T) {
