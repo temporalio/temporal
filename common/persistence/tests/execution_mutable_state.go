@@ -389,7 +389,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Conflict() {
 	s.IsType(&p.WorkflowConditionFailedError{}, err)
 }
 
-func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_DuplicateRunID_OtherRunCurrent() {
+func (s *ExecutionMutableStateSuite) TestCreateBrandNewDuplicateRunIDOtherRunCurrent() {
 	firstSnapshot, firstMutation, secondRunID, secondSnapshot, _ := s.createRunThenNewCurrentRun()
 
 	dupSnapshot, dupEvents := s.newDuplicateRunSnapshot()
@@ -415,7 +415,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_DuplicateRunID_OtherRun
 	s.assertCurrentRunID(secondRunID)
 }
 
-func (s *ExecutionMutableStateSuite) TestCreate_UpdateCurrent_DuplicateRunID_OtherRunCurrent() {
+func (s *ExecutionMutableStateSuite) TestCreateUpdateCurrentDuplicateRunIDOtherRunCurrent() {
 	firstSnapshot, firstMutation, secondRunID, secondSnapshot, secondBranchToken := s.createRunThenNewCurrentRun()
 
 	secondLastWriteVersion := rand.Int63()
@@ -861,7 +861,7 @@ func (s *ExecutionMutableStateSuite) createRunThenNewCurrentRun() (
 	return firstSnapshot, firstMutation, secondRunID, secondSnapshot, secondBranchToken
 }
 
-func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_WithNew_DuplicateRunID() {
+func (s *ExecutionMutableStateSuite) TestUpdateNotZombieWithNewDuplicateRunID() {
 	firstSnapshot, firstMutation, secondRunID, secondSnapshot, secondBranchToken := s.createRunThenNewCurrentRun()
 
 	// Close the current (second) run and create a new run reusing the first, non-current run's ID.

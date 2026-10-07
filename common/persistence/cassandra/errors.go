@@ -260,13 +260,15 @@ func extractWorkflowRunAlreadyExistsError(
 		return nil
 	}
 
-	binary, _ := conflictRecord["execution_state"].([]byte)
-	encoding, _ := conflictRecord["execution_state_encoding"].(string)
 	executionState := &persistencespb.WorkflowExecutionState{}
-	if state, err := serialization.DefaultDecoder.WorkflowExecutionStateFromBlob(p.NewDataBlob(binary, encoding)); err == nil {
-		executionState = state
+	binary, binaryOK := conflictRecord["execution_state"].([]byte)
+	encoding, encodingOK := conflictRecord["execution_state_encoding"].(string)
+	if binaryOK && encodingOK {
+		if state, err := serialization.DefaultDecoder.WorkflowExecutionStateFromBlob(p.NewDataBlob(binary, encoding)); err == nil {
+			executionState = state
+		}
 	}
-	// if err != nil, this means execution state cannot be parsed, just use default values
+	// if execution state is missing or cannot be parsed, just use default values
 
 	return &p.WorkflowRunAlreadyExistsError{
 		Msg:    fmt.Sprintf("Encounter workflow run already exists, run ID: %v", requestRunID),
