@@ -2003,6 +2003,11 @@ func (s *engine2Suite) TestStartWorkflowExecution_UseExistingNexusContextMetric(
 			name:            "incoming context missing",
 			existingContext: serializationContext,
 			attachCallback:  true,
+			expectedOutcome: "incoming_nexus_context_missing",
+		},
+		{
+			name:           "both contexts missing",
+			attachCallback: true,
 		},
 		{
 			name:            "callback not attached",

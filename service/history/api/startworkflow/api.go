@@ -46,6 +46,7 @@ const (
 	nexusWorkflowUseExistingSameContext              metrics.ReasonString = "same_nexus_context"
 	nexusWorkflowUseExistingDifferentContext         metrics.ReasonString = "different_nexus_context"
 	nexusWorkflowUseExistingMissingContext           metrics.ReasonString = "existing_nexus_context_missing"
+	nexusWorkflowUseExistingIncomingContextMissing   metrics.ReasonString = "incoming_nexus_context_missing"
 )
 
 const (
@@ -780,8 +781,9 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 				if !mutableState.IsWorkflowExecutionRunning() {
 					return nil, consts.ErrWorkflowCompleted
 				}
-				if incoming := s.request.StartRequest.GetPropagatedNexusSerializationContext(); incoming != nil && onConflictOptions.AttachCompletionCallbacks && len(completionCallbacks) > 0 {
+				if onConflictOptions.AttachCompletionCallbacks && len(completionCallbacks) > 0 {
 					existing := mutableState.GetExecutionInfo().GetPropagatedNexusSerializationContext()
+					incoming := s.request.StartRequest.GetPropagatedNexusSerializationContext()
 					nexusContextMatch = nexusSerializationContextMatch(existing, incoming)
 				}
 				_, err := mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
@@ -807,7 +809,7 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 	switch err {
 	case nil:
 		if nexusContextMatch != "" {
-			// Count attached Nexus callers by whether their context matches the existing workflow's context.
+			// Count callback attachments involving Nexus context by whether that context matches or is missing.
 			metrics.NexusWorkflowUseExisting.With(s.getMetricsHandler()).Record(1, metrics.NexusSerializationContextMatchTag(nexusContextMatch))
 		}
 		resp := &historyservice.StartWorkflowExecutionResponse{
@@ -846,9 +848,13 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 // nexusSerializationContextMatch classifies contexts for the USE_EXISTING callback attachment metric.
 func nexusSerializationContextMatch(existing, incoming *nexuspb.PropagatedSerializationContext) metrics.ReasonString {
 	switch {
+	case existing == nil && incoming == nil:
+		return ""
 	case existing == nil:
 		// The caller has Nexus context, but the existing workflow has none.
 		return nexusWorkflowUseExistingMissingContext
+	case incoming == nil:
+		return nexusWorkflowUseExistingIncomingContextMissing
 	case existing.GetEndpoint() == incoming.GetEndpoint() &&
 		existing.GetService() == incoming.GetService() &&
 		existing.GetOperation() == incoming.GetOperation():
