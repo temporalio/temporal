@@ -150,6 +150,13 @@ func (ni *ConcurrentRequestLimitInterceptor) Allow(
 	return cleanup, nil
 }
 
+func concurrencyLimitGroup(internal bool) string {
+	if internal {
+		return "internal_per_ns"
+	}
+	return "default"
+}
+
 func isInternalPerNSPoll(req any) bool {
 	switch r := req.(type) {
 	case *workflowservice.PollWorkflowTaskQueueRequest:

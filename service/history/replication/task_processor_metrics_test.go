@@ -28,6 +28,7 @@ func TestTaskProcessorResourceExhaustedMetrics(t *testing.T) {
 				"operation":                "HistoryReplicationTask",
 				"resource_exhausted_cause": "ConcurrentLimit",
 				"resource_exhausted_scope": "Namespace",
+				"concurrency_limit_group":  "not_applicable",
 			},
 		},
 		{
@@ -40,6 +41,7 @@ func TestTaskProcessorResourceExhaustedMetrics(t *testing.T) {
 				"operation":                "HistoryReplicationTask",
 				"resource_exhausted_cause": "RpsLimit",
 				"resource_exhausted_scope": "System",
+				"concurrency_limit_group":  "not_applicable",
 			},
 		},
 	} {
