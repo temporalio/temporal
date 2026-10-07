@@ -130,12 +130,17 @@ type (
 
 	// WorkflowConditionFailedError represents a failed conditional update for workflow record
 	WorkflowConditionFailedError struct {
-		Msg string
-		// RunID is the run that the store refused to write. Required for EnableCrossRunRequestIDDedup: one
-		// request can write several runs, and callers use it to tell which one failed.
-		RunID           string
+		Msg             string
 		NextEventID     int64
 		DBRecordVersion int64
+	}
+
+	// WorkflowRunAlreadyExistsError is returned when a write with VerifyRunIDUniqueness set creates a run whose
+	// run ID already exists. Status is the existing run's status.
+	WorkflowRunAlreadyExistsError struct {
+		Msg    string
+		RunID  string
+		Status enumspb.WorkflowExecutionStatus
 	}
 
 	// ConditionFailedError represents a failed conditional update for execution record
@@ -221,7 +226,7 @@ type (
 		ArchetypeID chasm.ArchetypeID
 
 		// VerifyRunIDUniqueness is set when the run ID was derived rather than randomly generated. The store must
-		// then reject the create with WorkflowConditionFailedError{RunID} if a run with this run ID already exists.
+		// then reject the create with WorkflowRunAlreadyExistsError if a run with this run ID already exists.
 		VerifyRunIDUniqueness bool
 
 		NewWorkflowSnapshot WorkflowSnapshot
@@ -1395,6 +1400,10 @@ func (e *WorkflowConditionFailedError) Error() string {
 	return e.Msg
 }
 
+func (e *WorkflowRunAlreadyExistsError) Error() string {
+	return e.Msg
+}
+
 func (e *ConditionFailedError) Error() string {
 	return e.Msg
 }
@@ -1419,6 +1428,7 @@ func IsConflictErr(err error) bool {
 	switch err.(type) {
 	case *CurrentWorkflowConditionFailedError,
 		*WorkflowConditionFailedError,
+		*WorkflowRunAlreadyExistsError,
 		*ConditionFailedError:
 		return true
 	}

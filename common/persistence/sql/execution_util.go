@@ -647,7 +647,6 @@ func lockAndCheckExecution(
 		if nextEventID != condition {
 			return &p.WorkflowConditionFailedError{
 				Msg:             fmt.Sprintf("lockAndCheckExecution failed. Next_event_id was %v when it should have been %v.", nextEventID, condition),
-				RunID:           runID.String(),
 				NextEventID:     nextEventID,
 				DBRecordVersion: version,
 			}
@@ -657,7 +656,6 @@ func lockAndCheckExecution(
 		if version != dbRecordVersion {
 			return &p.WorkflowConditionFailedError{
 				Msg:             fmt.Sprintf("lockAndCheckExecution failed. DBRecordVersion expected: %v, actually %v.", dbRecordVersion, version),
-				RunID:           runID.String(),
 				NextEventID:     nextEventID,
 				DBRecordVersion: version,
 			}
@@ -966,6 +964,38 @@ func assertNotCurrentExecution(
 	return assertRunIDMismatch(runID, currentRow, serializer)
 }
 
+func assertRunNotExists(
+	ctx context.Context,
+	tx sqlplugin.Tx,
+	shardID int32,
+	namespaceID primitives.UUID,
+	workflowID string,
+	runID primitives.UUID,
+	serializer serialization.Serializer,
+) error {
+	row, err := tx.SelectFromExecutions(ctx, sqlplugin.ExecutionsFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil
+		}
+		return serviceerror.NewUnavailablef("assertRunNotExists failed. Unable to load execution record. Error: %v", err)
+	}
+	executionState, err := serializer.WorkflowExecutionStateFromBlob(p.NewDataBlob(row.State, row.StateEncoding))
+	if err != nil {
+		return err
+	}
+	return &p.WorkflowRunAlreadyExistsError{
+		Msg:    fmt.Sprintf("assertRunNotExists failed. Workflow run already exists, run ID: %v", runID),
+		RunID:  runID.String(),
+		Status: executionState.Status,
+	}
+}
+
 func assertRunIDAndUpdateCurrentExecution(
 	ctx context.Context,
 	tx sqlplugin.Tx,
@@ -1177,7 +1207,6 @@ func (m *sqlExecutionStore) createExecution(
 		if m.DB.IsDupEntryError(err) {
 			return &p.WorkflowConditionFailedError{
 				Msg:             fmt.Sprintf("Workflow execution already running. WorkflowId: %v", workflowID),
-				RunID:           executionState.GetRunId(),
 				NextEventID:     0,
 				DBRecordVersion: 0,
 			}

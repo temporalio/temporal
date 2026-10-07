@@ -374,6 +374,7 @@ func createWorkflowExecution(
 		switch err.(type) {
 		case *persistence.CurrentWorkflowConditionFailedError,
 			*persistence.WorkflowConditionFailedError,
+			*persistence.WorkflowRunAlreadyExistsError,
 			*persistence.ConditionFailedError,
 			*serviceerror.ResourceExhausted:
 			// it is possible that workflow already exists and caller need to apply

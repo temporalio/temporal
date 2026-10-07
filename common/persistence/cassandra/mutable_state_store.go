@@ -480,7 +480,8 @@ func (d *MutableStateStore) CreateWorkflowExecution(
 			request.RangeID,
 			requestCurrentRunID,
 			[]executionCASCondition{{
-				runID: newWorkflow.ExecutionState.RunId,
+				runID:        newWorkflow.ExecutionState.RunId,
+				mustNotExist: request.VerifyRunIDUniqueness,
 				// dbVersion is for CAS, so the db record version will be set to `updateWorkflow.DBRecordVersion`
 				// while CAS on `updateWorkflow.DBRecordVersion - 1`
 				dbVersion:   newWorkflow.DBRecordVersion - 1,
@@ -731,9 +732,10 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 		// Report a new run whose run ID already exists as a conflict on that run.
 		if newWorkflow != nil {
 			executionCASConditions = append(executionCASConditions, executionCASCondition{
-				runID:       newWorkflow.ExecutionState.RunId,
-				dbVersion:   newWorkflow.DBRecordVersion - 1,
-				nextEventID: newWorkflow.Condition,
+				runID:        newWorkflow.ExecutionState.RunId,
+				mustNotExist: request.VerifyRunIDUniqueness,
+				dbVersion:    newWorkflow.DBRecordVersion - 1,
+				nextEventID:  newWorkflow.Condition,
 			})
 		}
 		return convertErrors(

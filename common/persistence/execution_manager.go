@@ -265,6 +265,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		}, nil
 	case *CurrentWorkflowConditionFailedError,
 		*WorkflowConditionFailedError,
+		*WorkflowRunAlreadyExistsError,
 		*ConditionFailedError:
 		m.trimHistoryNode(
 			ctx,
@@ -436,6 +437,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 		}, nil
 	case *CurrentWorkflowConditionFailedError,
 		*WorkflowConditionFailedError,
+		*WorkflowRunAlreadyExistsError,
 		*ConditionFailedError:
 		m.trimHistoryNode(
 			ctx,

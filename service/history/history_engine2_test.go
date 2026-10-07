@@ -2024,15 +2024,31 @@ func (s *engine2Suite) TestStartWorkflowExecution_DerivedRunID_CurrentRunConflic
 		Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(context.Background(), ms)}, nil)
 	// The terminate-and-replace write fails on the current run's version check, not on the new run.
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
-		Return(nil, &persistence.WorkflowConditionFailedError{Msg: "version mismatch", RunID: s.tv.RunID()})
+		Return(nil, &persistence.WorkflowConditionFailedError{Msg: "version mismatch"})
 
 	startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING)
 	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
 
-	var conflictErr *persistence.WorkflowConditionFailedError
-	s.ErrorAs(err, &conflictErr)
-	s.Equal(s.tv.RunID(), conflictErr.RunID)
+	s.IsType(&persistence.WorkflowConditionFailedError{}, err)
 	s.Nil(resp)
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_DerivedRunID_RunAlreadyExistsIsDedup() {
+	s.config.EnableCrossRunRequestIDDedup = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
+	derivedRunID := s.derivedRunID(startRequest)
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(nil, &persistence.WorkflowRunAlreadyExistsError{
+			Msg:    "run already exists",
+			RunID:  derivedRunID,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		})
+
+	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
+	s.NoError(err)
+	s.Equal(derivedRunID, resp.GetRunId())
+	s.True(resp.GetStarted())
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, resp.GetStatus())
 }
 
 func (s *engine2Suite) derivedRunID(request *historyservice.StartWorkflowExecutionRequest) string {
