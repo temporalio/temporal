@@ -1,12 +1,16 @@
 package workers
 
 import (
+	"strings"
+
+	otellog "go.opentelemetry.io/otel/log"
 	enumspb "go.temporal.io/api/enums/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/wideevents"
 )
 
 // WorkerMetricsConfig contains dynamic config flags for worker-related metrics.
@@ -97,5 +101,64 @@ func (e *workerMetricsEmitter) emitPollerAutoscaling(nsID namespace.ID, nsName n
 	}
 	if hb.NexusPollerInfo.GetIsAutoscaling() {
 		recordAutoscaling(enumspb.TASK_QUEUE_TYPE_NEXUS)
+	}
+}
+
+func emitWorkerConfigEvent(logger otellog.Logger, nsName namespace.Name, hb *workerpb.WorkerHeartbeat) {
+	var runtimeType, osTag, archTag string
+	if env := hb.GetEnvironment(); env != nil {
+		osTag, archTag = platformTags(env.GetPlatform())
+		if rts := env.GetRuntimes(); len(rts) > 0 {
+			runtimeType = runtimeTypeName(rts[0].GetType())
+		}
+	}
+	wideevents.Emit(logger, wideevents.WorkerConfigPayload{
+		Namespace:                 nsName.String(),
+		TaskQueue:                 hb.GetTaskQueue(),
+		WorkerInstanceKey:         hb.GetWorkerInstanceKey(),
+		SdkName:                   hb.GetSdkName(),
+		SdkVersion:                hb.GetSdkVersion(),
+		DeploymentName:            hb.GetDeploymentVersion().GetDeploymentName(),
+		BuildID:                   hb.GetDeploymentVersion().GetBuildId(),
+		RuntimeType:               runtimeType,
+		OS:                        osTag,
+		Architecture:              archTag,
+		WorkflowPollerAutoscaling: hb.GetWorkflowPollerInfo().GetIsAutoscaling(),
+		ActivityPollerAutoscaling: hb.GetActivityPollerInfo().GetIsAutoscaling(),
+		NexusPollerAutoscaling:    hb.GetNexusPollerInfo().GetIsAutoscaling(),
+	})
+}
+
+// runtimeTypeName returns a clean tag value for a RuntimeType enum, e.g. "go", "cpython", "jvm".
+func runtimeTypeName(rt workerpb.EnvironmentInfo_Runtime_RuntimeType) string {
+	if rt == workerpb.EnvironmentInfo_Runtime_RUNTIME_TYPE_UNSPECIFIED {
+		return "unknown"
+	}
+	raw := string(rt.Descriptor().Values().ByNumber(rt.Number()).Name())
+	return strings.ToLower(strings.TrimPrefix(raw, "RUNTIME_TYPE_"))
+}
+
+func architectureName(a workerpb.EnvironmentInfo_Architecture) string {
+	if a == workerpb.EnvironmentInfo_ARCHITECTURE_UNSPECIFIED {
+		return "unknown"
+	}
+	raw := string(a.Descriptor().Values().ByNumber(a.Number()).Name())
+	return strings.ToLower(strings.TrimPrefix(raw, "ARCHITECTURE_"))
+}
+
+// platformTags extracts OS and architecture tag values from the platform oneof.
+func platformTags(p *workerpb.EnvironmentInfo_Platform) (os string, arch string) {
+	if p == nil {
+		return "unknown", "unknown"
+	}
+	switch v := p.GetVariant().(type) {
+	case *workerpb.EnvironmentInfo_Platform_Linux:
+		return "linux", architectureName(v.Linux.GetArchitecture())
+	case *workerpb.EnvironmentInfo_Platform_Macos:
+		return "macos", architectureName(v.Macos.GetArchitecture())
+	case *workerpb.EnvironmentInfo_Platform_Windows:
+		return "windows", architectureName(v.Windows.GetArchitecture())
+	default:
+		return "unknown", "unknown"
 	}
 }
