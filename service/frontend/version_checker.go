@@ -155,15 +155,13 @@ func (vc *VersionChecker) checkVersion(ctx context.Context, shutdown bool) {
 		}
 		return
 	}
-	if !shutdown {
-		vc.logVersionInfo(resp)
-		err = vc.saveVersionInfo(ctx, resp)
-		if err != nil {
-			if ctx.Err() != context.Canceled {
-				metrics.VersionCheckFailedCount.With(metricsHandler).Record(1)
-			}
-			return
+	vc.logVersionInfo(resp)
+	err = vc.saveVersionInfo(ctx, resp, shutdown)
+	if err != nil {
+		if ctx.Err() != context.Canceled {
+			metrics.VersionCheckFailedCount.With(metricsHandler).Record(1)
 		}
+		return
 	}
 	metrics.VersionCheckSuccessCount.With(metricsHandler).Record(1)
 }
@@ -241,7 +239,7 @@ func (vc *VersionChecker) getVersionInfo(ctx context.Context, req *versioninfo.V
 	return vc.versionInfoCaller.CallContext(ctx, req)
 }
 
-func (vc *VersionChecker) saveVersionInfo(ctx context.Context, resp *versioninfo.VersionCheckResponse) error {
+func (vc *VersionChecker) saveVersionInfo(ctx context.Context, resp *versioninfo.VersionCheckResponse, ignoreConflict bool) error {
 	metadata, err := vc.clusterMetadataManager.GetCurrentClusterMetadata(ctx)
 	if err != nil {
 		return err
@@ -257,7 +255,7 @@ func (vc *VersionChecker) saveVersionInfo(ctx context.Context, resp *versioninfo
 	if err != nil {
 		return err
 	}
-	if !saved {
+	if !saved && !ignoreConflict {
 		return serviceerror.NewUnavailable("version info update hasn't been applied")
 	}
 	return nil
