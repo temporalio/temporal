@@ -277,12 +277,18 @@ func (e *engine) deleteClosedExecution(key chasm.ExecutionKey) error {
 	if x.backend.isRunning() {
 		return serviceerror.NewFailedPrecondition("deleting a running workflow is not supported")
 	}
+	e.deleteExecution(x)
+	return nil
+}
+
+// deleteExecution removes an execution, running or not. Its queued tasks are discarded when they
+// are dequeued, since they no longer resolve to an execution.
+func (e *engine) deleteExecution(x *execution) {
 	delete(e.executions, x.key)
 	current := [2]string{x.key.NamespaceID, x.key.BusinessID}
 	if e.current[current] == x {
 		delete(e.current, current)
 	}
-	return nil
 }
 
 func (e *engine) execution(ref chasm.ComponentRef) (*execution, error) {
@@ -352,7 +358,11 @@ func (b *backend) GetExecutionState() *persistencespb.WorkflowExecutionState {
 }
 
 func (b *backend) GetExecutionInfo() *persistencespb.WorkflowExecutionInfo {
-	return &persistencespb.WorkflowExecutionInfo{NamespaceId: b.key.NamespaceID, WorkflowId: b.key.BusinessID}
+	return &persistencespb.WorkflowExecutionInfo{
+		NamespaceId:          b.key.NamespaceID,
+		WorkflowId:           b.key.BusinessID,
+		StateTransitionCount: b.transitionCount,
+	}
 }
 
 func (b *backend) GetApproximatePersistedSize() int                   { return 0 }
