@@ -8382,6 +8382,11 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 // This is best effort: task validation before execution remains the correctness guarantee, since the
 // closed root fails the access check. It only runs on the active cluster to avoid diverging node versions
 // from what is replicated.
+//
+// The tree is touched regardless of which sub-components exist, so new workflow sub-components are covered
+// without updating this method. The root's state does not change, so it is not rewritten when CHASM
+// skip-persistence (history.enableCHASMSkipPersistence) is enabled; otherwise this costs one root node write
+// per workflow close.
 func (ms *MutableStateImpl) closeTransactionInvalidateChasmTasksOnClose(
 	ctx context.Context,
 	transactionPolicy historyi.TransactionPolicy,
@@ -8394,18 +8399,7 @@ func (ms *MutableStateImpl) closeTransactionInvalidateChasmTasksOnClose(
 		return nil
 	}
 
-	wf, _, err := ms.ChasmWorkflowComponentReadOnly(ctx)
-	if err != nil {
-		return err
-	}
-	// Only Nexus operations have tasks that depend on the workflow being open: callbacks are detached, updates
-	// only hold callbacks, and incoming signals are data. Skip otherwise, since touching the root rewrites it
-	// unless CHASM skip-persistence is enabled.
-	if len(wf.Operations) == 0 {
-		return nil
-	}
-
-	_, _, err = ms.ChasmWorkflowComponent(ctx)
+	_, _, err := ms.ChasmWorkflowComponent(ctx)
 	return err
 }
 
