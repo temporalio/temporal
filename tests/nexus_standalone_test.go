@@ -165,8 +165,8 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 		_, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "", // required field
 		})
-		s.Error(err)
-		s.Contains(err.Error(), "operation_id is required")
+		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+		s.ErrorContains(err, "operation_id: value is required")
 	})
 
 	s.Run("IDConflictPolicyFail", func(s *NexusStandaloneTestSuite) {
@@ -964,8 +964,8 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 		_, err := env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
 			Namespace: env.Namespace().String(),
 		})
-		s.Error(err)
-		s.ErrorContains(err, "operation_id is required")
+		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+		s.ErrorContains(err, "operation_id: value is required")
 	})
 }
 
@@ -1247,8 +1247,8 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationCancel() {
 			Namespace:   env.Namespace().String(),
 			OperationId: "", // required field
 		})
-		s.Error(err)
-		s.Contains(err.Error(), "operation_id is required")
+		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+		s.ErrorContains(err, "operation_id: value is required")
 	})
 }
 
@@ -1458,8 +1458,8 @@ func (s *NexusStandaloneTestSuite) TestTerminateStandaloneNexusOperation() {
 			Namespace:   env.Namespace().String(),
 			OperationId: "", // required field
 		})
-		s.Error(err)
-		s.Contains(err.Error(), "operation_id is required")
+		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+		s.ErrorContains(err, "operation_id: value is required")
 	})
 }
 
@@ -2043,8 +2043,8 @@ func (s *NexusStandaloneTestSuite) TestDeleteStandaloneNexusOperation() {
 		_, err := env.FrontendClient().DeleteNexusOperationExecution(s.Context(), &workflowservice.DeleteNexusOperationExecutionRequest{
 			Namespace: env.Namespace().String(),
 		})
-		s.Error(err)
-		s.ErrorContains(err, "operation_id is required")
+		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+		s.ErrorContains(err, "operation_id: value is required")
 	})
 }
 
@@ -2400,8 +2400,8 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 			OperationId: "", // required field
 			WaitStage:   enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
 		})
-		s.Error(err)
-		s.Contains(err.Error(), "operation_id is required")
+		s.ErrorAs(err, new(*serviceerror.InvalidArgument))
+		s.ErrorContains(err, "operation_id: value is required")
 	})
 }
 

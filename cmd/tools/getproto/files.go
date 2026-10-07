@@ -7,6 +7,7 @@ package main
 import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	validate "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	nexusannotations "github.com/nexus-rpc/nexus-proto-annotations/go/nexusannotations/v1"
 	activity "go.temporal.io/api/activity/v1"
 	batch "go.temporal.io/api/batch/v1"
@@ -45,6 +46,7 @@ import (
 
 func init() {
 	importMap = make(map[string]protoreflect.FileDescriptor)
+	importMap["buf/validate/validate.proto"] = validate.File_buf_validate_validate_proto
 	importMap["google/protobuf/any.proto"] = anypb.File_google_protobuf_any_proto
 	importMap["google/protobuf/descriptor.proto"] = descriptorpb.File_google_protobuf_descriptor_proto
 	importMap["google/protobuf/duration.proto"] = durationpb.File_google_protobuf_duration_proto
