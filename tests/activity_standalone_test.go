@@ -1333,6 +1333,119 @@ func (s *standaloneActivityTestSuite) TestEagerStartFallsBackWhenMatchingDenies(
 	}
 }
 
+func (s *standaloneActivityTestSuite) TestLostEagerActivityTaskResponseRecovery() {
+	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, false))
+	t := s.T()
+
+	startEagerActivity := func(
+		ctx context.Context,
+		t *testing.T,
+		activityID string,
+		taskQueue string,
+		startToCloseTimeout time.Duration,
+		heartbeatTimeout time.Duration,
+		scheduleToCloseTimeout time.Duration,
+	) *workflowservice.StartActivityExecutionResponse {
+		response, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			RequestEagerExecution:  true,
+			ActivityId:             activityID,
+			ActivityType:           env.Tv().ActivityType(),
+			Identity:               defaultIdentity,
+			Input:                  defaultInput,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			ScheduleToCloseTimeout: durationpb.New(scheduleToCloseTimeout),
+			StartToCloseTimeout:    durationpb.New(startToCloseTimeout),
+			HeartbeatTimeout:       durationpb.New(heartbeatTimeout),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval:    durationpb.New(time.Second),
+				BackoffCoefficient: 1,
+				MaximumAttempts:    2,
+			},
+			RequestId: testcore.RandomizeStr(t.Name()),
+		})
+		require.NoError(t, err)
+		require.True(t, response.GetStarted())
+		require.NotNil(t, response.GetEagerActivityTask())
+		return response
+	}
+
+	completeRetriedActivity := func(
+		ctx context.Context,
+		t *testing.T,
+		activityID string,
+		taskQueue string,
+		runID string,
+	) {
+		task, err := env.pollActivityTaskQueue(ctx, taskQueue)
+		require.NoError(t, err)
+		require.Equal(t, activityID, task.GetActivityId())
+		require.EqualValues(t, 2, task.GetAttempt(), "retry must use the normal task-queue poll path")
+
+		_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: task.GetTaskToken(),
+			Result:    defaultResult,
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+
+		describe, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:      env.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          runID,
+			IncludeOutcome: true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, describe.GetInfo().GetStatus())
+		require.EqualValues(t, 2, describe.GetInfo().GetAttempt())
+		protorequire.ProtoEqual(t, defaultResult, describe.GetOutcome().GetResult())
+	}
+
+	t.Run("StartToCloseTimeout", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(s.Context(), 20*time.Second)
+		defer cancel()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		response := startEagerActivity(ctx, t, activityID, taskQueue, time.Second, 0, time.Minute)
+		// Simulate a client that lost the eager response: it never responds using this token.
+		require.NotEmpty(t, response.GetEagerActivityTask().GetTaskToken())
+		completeRetriedActivity(ctx, t, activityID, taskQueue, response.GetRunId())
+	})
+
+	t.Run("HeartbeatTimeout", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(s.Context(), 20*time.Second)
+		defer cancel()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		response := startEagerActivity(ctx, t, activityID, taskQueue, time.Minute, time.Second, time.Minute)
+		// Simulate a client that lost the eager response: it never heartbeats or completes.
+		require.NotEmpty(t, response.GetEagerActivityTask().GetTaskToken())
+		completeRetriedActivity(ctx, t, activityID, taskQueue, response.GetRunId())
+	})
+
+	t.Run("ScheduleToCloseTimeout", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(s.Context(), 20*time.Second)
+		defer cancel()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		response := startEagerActivity(ctx, t, activityID, taskQueue, time.Minute, 0, time.Second)
+		// Schedule-to-close is the activity's terminal deadline, so a lost eager task must not retry.
+		require.NotEmpty(t, response.GetEagerActivityTask().GetTaskToken())
+
+		outcome, err := env.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      response.GetRunId(),
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, outcome.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
+	})
+}
+
 func (s *standaloneActivityTestSuite) TestComplete() {
 	env := s.newTestEnv()
 	t := s.T()
