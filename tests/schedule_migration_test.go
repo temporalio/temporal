@@ -2915,7 +2915,7 @@ func TestScheduleMigrationV1ToV2_AdminMigratePreservesRunningWorkflowHistory(t *
 // invisibly gate migration behind chasm/lib/scheduler/config.go's
 // SentinelIdleTime (15 minutes) and make an otherwise-passing test hang or
 // flake for the wrong reason.
-func requireNoChasmSentinel(ctx context.Context, t *testing.T, env *testcore.TestEnv, scheduleID string) {
+func requireNoChasmSentinel(ctx context.Context, t *testing.T, env *ScheduleTestEnv, scheduleID string) {
 	t.Helper()
 
 	resp, err := env.AdminClient().DescribeMutableState(ctx, &adminservice.DescribeMutableStateRequest{
@@ -2947,7 +2947,7 @@ func requireNoChasmSentinel(ctx context.Context, t *testing.T, env *testcore.Tes
 func createV1Schedule(
 	ctx context.Context,
 	t *testing.T,
-	env *testcore.TestEnv,
+	env *ScheduleTestEnv,
 	scheduleID string,
 	sched *schedulepb.Schedule,
 	initialPatch *schedulepb.SchedulePatch,
@@ -2971,7 +2971,7 @@ func createV1Schedule(
 
 // awaitRunningAction waits until the schedule has fired an action whose workflow
 // is still RUNNING, and returns that workflow's ID.
-func awaitRunningAction(ctx context.Context, t *testing.T, env *testcore.TestEnv, scheduleID string) string {
+func awaitRunningAction(ctx context.Context, t *testing.T, env *ScheduleTestEnv, scheduleID string) string {
 	t.Helper()
 
 	var runningWfID string
@@ -2996,7 +2996,7 @@ func awaitRunningAction(ctx context.Context, t *testing.T, env *testcore.TestEnv
 
 // awaitAnyAction waits until the schedule has fired at least one action
 // (regardless of the fired workflow's status) and returns that workflow's ID.
-func awaitAnyAction(ctx context.Context, t *testing.T, env *testcore.TestEnv, scheduleID string) string {
+func awaitAnyAction(ctx context.Context, t *testing.T, env *ScheduleTestEnv, scheduleID string) string {
 	t.Helper()
 
 	var wfID string
@@ -3018,7 +3018,7 @@ func awaitAnyAction(ctx context.Context, t *testing.T, env *testcore.TestEnv, sc
 // awaitV1SchedulerCompleted waits until the V1 scheduler workflow reaches
 // COMPLETED. The V1 scheduler workflow only completes when executeMigration()
 // succeeds, so its completion is a reliable "migration happened" signal.
-func awaitV1SchedulerCompleted(ctx context.Context, t *testing.T, env *testcore.TestEnv, scheduleID string) {
+func awaitV1SchedulerCompleted(ctx context.Context, t *testing.T, env *ScheduleTestEnv, scheduleID string) {
 	t.Helper()
 
 	v1WorkflowID := scheduler.WorkflowIDPrefix + scheduleID
@@ -3039,7 +3039,7 @@ func awaitV1SchedulerCompleted(ctx context.Context, t *testing.T, env *testcore.
 // older/community SDKs (whose vendored protobuf predates it) cannot decode it
 // and crash -- permanently stalling the workflow (see
 // repros/scheduler-migration-bug-evidence.md).
-func requireNoOptionsUpdatedEvent(ctx context.Context, t *testing.T, env *testcore.TestEnv, workflowID string) {
+func requireNoOptionsUpdatedEvent(ctx context.Context, t *testing.T, env *ScheduleTestEnv, workflowID string) {
 	t.Helper()
 
 	history, err := env.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
@@ -3056,7 +3056,7 @@ func requireNoOptionsUpdatedEvent(ctx context.Context, t *testing.T, env *testco
 }
 
 // requireV2ScheduleExists asserts a V2 (CHASM) schedule exists for scheduleID.
-func requireV2ScheduleExists(ctx context.Context, t *testing.T, env *testcore.TestEnv, scheduleID string) {
+func requireV2ScheduleExists(ctx context.Context, t *testing.T, env *ScheduleTestEnv, scheduleID string) {
 	t.Helper()
 
 	_, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(ctx, &schedulerpb.DescribeScheduleRequest{
