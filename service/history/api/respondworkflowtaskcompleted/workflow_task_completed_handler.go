@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
@@ -72,6 +73,7 @@ type (
 		initiatedChildExecutionsInBatch     map[string]struct{} // Set of initiated child executions in the workflow task
 		updateRegistry                      update.Registry
 		pendingWorkerCommandsByControlQueue map[string][]*workerpb.WorkerCommand // Batched worker commands by control queue
+		eagerActivityCandidates             []eagerActivityCandidate
 
 		// validation
 		attrValidator                  *api.CommandAttrValidator
@@ -100,13 +102,14 @@ type (
 		resp *historyservice.RespondWorkflowTaskCompletedResponse,
 	) error
 
-	commandPostAction func(
-		ctx context.Context,
-	) (workflowTaskResponseMutation, error)
-
 	handleCommandResponse struct {
 		workflowTaskResponseMutation workflowTaskResponseMutation
-		commandPostAction            commandPostAction
+	}
+
+	eagerActivityCandidate struct {
+		attr         *commandpb.ScheduleActivityTaskCommandAttributes
+		activityInfo *persistencespb.ActivityInfo
+		granted      bool
 	}
 )
 
@@ -182,7 +185,6 @@ func (handler *workflowTaskCompletedHandler) handleCommands(
 	}
 
 	var mutations []workflowTaskResponseMutation
-	var postActions []commandPostAction
 	for _, command := range commands {
 		response, err := handler.handleCommand(ctx, command, msgs)
 		if err != nil || handler.stopProcessing {
@@ -191,9 +193,6 @@ func (handler *workflowTaskCompletedHandler) handleCommands(
 		if response != nil {
 			if response.workflowTaskResponseMutation != nil {
 				mutations = append(mutations, response.workflowTaskResponseMutation)
-			}
-			if response.commandPostAction != nil {
-				postActions = append(postActions, response.commandPostAction)
 			}
 		}
 	}
@@ -211,15 +210,11 @@ func (handler *workflowTaskCompletedHandler) handleCommands(
 		}
 	}
 
-	for _, postAction := range postActions {
-		mutation, err := postAction(ctx)
-		if err != nil || handler.stopProcessing {
-			return nil, err
-		}
-		if mutation != nil {
-			mutations = append(mutations, mutation)
-		}
+	eagerActivityMutations, err := handler.handleEagerActivityCandidates(ctx)
+	if err != nil || handler.stopProcessing {
+		return nil, err
 	}
+	mutations = append(mutations, eagerActivityMutations...)
 
 	if err := handler.flushWorkerCommandsTasks(); err != nil {
 		return nil, err
@@ -550,14 +545,6 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	if handler.mutableState.GetExecutionState().Status == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		bypassActivityTaskGeneration = true
 		eagerStartActivity = false
-	} else if eagerStartActivity &&
-		// This line makes an RPC call to matching
-		// TODO: batch possibly multiple activities in a single RPC call
-		!handler.eagerActivityDispatchAllowed(ctx, namespace, attr) {
-		// Matching grants are best-effort. On a denial or any matching failure, generate the
-		// activity task normally instead of failing workflow task completion.
-		bypassActivityTaskGeneration = false
-		eagerStartActivity = false
 	}
 
 	event, _, err := handler.mutableState.AddActivityTaskScheduledEvent(
@@ -573,48 +560,121 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 		return event, &handleCommandResponse{}, nil
 	}
 
-	return event,
-		&handleCommandResponse{
-			commandPostAction: func(ctx context.Context) (workflowTaskResponseMutation, error) {
-				return handler.handlePostCommandEagerExecuteActivity(ctx, attr)
-			},
-		},
-		nil
+	handler.eagerActivityCandidates = append(handler.eagerActivityCandidates, eagerActivityCandidate{attr: attr})
+	return event, &handleCommandResponse{}, nil
 }
 
-func (handler *workflowTaskCompletedHandler) eagerActivityDispatchAllowed(
+func (handler *workflowTaskCompletedHandler) handleEagerActivityCandidates(
 	ctx context.Context,
-	namespaceName string,
-	attr *commandpb.ScheduleActivityTaskCommandAttributes,
-) bool {
-	return !handler.config.EnableActivityEagerDispatchCheck(namespaceName) ||
-		handler.grantEagerActivityDispatch(ctx, attr)
+) ([]workflowTaskResponseMutation, error) {
+	if len(handler.eagerActivityCandidates) == 0 || !handler.mutableState.IsWorkflowExecutionRunning() {
+		return nil, nil
+	}
+
+	namespace := handler.mutableState.GetNamespaceEntry().Name().String()
+	checkEnabled := handler.config.EnableActivityEagerDispatchCheck(namespace)
+	candidateIndexesByTaskQueue := make(map[string][]int)
+	for index := range handler.eagerActivityCandidates {
+		candidate := &handler.eagerActivityCandidates[index]
+		activityInfo, ok := handler.mutableState.GetActivityByActivityID(candidate.attr.GetActivityId())
+		if !ok {
+			// The activity was cancelled by a later command in this workflow task.
+			continue
+		}
+
+		candidate.activityInfo = activityInfo
+		if !checkEnabled {
+			candidate.granted = true
+			continue
+		}
+		candidateIndexesByTaskQueue[candidate.attr.GetTaskQueue().GetName()] = append(
+			candidateIndexesByTaskQueue[candidate.attr.GetTaskQueue().GetName()],
+			index,
+		)
+	}
+
+	for taskQueue, candidateIndexes := range candidateIndexesByTaskQueue {
+		handler.grantEagerActivityDispatchBatch(ctx, taskQueue, candidateIndexes)
+	}
+
+	var mutations []workflowTaskResponseMutation
+	for index := range handler.eagerActivityCandidates {
+		candidate := &handler.eagerActivityCandidates[index]
+		if candidate.activityInfo == nil {
+			continue
+		}
+		if !candidate.granted {
+			// Matching grants are best-effort. On a denial or any matching failure, generate the
+			// activity task normally instead of failing workflow task completion.
+			if err := handler.mutableState.GenerateActivityTask(candidate.activityInfo.GetScheduledEventId()); err != nil {
+				return nil, err
+			}
+			continue
+		}
+
+		mutation, err := handler.handlePostCommandEagerExecuteActivity(ctx, candidate.attr)
+		if err != nil {
+			return nil, err
+		}
+		if mutation != nil {
+			mutations = append(mutations, mutation)
+		}
+	}
+	return mutations, nil
 }
 
-func (handler *workflowTaskCompletedHandler) grantEagerActivityDispatch(
+func (handler *workflowTaskCompletedHandler) grantEagerActivityDispatchBatch(
 	ctx context.Context,
-	attr *commandpb.ScheduleActivityTaskCommandAttributes,
-) bool {
+	taskQueue string,
+	candidateIndexes []int,
+) {
 	if handler.matchingClient == nil {
-		return false
+		return
+	}
+
+	items := make([]*matchingservice.GrantEagerDispatchRequest_Item, len(candidateIndexes))
+	for index, candidateIndex := range candidateIndexes {
+		candidate := handler.eagerActivityCandidates[candidateIndex]
+		items[index] = &matchingservice.GrantEagerDispatchRequest_Item{
+			Count:    1,
+			Priority: candidate.attr.GetPriority(),
+			// As of Sep 2026 SDKs do not ask for Eager cross-TQ. So we can assume activity's version
+			// Is always the same as workflow's, Once/If SDK starts requesting Eager for other task queues,
+			// we should decide if different Deployment Versions are qualified for eager or not, and if so,
+			// how should they be handled.
+			Version: worker_versioning.DeploymentVersionFromDeployment(handler.workflowTaskDeployment),
+		}
 	}
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
+	namespaceName := handler.mutableState.GetNamespaceEntry().Name()
+	metrics.EagerDispatchRequestsSent.With(
+		workflow.GetPerTaskQueueFamilyScope(handler.metricsHandler, namespaceName, taskQueue, handler.config),
+	).Record(eagerDispatchRequestCount(items))
 	response, err := handler.matchingClient.GrantEagerDispatch(ctx, &matchingservice.GrantEagerDispatchRequest{
 		NamespaceId: executionInfo.GetNamespaceId(),
 		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-			TaskQueue:     attr.GetTaskQueue().GetName(),
+			TaskQueue:     taskQueue,
 			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 		},
-		Items: []*matchingservice.GrantEagerDispatchRequest_Item{
-			{
-				Count:    1,
-				Priority: attr.GetPriority(),
-				Version:  worker_versioning.DeploymentVersionFromDeployment(handler.workflowTaskDeployment),
-			},
-		},
+		Items: items,
 	})
-	return err == nil && len(response.GetItems()) == 1 && response.GetItems()[0].GetGrantedCount() == 1
+	if err != nil || len(response.GetItems()) != len(items) {
+		return
+	}
+	for index, item := range response.GetItems() {
+		handler.eagerActivityCandidates[candidateIndexes[index]].granted = item.GetGrantedCount() == 1
+	}
+}
+
+func eagerDispatchRequestCount(items []*matchingservice.GrantEagerDispatchRequest_Item) int64 {
+	var count int64
+	for _, item := range items {
+		if itemCount := item.GetCount(); itemCount > 0 {
+			count += int64(itemCount)
+		}
+	}
+	return count
 }
 
 func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivity(

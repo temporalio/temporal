@@ -2000,6 +2000,20 @@ func (mr *MockMutableStateMockRecorder) GenerateActivityCancelCommandsForClose()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityCancelCommandsForClose", reflect.TypeOf((*MockMutableState)(nil).GenerateActivityCancelCommandsForClose))
 }
 
+// GenerateActivityTask mocks base method.
+func (m *MockMutableState) GenerateActivityTask(scheduledEventID int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateActivityTask", scheduledEventID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GenerateActivityTask indicates an expected call of GenerateActivityTask.
+func (mr *MockMutableStateMockRecorder) GenerateActivityTask(scheduledEventID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityTask", reflect.TypeOf((*MockMutableState)(nil).GenerateActivityTask), scheduledEventID)
+}
+
 // GenerateEventLoadToken mocks base method.
 func (m *MockMutableState) GenerateEventLoadToken(event *history.HistoryEvent) ([]byte, error) {
 	m.ctrl.T.Helper()
