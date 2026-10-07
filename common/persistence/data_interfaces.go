@@ -135,7 +135,7 @@ type (
 		DBRecordVersion int64
 	}
 
-	// WorkflowRunAlreadyExistsError is returned when a write with VerifyRunIDUniqueness set creates a run whose
+	// WorkflowRunAlreadyExistsError is returned when a write with CheckRunAlreadyExists set creates a run whose
 	// run ID already exists. Status is the existing run's status.
 	WorkflowRunAlreadyExistsError struct {
 		Msg    string
@@ -225,9 +225,9 @@ type (
 
 		ArchetypeID chasm.ArchetypeID
 
-		// VerifyRunIDUniqueness is set when the run ID was derived rather than randomly generated. The store must
+		// CheckRunAlreadyExists is set when the run ID was derived rather than randomly generated. The store must
 		// then reject the create with WorkflowRunAlreadyExistsError if a run with this run ID already exists.
-		VerifyRunIDUniqueness bool
+		CheckRunAlreadyExists bool
 
 		NewWorkflowSnapshot WorkflowSnapshot
 		NewWorkflowEvents   []*WorkflowEvents
@@ -247,8 +247,8 @@ type (
 
 		ArchetypeID chasm.ArchetypeID
 
-		// VerifyRunIDUniqueness is as on CreateWorkflowExecutionRequest, for NewWorkflowSnapshot only.
-		VerifyRunIDUniqueness bool
+		// CheckRunAlreadyExists is as on CreateWorkflowExecutionRequest, for NewWorkflowSnapshot only.
+		CheckRunAlreadyExists bool
 
 		UpdateWorkflowMutation WorkflowMutation
 		UpdateWorkflowEvents   []*WorkflowEvents
@@ -1145,6 +1145,9 @@ type (
 		Closeable
 		GetName() string
 		GetHistoryBranchUtil() HistoryBranchUtil
+		// SupportsCheckRunAlreadyExists reports whether the store honors CheckRunAlreadyExists on create and on update
+		// with a new run, returning WorkflowRunAlreadyExistsError for a run ID that already exists.
+		SupportsCheckRunAlreadyExists() bool
 
 		CreateWorkflowExecution(ctx context.Context, request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(ctx context.Context, request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error)

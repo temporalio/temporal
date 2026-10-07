@@ -91,7 +91,7 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 	workflowID := newWorkflow.WorkflowID
 	runID := primitives.MustParseUUID(newWorkflow.RunID)
 
-	if request.VerifyRunIDUniqueness {
+	if request.CheckRunAlreadyExists {
 		if err := assertRunNotExists(ctx, tx, shardID, namespaceID, workflowID, runID, m.serializer); err != nil {
 			return nil, err
 		}
@@ -378,7 +378,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 
 	shardID := request.ShardID
 
-	if newWorkflow != nil && request.VerifyRunIDUniqueness {
+	if newWorkflow != nil && request.CheckRunAlreadyExists {
 		if err := assertRunNotExists(
 			ctx,
 			tx,
@@ -771,6 +771,10 @@ func (m *sqlExecutionStore) ListConcreteExecutions(
 
 func (m *sqlExecutionStore) GetHistoryBranchUtil() p.HistoryBranchUtil {
 	return m.HistoryBranchUtil
+}
+
+func (m *sqlExecutionStore) SupportsCheckRunAlreadyExists() bool {
+	return true
 }
 
 func getStartTimeFromState(state *persistencespb.WorkflowExecutionState) *time.Time {

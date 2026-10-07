@@ -117,6 +117,9 @@ type (
 		Closeable
 		GetName() string
 		GetHistoryBranchUtil() HistoryBranchUtil
+		// SupportsCheckRunAlreadyExists reports whether the store honors CheckRunAlreadyExists on create and on update
+		// with a new run, returning WorkflowRunAlreadyExistsError for a run ID that already exists.
+		SupportsCheckRunAlreadyExists() bool
 
 		// The below three APIs are related to serialization/deserialization
 		CreateWorkflowExecution(ctx context.Context, request *InternalCreateWorkflowExecutionRequest) (*InternalCreateWorkflowExecutionResponse, error)
@@ -345,11 +348,11 @@ type (
 
 		ArchetypeID chasm.ArchetypeID
 
-		// VerifyRunIDUniqueness is set when the run ID was derived rather than randomly generated. The store must
+		// CheckRunAlreadyExists is set when the run ID was derived rather than randomly generated. The store must
 		// then reject the create with WorkflowRunAlreadyExistsError, describing the existing run, if a run with this
 		// run ID already exists. It takes precedence over CurrentWorkflowConditionFailedError when the current run
 		// condition also fails.
-		VerifyRunIDUniqueness bool
+		CheckRunAlreadyExists bool
 
 		NewWorkflowSnapshot  InternalWorkflowSnapshot
 		NewWorkflowNewEvents []*InternalAppendHistoryNodesRequest `json:",omitempty"`
@@ -368,8 +371,8 @@ type (
 
 		ArchetypeID chasm.ArchetypeID
 
-		// VerifyRunIDUniqueness is as on InternalCreateWorkflowExecutionRequest, for NewWorkflowSnapshot only.
-		VerifyRunIDUniqueness bool
+		// CheckRunAlreadyExists is as on InternalCreateWorkflowExecutionRequest, for NewWorkflowSnapshot only.
+		CheckRunAlreadyExists bool
 
 		UpdateWorkflowMutation  InternalWorkflowMutation
 		UpdateWorkflowNewEvents []*InternalAppendHistoryNodesRequest `json:",omitempty"`

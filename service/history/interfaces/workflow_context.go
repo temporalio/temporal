@@ -49,12 +49,12 @@ type (
 			workflowEventsSlice ...*persistence.WorkflowEvents,
 		) (int64, error)
 
-		// SetVerifyRunIDUniqueness makes the store confirm this run's derived run ID is unused on create.
+		// SetCheckRunAlreadyExists makes the store confirm this run's derived run ID is unused on create.
 		// Set when the run ID is derived rather than random.
-		SetVerifyRunIDUniqueness(verify bool)
-		// VerifyRunIDUniqueness reports whether the run ID is derived rather than random, so creating the run must
+		SetCheckRunAlreadyExists(verify bool)
+		// CheckRunAlreadyExists reports whether the run ID is derived rather than random, so creating the run must
 		// fail if it already exists.
-		VerifyRunIDUniqueness() bool
+		CheckRunAlreadyExists() bool
 
 		CreateWorkflowExecution(
 			ctx context.Context,

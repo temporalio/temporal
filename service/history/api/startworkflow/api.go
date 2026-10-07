@@ -112,6 +112,18 @@ func NewStarter(
 		return nil, err
 	}
 
+	derivedRunID := allowDerivedRunID &&
+		shardContext.GetConfig().EnableCrossRunRequestIDDedup(namespaceEntry.Name().String()) &&
+		request.StartRequest.GetRequestId() != ""
+	if executionManager := shardContext.GetExecutionManager(); derivedRunID && !executionManager.SupportsCheckRunAlreadyExists() {
+		shardContext.GetThrottledLogger().Warn(
+			"EnableCrossRunRequestIDDedup is ignored: the execution store does not support CheckRunAlreadyExists",
+			tag.WorkflowNamespace(namespaceEntry.Name().String()),
+			tag.NewStringTag("store", executionManager.GetName()),
+		)
+		derivedRunID = false
+	}
+
 	return &Starter{
 		// metricsHandler is lazily created when needed in Starter.getMetricsHandler
 		metricsHandler:             nil,
@@ -124,9 +136,7 @@ func NewStarter(
 		createOrUpdateLeaseFn:      createLeaseFn,
 		versionCache:               versionCache,
 		reactivationSignaler:       reactivationSignaler,
-		derivedRunID: allowDerivedRunID &&
-			shardContext.GetConfig().EnableCrossRunRequestIDDedup(namespaceEntry.Name().String()) &&
-			request.StartRequest.GetRequestId() != "",
+		derivedRunID:               derivedRunID,
 	}, nil
 }
 
@@ -344,7 +354,7 @@ func (s *Starter) prepareNewWorkflow(ctx context.Context, workflowID string) (*c
 	}
 
 	// A derived run ID is not unique by construction, so the store must verify it.
-	workflowLease.GetContext().SetVerifyRunIDUniqueness(s.derivedRunID)
+	workflowLease.GetContext().SetCheckRunAlreadyExists(s.derivedRunID)
 
 	workflowTaskInfo := mutableState.GetStartedWorkflowTask()
 	if s.requestEagerStart() && workflowTaskInfo == nil {
@@ -621,7 +631,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 				return nil, nil, err
 			}
 
-			workflowLease.GetContext().SetVerifyRunIDUniqueness(s.derivedRunID)
+			workflowLease.GetContext().SetCheckRunAlreadyExists(s.derivedRunID)
 
 			// extract information from MutableState in case this is an eager start
 			mutableState := workflowLease.GetMutableState()

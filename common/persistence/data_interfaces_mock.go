@@ -591,6 +591,20 @@ func (mr *MockExecutionManagerMockRecorder) SetWorkflowExecution(ctx, request an
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowExecution", reflect.TypeOf((*MockExecutionManager)(nil).SetWorkflowExecution), ctx, request)
 }
 
+// SupportsCheckRunAlreadyExists mocks base method.
+func (m *MockExecutionManager) SupportsCheckRunAlreadyExists() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SupportsCheckRunAlreadyExists")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// SupportsCheckRunAlreadyExists indicates an expected call of SupportsCheckRunAlreadyExists.
+func (mr *MockExecutionManagerMockRecorder) SupportsCheckRunAlreadyExists() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SupportsCheckRunAlreadyExists", reflect.TypeOf((*MockExecutionManager)(nil).SupportsCheckRunAlreadyExists))
+}
+
 // TrimHistoryBranch mocks base method.
 func (m *MockExecutionManager) TrimHistoryBranch(ctx context.Context, request *TrimHistoryBranchRequest) (*TrimHistoryBranchResponse, error) {
 	m.ctrl.T.Helper()
