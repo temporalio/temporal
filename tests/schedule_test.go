@@ -29,7 +29,6 @@ import (
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/payload"
@@ -43,24 +42,9 @@ import (
 	"go.temporal.io/server/service/worker/dummy"
 	"go.temporal.io/server/service/worker/scheduler"
 	"go.temporal.io/server/tests/testcore"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
-)
-
-// contextFactory wraps a base context for CHASM vs V1 differences.
-type contextFactory func(context.Context) context.Context
-
-var (
-	chasmContextFactory contextFactory = func(ctx context.Context) context.Context {
-		return metadata.NewOutgoingContext(ctx, metadata.Pairs(
-			headers.ExperimentHeaderName, "chasm-scheduler",
-		))
-	}
-	v1ContextFactory contextFactory = func(ctx context.Context) context.Context {
-		return ctx
-	}
 )
 
 func (s *ScheduleSuite) contextFactoryFor(chasmEnabled bool) contextFactory {
@@ -96,9 +80,6 @@ const (
 	// neverWindow is how long a Never check waits to confirm a condition stays false.
 	neverWindow = 5 * time.Second
 )
-
-// completeSignalName releases a workflow registered via registerGatedWorkflow.
-const completeSignalName = "complete"
 
 // intervalSpec is the single-interval schedule spec used by most tests.
 func intervalSpec(every time.Duration) *schedulepb.ScheduleSpec {

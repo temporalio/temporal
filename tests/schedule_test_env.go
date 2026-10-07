@@ -10,8 +10,27 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/grpc/metadata"
 )
+
+// contextFactory wraps a base context for CHASM vs V1 differences.
+type contextFactory func(context.Context) context.Context
+
+var (
+	chasmContextFactory contextFactory = func(ctx context.Context) context.Context {
+		return metadata.NewOutgoingContext(ctx, metadata.Pairs(
+			headers.ExperimentHeaderName, "chasm-scheduler",
+		))
+	}
+	v1ContextFactory contextFactory = func(ctx context.Context) context.Context {
+		return ctx
+	}
+)
+
+// completeSignalName releases a workflow registered via registerGatedWorkflow.
+const completeSignalName = "complete"
 
 type ScheduleTestEnv struct {
 	*testcore.TestEnv
