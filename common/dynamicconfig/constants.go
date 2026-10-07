@@ -2066,14 +2066,15 @@ while still cached.`,
 	)
 	ShardUnloadOnIOSemaphoreStuck = NewGlobalBoolSetting(
 		"history.shardUnloadOnIOSemaphoreStuck",
-		true,
+		false,
 		`ShardUnloadOnIOSemaphoreStuck makes a shard unload itself when the deadlock detector reports
 that its io semaphore could not be acquired within the ping timeout. That happens when a persistence
 call holding the semaphore never returns, for example a SQL driver that cannot interrupt a blocked
 socket read once the call's deadline has passed (lib/pq, plugin postgres12). The controller then
 re-acquires the shard with a fresh context, semaphore and task tracker instead of leaving it stuck
 until a process restart. The persistence managers and their connection pool are shared; the stuck
-call keeps its connection until the socket errors.`,
+call keeps its connection until the socket errors, and each repeated unload can strand another one,
+so this is off by default.`,
 	)
 	StandbyClusterDelay = NewGlobalDurationSetting(
 		"history.standbyClusterDelay",
