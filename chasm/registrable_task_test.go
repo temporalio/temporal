@@ -58,92 +58,77 @@ func TestResolveTaskCountMetricThreshold(t *testing.T) {
 }
 
 func TestRegistryTaskCountMetricComponentIDs(t *testing.T) {
-	type testLibrary struct {
-		components []*RegistrableComponent
-		tasks      []*RegistrableTask
-	}
-	components := func() []*RegistrableComponent {
-		return []*RegistrableComponent{
-			NewRegistrableComponent[*TestSubComponent1]("sub1"),
-			NewRegistrableComponent[*TestSubComponent11]("sub11"),
-		}
-	}
-
 	testCases := []struct {
-		name string
-		// Registered in order, each as its own library.
-		libraries func(ctrl *gomock.Controller) []testLibrary
-		expected  []string
+		name        string
+		task        func(ctrl *gomock.Controller) *RegistrableTask
+		expected    []string
+		expectedErr string
 	}{
 		{
 			name: "concrete component type",
-			libraries: func(ctrl *gomock.Controller) []testLibrary {
-				return []testLibrary{{components: components(), tasks: []*RegistrableTask{
-					NewRegistrableSideEffectTask(
-						"task",
-						NewMockSideEffectTaskHandler[*TestSubComponent1, *TestSideEffectTask](ctrl),
-						WithTaskCountMetric(0),
-					),
-				}}}
+			task: func(ctrl *gomock.Controller) *RegistrableTask {
+				return NewRegistrableSideEffectTask(
+					"task",
+					NewMockSideEffectTaskHandler[*TestSubComponent1, *TestSideEffectTask](ctrl),
+					WithTaskCountMetric(0),
+				)
 			},
 			expected: []string{"sub1"},
 		},
 		{
 			name: "interface component type",
-			libraries: func(ctrl *gomock.Controller) []testLibrary {
-				return []testLibrary{{components: components(), tasks: []*RegistrableTask{
-					NewRegistrableSideEffectTask(
-						"task",
-						NewMockSideEffectTaskHandler[any, *TestSideEffectTask](ctrl),
-						WithTaskCountMetric(0),
-					),
-				}}}
+			task: func(ctrl *gomock.Controller) *RegistrableTask {
+				return NewRegistrableSideEffectTask(
+					"task",
+					NewMockSideEffectTaskHandler[any, *TestSideEffectTask](ctrl),
+					WithTaskCountMetric(0),
+				)
 			},
 			expected: []string{"sub1", "sub11"},
 		},
 		{
-			name: "task registered before its component",
-			libraries: func(ctrl *gomock.Controller) []testLibrary {
-				return []testLibrary{
-					{tasks: []*RegistrableTask{
-						NewRegistrableSideEffectTask(
-							"task",
-							NewMockSideEffectTaskHandler[*TestSubComponent1, *TestSideEffectTask](ctrl),
-							WithTaskCountMetric(0),
-						),
-					}},
-					{components: components()},
-				}
-			},
-			expected: []string{"sub1"},
-		},
-		{
 			name: "not opted in",
-			libraries: func(ctrl *gomock.Controller) []testLibrary {
-				return []testLibrary{{components: components(), tasks: []*RegistrableTask{
-					NewRegistrableSideEffectTask(
-						"task",
-						NewMockSideEffectTaskHandler[*TestSubComponent1, *TestSideEffectTask](ctrl),
-					),
-				}}}
+			task: func(ctrl *gomock.Controller) *RegistrableTask {
+				return NewRegistrableSideEffectTask(
+					"task",
+					NewMockSideEffectTaskHandler[*TestSubComponent1, *TestSideEffectTask](ctrl),
+				)
 			},
 			expected: nil,
+		},
+		{
+			name: "component not registered",
+			task: func(ctrl *gomock.Controller) *RegistrableTask {
+				return NewRegistrableSideEffectTask(
+					"task",
+					NewMockSideEffectTaskHandler[*TestSubComponent2, *TestSideEffectTask](ctrl),
+					WithTaskCountMetric(0),
+				)
+			},
+			expectedErr: "is not registered",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			ctrl := gomock.NewController(t)
+			lib := NewMockLibrary(ctrl)
+			lib.EXPECT().Name().Return("lib").AnyTimes()
+			lib.EXPECT().Components().Return([]*RegistrableComponent{
+				NewRegistrableComponent[*TestSubComponent1]("sub1"),
+				NewRegistrableComponent[*TestSubComponent11]("sub11"),
+			})
+			lib.EXPECT().Tasks().Return([]*RegistrableTask{tc.task(ctrl)})
+			lib.EXPECT().NexusServices().Return(nil).AnyTimes()
+			lib.EXPECT().NexusServiceProcessors().Return(nil).AnyTimes()
+
 			registry := NewRegistry(log.NewNoopLogger())
-			for i, lib := range tc.libraries(ctrl) {
-				mockLib := NewMockLibrary(ctrl)
-				mockLib.EXPECT().Name().Return([]string{"libA", "libB"}[i]).AnyTimes()
-				mockLib.EXPECT().Components().Return(lib.components)
-				mockLib.EXPECT().Tasks().Return(lib.tasks)
-				mockLib.EXPECT().NexusServices().Return(nil)
-				mockLib.EXPECT().NexusServiceProcessors().Return(nil)
-				require.NoError(t, registry.Register(mockLib))
+			err := registry.Register(lib)
+			if tc.expectedErr != "" {
+				require.ErrorContains(t, err, tc.expectedErr)
+				return
 			}
+			require.NoError(t, err)
 
 			var actual []string
 			for id := range registry.taskCountMetricComponentIDs {
