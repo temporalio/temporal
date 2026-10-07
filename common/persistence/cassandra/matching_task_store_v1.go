@@ -187,7 +187,7 @@ func (d *matchingTaskStoreV1) CompleteTasksLessThan(
 	ctx context.Context,
 	request *p.CompleteTasksLessThanRequest,
 ) (int, error) {
-	if request.ExclusiveMaxPass != 0 {
+	if request.ExclusiveMaxPass != 0 || request.ConditionRangeID != 0 {
 		return 0, serviceerror.NewInternal("invalid CompleteTasksLessThan request on queue")
 	}
 
