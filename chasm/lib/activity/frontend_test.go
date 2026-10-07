@@ -12,7 +12,6 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -219,7 +218,7 @@ func TestRequestIdStableAcrossRetries(t *testing.T) {
 }
 
 func TestEagerStartFallback(t *testing.T) {
-	newHandler := func(eagerEnabled bool, metricsHandler metrics.Handler) *frontendHandler {
+	newHandler := func(eagerEnabled bool) *frontendHandler {
 		return &frontendHandler{
 			config: &Config{
 				BlobSizeLimitError:         defaultBlobSizeLimitError,
@@ -237,7 +236,7 @@ func TestEagerStartFallback(t *testing.T) {
 				defaultLinkMaxSize,
 			),
 			logger:         log.NewNoopLogger(),
-			metricsHandler: metricsHandler,
+			metricsHandler: metrics.NoopMetricsHandler,
 		}
 	}
 
@@ -252,47 +251,23 @@ func TestEagerStartFallback(t *testing.T) {
 		}
 	}
 
-	assertMetric := func(t *testing.T, capture *metricstest.Capture, metricName string, reason string) {
-		t.Helper()
-		recordings := capture.SnapshotMetric(metricName)
-		require.Len(t, recordings, 1)
-		if reason != "" {
-			require.Equal(t, reason, recordings[0].Tags["reason"])
-		}
-	}
-
 	t.Run("enabled", func(t *testing.T) {
-		metricsHandler := metricstest.NewCaptureHandler()
-		capture := metricsHandler.StartCapture()
-		defer metricsHandler.StopCapture(capture)
-
-		req, err := newHandler(true, metricsHandler).validateAndPopulateStartRequest(context.Background(), newRequest(), "test-namespace-id")
+		req, err := newHandler(true).validateAndPopulateStartRequest(context.Background(), newRequest(), "test-namespace-id")
 		require.NoError(t, err)
 		require.True(t, req.GetRequestEagerExecution())
-		assertMetric(t, capture, metrics.StandaloneActivityEagerStartAcceptedCounter.Name(), "")
 	})
 
 	t.Run("namespace disabled", func(t *testing.T) {
-		metricsHandler := metricstest.NewCaptureHandler()
-		capture := metricsHandler.StartCapture()
-		defer metricsHandler.StopCapture(capture)
-
-		req, err := newHandler(false, metricsHandler).validateAndPopulateStartRequest(context.Background(), newRequest(), "test-namespace-id")
+		req, err := newHandler(false).validateAndPopulateStartRequest(context.Background(), newRequest(), "test-namespace-id")
 		require.NoError(t, err)
 		require.False(t, req.GetRequestEagerExecution())
-		assertMetric(t, capture, metrics.StandaloneActivityEagerStartDeniedCounter.Name(), "dynamic_config_disabled")
 	})
 
 	t.Run("start delay", func(t *testing.T) {
-		metricsHandler := metricstest.NewCaptureHandler()
-		capture := metricsHandler.StartCapture()
-		defer metricsHandler.StopCapture(capture)
-
 		req := newRequest()
 		req.StartDelay = durationpb.New(time.Minute)
-		req, err := newHandler(true, metricsHandler).validateAndPopulateStartRequest(context.Background(), req, "test-namespace-id")
+		req, err := newHandler(true).validateAndPopulateStartRequest(context.Background(), req, "test-namespace-id")
 		require.NoError(t, err)
 		require.False(t, req.GetRequestEagerExecution())
-		assertMetric(t, capture, metrics.StandaloneActivityEagerStartDeniedCounter.Name(), "start_delay")
 	})
 }

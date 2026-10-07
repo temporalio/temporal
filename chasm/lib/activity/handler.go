@@ -153,6 +153,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		if err != nil {
 			return nil, err
 		}
+		metrics.ActivityEagerExecutionCounter.With(eagerActivityMetricsHandler(h.metricsHandler, h.config, frontendReq)).Record(1)
 	}
 
 	// Apply on_conflict_options to an existing activity.

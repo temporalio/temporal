@@ -4,6 +4,7 @@ package tests
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -17,6 +18,8 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/service/history/consts"
@@ -71,6 +74,70 @@ func (s *activityParityTestSuite) TestEagerActivityStartParity() {
 	s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
 		newSAADriver(s.T(), env, cfg).driveTrace(s.T(), trace)
 	})
+}
+
+func (s *activityParityTestSuite) TestEagerActivityMetricParity() {
+	type captureResult struct {
+		recordings []*metricstest.CapturedRecording
+		taskQueue  string
+	}
+
+	capture := func(t *testing.T, standalone, breakdownByTaskQueue bool) captureResult {
+		env := newActivityParityEnv(t)
+		env.GetTestCluster().OverrideDynamicConfig(t, dynamicconfig.MetricsBreakdownByTaskQueue,
+			[]dynamicconfig.ConstrainedValue{{
+				Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()},
+				Value:       breakdownByTaskQueue,
+			}})
+		metricCapture := env.StartNamespaceMetricCapture()
+
+		cfg := activityConfig{EagerStart: true}
+		var taskQueue string
+		if standalone {
+			taskQueue = newSAADriver(t, env, cfg).start(t, cfg).taskQueue
+		} else {
+			taskQueue = newWFADriver(t, env, cfg).start(t, cfg).taskQueue
+		}
+
+		return captureResult{
+			recordings: metricCapture.Metric(metrics.ActivityEagerExecutionCounter.Name()),
+			taskQueue:  taskQueue,
+		}
+	}
+
+	tagKeys := func(recording *metricstest.CapturedRecording) []string {
+		keys := make([]string, 0, len(recording.Tags))
+		for key := range recording.Tags {
+			keys = append(keys, key)
+		}
+		slices.Sort(keys)
+		return keys
+	}
+
+	for _, breakdownByTaskQueue := range []bool{true, false} {
+		name := "TaskQueueBreakdownEnabled"
+		if !breakdownByTaskQueue {
+			name = "TaskQueueBreakdownDisabled"
+		}
+		s.Run(name, func(s *activityParityTestSuite) {
+			t := s.T()
+			wfa := capture(t, false, breakdownByTaskQueue)
+			saa := capture(t, true, breakdownByTaskQueue)
+			require.Len(t, wfa.recordings, 1)
+			require.Len(t, saa.recordings, 1)
+			require.Equal(t, tagKeys(wfa.recordings[0]), tagKeys(saa.recordings[0]),
+				"WFA and SAA eager activity metrics must use the same label keys")
+
+			expectedTaskQueue := "__omitted__"
+			if breakdownByTaskQueue {
+				require.Equal(t, wfa.taskQueue, wfa.recordings[0].Tags["taskqueue"])
+				require.Equal(t, saa.taskQueue, saa.recordings[0].Tags["taskqueue"])
+			} else {
+				require.Equal(t, expectedTaskQueue, wfa.recordings[0].Tags["taskqueue"])
+				require.Equal(t, expectedTaskQueue, saa.recordings[0].Tags["taskqueue"])
+			}
+		})
+	}
 }
 
 func assertActivityTaskNotCancelRequested(t *testing.T, err error) {
