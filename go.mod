@@ -223,6 +223,4 @@ require (
 	sigs.k8s.io/yaml v1.6.0 // indirect
 )
 
-replace go.temporal.io/api => github.com/wenlong-gu/api-go v1.63.7-0.20261002150604-6b55806007ed
-
 tool golang.org/x/perf/cmd/benchstat

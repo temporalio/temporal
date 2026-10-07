@@ -31,8 +31,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace go.temporal.io/api => github.com/wenlong-gu/api-go v1.63.7-0.20261002150604-6b55806007ed
-
 replace go.temporal.io/server => ../..
 
 replace go.temporal.io/sdk => go.temporal.io/sdk v1.42.0

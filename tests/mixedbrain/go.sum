@@ -43,8 +43,6 @@ github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
 github.com/temporalio/omes v0.0.0-20260915193711-9667582a3051 h1:lJ/bCaq7PVGpSwON+MgqAK8/0oih71Jrq9OP3Gxajns=
 github.com/temporalio/omes v0.0.0-20260915193711-9667582a3051/go.mod h1:ECa3gdOOjrNXSR1OXjI3s+iO1DhoxDIqcyS4fxK2j0Y=
-github.com/wenlong-gu/api-go v1.63.7-0.20261002150604-6b55806007ed h1:Jr0wN0pOdf8USIjmOL/v7t8P1dH1oBnnrMsZhaM3klg=
-github.com/wenlong-gu/api-go v1.63.7-0.20261002150604-6b55806007ed/go.mod h1:acM0I9WPuYg8W3Pd9jOZvEgi7mRUttUQ4+e7fowKVnM=
 go.opentelemetry.io/auto/sdk v1.2.1 h1:jXsnJ4Lmnqd11kwkBV2LgLoFMZKizbCi5fNZ/ipaZ64=
 go.opentelemetry.io/auto/sdk v1.2.1/go.mod h1:KRTj+aOaElaLi+wW1kO/DZRXwkF4C5xPbEe3ZiIhN7Y=
 go.opentelemetry.io/otel v1.44.0 h1:JjwHmHpA4iZ3wBxluu2fbbE7j4kqlE8jXyAyPXH7HqU=
@@ -57,6 +55,8 @@ go.opentelemetry.io/otel/sdk/metric v1.44.0 h1:3LlKgI+VjbVsjNRFZJZAJ30WjXC5VkNRk
 go.opentelemetry.io/otel/sdk/metric v1.44.0/go.mod h1:5B5pMARnXxKhltooO4xUuCBorl65a4EpnTalObqOigA=
 go.opentelemetry.io/otel/trace v1.44.0 h1:jxF5CsGYCe74MCRx2X4g7WsY/VBKRqqpNvXlX/6gtIk=
 go.opentelemetry.io/otel/trace v1.44.0/go.mod h1:oLl1jrMQAVo6v3GAggN+1VH9VIz9iUSvW53sW1Q8PIE=
+go.temporal.io/api v1.63.7-0.20261002150604-6b55806007ed h1:d09v879yeW0j2iZD0WZnEWqUmLu3RO0ZXtIPxK5nc2g=
+go.temporal.io/api v1.63.7-0.20261002150604-6b55806007ed/go.mod h1:acM0I9WPuYg8W3Pd9jOZvEgi7mRUttUQ4+e7fowKVnM=
 go.uber.org/goleak v1.3.0 h1:2K3zAYmnTNqV73imy9J1T3WC+gmCePx2hEGkimedGto=
 go.uber.org/goleak v1.3.0/go.mod h1:CoHD4mav9JJNrW/WLlf7HGZPjdw8EucARQHekz1X6bE=
 go.uber.org/multierr v1.11.0 h1:blXXJkSxSSfBVBlC76pxqeO+LN3aDfLQo+309xJstO0=

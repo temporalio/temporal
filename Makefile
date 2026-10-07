@@ -204,17 +204,9 @@ $(BUF): | $(LOCALBIN)
 
 GO_API_VER = $(shell go list -m -f '{{.Version}}' go.temporal.io/api \
 	|| (echo "failed to fetch version for go.temporal.io/api" >&2))
-GO_API_REPLACED = $(shell go list -m -f '{{if .Replace}}true{{end}}' go.temporal.io/api \
-	|| (echo "failed to resolve replacement for go.temporal.io/api" >&2))
 PROTOGEN := $(LOCALBIN)/protogen-$(GO_API_VER)
-ifeq ($(GO_API_REPLACED),true)
-$(PROTOGEN): | $(LOCALBIN)
-	@printf $(COLOR) "Building protogen through the replaced go.temporal.io/api module..."
-	@go build -o $@ go.temporal.io/api/cmd/protogen
-else
 $(PROTOGEN): | $(LOCALBIN)
 	$(call go-install-tool,$(PROTOGEN),go.temporal.io/api/cmd/protogen,$(GO_API_VER))
-endif
 
 ACTIONLINT_VER := v1.7.7
 ACTIONLINT := $(LOCALBIN)/actionlint-$(ACTIONLINT_VER)
@@ -293,14 +285,8 @@ $(STAMPDIR)/protoc-gen-go-grpc-$(PROTOC_GEN_GO_GRPC_VER): | $(STAMPDIR) $(LOCALB
 $(PROTOC_GEN_GO_GRPC): $(STAMPDIR)/protoc-gen-go-grpc-$(PROTOC_GEN_GO_GRPC_VER)
 
 PROTOC_GEN_GO_HELPERS := $(LOCALBIN)/protoc-gen-go-helpers-$(GO_API_VER)
-ifeq ($(GO_API_REPLACED),true)
-$(STAMPDIR)/protoc-gen-go-helpers-$(GO_API_VER): | $(STAMPDIR) $(LOCALBIN)
-	@printf $(COLOR) "Building protoc-gen-go-helpers through the replaced go.temporal.io/api module..."
-	@go build -o $(PROTOC_GEN_GO_HELPERS) go.temporal.io/api/cmd/protoc-gen-go-helpers
-else
 $(STAMPDIR)/protoc-gen-go-helpers-$(GO_API_VER): | $(STAMPDIR) $(LOCALBIN)
 	$(call go-install-tool,$(PROTOC_GEN_GO_HELPERS),go.temporal.io/api/cmd/protoc-gen-go-helpers,$(GO_API_VER))
-endif
 	@touch $@
 $(PROTOC_GEN_GO_HELPERS): $(STAMPDIR)/protoc-gen-go-helpers-$(GO_API_VER)
 
