@@ -49,6 +49,11 @@ func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*NamespaceMutationComponent](
 			chasm.NamespaceReplicationComponentName,
+			// This alias is visibility schema, not Workflow wiring. The eventual
+			// operator repair CLI uses it to resolve the exact CHASM business/run
+			// IDs returned by namespace-indexed queries.
+			chasm.WithBusinessIDAlias("NamespaceMutationBusinessId"),
+			chasm.WithSearchAttributes(namespaceIDSearchAttribute),
 		),
 	}
 }
