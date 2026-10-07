@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/health"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -316,26 +317,17 @@ func TelemetryInterceptorProvider(
 	)
 }
 
-func HealthSignalAggregatorProvider(
-	lc fx.Lifecycle,
-	dynamicCollection *dynamicconfig.Collection,
-	logger log.ThrottledLogger,
-) interceptor.HealthSignalAggregator {
-	aggregator := interceptor.NewHealthSignalAggregator(
-		logger,
-		dynamicconfig.HealthHistoryGRPCSettings.Get(dynamicCollection),
-	)
-	lc.Append(fx.StopHook(aggregator.Stop))
+func HealthSignalAggregatorProvider(lc fx.Lifecycle, dynamicCollection *dynamicconfig.Collection, logger log.ThrottledLogger) *health.SignalAggregator {
+	signals := interceptor.NewHealthSignals(logger, dynamicconfig.HealthHistoryGRPCSettings.Get(dynamicCollection))
 
-	return aggregator
+	lc.Append(fx.StartHook(signals.Start))
+	lc.Append(fx.StopHook(signals.Stop))
+
+	return signals
 }
 
-func HealthCheckInterceptorProvider(
-	healthSignalAggregator interceptor.HealthSignalAggregator,
-) *interceptor.HealthCheckInterceptor {
-	return interceptor.NewHealthCheckInterceptor(
-		healthSignalAggregator,
-	)
+func HealthCheckInterceptorProvider(healthSignalAggregator *health.SignalAggregator) *interceptor.HealthCheckInterceptor {
+	return interceptor.NewHealthCheckInterceptor(healthSignalAggregator)
 }
 
 func ContextMetadataInterceptorProvider(logger log.Logger) *interceptor.ContextMetadataInterceptor {
@@ -359,7 +351,6 @@ func NamespaceRateLimitInterceptorProvider(
 	namespaceRegistry namespace.Registry,
 	metricsHandler metrics.Handler,
 ) interceptor.NamespaceRateLimitInterceptor {
-
 	namespaceRateFn := func(namespaceName string) float64 {
 		if namespaceRPS := serviceConfig.NamespaceRPS(namespaceName); namespaceRPS > 0 {
 			return float64(namespaceRPS)
