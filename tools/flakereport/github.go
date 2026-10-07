@@ -1,12 +1,8 @@
 package flakereport
 
 import (
-	"archive/zip"
 	"context"
 	"fmt"
-	"io"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -58,94 +54,30 @@ func fetchRunArtifacts(ctx context.Context, repo string, runID int64) ([]github.
 	return testArtifacts, nil
 }
 
-// extractArtifactZip extracts zip file and returns paths to JUnit XML files
-func extractArtifactZip(zipPath, outputDir string) ([]string, error) {
-	r, err := zip.OpenReader(zipPath)
-	if err != nil {
-		return nil, fmt.Errorf("failed to open zip file %s: %w", zipPath, err)
-	}
-	defer func() {
-		if err := r.Close(); err != nil {
-			fmt.Printf("Warning: Failed to close zip reader: %v\n", err)
-		}
-	}()
-
-	var xmlFiles []string
-
-	for _, f := range r.File {
-		// Skip directories
-		if f.FileInfo().IsDir() {
-			continue
-		}
-
-		// Only extract XML files
-		if !strings.HasSuffix(strings.ToLower(f.Name), ".xml") {
-			continue
-		}
-
-		// Create extraction path
-		extractPath := filepath.Join(outputDir, filepath.Base(f.Name))
-
-		// Open file from zip
-		rc, err := f.Open()
-		if err != nil {
-			return nil, fmt.Errorf("failed to open file %s in zip: %w", f.Name, err)
-		}
-
-		// Create output file
-		outFile, err := os.Create(extractPath)
-		if err != nil {
-			_ = rc.Close()
-			return nil, fmt.Errorf("failed to create output file %s: %w", extractPath, err)
-		}
-
-		// Copy content
-		_, err = io.Copy(outFile, rc)
-		if closeErr := rc.Close(); closeErr != nil {
-			_ = outFile.Close()
-			return nil, fmt.Errorf("failed to close zip file reader: %w", closeErr)
-		}
-		if closeErr := outFile.Close(); closeErr != nil {
-			return nil, fmt.Errorf("failed to close output file: %w", closeErr)
-		}
-
-		if err != nil {
-			return nil, fmt.Errorf("failed to extract file %s: %w", f.Name, err)
-		}
-
-		xmlFiles = append(xmlFiles, extractPath)
-	}
-
-	return xmlFiles, nil
-}
-
 // parseArtifactName extracts run_id, job_id, and matrix_name from artifact name.
 // Functional tests: junit-xml--{run_id}--{job_id}--{run_attempt}--{matrix_name}--{display_name}--functional-test
 // Unit/integration:  junit-xml--{run_id}--{job_id}--{run_attempt}--unit-test
 // Returns: runID, jobID, matrixName ("unknown" for fields that are absent or unparseable)
-func parseArtifactName(artifactName string) (runID string, jobID string, matrixName string) {
-	parts := strings.Split(artifactName, "--")
-	if len(parts) < 3 {
+func parseArtifactName(artifactName string) (runID, jobID, matrixName string) {
+	parsed, _ := github.ParseArtifactName(artifactName)
+	if parsed.Type == "" {
 		return "unknown", "unknown", "unknown"
 	}
 
-	runID = parts[1]
-
-	jobID = parts[2]
+	jobID = parsed.JobID
 	if jobID == "" {
 		jobID = "unknown"
 	}
 
-	// Functional test artifacts carry a matrix name (DB config) at parts[4].
-	// Unit/integration artifacts have only 5 parts where parts[4] is the test type
-	// (e.g. "unit-test"), not a matrix name. Functional artifacts have >=7 parts.
-	if len(parts) >= 6 {
-		matrixName = parts[4]
-	} else {
-		matrixName = "unknown"
+	// Functional test artifacts carry a matrix name (DB config) at the start of the suffix.
+	// Unit/integration artifacts have only the test type (e.g. "unit-test") in the suffix.
+	matrixName = "unknown"
+	suffix := strings.Split(parsed.NameSuffix, "--")
+	if len(suffix) >= 2 {
+		matrixName = suffix[0]
 	}
 
-	return runID, jobID, matrixName
+	return parsed.RunID, jobID, matrixName
 }
 
 // buildGitHubURL constructs GitHub Actions URL from run/job IDs
