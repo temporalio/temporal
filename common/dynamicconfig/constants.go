@@ -270,12 +270,16 @@ response to a StartWorkflowExecution request and skipping the trip through match
 	HealthHistoryGRPCSettings = NewGlobalTypedSetting(
 		"health.history.grpc",
 		DefaultHealthSettings,
-		"controls history gRPC latency and error-ratio health check thresholds: an overall bucket across all endpoints plus optional named endpoint groups; empty disables every check",
+		`controls history gRPC latency and error-ratio health check thresholds: an overall bucket across all endpoints plus optional named endpoint groups.
+Overrides are merged onto DefaultHealthSettings field by field, so omitted, null, or empty fields keep their default values and cannot remove
+the default overall checks. To stop a check from marking the host unhealthy, set Enforced to false (it is still reported in the unenforced state).`,
 	)
 	HealthHistoryPersistenceSettings = NewGlobalTypedSetting(
 		"health.history.persistence",
 		DefaultHealthSettings,
-		"controls persistence latency and error-ratio health check thresholds: an overall bucket across all operations plus optional named operation groups; empty disables every check",
+		`controls persistence latency and error-ratio health check thresholds: an overall bucket across all operations plus optional named operation groups.
+Overrides are merged onto DefaultHealthSettings field by field, so omitted, null, or empty fields keep their default values and cannot remove
+the default overall checks. To stop a check from marking the host unhealthy, set Enforced to false (it is still reported in the unenforced state).`,
 	)
 	PersistenceHealthSignalAggregationEnabled = NewGlobalBoolSetting(
 		"system.persistenceHealthSignalAggregationEnabled",

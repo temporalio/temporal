@@ -275,7 +275,8 @@ type LatencyHealthChecksPerPercentile struct {
 }
 
 // DefaultHealthSettings is the starting point for every health check: an overall bucket
-// across all keys, with no groups
+// across all keys, with no groups. Dynamic config overrides are decoded on top of a copy
+// of this value, so omitted, null, or empty fields keep these defaults
 var DefaultHealthSettings = health.Settings{
 	Overall: health.Thresholds{
 		// how latency samples are retained: ten 5s windows
