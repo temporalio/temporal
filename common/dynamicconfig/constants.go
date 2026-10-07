@@ -3275,7 +3275,7 @@ request ID created the run (matching StartWorkflowExecution).`,
 		false,
 		`If true, a workflow start retry with the same request ID returns the run it created even when 
 it is no longer current. Run IDs of started workflows are derived from the request ID instead of being 
-random, and custom persistence stores must honor VerifyRunIDUniqueness for deduplication to work.`,
+random. Ignored when the execution store does not declare SupportsCheckRunAlreadyExists.`,
 	)
 	BusinessIDReuseRate = NewNamespaceIntSetting(
 		"history.businessIDReuseRate",

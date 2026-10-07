@@ -1961,10 +1961,11 @@ func (s *engine2Suite) TestStartWorkflowExecution_Terminate_Existing() {
 	s.NotEqual(s.tv.RunID(), resp.GetRunId())
 }
 
-func (s *engine2Suite) TestStartWorkflowExecution_VerifyRunIDUniqueness_BrandNew() {
+func (s *engine2Suite) TestStartWorkflowExecution_CheckRunAlreadyExists_BrandNew() {
 	for _, enabled := range []bool{false, true} {
 		s.Run(fmt.Sprintf("enabled=%v", enabled), func() {
 			s.config.EnableCrossRunRequestIDDedup = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(enabled)
+			s.mockExecutionMgr.EXPECT().SupportsCheckRunAlreadyExists().Return(true).AnyTimes()
 			startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
 
 			var createRequest *persistence.CreateWorkflowExecutionRequest
@@ -1976,7 +1977,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_VerifyRunIDUniqueness_BrandNew
 
 			resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
 			s.NoError(err)
-			s.Equal(enabled, createRequest.VerifyRunIDUniqueness)
+			s.Equal(enabled, createRequest.CheckRunAlreadyExists)
 			s.Equal(resp.GetRunId(), createRequest.NewWorkflowSnapshot.ExecutionState.GetRunId())
 			if enabled {
 				s.Equal(s.derivedRunID(startRequest), resp.GetRunId())
@@ -1985,10 +1986,11 @@ func (s *engine2Suite) TestStartWorkflowExecution_VerifyRunIDUniqueness_BrandNew
 	}
 }
 
-func (s *engine2Suite) TestStartWorkflowExecution_VerifyRunIDUniqueness_TerminateExisting() {
+func (s *engine2Suite) TestStartWorkflowExecution_CheckRunAlreadyExists_TerminateExisting() {
 	for _, enabled := range []bool{false, true} {
 		s.Run(fmt.Sprintf("enabled=%v", enabled), func() {
 			s.config.EnableCrossRunRequestIDDedup = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(enabled)
+			s.mockExecutionMgr.EXPECT().SupportsCheckRunAlreadyExists().Return(true).AnyTimes()
 			now := s.historyEngine.shardContext.GetTimeSource().Now()
 			ms := s.setupStartWorkflowExecutionDedup(timestamppb.New(now.Add(-2 * time.Second)))
 			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
@@ -2007,7 +2009,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_VerifyRunIDUniqueness_Terminat
 			startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING)
 			resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
 			s.NoError(err)
-			s.Equal(enabled, updateRequest.VerifyRunIDUniqueness)
+			s.Equal(enabled, updateRequest.CheckRunAlreadyExists)
 			s.Equal(resp.GetRunId(), updateRequest.NewWorkflowSnapshot.ExecutionState.GetRunId())
 			if enabled {
 				s.Equal(s.derivedRunID(startRequest), resp.GetRunId())
@@ -2018,6 +2020,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_VerifyRunIDUniqueness_Terminat
 
 func (s *engine2Suite) TestStartWorkflowExecution_DerivedRunID_CurrentRunConflictIsNotDedup() {
 	s.config.EnableCrossRunRequestIDDedup = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	s.mockExecutionMgr.EXPECT().SupportsCheckRunAlreadyExists().Return(true)
 	now := s.historyEngine.shardContext.GetTimeSource().Now()
 	ms := s.setupStartWorkflowExecutionDedup(timestamppb.New(now.Add(-2 * time.Second)))
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
@@ -2035,6 +2038,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_DerivedRunID_CurrentRunConflic
 
 func (s *engine2Suite) TestStartWorkflowExecution_DerivedRunID_RunAlreadyExistsIsDedup() {
 	s.config.EnableCrossRunRequestIDDedup = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	s.mockExecutionMgr.EXPECT().SupportsCheckRunAlreadyExists().Return(true)
 	startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
 	derivedRunID := s.derivedRunID(startRequest)
 	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).
@@ -2049,6 +2053,25 @@ func (s *engine2Suite) TestStartWorkflowExecution_DerivedRunID_RunAlreadyExistsI
 	s.Equal(derivedRunID, resp.GetRunId())
 	s.True(resp.GetStarted())
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, resp.GetStatus())
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_DerivedRunID_StoreWithoutCheckRunAlreadyExists() {
+	s.config.EnableCrossRunRequestIDDedup = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	s.mockExecutionMgr.EXPECT().SupportsCheckRunAlreadyExists().Return(false)
+	s.mockExecutionMgr.EXPECT().GetName().Return("test-store").AnyTimes()
+	startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
+
+	var createRequest *persistence.CreateWorkflowExecutionRequest
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
+			createRequest = req
+			return tests.CreateWorkflowExecutionResponse, nil
+		})
+
+	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
+	s.NoError(err)
+	s.False(createRequest.CheckRunAlreadyExists)
+	s.NotEqual(s.derivedRunID(startRequest), resp.GetRunId())
 }
 
 func (s *engine2Suite) derivedRunID(request *historyservice.StartWorkflowExecutionRequest) string {

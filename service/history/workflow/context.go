@@ -59,7 +59,7 @@ type (
 		// total size of all in-flight pagination buffers. nil is treated as "no limit".
 		paginationLimiter *limiter.KeyedBytesLimiter
 
-		verifyRunIDUniqueness bool
+		checkRunAlreadyExists bool
 	}
 
 	// workflowTaskIdentity identifies a specific workflow task attempt
@@ -100,7 +100,7 @@ type (
 		ExecutionEvents                   []*persistence.WorkflowEvents
 		NewExecutionSnapshot              *persistence.WorkflowSnapshot
 		NewExecutionEvents                []*persistence.WorkflowEvents
-		NewExecutionVerifyRunIDUniqueness bool
+		NewExecutionCheckRunAlreadyExists bool
 	}
 )
 
@@ -508,12 +508,12 @@ func (c *ContextImpl) PersistWorkflowEvents(
 	return PersistWorkflowEvents(ctx, shardContext, workflowEventsSlice...)
 }
 
-func (c *ContextImpl) SetVerifyRunIDUniqueness(verify bool) {
-	c.verifyRunIDUniqueness = verify
+func (c *ContextImpl) SetCheckRunAlreadyExists(verify bool) {
+	c.checkRunAlreadyExists = verify
 }
 
-func (c *ContextImpl) VerifyRunIDUniqueness() bool {
-	return c.verifyRunIDUniqueness
+func (c *ContextImpl) CheckRunAlreadyExists() bool {
+	return c.checkRunAlreadyExists
 }
 
 func (c *ContextImpl) CreateWorkflowExecution(
@@ -560,7 +560,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 
 		ArchetypeID: c.archetypeID,
 
-		VerifyRunIDUniqueness: c.verifyRunIDUniqueness,
+		CheckRunAlreadyExists: c.checkRunAlreadyExists,
 
 		NewWorkflowSnapshot: *newWorkflow,
 		NewWorkflowEvents:   newWorkflowEvents,
@@ -1010,7 +1010,7 @@ func (c *ContextImpl) closeMutableStateTransaction(
 		if err != nil {
 			return nil, err
 		}
-		payload.NewExecutionVerifyRunIDUniqueness = payload.NewExecutionSnapshot != nil && newContext.VerifyRunIDUniqueness()
+		payload.NewExecutionCheckRunAlreadyExists = payload.NewExecutionSnapshot != nil && newContext.CheckRunAlreadyExists()
 	}
 	return payload, nil
 }
@@ -1065,7 +1065,7 @@ func (c *ContextImpl) executeWorkflowTransaction(
 		MutableStateFailoverVersion(newMutableState),
 		payload.NewExecutionSnapshot,
 		payload.NewExecutionEvents,
-		payload.NewExecutionVerifyRunIDUniqueness,
+		payload.NewExecutionCheckRunAlreadyExists,
 		c.MutableState.IsWorkflow(),
 	); err != nil {
 		return err

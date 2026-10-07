@@ -174,7 +174,7 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	newWorkflowFailoverVersion *int64,
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 	newWorkflowEventsSeq []*persistence.WorkflowEvents,
-	verifyRunIDUniqueness bool,
+	checkRunAlreadyExists bool,
 	isWorkflow bool,
 ) (int64, int64, error) {
 
@@ -196,7 +196,7 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 			UpdateWorkflowEvents:   currentWorkflowEventsSeq,
 			NewWorkflowSnapshot:    newWorkflowSnapshot,
 			NewWorkflowEvents:      newWorkflowEventsSeq,
-			VerifyRunIDUniqueness:  verifyRunIDUniqueness,
+			CheckRunAlreadyExists:  checkRunAlreadyExists,
 		},
 		isWorkflow,
 	)

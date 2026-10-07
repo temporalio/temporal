@@ -403,7 +403,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_DuplicateRunID_OtherRun
 
 		ArchetypeID: chasm.WorkflowArchetypeID,
 
-		VerifyRunIDUniqueness: true,
+		CheckRunAlreadyExists: true,
 
 		NewWorkflowSnapshot: *dupSnapshot,
 		NewWorkflowEvents:   dupEvents,
@@ -454,7 +454,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_UpdateCurrent_DuplicateRunID_Oth
 
 		ArchetypeID: chasm.WorkflowArchetypeID,
 
-		VerifyRunIDUniqueness: true,
+		CheckRunAlreadyExists: true,
 
 		NewWorkflowSnapshot: *dupSnapshot,
 		NewWorkflowEvents:   dupEvents,
@@ -885,7 +885,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_WithNew_DuplicateRunID
 
 		ArchetypeID: chasm.WorkflowArchetypeID,
 
-		VerifyRunIDUniqueness: true,
+		CheckRunAlreadyExists: true,
 
 		UpdateWorkflowMutation: *secondMutation,
 		UpdateWorkflowEvents:   secondUpdateEvents,
