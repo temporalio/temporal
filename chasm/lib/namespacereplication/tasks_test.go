@@ -351,6 +351,7 @@ func (env *nsreplTestEnv) start(mutation *namespacereplicationpb.NamespaceMutati
 		key,
 		func(mctx chasm.MutableContext, m *namespacereplicationpb.NamespaceMutation) (*NamespaceMutationComponent, error) {
 			c := NewNamespaceMutationComponent(m)
+			c.initializeVisibility(mctx)
 			if mutate != nil {
 				mutate(c)
 			}
