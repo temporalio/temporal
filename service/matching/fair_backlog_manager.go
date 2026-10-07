@@ -313,6 +313,23 @@ func (c *fairBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb
 	return result
 }
 
+// NonNegligibleBacklogPriority returns 0 when no priority has a non-negligible backlog.
+func (c *fairBacklogManagerImpl) NonNegligibleBacklogPriority() priorityKey {
+	c.subqueueLock.Lock()
+	defer c.subqueueLock.Unlock()
+
+	var highest priorityKey
+	for subqueue, priority := range c.priorityBySubqueue {
+		oldestBacklogTime := c.subqueues[subqueue].getOldestBacklogTime()
+		if !oldestBacklogTime.IsZero() &&
+			time.Since(oldestBacklogTime) >= c.config.BacklogNegligibleAge() &&
+			(highest == 0 || priority < highest) {
+			highest = priority
+		}
+	}
+	return highest
+}
+
 func (c *fairBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	c.subqueueLock.Lock()
 	defer c.subqueueLock.Unlock()

@@ -13,6 +13,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
@@ -31,6 +32,7 @@ import (
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/resource"
 	test "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/queues/common"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/mock/gomock"
@@ -81,7 +83,10 @@ func (l *mockNexusCompletionGetterLibrary) Name() string {
 
 func (l *mockNexusCompletionGetterLibrary) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*mockNexusCompletionGetterComponent]("nexusCompletionGetter"),
+		chasm.NewRegistrableComponent[*mockNexusCompletionGetterComponent](
+			"nexusCompletionGetter",
+			chasm.WithExecutionType(enumspb.EXECUTION_TYPE_WORKFLOW),
+		),
 	}
 }
 
@@ -283,26 +288,27 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			}
 
 			// Setup logger
-			logger := log.NewTestLogger()
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+			capture := logger.StartCapture()
 
 			// Create task handler with mock namespace registry
 			nsRegistry := namespace.NewMockRegistry(ctrl)
 			nsRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(ns, nil)
 
-			handler := &invocationTaskHandler{
-				config: &Config{
+			handler := newInvocationTaskHandler(invocationTaskHandlerOptions{
+				Config: &Config{
 					RequestTimeout: dynamicconfig.GetDurationPropertyFnFilteredByDestination(time.Second),
 					RetryPolicy: func() backoff.RetryPolicy {
 						return backoff.NewExponentialRetryPolicy(time.Second)
 					},
 				},
-				namespaceRegistry: nsRegistry,
-				metricsHandler:    metricsHandler,
-				logger:            logger,
-				httpCallerProvider: func(nid common.NamespaceIDAndDestination) HTTPCaller {
+				NamespaceRegistry: nsRegistry,
+				MetricsHandler:    metricsHandler,
+				Logger:            logger,
+				HTTPCallerProvider: func(nid common.NamespaceIDAndDestination) HTTPCaller {
 					return tc.caller
 				},
-			}
+			})
 
 			callback := &Callback{
 				CallbackState: &callbackspb.CallbackState{
@@ -333,6 +339,26 @@ func TestExecuteInvocationTaskNexus_Outcomes(t *testing.T) {
 			readCallbackState(engineCtx, t, callbackRef, func(chasmCtx chasm.Context, c *Callback) {
 				tc.assertOutcome(t, c, executeErr)
 			})
+
+			if tc.expectedEvent != "success" {
+				capture.RequireContains(t, testlogger.CapturedLogPattern{
+					Level:   testlogger.Error,
+					Message: "Callback request failed",
+					Tags: map[string]any{
+						"nexus-stage":             "handler-outbound",
+						"operation":               "CompleteNexusOperation",
+						"error":                   testlogger.AnyTagValue,
+						"wf-namespace":            ns.Name().String(),
+						"destination":             "http://localhost",
+						"wf-id":                   "workflow-id",
+						"wf-run-id":               "run-id",
+						"nexus-completion-source": testCompletionSourceFqn,
+						"attempt":                 int32(0),
+						"request-id":              "request-id",
+						"retryable":               tc.expectedEvent == "retryable-error",
+					},
+				})
+			}
 		})
 	}
 }

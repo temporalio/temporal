@@ -21,7 +21,9 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	wciclient "go.temporal.io/auto-scaled-workers/wci/client"
 	computeprovider "go.temporal.io/auto-scaled-workers/wci/workflow/compute_provider"
+	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
@@ -78,6 +80,7 @@ func TestDeploymentVersionSuite(t *testing.T) {
 func (s *DeploymentVersionSuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	baseOpts := []testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.MatchingDeploymentWorkflowVersion, int(workerdeployment.VersionDataRevisionNumber)),
+		testcore.WithDynamicConfig(wciclient.WorkerControllerEnabledComputeProviders, []string{string(wciiface.ComputeProviderTypeTestInvoke)}),
 
 		// Make sure we don't hit the rate limiter in tests
 		testcore.WithDynamicConfig(dynamicconfig.FrontendGlobalNamespaceNamespaceReplicationInducingAPIsRPS, 1000),
@@ -162,7 +165,7 @@ func (s *DeploymentVersionSuite) startVersionWorkflowAndStopPoll(ctx context.Con
 	}()
 	s.waitForVersionWorkflow(ctx, env, tv)
 	cancelPoll()
-	await.Rcv(s.T(), pollDone)
+	s.Rcv(pollDone)
 }
 
 func (s *DeploymentVersionSuite) waitForVersionWorkflow(ctx context.Context, env *testcore.TestEnv, tv *testvars.TestVars) {
@@ -525,7 +528,7 @@ func (s *DeploymentVersionSuite) startVersionedWorkflow(ctx context.Context, env
 	defer w.Stop()
 	run, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{TaskQueue: tv.TaskQueue().String()}, wf)
 	s.NoError(err)
-	await.Rcv(s.T(), started)
+	s.Rcv(started)
 	return run
 }
 
@@ -767,7 +770,7 @@ func (s *DeploymentVersionSuite) TestWorkerDeploymentActivityOutcomeMetricTags()
 			)
 			s.NoError(err)
 			if tc.outcome == "cancel" {
-				await.Rcv(s.T(), activityStarted)
+				s.Rcv(activityStarted)
 				s.NoError(env.SdkClient().CancelWorkflow(s.Context(), run.GetID(), run.GetRunID()))
 			}
 			if tc.expectError {

@@ -1062,8 +1062,8 @@ var (
 	CompleteWorkflowTaskWithStickyEnabledCounter  = NewCounterDef("complete_workflow_task_sticky_enabled_count")
 	CompleteWorkflowTaskWithStickyDisabledCounter = NewCounterDef("complete_workflow_task_sticky_disabled_count")
 	WorkflowTaskHeartbeatTimeoutCounter           = NewCounterDef("workflow_task_heartbeat_timeout_count")
-	SignalWithStartSkipDelayCounter               = NewCounterDef("signal_with_start_skip_delay_count")
 	SignalWithStartWorkflowStartDeduped           = NewCounterDef("signal_with_start_workflow_start_deduped")
+	SignalWithStartWorkflowTaskBackoffCounter     = NewCounterDef("signal_with_start_workflow_task_backoff_count")
 	DuplicateReplicationEventsCounter             = NewCounterDef("duplicate_replication_events")
 	AcquireLockFailedCounter                      = NewCounterDef("acquire_lock_failed")
 	WorkflowContextCleared                        = NewCounterDef("workflow_context_cleared")
@@ -1203,6 +1203,7 @@ var (
 	ReplicationTasksAttempt                        = NewDimensionlessHistogramDef("replication_tasks_attempt")
 	ReplicationTasksErrorByType                    = NewCounterDef("replication_tasks_error_by_type")
 	ReplicationDLQFailed                           = NewCounterDef("replication_dlq_enqueue_failed")
+	ReplicationDLQDropped                          = NewCounterDef("replication_dlq_dropped")
 	ReplicationDLQMaxLevelGauge                    = NewGaugeDef("replication_dlq_max_level")
 	ReplicationDLQAckLevelGauge                    = NewGaugeDef("replication_dlq_ack_level")
 	ReplicationNonEmptyDLQCount                    = NewCounterDef("replication_dlq_non_empty")
@@ -1378,7 +1379,11 @@ var (
 		"fair_reader_stuck_detected",
 		WithDescription("Count of times the fair task reader detected a stuck state (atEnd=false, loadedTasks=0, readPending=false, backoffTimer=nil) on the write path"),
 	)
-	PartitionScaleEvents = NewCounterDef("partition_scale_events")
+	PartitionScaleEvents     = NewCounterDef("partition_scale_events")
+	PartitionScaleMaxClamped = NewCounterDef(
+		"partition_scale_max_clamped",
+		WithDescription("Count of partition scaler decisions whose target was reduced by a configured maximum"),
+	)
 	PartitionScaleRead   = NewGaugeDef("partition_scale_read")
 	PartitionScaleWrite  = NewGaugeDef("partition_scale_write")
 	PartitionScaleTarget = NewGaugeDef("partition_scale_target")

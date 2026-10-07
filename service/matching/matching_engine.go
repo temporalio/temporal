@@ -693,6 +693,26 @@ func (e *matchingEngineImpl) AddActivityTask(
 	})
 }
 
+func (e *matchingEngineImpl) GrantEagerDispatch(
+	ctx context.Context,
+	request *matchingservice.GrantEagerDispatchRequest,
+) (*matchingservice.GrantEagerDispatchResponse, error) {
+	partition := tqid.PartitionFromPartitionProto(request.GetTaskQueuePartition(), request.GetNamespaceId())
+	if _, ok := partition.(*tqid.NormalPartition); !ok {
+		return nil, serviceerror.NewInvalidArgument("eager dispatch grants only support normal task queue partitions")
+	}
+	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseTask)
+	if err != nil {
+		return nil, err
+	}
+
+	items, err := pm.GrantEagerDispatch(ctx, request.GetItems())
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.GrantEagerDispatchResponse{Items: items}, nil
+}
+
 // PollWorkflowTaskQueue tries to get the workflow task using exponential backoff.
 func (e *matchingEngineImpl) PollWorkflowTaskQueue(
 	ctx context.Context,
@@ -2524,6 +2544,7 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 				mergedData.RedirectRules = newVersioningData.GetRedirectRules()
 			}
 			mergedUserData.PerType = req.GetUserData().GetPerType()
+			mergedUserData.Clock = common.CloneProto(req.GetUserData().GetClock())
 		}
 
 		for _, buildId := range buildIdsToRevive {
