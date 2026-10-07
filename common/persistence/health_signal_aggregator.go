@@ -20,7 +20,10 @@ type (
 	HealthSignalAggregator interface {
 		health.SignalReader
 
-		Record(callerSegment int32, latency time.Duration, err error)
+		// Record takes the persistence operation (the metrics scope of the call, e.g.
+		// metrics.PersistenceGetOrCreateShardScope) as the key the health signals are
+		// grouped by
+		Record(operation string, callerSegment int32, latency time.Duration, err error)
 		AverageLatency() float64
 		Start()
 		Stop()
@@ -100,11 +103,11 @@ func (s *healthSignalAggregatorImpl) Stop() {
 	s.emitMetricsTimer.Stop()
 }
 
-func (s *healthSignalAggregatorImpl) Record(callerSegment int32, latency time.Duration, err error) {
+func (s *healthSignalAggregatorImpl) Record(operation string, callerSegment int32, latency time.Duration, err error) {
 	if s.aggregationEnabled {
 		s.latencyAverage.Record(latency.Milliseconds())
 
-		s.signals.Record("TODO", latency, err)
+		s.signals.Record(operation, latency, err)
 
 		if isUnhealthyError(err) {
 			s.errorRatio.Record(1)
