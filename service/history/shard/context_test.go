@@ -1494,6 +1494,30 @@ func (s *contextSuite) TestIOSemaphoreAcquire_CancelledCallerDoesNotTakeFreeToke
 	s.mockShard.ioSemaphore.Release(1)
 }
 
+// cancelOnTrySemaphore ends the caller's context right after TryAcquire takes the token, which is
+// the window between ioSemaphoreAcquire's ctx check and its fast path.
+type cancelOnTrySemaphore struct {
+	locks.PrioritySemaphore
+	cancel context.CancelFunc
+}
+
+func (c *cancelOnTrySemaphore) TryAcquire(priority locks.Priority, n int) bool {
+	ok := c.PrioritySemaphore.TryAcquire(priority, n)
+	c.cancel()
+	return ok
+}
+
+func (s *contextSuite) TestIOSemaphoreAcquire_FastPathReleasesTokenWhenCallerEnds() {
+	ctx, cancel := context.WithCancel(s.T().Context())
+	defer cancel()
+	sem := s.mockShard.ioSemaphore
+	s.mockShard.ioSemaphore = &cancelOnTrySemaphore{PrioritySemaphore: sem, cancel: cancel}
+
+	s.ErrorIs(s.mockShard.ioSemaphoreAcquire(ctx), context.Canceled)
+	s.True(sem.TryAcquire(locks.PriorityHigh, 1), "the token must be released")
+	sem.Release(1)
+}
+
 func (s *contextSuite) TestIOSemaphoreAcquire_CallerErrorWinsWhenBothEnd() {
 	s.mockShard.config.ShardUnloadOnIOSemaphoreStuck = dynamicconfig.GetBoolPropertyFn(true)
 	gated := &gatedSemaphore{

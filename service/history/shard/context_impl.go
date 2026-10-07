@@ -1686,6 +1686,12 @@ func (s *ContextImpl) ioSemaphoreAcquire(
 		return err
 	}
 	if s.ioSemaphore.TryAcquire(priority, 1) {
+		// TryAcquire doesn't look at ctx. If the caller's context was cancelled after the
+		// check above, give the token back instead of returning success.
+		if err := ctx.Err(); err != nil {
+			s.ioSemaphore.Release(1)
+			return err
+		}
 		return nil
 	}
 
