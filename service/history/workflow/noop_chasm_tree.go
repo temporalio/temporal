@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
@@ -18,7 +19,7 @@ var NoopChasmTree = &noopChasmTree{}
 
 type noopChasmTree struct{}
 
-func (*noopChasmTree) CloseTransaction() (chasm.NodesMutation, error) {
+func (*noopChasmTree) CloseTransaction(*commonpb.Principal) (chasm.NodesMutation, error) {
 	return chasm.NodesMutation{}, nil
 }
 

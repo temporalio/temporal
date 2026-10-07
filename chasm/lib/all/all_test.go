@@ -155,7 +155,7 @@ func persistStandaloneActivity(t *testing.T, registry *chasm.Registry) *persiste
 		}),
 	}
 	require.NoError(t, root.SetRootComponent(act))
-	_, err := root.CloseTransaction()
+	_, err := root.CloseTransaction(nil)
 	require.NoError(t, err)
 
 	// Shaped the way a caller that persisted the nodes would store them: the tree, plus the

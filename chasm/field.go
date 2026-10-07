@@ -4,6 +4,7 @@ import (
 	"reflect"
 
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/headers"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -45,6 +46,9 @@ func NewComponentField[C Component](
 	}
 	internal := newFieldInternalWithValue(fieldTypeComponent, c)
 	internal.detached = opts.detached
+	if ctx != nil {
+		internal.startedByPrincipal = headers.GetPrincipal(ctx.goContext())
+	}
 	return Field[C]{
 		Internal: internal,
 	}

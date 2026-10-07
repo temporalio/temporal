@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -473,8 +474,9 @@ func (e *Engine) startNew(
 	if err := exec.node.SetRootComponent(root); err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
+	exec.node.SetStartedByPrincipal(headers.GetPrincipal(ctx))
 	exec.root = root
-	if err = e.closeTransaction(exec); err != nil {
+	if err = e.closeTransaction(ctx, exec); err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
 
@@ -514,11 +516,12 @@ func (e *Engine) startAndUpdateNew(
 	if err := exec.node.SetRootComponent(root); err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
+	exec.node.SetStartedByPrincipal(headers.GetPrincipal(ctx))
 	if err := updateFn(mutableCtx, root); err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
 	exec.root = root
-	if err = e.closeTransaction(exec); err != nil {
+	if err = e.closeTransaction(ctx, exec); err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
 
@@ -624,8 +627,8 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 
 // closeTransaction closes the execution's transaction, commits its transition
 // count, and validates the resulting clean tree.
-func (e *Engine) closeTransaction(x *execution) error {
-	if _, err := x.node.CloseTransaction(); err != nil {
+func (e *Engine) closeTransaction(ctx context.Context, x *execution) error {
+	if _, err := x.node.CloseTransaction(headers.GetPrincipal(ctx)); err != nil {
 		return err
 	}
 	x.commitTransition()
@@ -683,7 +686,7 @@ func (e *Engine) updateComponentInExecution(
 		return nil, err
 	}
 
-	if err = e.closeTransaction(execution); err != nil {
+	if err = e.closeTransaction(ctx, execution); err != nil {
 		return nil, err
 	}
 	execution.recordRequestID(requestID)

@@ -1,5 +1,9 @@
 package chasm
 
+import (
+	commonpb "go.temporal.io/api/common/v1"
+)
+
 type fieldInternal struct {
 	// These 2 fields are used when node is not set yet (i.e., node==nil).
 	// Don't access them directly outside of this file. Use corresponding getters instead.
@@ -12,6 +16,10 @@ type fieldInternal struct {
 	// Detached field option. When true, the node created from this field
 	// will be detached regardless of the component type's registration.
 	detached bool
+
+	// Principal of the caller that created this component field. Copied to the
+	// component's metadata when its node is created.
+	startedByPrincipal *commonpb.Principal
 }
 
 func newFieldInternalWithValue(ft fieldType, v any) fieldInternal {

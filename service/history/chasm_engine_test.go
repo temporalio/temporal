@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -224,6 +225,41 @@ func (s *chasmEngineSuite) TestStartExecution_WaitsForShardEngine() {
 	s.ErrorIs(err, expectedErr)
 	s.False(startFnCalled)
 	s.False(result.Created)
+}
+
+func (s *chasmEngineSuite) TestStartExecution_RecordsStartedByPrincipal() {
+	tv := testvars.New(s.T())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.ExecutionKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			RunID:       "",
+		},
+	)
+	principal := &commonpb.Principal{Type: "jwt", Name: "alice"}
+
+	var rootAttributes *persistencespb.ChasmComponentAttributes
+	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *persistence.CreateWorkflowExecutionRequest,
+		) (*persistence.CreateWorkflowExecutionResponse, error) {
+			rootAttributes = request.NewWorkflowSnapshot.ChasmNodes[""].GetMetadata().GetComponentAttributes()
+			return tests.CreateWorkflowExecutionResponse, nil
+		},
+	).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(gomock.Any(), gomock.Any()).Return().Times(1)
+
+	_, err := s.engine.StartExecution(
+		headers.SetPrincipal(context.Background(), principal),
+		ref,
+		s.newTestExecutionFn(tv.ActivityID()),
+	)
+	s.NoError(err)
+	s.Require().NotNil(rootAttributes)
+	s.ProtoEqual(principal, rootAttributes.GetStartedByPrincipal())
+	s.Nil(rootAttributes.GetClosedByPrincipal())
 }
 
 func (s *chasmEngineSuite) TestStartExecution_SetsContextMetadata() {
