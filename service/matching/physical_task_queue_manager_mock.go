@@ -240,6 +240,20 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) MarkAlive() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkAlive", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).MarkAlive))
 }
 
+// NonNegligibleBacklogPriority mocks base method.
+func (m *MockphysicalTaskQueueManager) NonNegligibleBacklogPriority() priorityKey {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NonNegligibleBacklogPriority")
+	ret0, _ := ret[0].(priorityKey)
+	return ret0
+}
+
+// NonNegligibleBacklogPriority indicates an expected call of NonNegligibleBacklogPriority.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) NonNegligibleBacklogPriority() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NonNegligibleBacklogPriority", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).NonNegligibleBacklogPriority))
+}
+
 // PollTask mocks base method.
 func (m *MockphysicalTaskQueueManager) PollTask(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error) {
 	m.ctrl.T.Helper()
