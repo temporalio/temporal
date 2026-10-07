@@ -1045,6 +1045,7 @@ var (
 	WorkflowEagerExecutionDeniedCounter           = NewCounterDef("workflow_eager_execution_denied")
 	StartWorkflowRequestDeduped                   = NewCounterDef("start_workflow_request_deduped")
 	NexusWorkflowUseExisting                      = NewCounterDef("nexus_workflow_use_existing", WithDescription("Successful callback attachments to existing workflows involving Nexus serialization context, tagged by context match or missing context."))
+	NexusActivityUseExisting                      = NewCounterDef("nexus_activity_use_existing", WithDescription("Successful callback attachments to existing standalone activities involving Nexus serialization context, tagged by context match or missing context."))
 	OrphanedChildWorkflowReplacement              = NewCounterDef("orphaned_child_workflow_replacement")
 	EmptyCompletionCommandsCounter                = NewCounterDef("empty_completion_commands")
 	MultipleCompletionCommandsCounter             = NewCounterDef("multiple_completion_commands")

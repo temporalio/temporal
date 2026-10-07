@@ -6,6 +6,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -28,6 +29,13 @@ var (
 		enumspb.ACTIVITY_ID_CONFLICT_POLICY_FAIL:         chasm.BusinessIDConflictPolicyFail,
 		enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING: chasm.BusinessIDConflictPolicyUseExisting,
 	}
+)
+
+const (
+	nexusActivityUseExistingSameContext            metrics.ReasonString = "same_nexus_context"
+	nexusActivityUseExistingDifferentContext       metrics.ReasonString = "different_nexus_context"
+	nexusActivityUseExistingExistingContextMissing metrics.ReasonString = "existing_nexus_context_missing"
+	nexusActivityUseExistingIncomingContextMissing metrics.ReasonString = "incoming_nexus_context_missing"
 )
 
 type handler struct {
@@ -139,11 +147,15 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 	if !result.Created && (attachCallbacks || attachLinks) {
 		requestID := frontendReq.GetRequestId()
 		ref := chasm.NewComponentRef[*Activity](result.ExecutionKey)
+		var nexusContextMatch metrics.ReasonString
 		_, _, err := chasm.UpdateComponent(
 			ctx,
 			ref,
 			func(a *Activity, ctx chasm.MutableContext, _ any) (any, error) {
 				if attachCallbacks {
+					existing := a.RequestData.Get(ctx).GetPropagatedNexusSerializationContext()
+					incoming := frontendReq.GetPropagatedNexusSerializationContext()
+					nexusContextMatch = nexusActivitySerializationContextMatch(existing, incoming)
 					if err := a.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks); err != nil {
 						return nil, err
 					}
@@ -160,6 +172,9 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		)
 		if err != nil && !errors.Is(err, chasm.ErrRequestIDAlreadyUsed) {
 			return nil, err
+		}
+		if err == nil && nexusContextMatch != "" {
+			metrics.NexusActivityUseExisting.With(h.metricsHandler).Record(1, metrics.NexusSerializationContextMatchTag(nexusContextMatch))
 		}
 	}
 
@@ -179,6 +194,23 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			// EagerTask: TODO when supported, need to call the same code that would handle the HandleStarted API
 		},
 	}, nil
+}
+
+func nexusActivitySerializationContextMatch(existing, incoming *nexuspb.PropagatedSerializationContext) metrics.ReasonString {
+	switch {
+	case existing == nil && incoming == nil:
+		return ""
+	case existing == nil:
+		return nexusActivityUseExistingExistingContextMissing
+	case incoming == nil:
+		return nexusActivityUseExistingIncomingContextMissing
+	case existing.GetEndpoint() == incoming.GetEndpoint() &&
+		existing.GetService() == incoming.GetService() &&
+		existing.GetOperation() == incoming.GetOperation():
+		return nexusActivityUseExistingSameContext
+	default:
+		return nexusActivityUseExistingDifferentContext
+	}
 }
 
 // DescribeActivityExecution queries current activity state, optionally as a long-poll that waits
