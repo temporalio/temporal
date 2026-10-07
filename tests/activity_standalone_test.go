@@ -1275,6 +1275,8 @@ func (s *standaloneActivityTestSuite) TestEagerStartFallsBackWhenMatchingDenies(
 	env := s.newTestEnv(
 		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingBacklogNegligibleAge, time.Duration(0)),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
 	t := s.T()
 	ctx := s.Context()
@@ -1314,14 +1316,14 @@ func (s *standaloneActivityTestSuite) TestEagerStartFallsBackWhenMatchingDenies(
 	eager := start(eagerActivityID, true, 5)
 	require.Nil(t, eager.GetEagerActivityTask(), "Matching denial must fall back to normal dispatch")
 
-	for _, activity := range []struct {
+	for _, startedActivity := range []struct {
 		id    string
 		runID string
 	}{
 		{backloggedActivityID, backlogged.GetRunId()},
 		{eagerActivityID, eager.GetRunId()},
 	} {
-		task := env.pollActivityTaskAndValidate(ctx, t, activity.id, taskQueue, activity.runID)
+		task := env.pollActivityTaskAndValidate(ctx, t, startedActivity.id, taskQueue, startedActivity.runID)
 		_, err := env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
 			Namespace: env.Namespace().String(),
 			TaskToken: task.GetTaskToken(),
@@ -1329,7 +1331,7 @@ func (s *standaloneActivityTestSuite) TestEagerStartFallsBackWhenMatchingDenies(
 			Identity:  defaultIdentity,
 		})
 		require.NoError(t, err)
-		env.validateCompletion(ctx, t, activity.id, activity.runID, defaultIdentity)
+		env.validateCompletion(ctx, t, startedActivity.id, startedActivity.runID, defaultIdentity)
 	}
 }
 
