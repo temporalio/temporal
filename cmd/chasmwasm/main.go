@@ -6,7 +6,8 @@
 // temporal_call with the gRPC method name and the request. The result packs a pointer and length
 // (ptr<<32 | len) to a response buffer whose first byte is a gRPC status code; the rest is the
 // response proto when the code is 0 and an error message otherwise. The host frees buffers with
-// temporal_free.
+// temporal_free. WorkflowService methods are named without their service, and AdminService methods
+// with the prefix "AdminService/".
 package main
 
 import (
@@ -17,6 +18,7 @@ import (
 	"github.com/google/uuid"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm/localserver"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/proto"
@@ -64,6 +66,15 @@ var (
 		}),
 		"RespondActivityTaskFailed": method(func(ctx context.Context, r *workflowservice.RespondActivityTaskFailedRequest) (proto.Message, error) {
 			return server.RespondActivityTaskFailed(ctx, r)
+		}),
+		"AdminService/ImportWorkflowExecution": method(func(ctx context.Context, r *adminservice.ImportWorkflowExecutionRequest) (proto.Message, error) {
+			return server.Admin().ImportWorkflowExecution(ctx, r)
+		}),
+		"AdminService/GetWorkflowExecutionRawHistoryV2": method(func(ctx context.Context, r *adminservice.GetWorkflowExecutionRawHistoryV2Request) (proto.Message, error) {
+			return server.Admin().GetWorkflowExecutionRawHistoryV2(ctx, r)
+		}),
+		"AdminService/DeleteWorkflowExecution": method(func(ctx context.Context, r *adminservice.DeleteWorkflowExecutionRequest) (proto.Message, error) {
+			return server.Admin().DeleteWorkflowExecution(ctx, r)
 		}),
 	}
 )
