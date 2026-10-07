@@ -8,13 +8,17 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/chasmtest"
 	"go.temporal.io/server/chasm/lib/tests"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -247,4 +251,57 @@ func countTasks(t *testing.T, e *chasmtest.Engine, ref chasm.ComponentRef, categ
 
 func engineContext(e *chasmtest.Engine) context.Context {
 	return chasm.NewEngineContext(context.Background(), e)
+}
+
+// TestRecordsCallerPrincipal: the principal in the request context that creates the execution is recorded
+// on the root and the components it creates, the one that closes it is recorded on the root, and requests in
+// between change neither.
+func TestRecordsCallerPrincipal(t *testing.T) {
+	alice := &commonpb.Principal{Type: "jwt", Name: "alice"}
+	bob := &commonpb.Principal{Type: "jwt", Name: "bob"}
+	worker := &commonpb.Principal{Type: "jwt", Name: "worker"}
+
+	var rootAttributes, visibilityAttributes *persistencespb.ChasmComponentAttributes
+	captureRoot := func(_ *testing.T, node *chasm.Node, _ chasm.RootComponent) {
+		nodes := node.Snapshot(nil).Nodes
+		rootAttributes = nodes[""].GetMetadata().GetComponentAttributes()
+		visibilityAttributes = nodes["Visibility"].GetMetadata().GetComponentAttributes()
+	}
+
+	registry := chasm.NewRegistry(log.NewNoopLogger())
+	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
+	require.NoError(t, registry.Register(tests.Library))
+	e := chasmtest.NewEngine(t, registry, chasmtest.WithInvariantCheck(captureRoot))
+	callerContext := func(principal *commonpb.Principal) context.Context {
+		return headers.SetPrincipal(engineContext(e), principal)
+	}
+
+	key := chasm.ExecutionKey{NamespaceID: "test-ns", BusinessID: "store"}
+	result, err := chasm.StartExecution(callerContext(alice), key,
+		func(mc chasm.MutableContext, _ any) (*tests.PayloadStore, error) {
+			return tests.NewPayloadStore(mc)
+		}, nil)
+	require.NoError(t, err)
+	key.RunID = result.ExecutionKey.RunID
+	ref := chasm.NewComponentRef[*tests.PayloadStore](key)
+	protorequire.ProtoEqual(t, alice, rootAttributes.GetStartedByPrincipal())
+	require.Nil(t, rootAttributes.GetClosedByPrincipal())
+	// Sub-components created by the start request record the same caller.
+	protorequire.ProtoEqual(t, alice, visibilityAttributes.GetStartedByPrincipal())
+
+	_, _, err = chasm.UpdateComponent(callerContext(bob), ref,
+		func(s *tests.PayloadStore, mc chasm.MutableContext, _ any) (any, error) {
+			return nil, addPayload(s, mc, "second", 0)
+		}, nil)
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, alice, rootAttributes.GetStartedByPrincipal())
+	require.Nil(t, rootAttributes.GetClosedByPrincipal())
+
+	_, _, err = chasm.UpdateComponent(callerContext(worker), ref,
+		func(s *tests.PayloadStore, mc chasm.MutableContext, _ any) (any, error) {
+			return s.Close(mc, nil)
+		}, nil)
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, alice, rootAttributes.GetStartedByPrincipal())
+	protorequire.ProtoEqual(t, worker, rootAttributes.GetClosedByPrincipal())
 }

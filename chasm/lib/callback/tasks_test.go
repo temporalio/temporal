@@ -777,7 +777,7 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 					callback,
 				),
 			}))
-			_, err = root.CloseTransaction()
+			_, err = root.CloseTransaction(nil)
 			require.NoError(t, err)
 
 			mockEngine.EXPECT().ReadComponent(
