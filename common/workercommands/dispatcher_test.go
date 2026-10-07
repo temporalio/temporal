@@ -31,7 +31,7 @@ func testWorkerCommandsTask() *tasks.WorkerCommandsTask {
 				CancelActivity: &workerpb.CancelActivityCommand{TaskToken: []byte("token1")},
 			}},
 		},
-		Destination: "/temporal-sys/worker-commands/test-ns/key1",
+		ControlQueue: "/temporal-sys/worker-commands/test-ns/key1",
 	}
 }
 
@@ -116,7 +116,7 @@ func TestExecute_DispatchSuccess(t *testing.T) {
 	require.NotNil(t, capturedReq)
 	require.Equal(t, enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS, capturedReq.TaskQueue.Kind,
 		"dispatch request must use TASK_QUEUE_KIND_WORKER_COMMANDS, not TASK_QUEUE_KIND_NORMAL")
-	require.Equal(t, task.Destination, capturedReq.TaskQueue.Name)
+	require.Equal(t, task.ControlQueue, capturedReq.TaskQueue.Name)
 
 	requireMetricValue(t, capture.Snapshot(), "success")
 }

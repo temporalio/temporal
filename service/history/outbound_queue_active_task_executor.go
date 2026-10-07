@@ -111,7 +111,7 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 			e.logger.Info("Worker commands task exceeded max attempts, dropping",
 				tag.WorkflowID(task.WorkflowID),
 				tag.WorkflowRunID(task.RunID),
-				tag.NewStringTag("control_queue", task.Destination),
+				tag.NewStringTag("control_queue", task.ControlQueue),
 				tag.Attempt(int32(executable.Attempt())),
 			)
 			workercommands.RecordCommandMetrics(task.Commands, e.metricsHandler, namespaceTag.Value, "max_attempts_exceeded")

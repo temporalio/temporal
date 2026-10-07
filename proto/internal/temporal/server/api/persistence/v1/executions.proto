@@ -585,6 +585,8 @@ message OutboundTaskInfo {
 // WorkerCommandsTask contains worker commands to dispatch via Nexus.
 message WorkerCommandsTask {
   repeated temporal.api.worker.v1.WorkerCommand commands = 1;
+  // Task queue to send worker commands to.
+  string control_queue = 2;
 }
 
 message NexusInvocationTaskInfo {

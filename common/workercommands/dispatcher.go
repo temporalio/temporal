@@ -78,7 +78,7 @@ func (d *Dispatcher) Execute(
 			tag.WorkflowNamespace(namespaceName),
 			tag.WorkflowID(task.WorkflowID),
 			tag.WorkflowRunID(task.RunID),
-			tag.NewStringTag("control_queue", task.Destination),
+			tag.NewStringTag("control_queue", task.ControlQueue),
 			tag.NewInt("command_count", len(task.Commands)),
 		)
 		return nil
@@ -132,14 +132,14 @@ func (d *Dispatcher) dispatchToWorker(
 	resp, err := d.matchingClient.DispatchNexusTask(ctx, &matchingservice.DispatchNexusTaskRequest{
 		NamespaceId: task.NamespaceID,
 		TaskQueue: &taskqueuepb.TaskQueue{
-			Name: task.Destination,
+			Name: task.ControlQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_WORKER_COMMANDS,
 		},
 		Request: nexusRequest,
 	})
 	if err != nil {
 		d.recordCommandMetrics(task.Commands, namespaceName, "rpc_error")
-		return fmt.Errorf("failed to dispatch worker commands to control queue %s: %w", task.Destination, err)
+		return fmt.Errorf("failed to dispatch worker commands to control queue %s: %w", task.ControlQueue, err)
 	}
 
 	nexusErr := commonnexus.MatchingDispatchResponseToError(resp)
@@ -157,7 +157,7 @@ func (d *Dispatcher) handleError(nexusErr error, task *tasks.WorkerCommandsTask,
 		// MatchingDispatchResponseToError for non-worker-returned failures.
 		if handlerErr.Type == nexus.HandlerErrorTypeUpstreamTimeout {
 			d.logger.Debug("No worker polling control queue, dropping command",
-				tag.NewStringTag("control_queue", task.Destination))
+				tag.NewStringTag("control_queue", task.ControlQueue))
 			d.recordCommandMetrics(task.Commands, namespaceName, "no_poller")
 			// Don't retry — if no poller appeared within the dispatch timeout, the worker
 			// is likely gone.
@@ -166,14 +166,14 @@ func (d *Dispatcher) handleError(nexusErr error, task *tasks.WorkerCommandsTask,
 
 		if !handlerErr.Retryable() {
 			d.logger.Error("Worker commands non-retryable handler error",
-				tag.NewStringTag("control_queue", task.Destination),
+				tag.NewStringTag("control_queue", task.ControlQueue),
 				tag.Error(nexusErr))
 			d.recordCommandMetrics(task.Commands, namespaceName, "non_retryable_error")
 			return nil
 		}
 
 		d.logger.Warn("Worker commands transport failure",
-			tag.NewStringTag("control_queue", task.Destination),
+			tag.NewStringTag("control_queue", task.ControlQueue),
 			tag.Error(nexusErr))
 		d.recordCommandMetrics(task.Commands, namespaceName, "transport_error")
 		return nexusErr
@@ -186,7 +186,7 @@ func (d *Dispatcher) handleError(nexusErr error, task *tasks.WorkerCommandsTask,
 	d.logger.Error("Worker returned failure for worker commands",
 		tag.WorkflowID(task.WorkflowID),
 		tag.WorkflowRunID(task.RunID),
-		tag.NewStringTag("control_queue", task.Destination),
+		tag.NewStringTag("control_queue", task.ControlQueue),
 		tag.NewInt("command_count", len(task.Commands)),
 		tag.Error(nexusErr))
 	d.recordCommandMetrics(task.Commands, namespaceName, "worker_error")

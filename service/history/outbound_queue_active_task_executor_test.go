@@ -285,7 +285,7 @@ func (s *outboundQueueActiveTaskExecutorSuite) TestExecute_WorkerCommandsTask_Ex
 	task := &tasks.WorkerCommandsTask{
 		WorkflowKey: tests.WorkflowKey,
 		TaskID:      s.mustGenerateTaskID(),
-		Destination: "test-control-queue",
+		ControlQueue: "test-control-queue",
 		Commands: []*workerpb.WorkerCommand{
 			{Type: &workerpb.WorkerCommand_CancelActivity{
 				CancelActivity: &workerpb.CancelActivityCommand{TaskToken: []byte("token")},

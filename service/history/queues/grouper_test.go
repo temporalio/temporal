@@ -41,6 +41,20 @@ func TestGrouperStateMachineNamespaceIDAndDestination_Key(t *testing.T) {
 	}, k)
 }
 
+func TestGrouperWorkerCommandsTask_Key(t *testing.T) {
+	g := GrouperStateMachineNamespaceIDAndDestination{}
+	task := &tasks.WorkerCommandsTask{
+		WorkflowKey: definition.NewWorkflowKey("nid", "wid", "rid"),
+		ControlQueue: "control-queue-xyz", // routing destination, not used for grouping
+	}
+	k := g.Key(task)
+	require.Equal(t, tasks.TaskGroupNamespaceIDAndDestination{
+		TaskGroup:   tasks.WorkerCommandsTaskGroup,
+		NamespaceID: "nid",
+		Destination: tasks.WorkerCommandsTaskDestination,
+	}, k)
+}
+
 func TestGrouperStateMachineNamespaceIDAndDestination_Predicate(t *testing.T) {
 	g := GrouperStateMachineNamespaceIDAndDestination{}
 	groups := []tasks.TaskGroupNamespaceIDAndDestination{

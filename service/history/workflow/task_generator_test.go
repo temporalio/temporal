@@ -1195,7 +1195,7 @@ func TestGenerateWorkerCommandsTasks(t *testing.T) {
 				commandTask, ok := capturedTasks[0].(*tasks.WorkerCommandsTask)
 				require.True(t, ok)
 				require.Equal(t, tc.commands, commandTask.Commands)
-				require.Equal(t, tc.controlQueue, commandTask.Destination)
+				require.Equal(t, tc.controlQueue, commandTask.ControlQueue)
 				require.Equal(t, tests.NamespaceID.String(), commandTask.NamespaceID)
 			}
 		})
