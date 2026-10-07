@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -3789,6 +3790,155 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentAs
 	s.Equal(util.ErrorType(&serviceerror.NotFound{}), details["initial_error_type"])
 	s.Equal("sync_workflow_state", details["stage"])
 	s.Equal(cluster.TestCurrentClusterName, attributes["source_cluster"].AsString())
+	_, missing := s.resendScheduler.SourceNotFound(definition.NewWorkflowKey(
+		request.NamespaceId,
+		request.ParentExecution.WorkflowId,
+		request.ParentExecution.RunId,
+	))
+	s.False(missing)
+}
+
+func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentAsyncSourceNotFound() {
+	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
+
+	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+		NamespaceId: tests.ParentNamespaceID.String(),
+		ParentExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ChildExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "child workflowId",
+			RunId:      "child runId",
+		},
+		ParentInitiatedId:      123,
+		ParentInitiatedVersion: 100,
+		ResendParent:           true,
+	}
+	parentKey := definition.NewWorkflowKey(request.NamespaceId, request.ParentExecution.WorkflowId, request.ParentExecution.RunId)
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{}).AnyTimes()
+
+	mockClusterMetadata := cluster.NewMockMetadata(s.controller)
+	mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
+	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
+	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.SetClusterMetadata(mockClusterMetadata)
+
+	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewNotFound("parent removed on source")).Times(1)
+
+	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound)
+	await.RequireTrue(s.T(), func() bool {
+		missingOn, ok := s.resendScheduler.SourceNotFound(parentKey)
+		return ok && missingOn == cluster.TestCurrentClusterName
+	}, 10*time.Second, 10*time.Millisecond)
+
+	_, err = s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	s.Require().NoError(err)
+}
+
+func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentAsyncSourceNotFoundOnPreviousSource() {
+	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
+
+	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+		NamespaceId: tests.ParentNamespaceID.String(),
+		ParentExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ChildExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "child workflowId",
+			RunId:      "child runId",
+		},
+		ParentInitiatedId:      123,
+		ParentInitiatedVersion: 100,
+		ResendParent:           true,
+	}
+	parentKey := definition.NewWorkflowKey(request.NamespaceId, request.ParentExecution.WorkflowId, request.ParentExecution.RunId)
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{}).AnyTimes()
+
+	mockClusterMetadata := cluster.NewMockMetadata(s.controller)
+	mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
+	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
+	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.SetClusterMetadata(mockClusterMetadata)
+
+	// The namespace has since moved to a source that may still have the parent.
+	s.resendScheduler.MarkSourceNotFound(parentKey, "previous source")
+	syncCalled := make(chan struct{})
+	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(context.Context, *adminservice.SyncWorkflowStateRequest, ...grpc.CallOption) (*adminservice.SyncWorkflowStateResponse, error) {
+			close(syncCalled)
+			return nil, serviceerror.NewUnavailable("source cluster unavailable")
+		}).Times(1)
+
+	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound)
+	select {
+	case <-syncCalled:
+	case <-time.After(10 * time.Second):
+		s.Fail("resend did not reach the current source")
+	}
+}
+
+func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentAsyncSourceNotFoundLocalParent() {
+	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
+
+	mockClusterMetadata := cluster.NewMockMetadata(s.controller)
+	mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
+	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
+	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.SetClusterMetadata(mockClusterMetadata)
+
+	ms := workflow.TestGlobalMutableState(s.historyEngine.shardContext, s.mockEventsCache, log.NewTestLogger(), tests.Version, tests.WorkflowID, tests.RunID)
+	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
+	wt := addWorkflowTaskScheduledEvent(ms)
+	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.NewString())
+	wt.StartedEventID = workflowTaskStartedEvent.GetEventId()
+	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	initiatedEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(ms, workflowTaskCompletedEvent.GetEventId(),
+		tests.ChildNamespace, tests.ChildNamespaceID, "child workflowId", "child workflow type", "child task queue", nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(context.Background(), ms)}, nil).Times(2)
+	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewNotFound("parent removed on source")).Times(1)
+
+	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		ParentExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ChildExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "child workflowId",
+			RunId:      uuid.NewString(),
+		},
+		ParentInitiatedId:      initiatedEvent.GetEventId(),
+		ParentInitiatedVersion: initiatedEvent.GetVersion(),
+		ResendParent:           true,
+	}
+	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	var notReady *serviceerror.WorkflowNotReady
+	s.ErrorAs(err, &notReady)
+	parentKey := definition.NewWorkflowKey(request.NamespaceId, tests.WorkflowID, tests.RunID)
+	await.RequireTrue(s.T(), func() bool {
+		missingOn, ok := s.resendScheduler.SourceNotFound(parentKey)
+		return ok && missingOn == cluster.TestCurrentClusterName
+	}, 10*time.Second, 10*time.Millisecond)
+
+	_, err = s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	s.Require().NoError(err)
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentLimited() {

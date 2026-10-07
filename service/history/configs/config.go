@@ -85,6 +85,7 @@ type Config struct {
 	ChasmNexusWorkflowOperationsRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableCHASMCallbacks                       dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSignalBacklinks                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCHASMWorkflowRootOnStart             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkflowUpdateCallbacks              dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmMaxInMemoryPureTasks                  dynamicconfig.IntPropertyFn
 	ChasmDLQScheduledPureTaskOnValidation      dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -285,6 +286,7 @@ type Config struct {
 	EnableWorkflowTaskStampIncrementOnFailure        dynamicconfig.BoolPropertyFn
 	DiscardSpeculativeWorkflowTaskMaximumEventsCount dynamicconfig.IntPropertyFn
 	EnableDropRepeatedWorkflowTaskFailures           dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableSignalWithStartWorkflowTaskBackoff         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// TODO seankane: Added on 3/10/2026, if this is never used we should remove it at a later date
 	SendTransientOrSpeculativeWorkflowTaskEvents dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -312,6 +314,7 @@ type Config struct {
 	ReplicationDLQMaxRetryAttempts                       dynamicconfig.IntPropertyFn
 	ReplicationEnableUpdateWithNewTaskMerge              dynamicconfig.BoolPropertyFn
 	ReplicationMultipleBatches                           dynamicconfig.BoolPropertyFn
+	ValidateReplicationTaskSourceCluster                 dynamicconfig.BoolPropertyFn
 	ReplicationTaskConverterLowPriorityLockMaxAttempts   dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderErrorRetryWait                dynamicconfig.DurationPropertyFn
 	ReplicationStreamSenderErrorRetryBackoffCoefficient  dynamicconfig.FloatPropertyFn
@@ -551,10 +554,11 @@ func NewConfig(
 		EnableCHASMSchedulerCreation:  dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
 		EnableCHASMSchedulerMigration: dynamicconfig.EnableCHASMSchedulerMigration.Get(dc),
 
-		EnableCHASMCallbacks:          dynamicconfig.EnableCHASMCallbacks.Get(dc),
-		EnableCHASMSignalBacklinks:    dynamicconfig.EnableCHASMSignalBacklinks.Get(dc),
-		ExternalPayloadsEnabled:       dynamicconfig.ExternalPayloadsEnabled.Get(dc),
-		EnableWorkflowUpdateCallbacks: dynamicconfig.EnableWorkflowUpdateCallbacks.Get(dc),
+		EnableCHASMCallbacks:           dynamicconfig.EnableCHASMCallbacks.Get(dc),
+		EnableCHASMSignalBacklinks:     dynamicconfig.EnableCHASMSignalBacklinks.Get(dc),
+		EnableCHASMWorkflowRootOnStart: dynamicconfig.EnableCHASMWorkflowRootOnStart.Get(dc),
+		ExternalPayloadsEnabled:        dynamicconfig.ExternalPayloadsEnabled.Get(dc),
+		EnableWorkflowUpdateCallbacks:  dynamicconfig.EnableWorkflowUpdateCallbacks.Get(dc),
 
 		EventsShardLevelCacheMaxSizeBytes: dynamicconfig.EventsCacheMaxSizeBytes.Get(dc),          // 512KB
 		EventsHostLevelCacheMaxSizeBytes:  dynamicconfig.EventsHostLevelCacheMaxSizeBytes.Get(dc), // 256MB
@@ -665,6 +669,7 @@ func NewConfig(
 		ReplicationEnableDLQMetrics:                         dynamicconfig.ReplicationEnableDLQMetrics.Get(dc),
 		ReplicationDLQMaxRetryAttempts:                      dynamicconfig.ReplicationDLQMaxRetryAttempts.Get(dc),
 		ReplicationEnableUpdateWithNewTaskMerge:             dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge.Get(dc),
+		ValidateReplicationTaskSourceCluster:                dynamicconfig.ValidateReplicationTaskSourceCluster.Get(dc),
 		ReplicationStreamSyncStatusDuration:                 dynamicconfig.ReplicationStreamSyncStatusDuration.Get(dc),
 		ReplicationProcessorSchedulerQueueSize:              dynamicconfig.ReplicationProcessorSchedulerQueueSize.Get(dc),
 		ReplicationProcessorSchedulerWorkerCount:            dynamicconfig.ReplicationProcessorSchedulerWorkerCount.Subscribe(dc),
@@ -746,6 +751,7 @@ func NewConfig(
 		EnableWorkflowTaskStampIncrementOnFailure:        dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure.Get(dc),
 		DiscardSpeculativeWorkflowTaskMaximumEventsCount: dynamicconfig.DiscardSpeculativeWorkflowTaskMaximumEventsCount.Get(dc),
 		EnableDropRepeatedWorkflowTaskFailures:           dynamicconfig.EnableDropRepeatedWorkflowTaskFailures.Get(dc),
+		EnableSignalWithStartWorkflowTaskBackoff:         dynamicconfig.EnableSignalWithStartWorkflowTaskBackoff.Get(dc),
 		SendTransientOrSpeculativeWorkflowTaskEvents:     dynamicconfig.SendTransientOrSpeculativeWorkflowTaskEvents.Get(dc),
 
 		ReplicationTaskApplyTimeout:                  dynamicconfig.ReplicationTaskApplyTimeout.Get(dc),

@@ -24,7 +24,6 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/tests/testcore"
@@ -306,7 +305,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 		})
 
 		tc.assertion(s, result, err, headerCapture.lastHeaders)
-		s.NoError(await.Rcv(s.T(), pollerErrCh))
+		s.NoError(s.Rcv(pollerErrCh))
 
 		requests := capture.Metric("nexus_requests")
 		s.Len(requests, 1)
@@ -446,7 +445,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Claims(useTemporalFailures b
 
 		tc.assertion(s, result, err, preprocessErrors)
 		if pollerErrCh != nil {
-			s.NoError(await.Rcv(s.T(), pollerErrCh))
+			s.NoError(s.Rcv(pollerErrCh))
 		}
 	}
 
@@ -565,7 +564,7 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes(useTemporalFailure
 		err = handle.Cancel(s.Context(), nexus.CancelOperationOptions{Header: header})
 
 		tc.assertion(s, err, headerCapture.lastHeaders)
-		s.NoError(await.Rcv(s.T(), pollerErrCh))
+		s.NoError(s.Rcv(pollerErrCh))
 
 		requests := capture.Metric("nexus_requests")
 		s.Len(requests, 1)
@@ -644,7 +643,7 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Su
 	result, err := nexusrpc.StartOperation(ctx, client, op, "input", nexus.StartOperationOptions{})
 	s.NoError(err)
 	s.Equal("input", result.Successful)
-	s.NoError(await.Rcv(s.T(), pollerErrCh1))
+	s.NoError(s.Rcv(pollerErrCh1))
 
 	// Unversioned poller doesn't get a task
 	pollerErrCh2 := env.nexusTaskPoller(ctx, s.T(), taskQueue, nexusEchoHandler)
@@ -662,8 +661,8 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_WithNamespaceAndTaskQueue_Su
 	}
 	// Cancel the parent context to unblock the pollers that didn't receive a task.
 	cancel()
-	s.NoError(await.Rcv(s.T(), pollerErrCh2))
-	s.NoError(await.Rcv(s.T(), pollerErrCh3))
+	s.NoError(s.Rcv(pollerErrCh2))
+	s.NoError(s.Rcv(pollerErrCh3))
 }
 
 // TestNexusClientNameMetricPropagation verifies that when an SDK worker polls for Nexus tasks
@@ -698,7 +697,7 @@ func (s *NexusApiTestSuite) TestNexusClientNameMetricPropagation(useTemporalFail
 
 	_, err = nexusrpc.StartOperation(s.Context(), client, op, "input", nexus.StartOperationOptions{})
 	s.NoError(err)
-	s.NoError(await.Rcv(s.T(), pollerErrCh))
+	s.NoError(s.Rcv(pollerErrCh))
 
 	// Verify that the matching service emitted nexus_task_requests with client_name tag.
 	var found bool
