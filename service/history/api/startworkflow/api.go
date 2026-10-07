@@ -89,7 +89,6 @@ type mutableStateInfo struct {
 	lastEventID         int64
 	workflowTask        *historyi.WorkflowTaskInfo
 	firstExecutionRunID string
-	status              enumspb.WorkflowExecutionStatus
 }
 
 // NewStarter creates a new starter, fails if getting the active namespace fails.
@@ -248,7 +247,7 @@ func (s *Starter) runIDDedupResponse(
 
 	metrics.StartWorkflowRequestDeduped.With(s.getMetricsHandler()).Record(1)
 
-	// WorkflowRunAlreadyExistsError error outranks CurrentWorkflowConditionFailedError, so a retry while the run is still
+	// WorkflowRunAlreadyExistsError outranks CurrentWorkflowConditionFailedError, so a retry while the run is still
 	// current lands here rather than in handleConflict. respondToRetriedRequest keeps returning its eager workflow task in that case.
 	resp, err := s.respondToRetriedRequest(ctx, existsErr.RunID, existsErr.RunID)
 	if err != nil {
@@ -794,7 +793,6 @@ func extractMutableStateInfo(ctx context.Context, mutableState historyi.MutableS
 		lastEventID:         mutableState.GetNextEventID() - 1,
 		workflowTask:        &workflowTask,
 		firstExecutionRunID: firstRunID,
-		status:              mutableState.GetExecutionState().GetStatus(),
 	}, nil
 }
 

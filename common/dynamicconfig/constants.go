@@ -3273,8 +3273,8 @@ request ID created the run (matching StartWorkflowExecution).`,
 	EnableCrossRunRequestIDDedup = NewNamespaceBoolSetting(
 		"history.enableCrossRunRequestIDDedup",
 		false,
-		`If true, a workflow start retry with the same request ID returns the run it created even when 
-it is no longer current. Run IDs of started workflows are derived from the request ID instead of being 
+		`If true, a workflow start retry with the same request ID returns the run it created even when
+it is no longer current. Run IDs of started workflows are derived from the request ID instead of being
 random. Ignored when the execution store does not declare SupportsCheckRunAlreadyExists.`,
 	)
 	BusinessIDReuseRate = NewNamespaceIntSetting(
