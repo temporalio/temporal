@@ -1705,6 +1705,14 @@ var (
 		"schedule_callback_reattach",
 		WithDescription("Outcomes of re-attaching a completion callback to an already-running action, used for migration and anti-entropy. The reason tag distinguishes a genuine attach from recorded outcomes: not_found (target gone, recorded TERMINATED) and already_closed (target closed, recorded terminal status)."),
 	)
+	ScheduleCreateRequests = NewCounterDef(
+		"schedule_create_requests",
+		WithDescription("The number of CreateSchedule requests that succeeded, tagged by scheduler_backend (chasm vs legacy) indicating which backend the schedule was created on."),
+	)
+	ScheduleUpdateRequests = NewCounterDef(
+		"schedule_update_requests",
+		WithDescription("The number of UpdateSchedule requests that succeeded, tagged by scheduler_backend (chasm vs legacy) indicating which backend handled the update. A schedule still on V1 is counted here as legacy even though CHASM routing is attempted and falls back first; failed CHASM attempts that fall back are not separately counted."),
+	)
 
 	// Worker Versioning
 	WorkerDeploymentCreated                           = NewCounterDef("worker_deployment_created")

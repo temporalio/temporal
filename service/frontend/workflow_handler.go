@@ -3924,9 +3924,19 @@ func (wh *WorkflowHandler) CreateSchedule(
 	}
 
 	if useChasmScheduler {
-		return wh.createScheduleCHASM(ctx, request)
+		res, err := wh.createScheduleCHASM(ctx, request)
+		if err == nil {
+			metrics.ScheduleCreateRequests.With(wh.metricsScope(ctx)).Record(
+				1, metrics.StringTag(metrics.ScheduleBackendTag, metrics.ScheduleBackendChasm))
+		}
+		return res, err
 	}
-	return wh.createScheduleWorkflow(ctx, request)
+	res, err := wh.createScheduleWorkflow(ctx, request)
+	if err == nil {
+		metrics.ScheduleCreateRequests.With(wh.metricsScope(ctx)).Record(
+			1, metrics.StringTag(metrics.ScheduleBackendTag, metrics.ScheduleBackendLegacy))
+	}
+	return res, err
 }
 
 // chasmSchedulerCreationEnabled returns true when CreateSchedule should create on
@@ -4754,6 +4764,8 @@ func (wh *WorkflowHandler) UpdateSchedule(
 	if wh.chasmSchedulerEnabled(ctx, request.Namespace) {
 		res, err := wh.updateScheduleCHASM(ctx, request)
 		if err == nil {
+			metrics.ScheduleUpdateRequests.With(wh.metricsScope(ctx)).Record(
+				1, metrics.StringTag(metrics.ScheduleBackendTag, metrics.ScheduleBackendChasm))
 			return res, nil
 		}
 		if !isSchedulerErrorLegacyRoutable(err) {
@@ -4766,7 +4778,12 @@ func (wh *WorkflowHandler) UpdateSchedule(
 		return nil, serviceerror.NewFailedPrecondition("memo updates are not supported on workflow-backed schedules")
 	}
 
-	return wh.updateScheduleWorkflow(ctx, request)
+	res, err := wh.updateScheduleWorkflow(ctx, request)
+	if err == nil {
+		metrics.ScheduleUpdateRequests.With(wh.metricsScope(ctx)).Record(
+			1, metrics.StringTag(metrics.ScheduleBackendTag, metrics.ScheduleBackendLegacy))
+	}
+	return res, err
 }
 
 func (wh *WorkflowHandler) updateScheduleCHASM(
