@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	failurepb "go.temporal.io/api/failure/v1"
@@ -438,6 +439,14 @@ func TestTransitionSucceeded(t *testing.T) {
 func TestTransitionFailed(t *testing.T) {
 	customCompleteTime := defaultTime.Add(time.Minute)
 	failure := &failurepb.Failure{Message: "test failure"}
+	handlerFailure := &failurepb.Failure{
+		Message: "test handler failure",
+		FailureInfo: &failurepb.Failure_NexusHandlerFailureInfo{
+			NexusHandlerFailureInfo: &failurepb.NexusHandlerFailureInfo{
+				Type: string(nexus.HandlerErrorTypeNotFound),
+			},
+		},
+	}
 
 	for _, tc := range []struct {
 		name       string
@@ -445,6 +454,7 @@ func TestTransitionFailed(t *testing.T) {
 		event      EventFailed
 		prepare    func(*Operation)
 		assert     func(*testing.T, *chasm.MockMutableContext, *Operation)
+		wantReason string
 	}{
 		{
 			name:       "from scheduled records last attempt failure",
@@ -454,6 +464,25 @@ func TestTransitionFailed(t *testing.T) {
 				protorequire.ProtoEqual(t, failure, operation.LastAttemptFailure)
 				require.Nil(t, operation.Outcome.Get(ctx).GetVariant())
 			},
+			wantReason: "operation_failed",
+		},
+		{
+			name:       "from scheduled with handler error tags handler error reason",
+			fromStatus: nexusoperationpb.OPERATION_STATUS_SCHEDULED,
+			event:      EventFailed{Failure: handlerFailure},
+			assert: func(t *testing.T, ctx *chasm.MockMutableContext, operation *Operation) {
+				protorequire.ProtoEqual(t, handlerFailure, operation.LastAttemptFailure)
+			},
+			wantReason: "handler_error:NOT_FOUND",
+		},
+		{
+			name:       "from non-scheduled with handler error tags operation failed reason",
+			fromStatus: nexusoperationpb.OPERATION_STATUS_STARTED,
+			event:      EventFailed{Failure: handlerFailure},
+			assert: func(t *testing.T, ctx *chasm.MockMutableContext, operation *Operation) {
+				protorequire.ProtoEqual(t, handlerFailure, operation.Outcome.Get(ctx).GetFailed().GetFailure())
+			},
+			wantReason: "operation_failed",
 		},
 		{
 			name:       "from non-scheduled stores outcome failure",
@@ -463,6 +492,7 @@ func TestTransitionFailed(t *testing.T) {
 				protorequire.ProtoEqual(t, failure, operation.Outcome.Get(ctx).GetFailed().GetFailure())
 				require.Nil(t, operation.LastAttemptFailure)
 			},
+			wantReason: "operation_failed",
 		},
 		{
 			name:       "uses default time",
@@ -471,6 +501,7 @@ func TestTransitionFailed(t *testing.T) {
 			assert: func(t *testing.T, ctx *chasm.MockMutableContext, operation *Operation) {
 				require.Equal(t, defaultTime, operation.ClosedTime.AsTime())
 			},
+			wantReason: "operation_failed",
 		},
 		{
 			name:       "uses event CompleteTime",
@@ -479,6 +510,7 @@ func TestTransitionFailed(t *testing.T) {
 			assert: func(t *testing.T, ctx *chasm.MockMutableContext, operation *Operation) {
 				require.Equal(t, customCompleteTime, operation.ClosedTime.AsTime())
 			},
+			wantReason: "operation_failed",
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -527,10 +559,12 @@ func TestTransitionFailed(t *testing.T) {
 			}
 			latencyTags := maps.Clone(countTags)
 			latencyTags["outcome"] = "failed"
+			failedCountTags := maps.Clone(countTags)
+			failedCountTags["reason"] = tc.wantReason
 			latency := operation.ClosedTime.AsTime().Sub(operation.ScheduledTime.AsTime())
 			require.Equal(t, metricstest.CaptureSnapshot{
 				NexusOperationFailedCount.Name(): {
-					{Value: int64(1), Tags: countTags},
+					{Value: int64(1), Tags: failedCountTags},
 				},
 				NexusOperationScheduleToCloseLatency.Name(): {
 					{Value: latency, Tags: latencyTags},
