@@ -11,6 +11,9 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	vissql "go.temporal.io/server/common/persistence/visibility/store/sql"
@@ -19,14 +22,14 @@ import (
 
 const (
 	testNamespaceName = namespace.Name("test-namespace")
-
-	mysqlStore    = "mysql8"
-	postgresStore = "postgres12"
-	sqliteStore   = "sqlite"
-	esStore       = "elasticsearch"
 )
 
-var sqlPlugins = []string{mysqlStore, postgresStore, sqliteStore}
+var sqlPlugins = []string{
+	mysql.PluginName,
+	postgresql.PluginName,
+	postgresql.PluginNamePGX,
+	sqlite.PluginName,
+}
 
 type queryConverterTestCase struct {
 	name string
@@ -62,17 +65,17 @@ func (tc *queryConverterTestCase) expected(store string) (out string, errMsg str
 	if tc.err != "" {
 		return "", tc.err
 	}
-	if store == esStore {
+	if store == elasticsearch.PersistenceName {
 		return tc.es, tc.esErr
 	}
 
 	var outOverride, errOverride string
 	switch store {
-	case mysqlStore:
+	case mysql.PluginName:
 		outOverride, errOverride = tc.mysql, tc.mysqlErr
-	case postgresStore:
+	case postgresql.PluginName, postgresql.PluginNamePGX:
 		outOverride, errOverride = tc.postgres, tc.postgresErr
-	case sqliteStore:
+	case sqlite.PluginName:
 		outOverride, errOverride = tc.sqlite, tc.sqliteErr
 	default:
 		// no-op
@@ -1440,7 +1443,7 @@ func TestElasticsearchQueryConverter(t *testing.T) {
 	t.Parallel()
 	runQueryConverterTest(
 		t,
-		esStore,
+		elasticsearch.PersistenceName,
 		newESQueryConverter,
 		serializeESQuery,
 	)
