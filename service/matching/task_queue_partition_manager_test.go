@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	hlc "go.temporal.io/server/common/clock/hybrid_logical_clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
@@ -122,6 +123,192 @@ func (s *PartitionManagerTestSuite) TestAddTask_Forwarded() {
 		forwardInfo: &taskqueuespb.TaskForwardInfo{SourcePartition: "another-partition"},
 	})
 	s.Equal(errRemoteSyncMatchFailed, err)
+}
+
+func (s *PartitionManagerTestSuite) TestGrantEagerDispatch() {
+	items, err := s.partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
+		{
+			Count:    2,
+			Priority: &commonpb.Priority{PriorityKey: 3, FairnessKey: "key"},
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().Equal([]*matchingservice.GrantEagerDispatchResponse_Item{{GrantedCount: 2}}, items)
+}
+
+func (s *PartitionManagerTestSuite) TestGrantEagerDispatchValidation() {
+	tests := []struct {
+		name string
+		item *matchingservice.GrantEagerDispatchRequest_Item
+	}{
+		{
+			name: "zero count",
+			item: &matchingservice.GrantEagerDispatchRequest_Item{},
+		},
+		{
+			name: "negative count",
+			item: &matchingservice.GrantEagerDispatchRequest_Item{Count: -1},
+		},
+		{
+			name: "invalid version",
+			item: &matchingservice.GrantEagerDispatchRequest_Item{
+				Count:   1,
+				Version: &deploymentspb.WorkerDeploymentVersion{},
+			},
+		},
+	}
+
+	for _, test := range tests {
+		s.Run(test.name, func() {
+			_, err := s.partitionMgr.GrantEagerDispatch(
+				context.Background(),
+				[]*matchingservice.GrantEagerDispatchRequest_Item{test.item},
+			)
+			s.Require().Error(err)
+			var invalidArgument *serviceerror.InvalidArgument
+			s.Require().ErrorAs(err, &invalidArgument)
+		})
+	}
+}
+
+func (s *PartitionManagerTestSuite) TestGrantEagerDispatchChecksPhysicalQueueBacklogPriority() {
+	partitionMgr := s.newEagerDispatchPartitionManager(s.partitionMgr.config.DefaultPriorityKey, nil)
+
+	items, err := partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
+		{Count: 1, Priority: &commonpb.Priority{PriorityKey: 2}},
+		{Count: 1, Priority: &commonpb.Priority{PriorityKey: 3}},
+		{Count: 1, Priority: &commonpb.Priority{PriorityKey: 4}},
+		{Count: 1},
+	})
+	s.Require().NoError(err)
+	s.Require().Equal([]*matchingservice.GrantEagerDispatchResponse_Item{
+		{GrantedCount: 1},
+		{},
+		{},
+		{},
+	}, items)
+}
+
+func (s *PartitionManagerTestSuite) TestGrantEagerDispatchChecksDefaultBacklogByVersion() {
+	partitionMgr := s.newEagerDispatchPartitionManager(
+		s.partitionMgr.config.DefaultPriorityKey,
+		map[PhysicalTaskQueueVersion]priorityKey{
+			{deploymentSeriesName: "deployment", buildId: "current"}: 0,
+			{deploymentSeriesName: "deployment", buildId: "ramping"}: 0,
+			{deploymentSeriesName: "deployment", buildId: "old"}:     0,
+		},
+	)
+	s.addRoutingConfigUserData("deployment", "current", "ramping", 0)
+
+	items, err := partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
+		{
+			Count:    1,
+			Priority: &commonpb.Priority{PriorityKey: int32(partitionMgr.config.DefaultPriorityKey)},
+			Version:  workerDeploymentVersion("ramping"),
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().Equal([]*matchingservice.GrantEagerDispatchResponse_Item{{GrantedCount: 1}}, items)
+
+	s.addRoutingConfigUserData("deployment", "current", "ramping", 50)
+
+	items, err = partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
+		{
+			Count:    1,
+			Priority: &commonpb.Priority{PriorityKey: 2},
+			Version:  workerDeploymentVersion("current"),
+		},
+		{
+			Count:    1,
+			Priority: &commonpb.Priority{PriorityKey: 3},
+			Version:  workerDeploymentVersion("current"),
+		},
+		{
+			Count:    1,
+			Priority: &commonpb.Priority{PriorityKey: 4},
+			Version:  workerDeploymentVersion("current"),
+		},
+		{
+			Count:    1,
+			Priority: &commonpb.Priority{PriorityKey: 3},
+			Version:  workerDeploymentVersion("ramping"),
+		},
+		{
+			Count:    1,
+			Priority: &commonpb.Priority{PriorityKey: 3},
+			Version:  workerDeploymentVersion("old"),
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().Equal([]*matchingservice.GrantEagerDispatchResponse_Item{
+		{GrantedCount: 1},
+		{},
+		{},
+		{},
+		{GrantedCount: 1},
+	}, items)
+}
+
+func (s *PartitionManagerTestSuite) TestGrantEagerDispatchChecksVersionBacklog() {
+	version := workerDeploymentVersion("old")
+	partitionMgr := s.newEagerDispatchPartitionManager(
+		0,
+		map[PhysicalTaskQueueVersion]priorityKey{
+			{deploymentSeriesName: "deployment", buildId: "old"}: s.partitionMgr.config.DefaultPriorityKey,
+		},
+	)
+
+	items, err := partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
+		{Count: 1, Priority: &commonpb.Priority{PriorityKey: 2}, Version: version},
+		{Count: 1, Priority: &commonpb.Priority{PriorityKey: 3}, Version: version},
+		{Count: 1, Priority: &commonpb.Priority{PriorityKey: 4}, Version: version},
+	})
+	s.Require().NoError(err)
+	s.Require().Equal([]*matchingservice.GrantEagerDispatchResponse_Item{
+		{GrantedCount: 1},
+		{},
+		{},
+	}, items)
+}
+
+func (s *PartitionManagerTestSuite) TestGrantEagerDispatchReturnsPartialRateLimitGrant() {
+	if !s.newMatcher {
+		s.T().Skip("simple limiter is only used by the new matcher")
+	}
+
+	partitionMgr := s.newRateLimitedEagerDispatchPartitionManager()
+
+	items, err := partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
+		{Count: 3},
+		{Count: 1},
+	})
+	s.Require().NoError(err)
+	s.Require().Equal([]*matchingservice.GrantEagerDispatchResponse_Item{
+		{GrantedCount: 1},
+		{},
+	}, items)
+}
+
+func (s *PartitionManagerTestSuite) TestGrantEagerDispatchValidationDoesNotConsumeTokens() {
+	if !s.newMatcher {
+		s.T().Skip("simple limiter is only used by the new matcher")
+	}
+
+	partitionMgr := s.newRateLimitedEagerDispatchPartitionManager()
+
+	_, err := partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
+		{Count: 1},
+		{Count: 0}, // this causes the whole request to fail, so the previous item does not consume tokens
+	})
+	s.Require().Error(err)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArgument)
+
+	items, err := partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
+		{Count: 1},
+	})
+	s.Require().NoError(err)
+	s.Require().Equal([]*matchingservice.GrantEagerDispatchResponse_Item{{GrantedCount: 1}}, items)
 }
 
 func (s *PartitionManagerTestSuite) TestAddTaskNoRules_NoVersionDirective() {
@@ -2396,4 +2583,54 @@ func TestStickyQueueAdjustedStats_VersioningAttributionSkipped(t *testing.T) {
 	require.NotNil(t, adjustedStats)
 	require.InDelta(t, rawStats[3].TasksAddRate, adjustedStats.TasksAddRate, 0)
 	require.InDelta(t, rawStats[3].TasksDispatchRate, adjustedStats.TasksDispatchRate, 0)
+}
+
+func (s *PartitionManagerTestSuite) newEagerDispatchPartitionManager(
+	defaultBacklogPriority priorityKey,
+	versionBacklogPriorities map[PhysicalTaskQueueVersion]priorityKey,
+) *taskQueuePartitionManagerImpl {
+	defaultQueueFuture := future.NewFuture[physicalTaskQueueManager]()
+	defaultQueueFuture.Set(s.newEagerDispatchPhysicalQueue(defaultBacklogPriority), nil)
+
+	versionedQueues := make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager, len(versionBacklogPriorities))
+	for version, backlogPriority := range versionBacklogPriorities {
+		versionedQueues[version] = s.newEagerDispatchPhysicalQueue(backlogPriority)
+	}
+
+	return &taskQueuePartitionManagerImpl{
+		engine:             s.partitionMgr.engine,
+		partition:          s.partitionMgr.partition,
+		ns:                 s.partitionMgr.ns,
+		config:             s.partitionMgr.config,
+		versionedQueues:    versionedQueues,
+		userDataManager:    s.partitionMgr.userDataManager,
+		logger:             s.partitionMgr.logger,
+		throttledLogger:    s.partitionMgr.throttledLogger,
+		rateLimitManager:   s.partitionMgr.rateLimitManager,
+		defaultQueueFuture: defaultQueueFuture,
+	}
+}
+
+func workerDeploymentVersion(buildID string) *deploymentspb.WorkerDeploymentVersion {
+	return &deploymentspb.WorkerDeploymentVersion{
+		DeploymentName: "deployment",
+		BuildId:        buildID,
+	}
+}
+
+func (s *PartitionManagerTestSuite) newEagerDispatchPhysicalQueue(backlogPriority priorityKey) *MockphysicalTaskQueueManager {
+	queue := NewMockphysicalTaskQueueManager(s.controller)
+	queue.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
+	queue.EXPECT().MarkAlive().AnyTimes()
+	queue.EXPECT().NonNegligibleBacklogPriority().Return(backlogPriority).AnyTimes()
+	return queue
+}
+
+func (s *PartitionManagerTestSuite) newRateLimitedEagerDispatchPartitionManager() *taskQueuePartitionManagerImpl {
+	partitionMgr := s.newEagerDispatchPartitionManager(0, nil)
+	limiter := newRateLimitManager(partitionMgr.userDataManager, partitionMgr.config, partitionMgr.partition.TaskQueue().TaskType())
+	limiter.timeSource = clock.NewEventTimeSource().Update(time.Now())
+	limiter.wholeQueueLimit = makeSimpleLimiterParams(1, 0)
+	partitionMgr.rateLimitManager = limiter
+	return partitionMgr
 }

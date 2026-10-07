@@ -10,6 +10,7 @@ import (
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
@@ -86,6 +87,28 @@ func (s *WorkflowAPIBatchCancelClientTestSuite) TestWorkflowBatchCancel_Success(
 					})
 					return err == nil && desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED
 				}, 5*time.Second, 100*time.Millisecond)
+			}
+
+			// The cancel request must be recorded with the requester's identity
+			// and the batch's reason (surfaced as the event's cause), rather than
+			// the batcher worker's own process identity and no reason at all, and
+			// exactly once per workflow.
+			for _, e := range executions {
+				history, err := env.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+					Namespace: env.Namespace().String(),
+					Execution: e,
+				})
+				s.NoError(err)
+				var cancelRequests []*historypb.HistoryEvent
+				for _, event := range history.GetHistory().GetEvents() {
+					if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED {
+						cancelRequests = append(cancelRequests, event)
+					}
+				}
+				s.Require().Len(cancelRequests, 1)
+				attrs := cancelRequests[0].GetWorkflowExecutionCancelRequestedEventAttributes()
+				s.Equal("batch-canceler", attrs.GetIdentity())
+				s.Equal("test", attrs.GetCause())
 			}
 		})
 	}

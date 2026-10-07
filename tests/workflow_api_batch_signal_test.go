@@ -12,11 +12,14 @@ import (
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -240,12 +243,18 @@ func (s *WorkflowAPIBatchSignalClientTestSuite) TestWorkflowBatchSignal_Success(
 
 			// Signal all three workflows with a single batch operation.
 			jobID := uuid.NewString()
+			header := &commonpb.Header{
+				Fields: map[string]*commonpb.Payload{
+					"tracing-token": payload.EncodeString("trace-me"),
+				},
+			}
 			req := &workflowservice.StartBatchOperationRequest{
 				Namespace: env.Namespace().String(),
 				Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
 					SignalOperation: &batchpb.BatchOperationSignal{
 						Signal:   batchSignalTestSignalName,
 						Input:    inputPayloads,
+						Header:   header,
 						Identity: "batch-signaler",
 					},
 				},
@@ -265,6 +274,27 @@ func (s *WorkflowAPIBatchSignalClientTestSuite) TestWorkflowBatchSignal_Success(
 				var result string
 				s.NoError(env.SdkClient().GetWorkflow(ctx, e.GetWorkflowId(), e.GetRunId()).Get(ctx, &result))
 				s.Equal(signalData, result)
+			}
+
+			// The signal must be recorded with the requester's identity and the
+			// header it supplied -- workflows and interceptors read tracing and
+			// auth tokens from the latter.
+			for _, e := range executions {
+				history, err := env.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+					Namespace: env.Namespace().String(),
+					Execution: e,
+				})
+				s.NoError(err)
+				var signaled []*historypb.HistoryEvent
+				for _, event := range history.GetHistory().GetEvents() {
+					if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
+						signaled = append(signaled, event)
+					}
+				}
+				s.Require().Len(signaled, 1)
+				attrs := signaled[0].GetWorkflowExecutionSignaledEventAttributes()
+				s.Equal("batch-signaler", attrs.GetIdentity())
+				protorequire.ProtoEqual(t, header, attrs.GetHeader())
 			}
 		})
 	}
