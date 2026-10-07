@@ -58,6 +58,30 @@ func (w *Workflow) History(ctx chasm.Context) []*historypb.HistoryEvent {
 	return events
 }
 
+// HistoryBatchesAfter returns a native workflow's history events after an event, grouped in the
+// batches of the transactions that added them.
+func (w *Workflow) HistoryBatchesAfter(ctx chasm.Context, eventID int64) [][]*historypb.HistoryEvent {
+	state := w.Native.Get(ctx)
+	starts := state.GetBatchFirstEventIds()
+	var batches [][]*historypb.HistoryEvent
+	for i, first := range starts {
+		end := state.GetNextEventId()
+		if i+1 < len(starts) {
+			end = starts[i+1]
+		}
+		first = max(first, eventID+1)
+		if first >= end {
+			continue
+		}
+		batch := make([]*historypb.HistoryEvent, 0, end-first)
+		for id := first; id < end; id++ {
+			batch = append(batch, w.NativeHistory[id].Get(ctx))
+		}
+		batches = append(batches, batch)
+	}
+	return batches
+}
+
 // HistoryEvent returns a native workflow's history event.
 func (w *Workflow) HistoryEvent(ctx chasm.Context, eventID int64) (*historypb.HistoryEvent, bool) {
 	field, ok := w.NativeHistory[eventID]
@@ -110,6 +134,10 @@ func (w *Workflow) appendEvent(
 // refers to the buffered ActivityTaskStarted event preceding it, so its started event ID is
 // assigned here, as the server does when it flushes buffered events.
 func (w *Workflow) appendEvents(ctx chasm.MutableContext, state *nativeWorkflowState, events []*historypb.HistoryEvent) {
+	if transition := ctx.ExecutionInfo().StateTransitionCount; len(state.BatchFirstEventIds) == 0 || transition != state.LastEventTransitionCount {
+		state.BatchFirstEventIds = append(state.BatchFirstEventIds, state.NextEventId)
+		state.LastEventTransitionCount = transition
+	}
 	startedEventIDs := map[int64]int64{} // scheduled event ID -> started event ID
 	for _, event := range events {
 		event.EventId = state.NextEventId

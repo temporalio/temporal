@@ -32,6 +32,11 @@ message NativeWorkflowState {
   // Events added while a workflow task was started. They get event IDs when the workflow task
   // closes.
   repeated temporal.api.history.v1.HistoryEvent buffered_events = 13;
+  // First event ID of each history batch. As in the server, a batch holds the events one
+  // transaction added.
+  repeated int64 batch_first_event_ids = 14;
+  // State transition count of the transaction that added the last event.
+  int64 last_event_transition_count = 15;
 }
 
 // WorkflowTaskDispatchTask adds a scheduled workflow task to its task queue.

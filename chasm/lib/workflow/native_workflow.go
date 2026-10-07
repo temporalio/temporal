@@ -55,12 +55,7 @@ func NewNativeWorkflow(
 		WorkflowRunTimeout:  request.GetWorkflowRunTimeout(),
 		NextEventId:         1,
 	}
-	w := &Workflow{
-		Native:        chasm.NewDataField(ctx, state),
-		NativeHistory: chasm.Map[int64, *historypb.HistoryEvent]{},
-		Activities:    chasm.Map[int64, *activity.Activity]{},
-		Timers:        chasm.Map[string, *timer.Timer]{},
-	}
+	w := newNativeWorkflow(ctx, state)
 	key := ctx.ExecutionKey()
 	w.appendEvent(ctx, state, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, func(e *historypb.HistoryEvent) {
 		e.Attributes = &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
@@ -84,6 +79,41 @@ func NewNativeWorkflow(
 	})
 	w.scheduleWorkflowTask(ctx, state, 1)
 	return w, nil
+}
+
+// NewImportedNativeWorkflow creates a native workflow from the history of a run that a server
+// started: its WorkflowExecutionStarted event and its first scheduled workflow task.
+func NewImportedNativeWorkflow(
+	ctx chasm.MutableContext,
+	events []*historypb.HistoryEvent,
+) (*Workflow, error) {
+	if len(events) != 2 ||
+		events[0].GetEventId() != 1 || events[0].GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED ||
+		events[1].GetEventId() != 2 || events[1].GetEventType() != enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED {
+		return nil, serviceerror.NewInvalidArgument("imported history must be a started event followed by a scheduled workflow task")
+	}
+	started := events[0].GetWorkflowExecutionStartedEventAttributes()
+	state := &nativeWorkflowState{
+		Status:              enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		WorkflowType:        started.GetWorkflowType().GetName(),
+		TaskQueue:           started.GetTaskQueue().GetName(),
+		WorkflowTaskTimeout: started.GetWorkflowTaskTimeout(),
+		WorkflowRunTimeout:  started.GetWorkflowRunTimeout(),
+		NextEventId:         1,
+	}
+	w := newNativeWorkflow(ctx, state)
+	w.appendEvents(ctx, state, events)
+	w.setWorkflowTaskScheduled(ctx, state, 2, events[1].GetWorkflowTaskScheduledEventAttributes().GetAttempt())
+	return w, nil
+}
+
+func newNativeWorkflow(ctx chasm.MutableContext, state *nativeWorkflowState) *Workflow {
+	return &Workflow{
+		Native:        chasm.NewDataField(ctx, state),
+		NativeHistory: chasm.Map[int64, *historypb.HistoryEvent]{},
+		Activities:    chasm.Map[int64, *activity.Activity]{},
+		Timers:        chasm.Map[string, *timer.Timer]{},
+	}
 }
 
 func nativeLifecycleState(state *nativeWorkflowState) chasm.LifecycleState {
@@ -112,7 +142,11 @@ func (w *Workflow) scheduleWorkflowTask(ctx chasm.MutableContext, state *nativeW
 			},
 		}
 	})
-	state.WorkflowTaskScheduledEventId = event.EventId
+	w.setWorkflowTaskScheduled(ctx, state, event.EventId, attempt)
+}
+
+func (w *Workflow) setWorkflowTaskScheduled(ctx chasm.MutableContext, state *nativeWorkflowState, eventID int64, attempt int32) {
+	state.WorkflowTaskScheduledEventId = eventID
 	state.WorkflowTaskAttempt = attempt
 	state.WorkflowTaskStamp++
 	ctx.AddTask(w, chasm.TaskAttributes{}, &chasmworkflowpb.WorkflowTaskDispatchTask{Stamp: state.WorkflowTaskStamp})

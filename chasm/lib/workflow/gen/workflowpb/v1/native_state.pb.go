@@ -50,8 +50,13 @@ type NativeWorkflowState struct {
 	// Events added while a workflow task was started. They get event IDs when the workflow task
 	// closes.
 	BufferedEvents []*v11.HistoryEvent `protobuf:"bytes,13,rep,name=buffered_events,json=bufferedEvents,proto3" json:"buffered_events,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// First event ID of each history batch. As in the server, a batch holds the events one
+	// transaction added.
+	BatchFirstEventIds []int64 `protobuf:"varint,14,rep,packed,name=batch_first_event_ids,json=batchFirstEventIds,proto3" json:"batch_first_event_ids,omitempty"`
+	// State transition count of the transaction that added the last event.
+	LastEventTransitionCount int64 `protobuf:"varint,15,opt,name=last_event_transition_count,json=lastEventTransitionCount,proto3" json:"last_event_transition_count,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *NativeWorkflowState) Reset() {
@@ -175,6 +180,20 @@ func (x *NativeWorkflowState) GetBufferedEvents() []*v11.HistoryEvent {
 	return nil
 }
 
+func (x *NativeWorkflowState) GetBatchFirstEventIds() []int64 {
+	if x != nil {
+		return x.BatchFirstEventIds
+	}
+	return nil
+}
+
+func (x *NativeWorkflowState) GetLastEventTransitionCount() int64 {
+	if x != nil {
+		return x.LastEventTransitionCount
+	}
+	return 0
+}
+
 // WorkflowTaskDispatchTask adds a scheduled workflow task to its task queue.
 type WorkflowTaskDispatchTask struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
@@ -224,7 +243,7 @@ var File_temporal_server_chasm_lib_workflow_proto_v1_native_state_proto protoref
 
 const file_temporal_server_chasm_lib_workflow_proto_v1_native_state_proto_rawDesc = "" +
 	"\n" +
-	">temporal/server/chasm/lib/workflow/proto/v1/native_state.proto\x12+temporal.server.chasm.lib.workflow.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a%temporal/api/history/v1/message.proto\"\xaf\x06\n" +
+	">temporal/server/chasm/lib/workflow/proto/v1/native_state.proto\x12+temporal.server.chasm.lib.workflow.proto.v1\x1a\x1egoogle/protobuf/duration.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a%temporal/api/history/v1/message.proto\"\xa1\a\n" +
 	"\x13NativeWorkflowState\x12F\n" +
 	"\x06status\x18\x01 \x01(\x0e2..temporal.api.enums.v1.WorkflowExecutionStatusR\x06status\x12#\n" +
 	"\rworkflow_type\x18\x02 \x01(\tR\fworkflowType\x12\x1d\n" +
@@ -240,7 +259,9 @@ const file_temporal_server_chasm_lib_workflow_proto_v1_native_state_proto_rawDes
 	" \x01(\x05R\x13workflowTaskAttempt\x12.\n" +
 	"\x13workflow_task_stamp\x18\v \x01(\x05R\x11workflowTaskStamp\x12^\n" +
 	"-last_completed_workflow_task_started_event_id\x18\f \x01(\x03R'lastCompletedWorkflowTaskStartedEventId\x12N\n" +
-	"\x0fbuffered_events\x18\r \x03(\v2%.temporal.api.history.v1.HistoryEventR\x0ebufferedEvents\"0\n" +
+	"\x0fbuffered_events\x18\r \x03(\v2%.temporal.api.history.v1.HistoryEventR\x0ebufferedEvents\x121\n" +
+	"\x15batch_first_event_ids\x18\x0e \x03(\x03R\x12batchFirstEventIds\x12=\n" +
+	"\x1blast_event_transition_count\x18\x0f \x01(\x03R\x18lastEventTransitionCount\"0\n" +
 	"\x18WorkflowTaskDispatchTask\x12\x14\n" +
 	"\x05stamp\x18\x01 \x01(\x05R\x05stampBDZBgo.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpbb\x06proto3"
 
