@@ -392,6 +392,7 @@ func TestDeepHealthCheck(t *testing.T) {
 			startupTime := time.Unix(0, 0)
 
 			historySignals := interceptor.NewHealthSignals(testLogger, func() health2.Settings { return tc.healthCheckSettings })
+			persistenceSignals := persistence.NewHealthSignalAggregator(true, time.Second, 100, metrics.NoopMetricsHandler, testLogger, func() health2.Settings { return health2.Settings{} })
 
 			handler := deepHealthCheckHandler{
 				healthServer:   health.NewServer(),
@@ -402,7 +403,7 @@ func TestDeepHealthCheck(t *testing.T) {
 					HealthHistoryPersistenceSettings: func() health2.Settings { return tc.persistenceHealthCheckSettings },
 				},
 				historyHealthSignal:     historySignals,
-				persistenceHealthSignal: persistence.NewHealthSignalAggregator(true, time.Second, 100, metrics.NoopMetricsHandler, testLogger, func() health2.Settings { return health2.Settings{} }),
+				persistenceHealthSignal: persistenceSignals,
 				startupTime:             startupTime,
 			}
 
@@ -413,7 +414,7 @@ func TestDeepHealthCheck(t *testing.T) {
 			}
 
 			for _, r := range tc.persistRecords {
-				handler.persistenceHealthSignal.Record(metrics.PersistenceGetWorkflowExecutionScope, 1, r.latency, r.err)
+				persistenceSignals.Record(metrics.PersistenceGetWorkflowExecutionScope, 1, r.latency, r.err)
 			}
 
 			actual, err := handler.DeepHealthCheck(t.Context(), startupTime.Add(tc.timeSinceStartup))
