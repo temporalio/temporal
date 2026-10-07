@@ -38,7 +38,6 @@ const (
 	activityType            = "activityType"
 	commandType             = "commandType"
 	serviceName             = "service_name"
-	concurrencyLimitGroup   = "concurrency_limit_group"
 	actionType              = "action_type"
 	workerVersion           = "worker_version"
 	workerDeploymentName    = "worker_deployment_name"
@@ -465,13 +464,6 @@ func ResourceExhaustedCauseTag(cause enumspb.ResourceExhaustedCause) Tag {
 
 func ResourceExhaustedScopeTag(scope enumspb.ResourceExhaustedScope) Tag {
 	return Tag{Key: resourceExhaustedScopeTag, Value: scope.String()}
-}
-
-func ConcurrencyLimitGroupTag(value string) Tag {
-	if len(value) == 0 {
-		value = "not_applicable"
-	}
-	return Tag{Key: concurrencyLimitGroup, Value: value}
 }
 
 func LastAttemptCauseTag(value string) Tag {

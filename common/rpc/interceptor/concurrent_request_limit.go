@@ -140,21 +140,14 @@ func (ni *ConcurrentRequestLimitInterceptor) Allow(
 	count := atomic.AddInt32(counter, int32(token))
 	cleanup := func() { atomic.AddInt32(counter, -int32(token)) }
 
-	mh.WithTags(metrics.ConcurrencyLimitGroupTag(concurrencyLimitGroup(internal))).
-		Gauge(metrics.ServicePendingRequests.Name()).
-		Record(float64(count))
+	if !internal {
+		mh.Gauge(metrics.ServicePendingRequests.Name()).Record(float64(count))
+	}
 
 	if float64(count) > quotaCalculator.GetQuota(namespaceName.String()) {
 		return cleanup, ErrNamespaceCountLimitServerBusy
 	}
 	return cleanup, nil
-}
-
-func concurrencyLimitGroup(internal bool) string {
-	if internal {
-		return "internal_per_ns"
-	}
-	return "default"
 }
 
 func isInternalPerNSPoll(req any) bool {
