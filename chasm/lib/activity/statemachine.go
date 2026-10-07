@@ -377,8 +377,7 @@ func (a *Activity) applyScheduled(ctx chasm.MutableContext, dispatch bool) error
 	dispatchTime := a.firstDispatchTime()
 	attempt.DispatchTime = timestamppb.New(dispatchTime)
 
-	if dispatch && a.GetScheduleToStartTimeout().AsDuration() > 0 {
-		timeout := a.GetScheduleToStartTimeout().AsDuration()
+	if timeout := a.GetScheduleToStartTimeout().AsDuration(); dispatch && timeout > 0 {
 		ctx.AddTask(
 			a,
 			chasm.TaskAttributes{
@@ -424,6 +423,7 @@ func (a *Activity) applyEagerStarted(ctx chasm.MutableContext, event eagerStartE
 	attempt.LastWorkerIdentity = event.identity
 	attempt.SdkName = ctx.RequestHeader(headers.ClientNameHeaderName)
 	attempt.SdkVersion = ctx.RequestHeader(headers.ClientVersionHeaderName)
+	// TODO: Populate LastDeploymentVersion when standalone eager start supports worker versioning.
 	startTime := attempt.GetStartedTime().AsTime()
 	ctx.AddTask(
 		a,
