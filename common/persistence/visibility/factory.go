@@ -50,7 +50,6 @@ func NewManager(
 	secondaryVisibilityWritingMode dynamicconfig.StringPropertyFn,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
-	visibilityEnableUnifiedQueryConverter dynamicconfig.BoolPropertyFn,
 
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -71,7 +70,6 @@ func NewManager(
 		slowQueryThreshold,
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
-		visibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
 		serializer,
@@ -99,7 +97,6 @@ func NewManager(
 		slowQueryThreshold,
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
-		visibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
 		serializer,
@@ -191,7 +188,6 @@ func newVisibilityManagerFromDataStoreConfig(
 	slowQueryThreshold dynamicconfig.DurationPropertyFn,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
-	visibilityEnableUnifiedQueryConverter dynamicconfig.BoolPropertyFn,
 
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -208,7 +204,6 @@ func newVisibilityManagerFromDataStoreConfig(
 		chasmRegistry,
 		visibilityDisableOrderByClause,
 		visibilityEnableManualPagination,
-		visibilityEnableUnifiedQueryConverter,
 		metricsHandler,
 		logger,
 		serializer,
@@ -246,7 +241,6 @@ func newVisibilityStoreFromDataStoreConfig(
 	chasmRegistry *chasm.Registry,
 	visibilityDisableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	visibilityEnableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
-	visibilityEnableUnifiedQueryConverter dynamicconfig.BoolPropertyFn,
 
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -263,7 +257,6 @@ func newVisibilityStoreFromDataStoreConfig(
 			searchAttributesProvider,
 			searchAttributesMapperProvider,
 			chasmRegistry,
-			visibilityEnableUnifiedQueryConverter,
 			logger,
 			metricsHandler,
 			serializer,
@@ -277,7 +270,6 @@ func newVisibilityStoreFromDataStoreConfig(
 			chasmRegistry,
 			visibilityDisableOrderByClause,
 			visibilityEnableManualPagination,
-			visibilityEnableUnifiedQueryConverter,
 			metricsHandler,
 			logger,
 		)
