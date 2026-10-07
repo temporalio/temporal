@@ -119,6 +119,8 @@ type (
 		GetHistoryBranchUtil() HistoryBranchUtil
 		// SupportsCheckRunAlreadyExists reports whether the store honors CheckRunAlreadyExists on create and on update
 		// with a new run, returning WorkflowRunAlreadyExistsError for a run ID that already exists.
+		// Keep this on ExecutionStore: wrappers that embed the interface would hide a separate optional interface
+		// from a type assertion.
 		SupportsCheckRunAlreadyExists() bool
 
 		// The below three APIs are related to serialization/deserialization

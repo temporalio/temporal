@@ -729,13 +729,11 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 			dbVersion:   updateWorkflow.DBRecordVersion - 1,
 			nextEventID: updateWorkflow.Condition,
 		}}
-		// Report a new run whose run ID already exists as a conflict on that run.
-		if newWorkflow != nil {
+		// Report a new run whose run ID already exists.
+		if newWorkflow != nil && request.CheckRunAlreadyExists {
 			executionCASConditions = append(executionCASConditions, executionCASCondition{
 				runID:        newWorkflow.ExecutionState.RunId,
-				mustNotExist: request.CheckRunAlreadyExists,
-				dbVersion:    newWorkflow.DBRecordVersion - 1,
-				nextEventID:  newWorkflow.Condition,
+				mustNotExist: true,
 			})
 		}
 		return convertErrors(
