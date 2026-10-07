@@ -63,6 +63,7 @@ func newHandler(
 // matching being delivered to a worker poll request.
 func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.StartActivityExecutionRequest) (*activitypb.StartActivityExecutionResponse, error) {
 	frontendReq := req.GetFrontendRequest()
+	var eagerTaskData *eagerActivityTaskData
 
 	reusePolicy, ok := businessIDReusePolicyMap[frontendReq.GetIdReusePolicy()]
 	if !ok {
@@ -110,6 +111,16 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			if err != nil {
 				return nil, err
 			}
+			if request.GetRequestEagerExecution() {
+				eagerTaskData, err = newActivity.eagerActivityTaskData(mutableContext, eagerActivityTaskRequest{
+					namespaceID: req.GetNamespaceId(),
+					namespace:   request.GetNamespace(),
+					requestID:   request.GetRequestId(),
+				})
+				if err != nil {
+					return nil, err
+				}
+			}
 
 			return newActivity, nil
 		},
@@ -137,17 +148,8 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 	}
 
 	var eagerTask *workflowservice.PollActivityTaskQueueResponse
-	if result.Created && frontendReq.GetRequestEagerExecution() {
-		eagerTask, err = chasm.ReadComponent(
-			ctx,
-			result.ExecutionRef,
-			(*Activity).buildEagerActivityTask,
-			eagerActivityTaskRequest{
-				namespaceID: req.GetNamespaceId(),
-				namespace:   frontendReq.GetNamespace(),
-				requestID:   frontendReq.GetRequestId(),
-			},
-		)
+	if result.Created && eagerTaskData != nil {
+		eagerTask, err = eagerTaskData.response(result.ExecutionRef)
 		if err != nil {
 			return nil, err
 		}

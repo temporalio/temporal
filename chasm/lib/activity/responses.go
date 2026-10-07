@@ -22,59 +22,98 @@ type eagerActivityTaskRequest struct {
 	requestID   string
 }
 
-func (a *Activity) buildEagerActivityTask(
+type eagerActivityTaskData struct {
+	namespaceID                 string
+	namespace                   string
+	runID                       string
+	activityType                *commonpb.ActivityType
+	activityID                  string
+	header                      *commonpb.Header
+	input                       *commonpb.Payloads
+	heartbeatDetails            *commonpb.Payloads
+	scheduledTime               *timestamppb.Timestamp
+	currentAttemptScheduledTime *timestamppb.Timestamp
+	startedTime                 *timestamppb.Timestamp
+	attempt                     int32
+	scheduleToCloseTimeout      *durationpb.Duration
+	startToCloseTimeout         *durationpb.Duration
+	heartbeatTimeout            *durationpb.Duration
+	retryPolicy                 *commonpb.RetryPolicy
+	priority                    *commonpb.Priority
+	activityAttemptStartedStamp int32
+}
+
+func (a *Activity) eagerActivityTaskData(
 	ctx chasm.Context,
 	request eagerActivityTaskRequest,
-) (*workflowservice.PollActivityTaskQueueResponse, error) {
+) (*eagerActivityTaskData, error) {
 	attempt := a.LastAttempt.Get(ctx)
 	if !a.hasAttemptInProgress() || attempt.GetCount() != 1 || attempt.GetStartRequestId() != request.requestID {
 		return nil, nil
 	}
 
-	componentRef, err := ctx.Ref(a)
-	if err != nil {
-		return nil, err
-	}
 	key := ctx.ExecutionKey()
+	requestData := a.RequestData.Get(ctx)
+	lastHeartbeat, _ := a.LastHeartbeat.TryGet(ctx)
+	return &eagerActivityTaskData{
+		namespaceID:                 request.namespaceID,
+		namespace:                   request.namespace,
+		runID:                       key.RunID,
+		activityType:                a.GetActivityType(),
+		activityID:                  key.BusinessID,
+		header:                      requestData.GetHeader(),
+		input:                       requestData.GetInput(),
+		heartbeatDetails:            lastHeartbeat.GetDetails(),
+		scheduledTime:               a.GetScheduleTime(),
+		currentAttemptScheduledTime: a.dispatchTimeForAttempt(attempt),
+		startedTime:                 attempt.GetStartedTime(),
+		attempt:                     attempt.GetCount(),
+		scheduleToCloseTimeout:      a.GetScheduleToCloseTimeout(),
+		startToCloseTimeout:         a.GetStartToCloseTimeout(),
+		heartbeatTimeout:            a.GetHeartbeatTimeout(),
+		retryPolicy:                 a.GetRetryPolicy(),
+		priority:                    a.GetPriority(),
+		activityAttemptStartedStamp: attempt.GetStartedStamp(),
+	}, nil
+}
+
+func (d *eagerActivityTaskData) response(componentRef []byte) (*workflowservice.PollActivityTaskQueueResponse, error) {
 	token, err := tasktoken.NewSerializer().Serialize(tasktoken.NewActivityTaskToken(
-		request.namespaceID,
+		d.namespaceID,
 		"",
-		key.RunID,
+		d.runID,
 		0,
-		key.BusinessID,
-		a.GetActivityType().GetName(),
-		attempt.GetCount(),
+		d.activityID,
+		d.activityType.GetName(),
+		d.attempt,
 		nil,
 		0,
 		0,
 		componentRef,
-		attempt.GetStartedStamp(),
+		d.activityAttemptStartedStamp,
 	))
 	if err != nil {
 		return nil, err
 	}
 
-	requestData := a.RequestData.Get(ctx)
-	lastHeartbeat, _ := a.LastHeartbeat.TryGet(ctx)
 	return &workflowservice.PollActivityTaskQueueResponse{
 		TaskToken:                   token,
-		WorkflowNamespace:           request.namespace,
-		WorkflowExecution:           &commonpb.WorkflowExecution{RunId: key.RunID},
-		ActivityType:                a.GetActivityType(),
-		ActivityId:                  key.BusinessID,
-		Header:                      requestData.GetHeader(),
-		Input:                       requestData.GetInput(),
-		HeartbeatDetails:            lastHeartbeat.GetDetails(),
-		ScheduledTime:               a.GetScheduleTime(),
-		CurrentAttemptScheduledTime: a.dispatchTimeForAttempt(attempt),
-		StartedTime:                 attempt.GetStartedTime(),
-		Attempt:                     attempt.GetCount(),
-		ScheduleToCloseTimeout:      a.GetScheduleToCloseTimeout(),
-		StartToCloseTimeout:         a.GetStartToCloseTimeout(),
-		HeartbeatTimeout:            a.GetHeartbeatTimeout(),
-		RetryPolicy:                 a.GetRetryPolicy(),
-		Priority:                    a.GetPriority(),
-		ActivityRunId:               key.RunID,
+		WorkflowNamespace:           d.namespace,
+		ActivityType:                d.activityType,
+		ActivityId:                  d.activityID,
+		Header:                      d.header,
+		Input:                       d.input,
+		HeartbeatDetails:            d.heartbeatDetails,
+		ScheduledTime:               d.scheduledTime,
+		CurrentAttemptScheduledTime: d.currentAttemptScheduledTime,
+		StartedTime:                 d.startedTime,
+		Attempt:                     d.attempt,
+		ScheduleToCloseTimeout:      d.scheduleToCloseTimeout,
+		StartToCloseTimeout:         d.startToCloseTimeout,
+		HeartbeatTimeout:            d.heartbeatTimeout,
+		RetryPolicy:                 d.retryPolicy,
+		Priority:                    d.priority,
+		ActivityRunId:               d.runID,
 	}, nil
 }
 

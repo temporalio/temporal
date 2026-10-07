@@ -1235,9 +1235,7 @@ func (s *standaloneActivityTestSuite) TestEagerStartResponseAndNoRedelivery() {
 	require.NotNil(t, first.GetEagerActivityTask())
 	require.Equal(t, activityID, first.GetEagerActivityTask().GetActivityId())
 	require.Equal(t, first.GetRunId(), first.GetEagerActivityTask().GetActivityRunId())
-	require.NotNil(t, first.GetEagerActivityTask().GetWorkflowExecution())
-	require.Empty(t, first.GetEagerActivityTask().GetWorkflowExecution().GetWorkflowId())
-	require.Equal(t, first.GetRunId(), first.GetEagerActivityTask().GetWorkflowExecution().GetRunId())
+	require.Nil(t, first.GetEagerActivityTask().GetWorkflowExecution())
 	require.EqualValues(t, 1, first.GetEagerActivityTask().GetAttempt())
 
 	describe, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
@@ -1261,6 +1259,15 @@ func (s *standaloneActivityTestSuite) TestEagerStartResponseAndNoRedelivery() {
 	require.NoError(t, err)
 	require.False(t, conflict.GetStarted())
 	require.Nil(t, conflict.GetEagerActivityTask())
+
+	_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
+		TaskToken: first.GetEagerActivityTask().GetTaskToken(),
+		Result:    defaultResult,
+		Identity:  defaultIdentity,
+	})
+	require.NoError(t, err)
+	env.validateCompletion(ctx, t, activityID, first.GetRunId(), defaultIdentity)
 
 }
 
