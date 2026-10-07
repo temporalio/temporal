@@ -5,8 +5,10 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // TestNewNamespaceMutationComponent verifies the component starts RUNNING with a
@@ -23,6 +25,22 @@ func TestNewNamespaceMutationComponent(t *testing.T) {
 	for _, cell := range []string{"cellB", "cellC"} {
 		require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, c.GetPeerApply()[cell].GetOutcome(), cell)
 	}
+}
+
+func TestNamespaceMutationComponentVisibility(t *testing.T) {
+	c := NewNamespaceMutationComponent(&namespacereplicationpb.NamespaceMutation{
+		NamespaceDetail: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{Id: "namespace-id"},
+		},
+	})
+	c.initializeVisibility(&chasm.MockMutableContext{})
+
+	_, ok := c.Visibility.TryGet(nil)
+	require.True(t, ok)
+	require.Equal(t, []chasm.SearchAttributeKeyValue{
+		namespaceIDSearchAttribute.Value("namespace-id"),
+	}, c.SearchAttributes(nil))
+	require.IsType(t, &emptypb.Empty{}, c.Memo(nil))
 }
 
 // TestLifecycleState maps each component status onto the CHASM lifecycle state
