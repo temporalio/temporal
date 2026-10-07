@@ -9,12 +9,15 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/resource"
 )
 
 var (
@@ -37,6 +40,7 @@ type handler struct {
 	linkValidator     *linkValidator
 	logger            log.Logger
 	metricsHandler    metrics.Handler
+	matchingClient    resource.MatchingClient
 	namespaceRegistry namespace.Registry
 }
 
@@ -46,6 +50,7 @@ func newHandler(
 	linkValidator *linkValidator,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
+	matchingClient resource.MatchingClient,
 	namespaceRegistry namespace.Registry,
 ) *handler {
 	return &handler{
@@ -54,6 +59,7 @@ func newHandler(
 		linkValidator:     linkValidator,
 		logger:            logger,
 		metricsHandler:    metricsHandler,
+		matchingClient:    matchingClient,
 		namespaceRegistry: namespaceRegistry,
 	}
 }
@@ -76,6 +82,12 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 	}
 
 	maxCallbacks := h.config.MaxCallbacksPerExecution(frontendReq.GetNamespace())
+	if frontendReq.GetRequestEagerExecution() &&
+		!h.eagerActivityDispatchAllowed(ctx, req.GetNamespaceId(), frontendReq) {
+		// Matching grants are best-effort. On a denial or any Matching failure, schedule the
+		// activity normally instead of failing the start request.
+		frontendReq.RequestEagerExecution = false
+	}
 
 	result, err := chasm.StartExecution(
 		ctx,
@@ -206,6 +218,38 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			},
 		},
 	}, nil
+}
+
+func (h *handler) eagerActivityDispatchAllowed(
+	ctx context.Context,
+	namespaceID string,
+	request *workflowservice.StartActivityExecutionRequest,
+) bool {
+	return !h.config.EnableActivityEagerDispatchCheck(request.GetNamespace()) ||
+		h.grantEagerActivityDispatch(ctx, namespaceID, request)
+}
+
+func (h *handler) grantEagerActivityDispatch(
+	ctx context.Context,
+	namespaceID string,
+	request *workflowservice.StartActivityExecutionRequest,
+) bool {
+	if h.matchingClient == nil {
+		return false
+	}
+
+	response, err := h.matchingClient.GrantEagerDispatch(ctx, &matchingservice.GrantEagerDispatchRequest{
+		NamespaceId: namespaceID,
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     request.GetTaskQueue().GetName(),
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+		},
+		Items: []*matchingservice.GrantEagerDispatchRequest_Item{{
+			Count:    1,
+			Priority: request.GetPriority(),
+		}},
+	})
+	return err == nil && len(response.GetItems()) == 1 && response.GetItems()[0].GetGrantedCount() == 1
 }
 
 // DescribeActivityExecution queries current activity state, optionally as a long-poll that waits

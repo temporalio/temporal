@@ -1208,7 +1208,7 @@ func (s *standaloneActivityTestSuite) TestStart() {
 }
 
 func (s *standaloneActivityTestSuite) TestEagerStartResponseAndNoRedelivery() {
-	env := s.newTestEnv()
+	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, true))
 	t := s.T()
 	ctx := metadata.NewOutgoingContext(s.Context(), metadata.Pairs(
 		headers.ClientNameHeaderName, headers.ClientNameGoSDK,
@@ -1269,6 +1269,68 @@ func (s *standaloneActivityTestSuite) TestEagerStartResponseAndNoRedelivery() {
 	require.NoError(t, err)
 	env.validateCompletion(ctx, t, activityID, first.GetRunId(), defaultIdentity)
 
+}
+
+func (s *standaloneActivityTestSuite) TestEagerStartFallsBackWhenMatchingDenies() {
+	env := s.newTestEnv(
+		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, true),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingBacklogNegligibleAge, time.Duration(0)),
+	)
+	t := s.T()
+	ctx := s.Context()
+	taskQueue := testcore.RandomizeStr(t.Name())
+	backloggedActivityID := testcore.RandomizeStr(t.Name() + "-backlogged")
+	eagerActivityID := testcore.RandomizeStr(t.Name() + "-eager")
+
+	start := func(activityID string, eager bool, priority int32) *workflowservice.StartActivityExecutionResponse {
+		response, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:             env.Namespace().String(),
+			RequestEagerExecution: eager,
+			ActivityId:            activityID,
+			ActivityType:          env.Tv().ActivityType(),
+			Identity:              defaultIdentity,
+			Input:                 defaultInput,
+			TaskQueue:             &taskqueuepb.TaskQueue{Name: taskQueue},
+			Priority:              &commonpb.Priority{PriorityKey: priority},
+			StartToCloseTimeout:   durationpb.New(defaultStartToCloseTimeout),
+			RequestId:             testcore.RandomizeStr(t.Name()),
+		})
+		require.NoError(t, err)
+		require.True(t, response.GetStarted())
+		return response
+	}
+
+	backlogged := start(backloggedActivityID, false, 1)
+	await.RequireTruef(t, func() bool {
+		response, err := env.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     env.Namespace().String(),
+			TaskQueue:     &taskqueuepb.TaskQueue{Name: taskQueue},
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			ReportStats:   true,
+		})
+		return err == nil && response.GetStats().GetApproximateBacklogCount() >= 1
+	}, 10*time.Second, 100*time.Millisecond, "backlogged standalone activity never reached Matching")
+
+	eager := start(eagerActivityID, true, 5)
+	require.Nil(t, eager.GetEagerActivityTask(), "Matching denial must fall back to normal dispatch")
+
+	for _, activity := range []struct {
+		id    string
+		runID string
+	}{
+		{backloggedActivityID, backlogged.GetRunId()},
+		{eagerActivityID, eager.GetRunId()},
+	} {
+		task := env.pollActivityTaskAndValidate(ctx, t, activity.id, taskQueue, activity.runID)
+		_, err := env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: task.GetTaskToken(),
+			Result:    defaultResult,
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+		env.validateCompletion(ctx, t, activity.id, activity.runID, defaultIdentity)
+	}
 }
 
 func (s *standaloneActivityTestSuite) TestComplete() {
