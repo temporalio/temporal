@@ -11,11 +11,13 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 var (
@@ -91,7 +93,9 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			}
 
 			if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
-				if err := newActivity.addCompletionCallbacks(mutableContext, request.GetRequestId(), cbs, request.GetNamespace(), h.callbackValidator); err != nil {
+				regTime := timestamppb.New(mutableContext.Now(newActivity))
+				err := callback.ValidateAndAttach(mutableContext, newActivity, request.GetRequestId(), regTime, cbs, request.GetNamespace(), h.callbackValidator, callback.WithReusedRequestID())
+				if err != nil {
 					return nil, err
 				}
 			}
@@ -146,7 +150,9 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			ref,
 			func(a *Activity, ctx chasm.MutableContext, _ any) (any, error) {
 				if attachCallbacks {
-					if err := a.addCompletionCallbacks(ctx, requestID, cbs, frontendReq.GetNamespace(), h.callbackValidator); err != nil {
+					regTime := timestamppb.New(ctx.Now(a))
+					err := callback.ValidateAndAttach(ctx, a, requestID, regTime, cbs, frontendReq.GetNamespace(), h.callbackValidator, callback.WithReusedRequestID())
+					if err != nil {
 						return nil, err
 					}
 				}
