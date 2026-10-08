@@ -7840,9 +7840,16 @@ func (ms *MutableStateImpl) closeTransaction(
 		}
 	}
 
+	// Like history events, CHASM principals are only recorded on the active cluster;
+	// standby receives them through replication.
+	chasmCtx := ctx
+	if transactionPolicy != historyi.TransactionPolicyActive {
+		chasmCtx = headers.StripPrincipal(ctx)
+	}
+
 	// CloseTransaction() on chasmTree may update execution state & status,
 	// so must be called before closeTransactionUpdateTransitionHistory().
-	chasmNodesMutation, err := ms.chasmTree.CloseTransaction()
+	chasmNodesMutation, err := ms.chasmTree.CloseTransaction(chasmCtx)
 	if err != nil {
 		return closeTransactionResult{}, err
 	}

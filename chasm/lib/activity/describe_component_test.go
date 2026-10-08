@@ -120,7 +120,7 @@ func TestDescribeComponent_MatchesLiveDescribe(t *testing.T) {
 	liveRoot := chasm.NewEmptyTree(registry, backend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
 	liveCtx := chasm.NewMutableContext(context.Background(), liveRoot)
 	require.NoError(t, liveRoot.SetRootComponent(newClosedTestActivity(liveCtx)))
-	_, err := liveRoot.CloseTransaction()
+	_, err := liveRoot.CloseTransaction(context.Background())
 	require.NoError(t, err)
 
 	// What a live DescribeActivityExecution with all details requested would return.

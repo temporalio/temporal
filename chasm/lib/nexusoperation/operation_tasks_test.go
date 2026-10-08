@@ -121,7 +121,7 @@ func newInvocationTaskTestEnv(
 		invocationData: invocationData,
 		Op:             chasm.NewComponentField(ctx, op),
 	}))
-	_, err = root.CloseTransaction()
+	_, err = root.CloseTransaction(context.Background())
 	require.NoError(t, err)
 
 	mockEngine := chasm.NewMockEngine(ctrl)

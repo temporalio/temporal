@@ -21,6 +21,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -394,6 +395,21 @@ func (n *Node) SetRootComponent(
 		root.serializedNode.GetMetadata().GetComponentAttributes().TypeId = componentID
 	}
 	return root.syncSubComponents()
+}
+
+// SetStartedByPrincipal records the principal of the caller creating the execution
+// on the root component. It must be called in the transaction that creates the
+// execution, after SetRootComponent, and never overwrites an existing value.
+func (n *Node) SetStartedByPrincipal(principal *commonpb.Principal) {
+	if principal == nil || n.backend.IsWorkflow() {
+		// Workflows record principals on their history events instead.
+		return
+	}
+	attrs := n.root().serializedNode.GetMetadata().GetComponentAttributes()
+	if attrs == nil || attrs.StartedByPrincipal != nil {
+		return
+	}
+	attrs.StartedByPrincipal = principal
 }
 
 // setValue sets the value field of the node.
@@ -1600,14 +1616,8 @@ func (n *Node) closeTransactionApplyPendingComponentMetadata() error {
 		if !node.applyPendingComponentMetadata() {
 			continue
 		}
-		encodedPath, err := node.getEncodedPath()
-		if err != nil {
+		if err := n.markMetadataUpdated(node); err != nil {
 			return err
-		}
-		if _, exists := n.mutation.UpdatedNodes[encodedPath]; !exists {
-			node.updateLastUpdateVersionedTransition()
-			n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
-			delete(n.mutation.DeletedNodes, encodedPath)
 		}
 	}
 	if len(n.pendingRequestLinks) > 0 || len(n.pendingUserMetadata) > 0 {
@@ -1620,6 +1630,46 @@ func (n *Node) closeTransactionApplyPendingComponentMetadata() error {
 	n.pendingRequestLinks = make(map[any]map[string][]*commonpb.Link)
 	n.pendingUserMetadata = make(map[any]*sdkpb.UserMetadata)
 	return nil
+}
+
+// markMetadataUpdated adds a node whose metadata changed after serialization
+// to the transaction's mutation so the change is persisted and replicated.
+func (n *Node) markMetadataUpdated(node *Node) error {
+	encodedPath, err := node.getEncodedPath()
+	if err != nil {
+		return err
+	}
+	if _, exists := n.mutation.UpdatedNodes[encodedPath]; !exists {
+		node.updateLastUpdateVersionedTransition()
+		n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
+		delete(n.mutation.DeletedNodes, encodedPath)
+	}
+	return nil
+}
+
+// closeTransactionRecordClosedByPrincipal records the caller's principal on the
+// root component when this transaction closes the execution. It is write-once:
+// rootClosed is only true for the transaction that first closes the execution.
+func (n *Node) closeTransactionRecordClosedByPrincipal(
+	principal *commonpb.Principal,
+	rootClosed bool,
+) error {
+	if principal == nil || !rootClosed || n.backend.IsWorkflow() {
+		// Workflows record principals on their history events instead.
+		return nil
+	}
+	attrs := n.serializedNode.GetMetadata().GetComponentAttributes()
+	if attrs == nil {
+		return softassert.UnexpectedInternalErr(
+			n.logger,
+			"root node is not a component",
+			fmt.Errorf("%v", n.serializedNode.GetMetadata().GetAttributes()))
+	}
+	if attrs.ClosedByPrincipal != nil {
+		return nil
+	}
+	attrs.ClosedByPrincipal = principal
+	return n.markMetadataUpdated(n)
 }
 
 // applyPendingComponentMetadata writes staged per-component framework metadata
@@ -1724,7 +1774,12 @@ func (n *Node) AddTask(
 
 // CloseTransaction is used by MutableState to close the transaction and
 // track changes made in the current transaction.
-func (n *Node) CloseTransaction() (NodesMutation, error) {
+//
+// The principal in ctx, if any, is the caller whose request is being committed.
+// It is recorded on the root component when this transaction closes the execution,
+// so callers must not pass one when the transaction is not driven by a caller on
+// the active cluster (e.g. passive replication).
+func (n *Node) CloseTransaction(ctx context.Context) (NodesMutation, error) {
 	defer n.cleanupTransaction()
 
 	if err := n.executeImmediatePureTasks(); err != nil {
@@ -1746,11 +1801,13 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 		TransitionCount:          n.backend.NextTransitionCount(),
 	}
 
+	wasClosed := n.isExecutionClosed()
 	immutableContext := NewContext(context.TODO(), n)
 	rootLifecycleChanged, err := n.closeTransactionHandleRootLifecycleChange(immutableContext)
 	if err != nil {
 		return NodesMutation{}, err
 	}
+	rootClosed := !wasClosed && n.isExecutionClosed()
 
 	if n.subtreeIsDirty {
 		if err := n.closeTransactionForceUpdateVisibility(immutableContext, rootLifecycleChanged); err != nil {
@@ -1767,6 +1824,10 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 	}
 
 	if err := n.closeTransactionApplyPendingComponentMetadata(); err != nil {
+		return NodesMutation{}, err
+	}
+
+	if err := n.closeTransactionRecordClosedByPrincipal(headers.GetPrincipal(ctx), rootClosed); err != nil {
 		return NodesMutation{}, err
 	}
 
@@ -1876,6 +1937,10 @@ func (n *Node) closeTransactionHandleRootLifecycleChange(
 	}
 
 	return n.backend.UpdateWorkflowStateStatus(newState, newStatus)
+}
+
+func (n *Node) isExecutionClosed() bool {
+	return n.backend.GetExecutionState().GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 }
 
 func (n *Node) closeTransactionForceUpdateVisibility(
