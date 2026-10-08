@@ -335,7 +335,6 @@ type Config struct {
 	EnableReplicationTaskTieredProcessing               dynamicconfig.BoolPropertyFn
 	EnableReplicationReaderGroup                        dynamicconfig.BoolPropertyFn
 	ReplicationStreamReadBufferSize                     dynamicconfig.IntPropertyFn
-	EnableReplicationStreamLanes                        dynamicconfig.BoolPropertyFn
 	ReplicationStreamSenderLaneQPSRatio                 dynamicconfig.FloatPropertyFn
 	ReplicationStreamSenderLaneClassCount               dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderLaneReclassificationCycles   dynamicconfig.IntPropertyFn
@@ -677,7 +676,6 @@ func NewConfig(
 		EnableReplicationTaskTieredProcessing:               dynamicconfig.EnableReplicationTaskTieredProcessing.Get(dc),
 		EnableReplicationReaderGroup:                        dynamicconfig.EnableReplicationReaderGroup.Get(dc),
 		ReplicationStreamReadBufferSize:                     dynamicconfig.ReplicationStreamReadBufferSize.Get(dc),
-		EnableReplicationStreamLanes:                        dynamicconfig.EnableReplicationStreamLanes.Get(dc),
 		ReplicationStreamSenderLaneQPSRatio:                 dynamicconfig.ReplicationStreamSenderLaneQPSRatio.Get(dc),
 		ReplicationStreamSenderLaneClassCount:               dynamicconfig.ReplicationStreamSenderLaneClassCount.Get(dc),
 		ReplicationStreamSenderLaneReclassificationCycles:   dynamicconfig.ReplicationStreamSenderLaneReclassificationCycles.Get(dc),

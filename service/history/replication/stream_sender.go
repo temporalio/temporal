@@ -114,7 +114,7 @@ func NewStreamSender(
 	tieredStackEnabled := config.EnableReplicationTaskTieredProcessing()
 	readerGroup := newReaderGroupIfEnabled(config.EnableReplicationReaderGroup, shardContext, clientShardKey, tieredStackEnabled, logger)
 	maxLanes := config.ReplicationStreamSenderMaxLanes()
-	lanesEnabled := tieredStackEnabled && readerGroup != nil && config.EnableReplicationStreamLanes() && maxLanes > 0
+	lanesEnabled := tieredStackEnabled && readerGroup != nil && maxLanes > 0
 	var laneClassCount int
 	var initialLaneStateApplied chan struct{}
 	if lanesEnabled {
@@ -248,11 +248,12 @@ func (s *StreamSenderImpl) recvEventLoop() (retErr error) {
 		if (s.readerGroup != nil) != s.config.EnableReplicationReaderGroup() {
 			return NewStreamError("StreamSender detected reader group config change, restart the stream", nil)
 		}
-		lanesEnabled := s.isTieredStackEnabled && s.readerGroup != nil && s.config.EnableReplicationStreamLanes() && s.config.ReplicationStreamSenderMaxLanes() > 0
+		maxLanes := s.config.ReplicationStreamSenderMaxLanes()
+		lanesEnabled := s.isTieredStackEnabled && s.readerGroup != nil && maxLanes > 0
 		if (s.laneController != nil) != lanesEnabled {
 			return NewStreamError("StreamSender detected replication lane config change, restart the stream", nil)
 		}
-		if s.laneController != nil && s.laneController.maxLanes != s.config.ReplicationStreamSenderMaxLanes() {
+		if s.laneController != nil && s.laneController.maxLanes != maxLanes {
 			return NewStreamError("StreamSender detected replication lane limit change, restart the stream", nil)
 		}
 		if s.laneController != nil && s.laneController.policy.ClassCount() != normalizedLaneClassCount(s.config.ReplicationStreamSenderLaneClassCount()) {

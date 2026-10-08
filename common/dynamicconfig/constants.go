@@ -3050,12 +3050,6 @@ scans share one persistence read, with only readers below the buffered range fal
 to persistence. The buffer holds slim queue rows (task metadata, not event payloads).
 0 disables the buffer.`,
 	)
-	EnableReplicationStreamLanes = NewGlobalBoolSetting(
-		"history.EnableReplicationStreamLanes",
-		false,
-		`EnableReplicationStreamLanes enables sender-defined replication lanes. Requires tiered
-processing and the reader group. Changing it restarts replication streams.`,
-	)
 	ReplicationStreamSenderLaneQPSRatio = NewGlobalFloatSetting(
 		"history.ReplicationStreamSenderLaneQPSRatio",
 		0.1,
@@ -3081,8 +3075,9 @@ before a lane moves to the next slower service class.`,
 	)
 	ReplicationStreamSenderMaxLanes = NewGlobalIntSetting(
 		"history.ReplicationStreamSenderMaxLanes",
-		100,
+		0,
 		`ReplicationStreamSenderMaxLanes bounds active sender-defined lanes per stream.
+Positive values enable lane support, requiring tiered processing and the reader group.
 Non-positive values disable lane support. Changing it restarts replication streams.`,
 	)
 	ReplicationStreamSenderHighPriorityQPS = NewGlobalIntSetting(

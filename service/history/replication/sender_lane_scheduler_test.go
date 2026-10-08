@@ -315,6 +315,32 @@ func TestLaneWorkerWaitsForDefaultHandoff(t *testing.T) {
 	require.NoError(t, await.Rcv(t, done))
 }
 
+func TestStreamSenderLanePrerequisites(t *testing.T) {
+	for _, tc := range []struct {
+		name             string
+		tieredProcessing bool
+		readerGroup      bool
+	}{
+		{name: "missing tiered processing", readerGroup: true},
+		{name: "missing reader group", tieredProcessing: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newLaneSenderTest(t, 1, nil)
+			config := f.sender.config
+			config.EnableReplicationTaskTieredProcessing = func() bool { return tc.tieredProcessing }
+			config.EnableReplicationReaderGroup = func() bool { return tc.readerGroup }
+			config.ReplicationStreamSenderMaxLanes = func() int { return 1 }
+			sender := NewStreamSender(f.server, f.shard, f.engine, quotas.NoopRequestRateLimiter, f.converter,
+				"target_cluster", 1, f.sender.clientShardKey, f.sender.serverShardKey, config)
+			t.Cleanup(sender.cancel)
+			require.Nil(t, sender.laneRegistry)
+			require.Nil(t, sender.laneController)
+			require.Nil(t, sender.initialLaneStateApplied)
+			require.Empty(t, sender.laneRateLimiters)
+		})
+	}
+}
+
 func TestStreamSenderLaneLimit(t *testing.T) {
 	for _, limit := range []int{-1, 0, 1} {
 		t.Run(strconv.Itoa(limit), func(t *testing.T) {
@@ -322,7 +348,7 @@ func TestStreamSenderLaneLimit(t *testing.T) {
 			config := f.sender.config
 			config.EnableReplicationTaskTieredProcessing = func() bool { return true }
 			config.EnableReplicationReaderGroup = func() bool { return true }
-			config.EnableReplicationStreamLanes = func() bool { return true }
+			require.Zero(t, config.ReplicationStreamSenderMaxLanes())
 			config.ReplicationStreamSenderMaxLanes = func() int { return limit }
 			if limit > 0 {
 				f.shard.EXPECT().GetQueueState(tasks.CategoryReplication).Return(nil, false)
