@@ -4,6 +4,8 @@ import (
 	"cmp"
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -80,7 +82,7 @@ var (
 
 	// This is a fake error used to force reprocessing of task redirection as used by versioning.
 	// Situations where we do this:
-	// - after validateTasksOnRoot maybe-validates a task (only local backlog)
+	// - after validateTasks maybe-validates a task (only local backlog)
 	// - when userdata changes, on in-mem tasks (may be either sync or local backlog)
 	// This must be an error type that taskReader will treat as transient and re-enqueue the task.
 	errReprocessTask      = serviceerror.NewCanceled("reprocess task")
@@ -124,20 +126,19 @@ func (tm *priTaskMatcher) Start() {
 	policy := backoff.NewExponentialRetryPolicy(time.Second).
 		WithMaximumInterval(tm.config.BacklogTaskForwardTimeout()).
 		WithExpirationInterval(backoff.NoInterval)
-	retrier := backoff.NewRetrier(policy, clock.NewRealTimeSource())
-	lim := quotas.NewDefaultOutgoingRateLimiter(tm.config.ForwarderMaxRatePerSecond)
+	validatorRetrier := backoff.NewRetrier(policy, clock.NewRealTimeSource())
+	go tm.validateTasks(validatorRetrier)
 
 	if tm.fwdr == nil {
-		// Root/sticky doesn't forward. But it does need something to validate tasks.
-		go tm.validateTasksOnRoot(retrier)
 		return
 	}
 
-	// Non-root normal partitions:
+	lim := quotas.NewDefaultOutgoingRateLimiter(tm.config.ForwarderMaxRatePerSecond)
 
-	// TODO(pri): ForwarderMaxOutstandingTasks > 1 is not supported: it will cause alternating
-	// tasks to be sent to the validator, which will make the validator not validate anything.
+	// Forwarders share a synchronized per-task validation cache. Each worker owns
+	// its retrier so one worker's success cannot reset another worker's backoff.
 	for range tm.config.ForwarderMaxOutstandingTasks() {
+		retrier := backoff.NewRetrier(policy, clock.NewRealTimeSource())
 		go tm.forwardTasks(lim, retrier)
 	}
 
@@ -164,7 +165,6 @@ func (tm *priTaskMatcher) Stop() {
 	// when applicable.
 }
 
-// TODO(pri): access to retrier is not synchronized
 func (tm *priTaskMatcher) forwardTasks(lim quotas.RateLimiter, retrier backoff.Retrier) {
 	ctxs := []context.Context{tm.tqCtx}
 	poller := waitingPoller{taskForwarderType: parentTaskForwarder}
@@ -246,41 +246,69 @@ func (tm *priTaskMatcher) forwardTask(task *internalTask) (bool, error) {
 	return false, err
 }
 
-func (tm *priTaskMatcher) validateTasksOnRoot(retrier backoff.Retrier) {
+func (tm *priTaskMatcher) takeValidatorBatch(ctxs []context.Context, n int) ([]*internalTask, error) {
+	res := tm.data.EnqueuePollerAndWait(ctxs, &waitingPoller{taskForwarderType: validatorTaskForwarder})
+	if res.ctxErr != nil {
+		return nil, res.ctxErr
+	}
+	if res.task == nil {
+		return nil, nil
+	}
+	tasks := []*internalTask{res.task}
+	for len(tasks) < n {
+		more := tm.data.MatchPollerImmediately(&waitingPoller{taskForwarderType: validatorTaskForwarder})
+		if more == nil || more.task == nil {
+			break
+		}
+		tasks = append(tasks, more.task)
+	}
+	return tasks, nil
+}
+
+func (tm *priTaskMatcher) validateTasks(retrier backoff.Retrier) {
 	ctxs := []context.Context{tm.tqCtx}
-	poller := &waitingPoller{taskForwarderType: validatorTaskForwarder}
 	for {
-		res := tm.data.EnqueuePollerAndWait(ctxs, poller)
-		if res.ctxErr != nil {
+		n := max(1, tm.config.ValidatorBatchSize())
+		tasks, err := tm.takeValidatorBatch(ctxs, n)
+		if err != nil {
 			return // task queue closing
 		}
-		if !softassert.That(tm.logger, res.task != nil, "expected a task from match") {
+		if len(tasks) == 0 {
 			continue
 		}
 
-		task := res.task
-		if !softassert.That(tm.logger, task.forwardCtx == nil, "expected non-forwarded task") ||
-			!softassert.That(tm.logger, !task.isSyncMatchTask(), "expected non-sync match task") ||
-			!softassert.That(tm.logger, task.source == enumsspb.TASK_SOURCE_DB_BACKLOG, "expected backlog task") {
-			continue
+		var anyInvalid atomic.Bool
+		var wg sync.WaitGroup
+		for _, task := range tasks {
+			if !softassert.That(tm.logger, task.forwardCtx == nil, "expected non-forwarded task") ||
+				!softassert.That(tm.logger, !task.isSyncMatchTask(), "expected non-sync match task") ||
+				!softassert.That(tm.logger, task.source == enumsspb.TASK_SOURCE_DB_BACKLOG, "expected backlog task") {
+				continue
+			}
+			wg.Go(func() {
+				maybeValid := tm.validator == nil || tm.validator.maybeValidate(task.event.AllocatedTaskInfo, tm.partition.TaskType())
+				if !maybeValid {
+					// We found an invalid one, complete it and go back for another batch immediately.
+					task.finish(taskFinishResult{dropReason: getDroppedTaskExpiryReason(task)})
+
+					// Stay alive as long as we're invalidating tasks
+					tm.markAlive()
+					anyInvalid.Store(true)
+				} else {
+					// Task was valid, put it back and slow down checking if the whole batch is valid.
+					task.finish(taskFinishResult{err: errReprocessTask, consumedToken: false})
+				}
+			})
 		}
+		wg.Wait()
 
-		maybeValid := tm.validator == nil || tm.validator.maybeValidate(task.event.AllocatedTaskInfo, tm.partition.TaskType())
-		if !maybeValid {
-			// We found an invalid one, complete it and go back for another immediately.
-			task.finish(taskFinishResult{dropReason: getDroppedTaskExpiryReason(task)})
-
-			// Stay alive as long as we're invalidating tasks
-			tm.markAlive()
-
+		if anyInvalid.Load() {
 			retrier.Reset()
-		} else {
-			// Task was valid, put it back and slow down checking.
-			task.finish(taskFinishResult{err: errReprocessTask, consumedToken: true})
-			// retrier's max interval is backlogTaskForwardTimeout, so for just valid tasks,
-			// this loop will essentially be limited to that interval.
-			util.InterruptibleSleep(tm.tqCtx, retrier.NextBackOff(nil))
+			continue
 		}
+		// retrier's max interval is BacklogTaskForwardTimeout, so for just valid tasks,
+		// this loop will essentially be limited to that interval.
+		_ = util.InterruptibleSleep(tm.tqCtx, retrier.NextBackOff(nil))
 	}
 }
 

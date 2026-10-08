@@ -3,6 +3,7 @@ package matching
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -10,14 +11,15 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
-	taskReaderOfferTimeout        = 60 * time.Second // TODO(pri): old matcher cleanup
-	taskReaderValidationThreshold = 600 * time.Second
+	taskReaderOfferTimeout    = 60 * time.Second // TODO(pri): old matcher cleanup
+	taskValidatorCacheMaxSize = 1024
 )
 
 type (
@@ -41,25 +43,30 @@ type (
 
 	taskValidatorImpl struct {
 		tqCtx             context.Context
+		config            *taskQueueConfig
 		clusterMetadata   cluster.Metadata
 		namespaceRegistry namespace.Registry
 		historyClient     historyservice.HistoryServiceClient
 
-		lastValidatedTaskInfo taskValidationInfo
+		mu    sync.Mutex
+		cache cache.Cache
 	}
 )
 
 func newTaskValidator(
 	tqCtx context.Context,
+	config *taskQueueConfig,
 	clusterMetadata cluster.Metadata,
 	namespaceRegistry namespace.Registry,
 	historyClient historyservice.HistoryServiceClient,
 ) *taskValidatorImpl {
 	return &taskValidatorImpl{
 		tqCtx:             tqCtx,
+		config:            config,
 		clusterMetadata:   clusterMetadata,
 		namespaceRegistry: namespaceRegistry,
 		historyClient:     historyClient,
+		cache:             cache.New(taskValidatorCacheMaxSize, nil),
 	}
 }
 
@@ -102,61 +109,51 @@ func (v *taskValidatorImpl) preValidate(
 	return v.preValidatePassive(task)
 }
 
+func (v *taskValidatorImpl) lookupOrInit(task *persistencespb.AllocatedTaskInfo) (info taskValidationInfo, existed bool) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	// Redirected tasks from different physical queues can share the same task ID.
+	if info, ok := v.cache.Get(task).(taskValidationInfo); ok {
+		return info, true
+	}
+	validationTime := time.Now().UTC()
+	if task.Data.CreateTime != nil {
+		validationTime = task.Data.CreateTime.AsTime()
+	}
+	info = taskValidationInfo{taskID: task.TaskId, validationTime: validationTime}
+	v.cache.Put(task, info)
+	return info, false
+}
+
 // preValidateActive track a task and return if validation should be done, if namespace is active
 func (v *taskValidatorImpl) preValidateActive(
 	task *persistencespb.AllocatedTaskInfo,
 ) bool {
-	if v.lastValidatedTaskInfo.taskID != task.TaskId {
-		// first time seen the task, caller should try to dispatch first
-		if task.Data.CreateTime != nil {
-			v.lastValidatedTaskInfo = taskValidationInfo{
-				taskID:         task.TaskId,
-				validationTime: task.Data.CreateTime.AsTime(), // task is valid when created
-			}
-		} else {
-			v.lastValidatedTaskInfo = taskValidationInfo{
-				taskID:         task.TaskId,
-				validationTime: time.Now().UTC(), // if no creation time specified, use now
-			}
-		}
+	info, existed := v.lookupOrInit(task)
+	if !existed {
 		return false
 	}
-
-	// this task has been validated before
-	return time.Since(v.lastValidatedTaskInfo.validationTime) > taskReaderValidationThreshold
+	return time.Since(info.validationTime) > v.config.ValidatorValidationThreshold()
 }
 
 // preValidatePassive track a task and return if validation should be done, if namespace is passive
 func (v *taskValidatorImpl) preValidatePassive(
 	task *persistencespb.AllocatedTaskInfo,
 ) bool {
-	if v.lastValidatedTaskInfo.taskID != task.TaskId {
-		// first time seen the task, make a decision based on task creation time
-		if task.Data.CreateTime != nil {
-			v.lastValidatedTaskInfo = taskValidationInfo{
-				taskID:         task.TaskId,
-				validationTime: task.Data.CreateTime.AsTime(), // task is valid when created
-			}
-		} else {
-			v.lastValidatedTaskInfo = taskValidationInfo{
-				taskID:         task.TaskId,
-				validationTime: time.Now().UTC(), // if no creation time specified, use now
-			}
-		}
-	}
-
-	// this task has been validated before
-	return time.Since(v.lastValidatedTaskInfo.validationTime) > taskReaderValidationThreshold
+	info, _ := v.lookupOrInit(task)
+	return time.Since(info.validationTime) > v.config.ValidatorValidationThreshold()
 }
 
 // postValidate update tracked task info
 func (v *taskValidatorImpl) postValidate(
 	task *persistencespb.AllocatedTaskInfo,
 ) {
-	v.lastValidatedTaskInfo = taskValidationInfo{
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	v.cache.Put(task, taskValidationInfo{
 		taskID:         task.TaskId,
 		validationTime: time.Now().UTC(),
-	}
+	})
 }
 
 func (v *taskValidatorImpl) isTaskValid(

@@ -183,6 +183,7 @@ func newPhysicalTaskQueueManager(
 
 	pqMgr.taskValidator = newTaskValidator(
 		tqCtx,
+		config,
 		pqMgr.clusterMeta,
 		pqMgr.namespaceRegistry,
 		pqMgr.partitionMgr.engine.historyClient,

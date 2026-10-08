@@ -997,6 +997,48 @@ func (s *MatcherDataSuite) TestFindMatch() {
 	}
 }
 
+func (s *MatcherDataSuite) TestPollerList_ValidatorAfterParentForwarder() {
+	p := pollerList{logger: s.md.logger}
+	validator := &waitingPoller{taskForwarderType: validatorTaskForwarder}
+	forwarder := &waitingPoller{taskForwarderType: parentTaskForwarder}
+	local := &waitingPoller{taskForwarderType: notTaskForwarder}
+
+	// Insert in the worst order: validator first, then forwarder, then local.
+	p.Add(validator)
+	p.Add(forwarder)
+	p.Add(local)
+
+	s.Equal(local, p.head)
+	s.Equal(forwarder, p.head.next)
+	s.Equal(validator, p.tail)
+	s.Equal(3, p.Len())
+}
+
+func TestPollerListOrdering(t *testing.T) {
+	p := pollerList{logger: testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)}
+	pollers := []*waitingPoller{
+		{taskForwarderType: validatorTaskForwarder},
+		{taskForwarderType: parentTaskForwarder},
+		{taskForwarderType: notTaskForwarder},
+		{taskForwarderType: validatorTaskForwarder},
+		{taskForwarderType: notTaskForwarder},
+		{taskForwarderType: parentTaskForwarder},
+	}
+	for _, poller := range pollers {
+		p.Add(poller)
+	}
+
+	expected := []*waitingPoller{pollers[2], pollers[4], pollers[1], pollers[5], pollers[0], pollers[3]}
+	at := p.head
+	for _, poller := range expected {
+		require.Same(t, poller, at)
+		at = at.next
+	}
+	require.Nil(t, at)
+	require.Same(t, expected[len(expected)-1], p.tail)
+	require.Equal(t, len(pollers), p.Len())
+}
+
 // simple limiter tests
 
 func TestSimpleLimiter(t *testing.T) {
