@@ -42,6 +42,7 @@ func TestNewNilRegistry(t *testing.T) {
 		chasm.WorkflowArchetype,
 		chasm.SchedulerArchetype,
 		activity.Archetype,
+		chasm.FullyQualifiedName("task_queue_user_data", "task_queue_user_data"),
 	} {
 		id, ok := registry.ComponentIDByFqn(archetype)
 		require.True(t, ok, "archetype %s not registered", archetype)

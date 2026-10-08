@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.tquserdata.proto.v1;
+
+import "chasm/lib/tquserdata/proto/v1/user_data.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapb";
+
+message UpsertTaskQueueUserDataRequest {
+  string namespace_id = 1;
+  string task_queue = 2;
+  TaskQueueUserData task_queue_user_data = 3;
+  oneof precondition {
+    bool expect_missing = 4;
+    int64 expected_version = 5;
+  }
+}
+
+message UpsertTaskQueueUserDataResponse {
+  int64 version = 1;
+}
+
+message GetTaskQueueUserDataSnapshotRequest {
+  string namespace_id = 1;
+  string task_queue = 2;
+}
+
+message GetTaskQueueUserDataSnapshotResponse {
+  TaskQueueUserData task_queue_user_data = 1;
+  int64 version = 2;
+}
