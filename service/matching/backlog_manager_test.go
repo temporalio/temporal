@@ -747,27 +747,30 @@ func expiredBlock(n int) taskBlock { return taskBlock{count: n, expired: true} }
 func validBlock(n int) taskBlock   { return taskBlock{count: n, expired: false} }
 
 func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_ExpiredThenValid() {
-	s.testSkipExpiredTasks(10, expiredBlock(33), validBlock(3))
+	s.testSkipExpiredTasks(10, false, expiredBlock(33), validBlock(3))
 }
 
 func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_ValidExpiredValid() {
-	s.testSkipExpiredTasks(10, validBlock(3), expiredBlock(33), validBlock(3))
+	s.testSkipExpiredTasks(10, false, validBlock(3), expiredBlock(33), validBlock(3))
 }
 
 func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_ValidThenExpired() {
-	s.testSkipExpiredTasks(10, validBlock(3), expiredBlock(33))
+	s.testSkipExpiredTasks(10, false, validBlock(3), expiredBlock(33))
+}
+
+func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_ValidThenExpired_AckedBeforeExpiredRead() {
+	s.testSkipExpiredTasks(10, true, validBlock(3), expiredBlock(33))
 }
 
 func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_AllExpired() {
-	if s.newMatcher && !s.fairness {
-		s.T().Skip("this case doesn't work with priTaskReader yet")
-	}
-	s.testSkipExpiredTasks(10, expiredBlock(33))
+	s.testSkipExpiredTasks(10, false, expiredBlock(33))
 }
 
 // testSkipExpiredTasks verifies that the task reader correctly skips over expired tasks
-// in the DB and advances the ack level past them.
-func (s *BacklogManagerTestSuite) testSkipExpiredTasks(batchSize int, blocks ...taskBlock) {
+// in the DB and advances the ack level past them. If holdReadsUntilAcked is set, every read
+// after the first one waits until the delivered tasks are completed, so the valid tasks in
+// the first batch are acked before the reader reaches the tasks after them.
+func (s *BacklogManagerTestSuite) testSkipExpiredTasks(batchSize int, holdReadsUntilAcked bool, blocks ...taskBlock) {
 	if !s.newMatcher {
 		s.T().Skip("not compatible with classic backlog manager")
 	}
@@ -822,9 +825,21 @@ func (s *BacklogManagerTestSuite) testSkipExpiredTasks(batchSize int, blocks ...
 
 	s.setupToCaptureTasks()
 
+	releaseReads := make(chan struct{})
+	release := sync.OnceFunc(func() { close(releaseReads) })
+	if holdReadsUntilAcked {
+		var reads atomic.Int32
+		s.taskMgr.getTasksHook = func() {
+			if reads.Add(1) > 1 {
+				<-releaseReads
+			}
+		}
+	}
+
 	// Start backlog manager.
 	s.blm.Start()
 	defer s.blm.Stop()
+	defer release()
 	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
 
 	// Wait for all valid tasks to be delivered.
@@ -836,6 +851,7 @@ func (s *BacklogManagerTestSuite) testSkipExpiredTasks(batchSize int, blocks ...
 	for _, t := range s.capturedTasks() {
 		t.finish(taskFinishResult{consumedToken: true})
 	}
+	release()
 
 	// Verify the ack level advances past all tasks (expired + valid).
 	s.Eventually(func() bool {

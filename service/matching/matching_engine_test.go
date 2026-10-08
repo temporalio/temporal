@@ -5570,6 +5570,7 @@ type testTaskManager struct {
 
 	faultInjection map[string]float32 // "op:error" -> fraction of time
 	delayInjection time.Duration
+	getTasksHook   func() // called at the start of every GetTasks; set before starting readers
 }
 
 type dbTaskQueueKey struct {
@@ -5934,6 +5935,10 @@ func (m *testTaskManager) GetTasks(
 		return nil, serviceerror.NewInternal("invalid GetTasks request on fair queue")
 	} else if !m.fairness && request.InclusiveMinPass != 0 {
 		return nil, serviceerror.NewInternal("invalid GetTasks request on queue")
+	}
+
+	if m.getTasksHook != nil {
+		m.getTasksHook()
 	}
 
 	m.delay()
