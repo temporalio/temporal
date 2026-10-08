@@ -694,6 +694,14 @@ func (ms *MutableStateImpl) ChasmSkipPersistenceEnabled() bool {
 		ms.config.EnableCHASMSkipPersistence(ms.GetNamespaceEntry().Name().String())
 }
 
+// ChasmLogicalTaskCountAlertThreshold implements chasm.NodeBackend.
+func (ms *MutableStateImpl) ChasmLogicalTaskCountAlertThreshold(chasmTaskType string) int {
+	if ms.config.ChasmLogicalTaskCountAlertThreshold == nil {
+		return 0
+	}
+	return ms.config.ChasmLogicalTaskCountAlertThreshold(chasmTaskType)
+}
+
 func (ms *MutableStateImpl) ChasmDLQScheduledPureTaskOnValidationEnabled() bool {
 	return ms.config.ChasmDLQScheduledPureTaskOnValidation != nil &&
 		ms.config.ChasmDLQScheduledPureTaskOnValidation(ms.GetNamespaceEntry().Name().String())
@@ -714,6 +722,12 @@ func (ms *MutableStateImpl) ChasmSignalBacklinksEnabled() bool {
 	return ms.ChasmEnabled() && ms.shard.GetConfig().EnableCHASMSignalBacklinks(ms.GetNamespaceEntry().Name().String())
 }
 
+// chasmWorkflowRootOnStartEnabled returns true if the CHASM Workflow root should be persisted when the
+// workflow starts.
+func (ms *MutableStateImpl) chasmWorkflowRootOnStartEnabled() bool {
+	return ms.ChasmEnabled() && ms.shard.GetConfig().EnableCHASMWorkflowRootOnStart(ms.GetNamespaceEntry().Name().String())
+}
+
 // ChasmWorkflowComponent gets the root workflow component from the CHASM tree.
 // Returns the workflow component (which is *chasmworkflow.Workflow) and the CHASM mutable context.
 // This method is for write operations. Callers can type assert to *chasmworkflow.Workflow if needed.
@@ -728,21 +742,6 @@ func (ms *MutableStateImpl) ChasmWorkflowComponent(ctx context.Context) (*chasmw
 		return nil, nil, serviceerror.NewInternalf("expected workflow component, but got %T", rootComponent)
 	}
 	return wf, chasmCtx, nil
-}
-
-func (ms *MutableStateImpl) EnsureChasmWorkflowComponent(ctx context.Context) {
-	// Initialize chasm tree once for new workflows.
-	// Using context.Background() because this is done outside an actual request context and the
-	// chasmworkflow.NewWorkflow does not actually use it currently.
-	root, ok := ms.chasmTree.(*chasm.Node)
-	softassert.That(ms.logger, ok, "chasmTree cast failed")
-
-	if root.ArchetypeID() == chasm.UnspecifiedArchetypeID {
-		mutableContext := chasm.NewMutableContext(ctx, root)
-		if err := root.SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, chasm.NewMSPointer(ms))); err != nil {
-			softassert.Fail(ms.logger, "SetRootComponent failed", tag.Error(err))
-		}
-	}
 }
 
 // ChasmWorkflowComponentReadOnly gets the root workflow component from the CHASM tree.
@@ -1553,6 +1552,20 @@ func (ms *MutableStateImpl) GetUpdateOutcome(
 		return nil, err
 	}
 	return event.GetWorkflowExecutionUpdateCompletedEventAttributes().GetOutcome(), nil
+}
+
+func (ms *MutableStateImpl) GetUpdateAcceptedEventID(
+	ctx context.Context,
+	updateID string,
+) (int64, error) {
+	if acceptance := ms.executionInfo.GetUpdateInfos()[updateID].GetAcceptance(); acceptance != nil {
+		return acceptance.GetEventId(), nil
+	}
+	event, err := ms.getUpdateOutcomeEvent(ctx, updateID)
+	if err != nil {
+		return 0, err
+	}
+	return event.GetWorkflowExecutionUpdateCompletedEventAttributes().GetAcceptedEventId(), nil
 }
 
 func (ms *MutableStateImpl) getUpdateOutcomeEvent(
@@ -3115,6 +3128,16 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 
 	ms.approximateSize -= ms.executionState.Size()
 	ms.executionState.FirstExecutionRunId = event.GetFirstExecutionRunId()
+	if ms.chasmWorkflowRootOnStartEnabled() {
+		// Accessing the root with a mutable context marks it dirty, so it is persisted in this
+		// transaction with the InitialVersionedTransition assigned when NewMutableState created the
+		// tree. Otherwise the root is only persisted on first use of a CHASM feature, and for
+		// executions loaded from DB it is synthesized before the current version is known.
+		// Failing here must not block the start; the root then falls back to lazy persistence.
+		if _, _, err := ms.ChasmWorkflowComponent(context.Background()); err != nil {
+			softassert.Fail(ms.logger, "failed to persist CHASM workflow root on start", tag.Error(err))
+		}
+	}
 	if err := ms.addCompletionCallbacks(
 		startEvent,
 		requestID,
@@ -3470,10 +3493,6 @@ func (ms *MutableStateImpl) addUpdateCallbacks(
 		return nil
 	}
 	if ms.chasmCallbacksEnabled() && ms.config.EnableWorkflowUpdateCallbacks(ms.GetNamespaceEntry().Name().String()) {
-		// Initialize chasm tree once for new workflows.
-		// Using context.Background() because this is done outside an actual request context and the
-		// chasmworkflow.NewWorkflow does not actually use it currently.
-		ms.EnsureChasmWorkflowComponent(context.Background())
 		return ms.addUpdateCallbacksChasm(event, updateID, requestID, updateCallbacks)
 	}
 
@@ -3506,10 +3525,6 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 		return nil
 	}
 	if ms.chasmCallbacksEnabled() {
-		// Initialize chasm tree once for new workflows.
-		// Using context.Background() because this is done outside an actual request context and the
-		// chasmworkflow.NewWorkflow does not actually use it currently.
-		ms.EnsureChasmWorkflowComponent(context.Background())
 		return ms.addCompletionCallbacksChasm(event, requestID, completionCallbacks)
 	}
 
@@ -6288,9 +6303,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionSignaled(
 	}
 	requestID := signalEventAttrs.WorkflowExecutionSignaledEventAttributes.GetRequestId()
 	if requestID != "" && ms.ChasmSignalBacklinksEnabled() {
-		ctx := context.Background()
-		ms.EnsureChasmWorkflowComponent(ctx)
-		wf, chasmCtx, err := ms.ChasmWorkflowComponent(ctx)
+		wf, chasmCtx, err := ms.ChasmWorkflowComponent(context.Background())
 		if err != nil {
 			return err
 		}

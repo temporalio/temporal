@@ -21,6 +21,7 @@ const (
 	nexusEndpointTagName           = "nexus_endpoint"
 	nexusServiceTagName            = "nexus_service"
 	nexusOperationTagName          = "nexus_operation"
+	nexusOperationBackendTagName   = "backend"
 	outcomeTagName                 = "outcome"
 	nexusCompletionSourceTagName   = "nexus_completion_source"
 	versionedTagName               = "versioned"
@@ -945,6 +946,16 @@ var (
 		"chasm_pure_task_errors",
 		WithDescription("The number of errors during CHASM pure task execution."),
 	)
+	ChasmLogicalTaskCount = NewDimensionlessHistogramDef(
+		"chasm_logical_task_count",
+		WithDescription("The number of logical CHASM tasks of one task type in a single execution, recorded "+
+			"only when it exceeds history.chasmLogicalTaskCountAlertThreshold."),
+	)
+	ChasmLogicalTaskCountExceeded = NewCounterDef(
+		"chasm_logical_task_count_exceeded",
+		WithDescription("The number of times an execution's logical CHASM task count for one task type exceeded "+
+			"history.chasmLogicalTaskCountAlertThreshold."),
+	)
 	ChasmIncomingSignalWritten = NewCounterDef(
 		"chasm_incoming_signal_written",
 		WithDescription("The number of signal backlinks written to the CHASM IncomingSignals map."),
@@ -1062,8 +1073,8 @@ var (
 	CompleteWorkflowTaskWithStickyEnabledCounter  = NewCounterDef("complete_workflow_task_sticky_enabled_count")
 	CompleteWorkflowTaskWithStickyDisabledCounter = NewCounterDef("complete_workflow_task_sticky_disabled_count")
 	WorkflowTaskHeartbeatTimeoutCounter           = NewCounterDef("workflow_task_heartbeat_timeout_count")
-	SignalWithStartSkipDelayCounter               = NewCounterDef("signal_with_start_skip_delay_count")
 	SignalWithStartWorkflowStartDeduped           = NewCounterDef("signal_with_start_workflow_start_deduped")
+	SignalWithStartWorkflowTaskBackoffCounter     = NewCounterDef("signal_with_start_workflow_task_backoff_count")
 	DuplicateReplicationEventsCounter             = NewCounterDef("duplicate_replication_events")
 	AcquireLockFailedCounter                      = NewCounterDef("acquire_lock_failed")
 	WorkflowContextCleared                        = NewCounterDef("workflow_context_cleared")

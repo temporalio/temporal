@@ -250,11 +250,7 @@ func (s *AdminTestSuite) TestAdminRebuildMutableStateExecutionTimeout(testWithCh
 }
 
 func (s *AdminTestSuite) newRebuildEnv(testWithChasm bool) *testcore.TestEnv {
-	var opts []testcore.TestOption
-	if testWithChasm {
-		opts = append(opts, testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true))
-	}
-	env := testcore.NewEnv(s.T(), opts...)
+	env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.EnableChasm, testWithChasm))
 
 	if testWithChasm {
 		configValues := env.GetTestCluster().Host().DcClient().GetValue(dynamicconfig.EnableChasm.Key())

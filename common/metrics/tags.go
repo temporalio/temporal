@@ -454,6 +454,10 @@ func NexusOperationTag(value string) Tag {
 	return Tag{Key: nexusOperationTagName, Value: value}
 }
 
+func NexusOperationBackendTag(value string) Tag {
+	return Tag{Key: nexusOperationBackendTagName, Value: value}
+}
+
 // HttpStatusTag returns a new httpStatusTag.
 func HttpStatusTag(value int) Tag {
 	return Tag{Key: httpStatusTagName, Value: strconv.Itoa(value)}
