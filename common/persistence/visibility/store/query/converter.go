@@ -134,6 +134,8 @@ var (
 	}
 )
 
+var fieldNameFilterAccepted = metrics.NewCounterDef("field_name_filter_accepted")
+
 func NewQueryConverter[ExprT any](
 	storeQC StoreQueryConverter[ExprT],
 	namespaceName namespace.Name,
@@ -152,7 +154,7 @@ func NewQueryConverter[ExprT any](
 
 		seenNamespaceDivision: false,
 
-		metricsHandler: metricsHandler,
+		metricsHandler: metricsHandler.WithTags(metrics.NamespaceTag(namespaceName.String())),
 		logger:         logger,
 	}
 	return c
@@ -502,6 +504,14 @@ func (c *QueryConverter[ExprT]) convertColName(in sqlparser.Expr) (*SAColumn, er
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	isFieldName := saAlias == saFieldName && sadefs.IsPreallocatedCSAFieldName(saAlias, saType)
+	if _, ok := c.chasmMapper.SATypeMap()[saAlias]; ok && !sadefs.IsSystem(saAlias) {
+		isFieldName = true
+	}
+	if isFieldName {
+		fieldNameFilterAccepted.With(c.metricsHandler).Record(1)
 	}
 
 	if saFieldName == sadefs.TemporalNamespaceDivision {
