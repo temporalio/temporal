@@ -90,7 +90,8 @@ func newBucket() *bucket {
 }
 
 // upsertHeartbeats inserts or refreshes a WorkerHeartbeat under the given namespace.
-// Returns the count of added and removed entries separately.
+// Returns the count of added and removed entries separately, and the heartbeats
+// from workers not previously seen by this registry (first heartbeat from that worker).
 // Workers with WORKER_STATUS_SHUTDOWN are immediately removed from the registry.
 func (b *bucket) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name, principal *commonpb.Principal, heartbeats []*workerpb.WorkerHeartbeat) (added int64, removed int64, newHeartbeats []*workerpb.WorkerHeartbeat) {
 	now := time.Now()
@@ -277,6 +278,7 @@ func (m *registryImpl) getBucket(nsID namespace.ID) *bucket {
 func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name, principal *commonpb.Principal, heartbeats []*workerpb.WorkerHeartbeat) {
 	b := m.getBucket(nsID)
 	added, removed, newHeartbeats := b.upsertHeartbeats(nsID, nsName, principal, heartbeats)
+	// Emit config events only for newly seen workers, outside the bucket lock.
 	for _, hb := range newHeartbeats {
 		emitWorkerConfigEvent(m.eventLogger, nsName, hb)
 	}
