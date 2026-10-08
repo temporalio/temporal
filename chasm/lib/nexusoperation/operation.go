@@ -841,6 +841,21 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 		}
 	}
 
+	// If the Nexus operation is SCHEDULED, check the circuit breaker and upgrade it to BLOCKED if applicable.
+	if opCtx, ok := ctx.Value(OperationContextKey).(*OperationContext); ok && opCtx.DestinationBlocked != nil {
+		if info.State == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED &&
+			opCtx.DestinationBlocked(key.NamespaceID, o.Endpoint) {
+			info.State = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
+			info.BlockedReason = "The circuit breaker is open."
+		}
+
+		if info.GetCancellationInfo().GetState() == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED &&
+			opCtx.DestinationBlocked(key.NamespaceID, o.Endpoint) {
+			info.CancellationInfo.State = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
+			info.CancellationInfo.BlockedReason = "The circuit breaker is open."
+		}
+	}
+
 	return info
 }
 
@@ -849,7 +864,8 @@ func (o *Operation) metricsHandler(ctx chasm.Context) metrics.Handler {
 	namespaceName := ctx.NamespaceEntry().Name().String()
 
 	wftt := standaloneOperationWorkflowTypeName
-	if store, ok := o.Store.TryGet(ctx); ok {
+	store, workflowOperation := o.Store.TryGet(ctx)
+	if workflowOperation {
 		wftt = store.WorkflowTypeName()
 	}
 	tags := []metrics.Tag{
@@ -863,6 +879,9 @@ func (o *Operation) metricsHandler(ctx chasm.Context) metrics.Handler {
 		softassert.Fail(ctx.Logger(), "operation context missing")
 	} else {
 		conf := opCtx.MetricTagConfig()
+		if conf.IncludeBackendTag {
+			tags = append(tags, metrics.NexusOperationBackendTag("chasm"))
+		}
 		if conf.IncludeServiceTag {
 			tags = append(tags, metrics.NexusServiceTag(o.GetService()))
 		}

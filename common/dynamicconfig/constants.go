@@ -100,12 +100,6 @@ pod-level rate limiting. Read once at process startup: changing this value requi
 		`SuppressErrorSetSystemSearchAttribute suppresses errors when trying to set
 values in system search attributes.`,
 	)
-	VisibilityEnableUnifiedQueryConverter = NewGlobalBoolSetting(
-		"system.visibilityEnableUnifiedQueryConverter",
-		true,
-		`VisibilityEnableUnifiedQueryConverter enables the unified query converter for parsing the
-query.`,
-	)
 
 	HistoryArchivalState = NewGlobalStringSetting(
 		"system.historyArchivalState",
@@ -812,6 +806,24 @@ instances in the cluster, for a given namespace, per-API method. If this is set 
 ignored. The name 'frontend.globalNamespaceCount' is kept for consistency with the per-instance limit name,
 'frontend.namespaceCount'.`,
 	)
+	FrontendInternalPerNSMaxConcurrentLongRunningRequestsPerInstance = NewNamespaceIntSetting(
+		"frontend.internalPerNSNamespaceCount",
+		1200,
+		`FrontendInternalPerNSMaxConcurrentLongRunningRequestsPerInstance limits concurrent PollWorkflowTaskQueue,
+PollActivityTaskQueue, and PollNexusTaskQueue requests whose task queue is an internal per-namespace queue
+(temporal-sys-per-ns-* and temporal-sys-worker-controller-per-ns-tq). The limit is per frontend instance, per
+namespace, per API method, and is independent of frontend.namespaceCount. Sticky workflow polls are classified by
+TaskQueue.NormalName. This value is ignored if FrontendGlobalInternalPerNSMaxConcurrentLongRunningRequests is
+greater than zero. Warning: setting this to zero rejects all such polls. Requests are only throttled when the
+limit is exceeded, not when it is only reached.`,
+	)
+	FrontendGlobalInternalPerNSMaxConcurrentLongRunningRequests = NewNamespaceIntSetting(
+		"frontend.globalInternalPerNSNamespaceCount",
+		0,
+		`FrontendGlobalInternalPerNSMaxConcurrentLongRunningRequests limits concurrent internal per-namespace task-queue
+polls across all frontend instances in the cluster, for a given namespace, per API method. If this is set to 0
+(the default), then it is ignored and frontend.internalPerNSNamespaceCount is used.`,
+	)
 	FrontendMaxNamespaceVisibilityRPSPerInstance = NewNamespaceIntSetting(
 		"frontend.namespaceRPS.visibility",
 		10,
@@ -1158,10 +1170,17 @@ so forwarding by endpoint ID will not work out of the box.`,
 		true,
 		`FrontendEnableBatcher enables batcher-related RPCs in the frontend`,
 	)
+	// Deprecated: FrontendMaxConcurrentAdminBatchOperationPerNamespace is no longer honored. Use
+	// FrontendMaxConcurrentAdminBatchOperation instead.
 	FrontendMaxConcurrentAdminBatchOperationPerNamespace = NewNamespaceIntSetting(
 		"frontend.MaxConcurrentAdminBatchOperationPerNamespace",
 		1,
-		`FrontendMaxConcurrentAdminBatchOperationPerNamespace is the max concurrent admin batch operation job count per namespace`,
+		`Deprecated: no longer honored. Use frontend.MaxConcurrentAdminBatchOperation instead.`,
+	)
+	FrontendMaxConcurrentAdminBatchOperation = NewGlobalIntSetting(
+		"frontend.MaxConcurrentAdminBatchOperation",
+		10,
+		`FrontendMaxConcurrentAdminBatchOperation is the max concurrent admin batch operation job count. Admin batch operations only run in the temporal-system namespace.`,
 	)
 	FrontendEnableBatchOperationsForStandaloneActivities = NewNamespaceBoolSetting(
 		"frontend.enableBatchOperationsForStandaloneActivities",
@@ -2806,6 +2825,11 @@ the number of children greater than or equal to this threshold`,
 		false,
 		`EnableDropRepeatedWorkflowTaskFailures whether to silently drop repeated workflow task failures`,
 	)
+	EnableSignalWithStartWorkflowTaskBackoff = NewNamespaceBoolSetting(
+		"history.enableSignalWithStartWorkflowTaskBackoff",
+		false,
+		`EnableSignalWithStartWorkflowTaskBackoff enables SignalWithStart to honor first workflow task backoff.`,
+	)
 	SendTransientOrSpeculativeWorkflowTaskEvents = NewNamespaceBoolSetting(
 		"history.sendTransientOrSpeculativeWorkflowTaskEvents",
 		true,
@@ -2971,6 +2995,11 @@ should be enabled for non continuedAsNew workflow UpdateWithNew case.`,
 		"history.ReplicationMultipleBatches",
 		false,
 		`ReplicationMultipleBatches is the flag to enable replication of multiple history event batches`,
+	)
+	ValidateReplicationTaskSourceCluster = NewGlobalBoolSetting(
+		"history.validateReplicationTaskSourceCluster",
+		true,
+		`ValidateReplicationTaskSourceCluster controls whether inbound workflow replication tasks are accepted only from clusters in the namespace cluster list.`,
 	)
 	ReplicationTaskConverterLowPriorityLockMaxAttempts = NewGlobalIntSetting(
 		"history.ReplicationTaskConverterLowPriorityLockMaxAttempts",
@@ -3327,6 +3356,16 @@ terminates the task via DLQ. Immediate pure tasks are never affected by this set
 		`ChasmMaxInMemoryPureTasks is the maximum number of physical pure tasks that can be held in memory for best effort task deletion.`,
 	)
 
+	ChasmLogicalTaskCountAlertThreshold = NewChasmTaskTypeIntSetting(
+		"history.chasmLogicalTaskCountAlertThreshold",
+		0,
+		`ChasmLogicalTaskCountAlertThreshold overrides the number of logical CHASM tasks of one task type a single
+execution may accumulate before chasm_logical_task_count and chasm_logical_task_count_exceeded are emitted.
+Only applies to task types registered with chasm.WithTaskCountMetric. A value of 0 means not set, so the
+threshold registered via chasm.WithTaskCountMetric applies. A negative value disables the metrics. The chasmTaskType constraint takes a task's fully qualified name,
+e.g. "callback.invoke".`,
+	)
+
 	EnableCHASMSchedulerCreation = NewNamespaceBoolSetting(
 		"history.enableCHASMSchedulerCreation",
 		false,
@@ -3399,6 +3438,13 @@ instead of the previous HSM backed implementation.`,
 map to enable DescribeWorkflow to resolve RequestIDRef signal backlinks. Requires EnableChasm.
 Only enable once all servers in the fleet have been upgraded to a version that understands
 the IncomingSignals CHASM field.`,
+	)
+	EnableCHASMWorkflowRootOnStart = NewNamespaceBoolSetting(
+		"history.enableCHASMWorkflowRootOnStart",
+		true,
+		`Controls whether the CHASM Workflow root component is persisted in the transaction that
+applies the WorkflowExecutionStarted event, instead of lazily on first use of a CHASM feature.
+Requires EnableChasm.`,
 	)
 	EnableWorkflowUpdateCallbacks = NewNamespaceBoolSetting(
 		"history.enableUpdateCallbacks",

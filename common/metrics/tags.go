@@ -38,6 +38,7 @@ const (
 	activityType            = "activityType"
 	commandType             = "commandType"
 	serviceName             = "service_name"
+	concurrencyLimitGroup   = "concurrency_limit_group"
 	actionType              = "action_type"
 	workerVersion           = "worker_version"
 	workerDeploymentName    = "worker_deployment_name"
@@ -45,6 +46,8 @@ const (
 	destination             = "destination"
 	// Generic reason tag can be used anywhere a reason is needed.
 	reason = "reason"
+
+	nexusSerializationContextMatch = "context_match"
 	// See server.api.enums.v1.ReplicationTaskType
 	replicationTaskType                            = "replicationTaskType"
 	replicationTaskPriority                        = "replicationTaskPriority"
@@ -453,6 +456,14 @@ func NexusOperationTag(value string) Tag {
 	return Tag{Key: nexusOperationTagName, Value: value}
 }
 
+func NexusOperationBackendTag(value string) Tag {
+	return Tag{Key: nexusOperationBackendTagName, Value: value}
+}
+
+func NexusSerializationContextMatchTag(value ReasonString) Tag {
+	return Tag{Key: nexusSerializationContextMatch, Value: string(value)}
+}
+
 // HttpStatusTag returns a new httpStatusTag.
 func HttpStatusTag(value int) Tag {
 	return Tag{Key: httpStatusTagName, Value: strconv.Itoa(value)}
@@ -464,6 +475,13 @@ func ResourceExhaustedCauseTag(cause enumspb.ResourceExhaustedCause) Tag {
 
 func ResourceExhaustedScopeTag(scope enumspb.ResourceExhaustedScope) Tag {
 	return Tag{Key: resourceExhaustedScopeTag, Value: scope.String()}
+}
+
+func ConcurrencyLimitGroupTag(value string) Tag {
+	if len(value) == 0 {
+		value = "not_applicable"
+	}
+	return Tag{Key: concurrencyLimitGroup, Value: value}
 }
 
 func LastAttemptCauseTag(value string) Tag {
