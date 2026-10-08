@@ -8,7 +8,6 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -63,12 +62,15 @@ type (
 		// LegacyDescribeTaskQueue returns pollers info and legacy TaskQueueStatus for this physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		GetStatsByPriority(includeRates bool) map[int32]*taskqueuepb.TaskQueueStats
+		// NonNegligibleBacklogPriority returns the highest-priority non-negligible backlog
+		// across active and draining queues, or 0 as a sentinel when neither has one.
+		NonNegligibleBacklogPriority() priorityKey
 		GetInternalTaskQueueStatus() []*taskqueuespb.InternalTaskQueueStatus
 		UnloadFromPartitionManager(unloadCause)
 		QueueKey() *PhysicalTaskQueueKey
 		// MakePollerScalingDecision makes a decision on whether to scale pollers up or down based on the current state
 		// of the task queue and the task about to be returned.
-		MakePollerScalingDecision(ctx context.Context, pollStartTime time.Time, taskSource enumsspb.TaskSource) *taskqueuepb.PollerScalingDecision
+		MakePollerScalingDecision(ctx context.Context, pollStartTime time.Time, task *internalTask) *taskqueuepb.PollerScalingDecision
 		// GetFairnessWeightOverrides returns current fairness weight overrides for this queue.
 		GetFairnessWeightOverrides() fairnessWeightOverrides
 		UpdateRemotePriorityBacklogs(remotePriorityBacklogSet)

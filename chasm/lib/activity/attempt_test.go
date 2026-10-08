@@ -109,6 +109,7 @@ func TestStartDelayBucket(t *testing.T) {
 func TestNewActivityDispatchTask(t *testing.T) {
 	testCases := []struct {
 		name                    string
+		attemptCount            int32
 		startDelay              time.Duration
 		firstAttemptStartedTime *timestamppb.Timestamp
 		expectedReason          activitypb.DispatchReason
@@ -116,26 +117,37 @@ func TestNewActivityDispatchTask(t *testing.T) {
 	}{
 		{
 			name:           "immediate",
+			attemptCount:   1,
 			expectedReason: activitypb.DISPATCH_REASON_IMMEDIATE,
 			expectedBucket: activitypb.START_DELAY_BUCKET_NONE,
 		},
 		{
 			name:           "start delay",
+			attemptCount:   1,
 			startDelay:     time.Hour,
 			expectedReason: activitypb.DISPATCH_REASON_START_DELAY,
 			expectedBucket: activitypb.START_DELAY_BUCKET_1H_6H,
 		},
 		{
-			name:                    "retry without configured start delay",
-			firstAttemptStartedTime: timestamppb.Now(),
-			expectedReason:          activitypb.DISPATCH_REASON_RETRY,
-			expectedBucket:          activitypb.START_DELAY_BUCKET_NONE,
+			name:           "attempt number is authoritative for retry",
+			attemptCount:   2,
+			expectedReason: activitypb.DISPATCH_REASON_RETRY,
+			expectedBucket: activitypb.START_DELAY_BUCKET_NONE,
 		},
 		{
 			name:                    "retry preserves configured start delay bucket",
+			attemptCount:            2,
 			startDelay:              time.Hour,
 			firstAttemptStartedTime: timestamppb.Now(),
 			expectedReason:          activitypb.DISPATCH_REASON_RETRY,
+			expectedBucket:          activitypb.START_DELAY_BUCKET_1H_6H,
+		},
+		{
+			name:                    "attempt 1 after a prior worker start with configured start delay",
+			attemptCount:            1,
+			startDelay:              time.Hour,
+			firstAttemptStartedTime: timestamppb.Now(),
+			expectedReason:          activitypb.DISPATCH_REASON_IMMEDIATE,
 			expectedBucket:          activitypb.START_DELAY_BUCKET_1H_6H,
 		},
 	}
@@ -148,7 +160,10 @@ func TestNewActivityDispatchTask(t *testing.T) {
 					StartDelay:              durationpb.New(tc.startDelay),
 					FirstAttemptStartedTime: tc.firstAttemptStartedTime,
 				},
-				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Stamp: 1}),
+				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{
+					Count: tc.attemptCount,
+					Stamp: 1,
+				}),
 			}
 
 			task := activity.newActivityDispatchTask(ctx)

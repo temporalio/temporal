@@ -690,7 +690,10 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 	}
 
 	if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
-		if err := wh.callbackValidator.Validate(ctx, namespaceName.String(), cbs); err != nil {
+		opts := callbacks.ValidatorOptions{
+			EnabledKinds: wh.config.WorkflowEnabledCallbackKinds(namespaceName.String()),
+		}
+		if err := wh.callbackValidator.Validate(ctx, namespaceName.String(), cbs, opts); err != nil {
 			return nil, err
 		}
 	}
@@ -727,6 +730,9 @@ func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 		defaultMaxSkipPerSession := wh.config.WorkflowTimeSkippingMaxSkipPerSession(ns.String())
 		tsc.MaxSessionSkipCount = max(1, int32(defaultMaxSkipPerSession))
 	}
+	if !tsc.GetEnabled() && tsc.GetFastForwardConfig() != nil {
+		return serviceerror.NewInvalidArgument("time_skipping_config: cannot set fast_forward when enabled is false")
+	}
 
 	if ff := tsc.GetFastForwardConfig(); ff != nil {
 		if ff.GetDuration().AsDuration() <= 0 {
@@ -735,13 +741,6 @@ func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 		if strings.TrimSpace(ff.GetId()) == "" {
 			return errTimeSkippingFastForwardIDNotSet
 		}
-	}
-
-	if !tsc.GetEnabled() {
-		if tsc.GetFastForwardConfig() != nil {
-			return serviceerror.NewInvalidArgument("time_skipping_config: cannot set fast_forward when enabled is false")
-		}
-		return nil
 	}
 	return nil
 }
@@ -5252,7 +5251,6 @@ func (wh *WorkflowHandler) prepareSchedulerQuery(
 			saNameType,
 			wh.saMapperProvider,
 			chasmMapper,
-			wh.config.VisibilityEnableUnifiedQueryConverter,
 			query,
 			metricsHandler,
 			wh.logger,
@@ -5562,7 +5560,10 @@ func (wh *WorkflowHandler) prepareUpdateWorkflowRequest(
 	}
 
 	if cbs := request.GetRequest().GetCompletionCallbacks(); len(cbs) > 0 {
-		if err := wh.callbackValidator.Validate(ctx, namespaceName.String(), cbs); err != nil {
+		opts := callbacks.ValidatorOptions{
+			EnabledKinds: wh.config.WorkflowEnabledCallbackKinds(namespaceName.String()),
+		}
+		if err := wh.callbackValidator.Validate(ctx, namespaceName.String(), cbs, opts); err != nil {
 			return err
 		}
 	}
@@ -6163,19 +6164,66 @@ func (wh *WorkflowHandler) StopBatchOperation(
 		return nil, errBatchAPINotAllowed
 	}
 
+	// Check that the target job ID is a batcher workflow.
+	jobResp, err := wh.describeBatchJob(ctx, request.GetNamespace(), request.GetJobId())
+	if err != nil {
+		return nil, err
+	}
+
 	terminateReq := &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: request.GetNamespace(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: request.GetJobId(),
-		},
-		Reason:   request.GetReason(),
-		Identity: request.GetIdentity(),
+		// Use the validated execution from above, so that a run of the same workflow ID
+		// started in between is not terminated in its place.
+		WorkflowExecution: jobResp.GetWorkflowExecutionInfo().GetExecution(),
+		Reason:            request.GetReason(),
+		Identity:          request.GetIdentity(),
 	}
-	_, err := wh.TerminateWorkflowExecution(ctx, terminateReq)
+	_, err = wh.TerminateWorkflowExecution(ctx, terminateReq)
 	if err != nil {
 		return nil, err
 	}
 	return &workflowservice.StopBatchOperationResponse{}, nil
+}
+
+// describeBatchJob describes a batch job by ID, verifies that the ID is in fact
+// a batcher workflow started by StartBatchOperation or StartAdminBatchOperation,
+// that use a known workflow type, and hide behind a batcher namespace division.
+// This is used to prevent batch APIs on non-batch workflows/jobs.
+func (wh *WorkflowHandler) describeBatchJob(
+	ctx context.Context,
+	nsName string,
+	jobID string,
+) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
+	resp, err := wh.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: nsName,
+		Execution: &commonpb.WorkflowExecution{WorkflowId: jobID},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	executionInfo := resp.GetWorkflowExecutionInfo()
+	switch executionInfo.GetType().GetName() {
+	case batcher.BatchWFTypeName, batcher.BatchWFTypeProtobufName:
+	default:
+		return nil, errBatchJobIDNotValid
+	}
+
+	if resp.GetExecutionConfig().GetTaskQueue().GetName() != primitives.PerNSWorkerTaskQueue {
+		return nil, errBatchJobIDNotValid
+	}
+
+	var division string
+	if divisionPayload, ok := executionInfo.GetSearchAttributes().GetIndexedFields()[sadefs.TemporalNamespaceDivision]; ok {
+		if err := payload.Decode(divisionPayload, &division); err != nil {
+			return nil, err
+		}
+	}
+	if division != batcher.NamespaceDivision && division != batcher.AdminNamespaceDivision {
+		return nil, errBatchJobIDNotValid
+	}
+
+	return resp, nil
 }
 
 func (wh *WorkflowHandler) DescribeBatchOperation(
@@ -6203,14 +6251,7 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		return nil, errBatchAPINotAllowed
 	}
 
-	execution := &commonpb.WorkflowExecution{
-		WorkflowId: request.GetJobId(),
-		RunId:      "",
-	}
-	resp, err := wh.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: request.GetNamespace(),
-		Execution: execution,
-	})
+	resp, err := wh.describeBatchJob(ctx, request.GetNamespace(), request.GetJobId())
 	if err != nil {
 		return nil, err
 	}
@@ -7217,7 +7258,12 @@ func (wh *WorkflowHandler) cleanScheduleMemo(memo *commonpb.Memo) *commonpb.Memo
 
 // This mutates request (but idempotent so safe for retries)
 func (wh *WorkflowHandler) addInitialScheduleMemo(request *workflowservice.CreateScheduleRequest, args *schedulespb.StartScheduleArgs) {
-	info := scheduler.GetListInfoFromStartArgs(args, time.Now().UTC(), wh.scheduleSpecBuilder)
+	versionCeiling := wh.config.SchedulerV1VersionCeiling(request.Namespace)
+	versionOverride := wh.config.SchedulerV1VersionOverride(request.Namespace)
+	info := scheduler.GetListInfoFromStartArgs(args, time.Now().UTC(), wh.scheduleSpecBuilder, scheduler.VersionSelection{
+		Ceiling:  versionCeiling,
+		Override: versionOverride,
+	})
 	infoBytes, err := info.Marshal()
 	if err != nil {
 		wh.logger.Error("encoding initial schedule memo failed", tag.Error(err))

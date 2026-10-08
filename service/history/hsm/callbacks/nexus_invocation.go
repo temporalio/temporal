@@ -9,6 +9,7 @@ import (
 
 	"github.com/nexus-rpc/sdk-go/nexus"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -32,6 +33,7 @@ type nexusInvocation struct {
 	nexus             *persistencespb.Callback_Nexus
 	completion        nexusrpc.CompleteOperationOptions
 	workflowID, runID string
+	requestID         string
 	attempt           int32
 }
 
@@ -43,16 +45,18 @@ func (n nexusInvocation) WrapError(result invocationResult, err error) error {
 }
 
 func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e taskExecutor, task InvocationTask) invocationResult {
+	callbackLogger := log.With(e.Logger,
+		tag.WorkflowNamespace(ns.Name().String()),
+		tag.Operation("CompleteNexusOperation"),
+		tag.Destination(task.destination),
+		tag.WorkflowID(n.workflowID),
+		tag.WorkflowRunID(n.runID),
+		tag.NexusCompletionSource(chasm.WorkflowArchetype),
+		tag.Attempt(n.attempt),
+		tag.RequestID(n.requestID),
+	)
 	if e.HTTPTraceProvider != nil {
-		traceLogger := log.With(e.Logger,
-			tag.WorkflowNamespace(ns.Name().String()),
-			tag.Operation("CompleteNexusOperation"),
-			tag.Destination(task.destination),
-			tag.WorkflowID(n.workflowID),
-			tag.WorkflowRunID(n.runID),
-			tag.AttemptStart(time.Now().UTC()),
-			tag.Attempt(n.attempt),
-		)
+		traceLogger := log.With(callbackLogger, tag.AttemptStart(time.Now().UTC()))
 		if trace := e.HTTPTraceProvider.NewTrace(n.attempt, traceLogger); trace != nil {
 			ctx = httptrace.WithClientTrace(ctx, trace)
 		}
@@ -74,12 +78,17 @@ func (n nexusInvocation) Invoke(ctx context.Context, ns *namespace.Namespace, e 
 	namespaceTag := metrics.NamespaceTag(ns.Name().String())
 	destTag := metrics.DestinationTag(task.Destination())
 	statusCodeTag := metrics.OutcomeTag(outcomeTag(ctx, err))
-	e.MetricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag)
-	e.MetricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag)
+	completionSourceTag := metrics.NexusCompletionSourceTag(chasm.WorkflowArchetype)
+	e.MetricsHandler.Counter(RequestCounter.Name()).Record(1, namespaceTag, destTag, statusCodeTag, completionSourceTag)
+	e.MetricsHandler.Timer(RequestLatencyHistogram.Name()).Record(time.Since(startTime), namespaceTag, destTag, statusCodeTag, completionSourceTag)
 
 	if err != nil {
 		retryable := isRetryableCallError(err)
-		e.Logger.Error("Callback request failed", tag.Error(err), tag.Bool("retryable", retryable))
+		callbackLogger.Error(
+			"Callback request failed",
+			tag.Error(err),
+			tag.Bool("retryable", retryable),
+		)
 		if retryable {
 			return invocationResultRetry{err}
 		}
@@ -94,7 +103,7 @@ func outcomeTag(callCtx context.Context, callErr error) string {
 			return "request-timeout"
 		}
 		if handlerErr, ok := errors.AsType[*nexus.HandlerError](callErr); ok {
-			return "handler-error:" + string(handlerErr.Type)
+			return "handler-error:" + commonnexus.BoundHandlerErrorType(string(handlerErr.Type))
 		}
 		return "unknown-error"
 	}

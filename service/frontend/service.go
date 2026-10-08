@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity"
 	chasmcallback "go.temporal.io/server/chasm/lib/callback"
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -56,7 +57,6 @@ type Config struct {
 	VisibilityEnableShadowReadMode          dynamicconfig.BoolPropertyFn
 	VisibilityDisableOrderByClause          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityEnableManualPagination        dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	VisibilityEnableUnifiedQueryConverter   dynamicconfig.BoolPropertyFn
 	VisibilityAllowList                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	SuppressErrorSetSystemSearchAttribute   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -65,11 +65,14 @@ type Config struct {
 	GlobalRPS          dynamicconfig.IntPropertyFn
 	OperatorRPSRatio   dynamicconfig.FloatPropertyFn
 
+	EnableDescribeMutableStateRateLimit                               dynamicconfig.BoolPropertyFn
 	NamespaceReplicationInducingAPIsRPS                               dynamicconfig.IntPropertyFn
 	MaxNamespaceRPSPerInstance                                        dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceBurstRatioPerInstance                                 dynamicconfig.FloatPropertyFnWithNamespaceFilter
 	MaxConcurrentLongRunningRequestsPerInstance                       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxGlobalConcurrentLongRunningRequests                            dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxInternalPerNSConcurrentLongRunningRequestsPerInstance          dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxGlobalInternalPerNSConcurrentLongRunningRequests               dynamicconfig.IntPropertyFnWithNamespaceFilter
 	PollWaitForNamespaceRateLimitToken                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityRPSPerInstance                              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxNamespaceVisibilityBurstRatioPerInstance                       dynamicconfig.FloatPropertyFnWithNamespaceFilter
@@ -176,6 +179,10 @@ type Config struct {
 
 	// Enable schedule-related RPCs
 	EnableSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	// Ceiling on the V1 scheduler workflow's recorded version.
+	SchedulerV1VersionCeiling dynamicconfig.IntPropertyFnWithNamespaceFilter
+	// Requested V1 scheduler workflow version.
+	SchedulerV1VersionOverride dynamicconfig.IntPropertyFnWithNamespaceFilter
 
 	// Enable CHASM tree infrastructure
 	EnableChasm dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -202,8 +209,8 @@ type Config struct {
 	// Batch operation dynamic configs
 	MaxConcurrentBatchOperation     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxExecutionCountBatchOperation dynamicconfig.IntPropertyFnWithNamespaceFilter
-	// Admin Batch operation dynamic config
-	MaxConcurrentAdminBatchOperation             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	// Admin batch operations only run in the temporal-system namespace, so this limit is global.
+	MaxConcurrentAdminBatchOperation             dynamicconfig.IntPropertyFn
 	EnableBatchOperationsForStandaloneActivities dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	EnableUpdateWorkflowExecution                              dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -220,6 +227,9 @@ type Config struct {
 	MaxCallbacksPerWorkflow dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackEndpointConfigs dynamicconfig.TypedPropertyFnWithNamespaceFilter[callbacks.AddressMatchRules]
 
+	// The callback kinds a client may attach to a workflow execution.
+	WorkflowEnabledCallbackKinds dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.Kind]
+
 	MaxNexusOperationTokenLength   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NexusRequestHeadersBlacklist   dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	NexusForwardRequestUseEndpoint dynamicconfig.BoolPropertyFn
@@ -233,8 +243,7 @@ type Config struct {
 	MaskInternalErrorDetails dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	// Health check
-	HistoryHostErrorPercentage     dynamicconfig.FloatPropertyFn
-	HistoryHostSelfErrorProportion dynamicconfig.FloatPropertyFn
+	HistoryHostErrorPercentage dynamicconfig.FloatPropertyFn
 
 	LogAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -309,7 +318,6 @@ func NewConfig(
 		VisibilityEnableShadowReadMode:          dynamicconfig.VisibilityEnableShadowReadMode.Get(dc),
 		VisibilityDisableOrderByClause:          dynamicconfig.VisibilityDisableOrderByClause.Get(dc),
 		VisibilityEnableManualPagination:        dynamicconfig.VisibilityEnableManualPagination.Get(dc),
-		VisibilityEnableUnifiedQueryConverter:   dynamicconfig.VisibilityEnableUnifiedQueryConverter.Get(dc),
 		VisibilityAllowList:                     dynamicconfig.VisibilityAllowList.Get(dc),
 		SuppressErrorSetSystemSearchAttribute:   dynamicconfig.SuppressErrorSetSystemSearchAttribute.Get(dc),
 
@@ -317,12 +325,15 @@ func NewConfig(
 		RPS:                                 dynamicconfig.FrontendRPS.Get(dc),
 		GlobalRPS:                           dynamicconfig.FrontendGlobalRPS.Get(dc),
 		OperatorRPSRatio:                    dynamicconfig.OperatorRPSRatio.Get(dc),
+		EnableDescribeMutableStateRateLimit: dynamicconfig.AdminEnableDescribeMutableStateRateLimit.Get(dc),
 		NamespaceReplicationInducingAPIsRPS: dynamicconfig.FrontendNamespaceReplicationInducingAPIsRPS.Get(dc),
 
 		MaxNamespaceRPSPerInstance:                                        dynamicconfig.FrontendMaxNamespaceRPSPerInstance.Get(dc),
 		MaxNamespaceBurstRatioPerInstance:                                 dynamicconfig.FrontendMaxNamespaceBurstRatioPerInstance.Get(dc),
 		MaxConcurrentLongRunningRequestsPerInstance:                       dynamicconfig.FrontendMaxConcurrentLongRunningRequestsPerInstance.Get(dc),
 		MaxGlobalConcurrentLongRunningRequests:                            dynamicconfig.FrontendGlobalMaxConcurrentLongRunningRequests.Get(dc),
+		MaxInternalPerNSConcurrentLongRunningRequestsPerInstance:          dynamicconfig.FrontendInternalPerNSMaxConcurrentLongRunningRequestsPerInstance.Get(dc),
+		MaxGlobalInternalPerNSConcurrentLongRunningRequests:               dynamicconfig.FrontendGlobalInternalPerNSMaxConcurrentLongRunningRequests.Get(dc),
 		PollWaitForNamespaceRateLimitToken:                                dynamicconfig.PollWaitForNamespaceRateLimitToken.Get(dc),
 		MaxNamespaceVisibilityRPSPerInstance:                              dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance.Get(dc),
 		MaxNamespaceVisibilityBurstRatioPerInstance:                       dynamicconfig.FrontendMaxNamespaceVisibilityBurstRatioPerInstance.Get(dc),
@@ -385,6 +396,8 @@ func NewConfig(
 		MaxFairnessWeightOverrideConfigLimit: dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),
 
 		EnableSchedules:                      dynamicconfig.FrontendEnableSchedules.Get(dc),
+		SchedulerV1VersionCeiling:            dynamicconfig.SchedulerV1VersionCeiling.Get(dc),
+		SchedulerV1VersionOverride:           dynamicconfig.SchedulerV1VersionOverride.Get(dc),
 		EnableChasm:                          dynamicconfig.EnableChasm.Get(dc),
 		EnableCHASMSchedulerCreation:         dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
 		CHASMSchedulerCreationRolloutPercent: dynamicconfig.CHASMSchedulerCreationRolloutPercent.Get(dc),
@@ -399,7 +412,7 @@ func NewConfig(
 		EnableBatcher:                                dynamicconfig.FrontendEnableBatcher.Get(dc),
 		MaxConcurrentBatchOperation:                  dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace.Get(dc),
 		MaxExecutionCountBatchOperation:              dynamicconfig.FrontendMaxExecutionCountBatchOperationPerNamespace.Get(dc),
-		MaxConcurrentAdminBatchOperation:             dynamicconfig.FrontendMaxConcurrentAdminBatchOperationPerNamespace.Get(dc),
+		MaxConcurrentAdminBatchOperation:             dynamicconfig.FrontendMaxConcurrentAdminBatchOperation.Get(dc),
 		EnableBatchOperationsForStandaloneActivities: dynamicconfig.FrontendEnableBatchOperationsForStandaloneActivities.Get(dc),
 
 		EnableUpdateWorkflowExecution:                              dynamicconfig.FrontendEnableUpdateWorkflowExecution.Get(dc),
@@ -422,13 +435,14 @@ func NewConfig(
 		LinkMaxSize:        dynamicconfig.FrontendLinkMaxSize.Get(dc),
 		MaxLinksPerRequest: dynamicconfig.FrontendMaxLinksPerRequest.Get(dc),
 
-		CallbackEndpointConfigs:     chasmcallback.AllowedAddresses.Get(dc),
+		CallbackEndpointConfigs:      chasmcallback.AllowedAddresses.Get(dc),
+		WorkflowEnabledCallbackKinds: chasmworkflow.EnabledCallbackKinds.Get(dc),
+
 		AdminEnableListHistoryTasks: dynamicconfig.AdminEnableListHistoryTasks.Get(dc),
 
 		MaskInternalErrorDetails: dynamicconfig.FrontendMaskInternalErrorDetails.Get(dc),
 
 		HistoryHostErrorPercentage:              dynamicconfig.HistoryHostErrorPercentage.Get(dc),
-		HistoryHostSelfErrorProportion:          dynamicconfig.HistoryHostSelfErrorProportion.Get(dc),
 		LogAllReqErrors:                         dynamicconfig.LogAllReqErrors.Get(dc),
 		EnableEagerWorkflowStart:                dynamicconfig.EnableEagerWorkflowStart.Get(dc),
 		WorkflowRulesAPIsEnabled:                dynamicconfig.WorkflowRulesAPIsEnabled.Get(dc),

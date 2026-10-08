@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/grpcfaults"
+	"go.temporal.io/server/common/rpc/httpfaults"
 	historytasks "go.temporal.io/server/service/history/tasks"
 )
 
@@ -26,19 +27,20 @@ type HistoryPassiveReplicationTestHook interface {
 // Test hook keys with their return type and scope.
 // Try to avoid global scope as it requires a dedicated test cluster.
 var (
-	MatchingDisableSyncMatch                 = newKey[bool, namespace.ID]()
-	MatchingLBForceReadPartition             = newKey[int, namespace.ID]()
-	MatchingLBForceWritePartition            = newKey[int, namespace.ID]()
-	UpdateWithStartInBetweenLockAndStart     = newKey[func(), namespace.ID]()
-	UpdateWithStartOnClosingWorkflowRetry    = newKey[func(), namespace.ID]()
-	TaskQueuesInDeploymentSyncBatchSize      = newKey[int, global]()
-	MatchingIgnoreRoutingConfigRevisionCheck = newKey[bool, namespace.ID]()
-	MatchingDeploymentRegisterErrorBackoff   = newKey[time.Duration, namespace.ID]()
-	MatchingForwardTaskDelay                 = newKey[time.Duration, namespace.ID]()
-	HistoryReplicationTaskInterceptor        = newKey[func(*replicationspb.ReplicationTask, func() error) error, global]()
-	HistoryReplicationDLQWriteInterceptor    = newKey[func(*persistencespb.ReplicationTaskInfo, func() error) error, global]()
-	HistoryChasmRuntimeProvider              = newKey[func(chasm.Engine, chasm.VisibilityManager, *chasm.Registry), global]()
-	HistoryTransferTaskInterceptor           = newKey[func(historytasks.Task, func()), namespace.ID]()
+	MatchingDisableSyncMatch                    = newKey[bool, namespace.ID]()
+	MatchingLBForceReadPartition                = newKey[int, namespace.ID]()
+	MatchingLBForceWritePartition               = newKey[int, namespace.ID]()
+	UpdateWithStartInBetweenLockAndStart        = newKey[func(), namespace.ID]()
+	UpdateWithStartOnClosingWorkflowRetry       = newKey[func(), namespace.ID]()
+	TaskQueuesInDeploymentSyncBatchSize         = newKey[int, global]()
+	MatchingIgnoreRoutingConfigRevisionCheck    = newKey[bool, namespace.ID]()
+	MatchingDeploymentRegisterErrorBackoff      = newKey[time.Duration, namespace.ID]()
+	MatchingForwardTaskDelay                    = newKey[time.Duration, namespace.ID]()
+	HistoryReplicationTaskInterceptor           = newKey[func(*replicationspb.ReplicationTask, func() error) error, global]()
+	HistoryReplicationTaskConversionInterceptor = newKey[func(historytasks.Task, func() (*replicationspb.ReplicationTask, error)) (*replicationspb.ReplicationTask, error), namespace.ID]()
+	HistoryReplicationDLQWriteInterceptor       = newKey[func(*persistencespb.ReplicationTaskInfo, func() error) error, global]()
+	HistoryChasmRuntimeProvider                 = newKey[func(chasm.Engine, chasm.VisibilityManager, *chasm.Registry), global]()
+	HistoryTransferTaskInterceptor              = newKey[func(historytasks.Task, func()), namespace.ID]()
 	// HistoryPassiveReplicationTest enables the single-cluster passive replication
 	// test stack for one namespace. Production builds always report it as unset.
 	HistoryPassiveReplicationTest             = newKey[HistoryPassiveReplicationTestHook, namespace.ID]()
@@ -48,6 +50,10 @@ var (
 	GRPCRequestFaultGeneratorByNamespaceName  = newKey[grpcfaults.RequestCallback, namespace.Name]()
 	GRPCResponseFaultGeneratorByNamespaceID   = newKey[grpcfaults.ResponseCallback, namespace.ID]()
 	GRPCResponseFaultGeneratorByNamespaceName = newKey[grpcfaults.ResponseCallback, namespace.Name]()
+	HTTPRequestFaultGeneratorByNamespaceID    = newKey[httpfaults.RequestCallback, namespace.ID]()
+	HTTPRequestFaultGeneratorByNamespaceName  = newKey[httpfaults.RequestCallback, namespace.Name]()
+	HTTPResponseFaultGeneratorByNamespaceID   = newKey[httpfaults.ResponseCallback, namespace.ID]()
+	HTTPResponseFaultGeneratorByNamespaceName = newKey[httpfaults.ResponseCallback, namespace.Name]()
 )
 
 // keyID is a unique identifier for a key, used as a map key.

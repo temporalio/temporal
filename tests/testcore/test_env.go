@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -29,6 +30,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/grpcfaults"
+	"go.temporal.io/server/common/rpc/httpfaults"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -63,12 +65,12 @@ type Env interface {
 }
 
 type TestEnv struct {
-	*FunctionalTestBase
+	*functionalTestBase
 
-	// Shadows FunctionalTestBase.Assertions with a per-test instance bound to
+	// Shadows functionalTestBase.Assertions with a per-test instance bound to
 	// this TestEnv's own *testing.T, avoiding data races when parallel tests
-	// share the same *FunctionalTestBase cluster.
-	// TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
+	// share the same *functionalTestBase cluster.
+	// TODO: remove once all tests are migrated to TestEnv (and no longer use functionalTestBase directly).
 	*require.Assertions
 
 	Logger log.Logger
@@ -322,7 +324,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	testcontext.EnsureRemaining(testcontext.For(t), t, testcontext.DefaultTimeout())
 
 	env := &TestEnv{
-		FunctionalTestBase: base,
+		functionalTestBase: base,
 		Assertions:         require.New(t),
 		cluster:            cluster,
 		nsName:             ns,
@@ -428,7 +430,7 @@ func (e *TestEnv) TaskPoller() *taskpoller.TaskPoller {
 // NoError asserts that err is nil.
 //
 // Deprecated: use require.NoError with the parent test or suite instead.
-// TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
+// TODO: remove once all tests are migrated to TestEnv (and no longer use functionalTestBase directly).
 func (e *TestEnv) NoError(err error, msgAndArgs ...any) {
 	e.Assertions.NoError(err, msgAndArgs...)
 }
@@ -436,7 +438,7 @@ func (e *TestEnv) NoError(err error, msgAndArgs ...any) {
 // Error asserts that err is not nil.
 //
 // Deprecated: use require.Error with the parent test or suite instead.
-// TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
+// TODO: remove once all tests are migrated to TestEnv (and no longer use functionalTestBase directly).
 func (e *TestEnv) Error(err error, msgAndArgs ...any) {
 	e.Assertions.Error(err, msgAndArgs...)
 }
@@ -444,9 +446,9 @@ func (e *TestEnv) Error(err error, msgAndArgs ...any) {
 // Run executes a subtest.
 //
 // Deprecated: use the suite's Run method instead.
-// TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
+// TODO: remove once all tests are migrated to TestEnv (and no longer use functionalTestBase directly).
 func (e *TestEnv) Run(name string, subtest func()) bool {
-	return e.FunctionalTestBase.Run(name, subtest)
+	return e.functionalTestBase.Run(name, subtest)
 }
 
 // T returns the *testing.T.
@@ -494,6 +496,40 @@ func (e *TestEnv) InjectResponseFault(fault ResponseFault) func() {
 		if injectedErr := fault(req, resp, err); injectedErr != nil {
 			tracker.markFired(req)
 			return &grpcfaults.Outcome{Error: injectedErr}
+		}
+		return nil
+	})
+	return tracker.attach(unregister)
+}
+
+// InjectHTTPRequestFault registers a fault for HTTP requests in this namespace.
+func (e *TestEnv) InjectHTTPRequestFault(fault HTTPRequestFault) func() {
+	scope := httpfaults.Scope{
+		NamespaceID:   e.nsID,
+		NamespaceName: e.nsName,
+	}
+	tracker := newFaultTracker(e.t)
+	unregister := e.GetTestCluster().Host().GetHTTPFaultGenerator().RegisterRequestCallback(scope, func(ctx context.Context, _ string, req *httpfaults.Request) *httpfaults.Outcome {
+		if outcome := fault(ctx, req.Raw); outcome != nil {
+			tracker.markFired(req.Raw)
+			return outcome
+		}
+		return nil
+	})
+	return tracker.attach(unregister)
+}
+
+// InjectHTTPResponseFault registers a fault for HTTP results in this namespace.
+func (e *TestEnv) InjectHTTPResponseFault(fault HTTPResponseFault) func() {
+	scope := httpfaults.Scope{
+		NamespaceID:   e.nsID,
+		NamespaceName: e.nsName,
+	}
+	tracker := newFaultTracker(e.t)
+	unregister := e.GetTestCluster().Host().GetHTTPFaultGenerator().RegisterResponseCallback(scope, func(ctx context.Context, _ string, req *httpfaults.Request, resp *http.Response, callErr error) *httpfaults.Outcome {
+		if outcome := fault(ctx, req.Raw, resp, callErr); outcome != nil {
+			tracker.markFired(req.Raw)
+			return outcome
 		}
 		return nil
 	})
@@ -634,8 +670,8 @@ func (e *TestEnv) StartGlobalMetricCapture() *GlobalMetricCapture {
 }
 
 // StartNamespaceMetricCapture starts a metrics capture scoped to this test's namespace.
-// Namespace captures are safe on shared clusters because reads are restricted to
-// per-metric namespace-filtered iteration and reject non-namespaced metrics.
+// Namespace captures are safe on shared clusters because recordings are filtered
+// to this namespace as they are captured, and non-namespaced metrics are rejected on read.
 func (e *TestEnv) StartNamespaceMetricCapture() *NamespaceMetricCapture {
 	return e.StartNamespaceMetricCaptureFor(e.Namespace().String())
 }
@@ -647,11 +683,11 @@ func (e *TestEnv) StartNamespaceMetricCaptureFor(namespaceName string) *Namespac
 		e.t.Fatal("StartNamespaceMetricCapture is unavailable because metrics capture is not enabled on this cluster")
 	}
 
-	capture := handler.StartCapture()
+	capture := newNamespaceMetricCapture(handler, namespaceName)
 	e.t.Cleanup(func() {
-		handler.StopCapture(capture)
+		handler.StopCapture(capture.capture)
 	})
-	return newNamespaceMetricCapture(capture, namespaceName)
+	return capture
 }
 
 // CloseShard closes the shard that contains the given workflow.
