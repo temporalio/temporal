@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -863,6 +864,89 @@ func latestLogicalBacklogCount(snap map[string][]*metricstest.CapturedRecording,
 	return latest, found
 }
 
+// latestLogicalBacklogCountsByPriority returns the most recent approximate_backlog_count recording
+// for the given worker_version tag value, per task_priority tag value.
+func latestLogicalBacklogCountsByPriority(snap map[string][]*metricstest.CapturedRecording, workerVersion string) map[string]float64 {
+	return latestLogicalBacklogByPriority(snap, metrics.ApproximateBacklogCount.Name(), workerVersion)
+}
+
+// latestLogicalBacklogAgesByPriority is latestLogicalBacklogCountsByPriority for approximate_backlog_age_seconds.
+func latestLogicalBacklogAgesByPriority(snap map[string][]*metricstest.CapturedRecording, workerVersion string) map[string]float64 {
+	return latestLogicalBacklogByPriority(snap, metrics.ApproximateBacklogAgeSeconds.Name(), workerVersion)
+}
+
+func latestLogicalBacklogByPriority(snap map[string][]*metricstest.CapturedRecording, metricName, workerVersion string) map[string]float64 {
+	latest := make(map[string]float64)
+	for _, rec := range snap[metricName] {
+		if rec.Tags["worker_version"] == workerVersion {
+			latest[rec.Tags[metrics.TaskPriorityTagName]] = rec.Value.(float64)
+		}
+	}
+	return latest
+}
+
+// backlogWriteGate pauses the first non-zero approximate_backlog_count write made through a wrapped
+// metrics handler after arm is called, until open is called. written is closed once that write is done.
+// While the logical backlog emitter is enabled, physical queues record physical_approximate_backlog_count
+// instead, so the paused write is always the emitter's.
+type backlogWriteGate struct {
+	armed   atomic.Bool
+	once    sync.Once
+	paused  chan struct{}
+	release chan struct{}
+	written chan struct{}
+	opened  sync.Once
+}
+
+func newBacklogWriteGate() *backlogWriteGate {
+	return &backlogWriteGate{paused: make(chan struct{}), release: make(chan struct{}), written: make(chan struct{})}
+}
+
+func (g *backlogWriteGate) arm() { g.armed.Store(true) }
+
+func (g *backlogWriteGate) open() { g.opened.Do(func() { close(g.release) }) }
+
+func (g *backlogWriteGate) wrap(h metrics.Handler) metrics.Handler {
+	return gatedMetricsHandler{Handler: h, gate: g}
+}
+
+type gatedMetricsHandler struct {
+	metrics.Handler
+	gate *backlogWriteGate
+}
+
+func (h gatedMetricsHandler) WithTags(tags ...metrics.Tag) metrics.Handler {
+	return gatedMetricsHandler{Handler: h.Handler.WithTags(tags...), gate: h.gate}
+}
+
+func (h gatedMetricsHandler) Gauge(name string) metrics.GaugeIface {
+	gauge := h.Handler.Gauge(name)
+	if name != metrics.ApproximateBacklogCount.Name() {
+		return gauge
+	}
+	return gatedGauge{GaugeIface: gauge, gate: h.gate}
+}
+
+type gatedGauge struct {
+	metrics.GaugeIface
+	gate *backlogWriteGate
+}
+
+func (g gatedGauge) Record(v float64, tags ...metrics.Tag) {
+	var paused bool
+	if v != 0 && g.gate.armed.Load() {
+		g.gate.once.Do(func() {
+			paused = true
+			close(g.gate.paused)
+			<-g.gate.release
+		})
+	}
+	g.GaugeIface.Record(v, tags...)
+	if paused {
+		close(g.gate.written)
+	}
+}
+
 // latestLogicalBacklogAge returns the most recent approximate_backlog_age_seconds
 // recording for the given worker_version and task_priority tag values.
 func latestLogicalBacklogAge(snap map[string][]*metricstest.CapturedRecording, workerVersion, priorityTag string) (float64, bool) {
@@ -955,6 +1039,232 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_NoVersioning() {
 		_, ageOk := latestLogicalBacklogAge(snap, "__unversioned__", defaultPriorityTag)
 		return ageOk
 	}, 2*time.Second, 50*time.Millisecond)
+}
+
+func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_InFlightWriteDoesNotOutliveStop() {
+	gate := newBacklogWriteGate()
+	defer gate.open()
+	// The test stops pm itself, so the returned cleanup (which also stops it) isn't used.
+	pm, capture, _ := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{
+		loadTime:                   1 * time.Minute,
+		backlogMetricsEmitInterval: 10 * time.Millisecond,
+		wrapMetricsHandler:         gate.wrap,
+	})
+	s.spoolDefaultTasks(pm, 5)
+
+	// Pause the emitter's write of the backlog, stop the partition, then let the write through.
+	gate.arm()
+	<-gate.paused
+	pm.Stop(unloadCauseUnspecified)
+	gate.open()
+	<-gate.written
+
+	await.RequireTrue(s.T(), func() bool {
+		counts := latestLogicalBacklogCountsByPriority(capture.Snapshot(), "__unversioned__")
+		for _, count := range counts {
+			if count != 0 {
+				return false
+			}
+		}
+		return len(counts) > 0
+	}, 2*time.Second, 10*time.Millisecond)
+}
+
+func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_AttributedSeriesZeroedOnStop() {
+	if !s.newMatcher {
+		s.T().Skip("classic matcher has no per-priority subqueues, so there's no attributed-only priority")
+	}
+	const (
+		deploymentName = "foo"
+		currentBuildID = "A"
+		priorityKey    = 1 // not the default, so the current version's queue has no subqueue for it
+	)
+	s.addRoutingConfigUserData(deploymentName, currentBuildID, "", 0)
+
+	// The test stops pm itself, so the returned cleanup (which also stops it) isn't used.
+	pm, capture, _ := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{
+		loadTime:                   1 * time.Minute,
+		backlogMetricsEmitInterval: 10 * time.Millisecond,
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, currentVersionTag := s.loadCurrentVersionWithAttributedBacklog(ctx, pm, deploymentName, currentBuildID, priorityKey)
+
+	attributedPriority := metrics.MatchingTaskPriorityTag(priorityKey).Value
+	await.RequireTrue(s.T(), func() bool {
+		return latestLogicalBacklogCountsByPriority(capture.Snapshot(), currentVersionTag)[attributedPriority] > 0
+	}, 10*time.Second, 10*time.Millisecond)
+
+	pm.Stop(unloadCauseUnspecified)
+
+	await.RequireTrue(s.T(), func() bool {
+		for _, count := range latestLogicalBacklogCountsByPriority(capture.Snapshot(), currentVersionTag) {
+			if count != 0 {
+				return false
+			}
+		}
+		return true
+	}, 2*time.Second, 10*time.Millisecond)
+}
+
+// loadCurrentVersionWithAttributedBacklog spools tasks at priorityKey onto the unversioned queue and loads
+// the (empty) current version's queue, so the emitter reports that version with backlog it only has
+// through attribution. Returns the loaded queue and its worker_version tag value.
+func (s *PartitionManagerTestSuite) loadCurrentVersionWithAttributedBacklog(
+	ctx context.Context,
+	pm *taskQueuePartitionManagerImpl,
+	deploymentName, currentBuildID string,
+	priorityKey int32,
+) (physicalTaskQueueManager, string) {
+	for i := range 4 {
+		err := pm.defaultQueue().SpoolTask(&persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  fmt.Sprintf("wf-%d", i),
+			Priority:    &commonpb.Priority{PriorityKey: priorityKey},
+		})
+		s.Require().NoError(err)
+	}
+	// The emitter can't describe the version until its queue is initialized.
+	currentQ, err := pm.getVersionedQueue(ctx, "", "", &deploymentpb.Deployment{
+		SeriesName: deploymentName,
+		BuildId:    currentBuildID,
+	}, true)
+	s.Require().NoError(err)
+	s.Require().NoError(currentQ.WaitUntilInitialized(ctx))
+
+	versionTag := worker_versioning.ExternalWorkerDeploymentVersionToString(
+		&deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: currentBuildID},
+	)
+	return currentQ, versionTag
+}
+
+func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_SeriesZeroedOnVersionedQueueUnload() {
+	if s.newMatcher {
+		s.T().Skip("new matcher re-adds the tasks its matcher held when a queue stops, reloading it before the next emit")
+	}
+	const (
+		deploymentName = "foo"
+		buildID        = "C" // not current, so the unversioned backlog is attributed elsewhere
+	)
+	s.addRoutingConfigUserData(deploymentName, "A", "", 0)
+
+	gate := newBacklogWriteGate()
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{
+		loadTime:                   1 * time.Minute,
+		backlogMetricsEmitInterval: 10 * time.Millisecond,
+		wrapMetricsHandler:         gate.wrap,
+	})
+	defer cleanup()
+	defer gate.open()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	s.spoolDefaultTasks(pm, 3)
+	versionedQ, err := pm.getVersionedQueue(ctx, "", "", &deploymentpb.Deployment{
+		SeriesName: deploymentName,
+		BuildId:    buildID,
+	}, true)
+	s.Require().NoError(err)
+	s.Require().NoError(versionedQ.WaitUntilInitialized(ctx))
+	for i := range 4 {
+		s.Require().NoError(versionedQ.SpoolTask(&persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  fmt.Sprintf("wf-%d", i),
+			VersionDirective: &taskqueuespb.TaskVersionDirective{
+				Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
+				DeploymentVersion: &deploymentspb.WorkerDeploymentVersion{
+					DeploymentName: deploymentName,
+					BuildId:        buildID,
+				},
+				RevisionNumber: 1,
+			},
+		}))
+	}
+
+	versionTag := worker_versioning.ExternalWorkerDeploymentVersionToString(
+		&deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: buildID},
+	)
+	await.RequireTrue(s.T(), func() bool {
+		for _, count := range latestLogicalBacklogCountsByPriority(capture.Snapshot(), versionTag) {
+			if count > 0 {
+				return true
+			}
+		}
+		return false
+	}, 10*time.Second, 10*time.Millisecond)
+
+	// Pause after describe so it cannot reload C while the test unloads it.
+	// The next emit must clear the paused write.
+	gate.arm()
+	select {
+	case <-gate.paused:
+	case <-ctx.Done():
+		s.T().Fatal("emitter did not reach the write gate")
+	}
+	pm.unloadPhysicalQueue(versionedQ, unloadCauseIdle)
+	gate.open()
+
+	await.RequireTrue(s.T(), func() bool {
+		snap := capture.Snapshot()
+		for _, byPriority := range []map[string]float64{
+			latestLogicalBacklogCountsByPriority(snap, versionTag),
+			latestLogicalBacklogAgesByPriority(snap, versionTag),
+		} {
+			for _, v := range byPriority {
+				if v != 0 {
+					return false
+				}
+			}
+		}
+		return true
+	}, 2*time.Second, 10*time.Millisecond)
+	// The current version's series, which carries the unversioned backlog, is unaffected.
+	currentVersionTag := worker_versioning.ExternalWorkerDeploymentVersionToString(
+		&deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: "A"},
+	)
+	s.Require().Positive(latestLogicalBacklogCountsByPriority(capture.Snapshot(), currentVersionTag)[defaultPriorityTag])
+}
+
+func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_AttributedSeriesZeroedWhenNoLongerCurrent() {
+	if !s.newMatcher {
+		s.T().Skip("classic matcher has no per-priority subqueues, so there's no attributed-only priority")
+	}
+	const (
+		deploymentName = "foo"
+		currentBuildID = "A"
+		priorityKey    = 1 // not the default, so the current version's queue has no subqueue for it
+	)
+	s.addRoutingConfigUserData(deploymentName, currentBuildID, "", 0)
+
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{
+		loadTime:                   1 * time.Minute,
+		backlogMetricsEmitInterval: 10 * time.Millisecond,
+	})
+	defer cleanup()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, currentVersionTag := s.loadCurrentVersionWithAttributedBacklog(ctx, pm, deploymentName, currentBuildID, priorityKey)
+
+	attributedPriority := metrics.MatchingTaskPriorityTag(priorityKey).Value
+	await.RequireTrue(s.T(), func() bool {
+		return latestLogicalBacklogCountsByPriority(capture.Snapshot(), currentVersionTag)[attributedPriority] > 0
+	}, 10*time.Second, 10*time.Millisecond)
+
+	// Make another build current. A's queue stays loaded but no longer gets any attributed backlog,
+	// so the priority it only had through attribution must be zeroed.
+	s.userDataMgr.Lock()
+	s.addRoutingConfigUserData(deploymentName, "B", "", 0)
+	s.userDataMgr.Unlock()
+
+	await.RequireTrue(s.T(), func() bool {
+		snap := capture.Snapshot()
+		return latestLogicalBacklogCountsByPriority(snap, currentVersionTag)[attributedPriority] == 0 &&
+			latestLogicalBacklogAgesByPriority(snap, currentVersionTag)[attributedPriority] == 0
+	}, 2*time.Second, 10*time.Millisecond)
 }
 
 func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_CurrentOnly() {
@@ -1595,8 +1905,10 @@ func (s *PartitionManagerTestSuite) describeStatsEventually(
 
 // testPartitionManagerConfig holds configuration for setting up a partition manager in tests
 type testPartitionManagerConfig struct {
-	loadTime         time.Duration // How long ago partition was loaded
-	withRecentPoller bool          // Whether to register a poller to simulate recent poller activity
+	loadTime                   time.Duration                         // How long ago partition was loaded
+	withRecentPoller           bool                                  // Whether to register a poller to simulate recent poller activity
+	backlogMetricsEmitInterval time.Duration                         // Overrides the logical backlog emit interval if set
+	wrapMetricsHandler         func(metrics.Handler) metrics.Handler // Wraps the capturing metrics handler if set
 }
 
 // capturingTaskMatchHook records ProcessTaskMatch calls for test assertions.
@@ -1704,8 +2016,15 @@ func (s *PartitionManagerTestSuite) setupPartitionManagerWithCapture(
 	s.Require().NoError(err)
 	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), s.partitionMgr.engine.config, s.partitionMgr.ns.Name())
+	if config.backlogMetricsEmitInterval > 0 {
+		tqConfig.BacklogMetricsEmitInterval = func() time.Duration { return config.backlogMetricsEmitInterval }
+	}
+	var pmMetricsHandler metrics.Handler = metricsHandler
+	if config.wrapMetricsHandler != nil {
+		pmMetricsHandler = config.wrapMetricsHandler(metricsHandler)
+	}
 
-	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, metricsHandler, s.userDataMgr)
+	pm, err := newTaskQueuePartitionManager(s.partitionMgr.engine, s.partitionMgr.ns, partition, tqConfig, s.partitionMgr.logger, s.partitionMgr.throttledLogger, pmMetricsHandler, s.userDataMgr)
 	s.Require().NoError(err)
 	pm.Start()
 
