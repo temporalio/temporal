@@ -25,7 +25,7 @@ const (
 
 // WorkflowState is the persisted state of the CHASM workflow root component. The workflow's
 // own execution state still lives in mutable state; this message only carries the bookkeeping
-// that the CHASM tree owns.
+// specific to the CHASM tree.
 type WorkflowState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Metadata about attached completion callbacks.
