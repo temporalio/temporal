@@ -25,7 +25,7 @@ const VersionCheckInterval = 24 * time.Hour
 
 const (
 	versionCheckTimeout         = 10 * time.Second
-	versionCheckShutdownTimeout = 2 * time.Second
+	versionCheckShutdownTimeout = 5 * time.Second
 )
 
 type VersionChecker struct {

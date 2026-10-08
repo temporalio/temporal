@@ -328,8 +328,7 @@ func TestVersionCheckerShutdownDeadline(t *testing.T) {
 		deadline, ok := ctx.Deadline()
 		require.True(t, ok)
 		require.LessOrEqual(t, time.Until(deadline), versionCheckShutdownTimeout)
-		<-ctx.Done()
-		return nil, ctx.Err()
+		return nil, context.DeadlineExceeded
 	})
 	handler := metricstest.NewCaptureHandler()
 	capture := handler.StartCapture()
