@@ -424,7 +424,7 @@ func TestTransitionSucceeded(t *testing.T) {
 				"workflowType":    standaloneOperationWorkflowTypeName,
 			}
 			if tc.includeBackendTag {
-				countTags["nexus_op_backend"] = "chasm"
+				countTags["backend"] = "chasm"
 				countTags["workflowType"] = "_unknown_"
 			}
 			latencyTags := maps.Clone(countTags)

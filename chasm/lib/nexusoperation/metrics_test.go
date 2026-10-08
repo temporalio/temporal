@@ -71,10 +71,10 @@ func TestOperationBackendMetricTag(t *testing.T) {
 					}, slices.Collect(maps.Keys(snapshot)))
 					for metric, recordings := range snapshot {
 						for _, recording := range recordings {
-							if tc.wantTag && workflowOperation {
-								require.Equal(t, "chasm", recording.Tags["nexus_op_backend"], metric)
+							if tc.wantTag {
+								require.Equal(t, "chasm", recording.Tags["backend"], metric)
 							} else {
-								require.NotContains(t, recording.Tags, "nexus_op_backend", metric)
+								require.NotContains(t, recording.Tags, "backend", metric)
 							}
 						}
 					}

@@ -879,7 +879,7 @@ func (o *Operation) metricsHandler(ctx chasm.Context) metrics.Handler {
 		softassert.Fail(ctx.Logger(), "operation context missing")
 	} else {
 		conf := opCtx.MetricTagConfig()
-		if workflowOperation && conf.IncludeBackendTag {
+		if conf.IncludeBackendTag {
 			tags = append(tags, metrics.NexusOperationBackendTag("chasm"))
 		}
 		if conf.IncludeServiceTag {

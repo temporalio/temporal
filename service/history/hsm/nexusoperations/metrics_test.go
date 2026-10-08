@@ -54,9 +54,9 @@ func TestOperationBackendMetricTag(t *testing.T) {
 			for metric, recordings := range snapshot {
 				for _, recording := range recordings {
 					if tc.wantTag {
-						require.Equal(t, "hsm", recording.Tags["nexus_op_backend"], metric)
+						require.Equal(t, "hsm", recording.Tags["backend"], metric)
 					} else {
-						require.NotContains(t, recording.Tags, "nexus_op_backend", metric)
+						require.NotContains(t, recording.Tags, "backend", metric)
 					}
 				}
 			}
