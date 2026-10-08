@@ -71,10 +71,18 @@ func (h *handler) UpsertTaskQueueUserData(
 	if req.GetNamespaceId() == "" || req.GetTaskQueue() == "" || req.GetTaskQueueUserData() == nil {
 		return nil, serviceerror.NewInvalidArgument("invalid task queue user data write request")
 	}
-	return h.writeTaskQueueUserData(ctx, req)
-}
-
-func (*handler) writeTaskQueueUserData(ctx context.Context, req *tquserdatapb.UpsertTaskQueueUserDataRequest) (*tquserdatapb.UpsertTaskQueueUserDataResponse, error) {
+	switch condition := req.GetPrecondition().(type) {
+	case *tquserdatapb.UpsertTaskQueueUserDataRequest_ExpectMissing:
+		if !condition.ExpectMissing {
+			return nil, serviceerror.NewInvalidArgument("missing task queue user data write precondition")
+		}
+	case *tquserdatapb.UpsertTaskQueueUserDataRequest_ExpectedVersion:
+		if condition.ExpectedVersion < 0 {
+			return nil, serviceerror.NewInvalidArgument("expected task queue user data version must not be negative")
+		}
+	default:
+		return nil, serviceerror.NewInvalidArgument("missing task queue user data write precondition")
+	}
 	key := chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: req.GetTaskQueue()}
 	if req.GetExpectMissing() {
 		_, err := chasm.StartExecution(
@@ -97,18 +105,11 @@ func (*handler) writeTaskQueueUserData(ctx context.Context, req *tquserdatapb.Up
 		}
 		return &tquserdatapb.UpsertTaskQueueUserDataResponse{Version: 1}, nil
 	}
-	condition, ok := req.GetPrecondition().(*tquserdatapb.UpsertTaskQueueUserDataRequest_ExpectedVersion)
-	if !ok {
-		return nil, serviceerror.NewInvalidArgument("missing task queue user data write precondition")
-	}
-	if condition.ExpectedVersion < 0 {
-		return nil, serviceerror.NewInvalidArgument("expected task queue user data version must not be negative")
-	}
 	response, _, err := chasm.UpdateComponent(
 		ctx,
 		chasm.NewComponentRef[*TaskQueueUserData](key),
 		func(taskQueueUserData *TaskQueueUserData, mutableContext chasm.MutableContext, _ *tquserdatapb.UpsertTaskQueueUserDataRequest) (*tquserdatapb.UpsertTaskQueueUserDataResponse, error) {
-			if condition.ExpectedVersion != taskQueueUserData.Version {
+			if req.GetExpectedVersion() != taskQueueUserData.Version {
 				return nil, serviceerror.NewFailedPrecondition("task queue user data version changed")
 			}
 			taskQueueUserData.Version++
