@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/predicates"
@@ -639,6 +640,16 @@ func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
 	)
 	mockShard.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	mockShard.Resource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).DoAndReturn(
+		func(id namespace.ID) (namespace.Name, error) {
+			return namespace.Name(id.String()), nil
+		},
+	).AnyTimes()
+
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	defer captureHandler.StopCapture(capture)
+	s.metricsHandler = captureHandler
 
 	base := s.newQueueBase(mockShard, tasks.CategoryTimer, nil)
 	base.checkpointTimer = time.NewTimer(s.options.CheckpointInterval())
@@ -733,6 +744,24 @@ func (s *queueBaseSuite) TestCheckPoint_MoveTaskGroupAction() {
 	)
 
 	base.checkpoint()
+
+	snapshot := capture.Snapshot()
+	recordings := snapshot[metrics.QueuePendingTasksPerNamespace.Name()]
+	s.Require().Len(recordings, 5)
+	expectedCounts := map[string][]int64{
+		"namespace1": {20},
+		"namespace2": {100, 100},
+		"namespace3": {200, 300},
+	}
+	actualCounts := make(map[string][]int64)
+	for _, recording := range recordings {
+		s.Equal(tasks.CategoryTimer.Name(), recording.Tags["task_category"])
+		ns := recording.Tags["namespace"]
+		actualCounts[ns] = append(actualCounts[ns], recording.Value.(int64))
+	}
+	for ns, expected := range expectedCounts {
+		s.ElementsMatch(expected, actualCounts[ns])
+	}
 }
 
 func (s *queueBaseSuite) QueueStateEqual(
