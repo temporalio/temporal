@@ -160,6 +160,7 @@ func (c *Callback) loadInvocationArgs(
 		completionSourceTag: c.CompletionSource.Fqn(),
 		businessID:          ctx.ExecutionKey().BusinessID,
 		runID:               ctx.ExecutionKey().RunID,
+		requestID:           c.RequestId,
 		attempt:             c.Attempt,
 	}, nil
 }
