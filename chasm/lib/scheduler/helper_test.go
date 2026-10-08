@@ -110,7 +110,8 @@ func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *s
 			BaseLogger:     logger,
 		}),
 		scheduler.NewSchedulerCallbacksTaskHandler(scheduler.SchedulerCallbacksTaskHandlerOptions{
-			Config: config,
+			Config:         config,
+			MetricsHandler: metrics.NoopMetricsHandler,
 		}),
 		scheduler.NewGeneratorTaskHandler(scheduler.GeneratorTaskHandlerOptions{
 			Config:         config,
@@ -408,6 +409,7 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 
 	tv := testvars.New(t)
 	nodeBackend := &chasm.MockNodeBackend{
+		HandleNow:                 timeSource.Now,
 		HandleNextTransitionCount: func() int64 { return 2 },
 		HandleGetCurrentVersion:   func() int64 { return 1 },
 		HandleGetWorkflowKey:      tv.Any().WorkflowKey,
@@ -421,7 +423,7 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 		},
 	}
 
-	node := chasm.NewEmptyTree(registry, timeSource, nodeBackend, nodePathEncoder, logger, metrics.NoopMetricsHandler)
+	node := chasm.NewEmptyTree(registry, nodeBackend, nodePathEncoder, logger, metrics.NoopMetricsHandler)
 	ctx := chasm.NewMutableContext(context.Background(), node)
 	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, schedule, nil)
 	if err != nil {
@@ -593,6 +595,7 @@ func setupTestInfra(t *testing.T, specProcessor scheduler.SpecProcessor) *testIn
 	timeSource.Update(time.Now())
 
 	tv := testvars.New(t)
+	nodeBackend.HandleNow = timeSource.Now
 	nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
 	nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
 	nodeBackend.HandleGetWorkflowKey = tv.Any().WorkflowKey
@@ -605,7 +608,7 @@ func setupTestInfra(t *testing.T, specProcessor scheduler.SpecProcessor) *testIn
 		}
 	}
 
-	node := chasm.NewEmptyTree(registry, timeSource, nodeBackend, nodePathEncoder, logger, metrics.NoopMetricsHandler)
+	node := chasm.NewEmptyTree(registry, nodeBackend, nodePathEncoder, logger, metrics.NoopMetricsHandler)
 	return &testInfra{
 		node:        node,
 		nodeBackend: nodeBackend,

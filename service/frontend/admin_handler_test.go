@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -72,6 +73,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -2192,7 +2194,8 @@ func (s *adminHandlerSuite) TestMigrateScheduleToWorkflowExistingWorkflow() {
 		},
 	}).Return(&historyservice.DescribeWorkflowExecutionResponse{
 		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
-			Type: &commonpb.WorkflowType{Name: legacyscheduler.WorkflowType},
+			Type:   &commonpb.WorkflowType{Name: legacyscheduler.WorkflowType},
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		},
 	}, nil)
 
@@ -2232,7 +2235,9 @@ func (s *adminHandlerSuite) TestMigrateScheduleToWorkflowBlockedByWorkflowSentin
 		},
 	}).Return(&historyservice.DescribeWorkflowExecutionResponse{
 		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
-			Type: &commonpb.WorkflowType{Name: dummy.DummyWFTypeName},
+			Type:      &commonpb.WorkflowType{Name: dummy.DummyWFTypeName},
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			StartTime: timestamppb.New(time.Now()),
 		},
 	}, nil)
 
@@ -2254,6 +2259,51 @@ func (s *adminHandlerSuite) TestMigrateScheduleToWorkflowBlockedByWorkflowSentin
 	s.ErrorIs(err, chasmscheduler.ErrSentinelBlocked)
 	var unavailableErr *serviceerror.Unavailable
 	s.ErrorAs(err, &unavailableErr)
+}
+
+// A dummy sentinel completes after its idle window rather than disappearing, and stays
+// describable for the namespace's whole retention period. Blocking on it would stall rollback
+// for days instead of the minutes the sentinel is meant to reserve, so a closed sentinel must
+// not block.
+func (s *adminHandlerSuite) TestMigrateScheduleToWorkflowClosedSentinelDoesNotBlock() {
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: s.namespaceID.String(),
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.namespace.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: legacyscheduler.WorkflowIDPrefix + "test-schedule",
+			},
+		},
+	}).Return(&historyservice.DescribeWorkflowExecutionResponse{
+		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+			Type:      &commonpb.WorkflowType{Name: dummy.DummyWFTypeName},
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			StartTime: timestamppb.New(time.Now().Add(-chasmscheduler.SentinelIdleTime)),
+			CloseTime: timestamppb.New(time.Now()),
+		},
+	}, nil)
+
+	var capturedReq *schedulerpb.MigrateToWorkflowRequest
+	fake := &fakeSchedulerClient{
+		migrateToWorkflowFn: func(_ context.Context, req *schedulerpb.MigrateToWorkflowRequest) (*schedulerpb.MigrateToWorkflowResponse, error) {
+			capturedReq = req
+			return &schedulerpb.MigrateToWorkflowResponse{}, nil
+		},
+	}
+	s.handler.schedulerClient = fake
+
+	resp, err := s.handler.MigrateSchedule(context.Background(), &adminservice.MigrateScheduleRequest{
+		Namespace:  s.namespace.String(),
+		ScheduleId: "test-schedule",
+		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
+		Identity:   "test-identity",
+		RequestId:  "test-request-id",
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Require().NotNil(capturedReq)
+	s.Equal("test-schedule", capturedReq.ScheduleId)
 }
 
 func (s *adminHandlerSuite) TestMigrateScheduleToWorkflowError() {
@@ -2607,4 +2657,125 @@ func (s *adminHandlerSuite) TestGetSearchAttributes() {
 		var unavailable *serviceerror.Unavailable
 		s.ErrorAs(err, &unavailable)
 	})
+}
+
+func TestCreateDelegatedBatchRequest(t *testing.T) {
+	adminRequest := &adminservice.StartAdminBatchOperationRequest{
+		Namespace:       "target-namespace",
+		VisibilityQuery: "WorkflowType = 'test'",
+		JobId:           "job-id",
+		Reason:          "test reason",
+		Identity:        "test identity",
+	}
+
+	tests := []struct {
+		name      string
+		batchType enumspb.BatchOperationType
+		validate  func(*testing.T, *workflowservice.StartBatchOperationRequest)
+		wantError bool
+	}{
+		{
+			name:      "terminate workflows",
+			batchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+			validate: func(t *testing.T, request *workflowservice.StartBatchOperationRequest) {
+				op, ok := request.GetOperation().(*workflowservice.StartBatchOperationRequest_TerminationOperation)
+				require.True(t, ok)
+				require.Equal(t, adminRequest.GetIdentity(), op.TerminationOperation.GetIdentity())
+			},
+		},
+		{
+			name:      "terminate activities",
+			batchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+			validate: func(t *testing.T, request *workflowservice.StartBatchOperationRequest) {
+				op, ok := request.GetOperation().(*workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation)
+				require.True(t, ok)
+				require.Equal(t, adminRequest.GetIdentity(), op.TerminateActivitiesOperation.GetIdentity())
+				require.Equal(t, adminRequest.GetReason(), op.TerminateActivitiesOperation.GetReason())
+			},
+		},
+		{
+			name:      "delete workflows",
+			batchType: enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW,
+			validate: func(t *testing.T, request *workflowservice.StartBatchOperationRequest) {
+				op, ok := request.GetOperation().(*workflowservice.StartBatchOperationRequest_DeletionOperation)
+				require.True(t, ok)
+				require.Equal(t, adminRequest.GetIdentity(), op.DeletionOperation.GetIdentity())
+			},
+		},
+		{
+			name:      "delete activities",
+			batchType: enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY,
+			validate: func(t *testing.T, request *workflowservice.StartBatchOperationRequest) {
+				_, ok := request.GetOperation().(*workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation)
+				require.True(t, ok)
+			},
+		},
+		{
+			name:      "unsupported operation",
+			batchType: enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
+			wantError: true,
+		},
+		{
+			name:      "unspecified operation",
+			batchType: enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED,
+			wantError: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			request, err := createDelegatedBatchRequest(adminRequest, tc.batchType)
+			if tc.wantError {
+				var invalidArgument *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgument)
+				require.Nil(t, request)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, adminRequest.GetNamespace(), request.GetNamespace())
+			require.Equal(t, adminRequest.GetVisibilityQuery(), request.GetVisibilityQuery())
+			require.Equal(t, adminRequest.GetJobId(), request.GetJobId())
+			require.Equal(t, adminRequest.GetReason(), request.GetReason())
+			tc.validate(t, request)
+		})
+	}
+}
+
+func TestCreateDelegatedBatchRequestConvertsExecutions(t *testing.T) {
+	adminRequest := &adminservice.StartAdminBatchOperationRequest{
+		Namespace: "target-namespace",
+		JobId:     "job-id",
+		Reason:    "test reason",
+		Executions: []*commonpb.WorkflowExecution{
+			{WorkflowId: "business-id", RunId: "run-id"},
+		},
+	}
+
+	tests := []struct {
+		name          string
+		batchType     enumspb.BatchOperationType
+		executionType enumspb.ExecutionType
+	}{
+		{
+			name:          "workflow operation",
+			batchType:     enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+			executionType: enumspb.EXECUTION_TYPE_WORKFLOW,
+		},
+		{
+			name:          "activity operation",
+			batchType:     enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+			executionType: enumspb.EXECUTION_TYPE_ACTIVITY,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			request, err := createDelegatedBatchRequest(adminRequest, tc.batchType)
+			require.NoError(t, err)
+			require.Equal(t, []*commonpb.Execution{
+				{Type: tc.executionType, BusinessId: "business-id", RunId: "run-id"},
+			}, request.GetTargetExecutions())
+		})
+	}
 }

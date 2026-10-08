@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/serialization"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
@@ -93,6 +94,9 @@ func (q *namespaceReplicationQueueImpl) Close() {
 }
 
 func (q *namespaceReplicationQueueImpl) Publish(ctx context.Context, task *replicationspb.ReplicationTask) error {
+	if task != nil && task.VisibilityTime == nil {
+		task.VisibilityTime = timestamppb.Now()
+	}
 	blob, err := q.serializer.ReplicationTaskToBlob(task)
 	if err != nil {
 		return fmt.Errorf("failed to encode message: %v", err)

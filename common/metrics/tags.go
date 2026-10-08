@@ -26,6 +26,7 @@ const (
 	namespaceState          = "namespace_state"
 	sourceCluster           = "source_cluster"
 	targetCluster           = "target_cluster"
+	transport               = "transport"
 	taskSourceTag           = "source"
 	forwardedTag            = "forwarded"
 	pollResultTagName       = "poll_result"
@@ -37,6 +38,7 @@ const (
 	activityType            = "activityType"
 	commandType             = "commandType"
 	serviceName             = "service_name"
+	concurrencyLimitGroup   = "concurrency_limit_group"
 	actionType              = "action_type"
 	workerVersion           = "worker_version"
 	workerDeploymentName    = "worker_deployment_name"
@@ -157,6 +159,14 @@ func TargetClusterTag(value string) Tag {
 	return Tag{Key: targetCluster, Value: value}
 }
 
+// TransportTag returns a new transport tag.
+func TransportTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: transport, Value: value}
+}
+
 // FromClusterIDTag returns a new from cluster tag.
 func FromClusterIDTag(value int32) Tag {
 	return Tag{Key: fromCluster, Value: strconv.FormatInt(int64(value), 10)}
@@ -165,6 +175,22 @@ func FromClusterIDTag(value int32) Tag {
 // ToClusterIDTag returns a new to cluster tag.
 func ToClusterIDTag(value int32) Tag {
 	return Tag{Key: toCluster, Value: strconv.FormatInt(int64(value), 10)}
+}
+
+// FromClusterTag returns a new from cluster tag keyed by cluster name.
+func FromClusterTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: fromCluster, Value: value}
+}
+
+// ToClusterTag returns a new to cluster tag keyed by cluster name.
+func ToClusterTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: toCluster, Value: value}
 }
 
 // UnsafeTaskQueueTag returns a new task queue tag.
@@ -428,6 +454,10 @@ func NexusOperationTag(value string) Tag {
 	return Tag{Key: nexusOperationTagName, Value: value}
 }
 
+func NexusOperationBackendTag(value string) Tag {
+	return Tag{Key: nexusOperationBackendTagName, Value: value}
+}
+
 // HttpStatusTag returns a new httpStatusTag.
 func HttpStatusTag(value int) Tag {
 	return Tag{Key: httpStatusTagName, Value: strconv.Itoa(value)}
@@ -439,6 +469,13 @@ func ResourceExhaustedCauseTag(cause enumspb.ResourceExhaustedCause) Tag {
 
 func ResourceExhaustedScopeTag(scope enumspb.ResourceExhaustedScope) Tag {
 	return Tag{Key: resourceExhaustedScopeTag, Value: scope.String()}
+}
+
+func ConcurrencyLimitGroupTag(value string) Tag {
+	if len(value) == 0 {
+		value = "not_applicable"
+	}
+	return Tag{Key: concurrencyLimitGroup, Value: value}
 }
 
 func LastAttemptCauseTag(value string) Tag {
@@ -488,6 +525,9 @@ type ReasonString string
 // ReasonTag is a generic tag can be used anywhere a reason is needed.
 // Make sure that the value is of limited cardinality.
 func ReasonTag(value ReasonString) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
 	return Tag{Key: reason, Value: string(value)}
 }
 
@@ -504,6 +544,16 @@ func ReplicationTaskPriorityTag(value enumsspb.TaskPriority) Tag {
 // DestinationTag is a tag for metrics emitted by outbound task executors for the task's destination.
 func DestinationTag(value string) Tag {
 	return Tag{Key: destination, Value: value}
+}
+
+// NexusCompletionSourceTag identifies the CHASM component that delivered a completion callback, by
+// its fully qualified name, e.g. "workflow.workflow". An empty value means the framework could not
+// resolve the callback's parent.
+func NexusCompletionSourceTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return Tag{Key: nexusCompletionSourceTagName, Value: value}
 }
 
 func VersioningBehaviorTag(behavior enumspb.VersioningBehavior) Tag {

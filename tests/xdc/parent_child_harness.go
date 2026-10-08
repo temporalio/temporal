@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -237,16 +238,16 @@ func (r *parentChildScenarioRuntime) close() {
 			gate.close()
 		}
 	}
-	for index := len(r.removeHooks) - 1; index >= 0; index-- {
-		r.removeHooks[index]()
+	for _, removeHook := range slices.Backward(r.removeHooks) {
+		removeHook()
 	}
 	for _, capture := range r.metricCaptures {
 		if capture.handler != nil && capture.capture != nil {
 			capture.handler.StopCapture(capture.capture)
 		}
 	}
-	for index := len(r.cleanups) - 1; index >= 0; index-- {
-		r.cleanups[index]()
+	for _, cleanup := range slices.Backward(r.cleanups) {
+		cleanup()
 	}
 }
 
@@ -272,8 +273,8 @@ func useTransitionHistory() parentChildScenarioStep {
 	return parentChildScenarioStep{
 		name: "use transition history for this scenario",
 		run: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
-			for index := len(runtime.legacyReplicationCleanups) - 1; index >= 0; index-- {
-				runtime.legacyReplicationCleanups[index]()
+			for _, cleanup := range slices.Backward(runtime.legacyReplicationCleanups) {
+				cleanup()
 			}
 			runtime.legacyReplicationCleanups = nil
 			return nil
@@ -395,6 +396,24 @@ func enableChildWorkflowResend(cluster parentChildCluster) parentChildScenarioSt
 			runtime.cleanups = append(runtime.cleanups, runtime.suite.clusters[clusterIndex].OverrideDynamicConfig(
 				runtime.suite.T(),
 				dynamicconfig.EnableChildWorkflowResend,
+				true,
+			))
+			return nil
+		},
+	}
+}
+
+func enableAsyncParentWorkflowResend(cluster parentChildCluster) parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: fmt.Sprintf("enable async parent workflow resend on %s", cluster),
+		run: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+			clusterIndex := int(cluster)
+			if clusterIndex < 0 || clusterIndex >= len(runtime.suite.clusters) {
+				return fmt.Errorf("unknown parent-child cluster %d", cluster)
+			}
+			runtime.cleanups = append(runtime.cleanups, runtime.suite.clusters[clusterIndex].OverrideDynamicConfig(
+				runtime.suite.T(),
+				dynamicconfig.EnableAsyncParentWorkflowResend,
 				true,
 			))
 			return nil
@@ -561,6 +580,34 @@ func confirmWorkflowIsMissingOnCluster(
 		name: fmt.Sprintf("confirm %s is missing on %s", workflow, cluster),
 		run: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
 			return runtime.confirmWorkflowMissing(ctx, cluster, workflow)
+		},
+	}
+}
+
+func deleteWorkflowOnCluster(cluster parentChildCluster, workflow parentChildWorkflow) parentChildScenarioStep {
+	return parentChildScenarioStep{
+		name: fmt.Sprintf("delete %s on %s", workflow, cluster),
+		run: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
+			workflowID, err := runtime.workflowID(workflow)
+			if err != nil {
+				return err
+			}
+			_, err = runtime.suite.clusters[cluster].FrontendClient().DeleteWorkflowExecution(ctx, &workflowservice.DeleteWorkflowExecutionRequest{
+				Namespace: runtime.namespace,
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: workflowID,
+					RunId:      runtime.workflowRunID(workflow),
+				},
+			})
+			if err != nil {
+				return err
+			}
+			return runtime.waitForExpectation(ctx, parentChildExpectation{
+				name: fmt.Sprintf("%s is deleted on %s", workflow, cluster),
+				check: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
+					return runtime.confirmWorkflowMissing(ctx, cluster, workflow)
+				},
+			})
 		},
 	}
 }
@@ -1069,8 +1116,7 @@ func (r *parentChildScenarioRuntime) confirmWorkflowMissing(
 	workflow parentChildWorkflow,
 ) error {
 	_, err := r.workflowMutableState(ctx, cluster, workflow)
-	var notFound *serviceerror.NotFound
-	if errors.As(err, &notFound) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 		return nil
 	}
 	if err == nil {
@@ -1092,7 +1138,7 @@ func (r *parentChildScenarioRuntime) requireCapturedMetric(
 	if capture == nil {
 		return fmt.Errorf("metrics capture is not initialized for %s", cluster)
 	}
-	recordings := capture.Snapshot()[metricName]
+	recordings := capture.SnapshotMetric(metricName)
 	for _, recording := range recordings {
 		matches := true
 		for key, value := range tags {

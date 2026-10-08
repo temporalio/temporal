@@ -29,8 +29,7 @@ type Thresholds struct {
 	// ErrorRatioThreshold configures the moving-window error ratio. Nil = no error-ratio check
 	ErrorRatioThreshold *ErrorRatioThreshold
 
-	// Enforced controls whether a breach actually marks the node unhealthy. When false
-	// the checks are still computed and reported but never change the SERVING state
+	// Enforced controls whether a breach actually marks the node unhealthy
 	Enforced bool
 }
 

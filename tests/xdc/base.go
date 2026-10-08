@@ -43,7 +43,7 @@ const (
 
 type (
 	xdcBaseSuite struct {
-		// TODO (alex): use FunctionalTestBase instead.
+		// TODO (alex): use TestEnv instead.
 		suite.Suite
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
@@ -340,10 +340,21 @@ func (s *xdcBaseSuite) updateNamespaceClusters(
 	clusters []*testcore.TestCluster,
 ) {
 	replicationConfigs := make([]*replicationpb.ClusterReplicationConfig, len(clusters))
-	clusterNames := make([]string, len(clusters))
 	for ci, c := range clusters {
 		replicationConfigs[ci] = &replicationpb.ClusterReplicationConfig{ClusterName: c.ClusterName()}
-		clusterNames[ci] = c.ClusterName()
+	}
+	s.updateNamespaceClustersWithReplicationConfigs(ns, inClusterIndex, clusters, replicationConfigs)
+}
+
+func (s *xdcBaseSuite) updateNamespaceClustersWithReplicationConfigs(
+	ns string,
+	inClusterIndex int,
+	clusters []*testcore.TestCluster,
+	replicationConfigs []*replicationpb.ClusterReplicationConfig,
+) {
+	clusterNames := make([]string, len(replicationConfigs))
+	for ci, replicationConfig := range replicationConfigs {
+		clusterNames[ci] = replicationConfig.GetClusterName()
 	}
 
 	_, err := clusters[inClusterIndex].FrontendClient().UpdateNamespace(testcore.NewContext(), &workflowservice.UpdateNamespaceRequest{

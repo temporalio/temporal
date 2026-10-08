@@ -1974,18 +1974,6 @@ func (mr *MockMutableStateMockRecorder) DeleteSubStateMachine(path any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSubStateMachine", reflect.TypeOf((*MockMutableState)(nil).DeleteSubStateMachine), path)
 }
 
-// EnsureChasmWorkflowComponent mocks base method.
-func (m *MockMutableState) EnsureChasmWorkflowComponent(ctx context.Context) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "EnsureChasmWorkflowComponent", ctx)
-}
-
-// EnsureChasmWorkflowComponent indicates an expected call of EnsureChasmWorkflowComponent.
-func (mr *MockMutableStateMockRecorder) EnsureChasmWorkflowComponent(ctx any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "EnsureChasmWorkflowComponent", reflect.TypeOf((*MockMutableState)(nil).EnsureChasmWorkflowComponent), ctx)
-}
-
 // FlushBufferedEvents mocks base method.
 func (m *MockMutableState) FlushBufferedEvents() {
 	m.ctrl.T.Helper()
@@ -2807,6 +2795,21 @@ func (mr *MockMutableStateMockRecorder) GetTransientWorkflowTaskInfo(workflowTas
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTransientWorkflowTaskInfo", reflect.TypeOf((*MockMutableState)(nil).GetTransientWorkflowTaskInfo), workflowTask, identity)
 }
 
+// GetUpdateAcceptedEventID mocks base method.
+func (m *MockMutableState) GetUpdateAcceptedEventID(ctx context.Context, updateID string) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetUpdateAcceptedEventID", ctx, updateID)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetUpdateAcceptedEventID indicates an expected call of GetUpdateAcceptedEventID.
+func (mr *MockMutableStateMockRecorder) GetUpdateAcceptedEventID(ctx, updateID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpdateAcceptedEventID", reflect.TypeOf((*MockMutableState)(nil).GetUpdateAcceptedEventID), ctx, updateID)
+}
+
 // GetUpdateCondition mocks base method.
 func (m *MockMutableState) GetUpdateCondition() (int64, int64) {
 	m.ctrl.T.Helper()
@@ -3426,6 +3429,18 @@ func (m *MockMutableState) RecordLastActivityCompleteTime(ai *persistence.Activi
 func (mr *MockMutableStateMockRecorder) RecordLastActivityCompleteTime(ai any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordLastActivityCompleteTime", reflect.TypeOf((*MockMutableState)(nil).RecordLastActivityCompleteTime), ai)
+}
+
+// RecordTimeSkippingTransition mocks base method.
+func (m *MockMutableState) RecordTimeSkippingTransition(transition *chasm.TimeSkippingTransition) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RecordTimeSkippingTransition", transition)
+}
+
+// RecordTimeSkippingTransition indicates an expected call of RecordTimeSkippingTransition.
+func (mr *MockMutableStateMockRecorder) RecordTimeSkippingTransition(transition any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordTimeSkippingTransition", reflect.TypeOf((*MockMutableState)(nil).RecordTimeSkippingTransition), transition)
 }
 
 // RefreshExpirationTimeoutTask mocks base method.

@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
@@ -2458,7 +2459,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	s.NotEqual(runID, resp.GetRunId())
 }
 
-func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateRequests() {
+func (s *engine2Suite) TestSignalWithStartWorkflowExecution_ConcurrentCreate_SurfacesError() {
 	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
 
 	namespaceID := tests.NamespaceID
@@ -2528,9 +2529,110 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 
 	ctx := metrics.AddMetricsContext(context.Background())
 	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(ctx, sRequest)
+	s.ErrorIs(err, workflowAlreadyStartedErr)
+	s.Nil(resp)
+}
+
+// signalWithStartRequestWithConflictPolicy builds a SignalWithStart carrying an explicit
+// workflow id conflict policy.
+func (s *engine2Suite) signalWithStartRequestWithConflictPolicy(
+	workflowID string,
+	requestID string,
+	conflictPolicy enumspb.WorkflowIdConflictPolicy,
+) *historyservice.SignalWithStartWorkflowExecutionRequest {
+	return &historyservice.SignalWithStartWorkflowExecutionRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
+			Namespace:                tests.NamespaceID.String(),
+			WorkflowId:               workflowID,
+			WorkflowType:             &commonpb.WorkflowType{Name: "workflowType"},
+			TaskQueue:                &taskqueuepb.TaskQueue{Name: "testTaskQueue"},
+			WorkflowExecutionTimeout: durationpb.New(1 * time.Second),
+			WorkflowTaskTimeout:      durationpb.New(2 * time.Second),
+			Identity:                 "testIdentity",
+			RequestId:                requestID,
+			WorkflowIdReusePolicy:    enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+			WorkflowIdConflictPolicy: conflictPolicy,
+			SignalName:               "my signal name",
+			SignalInput:              payloads.EncodeString("test input"),
+		},
+	}
+}
+
+// currentRunCarryingRequestID returns mutable state for a current run that already handled a
+// SignalWithStart: its id is on the started event and in the signal-requested set.
+func (s *engine2Suite) currentRunCarryingRequestID(
+	workflowID string,
+	runID string,
+	requestID string,
+	state enumsspb.WorkflowExecutionState,
+	status enumspb.WorkflowExecutionStatus,
+) *persistencespb.WorkflowMutableState {
+	ms := workflow.TestLocalMutableState(s.historyEngine.shardContext, s.mockEventsCache, tests.LocalNamespaceEntry,
+		workflowID, runID, log.NewTestLogger())
+	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+		"wType", "testTaskQueue", payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, "testIdentity")
+	wfMs := workflow.TestCloneToProto(context.Background(), ms)
+	wfMs.ExecutionState.State = state
+	wfMs.ExecutionState.Status = status
+	wfMs.ExecutionState.FirstExecutionRunId = runID
+	wfMs.ExecutionState.CreateRequestId = requestID
+	wfMs.ExecutionState.RequestIds = map[string]*persistencespb.RequestIDInfo{
+		requestID: {EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, EventId: common.FirstEventID},
+	}
+	wfMs.SignalRequestedIds = []string{requestID}
+	return wfMs
+}
+
+// A retry with a request ID handled by the closed current run returns that run without writing,
+// starting another run, or applying the signal again.
+func (s *engine2Suite) TestSignalWithStartWorkflowExecution_DedupedRetry_ReturnsExistingRunWithoutWrite() {
+	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+
+	workflowID := "wId"
+	runID := tests.RunID
+	requestID := uuid.NewString()
+	sRequest := s.signalWithStartRequestWithConflictPolicy(workflowID, requestID,
+		enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING)
+
+	wfMs := s.currentRunCarryingRequestID(workflowID, runID, requestID,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
+
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil).AnyTimes()
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{State: wfMs}, nil).AnyTimes()
+
+	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
 	s.NoError(err)
-	s.NotNil(resp.GetRunId())
 	s.Equal(runID, resp.GetRunId())
+	s.Equal(runID, resp.GetFirstExecutionRunId())
+	s.True(resp.GetStarted(), "started is true: this request id created the run")
+}
+
+// Deduplication precedes conflict-policy resolution, so a duplicate request ID does not terminate a
+// running workflow, even with TERMINATE_EXISTING. Reusing the ID to request a restart has no effect.
+func (s *engine2Suite) TestSignalWithStartWorkflowExecution_DedupedRetry_TerminateExistingDoesNotTerminate() {
+	s.config.EnableWorkflowIdReuseStartTimeValidation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+
+	workflowID := "wId"
+	runID := tests.RunID
+	requestID := uuid.NewString()
+	sRequest := s.signalWithStartRequestWithConflictPolicy(workflowID, requestID,
+		enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING)
+
+	wfMs := s.currentRunCarryingRequestID(workflowID, runID, requestID,
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
+
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetCurrentExecutionResponse{RunID: runID}, nil).AnyTimes()
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{State: wfMs}, nil).AnyTimes()
+
+	resp, err := s.historyEngine.SignalWithStartWorkflowExecution(metrics.AddMetricsContext(context.Background()), sRequest)
+	s.NoError(err)
+	s.Equal(runID, resp.GetRunId(), "the running run is returned, not terminated and replaced")
+	s.True(resp.GetStarted(), "started is true: this request id created the run")
 }
 
 func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlreadyStarted() {
@@ -3688,6 +3790,155 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentAs
 	s.Equal(util.ErrorType(&serviceerror.NotFound{}), details["initial_error_type"])
 	s.Equal("sync_workflow_state", details["stage"])
 	s.Equal(cluster.TestCurrentClusterName, attributes["source_cluster"].AsString())
+	_, missing := s.resendScheduler.SourceNotFound(definition.NewWorkflowKey(
+		request.NamespaceId,
+		request.ParentExecution.WorkflowId,
+		request.ParentExecution.RunId,
+	))
+	s.False(missing)
+}
+
+func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentAsyncSourceNotFound() {
+	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
+
+	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+		NamespaceId: tests.ParentNamespaceID.String(),
+		ParentExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ChildExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "child workflowId",
+			RunId:      "child runId",
+		},
+		ParentInitiatedId:      123,
+		ParentInitiatedVersion: 100,
+		ResendParent:           true,
+	}
+	parentKey := definition.NewWorkflowKey(request.NamespaceId, request.ParentExecution.WorkflowId, request.ParentExecution.RunId)
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{}).AnyTimes()
+
+	mockClusterMetadata := cluster.NewMockMetadata(s.controller)
+	mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
+	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
+	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.SetClusterMetadata(mockClusterMetadata)
+
+	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewNotFound("parent removed on source")).Times(1)
+
+	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound)
+	await.RequireTrue(s.T(), func() bool {
+		missingOn, ok := s.resendScheduler.SourceNotFound(parentKey)
+		return ok && missingOn == cluster.TestCurrentClusterName
+	}, 10*time.Second, 10*time.Millisecond)
+
+	_, err = s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	s.Require().NoError(err)
+}
+
+func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentAsyncSourceNotFoundOnPreviousSource() {
+	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
+
+	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+		NamespaceId: tests.ParentNamespaceID.String(),
+		ParentExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ChildExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "child workflowId",
+			RunId:      "child runId",
+		},
+		ParentInitiatedId:      123,
+		ParentInitiatedVersion: 100,
+		ResendParent:           true,
+	}
+	parentKey := definition.NewWorkflowKey(request.NamespaceId, request.ParentExecution.WorkflowId, request.ParentExecution.RunId)
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{}).AnyTimes()
+
+	mockClusterMetadata := cluster.NewMockMetadata(s.controller)
+	mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
+	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
+	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.SetClusterMetadata(mockClusterMetadata)
+
+	// The namespace has since moved to a source that may still have the parent.
+	s.resendScheduler.MarkSourceNotFound(parentKey, "previous source")
+	syncCalled := make(chan struct{})
+	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(context.Context, *adminservice.SyncWorkflowStateRequest, ...grpc.CallOption) (*adminservice.SyncWorkflowStateResponse, error) {
+			close(syncCalled)
+			return nil, serviceerror.NewUnavailable("source cluster unavailable")
+		}).Times(1)
+
+	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound)
+	select {
+	case <-syncCalled:
+	case <-time.After(10 * time.Second):
+		s.Fail("resend did not reach the current source")
+	}
+}
+
+func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentAsyncSourceNotFoundLocalParent() {
+	s.config.EnableAsyncParentWorkflowResend = func() bool { return true }
+
+	mockClusterMetadata := cluster.NewMockMetadata(s.controller)
+	mockClusterMetadata.EXPECT().GetClusterID().Return(tests.Version).AnyTimes()
+	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
+	mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, tests.Version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockShard.SetClusterMetadata(mockClusterMetadata)
+
+	ms := workflow.TestGlobalMutableState(s.historyEngine.shardContext, s.mockEventsCache, log.NewTestLogger(), tests.Version, tests.WorkflowID, tests.RunID)
+	addWorkflowExecutionStartedEvent(ms, &commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
+	wt := addWorkflowTaskScheduledEvent(ms)
+	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(ms, wt.ScheduledEventID, "testTaskQueue", uuid.NewString())
+	wt.StartedEventID = workflowTaskStartedEvent.GetEventId()
+	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(&s.Suite, ms, wt.ScheduledEventID, wt.StartedEventID, "some random identity")
+	initiatedEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(ms, workflowTaskCompletedEvent.GetEventId(),
+		tests.ChildNamespace, tests.ChildNamespaceID, "child workflowId", "child workflow type", "child task queue", nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(context.Background(), ms)}, nil).Times(2)
+	s.mockShard.Resource.RemoteAdminClient.EXPECT().SyncWorkflowState(gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewNotFound("parent removed on source")).Times(1)
+
+	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		ParentExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		ChildExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "child workflowId",
+			RunId:      uuid.NewString(),
+		},
+		ParentInitiatedId:      initiatedEvent.GetEventId(),
+		ParentInitiatedVersion: initiatedEvent.GetVersion(),
+		ResendParent:           true,
+	}
+	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	var notReady *serviceerror.WorkflowNotReady
+	s.ErrorAs(err, &notReady)
+	parentKey := definition.NewWorkflowKey(request.NamespaceId, tests.WorkflowID, tests.RunID)
+	await.RequireTrue(s.T(), func() bool {
+		missingOn, ok := s.resendScheduler.SourceNotFound(parentKey)
+		return ok && missingOn == cluster.TestCurrentClusterName
+	}, 10*time.Second, 10*time.Millisecond)
+
+	_, err = s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
+	s.Require().NoError(err)
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_ResendParentLimited() {
@@ -4130,7 +4381,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
 	_, err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
-	s.IsType(&serviceerror.NotFound{}, err)
+	s.Require().NoError(err)
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEventFoundOnCurrentBranch() {

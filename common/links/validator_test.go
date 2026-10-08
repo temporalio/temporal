@@ -30,9 +30,38 @@ func TestValidate(t *testing.T) {
 			},
 		},
 	}
+	validWorkflowEventRequestIDRef := &commonpb.Link{
+		Variant: &commonpb.Link_WorkflowEvent_{
+			WorkflowEvent: &commonpb.Link_WorkflowEvent{
+				Namespace:  "ns",
+				WorkflowId: "wf",
+				RunId:      "run",
+				Reference: &commonpb.Link_WorkflowEvent_RequestIdRef{
+					RequestIdRef: &commonpb.Link_WorkflowEvent_RequestIdReference{
+						RequestId: "request-id",
+						EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
+					},
+				},
+			},
+		},
+	}
 	validBatchJob := &commonpb.Link{
 		Variant: &commonpb.Link_BatchJob_{
 			BatchJob: &commonpb.Link_BatchJob{JobId: "job"},
+		},
+	}
+	validCallback := &commonpb.Link{
+		Variant: &commonpb.Link_Callback_{
+			Callback: &commonpb.Link_Callback{
+				Namespace: "ns",
+				Execution: &commonpb.Execution{
+					Type:       enumspb.EXECUTION_TYPE_NEXUS_OPERATION,
+					BusinessId: "op",
+					RunId:      "run",
+				},
+				ComponentPath: []string{"Update", "wf-update-id"},
+				RequestId:     "req",
+			},
 		},
 	}
 	validNexusOperation := &commonpb.Link{
@@ -67,10 +96,11 @@ func TestValidate(t *testing.T) {
 		err := links.Validate([]*commonpb.Link{
 			validWorkflowEvent,
 			validBatchJob,
+			validCallback,
 			validNexusOperation,
 			validActivity,
 			validWorkflow,
-		}, maxLinks+2, maxSize)
+		}, maxLinks+3, maxSize)
 		require.NoError(t, err)
 	})
 
@@ -113,11 +143,39 @@ func TestValidate(t *testing.T) {
 		require.ErrorContains(t, err, "workflow event link ref cannot have an unspecified event type and a non-zero event ID")
 	})
 
+	t.Run("WorkflowEvent/RequestIDRefEmptyRequestID", func(t *testing.T) {
+		l := proto.Clone(validWorkflowEventRequestIDRef).(*commonpb.Link)
+		l.GetWorkflowEvent().GetRequestIdRef().RequestId = ""
+		err := links.Validate([]*commonpb.Link{l}, maxLinks, maxSize)
+		require.ErrorContains(t, err, "workflow event request ID ref must not have an empty request ID")
+	})
+
+	t.Run("WorkflowEvent/RequestIDRefUnspecifiedEventType", func(t *testing.T) {
+		l := proto.Clone(validWorkflowEventRequestIDRef).(*commonpb.Link)
+		l.GetWorkflowEvent().GetRequestIdRef().EventType = enumspb.EVENT_TYPE_UNSPECIFIED
+		err := links.Validate([]*commonpb.Link{l}, maxLinks, maxSize)
+		require.ErrorContains(t, err, "workflow event request ID ref must not have an unspecified event type")
+	})
+
 	t.Run("BatchJob/EmptyJobID", func(t *testing.T) {
 		l := proto.Clone(validBatchJob).(*commonpb.Link)
 		l.GetBatchJob().JobId = ""
 		err := links.Validate([]*commonpb.Link{l}, maxLinks, maxSize)
 		require.ErrorContains(t, err, "batch job link must not have an empty job ID")
+	})
+
+	t.Run("Callback/EmptyExecution", func(t *testing.T) {
+		l := proto.Clone(validCallback).(*commonpb.Link)
+		l.GetCallback().Execution = nil
+		err := links.Validate([]*commonpb.Link{l}, maxLinks, maxSize)
+		require.ErrorContains(t, err, "callback link must have an execution")
+	})
+
+	t.Run("Callback/RequestID", func(t *testing.T) {
+		l := proto.Clone(validCallback).(*commonpb.Link)
+		l.GetCallback().RequestId = ""
+		err := links.Validate([]*commonpb.Link{l}, maxLinks, maxSize)
+		require.ErrorContains(t, err, "callback link must have a request ID")
 	})
 
 	t.Run("NexusOperation/EmptyNamespace", func(t *testing.T) {

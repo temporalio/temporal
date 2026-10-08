@@ -16,6 +16,8 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/activity"
+	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
@@ -81,6 +83,60 @@ func TestDescribeHistoryHost(t *testing.T) {
 		ShardId: 2,
 	})
 	assert.NoError(t, err)
+}
+
+func TestIsActivityTaskValidStandaloneActivity(t *testing.T) {
+	const (
+		namespaceID = "test-namespace-id"
+		businessID  = "test-activity-id"
+		stamp       = int32(42)
+	)
+
+	controller := gomock.NewController(t)
+	shardController := shard.NewMockController(controller)
+	engine := chasm.NewMockEngine(controller)
+	activityCtx := &chasm.MockMutableContext{}
+	standaloneActivity := &activity.Activity{
+		ActivityState: &activitypb.ActivityState{
+			Status: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+		},
+		LastAttempt: chasm.NewDataField(activityCtx, &activitypb.ActivityAttemptState{
+			Stamp: stamp,
+		}),
+	}
+	engine.EXPECT().ReadComponent(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			componentRef chasm.ComponentRef,
+			readFn func(chasm.Context, chasm.Component) error,
+			_ ...chasm.TransitionOption,
+		) error {
+			require.Equal(t, namespaceID, componentRef.NamespaceID)
+			require.Equal(t, businessID, componentRef.BusinessID)
+			return readFn(activityCtx, standaloneActivity)
+		},
+	)
+
+	componentRef, err := (&persistencespb.ChasmComponentRef{
+		NamespaceId: namespaceID,
+		BusinessId:  businessID,
+		ArchetypeId: activity.ArchetypeID,
+	}).Marshal()
+	require.NoError(t, err)
+
+	handler := &Handler{controller: shardController}
+	response, err := handler.IsActivityTaskValid(
+		chasm.NewEngineContext(context.Background(), engine),
+		&historyservice.IsActivityTaskValidRequest{
+			NamespaceId:  namespaceID,
+			Execution:    &commonpb.WorkflowExecution{},
+			Stamp:        stamp,
+			ComponentRef: componentRef,
+		},
+	)
+
+	require.NoError(t, err)
+	require.True(t, response.GetIsValid())
 }
 
 // fakeNexusCompletionHandler is a CHASM component that records whether its completion
