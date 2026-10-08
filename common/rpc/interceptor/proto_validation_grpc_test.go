@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zaptest/observer"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
@@ -34,7 +35,7 @@ func TestProtoValidationInterceptorGRPC(t *testing.T) {
 	t.Parallel()
 
 	core, entries := observer.New(zap.ErrorLevel)
-	validation, err := NewProtoValidationInterceptor(log.NewZapLogger(zap.New(core)))
+	validation, err := NewProtoValidationInterceptor(log.NewZapLogger(zap.New(core)), metrics.NoopMetricsHandler)
 	require.NoError(t, err)
 	server := grpc.NewServer(grpc.ChainUnaryInterceptor(
 		NewServiceErrorInterceptor(func() int { return 1000 }, metrics.NoopMetricsHandler, log.NewZapLogger(zap.New(core))).Intercept,
@@ -60,6 +61,15 @@ func TestProtoValidationInterceptorGRPC(t *testing.T) {
 	client := workflowservice.NewWorkflowServiceClient(connection)
 	_, err = client.StartNexusOperationExecution(t.Context(), &workflowservice.StartNexusOperationExecutionRequest{})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
+	details := status.Convert(err).Details()
+	require.Len(t, details, 1)
+	protorequire.ProtoEqual(t, &errdetails.BadRequest{FieldViolations: []*errdetails.BadRequest_FieldViolation{
+		{Field: "namespace", Reason: "required", Description: "value is required"},
+		{Field: "operation_id", Reason: "required", Description: "value is required"},
+		{Field: "endpoint", Reason: "required", Description: "value is required"},
+		{Field: "service", Reason: "required", Description: "value is required"},
+		{Field: "operation", Reason: "required", Description: "value is required"},
+	}}, details[0].(*errdetails.BadRequest))
 	require.Zero(t, service.calls.Load())
 	require.Empty(t, entries.All())
 

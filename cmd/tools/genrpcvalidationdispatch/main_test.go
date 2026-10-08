@@ -31,6 +31,9 @@ func TestValidationTypesSelectsAnnotatedRequestsAndResponses(t *testing.T) {
 	types, err := validationTypes(file.Services().Get(0), file.Services().Get(0))
 	require.NoError(t, err)
 	require.Equal(t, []string{"interceptor.test.Request", "interceptor.test.Response"}, types)
+	responses, err := validationResponses(file.Services().Get(0), file.Services().Get(0))
+	require.NoError(t, err)
+	require.Equal(t, map[string]string{"/interceptor.test.WorkflowService/Start": "interceptor.test.Response"}, responses)
 }
 
 func TestHasValidationRulesFindsNestedAnnotations(t *testing.T) {

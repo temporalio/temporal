@@ -20,3 +20,19 @@ func (i *ProtoValidationInterceptor) validate(message proto.Message) error {
 		return nil
 	}
 }
+
+func protoValidationMessages() []proto.Message {
+	return []proto.Message{
+{{- range .Types}}
+		&{{.}}{},
+{{- end}}
+	}
+}
+
+func protoValidationResponses() map[string]proto.Message {
+	return map[string]proto.Message{
+{{- range .Responses}}
+		{{printf "%q" .Method}}: &{{.Type}}{},
+{{- end}}
+	}
+}

@@ -23,3 +23,23 @@ func (i *ProtoValidationInterceptor) validate(message proto.Message) error {
 		return nil
 	}
 }
+
+func protoValidationMessages() []proto.Message {
+	return []proto.Message{
+		&workflowservice.CountNexusOperationExecutionsRequest{},
+		&workflowservice.DeleteNexusOperationExecutionRequest{},
+		&workflowservice.DescribeNexusOperationExecutionRequest{},
+		&workflowservice.ListNexusOperationExecutionsRequest{},
+		&workflowservice.PollNexusOperationExecutionRequest{},
+		&workflowservice.RequestCancelNexusOperationExecutionRequest{},
+		&workflowservice.StartNexusOperationExecutionRequest{},
+		&workflowservice.StartNexusOperationExecutionResponse{},
+		&workflowservice.TerminateNexusOperationExecutionRequest{},
+	}
+}
+
+func protoValidationResponses() map[string]proto.Message {
+	return map[string]proto.Message{
+		"/temporal.api.workflowservice.v1.WorkflowService/StartNexusOperationExecution": &workflowservice.StartNexusOperationExecutionResponse{},
+	}
+}

@@ -242,6 +242,18 @@ If you need to make changes to the gRPC / protobuf definitions while also workin
       make bins
       ```
 
+## Protobuf field validation
+
+Frontend unary RPCs enforce standard Buf Protovalidate annotations. After adding API annotations,
+regenerate API-Go, update the Server dependency and run `make proto-codegen` to refresh the
+validation dispatch. The generator uses an explicit service list and discovers rules recursively.
+Unannotated messages skip validation; enrolled schemas compile at startup.
+
+Invalid requests return `InvalidArgument` with `google.rpc.BadRequest` field details. Successful
+responses remain unchanged when validation fails; failures are counted in `response_validation_failures`
+and reported with bounded, redacted softassert logs throttled per RPC. The existing frontend chain
+runs authentication, quotas and telemetry before validation. Direct handler calls do not pass through it.
+
 ## Commit Messages And Titles of Pull Requests
 
 Overcommit adds some requirements to your commit messages. At Temporal, we follow the

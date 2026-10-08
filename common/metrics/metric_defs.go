@@ -661,6 +661,10 @@ var (
 		"service_errors",
 		WithDescription("The number of unexpected service request errors."),
 	)
+	ResponseValidationFailures = NewCounterDef(
+		"response_validation_failures",
+		WithDescription("The number of successful RPC responses that fail protobuf validation."),
+	)
 	ServicePanic         = NewCounterDef("service_panics")
 	ServiceErrorWithType = NewCounterDef(
 		"service_error_with_type",

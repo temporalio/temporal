@@ -4,6 +4,7 @@ import (
 	_ "embed"
 	"flag"
 	"fmt"
+	"maps"
 	"reflect"
 	"slices"
 
@@ -31,7 +32,12 @@ func main() {
 	if err != nil {
 		codegen.Fatalf("finding annotated messages: %v", err)
 	}
+	responses, err := validationResponses(services...)
+	if err != nil {
+		codegen.Fatalf("finding annotated responses: %v", err)
+	}
 	data := templateData{}
+	goTypes := make(map[string]string)
 	imports := make(map[string]struct{})
 	for _, name := range types {
 		message, err := protoregistry.GlobalTypes.FindMessageByName(protoreflect.FullName(name))
@@ -40,7 +46,11 @@ func main() {
 		}
 		messageType := reflect.TypeOf(message.New().Interface()).Elem()
 		data.Types = append(data.Types, messageType.String())
+		goTypes[name] = messageType.String()
 		imports[messageType.PkgPath()] = struct{}{}
+	}
+	for _, method := range slices.Sorted(maps.Keys(responses)) {
+		data.Responses = append(data.Responses, responseType{Method: method, Type: goTypes[responses[method]]})
 	}
 	for path := range imports {
 		data.Imports = append(data.Imports, path)
@@ -51,8 +61,13 @@ func main() {
 }
 
 type templateData struct {
-	Imports []string
-	Types   []string
+	Imports   []string
+	Types     []string
+	Responses []responseType
+}
+
+type responseType struct {
+	Method, Type string
 }
 
 func validationTypes(services ...protoreflect.ServiceDescriptor) ([]string, error) {
@@ -104,4 +119,24 @@ func hasValidationRules(descriptor protoreflect.MessageDescriptor, visited map[p
 		}
 	}
 	return false, nil
+}
+
+func validationResponses(services ...protoreflect.ServiceDescriptor) (map[string]string, error) {
+	responses := make(map[string]string)
+	for _, service := range services {
+		for index := range service.Methods().Len() {
+			method := service.Methods().Get(index)
+			if method.IsStreamingClient() || method.IsStreamingServer() {
+				continue
+			}
+			applicable, err := hasValidationRules(method.Output(), make(map[protoreflect.MessageDescriptor]struct{}))
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", method.FullName(), err)
+			}
+			if applicable {
+				responses["/"+string(service.FullName())+"/"+string(method.Name())] = string(method.Output().FullName())
+			}
+		}
+	}
+	return responses, nil
 }
