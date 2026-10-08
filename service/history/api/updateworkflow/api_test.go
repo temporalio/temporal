@@ -272,6 +272,7 @@ func TestApplyRequest_SkipsCallbackValidationForCompletedUpdate(t *testing.T) {
 	ms := newRunningMutableStateForCallbacks(ctrl)
 	ms.EXPECT().GetUpdateOutcome(gomock.Any(), updateID).
 		Return(&updatepb.Outcome{Value: &updatepb.Outcome_Success{}}, nil).AnyTimes()
+	ms.EXPECT().GetUpdateAcceptedEventID(gomock.Any(), updateID).Return(int64(5), nil).AnyTimes()
 	ms.EXPECT().ValidateCallbackAddition(gomock.Any(), gomock.Any()).Times(0)
 
 	updateReg := update.NewRegistry(ms)
@@ -292,6 +293,7 @@ func newRunningMutableStateForCallbacks(ctrl *gomock.Controller) *historyi.MockM
 	ms.EXPECT().IsWorkflowExecutionRunning().Return(true).AnyTimes()
 	ms.EXPECT().IsWorkflowExecutionStatusPaused().Return(false).AnyTimes()
 	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{}).AnyTimes()
+	ms.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{}).AnyTimes()
 	ms.EXPECT().IsWorkflowCloseAttempted().Return(false).AnyTimes()
 	// Required by update.NewRegistry
 	ms.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
