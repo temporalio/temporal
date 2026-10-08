@@ -86,12 +86,10 @@ func (p *namespaceIsolationPolicy) Evaluate(
 		throttled[namespaceID] = struct{}{}
 	}
 	laneByKey := make(map[string]senderLaneSnapshot, len(lanes))
-	for _, lane := range lanes {
-		laneByKey[lane.logicalKey] = lane
-	}
 
 	var directives []replicationLaneDirective
 	for _, lane := range lanes {
+		laneByKey[lane.logicalKey] = lane
 		if !strings.HasPrefix(lane.logicalKey, namespaceLaneKeyPrefix) {
 			continue
 		}
