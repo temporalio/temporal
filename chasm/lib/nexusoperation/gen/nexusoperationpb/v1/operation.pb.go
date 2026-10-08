@@ -14,7 +14,8 @@ import (
 
 	v11 "go.temporal.io/api/common/v1"
 	v1 "go.temporal.io/api/failure/v1"
-	v12 "go.temporal.io/api/sdk/v1"
+	v13 "go.temporal.io/api/sdk/v1"
+	v12 "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	anypb "google.golang.org/protobuf/types/known/anypb"
@@ -263,11 +264,10 @@ type OperationState struct {
 	TerminateState *NexusOperationTerminateState `protobuf:"bytes,19,opt,name=terminate_state,json=terminateState,proto3" json:"terminate_state,omitempty"`
 	// Links are only populated for standalone operations. Workflow-backed operations derive links from history events.
 	Links []*v11.Link `protobuf:"bytes,20,rep,name=links,proto3" json:"links,omitempty"`
-	// Total size in bytes of all [commonpb.Callback]s attached to this operation.
-	// Used to enforce aggregate size limits without needing to deserialize each callback.
-	TotalCallbacksSize int64 `protobuf:"varint,21,opt,name=total_callbacks_size,json=totalCallbacksSize,proto3" json:"total_callbacks_size,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Metadata about attached completion callbacks.
+	CallbackMetadata *v12.CallbackMetadata `protobuf:"bytes,21,opt,name=callback_metadata,json=callbackMetadata,proto3" json:"callback_metadata,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *OperationState) Reset() {
@@ -440,11 +440,11 @@ func (x *OperationState) GetLinks() []*v11.Link {
 	return nil
 }
 
-func (x *OperationState) GetTotalCallbacksSize() int64 {
+func (x *OperationState) GetCallbackMetadata() *v12.CallbackMetadata {
 	if x != nil {
-		return x.TotalCallbacksSize
+		return x.CallbackMetadata
 	}
-	return 0
+	return nil
 }
 
 type NexusOperationTerminateState struct {
@@ -702,7 +702,7 @@ type OperationRequestData struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Input         *v11.Payload           `protobuf:"bytes,1,opt,name=input,proto3" json:"input,omitempty"`
 	NexusHeader   map[string]string      `protobuf:"bytes,2,rep,name=nexus_header,json=nexusHeader,proto3" json:"nexus_header,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	UserMetadata  *v12.UserMetadata      `protobuf:"bytes,3,opt,name=user_metadata,json=userMetadata,proto3" json:"user_metadata,omitempty"`
+	UserMetadata  *v13.UserMetadata      `protobuf:"bytes,3,opt,name=user_metadata,json=userMetadata,proto3" json:"user_metadata,omitempty"`
 	Identity      string                 `protobuf:"bytes,4,opt,name=identity,proto3" json:"identity,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -752,7 +752,7 @@ func (x *OperationRequestData) GetNexusHeader() map[string]string {
 	return nil
 }
 
-func (x *OperationRequestData) GetUserMetadata() *v12.UserMetadata {
+func (x *OperationRequestData) GetUserMetadata() *v13.UserMetadata {
 	if x != nil {
 		return x.UserMetadata
 	}
@@ -858,7 +858,7 @@ var File_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto proto
 
 const file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_rawDesc = "" +
 	"\n" +
-	"Atemporal/server/chasm/lib/nexusoperation/proto/v1/operation.proto\x121temporal.server.chasm.lib.nexusoperation.proto.v1\x1a\x19google/protobuf/any.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\"\x9b\n" +
+	"Atemporal/server/chasm/lib/nexusoperation/proto/v1/operation.proto\x121temporal.server.chasm.lib.nexusoperation.proto.v1\x1a\x19google/protobuf/any.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a%temporal/api/failure/v1/message.proto\x1a'temporal/api/sdk/v1/user_metadata.proto\x1a9temporal/server/chasm/lib/callback/proto/v1/message.proto\"\xd5\n" +
 	"\n" +
 	"\x0eOperationState\x12Z\n" +
 	"\x06status\x18\x01 \x01(\x0e2B.temporal.server.chasm.lib.nexusoperation.proto.v1.OperationStatusR\x06status\x12\x1f\n" +
@@ -885,8 +885,8 @@ const file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_raw
 	"\x1anext_attempt_schedule_time\x18\x11 \x01(\v2\x1a.google.protobuf.TimestampR\x17nextAttemptScheduleTime\x12'\n" +
 	"\x0foperation_token\x18\x12 \x01(\tR\x0eoperationToken\x12x\n" +
 	"\x0fterminate_state\x18\x13 \x01(\v2O.temporal.server.chasm.lib.nexusoperation.proto.v1.NexusOperationTerminateStateR\x0eterminateState\x122\n" +
-	"\x05links\x18\x14 \x03(\v2\x1c.temporal.api.common.v1.LinkR\x05links\x120\n" +
-	"\x14total_callbacks_size\x18\x15 \x01(\x03R\x12totalCallbacksSize\"=\n" +
+	"\x05links\x18\x14 \x03(\v2\x1c.temporal.api.common.v1.LinkR\x05links\x12j\n" +
+	"\x11callback_metadata\x18\x15 \x01(\v2=.temporal.server.chasm.lib.callback.proto.v1.CallbackMetadataR\x10callbackMetadata\"=\n" +
 	"\x1cNexusOperationTerminateState\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\"\x82\x03\n" +
@@ -972,8 +972,9 @@ var file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_goTyp
 	(*anypb.Any)(nil),                    // 12: google.protobuf.Any
 	(*v1.Failure)(nil),                   // 13: temporal.api.failure.v1.Failure
 	(*v11.Link)(nil),                     // 14: temporal.api.common.v1.Link
-	(*v11.Payload)(nil),                  // 15: temporal.api.common.v1.Payload
-	(*v12.UserMetadata)(nil),             // 16: temporal.api.sdk.v1.UserMetadata
+	(*v12.CallbackMetadata)(nil),         // 15: temporal.server.chasm.lib.callback.proto.v1.CallbackMetadata
+	(*v11.Payload)(nil),                  // 16: temporal.api.common.v1.Payload
+	(*v13.UserMetadata)(nil),             // 17: temporal.api.sdk.v1.UserMetadata
 }
 var file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_depIdxs = []int32{
 	0,  // 0: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationState.status:type_name -> temporal.server.chasm.lib.nexusoperation.proto.v1.OperationStatus
@@ -989,24 +990,25 @@ var file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_depId
 	10, // 10: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationState.next_attempt_schedule_time:type_name -> google.protobuf.Timestamp
 	3,  // 11: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationState.terminate_state:type_name -> temporal.server.chasm.lib.nexusoperation.proto.v1.NexusOperationTerminateState
 	14, // 12: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationState.links:type_name -> temporal.api.common.v1.Link
-	7,  // 13: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationOutcome.successful:type_name -> temporal.server.chasm.lib.nexusoperation.proto.v1.OperationOutcome.Successful
-	8,  // 14: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationOutcome.failed:type_name -> temporal.server.chasm.lib.nexusoperation.proto.v1.OperationOutcome.Failed
-	1,  // 15: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.status:type_name -> temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationStatus
-	10, // 16: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.requested_time:type_name -> google.protobuf.Timestamp
-	10, // 17: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
-	13, // 18: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.last_attempt_failure:type_name -> temporal.api.failure.v1.Failure
-	10, // 19: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.next_attempt_schedule_time:type_name -> google.protobuf.Timestamp
-	12, // 20: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.parent_data:type_name -> google.protobuf.Any
-	15, // 21: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.input:type_name -> temporal.api.common.v1.Payload
-	9,  // 22: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.nexus_header:type_name -> temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.NexusHeaderEntry
-	16, // 23: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.user_metadata:type_name -> temporal.api.sdk.v1.UserMetadata
-	15, // 24: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationOutcome.Successful.result:type_name -> temporal.api.common.v1.Payload
-	13, // 25: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationOutcome.Failed.failure:type_name -> temporal.api.failure.v1.Failure
-	26, // [26:26] is the sub-list for method output_type
-	26, // [26:26] is the sub-list for method input_type
-	26, // [26:26] is the sub-list for extension type_name
-	26, // [26:26] is the sub-list for extension extendee
-	0,  // [0:26] is the sub-list for field type_name
+	15, // 13: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationState.callback_metadata:type_name -> temporal.server.chasm.lib.callback.proto.v1.CallbackMetadata
+	7,  // 14: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationOutcome.successful:type_name -> temporal.server.chasm.lib.nexusoperation.proto.v1.OperationOutcome.Successful
+	8,  // 15: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationOutcome.failed:type_name -> temporal.server.chasm.lib.nexusoperation.proto.v1.OperationOutcome.Failed
+	1,  // 16: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.status:type_name -> temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationStatus
+	10, // 17: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.requested_time:type_name -> google.protobuf.Timestamp
+	10, // 18: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
+	13, // 19: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.last_attempt_failure:type_name -> temporal.api.failure.v1.Failure
+	10, // 20: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.next_attempt_schedule_time:type_name -> google.protobuf.Timestamp
+	12, // 21: temporal.server.chasm.lib.nexusoperation.proto.v1.CancellationState.parent_data:type_name -> google.protobuf.Any
+	16, // 22: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.input:type_name -> temporal.api.common.v1.Payload
+	9,  // 23: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.nexus_header:type_name -> temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.NexusHeaderEntry
+	17, // 24: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationRequestData.user_metadata:type_name -> temporal.api.sdk.v1.UserMetadata
+	16, // 25: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationOutcome.Successful.result:type_name -> temporal.api.common.v1.Payload
+	13, // 26: temporal.server.chasm.lib.nexusoperation.proto.v1.OperationOutcome.Failed.failure:type_name -> temporal.api.failure.v1.Failure
+	27, // [27:27] is the sub-list for method output_type
+	27, // [27:27] is the sub-list for method input_type
+	27, // [27:27] is the sub-list for extension type_name
+	27, // [27:27] is the sub-list for extension extendee
+	0,  // [0:27] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_nexusoperation_proto_v1_operation_proto_init() }
