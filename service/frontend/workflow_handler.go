@@ -461,7 +461,7 @@ func (wh *WorkflowHandler) GetConfig() *Config {
 // entity within Temporal, used as a container for all resources like workflow executions, task queues, etc.  Namespace
 // acts as a sandbox and provides isolation for all resources within the namespace.  All resources belong to exactly one
 // namespace.
-func (wh *WorkflowHandler) RegisterNamespace(ctx context.Context, request *workflowservice.RegisterNamespaceRequest) (_ *workflowservice.RegisterNamespaceResponse, retError error) {
+ func (wh *WorkflowHandler) RegisterNamespace(ctx context.Context, request *workflowservice.RegisterNamespaceRequest) (_ *workflowservice.RegisterNamespaceResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
 	if request == nil {
@@ -3914,6 +3914,9 @@ func (wh *WorkflowHandler) CreateSchedule(
 		return nil, err
 	}
 
+	if startWorkflow := request.GetSchedule().GetAction().GetStartWorkflow(); startWorkflow != nil && startWorkflow.GetWorkflowId() == "" {
+		startWorkflow.WorkflowId = uuid.NewString()
+	}
 	if err = wh.validateStartWorkflowArgsForSchedule(namespaceName, request.GetSchedule().GetAction().GetStartWorkflow()); err != nil {
 		return nil, err
 	}
@@ -4714,6 +4717,9 @@ func (wh *WorkflowHandler) UpdateSchedule(
 
 	namespaceName := namespace.Name(request.GetNamespace())
 
+	if startWorkflow := request.GetSchedule().GetAction().GetStartWorkflow(); startWorkflow != nil && startWorkflow.GetWorkflowId() == "" {
+		startWorkflow.WorkflowId = uuid.NewString()
+	}
 	if err := wh.validateStartWorkflowArgsForSchedule(
 		namespaceName,
 		request.GetSchedule().GetAction().GetStartWorkflow(),
