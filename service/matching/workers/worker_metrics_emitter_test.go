@@ -1,10 +1,13 @@
 package workers
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	otellog "go.opentelemetry.io/otel/log"
+	"go.opentelemetry.io/otel/log/embedded"
 	enumspb "go.temporal.io/api/enums/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -12,6 +15,18 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 )
+
+type captureEventLogger struct {
+	embedded.Logger
+	records []otellog.Record
+}
+
+func (c *captureEventLogger) Emit(_ context.Context, r otellog.Record) {
+	c.records = append(c.records, r)
+}
+func (c *captureEventLogger) Enabled(context.Context, otellog.EnabledParameters) bool {
+	return true
+}
 
 func TestWorkersPerProcessMetric(t *testing.T) {
 	captureHandler := metricstest.NewCaptureHandler()
@@ -138,4 +153,52 @@ func TestPollerAutoscalingMetricsDisabled(t *testing.T) {
 	snapshot := capture.Snapshot()
 	autoscalingMetrics := snapshot[metrics.PollerAutoscalingHeartbeatCount.Name()]
 	assert.Empty(t, autoscalingMetrics, "should not record autoscaling metrics when disabled")
+}
+
+func TestRuntimeTypeNameUnknownValue(t *testing.T) {
+	require.Equal(t, "go", runtimeTypeName(workerpb.EnvironmentInfo_Runtime_RUNTIME_TYPE_GO))
+	require.Equal(t, "unknown", runtimeTypeName(workerpb.EnvironmentInfo_Runtime_RUNTIME_TYPE_UNSPECIFIED))
+	require.Equal(t, "unknown", runtimeTypeName(workerpb.EnvironmentInfo_Runtime_RuntimeType(999)))
+}
+
+func TestArchitectureNameUnknownValue(t *testing.T) {
+	require.Equal(t, "amd64", architectureName(workerpb.EnvironmentInfo_ARCHITECTURE_AMD64))
+	require.Equal(t, "unknown", architectureName(workerpb.EnvironmentInfo_ARCHITECTURE_UNSPECIFIED))
+	require.Equal(t, "unknown", architectureName(workerpb.EnvironmentInfo_Architecture(999)))
+}
+
+func TestEmitWorkerConfigEvent(t *testing.T) {
+	eventLogger := &captureEventLogger{}
+
+	hb := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: "w1",
+		TaskQueue:         "my-queue",
+		SdkName:           "temporal-go",
+		Environment: &workerpb.EnvironmentInfo{
+			Runtimes: []*workerpb.EnvironmentInfo_Runtime{
+				{Type: workerpb.EnvironmentInfo_Runtime_RUNTIME_TYPE_GO},
+			},
+			Platform: &workerpb.EnvironmentInfo_Platform{
+				Variant: &workerpb.EnvironmentInfo_Platform_Linux{
+					Linux: &workerpb.EnvironmentInfo_LinuxPlatform{
+						Architecture: workerpb.EnvironmentInfo_ARCHITECTURE_ARM64,
+					},
+				},
+			},
+		},
+	}
+
+	emitWorkerConfigEvent(eventLogger, namespace.Name("ns"), hb)
+
+	require.Len(t, eventLogger.records, 1)
+	require.Equal(t, "worker_config", eventLogger.records[0].EventName())
+
+	attrs := map[string]otellog.Value{}
+	eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		attrs[kv.Key] = kv.Value
+		return true
+	})
+	require.Equal(t, "temporal-go", attrs["sdk_name"].AsString())
+	require.Equal(t, "go", attrs["runtime_type"].AsString())
+	require.Equal(t, "arm64", attrs["architecture"].AsString())
 }

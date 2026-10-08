@@ -908,3 +908,53 @@ func TestPluginMetricsDisabled(t *testing.T) {
 	pluginMetrics := snapshot[metrics.WorkerPluginNameMetric.Name()]
 	assert.Empty(t, pluginMetrics, "should not record any plugin metrics when disabled")
 }
+
+func TestWorkerConfigEventOnlyOnFirstHeartbeat(t *testing.T) {
+	eventLogger := &captureEventLogger{}
+
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:       dynamicconfig.GetIntPropertyFn(1),
+		TTL:              dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:      dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:         dynamicconfig.GetIntPropertyFn(10),
+		EvictionInterval: dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:   metricstest.NewCaptureHandler(),
+		MetricsConfig:              WorkerMetricsConfig{},
+		EventLogger:                eventLogger,
+		EnableWorkerHeartbeatEvents: dynamicconfig.GetBoolPropertyFn(true),
+	})
+	defer m.Stop()
+
+	hb := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: "w1",
+		SdkName:           "temporal-go",
+	}
+
+	m.RecordWorkerHeartbeats(namespace.ID("ns"), namespace.Name("ns"), nil, []*workerpb.WorkerHeartbeat{hb})
+	require.Len(t, eventLogger.records, 1)
+	require.Equal(t, "worker_config", eventLogger.records[0].EventName())
+
+	// Second heartbeat — should not emit again
+	m.RecordWorkerHeartbeats(namespace.ID("ns"), namespace.Name("ns"), nil, []*workerpb.WorkerHeartbeat{hb})
+	require.Len(t, eventLogger.records, 1)
+}
+
+func TestWorkerConfigEventNilLogger(t *testing.T) {
+	m := newRegistryImpl(RegistryParams{
+		NumBuckets:       dynamicconfig.GetIntPropertyFn(1),
+		TTL:              dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:      dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:         dynamicconfig.GetIntPropertyFn(10),
+		EvictionInterval: dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:   metricstest.NewCaptureHandler(),
+		MetricsConfig:    WorkerMetricsConfig{},
+		EventLogger:      nil,
+	})
+	defer m.Stop()
+
+	require.NotPanics(t, func() {
+		m.RecordWorkerHeartbeats(namespace.ID("ns"), namespace.Name("ns"), nil, []*workerpb.WorkerHeartbeat{
+			{WorkerInstanceKey: "w1", SdkName: "temporal-go"},
+		})
+	})
+}

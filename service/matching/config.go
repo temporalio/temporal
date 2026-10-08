@@ -58,6 +58,7 @@ type (
 		BreakdownMetricsByBuildID                dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		EnableWorkerPluginMetrics                dynamicconfig.BoolPropertyFn
 		EnablePollerAutoscalingMetrics           dynamicconfig.BoolPropertyFn
+		EnableWorkerHeartbeatEvents                 dynamicconfig.BoolPropertyFn
 		ExternalPayloadsEnabled                  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		WorkerRegistryNumBuckets                 dynamicconfig.IntPropertyFn
 		WorkerRegistryEntryTTL                   dynamicconfig.DurationPropertyFn
@@ -320,6 +321,7 @@ func NewConfig(
 		BreakdownMetricsByBuildID:                dynamicconfig.MetricsBreakdownByBuildID.Get(dc),
 		EnableWorkerPluginMetrics:                dynamicconfig.MatchingEnableWorkerPluginMetrics.Get(dc),
 		EnablePollerAutoscalingMetrics:           dynamicconfig.MatchingEnablePollerAutoscalingMetrics.Get(dc),
+		EnableWorkerHeartbeatEvents:                 dynamicconfig.MatchingEnableWorkerHeartbeatEvents.Get(dc),
 		ExternalPayloadsEnabled:                  dynamicconfig.ExternalPayloadsEnabled.Get(dc),
 		WorkerRegistryNumBuckets:                 dynamicconfig.MatchingWorkerRegistryNumBuckets.Get(dc),
 		WorkerRegistryEntryTTL:                   dynamicconfig.MatchingWorkerRegistryEntryTTL.Get(dc),
