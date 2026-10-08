@@ -240,3 +240,15 @@ func TestPollerAutoscalingMetricsDisabled(t *testing.T) {
 	autoscalingMetrics := snapshot[metrics.PollerAutoscalingHeartbeatCount.Name()]
 	assert.Empty(t, autoscalingMetrics, "should not record autoscaling metrics when disabled")
 }
+
+func TestRuntimeTypeNameUnknownValue(t *testing.T) {
+	require.Equal(t, "go", runtimeTypeName(workerpb.EnvironmentInfo_Runtime_RUNTIME_TYPE_GO))
+	require.Equal(t, "unknown", runtimeTypeName(workerpb.EnvironmentInfo_Runtime_RUNTIME_TYPE_UNSPECIFIED))
+	require.Equal(t, "unknown", runtimeTypeName(workerpb.EnvironmentInfo_Runtime_RuntimeType(999)))
+}
+
+func TestArchitectureNameUnknownValue(t *testing.T) {
+	require.Equal(t, "amd64", architectureName(workerpb.EnvironmentInfo_ARCHITECTURE_AMD64))
+	require.Equal(t, "unknown", architectureName(workerpb.EnvironmentInfo_ARCHITECTURE_UNSPECIFIED))
+	require.Equal(t, "unknown", architectureName(workerpb.EnvironmentInfo_Architecture(999)))
+}
