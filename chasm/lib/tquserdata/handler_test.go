@@ -9,7 +9,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -19,8 +18,6 @@ import (
 	"go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb/v1"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/testing/testlogger"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -261,80 +258,4 @@ func TestTaskQueueUserDataUsesTaskQueueNameForExecutionKey(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), response.Version)
 	require.True(t, proto.Equal(req.TaskQueueUserData, response.TaskQueueUserData))
-}
-
-func TestTaskQueueUserDataOperationsAreUnimplemented(t *testing.T) {
-	t.Parallel()
-	h, ctx, req := newTestHandler(t)
-	_, err := h.UpsertTaskQueueUserData(ctx, req)
-	require.NoError(t, err)
-	var server tquserdatapb.TaskQueueUserDataServiceServer = h
-	operations := []struct {
-		name string
-		call func(*testing.T) error
-	}{
-		{
-			name: "GetTaskQueueUserData",
-			call: func(t *testing.T) error {
-				response, err := server.GetTaskQueueUserData(ctx, &tquserdatapb.GetTaskQueueUserDataRequest{
-					NamespaceId:                       req.NamespaceId,
-					TaskQueue:                         req.TaskQueue,
-					TaskQueueType:                     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-					LastKnownTaskQueueUserDataVersion: 1,
-					WaitNewData:                       true,
-				})
-				require.Nil(t, response)
-				return err
-			},
-		},
-		{
-			name: "SyncDeploymentUserData",
-			call: func(t *testing.T) error {
-				response, err := server.SyncDeploymentUserData(ctx, &tquserdatapb.SyncDeploymentUserDataRequest{
-					NamespaceId:         req.NamespaceId,
-					TaskQueue:           req.TaskQueue,
-					DeploymentName:      "deployment",
-					TaskQueueTypes:      []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW},
-					UpdateRoutingConfig: &deploymentpb.RoutingConfig{RevisionNumber: 20},
-				})
-				require.Nil(t, response)
-				return err
-			},
-		},
-		{
-			name: "UpdateTaskQueueConfig",
-			call: func(t *testing.T) error {
-				response, err := server.UpdateTaskQueueConfig(ctx, &tquserdatapb.UpdateTaskQueueConfigRequest{
-					NamespaceId: req.NamespaceId,
-					UpdateTaskqueueConfig: &workflowservice.UpdateTaskQueueConfigRequest{
-						TaskQueue:     req.TaskQueue,
-						TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-					},
-				})
-				require.Nil(t, response)
-				return err
-			},
-		},
-		{
-			name: "UpdateFairnessState",
-			call: func(t *testing.T) error {
-				response, err := server.UpdateFairnessState(ctx, &tquserdatapb.UpdateFairnessStateRequest{
-					NamespaceId:   req.NamespaceId,
-					TaskQueue:     req.TaskQueue,
-					TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-					FairnessState: enumsspb.FAIRNESS_STATE_V2,
-				})
-				require.Nil(t, response)
-				return err
-			},
-		},
-	}
-	for _, operation := range operations {
-		t.Run(operation.name, func(t *testing.T) {
-			require.Equal(t, codes.Unimplemented, status.Code(operation.call(t)))
-			data := readTestTaskQueueUserData(ctx, t, h, req)
-			require.Equal(t, int64(1), data.Version)
-			require.True(t, proto.Equal(req.TaskQueueUserData, data.TaskQueueUserData))
-		})
-	}
 }

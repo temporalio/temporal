@@ -3,13 +3,6 @@ syntax = "proto3";
 package temporal.server.chasm.lib.tquserdata.proto.v1;
 
 import "chasm/lib/tquserdata/proto/v1/user_data.proto";
-import "temporal/api/deployment/v1/message.proto";
-import "temporal/api/enums/v1/task_queue.proto";
-import "temporal/api/taskqueue/v1/message.proto";
-import "temporal/api/workflowservice/v1/request_response.proto";
-import "temporal/server/api/deployment/v1/message.proto";
-import "temporal/server/api/enums/v1/fairness_state.proto";
-import "temporal/server/api/taskqueue/v1/message.proto";
 
 option go_package = "go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapb";
 
@@ -36,82 +29,3 @@ message GetTaskQueueUserDataSnapshotResponse {
   TaskQueueUserData task_queue_user_data = 1;
   int64 version = 2;
 }
-
-message GetTaskQueueUserDataRequest {
-  string namespace_id = 1;
-  // The task queue to fetch data from. The task queue is always considered as a normal
-  // queue, since sticky queues have no user data.
-  string task_queue = 2;
-  temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
-  // Zero means the requester has no cached task queue user data. Must not be negative.
-  int64 last_known_task_queue_user_data_version = 4;
-  // Zero means no cached ephemeral data; -1 excludes ephemeral data from the response.
-  int64 last_known_ephemeral_data_version = 5;
-  // If set and last_known_{task_queue_user_data,ephemeral_data}_version is the current version,
-  // block until new data is available (or timeout).
-  bool wait_new_data = 6;
-  // If set, do not load task queue if unloaded. (Returns FailedPrecondition error in that case.)
-  bool only_if_loaded = 7;
-}
-
-message VersionedTaskQueueUserData {
-  TaskQueueUserData data = 1;
-  int64 version = 2;
-}
-
-message GetTaskQueueUserDataResponse {
-  VersionedTaskQueueUserData task_queue_user_data = 1;
-  temporal.server.api.taskqueue.v1.VersionedEphemeralData ephemeral_data = 2;
-}
-
-message SyncDeploymentUserDataRequest {
-  string namespace_id = 1;
-  string task_queue = 2;
-  // Required, unless deprecated fields are used.
-  // (-- api-linter: core::0203::required=disabled
-  //     aip.dev/not-precedent: Not following Google API format --)
-  string deployment_name = 3;
-  repeated temporal.api.enums.v1.TaskQueueType task_queue_types = 4;
-
-  oneof operation {
-    // The deployment version and its data that is being updated.
-    temporal.server.api.deployment.v1.DeploymentVersionData update_version_data = 5 [deprecated = true];
-    // The version whose data should be cleaned from the task queue.
-    temporal.server.api.deployment.v1.WorkerDeploymentVersion forget_version = 6 [deprecated = true];
-  }
-
-  // Absent means no change.
-  // Ignored by the task queue if new revision number is not greater that what it has.
-  temporal.api.deployment.v1.RoutingConfig update_routing_config = 7;
-  // Optional map of build id to upsert version data.
-  // (-- api-linter: core::0203::required=disabled
-  //     aip.dev/not-precedent: Not following Google API format --)
-  map<string, temporal.server.api.deployment.v1.WorkerDeploymentVersionData> upsert_versions_data = 8;
-  // List of build ids to forget from task queue.
-  repeated string forget_versions = 9;
-}
-
-message SyncDeploymentUserDataResponse {
-  // New task queue user data version. Can be used to wait for propagation.
-  int64 version = 1;
-  // Deprecated because retries can lose the indication that an earlier attempt changed routing.
-  bool routing_config_changed = 2 [deprecated = true];
-}
-
-message UpdateTaskQueueConfigRequest {
-  string namespace_id = 1;
-  temporal.api.workflowservice.v1.UpdateTaskQueueConfigRequest update_taskqueue_config = 2;
-}
-
-message UpdateTaskQueueConfigResponse {
-  temporal.api.taskqueue.v1.TaskQueueConfig updated_taskqueue_config = 1;
-}
-
-message UpdateFairnessStateRequest {
-  string namespace_id = 1;
-  string task_queue = 2;
-  temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
-  temporal.server.api.enums.v1.FairnessState fairness_state = 4;
-}
-
-message UpdateFairnessStateResponse {}
