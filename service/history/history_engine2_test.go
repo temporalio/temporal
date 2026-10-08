@@ -15,9 +15,11 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
@@ -63,6 +65,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/callbacks"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
 	"go.temporal.io/server/service/history/notification"
@@ -1946,6 +1949,124 @@ func (s *engine2Suite) TestStartWorkflowExecution_Dedup_Running_UseExisting() {
 	s.NoError(err)
 	s.False(resp.Started)
 	s.Equal(s.tv.RunID(), resp.GetRunId())
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_UseExistingNexusContextMetric() {
+	serializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
+	for _, tc := range []struct {
+		name            string
+		existingContext *nexuspb.PropagatedSerializationContext
+		incomingContext *nexuspb.PropagatedSerializationContext
+		attachCallback  bool
+		invalidCallback bool
+		expectedOutcome string
+	}{
+		{
+			name:            "same context",
+			existingContext: serializationContext,
+			incomingContext: serializationContext,
+			attachCallback:  true,
+			expectedOutcome: "same_nexus_context",
+		},
+		{
+			name:            "different endpoint",
+			existingContext: serializationContext,
+			incomingContext: &nexuspb.PropagatedSerializationContext{Endpoint: "other-endpoint", Service: "service", Operation: "operation"},
+			attachCallback:  true,
+			expectedOutcome: "different_nexus_context",
+		},
+		{
+			name:            "different service",
+			existingContext: serializationContext,
+			incomingContext: &nexuspb.PropagatedSerializationContext{Endpoint: "endpoint", Service: "other-service", Operation: "operation"},
+			attachCallback:  true,
+			expectedOutcome: "different_nexus_context",
+		},
+		{
+			name:            "different operation",
+			existingContext: serializationContext,
+			incomingContext: &nexuspb.PropagatedSerializationContext{Endpoint: "endpoint", Service: "service", Operation: "other-operation"},
+			attachCallback:  true,
+			expectedOutcome: "different_nexus_context",
+		},
+		{
+			name:            "existing context missing",
+			incomingContext: serializationContext,
+			attachCallback:  true,
+			expectedOutcome: "existing_nexus_context_missing",
+		},
+		{
+			name:            "incoming context missing",
+			existingContext: serializationContext,
+			attachCallback:  true,
+			expectedOutcome: "incoming_nexus_context_missing",
+		},
+		{
+			name:           "both contexts missing",
+			attachCallback: true,
+		},
+		{
+			name:            "callback not attached",
+			existingContext: serializationContext,
+			incomingContext: serializationContext,
+		},
+		{
+			name:            "callback attachment failed",
+			existingContext: serializationContext,
+			incomingContext: serializationContext,
+			attachCallback:  true,
+			invalidCallback: true,
+		},
+	} {
+		s.Run(tc.name, func() {
+			s.Require().NoError(callbacks.RegisterStateMachine(s.mockShard.StateMachineRegistry()))
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+			s.mockShard.SetMetricsHandler(metricsHandler)
+
+			now := s.historyEngine.shardContext.GetTimeSource().Now()
+			ms := s.setupStartWorkflowExecutionDedup(timestamppb.New(now.Add(-100 * time.Millisecond)))
+			ms.GetExecutionInfo().PropagatedNexusSerializationContext = tc.existingContext
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+				Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(s.T().Context(), ms)}, nil).AnyTimes()
+			if tc.attachCallback && !tc.invalidCallback {
+				s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
+					Return(tests.UpdateWorkflowExecutionResponse, nil)
+			}
+
+			startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING)
+			startRequest.StartRequest.PropagatedNexusSerializationContext = tc.incomingContext
+			if tc.attachCallback {
+				startRequest.StartRequest.OnConflictOptions = &workflowpb.OnConflictOptions{AttachCompletionCallbacks: true}
+				startRequest.StartRequest.CompletionCallbacks = []*commonpb.Callback{{
+					Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://destination/path"}},
+				}}
+				if tc.invalidCallback {
+					startRequest.StartRequest.CompletionCallbacks = []*commonpb.Callback{{}}
+				}
+			}
+
+			resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(s.T().Context()), startRequest)
+			if tc.invalidCallback {
+				s.Require().ErrorContains(err, "unknown callback variant")
+			} else {
+				s.Require().NoError(err)
+				s.Require().False(resp.GetStarted())
+			}
+			recordings := capture.SnapshotMetric(metrics.NexusWorkflowUseExisting.Name())
+			if tc.expectedOutcome == "" {
+				s.Require().Empty(recordings)
+			} else {
+				s.Require().Len(recordings, 1)
+				s.Require().Equal(tc.expectedOutcome, recordings[0].Tags["context_match"])
+			}
+		})
+	}
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_Terminate_Existing() {
