@@ -1,12 +1,12 @@
 syntax = "proto3";
 
-package temporal.server.chasm.lib.callbacks.proto.v1;
+package temporal.server.chasm.lib.callback.proto.v1;
 
 import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
 
-option go_package = "go.temporal.io/server/chasm/lib/callbacks/gen/callbackspb;callbackspb";
+option go_package = "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1;callbackpb";
 
 message CallbackState {
   // Trigger for when the workflow is closed.
@@ -84,4 +84,19 @@ message Callback {
   }
 
   repeated temporal.api.common.v1.Link links = 100;
+}
+
+// Contains denormalized metadata about callbacks attached to a component. Used
+// to to enforce aggregate size limits without needing to deserialize existing
+// callbacks.
+//
+// There should only be one [CallbackMetadata] per execution. e.g. even though
+// Workflows and their child Workflow Updates can have callbacks attacked, there
+// is only one [CallbackMetadata] for the entire Workflow execution.
+message CallbackMetadata {
+  // Total number of [temporal.api.common.v1.Callback]s attached to the execution.
+  int64 total_callbacks_count = 1;
+
+  // Total size in bytes of the same set of callbacks.
+  int64 total_callbacks_size = 2;
 }
