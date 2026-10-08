@@ -2086,6 +2086,14 @@ func (s *NexusStandaloneTestSuite) TestDeleteStandaloneNexusOperation() {
 }
 
 func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
+	testSerializationContext := func(endpointName string) *nexuspb.PropagatedSerializationContext {
+		return &nexuspb.PropagatedSerializationContext{
+			Endpoint:  endpointName,
+			Service:   "test-service",
+			Operation: "test-operation",
+		}
+	}
+
 	s.Run("WaitStageStarted", func(s *NexusStandaloneTestSuite) {
 		env := s.newTestEnv()
 		taskQueue := testcore.RandomizedNexusEndpoint(s.T().Name())
@@ -2184,11 +2192,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 			RunId:          startResp.RunId,
 			WaitStage:      enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
 			OperationToken: "test-operation-token",
-			PropagatedNexusSerializationContext: &nexuspb.PropagatedSerializationContext{
-				Endpoint:  endpointName,
-				Service:   "test-service",
-				Operation: "test-operation",
-			},
+			PropagatedNexusSerializationContext: testSerializationContext(endpointName),
 		}, result.resp)
 
 		descResp, err := env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
@@ -2281,11 +2285,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 					RunId:          startResp.RunId,
 					WaitStage:      enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
 					OperationToken: pollResp.GetOperationToken(),
-					PropagatedNexusSerializationContext: &nexuspb.PropagatedSerializationContext{
-						Endpoint:  endpointName,
-						Service:   "test-service",
-						Operation: "test-operation",
-					},
+					PropagatedNexusSerializationContext: testSerializationContext(endpointName),
 					Outcome: &workflowservice.PollNexusOperationExecutionResponse_Failure{
 						Failure: pollResp.GetFailure(),
 					},
@@ -2326,11 +2326,7 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 			RunId:          startResp.RunId,
 			WaitStage:      enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
 			OperationToken: pollResp.GetOperationToken(),
-			PropagatedNexusSerializationContext: &nexuspb.PropagatedSerializationContext{
-				Endpoint:  endpointName,
-				Service:   "test-service",
-				Operation: "test-operation",
-			},
+			PropagatedNexusSerializationContext: testSerializationContext(endpointName),
 			Outcome: &workflowservice.PollNexusOperationExecutionResponse_Failure{
 				Failure: pollResp.GetFailure(),
 			},
