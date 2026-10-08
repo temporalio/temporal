@@ -8383,10 +8383,13 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 // closed root fails the access check. It only runs on the active cluster to avoid diverging node versions
 // from what is replicated.
 //
-// The tree is touched regardless of which sub-components exist, so new workflow sub-components are covered
-// without updating this method. The root's state does not change, so it is not rewritten when CHASM
-// skip-persistence (history.enableCHASMSkipPersistence) is enabled; otherwise this costs one root node write
-// per workflow close.
+// Marking the tree dirty only triggers revalidation; what gets persisted depends on CHASM skip-persistence
+// (history.enableCHASMSkipPersistence):
+//   - Enabled: the tree is always marked dirty. Only nodes whose tasks were removed are written; the root is
+//     unchanged and skipped. New workflow sub-components are covered without updating this method.
+//   - Disabled: every dirty node is written, including the unchanged root. To avoid that write when there is
+//     nothing to revalidate, the tree is only marked dirty when there are Nexus operations, the only
+//     sub-components today whose tasks depend on the workflow being open.
 func (ms *MutableStateImpl) closeTransactionInvalidateChasmTasksOnClose(
 	ctx context.Context,
 	transactionPolicy historyi.TransactionPolicy,
@@ -8397,6 +8400,17 @@ func (ms *MutableStateImpl) closeTransactionInvalidateChasmTasksOnClose(
 		ms.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED ||
 		ms.stateInDB == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return nil
+	}
+
+	// CONSIDER(chanric): drop the Operations check once skip-persistence is enabled by default.
+	if !ms.ChasmSkipPersistenceEnabled() {
+		wf, _, err := ms.ChasmWorkflowComponentReadOnly(ctx)
+		if err != nil {
+			return err
+		}
+		if len(wf.Operations) == 0 {
+			return nil
+		}
 	}
 
 	_, _, err := ms.ChasmWorkflowComponent(ctx)

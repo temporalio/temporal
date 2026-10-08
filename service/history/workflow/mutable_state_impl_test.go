@@ -9412,15 +9412,15 @@ func (s *mutableStateSuite) TestCloseTransactionInvalidateChasmTasksOnClose() {
 		s.True(tree.IsStateDirty())
 	})
 
-	s.Run("ClosingWithoutSubComponentsDirtiesTree", func() {
+	s.Run("ClosingWithoutOperationsSkipsWithoutSkipPersistence", func() {
 		tree := newChasmTree(false)
 		setState(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED)
 
 		s.NoError(s.mutableState.closeTransactionInvalidateChasmTasksOnClose(context.Background(), historyi.TransactionPolicyActive))
-		s.True(tree.IsStateDirty())
+		s.False(tree.IsStateDirty())
 	})
 
-	s.Run("SkipPersistenceDoesNotRewriteRoot", func() {
+	s.Run("ClosingWithoutOperationsDirtiesTreeWithSkipPersistence", func() {
 		originalSkipPersistence := s.mockConfig.EnableCHASMSkipPersistence
 		s.mockConfig.EnableCHASMSkipPersistence = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 		defer func() { s.mockConfig.EnableCHASMSkipPersistence = originalSkipPersistence }()
@@ -9429,6 +9429,9 @@ func (s *mutableStateSuite) TestCloseTransactionInvalidateChasmTasksOnClose() {
 		setState(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED)
 
 		s.NoError(s.mutableState.closeTransactionInvalidateChasmTasksOnClose(context.Background(), historyi.TransactionPolicyActive))
+		s.True(tree.IsStateDirty())
+
+		// The root's state is unchanged, so skip-persistence keeps it from being rewritten.
 		mutation, err := tree.CloseTransaction()
 		s.NoError(err)
 		s.Empty(mutation.UpdatedNodes)
