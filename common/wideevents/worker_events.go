@@ -1,6 +1,8 @@
 package wideevents
 
 import (
+	"strings"
+
 	"go.opentelemetry.io/otel/log"
 )
 
@@ -16,7 +18,7 @@ type WorkerConfigPayload struct {
 	SdkVersion                string
 	DeploymentName            string
 	BuildID                   string
-	RuntimeType               string
+	Runtimes                  []string
 	OS                        string
 	Architecture              string
 	WorkflowPollerAutoscaling bool
@@ -35,7 +37,7 @@ func (p WorkerConfigPayload) Attributes() []log.KeyValue {
 		log.String("sdk_version", p.SdkVersion),
 		log.String("deployment_name", p.DeploymentName),
 		log.String("build_id", p.BuildID),
-		log.String("runtime_type", p.RuntimeType),
+		log.String("runtimes", strings.Join(p.Runtimes, ",")),
 		log.String("os", p.OS),
 		log.String("architecture", p.Architecture),
 		log.Bool("workflow_poller_autoscaling", p.WorkflowPollerAutoscaling),

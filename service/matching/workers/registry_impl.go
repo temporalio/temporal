@@ -92,7 +92,7 @@ func newBucket() *bucket {
 // upsertHeartbeats inserts or refreshes a WorkerHeartbeat under the given namespace.
 // Returns the count of added and removed entries separately.
 // Workers with WORKER_STATUS_SHUTDOWN are immediately removed from the registry.
-func (b *bucket) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name, principal *commonpb.Principal, heartbeats []*workerpb.WorkerHeartbeat, eventLogger otellog.Logger) (added int64, removed int64) {
+func (b *bucket) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name, principal *commonpb.Principal, heartbeats []*workerpb.WorkerHeartbeat) (added int64, removed int64, newHeartbeats []*workerpb.WorkerHeartbeat) {
 	now := time.Now()
 
 	b.mu.Lock()
@@ -136,11 +136,11 @@ func (b *bucket) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name, prin
 			e.elem = b.order.PushBack(e)
 			ns.workers[key] = e
 			added++
-			emitWorkerConfigEvent(eventLogger, nsName, hb)
+			newHeartbeats = append(newHeartbeats, hb)
 		}
 	}
 
-	return added, removed
+	return added, removed, newHeartbeats
 }
 
 // filterWorkers returns all WorkerHeartbeats in a namespace
@@ -276,7 +276,10 @@ func (m *registryImpl) getBucket(nsID namespace.ID) *bucket {
 // New entries increment the global counter.
 func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name, principal *commonpb.Principal, heartbeats []*workerpb.WorkerHeartbeat) {
 	b := m.getBucket(nsID)
-	added, removed := b.upsertHeartbeats(nsID, nsName, principal, heartbeats, m.eventLogger)
+	added, removed, newHeartbeats := b.upsertHeartbeats(nsID, nsName, principal, heartbeats)
+	for _, hb := range newHeartbeats {
+		emitWorkerConfigEvent(m.eventLogger, nsName, hb)
+	}
 	m.total.Add(added - removed)
 	if added > 0 {
 		metrics.WorkerRegistryWorkersAdded.With(m.metricsHandler).Record(added)

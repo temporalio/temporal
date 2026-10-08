@@ -105,11 +105,12 @@ func (e *workerMetricsEmitter) emitPollerAutoscaling(nsID namespace.ID, nsName n
 }
 
 func emitWorkerConfigEvent(logger otellog.Logger, nsName namespace.Name, hb *workerpb.WorkerHeartbeat) {
-	var runtimeType, osTag, archTag string
+	var runtimes []string
+	var osTag, archTag string
 	if env := hb.GetEnvironment(); env != nil {
 		osTag, archTag = platformTags(env.GetPlatform())
-		if rts := env.GetRuntimes(); len(rts) > 0 {
-			runtimeType = runtimeTypeName(rts[0].GetType())
+		for _, rt := range env.GetRuntimes() {
+			runtimes = append(runtimes, runtimeTypeName(rt.GetType()))
 		}
 	}
 	wideevents.Emit(logger, wideevents.WorkerConfigPayload{
@@ -120,7 +121,7 @@ func emitWorkerConfigEvent(logger otellog.Logger, nsName namespace.Name, hb *wor
 		SdkVersion:                hb.GetSdkVersion(),
 		DeploymentName:            hb.GetDeploymentVersion().GetDeploymentName(),
 		BuildID:                   hb.GetDeploymentVersion().GetBuildId(),
-		RuntimeType:               runtimeType,
+		Runtimes:                  runtimes,
 		OS:                        osTag,
 		Architecture:              archTag,
 		WorkflowPollerAutoscaling: hb.GetWorkflowPollerInfo().GetIsAutoscaling(),
