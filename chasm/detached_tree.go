@@ -242,6 +242,11 @@ func (b *readOnlyNodeBackend) ChasmSkipPersistenceEnabled() bool {
 	return false
 }
 
+func (b *readOnlyNodeBackend) ChasmLogicalTaskCountAlertThreshold(string) int {
+	b.unsupported("ChasmLogicalTaskCountAlertThreshold")
+	return 0
+}
+
 func (b *readOnlyNodeBackend) SetTimeSkippingConfig(*commonpb.TimeSkippingConfig) {
 	b.unsupported("SetTimeSkippingConfig")
 }
