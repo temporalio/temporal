@@ -2443,7 +2443,10 @@ func TestQueryConverter_FieldNameFilterMetric(t *testing.T) {
 		// searchattribute.TestNameTypeMap(), whose field names are the preallocated SQL ones
 		// (Keyword01, Int01, ...).
 		customSAs map[string]enumspb.IndexedValueType
-		// count is the expected number of times the field name counter was recorded.
+		// saMapper overrides the search attribute mapper. Defaults to searchattribute.TestMapper.
+		saMapper searchattribute.Mapper
+		// count is the expected number of times the field name counter was recorded. It's
+		// recorded at most once per query, and only if the query is converted successfully.
 		count int
 		err   string
 	}{
@@ -2515,21 +2518,34 @@ func TestQueryConverter_FieldNameFilterMetric(t *testing.T) {
 			count: 0,
 		},
 		{
-			// Each occurrence is counted, even when it's the same field name.
+			// The counter is recorded once per query, regardless of the number of occurrences.
 			name:  "repeated field name",
 			query: "Keyword01 = 'foo' or Keyword01 = 'bar'",
-			count: 2,
+			count: 1,
 		},
 		{
-			// Mixing aliases and field names counts only the field names.
+			// Multiple distinct field names are still recorded once per query.
 			name:  "mixed aliases and field names",
 			query: "Keyword01 = 'foo' and AliasForInt01 > 1 and Double01 < 1.5",
-			count: 2,
+			count: 1,
+		},
+		{
+			name:  "field names in filter and order by",
+			query: "Keyword01 = 'foo' order by Int01",
+			count: 1,
 		},
 		{
 			// The whole query is rejected, so nothing is counted.
 			name:  "unknown search attribute",
 			query: "InvalidField = 'foo'",
+			count: 0,
+			err:   InvalidSearchAttribute,
+		},
+		{
+			// The field name is resolved before the error, but the query is rejected, so
+			// nothing is counted.
+			name:  "field name with unknown search attribute",
+			query: "Keyword01 = 'foo' and InvalidField = 'bar'",
 			count: 0,
 			err:   InvalidSearchAttribute,
 		},
@@ -2597,6 +2613,29 @@ func TestQueryConverter_FieldNameFilterMetric(t *testing.T) {
 			count:     0,
 		},
 
+		// A namespace may register an alias that is identical to the preallocated field name it is
+		// mapped to. Querying it is a legitimate use of the alias, so it must not be counted.
+		{
+			name:     "alias identical to its preallocated field name",
+			query:    "Keyword01 = 'foo'",
+			saMapper: aliasToFieldMapper{"Keyword01": "Keyword01"},
+			count:    0,
+		},
+		{
+			// Same alias as above, but the query uses another field name directly.
+			name:     "field name alongside alias identical to field name",
+			query:    "Keyword01 = 'foo' and Keyword02 = 'bar'",
+			saMapper: aliasToFieldMapper{"Keyword01": "Keyword01"},
+			count:    1,
+		},
+		{
+			// Field name that is the alias of another field: resolves as the alias.
+			name:     "alias identical to another preallocated field name",
+			query:    "Keyword01 = 'foo'",
+			saMapper: aliasToFieldMapper{"Keyword01": "Keyword02"},
+			count:    0,
+		},
+
 		// A raw CHASM field name resolves by stripping the Temporal prefix, so alias != field
 		// name; it is recognised via the CHASM mapper's type map instead.
 		{
@@ -2648,6 +2687,8 @@ func TestQueryConverter_FieldNameFilterMetric(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			r := require.New(t)
 			metricsHandler := metricstest.NewCaptureHandler()
 			capture := metricsHandler.StartCapture()
@@ -2657,10 +2698,14 @@ func TestQueryConverter_FieldNameFilterMetric(t *testing.T) {
 			if tc.customSAs != nil {
 				saTypeMap = searchattribute.NewNameTypeMapStub(tc.customSAs)
 			}
+			var saMapper searchattribute.Mapper = &searchattribute.TestMapper{}
+			if tc.saMapper != nil {
+				saMapper = tc.saMapper
+			}
 			queryConverter := NewNilQueryConverter(
 				testNamespaceName,
 				saTypeMap,
-				&searchattribute.TestMapper{},
+				saMapper,
 				metricsHandler,
 				log.NewNoopLogger(),
 			)
@@ -2688,8 +2733,9 @@ func TestQueryConverter_FieldNameFilterMetric(t *testing.T) {
 func TestQueryConverter_FieldNameFilterMetricGroupBy(t *testing.T) {
 	t.Parallel()
 
-	// GROUP BY is restricted to an allowlist of field names, and the counter is recorded
-	// while resolving the column name, before that restriction is applied.
+	// GROUP BY is restricted to an allowlist of field names. The field name is flagged while
+	// resolving the column name, before that restriction is applied, but the counter is only
+	// recorded if the whole query is converted successfully.
 	testCases := []struct {
 		name  string
 		query string
@@ -2709,13 +2755,20 @@ func TestQueryConverter_FieldNameFilterMetricGroupBy(t *testing.T) {
 		{
 			name:  "disallowed custom field name",
 			query: "group by Keyword01",
-			count: 1,
+			count: 0,
 			err:   NotSupportedErrMessage,
+		},
+		{
+			name:  "field name in filter with allowed group by",
+			query: "Keyword01 = 'foo' group by ExecutionStatus",
+			count: 1,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			r := require.New(t)
 			metricsHandler := metricstest.NewCaptureHandler()
 			capture := metricsHandler.StartCapture()
@@ -2739,6 +2792,26 @@ func TestQueryConverter_FieldNameFilterMetricGroupBy(t *testing.T) {
 			r.Len(capture.SnapshotMetric(fieldNameFilterAccepted.Name()), tc.count)
 		})
 	}
+}
+
+// aliasToFieldMapper mimics the namespace custom search attributes mapper: it only resolves the
+// registered aliases, and returns an error for anything else.
+type aliasToFieldMapper map[string]string
+
+func (m aliasToFieldMapper) GetAlias(fieldName string, _ string) (string, error) {
+	for alias, fn := range m {
+		if fn == fieldName {
+			return alias, nil
+		}
+	}
+	return "", serviceerror.NewInvalidArgument("no alias for field name")
+}
+
+func (m aliasToFieldMapper) GetFieldName(alias string, _ string) (string, error) {
+	if fn, ok := m[alias]; ok {
+		return fn, nil
+	}
+	return "", serviceerror.NewInvalidArgument("no mapping for alias")
 }
 
 func newTestQueryConverter(
