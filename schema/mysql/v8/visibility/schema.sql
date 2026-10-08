@@ -4,7 +4,7 @@ CREATE TABLE executions_visibility (
   _version                BIGINT        NOT NULL DEFAULT 0, -- increasing version, used to reject upserts which are out of order
   start_time              DATETIME(6)   NOT NULL,
   execution_time          DATETIME(6)   NOT NULL,
-  workflow_id             VARCHAR(255)  NOT NULL,
+  workflow_id             VARBINARY(1000) NOT NULL,
   workflow_type_name      VARCHAR(255)  NOT NULL,
   status                  INT           NOT NULL,  -- enum WorkflowExecutionStatus {RUNNING, COMPLETED, FAILED, CANCELED, TERMINATED, CONTINUED_AS_NEW, TIMED_OUT}
   close_time              DATETIME(6)   NULL,
@@ -16,9 +16,9 @@ CREATE TABLE executions_visibility (
   encoding                VARCHAR(64)   NOT NULL,
   task_queue              VARCHAR(255)  NOT NULL DEFAULT '',
   search_attributes       JSON          NULL,
-  parent_workflow_id      VARCHAR(255)  NULL,
+  parent_workflow_id      VARBINARY(1000) NULL,
   parent_run_id           VARCHAR(255)  NULL,
-  root_workflow_id        VARCHAR(255)  NOT NULL DEFAULT '',
+  root_workflow_id        VARBINARY(1000) NOT NULL DEFAULT '',
   root_run_id             VARCHAR(255)  NOT NULL DEFAULT '',
 
   -- Each search attribute has its own generated column.

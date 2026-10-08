@@ -1,0 +1,10 @@
+ALTER TABLE executions MODIFY workflow_id VARBINARY(1000) NOT NULL;
+ALTER TABLE current_executions MODIFY workflow_id VARBINARY(1000) NOT NULL;
+ALTER TABLE buffered_events MODIFY workflow_id VARBINARY(1000) NOT NULL;
+ALTER TABLE activity_info_maps MODIFY workflow_id VARBINARY(1000) NOT NULL;
+ALTER TABLE timer_info_maps MODIFY workflow_id VARBINARY(1000) NOT NULL;
+ALTER TABLE child_execution_info_maps MODIFY workflow_id VARBINARY(1000) NOT NULL;
+ALTER TABLE request_cancel_info_maps MODIFY workflow_id VARBINARY(1000) NOT NULL;
+ALTER TABLE signal_info_maps MODIFY workflow_id VARBINARY(1000) NOT NULL;
+ALTER TABLE signals_requested_sets MODIFY workflow_id VARBINARY(1000) NOT NULL;
+ALTER TABLE chasm_node_maps MODIFY workflow_id VARBINARY(1000) NOT NULL;
