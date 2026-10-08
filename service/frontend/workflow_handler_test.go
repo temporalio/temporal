@@ -507,7 +507,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_Failed_StartRequestNot
 	s.Equal(errRequestNotSet, err)
 }
 
-func (s *WorkflowHandlerSuite) TestValidateStartWorkflowArgsForSchedule_EmptyWorkflowIdGeneratesUUID() {
+func (s *WorkflowHandlerSuite) TestValidateStartWorkflowArgsForSchedule_DoesNotMutateWorkflowID() {
 	wh := s.getWorkflowHandler(s.newConfig())
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil).AnyTimes()
 	info := &workflowpb.NewWorkflowExecutionInfo{
@@ -519,9 +519,57 @@ func (s *WorkflowHandlerSuite) TestValidateStartWorkflowArgsForSchedule_EmptyWor
 	}
 	err := wh.validateStartWorkflowArgsForSchedule(s.testNamespace, info)
 	s.Require().NoError(err)
-	s.Require().NotEmpty(info.WorkflowId)
-	_, err = uuid.Parse(info.WorkflowId)
-	s.Require().NoError(err)
+	s.Require().Empty(info.WorkflowId)
+}
+
+func (s *WorkflowHandlerSuite) TestCreateUpdateSchedule_EmptyWorkflowIDGeneratesUUID() {
+	config := s.newConfig()
+	config.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+	ctx := context.Background()
+
+	for _, testCase := range []struct {
+		name string
+		call func(*workflowpb.NewWorkflowExecutionInfo) error
+	}{
+		{
+			name: "CreateSchedule",
+			call: func(startWorkflow *workflowpb.NewWorkflowExecutionInfo) error {
+				_, err := wh.CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+					Namespace:  s.testNamespace.String(),
+					ScheduleId: "test-schedule",
+					RequestId:  uuid.NewString(),
+					Schedule: &schedulepb.Schedule{Action: &schedulepb.ScheduleAction{
+						Action: &schedulepb.ScheduleAction_StartWorkflow{StartWorkflow: startWorkflow},
+					}},
+				})
+				return err
+			},
+		},
+		{
+			name: "UpdateSchedule",
+			call: func(startWorkflow *workflowpb.NewWorkflowExecutionInfo) error {
+				_, err := wh.UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+					Namespace:  s.testNamespace.String(),
+					ScheduleId: "test-schedule",
+					RequestId:  uuid.NewString(),
+					Schedule: &schedulepb.Schedule{Action: &schedulepb.ScheduleAction{
+						Action: &schedulepb.ScheduleAction_StartWorkflow{StartWorkflow: startWorkflow},
+					}},
+				})
+				return err
+			},
+		},
+	} {
+		s.Run(testCase.name, func() {
+			startWorkflow := &workflowpb.NewWorkflowExecutionInfo{}
+			err := testCase.call(startWorkflow)
+			s.ErrorContains(err, "WorkflowType is not set")
+			s.Require().NotEmpty(startWorkflow.WorkflowId)
+			_, err = uuid.Parse(startWorkflow.WorkflowId)
+			s.Require().NoError(err)
+		})
+	}
 }
 
 func (s *WorkflowHandlerSuite) TestValidateStartWorkflowArgsForSchedule_Failed_InvalidVersioningOverride() {
