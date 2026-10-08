@@ -243,6 +243,9 @@ func (r *StreamReceiverImpl) ackMessage(
 
 	var highPriorityWatermark, lowPriorityWatermark *replicationspb.ReplicationState
 	var laneStates map[string]*replicationspb.ReplicationState
+	var throttleHighNamespaceIDs []string
+	var supportsReplicationLanes bool
+	var laneProtocolVersion int32
 	inclusiveLowWaterMark := int64(-1)
 	var inclusiveLowWaterMarkTime time.Time
 
@@ -299,6 +302,9 @@ func (r *StreamReceiverImpl) ackMessage(
 				InclusiveLowWatermarkTime: timestamppb.New(wm.Timestamp),
 			}
 		}
+		throttleHighNamespaceIDs = r.NamespaceThrottler.ThrottledNamespaceIDs(r.clientShardKey.ShardID)
+		supportsReplicationLanes = true
+		laneProtocolVersion = 1
 	case ReceiverModeSingleStack:
 		if highPriorityWaterMarkInfo == nil { // This should not happen, more for a safety check
 			return 0, NewStreamError("Single stack mode. High priority tracker does not have low watermark info", serviceerror.NewInternal("Invalid tracker state"))
@@ -313,14 +319,6 @@ func (r *StreamReceiverImpl) ackMessage(
 		return 0, NewStreamError("InclusiveLowWaterMark is not set", serviceerror.NewInternal("Invalid inclusive low watermark"))
 	}
 
-	var throttleHighNamespaceIDs []string
-	if receiverMode == ReceiverModeTieredStack {
-		throttleHighNamespaceIDs = r.NamespaceThrottler.ThrottledNamespaceIDs(r.clientShardKey.ShardID)
-	}
-	var laneProtocolVersion int32
-	if receiverMode == ReceiverModeTieredStack {
-		laneProtocolVersion = 1
-	}
 	if err := stream.Send(&adminservice.StreamWorkflowReplicationMessagesRequest{
 		Attributes: &adminservice.StreamWorkflowReplicationMessagesRequest_SyncReplicationState{
 			SyncReplicationState: &replicationspb.SyncReplicationState{
@@ -330,7 +328,7 @@ func (r *StreamReceiverImpl) ackMessage(
 				LowPriorityState:               lowPriorityWatermark,
 				ThrottleHighNamespaceIds:       throttleHighNamespaceIDs,
 				LaneStates:                     laneStates,
-				SupportsReplicationLanes:       receiverMode == ReceiverModeTieredStack,
+				SupportsReplicationLanes:       supportsReplicationLanes,
 				ReplicationLaneProtocolVersion: laneProtocolVersion,
 			},
 		},
