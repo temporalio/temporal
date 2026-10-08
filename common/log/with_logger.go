@@ -32,6 +32,11 @@ func (l *withLogger) prependTags(tags []tag.Tag) []tag.Tag {
 	return allTags
 }
 
+func (l *withLogger) debugEnabled() bool {
+	checker, ok := l.logger.(debugEnabledLogger)
+	return !ok || checker.debugEnabled()
+}
+
 // Debug writes message to the log (if enabled).
 func (l *withLogger) Debug(msg string, tags ...tag.Tag) {
 	l.logger.Debug(msg, l.prependTags(tags)...)

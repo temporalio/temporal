@@ -79,10 +79,11 @@ func (e *safeReflectedEncoder) Encode(v any) (err error) {
 type (
 	// zapLogger is logger backed up by zap.Logger.
 	zapLogger struct {
-		zl     *zap.Logger
-		skip   int
-		baseZl *zap.Logger // original, without tags, for cloning new tagged versions, because Zap doesn't dedupe :(
-		tags   []tag.Tag   // my tags, for passing to clones
+		zl             *zap.Logger
+		skip           int
+		baseZl         *zap.Logger // original, without tags, for cloning new tagged versions, because Zap doesn't dedupe :(
+		tags           []tag.Tag   // my tags, for passing to clones
+		lazyDebugCheck bool        // caller opted into checks before lazy tag materialization
 	}
 )
 
@@ -122,6 +123,16 @@ func NewZapLogger(zl *zap.Logger) *zapLogger {
 	}
 }
 
+// NewZapLoggerWithLazyDebugSuppression opts into skipping lazy tag
+// materialization for disabled Debug calls. The caller must ensure Core.With
+// preserves level enablement and has no required side effects beyond binding
+// fields. An unmodified BuildZapLogger result meets these requirements.
+func NewZapLoggerWithLazyDebugSuppression(zl *zap.Logger) *zapLogger {
+	logger := NewZapLogger(zl)
+	logger.lazyDebugCheck = true
+	return logger
+}
+
 // BuildZapLogger builds and returns a new zap.Logger for this logging configuration
 func BuildZapLogger(cfg Config) *zap.Logger {
 	return buildZapLogger(cfg, true)
@@ -158,6 +169,13 @@ func setDefaultMsg(msg string) string {
 		return defaultMsgForEmpty
 	}
 	return msg
+}
+
+// debugEnabled is only used before lazy tags are materialized. Ordinary
+// NewZapLogger instances remain conservative because a custom core's With may
+// change level enablement or have required side effects.
+func (l *zapLogger) debugEnabled() bool {
+	return !l.lazyDebugCheck || l.zl.Core().Enabled(zap.DebugLevel)
 }
 
 func (l *zapLogger) Debug(msg string, tags ...tag.Tag) {
@@ -236,18 +254,20 @@ func (l *zapLogger) cloneWithTags(tags []tag.Tag) Logger {
 	l.fillFields(tags, fields)
 	zl := l.baseZl.With(fields...)
 	return &zapLogger{
-		zl:     zl,
-		skip:   l.skip,
-		baseZl: l.baseZl,
-		tags:   tags,
+		zl:             zl,
+		skip:           l.skip,
+		baseZl:         l.baseZl,
+		tags:           tags,
+		lazyDebugCheck: l.lazyDebugCheck,
 	}
 }
 
 func (l *zapLogger) Skip(extraSkip int) Logger {
 	return &zapLogger{
-		zl:     l.zl,
-		skip:   l.skip + extraSkip,
-		baseZl: l.baseZl,
+		zl:             l.zl,
+		skip:           l.skip + extraSkip,
+		baseZl:         l.baseZl,
+		lazyDebugCheck: l.lazyDebugCheck,
 	}
 }
 
