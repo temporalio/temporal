@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/number"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
@@ -1729,6 +1730,13 @@ func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.C
 	// drop out between emits and on exit, orders it after the last real emit, so an emit that was in
 	// flight when a queue unloaded can't leave a stale value behind.
 	defer func() { pm.emitZeroLogicalBacklog(emitted) }()
+	perNSWorkerHandler := pm.perNamespaceWorkerBacklogMetricsHandler()
+	var perNSWorkerEmitted bool
+	defer func() {
+		if perNSWorkerEmitted {
+			recordPerNamespaceWorkerBacklog(perNSWorkerHandler, 0, 0)
+		}
+	}()
 	for {
 		interval := pm.config.BacklogMetricsEmitInterval()
 		if interval == 0 { // disabled
@@ -1743,6 +1751,9 @@ func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.C
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(backoff.Jitter(interval, 0.05)):
+			if perNSWorkerHandler != nil {
+				perNSWorkerEmitted = pm.emitPerNamespaceWorkerBacklogMetrics(perNSWorkerHandler) || perNSWorkerEmitted
+			}
 			versions, err := pm.fetchAndEmitLogicalBacklogMetrics(ctx)
 			if err != nil {
 				// Stop closes the user data manager before cancelling this goroutine, so a tick in
@@ -1759,6 +1770,56 @@ func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.C
 			emitted = versions
 		}
 	}
+}
+
+// The per-namespace system queue is one fixed queue per namespace. Its metrics retain a
+// separate partition label so cloud exporters can keep it without keeping arbitrary
+// customer task queue and partition dimensions.
+func (pm *taskQueuePartitionManagerImpl) perNamespaceWorkerBacklogMetricsHandler() metrics.Handler {
+	partition, ok := pm.partition.(*tqid.NormalPartition)
+	if !ok || partition.TaskQueue().Name() != primitives.PerNSWorkerTaskQueue {
+		return nil
+	}
+	return pm.metricsHandler.WithTags(
+		metrics.NamespaceTag(pm.ns.Name().String()),
+		metrics.TaskQueueTypeTag(partition.TaskType()),
+		metrics.Tag{Key: "per_namespace_worker_partition", Value: partition.MetricTag(true)},
+	)
+}
+
+func (pm *taskQueuePartitionManagerImpl) emitPerNamespaceWorkerBacklogMetrics(handler metrics.Handler) bool {
+	queue, err := pm.defaultQueueFuture.GetIfReady()
+	if err != nil {
+		return false
+	}
+
+	// Physical stats include active and draining subqueues. Sum priorities and versions
+	// before recording a single gauge, without logical version attribution or its RPCs.
+	var count int64
+	var age float64
+	add := func(queue physicalTaskQueueManager) {
+		for _, stats := range queue.GetStatsByPriority(false) {
+			backlog := max(0, stats.GetApproximateBacklogCount())
+			count += backlog
+			if backlog > 0 {
+				age = max(age, stats.GetApproximateBacklogAge().AsDuration().Seconds())
+			}
+		}
+	}
+	add(queue)
+	pm.versionedQueuesLock.RLock()
+	for _, versionedQueue := range pm.versionedQueues {
+		add(versionedQueue)
+	}
+	pm.versionedQueuesLock.RUnlock()
+
+	recordPerNamespaceWorkerBacklog(handler, float64(count), age)
+	return true
+}
+
+func recordPerNamespaceWorkerBacklog(handler metrics.Handler, count, age float64) {
+	metrics.PerNamespaceWorkerBacklogCount.With(handler).Record(count)
+	metrics.PerNamespaceWorkerBacklogAgeSeconds.With(handler).Record(age)
 }
 
 // fetchAndEmitLogicalBacklogMetrics calls Describe to get attributed backlog stats and emits

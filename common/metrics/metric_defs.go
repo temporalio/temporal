@@ -1367,11 +1367,19 @@ var (
 	UnknownBuildPollsCounter               = NewCounterDef("unknown_build_polls")
 	UnknownBuildTasksCounter               = NewCounterDef("unknown_build_tasks")
 	TaskDispatchLatencyPerTaskQueue        = NewTimerDef("task_dispatch_latency")
-	ApproximateBacklogCount                = NewGaugeDef("approximate_backlog_count")
-	ApproximateBacklogAgeSeconds           = NewGaugeDef("approximate_backlog_age_seconds")
-	PhysicalApproximateBacklogCount        = NewGaugeDef("physical_approximate_backlog_count")
-	PhysicalApproximateBacklogAgeSeconds   = NewGaugeDef("physical_approximate_backlog_age_seconds")
-	NonRetryableTasks                      = NewCounterDef(
+	PerNamespaceWorkerBacklogCount         = NewGaugeDef(
+		"per_namespace_worker_backlog_count",
+		WithDescription("Approximate persisted backlog of temporal-sys-per-ns-tq, summed across priorities and worker versions within a namespace, task type, and partition."),
+	)
+	PerNamespaceWorkerBacklogAgeSeconds = NewGaugeDef(
+		"per_namespace_worker_backlog_age_seconds",
+		WithDescription("Oldest persisted task age in temporal-sys-per-ns-tq across priorities and worker versions within a namespace, task type, and partition."),
+	)
+	ApproximateBacklogCount              = NewGaugeDef("approximate_backlog_count")
+	ApproximateBacklogAgeSeconds         = NewGaugeDef("approximate_backlog_age_seconds")
+	PhysicalApproximateBacklogCount      = NewGaugeDef("physical_approximate_backlog_count")
+	PhysicalApproximateBacklogAgeSeconds = NewGaugeDef("physical_approximate_backlog_age_seconds")
+	NonRetryableTasks                    = NewCounterDef(
 		"non_retryable_tasks",
 		WithDescription("The number of non-retryable matching tasks which are dropped due to specific errors"),
 	)
