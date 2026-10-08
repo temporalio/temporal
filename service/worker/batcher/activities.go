@@ -469,8 +469,9 @@ func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams 
 		//nolint:staticcheck // SA1019: Executions is deprecated but still needed for backward compatibility
 		executions = batchParams.Request.Executions
 		targetExecutions = batchParams.Request.GetTargetExecutions()
+		requestedRPS := float64(batchParams.Request.GetMaxOperationsPerSecond())
 		rateLimiter = quotas.NewRequestRateLimiterAdapter(quotas.NewDefaultOutgoingRateLimiter(func() float64 {
-			return float64(a.rps(targetNS))
+			return getOperationRPS(float64(a.rps(targetNS)), requestedRPS)
 		}))
 	}
 
@@ -584,6 +585,15 @@ func (a *activities) adjustQueryAdminBatchType(
 	// RefreshWorkflowTasks applies to both open and closed workflows,
 	// so no additional filter is needed - return query as-is.
 	return adminReq.GetVisibilityQuery()
+}
+
+// getOperationRPS returns the rate for a batch operation.
+// It is the requested RPS (if set), capped by the configured RPS.
+func getOperationRPS(maxRPS, requestedRPS float64) float64 {
+	if requestedRPS <= 0 {
+		return maxRPS
+	}
+	return min(requestedRPS, maxRPS)
 }
 
 func (a *activities) getOperationConcurrency(concurrency int) int {
