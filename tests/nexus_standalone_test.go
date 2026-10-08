@@ -2189,9 +2189,9 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 		result := s.Rcv(pollResultCh)
 		s.NoError(result.err)
 		protorequire.ProtoEqual(s.T(), &workflowservice.PollNexusOperationExecutionResponse{
-			RunId:          startResp.RunId,
-			WaitStage:      enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
-			OperationToken: "test-operation-token",
+			RunId:                               startResp.RunId,
+			WaitStage:                           enumspb.NEXUS_OPERATION_WAIT_STAGE_STARTED,
+			OperationToken:                      "test-operation-token",
 			PropagatedNexusSerializationContext: testSerializationContext(endpointName),
 		}, result.resp)
 
@@ -2282,9 +2282,9 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 				pollResp := result.resp
 
 				protorequire.ProtoEqual(s.T(), &workflowservice.PollNexusOperationExecutionResponse{
-					RunId:          startResp.RunId,
-					WaitStage:      enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
-					OperationToken: pollResp.GetOperationToken(),
+					RunId:                               startResp.RunId,
+					WaitStage:                           enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
+					OperationToken:                      pollResp.GetOperationToken(),
 					PropagatedNexusSerializationContext: testSerializationContext(endpointName),
 					Outcome: &workflowservice.PollNexusOperationExecutionResponse_Failure{
 						Failure: pollResp.GetFailure(),
@@ -2323,9 +2323,9 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationPoll() {
 		})
 		s.NoError(err)
 		protorequire.ProtoEqual(s.T(), &workflowservice.PollNexusOperationExecutionResponse{
-			RunId:          startResp.RunId,
-			WaitStage:      enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
-			OperationToken: pollResp.GetOperationToken(),
+			RunId:                               startResp.RunId,
+			WaitStage:                           enumspb.NEXUS_OPERATION_WAIT_STAGE_CLOSED,
+			OperationToken:                      pollResp.GetOperationToken(),
 			PropagatedNexusSerializationContext: testSerializationContext(endpointName),
 			Outcome: &workflowservice.PollNexusOperationExecutionResponse_Failure{
 				Failure: pollResp.GetFailure(),
