@@ -62,6 +62,7 @@ func (l *TestLibrary) Tasks() []*RegistrableTask {
 		NewRegistrableSideEffectTask(
 			testSideEffectTaskName,
 			l.mockSideEffectTaskHandler,
+			WithTaskCountMetric(1000),
 		),
 		NewRegistrableSideEffectTask(
 			testDiscardableSideEffectTaskName,
@@ -75,6 +76,7 @@ func (l *TestLibrary) Tasks() []*RegistrableTask {
 		NewRegistrablePureTask(
 			testPureTaskName,
 			l.mockPureTaskHandler,
+			WithTaskCountMetric(1000),
 		),
 		NewRegistrableSideEffectTask[any, *TestSingletonReplaceSideEffectTask](
 			testSingletonReplaceSideEffectTaskName,
