@@ -13,7 +13,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/resource/serviceclient"
 	"go.temporal.io/server/service/history/queues/common"
 	"go.uber.org/fx"
 )
@@ -85,8 +85,8 @@ type invocationTaskHandlerOptions struct {
 	Logger             log.Logger
 	HTTPCallerProvider HTTPCallerProvider
 	HTTPTraceProvider  commonnexus.HTTPClientTraceProvider
-	HistoryClient      resource.HistoryClient
-	MatchingClient     resource.MatchingClient
+	HistoryClient      serviceclient.HistoryClient
+	MatchingClient     serviceclient.MatchingClient
 }
 
 type invocationTaskHandler struct {
@@ -97,8 +97,8 @@ type invocationTaskHandler struct {
 	logger             log.Logger
 	httpCallerProvider HTTPCallerProvider
 	httpTraceProvider  commonnexus.HTTPClientTraceProvider
-	historyClient      resource.HistoryClient
-	matchingClient     resource.MatchingClient
+	historyClient      serviceclient.HistoryClient
+	matchingClient     serviceclient.MatchingClient
 }
 
 func newInvocationTaskHandler(opts invocationTaskHandlerOptions) *invocationTaskHandler {

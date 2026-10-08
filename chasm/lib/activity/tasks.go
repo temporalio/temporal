@@ -8,7 +8,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/resource/serviceclient"
 	"go.temporal.io/server/common/util"
 	"go.uber.org/fx"
 )
@@ -28,7 +28,7 @@ type DispatchTaskHook func(
 type activityDispatchTaskHandlerOptions struct {
 	fx.In
 
-	MatchingClient   resource.MatchingClient
+	MatchingClient   serviceclient.MatchingClient
 	DispatchTaskHook DispatchTaskHook `optional:"true"`
 }
 

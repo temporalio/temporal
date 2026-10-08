@@ -274,7 +274,7 @@ func (a *Activity) outcome(ctx chasm.Context) *apiactivitypb.ActivityExecutionOu
 			Value: &apiactivitypb.ActivityExecutionOutcome_Result{Result: successful.GetOutput()},
 		}
 	}
-	if failure := a.terminalFailure(ctx); failure != nil {
+	if failure := a.TerminalFailure(ctx); failure != nil {
 		return &apiactivitypb.ActivityExecutionOutcome{
 			Value:      &apiactivitypb.ActivityExecutionOutcome_Failure{Failure: failure},
 			RetryState: activityOutcome.GetRetryState(),
@@ -283,10 +283,10 @@ func (a *Activity) outcome(ctx chasm.Context) *apiactivitypb.ActivityExecutionOu
 	return nil
 }
 
-// terminalFailure returns the failure for a closed activity. The failure may be stored in Outcome.Failed
+// TerminalFailure returns the failure for a closed activity. The failure may be stored in Outcome.Failed
 // (terminated, canceled, timed out) or in LastAttempt.LastFailureDetails (failed after exhausting retries).
 // Returns nil if no failure is found.
-func (a *Activity) terminalFailure(ctx chasm.Context) *failurepb.Failure {
+func (a *Activity) TerminalFailure(ctx chasm.Context) *failurepb.Failure {
 	if f := a.Outcome.Get(ctx).GetFailed(); f != nil {
 		return f.GetFailure()
 	}

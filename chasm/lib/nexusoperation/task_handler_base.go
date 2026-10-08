@@ -19,7 +19,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/resource/serviceclient"
 	"go.uber.org/fx"
 )
 
@@ -48,7 +48,7 @@ type InvocationTaskHandlerOptions struct {
 	ClientProvider    ClientProvider
 	EndpointRegistry  commonnexus.EndpointRegistry
 	HTTPTraceProvider commonnexus.HTTPClientTraceProvider
-	HistoryClient     resource.HistoryClient
+	HistoryClient     serviceclient.HistoryClient
 	ChasmRegistry     *chasm.Registry
 }
 
@@ -75,7 +75,7 @@ type nexusTaskHandlerBase struct {
 	clientProvider    ClientProvider
 	endpointRegistry  commonnexus.EndpointRegistry
 	httpTraceProvider commonnexus.HTTPClientTraceProvider
-	historyClient     resource.HistoryClient
+	historyClient     serviceclient.HistoryClient
 	chasmRegistry     *chasm.Registry
 }
 

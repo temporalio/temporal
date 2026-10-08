@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.timer.proto.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/timer/gen/timerpb/v1;timerpb";
+
+// TimerState is the state of a durable timer.
+message TimerState {
+  string timer_id = 1;
+  // Event ID of the TIMER_STARTED event.
+  int64 started_event_id = 2;
+  google.protobuf.Timestamp fire_time = 3;
+}
+
+// TimerFireTask fires a timer at its fire time.
+message TimerFireTask {}

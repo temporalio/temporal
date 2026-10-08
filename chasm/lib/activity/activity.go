@@ -49,8 +49,9 @@ var _ chasm.DescribableComponent = (*Activity)(nil)
 var _ callback.CompletionSource = (*Activity)(nil)
 
 type ActivityStore interface {
-	// RecordCompleted applies the provided function to record activity completion
-	RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error
+	// RecordCompleted applies the provided function to record completion of activity a. A store
+	// that holds several activities uses a to tell which one completed.
+	RecordCompleted(ctx chasm.MutableContext, a *Activity, applyFn func(ctx chasm.MutableContext) error) error
 }
 
 // Activity component represents an activity execution persistence object and can be either standalone activity or one
@@ -219,11 +220,22 @@ func NewStandaloneActivity(
 	return activity, nil
 }
 
+// NewEmbeddedActivity returns an activity to be embedded in an ActivityStore, such as a workflow,
+// with the given options and input. The activity reaches its store through its parent pointer once
+// it is added to the store as a child component.
 func NewEmbeddedActivity(
 	ctx chasm.MutableContext,
 	state *activitypb.ActivityState,
-	parent ActivityStore,
-) {
+	requestData *activitypb.ActivityRequestData,
+) *Activity {
+	activity := &Activity{
+		ActivityState: state,
+		LastAttempt:   chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
+		RequestData:   chasm.NewDataField(ctx, requestData),
+		Outcome:       chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+	}
+	activity.ScheduleTime = timestamppb.New(ctx.Now(activity))
+	return activity
 }
 
 // HandleStarted updates the activity on recording activity task started and populates the response.
@@ -295,7 +307,7 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 
 // RecordCompleted applies the provided function to record activity completion.
 // For standalone activities, it also triggers any registered completion callbacks.
-func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx chasm.MutableContext) error) error {
+func (a *Activity) RecordCompleted(ctx chasm.MutableContext, _ *Activity, applyFn func(ctx chasm.MutableContext) error) error {
 	if err := applyFn(ctx); err != nil {
 		return err
 	}
@@ -419,7 +431,7 @@ func (a *Activity) GetNexusCompletion(ctx chasm.Context, _ string) (nexusrpc.Com
 		return opts, nil
 	}
 
-	failure := a.terminalFailure(ctx)
+	failure := a.TerminalFailure(ctx)
 	if failure != nil {
 		state := nexus.OperationStateFailed
 		message := "operation failed"

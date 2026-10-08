@@ -476,6 +476,8 @@ func TestTimeoutTaskTerminalFailure(t *testing.T) {
 
 			terminalFailure := activity.outcome(ctx).GetFailure()
 			require.Equal(t, tc.expectedTimeoutType, terminalFailure.GetTimeoutFailureInfo().GetTimeoutType())
+			// As for workflow activities: the server, not the worker, produced the failure.
+			require.Equal(t, "Server", terminalFailure.GetSource())
 			require.Equal(t, tc.expectedRetryState, activity.outcome(ctx).GetRetryState())
 			if tc.expectedMessage != "" {
 				require.Equal(t, tc.expectedMessage, terminalFailure.GetMessage())
