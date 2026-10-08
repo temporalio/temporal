@@ -628,7 +628,7 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 // closeTransaction closes the execution's transaction, commits its transition
 // count, and validates the resulting clean tree.
 func (e *Engine) closeTransaction(ctx context.Context, x *execution) error {
-	if _, err := x.node.CloseTransaction(headers.GetPrincipal(ctx)); err != nil {
+	if _, err := x.node.CloseTransaction(ctx); err != nil {
 		return err
 	}
 	x.commitTransition()

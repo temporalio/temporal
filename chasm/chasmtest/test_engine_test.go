@@ -253,19 +253,16 @@ func engineContext(e *chasmtest.Engine) context.Context {
 	return chasm.NewEngineContext(context.Background(), e)
 }
 
-// TestRecordsCallerPrincipal: the principal in the request context that creates the execution is recorded
-// on the root and the components it creates, the one that closes it is recorded on the root, and requests in
-// between change neither.
+// TestRecordsCallerPrincipal: the principal in the request context that creates the execution and the
+// one that closes it are recorded on the root node, and requests in between change neither.
 func TestRecordsCallerPrincipal(t *testing.T) {
 	alice := &commonpb.Principal{Type: "jwt", Name: "alice"}
 	bob := &commonpb.Principal{Type: "jwt", Name: "bob"}
 	worker := &commonpb.Principal{Type: "jwt", Name: "worker"}
 
-	var rootAttributes, visibilityAttributes *persistencespb.ChasmComponentAttributes
+	var rootAttributes *persistencespb.ChasmComponentAttributes
 	captureRoot := func(_ *testing.T, node *chasm.Node, _ chasm.RootComponent) {
-		nodes := node.Snapshot(nil).Nodes
-		rootAttributes = nodes[""].GetMetadata().GetComponentAttributes()
-		visibilityAttributes = nodes["Visibility"].GetMetadata().GetComponentAttributes()
+		rootAttributes = node.Snapshot(nil).Nodes[""].GetMetadata().GetComponentAttributes()
 	}
 
 	registry := chasm.NewRegistry(log.NewNoopLogger())
@@ -286,8 +283,6 @@ func TestRecordsCallerPrincipal(t *testing.T) {
 	ref := chasm.NewComponentRef[*tests.PayloadStore](key)
 	protorequire.ProtoEqual(t, alice, rootAttributes.GetStartedByPrincipal())
 	require.Nil(t, rootAttributes.GetClosedByPrincipal())
-	// Sub-components created by the start request record the same caller.
-	protorequire.ProtoEqual(t, alice, visibilityAttributes.GetStartedByPrincipal())
 
 	_, _, err = chasm.UpdateComponent(callerContext(bob), ref,
 		func(s *tests.PayloadStore, mc chasm.MutableContext, _ any) (any, error) {

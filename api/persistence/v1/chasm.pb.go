@@ -232,8 +232,8 @@ type ChasmComponentAttributes struct {
 	Requests map[string]*ChasmComponentAttributes_RequestMetadata `protobuf:"bytes,5,rep,name=requests,proto3" json:"requests,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Caller-supplied user metadata (summary, details) attached to this component.
 	UserMetadata *v11.UserMetadata `protobuf:"bytes,6,opt,name=user_metadata,json=userMetadata,proto3" json:"user_metadata,omitempty"`
-	// Principal of the caller whose request created this component. Not set for
-	// components of workflow executions. Never overwritten.
+	// Principal of the caller whose request created the execution. Only set on
+	// the root component of non-workflow executions. Never overwritten.
 	// (-- api-linter: core::0140::prepositions=disabled
 	//     aip.dev/not-precedent: "by" is needed here. --)
 	StartedByPrincipal *v1.Principal `protobuf:"bytes,7,opt,name=started_by_principal,json=startedByPrincipal,proto3" json:"started_by_principal,omitempty"`

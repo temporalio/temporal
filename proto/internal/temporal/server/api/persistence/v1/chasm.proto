@@ -81,8 +81,8 @@ message ChasmComponentAttributes {
   map<string, RequestMetadata> requests = 5;
   // Caller-supplied user metadata (summary, details) attached to this component.
   temporal.api.sdk.v1.UserMetadata user_metadata = 6;
-  // Principal of the caller whose request created this component. Not set for
-  // components of workflow executions. Never overwritten.
+  // Principal of the caller whose request created the execution. Only set on
+  // the root component of non-workflow executions. Never overwritten.
   // (-- api-linter: core::0140::prepositions=disabled
   //     aip.dev/not-precedent: "by" is needed here. --)
   temporal.api.common.v1.Principal started_by_principal = 7;

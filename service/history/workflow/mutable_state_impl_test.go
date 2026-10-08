@@ -56,7 +56,6 @@ import (
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerror2 "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/fakedata"
-	"go.temporal.io/server/common/testing/protomock"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/tqid"
@@ -7858,10 +7857,10 @@ func (s *mutableStateSuite) TestCloseTransaction_ChasmTreeReceivesPrincipal() {
 	for _, tc := range []struct {
 		name              string
 		policy            historyi.TransactionPolicy
-		expectedPrincipal gomock.Matcher
+		expectedPrincipal *commonpb.Principal
 	}{
-		{"Active", historyi.TransactionPolicyActive, protomock.Eq(principal)},
-		{"Passive", historyi.TransactionPolicyPassive, gomock.Nil()},
+		{"Active", historyi.TransactionPolicyActive, principal},
+		{"Passive", historyi.TransactionPolicyPassive, nil},
 	} {
 		s.Run(tc.name, func() {
 			namespaceEntry := tests.GlobalNamespaceEntry
@@ -7875,7 +7874,9 @@ func (s *mutableStateSuite) TestCloseTransaction_ChasmTreeReceivesPrincipal() {
 			mutableState.chasmTree = mockChasmTree
 			mockChasmTree.EXPECT().IsStateDirty().Return(false).AnyTimes()
 			mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
-			mockChasmTree.EXPECT().CloseTransaction(tc.expectedPrincipal).Return(chasm.NodesMutation{}, nil).Times(1)
+			mockChasmTree.EXPECT().CloseTransaction(gomock.Cond(func(ctx context.Context) bool {
+				return proto.Equal(tc.expectedPrincipal, headers.GetPrincipal(ctx))
+			})).Return(chasm.NodesMutation{}, nil).Times(1)
 
 			ctx := headers.SetPrincipal(context.Background(), principal)
 			_, _, err = mutableState.CloseTransactionAsMutation(ctx, tc.policy)
