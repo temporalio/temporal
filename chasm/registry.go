@@ -331,7 +331,10 @@ func (r *Registry) registerTask(
 		return fmt.Errorf("component type %s must be and interface or struct that implements Component interface", rt.componentGoType.String())
 	}
 
-	if rt.taskCountMetricEnabled {
+	if rt.taskCountMetricEnabled() {
+		if threshold := *rt.taskCountMetricThreshold; threshold <= 0 {
+			return fmt.Errorf("task %s has task count metric threshold %d, which must be greater than 0", fqn, threshold)
+		}
 		if err := r.registerTaskCountMetricComponents(fqn, rt); err != nil {
 			return err
 		}

@@ -2151,7 +2151,7 @@ func (n *Node) countLogicalTasks(
 	} {
 		for _, componentTask := range componentTasks {
 			registrableTask, ok := n.registry.TaskByID(componentTask.GetTypeId())
-			if !ok || !registrableTask.taskCountMetricEnabled {
+			if !ok || !registrableTask.taskCountMetricEnabled() {
 				continue
 			}
 			if counts == nil {

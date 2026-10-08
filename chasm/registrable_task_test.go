@@ -16,25 +16,9 @@ func TestResolveTaskCountMetricThreshold(t *testing.T) {
 		expected               int
 	}{
 		{
-			name:     "framework default",
-			task:     newTestRegistrableTask(WithTaskCountMetric(0)),
-			expected: defaultTaskCountMetricThreshold,
-		},
-		{
 			name:     "registered threshold",
 			task:     newTestRegistrableTask(WithTaskCountMetric(50)),
 			expected: 50,
-		},
-		{
-			name:     "non-positive registered threshold falls back to default",
-			task:     newTestRegistrableTask(WithTaskCountMetric(-1)),
-			expected: defaultTaskCountMetricThreshold,
-		},
-		{
-			name:                   "dynamic config overrides default",
-			task:                   newTestRegistrableTask(WithTaskCountMetric(0)),
-			dynamicConfigThreshold: 20,
-			expected:               20,
 		},
 		{
 			name:                   "dynamic config overrides registered threshold",
@@ -70,7 +54,7 @@ func TestRegistryTaskCountMetricComponentIDs(t *testing.T) {
 				return NewRegistrableSideEffectTask(
 					"task",
 					NewMockSideEffectTaskHandler[*TestSubComponent1, *TestSideEffectTask](ctrl),
-					WithTaskCountMetric(0),
+					WithTaskCountMetric(1),
 				)
 			},
 			expected: []string{"sub1"},
@@ -81,7 +65,7 @@ func TestRegistryTaskCountMetricComponentIDs(t *testing.T) {
 				return NewRegistrableSideEffectTask(
 					"task",
 					NewMockSideEffectTaskHandler[any, *TestSideEffectTask](ctrl),
-					WithTaskCountMetric(0),
+					WithTaskCountMetric(1),
 				)
 			},
 			expected: []string{"sub1", "sub11"},
@@ -97,12 +81,23 @@ func TestRegistryTaskCountMetricComponentIDs(t *testing.T) {
 			expected: nil,
 		},
 		{
+			name: "non-positive threshold",
+			task: func(ctrl *gomock.Controller) *RegistrableTask {
+				return NewRegistrableSideEffectTask(
+					"task",
+					NewMockSideEffectTaskHandler[*TestSubComponent1, *TestSideEffectTask](ctrl),
+					WithTaskCountMetric(0),
+				)
+			},
+			expectedErr: "must be greater than 0",
+		},
+		{
 			name: "component not registered",
 			task: func(ctrl *gomock.Controller) *RegistrableTask {
 				return NewRegistrableSideEffectTask(
 					"task",
 					NewMockSideEffectTaskHandler[*TestSubComponent2, *TestSideEffectTask](ctrl),
-					WithTaskCountMetric(0),
+					WithTaskCountMetric(1),
 				)
 			},
 			expectedErr: "is not registered",

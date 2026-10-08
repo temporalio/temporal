@@ -5234,13 +5234,11 @@ func (s *nodeSuite) TestCloseTransaction_LogicalTaskCountMetrics() {
 		registeredThreshold    int
 		expectEmitted          bool
 	}{
-		{name: "dynamic config over threshold", dynamicConfigThreshold: taskCount - 1, expectEmitted: true},
-		{name: "dynamic config at threshold", dynamicConfigThreshold: taskCount, expectEmitted: false},
-		{name: "dynamic config overrides registered", dynamicConfigThreshold: taskCount - 1, registeredThreshold: taskCount, expectEmitted: true},
-		{name: "dynamic config disables", dynamicConfigThreshold: -1, registeredThreshold: taskCount - 1, expectEmitted: false},
 		{name: "registered over threshold", registeredThreshold: taskCount - 1, expectEmitted: true},
 		{name: "registered at threshold", registeredThreshold: taskCount, expectEmitted: false},
-		{name: "framework default", expectEmitted: false},
+		{name: "dynamic config lowers threshold", dynamicConfigThreshold: taskCount - 1, registeredThreshold: taskCount, expectEmitted: true},
+		{name: "dynamic config raises threshold", dynamicConfigThreshold: taskCount, registeredThreshold: taskCount - 1, expectEmitted: false},
+		{name: "dynamic config disables", dynamicConfigThreshold: -1, registeredThreshold: taskCount - 1, expectEmitted: false},
 	}
 
 	for _, tc := range testCases {
@@ -5258,8 +5256,9 @@ func (s *nodeSuite) TestCloseTransaction_LogicalTaskCountMetrics() {
 			s.True(ok)
 			registrableTask, ok := s.registry.TaskByID(taskTypeID)
 			s.True(ok)
-			registrableTask.taskCountMetricThreshold = tc.registeredThreshold
-			defer func() { registrableTask.taskCountMetricThreshold = 0 }()
+			originalThreshold := registrableTask.taskCountMetricThreshold
+			registrableTask.taskCountMetricThreshold = &tc.registeredThreshold
+			defer func() { registrableTask.taskCountMetricThreshold = originalThreshold }()
 
 			root := s.testComponentTree()
 			mutableContext := NewMutableContext(context.Background(), root)
