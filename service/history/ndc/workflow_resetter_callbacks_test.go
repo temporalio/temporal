@@ -172,7 +172,7 @@ func TestReapplyEvents_KeepsCallbacksOverLimit(t *testing.T) {
 			require.Len(t, wf.Callbacks, 3)
 			require.Contains(t, wf.Updates, updateID)
 			require.Len(t, wf.Updates[updateID].Get(ctx).Callbacks, 3)
-			require.Equal(t, int64(6), wf.GetTotalCallbacksCount())
+			require.Equal(t, int64(6), wf.GetCallbackMetadata().GetTotalCallbacksCount())
 		})
 	}
 }

@@ -103,8 +103,8 @@ func (s *mutableStateSuite) TestChasmCompletionCallbacks_AttachingDoesNotValidat
 
 	wf := s.chasmWorkflowComponent(ms)
 	s.Len(wf.Callbacks, 3)
-	s.Equal(int64(3), wf.GetTotalCallbacksCount())
-	s.NotZero(wf.GetTotalCallbacksSize())
+	s.Equal(int64(3), wf.GetCallbackMetadata().GetTotalCallbacksCount())
+	s.NotZero(wf.GetCallbackMetadata().GetTotalCallbacksSize())
 }
 
 // The rebuild path replays events another cluster already committed. Re-checking the limit
@@ -137,7 +137,7 @@ func (s *mutableStateSuite) TestChasmCompletionCallbacks_LimitNotEnforcedOnRebui
 
 	wf := s.chasmWorkflowComponent(ms)
 	s.Len(wf.Callbacks, 3)
-	s.Equal(int64(3), wf.GetTotalCallbacksCount())
+	s.Equal(int64(3), wf.GetCallbackMetadata().GetTotalCallbacksCount())
 }
 
 // lowerCallbackLimits drops the execution-wide limits below anything the tests attach,
@@ -190,7 +190,7 @@ func (s *mutableStateSuite) requireCarriedOverCallbacks(newRun historyi.MutableS
 	wf, _, err := newRun.ChasmWorkflowComponentReadOnly(context.Background())
 	s.NoError(err)
 	s.Len(wf.Callbacks, want)
-	s.Equal(int64(want), wf.GetTotalCallbacksCount())
+	s.Equal(int64(want), wf.GetCallbackMetadata().GetTotalCallbacksCount())
 
 	err = newRun.ValidateCallbackAddition(nil, chasmworkflow.CallbackAddition{
 		RequestID: "req-new",
@@ -283,7 +283,7 @@ func (s *mutableStateSuite) TestHsmCompletionCallbacks_AggregateValidationNotApp
 	s.Equal(3, callbacks.MachineCollection(ms.HSM()).Size())
 	wf := s.chasmWorkflowComponent(ms)
 	s.Empty(wf.Callbacks)
-	s.Zero(wf.GetTotalCallbacksCount())
+	s.Zero(wf.GetCallbackMetadata().GetTotalCallbacksCount())
 }
 
 // An Update's callbacks are validated when the Update is admitted, before it reaches a worker.
@@ -318,7 +318,7 @@ func (s *mutableStateSuite) TestChasmUpdateCallbacks_AttachingDoesNotValidate() 
 	s.Len(wf.Callbacks, 3)
 	s.Len(wf.Updates["accepted"].Get(ctx).Callbacks, 3)
 	s.Len(wf.Updates["reapplied"].Get(ctx).Callbacks, 3)
-	s.Equal(int64(9), wf.GetTotalCallbacksCount())
+	s.Equal(int64(9), wf.GetCallbackMetadata().GetTotalCallbacksCount())
 }
 
 // Callbacks of an Update in flight are reserved against the limits until it is accepted. Accepting
@@ -348,7 +348,7 @@ func (s *mutableStateSuite) TestChasmUpdateCallbacks_InFlightReservedUntilAccept
 	})
 	s.NoError(err)
 	wf := s.chasmWorkflowComponent(ms)
-	s.Equal(int64(3), wf.GetTotalCallbacksCount())
+	s.Equal(int64(3), wf.GetCallbackMetadata().GetTotalCallbacksCount())
 
 	err = ms.ValidateCallbackAddition(nil, another)
 	s.ErrorAs(err, &failedPrecondition)

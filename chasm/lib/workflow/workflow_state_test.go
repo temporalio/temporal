@@ -140,7 +140,7 @@ func TestWorkflowStateReplacesEmptyState(t *testing.T) {
 
 			wf := loadWorkflow(t, backend, serializedNodes)
 			require.NotNil(t, wf.WorkflowState)
-			require.Equal(t, tc.wantCBCount, wf.GetTotalCallbacksCount())
+			require.Equal(t, tc.wantCBCount, wf.GetCallbackMetadata().GetTotalCallbacksCount())
 
 			// The rest of the tree is unaffected by the state swap.
 			require.Len(t, wf.Callbacks, 1)

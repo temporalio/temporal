@@ -59,8 +59,8 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		require.Equal(t, "http://cb-1", wf.Callbacks["req-1-0"].Get(ctx).GetCallback().GetNexus().GetUrl())
 		require.Equal(t, "http://cb-2", wf.Callbacks["req-1-1"].Get(ctx).GetCallback().GetNexus().GetUrl())
 
-		require.Equal(t, int64(2), wf.GetTotalCallbacksCount())
-		require.Equal(t, int64(cbs[0].Size()+cbs[1].Size()), wf.GetTotalCallbacksSize())
+		require.Equal(t, int64(2), wf.GetCallbackMetadata().GetTotalCallbacksCount())
+		require.Equal(t, int64(cbs[0].Size()+cbs[1].Size()), wf.GetCallbackMetadata().GetTotalCallbacksSize())
 	})
 
 	t.Run("EmptyListIsNoOp", func(t *testing.T) {
@@ -69,8 +69,8 @@ func TestAddCompletionCallbacks(t *testing.T) {
 
 		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", nil))
 		require.Nil(t, wf.Callbacks)
-		require.Zero(t, wf.GetTotalCallbacksCount())
-		require.Zero(t, wf.GetTotalCallbacksSize())
+		require.Zero(t, wf.GetCallbackMetadata().GetTotalCallbacksCount())
+		require.Zero(t, wf.GetCallbackMetadata().GetTotalCallbacksSize())
 	})
 
 	t.Run("ReattachingTheSameRequestIsANoOp", func(t *testing.T) {
@@ -79,14 +79,14 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		cbs := nexusCallbacks("http://cb-1", "http://cb-2")
 
 		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", cbs))
-		sizeAfterFirstAttach := wf.GetTotalCallbacksSize()
+		sizeAfterFirstAttach := wf.GetCallbackMetadata().GetTotalCallbacksSize()
 
 		// The admitted and accepted events of an update both carry the same callbacks; the
 		// second attach must not be counted twice.
 		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", cbs))
 		require.Len(t, wf.Callbacks, 2)
-		require.Equal(t, int64(2), wf.GetTotalCallbacksCount())
-		require.Equal(t, sizeAfterFirstAttach, wf.GetTotalCallbacksSize())
+		require.Equal(t, int64(2), wf.GetCallbackMetadata().GetTotalCallbacksCount())
+		require.Equal(t, sizeAfterFirstAttach, wf.GetCallbackMetadata().GetTotalCallbacksSize())
 	})
 
 	t.Run("DistinctRequestsAccumulate", func(t *testing.T) {
@@ -96,7 +96,7 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-1", nexusCallbacks("http://cb-1")))
 		require.NoError(t, wf.AddCompletionCallbacks(ctx, timestamppb.Now(), "req-2", nexusCallbacks("http://cb-2")))
 		require.Len(t, wf.Callbacks, 2)
-		require.Equal(t, int64(2), wf.GetTotalCallbacksCount())
+		require.Equal(t, int64(2), wf.GetCallbackMetadata().GetTotalCallbacksCount())
 	})
 
 	t.Run("CountsWorkflowAndUpdateCallbacksTogether", func(t *testing.T) {
@@ -110,7 +110,7 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		require.Len(t, wf.Callbacks, 1)
 		require.Len(t, wf.Updates["u1"].Get(ctx).Callbacks, 1)
 		require.Len(t, wf.Updates["u2"].Get(ctx).Callbacks, 2)
-		require.Equal(t, int64(4), wf.GetTotalCallbacksCount())
+		require.Equal(t, int64(4), wf.GetCallbackMetadata().GetTotalCallbacksCount())
 	})
 }
 

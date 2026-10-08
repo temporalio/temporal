@@ -11,6 +11,7 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
+	v1 "go.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
@@ -24,18 +25,13 @@ const (
 
 // WorkflowState is the persisted state of the CHASM workflow root component. The workflow's
 // own execution state still lives in mutable state; this message only carries the bookkeeping
-// that the CHASM tree owns.
+// specific to the CHASM tree.
 type WorkflowState struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Total number of [temporal.api.common.v1.Callback]s attached to this execution: the
-	// workflow's own completion callbacks plus those of every WorkflowUpdate. Denormalized so
-	// that aggregate limits can be enforced without deserializing every update component.
-	TotalCallbacksCount int64 `protobuf:"varint,1,opt,name=total_callbacks_count,json=totalCallbacksCount,proto3" json:"total_callbacks_count,omitempty"`
-	// Total size in bytes of the same set of callbacks. Used to enforce aggregate size limits
-	// without needing to deserialize each callback.
-	TotalCallbacksSize int64 `protobuf:"varint,2,opt,name=total_callbacks_size,json=totalCallbacksSize,proto3" json:"total_callbacks_size,omitempty"`
-	unknownFields      protoimpl.UnknownFields
-	sizeCache          protoimpl.SizeCache
+	// Metadata about attached completion callbacks.
+	CallbackMetadata *v1.CallbackMetadata `protobuf:"bytes,1,opt,name=callback_metadata,json=callbackMetadata,proto3" json:"callback_metadata,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *WorkflowState) Reset() {
@@ -68,18 +64,11 @@ func (*WorkflowState) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *WorkflowState) GetTotalCallbacksCount() int64 {
+func (x *WorkflowState) GetCallbackMetadata() *v1.CallbackMetadata {
 	if x != nil {
-		return x.TotalCallbacksCount
+		return x.CallbackMetadata
 	}
-	return 0
-}
-
-func (x *WorkflowState) GetTotalCallbacksSize() int64 {
-	if x != nil {
-		return x.TotalCallbacksSize
-	}
-	return 0
+	return nil
 }
 
 // NexusOperationParentData contains workflow-specific data stored in a nexus operation's
@@ -235,10 +224,9 @@ var File_temporal_server_chasm_lib_workflow_proto_v1_state_proto protoreflect.Fi
 
 const file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_rawDesc = "" +
 	"\n" +
-	"7temporal/server/chasm/lib/workflow/proto/v1/state.proto\x12+temporal.server.chasm.lib.workflow.proto.v1\"u\n" +
-	"\rWorkflowState\x122\n" +
-	"\x15total_callbacks_count\x18\x01 \x01(\x03R\x13totalCallbacksCount\x120\n" +
-	"\x14total_callbacks_size\x18\x02 \x01(\x03R\x12totalCallbacksSize\"|\n" +
+	"7temporal/server/chasm/lib/workflow/proto/v1/state.proto\x12+temporal.server.chasm.lib.workflow.proto.v1\x1a9temporal/server/chasm/lib/callback/proto/v1/message.proto\"{\n" +
+	"\rWorkflowState\x12j\n" +
+	"\x11callback_metadata\x18\x01 \x01(\v2=.temporal.server.chasm.lib.callback.proto.v1.CallbackMetadataR\x10callbackMetadata\"|\n" +
 	"\x18NexusOperationParentData\x12,\n" +
 	"\x12scheduled_event_id\x18\x01 \x01(\x03R\x10scheduledEventId\x122\n" +
 	"\x15scheduled_event_token\x18\x02 \x01(\fR\x13scheduledEventToken\"K\n" +
@@ -265,13 +253,15 @@ var file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_goTypes = []any
 	(*NexusOperationParentData)(nil),    // 1: temporal.server.chasm.lib.workflow.proto.v1.NexusOperationParentData
 	(*NexusCancellationParentData)(nil), // 2: temporal.server.chasm.lib.workflow.proto.v1.NexusCancellationParentData
 	(*IncomingSignalData)(nil),          // 3: temporal.server.chasm.lib.workflow.proto.v1.IncomingSignalData
+	(*v1.CallbackMetadata)(nil),         // 4: temporal.server.chasm.lib.callback.proto.v1.CallbackMetadata
 }
 var file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	4, // 0: temporal.server.chasm.lib.workflow.proto.v1.WorkflowState.callback_metadata:type_name -> temporal.server.chasm.lib.callback.proto.v1.CallbackMetadata
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_workflow_proto_v1_state_proto_init() }
