@@ -187,7 +187,7 @@ func (s *taskSerializerSuite) TestOutboundWorkerCommandsTask() {
 				CancelActivity: &workerpb.CancelActivityCommand{TaskToken: []byte("token3")},
 			}},
 		},
-		ControlQueue: "test-control-queue",
+		Destination: "test-control-queue",
 	}
 
 	s.assertEqualTasksWithOpts(workerCommandsTask,
@@ -201,41 +201,6 @@ func (s *taskSerializerSuite) TestOutboundWorkerCommandsTask() {
 		},
 		cmpopts.IgnoreFields(tasks.WorkerCommandsTask{}, "Commands"),
 	)
-}
-
-// TestOutboundWorkerCommandsTask_BackwardCompat verifies that tasks serialized
-// before the control_queue field was added (with the control queue stored in
-// OutboundTaskInfo.Destination) still deserialize correctly.
-func (s *taskSerializerSuite) TestOutboundWorkerCommandsTask_BackwardCompat() {
-	// Simulate old serialization format: control queue in OutboundTaskInfo.Destination,
-	// no control_queue field in WorkerCommandsTask.
-	oldFormatInfo := &persistencespb.OutboundTaskInfo{
-		NamespaceId: s.workflowKey.NamespaceID,
-		WorkflowId:  s.workflowKey.WorkflowID,
-		RunId:       s.workflowKey.RunID,
-		TaskId:      rand.Int63(),
-		TaskType:    enumsspb.TASK_TYPE_WORKER_COMMANDS,
-		Destination: "old-control-queue",
-		TaskDetails: &persistencespb.OutboundTaskInfo_WorkerCommandsTask{
-			WorkerCommandsTask: &persistencespb.WorkerCommandsTask{
-				Commands: []*workerpb.WorkerCommand{
-					{Type: &workerpb.WorkerCommand_CancelActivity{
-						CancelActivity: &workerpb.CancelActivityCommand{TaskToken: []byte("token")},
-					}},
-				},
-				// ControlQueue intentionally not set — simulates old format.
-			},
-		},
-	}
-
-	blob, err := s.serializer.OutboundTaskInfoToBlob(oldFormatInfo)
-	s.NoError(err)
-
-	deserialized, err := s.serializer.DeserializeTask(tasks.CategoryOutbound, blob)
-	s.NoError(err)
-
-	workerTask := deserialized.(*tasks.WorkerCommandsTask)
-	s.Equal("old-control-queue", workerTask.ControlQueue, "should fall back to OutboundTaskInfo.Destination")
 }
 
 func (s *taskSerializerSuite) TestTimerWorkflowTask() {

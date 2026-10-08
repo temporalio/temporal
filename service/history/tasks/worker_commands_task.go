@@ -9,13 +9,13 @@ import (
 	"go.temporal.io/server/common/definition"
 )
 
-// The outbound queue allocates per-{TaskGroup, NamespaceID, Destination} in-memory resources
-// (circuit breaker, rate limiter, worker pool). Using an empty destination groups all worker
-// commands in a namespace under one key, bounding cardinality to O(namespaces) instead of
-// O(worker instances) which would grow unboundedly with ephemeral worker churn.
 const (
-	WorkerCommandsTaskGroup       = "worker_commands"
-	WorkerCommandsTaskDestination = ""
+	WorkerCommandsTaskGroup = "worker_commands"
+	// WorkerCommandsTaskDestination is set to a fixed value so that all worker commands
+	// for a namespace are handled by a single scheduler group, reducing the cardinality
+	// of in-memory resources (circuit breaker, rate limiter, worker pool) from
+	// O(worker instances) to O(namespaces).
+	WorkerCommandsTaskDestination = "worker_commands"
 )
 
 var _ Task = (*WorkerCommandsTask)(nil)
@@ -31,8 +31,8 @@ type (
 
 		// Commands to send to the worker.
 		Commands []*workerpb.WorkerCommand
-		// ControlQueue is the task queue to send worker commands to.
-		ControlQueue string
+		// Destination is the worker's control task queue.
+		Destination string
 	}
 )
 
@@ -64,8 +64,8 @@ func (t *WorkerCommandsTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_WORKER_COMMANDS
 }
 
-// GetDestination returns WorkerCommandsTaskDestination (empty) so that worker
-// commands are grouped by {WorkerCommandsTaskGroup, NamespaceID} only.
+// GetDestination returns WorkerCommandsTaskDestination so that all worker
+// commands in a namespace share a single scheduler group.
 func (t *WorkerCommandsTask) GetDestination() string {
 	return WorkerCommandsTaskDestination
 }
@@ -78,11 +78,11 @@ func (t *WorkerCommandsTask) OutboundTaskGroup() string {
 }
 
 func (t *WorkerCommandsTask) String() string {
-	return fmt.Sprintf("WorkerCommandsTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, Commands: %d, ControlQueue: %v}",
+	return fmt.Sprintf("WorkerCommandsTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, Commands: %d, Destination: %v}",
 		t.WorkflowKey.String(),
 		t.VisibilityTimestamp,
 		t.TaskID,
 		len(t.Commands),
-		t.ControlQueue,
+		t.Destination,
 	)
 }

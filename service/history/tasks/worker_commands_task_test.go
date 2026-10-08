@@ -8,19 +8,19 @@ import (
 	"go.temporal.io/server/common/definition"
 )
 
-func TestWorkerCommandsTask_GetDestination_ReturnsEmpty(t *testing.T) {
+func TestWorkerCommandsTask_GetDestination_ReturnsFixedValue(t *testing.T) {
 	task := &WorkerCommandsTask{
-		WorkflowKey:  definition.NewWorkflowKey("ns-id", "wf-id", "run-id"),
-		ControlQueue: "control-queue-xyz",
+		WorkflowKey: definition.NewWorkflowKey("ns-id", "wf-id", "run-id"),
+		Destination: "control-queue-xyz",
 		Commands: []*workerpb.WorkerCommand{
 			{Type: &workerpb.WorkerCommand_CancelActivity{
 				CancelActivity: &workerpb.CancelActivityCommand{TaskToken: []byte("token")},
 			}},
 		},
 	}
-	// GetDestination returns "" for grouping; ControlQueue is used for routing.
-	require.Empty(t, task.GetDestination())
-	require.Equal(t, "control-queue-xyz", task.ControlQueue)
+	// GetDestination returns fixed value for grouping, not the control queue.
+	require.Equal(t, WorkerCommandsTaskDestination, task.GetDestination())
+	require.NotEqual(t, task.Destination, task.GetDestination())
 }
 
 func TestWorkerCommandsTask_OutboundTaskGroup(t *testing.T) {

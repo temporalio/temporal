@@ -1506,12 +1506,11 @@ func serializeOutboundTask(
 			RunId:          task.RunID,
 			TaskId:         task.TaskID,
 			TaskType:       task.GetType(),
-			Destination:    tasks.WorkerCommandsTaskDestination,
+			Destination:    task.Destination,
 			VisibilityTime: timestamppb.New(task.VisibilityTimestamp),
 			TaskDetails: &persistencespb.OutboundTaskInfo_WorkerCommandsTask{
 				WorkerCommandsTask: &persistencespb.WorkerCommandsTask{
-					Commands:     task.Commands,
-					ControlQueue: task.ControlQueue,
+					Commands: task.Commands,
 				},
 			},
 		}
@@ -1558,12 +1557,6 @@ func deserializeOutboundTask(
 			Destination:         info.Destination,
 		}, nil
 	case enumsspb.TASK_TYPE_WORKER_COMMANDS:
-		controlQueue := info.GetWorkerCommandsTask().GetControlQueue()
-		if controlQueue == "" {
-			// Backward compat: tasks serialized before the control_queue field
-			// was added stored the control queue in OutboundTaskInfo.Destination.
-			controlQueue = info.Destination
-		}
 		return &tasks.WorkerCommandsTask{
 			WorkflowKey: definition.NewWorkflowKey(
 				info.NamespaceId,
@@ -1573,7 +1566,7 @@ func deserializeOutboundTask(
 			VisibilityTimestamp: info.VisibilityTime.AsTime(),
 			TaskID:              info.TaskId,
 			Commands:            info.GetWorkerCommandsTask().GetCommands(),
-			ControlQueue:        controlQueue,
+			Destination:         info.Destination,
 		}, nil
 	default:
 		return nil, serviceerror.NewInternalf("unknown outbound task type while deserializing: %v", info)

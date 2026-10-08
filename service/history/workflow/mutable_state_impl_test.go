@@ -8944,7 +8944,7 @@ func TestGenerateActivityCancelCommandsForClose(t *testing.T) {
 			// Verify each expected queue got the right number of commands
 			tasksByQueue := make(map[string]int)
 			for _, wct := range workerCommandTasks {
-				tasksByQueue[wct.ControlQueue] = len(wct.Commands)
+				tasksByQueue[wct.Destination] = len(wct.Commands)
 			}
 			require.Equal(t, tc.expectedQueues, tasksByQueue)
 		})

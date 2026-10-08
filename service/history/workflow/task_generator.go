@@ -594,7 +594,7 @@ func (r *TaskGeneratorImpl) GenerateWorkerCommandsTasks(commands []*workerpb.Wor
 	r.mutableState.AddTasks(&tasks.WorkerCommandsTask{
 		WorkflowKey: r.mutableState.GetWorkflowKey(),
 		Commands:    commands,
-		ControlQueue: controlQueue,
+		Destination: controlQueue,
 	})
 	return nil
 }

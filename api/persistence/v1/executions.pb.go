@@ -2661,10 +2661,8 @@ func (*OutboundTaskInfo_WorkerCommandsTask) isOutboundTaskInfo_TaskDetails() {}
 
 // WorkerCommandsTask contains worker commands to dispatch via Nexus.
 type WorkerCommandsTask struct {
-	state    protoimpl.MessageState `protogen:"open.v1"`
-	Commands []*v19.WorkerCommand   `protobuf:"bytes,1,rep,name=commands,proto3" json:"commands,omitempty"`
-	// Task queue to send worker commands to.
-	ControlQueue  string `protobuf:"bytes,2,opt,name=control_queue,json=controlQueue,proto3" json:"control_queue,omitempty"`
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Commands      []*v19.WorkerCommand   `protobuf:"bytes,1,rep,name=commands,proto3" json:"commands,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2704,13 +2702,6 @@ func (x *WorkerCommandsTask) GetCommands() []*v19.WorkerCommand {
 		return x.Commands
 	}
 	return nil
-}
-
-func (x *WorkerCommandsTask) GetControlQueue() string {
-	if x != nil {
-		return x.ControlQueue
-	}
-	return ""
 }
 
 type NexusInvocationTaskInfo struct {
@@ -5268,10 +5259,9 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x0fchasm_task_info\x18\t \x01(\v21.temporal.server.api.persistence.v1.ChasmTaskInfoH\x00R\rchasmTaskInfo\x12j\n" +
 	"\x14worker_commands_task\x18\n" +
 	" \x01(\v26.temporal.server.api.persistence.v1.WorkerCommandsTaskH\x00R\x12workerCommandsTaskB\x0e\n" +
-	"\ftask_details\"|\n" +
+	"\ftask_details\"W\n" +
 	"\x12WorkerCommandsTask\x12A\n" +
-	"\bcommands\x18\x01 \x03(\v2%.temporal.api.worker.v1.WorkerCommandR\bcommands\x12#\n" +
-	"\rcontrol_queue\x18\x02 \x01(\tR\fcontrolQueue\"3\n" +
+	"\bcommands\x18\x01 \x03(\v2%.temporal.api.worker.v1.WorkerCommandR\bcommands\"3\n" +
 	"\x17NexusInvocationTaskInfo\x12\x18\n" +
 	"\aattempt\x18\x01 \x01(\x05R\aattempt\"4\n" +
 	"\x18NexusCancelationTaskInfo\x12\x18\n" +
