@@ -286,7 +286,7 @@ func (s *RetryPolicySuite) TestErrorDependentPolicy() {
 	jitterPolicy := NewErrorDependentRetryPolicy(delayForError).WithMaximumAttempts(4).WithJitter(0.1)
 	sawJitter := false
 	for range 1000 {
-		delay = jitterPolicy.ComputeNextDelay(0, 1, fmt.Errorf("other error"))
+		delay = jitterPolicy.ComputeNextDelay(0, 1, errors.New("other error"))
 		s.GreaterOrEqual(delay, 1*time.Second)
 		s.Less(delay, 1100*time.Millisecond)
 		if delay > 1*time.Second {
