@@ -363,6 +363,83 @@ func (s *PriMatcherSuite) TestValidatorBatch_AllValidReprocessesAll() {
 	}
 }
 
+func TestValidatorBatchReturnsDispatchTokens(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		valid []bool
+	}{
+		{name: "all valid", valid: []bool{true, true, true}},
+		{name: "mixed", valid: []bool{true, false, false}},
+		{name: "all invalid", valid: []bool{false, false, false}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				cfg := newTaskQueueConfig(
+					tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+					NewConfig(dynamicconfig.NewNoopCollection()), "nsname",
+				)
+				cfg.ValidatorBatchSize = func() int { return len(tc.valid) }
+				partition := tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition()
+				manager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+				manager.Start()
+				defer manager.Stop()
+				manager.SetEffectiveRPSAndSourceForTesting(1, enumspb.RATE_LIMIT_SOURCE_API)
+				manager.UpdateSimpleRateLimitWithBurstForTesting(time.Duration(len(tc.valid)-1) * time.Second)
+
+				validator := NewMocktaskValidator(gomock.NewController(t))
+				validator.EXPECT().maybeValidate(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(task *persistencespb.AllocatedTaskInfo, _ enumspb.TaskQueueType) bool {
+						return tc.valid[task.TaskId-1]
+					},
+				).Times(len(tc.valid))
+				tm := newPriTaskMatcher(ctx, cfg, partition, nil, nil, validator,
+					testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError), metrics.NoopMetricsHandler,
+					manager, func() {}, func() {})
+				defer tm.Stop()
+
+				done := make(chan taskResponse, len(tc.valid))
+				for i := range tc.valid {
+					task := newInternalTaskFromBacklog(&persistencespb.AllocatedTaskInfo{TaskId: int64(i + 1), Data: &persistencespb.TaskInfo{CreateTime: timestamppb.Now()}},
+						func(_ *internalTask, res taskResponse) { done <- res })
+					task.resetMatcherState()
+					require.NoError(t, tm.AddTask(task))
+				}
+				tm.Start()
+				for range tc.valid {
+					await.Rcv(t, done)
+				}
+				synctest.Wait()
+
+				polled := make(chan *matchResult, len(tc.valid))
+				for range tc.valid {
+					go func() {
+						polled <- tm.data.EnqueuePollerAndWait([]context.Context{ctx}, &waitingPoller{})
+					}()
+				}
+				synctest.Wait()
+				for i := range tc.valid {
+					task := newInternalTaskFromBacklog(&persistencespb.AllocatedTaskInfo{TaskId: int64(i + 10), Data: &persistencespb.TaskInfo{CreateTime: timestamppb.Now()}},
+						func(_ *internalTask, _ taskResponse) {})
+					task.resetMatcherState()
+					require.NoError(t, tm.AddTask(task))
+				}
+				for range tc.valid {
+					select {
+					case res := <-polled:
+						require.NoError(t, res.ctxErr)
+						require.NotNil(t, res.task)
+						res.task.finish(taskFinishResult{consumedToken: true})
+					case <-time.After(100 * time.Millisecond):
+						t.Fatal("validation spent the dispatch tokens needed by later local polls")
+					}
+				}
+			})
+		})
+	}
+}
+
 func (s *PriMatcherSuite) TestValidatorBatch_MixedInvalidContinuesImmediately() {
 	// synctest: after a mixed batch the validator must not sleep before the next match.
 	synctest.Test(s.T(), func(t *testing.T) {

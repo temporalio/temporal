@@ -112,7 +112,8 @@ func (v *taskValidatorImpl) preValidate(
 func (v *taskValidatorImpl) lookupOrInit(task *persistencespb.AllocatedTaskInfo) (info taskValidationInfo, existed bool) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	if info, ok := v.cache.Get(task.TaskId).(taskValidationInfo); ok {
+	// Redirected tasks from different physical queues can share the same task ID.
+	if info, ok := v.cache.Get(task).(taskValidationInfo); ok {
 		return info, true
 	}
 	validationTime := time.Now().UTC()
@@ -120,7 +121,7 @@ func (v *taskValidatorImpl) lookupOrInit(task *persistencespb.AllocatedTaskInfo)
 		validationTime = task.Data.CreateTime.AsTime()
 	}
 	info = taskValidationInfo{taskID: task.TaskId, validationTime: validationTime}
-	v.cache.Put(task.TaskId, info)
+	v.cache.Put(task, info)
 	return info, false
 }
 
@@ -149,7 +150,7 @@ func (v *taskValidatorImpl) postValidate(
 ) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	v.cache.Put(task.TaskId, taskValidationInfo{
+	v.cache.Put(task, taskValidationInfo{
 		taskID:         task.TaskId,
 		validationTime: time.Now().UTC(),
 	})

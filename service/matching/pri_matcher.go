@@ -296,7 +296,7 @@ func (tm *priTaskMatcher) validateTasks(retrier backoff.Retrier) {
 					anyInvalid.Store(true)
 				} else {
 					// Task was valid, put it back and slow down checking if the whole batch is valid.
-					task.finish(taskFinishResult{err: errReprocessTask, consumedToken: true})
+					task.finish(taskFinishResult{err: errReprocessTask, consumedToken: false})
 				}
 			})
 		}
