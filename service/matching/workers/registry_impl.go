@@ -280,7 +280,7 @@ func (m *registryImpl) getBucket(nsID namespace.ID) *bucket {
 func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name, principal *commonpb.Principal, heartbeats []*workerpb.WorkerHeartbeat) {
 	b := m.getBucket(nsID)
 	var eventLogger otellog.Logger
-	if m.enableWorkerHeartbeatEvents == nil || m.enableWorkerHeartbeatEvents() {
+	if m.enableWorkerHeartbeatEvents != nil && m.enableWorkerHeartbeatEvents() {
 		eventLogger = m.eventLogger
 	}
 	added, removed := b.upsertHeartbeats(nsID, nsName, principal, heartbeats, eventLogger)

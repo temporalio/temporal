@@ -919,8 +919,9 @@ func TestWorkerConfigEventOnlyOnFirstHeartbeat(t *testing.T) {
 		MaxItems:         dynamicconfig.GetIntPropertyFn(10),
 		EvictionInterval: dynamicconfig.GetDurationPropertyFn(time.Hour),
 		MetricsHandler:   metricstest.NewCaptureHandler(),
-		MetricsConfig:            WorkerMetricsConfig{},
-		EventLogger:              eventLogger,
+		MetricsConfig:              WorkerMetricsConfig{},
+		EventLogger:                eventLogger,
+		EnableWorkerHeartbeatEvents: dynamicconfig.GetBoolPropertyFn(true),
 	})
 	defer m.Stop()
 
