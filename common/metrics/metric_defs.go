@@ -946,6 +946,16 @@ var (
 		"chasm_pure_task_errors",
 		WithDescription("The number of errors during CHASM pure task execution."),
 	)
+	ChasmLogicalTaskCount = NewDimensionlessHistogramDef(
+		"chasm_logical_task_count",
+		WithDescription("The number of logical CHASM tasks of one task type in a single execution, recorded "+
+			"only when it exceeds history.chasmLogicalTaskCountAlertThreshold."),
+	)
+	ChasmLogicalTaskCountExceeded = NewCounterDef(
+		"chasm_logical_task_count_exceeded",
+		WithDescription("The number of times an execution's logical CHASM task count for one task type exceeded "+
+			"history.chasmLogicalTaskCountAlertThreshold."),
+	)
 	ChasmIncomingSignalWritten = NewCounterDef(
 		"chasm_incoming_signal_written",
 		WithDescription("The number of signal backlinks written to the CHASM IncomingSignals map."),
