@@ -278,10 +278,6 @@ func (m *registryImpl) getBucket(nsID namespace.ID) *bucket {
 func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name, principal *commonpb.Principal, heartbeats []*workerpb.WorkerHeartbeat) {
 	b := m.getBucket(nsID)
 	added, removed, newHeartbeats := b.upsertHeartbeats(nsID, nsName, principal, heartbeats)
-	// Emit config events only for newly seen workers, outside the bucket lock.
-	for _, hb := range newHeartbeats {
-		emitWorkerConfigEvent(m.eventLogger, nsName, hb)
-	}
 	m.total.Add(added - removed)
 	if added > 0 {
 		metrics.WorkerRegistryWorkersAdded.With(m.metricsHandler).Record(added)
@@ -290,6 +286,10 @@ func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name
 		metrics.WorkerRegistryWorkersRemoved.With(m.metricsHandler).Record(removed)
 	}
 	m.recordUtilizationMetric()
+	// Emit config events only for newly seen workers, outside the bucket lock.
+	for _, hb := range newHeartbeats {
+		emitWorkerConfigEvent(m.eventLogger, nsName, hb)
+	}
 }
 
 // recordUtilizationMetric records the overall capacity utilization ratio.
