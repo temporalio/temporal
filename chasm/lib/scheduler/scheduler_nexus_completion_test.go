@@ -53,7 +53,7 @@ func executeNexusCompletion(t *testing.T, tc nexusCompletionTestCase) {
 	err := sched.HandleNexusCompletion(ctx, tc.completion)
 	require.NoError(t, err)
 
-	_, err = node.CloseTransaction(nil)
+	_, err = node.CloseTransaction(context.Background())
 	require.NoError(t, err)
 
 	readCtx := chasm.NewContext(context.Background(), node)
@@ -189,7 +189,7 @@ func TestHandleNexusCompletion_ExistingAllowAllDoesNotUpdateCompletionState(t *t
 				CloseTime: timestamppb.Now(),
 			})
 			require.NoError(t, err)
-			_, err = node.CloseTransaction(nil)
+			_, err = node.CloseTransaction(context.Background())
 			require.NoError(t, err)
 
 			readCtx := chasm.NewContext(context.Background(), node)
@@ -401,7 +401,7 @@ func TestPauseOnFailureInvalidatesConflictToken(t *testing.T) {
 			Attempt:    1,
 		},
 	}
-	_, err := node.CloseTransaction(nil)
+	_, err := node.CloseTransaction(context.Background())
 	require.NoError(t, err)
 
 	describeResponse, err := sched.Describe(
@@ -428,7 +428,7 @@ func TestPauseOnFailureInvalidatesConflictToken(t *testing.T) {
 		CloseTime: timestamppb.Now(),
 	})
 	require.NoError(t, err)
-	_, err = node.CloseTransaction(nil)
+	_, err = node.CloseTransaction(context.Background())
 	require.NoError(t, err)
 	require.True(t, sched.Schedule.GetState().GetPaused())
 	require.NotEmpty(t, sched.Schedule.GetState().GetNotes())

@@ -14,7 +14,6 @@ import (
 	reflect "reflect"
 	time "time"
 
-	common "go.temporal.io/api/common/v1"
 	persistence "go.temporal.io/server/api/persistence/v1"
 	chasm "go.temporal.io/server/chasm"
 	metrics "go.temporal.io/server/common/metrics"
@@ -118,18 +117,18 @@ func (mr *MockChasmTreeMockRecorder) ArchetypeID() *gomock.Call {
 }
 
 // CloseTransaction mocks base method.
-func (m *MockChasmTree) CloseTransaction(principal *common.Principal) (chasm.NodesMutation, error) {
+func (m *MockChasmTree) CloseTransaction(ctx context.Context) (chasm.NodesMutation, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CloseTransaction", principal)
+	ret := m.ctrl.Call(m, "CloseTransaction", ctx)
 	ret0, _ := ret[0].(chasm.NodesMutation)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CloseTransaction indicates an expected call of CloseTransaction.
-func (mr *MockChasmTreeMockRecorder) CloseTransaction(principal any) *gomock.Call {
+func (mr *MockChasmTreeMockRecorder) CloseTransaction(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransaction", reflect.TypeOf((*MockChasmTree)(nil).CloseTransaction), principal)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseTransaction", reflect.TypeOf((*MockChasmTree)(nil).CloseTransaction), ctx)
 }
 
 // Component mocks base method.

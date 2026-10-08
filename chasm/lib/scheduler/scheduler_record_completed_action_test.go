@@ -30,7 +30,7 @@ func executeRecordCompletedAction(t *testing.T, tc recordCompletedActionTestCase
 
 	sched.RecordCompletedAction(ctx, tc.completed, tc.requestID)
 
-	_, err := node.CloseTransaction(nil)
+	_, err := node.CloseTransaction(context.Background())
 	require.NoError(t, err)
 
 	readCtx := chasm.NewContext(context.Background(), node)

@@ -21,6 +21,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -1185,10 +1186,6 @@ func (n *Node) syncSubField(
 					componentAttr.Detached = rc.IsDetached()
 				}
 			}
-			// Workflows record principals on their history events instead.
-			if !n.backend.IsWorkflow() {
-				componentAttr.StartedByPrincipal = internal.startedByPrincipal
-			}
 		case fieldTypeData:
 			if err = assertStructPointer(reflect.TypeOf(fieldValue)); err != nil {
 				return
@@ -1774,11 +1771,11 @@ func (n *Node) AddTask(
 // CloseTransaction is used by MutableState to close the transaction and
 // track changes made in the current transaction.
 //
-// principal is the caller whose request is being committed. It is recorded on
-// the root component when this transaction closes the execution, and must be nil
-// when the transaction is not driven by a caller on the active cluster (e.g.
-// passive replication).
-func (n *Node) CloseTransaction(principal *commonpb.Principal) (NodesMutation, error) {
+// The principal in ctx, if any, is the caller whose request is being committed.
+// It is recorded on the root component when this transaction closes the execution,
+// so callers must not pass one when the transaction is not driven by a caller on
+// the active cluster (e.g. passive replication).
+func (n *Node) CloseTransaction(ctx context.Context) (NodesMutation, error) {
 	defer n.cleanupTransaction()
 
 	if err := n.executeImmediatePureTasks(); err != nil {
@@ -1826,7 +1823,7 @@ func (n *Node) CloseTransaction(principal *commonpb.Principal) (NodesMutation, e
 		return NodesMutation{}, err
 	}
 
-	if err := n.closeTransactionRecordClosedByPrincipal(principal, rootClosed); err != nil {
+	if err := n.closeTransactionRecordClosedByPrincipal(headers.GetPrincipal(ctx), rootClosed); err != nil {
 		return NodesMutation{}, err
 	}
 

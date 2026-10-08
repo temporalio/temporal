@@ -331,7 +331,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			err = rootNode.SetRootComponent(rootComponent)
 			s.NoError(err)
 
-			mutations, err := rootNode.CloseTransaction(nil)
+			mutations, err := rootNode.CloseTransaction(context.Background())
 			s.NoError(err)
 			s.Len(mutations.UpdatedNodes, 4, "root, collection, and 2 collection items must be updated")
 			s.Empty(mutations.DeletedNodes)
@@ -397,7 +397,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 				rootComponent.PendingActivities = nil
 			}
 
-			mutation, err := rootNode.CloseTransaction(nil)
+			mutation, err := rootNode.CloseTransaction(context.Background())
 			s.NoError(err)
 			s.Empty(mutation.UpdatedNodes, "root component data is unchanged; collection deletion is tracked by DeletedNodes")
 			s.Len(mutation.DeletedNodes, 3, "collection and 2 collection items must be deleted")
@@ -421,7 +421,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 				delete(rootComponent.PendingActivities, 1)
 			}
 
-			mutation, err := rootNode.CloseTransaction(nil)
+			mutation, err := rootNode.CloseTransaction(context.Background())
 			s.NoError(err)
 			s.Empty(mutation.UpdatedNodes, "root component data is unchanged; collection item deletion is tracked by DeletedNodes")
 			s.Len(mutation.DeletedNodes, 1, "collection item 1 must be deleted")
@@ -448,7 +448,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			}
 
 			// Now map is empty and must be deleted.
-			mutation, err := rootNode.CloseTransaction(nil)
+			mutation, err := rootNode.CloseTransaction(context.Background())
 			s.NoError(err)
 			s.Empty(mutation.UpdatedNodes, "root component data is unchanged; collection deletion is tracked by DeletedNodes")
 			s.Len(mutation.DeletedNodes, 3, "collection and 2 items must be deleted")
@@ -465,7 +465,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			err = rootNode.SetRootComponent(&TestComponent{}) // all map fields are nil
 			s.NoError(err)
 
-			mutation, err := rootNode.CloseTransaction(nil)
+			mutation, err := rootNode.CloseTransaction(context.Background())
 			s.NoError(err)
 			s.Empty(mutation.DeletedNodes, "no nodes should be deleted for a map that never existed")
 		})
@@ -490,7 +490,7 @@ func (s *nodeSuite) TestCollectionAttributes() {
 			err = rootNode.SetRootComponent(&rootComponent)
 			s.NoError(err)
 
-			mutation, err := rootNode.CloseTransaction(nil)
+			mutation, err := rootNode.CloseTransaction(context.Background())
 			s.NoError(err)
 			s.Empty(mutation.DeletedNodes, "no nodes should be deleted for a newly-created empty map")
 		})
@@ -507,7 +507,7 @@ func (s *nodeSuite) TestMapDeserializeNilToEmpty() {
 	err = rootNode.SetRootComponent(&TestComponent{})
 	s.NoError(err)
 
-	mutations, err := rootNode.CloseTransaction(nil)
+	mutations, err := rootNode.CloseTransaction(context.Background())
 	s.NoError(err)
 	// Only root is updated; no collection nodes because maps were nil/empty.
 	s.Len(mutations.UpdatedNodes, 1)
@@ -564,7 +564,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 
 		s.Equal(fieldTypeDeferredPointer, sc11.GrandparentPointer.Internal.ft)
 
-		mutations, err := rootNode.CloseTransaction(nil)
+		mutations, err := rootNode.CloseTransaction(context.Background())
 		s.NoError(err)
 		s.Len(mutations.UpdatedNodes, 5, "root, SubComponent1, SubComponent11, GrandparentPointer, and SubComponentInterfacePointer must be updated")
 		s.Empty(mutations.DeletedNodes)
@@ -623,7 +623,7 @@ func (s *nodeSuite) TestPointerAttributes() {
 
 		sc11Des.GrandparentPointer = NewEmptyField[*TestComponent]()
 
-		mutation, err := rootNode.CloseTransaction(nil)
+		mutation, err := rootNode.CloseTransaction(context.Background())
 		s.NoError(err)
 		s.Empty(mutation.UpdatedNodes)
 		s.Len(mutation.DeletedNodes, 1, "GrandparentPointer must be deleted")
@@ -1197,7 +1197,7 @@ func (s *nodeSuite) TestApplyMutation_InvalidatesHydratedMapAncestors() {
 		root, err := s.newTestTree(nil)
 		s.NoError(err)
 		s.NoError(root.SetRootComponent(component))
-		mutation, err := root.CloseTransaction(nil)
+		mutation, err := root.CloseTransaction(context.Background())
 		s.NoError(err)
 		s.NotEmpty(mutation.UpdatedNodes)
 		return common.CloneProtoMap(mutation.UpdatedNodes)
@@ -1214,7 +1214,7 @@ func (s *nodeSuite) TestApplyMutation_InvalidatesHydratedMapAncestors() {
 		component, err := source.Component(chasmContext, ComponentRef{})
 		s.NoError(err)
 		mutate(chasmContext, component.(*TestComponent))
-		mutation, err := source.CloseTransaction(nil)
+		mutation, err := source.CloseTransaction(context.Background())
 		s.NoError(err)
 		s.NotContains(mutation.UpdatedNodes, "", "replicated mutation must not include the hydrated parent component")
 		return NodesMutation{
@@ -1845,7 +1845,7 @@ func (s *nodeSuite) TestRefreshTasks() {
 	s.True(root.IsDirty())
 	s.False(root.IsStateDirty())
 
-	mutation, err := root.CloseTransaction(nil)
+	mutation, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 	s.Len(mutation.UpdatedNodes, 2) // TaskStatus for the root node is not reset, so no need to persist it.
 	s.Equal(2, s.nodeBackend.NumTasksAdded())
@@ -2594,7 +2594,7 @@ func (s *nodeSuite) TestCloseTransaction_StampsRootInitialVTOnFirstPersist() {
 	s.NoError(root.SetRootComponent(&TestComponent{
 		ComponentData: &protoMessageType{CreateRequestId: primitives.NewUUID().String()},
 	}))
-	mutation, err := root.CloseTransaction(nil)
+	mutation, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	expectedVT := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 101, TransitionCount: 6}
@@ -2619,7 +2619,7 @@ func (s *nodeSuite) TestCloseTransaction_KeepsPersistedRootInitialVT() {
 	component, err := root.ComponentByPath(chasmContext, nil)
 	s.NoError(err)
 	component.(*TestComponent).ComponentData = &protoMessageType{CreateRequestId: primitives.NewUUID().String()}
-	mutation, err := root.CloseTransaction(nil)
+	mutation, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	rootNode, ok := mutation.UpdatedNodes[""]
@@ -2703,7 +2703,7 @@ func (s *nodeSuite) TestCloseTransaction_Success() {
 	tc.(*TestComponent).SubData1 = NewEmptyField[*protoMessageType]()
 	tc.(*TestComponent).ComponentData = &protoMessageType{CreateRequestId: primitives.NewUUID().String()}
 
-	mutations, err := node.CloseTransaction(nil)
+	mutations, err := node.CloseTransaction(context.Background())
 	s.NoError(err)
 	s.Len(mutations.UpdatedNodes, 4)
 	s.Contains(mutations.UpdatedNodes, "", "root component must be in UpdatedNodes")
@@ -2716,7 +2716,7 @@ func (s *nodeSuite) TestCloseTransaction_Success() {
 	sc1 := tc.(*TestComponent).SubComponent1.Get(chasmCtx)
 	s.NotNil(sc1)
 
-	mutations, err = node.CloseTransaction(nil)
+	mutations, err = node.CloseTransaction(context.Background())
 	s.NoError(err)
 	s.Empty(mutations.UpdatedNodes)
 	s.Empty(mutations.DeletedNodes)
@@ -2729,7 +2729,7 @@ func (s *nodeSuite) TestCloseTransaction_EmptyNode() {
 	s.NoError(err)
 	s.Nil(node.value)
 
-	mutations, err := node.CloseTransaction(nil)
+	mutations, err := node.CloseTransaction(context.Background())
 	s.NoError(err)
 	s.Empty(mutations.UpdatedNodes, "there should be no updated nodes because tree was initialized with empty serialized nodes")
 	s.Empty(mutations.DeletedNodes, "there should be no deleted nodes because tree was initialized with empty serialized nodes")
@@ -2741,7 +2741,7 @@ func (s *nodeSuite) TestCloseTransaction_LifecycleChange() {
 	chasmCtx := NewMutableContext(context.Background(), node)
 	_, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
-	_, err = node.CloseTransaction(nil)
+	_, err = node.CloseTransaction(context.Background())
 	s.NoError(err)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, s.nodeBackend.LastUpdateWorkflowState())
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, s.nodeBackend.LastUpdateWorkflowStatus())
@@ -2750,7 +2750,7 @@ func (s *nodeSuite) TestCloseTransaction_LifecycleChange() {
 	_, err = node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	node.terminated = true
-	_, err = node.CloseTransaction(nil)
+	_, err = node.CloseTransaction(context.Background())
 	s.NoError(err)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, s.nodeBackend.LastUpdateWorkflowState())
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, s.nodeBackend.LastUpdateWorkflowStatus())
@@ -2759,7 +2759,7 @@ func (s *nodeSuite) TestCloseTransaction_LifecycleChange() {
 	tc, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	tc.(*TestComponent).Complete(chasmCtx)
-	_, err = node.CloseTransaction(nil)
+	_, err = node.CloseTransaction(context.Background())
 	s.NoError(err)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, s.nodeBackend.LastUpdateWorkflowState())
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, s.nodeBackend.LastUpdateWorkflowStatus())
@@ -2767,7 +2767,7 @@ func (s *nodeSuite) TestCloseTransaction_LifecycleChange() {
 	tc, err = node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	tc.(*TestComponent).Fail(chasmCtx)
-	_, err = node.CloseTransaction(nil)
+	_, err = node.CloseTransaction(context.Background())
 	s.NoError(err)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, s.nodeBackend.LastUpdateWorkflowState())
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, s.nodeBackend.LastUpdateWorkflowStatus())
@@ -2789,7 +2789,7 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootLifecycleChan
 
 	// Init visiblity component
 	testComponent.(*TestComponent).Visibility = NewComponentField(chasmCtx, NewVisibility(chasmCtx))
-	mutation, err := node.CloseTransaction(nil)
+	mutation, err := node.CloseTransaction(context.Background())
 	s.NoError(err)
 	pVisibilityNode, ok := mutation.UpdatedNodes["Visibility"]
 	s.True(ok)
@@ -2808,7 +2808,7 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootLifecycleChan
 	s.nodeBackend.HandleUpdateWorkflowStateStatus = func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error) {
 		return false, nil
 	}
-	mutation, err = node.CloseTransaction(nil)
+	mutation, err = node.CloseTransaction(context.Background())
 	s.NoError(err)
 	pVisibilityNode, ok = mutation.UpdatedNodes["Visibility"]
 	s.True(ok, "visibility should be updated when memo changes")
@@ -2823,7 +2823,7 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootLifecycleChan
 	s.nodeBackend.HandleUpdateWorkflowStateStatus = func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error) {
 		return true, nil
 	}
-	mutation, err = node.CloseTransaction(nil)
+	mutation, err = node.CloseTransaction(context.Background())
 	s.NoError(err)
 	pVisibilityNode, ok = mutation.UpdatedNodes["Visibility"]
 	s.True(ok)
@@ -2846,7 +2846,7 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootSAMemoChanged
 	s.nodeBackend.HandleUpdateWorkflowStateStatus = func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error) {
 		return true, nil
 	}
-	mutation, err := node.CloseTransaction(nil)
+	mutation, err := node.CloseTransaction(context.Background())
 	s.NoError(err)
 	pVisibilityNode, ok := mutation.UpdatedNodes["Visibility"]
 	s.True(ok)
@@ -2863,7 +2863,7 @@ func (s *nodeSuite) TestCloseTransaction_ForceUpdateVisibility_RootSAMemoChanged
 	s.nodeBackend.HandleUpdateWorkflowStateStatus = func(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) (bool, error) {
 		return false, nil
 	}
-	mutation, err = node.CloseTransaction(nil)
+	mutation, err = node.CloseTransaction(context.Background())
 	s.NoError(err)
 	pVisibilityNode, ok = mutation.UpdatedNodes["Visibility"]
 	s.True(ok)
@@ -2941,7 +2941,7 @@ func (s *nodeSuite) TestCloseTransaction_CleanupTasksAfterInvalidTask() {
 		Return(true, nil).
 		Times(1)
 
-	mutation, err := root.CloseTransaction(nil)
+	mutation, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	s.Equal(now.Add(1*time.Minute), s.nodeBackend.LastDeletePureTaskCall())
@@ -3052,7 +3052,7 @@ func (s *nodeSuite) TestCloseTransaction_InvalidateComponentTasks() {
 	s.testLibrary.mockPureTaskHandler.EXPECT().
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(2)
 
-	mutation, err := root.CloseTransaction(nil)
+	mutation, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	s.Equal(tasks.MaximumKey.FireTime, s.nodeBackend.LastDeletePureTaskCall())
@@ -3124,7 +3124,7 @@ func (s *nodeSuite) TestCloseTransaction_PausedStateInvalidatesTasks() {
 		// Task-specific validators must NOT be called - paused state short-circuits them.
 		// (no EXPECT calls on mock handlers)
 
-		mutation, err := root.CloseTransaction(nil)
+		mutation, err := root.CloseTransaction(context.Background())
 		s.NoError(err)
 
 		componentAttr := root.serializedNode.Metadata.GetComponentAttributes()
@@ -3174,7 +3174,7 @@ func (s *nodeSuite) TestCloseTransaction_PausedStateInvalidatesTasks() {
 		s.NoError(err)
 		tc.(*TestComponent).Pause(mutableContext)
 
-		mutation, err := root.CloseTransaction(nil)
+		mutation, err := root.CloseTransaction(context.Background())
 		s.NoError(err)
 
 		subAttr := root.children["SubComponent1"].serializedNode.Metadata.GetComponentAttributes()
@@ -3226,7 +3226,7 @@ func (s *nodeSuite) TestCloseTransaction_PausedStateInvalidatesTasks() {
 		s.testLibrary.mockSideEffectTaskHandler.EXPECT().
 			Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 
-		mutation, err := root.CloseTransaction(nil)
+		mutation, err := root.CloseTransaction(context.Background())
 		s.NoError(err)
 
 		subAttr := root.children["SubComponent1"].serializedNode.Metadata.GetComponentAttributes()
@@ -3337,7 +3337,7 @@ func (s *nodeSuite) TestCloseTransaction_TaskValidationSubtreeDirty() {
 		// SubComponent2's validator must NOT be called - its subtree is clean.
 		// (no EXPECT on mockSideEffectTaskHandler for SubComponent2)
 
-		_, err = root.CloseTransaction(nil)
+		_, err = root.CloseTransaction(context.Background())
 		s.NoError(err)
 
 		sc2Attr := root.children["SubComponent2"].serializedNode.Metadata.GetComponentAttributes()
@@ -3358,7 +3358,7 @@ func (s *nodeSuite) TestCloseTransaction_TaskValidationSubtreeDirty() {
 
 		// Both sub-components' tasks are invalidated by the paused ancestor
 		// (validateAccess short-circuits before calling task validators).
-		_, err = root.CloseTransaction(nil)
+		_, err = root.CloseTransaction(context.Background())
 		s.NoError(err)
 
 		sc1Attr := root.children["SubComponent1"].serializedNode.Metadata.GetComponentAttributes()
@@ -3391,7 +3391,7 @@ func (s *nodeSuite) TestCloseTransaction_TaskValidationSubtreeDirty() {
 		s.testLibrary.mockSideEffectTaskHandler.EXPECT().
 			Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 
-		_, err = root.CloseTransaction(nil)
+		_, err = root.CloseTransaction(context.Background())
 		s.NoError(err)
 	})
 
@@ -3409,7 +3409,7 @@ func (s *nodeSuite) TestCloseTransaction_TaskValidationSubtreeDirty() {
 		s.testLibrary.mockSideEffectTaskHandler.EXPECT().
 			Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 
-		_, err = root.CloseTransaction(nil)
+		_, err = root.CloseTransaction(context.Background())
 		s.NoError(err)
 
 		// After CloseTransaction, subtreeIsDirty must be reset on all nodes.
@@ -3449,7 +3449,7 @@ func (s *nodeSuite) TestCloseTransaction_TaskValidationSubtreeDirty() {
 		s.False(executed)
 		s.True(root.subtreeIsDirty, "ExecutePureTask must mark subtreeIsDirty even when task is invalid")
 
-		_, err = root.CloseTransaction(nil)
+		_, err = root.CloseTransaction(context.Background())
 		s.NoError(err)
 
 		componentAttr := root.serializedNode.Metadata.GetComponentAttributes()
@@ -3467,7 +3467,7 @@ func (s *nodeSuite) TestCloseTransaction_LifecycleChange_PausedRootKeepsRunning(
 	s.NoError(err)
 	rootComp.(*TestComponent).Pause(chasmCtx)
 
-	_, err = node.CloseTransaction(nil)
+	_, err = node.CloseTransaction(context.Background())
 	s.NoError(err)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, s.nodeBackend.LastUpdateWorkflowState())
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, s.nodeBackend.LastUpdateWorkflowStatus())
@@ -3494,6 +3494,10 @@ func (s *nodeSuite) useStatefulExecutionState() {
 	}
 }
 
+func principalContext(principal *commonpb.Principal) context.Context {
+	return headers.SetPrincipal(context.Background(), principal)
+}
+
 func (s *nodeSuite) rootComponentAttributes(node *Node) *persistencespb.ChasmComponentAttributes {
 	return node.serializedNode.GetMetadata().GetComponentAttributes()
 }
@@ -3509,7 +3513,7 @@ func (s *nodeSuite) TestCloseTransaction_RecordPrincipal() {
 
 	// Creating the execution records the starter.
 	node.SetStartedByPrincipal(alice)
-	mutation, err := node.CloseTransaction(alice)
+	mutation, err := node.CloseTransaction(principalContext(alice))
 	s.NoError(err)
 	s.Require().Contains(mutation.UpdatedNodes, "")
 	s.ProtoEqual(alice, mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetStartedByPrincipal())
@@ -3519,7 +3523,7 @@ func (s *nodeSuite) TestCloseTransaction_RecordPrincipal() {
 	tc, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	tc.(*TestComponent).ComponentData.CreateRequestId = "updated"
-	_, err = node.CloseTransaction(bob)
+	_, err = node.CloseTransaction(principalContext(bob))
 	s.NoError(err)
 	s.ProtoEqual(alice, s.rootComponentAttributes(node).GetStartedByPrincipal())
 	s.Nil(s.rootComponentAttributes(node).GetClosedByPrincipal())
@@ -3528,7 +3532,7 @@ func (s *nodeSuite) TestCloseTransaction_RecordPrincipal() {
 	tc, err = node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	tc.(*TestComponent).Complete(chasmCtx)
-	mutation, err = node.CloseTransaction(worker)
+	mutation, err = node.CloseTransaction(principalContext(worker))
 	s.NoError(err)
 	s.Require().Contains(mutation.UpdatedNodes, "")
 	s.ProtoEqual(alice, mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetStartedByPrincipal())
@@ -3538,7 +3542,7 @@ func (s *nodeSuite) TestCloseTransaction_RecordPrincipal() {
 	tc, err = node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	tc.(*TestComponent).Fail(chasmCtx)
-	_, err = node.CloseTransaction(bob)
+	_, err = node.CloseTransaction(principalContext(bob))
 	s.NoError(err)
 	s.ProtoEqual(alice, s.rootComponentAttributes(node).GetStartedByPrincipal())
 	s.ProtoEqual(worker, s.rootComponentAttributes(node).GetClosedByPrincipal())
@@ -3554,7 +3558,7 @@ func (s *nodeSuite) TestCloseTransaction_RecordPrincipal_Terminate() {
 	s.useStatefulExecutionState()
 	node := s.testComponentTree()
 	node.SetStartedByPrincipal(alice)
-	_, err := node.CloseTransaction(alice)
+	_, err := node.CloseTransaction(principalContext(alice))
 	s.NoError(err)
 
 	err = node.Terminate(
@@ -3562,7 +3566,7 @@ func (s *nodeSuite) TestCloseTransaction_RecordPrincipal_Terminate() {
 		ExecutionForceTerminationReasonMutableStateSizeExceedsLimit,
 	)
 	s.NoError(err)
-	mutation, err := node.CloseTransaction(bob)
+	mutation, err := node.CloseTransaction(principalContext(bob))
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, s.nodeBackend.GetExecutionState().GetStatus())
 	s.Require().Contains(mutation.UpdatedNodes, "")
@@ -3578,14 +3582,14 @@ func (s *nodeSuite) TestCloseTransaction_RecordPrincipal_CloseWithoutPrincipal()
 	node := s.testComponentTree()
 	chasmCtx := NewMutableContext(context.Background(), node)
 	node.SetStartedByPrincipal(alice)
-	_, err := node.CloseTransaction(alice)
+	_, err := node.CloseTransaction(principalContext(alice))
 	s.NoError(err)
 
 	// A close without a caller (e.g. a timeout task) leaves closed_by empty.
 	tc, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	tc.(*TestComponent).Fail(chasmCtx)
-	_, err = node.CloseTransaction(nil)
+	_, err = node.CloseTransaction(context.Background())
 	s.NoError(err)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, s.nodeBackend.GetExecutionState().GetState())
 	s.Nil(s.rootComponentAttributes(node).GetClosedByPrincipal())
@@ -3594,7 +3598,7 @@ func (s *nodeSuite) TestCloseTransaction_RecordPrincipal_CloseWithoutPrincipal()
 	tc, err = node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 	s.NoError(err)
 	tc.(*TestComponent).Complete(chasmCtx)
-	_, err = node.CloseTransaction(bob)
+	_, err = node.CloseTransaction(principalContext(bob))
 	s.NoError(err)
 	s.ProtoEqual(alice, s.rootComponentAttributes(node).GetStartedByPrincipal())
 	s.Nil(s.rootComponentAttributes(node).GetClosedByPrincipal())
@@ -3607,7 +3611,7 @@ func (s *nodeSuite) TestSetStartedByPrincipal() {
 	s.Run("NoPrincipal", func() {
 		node := s.testComponentTree()
 		node.SetStartedByPrincipal(nil)
-		_, err := node.CloseTransaction(nil)
+		_, err := node.CloseTransaction(context.Background())
 		s.NoError(err)
 		s.Nil(s.rootComponentAttributes(node).GetStartedByPrincipal())
 
@@ -3616,7 +3620,7 @@ func (s *nodeSuite) TestSetStartedByPrincipal() {
 		tc, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
 		s.NoError(err)
 		tc.(*TestComponent).ComponentData.CreateRequestId = "updated"
-		_, err = node.CloseTransaction(bob)
+		_, err = node.CloseTransaction(principalContext(bob))
 		s.NoError(err)
 		s.Nil(s.rootComponentAttributes(node).GetStartedByPrincipal())
 	})
@@ -3625,7 +3629,7 @@ func (s *nodeSuite) TestSetStartedByPrincipal() {
 		node := s.testComponentTree()
 		node.SetStartedByPrincipal(alice)
 		node.SetStartedByPrincipal(bob)
-		mutation, err := node.CloseTransaction(bob)
+		mutation, err := node.CloseTransaction(principalContext(bob))
 		s.NoError(err)
 		s.Require().Contains(mutation.UpdatedNodes, "")
 		s.ProtoEqual(alice, mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetStartedByPrincipal())
@@ -3636,63 +3640,10 @@ func (s *nodeSuite) TestSetStartedByPrincipal() {
 		defer func() { s.nodeBackend.HandleIsWorkflow = nil }()
 		node := s.testComponentTree()
 		node.SetStartedByPrincipal(alice)
-		_, err := node.CloseTransaction(alice)
+		_, err := node.CloseTransaction(principalContext(alice))
 		s.NoError(err)
 		s.Nil(s.rootComponentAttributes(node).GetStartedByPrincipal())
 		s.Nil(s.rootComponentAttributes(node).GetClosedByPrincipal())
-	})
-}
-
-func (s *nodeSuite) TestSubComponentStartedByPrincipal() {
-	alice := &commonpb.Principal{Type: "jwt", Name: "alice"}
-	bob := &commonpb.Principal{Type: "jwt", Name: "bob"}
-
-	attachSubComponent := func(node *Node, principal *commonpb.Principal) {
-		chasmCtx := NewMutableContext(headers.SetPrincipal(context.Background(), principal), node)
-		tc, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
-		s.NoError(err)
-		tc.(*TestComponent).SubComponents = Map[string, *TestSubComponent1]{
-			"attached": NewComponentField(chasmCtx, &TestSubComponent1{
-				SubComponent1Data: &protoMessageType{RunId: "attached"},
-			}),
-		}
-	}
-	subComponentAttributes := func(node *Node, path ...string) *persistencespb.ChasmComponentAttributes {
-		for _, name := range path {
-			node = node.children[name]
-			s.Require().NotNil(node, "missing node %v", path)
-		}
-		return node.serializedNode.GetMetadata().GetComponentAttributes()
-	}
-
-	s.Run("RecordsCreatingCaller", func() {
-		node := s.testComponentTree()
-		node.SetStartedByPrincipal(alice)
-		_, err := node.CloseTransaction(alice)
-		s.NoError(err)
-
-		// A component added by a later request records that request's caller,
-		// without changing the root or components created earlier.
-		attachSubComponent(node, bob)
-		mutation, err := node.CloseTransaction(bob)
-		s.NoError(err)
-		s.Require().Contains(mutation.UpdatedNodes, "SubComponents/attached")
-		s.ProtoEqual(bob, mutation.UpdatedNodes["SubComponents/attached"].GetMetadata().GetComponentAttributes().GetStartedByPrincipal())
-		s.ProtoEqual(alice, s.rootComponentAttributes(node).GetStartedByPrincipal())
-		s.Nil(subComponentAttributes(node, "SubComponent1").GetStartedByPrincipal())
-	})
-
-	s.Run("SkippedForWorkflow", func() {
-		s.nodeBackend.HandleIsWorkflow = func() bool { return true }
-		defer func() { s.nodeBackend.HandleIsWorkflow = nil }()
-		node := s.testComponentTree()
-		_, err := node.CloseTransaction(nil)
-		s.NoError(err)
-
-		attachSubComponent(node, bob)
-		_, err = node.CloseTransaction(bob)
-		s.NoError(err)
-		s.Nil(subComponentAttributes(node, "SubComponents", "attached").GetStartedByPrincipal())
 	})
 }
 
@@ -3795,7 +3746,7 @@ func (s *nodeSuite) TestCloseTransaction_NewComponentTasks() {
 		TestOutboundSideEffectTask{},
 	)
 
-	mutation, err := root.CloseTransaction(nil)
+	mutation, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	s.Equal(s.timeSource.Now().UTC(), s.nodeBackend.LastDeletePureTaskCall())
@@ -3939,7 +3890,7 @@ func (s *nodeSuite) TestCloseTransaction_ApplyMutation_SideEffectTasks() {
 	s.NoError(err)
 
 	expectedCategories := []tasks.Category{tasks.CategoryTimer, tasks.CategoryOutbound, tasks.CategoryTransfer}
-	_, err = root.CloseTransaction(nil)
+	_, err = root.CloseTransaction(context.Background())
 	for _, category := range expectedCategories {
 		for _, task := range s.nodeBackend.TasksByCategory[category] {
 			s.IsType(&tasks.ChasmTask{}, task)
@@ -4026,7 +3977,7 @@ func (s *nodeSuite) TestCloseTransaction_ApplyMutation_PureTasks() {
 	err = root.ApplyMutation(incomingMutation)
 	s.NoError(err)
 
-	mutation, err := root.CloseTransaction(nil)
+	mutation, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	s.Equal(now.Add(time.Minute), s.nodeBackend.LastDeletePureTaskCall())
@@ -4050,7 +4001,7 @@ func (s *nodeSuite) TestTerminate() {
 	node := s.testComponentTree()
 
 	// First closeTransaction once to make the tree clean.
-	_, err := node.CloseTransaction(nil)
+	_, err := node.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, s.nodeBackend.LastUpdateWorkflowState())
@@ -4073,7 +4024,7 @@ func (s *nodeSuite) TestTerminate() {
 	s.Equal(testComponentFQN, recordings[0].Tags["archetype"])
 	s.Equal(string(ExecutionForceTerminationReasonMutableStateSizeExceedsLimit), recordings[0].Tags["reason"])
 
-	mutations, err := node.CloseTransaction(nil)
+	mutations, err := node.CloseTransaction(context.Background())
 	s.NoError(err)
 	s.Len(mutations.UpdatedNodes, 1)
 	s.Empty(mutations.DeletedNodes)
@@ -4097,7 +4048,7 @@ func (s *nodeSuite) TestTerminate() {
 	_, err = node.Component(mutableContext, ComponentRef{})
 	s.NoError(err)
 
-	mutations, err = node.CloseTransaction(nil)
+	mutations, err = node.CloseTransaction(context.Background())
 	s.NoError(err)
 	s.Empty(mutations.UpdatedNodes)
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, s.nodeBackend.LastUpdateWorkflowState())
@@ -4227,7 +4178,7 @@ func (s *nodeSuite) TestContextNowStableWithinContext() {
 func (s *nodeSuite) TestExecuteImmediatePureTask() {
 	root := s.testComponentTree()
 
-	mutations, err := root.CloseTransaction(nil)
+	mutations, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	// Start a clean transaction.
@@ -4270,7 +4221,7 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 			gomock.Any(),
 		).Return(nil).Times(1)
 
-	mutations, err = root.CloseTransaction(nil)
+	mutations, err = root.CloseTransaction(context.Background())
 	s.NoError(err)
 	s.Empty(mutations.UpdatedNodes)
 	s.Empty(mutations.DeletedNodes)
@@ -4282,7 +4233,7 @@ func (s *nodeSuite) TestExecuteImmediatePureTask() {
 func (s *nodeSuite) TestImmediatePureTaskNowStableWithinTaskOnly() {
 	root := s.testComponentTree()
 
-	_, err := root.CloseTransaction(nil)
+	_, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	taskStartTime := time.Date(2026, 1, 1, 2, 0, 0, 0, time.UTC)
@@ -4330,7 +4281,7 @@ func (s *nodeSuite) TestImmediatePureTaskNowStableWithinTaskOnly() {
 		}).
 		Times(2)
 
-	mutations, err := root.CloseTransaction(nil)
+	mutations, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 	s.Empty(mutations.DeletedNodes)
 	s.Equal([]time.Time{taskStartTime, nextTaskTime}, observedTimes)
@@ -4344,7 +4295,7 @@ func (s *nodeSuite) TestExecuteImmediatePureTaskSkipsPostExecutionValidation() {
 	// Enable the DLQ validation flag to confirm it has no effect on immediate tasks.
 	s.nodeBackend.HandleChasmDLQScheduledPureTaskOnValidationEnabled = func() bool { return true }
 
-	_, err := root.CloseTransaction(nil)
+	_, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	mutableContext := NewMutableContext(context.Background(), root)
@@ -4371,7 +4322,7 @@ func (s *nodeSuite) TestExecuteImmediatePureTaskSkipsPostExecutionValidation() {
 			).Return(nil).Times(1),
 	)
 
-	_, err = root.CloseTransaction(nil)
+	_, err = root.CloseTransaction(context.Background())
 	s.NoError(err)
 }
 
@@ -5304,7 +5255,7 @@ func (s *nodeSuite) TestCloseTransaction_AppliesPendingComponentMetadata() {
 	root := s.testComponentTree() // sets HandleNextTransitionCount = 1, HandleGetCurrentVersion = 1
 
 	// Initial create transaction must close cleanly before we exercise the metadata path.
-	_, err := root.CloseTransaction(nil)
+	_, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	// Bump the transition count so we can verify LastUpdateVersionedTransition was updated.
@@ -5317,7 +5268,7 @@ func (s *nodeSuite) TestCloseTransaction_AppliesPendingComponentMetadata() {
 	s.NoError(ctx.SetRequestLinks(c, requestID, []*commonpb.Link{link}))
 	s.NoError(ctx.SetUserMetadata(c, md))
 
-	mutation, err := root.CloseTransaction(nil)
+	mutation, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	rootSerialized, ok := mutation.UpdatedNodes[""]
@@ -5339,7 +5290,7 @@ func (s *nodeSuite) TestCloseTransaction_AppliesPendingComponentMetadata() {
 // before CloseTransaction runs.
 func (s *nodeSuite) TestSetComponentMetadata_MarksTreeDirty() {
 	root := s.testComponentTree()
-	_, err := root.CloseTransaction(nil)
+	_, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	s.False(root.IsDirty(), "tree must be clean after the initial close")
@@ -5357,7 +5308,7 @@ func (s *nodeSuite) TestSetComponentMetadata_MarksTreeDirty() {
 	s.True(root.IsStateDirty(), "staging SetRequestLinks must mark the tree dirty")
 	s.True(root.IsDirty())
 
-	_, err = root.CloseTransaction(nil)
+	_, err = root.CloseTransaction(context.Background())
 	s.NoError(err)
 	s.False(root.IsStateDirty(), "CloseTransaction must clear the dirty flag")
 
@@ -5378,7 +5329,7 @@ func (s *nodeSuite) TestSetComponentMetadata_MarksTreeDirty() {
 // are cleared afterwards.
 func (s *nodeSuite) TestCloseTransaction_DropsOrphanedComponentMetadata() {
 	root := s.testComponentTree()
-	_, err := root.CloseTransaction(nil)
+	_, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
@@ -5395,7 +5346,7 @@ func (s *nodeSuite) TestCloseTransaction_DropsOrphanedComponentMetadata() {
 		Summary: &commonpb.Payload{Data: []byte("orphan")},
 	}))
 
-	mutation, err := root.CloseTransaction(nil)
+	mutation, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 	s.NotContains(mutation.UpdatedNodes, "", "root must not be updated by orphaned writes")
 	s.Empty(root.pendingRequestLinks)
@@ -5407,7 +5358,7 @@ func (s *nodeSuite) TestCloseTransaction_DropsOrphanedComponentMetadata() {
 // empty-string key.
 func (s *nodeSuite) TestSetComponentRequestLinks_RejectsEmptyRequestID() {
 	root := s.testComponentTree()
-	_, err := root.CloseTransaction(nil)
+	_, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	ctx := NewMutableContext(context.Background(), root)
@@ -5432,7 +5383,7 @@ func (s *nodeSuite) TestSetComponentRequestLinks_RejectsEmptyRequestID() {
 // ChasmComponentAttributes.requests.
 func (s *nodeSuite) TestSetRequestLinks_MultipleRequestsCoexist() {
 	root := s.testComponentTree()
-	_, err := root.CloseTransaction(nil)
+	_, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	s.nodeBackend.HandleNextTransitionCount = func() int64 { return 2 }
@@ -5449,7 +5400,7 @@ func (s *nodeSuite) TestSetRequestLinks_MultipleRequestsCoexist() {
 	s.NoError(ctx.SetRequestLinks(c, "req-a", []*commonpb.Link{linkA}))
 	s.NoError(ctx.SetRequestLinks(c, "req-b", []*commonpb.Link{linkB}))
 
-	mutation, err := root.CloseTransaction(nil)
+	mutation, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	attrs := mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
@@ -5463,7 +5414,7 @@ func (s *nodeSuite) TestSetRequestLinks_MultipleRequestsCoexist() {
 // transactions — leave only the second value in attrs.Requests.
 func (s *nodeSuite) TestSetRequestLinks_ReplacesEntryForSameRequestID() {
 	root := s.testComponentTree()
-	_, err := root.CloseTransaction(nil)
+	_, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	linkA := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
@@ -5482,7 +5433,7 @@ func (s *nodeSuite) TestSetRequestLinks_ReplacesEntryForSameRequestID() {
 	s.NoError(err)
 	s.NoError(ctx.SetRequestLinks(c, "req", []*commonpb.Link{linkA}))
 	s.NoError(ctx.SetRequestLinks(c, "req", []*commonpb.Link{linkB}))
-	mutation, err := root.CloseTransaction(nil)
+	mutation, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 	s.Equal([]*commonpb.Link{linkB},
 		mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetRequests()["req"].GetLinks(),
@@ -5496,7 +5447,7 @@ func (s *nodeSuite) TestSetRequestLinks_ReplacesEntryForSameRequestID() {
 	c, err = root.Component(ctx, ComponentRef{})
 	s.NoError(err)
 	s.NoError(ctx.SetRequestLinks(c, "req", []*commonpb.Link{linkA}))
-	mutation, err = root.CloseTransaction(nil)
+	mutation, err = root.CloseTransaction(context.Background())
 	s.NoError(err)
 	s.Equal([]*commonpb.Link{linkA},
 		mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetRequests()["req"].GetLinks(),
@@ -5509,7 +5460,7 @@ func (s *nodeSuite) TestSetRequestLinks_ReplacesEntryForSameRequestID() {
 // ChasmComponentAttributes.requests.
 func (s *nodeSuite) TestSetRequestLinks_RemovesEntryWhenEmptyLinks() {
 	root := s.testComponentTree()
-	_, err := root.CloseTransaction(nil)
+	_, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	link := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
@@ -5523,7 +5474,7 @@ func (s *nodeSuite) TestSetRequestLinks_RemovesEntryWhenEmptyLinks() {
 	c, err := root.Component(ctx, ComponentRef{})
 	s.NoError(err)
 	s.NoError(ctx.SetRequestLinks(c, "req", []*commonpb.Link{link}))
-	mutation, err := root.CloseTransaction(nil)
+	mutation, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 	s.Contains(mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetRequests(), "req")
 
@@ -5533,7 +5484,7 @@ func (s *nodeSuite) TestSetRequestLinks_RemovesEntryWhenEmptyLinks() {
 	c, err = root.Component(ctx, ComponentRef{})
 	s.NoError(err)
 	s.NoError(ctx.SetRequestLinks(c, "req", nil))
-	mutation, err = root.CloseTransaction(nil)
+	mutation, err = root.CloseTransaction(context.Background())
 	s.NoError(err)
 	attrs := mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
 	s.NotContains(attrs.GetRequests(), "req", "empty links must remove the entry for requestID")
@@ -5545,7 +5496,7 @@ func (s *nodeSuite) TestSetRequestLinks_RemovesEntryWhenEmptyLinks() {
 // reading-then-writing within a single transaction never observe stale state.
 func (s *nodeSuite) TestRequestLinks_PrefersPendingOverPersisted() {
 	root := s.testComponentTree()
-	_, err := root.CloseTransaction(nil)
+	_, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	oldLink := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
@@ -5562,7 +5513,7 @@ func (s *nodeSuite) TestRequestLinks_PrefersPendingOverPersisted() {
 	c, err := root.Component(ctx, ComponentRef{})
 	s.NoError(err)
 	s.NoError(ctx.SetRequestLinks(c, "req", []*commonpb.Link{oldLink}))
-	_, err = root.CloseTransaction(nil)
+	_, err = root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	// Open a new transaction, stage a replace with [newLink] under the same
@@ -5585,7 +5536,7 @@ func (s *nodeSuite) TestRequestLinks_PrefersPendingOverPersisted() {
 // B, read it back through the framework APIs.
 func (s *nodeSuite) TestCloseTransaction_PersistsAcrossTransactions() {
 	root := s.testComponentTree()
-	_, err := root.CloseTransaction(nil)
+	_, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	link := &commonpb.Link{Variant: &commonpb.Link_WorkflowEvent_{
@@ -5600,7 +5551,7 @@ func (s *nodeSuite) TestCloseTransaction_PersistsAcrossTransactions() {
 	s.NoError(err)
 	s.NoError(ctx.SetRequestLinks(c, "req", []*commonpb.Link{link}))
 	s.NoError(ctx.SetUserMetadata(c, md))
-	_, err = root.CloseTransaction(nil)
+	_, err = root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	// New transaction: framework getters must surface the persisted attrs.
@@ -5621,7 +5572,7 @@ func (s *nodeSuite) TestCloseTransaction_PersistsAcrossTransactions() {
 // component (rather than being treated as a no-op).
 func (s *nodeSuite) TestSetUserMetadata_NilClearsPersistedValue() {
 	root := s.testComponentTree()
-	_, err := root.CloseTransaction(nil)
+	_, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	// Persist user metadata.
@@ -5633,7 +5584,7 @@ func (s *nodeSuite) TestSetUserMetadata_NilClearsPersistedValue() {
 	s.NoError(ctx.SetUserMetadata(c, &sdkpb.UserMetadata{
 		Summary: &commonpb.Payload{Data: []byte("first")},
 	}))
-	_, err = root.CloseTransaction(nil)
+	_, err = root.CloseTransaction(context.Background())
 	s.NoError(err)
 
 	// Clear with nil.
@@ -5642,7 +5593,7 @@ func (s *nodeSuite) TestSetUserMetadata_NilClearsPersistedValue() {
 	c, err = root.Component(ctx, ComponentRef{})
 	s.NoError(err)
 	s.NoError(ctx.SetUserMetadata(c, nil))
-	mutation, err := root.CloseTransaction(nil)
+	mutation, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 	s.Nil(mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetUserMetadata())
 }
@@ -5676,7 +5627,7 @@ func (s *nodeSuite) TestCloseTransaction_SingletonTask_Replace_SideEffect() {
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	mutableContext.AddTask(testComponent, TaskAttributes{}, &TestSingletonReplaceSideEffectTask{Data: []byte("first")})
 
-	mutation, err := root.CloseTransaction(nil)
+	mutation, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 	rootAttr := mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
 	s.Len(rootAttr.SideEffectTasks, 1)
@@ -5695,7 +5646,7 @@ func (s *nodeSuite) TestCloseTransaction_SingletonTask_Replace_SideEffect() {
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(2)
 	mutableContext.AddTask(testComponent, TaskAttributes{}, &TestSingletonReplaceSideEffectTask{Data: []byte("second")})
 
-	mutation, err = root.CloseTransaction(nil)
+	mutation, err = root.CloseTransaction(context.Background())
 	s.NoError(err)
 	rootAttr = mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
 	s.Len(rootAttr.SideEffectTasks, 1, "replace mode must keep exactly one task")
@@ -5731,7 +5682,7 @@ func (s *nodeSuite) TestCloseTransaction_SingletonTask_Ignore_SideEffect() {
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	mutableContext.AddTask(testComponent, TaskAttributes{}, &TestSingletonIgnoreSideEffectTask{Data: []byte("first")})
 
-	mutation, err := root.CloseTransaction(nil)
+	mutation, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 	rootAttr := mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
 	s.Len(rootAttr.SideEffectTasks, 1)
@@ -5750,7 +5701,7 @@ func (s *nodeSuite) TestCloseTransaction_SingletonTask_Ignore_SideEffect() {
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(2)
 	mutableContext.AddTask(testComponent, TaskAttributes{}, &TestSingletonIgnoreSideEffectTask{Data: []byte("second")})
 
-	mutation, err = root.CloseTransaction(nil)
+	mutation, err = root.CloseTransaction(context.Background())
 	s.NoError(err)
 	rootAttr = mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
 	s.Len(rootAttr.SideEffectTasks, 1, "ignore mode must keep exactly one task")
@@ -5790,7 +5741,7 @@ func (s *nodeSuite) TestCloseTransaction_SingletonTask_Replace_Pure() {
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	mutableContext.AddTask(testComponent, TaskAttributes{ScheduledTime: t1}, &TestSingletonReplacePureTask{Data: []byte("first")})
 
-	mutation, err := root.CloseTransaction(nil)
+	mutation, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 	rootAttr := mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
 	s.Len(rootAttr.PureTasks, 1)
@@ -5809,7 +5760,7 @@ func (s *nodeSuite) TestCloseTransaction_SingletonTask_Replace_Pure() {
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(2)
 	mutableContext.AddTask(testComponent, TaskAttributes{ScheduledTime: t2}, &TestSingletonReplacePureTask{Data: []byte("second")})
 
-	mutation, err = root.CloseTransaction(nil)
+	mutation, err = root.CloseTransaction(context.Background())
 	s.NoError(err)
 	rootAttr = mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
 	s.Len(rootAttr.PureTasks, 1, "replace mode must keep exactly one task")
@@ -5849,7 +5800,7 @@ func (s *nodeSuite) TestCloseTransaction_SingletonTask_Ignore_Pure() {
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	mutableContext.AddTask(testComponent, TaskAttributes{ScheduledTime: t1}, &TestSingletonIgnorePureTask{Data: []byte("first")})
 
-	mutation, err := root.CloseTransaction(nil)
+	mutation, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 	rootAttr := mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
 	s.Len(rootAttr.PureTasks, 1)
@@ -5868,7 +5819,7 @@ func (s *nodeSuite) TestCloseTransaction_SingletonTask_Ignore_Pure() {
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(2)
 	mutableContext.AddTask(testComponent, TaskAttributes{ScheduledTime: t2}, &TestSingletonIgnorePureTask{Data: []byte("second")})
 
-	mutation, err = root.CloseTransaction(nil)
+	mutation, err = root.CloseTransaction(context.Background())
 	s.NoError(err)
 	rootAttr = mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
 	s.Len(rootAttr.PureTasks, 1, "ignore mode must keep exactly one task")
@@ -5905,7 +5856,7 @@ func (s *nodeSuite) TestCloseTransaction_SingletonTask_InvalidNewTask_DoesNotDis
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).Times(1)
 	mutableContext.AddTask(testComponent, TaskAttributes{}, &TestSingletonReplaceSideEffectTask{Data: []byte("first")})
 
-	mutation, err := root.CloseTransaction(nil)
+	mutation, err := root.CloseTransaction(context.Background())
 	s.NoError(err)
 	rootAttr := mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
 	s.Len(rootAttr.SideEffectTasks, 1)
@@ -5927,7 +5878,7 @@ func (s *nodeSuite) TestCloseTransaction_SingletonTask_InvalidNewTask_DoesNotDis
 		Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(false, nil).Times(1)
 	mutableContext.AddTask(testComponent, TaskAttributes{}, &TestSingletonReplaceSideEffectTask{Data: []byte("invalid-second")})
 
-	mutation, err = root.CloseTransaction(nil)
+	mutation, err = root.CloseTransaction(context.Background())
 	s.NoError(err)
 	rootAttr = mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes()
 	s.Len(rootAttr.SideEffectTasks, 1, "invalid new task must not displace existing singleton")
@@ -6430,7 +6381,7 @@ func (s *nodeSuite) TestCloseTransaction_MarkTotalTimeSkippedUpdatedInPassive() 
 	s.Run("WithoutFlagLeavesCreatedTasksUntouched", func() {
 		root := newTree()
 
-		_, err := root.CloseTransaction(nil)
+		_, err := root.CloseTransaction(context.Background())
 		s.Require().NoError(err)
 
 		s.Equal(0, s.nodeBackend.NumTasksAdded(),
@@ -6443,7 +6394,7 @@ func (s *nodeSuite) TestCloseTransaction_MarkTotalTimeSkippedUpdatedInPassive() 
 		root.MarkTotalTimeSkippedUpdatedInPassive()
 		s.True(root.totalTimeSkippedUpdatedInPassive)
 
-		_, err := root.CloseTransaction(nil)
+		_, err := root.CloseTransaction(context.Background())
 		s.Require().NoError(err)
 
 		s.Equal(2, s.nodeBackend.NumTasksAdded(),
