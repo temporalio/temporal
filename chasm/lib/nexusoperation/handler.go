@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/chasm/lib/callback"
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/contextutil"
@@ -116,7 +117,8 @@ func (h *handler) applyOnConflictOptions(
 		chasm.NewComponentRef[*Operation](key),
 		func(o *Operation, ctx chasm.MutableContext, _ any) (any, error) {
 			if attachCallbacks {
-				if err := o.addCompletionCallbacks(ctx, requestID, cbs, namespaceName, h.callbackValidator); err != nil {
+				regTime := timestamppb.New(ctx.Now(o))
+				if err := callback.ValidateAndAttach(ctx, o, requestID, regTime, cbs, namespaceName, h.callbackValidator); err != nil {
 					return nil, err
 				}
 			}
