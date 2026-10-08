@@ -9,8 +9,6 @@ import (
 
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/frontend"
@@ -39,6 +37,7 @@ import (
 	"go.temporal.io/server/common/pingable"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/resource/serviceclient"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
@@ -59,11 +58,10 @@ type (
 	InstanceID           string
 	ServiceNames         map[primitives.ServiceName]struct{}
 
-	HistoryRawClient historyservice.HistoryServiceClient
-	HistoryClient    historyservice.HistoryServiceClient
-
-	MatchingRawClient matchingservice.MatchingServiceClient
-	MatchingClient    matchingservice.MatchingServiceClient
+	HistoryRawClient  = serviceclient.HistoryRawClient
+	HistoryClient     = serviceclient.HistoryClient
+	MatchingRawClient = serviceclient.MatchingRawClient
+	MatchingClient    = serviceclient.MatchingClient
 
 	RuntimeMetricsReporterParams struct {
 		fx.In

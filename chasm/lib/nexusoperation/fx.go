@@ -19,7 +19,7 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/resource/serviceclient"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/httpfaults"
 	"go.temporal.io/server/common/telemetry"
@@ -71,7 +71,7 @@ func register(
 }
 
 func endpointRegistryProvider(
-	matchingClient resource.MatchingClient,
+	matchingClient serviceclient.MatchingClient,
 	endpointManager persistence.NexusEndpointManager,
 	dc *dynamicconfig.Collection,
 	logger log.Logger,

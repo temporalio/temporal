@@ -19,7 +19,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/resource/serviceclient"
 )
 
 // startArgs holds the arguments needed to start a Nexus operation invocation.
@@ -181,7 +181,7 @@ func (i *invocationHTTP) Cancel(
 type invocationSystem struct {
 	ns            *namespace.Namespace
 	chasmRegistry *chasm.Registry
-	historyClient resource.HistoryClient
+	historyClient serviceclient.HistoryClient
 	config        *Config
 	logger        log.Logger
 }

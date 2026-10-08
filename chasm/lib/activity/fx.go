@@ -3,7 +3,6 @@ package activity
 import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
-	"go.temporal.io/server/common/resource"
 	"go.uber.org/fx"
 )
 
@@ -31,7 +30,6 @@ var FrontendModule = fx.Module(
 	fx.Provide(linkValidatorProvider),
 	fx.Provide(activitypb.NewActivityServiceLayeredClient),
 	fx.Provide(NewFrontendHandler),
-	fx.Provide(resource.SearchAttributeValidatorProvider),
 	fx.Provide(newComponentOnlyLibrary),
 	fx.Invoke(func(l *componentOnlyLibrary, registry *chasm.Registry) error {
 		// Frontend needs to register the component in order to serialize ComponentRefs, but doesn't
