@@ -257,7 +257,8 @@ func WorkersRegistryProvider(
 		MaxItems:         serviceConfig.WorkerRegistryMaxEntries,
 		EvictionInterval: serviceConfig.WorkerRegistryEvictionInterval,
 		MetricsHandler:   metricsHandler,
-		EventLogger:      eventLogger,
+		EventLogger:              eventLogger,
+		EnableWorkerHeartbeatEvents: serviceConfig.EnableWorkerHeartbeatEvents,
 		MetricsConfig: workers.WorkerMetricsConfig{
 			EnablePluginMetrics:            serviceConfig.EnableWorkerPluginMetrics,
 			EnablePollerAutoscalingMetrics: serviceConfig.EnablePollerAutoscalingMetrics,

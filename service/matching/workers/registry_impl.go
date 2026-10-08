@@ -64,9 +64,10 @@ type (
 		total              atomic.Int64                     // atomic counter of total entries
 		quit               chan struct{}                    // channel to signal shutdown of the eviction loop
 		seed               maphash.Seed                     // seed for the hasher, used to ensure consistent hashing
-		metricsHandler     metrics.Handler                  // metrics handler for recording registry metrics
-		metricsEmitter     *workerMetricsEmitter            // emitter for heartbeat-derived metrics
-		eventLogger        otellog.Logger                   // OTEL logger for wide events
+		metricsHandler           metrics.Handler                  // metrics handler for recording registry metrics
+		metricsEmitter           *workerMetricsEmitter            // emitter for heartbeat-derived metrics
+		eventLogger              otellog.Logger                   // OTEL logger for wide events
+		enableWorkerHeartbeatEvents dynamicconfig.BoolPropertyFn
 	}
 
 	// RegistryParams contains all parameters for creating a worker registry.
@@ -76,9 +77,10 @@ type (
 		MinEvictAge      dynamicconfig.DurationPropertyFn
 		MaxItems         dynamicconfig.IntPropertyFn
 		EvictionInterval dynamicconfig.DurationPropertyFn
-		MetricsHandler   metrics.Handler
-		MetricsConfig    WorkerMetricsConfig
-		EventLogger      otellog.Logger
+		MetricsHandler           metrics.Handler
+		MetricsConfig            WorkerMetricsConfig
+		EventLogger              otellog.Logger
+		EnableWorkerHeartbeatEvents dynamicconfig.BoolPropertyFn
 	}
 )
 
@@ -247,8 +249,9 @@ func newRegistryImpl(params RegistryParams) *registryImpl {
 		evictionIntervalFn: params.EvictionInterval,
 		seed:               maphash.MakeSeed(),
 		quit:               make(chan struct{}),
-		metricsHandler:     params.MetricsHandler,
-		eventLogger:        params.EventLogger,
+		metricsHandler:           params.MetricsHandler,
+		eventLogger:              params.EventLogger,
+		enableWorkerHeartbeatEvents: params.EnableWorkerHeartbeatEvents,
 		metricsEmitter: &workerMetricsEmitter{
 			handler: params.MetricsHandler,
 			config:  params.MetricsConfig,
@@ -276,7 +279,11 @@ func (m *registryImpl) getBucket(nsID namespace.ID) *bucket {
 // New entries increment the global counter.
 func (m *registryImpl) upsertHeartbeats(nsID namespace.ID, nsName namespace.Name, principal *commonpb.Principal, heartbeats []*workerpb.WorkerHeartbeat) {
 	b := m.getBucket(nsID)
-	added, removed := b.upsertHeartbeats(nsID, nsName, principal, heartbeats, m.eventLogger)
+	var eventLogger otellog.Logger
+	if m.enableWorkerHeartbeatEvents == nil || m.enableWorkerHeartbeatEvents() {
+		eventLogger = m.eventLogger
+	}
+	added, removed := b.upsertHeartbeats(nsID, nsName, principal, heartbeats, eventLogger)
 	m.total.Add(added - removed)
 	if added > 0 {
 		metrics.WorkerRegistryWorkersAdded.With(m.metricsHandler).Record(added)
