@@ -248,9 +248,11 @@ func (u *Updater) applyRequest(
 //
 // Cases:
 //
-//	requestID already has an event recorded on it?
-//	  - Yes: link to that event.
-//	  - No: is the Update already accepted/completed, or does the request have no callbacks?
+//	requestID or callbacks empty?
+//	  - Yes: return nil to link to the accepted event.
+//	  - No: requestID already has an event recorded on it?
+//	    - Yes: link to that event.
+//	    - No: is the Update already completed?
 //	        - Yes: return nil as a hint to OnSuccess to link to the accepted event.
 //	        - No: link to the projected event.
 func (u *Updater) captureRequestIDLink(ms historyi.MutableState) *commonpb.Link {
@@ -260,14 +262,20 @@ func (u *Updater) captureRequestIDLink(ms historyi.MutableState) *commonpb.Link 
 		return nil
 	}
 
+	// If there are no completion callbacks, dont set the
+	// requestIDRef link as it is not guaranteed to resolve.
+	if len(request.CompletionCallbacks) == 0 {
+		return nil
+	}
+
 	var eventType enumspb.EventType
 	if requestIDInfo := ms.GetExecutionState().GetRequestIds()[requestID]; requestIDInfo != nil {
 		eventType = requestIDInfo.GetEventType()
 	} else {
 		updateInfo := ms.GetExecutionInfo().GetUpdateInfos()[request.GetMeta().GetUpdateId()]
-		// For requests that are not carrying any callbacks or are already persisted(accepted/completed)
-		// skip setting a requestIDRef link so OnSuccess can point to the Accepted event directly.
-		if len(request.GetCompletionCallbacks()) == 0 || updateInfo.GetAcceptance() != nil || updateInfo.GetCompletion() != nil {
+		if updateInfo.GetCompletion() != nil {
+			// If the update is already completed, the request's callbacks are not
+			// recorded so the requestIDRef is not captured as it will not resolve.
 			return nil
 		}
 		eventType = u.upd.EventLinkType(requestID)
@@ -370,8 +378,8 @@ func (u *Updater) responseLink(status *update.Status) *commonpb.Link {
 			},
 		}
 	}
-	// Use the requestIDLink if set, this is to cater for cases where request resulted
-	// in an OptionsUpdated event instead of Accepted.
+	// Use the requestIDLink if set- it is guaranteed by
+	// captureRequestIDLink that the requestIDRef will resolve.
 	if u.requestIDLink != nil {
 		return u.requestIDLink
 	}
