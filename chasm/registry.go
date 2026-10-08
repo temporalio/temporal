@@ -39,6 +39,11 @@ type (
 		nexusServices          map[string]*nexus.Service // service name -> nexus service
 		NexusEndpointProcessor *NexusEndpointProcessor
 
+		// IDs of component types that own a task type opted into the task count metrics.
+		// CloseTransaction iterates the tasks of these component types only, skipping all other
+		// component nodes after a single lookup in this set.
+		taskCountMetricComponentIDs map[uint32]struct{}
+
 		logger log.Logger
 	}
 )
@@ -52,17 +57,18 @@ type valueWithFqn struct {
 
 func NewRegistry(logger log.Logger) *Registry {
 	return &Registry{
-		libraries:              make(map[string]Library),
-		rcByFqn:                make(map[string]*RegistrableComponent),
-		rcByID:                 make(map[uint32]*RegistrableComponent),
-		rcByGoType:             make(map[reflect.Type]*RegistrableComponent),
-		rtByFqn:                make(map[string]*RegistrableTask),
-		rtByID:                 make(map[uint32]*RegistrableTask),
-		rtByGoType:             make(map[reflect.Type]*RegistrableTask),
-		rcContextValues:        make(map[any]valueWithFqn),
-		nexusServices:          make(map[string]*nexus.Service),
-		NexusEndpointProcessor: NewNexusEndpointProcessor(),
-		logger:                 logger,
+		libraries:                   make(map[string]Library),
+		rcByFqn:                     make(map[string]*RegistrableComponent),
+		rcByID:                      make(map[uint32]*RegistrableComponent),
+		rcByGoType:                  make(map[reflect.Type]*RegistrableComponent),
+		rtByFqn:                     make(map[string]*RegistrableTask),
+		rtByID:                      make(map[uint32]*RegistrableTask),
+		rtByGoType:                  make(map[reflect.Type]*RegistrableTask),
+		taskCountMetricComponentIDs: make(map[uint32]struct{}),
+		rcContextValues:             make(map[any]valueWithFqn),
+		nexusServices:               make(map[string]*nexus.Service),
+		NexusEndpointProcessor:      NewNexusEndpointProcessor(),
+		logger:                      logger,
 	}
 }
 
@@ -325,9 +331,45 @@ func (r *Registry) registerTask(
 		return fmt.Errorf("component type %s must be and interface or struct that implements Component interface", rt.componentGoType.String())
 	}
 
+	if rt.taskCountMetricEnabled() {
+		if threshold := *rt.taskCountMetricThreshold; threshold <= 0 {
+			return fmt.Errorf("task %s has task count metric threshold %d, which must be greater than 0", fqn, threshold)
+		}
+		if err := r.registerTaskCountMetricComponents(fqn, rt); err != nil {
+			return err
+		}
+	}
+
 	r.rtByFqn[fqn] = rt
 	r.rtByID[id] = rt
 	r.rtByGoType[rt.goType] = rt
+	return nil
+}
+
+// registerTaskCountMetricComponents marks the component types that can hold the opted in
+// task type rt. Those components must already be registered, which they are when they are in
+// the same library as the task, since a library registers its components before its tasks.
+func (r *Registry) registerTaskCountMetricComponents(fqn string, rt *RegistrableTask) error {
+	// An interface matches every registered component implementing it.
+	if rt.componentGoType.Kind() == reflect.Interface {
+		for id, rc := range r.rcByID {
+			if rc.goType.Implements(rt.componentGoType) {
+				r.taskCountMetricComponentIDs[id] = struct{}{}
+			}
+		}
+		return nil
+	}
+
+	rc, ok := r.rcByGoType[rt.componentGoType]
+	if !ok {
+		return fmt.Errorf(
+			"task %s opts into the task count metric but its component type %s is not registered; "+
+				"register the component before its task",
+			fqn,
+			rt.componentGoType.String(),
+		)
+	}
+	r.taskCountMetricComponentIDs[rc.componentID] = struct{}{}
 	return nil
 }
 
