@@ -134,16 +134,22 @@ func runtimeTypeName(rt workerpb.EnvironmentInfo_Runtime_RuntimeType) string {
 	if rt == workerpb.EnvironmentInfo_Runtime_RUNTIME_TYPE_UNSPECIFIED {
 		return "unknown"
 	}
-	raw := string(rt.Descriptor().Values().ByNumber(rt.Number()).Name())
-	return strings.ToLower(strings.TrimPrefix(raw, "RUNTIME_TYPE_"))
+	v := rt.Descriptor().Values().ByNumber(rt.Number())
+	if v == nil {
+		return "unknown"
+	}
+	return strings.ToLower(strings.TrimPrefix(string(v.Name()), "RUNTIME_TYPE_"))
 }
 
 func architectureName(a workerpb.EnvironmentInfo_Architecture) string {
 	if a == workerpb.EnvironmentInfo_ARCHITECTURE_UNSPECIFIED {
 		return "unknown"
 	}
-	raw := string(a.Descriptor().Values().ByNumber(a.Number()).Name())
-	return strings.ToLower(strings.TrimPrefix(raw, "ARCHITECTURE_"))
+	v := a.Descriptor().Values().ByNumber(a.Number())
+	if v == nil {
+		return "unknown"
+	}
+	return strings.ToLower(strings.TrimPrefix(string(v.Name()), "ARCHITECTURE_"))
 }
 
 // platformTags extracts OS and architecture tag values from the platform oneof.
