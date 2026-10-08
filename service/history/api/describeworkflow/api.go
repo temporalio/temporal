@@ -101,6 +101,7 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
+	startAttributes := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	result := &historyservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfig: &workflowpb.WorkflowExecutionConfig{
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -144,7 +145,7 @@ func Invoke(
 			ExecutionExpirationTime:             executionInfo.WorkflowExecutionExpirationTime,
 			RunExpirationTime:                   executionInfo.WorkflowRunExpirationTime,
 			OriginalStartTime:                   startEvent.EventTime,
-			PropagatedNexusSerializationContext: startEvent.GetWorkflowExecutionStartedEventAttributes().GetPropagatedNexusSerializationContext(),
+			PropagatedNexusSerializationContext: startAttributes.GetPropagatedNexusSerializationContext(),
 			CancelRequested:                     executionInfo.CancelRequested,
 			ResetRunId:                          executionInfo.ResetRunId,
 			RequestIdInfos:                      make(map[string]*workflowpb.RequestIdInfo),
