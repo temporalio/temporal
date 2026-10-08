@@ -23,8 +23,9 @@ type WorkerMetricsConfig struct {
 
 // workerMetricsEmitter encapsulates logic for emitting metrics derived from worker heartbeats.
 type workerMetricsEmitter struct {
-	handler metrics.Handler
-	config  WorkerMetricsConfig
+	handler     metrics.Handler
+	config      WorkerMetricsConfig
+	eventLogger otellog.Logger
 }
 
 func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, heartbeats []*workerpb.WorkerHeartbeat) {
@@ -76,6 +77,8 @@ func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, he
 				}
 			}
 		}
+
+		e.emitWorkerMetricsEvent(nsName, hb)
 	}
 }
 
@@ -127,6 +130,44 @@ func emitWorkerConfigEvent(logger otellog.Logger, nsName namespace.Name, hb *wor
 		WorkflowPollerAutoscaling: hb.GetWorkflowPollerInfo().GetIsAutoscaling(),
 		ActivityPollerAutoscaling: hb.GetActivityPollerInfo().GetIsAutoscaling(),
 		NexusPollerAutoscaling:    hb.GetNexusPollerInfo().GetIsAutoscaling(),
+	})
+}
+
+func (e *workerMetricsEmitter) emitWorkerMetricsEvent(nsName namespace.Name, hb *workerpb.WorkerHeartbeat) {
+	type taskEntry struct {
+		taskType    string
+		slots       *workerpb.WorkerSlotsInfo
+		pollerCount int32
+	}
+	entries := []taskEntry{
+		{"workflow", hb.GetWorkflowTaskSlotsInfo(),
+			hb.GetWorkflowPollerInfo().GetCurrentPollers() + hb.GetWorkflowStickyPollerInfo().GetCurrentPollers()},
+		{"activity", hb.GetActivityTaskSlotsInfo(), hb.GetActivityPollerInfo().GetCurrentPollers()},
+		{"nexus", hb.GetNexusTaskSlotsInfo(), hb.GetNexusPollerInfo().GetCurrentPollers()},
+		{"local_activity", hb.GetLocalActivitySlotsInfo(), 0},
+	}
+
+	stats := make(map[string]wideevents.WorkerTaskTypeStats)
+	for _, te := range entries {
+		if te.slots == nil {
+			continue
+		}
+		stats[te.taskType] = wideevents.WorkerTaskTypeStats{
+			TotalSlots:  te.slots.GetCurrentAvailableSlots() + te.slots.GetCurrentUsedSlots(),
+			UsedSlots:   te.slots.GetCurrentUsedSlots(),
+			PollerCount: te.pollerCount,
+		}
+	}
+
+	if len(stats) == 0 {
+		return
+	}
+
+	wideevents.Emit(e.eventLogger, wideevents.WorkerMetricsPayload{
+		Namespace:         nsName.String(),
+		TaskQueue:         hb.GetTaskQueue(),
+		WorkerInstanceKey: hb.GetWorkerInstanceKey(),
+		TaskTypeStats:     stats,
 	})
 }
 
