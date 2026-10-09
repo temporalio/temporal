@@ -644,14 +644,24 @@ func convertString(val any) (string, error) {
 	return "", errors.New("value type is not string")
 }
 
-func convertStringEnum(vals []string) func(any) (string, error) {
+type StringEnum []string
+
+func (e StringEnum) mustContainDefault(key string, def string) {
+	if slices.Contains(e, def) {
+		return
+	}
+	// nolint:forbidigo invalid static defaults must fail fast during initialization
+	panic(fmt.Sprintf("dynamicconfig setting %q: default value %q is not one of allowed values %v", key, def, []string(e)))
+}
+
+func convertStringEnum(vals StringEnum) func(any) (string, error) {
 	return func(val any) (string, error) {
 		s, err := convertString(val)
 		if err != nil {
 			return "", err
 		}
 		if !slices.Contains(vals, s) {
-			return "", fmt.Errorf("invalid value %q, must be one of: %v", s, vals)
+			return "", fmt.Errorf("invalid value %q, must be one of: %v", s, []string(vals))
 		}
 		return s, nil
 	}

@@ -28,6 +28,8 @@ const (
 	testGetDurationPropertyKey                        = "testGetDurationPropertyKey"
 	testGetBoolPropertyKey                            = "testGetBoolPropertyKey"
 	testGetStringPropertyKey                          = "testGetStringPropertyKey"
+	testGetStringEnumPropertyKey                      = "testGetStringEnumPropertyKey"
+	testGetStringEnumPropertyFilteredByNamespaceKey   = "testGetStringEnumPropertyFilteredByNamespaceKey"
 	testGetMapPropertyKey                             = "testGetMapPropertyKey"
 	testGetTypedPropertyKey                           = "testGetTypedPropertyKey"
 	testGetIntPropertyFilteredByNamespaceKey          = "testGetIntPropertyFilteredByNamespaceKey"
@@ -558,6 +560,64 @@ func (s *collectionSuite) TestGetIntPropertyFilteredByDestination() {
 	s.Equal(90, value("testAnotherNamespace", destination1))
 	s.Equal(100, value(namespaceName, destination2)) // priority: destination >>> namespace
 	s.Equal(10, value("testAnotherNamespace", "testAnotherDestination"))
+}
+
+func (s *collectionSuite) TestGlobalStringEnumSetting() {
+	allowed := dynamicconfig.StringEnum{"off", "on", "dual"}
+	setting := dynamicconfig.NewGlobalStringEnumSetting(testGetStringEnumPropertyKey, allowed, "off", "")
+	s.Require().NoError(setting.Validate("on"))
+	s.Require().Error(setting.Validate("duel"))
+	s.Require().Error(setting.Validate("dual "))
+
+	get := setting.Get(s.cln)
+	s.Equal("off", get())
+	s.client.SetValue(testGetStringEnumPropertyKey, "dual")
+	s.Equal("dual", get())
+	s.client.SetValue(testGetStringEnumPropertyKey, "duel")
+	s.Equal("off", get())
+}
+
+func (s *collectionSuite) TestGlobalStringEnumSettingInvalidDefault() {
+	s.Require().PanicsWithValue(
+		`dynamicconfig setting "testStringEnumBadDefault": default value "duel" is not one of allowed values [off on dual]`,
+		func() {
+			dynamicconfig.NewGlobalStringEnumSetting(
+				"testStringEnumBadDefault",
+				dynamicconfig.StringEnum{"off", "on", "dual"},
+				"duel",
+				"",
+			)
+		},
+	)
+}
+
+func (s *collectionSuite) TestNamespaceStringEnumSetting() {
+	allowed := dynamicconfig.StringEnum{"off", "on", "dual"}
+	setting := dynamicconfig.NewNamespaceStringEnumSetting(testGetStringEnumPropertyFilteredByNamespaceKey, allowed, "off", "")
+	ns := "testNamespace"
+	get := setting.Get(s.cln)
+	s.Equal("off", get(ns))
+	s.client.SetValue(testGetStringEnumPropertyFilteredByNamespaceKey, "on")
+	s.Equal("on", get(ns))
+	s.client.SetValue(testGetStringEnumPropertyFilteredByNamespaceKey, "duel")
+	s.Equal("off", get(ns))
+}
+
+func (s *collectionSuite) TestStringEnumConstrainedDefaultInvalid() {
+	s.Require().PanicsWithValue(
+		`dynamicconfig setting "testStringEnumBadConstrainedDefault": default value "duel" is not one of allowed values [off on dual]`,
+		func() {
+			dynamicconfig.NewGlobalStringEnumSettingWithConstrainedDefault(
+				"testStringEnumBadConstrainedDefault",
+				dynamicconfig.StringEnum{"off", "on", "dual"},
+				[]dynamicconfig.TypedConstrainedValue[string]{
+					{Value: "off"},
+					{Value: "duel"},
+				},
+				"",
+			)
+		},
+	)
 }
 
 type (
