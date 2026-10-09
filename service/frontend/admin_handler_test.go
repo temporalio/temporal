@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
@@ -73,6 +74,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -230,6 +233,105 @@ func (s *adminHandlerSuite) SetupTest() {
 func (s *adminHandlerSuite) TearDownTest() {
 	s.controller.Finish()
 	s.handler.Stop()
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowCompareOnly() {
+	namespaceTask := &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"}
+	payload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
+	s.Require().NoError(err)
+	fingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(payload)
+
+	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+		NamespaceTask:        namespaceTask,
+		Shadow:               true,
+		Fingerprint:          fingerprint,
+		NamespaceTaskPayload: payload,
+	})
+	s.Require().NoError(err)
+	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, response.GetOutcome())
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowMismatch() {
+	namespaceTask := &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"}
+	payload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
+	s.Require().NoError(err)
+
+	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+		NamespaceTask:        namespaceTask,
+		Shadow:               true,
+		Fingerprint:          []byte("incorrect-fingerprint"),
+		NamespaceTaskPayload: payload,
+	})
+	s.Require().NoError(err)
+	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH, response.GetOutcome())
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowPayloadDiffersFromTypedTask() {
+	payloadTask := &replicationspb.NamespaceTaskAttributes{Id: "payload-namespace-id"}
+	payload, err := nsreplication.MarshalNamespaceTask(payloadTask)
+	s.Require().NoError(err)
+
+	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+		NamespaceTask:        &replicationspb.NamespaceTaskAttributes{Id: "typed-namespace-id"},
+		Shadow:               true,
+		Fingerprint:          nsreplication.NamespaceTaskFingerprintFromPayload(payload),
+		NamespaceTaskPayload: payload,
+	})
+	s.Require().NoError(err)
+	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH, response.GetOutcome())
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowHashesOriginalPayloadBytes() {
+	canonicalPayload, err := nsreplication.MarshalNamespaceTask(
+		&replicationspb.NamespaceTaskAttributes{Id: "namespace-id"},
+	)
+	s.Require().NoError(err)
+	unknownField := protowire.AppendTag(nil, 100, protowire.VarintType)
+	unknownField = protowire.AppendVarint(unknownField, 42)
+	payload := append(unknownField, canonicalPayload...)
+	namespaceTask := &replicationspb.NamespaceTaskAttributes{}
+	s.Require().NoError(proto.Unmarshal(payload, namespaceTask))
+	reencodedPayload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
+	s.Require().NoError(err)
+	s.NotEqual(payload, reencodedPayload)
+
+	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+		NamespaceTask:        namespaceTask,
+		Shadow:               true,
+		Fingerprint:          nsreplication.NamespaceTaskFingerprintFromPayload(payload),
+		NamespaceTaskPayload: payload,
+	})
+	s.Require().NoError(err)
+	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, response.GetOutcome())
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_RejectsMissingPayload() {
+	_, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+		NamespaceTask: &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"},
+		Shadow:        true,
+	})
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_RejectsMalformedPayload() {
+	payload := []byte{0xff}
+	_, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+		NamespaceTask:        &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"},
+		Shadow:               true,
+		Fingerprint:          nsreplication.NamespaceTaskFingerprintFromPayload(payload),
+		NamespaceTaskPayload: payload,
+	})
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_RejectsAuthoritativeRequest() {
+	_, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+		NamespaceTask: &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"},
+	})
+	var failedPrecondition *serviceerror.FailedPrecondition
+	s.ErrorAs(err, &failedPrecondition)
 }
 
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {

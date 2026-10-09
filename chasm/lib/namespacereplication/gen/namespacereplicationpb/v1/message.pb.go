@@ -152,8 +152,8 @@ func (ComponentStatus) EnumDescriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDescGZIP(), []int{1}
 }
 
-// LocalApplyOutcome reports the result of the local CAS write. Binary outcome:
-// pending until the write resolves, then committed or failed.
+// LocalApplyOutcome reports the result of the local phase: pending until an
+// authoritative write resolves or shadow mode deliberately skips that write.
 type LocalApplyOutcome int32
 
 const (
@@ -161,6 +161,8 @@ const (
 	LOCAL_APPLY_OUTCOME_PENDING     LocalApplyOutcome = 1
 	LOCAL_APPLY_OUTCOME_COMMITTED   LocalApplyOutcome = 2
 	LOCAL_APPLY_OUTCOME_FAILED      LocalApplyOutcome = 3
+	// Shadow mode deliberately skipped the source metadata-store write.
+	LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW LocalApplyOutcome = 4
 )
 
 // Enum value maps for LocalApplyOutcome.
@@ -170,12 +172,14 @@ var (
 		1: "LOCAL_APPLY_OUTCOME_PENDING",
 		2: "LOCAL_APPLY_OUTCOME_COMMITTED",
 		3: "LOCAL_APPLY_OUTCOME_FAILED",
+		4: "LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW",
 	}
 	LocalApplyOutcome_value = map[string]int32{
-		"LOCAL_APPLY_OUTCOME_UNSPECIFIED": 0,
-		"LOCAL_APPLY_OUTCOME_PENDING":     1,
-		"LOCAL_APPLY_OUTCOME_COMMITTED":   2,
-		"LOCAL_APPLY_OUTCOME_FAILED":      3,
+		"LOCAL_APPLY_OUTCOME_UNSPECIFIED":    0,
+		"LOCAL_APPLY_OUTCOME_PENDING":        1,
+		"LOCAL_APPLY_OUTCOME_COMMITTED":      2,
+		"LOCAL_APPLY_OUTCOME_FAILED":         3,
+		"LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW": 4,
 	}
 )
 
@@ -195,6 +199,8 @@ func (x LocalApplyOutcome) String() string {
 		return "Committed"
 	case LOCAL_APPLY_OUTCOME_FAILED:
 		return "Failed"
+	case LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW:
+		return "SkippedShadow"
 	default:
 		return strconv.Itoa(int(x))
 	}
@@ -218,10 +224,10 @@ func (LocalApplyOutcome) EnumDescriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDescGZIP(), []int{2}
 }
 
-// PeerApplyOutcome reports the result of a peer apply via the
-// ApplyNamespaceMutation admin RPC. Richer than the local outcome because the
-// receiver's apply-if-higher logic can no-op stale incoming mutations, and the
-// RPC can fail in retriable or terminal ways.
+// PeerApplyOutcome reports the result of processing a mutation at a peer via
+// the ApplyNamespaceMutation admin RPC. Richer than the local outcome because
+// the receiver can shadow-validate without writing or no-op a stale mutation,
+// and the RPC can fail in retriable or terminal ways.
 type PeerApplyOutcome int32
 
 const (
@@ -237,6 +243,12 @@ const (
 	// distinct from APPLIED so the sender never records a phantom write, and from
 	// FAILED_* so it doesn't read as an error.
 	PEER_APPLY_OUTCOME_NOT_ADMITTED PeerApplyOutcome = 6
+	// The peer processed a shadow request without writing receiver state and the
+	// received payload matched the sender's fingerprint.
+	PEER_APPLY_OUTCOME_SHADOW_MATCH PeerApplyOutcome = 7
+	// The peer processed a shadow request without writing receiver state and the
+	// received payload did not match the sender's fingerprint.
+	PEER_APPLY_OUTCOME_SHADOW_MISMATCH PeerApplyOutcome = 8
 )
 
 // Enum value maps for PeerApplyOutcome.
@@ -249,6 +261,8 @@ var (
 		4: "PEER_APPLY_OUTCOME_FAILED_RETRIABLE",
 		5: "PEER_APPLY_OUTCOME_FAILED_TERMINAL",
 		6: "PEER_APPLY_OUTCOME_NOT_ADMITTED",
+		7: "PEER_APPLY_OUTCOME_SHADOW_MATCH",
+		8: "PEER_APPLY_OUTCOME_SHADOW_MISMATCH",
 	}
 	PeerApplyOutcome_value = map[string]int32{
 		"PEER_APPLY_OUTCOME_UNSPECIFIED":      0,
@@ -258,6 +272,8 @@ var (
 		"PEER_APPLY_OUTCOME_FAILED_RETRIABLE": 4,
 		"PEER_APPLY_OUTCOME_FAILED_TERMINAL":  5,
 		"PEER_APPLY_OUTCOME_NOT_ADMITTED":     6,
+		"PEER_APPLY_OUTCOME_SHADOW_MATCH":     7,
+		"PEER_APPLY_OUTCOME_SHADOW_MISMATCH":  8,
 	}
 )
 
@@ -283,8 +299,15 @@ func (x PeerApplyOutcome) String() string {
 		return "FailedTerminal"
 	case PEER_APPLY_OUTCOME_NOT_ADMITTED:
 		return "NotAdmitted"
+	case PEER_APPLY_OUTCOME_SHADOW_MATCH:
+		return "ShadowMatch"
+	case PEER_APPLY_OUTCOME_SHADOW_MISMATCH:
+		return "ShadowMismatch"
 	default:
-		return strconv.Itoa(int(x))
+		return strconv.
+
+			// Deprecated: Use PeerApplyOutcome.Descriptor instead.
+			Itoa(int(x))
 	}
 
 }
@@ -301,7 +324,6 @@ func (x PeerApplyOutcome) Number() protoreflect.EnumNumber {
 	return protoreflect.EnumNumber(x)
 }
 
-// Deprecated: Use PeerApplyOutcome.Descriptor instead.
 func (PeerApplyOutcome) EnumDescriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDescGZIP(), []int{3}
 }
@@ -322,7 +344,10 @@ type NamespaceMutation struct {
 	// List of peer cells to fan out to after the local apply succeeds. For an
 	// update, this is the union of the previous and target cluster lists, minus
 	// the local cell, so a removed peer receives the final configuration.
-	PeerCells     []string `protobuf:"bytes,4,rep,name=peer_cells,json=peerCells,proto3" json:"peer_cells,omitempty"`
+	PeerCells []string `protobuf:"bytes,4,rep,name=peer_cells,json=peerCells,proto3" json:"peer_cells,omitempty"`
+	// Shadow mutations exercise the full component and peer transport without
+	// writing namespace state in either the source or destination cell.
+	Shadow        bool `protobuf:"varint,5,opt,name=shadow,proto3" json:"shadow,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -383,6 +408,13 @@ func (x *NamespaceMutation) GetPeerCells() []string {
 		return x.PeerCells
 	}
 	return nil
+}
+
+func (x *NamespaceMutation) GetShadow() bool {
+	if x != nil {
+		return x.Shadow
+	}
+	return false
 }
 
 // NamespaceMutationState is the persisted state of a NamespaceMutationComponent.
@@ -460,9 +492,9 @@ func (x *NamespaceMutationState) GetPeerApply() map[string]*PeerApplyStatus {
 
 type LocalApplyStatus struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Current outcome of the local metadata-store apply.
+	// Current outcome of the local phase.
 	Outcome LocalApplyOutcome `protobuf:"varint,1,opt,name=outcome,proto3,enum=temporal.server.chasm.lib.namespacereplication.proto.v1.LocalApplyOutcome" json:"outcome,omitempty"`
-	// Time the local apply reached COMMITTED or FAILED. Unset while pending.
+	// Time the local apply reached a terminal outcome. Unset while pending.
 	ResolvedAt *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=resolved_at,json=resolvedAt,proto3" json:"resolved_at,omitempty"`
 	// Failure detail when outcome is FAILED (e.g. CAS conflict, store unavailable).
 	Failure       *v11.Failure `protobuf:"bytes,3,opt,name=failure,proto3" json:"failure,omitempty"`
@@ -523,7 +555,7 @@ func (x *LocalApplyStatus) GetFailure() *v11.Failure {
 
 type PeerApplyStatus struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Current outcome of applying the mutation to this peer.
+	// Current outcome of processing the mutation at this peer.
 	Outcome PeerApplyOutcome `protobuf:"varint,1,opt,name=outcome,proto3,enum=temporal.server.chasm.lib.namespacereplication.proto.v1.PeerApplyOutcome" json:"outcome,omitempty"`
 	// Number of completed apply attempts.
 	AttemptCount int32 `protobuf:"varint,2,opt,name=attempt_count,json=attemptCount,proto3" json:"attempt_count,omitempty"`
@@ -606,13 +638,14 @@ var File_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto p
 
 const file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"Etemporal/server/chasm/lib/namespacereplication/proto/v1/message.proto\x127temporal.server.chasm.lib.namespacereplication.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a%temporal/api/failure/v1/message.proto\x1a3temporal/server/api/persistence/v1/namespaces.proto\"\xa8\x02\n" +
+	"Etemporal/server/chasm/lib/namespacereplication/proto/v1/message.proto\x127temporal.server.chasm.lib.namespacereplication.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a%temporal/api/failure/v1/message.proto\x1a3temporal/server/api/persistence/v1/namespaces.proto\"\xc0\x02\n" +
 	"\x11NamespaceMutation\x12i\n" +
 	"\toperation\x18\x01 \x01(\x0e2K.temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceOperationR\toperation\x12^\n" +
 	"\x10namespace_detail\x18\x02 \x01(\v23.temporal.server.api.persistence.v1.NamespaceDetailR\x0fnamespaceDetail\x12)\n" +
 	"\x10expected_version\x18\x03 \x01(\x03R\x0fexpectedVersion\x12\x1d\n" +
 	"\n" +
-	"peer_cells\x18\x04 \x03(\tR\tpeerCells\"\xd6\x04\n" +
+	"peer_cells\x18\x04 \x03(\tR\tpeerCells\x12\x16\n" +
+	"\x06shadow\x18\x05 \x01(\bR\x06shadow\"\xd6\x04\n" +
 	"\x16NamespaceMutationState\x12f\n" +
 	"\bmutation\x18\x01 \x01(\v2J.temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationR\bmutation\x12`\n" +
 	"\x06status\x18\x02 \x01(\x0e2H.temporal.server.chasm.lib.namespacereplication.proto.v1.ComponentStatusR\x06status\x12j\n" +
@@ -642,12 +675,13 @@ const file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto
 	"\x1cCOMPONENT_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18COMPONENT_STATUS_RUNNING\x10\x01\x12\x1e\n" +
 	"\x1aCOMPONENT_STATUS_COMPLETED\x10\x02\x12\x1b\n" +
-	"\x17COMPONENT_STATUS_FAILED\x10\x03*\x9c\x01\n" +
+	"\x17COMPONENT_STATUS_FAILED\x10\x03*\xc4\x01\n" +
 	"\x11LocalApplyOutcome\x12#\n" +
 	"\x1fLOCAL_APPLY_OUTCOME_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bLOCAL_APPLY_OUTCOME_PENDING\x10\x01\x12!\n" +
 	"\x1dLOCAL_APPLY_OUTCOME_COMMITTED\x10\x02\x12\x1e\n" +
-	"\x1aLOCAL_APPLY_OUTCOME_FAILED\x10\x03*\x90\x02\n" +
+	"\x1aLOCAL_APPLY_OUTCOME_FAILED\x10\x03\x12&\n" +
+	"\"LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW\x10\x04*\xdd\x02\n" +
 	"\x10PeerApplyOutcome\x12\"\n" +
 	"\x1ePEER_APPLY_OUTCOME_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aPEER_APPLY_OUTCOME_PENDING\x10\x01\x12\x1e\n" +
@@ -655,7 +689,9 @@ const file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto
 	"\x1ePEER_APPLY_OUTCOME_NO_OP_STALE\x10\x03\x12'\n" +
 	"#PEER_APPLY_OUTCOME_FAILED_RETRIABLE\x10\x04\x12&\n" +
 	"\"PEER_APPLY_OUTCOME_FAILED_TERMINAL\x10\x05\x12#\n" +
-	"\x1fPEER_APPLY_OUTCOME_NOT_ADMITTED\x10\x06BhZfgo.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb;namespacereplicationpbb\x06proto3"
+	"\x1fPEER_APPLY_OUTCOME_NOT_ADMITTED\x10\x06\x12#\n" +
+	"\x1fPEER_APPLY_OUTCOME_SHADOW_MATCH\x10\a\x12&\n" +
+	"\"PEER_APPLY_OUTCOME_SHADOW_MISMATCH\x10\bBhZfgo.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb;namespacereplicationpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDescOnce sync.Once
