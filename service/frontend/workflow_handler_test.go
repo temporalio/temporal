@@ -4325,15 +4325,9 @@ func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 		{name: "disabled", config: &commonpb.TimeSkippingConfig{Enabled: false}},
 		{name: "disabled with allow all", config: &commonpb.TimeSkippingConfig{Enabled: false}, overlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL},
 		{name: "enabled without fast forward", config: &commonpb.TimeSkippingConfig{Enabled: true}, wantErrContains: "fast_forward_config is required when enabled"},
-		{name: "one year", config: &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{
-			Id: "one-year", Duration: durationpb.New(365 * 24 * time.Hour),
-		}}},
 		{name: "enabled with allow all", config: &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{
 			Id: "allow-all", Duration: durationpb.New(time.Hour),
 		}}, overlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL, wantErrContains: "ALLOW_ALL overlap policy"},
-		{name: "over one year", config: &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{
-			Id: "over-one-year", Duration: durationpb.New(365*24*time.Hour + time.Second),
-		}}, wantErrContains: "fast_forward duration cannot exceed 365 days"},
 	}
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {

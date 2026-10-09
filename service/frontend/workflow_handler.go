@@ -114,7 +114,6 @@ const (
 	maxReasonLength              = 1000 // Maximum length for the reason field in RateLimitUpdate configurations.
 	defaultUserTerminateReason   = "terminated by user via frontend"
 	defaultUserTerminateIdentity = "frontend-service"
-	maxScheduleFastForward       = 365 * 24 * time.Hour
 )
 
 type (
@@ -798,10 +797,6 @@ func (wh *WorkflowHandler) validateAndPopulateScheduleTimeSkippingConfig(
 	if fastForward == nil {
 		return serviceerror.NewInvalidArgument(
 			"schedule time_skipping_config: fast_forward_config is required when enabled")
-	}
-	if fastForward.GetDuration().AsDuration() > maxScheduleFastForward {
-		return serviceerror.NewInvalidArgument(
-			"schedule time_skipping_config: fast_forward duration cannot exceed 365 days")
 	}
 	return nil
 }
