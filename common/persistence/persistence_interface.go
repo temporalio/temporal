@@ -250,6 +250,7 @@ type (
 	InternalGetTaskQueueResponse struct {
 		RangeID       int64
 		TaskQueueInfo *commonpb.DataBlob
+		Fingerprint   uint64 // see TaskQueueInfoFingerprint, zero if unknown
 	}
 
 	InternalGetTaskQueueUserDataResponse struct {
@@ -267,7 +268,8 @@ type (
 		TaskQueueKind enumspb.TaskQueueKind
 		ExpiryTime    *timestamppb.Timestamp
 
-		PrevRangeID int64
+		PrevRangeID     int64
+		PrevFingerprint uint64 // if non-zero, also condition on the current fingerprint matching
 	}
 
 	InternalUpdateTaskQueueUserDataRequest struct {

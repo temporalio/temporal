@@ -27,9 +27,17 @@ import (
 const (
 	initialRangeID = 1 // Id of the first range of a new task queue
 
+	// Max attempts at taking over a task queue when the previous owner is concurrently
+	// writing metadata.
+	maxTakeoverAttempts = 3
+
 	// Subqueue zero corresponds to "the queue" before migrating metadata to subqueues.
 	// For backwards compatibility, some operations only apply to subqueue zero for now.
 	subqueueZero = subqueueIndex(0)
+
+	// noMetadataCondition is used with updateTaskQueueConditionalLocked to indicate no
+	// condition on the previous metadata (fingerprint).
+	noMetadataCondition = 0
 )
 
 type (
@@ -160,7 +168,7 @@ func (db *taskQueueDB) RenewLease(
 			return taskQueueState{}, err
 		}
 	} else {
-		if err := db.updateTaskQueueLocked(ctx, true); err != nil {
+		if err := db.updateTaskQueueConditionalLocked(ctx, true, noMetadataCondition); err != nil {
 			return taskQueueState{}, err
 		}
 	}
@@ -176,77 +184,112 @@ func (db *taskQueueDB) RenewLease(
 func (db *taskQueueDB) takeOverTaskQueueLocked(
 	ctx context.Context,
 ) error {
-	response, err := db.store.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
-		NamespaceID: db.queue.NamespaceId(),
-		TaskQueue:   db.queue.PersistenceName(),
-		TaskType:    db.queue.TaskType(),
-	})
-	switch err.(type) {
-	case nil:
-		db.rangeID = response.RangeID
-		// If we are the draining one, then assume the other has tasks, so we can migrate
-		// backwards safely.
-		db.otherHasTasks = response.TaskQueueInfo.OtherHasTasks || db.isDraining
-		db.subqueues = db.ensureDefaultSubqueuesLocked(
-			response.TaskQueueInfo.Subqueues,
-			response.TaskQueueInfo.AckLevel,
-			response.TaskQueueInfo.ApproximateBacklogCount,
-		)
-		db.scaleState = response.TaskQueueInfo.PartitionScaleState
-		err := db.updateTaskQueueLocked(ctx, true)
-		if err != nil {
-			db.rangeID = 0
+	// The previous owner may still be running and writing metadata (without changing the
+	// range id) between our read and our conditional update. If we didn't notice, we'd
+	// overwrite its changes with our stale copy. So our update is also conditional on the
+	// metadata fingerprint. If that fails but the range id is unchanged, then the previous
+	// owner wrote in between, and we can just try again.
+	var prevRangeID int64
+	for attempt := 1; ; attempt++ {
+		response, err := db.store.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
+			NamespaceID: db.queue.NamespaceId(),
+			TaskQueue:   db.queue.PersistenceName(),
+			TaskType:    db.queue.TaskType(),
+		})
+		if err == nil && prevRangeID != 0 && response.RangeID != prevRangeID {
+			// Someone else took over after our previous attempt, don't fight with them.
+			return &persistence.ConditionFailedError{Msg: "task queue range id changed during takeover"}
+		}
+		switch err.(type) {
+		case nil:
+			err := db.takeOverExistingTaskQueueLocked(ctx, response)
+			if _, ok := err.(*persistence.ConditionFailedError); ok && attempt < maxTakeoverAttempts {
+				prevRangeID = response.RangeID
+				continue
+			}
+			return err
+		case *serviceerror.NotFound:
+			return db.createTaskQueueLocked(ctx)
+		default:
 			return err
 		}
-		db.lastWrite = time.Now()
-		// We took over the task queue and are not sure what tasks may have been written
-		// before. Set max read level id of all subqueues to just before our new block.
-		maxReadLevel := rangeIDToTaskIDBlock(db.rangeID, db.config.RangeSize).start - 1
-		for _, s := range db.subqueues {
-			s.maxReadLevel = maxReadLevel
-		}
-		return nil
-
-	case *serviceerror.NotFound:
-		db.rangeID = initialRangeID
-		db.subqueues = db.ensureDefaultSubqueuesLocked(nil, 0, 0)
-
-		// If we are the draining one, then assume the other has tasks, so we can migrate
-		// backwards safely. Also assume other has tasks if the config allows for migration
-		// (and the partition supports fairness) since we may have just turned on fairness and need to migrate.
-		canMigrate := (db.config.NewMatcher || db.config.EnableFairness) && db.queue.Partition().SupportsFairness()
-		db.otherHasTasks = canMigrate || db.isDraining
-
-		if _, err := db.store.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
-			RangeID:       db.rangeID,
-			TaskQueueInfo: db.cachedQueueInfo(),
-		}); err != nil {
-			db.rangeID = 0
-			return err
-		}
-		db.lastWrite = time.Now()
-		// In this case, ensureDefaultSubqueuesLocked already initialized subqueue 0 to have
-		// ackLevel and maxReadLevel 0, so we don't need to initialize them.
-		softassert.That(db.logger, db.subqueues[0].maxReadLevel == 0, "should have maxReadLevel 0 here")
-		softassert.That(db.logger, db.subqueues[0].FairMaxReadLevel == nil, "should have maxReadLevel 0 here")
-		softassert.That(db.logger, db.subqueues[0].AckLevel == 0, "should have ackLevel 0 here")
-		softassert.That(db.logger, db.subqueues[0].FairAckLevel == nil, "should have ackLevel 0 here")
-		return nil
-
-	default:
-		return err
 	}
 }
 
-func (db *taskQueueDB) updateTaskQueueLocked(ctx context.Context, incrementRangeId bool) error {
+func (db *taskQueueDB) takeOverExistingTaskQueueLocked(
+	ctx context.Context,
+	response *persistence.GetTaskQueueResponse,
+) error {
+	db.rangeID = response.RangeID
+	// If we are the draining one, then assume the other has tasks, so we can migrate
+	// backwards safely.
+	db.otherHasTasks = response.TaskQueueInfo.OtherHasTasks || db.isDraining
+	db.subqueues = db.ensureDefaultSubqueuesLocked(
+		response.TaskQueueInfo.Subqueues,
+		response.TaskQueueInfo.AckLevel,
+		response.TaskQueueInfo.ApproximateBacklogCount,
+	)
+	db.scaleState = response.TaskQueueInfo.PartitionScaleState
+	err := db.updateTaskQueueConditionalLocked(ctx, true, response.Fingerprint)
+	if err != nil {
+		db.rangeID = 0
+		return err
+	}
+	db.lastWrite = time.Now()
+	// We took over the task queue and are not sure what tasks may have been written
+	// before. Set max read level id of all subqueues to just before our new block.
+	maxReadLevel := rangeIDToTaskIDBlock(db.rangeID, db.config.RangeSize).start - 1
+	for _, s := range db.subqueues {
+		s.maxReadLevel = maxReadLevel
+	}
+	return nil
+}
+
+func (db *taskQueueDB) createTaskQueueLocked(ctx context.Context) error {
+	db.rangeID = initialRangeID
+	db.subqueues = db.ensureDefaultSubqueuesLocked(nil, 0, 0)
+
+	// If we are the draining one, then assume the other has tasks, so we can migrate
+	// backwards safely. Also assume other has tasks if the config allows for migration
+	// (and the partition supports fairness) since we may have just turned on fairness and need to migrate.
+	canMigrate := (db.config.NewMatcher || db.config.EnableFairness) && db.queue.Partition().SupportsFairness()
+	db.otherHasTasks = canMigrate || db.isDraining
+
+	if _, err := db.store.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
+		RangeID:       db.rangeID,
+		TaskQueueInfo: db.cachedQueueInfo(),
+	}); err != nil {
+		db.rangeID = 0
+		return err
+	}
+	db.lastWrite = time.Now()
+	// In this case, ensureDefaultSubqueuesLocked already initialized subqueue 0 to have
+	// ackLevel and maxReadLevel 0, so we don't need to initialize them.
+	softassert.That(db.logger, db.subqueues[0].maxReadLevel == 0, "should have maxReadLevel 0 here")
+	softassert.That(db.logger, db.subqueues[0].FairMaxReadLevel == nil, "should have maxReadLevel 0 here")
+	softassert.That(db.logger, db.subqueues[0].AckLevel == 0, "should have ackLevel 0 here")
+	softassert.That(db.logger, db.subqueues[0].FairAckLevel == nil, "should have ackLevel 0 here")
+	return nil
+}
+
+// updateTaskQueueLocked writes task queue metadata (with no rangeid update and no other
+// condition on the transaction).
+func (db *taskQueueDB) updateTaskQueueLocked(ctx context.Context) error {
+	return db.updateTaskQueueConditionalLocked(ctx, false, noMetadataCondition)
+}
+
+// updateTaskQueueConditionalLocked writes task queue metadata with an optional rangeid
+// increment and an optional condition on the metadata in the transaction.
+func (db *taskQueueDB) updateTaskQueueConditionalLocked(ctx context.Context, incrementRangeID bool, prevFingerprint uint64) error {
 	newRangeID := db.rangeID
-	if incrementRangeId {
+	if incrementRangeID {
 		newRangeID++
 	}
 	if _, err := db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
-		RangeID:       newRangeID,
-		TaskQueueInfo: db.cachedQueueInfo(),
-		PrevRangeID:   db.rangeID,
+		RangeID:         newRangeID,
+		TaskQueueInfo:   db.cachedQueueInfo(),
+		PrevRangeID:     db.rangeID,
+		PrevFingerprint: prevFingerprint,
 	}); err != nil {
 		return err
 	}
@@ -277,7 +320,7 @@ func (db *taskQueueDB) OldUpdateState(
 	prevAckLevel := db.subqueues[subqueueZero].AckLevel
 	db.subqueues[subqueueZero].AckLevel = ackLevel
 
-	err := db.updateTaskQueueLocked(ctx, false)
+	err := db.updateTaskQueueLocked(ctx)
 	if err != nil {
 		db.subqueues[subqueueZero].AckLevel = prevAckLevel
 	}
@@ -312,7 +355,7 @@ func (db *taskQueueDB) SyncState(ctx context.Context) error {
 		return db.verifyOwnershipLocked(ctx)
 	}
 
-	return db.updateTaskQueueLocked(ctx, false)
+	return db.updateTaskQueueLocked(ctx)
 }
 
 func (db *taskQueueDB) verifyOwnershipLocked(ctx context.Context) error {
@@ -500,7 +543,7 @@ func (db *taskQueueDB) SetOtherHasTasks(ctx context.Context, value bool) error {
 	}
 	db.otherHasTasks = value
 	db.lastChange = time.Now()
-	return db.updateTaskQueueLocked(ctx, false)
+	return db.updateTaskQueueLocked(ctx)
 }
 
 // UpdateScaleState sets the partition scale state (in memory). If syncToDB is true, it also tries to persist it to the DB.
@@ -511,7 +554,7 @@ func (db *taskQueueDB) UpdateScaleState(ctx context.Context, scaleState *persist
 	db.scaleState = scaleState
 	db.lastChange = time.Now()
 	if syncToDB {
-		return db.updateTaskQueueLocked(ctx, false)
+		return db.updateTaskQueueLocked(ctx)
 	}
 	return nil
 }
@@ -817,7 +860,7 @@ func (db *taskQueueDB) AllocateSubqueue(
 	db.subqueues = append(db.subqueues, newSubqueue)
 
 	// ensure written to metadata before returning
-	err := db.updateTaskQueueLocked(ctx, false)
+	err := db.updateTaskQueueLocked(ctx)
 	if err != nil {
 		// If this was a conflict, caller will shut down partition. Otherwise, we don't know
 		// for sure if this write made it to persistence or not. We should forget about the new
