@@ -455,6 +455,11 @@ type (
 		TaskCategory        tasks.Category
 		InclusiveMinTaskKey tasks.Key
 		ExclusiveMaxTaskKey tasks.Key
+		// Optional; <=0 means the store may delete the whole range in one operation (legacy);
+		// when >0 SQL stores delete scheduled tasks in batches of at most BatchSize rows,
+		// each committed independently so partial progress persists if the context ends;
+		// stores that don't need batching (Cassandra) ignore it.
+		BatchSize int
 	}
 
 	// GetReplicationTasksRequest is used to read tasks from the replication task queue
