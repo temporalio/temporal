@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/sony/gobreaker"
 	"github.com/stretchr/testify/require"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
@@ -15,10 +16,12 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/service/history/circuitbreakerpool"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
@@ -30,9 +33,58 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestOutboundQueueFactory_ChasmTaskGroupWiring(t *testing.T) {
+func TestOutboundQueueFactory_SetsChasmTaskGroup(t *testing.T) {
 	t.Parallel()
 
+	cb := circuitbreaker.NewTwoStepCircuitBreakerWithDynamicSettings(circuitbreaker.Settings{Name: "test"})
+	cb.UpdateSettings(dynamicconfig.CircuitBreakerSettings{})
+	taskCh := startOutboundQueueWithChasmTask(t, metrics.NoopMetricsHandler, cb)
+
+	select {
+	case executedTask := <-taskCh:
+		ct, ok := executedTask.(*tasks.ChasmTask)
+		require.True(t, ok, "expected ChasmTask, got %T", executedTask)
+		require.Equal(t, "my-task-group", ct.OutboundTaskGroup())
+	case <-time.After(10 * time.Second):
+		t.Fatal("timed out waiting for task to reach executor")
+	}
+}
+
+func TestOutboundQueueFactory_RecordsCircuitBreakerBlocked(t *testing.T) {
+	t.Parallel()
+
+	cb := circuitbreaker.NewTwoStepCircuitBreakerWithDynamicSettings(circuitbreaker.Settings{
+		Name:        "test",
+		ReadyToTrip: func(gobreaker.Counts) bool { return true },
+	})
+	cb.UpdateSettings(dynamicconfig.CircuitBreakerSettings{Timeout: time.Hour})
+	done, err := cb.Allow()
+	require.NoError(t, err)
+	done(false) // one failure trips it; the hour-long timeout keeps it open for the test
+
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	startOutboundQueueWithChasmTask(t, metricsHandler, cb)
+
+	await.Require(t.Context(), t, func(c *await.T) {
+		recordings := capture.SnapshotMetric(metrics.CircuitBreakerExecutableBlocked.Name())
+		require.NotEmpty(c, recordings)
+		require.Equal(c, &metricstest.CapturedRecording{Value: int64(1), Tags: map[string]string{
+			"operation":   metrics.OperationOutboundQueueProcessorScope,
+			"namespace":   "test-ns",
+			"destination": "test-destination",
+			"task_group":  "my-task-group",
+		}}, recordings[0])
+	}, 10*time.Second, 10*time.Millisecond)
+}
+
+// startOutboundQueueWithChasmTask starts an outbound queue that loads one CHASM task in task group
+// "my-task-group", and returns the channel the task is sent to once it reaches the executor.
+func startOutboundQueueWithChasmTask(
+	t *testing.T,
+	metricsHandler metrics.Handler,
+	cb circuitbreaker.TwoStepCircuitBreaker,
+) <-chan tasks.Task {
 	ctrl := gomock.NewController(t)
 
 	chasmRegistry := chasm.NewRegistry(log.NewTestLogger())
@@ -93,8 +145,6 @@ func TestOutboundQueueFactory_ChasmTaskGroupWiring(t *testing.T) {
 	cbPool := &circuitbreakerpool.OutboundQueueCircuitBreakerPool{
 		CircuitBreakerPool: circuitbreakerpool.NewCircuitBreakerPool(
 			func(tasks.TaskGroupNamespaceIDAndDestination) circuitbreaker.TwoStepCircuitBreaker {
-				cb := circuitbreaker.NewTwoStepCircuitBreakerWithDynamicSettings(circuitbreaker.Settings{Name: "test"})
-				cb.UpdateSettings(dynamicconfig.CircuitBreakerSettings{})
 				return cb
 			},
 		),
@@ -108,7 +158,7 @@ func TestOutboundQueueFactory_ChasmTaskGroupWiring(t *testing.T) {
 			WorkflowCache:        cache.NewMockCache(ctrl),
 			Config:               configs.NewConfig(dynamicconfig.NewNoopCollection(), 1),
 			TimeSource:           clock.NewRealTimeSource(),
-			MetricsHandler:       metrics.NoopMetricsHandler,
+			MetricsHandler:       metricsHandler,
 			TracerProvider:       telemetry.NoopTracerProvider,
 			Logger:               log.NewTestLogger(),
 			SchedulerRateLimiter: rateLimiter,
@@ -128,21 +178,13 @@ func TestOutboundQueueFactory_ChasmTaskGroupWiring(t *testing.T) {
 	require.NotNil(t, queue)
 
 	factory.Start()
-	defer factory.Stop()
+	t.Cleanup(factory.Stop)
 
 	queue.Start()
-	defer queue.Stop()
+	t.Cleanup(queue.Stop)
 
 	queue.NotifyNewTasks([]tasks.Task{chasmTask})
-
-	select {
-	case executedTask := <-taskCh:
-		ct, ok := executedTask.(*tasks.ChasmTask)
-		require.True(t, ok, "expected ChasmTask, got %T", executedTask)
-		require.Equal(t, "my-task-group", ct.OutboundTaskGroup())
-	case <-time.After(10 * time.Second):
-		t.Fatal("timed out waiting for task to reach executor")
-	}
+	return taskCh
 }
 
 // captureExecutorWrapper intercepts tasks at the executor level.
