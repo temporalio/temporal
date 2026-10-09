@@ -160,6 +160,14 @@ var DisallowedOperationHeaders = dynamicconfig.NewGlobalTypedSettingWithConverte
 "nexus_header" field that contains any of these disallowed keys will be rejected.`,
 )
 
+var RejectReservedHeaders = dynamicconfig.NewNamespaceBoolSetting(
+	"nexusoperation.rejectReservedHeaders",
+	false,
+	`Reject Nexus Operation requests with "nexus_header" keys that start with the reserved "temporal-" prefix (case
+insensitive). Applies to ScheduleNexusOperation commands and StartNexusOperationExecution requests. Usage of the
+reserved prefix is tracked via the nexus_reserved_header_usage metric regardless of this setting.`,
+)
+
 var MaxOperationScheduleToCloseTimeout = dynamicconfig.NewNamespaceDurationSetting(
 	"nexusoperation.limit.scheduleToCloseTimeout",
 	0,
@@ -261,6 +269,7 @@ type Config struct {
 	MaxOperationTokenLength                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationHeaderSize                     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	DisallowedOperationHeaders                 dynamicconfig.TypedPropertyFn[[]string]
+	RejectReservedHeaders                      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxOperationScheduleToCloseTimeout         dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	PayloadSizeLimit                           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                        dynamicconfig.TypedPropertyFn[*template.Template]
@@ -294,6 +303,7 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		MaxOperationTokenLength:            MaxOperationTokenLength.Get(dc),
 		MaxOperationHeaderSize:             MaxOperationHeaderSize.Get(dc),
 		DisallowedOperationHeaders:         DisallowedOperationHeaders.Get(dc),
+		RejectReservedHeaders:              RejectReservedHeaders.Get(dc),
 		MaxOperationScheduleToCloseTimeout: MaxOperationScheduleToCloseTimeout.Get(dc),
 		PayloadSizeLimit:                   dynamicconfig.BlobSizeLimitError.Get(dc),
 		PayloadSizeLimitWarn:               dynamicconfig.BlobSizeLimitWarn.Get(dc),

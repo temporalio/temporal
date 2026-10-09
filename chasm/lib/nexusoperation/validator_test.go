@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -31,6 +32,8 @@ func newTestValidator(config *Config) *validator {
 	return newValidator(
 		config,
 		log.NewNoopLogger(),
+		log.NewNoopLogger(),
+		metrics.NoopMetricsHandler,
 		nil,
 		nil,
 		mustNewCallbackValidator(),
@@ -120,6 +123,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 		MaxUserMetadataDetailsSize:         func(string) int { return 20 },
 		MaxOperationHeaderSize:             func(string) int { return 10 },
 		DisallowedOperationHeaders:         func() []string { return []string{"disallowed-header"} },
+		RejectReservedHeaders:              func(string) bool { return false },
 		MaxOperationScheduleToCloseTimeout: func(string) time.Duration { return time.Hour },
 		EnabledCallbackKinds: func(string) []callbacks.Kind {
 			return []callbacks.Kind{callbacks.KindNexus}
@@ -131,6 +135,8 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 		mutate       func(*workflowservice.StartNexusOperationExecutionRequest)
 		mutateConfig func(*Config)
 		wantErr      string
+		// Expected value of the "rejected" tag on the reserved header usage metric, or empty if none is expected.
+		wantReservedHeaderUsage string
 		// Check the request after validation, to verify situations where it normalizes values.
 		postValidateCheck func(*testing.T, *workflowservice.StartNexusOperationExecutionRequest)
 	}{
@@ -347,6 +353,44 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			wantErr: "nexus_header contains a disallowed key",
 		},
 		{
+			name: "nexus_header - reserved key allowed",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.NexusHeader = map[string]string{"Temporal-A": "v"}
+			},
+			mutateConfig: func(c *Config) {
+				c.MaxOperationHeaderSize = func(string) int { return 20 }
+			},
+			postValidateCheck: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
+				require.Equal(t, map[string]string{"temporal-a": "v"}, r.NexusHeader)
+			},
+			wantReservedHeaderUsage: "false",
+		},
+		{
+			name: "nexus_header - reserved key rejected",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.NexusHeader = map[string]string{"Temporal-A": "v"}
+			},
+			mutateConfig: func(c *Config) {
+				c.MaxOperationHeaderSize = func(string) int { return 20 }
+				c.RejectReservedHeaders = func(string) bool { return true }
+			},
+			wantErr:                 "nexus_header contains reserved keys",
+			wantReservedHeaderUsage: "true",
+		},
+		{
+			name: "nexus_header - reserved key not tracked when a later validation fails",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.NexusHeader = map[string]string{"Temporal-A": "v"}
+				r.Links = []*commonpb.Link{{Variant: &commonpb.Link_WorkflowEvent_{
+					WorkflowEvent: &commonpb.Link_WorkflowEvent{WorkflowId: "wf-id", RunId: "wf-run-id"},
+				}}}
+			},
+			mutateConfig: func(c *Config) {
+				c.MaxOperationHeaderSize = func(string) int { return 20 }
+			},
+			wantErr: "must not have an empty namespace",
+		},
+		{
 			name: "nexus_header - exceeds size limit",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.NexusHeader = map[string]string{"key": "too-long-val"}
@@ -559,7 +603,10 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 
 			cbValidator := mustNewCallbackValidator()
 			logger := log.NewNoopLogger()
-			v := newValidator(&caseConfig, logger, nil, saValidator, cbValidator, newTestLinkValidator(10, 10))
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+			v := newValidator(&caseConfig, logger, logger, metricsHandler, nil, saValidator, cbValidator, newTestLinkValidator(10, 10))
 
 			err := v.validateAndNormalizeStartRequest(context.Background(), req)
 			if tc.wantErr != "" {
@@ -568,6 +615,16 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 				require.Contains(t, err.Error(), tc.wantErr)
 			} else {
 				require.NoError(t, err)
+			}
+			recordings := capture.Snapshot()[ReservedHeaderUsageCounter.Name()]
+			if tc.wantReservedHeaderUsage == "" {
+				require.Empty(t, recordings)
+			} else {
+				require.Len(t, recordings, 1)
+				require.Equal(t, int64(1), recordings[0].Value)
+				require.Equal(t, "default", recordings[0].Tags["namespace"])
+				require.Equal(t, ReservedHeaderSourceStandalone, recordings[0].Tags["request_source"])
+				require.Equal(t, tc.wantReservedHeaderUsage, recordings[0].Tags["rejected"])
 			}
 			if tc.postValidateCheck != nil {
 				tc.postValidateCheck(t, req)

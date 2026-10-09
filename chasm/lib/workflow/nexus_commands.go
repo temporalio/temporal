@@ -14,14 +14,17 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type nexusCommandHandler struct {
-	config         *nexusoperation.Config
-	nexusProcessor *chasm.NexusEndpointProcessor
+	config          *nexusoperation.Config
+	nexusProcessor  *chasm.NexusEndpointProcessor
+	throttledLogger log.Logger
 }
 
 //nolint:revive // cognitive-complexity: this is a direct port of the HSM command handler
@@ -167,6 +170,15 @@ func (ch *nexusCommandHandler) handleScheduleCommand(
 		}
 	}
 
+	reservedHeaderKeys := commonnexus.ReservedHeaderKeys(lowerCaseHeader)
+	if len(reservedHeaderKeys) > 0 && ch.config.RejectReservedHeaders(nsName) {
+		ch.recordReservedHeaderUsage(ctx, nsName, reservedHeaderKeys, true)
+		return FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf("ScheduleNexusOperationCommandAttributes.NexusHeader contains reserved header keys: %q", reservedHeaderKeys),
+		}
+	}
+
 	if headerLength > ch.config.MaxOperationHeaderSize(nsName) {
 		return FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
@@ -227,7 +239,32 @@ func (ch *nexusCommandHandler) handleScheduleCommand(
 		}
 		he.UserMetadata = cmd.UserMetadata
 	})
-	return err
+	if err != nil {
+		return err
+	}
+	if len(reservedHeaderKeys) > 0 {
+		ch.recordReservedHeaderUsage(ctx, nsName, reservedHeaderKeys, false)
+	}
+	return nil
+}
+
+func (ch *nexusCommandHandler) recordReservedHeaderUsage(
+	ctx chasm.MutableContext,
+	nsName string,
+	keys []string,
+	rejected bool,
+) {
+	executionKey := ctx.ExecutionKey()
+	nexusoperation.RecordReservedHeaderUsage(
+		ctx.MetricsHandler(),
+		ch.throttledLogger,
+		nsName,
+		nexusoperation.ReservedHeaderSourceWorkflow,
+		keys,
+		rejected,
+		tag.WorkflowID(executionKey.BusinessID),
+		tag.WorkflowRunID(executionKey.RunID),
+	)
 }
 
 func (ch *nexusCommandHandler) handleCancelCommand(
