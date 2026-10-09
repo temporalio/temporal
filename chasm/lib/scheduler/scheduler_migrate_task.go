@@ -237,6 +237,7 @@ func (h *SchedulerMigrateToWorkflowTaskHandler) Execute(
 		func(s *Scheduler, ctx chasm.MutableContext, _ any) (chasm.NoValue, error) {
 			s.Closed = true
 			s.WorkflowMigration = nil
+			s.PrepareVisibility(ctx)
 			return nil, nil
 		},
 		nil,

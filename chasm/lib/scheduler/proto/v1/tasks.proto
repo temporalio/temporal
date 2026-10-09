@@ -14,6 +14,10 @@ message SchedulerIdleTask {
   google.protobuf.Duration idle_time_total = 1;
 }
 
+message SchedulerVisibilityRefreshTask {
+  int64 generation = 1;
+}
+
 // Ensures that callbacks for all running buffered starts are attached. Used only
 // during migration from V1, as workflows started by CHASM scheduler are started
 // with callbacks attached.
