@@ -9,6 +9,7 @@ import "temporal/api/common/v1/message.proto";
 import "temporal/api/deployment/v1/message.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/failure/v1/message.proto";
+import "temporal/api/nexus/v1/message.proto";
 import "temporal/api/sdk/v1/user_metadata.proto";
 import "temporal/api/taskqueue/v1/message.proto";
 
@@ -283,6 +284,9 @@ message ActivityRequestData {
   // only to read state persisted before the migration; new activities leave
   // this empty.
   temporal.api.sdk.v1.UserMetadata user_metadata = 3 [deprecated = true];
+  // Serialization context from the Nexus caller that started this activity. Kept for worker
+  // retries and for DescribeActivityExecution and PollActivityExecution responses.
+  temporal.api.nexus.v1.PropagatedSerializationContext propagated_nexus_serialization_context = 4;
 }
 
 message ActivityOutcome {
