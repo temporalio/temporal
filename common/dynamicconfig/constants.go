@@ -3222,6 +3222,11 @@ time (mirrors gRPC MaxConnectionAge's +/-10% jitter). Values outside [0, 1] are 
 		false,
 		`ReplicationStreamSenderSkipStuckTask, when true, makes the replication stream sender log, emit a metric, and skip (advance the watermark past) a task that could not be built ("converted") after exhausting retries, instead of failing and wedging the whole stream. Only unbuildable tasks (corrupt/unusable source info) are skipped; transient send/rate-limit failures and infra/teardown errors (shard-ownership-lost, stream error, context canceled) are not, so they still tear the stream down. Deterministic non-retryable send failures such as an oversized gRPC message are not handled here (left to the transport-layer message-size fix).`,
 	)
+	ReplicationStreamSenderCoalesceVerifyTasks = NewGlobalBoolSetting(
+		"history.ReplicationStreamSenderCoalesceVerifyTasks",
+		false,
+		`ReplicationStreamSenderCoalesceVerifyTasks, when true, makes the replication stream sender send only the last of a consecutive streak of verify versioned transition tasks for the same run on the same branch. The dropped verify tasks are covered by the last one, which verifies a newer versioned transition and acks them through its watermark. This reduces the send rate when a shard's sender lags behind a hot workflow.`,
+	)
 	ReplicationExecutableTaskErrorRetryWait = NewGlobalDurationSetting(
 		"history.ReplicationExecutableTaskErrorRetryWait",
 		1*time.Second,
