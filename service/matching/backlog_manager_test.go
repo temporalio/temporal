@@ -278,7 +278,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_NotIncrementedBySp
 
 func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 	if s.fairness {
-		s.T().Skip("only for priority backlog manager")
+		s.T().Skip("only for fairness backlog manager")
 	}
 
 	blm := s.blm.(*priBacklogManagerImpl)
@@ -340,7 +340,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 
 func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnGapDrain() {
 	if s.fairness {
-		s.T().Skip("only for priority backlog manager")
+		s.T().Skip("only for fairness backlog manager")
 	}
 
 	blm := s.blm.(*priBacklogManagerImpl)
@@ -432,7 +432,7 @@ func (s *BacklogManagerTestSuite) dbAckLevel(blm *priBacklogManagerImpl) int64 {
 // let the reader re-read and re-dispatch them once they were acked.
 func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_IgnoresStaleLevels() {
 	if s.fairness {
-		s.T().Skip("only for priority backlog manager")
+		s.T().Skip("only for fairness backlog manager")
 	}
 	s.setupToCaptureTasks()
 	blm, tr, start := s.initPriReaderAtEnd()
@@ -472,7 +472,7 @@ func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_IgnoresStaleLevels() 
 // (empty batch -> signal -> empty batch -> ...).
 func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_NoReloadSignalWhenCaughtUp() {
 	if s.fairness {
-		s.T().Skip("only for priority backlog manager")
+		s.T().Skip("only for fairness backlog manager")
 	}
 	blm, tr, start := s.initPriReaderAtEnd()
 
@@ -499,7 +499,7 @@ func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_NoReloadSignalWhenCau
 // check can't see them and they used to be dispatched and acked a second time.
 func (s *BacklogManagerTestSuite) TestProcessTaskBatch_IgnoresAlreadyAckedTasks() {
 	if s.fairness {
-		s.T().Skip("only for priority backlog manager")
+		s.T().Skip("only for fairness backlog manager")
 	}
 	s.setupToCaptureTasks()
 	blm, tr, start := s.initPriReaderAtEnd()
@@ -542,7 +542,7 @@ func (s *BacklogManagerTestSuite) TestProcessTaskBatch_IgnoresAlreadyAckedTasks(
 // level gets flagged but cannot regress what we persist.
 func (s *BacklogManagerTestSuite) TestUpdateAckLevel_DoesNotMoveBackwards() {
 	if s.fairness {
-		s.T().Skip("only for priority backlog manager")
+		s.T().Skip("only for fairness backlog manager")
 	}
 	blm, _, _ := s.initPriReaderAtEnd()
 
