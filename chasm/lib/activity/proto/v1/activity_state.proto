@@ -240,6 +240,9 @@ message ActivityAttemptState {
 
   string last_worker_identity = 7;
 
+  // The authenticated principal for the most recent worker response.
+  temporal.api.common.v1.Principal last_worker_principal = 15;
+
   // The Worker Deployment Version this activity was dispatched to most recently.
   // If nil, the activity has not yet been dispatched or was last dispatched to an unversioned worker.
   temporal.api.deployment.v1.WorkerDeploymentVersion last_deployment_version = 8;

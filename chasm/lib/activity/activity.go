@@ -85,20 +85,23 @@ type WithToken[R any] struct {
 
 // RespondCompletedEvent wraps the RespondActivityTaskCompletedRequest with context-specific data.
 type RespondCompletedEvent struct {
-	Request *historyservice.RespondActivityTaskCompletedRequest
-	Token   *tokenspb.Task
+	Request   *historyservice.RespondActivityTaskCompletedRequest
+	Token     *tokenspb.Task
+	Principal *commonpb.Principal
 }
 
 // RespondFailedEvent wraps the RespondActivityTaskFailedRequest with context-specific data.
 type RespondFailedEvent struct {
-	Request *historyservice.RespondActivityTaskFailedRequest
-	Token   *tokenspb.Task
+	Request   *historyservice.RespondActivityTaskFailedRequest
+	Token     *tokenspb.Task
+	Principal *commonpb.Principal
 }
 
 // RespondCancelledEvent wraps the RespondActivityTaskCanceledRequest with context-specific data.
 type RespondCancelledEvent struct {
-	Request *historyservice.RespondActivityTaskCanceledRequest
-	Token   *tokenspb.Task
+	Request   *historyservice.RespondActivityTaskCanceledRequest
+	Token     *tokenspb.Task
+	Principal *commonpb.Principal
 }
 
 // errClosed is the error returned by an operator command on a closed activity.
@@ -469,6 +472,7 @@ func (a *Activity) HandleCompleted(
 	}); err != nil {
 		return nil, err
 	}
+	a.LastAttempt.Get(ctx).LastWorkerPrincipal = event.Principal
 
 	return &historyservice.RespondActivityTaskCompletedResponse{}, nil
 }
@@ -508,6 +512,7 @@ func (a *Activity) HandleFailed(
 	}
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
 		a.emitOnAttemptFailedMetrics(ctx, enrichedHandler)
+		a.LastAttempt.Get(ctx).LastWorkerPrincipal = event.Principal
 
 		return &historyservice.RespondActivityTaskFailedResponse{}, nil
 	}
@@ -520,6 +525,7 @@ func (a *Activity) HandleFailed(
 	}); err != nil {
 		return nil, err
 	}
+	a.LastAttempt.Get(ctx).LastWorkerPrincipal = event.Principal
 
 	return &historyservice.RespondActivityTaskFailedResponse{}, nil
 }
@@ -545,6 +551,7 @@ func (a *Activity) HandleCanceled(
 	}); err != nil {
 		return nil, err
 	}
+	a.LastAttempt.Get(ctx).LastWorkerPrincipal = event.Principal
 
 	return &historyservice.RespondActivityTaskCanceledResponse{}, nil
 }
