@@ -21,11 +21,13 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -287,10 +289,6 @@ func TestHandleStarted(t *testing.T) {
 				Stamp:          tc.attemptStamp,
 				StartRequestId: tc.startRequestID,
 				DispatchTime:   tc.dispatchTime,
-				LastWorkerPrincipal: &commonpb.Principal{
-					Type: "jwt",
-					Name: "previous-worker",
-				},
 			}
 			// A recorded start request ID means this attempt was previously started.
 			if tc.startRequestID != "" {
@@ -338,7 +336,6 @@ func TestHandleStarted(t *testing.T) {
 			response, err := activity.HandleStarted(ctx, request)
 
 			tc.checkOutcome(t, response, err)
-			require.Equal(t, "previous-worker", activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal().GetName())
 			recordings := metricCapture.Snapshot()[metrics.TaskScheduleToStartLatency.Name()]
 			require.Len(t, recordings, tc.metricSamples)
 			if tc.metricSamples > 0 {
@@ -884,6 +881,7 @@ func newWorkerResponseTestActivity(
 func TestHandleFailedRetryRecordsLastWorkerPrincipal(t *testing.T) {
 	ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, true)
 	principal := &commonpb.Principal{Type: "jwt", Name: "worker-1"}
+	ctx.GoCtx = headers.SetPrincipal(ctx.GoCtx, principal)
 	_, err := activity.HandleFailed(ctx, RespondFailedEvent{
 		Token: token,
 		Request: &historyservice.RespondActivityTaskFailedRequest{
@@ -896,34 +894,33 @@ func TestHandleFailedRetryRecordsLastWorkerPrincipal(t *testing.T) {
 				},
 			},
 		},
-		Principal: principal,
 	})
 	require.NoError(t, err)
-	require.Equal(t, principal, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
+	protorequire.ProtoEqual(t, principal, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
 }
 
 func TestWorkerResponsesRecordLastWorkerPrincipal(t *testing.T) {
 	t.Run("completed", func(t *testing.T) {
 		ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, true)
 		principal := &commonpb.Principal{Type: "jwt", Name: "completion-worker"}
+		ctx.GoCtx = headers.SetPrincipal(ctx.GoCtx, principal)
 		_, err := activity.HandleCompleted(ctx, RespondCompletedEvent{
-			Token:     token,
-			Principal: principal,
+			Token: token,
 			Request: &historyservice.RespondActivityTaskCompletedRequest{
 				NamespaceId:     token.GetNamespaceId(),
 				CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{},
 			},
 		})
 		require.NoError(t, err)
-		require.Equal(t, principal, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
+		protorequire.ProtoEqual(t, principal, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
 	})
 
 	t.Run("terminal failure", func(t *testing.T) {
 		ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, true)
 		principal := &commonpb.Principal{Type: "jwt", Name: "failure-worker"}
+		ctx.GoCtx = headers.SetPrincipal(ctx.GoCtx, principal)
 		_, err := activity.HandleFailed(ctx, RespondFailedEvent{
-			Token:     token,
-			Principal: principal,
+			Token: token,
 			Request: &historyservice.RespondActivityTaskFailedRequest{
 				NamespaceId: token.GetNamespaceId(),
 				FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
@@ -936,30 +933,30 @@ func TestWorkerResponsesRecordLastWorkerPrincipal(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		require.Equal(t, principal, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
+		protorequire.ProtoEqual(t, principal, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
 	})
 
 	t.Run("canceled", func(t *testing.T) {
 		ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED, true)
 		principal := &commonpb.Principal{Type: "jwt", Name: "cancel-worker"}
+		ctx.GoCtx = headers.SetPrincipal(ctx.GoCtx, principal)
 		_, err := activity.HandleCanceled(ctx, RespondCancelledEvent{
-			Token:     token,
-			Principal: principal,
+			Token: token,
 			Request: &historyservice.RespondActivityTaskCanceledRequest{
 				NamespaceId:   token.GetNamespaceId(),
 				CancelRequest: &workflowservice.RespondActivityTaskCanceledRequest{},
 			},
 		})
 		require.NoError(t, err)
-		require.Equal(t, principal, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
+		protorequire.ProtoEqual(t, principal, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
 	})
 }
 
 func TestWorkerResponseDoesNotRecordPrincipalWhenPropagationDisabled(t *testing.T) {
 	ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, false)
+	ctx.GoCtx = headers.SetPrincipal(ctx.GoCtx, &commonpb.Principal{Type: "jwt", Name: "worker-1"})
 	_, err := activity.HandleCompleted(ctx, RespondCompletedEvent{
-		Token:     token,
-		Principal: &commonpb.Principal{Type: "jwt", Name: "worker-1"},
+		Token: token,
 		Request: &historyservice.RespondActivityTaskCompletedRequest{
 			NamespaceId:     token.GetNamespaceId(),
 			CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{},

@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -85,23 +86,20 @@ type WithToken[R any] struct {
 
 // RespondCompletedEvent wraps the RespondActivityTaskCompletedRequest with context-specific data.
 type RespondCompletedEvent struct {
-	Request   *historyservice.RespondActivityTaskCompletedRequest
-	Token     *tokenspb.Task
-	Principal *commonpb.Principal
+	Request *historyservice.RespondActivityTaskCompletedRequest
+	Token   *tokenspb.Task
 }
 
 // RespondFailedEvent wraps the RespondActivityTaskFailedRequest with context-specific data.
 type RespondFailedEvent struct {
-	Request   *historyservice.RespondActivityTaskFailedRequest
-	Token     *tokenspb.Task
-	Principal *commonpb.Principal
+	Request *historyservice.RespondActivityTaskFailedRequest
+	Token   *tokenspb.Task
 }
 
 // RespondCancelledEvent wraps the RespondActivityTaskCanceledRequest with context-specific data.
 type RespondCancelledEvent struct {
-	Request   *historyservice.RespondActivityTaskCanceledRequest
-	Token     *tokenspb.Task
-	Principal *commonpb.Principal
+	Request *historyservice.RespondActivityTaskCanceledRequest
+	Token   *tokenspb.Task
 }
 
 // errClosed is the error returned by an operator command on a closed activity.
@@ -472,7 +470,7 @@ func (a *Activity) HandleCompleted(
 	}); err != nil {
 		return nil, err
 	}
-	a.recordLastWorkerPrincipal(ctx, event.Principal)
+	a.recordLastWorkerPrincipal(ctx)
 
 	return &historyservice.RespondActivityTaskCompletedResponse{}, nil
 }
@@ -512,7 +510,7 @@ func (a *Activity) HandleFailed(
 	}
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
 		a.emitOnAttemptFailedMetrics(ctx, enrichedHandler)
-		a.recordLastWorkerPrincipal(ctx, event.Principal)
+		a.recordLastWorkerPrincipal(ctx)
 
 		return &historyservice.RespondActivityTaskFailedResponse{}, nil
 	}
@@ -525,7 +523,7 @@ func (a *Activity) HandleFailed(
 	}); err != nil {
 		return nil, err
 	}
-	a.recordLastWorkerPrincipal(ctx, event.Principal)
+	a.recordLastWorkerPrincipal(ctx)
 
 	return &historyservice.RespondActivityTaskFailedResponse{}, nil
 }
@@ -551,20 +549,31 @@ func (a *Activity) HandleCanceled(
 	}); err != nil {
 		return nil, err
 	}
-	a.recordLastWorkerPrincipal(ctx, event.Principal)
+	a.recordLastWorkerPrincipal(ctx)
 
 	return &historyservice.RespondActivityTaskCanceledResponse{}, nil
 }
 
 func (a *Activity) recordLastWorkerPrincipal(
 	ctx chasm.MutableContext,
-	principal *commonpb.Principal,
 ) {
 	config := activityContextFromChasm(ctx).config
 	if !config.EnablePrincipalPropagation(ctx.NamespaceEntry().Name().String()) {
 		return
 	}
-	a.LastAttempt.Get(ctx).LastWorkerPrincipal = principal
+	a.LastAttempt.Get(ctx).LastWorkerPrincipal = requestPrincipal(ctx)
+}
+
+func requestPrincipal(ctx chasm.Context) *commonpb.Principal {
+	principalType := ctx.RequestHeader(headers.PrincipalTypeHeaderName)
+	principalName := ctx.RequestHeader(headers.PrincipalNameHeaderName)
+	if principalType == "" && principalName == "" {
+		return nil
+	}
+	return &commonpb.Principal{
+		Type: principalType,
+		Name: principalName,
+	}
 }
 
 // Terminate implements the chasm.RootComponent interface.
