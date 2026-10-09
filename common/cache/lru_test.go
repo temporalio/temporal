@@ -695,6 +695,134 @@ func TestCache_ItemSizeChangeBeforeRelease(t *testing.T) {
 	require.Equal(t, 2, cache.Size())
 }
 
+func TestCache_PinnedUsageItemSizeChangeBetweenReleases(t *testing.T) {
+	t.Parallel()
+
+	metricsHandler := metricstest.NewCaptureHandler()
+	cache := NewWithMetrics(10, &Options{Pin: true}, metricsHandler)
+
+	entry := &testEntryWithCacheSize{cacheSize: 1}
+	key := uuid.New()
+
+	capture := metricsHandler.StartCapture()
+	_, err := cache.PutIfNotExist(key, entry)
+	require.NoError(t, err)
+	// Second reference to the same entry, ref count is 2 now.
+	require.Equal(t, entry, cache.Get(key))
+	require.Equal(t, 1, lastPinnedUsage(t, capture))
+
+	// Entry grows while it is still pinned by the second reference.
+	entry.cacheSize = 5
+	cache.Release(key)
+	require.Equal(t, 5, lastPinnedUsage(t, capture))
+
+	cache.Release(key)
+	require.Equal(t, 0, lastPinnedUsage(t, capture))
+}
+
+func TestCache_PinnedUsageDeleteWhilePinned(t *testing.T) {
+	t.Parallel()
+
+	metricsHandler := metricstest.NewCaptureHandler()
+	cache := NewWithMetrics(10, &Options{Pin: true}, metricsHandler)
+
+	entry := &testEntryWithCacheSize{cacheSize: 4}
+	key := uuid.New()
+
+	capture := metricsHandler.StartCapture()
+	_, err := cache.PutIfNotExist(key, entry)
+	require.NoError(t, err)
+	require.Equal(t, 4, lastPinnedUsage(t, capture))
+
+	// Entry is deleted while still pinned, the subsequent Release is a no-op.
+	cache.Delete(key)
+	cache.Release(key)
+	require.Equal(t, 0, lastPinnedUsage(t, capture))
+}
+
+// Release resolves entries by key, so a release still owed for an entry that was deleted lands on
+// whatever was re-inserted under that key and unpins it early. Telling the two apart needs the
+// reference to identify the entry it belongs to, which the Cache interface does not carry, so this
+// test only pins down that the counters stay consistent: pinnedSize is given back exactly once and
+// the entry stays evictable instead of being stranded with a negative ref count.
+func TestCache_StaleReleaseAfterReInsert(t *testing.T) {
+	t.Parallel()
+
+	ttl := time.Minute
+	timeSource := clock.NewEventTimeSource()
+	metricsHandler := metricstest.NewCaptureHandler()
+	cache := NewWithMetrics(10,
+		&Options{
+			TTL:        ttl,
+			Pin:        true,
+			TimeSource: timeSource,
+		},
+		metricsHandler,
+	)
+
+	oldEntry := &testEntryWithCacheSize{cacheSize: 1}
+	newEntry := &testEntryWithCacheSize{cacheSize: 8}
+	key := uuid.New()
+
+	capture := metricsHandler.StartCapture()
+	_, err := cache.PutIfNotExist(key, oldEntry)
+	require.NoError(t, err)
+
+	cache.Delete(key)
+	_, err = cache.PutIfNotExist(key, newEntry)
+	require.NoError(t, err)
+	require.Equal(t, 8, lastPinnedUsage(t, capture))
+
+	// The release still owed for oldEntry lands on newEntry and unpins it early. Undesirable, but
+	// pre-existing and out of reach of this fix.
+	cache.Release(key)
+	require.Equal(t, 0, lastPinnedUsage(t, capture))
+
+	// The release owed for newEntry no longer has a reference to give back.
+	newEntry.cacheSize = 2
+	cache.Release(key)
+	require.Equal(t, 0, lastPinnedUsage(t, capture))
+
+	timeSource.Advance(2 * ttl)
+	require.Nil(t, cache.Get(key))
+	require.Equal(t, 0, cache.Size())
+}
+
+func TestCache_StaleReleaseKeepsEntryEvictable(t *testing.T) {
+	t.Parallel()
+
+	ttl := time.Minute
+	timeSource := clock.NewEventTimeSource()
+	cache := New(10,
+		&Options{
+			TTL:        ttl,
+			Pin:        true,
+			TimeSource: timeSource,
+		},
+	)
+
+	key := uuid.New()
+	_, err := cache.PutIfNotExist(key, &testEntryWithCacheSize{cacheSize: 3})
+	require.NoError(t, err)
+
+	cache.Release(key)
+	// Extra release without a matching reference must not drive the ref count below zero:
+	// both eviction and TTL expiry require refCount == 0.
+	cache.Release(key)
+
+	timeSource.Advance(2 * ttl)
+	require.Nil(t, cache.Get(key))
+	require.Equal(t, 0, cache.Size())
+}
+
+// lastPinnedUsage returns the most recent value recorded for the cache_pinned_usage metric.
+func lastPinnedUsage(t *testing.T, capture *metricstest.Capture) int {
+	t.Helper()
+	recordings := capture.Snapshot()[metrics.CachePinnedUsage.Name()]
+	require.NotEmpty(t, recordings)
+	return int(recordings[len(recordings)-1].Value.(float64))
+}
+
 func TestCache_InvokeLifecycleCallbacks(t *testing.T) {
 	t.Parallel()
 
