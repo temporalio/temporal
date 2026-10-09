@@ -3047,6 +3047,165 @@ func (s *matchingEngineSuite) seedTaskQueueUserData(taskQueue string, data *pers
 	}))
 }
 
+func (s *matchingEngineSuite) loadRootUserData(taskQueue string) *persistencespb.VersionedTaskQueueUserData {
+	taskQueueFamily, err := tqid.NewTaskQueueFamily(s.ns.ID().String(), taskQueue)
+	s.Require().NoError(err)
+	pm, _, err := s.matchingEngine.getTaskQueuePartitionManager(
+		context.Background(),
+		taskQueueFamily.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).RootPartition(),
+		true,
+		loadCauseUserData,
+	)
+	s.Require().NoError(err)
+	s.Require().NoError(pm.GetUserDataManager().WaitUntilInitialized(context.Background()))
+	userData, _, err := pm.GetUserDataManager().GetUserData()
+	s.Require().NoError(err)
+	return userData
+}
+
+func (s *matchingEngineSuite) TestForceSetTaskQueueTypeUserData() {
+	seedClock := &clockspb.HybridLogicalClock{WallClock: 123456, ClusterId: 1}
+	versioningData := &persistencespb.VersioningData{
+		VersionSets: []*persistencespb.CompatibleVersionSet{{SetIds: []string{"set"}}},
+	}
+	activityData := &persistencespb.TaskQueueTypeUserData{FairnessState: enumsspb.FAIRNESS_STATE_V1}
+	seed := func() (string, int64) {
+		taskQueue := uuid.NewString()
+		s.seedTaskQueueUserData(taskQueue, &persistencespb.TaskQueueUserData{
+			Clock:          seedClock,
+			VersioningData: versioningData,
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {FairnessState: enumsspb.FAIRNESS_STATE_V1},
+				int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY): activityData,
+			},
+		})
+		return taskQueue, s.loadRootUserData(taskQueue).GetVersion()
+	}
+	// Keeps the seeded fairness state: changing it unloads the partition, and this suite doesn't persist user data.
+	unchangedFairnessWithOverrides := func() *persistencespb.TaskQueueTypeUserData {
+		return &persistencespb.TaskQueueTypeUserData{
+			FairnessState: enumsspb.FAIRNESS_STATE_V1,
+			Config:        &taskqueuepb.TaskQueueConfig{FairnessWeightOverrides: map[string]float32{"key": 2}},
+		}
+	}
+
+	s.Run("replaces only the requested type", func() {
+		taskQueue, version := seed()
+		newData := unchangedFairnessWithOverrides()
+
+		resp, err := s.matchingEngine.ForceSetTaskQueueTypeUserData(context.Background(), &matchingservice.ForceSetTaskQueueTypeUserDataRequest{
+			NamespaceId:   s.ns.ID().String(),
+			TaskQueue:     taskQueue,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			UserData:      newData,
+			KnownVersion:  version,
+		})
+		s.Require().NoError(err)
+		s.Equal(version+1, resp.GetVersion())
+
+		got := s.loadRootUserData(taskQueue)
+		s.Equal(version+1, got.GetVersion())
+		protorequire.ProtoEqual(s.T(), newData, got.GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)])
+		protorequire.ProtoEqual(s.T(), activityData, got.GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY)])
+		protorequire.ProtoEqual(s.T(), versioningData, got.GetData().GetVersioningData())
+		s.True(hlc.Greater(got.GetData().GetClock(), seedClock))
+	})
+
+	s.Run("unspecified type defaults to workflow", func() {
+		taskQueue, version := seed()
+		newData := unchangedFairnessWithOverrides()
+
+		_, err := s.matchingEngine.ForceSetTaskQueueTypeUserData(context.Background(), &matchingservice.ForceSetTaskQueueTypeUserDataRequest{
+			NamespaceId:  s.ns.ID().String(),
+			TaskQueue:    taskQueue,
+			UserData:     newData,
+			KnownVersion: version,
+		})
+		s.Require().NoError(err)
+		protorequire.ProtoEqual(s.T(), newData, s.loadRootUserData(taskQueue).GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW)])
+	})
+
+	s.Run("retry of an applied request succeeds and re-applies", func() {
+		taskQueue, version := seed()
+		req := &matchingservice.ForceSetTaskQueueTypeUserDataRequest{
+			NamespaceId:   s.ns.ID().String(),
+			TaskQueue:     taskQueue,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			UserData:      unchangedFairnessWithOverrides(),
+			KnownVersion:  version,
+		}
+		first, err := s.matchingEngine.ForceSetTaskQueueTypeUserData(context.Background(), req)
+		s.Require().NoError(err)
+
+		// Same request with the now-stale version, as a client retry would send.
+		second, err := s.matchingEngine.ForceSetTaskQueueTypeUserData(context.Background(), req)
+		s.Require().NoError(err)
+		s.Equal(first.GetVersion()+1, second.GetVersion())
+		protorequire.ProtoEqual(s.T(), req.GetUserData(), s.loadRootUserData(taskQueue).GetData().GetPerType()[int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY)])
+	})
+
+	s.Run("stale known version is rejected", func() {
+		taskQueue, version := seed()
+
+		_, err := s.matchingEngine.ForceSetTaskQueueTypeUserData(context.Background(), &matchingservice.ForceSetTaskQueueTypeUserDataRequest{
+			NamespaceId:   s.ns.ID().String(),
+			TaskQueue:     taskQueue,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			UserData:      &persistencespb.TaskQueueTypeUserData{},
+			KnownVersion:  version + 1,
+		})
+		var failedPrecondition *serviceerror.FailedPrecondition
+		s.ErrorAs(err, &failedPrecondition)
+		s.Equal(version, s.loadRootUserData(taskQueue).GetVersion())
+	})
+
+	s.Run("invalid arguments", func() {
+		rateLimit := func(rps float32) *taskqueuepb.RateLimitConfig {
+			return &taskqueuepb.RateLimitConfig{RateLimit: &taskqueuepb.RateLimit{RequestsPerSecond: rps}}
+		}
+		tooManyOverrides := make(map[string]float32)
+		for i := range 1001 {
+			tooManyOverrides[fmt.Sprintf("key-%d", i)] = 1
+		}
+		valid := &persistencespb.TaskQueueTypeUserData{}
+		tests := []struct {
+			name string
+			req  *matchingservice.ForceSetTaskQueueTypeUserDataRequest
+		}{
+			{name: "missing task queue", req: &matchingservice.ForceSetTaskQueueTypeUserDataRequest{KnownVersion: 1, UserData: valid}},
+			{name: "non-root task queue", req: &matchingservice.ForceSetTaskQueueTypeUserDataRequest{TaskQueue: "/_sys/tq/1", KnownVersion: 1, UserData: valid}},
+			{name: "missing known version", req: &matchingservice.ForceSetTaskQueueTypeUserDataRequest{TaskQueue: "tq", UserData: valid}},
+			{name: "missing user data", req: &matchingservice.ForceSetTaskQueueTypeUserDataRequest{TaskQueue: "tq", KnownVersion: 1}},
+			{
+				name: "rate limit on workflow queue",
+				req: &matchingservice.ForceSetTaskQueueTypeUserDataRequest{TaskQueue: "tq", KnownVersion: 1, TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+					UserData: &persistencespb.TaskQueueTypeUserData{Config: &taskqueuepb.TaskQueueConfig{QueueRateLimit: rateLimit(1)}}},
+			},
+			{
+				name: "negative rate limit",
+				req: &matchingservice.ForceSetTaskQueueTypeUserDataRequest{TaskQueue: "tq", KnownVersion: 1, TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+					UserData: &persistencespb.TaskQueueTypeUserData{Config: &taskqueuepb.TaskQueueConfig{FairnessKeysRateLimitDefault: rateLimit(-1)}}},
+			},
+			{
+				name: "too many fairness weight overrides",
+				req: &matchingservice.ForceSetTaskQueueTypeUserDataRequest{TaskQueue: "tq", KnownVersion: 1,
+					UserData: &persistencespb.TaskQueueTypeUserData{Config: &taskqueuepb.TaskQueueConfig{FairnessWeightOverrides: tooManyOverrides}}},
+			},
+			{
+				name: "non-positive fairness weight",
+				req: &matchingservice.ForceSetTaskQueueTypeUserDataRequest{TaskQueue: "tq", KnownVersion: 1,
+					UserData: &persistencespb.TaskQueueTypeUserData{Config: &taskqueuepb.TaskQueueConfig{FairnessWeightOverrides: map[string]float32{"k": 0}}}},
+			},
+		}
+		for _, tc := range tests {
+			tc.req.NamespaceId = s.ns.ID().String()
+			_, err := s.matchingEngine.ForceSetTaskQueueTypeUserData(context.Background(), tc.req)
+			var invalidArgument *serviceerror.InvalidArgument
+			s.ErrorAs(err, &invalidArgument, tc.name)
+		}
+	})
+}
+
 func (s *matchingEngineSuite) TestApplyTaskQueueUserDataReplicationEventAcceptsClocklessData() {
 	deploymentData := &persistencespb.TaskQueueUserData{
 		PerType: map[int32]*persistencespb.TaskQueueTypeUserData{

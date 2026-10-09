@@ -691,6 +691,13 @@ func (h *Handler) UpdateFairnessState(
 	return h.engine.UpdateFairnessState(ctx, request)
 }
 
+func (h *Handler) ForceSetTaskQueueTypeUserData(
+	ctx context.Context, request *matchingservice.ForceSetTaskQueueTypeUserDataRequest,
+) (_ *matchingservice.ForceSetTaskQueueTypeUserDataResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	return h.engine.ForceSetTaskQueueTypeUserData(ctx, request)
+}
+
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
 	entry, err := h.namespaceRegistry.GetNamespaceByID(id)
 	if err != nil {

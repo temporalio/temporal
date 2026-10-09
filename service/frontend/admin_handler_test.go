@@ -2488,6 +2488,84 @@ func (s *adminHandlerSuite) TestGetTaskQueueUserData() {
 	})
 }
 
+func (s *adminHandlerSuite) TestUpdateTaskQueueUserData() {
+	handler := s.handler
+	ctx := context.Background()
+
+	errorCases := []struct {
+		Name     string
+		Request  *adminservice.UpdateTaskQueueUserDataRequest
+		Expected error
+	}{
+		{
+			Name:     "nil request",
+			Request:  nil,
+			Expected: &serviceerror.InvalidArgument{Message: "Request is nil."},
+		},
+		{
+			Name:     "empty namespace",
+			Request:  &adminservice.UpdateTaskQueueUserDataRequest{TaskQueue: "my-queue", KnownVersion: 1},
+			Expected: &serviceerror.InvalidArgument{Message: "Namespace is not set on request."},
+		},
+	}
+	for _, tc := range errorCases {
+		s.Run(tc.Name, func() {
+			resp, err := handler.UpdateTaskQueueUserData(ctx, tc.Request)
+			s.Equal(tc.Expected, err)
+			s.Nil(resp)
+		})
+	}
+
+	s.Run("namespace not found", func() {
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(namespace.ID(""), serviceerror.NewNotFound("Namespace nonexistent is not found."))
+		resp, err := handler.UpdateTaskQueueUserData(ctx, &adminservice.UpdateTaskQueueUserDataRequest{
+			Namespace:    "nonexistent",
+			TaskQueue:    "my-queue",
+			KnownVersion: 1,
+		})
+		s.Error(err)
+		s.Nil(resp)
+	})
+
+	// The remaining fields are passed through as-is; matching validates them and applies defaults.
+	s.Run("success", func() {
+		userData := &persistencespb.TaskQueueTypeUserData{FairnessState: enumsspb.FAIRNESS_STATE_V2}
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+		s.mockMatchingClient.EXPECT().ForceSetTaskQueueTypeUserData(ctx, &matchingservice.ForceSetTaskQueueTypeUserDataRequest{
+			NamespaceId:   s.namespaceID.String(),
+			TaskQueue:     "my-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			UserData:      userData,
+			KnownVersion:  5,
+		}).Return(&matchingservice.ForceSetTaskQueueTypeUserDataResponse{Version: 6}, nil)
+
+		resp, err := handler.UpdateTaskQueueUserData(ctx, &adminservice.UpdateTaskQueueUserDataRequest{
+			Namespace:     s.namespace.String(),
+			TaskQueue:     "my-queue",
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			UserData:      userData,
+			KnownVersion:  5,
+		})
+		s.Require().NoError(err)
+		s.Equal(int64(6), resp.GetVersion())
+	})
+
+	s.Run("matching error", func() {
+		s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+		s.mockMatchingClient.EXPECT().ForceSetTaskQueueTypeUserData(ctx, gomock.Any()).Return(
+			nil, serviceerror.NewFailedPrecondition("user data version mismatch"),
+		)
+		resp, err := handler.UpdateTaskQueueUserData(ctx, &adminservice.UpdateTaskQueueUserDataRequest{
+			Namespace:    s.namespace.String(),
+			TaskQueue:    "my-queue",
+			KnownVersion: 5,
+		})
+		var failedPrecondition *serviceerror.FailedPrecondition
+		s.ErrorAs(err, &failedPrecondition)
+		s.Nil(resp)
+	})
+}
+
 func (s *adminHandlerSuite) TestAddSearchAttributes() {
 	ctx := context.Background()
 	mockOperatorClient := operatorservicemock.NewMockOperatorServiceClient(s.controller)

@@ -963,6 +963,26 @@ func (mr *MockAdminServiceClientMockRecorder) SyncWorkflowState(ctx, in any, opt
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncWorkflowState", reflect.TypeOf((*MockAdminServiceClient)(nil).SyncWorkflowState), varargs...)
 }
 
+// UpdateTaskQueueUserData mocks base method.
+func (m *MockAdminServiceClient) UpdateTaskQueueUserData(ctx context.Context, in *adminservice.UpdateTaskQueueUserDataRequest, opts ...grpc.CallOption) (*adminservice.UpdateTaskQueueUserDataResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateTaskQueueUserData", varargs...)
+	ret0, _ := ret[0].(*adminservice.UpdateTaskQueueUserDataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateTaskQueueUserData indicates an expected call of UpdateTaskQueueUserData.
+func (mr *MockAdminServiceClientMockRecorder) UpdateTaskQueueUserData(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTaskQueueUserData", reflect.TypeOf((*MockAdminServiceClient)(nil).UpdateTaskQueueUserData), varargs...)
+}
+
 // MockAdminService_StreamWorkflowReplicationMessagesClient is a mock of AdminService_StreamWorkflowReplicationMessagesClient interface.
 type MockAdminService_StreamWorkflowReplicationMessagesClient struct {
 	ctrl     *gomock.Controller
@@ -1812,6 +1832,21 @@ func (m *MockAdminServiceServer) SyncWorkflowState(arg0 context.Context, arg1 *a
 func (mr *MockAdminServiceServerMockRecorder) SyncWorkflowState(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncWorkflowState", reflect.TypeOf((*MockAdminServiceServer)(nil).SyncWorkflowState), arg0, arg1)
+}
+
+// UpdateTaskQueueUserData mocks base method.
+func (m *MockAdminServiceServer) UpdateTaskQueueUserData(arg0 context.Context, arg1 *adminservice.UpdateTaskQueueUserDataRequest) (*adminservice.UpdateTaskQueueUserDataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateTaskQueueUserData", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.UpdateTaskQueueUserDataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateTaskQueueUserData indicates an expected call of UpdateTaskQueueUserData.
+func (mr *MockAdminServiceServerMockRecorder) UpdateTaskQueueUserData(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTaskQueueUserData", reflect.TypeOf((*MockAdminServiceServer)(nil).UpdateTaskQueueUserData), arg0, arg1)
 }
 
 // mustEmbedUnimplementedAdminServiceServer mocks base method.

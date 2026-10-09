@@ -305,4 +305,10 @@ service MatchingService {
   rpc CheckTaskQueueVersionMembership(CheckTaskQueueVersionMembershipRequest) returns (CheckTaskQueueVersionMembershipResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
+
+  // ForceSetTaskQueueTypeUserData overwrites the user data of a single task queue type via the root workflow
+  // partition, so that loaded partitions and other clusters observe the change. Used by admin tooling.
+  rpc ForceSetTaskQueueTypeUserData(ForceSetTaskQueueTypeUserDataRequest) returns (ForceSetTaskQueueTypeUserDataResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_SYSTEM;
+  }
 }

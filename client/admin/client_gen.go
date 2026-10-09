@@ -458,3 +458,13 @@ func (c *clientImpl) SyncWorkflowState(
 	defer cancel()
 	return c.client.SyncWorkflowState(ctx, request, opts...)
 }
+
+func (c *clientImpl) UpdateTaskQueueUserData(
+	ctx context.Context,
+	request *adminservice.UpdateTaskQueueUserDataRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.UpdateTaskQueueUserDataResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.UpdateTaskQueueUserData(ctx, request, opts...)
+}

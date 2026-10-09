@@ -3150,6 +3150,80 @@ func (this *UpdateFairnessStateResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type ForceSetTaskQueueTypeUserDataRequest to the protobuf v3 wire format
+func (val *ForceSetTaskQueueTypeUserDataRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ForceSetTaskQueueTypeUserDataRequest from the protobuf v3 wire format
+func (val *ForceSetTaskQueueTypeUserDataRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ForceSetTaskQueueTypeUserDataRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ForceSetTaskQueueTypeUserDataRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ForceSetTaskQueueTypeUserDataRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ForceSetTaskQueueTypeUserDataRequest
+	switch t := that.(type) {
+	case *ForceSetTaskQueueTypeUserDataRequest:
+		that1 = t
+	case ForceSetTaskQueueTypeUserDataRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ForceSetTaskQueueTypeUserDataResponse to the protobuf v3 wire format
+func (val *ForceSetTaskQueueTypeUserDataResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ForceSetTaskQueueTypeUserDataResponse from the protobuf v3 wire format
+func (val *ForceSetTaskQueueTypeUserDataResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ForceSetTaskQueueTypeUserDataResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ForceSetTaskQueueTypeUserDataResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ForceSetTaskQueueTypeUserDataResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ForceSetTaskQueueTypeUserDataResponse
+	switch t := that.(type) {
+	case *ForceSetTaskQueueTypeUserDataResponse:
+		that1 = t
+	case ForceSetTaskQueueTypeUserDataResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type CheckTaskQueueVersionMembershipRequest to the protobuf v3 wire format
 func (val *CheckTaskQueueVersionMembershipRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)
