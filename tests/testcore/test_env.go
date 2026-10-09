@@ -174,6 +174,25 @@ func WithMTLS() TestOption {
 	}
 }
 
+// WithInternalPrincipalAuth authenticates calls to the test frontend as the
+// Temporal server. This is used for APIs whose internal-only fields are guarded
+// by the authenticated principal.
+func WithInternalPrincipalAuth() TestOption {
+	return func(o *testOptions) {
+		o.dedicatedCluster = true
+		o.clusterOptions = append(o.clusterOptions, func(params *testClusterParams) {
+			params.AdditionalServerOptions = append(
+				params.AdditionalServerOptions,
+				temporal.WithAuthorizer(authorization.NewDefaultAuthorizer()),
+				temporal.WithClaimMapper(func(*config.Config) authorization.ClaimMapper {
+					return authorization.NewInternalClaimMapper()
+				}),
+			)
+		})
+		o.dedicatedReason = "internal principal authentication required"
+	}
+}
+
 // WithPersistenceFaultInjection requests a dedicated cluster with the given persistence fault injection config.
 func WithPersistenceFaultInjection(cfg *config.FaultInjection) TestOption {
 	return func(o *testOptions) {
