@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -34,6 +35,7 @@ type handler struct {
 	activitypb.UnimplementedActivityServiceServer
 	config            *Config
 	historyHandler    historyservice.HistoryServiceServer
+	callbackValidator callbacks.Validator
 	linkValidator     *linkValidator
 	logger            log.Logger
 	metricsHandler    metrics.Handler
@@ -43,6 +45,7 @@ type handler struct {
 func newHandler(
 	config *Config,
 	historyHandler historyservice.HistoryServiceServer,
+	callbackValidator callbacks.Validator,
 	linkValidator *linkValidator,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
@@ -51,6 +54,7 @@ func newHandler(
 	return &handler{
 		config:            config,
 		historyHandler:    historyHandler,
+		callbackValidator: callbackValidator,
 		linkValidator:     linkValidator,
 		logger:            logger,
 		metricsHandler:    metricsHandler,
@@ -74,8 +78,6 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, serviceerror.NewInvalidArgumentf("unsupported ID conflict policy: %v", frontendReq.GetIdConflictPolicy())
 	}
 
-	maxCallbacks := h.config.MaxCallbacksPerExecution(frontendReq.GetNamespace())
-
 	result, err := chasm.StartExecution(
 		ctx,
 		chasm.ExecutionKey{
@@ -89,7 +91,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			}
 
 			if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
-				if err := newActivity.addCompletionCallbacks(mutableContext, request.GetRequestId(), cbs, maxCallbacks); err != nil {
+				if err := newActivity.addCompletionCallbacks(mutableContext, request.GetRequestId(), cbs, request.GetNamespace(), h.callbackValidator); err != nil {
 					return nil, err
 				}
 			}
@@ -144,7 +146,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			ref,
 			func(a *Activity, ctx chasm.MutableContext, _ any) (any, error) {
 				if attachCallbacks {
-					if err := a.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks); err != nil {
+					if err := a.addCompletionCallbacks(ctx, requestID, cbs, frontendReq.GetNamespace(), h.callbackValidator); err != nil {
 						return nil, err
 					}
 				}
