@@ -19,6 +19,7 @@ import (
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -36,6 +37,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -568,6 +570,102 @@ func (s *engine2Suite) TestRecordWorkflowTaskStarted_NoMessages() {
 	s.Error(err)
 	s.IsType(&serviceerror.NotFound{}, err, err.Error())
 	s.EqualError(err, "No messages for speculative workflow task.")
+}
+
+func (s *engine2Suite) TestRecordWorkflowTaskStarted_DirtySpeculativeWorkflowTask() {
+	// Verify that RecordWorkflowTaskStarted persists and converts a speculative Workflow Task when
+	// starting it makes mutable state dirty. Here, assigning the initial Build ID creates persistent
+	// visibility work, so History must not return Noop.
+	const (
+		taskQueue = "testTaskQueue"
+		identity  = "testIdentity"
+		updateID  = "update-id"
+		buildID   = "1.0.0"
+	)
+	workflowExecution := &commonpb.WorkflowExecution{
+		WorkflowId: "wId",
+		RunId:      tests.RunID,
+	}
+
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(false, tests.Version).
+		Return(cluster.TestCurrentClusterName).AnyTimes()
+	ms := s.createExecutionStartedState(workflowExecution, taskQueue, identity, false, false)
+	// Keep the workflow at the active failover version so failover does not independently convert
+	// the speculative Workflow Task before the Build ID assignment is applied.
+	err := ms.UpdateCurrentVersion(tests.GlobalNamespaceEntry.FailoverVersion(workflowExecution.GetWorkflowId()), true)
+	s.NoError(err)
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+		&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(context.Background(), ms)},
+		nil,
+	)
+	// Capture the write made by RecordWorkflowTaskStarted. If the handler incorrectly returns Noop,
+	// this expected persistence call is never made and the test fails.
+	var persistedExecutionInfo *persistencespb.WorkflowExecutionInfo
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			persistedExecutionInfo = request.UpdateWorkflowMutation.ExecutionInfo
+			return tests.UpdateWorkflowExecutionResponse, nil
+		},
+	)
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).Return(
+		&persistence.ReadHistoryBranchResponse{},
+		nil,
+	)
+	s.mockShard.Resource.SearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).
+		Return(searchattribute.TestNameTypeMap(), nil)
+	s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
+		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
+
+	// Admit an Update and schedule the speculative Workflow Task that will carry it to the worker.
+	wfCtx, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
+		metrics.AddMetricsContext(context.Background()),
+		s.mockShard,
+		tests.NamespaceID,
+		workflowExecution,
+		locks.PriorityHigh,
+	)
+	s.NoError(err)
+	loadedMS, err := wfCtx.LoadMutableState(context.Background(), s.mockShard)
+	s.NoError(err)
+	upd, _, err := wfCtx.UpdateRegistry(context.Background()).FindOrCreate(context.Background(), updateID)
+	s.NoError(err)
+	s.NoError(upd.Admit(
+		&updatepb.Request{
+			Meta:  &updatepb.Meta{UpdateId: updateID},
+			Input: &updatepb.Input{Name: "update"},
+		},
+		workflow.WithEffects(effect.Immediate(context.Background()), loadedMS),
+	))
+	wft, err := loadedMS.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_SPECULATIVE)
+	s.NoError(err)
+	release(nil)
+
+	// Matching starts the speculative task with an initial Build ID assignment, which generates a
+	// visibility task and makes mutable state dirty.
+	response, err := s.historyEngine.RecordWorkflowTaskStarted(
+		metrics.AddMetricsContext(context.Background()),
+		&historyservice.RecordWorkflowTaskStartedRequest{
+			NamespaceId:       tests.NamespaceID.String(),
+			WorkflowExecution: workflowExecution,
+			ScheduledEventId:  wft.ScheduledEventID,
+			RequestId:         "request-id",
+			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+				TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue},
+				Identity:  identity,
+				WorkerVersionCapabilities: &commonpb.WorkerVersionCapabilities{ //nolint:staticcheck // SA1019: required to exercise old Build ID-based versioning.
+					UseVersioning: true,
+					BuildId:       buildID,
+				},
+			},
+		},
+	)
+	s.NoError(err)
+	s.NotNil(response)
+	// Transaction close must use the existing conversion path and persist the task as normal.
+	s.Require().NotNil(persistedExecutionInfo)
+	s.Equal(enumsspb.WORKFLOW_TASK_TYPE_NORMAL, persistedExecutionInfo.GetWorkflowTaskType())
+	s.Equal(buildID, persistedExecutionInfo.GetAssignedBuildId())
 }
 
 func (s *engine2Suite) TestRecordWorkflowTaskStartedIfGetExecutionFailed() {
