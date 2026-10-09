@@ -209,6 +209,10 @@ type (
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
 		GetApproximatePersistedSize() int
 		ChasmSkipPersistenceEnabled() bool
+		// Returns the operator override of the logical task count that triggers the task count
+		// metrics for the given fully qualified task type. Zero means not set, so the registered
+		// threshold applies, and a negative value disables the metrics.
+		ChasmLogicalTaskCountAlertThreshold(chasmTaskType string) int
 		ChasmDLQScheduledPureTaskOnValidationEnabled() bool
 		GetNamespaceEntry() *namespace.Namespace
 		GetCurrentVersion() int64
@@ -2049,6 +2053,10 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 	var firstPureTask *persistencespb.ChasmComponentAttributes_Task
 	var firstPureTaskNode *Node
 
+	// Keyed by task type ID and aggregated across the whole execution. Stays nil unless a
+	// type opted in.
+	var taskCounts map[uint32]int
+
 	for nodePath, node := range n.andAllChildren() {
 		// no-op if node is not a component
 		componentAttr := node.serializedNode.Metadata.GetComponentAttributes()
@@ -2110,6 +2118,9 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 			}
 		}
 
+		// Invalid tasks are removed and new tasks added by this point, so counts are final.
+		taskCounts = n.countLogicalTasks(componentAttr, taskCounts)
+
 		sideEffectTasks := componentAttr.GetSideEffectTasks()
 		for _, sideEffectTask := range slices.Backward(sideEffectTasks) {
 			if sideEffectTask.PhysicalTaskStatus == physicalTaskStatusCreated {
@@ -2137,6 +2148,8 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		}
 	}
 
+	n.emitLogicalTaskCountMetrics(taskCounts, archetypeID)
+
 	// TODO: We cannot simply assert that all tasks in n.nodeBase.newTasks are processed.
 	// That should be the case when only one transition for each transaction.
 	// However, when processing pure tasks, we run multiple pure tasks, thus multiple transitions
@@ -2148,6 +2161,74 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		firstPureTaskNode,
 		archetypeID,
 	)
+}
+
+// countLogicalTasks adds componentAttr's logical task counts, keyed by task type ID, into
+// counts, tracking only task types opted into the task count metrics, and returns the
+// possibly reallocated map.
+func (n *Node) countLogicalTasks(
+	componentAttr *persistencespb.ChasmComponentAttributes,
+	counts map[uint32]int,
+) map[uint32]int {
+	if _, ok := n.registry.taskCountMetricComponentIDs[componentAttr.GetTypeId()]; !ok {
+		return counts
+	}
+
+	for _, componentTasks := range [2][]*persistencespb.ChasmComponentAttributes_Task{
+		componentAttr.GetPureTasks(),
+		componentAttr.GetSideEffectTasks(),
+	} {
+		for _, componentTask := range componentTasks {
+			registrableTask, ok := n.registry.TaskByID(componentTask.GetTypeId())
+			if !ok || !registrableTask.taskCountMetricEnabled() {
+				continue
+			}
+			if counts == nil {
+				counts = make(map[uint32]int)
+			}
+			counts[componentTask.GetTypeId()]++
+		}
+	}
+
+	return counts
+}
+
+// emitLogicalTaskCountMetrics records the task count metrics for each task type over threshold.
+func (n *Node) emitLogicalTaskCountMetrics(
+	counts map[uint32]int,
+	archetypeID ArchetypeID,
+) {
+	if len(counts) == 0 {
+		return
+	}
+
+	// Allocated on the first breach only.
+	var metricsHandler metrics.Handler
+
+	for taskTypeID, count := range counts {
+		registrableTask, ok := n.registry.TaskByID(taskTypeID)
+		if !ok {
+			continue
+		}
+		taskFqn := registrableTask.fqType()
+		threshold := registrableTask.resolveTaskCountMetricThreshold(
+			n.backend.ChasmLogicalTaskCountAlertThreshold(taskFqn),
+		)
+		if threshold <= 0 || count <= threshold {
+			continue
+		}
+		if metricsHandler == nil {
+			archetypeTag := metrics.ArchetypeTag("")
+			if name, ok := n.registry.ArchetypeDisplayName(archetypeID); ok {
+				archetypeTag = metrics.ArchetypeTag(name)
+			}
+			metricsHandler = n.metricsHandler.WithTags(archetypeTag)
+		}
+
+		taskTypeTag := metrics.ChasmTaskTypeTag(taskFqn)
+		metrics.ChasmLogicalTaskCount.With(metricsHandler).Record(int64(count), taskTypeTag)
+		metrics.ChasmLogicalTaskCountExceeded.With(metricsHandler).Record(1, taskTypeTag)
+	}
 }
 
 func (n *Node) deserializeComponentTask(

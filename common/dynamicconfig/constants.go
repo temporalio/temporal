@@ -100,12 +100,6 @@ pod-level rate limiting. Read once at process startup: changing this value requi
 		`SuppressErrorSetSystemSearchAttribute suppresses errors when trying to set
 values in system search attributes.`,
 	)
-	VisibilityEnableUnifiedQueryConverter = NewGlobalBoolSetting(
-		"system.visibilityEnableUnifiedQueryConverter",
-		true,
-		`VisibilityEnableUnifiedQueryConverter enables the unified query converter for parsing the
-query.`,
-	)
 
 	HistoryArchivalState = NewGlobalStringSetting(
 		"system.historyArchivalState",
@@ -3002,6 +2996,11 @@ should be enabled for non continuedAsNew workflow UpdateWithNew case.`,
 		false,
 		`ReplicationMultipleBatches is the flag to enable replication of multiple history event batches`,
 	)
+	ValidateReplicationTaskSourceCluster = NewGlobalBoolSetting(
+		"history.validateReplicationTaskSourceCluster",
+		true,
+		`ValidateReplicationTaskSourceCluster controls whether inbound workflow replication tasks are accepted only from clusters in the namespace cluster list.`,
+	)
 	ReplicationTaskConverterLowPriorityLockMaxAttempts = NewGlobalIntSetting(
 		"history.ReplicationTaskConverterLowPriorityLockMaxAttempts",
 		3,
@@ -3357,6 +3356,16 @@ terminates the task via DLQ. Immediate pure tasks are never affected by this set
 		`ChasmMaxInMemoryPureTasks is the maximum number of physical pure tasks that can be held in memory for best effort task deletion.`,
 	)
 
+	ChasmLogicalTaskCountAlertThreshold = NewChasmTaskTypeIntSetting(
+		"history.chasmLogicalTaskCountAlertThreshold",
+		0,
+		`ChasmLogicalTaskCountAlertThreshold overrides the number of logical CHASM tasks of one task type a single
+execution may accumulate before chasm_logical_task_count and chasm_logical_task_count_exceeded are emitted.
+Only applies to task types registered with chasm.WithTaskCountMetric. A value of 0 means not set, so the
+threshold registered via chasm.WithTaskCountMetric applies. A negative value disables the metrics. The chasmTaskType constraint takes a task's fully qualified name,
+e.g. "callback.invoke".`,
+	)
+
 	EnableCHASMSchedulerCreation = NewNamespaceBoolSetting(
 		"history.enableCHASMSchedulerCreation",
 		false,
@@ -3432,7 +3441,7 @@ the IncomingSignals CHASM field.`,
 	)
 	EnableCHASMWorkflowRootOnStart = NewNamespaceBoolSetting(
 		"history.enableCHASMWorkflowRootOnStart",
-		false,
+		true,
 		`Controls whether the CHASM Workflow root component is persisted in the transaction that
 applies the WorkflowExecutionStarted event, instead of lazily on first use of a CHASM feature.
 Requires EnableChasm.`,

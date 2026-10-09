@@ -56,7 +56,6 @@ type (
 		processorAckTimeout            dynamicconfig.DurationPropertyFn
 		disableOrderByClause           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		enableManualPagination         dynamicconfig.BoolPropertyFnWithNamespaceFilter
-		enableUnifiedQueryConverter    dynamicconfig.BoolPropertyFn
 		metricsHandler                 metrics.Handler
 		logger                         log.Logger
 	}
@@ -136,7 +135,6 @@ func NewVisibilityStore(
 	chasmRegistry *chasm.Registry,
 	disableOrderByClause dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	enableManualPagination dynamicconfig.BoolPropertyFnWithNamespaceFilter,
-	enableUnifiedQueryConverter dynamicconfig.BoolPropertyFn,
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) (*VisibilityStore, error) {
@@ -164,7 +162,6 @@ func NewVisibilityStore(
 		processorAckTimeout:            processorAckTimeout,
 		disableOrderByClause:           disableOrderByClause,
 		enableManualPagination:         enableManualPagination,
-		enableUnifiedQueryConverter:    enableUnifiedQueryConverter,
 		metricsHandler:                 metricsHandler.WithTags(metrics.OperationTag(metrics.ElasticsearchVisibility)),
 		logger:                         logger,
 	}, nil
@@ -424,31 +421,15 @@ func (s *VisibilityStore) CountChasmExecutions(
 	}
 	mapper := rc.SearchAttributesMapper()
 
-	var queryParams *esQueryParams
-	var err error
-	if s.enableUnifiedQueryConverter() {
-		queryParams, err = s.convertQuery(
-			namespace.Name(request.Namespace),
-			namespace.ID(request.NamespaceId),
-			request.Query,
-			mapper,
-			request.ArchetypeId,
-		)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		queryParamsLegacy, err := s.convertQueryLegacy(
-			namespace.Name(request.Namespace),
-			namespace.ID(request.NamespaceId),
-			request.Query,
-			mapper,
-			request.ArchetypeId,
-		)
-		if err != nil {
-			return nil, err
-		}
-		queryParams = (*esQueryParams)(queryParamsLegacy)
+	queryParams, err := s.convertQuery(
+		namespace.Name(request.Namespace),
+		namespace.ID(request.NamespaceId),
+		request.Query,
+		mapper,
+		request.ArchetypeId,
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	if len(queryParams.GroupBy) > 0 {
@@ -467,19 +448,15 @@ func (s *VisibilityStore) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
 ) (*store.InternalCountExecutionsResponse, error) {
-	var queryParams *esQueryParams
-	var err error
-	if s.enableUnifiedQueryConverter() {
-		queryParams, err = s.convertQuery(request.Namespace, request.NamespaceID, request.Query, nil, chasm.UnspecifiedArchetypeID)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		queryParamsLegacy, err := s.convertQueryLegacy(request.Namespace, request.NamespaceID, request.Query, nil, chasm.UnspecifiedArchetypeID)
-		if err != nil {
-			return nil, err
-		}
-		queryParams = (*esQueryParams)(queryParamsLegacy)
+	queryParams, err := s.convertQuery(
+		request.Namespace,
+		request.NamespaceID,
+		request.Query,
+		nil,
+		chasm.UnspecifiedArchetypeID,
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	if len(queryParams.GroupBy) > 0 {
@@ -617,25 +594,15 @@ func (s *VisibilityStore) BuildChasmSearchParameters(
 func (s *VisibilityStore) buildSearchParametersInternal(
 	params *searchParametersInternal,
 ) (*client.SearchParameters, error) {
-	var queryParams *esQueryParams
-	var err error
-	if s.enableUnifiedQueryConverter() {
-		queryParams, err = s.convertQuery(params.NamespaceName, params.NamespaceID, params.Query, params.ChasmMapper, params.ArchetypeID)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		queryParamsLegacy, err := s.convertQueryLegacy(
-			params.NamespaceName,
-			params.NamespaceID,
-			params.Query,
-			params.ChasmMapper,
-			params.ArchetypeID,
-		)
-		if err != nil {
-			return nil, err
-		}
-		queryParams = (*esQueryParams)(queryParamsLegacy)
+	queryParams, err := s.convertQuery(
+		params.NamespaceName,
+		params.NamespaceID,
+		params.Query,
+		params.ChasmMapper,
+		params.ArchetypeID,
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	searchParams := &client.SearchParameters{
@@ -804,54 +771,6 @@ func (s *VisibilityStore) convertQuery(
 		Sorter:  orderBy,
 		GroupBy: groupBy,
 	}, nil
-}
-
-func (s *VisibilityStore) convertQueryLegacy(
-	namespace namespace.Name,
-	namespaceID namespace.ID,
-	requestQueryStr string,
-	chasmMapper *chasm.VisibilitySearchAttributesMapper,
-	archetypeID chasm.ArchetypeID,
-) (*query.QueryParamsLegacy, error) {
-	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.index, false)
-	if err != nil {
-		return nil, serviceerror.NewUnavailablef("unable to read search attribute types: %v", err)
-	}
-	nameInterceptor := NewNameInterceptor(namespace, saTypeMap, s.searchAttributesMapperProvider, chasmMapper, archetypeID)
-	queryConverter := NewQueryConverterLegacy(
-		nameInterceptor,
-		NewValuesInterceptor(namespace, saTypeMap, chasmMapper, s.metricsHandler, s.logger),
-		saTypeMap,
-		chasmMapper,
-	)
-	queryParams, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)
-	if err != nil {
-		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
-		if converterErr, ok := errors.AsType[*query.ConverterError](err); ok {
-			return nil, converterErr.ToInvalidArgument()
-		}
-		return nil, err
-	}
-
-	// Create a new bool query because a request query might have only "should" (="or") queries.
-	namespaceFilterQuery := elastic.NewBoolQuery().Filter(elastic.NewTermQuery(sadefs.NamespaceID, namespaceID.String()))
-
-	// If the query did not explicitly filter on TemporalNamespaceDivision somehow, then add a
-	// "must not exist" (i.e. "is null") query for it.
-	if !nameInterceptor.seenNamespaceDivision {
-		if archetypeID != chasm.UnspecifiedArchetypeID {
-			namespaceFilterQuery.Filter(elastic.NewTermQuery(sadefs.TemporalNamespaceDivision, strconv.Itoa(int(archetypeID))))
-		} else {
-			namespaceFilterQuery.MustNot(elastic.NewExistsQuery(sadefs.TemporalNamespaceDivision))
-		}
-	}
-
-	if queryParams.Query != nil {
-		namespaceFilterQuery.Filter(queryParams.Query)
-	}
-
-	queryParams.Query = namespaceFilterQuery
-	return queryParams, nil
 }
 
 func (s *VisibilityStore) GetListFieldSorter(fieldSorts []elastic.Sorter) ([]elastic.Sorter, error) {

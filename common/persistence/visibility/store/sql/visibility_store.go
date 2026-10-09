@@ -13,7 +13,6 @@ import (
 	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -38,8 +37,6 @@ type (
 		chasmRegistry                  *chasm.Registry
 		metricsHandler                 metrics.Handler
 		logger                         log.Logger
-
-		enableUnifiedQueryConverter dynamicconfig.BoolPropertyFn
 	}
 
 	listExecutionsRequestInternal struct {
@@ -64,7 +61,6 @@ func NewSQLVisibilityStore(
 	searchAttributesProvider searchattribute.Provider,
 	searchAttributesMapperProvider searchattribute.MapperProvider,
 	chasmRegistry *chasm.Registry,
-	enableUnifiedQueryConverter dynamicconfig.BoolPropertyFn,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 	serializer serialization.Serializer,
@@ -81,8 +77,6 @@ func NewSQLVisibilityStore(
 		chasmRegistry:                  chasmRegistry,
 		metricsHandler:                 metricsHandler,
 		logger:                         logger,
-
-		enableUnifiedQueryConverter: enableUnifiedQueryConverter,
 	}, nil
 }
 
@@ -197,10 +191,7 @@ func (s *VisibilityStore) ListWorkflowExecutions(
 	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListExecutionsResponse, error) {
-	if s.enableUnifiedQueryConverter() {
-		return s.listWorkflowExecutions(ctx, request)
-	}
-	return s.listWorkflowExecutionsLegacy(ctx, request)
+	return s.listWorkflowExecutions(ctx, request)
 }
 
 func (s *VisibilityStore) ListChasmExecutions(
@@ -223,11 +214,7 @@ func (s *VisibilityStore) ListChasmExecutions(
 		ArchetypeID:   request.ArchetypeId,
 	}
 
-	if s.enableUnifiedQueryConverter() {
-		return s.listExecutionsInternal(ctx, requestInternal)
-	}
-
-	return s.listExecutionsInternalLegacy(ctx, requestInternal)
+	return s.listExecutionsInternal(ctx, requestInternal)
 }
 
 func (s *VisibilityStore) CountChasmExecutions(
@@ -239,11 +226,7 @@ func (s *VisibilityStore) CountChasmExecutions(
 		return nil, serviceerror.NewInvalidArgumentf("unknown archetype ID: %d", request.ArchetypeId)
 	}
 	mapper := rc.SearchAttributesMapper()
-
-	if s.enableUnifiedQueryConverter() {
-		return s.countChasmExecutions(ctx, request, mapper)
-	}
-	return s.countChasmExecutionsLegacy(ctx, request, mapper)
+	return s.countChasmExecutions(ctx, request, mapper)
 }
 
 func (s *VisibilityStore) countChasmExecutions(
@@ -286,52 +269,6 @@ func (s *VisibilityStore) countChasmExecutions(
 	}
 
 	selectFilter := s.buildSelectFilterFromQueryParams(queryParams, sqlQC)
-
-	if len(selectFilter.GroupBy) > 0 {
-		return s.countGroupByExecutions(ctx, selectFilter, mapper)
-	}
-
-	count, err := s.sqlStore.DB.CountFromVisibility(ctx, *selectFilter)
-	if err != nil {
-		return nil, serviceerror.NewUnavailable(
-			fmt.Sprintf("CountChasmExecutions operation failed. Query failed: %v", err))
-	}
-
-	return &store.InternalCountExecutionsResponse{Count: count}, nil
-}
-
-func (s *VisibilityStore) countChasmExecutionsLegacy(
-	ctx context.Context,
-	request *visibilityservice.CountChasmExecutionsRequest,
-	mapper *chasm.VisibilitySearchAttributesMapper,
-) (*store.InternalCountExecutionsResponse, error) {
-	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
-	if err != nil {
-		return nil, err
-	}
-
-	saMapper, err := s.searchAttributesMapperProvider.GetMapper(namespace.Name(request.Namespace))
-	if err != nil {
-		return nil, err
-	}
-
-	converter := NewQueryConverterLegacy(
-		s.GetName(),
-		namespace.Name(request.Namespace),
-		namespace.ID(request.NamespaceId),
-		saTypeMap,
-		saMapper,
-		request.Query,
-		mapper,
-		request.ArchetypeId,
-	)
-	selectFilter, err := converter.BuildCountStmt()
-	if err != nil {
-		if converterErr, ok := errors.AsType[*query.ConverterError](err); ok {
-			return nil, converterErr.ToInvalidArgument()
-		}
-		return nil, err
-	}
 
 	if len(selectFilter.GroupBy) > 0 {
 		return s.countGroupByExecutions(ctx, selectFilter, mapper)
@@ -452,145 +389,11 @@ func (s *VisibilityStore) listExecutionsInternal(
 	}, nil
 }
 
-func (s *VisibilityStore) listWorkflowExecutionsLegacy(
-	ctx context.Context,
-	request *manager.ListWorkflowExecutionsRequestV2,
-) (*store.InternalListExecutionsResponse, error) {
-	return s.listExecutionsInternalLegacy(ctx, &listExecutionsRequestInternal{
-		NamespaceID:   request.NamespaceID,
-		Namespace:     request.Namespace,
-		Query:         request.Query,
-		PageSize:      request.PageSize,
-		NextPageToken: request.NextPageToken,
-		ChasmMapper:   nil,
-		ArchetypeID:   chasm.UnspecifiedArchetypeID,
-	})
-}
-
-func (s *VisibilityStore) listExecutionsInternalLegacy(
-	ctx context.Context,
-	request *listExecutionsRequestInternal,
-) (*store.InternalListExecutionsResponse, error) {
-	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
-	if err != nil {
-		return nil, err
-	}
-
-	saMapper, err := s.searchAttributesMapperProvider.GetMapper(request.Namespace)
-	if err != nil {
-		return nil, err
-	}
-
-	converter := NewQueryConverterLegacy(
-		s.GetName(),
-		request.Namespace,
-		request.NamespaceID,
-		saTypeMap,
-		saMapper,
-		request.Query,
-		request.ChasmMapper,
-		request.ArchetypeID,
-	)
-	selectFilter, err := converter.BuildSelectStmt(request.PageSize, request.NextPageToken)
-	if err != nil {
-		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
-		if converterErr, ok := errors.AsType[*query.ConverterError](err); ok {
-			return nil, converterErr.ToInvalidArgument()
-		}
-		return nil, err
-	}
-
-	rows, err := s.sqlStore.DB.SelectFromVisibility(ctx, *selectFilter)
-	if err != nil {
-		return nil, convertSQLError("ListWorkflowExecutions operation failed.", err)
-	}
-	if len(rows) == 0 {
-		return &store.InternalListExecutionsResponse{}, nil
-	}
-
-	var infos = make([]*store.InternalExecutionInfo, len(rows))
-	for i, row := range rows {
-		infos[i], err = s.rowToInfo(&row, request.ChasmMapper)
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	var nextPageToken []byte
-	if len(rows) == request.PageSize {
-		lastRow := rows[len(rows)-1]
-		closeTime := maxDatetime
-		if lastRow.CloseTime != nil {
-			closeTime = *lastRow.CloseTime
-		}
-		nextPageToken, err = serializePageTokenLegacy(&pageTokenLegacy{
-			CloseTime: closeTime,
-			StartTime: lastRow.StartTime,
-			RunID:     lastRow.RunID,
-		})
-		if err != nil {
-			return nil, err
-		}
-	}
-	return &store.InternalListExecutionsResponse{
-		Executions:    infos,
-		NextPageToken: nextPageToken,
-	}, nil
-}
-
 func (s *VisibilityStore) CountWorkflowExecutions(
 	ctx context.Context,
 	request *manager.CountWorkflowExecutionsRequest,
 ) (*store.InternalCountExecutionsResponse, error) {
-	if s.enableUnifiedQueryConverter() {
-		return s.countWorkflowExecutions(ctx, request)
-	}
-	return s.countWorkflowExecutionsLegacy(ctx, request)
-}
-
-func (s *VisibilityStore) countWorkflowExecutionsLegacy(
-	ctx context.Context,
-	request *manager.CountWorkflowExecutionsRequest,
-) (*store.InternalCountExecutionsResponse, error) {
-	saTypeMap, err := s.searchAttributesProvider.GetSearchAttributes(s.GetIndexName(), false)
-	if err != nil {
-		return nil, err
-	}
-
-	saMapper, err := s.searchAttributesMapperProvider.GetMapper(request.Namespace)
-	if err != nil {
-		return nil, err
-	}
-
-	converter := NewQueryConverterLegacy(
-		s.GetName(),
-		request.Namespace,
-		request.NamespaceID,
-		saTypeMap,
-		saMapper,
-		request.Query,
-		nil,
-		chasm.UnspecifiedArchetypeID,
-	)
-	selectFilter, err := converter.BuildCountStmt()
-	if err != nil {
-		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
-		if converterErr, ok := errors.AsType[*query.ConverterError](err); ok {
-			return nil, converterErr.ToInvalidArgument()
-		}
-		return nil, err
-	}
-
-	if len(selectFilter.GroupBy) > 0 {
-		return s.countGroupByExecutions(ctx, selectFilter, nil)
-	}
-
-	count, err := s.sqlStore.DB.CountFromVisibility(ctx, *selectFilter)
-	if err != nil {
-		return nil, convertSQLError("CountWorkflowExecutions operation failed.", err)
-	}
-
-	return &store.InternalCountExecutionsResponse{Count: count}, nil
+	return s.countWorkflowExecutions(ctx, request)
 }
 
 func (s *VisibilityStore) countWorkflowExecutions(

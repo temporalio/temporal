@@ -7,6 +7,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -133,6 +134,7 @@ func Invoke(
 	}
 
 	isCloseEventOnly := request.Request.GetHistoryEventFilterType() == enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT
+	var propagatedNexusSerializationContext *nexuspb.PropagatedSerializationContext
 
 	queryMutableState := func(
 		namespaceUUID namespace.ID,
@@ -194,6 +196,7 @@ func Invoke(
 		if err != nil {
 			return nil, "", 0, 0, false, nil, nil, nil, err
 		}
+		propagatedNexusSerializationContext = response.GetNexusSerializationContext()
 
 		isWorkflowRunning := response.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 		currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(response.GetVersionHistories())
@@ -531,10 +534,11 @@ func Invoke(
 	}
 	return &historyservice.GetWorkflowExecutionHistoryResponseWithRaw{
 		Response: &workflowservice.GetWorkflowExecutionHistoryResponse{
-			History:       history,
-			RawHistory:    historyBlob,
-			NextPageToken: nextToken,
-			Archived:      false,
+			History:                             history,
+			RawHistory:                          historyBlob,
+			NextPageToken:                       nextToken,
+			Archived:                            false,
+			PropagatedNexusSerializationContext: propagatedNexusSerializationContext,
 		},
 
 		History: rawHistory,
