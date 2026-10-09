@@ -14,6 +14,8 @@ import (
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -37,6 +39,8 @@ type cancelOrTerminateRequest interface {
 type validator struct {
 	config            *Config
 	logger            log.Logger
+	throttledLogger   log.Logger
+	metricsHandler    metrics.Handler
 	saMapperProvider  searchattribute.MapperProvider
 	saValidator       *searchattribute.Validator
 	callbackValidator callbacks.Validator
@@ -46,6 +50,8 @@ type validator struct {
 func newValidator(
 	config *Config,
 	logger log.Logger,
+	throttledLogger log.Logger,
+	metricsHandler metrics.Handler,
 	saMapperProvider searchattribute.MapperProvider,
 	saValidator *searchattribute.Validator,
 	callbackValidator callbacks.Validator,
@@ -54,6 +60,8 @@ func newValidator(
 	return &validator{
 		config:            config,
 		logger:            logger,
+		throttledLogger:   throttledLogger,
+		metricsHandler:    metricsHandler,
 		saMapperProvider:  saMapperProvider,
 		saValidator:       saValidator,
 		callbackValidator: callbackValidator,
@@ -119,7 +127,15 @@ func (v *validator) validateAndNormalizeStartRequest(
 	}
 
 	v.normalizeIDPolicies(req)
+
+	if reservedKeys := commonnexus.ReservedHeaderKeys(req.GetNexusHeader()); len(reservedKeys) > 0 {
+		v.recordReservedHeaderUsage(ns, reservedKeys, false)
+	}
 	return nil
+}
+
+func (v *validator) recordReservedHeaderUsage(ns string, keys []string, rejected bool) {
+	RecordReservedHeaderUsage(v.metricsHandler, v.throttledLogger, ns, ReservedHeaderSourceStandalone, keys, rejected)
 }
 
 func (v *validator) validateAndNormalizeDescribeRequest(
@@ -306,6 +322,10 @@ func (v *validator) validateAndLowercaseHeaders(ns string, headers map[string]st
 			return nil, serviceerror.NewInvalidArgumentf("nexus_header contains a disallowed key: %q", k)
 		}
 		lowered[lowerK] = val
+	}
+	if reservedKeys := commonnexus.ReservedHeaderKeys(lowered); len(reservedKeys) > 0 && v.config.RejectReservedHeaders(ns) {
+		v.recordReservedHeaderUsage(ns, reservedKeys, true)
+		return nil, serviceerror.NewInvalidArgumentf("nexus_header contains reserved keys: %q", reservedKeys)
 	}
 	if headerLength > v.config.MaxOperationHeaderSize(ns) {
 		return nil, serviceerror.NewInvalidArgument("nexus_header exceeds size limit")

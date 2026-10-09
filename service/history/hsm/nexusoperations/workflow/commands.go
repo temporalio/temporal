@@ -15,7 +15,11 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/hsm"
@@ -29,6 +33,8 @@ type commandHandler struct {
 	config           *nexusoperations.Config
 	endpointRegistry commonnexus.EndpointRegistry
 	nexusProcessor   *chasm.NexusEndpointProcessor
+	metricsHandler   metrics.Handler
+	throttledLogger  log.Logger
 }
 
 //nolint:revive // The legacy handler is kept intact while existing HSM operations remain loadable.
@@ -174,6 +180,15 @@ func (ch *commandHandler) HandleScheduleCommand(
 		}
 	}
 
+	reservedHeaderKeys := commonnexus.ReservedHeaderKeys(lowerCaseHeader)
+	if len(reservedHeaderKeys) > 0 && ch.config.RejectReservedHeaders(nsName) {
+		ch.recordReservedHeaderUsage(ms, nsName, reservedHeaderKeys, true)
+		return chasmworkflow.FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf("ScheduleNexusOperationCommandAttributes.NexusHeader contains reserved header keys: %q", reservedHeaderKeys),
+		}
+	}
+
 	if headerLength > ch.config.MaxOperationHeaderSize(nsName) {
 		return chasmworkflow.FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
@@ -238,7 +253,31 @@ func (ch *commandHandler) HandleScheduleCommand(
 		he.EventGroupMarkers = command.EventGroupMarkers
 	})
 
-	return nexusoperations.ScheduledEventDefinition{}.Apply(root, event)
+	if err := (nexusoperations.ScheduledEventDefinition{}).Apply(root, event); err != nil {
+		return err
+	}
+	if len(reservedHeaderKeys) > 0 {
+		ch.recordReservedHeaderUsage(ms, nsName, reservedHeaderKeys, false)
+	}
+	return nil
+}
+
+func (ch *commandHandler) recordReservedHeaderUsage(
+	ms historyi.MutableState,
+	nsName string,
+	keys []string,
+	rejected bool,
+) {
+	chasmnexus.RecordReservedHeaderUsage(
+		ch.metricsHandler,
+		ch.throttledLogger,
+		nsName,
+		chasmnexus.ReservedHeaderSourceWorkflow,
+		keys,
+		rejected,
+		tag.WorkflowID(ms.GetExecutionInfo().GetWorkflowId()),
+		tag.WorkflowRunID(ms.GetExecutionState().GetRunId()),
+	)
 }
 
 func (ch *commandHandler) HandleCancelCommand(
@@ -328,11 +367,15 @@ func RegisterCommandHandlers(
 	chasmRegistry *chasm.Registry,
 	endpointRegistry commonnexus.EndpointRegistry,
 	config *nexusoperations.Config,
+	metricsHandler metrics.Handler,
+	throttledLogger log.ThrottledLogger,
 ) error {
 	h := commandHandler{
 		config:           config,
 		endpointRegistry: endpointRegistry,
 		nexusProcessor:   chasmRegistry.NexusEndpointProcessor,
+		metricsHandler:   metricsHandler,
+		throttledLogger:  throttledLogger,
 	}
 	if err := reg.Register(enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION, h.HandleScheduleCommand); err != nil {
 		return err

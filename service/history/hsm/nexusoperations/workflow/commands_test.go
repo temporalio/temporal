@@ -16,10 +16,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	testlib "go.temporal.io/server/chasm/lib/tests"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexustest"
@@ -48,6 +50,7 @@ type testContext struct {
 	scheduleHandler workflow.CommandHandler
 	cancelHandler   workflow.CommandHandler
 	history         *historypb.History
+	metricsCapture  *metricstest.Capture
 }
 
 var defaultConfig = &nexusoperations.Config{
@@ -56,6 +59,7 @@ var defaultConfig = &nexusoperations.Config{
 	MaxConcurrentOperations:            dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
 	MaxOperationHeaderSize:             dynamicconfig.GetIntPropertyFnFilteredByNamespace(20),
 	DisallowedOperationHeaders:         dynamicconfig.GetTypedPropertyFn([]string{"request-timeout"}),
+	RejectReservedHeaders:              dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 	MaxOperationScheduleToCloseTimeout: dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Hour * 24),
 }
 
@@ -74,7 +78,10 @@ func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
 	chReg := workflow.NewCommandHandlerRegistry()
 	chasmReg := chasm.NewRegistry(log.NewTestLogger())
 	require.NoError(t, chasmReg.Register(testlib.Library))
-	require.NoError(t, opsworkflow.RegisterCommandHandlers(chReg, chasmReg, endpointReg, cfg))
+	metricsHandler := metricstest.NewCaptureHandler()
+	metricsCapture := metricsHandler.StartCapture()
+	t.Cleanup(func() { metricsHandler.StopCapture(metricsCapture) })
+	require.NoError(t, opsworkflow.RegisterCommandHandlers(chReg, chasmReg, endpointReg, cfg, metricsHandler, log.NewTestLogger()))
 	smReg := hsm.NewRegistry()
 	require.NoError(t, workflow.RegisterStateMachine(smReg))
 	require.NoError(t, nexusoperations.RegisterStateMachines(smReg))
@@ -102,6 +109,7 @@ func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
 	execInfo := &persistencespb.WorkflowExecutionInfo{}
 	ms.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
 	ms.EXPECT().GetExecutionInfo().Return(execInfo).AnyTimes()
+	ms.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{}).AnyTimes()
 	ms.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
 	ms.EXPECT().NextTransitionCount().Return(int64(2)).AnyTimes()
 	scheduleHandler, ok := chReg.Handler(enumspb.COMMAND_TYPE_SCHEDULE_NEXUS_OPERATION)
@@ -115,6 +123,7 @@ func newTestContext(t *testing.T, cfg *nexusoperations.Config) testContext {
 		history:         history,
 		scheduleHandler: scheduleHandler,
 		cancelHandler:   cancelHandler,
+		metricsCapture:  metricsCapture,
 	}
 }
 
@@ -241,6 +250,73 @@ func TestHandleScheduleCommand(t *testing.T) {
 		require.False(t, failWFTErr.TerminateWorkflow)
 		require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
 		require.Empty(t, tcx.history.Events)
+	})
+
+	t.Run("reserved header keys", func(t *testing.T) {
+		newCommand := func() *commandpb.Command {
+			return &commandpb.Command{
+				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
+					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
+						Endpoint:  "endpoint",
+						Service:   "service",
+						Operation: "op",
+						NexusHeader: map[string]string{
+							"Temporal-Foo": "a",
+							"temporal-bar": "b",
+						},
+					},
+				},
+			}
+		}
+		requireRecorded := func(t *testing.T, capture *metricstest.Capture, rejected string) {
+			recordings := capture.Snapshot()[chasmnexus.ReservedHeaderUsageCounter.Name()]
+			require.Len(t, recordings, 1)
+			require.Equal(t, int64(1), recordings[0].Value)
+			require.Equal(t, tests.GlobalNamespaceEntry.Name().String(), recordings[0].Tags["namespace"])
+			require.Equal(t, chasmnexus.ReservedHeaderSourceWorkflow, recordings[0].Tags["request_source"])
+			require.Equal(t, rejected, recordings[0].Tags["rejected"])
+		}
+		newConfig := func(reject bool) *nexusoperations.Config {
+			cfg := *defaultConfig
+			cfg.MaxOperationHeaderSize = dynamicconfig.GetIntPropertyFnFilteredByNamespace(100)
+			cfg.RejectReservedHeaders = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(reject)
+			return &cfg
+		}
+
+		t.Run("allowed and tracked", func(t *testing.T) {
+			tcx := newTestContext(t, newConfig(false))
+			err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, newCommand())
+			require.NoError(t, err)
+			require.Len(t, tcx.history.Events, 1)
+			require.Equal(t,
+				map[string]string{"temporal-foo": "a", "temporal-bar": "b"},
+				tcx.history.Events[0].GetNexusOperationScheduledEventAttributes().GetNexusHeader(),
+			)
+			requireRecorded(t, tcx.metricsCapture, "false")
+		})
+
+		t.Run("rejected by config", func(t *testing.T) {
+			tcx := newTestContext(t, newConfig(true))
+			err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, newCommand())
+			var failWFTErr chasmworkflow.FailWorkflowTaskError
+			require.ErrorAs(t, err, &failWFTErr)
+			require.False(t, failWFTErr.TerminateWorkflow)
+			require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
+			require.Contains(t, failWFTErr.Message, "reserved header keys")
+			require.Empty(t, tcx.history.Events)
+			requireRecorded(t, tcx.metricsCapture, "true")
+		})
+
+		t.Run("not tracked when a later validation fails", func(t *testing.T) {
+			cfg := newConfig(false)
+			cfg.MaxConcurrentOperations = dynamicconfig.GetIntPropertyFnFilteredByNamespace(0)
+			tcx := newTestContext(t, cfg)
+			err := tcx.scheduleHandler(context.Background(), tcx.ms, commandValidator{maxPayloadSize: 1}, 1, newCommand())
+			var failWFTErr chasmworkflow.FailWorkflowTaskError
+			require.ErrorAs(t, err, &failWFTErr)
+			require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_NEXUS_OPERATIONS_LIMIT_EXCEEDED, failWFTErr.Cause)
+			require.Empty(t, tcx.metricsCapture.Snapshot()[chasmnexus.ReservedHeaderUsageCounter.Name()])
+		})
 	})
 
 	t.Run("exceeds max payload size", func(t *testing.T) {
