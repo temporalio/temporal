@@ -30,7 +30,7 @@ func TestNewNamespaceMutationComponent(t *testing.T) {
 func TestNamespaceMutationComponentVisibility(t *testing.T) {
 	c := NewNamespaceMutationComponent(&namespacereplicationpb.NamespaceMutation{
 		NamespaceDetail: &persistencespb.NamespaceDetail{
-			Info: &persistencespb.NamespaceInfo{Id: "namespace-id"},
+			Info: &persistencespb.NamespaceInfo{Id: "namespace-id", Name: "namespace-name"},
 		},
 	})
 	c.initializeVisibility(&chasm.MockMutableContext{})
@@ -39,6 +39,7 @@ func TestNamespaceMutationComponentVisibility(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, []chasm.SearchAttributeKeyValue{
 		namespaceIDSearchAttribute.Value("namespace-id"),
+		namespaceNameSearchAttribute.Value("namespace-name"),
 	}, c.SearchAttributes(nil))
 	require.IsType(t, &emptypb.Empty{}, c.Memo(nil))
 }
