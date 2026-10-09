@@ -216,7 +216,7 @@ func (r *serviceResolver) AvailableMemberCount() int {
 	_, hosts := r.ring()
 	n := 0
 	for _, host := range hosts {
-		if !isDraining(host) {
+		if !isLeaving(host) {
 			n++
 		}
 	}
@@ -236,7 +236,7 @@ func (r *serviceResolver) AvailableMembers() []membership.HostInfo {
 	_, hosts := r.ring()
 	var servers []membership.HostInfo
 	for _, host := range hosts {
-		if !isDraining(host) {
+		if !isLeaving(host) {
 			servers = append(servers, host)
 		}
 	}
@@ -530,4 +530,17 @@ func isDraining(host *hostInfo) bool {
 		}
 	}
 	return false
+}
+
+func hasStopAt(host *hostInfo) bool {
+	_, ok := host.Label(stopAtKey)
+	return ok
+}
+
+// isLeaving reports that a host has announced its departure (draining or a
+// scheduled stop). Such hosts are dropped from AvailableMembers and
+// AvailableMemberCount, but stay in the lookup ring until they actually leave
+// so shard/task-queue ownership transfers only at eviction.
+func isLeaving(host *hostInfo) bool {
+	return isDraining(host) || hasStopAt(host)
 }
