@@ -15,7 +15,6 @@ import (
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmworkflowpb "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb/v1"
 	commonnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/common/nexus/nexusrpc"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -263,14 +262,6 @@ func (w *Workflow) NexusOperationInvocationData(
 		Header:     attrs.GetNexusHeader(),
 		NexusLinks: []nexus.Link{nexusLink},
 	}, nil
-}
-
-func (w *Workflow) GetNexusCompletion(
-	ctx chasm.Context,
-	requestID string,
-) (nexusrpc.CompleteOperationOptions, error) {
-	// Retrieve the completion data from the underlying mutable state via MSPointer
-	return w.MSPointer.GetNexusCompletion(ctx, requestID)
 }
 
 // BuildPendingNexusOperationInfos reads nexus operations from the workflow and converts them to API format.

@@ -3,7 +3,6 @@ package activity
 import (
 	"errors"
 
-	"github.com/nexus-rpc/sdk-go/nexus"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -17,11 +16,8 @@ import (
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/metrics"
-	commonnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/retrypolicy"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/consts"
@@ -46,7 +42,7 @@ var (
 
 var _ chasm.VisibilitySearchAttributesProvider = (*Activity)(nil)
 var _ chasm.DescribableComponent = (*Activity)(nil)
-var _ callback.CompletionSource = (*Activity)(nil)
+var _ callback.Host = (*Activity)(nil)
 
 type ActivityStore interface {
 	// RecordCompleted applies the provided function to record activity completion
@@ -299,69 +295,7 @@ func (a *Activity) RecordCompleted(ctx chasm.MutableContext, applyFn func(ctx ch
 	if err := applyFn(ctx); err != nil {
 		return err
 	}
-	return callback.ScheduleStandbyCallbacks(ctx, a.Callbacks)
-}
-
-// addCompletionCallbacks attaches newCallbacks as child CHASM callback components.
-//
-// Callbacks are keyed by request ID plus their position within the request, so re-attaching the same
-// request is a no-op rather than a duplicate. The idempotency probe runs before the closed check, so a
-// retry still succeeds if the operation closed after the first attach.
-//
-// The cumulative callback limits are checked here, because the frontend is only aware of the
-// callbacks on the request, and not the current state.
-func (a *Activity) addCompletionCallbacks(
-	ctx chasm.MutableContext,
-	requestID string,
-	newCallbacks []*commonpb.Callback,
-	namespaceName string,
-	validator callbacks.Validator,
-) error {
-	if len(newCallbacks) == 0 {
-		return nil
-	}
-	if requestID == "" {
-		return serviceerror.NewInvalidArgument("cannot attach completion callbacks without a request ID")
-	}
-	// Idempotency check. Attaching is atomic, so if we see that the first callback has been attached we
-	// know they all are present.
-	if callback.HasCallbacksForRequest(a.Callbacks, requestID) {
-		return nil
-	}
-	if a.LifecycleState(ctx).IsClosed() {
-		return serviceerror.NewFailedPrecondition("cannot attach callbacks to a closed activity")
-	}
-
-	// Validate
-	err := validator.ValidateAdditions(namespaceName, newCallbacks, callbacks.CurrentCallbacksInfo{
-		Count:     len(a.Callbacks),
-		TotalSize: int(a.TotalCallbacksSize),
-	})
-	if err != nil {
-		return err
-	}
-
-	// Attach
-	if a.Callbacks == nil {
-		a.Callbacks = make(chasm.Map[string, *callback.Callback], len(newCallbacks))
-	}
-
-	registrationTime := timestamppb.New(ctx.Now(a))
-	for idx, cb := range newCallbacks {
-		chasmCB, err := callback.FromAPICallback(cb)
-		if err != nil {
-			return err
-		}
-
-		// TODO(https://github.com/temporalio/temporal/issues/11958): Reusing the source requestID in this
-		// way leads to ambiguities if multiple callbacks are attached in the same request that are routed
-		// to the same destination. Each callback should instead be given its own, unique request ID.
-		callbackID := callback.CompletionCallbackID(requestID, idx)
-		callbackObj := callback.NewCallback(requestID, registrationTime, chasmCB)
-		a.Callbacks[callbackID] = chasm.NewComponentField(ctx, callbackObj)
-		a.TotalCallbacksSize += int64(cb.Size())
-	}
-	return nil
+	return callback.ScheduleCompletionCallbacks(ctx, a)
 }
 
 // effectiveUserMetadata returns the activity's user metadata, preferring the
@@ -406,66 +340,6 @@ func (a *Activity) attachLinks(ctx chasm.MutableContext, links []*commonpb.Link,
 		return err
 	}
 	return ctx.SetRequestLinks(a, requestID, links)
-}
-
-// GetNexusCompletion returns the activity's completion data in the format required by the Nexus callback invocation.
-// Implements callback.CompletionSource.
-func (a *Activity) GetNexusCompletion(ctx chasm.Context, _ string) (nexusrpc.CompleteOperationOptions, error) {
-	if !a.LifecycleState(ctx).IsClosed() {
-		return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInternal("activity has not completed yet")
-	}
-
-	key := ctx.ExecutionKey()
-	backLink := commonnexus.ConvertLinkActivityToNexusLink(&commonpb.Link_Activity{
-		Namespace:  ctx.NamespaceEntry().Name().String(),
-		ActivityId: key.BusinessID,
-		RunId:      key.RunID,
-	})
-
-	opts := nexusrpc.CompleteOperationOptions{
-		StartTime: a.GetScheduleTime().AsTime(),
-		CloseTime: ctx.ExecutionInfo().CloseTime,
-		Links:     []nexus.Link{backLink},
-	}
-
-	outcome := a.Outcome.Get(ctx)
-	if successful := outcome.GetSuccessful(); successful != nil {
-		// Successful completion: return the first output payload as the result as Nexus supports only a single payload
-		var p *commonpb.Payload
-		if payloads := successful.GetOutput().GetPayloads(); len(payloads) > 0 {
-			p = payloads[0]
-		}
-		opts.Result = p
-		return opts, nil
-	}
-
-	failure := a.terminalFailure(ctx)
-	if failure != nil {
-		state := nexus.OperationStateFailed
-		message := "operation failed"
-		if a.Status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED {
-			state = nexus.OperationStateCanceled
-			message = "operation canceled"
-		}
-
-		nf, err := commonnexus.TemporalFailureToNexusFailure(failure)
-		if err != nil {
-			return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInternalf("failed to convert failure: %v", err)
-		}
-
-		opErr := &nexus.OperationError{
-			State:   state,
-			Message: message,
-			Cause:   &nexus.FailureError{Failure: nf},
-		}
-		if err := nexusrpc.MarkAsWrapperError(nexusrpc.DefaultFailureConverter(), opErr); err != nil {
-			return nexusrpc.CompleteOperationOptions{}, err
-		}
-		opts.Error = opErr
-		return opts, nil
-	}
-
-	return nexusrpc.CompleteOperationOptions{}, serviceerror.NewInternalf("activity in status %v has no outcome", a.Status)
 }
 
 // HandleCompleted updates the activity on activity completion.

@@ -5901,7 +5901,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAcceptedEvent(
 	// present in the normal flow. The exception is the reset/reapply case where
 	// callbacks are registered at admission time instead (because the
 	// UpdateAccepted event has a nil AcceptedRequest after reset). In that case,
-	// addCallbacksToMap is a no-op since the requestID-indexed keys already
+	// attaching is a no-op since the requestID-indexed keys already
 	// exist from the admitted event.
 	if attrs.GetAcceptedRequest() != nil {
 		requestID := attrs.GetAcceptedRequest().GetRequestId()

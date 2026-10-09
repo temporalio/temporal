@@ -4,7 +4,7 @@
 // 	protoc
 // source: temporal/server/chasm/lib/callback/proto/v1/tasks.proto
 
-package callbackspb
+package callbackpb
 
 import (
 	reflect "reflect"
@@ -116,11 +116,11 @@ var File_temporal_server_chasm_lib_callback_proto_v1_tasks_proto protoreflect.Fi
 
 const file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDesc = "" +
 	"\n" +
-	"7temporal/server/chasm/lib/callback/proto/v1/tasks.proto\x12,temporal.server.chasm.lib.callbacks.proto.v1\"*\n" +
+	"7temporal/server/chasm/lib/callback/proto/v1/tasks.proto\x12+temporal.server.chasm.lib.callback.proto.v1\"*\n" +
 	"\x0eInvocationTask\x12\x18\n" +
 	"\aattempt\x18\x01 \x01(\x05R\aattempt\"'\n" +
 	"\vBackoffTask\x12\x18\n" +
-	"\aattempt\x18\x01 \x01(\x05R\aattemptBGZEgo.temporal.io/server/chasm/lib/callbacks/gen/callbackspb;callbackspbb\x06proto3"
+	"\aattempt\x18\x01 \x01(\x05R\aattemptBGZEgo.temporal.io/server/chasm/lib/callback/gen/callbackpb/v1;callbackpbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDescOnce sync.Once
@@ -136,8 +136,8 @@ func file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_rawDescGZIP() 
 
 var file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
 var file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_goTypes = []any{
-	(*InvocationTask)(nil), // 0: temporal.server.chasm.lib.callbacks.proto.v1.InvocationTask
-	(*BackoffTask)(nil),    // 1: temporal.server.chasm.lib.callbacks.proto.v1.BackoffTask
+	(*InvocationTask)(nil), // 0: temporal.server.chasm.lib.callback.proto.v1.InvocationTask
+	(*BackoffTask)(nil),    // 1: temporal.server.chasm.lib.callback.proto.v1.BackoffTask
 }
 var file_temporal_server_chasm_lib_callback_proto_v1_tasks_proto_depIdxs = []int32{
 	0, // [0:0] is the sub-list for method output_type

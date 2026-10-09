@@ -8,6 +8,7 @@ import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/sdk/v1/user_metadata.proto";
+import "chasm/lib/callback/proto/v1/message.proto";
 
 option go_package = "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb;nexusoperationpb";
 
@@ -59,9 +60,8 @@ message OperationState {
   // Links are only populated for standalone operations. Workflow-backed operations derive links from history events.
   repeated temporal.api.common.v1.Link links = 20;
 
-  // Total size in bytes of all [commonpb.Callback]s attached to this operation.
-  // Used to enforce aggregate size limits without needing to deserialize each callback.
-  int64 total_callbacks_size = 21;
+  // Metadata about attached completion callbacks.
+  temporal.server.chasm.lib.callback.proto.v1.CallbackMetadata callback_metadata = 21;
 }
 
 message NexusOperationTerminateState {
