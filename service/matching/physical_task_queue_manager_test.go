@@ -658,6 +658,27 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingStickyQueue() {
 	s.GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
 }
 
+func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingWorkerCommandsQueue() {
+	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+	s.Require().NoError(err)
+	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_NEXUS).WorkerCommandsPartition()
+	s.False(partition.IsRoot())
+	s.False(partition.SupportsPartitions())
+	s.tqMgr.queue = UnversionedQueueKey(partition)
+
+	rl := quotas.NewMockRateLimiter(s.controller)
+	rl.EXPECT().AllowN(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+	s.tqMgr.pollerScalingRateLimiter = rl
+
+	fakeStats := &taskqueuepb.TaskQueueStats{
+		TasksAddRate:      100,
+		TasksDispatchRate: 10,
+	}
+	decision := s.tqMgr.makePollerScalingDecisionImpl(time.Now(), pollScalingTask(enumsspb.TASK_SOURCE_HISTORY, time.Now()), func() *taskqueuepb.TaskQueueStats { return fakeStats })
+	s.Require().NotNil(decision)
+	s.GreaterOrEqual(decision.PollRequestDeltaSuggestion, int32(1))
+}
+
 func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingDownOnLongSyncMatch() {
 	fakeStats := &taskqueuepb.TaskQueueStats{
 		ApproximateBacklogCount: 0,
