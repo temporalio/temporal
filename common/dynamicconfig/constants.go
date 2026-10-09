@@ -3091,6 +3091,36 @@ scans share one persistence read, with only readers below the buffered range fal
 to persistence. The buffer holds slim queue rows (task metadata, not event payloads).
 0 disables the buffer.`,
 	)
+	ReplicationStreamSenderLaneQPSRatio = NewGlobalFloatSetting(
+		"history.ReplicationStreamSenderLaneQPSRatio",
+		0.1,
+		`ReplicationStreamSenderLaneQPSRatio is the multiplier applied per lane service class to
+ReplicationStreamSenderLowPriorityQPS. The sender clamps it to (0, 1].`,
+	)
+	ReplicationStreamSenderLaneClassCount = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderLaneClassCount",
+		4,
+		`ReplicationStreamSenderLaneClassCount is the number of progressively slower lane service classes.
+Changing it restarts replication streams.`,
+	)
+	ReplicationStreamSenderLaneReclassificationCycles = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderLaneReclassificationCycles",
+		3,
+		`ReplicationStreamSenderLaneReclassificationCycles is the number of consecutive policy signals
+before a lane moves to the next slower service class.`,
+	)
+	ReplicationStreamSenderLaneReleaseCycles = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderLaneReleaseCycles",
+		3,
+		`ReplicationStreamSenderLaneReleaseCycles is the number of calm policy cycles before a lane may retire.`,
+	)
+	ReplicationStreamSenderMaxLanes = NewGlobalIntSetting(
+		"history.ReplicationStreamSenderMaxLanes",
+		0,
+		`ReplicationStreamSenderMaxLanes bounds active sender-defined lanes per stream.
+Positive values enable lane support, requiring tiered processing and the reader group.
+Non-positive values disable lane support. Changing it restarts replication streams.`,
+	)
 	ReplicationStreamSenderHighPriorityQPS = NewGlobalIntSetting(
 		"history.ReplicationStreamSenderHighPriorityQPS",
 		100,
