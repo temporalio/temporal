@@ -178,9 +178,9 @@ const (
 	// attempt) over which a retriable peer failure keeps retrying before it is
 	// given up as FAILED_TERMINAL so the component can still complete.
 	peerRetryBudget = 7 * 24 * time.Hour
-	// peerPendingAlertThreshold is deliberately well below the retry budget so
-	// operators are alerted while the component is still actively converging.
-	peerPendingAlertThreshold = 24 * time.Hour
+	// peerPendingAlertThreshold mirrors the legacy namespace replication DLQ
+	// alert timing while the component continues trying to converge.
+	peerPendingAlertThreshold = time.Minute
 )
 
 // peerRetryBackoff returns the delay after the given number of completed
