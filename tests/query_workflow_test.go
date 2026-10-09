@@ -437,8 +437,8 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryWhileBackoff() {
 
 func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 	env := testcore.NewEnv(s.T())
-	// stop the worker, so the workflow won't be started before query
-	env.SdkWorker().Stop()
+	// Don't call env.SdkWorker() (it lazily starts a worker), so no worker polls this task queue
+	// until queryWorker starts below and the query arrives before the first workflow task runs.
 
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		status := "initialized"
@@ -488,6 +488,9 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_QueryBeforeStart() {
 	queryWorker.RegisterWorkflow(workflowFn)
 	err = queryWorker.Start()
 	s.NoError(err)
+	// Unlike env.SdkWorker(), this worker isn't stopped by the env's cleanup; stop it so its
+	// pollers don't outlive the test.
+	defer queryWorker.Stop()
 
 	// wait query
 	wg.Wait()

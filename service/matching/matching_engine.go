@@ -1287,7 +1287,7 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 		// fully rolled out. This check is only needed during the transition since the legacy
 		// frontend fan-out path may send non-root partitions to this handler.
 		if partition.IsRoot() && partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
-			return e.cancelOutstandingWorkerPollsForAllPartitions(ctx, request, partition)
+			return e.cancelOutstandingWorkerPollsForAllPartitions(ctx, request, ns, partition)
 		}
 	}
 	// TODO: Delete this code path after EnableMatchingFanOutForPollCancellation is rolled out.
@@ -1306,27 +1306,26 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 	ctx context.Context,
 	request *matchingservice.CancelOutstandingWorkerPollsRequest,
+	nsName namespace.Name,
 	rootPartition tqid.Partition,
 ) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
 	rootPM, _, err := e.getTaskQueuePartitionManager(ctx, rootPartition, false, loadCauseOtherWrite)
 	if err != nil {
 		return nil, err
 	}
-	if rootPM == nil {
-		// Root not loaded means no pending polls anywhere — child partitions loading
-		// triggers root to load via user data fetch chain.
-		e.logger.Debug("Skipping poll cancellation fan-out: root partition not loaded",
-			tag.WorkflowNamespaceID(request.GetNamespaceId()),
-			tag.WorkflowTaskQueueName(rootPartition.TaskQueue().Name()),
-			tag.WorkflowTaskQueueType(request.GetTaskQueueType()),
-			tag.NewStringTag("worker-instance-key", request.GetWorkerInstanceKey()),
-		)
-		return &matchingservice.CancelOutstandingWorkerPollsResponse{}, nil
-	}
-	// Ephemeral data carries the real read partition count once dynamic partitioning is active.
-	numPartitions := int(rootPM.GetUserDataManager().PartitionScale().GetRead())
-	if numPartitions <= 0 {
-		numPartitions = rootPM.GetConfig().NumReadPartitions()
+	var numPartitions int
+	if rootPM != nil {
+		// Ephemeral data carries the real read partition count once dynamic partitioning is active.
+		numPartitions = int(rootPM.GetUserDataManager().PartitionScale().GetRead())
+		if numPartitions <= 0 {
+			numPartitions = rootPM.GetConfig().NumReadPartitions()
+		}
+	} else {
+		// Root not loaded doesn't mean there are no polls: the worker's polls may still be in
+		// flight (e.g. a worker that shuts down right after starting). Fan out anyway so every
+		// partition host records the worker as shut down and rejects its late-arriving polls.
+		numPartitions = max(1, e.config.NumTaskqueueReadPartitions(
+			nsName.String(), rootPartition.TaskQueue().Name(), request.GetTaskQueueType()))
 	}
 
 	e.logger.Debug("Initiating fan-out for worker poll cancellation",

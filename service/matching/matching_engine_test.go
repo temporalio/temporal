@@ -7195,6 +7195,70 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		require.ElementsMatch(t, []int32{1, 2, 3, 4}, remotePartitionIDs)
 	})
 
+	t.Run("fan-out: root not loaded still records shutdown on all partitions", func(t *testing.T) {
+		// A worker that shuts down right after starting may still have polls in flight that
+		// haven't loaded the root partition yet. The fan-out must still reach every partition
+		// so those polls are rejected when they arrive.
+		t.Parallel()
+		ctrl := gomock.NewController(t)
+		t.Cleanup(ctrl.Finish)
+
+		namespaceID := "test-namespace-id"
+		mockMatchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+		mockNamespaceCache := namespace.NewMockRegistry(ctrl)
+		mockNamespaceCache.EXPECT().GetNamespaceName(gomock.Eq(namespace.ID(namespaceID))).Return(namespace.Name("test-namespace"), nil)
+		mockHostInfoProvider := membership.NewMockHostInfoProvider(ctrl)
+		mockHostInfoProvider.EXPECT().HostInfo().Return(membership.NewHostInfoFromAddress("self-host")).AnyTimes()
+
+		config := defaultTestConfig()
+		config.EnableMatchingFanOutForPollCancellation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+		config.NumTaskqueueReadPartitions = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(3)
+
+		routeFn := func(p tqid.Partition) (string, error) {
+			if p.IsRoot() {
+				return "self-host", nil
+			}
+			return "host-a", nil
+		}
+		engine := &matchingEngineImpl{
+			config:            config,
+			namespaceRegistry: mockNamespaceCache,
+			matchingRawClient: &routingMatchingClient{
+				MockMatchingServiceClient: mockMatchingClient,
+				routeFn:                   routeFn,
+			},
+			hostInfoProvider:      mockHostInfoProvider,
+			logger:                log.NewNoopLogger(),
+			shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+			workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+			partitions:            map[tqid.PartitionKey]taskQueuePartitionManager{}, // nothing loaded
+		}
+
+		var remotePartitions []int32
+		mockMatchingClient.EXPECT().
+			CancelOutstandingWorkerPollsPartition(gomock.Any(), gomock.Any()).
+			DoAndReturn(func(_ context.Context, req *matchingservice.CancelOutstandingWorkerPollsPartitionRequest, _ ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
+				for _, p := range req.GetPartitions() {
+					remotePartitions = append(remotePartitions, p.GetNormalPartitionId())
+				}
+				return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{}, nil
+			}).
+			Times(1)
+
+		_, err := engine.CancelOutstandingWorkerPolls(context.Background(),
+			&matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       namespaceID,
+				TaskQueue:         &taskqueuepb.TaskQueue{Name: "test-queue", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+				TaskQueueType:     enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				WorkerInstanceKey: "worker-key",
+				WorkerIdentity:    "worker-identity",
+			})
+
+		require.NoError(t, err)
+		require.NotNil(t, engine.shutdownWorkers.Get("worker-key"), "local host should reject late polls from the worker")
+		require.ElementsMatch(t, []int32{1, 2}, remotePartitions, "remote partitions should still be notified")
+	})
+
 	t.Run("fan-out: removePollerFromHistory called for every partition", func(t *testing.T) {
 		// Verifies that poller history is cleaned up for each partition, not just
 		// the routing partition.
