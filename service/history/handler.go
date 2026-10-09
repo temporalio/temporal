@@ -419,8 +419,9 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 			componentRef,
 			(*activity.Activity).HandleCompleted,
 			activity.RespondCompletedEvent{
-				Request: request,
-				Token:   taskToken,
+				Request:   request,
+				Token:     taskToken,
+				Principal: headers.GetPrincipal(ctx),
 			},
 		)
 		if err != nil {
@@ -470,8 +471,9 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 			componentRef,
 			(*activity.Activity).HandleFailed,
 			activity.RespondFailedEvent{
-				Request: request,
-				Token:   taskToken,
+				Request:   request,
+				Token:     taskToken,
+				Principal: headers.GetPrincipal(ctx),
 			},
 		)
 		if err != nil {
@@ -521,8 +523,9 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 			componentRef,
 			(*activity.Activity).HandleCanceled,
 			activity.RespondCancelledEvent{
-				Request: request,
-				Token:   taskToken,
+				Request:   request,
+				Token:     taskToken,
+				Principal: headers.GetPrincipal(ctx),
 			},
 		)
 		if err != nil {
