@@ -724,7 +724,8 @@ type ActivityAttemptState struct {
 	// the started attempt is updated, so a task token issued at start remains valid until that attempt completes.
 	StartedStamp       int32  `protobuf:"varint,14,opt,name=started_stamp,json=startedStamp,proto3" json:"started_stamp,omitempty"`
 	LastWorkerIdentity string `protobuf:"bytes,7,opt,name=last_worker_identity,json=lastWorkerIdentity,proto3" json:"last_worker_identity,omitempty"`
-	// The authenticated principal for the most recent worker response.
+	// The authenticated principal of the worker that most recently responded (completed, failed, or canceled) to an
+	// activity task. Not updated when an attempt starts, so it can refer to a different worker than last_worker_identity.
 	LastWorkerPrincipal *v1.Principal `protobuf:"bytes,15,opt,name=last_worker_principal,json=lastWorkerPrincipal,proto3" json:"last_worker_principal,omitempty"`
 	// The Worker Deployment Version this activity was dispatched to most recently.
 	// If nil, the activity has not yet been dispatched or was last dispatched to an unversioned worker.
