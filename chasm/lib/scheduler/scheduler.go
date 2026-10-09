@@ -115,7 +115,7 @@ var (
 	ErrSentinel              = serviceerror.NewNotFound("schedule is a sentinel")
 	ErrSentinelBlocked       = serviceerror.NewUnavailable("schedule is a sentinel; please retry after sentinel expires")
 	ErrMigrationPending      = serviceerror.NewUnavailable("schedule has a pending migration to workflow; please retry later")
-	ErrTimeSkippingMigration = serviceerror.NewFailedPrecondition("schedule with enabled time skipping or accumulated skipped duration cannot migrate to workflow-backed scheduler")
+	ErrTimeSkippingMigration = serviceerror.NewFailedPrecondition("schedule with time skipping cannot migrate to workflow-backed scheduler")
 )
 
 // NewScheduler returns an initialized CHASM scheduler root component.
@@ -860,9 +860,7 @@ func (s *Scheduler) MigrateToWorkflow(
 		return &schedulerpb.MigrateToWorkflowResponse{}, nil
 	}
 
-	_, timeSkippingState := ctx.GetTimeSkippingPropagateState()
-	if ctx.GetTimeSkippingInfo().GetEffectiveConfig().GetEnabled() ||
-		timeSkippingState.GetInitialSkippedDuration().AsDuration() > 0 {
+	if ctx.GetTimeSkippingInfo() != nil {
 		return nil, ErrTimeSkippingMigration
 	}
 

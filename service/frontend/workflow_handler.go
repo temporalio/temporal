@@ -48,7 +48,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
-	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
@@ -725,21 +724,6 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 	return request, nil
 }
 
-func validateTimeSkippingStatePropagation(
-	ctx context.Context,
-	state *commonpb.TimeSkippingStatePropagation,
-) error {
-	if state == nil {
-		return nil
-	}
-	principal := headers.GetPrincipal(ctx)
-	if principal.GetType() != authorization.InternalPrincipalType ||
-		principal.GetName() != authorization.InternalPrincipalName {
-		return errTimeSkippingStatePropagationNotInternal
-	}
-	return nil
-}
-
 func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 	tsc *commonpb.TimeSkippingConfig,
 	ns namespace.Name,
@@ -794,14 +778,21 @@ func (wh *WorkflowHandler) validateAndPopulateScheduleTimeSkippingConfig(
 		)
 		return errScheduleTimeSkippingNotEnabled
 	}
+
+	// a separate per-ns feature flag for time skipping of schedules
 	if !wh.config.ScheduleV2TimeSkippingEnabled(ns.String()) {
 		return errScheduleTimeSkippingNotEnabled
 	}
+
 	if err := wh.validateAndPopulateTimeSkippingConfig(config, ns); err != nil {
 		return err
 	}
 	if !config.GetEnabled() {
 		return nil
+	}
+	if schedule.GetPolicies().GetOverlapPolicy() == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
+		return serviceerror.NewInvalidArgument(
+			"Schedule time skipping cannot be enabled with the ALLOW_ALL overlap policy.")
 	}
 	fastForward := config.GetFastForwardConfig()
 	if fastForward == nil {

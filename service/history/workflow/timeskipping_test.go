@@ -749,7 +749,6 @@ func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
 }
 
 func (s *mutableStateSuite) TestSetTimeSkippingConfig() {
-
 	s.Run("InitsWhenTimeSkippingInfoNil", func() {
 		s.mutableState.timeSource = clock.NewEventTimeSource()
 		s.mutableState.executionInfo.TimeSkippingInfo = nil

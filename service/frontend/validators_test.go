@@ -1,10 +1,14 @@
 package frontend
 
 import (
+	"context"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/headers"
 )
 
 func TestValidateFairnessWeightUpdate(t *testing.T) {
@@ -74,4 +78,24 @@ func TestValidateFairnessWeightUpdate(t *testing.T) {
 		err := validateFairnessWeightUpdate(set, unset, 10)
 		require.ErrorContains(t, err, "fairness weight override key \"a\" present in both set and unset lists")
 	})
+}
+
+func (s *WorkflowHandlerSuite) TestValidateTimeSkippingStatePropagation() {
+	state := &commonpb.TimeSkippingStatePropagation{InitialSkipCount: 1}
+
+	s.Require().NoError(validateTimeSkippingStatePropagation(context.Background(), nil))
+	s.Require().ErrorIs(
+		validateTimeSkippingStatePropagation(context.Background(), state),
+		errTimeSkippingStatePropagationNotInternal,
+	)
+	userCtx := headers.SetPrincipal(context.Background(), &commonpb.Principal{Type: "user", Name: "mockName"})
+	s.Require().ErrorIs(
+		validateTimeSkippingStatePropagation(userCtx, state),
+		errTimeSkippingStatePropagationNotInternal,
+	)
+	internalCtx := headers.SetPrincipal(context.Background(), &commonpb.Principal{
+		Type: authorization.InternalPrincipalType,
+		Name: authorization.InternalPrincipalName,
+	})
+	s.Require().NoError(validateTimeSkippingStatePropagation(internalCtx, state))
 }

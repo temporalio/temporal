@@ -45,7 +45,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
-	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -4315,16 +4314,22 @@ func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 	wh = s.getWorkflowHandler(config)
 
 	testCases := []struct {
-		name    string
-		config  *commonpb.TimeSkippingConfig
-		wantErr bool
+		name            string
+		config          *commonpb.TimeSkippingConfig
+		overlapPolicy   enumspb.ScheduleOverlapPolicy
+		wantErr         bool
+		wantErrContains string
 	}{
 		{name: "unset"},
 		{name: "disabled", config: &commonpb.TimeSkippingConfig{Enabled: false}},
+		{name: "disabled with allow all", config: &commonpb.TimeSkippingConfig{Enabled: false}, overlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL},
 		{name: "enabled without fast forward", config: &commonpb.TimeSkippingConfig{Enabled: true}, wantErr: true},
 		{name: "one year", config: &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{
 			Id: "one-year", Duration: durationpb.New(365 * 24 * time.Hour),
 		}}},
+		{name: "enabled with allow all", config: &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{
+			Id: "allow-all", Duration: durationpb.New(time.Hour),
+		}}, overlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL, wantErr: true, wantErrContains: "ALLOW_ALL overlap policy"},
 		{name: "over one year", config: &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{
 			Id: "over-one-year", Duration: durationpb.New(365*24*time.Hour + time.Second),
 		}}, wantErr: true},
@@ -4332,9 +4337,20 @@ func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
 			err := wh.validateAndPopulateScheduleTimeSkippingConfig(
-				&schedulepb.Schedule{TimeSkippingConfig: tc.config}, s.testNamespace, true)
+				&schedulepb.Schedule{
+					TimeSkippingConfig: tc.config,
+					Policies:           &schedulepb.SchedulePolicies{OverlapPolicy: tc.overlapPolicy},
+				},
+				s.testNamespace,
+				true,
+			)
 			if tc.wantErr {
 				s.Require().Error(err)
+				if tc.wantErrContains != "" {
+					var invalidArgumentErr *serviceerror.InvalidArgument
+					s.Require().ErrorAs(err, &invalidArgumentErr)
+					s.Require().ErrorContains(err, tc.wantErrContains)
+				}
 			} else {
 				s.Require().NoError(err)
 			}
@@ -4347,26 +4363,6 @@ func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 		wh.validateAndPopulateScheduleTimeSkippingConfig(scheduleWithConfig, s.testNamespace, false),
 		errScheduleTimeSkippingNotEnabled,
 	)
-}
-
-func (s *WorkflowHandlerSuite) TestValidateTimeSkippingStatePropagation() {
-	state := &commonpb.TimeSkippingStatePropagation{InitialSkipCount: 1}
-
-	s.Require().NoError(validateTimeSkippingStatePropagation(context.Background(), nil))
-	s.Require().ErrorIs(
-		validateTimeSkippingStatePropagation(context.Background(), state),
-		errTimeSkippingStatePropagationNotInternal,
-	)
-	userCtx := headers.SetPrincipal(context.Background(), &commonpb.Principal{Type: "user", Name: "alice"})
-	s.Require().ErrorIs(
-		validateTimeSkippingStatePropagation(userCtx, state),
-		errTimeSkippingStatePropagationNotInternal,
-	)
-	internalCtx := headers.SetPrincipal(context.Background(), &commonpb.Principal{
-		Type: authorization.InternalPrincipalType,
-		Name: authorization.InternalPrincipalName,
-	})
-	s.Require().NoError(validateTimeSkippingStatePropagation(internalCtx, state))
 }
 
 func (s *WorkflowHandlerSuite) TestPollWorkflowExecutionTimeSkipping() {

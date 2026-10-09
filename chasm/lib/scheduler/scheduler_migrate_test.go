@@ -3,7 +3,6 @@ package scheduler_test
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
@@ -21,25 +20,16 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type migrationTimeSkippingContext struct {
 	chasm.MutableContext
-	info             *commonpb.TimeSkippingInfo
-	statePropagation *commonpb.TimeSkippingStatePropagation
-	setConfig        *commonpb.TimeSkippingConfig
+	info      *commonpb.TimeSkippingInfo
+	setConfig *commonpb.TimeSkippingConfig
 }
 
 func (c *migrationTimeSkippingContext) GetTimeSkippingInfo() *commonpb.TimeSkippingInfo {
 	return common.CloneProto(c.info)
-}
-
-func (c *migrationTimeSkippingContext) GetTimeSkippingPropagateState() (
-	*commonpb.TimeSkippingConfig,
-	*commonpb.TimeSkippingStatePropagation,
-) {
-	return common.CloneProto(c.info.GetEffectiveConfig()), common.CloneProto(c.statePropagation)
 }
 
 func (c *migrationTimeSkippingContext) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
@@ -64,25 +54,18 @@ func TestMigrateToWorkflow_PausesSchedule(t *testing.T) {
 
 func TestMigrateToWorkflow_BlockedByTimeSkipping(t *testing.T) {
 	tests := []struct {
-		name            string
-		config          *commonpb.TimeSkippingConfig
-		skippedDuration time.Duration
+		name   string
+		config *commonpb.TimeSkippingConfig
 	}{
 		{
-			name: "time skipping enabled",
-			config: &commonpb.TimeSkippingConfig{
-				Enabled: true,
-				FastForwardConfig: &commonpb.FastForwardConfig{
-					Id:       "fast-forward",
-					Duration: durationpb.New(time.Hour),
-				},
-			},
+			name:   "time skipping enabled",
+			config: &commonpb.TimeSkippingConfig{Enabled: true},
 		},
 		{
-			name:            "accumulated skipped duration",
-			config:          &commonpb.TimeSkippingConfig{Enabled: false},
-			skippedDuration: 2 * time.Hour,
+			name:   "time skipping disabled",
+			config: &commonpb.TimeSkippingConfig{Enabled: false},
 		},
+		{name: "time skipping info without config"},
 	}
 
 	for _, tt := range tests {
@@ -94,11 +77,6 @@ func TestMigrateToWorkflow_BlockedByTimeSkipping(t *testing.T) {
 				info: &commonpb.TimeSkippingInfo{
 					EffectiveConfig: common.CloneProto(tt.config),
 				},
-			}
-			if tt.skippedDuration > 0 {
-				migrationCtx.statePropagation = &commonpb.TimeSkippingStatePropagation{
-					InitialSkippedDuration: durationpb.New(tt.skippedDuration),
-				}
 			}
 
 			_, err := sched.MigrateToWorkflow(migrationCtx, &schedulerpb.MigrateToWorkflowRequest{

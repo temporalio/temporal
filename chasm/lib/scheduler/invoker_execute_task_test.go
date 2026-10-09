@@ -541,7 +541,7 @@ func TestExecuteTask_PropagatesScheduleTimeSkipping(t *testing.T) {
 	}
 }
 
-func TestExecuteTask_TimeSkippingStartTimeUsesFrameworkClock(t *testing.T) {
+func TestExecuteTask_TimeSkippingStartTimeAddsSkippedDurationToWallClock(t *testing.T) {
 	env := newInvokerExecuteTestEnv(t)
 	frameworkNow := env.TimeSource.Now().Add(24 * time.Hour)
 	env.TimeSource.Update(frameworkNow)
@@ -560,6 +560,7 @@ func TestExecuteTask_TimeSkippingStartTimeUsesFrameworkClock(t *testing.T) {
 		StartWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(&workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil)
 
+	beforeStart := time.Now().Add(24 * time.Hour)
 	runExecuteTestCase(t, env, &executeTestCase{
 		InitialBufferedStarts: []*schedulespb.BufferedStart{{
 			NominalTime:   startTime,
@@ -573,7 +574,9 @@ func TestExecuteTask_TimeSkippingStartTimeUsesFrameworkClock(t *testing.T) {
 		ExpectedRunningWorkflows: 1,
 		ExpectedActionCount:      1,
 		ValidateInvoker: func(t *testing.T, invoker *scheduler.Invoker, _ *invokerExecuteTestEnv) {
-			require.True(t, frameworkNow.Equal(invoker.GetBufferedStarts()[0].GetStartTime().AsTime()))
+			actualStartTime := invoker.GetBufferedStarts()[0].GetStartTime().AsTime()
+			require.False(t, actualStartTime.Before(beforeStart))
+			require.False(t, actualStartTime.After(time.Now().Add(24*time.Hour)))
 		},
 	})
 }

@@ -62,9 +62,6 @@ func (ms *MutableStateImpl) updateTimeSkippingInfo(
 func (ms *MutableStateImpl) SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig) {
 	// todo: migrate workflow init and update to this unified method
 	if ms.executionInfo.GetTimeSkippingInfo() == nil {
-		if config == nil {
-			return
-		}
 		ms.initTimeSkippingInfo(config, nil)
 	} else {
 		ms.updateTimeSkippingInfo(config)
