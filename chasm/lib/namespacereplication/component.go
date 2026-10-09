@@ -36,11 +36,19 @@ var _ chasm.StateMachine[namespacereplicationpb.ComponentStatus] = (*NamespaceMu
 var _ chasm.VisibilitySearchAttributesProvider = (*NamespaceMutationComponent)(nil)
 var _ chasm.VisibilityMemoProvider = (*NamespaceMutationComponent)(nil)
 
-const NamespaceIDSearchAttributeName = "ReplicatedNamespaceId"
+const (
+	NamespaceIDSearchAttributeName   = "ReplicatedNamespaceId"
+	NamespaceNameSearchAttributeName = "ReplicatedNamespaceName"
+)
 
 var namespaceIDSearchAttribute = chasm.NewSearchAttributeKeyword(
 	NamespaceIDSearchAttributeName,
 	chasm.SearchAttributeFieldKeyword01,
+)
+
+var namespaceNameSearchAttribute = chasm.NewSearchAttributeKeyword(
+	NamespaceNameSearchAttributeName,
+	chasm.SearchAttributeFieldKeyword02,
 )
 
 // NewNamespaceMutationComponent constructs a fresh component with the mutation set
@@ -74,12 +82,14 @@ func (c *NamespaceMutationComponent) initializeVisibility(ctx chasm.MutableConte
 }
 
 // SearchAttributes indexes the namespace being mutated for eventual CLI-based
-// repair. The CHASM execution itself lives in temporal-system, so its storage
-// namespace cannot be used to find all mutation executions for an application
-// namespace.
+// repair and manual discovery. The CHASM execution itself lives in
+// temporal-system, so its storage namespace cannot be used to find all mutation
+// executions for an application namespace. Repair remains keyed by the stable
+// namespace ID; the name is a human-friendly discovery alias.
 func (c *NamespaceMutationComponent) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyValue {
 	return []chasm.SearchAttributeKeyValue{
 		namespaceIDSearchAttribute.Value(c.GetMutation().GetNamespaceDetail().GetInfo().GetId()),
+		namespaceNameSearchAttribute.Value(c.GetMutation().GetNamespaceDetail().GetInfo().GetName()),
 	}
 }
 
