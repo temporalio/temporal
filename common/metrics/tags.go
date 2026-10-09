@@ -370,6 +370,14 @@ const (
 	PollerScaleReasonTaskQueueRateLimited ReasonString = "task_queue_rate_limited"
 )
 
+// Reasons for WorkflowTaskCompletionBufferLost.
+const (
+	BufferLostReasonNewPaginationLimit ReasonString = "new_pagination_limit"
+	BufferLostReasonMemoryLimit        ReasonString = "memory_limit"
+	BufferLostReasonMissingBuffer      ReasonString = "missing_buffer"
+	BufferLostReasonMissingPage        ReasonString = "missing_page"
+)
+
 // PollerScaleDecisionTag records the direction of a poller scaling decision (scale up, scale
 // down, or hold). Pair it with ReasonTag for the cause. See metrics.PollerScaleDecisionCounter.
 func PollerScaleDecisionTag(decision string) Tag {

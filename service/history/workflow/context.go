@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"errors"
+	"math"
 	"slices"
 	"strconv"
 
@@ -252,7 +253,8 @@ func (c *ContextImpl) AppendTaskCompletionPage(
 	if c.taskCompletionBuffer != nil && c.taskCompletionBuffer.identity != identity {
 		c.clearTaskCompletionBuffer()
 	}
-	if c.taskCompletionBuffer == nil {
+	newPagination := c.taskCompletionBuffer == nil
+	if newPagination {
 		c.taskCompletionBuffer = &TaskCompletionBuffer{
 			pages:     make(map[int32][]*commandpb.Command),
 			identity:  identity,
@@ -274,18 +276,33 @@ func (c *ContextImpl) AppendTaskCompletionPage(
 	}
 
 	// Apply the process-wide limit and its per-namespace share so one
-	// namespace cannot exhaust the whole process budget.
+	// namespace cannot exhaust the whole process budget. A page that starts a
+	// new pagination only gets a fraction of both limits. The rest is kept for
+	// in-flight paginations, so they can complete under memory pressure.
 	if c.paginationLimiter != nil {
-		processLimit := int64(c.config.WorkflowTaskCompletionBufferTotalSizeLimit())
-		nsRatio := c.config.WorkflowTaskCompletionBufferNamespaceRatio(nsName)
-		nsLimit := int64(nsRatio * float64(processLimit))
-		ok, used := c.paginationLimiter.TryReserve(nsName, pageBytes, processLimit, nsLimit)
+		processLimit := float64(c.config.WorkflowTaskCompletionBufferTotalSizeLimit())
+		nsLimit := c.config.WorkflowTaskCompletionBufferNamespaceRatio(nsName) * processLimit
+		if newPagination {
+			ratio := c.config.WorkflowTaskCompletionBufferNewPaginationRatio(nsName)
+			if ratio <= 0 || ratio > 1 {
+				ratio = 1
+			}
+			processLimit *= ratio
+			nsLimit *= ratio
+		}
+		ok, used := c.paginationLimiter.TryReserve(
+			nsName, pageBytes, int64(math.Ceil(processLimit)), int64(math.Ceil(nsLimit)))
 		if !ok {
-			// BufferLost makes the SDK resend from page 0, so retaining the
-			// partial buffer buys. Clear it to release the reserved bytes back
-			// to the budget.
+			// BufferLost makes the SDK resend from page 0, so the partial buffer
+			// can never be used. Clear it to release the reserved bytes back to
+			// the budget.
 			c.clearTaskCompletionBuffer()
-			metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1)
+			if newPagination {
+				metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1, metrics.ReasonTag(metrics.BufferLostReasonNewPaginationLimit))
+				return serviceerror.NewWorkflowTaskCompletionBufferLostf(
+					"workflow task completion buffer memory limit for new paginations reached")
+			}
+			metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1, metrics.ReasonTag(metrics.BufferLostReasonMemoryLimit))
 			return serviceerror.NewWorkflowTaskCompletionBufferLostf(
 				"workflow task completion buffer memory limit reached while buffering page %d", request.GetPageNumber())
 		}
@@ -356,7 +373,7 @@ func (c *ContextImpl) GetMergedTaskCompletionPages(
 	// higher-version branch (same schedID/attempt) is treated as lost.
 	identity := workflowTaskIdentity{schedID: schedID, attempt: attempt, version: c.startedWorkflowTaskIdentity().version}
 	if c.taskCompletionBuffer == nil || c.taskCompletionBuffer.identity != identity {
-		metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1)
+		metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1, metrics.ReasonTag(metrics.BufferLostReasonMissingBuffer))
 		return nil, serviceerror.NewWorkflowTaskCompletionBufferLostf(
 			"workflow task completion buffer lost for scheduled event %d attempt %d", schedID, attempt)
 	}
@@ -366,7 +383,7 @@ func (c *ContextImpl) GetMergedTaskCompletionPages(
 	for page := range finalPageNumber {
 		cmds, ok := c.taskCompletionBuffer.pages[page]
 		if !ok {
-			metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1)
+			metrics.WorkflowTaskCompletionBufferLost.With(c.metricsHandler).Record(1, metrics.ReasonTag(metrics.BufferLostReasonMissingPage))
 			return nil, serviceerror.NewWorkflowTaskCompletionBufferLostf(
 				"workflow task completion buffer missing page %d of %d", page, finalPageNumber)
 		}

@@ -1312,7 +1312,7 @@ var (
 	)
 	WorkflowTaskCompletionBufferLost = NewCounterDef(
 		"workflow_task_completion_buffer_lost",
-		WithDescription("Paginated workflow task completions aborted because the buffer was lost (evicted, process limit exceeded, or a page was missing)."),
+		WithDescription("Paginated workflow task completions aborted because the buffer was lost."),
 	)
 
 	// Matching
