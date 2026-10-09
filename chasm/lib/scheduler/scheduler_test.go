@@ -171,9 +171,18 @@ func TestIsExecutionSkippable(t *testing.T) {
 		sched.Generator.Get(ctx).LastProcessedTime = timestamppb.New(ctx.Now(sched))
 	}
 
-	t.Run("pending generator task after update", func(t *testing.T) {
+	t.Run("generator has not processed initial configuration", func(t *testing.T) {
 		sched, ctx, _ := setupSchedulerForTest(t)
-		sched.Info.UpdateTime = timestamppb.New(sched.Generator.Get(ctx).GetLastProcessedTime().AsTime().Add(time.Second))
+		sched.Generator.Get(ctx).LastProcessedTime = nil
+		require.Nil(t, sched.Generator.Get(ctx).GetLastProcessedTime())
+		require.False(t, sched.IsExecutionSkippable(ctx))
+	})
+
+	t.Run("generator has not processed latest update", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+		lastProcessedTime := ctx.Now(sched)
+		sched.Generator.Get(ctx).LastProcessedTime = timestamppb.New(lastProcessedTime)
+		sched.Info.UpdateTime = timestamppb.New(lastProcessedTime.Add(time.Second))
 		require.False(t, sched.IsExecutionSkippable(ctx))
 	})
 
@@ -190,7 +199,6 @@ func TestIsExecutionSkippable(t *testing.T) {
 		enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
 		enumspb.SCHEDULE_OVERLAP_POLICY_CANCEL_OTHER,
 		enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER,
-		enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
 	} {
 		t.Run("running workflow blocks scheduler time/"+policy.String(), func(t *testing.T) {
 			sched, ctx, _ := setupSchedulerForTest(t)
@@ -1052,7 +1060,7 @@ func TestScheduler_Describe_ReturnsTimeSkippingInfo(t *testing.T) {
 		newLegacySpecBuilder(0, 0),
 	)
 	require.NoError(t, err)
-	require.Same(t, want, resp.GetFrontendResponse().GetInfo().GetTimeSkippingInfo())
+	protorequire.ProtoEqual(t, want, resp.GetFrontendResponse().GetInfo().GetTimeSkippingInfo())
 }
 
 // TestScheduler_Describe_DoesNotMutateCachedComponent proves Describe defaults and

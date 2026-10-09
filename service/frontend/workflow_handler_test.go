@@ -4317,22 +4317,21 @@ func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 		name            string
 		config          *commonpb.TimeSkippingConfig
 		overlapPolicy   enumspb.ScheduleOverlapPolicy
-		wantErr         bool
 		wantErrContains string
 	}{
 		{name: "unset"},
 		{name: "disabled", config: &commonpb.TimeSkippingConfig{Enabled: false}},
 		{name: "disabled with allow all", config: &commonpb.TimeSkippingConfig{Enabled: false}, overlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL},
-		{name: "enabled without fast forward", config: &commonpb.TimeSkippingConfig{Enabled: true}, wantErr: true},
+		{name: "enabled without fast forward", config: &commonpb.TimeSkippingConfig{Enabled: true}, wantErrContains: "fast_forward_config is required when enabled"},
 		{name: "one year", config: &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{
 			Id: "one-year", Duration: durationpb.New(365 * 24 * time.Hour),
 		}}},
 		{name: "enabled with allow all", config: &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{
 			Id: "allow-all", Duration: durationpb.New(time.Hour),
-		}}, overlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL, wantErr: true, wantErrContains: "ALLOW_ALL overlap policy"},
+		}}, overlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL, wantErrContains: "ALLOW_ALL overlap policy"},
 		{name: "over one year", config: &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{
 			Id: "over-one-year", Duration: durationpb.New(365*24*time.Hour + time.Second),
-		}}, wantErr: true},
+		}}, wantErrContains: "fast_forward duration cannot exceed 365 days"},
 	}
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
@@ -4344,13 +4343,10 @@ func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 				s.testNamespace,
 				true,
 			)
-			if tc.wantErr {
-				s.Require().Error(err)
-				if tc.wantErrContains != "" {
-					var invalidArgumentErr *serviceerror.InvalidArgument
-					s.Require().ErrorAs(err, &invalidArgumentErr)
-					s.Require().ErrorContains(err, tc.wantErrContains)
-				}
+			if tc.wantErrContains != "" {
+				var invalidArgumentErr *serviceerror.InvalidArgument
+				s.Require().ErrorAs(err, &invalidArgumentErr)
+				s.Require().ErrorContains(err, tc.wantErrContains)
 			} else {
 				s.Require().NoError(err)
 			}
@@ -4363,6 +4359,72 @@ func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 		wh.validateAndPopulateScheduleTimeSkippingConfig(scheduleWithConfig, s.testNamespace, false),
 		errScheduleTimeSkippingNotEnabled,
 	)
+}
+
+func (s *WorkflowHandlerSuite) TestCreateUpdateSchedule_TimeSkippingRoutingValidation() {
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil).AnyTimes()
+
+	invoke := func(useV2 bool, update bool, timeSkippingConfig *commonpb.TimeSkippingConfig) error {
+		config := s.newConfig()
+		config.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(true)
+		config.EnableCHASMSchedulerCreation = dc.GetBoolPropertyFnFilteredByNamespace(useV2)
+		config.CHASMSchedulerCreationRolloutPercent = dc.GetIntPropertyFnFilteredByNamespace(100)
+		config.EnableCHASMSchedulerRouting = dc.GetBoolPropertyFnFilteredByNamespace(useV2)
+		config.ScheduleV2TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+		wh := s.getWorkflowHandler(config)
+
+		schedule := &schedulepb.Schedule{
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   "workflow-id",
+						WorkflowType: &commonpb.WorkflowType{Name: "workflow-type"},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: "task-queue"},
+					},
+				},
+			},
+			TimeSkippingConfig: timeSkippingConfig,
+		}
+		if update {
+			_, err := wh.UpdateSchedule(context.Background(), &workflowservice.UpdateScheduleRequest{
+				Namespace:  s.testNamespace.String(),
+				ScheduleId: "schedule-id",
+				RequestId:  uuid.NewString(),
+				Schedule:   schedule,
+			})
+			return err
+		}
+		_, err := wh.CreateSchedule(context.Background(), &workflowservice.CreateScheduleRequest{
+			Namespace:  s.testNamespace.String(),
+			ScheduleId: "schedule-id",
+			RequestId:  uuid.NewString(),
+			Schedule:   schedule,
+		})
+		return err
+	}
+
+	for _, update := range []bool{false, true} {
+		operation := "create"
+		if update {
+			operation = "update"
+		}
+		s.Run(operation+" validates V2 time-skipping config", func() {
+			err := invoke(true, update, &commonpb.TimeSkippingConfig{Enabled: true})
+			var invalidArgumentErr *serviceerror.InvalidArgument
+			s.Require().ErrorAs(err, &invalidArgumentErr)
+			s.Require().ErrorContains(err, "fast_forward_config is required when enabled")
+		})
+		s.Run(operation+" rejects time-skipping config for V1", func() {
+			err := invoke(false, update, &commonpb.TimeSkippingConfig{
+				Enabled: true,
+				FastForwardConfig: &commonpb.FastForwardConfig{
+					Id:       "fast-forward-id",
+					Duration: durationpb.New(time.Hour),
+				},
+			})
+			s.Require().ErrorIs(err, errScheduleTimeSkippingNotEnabled)
+		})
+	}
 }
 
 func (s *WorkflowHandlerSuite) TestPollWorkflowExecutionTimeSkipping() {

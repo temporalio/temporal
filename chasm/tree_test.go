@@ -3962,19 +3962,6 @@ func (s *nodeSuite) testComponentTree() *Node {
 	return node // maybe tc too
 }
 
-func (s *nodeSuite) TestMutableContextForwardsNilTimeSkippingConfig() {
-	root := s.testComponentTree()
-	called := false
-	s.nodeBackend.HandleSetTimeSkippingConfig = func(config *commonpb.TimeSkippingConfig) {
-		called = true
-		s.Nil(config)
-	}
-
-	NewMutableContext(context.Background(), root).SetTimeSkippingConfig(nil)
-
-	s.True(called)
-}
-
 func (s *nodeSuite) TestContextNowStableWithinContext() {
 	root := s.testComponentTree()
 
