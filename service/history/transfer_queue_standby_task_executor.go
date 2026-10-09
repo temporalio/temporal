@@ -322,7 +322,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		}
 
 		// verify if parent got the completion event
-		verifyCompletionRecorded := mutableState.HasParentExecution() && executionInfo.NewExecutionRunId == ""
+		verifyCompletionRecorded := !transferTask.SkipParentVerification && mutableState.HasParentExecution() && executionInfo.NewExecutionRunId == ""
 		if verifyCompletionRecorded {
 			// load close event only if needed.
 			completionEvent, err := mutableState.GetCompletionEvent(ctx)

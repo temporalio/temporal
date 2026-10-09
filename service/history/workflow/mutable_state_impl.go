@@ -4980,7 +4980,7 @@ func (ms *MutableStateImpl) AddCompletedWorkflowEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		event.GetEventTime().AsTime(),
 		false,
-		false, // skipCloseTransferTask
+		false, // skipParentVerification
 	); err != nil {
 		return nil, err
 	}
@@ -5024,7 +5024,7 @@ func (ms *MutableStateImpl) AddFailWorkflowEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		event.GetEventTime().AsTime(),
 		false,
-		false, // skipCloseTransferTask
+		false, // skipParentVerification
 	); err != nil {
 		return nil, err
 	}
@@ -5073,7 +5073,7 @@ func (ms *MutableStateImpl) AddTimeoutWorkflowEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		event.GetEventTime().AsTime(),
 		false,
-		false, // skipCloseTransferTask
+		false, // skipParentVerification
 	); err != nil {
 		return nil, err
 	}
@@ -5158,7 +5158,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionCanceledEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		event.GetEventTime().AsTime(),
 		false,
-		false, // skipCloseTransferTask
+		false, // skipParentVerification
 	); err != nil {
 		return nil, err
 	}
@@ -5690,7 +5690,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTerminatedEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		event.GetEventTime().AsTime(),
 		deleteAfterTerminate,
-		false, // skipCloseTransferTask
+		false, // skipParentVerification
 	); err != nil {
 		return nil, err
 	}
@@ -6425,7 +6425,7 @@ func (ms *MutableStateImpl) AddContinueAsNewEvent(
 	if err := ms.taskGenerator.GenerateWorkflowCloseTasks(
 		continueAsNewEvent.GetEventTime().AsTime(),
 		false,
-		false, // skipCloseTransferTask
+		false, // skipParentVerification
 	); err != nil {
 		return nil, nil, err
 	}
