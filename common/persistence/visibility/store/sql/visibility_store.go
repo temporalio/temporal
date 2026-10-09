@@ -584,8 +584,8 @@ func (s *VisibilityStore) AddSearchAttributes(
 	return serviceerror.NewUnimplemented("AddSearchAttributes operation not supported in SQL visibility")
 }
 
-// ListExecutions implements [store.AdminVisibilityStore].
-func (s *VisibilityStore) ListExecutions(
+// AdminListExecutions implements [store.AdminVisibilityStore].
+func (s *VisibilityStore) AdminListExecutions(
 	ctx context.Context,
 	request *manager.AdminListExecutionsRequest,
 ) (*store.InternalListExecutionsResponse, error) {
@@ -621,8 +621,8 @@ func (s *VisibilityStore) ListExecutions(
 	)
 }
 
-// CountExecutions implements [store.AdminVisibilityStore].
-func (s *VisibilityStore) CountExecutions(
+// AdminCountExecutions implements [store.AdminVisibilityStore].
+func (s *VisibilityStore) AdminCountExecutions(
 	ctx context.Context,
 	request *manager.AdminCountExecutionsRequest,
 ) (*store.InternalCountExecutionsResponse, error) {

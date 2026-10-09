@@ -213,8 +213,8 @@ func (m *visibilityManagerMetrics) AddSearchAttributes(
 	)
 }
 
-// ListExecutions implements [manager.AdminVisibilityManager].
-func (m *visibilityManagerMetrics) ListExecutions(
+// AdminListExecutions implements [manager.AdminVisibilityManager].
+func (m *visibilityManagerMetrics) AdminListExecutions(
 	ctx context.Context,
 	request *manager.AdminListExecutionsRequest,
 ) (*manager.AdminListExecutionsResponse, error) {
@@ -227,15 +227,15 @@ func (m *visibilityManagerMetrics) ListExecutions(
 		ctx,
 		m,
 		metrics.VisibilityPersistenceListExecutionsScope,
-		adminManager.ListExecutions,
+		adminManager.AdminListExecutions,
 		request,
 		request.Namespace,
 		request.Query,
 	)
 }
 
-// CountExecutions implements [manager.AdminVisibilityManager].
-func (m *visibilityManagerMetrics) CountExecutions(
+// AdminCountExecutions implements [manager.AdminVisibilityManager].
+func (m *visibilityManagerMetrics) AdminCountExecutions(
 	ctx context.Context,
 	request *manager.AdminCountExecutionsRequest,
 ) (*manager.AdminCountExecutionsResponse, error) {
@@ -248,7 +248,7 @@ func (m *visibilityManagerMetrics) CountExecutions(
 		ctx,
 		m,
 		metrics.VisibilityPersistenceCountExecutionsScope,
-		adminManager.CountExecutions,
+		adminManager.AdminCountExecutions,
 		request,
 		request.Namespace,
 		request.Query,

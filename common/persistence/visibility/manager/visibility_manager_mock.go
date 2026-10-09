@@ -308,6 +308,36 @@ func (mr *MockAdminVisibilityManagerMockRecorder) AddSearchAttributes(ctx, reque
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSearchAttributes", reflect.TypeOf((*MockAdminVisibilityManager)(nil).AddSearchAttributes), ctx, request)
 }
 
+// AdminCountExecutions mocks base method.
+func (m *MockAdminVisibilityManager) AdminCountExecutions(ctx context.Context, request *AdminCountExecutionsRequest) (*AdminCountExecutionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AdminCountExecutions", ctx, request)
+	ret0, _ := ret[0].(*AdminCountExecutionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AdminCountExecutions indicates an expected call of AdminCountExecutions.
+func (mr *MockAdminVisibilityManagerMockRecorder) AdminCountExecutions(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdminCountExecutions", reflect.TypeOf((*MockAdminVisibilityManager)(nil).AdminCountExecutions), ctx, request)
+}
+
+// AdminListExecutions mocks base method.
+func (m *MockAdminVisibilityManager) AdminListExecutions(ctx context.Context, request *AdminListExecutionsRequest) (*AdminListExecutionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AdminListExecutions", ctx, request)
+	ret0, _ := ret[0].(*AdminListExecutionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AdminListExecutions indicates an expected call of AdminListExecutions.
+func (mr *MockAdminVisibilityManagerMockRecorder) AdminListExecutions(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdminListExecutions", reflect.TypeOf((*MockAdminVisibilityManager)(nil).AdminListExecutions), ctx, request)
+}
+
 // Close mocks base method.
 func (m *MockAdminVisibilityManager) Close() {
 	m.ctrl.T.Helper()
@@ -333,21 +363,6 @@ func (m *MockAdminVisibilityManager) CountChasmExecutions(ctx context.Context, r
 func (mr *MockAdminVisibilityManagerMockRecorder) CountChasmExecutions(ctx, request any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountChasmExecutions", reflect.TypeOf((*MockAdminVisibilityManager)(nil).CountChasmExecutions), ctx, request)
-}
-
-// CountExecutions mocks base method.
-func (m *MockAdminVisibilityManager) CountExecutions(ctx context.Context, request *AdminCountExecutionsRequest) (*AdminCountExecutionsResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CountExecutions", ctx, request)
-	ret0, _ := ret[0].(*AdminCountExecutionsResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// CountExecutions indicates an expected call of CountExecutions.
-func (mr *MockAdminVisibilityManagerMockRecorder) CountExecutions(ctx, request any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountExecutions", reflect.TypeOf((*MockAdminVisibilityManager)(nil).CountExecutions), ctx, request)
 }
 
 // CountWorkflowExecutions mocks base method.
@@ -463,21 +478,6 @@ func (m *MockAdminVisibilityManager) ListChasmExecutions(ctx context.Context, re
 func (mr *MockAdminVisibilityManagerMockRecorder) ListChasmExecutions(ctx, request any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListChasmExecutions", reflect.TypeOf((*MockAdminVisibilityManager)(nil).ListChasmExecutions), ctx, request)
-}
-
-// ListExecutions mocks base method.
-func (m *MockAdminVisibilityManager) ListExecutions(ctx context.Context, request *AdminListExecutionsRequest) (*AdminListExecutionsResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListExecutions", ctx, request)
-	ret0, _ := ret[0].(*AdminListExecutionsResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListExecutions indicates an expected call of ListExecutions.
-func (mr *MockAdminVisibilityManagerMockRecorder) ListExecutions(ctx, request any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListExecutions", reflect.TypeOf((*MockAdminVisibilityManager)(nil).ListExecutions), ctx, request)
 }
 
 // ListWorkflowExecutions mocks base method.

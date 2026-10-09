@@ -168,8 +168,8 @@ func (m *visibilityManagerRateLimited) AddSearchAttributes(
 	return m.delegate.AddSearchAttributes(ctx, request)
 }
 
-// ListExecutions implements [manager.AdminVisibilityManager].
-func (m *visibilityManagerRateLimited) ListExecutions(
+// AdminListExecutions implements [manager.AdminVisibilityManager].
+func (m *visibilityManagerRateLimited) AdminListExecutions(
 	ctx context.Context,
 	request *manager.AdminListExecutionsRequest,
 ) (*manager.AdminListExecutionsResponse, error) {
@@ -180,11 +180,11 @@ func (m *visibilityManagerRateLimited) ListExecutions(
 	if ok := allow(ctx, "ListExecutions", m.readRateLimiter); !ok {
 		return nil, persistence.ErrPersistenceSystemLimitExceeded
 	}
-	return adminManager.ListExecutions(ctx, request)
+	return adminManager.AdminListExecutions(ctx, request)
 }
 
-// CountExecutions implements [manager.AdminVisibilityManager].
-func (m *visibilityManagerRateLimited) CountExecutions(
+// AdminCountExecutions implements [manager.AdminVisibilityManager].
+func (m *visibilityManagerRateLimited) AdminCountExecutions(
 	ctx context.Context,
 	request *manager.AdminCountExecutionsRequest,
 ) (*manager.AdminCountExecutionsResponse, error) {
@@ -195,7 +195,7 @@ func (m *visibilityManagerRateLimited) CountExecutions(
 	if ok := allow(ctx, "CountExecutions", m.readRateLimiter); !ok {
 		return nil, persistence.ErrPersistenceSystemLimitExceeded
 	}
-	return adminManager.CountExecutions(ctx, request)
+	return adminManager.AdminCountExecutions(ctx, request)
 }
 
 func allow(

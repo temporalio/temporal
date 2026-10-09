@@ -7,10 +7,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/adminservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/tools/tdbg"
 	"go.temporal.io/server/tools/tdbg/tdbgtest"
@@ -73,16 +71,13 @@ func runVisibility(
 	return stdout.String(), stderr.String(), err
 }
 
-func visibilityExecution(workflowID string) *persistencespb.VisibilityExecutionInfo {
-	return &persistencespb.VisibilityExecutionInfo{
+func visibilityExecution(workflowID string) *adminservice.VisibilityExecutionInfo {
+	return &adminservice.VisibilityExecutionInfo{
 		NamespaceId: "test-namespace-id",
 		Namespace:   "test-namespace",
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      "test-run-id",
-		},
-		WorkflowType: &commonpb.WorkflowType{Name: "test-workflow-type"},
-		Status:       enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		BusinessId:  workflowID,
+		RunId:       "test-run-id",
+		State:       enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 	}
 }
 
@@ -90,7 +85,7 @@ func TestAdminListExecutions(t *testing.T) {
 	admin := &visibilityAdminClient{
 		listPages: []*adminservice.ListExecutionsResponse{
 			{
-				Executions: []*persistencespb.VisibilityExecutionInfo{
+				Executions: []*adminservice.VisibilityExecutionInfo{
 					visibilityExecution("wid-1"),
 				},
 			},
@@ -122,7 +117,7 @@ func TestAdminListExecutions_AllNamespaces(t *testing.T) {
 	admin := &visibilityAdminClient{
 		listPages: []*adminservice.ListExecutionsResponse{
 			{
-				Executions: []*persistencespb.VisibilityExecutionInfo{
+				Executions: []*adminservice.VisibilityExecutionInfo{
 					visibilityExecution("wid-1"),
 				},
 			},
@@ -140,13 +135,13 @@ func TestAdminListExecutions_Paginates(t *testing.T) {
 	admin := &visibilityAdminClient{
 		listPages: []*adminservice.ListExecutionsResponse{
 			{
-				Executions: []*persistencespb.VisibilityExecutionInfo{
+				Executions: []*adminservice.VisibilityExecutionInfo{
 					visibilityExecution("wid-1"),
 				},
 				NextPageToken: []byte("page-2"),
 			},
 			{
-				Executions: []*persistencespb.VisibilityExecutionInfo{
+				Executions: []*adminservice.VisibilityExecutionInfo{
 					visibilityExecution("wid-2"),
 				},
 			},

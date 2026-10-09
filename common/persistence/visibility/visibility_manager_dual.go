@@ -219,8 +219,8 @@ func (v *VisibilityManagerDual) AddSearchAttributes(
 	return v.secondaryVisibilityManager.AddSearchAttributes(ctx, request)
 }
 
-// ListExecutions implements [manager.AdminVisibilityManager].
-func (v *VisibilityManagerDual) ListExecutions(
+// AdminListExecutions implements [manager.AdminVisibilityManager].
+func (v *VisibilityManagerDual) AdminListExecutions(
 	ctx context.Context,
 	request *manager.AdminListExecutionsRequest,
 ) (*manager.AdminListExecutionsResponse, error) {
@@ -236,11 +236,11 @@ func (v *VisibilityManagerDual) ListExecutions(
 	if !ok {
 		return nil, manager.ErrNotAdminVisibilityManager
 	}
-	return adminReadManager.ListExecutions(ctx, request)
+	return adminReadManager.AdminListExecutions(ctx, request)
 }
 
-// CountExecutions implements [manager.AdminVisibilityManager].
-func (v *VisibilityManagerDual) CountExecutions(
+// AdminCountExecutions implements [manager.AdminVisibilityManager].
+func (v *VisibilityManagerDual) AdminCountExecutions(
 	ctx context.Context,
 	request *manager.AdminCountExecutionsRequest,
 ) (*manager.AdminCountExecutionsResponse, error) {
@@ -256,7 +256,7 @@ func (v *VisibilityManagerDual) CountExecutions(
 	if !ok {
 		return nil, manager.ErrNotAdminVisibilityManager
 	}
-	return adminReadManager.CountExecutions(ctx, request)
+	return adminReadManager.AdminCountExecutions(ctx, request)
 }
 
 func dualWriteWrapper[RequestT any](

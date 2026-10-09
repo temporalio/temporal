@@ -5916,7 +5916,7 @@ func (x *ListExecutionsRequest) GetNextPageToken() []byte {
 type ListExecutionsResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Executions.
-	Executions []*v12.VisibilityExecutionInfo `protobuf:"bytes,1,rep,name=executions,proto3" json:"executions,omitempty"`
+	Executions []*VisibilityExecutionInfo `protobuf:"bytes,1,rep,name=executions,proto3" json:"executions,omitempty"`
 	// Next page token.
 	NextPageToken []byte `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -5953,7 +5953,7 @@ func (*ListExecutionsResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_adminservice_v1_request_response_proto_rawDescGZIP(), []int{96}
 }
 
-func (x *ListExecutionsResponse) GetExecutions() []*v12.VisibilityExecutionInfo {
+func (x *ListExecutionsResponse) GetExecutions() []*VisibilityExecutionInfo {
 	if x != nil {
 		return x.Executions
 	}
@@ -6250,7 +6250,7 @@ var File_temporal_server_api_adminservice_v1_request_response_proto protoreflect
 
 const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	":temporal/server/api/adminservice/v1/request_response.proto\x12#temporal.server.api.adminservice.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a+temporal/api/enums/v1/batch_operation.proto\x1a\"temporal/api/enums/v1/common.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a'temporal/api/namespace/v1/message.proto\x1a)temporal/api/replication/v1/message.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a%temporal/api/version/v1/message.proto\x1a&temporal/api/workflow/v1/message.proto\x1a,temporal/server/api/cluster/v1/message.proto\x1a'temporal/server/api/common/v1/dlq.proto\x1a*temporal/server/api/enums/v1/cluster.proto\x1a)temporal/server/api/enums/v1/common.proto\x1a&temporal/server/api/enums/v1/dlq.proto\x1a'temporal/server/api/enums/v1/task.proto\x1a+temporal/server/api/health/v1/message.proto\x1a,temporal/server/api/history/v1/message.proto\x1a.temporal/server/api/namespace/v1/message.proto\x1a9temporal/server/api/persistence/v1/cluster_metadata.proto\x1a3temporal/server/api/persistence/v1/executions.proto\x1a,temporal/server/api/persistence/v1/hsm.proto\x1a4temporal/server/api/persistence/v1/task_queues.proto\x1a.temporal/server/api/persistence/v1/tasks.proto\x1a3temporal/server/api/persistence/v1/visibility.proto\x1a?temporal/server/api/persistence/v1/workflow_mutable_state.proto\x1a0temporal/server/api/replication/v1/message.proto\x1a.temporal/server/api/taskqueue/v1/message.proto\"\x83\x01\n" +
+	":temporal/server/api/adminservice/v1/request_response.proto\x12#temporal.server.api.adminservice.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a+temporal/api/enums/v1/batch_operation.proto\x1a\"temporal/api/enums/v1/common.proto\x1a&temporal/api/enums/v1/task_queue.proto\x1a'temporal/api/namespace/v1/message.proto\x1a)temporal/api/replication/v1/message.proto\x1a'temporal/api/taskqueue/v1/message.proto\x1a%temporal/api/version/v1/message.proto\x1a&temporal/api/workflow/v1/message.proto\x1a1temporal/server/api/adminservice/v1/message.proto\x1a,temporal/server/api/cluster/v1/message.proto\x1a'temporal/server/api/common/v1/dlq.proto\x1a*temporal/server/api/enums/v1/cluster.proto\x1a)temporal/server/api/enums/v1/common.proto\x1a&temporal/server/api/enums/v1/dlq.proto\x1a'temporal/server/api/enums/v1/task.proto\x1a+temporal/server/api/health/v1/message.proto\x1a,temporal/server/api/history/v1/message.proto\x1a.temporal/server/api/namespace/v1/message.proto\x1a9temporal/server/api/persistence/v1/cluster_metadata.proto\x1a3temporal/server/api/persistence/v1/executions.proto\x1a,temporal/server/api/persistence/v1/hsm.proto\x1a4temporal/server/api/persistence/v1/task_queues.proto\x1a.temporal/server/api/persistence/v1/tasks.proto\x1a?temporal/server/api/persistence/v1/workflow_mutable_state.proto\x1a0temporal/server/api/replication/v1/message.proto\x1a.temporal/server/api/taskqueue/v1/message.proto\"\x83\x01\n" +
 	"\x1aRebuildMutableStateRequest\x12\x1c\n" +
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12G\n" +
 	"\texecution\x18\x02 \x01(\v2).temporal.api.common.v1.WorkflowExecutionR\texecution\"\x1d\n" +
@@ -6691,10 +6691,10 @@ const file_temporal_server_api_adminservice_v1_request_response_proto_rawDesc = 
 	"\tnamespace\x18\x01 \x01(\tR\tnamespace\x12\x14\n" +
 	"\x05query\x18\x02 \x01(\tR\x05query\x12\x1b\n" +
 	"\tpage_size\x18\x03 \x01(\x05R\bpageSize\x12&\n" +
-	"\x0fnext_page_token\x18\x04 \x01(\fR\rnextPageToken\"\x9d\x01\n" +
-	"\x16ListExecutionsResponse\x12[\n" +
+	"\x0fnext_page_token\x18\x04 \x01(\fR\rnextPageToken\"\x9e\x01\n" +
+	"\x16ListExecutionsResponse\x12\\\n" +
 	"\n" +
-	"executions\x18\x01 \x03(\v2;.temporal.server.api.persistence.v1.VisibilityExecutionInfoR\n" +
+	"executions\x18\x01 \x03(\v2<.temporal.server.api.adminservice.v1.VisibilityExecutionInfoR\n" +
 	"executions\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\fR\rnextPageToken\"L\n" +
 	"\x16CountExecutionsRequest\x12\x1c\n" +
@@ -6877,7 +6877,7 @@ var file_temporal_server_api_adminservice_v1_request_response_proto_goTypes = []
 	(*v114.PartitionScaleInfo)(nil),                     // 152: temporal.server.api.taskqueue.v1.PartitionScaleInfo
 	(*v12.TaskQueueTypeUserData)(nil),                   // 153: temporal.server.api.persistence.v1.TaskQueueTypeUserData
 	(v16.BatchOperationType)(0),                         // 154: temporal.api.enums.v1.BatchOperationType
-	(*v12.VisibilityExecutionInfo)(nil),                 // 155: temporal.server.api.persistence.v1.VisibilityExecutionInfo
+	(*VisibilityExecutionInfo)(nil),                     // 155: temporal.server.api.adminservice.v1.VisibilityExecutionInfo
 	(v16.IndexedValueType)(0),                           // 156: temporal.api.enums.v1.IndexedValueType
 	(*v114.TaskQueueVersionInfoInternal)(nil),           // 157: temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal
 	(*v1.Payload)(nil),                                  // 158: temporal.api.common.v1.Payload
@@ -6973,7 +6973,7 @@ var file_temporal_server_api_adminservice_v1_request_response_proto_depIdxs = []
 	93,  // 87: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.refresh_tasks_operation:type_name -> temporal.server.api.adminservice.v1.BatchOperationRefreshTasks
 	154, // 88: temporal.server.api.adminservice.v1.StartAdminBatchOperationRequest.delegation_operation:type_name -> temporal.api.enums.v1.BatchOperationType
 	0,   // 89: temporal.server.api.adminservice.v1.MigrateScheduleRequest.target:type_name -> temporal.server.api.adminservice.v1.MigrateScheduleRequest.SchedulerTarget
-	155, // 90: temporal.server.api.adminservice.v1.ListExecutionsResponse.executions:type_name -> temporal.server.api.persistence.v1.VisibilityExecutionInfo
+	155, // 90: temporal.server.api.adminservice.v1.ListExecutionsResponse.executions:type_name -> temporal.server.api.adminservice.v1.VisibilityExecutionInfo
 	110, // 91: temporal.server.api.adminservice.v1.CountExecutionsResponse.groups:type_name -> temporal.server.api.adminservice.v1.CountExecutionsResponse.AggregationGroup
 	121, // 92: temporal.server.api.adminservice.v1.GetReplicationMessagesResponse.ShardMessagesEntry.value:type_name -> temporal.server.api.replication.v1.ReplicationMessages
 	156, // 93: temporal.server.api.adminservice.v1.AddSearchAttributesRequest.SearchAttributesEntry.value:type_name -> temporal.api.enums.v1.IndexedValueType
@@ -6994,6 +6994,7 @@ func file_temporal_server_api_adminservice_v1_request_response_proto_init() {
 	if File_temporal_server_api_adminservice_v1_request_response_proto != nil {
 		return
 	}
+	file_temporal_server_api_adminservice_v1_message_proto_init()
 	file_temporal_server_api_adminservice_v1_request_response_proto_msgTypes[59].OneofWrappers = []any{
 		(*StreamWorkflowReplicationMessagesRequest_SyncReplicationState)(nil),
 	}

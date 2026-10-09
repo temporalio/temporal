@@ -2450,7 +2450,7 @@ func (adh *AdminHandler) ListExecutions(
 		pageSize = maxPageSize
 	}
 
-	resp, err := adh.visibilityMgr.ListExecutions(
+	resp, err := adh.visibilityMgr.AdminListExecutions(
 		ctx, &manager.AdminListExecutionsRequest{
 			Namespace:     namespace.Name(request.GetNamespace()),
 			Query:         request.GetQuery(),
@@ -2478,7 +2478,7 @@ func (adh *AdminHandler) CountExecutions(
 		return nil, errRequestNotSet
 	}
 
-	resp, err := adh.visibilityMgr.CountExecutions(
+	resp, err := adh.visibilityMgr.AdminCountExecutions(
 		ctx, &manager.AdminCountExecutionsRequest{
 			Namespace: namespace.Name(request.GetNamespace()),
 			Query:     request.GetQuery(),

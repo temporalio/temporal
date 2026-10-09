@@ -25,7 +25,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
@@ -1185,7 +1185,7 @@ func (s *AdvancedVisibilitySuite) TestAdminListExecutions() {
 	)
 	s.NoError(err)
 
-	var executions []*persistencespb.VisibilityExecutionInfo
+	var executions []*adminservice.VisibilityExecutionInfo
 	query := fmt.Sprintf(`WorkflowType = %q`, wt)
 	s.Await(
 		func(s *AdvancedVisibilitySuite) {
@@ -1199,7 +1199,7 @@ func (s *AdvancedVisibilitySuite) TestAdminListExecutions() {
 			)
 			s.NoError(err)
 			s.Len(resp.GetExecutions(), 2)
-			s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, resp.GetExecutions()[1].GetStatus())
+			s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, resp.GetExecutions()[1].GetState())
 			executions = resp.GetExecutions()
 		},
 		testcore.WaitForESToSettle,
@@ -1210,14 +1210,13 @@ func (s *AdvancedVisibilitySuite) TestAdminListExecutions() {
 	for _, execution := range executions {
 		s.Equal(env.NamespaceID().String(), execution.GetNamespaceId())
 		s.Equal(env.Namespace().String(), execution.GetNamespace())
-		s.Equal(wt, execution.GetWorkflowType().GetName())
 		s.NotNil(execution.GetStartTime())
 	}
 
 	openExecution, ok := byRunID[openWE.GetRunId()]
 	s.True(ok)
-	s.Equal(id+"-open", openExecution.GetExecution().GetWorkflowId())
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, openExecution.GetStatus())
+	s.Equal(id+"-open", openExecution.GetBusinessId())
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, openExecution.GetState())
 	s.Nil(openExecution.GetCloseTime())
 	s.Nil(openExecution.GetExecutionDuration())
 	s.Zero(openExecution.GetHistoryLength())
@@ -1226,8 +1225,8 @@ func (s *AdvancedVisibilitySuite) TestAdminListExecutions() {
 
 	closedExecution, ok := byRunID[closedWE.GetRunId()]
 	s.True(ok)
-	s.Equal(id+"-closed", closedExecution.GetExecution().GetWorkflowId())
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, closedExecution.GetStatus())
+	s.Equal(id+"-closed", closedExecution.GetBusinessId())
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, closedExecution.GetState())
 	s.NotNil(closedExecution.GetCloseTime())
 	s.False(closedExecution.GetCloseTime().AsTime().Before(closedExecution.GetStartTime().AsTime()))
 	s.NotNil(closedExecution.GetExecutionDuration())
@@ -1308,7 +1307,7 @@ func (s *AdvancedVisibilitySuite) TestAdminListExecutions_AllNamespaces() {
 	)
 
 	// Without a namespace, both namespaces are spanned.
-	var executions []*persistencespb.VisibilityExecutionInfo
+	var executions []*adminservice.VisibilityExecutionInfo
 	s.Await(
 		func(s *AdvancedVisibilitySuite) {
 			resp, err := env.AdminClient().ListExecutions(
@@ -1478,7 +1477,6 @@ func (s *AdvancedVisibilitySuite) TestAdminCountExecutions() {
 			)
 			s.NoError(err)
 			s.Equal(int64(numOfWorkflows), resp.GetCount())
-			s.Len(resp.GetGroups(), 2)
 			s.Empty(resp.GetGroups())
 		},
 		testcore.WaitForESToSettle,
@@ -1497,6 +1495,7 @@ func (s *AdvancedVisibilitySuite) TestAdminCountExecutions() {
 			)
 			s.NoError(err)
 			s.Equal(int64(numOfWorkflows), resp.GetCount())
+			s.Len(resp.GetGroups(), 2)
 			countResp = resp
 		},
 		testcore.WaitForESToSettle,
@@ -1682,19 +1681,19 @@ func (s *AdvancedVisibilitySuite) testAdminListExecutionsPaginationHelper(
 }
 
 func executionsByRunID(
-	executions []*persistencespb.VisibilityExecutionInfo,
-) map[string]*persistencespb.VisibilityExecutionInfo {
-	byRunID := make(map[string]*persistencespb.VisibilityExecutionInfo, len(executions))
+	executions []*adminservice.VisibilityExecutionInfo,
+) map[string]*adminservice.VisibilityExecutionInfo {
+	byRunID := make(map[string]*adminservice.VisibilityExecutionInfo, len(executions))
 	for _, execution := range executions {
-		byRunID[execution.GetExecution().GetRunId()] = execution
+		byRunID[execution.GetRunId()] = execution
 	}
 	return byRunID
 }
 
-func runIDsOfExecutions(executions []*persistencespb.VisibilityExecutionInfo) []string {
+func runIDsOfExecutions(executions []*adminservice.VisibilityExecutionInfo) []string {
 	runIDs := make([]string, len(executions))
 	for i, execution := range executions {
-		runIDs[i] = execution.GetExecution().GetRunId()
+		runIDs[i] = execution.GetRunId()
 	}
 	return runIDs
 }
