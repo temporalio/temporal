@@ -115,6 +115,7 @@ var (
 	ErrSentinel              = serviceerror.NewNotFound("schedule is a sentinel")
 	ErrSentinelBlocked       = serviceerror.NewUnavailable("schedule is a sentinel; please retry after sentinel expires")
 	ErrMigrationPending      = serviceerror.NewUnavailable("schedule has a pending migration to workflow; please retry later")
+	ErrTimeSkippingMigration = serviceerror.NewFailedPrecondition("schedule with time skipping cannot migrate to workflow-backed scheduler")
 )
 
 // NewScheduler returns an initialized CHASM scheduler root component.
@@ -143,6 +144,7 @@ func NewScheduler(
 		EventLog:             chasm.NewComponentField(ctx, NewEventLog(ctx)),
 	}
 	sched.setNullableFields()
+	ctx.SetTimeSkippingConfig(input.GetTimeSkippingConfig())
 	sched.Info.CreateTime = timestamppb.New(ctx.Now(sched))
 	sched.applyPausePatch(ctx, patch)
 
@@ -347,6 +349,34 @@ func (s *Scheduler) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 	}
 
 	return chasm.LifecycleStateRunning
+}
+
+// IsExecutionSkippable reports whether the scheduler has no internal work that
+// must complete before its virtual clock advances to the next timer.
+func (s *Scheduler) IsExecutionSkippable(ctx chasm.Context) bool {
+	// Schedule status.
+	if s.Sentinel || s.Closed || s.WorkflowMigration != nil || s.Schedule.GetState().GetPaused() {
+		return false
+	}
+	// Active Backfillers.
+	if s.hasMoreBackfills() {
+		return false
+	}
+
+	// Pending Invoker work.
+	invoker := s.Invoker.Get(ctx)
+	if len(invoker.GetCancelWorkflows()) > 0 || len(invoker.GetTerminateWorkflows()) > 0 {
+		return false
+	}
+	for _, start := range invoker.GetBufferedStarts() {
+		if start.GetCompleted() == nil {
+			return false
+		}
+	}
+
+	// Generator readiness.
+	lastProcessedTime := s.Generator.Get(ctx).GetLastProcessedTime()
+	return lastProcessedTime != nil && !lastProcessedTime.AsTime().Before(s.Info.GetUpdateTime().AsTime())
 }
 
 func (s *Scheduler) ContextMetadata(_ chasm.Context) map[string]string {
@@ -700,6 +730,7 @@ func (s *Scheduler) Describe(
 	info.FutureActionTimes = futureActionTimes
 	// Only starts that have not reached StartWorkflowExecution count as buffered.
 	info.BufferSize = int64(invoker.bufferedStartsCount())
+	info.TimeSkippingInfo = ctx.GetTimeSkippingInfo()
 
 	executionInfo := ctx.ExecutionInfo()
 	info.StateSizeBytes = int64(executionInfo.ApproximateStateSize)
@@ -829,6 +860,10 @@ func (s *Scheduler) MigrateToWorkflow(
 		return &schedulerpb.MigrateToWorkflowResponse{}, nil
 	}
 
+	if ctx.GetTimeSkippingInfo() != nil {
+		return nil, ErrTimeSkippingMigration
+	}
+
 	// Save pre-migration paused state, mark migration as pending, then pause.
 	s.WorkflowMigration = &schedulerpb.WorkflowMigrationState{
 		PreMigrationPaused: s.Schedule.State.Paused,
@@ -889,6 +924,7 @@ func (s *Scheduler) Update(
 
 	s.Schedule = req.FrontendRequest.Schedule
 	s.setNullableFields()
+	ctx.SetTimeSkippingConfig(s.Schedule.GetTimeSkippingConfig())
 
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
 	s.updateConflictToken()

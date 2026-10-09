@@ -319,6 +319,10 @@ func (i *Invoker) recordCompletedAction(
 	idx := slices.IndexFunc(i.BufferedStarts, func(start *schedulespb.BufferedStart) bool {
 		return start.Attempt == 0
 	})
+	// TODO(time-skipping): The completed workflow and its schedule use independent virtual clocks, so
+	// the workflow's CloseTime may not be in the schedule's clock domain. Consider using the schedule's
+	// current virtual time instead. This is only observable when a workflow completion releases a
+	// pending overlap start.
 	if idx >= 0 {
 		i.BufferedStarts[idx].DesiredTime = timestamppb.New(completed.GetCloseTime().AsTime())
 	}

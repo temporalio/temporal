@@ -3870,6 +3870,11 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		false,
 		`WorkflowTimeSkippingEnabled is a "feature enable" flag. When enabled it allows clients to skip time in executions.`,
 	)
+	ScheduleV2TimeSkippingEnabled = NewNamespaceBoolSetting(
+		"frontend.ScheduleV2TimeSkippingEnabled",
+		false,
+		`ScheduleV2TimeSkippingEnabled is a namespace-level feature flag that allows time skipping for CHASM (V2) schedules.`,
+	)
 	WorkflowTimeSkippingMaxSkipPerSession = NewNamespaceIntSetting(
 		"frontend.WorkflowTimeSkippingMaxSkipPerSession",
 		200,

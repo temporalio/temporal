@@ -1,11 +1,15 @@
 package frontend
 
 import (
+	"context"
+
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/authorization"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/priorities"
 )
 
@@ -100,6 +104,23 @@ func validateFairnessWeightUpdate(
 				"fairness weight override key %q present in both set and unset lists", u)
 		}
 	}
+	return nil
+}
 
+// validateTimeSkippingStatePropagation keeps propagation state internal-only while CHASM Schedules
+// start Workflows through Frontend.
+// TODO: Delete this function once they start Workflows directly from History.
+func validateTimeSkippingStatePropagation(
+	ctx context.Context,
+	state *commonpb.TimeSkippingStatePropagation,
+) error {
+	if state == nil {
+		return nil
+	}
+	principal := headers.GetPrincipal(ctx)
+	if principal.GetType() != authorization.InternalPrincipalType ||
+		principal.GetName() != authorization.InternalPrincipalName {
+		return errTimeSkippingStatePropagationNotInternal
+	}
 	return nil
 }
