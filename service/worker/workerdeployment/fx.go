@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -79,6 +80,16 @@ func ClientProvider(
 	testHooks testhooks.TestHooks,
 	metricsHandler metrics.Handler,
 ) Client {
+	visibilityQueryRPS := dynamicconfig.MatchingWorkerDeploymentVisibilityQueryRPS.Get(dc)
+	autoCreateVisibilityRateLimiter := quotas.NewNamespaceRequestRateLimiter(
+		func(req quotas.Request) quotas.RequestRateLimiter {
+			return quotas.NewRequestRateLimiterAdapter(
+				quotas.NewDefaultIncomingRateLimiter(
+					func() float64 { return visibilityQueryRPS(req.Caller) },
+				),
+			)
+		},
+	)
 	highestRevSignaledToVersionWf := cache.New(dynamicconfig.ReactivationSignalDedupCacheMaxSize.Get(dc)(), nil)
 	lc.Append(fx.Hook{
 		OnStop: func(context.Context) error {
@@ -96,6 +107,7 @@ func ClientProvider(
 		visibilityMaxPageSize:            dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 		maxTaskQueuesInDeploymentVersion: dynamicconfig.MatchingMaxTaskQueuesInDeploymentVersion.Get(dc),
 		maxDeployments:                   dynamicconfig.MatchingMaxDeployments.Get(dc),
+		autoCreateVisibilityRateLimiter:  autoCreateVisibilityRateLimiter,
 		testHooks:                        testHooks,
 		metricsHandler:                   metricsHandler,
 		highestRevSignaledToVersionWf:    highestRevSignaledToVersionWf,
