@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/temporalio/sqlparser"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
@@ -1482,7 +1483,7 @@ func TestSQLQueryConverter(t *testing.T) {
 						testNamespaceName,
 						searchattribute.TestNameTypeMap(),
 						&searchattribute.TestMapper{},
-						nil, // metricsHandler
+						metrics.NoopMetricsHandler,
 						log.NewNoopLogger(),
 					)
 				},
@@ -1507,7 +1508,7 @@ func newESQueryConverter() *query.QueryConverter[elastic.Query] {
 		testNamespaceName,
 		searchattribute.TestNameTypeMap(),
 		&searchattribute.TestMapper{},
-		nil, // metricsHandler
+		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),
 	)
 }

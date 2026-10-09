@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/searchattribute"
-	"go.uber.org/mock/gomock"
 )
 
 const (
@@ -74,7 +73,6 @@ func TestBuildQueryParams(t *testing.T) {
 			tcName := fmt.Sprintf("%s/%s", pluginName, tc.name)
 			t.Run(tcName, func(t *testing.T) {
 				r := require.New(t)
-				ctrl := gomock.NewController(t)
 				sqlQC, err := NewSQLQueryConverter(pluginName)
 				r.NoError(err)
 
@@ -87,7 +85,7 @@ func TestBuildQueryParams(t *testing.T) {
 					&searchattribute.TestMapper{},
 					nil, // chasmMapper
 					chasm.UnspecifiedArchetypeID,
-					metrics.NewMockHandler(ctrl),
+					metrics.NoopMetricsHandler,
 					log.NewNoopLogger(),
 				)
 				if tc.err != "" {
