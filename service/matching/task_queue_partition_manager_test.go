@@ -54,7 +54,6 @@ type PartitionManagerTestSuite struct {
 	suite.Suite
 	protorequire.ProtoAssertions
 
-	newMatcher     bool
 	fairness       bool
 	controller     *gomock.Controller
 	userDataMgr    *mockUserDataManager
@@ -63,20 +62,14 @@ type PartitionManagerTestSuite struct {
 	ns             *namespace.Namespace
 }
 
-// TODO(pri): cleanup; delete this
-func TestTaskQueuePartitionManager_Classic_Suite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, &PartitionManagerTestSuite{newMatcher: false})
-}
-
 func TestTaskQueuePartitionManager_Pri_Suite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, &PartitionManagerTestSuite{newMatcher: true})
+	suite.Run(t, &PartitionManagerTestSuite{})
 }
 
 func TestTaskQueuePartitionManager_Fair_Suite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, &PartitionManagerTestSuite{newMatcher: true, fairness: true})
+	suite.Run(t, &PartitionManagerTestSuite{fairness: true})
 }
 
 func (s *PartitionManagerTestSuite) SetupTest() {
@@ -89,8 +82,6 @@ func (s *PartitionManagerTestSuite) SetupTest() {
 	config := defaultTestConfig()
 	if s.fairness {
 		useFairness(config)
-	} else if !s.newMatcher {
-		useClassicMatcher(config)
 	}
 
 	s.matchingClient = matchingservicemock.NewMockMatchingServiceClient(s.controller)
@@ -274,10 +265,6 @@ func (s *PartitionManagerTestSuite) TestGrantEagerDispatchChecksVersionBacklog()
 }
 
 func (s *PartitionManagerTestSuite) TestGrantEagerDispatchReturnsPartialRateLimitGrant() {
-	if !s.newMatcher {
-		s.T().Skip("simple limiter is only used by the new matcher")
-	}
-
 	partitionMgr := s.newRateLimitedEagerDispatchPartitionManager()
 
 	items, err := partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
@@ -292,10 +279,6 @@ func (s *PartitionManagerTestSuite) TestGrantEagerDispatchReturnsPartialRateLimi
 }
 
 func (s *PartitionManagerTestSuite) TestGrantEagerDispatchValidationDoesNotConsumeTokens() {
-	if !s.newMatcher {
-		s.T().Skip("simple limiter is only used by the new matcher")
-	}
-
 	partitionMgr := s.newRateLimitedEagerDispatchPartitionManager()
 
 	_, err := partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
@@ -1072,9 +1055,6 @@ func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_InFlightWriteDoesN
 }
 
 func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_AttributedSeriesZeroedOnStop() {
-	if !s.newMatcher {
-		s.T().Skip("classic matcher has no per-priority subqueues, so there's no attributed-only priority")
-	}
 	const (
 		deploymentName = "foo"
 		currentBuildID = "A"
@@ -1141,98 +1121,7 @@ func (s *PartitionManagerTestSuite) loadCurrentVersionWithAttributedBacklog(
 	return currentQ, versionTag
 }
 
-func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_SeriesZeroedOnVersionedQueueUnload() {
-	if s.newMatcher {
-		s.T().Skip("new matcher re-adds the tasks its matcher held when a queue stops, reloading it before the next emit")
-	}
-	const (
-		deploymentName = "foo"
-		buildID        = "C" // not current, so the unversioned backlog is attributed elsewhere
-	)
-	s.addRoutingConfigUserData(deploymentName, "A", "", 0)
-
-	gate := newBacklogWriteGate()
-	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{
-		loadTime:                   1 * time.Minute,
-		backlogMetricsEmitInterval: 10 * time.Millisecond,
-		wrapMetricsHandler:         gate.wrap,
-	})
-	defer cleanup()
-	defer gate.open()
-
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-	s.spoolDefaultTasks(pm, 3)
-	versionedQ, err := pm.getVersionedQueue(ctx, "", "", &deploymentpb.Deployment{
-		SeriesName: deploymentName,
-		BuildId:    buildID,
-	}, true)
-	s.Require().NoError(err)
-	s.Require().NoError(versionedQ.WaitUntilInitialized(ctx))
-	for i := range 4 {
-		s.Require().NoError(versionedQ.SpoolTask(&persistencespb.TaskInfo{
-			NamespaceId: namespaceID,
-			RunId:       "run",
-			WorkflowId:  fmt.Sprintf("wf-%d", i),
-			VersionDirective: &taskqueuespb.TaskVersionDirective{
-				Behavior: enumspb.VERSIONING_BEHAVIOR_PINNED,
-				DeploymentVersion: &deploymentspb.WorkerDeploymentVersion{
-					DeploymentName: deploymentName,
-					BuildId:        buildID,
-				},
-				RevisionNumber: 1,
-			},
-		}))
-	}
-
-	versionTag := worker_versioning.ExternalWorkerDeploymentVersionToString(
-		&deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: buildID},
-	)
-	await.RequireTrue(s.T(), func() bool {
-		for _, count := range latestLogicalBacklogCountsByPriority(capture.Snapshot(), versionTag) {
-			if count > 0 {
-				return true
-			}
-		}
-		return false
-	}, 10*time.Second, 10*time.Millisecond)
-
-	// Pause after describe so it cannot reload C while the test unloads it.
-	// The next emit must clear the paused write.
-	gate.arm()
-	select {
-	case <-gate.paused:
-	case <-ctx.Done():
-		s.T().Fatal("emitter did not reach the write gate")
-	}
-	pm.unloadPhysicalQueue(versionedQ, unloadCauseIdle)
-	gate.open()
-
-	await.RequireTrue(s.T(), func() bool {
-		snap := capture.Snapshot()
-		for _, byPriority := range []map[string]float64{
-			latestLogicalBacklogCountsByPriority(snap, versionTag),
-			latestLogicalBacklogAgesByPriority(snap, versionTag),
-		} {
-			for _, v := range byPriority {
-				if v != 0 {
-					return false
-				}
-			}
-		}
-		return true
-	}, 2*time.Second, 10*time.Millisecond)
-	// The current version's series, which carries the unversioned backlog, is unaffected.
-	currentVersionTag := worker_versioning.ExternalWorkerDeploymentVersionToString(
-		&deploymentpb.WorkerDeploymentVersion{DeploymentName: deploymentName, BuildId: "A"},
-	)
-	s.Require().Positive(latestLogicalBacklogCountsByPriority(capture.Snapshot(), currentVersionTag)[defaultPriorityTag])
-}
-
 func (s *PartitionManagerTestSuite) TestLogicalBacklogMetrics_AttributedSeriesZeroedWhenNoLongerCurrent() {
-	if !s.newMatcher {
-		s.T().Skip("classic matcher has no per-priority subqueues, so there's no attributed-only priority")
-	}
 	const (
 		deploymentName = "foo"
 		currentBuildID = "A"
@@ -2239,9 +2128,6 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_AddHookNoSyncMatch() {
 }
 
 func (s *PartitionManagerTestSuite) TestTaskAddHooks_RateLimited() {
-	if !s.newMatcher {
-		s.T().Skip("rate limiting signal from matcher is only available in new matcher")
-	}
 	hook := &capturingTaskMatchHook{}
 	pm, cleanup := s.setupPartitionManagerWithTaskHookFactories([]hooks.TaskHookFactory{hook})
 	defer cleanup()
