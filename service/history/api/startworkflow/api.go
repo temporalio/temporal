@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log/tag"
@@ -781,11 +782,18 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 				if !mutableState.IsWorkflowExecutionRunning() {
 					return nil, consts.ErrWorkflowCompleted
 				}
+
 				if onConflictOptions.AttachCompletionCallbacks && len(completionCallbacks) > 0 {
 					existing := mutableState.GetExecutionInfo().GetPropagatedNexusSerializationContext()
 					incoming := s.request.StartRequest.GetPropagatedNexusSerializationContext()
 					nexusContextMatch = nexusSerializationContextMatch(existing, incoming)
+
+					err := validateAttachedCallbacks(ctx, workflowLease, requestID, completionCallbacks)
+					if err != nil {
+						return nil, err
+					}
 				}
+
 				_, err := mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
 					nil,
 					false,
@@ -980,4 +988,27 @@ func (s StartOutcome) String() string {
 	default:
 		return "Unknown"
 	}
+}
+
+// validateAttachedCallbacks checks the completion callbacks attached to an existing workflow on
+// conflict against the execution's limits, reserving those of the workflow's in-flight Updates;
+// see update.Registry.InFlightCallbacks.
+func validateAttachedCallbacks(
+	ctx context.Context,
+	workflowLease api.WorkflowLease,
+	requestID string,
+	completionCallbacks []*commonpb.Callback,
+) error {
+	if len(completionCallbacks) == 0 {
+		return nil
+	}
+	registry := workflowLease.GetContext().UpdateRegistry(ctx)
+	inFlight, err := registry.InFlightCallbacks()
+	if err != nil {
+		return err
+	}
+	return workflowLease.GetMutableState().ValidateCallbackAddition(inFlight, chasmworkflow.CallbackAddition{
+		RequestID: requestID,
+		Callbacks: completionCallbacks,
+	})
 }

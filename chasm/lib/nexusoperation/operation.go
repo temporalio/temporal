@@ -475,7 +475,7 @@ func (o *Operation) addCompletionCallbacks(
 	}
 	// Idempotency check. Attaching is atomic, so if we see that the first callback has been attached we
 	// know they all are present.
-	if _, ok := o.Callbacks[completionCallbackID(requestID, 0)]; ok {
+	if callback.HasCallbacksForRequest(o.Callbacks, requestID) {
 		return nil
 	}
 	if o.isClosed() {
@@ -506,8 +506,9 @@ func (o *Operation) addCompletionCallbacks(
 		// Give each callback its own, unique request ID. Since using the same request ID as the
 		// operation which added the callbacks would be ambiguous if it added more than one callback.
 		cbRequestID := uuid.NewString()
+		callbackID := callback.CompletionCallbackID(requestID, idx)
 		callbackObj := callback.NewCallback(cbRequestID, registrationTime, chasmCB)
-		o.Callbacks[completionCallbackID(requestID, idx)] = chasm.NewComponentField(ctx, callbackObj)
+		o.Callbacks[callbackID] = chasm.NewComponentField(ctx, callbackObj)
 		o.TotalCallbacksSize += int64(cb.Size())
 	}
 	return nil
@@ -562,11 +563,6 @@ func (o *Operation) allLinks(ctx chasm.Context) []*commonpb.Link {
 	all = append(all, requestLinks...)
 	all = append(all, o.Links...)
 	return all
-}
-
-// completionCallbackID defines the stable key used for keeping track of attached completion callbacks.
-func completionCallbackID(requestID string, idx int) string {
-	return fmt.Sprintf("%s-%d", requestID, idx)
 }
 
 // scheduleCompletionCallbacks releases every STANDBY completion callback for delivery. Called from each

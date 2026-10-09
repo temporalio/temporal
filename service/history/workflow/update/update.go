@@ -12,6 +12,7 @@ import (
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/future"
@@ -485,8 +486,8 @@ func (u *Update) EventLinkType(requestID string) enumspb.EventType {
 //
 // In practice, the number of buffered callbacks is very small (1-2): it requires
 // multiple concurrent callers to call AttachCallbacks while the update is in
-// stateSent. The per-update callback limit (MaxCallbacksPerUpdateID) bounds the
-// worst case.
+// stateSent. The execution's aggregate callback limits, which reserve buffered
+// callbacks at admission, bound the worst case.
 func (u *Update) persistPendingCallbacks(eventStore EventStore) error {
 	for _, pc := range u.pendingCallbacks {
 		if _, err := u.persistCallback(eventStore, pc.requestID, pc.completionCallbacks); err != nil {
@@ -878,4 +879,42 @@ func (u *Update) AcceptedEventID() int64 {
 		return common.EmptyEventID
 	}
 	return u.acceptedEventID
+}
+
+// IsCompleted reports whether the Update has completed, in which case its outcome is final and
+// no further callbacks will be attached to it.
+func (u *Update) IsCompleted() bool {
+	return u.state == stateCompleted
+}
+
+// inFlightCallbacks returns the completion callbacks this Update will persist if it is accepted.
+// See Registry.InFlightCallbacks.
+func (u *Update) inFlightCallbacks() ([]chasmworkflow.CallbackAddition, error) {
+	if !u.state.Matches(stateSet(stateProvisionallyAdmitted | stateAdmitted | stateSent)) {
+		return nil, nil
+	}
+	var inFlight []chasmworkflow.CallbackAddition
+	// The request is nil for an Update admitted from an UpdateAdmitted event, whose callbacks
+	// were persisted along with that event.
+	if u.request != nil {
+		req := &updatepb.Request{}
+		if err := u.request.UnmarshalTo(req); err != nil {
+			return nil, serviceerror.NewInternalf("unable to unmarshal original request: %v", err)
+		}
+		if len(req.GetCompletionCallbacks()) > 0 {
+			inFlight = append(inFlight, chasmworkflow.CallbackAddition{
+				UpdateID:  u.id,
+				RequestID: req.GetRequestId(),
+				Callbacks: req.GetCompletionCallbacks(),
+			})
+		}
+	}
+	for _, pc := range u.pendingCallbacks {
+		inFlight = append(inFlight, chasmworkflow.CallbackAddition{
+			UpdateID:  u.id,
+			RequestID: pc.requestID,
+			Callbacks: pc.completionCallbacks,
+		})
+	}
+	return inFlight, nil
 }

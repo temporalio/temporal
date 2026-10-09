@@ -4,6 +4,20 @@ package temporal.server.chasm.lib.workflow.proto.v1;
 
 option go_package = "go.temporal.io/server/chasm/lib/workflow/gen/workflowpb;workflowpb";
 
+// WorkflowState is the persisted state of the CHASM workflow root component. The workflow's
+// own execution state still lives in mutable state; this message only carries the bookkeeping
+// that the CHASM tree owns.
+message WorkflowState {
+  // Total number of [temporal.api.common.v1.Callback]s attached to this execution: the
+  // workflow's own completion callbacks plus those of every WorkflowUpdate. Denormalized so
+  // that aggregate limits can be enforced without deserializing every update component.
+  int64 total_callbacks_count = 1;
+
+  // Total size in bytes of the same set of callbacks. Used to enforce aggregate size limits
+  // without needing to deserialize each callback.
+  int64 total_callbacks_size = 2;
+}
+
 // NexusOperationParentData contains workflow-specific data stored in a nexus operation's
 // parent_data field when the operation is embedded in a workflow.
 message NexusOperationParentData {
