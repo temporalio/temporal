@@ -458,6 +458,171 @@ func (suite *ScheduleCHASMSuite) TestPausedBehavior() {
 	})
 }
 
+func (suite *ScheduleCHASMSuite) TestTimeSkippingWeeklySkipCreateWithPatch() {
+	testScheduleTimeSkippingWeekly(suite.T(), enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, true)
+}
+
+func (suite *ScheduleCHASMSuite) TestTimeSkippingWeeklyAllowAllPatch() {
+	testScheduleTimeSkippingWeekly(suite.T(), enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL, false)
+}
+
+func testScheduleTimeSkippingWeekly(
+	t *testing.T,
+	overlapPolicy enumspb.ScheduleOverlapPolicy,
+	createWithPatch bool,
+) {
+	opts := append(
+		scheduleCommonOpts(t),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerTimeSkipping, true),
+	)
+	s := newScheduleEnv(t, opts...)
+	ctx := chasmContextFactory(testcontext.For(t))
+
+	sid := testcore.RandomizeStr("sched-time-skipping-weekly")
+	wid := testcore.RandomizeStr("sched-time-skipping-weekly-wf")
+	wt := testcore.RandomizeStr("sched-time-skipping-weekly-wt")
+	var runs atomic.Int32
+	registerCountingWorkflow(s, wt, &runs)
+
+	week := 7 * 24 * time.Hour
+	now := time.Now().UTC()
+	firstTick := now.Add(12 * time.Hour).Truncate(time.Second)
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{{
+				Interval: durationpb.New(week),
+				Phase:    durationpb.New(time.Duration(firstTick.UnixNano() % week.Nanoseconds())),
+			}},
+		},
+		Action: startWorkflowAction(s, wid, wt),
+		Policies: &schedulepb.SchedulePolicies{
+			OverlapPolicy: overlapPolicy,
+		},
+		State: &schedulepb.ScheduleState{Paused: !createWithPatch},
+	}
+	fastForwardID := uuid.NewString()
+	patch := &schedulepb.SchedulePatch{
+		TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+			Enabled: true,
+			FastForwardConfig: &commonpb.FastForwardConfig{
+				Id:       fastForwardID,
+				Duration: durationpb.New(3*week + 24*time.Hour),
+			},
+		},
+	}
+	if createWithPatch {
+		_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+			Namespace:    s.Namespace().String(),
+			ScheduleId:   sid,
+			Schedule:     schedule,
+			InitialPatch: patch,
+			Identity:     "test",
+			RequestId:    uuid.NewString(),
+		})
+		require.NoError(t, err)
+	} else {
+		createSchedule(ctx, t, s, sid, schedule)
+		patch.Unpause = "start time skipping"
+		patchSchedule(ctx, t, s, sid, patch)
+	}
+
+	await.Require(ctx, t, func(at *await.T) {
+		describe, err := s.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		require.NoError(at, err)
+		info := describe.GetInfo()
+		require.Equal(at, int64(4), info.GetActionCount())
+		require.Len(at, info.GetRecentActions(), 4)
+		timeSkippingInfo := info.GetTimeSkippingInfo()
+		require.NotNil(at, timeSkippingInfo)
+		require.Equal(at, fastForwardID, timeSkippingInfo.GetFastForwardInfo().GetFastForwardId())
+		require.True(at, timeSkippingInfo.GetFastForwardInfo().GetHasCompleted())
+		require.False(at, timeSkippingInfo.GetCurrentTime().AsTime().Before(now.Add(3*week+24*time.Hour)))
+	}, 2*time.Minute, pollInterval)
+	describe, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	require.NoError(t, err)
+	actionsByScheduleTime := make(map[time.Time]*schedulepb.ScheduleActionResult, 4)
+	for _, action := range describe.GetInfo().GetRecentActions() {
+		require.NotNil(t, action.GetScheduleTime())
+		scheduledTime := action.GetScheduleTime().AsTime()
+		require.NotContains(t, actionsByScheduleTime, scheduledTime)
+		actionsByScheduleTime[scheduledTime] = action
+	}
+	for i := range 4 {
+		expectedStart := firstTick.Add(time.Duration(i) * week)
+		action, ok := actionsByScheduleTime[expectedStart]
+		require.True(t, ok, "missing workflow scheduled at %s", expectedStart)
+		execution := action.GetStartWorkflowResult()
+		require.NotNil(t, execution)
+		workflowDescription, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(),
+			Execution: execution,
+		})
+		require.NoError(t, err)
+		var workflowScheduledStart time.Time
+		require.NoError(t, payload.Decode(
+			workflowDescription.GetWorkflowExecutionInfo().GetSearchAttributes().GetIndexedFields()[sadefs.TemporalScheduledStartTime],
+			&workflowScheduledStart,
+		))
+		require.Equal(t, expectedStart, workflowScheduledStart)
+	}
+	await.RequireTruef(t, func() bool {
+		return runs.Load() >= 4
+	}, time.Minute, pollInterval, "four weekly workflows should start")
+	require.Equal(t, int32(4), runs.Load())
+}
+
+func (suite *ScheduleCHASMSuite) TestTimeSkippingDynamicConfigGate() {
+	t := suite.T()
+	s := newScheduleEnv(t, append(
+		scheduleCommonOpts(t),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerTimeSkipping, false),
+	)...)
+	ctx := chasmContextFactory(testcontext.For(t))
+
+	sid := testcore.RandomizeStr("sched-time-skipping-gate")
+	schedule := &schedulepb.Schedule{
+		Spec:     intervalSpec(7 * 24 * time.Hour),
+		Action:   startWorkflowAction(s, "time-skipping-gate-wf", "time-skipping-gate-wt"),
+		Policies: &schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP},
+		State:    &schedulepb.ScheduleState{Paused: true},
+	}
+	createSchedule(ctx, t, s, sid, schedule)
+
+	patch := &schedulepb.SchedulePatch{TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+		Enabled: true,
+		FastForwardConfig: &commonpb.FastForwardConfig{
+			Id:       uuid.NewString(),
+			Duration: durationpb.New(3*7*24*time.Hour + 24*time.Hour),
+		},
+	}}
+	_, err := s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Patch:      patch,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	var unimplemented *serviceerror.Unimplemented
+	require.ErrorAs(t, err, &unimplemented)
+	require.ErrorContains(t, err, "Schedule time skipping is not enabled for the namespace")
+
+	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerTimeSkipping, true)
+	patchSchedule(ctx, t, s, sid, patch)
+	describe, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	require.NoError(t, err)
+	require.True(t, describe.GetInfo().GetTimeSkippingInfo().GetEffectiveConfig().GetEnabled())
+}
+
 func (suite *ScheduleCHASMSuite) TestDescribeCatchupWindowAfterCreateAndUpdate() {
 	t := suite.T()
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
