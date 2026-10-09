@@ -1,6 +1,7 @@
 package tdbg
 
 import (
+	"flag"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -8,6 +9,9 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
+	"github.com/urfave/cli/v2"
 )
 
 type args struct {
@@ -119,4 +123,39 @@ func Test_fetchCACertFromFile(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCreateTLSConfigUsesPerAddressServerName(t *testing.T) {
+	app := NewCliApp()
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	for _, cliFlag := range app.Flags {
+		require.NoError(t, cliFlag.Apply(flagSet))
+	}
+	require.NoError(t, flagSet.Set(FlagTLSServerName, "source.example.com"))
+	ctx := cli.NewContext(app, flagSet, nil)
+	factory := NewClientFactory().(*clientFactory)
+
+	sourceTLS, err := factory.createTLSConfig(ctx, "source-address:7233", "source.example.com")
+	require.NoError(t, err)
+	require.Equal(t, "source.example.com", sourceTLS.ServerName)
+
+	targetTLS, err := factory.createTLSConfig(ctx, "target.example.com:7233", "")
+	require.NoError(t, err)
+	require.Equal(t, "target.example.com", targetTLS.ServerName)
+}
+
+func TestAdminClientForAddressReturnsTLSConfigurationError(t *testing.T) {
+	app := NewCliApp()
+	flagSet := flag.NewFlagSet("test", flag.ContinueOnError)
+	for _, cliFlag := range app.Flags {
+		require.NoError(t, cliFlag.Apply(flagSet))
+	}
+	require.NoError(t, flagSet.Set(FlagTLSCaPath, "testdata/does-not-exist.pem"))
+	ctx := cli.NewContext(app, flagSet, nil)
+	factory := NewClientFactory().(*clientFactory)
+
+	client, closer, err := factory.AdminClientForAddress(ctx, "target.example.com:7233", "")
+	require.ErrorContains(t, err, "load server CA certificate")
+	require.Nil(t, client)
+	require.Nil(t, closer)
 }
