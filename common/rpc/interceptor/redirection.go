@@ -27,7 +27,10 @@ const (
 	DCRedirectionContextHeaderName    = "xdc-redirection"
 	DCRedirectionAPIHeaderName        = "xdc-redirection-api"
 	DCRedirectionSourceCellHeaderName = "xdc-redirection-source-cell"
-	dcRedirectionMetricsPrefix        = "DCRedirection"
+	// DCRedirectionMetricsPrefix prefixes the operation tag on redirection metrics so a
+	// redirected call is distinguishable from the same operation served locally. Exported
+	// so the Nexus forwarding interceptor in service/frontend follows the same convention.
+	DCRedirectionMetricsPrefix = "DCRedirection"
 )
 
 var (
@@ -297,7 +300,7 @@ func (i *Redirection) handleLocalAPIInvocation(
 	handler grpc.UnaryHandler,
 	methodName string,
 ) (_ any, retError error) {
-	scope, startTime := i.BeforeCall(dcRedirectionMetricsPrefix + methodName)
+	scope, startTime := i.BeforeCall(DCRedirectionMetricsPrefix + methodName)
 	defer func() {
 		i.AfterCall(scope, startTime, i.currentClusterName, "local", retError)
 	}()
@@ -317,7 +320,7 @@ func (i *Redirection) handleRedirectAPIInvocation(
 	var targetClusterName = i.currentClusterName
 	var err error
 
-	scope, startTime := i.BeforeCall(dcRedirectionMetricsPrefix + methodName)
+	scope, startTime := i.BeforeCall(DCRedirectionMetricsPrefix + methodName)
 	defer func() {
 		i.AfterCall(scope, startTime, targetClusterName, namespaceName.String(), retError)
 	}()

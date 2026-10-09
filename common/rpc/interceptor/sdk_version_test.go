@@ -4,9 +4,15 @@ import (
 	"context"
 	"sort"
 	"testing"
+	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/namespace"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/versioninfo"
 )
 
@@ -63,4 +69,64 @@ func TestSDKVersionRecorder(t *testing.T) {
 	assert.Equal(t, sdkVersion, info[0].Version)
 	assert.Equal(t, headers.ClientNameTypeScriptSDK, info[1].Name)
 	assert.Equal(t, sdkVersion, info[1].Version)
+}
+
+func TestSDKVersionInterceptNexus(t *testing.T) {
+	clientVersion := "1.10.1"
+	for _, tc := range []struct {
+		name            string
+		ctx             context.Context
+		expectedOutcome string
+	}{
+		{
+			name: "supported client",
+			ctx: headers.SetVersionsForTests(
+				context.Background(),
+				clientVersion,
+				headers.ClientNameGoSDK,
+				headers.SupportedServerVersions,
+				headers.AllFeatures,
+			),
+		},
+		{
+			name: "unsupported client",
+			ctx: headers.SetVersionsForTests(
+				context.Background(),
+				"unparseable.client.version",
+				headers.ClientNameGoSDK,
+				headers.SupportedServerVersions,
+				headers.AllFeatures,
+			),
+			expectedOutcome: "unsupported_client",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			interceptor := NewSDKVersionInterceptor()
+			nextCalled := false
+			_, err := interceptor.InterceptNexus(
+				tc.ctx,
+				interceptornexus.NewStartOpInput("s",
+					"o",
+					time.Now(),
+					nexus.StartOperationOptions{},
+					nil,
+					interceptornexus.ForwardingInfo{},
+					interceptornexus.RequestMetadata{NamespaceEntry: namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: testNamespace}, nil, "")}),
+				func(context.Context, interceptornexus.InterceptorInput) (any, error) {
+					nextCalled = true
+					return nil, nil
+				},
+			)
+			if tc.expectedOutcome != "" {
+				var interceptorErr *interceptornexus.InterceptorError
+				require.ErrorAs(t, err, &interceptorErr)
+				require.Equal(t, tc.expectedOutcome, interceptorErr.Outcome)
+				require.False(t, nextCalled)
+			} else {
+				require.True(t, nextCalled)
+				require.NoError(t, err)
+				require.Contains(t, interceptor.GetAndResetSDKInfo(), versioninfo.SDKInfo{Name: headers.ClientNameGoSDK, Version: clientVersion})
+			}
+		})
+	}
 }

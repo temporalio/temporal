@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"google.golang.org/grpc"
 )
 
@@ -147,6 +148,16 @@ func (i *NamespaceHandoverInterceptor) Intercept(
 	}
 
 	return handler(ctx, req)
+}
+
+// InterceptNexus is a no-op: the handover gate only applies to WorkflowService
+// methods- see [NamespaceHandoverInterceptor.handlesMethod] for details.
+func (i *NamespaceHandoverInterceptor) InterceptNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (any, error) {
+	return next(ctx, in)
 }
 
 func (i *NamespaceHandoverInterceptor) waitNamespaceHandoverUpdate(

@@ -105,7 +105,7 @@ func TestFrontendServiceErrorInterceptor(t *testing.T) {
 			}
 			ctx := grpc.NewContextWithServerTransportStream(context.Background(), stream)
 
-			var interceptorFn = NewFrontendServiceErrorInterceptor(tl)
+			var interceptorFn = NewFrontendServiceErrorInterceptorWrapper(tl).Intercept
 			info := &grpc.UnaryServerInfo{FullMethod: method}
 			_, err := interceptorFn(ctx, nil, info,
 				func(_ context.Context, _ any) (any, error) {

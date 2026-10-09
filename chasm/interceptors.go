@@ -5,6 +5,7 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"google.golang.org/grpc"
 )
 
@@ -58,6 +59,16 @@ func (i *ChasmVisibilityInterceptor) Intercept(
 ) (resp any, retError error) {
 	ctx = NewVisibilityManagerContext(ctx, i.visibilityMgr)
 	return handler(ctx, req)
+}
+
+// InterceptNexus publishes the CHASM visibility manager to the Nexus handler context.
+func (i *ChasmVisibilityInterceptor) InterceptNexus(
+	ctx context.Context,
+	in interceptornexus.InterceptorInput,
+	next interceptornexus.HandlerFunc,
+) (any, error) {
+	ctx = NewVisibilityManagerContext(ctx, i.visibilityMgr)
+	return next(ctx, in)
 }
 
 func ChasmVisibilityInterceptorProvider(visibilityMgr VisibilityManager) *ChasmVisibilityInterceptor {

@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/tasktoken"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/reflect/protoreflect"
@@ -33,6 +34,15 @@ type (
 		maxNamespaceLength              dynamicconfig.IntPropertyFn
 		// Keyed by full gRPC method, like allowedMethodsDuringHandover.
 		additionalAllowedMethodsDuringHandover map[string]struct{}
+	}
+
+	// NamespaceLengthValidatorInterceptor enforces the namespace name length limit. It is separate
+	// from NamespaceValidatorInterceptor to allow both to expose cleaner Intercept/InterceptNexus
+	// methods that are used as gRPC and Nexus interceptors.
+	NamespaceLengthValidatorInterceptor struct {
+		namespaceRegistry  namespace.Registry
+		tokenSerializer    *tasktoken.Serializer
+		maxNamespaceLength dynamicconfig.IntPropertyFn
 	}
 )
 
@@ -100,6 +110,9 @@ var (
 	}
 )
 
+var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).Intercept
+var _ grpc.UnaryServerInterceptor = (*NamespaceLengthValidatorInterceptor)(nil).Intercept
+
 // newAdditionalAllowedMethods builds an embedder's handover allow-list from full gRPC
 // methods. A bad entry is inert rather than fatal, and logged where the list is
 // validated.
@@ -149,9 +162,6 @@ func validateFullMethods(fullMethods ...string) error {
 	return nil
 }
 
-var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).StateValidationIntercept
-var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).NamespaceValidateIntercept
-
 func NewNamespaceValidatorInterceptor(
 	namespaceRegistry namespace.Registry,
 	enableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn,
@@ -168,24 +178,53 @@ func NewNamespaceValidatorInterceptor(
 	}
 }
 
-func (ni *NamespaceValidatorInterceptor) NamespaceValidateIntercept(
+// NewNamespaceLengthValidatorInterceptor constructs a validator for namespace name length.
+func NewNamespaceLengthValidatorInterceptor(
+	namespaceRegistry namespace.Registry,
+	maxNamespaceLength dynamicconfig.IntPropertyFn,
+) *NamespaceLengthValidatorInterceptor {
+	return &NamespaceLengthValidatorInterceptor{
+		namespaceRegistry:  namespaceRegistry,
+		tokenSerializer:    tasktoken.NewSerializer(),
+		maxNamespaceLength: maxNamespaceLength,
+	}
+}
+
+// Intercept resolves the gRPC namespace and validates its name length.
+func (nsvi *NamespaceLengthValidatorInterceptor) Intercept(
 	ctx context.Context,
 	req any,
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (any, error) {
-	err := ni.setNamespaceIfNotPresent(req)
+	err := setNamespaceIfNotPresent(nsvi.tokenSerializer, nsvi.namespaceRegistry, req)
 	if err != nil {
 		return nil, err
 	}
 	reqWithNamespace, hasNamespace := req.(NamespaceNameGetter)
-	if hasNamespace {
-		if err := ni.ValidateName(reqWithNamespace.GetNamespace()); err != nil {
-			return nil, err
-		}
+	if hasNamespace && len(reqWithNamespace.GetNamespace()) > nsvi.maxNamespaceLength() {
+		return nil, errNamespaceTooLong
 	}
 
 	return handler(ctx, req)
+}
+
+// InterceptNexus validates the resolved Nexus namespace name length.
+func (nsvi *NamespaceLengthValidatorInterceptor) InterceptNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (any, error) {
+	ns := in.NamespaceEntry()
+	if len(ns.Info().GetName()) > nsvi.maxNamespaceLength() {
+		return nil, &nexus.InterceptorError{
+			Err:                       errNamespaceTooLong,
+			Outcome:                   "interceptor_failed",
+			SkipServiceErrorReporting: true,
+		}
+	}
+
+	return next(ctx, in)
 }
 
 // ValidateName validates a namespace name (currently only a max length check).
@@ -196,17 +235,19 @@ func (ni *NamespaceValidatorInterceptor) ValidateName(ns string) error {
 	return nil
 }
 
-func (ni *NamespaceValidatorInterceptor) setNamespaceIfNotPresent(
+func setNamespaceIfNotPresent(
+	tokenSerializer *tasktoken.Serializer,
+	namespaceRegistry namespace.Registry,
 	req any,
 ) error {
 	switch request := req.(type) {
 	case NamespaceNameGetter:
 		if request.GetNamespace() == "" {
-			namespaceEntry, err := ni.extractNamespaceFromTaskToken(req)
+			namespaceEntry, err := extractNamespaceFromTaskToken(tokenSerializer, namespaceRegistry, req)
 			if err != nil {
 				return err
 			}
-			ni.setNamespace(namespaceEntry, req)
+			setNamespace(namespaceEntry, req)
 		}
 		return nil
 	default:
@@ -214,7 +255,7 @@ func (ni *NamespaceValidatorInterceptor) setNamespaceIfNotPresent(
 	}
 }
 
-func (ni *NamespaceValidatorInterceptor) setNamespace(
+func setNamespace(
 	namespaceEntry *namespace.Namespace,
 	req any,
 ) {
@@ -258,8 +299,8 @@ func (ni *NamespaceValidatorInterceptor) setNamespace(
 	}
 }
 
-// StateValidationIntercept runs ValidateState - see docstring for that method.
-func (ni *NamespaceValidatorInterceptor) StateValidationIntercept(
+// Intercept validates the namespace state for a gRPC request.
+func (ni *NamespaceValidatorInterceptor) Intercept(
 	ctx context.Context,
 	req any,
 	info *grpc.UnaryServerInfo,
@@ -277,6 +318,23 @@ func (ni *NamespaceValidatorInterceptor) StateValidationIntercept(
 	return handler(ctx, req)
 }
 
+// InterceptNexus validates the namespace state for a Nexus request.
+func (ni *NamespaceValidatorInterceptor) InterceptNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (any, error) {
+	namespaceEntry := in.NamespaceEntry()
+	if err := ni.ValidateState(namespaceEntry, in.APIName(), in.ForwardingInfo().BusinessID); err != nil {
+		return nil, &nexus.InterceptorError{
+			Err:                       err,
+			Outcome:                   "invalid_namespace_state",
+			SkipServiceErrorReporting: true,
+		}
+	}
+	return next(ctx, in)
+}
+
 // ValidateState validates:
 // 1. Namespace is specified in task token if there is a `task_token` field.
 // 2. Namespace is specified in request if there is a `namespace` field and no `task_token` field.
@@ -292,7 +350,7 @@ func (ni *NamespaceValidatorInterceptor) ValidateState(namespaceEntry *namespace
 
 func (ni *NamespaceValidatorInterceptor) extractNamespace(req any) (*namespace.Namespace, error) {
 	// Token namespace has priority over request namespace. Check it first.
-	tokenNamespaceEntry, tokenErr := ni.extractNamespaceFromTaskToken(req)
+	tokenNamespaceEntry, tokenErr := extractNamespaceFromTaskToken(ni.tokenSerializer, ni.namespaceRegistry, req)
 	if tokenErr != nil {
 		return nil, tokenErr
 	}
@@ -381,7 +439,11 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req any) (*
 	}
 }
 
-func (ni *NamespaceValidatorInterceptor) extractNamespaceFromTaskToken(req any) (*namespace.Namespace, error) {
+func extractNamespaceFromTaskToken(
+	tokenSerializer *tasktoken.Serializer,
+	namespaceRegistry namespace.Registry,
+	req any,
+) (*namespace.Namespace, error) {
 	reqWithTaskToken, hasTaskToken := req.(TaskTokenGetter)
 	if !hasTaskToken {
 		return nil, nil
@@ -393,13 +455,13 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromTaskToken(req any) 
 	var namespaceID namespace.ID
 	// Special case for deprecated RespondQueryTaskCompleted API.
 	if _, ok := req.(*workflowservice.RespondQueryTaskCompletedRequest); ok {
-		taskToken, err := ni.tokenSerializer.DeserializeQueryTaskToken(taskTokenBytes)
+		taskToken, err := tokenSerializer.DeserializeQueryTaskToken(taskTokenBytes)
 		if err != nil {
 			return nil, errDeserializingToken
 		}
 		namespaceID = namespace.ID(taskToken.GetNamespaceId())
 	} else {
-		taskToken, err := ni.tokenSerializer.Deserialize(taskTokenBytes)
+		taskToken, err := tokenSerializer.Deserialize(taskTokenBytes)
 		if err != nil {
 			return nil, errDeserializingToken
 		}
@@ -409,7 +471,7 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromTaskToken(req any) 
 	if namespaceID.IsEmpty() {
 		return nil, errNamespaceNotSet
 	}
-	return ni.namespaceRegistry.GetNamespaceByID(namespaceID)
+	return namespaceRegistry.GetNamespaceByID(namespaceID)
 }
 
 func (ni *NamespaceValidatorInterceptor) checkNamespaceMatch(requestNamespace *namespace.Namespace, tokenNamespace *namespace.Namespace) error {

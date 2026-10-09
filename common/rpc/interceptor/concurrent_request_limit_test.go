@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -18,6 +21,7 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/quotas/quotastest"
+	interceptornexus "go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
@@ -144,6 +148,65 @@ func TestNamespaceCountLimitInterceptor_Intercept(t *testing.T) {
 			tc.run(t)
 		})
 	}
+}
+
+func TestConcurrentRequestLimitInterceptor_InterceptNexus(t *testing.T) {
+	interceptor := NewConcurrentRequestLimitInterceptor(
+		nil,
+		quotastest.NewFakeMemberCounter(1),
+		log.NewNoopLogger(),
+		ConcurrentRequestQuotas{
+			PerInstance: dynamicconfig.GetIntPropertyFnFilteredByNamespace(1),
+			Global:      dynamicconfig.GetIntPropertyFnFilteredByNamespace(1),
+		},
+		ConcurrentRequestQuotas{
+			PerInstance: dynamicconfig.GetIntPropertyFnFilteredByNamespace(0),
+			Global:      dynamicconfig.GetIntPropertyFnFilteredByNamespace(0),
+		},
+		map[string]int{"NexusAPI": 1},
+	)
+	input := interceptornexus.NewStartOpInput("s",
+		"o",
+		time.Now(),
+		nexus.StartOperationOptions{},
+		nil,
+		interceptornexus.ForwardingInfo{},
+		interceptornexus.RequestMetadata{NamespaceEntry: namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Name: testNamespace}, nil, ""), APIName: "NexusAPI"})
+
+	ctx := context.Background()
+
+	blockUntilFirstReqStarted := make(chan struct{})
+	unblockFirstRequest := make(chan struct{})
+	firstReqErrorCh := make(chan error, 1)
+
+	go func() {
+		_, err := interceptor.InterceptNexus(
+			ctx,
+			input,
+			func(context.Context, interceptornexus.InterceptorInput) (any, error) {
+				close(blockUntilFirstReqStarted)
+				<-unblockFirstRequest
+				return nil, nil
+			},
+		)
+		firstReqErrorCh <- err
+	}()
+	<-blockUntilFirstReqStarted
+	// second req should never proceed to calling next
+	_, err := interceptor.InterceptNexus(
+		ctx,
+		input,
+		func(context.Context, interceptornexus.InterceptorInput) (any, error) {
+			t.Fatal("second request reached handler")
+			return nil, errors.New("throttled request reached")
+		},
+	)
+	var interceptorErr *interceptornexus.InterceptorError
+	require.ErrorAs(t, err, &interceptorErr)
+	require.Equal(t, "namespace_concurrency_limited", interceptorErr.Outcome)
+
+	close(unblockFirstRequest)
+	require.NoError(t, <-firstReqErrorCh)
 }
 
 // run the test case by simulating a bunch of blocked pollers, sending a final request, and verifying that it is either

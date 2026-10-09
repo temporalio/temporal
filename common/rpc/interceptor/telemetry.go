@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/interceptor/logtags"
+	"go.temporal.io/server/common/rpc/interceptor/nexus"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/service/frontend/configs"
 	"google.golang.org/grpc"
@@ -32,6 +33,8 @@ type (
 		workflowTags        *logtags.WorkflowTags
 		logAllReqErrors     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		requestErrorHandler ErrorHandler
+		// nexusMetricTagsFn computes the metric tags based on dynamic config(chasmnexus.NexusMetricTagConfig).
+		nexusMetricTagsFn func(nexus.InterceptorInput) []metrics.Tag
 	}
 )
 
@@ -47,7 +50,7 @@ var (
 	updateResponseMessageBody anypb.Any
 	_                         = updateResponseMessageBody.MarshalFrom(&updatepb.Response{})
 
-	_ grpc.UnaryServerInterceptor  = (*TelemetryInterceptor)(nil).UnaryIntercept
+	_ grpc.UnaryServerInterceptor  = (*TelemetryInterceptor)(nil).Intercept
 	_ grpc.StreamServerInterceptor = (*TelemetryInterceptor)(nil).StreamIntercept
 )
 
@@ -100,6 +103,7 @@ func NewTelemetryInterceptor(
 	logger log.Logger,
 	logAllReqErrors dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	requestErrorHandler ErrorHandler,
+	nexusMetricTagsFn func(nexus.InterceptorInput) []metrics.Tag,
 ) *TelemetryInterceptor {
 	return &TelemetryInterceptor{
 		namespaceRegistry:   namespaceRegistry,
@@ -108,6 +112,7 @@ func NewTelemetryInterceptor(
 		workflowTags:        logtags.NewWorkflowTags(tasktoken.NewSerializer(), logger),
 		logAllReqErrors:     logAllReqErrors,
 		requestErrorHandler: requestErrorHandler,
+		nexusMetricTagsFn:   nexusMetricTagsFn,
 	}
 }
 
@@ -162,7 +167,8 @@ func telemetryOverrideOperationTag(fullName, operation string) string {
 	return operation
 }
 
-func (ti *TelemetryInterceptor) UnaryIntercept(
+// Intercept records gRPC request telemetry and reports service errors.
+func (ti *TelemetryInterceptor) Intercept(
 	ctx context.Context,
 	req any,
 	info *grpc.UnaryServerInfo,
@@ -198,6 +204,87 @@ func (ti *TelemetryInterceptor) UnaryIntercept(
 	}
 
 	return resp, err
+}
+
+// InterceptNexus is a no-op as Nexus request telemetry is recorded by
+// [*TelemetryInterceptor.InterceptNexusOutermost]
+func (ti *TelemetryInterceptor) InterceptNexus(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (any, error) {
+	return next(ctx, in)
+}
+
+// InterceptNexusOutermost records telemetry around the complete Nexus interceptor chain.
+func (ti *TelemetryInterceptor) InterceptNexusOutermost(
+	ctx context.Context,
+	in nexus.InterceptorInput,
+	next nexus.HandlerFunc,
+) (any, error) {
+	serviceHandler := ti.metricsHandler.WithTags(
+		metrics.OperationTag(in.MethodName()),
+		metrics.NamespaceTag(in.NamespaceEntry().Name().String()),
+	)
+	ctx = AddTelemetryContext(ctx, serviceHandler)
+	metrics.ServiceRequests.With(serviceHandler).Record(1)
+
+	var metricTags []metrics.Tag
+	if ti.nexusMetricTagsFn != nil {
+		metricTags = ti.nexusMetricTagsFn(in)
+	}
+	startTime := in.StartTime()
+	outcome, failed := "internal_error", true
+	ctx = metrics.AddMetricsContext(ctx)
+	defer func() {
+		ti.RecordLatencyMetrics(ctx, startTime, serviceHandler)
+		ti.recordNexusRequest(in, startTime, outcome, failed, metricTags)
+	}()
+
+	out, err := next(ctx, in)
+	outcome, failed = in.Outcome(out, err), err != nil
+
+	if result, ok := out.(nexus.InterceptorResult); ok {
+		out = result.Value
+		if err == nil {
+			outcome = result.Outcome
+		}
+	}
+	return out, err
+}
+
+func (ti *TelemetryInterceptor) recordNexusRequest(
+	in nexus.InterceptorInput,
+	startTime time.Time,
+	outcome string,
+	failed bool,
+	metricTags []metrics.Tag,
+) {
+	if _, ok := in.(nexus.CompleteOpInput); ok {
+		handler := ti.metricsHandler.WithTags(
+			metrics.NamespaceTag(in.NamespaceEntry().Name().String()),
+			metrics.OutcomeTag(outcome),
+		)
+		handler.Counter(metrics.NexusCompletionRequests.Name()).Record(1)
+		handler.Histogram(metrics.NexusCompletionLatencyHistogram.Name(), metrics.Milliseconds).
+			Record(time.Since(startTime).Milliseconds())
+		return
+	}
+
+	handler := ti.metricsHandler.WithTags(
+		metrics.NamespaceTag(in.NamespaceEntry().Name().String()),
+		metrics.NexusEndpointTag(in.EndpointName()),
+		metrics.NexusMethodTag(in.MethodName()),
+	)
+	handler = handler.WithTags(metricTags...)
+	// applied last so that a configured tag doesnt shadow the outcome
+	handler = handler.WithTags(metrics.OutcomeTag(outcome))
+
+	metrics.NexusRequests.With(handler).Record(1)
+	metrics.NexusLatency.With(handler).Record(time.Since(startTime))
+	if failed {
+		metrics.NexusRequestErrors.With(handler).Record(1)
+	}
 }
 
 func AddTelemetryContext(ctx context.Context, metricsHandler metrics.Handler) context.Context {

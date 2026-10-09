@@ -23,6 +23,7 @@ import (
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/service/frontend"
 	"google.golang.org/grpc"
 )
 
@@ -44,28 +45,29 @@ type (
 
 		startupSynchronizationMode synchronizationModeParams
 
-		logger                          log.Logger
-		namespaceLogger                 log.Logger
-		authorizer                      authorization.Authorizer
-		tlsConfigProvider               encryption.TLSConfigProvider
-		claimMapper                     authorization.ClaimMapper
-		audienceGetter                  authorization.JWTAudienceMapper
-		persistenceServiceResolver      resolver.ServiceResolver
-		elasticsearchHttpClient         *http.Client //nolint:staticcheck // should be elasticsearchHTTPClient
-		dynamicConfigClient             dynamicconfig.Client
-		customDataStoreFactory          persistenceClient.AbstractDataStoreFactory
-		customVisibilityStoreFactory    visibility.VisibilityStoreFactory
-		customHistoryArchiverFactory    provider.CustomHistoryArchiverFactory
-		customVisibilityArchiverFactory provider.CustomVisibilityArchiverFactory
-		clientFactoryProvider           client.FactoryProvider
-		persistenceFactoryProvider      persistenceClient.FactoryProviderFn
-		searchAttributesMapper          searchattribute.Mapper
-		customFrontendInterceptors      []grpc.UnaryServerInterceptor
-		additionalStreamInterceptors    []grpc.StreamServerInterceptor
-		metricHandler                   metrics.Handler
-		eventLoggerProvider             otellog.LoggerProvider
-		tokenProvider                   auth.TokenProvider
-		testHooks                       *testhooks.TestHooks
+		logger                            log.Logger
+		namespaceLogger                   log.Logger
+		authorizer                        authorization.Authorizer
+		tlsConfigProvider                 encryption.TLSConfigProvider
+		claimMapper                       authorization.ClaimMapper
+		audienceGetter                    authorization.JWTAudienceMapper
+		persistenceServiceResolver        resolver.ServiceResolver
+		elasticsearchHttpClient           *http.Client //nolint:staticcheck // should be elasticsearchHTTPClient
+		dynamicConfigClient               dynamicconfig.Client
+		customDataStoreFactory            persistenceClient.AbstractDataStoreFactory
+		customVisibilityStoreFactory      visibility.VisibilityStoreFactory
+		customHistoryArchiverFactory      provider.CustomHistoryArchiverFactory
+		customVisibilityArchiverFactory   provider.CustomVisibilityArchiverFactory
+		clientFactoryProvider             client.FactoryProvider
+		persistenceFactoryProvider        persistenceClient.FactoryProviderFn
+		searchAttributesMapper            searchattribute.Mapper
+		customFrontendInterceptors        []grpc.UnaryServerInterceptor
+		customFrontendUnifiedInterceptors []frontend.Interceptor
+		additionalStreamInterceptors      []grpc.StreamServerInterceptor
+		metricHandler                     metrics.Handler
+		eventLoggerProvider               otellog.LoggerProvider
+		tokenProvider                     auth.TokenProvider
+		testHooks                         *testhooks.TestHooks
 	}
 )
 
@@ -130,6 +132,12 @@ func (so *serverOptions) loadConfig() error {
 }
 
 func (so *serverOptions) validateConfig() error {
+	if len(so.customFrontendInterceptors) > 0 &&
+		len(so.customFrontendUnifiedInterceptors) > 0 {
+		// Both could be supported as a migration path but intentionally avoided as
+		// migration itself is as simple as wrapping with no-op Nexus Interceptors.
+		return errors.New("WithChainedFrontendGrpcInterceptors is deprecated in favor of WithChainedFrontendInterceptors- they cannot both be set")
+	}
 	if err := so.config.Validate(); err != nil {
 		return err
 	}
