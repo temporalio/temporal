@@ -58,6 +58,10 @@ message OperationState {
   NexusOperationTerminateState terminate_state = 19;
   // Links are only populated for standalone operations. Workflow-backed operations derive links from history events.
   repeated temporal.api.common.v1.Link links = 20;
+
+  // Total size in bytes of all [commonpb.Callback]s attached to this operation.
+  // Used to enforce aggregate size limits without needing to deserialize each callback.
+  int64 total_callbacks_size = 21;
 }
 
 message NexusOperationTerminateState {
