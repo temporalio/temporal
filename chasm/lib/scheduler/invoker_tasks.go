@@ -412,7 +412,6 @@ func (h *InvokerExecuteTaskHandler) startWorkflows(
 				start,
 				lastCompletionState,
 				schedulerRef,
-				now,
 				timeSkippingConfig,
 				timeSkippingStatePropagation,
 			)
@@ -665,7 +664,6 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	start *schedulespb.BufferedStart,
 	lastCompletionState *schedulerpb.LastCompletionResult,
 	schedulerRef []byte,
-	virtualStartTime time.Time,
 	timeSkippingConfig *commonpb.TimeSkippingConfig,
 	timeSkippingStatePropagation *commonpb.TimeSkippingStatePropagation,
 ) error {
@@ -744,10 +742,10 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 		return err
 	}
 	actualStartTime := time.Now()
-	// Preserve existing wall-clock behavior unless the started workflow inherits skipped time.
-	if timeSkippingStatePropagation.GetInitialSkippedDuration().AsDuration() > 0 {
-		actualStartTime = virtualStartTime
-	}
+	// Reconstruct virtual time from wall time.
+	actualStartTime = actualStartTime.Add(
+		timeSkippingStatePropagation.GetInitialSkippedDuration().AsDuration(),
+	)
 
 	// Set metadata on the cloned start. The clone was created in startWorkflows
 	// before spawning this goroutine, and will be copied back to the Invoker's
