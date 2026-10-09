@@ -102,6 +102,11 @@ func (v *validator) validateAndNormalizeStartRequest(
 		return err
 	}
 	req.NexusHeader = loweredHeaders
+	reservedHeaderKeys := commonnexus.ReservedHeaderKeys(loweredHeaders)
+	if len(reservedHeaderKeys) > 0 && v.config.RejectReservedHeaders(ns) {
+		v.recordReservedHeaderUsage(ns, reservedHeaderKeys, true)
+		return serviceerror.NewInvalidArgumentf("nexus_header contains reserved keys: %q", reservedHeaderKeys)
+	}
 
 	if err := v.validateAndNormalizeSearchAttributes(req); err != nil {
 		return err
@@ -128,8 +133,8 @@ func (v *validator) validateAndNormalizeStartRequest(
 
 	v.normalizeIDPolicies(req)
 
-	if reservedKeys := commonnexus.ReservedHeaderKeys(req.GetNexusHeader()); len(reservedKeys) > 0 {
-		v.recordReservedHeaderUsage(ns, reservedKeys, false)
+	if len(reservedHeaderKeys) > 0 {
+		v.recordReservedHeaderUsage(ns, reservedHeaderKeys, false)
 	}
 	return nil
 }
@@ -322,10 +327,6 @@ func (v *validator) validateAndLowercaseHeaders(ns string, headers map[string]st
 			return nil, serviceerror.NewInvalidArgumentf("nexus_header contains a disallowed key: %q", k)
 		}
 		lowered[lowerK] = val
-	}
-	if reservedKeys := commonnexus.ReservedHeaderKeys(lowered); len(reservedKeys) > 0 && v.config.RejectReservedHeaders(ns) {
-		v.recordReservedHeaderUsage(ns, reservedKeys, true)
-		return nil, serviceerror.NewInvalidArgumentf("nexus_header contains reserved keys: %q", reservedKeys)
 	}
 	if headerLength > v.config.MaxOperationHeaderSize(ns) {
 		return nil, serviceerror.NewInvalidArgument("nexus_header exceeds size limit")

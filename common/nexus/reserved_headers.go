@@ -5,19 +5,14 @@ import (
 	"strings"
 )
 
-// ReservedHeaderPrefix is the Nexus header key prefix reserved for Temporal's own use.
-const ReservedHeaderPrefix = "temporal-"
-
-// IsReservedHeader reports whether the given lower-cased header key uses the reserved prefix.
-func IsReservedHeader(lowerKey string) bool {
-	return strings.HasPrefix(lowerKey, ReservedHeaderPrefix)
-}
+// reservedHeaderPrefix is the Nexus header key prefix reserved for Temporal's own use.
+const reservedHeaderPrefix = "temporal-"
 
 // ReservedHeaderKeys returns the sorted keys of the given lower-cased header that use the reserved prefix.
 func ReservedHeaderKeys(lowerCaseHeader map[string]string) []string {
 	var keys []string
 	for k := range lowerCaseHeader {
-		if IsReservedHeader(k) {
+		if strings.HasPrefix(k, reservedHeaderPrefix) {
 			keys = append(keys, k)
 		}
 	}
