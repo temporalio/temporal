@@ -3,12 +3,14 @@ package frontend
 import (
 	"context"
 	"errors"
+	"net/url"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
@@ -25,6 +27,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -385,4 +388,97 @@ func TestNexusInterceptRequest_HeadersSanitization(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, initialHeader, header)
 	require.Equal(t, map[string]string{"ok-header": "ok"}, request.Request.Header)
+}
+
+func TestParseNexusCaller(t *testing.T) {
+	workflowLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+		Namespace:  "workflow-namespace",
+		WorkflowId: "workflow-id",
+		RunId:      "workflow-run",
+		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventId:   1,
+				EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+			},
+		},
+	})
+	standaloneLink := commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
+		Namespace:   "standalone-namespace",
+		OperationId: "operation-id",
+		RunId:       "operation-run",
+	})
+	workflowTags := map[string]any{
+		"caller-namespace":   "workflow-namespace",
+		"caller-workflow-id": "workflow-id",
+		"caller-run-id":      "workflow-run",
+	}
+	standaloneTags := map[string]any{
+		"caller-namespace":   "standalone-namespace",
+		"caller-workflow-id": "operation-id",
+		"caller-run-id":      "operation-run",
+	}
+
+	for _, tc := range []struct {
+		name  string
+		links []nexus.Link
+		want  map[string]any
+	}{
+		{name: "no links"},
+		{name: "workflow", links: []nexus.Link{workflowLink}, want: workflowTags},
+		{name: "standalone", links: []nexus.Link{standaloneLink}, want: standaloneTags},
+		{
+			name: "escaped standalone identifiers",
+			links: []nexus.Link{commonnexus.ConvertLinkNexusOperationToNexusLink(&commonpb.Link_NexusOperation{
+				Namespace:   "caller/namespace",
+				OperationId: "operation/with spaces",
+				RunId:       "operation-run",
+			})},
+			want: map[string]any{
+				"caller-namespace":   "caller/namespace",
+				"caller-workflow-id": "operation/with spaces",
+				"caller-run-id":      "operation-run",
+			},
+		},
+		{
+			name: "skip invalid links",
+			links: []nexus.Link{
+				{Type: "unsupported"},
+				{Type: workflowLink.Type},
+				{Type: standaloneLink.Type},
+				{Type: workflowLink.Type, URL: &url.URL{Scheme: "temporal", Path: "/invalid"}},
+				{Type: standaloneLink.Type, URL: &url.URL{Scheme: "temporal", Path: "/invalid"}},
+				standaloneLink,
+			},
+			want: standaloneTags,
+		},
+		{
+			name:  "first caller is standalone",
+			links: []nexus.Link{standaloneLink, workflowLink},
+			want:  standaloneTags,
+		},
+		{
+			name:  "first caller is workflow",
+			links: []nexus.Link{workflowLink, standaloneLink},
+			want:  workflowTags,
+		},
+		{
+			name: "no supported caller",
+			links: []nexus.Link{{
+				Type: standaloneLink.Type,
+				URL:  &url.URL{Scheme: "http", Path: standaloneLink.URL.Path},
+			}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tags := parseNexusCaller(tc.links)
+			var got map[string]any
+			if len(tags) > 0 {
+				got = make(map[string]any, len(tags))
+				for _, tag := range tags {
+					got[tag.Key()] = tag.Value()
+				}
+			}
+			require.Equal(t, tc.want, got)
+		})
+	}
 }

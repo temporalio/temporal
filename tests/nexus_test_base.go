@@ -70,13 +70,18 @@ func (env *NexusTestEnv) describeNexusOperation(
 }
 
 func (env *NexusTestEnv) createNexusEndpoint(ctx context.Context, t *testing.T, name string, taskQueue string) *nexuspb.Endpoint {
+	return env.createNexusEndpointForNamespace(ctx, t, name, env.Namespace().String(), taskQueue)
+}
+
+// createNexusEndpointForNamespace creates an endpoint that targets the given namespace and task queue.
+func (env *NexusTestEnv) createNexusEndpointForNamespace(ctx context.Context, t *testing.T, name, namespace, taskQueue string) *nexuspb.Endpoint {
 	resp, err := env.OperatorClient().CreateNexusEndpoint(ctx, &operatorservice.CreateNexusEndpointRequest{
 		Spec: &nexuspb.EndpointSpec{
 			Name: name,
 			Target: &nexuspb.EndpointTarget{
 				Variant: &nexuspb.EndpointTarget_Worker_{
 					Worker: &nexuspb.EndpointTarget_Worker{
-						Namespace: env.Namespace().String(),
+						Namespace: namespace,
 						TaskQueue: taskQueue,
 					},
 				},
