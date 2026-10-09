@@ -19,6 +19,7 @@ type WorkerConfigPayload struct {
 	DeploymentName            string
 	BuildID                   string
 	Runtimes                  []string
+	HostingEnvironments       []string
 	OS                        string
 	Architecture              string
 	WorkflowPollerAutoscaling bool
@@ -38,6 +39,7 @@ func (p WorkerConfigPayload) Attributes() []log.KeyValue {
 		log.String("deployment_name", p.DeploymentName),
 		log.String("build_id", p.BuildID),
 		log.String("runtimes", strings.Join(p.Runtimes, ",")),
+		log.String("hosting_environments", strings.Join(p.HostingEnvironments, ",")),
 		log.String("os", p.OS),
 		log.String("architecture", p.Architecture),
 		log.Bool("workflow_poller_autoscaling", p.WorkflowPollerAutoscaling),

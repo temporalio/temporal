@@ -105,12 +105,15 @@ func (e *workerMetricsEmitter) emitPollerAutoscaling(nsID namespace.ID, nsName n
 }
 
 func emitWorkerConfigEvent(logger otellog.Logger, nsName namespace.Name, hb *workerpb.WorkerHeartbeat) {
-	var runtimes []string
+	var runtimes, hostingEnvs []string
 	var osTag, archTag string
 	if env := hb.GetEnvironment(); env != nil {
 		osTag, archTag = platformTags(env.GetPlatform())
 		for _, rt := range env.GetRuntimes() {
 			runtimes = append(runtimes, runtimeTypeName(rt.GetType()))
+		}
+		for _, he := range env.GetHostingEnvironments() {
+			hostingEnvs = append(hostingEnvs, hostingEnvironmentTypeName(he.GetType()))
 		}
 	}
 	wideevents.Emit(logger, wideevents.WorkerConfigPayload{
@@ -122,6 +125,7 @@ func emitWorkerConfigEvent(logger otellog.Logger, nsName namespace.Name, hb *wor
 		DeploymentName:            hb.GetDeploymentVersion().GetDeploymentName(),
 		BuildID:                   hb.GetDeploymentVersion().GetBuildId(),
 		Runtimes:                  runtimes,
+		HostingEnvironments:       hostingEnvs,
 		OS:                        osTag,
 		Architecture:              archTag,
 		WorkflowPollerAutoscaling: hb.GetWorkflowPollerInfo().GetIsAutoscaling(),
@@ -140,6 +144,17 @@ func runtimeTypeName(rt workerpb.EnvironmentInfo_Runtime_RuntimeType) string {
 		return "unknown"
 	}
 	return strings.ToLower(strings.TrimPrefix(string(v.Name()), "RUNTIME_TYPE_"))
+}
+
+func hostingEnvironmentTypeName(t workerpb.EnvironmentInfo_HostingEnvironment_HostingEnvironmentType) string {
+	if t == workerpb.EnvironmentInfo_HostingEnvironment_HOSTING_ENVIRONMENT_TYPE_UNSPECIFIED {
+		return "unknown"
+	}
+	v := t.Descriptor().Values().ByNumber(t.Number())
+	if v == nil {
+		return "unknown"
+	}
+	return strings.ToLower(strings.TrimPrefix(string(v.Name()), "HOSTING_ENVIRONMENT_TYPE_"))
 }
 
 func architectureName(a workerpb.EnvironmentInfo_Architecture) string {
