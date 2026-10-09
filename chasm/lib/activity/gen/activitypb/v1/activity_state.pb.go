@@ -948,7 +948,9 @@ type ActivityRequestData struct {
 	// this empty.
 	//
 	// Deprecated: Marked as deprecated in temporal/server/chasm/lib/activity/proto/v1/activity_state.proto.
-	UserMetadata                        *v14.UserMetadata                   `protobuf:"bytes,3,opt,name=user_metadata,json=userMetadata,proto3" json:"user_metadata,omitempty"`
+	UserMetadata *v14.UserMetadata `protobuf:"bytes,3,opt,name=user_metadata,json=userMetadata,proto3" json:"user_metadata,omitempty"`
+	// Serialization context from the Nexus caller that started this activity. Kept for worker
+	// retries and for DescribeActivityExecution and PollActivityExecution responses.
 	PropagatedNexusSerializationContext *v15.PropagatedSerializationContext `protobuf:"bytes,4,opt,name=propagated_nexus_serialization_context,json=propagatedNexusSerializationContext,proto3" json:"propagated_nexus_serialization_context,omitempty"`
 	unknownFields                       protoimpl.UnknownFields
 	sizeCache                           protoimpl.SizeCache
