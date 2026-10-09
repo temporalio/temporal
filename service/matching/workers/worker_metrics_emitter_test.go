@@ -179,6 +179,10 @@ func TestEmitWorkerConfigEvent(t *testing.T) {
 				{Type: workerpb.EnvironmentInfo_Runtime_RUNTIME_TYPE_GO},
 				{Type: workerpb.EnvironmentInfo_Runtime_RUNTIME_TYPE_ROADRUNNER},
 			},
+			HostingEnvironments: []*workerpb.EnvironmentInfo_HostingEnvironment{
+				{Type: workerpb.EnvironmentInfo_HostingEnvironment_HOSTING_ENVIRONMENT_TYPE_DOCKER},
+				{Type: workerpb.EnvironmentInfo_HostingEnvironment_HOSTING_ENVIRONMENT_TYPE_K8S},
+			},
 			Platform: &workerpb.EnvironmentInfo_Platform{
 				Variant: &workerpb.EnvironmentInfo_Platform_Linux{
 					Linux: &workerpb.EnvironmentInfo_LinuxPlatform{
@@ -201,5 +205,7 @@ func TestEmitWorkerConfigEvent(t *testing.T) {
 	})
 	require.Equal(t, "temporal-go", attrs["sdk_name"].AsString())
 	require.Equal(t, "go,roadrunner", attrs["runtimes"].AsString())
+	require.Equal(t, "docker,k8s", attrs["hosting_environments"].AsString())
+	require.Equal(t, "linux", attrs["os"].AsString())
 	require.Equal(t, "arm64", attrs["architecture"].AsString())
 }
