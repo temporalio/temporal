@@ -318,14 +318,31 @@ func (s *VersionWorkflowSuite) Test_SyncRoutingConfigAsync() {
 // Test_AsyncPropagationsPreventsCanUntilComplete tests that the workflow does not
 // continue-as-new while async propagations are in progress
 func (s *VersionWorkflowSuite) Test_AsyncPropagationsPreventsCanUntilComplete() {
+	s.testAsyncPropagationPreventsCanUntilComplete(nil)
+}
+
+func (s *VersionWorkflowSuite) Test_ForceCANWaitsForAsyncPropagation() {
+	s.testAsyncPropagationPreventsCanUntilComplete(func() {
+		s.env.SignalWorkflow(ForceCANSignalName, nil)
+	})
+}
+
+func (s *VersionWorkflowSuite) Test_ContinueAsNewSuggestedWaitsForAsyncPropagation() {
+	s.testAsyncPropagationPreventsCanUntilComplete(func() {
+		s.env.SetContinueAsNewSuggested(true)
+	})
+}
+
+func (s *VersionWorkflowSuite) testAsyncPropagationPreventsCanUntilComplete(triggerContinueAsNew func()) {
 	tv := testvars.New(s.T())
 	now := timestamppb.New(time.Now())
 
 	var a *VersionActivities
-	s.env.RegisterActivity(a.StartWorkerDeploymentWorkflow)
-	s.env.OnActivity(a.StartWorkerDeploymentWorkflow, mock.Anything, mock.Anything).Return(nil).Maybe()
-
 	taskQueueName := tv.TaskQueue().Name
+	releasePropagation := make(chan struct{})
+	var observedWaiting atomic.Bool
+	var completedBeforePropagation atomic.Bool
+	var propagationCompleted atomic.Bool
 
 	routingConfig := &deploymentpb.RoutingConfig{
 		CurrentVersion:            tv.DeploymentVersionString(),
@@ -333,7 +350,6 @@ func (s *VersionWorkflowSuite) Test_AsyncPropagationsPreventsCanUntilComplete() 
 		RevisionNumber:            5,
 	}
 
-	// Mock SyncDeploymentVersionUserData to return with task queue max versions
 	s.env.OnActivity(a.SyncDeploymentVersionUserData, mock.Anything, mock.Anything).Return(
 		&deploymentspb.SyncDeploymentVersionUserDataResponse{
 			TaskQueueMaxVersions: map[string]int64{
@@ -342,11 +358,17 @@ func (s *VersionWorkflowSuite) Test_AsyncPropagationsPreventsCanUntilComplete() 
 		}, nil,
 	).Maybe()
 
-	// Mock CheckWorkerDeploymentUserDataPropagation with a delay to simulate async processing
 	s.env.OnActivity(a.CheckWorkerDeploymentUserDataPropagation, mock.Anything, mock.Anything).
-		After(50 * time.Millisecond).Return(nil).Maybe()
+		Return(func(ctx context.Context, _ *deploymentspb.CheckWorkerDeploymentUserDataPropagationRequest) error {
+			select {
+			case <-releasePropagation:
+				propagationCompleted.Store(true)
+				return nil
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}).Maybe()
 
-	// Mock the SignalExternalWorkflow call (optional)
 	s.env.OnSignalExternalWorkflow(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).Return(nil).Maybe()
 
 	s.env.RegisterDelayedCallback(func() {
@@ -363,6 +385,14 @@ func (s *VersionWorkflowSuite) Test_AsyncPropagationsPreventsCanUntilComplete() 
 			OnAccept: func() {},
 			OnComplete: func(result any, err error) {
 				s.Require().NoError(err)
+				if triggerContinueAsNew != nil {
+					triggerContinueAsNew()
+				}
+				s.env.RegisterDelayedCallback(func() {
+					observedWaiting.Store(true)
+					completedBeforePropagation.Store(s.env.IsWorkflowCompleted())
+					close(releasePropagation)
+				}, 10*time.Millisecond)
 			},
 		}, syncStateArgs)
 	}, 1*time.Millisecond)
@@ -387,7 +417,11 @@ func (s *VersionWorkflowSuite) Test_AsyncPropagationsPreventsCanUntilComplete() 
 		},
 	})
 
-	s.True(s.env.IsWorkflowCompleted())
+	s.Require().True(s.env.IsWorkflowCompleted())
+	s.Require().True(observedWaiting.Load())
+	s.Require().False(completedBeforePropagation.Load())
+	s.Require().True(propagationCompleted.Load())
+	s.Require().True(workflow.IsContinueAsNewError(s.env.GetWorkflowError()))
 }
 
 // Test_DeleteVersion_Success tests successful deletion of a version
