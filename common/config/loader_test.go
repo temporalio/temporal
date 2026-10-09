@@ -12,6 +12,39 @@ import (
 
 const fileMode = os.FileMode(0644)
 
+func TestLoadEmbeddedPostgresConnectTimeout(t *testing.T) {
+	for _, plugin := range []string{"postgres12", "postgres12_pgx"} {
+		t.Run(plugin, func(t *testing.T) {
+			t.Setenv("DB", plugin)
+			for _, tc := range []struct {
+				name            string
+				value           string
+				expected        string
+				expectedPresent bool
+			}{
+				{name: "unset"},
+				{name: "custom", value: "30", expected: "30", expectedPresent: true},
+				{name: "disabled", value: "0", expected: "0", expectedPresent: true},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					t.Setenv("SQL_CONNECT_TIMEOUT", tc.value)
+					cfg, err := Load(WithEmbedded())
+					require.NoError(t, err)
+					for _, storeName := range []string{"default", "visibility"} {
+						store, ok := cfg.Persistence.DataStores[storeName]
+						require.True(t, ok, storeName)
+						require.NotNil(t, store.SQL, storeName)
+						require.Equal(t, plugin, store.SQL.PluginName, storeName)
+						actual, present := store.SQL.ConnectAttributes["connect_timeout"]
+						require.Equal(t, tc.expectedPresent, present, storeName)
+						require.Equal(t, tc.expected, actual, storeName)
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestLoad(t *testing.T) {
 	const staticConfig = `log:
   level: warn
