@@ -1156,6 +1156,41 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskTimedOut() {
 }
 
 func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskFailed() {
+	s.testApplyWorkflowTaskFailedRequestID(&historypb.WorkflowTaskFailedEventAttributes{}, false)
+}
+
+func (s *stateBuilderSuite) TestApplyEvents_ResetRequestID() {
+	s.testApplyWorkflowTaskFailedRequestID(&historypb.WorkflowTaskFailedEventAttributes{
+		Cause:          enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
+		NewRunId:       tests.RunID,
+		ResetRequestId: "reset-request",
+	}, true)
+}
+
+func (s *stateBuilderSuite) TestApplyEvents_AncestorResetRequestID() {
+	s.testApplyWorkflowTaskFailedRequestID(&historypb.WorkflowTaskFailedEventAttributes{
+		Cause:          enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
+		NewRunId:       "ancestor-run",
+		ResetRequestId: "ancestor-reset-request",
+	}, false)
+}
+
+func (s *stateBuilderSuite) TestApplyEvents_ResetWithoutRequestID() {
+	s.testApplyWorkflowTaskFailedRequestID(&historypb.WorkflowTaskFailedEventAttributes{
+		Cause:    enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW,
+		NewRunId: tests.RunID,
+	}, false)
+}
+
+func (s *stateBuilderSuite) TestApplyEvents_NonResetRequestID() {
+	s.testApplyWorkflowTaskFailedRequestID(&historypb.WorkflowTaskFailedEventAttributes{
+		Cause:          enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND,
+		NewRunId:       tests.RunID,
+		ResetRequestId: "not-a-reset-request",
+	}, false)
+}
+
+func (s *stateBuilderSuite) testApplyWorkflowTaskFailedRequestID(attributes *historypb.WorkflowTaskFailedEventAttributes, attach bool) {
 	version := int64(1)
 	requestID := uuid.NewString()
 
@@ -1165,21 +1200,21 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowTaskFailed() {
 	}
 
 	now := time.Now().UTC()
-	scheduledEventID := int64(12)
-	startedEventID := int64(28)
+	attributes.ScheduledEventId = 12
+	attributes.StartedEventId = 28
 	evenType := enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED
 	event := &historypb.HistoryEvent{
-		TaskId:    rand.Int63(),
-		Version:   version,
-		EventId:   130,
-		EventTime: timestamppb.New(now),
-		EventType: evenType,
-		Attributes: &historypb.HistoryEvent_WorkflowTaskFailedEventAttributes{WorkflowTaskFailedEventAttributes: &historypb.WorkflowTaskFailedEventAttributes{
-			ScheduledEventId: scheduledEventID,
-			StartedEventId:   startedEventID,
-		}},
+		TaskId:     rand.Int63(),
+		Version:    version,
+		EventId:    130,
+		EventTime:  timestamppb.New(now),
+		EventType:  evenType,
+		Attributes: &historypb.HistoryEvent_WorkflowTaskFailedEventAttributes{WorkflowTaskFailedEventAttributes: attributes},
 	}
 	s.mockMutableState.EXPECT().ApplyWorkflowTaskFailedEvent().Return(nil)
+	if attach {
+		s.mockMutableState.EXPECT().AttachRequestID(attributes.GetResetRequestId(), evenType, event.GetEventId())
+	}
 	taskqueue := &taskqueuepb.TaskQueue{Kind: enumspb.TASK_QUEUE_KIND_NORMAL, Name: "some random taskqueue"}
 	newScheduledEventID := int64(233)
 	s.executionInfo.TaskQueue = taskqueue.GetName()
