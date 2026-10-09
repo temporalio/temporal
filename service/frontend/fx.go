@@ -128,6 +128,7 @@ var Module = fx.Options(
 	fx.Provide(callbackValidatorProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
+	fx.Provide(NamespaceMutationTaskExecutorProvider),
 	fx.Provide(NamespaceDLQHandlerProvider),
 	fx.Provide(OperatorHandlerProvider),
 	fx.Provide(NewVersionChecker),
@@ -823,6 +824,7 @@ func AdminHandlerProvider(
 	schedulerClient schedulerpb.SchedulerServiceClient,
 	metricsHandler metrics.Handler,
 	namespaceDLQHandler nsreplication.DLQMessageHandler,
+	namespaceMutationExecutor nsreplication.MutationTaskExecutor,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -856,7 +858,25 @@ func AdminHandlerProvider(
 		taskCategoryRegistry,
 		matchingClient,
 	}
-	return NewAdminHandler(args, namespaceDLQHandler)
+	return NewAdminHandler(args, namespaceDLQHandler, namespaceMutationExecutor)
+}
+
+func NamespaceMutationTaskExecutorProvider(
+	clusterMetadata cluster.Metadata,
+	persistenceMetadataManager persistence.MetadataManager,
+	namespaceDataMerger nsreplication.NamespaceDataMerger,
+	namespaceAdmitter nsreplication.NamespaceReplicationAdmitter,
+	logger log.SnTaggedLogger,
+	testHooks testhooks.TestHooks,
+) nsreplication.MutationTaskExecutor {
+	return nsreplication.NewMutationTaskExecutor(
+		clusterMetadata.GetCurrentClusterName(),
+		persistenceMetadataManager,
+		namespaceDataMerger,
+		namespaceAdmitter,
+		logger,
+		testHooks,
+	)
 }
 
 // NamespaceDLQHandlerProvider provides the default namespace DLQ message handler.

@@ -160,7 +160,7 @@ func NamespaceDetailFromTransmissionTask(
 // extracted from HandleTransmissionTask in preparation for an eventual
 // CHASM-based namespace replication transport: that path will share this exact
 // decision so the two transports can never diverge on which mutations replicate.
-// Today only the legacy queue path (HandleTransmissionTask) calls it.
+// Both the legacy queue path and the CHASM authoritative path call it.
 //
 // The entire force/deleted/global/peer decision lives here, in one place, so no
 // caller can accidentally bypass part of it:
@@ -203,9 +203,8 @@ func ShouldReplicateNamespace(
 // preparation for an eventual CHASM-based namespace replication transport: when
 // that path is added it will build its outbound requests through this same
 // function, so a replicated field can never be emitted by one transport and
-// silently dropped by the other. Today only the legacy queue path
-// (HandleTransmissionTask) calls it; the extraction itself is a pure
-// no-behavior-change refactor.
+// silently dropped by the other. Both transports build receiver tasks through
+// this conversion.
 func NamespaceDetailToTaskAttributes(
 	namespaceOperation enumsspb.NamespaceOperation,
 	detail *persistencespb.NamespaceDetail,
