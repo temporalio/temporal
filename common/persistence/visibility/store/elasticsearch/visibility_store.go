@@ -801,12 +801,9 @@ func (s *VisibilityStore) newQueryConverter(
 		return nil, serviceerror.NewUnavailablef("unable to read search attribute types: %v", err)
 	}
 
-	var saMapper searchattribute.Mapper
-	if namespaceName != namespace.EmptyName {
-		saMapper, err = s.searchAttributesMapperProvider.GetMapper(namespaceName)
-		if err != nil {
-			return nil, err
-		}
+	saMapper, err := s.searchAttributesMapperProvider.GetMapper(namespaceName)
+	if err != nil {
+		return nil, err
 	}
 
 	queryConverter := NewQueryConverter(
