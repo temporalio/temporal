@@ -5,7 +5,9 @@
 // their formatted variants. By default, they enforce a 10s timeout for each
 // await attempt.
 //
-// Polling doubles from each caller-provided interval up to 2s.
+// The total wait is bounded by the test context timeout. Polling doubles from
+// each caller-provided interval up to 2s; timeout arguments remain for source
+// compatibility and are ignored.
 //
 // Improvements over testify's eventually functions:
 //
