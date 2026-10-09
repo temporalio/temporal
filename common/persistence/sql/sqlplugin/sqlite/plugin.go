@@ -170,9 +170,17 @@ func buildDSN(cfg *config.SQL) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	databaseName := cfg.DatabaseName
+	if vals.Get("mode") == "memory" && vals.Get("vfs") == "" {
+		vals.Del("mode")
+		vals.Del("cache")
+		vals.Set("vfs", "memdb")
+		databaseName = "/" + strings.TrimPrefix(databaseName, "/")
+	}
+
 	dsn := fmt.Sprintf(
 		"file:%s?%v",
-		cfg.DatabaseName,
+		databaseName,
 		vals.Encode(),
 	)
 	return dsn, nil
@@ -205,6 +213,6 @@ func buildDSNAttr(cfg *config.SQL) (url.Values, error) {
 		parameters.Add("_pragma", fmt.Sprintf("%s=%s", key, value))
 	}
 	// set time format
-	parameters.Add("_time_format", "sqlite")
+	parameters.Add("_timefmt", "auto")
 	return parameters, nil
 }
