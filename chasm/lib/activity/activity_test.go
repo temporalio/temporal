@@ -820,6 +820,7 @@ func TestActivityTaskTokenLegacyStampCompatibility(t *testing.T) {
 func newWorkerResponseTestActivity(
 	t *testing.T,
 	status activitypb.ActivityExecutionStatus,
+	enablePrincipalPropagation bool,
 ) (*chasm.MockMutableContext, *Activity, *tokenspb.Task) {
 	t.Helper()
 
@@ -844,6 +845,7 @@ func newWorkerResponseTestActivity(
 	}
 	ctx.GoCtx = context.WithValue(t.Context(), ctxKeyActivityContext, &activityContext{config: &Config{
 		BreakdownMetricsByTaskQueue:               dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+		EnablePrincipalPropagation:                dynamicconfig.GetBoolPropertyFnFilteredByNamespace(enablePrincipalPropagation),
 		MutableStateActivityFailureSizeLimitError: dynamicconfig.GetIntPropertyFnFilteredByNamespace(defaultFailureSizeLimit),
 	}})
 
@@ -880,7 +882,7 @@ func newWorkerResponseTestActivity(
 }
 
 func TestHandleFailedRetryRecordsLastWorkerPrincipal(t *testing.T) {
-	ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED)
+	ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, true)
 	principal := &commonpb.Principal{Type: "jwt", Name: "worker-1"}
 	_, err := activity.HandleFailed(ctx, RespondFailedEvent{
 		Token: token,
@@ -902,7 +904,7 @@ func TestHandleFailedRetryRecordsLastWorkerPrincipal(t *testing.T) {
 
 func TestWorkerResponsesRecordLastWorkerPrincipal(t *testing.T) {
 	t.Run("completed", func(t *testing.T) {
-		ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED)
+		ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, true)
 		principal := &commonpb.Principal{Type: "jwt", Name: "completion-worker"}
 		_, err := activity.HandleCompleted(ctx, RespondCompletedEvent{
 			Token:     token,
@@ -917,7 +919,7 @@ func TestWorkerResponsesRecordLastWorkerPrincipal(t *testing.T) {
 	})
 
 	t.Run("terminal failure", func(t *testing.T) {
-		ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED)
+		ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, true)
 		principal := &commonpb.Principal{Type: "jwt", Name: "failure-worker"}
 		_, err := activity.HandleFailed(ctx, RespondFailedEvent{
 			Token:     token,
@@ -938,7 +940,7 @@ func TestWorkerResponsesRecordLastWorkerPrincipal(t *testing.T) {
 	})
 
 	t.Run("canceled", func(t *testing.T) {
-		ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED)
+		ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED, true)
 		principal := &commonpb.Principal{Type: "jwt", Name: "cancel-worker"}
 		_, err := activity.HandleCanceled(ctx, RespondCancelledEvent{
 			Token:     token,
@@ -951,6 +953,20 @@ func TestWorkerResponsesRecordLastWorkerPrincipal(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, principal, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
 	})
+}
+
+func TestWorkerResponseDoesNotRecordPrincipalWhenPropagationDisabled(t *testing.T) {
+	ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, false)
+	_, err := activity.HandleCompleted(ctx, RespondCompletedEvent{
+		Token:     token,
+		Principal: &commonpb.Principal{Type: "jwt", Name: "worker-1"},
+		Request: &historyservice.RespondActivityTaskCompletedRequest{
+			NamespaceId:     token.GetNamespaceId(),
+			CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{},
+		},
+	})
+	require.NoError(t, err)
+	require.Nil(t, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
 }
 
 func TestContextMetadata(t *testing.T) {
