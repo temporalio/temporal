@@ -971,7 +971,27 @@ var (
 	TaskScheduleToStartLatency  = NewTimerDef("task_schedule_to_start_latency")
 	TaskBatchCompleteCounter    = NewCounterDef("task_batch_complete_counter")
 	TaskReschedulerPendingTasks = NewDimensionlessHistogramDef("task_rescheduler_pending_tasks")
-	PendingTasksCounter         = NewDimensionlessHistogramDef(
+	TaskThrottleGateAdmitted    = NewCounterDef(
+		"task_throttle_gate_admitted",
+		WithDescription("The number of task releases admitted by the throttle controller gate."),
+	)
+	TaskThrottleGateSuppressed = NewCounterDef(
+		"task_throttle_gate_suppressed",
+		WithDescription("The number of task releases suppressed by the throttle controller gate, i.e. attempts the controller prevented from being wasted."),
+	)
+	TaskThrottleRejections = NewCounterDef(
+		"task_throttle_rejections",
+		WithDescription("The number of throttle rejections fed into the throttle controller, by cause."),
+	)
+	TaskThrottleAdmittedRate = NewGaugeDef(
+		"task_throttle_admitted_rate",
+		WithDescription("The current admitted rate, in task releases per second, for one throttle controller key."),
+	)
+	TaskThrottleKeysTracked = NewGaugeDef(
+		"task_throttle_keys_tracked",
+		WithDescription("The number of keys tracked by the throttle controller."),
+	)
+	PendingTasksCounter = NewDimensionlessHistogramDef(
 		"pending_tasks",
 		WithDescription("A histogram across history shards for the number of in-memory pending history tasks."),
 	)

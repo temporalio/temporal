@@ -25,14 +25,18 @@ const (
 
 	reschedulerPQCleanupDuration          = 3 * time.Minute
 	reschedulerPQCleanupJitterCoefficient = 0.15
+
+	// How often a class blocked on its budget looks again, per control window.
+	budgetPollsPerWindow = 10
 )
 
 type (
 	// Rescheduler buffers task executables that are failed to process and
 	// resubmit them to the task scheduler when the Reschedule method is called.
 	Rescheduler interface {
-		// Add task executable to the rescheduler.
-		Add(task Executable, rescheduleTime time.Time)
+		// Add task executable to the rescheduler. throttleKey is the budget it is waiting on,
+		// or the zero key when the controller does not pace it.
+		Add(task Executable, rescheduleTime time.Time, throttleKey ThrottleKey)
 
 		// Reschedule triggers an immediate reschedule for provided namespace
 		// ignoring executable's reschedule time.
@@ -50,11 +54,18 @@ type (
 		rescheduleTime time.Time
 	}
 
+	// The zero ThrottleKey marks work that is not governed by the controller.
+	reschedulerKey struct {
+		TaskChannelKey
+		Throttle ThrottleKey
+	}
+
 	reschedulerImpl struct {
 		scheduler      Scheduler
 		timeSource     clock.TimeSource
 		logger         log.Logger
 		metricsHandler metrics.Handler
+		throttleState  *ThrottleState
 
 		status     int32
 		shutdownCh chan struct{}
@@ -64,7 +75,7 @@ type (
 		taskChannelKeyFn TaskChannelKeyFn
 
 		sync.Mutex
-		pqMap          map[TaskChannelKey]collection.Queue[rescheduledExecuable]
+		pqMap          map[reschedulerKey]collection.Queue[rescheduledExecuable]
 		numExecutables int
 	}
 )
@@ -74,12 +85,14 @@ func NewRescheduler(
 	timeSource clock.TimeSource,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
+	throttleState *ThrottleState,
 ) *reschedulerImpl {
 	return &reschedulerImpl{
 		scheduler:      scheduler,
 		timeSource:     timeSource,
 		logger:         logger,
 		metricsHandler: metricsHandler,
+		throttleState:  throttleState,
 
 		status:     common.DaemonStatusInitialized,
 		shutdownCh: make(chan struct{}),
@@ -87,7 +100,7 @@ func NewRescheduler(
 		timerGate:        timer.NewLocalGate(timeSource),
 		taskChannelKeyFn: scheduler.TaskChannelKeyFn(),
 
-		pqMap: make(map[TaskChannelKey]collection.Queue[rescheduledExecuable]),
+		pqMap: make(map[reschedulerKey]collection.Queue[rescheduledExecuable]),
 	}
 }
 
@@ -120,9 +133,12 @@ func (r *reschedulerImpl) Stop() {
 func (r *reschedulerImpl) Add(
 	executable Executable,
 	rescheduleTime time.Time,
+	throttleKey ThrottleKey,
 ) {
+	key := reschedulerKey{TaskChannelKey: r.taskChannelKeyFn(executable), Throttle: throttleKey}
+
 	r.Lock()
-	pq := r.getOrCreatePQLocked(r.taskChannelKeyFn(executable))
+	pq := r.getOrCreateClassLocked(key)
 	pq.Add(rescheduledExecuable{
 		executable:     executable,
 		rescheduleTime: rescheduleTime,
@@ -211,32 +227,73 @@ func (r *reschedulerImpl) reschedule() {
 
 	metrics.TaskReschedulerPendingTasks.With(r.metricsHandler).Record(int64(r.numExecutables))
 	now := r.timeSource.Now()
-	for _, pq := range r.pqMap {
-		for !pq.IsEmpty() {
-			rescheduled := pq.Peek()
 
-			if rescheduleTime := rescheduled.rescheduleTime; now.Before(rescheduleTime) {
-				r.timerGate.Update(rescheduleTime)
-				break
-			}
-
-			executable := rescheduled.executable
-			if executable.State() == ctasks.TaskStateCancelled {
-				pq.Remove()
-				r.numExecutables--
+	for _, priority := range ctasks.PriorityOrder {
+		for key, pq := range r.pqMap {
+			if key.Priority != priority || pq.IsEmpty() {
 				continue
 			}
+			r.drainClassLocked(key, pq, now)
+		}
+	}
 
-			executable.SetScheduledTime(now)
-			submitted := r.scheduler.TrySubmit(executable)
-			if !submitted {
-				r.timerGate.Update(now.Add(backoff.Jitter(taskChanFullBackoff, taskChanFullBackoffJitterCoefficient)))
-				break
-			}
+	for key, pq := range r.pqMap {
+		if _, named := ctasks.PriorityName[key.Priority]; named || pq.IsEmpty() {
+			continue
+		}
+		r.drainClassLocked(key, pq, now)
+	}
+}
 
+func (r *reschedulerImpl) drainClassLocked(
+	key reschedulerKey,
+	pq collection.Queue[rescheduledExecuable],
+	now time.Time,
+) {
+	for !pq.IsEmpty() {
+		rescheduled := pq.Peek()
+		if rescheduleTime := rescheduled.rescheduleTime; now.Before(rescheduleTime) {
+			r.timerGate.Update(rescheduleTime)
+			return
+		}
+
+		executable := rescheduled.executable
+		if executable.State() == ctasks.TaskStateCancelled {
 			pq.Remove()
 			r.numExecutables--
+			continue
 		}
+
+		metered := false
+		if key.Throttle != (ThrottleKey{}) {
+			allowed, admitted := r.throttleState.Admit(key.Throttle)
+			if !allowed {
+				// Wait a fixed slice of the window rather than for the next token: waking per
+				// token means one task per pass, where waiting batches them.
+				window := r.throttleState.settings().Window
+				r.timerGate.Update(now.Add(window / budgetPollsPerWindow))
+				return
+			}
+			metered = admitted
+		}
+
+		executable.SetScheduledTime(now)
+		if metered {
+			// Mark before submitting: a worker can reach HandleErr before TrySubmit returns.
+			executable.SetThrottleAdmitted(true)
+		}
+		if !r.scheduler.TrySubmit(executable) {
+			if metered {
+				executable.SetThrottleAdmitted(false)
+				r.throttleState.Return(key.Throttle)
+			}
+			r.timerGate.Update(now.Add(
+				backoff.Jitter(taskChanFullBackoff, taskChanFullBackoffJitterCoefficient)))
+			return
+		}
+
+		pq.Remove()
+		r.numExecutables--
 	}
 }
 
@@ -261,7 +318,6 @@ func (r *reschedulerImpl) drain() {
 		}
 		delete(r.pqMap, key)
 	}
-
 	r.numExecutables = 0
 }
 
@@ -269,8 +325,8 @@ func (r *reschedulerImpl) isStopped() bool {
 	return atomic.LoadInt32(&r.status) == common.DaemonStatusStopped
 }
 
-func (r *reschedulerImpl) getOrCreatePQLocked(
-	key TaskChannelKey,
+func (r *reschedulerImpl) getOrCreateClassLocked(
+	key reschedulerKey,
 ) collection.Queue[rescheduledExecuable] {
 	if pq, ok := r.pqMap[key]; ok {
 		return pq
