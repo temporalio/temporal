@@ -1537,6 +1537,9 @@ func (pm *taskQueuePartitionManagerImpl) updateEphemeralData(ctx context.Context
 	}
 }
 
+// checklocks cannot model a local closure that is called both with and without
+// versionedQueuesLock held.
+// +checklocksignore
 func (pm *taskQueuePartitionManagerImpl) updateEphemeralDataIteration(prevBacklogPriority map[PhysicalTaskQueueVersion]int64) map[PhysicalTaskQueueVersion]int64 {
 	negligibleAge := pm.config.BacklogNegligibleAge()
 	backlogPriority := make(map[PhysicalTaskQueueVersion]int64)
@@ -1687,6 +1690,9 @@ func parseDeploymentFromVersionKey(versionKey string) (deploymentName, buildID s
 	return "", ""
 }
 
+// checklocks cannot model a local closure that is called both with and without
+// versionedQueuesLock held.
+// +checklocksignore
 func (pm *taskQueuePartitionManagerImpl) ephemeralDataChanged(data *taskqueuespb.EphemeralData) {
 	// for now, only sticky partitions act on ephemeral data, normal partitions ignore it.
 	if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {

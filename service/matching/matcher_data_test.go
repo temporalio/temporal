@@ -939,6 +939,8 @@ func (s *MatcherDataSuite) TestFindMatch() {
 
 	for _, tc := range cases {
 		s.Run(tc.name, func() {
+			s.md.lock.Lock()
+
 			// Reset the task tree for each subtest, since Add appends rather than
 			// replacing (the old s.md.tasks.heap assignment reset implicitly).
 			s.md.tasks = newTaskBTree()
@@ -980,7 +982,6 @@ func (s *MatcherDataSuite) TestFindMatch() {
 			s.md.pollers.Add(poller)
 
 			// Call findMatch
-			s.md.lock.Lock()
 			now := s.ts.Now().UnixNano()
 			foundTask, foundPoller, _ := s.md.findMatch(tc.allowForwarding, now)
 			s.md.lock.Unlock()

@@ -220,16 +220,22 @@ type matcherData struct {
 
 	lock sync.Mutex // covers everything below, and all fields in any waitableMatchResult
 
-	rateLimitTimer         resettableTimer
+	// +checklocks:lock
+	rateLimitTimer resettableTimer
+	// +checklocks:lock
 	reconsiderForwardTimer resettableTimer
 
 	// waiting pollers and tasks
 	// invariant: all pollers and tasks in these data structures have matchResult == nil and queued == true
+	// +checklocks:lock
 	pollers pollerList
-	tasks   taskBTree
+	// +checklocks:lock
+	tasks taskBTree
 
+	// +checklocks:lock
 	lastPoller time.Time // most recent poll start time
 
+	// +checklocks:lock
 	stopped bool // if true, reject new tasks
 }
 
@@ -422,6 +428,7 @@ func (d *matcherData) ReprocessTasks(pred func(*internalTask) bool) []*internalT
 // minimum wait until any rate-limited task (that has a compatible poller) becomes ready.
 // call with lock held
 // nolint:revive // will improve later
+// +checklocks:d.lock
 func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *internalTask, matchedPoller *waitingPoller, minDelay time.Duration) {
 	// TODO(pri): optimize so it's not O(d*n) worst case
 	// Scan keeps its callback on the stack, so this walk does not allocate; the equivalent
@@ -440,6 +447,9 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 		}
 	}
 
+	// The scan callback runs synchronously under d.lock, but checklocks analyzes closures passed as
+	// arguments without the caller's lock state, so read the guarded field before the callback.
+	pollers := &d.pollers
 	d.tasks.tree.Scan(func(task *internalTask) bool {
 		// disallow normal poll forwarding when allowForwarding is false, but allow the
 		// "priority backlog poll forwarders".
@@ -448,7 +458,7 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 		}
 
 		var matched *waitingPoller
-		for poller := d.pollers.head; poller != nil; poller = poller.next {
+		for poller := pollers.head; poller != nil; poller = poller.next {
 			// can't match cases:
 			if poller.queryOnly && !task.isQuery() && !task.isPollForwarder() {
 				// query-only poll only matches with query (but can match poll forwarder)
@@ -495,6 +505,7 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 }
 
 // call with lock held
+// +checklocks:d.lock
 func (d *matcherData) allowForwarding() (allowForwarding bool) {
 	// If there is a non-negligible backlog, we pause forwarding to make sure
 	// root and leaf partitions are treated equally and can process their
@@ -528,6 +539,7 @@ func (d *matcherData) allowForwarding() (allowForwarding bool) {
 }
 
 // call with lock held. Returns true if a match was found but blocked by rate limiting.
+// +checklocks:d.lock
 func (d *matcherData) findAndWakeMatches() (rateLimited bool) {
 	allowForwarding := d.canForward && d.allowForwarding()
 
@@ -595,6 +607,7 @@ func (d *matcherData) FinishMatchAfterPollForward(poller *waitingPoller, task *i
 
 // isBacklogNegligible returns true if the age of the task backlog is less than the threshold.
 // call with lock held.
+// +checklocks:d.lock
 func (d *matcherData) isBacklogNegligible() bool {
 	t := d.tasks.ages.oldestTime()
 	return t.IsZero() || time.Since(t) < d.config.BacklogNegligibleAge()
