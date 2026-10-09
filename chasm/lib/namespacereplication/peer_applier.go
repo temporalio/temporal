@@ -18,6 +18,18 @@ import (
 // here.
 type PeerApplyResult int
 
+// PeerApplyRequest carries one transport attempt and its correlation metadata.
+type PeerApplyRequest struct {
+	SourceCluster       string
+	TargetCluster       string
+	ComponentBusinessID string
+	ComponentRunID      string
+	AttemptCount        int32
+	Operation           enumsspb.NamespaceOperation
+	Detail              *persistencespb.NamespaceDetail
+	Shadow              bool
+}
+
 const (
 	// PeerApplyResultUnspecified is invalid and must never be treated as a
 	// successful peer apply.
@@ -55,10 +67,7 @@ const (
 type PeerApplier interface {
 	Apply(
 		ctx context.Context,
-		targetCell string,
-		operation enumsspb.NamespaceOperation,
-		detail *persistencespb.NamespaceDetail,
-		shadow bool,
+		request PeerApplyRequest,
 	) (PeerApplyResult, error)
 }
 
@@ -76,12 +85,9 @@ func newAdminClientPeerApplier(clientBean serverclient.Bean) PeerApplier {
 
 func (a *adminClientPeerApplier) Apply(
 	ctx context.Context,
-	targetCell string,
-	operation enumsspb.NamespaceOperation,
-	detail *persistencespb.NamespaceDetail,
-	shadow bool,
+	request PeerApplyRequest,
 ) (PeerApplyResult, error) {
-	namespaceTask := nsreplication.NamespaceDetailToTaskAttributes(operation, detail)
+	namespaceTask := nsreplication.NamespaceDetailToTaskAttributes(request.Operation, request.Detail)
 	namespaceTaskPayload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
 	if err != nil {
 		return PeerApplyResultUnspecified, serviceerror.NewInvalidArgument(
@@ -89,20 +95,24 @@ func (a *adminClientPeerApplier) Apply(
 		)
 	}
 	fingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(namespaceTaskPayload)
-	adminClient, err := a.clientBean.GetRemoteAdminClient(targetCell)
+	adminClient, err := a.clientBean.GetRemoteAdminClient(request.TargetCluster)
 	if err != nil {
 		return PeerApplyResultUnspecified, err
 	}
 	resp, err := adminClient.ApplyNamespaceMutation(ctx, &adminservice.ApplyNamespaceMutationRequest{
 		NamespaceTask:        namespaceTask,
-		Shadow:               shadow,
+		Shadow:               request.Shadow,
 		Fingerprint:          fingerprint,
+		SourceCluster:        request.SourceCluster,
+		ComponentBusinessId:  request.ComponentBusinessID,
+		ComponentRunId:       request.ComponentRunID,
+		AttemptCount:         request.AttemptCount,
 		NamespaceTaskPayload: namespaceTaskPayload,
 	})
 	if err != nil {
 		return PeerApplyResultUnspecified, err
 	}
-	return peerApplyResultFromOutcome(targetCell, shadow, resp.GetOutcome())
+	return peerApplyResultFromOutcome(request.TargetCluster, request.Shadow, resp.GetOutcome())
 }
 
 func peerApplyResultFromOutcome(

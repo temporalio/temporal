@@ -1560,6 +1560,14 @@ var (
 		"namespace_replication_apply_end_to_end_latency",
 		WithDescription("Latency from source publication to a terminal namespace metadata replication apply outcome."),
 	)
+	NamespaceReplicationShadowBuildComparisonOutcomes = NewCounterDef(
+		"namespace_replication_shadow_build_comparison_outcomes",
+		WithDescription("The number of legacy-to-CHASM namespace mutation payload comparison outcomes at the source build boundary."),
+	)
+	NamespaceReplicationShadowReceiveComparisonOutcomes = NewCounterDef(
+		"namespace_replication_shadow_receive_comparison_outcomes",
+		WithDescription("The number of CHASM namespace mutation fingerprint comparison outcomes at the receiving cluster."),
+	)
 	TaskQueueUserDataReplicationApplyOutcomes = NewCounterDef(
 		"task_queue_user_data_replication_apply_outcomes",
 		WithDescription("The number of terminal task queue user data replication apply outcomes per target cluster."),

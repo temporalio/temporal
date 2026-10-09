@@ -215,6 +215,14 @@ message ApplyNamespaceMutationRequest {
   // protobuf deterministic encoding is not canonical across schema versions.
   bytes fingerprint = 3;
 
+  // Observability metadata for correlating a receiver attempt with its source
+  // CHASM component. These fields do not affect apply semantics.
+  string source_cluster = 4;
+  string component_business_id = 5;
+  string component_run_id = 6;
+  // One-based delivery attempt count.
+  int32 attempt_count = 7;
+
   // Exact deterministic protobuf encoding of namespace_task. The receiver
   // verifies these bytes before decoding them with its local schema.
   bytes namespace_task_payload = 8;

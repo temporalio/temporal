@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/payload"
@@ -114,6 +115,7 @@ type (
 		historyHealthChecker       HealthChecker
 		chasmRegistry              *chasm.Registry
 		schedulerClient            schedulerpb.SchedulerServiceClient
+		metricsHandler             metrics.Handler
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -149,6 +151,7 @@ type (
 		ChasmRegistry                       *chasm.Registry
 		NamespaceDataMerger                 nsreplication.NamespaceDataMerger
 		SchedulerClient                     schedulerpb.SchedulerServiceClient
+		MetricsHandler                      metrics.Handler
 
 		// DEPRECATED: only history service on server side is supposed to
 		// use the following components.
@@ -204,6 +207,7 @@ func NewAdminHandler(
 		matchingClient:             args.matchingClient,
 		chasmRegistry:              args.ChasmRegistry,
 		schedulerClient:            args.SchedulerClient,
+		metricsHandler:             args.MetricsHandler,
 	}
 }
 
@@ -1046,36 +1050,83 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 		return nil, serviceerror.NewFailedPrecondition("authoritative CHASM namespace replication is not enabled")
 	}
 	if request.NamespaceTaskPayload == nil {
-		return nil, serviceerror.NewInvalidArgument("namespace_task_payload is required")
+		err := serviceerror.NewInvalidArgument("namespace_task_payload is required")
+		adh.recordShadowReceiveComparison(
+			request.GetNamespaceTask().GetNamespaceOperation(),
+			request.GetSourceCluster(),
+			namespaceReplicationShadowOutcomeError,
+		)
+		adh.emitShadowReceiveComparison(request, request.GetFingerprint(), nil, namespaceReplicationShadowOutcomeError, err)
+		return nil, err
 	}
 
 	actualFingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(request.GetNamespaceTaskPayload())
 	outcome := adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH
-	if bytes.Equal(request.GetFingerprint(), actualFingerprint) {
+	metricsOutcome := namespaceReplicationShadowOutcomeMatch
+	matches := bytes.Equal(request.GetFingerprint(), actualFingerprint)
+	if matches {
 		payloadTask := &replicationspb.NamespaceTaskAttributes{}
 		if err := proto.Unmarshal(request.GetNamespaceTaskPayload(), payloadTask); err != nil {
+			adh.recordShadowReceiveComparison(
+				request.GetNamespaceTask().GetNamespaceOperation(),
+				request.GetSourceCluster(),
+				namespaceReplicationShadowOutcomeError,
+			)
+			adh.emitShadowReceiveComparison(request, request.GetFingerprint(), actualFingerprint, namespaceReplicationShadowOutcomeError, err)
 			return nil, serviceerror.NewInvalidArgumentf("decode namespace_task_payload: %v", err)
 		}
-		if proto.Equal(payloadTask, request.GetNamespaceTask()) {
-			return &adminservice.ApplyNamespaceMutationResponse{Outcome: outcome}, nil
-		}
-		var err error
-		actualFingerprint, err = nsreplication.NamespaceTaskFingerprint(request.GetNamespaceTask())
-		if err != nil {
-			return nil, serviceerror.NewInvalidArgumentf("fingerprint namespace_task: %v", err)
+		matches = proto.Equal(payloadTask, request.GetNamespaceTask())
+		if !matches {
+			var err error
+			actualFingerprint, err = nsreplication.NamespaceTaskFingerprint(request.GetNamespaceTask())
+			if err != nil {
+				adh.recordShadowReceiveComparison(
+					request.GetNamespaceTask().GetNamespaceOperation(),
+					request.GetSourceCluster(),
+					namespaceReplicationShadowOutcomeError,
+				)
+				adh.emitShadowReceiveComparison(request, request.GetFingerprint(), nil, namespaceReplicationShadowOutcomeError, err)
+				return nil, serviceerror.NewInvalidArgumentf("fingerprint namespace_task: %v", err)
+			}
 		}
 	}
-	adh.logger.Warn(
-		"namespace replication shadow receive mismatch",
-		tag.WorkflowNamespaceID(request.GetNamespaceTask().GetId()),
-		tag.NewStringTag("expected_fingerprint", hex.EncodeToString(request.GetFingerprint())),
-		tag.NewStringTag("actual_fingerprint", hex.EncodeToString(actualFingerprint)),
+	if !matches {
+		adh.logger.Warn(
+			"namespace replication shadow receive mismatch",
+			tag.WorkflowNamespaceID(request.GetNamespaceTask().GetId()),
+			tag.NewStringTag("expected_fingerprint", hex.EncodeToString(request.GetFingerprint())),
+			tag.NewStringTag("actual_fingerprint", hex.EncodeToString(actualFingerprint)),
+		)
+		outcome = adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH
+		metricsOutcome = namespaceReplicationShadowOutcomeMismatch
+	}
+	adh.recordShadowReceiveComparison(
+		request.GetNamespaceTask().GetNamespaceOperation(),
+		request.GetSourceCluster(),
+		metricsOutcome,
 	)
-	outcome = adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH
+	adh.emitShadowReceiveComparison(request, request.GetFingerprint(), actualFingerprint, metricsOutcome, nil)
 
 	return &adminservice.ApplyNamespaceMutationResponse{
 		Outcome: outcome,
 	}, nil
+}
+
+func (adh *AdminHandler) recordShadowReceiveComparison(
+	operation enumsspb.NamespaceOperation,
+	sourceCluster string,
+	outcome string,
+) {
+	if adh.metricsHandler == nil {
+		return
+	}
+	metrics.NamespaceReplicationShadowReceiveComparisonOutcomes.With(adh.metricsHandler).Record(
+		1,
+		metrics.SourceClusterTag(sourceCluster),
+		metrics.TargetClusterTag(adh.clusterMetadata.GetCurrentClusterName()),
+		metrics.OperationTag(namespaceReplicationOperationMetricValue(operation)),
+		metrics.OutcomeTag(outcome),
+	)
 }
 
 // GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task ID.

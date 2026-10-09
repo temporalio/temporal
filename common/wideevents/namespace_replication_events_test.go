@@ -116,6 +116,42 @@ func TestNamespaceReplicationTaskFingerprintLinksPhases(t *testing.T) {
 	require.NotEqual(t, first, namespaceReplicationRecordDetails(t, logger.records[2])["task_fingerprint"])
 }
 
+func TestEmitNamespaceReplicationLifecyclePreservesEventWhenTaskSerializationFails(t *testing.T) {
+	logger := &captureLogger{}
+	task := namespaceReplicationTaskForTest()
+	task.Info.Name = string([]byte{0xff})
+
+	EmitNamespaceReplicationLifecycle(logger, NamespaceReplicationLifecycleInput{
+		Phase:                        NamespaceReplicationCompared,
+		Outcome:                      NamespaceReplicationOutcomeError,
+		EventData:                    namespaceReplicationEventDataForTest(t, task),
+		Error:                        errors.New("fingerprint namespace mutation"),
+		EmitOnTaskSerializationError: true,
+	})
+
+	require.Len(t, logger.records, 1)
+	details := namespaceReplicationRecordDetails(t, logger.records[0])
+	require.Equal(t, "incomplete", details["task_payload_status"])
+	require.NotEmpty(t, details["task_json_error"])
+	require.NotEmpty(t, details["task_fingerprint_error"])
+	require.Equal(t, "fingerprint namespace mutation", details["error"])
+	require.NotContains(t, details, "task")
+	require.NotContains(t, details, "task_fingerprint")
+}
+
+func TestEmitNamespaceReplicationLifecycleDropsSerializationFailureByDefault(t *testing.T) {
+	logger := &captureLogger{}
+	task := namespaceReplicationTaskForTest()
+	task.Info.Name = string([]byte{0xff})
+
+	EmitNamespaceReplicationLifecycle(logger, NamespaceReplicationLifecycleInput{
+		Phase:     NamespaceReplicationReceived,
+		EventData: namespaceReplicationEventDataForTest(t, task),
+	})
+
+	require.Empty(t, logger.records)
+}
+
 func TestNamespaceReplicationProcessedIncludesCreatePersistenceRequest(t *testing.T) {
 	logger := &captureLogger{}
 	request := &persistence.CreateNamespaceRequest{
