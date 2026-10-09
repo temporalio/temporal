@@ -217,7 +217,9 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 	case *adminservice.StartAdminBatchOperationRequest:
 		return nil
 	case *adminservice.StartAdminBatchOperationResponse:
-		return nil
+		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowId()),
+		}
 	case *adminservice.SyncWorkflowStateRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetExecution().GetWorkflowId()),

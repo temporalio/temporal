@@ -12,6 +12,7 @@ import "temporal/api/enums/v1/failed_cause.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
+import "temporal/api/nexus/v1/message.proto";
 import "temporal/api/worker/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
 import "temporal/server/api/clock/v1/message.proto";
@@ -323,6 +324,9 @@ message WorkflowExecutionInfo {
   // Time of the most recent AdminRebuildMutableState call for this run, unset if the run
   // was never rebuilt.
   google.protobuf.Timestamp mutable_state_rebuild_time = 116;
+
+  // Nexus operation context retained across runs so workers can select payload serialization.
+  temporal.api.nexus.v1.PropagatedSerializationContext propagated_nexus_serialization_context = 117;
 }
 
 message TimeSkippingInfo {

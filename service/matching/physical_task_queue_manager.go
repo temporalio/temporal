@@ -651,6 +651,10 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	if workerDeployment == nil {
 		return nil
 	}
+	// Skip registration for partitions that don't support versioning (e.g. worker commands).
+	if !c.partitionMgr.partition.SupportsVersioning() {
+		return nil
+	}
 	if !c.partitionMgr.engine.config.EnableDeploymentVersions(namespaceEntry.Name().String()) {
 		return errMissingDeploymentVersion
 	}
