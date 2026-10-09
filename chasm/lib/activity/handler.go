@@ -167,7 +167,10 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			return nil, err
 		}
 		if err == nil && nexusContextMatch != "" {
-			metrics.NexusActivityUseExisting.With(h.metricsHandler).Record(1, metrics.NexusSerializationContextMatchTag(nexusContextMatch))
+			metrics.NexusActivityUseExisting.With(h.metricsHandler).Record(1,
+				metrics.NamespaceTag(frontendReq.GetNamespace()),
+				metrics.NexusSerializationContextMatchTag(nexusContextMatch),
+			)
 		}
 	}
 
