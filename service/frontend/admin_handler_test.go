@@ -2790,22 +2790,19 @@ func (s *adminHandlerSuite) TestListExecutions() {
 		PageSize:      10,
 		NextPageToken: []byte("page-token"),
 	}
-	executions := []*persistencespb.VisibilityExecutionInfo{
+	executions := []*adminservice.VisibilityExecutionInfo{
 		{
 			NamespaceId: s.namespaceID.String(),
 			Namespace:   s.namespace.String(),
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: "test-workflow-id",
-				RunId:      "test-run-id",
-			},
-			WorkflowType: &commonpb.WorkflowType{Name: "test-workflow-type"},
-			Status:       enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			BusinessId:  "test-workflow-id",
+			RunId:       "test-run-id",
+			State:       enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		},
 	}
 
 	s.Run("success", func() {
 		s.mockAdminVisibilityMgr.EXPECT().
-			ListExecutions(ctx, &manager.AdminListExecutionsRequest{
+			AdminListExecutions(ctx, &manager.AdminListExecutionsRequest{
 				Namespace:     s.namespace,
 				Query:         request.GetQuery(),
 				PageSize:      int(request.GetPageSize()),
@@ -2824,7 +2821,7 @@ func (s *adminHandlerSuite) TestListExecutions() {
 
 	s.Run("all namespaces", func() {
 		s.mockAdminVisibilityMgr.EXPECT().
-			ListExecutions(ctx, &manager.AdminListExecutionsRequest{
+			AdminListExecutions(ctx, &manager.AdminListExecutionsRequest{
 				Query:    request.GetQuery(),
 				PageSize: int(request.GetPageSize()),
 			}).
@@ -2841,7 +2838,7 @@ func (s *adminHandlerSuite) TestListExecutions() {
 
 	s.Run("visibility manager error", func() {
 		s.mockAdminVisibilityMgr.EXPECT().
-			ListExecutions(ctx, gomock.Any()).
+			AdminListExecutions(ctx, gomock.Any()).
 			Return(nil, serviceerror.NewInvalidArgument("invalid query"))
 
 		resp, err := s.handler.ListExecutions(ctx, request)
@@ -2868,7 +2865,7 @@ func (s *adminHandlerSuite) TestCountExecutions() {
 
 	s.Run("success", func() {
 		s.mockAdminVisibilityMgr.EXPECT().
-			CountExecutions(ctx, &manager.AdminCountExecutionsRequest{
+			AdminCountExecutions(ctx, &manager.AdminCountExecutionsRequest{
 				Namespace: s.namespace,
 				Query:     request.GetQuery(),
 			}).
@@ -2882,7 +2879,7 @@ func (s *adminHandlerSuite) TestCountExecutions() {
 
 	s.Run("all namespaces", func() {
 		s.mockAdminVisibilityMgr.EXPECT().
-			CountExecutions(ctx, &manager.AdminCountExecutionsRequest{Query: request.GetQuery()}).
+			AdminCountExecutions(ctx, &manager.AdminCountExecutionsRequest{Query: request.GetQuery()}).
 			Return(&manager.AdminCountExecutionsResponse{Count: 100}, nil)
 
 		resp, err := s.handler.CountExecutions(ctx, &adminservice.CountExecutionsRequest{
@@ -2895,7 +2892,7 @@ func (s *adminHandlerSuite) TestCountExecutions() {
 
 	s.Run("visibility manager error", func() {
 		s.mockAdminVisibilityMgr.EXPECT().
-			CountExecutions(ctx, gomock.Any()).
+			AdminCountExecutions(ctx, gomock.Any()).
 			Return(nil, serviceerror.NewInvalidArgument("invalid query"))
 
 		resp, err := s.handler.CountExecutions(ctx, request)

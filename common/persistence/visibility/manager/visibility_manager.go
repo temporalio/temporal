@@ -13,7 +13,6 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -61,8 +60,8 @@ type (
 	AdminVisibilityManager interface {
 		VisibilityManager
 
-		ListExecutions(ctx context.Context, request *AdminListExecutionsRequest) (*AdminListExecutionsResponse, error)
-		CountExecutions(ctx context.Context, request *AdminCountExecutionsRequest) (*AdminCountExecutionsResponse, error)
+		AdminListExecutions(ctx context.Context, request *AdminListExecutionsRequest) (*AdminListExecutionsResponse, error)
+		AdminCountExecutions(ctx context.Context, request *AdminCountExecutionsRequest) (*AdminCountExecutionsResponse, error)
 
 		AddSearchAttributes(ctx context.Context, request *AddSearchAttributesRequest) error
 	}
@@ -186,7 +185,7 @@ type (
 	}
 
 	AdminListExecutionsResponse struct {
-		Executions    []*persistencespb.VisibilityExecutionInfo
+		Executions    []*adminservice.VisibilityExecutionInfo
 		NextPageToken []byte
 	}
 

@@ -39,24 +39,17 @@ type (
 
 		ListChasmExecutions(ctx context.Context, request *visibilityservice.ListChasmExecutionsRequest) (*InternalListExecutionsResponse, error)
 		CountChasmExecutions(ctx context.Context, request *visibilityservice.CountChasmExecutionsRequest) (*InternalCountExecutionsResponse, error)
-
-		// Admin APIs
-
-		// AddSearchAttributes makes schema changes to add the search attributes. This function must be
-		// idempotent, ie., if a search attribute already exists, this function must be no-op, and must
-		// not return any error.
-		AddSearchAttributes(ctx context.Context, request *manager.AddSearchAttributesRequest) error
 	}
 
 	AdminVisibilityStore interface {
 		VisibilityStore
 
-		ListExecutions(
+		AdminListExecutions(
 			ctx context.Context,
 			request *manager.AdminListExecutionsRequest,
 		) (*InternalListExecutionsResponse, error)
 
-		CountExecutions(
+		AdminCountExecutions(
 			ctx context.Context,
 			request *manager.AdminCountExecutionsRequest,
 		) (*InternalCountExecutionsResponse, error)

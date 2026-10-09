@@ -36,7 +36,7 @@ func (s *ESVisibilitySuite) TestListExecutions() {
 			return testSearchResult, nil
 		})
 
-	_, err := s.visibilityStore.ListExecutions(
+	_, err := s.visibilityStore.AdminListExecutions(
 		context.Background(),
 		&manager.AdminListExecutionsRequest{
 			Namespace: testNamespace,
@@ -65,7 +65,7 @@ func (s *ESVisibilitySuite) TestListExecutions_AllNamespaces() {
 			return testSearchResult, nil
 		})
 
-	_, err := s.visibilityStore.ListExecutions(
+	_, err := s.visibilityStore.AdminListExecutions(
 		context.Background(),
 		&manager.AdminListExecutionsRequest{
 			Query:    `ExecutionStatus = "Terminated"`,
@@ -96,11 +96,11 @@ func (s *ESVisibilitySuite) TestListExecutions_AllNamespacesNoMapper() {
 		Query:    `CustomKeywordField = "foo"`,
 		PageSize: 10,
 	}
-	_, err := s.visibilityStore.ListExecutions(context.Background(), request)
+	_, err := s.visibilityStore.AdminListExecutions(context.Background(), request)
 	s.NoError(err)
 
 	request.Query = `AliasForCustomKeywordField = "foo"`
-	_, err = s.visibilityStore.ListExecutions(context.Background(), request)
+	_, err = s.visibilityStore.AdminListExecutions(context.Background(), request)
 	s.ErrorContains(err, "invalid search attribute: AliasForCustomKeywordField")
 }
 
@@ -151,7 +151,7 @@ func (s *ESVisibilitySuite) TestListExecutions_OrQueryPagination() {
 			return testSearchResult, nil
 		})
 
-	_, err = s.visibilityStore.ListExecutions(
+	_, err = s.visibilityStore.AdminListExecutions(
 		context.Background(),
 		&manager.AdminListExecutionsRequest{
 			Query:         `WorkflowId = "wid-1" OR WorkflowId = "wid-2"`,
@@ -252,7 +252,7 @@ func (s *ESVisibilitySuite) TestListExecutions_NamespaceNotFound() {
 		GetNamespaceID(testNamespace).
 		Return(namespace.EmptyID, nsNotFoundErr)
 
-	_, err := s.visibilityStore.ListExecutions(
+	_, err := s.visibilityStore.AdminListExecutions(
 		context.Background(),
 		&manager.AdminListExecutionsRequest{Namespace: testNamespace, PageSize: 10},
 	)
@@ -271,13 +271,13 @@ func (s *ESVisibilitySuite) TestListExecutions_Error() {
 		AnyTimes()
 
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
-	_, err := s.visibilityStore.ListExecutions(context.Background(), request)
+	_, err := s.visibilityStore.AdminListExecutions(context.Background(), request)
 	var unavailableErr *serviceerror.Unavailable
 	s.ErrorAs(err, &unavailableErr)
 	s.Contains(err.Error(), "ListExecutions failed")
 
 	request.Query = `invalid query`
-	_, err = s.visibilityStore.ListExecutions(context.Background(), request)
+	_, err = s.visibilityStore.AdminListExecutions(context.Background(), request)
 	var invalidArgErr *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgErr)
 }
@@ -296,7 +296,7 @@ func (s *ESVisibilitySuite) TestCountExecutions() {
 			return int64(1), nil
 		})
 
-	resp, err := s.visibilityStore.CountExecutions(
+	resp, err := s.visibilityStore.AdminCountExecutions(
 		context.Background(),
 		&manager.AdminCountExecutionsRequest{
 			Namespace: testNamespace,
@@ -322,7 +322,7 @@ func (s *ESVisibilitySuite) TestCountExecutions_AllNamespaces() {
 			return int64(1), nil
 		})
 
-	resp, err := s.visibilityStore.CountExecutions(
+	resp, err := s.visibilityStore.AdminCountExecutions(
 		context.Background(),
 		&manager.AdminCountExecutionsRequest{Query: `ExecutionStatus = "Terminated"`},
 	)
@@ -355,7 +355,7 @@ func (s *ESVisibilitySuite) TestCountExecutions_GroupBy() {
 			nil,
 		)
 
-	resp, err := s.visibilityStore.CountExecutions(
+	resp, err := s.visibilityStore.AdminCountExecutions(
 		context.Background(),
 		&manager.AdminCountExecutionsRequest{Query: "GROUP BY ExecutionStatus"},
 	)
@@ -386,7 +386,7 @@ func (s *ESVisibilitySuite) TestCountExecutions_NamespaceNotFound() {
 		GetNamespaceID(testNamespace).
 		Return(namespace.EmptyID, nsNotFoundErr)
 
-	_, err := s.visibilityStore.CountExecutions(
+	_, err := s.visibilityStore.AdminCountExecutions(
 		context.Background(),
 		&manager.AdminCountExecutionsRequest{Namespace: testNamespace},
 	)
@@ -404,13 +404,13 @@ func (s *ESVisibilitySuite) TestCountExecutions_Error() {
 	s.mockESClient.EXPECT().
 		Count(gomock.Any(), testIndex, gomock.Any()).
 		Return(int64(0), errTestESSearch)
-	_, err := s.visibilityStore.CountExecutions(context.Background(), request)
+	_, err := s.visibilityStore.AdminCountExecutions(context.Background(), request)
 	var unavailableErr *serviceerror.Unavailable
 	s.ErrorAs(err, &unavailableErr)
 	s.Contains(err.Error(), "CountExecutions failed")
 
 	request.Query = `invalid query`
-	_, err = s.visibilityStore.CountExecutions(context.Background(), request)
+	_, err = s.visibilityStore.AdminCountExecutions(context.Background(), request)
 	var invalidArgErr *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgErr)
 }

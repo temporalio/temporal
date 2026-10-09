@@ -12,7 +12,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -1380,7 +1380,6 @@ func (s *VisibilityPersistenceSuite) TestListExecutions() {
 			for _, exec := range resp.Executions {
 				require.Equal(t, ns1ID.String(), exec.GetNamespaceId())
 				require.Equal(t, ns1Name.String(), exec.GetNamespace())
-				require.Equal(t, workflowType, exec.GetWorkflowType().GetName())
 			}
 			require.ElementsMatch(
 				t,
@@ -1404,7 +1403,7 @@ func (s *VisibilityPersistenceSuite) TestListExecutions() {
 			require.Len(t, resp.Executions, 1)
 			require.Equal(t, ns2ID.String(), resp.Executions[0].GetNamespaceId())
 			require.Equal(t, ns2Name.String(), resp.Executions[0].GetNamespace())
-			require.Equal(t, ns2Open.Execution.GetRunId(), resp.Executions[0].GetExecution().GetRunId())
+			require.Equal(t, ns2Open.Execution.GetRunId(), resp.Executions[0].GetRunId())
 		},
 	)
 
@@ -1428,9 +1427,9 @@ func (s *VisibilityPersistenceSuite) TestListExecutions() {
 				runIDsOf(resp.Executions),
 			)
 
-			byRunID := make(map[string]*persistencespb.VisibilityExecutionInfo, len(resp.Executions))
+			byRunID := make(map[string]*adminservice.VisibilityExecutionInfo, len(resp.Executions))
 			for _, exec := range resp.Executions {
-				byRunID[exec.GetExecution().GetRunId()] = exec
+				byRunID[exec.GetRunId()] = exec
 			}
 			for _, startedRequest := range []*manager.RecordWorkflowExecutionStartedRequest{
 				ns1Open, ns1ClosedStart, ns2Open,
@@ -1442,12 +1441,12 @@ func (s *VisibilityPersistenceSuite) TestListExecutions() {
 
 			// A running execution carries no close-time fields; a closed one does.
 			openExec := byRunID[ns1Open.Execution.GetRunId()]
-			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, openExec.GetStatus())
+			require.Equal(t, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, openExec.GetState())
 			require.Nil(t, openExec.GetCloseTime())
 			require.Zero(t, openExec.GetHistoryLength())
 
 			closedExec := byRunID[ns1ClosedStart.Execution.GetRunId()]
-			require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, closedExec.GetStatus())
+			require.Equal(t, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, closedExec.GetState())
 			require.Equal(
 				t,
 				ns1Closed.CloseTime.UnixNano(),
@@ -1474,7 +1473,7 @@ func (s *VisibilityPersistenceSuite) TestListExecutions() {
 			require.NotEmpty(t, resp.NextPageToken)
 
 			runIDs := runIDsOf(resp.Executions)
-			next, err := s.adminVisibilityMgr().ListExecutions(
+			next, err := s.adminVisibilityMgr().AdminListExecutions(
 				s.ctx,
 				&manager.AdminListExecutionsRequest{
 					Query:         typeQuery,
@@ -1803,7 +1802,7 @@ func (s *VisibilityPersistenceSuite) assertListExecutions(
 		s.ctx,
 		s.T(),
 		func(t *await.T) {
-			resp, err := s.adminVisibilityMgr().ListExecutions(s.ctx, request)
+			resp, err := s.adminVisibilityMgr().AdminListExecutions(s.ctx, request)
 			assertFn(t, resp, err)
 		},
 		4*time.Second,
@@ -1819,7 +1818,7 @@ func (s *VisibilityPersistenceSuite) assertCountExecutions(
 		s.ctx,
 		s.T(),
 		func(t *await.T) {
-			resp, err := s.adminVisibilityMgr().CountExecutions(s.ctx, request)
+			resp, err := s.adminVisibilityMgr().AdminCountExecutions(s.ctx, request)
 			assertFn(t, resp, err)
 		},
 		4*time.Second,
@@ -1827,10 +1826,10 @@ func (s *VisibilityPersistenceSuite) assertCountExecutions(
 	)
 }
 
-func runIDsOf(executions []*persistencespb.VisibilityExecutionInfo) []string {
+func runIDsOf(executions []*adminservice.VisibilityExecutionInfo) []string {
 	runIDs := make([]string, len(executions))
 	for i, exec := range executions {
-		runIDs[i] = exec.GetExecution().GetRunId()
+		runIDs[i] = exec.GetRunId()
 	}
 	return runIDs
 }

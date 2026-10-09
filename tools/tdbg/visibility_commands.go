@@ -7,18 +7,18 @@ import (
 	"time"
 
 	"github.com/urfave/cli/v2"
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type compactVisExecutionInfo struct {
 	Namespace  string
-	WorkflowID string
+	BusinessID string
 	RunID      string
 	Type       string
-	Status     enumspb.WorkflowExecutionStatus
+	State      enumsspb.WorkflowExecutionState
 	StartTime  time.Time
 	CloseTime  *time.Time
 }
@@ -63,10 +63,9 @@ func AdminListExecutions(c *cli.Context, clientFactory ClientFactory) error {
 				}
 				items = append(items, compactVisExecutionInfo{
 					Namespace:  ns,
-					WorkflowID: execution.Execution.WorkflowId,
-					RunID:      execution.Execution.RunId,
-					Type:       execution.WorkflowType.GetName(),
-					Status:     execution.Status,
+					BusinessID: execution.BusinessId,
+					RunID:      execution.RunId,
+					State:      execution.State,
 					StartTime:  execution.StartTime.AsTime(),
 					CloseTime:  timestamp.TimeValuePtr(execution.CloseTime),
 				})
