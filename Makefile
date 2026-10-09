@@ -367,6 +367,10 @@ temporal-server: $(ALL_SRC)
 	@printf $(COLOR) "Build temporal-server with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
 	CGO_ENABLED=$(CGO_ENABLED) go build $(BUILD_TAG_FLAG) -o temporal-server ./cmd/server
 
+.PHONY: temporal-server-wasi
+temporal-server-wasi:
+	GOOS=wasip1 GOARCH=wasm CGO_ENABLED=0 go build -mod=readonly -tags "$(ALL_BUILD_TAGS),sqlite3_dotlk" -o temporal-server.wasm ./cmd/server
+
 tdbg: $(ALL_SRC)
 	@printf $(COLOR) "Build tdbg with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
 	CGO_ENABLED=$(CGO_ENABLED) go build $(BUILD_TAG_FLAG) -o tdbg ./cmd/tools/tdbg
