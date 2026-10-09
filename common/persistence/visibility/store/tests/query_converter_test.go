@@ -9,8 +9,12 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/temporalio/sqlparser"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 	vissql "go.temporal.io/server/common/persistence/visibility/store/sql"
@@ -19,14 +23,14 @@ import (
 
 const (
 	testNamespaceName = namespace.Name("test-namespace")
-
-	mysqlStore    = "mysql8"
-	postgresStore = "postgres12"
-	sqliteStore   = "sqlite"
-	esStore       = "elasticsearch"
 )
 
-var sqlPlugins = []string{mysqlStore, postgresStore, sqliteStore}
+var sqlPlugins = []string{
+	mysql.PluginName,
+	postgresql.PluginName,
+	postgresql.PluginNamePGX,
+	sqlite.PluginName,
+}
 
 type queryConverterTestCase struct {
 	name string
@@ -62,17 +66,17 @@ func (tc *queryConverterTestCase) expected(store string) (out string, errMsg str
 	if tc.err != "" {
 		return "", tc.err
 	}
-	if store == esStore {
+	if store == elasticsearch.PersistenceName {
 		return tc.es, tc.esErr
 	}
 
 	var outOverride, errOverride string
 	switch store {
-	case mysqlStore:
+	case mysql.PluginName:
 		outOverride, errOverride = tc.mysql, tc.mysqlErr
-	case postgresStore:
+	case postgresql.PluginName, postgresql.PluginNamePGX:
 		outOverride, errOverride = tc.postgres, tc.postgresErr
-	case sqliteStore:
+	case sqlite.PluginName:
 		outOverride, errOverride = tc.sqlite, tc.sqliteErr
 	default:
 		// no-op
@@ -936,10 +940,14 @@ var queryConverterTestCases = []queryConverterTestCase{
 		es:   `{"bool":{"minimum_should_match":"1","should":[{"bool":{"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}},{"exists":{"field":"TemporalNamespaceDivision"}}]}}`,
 	},
 	{
+		// The two equality conditions on the same field are merged into a single terms
+		// condition, which leaves a single clause in the should clauses, so it becomes a
+		// filter clause.
 		name: "namespace division in complex query",
 		in:   "WorkflowId = 'wid' AND (TemporalNamespaceDivision = 'foo' OR TemporalNamespaceDivision = 'bar')",
 		sql:  "(workflow_id = 'wid' and (TemporalNamespaceDivision = 'foo' or TemporalNamespaceDivision = 'bar'))",
-		es:   `{"bool":{"filter":[{"term":{"WorkflowId":"wid"}},{"bool":{"minimum_should_match":"1","should":[{"term":{"TemporalNamespaceDivision":"foo"}},{"term":{"TemporalNamespaceDivision":"bar"}}]}}]}}`,
+		es: `{"bool":{"filter":[{"term":{"WorkflowId":"wid"}},` +
+			`{"bool":{"filter":{"terms":{"TemporalNamespaceDivision":["foo","bar"]}}}}]}}`,
 	},
 
 	// Logical operators.
@@ -1158,6 +1166,55 @@ var queryConverterTestCases = []queryConverterTestCase{
 		es: `{"bool":{"filter":{"bool":{"minimum_should_match":"1","should":[` +
 			`{"range":{"HistoryLength":{"gt":1}}},` +
 			`{"range":{"HistoryLength":{"lt":10}}}]}},` +
+			`"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		// Equality conditions on the same field are merged into a single terms condition,
+		// which leaves a single clause in the should clauses, so it becomes a filter clause.
+		name: "merge equality conditions in or expression",
+		in:   "WorkflowId = 'wid1' OR WorkflowId = 'wid2'",
+		sql:  "TemporalNamespaceDivision is null and (workflow_id = 'wid1' or workflow_id = 'wid2')",
+		es: `{"bool":{"filter":{"bool":{"filter":{"terms":{"WorkflowId":["wid1","wid2"]}}}},` +
+			`"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		name: "merge equality and in conditions in or expression",
+		in:   "WorkflowId IN ('wid1', 'wid2') OR WorkflowId = 'wid3'",
+		sql: "TemporalNamespaceDivision is null and " +
+			"(workflow_id in ('wid1', 'wid2') or workflow_id = 'wid3')",
+		es: `{"bool":{"filter":{"bool":{"filter":{"terms":{"WorkflowId":["wid1","wid2","wid3"]}}}},` +
+			`"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		// Conditions on distinct fields are merged independently and keep their relative
+		// order, so more than one clause is left in the should clauses.
+		name: "merge equality conditions on distinct fields in or expression",
+		in:   "WorkflowId = 'wid1' OR RunId = 'rid' OR WorkflowId = 'wid2'",
+		sql: "TemporalNamespaceDivision is null and " +
+			"(workflow_id = 'wid1' or run_id = 'rid' or workflow_id = 'wid2')",
+		es: `{"bool":{"filter":{"bool":{"minimum_should_match":"1","should":[` +
+			`{"terms":{"WorkflowId":["wid1","wid2"]}},` +
+			`{"term":{"RunId":"rid"}}]}},` +
+			`"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		// Only should clauses are merged: equality conditions of an AND expression land in
+		// the filter clauses and are left as is.
+		name: "equality conditions in and expression are not merged",
+		in:   "WorkflowId = 'wid1' AND WorkflowId = 'wid2'",
+		sql:  "TemporalNamespaceDivision is null and (workflow_id = 'wid1' and workflow_id = 'wid2')",
+		es: `{"bool":{"filter":[{"term":{"WorkflowId":"wid1"}},{"term":{"WorkflowId":"wid2"}}],` +
+			`"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
+	},
+	{
+		// Only should clauses are merged: a negated equality condition lands in the must_not
+		// clause and is left as is.
+		name: "negated equality conditions in or expression are not merged",
+		in:   "WorkflowId != 'wid1' OR WorkflowId != 'wid2'",
+		sql:  "TemporalNamespaceDivision is null and (workflow_id != 'wid1' or workflow_id != 'wid2')",
+		es: `{"bool":{"filter":{"bool":{"minimum_should_match":"1","should":[` +
+			`{"bool":{"must_not":{"term":{"WorkflowId":"wid1"}}}},` +
+			`{"bool":{"must_not":{"term":{"WorkflowId":"wid2"}}}}]}},` +
 			`"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}}`,
 	},
 	{
@@ -1426,7 +1483,7 @@ func TestSQLQueryConverter(t *testing.T) {
 						testNamespaceName,
 						searchattribute.TestNameTypeMap(),
 						&searchattribute.TestMapper{},
-						nil, // metricsHandler
+						metrics.NoopMetricsHandler,
 						log.NewNoopLogger(),
 					)
 				},
@@ -1440,7 +1497,7 @@ func TestElasticsearchQueryConverter(t *testing.T) {
 	t.Parallel()
 	runQueryConverterTest(
 		t,
-		esStore,
+		elasticsearch.PersistenceName,
 		newESQueryConverter,
 		serializeESQuery,
 	)
@@ -1451,7 +1508,7 @@ func newESQueryConverter() *query.QueryConverter[elastic.Query] {
 		testNamespaceName,
 		searchattribute.TestNameTypeMap(),
 		&searchattribute.TestMapper{},
-		nil, // metricsHandler
+		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),
 	)
 }

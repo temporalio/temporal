@@ -24,21 +24,16 @@ Express each rule as a concise, direct statement of the expected code or review 
 
 ## 3. Testing Correctness and Reliability
 
-- Subtests use their `t` parameter rather than `s.T()`.
-- Eventually blocks containing assertions use `EventuallyWithT` and its block-local `t`.
-- Specific error type assertions use `require.ErrorAs(t, err, &specificErr)`.
-- Test assertions use `require` rather than `assert`, so a failed assertion stops the test before later checks run on an invalid state.
+Before writing, reviewing, or running tests, read and follow the [testing guide](../docs/development/testing.md) for setup, assertions, polling, parallelization, and test helpers.
+
+- Subtests use their own `t` parameter rather than the parent's `t` or `s.T()`.
 - Tests use a table-driven structure when multiple cases exercise the same behavior. Every case has a descriptive name and runs as a subtest.
-- Independent cases in plain `t.Run` tests run in parallel. Testify suite subtests remain sequential because the suite does not support parallel subtests.
-- Tests compare a function's complete result with an expected value rather than asserting each field separately. Proto results and proto fields within non-proto results use `protorequire.ProtoEqual`; field-level assertions are reserved for cases where only part of the result is relevant.
-- Every use of `Eventually` has a comment explaining why polling is required, such as eventual consistency.
-- Error type checks use a guarded API such as `errors.AsType`; single-value assertions such as `err.(*T)` are avoided because they panic when the type does not match.
+- Tests compare a function's complete result with an expected value rather than asserting each field separately; field-level assertions are reserved for cases where only part of the result is relevant.
 - A goroutine that maintains a precondition for later assertions, such as `go s.someHelper(ctx, ...)`, loops until context cancellation or reports success before the test waits for its effect. This prevents a transiently failed attempt from exiting silently and leaving downstream eventual-consistency waits unable to succeed.
-- Testify assertions such as `s.NoError`, `s.Equal`, `require.NoError`, and `assert.NoError` run in the test goroutine. Worker goroutines return results or errors through buffered channels so an assertion cannot panic the binary after the test has completed.
-- Blocking channel operations in tests use `await.Rcv` and `await.Snd` so they fail on timeout instead of hanging indefinitely.
+- Assertions run in the test goroutine. Worker goroutines return results or errors through buffered channels so an assertion cannot panic the binary after the test has completed.
 - Tests do not write to package-level or global variables. Values are threaded through function parameters because parallel tests share the same process.
-- Tests coordinate ordering with channels, `sync.WaitGroup`, or `EventuallyWithT` rather than `time.Sleep` or elapsed-time thresholds.
-- A background operation that drives an `EventuallyWithT` condition has a longer timeout than the waiting deadline, so it remains capable of satisfying the condition for the entire wait.
+- Tests coordinate ordering with explicit synchronization rather than sleeps or elapsed-time thresholds.
+- A background operation that drives a polling condition has a longer timeout than the waiting deadline, so it remains capable of satisfying the condition for the entire wait.
 - Errors from precondition operations are surfaced or retried until success when failure would invalidate the rest of the test; they are not discarded with `_, _ = f()`.
 
 ## 4. Inline Code / Avoid Abstractions
@@ -52,6 +47,7 @@ Express each rule as a concise, direct statement of the expected code or review 
 
 ## 5. Proper Error Handling
 
+- Use `softassert.That` or `softassert.Fail` to report programming errors and invariant violations.
 - Temporal errors use standard types such as `InvalidArgument`, `NotFound`, and `FailedPrecondition` rather than custom error types.
 - Errors are non-retryable when their tasks must not retry in the queue.
 - Wrapped errors add useful context, for example `fmt.Errorf("multi-operation part 2: %w", err)`; wrappers without additional information are omitted.
@@ -62,6 +58,8 @@ Express each rule as a concise, direct statement of the expected code or review 
 
 ## 6. Consistency with Codebase
 
+- Do not introduce new third-party libraries unless specifically requested.
+- Check existing imports and `go.mod` before assuming a library is available.
 - Code follows the patterns already established in the codebase. For example, libraries pass the frontend request through as other libraries do.
 - Existing utilities are reused before new ones are created.
 - Logger messages are static, and dynamic content is recorded in structured tags.
