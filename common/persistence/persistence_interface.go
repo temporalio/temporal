@@ -56,6 +56,7 @@ type (
 		GetName() string
 		GetClusterName() string
 		GetOrCreateShard(ctx context.Context, request *InternalGetOrCreateShardRequest) (*InternalGetOrCreateShardResponse, error)
+		GetShard(ctx context.Context, request *GetShardRequest) (*InternalGetShardResponse, error)
 		UpdateShard(ctx context.Context, request *InternalUpdateShardRequest) error
 		AssertShardOwnership(ctx context.Context, request *AssertShardOwnershipRequest) error
 	}
@@ -207,17 +208,24 @@ type (
 		Version int64
 	}
 
-	// InternalGetOrCreateShardRequest is used by ShardStore to retrieve or create a shard.
-	// GetOrCreateShard should: if shard exists, return it. If not, call CreateShardInfo and
-	// create the shard with the returned value.
+	// InternalGetOrCreateShardRequest is used by ShardStore to retrieve or create a shard as
+	// the first step of acquiring it. The acquisition completes with an UpdateShard call from
+	// the same owner. GetOrCreateShard should: if shard exists, return it. If not, call
+	// CreateShardInfo and create the shard with the returned value.
+	// Reads that are not part of an acquisition use GetShard instead.
 	InternalGetOrCreateShardRequest struct {
 		ShardID          int32
 		CreateShardInfo  func() (rangeID int64, shardInfo *commonpb.DataBlob, err error) `json:"-"` // cannot be serialized otherwise
-		LifecycleContext context.Context                                                 // cancelled when shard is unloaded
+		LifecycleContext context.Context                                                 // required, cancelled when shard is unloaded
 	}
 
-	// InternalGetOrCreateShardResponse is the response to GetShard
+	// InternalGetOrCreateShardResponse is the response to GetOrCreateShard
 	InternalGetOrCreateShardResponse struct {
+		ShardInfo *commonpb.DataBlob
+	}
+
+	// InternalGetShardResponse is the response to GetShard
+	InternalGetShardResponse struct {
 		ShardInfo *commonpb.DataBlob
 	}
 

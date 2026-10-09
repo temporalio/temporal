@@ -158,6 +158,8 @@ const (
 	PersistenceGetClusterMembersScope = "GetClusterMembers"
 	// PersistenceGetOrCreateShardScope tracks GetOrCreateShard calls made by service to persistence layer
 	PersistenceGetOrCreateShardScope = "GetOrCreateShard"
+	// PersistenceGetShardScope tracks GetShard calls made by service to persistence layer
+	PersistenceGetShardScope = "GetShard"
 	// PersistenceUpdateShardScope tracks UpdateShard calls made by service to persistence layer
 	PersistenceUpdateShardScope = "UpdateShard"
 	// PersistenceAssertShardOwnershipScope tracks UpdateShard calls made by service to persistence layer

@@ -170,6 +170,21 @@ func (p *shardRetryablePersistenceClient) GetOrCreateShard(
 	return response, err
 }
 
+func (p *shardRetryablePersistenceClient) GetShard(
+	ctx context.Context,
+	request *GetShardRequest,
+) (*GetShardResponse, error) {
+	var response *GetShardResponse
+	op := func(ctx context.Context) error {
+		var err error
+		response, err = p.persistence.GetShard(ctx, request)
+		return err
+	}
+
+	err := backoff.ThrottleRetryContext(ctx, op, p.policy, p.isRetryable)
+	return response, err
+}
+
 func (p *shardRetryablePersistenceClient) UpdateShard(
 	ctx context.Context,
 	request *UpdateShardRequest,

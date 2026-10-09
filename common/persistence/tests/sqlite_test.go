@@ -95,6 +95,33 @@ func LoadSchema(t *testing.T, db sqlplugin.AdminDB, schemaFile string) {
 	}
 }
 
+func TestSQLiteShardStoreSuite(t *testing.T) {
+	t.Parallel()
+	cfg := NewSQLiteMemoryConfig()
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testSQLiteClusterName,
+		logger,
+		metrics.NoopMetricsHandler,
+		serialization.NewSerializer(),
+	)
+	shardStore, err := factory.NewShardStore()
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer factory.Close()
+
+	s := NewShardSuite(
+		t,
+		shardStore,
+		serialization.NewSerializer(),
+		logger,
+	)
+	suite.Run(t, s)
+}
+
 func TestSQLiteExecutionMutableStateStoreSuite(t *testing.T) {
 	t.Parallel()
 	cfg := NewSQLiteMemoryConfig()
