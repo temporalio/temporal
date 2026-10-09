@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/matching/hooks"
+	"go.temporal.io/server/service/matching/simplelimiter"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -2949,7 +2950,7 @@ func (s *PartitionManagerTestSuite) newRateLimitedEagerDispatchPartitionManager(
 	partitionMgr := s.newEagerDispatchPartitionManager(0, nil)
 	limiter := newRateLimitManager(partitionMgr.userDataManager, partitionMgr.config, partitionMgr.partition.TaskQueue().TaskType())
 	limiter.timeSource = clock.NewEventTimeSource().Update(time.Now())
-	limiter.wholeQueueLimit = makeSimpleLimiterParams(1, 0)
+	limiter.wholeQueueLimit = simplelimiter.MakeParams(1, 0)
 	partitionMgr.rateLimitManager = limiter
 	return partitionMgr
 }
