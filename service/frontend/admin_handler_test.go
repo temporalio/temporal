@@ -66,6 +66,7 @@ import (
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/dlq"
 	"go.temporal.io/server/service/worker/dummy"
@@ -116,13 +117,15 @@ type (
 		outcome nsreplication.ApplyOutcome
 		err     error
 		task    *replicationspb.NamespaceTaskAttributes
+		ctx     context.Context
 	}
 )
 
 func (e *testNamespaceMutationExecutor) ExecuteWithOutcome(
-	_ context.Context,
+	ctx context.Context,
 	task *replicationspb.NamespaceTaskAttributes,
 ) (nsreplication.ApplyOutcome, error) {
+	e.ctx = ctx
 	e.task = task
 	return e.outcome, e.err
 }
@@ -437,15 +440,39 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_AuthoritativeOutcomes() {
 			response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
 				NamespaceTask:        namespaceTask,
 				Fingerprint:          fingerprint,
+				SourceCluster:        "source-cluster",
+				ComponentBusinessId:  "business-id",
+				ComponentRunId:       "run-id",
+				AttemptCount:         2,
 				NamespaceTaskPayload: payload,
 			})
 			s.Require().NoError(err)
 			s.Equal(testCase.expected, response.GetOutcome())
 			s.True(proto.Equal(namespaceTask, s.namespaceMutationExecutor.task))
+			eventContext, ok := wideevents.NamespaceReplicationTaskContextFromContext(s.namespaceMutationExecutor.ctx)
+			s.Require().True(ok)
+			s.Equal("source-cluster", eventContext.SourceCluster)
+			s.Equal(s.currentClusterName, eventContext.TargetCluster)
+			s.Equal(2, eventContext.AttemptCount)
+			s.Equal("chasm", eventContext.EventData.Details["transport"])
+			s.Equal("authoritative", eventContext.EventData.Details["mode"])
+			s.Equal(nsreplication.CHASMApplyStageReceive, eventContext.EventData.Details["apply_stage"])
+			s.Equal("business-id", eventContext.EventData.Details["component_business_id"])
+			s.Equal("run-id", eventContext.EventData.Details["component_run_id"])
 		})
 	}
 	s.Empty(metricsCapture.SnapshotMetric(metrics.NamespaceReplicationShadowReceiveComparisonOutcomes.Name()))
-	s.Empty(eventLogger.records)
+	recordings := metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyOutcomes.Name())
+	s.Len(recordings, len(testCases))
+	for i, testCase := range testCases {
+		s.Equal(nsreplication.CHASMApplyStageReceive, recordings[i].Tags["apply_stage"])
+		s.Equal(authoritativeReceiveOutcome(testCase.outcome), recordings[i].Tags[metrics.OutcomeTag("").Key])
+	}
+	s.Empty(eventLogger.records, "the real executor owns successful processed events")
+	metricsContext, ok := nsreplication.TaskMetricsContextFromContext(s.namespaceMutationExecutor.ctx)
+	s.True(ok)
+	s.Equal(nsreplication.CHASMReplicationTransport, metricsContext.Transport)
+	s.Equal(s.currentClusterName, metricsContext.TargetCluster)
 }
 
 func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowPayloadDiffersFromTypedTask() {
@@ -509,6 +536,13 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_RejectsMalformedPayload()
 }
 
 func (s *adminHandlerSuite) TestApplyNamespaceMutation_AuthoritativeRejectsFingerprintMismatch() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	metricsCapture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(metricsCapture)
+	s.handler.metricsHandler = metricsHandler
+	eventLogger := &captureNamespaceEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 	namespaceTask := &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"}
 	payload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
 	s.Require().NoError(err)
@@ -516,11 +550,60 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_AuthoritativeRejectsFinge
 	_, err = s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
 		NamespaceTask:        namespaceTask,
 		Fingerprint:          []byte("wrong"),
+		SourceCluster:        "source-cluster",
+		ComponentBusinessId:  "business-id",
+		ComponentRunId:       "run-id",
+		AttemptCount:         2,
 		NamespaceTaskPayload: payload,
 	})
 	var invalidArgument *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgument)
 	s.Nil(s.namespaceMutationExecutor.task)
+	recordings := metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyOutcomes.Name())
+	s.Require().Len(recordings, 1)
+	s.Equal(nsreplication.CHASMApplyStageReceive, recordings[0].Tags["apply_stage"])
+	s.Equal(nsreplication.CHASMApplyOutcomeFingerprintMismatch, recordings[0].Tags[metrics.OutcomeTag("").Key])
+	s.Require().Len(eventLogger.records, 1)
+	details := namespaceReplicationEventDetails(s.T(), eventLogger.records[0])
+	s.Equal("business-id", details["component_business_id"])
+	s.Equal("run-id", details["component_run_id"])
+	s.Equal(nsreplication.CHASMApplyOutcomeFingerprintMismatch, details["outcome"])
+	s.NotEqual(details["expected_task_fingerprint"], details["actual_task_fingerprint"])
+}
+
+func (s *adminHandlerSuite) TestApplyNamespaceMutation_AuthoritativeApplyErrorObserved() {
+	metricsHandler := metricstest.NewCaptureHandler()
+	metricsCapture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(metricsCapture)
+	s.handler.metricsHandler = metricsHandler
+	eventLogger := &captureNamespaceEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.namespaceMutationExecutor.err = serviceerror.NewUnavailable("metadata unavailable")
+	namespaceTask := &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"}
+	payload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
+	s.Require().NoError(err)
+	fingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(payload)
+
+	_, err = s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
+		NamespaceTask:        namespaceTask,
+		Fingerprint:          fingerprint,
+		SourceCluster:        "source-cluster",
+		ComponentBusinessId:  "business-id",
+		ComponentRunId:       "run-id",
+		AttemptCount:         3,
+		NamespaceTaskPayload: payload,
+	})
+	var unavailable *serviceerror.Unavailable
+	s.ErrorAs(err, &unavailable)
+	recordings := metricsCapture.SnapshotMetric(metrics.NamespaceReplicationCHASMApplyOutcomes.Name())
+	s.Require().Len(recordings, 1)
+	s.Equal(nsreplication.CHASMApplyOutcomeError, recordings[0].Tags[metrics.OutcomeTag("").Key])
+	s.Require().Len(eventLogger.records, 1)
+	details := namespaceReplicationEventDetails(s.T(), eventLogger.records[0])
+	s.Equal(nsreplication.CHASMApplyOutcomeError, details["outcome"])
+	s.Equal("metadata unavailable", details["error"])
+	s.InDelta(float64(3), details["attempt_count"], 0)
 }
 
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {

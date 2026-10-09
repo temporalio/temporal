@@ -209,6 +209,7 @@ func (p *replicationMessageProcessor) handleReplicationTasks() {
 		}
 
 		attemptCount := 0
+		sourceTaskID := task.GetSourceTaskId()
 		policy := p.retryPolicyForTask(task)
 		err := backoff.ThrottleRetry(func() error {
 			attemptCount++
@@ -217,7 +218,7 @@ func (p *replicationMessageProcessor) handleReplicationTasks() {
 				attemptCtx = wideevents.SetNamespaceReplicationTaskContext(attemptCtx, wideevents.NamespaceReplicationTaskContext{
 					SourceCluster: p.sourceCluster,
 					TargetCluster: p.currentCluster,
-					SourceTaskID:  task.GetSourceTaskId(),
+					SourceTaskID:  &sourceTaskID,
 					AttemptCount:  attemptCount,
 					EventData:     eventData,
 				})

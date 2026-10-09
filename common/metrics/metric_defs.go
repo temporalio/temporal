@@ -1568,6 +1568,26 @@ var (
 		"namespace_replication_shadow_receive_comparison_outcomes",
 		WithDescription("The number of CHASM namespace mutation fingerprint comparison outcomes at the receiving cluster."),
 	)
+	NamespaceReplicationCHASMApplyOutcomes = NewCounterDef(
+		"namespace_replication_chasm_apply_outcomes",
+		WithDescription("The number of authoritative CHASM namespace mutation outcomes by apply stage."),
+	)
+	NamespaceReplicationCHASMApplyLatency = NewTimerDef(
+		"namespace_replication_chasm_apply_latency",
+		WithDescription("Latency of authoritative CHASM namespace mutation attempts by apply stage."),
+	)
+	NamespaceReplicationCHASMPeerPendingLatency = NewTimerDef(
+		"namespace_replication_chasm_peer_pending_latency",
+		WithDescription("Time from the first authoritative CHASM peer attempt until a terminal peer outcome."),
+	)
+	NamespaceReplicationCHASMPeerPendingAge = NewTimerDef(
+		"namespace_replication_chasm_peer_pending_age",
+		WithDescription("Age of an in-flight authoritative CHASM peer apply when a retry is durably scheduled."),
+	)
+	NamespaceReplicationCHASMPeerPendingThresholdExceeded = NewCounterDef(
+		"namespace_replication_chasm_peer_pending_threshold_exceeded",
+		WithDescription("The number of authoritative CHASM peer retries durably scheduled after the peer apply has been pending for at least one minute."),
+	)
 	TaskQueueUserDataReplicationApplyOutcomes = NewCounterDef(
 		"task_queue_user_data_replication_apply_outcomes",
 		WithDescription("The number of terminal task queue user data replication apply outcomes per target cluster."),

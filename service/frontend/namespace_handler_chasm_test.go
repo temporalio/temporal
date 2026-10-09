@@ -281,7 +281,7 @@ func requireShadowComparisonEvent(
 ) map[string]any {
 	t.Helper()
 	require.Len(t, records, 1)
-	require.Equal(t, wideevents.NamespaceLifecycleEventName, records[0].EventName())
+	details := namespaceReplicationEventDetails(t, records[0])
 	attributes := make(map[string]string)
 	records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
 		if kv.Value.Kind() == otellog.KindString {
@@ -290,8 +290,6 @@ func requireShadowComparisonEvent(
 		return true
 	})
 	require.Equal(t, string(wideevents.NamespaceReplicationCompared), attributes["phase"])
-	var details map[string]any
-	require.NoError(t, json.Unmarshal([]byte(attributes["details"]), &details))
 	require.Equal(t, namespaceReplicationShadowTransport, details["transport"])
 	require.Equal(t, namespaceReplicationShadowMode, details["mode"])
 	require.Equal(t, boundary, details["comparison_boundary"])
@@ -306,6 +304,21 @@ func requireShadowComparisonEvent(
 	} else {
 		require.Equal(t, targetCluster, details["target_cluster"])
 	}
+	return details
+}
+
+func namespaceReplicationEventDetails(t *testing.T, record otellog.Record) map[string]any {
+	t.Helper()
+	require.Equal(t, wideevents.NamespaceLifecycleEventName, record.EventName())
+	attributes := make(map[string]string)
+	record.WalkAttributes(func(kv otellog.KeyValue) bool {
+		if kv.Value.Kind() == otellog.KindString {
+			attributes[kv.Key] = kv.Value.AsString()
+		}
+		return true
+	})
+	var details map[string]any
+	require.NoError(t, json.Unmarshal([]byte(attributes["details"]), &details))
 	return details
 }
 

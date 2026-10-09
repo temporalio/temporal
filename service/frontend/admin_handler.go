@@ -1046,6 +1046,7 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 	ctx context.Context,
 	request *adminservice.ApplyNamespaceMutationRequest,
 ) (*adminservice.ApplyNamespaceMutationResponse, error) {
+	startTime := time.Now() // nolint:forbidigo // Wall-clock time is used only for latency metrics.
 	if request == nil || request.GetNamespaceTask() == nil {
 		return nil, serviceerror.NewInvalidArgument("namespace_task is required")
 	}
@@ -1058,6 +1059,20 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 				namespaceReplicationShadowOutcomeError,
 			)
 			adh.emitShadowReceiveComparison(request, request.GetFingerprint(), actualFingerprint, namespaceReplicationShadowOutcomeError, err)
+		} else {
+			details := map[string]any{
+				"expected_task_fingerprint": hex.EncodeToString(request.GetFingerprint()),
+			}
+			if len(actualFingerprint) > 0 {
+				details["actual_task_fingerprint"] = hex.EncodeToString(actualFingerprint)
+			}
+			adh.observeAuthoritativeNamespaceMutation(
+				request,
+				nsreplication.CHASMApplyOutcomeFingerprintError,
+				err,
+				startTime,
+				details,
+			)
 		}
 		return nil, err
 	}
@@ -1085,6 +1100,16 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 				Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH,
 			}, nil
 		}
+		adh.observeAuthoritativeNamespaceMutation(
+			request,
+			nsreplication.CHASMApplyOutcomeFingerprintMismatch,
+			nil,
+			startTime,
+			map[string]any{
+				"expected_task_fingerprint": hex.EncodeToString(request.GetFingerprint()),
+				"actual_task_fingerprint":   hex.EncodeToString(actualFingerprint),
+			},
+		)
 		return nil, serviceerror.NewInvalidArgument("namespace mutation fingerprint mismatch")
 	}
 
@@ -1105,15 +1130,35 @@ func (adh *AdminHandler) ApplyNamespaceMutation(
 			Outcome: adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH,
 		}, nil
 	}
-
+	ctx = nsreplication.WithTaskMetricsContext(ctx, nsreplication.TaskMetricsContext{
+		SourceCluster: request.GetSourceCluster(),
+		TargetCluster: adh.clusterMetadata.GetCurrentClusterName(),
+		Transport:     nsreplication.CHASMReplicationTransport,
+	})
+	ctx = adh.withAuthoritativeNamespaceMutationEvent(ctx, request)
 	outcome, err := adh.namespaceMutationExecutor.ExecuteWithOutcome(ctx, payloadTask)
 	if err != nil {
+		adh.observeAuthoritativeNamespaceMutation(
+			request,
+			nsreplication.CHASMApplyOutcomeError,
+			err,
+			startTime,
+			nil,
+		)
 		return nil, err
 	}
 	wireOutcome, err := namespaceMutationResponseOutcome(outcome)
 	if err != nil {
+		adh.observeAuthoritativeNamespaceMutation(
+			request,
+			nsreplication.CHASMApplyOutcomeError,
+			err,
+			startTime,
+			nil,
+		)
 		return nil, err
 	}
+	adh.recordAuthoritativeNamespaceMutation(request, authoritativeReceiveOutcome(outcome), nil, startTime, nil)
 	return &adminservice.ApplyNamespaceMutationResponse{Outcome: wireOutcome}, nil
 }
 

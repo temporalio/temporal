@@ -549,14 +549,13 @@ func (h *taskExecutorImpl) emitNamespaceReplicationProcessed(
 		return
 	}
 
-	sourceTaskID := metadata.SourceTaskID
 	wideevents.EmitNamespaceReplicationLifecycle(h.eventLogger, wideevents.NamespaceReplicationLifecycleInput{
 		Phase:                     wideevents.NamespaceReplicationProcessed,
 		Outcome:                   outcome,
 		EventData:                 metadata.EventData,
 		SourceCluster:             metadata.SourceCluster,
 		TargetCluster:             metadata.TargetCluster,
-		SourceTaskID:              &sourceTaskID,
+		SourceTaskID:              metadata.SourceTaskID,
 		AttemptCount:              metadata.AttemptCount,
 		LocalNamespacePreMutation: localNamespacePreMutation,
 		CreateNamespaceRequest:    createRequest,
