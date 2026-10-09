@@ -53,7 +53,7 @@ func (l *Library) Components() []*chasm.RegistrableComponent {
 			// operator repair CLI uses it to resolve the exact CHASM business/run
 			// IDs returned by namespace-indexed queries.
 			chasm.WithBusinessIDAlias("NamespaceMutationBusinessId"),
-			chasm.WithSearchAttributes(namespaceIDSearchAttribute),
+			chasm.WithSearchAttributes(namespaceIDSearchAttribute, namespaceNameSearchAttribute),
 		),
 	}
 }
