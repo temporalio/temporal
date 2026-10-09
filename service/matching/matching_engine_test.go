@@ -3712,8 +3712,8 @@ func (s *matchingEngineSuite) getPhysicalTaskQueueManagerImplFromKey(ptq *Physic
 // the task manager to be empty, since task gc is best-effort.
 func (s *matchingEngineSuite) expectEmptyBacklog(ptq *PhysicalTaskQueueKey) {
 	pqMgr := s.getPhysicalTaskQueueManagerImplFromKey(ptq)
-	s.EventuallyWithT(func(collect *assert.CollectT) {
-		require.Zero(collect, totalApproximateBacklogCount(pqMgr.backlogMgr))
+	await.Require(context.Background(), s.T(), func(t *await.T) {
+		t.Require().Zero(totalApproximateBacklogCount(pqMgr.backlogMgr))
 	}, 5*time.Second, 10*time.Millisecond)
 }
 

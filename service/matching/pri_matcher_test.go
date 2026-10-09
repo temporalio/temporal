@@ -43,21 +43,61 @@ func (s *PriMatcherSuite) SetupTest() {
 	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnAnyUnexpectedError)
 }
 
+var testMatcherTaskQueue = tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+
+// testMatcherOpts configures newTestMatcher. The zero value is a root partition with no
+// client and no validator.
+type testMatcherOpts struct {
+	// partition of testMatcherTaskQueue to use. Defaults to the root partition. Child
+	// partitions get a forwarder that uses client.
+	partition *tqid.NormalPartition
+	client    matchingservice.MatchingServiceClient
+	validator taskValidator
+	// config, if set, can modify the task queue config before the matcher is created.
+	config func(*taskQueueConfig)
+}
+
+// newTestMatcher returns a priTaskMatcher for tests. It's not started: the caller should call
+// Start (after adding any initial tasks) and Stop.
+func (s *PriMatcherSuite) newTestMatcher(ctx context.Context, opts testMatcherOpts) *priTaskMatcher {
+	cfg := newTaskQueueConfig(testMatcherTaskQueue, NewConfig(dynamicconfig.NewNoopCollection()), "nsname")
+	if opts.config != nil {
+		opts.config(cfg)
+	}
+	partition := opts.partition
+	if partition == nil {
+		partition = testMatcherTaskQueue.RootPartition()
+	}
+	var fwdr *priForwarder
+	if partition.IsChild() {
+		var err error
+		fwdr, err = newPriForwarder(&cfg.forwarderConfig, UnversionedQueueKey(partition), opts.client, testhooks.TestHooks{})
+		if err != nil {
+			panic(err) // only fails for non-normal partitions
+		}
+	}
+	rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	rateLimitManager.Start()
+	return newPriTaskMatcher(
+		ctx,
+		cfg,
+		partition,
+		fwdr,
+		opts.client,
+		opts.validator,
+		s.logger,
+		metrics.NoopMetricsHandler,
+		rateLimitManager,
+		func() {}, // onRateLimited
+		func() {}, // markAlive
+	)
+}
+
 // TestValidatorWorksOnRoot tests that the validator goroutine can pick up tasks
 // on a root partition (where there is no forwarder).
 func (s *PriMatcherSuite) TestValidatorWorksOnRoot() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
-	cfg := newTaskQueueConfig(
-		tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
-		NewConfig(dynamicconfig.NewNoopCollection()),
-		"nsname",
-	)
-
-	partition := tqid.UnsafeTaskQueueFamily("nsid", "tq").
-		TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).
-		RootPartition()
 
 	var validatorValidatedTask atomic.Bool
 
@@ -68,24 +108,7 @@ func (s *PriMatcherSuite) TestValidatorWorksOnRoot() {
 		return true // task is valid
 	})
 
-	rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	rateLimitManager.Start()
-
-	tm := newPriTaskMatcher(
-		ctx,
-		cfg,
-		partition,
-		nil, // nil forwarder = root partition
-		nil, // no client needed for this test
-		mockValidator,
-		s.logger,
-		metrics.NoopMetricsHandler,
-		rateLimitManager,
-		func() {}, // onRateLimited
-		func() {}, // markAlive
-	)
-
-	// start the matcher
+	tm := s.newTestMatcher(ctx, testMatcherOpts{validator: mockValidator})
 	tm.Start()
 	defer tm.Stop()
 
@@ -126,13 +149,6 @@ func (s *PriMatcherSuite) TestForwardPollRetriesOnResourceExhausted() {
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		tq := tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-		childPartition := tq.NormalPartition(1) // child partition /1
-
-		cfg := newTaskQueueConfig(tq, NewConfig(dynamicconfig.NewNoopCollection()), "nsname")
-		// Use a generous poll timeout so we can distinguish retry success from timeout.
-		cfg.LongPollExpirationInterval = func() time.Duration { return 10 * time.Second }
-
 		mockClient := matchingservicemock.NewMockMatchingServiceClient(s.controller)
 
 		// First ForwardPoll call: return ResourceExhausted (simulating rate limit storm).
@@ -153,33 +169,14 @@ func (s *PriMatcherSuite) TestForwardPollRetriesOnResourceExhausted() {
 				}, nil),
 		)
 
-		// Create a priForwarder for the child partition (non-nil fwdr triggers child behavior).
-		queue := UnversionedQueueKey(childPartition)
-		fwdr, err := newPriForwarder(
-			&cfg.forwarderConfig,
-			queue,
-			mockClient,
-			testhooks.TestHooks{},
-		)
-		require.NoError(t, err)
-
-		rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-		rateLimitManager.Start()
-
-		tm := newPriTaskMatcher(
-			ctx,
-			cfg,
-			childPartition,
-			fwdr,
-			mockClient,
-			nil, // no validator needed on child
-			s.logger,
-			metrics.NoopMetricsHandler,
-			rateLimitManager,
-			func() {},
-			func() {},
-		)
-
+		tm := s.newTestMatcher(ctx, testMatcherOpts{
+			partition: testMatcherTaskQueue.NormalPartition(1),
+			client:    mockClient,
+			config: func(cfg *taskQueueConfig) {
+				// Use a generous poll timeout so we can distinguish retry success from timeout.
+				cfg.LongPollExpirationInterval = func() time.Duration { return 10 * time.Second }
+			},
+		})
 		tm.Start()
 		defer tm.Stop()
 
@@ -219,34 +216,12 @@ func (s *PriMatcherSuite) TestValidatorDrop_SetsDropReason() {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			cfg := newTaskQueueConfig(
-				tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
-				NewConfig(dynamicconfig.NewNoopCollection()),
-				"nsname",
-			)
-			partition := tqid.UnsafeTaskQueueFamily("nsid", "tq").
-				TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).
-				RootPartition()
-
 			// Validator rejects every task it sees, forcing the drop path.
 			mockValidator := NewMocktaskValidator(s.controller)
 			mockValidator.EXPECT().maybeValidate(gomock.Any(), gomock.Any()).Return(false).AnyTimes()
 
-			rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-			rateLimitManager.Start()
-			tm := newPriTaskMatcher(
-				ctx,
-				cfg,
-				partition,
-				nil, // nil forwarder = root partition -> validateTasksOnRoot path
-				nil,
-				mockValidator,
-				s.logger,
-				metrics.NoopMetricsHandler,
-				rateLimitManager,
-				func() {},
-				func() {},
-			)
+			// root partition -> validateTasksOnRoot path
+			tm := s.newTestMatcher(ctx, testMatcherOpts{validator: mockValidator})
 			tm.Start()
 			defer tm.Stop()
 
@@ -273,43 +248,6 @@ func (s *PriMatcherSuite) TestValidatorDrop_SetsDropReason() {
 			}
 		})
 	}
-}
-
-var testMatcherTaskQueue = tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-
-// newTestMatcher returns a started priTaskMatcher for the given partition of testMatcherTaskQueue.
-// Child partitions get a forwarder that uses client.
-func (s *PriMatcherSuite) newTestMatcher(
-	t *testing.T,
-	ctx context.Context,
-	partition *tqid.NormalPartition,
-	client matchingservice.MatchingServiceClient,
-	validator taskValidator,
-) *priTaskMatcher {
-	cfg := newTaskQueueConfig(testMatcherTaskQueue, NewConfig(dynamicconfig.NewNoopCollection()), "nsname")
-	var fwdr *priForwarder
-	if partition.IsChild() {
-		var err error
-		fwdr, err = newPriForwarder(&cfg.forwarderConfig, UnversionedQueueKey(partition), client, testhooks.TestHooks{})
-		require.NoError(t, err)
-	}
-	rateLimitManager := newRateLimitManager(&mockUserDataManager{}, cfg, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	rateLimitManager.Start()
-	tm := newPriTaskMatcher(
-		ctx,
-		cfg,
-		partition,
-		fwdr,
-		client,
-		validator,
-		s.logger,
-		metrics.NoopMetricsHandler,
-		rateLimitManager,
-		func() {},
-		func() {},
-	)
-	tm.Start()
-	return tm
 }
 
 func newTestBacklogTask(age time.Duration, completionFunc func(*internalTask, taskResponse)) *internalTask {
@@ -351,7 +289,8 @@ func (s *PriMatcherSuite) TestChildOfferForwardsToParent() {
 						return &matchingservice.AddWorkflowTaskResponse{}, tc.forwardErr
 					})
 
-				tm := s.newTestMatcher(t, ctx, child, client, nil)
+				tm := s.newTestMatcher(ctx, testMatcherOpts{partition: child, client: client})
+				tm.Start()
 				defer tm.Stop()
 				synctest.Wait() // let the task forwarder get in place
 
@@ -398,7 +337,8 @@ func (s *PriMatcherSuite) TestChildOfferQueryForwardsToParent() {
 						return resp, tc.forwardErr
 					})
 
-				tm := s.newTestMatcher(t, ctx, child, client, nil)
+				tm := s.newTestMatcher(ctx, testMatcherOpts{partition: child, client: client})
+				tm.Start()
 				defer tm.Stop()
 				synctest.Wait()
 
@@ -441,7 +381,8 @@ func (s *PriMatcherSuite) TestRootOfferBlocksOnlyForForwardedBacklogTasks() {
 		synctest.Test(s.T(), func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			tm := s.newTestMatcher(t, ctx, testMatcherTaskQueue.RootPartition(), nil, nil)
+			tm := s.newTestMatcher(ctx, testMatcherOpts{})
+			tm.Start()
 			defer tm.Stop()
 
 			outcome, err := tm.Offer(ctx, newSyncTask(nil))
@@ -454,7 +395,8 @@ func (s *PriMatcherSuite) TestRootOfferBlocksOnlyForForwardedBacklogTasks() {
 		synctest.Test(s.T(), func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			tm := s.newTestMatcher(t, ctx, testMatcherTaskQueue.RootPartition(), nil, nil)
+			tm := s.newTestMatcher(ctx, testMatcherOpts{})
+			tm.Start()
 			defer tm.Stop()
 
 			outcome, err := tm.Offer(ctx, newSyncTask(childForwardInfo(enumsspb.TASK_SOURCE_HISTORY)))
@@ -467,7 +409,8 @@ func (s *PriMatcherSuite) TestRootOfferBlocksOnlyForForwardedBacklogTasks() {
 		synctest.Test(s.T(), func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			tm := s.newTestMatcher(t, ctx, testMatcherTaskQueue.RootPartition(), nil, nil)
+			tm := s.newTestMatcher(ctx, testMatcherOpts{})
+			tm.Start()
 			defer tm.Stop()
 
 			task := newSyncTask(childForwardInfo(enumsspb.TASK_SOURCE_DB_BACKLOG))
@@ -497,7 +440,8 @@ func (s *PriMatcherSuite) TestRootOfferBlocksOnlyForForwardedBacklogTasks() {
 		synctest.Test(s.T(), func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			tm := s.newTestMatcher(t, ctx, testMatcherTaskQueue.RootPartition(), nil, nil)
+			tm := s.newTestMatcher(ctx, testMatcherOpts{})
+			tm.Start()
 			defer tm.Stop()
 
 			// The root validator will periodically take the task and send it back for
@@ -537,7 +481,8 @@ func (s *PriMatcherSuite) TestRootOfferQueryNoRecentPoller() {
 			synctest.Test(s.T(), func(t *testing.T) {
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
-				tm := s.newTestMatcher(t, ctx, testMatcherTaskQueue.RootPartition(), nil, nil)
+				tm := s.newTestMatcher(ctx, testMatcherOpts{})
+				tm.Start()
 				defer tm.Stop()
 
 				if tc.pollerAge > 0 {
@@ -592,7 +537,8 @@ func (s *PriMatcherSuite) TestChildBacklogForwarding() {
 				validator := NewMocktaskValidator(s.controller)
 				validator.EXPECT().maybeValidate(gomock.Any(), gomock.Any()).Return(true)
 
-				tm := s.newTestMatcher(t, ctx, child, client, validator)
+				tm := s.newTestMatcher(ctx, testMatcherOpts{partition: child, client: client, validator: validator})
+				tm.Start()
 				defer tm.Stop()
 				synctest.Wait()
 

@@ -25,7 +25,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	testutil "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/await"
-	"go.temporal.io/server/common/testing/protoassert"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
@@ -655,20 +655,20 @@ func (s *BacklogManagerTestSuite) TestRespoolTaskAfterStartError() {
 		CreateTime: timestamp.TimeNowPtrUtc(),
 		ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
 	}))
-	s.Require().Eventually(func() bool { return s.capturedTasksLen() == 1 }, 5*time.Second, 10*time.Millisecond)
+	await.RequireTrue(s.T(), func() bool { return s.capturedTasksLen() == 1 }, 5*time.Second, 10*time.Millisecond)
 	task1 := s.capturedTasks()[0]
 
 	task1.finish(taskFinishResult{err: errors.New("failed to start"), consumedToken: true})
 
-	s.Require().Eventually(func() bool { return s.capturedTasksLen() == 2 }, 5*time.Second, 10*time.Millisecond)
+	await.RequireTrue(s.T(), func() bool { return s.capturedTasksLen() == 2 }, 5*time.Second, 10*time.Millisecond)
 	task2 := s.capturedTasks()[1]
-	protoassert.ProtoEqual(s.T(), task1.event.Data, task2.event.Data)
+	protorequire.ProtoEqual(s.T(), task1.event.Data, task2.event.Data)
 	s.NotEqual(task1.event.TaskId, task2.event.TaskId)
 	s.EqualValues(1, totalApproximateBacklogCount(s.blm))
 
 	// the original task gets acked and deleted, leaving only the respooled copy
 	queue := s.blm.getDB().queue
-	s.Eventually(func() bool { return s.taskMgr.getTaskCount(queue) == 1 }, 5*time.Second, 10*time.Millisecond)
+	await.RequireTrue(s.T(), func() bool { return s.taskMgr.getTaskCount(queue) == 1 }, 5*time.Second, 10*time.Millisecond)
 
 	task2.finish(taskFinishResult{consumedToken: true})
 	s.Zero(totalApproximateBacklogCount(s.blm))
@@ -692,7 +692,7 @@ func (s *BacklogManagerTestSuite) TestTaskGC_BatchSize() {
 			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
 		}))
 	}
-	s.Require().Eventually(func() bool { return s.capturedTasksLen() == taskCount }, 5*time.Second, 10*time.Millisecond)
+	await.RequireTrue(s.T(), func() bool { return s.capturedTasksLen() == taskCount }, 5*time.Second, 10*time.Millisecond)
 	tasks := s.capturedTasks()
 	slices.SortFunc(tasks, func(a, b *internalTask) int {
 		if a.fairLevel().less(b.fairLevel()) {
@@ -713,7 +713,7 @@ func (s *BacklogManagerTestSuite) TestTaskGC_BatchSize() {
 
 		// The third one reaches the batch size.
 		tasks[3*batch+2].finish(taskFinishResult{consumedToken: true})
-		s.Eventually(func() bool { return dbTaskCount() == taskCount-3*(batch+1) }, 5*time.Second, 10*time.Millisecond)
+		await.RequireTrue(s.T(), func() bool { return dbTaskCount() == taskCount-3*(batch+1) }, 5*time.Second, 10*time.Millisecond)
 	}
 }
 
