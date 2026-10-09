@@ -454,10 +454,6 @@ func (a *Activity) HandleCanceled(
 func (a *Activity) recordLastWorkerPrincipal(
 	ctx chasm.MutableContext,
 ) {
-	config := activityContextFromChasm(ctx).config
-	if !config.EnablePrincipalPropagation(ctx.NamespaceEntry().Name().String()) {
-		return
-	}
 	a.LastAttempt.Get(ctx).LastWorkerPrincipal = requestPrincipal(ctx)
 }
 
