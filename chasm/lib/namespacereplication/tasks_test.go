@@ -1219,15 +1219,15 @@ func TestApplyPeerTask_Execute_RetryBudgetBoundary(t *testing.T) {
 		wantThreshold    bool
 	}{
 		{
-			name:             "below pending alert threshold retries",
-			elapsed:          peerPendingAlertThreshold - time.Nanosecond,
+			name:             "below one-minute pending alert threshold retries",
+			elapsed:          time.Minute - time.Nanosecond,
 			wantOutcome:      namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING,
 			wantStatus:       namespacereplicationpb.COMPONENT_STATUS_RUNNING,
 			wantNewTimerTask: 1,
 		},
 		{
-			name:             "at pending alert threshold retries and emits threshold metric",
-			elapsed:          peerPendingAlertThreshold,
+			name:             "at one-minute pending alert threshold retries and emits threshold metric",
+			elapsed:          time.Minute,
 			wantOutcome:      namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING,
 			wantStatus:       namespacereplicationpb.COMPONENT_STATUS_RUNNING,
 			wantNewTimerTask: 1,
