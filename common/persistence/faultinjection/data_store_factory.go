@@ -25,11 +25,14 @@ type (
 func NewFaultInjectionDatastoreFactory(
 	fiConfig *config.FaultInjection,
 	baseFactory persistence.DataStoreFactory,
-) *FaultInjectionDataStoreFactory {
+) (*FaultInjectionDataStoreFactory, error) {
+	if err := fiConfig.Validate(); err != nil {
+		return nil, err
+	}
 	return &FaultInjectionDataStoreFactory{
 		baseFactory: baseFactory,
 		fiConfig:    fiConfig,
-	}
+	}, nil
 }
 
 func (d *FaultInjectionDataStoreFactory) Close() {

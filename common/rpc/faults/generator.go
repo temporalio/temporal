@@ -1,5 +1,5 @@
-// Package faultinjection registers request and response faults for multiple transports.
-package faultinjection
+// Package faults registers request and response faults for multiple transports.
+package faults
 
 import (
 	"context"
@@ -45,6 +45,21 @@ type ResponseCallback[Req, Resp any] func(ctx context.Context, operation string,
 type Generator[Req, Resp any] interface {
 	GenerateRequest(ctx context.Context, operation string, req Req) *Outcome[Resp]
 	GenerateResponse(ctx context.Context, operation string, req Req, resp Resp, err error) *Outcome[Resp]
+}
+
+// Invoke applies the shared request/response fault lifecycle around a call.
+func Invoke[Req, Resp any](ctx context.Context, generator Generator[Req, Resp], operation string, req Req, call func() (Resp, error)) (Resp, error) {
+	if generator == nil {
+		return call()
+	}
+	if outcome := generator.GenerateRequest(ctx, operation, req); outcome != nil {
+		return outcome.Response, outcome.Error
+	}
+	resp, err := call()
+	if outcome := generator.GenerateResponse(ctx, operation, req, resp, err); outcome != nil {
+		return outcome.Response, outcome.Error
+	}
+	return resp, err
 }
 
 // Hooks installs callbacks outside the generator.

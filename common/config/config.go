@@ -52,7 +52,8 @@ type (
 		// ExporterConfig allows the specification of process-wide OTEL exporters
 		ExporterConfig telemetry.ExportConfig `yaml:"otel"`
 		// Visibility related config
-		Visibility Visibility `yaml:"visibility"`
+		Visibility     Visibility        `yaml:"visibility"`
+		FaultInjection RPCFaultInjection `yaml:"faultInjection"`
 	}
 
 	// Service contains the service specific config items
@@ -693,6 +694,9 @@ const (
 
 // Validate validates this config
 func (c *Config) Validate() error {
+	if err := c.FaultInjection.Validate(); err != nil {
+		return err
+	}
 	if err := c.Persistence.Validate(); err != nil {
 		return err
 	}

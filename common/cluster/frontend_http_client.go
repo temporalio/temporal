@@ -16,18 +16,21 @@ type tlsConfigProvider interface {
 }
 
 type FrontendHTTPClientCache struct {
-	metadata    Metadata
-	tlsProvider tlsConfigProvider
-	clients     *collection.FallibleOnceMap[string, *common.FrontendHTTPClient]
+	transportWrapper func(http.RoundTripper) http.RoundTripper
+	metadata         Metadata
+	tlsProvider      tlsConfigProvider
+	clients          *collection.FallibleOnceMap[string, *common.FrontendHTTPClient]
 }
 
 func NewFrontendHTTPClientCache(
 	metadata Metadata,
 	tlsProvider tlsConfigProvider,
+	transportWrapper func(http.RoundTripper) http.RoundTripper,
 ) *FrontendHTTPClientCache {
 	cache := &FrontendHTTPClientCache{
-		metadata:    metadata,
-		tlsProvider: tlsProvider,
+		metadata:         metadata,
+		transportWrapper: transportWrapper,
+		tlsProvider:      tlsProvider,
 	}
 	cache.clients = collection.NewFallibleOnceMap(cache.newClientForCluster)
 	metadata.RegisterMetadataChangeCallback(cache, cache.evictionCallback)
@@ -70,10 +73,14 @@ func (c *FrontendHTTPClientCache) newClientForCluster(targetClusterName string) 
 		return nil, err
 	}
 
+	var clientTransport http.RoundTripper = transport
+	if c.transportWrapper != nil {
+		clientTransport = c.transportWrapper(transport)
+	}
 	return &common.FrontendHTTPClient{
 		Address: targetInfo.HTTPAddress,
 		Scheme:  urlScheme,
-		Client:  http.Client{Transport: transport},
+		Client:  http.Client{Transport: clientTransport},
 	}, nil
 }
 
