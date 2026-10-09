@@ -43,6 +43,8 @@ type BacklogManagerTestSuite struct {
 	blm        backlogManager
 	controller *gomock.Controller
 	cancelCtx  context.CancelFunc
+	ctx        context.Context
+	tlCfg      *taskQueueConfig
 	taskMgr    *testTaskManager
 	ptqMgr     *MockphysicalTaskQueueManager
 	metricsCap *metricstest.CaptureHandler
@@ -91,6 +93,7 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 	prtn := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0)
 	queue := UnversionedQueueKey(prtn)
 	tlCfg := newTaskQueueConfig(prtn.TaskQueue(), NewConfig(s.cfgcol), "test-namespace")
+	s.tlCfg = tlCfg
 
 	s.ptqMgr = NewMockphysicalTaskQueueManager(s.controller)
 	s.ptqMgr.EXPECT().QueueKey().Return(queue).AnyTimes()
@@ -100,6 +103,7 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 
 	var ctx context.Context
 	ctx, s.cancelCtx = context.WithCancel(context.Background())
+	s.ctx = ctx
 	s.T().Cleanup(s.cancelCtx)
 
 	if s.fairness {
@@ -464,9 +468,10 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 
 	s.EqualValues(3, totalApproximateBacklogCount(s.blm))
 
-	// Inject backlog count divergence (simulating accumulated drift).
+	// Inject backlog count divergence (simulating accumulated drift). Not asserted: the running
+	// pump corrects the count whenever it reads to the end of the backlog, so the drift may
+	// already be gone.
 	db.updateBacklogStats(2, time.Time{})
-	s.EqualValues(5, totalApproximateBacklogCount(s.blm))
 
 	// Advance maxReadLevel past all task IDs to simulate a range renewal.
 	// After direct-add, readLevel == old maxReadLevel == last task ID.
@@ -578,6 +583,82 @@ func (s *BacklogManagerTestSuite) dbAckLevel(blm *priBacklogManagerImpl) int64 {
 	blm.db.Lock()
 	defer blm.db.Unlock()
 	return blm.db.subqueues[subqueueZero].AckLevel
+}
+
+// TestApproximateBacklogCount_CorrectedAfterOwnershipChange covers a partition that moves to a new
+// owner before its count was persisted. Appends skip the metadata write, so the new owner takes over
+// with the count from before the appends while its reader still loads the task rows. Reading to the
+// end of the backlog must correct the count to the tasks that are actually there.
+func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_CorrectedAfterOwnershipChange() {
+	if !s.newMatcher || s.fairness {
+		s.T().Skip("only for priority backlog manager")
+	}
+	s.cfgcli.OverrideSetting(dynamicconfig.MatchingMetadataUpdateOnAppendInterval, time.Hour)
+	s.setupToCaptureTasks()
+
+	prevOwner, _, start := s.initPriReaderAtEnd()
+	s.createTasksAt(prevOwner, start+1, start+2)
+	s.Require().EqualValues(2, prevOwner.db.getTotalApproximateBacklogCount())
+
+	newOwner := newPriBacklogManager(s.ctx, s.ptqMgr, s.tlCfg, s.taskMgr, s.logger, s.logger, nil, s.metricsCap, false)
+	_, err := newOwner.db.RenewLease(newOwner.tqCtx)
+	s.Require().NoError(err)
+	s.Require().Zero(newOwner.db.getTotalApproximateBacklogCount(), "takeover loads the count persisted before the appends")
+
+	tr := newPriTaskReader(newOwner, subqueueZero, s.dbAckLevel(newOwner))
+	loaded := false
+	for {
+		batch, err := tr.getTaskBatch(newOwner.tqCtx)
+		s.Require().NoError(err)
+		if len(batch.tasks) > 0 {
+			tr.processTaskBatch(batch.tasks)
+			loaded = true
+			continue
+		}
+		if loaded {
+			// Ack the later task only: it stays counted until the ack level passes it, so the
+			// corrected count must include it.
+			s.Require().Len(s.capturedTasks(), 2)
+			for _, t := range s.capturedTasks() {
+				if t.event.TaskId == start+2 {
+					t.finish(taskFinishResult{consumedToken: true})
+				}
+			}
+			loaded = false
+		}
+		tr.setReadLevelAfterGap(batch.readLevel)
+		if batch.isReadBatchDone {
+			tr.setKnownBacklogCountAtEnd(batch.readLevel)
+			break
+		}
+	}
+
+	s.EqualValues(2, newOwner.db.getTotalApproximateBacklogCount())
+	newOwner.db.Lock()
+	oldest := newOwner.db.subqueues[subqueueZero].oldestTime
+	newOwner.db.Unlock()
+	s.False(oldest.IsZero(), "backlog age must be set alongside the corrected count")
+}
+
+// TestApproximateBacklogCount_KnownCountSkippedAfterConcurrentWrite guards the correction above
+// against a write that lands between the reader's end-of-backlog scan and applying it: the write has
+// already counted itself in the db, but hasn't reached the reader's loaded tasks yet.
+func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_KnownCountSkippedAfterConcurrentWrite() {
+	if !s.newMatcher || s.fairness {
+		s.T().Skip("only for priority backlog manager")
+	}
+	blm, tr, start := s.initPriReaderAtEnd()
+
+	batch, err := tr.getTaskBatch(blm.tqCtx)
+	s.Require().NoError(err)
+	s.Require().Empty(batch.tasks)
+	s.Require().True(batch.isReadBatchDone)
+
+	s.createTasksAt(blm, start+1)
+	tr.setReadLevelAfterGap(batch.readLevel)
+	tr.setKnownBacklogCountAtEnd(batch.readLevel)
+
+	s.EqualValues(1, blm.db.getTotalApproximateBacklogCount())
 }
 
 // TestSetReadLevelAfterGap_IgnoresStaleLevels covers the read/write race where getTaskBatch

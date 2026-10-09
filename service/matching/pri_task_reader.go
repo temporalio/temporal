@@ -189,7 +189,9 @@ func (tr *priTaskReader) getTasksPump() {
 
 		if len(batch.tasks) == 0 {
 			tr.setReadLevelAfterGap(batch.readLevel)
-			if !batch.isReadBatchDone {
+			if batch.isReadBatchDone {
+				tr.setKnownBacklogCountAtEnd(batch.readLevel)
+			} else {
 				tr.SignalTaskLoading()
 			}
 			continue
@@ -509,6 +511,25 @@ func (tr *priTaskReader) setReadLevelAfterGap(newReadLevel int64) {
 		tr.backlogMgr.db.updateAckLevelAndBacklogStats(tr.subqueue, tr.ackLevel, 0, tr.backlogAge.oldestTime())
 	}
 	tr.readLevel = newReadLevel
+}
+
+// setKnownBacklogCountAtEnd corrects the backlog count after a scan found no tasks up to
+// readLevel, the end of the backlog. At that point every unexpired task above the ack level is in
+// outstandingTasks, so its size is the backlog count as it is tracked here: tasks leave the count
+// when the ack level passes them, not when they are acked, and tasks dropped as expired on read
+// leave it now rather than when the ack level passes them.
+//
+// This corrects a count that was never persisted before a previous owner lost the partition:
+// appends usually skip the metadata write, so the new owner loads the older count while its reader
+// still loads the task rows.
+func (tr *priTaskReader) setKnownBacklogCountAtEnd(readLevel int64) {
+	tr.lock.Lock()
+	defer tr.lock.Unlock()
+	if tr.readLevel != readLevel {
+		// signalNewTasks moved past the scan, so readLevel is no longer the end.
+		return
+	}
+	tr.backlogMgr.db.setKnownBacklogCount(tr.subqueue, int64(tr.outstandingTasks.Size()), readLevel, tr.backlogAge.oldestTime())
 }
 
 func (tr *priTaskReader) getLevels() (readLevel, ackLevel int64) {
