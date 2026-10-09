@@ -47,13 +47,14 @@ const postAwaitTimeoutReserve = 10 * time.Second
 //
 // Pass the *await.T to require.*/assert.* — failures cause a retry, not a
 // test failure. Use t.Context() inside the callback to honor the timeout.
+// The poll interval is the base for exponential backoff capped at 2s.
 func Require(ctx context.Context, tb testing.TB, condition func(*T), timeout, pollInterval time.Duration) {
 	tb.Helper()
 	run(ctx, tb, condition, legacyConfig(timeout, pollInterval, ""), "Require", requireMisuseHint, true)
 }
 
 // Requiref is like [Require] but adds a formatted message to the timeout
-// failure.
+// failure. Its poll interval is also used as the base for exponential backoff.
 func Requiref(ctx context.Context, tb testing.TB, condition func(*T), timeout, pollInterval time.Duration, msg string, args ...any) {
 	tb.Helper()
 	run(ctx, tb, condition, legacyConfig(timeout, pollInterval, fmt.Sprintf(msg, args...)), "Requiref", requireMisuseHint, true)
@@ -184,8 +185,12 @@ func run(
 			return
 		}
 
-		// Wait for pollInterval, or context is canceled or deadline is reached.
-		sleep(awaitCtx, deadline, cfg.pollInterval)
+		// Wait for the next poll interval, or context is canceled or deadline is reached.
+		pollInterval := min(
+			nextPollInterval(cfg.pollInterval, report.attempts),
+			max(time.Nanosecond, time.Until(deadline)/2),
+		)
+		sleep(awaitCtx, deadline, pollInterval)
 	}
 }
 
