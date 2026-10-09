@@ -475,7 +475,7 @@ func (a *Activity) HandleCompleted(
 	}); err != nil {
 		return nil, err
 	}
-	a.LastAttempt.Get(ctx).LastWorkerPrincipal = event.Principal
+	a.recordLastWorkerPrincipal(ctx, event.Principal)
 
 	return &historyservice.RespondActivityTaskCompletedResponse{}, nil
 }
@@ -515,7 +515,7 @@ func (a *Activity) HandleFailed(
 	}
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
 		a.emitOnAttemptFailedMetrics(ctx, enrichedHandler)
-		a.LastAttempt.Get(ctx).LastWorkerPrincipal = event.Principal
+		a.recordLastWorkerPrincipal(ctx, event.Principal)
 
 		return &historyservice.RespondActivityTaskFailedResponse{}, nil
 	}
@@ -528,7 +528,7 @@ func (a *Activity) HandleFailed(
 	}); err != nil {
 		return nil, err
 	}
-	a.LastAttempt.Get(ctx).LastWorkerPrincipal = event.Principal
+	a.recordLastWorkerPrincipal(ctx, event.Principal)
 
 	return &historyservice.RespondActivityTaskFailedResponse{}, nil
 }
@@ -554,9 +554,20 @@ func (a *Activity) HandleCanceled(
 	}); err != nil {
 		return nil, err
 	}
-	a.LastAttempt.Get(ctx).LastWorkerPrincipal = event.Principal
+	a.recordLastWorkerPrincipal(ctx, event.Principal)
 
 	return &historyservice.RespondActivityTaskCanceledResponse{}, nil
+}
+
+func (a *Activity) recordLastWorkerPrincipal(
+	ctx chasm.MutableContext,
+	principal *commonpb.Principal,
+) {
+	config := activityContextFromChasm(ctx).config
+	if !config.EnablePrincipalPropagation(ctx.NamespaceEntry().Name().String()) {
+		return
+	}
+	a.LastAttempt.Get(ctx).LastWorkerPrincipal = principal
 }
 
 // Terminate implements the chasm.RootComponent interface.
