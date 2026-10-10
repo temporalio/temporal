@@ -264,6 +264,38 @@ func (s *PartitionManagerTestSuite) TestGrantEagerDispatchChecksVersionBacklog()
 	}, items)
 }
 
+func (s *PartitionManagerTestSuite) TestGrantEagerDispatchRecordsGrantsOnTargetQueue() {
+	newQueue := func(backlogPriority priorityKey) *MockphysicalTaskQueueManager {
+		queue := NewMockphysicalTaskQueueManager(s.controller)
+		queue.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
+		queue.EXPECT().MarkAlive().AnyTimes()
+		queue.EXPECT().NonNegligibleBacklogPriority().Return(backlogPriority).AnyTimes()
+		return queue
+	}
+	// The default queue is not targeted, so any RecordEagerDispatch call on it fails the test.
+	defaultQueue := newQueue(0)
+	versionQueue := newQueue(3)
+	versionQueue.EXPECT().RecordEagerDispatch(priorityKey(2), int32(2)).Times(1)
+
+	partitionMgr := s.newEagerDispatchPartitionManager(0, nil)
+	partitionMgr.defaultQueueFuture = future.NewFuture[physicalTaskQueueManager]()
+	partitionMgr.defaultQueueFuture.Set(defaultQueue, nil)
+	partitionMgr.versionedQueues = map[PhysicalTaskQueueVersion]physicalTaskQueueManager{
+		{deploymentSeriesName: "deployment", buildId: "old"}: versionQueue,
+	}
+
+	version := workerDeploymentVersion("old")
+	items, err := partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
+		{Count: 2, Priority: &commonpb.Priority{PriorityKey: 2}, Version: version},
+		{Count: 1, Priority: &commonpb.Priority{PriorityKey: 4}, Version: version}, // denied by backlog: not recorded
+	})
+	s.Require().NoError(err)
+	s.Require().Equal([]*matchingservice.GrantEagerDispatchResponse_Item{
+		{GrantedCount: 2},
+		{},
+	}, items)
+}
+
 func (s *PartitionManagerTestSuite) TestGrantEagerDispatchReturnsPartialRateLimitGrant() {
 	partitionMgr := s.newRateLimitedEagerDispatchPartitionManager()
 
@@ -2778,7 +2810,7 @@ func TestStickyQueueAdjustedStats_VersioningAttributionSkipped(t *testing.T) {
 	ts.Advance(time.Second)
 
 	// Verify the raw stats have non-zero rates (precondition for the test to be meaningful).
-	rawStats := dbq.GetStatsByPriority(true)
+	rawStats := dbq.GetStatsByPriority(true, true)
 	require.Greater(t, rawStats[3].TasksAddRate, float32(0))
 	require.Greater(t, rawStats[3].TasksDispatchRate, float32(0))
 
@@ -2789,6 +2821,79 @@ func TestStickyQueueAdjustedStats_VersioningAttributionSkipped(t *testing.T) {
 	require.NotNil(t, adjustedStats)
 	require.InDelta(t, rawStats[3].TasksAddRate, adjustedStats.TasksAddRate, 0)
 	require.InDelta(t, rawStats[3].TasksDispatchRate, adjustedStats.TasksDispatchRate, 0)
+}
+
+func TestEagerDispatchStats(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+
+	ns, registry := createMockNamespaceCache(ctrl, namespace.Name(namespaceName))
+	config := defaultTestConfig()
+
+	matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+	matchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{}, nil).AnyTimes()
+	engine := createTestMatchingEngine(logger, ctrl, config, matchingClient, registry)
+
+	// Use a fixed time source so rate calculations are deterministic across reads.
+	ts := clock.NewEventTimeSource()
+	ts.Update(time.Now())
+	engine.timeSource = ts
+
+	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+	require.NoError(t, err)
+	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition()
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, ns.Name())
+
+	pm, err := newTaskQueuePartitionManager(engine, ns, partition, tqConfig, logger, logger, metrics.NoopMetricsHandler, &mockUserDataManager{})
+	require.NoError(t, err)
+	engine.Start()
+	pm.Start()
+	defer pm.Stop(unloadCauseShuttingDown)
+	defer engine.Stop()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	require.NoError(t, pm.WaitUntilInitialized(ctx))
+
+	items, err := pm.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
+		{Count: 3, Priority: &commonpb.Priority{PriorityKey: 3}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int32(3), items[0].GetGrantedCount())
+
+	// Advance time so the task tracker has positive elapsed time for rate calculation.
+	ts.Advance(time.Second)
+
+	dbq := pm.defaultQueue()
+	require.NotNil(t, dbq)
+
+	// Eager grants count as both added and dispatched, and never as backlog.
+	withEager := dbq.GetStatsByPriority(true, true)[3]
+	require.Greater(t, withEager.GetTasksAddRate(), float32(0))
+	require.InDelta(t, withEager.GetTasksAddRate(), withEager.GetTasksDispatchRate(), 0)
+	require.Zero(t, withEager.GetApproximateBacklogCount())
+
+	withoutEager := dbq.GetStatsByPriority(true, false)[3]
+	require.Zero(t, withoutEager.GetTasksAddRate())
+	require.Zero(t, withoutEager.GetTasksDispatchRate())
+
+	// DescribeTaskQueuePartition reports them.
+	desc, err := pm.Describe(context.Background(), map[string]bool{"": true}, false, true, false, false, true)
+	require.NoError(t, err)
+	described := desc.GetVersionsInfoInternal()[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
+	require.InDelta(t, withEager.GetTasksAddRate(), described.GetTasksAddRate(), 0)
+	require.InDelta(t, withEager.GetTasksDispatchRate(), described.GetTasksDispatchRate(), 0)
+
+	// Poller scaling inputs do not, since eager tasks never reach this queue's pollers.
+	scalingStats := pm.GetPhysicalQueueAdjustedStats(context.Background(), dbq)
+	require.NotNil(t, scalingStats)
+	require.Zero(t, scalingStats.GetTasksAddRate())
+	require.Zero(t, scalingStats.GetTasksDispatchRate())
+	addRate, syncMatchRate := dbq.(*physicalTaskQueueManagerImpl).getAggregateRates()
+	require.Zero(t, addRate)
+	require.Zero(t, syncMatchRate)
 }
 
 func (s *PartitionManagerTestSuite) newEagerDispatchPartitionManager(
@@ -2829,6 +2934,7 @@ func (s *PartitionManagerTestSuite) newEagerDispatchPhysicalQueue(backlogPriorit
 	queue.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
 	queue.EXPECT().MarkAlive().AnyTimes()
 	queue.EXPECT().NonNegligibleBacklogPriority().Return(backlogPriority).AnyTimes()
+	queue.EXPECT().RecordEagerDispatch(gomock.Any(), gomock.Any()).AnyTimes()
 	return queue
 }
 
