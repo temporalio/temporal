@@ -43,11 +43,13 @@ type AbstractState struct {
 // Config is what the model needs to know about an activity's configuration: which options are set,
 // and what their durations imply regarding retries.
 type Config struct {
-	HasScheduleToClose bool
-	HasScheduleToStart bool
-	HasHeartbeat       bool
-	HasStartDelay      bool
-	MaxAttempts        int32 // 0 = unlimited
+	// InitialAttemptStarted means the first attempt was delivered eagerly and is already running.
+	InitialAttemptStarted bool
+	HasScheduleToClose    bool
+	HasScheduleToStart    bool
+	HasHeartbeat          bool
+	HasStartDelay         bool
+	MaxAttempts           int32 // 0 = unlimited
 
 	// NonRetryableTimeouts are the timeout elapses whose failure the retry policy refuses to retry,
 	// so that the timeout closes the activity instead of scheduling another attempt.

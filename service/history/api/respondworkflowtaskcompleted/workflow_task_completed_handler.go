@@ -711,7 +711,17 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		},
 	}
 	metrics.ActivityEagerExecutionCounter.With(
-		workflow.GetPerTaskQueueFamilyScope(handler.metricsHandler, handler.mutableState.GetNamespaceEntry().Name(), ai.TaskQueue, handler.config),
+		metrics.GetPerActivityEagerExecutionScope(
+			handler.metricsHandler,
+			handler.mutableState.GetNamespaceEntry().Name().String(),
+			ai.TaskQueue,
+			handler.config.BreakdownMetricsByTaskQueue(
+				handler.mutableState.GetNamespaceEntry().Name().String(),
+				ai.TaskQueue,
+				enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			),
+			metrics.HistoryRespondWorkflowTaskCompletedScope,
+		),
 	).Record(1)
 
 	return func(resp *historyservice.RespondWorkflowTaskCompletedResponse) error {
