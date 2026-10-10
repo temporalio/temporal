@@ -222,7 +222,7 @@ func AuthorizationInterceptorProvider(
 		cfg.Global.Authorization.AuthExtraHeaderName,
 		serviceConfig.ExposeAuthorizerErrors,
 		dynamicconfig.EnableCrossNamespaceCommands.Get(dc),
-		dynamicconfig.EnablePrincipalPropagation.Get(dc),
+		dynamicconfig.EnablePrincipalHeader.Get(dc),
 		dynamicconfig.DisableStreamingAuthorizer.Get(dc),
 	)
 }

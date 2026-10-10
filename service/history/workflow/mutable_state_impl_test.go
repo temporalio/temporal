@@ -7709,15 +7709,28 @@ func (s *mutableStateSuite) TestUpdateActivityProgressApproximateSize() {
 	)
 }
 
+func (s *mutableStateSuite) principalSizeCounter(name string) int64 {
+	var total int64
+	for _, c := range s.testScope.Snapshot().Counters() {
+		if c.Name() == "test."+name {
+			total += c.Value()
+		}
+	}
+	return total
+}
+
 func (s *mutableStateSuite) TestCloseTransaction_PrincipalStamped() {
 	for _, tc := range []struct {
-		name   string
-		policy historyi.TransactionPolicy
+		name               string
+		policy             historyi.TransactionPolicy
+		propagationEnabled bool
 	}{
-		{"Active", historyi.TransactionPolicyActive},
-		{"Passive", historyi.TransactionPolicyPassive},
+		{"ActivePropagationEnabled", historyi.TransactionPolicyActive, true},
+		{"ActivePropagationDisabled", historyi.TransactionPolicyActive, false},
+		{"Passive", historyi.TransactionPolicyPassive, true},
 	} {
 		s.Run(tc.name, func() {
+			s.mockConfig.EnablePrincipalPropagation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(tc.propagationEnabled)
 			namespaceEntry := tests.GlobalNamespaceEntry
 			s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
@@ -7739,6 +7752,9 @@ func (s *mutableStateSuite) TestCloseTransaction_PrincipalStamped() {
 			)
 			s.NoError(err)
 
+			writtenBefore := s.principalSizeCounter(metrics.HistoryPrincipalSize.Name())
+			skippedBefore := s.principalSizeCounter(metrics.HistoryPrincipalSizeSkipped.Name())
+
 			// Close the transaction with a principal in context.
 			principal := &commonpb.Principal{Type: "user", Name: "alice"}
 			ctx := headers.SetPrincipal(context.Background(), principal)
@@ -7746,23 +7762,98 @@ func (s *mutableStateSuite) TestCloseTransaction_PrincipalStamped() {
 			s.NoError(err)
 
 			s.NotEmpty(eventsSeq)
+			var eventCount int
 			for _, we := range eventsSeq {
 				for _, event := range we.Events {
-					if tc.policy == historyi.TransactionPolicyActive {
-						// Active: all events should be stamped with the caller's principal.
+					eventCount++
+					if tc.policy == historyi.TransactionPolicyActive && tc.propagationEnabled {
 						s.Equal("user", event.Principal.GetType(), "event %s should have principal type 'user'", event.EventType)
 						s.Equal("alice", event.Principal.GetName(), "event %s should have principal name 'alice'", event.EventType)
 					} else {
-						// Passive: events must not be stamped
-						s.Nil(event.Principal, "event %s should not have principal stamped in passive mode", event.EventType)
+						s.Nil(event.Principal, "event %s should not have principal stamped", event.EventType)
 					}
 				}
 			}
+
+			expectedSize := int64(eventCount * proto.Size(&historypb.HistoryEvent{Principal: principal}))
+			var expectedWritten, expectedSkipped int64
+			if tc.policy == historyi.TransactionPolicyActive {
+				if tc.propagationEnabled {
+					expectedWritten = expectedSize
+				} else {
+					expectedSkipped = expectedSize
+				}
+			}
+			s.Equal(expectedWritten, s.principalSizeCounter(metrics.HistoryPrincipalSize.Name())-writtenBefore)
+			s.Equal(expectedSkipped, s.principalSizeCounter(metrics.HistoryPrincipalSizeSkipped.Name())-skippedBefore)
 		})
 	}
 }
 
+func (s *mutableStateSuite) TestCloseTransaction_PrincipalSkippedCountsBufferedEventsOnFlush() {
+	s.mockConfig.EnablePrincipalPropagation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
+	namespaceEntry := tests.GlobalNamespaceEntry
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	dbState := s.buildWorkflowMutableState()
+	dbState.BufferedEvents = nil
+
+	var err error
+	s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, dbState, 123)
+	s.NoError(err)
+	err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(tests.WorkflowID), false)
+	s.NoError(err)
+
+	principal := &commonpb.Principal{Type: "user", Name: "alice"}
+	ctx := headers.SetPrincipal(context.Background(), principal)
+	eventSize := int64(proto.Size(&historypb.HistoryEvent{Principal: principal}))
+
+	// The signal is buffered while a workflow task is started; it is not counted yet.
+	_, err = s.mutableState.AddWorkflowExecutionSignaledEvent(
+		"signal-from-alice",
+		&commonpb.Payloads{},
+		"alice-identity",
+		&commonpb.Header{},
+		nil,
+		"",
+		nil,
+	)
+	s.NoError(err)
+	skippedBefore := s.principalSizeCounter(metrics.HistoryPrincipalSizeSkipped.Name())
+	mutation, _, err := s.mutableState.CloseTransactionAsMutation(ctx, historyi.TransactionPolicyActive)
+	s.NoError(err)
+	s.Len(mutation.NewBufferedEvents, 1)
+	s.Nil(mutation.NewBufferedEvents[0].Principal)
+	s.Equal(skippedBefore, s.principalSizeCounter(metrics.HistoryPrincipalSizeSkipped.Name()))
+
+	// Completing the workflow task flushes the signal into history, where it is counted.
+	workflowTaskInfo := s.mutableState.GetStartedWorkflowTask()
+	_, err = s.mutableState.AddWorkflowTaskCompletedEvent(
+		workflowTaskInfo,
+		&workflowservice.RespondWorkflowTaskCompletedRequest{},
+		workflowTaskCompletionLimits,
+	)
+	s.NoError(err)
+	_, eventsSeq, err := s.mutableState.CloseTransactionAsMutation(ctx, historyi.TransactionPolicyActive)
+	s.NoError(err)
+
+	var eventCount int
+	foundSignal := false
+	for _, we := range eventsSeq {
+		for _, event := range we.Events {
+			eventCount++
+			s.Nil(event.Principal)
+			if event.EventType == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
+				foundSignal = true
+			}
+		}
+	}
+	s.True(foundSignal)
+	s.Equal(int64(eventCount)*eventSize, s.principalSizeCounter(metrics.HistoryPrincipalSizeSkipped.Name())-skippedBefore)
+}
+
 func (s *mutableStateSuite) TestCloseTransaction_PrincipalPreserved() {
+	s.mockConfig.EnablePrincipalPropagation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	namespaceEntry := tests.GlobalNamespaceEntry
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 

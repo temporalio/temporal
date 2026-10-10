@@ -2679,6 +2679,56 @@ func (ms *MutableStateImpl) HasRequestID(
 // Only entries with a non-nil AttachTime are sweepable; the create request ID and event-backed request
 // IDs always have a nil AttachTime and are never swept. Run lazily on transaction close, when a request
 // ID has been added.
+// closeTransactionStampPrincipal stamps events with the caller's principal when
+// principal propagation is enabled for the namespace. Otherwise it only records
+// the bytes the principal would have added to history.
+func (ms *MutableStateImpl) closeTransactionStampPrincipal(
+	ctx context.Context,
+	workflowEventsSeq []*persistence.WorkflowEvents,
+	bufferEvents []*historypb.HistoryEvent,
+) {
+	principal := headers.GetPrincipal(ctx)
+	if principal == nil {
+		return
+	}
+	nsName := ms.GetNamespaceEntry().Name().String()
+	enabled := ms.config.EnablePrincipalPropagation(nsName)
+
+	// Events that already have a principal are previously buffered events (e.g., signals)
+	// that were stamped when originally created and are now being flushed into history
+	// by a different caller (e.g., the worker completing a workflow task).
+	var stampedEvents int
+	for _, we := range workflowEventsSeq {
+		for _, event := range we.Events {
+			if event.Principal == nil {
+				stampedEvents++
+				if enabled {
+					event.Principal = principal
+				}
+			}
+		}
+	}
+	// When principal propagation is disabled, buffered events stay unstamped and are
+	// counted by the loop above in the transaction that flushes them into history.
+	if enabled {
+		for _, event := range bufferEvents {
+			event.Principal = principal
+		}
+		stampedEvents += len(bufferEvents)
+	}
+	if stampedEvents == 0 {
+		return
+	}
+
+	size := int64(stampedEvents * proto.Size(&historypb.HistoryEvent{Principal: principal}))
+	metricsHandler := ms.metricsHandler.WithTags(metrics.NamespaceTag(nsName))
+	if enabled {
+		metrics.HistoryPrincipalSize.With(metricsHandler).Record(size)
+	} else {
+		metrics.HistoryPrincipalSizeSkipped.With(metricsHandler).Record(size)
+	}
+}
+
 func (ms *MutableStateImpl) closeTransactionSweepChasmRequestIDs(transactionPolicy historyi.TransactionPolicy) {
 	if !ms.chasmRequestIDsAdded || transactionPolicy != historyi.TransactionPolicyActive {
 		return
@@ -7821,25 +7871,10 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
-	// Stamp events with the caller's principal. Only do this on the active
-	// cluster — standby (passive) replays events that were already stamped by
-	// the active side, and we must not overwrite those principals.
+	// Only stamp on the active cluster. Standby (passive) replays events that
+	// were already stamped by the active side, and we must not overwrite those principals.
 	if transactionPolicy == historyi.TransactionPolicyActive {
-		principal := headers.GetPrincipal(ctx)
-		for _, we := range workflowEventsSeq {
-			for _, event := range we.Events {
-				// Skip events that already have a principal. Those are previously
-				// buffered events (e.g., signals) that were stamped when originally
-				// created and are now being flushed into history by a different caller
-				// (e.g., the worker completing a workflow task).
-				if event.Principal == nil {
-					event.Principal = principal
-				}
-			}
-		}
-		for _, event := range bufferEvents {
-			event.Principal = principal
-		}
+		ms.closeTransactionStampPrincipal(ctx, workflowEventsSeq, bufferEvents)
 	}
 
 	if err := ms.closeTransactionInvalidateChasmTasksOnClose(ctx, transactionPolicy); err != nil {

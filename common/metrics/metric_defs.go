@@ -1012,6 +1012,8 @@ var (
 	ActivityReset                                    = NewCounterDef("activity_reset", WithDescription("Number of activity resets."))
 	ActivityTimeout                                  = NewCounterDef("activity_timeout", WithDescription("Number of terminal activity timeouts."))
 	ActivityPayloadSize                              = NewCounterDef("activity_payload_size", WithDescription("Size of activity payloads in bytes."))
+	HistoryPrincipalSize                             = NewCounterDef("history_principal_size", WithDescription("Size in bytes of principal written to history events."))
+	HistoryPrincipalSizeSkipped                      = NewCounterDef("history_principal_size_skipped", WithDescription("Size in bytes of principal that would have been written to history events if principal propagation was enabled."))
 	ActivityHeartbeatCount                           = NewCounterDef("activity_heartbeat_count", WithDescription("Count of activity heartbeats, with has_details tag indicating whether the heartbeat carried a payload."))
 	AckLevelUpdateCounter                            = NewCounterDef("ack_level_update")
 	AckLevelUpdateFailedCounter                      = NewCounterDef("ack_level_update_failed")
