@@ -1376,8 +1376,6 @@ var (
 	)
 	TaskLagPerTaskQueueGauge               = NewGaugeDef("task_lag_per_tl")
 	NoRecentPollerTasksPerTaskQueueCounter = NewCounterDef("no_poller_tasks")
-	UnknownBuildPollsCounter               = NewCounterDef("unknown_build_polls")
-	UnknownBuildTasksCounter               = NewCounterDef("unknown_build_tasks")
 	TaskDispatchLatencyPerTaskQueue        = NewTimerDef("task_dispatch_latency")
 	ApproximateBacklogCount                = NewGaugeDef("approximate_backlog_count")
 	ApproximateBacklogAgeSeconds           = NewGaugeDef("approximate_backlog_age_seconds")

@@ -3678,7 +3678,7 @@ func (s *matchingEngineSuite) pollWorkflowTasks(
 // pollWorkflowTasksConcurrently polls tasks using numWorkers concurrently
 func (s *matchingEngineSuite) pollWorkflowTasksConcurrently(
 	wg *sync.WaitGroup, workflowType *commonpb.WorkflowType, numPollers int, taskCount int,
-	ptq *PhysicalTaskQueueKey, taskQueue *taskqueuepb.TaskQueue,
+	taskQueue *taskqueuepb.TaskQueue,
 ) {
 	s.mockHistoryWhilePolling(workflowType)
 	for range numPollers {
@@ -3766,7 +3766,7 @@ func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(
 	workflowType, workflowExecution := s.generateWorkflowExecution()
 	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
 	s.addWorkflowTasksConcurrently(&wg, numWorkers, tasksToAdd, taskQueue, workflowExecution)
-	s.pollWorkflowTasksConcurrently(&wg, workflowType, numWorkers, tasksToPoll, ptq, taskQueue)
+	s.pollWorkflowTasksConcurrently(&wg, workflowType, numWorkers, tasksToPoll, taskQueue)
 	wg.Wait()
 
 	ptqMgr := s.getPhysicalTaskQueueManagerImplFromKey(ptq)
