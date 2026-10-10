@@ -342,18 +342,18 @@ func (cs *CompiledSpec) GetNextTime(jitterSeed string, after time.Time) (GetNext
 
 // Returns the next matching time (without jitter), or the zero value if no time matches.
 func (cs *CompiledSpec) rawNextTime(after time.Time) (nominal time.Time) {
-	var minTimestamp int64 = math.MaxInt64 // unix seconds-since-epoch as int64
+	var minTimestamp int64 = math.MaxInt64 // unix nanoseconds-since-epoch as int64
 
 	for _, cal := range cs.calendar {
 		if next := cal.next(after); !next.IsZero() {
-			nextTs := next.Unix()
+			nextTs := next.UnixNano()
 			if nextTs < minTimestamp {
 				minTimestamp = nextTs
 			}
 		}
 	}
 
-	ts := after.Unix()
+	ts := after.UnixNano()
 	for _, iv := range cs.spec.Interval {
 		next := cs.nextIntervalTime(iv, ts)
 		if next < minTimestamp {
@@ -364,13 +364,13 @@ func (cs *CompiledSpec) rawNextTime(after time.Time) (nominal time.Time) {
 	if minTimestamp == math.MaxInt64 {
 		return time.Time{}
 	}
-	return time.Unix(minTimestamp, 0).UTC()
+	return time.Unix(0, minTimestamp).UTC()
 }
 
 // Returns the next matching time for a single interval spec.
 func (cs *CompiledSpec) nextIntervalTime(iv *schedulepb.IntervalSpec, ts int64) int64 {
-	interval := max(int64(timestamp.DurationValue(iv.Interval)/time.Second), 1)
-	phase := max(int64(timestamp.DurationValue(iv.Phase)/time.Second), 0)
+	interval := max(int64(timestamp.DurationValue(iv.Interval)), int64(time.Second))
+	phase := max(int64(timestamp.DurationValue(iv.Phase)), 0)
 	return (((ts-phase)/interval)+1)*interval + phase
 }
 
