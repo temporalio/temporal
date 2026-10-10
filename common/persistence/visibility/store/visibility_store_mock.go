@@ -42,20 +42,6 @@ func (m *MockVisibilityStore) EXPECT() *MockVisibilityStoreMockRecorder {
 	return m.recorder
 }
 
-// AddSearchAttributes mocks base method.
-func (m *MockVisibilityStore) AddSearchAttributes(ctx context.Context, request *manager.AddSearchAttributesRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddSearchAttributes", ctx, request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// AddSearchAttributes indicates an expected call of AddSearchAttributes.
-func (mr *MockVisibilityStoreMockRecorder) AddSearchAttributes(ctx, request any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSearchAttributes", reflect.TypeOf((*MockVisibilityStore)(nil).AddSearchAttributes), ctx, request)
-}
-
 // Close mocks base method.
 func (m *MockVisibilityStore) Close() {
 	m.ctrl.T.Helper()
@@ -240,4 +226,258 @@ func (m *MockVisibilityStore) ValidateCustomSearchAttributes(searchAttributes ma
 func (mr *MockVisibilityStoreMockRecorder) ValidateCustomSearchAttributes(searchAttributes any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateCustomSearchAttributes", reflect.TypeOf((*MockVisibilityStore)(nil).ValidateCustomSearchAttributes), searchAttributes)
+}
+
+// MockAdminVisibilityStore is a mock of AdminVisibilityStore interface.
+type MockAdminVisibilityStore struct {
+	ctrl     *gomock.Controller
+	recorder *MockAdminVisibilityStoreMockRecorder
+	isgomock struct{}
+}
+
+// MockAdminVisibilityStoreMockRecorder is the mock recorder for MockAdminVisibilityStore.
+type MockAdminVisibilityStoreMockRecorder struct {
+	mock *MockAdminVisibilityStore
+}
+
+// NewMockAdminVisibilityStore creates a new mock instance.
+func NewMockAdminVisibilityStore(ctrl *gomock.Controller) *MockAdminVisibilityStore {
+	mock := &MockAdminVisibilityStore{ctrl: ctrl}
+	mock.recorder = &MockAdminVisibilityStoreMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockAdminVisibilityStore) EXPECT() *MockAdminVisibilityStoreMockRecorder {
+	return m.recorder
+}
+
+// AddSearchAttributes mocks base method.
+func (m *MockAdminVisibilityStore) AddSearchAttributes(ctx context.Context, request *manager.AddSearchAttributesRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddSearchAttributes", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddSearchAttributes indicates an expected call of AddSearchAttributes.
+func (mr *MockAdminVisibilityStoreMockRecorder) AddSearchAttributes(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSearchAttributes", reflect.TypeOf((*MockAdminVisibilityStore)(nil).AddSearchAttributes), ctx, request)
+}
+
+// AdminCountExecutions mocks base method.
+func (m *MockAdminVisibilityStore) AdminCountExecutions(ctx context.Context, request *manager.AdminCountExecutionsRequest) (*InternalCountExecutionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AdminCountExecutions", ctx, request)
+	ret0, _ := ret[0].(*InternalCountExecutionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AdminCountExecutions indicates an expected call of AdminCountExecutions.
+func (mr *MockAdminVisibilityStoreMockRecorder) AdminCountExecutions(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdminCountExecutions", reflect.TypeOf((*MockAdminVisibilityStore)(nil).AdminCountExecutions), ctx, request)
+}
+
+// AdminListExecutions mocks base method.
+func (m *MockAdminVisibilityStore) AdminListExecutions(ctx context.Context, request *manager.AdminListExecutionsRequest) (*InternalListExecutionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AdminListExecutions", ctx, request)
+	ret0, _ := ret[0].(*InternalListExecutionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AdminListExecutions indicates an expected call of AdminListExecutions.
+func (mr *MockAdminVisibilityStoreMockRecorder) AdminListExecutions(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdminListExecutions", reflect.TypeOf((*MockAdminVisibilityStore)(nil).AdminListExecutions), ctx, request)
+}
+
+// Close mocks base method.
+func (m *MockAdminVisibilityStore) Close() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Close")
+}
+
+// Close indicates an expected call of Close.
+func (mr *MockAdminVisibilityStoreMockRecorder) Close() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockAdminVisibilityStore)(nil).Close))
+}
+
+// CountChasmExecutions mocks base method.
+func (m *MockAdminVisibilityStore) CountChasmExecutions(ctx context.Context, request *visibilityservice.CountChasmExecutionsRequest) (*InternalCountExecutionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountChasmExecutions", ctx, request)
+	ret0, _ := ret[0].(*InternalCountExecutionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountChasmExecutions indicates an expected call of CountChasmExecutions.
+func (mr *MockAdminVisibilityStoreMockRecorder) CountChasmExecutions(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountChasmExecutions", reflect.TypeOf((*MockAdminVisibilityStore)(nil).CountChasmExecutions), ctx, request)
+}
+
+// CountWorkflowExecutions mocks base method.
+func (m *MockAdminVisibilityStore) CountWorkflowExecutions(ctx context.Context, request *manager.CountWorkflowExecutionsRequest) (*InternalCountExecutionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountWorkflowExecutions", ctx, request)
+	ret0, _ := ret[0].(*InternalCountExecutionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountWorkflowExecutions indicates an expected call of CountWorkflowExecutions.
+func (mr *MockAdminVisibilityStoreMockRecorder) CountWorkflowExecutions(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountWorkflowExecutions", reflect.TypeOf((*MockAdminVisibilityStore)(nil).CountWorkflowExecutions), ctx, request)
+}
+
+// DeleteWorkflowExecution mocks base method.
+func (m *MockAdminVisibilityStore) DeleteWorkflowExecution(ctx context.Context, request *manager.VisibilityDeleteWorkflowExecutionRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteWorkflowExecution indicates an expected call of DeleteWorkflowExecution.
+func (mr *MockAdminVisibilityStoreMockRecorder) DeleteWorkflowExecution(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockAdminVisibilityStore)(nil).DeleteWorkflowExecution), ctx, request)
+}
+
+// GetIndexName mocks base method.
+func (m *MockAdminVisibilityStore) GetIndexName() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetIndexName")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetIndexName indicates an expected call of GetIndexName.
+func (mr *MockAdminVisibilityStoreMockRecorder) GetIndexName() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetIndexName", reflect.TypeOf((*MockAdminVisibilityStore)(nil).GetIndexName))
+}
+
+// GetName mocks base method.
+func (m *MockAdminVisibilityStore) GetName() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetName")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetName indicates an expected call of GetName.
+func (mr *MockAdminVisibilityStoreMockRecorder) GetName() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetName", reflect.TypeOf((*MockAdminVisibilityStore)(nil).GetName))
+}
+
+// GetWorkflowExecution mocks base method.
+func (m *MockAdminVisibilityStore) GetWorkflowExecution(ctx context.Context, request *manager.GetWorkflowExecutionRequest) (*InternalGetWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowExecution", ctx, request)
+	ret0, _ := ret[0].(*InternalGetWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkflowExecution indicates an expected call of GetWorkflowExecution.
+func (mr *MockAdminVisibilityStoreMockRecorder) GetWorkflowExecution(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecution", reflect.TypeOf((*MockAdminVisibilityStore)(nil).GetWorkflowExecution), ctx, request)
+}
+
+// ListChasmExecutions mocks base method.
+func (m *MockAdminVisibilityStore) ListChasmExecutions(ctx context.Context, request *visibilityservice.ListChasmExecutionsRequest) (*InternalListExecutionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListChasmExecutions", ctx, request)
+	ret0, _ := ret[0].(*InternalListExecutionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListChasmExecutions indicates an expected call of ListChasmExecutions.
+func (mr *MockAdminVisibilityStoreMockRecorder) ListChasmExecutions(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListChasmExecutions", reflect.TypeOf((*MockAdminVisibilityStore)(nil).ListChasmExecutions), ctx, request)
+}
+
+// ListWorkflowExecutions mocks base method.
+func (m *MockAdminVisibilityStore) ListWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*InternalListExecutionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListWorkflowExecutions", ctx, request)
+	ret0, _ := ret[0].(*InternalListExecutionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListWorkflowExecutions indicates an expected call of ListWorkflowExecutions.
+func (mr *MockAdminVisibilityStoreMockRecorder) ListWorkflowExecutions(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWorkflowExecutions", reflect.TypeOf((*MockAdminVisibilityStore)(nil).ListWorkflowExecutions), ctx, request)
+}
+
+// RecordWorkflowExecutionClosed mocks base method.
+func (m *MockAdminVisibilityStore) RecordWorkflowExecutionClosed(ctx context.Context, request *InternalRecordWorkflowExecutionClosedRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecordWorkflowExecutionClosed", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RecordWorkflowExecutionClosed indicates an expected call of RecordWorkflowExecutionClosed.
+func (mr *MockAdminVisibilityStoreMockRecorder) RecordWorkflowExecutionClosed(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordWorkflowExecutionClosed", reflect.TypeOf((*MockAdminVisibilityStore)(nil).RecordWorkflowExecutionClosed), ctx, request)
+}
+
+// RecordWorkflowExecutionStarted mocks base method.
+func (m *MockAdminVisibilityStore) RecordWorkflowExecutionStarted(ctx context.Context, request *InternalRecordWorkflowExecutionStartedRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RecordWorkflowExecutionStarted", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RecordWorkflowExecutionStarted indicates an expected call of RecordWorkflowExecutionStarted.
+func (mr *MockAdminVisibilityStoreMockRecorder) RecordWorkflowExecutionStarted(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordWorkflowExecutionStarted", reflect.TypeOf((*MockAdminVisibilityStore)(nil).RecordWorkflowExecutionStarted), ctx, request)
+}
+
+// UpsertWorkflowExecution mocks base method.
+func (m *MockAdminVisibilityStore) UpsertWorkflowExecution(ctx context.Context, request *InternalUpsertWorkflowExecutionRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertWorkflowExecution", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpsertWorkflowExecution indicates an expected call of UpsertWorkflowExecution.
+func (mr *MockAdminVisibilityStoreMockRecorder) UpsertWorkflowExecution(ctx, request any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertWorkflowExecution", reflect.TypeOf((*MockAdminVisibilityStore)(nil).UpsertWorkflowExecution), ctx, request)
+}
+
+// ValidateCustomSearchAttributes mocks base method.
+func (m *MockAdminVisibilityStore) ValidateCustomSearchAttributes(searchAttributes map[string]any) (map[string]any, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidateCustomSearchAttributes", searchAttributes)
+	ret0, _ := ret[0].(map[string]any)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ValidateCustomSearchAttributes indicates an expected call of ValidateCustomSearchAttributes.
+func (mr *MockAdminVisibilityStoreMockRecorder) ValidateCustomSearchAttributes(searchAttributes any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateCustomSearchAttributes", reflect.TypeOf((*MockAdminVisibilityStore)(nil).ValidateCustomSearchAttributes), searchAttributes)
 }

@@ -5,15 +5,22 @@ package manager
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/visibilityservice/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+)
+
+var (
+	ErrNotAdminVisibilityStore   = errors.New("AdminVisibilityManager not managing AdminVisibilityStore")
+	ErrNotAdminVisibilityManager = errors.New("VisibilityManager is not AdminVisibilityManager")
 )
 
 type (
@@ -47,6 +54,15 @@ type (
 		) (*visibilityservice.CountChasmExecutionsResponse, error)
 
 		// Admin APIs
+		AddSearchAttributes(ctx context.Context, request *AddSearchAttributesRequest) error
+	}
+
+	AdminVisibilityManager interface {
+		VisibilityManager
+
+		AdminListExecutions(ctx context.Context, request *AdminListExecutionsRequest) (*AdminListExecutionsResponse, error)
+		AdminCountExecutions(ctx context.Context, request *AdminCountExecutionsRequest) (*AdminCountExecutionsResponse, error)
+
 		AddSearchAttributes(ctx context.Context, request *AddSearchAttributesRequest) error
 	}
 
@@ -159,6 +175,28 @@ type (
 
 	AddSearchAttributesRequest struct {
 		SearchAttributes map[string]enumspb.IndexedValueType
+	}
+
+	AdminListExecutionsRequest struct {
+		Namespace     namespace.Name
+		Query         string
+		PageSize      int
+		NextPageToken []byte
+	}
+
+	AdminListExecutionsResponse struct {
+		Executions    []*adminservice.VisibilityExecutionInfo
+		NextPageToken []byte
+	}
+
+	AdminCountExecutionsRequest struct {
+		Namespace namespace.Name
+		Query     string
+	}
+
+	AdminCountExecutionsResponse struct {
+		Count  int64 // sum of counts in Groups
+		Groups []*adminservice.CountExecutionsResponse_AggregationGroup
 	}
 )
 
