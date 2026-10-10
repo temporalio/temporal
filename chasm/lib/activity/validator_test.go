@@ -2,6 +2,7 @@ package activity
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -427,6 +429,62 @@ func newTestFrontendHandler(
 			MaxUserMetadataSummarySize: defaultMaxUserMetadataSummarySize,
 		},
 		logger: log.NewNoopLogger(),
+	}
+}
+
+func TestValidateAndPopulateStartRequestNexusSerializationContextLength(t *testing.T) {
+	t.Parallel()
+	const maxLength = 64
+	atLimit := strings.Repeat("x", maxLength)
+	tooLong := strings.Repeat("x", maxLength+1)
+
+	for _, tc := range []struct {
+		name      string
+		context   *nexuspb.PropagatedSerializationContext
+		wantError string
+	}{
+		{
+			name:    "at limit",
+			context: &nexuspb.PropagatedSerializationContext{Endpoint: atLimit, Service: atLimit, Operation: atLimit},
+		},
+		{
+			name:      "endpoint too long",
+			context:   &nexuspb.PropagatedSerializationContext{Endpoint: tooLong},
+			wantError: "Nexus serialization context endpoint exceeds length limit. Length=65 Limit=64",
+		},
+		{
+			name:      "service too long",
+			context:   &nexuspb.PropagatedSerializationContext{Service: tooLong},
+			wantError: "Nexus serialization context service exceeds length limit. Length=65 Limit=64",
+		},
+		{
+			name:      "operation too long",
+			context:   &nexuspb.PropagatedSerializationContext{Operation: tooLong},
+			wantError: "Nexus serialization context operation exceeds length limit. Length=65 Limit=64",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			h := newTestFrontendHandler(defaultBlobSizeLimitError, defaultBlobSizeLimitWarn, maxLength)
+			h.config.DefaultActivityRetryPolicy = getDefaultRetrySettings
+			h.linkValidator = newLinkValidator(defaultMaxLinksPerRequest, func(string) int { return 2000 }, defaultLinkMaxSize)
+			req := &workflowservice.StartActivityExecutionRequest{
+				Namespace:                           defaultNamespaceID,
+				ActivityId:                          defaultActivityID,
+				ActivityType:                        &commonpb.ActivityType{Name: defaultActivityType},
+				TaskQueue:                           &taskqueuepb.TaskQueue{Name: defaultTaskQueue},
+				StartToCloseTimeout:                 durationpb.New(10 * time.Second),
+				PropagatedNexusSerializationContext: tc.context,
+			}
+			_, err := h.validateAndPopulateStartRequest(t.Context(), req, namespace.ID(defaultNamespaceID))
+			if tc.wantError == "" {
+				require.NoError(t, err)
+			} else {
+				var invalidArgument *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgument)
+				require.ErrorContains(t, err, tc.wantError)
+			}
+		})
 	}
 }
 

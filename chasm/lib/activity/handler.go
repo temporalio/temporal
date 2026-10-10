@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/resource"
 )
 
@@ -121,8 +122,48 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		metrics.ActivityEagerExecutionCounter.With(eagerActivityMetricsHandler(h.metricsHandler, h.config, frontendReq)).Record(1)
 	}
 
-	if err := h.applyOnConflictOptions(ctx, frontendReq, result.Created, result.ExecutionKey, maxCallbacks); err != nil {
-		return nil, err
+	// Apply on_conflict_options to an existing activity.
+	// TODO: Use chasm.UpdateWithStartExecution to avoid a second transaction once the engine supports BusinessIDConflictPolicyFail in the updateFn path.
+	cbs := frontendReq.GetCompletionCallbacks()
+	links := frontendReq.GetLinks()
+	onConflict := frontendReq.GetOnConflictOptions()
+	attachCallbacks := onConflict.GetAttachCompletionCallbacks() && len(cbs) > 0
+	attachLinks := onConflict.GetAttachLinks() && len(links) > 0
+	if !result.Created && (attachCallbacks || attachLinks) {
+		requestID := frontendReq.GetRequestId()
+		ref := chasm.NewComponentRef[*Activity](result.ExecutionKey)
+		var nexusContextMatch metrics.ReasonString
+		_, _, err := chasm.UpdateComponent(
+			ctx,
+			ref,
+			func(a *Activity, ctx chasm.MutableContext, _ any) (any, error) {
+				if attachCallbacks {
+					existing := a.RequestData.Get(ctx).GetPropagatedNexusSerializationContext()
+					incoming := frontendReq.GetPropagatedNexusSerializationContext()
+					nexusContextMatch = commonnexus.SerializationContextMatch(existing, incoming)
+					if err := a.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks); err != nil {
+						return nil, err
+					}
+				}
+				if attachLinks {
+					if err := a.attachLinks(ctx, links, requestID, h.linkValidator, frontendReq.GetNamespace()); err != nil {
+						return nil, err
+					}
+				}
+				return nil, nil
+			},
+			nil,
+			chasm.WithRequestID(requestID),
+		)
+		if err != nil && !errors.Is(err, chasm.ErrRequestIDAlreadyUsed) {
+			return nil, err
+		}
+		if err == nil && nexusContextMatch != "" {
+			metrics.NexusActivityUseExisting.With(h.metricsHandler).Record(1,
+				metrics.NamespaceTag(frontendReq.GetNamespace()),
+				metrics.NexusSerializationContextMatchTag(nexusContextMatch),
+			)
+		}
 	}
 
 	return &activitypb.StartActivityExecutionResponse{
@@ -222,50 +263,6 @@ func startActivityExecutionError(err error) error {
 		return serviceerror.NewActivityExecutionAlreadyStarted("activity execution already started", alreadyStartedErr.CurrentRequestID, alreadyStartedErr.CurrentRunID)
 	}
 	return err
-}
-
-// applyOnConflictOptions updates an existing activity after StartExecution returns it unchanged.
-func (h *handler) applyOnConflictOptions(
-	ctx context.Context,
-	request *workflowservice.StartActivityExecutionRequest,
-	created bool,
-	executionKey chasm.ExecutionKey,
-	maxCallbacks int,
-) error {
-	cbs := request.GetCompletionCallbacks()
-	links := request.GetLinks()
-	onConflict := request.GetOnConflictOptions()
-	attachCallbacks := onConflict.GetAttachCompletionCallbacks() && len(cbs) > 0
-	attachLinks := onConflict.GetAttachLinks() && len(links) > 0
-	if created || (!attachCallbacks && !attachLinks) {
-		return nil
-	}
-
-	// TODO: Use chasm.UpdateWithStartExecution to avoid a second transaction once the engine supports BusinessIDConflictPolicyFail in the updateFn path.
-	requestID := request.GetRequestId()
-	_, _, err := chasm.UpdateComponent(
-		ctx,
-		chasm.NewComponentRef[*Activity](executionKey),
-		func(a *Activity, ctx chasm.MutableContext, _ any) (any, error) {
-			if attachCallbacks {
-				if err := a.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks); err != nil {
-					return nil, err
-				}
-			}
-			if attachLinks {
-				if err := a.attachLinks(ctx, links, requestID, h.linkValidator, request.GetNamespace()); err != nil {
-					return nil, err
-				}
-			}
-			return nil, nil
-		},
-		nil,
-		chasm.WithRequestID(requestID),
-	)
-	if err != nil && !errors.Is(err, chasm.ErrRequestIDAlreadyUsed) {
-		return err
-	}
-	return nil
 }
 
 func (h *handler) eagerActivityDispatchAllowed(

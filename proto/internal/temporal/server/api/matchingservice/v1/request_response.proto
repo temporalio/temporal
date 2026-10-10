@@ -149,6 +149,7 @@ message PollActivityTaskQueueResponse {
   temporal.api.common.v1.RetryPolicy retry_policy = 19;
   // ID of the activity run (applicable for standalone activities only)
   string activity_run_id = 20;
+  temporal.api.nexus.v1.PropagatedSerializationContext propagated_nexus_serialization_context = 21;
 }
 
 message AddWorkflowTaskRequest {

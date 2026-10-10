@@ -2,7 +2,6 @@ package matching
 
 import (
 	"context"
-	"math"
 	"sync"
 	"time"
 	"unsafe"
@@ -436,7 +435,7 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 	// refactor the rate limit logic so findMatch doesn't need to know about it.
 	wholeQueueReady, perKeyLimited := d.rateLimitManager.rateLimitState()
 	if !perKeyLimited && d.tasks.Len() > 0 && d.pollers.Len() > 0 {
-		if delay := wholeQueueReady.delay(now); delay > 0 {
+		if delay := wholeQueueReady.Delay(now); delay > 0 {
 			return nil, nil, delay
 		}
 	}
@@ -480,7 +479,7 @@ func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *i
 		// skip per-key rate-limited tasks, tracking the minimum delay so the caller
 		// knows when the soonest one becomes ready
 		if perKeyLimited {
-			delay := d.rateLimitManager.readyTimeForTask(task).delay(now)
+			delay := d.rateLimitManager.readyTimeForTask(task).Delay(now)
 			if delay > 0 {
 				if minDelay == 0 || delay < minDelay {
 					minDelay = delay
@@ -675,92 +674,4 @@ func (rt *resettableTimer) unset() {
 		rt.timer.Stop()
 		rt.timer = nil
 	}
-}
-
-// simple limiter
-
-// simpleLimiter and simpleLimiterParams implement a "GCRA" limiter.
-// A simpleLimiter is "ready" if its value is <= now (as unix nanos).
-type simpleLimiter int64 // ready time as unix nanos
-
-type simpleLimiterParams struct {
-	interval time.Duration // ideal task spacing interval, or 0 for no limit (infinite), or -1 for zero limit
-	burst    time.Duration // burst duration
-}
-
-const maxBurst = time.Minute
-const simpleLimiterNever = simpleLimiter(7 << 60) // this is in the year 2225
-
-func makeSimpleLimiterParams(rate float64, burstDuration time.Duration) simpleLimiterParams {
-	// 1e-9 would make interval overflow int64
-	if rate <= 1e-9 {
-		return simpleLimiterParams{
-			interval: time.Duration(-1),
-		}
-	}
-	return simpleLimiterParams{
-		interval: time.Duration(float64(time.Second) / rate),
-		burst:    min(burstDuration, maxBurst),
-	}
-}
-
-func (p simpleLimiterParams) never() bool   { return p.interval < 0 }
-func (p simpleLimiterParams) limited() bool { return p.interval > 0 }
-func (p simpleLimiterParams) divideInterval(by float32) simpleLimiterParams {
-	return simpleLimiterParams{
-		interval: time.Duration(float32(p.interval) / by),
-		burst:    p.burst,
-	}
-}
-
-// delay returns the time until the limiter is ready.
-// If the return value is <= 0 then the limiter can go now.
-func (ready simpleLimiter) delay(now int64) time.Duration {
-	return time.Duration(int64(ready) - now)
-}
-
-// consume updates ready based on the current time and number of new tokens consumed.
-func (ready simpleLimiter) consume(p simpleLimiterParams, now int64, tokens int64) simpleLimiter {
-	// This is a slight variation of the normal GCRA: instead of tracking the end of the
-	// allowed interval (the theoretical arrival time), ready tracks the beginning of it, and
-	// the end is ready + burst. To find the next ready time:
-	// - Add ready+burst to find the next theoretical arrival time.
-	// - If that's in the past, clip it at the current time.
-	// - Subtract burst to turn it back into a ready time.
-	// - Finally add the tokens we used.
-	//
-	// For intuition, consider that if if now is > ready by only a tiny amount, i.e. we're
-	// bursting, then the max takes ready+burst and we push up the ready time by the full
-	// interval. We can do this burst/interval times before it catches up and we're no longer
-	// ready.
-	//
-	// Alternatively, if now is > ready by more than burst, then we end up subtracting the full
-	// burst from now and adding one interval.
-	if p.never() {
-		return simpleLimiterNever
-	}
-	clippedReady := max(now, int64(ready)+p.burst.Nanoseconds()) - p.burst.Nanoseconds()
-	return simpleLimiter(clippedReady + tokens*p.interval.Nanoseconds())
-}
-
-// clip updates ready to an allowable range based on the given parameters.
-func (ready simpleLimiter) clip(p simpleLimiterParams, now int64, maxTokens int64) simpleLimiter {
-	if p.never() {
-		return simpleLimiterNever
-	}
-	// If ready was set very far in the future (e.g. because the rate was zero), then we can
-	// clip it back to now + maxTokens*interval + burst.
-	maxDelay := maxTokens*p.interval.Nanoseconds() + p.burst.Nanoseconds()
-	return min(ready, simpleLimiter(now+maxDelay))
-}
-
-func (ready simpleLimiter) availableSimpleLimiterTokens(params simpleLimiterParams, now int64) int32 {
-	if params.never() || ready.delay(now) > 0 {
-		return 0
-	}
-	if !params.limited() {
-		return math.MaxInt32
-	}
-	clippedReady := max(now, int64(ready)+params.burst.Nanoseconds()) - params.burst.Nanoseconds()
-	return int32(min((now-clippedReady)/params.interval.Nanoseconds()+1, math.MaxInt32))
 }

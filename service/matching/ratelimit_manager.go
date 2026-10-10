@@ -9,7 +9,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/service/matching/simplelimiter"
 )
 
 type (
@@ -35,13 +35,9 @@ type (
 		systemRPS       float64                 // Min of partition level dispatch rates times the number of read partitions.
 		rateLimitSource enumspb.RateLimitSource // Source of the rate limit, can be set via API, worker or system default.
 		// Derived from the `defaultTaskDispatchRPS`.
-		// dynamicRateBurst is the dynamic rate & burst for rate limiter
-		dynamicRateBurst quotas.MutableRateBurst
-		// dynamicRateLimiter is the dynamic rate limiter that can be used to force refresh on new rates.
-		dynamicRateLimiter *quotas.DynamicRateLimiterImpl
 		// Fairness tasks rate limiter.
-		wholeQueueLimit simpleLimiterParams
-		wholeQueueReady simpleLimiter
+		wholeQueueLimit simplelimiter.Params
+		wholeQueueReady simplelimiter.Ready
 		// Rate limiter for individual fairness keys.
 		// Note that we currently have only one limit for all keys, which is scaled by the key's
 		// weight. If we do this, we can assume that all keys are either at or below their rate
@@ -49,7 +45,7 @@ type (
 		// must also be, and so we don't have to "skip over" the head of the queue due to rate
 		// limits. This isn't true in situations where weights have changed in between writing and
 		// reading. We'll handle that situation better in the future.
-		perKeyLimit     simpleLimiterParams
+		perKeyLimit     simplelimiter.Params
 		perKeyReady     cache.Cache
 		perKeyOverrides fairnessWeightOverrides // TODO(fairness): get this from config
 		cancels         []func()
@@ -71,22 +67,13 @@ func newRateLimitManager(
 	config *taskQueueConfig,
 	taskQueueType enumspb.TaskQueueType,
 ) *rateLimitManager {
-	r := &rateLimitManager{
+	return &rateLimitManager{
 		userDataManager: userDataManager,
 		config:          config,
 		taskQueueType:   taskQueueType,
 		perKeyReady:     cache.New(config.FairnessKeyRateLimitCacheSize(), nil),
 		timeSource:      clock.NewRealTimeSource(),
 	}
-	r.dynamicRateBurst = quotas.NewMutableRateBurst(
-		defaultTaskDispatchRPS,
-		int(defaultTaskDispatchRPS),
-	)
-	r.dynamicRateLimiter = quotas.NewDynamicRateLimiter(
-		r.dynamicRateBurst,
-		config.RateLimiterRefreshInterval,
-	)
-	return r
 }
 
 // Start registers dynamic config subscriptions and computes the initial rate limits.
@@ -174,7 +161,6 @@ func (r *rateLimitManager) computeAndApplyRateLimitLocked() {
 	newRPS := r.effectiveRPS
 	// If the effective RPS has changed, we need to update the rate limiters.
 	if oldRPS != newRPS {
-		r.updateRatelimitLocked()
 		r.updateSimpleRateLimitWithBurstLocked(defaultBurstDuration)
 	}
 	// Internally, checks if the per-key rate limit has changed and updates it accordingly.
@@ -205,10 +191,6 @@ func (r *rateLimitManager) GetEffectiveRPSAndSource() (float64, enumspb.RateLimi
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.effectiveRPS * float64(r.numReadPartitions), r.rateLimitSource
-}
-
-func (r *rateLimitManager) GetRateLimiter() quotas.RateLimiter {
-	return r.dynamicRateLimiter
 }
 
 // Updates the API-configured RPS based on the latest user data
@@ -252,34 +234,15 @@ func (r *rateLimitManager) trySetRPSFromUserDataLocked() {
 	r.perKeyOverrides = fairnessWeightOverrides
 }
 
-// updateRatelimitLocked checks and updates the overall queue rate limit if changed.
-func (r *rateLimitManager) updateRatelimitLocked() {
-	newRPS := r.effectiveRPS
-	// If the effective RPS is zero, we set the burst to zero as well.
-	// This prevents any initial tasks from executing immediately.
-	// Allows pausing of the task queue by setting the RPS to zero.
-	var burst int
-	if newRPS != 0 {
-		// If the effective RPS is non-zero, we can set a burst based on the effective RPS.
-		burst = max(int(math.Ceil(newRPS)), r.config.MinTaskThrottlingBurstSize())
-	}
-	r.dynamicRateBurst.SetRPS(newRPS)
-	r.dynamicRateBurst.SetBurst(burst)
-	// updateRatelimitLocked is invoked whenever the effective RPS value changes.
-	// At this point, the dynamicRateLimiter is always updated with the latest rate and burst values,
-	// ensuring that the new rate limit takes effect immediately.
-	r.dynamicRateLimiter.Refresh()
-}
-
 // UpdateSimpleRateLimit updates the overall queue rate limits for the simpleRateLimiter implementation
 func (r *rateLimitManager) updateSimpleRateLimitWithBurstLocked(burstDuration time.Duration) {
 	newRPS := r.effectiveRPS
-	r.wholeQueueLimit = makeSimpleLimiterParams(newRPS, burstDuration)
+	r.wholeQueueLimit = simplelimiter.MakeParams(newRPS, burstDuration)
 
 	// Clip to handle the case where we have increased from a zero or very low limit and had
 	// ready times in the far future.
 	now := r.timeSource.Now().UnixNano()
-	r.wholeQueueReady = r.wholeQueueReady.clip(r.wholeQueueLimit, now, maxTokens)
+	r.wholeQueueReady = r.wholeQueueReady.Clip(r.wholeQueueLimit, now, maxTokens)
 }
 
 // UpdatePerKeySimpleRateLimit updates the per-key rate limit for the simpleRateLimit implementation
@@ -290,7 +253,7 @@ func (r *rateLimitManager) updatePerKeySimpleRateLimitWithBurstLocked(burstDurat
 		return
 	}
 	rate := *r.fairnessKeyRateLimitDefault
-	slp := makeSimpleLimiterParams(rate, burstDuration)
+	slp := simplelimiter.MakeParams(rate, burstDuration)
 	if slp == r.perKeyLimit {
 		// No change in per-key rate limit, no need to update.
 		return
@@ -299,15 +262,15 @@ func (r *rateLimitManager) updatePerKeySimpleRateLimitWithBurstLocked(burstDurat
 
 	// Clip to handle the case where we have increased from a zero or very low limit and had
 	// ready times in the far future.
-	var updates map[string]simpleLimiter
+	var updates map[string]simplelimiter.Ready
 	now := r.timeSource.Now().UnixNano()
 	it := r.perKeyReady.Iterator()
 	for it.HasNext() {
 		e := it.Next()
-		sl := e.Value().(simpleLimiter) //nolint:revive
-		if clipped := sl.clip(r.perKeyLimit, now, maxTokens); clipped != sl {
+		sl := e.Value().(simplelimiter.Ready) //nolint:revive
+		if clipped := sl.Clip(r.perKeyLimit, now, maxTokens); clipped != sl {
 			if updates == nil {
-				updates = make(map[string]simpleLimiter)
+				updates = make(map[string]simplelimiter.Ready)
 			}
 			updates[e.Key().(string)] = clipped
 		}
@@ -324,17 +287,17 @@ func (r *rateLimitManager) updatePerKeySimpleRateLimitWithBurstLocked(burstDurat
 // clearPerKeyRateLimitsLocked removes all fairness per-key rate limits.
 func (r *rateLimitManager) clearPerKeyRateLimitsLocked() {
 	r.perKeyReady = cache.New(r.config.FairnessKeyRateLimitCacheSize(), nil)
-	r.perKeyLimit = simpleLimiterParams{}
+	r.perKeyLimit = simplelimiter.NoLimit()
 }
 
 // rateLimitState returns the whole-queue ready time and whether a per-key limit is in effect.
-func (r *rateLimitManager) rateLimitState() (wholeQueueReady simpleLimiter, perKeyLimited bool) {
+func (r *rateLimitManager) rateLimitState() (wholeQueueReady simplelimiter.Ready, perKeyLimited bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return r.wholeQueueReady, r.perKeyLimit.limited()
+	return r.wholeQueueReady, r.perKeyLimit.Limited()
 }
 
-func (r *rateLimitManager) readyTimeForTask(task *internalTask) simpleLimiter {
+func (r *rateLimitManager) readyTimeForTask(task *internalTask) simplelimiter.Ready {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	// TODO(pri): after we have task-specific ready time, we can re-enable this
@@ -344,10 +307,10 @@ func (r *rateLimitManager) readyTimeForTask(task *internalTask) simpleLimiter {
 	// }
 	ready := r.wholeQueueReady
 
-	if r.perKeyLimit.limited() {
+	if r.perKeyLimit.Limited() {
 		key := task.getPriority().GetFairnessKey()
 		if v := r.perKeyReady.Get(key); v != nil {
-			ready = max(ready, v.(simpleLimiter))
+			ready = max(ready, v.(simplelimiter.Ready))
 		}
 	}
 
@@ -362,53 +325,45 @@ func (r *rateLimitManager) consumeTokens(now int64, task *internalTask, tokens i
 		return
 	}
 
-	r.wholeQueueReady = r.wholeQueueReady.consume(r.wholeQueueLimit, now, tokens)
+	r.wholeQueueReady = r.wholeQueueReady.Consume(r.wholeQueueLimit, now, tokens)
 
-	if r.perKeyLimit.limited() {
+	if r.perKeyLimit.Limited() {
 		pri := task.getPriority()
 		key := pri.GetFairnessKey()
 		weight := getEffectiveWeight(r.perKeyOverrides, pri)
-		p := r.perKeyLimit.divideInterval(weight) // scale by weight
-		var sl simpleLimiter
+		p := r.perKeyLimit.DivideInterval(weight) // scale by weight
+		var sl simplelimiter.Ready
 		if v := r.perKeyReady.Get(key); v != nil {
-			sl = v.(simpleLimiter) // nolint:revive
+			sl = v.(simplelimiter.Ready) // nolint:revive
 		}
-		r.perKeyReady.Put(key, sl.consume(p, now, tokens))
+		r.perKeyReady.Put(key, sl.Consume(p, now, tokens))
 	}
 }
 
 func (r *rateLimitManager) grantTokens(priority *commonpb.Priority, requested int32) int32 {
 	now := r.timeSource.Now()
-	if !r.config.NewMatcher {
-		available := r.dynamicRateLimiter.TokensAt(now)
-		granted := min(requested, int32(max(available, 0)))
-		if granted > 0 && r.dynamicRateLimiter.AllowN(now, int(granted)) {
-			return granted
-		}
-		return 0
-	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	nowNanos := now.UnixNano()
-	granted := min(requested, r.wholeQueueReady.availableSimpleLimiterTokens(r.wholeQueueLimit, nowNanos))
-	if r.perKeyLimit.limited() {
+	granted := min(requested, r.wholeQueueReady.Available(r.wholeQueueLimit, nowNanos))
+	if r.perKeyLimit.Limited() {
 		key := priority.GetFairnessKey()
-		var ready simpleLimiter
+		var ready simplelimiter.Ready
 		if value := r.perKeyReady.Get(key); value != nil {
-			ready = value.(simpleLimiter) // nolint:revive
+			ready = value.(simplelimiter.Ready) // nolint:revive
 		}
-		params := r.perKeyLimit.divideInterval(getEffectiveWeight(r.perKeyOverrides, priority))
-		granted = min(granted, ready.availableSimpleLimiterTokens(params, nowNanos))
+		params := r.perKeyLimit.DivideInterval(getEffectiveWeight(r.perKeyOverrides, priority))
+		granted = min(granted, ready.Available(params, nowNanos))
 		if granted == 0 {
 			return 0
 		}
-		r.perKeyReady.Put(key, ready.consume(params, nowNanos, int64(granted)))
+		r.perKeyReady.Put(key, ready.Consume(params, nowNanos, int64(granted)))
 	}
 
 	if granted > 0 {
-		r.wholeQueueReady = r.wholeQueueReady.consume(r.wholeQueueLimit, nowNanos, int64(granted))
+		r.wholeQueueReady = r.wholeQueueReady.Consume(r.wholeQueueLimit, nowNanos, int64(granted))
 	}
 	return granted
 }
