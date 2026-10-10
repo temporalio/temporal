@@ -981,6 +981,10 @@ var (
 	QueueSliceCountHistogram     = NewDimensionlessHistogramDef("queue_slice_count")
 	QueueSliceCountTotal         = NewCounterDef("queue_slice_count_total")
 	QueueSlicePendingKeys        = NewDimensionlessHistogramDef("queue_slice_pending_keys")
+	QueuePendingTasksPerNamespace = NewDimensionlessHistogramDef(
+		"queue_pending_tasks_per_namespace",
+		WithDescription("A histogram across history shards for the number of in-memory pending tasks per namespace in a queue, tagged by namespace and task_category."),
+	)
 	QueueActionCounter           = NewCounterDef("queue_actions")
 	QueueAlertShadowCounter      = NewCounterDef("queue_alert_shadow")
 	QueuePredicateResolutionLoss = NewCounterDef(
