@@ -421,7 +421,11 @@ func TestTransitionStarted(t *testing.T) {
 	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
 	ctx.GoCtx = headers.SetVersionsForTests(context.Background(), temporal.SDKVersion, headers.ClientNameGoSDK, "", "")
 	attemptState := &activitypb.ActivityAttemptState{
-		Count:       1,
+		Count: 1,
+		LastWorkerPrincipal: &commonpb.Principal{
+			Type: "jwt",
+			Name: "previous-worker",
+		},
 		StartedTime: timestamppb.New(defaultTime),
 	}
 	outcome := &activitypb.ActivityOutcome{}
@@ -458,6 +462,10 @@ func TestTransitionStarted(t *testing.T) {
 	require.EqualValues(t, 1, attemptState.Count)
 	require.Equal(t, defaultTime, attemptState.StartedTime.AsTime())
 	require.Equal(t, "test-worker", attemptState.LastWorkerIdentity)
+	protorequire.ProtoEqual(t, &commonpb.Principal{
+		Type: "jwt",
+		Name: "previous-worker",
+	}, attemptState.LastWorkerPrincipal)
 	require.Equal(t, headers.ClientNameGoSDK, attemptState.SdkName)
 	require.Equal(t, temporal.SDKVersion, attemptState.SdkVersion)
 

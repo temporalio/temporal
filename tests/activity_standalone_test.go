@@ -23,8 +23,10 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/chasm/lib/activity"
+	activitystatepb "go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
@@ -32,6 +34,8 @@ import (
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
@@ -120,6 +124,72 @@ func (s *standaloneActivityTestSuite) newTestEnv(opts ...testcore.TestOption) *s
 	cluster.OverrideDynamicConfig(s.T(), activity.EnableCallbacks, nsValues(true))
 	cluster.OverrideDynamicConfig(s.T(), activity.EnableStandaloneActivityOperatorCommands, nsValues(true))
 	return env
+}
+
+func (s *standaloneActivityTestSuite) TestLastWorkerPrincipalIsPersisted() {
+	const (
+		principalType = "jwt"
+		principalName = "worker-subject"
+	)
+
+	env := s.newTestEnv(
+		testcore.WithDedicatedCluster(),
+		testcore.WithDynamicConfig(dynamicconfig.EnablePrincipalPropagation, true),
+	)
+	t := s.T()
+
+	env.SetOnGetClaims(func(*authorization.AuthInfo) (*authorization.Claims, error) {
+		return &authorization.Claims{
+			Subject:  principalName,
+			AuthType: principalType,
+			System:   authorization.RoleAdmin,
+		}, nil
+	})
+	env.SetOnAuthorize(func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error) {
+		return authorization.Result{
+			Decision: authorization.DecisionAllow,
+			Principal: &commonpb.Principal{
+				Type: principalType,
+				Name: principalName,
+			},
+		}, nil
+	})
+
+	activityID := testcore.RandomizeStr(t.Name())
+	taskQueue := testcore.RandomizeStr(t.Name())
+	startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+	pollTaskResp := env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, startResp.RunId)
+
+	_, err := env.FrontendClient().RespondActivityTaskCompleted(s.Context(), &workflowservice.RespondActivityTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
+		TaskToken: pollTaskResp.TaskToken,
+		Result:    defaultResult,
+		Identity:  defaultIdentity,
+	})
+	require.NoError(t, err)
+
+	shardID := common.WorkflowIDToHistoryShard(
+		env.NamespaceID().String(),
+		activityID,
+		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
+	)
+	persistedExecution, err := env.GetTestCluster().ExecutionManager().GetWorkflowExecution(s.Context(), &persistence.GetWorkflowExecutionRequest{
+		ShardID:     shardID,
+		NamespaceID: env.NamespaceID().String(),
+		WorkflowID:  activityID,
+		RunID:       startResp.RunId,
+		ArchetypeID: activity.ArchetypeID,
+	})
+	require.NoError(t, err)
+
+	attemptNode := persistedExecution.State.ChasmNodes["LastAttempt"]
+	require.NotNil(t, attemptNode)
+	attemptState := &activitystatepb.ActivityAttemptState{}
+	require.NoError(t, serialization.Decode(attemptNode.Data, attemptState))
+	protorequire.ProtoEqual(t, &commonpb.Principal{
+		Type: principalType,
+		Name: principalName,
+	}, attemptState.GetLastWorkerPrincipal())
 }
 
 func (s *standaloneActivityTestSuite) TestIDReusePolicy() {

@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/nexus/nexusrpc"
@@ -469,6 +470,7 @@ func (a *Activity) HandleCompleted(
 	}); err != nil {
 		return nil, err
 	}
+	a.recordLastWorkerPrincipal(ctx)
 
 	return &historyservice.RespondActivityTaskCompletedResponse{}, nil
 }
@@ -508,6 +510,7 @@ func (a *Activity) HandleFailed(
 	}
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
 		a.emitOnAttemptFailedMetrics(ctx, enrichedHandler)
+		a.recordLastWorkerPrincipal(ctx)
 
 		return &historyservice.RespondActivityTaskFailedResponse{}, nil
 	}
@@ -520,6 +523,7 @@ func (a *Activity) HandleFailed(
 	}); err != nil {
 		return nil, err
 	}
+	a.recordLastWorkerPrincipal(ctx)
 
 	return &historyservice.RespondActivityTaskFailedResponse{}, nil
 }
@@ -545,8 +549,27 @@ func (a *Activity) HandleCanceled(
 	}); err != nil {
 		return nil, err
 	}
+	a.recordLastWorkerPrincipal(ctx)
 
 	return &historyservice.RespondActivityTaskCanceledResponse{}, nil
+}
+
+func (a *Activity) recordLastWorkerPrincipal(
+	ctx chasm.MutableContext,
+) {
+	a.LastAttempt.Get(ctx).LastWorkerPrincipal = requestPrincipal(ctx)
+}
+
+func requestPrincipal(ctx chasm.Context) *commonpb.Principal {
+	principalType := ctx.RequestHeader(headers.PrincipalTypeHeaderName)
+	principalName := ctx.RequestHeader(headers.PrincipalNameHeaderName)
+	if principalType == "" && principalName == "" {
+		return nil
+	}
+	return &commonpb.Principal{
+		Type: principalType,
+		Name: principalName,
+	}
 }
 
 // Terminate implements the chasm.RootComponent interface.

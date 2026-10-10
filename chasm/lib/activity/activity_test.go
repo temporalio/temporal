@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	nexuspb "go.temporal.io/api/nexus/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
@@ -20,11 +21,13 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -809,6 +812,142 @@ func TestActivityTaskTokenLegacyStampCompatibility(t *testing.T) {
 			require.NoError(t, heartbeatErr)
 		})
 	}
+}
+
+func newWorkerResponseTestActivity(
+	t *testing.T,
+	status activitypb.ActivityExecutionStatus,
+) (*chasm.MockMutableContext, *Activity, *tokenspb.Task) {
+	t.Helper()
+
+	const (
+		namespaceID = "test-namespace-id"
+		activityID  = "test-activity-id"
+		runID       = "test-run-id"
+	)
+
+	componentRef, err := (&persistencespb.ChasmComponentRef{
+		NamespaceId: namespaceID,
+		BusinessId:  activityID,
+		RunId:       runID,
+	}).Marshal()
+	require.NoError(t, err)
+
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow:            func(chasm.Component) time.Time { return defaultTime },
+			HandleNamespaceEntry: testNamespaceEntry,
+		},
+	}
+	ctx.GoCtx = context.WithValue(t.Context(), ctxKeyActivityContext, &activityContext{config: &Config{
+		BreakdownMetricsByTaskQueue:               dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+		MutableStateActivityFailureSizeLimitError: dynamicconfig.GetIntPropertyFnFilteredByNamespace(defaultFailureSizeLimit),
+	}})
+
+	activityState := &activitypb.ActivityState{
+		ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
+		RetryPolicy:            defaultRetryPolicy,
+		ScheduleToCloseTimeout: durationpb.New(defaultScheduleToCloseTimeout),
+		ScheduleToStartTimeout: durationpb.New(defaultScheduleToStartTimeout),
+		StartToCloseTimeout:    durationpb.New(defaultStartToCloseTimeout),
+		ScheduleTime:           timestamppb.New(defaultTime.Add(-time.Minute)),
+		Status:                 status,
+		TaskQueue:              &taskqueuepb.TaskQueue{Name: "test-task-queue"},
+	}
+	if status == activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED {
+		activityState.CancelState = &activitypb.ActivityCancelState{Identity: "cancelling-client"}
+	}
+	attempt := &activitypb.ActivityAttemptState{
+		Count:        1,
+		Stamp:        1,
+		StartedStamp: 1,
+		StartedTime:  timestamppb.New(defaultTime.Add(-time.Minute)),
+	}
+	activity := &Activity{
+		ActivityState: activityState,
+		LastAttempt:   chasm.NewDataField(ctx, attempt),
+		Outcome:       chasm.NewDataField(ctx, &activitypb.ActivityOutcome{}),
+	}
+	return ctx, activity, &tokenspb.Task{
+		NamespaceId:          namespaceID,
+		Attempt:              1,
+		ActivityAttemptStamp: 1,
+		ComponentRef:         componentRef,
+	}
+}
+
+func TestHandleFailedRetryRecordsLastWorkerPrincipal(t *testing.T) {
+	ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED)
+	principal := &commonpb.Principal{Type: "jwt", Name: "worker-1"}
+	ctx.GoCtx = headers.SetPrincipal(ctx.GoCtx, principal)
+	_, err := activity.HandleFailed(ctx, RespondFailedEvent{
+		Token: token,
+		Request: &historyservice.RespondActivityTaskFailedRequest{
+			NamespaceId: token.GetNamespaceId(),
+			FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
+				Failure: &failurepb.Failure{
+					FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+						ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "retryable"},
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, principal, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
+}
+
+func TestWorkerResponsesRecordLastWorkerPrincipal(t *testing.T) {
+	t.Run("completed", func(t *testing.T) {
+		ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED)
+		principal := &commonpb.Principal{Type: "jwt", Name: "completion-worker"}
+		ctx.GoCtx = headers.SetPrincipal(ctx.GoCtx, principal)
+		_, err := activity.HandleCompleted(ctx, RespondCompletedEvent{
+			Token: token,
+			Request: &historyservice.RespondActivityTaskCompletedRequest{
+				NamespaceId:     token.GetNamespaceId(),
+				CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{},
+			},
+		})
+		require.NoError(t, err)
+		protorequire.ProtoEqual(t, principal, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
+	})
+
+	t.Run("terminal failure", func(t *testing.T) {
+		ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED)
+		principal := &commonpb.Principal{Type: "jwt", Name: "failure-worker"}
+		ctx.GoCtx = headers.SetPrincipal(ctx.GoCtx, principal)
+		_, err := activity.HandleFailed(ctx, RespondFailedEvent{
+			Token: token,
+			Request: &historyservice.RespondActivityTaskFailedRequest{
+				NamespaceId: token.GetNamespaceId(),
+				FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
+					Failure: &failurepb.Failure{
+						FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+							ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: true},
+						},
+					},
+				},
+			},
+		})
+		require.NoError(t, err)
+		protorequire.ProtoEqual(t, principal, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
+	})
+
+	t.Run("canceled", func(t *testing.T) {
+		ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED)
+		principal := &commonpb.Principal{Type: "jwt", Name: "cancel-worker"}
+		ctx.GoCtx = headers.SetPrincipal(ctx.GoCtx, principal)
+		_, err := activity.HandleCanceled(ctx, RespondCancelledEvent{
+			Token: token,
+			Request: &historyservice.RespondActivityTaskCanceledRequest{
+				NamespaceId:   token.GetNamespaceId(),
+				CancelRequest: &workflowservice.RespondActivityTaskCanceledRequest{},
+			},
+		})
+		require.NoError(t, err)
+		protorequire.ProtoEqual(t, principal, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
+	})
 }
 
 func TestContextMetadata(t *testing.T) {
