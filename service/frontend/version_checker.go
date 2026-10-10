@@ -90,9 +90,17 @@ func (vc *VersionChecker) versionCheckLoop(
 	}
 }
 
+// versionCheckTimeout bounds one whole check, not just its HTTP call. The
+// persistence reads below inherit the loop's context, which is cancelled only by
+// Stop, so without this a driver that honours cancellation still has no deadline
+// of its own. See #12449 for the other background callers in the same position.
+const versionCheckTimeout = 30 * time.Second
+
 func (vc *VersionChecker) performVersionCheck(
 	ctx context.Context,
 ) {
+	ctx, cancel := context.WithTimeout(ctx, versionCheckTimeout)
+	defer cancel()
 	startTime := time.Now().UTC()
 	defer func() {
 		metrics.VersionCheckLatency.With(vc.metricsHandler).Record(time.Since(startTime))

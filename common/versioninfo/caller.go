@@ -30,7 +30,7 @@ func NewCaller() Caller {
 
 // Call performs the version check. The context bounds the whole exchange,
 // including reading the response body: a server that sends headers and then
-// stalls mid-body would otherwise still hang the caller.
+// stalls mid-body is ended by cancelling the request context.
 func (c Caller) Call(ctx context.Context, r *VersionCheckRequest) (*VersionCheckResponse, error) {
 	err := validateRequest(r)
 	if err != nil {
@@ -44,8 +44,9 @@ func (c Caller) Call(ctx context.Context, r *VersionCheckRequest) (*VersionCheck
 	if c.Scheme == "https" {
 		tr.TLSClientConfig = &tls.Config{}
 	}
-	// Timeout as well as the context: it covers the case where a caller passes a
-	// context with no deadline, and unlike the context it also bounds the body read.
+	// Timeout as well as the context, for the case where a caller passes a context
+	// with no deadline. A cancelled request context already ends the body read, so
+	// this is not covering that.
 	client := &http.Client{Transport: tr, Timeout: RequestTimeout}
 	reqBody, err := json.Marshal(r)
 	if err != nil {

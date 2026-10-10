@@ -3,10 +3,12 @@ package versioninfo_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"testing"
 	"time"
 
@@ -89,11 +91,19 @@ func TestPostInfo(t *testing.T) {
 // request and never responds used to block Call forever: the client had no
 // Timeout and the request carried no context, so neither the caller's deadline
 // nor VersionChecker.Stop could reach it.
+//
+// The handler signals on entry and the context is cancelled only after that
+// signal, so the request is provably in flight when it is cancelled. Cancelling
+// earlier would let the test pass on a request that never reached the server,
+// which is not what Stop relies on.
 func TestCallIsBoundedByContext(t *testing.T) {
 	t.Parallel()
 
+	arrived := make(chan struct{})
 	released := make(chan struct{})
+	var once sync.Once
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		once.Do(func() { close(arrived) })
 		<-released // accept, then never answer
 	}))
 	defer func() {
@@ -123,13 +133,19 @@ func TestCallIsBoundedByContext(t *testing.T) {
 		done <- callErr
 	}()
 
-	// Cancelling must unblock the in-flight request, which is what Stop relies on.
+	// Only cancel once the server has the request, so this exercises an in-flight
+	// call rather than one cancelled before it left.
+	select {
+	case <-arrived:
+	case <-time.After(10 * time.Second):
+		t.Fatal("request never reached the server")
+	}
 	cancel()
 
 	select {
 	case callErr := <-done:
-		if callErr == nil {
-			t.Fatal("Call returned nil error after its context was cancelled")
+		if !errors.Is(callErr, context.Canceled) {
+			t.Fatalf("Call returned %v, want context.Canceled", callErr)
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("Call did not return after its context was cancelled; the request is not bound to the context")
