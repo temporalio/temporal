@@ -31,9 +31,9 @@ func testScheduleAuditVisibility(t *testing.T, newContext contextFactory) {
 	}, workflow.RegisterOptions{Name: wt})
 	first := time.Now().UTC().Truncate(time.Second).Add(5 * time.Second)
 	second := first.Add(5 * time.Second)
-	createSchedule(ctx, t, env, sid, &schedulepb.Schedule{
+	env.createSchedule(ctx, t, sid, &schedulepb.Schedule{
 		Spec:     &schedulepb.ScheduleSpec{Calendar: []*schedulepb.CalendarSpec{calendarSpec(first), calendarSpec(second)}},
-		Action:   startWorkflowAction(env, wid, wt),
+		Action:   env.startWorkflowAction(wid, wt),
 		Policies: &schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL},
 	})
 	loader := scheduleaudit.NewGRPCExecutionLoader(env.FrontendClient(), io.Discard, nil)
