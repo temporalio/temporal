@@ -755,9 +755,8 @@ func (pm *taskQueuePartitionManagerImpl) grantEagerDispatch(
 			granted = pm.rateLimitManager.grantTokens(item.GetPriority(), item.GetCount())
 		}
 		if granted > 0 {
-			// Track under the unclipped key, as TrySyncMatch does, so eager and regular tasks of
-			// the same priority land in the same stats bucket.
-			targets[index].physicalQueue.RecordEagerDispatch(priorityKey(item.GetPriority().GetPriorityKey()), granted)
+			// Unclipped, like the key TrySyncMatch tracks added tasks under.
+			targets[index].physicalQueue.RecordEagerGrant(priorityKey(item.GetPriority().GetPriorityKey()), granted)
 		}
 		responseItems[index] = &matchingservice.GrantEagerDispatchResponse_Item{
 			GrantedCount: granted,
@@ -999,8 +998,7 @@ func (pm *taskQueuePartitionManagerImpl) GetPhysicalQueueAdjustedStats(
 		buildID = worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment))
 	}
 
-	// Eager dispatches never reach this queue's pollers, so leave them out of the rates used for
-	// poller scaling decisions.
+	// Eager grants never reach this queue's pollers, so leave them out of poller scaling decisions.
 	partitionInfo, err := pm.describe(ctx, map[string]bool{buildID: true}, false, true, false, false, false, false)
 	if err != nil {
 		return nil
@@ -1368,13 +1366,13 @@ func (pm *taskQueuePartitionManagerImpl) Describe(
 // described queue is marked alive to reset its idle timeout and prevent it from being unloaded.
 // When we describe the task queue from inside the partition manager to expose periodic metrics,
 // we pass skipMarkAlive=true to suppress this side effect and avoid preventing idle queue unloading.
-// includeEagerDispatches folds tasks granted eager dispatch into the reported add and dispatch rates.
+// includeEagerGrants adds eager dispatch grants to the reported add and dispatch rates.
 //
 //nolint:revive // cognitive complexity 67 (> max enabled 25) but this is just a renaming of an existing function.
 func (pm *taskQueuePartitionManagerImpl) describe(
 	ctx context.Context,
 	buildIds map[string]bool,
-	includeAllActive, reportStats, reportPollers, internalTaskQueueStatus, skipMarkAlive, includeEagerDispatches bool,
+	includeAllActive, reportStats, reportPollers, internalTaskQueueStatus, skipMarkAlive, includeEagerGrants bool,
 ) (*matchingservice.DescribeTaskQueuePartitionResponse, error) {
 	pm.versionedQueuesLock.RLock()
 
@@ -1444,7 +1442,7 @@ func (pm *taskQueuePartitionManagerImpl) describe(
 		if dbq == nil {
 			return nil, errDefaultQueueNotInit
 		}
-		unversionedStatsByPriority = dbq.GetStatsByPriority(true, includeEagerDispatches)
+		unversionedStatsByPriority = dbq.GetStatsByPriority(true, includeEagerGrants)
 
 		userData, _, err := pm.GetUserDataManager().GetUserData()
 		if err != nil {
@@ -1500,7 +1498,7 @@ func (pm *taskQueuePartitionManagerImpl) describe(
 			vInfo.PhysicalTaskQueueInfo.Pollers = physicalQueue.GetAllPollerInfo()
 		}
 		if reportStats {
-			physicalStatsByPriority := physicalQueue.GetStatsByPriority(true, includeEagerDispatches)
+			physicalStatsByPriority := physicalQueue.GetStatsByPriority(true, includeEagerGrants)
 
 			// Clone the physical queue's stats by priority so we can adjust (either add, subtract) them based on the
 			// attribution model defined below.
@@ -1691,7 +1689,7 @@ func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx c
 	}
 
 	buildIds := map[string]bool{"": true} // include unversioned
-	resp, err := pm.describe(ctx, buildIds, true, true, false, false, true, true)
+	resp, err := pm.describe(ctx, buildIds, true, true, false, false, true, false)
 	if err != nil {
 		return nil, err
 	}

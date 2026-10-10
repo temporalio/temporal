@@ -159,17 +159,17 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) GetInternalTaskQueueStatus()
 }
 
 // GetStatsByPriority mocks base method.
-func (m *MockphysicalTaskQueueManager) GetStatsByPriority(includeRates, includeEagerDispatches bool) map[int32]*taskqueue.TaskQueueStats {
+func (m *MockphysicalTaskQueueManager) GetStatsByPriority(includeRates, includeEagerGrants bool) map[int32]*taskqueue.TaskQueueStats {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetStatsByPriority", includeRates, includeEagerDispatches)
+	ret := m.ctrl.Call(m, "GetStatsByPriority", includeRates, includeEagerGrants)
 	ret0, _ := ret[0].(map[int32]*taskqueue.TaskQueueStats)
 	return ret0
 }
 
 // GetStatsByPriority indicates an expected call of GetStatsByPriority.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) GetStatsByPriority(includeRates, includeEagerDispatches any) *gomock.Call {
+func (mr *MockphysicalTaskQueueManagerMockRecorder) GetStatsByPriority(includeRates, includeEagerGrants any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStatsByPriority", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).GetStatsByPriority), includeRates, includeEagerDispatches)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStatsByPriority", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).GetStatsByPriority), includeRates, includeEagerGrants)
 }
 
 // HasPollerAfter mocks base method.
@@ -269,16 +269,16 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) QueueKey() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueKey", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).QueueKey))
 }
 
-// RecordEagerDispatch mocks base method.
-func (m *MockphysicalTaskQueueManager) RecordEagerDispatch(priority priorityKey, count int32) {
+// RecordEagerGrant mocks base method.
+func (m *MockphysicalTaskQueueManager) RecordEagerGrant(priority priorityKey, count int32) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RecordEagerDispatch", priority, count)
+	m.ctrl.Call(m, "RecordEagerGrant", priority, count)
 }
 
-// RecordEagerDispatch indicates an expected call of RecordEagerDispatch.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) RecordEagerDispatch(priority, count any) *gomock.Call {
+// RecordEagerGrant indicates an expected call of RecordEagerGrant.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) RecordEagerGrant(priority, count any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordEagerDispatch", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).RecordEagerDispatch), priority, count)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordEagerGrant", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).RecordEagerGrant), priority, count)
 }
 
 // RecordTaskAdd mocks base method.

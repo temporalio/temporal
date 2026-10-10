@@ -96,11 +96,10 @@ type (
 		// proto and this rate is only used internally, for poller scaling decisions. Exposing it via
 		// DescribeTaskQueue would mean moving it there and adding a proto field.
 		tasksSyncMatched map[priorityKey]*taskTracker
-		// tasksEagerDispatched counts tasks granted eager dispatch through GrantEagerDispatch. Those
-		// tasks are handed to a worker by history without passing through this queue, so they are
-		// kept apart from tasksAdded and tasksDispatched (which drive poller scaling) and are only
-		// folded into the add and dispatch rates reported by GetStatsByPriority.
-		tasksEagerDispatched map[priorityKey]*taskTracker
+		// tasksEagerGranted counts GrantEagerDispatch grants. Granted tasks go straight to a worker
+		// and never reach this queue's pollers, so they are kept out of the trackers used for poller
+		// scaling. A grant that history ends up not using is still counted.
+		tasksEagerGranted map[priorityKey]*taskTracker
 		// tasksRateLimited tracks rate-limit events in a sliding window for stats reporting.
 		tasksRateLimited *taskTracker
 	}
@@ -156,7 +155,7 @@ func newPhysicalTaskQueueManager(
 		tasksAdded:               make(map[priorityKey]*taskTracker),
 		tasksDispatched:          make(map[priorityKey]*taskTracker),
 		tasksSyncMatched:         make(map[priorityKey]*taskTracker),
-		tasksEagerDispatched:     make(map[priorityKey]*taskTracker),
+		tasksEagerGranted:        make(map[priorityKey]*taskTracker),
 		tasksRateLimited:         e.newTaskTracker(),
 		pollerScalingRateLimiter: quotas.NewDefaultOutgoingRateLimiter(pollerScalingRateLimitFn),
 		deploymentRegistrationCh: make(chan struct{}, 1),
@@ -578,7 +577,7 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 	return response
 }
 
-func (c *physicalTaskQueueManagerImpl) GetStatsByPriority(includeRates, includeEagerDispatches bool) map[int32]*taskqueuepb.TaskQueueStats {
+func (c *physicalTaskQueueManagerImpl) GetStatsByPriority(includeRates, includeEagerGrants bool) map[int32]*taskqueuepb.TaskQueueStats {
 	stats := c.backlogMgr.BacklogStatsByPriority()
 
 	if m := c.getDrainBacklogMgr(); m != nil {
@@ -596,9 +595,9 @@ func (c *physicalTaskQueueManagerImpl) GetStatsByPriority(includeRates, includeE
 		for pri, tt := range c.tasksDispatched {
 			util.GetOrSetNew(stats, int32(pri)).TasksDispatchRate = tt.rate()
 		}
-		if includeEagerDispatches {
-			// An eager task is added and dispatched at the same instant, so it counts toward both.
-			for pri, tt := range c.tasksEagerDispatched {
+		if includeEagerGrants {
+			// An eager task is added and dispatched at the same instant.
+			for pri, tt := range c.tasksEagerGranted {
 				s := util.GetOrSetNew(stats, int32(pri))
 				eagerRate := tt.rate()
 				s.TasksAddRate += eagerRate
@@ -641,8 +640,8 @@ func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() []*taskqueue
 	return status
 }
 
-func (c *physicalTaskQueueManagerImpl) RecordEagerDispatch(priority priorityKey, count int32) {
-	c.incTaskTracker(c.tasksEagerDispatched, priority, int(count))
+func (c *physicalTaskQueueManagerImpl) RecordEagerGrant(priority priorityKey, count int32) {
+	c.incTaskTracker(c.tasksEagerGranted, priority, int(count))
 }
 
 func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *internalTask) (syncMatchOutcome, error) {
@@ -956,7 +955,7 @@ func (c *physicalTaskQueueManagerImpl) incTaskTracker(
 		c.tasksAdded[priorityKey] = c.partitionMgr.engine.newTaskTracker()
 		c.tasksDispatched[priorityKey] = c.partitionMgr.engine.newTaskTracker()
 		c.tasksSyncMatched[priorityKey] = c.partitionMgr.engine.newTaskTracker()
-		c.tasksEagerDispatched[priorityKey] = c.partitionMgr.engine.newTaskTracker()
+		c.tasksEagerGranted[priorityKey] = c.partitionMgr.engine.newTaskTracker()
 		tracker = intervals[priorityKey]
 	}
 	tracker.inc(n)

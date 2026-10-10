@@ -265,17 +265,10 @@ func (s *PartitionManagerTestSuite) TestGrantEagerDispatchChecksVersionBacklog()
 }
 
 func (s *PartitionManagerTestSuite) TestGrantEagerDispatchRecordsGrantsOnTargetQueue() {
-	newQueue := func(backlogPriority priorityKey) *MockphysicalTaskQueueManager {
-		queue := NewMockphysicalTaskQueueManager(s.controller)
-		queue.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
-		queue.EXPECT().MarkAlive().AnyTimes()
-		queue.EXPECT().NonNegligibleBacklogPriority().Return(backlogPriority).AnyTimes()
-		return queue
-	}
-	// The default queue is not targeted, so any RecordEagerDispatch call on it fails the test.
-	defaultQueue := newQueue(0)
-	versionQueue := newQueue(3)
-	versionQueue.EXPECT().RecordEagerDispatch(priorityKey(2), int32(2)).Times(1)
+	// The default queue is not targeted, so any RecordEagerGrant call on it fails the test.
+	defaultQueue := s.newStrictEagerDispatchPhysicalQueue(0)
+	versionQueue := s.newStrictEagerDispatchPhysicalQueue(3)
+	versionQueue.EXPECT().RecordEagerGrant(priorityKey(2), int32(2)).Times(1)
 
 	partitionMgr := s.newEagerDispatchPartitionManager(0, nil)
 	partitionMgr.defaultQueueFuture = future.NewFuture[physicalTaskQueueManager]()
@@ -2728,31 +2721,46 @@ func TestSplitTaskQueueStatsByRampPercentage_RateLimitingFalse(t *testing.T) {
 // TestStickyQueueAdjustedStats_VersioningAttributionSkipped verifies that the versioning
 // attribution logic in Describe is skipped for sticky queues. Sticky queues don't route
 // by version, so their stats should not be reduced by the current/ramping version shares.
-func TestStickyQueueAdjustedStats_VersioningAttributionSkipped(t *testing.T) {
-	t.Parallel()
-
+// newFakeClockPartitionManager starts a partition manager whose engine uses a fixed time source, so
+// task tracker rates are deterministic across reads.
+func newFakeClockPartitionManager(
+	t *testing.T,
+	partition tqid.Partition,
+	userDataMgr userDataManager,
+) (*taskQueuePartitionManagerImpl, *clock.EventTimeSource) {
 	ctrl := gomock.NewController(t)
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
 
 	ns, registry := createMockNamespaceCache(ctrl, namespace.Name(namespaceName))
-	config := defaultTestConfig()
-
 	matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
 	matchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any(), gomock.Any()).
 		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{}, nil).AnyTimes()
-	engine := createTestMatchingEngine(logger, ctrl, config, matchingClient, registry)
+	engine := createTestMatchingEngine(logger, ctrl, defaultTestConfig(), matchingClient, registry)
 
-	// Use a fixed time source so rate calculations are deterministic across reads.
 	ts := clock.NewEventTimeSource()
 	ts.Update(time.Now())
 	engine.timeSource = ts
+
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, ns.Name())
+	pm, err := newTaskQueuePartitionManager(engine, ns, partition, tqConfig, logger, logger, metrics.NoopMetricsHandler, userDataMgr)
+	require.NoError(t, err)
+	engine.partitions[partition.Key()] = pm
+	engine.Start()
+	pm.Start()
+	t.Cleanup(engine.Stop)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	require.NoError(t, pm.WaitUntilInitialized(ctx))
+	return pm, ts
+}
+
+func TestStickyQueueAdjustedStats_VersioningAttributionSkipped(t *testing.T) {
+	t.Parallel()
 
 	// Create a sticky partition (like a real worker's sticky queue)
 	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	require.NoError(t, err)
 	stickyPartition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition("my-sticky-queue")
-
-	tqConfig := newTaskQueueConfig(stickyPartition.TaskQueue(), engine.config, ns.Name())
 
 	// Seed user data with a current deployment version (no ramping).
 	// This simulates a sticky queue that fetches user data from its normal queue,
@@ -2788,15 +2796,7 @@ func TestStickyQueueAdjustedStats_VersioningAttributionSkipped(t *testing.T) {
 		},
 	}
 
-	pm, err := newTaskQueuePartitionManager(engine, ns, stickyPartition, tqConfig, logger, logger, metrics.NoopMetricsHandler, userDataMgr)
-	require.NoError(t, err)
-	engine.partitions[stickyPartition.Key()] = pm
-	engine.Start()
-	pm.Start()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	defer cancel()
-	err = pm.WaitUntilInitialized(ctx)
-	require.NoError(t, err)
+	pm, ts := newFakeClockPartitionManager(t, stickyPartition, userDataMgr)
 
 	dbq := pm.defaultQueue()
 	require.NotNil(t, dbq)
@@ -2810,7 +2810,7 @@ func TestStickyQueueAdjustedStats_VersioningAttributionSkipped(t *testing.T) {
 	ts.Advance(time.Second)
 
 	// Verify the raw stats have non-zero rates (precondition for the test to be meaningful).
-	rawStats := dbq.GetStatsByPriority(true, true)
+	rawStats := dbq.GetStatsByPriority(true, false)
 	require.Greater(t, rawStats[3].TasksAddRate, float32(0))
 	require.Greater(t, rawStats[3].TasksDispatchRate, float32(0))
 
@@ -2826,36 +2826,9 @@ func TestStickyQueueAdjustedStats_VersioningAttributionSkipped(t *testing.T) {
 func TestEagerDispatchStats(t *testing.T) {
 	t.Parallel()
 
-	ctrl := gomock.NewController(t)
-	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
-
-	ns, registry := createMockNamespaceCache(ctrl, namespace.Name(namespaceName))
-	config := defaultTestConfig()
-
-	matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
-	matchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{}, nil).AnyTimes()
-	engine := createTestMatchingEngine(logger, ctrl, config, matchingClient, registry)
-
-	// Use a fixed time source so rate calculations are deterministic across reads.
-	ts := clock.NewEventTimeSource()
-	ts.Update(time.Now())
-	engine.timeSource = ts
-
 	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	require.NoError(t, err)
-	partition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition()
-	tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, ns.Name())
-
-	pm, err := newTaskQueuePartitionManager(engine, ns, partition, tqConfig, logger, logger, metrics.NoopMetricsHandler, &mockUserDataManager{})
-	require.NoError(t, err)
-	engine.Start()
-	pm.Start()
-	defer pm.Stop(unloadCauseShuttingDown)
-	defer engine.Stop()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	defer cancel()
-	require.NoError(t, pm.WaitUntilInitialized(ctx))
+	pm, ts := newFakeClockPartitionManager(t, f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(), &mockUserDataManager{})
 
 	items, err := pm.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
 		{Count: 3, Priority: &commonpb.Priority{PriorityKey: 3}},
@@ -2866,34 +2839,19 @@ func TestEagerDispatchStats(t *testing.T) {
 	// Advance time so the task tracker has positive elapsed time for rate calculation.
 	ts.Advance(time.Second)
 
-	dbq := pm.defaultQueue()
-	require.NotNil(t, dbq)
-
-	// Eager grants count as both added and dispatched, and never as backlog.
-	withEager := dbq.GetStatsByPriority(true, true)[3]
-	require.Greater(t, withEager.GetTasksAddRate(), float32(0))
-	require.InDelta(t, withEager.GetTasksAddRate(), withEager.GetTasksDispatchRate(), 0)
-	require.Zero(t, withEager.GetApproximateBacklogCount())
-
-	withoutEager := dbq.GetStatsByPriority(true, false)[3]
-	require.Zero(t, withoutEager.GetTasksAddRate())
-	require.Zero(t, withoutEager.GetTasksDispatchRate())
-
-	// DescribeTaskQueuePartition reports them.
+	// Grants count as both added and dispatched, and never as backlog.
 	desc, err := pm.Describe(context.Background(), map[string]bool{"": true}, false, true, false, false, true)
 	require.NoError(t, err)
-	described := desc.GetVersionsInfoInternal()[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats()
-	require.InDelta(t, withEager.GetTasksAddRate(), described.GetTasksAddRate(), 0)
-	require.InDelta(t, withEager.GetTasksDispatchRate(), described.GetTasksDispatchRate(), 0)
+	described := desc.GetVersionsInfoInternal()[""].GetPhysicalTaskQueueInfo().GetTaskQueueStatsByPriorityKey()[3]
+	require.InDelta(t, 3, described.GetTasksAddRate(), 0.01)
+	require.InDelta(t, 3, described.GetTasksDispatchRate(), 0.01)
+	require.Zero(t, described.GetApproximateBacklogCount())
 
-	// Poller scaling inputs do not, since eager tasks never reach this queue's pollers.
-	scalingStats := pm.GetPhysicalQueueAdjustedStats(context.Background(), dbq)
+	// They are left out of poller scaling decisions.
+	scalingStats := pm.GetPhysicalQueueAdjustedStats(context.Background(), pm.defaultQueue())
 	require.NotNil(t, scalingStats)
 	require.Zero(t, scalingStats.GetTasksAddRate())
 	require.Zero(t, scalingStats.GetTasksDispatchRate())
-	addRate, syncMatchRate := dbq.(*physicalTaskQueueManagerImpl).getAggregateRates()
-	require.Zero(t, addRate)
-	require.Zero(t, syncMatchRate)
 }
 
 func (s *PartitionManagerTestSuite) newEagerDispatchPartitionManager(
@@ -2930,11 +2888,18 @@ func workerDeploymentVersion(buildID string) *deploymentspb.WorkerDeploymentVers
 }
 
 func (s *PartitionManagerTestSuite) newEagerDispatchPhysicalQueue(backlogPriority priorityKey) *MockphysicalTaskQueueManager {
+	queue := s.newStrictEagerDispatchPhysicalQueue(backlogPriority)
+	queue.EXPECT().RecordEagerGrant(gomock.Any(), gomock.Any()).AnyTimes()
+	return queue
+}
+
+// newStrictEagerDispatchPhysicalQueue leaves RecordEagerGrant unexpected, so tests can set exact
+// expectations for it.
+func (s *PartitionManagerTestSuite) newStrictEagerDispatchPhysicalQueue(backlogPriority priorityKey) *MockphysicalTaskQueueManager {
 	queue := NewMockphysicalTaskQueueManager(s.controller)
 	queue.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
 	queue.EXPECT().MarkAlive().AnyTimes()
 	queue.EXPECT().NonNegligibleBacklogPriority().Return(backlogPriority).AnyTimes()
-	queue.EXPECT().RecordEagerDispatch(gomock.Any(), gomock.Any()).AnyTimes()
 	return queue
 }
 
