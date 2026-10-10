@@ -55,9 +55,7 @@ type (
 		HasPollerAfter(accessTime time.Time) bool
 		// LegacyDescribeTaskQueue returns pollers info and legacy TaskQueueStatus for this physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
-		// GetStatsByPriority returns stats by priority key. includeEagerGrants adds eager dispatch
-		// grants to both the add and dispatch rates; it has no effect without includeRates.
-		GetStatsByPriority(includeRates, includeEagerGrants bool) map[int32]*taskqueuepb.TaskQueueStats
+		GetStatsByPriority(includeRates bool) map[int32]*taskqueuepb.TaskQueueStats
 		// RecordEagerGrant records tasks granted eager dispatch on this physical queue.
 		RecordEagerGrant(priority priorityKey, count int32)
 		// NonNegligibleBacklogPriority returns the highest-priority non-negligible backlog

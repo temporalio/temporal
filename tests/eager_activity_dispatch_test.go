@@ -45,17 +45,17 @@ func TestEagerActivityWithMatchingGrant_Unversioned(t *testing.T) {
 
 	// The eager activity never entered the activity task queue, but it is still reported as added
 	// and dispatched there, aggregated across partitions.
-	describeResponse, err := env.FrontendClient().DescribeTaskQueue(t.Context(), &workflowservice.DescribeTaskQueueRequest{
-		Namespace:     env.Namespace().String(),
-		TaskQueue:     tv.TaskQueue(),
-		TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-		ReportStats:   true,
-	})
-	require.NoError(t, err)
-	stats := describeResponse.GetStats()
-	require.Greater(t, stats.GetTasksAddRate(), float32(0))
-	require.Greater(t, stats.GetTasksDispatchRate(), float32(0))
-	require.Zero(t, stats.GetApproximateBacklogCount())
+	await.RequireTruef(t, func() bool {
+		response, err := env.FrontendClient().DescribeTaskQueue(t.Context(), &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     env.Namespace().String(),
+			TaskQueue:     tv.TaskQueue(),
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			ReportStats:   true,
+		})
+		stats := response.GetStats()
+		return err == nil && stats.GetTasksAddRate() > 0 && stats.GetTasksDispatchRate() > 0 &&
+			stats.GetApproximateBacklogCount() == 0
+	}, 10*time.Second, 100*time.Millisecond, "eager activity never showed up in task queue stats")
 
 	_, err = poller.HandleActivityTask(tv, eagerActivity, taskpoller.CompleteActivityTask(tv))
 	require.NoError(t, err)

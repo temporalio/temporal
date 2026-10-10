@@ -97,8 +97,8 @@ type (
 		// DescribeTaskQueue would mean moving it there and adding a proto field.
 		tasksSyncMatched map[priorityKey]*taskTracker
 		// tasksEagerGranted counts GrantEagerDispatch grants. Granted tasks go straight to a worker
-		// and never reach this queue's pollers, so they are kept out of the trackers used for poller
-		// scaling. A grant that history ends up not using is still counted.
+		// without passing through this queue, so they are kept out of the trackers used by the v2
+		// poller scaling signals. A grant that history ends up not using is still counted.
 		tasksEagerGranted map[priorityKey]*taskTracker
 		// tasksRateLimited tracks rate-limit events in a sliding window for stats reporting.
 		tasksRateLimited *taskTracker
@@ -577,7 +577,7 @@ func (c *physicalTaskQueueManagerImpl) LegacyDescribeTaskQueue(includeTaskQueueS
 	return response
 }
 
-func (c *physicalTaskQueueManagerImpl) GetStatsByPriority(includeRates, includeEagerGrants bool) map[int32]*taskqueuepb.TaskQueueStats {
+func (c *physicalTaskQueueManagerImpl) GetStatsByPriority(includeRates bool) map[int32]*taskqueuepb.TaskQueueStats {
 	stats := c.backlogMgr.BacklogStatsByPriority()
 
 	if m := c.getDrainBacklogMgr(); m != nil {
@@ -595,14 +595,12 @@ func (c *physicalTaskQueueManagerImpl) GetStatsByPriority(includeRates, includeE
 		for pri, tt := range c.tasksDispatched {
 			util.GetOrSetNew(stats, int32(pri)).TasksDispatchRate = tt.rate()
 		}
-		if includeEagerGrants {
-			// An eager task is added and dispatched at the same instant.
-			for pri, tt := range c.tasksEagerGranted {
-				s := util.GetOrSetNew(stats, int32(pri))
-				eagerRate := tt.rate()
-				s.TasksAddRate += eagerRate
-				s.TasksDispatchRate += eagerRate
-			}
+		// An eager task is added and dispatched at the same instant.
+		for pri, tt := range c.tasksEagerGranted {
+			s := util.GetOrSetNew(stats, int32(pri))
+			eagerRate := tt.rate()
+			s.TasksAddRate += eagerRate
+			s.TasksDispatchRate += eagerRate
 		}
 		rateLimitingActive := c.tasksRateLimited.rate() > 0
 		c.taskTrackerLock.Unlock()
