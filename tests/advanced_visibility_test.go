@@ -24,9 +24,12 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
@@ -1149,6 +1152,551 @@ func (s *AdvancedVisibilitySuite) TestCountGroupByNamespaceDivision() {
 		},
 		actual,
 	)
+}
+
+// TestAdminListExecutions covers the admin ListExecutions API scoped to a single
+// namespace, including the fields that are only populated for closed executions.
+func (s *AdvancedVisibilitySuite) TestAdminListExecutions() {
+	env := s.newTestEnv()
+	id := "es-functional-admin-list-executions-test"
+	wt := testcore.RandomizeStr("es-functional-admin-list-executions-test-type")
+	tl := "es-functional-admin-list-executions-test-taskqueue"
+
+	openWE, err := env.FrontendClient().StartWorkflowExecution(
+		s.Context(),
+		s.createStartWorkflowExecutionRequest(env, id+"-open", wt, tl),
+	)
+	s.NoError(err)
+
+	closedWE, err := env.FrontendClient().StartWorkflowExecution(
+		s.Context(),
+		s.createStartWorkflowExecutionRequest(env, id+"-closed", wt, tl),
+	)
+	s.NoError(err)
+	_, err = env.FrontendClient().TerminateWorkflowExecution(
+		s.Context(),
+		&workflowservice.TerminateWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: id + "-closed",
+				RunId:      closedWE.GetRunId(),
+			},
+		},
+	)
+	s.NoError(err)
+
+	var executions []*persistencespb.VisibilityExecutionInfo
+	query := fmt.Sprintf(`WorkflowType = %q`, wt)
+	s.Await(
+		func(s *AdvancedVisibilitySuite) {
+			resp, err := env.AdminClient().ListExecutions(
+				s.Context(),
+				&adminservice.ListExecutionsRequest{
+					Namespace: env.Namespace().String(),
+					Query:     query,
+					PageSize:  testcore.DefaultPageSize,
+				},
+			)
+			s.NoError(err)
+			s.Len(resp.GetExecutions(), 2)
+			s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, resp.GetExecutions()[1].GetStatus())
+			executions = resp.GetExecutions()
+		},
+		testcore.WaitForESToSettle,
+		esPollInterval,
+	)
+
+	byRunID := executionsByRunID(executions)
+	for _, execution := range executions {
+		s.Equal(env.NamespaceID().String(), execution.GetNamespaceId())
+		s.Equal(env.Namespace().String(), execution.GetNamespace())
+		s.Equal(wt, execution.GetWorkflowType().GetName())
+		s.NotNil(execution.GetStartTime())
+	}
+
+	openExecution, ok := byRunID[openWE.GetRunId()]
+	s.True(ok)
+	s.Equal(id+"-open", openExecution.GetExecution().GetWorkflowId())
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, openExecution.GetStatus())
+	s.Nil(openExecution.GetCloseTime())
+	s.Nil(openExecution.GetExecutionDuration())
+	s.Zero(openExecution.GetHistoryLength())
+	s.Zero(openExecution.GetHistorySizeBytes())
+	s.Zero(openExecution.GetStateTransitionCount())
+
+	closedExecution, ok := byRunID[closedWE.GetRunId()]
+	s.True(ok)
+	s.Equal(id+"-closed", closedExecution.GetExecution().GetWorkflowId())
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, closedExecution.GetStatus())
+	s.NotNil(closedExecution.GetCloseTime())
+	s.False(closedExecution.GetCloseTime().AsTime().Before(closedExecution.GetStartTime().AsTime()))
+	s.NotNil(closedExecution.GetExecutionDuration())
+	s.Positive(closedExecution.GetHistoryLength())
+	s.Positive(closedExecution.GetHistorySizeBytes())
+	s.Positive(closedExecution.GetStateTransitionCount())
+}
+
+// TestAdminListExecutions_PageToken paginates within the Elasticsearch max result
+// window, so the page token is served by a plain offset/search-after query.
+func (s *AdvancedVisibilitySuite) TestAdminListExecutions_PageToken() {
+	env := s.newTestEnv()
+	id := "es-functional-admin-list-executions-token-test"
+	wt := testcore.RandomizeStr("es-functional-admin-list-executions-token-test-type")
+	tl := "es-functional-admin-list-executions-token-test-taskqueue"
+
+	numOfWorkflows := testcore.DefaultPageSize - 1 // == 4
+	pageSize := 3
+
+	runIDs := s.startWorkflows(env, env.Namespace(), numOfWorkflows, id, wt, tl)
+	s.testAdminListExecutionsPaginationHelper(
+		env, env.Namespace(), fmt.Sprintf(`WorkflowType = %q`, wt), pageSize, runIDs)
+}
+
+// TestAdminListExecutions_SearchAfter paginates past the Elasticsearch max result
+// window, which forces the store onto the search-after pagination path.
+func (s *AdvancedVisibilitySuite) TestAdminListExecutions_SearchAfter() {
+	env := s.newTestEnv()
+	id := "es-functional-admin-list-executions-searchafter-test"
+	wt := testcore.RandomizeStr("es-functional-admin-list-executions-searchafter-test-type")
+	tl := "es-functional-admin-list-executions-searchafter-test-taskqueue"
+
+	numOfWorkflows := testcore.DefaultPageSize + 1 // == 6
+	pageSize := 4
+
+	runIDs := s.startWorkflows(env, env.Namespace(), numOfWorkflows, id, wt, tl)
+	s.testAdminListExecutionsPaginationHelper(
+		env, env.Namespace(), fmt.Sprintf(`WorkflowType = %q`, wt), pageSize, runIDs)
+}
+
+// TestAdminListExecutions_AllNamespaces covers a request with no namespace: executions
+// of every namespace are listed, each carrying the namespace it belongs to, and the
+// page token carries across namespaces.
+func (s *AdvancedVisibilitySuite) TestAdminListExecutions_AllNamespaces() {
+	env := s.newTestEnv()
+	id := "es-functional-admin-list-executions-all-ns-test"
+	wt := testcore.RandomizeStr("es-functional-admin-list-executions-all-ns-test-type")
+	tl := "es-functional-admin-list-executions-all-ns-test-taskqueue"
+
+	otherNsName := namespace.Name(testcore.RandomizeStr(id + "-other-namespace"))
+	otherNsID, err := env.RegisterNamespace(
+		s.Context(), otherNsName, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	s.NoError(err)
+
+	nsRunIDs := s.startWorkflows(env, env.Namespace(), 2, id+"-ns", wt, tl)
+	otherNsRunIDs := s.startWorkflows(env, otherNsName, 2, id+"-other-ns", wt, tl)
+
+	// The cluster is shared with other tests, so the all-namespaces query is scoped by
+	// a workflow type unique to this test.
+	query := fmt.Sprintf(`WorkflowType = %q`, wt)
+
+	// With a namespace, only that namespace's executions are returned.
+	s.Await(
+		func(s *AdvancedVisibilitySuite) {
+			resp, err := env.AdminClient().ListExecutions(
+				s.Context(),
+				&adminservice.ListExecutionsRequest{
+					Namespace: env.Namespace().String(),
+					Query:     query,
+					PageSize:  testcore.DefaultPageSize,
+				},
+			)
+			s.NoError(err)
+			s.ElementsMatch(nsRunIDs, runIDsOfExecutions(resp.GetExecutions()))
+		},
+		testcore.WaitForESToSettle,
+		esPollInterval,
+	)
+
+	// Without a namespace, both namespaces are spanned.
+	var executions []*persistencespb.VisibilityExecutionInfo
+	s.Await(
+		func(s *AdvancedVisibilitySuite) {
+			resp, err := env.AdminClient().ListExecutions(
+				s.Context(),
+				&adminservice.ListExecutionsRequest{
+					Query:    query,
+					PageSize: testcore.DefaultPageSize,
+				},
+			)
+			s.NoError(err)
+			s.Len(resp.GetExecutions(), len(nsRunIDs)+len(otherNsRunIDs))
+			executions = resp.GetExecutions()
+		},
+		testcore.WaitForESToSettle,
+		esPollInterval,
+	)
+
+	byRunID := executionsByRunID(executions)
+	for _, runID := range nsRunIDs {
+		execution, ok := byRunID[runID]
+		s.True(ok)
+		s.Equal(env.NamespaceID().String(), execution.GetNamespaceId())
+		s.Equal(env.Namespace().String(), execution.GetNamespace())
+	}
+	for _, runID := range otherNsRunIDs {
+		execution, ok := byRunID[runID]
+		s.True(ok)
+		s.Equal(otherNsID.String(), execution.GetNamespaceId())
+		s.Equal(otherNsName.String(), execution.GetNamespace())
+	}
+
+	// The page token carries across namespaces.
+	s.testAdminListExecutionsPaginationHelper(
+		env, namespace.EmptyName, query, 3, append(nsRunIDs, otherNsRunIDs...))
+}
+
+// TestAdminListExecutions_AllNamespacesEmptyQuery paginates with neither a namespace nor
+// a query. There is then no filter for the page token to attach its pagination clauses to,
+// which the store must still handle rather than failing on the second page.
+//
+// The cluster is shared with other tests, so an unfiltered query has no bounded result
+// set: this asserts only that every page is served and that no execution is returned
+// twice, not an exact set of executions.
+func (s *AdvancedVisibilitySuite) TestAdminListExecutions_AllNamespacesEmptyQuery() {
+	env := s.newTestEnv()
+	id := "es-functional-admin-list-executions-empty-query-test"
+	wt := testcore.RandomizeStr("es-functional-admin-list-executions-empty-query-test-type")
+	tl := "es-functional-admin-list-executions-empty-query-test-taskqueue"
+
+	pageSize := 2
+	numOfPages := 3
+
+	// Start enough workflows that every page below is full no matter what the rest of
+	// the cluster holds, and wait for all of them to be visible.
+	runIDs := s.startWorkflows(env, env.Namespace(), pageSize*numOfPages, id, wt, tl)
+	s.awaitExecutionCount(
+		env, env.Namespace(), fmt.Sprintf(`WorkflowType = %q`, wt), len(runIDs))
+
+	listRequest := &adminservice.ListExecutionsRequest{PageSize: int32(pageSize)}
+	seenRunIDs := make(map[string]bool, pageSize*numOfPages)
+	for page := range numOfPages {
+		resp, err := env.AdminClient().ListExecutions(s.Context(), listRequest)
+		s.NoError(err, "page %d", page)
+		s.Len(resp.GetExecutions(), pageSize, "page %d", page)
+		for _, runID := range runIDsOfExecutions(resp.GetExecutions()) {
+			s.False(seenRunIDs[runID], "run ID %s returned on more than one page", runID)
+			seenRunIDs[runID] = true
+		}
+		s.NotEmpty(resp.GetNextPageToken(), "page %d", page)
+		listRequest.NextPageToken = resp.GetNextPageToken()
+	}
+}
+
+// TestAdminListExecutions_OrQueryPagination paginates a query whose top level is a
+// disjunction. Such a query converts to a bool query that already carries its own
+// `should` clauses, which the pagination clauses of the second page must not join: a
+// pagination clause would then satisfy `minimum_should_match` on its own and the page
+// would include executions the query excludes.
+func (s *AdvancedVisibilitySuite) TestAdminListExecutions_OrQueryPagination() {
+	env := s.newTestEnv()
+	// The all-namespaces query below is not scoped by a namespace, and the cluster is
+	// shared with other tests, so the workflow IDs it matches must be globally unique.
+	id := testcore.RandomizeStr("es-functional-admin-list-executions-or-query-test")
+	wt := "es-functional-admin-list-executions-or-query-test-type"
+	tl := "es-functional-admin-list-executions-or-query-test-taskqueue"
+
+	numOfWorkflows := 3
+	pageSize := 2
+	runIDs := s.startWorkflows(env, env.Namespace(), numOfWorkflows, id, wt, tl)
+
+	orClauses := make([]string, numOfWorkflows)
+	for i := range numOfWorkflows {
+		orClauses[i] = fmt.Sprintf(`WorkflowId = %q`, id+strconv.Itoa(i))
+	}
+	query := strings.Join(orClauses, " OR ")
+
+	// Across all namespaces the converted query is used as-is, so its `should` clauses
+	// are the ones the page token has to be combined with.
+	s.testAdminListExecutionsPaginationHelper(
+		env, namespace.EmptyName, query, pageSize, runIDs)
+
+	// Scoped to a namespace the query is nested under the namespace filter, which leaves
+	// no `should` clauses at the top level.
+	s.testAdminListExecutionsPaginationHelper(
+		env, env.Namespace(), query, pageSize, runIDs)
+}
+
+func (s *AdvancedVisibilitySuite) TestAdminListExecutions_InvalidRequest() {
+	env := s.newTestEnv()
+
+	_, err := env.AdminClient().ListExecutions(
+		s.Context(),
+		&adminservice.ListExecutionsRequest{
+			Namespace: "does-not-exist-namespace",
+			PageSize:  testcore.DefaultPageSize,
+		},
+	)
+	var namespaceNotFound *serviceerror.NamespaceNotFound
+	s.ErrorAs(err, &namespaceNotFound)
+
+	_, err = env.AdminClient().ListExecutions(
+		s.Context(),
+		&adminservice.ListExecutionsRequest{
+			Namespace: env.Namespace().String(),
+			Query:     `InvalidSearchAttribute = "foo"`,
+			PageSize:  testcore.DefaultPageSize,
+		},
+	)
+	var invalidArgument *serviceerror.InvalidArgument
+	s.ErrorAs(err, &invalidArgument)
+}
+
+// TestAdminCountExecutions covers the admin CountExecutions API scoped to a single
+// namespace, with and without a GROUP BY clause.
+func (s *AdvancedVisibilitySuite) TestAdminCountExecutions() {
+	env := s.newTestEnv()
+	id := "es-functional-admin-count-executions-test"
+	wt := testcore.RandomizeStr("es-functional-admin-count-executions-test-type")
+	tl := "es-functional-admin-count-executions-test-taskqueue"
+
+	numOfWorkflows := 3
+	numOfTerminated := 1
+	runIDs := s.startWorkflows(env, env.Namespace(), numOfWorkflows, id, wt, tl)
+	for i := range numOfTerminated {
+		_, err := env.FrontendClient().TerminateWorkflowExecution(
+			s.Context(),
+			&workflowservice.TerminateWorkflowExecutionRequest{
+				Namespace: env.Namespace().String(),
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: id + strconv.Itoa(i),
+					RunId:      runIDs[i],
+				},
+			},
+		)
+		s.NoError(err)
+	}
+
+	query := fmt.Sprintf(`WorkflowType = %q`, wt)
+	s.Await(
+		func(s *AdvancedVisibilitySuite) {
+			resp, err := env.AdminClient().CountExecutions(
+				s.Context(),
+				&adminservice.CountExecutionsRequest{
+					Namespace: env.Namespace().String(),
+					Query:     query,
+				},
+			)
+			s.NoError(err)
+			s.Equal(int64(numOfWorkflows), resp.GetCount())
+			s.Len(resp.GetGroups(), 2)
+			s.Empty(resp.GetGroups())
+		},
+		testcore.WaitForESToSettle,
+		esPollInterval,
+	)
+
+	var countResp *adminservice.CountExecutionsResponse
+	s.Await(
+		func(s *AdvancedVisibilitySuite) {
+			resp, err := env.AdminClient().CountExecutions(
+				s.Context(),
+				&adminservice.CountExecutionsRequest{
+					Namespace: env.Namespace().String(),
+					Query:     query + " GROUP BY ExecutionStatus",
+				},
+			)
+			s.NoError(err)
+			s.Equal(int64(numOfWorkflows), resp.GetCount())
+			countResp = resp
+		},
+		testcore.WaitForESToSettle,
+		esPollInterval,
+	)
+	s.ProtoElementsMatch(
+		[]*adminservice.CountExecutionsResponse_AggregationGroup{
+			{
+				GroupValues: []*commonpb.Payload{
+					sadefs.MustEncodeValue(
+						enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+						enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+					),
+				},
+				Count: int64(numOfWorkflows - numOfTerminated),
+			},
+			{
+				GroupValues: []*commonpb.Payload{
+					sadefs.MustEncodeValue(
+						enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED.String(),
+						enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+					),
+				},
+				Count: int64(numOfTerminated),
+			},
+		},
+		countResp.GetGroups(),
+	)
+
+	resp, err := env.AdminClient().CountExecutions(
+		s.Context(),
+		&adminservice.CountExecutionsRequest{
+			Namespace: env.Namespace().String(),
+			Query:     fmt.Sprintf(`WorkflowType = %q`, wt+"-no-match"),
+		},
+	)
+	s.NoError(err)
+	s.Zero(resp.GetCount())
+}
+
+// TestAdminCountExecutions_AllNamespaces covers a request with no namespace: the counts
+// of every namespace are summed, including when grouping.
+func (s *AdvancedVisibilitySuite) TestAdminCountExecutions_AllNamespaces() {
+	env := s.newTestEnv()
+	id := "es-functional-admin-count-executions-all-ns-test"
+	wt := testcore.RandomizeStr("es-functional-admin-count-executions-all-ns-test-type")
+	tl := "es-functional-admin-count-executions-all-ns-test-taskqueue"
+
+	otherNsName := namespace.Name(testcore.RandomizeStr(id + "-other-namespace"))
+	_, err := env.RegisterNamespace(
+		s.Context(), otherNsName, 1, enumspb.ARCHIVAL_STATE_DISABLED, "", "")
+	s.NoError(err)
+
+	numInNamespace := 2
+	numInOtherNamespace := 3
+	s.startWorkflows(env, env.Namespace(), numInNamespace, id+"-ns", wt, tl)
+	s.startWorkflows(env, otherNsName, numInOtherNamespace, id+"-other-ns", wt, tl)
+
+	// The cluster is shared with other tests, so the all-namespaces query is scoped by
+	// a workflow type unique to this test.
+	query := fmt.Sprintf(`WorkflowType = %q`, wt)
+	s.Await(
+		func(s *AdvancedVisibilitySuite) {
+			resp, err := env.AdminClient().CountExecutions(
+				s.Context(),
+				&adminservice.CountExecutionsRequest{Query: query},
+			)
+			s.NoError(err)
+			s.Equal(int64(numInNamespace+numInOtherNamespace), resp.GetCount())
+		},
+		testcore.WaitForESToSettle,
+		esPollInterval,
+	)
+
+	resp, err := env.AdminClient().CountExecutions(
+		s.Context(),
+		&adminservice.CountExecutionsRequest{Query: query + " GROUP BY ExecutionStatus"},
+	)
+	s.NoError(err)
+	s.Equal(int64(numInNamespace+numInOtherNamespace), resp.GetCount())
+	s.ProtoElementsMatch(
+		[]*adminservice.CountExecutionsResponse_AggregationGroup{
+			{
+				GroupValues: []*commonpb.Payload{
+					sadefs.MustEncodeValue(
+						enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+						enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+					),
+				},
+				Count: int64(numInNamespace + numInOtherNamespace),
+			},
+		},
+		resp.GetGroups(),
+	)
+}
+
+// startWorkflows starts numOfWorkflows workflows named wid+index in the given namespace
+// and returns their run IDs.
+func (s *AdvancedVisibilitySuite) startWorkflows(
+	env *testcore.TestEnv,
+	nsName namespace.Name,
+	numOfWorkflows int,
+	wid, wType, taskQueue string,
+) []string {
+	request := s.createStartWorkflowExecutionRequest(env, wid, wType, taskQueue)
+	request.Namespace = nsName.String()
+	runIDs := make([]string, numOfWorkflows)
+	for i := range numOfWorkflows {
+		request.RequestId = uuid.NewString()
+		request.WorkflowId = wid + strconv.Itoa(i)
+		we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), request)
+		s.NoError(err)
+		runIDs[i] = we.GetRunId()
+	}
+	return runIDs
+}
+
+// awaitExecutionCount waits until CountExecutions reports exactly expectedCount
+// executions for the query. An empty nsName counts across all namespaces.
+func (s *AdvancedVisibilitySuite) awaitExecutionCount(
+	env *testcore.TestEnv,
+	nsName namespace.Name,
+	query string,
+	expectedCount int,
+) {
+	s.Await(
+		func(s *AdvancedVisibilitySuite) {
+			resp, err := env.AdminClient().CountExecutions(
+				s.Context(),
+				&adminservice.CountExecutionsRequest{
+					Namespace: nsName.String(),
+					Query:     query,
+				},
+			)
+			s.NoError(err)
+			s.Equal(int64(expectedCount), resp.GetCount())
+		},
+		testcore.WaitForESToSettle,
+		esPollInterval,
+	)
+}
+
+// testAdminListExecutionsPaginationHelper pages through ListExecutions and asserts that
+// every expected execution is returned exactly once, that each page but the last is full,
+// and that the pagination terminates with an empty page token.
+//
+// An empty nsName lists across all namespaces.
+func (s *AdvancedVisibilitySuite) testAdminListExecutionsPaginationHelper(
+	env *testcore.TestEnv,
+	nsName namespace.Name,
+	query string,
+	pageSize int,
+	expectedRunIDs []string,
+) {
+	numOfWorkflows := len(expectedRunIDs)
+	s.Greater(numOfWorkflows, pageSize, "numOfWorkflows must be greater than pageSize")
+
+	// Wait for every execution to be visible first: paginating while the index is still
+	// catching up would drop executions that land before an already-consumed page.
+	s.awaitExecutionCount(env, nsName, query, numOfWorkflows)
+
+	listRequest := &adminservice.ListExecutionsRequest{
+		Namespace: nsName.String(),
+		Query:     query,
+		PageSize:  int32(pageSize),
+	}
+	var runIDs []string
+	// The store may return a non-empty page token on the last non-empty page, which
+	// takes one extra request to resolve into an empty page.
+	maxPages := numOfWorkflows/pageSize + 2
+	for range maxPages {
+		resp, err := env.AdminClient().ListExecutions(s.Context(), listRequest)
+		s.NoError(err)
+		s.Len(resp.GetExecutions(), min(pageSize, numOfWorkflows-len(runIDs)))
+		runIDs = append(runIDs, runIDsOfExecutions(resp.GetExecutions())...)
+		listRequest.NextPageToken = resp.GetNextPageToken()
+		if len(listRequest.NextPageToken) == 0 {
+			break
+		}
+	}
+	s.Empty(listRequest.NextPageToken, "pagination did not terminate")
+	s.ElementsMatch(expectedRunIDs, runIDs)
+}
+
+func executionsByRunID(
+	executions []*persistencespb.VisibilityExecutionInfo,
+) map[string]*persistencespb.VisibilityExecutionInfo {
+	byRunID := make(map[string]*persistencespb.VisibilityExecutionInfo, len(executions))
+	for _, execution := range executions {
+		byRunID[execution.GetExecution().GetRunId()] = execution
+	}
+	return byRunID
+}
+
+func runIDsOfExecutions(executions []*persistencespb.VisibilityExecutionInfo) []string {
+	runIDs := make([]string, len(executions))
+	for i, execution := range executions {
+		runIDs[i] = execution.GetExecution().GetRunId()
+	}
+	return runIDs
 }
 
 func (s *AdvancedVisibilitySuite) createStartWorkflowExecutionRequest(env *testcore.TestEnv, id, wt, tl string) *workflowservice.StartWorkflowExecutionRequest {

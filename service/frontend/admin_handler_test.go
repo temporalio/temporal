@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -89,7 +90,7 @@ type (
 		mockNamespaceCache *namespace.MockRegistry
 
 		mockExecutionMgr           *persistence.MockExecutionManager
-		mockVisibilityMgr          *manager.MockVisibilityManager
+		mockAdminVisibilityMgr     *manager.MockAdminVisibilityManager
 		mockClusterMetadataManager *persistence.MockClusterMetadataManager
 		mockClientFactory          *clientmocks.MockFactory
 		mockAdminClient            *adminservicemock.MockAdminServiceClient
@@ -140,7 +141,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockClientFactory = s.mockResource.ClientFactory
 	s.mockAdminClient = adminservicemock.NewMockAdminServiceClient(s.controller)
 	s.mockMetadata = s.mockResource.ClusterMetadata
-	s.mockVisibilityMgr = s.mockResource.VisibilityManager
+	s.mockAdminVisibilityMgr = s.mockResource.AdminVisibilityManager
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
 	s.mockMatchingClient = s.mockResource.MatchingClient
 
@@ -158,6 +159,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		SearchAttributesNumberOfKeysLimit:     dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
 		SearchAttributesSizeOfValueLimit:      dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
 		SearchAttributesTotalSizeLimit:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
+		VisibilityMaxPageSize:                 dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
 		VisibilityAllowList:                   dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		SuppressErrorSetSystemSearchAttribute: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 	}
@@ -172,7 +174,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		cfg.SearchAttributesNumberOfKeysLimit,
 		cfg.SearchAttributesSizeOfValueLimit,
 		cfg.SearchAttributesTotalSizeLimit,
-		s.mockVisibilityMgr,
+		s.mockAdminVisibilityMgr,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		cfg.SuppressErrorSetSystemSearchAttribute,
 		metrics.NoopMetricsHandler,
@@ -184,7 +186,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		cfg,
 		s.mockResource.GetNamespaceReplicationQueue(),
 		s.mockProducer,
-		s.mockVisibilityMgr,
+		s.mockAdminVisibilityMgr,
 		s.mockResource.GetLogger(),
 		nil,
 		s.mockResource.GetTaskManager(),
@@ -932,7 +934,7 @@ func (s *adminHandlerSuite) Test_DescribeCluster_CurrentCluster_Success() {
 	s.mockResource.MatchingServiceResolver.EXPECT().MemberCount().Return(0)
 	s.mockResource.WorkerServiceResolver.EXPECT().Members().Return([]membership.HostInfo{})
 	s.mockResource.WorkerServiceResolver.EXPECT().MemberCount().Return(0)
-	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
+	s.mockAdminVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
 	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		&persistence.GetClusterMetadataResponse{
 			ClusterMetadata: &persistencespb.ClusterMetadata{
@@ -970,7 +972,7 @@ func (s *adminHandlerSuite) Test_DescribeCluster_NonCurrentCluster_Success() {
 	s.mockResource.MatchingServiceResolver.EXPECT().MemberCount().Return(0)
 	s.mockResource.WorkerServiceResolver.EXPECT().Members().Return([]membership.HostInfo{})
 	s.mockResource.WorkerServiceResolver.EXPECT().MemberCount().Return(0)
-	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
+	s.mockAdminVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
 	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		&persistence.GetClusterMetadataResponse{
 			ClusterMetadata: &persistencespb.ClusterMetadata{
@@ -1954,7 +1956,7 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithAliasedSearchAttribu
 			}
 
 			s.mockNamespaceCache.EXPECT().GetNamespaceID(tv.NamespaceName()).Return(tv.NamespaceID(), nil)
-			s.mockVisibilityMgr.EXPECT().GetIndexName().Return(tv.IndexName()).Times(eventsWithSasCount)
+			s.mockAdminVisibilityMgr.EXPECT().GetIndexName().Return(tv.IndexName()).Times(eventsWithSasCount)
 
 			// Mock mapper remove alias from alias name.
 			s.mockSaMapper.EXPECT().GetFieldName(gomock.Any(), tv.NamespaceName().String()).DoAndReturn(func(alias string, nsName string) (string, error) {
@@ -1969,7 +1971,7 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithAliasedSearchAttribu
 			if subTest.ExpectedErr != nil {
 				s.mockSaMapper.EXPECT().GetAlias(gomock.Any(), tv.NamespaceName().String()).Return("", serviceerror.NewInvalidArgument(""))
 			} else {
-				s.mockVisibilityMgr.EXPECT().ValidateCustomSearchAttributes(gomock.Any()).Return(nil, nil).Times(eventsWithSasCount)
+				s.mockAdminVisibilityMgr.EXPECT().ValidateCustomSearchAttributes(gomock.Any()).Return(nil, nil).Times(eventsWithSasCount)
 				s.mockHistoryClient.EXPECT().ImportWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *historyservice.ImportWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.ImportWorkflowExecutionResponse, error) {
 					s.Equal(tv.NamespaceID().String(), request.NamespaceId)
 					for _, historyBatch := range request.HistoryBatches {
@@ -2056,7 +2058,7 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithNonAliasedSearchAttr
 			}
 
 			s.mockNamespaceCache.EXPECT().GetNamespaceID(tv.NamespaceName()).Return(tv.NamespaceID(), nil)
-			s.mockVisibilityMgr.EXPECT().GetIndexName().Return(tv.IndexName()).Times(eventsWithSasCount)
+			s.mockAdminVisibilityMgr.EXPECT().GetIndexName().Return(tv.IndexName()).Times(eventsWithSasCount)
 
 			s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes(tv.IndexName(), gomock.Any()).Return(searchattribute.TestEsNameTypeMap(), nil).Times(eventsWithSasCount)
 
@@ -2068,7 +2070,7 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithNonAliasedSearchAttr
 			if subTest.ExpectedErr != nil {
 				s.mockSaMapper.EXPECT().GetAlias(gomock.Any(), tv.NamespaceName().String()).Return("", serviceerror.NewInvalidArgument(""))
 			} else {
-				s.mockVisibilityMgr.EXPECT().ValidateCustomSearchAttributes(gomock.Any()).Return(nil, nil).Times(eventsWithSasCount)
+				s.mockAdminVisibilityMgr.EXPECT().ValidateCustomSearchAttributes(gomock.Any()).Return(nil, nil).Times(eventsWithSasCount)
 				s.mockHistoryClient.EXPECT().ImportWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *historyservice.ImportWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.ImportWorkflowExecutionResponse, error) {
 					s.Equal(tv.NamespaceID().String(), request.NamespaceId)
 					for _, historyBatch := range request.HistoryBatches {
@@ -2778,4 +2780,127 @@ func TestCreateDelegatedBatchRequestConvertsExecutions(t *testing.T) {
 			}, request.GetTargetExecutions())
 		})
 	}
+}
+
+func (s *adminHandlerSuite) TestListExecutions() {
+	ctx := context.Background()
+	request := &adminservice.ListExecutionsRequest{
+		Namespace:     s.namespace.String(),
+		Query:         "ExecutionStatus = 'Completed'",
+		PageSize:      10,
+		NextPageToken: []byte("page-token"),
+	}
+	executions := []*persistencespb.VisibilityExecutionInfo{
+		{
+			NamespaceId: s.namespaceID.String(),
+			Namespace:   s.namespace.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: "test-workflow-id",
+				RunId:      "test-run-id",
+			},
+			WorkflowType: &commonpb.WorkflowType{Name: "test-workflow-type"},
+			Status:       enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		},
+	}
+
+	s.Run("success", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			ListExecutions(ctx, &manager.AdminListExecutionsRequest{
+				Namespace:     s.namespace,
+				Query:         request.GetQuery(),
+				PageSize:      int(request.GetPageSize()),
+				NextPageToken: request.GetNextPageToken(),
+			}).
+			Return(&manager.AdminListExecutionsResponse{
+				Executions:    executions,
+				NextPageToken: []byte("next-page-token"),
+			}, nil)
+
+		resp, err := s.handler.ListExecutions(ctx, request)
+		s.NoError(err)
+		protorequire.ProtoSliceEqual(s.T(), executions, resp.GetExecutions())
+		s.Equal([]byte("next-page-token"), resp.GetNextPageToken())
+	})
+
+	s.Run("all namespaces", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			ListExecutions(ctx, &manager.AdminListExecutionsRequest{
+				Query:    request.GetQuery(),
+				PageSize: int(request.GetPageSize()),
+			}).
+			Return(&manager.AdminListExecutionsResponse{}, nil)
+
+		resp, err := s.handler.ListExecutions(ctx, &adminservice.ListExecutionsRequest{
+			Query:    request.GetQuery(),
+			PageSize: request.GetPageSize(),
+		})
+		s.NoError(err)
+		s.Empty(resp.GetExecutions())
+		s.Empty(resp.GetNextPageToken())
+	})
+
+	s.Run("visibility manager error", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			ListExecutions(ctx, gomock.Any()).
+			Return(nil, serviceerror.NewInvalidArgument("invalid query"))
+
+		resp, err := s.handler.ListExecutions(ctx, request)
+		s.Nil(resp)
+		var invalidArg *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArg)
+	})
+}
+
+func (s *adminHandlerSuite) TestCountExecutions() {
+	ctx := context.Background()
+	request := &adminservice.CountExecutionsRequest{
+		Namespace: s.namespace.String(),
+		Query:     "GROUP BY ExecutionStatus",
+	}
+	groups := []*adminservice.CountExecutionsResponse_AggregationGroup{
+		{
+			GroupValues: []*commonpb.Payload{
+				payload.EncodeString(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED.String()),
+			},
+			Count: 100,
+		},
+	}
+
+	s.Run("success", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			CountExecutions(ctx, &manager.AdminCountExecutionsRequest{
+				Namespace: s.namespace,
+				Query:     request.GetQuery(),
+			}).
+			Return(&manager.AdminCountExecutionsResponse{Count: 100, Groups: groups}, nil)
+
+		resp, err := s.handler.CountExecutions(ctx, request)
+		s.NoError(err)
+		s.Equal(int64(100), resp.GetCount())
+		protorequire.ProtoSliceEqual(s.T(), groups, resp.GetGroups())
+	})
+
+	s.Run("all namespaces", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			CountExecutions(ctx, &manager.AdminCountExecutionsRequest{Query: request.GetQuery()}).
+			Return(&manager.AdminCountExecutionsResponse{Count: 100}, nil)
+
+		resp, err := s.handler.CountExecutions(ctx, &adminservice.CountExecutionsRequest{
+			Query: request.GetQuery(),
+		})
+		s.NoError(err)
+		s.Equal(int64(100), resp.GetCount())
+		s.Empty(resp.GetGroups())
+	})
+
+	s.Run("visibility manager error", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			CountExecutions(ctx, gomock.Any()).
+			Return(nil, serviceerror.NewInvalidArgument("invalid query"))
+
+		resp, err := s.handler.CountExecutions(ctx, request)
+		s.Nil(resp)
+		var invalidArg *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArg)
+	})
 }

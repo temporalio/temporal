@@ -372,6 +372,13 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req any) (*
 			return ni.namespaceRegistry.GetNamespace(namespaceName)
 		}
 		return nil, nil
+	case *adminservice.ListExecutionsRequest,
+		*adminservice.CountExecutionsRequest:
+		// Namespace is optional for admin visibility APIs.
+		if !namespaceName.IsEmpty() {
+			return ni.namespaceRegistry.GetNamespace(namespaceName)
+		}
+		return nil, nil
 	default:
 		// All other APIs.
 		if namespaceName.IsEmpty() {

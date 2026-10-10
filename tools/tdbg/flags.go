@@ -75,6 +75,7 @@ var (
 	FlagFair                       = "fair"
 	FlagMinPass                    = "min-pass"
 	FlagVisibilityQuery            = "query"
+	FlagVisibilityQueryAlias       = []string{"q"}
 	FlagJobID                      = "job-id"
 	FlagDecode                     = "decode"
 	FlagScheduleID                 = "schedule-id"
