@@ -96,7 +96,6 @@ type (
 		initCtx               context.Context
 		initCancel            func()
 
-		cancelNewMatcherSub func()
 		cancelFairnessSub   func()
 		cancelAutoEnableSub func()
 
@@ -207,11 +206,10 @@ func newTaskQueuePartitionManager(
 	return pm, nil
 }
 
-// computeEffectiveConfig determines the effective NewMatcher and EnableFairness config values
-// based on fairnessState, autoEnable, and the base dynamic config values.
-func (pm *taskQueuePartitionManagerImpl) computeEffectiveConfig(autoEnable, fairness, newMatcher bool) (effectiveNewMatcher, effectiveEnableFairness bool) {
+// computeEffectiveConfig determines the effective EnableFairness config value
+// based on fairnessState, autoEnable, and the base dynamic config value.
+func (pm *taskQueuePartitionManagerImpl) computeEffectiveConfig(autoEnable, fairness bool) (effectiveEnableFairness bool) {
 	effectiveEnableFairness = fairness && pm.partition.SupportsFairness()
-	effectiveNewMatcher = newMatcher || fairness
 	if !autoEnable {
 		return
 	}
@@ -220,13 +218,10 @@ func (pm *taskQueuePartitionManagerImpl) computeEffectiveConfig(autoEnable, fair
 	case enumsspb.FAIRNESS_STATE_UNSPECIFIED:
 		// use values from config
 	case enumsspb.FAIRNESS_STATE_V0:
-		effectiveNewMatcher = false
 		effectiveEnableFairness = false
 	case enumsspb.FAIRNESS_STATE_V1:
-		effectiveNewMatcher = true
 		effectiveEnableFairness = false
 	case enumsspb.FAIRNESS_STATE_V2:
-		effectiveNewMatcher = true
 		effectiveEnableFairness = pm.partition.SupportsFairness()
 	default:
 		pm.logger.Error("unknown fairnessState in user data")
@@ -250,7 +245,7 @@ func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 	pm.fairnessState = data.GetFairnessState()
 	changeKey := pm.partition.GradualChangeKey()
 
-	var autoEnable, fairness, newMatcher bool
+	var autoEnable, fairness bool
 	autoEnable, pm.cancelAutoEnableSub = pm.config.AutoEnableV2Sub(pm.autoEnableChanged)
 
 	unloadOnBaseConfigChange := func(bool) {
@@ -259,13 +254,11 @@ func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 		}
 	}
 
-	newMatcher, pm.cancelNewMatcherSub = dynamicconfig.SubscribeGradualChange(
-		pm.config.NewMatcherSub, changeKey, unloadOnBaseConfigChange, pm.engine.timeSource)
 	fairness, pm.cancelFairnessSub = dynamicconfig.SubscribeGradualChange(
 		pm.config.EnableFairnessSub, changeKey, unloadOnBaseConfigChange, pm.engine.timeSource)
 
 	// Determine initial config values
-	pm.config.NewMatcher, pm.config.EnableFairness = pm.computeEffectiveConfig(autoEnable, fairness, newMatcher)
+	pm.config.EnableFairness = pm.computeEffectiveConfig(autoEnable, fairness)
 
 	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(pm.partition))
 	if err != nil {
@@ -315,14 +308,10 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	queue, err := pm.defaultQueueFuture.Get(context.Background())
 	if err == nil {
 		queue.Stop(unloadCause)
-		pm.emitZeroLogicalBacklogForQueue(queue.QueueKey().Version(), queue)
 	}
 
 	if pm.cancelFairnessSub != nil {
 		pm.cancelFairnessSub()
-	}
-	if pm.cancelNewMatcherSub != nil {
-		pm.cancelNewMatcherSub()
 	}
 	if pm.cancelAutoEnableSub != nil {
 		pm.cancelAutoEnableSub()
@@ -330,9 +319,8 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 	pm.scaleManager.Stop()
 
 	pm.versionedQueuesLock.Lock()
-	for version, vq := range pm.versionedQueues {
+	for _, vq := range pm.versionedQueues {
 		vq.Stop(unloadCause)
-		pm.emitZeroLogicalBacklogForQueue(version, vq)
 	}
 	pm.versionedQueuesLock.Unlock()
 
@@ -513,33 +501,18 @@ func (pm *taskQueuePartitionManagerImpl) autoEnableChanged(en bool) {
 	fairnessGC, _ := pm.config.EnableFairnessSub(nil)
 	fairness := fairnessGC.Value(changeKey, now)
 
-	newMatcherGC, _ := pm.config.NewMatcherSub(nil)
-	newMatcher := newMatcherGC.Value(changeKey, now)
+	effectiveEnableFairness := pm.computeEffectiveConfig(en, fairness)
 
-	effectiveNewMatcher, effectiveEnableFairness := pm.computeEffectiveConfig(en, fairness, newMatcher)
-
-	if effectiveNewMatcher != pm.config.NewMatcher || effectiveEnableFairness != pm.config.EnableFairness {
+	if effectiveEnableFairness != pm.config.EnableFairness {
 		pm.unloadFromEngine(unloadCauseConfigChange)
 	}
 }
 
 func (pm *taskQueuePartitionManagerImpl) autoEnableIfNeeded(ctx context.Context, params addTaskParams) {
-	if pm.fairnessState != enumsspb.FAIRNESS_STATE_UNSPECIFIED {
-		return
-	}
-	if params.taskInfo.Priority.GetFairnessKey() == "" {
-		if params.taskInfo.Priority.GetPriorityKey() == int32(0) {
-			return
-		}
-		// Do not auto enable if we only see priority and we're using new matcher already
-		if pm.config.NewMatcher {
-			return
-		}
-	}
-	if !pm.Partition().IsRoot() || !pm.Partition().SupportsFairness() || !pm.config.AutoEnableV2() {
-		return
-	}
-	if !pm.autoEnableRateLimiter.Allow() {
+	if pm.fairnessState != enumsspb.FAIRNESS_STATE_UNSPECIFIED ||
+		params.taskInfo.Priority.GetFairnessKey() == "" ||
+		!pm.Partition().IsRoot() || !pm.Partition().SupportsFairness() || !pm.config.AutoEnableV2() ||
+		!pm.autoEnableRateLimiter.Allow() {
 		return
 	}
 	req := &matchingservice.UpdateFairnessStateRequest{
@@ -1031,70 +1004,6 @@ func (pm *taskQueuePartitionManagerImpl) GetPhysicalQueueAdjustedStats(
 		return nil
 	}
 	return info.GetPhysicalTaskQueueInfo().GetTaskQueueStats()
-}
-
-// TODO(pri): old matcher cleanup
-func (pm *taskQueuePartitionManagerImpl) ProcessSpooledTask(
-	ctx context.Context,
-	task *internalTask,
-	backlogQueue *PhysicalTaskQueueKey,
-) error {
-	taskInfo := task.event.GetData()
-	// This task came from taskReader so task.event is always set here.
-	directive := taskInfo.GetVersionDirective()
-	assignedBuildId := backlogQueue.Version().BuildId()
-	if assignedBuildId != "" {
-		// construct directive based on the build ID of the spool queue
-		directive = worker_versioning.MakeBuildIdDirective(assignedBuildId)
-	}
-	// Redirect and re-resolve if we're blocked in matcher and user data changes.
-	for {
-		newBacklogQueue, syncMatchQueue, userDataChanged, taskDispatchRevisionNumber, targetVersion, err := pm.getPhysicalQueuesForAdd(ctx,
-			directive,
-			nil,
-			taskInfo.GetRunId(),
-			taskInfo.GetWorkflowId(),
-			false)
-		if err != nil {
-			return err
-		}
-
-		task.targetWorkerDeploymentVersion = targetVersion
-
-		// Update the task dispatch revision number on the task since the routingConfig of the partition
-		// may have changed after the task was spooled.
-		task.taskDispatchRevisionNumber = taskDispatchRevisionNumber
-
-		// set redirect info if spoolQueue and syncMatchQueue build ids are different
-		if assignedBuildId != syncMatchQueue.QueueKey().Version().BuildId() {
-			task.redirectInfo = &taskqueuespb.BuildIdRedirectInfo{
-				AssignedBuildId: assignedBuildId,
-			}
-		} else {
-			// make sure to reset redirectInfo in case it was set in a previous loop cycle
-			task.redirectInfo = nil
-		}
-		if !backlogQueue.version.Deployment().Equal(newBacklogQueue.QueueKey().version.Deployment()) {
-			// Backlog queue has changed, spool to the new queue. This should happen rarely: when
-			// activity of pinned workflow was determined independent and sent to the default queue
-			// but now at dispatch time, the determination is different because the activity pollers
-			// on the pinned deployment have reached server.
-			// TODO: before spooling, try to sync-match the task on the new queue
-			err = newBacklogQueue.SpoolTask(taskInfo)
-			if err != nil {
-				// return the error so task_reader retries the outer call
-				return err
-			}
-			// Finish the task because now it is copied to the other backlog. It should be considered
-			// invalid because a poller did not receive the task.
-			task.finish(taskFinishResult{})
-			return nil
-		}
-		err = syncMatchQueue.DispatchSpooledTask(ctx, task, userDataChanged)
-		if err != errInterrupted {
-			return err
-		}
-	}
 }
 
 func (pm *taskQueuePartitionManagerImpl) AddSpooledTask(
@@ -1662,8 +1571,7 @@ func (pm *taskQueuePartitionManagerImpl) describe(
 func (pm *taskQueuePartitionManagerImpl) updateEphemeralData(ctx context.Context) error {
 	// for now, this only applies to normal workflow task queues, only with new matcher
 	if pm.partition.Kind() != enumspb.TASK_QUEUE_KIND_NORMAL ||
-		pm.partition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW ||
-		!pm.config.NewMatcher {
+		pm.partition.TaskType() != enumspb.TASK_QUEUE_TYPE_WORKFLOW {
 		return nil
 	}
 
@@ -1726,6 +1634,11 @@ func (pm *taskQueuePartitionManagerImpl) updateEphemeralDataIteration(prevBacklo
 }
 
 func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.Context) error {
+	var emitted map[string]*taskqueuespb.TaskQueueVersionInfoInternal
+	// This goroutine is the only writer of the logical backlog gauges. Zeroing here, both for series that
+	// drop out between emits and on exit, orders it after the last real emit, so an emit that was in
+	// flight when a queue unloaded can't leave a stale value behind.
+	defer func() { pm.emitZeroLogicalBacklog(emitted) }()
 	for {
 		interval := pm.config.BacklogMetricsEmitInterval()
 		if interval == 0 { // disabled
@@ -1740,7 +1653,20 @@ func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.C
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(backoff.Jitter(interval, 0.05)):
-			pm.fetchAndEmitLogicalBacklogMetrics(ctx)
+			versions, err := pm.fetchAndEmitLogicalBacklogMetrics(ctx)
+			if err != nil {
+				// Stop closes the user data manager before cancelling this goroutine, so a tick in
+				// that window fails with errTaskQueueClosed; neither that nor cancellation is a problem.
+				if !common.IsContextCanceledErr(err) && !errors.Is(err, errTaskQueueClosed) {
+					pm.logger.Error("failed to emit logical backlog metrics", tag.Error(err))
+				}
+				continue // keep the last snapshot so a failed describe doesn't zero live series
+			}
+			if versions == nil {
+				continue // disabled
+			}
+			pm.emitZeroLogicalBacklog(staleLogicalBacklog(emitted, versions))
+			emitted = versions
 		}
 	}
 }
@@ -1750,17 +1676,19 @@ func (pm *taskQueuePartitionManagerImpl) emitLogicalBacklogMetrics(ctx context.C
 // These metrics reflect versioning attribution: for current/ramping versions, a proportional
 // share of the unversioned queue's backlog is added to their count, and the unversioned queue's
 // count is reduced accordingly. This ensures metrics match what DescribeTaskQueue returns.
-func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx context.Context) {
+// Returns the versions it recorded, or nil if the metrics are disabled.
+func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx context.Context) (map[string]*taskqueuespb.TaskQueueVersionInfoInternal, error) {
 	if !pm.config.BreakdownMetricsByTaskQueue() || !pm.config.BreakdownMetricsByPartition() {
-		return
+		return nil, nil
 	}
 
 	buildIds := map[string]bool{"": true} // include unversioned
 	resp, err := pm.describe(ctx, buildIds, true, true, false, false, true)
 	if err != nil {
-		return
+		return nil, err
 	}
 
+	emitted := make(map[string]*taskqueuespb.TaskQueueVersionInfoInternal)
 	for versionKey, vInfo := range resp.GetVersionsInfoInternal() {
 		// When BreakdownMetricsByBuildID is disabled, all versioned queues share the same
 		// "__versioned__" tag value. Since gauges overwrite on each Record() call, emitting
@@ -1770,14 +1698,9 @@ func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx c
 			continue
 		}
 
+		emitted[versionKey] = vInfo
 		pqInfo := vInfo.GetPhysicalTaskQueueInfo()
-
-		deploymentName, buildID := parseDeploymentFromVersionKey(versionKey)
-		versionHandler := pm.metricsHandler.WithTags(
-			metrics.WorkerVersionTag(versionKey, pm.config.BreakdownMetricsByBuildID()),
-			metrics.WorkerDeploymentNameTag(deploymentName, pm.config.BreakdownMetricsByBuildID()),
-			metrics.WorkerDeploymentBuildIDTag(buildID, pm.config.BreakdownMetricsByBuildID()),
-		)
+		versionHandler := pm.logicalBacklogHandler(versionKey)
 
 		// Per-priority backlog count and age
 		for pri, stats := range pqInfo.GetTaskQueueStatsByPriorityKey() {
@@ -1793,33 +1716,50 @@ func (pm *taskQueuePartitionManagerImpl) fetchAndEmitLogicalBacklogMetrics(ctx c
 			)
 		}
 	}
+	return emitted, nil
 }
 
-// emitZeroLogicalBacklogForQueue zeroes out logical backlog gauges for a single physical queue
-// to prevent stale values after unloading. Called from:
-//   - Stop(): after each physical queue is stopped during full partition unload.
-//   - unloadPhysicalQueue(): before a versioned queue is removed from the map during individual
-//     unload (idle timeout, ownership conflict, init error, or other fatal backlog manager errors).
-//
-// Only zeroes priority keys that actually exist in the queue's own subqueues to avoid creating
-// noisy zero-value series. Note: for current/ramping versions, fetchAndEmitLogicalBacklogMetrics
-// may emit additional priority keys attributed from the default queue via mergeStatsByPriority.
-// Those attributed-only keys are not zeroed here, which could leave stale gauge values for
-// priority keys that existed only through attribution.
-func (pm *taskQueuePartitionManagerImpl) emitZeroLogicalBacklogForQueue(version PhysicalTaskQueueVersion, pq physicalTaskQueueManager) {
-	if !pm.config.BreakdownMetricsByTaskQueue() || !pm.config.BreakdownMetricsByPartition() {
-		return
+// staleLogicalBacklog returns the series in prev that cur no longer reports: every priority of a
+// version whose queue unloaded, and any priority a still-loaded version only had through
+// attribution, e.g. after it stops being current.
+func staleLogicalBacklog(prev, cur map[string]*taskqueuespb.TaskQueueVersionInfoInternal) map[string]*taskqueuespb.TaskQueueVersionInfoInternal {
+	stale := make(map[string]*taskqueuespb.TaskQueueVersionInfoInternal)
+	for versionKey, prevInfo := range prev {
+		curInfo, stillLoaded := cur[versionKey]
+		if !stillLoaded {
+			stale[versionKey] = prevInfo
+			continue
+		}
+		prevStats := prevInfo.GetPhysicalTaskQueueInfo().GetTaskQueueStatsByPriorityKey()
+		for pri := range curInfo.GetPhysicalTaskQueueInfo().GetTaskQueueStatsByPriorityKey() {
+			delete(prevStats, pri)
+		}
+		if len(prevStats) > 0 {
+			stale[versionKey] = prevInfo
+		}
 	}
-	deploymentName, buildID := parseDeploymentFromVersionKey(version.MetricsTagValue())
-	handler := pm.metricsHandler.WithTags(
-		metrics.WorkerVersionTag(version.MetricsTagValue(), pm.config.BreakdownMetricsByBuildID()),
+	return stale
+}
+
+func (pm *taskQueuePartitionManagerImpl) logicalBacklogHandler(versionKey string) metrics.Handler {
+	deploymentName, buildID := parseDeploymentFromVersionKey(versionKey)
+	return pm.metricsHandler.WithTags(
+		metrics.WorkerVersionTag(versionKey, pm.config.BreakdownMetricsByBuildID()),
 		metrics.WorkerDeploymentNameTag(deploymentName, pm.config.BreakdownMetricsByBuildID()),
 		metrics.WorkerDeploymentBuildIDTag(buildID, pm.config.BreakdownMetricsByBuildID()),
 	)
-	for pri := range pq.GetStatsByPriority(false) {
-		priorityTag := metrics.MatchingTaskPriorityTag(pri)
-		metrics.ApproximateBacklogCount.With(handler).Record(0, priorityTag)
-		metrics.ApproximateBacklogAgeSeconds.With(handler).Record(0, priorityTag)
+}
+
+// emitZeroLogicalBacklog zeroes out the logical backlog gauges that fetchAndEmitLogicalBacklogMetrics
+// recorded for versions, including priorities a version only has through attribution.
+func (pm *taskQueuePartitionManagerImpl) emitZeroLogicalBacklog(versions map[string]*taskqueuespb.TaskQueueVersionInfoInternal) {
+	for versionKey, vInfo := range versions {
+		handler := pm.logicalBacklogHandler(versionKey)
+		for pri := range vInfo.GetPhysicalTaskQueueInfo().GetTaskQueueStatsByPriorityKey() {
+			priorityTag := metrics.MatchingTaskPriorityTag(pri)
+			metrics.ApproximateBacklogCount.With(handler).Record(0, priorityTag)
+			metrics.ApproximateBacklogAgeSeconds.With(handler).Record(0, priorityTag)
+		}
 	}
 }
 
@@ -2113,8 +2053,6 @@ func (pm *taskQueuePartitionManagerImpl) unloadPhysicalQueue(unloadedDbq physica
 	pm.versionedQueuesLock.Lock()
 	foundDbq, ok := pm.versionedQueues[version]
 	if ok && foundDbq == unloadedDbq {
-		// Zero logical backlog metrics before removing from map to prevent stale gauges.
-		pm.emitZeroLogicalBacklogForQueue(version, foundDbq)
 		delete(pm.versionedQueues, version)
 	}
 	pm.versionedQueuesLock.Unlock()
