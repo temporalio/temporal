@@ -743,8 +743,14 @@ type ActivityAttemptState struct {
 	// worker-provided NextRetryDelay override. Retry policy updates only recompute
 	// current_retry_interval when this is ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY.
 	CurrentRetryIntervalSource ActivityRetryIntervalSource `protobuf:"varint,13,opt,name=current_retry_interval_source,json=currentRetryIntervalSource,proto3,enum=temporal.server.chasm.lib.activity.proto.v1.ActivityRetryIntervalSource" json:"current_retry_interval_source,omitempty"`
-	unknownFields              protoimpl.UnknownFields
-	sizeCache                  protoimpl.SizeCache
+	// The worker's control task queue for sending commands (e.g. cancel) via Nexus.
+	// Set when the worker reports it during poll. Empty if the worker doesn't support worker commands.
+	WorkerControlTaskQueue string `protobuf:"bytes,15,opt,name=worker_control_task_queue,json=workerControlTaskQueue,proto3" json:"worker_control_task_queue,omitempty"`
+	// The serialized ComponentRef captured when the attempt was scheduled. Used to
+	// construct the task token for both dispatch to matching and cancel commands.
+	ComponentRef  []byte `protobuf:"bytes,16,opt,name=component_ref,json=componentRef,proto3" json:"component_ref,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ActivityAttemptState) Reset() {
@@ -873,6 +879,20 @@ func (x *ActivityAttemptState) GetCurrentRetryIntervalSource() ActivityRetryInte
 		return x.CurrentRetryIntervalSource
 	}
 	return ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
+}
+
+func (x *ActivityAttemptState) GetWorkerControlTaskQueue() string {
+	if x != nil {
+		return x.WorkerControlTaskQueue
+	}
+	return ""
+}
+
+func (x *ActivityAttemptState) GetComponentRef() []byte {
+	if x != nil {
+		return x.ComponentRef
+	}
+	return nil
 }
 
 type ActivityHeartbeatState struct {
@@ -1297,7 +1317,7 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\bidentity\x18\x02 \x01(\tR\bidentity\x12\x16\n" +
 	"\x06reason\x18\x03 \x01(\tR\x06reason\x12\x1d\n" +
 	"\n" +
-	"request_id\x18\x04 \x01(\tR\trequestId\"\x98\b\n" +
+	"request_id\x18\x04 \x01(\tR\trequestId\"\xf8\b\n" +
 	"\x14ActivityAttemptState\x12\x14\n" +
 	"\x05count\x18\x01 \x01(\x05R\x05count\x12O\n" +
 	"\x16current_retry_interval\x18\x02 \x01(\v2\x19.google.protobuf.DurationR\x14currentRetryInterval\x12=\n" +
@@ -1314,7 +1334,9 @@ const file_temporal_server_chasm_lib_activity_proto_v1_activity_state_proto_rawD
 	"\vsdk_version\x18\v \x01(\tR\n" +
 	"sdkVersion\x12?\n" +
 	"\rdispatch_time\x18\f \x01(\v2\x1a.google.protobuf.TimestampR\fdispatchTime\x12\x8b\x01\n" +
-	"\x1dcurrent_retry_interval_source\x18\r \x01(\x0e2H.temporal.server.chasm.lib.activity.proto.v1.ActivityRetryIntervalSourceR\x1acurrentRetryIntervalSource\x1a\x80\x01\n" +
+	"\x1dcurrent_retry_interval_source\x18\r \x01(\x0e2H.temporal.server.chasm.lib.activity.proto.v1.ActivityRetryIntervalSourceR\x1acurrentRetryIntervalSource\x129\n" +
+	"\x19worker_control_task_queue\x18\x0f \x01(\tR\x16workerControlTaskQueue\x12#\n" +
+	"\rcomponent_ref\x18\x10 \x01(\fR\fcomponentRef\x1a\x80\x01\n" +
 	"\x12LastFailureDetails\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12:\n" +
 	"\afailure\x18\x02 \x01(\v2 .temporal.api.failure.v1.FailureR\afailure\"\xc9\x01\n" +

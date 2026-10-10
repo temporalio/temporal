@@ -264,6 +264,14 @@ message ActivityAttemptState {
   // worker-provided NextRetryDelay override. Retry policy updates only recompute
   // current_retry_interval when this is ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY.
   ActivityRetryIntervalSource current_retry_interval_source = 13;
+
+  // The worker's control task queue for sending commands (e.g. cancel) via Nexus.
+  // Set when the worker reports it during poll. Empty if the worker doesn't support worker commands.
+  string worker_control_task_queue = 15;
+
+  // The serialized ComponentRef captured when the attempt was scheduled. Used to
+  // construct the task token for both dispatch to matching and cancel commands.
+  bytes component_ref = 16;
 }
 
 message ActivityHeartbeatState {

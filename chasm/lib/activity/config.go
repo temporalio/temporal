@@ -61,6 +61,7 @@ type Config struct {
 	BlobSizeLimitWarn                         dynamicconfig.IntPropertyFnWithNamespaceFilter
 	BreakdownMetricsByTaskQueue               dynamicconfig.TypedPropertyFnWithTaskQueueFilter[bool]
 	EnableCallbacks                           dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCancelActivityWorkerCommand         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnabledCallbackKinds                      dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.Kind]
 	Enabled                                   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableStandaloneActivityOperatorCommands  dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -83,6 +84,7 @@ func ConfigProvider(dc *dynamicconfig.Collection) *Config {
 		BreakdownMetricsByTaskQueue:               dynamicconfig.MetricsBreakdownByTaskQueue.Get(dc),
 		DefaultActivityRetryPolicy:                dynamicconfig.DefaultActivityRetryPolicy.Get(dc),
 		EnableCallbacks:                           EnableCallbacks.Get(dc),
+		EnableCancelActivityWorkerCommand:         dynamicconfig.EnableCancelActivityWorkerCommand.Get(dc),
 		EnabledCallbackKinds:                      EnabledCallbackKinds.Get(dc),
 		Enabled:                                   Enabled.Get(dc),
 		EnableStandaloneActivityOperatorCommands:  EnableStandaloneActivityOperatorCommands.Get(dc),
