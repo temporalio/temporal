@@ -3247,6 +3247,13 @@ time (mirrors gRPC MaxConnectionAge's +/-10% jitter). Values outside [0, 1] are 
 current run returns that run instead of starting a second one, and reports Started=true when that
 request ID created the run (matching StartWorkflowExecution).`,
 	)
+	EnableCrossRunRequestIDDedup = NewNamespaceBoolSetting(
+		"history.enableCrossRunRequestIDDedup",
+		false,
+		`If true, a workflow start retry with the same request ID returns the run it created even when
+it is no longer current. Run IDs of started workflows are derived from the request ID instead of being
+random. Ignored when the execution store does not declare SupportsCheckRunAlreadyExists.`,
+	)
 	BusinessIDReuseRate = NewNamespaceIntSetting(
 		"history.businessIDReuseRate",
 		0,

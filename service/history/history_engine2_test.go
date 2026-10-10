@@ -60,6 +60,7 @@ import (
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/service/history/api/workflowresend"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -2079,6 +2080,130 @@ func (s *engine2Suite) TestStartWorkflowExecution_Terminate_Existing() {
 	s.NoError(err)
 	s.True(resp.Started)
 	s.NotEqual(s.tv.RunID(), resp.GetRunId())
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_CheckRunAlreadyExists_BrandNew() {
+	for _, enabled := range []bool{false, true} {
+		s.Run(fmt.Sprintf("enabled=%v", enabled), func() {
+			s.config.EnableCrossRunRequestIDDedup = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(enabled)
+			s.mockExecutionMgr.EXPECT().SupportsCheckRunAlreadyExists().Return(true).AnyTimes()
+			startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
+
+			var createRequest *persistence.CreateWorkflowExecutionRequest
+			s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, req *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
+					createRequest = req
+					return tests.CreateWorkflowExecutionResponse, nil
+				})
+
+			resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
+			s.NoError(err)
+			s.Equal(enabled, createRequest.CheckRunAlreadyExists)
+			s.Equal(resp.GetRunId(), createRequest.NewWorkflowSnapshot.ExecutionState.GetRunId())
+			if enabled {
+				s.Equal(s.derivedRunID(startRequest), resp.GetRunId())
+			}
+		})
+	}
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_CheckRunAlreadyExists_TerminateExisting() {
+	for _, enabled := range []bool{false, true} {
+		s.Run(fmt.Sprintf("enabled=%v", enabled), func() {
+			s.config.EnableCrossRunRequestIDDedup = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(enabled)
+			s.mockExecutionMgr.EXPECT().SupportsCheckRunAlreadyExists().Return(true).AnyTimes()
+			now := s.historyEngine.shardContext.GetTimeSource().Now()
+			ms := s.setupStartWorkflowExecutionDedup(timestamppb.New(now.Add(-2 * time.Second)))
+			s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+				Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(context.Background(), ms)}, nil)
+			var updateRequest *persistence.UpdateWorkflowExecutionRequest
+			s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+				func(_ context.Context, req *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+					updateRequest = req
+					return &persistence.UpdateWorkflowExecutionResponse{
+						UpdateMutableStateStats: persistence.MutableStateStatistics{
+							HistoryStatistics: &persistence.HistoryStatistics{SizeDiff: 1},
+						},
+					}, nil
+				})
+
+			startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING)
+			resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
+			s.NoError(err)
+			s.Equal(enabled, updateRequest.CheckRunAlreadyExists)
+			s.Equal(resp.GetRunId(), updateRequest.NewWorkflowSnapshot.ExecutionState.GetRunId())
+			if enabled {
+				s.Equal(s.derivedRunID(startRequest), resp.GetRunId())
+			}
+		})
+	}
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_DerivedRunID_CurrentRunConflictIsNotDedup() {
+	s.config.EnableCrossRunRequestIDDedup = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	s.mockExecutionMgr.EXPECT().SupportsCheckRunAlreadyExists().Return(true)
+	now := s.historyEngine.shardContext.GetTimeSource().Now()
+	ms := s.setupStartWorkflowExecutionDedup(timestamppb.New(now.Add(-2 * time.Second)))
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{State: workflow.TestCloneToProto(context.Background(), ms)}, nil)
+	// The terminate-and-replace write fails on the current run's version check, not on the new run.
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(nil, &persistence.WorkflowConditionFailedError{Msg: "version mismatch"})
+
+	startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING)
+	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
+
+	var conditionFailedErr *persistence.WorkflowConditionFailedError
+	s.ErrorAs(err, &conditionFailedErr)
+	s.Nil(resp)
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_DerivedRunID_RunAlreadyExistsIsDedup() {
+	s.config.EnableCrossRunRequestIDDedup = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	s.mockExecutionMgr.EXPECT().SupportsCheckRunAlreadyExists().Return(true)
+	startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
+	derivedRunID := s.derivedRunID(startRequest)
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(nil, &persistence.WorkflowRunAlreadyExistsError{
+			Msg:    "run already exists",
+			RunID:  derivedRunID,
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		})
+
+	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
+	s.NoError(err)
+	s.Equal(derivedRunID, resp.GetRunId())
+	s.True(resp.GetStarted())
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, resp.GetStatus())
+}
+
+func (s *engine2Suite) TestStartWorkflowExecution_DerivedRunID_StoreWithoutCheckRunAlreadyExists() {
+	s.config.EnableCrossRunRequestIDDedup = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+	s.mockExecutionMgr.EXPECT().SupportsCheckRunAlreadyExists().Return(false)
+	s.mockExecutionMgr.EXPECT().GetName().Return("test-store").AnyTimes()
+	startRequest := makeMockStartRequest(s.tv, enumspb.WORKFLOW_ID_REUSE_POLICY_UNSPECIFIED, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL)
+
+	var createRequest *persistence.CreateWorkflowExecutionRequest
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
+			createRequest = req
+			return tests.CreateWorkflowExecutionResponse, nil
+		})
+
+	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), startRequest)
+	s.NoError(err)
+	s.False(createRequest.CheckRunAlreadyExists)
+	s.NotEqual(s.derivedRunID(startRequest), resp.GetRunId())
+}
+
+func (s *engine2Suite) derivedRunID(request *historyservice.StartWorkflowExecutionRequest) string {
+	return startworkflow.DeriveRunID(
+		request.GetNamespaceId(),
+		request.StartRequest.GetWorkflowId(),
+		chasm.WorkflowArchetypeID,
+		request.StartRequest.GetRequestId(),
+		s.historyEngine.shardContext.GetClusterMetadata().GetClusterID(),
+	)
 }
 
 func (s *engine2Suite) TestStartWorkflowExecution_Terminate_Running() {

@@ -1266,6 +1266,20 @@ func (mr *MockExecutionStoreMockRecorder) SetWorkflowExecution(ctx, request any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowExecution", reflect.TypeOf((*MockExecutionStore)(nil).SetWorkflowExecution), ctx, request)
 }
 
+// SupportsCheckRunAlreadyExists mocks base method.
+func (m *MockExecutionStore) SupportsCheckRunAlreadyExists() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SupportsCheckRunAlreadyExists")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// SupportsCheckRunAlreadyExists indicates an expected call of SupportsCheckRunAlreadyExists.
+func (mr *MockExecutionStoreMockRecorder) SupportsCheckRunAlreadyExists() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SupportsCheckRunAlreadyExists", reflect.TypeOf((*MockExecutionStore)(nil).SupportsCheckRunAlreadyExists))
+}
+
 // UpdateWorkflowExecution mocks base method.
 func (m *MockExecutionStore) UpdateWorkflowExecution(ctx context.Context, request *persistence.InternalUpdateWorkflowExecutionRequest) error {
 	m.ctrl.T.Helper()

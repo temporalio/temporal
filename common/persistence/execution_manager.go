@@ -67,6 +67,10 @@ func (m *executionManagerImpl) GetHistoryBranchUtil() HistoryBranchUtil {
 	return m.persistence.GetHistoryBranchUtil()
 }
 
+func (m *executionManagerImpl) SupportsCheckRunAlreadyExists() bool {
+	return m.persistence.SupportsCheckRunAlreadyExists()
+}
+
 // historySizeRollback records HistorySize increments applied to caller-owned ExecutionStats
 // during a write so they can be reverted if the write fails. The persistence layer mutates
 // the caller's (shared) in-memory mutable state in place; without reverting on failure, a
@@ -149,6 +153,7 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 		PreviousRunID:            request.PreviousRunID,
 		PreviousLastWriteVersion: request.PreviousLastWriteVersion,
 		ArchetypeID:              archetypeID,
+		CheckRunAlreadyExists:    request.CheckRunAlreadyExists,
 		NewWorkflowSnapshot:      *serializedNewWorkflowSnapshot,
 		NewWorkflowNewEvents:     newWorkflowNewEvents,
 	}
@@ -238,6 +243,8 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 
 		ArchetypeID: archetypeID,
 
+		CheckRunAlreadyExists: request.CheckRunAlreadyExists,
+
 		UpdateWorkflowMutation:  *serializedWorkflowMutation,
 		UpdateWorkflowNewEvents: updateWorkflowNewEvents,
 		NewWorkflowSnapshot:     serializedNewWorkflowSnapshot,
@@ -262,6 +269,7 @@ func (m *executionManagerImpl) UpdateWorkflowExecution(
 		}, nil
 	case *CurrentWorkflowConditionFailedError,
 		*WorkflowConditionFailedError,
+		*WorkflowRunAlreadyExistsError,
 		*ConditionFailedError:
 		m.trimHistoryNode(
 			ctx,
@@ -433,6 +441,7 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 		}, nil
 	case *CurrentWorkflowConditionFailedError,
 		*WorkflowConditionFailedError,
+		*WorkflowRunAlreadyExistsError,
 		*ConditionFailedError:
 		m.trimHistoryNode(
 			ctx,

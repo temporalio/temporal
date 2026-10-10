@@ -77,6 +77,7 @@ func (s *transactionSuite) TestOperationMayApplied() {
 	}{
 		{err: &persistence.CurrentWorkflowConditionFailedError{}, mayApplied: false},
 		{err: &persistence.WorkflowConditionFailedError{}, mayApplied: false},
+		{err: &persistence.WorkflowRunAlreadyExistsError{}, mayApplied: false},
 		{err: &persistence.ConditionFailedError{}, mayApplied: false},
 		{err: &persistence.ShardOwnershipLostError{}, mayApplied: false},
 		{err: &persistence.InvalidPersistenceRequestError{}, mayApplied: false},
@@ -148,7 +149,8 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_NotifyTaskWhenFailed() {
 		new(int64(0)),
 		&persistence.WorkflowSnapshot{},
 		[]*persistence.WorkflowEvents{},
-		true, // isWorkflow
+		false, // checkRunAlreadyExists
+		true,  // isWorkflow
 	)
 	s.Equal(timeoutErr, err)
 }
@@ -248,7 +250,8 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_CompletionMetrics() {
 				nil,
 				nil,
 				nil,
-				true, // isWorkflow
+				false, // checkRunAlreadyExists
+				true,  // isWorkflow
 			)
 			s.Require().NoError(err)
 

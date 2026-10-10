@@ -225,6 +225,10 @@ func (p *executionPersistenceClient) GetHistoryBranchUtil() HistoryBranchUtil {
 	return p.persistence.GetHistoryBranchUtil()
 }
 
+func (p *executionPersistenceClient) SupportsCheckRunAlreadyExists() bool {
+	return p.persistence.SupportsCheckRunAlreadyExists()
+}
+
 func (p *executionPersistenceClient) CreateWorkflowExecution(
 	ctx context.Context,
 	request *CreateWorkflowExecutionRequest,
@@ -1445,6 +1449,7 @@ func updateErrorMetric(handler metrics.Handler, logger log.Logger, operation str
 			*AppendHistoryTimeoutError,
 			*CurrentWorkflowConditionFailedError,
 			*WorkflowConditionFailedError,
+			*WorkflowRunAlreadyExistsError,
 			*ConditionFailedError,
 			*TimeoutError,
 			*serviceerror.InvalidArgument,

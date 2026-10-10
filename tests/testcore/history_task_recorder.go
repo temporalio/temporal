@@ -550,6 +550,10 @@ func (r *HistoryTaskRecorder) GetHistoryBranchUtil() persistence.HistoryBranchUt
 	return r.delegate.GetHistoryBranchUtil()
 }
 
+func (r *HistoryTaskRecorder) SupportsCheckRunAlreadyExists() bool {
+	return r.delegate.SupportsCheckRunAlreadyExists()
+}
+
 func (r *HistoryTaskRecorder) AppendHistoryNodes(
 	ctx context.Context,
 	request *persistence.AppendHistoryNodesRequest,
