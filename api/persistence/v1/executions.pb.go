@@ -12,11 +12,12 @@ import (
 	unsafe "unsafe"
 
 	v13 "go.temporal.io/api/common/v1"
-	v18 "go.temporal.io/api/deployment/v1"
+	v19 "go.temporal.io/api/deployment/v1"
 	v11 "go.temporal.io/api/enums/v1"
-	v110 "go.temporal.io/api/failure/v1"
+	v111 "go.temporal.io/api/failure/v1"
 	v17 "go.temporal.io/api/history/v1"
-	v19 "go.temporal.io/api/worker/v1"
+	v18 "go.temporal.io/api/nexus/v1"
+	v110 "go.temporal.io/api/worker/v1"
 	v12 "go.temporal.io/api/workflow/v1"
 	v15 "go.temporal.io/server/api/clock/v1"
 	v1 "go.temporal.io/server/api/enums/v1"
@@ -369,8 +370,10 @@ type WorkflowExecutionInfo struct {
 	// Time of the most recent AdminRebuildMutableState call for this run, unset if the run
 	// was never rebuilt.
 	MutableStateRebuildTime *timestamppb.Timestamp `protobuf:"bytes,116,opt,name=mutable_state_rebuild_time,json=mutableStateRebuildTime,proto3" json:"mutable_state_rebuild_time,omitempty"`
-	unknownFields           protoimpl.UnknownFields
-	sizeCache               protoimpl.SizeCache
+	// Nexus operation context retained across runs so workers can select payload serialization.
+	PropagatedNexusSerializationContext *v18.PropagatedSerializationContext `protobuf:"bytes,117,opt,name=propagated_nexus_serialization_context,json=propagatedNexusSerializationContext,proto3" json:"propagated_nexus_serialization_context,omitempty"`
+	unknownFields                       protoimpl.UnknownFields
+	sizeCache                           protoimpl.SizeCache
 }
 
 func (x *WorkflowExecutionInfo) Reset() {
@@ -1149,6 +1152,13 @@ func (x *WorkflowExecutionInfo) GetMutableStateRebuildTime() *timestamppb.Timest
 	return nil
 }
 
+func (x *WorkflowExecutionInfo) GetPropagatedNexusSerializationContext() *v18.PropagatedSerializationContext {
+	if x != nil {
+		return x.PropagatedNexusSerializationContext
+	}
+	return nil
+}
+
 type isWorkflowExecutionInfo_LastWorkflowTaskFailure interface {
 	isWorkflowExecutionInfo_LastWorkflowTaskFailure()
 }
@@ -1318,7 +1328,7 @@ func (x *FastForwardInfo) GetHasReached() bool {
 // Used only within server persistence; never flows to the public API.
 type LastNotifiedTargetVersion struct {
 	state             protoimpl.MessageState       `protogen:"open.v1"`
-	DeploymentVersion *v18.WorkerDeploymentVersion `protobuf:"bytes,1,opt,name=deployment_version,json=deploymentVersion,proto3" json:"deployment_version,omitempty"`
+	DeploymentVersion *v19.WorkerDeploymentVersion `protobuf:"bytes,1,opt,name=deployment_version,json=deploymentVersion,proto3" json:"deployment_version,omitempty"`
 	// Revision number of the task queue routing config at the time the
 	// notification was sent. Carried forward to DeclinedTargetVersionUpgrade
 	// at continue-as-new time.
@@ -1357,7 +1367,7 @@ func (*LastNotifiedTargetVersion) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *LastNotifiedTargetVersion) GetDeploymentVersion() *v18.WorkerDeploymentVersion {
+func (x *LastNotifiedTargetVersion) GetDeploymentVersion() *v19.WorkerDeploymentVersion {
 	if x != nil {
 		return x.DeploymentVersion
 	}
@@ -2662,7 +2672,7 @@ func (*OutboundTaskInfo_WorkerCommandsTask) isOutboundTaskInfo_TaskDetails() {}
 // WorkerCommandsTask contains worker commands to dispatch via Nexus.
 type WorkerCommandsTask struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Commands      []*v19.WorkerCommand   `protobuf:"bytes,1,rep,name=commands,proto3" json:"commands,omitempty"`
+	Commands      []*v110.WorkerCommand  `protobuf:"bytes,1,rep,name=commands,proto3" json:"commands,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2697,7 +2707,7 @@ func (*WorkerCommandsTask) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_persistence_v1_executions_proto_rawDescGZIP(), []int{14}
 }
 
-func (x *WorkerCommandsTask) GetCommands() []*v19.WorkerCommand {
+func (x *WorkerCommandsTask) GetCommands() []*v110.WorkerCommand {
 	if x != nil {
 		return x.Commands
 	}
@@ -2825,7 +2835,7 @@ type ActivityInfo struct {
 	RetryExpirationTime         *timestamppb.Timestamp `protobuf:"bytes,24,opt,name=retry_expiration_time,json=retryExpirationTime,proto3" json:"retry_expiration_time,omitempty"`
 	RetryBackoffCoefficient     float64                `protobuf:"fixed64,25,opt,name=retry_backoff_coefficient,json=retryBackoffCoefficient,proto3" json:"retry_backoff_coefficient,omitempty"`
 	RetryNonRetryableErrorTypes []string               `protobuf:"bytes,26,rep,name=retry_non_retryable_error_types,json=retryNonRetryableErrorTypes,proto3" json:"retry_non_retryable_error_types,omitempty"`
-	RetryLastFailure            *v110.Failure          `protobuf:"bytes,27,opt,name=retry_last_failure,json=retryLastFailure,proto3" json:"retry_last_failure,omitempty"`
+	RetryLastFailure            *v111.Failure          `protobuf:"bytes,27,opt,name=retry_last_failure,json=retryLastFailure,proto3" json:"retry_last_failure,omitempty"`
 	RetryLastWorkerIdentity     string                 `protobuf:"bytes,28,opt,name=retry_last_worker_identity,json=retryLastWorkerIdentity,proto3" json:"retry_last_worker_identity,omitempty"`
 	ScheduledEventId            int64                  `protobuf:"varint,30,opt,name=scheduled_event_id,json=scheduledEventId,proto3" json:"scheduled_event_id,omitempty"`
 	LastHeartbeatDetails        *v13.Payloads          `protobuf:"bytes,31,opt,name=last_heartbeat_details,json=lastHeartbeatDetails,proto3" json:"last_heartbeat_details,omitempty"`
@@ -2864,14 +2874,14 @@ type ActivityInfo struct {
 	// The deployment this activity was dispatched to most recently. Present only if the activity
 	// was dispatched to a versioned worker.
 	// Deprecated. Replaced by last_worker_deployment_version.
-	LastStartedDeployment *v18.Deployment `protobuf:"bytes,43,opt,name=last_started_deployment,json=lastStartedDeployment,proto3" json:"last_started_deployment,omitempty"`
+	LastStartedDeployment *v19.Deployment `protobuf:"bytes,43,opt,name=last_started_deployment,json=lastStartedDeployment,proto3" json:"last_started_deployment,omitempty"`
 	// The deployment this activity was dispatched to most recently. Present only if the activity
 	// was dispatched to a versioned worker.
 	// Deprecated. Clean up with versioning-3.1. [cleanup-old-wv]
 	LastWorkerDeploymentVersion string `protobuf:"bytes,44,opt,name=last_worker_deployment_version,json=lastWorkerDeploymentVersion,proto3" json:"last_worker_deployment_version,omitempty"`
 	// The deployment version this activity was dispatched to most recently. Present only if the activity
 	// was dispatched to a versioned worker.
-	LastDeploymentVersion *v18.WorkerDeploymentVersion `protobuf:"bytes,49,opt,name=last_deployment_version,json=lastDeploymentVersion,proto3" json:"last_deployment_version,omitempty"`
+	LastDeploymentVersion *v19.WorkerDeploymentVersion `protobuf:"bytes,49,opt,name=last_deployment_version,json=lastDeploymentVersion,proto3" json:"last_deployment_version,omitempty"`
 	// Priority metadata. If this message is not present, or any fields are not
 	// present, they inherit the values from the workflow.
 	Priority  *v13.Priority           `protobuf:"bytes,45,opt,name=priority,proto3" json:"priority,omitempty"`
@@ -3100,7 +3110,7 @@ func (x *ActivityInfo) GetRetryNonRetryableErrorTypes() []string {
 	return nil
 }
 
-func (x *ActivityInfo) GetRetryLastFailure() *v110.Failure {
+func (x *ActivityInfo) GetRetryLastFailure() *v111.Failure {
 	if x != nil {
 		return x.RetryLastFailure
 	}
@@ -3216,7 +3226,7 @@ func (x *ActivityInfo) GetPaused() bool {
 	return false
 }
 
-func (x *ActivityInfo) GetLastStartedDeployment() *v18.Deployment {
+func (x *ActivityInfo) GetLastStartedDeployment() *v19.Deployment {
 	if x != nil {
 		return x.LastStartedDeployment
 	}
@@ -3230,7 +3240,7 @@ func (x *ActivityInfo) GetLastWorkerDeploymentVersion() string {
 	return ""
 }
 
-func (x *ActivityInfo) GetLastDeploymentVersion() *v18.WorkerDeploymentVersion {
+func (x *ActivityInfo) GetLastDeploymentVersion() *v19.WorkerDeploymentVersion {
 	if x != nil {
 		return x.LastDeploymentVersion
 	}
@@ -3936,7 +3946,7 @@ type CallbackInfo struct {
 	// The time when the last attempt completed.
 	LastAttemptCompleteTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3" json:"last_attempt_complete_time,omitempty"`
 	// The last attempt's failure, if any.
-	LastAttemptFailure *v110.Failure `protobuf:"bytes,7,opt,name=last_attempt_failure,json=lastAttemptFailure,proto3" json:"last_attempt_failure,omitempty"`
+	LastAttemptFailure *v111.Failure `protobuf:"bytes,7,opt,name=last_attempt_failure,json=lastAttemptFailure,proto3" json:"last_attempt_failure,omitempty"`
 	// The time when the next attempt is scheduled.
 	NextAttemptScheduleTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=next_attempt_schedule_time,json=nextAttemptScheduleTime,proto3" json:"next_attempt_schedule_time,omitempty"`
 	// Request ID that added the callback.
@@ -4017,7 +4027,7 @@ func (x *CallbackInfo) GetLastAttemptCompleteTime() *timestamppb.Timestamp {
 	return nil
 }
 
-func (x *CallbackInfo) GetLastAttemptFailure() *v110.Failure {
+func (x *CallbackInfo) GetLastAttemptFailure() *v111.Failure {
 	if x != nil {
 		return x.LastAttemptFailure
 	}
@@ -4068,7 +4078,7 @@ type NexusOperationInfo struct {
 	// The time when the last attempt completed.
 	LastAttemptCompleteTime *timestamppb.Timestamp `protobuf:"bytes,12,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3" json:"last_attempt_complete_time,omitempty"`
 	// The last attempt's failure, if any.
-	LastAttemptFailure *v110.Failure `protobuf:"bytes,13,opt,name=last_attempt_failure,json=lastAttemptFailure,proto3" json:"last_attempt_failure,omitempty"`
+	LastAttemptFailure *v111.Failure `protobuf:"bytes,13,opt,name=last_attempt_failure,json=lastAttemptFailure,proto3" json:"last_attempt_failure,omitempty"`
 	// The time when the next attempt is scheduled.
 	NextAttemptScheduleTime *timestamppb.Timestamp `protobuf:"bytes,14,opt,name=next_attempt_schedule_time,json=nextAttemptScheduleTime,proto3" json:"next_attempt_schedule_time,omitempty"`
 	// Endpoint ID, the name is also stored here (field 1) but we use the ID internally to avoid failing operation
@@ -4195,7 +4205,7 @@ func (x *NexusOperationInfo) GetLastAttemptCompleteTime() *timestamppb.Timestamp
 	return nil
 }
 
-func (x *NexusOperationInfo) GetLastAttemptFailure() *v110.Failure {
+func (x *NexusOperationInfo) GetLastAttemptFailure() *v111.Failure {
 	if x != nil {
 		return x.LastAttemptFailure
 	}
@@ -4249,7 +4259,7 @@ type NexusOperationCancellationInfo struct {
 	// The time when the last attempt completed.
 	LastAttemptCompleteTime *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=last_attempt_complete_time,json=lastAttemptCompleteTime,proto3" json:"last_attempt_complete_time,omitempty"`
 	// The last attempt's failure, if any.
-	LastAttemptFailure *v110.Failure `protobuf:"bytes,5,opt,name=last_attempt_failure,json=lastAttemptFailure,proto3" json:"last_attempt_failure,omitempty"`
+	LastAttemptFailure *v111.Failure `protobuf:"bytes,5,opt,name=last_attempt_failure,json=lastAttemptFailure,proto3" json:"last_attempt_failure,omitempty"`
 	// The time when the next attempt is scheduled.
 	NextAttemptScheduleTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=next_attempt_schedule_time,json=nextAttemptScheduleTime,proto3" json:"next_attempt_schedule_time,omitempty"`
 	// The event ID of the NEXUS_OPERATION_CANCEL_REQUESTED event for this cancelation.
@@ -4316,7 +4326,7 @@ func (x *NexusOperationCancellationInfo) GetLastAttemptCompleteTime() *timestamp
 	return nil
 }
 
-func (x *NexusOperationCancellationInfo) GetLastAttemptFailure() *v110.Failure {
+func (x *NexusOperationCancellationInfo) GetLastAttemptFailure() *v111.Failure {
 	if x != nil {
 		return x.LastAttemptFailure
 	}
@@ -4958,7 +4968,7 @@ var File_temporal_server_api_persistence_v1_executions_proto protoreflect.FileDe
 
 const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\n" +
-	"3temporal/server/api/persistence/v1/executions.proto\x12\"temporal.server.api.persistence.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a\"temporal/api/enums/v1/common.proto\x1a&temporal/api/enums/v1/event_type.proto\x1a(temporal/api/enums/v1/failed_cause.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a%temporal/api/failure/v1/message.proto\x1a%temporal/api/history/v1/message.proto\x1a$temporal/api/worker/v1/message.proto\x1a&temporal/api/workflow/v1/message.proto\x1a*temporal/server/api/clock/v1/message.proto\x1a)temporal/server/api/enums/v1/common.proto\x1a(temporal/server/api/enums/v1/nexus.proto\x1a'temporal/server/api/enums/v1/task.proto\x1a+temporal/server/api/enums/v1/workflow.proto\x1a5temporal/server/api/enums/v1/workflow_task_type.proto\x1a,temporal/server/api/history/v1/message.proto\x1a.temporal/server/api/persistence/v1/chasm.proto\x1a,temporal/server/api/persistence/v1/hsm.proto\x1a/temporal/server/api/persistence/v1/queues.proto\x1a/temporal/server/api/persistence/v1/update.proto\x1a-temporal/server/api/workflow/v1/message.proto\"\xa3\x05\n" +
+	"3temporal/server/api/persistence/v1/executions.proto\x12\"temporal.server.api.persistence.v1\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a$temporal/api/common/v1/message.proto\x1a(temporal/api/deployment/v1/message.proto\x1a\"temporal/api/enums/v1/common.proto\x1a&temporal/api/enums/v1/event_type.proto\x1a(temporal/api/enums/v1/failed_cause.proto\x1a$temporal/api/enums/v1/workflow.proto\x1a%temporal/api/failure/v1/message.proto\x1a%temporal/api/history/v1/message.proto\x1a#temporal/api/nexus/v1/message.proto\x1a$temporal/api/worker/v1/message.proto\x1a&temporal/api/workflow/v1/message.proto\x1a*temporal/server/api/clock/v1/message.proto\x1a)temporal/server/api/enums/v1/common.proto\x1a(temporal/server/api/enums/v1/nexus.proto\x1a'temporal/server/api/enums/v1/task.proto\x1a+temporal/server/api/enums/v1/workflow.proto\x1a5temporal/server/api/enums/v1/workflow_task_type.proto\x1a,temporal/server/api/history/v1/message.proto\x1a.temporal/server/api/persistence/v1/chasm.proto\x1a,temporal/server/api/persistence/v1/hsm.proto\x1a/temporal/server/api/persistence/v1/queues.proto\x1a/temporal/server/api/persistence/v1/update.proto\x1a-temporal/server/api/workflow/v1/message.proto\"\xa3\x05\n" +
 	"\tShardInfo\x12\x19\n" +
 	"\bshard_id\x18\x01 \x01(\x05R\ashardId\x12\x19\n" +
 	"\brange_id\x18\x02 \x01(\x03R\arangeId\x12\x14\n" +
@@ -4975,7 +4985,7 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\x05R\x03key\x12D\n" +
 	"\x05value\x18\x02 \x01(\v2..temporal.server.api.persistence.v1.QueueStateR\x05value:\x028\x01J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\b\x10\tJ\x04\b\t\x10\n" +
 	"J\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11\"\xacC\n" +
+	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11\"\xb9D\n" +
 	"\x15WorkflowExecutionInfo\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -5088,7 +5098,8 @@ const file_temporal_server_api_persistence_v1_executions_proto_rawDesc = "" +
 	"\x1clast_notified_target_version\x18q \x01(\v2=.temporal.server.api.persistence.v1.LastNotifiedTargetVersionR\x19lastNotifiedTargetVersion\x12|\n" +
 	"\x1fdeclined_target_version_upgrade\x18r \x01(\v25.temporal.api.history.v1.DeclinedTargetVersionUpgradeR\x1cdeclinedTargetVersionUpgrade\x12b\n" +
 	"\x12time_skipping_info\x18s \x01(\v24.temporal.server.api.persistence.v1.TimeSkippingInfoR\x10timeSkippingInfo\x12W\n" +
-	"\x1amutable_state_rebuild_time\x18t \x01(\v2\x1a.google.protobuf.TimestampR\x17mutableStateRebuildTime\x1ad\n" +
+	"\x1amutable_state_rebuild_time\x18t \x01(\v2\x1a.google.protobuf.TimestampR\x17mutableStateRebuildTime\x12\x8a\x01\n" +
+	"&propagated_nexus_serialization_context\x18u \x01(\v25.temporal.api.nexus.v1.PropagatedSerializationContextR#propagatedNexusSerializationContext\x1ad\n" +
 	"\x15SearchAttributesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x125\n" +
 	"\x05value\x18\x02 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x05value:\x028\x01\x1aX\n" +
@@ -5536,35 +5547,36 @@ var file_temporal_server_api_persistence_v1_executions_proto_goTypes = []any{
 	(v11.WorkflowTaskFailedCause)(0),                   // 61: temporal.api.enums.v1.WorkflowTaskFailedCause
 	(v11.TimeoutType)(0),                               // 62: temporal.api.enums.v1.TimeoutType
 	(*v17.DeclinedTargetVersionUpgrade)(nil),           // 63: temporal.api.history.v1.DeclinedTargetVersionUpgrade
-	(*v13.TimeSkippingConfig)(nil),                     // 64: temporal.api.common.v1.TimeSkippingConfig
-	(*v18.WorkerDeploymentVersion)(nil),                // 65: temporal.api.deployment.v1.WorkerDeploymentVersion
-	(v1.WorkflowExecutionState)(0),                     // 66: temporal.server.api.enums.v1.WorkflowExecutionState
-	(v11.WorkflowExecutionStatus)(0),                   // 67: temporal.api.enums.v1.WorkflowExecutionStatus
-	(v11.EventType)(0),                                 // 68: temporal.api.enums.v1.EventType
-	(v1.TaskType)(0),                                   // 69: temporal.server.api.enums.v1.TaskType
-	(*ChasmTaskInfo)(nil),                              // 70: temporal.server.api.persistence.v1.ChasmTaskInfo
-	(v1.TaskPriority)(0),                               // 71: temporal.server.api.enums.v1.TaskPriority
-	(*v14.VersionHistoryItem)(nil),                     // 72: temporal.server.api.history.v1.VersionHistoryItem
-	(*v14.VersionHistory)(nil),                         // 73: temporal.server.api.history.v1.VersionHistory
-	(v1.WorkflowBackoffType)(0),                        // 74: temporal.server.api.enums.v1.WorkflowBackoffType
-	(*StateMachineTaskInfo)(nil),                       // 75: temporal.server.api.persistence.v1.StateMachineTaskInfo
-	(*v19.WorkerCommand)(nil),                          // 76: temporal.api.worker.v1.WorkerCommand
-	(*v110.Failure)(nil),                               // 77: temporal.api.failure.v1.Failure
-	(*v13.Payloads)(nil),                               // 78: temporal.api.common.v1.Payloads
-	(*v13.ActivityType)(nil),                           // 79: temporal.api.common.v1.ActivityType
-	(*v18.Deployment)(nil),                             // 80: temporal.api.deployment.v1.Deployment
-	(v11.ParentClosePolicy)(0),                         // 81: temporal.api.enums.v1.ParentClosePolicy
-	(v1.ChecksumFlavor)(0),                             // 82: temporal.server.api.enums.v1.ChecksumFlavor
-	(*v13.Link)(nil),                                   // 83: temporal.api.common.v1.Link
-	(*v17.HistoryEvent)(nil),                           // 84: temporal.api.history.v1.HistoryEvent
-	(v1.CallbackState)(0),                              // 85: temporal.server.api.enums.v1.CallbackState
-	(v1.NexusOperationState)(0),                        // 86: temporal.server.api.enums.v1.NexusOperationState
-	(v11.NexusOperationCancellationState)(0),           // 87: temporal.api.enums.v1.NexusOperationCancellationState
-	(*QueueState)(nil),                                 // 88: temporal.server.api.persistence.v1.QueueState
-	(*v13.Payload)(nil),                                // 89: temporal.api.common.v1.Payload
-	(*UpdateInfo)(nil),                                 // 90: temporal.server.api.persistence.v1.UpdateInfo
-	(*StateMachineMap)(nil),                            // 91: temporal.server.api.persistence.v1.StateMachineMap
-	(*StateMachineRef)(nil),                            // 92: temporal.server.api.persistence.v1.StateMachineRef
+	(*v18.PropagatedSerializationContext)(nil),         // 64: temporal.api.nexus.v1.PropagatedSerializationContext
+	(*v13.TimeSkippingConfig)(nil),                     // 65: temporal.api.common.v1.TimeSkippingConfig
+	(*v19.WorkerDeploymentVersion)(nil),                // 66: temporal.api.deployment.v1.WorkerDeploymentVersion
+	(v1.WorkflowExecutionState)(0),                     // 67: temporal.server.api.enums.v1.WorkflowExecutionState
+	(v11.WorkflowExecutionStatus)(0),                   // 68: temporal.api.enums.v1.WorkflowExecutionStatus
+	(v11.EventType)(0),                                 // 69: temporal.api.enums.v1.EventType
+	(v1.TaskType)(0),                                   // 70: temporal.server.api.enums.v1.TaskType
+	(*ChasmTaskInfo)(nil),                              // 71: temporal.server.api.persistence.v1.ChasmTaskInfo
+	(v1.TaskPriority)(0),                               // 72: temporal.server.api.enums.v1.TaskPriority
+	(*v14.VersionHistoryItem)(nil),                     // 73: temporal.server.api.history.v1.VersionHistoryItem
+	(*v14.VersionHistory)(nil),                         // 74: temporal.server.api.history.v1.VersionHistory
+	(v1.WorkflowBackoffType)(0),                        // 75: temporal.server.api.enums.v1.WorkflowBackoffType
+	(*StateMachineTaskInfo)(nil),                       // 76: temporal.server.api.persistence.v1.StateMachineTaskInfo
+	(*v110.WorkerCommand)(nil),                         // 77: temporal.api.worker.v1.WorkerCommand
+	(*v111.Failure)(nil),                               // 78: temporal.api.failure.v1.Failure
+	(*v13.Payloads)(nil),                               // 79: temporal.api.common.v1.Payloads
+	(*v13.ActivityType)(nil),                           // 80: temporal.api.common.v1.ActivityType
+	(*v19.Deployment)(nil),                             // 81: temporal.api.deployment.v1.Deployment
+	(v11.ParentClosePolicy)(0),                         // 82: temporal.api.enums.v1.ParentClosePolicy
+	(v1.ChecksumFlavor)(0),                             // 83: temporal.server.api.enums.v1.ChecksumFlavor
+	(*v13.Link)(nil),                                   // 84: temporal.api.common.v1.Link
+	(*v17.HistoryEvent)(nil),                           // 85: temporal.api.history.v1.HistoryEvent
+	(v1.CallbackState)(0),                              // 86: temporal.server.api.enums.v1.CallbackState
+	(v1.NexusOperationState)(0),                        // 87: temporal.server.api.enums.v1.NexusOperationState
+	(v11.NexusOperationCancellationState)(0),           // 88: temporal.api.enums.v1.NexusOperationCancellationState
+	(*QueueState)(nil),                                 // 89: temporal.server.api.persistence.v1.QueueState
+	(*v13.Payload)(nil),                                // 90: temporal.api.common.v1.Payload
+	(*UpdateInfo)(nil),                                 // 91: temporal.server.api.persistence.v1.UpdateInfo
+	(*StateMachineMap)(nil),                            // 92: temporal.server.api.persistence.v1.StateMachineMap
+	(*StateMachineRef)(nil),                            // 93: temporal.server.api.persistence.v1.StateMachineRef
 }
 var file_temporal_server_api_persistence_v1_executions_proto_depIdxs = []int32{
 	47,  // 0: temporal.server.api.persistence.v1.ShardInfo.update_time:type_name -> google.protobuf.Timestamp
@@ -5616,125 +5628,126 @@ var file_temporal_server_api_persistence_v1_executions_proto_depIdxs = []int32{
 	63,  // 46: temporal.server.api.persistence.v1.WorkflowExecutionInfo.declined_target_version_upgrade:type_name -> temporal.api.history.v1.DeclinedTargetVersionUpgrade
 	2,   // 47: temporal.server.api.persistence.v1.WorkflowExecutionInfo.time_skipping_info:type_name -> temporal.server.api.persistence.v1.TimeSkippingInfo
 	47,  // 48: temporal.server.api.persistence.v1.WorkflowExecutionInfo.mutable_state_rebuild_time:type_name -> google.protobuf.Timestamp
-	64,  // 49: temporal.server.api.persistence.v1.TimeSkippingInfo.config:type_name -> temporal.api.common.v1.TimeSkippingConfig
-	48,  // 50: temporal.server.api.persistence.v1.TimeSkippingInfo.accumulated_skipped_duration:type_name -> google.protobuf.Duration
-	3,   // 51: temporal.server.api.persistence.v1.TimeSkippingInfo.fast_forward_info:type_name -> temporal.server.api.persistence.v1.FastForwardInfo
-	56,  // 52: temporal.server.api.persistence.v1.TimeSkippingInfo.fast_forward_info_last_update_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	56,  // 53: temporal.server.api.persistence.v1.TimeSkippingInfo.last_update_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	47,  // 54: temporal.server.api.persistence.v1.FastForwardInfo.target_time:type_name -> google.protobuf.Timestamp
-	65,  // 55: temporal.server.api.persistence.v1.LastNotifiedTargetVersion.deployment_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
-	66,  // 56: temporal.server.api.persistence.v1.WorkflowExecutionState.state:type_name -> temporal.server.api.enums.v1.WorkflowExecutionState
-	67,  // 57: temporal.server.api.persistence.v1.WorkflowExecutionState.status:type_name -> temporal.api.enums.v1.WorkflowExecutionStatus
-	56,  // 58: temporal.server.api.persistence.v1.WorkflowExecutionState.last_update_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	47,  // 59: temporal.server.api.persistence.v1.WorkflowExecutionState.start_time:type_name -> google.protobuf.Timestamp
-	37,  // 60: temporal.server.api.persistence.v1.WorkflowExecutionState.request_ids:type_name -> temporal.server.api.persistence.v1.WorkflowExecutionState.RequestIdsEntry
-	68,  // 61: temporal.server.api.persistence.v1.RequestIDInfo.event_type:type_name -> temporal.api.enums.v1.EventType
-	47,  // 62: temporal.server.api.persistence.v1.RequestIDInfo.attach_time:type_name -> google.protobuf.Timestamp
-	69,  // 63: temporal.server.api.persistence.v1.TransferTaskInfo.task_type:type_name -> temporal.server.api.enums.v1.TaskType
-	47,  // 64: temporal.server.api.persistence.v1.TransferTaskInfo.visibility_time:type_name -> google.protobuf.Timestamp
-	38,  // 65: temporal.server.api.persistence.v1.TransferTaskInfo.close_execution_task_details:type_name -> temporal.server.api.persistence.v1.TransferTaskInfo.CloseExecutionTaskDetails
-	70,  // 66: temporal.server.api.persistence.v1.TransferTaskInfo.chasm_task_info:type_name -> temporal.server.api.persistence.v1.ChasmTaskInfo
-	69,  // 67: temporal.server.api.persistence.v1.ReplicationTaskInfo.task_type:type_name -> temporal.server.api.enums.v1.TaskType
-	47,  // 68: temporal.server.api.persistence.v1.ReplicationTaskInfo.visibility_time:type_name -> google.protobuf.Timestamp
-	71,  // 69: temporal.server.api.persistence.v1.ReplicationTaskInfo.priority:type_name -> temporal.server.api.enums.v1.TaskPriority
-	56,  // 70: temporal.server.api.persistence.v1.ReplicationTaskInfo.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	9,   // 71: temporal.server.api.persistence.v1.ReplicationTaskInfo.task_equivalents:type_name -> temporal.server.api.persistence.v1.ReplicationTaskInfo
-	72,  // 72: temporal.server.api.persistence.v1.ReplicationTaskInfo.last_version_history_item:type_name -> temporal.server.api.history.v1.VersionHistoryItem
-	73,  // 73: temporal.server.api.persistence.v1.ReplicationTaskInfo.current_version_history:type_name -> temporal.server.api.history.v1.VersionHistory
-	69,  // 74: temporal.server.api.persistence.v1.VisibilityTaskInfo.task_type:type_name -> temporal.server.api.enums.v1.TaskType
-	47,  // 75: temporal.server.api.persistence.v1.VisibilityTaskInfo.visibility_time:type_name -> google.protobuf.Timestamp
-	47,  // 76: temporal.server.api.persistence.v1.VisibilityTaskInfo.close_time:type_name -> google.protobuf.Timestamp
-	47,  // 77: temporal.server.api.persistence.v1.VisibilityTaskInfo.start_time:type_name -> google.protobuf.Timestamp
-	70,  // 78: temporal.server.api.persistence.v1.VisibilityTaskInfo.chasm_task_info:type_name -> temporal.server.api.persistence.v1.ChasmTaskInfo
-	69,  // 79: temporal.server.api.persistence.v1.TimerTaskInfo.task_type:type_name -> temporal.server.api.enums.v1.TaskType
-	62,  // 80: temporal.server.api.persistence.v1.TimerTaskInfo.timeout_type:type_name -> temporal.api.enums.v1.TimeoutType
-	74,  // 81: temporal.server.api.persistence.v1.TimerTaskInfo.workflow_backoff_type:type_name -> temporal.server.api.enums.v1.WorkflowBackoffType
-	47,  // 82: temporal.server.api.persistence.v1.TimerTaskInfo.visibility_time:type_name -> google.protobuf.Timestamp
-	70,  // 83: temporal.server.api.persistence.v1.TimerTaskInfo.chasm_task_info:type_name -> temporal.server.api.persistence.v1.ChasmTaskInfo
-	56,  // 84: temporal.server.api.persistence.v1.TimerTaskInfo.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	69,  // 85: temporal.server.api.persistence.v1.ArchivalTaskInfo.task_type:type_name -> temporal.server.api.enums.v1.TaskType
-	47,  // 86: temporal.server.api.persistence.v1.ArchivalTaskInfo.visibility_time:type_name -> google.protobuf.Timestamp
-	69,  // 87: temporal.server.api.persistence.v1.OutboundTaskInfo.task_type:type_name -> temporal.server.api.enums.v1.TaskType
-	47,  // 88: temporal.server.api.persistence.v1.OutboundTaskInfo.visibility_time:type_name -> google.protobuf.Timestamp
-	75,  // 89: temporal.server.api.persistence.v1.OutboundTaskInfo.state_machine_info:type_name -> temporal.server.api.persistence.v1.StateMachineTaskInfo
-	70,  // 90: temporal.server.api.persistence.v1.OutboundTaskInfo.chasm_task_info:type_name -> temporal.server.api.persistence.v1.ChasmTaskInfo
-	14,  // 91: temporal.server.api.persistence.v1.OutboundTaskInfo.worker_commands_task:type_name -> temporal.server.api.persistence.v1.WorkerCommandsTask
-	76,  // 92: temporal.server.api.persistence.v1.WorkerCommandsTask.commands:type_name -> temporal.api.worker.v1.WorkerCommand
-	47,  // 93: temporal.server.api.persistence.v1.ActivityInfo.scheduled_time:type_name -> google.protobuf.Timestamp
-	47,  // 94: temporal.server.api.persistence.v1.ActivityInfo.started_time:type_name -> google.protobuf.Timestamp
-	48,  // 95: temporal.server.api.persistence.v1.ActivityInfo.schedule_to_start_timeout:type_name -> google.protobuf.Duration
-	48,  // 96: temporal.server.api.persistence.v1.ActivityInfo.schedule_to_close_timeout:type_name -> google.protobuf.Duration
-	48,  // 97: temporal.server.api.persistence.v1.ActivityInfo.start_to_close_timeout:type_name -> google.protobuf.Duration
-	48,  // 98: temporal.server.api.persistence.v1.ActivityInfo.heartbeat_timeout:type_name -> google.protobuf.Duration
-	48,  // 99: temporal.server.api.persistence.v1.ActivityInfo.retry_initial_interval:type_name -> google.protobuf.Duration
-	48,  // 100: temporal.server.api.persistence.v1.ActivityInfo.retry_maximum_interval:type_name -> google.protobuf.Duration
-	47,  // 101: temporal.server.api.persistence.v1.ActivityInfo.retry_expiration_time:type_name -> google.protobuf.Timestamp
-	77,  // 102: temporal.server.api.persistence.v1.ActivityInfo.retry_last_failure:type_name -> temporal.api.failure.v1.Failure
-	78,  // 103: temporal.server.api.persistence.v1.ActivityInfo.last_heartbeat_details:type_name -> temporal.api.common.v1.Payloads
-	47,  // 104: temporal.server.api.persistence.v1.ActivityInfo.last_heartbeat_update_time:type_name -> google.protobuf.Timestamp
-	79,  // 105: temporal.server.api.persistence.v1.ActivityInfo.activity_type:type_name -> temporal.api.common.v1.ActivityType
-	39,  // 106: temporal.server.api.persistence.v1.ActivityInfo.use_workflow_build_id_info:type_name -> temporal.server.api.persistence.v1.ActivityInfo.UseWorkflowBuildIdInfo
-	55,  // 107: temporal.server.api.persistence.v1.ActivityInfo.last_worker_version_stamp:type_name -> temporal.api.common.v1.WorkerVersionStamp
-	56,  // 108: temporal.server.api.persistence.v1.ActivityInfo.last_update_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	47,  // 109: temporal.server.api.persistence.v1.ActivityInfo.first_scheduled_time:type_name -> google.protobuf.Timestamp
-	47,  // 110: temporal.server.api.persistence.v1.ActivityInfo.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
-	80,  // 111: temporal.server.api.persistence.v1.ActivityInfo.last_started_deployment:type_name -> temporal.api.deployment.v1.Deployment
-	65,  // 112: temporal.server.api.persistence.v1.ActivityInfo.last_deployment_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
-	60,  // 113: temporal.server.api.persistence.v1.ActivityInfo.priority:type_name -> temporal.api.common.v1.Priority
-	40,  // 114: temporal.server.api.persistence.v1.ActivityInfo.pause_info:type_name -> temporal.server.api.persistence.v1.ActivityInfo.PauseInfo
-	53,  // 115: temporal.server.api.persistence.v1.ActivityInfo.started_clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	47,  // 116: temporal.server.api.persistence.v1.TimerInfo.expiry_time:type_name -> google.protobuf.Timestamp
-	56,  // 117: temporal.server.api.persistence.v1.TimerInfo.last_update_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	81,  // 118: temporal.server.api.persistence.v1.ChildExecutionInfo.parent_close_policy:type_name -> temporal.api.enums.v1.ParentClosePolicy
-	53,  // 119: temporal.server.api.persistence.v1.ChildExecutionInfo.clock:type_name -> temporal.server.api.clock.v1.VectorClock
-	56,  // 120: temporal.server.api.persistence.v1.ChildExecutionInfo.last_update_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	60,  // 121: temporal.server.api.persistence.v1.ChildExecutionInfo.priority:type_name -> temporal.api.common.v1.Priority
-	56,  // 122: temporal.server.api.persistence.v1.RequestCancelInfo.last_update_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	56,  // 123: temporal.server.api.persistence.v1.SignalInfo.last_update_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	82,  // 124: temporal.server.api.persistence.v1.Checksum.flavor:type_name -> temporal.server.api.enums.v1.ChecksumFlavor
-	42,  // 125: temporal.server.api.persistence.v1.Callback.nexus:type_name -> temporal.server.api.persistence.v1.Callback.Nexus
-	43,  // 126: temporal.server.api.persistence.v1.Callback.hsm:type_name -> temporal.server.api.persistence.v1.Callback.HSM
-	83,  // 127: temporal.server.api.persistence.v1.Callback.links:type_name -> temporal.api.common.v1.Link
-	84,  // 128: temporal.server.api.persistence.v1.HSMCompletionCallbackArg.last_event:type_name -> temporal.api.history.v1.HistoryEvent
-	23,  // 129: temporal.server.api.persistence.v1.CallbackInfo.callback:type_name -> temporal.server.api.persistence.v1.Callback
-	46,  // 130: temporal.server.api.persistence.v1.CallbackInfo.trigger:type_name -> temporal.server.api.persistence.v1.CallbackInfo.Trigger
-	47,  // 131: temporal.server.api.persistence.v1.CallbackInfo.registration_time:type_name -> google.protobuf.Timestamp
-	85,  // 132: temporal.server.api.persistence.v1.CallbackInfo.state:type_name -> temporal.server.api.enums.v1.CallbackState
-	47,  // 133: temporal.server.api.persistence.v1.CallbackInfo.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
-	77,  // 134: temporal.server.api.persistence.v1.CallbackInfo.last_attempt_failure:type_name -> temporal.api.failure.v1.Failure
-	47,  // 135: temporal.server.api.persistence.v1.CallbackInfo.next_attempt_schedule_time:type_name -> google.protobuf.Timestamp
-	48,  // 136: temporal.server.api.persistence.v1.NexusOperationInfo.schedule_to_close_timeout:type_name -> google.protobuf.Duration
-	47,  // 137: temporal.server.api.persistence.v1.NexusOperationInfo.scheduled_time:type_name -> google.protobuf.Timestamp
-	86,  // 138: temporal.server.api.persistence.v1.NexusOperationInfo.state:type_name -> temporal.server.api.enums.v1.NexusOperationState
-	47,  // 139: temporal.server.api.persistence.v1.NexusOperationInfo.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
-	77,  // 140: temporal.server.api.persistence.v1.NexusOperationInfo.last_attempt_failure:type_name -> temporal.api.failure.v1.Failure
-	47,  // 141: temporal.server.api.persistence.v1.NexusOperationInfo.next_attempt_schedule_time:type_name -> google.protobuf.Timestamp
-	48,  // 142: temporal.server.api.persistence.v1.NexusOperationInfo.schedule_to_start_timeout:type_name -> google.protobuf.Duration
-	48,  // 143: temporal.server.api.persistence.v1.NexusOperationInfo.start_to_close_timeout:type_name -> google.protobuf.Duration
-	47,  // 144: temporal.server.api.persistence.v1.NexusOperationInfo.started_time:type_name -> google.protobuf.Timestamp
-	47,  // 145: temporal.server.api.persistence.v1.NexusOperationCancellationInfo.requested_time:type_name -> google.protobuf.Timestamp
-	87,  // 146: temporal.server.api.persistence.v1.NexusOperationCancellationInfo.state:type_name -> temporal.api.enums.v1.NexusOperationCancellationState
-	47,  // 147: temporal.server.api.persistence.v1.NexusOperationCancellationInfo.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
-	77,  // 148: temporal.server.api.persistence.v1.NexusOperationCancellationInfo.last_attempt_failure:type_name -> temporal.api.failure.v1.Failure
-	47,  // 149: temporal.server.api.persistence.v1.NexusOperationCancellationInfo.next_attempt_schedule_time:type_name -> google.protobuf.Timestamp
-	47,  // 150: temporal.server.api.persistence.v1.WorkflowPauseInfo.pause_time:type_name -> google.protobuf.Timestamp
-	88,  // 151: temporal.server.api.persistence.v1.ShardInfo.QueueStatesEntry.value:type_name -> temporal.server.api.persistence.v1.QueueState
-	89,  // 152: temporal.server.api.persistence.v1.WorkflowExecutionInfo.SearchAttributesEntry.value:type_name -> temporal.api.common.v1.Payload
-	89,  // 153: temporal.server.api.persistence.v1.WorkflowExecutionInfo.MemoEntry.value:type_name -> temporal.api.common.v1.Payload
-	90,  // 154: temporal.server.api.persistence.v1.WorkflowExecutionInfo.UpdateInfosEntry.value:type_name -> temporal.server.api.persistence.v1.UpdateInfo
-	91,  // 155: temporal.server.api.persistence.v1.WorkflowExecutionInfo.SubStateMachinesByTypeEntry.value:type_name -> temporal.server.api.persistence.v1.StateMachineMap
-	28,  // 156: temporal.server.api.persistence.v1.WorkflowExecutionInfo.ChildrenInitializedPostResetPointEntry.value:type_name -> temporal.server.api.persistence.v1.ResetChildInfo
-	7,   // 157: temporal.server.api.persistence.v1.WorkflowExecutionState.RequestIdsEntry.value:type_name -> temporal.server.api.persistence.v1.RequestIDInfo
-	47,  // 158: temporal.server.api.persistence.v1.ActivityInfo.PauseInfo.pause_time:type_name -> google.protobuf.Timestamp
-	41,  // 159: temporal.server.api.persistence.v1.ActivityInfo.PauseInfo.manual:type_name -> temporal.server.api.persistence.v1.ActivityInfo.PauseInfo.Manual
-	44,  // 160: temporal.server.api.persistence.v1.Callback.Nexus.header:type_name -> temporal.server.api.persistence.v1.Callback.Nexus.HeaderEntry
-	92,  // 161: temporal.server.api.persistence.v1.Callback.HSM.ref:type_name -> temporal.server.api.persistence.v1.StateMachineRef
-	45,  // 162: temporal.server.api.persistence.v1.CallbackInfo.Trigger.workflow_closed:type_name -> temporal.server.api.persistence.v1.CallbackInfo.WorkflowClosed
-	163, // [163:163] is the sub-list for method output_type
-	163, // [163:163] is the sub-list for method input_type
-	163, // [163:163] is the sub-list for extension type_name
-	163, // [163:163] is the sub-list for extension extendee
-	0,   // [0:163] is the sub-list for field type_name
+	64,  // 49: temporal.server.api.persistence.v1.WorkflowExecutionInfo.propagated_nexus_serialization_context:type_name -> temporal.api.nexus.v1.PropagatedSerializationContext
+	65,  // 50: temporal.server.api.persistence.v1.TimeSkippingInfo.config:type_name -> temporal.api.common.v1.TimeSkippingConfig
+	48,  // 51: temporal.server.api.persistence.v1.TimeSkippingInfo.accumulated_skipped_duration:type_name -> google.protobuf.Duration
+	3,   // 52: temporal.server.api.persistence.v1.TimeSkippingInfo.fast_forward_info:type_name -> temporal.server.api.persistence.v1.FastForwardInfo
+	56,  // 53: temporal.server.api.persistence.v1.TimeSkippingInfo.fast_forward_info_last_update_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	56,  // 54: temporal.server.api.persistence.v1.TimeSkippingInfo.last_update_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	47,  // 55: temporal.server.api.persistence.v1.FastForwardInfo.target_time:type_name -> google.protobuf.Timestamp
+	66,  // 56: temporal.server.api.persistence.v1.LastNotifiedTargetVersion.deployment_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
+	67,  // 57: temporal.server.api.persistence.v1.WorkflowExecutionState.state:type_name -> temporal.server.api.enums.v1.WorkflowExecutionState
+	68,  // 58: temporal.server.api.persistence.v1.WorkflowExecutionState.status:type_name -> temporal.api.enums.v1.WorkflowExecutionStatus
+	56,  // 59: temporal.server.api.persistence.v1.WorkflowExecutionState.last_update_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	47,  // 60: temporal.server.api.persistence.v1.WorkflowExecutionState.start_time:type_name -> google.protobuf.Timestamp
+	37,  // 61: temporal.server.api.persistence.v1.WorkflowExecutionState.request_ids:type_name -> temporal.server.api.persistence.v1.WorkflowExecutionState.RequestIdsEntry
+	69,  // 62: temporal.server.api.persistence.v1.RequestIDInfo.event_type:type_name -> temporal.api.enums.v1.EventType
+	47,  // 63: temporal.server.api.persistence.v1.RequestIDInfo.attach_time:type_name -> google.protobuf.Timestamp
+	70,  // 64: temporal.server.api.persistence.v1.TransferTaskInfo.task_type:type_name -> temporal.server.api.enums.v1.TaskType
+	47,  // 65: temporal.server.api.persistence.v1.TransferTaskInfo.visibility_time:type_name -> google.protobuf.Timestamp
+	38,  // 66: temporal.server.api.persistence.v1.TransferTaskInfo.close_execution_task_details:type_name -> temporal.server.api.persistence.v1.TransferTaskInfo.CloseExecutionTaskDetails
+	71,  // 67: temporal.server.api.persistence.v1.TransferTaskInfo.chasm_task_info:type_name -> temporal.server.api.persistence.v1.ChasmTaskInfo
+	70,  // 68: temporal.server.api.persistence.v1.ReplicationTaskInfo.task_type:type_name -> temporal.server.api.enums.v1.TaskType
+	47,  // 69: temporal.server.api.persistence.v1.ReplicationTaskInfo.visibility_time:type_name -> google.protobuf.Timestamp
+	72,  // 70: temporal.server.api.persistence.v1.ReplicationTaskInfo.priority:type_name -> temporal.server.api.enums.v1.TaskPriority
+	56,  // 71: temporal.server.api.persistence.v1.ReplicationTaskInfo.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	9,   // 72: temporal.server.api.persistence.v1.ReplicationTaskInfo.task_equivalents:type_name -> temporal.server.api.persistence.v1.ReplicationTaskInfo
+	73,  // 73: temporal.server.api.persistence.v1.ReplicationTaskInfo.last_version_history_item:type_name -> temporal.server.api.history.v1.VersionHistoryItem
+	74,  // 74: temporal.server.api.persistence.v1.ReplicationTaskInfo.current_version_history:type_name -> temporal.server.api.history.v1.VersionHistory
+	70,  // 75: temporal.server.api.persistence.v1.VisibilityTaskInfo.task_type:type_name -> temporal.server.api.enums.v1.TaskType
+	47,  // 76: temporal.server.api.persistence.v1.VisibilityTaskInfo.visibility_time:type_name -> google.protobuf.Timestamp
+	47,  // 77: temporal.server.api.persistence.v1.VisibilityTaskInfo.close_time:type_name -> google.protobuf.Timestamp
+	47,  // 78: temporal.server.api.persistence.v1.VisibilityTaskInfo.start_time:type_name -> google.protobuf.Timestamp
+	71,  // 79: temporal.server.api.persistence.v1.VisibilityTaskInfo.chasm_task_info:type_name -> temporal.server.api.persistence.v1.ChasmTaskInfo
+	70,  // 80: temporal.server.api.persistence.v1.TimerTaskInfo.task_type:type_name -> temporal.server.api.enums.v1.TaskType
+	62,  // 81: temporal.server.api.persistence.v1.TimerTaskInfo.timeout_type:type_name -> temporal.api.enums.v1.TimeoutType
+	75,  // 82: temporal.server.api.persistence.v1.TimerTaskInfo.workflow_backoff_type:type_name -> temporal.server.api.enums.v1.WorkflowBackoffType
+	47,  // 83: temporal.server.api.persistence.v1.TimerTaskInfo.visibility_time:type_name -> google.protobuf.Timestamp
+	71,  // 84: temporal.server.api.persistence.v1.TimerTaskInfo.chasm_task_info:type_name -> temporal.server.api.persistence.v1.ChasmTaskInfo
+	56,  // 85: temporal.server.api.persistence.v1.TimerTaskInfo.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	70,  // 86: temporal.server.api.persistence.v1.ArchivalTaskInfo.task_type:type_name -> temporal.server.api.enums.v1.TaskType
+	47,  // 87: temporal.server.api.persistence.v1.ArchivalTaskInfo.visibility_time:type_name -> google.protobuf.Timestamp
+	70,  // 88: temporal.server.api.persistence.v1.OutboundTaskInfo.task_type:type_name -> temporal.server.api.enums.v1.TaskType
+	47,  // 89: temporal.server.api.persistence.v1.OutboundTaskInfo.visibility_time:type_name -> google.protobuf.Timestamp
+	76,  // 90: temporal.server.api.persistence.v1.OutboundTaskInfo.state_machine_info:type_name -> temporal.server.api.persistence.v1.StateMachineTaskInfo
+	71,  // 91: temporal.server.api.persistence.v1.OutboundTaskInfo.chasm_task_info:type_name -> temporal.server.api.persistence.v1.ChasmTaskInfo
+	14,  // 92: temporal.server.api.persistence.v1.OutboundTaskInfo.worker_commands_task:type_name -> temporal.server.api.persistence.v1.WorkerCommandsTask
+	77,  // 93: temporal.server.api.persistence.v1.WorkerCommandsTask.commands:type_name -> temporal.api.worker.v1.WorkerCommand
+	47,  // 94: temporal.server.api.persistence.v1.ActivityInfo.scheduled_time:type_name -> google.protobuf.Timestamp
+	47,  // 95: temporal.server.api.persistence.v1.ActivityInfo.started_time:type_name -> google.protobuf.Timestamp
+	48,  // 96: temporal.server.api.persistence.v1.ActivityInfo.schedule_to_start_timeout:type_name -> google.protobuf.Duration
+	48,  // 97: temporal.server.api.persistence.v1.ActivityInfo.schedule_to_close_timeout:type_name -> google.protobuf.Duration
+	48,  // 98: temporal.server.api.persistence.v1.ActivityInfo.start_to_close_timeout:type_name -> google.protobuf.Duration
+	48,  // 99: temporal.server.api.persistence.v1.ActivityInfo.heartbeat_timeout:type_name -> google.protobuf.Duration
+	48,  // 100: temporal.server.api.persistence.v1.ActivityInfo.retry_initial_interval:type_name -> google.protobuf.Duration
+	48,  // 101: temporal.server.api.persistence.v1.ActivityInfo.retry_maximum_interval:type_name -> google.protobuf.Duration
+	47,  // 102: temporal.server.api.persistence.v1.ActivityInfo.retry_expiration_time:type_name -> google.protobuf.Timestamp
+	78,  // 103: temporal.server.api.persistence.v1.ActivityInfo.retry_last_failure:type_name -> temporal.api.failure.v1.Failure
+	79,  // 104: temporal.server.api.persistence.v1.ActivityInfo.last_heartbeat_details:type_name -> temporal.api.common.v1.Payloads
+	47,  // 105: temporal.server.api.persistence.v1.ActivityInfo.last_heartbeat_update_time:type_name -> google.protobuf.Timestamp
+	80,  // 106: temporal.server.api.persistence.v1.ActivityInfo.activity_type:type_name -> temporal.api.common.v1.ActivityType
+	39,  // 107: temporal.server.api.persistence.v1.ActivityInfo.use_workflow_build_id_info:type_name -> temporal.server.api.persistence.v1.ActivityInfo.UseWorkflowBuildIdInfo
+	55,  // 108: temporal.server.api.persistence.v1.ActivityInfo.last_worker_version_stamp:type_name -> temporal.api.common.v1.WorkerVersionStamp
+	56,  // 109: temporal.server.api.persistence.v1.ActivityInfo.last_update_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	47,  // 110: temporal.server.api.persistence.v1.ActivityInfo.first_scheduled_time:type_name -> google.protobuf.Timestamp
+	47,  // 111: temporal.server.api.persistence.v1.ActivityInfo.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
+	81,  // 112: temporal.server.api.persistence.v1.ActivityInfo.last_started_deployment:type_name -> temporal.api.deployment.v1.Deployment
+	66,  // 113: temporal.server.api.persistence.v1.ActivityInfo.last_deployment_version:type_name -> temporal.api.deployment.v1.WorkerDeploymentVersion
+	60,  // 114: temporal.server.api.persistence.v1.ActivityInfo.priority:type_name -> temporal.api.common.v1.Priority
+	40,  // 115: temporal.server.api.persistence.v1.ActivityInfo.pause_info:type_name -> temporal.server.api.persistence.v1.ActivityInfo.PauseInfo
+	53,  // 116: temporal.server.api.persistence.v1.ActivityInfo.started_clock:type_name -> temporal.server.api.clock.v1.VectorClock
+	47,  // 117: temporal.server.api.persistence.v1.TimerInfo.expiry_time:type_name -> google.protobuf.Timestamp
+	56,  // 118: temporal.server.api.persistence.v1.TimerInfo.last_update_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	82,  // 119: temporal.server.api.persistence.v1.ChildExecutionInfo.parent_close_policy:type_name -> temporal.api.enums.v1.ParentClosePolicy
+	53,  // 120: temporal.server.api.persistence.v1.ChildExecutionInfo.clock:type_name -> temporal.server.api.clock.v1.VectorClock
+	56,  // 121: temporal.server.api.persistence.v1.ChildExecutionInfo.last_update_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	60,  // 122: temporal.server.api.persistence.v1.ChildExecutionInfo.priority:type_name -> temporal.api.common.v1.Priority
+	56,  // 123: temporal.server.api.persistence.v1.RequestCancelInfo.last_update_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	56,  // 124: temporal.server.api.persistence.v1.SignalInfo.last_update_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
+	83,  // 125: temporal.server.api.persistence.v1.Checksum.flavor:type_name -> temporal.server.api.enums.v1.ChecksumFlavor
+	42,  // 126: temporal.server.api.persistence.v1.Callback.nexus:type_name -> temporal.server.api.persistence.v1.Callback.Nexus
+	43,  // 127: temporal.server.api.persistence.v1.Callback.hsm:type_name -> temporal.server.api.persistence.v1.Callback.HSM
+	84,  // 128: temporal.server.api.persistence.v1.Callback.links:type_name -> temporal.api.common.v1.Link
+	85,  // 129: temporal.server.api.persistence.v1.HSMCompletionCallbackArg.last_event:type_name -> temporal.api.history.v1.HistoryEvent
+	23,  // 130: temporal.server.api.persistence.v1.CallbackInfo.callback:type_name -> temporal.server.api.persistence.v1.Callback
+	46,  // 131: temporal.server.api.persistence.v1.CallbackInfo.trigger:type_name -> temporal.server.api.persistence.v1.CallbackInfo.Trigger
+	47,  // 132: temporal.server.api.persistence.v1.CallbackInfo.registration_time:type_name -> google.protobuf.Timestamp
+	86,  // 133: temporal.server.api.persistence.v1.CallbackInfo.state:type_name -> temporal.server.api.enums.v1.CallbackState
+	47,  // 134: temporal.server.api.persistence.v1.CallbackInfo.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
+	78,  // 135: temporal.server.api.persistence.v1.CallbackInfo.last_attempt_failure:type_name -> temporal.api.failure.v1.Failure
+	47,  // 136: temporal.server.api.persistence.v1.CallbackInfo.next_attempt_schedule_time:type_name -> google.protobuf.Timestamp
+	48,  // 137: temporal.server.api.persistence.v1.NexusOperationInfo.schedule_to_close_timeout:type_name -> google.protobuf.Duration
+	47,  // 138: temporal.server.api.persistence.v1.NexusOperationInfo.scheduled_time:type_name -> google.protobuf.Timestamp
+	87,  // 139: temporal.server.api.persistence.v1.NexusOperationInfo.state:type_name -> temporal.server.api.enums.v1.NexusOperationState
+	47,  // 140: temporal.server.api.persistence.v1.NexusOperationInfo.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
+	78,  // 141: temporal.server.api.persistence.v1.NexusOperationInfo.last_attempt_failure:type_name -> temporal.api.failure.v1.Failure
+	47,  // 142: temporal.server.api.persistence.v1.NexusOperationInfo.next_attempt_schedule_time:type_name -> google.protobuf.Timestamp
+	48,  // 143: temporal.server.api.persistence.v1.NexusOperationInfo.schedule_to_start_timeout:type_name -> google.protobuf.Duration
+	48,  // 144: temporal.server.api.persistence.v1.NexusOperationInfo.start_to_close_timeout:type_name -> google.protobuf.Duration
+	47,  // 145: temporal.server.api.persistence.v1.NexusOperationInfo.started_time:type_name -> google.protobuf.Timestamp
+	47,  // 146: temporal.server.api.persistence.v1.NexusOperationCancellationInfo.requested_time:type_name -> google.protobuf.Timestamp
+	88,  // 147: temporal.server.api.persistence.v1.NexusOperationCancellationInfo.state:type_name -> temporal.api.enums.v1.NexusOperationCancellationState
+	47,  // 148: temporal.server.api.persistence.v1.NexusOperationCancellationInfo.last_attempt_complete_time:type_name -> google.protobuf.Timestamp
+	78,  // 149: temporal.server.api.persistence.v1.NexusOperationCancellationInfo.last_attempt_failure:type_name -> temporal.api.failure.v1.Failure
+	47,  // 150: temporal.server.api.persistence.v1.NexusOperationCancellationInfo.next_attempt_schedule_time:type_name -> google.protobuf.Timestamp
+	47,  // 151: temporal.server.api.persistence.v1.WorkflowPauseInfo.pause_time:type_name -> google.protobuf.Timestamp
+	89,  // 152: temporal.server.api.persistence.v1.ShardInfo.QueueStatesEntry.value:type_name -> temporal.server.api.persistence.v1.QueueState
+	90,  // 153: temporal.server.api.persistence.v1.WorkflowExecutionInfo.SearchAttributesEntry.value:type_name -> temporal.api.common.v1.Payload
+	90,  // 154: temporal.server.api.persistence.v1.WorkflowExecutionInfo.MemoEntry.value:type_name -> temporal.api.common.v1.Payload
+	91,  // 155: temporal.server.api.persistence.v1.WorkflowExecutionInfo.UpdateInfosEntry.value:type_name -> temporal.server.api.persistence.v1.UpdateInfo
+	92,  // 156: temporal.server.api.persistence.v1.WorkflowExecutionInfo.SubStateMachinesByTypeEntry.value:type_name -> temporal.server.api.persistence.v1.StateMachineMap
+	28,  // 157: temporal.server.api.persistence.v1.WorkflowExecutionInfo.ChildrenInitializedPostResetPointEntry.value:type_name -> temporal.server.api.persistence.v1.ResetChildInfo
+	7,   // 158: temporal.server.api.persistence.v1.WorkflowExecutionState.RequestIdsEntry.value:type_name -> temporal.server.api.persistence.v1.RequestIDInfo
+	47,  // 159: temporal.server.api.persistence.v1.ActivityInfo.PauseInfo.pause_time:type_name -> google.protobuf.Timestamp
+	41,  // 160: temporal.server.api.persistence.v1.ActivityInfo.PauseInfo.manual:type_name -> temporal.server.api.persistence.v1.ActivityInfo.PauseInfo.Manual
+	44,  // 161: temporal.server.api.persistence.v1.Callback.Nexus.header:type_name -> temporal.server.api.persistence.v1.Callback.Nexus.HeaderEntry
+	93,  // 162: temporal.server.api.persistence.v1.Callback.HSM.ref:type_name -> temporal.server.api.persistence.v1.StateMachineRef
+	45,  // 163: temporal.server.api.persistence.v1.CallbackInfo.Trigger.workflow_closed:type_name -> temporal.server.api.persistence.v1.CallbackInfo.WorkflowClosed
+	164, // [164:164] is the sub-list for method output_type
+	164, // [164:164] is the sub-list for method input_type
+	164, // [164:164] is the sub-list for extension type_name
+	164, // [164:164] is the sub-list for extension extendee
+	0,   // [0:164] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_persistence_v1_executions_proto_init() }

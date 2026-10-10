@@ -35,19 +35,16 @@ func TestBoolQuery_Clauses(t *testing.T) {
 	r.Same(q, q.MustNot(q1))
 	r.Same(q, q.Filter(q1))
 	r.Same(q, q.Should(q1))
-	r.Same(q, q.MinimumNumberShouldMatch(1))
 
 	// Successive calls append to the existing clauses.
 	q.MustNot(q2, q3)
 	q.Filter(q2, q3)
 	q.Should(q2, q3)
-	q.MinimumNumberShouldMatch(2)
 
 	r.Equal(&boolQuery{
-		mustNotClauses:     []elastic.Query{q1, q2, q3},
-		filterClauses:      []elastic.Query{q1, q2, q3},
-		shouldClauses:      []elastic.Query{q1, q2, q3},
-		minimumShouldMatch: "2",
+		mustNotClauses: []elastic.Query{q1, q2, q3},
+		filterClauses:  []elastic.Query{q1, q2, q3},
+		shouldClauses:  []elastic.Query{q1, q2, q3},
 	}, q)
 
 	// Calls without arguments are no-ops.
@@ -55,10 +52,9 @@ func TestBoolQuery_Clauses(t *testing.T) {
 	q.Filter()
 	q.Should()
 	r.Equal(&boolQuery{
-		mustNotClauses:     []elastic.Query{q1, q2, q3},
-		filterClauses:      []elastic.Query{q1, q2, q3},
-		shouldClauses:      []elastic.Query{q1, q2, q3},
-		minimumShouldMatch: "2",
+		mustNotClauses: []elastic.Query{q1, q2, q3},
+		filterClauses:  []elastic.Query{q1, q2, q3},
+		shouldClauses:  []elastic.Query{q1, q2, q3},
 	}, q)
 }
 
@@ -112,29 +108,25 @@ func TestBoolQuery_Source(t *testing.T) {
 			]}}`,
 		},
 		{
-			name: "single should clause",
+			// A lone should clause is equivalent to a filter clause, and a filter clause
+			// doesn't need minimum_should_match.
+			name: "single should clause becomes a filter clause",
 			in:   newBoolQuery().Should(termFoo),
-			out:  `{"bool":{"should":{"term":{"Keyword01":"foo"}}}}`,
+			out:  `{"bool":{"filter":{"term":{"Keyword01":"foo"}}}}`,
 		},
 		{
-			name: "multiple should clauses",
-			in:   newBoolQuery().Should(termFoo, termBar),
-			out: `{"bool":{"should":[
+			name: "single should clause is appended after the filter clauses",
+			in:   newBoolQuery().Filter(termFoo).Should(termBar),
+			out: `{"bool":{"filter":[
 				{"term":{"Keyword01":"foo"}},
 				{"term":{"Keyword01":"bar"}}
 			]}}`,
 		},
 		{
-			name: "minimum should match is omitted when unset",
+			// Elasticsearch defaults minimum_should_match to 0 when the bool query has filter
+			// or must clauses, so it's always set explicitly.
+			name: "minimum should match is always set with multiple should clauses",
 			in:   newBoolQuery().Should(termFoo, termBar),
-			out: `{"bool":{"should":[
-				{"term":{"Keyword01":"foo"}},
-				{"term":{"Keyword01":"bar"}}
-			]}}`,
-		},
-		{
-			name: "minimum should match",
-			in:   newBoolQuery().Should(termFoo, termBar).MinimumNumberShouldMatch(1),
 			out: `{"bool":{
 				"should":[
 					{"term":{"Keyword01":"foo"}},
@@ -148,12 +140,14 @@ func TestBoolQuery_Source(t *testing.T) {
 			in: newBoolQuery().
 				MustNot(termFoo).
 				Filter(termBar).
-				Should(termFoo).
-				MinimumNumberShouldMatch(1),
+				Should(termFoo, termBar),
 			out: `{"bool":{
 				"must_not":{"term":{"Keyword01":"foo"}},
 				"filter":{"term":{"Keyword01":"bar"}},
-				"should":{"term":{"Keyword01":"foo"}},
+				"should":[
+					{"term":{"Keyword01":"foo"}},
+					{"term":{"Keyword01":"bar"}}
+				],
 				"minimum_should_match":"1"
 			}}`,
 		},
@@ -247,6 +241,96 @@ func TestBoolQuery_Source(t *testing.T) {
 				"should":[
 					{"range":{"Int02":{"gte":1}}},
 					{"range":{"Int02":{"lte":10}}}
+				],
+				"minimum_should_match":"1"
+			}}`,
+		},
+		{
+			name: "term queries on same field are merged into a terms query",
+			in: newBoolQuery().Should(
+				newTermQuery("Keyword01", "foo"),
+				newTermQuery("Keyword01", "bar"),
+			),
+			out: `{"bool":{"filter":{
+				"terms":{"Keyword01":["foo","bar"]}
+			}}}`,
+		},
+		{
+			name: "term and terms queries on same field are merged into a terms query",
+			in: newBoolQuery().Should(
+				newTermQuery("Keyword01", "foo"),
+				newTermsQuery("Keyword01", "bar", "baz"),
+				newTermQuery("Keyword01", "qux"),
+			),
+			out: `{"bool":{"filter":{
+				"terms":{"Keyword01":["foo","bar","baz","qux"]}
+			}}}`,
+		},
+		{
+			name: "term queries on distinct fields are merged independently",
+			in: newBoolQuery().Should(
+				newTermQuery("Keyword01", "foo"),
+				newTermQuery("Keyword02", "bar"),
+				newTermQuery("Keyword01", "baz"),
+				newTermQuery("Keyword02", "qux"),
+			),
+			out: `{"bool":{
+				"should":[
+					{"terms":{"Keyword01":["foo","baz"]}},
+					{"terms":{"Keyword02":["bar","qux"]}}
+				],
+				"minimum_should_match":"1"
+			}}`,
+		},
+		{
+			name: "should clauses keep their relative order and merged term queries stay in place",
+			in: newBoolQuery().Should(
+				termFoo, // this is elastic.Term, not mergeable
+				newTermQuery("Keyword02", "foo"),
+				termBar, // this is elastic.Term, not mergeable
+				newTermQuery("Keyword02", "bar"),
+			),
+			out: `{"bool":{
+				"should":[
+					{"term":{"Keyword01":"foo"}},
+					{"terms":{"Keyword02":["foo","bar"]}},
+					{"term":{"Keyword01":"bar"}}
+				],
+				"minimum_should_match":"1"
+			}}`,
+		},
+		{
+			// Only the term query wrappers are merged: elastic.TermQuery is left as is, even
+			// on the same field.
+			name: "elastic term queries are not merged",
+			in:   newBoolQuery().Should(termFoo, termBar),
+			out: `{"bool":{
+				"should":[
+					{"term":{"Keyword01":"foo"}},
+					{"term":{"Keyword01":"bar"}}
+				],
+				"minimum_should_match":"1"
+			}}`,
+		},
+		{
+			name: "term queries in must not and filter clauses are not merged",
+			in: newBoolQuery().
+				MustNot(
+					newTermQuery("Keyword01", "foo"),
+					newTermQuery("Keyword01", "bar"),
+				).
+				Filter(
+					newTermQuery("Keyword02", "foo"),
+					newTermQuery("Keyword02", "bar"),
+				),
+			out: `{"bool":{
+				"must_not":[
+					{"term":{"Keyword01":"foo"}},
+					{"term":{"Keyword01":"bar"}}
+				],
+				"filter":[
+					{"term":{"Keyword02":"foo"}},
+					{"term":{"Keyword02":"bar"}}
 				]
 			}}`,
 		},
@@ -335,7 +419,7 @@ func TestBoolQuery_MergeFilterClauses(t *testing.T) {
 		{
 			name: "no clauses",
 			in:   nil,
-			out:  []elastic.Query{},
+			out:  nil,
 		},
 		{
 			name: "no range queries",
@@ -443,4 +527,123 @@ func TestBoolQuery_MergeFilterClausesOnlyReadsFilterClauses(t *testing.T) {
 	r.Equal([]elastic.Query{rq1, rq2}, q.mustNotClauses)
 	r.Equal([]elastic.Query{rq1, rq2}, q.shouldClauses)
 	r.Empty(q.filterClauses)
+}
+
+func TestBoolQuery_MergeShouldClauses(t *testing.T) {
+	termFoo := elastic.NewTermQuery("Keyword01", "foo")
+	termBar := elastic.NewTermQuery("Keyword01", "bar")
+
+	testCases := []struct {
+		name string
+		in   []elastic.Query
+		out  []elastic.Query
+	}{
+		{
+			name: "no clauses",
+			in:   nil,
+			out:  nil,
+		},
+		{
+			// Only the term query wrappers implement termsQueryIf: elastic.TermQuery is left
+			// as is, even on the same field.
+			name: "no term queries",
+			in:   []elastic.Query{termFoo, termBar},
+			out:  []elastic.Query{termFoo, termBar},
+		},
+		{
+			name: "single term query",
+			in:   []elastic.Query{newTermQuery("Keyword01", "foo")},
+			out:  []elastic.Query{newTermQuery("Keyword01", "foo")},
+		},
+		{
+			name: "single terms query",
+			in:   []elastic.Query{newTermsQuery("Keyword01", "foo", "bar")},
+			out:  []elastic.Query{newTermsQuery("Keyword01", "foo", "bar")},
+		},
+		{
+			name: "term queries on same field",
+			in: []elastic.Query{
+				newTermQuery("Keyword01", "foo"),
+				newTermQuery("Keyword01", "bar"),
+			},
+			out: []elastic.Query{newTermsQuery("Keyword01", "foo", "bar")},
+		},
+		{
+			name: "term and terms queries on same field",
+			in: []elastic.Query{
+				newTermQuery("Keyword01", "foo"),
+				newTermsQuery("Keyword01", "bar", "baz"),
+				newTermQuery("Keyword01", "qux"),
+			},
+			out: []elastic.Query{newTermsQuery("Keyword01", "foo", "bar", "baz", "qux")},
+		},
+		{
+			// Duplicate values are kept: Elasticsearch ignores them.
+			name: "term queries with the same value",
+			in: []elastic.Query{
+				newTermQuery("Keyword01", "foo"),
+				newTermQuery("Keyword01", "foo"),
+			},
+			out: []elastic.Query{newTermsQuery("Keyword01", "foo", "foo")},
+		},
+		{
+			name: "term queries on distinct fields",
+			in: []elastic.Query{
+				newTermQuery("Keyword01", "foo"),
+				newTermQuery("Keyword02", "bar"),
+			},
+			out: []elastic.Query{
+				newTermQuery("Keyword01", "foo"),
+				newTermQuery("Keyword02", "bar"),
+			},
+		},
+		{
+			name: "term queries on distinct fields interleaved with each other",
+			in: []elastic.Query{
+				newTermQuery("Keyword01", "foo"),
+				newTermQuery("Keyword02", "bar"),
+				newTermQuery("Keyword01", "baz"),
+				newTermQuery("Keyword02", "qux"),
+			},
+			out: []elastic.Query{
+				newTermsQuery("Keyword01", "foo", "baz"),
+				newTermsQuery("Keyword02", "bar", "qux"),
+			},
+		},
+		{
+			name: "mixed term and non term queries keep their relative order",
+			in: []elastic.Query{
+				newTermQuery("Keyword02", "foo"),
+				termFoo,
+				newTermQuery("Keyword02", "bar"),
+				termBar,
+			},
+			out: []elastic.Query{
+				newTermsQuery("Keyword02", "foo", "bar"),
+				termFoo,
+				termBar,
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			q := newBoolQuery().Should(tc.in...)
+			r.Equal(tc.out, q.mergeShouldClauses())
+			// Clauses are merged into a new slice, leaving the query untouched.
+			r.Equal(tc.in, q.shouldClauses)
+		})
+	}
+}
+
+func TestBoolQuery_MergeShouldClausesOnlyReadsShouldClauses(t *testing.T) {
+	r := require.New(t)
+	tq1 := newTermQuery("Keyword01", "foo")
+	tq2 := newTermQuery("Keyword01", "bar")
+	q := newBoolQuery().MustNot(tq1, tq2).Filter(tq1, tq2)
+	r.Empty(q.mergeShouldClauses())
+	r.Equal([]elastic.Query{tq1, tq2}, q.mustNotClauses)
+	r.Equal([]elastic.Query{tq1, tq2}, q.filterClauses)
+	r.Empty(q.shouldClauses)
 }

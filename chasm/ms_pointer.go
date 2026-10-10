@@ -23,6 +23,27 @@ func NewMSPointer(backend NodeBackend) MSPointer {
 	}
 }
 
+// LifecycleState derives the CHASM lifecycle state from the underlying mutable state's execution status.
+//
+// NOTE: Workflow pause is intentionally reported as Running. Reporting LifecycleStatePaused would cause
+// task validation to drop tasks for non-detached sub-components (e.g. Nexus operations) while paused.
+// Unknown statuses (including UNSPECIFIED) are also reported as Running so that tasks are not
+// invalidated based on a status we cannot interpret.
+func (m MSPointer) LifecycleState() LifecycleState {
+	switch m.backend.GetExecutionState().GetStatus() {
+	case enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW:
+		return LifecycleStateCompleted
+	case enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+		return LifecycleStateFailed
+	default:
+		return LifecycleStateRunning
+	}
+}
+
 // WorkflowRunTimeout returns the workflow run timeout duration. Returns 0 if no timeout is set.
 func (m MSPointer) WorkflowRunTimeout() time.Duration {
 	return m.backend.GetExecutionInfo().GetWorkflowRunTimeout().AsDuration()

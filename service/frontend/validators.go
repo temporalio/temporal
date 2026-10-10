@@ -3,6 +3,7 @@ package frontend
 import (
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/priorities"
@@ -45,6 +46,16 @@ func validateStringField(fieldName string, value string, maxLen int, required bo
 		return serviceerror.NewInvalidArgumentf("%s field too long (max %d characters).", fieldName, maxLen)
 	}
 	return nil
+}
+
+func validatePropagatedNexusSerializationContext(nsCtx *nexuspb.PropagatedSerializationContext, maxIDLength int) error {
+	if err := validateStringField("Nexus serialization context endpoint", nsCtx.GetEndpoint(), maxIDLength, false); err != nil {
+		return err
+	}
+	if err := validateStringField("Nexus serialization context service", nsCtx.GetService(), maxIDLength, false); err != nil {
+		return err
+	}
+	return validateStringField("Nexus serialization context operation", nsCtx.GetOperation(), maxIDLength, false)
 }
 
 func validateFairnessWeightUpdate(

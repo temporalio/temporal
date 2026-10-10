@@ -3,6 +3,7 @@ package hsmtest
 import (
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"go.temporal.io/server/service/history/hsm"
@@ -41,10 +42,17 @@ func (d *Data) SetState(s State) {
 	d.state = s
 }
 
+// regenerated counts the timer tasks handed out. Timers with equal deadlines
+// are grouped into one state machine timer, and the wall clock does not tick
+// between two nodes of one walk on every platform, so each deadline is pushed
+// out by one more nanosecond than the last.
+var regenerated atomic.Int64
+
 func (d *Data) RegenerateTasks(node *hsm.Node) ([]hsm.Task, error) {
+	deadline := time.Now().Add(time.Hour + time.Duration(regenerated.Add(1)))
 	return []hsm.Task{
 		NewTask(
-			hsm.TaskAttributes{Deadline: time.Now().Add(time.Hour)},
+			hsm.TaskAttributes{Deadline: deadline},
 			false,
 		),
 		NewTask(

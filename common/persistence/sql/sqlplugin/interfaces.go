@@ -1,3 +1,5 @@
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination interfaces_mock.go
+
 package sqlplugin
 
 import (
