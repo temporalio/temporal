@@ -122,7 +122,7 @@ func pauseInteractionOpts(t *testing.T) []testcore.TestOption {
 
 // scheduledPauseFixture holds the handles produced by setupPausedScheduledWorkflow.
 type scheduledPauseFixture struct {
-	env            *testcore.TestEnv
+	env            *ScheduleTestEnv
 	ctx            context.Context
 	sid            string
 	wid            string
@@ -139,7 +139,7 @@ func setupPausedScheduledWorkflow(
 	t *testing.T,
 	newContext contextFactory,
 	policy enumspb.ScheduleOverlapPolicy,
-	register func(s *testcore.TestEnv, wt string),
+	register func(s *ScheduleTestEnv, wt string),
 ) *scheduledPauseFixture {
 	env := newScheduleEnv(t, pauseInteractionOpts(t)...)
 
@@ -233,7 +233,7 @@ func setupPausedScheduledWorkflow(
 
 // registerForeverWorkflow registers a workflow that runs (effectively) forever,
 // so it stays in the schedule's running set until the schedule closes it.
-func registerForeverWorkflow(s *testcore.TestEnv, wt string) {
+func registerForeverWorkflow(s *ScheduleTestEnv, wt string) {
 	s.SdkWorker().RegisterWorkflowWithOptions(
 		func(ctx workflow.Context) error {
 			return workflow.Sleep(ctx, time.Hour)
@@ -246,7 +246,7 @@ func registerForeverWorkflow(s *testcore.TestEnv, wt string) {
 // receives the "complete" signal or its context is cancelled, then closes. This
 // lets a test free the schedule's overlap slot on demand (by signalling) or via
 // the scheduler's own cancellation (CANCEL_OTHER).
-func registerSignalCompletableWorkflow(s *testcore.TestEnv, wt string) {
+func registerSignalCompletableWorkflow(s *ScheduleTestEnv, wt string) {
 	s.SdkWorker().RegisterWorkflowWithOptions(
 		func(ctx workflow.Context) error {
 			workflow.GetSignalChannel(ctx, "complete").Receive(ctx, nil)
@@ -328,8 +328,8 @@ func setupPausedTriggeredWorkflow(
 	newContext contextFactory,
 	opts []testcore.TestOption,
 	idPrefix string,
-	register func(s *testcore.TestEnv, wt string),
-	afterStart func(s *testcore.TestEnv, firstRun *commonpb.WorkflowExecution),
+	register func(s *ScheduleTestEnv, wt string),
+	afterStart func(s *ScheduleTestEnv, firstRun *commonpb.WorkflowExecution),
 ) *scheduledPauseFixture {
 	env := newScheduleEnv(t, opts...)
 
@@ -437,7 +437,7 @@ func testSchedulePauseContinueAsNew(t *testing.T, newContext contextFactory) {
 
 	// First run waits for the "go" signal, then continues-as-new; the continued
 	// run completes immediately.
-	register := func(s *testcore.TestEnv, wt string) {
+	register := func(s *ScheduleTestEnv, wt string) {
 		s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
 			if workflow.GetInfo(ctx).ContinuedExecutionRunID == "" {
 				workflow.GetSignalChannel(ctx, "go").Receive(ctx, nil)
@@ -508,7 +508,7 @@ func testSchedulePauseContinueAsNew(t *testing.T, newContext contextFactory) {
 // event is not part of the reset history), and the scheduler keeps tracking the
 // reset run through to completion.
 func testSchedulePauseReset(t *testing.T, newContext contextFactory) {
-	register := func(s *testcore.TestEnv, wt string) {
+	register := func(s *ScheduleTestEnv, wt string) {
 		s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
 			workflow.GetSignalChannel(ctx, "complete").Receive(ctx, nil)
 			return nil
@@ -516,7 +516,7 @@ func testSchedulePauseReset(t *testing.T, newContext contextFactory) {
 	}
 
 	// Wait until the first workflow task is complete so event 3 is a valid reset point.
-	afterStart := func(s *testcore.TestEnv, firstRun *commonpb.WorkflowExecution) {
+	afterStart := func(s *ScheduleTestEnv, firstRun *commonpb.WorkflowExecution) {
 		s.WaitForHistoryEvents(`
 			1 WorkflowExecutionStarted
 			2 WorkflowTaskScheduled
@@ -577,7 +577,7 @@ func testSchedulePauseReset(t *testing.T, newContext contextFactory) {
 
 // scheduleActionCount returns the schedule's total ActionCount (number of
 // workflows it has started).
-func scheduleActionCount(ctx context.Context, s *testcore.TestEnv, sid string) (int64, error) {
+func scheduleActionCount(ctx context.Context, s *ScheduleTestEnv, sid string) (int64, error) {
 	desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
