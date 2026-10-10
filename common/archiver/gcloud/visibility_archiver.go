@@ -252,11 +252,11 @@ func (v *visibilityArchiver) queryPrefix(ctx context.Context, uri archiver.URI, 
 	}
 
 	if request.parsedQuery.runID != nil {
-		filters = append(filters, newWorkflowIDPrecondition(hash(*request.parsedQuery.runID)))
+		filters = append(filters, newRunIDPrecondition(hash(*request.parsedQuery.runID)))
 	}
 
 	if request.parsedQuery.workflowType != nil {
-		filters = append(filters, newWorkflowIDPrecondition(hash(*request.parsedQuery.workflowType)))
+		filters = append(filters, newWorkflowTypeNamePrecondition(hash(*request.parsedQuery.workflowType)))
 	}
 
 	filenames, completed, currentCursorPos, err := v.gcloudStorage.QueryWithFilters(ctx, uri, prefix, request.pageSize, token.Offset, filters)
