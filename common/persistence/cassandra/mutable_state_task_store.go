@@ -267,18 +267,52 @@ func (d *MutableStateTaskStore) RangeCompleteHistoryTasks(
 	ctx context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
+	batch := d.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
+
 	switch request.TaskCategory.ID() {
 	case tasks.CategoryIDTransfer:
-		return d.rangeCompleteTransferTasks(ctx, request)
+		d.rangeCompleteTransferTasks(batch, request)
 	case tasks.CategoryIDTimer:
-		return d.rangeCompleteTimerTasks(ctx, request)
+		d.rangeCompleteTimerTasks(batch, request)
 	case tasks.CategoryIDVisibility:
-		return d.rangeCompleteVisibilityTasks(ctx, request)
+		d.rangeCompleteVisibilityTasks(batch, request)
 	case tasks.CategoryIDReplication:
-		return d.rangeCompleteReplicationTasks(ctx, request)
+		d.rangeCompleteReplicationTasks(batch, request)
 	default:
-		return d.rangeCompleteHistoryTasks(ctx, request)
+		d.rangeCompleteHistoryTasks(batch, request)
 	}
+
+	batch.Query(templateUpdateLeaseQuery,
+		request.RangeID,
+		request.ShardID,
+		rowTypeShard,
+		rowTypeShardNamespaceID,
+		rowTypeShardWorkflowID,
+		rowTypeShardRunID,
+		defaultVisibilityTimestamp,
+		rowTypeShardTaskID,
+		request.RangeID,
+	)
+
+	previous := make(map[string]any)
+	applied, iter, err := d.Session.MapExecuteBatchCAS(batch, previous)
+	if err != nil {
+		return gocql.ConvertError("RangeCompleteHistoryTasks", err)
+	}
+	defer func() {
+		_ = iter.Close()
+	}()
+
+	if !applied {
+		if previousRangeID, ok := previous["range_id"].(int64); ok && previousRangeID != request.RangeID {
+			return &p.ShardOwnershipLostError{
+				ShardID: request.ShardID,
+				Msg:     fmt.Sprintf("Failed to range complete history tasks. Request RangeID: %v, Actual RangeID: %v", request.RangeID, previousRangeID),
+			}
+		}
+		return serviceerror.NewUnavailable("RangeCompleteHistoryTasks operation failed because of conditional failure.")
+	}
+	return nil
 }
 
 func (d *MutableStateTaskStore) getTransferTasks(
@@ -344,10 +378,10 @@ func (d *MutableStateTaskStore) completeTransferTask(
 }
 
 func (d *MutableStateTaskStore) rangeCompleteTransferTasks(
-	ctx context.Context,
+	batch *gocql.Batch,
 	request *p.RangeCompleteHistoryTasksRequest,
-) error {
-	query := d.Session.Query(templateRangeCompleteTransferTaskQuery,
+) {
+	batch.Query(templateRangeCompleteTransferTaskQuery,
 		request.ShardID,
 		rowTypeTransferTask,
 		rowTypeTransferNamespaceID,
@@ -356,10 +390,7 @@ func (d *MutableStateTaskStore) rangeCompleteTransferTasks(
 		defaultVisibilityTimestamp,
 		request.InclusiveMinTaskKey.TaskID,
 		request.ExclusiveMaxTaskKey.TaskID,
-	).WithContext(ctx)
-
-	err := query.Exec()
-	return gocql.ConvertError("RangeCompleteTransferTask", err)
+	)
 }
 
 func (d *MutableStateTaskStore) getTimerTasks(
@@ -428,12 +459,12 @@ func (d *MutableStateTaskStore) completeTimerTask(
 }
 
 func (d *MutableStateTaskStore) rangeCompleteTimerTasks(
-	ctx context.Context,
+	batch *gocql.Batch,
 	request *p.RangeCompleteHistoryTasksRequest,
-) error {
+) {
 	start := p.UnixMilliseconds(request.InclusiveMinTaskKey.FireTime)
 	end := p.UnixMilliseconds(request.ExclusiveMaxTaskKey.FireTime)
-	query := d.Session.Query(templateRangeCompleteTimerTaskQuery,
+	batch.Query(templateRangeCompleteTimerTaskQuery,
 		request.ShardID,
 		rowTypeTimerTask,
 		rowTypeTimerNamespaceID,
@@ -441,10 +472,7 @@ func (d *MutableStateTaskStore) rangeCompleteTimerTasks(
 		rowTypeTimerRunID,
 		start,
 		end,
-	).WithContext(ctx)
-
-	err := query.Exec()
-	return gocql.ConvertError("RangeCompleteTimerTask", err)
+	)
 }
 
 func (d *MutableStateTaskStore) getReplicationTasks(
@@ -486,10 +514,10 @@ func (d *MutableStateTaskStore) completeReplicationTask(
 }
 
 func (d *MutableStateTaskStore) rangeCompleteReplicationTasks(
-	ctx context.Context,
+	batch *gocql.Batch,
 	request *p.RangeCompleteHistoryTasksRequest,
-) error {
-	query := d.Session.Query(templateRangeCompleteReplicationTaskQuery,
+) {
+	batch.Query(templateRangeCompleteReplicationTaskQuery,
 		request.ShardID,
 		rowTypeReplicationTask,
 		rowTypeReplicationNamespaceID,
@@ -498,10 +526,7 @@ func (d *MutableStateTaskStore) rangeCompleteReplicationTasks(
 		defaultVisibilityTimestamp,
 		request.InclusiveMinTaskKey.TaskID,
 		request.ExclusiveMaxTaskKey.TaskID,
-	).WithContext(ctx)
-
-	err := query.Exec()
-	return gocql.ConvertError("RangeCompleteReplicationTask", err)
+	)
 }
 
 func (d *MutableStateTaskStore) PutReplicationTaskToDLQ(
@@ -680,10 +705,10 @@ func (d *MutableStateTaskStore) completeVisibilityTask(
 }
 
 func (d *MutableStateTaskStore) rangeCompleteVisibilityTasks(
-	ctx context.Context,
+	batch *gocql.Batch,
 	request *p.RangeCompleteHistoryTasksRequest,
-) error {
-	query := d.Session.Query(templateRangeCompleteVisibilityTaskQuery,
+) {
+	batch.Query(templateRangeCompleteVisibilityTaskQuery,
 		request.ShardID,
 		rowTypeVisibilityTask,
 		rowTypeVisibilityTaskNamespaceID,
@@ -692,10 +717,7 @@ func (d *MutableStateTaskStore) rangeCompleteVisibilityTasks(
 		defaultVisibilityTimestamp,
 		request.InclusiveMinTaskKey.TaskID,
 		request.ExclusiveMaxTaskKey.TaskID,
-	).WithContext(ctx)
-
-	err := query.Exec()
-	return gocql.ConvertError("RangeCompleteVisibilityTask", err)
+	)
 }
 
 func (d *MutableStateTaskStore) populateGetReplicationTasksResponse(
@@ -862,13 +884,12 @@ func (d *MutableStateTaskStore) completeHistoryTask(
 }
 
 func (d *MutableStateTaskStore) rangeCompleteHistoryTasks(
-	ctx context.Context,
+	batch *gocql.Batch,
 	request *p.RangeCompleteHistoryTasksRequest,
-) error {
+) {
 	// execution manager should already validated the request
-	var query gocql.Query
 	if request.TaskCategory.Type() == tasks.CategoryTypeImmediate {
-		query = d.Session.Query(templateRangeCompleteHistoryImmediateTasksQuery,
+		batch.Query(templateRangeCompleteHistoryImmediateTasksQuery,
 			request.ShardID,
 			request.TaskCategory.ID(),
 			rowTypeHistoryTaskNamespaceID,
@@ -877,11 +898,11 @@ func (d *MutableStateTaskStore) rangeCompleteHistoryTasks(
 			defaultVisibilityTimestamp,
 			request.InclusiveMinTaskKey.TaskID,
 			request.ExclusiveMaxTaskKey.TaskID,
-		).WithContext(ctx)
+		)
 	} else {
 		minTimestamp := p.UnixMilliseconds(request.InclusiveMinTaskKey.FireTime)
 		maxTimestamp := p.UnixMilliseconds(request.ExclusiveMaxTaskKey.FireTime)
-		query = d.Session.Query(templateRangeCompleteHistoryScheduledTasksQuery,
+		batch.Query(templateRangeCompleteHistoryScheduledTasksQuery,
 			request.ShardID,
 			request.TaskCategory.ID(),
 			rowTypeHistoryTaskNamespaceID,
@@ -889,9 +910,6 @@ func (d *MutableStateTaskStore) rangeCompleteHistoryTasks(
 			rowTypeHistoryTaskRunID,
 			minTimestamp,
 			maxTimestamp,
-		).WithContext(ctx)
+		)
 	}
-
-	err := query.Exec()
-	return gocql.ConvertError("RangeCompleteHistoryTasks", err)
 }
