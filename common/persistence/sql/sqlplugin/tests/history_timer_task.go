@@ -13,11 +13,16 @@ import (
 )
 
 type (
+	historyScheduledAndTimerTaskStore interface {
+		sqlplugin.HistoryTimerTask
+		sqlplugin.HistoryScheduledTask
+	}
+
 	historyHistoryTimerTaskSuite struct {
 		suite.Suite
 		*require.Assertions
 
-		store sqlplugin.HistoryTimerTask
+		store historyScheduledAndTimerTaskStore
 	}
 )
 
@@ -31,7 +36,7 @@ var (
 
 func NewHistoryTimerTaskSuite(
 	t *testing.T,
-	store sqlplugin.HistoryTimerTask,
+	store historyScheduledAndTimerTaskStore,
 ) *historyHistoryTimerTaskSuite {
 	return &historyHistoryTimerTaskSuite{
 		Assertions: require.New(t),
@@ -217,6 +222,98 @@ func (s *historyHistoryTimerTaskSuite) TestInsertSelectMultipleAtSameTimestamp()
 		rows[index].ShardID = shardID
 	}
 	s.Equal(tasks[1:], rows)
+}
+
+func (s *historyHistoryTimerTaskSuite) TestRangeSelectTimerTasksCompositeLowerBound() {
+	shardID := rand.Int31()
+	timestamp := s.now()
+	laterTimestamp := timestamp.Add(time.Millisecond)
+	maxTimestamp := laterTimestamp.Add(time.Millisecond)
+	tasks := []sqlplugin.TimerTasksRow{
+		s.newRandomTimerTaskRow(shardID, timestamp.Add(-time.Millisecond), 100),
+		s.newRandomTimerTaskRow(shardID, timestamp, 1),
+		s.newRandomTimerTaskRow(shardID, timestamp, 2),
+		s.newRandomTimerTaskRow(shardID, timestamp, 3),
+		s.newRandomTimerTaskRow(shardID, laterTimestamp, 1),
+		s.newRandomTimerTaskRow(shardID, maxTimestamp, 100),
+	}
+	_, err := s.store.InsertIntoTimerTasks(newExecutionContext(), tasks)
+	s.Require().NoError(err)
+
+	filter := sqlplugin.TimerTasksRangeFilter{
+		ShardID:                         shardID,
+		InclusiveMinVisibilityTimestamp: timestamp,
+		InclusiveMinTaskID:              2,
+		ExclusiveMaxVisibilityTimestamp: maxTimestamp,
+		PageSize:                        2,
+	}
+	rows, err := s.store.RangeSelectFromTimerTasks(newExecutionContext(), filter)
+	s.Require().NoError(err)
+	for i := range rows {
+		rows[i].ShardID = shardID
+	}
+	s.Equal(tasks[2:4], rows)
+
+	filter.InclusiveMinTaskID = tasks[3].TaskID + 1
+	rows, err = s.store.RangeSelectFromTimerTasks(newExecutionContext(), filter)
+	s.Require().NoError(err)
+	for i := range rows {
+		rows[i].ShardID = shardID
+	}
+	s.Equal(tasks[4:5], rows)
+}
+
+func (s *historyHistoryTimerTaskSuite) TestRangeSelectHistoryScheduledTasksCompositeLowerBound() {
+	shardID := rand.Int31()
+	categoryID := int32(1234)
+	timestamp := s.now()
+	laterTimestamp := timestamp.Add(time.Millisecond)
+	maxTimestamp := laterTimestamp.Add(time.Millisecond)
+	newTask := func(timestamp time.Time, taskID int64) sqlplugin.HistoryScheduledTasksRow {
+		return sqlplugin.HistoryScheduledTasksRow{
+			ShardID:             shardID,
+			CategoryID:          categoryID,
+			VisibilityTimestamp: timestamp,
+			TaskID:              taskID,
+			Data:                testHistoryTimerTaskData,
+			DataEncoding:        testHistoryTimerTaskEncoding,
+		}
+	}
+	tasks := []sqlplugin.HistoryScheduledTasksRow{
+		newTask(timestamp.Add(-time.Millisecond), 100),
+		newTask(timestamp, 1),
+		newTask(timestamp, 2),
+		newTask(timestamp, 3),
+		newTask(laterTimestamp, 1),
+		newTask(maxTimestamp, 100),
+	}
+	_, err := s.store.InsertIntoHistoryScheduledTasks(newExecutionContext(), tasks)
+	s.Require().NoError(err)
+
+	filter := sqlplugin.HistoryScheduledTasksRangeFilter{
+		ShardID:                         shardID,
+		CategoryID:                      categoryID,
+		InclusiveMinVisibilityTimestamp: timestamp,
+		InclusiveMinTaskID:              2,
+		ExclusiveMaxVisibilityTimestamp: maxTimestamp,
+		PageSize:                        2,
+	}
+	rows, err := s.store.RangeSelectFromHistoryScheduledTasks(newExecutionContext(), filter)
+	s.Require().NoError(err)
+	for i := range rows {
+		rows[i].ShardID = shardID
+		rows[i].CategoryID = categoryID
+	}
+	s.Equal(tasks[2:4], rows)
+
+	filter.InclusiveMinTaskID = tasks[3].TaskID + 1
+	rows, err = s.store.RangeSelectFromHistoryScheduledTasks(newExecutionContext(), filter)
+	s.Require().NoError(err)
+	for i := range rows {
+		rows[i].ShardID = shardID
+		rows[i].CategoryID = categoryID
+	}
+	s.Equal(tasks[4:5], rows)
 }
 
 func (s *historyHistoryTimerTaskSuite) TestDeleteSelect_Single() {

@@ -93,9 +93,9 @@ namespace_id = :namespace_id
 	getHistoryScheduledTasksQuery = `SELECT visibility_timestamp, task_id, data, data_encoding FROM history_scheduled_tasks 
   WHERE shard_id = $1 
   AND category_id = $2 
-  AND ((visibility_timestamp >= $3 AND task_id >= $4) OR visibility_timestamp > $5) 
-  AND visibility_timestamp < $6
-  ORDER BY visibility_timestamp,task_id LIMIT $7`
+  AND (visibility_timestamp, task_id) >= ($3, $4)
+  AND visibility_timestamp < $5
+  ORDER BY visibility_timestamp,task_id LIMIT $6`
 
 	deleteHistoryScheduledTaskQuery       = `DELETE FROM history_scheduled_tasks WHERE shard_id = $1 AND category_id = $2 AND visibility_timestamp = $3 AND task_id = $4`
 	rangeDeleteHistoryScheduledTasksQuery = `DELETE FROM history_scheduled_tasks WHERE shard_id = $1 AND category_id = $2 AND visibility_timestamp >= $3 AND visibility_timestamp < $4`
@@ -537,7 +537,6 @@ func (pdb *db) RangeSelectFromHistoryScheduledTasks(
 		filter.CategoryID,
 		filter.InclusiveMinVisibilityTimestamp,
 		filter.InclusiveMinTaskID,
-		filter.InclusiveMinVisibilityTimestamp,
 		filter.ExclusiveMaxVisibilityTimestamp,
 		filter.PageSize,
 	); err != nil {
