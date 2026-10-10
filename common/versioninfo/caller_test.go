@@ -1,11 +1,14 @@
 package versioninfo_test
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"sync"
 	"testing"
 	"time"
 
@@ -69,7 +72,7 @@ func TestPostInfo(t *testing.T) {
 		Name:    "sdk-java",
 		Version: "3.11",
 	}}
-	_, err = caller.Call(&versioninfo.VersionCheckRequest{
+	_, err = caller.Call(t.Context(), &versioninfo.VersionCheckRequest{
 		Product:   "server",
 		Version:   "0.1",
 		ClusterID: "foo",
@@ -81,5 +84,70 @@ func TestPostInfo(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatalf("Request failed: %s", err)
+	}
+}
+
+// TestCallIsBoundedByContext pins the fix for #11943. A server that accepts the
+// request and never responds used to block Call forever: the client had no
+// Timeout and the request carried no context, so neither the caller's deadline
+// nor VersionChecker.Stop could reach it.
+//
+// The handler signals on entry and the context is cancelled only after that
+// signal, so the request is provably in flight when it is cancelled. Cancelling
+// earlier would let the test pass on a request that never reached the server,
+// which is not what Stop relies on.
+func TestCallIsBoundedByContext(t *testing.T) {
+	t.Parallel()
+
+	arrived := make(chan struct{})
+	released := make(chan struct{})
+	var once sync.Once
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		once.Do(func() { close(arrived) })
+		<-released // accept, then never answer
+	}))
+	defer func() {
+		close(released)
+		ts.Close()
+	}()
+
+	u, err := url.Parse(ts.URL)
+	if err != nil {
+		t.Fatalf("parse url: %s", err)
+	}
+	caller := &versioninfo.Caller{Scheme: u.Scheme, Host: u.Host}
+
+	ctx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	go func() {
+		_, callErr := caller.Call(ctx, &versioninfo.VersionCheckRequest{
+			Product:   "server",
+			Version:   "0.1",
+			ClusterID: "foo",
+			DB:        "cassandra",
+			OS:        "linux",
+			Arch:      "arm64",
+			Timestamp: time.Now().UnixNano(),
+			SDKInfo:   []versioninfo.SDKInfo{{Name: "sdk-java", Version: "3.11"}},
+		})
+		done <- callErr
+	}()
+
+	// Only cancel once the server has the request, so this exercises an in-flight
+	// call rather than one cancelled before it left.
+	select {
+	case <-arrived:
+	case <-time.After(10 * time.Second):
+		t.Fatal("request never reached the server")
+	}
+	cancel()
+
+	select {
+	case callErr := <-done:
+		if !errors.Is(callErr, context.Canceled) {
+			t.Fatalf("Call returned %v, want context.Canceled", callErr)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Call did not return after its context was cancelled; the request is not bound to the context")
 	}
 }

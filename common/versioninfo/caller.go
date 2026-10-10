@@ -2,6 +2,7 @@ package versioninfo
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"encoding/json"
 	"errors"
@@ -9,7 +10,14 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"time"
 )
+
+// RequestTimeout bounds a single version-info call. The check is advisory
+// background work on a 24h cadence, so it is better for it to give up quickly
+// than to hold a goroutine and a connection waiting on an endpoint that
+// accepted the request and then went quiet.
+const RequestTimeout = 10 * time.Second
 
 type Caller struct {
 	Scheme string
@@ -20,7 +28,10 @@ func NewCaller() Caller {
 	return Caller{"https", "version-info.temporal.io"}
 }
 
-func (c Caller) Call(r *VersionCheckRequest) (*VersionCheckResponse, error) {
+// Call performs the version check. The context bounds the whole exchange,
+// including reading the response body: a server that sends headers and then
+// stalls mid-body is ended by cancelling the request context.
+func (c Caller) Call(ctx context.Context, r *VersionCheckRequest) (*VersionCheckResponse, error) {
 	err := validateRequest(r)
 	if err != nil {
 		return nil, err
@@ -33,12 +44,15 @@ func (c Caller) Call(r *VersionCheckRequest) (*VersionCheckResponse, error) {
 	if c.Scheme == "https" {
 		tr.TLSClientConfig = &tls.Config{}
 	}
-	client := &http.Client{Transport: tr}
+	// Timeout as well as the context, for the case where a caller passes a context
+	// with no deadline. A cancelled request context already ends the body read, so
+	// this is not covering that.
+	client := &http.Client{Transport: tr, Timeout: RequestTimeout}
 	reqBody, err := json.Marshal(r)
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequest("POST", u.String(), bytes.NewReader(reqBody))
+	req, err := http.NewRequestWithContext(ctx, "POST", u.String(), bytes.NewReader(reqBody))
 	if err != nil {
 		return nil, err
 	}
