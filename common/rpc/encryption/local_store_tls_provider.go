@@ -393,12 +393,39 @@ func newClientTLSConfig(
 		}
 	}
 
-	return auth.NewDynamicTLSClientConfig(
+	tlsConfig := auth.NewDynamicTLSClientConfig(
 		getCert,
 		serverCa,
 		serverName,
 		enableHostVerification,
-	), nil
+	)
+	if enableHostVerification {
+		// RootCAs is copied into the cached tls.Config, unlike client certificates.
+		// Verify every handshake against the provider's current trust bundle,
+		// including resumed connections. Preserve standard chain, expiry, EKU
+		// and hostname checks rather than trusting the stale RootCAs snapshot.
+		tlsConfig.InsecureSkipVerify = true // Verification is performed below.
+		tlsConfig.VerifyConnection = func(state tls.ConnectionState) error {
+			roots, err := clientProvider.FetchServerRootCAsForClient(isWorker)
+			if err != nil {
+				return fmt.Errorf("failed to load client ca: %w", err)
+			}
+			if len(state.PeerCertificates) == 0 {
+				return fmt.Errorf("server presented no certificate")
+			}
+			intermediates := x509.NewCertPool()
+			for _, cert := range state.PeerCertificates[1:] {
+				intermediates.AddCert(cert)
+			}
+			_, err = state.PeerCertificates[0].Verify(x509.VerifyOptions{
+				Roots:         roots,
+				Intermediates: intermediates,
+				DNSName:       state.ServerName,
+			})
+			return err
+		}
+	}
+	return tlsConfig, nil
 }
 
 func (s *localStoreTlsProvider) timerCallback() {
