@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -188,7 +189,7 @@ func GetOrPollWorkflowMutableState(
 
 		// Send back response just before caller context would time out.
 		longPollInterval := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
-		longPollCtx, cancel := contextutil.WithDeadlineBuffer(ctx, longPollInterval, common.DefaultLongPollBuffer)
+		longPollCtx, cancel := contextutil.WithDeadlineBuffer(ctx, longPollInterval, longPollBuffer(ctx))
 		defer cancel()
 
 		for {
@@ -261,6 +262,18 @@ func GetOrPollWorkflowMutableState(
 	}
 
 	return response, nil
+}
+
+// longPollBuffer returns how much of the caller's remaining time the long poll keeps for sending
+// its response. It is common.DefaultLongPollBuffer while more than that is left, and zero
+// otherwise. With zero, the poll waits until the caller's deadline. An early empty response would
+// only make the caller poll again right away.
+func longPollBuffer(ctx context.Context) time.Duration {
+	deadline, ok := ctx.Deadline()
+	if !ok || time.Until(deadline) > common.DefaultLongPollBuffer {
+		return common.DefaultLongPollBuffer
+	}
+	return 0
 }
 
 func GetMutableState(
