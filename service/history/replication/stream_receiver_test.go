@@ -1,6 +1,7 @@
 package replication
 
 import (
+	"context"
 	"math/rand"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -128,6 +130,64 @@ func (s *streamReceiverSuite) SetupTest() {
 
 func (s *streamReceiverSuite) TearDownTest() {
 	s.controller.Finish()
+}
+
+func TestStreamReceiverStopCancelsTransport(t *testing.T) {
+	t.Parallel()
+
+	controller := gomock.NewController(t)
+	metadata := cluster.NewMockMetadata(controller)
+	metadata.EXPECT().ClusterNameForFailoverVersion(true, int64(1)).Return("source")
+	metadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		"source": {InitialFailoverVersion: 1},
+	})
+	toolbox := ProcessToolBox{
+		ClusterMetadata: metadata,
+		Config:          tests.NewDynamicConfig(),
+		MetricsHandler:  metrics.NoopMetricsHandler,
+		Logger:          log.NewTestLogger(),
+	}
+	receiver := NewStreamReceiver(toolbox, nil, NewClusterShardKey(2, 1), NewClusterShardKey(1, 1))
+	highPriorityTracker := NewMockExecutableTaskTracker(controller)
+	lowPriorityTracker := NewMockExecutableTaskTracker(controller)
+	receiver.highPriorityTaskTracker = highPriorityTracker
+	receiver.lowPriorityTaskTracker = lowPriorityTracker
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	provider := streamClientProviderFunc[*adminservice.StreamWorkflowReplicationMessagesRequest, *adminservice.StreamWorkflowReplicationMessagesResponse](
+		func(ctx context.Context) (BiDirectionStreamClient[*adminservice.StreamWorkflowReplicationMessagesRequest, *adminservice.StreamWorkflowReplicationMessagesResponse], error) {
+			return &streamClientStub[*adminservice.StreamWorkflowReplicationMessagesRequest, *adminservice.StreamWorkflowReplicationMessagesResponse]{
+				send: func(*adminservice.StreamWorkflowReplicationMessagesRequest) error {
+					t.Error("idle receiver unexpectedly sent an ACK")
+					return nil
+				},
+				recv: func() (*adminservice.StreamWorkflowReplicationMessagesResponse, error) {
+					close(entered)
+					return nil, waitForStreamCancellation(ctx, release)
+				},
+			}, nil
+		})
+	stream := NewBiDirectionStream(provider, metrics.NoopMetricsHandler, log.NewTestLogger())
+	t.Cleanup(func() {
+		close(release)
+		stream.Close()
+	})
+	receiver.stream = stream
+	receiver.status = common.DaemonStatusStarted
+	highPriorityTracker.EXPECT().Cancel()
+	lowPriorityTracker.EXPECT().Cancel()
+	result := make(chan error, 1)
+	go func() { result <- receiver.processMessages(stream) }()
+	waitForStreamSignal(t, entered, "receiver did not wait for a transport response")
+	receiver.Stop()
+	select {
+	case err := <-result:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("receiver message loop did not return after Stop")
+	}
+	require.False(t, stream.IsValid())
+	require.False(t, receiver.IsValid())
 }
 
 func (s *streamReceiverSuite) TestAckMessage_Noop() {

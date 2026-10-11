@@ -48,6 +48,7 @@ type (
 	}
 	BiDirectionStreamImpl[Req any, Resp any] struct {
 		ctx            context.Context
+		cancel         context.CancelFunc
 		clientProvider BiDirectionStreamClientProvider[Req, Resp]
 		metricsHandler metrics.Handler
 		logger         log.Logger
@@ -69,8 +70,10 @@ func NewBiDirectionStream[Req any, Resp any](
 	metricsHandler metrics.Handler,
 	logger log.Logger,
 ) *BiDirectionStreamImpl[Req, Resp] {
+	ctx, cancel := context.WithCancel(context.Background())
 	return &BiDirectionStreamImpl[Req, Resp]{
-		ctx:            context.Background(),
+		ctx:            ctx,
+		cancel:         cancel,
 		clientProvider: clientProvider,
 		metricsHandler: metricsHandler,
 		logger:         logger,
@@ -109,6 +112,8 @@ func (s *BiDirectionStreamImpl[Req, Resp]) Recv() (<-chan StreamResp[Resp], erro
 }
 
 func (s *BiDirectionStreamImpl[Req, Resp]) Close() {
+	// Get and Send hold the mutex during I/O. Cancel before waiting for them.
+	s.cancel()
 	s.Lock()
 	defer s.Unlock()
 
@@ -122,6 +127,7 @@ func (s *BiDirectionStreamImpl[Req, Resp]) IsValid() bool {
 }
 
 func (s *BiDirectionStreamImpl[Req, Resp]) closeLocked() {
+	s.cancel()
 	if s.status == streamStatusClosed {
 		return
 	}
@@ -159,10 +165,15 @@ func (s *BiDirectionStreamImpl[Req, Resp]) recvLoop() {
 	defer s.Close()
 
 	for {
+		if s.ctx.Err() != nil {
+			return
+		}
 		resp, err := s.streamingClient.Recv()
 		switch err {
 		case nil:
-			s.notifyRecvChannel(resp, nil)
+			if !s.notifyRecvChannel(resp, nil) {
+				return
+			}
 		case io.EOF:
 			return
 		default:
@@ -173,7 +184,10 @@ func (s *BiDirectionStreamImpl[Req, Resp]) recvLoop() {
 	}
 }
 
-func (s *BiDirectionStreamImpl[Req, Resp]) notifyRecvChannel(response Resp, err error) {
+func (s *BiDirectionStreamImpl[Req, Resp]) notifyRecvChannel(response Resp, err error) bool {
+	if s.ctx.Err() != nil {
+		return false
+	}
 	resp := StreamResp[Resp]{
 		Resp: response,
 		Err:  err,
@@ -181,10 +195,17 @@ func (s *BiDirectionStreamImpl[Req, Resp]) notifyRecvChannel(response Resp, err 
 
 	select {
 	case s.channel <- resp:
-		return
+		return true
+	case <-s.ctx.Done():
+		return false
 	default:
 		metrics.ReplicationStreamChannelFull.With(s.metricsHandler).Record(1)
-		s.channel <- resp
+	}
+	select {
+	case s.channel <- resp:
+		return true
+	case <-s.ctx.Done():
+		return false
 	}
 }
 
