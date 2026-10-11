@@ -82,8 +82,7 @@ func (d CancelRequestedEventDefinition) Apply(ctx chasm.MutableContext, wf *Work
 	attrs := event.GetNexusOperationCancelRequestedEventAttributes()
 	field, ok := wf.Operations[attrs.GetScheduledEventId()]
 	if !ok {
-		// Operation may have already completed (buffered terminal event). Ignore.
-		return nil
+		return serviceerror.NewNotFoundf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId())
 	}
 
 	op := field.Get(ctx)
@@ -123,7 +122,8 @@ func (d CancelRequestCompletedEventDefinition) Apply(ctx chasm.MutableContext, w
 	if !ok {
 		return serviceerror.NewNotFoundf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId())
 	}
-	// Cancellation must be present to deliver a cancel request.
+	// CherryPick already guards against a missing cancellation, and normal replay always applies CancelRequested
+	// (which creates the cancellation) earlier in the same branch.
 	cancellation := field.Get(ctx).Cancellation.Get(ctx)
 	return nexusoperation.TransitionCancellationSucceeded.Apply(cancellation, ctx, nexusoperation.EventCancellationSucceeded{})
 }
@@ -131,6 +131,15 @@ func (d CancelRequestCompletedEventDefinition) Apply(ctx chasm.MutableContext, w
 func (d CancelRequestCompletedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *Workflow, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
 	if _, ok := excludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS]; ok {
 		return ErrEventNotCherryPickable
+	}
+	attrs := event.GetNexusOperationCancelRequestCompletedEventAttributes()
+	field, ok := wf.Operations[attrs.GetScheduledEventId()]
+	if !ok {
+		return serviceerror.NewNotFoundf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId())
+	}
+	if _, ok := field.Get(ctx).Cancellation.TryGet(ctx); !ok {
+		// When there is no cancellation for the nexus operation we cannot cherry pick the completion event here.
+		return serviceerror.NewNotFoundf("nexus operation cancellation not found for scheduled event ID %d", attrs.GetScheduledEventId())
 	}
 	return d.Apply(ctx, wf, event)
 }
@@ -153,7 +162,7 @@ func (d CancelRequestFailedEventDefinition) Apply(ctx chasm.MutableContext, wf *
 	if !ok {
 		return serviceerror.NewNotFoundf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId())
 	}
-	// Cancellation must be present to deliver a cancel request.
+	// See CancelRequestCompletedEventDefinition.Apply.
 	cancellation := field.Get(ctx).Cancellation.Get(ctx)
 	return nexusoperation.TransitionCancellationFailed.Apply(cancellation, ctx, nexusoperation.EventCancellationFailed{
 		Failure: attrs.GetFailure(),
@@ -163,6 +172,15 @@ func (d CancelRequestFailedEventDefinition) Apply(ctx chasm.MutableContext, wf *
 func (d CancelRequestFailedEventDefinition) CherryPick(ctx chasm.MutableContext, wf *Workflow, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
 	if _, ok := excludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS]; ok {
 		return ErrEventNotCherryPickable
+	}
+	attrs := event.GetNexusOperationCancelRequestFailedEventAttributes()
+	field, ok := wf.Operations[attrs.GetScheduledEventId()]
+	if !ok {
+		return serviceerror.NewNotFoundf("nexus operation not found for scheduled event ID %d", attrs.GetScheduledEventId())
+	}
+	if _, ok := field.Get(ctx).Cancellation.TryGet(ctx); !ok {
+		// See CancelRequestCompletedEventDefinition.CherryPick.
+		return serviceerror.NewNotFoundf("nexus operation cancellation not found for scheduled event ID %d", attrs.GetScheduledEventId())
 	}
 	return d.Apply(ctx, wf, event)
 }
