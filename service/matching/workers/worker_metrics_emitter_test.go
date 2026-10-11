@@ -209,3 +209,53 @@ func TestEmitWorkerConfigEvent(t *testing.T) {
 	require.Equal(t, "linux", attrs["os"].AsString())
 	require.Equal(t, "arm64", attrs["architecture"].AsString())
 }
+
+func TestEmitWorkerMetricsEvent(t *testing.T) {
+	eventLogger := &captureEventLogger{}
+	emitter := &workerMetricsEmitter{
+		handler:     metricstest.NewCaptureHandler(),
+		config:      WorkerMetricsConfig{},
+		eventLogger: eventLogger,
+	}
+
+	hb := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: "w1",
+		TaskQueue:         "my-queue",
+		WorkflowTaskSlotsInfo: &workerpb.WorkerSlotsInfo{
+			CurrentAvailableSlots: 8,
+			CurrentUsedSlots:      2,
+		},
+		WorkflowPollerInfo: &workerpb.WorkerPollerInfo{
+			CurrentPollers: 3,
+		},
+	}
+
+	emitter.emitWorkerMetricsEvent(namespace.Name("ns"), hb)
+
+	require.Len(t, eventLogger.records, 1)
+	require.Equal(t, "worker_metrics", eventLogger.records[0].EventName())
+
+	attrs := map[string]otellog.Value{}
+	eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		attrs[kv.Key] = kv.Value
+		return true
+	})
+	require.Equal(t, "w1", attrs["worker_instance_key"].AsString())
+	require.Contains(t, attrs["task_type_stats"].AsString(), `"workflow"`)
+	require.Contains(t, attrs["task_type_stats"].AsString(), `"total_slots"`)
+}
+
+func TestEmitWorkerMetricsEventNoSlots(t *testing.T) {
+	eventLogger := &captureEventLogger{}
+	emitter := &workerMetricsEmitter{
+		handler:     metricstest.NewCaptureHandler(),
+		config:      WorkerMetricsConfig{},
+		eventLogger: eventLogger,
+	}
+
+	emitter.emitWorkerMetricsEvent(namespace.Name("ns"), &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: "w1",
+	})
+
+	require.Empty(t, eventLogger.records)
+}
