@@ -96,6 +96,10 @@ type (
 		// proto and this rate is only used internally, for poller scaling decisions. Exposing it via
 		// DescribeTaskQueue would mean moving it there and adding a proto field.
 		tasksSyncMatched map[priorityKey]*taskTracker
+		// tasksEagerGranted counts GrantEagerDispatch grants. Granted tasks go straight to a worker
+		// without passing through this queue, so they are kept out of the trackers used by the v2
+		// poller scaling signals. A grant that history ends up not using is still counted.
+		tasksEagerGranted map[priorityKey]*taskTracker
 		// tasksRateLimited tracks rate-limit events in a sliding window for stats reporting.
 		tasksRateLimited *taskTracker
 	}
@@ -151,6 +155,7 @@ func newPhysicalTaskQueueManager(
 		tasksAdded:               make(map[priorityKey]*taskTracker),
 		tasksDispatched:          make(map[priorityKey]*taskTracker),
 		tasksSyncMatched:         make(map[priorityKey]*taskTracker),
+		tasksEagerGranted:        make(map[priorityKey]*taskTracker),
 		tasksRateLimited:         e.newTaskTracker(),
 		pollerScalingRateLimiter: quotas.NewDefaultOutgoingRateLimiter(pollerScalingRateLimitFn),
 		deploymentRegistrationCh: make(chan struct{}, 1),
@@ -590,6 +595,13 @@ func (c *physicalTaskQueueManagerImpl) GetStatsByPriority(includeRates bool) map
 		for pri, tt := range c.tasksDispatched {
 			util.GetOrSetNew(stats, int32(pri)).TasksDispatchRate = tt.rate()
 		}
+		// An eager task is added and dispatched at the same instant.
+		for pri, tt := range c.tasksEagerGranted {
+			s := util.GetOrSetNew(stats, int32(pri))
+			eagerRate := tt.rate()
+			s.TasksAddRate += eagerRate
+			s.TasksDispatchRate += eagerRate
+		}
 		rateLimitingActive := c.tasksRateLimited.rate() > 0
 		c.taskTrackerLock.Unlock()
 
@@ -624,6 +636,10 @@ func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() []*taskqueue
 		status = append(status, drainStatus...)
 	}
 	return status
+}
+
+func (c *physicalTaskQueueManagerImpl) RecordEagerGrant(priority priorityKey, count int32) {
+	c.incTaskTracker(c.tasksEagerGranted, priority, int(count))
 }
 
 func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *internalTask) (syncMatchOutcome, error) {
@@ -937,6 +953,7 @@ func (c *physicalTaskQueueManagerImpl) incTaskTracker(
 		c.tasksAdded[priorityKey] = c.partitionMgr.engine.newTaskTracker()
 		c.tasksDispatched[priorityKey] = c.partitionMgr.engine.newTaskTracker()
 		c.tasksSyncMatched[priorityKey] = c.partitionMgr.engine.newTaskTracker()
+		c.tasksEagerGranted[priorityKey] = c.partitionMgr.engine.newTaskTracker()
 		tracker = intervals[priorityKey]
 	}
 	tracker.inc(n)

@@ -269,6 +269,18 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) QueueKey() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueueKey", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).QueueKey))
 }
 
+// RecordEagerGrant mocks base method.
+func (m *MockphysicalTaskQueueManager) RecordEagerGrant(priority priorityKey, count int32) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RecordEagerGrant", priority, count)
+}
+
+// RecordEagerGrant indicates an expected call of RecordEagerGrant.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) RecordEagerGrant(priority, count any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordEagerGrant", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).RecordEagerGrant), priority, count)
+}
+
 // RecordTaskAdd mocks base method.
 func (m *MockphysicalTaskQueueManager) RecordTaskAdd(result string, forwarded bool, behavior enums.VersioningBehavior) {
 	m.ctrl.T.Helper()

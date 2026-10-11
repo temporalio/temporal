@@ -754,6 +754,10 @@ func (pm *taskQueuePartitionManagerImpl) grantEagerDispatch(
 		if backlogPriority == 0 || backlogPriority > priority {
 			granted = pm.rateLimitManager.grantTokens(item.GetPriority(), item.GetCount())
 		}
+		if granted > 0 {
+			// Unclipped, like the key TrySyncMatch tracks added tasks under.
+			targets[index].physicalQueue.RecordEagerGrant(priorityKey(item.GetPriority().GetPriorityKey()), granted)
+		}
 		responseItems[index] = &matchingservice.GrantEagerDispatchResponse_Item{
 			GrantedCount: granted,
 		}
