@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"sync"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -161,7 +162,7 @@ func (r *dlqHandlerImpl) MergeMessages(
 	pageToken []byte,
 ) ([]byte, error) {
 
-	replicationTasks, _, ackLevel, token, err := r.readMessagesWithAckLevel(
+	replicationTasks, taskInfos, _, token, err := r.readMessagesWithAckLevel(
 		ctx,
 		sourceCluster,
 		lastMessageID,
@@ -170,6 +171,28 @@ func (r *dlqHandlerImpl) MergeMessages(
 	)
 	if err != nil {
 		return nil, err
+	}
+
+	// Remote shards may return tasks out of order or omit them after a fetch error.
+	// Require every persisted ID before replaying or retiring any part of the page.
+	if len(replicationTasks) != len(taskInfos) {
+		return nil, serviceerror.NewUnavailable("Incomplete DLQ replication task response")
+	}
+	pendingTaskIDs := make(map[int64]struct{}, len(taskInfos))
+	for _, taskInfo := range taskInfos {
+		pendingTaskIDs[taskInfo.GetTaskId()] = struct{}{}
+	}
+	for _, task := range replicationTasks {
+		if task == nil {
+			return nil, serviceerror.NewUnavailable("Missing DLQ replication task")
+		}
+		if _, ok := pendingTaskIDs[task.GetSourceTaskId()]; !ok {
+			return nil, serviceerror.NewUnavailable("Unexpected DLQ replication task ID")
+		}
+		delete(pendingTaskIDs, task.GetSourceTaskId())
+	}
+	if len(taskInfos) == 0 {
+		return token, nil
 	}
 
 	taskExecutor, err := r.getOrCreateTaskExecutor(sourceCluster)
@@ -187,28 +210,24 @@ func (r *dlqHandlerImpl) MergeMessages(
 		}
 	}
 
-	err = r.shard.GetExecutionManager().RangeDeleteReplicationTaskFromDLQ(
-		ctx,
-		&persistence.RangeDeleteReplicationTaskFromDLQRequest{
-			RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
-				ShardID:             r.shard.GetShardID(),
-				TaskCategory:        tasks.CategoryReplication,
-				InclusiveMinTaskKey: tasks.NewImmediateKey(ackLevel + 1),
-				ExclusiveMaxTaskKey: tasks.NewImmediateKey(lastMessageID + 1),
+	// Writers can insert older task IDs while this page is being replayed. Delete
+	// only this page's entries and leave the range acknowledgment unchanged so
+	// those late entries remain readable on a subsequent traversal.
+	for _, taskInfo := range taskInfos {
+		err = r.shard.GetExecutionManager().DeleteReplicationTaskFromDLQ(
+			ctx,
+			&persistence.DeleteReplicationTaskFromDLQRequest{
+				CompleteHistoryTaskRequest: persistence.CompleteHistoryTaskRequest{
+					ShardID:      r.shard.GetShardID(),
+					TaskCategory: tasks.CategoryReplication,
+					TaskKey:      tasks.NewImmediateKey(taskInfo.GetTaskId()),
+				},
+				SourceClusterName: sourceCluster,
 			},
-			SourceClusterName: sourceCluster,
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	if err = r.shard.UpdateReplicatorDLQAckLevel(
-		sourceCluster,
-		lastMessageID,
-	); err != nil {
-		r.logger.Error("Failed to purge history replication message", tag.Error(err))
-		// The update ack level should not block the call. Ignore the error.
+		)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return token, nil
 }
