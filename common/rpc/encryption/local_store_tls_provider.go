@@ -399,31 +399,40 @@ func newClientTLSConfig(
 		serverName,
 		enableHostVerification,
 	)
-	if enableHostVerification {
-		// RootCAs is copied into the cached tls.Config, unlike client certificates.
-		// Verify every handshake against the provider's current trust bundle,
-		// including resumed connections. Preserve standard chain, expiry, EKU
-		// and hostname checks rather than trusting the stale RootCAs snapshot.
-		tlsConfig.InsecureSkipVerify = true // Verification is performed below.
-		tlsConfig.VerifyConnection = func(state tls.ConnectionState) error {
-			roots, err := clientProvider.FetchServerRootCAsForClient(isWorker)
-			if err != nil {
-				return fmt.Errorf("failed to load client ca: %w", err)
-			}
-			if len(state.PeerCertificates) == 0 {
-				return fmt.Errorf("server presented no certificate")
-			}
-			intermediates := x509.NewCertPool()
-			for _, cert := range state.PeerCertificates[1:] {
-				intermediates.AddCert(cert)
-			}
-			_, err = state.PeerCertificates[0].Verify(x509.VerifyOptions{
-				Roots:         roots,
-				Intermediates: intermediates,
-				DNSName:       state.ServerName,
-			})
-			return err
+	// RootCAs is copied into the cached tls.Config, unlike client certificates.
+	// Verify every handshake against the provider's current trust bundle,
+	// including resumed connections. Chain, expiry and EKU checks remain required
+	// even when hostname verification is explicitly disabled.
+	tlsConfig.InsecureSkipVerify = true // Verification is performed below.
+	tlsConfig.VerifyConnection = func(state tls.ConnectionState) error {
+		roots, err := clientProvider.FetchServerRootCAsForClient(isWorker)
+		if err != nil {
+			return fmt.Errorf("failed to load client ca: %w", err)
 		}
+		if len(state.PeerCertificates) == 0 {
+			return fmt.Errorf("server presented no certificate")
+		}
+		dnsName := ""
+		if enableHostVerification {
+			// IP addresses do not appear in SNI, so prefer the configured name.
+			dnsName = serverName
+			if dnsName == "" {
+				dnsName = state.ServerName
+			}
+			if dnsName == "" {
+				return fmt.Errorf("server name required for hostname verification")
+			}
+		}
+		intermediates := x509.NewCertPool()
+		for _, cert := range state.PeerCertificates[1:] {
+			intermediates.AddCert(cert)
+		}
+		_, err = state.PeerCertificates[0].Verify(x509.VerifyOptions{
+			Roots:         roots,
+			Intermediates: intermediates,
+			DNSName:       dnsName,
+		})
+		return err
 	}
 	return tlsConfig, nil
 }

@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"errors"
+	"fmt"
 	"math/big"
 	"net"
 	"sync/atomic"
@@ -55,7 +56,11 @@ func rotationCertificate(t *testing.T, parent *x509.Certificate, parentKey ed255
 		template.KeyUsage = x509.KeyUsageCertSign
 		parent, parentKey = template, privateKey
 	} else {
-		template.DNSNames = []string{name}
+		if ip := net.ParseIP(name); ip != nil {
+			template.IPAddresses = []net.IP{ip}
+		} else {
+			template.DNSNames = []string{name}
+		}
 		template.KeyUsage = x509.KeyUsageDigitalSignature
 		template.ExtKeyUsage = []x509.ExtKeyUsage{usage}
 	}
@@ -101,13 +106,16 @@ func TestCachedClientConfigReloadsRootCAs(t *testing.T) {
 	newCA, newKey, _ := rotationCertificate(t, nil, nil, "", 0, false)
 	_, _, oldServer := rotationCertificate(t, oldCA, oldKey, "temporal.test", x509.ExtKeyUsageServerAuth, false)
 	_, _, newServer := rotationCertificate(t, newCA, newKey, "temporal.test", x509.ExtKeyUsageServerAuth, false)
-	for _, worker := range []bool{false, true} {
-		t.Run(map[bool]string{false: "internode", true: "system-worker"}[worker], func(t *testing.T) {
+	for _, mode := range []struct{ worker, hostVerification bool }{
+		{false, true}, {true, true}, {false, false}, {true, false},
+	} {
+		worker := mode.worker
+		t.Run(fmt.Sprintf("worker=%t/hostname=%t", worker, mode.hostVerification), func(t *testing.T) {
 			certProvider := &rotatingRootProvider{}
 			certProvider.roots.Store(rotationRoots(oldCA))
 			settings := &config.RootTLS{
-				Internode:    config.GroupTLS{Client: config.ClientTLS{ServerName: "temporal.test", ForceTLS: true}},
-				SystemWorker: config.WorkerTLS{Client: config.ClientTLS{ServerName: "temporal.test", ForceTLS: true}},
+				Internode:    config.GroupTLS{Client: config.ClientTLS{ServerName: "temporal.test", ForceTLS: true, DisableHostVerification: !mode.hostVerification}},
+				SystemWorker: config.WorkerTLS{Client: config.ClientTLS{ServerName: "temporal.test", ForceTLS: true, DisableHostVerification: !mode.hostVerification}},
 			}
 			provider, err := NewLocalStoreTlsProvider(settings, metrics.NoopMetricsHandler, log.NewTestLogger(), func(*config.GroupTLS, *config.WorkerTLS, *config.ClientTLS, time.Duration, log.Logger) CertProvider {
 				return certProvider
@@ -137,12 +145,17 @@ func TestCachedClientConfigReloadsRootCAs(t *testing.T) {
 			} else {
 				require.Positive(t, certProvider.internodeCalls.Load())
 			}
+			_, _, wrongNameServer := rotationCertificate(t, newCA, newKey, "wrong.test", x509.ExtKeyUsageServerAuth, false)
+			if mode.hostVerification {
+				require.Error(t, rotationHandshake(t, clientConfig, wrongNameServer))
+			} else {
+				require.NoError(t, rotationHandshake(t, clientConfig, wrongNameServer))
+			}
 			for _, invalid := range []struct {
 				name    string
 				usage   x509.ExtKeyUsage
 				expired bool
 			}{
-				{"wrong.test", x509.ExtKeyUsageServerAuth, false},
 				{"temporal.test", x509.ExtKeyUsageClientAuth, false},
 				{"temporal.test", x509.ExtKeyUsageServerAuth, true},
 			} {
@@ -153,8 +166,22 @@ func TestCachedClientConfigReloadsRootCAs(t *testing.T) {
 			require.ErrorContains(t, rotationHandshake(t, clientConfig, newServer), "trust bundle unavailable")
 			require.Error(t, clientConfig.VerifyConnection(tls.ConnectionState{ServerName: "temporal.test"}))
 			certProvider.unavailable.Store(false)
+			require.ErrorContains(t, clientConfig.VerifyConnection(tls.ConnectionState{}), "server presented no certificate")
 			// VerifyConnection is also invoked by crypto/tls on resumed sessions.
 			require.Error(t, clientConfig.VerifyConnection(tls.ConnectionState{ServerName: "temporal.test", DidResume: true, PeerCertificates: []*x509.Certificate{oldServer.Leaf}}))
 		})
 	}
+}
+
+func TestDynamicRootsVerifyConfiguredIPWithoutSNI(t *testing.T) {
+	ca, key, _ := rotationCertificate(t, nil, nil, "", 0, false)
+	_, _, server := rotationCertificate(t, ca, key, "127.0.0.1", x509.ExtKeyUsageServerAuth, false)
+	certProvider := &rotatingRootProvider{}
+	certProvider.roots.Store(rotationRoots(ca))
+	clientConfig, err := newClientTLSConfig(certProvider, "127.0.0.1", false, false, true)
+	require.NoError(t, err)
+	require.NoError(t, rotationHandshake(t, clientConfig, server))
+	wrongName, err := newClientTLSConfig(certProvider, "127.0.0.2", false, false, true)
+	require.NoError(t, err)
+	require.Error(t, rotationHandshake(t, wrongName, server))
 }
