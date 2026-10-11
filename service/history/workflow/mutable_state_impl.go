@@ -2875,11 +2875,12 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		Memo:                     command.Memo,
 		SearchAttributes:         command.SearchAttributes,
 		// No need to request eager execution here (for now)
-		RequestEagerExecution: false,
-		CompletionCallbacks:   completionCallbacks,
-		Links:                 links,
-		Priority:              previousExecutionInfo.Priority,
-		TimeSkippingConfig:    tsc,
+		RequestEagerExecution:               false,
+		CompletionCallbacks:                 completionCallbacks,
+		Links:                               links,
+		Priority:                            previousExecutionInfo.Priority,
+		TimeSkippingConfig:                  tsc,
+		PropagatedNexusSerializationContext: previousExecutionInfo.GetPropagatedNexusSerializationContext(),
 	}
 
 	enums.SetDefaultContinueAsNewInitiator(&command.Initiator)
@@ -3125,6 +3126,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.WorkflowExecutionTimeout = event.GetWorkflowExecutionTimeout()
 	ms.executionInfo.DefaultWorkflowTaskTimeout = event.GetWorkflowTaskTimeout()
 	ms.executionInfo.OriginalExecutionRunId = event.GetOriginalExecutionRunId()
+	ms.executionInfo.PropagatedNexusSerializationContext = event.GetPropagatedNexusSerializationContext()
 
 	ms.approximateSize -= ms.executionState.Size()
 	ms.executionState.FirstExecutionRunId = event.GetFirstExecutionRunId()
@@ -7840,6 +7842,10 @@ func (ms *MutableStateImpl) closeTransaction(
 		}
 	}
 
+	if err := ms.closeTransactionInvalidateChasmTasksOnClose(ctx, transactionPolicy); err != nil {
+		return closeTransactionResult{}, err
+	}
+
 	// CloseTransaction() on chasmTree may update execution state & status,
 	// so must be called before closeTransactionUpdateTransitionHistory().
 	chasmNodesMutation, err := ms.chasmTree.CloseTransaction()
@@ -8362,6 +8368,51 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 	}
 
 	return ms.closeTransactionPrepareReplicationTasks(transactionPolicy, eventBatches, clearBufferEvents)
+}
+
+// closeTransactionInvalidateChasmTasksOnClose marks the CHASM tree dirty when the workflow closes in the
+// current transaction, so that chasmTree.CloseTransaction() revalidates tasks of non-detached sub-components
+// (e.g. Nexus operations) and removes invalid tasks from persisted component metadata so they aren't regenerated
+// on task refresh or replication. This aligns workflows with other archetypes, whose root lifecycle change dirties
+// the tree. It covers every close path (complete, fail, timeout, cancel, terminate, continue-as-new, retry, cron,
+// reset).
+//
+// This is best effort: task validation before execution remains the correctness guarantee, since the
+// closed root fails the access check. It only runs on the active cluster to avoid diverging node versions
+// from what is replicated.
+//
+// Marking the tree dirty only triggers revalidation; what gets persisted depends on CHASM skip-persistence
+// (history.enableCHASMSkipPersistence):
+//   - Enabled: the tree is always marked dirty. Only nodes whose tasks were removed are written; the root is
+//     unchanged and skipped. New workflow sub-components are covered without updating this method.
+//   - Disabled: every dirty node is written, including the unchanged root. To avoid that write when there is
+//     nothing to revalidate, the tree is only marked dirty when there are Nexus operations, the only
+//     sub-components today whose tasks depend on the workflow being open.
+func (ms *MutableStateImpl) closeTransactionInvalidateChasmTasksOnClose(
+	ctx context.Context,
+	transactionPolicy historyi.TransactionPolicy,
+) error {
+	if transactionPolicy != historyi.TransactionPolicyActive ||
+		!ms.IsWorkflow() ||
+		!ms.ChasmEnabled() ||
+		ms.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED ||
+		ms.stateInDB == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		return nil
+	}
+
+	// CONSIDER(chanric): drop the Operations check once skip-persistence is enabled by default.
+	if !ms.ChasmSkipPersistenceEnabled() {
+		wf, _, err := ms.ChasmWorkflowComponentReadOnly(ctx)
+		if err != nil {
+			return err
+		}
+		if len(wf.Operations) == 0 {
+			return nil
+		}
+	}
+
+	_, _, err := ms.ChasmWorkflowComponent(ctx)
+	return err
 }
 
 func (ms *MutableStateImpl) closeTransactionGenerateChasmRetentionTask(

@@ -20,6 +20,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
@@ -33,6 +34,8 @@ import (
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -43,6 +46,7 @@ import (
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/payloads"
@@ -3088,6 +3092,12 @@ func (s *mutableStateSuite) TestApplyActivityTaskStartedEvent() {
 func (s *mutableStateSuite) TestAddContinueAsNewEvent_Default() {
 	dbState := s.buildWorkflowMutableState()
 	dbState.BufferedEvents = nil
+	serializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
+	dbState.ExecutionInfo.PropagatedNexusSerializationContext = serializationContext
 
 	var err error
 	s.mutableState, err = NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
@@ -3120,7 +3130,12 @@ func (s *mutableStateSuite) TestAddContinueAsNewEvent_Default() {
 	s.NoError(err)
 
 	s.mockEventsCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(&historypb.HistoryEvent{}, nil)
-	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).Times(2)
+	var newRunStartEvent *historypb.HistoryEvent
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).Do(func(_ events.EventKey, event *historypb.HistoryEvent) {
+		if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
+			newRunStartEvent = event
+		}
+	}).Times(2)
 	_, newRunMutableState, err := s.mutableState.AddContinueAsNewEvent(
 		context.Background(),
 		workflowTaskCompletedEvent.GetEventId(),
@@ -3145,6 +3160,9 @@ func (s *mutableStateSuite) TestAddContinueAsNewEvent_Default() {
 	protorequire.ProtoEqual(s.T(), currentRunExecutionInfo.WorkflowExecutionExpirationTime, newRunExecutionInfo.WorkflowExecutionExpirationTime)
 	s.Equal(currentRunExecutionInfo.WorkflowExecutionTimerTaskStatus, newRunExecutionInfo.WorkflowExecutionTimerTaskStatus)
 	s.Equal(currentRunExecutionInfo.FirstExecutionRunId, newRunExecutionInfo.FirstExecutionRunId)
+	s.Require().NotNil(newRunStartEvent)
+	protorequire.ProtoEqual(s.T(), serializationContext,
+		newRunStartEvent.GetWorkflowExecutionStartedEventAttributes().GetPropagatedNexusSerializationContext())
 
 	// Add more checks here if needed.
 }
@@ -7344,6 +7362,29 @@ func (s *mutableStateSuite) TestSetContextMetadata() {
 	s.Equal(taskQueue, tq)
 }
 
+func (s *mutableStateSuite) TestWorkflowStartPersistsNexusSerializationContext() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).Times(1)
+	serializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
+	event, err := s.mutableState.AddWorkflowExecutionStartedEvent(
+		&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+		&historyservice.StartWorkflowExecutionRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:                        &commonpb.WorkflowType{Name: "workflow"},
+				TaskQueue:                           &taskqueuepb.TaskQueue{Name: "task-queue"},
+				PropagatedNexusSerializationContext: serializationContext,
+			},
+		},
+	)
+	s.Require().NoError(err)
+	protorequire.ProtoEqual(s.T(), serializationContext, event.GetWorkflowExecutionStartedEventAttributes().GetPropagatedNexusSerializationContext())
+	protorequire.ProtoEqual(s.T(), serializationContext, s.mutableState.GetExecutionInfo().GetPropagatedNexusSerializationContext())
+}
+
 func (s *mutableStateSuite) TestSetContextMetadata_ActivityResolution() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 
@@ -9378,5 +9419,102 @@ func (s *mutableStateSuite) TestFlagSkipDurationUpdateInPassive() {
 		}
 		// VT advanced and accumulated skip grew from 0 → 1h in this delta.
 		s.mutableState.flagSkipDurationUpdateInPassive(timeSkippingVT(5), 0)
+	})
+}
+
+func (s *mutableStateSuite) TestCloseTransactionInvalidateChasmTasksOnClose() {
+	// newChasmTree installs a real workflow CHASM tree whose initial state is already persisted, so any
+	// dirtiness observed afterwards comes from the hook under test.
+	newChasmTree := func(withOperation bool) *chasm.Node {
+		registry := chasm.NewRegistry(s.logger)
+		s.NoError(registry.Register(&chasm.CoreLibrary{}))
+		s.NoError(registry.Register(chasmworkflow.NewLibrary(chasmworkflow.NewRegistry())))
+		s.NoError(registry.Register(chasmnexus.NewNilLibrary()))
+
+		tree := chasm.NewEmptyTree(registry, s.mutableState, chasm.DefaultPathEncoder, s.logger, metrics.NoopMetricsHandler)
+		s.mutableState.chasmTree = tree
+
+		mutableCtx := chasm.NewMutableContext(context.Background(), tree)
+		wf := chasmworkflow.NewWorkflow(mutableCtx, chasm.NewMSPointer(s.mutableState))
+		if withOperation {
+			op := chasmnexus.NewOperation(&nexusoperationpb.OperationState{})
+			wf.Operations = chasm.Map[int64, *chasmnexus.Operation]{
+				5: chasm.NewComponentField(mutableCtx, op),
+			}
+		}
+		s.NoError(tree.SetRootComponent(wf))
+		_, err := tree.CloseTransaction()
+		s.NoError(err)
+		s.False(tree.IsStateDirty())
+		return tree
+	}
+
+	setState := func(stateInDB, state enumsspb.WorkflowExecutionState) {
+		s.mutableState.stateInDB = stateInDB
+		s.mutableState.executionState.State = state
+	}
+
+	s.Run("ClosingWithOperationDirtiesTree", func() {
+		tree := newChasmTree(true)
+		setState(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED)
+
+		s.NoError(s.mutableState.closeTransactionInvalidateChasmTasksOnClose(context.Background(), historyi.TransactionPolicyActive))
+		s.True(tree.IsStateDirty())
+	})
+
+	s.Run("ClosingWithoutOperationsSkipsWithoutSkipPersistence", func() {
+		tree := newChasmTree(false)
+		setState(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED)
+
+		s.NoError(s.mutableState.closeTransactionInvalidateChasmTasksOnClose(context.Background(), historyi.TransactionPolicyActive))
+		s.False(tree.IsStateDirty())
+	})
+
+	s.Run("ClosingWithoutOperationsDirtiesTreeWithSkipPersistence", func() {
+		originalSkipPersistence := s.mockConfig.EnableCHASMSkipPersistence
+		s.mockConfig.EnableCHASMSkipPersistence = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+		defer func() { s.mockConfig.EnableCHASMSkipPersistence = originalSkipPersistence }()
+
+		tree := newChasmTree(false)
+		setState(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED)
+
+		s.NoError(s.mutableState.closeTransactionInvalidateChasmTasksOnClose(context.Background(), historyi.TransactionPolicyActive))
+		s.True(tree.IsStateDirty())
+
+		// The root's state is unchanged, so skip-persistence keeps it from being rewritten.
+		mutation, err := tree.CloseTransaction()
+		s.NoError(err)
+		s.Empty(mutation.UpdatedNodes)
+	})
+
+	s.Run("StillRunning", func() {
+		tree := newChasmTree(true)
+		setState(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING)
+
+		s.NoError(s.mutableState.closeTransactionInvalidateChasmTasksOnClose(context.Background(), historyi.TransactionPolicyActive))
+		s.False(tree.IsStateDirty())
+	})
+
+	s.Run("AlreadyClosedInDB", func() {
+		tree := newChasmTree(true)
+		setState(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED)
+
+		s.NoError(s.mutableState.closeTransactionInvalidateChasmTasksOnClose(context.Background(), historyi.TransactionPolicyActive))
+		s.False(tree.IsStateDirty())
+	})
+
+	s.Run("PassivePolicy", func() {
+		tree := newChasmTree(true)
+		setState(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED)
+
+		s.NoError(s.mutableState.closeTransactionInvalidateChasmTasksOnClose(context.Background(), historyi.TransactionPolicyPassive))
+		s.False(tree.IsStateDirty())
+	})
+
+	s.Run("ChasmDisabled", func() {
+		s.mutableState.chasmTree = &noopChasmTree{}
+		setState(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED)
+
+		s.NoError(s.mutableState.closeTransactionInvalidateChasmTasksOnClose(context.Background(), historyi.TransactionPolicyActive))
 	})
 }

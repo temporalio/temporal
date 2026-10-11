@@ -19,6 +19,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/softassert"
@@ -752,6 +753,7 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 
 	var err error
 	onConflictOptions := s.request.StartRequest.GetOnConflictOptions()
+	var nexusContextMatch metrics.ReasonString
 	if onConflictOptions != nil {
 		requestID := ""
 		if onConflictOptions.AttachRequestId {
@@ -775,6 +777,11 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 				if !mutableState.IsWorkflowExecutionRunning() {
 					return nil, consts.ErrWorkflowCompleted
 				}
+				if onConflictOptions.AttachCompletionCallbacks && len(completionCallbacks) > 0 {
+					existing := mutableState.GetExecutionInfo().GetPropagatedNexusSerializationContext()
+					incoming := s.request.StartRequest.GetPropagatedNexusSerializationContext()
+					nexusContextMatch = commonnexus.SerializationContextMatch(existing, incoming)
+				}
 				_, err := mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
 					nil,
 					false,
@@ -797,6 +804,10 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 
 	switch err {
 	case nil:
+		if nexusContextMatch != "" {
+			// Count callback attachments involving Nexus context by whether that context matches or is missing.
+			metrics.NexusWorkflowUseExisting.With(s.getMetricsHandler()).Record(1, metrics.NexusSerializationContextMatchTag(nexusContextMatch))
+		}
 		resp := &historyservice.StartWorkflowExecutionResponse{
 			RunId:               workflowKey.RunID,
 			FirstExecutionRunId: currentWorkflowConditionFailed.FirstExecutionRunID,

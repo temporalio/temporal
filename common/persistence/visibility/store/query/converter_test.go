@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
@@ -2407,6 +2408,412 @@ func TestQueryConverter_CapturePanic(t *testing.T) {
 	r.Nil(out)
 }
 
+func TestQueryConverter_FieldNameFilterMetric(t *testing.T) {
+	t.Parallel()
+
+	// Maps the CHASM alias "ChasmKeyword" to the field name "TemporalKeyword01".
+	chasmMapper := chasm.NewTestVisibilitySearchAttributesMapper(
+		map[string]string{
+			"TemporalKeyword01": "ChasmKeyword",
+		},
+		map[string]enumspb.IndexedValueType{
+			"TemporalKeyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+	)
+
+	// Models chasm.WithBusinessIDAlias, which every archetype with a visibility component must
+	// register: it puts the WorkflowId *system* field into the CHASM type map, keyed by field.
+	chasmBusinessIDMapper := chasm.NewTestVisibilitySearchAttributesMapper(
+		map[string]string{
+			sadefs.WorkflowID: "ScheduleId",
+		},
+		map[string]enumspb.IndexedValueType{
+			sadefs.WorkflowID: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+	)
+
+	testCases := []struct {
+		name string
+		// query is converted with the nil store query converter, so only the search attribute
+		// resolution (and thus the metric emission) is exercised.
+		query string
+		// chasmMapper, when set, is installed in the query converter.
+		chasmMapper *chasm.VisibilitySearchAttributesMapper
+		// customSAs overrides the namespace's custom search attributes. Defaults to
+		// searchattribute.TestNameTypeMap(), whose field names are the preallocated SQL ones
+		// (Keyword01, Int01, ...).
+		customSAs map[string]enumspb.IndexedValueType
+		// saMapper overrides the search attribute mapper. Defaults to searchattribute.TestMapper.
+		saMapper searchattribute.Mapper
+		// count is the expected number of times the field name counter was recorded. It's
+		// recorded at most once per query, and only if the query is converted successfully.
+		count int
+		err   string
+	}{
+		{
+			// A custom search attribute referenced by its alias is the expected usage.
+			name:  "alias of custom search attribute",
+			query: "AliasForKeyword01 = 'foo'",
+			count: 0,
+		},
+		{
+			// A custom search attribute referenced by its field name is what the metric counts.
+			name:  "field name of custom search attribute",
+			query: "Keyword01 = 'foo'",
+			count: 1,
+		},
+		{
+			// System search attributes aren't mappable: alias and field name are always equal.
+			name:  "system search attribute",
+			query: "WorkflowId = 'foo'",
+			count: 0,
+		},
+		{
+			// Predefined search attributes aren't mappable either.
+			name:  "predefined search attribute",
+			query: "TemporalNamespaceDivision = 'foo'",
+			count: 0,
+		},
+		{
+			name:  "predefined search attribute keyword list",
+			query: "TemporalChangeVersion = 'foo'",
+			count: 0,
+		},
+		{
+			// ScheduleId resolves to the WorkflowId field, so alias != field name.
+			name:  "special alias",
+			query: "ScheduleId = 'foo'",
+			count: 0,
+		},
+		{
+			name:        "alias of CHASM search attribute",
+			query:       "ChasmKeyword = 'foo'",
+			chasmMapper: chasmMapper,
+			count:       0,
+		},
+		{
+			// Backticks are stripped before the alias is resolved.
+			name:  "field name with backticks",
+			query: "`Keyword01` = 'foo'",
+			count: 1,
+		},
+		{
+			name:  "field name in range condition",
+			query: "Int01 between 1 and 2",
+			count: 1,
+		},
+		{
+			name:  "field name in is expression",
+			query: "Keyword01 is null",
+			count: 1,
+		},
+		{
+			name:  "field name in order by",
+			query: "order by Keyword01",
+			count: 1,
+		},
+		{
+			name:  "alias in order by",
+			query: "order by AliasForKeyword01",
+			count: 0,
+		},
+		{
+			// The counter is recorded once per query, regardless of the number of occurrences.
+			name:  "repeated field name",
+			query: "Keyword01 = 'foo' or Keyword01 = 'bar'",
+			count: 1,
+		},
+		{
+			// Multiple distinct field names are still recorded once per query.
+			name:  "mixed aliases and field names",
+			query: "Keyword01 = 'foo' and AliasForInt01 > 1 and Double01 < 1.5",
+			count: 1,
+		},
+		{
+			name:  "field names in filter and order by",
+			query: "Keyword01 = 'foo' order by Int01",
+			count: 1,
+		},
+		{
+			// The whole query is rejected, so nothing is counted.
+			name:  "unknown search attribute",
+			query: "InvalidField = 'foo'",
+			count: 0,
+			err:   InvalidSearchAttribute,
+		},
+		{
+			// The field name is resolved before the error, but the query is rejected, so
+			// nothing is counted.
+			name:  "field name with unknown search attribute",
+			query: "Keyword01 = 'foo' and InvalidField = 'bar'",
+			count: 0,
+			err:   InvalidSearchAttribute,
+		},
+		{
+			// convertColName is not reached for the right hand side of a comparison.
+			name:  "field name on right hand side",
+			query: "AliasForKeyword01 = Keyword01",
+			count: 0,
+			err:   NotSupportedErrMessage,
+		},
+
+		// Preallocated SQL field names of every type are counted. The name must match the shape
+		// for the *resolved* type, so these pin the type-to-prefix pairing.
+		{
+			name:  "preallocated bool field name",
+			query: "Bool01 = true",
+			count: 1,
+		},
+		{
+			name:  "preallocated int field name",
+			query: "Int01 = 1",
+			count: 1,
+		},
+		{
+			name:  "preallocated keyword list field name",
+			query: "KeywordList01 = 'foo'",
+			count: 1,
+		},
+		{
+			name:  "preallocated text field name",
+			query: "Text01 = 'foo'",
+			count: 1,
+		},
+		{
+			// IS NULL avoids parsing a datetime value, which the nil store converter can't format.
+			name:  "preallocated datetime field name",
+			query: "Datetime01 is null",
+			count: 1,
+		},
+		{
+			// A namespace may register a custom search attribute whose *alias* happens to look
+			// like a preallocated field name. The shape is checked against the resolved type, so
+			// a mismatched type is not counted.
+			name:      "preallocated shape with mismatched type",
+			query:     "Keyword01 = 'foo'",
+			customSAs: map[string]enumspb.IndexedValueType{"Keyword01": enumspb.INDEXED_VALUE_TYPE_TEXT},
+			count:     0,
+		},
+
+		// A custom search attribute that legitimately maps to itself (the Elasticsearch layout,
+		// and the back-compat mapper's pass-through behaviour) has alias == field name but is not
+		// a physical preallocated column, so it must not be counted.
+		{
+			name:      "self-mapped custom search attribute",
+			query:     "CustomKeywordField = 'foo'",
+			customSAs: map[string]enumspb.IndexedValueType{"CustomKeywordField": enumspb.INDEXED_VALUE_TYPE_KEYWORD},
+			count:     0,
+		},
+		{
+			// TestMapper.GetFieldName returns "pass-through" unchanged, like the back-compat
+			// mapper does for legacy attributes.
+			name:      "pass-through mapper",
+			query:     "`pass-through` = 'foo'",
+			customSAs: map[string]enumspb.IndexedValueType{"pass-through": enumspb.INDEXED_VALUE_TYPE_KEYWORD},
+			count:     0,
+		},
+
+		// A namespace may register an alias that is identical to the preallocated field name it is
+		// mapped to. Querying it is a legitimate use of the alias, so it must not be counted.
+		{
+			name:     "alias identical to its preallocated field name",
+			query:    "Keyword01 = 'foo'",
+			saMapper: aliasToFieldMapper{"Keyword01": "Keyword01"},
+			count:    0,
+		},
+		{
+			// Same alias as above, but the query uses another field name directly.
+			name:     "field name alongside alias identical to field name",
+			query:    "Keyword01 = 'foo' and Keyword02 = 'bar'",
+			saMapper: aliasToFieldMapper{"Keyword01": "Keyword01"},
+			count:    1,
+		},
+		{
+			// Field name that is the alias of another field: resolves as the alias.
+			name:     "alias identical to another preallocated field name",
+			query:    "Keyword01 = 'foo'",
+			saMapper: aliasToFieldMapper{"Keyword01": "Keyword02"},
+			count:    0,
+		},
+
+		// A raw CHASM field name resolves by stripping the Temporal prefix, so alias != field
+		// name; it is recognised via the CHASM mapper's type map instead.
+		{
+			name:        "field name of CHASM search attribute",
+			query:       "TemporalKeyword01 = 'foo'",
+			chasmMapper: chasmMapper,
+			count:       1,
+		},
+		{
+			// Without a CHASM mapper the same name is just the Temporal-prefixed spelling of the
+			// Keyword01 alias, which the resolver accepts for ordinary workflow queries.
+			name:  "Temporal prefixed name without CHASM mapper",
+			query: "TemporalKeyword01 = 'foo'",
+			count: 0,
+		},
+		{
+			name:        "business ID alias of CHASM search attribute",
+			query:       "ScheduleId = 'foo'",
+			chasmMapper: chasmBusinessIDMapper,
+			count:       0,
+		},
+		{
+			// WithBusinessIDAlias registers WorkflowId as a CHASM *field*, so it is in the CHASM
+			// type map. It is still a system search attribute that any caller may query by name,
+			// so it must not be counted.
+			name:        "system search attribute backing a business ID alias",
+			query:       "WorkflowId = 'foo'",
+			chasmMapper: chasmBusinessIDMapper,
+			count:       0,
+		},
+		{
+			// The system guard is keyed on the queried name, so a CHASM field remains counted
+			// even when the same mapper also registers a system field.
+			name:  "CHASM field name alongside a business ID alias",
+			query: "TemporalKeyword01 = 'foo'",
+			chasmMapper: chasm.NewTestVisibilitySearchAttributesMapper(
+				map[string]string{
+					sadefs.WorkflowID:   "ScheduleId",
+					"TemporalKeyword01": "ChasmKeyword",
+				},
+				map[string]enumspb.IndexedValueType{
+					sadefs.WorkflowID:   enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+					"TemporalKeyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				},
+			),
+			count: 1,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := require.New(t)
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+
+			saTypeMap := searchattribute.TestNameTypeMap()
+			if tc.customSAs != nil {
+				saTypeMap = searchattribute.NewNameTypeMapStub(tc.customSAs)
+			}
+			var saMapper searchattribute.Mapper = &searchattribute.TestMapper{}
+			if tc.saMapper != nil {
+				saMapper = tc.saMapper
+			}
+			queryConverter := NewNilQueryConverter(
+				testNamespaceName,
+				saTypeMap,
+				saMapper,
+				metricsHandler,
+				log.NewNoopLogger(),
+			)
+			if tc.chasmMapper != nil {
+				queryConverter = queryConverter.WithChasmMapper(tc.chasmMapper)
+			}
+
+			_, err := queryConverter.Convert(tc.query)
+			if tc.err != "" {
+				r.ErrorContains(err, tc.err)
+			} else {
+				r.NoError(err)
+			}
+
+			recordings := capture.SnapshotMetric(fieldNameFilterAccepted.Name())
+			r.Len(recordings, tc.count)
+			for _, rec := range recordings {
+				r.Equal(int64(1), rec.Value)
+				r.Equal(testNamespaceName.String(), rec.Tags["namespace"])
+			}
+		})
+	}
+}
+
+func TestQueryConverter_FieldNameFilterMetricGroupBy(t *testing.T) {
+	t.Parallel()
+
+	// GROUP BY is restricted to an allowlist of field names. The field name is flagged while
+	// resolving the column name, before that restriction is applied, but the counter is only
+	// recorded if the whole query is converted successfully.
+	testCases := []struct {
+		name  string
+		query string
+		count int
+		err   string
+	}{
+		{
+			name:  "allowed system field",
+			query: "group by ExecutionStatus",
+			count: 0,
+		},
+		{
+			name:  "allowed predefined field",
+			query: "group by TemporalNamespaceDivision",
+			count: 0,
+		},
+		{
+			name:  "disallowed custom field name",
+			query: "group by Keyword01",
+			count: 0,
+			err:   NotSupportedErrMessage,
+		},
+		{
+			name:  "field name in filter with allowed group by",
+			query: "Keyword01 = 'foo' group by ExecutionStatus",
+			count: 1,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			r := require.New(t)
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
+
+			queryConverter := NewNilQueryConverter(
+				testNamespaceName,
+				searchattribute.TestNameTypeMap(),
+				&searchattribute.TestMapper{},
+				metricsHandler,
+				log.NewNoopLogger(),
+			)
+
+			_, err := queryConverter.Convert(tc.query)
+			if tc.err != "" {
+				r.ErrorContains(err, tc.err)
+			} else {
+				r.NoError(err)
+			}
+
+			r.Len(capture.SnapshotMetric(fieldNameFilterAccepted.Name()), tc.count)
+		})
+	}
+}
+
+// aliasToFieldMapper mimics the namespace custom search attributes mapper: it only resolves the
+// registered aliases, and returns an error for anything else.
+type aliasToFieldMapper map[string]string
+
+func (m aliasToFieldMapper) GetAlias(fieldName string, _ string) (string, error) {
+	for alias, fn := range m {
+		if fn == fieldName {
+			return alias, nil
+		}
+	}
+	return "", serviceerror.NewInvalidArgument("no alias for field name")
+}
+
+func (m aliasToFieldMapper) GetFieldName(alias string, _ string) (string, error) {
+	if fn, ok := m[alias]; ok {
+		return fn, nil
+	}
+	return "", serviceerror.NewInvalidArgument("no mapping for alias")
+}
+
 func newTestQueryConverter(
 	storeQC StoreQueryConverter[sqlparser.Expr],
 ) *QueryConverter[sqlparser.Expr] {
@@ -2415,7 +2822,7 @@ func newTestQueryConverter(
 		testNamespaceName,
 		searchattribute.TestNameTypeMap(),
 		&searchattribute.TestMapper{},
-		nil, // metricsHandler
+		metrics.NoopMetricsHandler,
 		log.NewNoopLogger(),
 	)
 }
