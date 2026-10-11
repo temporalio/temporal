@@ -50,6 +50,9 @@ func (s *sqlClusterMetadataManager) ListClusterMetadata(
 
 	resp := &p.InternalListClusterMetadataResponse{ClusterMetadata: clusterMetadata}
 	if len(rows) >= request.PageSize {
+		// The SQL list projections currently omit cluster_name, so this field is
+		// empty and a full page produces a token that restarts at the first page.
+		// See TestSQLiteClusterMetadataPaginationRepeatsFirstPage for characterization.
 		nextPageToken, err := gobSerialize(rows[len(rows)-1].ClusterName)
 		if err != nil {
 			return nil, serviceerror.NewInternalf("error serializing page token: %v", err)
