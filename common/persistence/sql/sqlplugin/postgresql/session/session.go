@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	dsnFmt = "postgres://%v:%v@%v/%v?%v"
+	dsnFmt = "postgres://%s@%s/%s?%s"
 )
 
 const (
@@ -103,8 +103,7 @@ func buildDSN(
 	resolvedAddr := r.Resolve(cfg.ConnectAddr)[0]
 	return fmt.Sprintf(
 		dsnFmt,
-		cfg.User,
-		url.QueryEscape(password),
+		url.UserPassword(cfg.User, password).String(),
 		resolvedAddr,
 		cfg.DatabaseName,
 		tlsAttrs.Encode(),
