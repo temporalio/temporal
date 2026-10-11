@@ -882,6 +882,14 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 	return nil
 }
 
+// History callers hold the target execution's context lock through persistence;
+// the batch's shard range condition fences writers from a previous shard owner.
+// For versioned executions, promoting an existing run to current also updates
+// that run's DBRecordVersion in the same batch, fencing a stale bypass write.
+// Creating a current record instead requires inserting a new execution, so it
+// cannot attach a missing current record to an existing run. Legacy executions
+// with DBRecordVersion == 0 still rely on caller serialization when a state-only
+// update leaves next_event_id unchanged.
 func (d *MutableStateStore) assertNotCurrentExecution(
 	ctx context.Context,
 	shardID int32,
