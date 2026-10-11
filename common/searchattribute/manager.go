@@ -23,7 +23,7 @@ const (
 	cacheRefreshTimeout               = 5 * time.Second
 	cacheRefreshInterval              = 60 * time.Second
 	cacheRefreshIfUnavailableInterval = 20 * time.Second
-	cacheRefreshColdInterval          = 1 * time.Second
+	cacheRefreshErrorInterval         = 1 * time.Second
 )
 
 type (
@@ -42,6 +42,8 @@ type (
 		searchAttributes map[string]NameTypeMap
 		dbVersion        int64
 		expireOn         time.Time
+		refreshErr       error
+		retryAfter       time.Time
 	}
 )
 
@@ -79,7 +81,6 @@ func (m *managerImpl) GetSearchAttributes(
 	result := NewNameTypeMap(nil)
 	saCache, err := m.refreshCache(forceRefreshCache, now)
 	if err != nil {
-		m.logger.Error("failed to refresh search attributes cache", tag.Error(err))
 		return result, err
 	}
 	if indexSearchAttributes, ok := saCache.searchAttributes[indexName]; ok {
@@ -88,23 +89,35 @@ func (m *managerImpl) GetSearchAttributes(
 	return result, nil
 }
 
-func (m *managerImpl) needRefreshCache(saCache cache, forceRefreshCache bool, now time.Time) bool {
-	return forceRefreshCache || saCache.expireOn.Before(now) || m.forceRefresh()
+// needRefreshCache also returns the shared error when an expired snapshot is in cooldown.
+func (m *managerImpl) needRefreshCache(saCache cache, forceRefreshCache bool, now time.Time) (bool, error) {
+	if forceRefreshCache || m.forceRefresh() {
+		return true, nil
+	}
+	// A failed forced refresh must not poison an otherwise usable snapshot.
+	if !saCache.expireOn.Before(now) {
+		return false, nil
+	}
+	if now.Before(saCache.retryAfter) {
+		return false, saCache.refreshErr
+	}
+	return true, nil
 }
 
 func (m *managerImpl) refreshCache(forceRefreshCache bool, now time.Time) (cache, error) {
 	//nolint:revive // cache value is always of type `cache`
 	saCache := m.cache.Load().(cache)
-	if !m.needRefreshCache(saCache, forceRefreshCache, now) {
-		return saCache, nil
+	if refresh, err := m.needRefreshCache(saCache, forceRefreshCache, now); !refresh {
+		return saCache, err
 	}
 
 	m.cacheUpdateMutex.Lock()
 	defer m.cacheUpdateMutex.Unlock()
 	//nolint:revive // cache value is always of type `cache`
 	saCache = m.cache.Load().(cache)
-	if !m.needRefreshCache(saCache, forceRefreshCache, now) {
-		return saCache, nil
+	now = m.timeSource.Now()
+	if refresh, err := m.needRefreshCache(saCache, forceRefreshCache, now); !refresh {
+		return saCache, err
 	}
 
 	return m.refreshCacheLocked(saCache, now)
@@ -121,6 +134,8 @@ func (m *managerImpl) refreshCacheLocked(saCache cache, now time.Time) (cache, e
 	}
 
 	clusterMetadata, err := m.clusterMetadataManager.GetCurrentClusterMetadata(ctx)
+	saCache.refreshErr = nil
+	saCache.retryAfter = time.Time{}
 	if err != nil {
 		switch err.(type) {
 		case *serviceerror.NotFound:
@@ -129,16 +144,19 @@ func (m *managerImpl) refreshCacheLocked(saCache cache, now time.Time) (cache, e
 			saCache.expireOn = now.Add(cacheRefreshInterval)
 			err = nil
 		case *serviceerror.Unavailable:
-			if saCache.dbVersion == 0 {
-				// If the cache is still cold, and persistence is Unavailable, retry more aggressively
-				// within cacheRefreshColdInterval.
-				saCache.expireOn = now.Add(time.Duration(rand.Int63n(int64(cacheRefreshColdInterval))))
-			} else {
+			if saCache.dbVersion != 0 {
 				// If persistence is Unavailable, but cache was loaded at least once, then ignore the error
 				// and use existing cache for cacheRefreshIfUnavailableInterval.
 				saCache.expireOn = now.Add(cacheRefreshIfUnavailableInterval)
 				err = nil
 			}
+		}
+		if err != nil {
+			// Share the failed attempt without marking cold or expired metadata fresh.
+			// Start the positive, jittered cooldown after I/O completes.
+			saCache.refreshErr = err
+			saCache.retryAfter = m.timeSource.Now().Add(cacheRefreshErrorInterval + time.Duration(rand.Int63n(int64(cacheRefreshErrorInterval))))
+			m.logger.Error("failed to refresh search attributes cache", tag.Error(err))
 		}
 		m.cache.Store(saCache)
 		return saCache, err
@@ -183,7 +201,10 @@ func (m *managerImpl) SaveSearchAttributes(
 		Version:         clusterMetadataResponse.Version,
 	})
 	// Flush local cache, even if there was an error, which is most likely version mismatch (=stale cache).
+	// Keep network operations outside the lock, but order invalidation after any older refresh publication.
+	m.cacheUpdateMutex.Lock()
 	m.cache.Store(cache{})
+	m.cacheUpdateMutex.Unlock()
 
 	return err
 }
