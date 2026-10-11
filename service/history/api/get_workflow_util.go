@@ -187,7 +187,8 @@ func GetOrPollWorkflowMutableState(
 			return nil, err
 		}
 
-		// Send back response just before caller context would time out.
+		// Send back response just before caller context would time out. When longPollBuffer
+		// returns zero, the poll can last until the caller's deadline.
 		longPollInterval := shardContext.GetConfig().LongPollExpirationInterval(namespaceRegistry.Name().String())
 		longPollCtx, cancel := contextutil.WithDeadlineBuffer(ctx, longPollInterval, longPollBuffer(ctx))
 		defer cancel()
@@ -254,8 +255,9 @@ func GetOrPollWorkflowMutableState(
 				// Fallback for when ctx.Deadline() returns false but ctx is still cancelled.
 				// This can happen when gRPC timeout header isn't propagated (e.g., stripped
 				// by proxy) but the client still disconnects/cancels when its timeout fires.
-				// In normal operation where ctx.Deadline() returns true, longPollCtx.Done()
-				// fires first and this case is never reached.
+				// In normal operation where ctx.Deadline() returns true and longPollBuffer
+				// returned a non-zero buffer, longPollCtx.Done() fires first. With a zero
+				// buffer, longPollCtx and ctx share the caller's deadline, so either case can run.
 				return response, nil
 			}
 		}
