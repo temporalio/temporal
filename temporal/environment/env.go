@@ -19,9 +19,12 @@ const (
 	localhostIPEnv     = "LOCALHOST_IP"
 	localhostIPDefault = "127.0.0.1"
 
-	cassandraSeedsEnv    = "CASSANDRA_SEEDS"
-	cassandraPortEnv     = "CASSANDRA_PORT"
-	cassandraDefaultPort = 9042
+	cassandraSeedsEnv                    = "CASSANDRA_SEEDS"
+	cassandraPortEnv                     = "CASSANDRA_PORT"
+	cassandraDefaultPort                 = 9042
+	cassandraIgnorePeerAddrEnv           = "CASSANDRA_IGNORE_PEER_ADDR"
+	cassandraDisableShardAwarePortEnv    = "CASSANDRA_DISABLE_SHARD_AWARE_PORT"
+	cassandraDisableInitialHostLookupEnv = "CASSANDRA_DISABLE_INITIAL_HOST_LOOKUP"
 
 	mySQLSeedsEnv    = "MYSQL_SEEDS"
 	mySQLPortEnv     = "MYSQL_PORT"
@@ -87,6 +90,21 @@ func GetCassandraPort() int {
 		panic(fmt.Sprintf("error getting env %v", cassandraPortEnv))
 	}
 	return p
+}
+
+// GetCassandraDisableInitialHostLookup returns whether to disable initial host lookup
+func GetCassandraDisableInitialHostLookup() bool {
+	return os.Getenv(cassandraDisableInitialHostLookupEnv) != ""
+}
+
+// GetCassandraIgnorePeerAddr returns whether to ignore peer addresses from system.peers
+func GetCassandraIgnorePeerAddr() bool {
+	return os.Getenv(cassandraIgnorePeerAddrEnv) != ""
+}
+
+// GetCassandraDisableShardAwarePort returns whether to disable ScyllaDB's shard-aware port
+func GetCassandraDisableShardAwarePort() bool {
+	return os.Getenv(cassandraDisableShardAwarePortEnv) != ""
 }
 
 func GetESAddress() string {
