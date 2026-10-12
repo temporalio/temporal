@@ -430,14 +430,16 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 			return false
 		}
 		// 3. state change.
+		previousDuration := ms.accumulatedSkippedDuration()
 		_, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(
 			ctx, transition.GetTargetTime(), transition.DisabledAfterFastForward)
 		if err != nil {
 			ms.logger.Error("failed to add workflow execution time skipping transitioned event", tag.Error(err))
 			return false
 		}
-		// 4. task regeneration
-		return true
+		// 4. Timer tasks only need to be re-stamped when the virtual-time offset changed.
+		// A valid transition may only disable time skipping or update session state.
+		return ms.accumulatedSkippedDuration() != previousDuration
 	case historyi.TransactionPolicyPassive:
 		return false
 	default:

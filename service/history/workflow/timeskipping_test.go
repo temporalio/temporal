@@ -1374,6 +1374,35 @@ func (s *mutableStateSuite) TestCloseTransactionHandleWorkflowTimeSkipping() {
 			"the skip advances virtual time toward the timer target")
 	})
 
+	s.Run("ActiveWithBareDisable_PreservesAccumulatedDurationAndDoesNotRegenerateTasks", func() {
+		initialSkippedDuration := 30 * time.Minute
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
+			AccumulatedSkippedDuration: durationpb.New(initialSkippedDuration),
+			FastForwardInfo: &persistencespb.FastForwardInfo{
+				TargetTime: timestamppb.New(s.mutableState.Now().Add(-time.Second)),
+			},
+		}
+		s.mutableState.pendingTimerInfoIDs = map[string]*persistencespb.TimerInfo{}
+		s.mutableState.timeSkippingInfoUpdated = false
+
+		transition := s.mutableState.findNextSkipTarget()
+		s.Require().True(transition.IsValid())
+		s.True(transition.DisabledAfterFastForward)
+		s.True(transition.GetTargetTime().IsZero())
+
+		needRegen := s.mutableState.closeTransactionHandleWorkflowTimeSkipping(
+			context.Background(), historyi.TransactionPolicyActive)
+
+		s.False(needRegen, "unchanged accumulated duration must not regenerate timer tasks")
+		s.Equal(initialSkippedDuration, s.mutableState.accumulatedSkippedDuration(),
+			"the previously accumulated skip must be preserved")
+		s.False(s.mutableState.executionInfo.TimeSkippingInfo.GetConfig().GetEnabled(),
+			"the bare transition still disables time skipping")
+		s.True(s.mutableState.timeSkippingInfoUpdated,
+			"the transition still updates time-skipping state")
+	})
+
 	s.Run("ActiveWithoutValidTarget_NoSkip", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
