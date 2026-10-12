@@ -587,6 +587,13 @@ func (o *Operation) GetNexusCompletion(ctx chasm.Context, _ string) (nexusrpc.Co
 		StartTime: o.GetScheduledTime().AsTime(),
 		CloseTime: ctx.ExecutionInfo().CloseTime,
 		Links:     []nexus.Link{backLink},
+		// TODO: Wire this through to all other implementations of CompletionHandler,
+		// e.g. for SAA, Workflows, and WorkflowUpdates.
+		SerializationContext: &nexuspb.PropagatedSerializationContext{
+			Endpoint:  o.Endpoint,
+			Service:   o.Service,
+			Operation: o.Operation,
+		},
 	}
 
 	result, failure := o.outcome(ctx)

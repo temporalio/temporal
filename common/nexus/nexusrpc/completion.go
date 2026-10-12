@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/nexus-rpc/sdk-go/nexus"
+	nexuspb "go.temporal.io/api/nexus/v1"
 )
 
 // CompletionHTTPClient is a client for sending Nexus operation completion callbacks via HTTP.
@@ -103,6 +104,10 @@ type CompleteOperationOptions struct {
 	Links []nexus.Link
 	// Error to send with the completion. If set, the completion is unsuccessful.
 	Error *nexus.OperationError
+
+	// Optional serialization context for the Nexus operation.
+	SerializationContext *nexuspb.PropagatedSerializationContext
+
 	// Result to deliver with the completion. Uses the client's serializer to serialize the result into the request body.
 	// Only used for successful completions.
 	Result any

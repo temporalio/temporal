@@ -55,6 +55,9 @@ type invocableNexusHandler struct {
 // operation's outcome and the context the callback was registered with.
 func (n invocableNexusHandler) buildOnCompleteRequest() (*notificationservice.OnCompleteRequest, error) {
 	onCompReq := &notificationservice.OnCompleteRequest{
+		// BUG? This commonpb.Payload will be deserialized using the same PropagatgedNexusSerializatioContext,
+		// however it was not actually created by the Nexus handler. It was only encoded from the caller side.
+		// So maybe we should mark this some special way? e.g. a metadata KVP on the payload?
 		SourceContext: n.callback.GetSourceContext(),
 	}
 
@@ -139,6 +142,10 @@ func (n invocableNexusHandler) buildDispatchRequest(
 					Links: n.sourceLinks,
 				},
 			},
+			// TODO: Pass the serialization context through to the Nexus request protobuf.
+			// However, this should be a vaiant field.
+			// e.g. SerializationContext is one of { NexusSerializationContext, <tbd-for-future-use> }
+			// SerializationContext: n.completion.SerializationContext,
 			Capabilities: &nexuspb.Request_Capabilities{
 				TemporalFailureResponses: true,
 			},
