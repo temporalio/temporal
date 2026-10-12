@@ -2243,7 +2243,9 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 	callerWF := func(ctx workflow.Context) error {
 		opCtx, cancel := workflow.WithCancel(ctx)
 		c := workflow.NewNexusClient(endpointName, "service")
-		fut := c.ExecuteOperation(opCtx, "operation", "input", workflow.NexusOperationOptions{})
+		fut := c.ExecuteOperation(opCtx, "operation", "input", workflow.NexusOperationOptions{
+			StartToCloseTimeout: 2 * time.Second,
+		})
 		// Sleep to force a new workflow task, ensuring the operation is scheduled before cancel.
 		_ = workflow.Sleep(ctx, time.Millisecond)
 		cancel()
@@ -2271,9 +2273,10 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 	s.Snd(canStartCh, struct{}{})
 	s.Rcv(cancelSentCh)
 
-	// Terminate the workflow for good measure.
-	err = env.SdkClient().TerminateWorkflow(ctx, run.GetID(), run.GetRunID(), "test")
-	s.NoError(err)
+	// Acknowledging cancellation does not complete the operation; its start-to-close timeout must still fire.
+	var timeoutErr *temporal.TimeoutError
+	s.ErrorAs(run.Get(ctx, nil), &timeoutErr)
+	s.Equal(enumspb.TIMEOUT_TYPE_START_TO_CLOSE, timeoutErr.TimeoutType())
 
 	// Assert that cancel was requested before the operation started.
 	hist := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{
@@ -2283,6 +2286,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationCancelBeforeStarted_Cancelati
 	s.ContainsHistoryEvents(`
 NexusOperationCancelRequested
 NexusOperationStarted`, hist)
+	s.RequireHistoryEvent(hist, enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT)
 }
 
 func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionAfterReset(chasmEnabled bool) {
