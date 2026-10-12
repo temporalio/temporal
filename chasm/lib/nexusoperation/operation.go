@@ -728,6 +728,11 @@ func (o *Operation) buildPollResponse(
 	resp := &workflowservice.PollNexusOperationExecutionResponse{
 		RunId:          ctx.ExecutionKey().RunID,
 		OperationToken: o.OperationToken,
+		PropagatedNexusSerializationContext: &nexuspb.PropagatedSerializationContext{
+			Endpoint:  o.GetEndpoint(),
+			Service:   o.GetService(),
+			Operation: o.GetOperation(),
+		},
 	}
 
 	if o.isClosed() {

@@ -375,6 +375,11 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	}
 	req = common.CloneProto(req)
 	activityType := req.ActivityType.GetName()
+	maxIDLengthLimit := h.config.MaxIDLengthLimit()
+	nexusSerializationContext := req.GetPropagatedNexusSerializationContext()
+	if err := validatePropagatedNexusSerializationContext(nexusSerializationContext, maxIDLengthLimit); err != nil {
+		return nil, err
+	}
 
 	if req.RetryPolicy == nil {
 		req.RetryPolicy = &commonpb.RetryPolicy{}
@@ -393,7 +398,7 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		req.ActivityId,
 		activityType,
 		h.config.DefaultActivityRetryPolicy,
-		h.config.MaxIDLengthLimit(),
+		maxIDLengthLimit,
 		namespace.Name(req.GetNamespace()),
 		opts,
 		req.Priority,
