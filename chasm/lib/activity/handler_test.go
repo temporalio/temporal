@@ -12,7 +12,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
@@ -75,22 +74,4 @@ func TestGrantEagerActivityDispatch(t *testing.T) {
 			require.Equal(t, test.granted, handler.grantEagerActivityDispatch(context.Background(), "namespace-id", request))
 		})
 	}
-}
-
-func TestEagerActivityDispatchCheck(t *testing.T) {
-	request := &workflowservice.StartActivityExecutionRequest{Namespace: "namespace"}
-
-	t.Run("disabled skips Matching", func(t *testing.T) {
-		handler := &handler{config: &Config{
-			EnableActivityEagerDispatchCheck: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
-		}}
-		require.True(t, handler.eagerActivityDispatchAllowed(context.Background(), "namespace-id", request))
-	})
-
-	t.Run("enabled falls back when Matching is unavailable", func(t *testing.T) {
-		handler := &handler{config: &Config{
-			EnableActivityEagerDispatchCheck: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
-		}}
-		require.False(t, handler.eagerActivityDispatchAllowed(context.Background(), "namespace-id", request))
-	})
 }

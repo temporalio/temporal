@@ -225,6 +225,7 @@ func TestTransitionEagerStarted(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, activity.GetStatus())
+	require.True(t, activity.GetEagerExecutionAccepted())
 	require.EqualValues(t, 1, attempt.GetCount())
 	require.EqualValues(t, 1, attempt.GetStamp())
 	require.EqualValues(t, 1, attempt.GetStartedStamp())

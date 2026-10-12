@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/tasktoken"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -55,24 +56,76 @@ func (a *Activity) eagerActivityTaskData(
 	key := ctx.ExecutionKey()
 	requestData := a.RequestData.Get(ctx)
 	lastHeartbeat, _ := a.LastHeartbeat.TryGet(ctx)
+	activityType := a.GetActivityType()
+	header := requestData.GetHeader()
+	input := requestData.GetInput()
+	heartbeatDetails := lastHeartbeat.GetDetails()
+	scheduledTime := a.GetScheduleTime()
+	currentAttemptScheduledTime := a.dispatchTimeForAttempt(attempt)
+	startedTime := attempt.GetStartedTime()
+	scheduleToCloseTimeout := a.GetScheduleToCloseTimeout()
+	startToCloseTimeout := a.GetStartToCloseTimeout()
+	heartbeatTimeout := a.GetHeartbeatTimeout()
+	retryPolicy := a.GetRetryPolicy()
+	priority := a.GetPriority()
+
+	// This data is used to construct the eager response after the transaction has completed, so
+	// it must not retain mutable state owned by the transaction.
+	if activityType != nil {
+		activityType = common.CloneProto(activityType)
+	}
+	if header != nil {
+		header = common.CloneProto(header)
+	}
+	if input != nil {
+		input = common.CloneProto(input)
+	}
+	if heartbeatDetails != nil {
+		heartbeatDetails = common.CloneProto(heartbeatDetails)
+	}
+	if scheduledTime != nil {
+		scheduledTime = common.CloneProto(scheduledTime)
+	}
+	if currentAttemptScheduledTime != nil {
+		currentAttemptScheduledTime = common.CloneProto(currentAttemptScheduledTime)
+	}
+	if startedTime != nil {
+		startedTime = common.CloneProto(startedTime)
+	}
+	if scheduleToCloseTimeout != nil {
+		scheduleToCloseTimeout = common.CloneProto(scheduleToCloseTimeout)
+	}
+	if startToCloseTimeout != nil {
+		startToCloseTimeout = common.CloneProto(startToCloseTimeout)
+	}
+	if heartbeatTimeout != nil {
+		heartbeatTimeout = common.CloneProto(heartbeatTimeout)
+	}
+	if retryPolicy != nil {
+		retryPolicy = common.CloneProto(retryPolicy)
+	}
+	if priority != nil {
+		priority = common.CloneProto(priority)
+	}
+
 	return &eagerActivityTaskData{
 		namespaceID:                 request.namespaceID,
 		namespace:                   request.namespace,
 		runID:                       key.RunID,
-		activityType:                a.GetActivityType(),
+		activityType:                activityType,
 		activityID:                  key.BusinessID,
-		header:                      requestData.GetHeader(),
-		input:                       requestData.GetInput(),
-		heartbeatDetails:            lastHeartbeat.GetDetails(),
-		scheduledTime:               a.GetScheduleTime(),
-		currentAttemptScheduledTime: a.dispatchTimeForAttempt(attempt),
-		startedTime:                 attempt.GetStartedTime(),
+		header:                      header,
+		input:                       input,
+		heartbeatDetails:            heartbeatDetails,
+		scheduledTime:               scheduledTime,
+		currentAttemptScheduledTime: currentAttemptScheduledTime,
+		startedTime:                 startedTime,
 		attempt:                     attempt.GetCount(),
-		scheduleToCloseTimeout:      a.GetScheduleToCloseTimeout(),
-		startToCloseTimeout:         a.GetStartToCloseTimeout(),
-		heartbeatTimeout:            a.GetHeartbeatTimeout(),
-		retryPolicy:                 a.GetRetryPolicy(),
-		priority:                    a.GetPriority(),
+		scheduleToCloseTimeout:      scheduleToCloseTimeout,
+		startToCloseTimeout:         startToCloseTimeout,
+		heartbeatTimeout:            heartbeatTimeout,
+		retryPolicy:                 retryPolicy,
+		priority:                    priority,
 		activityAttemptStartedStamp: attempt.GetStartedStamp(),
 	}, nil
 }
@@ -215,6 +268,7 @@ func (a *Activity) buildActivityExecutionInfo(
 		CanceledReason:                      a.CancelState.GetReason(),
 		CloseTime:                           closeTime,
 		CurrentRetryInterval:                a.currentRetryInterval(ctx, attempt),
+		EagerExecutionAccepted:              a.GetEagerExecutionAccepted(),
 		ExecutionDuration:                   executionDuration,
 		ExecutionTime:                       timestamppb.New(a.firstDispatchTime()),
 		ExpirationTime:                      expirationTime,

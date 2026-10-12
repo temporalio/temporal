@@ -414,6 +414,7 @@ func (a *Activity) applyScheduled(ctx chasm.MutableContext, dispatch bool) error
 
 func (a *Activity) applyEagerStarted(ctx chasm.MutableContext, event eagerStartEvent) error {
 	attempt := a.LastAttempt.Get(ctx)
+	a.EagerExecutionAccepted = true
 	attempt.StartedTime = timestamppb.New(ctx.Now(a))
 	attempt.StartedStamp = attempt.GetStamp()
 	if a.FirstAttemptStartedTime == nil {

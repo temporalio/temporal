@@ -78,7 +78,13 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 	}
 
 	maxCallbacks := h.config.MaxCallbacksPerExecution(frontendReq.GetNamespace())
-	h.maybeDisableEagerActivityDispatch(ctx, req.GetNamespaceId(), frontendReq)
+	if frontendReq.GetRequestEagerExecution() &&
+		h.config.EnableActivityEagerDispatchCheck(frontendReq.GetNamespace()) &&
+		!h.grantEagerActivityDispatch(ctx, req.GetNamespaceId(), frontendReq) {
+		// Matching grants are best-effort. On a denial or any Matching failure, schedule the
+		// activity normally instead of failing the start request.
+		frontendReq.RequestEagerExecution = false
+	}
 
 	result, err := chasm.StartExecution(
 		ctx,
@@ -100,7 +106,14 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 	)
 
 	if err != nil {
-		return nil, startActivityExecutionError(err)
+		if alreadyStartedErr, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); ok {
+			return nil, serviceerror.NewActivityExecutionAlreadyStarted(
+				"activity execution already started",
+				alreadyStartedErr.CurrentRequestID,
+				alreadyStartedErr.CurrentRunID,
+			)
+		}
+		return nil, err
 	}
 
 	if result.Created {
@@ -244,34 +257,6 @@ func businessIDPolicies(request *workflowservice.StartActivityExecutionRequest) 
 	}
 
 	return reusePolicy, conflictPolicy, nil
-}
-
-func (h *handler) maybeDisableEagerActivityDispatch(
-	ctx context.Context,
-	namespaceID string,
-	request *workflowservice.StartActivityExecutionRequest,
-) {
-	if request.GetRequestEagerExecution() && !h.eagerActivityDispatchAllowed(ctx, namespaceID, request) {
-		// Matching grants are best-effort. On a denial or any Matching failure, schedule the
-		// activity normally instead of failing the start request.
-		request.RequestEagerExecution = false
-	}
-}
-
-func startActivityExecutionError(err error) error {
-	if alreadyStartedErr, ok := errors.AsType[*chasm.ExecutionAlreadyStartedError](err); ok {
-		return serviceerror.NewActivityExecutionAlreadyStarted("activity execution already started", alreadyStartedErr.CurrentRequestID, alreadyStartedErr.CurrentRunID)
-	}
-	return err
-}
-
-func (h *handler) eagerActivityDispatchAllowed(
-	ctx context.Context,
-	namespaceID string,
-	request *workflowservice.StartActivityExecutionRequest,
-) bool {
-	return !h.config.EnableActivityEagerDispatchCheck(request.GetNamespace()) ||
-		h.grantEagerActivityDispatch(ctx, namespaceID, request)
 }
 
 func (h *handler) grantEagerActivityDispatch(

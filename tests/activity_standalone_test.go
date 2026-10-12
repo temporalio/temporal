@@ -1259,6 +1259,7 @@ func (s *standaloneActivityTestSuite) TestEagerStartResponseAndNoRedelivery() {
 	require.NoError(t, err)
 	require.Equal(t, headers.ClientNameGoSDK, describe.GetInfo().GetSdkName())
 	require.Equal(t, temporal.SDKVersion, describe.GetInfo().GetSdkVersion())
+	require.True(t, describe.GetInfo().GetEagerExecutionAccepted())
 
 	retry, err := env.FrontendClient().StartActivityExecution(ctx, request)
 	require.NoError(t, err)
@@ -1328,6 +1329,22 @@ func (s *standaloneActivityTestSuite) TestEagerStartFallsBackWhenMatchingDenies(
 
 	eager := start(eagerActivityID, true, 5)
 	require.Nil(t, eager.GetEagerActivityTask(), "Matching denial must fall back to normal dispatch")
+
+	for _, startedActivity := range []struct {
+		id    string
+		runID string
+	}{
+		{backloggedActivityID, backlogged.GetRunId()},
+		{eagerActivityID, eager.GetRunId()},
+	} {
+		describe, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: startedActivity.id,
+			RunId:      startedActivity.runID,
+		})
+		require.NoError(t, err)
+		require.False(t, describe.GetInfo().GetEagerExecutionAccepted())
+	}
 
 	for _, startedActivity := range []struct {
 		id    string
