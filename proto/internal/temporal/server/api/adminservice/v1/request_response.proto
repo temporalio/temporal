@@ -13,6 +13,7 @@ import "temporal/api/replication/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/api/version/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
+import "temporal/server/api/adminservice/v1/message.proto";
 import "temporal/server/api/cluster/v1/message.proto";
 import "temporal/server/api/common/v1/dlq.proto";
 import "temporal/server/api/enums/v1/cluster.proto";
@@ -688,3 +689,58 @@ message MigrateScheduleRequest {
 }
 
 message MigrateScheduleResponse {}
+
+message ListExecutionsRequest {
+  // Optional namespace name. If not set, search is made across all namespaces
+  // and you cannot filter on any custom search attribute. If set, you can filter
+  // on the namespace's custom search attributes.
+  // (-- api-linter: core::0203::required=disabled
+  //     aip.dev/not-precedent: Not following Google API format --)
+  string namespace = 1;
+
+  // Query string.
+  string query = 2;
+
+  // Page size.
+  int32 page_size = 3;
+
+  // Next page token.
+  bytes next_page_token = 4;
+}
+
+message ListExecutionsResponse {
+  // Executions.
+  repeated VisibilityExecutionInfo executions = 1;
+
+  // Next page token.
+  bytes next_page_token = 2;
+}
+
+message CountExecutionsRequest {
+  // Optional namespace name. If not set, count is made across all namespaces
+  // and you cannot filter on any custom search attribute. If set, you can filter
+  // on the namespace's custom search attributes.
+  // (-- api-linter: core::0203::required=disabled
+  //     aip.dev/not-precedent: Not following Google API format --)
+  string namespace = 1;
+
+  // Query string.
+  string query = 2;
+}
+
+message CountExecutionsResponse {
+  // Approximate count.
+  int64 count = 1;
+
+  // `groups` contains the groups if the request is grouping by a field.
+  // The list might not be complete, and the counts of each group are approximations.
+  repeated AggregationGroup groups = 2;
+
+  message AggregationGroup {
+    // Group keys values as payload.
+    repeated temporal.api.common.v1.Payload group_values = 1;
+
+    // Approximate count.
+    int64 count = 2;
+  }
+}
