@@ -160,13 +160,39 @@ var DisallowedOperationHeaders = dynamicconfig.NewGlobalTypedSettingWithConverte
 "nexus_header" field that contains any of these disallowed keys will be rejected.`,
 )
 
-var RejectReservedHeaders = dynamicconfig.NewNamespaceBoolSetting(
-	"nexusoperation.rejectReservedHeaders",
-	false,
-	`Reject Nexus Operation requests with "nexus_header" keys that start with the reserved "temporal-" prefix (case
-insensitive). Applies to ScheduleNexusOperation commands and StartNexusOperationExecution requests. Usage of the
-reserved prefix is tracked via the nexus_reserved_header_usage metric regardless of this setting.`,
+var TrackedHeaderPrefixes = dynamicconfig.NewNamespaceTypedSettingWithConverter(
+	"nexusoperation.trackedHeaderPrefixes",
+	convertHeaderPrefixes,
+	[]string{"temporal-"},
+	`Case insensitive list of Nexus header key prefixes to track. ScheduleNexusOperation commands and
+StartNexusOperationExecution requests with "nexus_header" keys that start with any of these prefixes are counted via the
+nexus_header_prefix_usage metric, tagged by prefix, and logged.`,
 )
+
+var RejectedHeaderPrefixes = dynamicconfig.NewNamespaceTypedSettingWithConverter(
+	"nexusoperation.rejectedHeaderPrefixes",
+	convertHeaderPrefixes,
+	[]string(nil),
+	`Case insensitive list of Nexus header key prefixes to reject. ScheduleNexusOperation commands and
+StartNexusOperationExecution requests with "nexus_header" keys that start with any of these prefixes will be rejected.
+Rejections are counted via the nexus_header_prefix_usage metric with rejected=true.`,
+)
+
+// convertHeaderPrefixes lower-cases the configured header prefixes and drops empty ones, which would otherwise match
+// every header key.
+func convertHeaderPrefixes(in any) ([]string, error) {
+	prefixes, err := dynamicconfig.ConvertStructure[[]string](nil)(in)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]string, 0, len(prefixes))
+	for _, p := range prefixes {
+		if p != "" {
+			result = append(result, strings.ToLower(p))
+		}
+	}
+	return result, nil
+}
 
 var MaxOperationScheduleToCloseTimeout = dynamicconfig.NewNamespaceDurationSetting(
 	"nexusoperation.limit.scheduleToCloseTimeout",
@@ -269,7 +295,8 @@ type Config struct {
 	MaxOperationTokenLength                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationHeaderSize                     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	DisallowedOperationHeaders                 dynamicconfig.TypedPropertyFn[[]string]
-	RejectReservedHeaders                      dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	TrackedHeaderPrefixes                      dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
+	RejectedHeaderPrefixes                     dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
 	MaxOperationScheduleToCloseTimeout         dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	PayloadSizeLimit                           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                        dynamicconfig.TypedPropertyFn[*template.Template]
@@ -303,7 +330,8 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		MaxOperationTokenLength:            MaxOperationTokenLength.Get(dc),
 		MaxOperationHeaderSize:             MaxOperationHeaderSize.Get(dc),
 		DisallowedOperationHeaders:         DisallowedOperationHeaders.Get(dc),
-		RejectReservedHeaders:              RejectReservedHeaders.Get(dc),
+		TrackedHeaderPrefixes:              TrackedHeaderPrefixes.Get(dc),
+		RejectedHeaderPrefixes:             RejectedHeaderPrefixes.Get(dc),
 		MaxOperationScheduleToCloseTimeout: MaxOperationScheduleToCloseTimeout.Get(dc),
 		PayloadSizeLimit:                   dynamicconfig.BlobSizeLimitError.Get(dc),
 		PayloadSizeLimitWarn:               dynamicconfig.BlobSizeLimitWarn.Get(dc),

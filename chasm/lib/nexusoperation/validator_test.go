@@ -123,7 +123,8 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 		MaxUserMetadataDetailsSize:         func(string) int { return 20 },
 		MaxOperationHeaderSize:             func(string) int { return 10 },
 		DisallowedOperationHeaders:         func() []string { return []string{"disallowed-header"} },
-		RejectReservedHeaders:              func(string) bool { return false },
+		TrackedHeaderPrefixes:              func(string) []string { return []string{"temporal-"} },
+		RejectedHeaderPrefixes:             func(string) []string { return nil },
 		MaxOperationScheduleToCloseTimeout: func(string) time.Duration { return time.Hour },
 		EnabledCallbackKinds: func(string) []callbacks.Kind {
 			return []callbacks.Kind{callbacks.KindNexus}
@@ -135,8 +136,9 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 		mutate       func(*workflowservice.StartNexusOperationExecutionRequest)
 		mutateConfig func(*Config)
 		wantErr      string
-		// Expected value of the "rejected" tag on the reserved header usage metric, or empty if none is expected.
-		wantReservedHeaderUsage string
+		// Expected value of the "rejected" tag on the header prefix usage metric for the "temporal-" prefix, or empty if
+		// none is expected.
+		wantHeaderPrefixUsage string
 		// Check the request after validation, to verify situations where it normalizes values.
 		postValidateCheck func(*testing.T, *workflowservice.StartNexusOperationExecutionRequest)
 	}{
@@ -353,7 +355,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			wantErr: "nexus_header contains a disallowed key",
 		},
 		{
-			name: "nexus_header - reserved key allowed",
+			name: "nexus_header - tracked prefix",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.NexusHeader = map[string]string{"Temporal-A": "v"}
 			},
@@ -363,22 +365,32 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			postValidateCheck: func(t *testing.T, r *workflowservice.StartNexusOperationExecutionRequest) {
 				require.Equal(t, map[string]string{"temporal-a": "v"}, r.NexusHeader)
 			},
-			wantReservedHeaderUsage: "false",
+			wantHeaderPrefixUsage: "false",
 		},
 		{
-			name: "nexus_header - reserved key rejected",
+			name: "nexus_header - not tracked without tracked prefixes",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.NexusHeader = map[string]string{"Temporal-A": "v"}
 			},
 			mutateConfig: func(c *Config) {
 				c.MaxOperationHeaderSize = func(string) int { return 20 }
-				c.RejectReservedHeaders = func(string) bool { return true }
+				c.TrackedHeaderPrefixes = func(string) []string { return nil }
 			},
-			wantErr:                 "nexus_header contains reserved keys",
-			wantReservedHeaderUsage: "true",
 		},
 		{
-			name: "nexus_header - reserved key not tracked when a later validation fails",
+			name: "nexus_header - rejected prefix",
+			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
+				r.NexusHeader = map[string]string{"Temporal-A": "v"}
+			},
+			mutateConfig: func(c *Config) {
+				c.MaxOperationHeaderSize = func(string) int { return 20 }
+				c.RejectedHeaderPrefixes = func(string) []string { return []string{"temporal-"} }
+			},
+			wantErr:               "nexus_header contains keys with a rejected prefix",
+			wantHeaderPrefixUsage: "true",
+		},
+		{
+			name: "nexus_header - not tracked when a later validation fails",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.NexusHeader = map[string]string{"Temporal-A": "v"}
 				r.Links = []*commonpb.Link{{Variant: &commonpb.Link_WorkflowEvent_{
@@ -616,15 +628,16 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			} else {
 				require.NoError(t, err)
 			}
-			recordings := capture.Snapshot()[ReservedHeaderUsageCounter.Name()]
-			if tc.wantReservedHeaderUsage == "" {
+			recordings := capture.Snapshot()[HeaderPrefixUsageCounter.Name()]
+			if tc.wantHeaderPrefixUsage == "" {
 				require.Empty(t, recordings)
 			} else {
 				require.Len(t, recordings, 1)
 				require.Equal(t, int64(1), recordings[0].Value)
 				require.Equal(t, "default", recordings[0].Tags["namespace"])
-				require.Equal(t, ReservedHeaderSourceStandalone, recordings[0].Tags["request_source"])
-				require.Equal(t, tc.wantReservedHeaderUsage, recordings[0].Tags["rejected"])
+				require.Equal(t, HeaderPrefixSourceStandalone, recordings[0].Tags["request_source"])
+				require.Equal(t, "temporal-", recordings[0].Tags["prefix"])
+				require.Equal(t, tc.wantHeaderPrefixUsage, recordings[0].Tags["rejected"])
 			}
 			if tc.postValidateCheck != nil {
 				tc.postValidateCheck(t, req)

@@ -162,7 +162,8 @@ type Config struct {
 	MaxOperationTokenLength             dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationHeaderSize              dynamicconfig.IntPropertyFnWithNamespaceFilter
 	DisallowedOperationHeaders          dynamicconfig.TypedPropertyFn[[]string]
-	RejectReservedHeaders               dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	TrackedHeaderPrefixes               dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
+	RejectedHeaderPrefixes              dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
 	MaxOperationScheduleToCloseTimeout  dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	PayloadSizeLimit                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                 dynamicconfig.StringPropertyFn
@@ -182,7 +183,8 @@ func ConfigProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		MaxOperationTokenLength:             MaxOperationTokenLength.Get(dc),
 		MaxOperationHeaderSize:              MaxOperationHeaderSize.Get(dc),
 		DisallowedOperationHeaders:          DisallowedOperationHeaders.Get(dc),
-		RejectReservedHeaders:               chasmnexus.RejectReservedHeaders.Get(dc),
+		TrackedHeaderPrefixes:               chasmnexus.TrackedHeaderPrefixes.Get(dc),
+		RejectedHeaderPrefixes:              chasmnexus.RejectedHeaderPrefixes.Get(dc),
 		MaxOperationScheduleToCloseTimeout:  MaxOperationScheduleToCloseTimeout.Get(dc),
 		PayloadSizeLimit:                    dynamicconfig.BlobSizeLimitError.Get(dc),
 		CallbackURLTemplate:                 CallbackURLTemplate.Get(dc),

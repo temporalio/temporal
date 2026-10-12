@@ -65,7 +65,8 @@ var defaultConfig = &nexusoperation.Config{
 	MaxConcurrentOperationsPerWorkflow:         dynamicconfig.GetIntPropertyFnFilteredByNamespace(2),
 	MaxOperationHeaderSize:                     dynamicconfig.GetIntPropertyFnFilteredByNamespace(20),
 	DisallowedOperationHeaders:                 dynamicconfig.GetTypedPropertyFn([]string{"request-timeout"}),
-	RejectReservedHeaders:                      dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+	TrackedHeaderPrefixes:                      dynamicconfig.GetTypedPropertyFnFilteredByNamespace([]string{"temporal-"}),
+	RejectedHeaderPrefixes:                     dynamicconfig.GetTypedPropertyFnFilteredByNamespace([]string(nil)),
 	MaxOperationScheduleToCloseTimeout:         dynamicconfig.GetDurationPropertyFnFilteredByNamespace(time.Hour * 24),
 }
 
@@ -343,7 +344,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 		require.Empty(t, tcx.history.Events)
 	})
 
-	t.Run("reserved header keys", func(t *testing.T) {
+	t.Run("header prefixes", func(t *testing.T) {
 		newCommand := func() *commandpb.Command {
 			return &commandpb.Command{
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
@@ -354,59 +355,81 @@ func TestHandleScheduleCommand(t *testing.T) {
 						NexusHeader: map[string]string{
 							"Temporal-Foo": "a",
 							"temporal-bar": "b",
+							"Tmprl-Baz":    "c",
 						},
 					},
 				},
 			}
 		}
-		requireRecorded := func(t *testing.T, capture *metricstest.Capture, rejected string) {
-			recordings := capture.Snapshot()[nexusoperation.ReservedHeaderUsageCounter.Name()]
-			require.Len(t, recordings, 1)
-			require.Equal(t, int64(1), recordings[0].Value)
-			require.Equal(t, tests.GlobalNamespaceEntry.Name().String(), recordings[0].Tags["namespace"])
-			require.Equal(t, nexusoperation.ReservedHeaderSourceWorkflow, recordings[0].Tags["request_source"])
-			require.Equal(t, rejected, recordings[0].Tags["rejected"])
+		requireRecorded := func(t *testing.T, capture *metricstest.Capture, rejected string, prefixes ...string) {
+			recordings := capture.Snapshot()[nexusoperation.HeaderPrefixUsageCounter.Name()]
+			require.Len(t, recordings, len(prefixes))
+			recordedPrefixes := make([]string, len(recordings))
+			for i, r := range recordings {
+				require.Equal(t, int64(1), r.Value)
+				require.Equal(t, tests.GlobalNamespaceEntry.Name().String(), r.Tags["namespace"])
+				require.Equal(t, nexusoperation.HeaderPrefixSourceWorkflow, r.Tags["request_source"])
+				require.Equal(t, rejected, r.Tags["rejected"])
+				recordedPrefixes[i] = r.Tags["prefix"]
+			}
+			require.ElementsMatch(t, prefixes, recordedPrefixes)
 		}
-		newConfig := func(reject bool) *nexusoperation.Config {
+		newConfig := func(tracked, rejected []string) *nexusoperation.Config {
 			cfg := *defaultConfig
 			cfg.MaxOperationHeaderSize = dynamicconfig.GetIntPropertyFnFilteredByNamespace(100)
-			cfg.RejectReservedHeaders = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(reject)
+			cfg.TrackedHeaderPrefixes = dynamicconfig.GetTypedPropertyFnFilteredByNamespace(tracked)
+			cfg.RejectedHeaderPrefixes = dynamicconfig.GetTypedPropertyFnFilteredByNamespace(rejected)
 			return &cfg
 		}
 
-		t.Run("allowed and tracked", func(t *testing.T) {
-			tcx := newTestContext(t, newConfig(false))
+		t.Run("tracked with default prefix", func(t *testing.T) {
+			tcx := newTestContext(t, newConfig([]string{"temporal-"}, nil))
 			err := tcx.scheduleHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, newCommand(), CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 			require.NoError(t, err)
 			require.Len(t, tcx.history.Events, 1)
 			require.Equal(t,
-				map[string]string{"temporal-foo": "a", "temporal-bar": "b"},
+				map[string]string{"temporal-foo": "a", "temporal-bar": "b", "tmprl-baz": "c"},
 				tcx.history.Events[0].GetNexusOperationScheduledEventAttributes().GetNexusHeader(),
 			)
+			requireRecorded(t, tcx.metricsCapture, "false", "temporal-")
+		})
+
+		t.Run("tracks each matching prefix", func(t *testing.T) {
+			tcx := newTestContext(t, newConfig([]string{"temporal-", "tmprl-", "unused-"}, nil))
+			err := tcx.scheduleHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, newCommand(), CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+			require.NoError(t, err)
+			requireRecorded(t, tcx.metricsCapture, "false", "temporal-", "tmprl-")
+		})
+
+		t.Run("not tracked without tracked prefixes", func(t *testing.T) {
+			tcx := newTestContext(t, newConfig(nil, nil))
+			err := tcx.scheduleHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, newCommand(), CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
+			require.NoError(t, err)
 			requireRecorded(t, tcx.metricsCapture, "false")
 		})
 
 		t.Run("rejected by config", func(t *testing.T) {
-			tcx := newTestContext(t, newConfig(true))
+			tcx := newTestContext(t, newConfig([]string{"temporal-"}, []string{"tmprl-"}))
 			err := tcx.scheduleHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, newCommand(), CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 			var failWFTErr FailWorkflowTaskError
 			require.ErrorAs(t, err, &failWFTErr)
 			require.False(t, failWFTErr.TerminateWorkflow)
 			require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES, failWFTErr.Cause)
-			require.Contains(t, failWFTErr.Message, "reserved header keys")
+			require.Contains(t, failWFTErr.Message, "rejected prefix")
+			require.Contains(t, failWFTErr.Message, "tmprl-baz")
 			require.Empty(t, tcx.history.Events)
-			requireRecorded(t, tcx.metricsCapture, "true")
+			requireRecorded(t, tcx.metricsCapture, "true", "tmprl-")
 		})
 
 		t.Run("not tracked when a later validation fails", func(t *testing.T) {
-			cfg := newConfig(false)
+			cfg := newConfig([]string{"temporal-"}, nil)
 			cfg.MaxConcurrentOperationsPerWorkflow = dynamicconfig.GetIntPropertyFnFilteredByNamespace(0)
 			tcx := newTestContext(t, cfg)
 			err := tcx.scheduleHandler(tcx.chasmCtx, tcx.wf, commandValidator{maxPayloadSize: 1}, newCommand(), CommandHandlerOptions{WorkflowTaskCompletedEventID: 1})
 			var failWFTErr FailWorkflowTaskError
 			require.ErrorAs(t, err, &failWFTErr)
 			require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_NEXUS_OPERATIONS_LIMIT_EXCEEDED, failWFTErr.Cause)
-			require.Empty(t, tcx.metricsCapture.Snapshot()[nexusoperation.ReservedHeaderUsageCounter.Name()])
+			requireRecorded(t, tcx.metricsCapture, "false")
 		})
 	})
 

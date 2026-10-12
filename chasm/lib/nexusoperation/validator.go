@@ -102,10 +102,9 @@ func (v *validator) validateAndNormalizeStartRequest(
 		return err
 	}
 	req.NexusHeader = loweredHeaders
-	reservedHeaderKeys := commonnexus.ReservedHeaderKeys(loweredHeaders)
-	if len(reservedHeaderKeys) > 0 && v.config.RejectReservedHeaders(ns) {
-		v.recordReservedHeaderUsage(ns, reservedHeaderKeys, true)
-		return serviceerror.NewInvalidArgumentf("nexus_header contains reserved keys: %q", reservedHeaderKeys)
+	if rejected := commonnexus.MatchHeaderPrefixes(loweredHeaders, v.config.RejectedHeaderPrefixes(ns)); len(rejected) > 0 {
+		v.recordHeaderPrefixUsage(ns, rejected, true)
+		return serviceerror.NewInvalidArgumentf("nexus_header contains keys with a rejected prefix: %q", rejected.Keys())
 	}
 
 	if err := v.validateAndNormalizeSearchAttributes(req); err != nil {
@@ -133,14 +132,14 @@ func (v *validator) validateAndNormalizeStartRequest(
 
 	v.normalizeIDPolicies(req)
 
-	if len(reservedHeaderKeys) > 0 {
-		v.recordReservedHeaderUsage(ns, reservedHeaderKeys, false)
+	if tracked := commonnexus.MatchHeaderPrefixes(loweredHeaders, v.config.TrackedHeaderPrefixes(ns)); len(tracked) > 0 {
+		v.recordHeaderPrefixUsage(ns, tracked, false)
 	}
 	return nil
 }
 
-func (v *validator) recordReservedHeaderUsage(ns string, keys []string, rejected bool) {
-	RecordReservedHeaderUsage(v.metricsHandler, v.throttledLogger, ns, ReservedHeaderSourceStandalone, keys, rejected)
+func (v *validator) recordHeaderPrefixUsage(ns string, matches commonnexus.HeaderPrefixMatches, rejected bool) {
+	RecordHeaderPrefixUsage(v.metricsHandler, v.throttledLogger, ns, HeaderPrefixSourceStandalone, matches, rejected)
 }
 
 func (v *validator) validateAndNormalizeDescribeRequest(

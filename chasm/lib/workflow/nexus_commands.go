@@ -170,12 +170,11 @@ func (ch *nexusCommandHandler) handleScheduleCommand(
 		}
 	}
 
-	reservedHeaderKeys := commonnexus.ReservedHeaderKeys(lowerCaseHeader)
-	if len(reservedHeaderKeys) > 0 && ch.config.RejectReservedHeaders(nsName) {
-		ch.recordReservedHeaderUsage(ctx, nsName, reservedHeaderKeys, true)
+	if rejected := commonnexus.MatchHeaderPrefixes(lowerCaseHeader, ch.config.RejectedHeaderPrefixes(nsName)); len(rejected) > 0 {
+		ch.recordHeaderPrefixUsage(ctx, nsName, rejected, true)
 		return FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
-			Message: fmt.Sprintf("ScheduleNexusOperationCommandAttributes.NexusHeader contains reserved header keys: %q", reservedHeaderKeys),
+			Message: fmt.Sprintf("ScheduleNexusOperationCommandAttributes.NexusHeader contains keys with a rejected prefix: %q", rejected.Keys()),
 		}
 	}
 
@@ -242,25 +241,25 @@ func (ch *nexusCommandHandler) handleScheduleCommand(
 	if err != nil {
 		return err
 	}
-	if len(reservedHeaderKeys) > 0 {
-		ch.recordReservedHeaderUsage(ctx, nsName, reservedHeaderKeys, false)
+	if tracked := commonnexus.MatchHeaderPrefixes(lowerCaseHeader, ch.config.TrackedHeaderPrefixes(nsName)); len(tracked) > 0 {
+		ch.recordHeaderPrefixUsage(ctx, nsName, tracked, false)
 	}
 	return nil
 }
 
-func (ch *nexusCommandHandler) recordReservedHeaderUsage(
+func (ch *nexusCommandHandler) recordHeaderPrefixUsage(
 	ctx chasm.MutableContext,
 	nsName string,
-	keys []string,
+	matches commonnexus.HeaderPrefixMatches,
 	rejected bool,
 ) {
 	executionKey := ctx.ExecutionKey()
-	nexusoperation.RecordReservedHeaderUsage(
+	nexusoperation.RecordHeaderPrefixUsage(
 		ctx.MetricsHandler(),
 		ch.throttledLogger,
 		nsName,
-		nexusoperation.ReservedHeaderSourceWorkflow,
-		keys,
+		nexusoperation.HeaderPrefixSourceWorkflow,
+		matches,
 		rejected,
 		tag.WorkflowID(executionKey.BusinessID),
 		tag.WorkflowRunID(executionKey.RunID),
