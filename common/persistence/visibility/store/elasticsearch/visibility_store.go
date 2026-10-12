@@ -1,3 +1,5 @@
+//go:build !temporal_minimal || temporal_with_elasticsearch
+
 package elasticsearch
 
 import (
@@ -35,8 +37,6 @@ import (
 )
 
 const (
-	PersistenceName = "elasticsearch"
-
 	delimiter = "~"
 
 	// paginationDatetimeFormat is a copy from time.RFC3339Nano, but always writes

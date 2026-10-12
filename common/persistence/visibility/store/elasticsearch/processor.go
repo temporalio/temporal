@@ -1,3 +1,5 @@
+//go:build !temporal_minimal || temporal_with_elasticsearch
+
 //go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination processor_mock.go
 
 package elasticsearch
@@ -16,7 +18,6 @@ import (
 	"github.com/olivere/elastic/v7"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -48,17 +49,6 @@ type (
 	}
 
 	// ProcessorConfig contains all configs for processor
-	ProcessorConfig struct {
-		IndexerConcurrency dynamicconfig.IntPropertyFn
-		// TODO: remove ESProcessor prefix
-		ESProcessorNumOfWorkers  dynamicconfig.IntPropertyFn
-		ESProcessorBulkActions   dynamicconfig.IntPropertyFn // max number of requests in bulk
-		ESProcessorBulkSize      dynamicconfig.IntPropertyFn // max total size of bytes in bulk
-		ESProcessorFlushInterval dynamicconfig.DurationPropertyFn
-
-		ESProcessorAckTimeout dynamicconfig.DurationPropertyFn
-	}
-
 	ackFuture struct { // value of processorImpl.mapToAckFuture
 		future    *future.FutureImpl[bool]
 		createdAt time.Time    // Time when request was created (used to report metrics).

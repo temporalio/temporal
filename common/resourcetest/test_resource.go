@@ -23,7 +23,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
@@ -70,7 +69,6 @@ type (
 		RemoteFrontendClient *workflowservicemock.MockWorkflowServiceClient
 		ClientBean           *client.MockBean
 		ClientFactory        *client.MockFactory
-		ESClient             *esclient.MockClient
 		VisibilityManager    *manager.MockVisibilityManager
 
 		// persistence clients
@@ -172,7 +170,6 @@ func NewTest(controller *gomock.Controller, serviceName primitives.ServiceName) 
 		RemoteFrontendClient: remoteFrontendClient,
 		ClientBean:           clientBean,
 		ClientFactory:        clientFactory,
-		ESClient:             esclient.NewMockClient(controller),
 		VisibilityManager:    manager.NewMockVisibilityManager(controller),
 
 		// persistence clients

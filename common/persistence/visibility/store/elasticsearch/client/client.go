@@ -1,3 +1,5 @@
+//go:build !temporal_minimal || temporal_with_elasticsearch
+
 //go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination client_mock.go
 
 package client
