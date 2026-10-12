@@ -1194,7 +1194,7 @@ type TimeSkippingInfo struct {
 	// was most recently enabled. It is reset every time the skipping config is updated.
 	SessionSkipCount int32 `protobuf:"varint,6,opt,name=session_skip_count,json=sessionSkipCount,proto3" json:"session_skip_count,omitempty"`
 	// Skipped duration inherited when this execution started. Unlike accumulated_skipped_duration,
-	// this stays fixed so the workflow start time can be converted to wall-clock time later.
+	// this value remains fixed and can be used to calculate the execution's wall-clock start time.
 	InitialSkippedDuration *durationpb.Duration `protobuf:"bytes,8,opt,name=initial_skipped_duration,json=initialSkippedDuration,proto3" json:"initial_skipped_duration,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache

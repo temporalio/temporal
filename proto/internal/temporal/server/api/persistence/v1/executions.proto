@@ -353,7 +353,7 @@ message TimeSkippingInfo {
   int32 session_skip_count = 6;
 
   // Skipped duration inherited when this execution started. Unlike accumulated_skipped_duration,
-  // this stays fixed so the workflow start time can be converted to wall-clock time later.
+  // this value remains fixed and can be used to calculate the execution's wall-clock start time.
   google.protobuf.Duration initial_skipped_duration = 8;
 }
 
