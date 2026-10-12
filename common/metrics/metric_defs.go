@@ -21,6 +21,7 @@ const (
 	nexusEndpointTagName           = "nexus_endpoint"
 	nexusServiceTagName            = "nexus_service"
 	nexusOperationTagName          = "nexus_operation"
+	nexusOperationBackendTagName   = "backend"
 	outcomeTagName                 = "outcome"
 	nexusCompletionSourceTagName   = "nexus_completion_source"
 	versionedTagName               = "versioned"
@@ -945,6 +946,16 @@ var (
 		"chasm_pure_task_errors",
 		WithDescription("The number of errors during CHASM pure task execution."),
 	)
+	ChasmLogicalTaskCount = NewDimensionlessHistogramDef(
+		"chasm_logical_task_count",
+		WithDescription("The number of logical CHASM tasks of one task type in a single execution, recorded "+
+			"only when it exceeds history.chasmLogicalTaskCountAlertThreshold."),
+	)
+	ChasmLogicalTaskCountExceeded = NewCounterDef(
+		"chasm_logical_task_count_exceeded",
+		WithDescription("The number of times an execution's logical CHASM task count for one task type exceeded "+
+			"history.chasmLogicalTaskCountAlertThreshold."),
+	)
 	ChasmIncomingSignalWritten = NewCounterDef(
 		"chasm_incoming_signal_written",
 		WithDescription("The number of signal backlinks written to the CHASM IncomingSignals map."),
@@ -1033,6 +1044,8 @@ var (
 	// This metric has a "reason" tag attached to it to understand why eager start was denied.
 	WorkflowEagerExecutionDeniedCounter           = NewCounterDef("workflow_eager_execution_denied")
 	StartWorkflowRequestDeduped                   = NewCounterDef("start_workflow_request_deduped")
+	NexusWorkflowUseExisting                      = NewCounterDef("nexus_workflow_use_existing", WithDescription("Successful callback attachments to existing workflows involving Nexus serialization context, tagged by context match or missing context."))
+	NexusActivityUseExisting                      = NewCounterDef("nexus_activity_use_existing", WithDescription("Successful callback attachments to existing standalone activities involving Nexus serialization context, tagged by context match or missing context."))
 	OrphanedChildWorkflowReplacement              = NewCounterDef("orphaned_child_workflow_replacement")
 	EmptyCompletionCommandsCounter                = NewCounterDef("empty_completion_commands")
 	MultipleCompletionCommandsCounter             = NewCounterDef("multiple_completion_commands")
@@ -1062,13 +1075,18 @@ var (
 	CompleteWorkflowTaskWithStickyEnabledCounter  = NewCounterDef("complete_workflow_task_sticky_enabled_count")
 	CompleteWorkflowTaskWithStickyDisabledCounter = NewCounterDef("complete_workflow_task_sticky_disabled_count")
 	WorkflowTaskHeartbeatTimeoutCounter           = NewCounterDef("workflow_task_heartbeat_timeout_count")
-	SignalWithStartSkipDelayCounter               = NewCounterDef("signal_with_start_skip_delay_count")
+	SignalWithStartWorkflowStartDeduped           = NewCounterDef("signal_with_start_workflow_start_deduped")
+	SignalWithStartWorkflowTaskBackoffCounter     = NewCounterDef("signal_with_start_workflow_task_backoff_count")
 	DuplicateReplicationEventsCounter             = NewCounterDef("duplicate_replication_events")
 	AcquireLockFailedCounter                      = NewCounterDef("acquire_lock_failed")
 	WorkflowContextCleared                        = NewCounterDef("workflow_context_cleared")
 	HistoryPassiveReplicationTestHookCounter      = NewCounterDef(
 		"history_passive_replication_test_hook",
 		WithDescription("Number of times the test-only passive replication hook executes. This must be zero in production."),
+	)
+	ExecutionForceTerminations = NewCounterDef(
+		"execution_force_terminations",
+		WithDescription("The number of workflow or CHASM executions force terminated due to system conditions (not application specific reasons). Tagged by namespace, archetype, and reason."),
 	)
 	MutableStateSize = NewBytesHistogramDef(
 		"mutable_state_size",
@@ -1198,6 +1216,7 @@ var (
 	ReplicationTasksAttempt                        = NewDimensionlessHistogramDef("replication_tasks_attempt")
 	ReplicationTasksErrorByType                    = NewCounterDef("replication_tasks_error_by_type")
 	ReplicationDLQFailed                           = NewCounterDef("replication_dlq_enqueue_failed")
+	ReplicationDLQDropped                          = NewCounterDef("replication_dlq_dropped")
 	ReplicationDLQMaxLevelGauge                    = NewGaugeDef("replication_dlq_max_level")
 	ReplicationDLQAckLevelGauge                    = NewGaugeDef("replication_dlq_ack_level")
 	ReplicationNonEmptyDLQCount                    = NewCounterDef("replication_dlq_non_empty")
@@ -1373,7 +1392,11 @@ var (
 		"fair_reader_stuck_detected",
 		WithDescription("Count of times the fair task reader detected a stuck state (atEnd=false, loadedTasks=0, readPending=false, backoffTimer=nil) on the write path"),
 	)
-	PartitionScaleEvents = NewCounterDef("partition_scale_events")
+	PartitionScaleEvents     = NewCounterDef("partition_scale_events")
+	PartitionScaleMaxClamped = NewCounterDef(
+		"partition_scale_max_clamped",
+		WithDescription("Count of partition scaler decisions whose target was reduced by a configured maximum"),
+	)
 	PartitionScaleRead   = NewGaugeDef("partition_scale_read")
 	PartitionScaleWrite  = NewGaugeDef("partition_scale_write")
 	PartitionScaleTarget = NewGaugeDef("partition_scale_target")
@@ -1477,6 +1500,7 @@ var (
 	VisibilityArchiverArchiveNonRetryableErrorCount                   = NewCounterDef("visibility_archiver_archive_non_retryable_error")
 	VisibilityArchiverArchiveTransientErrorCount                      = NewCounterDef("visibility_archiver_archive_transient_error")
 	VisibilityArchiveSuccessCount                                     = NewCounterDef("visibility_archiver_archive_success")
+	VisibilityArchiverBlobExistsCount                                 = NewCounterDef("visibility_archiver_blob_exists")
 	HistoryScavengerSuccessCount                                      = NewCounterDef("scavenger_success")
 	HistoryScavengerErrorCount                                        = NewCounterDef("scavenger_errors")
 	HistoryScavengerSkipCount                                         = NewCounterDef("scavenger_skips")
@@ -1567,6 +1591,10 @@ var (
 	TaskQueueUserDataReplicationApplyEndToEndLatency = NewTimerDef(
 		"task_queue_user_data_replication_apply_end_to_end_latency",
 		WithDescription("Latency from source publication to a terminal task queue user data replication apply outcome."),
+	)
+	TaskQueueUserDataReplicationIncomingPerTypeDataDropped = NewCounterDef(
+		"task_queue_user_data_replication_incoming_per_type_data_dropped",
+		WithDescription("The number of task queue user data replication merges that discarded incoming, non-empty per-type data."),
 	)
 	ParentClosePolicyProcessorSuccess       = NewCounterDef("parent_close_policy_processor_requests")
 	ParentClosePolicyProcessorFailures      = NewCounterDef("parent_close_policy_processor_errors")

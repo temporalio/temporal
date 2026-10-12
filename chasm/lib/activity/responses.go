@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
@@ -106,42 +107,43 @@ func (a *Activity) buildActivityExecutionInfo(
 	}
 
 	info := &apiactivitypb.ActivityExecutionInfo{
-		ActivityId:              key.BusinessID,
-		ActivityType:            a.GetActivityType(),
-		Attempt:                 attempt.GetCount(),
-		CanceledReason:          a.CancelState.GetReason(),
-		CloseTime:               closeTime,
-		CurrentRetryInterval:    a.currentRetryInterval(ctx, attempt),
-		ExecutionDuration:       executionDuration,
-		ExecutionTime:           timestamppb.New(a.firstDispatchTime()),
-		ExpirationTime:          expirationTime,
-		Header:                  requestData.GetHeader(),
-		HeartbeatTimeout:        a.GetHeartbeatTimeout(),
-		Links:                   ctx.Links(a),
-		TotalHeartbeatCount:     heartbeat.GetTotalHeartbeatCount(),
-		LastAttemptCompleteTime: attempt.GetCompleteTime(),
-		LastHeartbeatTime:       heartbeat.GetRecordedTime(),
-		LastStartedTime:         attempt.GetStartedTime(),
-		LastWorkerIdentity:      attempt.GetLastWorkerIdentity(),
-		LastDeploymentVersion:   attempt.GetLastDeploymentVersion(),
-		SdkName:                 attempt.GetSdkName(),
-		SdkVersion:              attempt.GetSdkVersion(),
-		NextAttemptScheduleTime: a.nextAttemptDispatchTime(ctx, attempt),
-		Priority:                a.GetPriority(),
-		RetryPolicy:             a.GetRetryPolicy(),
-		RunId:                   key.RunID,
-		RunState:                runState,
-		ScheduleTime:            a.GetScheduleTime(),
-		ScheduleToCloseTimeout:  a.GetScheduleToCloseTimeout(),
-		ScheduleToStartTimeout:  a.GetScheduleToStartTimeout(),
-		StartDelay:              a.GetStartDelay(),
-		StartToCloseTimeout:     a.GetStartToCloseTimeout(),
-		StateSizeBytes:          int64(executionInfo.ApproximateStateSize),
-		StateTransitionCount:    executionInfo.StateTransitionCount,
-		SearchAttributes:        sa,
-		Status:                  status,
-		TaskQueue:               a.GetTaskQueue().GetName(),
-		UserMetadata:            a.effectiveUserMetadata(ctx),
+		ActivityId:                          key.BusinessID,
+		ActivityType:                        a.GetActivityType(),
+		Attempt:                             attempt.GetCount(),
+		CanceledReason:                      a.CancelState.GetReason(),
+		CloseTime:                           closeTime,
+		CurrentRetryInterval:                a.currentRetryInterval(ctx, attempt),
+		ExecutionDuration:                   executionDuration,
+		ExecutionTime:                       timestamppb.New(a.firstDispatchTime()),
+		ExpirationTime:                      expirationTime,
+		Header:                              requestData.GetHeader(),
+		HeartbeatTimeout:                    a.GetHeartbeatTimeout(),
+		Links:                               ctx.Links(a),
+		TotalHeartbeatCount:                 heartbeat.GetTotalHeartbeatCount(),
+		LastAttemptCompleteTime:             attempt.GetCompleteTime(),
+		LastHeartbeatTime:                   heartbeat.GetRecordedTime(),
+		LastStartedTime:                     attempt.GetStartedTime(),
+		LastWorkerIdentity:                  attempt.GetLastWorkerIdentity(),
+		LastDeploymentVersion:               attempt.GetLastDeploymentVersion(),
+		SdkName:                             attempt.GetSdkName(),
+		SdkVersion:                          attempt.GetSdkVersion(),
+		NextAttemptScheduleTime:             a.nextAttemptDispatchTime(ctx, attempt),
+		Priority:                            a.GetPriority(),
+		PropagatedNexusSerializationContext: requestData.GetPropagatedNexusSerializationContext(),
+		RetryPolicy:                         a.GetRetryPolicy(),
+		RunId:                               key.RunID,
+		RunState:                            runState,
+		ScheduleTime:                        a.GetScheduleTime(),
+		ScheduleToCloseTimeout:              a.GetScheduleToCloseTimeout(),
+		ScheduleToStartTimeout:              a.GetScheduleToStartTimeout(),
+		StartDelay:                          a.GetStartDelay(),
+		StartToCloseTimeout:                 a.GetStartToCloseTimeout(),
+		StateSizeBytes:                      int64(executionInfo.ApproximateStateSize),
+		StateTransitionCount:                executionInfo.StateTransitionCount,
+		SearchAttributes:                    sa,
+		Status:                              status,
+		TaskQueue:                           a.GetTaskQueue().GetName(),
+		UserMetadata:                        a.effectiveUserMetadata(ctx),
 	}
 	if request.GetIncludeHeartbeatDetails() {
 		info.HeartbeatDetails = heartbeat.GetDetails()
@@ -193,6 +195,39 @@ func (a *Activity) buildDescribeActivityExecutionResponse(
 	}, nil
 }
 
+// DescribeComponent implements chasm.DescribableComponent, returning the same response the
+// frontend serves with every optional detail included. Sharing that code path keeps a detached
+// read and a live describe from drifting.
+//
+// The response reflects persisted state only. Anything derived from the live process holding
+// the execution is either cleared or reads as its persisted value:
+//   - LongPollToken is cleared: it is a handle on a live execution. The token is still built,
+//     since ctx.Ref works on a detached tree, and TestDescribeComponent_MatchesLiveDescribe
+//     fails if that ever stops being true.
+//   - Outside the history service, a SCHEDULED callback is never reported as BLOCKED. BLOCKED
+//     is not persisted: it reflects the history service's outbound queue circuit breaker, which
+//     only that service can see, and elsewhere the callback library reports no destination as
+//     blocked.
+//   - Info.StateSizeBytes is computed from the record the reader supplied, not the history
+//     service's running total.
+func (a *Activity) DescribeComponent(ctx chasm.Context) (proto.Message, error) {
+	response, err := a.buildDescribeActivityExecutionResponse(ctx, &activitypb.DescribeActivityExecutionRequest{
+		FrontendRequest: &workflowservice.DescribeActivityExecutionRequest{
+			IncludeInput:            true,
+			IncludeOutcome:          true,
+			IncludeHeartbeatDetails: true,
+			IncludeLastFailure:      true,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	frontendResponse := response.GetFrontendResponse()
+	frontendResponse.LongPollToken = nil
+	return frontendResponse, nil
+}
+
 func (a *Activity) buildCallbackInfos(ctx chasm.Context) ([]*apiactivitypb.CallbackInfo, error) {
 	if len(a.Callbacks) == 0 {
 		return nil, nil
@@ -222,8 +257,9 @@ func (a *Activity) buildPollActivityExecutionResponse(
 ) *activitypb.PollActivityExecutionResponse {
 	return &activitypb.PollActivityExecutionResponse{
 		FrontendResponse: &workflowservice.PollActivityExecutionResponse{
-			RunId:   ctx.ExecutionKey().RunID,
-			Outcome: a.outcome(ctx),
+			RunId:                               ctx.ExecutionKey().RunID,
+			Outcome:                             a.outcome(ctx),
+			PropagatedNexusSerializationContext: a.RequestData.Get(ctx).GetPropagatedNexusSerializationContext(),
 		},
 	}
 }

@@ -110,12 +110,12 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 	case *tasks.ChasmTask:
 		task.Attempt = executable.Attempt()
 		err = t.executeChasmSideEffectTimerTask(ctx, task)
-	case *tasks.TimeSkippingTimerTask:
+	case *tasks.TimeSkippingFastForwardTimerTask:
 		err = t.executeTimeSkippingTimerTask(ctx, task)
 	default:
 		err = queueserrors.NewUnprocessableTaskError("unknown task type")
 	}
-	emitStandbyTaskError(t.shardContext, executable, taskTypeTagValue, err)
+	emitStandbyTaskError(t.shardContext, executable, taskTypeTagValue, nil, err)
 
 	return queues.ExecuteResponse{
 		ExecutionMetricTags: metricsTags,
@@ -238,7 +238,7 @@ func (t *timerQueueStandbyTaskExecutor) discardChasmTask(
 // task is retried until the discard delay elapses; otherwise it is acked.
 func (t *timerQueueStandbyTaskExecutor) executeTimeSkippingTimerTask(
 	ctx context.Context,
-	timerTask *tasks.TimeSkippingTimerTask,
+	timerTask *tasks.TimeSkippingFastForwardTimerTask,
 ) error {
 
 	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {

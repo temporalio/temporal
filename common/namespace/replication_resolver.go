@@ -1,6 +1,8 @@
 package namespace
 
 import (
+	"slices"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
@@ -24,6 +26,8 @@ type RoutingKey struct {
 type ReplicationResolver interface {
 	ActiveClusterName(routingKey RoutingKey) string
 	ActiveInCluster(clusterName string) bool
+	// CanDeleteNamespaceFromCluster reports whether namespace deletion may run in a cluster.
+	CanDeleteNamespaceFromCluster(clusterName string) bool
 	ClusterNames(businessID string) []string
 	ReplicationState(businessID string) enumspb.ReplicationState
 	IsGlobalNamespace() bool
@@ -76,6 +80,14 @@ func (r *defaultReplicationResolver) ActiveInCluster(clusterName string) bool {
 		return true
 	}
 	return r.replicationConfig.ActiveClusterName == clusterName
+}
+
+func (r *defaultReplicationResolver) CanDeleteNamespaceFromCluster(clusterName string) bool {
+	if !r.IsGlobalNamespace() {
+		return true
+	}
+	return r.replicationConfig != nil &&
+		(!slices.Contains(r.replicationConfig.Clusters, clusterName) || r.replicationConfig.ActiveClusterName == clusterName)
 }
 
 func (r *defaultReplicationResolver) ClusterNames(businessID string) []string {

@@ -170,6 +170,10 @@ type PartitionScaleAllowedDrift struct {
 }
 
 type PartitionScaleManagerSettings struct {
+	// Enabled controls whether partition scaler decisions are put into effect. If Enabled is
+	// false (default), then the scaler acts in "shadow mode", where the scaler is consulted
+	// but the result is only logged and emitted as metrics.
+	Enabled bool
 	// MaxRate limits target change frequency.
 	MaxRate float32
 	// ShrinkRatio is how much smaller write partitions is allowed to be than read partitions
@@ -193,10 +197,9 @@ type PartitionScaleManagerSettings struct {
 	// should be set to the maximum time of an AddTask call that may write to a backlog. Note
 	// that query/nexus tasks will be processed without interruption even after scale down.
 	DrainBufferTime time.Duration
-	// ShadowModeLogInterval controls how often shadow decisions are logged. If <= 0, shadow mode
-	// is disabled and enabled scaler decisions are applied normally. If > 0, the configured scaler
-	// is evaluated and logged at that cadence but decisions are not applied. If the partition
-	// scaler is disabled, shadow mode does not log.
+	// ShadowModeLogInterval controls how often shadow decisions are logged (in shadow mode
+	// only). If this is <= 0, or if the partition scaler returns 0 (disabled), shadow mode
+	// doesn't log anything or emit gauge metrics.
 	ShadowModeLogInterval time.Duration
 }
 
@@ -234,6 +237,21 @@ type SimplePartitionScalerSettings struct {
 	// Overall bounds (0 means don't enforce).
 	Min int32
 	Max int32
+
+	// These settings derive Fixed/Min/Max from the MatchingNumTaskqueueWritePartitions config
+	// (unmanaged scaling), to aid in the transition to managed scaling. If non-zero, the
+	// bound is set to the corresponding multiple (rounded to the nearest integer, but at least
+	// one) of the legacy write partition count.
+	//
+	// FixedAsMultipleOfLegacy is only used if Fixed is zero (an explicit Fixed wins).
+	//
+	// {Min,Max}AsMultipleOfLegacy apply _in addition_ to a non-zero Min/Max, i.e. the more
+	// restrictive of the two is used. E.g. setting MaxAsMultipleOfLegacy to 1.0 ensures the
+	// scaler never exceeds the current static partition count, which makes disabling/rollback
+	// safe.
+	FixedAsMultipleOfLegacy float32
+	MinAsMultipleOfLegacy   float32
+	MaxAsMultipleOfLegacy   float32
 }
 
 type SimplePartitionScalerThreshold struct {

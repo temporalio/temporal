@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/common/util"
@@ -139,6 +140,110 @@ func (s *QueryWorkflowSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 
 	// verify query sees all signals before it
 	s.Equal("pauseabc", queryResultStr)
+}
+
+func (s *QueryWorkflowSuite) TestQueryWorkflowResult_LinkResolvesRunID() {
+	env := testcore.NewEnv(s.T())
+	tv := env.Tv()
+
+	var workflowFn func(ctx workflow.Context, gen int) error
+
+	workflowFn = func(ctx workflow.Context, gen int) error {
+		_ = workflow.SetQueryHandler(ctx, tv.QueryType(), func() (int, error) {
+			return gen, nil
+		})
+		workflow.GetSignalChannel(ctx, tv.SignalName()).Receive(ctx, nil)
+		return workflow.NewContinueAsNewError(ctx, workflowFn, gen+1)
+	}
+
+	ctx := s.Context()
+	env.SdkWorker().RegisterWorkflow(workflowFn)
+
+	query := func(s *QueryWorkflowSuite, runID string) (int, *commonpb.Link_Workflow) {
+		resp, err := env.FrontendClient().QueryWorkflow(
+			ctx,
+			&workflowservice.QueryWorkflowRequest{
+				Namespace: env.Namespace().String(),
+				Execution: tv.WithRunID(runID).WorkflowExecution(),
+				Query:     &querypb.WorkflowQuery{QueryType: tv.QueryType()},
+			},
+		)
+		s.NoError(err)
+		link := resp.GetLink().GetWorkflow()
+		s.NotNil(link, "query must carry a link of type workflow")
+		s.Equal(env.Namespace().String(), link.GetNamespace())
+		s.Equal(tv.WorkflowID(), link.GetWorkflowId())
+		s.Equal("Query processed", link.GetReason())
+		var result int
+		s.NoError(payloads.Decode(resp.QueryResult, &result))
+		return result, link
+	}
+
+	firstRun, err := env.SdkClient().ExecuteWorkflow(
+		ctx,
+		sdkclient.StartWorkflowOptions{
+			ID:        tv.WorkflowID(),
+			TaskQueue: env.WorkerTaskQueue(),
+		},
+		workflowFn,
+		0,
+	)
+	s.NoError(err)
+	firstRunID := firstRun.GetRunID()
+
+	// continue-as-new, then wait for the new run to become the current one
+	s.NoError(env.SdkClient().SignalWorkflow(ctx, tv.WorkflowID(), firstRunID, tv.SignalName(), nil))
+	var secondRunID string
+	s.Await(func(s *QueryWorkflowSuite) {
+		desc, err := env.SdkClient().DescribeWorkflowExecution(ctx, tv.WorkflowID(), "")
+		s.NoError(err)
+		secondRunID = desc.GetWorkflowExecutionInfo().GetExecution().GetRunId()
+		s.NotEqual(firstRunID, secondRunID)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, desc.GetWorkflowExecutionInfo().GetStatus())
+	}, 10*time.Second, 100*time.Millisecond)
+
+	s.RunSequential("explicit run ID targets the closed original run", func(s *QueryWorkflowSuite) {
+		result, link := query(s, firstRunID)
+		s.Equal(0, result)
+		s.Equal(firstRunID, link.GetRunId())
+	})
+
+	s.RunSequential("empty run ID resolves to the continued-as-new run", func(s *QueryWorkflowSuite) {
+		result, link := query(s, "")
+		s.Equal(1, result)
+		s.Equal(secondRunID, link.GetRunId())
+	})
+
+	s.RunSequential("empty run ID resolves to the reset run", func(s *QueryWorkflowSuite) {
+		var workflowTaskCompletedEventID int64
+		s.Await(func(s *QueryWorkflowSuite) {
+			hist := env.GetHistory(env.Namespace().String(), tv.WithRunID(secondRunID).WorkflowExecution())
+			for _, event := range hist {
+				if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED {
+					workflowTaskCompletedEventID = event.GetEventId()
+					break
+				}
+			}
+			s.Positive(workflowTaskCompletedEventID, "expected a completed workflow task")
+		}, 10*time.Second, 100*time.Millisecond)
+		resetResp, err := env.FrontendClient().ResetWorkflowExecution(
+			ctx,
+			&workflowservice.ResetWorkflowExecutionRequest{
+				Namespace:                 env.Namespace().String(),
+				WorkflowExecution:         tv.WithRunID(secondRunID).WorkflowExecution(),
+				Reason:                    "reset for query link test",
+				RequestId:                 tv.RequestID(),
+				WorkflowTaskFinishEventId: workflowTaskCompletedEventID,
+			},
+		)
+		s.NoError(err)
+		s.NotEmpty(resetResp.GetRunId())
+		s.NotEqual(secondRunID, resetResp.GetRunId())
+
+		result, link := query(s, "")
+		s.Equal(1, result)
+		s.Equal(resetResp.GetRunId(), link.GetRunId())
+	})
 }
 
 func (s *QueryWorkflowSuite) TestQueryWorkflowResult_ContainsWorkflowLink() {

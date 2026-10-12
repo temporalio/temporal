@@ -45,6 +45,7 @@ var (
 )
 
 var _ chasm.VisibilitySearchAttributesProvider = (*Activity)(nil)
+var _ chasm.DescribableComponent = (*Activity)(nil)
 var _ callback.CompletionSource = (*Activity)(nil)
 
 type ActivityStore interface {
@@ -98,6 +99,11 @@ type RespondFailedEvent struct {
 type RespondCancelledEvent struct {
 	Request *historyservice.RespondActivityTaskCanceledRequest
 	Token   *tokenspb.Task
+}
+
+// errClosed is the error returned by an operator command on a closed activity.
+func (a *Activity) errClosed() error {
+	return serviceerror.NewNotFoundf("no running activity execution: it closed with status %v", a.GetStatus())
 }
 
 func (a *Activity) isTerminal() bool {
@@ -189,8 +195,9 @@ func NewStandaloneActivity(
 		},
 		LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{}),
 		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
-			Input:  request.Input,
-			Header: request.Header,
+			Input:                               request.Input,
+			Header:                              request.Header,
+			PropagatedNexusSerializationContext: request.GetPropagatedNexusSerializationContext(),
 			// Dual-write user_metadata to the legacy ActivityRequestData field so that a
 			// rolled-back binary (which only reads from here) keeps showing it. The
 			// authoritative copy lives on ChasmComponentAttributes.user_metadata; this
@@ -265,6 +272,7 @@ func (a *Activity) GenerateRecordActivityTaskStartedResponse(
 		ActivityRunId:               key.RunID,
 		WorkflowNamespace:           namespace,
 		HeartbeatDetails:            lastHeartbeat.GetDetails(),
+		NexusSerializationContext:   requestData.GetPropagatedNexusSerializationContext(),
 		CurrentAttemptScheduledTime: a.dispatchTimeForAttempt(attempt),
 		ScheduledEvent: &historypb.HistoryEvent{
 			EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
@@ -546,17 +554,12 @@ func (a *Activity) Terminate(
 	ctx chasm.MutableContext,
 	req chasm.TerminateComponentRequest,
 ) (chasm.TerminateComponentResponse, error) {
-	// If already in terminated state, fail if request ID is different, else no-op
-	if a.GetStatus() == activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED {
-		newReqID := req.RequestID
-		existingReqID := a.GetTerminateState().GetRequestId()
-
-		if existingReqID != newReqID {
-			return chasm.TerminateComponentResponse{}, serviceerror.NewFailedPreconditionf(
-				"already terminated with request ID %s", existingReqID)
-		}
-
+	if req.RequestID != "" && a.GetTerminateState().GetRequestId() == req.RequestID {
 		return chasm.TerminateComponentResponse{}, nil
+	}
+
+	if a.isTerminal() {
+		return chasm.TerminateComponentResponse{}, a.errClosed()
 	}
 
 	metricsHandler := a.enrichedMetricsHandler(ctx, metrics.ActivityTerminatedScope)

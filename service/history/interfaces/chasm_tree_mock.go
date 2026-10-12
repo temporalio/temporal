@@ -16,6 +16,7 @@ import (
 
 	persistence "go.temporal.io/server/api/persistence/v1"
 	chasm "go.temporal.io/server/chasm"
+	metrics "go.temporal.io/server/common/metrics"
 	tasks "go.temporal.io/server/service/history/tasks"
 	gomock "go.uber.org/mock/gomock"
 )
@@ -244,6 +245,18 @@ func (mr *MockChasmTreeMockRecorder) IsStateDirty() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsStateDirty", reflect.TypeOf((*MockChasmTree)(nil).IsStateDirty))
 }
 
+// MarkTotalTimeSkippedUpdatedInPassive mocks base method.
+func (m *MockChasmTree) MarkTotalTimeSkippedUpdatedInPassive() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "MarkTotalTimeSkippedUpdatedInPassive")
+}
+
+// MarkTotalTimeSkippedUpdatedInPassive indicates an expected call of MarkTotalTimeSkippedUpdatedInPassive.
+func (mr *MockChasmTreeMockRecorder) MarkTotalTimeSkippedUpdatedInPassive() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkTotalTimeSkippedUpdatedInPassive", reflect.TypeOf((*MockChasmTree)(nil).MarkTotalTimeSkippedUpdatedInPassive))
+}
+
 // PartitionedSnapshot mocks base method.
 func (m *MockChasmTree) PartitionedSnapshot(arg0 *persistence.VersionedTransition) (chasm.NodesSnapshot, *persistence.ChasmLocalState) {
 	m.ctrl.T.Helper()
@@ -288,17 +301,17 @@ func (mr *MockChasmTreeMockRecorder) Snapshot(arg0 any) *gomock.Call {
 }
 
 // Terminate mocks base method.
-func (m *MockChasmTree) Terminate(arg0 chasm.TerminateComponentRequest) error {
+func (m *MockChasmTree) Terminate(arg0 chasm.TerminateComponentRequest, arg1 metrics.ReasonString) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Terminate", arg0)
+	ret := m.ctrl.Call(m, "Terminate", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Terminate indicates an expected call of Terminate.
-func (mr *MockChasmTreeMockRecorder) Terminate(arg0 any) *gomock.Call {
+func (mr *MockChasmTreeMockRecorder) Terminate(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Terminate", reflect.TypeOf((*MockChasmTree)(nil).Terminate), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Terminate", reflect.TypeOf((*MockChasmTree)(nil).Terminate), arg0, arg1)
 }
 
 // ValidateSideEffectTask mocks base method.

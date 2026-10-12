@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -70,6 +71,35 @@ func TestSearchAttributesIncludesExecutionTime(t *testing.T) {
 			require.Equal(t, testTime.Add(tc.startDelay), executionTime)
 		})
 	}
+}
+
+func TestStandaloneActivityPropagatesNexusSerializationContext(t *testing.T) {
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return time.Now() },
+			HandleExecutionKey: func() chasm.ExecutionKey {
+				return chasm.ExecutionKey{NamespaceID: "namespace-id", BusinessID: "activity-id", RunID: "run-id"}
+			},
+		},
+	}
+	serializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
+	activity, err := NewStandaloneActivity(ctx, &workflowservice.StartActivityExecutionRequest{
+		ActivityType:                        &commonpb.ActivityType{Name: "activity"},
+		TaskQueue:                           &taskqueuepb.TaskQueue{Name: "task-queue"},
+		StartToCloseTimeout:                 durationpb.New(time.Minute),
+		PropagatedNexusSerializationContext: serializationContext,
+	})
+	require.NoError(t, err)
+
+	response, err := activity.GenerateRecordActivityTaskStartedResponse(ctx, "namespace")
+	require.NoError(t, err)
+	require.Equal(t, serializationContext, response.GetNexusSerializationContext())
+	require.Equal(t, serializationContext, activity.buildActivityExecutionInfo(ctx, &workflowservice.DescribeActivityExecutionRequest{}).GetPropagatedNexusSerializationContext())
+	require.Equal(t, serializationContext, activity.buildPollActivityExecutionResponse(ctx).GetFrontendResponse().GetPropagatedNexusSerializationContext())
 }
 
 func TestHandleStarted(t *testing.T) {
@@ -333,26 +363,30 @@ func TestActivityTerminate(t *testing.T) {
 		{
 			name:           "error on completed activity",
 			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
-			expectErr:      "invalid transition from Completed",
+			expectErr:      "no running activity execution: it closed with status Completed",
 		},
 		{
-			name:           "no-op on already terminated activity",
+			// This request carries no request id, so it cannot be recognized as a retry of the one
+			// that terminated the activity. TestRequestDeduplicationAfterTerminalState covers the
+			// retry that can be.
+			name:           "error on already terminated activity",
 			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
+			expectErr:      "no running activity execution: it closed with status Terminated",
 		},
 		{
 			name:           "error on failed activity",
 			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
-			expectErr:      "invalid transition from Failed",
+			expectErr:      "no running activity execution: it closed with status Failed",
 		},
 		{
 			name:           "error on timed out activity",
 			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
-			expectErr:      "invalid transition from TimedOut",
+			expectErr:      "no running activity execution: it closed with status TimedOut",
 		},
 		{
 			name:           "error on canceled activity",
 			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
-			expectErr:      "invalid transition from Canceled",
+			expectErr:      "no running activity execution: it closed with status Canceled",
 		},
 	}
 

@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	activitypb "go.temporal.io/api/activity/v1"
@@ -14,6 +15,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
@@ -23,6 +25,7 @@ import (
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -939,6 +942,16 @@ func (s *standaloneActivityTestSuite) TestStart() {
 	t.Run("AttachLinksOnConflictUnionsLinks", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
+		serializationContext := &nexuspb.PropagatedSerializationContext{
+			Endpoint:  "endpoint",
+			Service:   "service",
+			Operation: "operation",
+		}
+		otherSerializationContext := &nexuspb.PropagatedSerializationContext{
+			Endpoint:  "other-endpoint",
+			Service:   "other-service",
+			Operation: "other-operation",
+		}
 
 		firstLinks := []*commonpb.Link{
 			{
@@ -978,10 +991,11 @@ func (s *standaloneActivityTestSuite) TestStart() {
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
-			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
-			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
-			Links:               firstLinks,
+			StartToCloseTimeout:                 durationpb.New(defaultStartToCloseTimeout),
+			RequestId:                           env.Tv().Any().String(),
+			IdConflictPolicy:                    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+			Links:                               firstLinks,
+			PropagatedNexusSerializationContext: serializationContext,
 		})
 		require.NoError(t, err)
 		require.True(t, firstResp.Started)
@@ -995,10 +1009,11 @@ func (s *standaloneActivityTestSuite) TestStart() {
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
-			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
-			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
-			Links:               secondLinks,
+			StartToCloseTimeout:                 durationpb.New(defaultStartToCloseTimeout),
+			RequestId:                           env.Tv().Any().String(),
+			IdConflictPolicy:                    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+			Links:                               secondLinks,
+			PropagatedNexusSerializationContext: otherSerializationContext,
 			OnConflictOptions: &commonpb.OnConflictOptions{
 				AttachLinks: true,
 			},
@@ -1013,6 +1028,7 @@ func (s *standaloneActivityTestSuite) TestStart() {
 			RunId:      firstResp.RunId,
 		})
 		require.NoError(t, err)
+		protorequire.ProtoEqual(t, serializationContext, descResp.GetInfo().GetPropagatedNexusSerializationContext())
 		expected := append([]*commonpb.Link{}, firstLinks...)
 		expected = append(expected, secondLinks...)
 		// Links across requests are stored in a map keyed by request ID, so their relative order is non-deterministic.
@@ -2909,7 +2925,7 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 		require.NoError(t, err)
 	})
 
-	t.Run("DifferentRequestIDFails", func(t *testing.T) {
+	t.Run("DifferentRequestIDIsNotFound", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
 
@@ -2936,8 +2952,8 @@ func (s *standaloneActivityTestSuite) TestTerminate() {
 			Reason:     "Test Termination",
 			Identity:   "terminator",
 		})
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
 	})
 
 	t.Run("NonExistent", func(t *testing.T) {
@@ -4765,6 +4781,108 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 			require.NotNil(t, pollActivityResp)
 			require.Equal(t, startResp.RunId, pollActivityResp.GetRunId())
 			tc.completionValidationFn(t, pollActivityResp)
+		})
+	}
+}
+
+func (s *standaloneActivityTestSuite) TestNexusSerializationContextPropagation() {
+	env := s.newTestEnv()
+	serializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "test-endpoint",
+		Service:   "test-service",
+		Operation: "test-operation",
+	}
+
+	for _, tc := range []struct {
+		name   string
+		failed bool
+	}{
+		{name: "Completed"},
+		{name: "Failed", failed: true},
+	} {
+		s.Run(tc.name, func(s *standaloneActivityTestSuite) {
+			t := s.T()
+			ctx := s.Context()
+			activityID := testcore.RandomizeStr(t.Name())
+			taskQueue := testcore.RandomizeStr(t.Name())
+
+			// Start with a context that should remain unchanged across retries.
+			startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+				Namespace:                           env.Namespace().String(),
+				ActivityId:                          activityID,
+				ActivityType:                        env.Tv().ActivityType(),
+				TaskQueue:                           &taskqueuepb.TaskQueue{Name: taskQueue},
+				ScheduleToCloseTimeout:              durationpb.New(time.Minute),
+				RetryPolicy:                         &commonpb.RetryPolicy{MaximumAttempts: 2},
+				PropagatedNexusSerializationContext: serializationContext,
+			})
+			require.NoError(t, err)
+
+			firstTask, err := env.pollActivityTaskQueue(ctx, taskQueue)
+			require.NoError(t, err)
+			require.EqualValues(t, 1, firstTask.GetAttempt())
+			protorequire.ProtoEqual(t, serializationContext, firstTask.GetPropagatedNexusSerializationContext())
+
+			// Fail the first attempt so the server dispatches a second worker task.
+			_, err = env.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+				Namespace: env.Namespace().String(),
+				TaskToken: firstTask.GetTaskToken(),
+				Failure: &failurepb.Failure{
+					Message: "retryable failure",
+					FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+						NextRetryDelay: durationpb.New(time.Second),
+					}},
+				},
+			})
+			require.NoError(t, err)
+
+			secondTask, err := env.pollActivityTaskQueue(ctx, taskQueue)
+			require.NoError(t, err)
+			require.EqualValues(t, 2, secondTask.GetAttempt())
+			protorequire.ProtoEqual(t, serializationContext, secondTask.GetPropagatedNexusSerializationContext())
+
+			if tc.failed {
+				_, err = env.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+					Namespace: env.Namespace().String(),
+					TaskToken: secondTask.GetTaskToken(),
+					Failure:   defaultFailure,
+				})
+			} else {
+				_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+					Namespace: env.Namespace().String(),
+					TaskToken: secondTask.GetTaskToken(),
+					Result:    defaultResult,
+				})
+			}
+			require.NoError(t, err)
+
+			// Check that both result APIs retain the context after either outcome.
+			pollResp, err := env.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+				Namespace:  env.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.GetRunId(),
+			})
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, serializationContext, pollResp.GetPropagatedNexusSerializationContext())
+
+			describeResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:      env.Namespace().String(),
+				ActivityId:     activityID,
+				RunId:          startResp.GetRunId(),
+				IncludeOutcome: true,
+			})
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, serializationContext, describeResp.GetInfo().GetPropagatedNexusSerializationContext())
+
+			if tc.failed {
+				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, describeResp.GetInfo().GetStatus())
+				protorequire.ProtoEqual(t, defaultFailure, pollResp.GetOutcome().GetFailure())
+				protorequire.ProtoEqual(t, defaultFailure, describeResp.GetOutcome().GetFailure())
+			} else {
+				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, describeResp.GetInfo().GetStatus())
+				protorequire.ProtoEqual(t, defaultResult, pollResp.GetOutcome().GetResult())
+				protorequire.ProtoEqual(t, defaultResult, describeResp.GetOutcome().GetResult())
+			}
 		})
 	}
 }
@@ -10649,6 +10767,100 @@ func (s *standaloneActivityTestSuite) TestCallbacks() {
 		const lastDeliveryFailureMessage = "handler error (BAD_REQUEST): delivery #2"
 		require.Equal(t, lastDeliveryFailureMessage, cbInfo.GetLastAttemptFailure().GetMessage())
 	})
+
+	// Verify that a NexusHandler-variant callback links in both directions: the handler is handed a link
+	// to the callback, and the links the handler returns are recorded on the callback.
+	t.Run("NexusHandlerCallbackLinks", func(t *testing.T) {
+		env.OverrideDynamicConfig(activity.EnabledCallbackKinds, []callbacks.Kind{callbacks.KindNexus, callbacks.KindNexusHandler})
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		handlerTaskQueue := testcore.RandomizeStr("nh-callback-" + t.Name())
+		requestID := env.Tv().Any().String()
+
+		// Stands in for a workflow the handler started to process the completion.
+		handlerReturnLink := &commonpb.Link_WorkflowEvent{
+			Namespace:  env.Namespace().String(),
+			WorkflowId: "nh-callback-handler-wf-id",
+			RunId:      uuid.NewString(),
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				},
+			},
+		}
+		nexusEnv := &NexusTestEnv{TestEnv: env.TestEnv, useTemporalFailures: true}
+		inboundLinks := make(chan []*nexuspb.Link, 1)
+		pollerErrCh := nexusEnv.nexusTaskPoller(s.Context(), t, handlerTaskQueue, func(
+			_ *testing.T,
+			res *workflowservice.PollNexusTaskQueueResponse,
+		) (*nexusTaskResponse, error) {
+			inboundLinks <- res.GetRequest().GetStartOperation().GetLinks()
+			return &nexusTaskResponse{
+				StartResult: &nexus.HandlerStartOperationResultAsync{OperationToken: "nh-callback-op-token"},
+				Links:       []nexus.Link{commonnexus.ConvertLinkWorkflowEventToNexusLink(handlerReturnLink)},
+			}, nil
+		})
+
+		startResp, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Identity:            env.Tv().WorkerIdentity(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+			RequestId:           requestID,
+			CompletionCallbacks: []*commonpb.Callback{{
+				Variant: &commonpb.Callback_NexusHandler_{
+					NexusHandler: &commonpb.Callback_NexusHandler{
+						TaskQueueName: handlerTaskQueue,
+						// The shared poller only accepts tasks addressed to "test-service".
+						Service:   "test-service",
+						Operation: "OnComplete",
+					},
+				},
+			}},
+		})
+		require.NoError(t, err)
+
+		pollResp, err := env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			Identity:  env.Tv().WorkerIdentity(),
+		})
+		require.NoError(t, err)
+		_, err = env.FrontendClient().RespondActivityTaskCompleted(s.Context(), &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: pollResp.TaskToken,
+			Result:    defaultResult,
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+		require.NoError(t, await.Rcv(t, pollerErrCh))
+
+		gotLinks := await.Rcv(t, inboundLinks)
+		require.Len(t, gotLinks, 1)
+		gotCallbackLink, err := commonnexus.ConvertNexusLinkToLinkCallback(commonnexus.ConvertLinksFromProto(gotLinks)[0])
+		require.NoError(t, err)
+		protorequire.ProtoEqual(t, &commonpb.Link_Callback{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.Execution{
+				Type:       enumspb.EXECUTION_TYPE_ACTIVITY,
+				BusinessId: activityID,
+				RunId:      startResp.GetRunId(),
+			},
+			RequestId: requestID,
+		}, gotCallbackLink)
+
+		cbInfo := env.awaitCallbackInfo(s.Context(), t, activityID, enumspb.CALLBACK_STATE_SUCCEEDED)
+		// TODO(https://github.com/temporalio/temporal/issues/11958): Callback invocations should have their own request ID, since its used as an idempotency key.
+		require.Equal(t, requestID, cbInfo.GetRequestId())
+		protorequire.ProtoSliceEqual(t,
+			[]*commonpb.Link{{Variant: &commonpb.Link_WorkflowEvent_{WorkflowEvent: handlerReturnLink}}},
+			cbInfo.GetCallback().GetLinks())
+	})
 }
 
 func (s *standaloneActivityTestSuite) TestCallbacksDisabled() {
@@ -10956,7 +11168,7 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Pause should fail with FailedPrecondition on a terminal activity.
+		// Pause should fail with NotFound on a terminal activity.
 		_, err = env.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -10965,8 +11177,8 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 			Reason:     "test",
 		})
 		require.Error(t, err)
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
 	})
 
 	// PauseWhileRunning: pause a STARTED activity, fail the attempt, then verify the activity
@@ -12590,7 +12802,7 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Unpause should fail with FailedPrecondition on a terminal activity.
+		// Unpause should fail with NotFound on a terminal activity.
 		_, err = env.FrontendClient().UnpauseActivityExecution(ctx, &workflowservice.UnpauseActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
@@ -12598,8 +12810,8 @@ func (s *standaloneActivityTestSuite) TestUnpauseActivityExecution() {
 			Identity:   "test-identity",
 		})
 		require.Error(t, err)
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
 	})
 
 	// UnpauseWhileCancelRequestedFails: unpausing a CANCEL_REQUESTED activity must be rejected with
@@ -13469,8 +13681,8 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		})
 	}
 
-	t.Run("TerminalStateReturnsFailedPrecondition", func(t *testing.T) {
-		// Resetting a completed activity should return FailedPrecondition.
+	t.Run("TerminalStateReturnsNotFound", func(t *testing.T) {
+		// Resetting a completed activity should return NotFound.
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 
@@ -13486,14 +13698,14 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Attempt to reset — should fail with FailedPrecondition since the activity is in a terminal state
+		// Attempt to reset — should fail with NotFound since the activity is in a terminal state
 		_, err = env.FrontendClient().ResetActivityExecution(ctx, &workflowservice.ResetActivityExecutionRequest{
 			Namespace:  env.Namespace().String(),
 			ActivityId: activityID,
 			RunId:      startResp.GetRunId(),
 		})
-		var failedPreconditionErr *serviceerror.FailedPrecondition
-		require.ErrorAs(t, err, &failedPreconditionErr)
+		var notFoundErr *serviceerror.NotFound
+		require.ErrorAs(t, err, &notFoundErr)
 	})
 
 	t.Run("KeepPaused", func(t *testing.T) {

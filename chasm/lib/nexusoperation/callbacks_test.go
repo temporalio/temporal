@@ -440,6 +440,7 @@ func TestCompletionCallbacksRoundTripThroughTheTree(t *testing.T) {
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(defaultTime)
 	nodeBackend := &chasm.MockNodeBackend{
+		HandleNow:                 timeSource.Now,
 		HandleNextTransitionCount: func() int64 { return 2 },
 		HandleGetCurrentVersion:   func() int64 { return 1 },
 		HandleCurrentVersionedTransition: func() *persistencespb.VersionedTransition {
@@ -449,7 +450,7 @@ func TestCompletionCallbacksRoundTripThroughTheTree(t *testing.T) {
 			return namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{Name: "ns-name"}, nil, false, nil, 0)
 		},
 	}
-	root := chasm.NewEmptyTree(registry, timeSource, nodeBackend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
+	root := chasm.NewEmptyTree(registry, nodeBackend, chasm.DefaultPathEncoder, logger, metrics.NoopMetricsHandler)
 	ctx := chasm.NewMutableContext(context.Background(), root)
 
 	op := NewOperation(&nexusoperationpb.OperationState{

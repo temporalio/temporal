@@ -67,34 +67,40 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 	s.SearchAttributesMapperProvider = searchattribute.NewTestMapperProvider(nil)
 	s.NamespaceRegistry = namespace.NewMockRegistry(s.controller)
 	s.VisibilityMgr, err = visibility.NewManager(
-		cfg,
-		resolver.NewNoopResolver(),
-		s.CustomVisibilityStoreFactory,
-		&elasticsearch.ProcessorConfig{
-			IndexerConcurrency:       dynamicconfig.GetIntPropertyFn(10),
-			ESProcessorNumOfWorkers:  dynamicconfig.GetIntPropertyFn(2),
-			ESProcessorBulkActions:   dynamicconfig.GetIntPropertyFn(10),
-			ESProcessorBulkSize:      dynamicconfig.GetIntPropertyFn(1 * 1024 * 1024), // 1MB
-			ESProcessorFlushInterval: dynamicconfig.GetDurationPropertyFn(time.Second),
-			ESProcessorAckTimeout:    dynamicconfig.GetDurationPropertyFn(30 * time.Second),
+		&visibility.ManagerParams{
+			PersistenceCfg:               &cfg,
+			PersistenceResolver:          resolver.NewNoopResolver(),
+			CustomVisibilityStoreFactory: s.CustomVisibilityStoreFactory,
+
+			SearchAttributesProvider:       s.SearchAttributesProvider,
+			SearchAttributesMapperProvider: s.SearchAttributesMapperProvider,
+			NamespaceRegistry:              s.NamespaceRegistry,
+			ChasmRegistry:                  chasm.NewRegistry(nil),
+
+			MetricsHandler: metrics.NoopMetricsHandler,
+			Logger:         s.Logger,
+			Serializer:     serialization.NewSerializer(),
 		},
-		s.SearchAttributesProvider,
-		s.SearchAttributesMapperProvider,
-		s.NamespaceRegistry,
-		chasm.NewRegistry(nil),
-		dynamicconfig.GetIntPropertyFn(1000),
-		dynamicconfig.GetIntPropertyFn(1000),
-		dynamicconfig.GetFloatPropertyFn(0.2),
-		dynamicconfig.GetDurationPropertyFn(time.Second),
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
-		dynamicconfig.GetBoolPropertyFn(false),
-		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff),
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
-		dynamicconfig.GetBoolPropertyFn(true),
-		metrics.NoopMetricsHandler,
-		s.Logger,
-		serialization.NewSerializer(),
+		&visibility.ManagerConfig{
+			EsProcessorConfig: &elasticsearch.ProcessorConfig{
+				IndexerConcurrency:       dynamicconfig.GetIntPropertyFn(10),
+				ESProcessorNumOfWorkers:  dynamicconfig.GetIntPropertyFn(2),
+				ESProcessorBulkActions:   dynamicconfig.GetIntPropertyFn(10),
+				ESProcessorBulkSize:      dynamicconfig.GetIntPropertyFn(1 * 1024 * 1024), // 1MB
+				ESProcessorFlushInterval: dynamicconfig.GetDurationPropertyFn(time.Second),
+				ESProcessorAckTimeout:    dynamicconfig.GetDurationPropertyFn(30 * time.Second),
+			},
+
+			MaxReadQPS:                     dynamicconfig.GetIntPropertyFn(1000),
+			MaxWriteQPS:                    dynamicconfig.GetIntPropertyFn(1000),
+			OperatorRPSRatio:               dynamicconfig.GetFloatPropertyFn(0.2),
+			SlowQueryThreshold:             dynamicconfig.GetDurationPropertyFn(time.Second),
+			EnableReadFromSecondary:        dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			EnableShadowReadMode:           dynamicconfig.GetBoolPropertyFn(false),
+			SecondaryVisibilityWritingMode: dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff),
+			DisableOrderByClause:           dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			EnableManualPagination:         dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		},
 	)
 
 	if err != nil {

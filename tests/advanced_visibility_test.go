@@ -56,16 +56,12 @@ type AdvancedVisibilitySuite struct {
 }
 
 func TestAdvancedVisibilitySuite(t *testing.T) {
-	parallelsuite.Run(t, &AdvancedVisibilitySuite{}, true)
-}
-
-func TestAdvancedVisibilitySuiteLegacy(t *testing.T) {
-	parallelsuite.Run(t, &AdvancedVisibilitySuite{}, false)
+	parallelsuite.Run(t, &AdvancedVisibilitySuite{})
 }
 
 // newTestEnv creates a TestEnv with the dynamic config this suite needs.
 // Additional per-test options may be passed in opts.
-func (s *AdvancedVisibilitySuite) newTestEnv(enableUnifiedQueryConverter bool, opts ...testcore.TestOption) *testcore.TestEnv {
+func (s *AdvancedVisibilitySuite) newTestEnv(opts ...testcore.TestOption) *testcore.TestEnv {
 	// This cluster use customized threshold for history config
 	baseOpts := []testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.VisibilityDisableOrderByClause, false),
@@ -77,8 +73,6 @@ func (s *AdvancedVisibilitySuite) newTestEnv(enableUnifiedQueryConverter bool, o
 		testcore.WithDynamicConfig(dynamicconfig.BuildIdScavengerEnabled, true),
 		// Allow the scavenger to remove any build ID regardless of when it was last default for a set.
 		testcore.WithDynamicConfig(dynamicconfig.RemovableBuildIdDurationSinceDefault, time.Microsecond),
-		// Enable the unified query converter
-		testcore.WithDynamicConfig(dynamicconfig.VisibilityEnableUnifiedQueryConverter, enableUnifiedQueryConverter),
 		// Enable external payload tracking for TestListWorkflow_ExternalPayloadSearchAttributes
 		testcore.WithDynamicConfig(dynamicconfig.ExternalPayloadsEnabled, true),
 	}
@@ -94,8 +88,8 @@ func (s *AdvancedVisibilitySuite) newTestEnv(enableUnifiedQueryConverter bool, o
 	return env
 }
 
-func (s *AdvancedVisibilitySuite) TestListOpenWorkflow(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestListOpenWorkflow() {
+	env := s.newTestEnv()
 	id := "es-functional-start-workflow-test"
 	wt := "es-functional-start-workflow-test-type"
 	tl := "es-functional-start-workflow-test-taskqueue"
@@ -150,8 +144,8 @@ func (s *AdvancedVisibilitySuite) TestListOpenWorkflow(enableUnifiedQueryConvert
 	s.NotEmpty(attrType)
 }
 
-func (s *AdvancedVisibilitySuite) TestListWorkflow(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestListWorkflow() {
+	env := s.newTestEnv()
 	id := "es-functional-list-workflow-test"
 	wt := "es-functional-list-workflow-test-type"
 	tl := "es-functional-list-workflow-test-taskqueue"
@@ -164,8 +158,8 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow(enableUnifiedQueryConverter b
 	s.testHelperForReadOnce(env, we.GetRunId(), query)
 }
 
-func (s *AdvancedVisibilitySuite) TestListWorkflow_ExecutionTime(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestListWorkflow_ExecutionTime() {
+	env := s.newTestEnv()
 	id := "es-functional-list-workflow-execution-time-test"
 	wt := "es-functional-list-workflow-execution-time-test-type"
 	tl := "es-functional-list-workflow-execution-time-test-taskqueue"
@@ -207,8 +201,8 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_ExecutionTime(enableUnifiedQu
 	s.testHelperForReadOnce(env, weCron.GetRunId(), cronQuery)
 }
 
-func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute() {
+	env := s.newTestEnv()
 	id := "es-functional-list-workflow-by-search-attr-test"
 	wt := "es-functional-list-workflow-by-search-attr-test-type"
 	tl := "es-functional-list-workflow-by-search-attr-test-taskqueue"
@@ -296,8 +290,8 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAttribute(enableUnified
 	}
 }
 
-func (s *AdvancedVisibilitySuite) TestListWorkflow_PageToken(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestListWorkflow_PageToken() {
+	env := s.newTestEnv()
 	id := "es-functional-list-workflow-token-test"
 	wt := "es-functional-list-workflow-token-test-type"
 	tl := "es-functional-list-workflow-token-test-taskqueue"
@@ -309,8 +303,8 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_PageToken(enableUnifiedQueryC
 	s.testListWorkflowHelper(env, numOfWorkflows, pageSize, request, id, wt)
 }
 
-func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAfter(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAfter() {
+	env := s.newTestEnv()
 	id := "es-functional-list-workflow-searchAfter-test"
 	wt := "es-functional-list-workflow-searchAfter-test-type"
 	tl := "es-functional-list-workflow-searchAfter-test-taskqueue"
@@ -322,8 +316,8 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_SearchAfter(enableUnifiedQuer
 	s.testListWorkflowHelper(env, numOfWorkflows, pageSize, request, id, wt)
 }
 
-func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery() {
+	env := s.newTestEnv()
 	id := "es-functional-list-workflow-or-query-test"
 	wt := "es-functional-list-workflow-or-query-test-type"
 	tl := "es-functional-list-workflow-or-query-test-taskqueue"
@@ -434,8 +428,72 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_OrQuery(enableUnifiedQueryCon
 	s.Equal(3, searchVal)
 }
 
-func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+// TestListWorkflow_KeywordListOrQuery verifies that OR conditions on the same keyword list field
+// match workflows whose list contains any of the values.
+func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordListOrQuery() {
+	env := s.newTestEnv()
+	id := "es-functional-list-workflow-keyword-list-or-query-test"
+	wt := "es-functional-list-workflow-keyword-list-or-query-test-type"
+	tl := "es-functional-list-workflow-keyword-list-or-query-test-taskqueue"
+	key := "CustomKeywordListOrField"
+	s.addCustomSearchAttribute(env, key, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST)
+
+	values := map[string][]string{
+		id + "-1": {"red", "green"},
+		id + "-2": {"blue"},
+		id + "-3": {"yellow"},
+	}
+	for wid, vals := range values {
+		request := s.createStartWorkflowExecutionRequest(env, wid, wt, tl)
+		sa, err := searchattribute.Encode(map[string]any{key: vals}, nil)
+		s.NoError(err)
+		request.SearchAttributes = sa
+		_, err = env.FrontendClient().StartWorkflowExecution(s.Context(), request)
+		s.NoError(err)
+	}
+
+	testCases := []struct {
+		query    string
+		expected []string
+	}{
+		{
+			// The first workflow matches on the second element of its list.
+			query:    fmt.Sprintf(`%s = "green" OR %s = "blue"`, key, key),
+			expected: []string{id + "-1", id + "-2"},
+		},
+		{
+			query:    fmt.Sprintf(`%s = "blue" OR %s IN ("yellow", "purple")`, key, key),
+			expected: []string{id + "-2", id + "-3"},
+		},
+		{
+			query:    fmt.Sprintf(`%s IN ("red", "purple") OR %s = "yellow"`, key, key),
+			expected: []string{id + "-1", id + "-3"},
+		},
+	}
+	for _, tc := range testCases {
+		listRequest := &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: env.Namespace().String(),
+			PageSize:  testcore.DefaultPageSize,
+			Query:     tc.query,
+		}
+		s.Await(
+			func(s *AdvancedVisibilitySuite) {
+				resp, err := env.FrontendClient().ListWorkflowExecutions(s.Context(), listRequest)
+				s.NoError(err)
+				wids := make([]string, 0, len(resp.GetExecutions()))
+				for _, e := range resp.GetExecutions() {
+					wids = append(wids, e.GetExecution().GetWorkflowId())
+				}
+				s.ElementsMatch(tc.expected, wids, tc.query)
+			},
+			testcore.WaitForESToSettle,
+			esPollInterval,
+		)
+	}
+}
+
+func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery() {
+	env := s.newTestEnv()
 	id := "es-functional-list-workflow-keyword-query-test"
 	wt := "es-functional-list-workflow-keyword-query-test-type"
 	tl := "es-functional-list-workflow-keyword-query-test-taskqueue"
@@ -523,8 +581,8 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_KeywordQuery(enableUnifiedQue
 	s.Empty(resp.GetExecutions())
 }
 
-func (s *AdvancedVisibilitySuite) TestListWorkflow_StringQuery(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestListWorkflow_StringQuery() {
+	env := s.newTestEnv()
 	id := "es-functional-list-workflow-string-query-test"
 	wt := "es-functional-list-workflow-string-query-test-type"
 	tl := "es-functional-list-workflow-string-query-test-taskqueue"
@@ -589,8 +647,8 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_StringQuery(enableUnifiedQuer
 }
 
 // To test last page search trigger max window size error
-func (s *AdvancedVisibilitySuite) TestListWorkflow_MaxWindowSize(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestListWorkflow_MaxWindowSize() {
+	env := s.newTestEnv()
 	id := "es-functional-list-workflow-max-window-size-test"
 	wt := "es-functional-list-workflow-max-window-size-test-type"
 	tl := "es-functional-list-workflow-max-window-size-test-taskqueue"
@@ -636,8 +694,8 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_MaxWindowSize(enableUnifiedQu
 	s.Nil(resp.GetNextPageToken())
 }
 
-func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestListWorkflow_OrderBy() {
+	env := s.newTestEnv()
 	if testcore.UseSQLVisibility() {
 		s.T().Skip("This test is only for Elasticsearch")
 	}
@@ -900,8 +958,8 @@ func (s *AdvancedVisibilitySuite) testHelperForReadOnce(env *testcore.TestEnv, e
 	return openExecution
 }
 
-func (s *AdvancedVisibilitySuite) TestCountWorkflow(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestCountWorkflow() {
+	env := s.newTestEnv()
 	id := "es-functional-count-workflow-test"
 	wt := "es-functional-count-workflow-test-type"
 	tl := "es-functional-count-workflow-test-taskqueue"
@@ -940,8 +998,8 @@ func (s *AdvancedVisibilitySuite) TestCountWorkflow(enableUnifiedQueryConverter 
 	s.Equal(int64(0), resp.GetCount())
 }
 
-func (s *AdvancedVisibilitySuite) TestCountGroupByWorkflow(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestCountGroupByWorkflow() {
+	env := s.newTestEnv()
 	id := "es-functional-count-groupby-workflow-test"
 	wt := "es-functional-count-groupby-workflow-test-type"
 	tl := "es-functional-count-groupby-workflow-test-taskqueue"
@@ -1022,8 +1080,8 @@ func (s *AdvancedVisibilitySuite) TestCountGroupByWorkflow(enableUnifiedQueryCon
 	s.Contains(strings.ToLower(err.Error()), "'group by' clause supports only a single field")
 }
 
-func (s *AdvancedVisibilitySuite) TestCountGroupByNamespaceDivision(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestCountGroupByNamespaceDivision() {
+	env := s.newTestEnv()
 	id := "es-functional-count-groupby-nsdivision-test"
 	wt := "es-functional-count-groupby-nsdivision-test-type"
 	tl := "es-functional-count-groupby-nsdivision-test-taskqueue"
@@ -1111,8 +1169,8 @@ func (s *AdvancedVisibilitySuite) createStartWorkflowExecutionRequest(env *testc
 	return request
 }
 
-func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes() {
+	env := s.newTestEnv()
 	id := "es-functional-upsert-workflow-search-attributes-test"
 	wt := "es-functional-upsert-workflow-search-attributes-test-type"
 	tl := "es-functional-upsert-workflow-search-attributes-test-taskqueue"
@@ -1391,8 +1449,8 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecutionSearchAttributes(en
 	}
 }
 
-func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestModifyWorkflowExecutionProperties() {
+	env := s.newTestEnv()
 	id := "es-functional-modify-workflow-properties-test"
 	wt := "es-functional-modify-workflow-properties-test-type"
 	tl := "es-functional-modify-workflow-properties-test-taskqueue"
@@ -1655,8 +1713,8 @@ func (s *AdvancedVisibilitySuite) createSearchAttributes() *commonpb.SearchAttri
 	return searchAttributes
 }
 
-func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey() {
+	env := s.newTestEnv()
 	id := "es-functional-upsert-workflow-failed-test"
 	wt := "es-functional-upsert-workflow-failed-test-type"
 	tl := "es-functional-upsert-workflow-failed-test-taskqueue"
@@ -1724,8 +1782,8 @@ func (s *AdvancedVisibilitySuite) TestUpsertWorkflowExecution_InvalidKey(enableU
   5 WorkflowTaskScheduled`, env.Namespace().String()), historyEvents)
 }
 
-func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow() {
+	env := s.newTestEnv()
 	var (
 		wfID        = testcore.RandomizeStr(s.T().Name())
 		childWfID   = testcore.RandomizeStr(s.T().Name())
@@ -1806,8 +1864,8 @@ func (s *AdvancedVisibilitySuite) TestChildWorkflow_ParentWorkflow(enableUnified
 	)
 }
 
-func (s *AdvancedVisibilitySuite) Test_LongWorkflowID(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) Test_LongWorkflowID() {
+	env := s.newTestEnv()
 	if env.GetTestClusterConfig().Persistence.StoreType == config.StoreTypeSQL {
 		// TODO: remove this when workflow_id field size is increased from varchar(255) in SQL schema.
 		return
@@ -1825,8 +1883,8 @@ func (s *AdvancedVisibilitySuite) Test_LongWorkflowID(enableUnifiedQueryConverte
 	s.testHelperForReadOnce(env, we.GetRunId(), query)
 }
 
-func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWorker(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWorker() {
+	env := s.newTestEnv()
 	id := testcore.RandomizeStr(s.T().Name())
 	workflowType := "functional-build-id"
 	taskQueue := testcore.RandomizeStr(s.T().Name())
@@ -1921,9 +1979,9 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_UnversionedWor
 	}
 }
 
-func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorker(enableUnifiedQueryConverter bool) {
+func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorker() {
 	// Use only one partition to avoid having to wait for user data propagation later
-	env := s.newTestEnv(enableUnifiedQueryConverter,
+	env := s.newTestEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
@@ -2078,9 +2136,9 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnCompletion_VersionedWorke
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset(enableUnifiedQueryConverter bool) {
+func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset() {
 	// Use only one partition to avoid having to wait for user data propagation later
-	env := s.newTestEnv(enableUnifiedQueryConverter,
+	env := s.newTestEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
@@ -2158,9 +2216,9 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnReset(enableUnifiedQueryC
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnRetry(enableUnifiedQueryConverter bool) {
+func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnRetry() {
 	// Use only one partition to avoid having to wait for user data propagation later
-	env := s.newTestEnv(enableUnifiedQueryConverter,
+	env := s.newTestEnv(
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
@@ -2222,8 +2280,8 @@ func (s *AdvancedVisibilitySuite) Test_BuildIdIndexedOnRetry(enableUnifiedQueryC
 	}, 10*time.Second, 100*time.Millisecond)
 }
 
-func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId() {
+	env := s.newTestEnv()
 	tq1 := s.T().Name()
 	tq2 := s.T().Name() + "-2"
 	tq3 := s.T().Name() + "-3"
@@ -2344,8 +2402,8 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId(enableUni
 
 }
 
-func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInNamespace(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInNamespace() {
+	env := s.newTestEnv()
 	buildId := s.T().Name() + "v0"
 
 	reachabilityResponse, err := env.FrontendClient().GetWorkerTaskReachability(s.Context(), &workflowservice.GetWorkerTaskReachabilityRequest{
@@ -2360,8 +2418,8 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInName
 	}}, reachabilityResponse.BuildIdReachability)
 }
 
-func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInTaskQueue(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInTaskQueue() {
+	env := s.newTestEnv()
 	tq := s.T().Name()
 	v0 := s.T().Name() + "v0"
 	v01 := s.T().Name() + "v0.1"
@@ -2394,8 +2452,8 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_ByBuildId_NotInTask
 	checkReachability()
 }
 
-func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_EmptyBuildIds(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_EmptyBuildIds() {
+	env := s.newTestEnv()
 
 	_, err := env.FrontendClient().GetWorkerTaskReachability(s.Context(), &workflowservice.GetWorkerTaskReachabilityRequest{
 		Namespace: env.Namespace().String(),
@@ -2404,8 +2462,8 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_EmptyBuildIds(enabl
 	s.ErrorAs(err, &invalidArgument)
 }
 
-func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_TooManyBuildIds(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_TooManyBuildIds() {
+	env := s.newTestEnv()
 
 	_, err := env.FrontendClient().GetWorkerTaskReachability(s.Context(), &workflowservice.GetWorkerTaskReachabilityRequest{
 		Namespace: env.Namespace().String(),
@@ -2415,8 +2473,8 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_TooManyBuildIds(ena
 	s.ErrorAs(err, &invalidArgument)
 }
 
-func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InNamespace(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InNamespace() {
+	env := s.newTestEnv()
 
 	_, err := env.FrontendClient().GetWorkerTaskReachability(s.Context(), &workflowservice.GetWorkerTaskReachabilityRequest{
 		Namespace: env.Namespace().String(),
@@ -2426,8 +2484,8 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InNames
 	s.ErrorAs(err, &invalidArgument)
 }
 
-func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQueue(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQueue() {
+	env := s.newTestEnv()
 	tq := s.T().Name()
 
 	_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
@@ -2481,8 +2539,8 @@ func (s *AdvancedVisibilitySuite) TestWorkerTaskReachability_Unversioned_InTaskQ
 	s.checkReachability(env, tq, "", enumspb.TASK_REACHABILITY_CLOSED_WORKFLOWS)
 }
 
-func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter, testcore.WithWorkerService("build id scavenger workflow"))
+func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId() {
+	env := s.newTestEnv(testcore.WithWorkerService("build id scavenger workflow"))
 	tq := s.T().Name()
 	buildIdv0 := s.T().Name() + "-v0"
 	buildIdv1 := s.T().Name() + "-v1"
@@ -2539,8 +2597,8 @@ func (s *AdvancedVisibilitySuite) TestBuildIdScavenger_DeletesUnusedBuildId(enab
 	s.Empty(res.BuildIdReachability[0].TaskQueueReachability)
 }
 
-func (s *AdvancedVisibilitySuite) TestListWorkflow_ExternalPayloadSearchAttributes(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestListWorkflow_ExternalPayloadSearchAttributes() {
+	env := s.newTestEnv()
 	id := "es-functional-external-payload-test"
 	wt := "es-functional-external-payload-test-type"
 	tl := "es-functional-external-payload-test-taskqueue"
@@ -2596,8 +2654,8 @@ func (s *AdvancedVisibilitySuite) TestListWorkflow_ExternalPayloadSearchAttribut
 	s.testHelperForReadOnce(env, we.GetRunId(), query)
 }
 
-func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes(enableUnifiedQueryConverter bool) {
-	env := s.newTestEnv(enableUnifiedQueryConverter)
+func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes() {
+	env := s.newTestEnv()
 
 	// Test 1: List schedule with "scheduleId" query
 	scheduleID := "test-schedule-" + uuid.NewString()
@@ -2650,7 +2708,7 @@ func (s *AdvancedVisibilitySuite) TestScheduleListingWithSearchAttributes(enable
 	s.Equal(listResponse.Schedules[0].ScheduleId, scheduleID)
 
 	// Test 2: List schedule with custom "scheduleId" search attribute
-	s.addCustomKeywordSearchAttribute(env, sadefs.ScheduleID)
+	s.addCustomSearchAttribute(env, sadefs.ScheduleID, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
 
 	// Create the schedule with the new search attribute and verify it can be listed
 	customScheduleID := "test-schedule-" + uuid.NewString()
@@ -2752,11 +2810,15 @@ func (s *AdvancedVisibilitySuite) updateMaxResultWindow(env *testcore.TestEnv) {
 	)
 }
 
-func (s *AdvancedVisibilitySuite) addCustomKeywordSearchAttribute(env *testcore.TestEnv, attrName string) {
+func (s *AdvancedVisibilitySuite) addCustomSearchAttribute(
+	env *testcore.TestEnv,
+	attrName string,
+	valueType enumspb.IndexedValueType,
+) {
 	// Add new search attribute
 	_, err := env.OperatorClient().AddSearchAttributes(s.Context(), &operatorservice.AddSearchAttributesRequest{
 		SearchAttributes: map[string]enumspb.IndexedValueType{
-			attrName: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+			attrName: valueType,
 		},
 		Namespace: env.Namespace().String(),
 	})

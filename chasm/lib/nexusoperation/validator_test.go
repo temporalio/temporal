@@ -55,7 +55,7 @@ func mustNewCallbackValidator() callbacks.Validator {
 		NexusHandlerSourceContextMaxSize: func(string) int { return 1000 },
 	}
 
-	v, err := callbacks.NewValidator(cfg)
+	v, err := callbacks.NewValidator(cfg, nil)
 	if err != nil {
 		panic("creating callback validator: " + err.Error())
 	}

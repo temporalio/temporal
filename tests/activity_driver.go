@@ -5,7 +5,9 @@ package tests
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -14,11 +16,13 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm/lib/activity/model"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/testing/await"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -149,6 +153,43 @@ type activityTerminalOutcome struct {
 	retryState enumspb.RetryState
 }
 
+// modelConfig is the model's view of the activity: which options are configured at all, plus the two
+// ways the options alone settle that no retry can follow. Deriving it means the two cannot disagree.
+func (c activityConfig) modelConfig() model.Config {
+	return model.Config{
+		MaxAttempts:          c.MaxAttempts,
+		HasStartDelay:        c.StartDelay > 0,
+		HasScheduleToClose:   c.ScheduleToClose > 0,
+		HasScheduleToStart:   c.ScheduleToStart > 0,
+		HasHeartbeat:         c.HeartbeatTimeout > 0,
+		NonRetryableTimeouts: c.nonRetryableTimeouts(),
+		// In reality, the server decides this based on how long the attempt took, and any
+		// NextRetryDelay sent by the worker. The model cannot express that. Instead it supports a
+		// fixed retry delay and the calculation here pretends that the attempt duration is zero.
+		// This will be wrong if an attempt runs long enough that the delay no longer fits.
+		RetryOutlivesScheduleToClose: c.ScheduleToClose > 0 &&
+			cmp.Or(c.NextRetryDelay, c.retryInterval()) >= c.ScheduleToClose,
+	}
+}
+
+// nonRetryableTimeouts returns the internal timeout event types that should not be retried
+// according to the retry policy's NonRetryableErrorTypes. (NonRetryableErrorTypes can contain
+// arbitrary strings, matched against ApplicationFailureInfo.Type, and the names of internal timeout
+// events, prefixed by "TemporalTimeout:").
+func (c activityConfig) nonRetryableTimeouts() []model.EventType {
+	var nonRetryable []model.EventType
+	for _, e := range []model.Event{
+		// ScheduleToClose and ScheduleToStart are always non-retryable, so it makes no difference
+		// if the user includes them in this list.
+		model.ScheduleToStartElapses, model.ScheduleToCloseElapses, model.StartToCloseElapses, model.HeartbeatElapses,
+	} {
+		if slices.Contains(c.NonRetryableErrorTypes, retrypolicy.TimeoutFailureTypePrefix+timeoutType(e).String()) {
+			nonRetryable = append(nonRetryable, e.Type)
+		}
+	}
+	return nonRetryable
+}
+
 // activityDriverTimeout bounds a wait for something the server should do promptly: dispatch a task to
 // poll for, schedule the activity a workflow owns, close an activity the trace has finished with. A
 // wait for a configured window is bounded by that window plus activityDriverTimerMargin instead.
@@ -161,7 +202,7 @@ var activityDriverTimerMargin = activityDriverTimeout
 const activityDriverPollInterval = 100 * time.Millisecond
 
 // timeoutType is the TimeoutType a timeout-elapse event reports when it fires,
-// TIMEOUT_TYPE_UNSPECIFIED for any other event. The model names no API types, so the correspondence
+// TIMEOUT_TYPE_UNSPECIFIED for any other event. The model does not use API types, so the mapping
 // lives here.
 func timeoutType(e model.Event) enumspb.TimeoutType {
 	switch e.Type {
@@ -178,34 +219,39 @@ func timeoutType(e model.Event) enumspb.TimeoutType {
 	}
 }
 
-// validateTrace rejects a trace the drivers cannot realize. An attempt's timeouts run concurrently,
-// from deadlines the server anchors at schedule or attempt-start time, while the driver waits each one
-// out from the moment its event is driven — so an attempt can be ended by at most one. Once the first
-// fires, the others are no longer running and the driver would wait for something that never happens.
-//
-// A Poll starts a new attempt, which arms a fresh set, so the same timeout may appear again after one.
-// Dispatch delays are exempt entirely: each backoff is its own window, and awaitDispatchTimePassed
-// takes its deadline from the server rather than from the trace.
-//
-// A rule of thumb, not a decision procedure. The model decides this per event and per state, and
-// replaces this once it lands here.
-func validateTrace(t require.TestingT, trace []model.Event) {
-	var timeouts []model.Event
-	for _, e := range trace {
-		switch {
-		case e.Type == model.PollType:
-			timeouts = nil // a new attempt arms its timeouts afresh
-		case isTimerEvent(e.Type) && !isDispatchDelayEvent(e.Type):
-			timeouts = append(timeouts, e)
-		default: // an event that neither starts an attempt nor ends one by timeout
-		}
-		if len(timeouts) > 1 {
-			require.Failf(t, "a trace cannot name two timeouts on one attempt",
-				"they run concurrently, so once the first fires the rest cannot occur. This attempt names %v. "+
-					"Poll again first if the second belongs to a later attempt.", timeouts)
-			return
-		}
+// activityModel is the model state a driver has reached, so that driveEvent can check each event
+// against the state it is driven from. It replaces a rule of thumb about which traces are realizable
+// with the model's decision, per event and per state: a timeout event whose clock is not running
+// cannot occur, so a driver waiting for it would wait for something that never happens.
+type activityModel struct {
+	cfg   model.Config
+	state model.AbstractState
+}
+
+func newActivityModel(cfg activityConfig) *activityModel {
+	mc := cfg.modelConfig()
+	return &activityModel{cfg: mc, state: model.Initial(mc)}
+}
+
+// advance moves the model past e, failing if e cannot occur in the state reached so far. It returns
+// the error kind the model requires the server to answer e with.
+func (m *activityModel) advance(t require.TestingT, e model.Event) model.ErrorKind {
+	out := model.Transition(m.cfg, m.state, e)
+	if out.ImpossibleTimeWindowElapse {
+		require.Failf(t, "the trace drives an event that cannot occur",
+			"%s cannot occur in %v/%v: its clock is not running there. Remove it, or drive the events "+
+				"that start its clock first.", e, m.state.Status, m.state.Dispatchability)
+		return model.NoError
 	}
+	// A Poll in a trace is there to start an attempt; one that finds no task asserts nothing.
+	if e.Type == model.PollType && !model.FindsTask(m.state) {
+		require.Failf(t, "the trace drives a Poll that finds no task",
+			"nothing is dispatchable in %v/%v. Remove the Poll, or drive the events that make an "+
+				"attempt dispatchable first.", m.state.Status, m.state.Dispatchability)
+		return model.NoError
+	}
+	m.state = out.Next
+	return out.Reject
 }
 
 // isTimerEvent reports whether an event represents a timer elapsing, as opposed to an RPC.
@@ -241,7 +287,7 @@ func respondFailedFailure(e model.Event, nextRetryDelay time.Duration) *failurep
 	}
 	switch e.Failure.Type {
 	case model.ApplicationFailureType:
-		info := &failurepb.ApplicationFailureInfo{Type: "TestFailure", NonRetryable: !e.Failure.Retryable}
+		info := &failurepb.ApplicationFailureInfo{Type: "TestFailure", NonRetryable: e.Failure.NonRetryable}
 		if nextRetryDelay > 0 {
 			info.NextRetryDelay = durationpb.New(nextRetryDelay)
 		}
@@ -256,7 +302,7 @@ func respondFailedFailure(e model.Event, nextRetryDelay time.Duration) *failurep
 	case model.ServerFailureType:
 		return &failurepb.Failure{
 			Message:     "test server failure",
-			FailureInfo: &failurepb.Failure_ServerFailureInfo{ServerFailureInfo: &failurepb.ServerFailureInfo{NonRetryable: !e.Failure.Retryable}},
+			FailureInfo: &failurepb.Failure_ServerFailureInfo{ServerFailureInfo: &failurepb.ServerFailureInfo{NonRetryable: e.Failure.NonRetryable}},
 		}
 	case model.StartToCloseTimeoutFailureType:
 		return syntheticTimeoutFailure(enumspb.TIMEOUT_TYPE_START_TO_CLOSE)
@@ -312,11 +358,15 @@ type drivenActivity interface {
 	pollForTask(require.TestingT, time.Duration) *workflowservice.PollActivityTaskQueueResponse
 	awaitDispatchDelay(testing.TB, model.Event)
 	timeoutInfo(require.TestingT) activityTimeoutInfo
+	observedState(require.TestingT) activityState
 	rpc(testing.TB, model.Event) error
 }
 
-// driveActivityEvent advances an activity by one event.
-func driveActivityEvent(t testing.TB, a drivenActivity, e model.Event) {
+// driveActivityEvent advances an activity by one event, holding the server to the model on both
+// halves of the contract: the answer it gives the call, and the state it is left in.
+func driveActivityEvent(t testing.TB, a drivenActivity, e model.Event, m *activityModel) {
+	from := m.state.Status
+	wantReject := m.advance(t, e)
 	state := a.driverState()
 	switch {
 	case e.Type == model.PollType:
@@ -329,12 +379,93 @@ func driveActivityEvent(t testing.TB, a drivenActivity, e model.Event) {
 	case isTimerEvent(e.Type):
 		awaitActivityTimeout(t, a, e, time.Now().Add(state.cfg.timerDuration(e)+activityDriverTimerMargin))
 	default:
-		require.NoError(t, a.rpc(t, e))
+		requireErrorMatches(t, e, from, wantReject, a.rpc(t, e))
+	}
+	requireStateMatches(t, a, e, from, m.state)
+}
+
+// activityState is the state a driver observes, reduced to what both implementations report: the run
+// state and attempt number while the activity is open, and closedness once it is not. A terminal
+// status itself is reported differently by each, so terminalOutcome checks that.
+type activityState struct {
+	closed   bool
+	runState enumspb.PendingActivityState
+	attempt  int32
+}
+
+// requireStateMatches compares the state the server reports with the state model.Transition says the
+// event leaves the activity in. The read is retried, because an event's effect is not always visible
+// by the time the call driving it returns.
+func requireStateMatches(t testing.TB, a drivenActivity, e model.Event, from model.Status, s model.AbstractState) {
+	t.Helper()
+	want := activityState{closed: s.Status.Terminal()}
+	if !want.closed {
+		want.runState, want.attempt = expectedRunState(s), s.AttemptCount
+	}
+	await.Require(a.testContext(), t, func(t *await.T) {
+		t.Require().Equal(want, a.observedState(t),
+			"after %s from %v, the state the server reports disagrees with the model", e, from)
+	}, activityDriverTimeout, activityDriverPollInterval)
+}
+
+// expectedRunState is the PendingActivityState an open activity is reported in. The model does not
+// use API types, so the mapping lives here.
+func expectedRunState(s model.AbstractState) enumspb.PendingActivityState {
+	switch s.Status {
+	case model.Scheduled:
+		return enumspb.PENDING_ACTIVITY_STATE_SCHEDULED
+	case model.Started:
+		return enumspb.PENDING_ACTIVITY_STATE_STARTED
+	case model.CancelRequested:
+		return enumspb.PENDING_ACTIVITY_STATE_CANCEL_REQUESTED
+	case model.PauseRequested:
+		return enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED
+	case model.Paused:
+		return enumspb.PENDING_ACTIVITY_STATE_PAUSED
+	case model.ResetRequested:
+		// A reset the worker has yet to yield to is reported as the pause it carries, and otherwise
+		// as the attempt still running.
+		if s.ResetKeepPaused {
+			return enumspb.PENDING_ACTIVITY_STATE_PAUSE_REQUESTED
+		}
+		return enumspb.PENDING_ACTIVITY_STATE_STARTED
+	default:
+		panic("no run state is reported for status " + s.Status.String())
 	}
 }
 
-// awaitActivityTimeout blocks until the activity reports the timeout the event names, and fails if it
-// does not within (window + margin).
+// requireErrorMatches compares the error an RPC returned, or its absence, with the one
+// model.Transition requires. The two implementations word a refusal differently, so the error kind is
+// what they have to agree on.
+func requireErrorMatches(t require.TestingT, e model.Event, from model.Status, want model.ErrorKind, err error) {
+	got := activityRejectKind(err)
+	if got == want {
+		return
+	}
+	require.Failf(t, "the server's answer to an RPC disagrees with the model",
+		"%s from %v: the model requires %s, the server gave %s (%v)", e, from, want, got, err)
+}
+
+// activityRejectKind classifies an RPC error as the model's ErrorKind. The FrontendClient returns
+// serviceerror types, so this matches on type rather than on gRPC status code.
+func activityRejectKind(err error) model.ErrorKind {
+	if err == nil {
+		return model.NoError
+	}
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
+		return model.NotFound
+	}
+	if _, ok := errors.AsType[*serviceerror.FailedPrecondition](err); ok {
+		return model.FailedPrecondition
+	}
+	if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
+		return model.InvalidArgument
+	}
+	return model.ErrorKind(-1) // unrecognized, so it matches no predicted kind
+}
+
+// awaitActivityTimeout blocks until the activity reports the timeout for e, and fails if it does not
+// within (window + margin).
 func awaitActivityTimeout(t testing.TB, a drivenActivity, e model.Event, deadline time.Time) {
 	state := a.driverState()
 	want := timeoutType(e)
