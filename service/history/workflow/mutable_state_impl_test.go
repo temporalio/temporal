@@ -8044,7 +8044,7 @@ func (s *mutableStateSuite) TestSetSpeculativeWorkflowTaskTimeoutTask_SubtractsS
 // TestAccumulatedSkippedDuration_NilSafety pins the contract that the unexported
 // accumulatedSkippedDuration helper never panics regardless of how much of the proto chain is
 // nil, and returns 0 whenever time-skipping is not configured. AddTasks,
-// SetSpeculativeWorkflowTaskTimeoutTask, and ToRealTime all rely on this; if it panicked or
+// SetSpeculativeWorkflowTaskTimeoutTask, and ToRealTimeWithCurrentOffset all rely on this; if it panicked or
 // returned non-zero on a nil chain, every non-time-skipping workflow would break.
 func (s *mutableStateSuite) TestAccumulatedSkippedDuration_NilSafety() {
 	s.Run("ExecutionInfoNil", func() {
@@ -9004,19 +9004,18 @@ func TestGenerateActivityCancelCommandsForClose(t *testing.T) {
 	}
 }
 
-// TestToRealTime tests ms.ToRealTime() exhaustively as this function is also used by executions that don't
-// use time skipping and need to be tested thoroughly. This function converts virtual time to wall-clock time.
-func (s *mutableStateSuite) TestToRealTime() {
+// TestToRealTimeWithCurrentOffset covers both skipped and unskipped executions.
+func (s *mutableStateSuite) TestToRealTimeWithCurrentOffset() {
 	virtualTime := time.Date(2026, 5, 4, 12, 0, 0, 0, time.UTC)
 	s.Run("IdentityWhenTimeSkippingInfoNil", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = nil
-		s.Equal(virtualTime, s.mutableState.ToRealTime(virtualTime))
+		s.Equal(virtualTime, s.mutableState.ToRealTimeWithCurrentOffset(virtualTime))
 	})
 	s.Run("IdentityWhenTimeSkippingInfoWithNilAccumulatedSkippedDuration", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}
-		s.Equal(virtualTime, s.mutableState.ToRealTime(virtualTime))
+		s.Equal(virtualTime, s.mutableState.ToRealTimeWithCurrentOffset(virtualTime))
 	})
 	s.Run("SubtractsAccumulatedSkip", func() {
 		accum := time.Hour
@@ -9024,17 +9023,17 @@ func (s *mutableStateSuite) TestToRealTime() {
 			Config:                     &commonpb.TimeSkippingConfig{Enabled: false},
 			AccumulatedSkippedDuration: durationpb.New(accum),
 		}
-		s.Equal(virtualTime.Add(-accum), s.mutableState.ToRealTime(virtualTime))
+		s.Equal(virtualTime.Add(-accum), s.mutableState.ToRealTimeWithCurrentOffset(virtualTime))
 	})
 	s.Run("ZeroInputReturnedUnchangedEvenUnderSkip", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
 			AccumulatedSkippedDuration: durationpb.New(time.Hour),
 		}
-		s.True(s.mutableState.ToRealTime(time.Time{}).IsZero())
+		s.True(s.mutableState.ToRealTimeWithCurrentOffset(time.Time{}).IsZero())
 	})
 	s.Run("RoundTripsWithNowYieldsWallClock", func() {
-		// The defining contract of the virtual-time frame: ToRealTime ∘ Now is
+		// The defining contract of the virtual-time frame: ToRealTimeWithCurrentOffset ∘ Now is
 		// the identity to wall clock. AddTasks relies on this to stamp timer
 		// VisibilityTimestamps that fire at the right real moment after a skip.
 		fixedBase := time.Date(2026, 7, 1, 8, 0, 0, 0, time.UTC)
@@ -9046,18 +9045,16 @@ func (s *mutableStateSuite) TestToRealTime() {
 		}
 		s.mutableState.wrapTimeSourceWithTimeSkipping()
 
-		s.Equal(fixedBase, s.mutableState.ToRealTime(s.mutableState.Now()))
+		s.Equal(fixedBase, s.mutableState.ToRealTimeWithCurrentOffset(s.mutableState.Now()))
 	})
 	s.Run("PastVirtualTimeStillSubtractsAccumulated", func() {
-		// Sanity that ToRealTime is unconditional arithmetic — it doesn't gate on
-		// whether the input is past or future relative to Now. A persisted virtual
-		// timestamp from an older event should still convert correctly.
+		// The conversion always uses the current offset, even for a past input.
 		accum := 4 * time.Hour
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			AccumulatedSkippedDuration: durationpb.New(accum),
 		}
 		past := time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
-		s.Equal(past.Add(-accum), s.mutableState.ToRealTime(past))
+		s.Equal(past.Add(-accum), s.mutableState.ToRealTimeWithCurrentOffset(past))
 	})
 	s.Run("ToRealTimeDoesNotMutateState", func() {
 		ts := clock.NewEventTimeSource()
@@ -9070,7 +9067,7 @@ func (s *mutableStateSuite) TestToRealTime() {
 		tsiBefore := proto.Clone(s.mutableState.executionInfo.TimeSkippingInfo).(*persistencespb.TimeSkippingInfo)
 		nowBefore := s.mutableState.timeSource.Now()
 
-		_ = s.mutableState.ToRealTime(virtualTime)
+		_ = s.mutableState.ToRealTimeWithCurrentOffset(virtualTime)
 
 		s.Equal(nowBefore, s.mutableState.timeSource.Now())
 		s.True(proto.Equal(tsiBefore, s.mutableState.executionInfo.TimeSkippingInfo))

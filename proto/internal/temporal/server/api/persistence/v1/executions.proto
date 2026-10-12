@@ -351,6 +351,10 @@ message TimeSkippingInfo {
   // Tracks the number of times a time-skipping transition has occurred since time skipping
   // was most recently enabled. It is reset every time the skipping config is updated.
   int32 session_skip_count = 6;
+
+  // Skipped duration inherited when this execution started. Unlike accumulated_skipped_duration,
+  // this stays fixed so the workflow start time can be converted to wall-clock time later.
+  google.protobuf.Duration initial_skipped_duration = 8;
 }
 
 message FastForwardInfo {

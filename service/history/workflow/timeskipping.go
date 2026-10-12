@@ -38,6 +38,7 @@ func (ms *MutableStateImpl) initTimeSkippingInfo(
 	ms.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 		Config:                     config,
 		AccumulatedSkippedDuration: initialSkip,
+		InitialSkippedDuration:     initialSkip,
 		SessionSkipCount:           propagatedState.GetInitialSkipCount(),
 	}
 	ms.wrapTimeSourceWithTimeSkipping()
