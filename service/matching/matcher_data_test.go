@@ -996,23 +996,6 @@ func (s *MatcherDataSuite) TestFindMatch() {
 	}
 }
 
-func (s *MatcherDataSuite) TestPollerList_ValidatorAfterParentForwarder() {
-	p := pollerList{logger: s.md.logger}
-	validator := &waitingPoller{taskForwarderType: validatorTaskForwarder}
-	forwarder := &waitingPoller{taskForwarderType: parentTaskForwarder}
-	local := &waitingPoller{taskForwarderType: notTaskForwarder}
-
-	// Insert in the worst order: validator first, then forwarder, then local.
-	p.Add(validator)
-	p.Add(forwarder)
-	p.Add(local)
-
-	s.Equal(local, p.head)
-	s.Equal(forwarder, p.head.next)
-	s.Equal(validator, p.tail)
-	s.Equal(3, p.Len())
-}
-
 func TestPollerListOrdering(t *testing.T) {
 	p := pollerList{logger: testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)}
 	pollers := []*waitingPoller{
