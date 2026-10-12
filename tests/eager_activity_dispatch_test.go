@@ -43,8 +43,7 @@ func TestEagerActivityWithMatchingGrant_Unversioned(t *testing.T) {
 	eagerActivity := response.GetActivityTasks()[0]
 	require.Equal(t, tv.ActivityID(), eagerActivity.GetActivityId())
 
-	// The eager activity never entered the activity task queue, but it is still reported as added
-	// and dispatched there, aggregated across partitions.
+	// The eager activity is reported separately from matching traffic, aggregated across partitions.
 	await.Require(t.Context(), t, func(t *await.T) {
 		response, err := env.FrontendClient().DescribeTaskQueue(t.Context(), &workflowservice.DescribeTaskQueueRequest{
 			Namespace:     env.Namespace().String(),
@@ -54,8 +53,9 @@ func TestEagerActivityWithMatchingGrant_Unversioned(t *testing.T) {
 		})
 		require.NoError(t, err)
 		stats := response.GetStats()
-		require.Greater(t, stats.GetTasksAddRate(), float32(0))
-		require.Greater(t, stats.GetTasksDispatchRate(), float32(0))
+		require.Greater(t, stats.GetEagerDispatchRate(), float32(0))
+		require.Zero(t, stats.GetTasksAddRate())
+		require.Zero(t, stats.GetTasksDispatchRate())
 		require.Zero(t, stats.GetApproximateBacklogCount())
 	}, 10*time.Second, 100*time.Millisecond)
 

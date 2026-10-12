@@ -2806,13 +2806,119 @@ func TestEagerDispatchStats(t *testing.T) {
 	// Advance time so the task tracker has positive elapsed time for rate calculation.
 	ts.Advance(time.Second)
 
-	// Grants count as both added and dispatched, and never as backlog.
+	// Eager grants are reported separately from matching traffic and never as backlog.
 	desc, err := pm.Describe(context.Background(), map[string]bool{"": true}, false, true, false, false, true)
 	require.NoError(t, err)
 	described := desc.GetVersionsInfoInternal()[""].GetPhysicalTaskQueueInfo().GetTaskQueueStatsByPriorityKey()[3]
-	require.InDelta(t, 3, described.GetTasksAddRate(), 0.01)
-	require.InDelta(t, 3, described.GetTasksDispatchRate(), 0.01)
-	require.Zero(t, described.GetApproximateBacklogCount())
+	protorequire.ProtoEqual(t, &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogAge: durationpb.New(0),
+		EagerDispatchRate:     3,
+	}, described)
+	protorequire.ProtoEqual(t, described, desc.GetVersionsInfoInternal()[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats())
+}
+
+func TestEagerDispatchStatsPreservePollerScaling(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		v2   bool
+	}{
+		{name: "v1"},
+		{name: "v2", v2: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+			require.NoError(t, err)
+			pm, ts := newFakeClockPartitionManager(t, f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(), &mockUserDataManager{})
+			pm.config.UseSignalsV2ForPollerScaling = func() bool { return tc.v2 }
+			queue := pm.defaultQueue().(*physicalTaskQueueManagerImpl)
+			queue.incTaskTracker(queue.tasksAdded, 3, 20)
+			queue.incTaskTracker(queue.tasksDispatched, 3, 10)
+			queue.incTaskTracker(queue.tasksSyncMatched, 3, 10)
+			ts.Advance(time.Second)
+
+			before := pm.GetPhysicalQueueAdjustedStats(t.Context(), queue)
+			require.True(t, queue.ratioSignalFiring(before))
+			queue.RecordEagerGrant(3, 1000)
+			after := pm.GetPhysicalQueueAdjustedStats(t.Context(), queue)
+			protorequire.ProtoEqual(t, &taskqueuepb.TaskQueueStats{
+				ApproximateBacklogAge: durationpb.New(0),
+				TasksAddRate:          20,
+				TasksDispatchRate:     10,
+				EagerDispatchRate:     1000,
+			}, after)
+			require.True(t, queue.ratioSignalFiring(after))
+		})
+	}
+}
+
+func TestEagerDispatchStatsVersionAttribution(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		ramp float32
+	}{
+		{name: "current only"},
+		{name: "ramping", ramp: 30},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			current, ramping := workerDeploymentVersion("current"), workerDeploymentVersion("ramping")
+			routing := &deploymentpb.RoutingConfig{
+				CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromVersion(current),
+				CurrentVersionChangedTime: timestamppb.New(time.Unix(1, 0)),
+			}
+			if tc.ramp > 0 {
+				routing.RampingDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromVersion(ramping)
+				routing.RampingVersionPercentage = tc.ramp
+				routing.RampingVersionChangedTime = timestamppb.New(time.Unix(2, 0))
+			}
+			userDataMgr := &mockUserDataManager{
+				data: &persistencespb.VersionedTaskQueueUserData{
+					Data: &persistencespb.TaskQueueUserData{
+						PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+							int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY): {
+								DeploymentData: &persistencespb.DeploymentData{
+									DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+										"deployment": {RoutingConfig: routing},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+			require.NoError(t, err)
+			pm, ts := newFakeClockPartitionManager(t, f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(), userDataMgr)
+			versions := []*deploymentspb.WorkerDeploymentVersion{nil, current, ramping}
+			for i, version := range versions {
+				items, err := pm.GrantEagerDispatch(t.Context(), []*matchingservice.GrantEagerDispatchRequest_Item{
+					{Count: int32(i + 1), Priority: &commonpb.Priority{PriorityKey: 3}, Version: version},
+				})
+				require.NoError(t, err)
+				require.Equal(t, int32(i+1), items[0].GetGrantedCount())
+			}
+			ts.Advance(time.Second)
+			desc, err := pm.Describe(t.Context(), map[string]bool{"": true}, true, true, false, false, true)
+			require.NoError(t, err)
+			require.Len(t, desc.GetVersionsInfoInternal(), len(versions))
+			for i, version := range versions {
+				key := ""
+				if version != nil {
+					key = worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromVersion(version))
+				}
+				info := desc.GetVersionsInfoInternal()[key].GetPhysicalTaskQueueInfo()
+				expected := &taskqueuepb.TaskQueueStats{
+					ApproximateBacklogAge: durationpb.New(0),
+					EagerDispatchRate:     float32(i + 1),
+				}
+				protorequire.ProtoEqual(t, expected, info.GetTaskQueueStats())
+				protorequire.ProtoEqual(t, expected, info.GetTaskQueueStatsByPriorityKey()[3])
+			}
+		})
+	}
 }
 
 // newFakeClockPartitionManager starts a partition manager whose engine uses a fixed time source, so

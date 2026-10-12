@@ -14,6 +14,7 @@ func MergeStats(into, from *taskqueuepb.TaskQueueStats) {
 	into.ApproximateBacklogAge = oldestBacklogAge(into.ApproximateBacklogAge, from.ApproximateBacklogAge)
 	into.TasksAddRate += from.TasksAddRate
 	into.TasksDispatchRate += from.TasksDispatchRate
+	into.EagerDispatchRate += from.EagerDispatchRate
 	into.RateLimitingActive = into.RateLimitingActive || from.RateLimitingActive
 }
 

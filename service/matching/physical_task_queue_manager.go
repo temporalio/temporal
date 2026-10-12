@@ -595,12 +595,8 @@ func (c *physicalTaskQueueManagerImpl) GetStatsByPriority(includeRates bool) map
 		for pri, tt := range c.tasksDispatched {
 			util.GetOrSetNew(stats, int32(pri)).TasksDispatchRate = tt.rate()
 		}
-		// An eager task is added and dispatched at the same instant.
 		for pri, tt := range c.tasksEagerGranted {
-			s := util.GetOrSetNew(stats, int32(pri))
-			eagerRate := tt.rate()
-			s.TasksAddRate += eagerRate
-			s.TasksDispatchRate += eagerRate
+			util.GetOrSetNew(stats, int32(pri)).EagerDispatchRate = tt.rate()
 		}
 		rateLimitingActive := c.tasksRateLimited.rate() > 0
 		c.taskTrackerLock.Unlock()

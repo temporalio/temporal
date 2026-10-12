@@ -1440,7 +1440,12 @@ func (pm *taskQueuePartitionManagerImpl) describe(
 		if dbq == nil {
 			return nil, errDefaultQueueNotInit
 		}
-		unversionedStatsByPriority = dbq.GetStatsByPriority(true)
+		unversionedStatsByPriority = cloneStatsByPriority(dbq.GetStatsByPriority(true))
+		// Eager grants identify their target version, so their rates stay on the physical queue
+		// that granted them rather than being attributed to the current and ramping versions.
+		for _, stats := range unversionedStatsByPriority {
+			stats.EagerDispatchRate = 0
+		}
 
 		userData, _, err := pm.GetUserDataManager().GetUserData()
 		if err != nil {
