@@ -20,7 +20,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -76,9 +75,7 @@ type (
 		drainBacklogMgrLock sync.Mutex
 		drainBacklogMgr     backlogManager // protected by drainBacklogMgrLock
 		liveness            *liveness
-		oldMatcher          *TaskMatcher // TODO(pri): old matcher cleanup
-		priMatcher          *priTaskMatcher
-		matcher             matcherInterface // TODO(pri): old matcher cleanup
+		matcher             *priTaskMatcher
 		namespaceRegistry   namespace.Registry
 		logger              log.Logger
 		throttledLogger     log.ThrottledLogger
@@ -102,18 +99,6 @@ type (
 		// tasksRateLimited tracks rate-limit events in a sliding window for stats reporting.
 		tasksRateLimited *taskTracker
 	}
-
-	// TODO(pri): old matcher cleanup
-	matcherInterface interface {
-		Start()
-		Stop()
-		Poll(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
-		PollForQuery(ctx context.Context, pollMetadata *pollMetadata) (*internalTask, error)
-		OfferQuery(ctx context.Context, task *internalTask) (*matchingservice.QueryWorkflowResponse, error)
-		OfferNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error)
-		ReprocessAllTasks()
-		HasWaitingPoller() bool
-	}
 )
 
 var _ physicalTaskQueueManager = (*physicalTaskQueueManagerImpl)(nil)
@@ -124,7 +109,6 @@ var (
 	errDeploymentVersionNotReady = serviceerror.NewUnavailable("task queue is not ready to process polls from this deployment version, try again shortly")
 	ErrBlackholedQuery           = "You are trying to query a closed Workflow that is PINNED to Worker Deployment Version %s, but %s is drained and has no pollers to answer the query. Immediately: You can re-deploy Workers in this Deployment Version to take those queries, or you can workflow update-options to change your workflow to AUTO_UPGRADE. For the future: In your infrastructure, consider waiting longer after the last queried timestamp as reported in Describe Deployment before you sunset Workers. Or mark this workflow as AUTO_UPGRADE."
 
-	backlogTagClassic       = tag.String("backlog", "classic")
 	backlogTagPriority      = tag.String("backlog", "priority")
 	backlogTagFairness      = tag.String("backlog", "fairness")
 	backlogTagPriorityDrain = tag.String("backlog", "priority-drain")
@@ -188,8 +172,7 @@ func newPhysicalTaskQueueManager(
 		pqMgr.partitionMgr.engine.historyClient,
 	)
 
-	switch {
-	case config.EnableFairness:
+	if config.EnableFairness {
 		pqMgr.logger = log.With(partitionMgr.logger, buildIDTag, backlogTagFairness)
 		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIDTag, backlogTagFairness)
 
@@ -205,32 +188,7 @@ func newPhysicalTaskQueueManager(
 			pqMgr.counterFactory,
 			false,
 		)
-		var fwdr *priForwarder
-		var err error
-		if queue.Partition().IsChild() {
-			// Every DB Queue needs its own forwarder so that the throttles do not interfere
-			fwdr, err = newPriForwarder(&config.forwarderConfig, queue, e.matchingRawClient, e.testHooks)
-			if err != nil {
-				return nil, err
-			}
-		}
-		pqMgr.priMatcher = newPriTaskMatcher(
-			tqCtx,
-			config,
-			queue.partition,
-			fwdr,
-			pqMgr.matchingClient,
-			pqMgr.taskValidator,
-			pqMgr.logger,
-			taggedMetricsHandler,
-			partitionMgr.rateLimitManager,
-			pqMgr.onRateLimited,
-			pqMgr.MarkAlive,
-		)
-		pqMgr.matcher = pqMgr.priMatcher
-		return pqMgr, nil
-
-	case config.NewMatcher:
+	} else {
 		pqMgr.logger = log.With(partitionMgr.logger, buildIDTag, backlogTagPriority)
 		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIDTag, backlogTagPriority)
 
@@ -245,57 +203,32 @@ func newPhysicalTaskQueueManager(
 			taggedMetricsHandler,
 			false,
 		)
-		var fwdr *priForwarder
-		var err error
-		if queue.Partition().IsChild() {
-			// Every DB Queue needs its own forwarder so that the throttles do not interfere
-			fwdr, err = newPriForwarder(&config.forwarderConfig, queue, e.matchingRawClient, e.testHooks)
-			if err != nil {
-				return nil, err
-			}
-		}
-		pqMgr.priMatcher = newPriTaskMatcher(
-			tqCtx,
-			config,
-			queue.partition,
-			fwdr,
-			pqMgr.matchingClient,
-			pqMgr.taskValidator,
-			pqMgr.logger,
-			taggedMetricsHandler,
-			partitionMgr.rateLimitManager,
-			pqMgr.onRateLimited,
-			pqMgr.MarkAlive,
-		)
-		pqMgr.matcher = pqMgr.priMatcher
-		return pqMgr, nil
-	default:
-		pqMgr.logger = log.With(partitionMgr.logger, buildIDTag, backlogTagClassic)
-		pqMgr.throttledLogger = log.With(partitionMgr.throttledLogger, buildIDTag, backlogTagClassic)
-
-		pqMgr.backlogMgr = newBacklogManager(
-			tqCtx,
-			pqMgr,
-			config,
-			e.taskManager,
-			pqMgr.logger,
-			pqMgr.throttledLogger,
-			e.matchingRawClient,
-			taggedMetricsHandler,
-		)
-		var fwdr *Forwarder
-		var err error
-		if queue.Partition().IsChild() {
-			// Every DB Queue needs its own forwarder so that the throttles do not interfere
-			fwdr, err = newForwarder(&config.forwarderConfig, queue, e.matchingRawClient)
-			if err != nil {
-				return nil, err
-			}
-		}
-		pqMgr.oldMatcher = newTaskMatcher(config, fwdr, taggedMetricsHandler, pqMgr.partitionMgr.GetRateLimitManager().GetRateLimiter())
-		pqMgr.matcher = pqMgr.oldMatcher
-		return pqMgr, nil
 	}
+
+	var fwdr *priForwarder
+	var err error
+	if queue.Partition().IsChild() {
+		// Every DB Queue needs its own forwarder so that the throttles do not interfere
+		fwdr, err = newPriForwarder(&config.forwarderConfig, queue, e.matchingRawClient, e.testHooks)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	pqMgr.matcher = newPriTaskMatcher(
+		tqCtx,
+		config,
+		queue.partition,
+		fwdr,
+		pqMgr.matchingClient,
+		pqMgr.taskValidator,
+		pqMgr.logger,
+		taggedMetricsHandler,
+		partitionMgr.rateLimitManager,
+		pqMgr.onRateLimited,
+		pqMgr.MarkAlive,
+	)
+	return pqMgr, nil
 }
 
 func (c *physicalTaskQueueManagerImpl) Start() {
@@ -381,10 +314,6 @@ func (c *physicalTaskQueueManagerImpl) UpdateScaleState(scaleState *persistences
 // Must be called by the active backlog manager before it sets itself initialized.
 // Must only be called when using new matcher.
 func (c *physicalTaskQueueManagerImpl) SetupDraining() {
-	if !softassert.That(c.logger, c.priMatcher != nil, "SetupDraining called with old matcher") {
-		return
-	}
-
 	var drainBacklogMgr backlogManager
 	var logger log.Logger
 	switch c.backlogMgr.(type) {
@@ -434,10 +363,6 @@ func (c *physicalTaskQueueManagerImpl) SetupDraining() {
 // FinishedDraining is called by a draining backlog manager when it has fully drained.
 // This updates the active backlog manager's metadata and unloads the draining manager.
 func (c *physicalTaskQueueManagerImpl) FinishedDraining() {
-	if !softassert.That(c.logger, c.priMatcher != nil, "FinishedDraining called with old matcher") {
-		return
-	}
-
 	c.drainBacklogMgrLock.Lock()
 	drainMgr := c.drainBacklogMgr
 	c.drainBacklogMgr = nil
@@ -461,10 +386,7 @@ func (c *physicalTaskQueueManagerImpl) FinishedDraining() {
 }
 
 func (c *physicalTaskQueueManagerImpl) ReprocessRedirectedTasksAfterStop() {
-	if c.priMatcher == nil {
-		return
-	}
-	c.priMatcher.ReprocessRedirectedTasksAfterStop()
+	c.matcher.ReprocessRedirectedTasksAfterStop()
 }
 
 func (c *physicalTaskQueueManagerImpl) SpoolTask(taskInfo *persistencespb.TaskInfo) error {
@@ -566,48 +488,12 @@ func (c *physicalTaskQueueManagerImpl) onRateLimited() {
 	c.taskTrackerLock.Unlock()
 }
 
-// DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
-// up the task or if rate limit is exceeded, this method will return error. Task
-// *will not* be persisted to db
-// TODO(pri): old matcher cleanup
-func (c *physicalTaskQueueManagerImpl) DispatchSpooledTask(
-	ctx context.Context,
-	task *internalTask,
-	userDataChanged <-chan struct{},
-) error {
-	if c.oldMatcher == nil {
-		return softassert.UnexpectedInternalErr(c.logger, "DispatchSpooledTask called on new matcher", nil)
-	}
-	return c.oldMatcher.MustOffer(ctx, task, userDataChanged)
-}
-
-// TODO(pri): old matcher cleanup
-func (c *physicalTaskQueueManagerImpl) ProcessSpooledTask(
-	ctx context.Context,
-	task *internalTask,
-) error {
-	if !c.taskValidator.maybeValidate(task.event.AllocatedTaskInfo, c.queue.TaskType()) {
-		task.finish(taskFinishResult{dropReason: getDroppedTaskExpiryReason(task)})
-		// Don't try to set read level here because it may have been advanced already.
-
-		// Stay alive as long as we're invalidating tasks
-		c.MarkAlive()
-
-		return nil
-	}
-	return c.partitionMgr.ProcessSpooledTask(ctx, task, c.queue)
-}
-
 func (c *physicalTaskQueueManagerImpl) AddSpooledTask(task *internalTask) error {
 	return c.partitionMgr.AddSpooledTask(c.tqCtx, task, c.queue)
 }
 
 func (c *physicalTaskQueueManagerImpl) AddSpooledTaskToMatcher(task *internalTask) error {
-	if c.priMatcher == nil {
-		softassert.Fail(c.logger, "AddSpooledTaskToMatcher called on old matcher")
-		return errInternalMatchError
-	}
-	return c.priMatcher.AddTask(task)
+	return c.matcher.AddTask(task)
 }
 
 func (c *physicalTaskQueueManagerImpl) UserDataChanged() {
@@ -750,18 +636,7 @@ func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *i
 		}
 	}
 
-	if c.priMatcher != nil {
-		return c.priMatcher.Offer(ctx, task)
-	}
-
-	childCtx, cancel := contextutil.WithDeadlineBuffer(ctx, c.config.SyncMatchWaitDuration(), time.Second)
-	defer cancel()
-
-	matched, err := c.oldMatcher.Offer(childCtx, task)
-	if matched {
-		return syncMatchSuccess, err
-	}
-	return syncMatchNoPoller, err
+	return c.matcher.Offer(ctx, task)
 }
 
 func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
@@ -957,10 +832,9 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	if c.delaySignalFiring(stats, task) {
 		delta = 1
 		reason = metrics.PollerScaleReasonDelay
-	} else if c.queue.Partition().Kind() != enumspb.TASK_QUEUE_KIND_STICKY && !c.queue.Partition().IsRoot() {
-		// Non-root partitions don't have an appropriate view of the data to make decisions beyond backlog.
-		// Sticky queues are exempt: they aren't considered root but do have a complete view of their data,
-		// as they have only 1 partition.
+	} else if c.queue.Partition().SupportsPartitions() && !c.queue.Partition().IsRoot() {
+		// Only the root has a complete view when multiple partitions exist, so skip ratio-based scaling
+		// for non-root partitions. Queues without partition support have one partition and remain eligible.
 		return nil
 	} else if c.ratioSignalFiring(stats) {
 		delta = 1
@@ -1036,9 +910,7 @@ func (c *physicalTaskQueueManagerImpl) getAggregateRates() (addRate, syncMatchRa
 }
 
 func (c *physicalTaskQueueManagerImpl) UpdateRemotePriorityBacklogs(backlogs remotePriorityBacklogSet) {
-	if c.priMatcher != nil {
-		c.priMatcher.UpdateRemotePriorityBacklogs(backlogs)
-	}
+	c.matcher.UpdateRemotePriorityBacklogs(backlogs)
 }
 
 func (c *physicalTaskQueueManagerImpl) incTaskTracker(

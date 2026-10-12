@@ -52,7 +52,6 @@ type taskQueueStatsContext struct {
 	*VersioningTestEnv
 	tb              testing.TB
 	ctx             context.Context
-	usePriMatcher   bool
 	minPriority     int
 	maxPriority     int
 	defaultPriority int
@@ -62,14 +61,12 @@ type taskQueueStatsContext struct {
 func newTaskQueueStatsContext(
 	ctx context.Context,
 	t *testing.T,
-	usePriMatcher bool,
 	behavior testcore.MatchingBehavior,
 	extraOpts ...testcore.TestOption,
 ) *taskQueueStatsContext {
 	opts := []testcore.TestOption{
 		testcore.WithDynamicConfig(dynamicconfig.EnableDeploymentVersions, true),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendEnableWorkerVersioningWorkflowAPIs, true),
-		testcore.WithDynamicConfig(dynamicconfig.MatchingUseNewMatcher, usePriMatcher),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingPriorityLevels, 5), // maxPriority
 	}
 	opts = append(opts, behavior.Options()...)
@@ -80,7 +77,6 @@ func newTaskQueueStatsContext(
 		VersioningTestEnv: env,
 		tb:                t,
 		ctx:               ctx,
-		usePriMatcher:     usePriMatcher,
 		minPriority:       1,
 		maxPriority:       5,
 		defaultPriority:   3,
@@ -94,20 +90,19 @@ type TaskQueueStatsSuite struct {
 }
 
 func TestTaskQueueStats_Pri_Suite(t *testing.T) {
-	testcore.UseSuiteScopedCluster(t)                                  //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
-	parallelsuite.RunLegacySequential(t, &TaskQueueStatsSuite{}, true) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
+	testcore.UseSuiteScopedCluster(t)                            //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
+	parallelsuite.RunLegacySequential(t, &TaskQueueStatsSuite{}) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
 }
 
 func (s *TaskQueueStatsSuite) newTaskQueueStatsContext(
-	usePriMatcher bool,
 	behavior testcore.MatchingBehavior,
 	extraOpts ...testcore.TestOption,
 ) *taskQueueStatsContext {
-	return newTaskQueueStatsContext(s.Context(), s.T(), usePriMatcher, behavior, extraOpts...)
+	return newTaskQueueStatsContext(s.Context(), s.T(), behavior, extraOpts...)
 }
 
-func (s *TaskQueueStatsSuite) TestDescribeTaskQueue_NonRoot(usePriMatcher bool) {
-	env := s.newTaskQueueStatsContext(usePriMatcher, testcore.MatchingBehavior{})
+func (s *TaskQueueStatsSuite) TestDescribeTaskQueue_NonRoot() {
+	env := s.newTaskQueueStatsContext(testcore.MatchingBehavior{})
 	resp, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
 		Namespace: env.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: "/_sys/foo/1", Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -124,8 +119,8 @@ func (s *TaskQueueStatsSuite) TestDescribeTaskQueue_NonRoot(usePriMatcher bool) 
 	s.ErrorContains(err, "DescribeTaskQueue stats are only supported for the root partition")
 }
 
-func (s *TaskQueueStatsSuite) TestNoTasks_ValidateStats(usePriMatcher bool) {
-	env := s.newTaskQueueStatsContext(usePriMatcher, testcore.MatchingBehavior{},
+func (s *TaskQueueStatsSuite) TestNoTasks_ValidateStats() {
+	env := s.newTaskQueueStatsContext(testcore.MatchingBehavior{},
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 2),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 2),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second),
@@ -134,8 +129,8 @@ func (s *TaskQueueStatsSuite) TestNoTasks_ValidateStats(usePriMatcher bool) {
 	env.publishConsumeWorkflowTasksValidateStats(0, false)
 }
 
-func (s *TaskQueueStatsSuite) TestAddMultipleTasks_ValidateStats_Cached(usePriMatcher bool) {
-	env := s.newTaskQueueStatsContext(usePriMatcher, testcore.MatchingBehavior{},
+func (s *TaskQueueStatsSuite) TestAddMultipleTasks_ValidateStats_Cached() {
+	env := s.newTaskQueueStatsContext(testcore.MatchingBehavior{},
 		testcore.WithDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second),
 		testcore.WithDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Hour),
 	)
@@ -186,10 +181,10 @@ func (s *TaskQueueStatsSuite) TestAddMultipleTasks_ValidateStats_Cached(usePriMa
 // TestVersioningSuite runs version-specific tests across all matching behavior combinations.
 // Note: matching behaviors configure partition count based on forwarding behavior.
 // Do NOT override MatchingNumTaskqueueReadPartitions/WritePartitions inside the subtest.
-func (s *TaskQueueStatsSuite) TestVersioningSuite(usePriMatcher bool) {
+func (s *TaskQueueStatsSuite) TestVersioningSuite() {
 	for _, behavior := range testcore.AllMatchingBehaviors() {
 		s.T().Run(behavior.Name()+"Suite", func(t *testing.T) { //nolint:testifylint // nested parallelsuite.Run needs raw *testing.T
-			parallelsuite.RunLegacySequential(t, &TaskQueueStatsVersionSuite{}, usePriMatcher, behavior) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
+			parallelsuite.RunLegacySequential(t, &TaskQueueStatsVersionSuite{}, behavior) //nolint:staticcheck // SA1019: suite reuses one worker-service cluster to avoid per-test cluster churn.
 		})
 	}
 }
@@ -200,22 +195,21 @@ type TaskQueueStatsVersionSuite struct {
 }
 
 func (s *TaskQueueStatsVersionSuite) newTaskQueueStatsContext(
-	usePriMatcher bool,
 	behavior testcore.MatchingBehavior,
 	extraOpts ...testcore.TestOption,
 ) *taskQueueStatsContext {
-	return newTaskQueueStatsContext(s.Context(), s.T(), usePriMatcher, behavior, extraOpts...)
+	return newTaskQueueStatsContext(s.Context(), s.T(), behavior, extraOpts...)
 }
 
-func (s *TaskQueueStatsVersionSuite) TestMultipleTasks_ValidateStats(usePriMatcher bool, behavior testcore.MatchingBehavior) {
-	env := s.newTaskQueueStatsContext(usePriMatcher, behavior)
+func (s *TaskQueueStatsVersionSuite) TestMultipleTasks_ValidateStats(behavior testcore.MatchingBehavior) {
+	env := s.newTaskQueueStatsContext(behavior)
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond)
 	env.publishConsumeWorkflowTasksValidateStats(4, false)
 }
 
-func (s *TaskQueueStatsVersionSuite) TestCurrentVersionAbsorbsUnversionedBacklog_NoRamping(usePriMatcher bool, behavior testcore.MatchingBehavior) {
-	env := s.newTaskQueueStatsContext(usePriMatcher, behavior)
+func (s *TaskQueueStatsVersionSuite) TestCurrentVersionAbsorbsUnversionedBacklog_NoRamping(behavior testcore.MatchingBehavior) {
+	env := s.newTaskQueueStatsContext(behavior)
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
@@ -302,8 +296,8 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentVersionAbsorbsUnversionedBacklog
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
-func (s *TaskQueueStatsVersionSuite) TestRampingAndCurrentAbsorbUnversionedBacklog(usePriMatcher bool, behavior testcore.MatchingBehavior) {
-	env := s.newTaskQueueStatsContext(usePriMatcher, behavior)
+func (s *TaskQueueStatsVersionSuite) TestRampingAndCurrentAbsorbUnversionedBacklog(behavior testcore.MatchingBehavior) {
+	env := s.newTaskQueueStatsContext(behavior)
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
@@ -464,8 +458,8 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAndCurrentAbsorbUnversionedBackl
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
-func (s *TaskQueueStatsVersionSuite) TestCurrentAbsorbsUnversionedBacklog_WhenRampingToUnversioned(usePriMatcher bool, behavior testcore.MatchingBehavior) {
-	env := s.newTaskQueueStatsContext(usePriMatcher, behavior)
+func (s *TaskQueueStatsVersionSuite) TestCurrentAbsorbsUnversionedBacklog_WhenRampingToUnversioned(behavior testcore.MatchingBehavior) {
+	env := s.newTaskQueueStatsContext(behavior)
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
@@ -524,8 +518,8 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentAbsorbsUnversionedBacklog_WhenRa
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
-func (s *TaskQueueStatsVersionSuite) TestRampingAbsorbsUnversionedBacklog_WhenCurrentIsUnversioned(usePriMatcher bool, behavior testcore.MatchingBehavior) {
-	env := s.newTaskQueueStatsContext(usePriMatcher, behavior)
+func (s *TaskQueueStatsVersionSuite) TestRampingAbsorbsUnversionedBacklog_WhenCurrentIsUnversioned(behavior testcore.MatchingBehavior) {
+	env := s.newTaskQueueStatsContext(behavior)
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
@@ -585,8 +579,8 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAbsorbsUnversionedBacklog_WhenCu
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
-func (s *TaskQueueStatsVersionSuite) TestInactiveVersionDoesNotAbsorbUnversionedBacklog(usePriMatcher bool, behavior testcore.MatchingBehavior) {
-	env := s.newTaskQueueStatsContext(usePriMatcher, behavior)
+func (s *TaskQueueStatsVersionSuite) TestInactiveVersionDoesNotAbsorbUnversionedBacklog(behavior testcore.MatchingBehavior) {
+	env := s.newTaskQueueStatsContext(behavior)
 	env.OverrideDynamicConfig(dynamicconfig.MatchingLongPollExpirationInterval, 10*time.Second)
 	env.OverrideDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond) // zero means no TTL
 
@@ -1415,7 +1409,7 @@ func (s *taskQueueStatsContext) validateDescribeTaskQueueWithDefaultMode(
 		}
 
 		validateTaskQueueStats(require.New(t), label, resp.Stats, expectation)
-		if s.usePriMatcher && expectation.BacklogCount > 0 {
+		if expectation.BacklogCount > 0 {
 			// Per priority stats are only available with the priority matcher and when they've been actively used.
 			s.validateTaskQueueStatsByPriority(t, label, resp.StatsByPriorityKey, expectation)
 		}
@@ -1512,7 +1506,7 @@ func (s *taskQueueStatsContext) validateDescribeWorkerDeploymentVersion(
 			if info.Name == tqName || info.Type == tqType {
 				label := "DescribeWorkerDeploymentVersion[" + tqType.String() + "]"
 				validateTaskQueueStats(require.New(t), label, info.Stats, expectation)
-				if s.usePriMatcher && expectation.BacklogCount > 0 {
+				if expectation.BacklogCount > 0 {
 					// Per priority stats are only available with the priority matcher and when they've been actively used.
 					s.validateTaskQueueStatsByPriority(t, label, info.StatsByPriorityKey, expectation)
 				}

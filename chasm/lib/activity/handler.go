@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 )
 
 var (
@@ -139,11 +140,15 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 	if !result.Created && (attachCallbacks || attachLinks) {
 		requestID := frontendReq.GetRequestId()
 		ref := chasm.NewComponentRef[*Activity](result.ExecutionKey)
+		var nexusContextMatch metrics.ReasonString
 		_, _, err := chasm.UpdateComponent(
 			ctx,
 			ref,
 			func(a *Activity, ctx chasm.MutableContext, _ any) (any, error) {
 				if attachCallbacks {
+					existing := a.RequestData.Get(ctx).GetPropagatedNexusSerializationContext()
+					incoming := frontendReq.GetPropagatedNexusSerializationContext()
+					nexusContextMatch = commonnexus.SerializationContextMatch(existing, incoming)
 					if err := a.addCompletionCallbacks(ctx, requestID, cbs, maxCallbacks); err != nil {
 						return nil, err
 					}
@@ -160,6 +165,12 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		)
 		if err != nil && !errors.Is(err, chasm.ErrRequestIDAlreadyUsed) {
 			return nil, err
+		}
+		if err == nil && nexusContextMatch != "" {
+			metrics.NexusActivityUseExisting.With(h.metricsHandler).Record(1,
+				metrics.NamespaceTag(frontendReq.GetNamespace()),
+				metrics.NexusSerializationContextMatchTag(nexusContextMatch),
+			)
 		}
 	}
 

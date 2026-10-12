@@ -9,7 +9,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/matching/simplelimiter"
 )
 
@@ -36,10 +35,6 @@ type (
 		systemRPS       float64                 // Min of partition level dispatch rates times the number of read partitions.
 		rateLimitSource enumspb.RateLimitSource // Source of the rate limit, can be set via API, worker or system default.
 		// Derived from the `defaultTaskDispatchRPS`.
-		// dynamicRateBurst is the dynamic rate & burst for rate limiter
-		dynamicRateBurst quotas.MutableRateBurst
-		// dynamicRateLimiter is the dynamic rate limiter that can be used to force refresh on new rates.
-		dynamicRateLimiter *quotas.DynamicRateLimiterImpl
 		// Fairness tasks rate limiter.
 		wholeQueueLimit simplelimiter.Params
 		wholeQueueReady simplelimiter.Ready
@@ -72,22 +67,13 @@ func newRateLimitManager(
 	config *taskQueueConfig,
 	taskQueueType enumspb.TaskQueueType,
 ) *rateLimitManager {
-	r := &rateLimitManager{
+	return &rateLimitManager{
 		userDataManager: userDataManager,
 		config:          config,
 		taskQueueType:   taskQueueType,
 		perKeyReady:     cache.New(config.FairnessKeyRateLimitCacheSize(), nil),
 		timeSource:      clock.NewRealTimeSource(),
 	}
-	r.dynamicRateBurst = quotas.NewMutableRateBurst(
-		defaultTaskDispatchRPS,
-		int(defaultTaskDispatchRPS),
-	)
-	r.dynamicRateLimiter = quotas.NewDynamicRateLimiter(
-		r.dynamicRateBurst,
-		config.RateLimiterRefreshInterval,
-	)
-	return r
 }
 
 // Start registers dynamic config subscriptions and computes the initial rate limits.
@@ -175,7 +161,6 @@ func (r *rateLimitManager) computeAndApplyRateLimitLocked() {
 	newRPS := r.effectiveRPS
 	// If the effective RPS has changed, we need to update the rate limiters.
 	if oldRPS != newRPS {
-		r.updateRatelimitLocked()
 		r.updateSimpleRateLimitWithBurstLocked(defaultBurstDuration)
 	}
 	// Internally, checks if the per-key rate limit has changed and updates it accordingly.
@@ -206,10 +191,6 @@ func (r *rateLimitManager) GetEffectiveRPSAndSource() (float64, enumspb.RateLimi
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.effectiveRPS * float64(r.numReadPartitions), r.rateLimitSource
-}
-
-func (r *rateLimitManager) GetRateLimiter() quotas.RateLimiter {
-	return r.dynamicRateLimiter
 }
 
 // Updates the API-configured RPS based on the latest user data
@@ -251,25 +232,6 @@ func (r *rateLimitManager) trySetRPSFromUserDataLocked() {
 	}
 	fairnessWeightOverrides := config.GetFairnessWeightOverrides()
 	r.perKeyOverrides = fairnessWeightOverrides
-}
-
-// updateRatelimitLocked checks and updates the overall queue rate limit if changed.
-func (r *rateLimitManager) updateRatelimitLocked() {
-	newRPS := r.effectiveRPS
-	// If the effective RPS is zero, we set the burst to zero as well.
-	// This prevents any initial tasks from executing immediately.
-	// Allows pausing of the task queue by setting the RPS to zero.
-	var burst int
-	if newRPS != 0 {
-		// If the effective RPS is non-zero, we can set a burst based on the effective RPS.
-		burst = max(int(math.Ceil(newRPS)), r.config.MinTaskThrottlingBurstSize())
-	}
-	r.dynamicRateBurst.SetRPS(newRPS)
-	r.dynamicRateBurst.SetBurst(burst)
-	// updateRatelimitLocked is invoked whenever the effective RPS value changes.
-	// At this point, the dynamicRateLimiter is always updated with the latest rate and burst values,
-	// ensuring that the new rate limit takes effect immediately.
-	r.dynamicRateLimiter.Refresh()
 }
 
 // UpdateSimpleRateLimit updates the overall queue rate limits for the simpleRateLimiter implementation
@@ -380,14 +342,6 @@ func (r *rateLimitManager) consumeTokens(now int64, task *internalTask, tokens i
 
 func (r *rateLimitManager) grantTokens(priority *commonpb.Priority, requested int32) int32 {
 	now := r.timeSource.Now()
-	if !r.config.NewMatcher {
-		available := r.dynamicRateLimiter.TokensAt(now)
-		granted := min(requested, int32(max(available, 0)))
-		if granted > 0 && r.dynamicRateLimiter.AllowN(now, int(granted)) {
-			return granted
-		}
-		return 0
-	}
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
