@@ -13,21 +13,18 @@ import (
 )
 
 // Completion callbacks are how most [Callback] components are used within CHASM. The types and
-// functions within ths file are to unify the logic required to implement that that capability
-// correctly.
+// functions in this file unify the logic required to implement that capability.
 //
-// To have a CHASM component support completion callbacks, you would need to do the following:
+// To support completion callbacks, a CHASM component must:
 //
-// - The component must persist two fields: a chasm.Map[string, *Callback] and a
-//   callbackspb.CallbackMetadata.
-// - The component must implement the [Host] interface, providing a way to access that data.
+// - Persist a chasm.Map[string, *Callback] and a callbackspb.CallbackMetadata.
+// - Implement the [Host] interface to expose that data.
 //
-// Then, the component would just need to use the methods for validating, attaching, and
-// executing completion callbacks when appropriate.
+// The component then uses these functions:
 //
-// - [CheckLimts(...)] to enforce aggregate callback checks.
-// - [Attach(...)] to mutate the [Host] compoment and update the relevant metadata.
-// - [ScheduleCompletionCallbacks(...)] to invoke the callbacks.
+// - [ValidateAndAttach] to enforce aggregate limits and attach callbacks from a request.
+// - [Attach] to attach already-accepted callbacks without validation.
+// - [ScheduleCompletionCallbacks] to invoke the callbacks once the component closes.
 
 // Holder is a component that has completion callbacks.
 type Holder interface {
@@ -35,13 +32,14 @@ type Holder interface {
 	// The returned value may be mutated, so the implementer MUST initialize the backing store if
 	// needed.
 	CompletionCallbacks() chasm.Map[string, *Callback]
+
+	// CompletionSource is how a callback would obtain the value to be delivered via callback.
+	CompletionSource
 }
 
 // Host is a component that supports completion callbacks.
 type Host interface {
 	Holder
-	// CompletionSource is how a callback would obtain the value to be delivered via callback.
-	CompletionSource
 
 	LifecycleState(ctx chasm.Context) chasm.LifecycleState
 
@@ -60,7 +58,7 @@ func completionCallbackID(requestID string, idx int) string {
 
 // HasCallbacksForRequest returns true if the given completion callbacks map has any callbacks attached
 // that came from the given request ID.
-func HasCallbacksForRequest(ctx chasm.Context, holder Holder, requestID string) bool {
+func HasCallbacksForRequest(holder Holder, requestID string) bool {
 	if holder == nil {
 		return false
 	}
@@ -153,7 +151,7 @@ func ValidateAndAttach(
 	}
 
 	// Idempotency check.
-	if HasCallbacksForRequest(ctx, host, requestID) {
+	if HasCallbacksForRequest(host, requestID) {
 		return nil
 	}
 
@@ -193,7 +191,7 @@ func Attach(
 	}
 
 	// Idempotency check.
-	if HasCallbacksForRequest(ctx, host, requestID) {
+	if HasCallbacksForRequest(host, requestID) {
 		return nil
 	}
 

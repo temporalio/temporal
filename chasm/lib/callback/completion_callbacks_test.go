@@ -80,7 +80,7 @@ func TestUsage(t *testing.T) {
 	require.Equal(t, Usage{Count: 4, TotalSize: 100 + sizeOf(cbs)}, usage)
 }
 
-func TestCheckLimits(t *testing.T) {
+func TestValidateAdditions(t *testing.T) {
 	t.Parallel()
 	cfg := test.NewCallbacksValidatorConfig()
 	cfg.MaxCallbacksPerExecution = func(string) int { return 2 }
