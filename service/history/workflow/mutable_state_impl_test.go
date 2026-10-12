@@ -8166,6 +8166,28 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
 		}
 	}
 
+	// enableTimeSkipping models the real trigger for evaluating time skipping: an
+	// options update changes persisted workflow state and leaves the workflow idle.
+	// Loading an already-enabled workflow and closing an otherwise empty transaction
+	// must not advance virtual time by itself.
+	enableTimeSkipping := func(ms *MutableStateImpl) {
+		s.Require().False(ms.GetExecutionInfo().GetTimeSkippingInfo().GetConfig().GetEnabled())
+		_, err := ms.AddWorkflowExecutionOptionsUpdatedEvent(
+			nil,
+			false,
+			"",
+			nil,
+			nil,
+			"test-identity",
+			nil,
+			&commonpb.TimeSkippingConfig{Enabled: true},
+			true,
+			nil,
+		)
+		s.Require().NoError(err)
+		s.Require().True(ms.isStateDirty())
+	}
+
 	s.Run("Active_Eligible_WritesEventAndRegeneratesTimerTask", func() {
 		// Happy path: active cluster, running workflow, time-skipping enabled, one pending
 		// timer, no other in-flight work.  Expect:
@@ -8175,10 +8197,13 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
 		now := s.mockShard.GetTimeSource().Now()
 		timerExpiry := now.Add(2 * time.Hour)
 
-		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, buildEligibleState(timerExpiry), 1)
+		dbState := buildEligibleState(timerExpiry)
+		dbState.ExecutionInfo.TimeSkippingInfo.Config.Enabled = false
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, dbState, 1)
 		s.Require().NoError(err)
 		_, err = ms.StartTransaction(s.namespaceEntry)
 		s.Require().NoError(err)
+		enableTimeSkipping(ms)
 
 		mutation, workflowEventsSeq, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
 		s.Require().NoError(err)
@@ -8229,6 +8254,7 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
 		smDeadline := now.Add(3 * time.Hour)
 
 		dbState := buildEligibleState(userTimerExpiry)
+		dbState.ExecutionInfo.TimeSkippingInfo.Config.Enabled = false
 		dbState.ExecutionInfo.StateMachineTimers = []*persistencespb.StateMachineTimerGroup{
 			{
 				Deadline:  timestamppb.New(smDeadline),
@@ -8246,6 +8272,7 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
 		s.Require().NoError(err)
 		_, err = ms.StartTransaction(s.namespaceEntry)
 		s.Require().NoError(err)
+		enableTimeSkipping(ms)
 
 		mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
 		s.Require().NoError(err)
@@ -8265,6 +8292,34 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
 		s.Equal(1, smTaskCount, "exactly one StateMachineTimerTask expected; regenerator must not double-emit")
 		s.Require().NotNil(smTask)
 		s.Equal(expectedTS, smTask.VisibilityTimestamp, "the single emitted task carries the current virtual→wall conversion")
+	})
+
+	s.Run("Active_Eligible_CleanState_NoEventOrRegeneration", func() {
+		// A workflow loaded from persistence is not a state change. Closing that
+		// otherwise empty transaction must not advance virtual time merely because
+		// the persisted workflow is eligible for time skipping.
+		now := s.mockShard.GetTimeSource().Now()
+		timerExpiry := now.Add(2 * time.Hour)
+
+		ms, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, s.namespaceEntry, buildEligibleState(timerExpiry), 1)
+		s.Require().NoError(err)
+		_, err = ms.StartTransaction(s.namespaceEntry)
+		s.Require().NoError(err)
+		s.Require().False(ms.isStateDirty())
+
+		mutation, workflowEventsSeq, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
+		s.Require().NoError(err)
+
+		s.Nil(ms.GetExecutionInfo().GetTimeSkippingInfo().GetAccumulatedSkippedDuration())
+		for _, we := range workflowEventsSeq {
+			for _, ev := range we.Events {
+				s.NotEqual(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED, ev.GetEventType())
+			}
+		}
+		for _, task := range mutation.Tasks[tasks.CategoryTimer] {
+			_, ok := task.(*tasks.UserTimerTask)
+			s.False(ok, "clean transaction must not regenerate a UserTimerTask")
+		}
 	})
 
 	s.Run("Active_TimeSkippingDisabled_NoEvent", func() {
@@ -8442,6 +8497,23 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
 		return result
 	}
 
+	enableTimeSkipping := func(ms *MutableStateImpl) {
+		_, err := ms.AddWorkflowExecutionOptionsUpdatedEvent(
+			nil,
+			false,
+			"",
+			nil,
+			nil,
+			"test-identity",
+			nil,
+			&commonpb.TimeSkippingConfig{Enabled: true},
+			true,
+			nil,
+		)
+		s.Require().NoError(err)
+		s.Require().True(ms.isStateDirty())
+	}
+
 	// ── closeTransactionHandleActivityUserTimerTasks scenarios ──────────────────
 
 	s.Run("HandleActivityUserTimerTasks/Active_Running_UserTimer_NotCreated", func() {
@@ -8574,7 +8646,7 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
 		// runtime dedup handles the duplicate.
 		dbState := buildRunningState()
 		dbState.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+			Config: &commonpb.TimeSkippingConfig{Enabled: false},
 		}
 		dbState.TimerInfos = pendingTimer(TimerTaskStatusNone)
 
@@ -8582,6 +8654,7 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
 		s.Require().NoError(err)
 		_, err = ms.StartTransaction(s.namespaceEntry)
 		s.Require().NoError(err)
+		enableTimeSkipping(ms)
 
 		mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
 		s.Require().NoError(err)
@@ -8606,7 +8679,7 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
 		// generates the time-shifted task.  Only the time-skipped task appears.
 		dbState := buildRunningState()
 		dbState.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
-			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+			Config: &commonpb.TimeSkippingConfig{Enabled: false},
 		}
 		dbState.TimerInfos = pendingTimer(TimerTaskStatusCreated)
 
@@ -8614,6 +8687,7 @@ func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
 		s.Require().NoError(err)
 		_, err = ms.StartTransaction(s.namespaceEntry)
 		s.Require().NoError(err)
+		enableTimeSkipping(ms)
 
 		mutation, _, err := ms.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
 		s.Require().NoError(err)
