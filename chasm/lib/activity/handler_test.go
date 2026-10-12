@@ -93,4 +93,14 @@ func TestGrantEagerActivityDispatch(t *testing.T) {
 			require.Equal(t, "StartActivityExecution", recordings[0].Tags[metrics.OperationTag("").Key])
 		})
 	}
+
+	t.Run("no matching client", func(t *testing.T) {
+		metricsHandler := metricstest.NewCaptureHandler()
+		capture := metricsHandler.StartCapture()
+		defer metricsHandler.StopCapture(capture)
+		handler := &handler{metricsHandler: metricsHandler}
+
+		require.False(t, handler.grantEagerActivityDispatch(context.Background(), "namespace-id", request))
+		require.Empty(t, capture.SnapshotMetric(metrics.EagerDispatchRequestsSent.Name()))
+	})
 }

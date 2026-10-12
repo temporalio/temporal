@@ -1038,7 +1038,7 @@ var (
 	ActivityEagerExecutionCounter = NewCounterDef("activity_eager_execution")
 	EagerDispatchRequestsSent     = NewCounterDef(
 		"eager_dispatch_requests_sent",
-		WithDescription("Number of task grants sent by History through GrantEagerDispatch, summed from the request item counts."),
+		WithDescription("Number of task grants sent to Matching through GrantEagerDispatch, summed from the request item counts."),
 	)
 	// WorkflowEagerExecutionCounter is emitted any time eager workflow start is requested.
 	WorkflowEagerExecutionCounter = NewCounterDef("workflow_eager_execution")
