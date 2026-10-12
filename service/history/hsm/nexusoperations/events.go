@@ -73,22 +73,42 @@ func (d CancelRequestCompletedEventDefinition) Apply(root *hsm.Node, event *hist
 		if err != nil {
 			return hsm.TransitionOutput{}, err
 		}
-		if child != nil {
-			return hsm.TransitionOutput{}, hsm.MachineTransition(child, func(c Cancelation) (hsm.TransitionOutput, error) {
-				return TransitionCancelationSucceeded.Apply(c, EventCancelationSucceeded{
-					Time: event.EventTime.AsTime(),
-					Node: child,
-				})
-			})
+		if child == nil {
+			// CherryPick already guards against a missing cancellation, and normal replay always applies CancelRequested
+			// (which creates the cancellation) earlier in the same branch.
+			return hsm.TransitionOutput{}, fmt.Errorf("%w: %v", hsm.ErrStateMachineNotFound, CancelationMachineKey)
 		}
-		return hsm.TransitionOutput{}, nil
+		return hsm.TransitionOutput{}, hsm.MachineTransition(child, func(c Cancelation) (hsm.TransitionOutput, error) {
+			return TransitionCancelationSucceeded.Apply(c, EventCancelationSucceeded{
+				Time: event.EventTime.AsTime(),
+				Node: child,
+			})
+		})
 	})
 	return err
 }
 
-func (d CancelRequestCompletedEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
-	// We never cherry pick command events, and instead allow user logic to reschedule those commands.
-	return hsm.ErrNotCherryPickable
+func (d CancelRequestCompletedEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
+	if _, ok := excludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS]; ok {
+		return hsm.ErrNotCherryPickable
+	}
+	node, err := findOperationNode(root, event)
+	if err != nil {
+		return err
+	}
+	o, err := hsm.MachineData[Operation](node)
+	if err != nil {
+		return err
+	}
+	child, err := o.CancelationNode(node)
+	if err != nil {
+		return err
+	}
+	if child == nil {
+		// When there is no cancellation for the nexus operation we cannot cherry pick the completion event here.
+		return fmt.Errorf("%w: %v", hsm.ErrStateMachineNotFound, CancelationMachineKey)
+	}
+	return d.Apply(root, event)
 }
 
 type CancelRequestFailedEventDefinition struct{}
@@ -107,23 +127,42 @@ func (d CancelRequestFailedEventDefinition) Apply(root *hsm.Node, event *history
 		if err != nil {
 			return hsm.TransitionOutput{}, err
 		}
-		if child != nil {
-			return hsm.TransitionOutput{}, hsm.MachineTransition(child, func(c Cancelation) (hsm.TransitionOutput, error) {
-				return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
-					Time:    event.EventTime.AsTime(),
-					Failure: event.GetNexusOperationCancelRequestFailedEventAttributes().GetFailure(),
-					Node:    child,
-				})
-			})
+		if child == nil {
+			// See CancelRequestCompletedEventDefinition.Apply.
+			return hsm.TransitionOutput{}, fmt.Errorf("%w: %v", hsm.ErrStateMachineNotFound, CancelationMachineKey)
 		}
-		return hsm.TransitionOutput{}, nil
+		return hsm.TransitionOutput{}, hsm.MachineTransition(child, func(c Cancelation) (hsm.TransitionOutput, error) {
+			return TransitionCancelationFailed.Apply(c, EventCancelationFailed{
+				Time:    event.EventTime.AsTime(),
+				Failure: event.GetNexusOperationCancelRequestFailedEventAttributes().GetFailure(),
+				Node:    child,
+			})
+		})
 	})
 	return err
 }
 
-func (d CancelRequestFailedEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent, _ map[enumspb.ResetReapplyExcludeType]struct{}) error {
-	// We never cherry pick command events, and instead allow user logic to reschedule those commands.
-	return hsm.ErrNotCherryPickable
+func (d CancelRequestFailedEventDefinition) CherryPick(root *hsm.Node, event *historypb.HistoryEvent, excludeTypes map[enumspb.ResetReapplyExcludeType]struct{}) error {
+	if _, ok := excludeTypes[enumspb.RESET_REAPPLY_EXCLUDE_TYPE_NEXUS]; ok {
+		return hsm.ErrNotCherryPickable
+	}
+	node, err := findOperationNode(root, event)
+	if err != nil {
+		return err
+	}
+	o, err := hsm.MachineData[Operation](node)
+	if err != nil {
+		return err
+	}
+	child, err := o.CancelationNode(node)
+	if err != nil {
+		return err
+	}
+	if child == nil {
+		// See CancelRequestCompletedEventDefinition.CherryPick.
+		return fmt.Errorf("%w: %v", hsm.ErrStateMachineNotFound, CancelationMachineKey)
+	}
+	return d.Apply(root, event)
 }
 
 type StartedEventDefinition struct{}

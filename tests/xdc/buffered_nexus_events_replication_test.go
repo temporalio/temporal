@@ -150,7 +150,8 @@ func (s *NexusStateReplicationSuite) TestBufferedNexusEventsReapplySharedOperati
 
 // TestNaturallyBufferedNexusOutcomesFlushedAndReapplied buffers failed, canceled, timed-out, and
 // cancel-request-failed outcomes for operations shared by both branches. It expects the terminal operation
-// outcomes to be reapplied to the winner and the non-cherry-pickable cancellation result to remain on the loser.
+// outcomes to be reapplied to the winner and the cancellation result to remain on the loser because its
+// cancellation request is not part of the common branch.
 func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusOutcomesFlushedAndReapplied() {
 	if !s.enableTransitionHistory {
 		s.T().Skip("conflict reapplication of buffered events requires transition history")
@@ -294,13 +295,13 @@ func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusOutcomesFlushedAn
 	}
 	s.Require().False(
 		hasNexusEventForScheduledID(winningHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED, scheduledIDs["cancel-failed"]),
-		"Nexus cancellation results are not cherry-pickable and must remain only on the losing branch",
+		"a cancellation result without a cancellation on the winning branch must remain only on the losing branch",
 	)
 }
 
 // TestNaturallyBufferedNexusCancelRequestCompletedFlushedAndReapplied buffers a successful Nexus
 // cancel-request result. It expects the result to be persisted on the losing branch but skipped on the
-// winner because cancellation results are not cherry-pickable.
+// winner because the corresponding cancellation request exists only on the losing branch.
 func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusCancelRequestCompletedFlushedAndReapplied() {
 	if !s.enableTransitionHistory {
 		s.T().Skip("conflict reapplication of buffered events requires transition history")
@@ -379,6 +380,137 @@ func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusCancelRequestComp
 	winningHistory := s.getWorkflowHistory(ctx, s.T(), 1, ns, execution)
 	s.Require().False(
 		hasNexusEventForScheduledID(winningHistory, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED, scheduledID),
-		"Nexus cancellation results are not cherry-pickable and must remain only on the losing branch",
+		"a cancellation result without a cancellation on the winning branch must remain only on the losing branch",
 	)
+}
+
+// TestNaturallyBufferedNexusCancelRequestOutcomesReappliedWithSharedCancellation verifies that cancellation
+// delivery outcomes are reapplied when the cancellation request is part of the common branch.
+func (s *NexusStateReplicationSuite) TestNaturallyBufferedNexusCancelRequestOutcomesReappliedWithSharedCancellation() {
+	if !s.enableTransitionHistory {
+		s.T().Skip("conflict reapplication of buffered events requires transition history")
+	}
+
+	testCases := []struct {
+		name              string
+		cancelResult      error
+		outcomeType       enumspb.EventType
+		cancellationState enumspb.NexusOperationCancellationState
+	}{
+		{
+			name:              "Completed",
+			outcomeType:       enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED,
+			cancellationState: enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SUCCEEDED,
+		},
+		{
+			name:              "Failed",
+			cancelResult:      nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "expected cancellation failure"),
+			outcomeType:       enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED,
+			cancellationState: enumspb.NEXUS_OPERATION_CANCELLATION_STATE_FAILED,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
+			defer cancel()
+			namespace := s.createBufferedEventsNamespace(ctx)
+			ns := namespace.Name
+
+			started := make(chan struct{}, 1)
+			cancelStarted := make(chan struct{}, 2)
+			cancelResults := make(chan error, 1)
+			handler := nexustest.Handler{
+				OnStartOperation: func(_ context.Context, _, operation string, _ *nexus.LazyValue, _ nexus.StartOperationOptions) (nexus.HandlerStartOperationResult[any], error) {
+					started <- struct{}{}
+					return &nexus.HandlerStartOperationResultAsync{OperationToken: operation}, nil
+				},
+				OnCancelOperation: func(_ context.Context, _, _, _ string, _ nexus.CancelOperationOptions) error {
+					cancelStarted <- struct{}{}
+					select {
+					case result := <-cancelResults:
+						return result
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+				},
+			}
+			endpointName := s.createBufferedNexusEndpoint(ctx, handler)
+			workflowID := "buffered-nexus-shared-cancel-" + uuid.NewString()
+			taskQueue := &taskqueuepb.TaskQueue{Name: workflowID, Kind: enumspb.TASK_QUEUE_KIND_NORMAL}
+			execution := s.startBufferedEventsWorkflow(ctx, startBufferedEventsWorkflowArgs{
+				Namespace:  ns,
+				WorkflowID: workflowID,
+				TaskQueue:  taskQueue,
+			})
+			firstTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, taskQueue)
+			s.completeWorkflowTask(ctx, workflowTaskCompletion{
+				Task:     firstTask,
+				Commands: []*commandpb.Command{scheduleBufferedNexusOperationCommand(endpointName, "shared-cancel")},
+			})
+			select {
+			case <-started:
+			case <-ctx.Done():
+				s.FailNow("timed out waiting for Nexus operation to start")
+			}
+
+			cancelTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, taskQueue)
+			scheduledID := findNexusScheduledEventID(cancelTask.History.Events, "shared-cancel")
+			s.Require().Positive(scheduledID)
+			s.completeWorkflowTaskAndScheduleNext(ctx, workflowTaskCompletion{
+				Task:     cancelTask,
+				Commands: []*commandpb.Command{requestCancelNexusOperationCommand(scheduledID)},
+			})
+			select {
+			case <-cancelStarted:
+			case <-ctx.Done():
+				s.FailNow("timed out waiting for Nexus cancellation handler")
+			}
+
+			s.waitForClusterSynced()
+			await.Require(ctx, s.T(), func(t *await.T) {
+				history := s.getWorkflowHistory(t.Context(), t.AssertionT(), 1, ns, execution)
+				require.True(t, hasNexusEventForScheduledID(history, enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED, scheduledID))
+			}, replicationWaitTime, replicationCheckInterval)
+
+			replicationToOldActive := s.blockReplicationForWorkflow(0, workflowID)
+			replicationToNewActive := s.blockReplicationForWorkflow(1, workflowID)
+			heldTask := s.pollBufferedEventsWorkflowTask(ctx, 0, ns, taskQueue)
+			s.Require().NotEmpty(heldTask.TaskToken)
+
+			cancelResults <- tc.cancelResult
+			expectedTypes := []enumspb.EventType{tc.outcomeType}
+			s.assertBufferedEventTypesPresent(ctx, bufferedEventExpectation{
+				Namespace:  ns,
+				Execution:  execution,
+				EventTypes: expectedTypes,
+			})
+			s.finishNaturallyBufferedConflict(ctx, naturallyBufferedConflict{
+				Namespace:              namespace,
+				Execution:              execution,
+				ReplicationToOldActive: replicationToOldActive,
+				ReplicationToNewActive: replicationToNewActive,
+				ExpectedEventTypes:     expectedTypes,
+				WinnerSignal:           "nexus-shared-cancel-winner-signal",
+			})
+
+			winningHistory := s.getWorkflowHistory(ctx, s.T(), 1, ns, execution)
+			s.Require().True(
+				hasNexusEventForScheduledID(winningHistory, tc.outcomeType, scheduledID),
+				"%s for a shared cancellation must be reapplied to the winning branch",
+				tc.outcomeType,
+			)
+			await.Require(ctx, s.T(), func(t *await.T) {
+				describeResponse, err := s.clusters[1].FrontendClient().DescribeWorkflowExecution(t.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+					Namespace: ns,
+					Execution: execution,
+				})
+				require.NoError(t, err)
+				require.Len(t, describeResponse.PendingNexusOperations, 1)
+				cancellationInfo := describeResponse.PendingNexusOperations[0].CancellationInfo
+				require.NotNil(t, cancellationInfo)
+				require.Equal(t, tc.cancellationState, cancellationInfo.State)
+			}, replicationWaitTime, replicationCheckInterval)
+		})
+	}
 }
