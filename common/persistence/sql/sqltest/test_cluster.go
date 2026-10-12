@@ -1,4 +1,4 @@
-package sql
+package sqltest
 
 import (
 	"fmt"
@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
@@ -212,7 +213,7 @@ func (s *TestCluster) newAdminDB(kind sqlplugin.DbKind, cfg *config.SQL) sqlplug
 	var err error
 	err = backoff.ThrottleRetry(
 		func() error {
-			db, err = NewSQLAdminDB(kind, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
+			db, err = sql.NewSQLAdminDB(kind, cfg, resolver.NewNoopResolver(), log.NewTestLogger(), metrics.NoopMetricsHandler)
 			return err
 		},
 		backoff.NewExponentialRetryPolicy(time.Second).WithExpirationInterval(time.Minute),

@@ -19,7 +19,7 @@ import (
 	"go.temporal.io/server/common/debug"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra/cassandratest"
-	"go.temporal.io/server/common/persistence/sql"
+	"go.temporal.io/server/common/persistence/sql/sqltest"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/protorequire"
@@ -2096,7 +2096,7 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceNotFound() {
 func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceCassandra() {
 	// This test is for Cassandra
 	switch m.DefaultTestCluster.(type) {
-	case *sql.TestCluster:
+	case *sqltest.TestCluster:
 		m.T().Skip()
 	default:
 	}
@@ -2216,7 +2216,7 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceCassandra() {
 func (m *MetadataPersistenceSuiteV2) TestRenameNamespaceSQL() {
 	// This test is for SQL databases
 	switch m.DefaultTestCluster.(type) {
-	case *sql.TestCluster:
+	case *sqltest.TestCluster:
 	default:
 		m.T().Skip()
 	}

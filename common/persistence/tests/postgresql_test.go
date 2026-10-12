@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql" // register plugins
 	sqltests "go.temporal.io/server/common/persistence/sql/sqlplugin/tests"
+	"go.temporal.io/server/common/persistence/sql/sqltest"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/temporal/environment"
 )
@@ -706,7 +707,7 @@ func (p *PostgreSQLSuite) TestPostgreSQLTestClusterDropsDatabaseWithOpenConnecti
 		TearDownPostgreSQLDatabase(p.T(), cfg)
 	})
 
-	testCluster := sql.NewTestCluster(
+	testCluster := sqltest.NewTestCluster(
 		cfg.PluginName,
 		cfg.DatabaseName,
 		cfg.User,

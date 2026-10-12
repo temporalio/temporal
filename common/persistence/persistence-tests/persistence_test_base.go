@@ -26,10 +26,10 @@ import (
 	"go.temporal.io/server/common/persistence/cassandra/cassandratest"
 	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
+	"go.temporal.io/server/common/persistence/sql/sqltest"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
@@ -175,7 +175,7 @@ func NewTestBaseWithSQL(options *TestBaseOptions) *TestBase {
 			panic(fmt.Sprintf("unknown sql store driver: %v", options.SQLDBPluginName))
 		}
 	}
-	testCluster := sql.NewTestCluster(
+	testCluster := sqltest.NewTestCluster(
 		options.SQLDBPluginName,
 		options.DBName,
 		options.DBUsername,
