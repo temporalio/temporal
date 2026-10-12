@@ -9518,3 +9518,35 @@ func (s *mutableStateSuite) TestCloseTransactionInvalidateChasmTasksOnClose() {
 		s.NoError(s.mutableState.closeTransactionInvalidateChasmTasksOnClose(context.Background(), historyi.TransactionPolicyActive))
 	})
 }
+
+func NewMapEventCache(
+	t *testing.T,
+	m map[events.EventKey]*historypb.HistoryEvent,
+) events.Cache {
+	cache := events.NewMockCache(gomock.NewController(t))
+	cache.EXPECT().DeleteEvent(gomock.Any()).AnyTimes().Do(
+		func(k events.EventKey) { delete(m, k) },
+	)
+	cache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes().Do(
+		func(k events.EventKey, event *historypb.HistoryEvent) {
+			m[k] = event
+		},
+	)
+	cache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		AnyTimes().
+		DoAndReturn(
+			func(
+				_ context.Context,
+				_ int32,
+				key events.EventKey,
+				_ int64,
+				_ []byte,
+			) (*historypb.HistoryEvent, error) {
+				if event, ok := m[key]; ok {
+					return event, nil
+				}
+				return nil, serviceerror.NewNotFoundf("event %#v not found", key)
+			},
+		)
+	return cache
+}
