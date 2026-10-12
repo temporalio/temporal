@@ -950,6 +950,11 @@ var (
 		"chasm_pure_task_errors",
 		WithDescription("The number of errors during CHASM pure task execution."),
 	)
+	ChasmPureTaskNotInvalidated = NewCounterDef(
+		"chasm_pure_task_not_invalidated",
+		WithDescription("The number of scheduled CHASM pure tasks that remained valid after successful execution. "+
+			"Such tasks are sent to DLQ only when history.chasmDLQScheduledPureTaskOnValidation is enabled."),
+	)
 	ChasmLogicalTaskCount = NewDimensionlessHistogramDef(
 		"chasm_logical_task_count",
 		WithDescription("The number of logical CHASM tasks of one task type in a single execution, recorded "+
