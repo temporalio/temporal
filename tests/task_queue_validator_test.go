@@ -42,7 +42,6 @@ func (s *TaskQueueSuite) TestTaskValidatorBacklog() {
 
 func (s *TaskQueueSuite) testTaskValidatorBacklog(taskType enumspb.TaskQueueType, taskCount int, invalidPositions []int, pollBeforeCleanup int) {
 	env := s.newTestEnv(
-		testcore.WithDynamicConfig(dynamicconfig.MatchingUseNewMatcher, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingEnableFairness, false),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
