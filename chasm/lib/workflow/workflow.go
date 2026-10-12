@@ -186,7 +186,7 @@ func (w *Workflow) ValidateCallbackAddition(
 	// again here would reject retries that are actually within the limits. This has to precede
 	// the limit checks: target already holds the callbacks being re-offered.
 	target := w.callbackHolder(ctx, addition.UpdateID)
-	if callback.HasCallbacksForRequest(ctx, target, addition.RequestID) {
+	if callback.HasCallbacksForRequest(target, addition.RequestID) {
 		return nil
 	}
 
@@ -202,7 +202,7 @@ func (w *Workflow) ValidateCallbackAddition(
 		seen[key] = struct{}{}
 		// Already attached, and so already in the totals: a retry of a request persisted with an
 		// UpdateAdmitted event can be buffered again.
-		if callback.HasCallbacksForRequest(ctx, w.callbackHolder(ctx, held.UpdateID), held.RequestID) {
+		if callback.HasCallbacksForRequest(w.callbackHolder(ctx, held.UpdateID), held.RequestID) {
 			continue
 		}
 		usage.Reserve(held.Callbacks)
