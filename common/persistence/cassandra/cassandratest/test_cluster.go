@@ -1,4 +1,4 @@
-package cassandra
+package cassandratest
 
 import (
 	"path"
@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/cassandra"
 	commongocql "go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
@@ -172,7 +173,7 @@ func (s *TestCluster) CreateSession(
 
 // CreateDatabase from PersistenceTestCluster interface
 func (s *TestCluster) CreateDatabase() {
-	err := CreateCassandraKeyspace(s.session, s.DatabaseName(), 1, true, s.logger)
+	err := cassandra.CreateCassandraKeyspace(s.session, s.DatabaseName(), 1, true, s.logger)
 	if err != nil {
 		s.logger.Fatal("CreateCassandraKeyspace", tag.Error(err))
 	}
@@ -181,7 +182,7 @@ func (s *TestCluster) CreateDatabase() {
 
 // DropDatabase from PersistenceTestCluster interface
 func (s *TestCluster) DropDatabase() {
-	err := DropCassandraKeyspace(s.session, s.DatabaseName(), s.logger)
+	err := cassandra.DropCassandraKeyspace(s.session, s.DatabaseName(), s.logger)
 	if err != nil && !strings.Contains(err.Error(), "AlreadyExists") {
 		s.logger.Fatal("DropCassandraKeyspace", tag.Error(err))
 	}

@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/persistence/cassandra/cassandratest"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/persistencetest"
@@ -353,7 +354,7 @@ func TestCassandraNexusEndpointPersistence(t *testing.T) {
 	})
 }
 
-func testCassandraQueueV2DataCorruption(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2DataCorruption(t *testing.T, cluster *cassandratest.TestCluster) {
 	t.Run("ErrInvalidQueueMessageEncodingType", func(t *testing.T) {
 		t.Parallel()
 		testCassandraQueueV2ErrInvalidQueueMessageEncodingType(t, cluster)
@@ -368,7 +369,7 @@ func testCassandraQueueV2DataCorruption(t *testing.T, cluster *cassandra.TestClu
 	})
 }
 
-func testCassandraQueueV2(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2(t *testing.T, cluster *cassandratest.TestCluster) {
 	t.Run("DataCorruption", func(t *testing.T) {
 		t.Parallel()
 		testCassandraQueueV2DataCorruption(t, cluster)
@@ -397,7 +398,7 @@ func testCassandraQueueV2(t *testing.T, cluster *cassandra.TestCluster) {
 	})
 }
 
-func testCassandraQueueV2ConcurrentConflicts(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2ConcurrentConflicts(t *testing.T, cluster *cassandratest.TestCluster) {
 	t.Run("EnqueueMessage", func(t *testing.T) {
 		t.Parallel()
 		testCassandraQueueV2EnqueueErrEnqueueMessageConflict(t, cluster)
@@ -408,7 +409,7 @@ func testCassandraQueueV2ConcurrentConflicts(t *testing.T, cluster *cassandra.Te
 	})
 }
 
-func testCassandraQueueV2QueryErrors(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2QueryErrors(t *testing.T, cluster *cassandratest.TestCluster) {
 	t.Run("GetQueueQuery", func(t *testing.T) {
 		t.Parallel()
 		testCassandraQueueV2ErrGetQueueQuery(t, cluster)
@@ -451,7 +452,7 @@ func testCassandraQueueV2QueryErrors(t *testing.T, cluster *cassandra.TestCluste
 	})
 }
 
-func testCassandraQueueV2ErrRangeDeleteMessagesUpdateQueueQuery(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2ErrRangeDeleteMessagesUpdateQueueQuery(t *testing.T, cluster *cassandratest.TestCluster) {
 	q := newQueueV2Store(failingSession{
 		Session:        cluster.GetSession(),
 		failingQueries: []string{cassandra.TemplateUpdateQueueMetadataQuery},
@@ -472,7 +473,7 @@ func testCassandraQueueV2ErrRangeDeleteMessagesUpdateQueueQuery(t *testing.T, cl
 	assert.ErrorContains(t, err, "QueueV2UpdateQueueMetadata")
 }
 
-func testCassandraQueueV2ErrRangeDeleteMessagesGetMaxMessageIDQuery(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2ErrRangeDeleteMessagesGetMaxMessageIDQuery(t *testing.T, cluster *cassandratest.TestCluster) {
 	session := &failingSession{
 		Session:        cluster.GetSession(),
 		failingQueries: []string{},
@@ -495,7 +496,7 @@ func testCassandraQueueV2ErrRangeDeleteMessagesGetMaxMessageIDQuery(t *testing.T
 	assert.ErrorContains(t, err, "QueueV2GetMaxMessageID")
 }
 
-func testCassandraQueueV2ErrEnqueueMessageGetMaxMessageIDQuery(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2ErrEnqueueMessageGetMaxMessageIDQuery(t *testing.T, cluster *cassandratest.TestCluster) {
 	q := newQueueV2Store(failingSession{
 		Session:        cluster.GetSession(),
 		failingQueries: []string{cassandra.TemplateGetMaxMessageIDQuery},
@@ -515,7 +516,7 @@ func testCassandraQueueV2ErrEnqueueMessageGetMaxMessageIDQuery(t *testing.T, clu
 	assert.ErrorContains(t, err, "QueueV2GetMaxMessageID")
 }
 
-func testCassandraQueueV2ErrListQueuesGetMaxMessageIDQuery(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2ErrListQueuesGetMaxMessageIDQuery(t *testing.T, cluster *cassandratest.TestCluster) {
 	q := newQueueV2Store(failingSession{
 		Session:        cluster.GetSession(),
 		failingQueries: []string{cassandra.TemplateGetMaxMessageIDQuery},
@@ -538,7 +539,7 @@ func testCassandraQueueV2ErrListQueuesGetMaxMessageIDQuery(t *testing.T, cluster
 	assert.ErrorContains(t, err, "QueueV2GetMaxMessageID")
 }
 
-func testCassandraQueueV2ErrListQueuesGetQueueNamesQuery(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2ErrListQueuesGetQueueNamesQuery(t *testing.T, cluster *cassandratest.TestCluster) {
 	q := newQueueV2Store(failingSession{
 		Session:        cluster.GetSession(),
 		failingQueries: []string{cassandra.TemplateGetQueueNamesQuery},
@@ -555,7 +556,7 @@ func testCassandraQueueV2ErrListQueuesGetQueueNamesQuery(t *testing.T, cluster *
 	require.ErrorContains(t, err, "QueueV2ListQueues")
 }
 
-func testCassandraQueueV2MultiplePartitions(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2MultiplePartitions(t *testing.T, cluster *cassandratest.TestCluster) {
 	t.Run("RangeDeleteMessages", func(t *testing.T) {
 		t.Parallel()
 		testCassandraQueueV2MultiplePartitionsRangeDelete(t, cluster)
@@ -584,7 +585,7 @@ func (f *blockingSession) Query(query string, args ...any) gocql.Query {
 // testCassandraQueueV2EnqueueErrEnqueueMessageConflict tests that when there are concurrent inserts to the queue, only one of
 // them is accepted if they try to enqueue a message with the same ID, and the other clients are given the correct
 // error.
-func testCassandraQueueV2EnqueueErrEnqueueMessageConflict(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2EnqueueErrEnqueueMessageConflict(t *testing.T, cluster *cassandratest.TestCluster) {
 	const numConcurrentWrites = 3
 
 	session := &blockingSession{
@@ -688,7 +689,7 @@ func printResults(t *testing.T, results chan enqueueMessageResult) {
 	}
 }
 
-func testCassandraQueueV2ErrInvalidQueueMessageEncodingType(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2ErrInvalidQueueMessageEncodingType(t *testing.T, cluster *cassandratest.TestCluster) {
 	session := cluster.GetSession()
 	q := newQueueV2Store(session)
 	queueType := persistence.QueueTypeHistoryNormal
@@ -732,7 +733,7 @@ func (f failingSession) Query(query string, args ...any) gocql.Query {
 	return f.Session.Query(query, args...)
 }
 
-func testCassandraQueueV2ErrGetMessagesQuery(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2ErrGetMessagesQuery(t *testing.T, cluster *cassandratest.TestCluster) {
 	q := newQueueV2Store(failingSession{
 		Session:        cluster.GetSession(),
 		failingQueries: []string{cassandra.TemplateGetMessagesQuery},
@@ -756,7 +757,7 @@ func testCassandraQueueV2ErrGetMessagesQuery(t *testing.T, cluster *cassandra.Te
 	assert.ErrorContains(t, err, "QueueV2ReadMessages")
 }
 
-func testCassandraQueueV2ErrEnqueueMessageQuery(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2ErrEnqueueMessageQuery(t *testing.T, cluster *cassandratest.TestCluster) {
 	q := newQueueV2Store(failingSession{
 		Session:        cluster.GetSession(),
 		failingQueries: []string{cassandra.TemplateEnqueueMessageQuery},
@@ -776,7 +777,7 @@ func testCassandraQueueV2ErrEnqueueMessageQuery(t *testing.T, cluster *cassandra
 	assert.ErrorContains(t, err, "QueueV2EnqueueMessage")
 }
 
-func testCassandraQueueV2ErrInvalidPayloadEncodingType(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2ErrInvalidPayloadEncodingType(t *testing.T, cluster *cassandratest.TestCluster) {
 	// Manually insert a row into the queues table that has an invalid metadata payload encoding type and then verify
 	// that we gracefully handle the error when we try to read from this queue.
 
@@ -816,7 +817,7 @@ func testCassandraQueueV2ErrInvalidPayloadEncodingType(t *testing.T, cluster *ca
 	assert.ErrorContains(t, err, queueName)
 }
 
-func testCassandraQueueV2ErrInvalidPayload(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2ErrInvalidPayload(t *testing.T, cluster *cassandratest.TestCluster) {
 	// Manually insert a row into the queues table that has some invalid bytes for the queue metadata proto payload and
 	// then verify that we gracefully handle the error when we try to read from this queue.
 
@@ -845,7 +846,7 @@ func testCassandraQueueV2ErrInvalidPayload(t *testing.T, cluster *cassandra.Test
 	assert.ErrorContains(t, err, queueName)
 }
 
-func testCassandraQueueV2ErrGetQueueQuery(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2ErrGetQueueQuery(t *testing.T, cluster *cassandratest.TestCluster) {
 	q := newQueueV2Store(failingSession{
 		Session:        cluster.GetSession(),
 		failingQueries: []string{cassandra.TemplateGetQueueQuery},
@@ -869,7 +870,7 @@ func testCassandraQueueV2ErrGetQueueQuery(t *testing.T, cluster *cassandra.TestC
 	assert.ErrorContains(t, err, "QueueV2GetQueue")
 }
 
-func testCassandraQueueV2ErrCreateQueueQuery(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2ErrCreateQueueQuery(t *testing.T, cluster *cassandratest.TestCluster) {
 	q := newQueueV2Store(failingSession{
 		Session:        cluster.GetSession(),
 		failingQueries: []string{cassandra.TemplateCreateQueueQuery},
@@ -887,7 +888,7 @@ func testCassandraQueueV2ErrCreateQueueQuery(t *testing.T, cluster *cassandra.Te
 	assert.ErrorContains(t, err, "QueueV2CreateQueue")
 }
 
-func testCassandraQueueV2ErrRangeDeleteMessagesQuery(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2ErrRangeDeleteMessagesQuery(t *testing.T, cluster *cassandratest.TestCluster) {
 	q := newQueueV2Store(failingSession{
 		Session:        cluster.GetSession(),
 		failingQueries: []string{cassandra.TemplateRangeDeleteMessagesQuery},
@@ -908,7 +909,7 @@ func testCassandraQueueV2ErrRangeDeleteMessagesQuery(t *testing.T, cluster *cass
 	assert.ErrorContains(t, err, "QueueV2RangeDeleteMessages")
 }
 
-func testCassandraQueueV2MinMessageIDOptimization(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2MinMessageIDOptimization(t *testing.T, cluster *cassandratest.TestCluster) {
 	session := &recordingSession{
 		Session: cluster.GetSession(),
 	}
@@ -954,7 +955,7 @@ func testCassandraQueueV2MinMessageIDOptimization(t *testing.T, cluster *cassand
 	assert.Equal(t, pageSize, args[4])
 }
 
-func testCassandraQueueV2ConcurrentRangeDeleteMessages(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2ConcurrentRangeDeleteMessages(t *testing.T, cluster *cassandratest.TestCluster) {
 	// This test simulates a race condition between two RangeDeleteMessages calls. First, we enqueue 3 messages, then we
 	// start a request to delete the first message, and then we start another request to delete the first two messages.
 	// We have two cases, one where the first request to delete the first message is the leader and one where the second
@@ -1094,7 +1095,7 @@ func testCassandraQueueV2ConcurrentRangeDeleteMessages(t *testing.T, cluster *ca
 	}
 }
 
-func testCassandraQueueV2MultiplePartitionsRangeDelete(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2MultiplePartitionsRangeDelete(t *testing.T, cluster *cassandratest.TestCluster) {
 	// Manually insert a row into the queues table that has multiple partitions and then verify that we gracefully
 	// handle the error when we try to range delete messages from this queue.
 
@@ -1111,7 +1112,7 @@ func testCassandraQueueV2MultiplePartitionsRangeDelete(t *testing.T, cluster *ca
 	assert.ErrorContains(t, err, "partitions")
 }
 
-func testCassandraQueueV2MultiplePartitionsReadMessages(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2MultiplePartitionsReadMessages(t *testing.T, cluster *cassandratest.TestCluster) {
 	// Manually insert a row into the queues table that has multiple partitions and then verify that we gracefully
 	// handle the error when we try to read messages from this queue.
 
@@ -1132,7 +1133,7 @@ func testCassandraQueueV2MultiplePartitionsReadMessages(t *testing.T, cluster *c
 	assert.ErrorContains(t, err, "partitions")
 }
 
-func testCassandraQueueV2MultiplePartitionsListQueues(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2MultiplePartitionsListQueues(t *testing.T, cluster *cassandratest.TestCluster) {
 	// Manually insert a row into the queues table that has multiple partitions and then verify that we gracefully
 	// handle the error when we try to list queues.
 
@@ -1152,7 +1153,7 @@ func testCassandraQueueV2MultiplePartitionsListQueues(t *testing.T, cluster *cas
 	assert.ErrorContains(t, err, "partitions")
 }
 
-func testCassandraQueueV2RangeDeleteUpperBoundHigherThanMaxMessageID(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2RangeDeleteUpperBoundHigherThanMaxMessageID(t *testing.T, cluster *cassandratest.TestCluster) {
 	q := newQueueV2Store(cluster.GetSession())
 	ctx := context.Background()
 	queueType := persistence.QueueTypeHistoryNormal
@@ -1171,7 +1172,7 @@ func testCassandraQueueV2RangeDeleteUpperBoundHigherThanMaxMessageID(t *testing.
 	assert.Equal(t, int64(persistence.FirstQueueMessageID+1), res.Metadata.ID)
 }
 
-func testCassandraQueueV2RepeatedRangeDelete(t *testing.T, cluster *cassandra.TestCluster) {
+func testCassandraQueueV2RepeatedRangeDelete(t *testing.T, cluster *cassandratest.TestCluster) {
 	// We never delete the last message from the queue. However, on a subsequent delete, the previous message with the
 	// min_message_id of the queue should be deleted. This test verifies that.
 
@@ -1204,7 +1205,7 @@ func testCassandraQueueV2RepeatedRangeDelete(t *testing.T, cluster *cassandra.Te
 
 func getNumMessages(
 	t *testing.T,
-	cluster *cassandra.TestCluster,
+	cluster *cassandratest.TestCluster,
 	queueType persistence.QueueV2Type,
 	queueName string,
 	numMessages int,
@@ -1283,7 +1284,7 @@ func deleteMessages(
 	return err
 }
 
-func testCassandraNexusEndpointStore(t *testing.T, cluster *cassandra.TestCluster, tableVersion *atomic.Int64) {
+func testCassandraNexusEndpointStore(t *testing.T, cluster *cassandratest.TestCluster, tableVersion *atomic.Int64) {
 	store := newNexusEndpointStore(cluster.GetSession())
 	t.Run("ConcurrentCreate", func(t *testing.T) {
 		testCassandraNexusEndpointStoreConcurrentCreate(t, store, tableVersion)

@@ -23,7 +23,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/persistence/cassandra/cassandratest"
 	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
@@ -127,11 +127,11 @@ func NewTestBaseWithCassandra(options *TestBaseOptions) *TestBase {
 	return NewTestBaseForCluster(testCluster, logger)
 }
 
-func NewTestClusterForCassandra(options *TestBaseOptions, logger log.Logger) *cassandra.TestCluster {
+func NewTestClusterForCassandra(options *TestBaseOptions, logger log.Logger) *cassandratest.TestCluster {
 	if options.DBName == "" {
 		options.DBName = GenerateRandomDBName()
 	}
-	testCluster := cassandra.NewTestCluster(
+	testCluster := cassandratest.NewTestCluster(
 		options.DBName,
 		options.DBUsername,
 		options.DBPassword,

@@ -18,7 +18,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/debug"
 	p "go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/persistence/cassandra/cassandratest"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/testing/await"
@@ -85,18 +85,18 @@ func (m *MetadataPersistenceSuiteV2) createPartialNamespace(id string, name stri
 	const templateCreateNamespaceQuery = `INSERT INTO namespaces_by_id (` +
 		`id, name) ` +
 		`VALUES(?, ?) IF NOT EXISTS`
-	query := m.DefaultTestCluster.(*cassandra.TestCluster).GetSession().Query(templateCreateNamespaceQuery, id, name).WithContext(context.Background())
+	query := m.DefaultTestCluster.(*cassandratest.TestCluster).GetSession().Query(templateCreateNamespaceQuery, id, name).WithContext(context.Background())
 	err := query.Exec()
 	m.NoError(err)
 
 }
 
 func (m *MetadataPersistenceSuiteV2) truncatePartialNamespace() {
-	query := m.DefaultTestCluster.(*cassandra.TestCluster).GetSession().Query("TRUNCATE namespaces_by_id").WithContext(context.Background())
+	query := m.DefaultTestCluster.(*cassandratest.TestCluster).GetSession().Query("TRUNCATE namespaces_by_id").WithContext(context.Background())
 	err := query.Exec()
 	m.NoError(err)
 
-	query = m.DefaultTestCluster.(*cassandra.TestCluster).GetSession().Query("TRUNCATE namespaces").WithContext(context.Background())
+	query = m.DefaultTestCluster.(*cassandratest.TestCluster).GetSession().Query("TRUNCATE namespaces").WithContext(context.Background())
 	err = query.Exec()
 	m.NoError(err)
 }
@@ -104,7 +104,7 @@ func (m *MetadataPersistenceSuiteV2) truncatePartialNamespace() {
 func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameSameID() {
 	// This is only relevant for cassandra
 	switch m.DefaultTestCluster.(type) {
-	case *cassandra.TestCluster:
+	case *cassandratest.TestCluster:
 	default:
 		return
 	}
@@ -182,7 +182,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameSameI
 func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameDifferentID() {
 	// This is only relevant for cassandra
 	switch m.DefaultTestCluster.(type) {
-	case *cassandra.TestCluster:
+	case *cassandratest.TestCluster:
 	default:
 		return
 	}
@@ -261,7 +261,7 @@ func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceSameNameDiffe
 func (m *MetadataPersistenceSuiteV2) TestCreateWithPartialNamespaceDifferentNameSameID() {
 	// This is only relevant for cassandra
 	switch m.DefaultTestCluster.(type) {
-	case *cassandra.TestCluster:
+	case *cassandratest.TestCluster:
 	default:
 		return
 	}
