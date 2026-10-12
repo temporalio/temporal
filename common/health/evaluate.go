@@ -16,7 +16,7 @@ type SignalReader interface {
 // configured threshold. Checks are named after the source, so callers evaluating more than
 // one source (e.g. gRPC and persistence) get names that stay distinct in a single response.
 func Evaluate(reader SignalReader, settings Settings, source Source) []*healthspb.HealthCheck {
-	var checks []*healthspb.HealthCheck
+	checks := make([]*healthspb.HealthCheck, 0, 16)
 
 	// //////////////////
 	// overall latency
