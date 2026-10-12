@@ -77,7 +77,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 			}
 			handlerErr, isHandlerError := errors.AsType[*nexus.HandlerError](err)
 			if isHandlerError {
-				// nolint:exhaustive
+				//nolint:exhaustive
 				switch handlerErr.Type {
 				case nexus.HandlerErrorTypeNotFound, nexus.HandlerErrorTypeBadRequest:
 					return chasmworkflow.FailWorkflowTaskError{

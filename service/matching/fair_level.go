@@ -32,7 +32,7 @@ func (a fairLevel) less(b fairLevel) bool {
 
 func newFairLevelTreeMap() *treemap.Map {
 	return treemap.NewWith(func(aany, bany any) int {
-		a, b := aany.(fairLevel), bany.(fairLevel) // nolint:revive
+		a, b := aany.(fairLevel), bany.(fairLevel) //nolint:revive
 		if a.less(b) {
 			return -1
 		} else if b.less(a) {

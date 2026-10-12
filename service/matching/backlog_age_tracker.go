@@ -29,7 +29,7 @@ func (b backlogAgeTracker) record(ts *timestamppb.Timestamp, delta int) {
 	createTime := ts.AsTime().UnixNano()
 	count := delta
 	if prev, ok := b.tree.Get(createTime); ok {
-		count += prev.(int) // nolint:revive
+		count += prev.(int) //nolint:revive
 	}
 	if count = max(0, count); count == 0 {
 		b.tree.Remove(createTime)
@@ -45,7 +45,7 @@ func (b backlogAgeTracker) oldestTime() time.Time {
 		return time.Time{}
 	}
 	k, _ := b.tree.Min()
-	return time.Unix(0, k.(int64)) // nolint:revive
+	return time.Unix(0, k.(int64)) //nolint:revive
 }
 
 // minNonZeroTime returns the minimum time of a and b, ignoring zero times.

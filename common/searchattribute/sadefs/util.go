@@ -26,7 +26,7 @@ func SetMetadataType(p *commonpb.Payload, t enumspb.IndexedValueType) {
 
 	_, isValidT := enumspb.IndexedValueType_name[int32(t)]
 	if !isValidT {
-		// nolint: forbidigo
+		//nolint:forbidigo
 		panic(fmt.Sprintf("unknown index value type %v", t))
 	}
 	p.Metadata[MetadataType] = []byte(t.String())

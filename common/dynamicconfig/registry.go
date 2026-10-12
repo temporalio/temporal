@@ -24,7 +24,7 @@ func register(s GenericSetting) {
 		globalRegistry.settings = make(map[Key]GenericSetting)
 	}
 	if globalRegistry.settings[s.Key()] != nil {
-		// nolint:forbidigo // only called during static initialization
+		//nolint:forbidigo // only called during static initialization
 		panic(fmt.Sprintf("duplicate registration of dynamic config key: %q", s.Key().String()))
 	}
 	globalRegistry.settings[s.Key()] = s

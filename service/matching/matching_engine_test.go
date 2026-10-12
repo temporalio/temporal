@@ -5430,7 +5430,7 @@ func (m *testTaskManager) DeleteTaskQueue(
 
 func (m *testTaskManager) delay() {
 	if m.delayInjection > 0 && rand.Int31n(128) >= 13 {
-		time.Sleep(time.Duration(rand.Float32() * float32(m.delayInjection))) // nolint:forbidigo
+		time.Sleep(time.Duration(rand.Float32() * float32(m.delayInjection))) //nolint:forbidigo
 	}
 }
 

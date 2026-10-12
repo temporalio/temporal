@@ -87,7 +87,7 @@ func RegisterTaskSerializers(reg *hsm.Registry) error {
 	if err := reg.RegisterTaskSerializer(TaskTypeInvocation, InvocationTaskSerializer{}); err != nil {
 		return err
 	}
-	if err := reg.RegisterTaskSerializer(TaskTypeBackoff, BackoffTaskSerializer{}); err != nil { // nolint:revive
+	if err := reg.RegisterTaskSerializer(TaskTypeBackoff, BackoffTaskSerializer{}); err != nil { //nolint:revive
 		return err
 	}
 	return nil

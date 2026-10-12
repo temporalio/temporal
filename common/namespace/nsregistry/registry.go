@@ -260,7 +260,7 @@ func (r *registry) GetPingChecks() []pingable.Check {
 			Ping: func() []pingable.Pingable {
 				// just checking if we can acquire the lock
 				r.nsMapsLock.Lock()
-				// nolint:staticcheck
+				//nolint:staticcheck
 				r.nsMapsLock.Unlock()
 				return nil
 			},

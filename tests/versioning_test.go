@@ -1,4 +1,4 @@
-// nolint:revive
+//nolint:revive
 package tests
 
 import (

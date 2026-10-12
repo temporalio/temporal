@@ -81,7 +81,7 @@ func (f *priForwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 		expirationDuration = durationpb.New(remaining)
 	}
 
-	// nolint:exhaustive // there's a default clause
+	//nolint:exhaustive // there's a default clause
 	switch f.partition.TaskType() {
 	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
 		_, err = f.client.AddWorkflowTask(
@@ -221,10 +221,10 @@ func ForwardPollWithTarget(
 	source tqid.Partition,
 	target *tqid.NormalPartition,
 ) (*internalTask, error) {
-	pollerID, _ := ctx.Value(pollerIDKey).(string) // nolint:revive
-	identity, _ := ctx.Value(identityKey).(string) // nolint:revive
+	pollerID, _ := ctx.Value(pollerIDKey).(string) //nolint:revive
+	identity, _ := ctx.Value(identityKey).(string) //nolint:revive
 
-	// nolint:exhaustive // there's a default clause
+	//nolint:exhaustive // there's a default clause
 	switch target.TaskType() {
 	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
 		resp, err := client.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{

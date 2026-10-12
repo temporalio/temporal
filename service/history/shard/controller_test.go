@@ -930,7 +930,7 @@ func (s *controllerSuite) setupMockForReadiness(shardID int32, state *readinessM
 		PreviousRangeID: 5,
 	})).Return(nil)
 
-	// nolint:forbidigo // deliberately blocking
+	//nolint:forbidigo // deliberately blocking
 	s.mockShardManager.EXPECT().AssertShardOwnership(gomock.Any(), &persistence.AssertShardOwnershipRequest{
 		ShardID: shardID,
 		RangeID: 6,

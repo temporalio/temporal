@@ -46,7 +46,7 @@ func setupCustom(t *testing.T, handler nexus.Handler, serializer nexus.Serialize
 
 	return ctx, client, func() {
 		cancel()
-		// nolint // ignore error on close in test
+		//nolint // ignore error on close in test
 		listener.Close()
 	}
 }
@@ -75,7 +75,7 @@ func setupForCompletion(t *testing.T, handler nexusrpc.CompletionHandler, serial
 
 	return ctx, callbackURL, func() {
 		cancel()
-		// nolint // ignore error on close in test
+		//nolint // ignore error on close in test
 		listener.Close()
 	}
 }
@@ -122,7 +122,8 @@ func (c customFailureConverter) ErrorToFailure(err error) (nexus.Failure, error)
 }
 
 // FailureToError implements FailureConverter.
-// nolint:revive // unnamed results of the same type is fine for test
+//
+//nolint:revive // unnamed results of the same type is fine for test
 func (c customFailureConverter) FailureToError(f nexus.Failure) (error, error) {
 	if f.Metadata["type"] != "custom" {
 		return errors.New(f.Message), nil

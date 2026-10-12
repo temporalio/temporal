@@ -155,7 +155,7 @@ func (tr *priTaskReader) completeTask(task *internalTask, res taskResponse) {
 	tr.backlogMgr.db.updateAckLevelAndBacklogStats(tr.subqueue, tr.ackLevel, -numAcked, tr.backlogAge.oldestTime())
 }
 
-// nolint:revive // can simplify later
+//nolint:revive // can simplify later
 func (tr *priTaskReader) getTasksPump() {
 	ctx := tr.backlogMgr.tqCtx
 
@@ -466,7 +466,7 @@ func (tr *priTaskReader) ackTaskLocked(taskId int64) int64 {
 		if minId == nil || !acked.(bool) {
 			break
 		}
-		tr.ackLevel = minId.(int64) // nolint:revive
+		tr.ackLevel = minId.(int64) //nolint:revive
 		tr.outstandingTasks.Remove(minId)
 		numAcked += 1
 	}

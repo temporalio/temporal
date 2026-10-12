@@ -223,7 +223,7 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 		return nil, errors.New("unknown-query-type")
 	}
 
-	// nolint
+	//nolint
 	poller0 := testcore.TaskPoller{
 		Client:              client0,
 		Namespace:           namespaceName,
@@ -236,7 +236,7 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 		T:                   s.T(),
 	}
 
-	// nolint
+	//nolint
 	poller1 := testcore.TaskPoller{
 		Client:              client1,
 		Namespace:           namespaceName,
@@ -293,7 +293,7 @@ func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {
 	s.Equal("query-result", s.decodePayloadsString(queryResult.Resp.GetQueryResult()))
 
 	// Wait a while so the events are replicated.
-	time.Sleep(5 * time.Second) // nolint:forbidigo
+	time.Sleep(5 * time.Second) //nolint:forbidigo
 
 	// call QueryWorkflow in separate goroutinue (because it is blocking). That will generate a query task
 	go queryWorkflowFn(client1, queryType)
@@ -472,7 +472,7 @@ func (s *FunctionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
 		}}, nil
 	}
 
-	// nolint
+	//nolint
 	poller0 := &testcore.TaskPoller{
 		Client:                       client0,
 		Namespace:                    namespace,
@@ -485,7 +485,7 @@ func (s *FunctionalClustersTestSuite) TestStickyWorkflowTaskFailover() {
 		T:                            s.T(),
 	}
 
-	// nolint
+	//nolint
 	poller1 := &testcore.TaskPoller{
 		Client:                       client1,
 		Namespace:                    namespace,
@@ -586,7 +586,7 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 		}}, nil
 	}
 
-	// nolint
+	//nolint
 	poller0 := testcore.TaskPoller{
 		Client:              client0,
 		Namespace:           namespaceName,
@@ -598,7 +598,7 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 		T:                   s.T(),
 	}
 
-	// nolint
+	//nolint
 	poller1 := testcore.TaskPoller{
 		Client:              client1,
 		Namespace:           namespaceName,
@@ -694,7 +694,7 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 		}}, nil
 	}
 
-	// nolint
+	//nolint
 	poller0 := testcore.TaskPoller{
 		Client:              client0,
 		Namespace:           namespaceName,
@@ -706,7 +706,7 @@ func (s *FunctionalClustersTestSuite) TestStartWorkflowExecution_Failover_Workfl
 		T:                   s.T(),
 	}
 
-	// nolint
+	//nolint
 	poller1 := testcore.TaskPoller{
 		Client:              client1,
 		Namespace:           namespaceName,
@@ -799,7 +799,7 @@ func (s *FunctionalClustersTestSuite) TestTerminateFailover() {
 		}}, nil
 	}
 
-	// nolint
+	//nolint
 	poller0 := &testcore.TaskPoller{
 		Client:              client0,
 		Namespace:           namespace,
@@ -961,7 +961,7 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 
 	}
 
-	// nolint
+	//nolint
 	poller0 := testcore.TaskPoller{
 		Client:              client0,
 		Namespace:           namespace,
@@ -973,7 +973,7 @@ func (s *FunctionalClustersTestSuite) TestResetWorkflowFailover() {
 		T:                   s.T(),
 	}
 
-	// nolint
+	//nolint
 	poller1 := testcore.TaskPoller{
 		Client:              client1,
 		Namespace:           namespace,
@@ -1115,7 +1115,7 @@ func (s *FunctionalClustersTestSuite) TestContinueAsNewFailover() {
 		}}, nil
 	}
 
-	// nolint
+	//nolint
 	poller0 := &testcore.TaskPoller{
 		Client:              client0,
 		Namespace:           namespace,
@@ -1126,7 +1126,7 @@ func (s *FunctionalClustersTestSuite) TestContinueAsNewFailover() {
 		T:                   s.T(),
 	}
 
-	// nolint
+	//nolint
 	poller1 := testcore.TaskPoller{
 		Client:              client1,
 		Namespace:           namespace,
@@ -1211,7 +1211,7 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 		}}, nil
 	}
 
-	// nolint
+	//nolint
 	poller0 := &testcore.TaskPoller{
 		Client:              client0,
 		Namespace:           namespace,
@@ -1222,7 +1222,7 @@ func (s *FunctionalClustersTestSuite) TestSignalFailover() {
 		T:                   s.T(),
 	}
 
-	// nolint
+	//nolint
 	poller1 := &testcore.TaskPoller{
 		Client:              client1,
 		Namespace:           namespace,
@@ -1420,7 +1420,7 @@ func (s *FunctionalClustersTestSuite) TestUserTimerFailover() {
 		}}, nil
 	}
 
-	// nolint
+	//nolint
 	poller0 := &testcore.TaskPoller{
 		Client:              client0,
 		Namespace:           namespace,
@@ -1431,7 +1431,7 @@ func (s *FunctionalClustersTestSuite) TestUserTimerFailover() {
 		T:                   s.T(),
 	}
 
-	// nolint
+	//nolint
 	poller1 := &testcore.TaskPoller{
 		Client:              client1,
 		Namespace:           namespace,
@@ -1460,7 +1460,7 @@ func (s *FunctionalClustersTestSuite) TestUserTimerFailover() {
 		if !workflowCompleted {
 			_, err = poller1.PollAndProcessWorkflowTask()
 			s.NoError(err)
-			time.Sleep(time.Second) // nolint:forbidigo
+			time.Sleep(time.Second) //nolint:forbidigo
 		}
 	}
 }
@@ -1503,7 +1503,7 @@ func (s *FunctionalClustersTestSuite) TestForceWorkflowTaskClose_WithClusterReco
 		}}, nil
 	}
 
-	// nolint
+	//nolint
 	poller0 := &testcore.TaskPoller{
 		Client:              client0,
 		Namespace:           namespace,
@@ -1605,7 +1605,7 @@ func (s *FunctionalClustersTestSuite) TestTransientWorkflowTaskFailover() {
 		}}, nil
 	}
 
-	// nolint
+	//nolint
 	poller0 := &testcore.TaskPoller{
 		Client:              client0,
 		Namespace:           namespace,
@@ -1616,7 +1616,7 @@ func (s *FunctionalClustersTestSuite) TestTransientWorkflowTaskFailover() {
 		T:                   s.T(),
 	}
 
-	// nolint
+	//nolint
 	poller1 := &testcore.TaskPoller{
 		Client:              client1,
 		Namespace:           namespace,
@@ -1683,7 +1683,7 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowStartAndFailover() {
 			}}, nil
 	}
 
-	// nolint
+	//nolint
 	poller1 := testcore.TaskPoller{
 		Client:              client1,
 		Namespace:           namespace,
@@ -1807,7 +1807,7 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 			}}, nil
 	}
 
-	// nolint
+	//nolint
 	poller0 := testcore.TaskPoller{
 		Client:              client0,
 		Namespace:           namespace,
@@ -1818,7 +1818,7 @@ func (s *FunctionalClustersTestSuite) TestCronWorkflowCompleteAndFailover() {
 		T:                   s.T(),
 	}
 
-	// nolint
+	//nolint
 	poller1 := testcore.TaskPoller{
 		Client:              client1,
 		Namespace:           namespace,
@@ -1910,7 +1910,7 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryStartAndFailover() {
 			}}, nil
 	}
 
-	// nolint
+	//nolint
 	poller1 := testcore.TaskPoller{
 		Client:              client1,
 		Namespace:           namespace,
@@ -1992,7 +1992,7 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 			}}, nil
 	}
 
-	// nolint
+	//nolint
 	poller0 := testcore.TaskPoller{
 		Client:              client0,
 		Namespace:           namespace,
@@ -2003,7 +2003,7 @@ func (s *FunctionalClustersTestSuite) TestWorkflowRetryFailAndFailover() {
 		T:                   s.T(),
 	}
 
-	// nolint
+	//nolint
 	poller1 := testcore.TaskPoller{
 		Client:              client1,
 		Namespace:           namespace,
@@ -2056,7 +2056,7 @@ func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
 			}
 		}
 		activity.RecordHeartbeat(ctx, expectedHeartbeatValue)
-		time.Sleep(time.Second * 10) // nolint:forbidigo
+		time.Sleep(time.Second * 10) //nolint:forbidigo
 		return errors.New("no heartbeat progress found")
 	}
 	testWorkflowFn := func(ctx workflow.Context) error {
@@ -2083,7 +2083,7 @@ func (s *FunctionalClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.NotEmpty(run1.GetRunID())
 
 	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(run1.GetRunID()))
-	// nolint:forbidigo
+	//nolint:forbidigo
 	time.Sleep(time.Second * 4) // wait for heartbeat from activity to be reported and activity timed out on heartbeat
 
 	worker0.Stop() // stop worker0 so cluster0 won't make any progress
@@ -2874,7 +2874,7 @@ func (s *FunctionalClustersWithRedirectionTestSuite) TestActivityMultipleHeartbe
 
 	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
 	// sleep to trigger heartbeat timeout for first attempt
-	// nolint:forbidigo
+	//nolint:forbidigo
 	time.Sleep(time.Second * 4)
 
 	close(allowFailover)

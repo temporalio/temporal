@@ -121,7 +121,8 @@ func newNexusCompletionHTTPHandler(handler *nexusCompletionHandler) *nexusComple
 }
 
 // CompleteOperation implements nexus.CompletionHandler.
-// nolint:revive // (cyclomatic complexity) This function is long but the complexity is justified.
+//
+//nolint:revive // (cyclomatic complexity) This function is long but the complexity is justified.
 func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexusrpc.CompletionRequest) (retErr error) {
 	startTime := time.Now()
 	token, err := commonnexus.DecodeCallbackToken(r.HTTPRequest.Header.Get(commonnexus.CallbackTokenHeader))
@@ -212,7 +213,7 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 	links := commonnexus.ConvertNexusLinksToProtoLinks(r.Links, logger)
 
 	var successPayload *commonpb.Payload
-	switch r.State { // nolint:exhaustive
+	switch r.State { //nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
 		// no validation needed
 	case nexus.OperationStateSucceeded:
@@ -330,7 +331,7 @@ func (h *nexusCompletionHandler) completeHSMOperation(
 		Links:          links,
 	}
 
-	switch req.State { // nolint:exhaustive
+	switch req.State { //nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
 		hr.Outcome = &historyservice.CompleteNexusOperationRequest_Failure{
 			Failure: commonnexus.NexusFailureToProtoFailure(*req.Error.OriginalFailure),
@@ -371,7 +372,7 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 		hr.CloseTime = timestamppb.New(req.CloseTime)
 	}
 
-	switch req.State { // nolint:exhaustive
+	switch req.State { //nolint:exhaustive
 	case nexus.OperationStateFailed, nexus.OperationStateCanceled:
 		// Temporal->Temporal calls transmit the real failure as the wrapper OperationError's cause.
 		// Unwrap it so the caller sees the handler's original error (message, type, details, and

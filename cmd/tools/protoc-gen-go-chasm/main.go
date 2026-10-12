@@ -41,7 +41,7 @@ func (w *writer) indent() {
 
 func (w *writer) unindent() {
 	if w.indentation <= 0 {
-		// nolint: forbidigo
+		//nolint:forbidigo
 		panic("unmatched unindent")
 	}
 	w.indentation--

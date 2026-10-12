@@ -144,7 +144,7 @@ func createServer(t *testing.T, historyTaskQueueManager persistence.HistoryTaskQ
 		ChasmRegistry:        chasm.NewRegistry(log.NewNoopLogger()),
 	}, fxtest.NewLifecycle(t))
 	if err != nil {
-		panic(err) // nolint:forbidigo // Panic is acceptable in test setup code.
+		panic(err) //nolint:forbidigo // Panic is acceptable in test setup code.
 	}
 	grpcServer := grpc.NewServer()
 	historyservice.RegisterHistoryServiceServer(grpcServer, historyHandler)

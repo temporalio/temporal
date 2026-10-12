@@ -111,7 +111,7 @@ func buildDSN(
 	), nil
 }
 
-// nolint: revive
+//nolint:revive
 func buildDSNAttr(cfg *config.SQL) (url.Values, error) {
 	parameters := make(url.Values, len(cfg.ConnectAttributes))
 	for k, v := range cfg.ConnectAttributes {

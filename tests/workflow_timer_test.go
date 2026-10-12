@@ -71,7 +71,7 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer() {
 
 		historyEvents := env.GetHistory(env.Namespace().String(), workflowExecution)
 		for _, event := range historyEvents {
-			switch event.GetEventType() { // nolint:exhaustive
+			switch event.GetEventType() { //nolint:exhaustive,revive
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 				signalDelivered = true
 			case enumspb.EVENT_TYPE_TIMER_CANCELED:
@@ -195,7 +195,7 @@ func (s *WorkflowTimerTestSuite) TestCancelTimer_CancelFiredAndBuffered() {
 
 		historyEvents := env.GetHistory(env.Namespace().String(), workflowExecution)
 		for _, event := range historyEvents {
-			switch event.GetEventType() { // nolint:exhaustive
+			switch event.GetEventType() { //nolint:exhaustive,revive
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED:
 				signalDelivered = true
 			case enumspb.EVENT_TYPE_TIMER_CANCELED:

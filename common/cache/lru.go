@@ -482,7 +482,7 @@ func (c *lru) bgEvict(settings dynamicconfig.CacheBackgroundEvictSettings) {
 				return false
 			}
 			elementPrev := element.Prev()
-			entry := element.Value.(*entryImpl) // nolint:revive
+			entry := element.Value.(*entryImpl) //nolint:revive
 			if !c.isEntryExpired(entry, now) {
 				return false
 			}

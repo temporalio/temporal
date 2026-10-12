@@ -108,8 +108,9 @@ type CompleteOperationOptions struct {
 	Result any
 }
 
-// nolint:revive // This method is long but it's more readable to keep the logic in one place since it's all related to
 // constructing the completion request.
+//
+//nolint:revive // This method is long but it's more readable to keep the logic in one place since it's all related to
 func (c CompleteOperationOptions) applyToHTTPRequest(cc *CompletionHTTPClient, request *http.Request) error {
 	if request.Header == nil {
 		request.Header = make(http.Header)

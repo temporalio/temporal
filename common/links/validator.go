@@ -42,7 +42,8 @@ func Validate(links []*commonpb.Link, maxAllowedLinks, maxSize int) error {
 }
 
 // validateFields confirms that Link has all the required fields.
-// nolint:revive // cognitive-complexity is high but justified to keep each case together for readability.
+//
+//nolint:revive // cognitive-complexity is high but justified to keep each case together for readability.
 func validateFields(l *commonpb.Link) error {
 	switch t := l.Variant.(type) {
 	case *commonpb.Link_WorkflowEvent_:

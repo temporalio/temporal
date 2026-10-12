@@ -58,7 +58,7 @@ func (c invocableInternal) Invoke(
 	task *callbackspb.InvocationTask,
 	taskAttr chasm.TaskAttributes,
 ) invocationResult {
-	// nolint:forbidigo // Wall-clock RPC measurement, not component state; Invoke has no chasm.Context.
+	//nolint:forbidigo // Wall-clock RPC measurement, not component state; Invoke has no chasm.Context.
 	startTime := time.Now()
 	// Sentinel default: a return path that forgets to set outcome must not read as a success.
 	outcome := outcomeUnknown

@@ -454,7 +454,7 @@ func TestEvictByCapacityAfterMinAge(t *testing.T) {
 		}
 
 		// Virtual time advance - instant with synctest!
-		time.Sleep(300 * time.Millisecond) // nolint:forbidigo
+		time.Sleep(300 * time.Millisecond) //nolint:forbidigo
 
 		// Now eviction should work
 		m.evictByCapacity()
@@ -615,7 +615,7 @@ func TestEvictLoopRecordsUtilizationMetric(t *testing.T) {
 		defer m.Stop()
 
 		// Advance virtual time to trigger one eviction cycle - instant with synctest!
-		time.Sleep(evictionInterval) // nolint:forbidigo
+		time.Sleep(evictionInterval) //nolint:forbidigo
 
 		// Wait until all goroutines are blocked (evictLoop processes timer and blocks on next timer)
 		synctest.Wait()

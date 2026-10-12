@@ -71,7 +71,7 @@ func (c *workflowSizeChecker) checkIfPayloadSizeExceedsLimit(
 		commandTypeTag.Value,
 	)
 	if err != nil {
-		return fmt.Errorf("%s", message) // nolint:err113
+		return fmt.Errorf("%s", message) //nolint:err113
 	}
 	return nil
 }
@@ -99,7 +99,7 @@ func (c *workflowSizeChecker) checkIfMemoSizeExceedsLimit(
 		commandTypeTag.Value,
 	)
 	if err != nil {
-		return fmt.Errorf("%s", message) // nolint:err113
+		return fmt.Errorf("%s", message) //nolint:err113
 	}
 	return nil
 }
@@ -130,7 +130,7 @@ func (c *workflowSizeChecker) checkCountConstraint(
 		return nil
 	}
 	c.metricsHandler.Counter(metricName).Record(1)
-	// nolint:err113
+	//nolint:err113
 	err := fmt.Errorf(
 		"the number of %s, %d, has reached the per-workflow limit of %d",
 		resourceName,

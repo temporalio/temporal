@@ -130,7 +130,7 @@ func TemporalFailureToNexusFailureInPlace(failure *failurepb.Failure) (nexus.Fai
 			encodedAttributes = base64.RawURLEncoding.EncodeToString(b)
 		}
 		var retryableOverride *bool
-		// nolint:exhaustive,revive // There are only two valid values other than unspecified.
+		//nolint:exhaustive,revive // There are only two valid values other than unspecified.
 		switch info.NexusHandlerFailureInfo.GetRetryBehavior() {
 		case enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_RETRYABLE:
 			val := true
@@ -210,7 +210,8 @@ func CoerceToCanceledFailure(failure *failurepb.Failure) *failurepb.Failure {
 // reconstructed using protojson.Unmarshal on the failure details field. Otherwise, the failure is reconstructed
 // based on the known Nexus SDK failure types.
 // Returns an error if the failure cannot be converted.
-// nolint:revive // cognitive-complexity is high but justified to keep each case together
+//
+//nolint:revive // cognitive-complexity is high but justified to keep each case together
 func NexusFailureToTemporalFailure(f nexus.Failure) (*failurepb.Failure, error) {
 	apiFailure := &failurepb.Failure{
 		Message:    f.Message,

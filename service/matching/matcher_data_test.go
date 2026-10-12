@@ -620,7 +620,7 @@ func (s *MatcherDataSuite) TestPollForwardFailedTimedOut() {
 		s.NotNil(tres.poller)
 		// there's a new task in the meantime
 		s.md.EnqueueTaskNoWait(t2)
-		time.Sleep(100 * time.Millisecond) // nolint:forbidigo
+		time.Sleep(100 * time.Millisecond) //nolint:forbidigo
 		// but we waited too long, poller timed out, so this does nothing (but doesn't crash or assert)
 		s.md.ReenqueuePollerIfNotMatched(tres.poller)
 		done <- struct{}{}

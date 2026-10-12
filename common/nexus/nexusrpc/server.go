@@ -57,7 +57,7 @@ func (h *httpHandler) writeResult(writer http.ResponseWriter, request *http.Requ
 	if r, ok := result.(*nexus.Reader); ok {
 		// Close the request body in case we error before sending the HTTP request (which may double close but
 		// that's fine since we ignore the error).
-		// nolint:errcheck // ignore error on close
+		//nolint:errcheck // ignore error on close
 		defer r.Close()
 		reader = r
 	} else {
@@ -91,7 +91,8 @@ func (h *httpHandler) writeResult(writer http.ResponseWriter, request *http.Requ
 
 // WriteFailure writes the given error to the response, converting it to a Failure if possible. It also sets the HTTP
 // status code based on the type of error.
-// nolint:revive // Keeping all of the logic together for readability, even if it means the function is long.
+//
+//nolint:revive // Keeping all of the logic together for readability, even if it means the function is long.
 func (h *BaseHTTPHandler) WriteFailure(writer http.ResponseWriter, r *http.Request, err error) {
 	var failure nexus.Failure
 	var handlerError *nexus.HandlerError

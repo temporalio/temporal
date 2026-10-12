@@ -497,7 +497,7 @@ again:
 func (tm *priTaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*matchingservice.QueryWorkflowResponse, error) {
 	res, err := tm.syncOfferTask(ctx, task, true)
 	if res != nil { // note res may be non-nil "any" containing nil pointer
-		return res.(*matchingservice.QueryWorkflowResponse), err // nolint:revive
+		return res.(*matchingservice.QueryWorkflowResponse), err //nolint:revive
 	}
 	return nil, err
 }
@@ -508,7 +508,7 @@ func (tm *priTaskMatcher) OfferQuery(ctx context.Context, task *internalTask) (*
 func (tm *priTaskMatcher) OfferNexusTask(ctx context.Context, task *internalTask) (*matchingservice.DispatchNexusTaskResponse, error) {
 	res, err := tm.syncOfferTask(ctx, task, false)
 	if res != nil { // note res may be non-nil "any" containing nil pointer
-		return res.(*matchingservice.DispatchNexusTaskResponse), err // nolint:revive
+		return res.(*matchingservice.DispatchNexusTaskResponse), err //nolint:revive
 	}
 	return nil, err
 }

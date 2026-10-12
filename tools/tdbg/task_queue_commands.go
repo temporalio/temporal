@@ -117,7 +117,7 @@ func AdminDescribeTaskQueuePartition(c *cli.Context, clientFactory ClientFactory
 	}
 	tqType := enumspb.TaskQueueType(tlTypeInt)
 	if tqType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
-		return errors.New("invalid task queue type") // nolint
+		return errors.New("invalid task queue type") //nolint
 	}
 
 	// extracting the task queue partition id
@@ -252,7 +252,7 @@ func AdminForceUnloadTaskQueuePartition(c *cli.Context, clientFactory ClientFact
 	}
 	tqType := enumspb.TaskQueueType(tlTypeInt)
 	if tqType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
-		return errors.New("invalid task queue type") // nolint
+		return errors.New("invalid task queue type") //nolint
 	}
 
 	// extracting the task queue partition id

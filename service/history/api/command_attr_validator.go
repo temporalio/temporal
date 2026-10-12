@@ -647,7 +647,7 @@ func (v *CommandAttrValidator) ValidateCommandSequence(
 			)
 		}
 
-		// nolint:exhaustive
+		//nolint:exhaustive
 		switch command.GetCommandType() {
 		case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
 			enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,

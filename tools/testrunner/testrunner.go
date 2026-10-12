@@ -89,7 +89,7 @@ func newRunner() *runner {
 	}
 }
 
-// nolint:revive,cognitive-complexity
+//nolint:revive,cognitive-complexity
 func (r *runner) sanitizeAndParseArgs(command string, args []string) ([]string, error) {
 	var sanitizedArgs []string
 	for _, arg := range args {
@@ -211,7 +211,8 @@ func (r *runner) allReports() []*junitReport {
 }
 
 // Main is the entry point for the testrunner tool.
-// nolint:revive,deep-exit
+//
+//nolint:revive,deep-exit
 func Main() {
 	log.SetPrefix("[testrunner] ")
 	ctx := context.Background()
@@ -247,7 +248,7 @@ func Main() {
 	}
 }
 
-// nolint:revive,deep-exit
+//nolint:revive,deep-exit
 func (r *runner) reportCrash() {
 	jr := generateReport([]string{r.crashName}, "crash", failureTypeCrash)
 	if err := r.writeReport(jr); err != nil {
@@ -326,7 +327,7 @@ func (r *runner) writeCurrentReport() {
 	}
 }
 
-// nolint:revive,deep-exit
+//nolint:revive,deep-exit
 func (r *runner) runTests(ctx context.Context, args []string) {
 	var currentAttempt *attempt
 	var totalTimeoutFired bool

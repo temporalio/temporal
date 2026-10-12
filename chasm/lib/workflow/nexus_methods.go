@@ -194,7 +194,7 @@ func (w *Workflow) OnNexusOperationCancellationCompleted(ctx chasm.MutableContex
 				RequestedEventId: cancelParentData.GetRequestedEventId(),
 			},
 		}
-		// nolint:revive // We must mutate here even if the linter doesn't like it.
+		//nolint:revive // We must mutate here even if the linter doesn't like it.
 		e.WorkerMayIgnore = true // For compatibility with older SDKs.
 	})
 	return err
@@ -219,7 +219,7 @@ func (w *Workflow) OnNexusOperationCancellationFailed(ctx chasm.MutableContext, 
 				Failure:          failure,
 			},
 		}
-		// nolint:revive // We must mutate here even if the linter doesn't like it.
+		//nolint:revive // We must mutate here even if the linter doesn't like it.
 		e.WorkerMayIgnore = true // For compatibility with older SDKs.
 	})
 	return err

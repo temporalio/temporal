@@ -173,7 +173,7 @@ func attachBatchOperationStats(ctx workflow.Context, result HeartBeatDetails) er
 	return workflow.UpsertMemo(ctx, memo)
 }
 
-// nolint:revive,cognitive-complexity
+//nolint:revive,cognitive-complexity
 func ValidateBatchOperation(params *workflowservice.StartBatchOperationRequest) error {
 	numTargetSelectors := 0
 	if len(params.GetVisibilityQuery()) != 0 {

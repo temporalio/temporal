@@ -154,7 +154,7 @@ func NewMetadata(
 
 	versionToClusterName, err := updateVersionToClusterName(clusterInfo, failoverVersionIncrement)
 	if err != nil {
-		// nolint:forbidigo // matches the other startup-config panics in this constructor
+		//nolint:forbidigo // matches the other startup-config panics in this constructor
 		panic(err.Error())
 	}
 	if _, ok := clusterInfo[currentClusterName]; !ok {
@@ -240,7 +240,7 @@ func (m *metadataImpl) GetPingChecks() []pingable.Check {
 			Timeout: 10 * time.Second,
 			Ping: func() []pingable.Pingable {
 				m.clusterLock.Lock()
-				// nolint:staticcheck
+				//nolint:staticcheck
 				m.clusterLock.Unlock()
 				return nil
 			},
@@ -253,7 +253,7 @@ func (m *metadataImpl) GetPingChecks() []pingable.Check {
 			Timeout: 10 * time.Second,
 			Ping: func() []pingable.Pingable {
 				m.clusterCallbackLock.Lock()
-				// nolint:staticcheck
+				//nolint:staticcheck
 				m.clusterCallbackLock.Unlock()
 				return nil
 			},

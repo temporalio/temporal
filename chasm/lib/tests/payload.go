@@ -205,7 +205,7 @@ func (s *PayloadStore) LifecycleState(
 	chasmContext chasm.Context,
 ) chasm.LifecycleState {
 	if err := assertContextValue(chasmContext); err != nil {
-		// nolint:forbidigo // Panic here for testing.
+		//nolint:forbidigo // Panic here for testing.
 		panic("registered component key value pair not available in context")
 	}
 
@@ -237,7 +237,7 @@ func (s *PayloadStore) SearchAttributes(
 	chasmContext chasm.Context,
 ) []chasm.SearchAttributeKeyValue {
 	if err := assertContextValue(chasmContext); err != nil {
-		// nolint:forbidigo // Panic here for testing.
+		//nolint:forbidigo // Panic here for testing.
 		panic("registered component key value pair not available in context")
 	}
 
@@ -258,7 +258,7 @@ func (s *PayloadStore) SearchAttributes(
 // Memo implements chasm.VisibilityMemoProvider interface
 func (s *PayloadStore) Memo(chasmContext chasm.Context) proto.Message {
 	if err := assertContextValue(chasmContext); err != nil {
-		// nolint:forbidigo // Panic here for testing.
+		//nolint:forbidigo // Panic here for testing.
 		panic("registered component key value pair not available in context")
 	}
 

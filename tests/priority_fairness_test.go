@@ -191,7 +191,7 @@ func (s *PrioritySuite) TestStickyInteraction_SinglePartition() {
 		},
 	})
 	stickyCtx, stickyCancel := context.WithCancel(s.Context())
-	go stickyPoller.HandleTask(env.Tv(), taskpoller.DrainWorkflowTask, taskpoller.WithContext(stickyCtx)) // nolint:errcheck
+	go stickyPoller.HandleTask(env.Tv(), taskpoller.DrainWorkflowTask, taskpoller.WithContext(stickyCtx)) //nolint:errcheck
 	// wait for poll to reach matching service and load the queue
 	s.EventuallyWithT(func(c *assert.CollectT) {
 		res, err := describeSticky()
@@ -202,7 +202,7 @@ func (s *PrioritySuite) TestStickyInteraction_SinglePartition() {
 	s.T().Log("canceling sticky poll")
 	stickyCancel()
 	// wait for cancel to propagate
-	time.Sleep(100 * time.Millisecond) // nolint:forbidigo // there's no way to wait for this
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo // there's no way to wait for this
 
 	// create some wfts at default priority
 	s.T().Log("creating wfts on normal")
@@ -276,7 +276,7 @@ func (s *PrioritySuite) TestStickyInteraction_SinglePartition() {
 	// the ephemeral data mechanism is asynchronous, so wait a little while for it to kick in.
 	// there's no way to check if this is done yet without actually polling, which would mess
 	// up the results, so just sleep.
-	time.Sleep(3 * shortTime) // nolint:forbidigo
+	time.Sleep(3 * shortTime) //nolint:forbidigo
 
 	// now poll the sticky queue. we should get the high priority tasks from the normal queue
 	// then the normal-priority from sticky, then the low priority from normal.

@@ -351,7 +351,7 @@ func TestRetry(t *testing.T) {
 	transitionOp, ok := opLog[0].(hsm.TransitionOperation)
 	require.True(t, ok)
 	require.Len(t, transitionOp.Output.Tasks, 1)
-	boTask := transitionOp.Output.Tasks[0].(nexusoperations.BackoffTask) // nolint:revive
+	boTask := transitionOp.Output.Tasks[0].(nexusoperations.BackoffTask) //nolint:revive
 	op, err := hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
 	require.Equal(t, enumsspb.NEXUS_OPERATION_STATE_BACKING_OFF, op.State())
@@ -371,7 +371,7 @@ func TestRetry(t *testing.T) {
 	transitionOp, ok = opLog[0].(hsm.TransitionOperation)
 	require.True(t, ok)
 	require.Len(t, transitionOp.Output.Tasks, 1)
-	invocationTask := transitionOp.Output.Tasks[0].(nexusoperations.InvocationTask) // nolint:revive
+	invocationTask := transitionOp.Output.Tasks[0].(nexusoperations.InvocationTask) //nolint:revive
 	require.Equal(t, "endpoint", invocationTask.EndpointName)
 	op, err = hsm.MachineData[nexusoperations.Operation](node)
 	require.NoError(t, err)
@@ -669,7 +669,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 
 	// Assert backoff task is generated
 	require.Len(t, out.Tasks, 1)
-	boTask := out.Tasks[0].(nexusoperations.CancelationBackoffTask) // nolint:revive
+	boTask := out.Tasks[0].(nexusoperations.CancelationBackoffTask) //nolint:revive
 	require.Equal(t, cancelation.NextAttemptScheduleTime.AsTime(), boTask.Deadline())
 
 	// Rescheduled
@@ -688,7 +688,7 @@ func TestCancelationValidTransitions(t *testing.T) {
 
 	// Assert cancelation task is generated
 	require.Len(t, out.Tasks, 1)
-	cbTask := out.Tasks[0].(nexusoperations.CancelationTask) // nolint:revive
+	cbTask := out.Tasks[0].(nexusoperations.CancelationTask) //nolint:revive
 	require.Equal(t, "endpoint", cbTask.EndpointName)
 
 	// Store the pre-succeeded state to test Failed later

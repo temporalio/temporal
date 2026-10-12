@@ -218,7 +218,7 @@ type ClientStartOperationResponse[T any] struct {
 //
 //  4. Any other error.
 //
-// nolint:revive // (cyclomatic complexity) Containing the entire implementation inline is clearer here.
+//nolint:revive // (cyclomatic complexity) Containing the entire implementation inline is clearer here.
 func (c *HTTPClient) StartOperation(
 	ctx context.Context,
 	operation string,
@@ -230,7 +230,7 @@ func (c *HTTPClient) StartOperation(
 	if r, ok := input.(*nexus.Reader); ok {
 		// Close the input reader in case we error before sending the HTTP request (which may double close but
 		// that's fine since we ignore the error).
-		// nolint:errcheck // double close is fine
+		//nolint:errcheck // double close is fine
 		defer r.Close()
 		reader = r
 	} else {

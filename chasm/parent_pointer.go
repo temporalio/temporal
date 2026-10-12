@@ -37,7 +37,7 @@ type parentPtrInternal struct {
 func (p ParentPtr[T]) Get(chasmContext Context) T {
 	vT, ok := p.TryGet(chasmContext)
 	if !ok {
-		// nolint:forbidigo // Panic is intended here for framework error handling.
+		//nolint:forbidigo // Panic is intended here for framework error handling.
 		panic(serviceerror.NewInternal("expect parent component value but got nil"))
 	}
 	return vT
@@ -55,7 +55,7 @@ func (p ParentPtr[T]) TryGet(chasmContext Context) (T, bool) {
 	}
 
 	if err := parent.prepareComponentValue(chasmContext); err != nil {
-		// nolint:forbidigo // Panic is intended here for framework error handling.
+		//nolint:forbidigo // Panic is intended here for framework error handling.
 		panic(err)
 	}
 
@@ -65,7 +65,7 @@ func (p ParentPtr[T]) TryGet(chasmContext Context) (T, bool) {
 
 	vT, isT := parent.value.(T)
 	if !isT {
-		// nolint:forbidigo // Panic is intended here for framework error handling.
+		//nolint:forbidigo // Panic is intended here for framework error handling.
 		panic(serviceerror.NewInternalf("parent component value doesn't implement %s", reflect.TypeFor[T]().Name()))
 	}
 	return vT, true
@@ -88,7 +88,7 @@ func (p ParentPtr[T]) parentNode() (*Node, bool) {
 		parent = parent.parent
 		if parent == nil {
 			encodedPath, _ := p.Internal.currentNode.getEncodedPath()
-			// nolint:forbidigo // Panic is intended here for framework error handling.
+			//nolint:forbidigo // Panic is intended here for framework error handling.
 			panic(softassert.UnexpectedInternalErr(
 				p.Internal.currentNode.logger,
 				"unable to find parent component for CHASM component inside a map",
@@ -98,7 +98,7 @@ func (p ParentPtr[T]) parentNode() (*Node, bool) {
 	}
 
 	if !parent.isComponent() {
-		// nolint:forbidigo // Panic is intended here for framework error handling.
+		//nolint:forbidigo // Panic is intended here for framework error handling.
 		panic(softassert.UnexpectedInternalErr(
 			parent.logger,
 			"unexpected CHASM node that has a child component",

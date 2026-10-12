@@ -152,7 +152,7 @@ func (s *VisibilityTestSuite) TestSearchAttributes() {
 		return []*commandpb.Command{upsertCommand}, nil
 	}
 
-	// nolint
+	//nolint
 	poller0 := testcore.TaskPoller{
 		Client:              client0,
 		Namespace:           ns,

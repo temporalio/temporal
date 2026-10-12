@@ -168,7 +168,7 @@ func newOperationContext(options contextOptions) *operationContext {
 	)
 	re, err := dynamicconfig.ConvertWildcardStringListToRegexp(options.headersBlacklist)
 	if err != nil {
-		panic(err) // nolint:forbidigo
+		panic(err) //nolint:forbidigo
 	}
 	oc.headersBlacklist = dynamicconfig.GetTypedPropertyFn(re)
 	oc.redirectionInterceptor = interceptor.NewRedirection(

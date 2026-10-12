@@ -159,7 +159,7 @@ func AdminBatchStart(c *cli.Context, clientFactory ClientFactory, prompter *Prom
 		return fmt.Errorf("unable to start batch operation: %w", err)
 	}
 
-	// nolint:errcheck // assuming that write will succeed.
+	//nolint:errcheck // assuming that write will succeed.
 	fmt.Fprintf(c.App.Writer,
 		"Batch operation %q started successfully in namespace %s, targeting namespace %q, with Job ID: %s\n",
 		batchType, primitives.SystemLocalNamespace, nsName, resp.GetWorkflowId())

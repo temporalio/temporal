@@ -5496,7 +5496,7 @@ func (wh *WorkflowHandler) UpdateWorkflowExecution(
 	metrics.HeaderSize.With(metricsHandler).Record(int64(request.GetRequest().GetInput().GetHeader().Size()))
 	metrics.EventBlobSize.With(wh.metricsScope(ctx).WithTags(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String()))).Record(int64(request.GetRequest().GetInput().GetArgs().Size()), metrics.OperationTag("UpdateWorkflowExecution"))
 
-	switch request.WaitPolicy.LifecycleStage { // nolint:exhaustive
+	switch request.WaitPolicy.LifecycleStage { //nolint:exhaustive,revive
 	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED:
 		metrics.WorkflowExecutionUpdateWaitStageAccepted.With(wh.metricsScope(ctx)).Record(1)
 	case enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED:
@@ -6565,7 +6565,7 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 	// doesn't go into workflow history, and the Nexus request caller is unknown, there doesn't seem like there's a
 	// good reason to fail at this point.
 
-	// nolint:staticcheck // checking deprecated field for backwards compatibility
+	//nolint:staticcheck // checking deprecated field for backwards compatibility
 	if opErr := request.GetResponse().GetStartOperation().GetOperationError(); opErr != nil {
 		if details := opErr.GetFailure().GetDetails(); details != nil && !json.Valid(details) {
 			return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
@@ -6613,11 +6613,11 @@ func (wh *WorkflowHandler) RespondNexusTaskFailed(ctx context.Context, request *
 	}
 	namespaceId := namespace.ID(tt.GetNamespaceId())
 
-	if request.Error == nil && request.Failure == nil { // nolint:staticcheck // checking deprecated field for backwards compatibility
+	if request.Error == nil && request.Failure == nil { //nolint:staticcheck // checking deprecated field for backwards compatibility
 		return nil, serviceerror.NewInvalidArgument("request must contain error or failure")
 	}
-	if request.GetError() != nil { // nolint:staticcheck // checking deprecated field for backwards compatibility
-		if details := request.GetError().GetFailure().GetDetails(); details != nil && !json.Valid(details) { // nolint:staticcheck // checking deprecated field for backwards compatibility
+	if request.GetError() != nil { //nolint:staticcheck // checking deprecated field for backwards compatibility
+		if details := request.GetError().GetFailure().GetDetails(); details != nil && !json.Valid(details) { //nolint:staticcheck // checking deprecated field for backwards compatibility
 			return nil, serviceerror.NewInvalidArgument("failure details must be JSON serializable")
 		}
 	}

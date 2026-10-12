@@ -186,7 +186,7 @@ func (h *operationInvocationTaskHandler) Execute(
 	if err != nil {
 		return fmt.Errorf("failed to construct invocation: %w", err)
 	}
-	startTime := time.Now() // nolint:forbidigo // Time can be used for timing metrics.
+	startTime := time.Now() //nolint:forbidigo // Time can be used for timing metrics.
 	response, callErr := invocation.Start(callCtx, args, options)
 	callDuration := time.Since(startTime)
 	if validationErr := h.validateStartResult(ns, response); validationErr != nil {

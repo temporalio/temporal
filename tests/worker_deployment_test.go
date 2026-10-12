@@ -1525,7 +1525,7 @@ func (s *WorkerDeploymentSuite) TestSetWorkerDeploymentRampingVersion_Unversione
 		DeploymentName: env.Tv().DeploymentSeries(),
 	})
 	s.NoError(err)
-	// nolint:staticcheck // SA1019: old worker versioning
+	//nolint:staticcheck // SA1019: old worker versioning
 	s.Equal(worker_versioning.UnversionedVersionId, resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingVersion())
 	s.Nil(resp.GetWorkerDeploymentInfo().GetRoutingConfig().GetRampingDeploymentVersion())
 

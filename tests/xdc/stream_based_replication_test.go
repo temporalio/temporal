@@ -434,7 +434,7 @@ func (s *streamBasedReplicationTestSuite) TestForceReplicateResetWorkflow_BaseWo
 		}}, nil
 	}
 
-	// nolint
+	//nolint
 	poller0 := &testcore.TaskPoller{
 		Client:              client0,
 		Namespace:           ns,
@@ -577,7 +577,7 @@ func (s *streamBasedReplicationTestSuite) TestResetWorkflow_SyncWorkflowState() 
 		}}, nil
 	}
 
-	// nolint
+	//nolint
 	poller0 := &testcore.TaskPoller{
 		Client:              client0,
 		Namespace:           ns,

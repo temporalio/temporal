@@ -1524,7 +1524,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 				if !expected {
 					continue
 				}
-				switch event.GetEventType() { // nolint:exhaustive
+				switch event.GetEventType() { //nolint:exhaustive,revive
 				case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED:
 					attr := event.GetWorkflowExecutionOptionsUpdatedEventAttributes()
 					ms.EXPECT().AddWorkflowExecutionOptionsUpdatedEvent(

@@ -802,7 +802,7 @@ func IsRetryableRPCError(err error) bool {
 		// Not a gRPC induced error
 		return false
 	}
-	// nolint:exhaustive
+	//nolint:exhaustive
 	switch st.Code() {
 	case codes.Canceled,
 		codes.Unknown,

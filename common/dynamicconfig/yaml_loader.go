@@ -164,7 +164,7 @@ func convertKeyTypeToStringSlice(s []any) ([]any, error) {
 	return stringKeySlice, nil
 }
 
-// nolint:revive // cognitive-complexity, it's just a big switch
+//nolint:revive // cognitive-complexity, it's just a big switch
 func convertYamlConstraints(key Key, m map[string]any, precedence Precedence, lr *YamlLoader) Constraints {
 	var cs Constraints
 	for k, v := range m {

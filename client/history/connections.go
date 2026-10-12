@@ -149,7 +149,7 @@ func (c *connectionPoolImpl[C]) reapClosableConns(evictAt map[rpcAddress]time.Ti
 
 func (c *connectionPoolImpl[C]) getOrCreateClientConn(addr rpcAddress) clientConnection[C] {
 	if v, ok := c.conns.Load(addr); ok {
-		cc := v.(clientConnection[C]) // nolint:revive // unchecked-type-assertion
+		cc := v.(clientConnection[C]) //nolint:revive // unchecked-type-assertion
 		if cc.grpcConn.GetState() != connectivity.Shutdown {
 			return cc
 		}
@@ -163,7 +163,7 @@ func (c *connectionPoolImpl[C]) getOrCreateClientConn(addr rpcAddress) clientCon
 	}
 
 	if actual, loaded := c.conns.LoadOrStore(addr, cc); loaded {
-		return actual.(clientConnection[C]) // nolint:revive // unchecked-type-assertion
+		return actual.(clientConnection[C]) //nolint:revive // unchecked-type-assertion
 	}
 	// Lost the race with Close; drop the conn we just cached.
 	if c.closed.Load() {

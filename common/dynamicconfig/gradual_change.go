@@ -66,7 +66,8 @@ func (c *GradualChange[T]) switchTime(key []byte) time.Time {
 // ConvertGradualChange is a conversion function that can handle a plain T (which represents a
 // static value) as well as a GradualChange[T]. It can be used to turn settings that were not
 // of type GradualChange into a GradualChange.
-// nolint:revive // cognitive-complexity // this looks complicated but each case is fairly simple
+//
+//nolint:revive // cognitive-complexity // this looks complicated but each case is fairly simple
 func ConvertGradualChange[T any](def T) func(v any) (GradualChange[T], error) {
 	changeConverter := ConvertStructure(StaticGradualChange(def))
 
@@ -120,7 +121,7 @@ func ConvertGradualChange[T any](def T) func(v any) (GradualChange[T], error) {
 			return changeConverter(v)
 		}
 	default:
-		// nolint:forbidigo // this will be triggered from a static initializer before it can be triggered from production code
+		//nolint:forbidigo // this will be triggered from a static initializer before it can be triggered from production code
 		panic("ConvertGradualChange can only be used with scalar types for now")
 	}
 }

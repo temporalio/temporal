@@ -433,7 +433,7 @@ func (tr *fairTaskReader) mergeTasks(tasks []*persistencespb.AllocatedTaskInfo, 
 	}
 }
 
-// nolint:revive,cognitive-complexity // merge is an inherently multi-phase operation
+//nolint:revive,cognitive-complexity // merge is an inherently multi-phase operation
 func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTaskInfo, mode mergeMode) []*internalTask {
 	batchSize := tr.backlogMgr.config.GetTasksBatchSize()
 

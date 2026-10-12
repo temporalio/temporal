@@ -386,7 +386,7 @@ func TestSubscribeGradualChange_CancelStopsUpdates(t *testing.T) {
 	assert.True(t, subCancelCalled.Load())
 
 	ts.Update(end.Add(time.Hour))
-	time.Sleep(10 * time.Millisecond) // nolint:forbidigo // check for lack of async call
+	time.Sleep(10 * time.Millisecond) //nolint:forbidigo // check for lack of async call
 	assert.Empty(t, callbackVals.get(), "callback should not be called after cancel")
 }
 

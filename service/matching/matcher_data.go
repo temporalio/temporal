@@ -303,7 +303,7 @@ func (d *matcherData) EnqueueTaskAndWait(ctxs []context.Context, task *internalT
 				task.wake(d.logger, &matchResult{ctxErr: ctx.Err(), ctxErrIdx: i})
 			}
 		})
-		defer stop() // nolint:revive // there's only ever a small number of contexts
+		defer stop() //nolint:revive // there's only ever a small number of contexts
 	}
 
 	return task.waitForMatch()
@@ -351,7 +351,7 @@ func (d *matcherData) EnqueuePollerAndWait(ctxs []context.Context, poller *waiti
 				poller.wake(d.logger, &matchResult{ctxErr: ctx.Err(), ctxErrIdx: i})
 			}
 		})
-		defer stop() // nolint:revive // there's only ever a small number of contexts
+		defer stop() //nolint:revive // there's only ever a small number of contexts
 	}
 
 	return poller.waitForMatch()
@@ -421,7 +421,8 @@ func (d *matcherData) ReprocessTasks(pred func(*internalTask) bool) []*internalT
 // If no ready pair is found, returns (nil, nil, minDelay) where minDelay is the
 // minimum wait until any rate-limited task (that has a compatible poller) becomes ready.
 // call with lock held
-// nolint:revive // will improve later
+//
+//nolint:revive // will improve later
 func (d *matcherData) findMatch(allowForwarding bool, now int64) (matchedTask *internalTask, matchedPoller *waitingPoller, minDelay time.Duration) {
 	// TODO(pri): optimize so it's not O(d*n) worst case
 	// Scan keeps its callback on the stack, so this walk does not allocate; the equivalent

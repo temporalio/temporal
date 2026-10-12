@@ -121,7 +121,7 @@ func TestBuildDSNAttr_DuplicateConnectAttribute_Panics(t *testing.T) {
 		},
 	}
 	require.Panics(t, func() {
-		// nolint: errcheck
+		//nolint:errcheck
 		buildDSNAttr(cfg)
 	}, "Should panic when duplicate keys are detected")
 }

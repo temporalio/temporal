@@ -139,7 +139,7 @@ func (p *NexusServiceProcessor) RegisterOperation(name string, op RegisterableNe
 // MustRegisterOperation registers a named operation and panics if registration fails.
 func (p *NexusServiceProcessor) MustRegisterOperation(name string, op RegisterableNexusOperationProcessor) {
 	if err := p.RegisterOperation(name, op); err != nil {
-		// nolint:forbidigo // Panic is acceptable here for Must-style method.
+		//nolint:forbidigo // Panic is acceptable here for Must-style method.
 		panic(err)
 	}
 }
@@ -183,7 +183,7 @@ func (p *NexusEndpointProcessor) RegisterServiceProcessor(processor *NexusServic
 // MustRegisterServiceProcessor registers the service processor and panics if registration fails.
 func (p *NexusEndpointProcessor) MustRegisterServiceProcessor(processor *NexusServiceProcessor) {
 	if err := p.RegisterServiceProcessor(processor); err != nil {
-		// nolint:forbidigo // Panic is acceptable here for Must-style method.
+		//nolint:forbidigo // Panic is acceptable here for Must-style method.
 		panic(err)
 	}
 }

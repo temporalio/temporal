@@ -255,7 +255,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) getTaskManager() *testTaskManager {
 func (s *PhysicalTaskQueueManagerTestSuite) TestCheckIdleTaskQueue() {
 	// Idle
 	s.tqMgr.Start()
-	time.Sleep(50 * time.Millisecond) // nolint:forbidigo
+	time.Sleep(50 * time.Millisecond) //nolint:forbidigo
 	s.Equal(common.DaemonStatusStarted, atomic.LoadInt32(&s.tqMgr.status))
 	s.tqMgr.Stop(unloadCauseShuttingDown)
 	s.Equal(common.DaemonStatusStopped, atomic.LoadInt32(&s.tqMgr.status))
@@ -266,7 +266,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestCheckIdleTaskQueue() {
 	s.tqMgr.Start()
 	s.tqMgr.pollerHistory.updatePollerInfo("test-poll", &pollMetadata{})
 	s.Len(s.tqMgr.GetAllPollerInfo(), 1)
-	time.Sleep(50 * time.Millisecond) // nolint:forbidigo
+	time.Sleep(50 * time.Millisecond) //nolint:forbidigo
 	s.Equal(common.DaemonStatusStarted, atomic.LoadInt32(&s.tqMgr.status))
 	s.tqMgr.Stop(unloadCauseUnspecified)
 	s.Equal(common.DaemonStatusStopped, atomic.LoadInt32(&s.tqMgr.status))
@@ -276,7 +276,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestCheckIdleTaskQueue() {
 	// Active adding task
 	s.tqMgr.Start()
 	s.Empty(s.tqMgr.GetAllPollerInfo())
-	time.Sleep(50 * time.Millisecond) // nolint:forbidigo
+	time.Sleep(50 * time.Millisecond) //nolint:forbidigo
 	s.Equal(common.DaemonStatusStarted, atomic.LoadInt32(&s.tqMgr.status))
 	s.tqMgr.Stop(unloadCauseUnspecified)
 	s.Equal(common.DaemonStatusStopped, atomic.LoadInt32(&s.tqMgr.status))
@@ -339,7 +339,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestTQMDoesNotDoFinalUpdateOnOwnersh
 	s.tqMgr.Start()
 
 	// wait for goroutines to start and to acquire rangeid lock
-	time.Sleep(10 * time.Millisecond) // nolint:forbidigo
+	time.Sleep(10 * time.Millisecond) //nolint:forbidigo
 
 	tm := s.getTaskManager()
 

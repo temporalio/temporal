@@ -569,7 +569,7 @@ func (s *ActivityTestSuite) TestActivityRetry() {
 			}, nil
 		} else if task.PreviousStartedEventId > 0 {
 			for _, event := range task.History.Events[task.PreviousStartedEventId:] {
-				switch event.GetEventType() { // nolint:exhaustive
+				switch event.GetEventType() { //nolint:exhaustive,revive
 				case enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
 					switch event.GetActivityTaskScheduledEventAttributes().GetActivityId() {
 					case "A":
@@ -1351,7 +1351,7 @@ func (s *ActivityTestSuite) TestActivityHeartBeat_RecordIdentity() {
 	workflowComplete := false
 	workflowNextCmd := enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK
 	wtHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) ([]*commandpb.Command, error) {
-		switch workflowNextCmd { // nolint:exhaustive
+		switch workflowNextCmd { //nolint:exhaustive
 		case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:
 			workflowNextCmd = enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION
 			return []*commandpb.Command{{

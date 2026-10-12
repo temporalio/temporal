@@ -808,7 +808,7 @@ func (s *ResetWorkflowTestSuite) testResetWorkflowSignalReapplyBuffer(
 	s.NoError(err)
 
 	events := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: resetRunID})
-	switch reapplyType { // nolint:exhaustive
+	switch reapplyType { //nolint:exhaustive
 	case enumspb.RESET_REAPPLY_TYPE_SIGNAL:
 		s.EqualHistoryEvents(`
   1 WorkflowExecutionStarted

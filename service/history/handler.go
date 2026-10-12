@@ -2721,6 +2721,6 @@ func (p *payloadSerializer) Deserialize(_ *nexus.Content, v any) error {
 
 // Serialize should never be called since we only use this serializer for deserialization.
 func (p *payloadSerializer) Serialize(v any) (*nexus.Content, error) {
-	// nolint:forbidigo // Panic is expected as this method should never be called.
+	//nolint:forbidigo // Panic is expected as this method should never be called.
 	panic("Serialize not supported on payloadSerializer")
 }

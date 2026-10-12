@@ -9,7 +9,7 @@ import (
 // deepCopyForMapstructure does a simple deep copy of T. Fancy cases (anything other than plain old data)
 // is not handled and will panic.
 func deepCopyForMapstructure[T any](t T) T {
-	// nolint:revive // this will be triggered from a static initializer before it can be triggered from production code
+	//nolint:revive // this will be triggered from a static initializer before it can be triggered from production code
 	return deepCopyValue(reflect.ValueOf(t)).Interface().(T)
 }
 
@@ -57,7 +57,7 @@ func deepCopyValue(v reflect.Value) reflect.Value {
 			if v.Interface().(time.Time).IsZero() {
 				return reflect.ValueOf(time.Time{})
 			}
-			// nolint:forbidigo // this will be triggered from a static initializer before it can be triggered from production code
+			//nolint:forbidigo // this will be triggered from a static initializer before it can be triggered from production code
 			panic(fmt.Sprintf("Can't deep copy non-zero time.Time: %v", v.Interface()))
 		}
 		nv := reflect.New(v.Type()).Elem()
@@ -72,7 +72,7 @@ func deepCopyValue(v reflect.Value) reflect.Value {
 		}
 		fallthrough
 	default:
-		// nolint:forbidigo // this will be triggered from a static initializer before it can be triggered from production code
+		//nolint:forbidigo // this will be triggered from a static initializer before it can be triggered from production code
 		panic(fmt.Sprintf("Can't deep copy value of type %s: %v", v.Type(), v))
 	}
 }

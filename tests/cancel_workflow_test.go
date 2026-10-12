@@ -575,7 +575,7 @@ func (s *CancelWorkflowSuite) TestImmediateChildCancellation_WorkflowTaskFailed(
 		// Validate child workflow as cancelled
 		for _, event := range task.History.Events[task.PreviousStartedEventId:] {
 			env.Logger.Info(fmt.Sprintf("Processing EventID: %v, Event: %v", event.GetEventId(), event))
-			switch event.GetEventType() { // nolint:exhaustive
+			switch event.GetEventType() { //nolint:exhaustive,revive
 			case enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED:
 				initiatedEvent = event
 			case enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED:

@@ -30,7 +30,7 @@ func handleSuccessfulOperationResult(
 	}
 	event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED, func(e *historypb.HistoryEvent) {
 		// We must assign to this property, linter doesn't like this.
-		// nolint:revive
+		//nolint:revive
 		e.Attributes = &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
 			NexusOperationCompletedEventAttributes: &historypb.NexusOperationCompletedEventAttributes{
 				ScheduledEventId: eventID,
@@ -72,11 +72,11 @@ func handleOperationError(
 		}
 	}
 
-	switch opErr.State { // nolint:exhaustive
+	switch opErr.State { //nolint:exhaustive
 	case nexus.OperationStateFailed:
 		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
 			// We must assign to this property, linter doesn't like this.
-			// nolint:revive
+			//nolint:revive
 			e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
 				NexusOperationFailedEventAttributes: &historypb.NexusOperationFailedEventAttributes{
 					Failure:          createNexusOperationFailure(operation, eventID, originalCause),
@@ -91,7 +91,7 @@ func handleOperationError(
 		originalCause = commonnexus.CoerceToCanceledFailure(originalCause)
 		event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCELED, func(e *historypb.HistoryEvent) {
 			// We must assign to this property, linter doesn't like this.
-			// nolint:revive
+			//nolint:revive
 			e.Attributes = &historypb.HistoryEvent_NexusOperationCanceledEventAttributes{
 				NexusOperationCanceledEventAttributes: &historypb.NexusOperationCanceledEventAttributes{
 					Failure:          createNexusOperationFailure(operation, eventID, originalCause),

@@ -298,7 +298,7 @@ func (env *NexusTestEnv) versionedNexusTaskPollerDo(ctx context.Context, t *test
 				},
 			}
 		default:
-			panic("unreachable") // nolint:revive // all implementations of HandlerStartOperationResult must be covered here, so this should be unreachable.
+			panic("unreachable") //nolint:revive // all implementations of HandlerStartOperationResult must be covered here, so this should be unreachable.
 		}
 	}
 	_, err = env.FrontendClient().RespondNexusTaskCompleted(ctx, &workflowservice.RespondNexusTaskCompletedRequest{
@@ -349,7 +349,7 @@ func (env *NexusTestEnv) respondNexusTaskFailed(ctx context.Context, taskToken [
 		ErrorType: string(he.Type),
 		Failure:   protoFailure,
 	}
-	// nolint:exhaustive // only two valid values other than unspecified.
+	//nolint:exhaustive // only two valid values other than unspecified.
 	switch he.RetryBehavior {
 	case nexus.HandlerErrorRetryBehaviorRetryable:
 		protoError.RetryBehavior = enumspb.NEXUS_HANDLER_ERROR_RETRY_BEHAVIOR_RETRYABLE

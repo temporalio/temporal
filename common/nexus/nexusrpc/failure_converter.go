@@ -44,7 +44,8 @@ type serializedOperationError struct {
 }
 
 // ErrorToFailure implements FailureConverter.
-// nolint:revive // Keeping all of the logic together for readability, even if it means the function is long.
+//
+//nolint:revive // Keeping all of the logic together for readability, even if it means the function is long.
 func (e knownErrorFailureConverter) ErrorToFailure(err error) (nexus.Failure, error) {
 	if err == nil {
 		return nexus.Failure{}, nil
@@ -130,7 +131,8 @@ func (e knownErrorFailureConverter) ErrorToFailure(err error) (nexus.Failure, er
 }
 
 // FailureToError implements FailureConverter.
-// nolint:revive // Keeping all of the logic together for readability, even if it means the function is long.
+//
+//nolint:revive // Keeping all of the logic together for readability, even if it means the function is long.
 func (e knownErrorFailureConverter) FailureToError(f nexus.Failure) (error, error) {
 	if f.Metadata != nil {
 		switch f.Metadata["type"] {
@@ -200,7 +202,7 @@ func DefaultFailureConverter() FailureConverter {
 }
 
 func retryBehaviorAsOptionalBool(e *nexus.HandlerError) *bool {
-	// nolint:exhaustive // this is a simple optional boolean.
+	//nolint:exhaustive // this is a simple optional boolean.
 	switch e.RetryBehavior {
 	case nexus.HandlerErrorRetryBehaviorRetryable:
 		ret := true

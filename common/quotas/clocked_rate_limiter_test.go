@@ -147,7 +147,7 @@ func TestClockedRateLimiter_Wait_Recycle(t *testing.T) {
 		asserted.Store(true)
 	}()
 	// wait for rl.Wait() to start and get to the select statement
-	time.Sleep(10 * time.Millisecond) // nolint
+	time.Sleep(10 * time.Millisecond) //nolint
 
 	// once a waiter exists, recycle the token instead of advancing time
 	rl.RecycleToken()
@@ -179,7 +179,7 @@ func TestClockedRateLimiter_WaitN_NoRecycle(t *testing.T) {
 		asserted.Store(true)
 	}()
 	// wait for rl.Wait() to start and get to the select statement
-	time.Sleep(10 * time.Millisecond) // nolint
+	time.Sleep(10 * time.Millisecond) //nolint
 
 	// once a waiter exists, recycle the token instead of advancing time
 	rl.RecycleToken()

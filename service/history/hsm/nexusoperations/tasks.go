@@ -355,7 +355,7 @@ func RegisterTaskSerializers(reg *hsm.Registry) error {
 	if err := reg.RegisterTaskSerializer(TaskTypeCancelation, CancelationTaskSerializer{}); err != nil {
 		return err
 	}
-	if err := reg.RegisterTaskSerializer(TaskTypeCancelationBackoff, CancelationBackoffTaskSerializer{}); err != nil { // nolint:revive
+	if err := reg.RegisterTaskSerializer(TaskTypeCancelationBackoff, CancelationBackoffTaskSerializer{}); err != nil { //nolint:revive
 		return err
 	}
 	if err := reg.RegisterTaskSerializer(TaskTypeScheduleToStartTimeout, ScheduleToStartTimeoutTaskSerializer{}); err != nil {

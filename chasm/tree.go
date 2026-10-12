@@ -917,7 +917,7 @@ func (n *Node) serializeComponentNode() error {
 //
 // True is returned when CHASM must perform deferred pointer resolution.
 //
-// nolint:revive,cognitive-complexity
+//nolint:revive,cognitive-complexity
 func (n *Node) syncSubComponents() error {
 	if n.valueState < valueStateNeedSyncStructure {
 		for _, childNode := range n.children {

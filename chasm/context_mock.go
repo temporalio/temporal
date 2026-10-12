@@ -57,7 +57,7 @@ func (c *MockContext) RegisterComponentContextValues(
 	}
 	for k, v := range keyValues {
 		if _, exists := c.registeredContextValues[k]; exists {
-			// nolint:forbidigo
+			//nolint:forbidigo
 			panic(fmt.Sprintf("context value key already registered: %v", k))
 		}
 		c.registeredContextValues[k] = v

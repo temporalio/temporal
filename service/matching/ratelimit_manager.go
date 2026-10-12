@@ -334,7 +334,7 @@ func (r *rateLimitManager) consumeTokens(now int64, task *internalTask, tokens i
 		p := r.perKeyLimit.DivideInterval(weight) // scale by weight
 		var sl simplelimiter.Ready
 		if v := r.perKeyReady.Get(key); v != nil {
-			sl = v.(simplelimiter.Ready) // nolint:revive
+			sl = v.(simplelimiter.Ready) //nolint:revive
 		}
 		r.perKeyReady.Put(key, sl.Consume(p, now, tokens))
 	}
@@ -352,7 +352,7 @@ func (r *rateLimitManager) grantTokens(priority *commonpb.Priority, requested in
 		key := priority.GetFairnessKey()
 		var ready simplelimiter.Ready
 		if value := r.perKeyReady.Get(key); value != nil {
-			ready = value.(simplelimiter.Ready) // nolint:revive
+			ready = value.(simplelimiter.Ready) //nolint:revive
 		}
 		params := r.perKeyLimit.DivideInterval(getEffectiveWeight(r.perKeyOverrides, priority))
 		granted = min(granted, ready.Available(params, nowNanos))

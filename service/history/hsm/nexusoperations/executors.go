@@ -458,7 +458,7 @@ func (e taskExecutor) saveStartedResult(env hsm.Environment, node *hsm.Node, ope
 	}
 	links := commonnexus.ConvertNexusLinksToProtoLinks(result.Links, e.Logger)
 	event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_STARTED, func(e *historypb.HistoryEvent) {
-		// nolint:revive // We must mutate here even if the linter doesn't like it.
+		//nolint:revive // We must mutate here even if the linter doesn't like it.
 		e.Attributes = &historypb.HistoryEvent_NexusOperationStartedEventAttributes{
 			NexusOperationStartedEventAttributes: &historypb.NexusOperationStartedEventAttributes{
 				ScheduledEventId: eventID,
@@ -468,7 +468,7 @@ func (e taskExecutor) saveStartedResult(env hsm.Environment, node *hsm.Node, ope
 				RequestId:   operation.RequestId,
 			},
 		}
-		// nolint:revive // We must mutate here even if the linter doesn't like it.
+		//nolint:revive // We must mutate here even if the linter doesn't like it.
 		e.Links = links
 	})
 	return hsm.MachineTransition(node, func(operation Operation) (hsm.TransitionOutput, error) {
@@ -594,7 +594,7 @@ func handleNonRetryableStartOperationError(node *hsm.Node, operation Operation, 
 		RequestId:        operation.RequestId,
 	}
 	event := node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_FAILED, func(e *historypb.HistoryEvent) {
-		// nolint:revive // We must mutate here even if the linter doesn't like it.
+		//nolint:revive // We must mutate here even if the linter doesn't like it.
 		e.Attributes = &historypb.HistoryEvent_NexusOperationFailedEventAttributes{
 			NexusOperationFailedEventAttributes: attrs,
 		}
@@ -649,7 +649,7 @@ func (e taskExecutor) recordOperationTimeout(node *hsm.Node, timeoutType enumspb
 			return hsm.TransitionOutput{}, err
 		}
 		node.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT, func(e *historypb.HistoryEvent) {
-			// nolint:revive // We must mutate here even if the linter doesn't like it.
+			//nolint:revive // We must mutate here even if the linter doesn't like it.
 			e.Attributes = &historypb.HistoryEvent_NexusOperationTimedOutEventAttributes{
 				NexusOperationTimedOutEventAttributes: &historypb.NexusOperationTimedOutEventAttributes{
 					Failure: createNexusOperationFailure(
@@ -874,7 +874,7 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 				if !isRetryable {
 					if e.Config.RecordCancelRequestCompletionEvents() {
 						n.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED, func(e *historypb.HistoryEvent) {
-							// nolint:revive // We must mutate here even if the linter doesn't like it.
+							//nolint:revive // We must mutate here even if the linter doesn't like it.
 							e.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestFailedEventAttributes{
 								NexusOperationCancelRequestFailedEventAttributes: &historypb.NexusOperationCancelRequestFailedEventAttributes{
 									ScheduledEventId: scheduledEventID,
@@ -882,7 +882,7 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 									Failure:          failure,
 								},
 							}
-							// nolint:revive // We must mutate here even if the linter doesn't like it.
+							//nolint:revive // We must mutate here even if the linter doesn't like it.
 							e.WorkerMayIgnore = true // For compatibility with older SDKs.
 						})
 					}
@@ -904,14 +904,14 @@ func (e taskExecutor) saveCancelationResult(ctx context.Context, env hsm.Environ
 			// completion callback.
 			if e.Config.RecordCancelRequestCompletionEvents() {
 				n.AddHistoryEvent(enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED, func(e *historypb.HistoryEvent) {
-					// nolint:revive // We must mutate here even if the linter doesn't like it.
+					//nolint:revive // We must mutate here even if the linter doesn't like it.
 					e.Attributes = &historypb.HistoryEvent_NexusOperationCancelRequestCompletedEventAttributes{
 						NexusOperationCancelRequestCompletedEventAttributes: &historypb.NexusOperationCancelRequestCompletedEventAttributes{
 							ScheduledEventId: scheduledEventID,
 							RequestedEventId: c.RequestedEventId,
 						},
 					}
-					// nolint:revive // We must mutate here even if the linter doesn't like it.
+					//nolint:revive // We must mutate here even if the linter doesn't like it.
 					e.WorkerMayIgnore = true // For compatibility with older SDKs.
 				})
 			}

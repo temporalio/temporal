@@ -165,7 +165,7 @@ func (h *cancellationInvocationTaskHandler) Execute(
 	if h.config.UseNewFailureWireFormat(ns.Name().String()) {
 		header.Set(nexusrpc.HeaderTemporalNexusFailureSupport, "true")
 	}
-	startTime := time.Now() // nolint:forbidigo // Time can be used for timing metrics.
+	startTime := time.Now() //nolint:forbidigo // Time can be used for timing metrics.
 	callErr := inv.Cancel(callCtx, args, nexus.CancelOperationOptions{Header: header})
 	failureSource := failureSourceFromContext(callCtx)
 

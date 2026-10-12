@@ -26,7 +26,7 @@ var globalRngPool = sync.Pool{
 func getRng() *rand.Rand {
 	rng, ok := globalRngPool.Get().(*rand.Rand)
 	if !ok {
-		// nolint:forbidigo
+		//nolint:forbidigo
 		panic("Failed to access valid object from globalRngPool") // This should never happen, since it would mean someone put an invalid object into the pool.
 	}
 

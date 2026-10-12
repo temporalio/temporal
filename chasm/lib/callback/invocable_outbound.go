@@ -57,7 +57,7 @@ func (n invocableOutbound) Invoke(
 		tag.RequestID(n.requestID),
 	)
 	if h.httpTraceProvider != nil {
-		// nolint:forbidigo // Wall-clock RPC timestamp, not component state; Invoke has no chasm.Context.
+		//nolint:forbidigo // Wall-clock RPC timestamp, not component state; Invoke has no chasm.Context.
 		traceLogger := log.With(callbackLogger, tag.AttemptStart(time.Now().UTC()))
 		if trace := h.httpTraceProvider.NewTrace(n.attempt, traceLogger); trace != nil {
 			ctx = httptrace.WithClientTrace(ctx, trace)
@@ -72,7 +72,7 @@ func (n invocableOutbound) Invoke(
 		Serializer: commonnexus.PayloadSerializer,
 	})
 
-	// nolint:forbidigo // Wall-clock RPC measurement, not component state; Invoke has no chasm.Context.
+	//nolint:forbidigo // Wall-clock RPC measurement, not component state; Invoke has no chasm.Context.
 	startTime := time.Now()
 
 	// Make the call.

@@ -27,7 +27,7 @@ func EncodeValue(val any, t enumspb.IndexedValueType) (*commonpb.Payload, error)
 func MustEncodeValue(val any, t enumspb.IndexedValueType) *commonpb.Payload {
 	valPayload, err := EncodeValue(val, t)
 	if err != nil {
-		// nolint:forbidigo
+		//nolint:forbidigo
 		panic(err)
 	}
 	return valPayload

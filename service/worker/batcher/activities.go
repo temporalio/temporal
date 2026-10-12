@@ -237,7 +237,8 @@ func heartbeatInterval(heartbeatTimeout time.Duration) time.Duration {
 }
 
 // processWorkflowsWithProactiveFetching handles the core logic for both batch activity functions
-// nolint:revive,cognitive-complexity
+//
+//nolint:revive,cognitive-complexity
 func (a *activities) processWorkflowsWithProactiveFetching(
 	ctx context.Context,
 	config batchProcessorConfig,
@@ -422,7 +423,8 @@ func isAdminDelegatedRequest(batchParams *batchspb.BatchOperationInput) bool {
 }
 
 // BatchActivityWithProtobuf is an activity for processing batch operations using protobuf as the input type.
-// nolint:revive,cognitive-complexity
+//
+//nolint:revive,cognitive-complexity
 func (a *activities) BatchActivityWithProtobuf(ctx context.Context, batchParams *batchspb.BatchOperationInput) (HeartBeatDetails, error) {
 	logger := a.getActivityLogger(ctx)
 	hbd := HeartBeatDetails{}
@@ -647,7 +649,8 @@ func deterministicRequestID(jobID string, parts ...string) string {
 
 // processSingleTask processes a single batch task, bounding its execution with a
 // per-task timeout so that one hung operation cannot block the task processor.
-// nolint:revive,cognitive-complexity
+//
+//nolint:revive,cognitive-complexity
 func (a *activities) processSingleTask(
 	ctx context.Context,
 	batchOperation *batchspb.BatchOperationInput,

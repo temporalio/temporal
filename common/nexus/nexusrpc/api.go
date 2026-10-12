@@ -271,7 +271,7 @@ func ParseDuration(value string) (time.Duration, error) {
 	case "m":
 		return time.Millisecond * time.Duration(v*1e3*60), nil
 	}
-	// nolint:forbidigo // code is unreachable due to regex validation
+	//nolint:forbidigo // code is unreachable due to regex validation
 	panic("unreachable")
 }
 

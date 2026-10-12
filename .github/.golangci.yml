@@ -19,7 +19,12 @@ linters:
     - godox
     - iotamixing
     - testifylint
+    - nolintlint
   settings:
+    nolintlint:
+      # Only check directive syntax. Unused-directive detection reports false positives,
+      # e.g. for a //nolint trailing the first line of a multi-line statement.
+      allow-unused: true
     staticcheck:
       checks:
         - "all"
@@ -101,6 +106,10 @@ linters:
           disabled: true
         - name: empty-lines
           disabled: true
+        - name: epoch-naming
+          # Typed rule that aborts revive on type-check errors, making findings and
+          # nolintlint results nondeterministic: https://github.com/mgechev/revive/issues/1277
+          disabled: true
         - name: error-naming
           disabled: true
         - name: errorf
@@ -114,6 +123,10 @@ linters:
         - name: imports-blocklist
           disabled: true
         - name: increment-decrement
+          disabled: true
+        - name: inefficient-map-lookup
+          # Typed rule that aborts revive on type-check errors, making findings and
+          # nolintlint results nondeterministic: https://github.com/mgechev/revive/issues/1277
           disabled: true
         - name: line-length-limit
           disabled: true

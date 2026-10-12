@@ -107,7 +107,7 @@ func (fc *FileBasedClient) SetMetricsHandler(metricsHandler metrics.Handler) {
 }
 
 func (fc *FileBasedClient) getMetricsHandler() metrics.Handler {
-	h := fc.metricsHandler.Load() // nolint:revive // unchecked-type-assertion
+	h := fc.metricsHandler.Load() //nolint:revive // unchecked-type-assertion
 	if h == nil {
 		// this should never happen, but we'll log a warning if it does
 		fc.logger.Warn("dynamic config is missing correct metrics handler, using noop metrics handler")
@@ -117,7 +117,7 @@ func (fc *FileBasedClient) getMetricsHandler() metrics.Handler {
 }
 
 func (fc *FileBasedClient) GetValue(key Key) []ConstrainedValue {
-	values := fc.values.Load().(ConfigValueMap) // nolint:revive // unchecked-type-assertion
+	values := fc.values.Load().(ConfigValueMap) //nolint:revive // unchecked-type-assertion
 	return values[key]
 }
 
@@ -193,7 +193,7 @@ func (fc *FileBasedClient) Update() (updateErr error) {
 	}
 
 	prev := fc.values.Swap(lr.Map)
-	oldValues, _ := prev.(ConfigValueMap) // nolint:revive // unchecked-type-assertion
+	oldValues, _ := prev.(ConfigValueMap) //nolint:revive // unchecked-type-assertion
 	changedMap := DiffAndLogConfigs(fc.logger, oldValues, lr.Map)
 	fc.logger.Info("Updated dynamic config")
 

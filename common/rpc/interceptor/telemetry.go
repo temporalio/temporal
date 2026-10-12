@@ -296,7 +296,7 @@ func (ti *TelemetryInterceptor) emitActionMetric(
 				continue
 			}
 
-			switch command.CommandType { // nolint:exhaustive
+			switch command.CommandType { //nolint:exhaustive
 			case enumspb.COMMAND_TYPE_RECORD_MARKER:
 				// handle RecordMarker command, they are used for localActivity, sideEffect, versioning etc.
 				hasMarker = true

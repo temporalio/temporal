@@ -164,7 +164,7 @@ func (n invocableNexusHandler) Invoke(
 		tag.Attempt(n.attempt),
 	)
 
-	// nolint:forbidigo // Wall-clock RPC measurement, not component state; Invoke has no chasm.Context.
+	//nolint:forbidigo // Wall-clock RPC measurement, not component state; Invoke has no chasm.Context.
 	startTime := time.Now()
 
 	result, outcome := n.dispatch(ctx, startTime, logger, h, ns)
