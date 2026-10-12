@@ -9638,7 +9638,7 @@ func (s *mutableStateSuite) TestCloseTransactionInvalidateChasmTasksOnClose() {
 			}
 		}
 		s.NoError(tree.SetRootComponent(wf))
-		_, err := tree.CloseTransaction(nil)
+		_, err := tree.CloseTransaction(context.Background())
 		s.NoError(err)
 		s.False(tree.IsStateDirty())
 		return tree
@@ -9677,7 +9677,7 @@ func (s *mutableStateSuite) TestCloseTransactionInvalidateChasmTasksOnClose() {
 		s.True(tree.IsStateDirty())
 
 		// The root's state is unchanged, so skip-persistence keeps it from being rewritten.
-		mutation, err := tree.CloseTransaction(nil)
+		mutation, err := tree.CloseTransaction(context.Background())
 		s.NoError(err)
 		s.Empty(mutation.UpdatedNodes)
 	})
