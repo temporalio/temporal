@@ -78,10 +78,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 	}
 
 	maxCallbacks := h.config.MaxCallbacksPerExecution(frontendReq.GetNamespace())
-	// TODO: Reconcile a Matching grant when the subsequent start does not create an eager task.
-	// This RPC stays outside the CHASM transaction so it does not hold the Activity lock while
-	// waiting for Matching. A duplicate, conflict, or transaction failure can consume a grant
-	// without producing an eager task. The eager dispatch metrics record this gap.
+	// TODO: Reconcile the Matching grant when the subsequent start does not create an eager task.
 	if frontendReq.GetRequestEagerExecution() &&
 		h.config.EnableActivityEagerDispatchCheck(frontendReq.GetNamespace()) &&
 		!h.grantEagerActivityDispatch(ctx, req.GetNamespaceId(), frontendReq) {
