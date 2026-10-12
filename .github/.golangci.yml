@@ -59,6 +59,36 @@ linters:
           deny:
             - pkg: github.com/pborman/uuid
               desc: "Importing github.com/pborman/uuid is disallowed; use github.com/google/uuid instead"
+        # Production code must not import test-only packages: they get compiled into every server
+        # build. Test helpers belong in _test.go files or in the test-only locations excluded here.
+        test-only:
+          list-mode: lax
+          files:
+            - "$all"
+            - "!$test"
+            - "!**/tests/**"
+            - "!**/*test/**"
+            - "!**/common/testing/**"
+            - "!**/tools/**"
+            - "!**/temporaltest/**"
+            - "!**/persistence-tests/**"
+          allow:
+            # Test hooks and fault injection are compiled into the server, with no-op
+            # implementations unless built with the test_dep tag.
+            - go.temporal.io/server/common/testing/testhooks
+            - go.temporal.io/server/common/testing/grpcfaultstest
+            - go.temporal.io/server/common/testing/httpfaultstest
+          deny:
+            - pkg: testing
+              desc: "Test-only package; move the code into a _test.go file or a test-only package"
+            - pkg: github.com/stretchr/testify
+              desc: "Test-only package; move the code into a _test.go file or a test-only package"
+            - pkg: go.temporal.io/server/common/resourcetest
+              desc: "Test-only package; move the code into a _test.go file or a test-only package"
+            - pkg: go.temporal.io/server/tests
+              desc: "Test-only package; move the code into a _test.go file or a test-only package"
+            - pkg: go.temporal.io/server/common/testing
+              desc: "Test-only package; move the code into a _test.go file or a test-only package"
     importas:
       # Enforce the aliases below.
       no-unaliased: true

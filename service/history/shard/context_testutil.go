@@ -21,7 +21,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/resourcetest"
+	"go.temporal.io/server/common/resourcetest" //nolint:depguard // test-only helper outside a _test.go file
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
