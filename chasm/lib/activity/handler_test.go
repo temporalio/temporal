@@ -12,6 +12,9 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
@@ -58,6 +61,9 @@ func TestGrantEagerActivityDispatch(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			controller := gomock.NewController(t)
 			matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			defer metricsHandler.StopCapture(capture)
 			matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).DoAndReturn(
 				func(_ context.Context, actual *matchingservice.GrantEagerDispatchRequest, _ ...grpc.CallOption) (*matchingservice.GrantEagerDispatchResponse, error) {
 					require.Equal(t, "namespace-id", actual.GetNamespaceId())
@@ -70,8 +76,21 @@ func TestGrantEagerActivityDispatch(t *testing.T) {
 				},
 			)
 
-			handler := &handler{matchingClient: matchingClient}
+			handler := &handler{
+				config: &Config{
+					BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
+				},
+				matchingClient: matchingClient,
+				metricsHandler: metricsHandler,
+			}
 			require.Equal(t, test.granted, handler.grantEagerActivityDispatch(context.Background(), "namespace-id", request))
+
+			recordings := capture.SnapshotMetric(metrics.EagerDispatchRequestsSent.Name())
+			require.Len(t, recordings, 1)
+			require.EqualValues(t, 1, recordings[0].Value)
+			require.Equal(t, "namespace", recordings[0].Tags[metrics.NamespaceTag("").Key])
+			require.Equal(t, "activity-task-queue", recordings[0].Tags[metrics.UnsafeTaskQueueTag("").Key])
+			require.Equal(t, "StartActivityExecution", recordings[0].Tags[metrics.OperationTag("").Key])
 		})
 	}
 }

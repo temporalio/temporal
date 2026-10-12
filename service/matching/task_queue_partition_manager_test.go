@@ -278,6 +278,95 @@ func (s *PartitionManagerTestSuite) TestGrantEagerDispatchReturnsPartialRateLimi
 	}, items)
 }
 
+func (s *PartitionManagerTestSuite) TestGrantEagerDispatchMetrics() {
+	tests := []struct {
+		name            string
+		backlogPriority priorityKey
+		configure       func(*rateLimitManager)
+		items           []*matchingservice.GrantEagerDispatchRequest_Item
+		expectedError   bool
+		expectedRequest int64
+		expectedResults map[string]int64
+	}{
+		{
+			name: "granted",
+			items: []*matchingservice.GrantEagerDispatchRequest_Item{
+				{Count: 2},
+			},
+			expectedRequest: 2,
+			expectedResults: map[string]int64{eagerDispatchOutcomeGranted: 2},
+		},
+		{
+			name:            "backlog",
+			backlogPriority: 2,
+			items: []*matchingservice.GrantEagerDispatchRequest_Item{
+				{Count: 3, Priority: &commonpb.Priority{PriorityKey: 3}},
+			},
+			expectedRequest: 3,
+			expectedResults: map[string]int64{eagerDispatchOutcomeBacklog: 3},
+		},
+		{
+			name: "general rate limit",
+			configure: func(rateLimitManager *rateLimitManager) {
+				rateLimitManager.wholeQueueLimit = simplelimiter.MakeParams(1, 0)
+			},
+			items: []*matchingservice.GrantEagerDispatchRequest_Item{
+				{Count: 3},
+			},
+			expectedRequest: 3,
+			expectedResults: map[string]int64{
+				eagerDispatchOutcomeGranted:   1,
+				eagerDispatchOutcomeRateLimit: 2,
+			},
+		},
+		{
+			name: "per-key rate limit",
+			configure: func(rateLimitManager *rateLimitManager) {
+				rateLimitManager.perKeyLimit = simplelimiter.MakeParams(1, 0)
+			},
+			items: []*matchingservice.GrantEagerDispatchRequest_Item{
+				{Count: 3, Priority: &commonpb.Priority{FairnessKey: "key"}},
+			},
+			expectedRequest: 3,
+			expectedResults: map[string]int64{
+				eagerDispatchOutcomeGranted:         1,
+				eagerDispatchOutcomePerKeyRateLimit: 2,
+			},
+		},
+		{
+			name: "error",
+			items: []*matchingservice.GrantEagerDispatchRequest_Item{
+				{Count: 3, Version: &deploymentspb.WorkerDeploymentVersion{}},
+			},
+			expectedError:   true,
+			expectedRequest: 3,
+			expectedResults: map[string]int64{eagerDispatchOutcomeError: 3},
+		},
+	}
+
+	for _, test := range tests {
+		s.Run(test.name, func() {
+			partitionMgr, capture, cleanup := s.newEagerDispatchPartitionManagerWithMetrics(test.backlogPriority)
+			defer cleanup()
+			if test.configure != nil {
+				test.configure(partitionMgr.rateLimitManager)
+			}
+
+			_, err := partitionMgr.GrantEagerDispatch(context.Background(), test.items)
+			if test.expectedError {
+				s.Require().Error(err)
+			} else {
+				s.Require().NoError(err)
+			}
+
+			requestMetrics := capture.SnapshotMetric(metrics.EagerDispatchRequests.Name())
+			s.Require().Len(requestMetrics, 1)
+			s.Equal(test.expectedRequest, requestMetrics[0].Value)
+			s.Equal(test.expectedResults, eagerDispatchResultMetrics(capture))
+		})
+	}
+}
+
 func (s *PartitionManagerTestSuite) TestGrantEagerDispatchValidationDoesNotConsumeTokens() {
 	partitionMgr := s.newRateLimitedEagerDispatchPartitionManager()
 
@@ -2812,9 +2901,41 @@ func (s *PartitionManagerTestSuite) newEagerDispatchPartitionManager(
 		userDataManager:    s.partitionMgr.userDataManager,
 		logger:             s.partitionMgr.logger,
 		throttledLogger:    s.partitionMgr.throttledLogger,
+		metricsHandler:     s.partitionMgr.metricsHandler,
 		rateLimitManager:   s.partitionMgr.rateLimitManager,
 		defaultQueueFuture: defaultQueueFuture,
 	}
+}
+
+func (s *PartitionManagerTestSuite) newEagerDispatchPartitionManagerWithMetrics(
+	defaultBacklogPriority priorityKey,
+) (*taskQueuePartitionManagerImpl, *metricstest.Capture, func()) {
+	partitionMgr := s.newEagerDispatchPartitionManager(defaultBacklogPriority, nil)
+	captureHandler := metricstest.NewCaptureHandler()
+	capture := captureHandler.StartCapture()
+	partitionMgr.metricsHandler = metrics.GetPerTaskQueuePartitionIDScope(
+		captureHandler,
+		namespaceName,
+		partitionMgr.partition,
+		true,
+		true,
+		metrics.OperationTag(metrics.MatchingTaskQueuePartitionManagerScope),
+	)
+	partitionMgr.rateLimitManager = newRateLimitManager(
+		partitionMgr.userDataManager,
+		partitionMgr.config,
+		partitionMgr.partition.TaskQueue().TaskType(),
+	)
+	partitionMgr.rateLimitManager.timeSource = clock.NewEventTimeSource().Update(time.Now())
+	return partitionMgr, capture, func() { captureHandler.StopCapture(capture) }
+}
+
+func eagerDispatchResultMetrics(capture *metricstest.Capture) map[string]int64 {
+	results := make(map[string]int64)
+	for _, recording := range capture.SnapshotMetric(metrics.EagerDispatchResults.Name()) {
+		results[recording.Tags[metrics.OutcomeTag("").Key]] += recording.Value.(int64)
+	}
+	return results
 }
 
 func workerDeploymentVersion(buildID string) *deploymentspb.WorkerDeploymentVersion {

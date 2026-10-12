@@ -57,7 +57,13 @@ const (
 	// 100/second and burst duration of 2 seconds, the capacity of a bucket-type limiting
 	// algorithm would be 200.
 	defaultBurstDuration = time.Second
+
+	eagerDispatchRateLimitNone eagerDispatchRateLimit = iota
+	eagerDispatchRateLimitGeneral
+	eagerDispatchRateLimitPerKey
 )
+
+type eagerDispatchRateLimit int
 
 // Create a new rate limit manager for the task queue partition. This only allocates;
 // dynamic config subscriptions are registered in Start, so an unstarted manager holds
@@ -340,14 +346,22 @@ func (r *rateLimitManager) consumeTokens(now int64, task *internalTask, tokens i
 	}
 }
 
-func (r *rateLimitManager) grantTokens(priority *commonpb.Priority, requested int32) int32 {
+func (r *rateLimitManager) grantTokens(
+	priority *commonpb.Priority,
+	requested int32,
+) (int32, eagerDispatchRateLimit) {
 	now := r.timeSource.Now()
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	nowNanos := now.UnixNano()
-	granted := min(requested, r.wholeQueueReady.Available(r.wholeQueueLimit, nowNanos))
+	wholeQueueAvailable := r.wholeQueueReady.Available(r.wholeQueueLimit, nowNanos)
+	granted := min(requested, wholeQueueAvailable)
+	limitedBy := eagerDispatchRateLimitNone
+	if granted < requested {
+		limitedBy = eagerDispatchRateLimitGeneral
+	}
 	if r.perKeyLimit.Limited() {
 		key := priority.GetFairnessKey()
 		var ready simplelimiter.Ready
@@ -355,9 +369,13 @@ func (r *rateLimitManager) grantTokens(priority *commonpb.Priority, requested in
 			ready = value.(simplelimiter.Ready) // nolint:revive
 		}
 		params := r.perKeyLimit.DivideInterval(getEffectiveWeight(r.perKeyOverrides, priority))
-		granted = min(granted, ready.Available(params, nowNanos))
+		perKeyAvailable := ready.Available(params, nowNanos)
+		if perKeyAvailable < granted {
+			limitedBy = eagerDispatchRateLimitPerKey
+		}
+		granted = min(granted, perKeyAvailable)
 		if granted == 0 {
-			return 0
+			return 0, limitedBy
 		}
 		r.perKeyReady.Put(key, ready.Consume(params, nowNanos, int64(granted)))
 	}
@@ -365,7 +383,7 @@ func (r *rateLimitManager) grantTokens(priority *commonpb.Priority, requested in
 	if granted > 0 {
 		r.wholeQueueReady = r.wholeQueueReady.Consume(r.wholeQueueLimit, nowNanos, int64(granted))
 	}
-	return granted
+	return granted, limitedBy
 }
 
 // GetFairnessWeightOverrides returns the current fairness weight overrides.
