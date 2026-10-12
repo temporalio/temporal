@@ -17,7 +17,6 @@ type compactVisExecutionInfo struct {
 	Namespace  string
 	BusinessID string
 	RunID      string
-	Type       string
 	State      enumsspb.WorkflowExecutionState
 	StartTime  time.Time
 	CloseTime  *time.Time

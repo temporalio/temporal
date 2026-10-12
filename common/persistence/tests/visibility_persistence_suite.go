@@ -481,12 +481,11 @@ func (s *VisibilityPersistenceSuite) TestPaginationEdgeCase() {
 		startReqs = append(startReqs, r)
 	}
 	for i := range startReqs {
-		r := s.createClosedWorkflowRecord(
+		_ = s.createClosedWorkflowRecord(
 			startReqs[i],
 			closeTime.Add(time.Duration(n-i-1)*100*time.Millisecond),
 			enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		)
-		fmt.Printf("FOO %d (%d, %d)\n", i, r.CloseTime.UTC().UnixNano(), r.StartTime.UTC().UnixNano())
 	}
 
 	s.assertCountWorkflowExecutions(
@@ -514,8 +513,6 @@ func (s *VisibilityPersistenceSuite) TestPaginationEdgeCase() {
 			nextPageToken = resp.NextPageToken
 		},
 	)
-
-	fmt.Printf("FOO page token: %s\n", nextPageToken)
 
 	s.assertListWorkflowExecutions(
 		&manager.ListWorkflowExecutionsRequestV2{
@@ -1449,8 +1446,8 @@ func (s *VisibilityPersistenceSuite) TestListExecutions() {
 			require.Equal(t, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, closedExec.GetState())
 			require.Equal(
 				t,
-				ns1Closed.CloseTime.UnixNano(),
-				timestamp.TimeValue(closedExec.GetCloseTime()).UnixNano(),
+				persistence.UnixMilliseconds(ns1Closed.CloseTime),
+				persistence.UnixMilliseconds(timestamp.TimeValue(closedExec.GetCloseTime())),
 			)
 			require.Equal(
 				t,
