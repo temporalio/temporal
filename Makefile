@@ -18,6 +18,7 @@ ci-build-misc: \
 	shell-check \
 	goimports \
 	gomodtidy \
+	build-minimal \
 	ensure-no-changes
 
 # Delete all build artifacts
@@ -390,6 +391,13 @@ temporal-elasticsearch-tool: $(ALL_SRC)
 temporal-server-debug: $(ALL_SRC)
 	@printf $(COLOR) "Build temporal-server-debug with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
 	CGO_ENABLED=$(CGO_ENABLED) go build $(BUILD_TAG_FLAG),TEMPORAL_DEBUG -o temporal-server-debug ./cmd/server
+
+# Compiles the server with all optional integrations excluded, so the build-tagged stubs keep
+# compiling. See docs/development/build-tags.md.
+.PHONY: build-minimal
+build-minimal:
+	@printf $(COLOR) "Build temporal-server with temporal_minimal..."
+	CGO_ENABLED=$(CGO_ENABLED) go build $(BUILD_TAG_FLAG),temporal_minimal -o /dev/null ./cmd/server
 
 ##### Checks #####
 goimports: fmt-imports $(GOIMPORTS)
