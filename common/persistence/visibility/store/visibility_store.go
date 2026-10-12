@@ -39,8 +39,20 @@ type (
 
 		ListChasmExecutions(ctx context.Context, request *visibilityservice.ListChasmExecutionsRequest) (*InternalListExecutionsResponse, error)
 		CountChasmExecutions(ctx context.Context, request *visibilityservice.CountChasmExecutionsRequest) (*InternalCountExecutionsResponse, error)
+	}
 
-		// Admin APIs
+	AdminVisibilityStore interface {
+		VisibilityStore
+
+		AdminListExecutions(
+			ctx context.Context,
+			request *manager.AdminListExecutionsRequest,
+		) (*InternalListExecutionsResponse, error)
+
+		AdminCountExecutions(
+			ctx context.Context,
+			request *manager.AdminCountExecutionsRequest,
+		) (*InternalCountExecutionsResponse, error)
 
 		// AddSearchAttributes makes schema changes to add the search attributes. This function must be
 		// idempotent, ie., if a search attribute already exists, this function must be no-op, and must
@@ -50,6 +62,7 @@ type (
 
 	// InternalExecutionInfo is internal visibility info for workflow execution
 	InternalExecutionInfo struct {
+		NamespaceID          string
 		WorkflowID           string
 		RunID                string
 		TypeName             string

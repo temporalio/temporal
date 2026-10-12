@@ -936,8 +936,10 @@ var queryConverterTestCases = []queryConverterTestCase{
 	{
 		name: "match any namespace division",
 		in:   "TemporalNamespaceDivision IS NULL OR TemporalNamespaceDivision IS NOT NULL",
-		sql:  "(TemporalNamespaceDivision is null or TemporalNamespaceDivision is not null)",
-		es:   `{"bool":{"minimum_should_match":"1","should":[{"bool":{"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}},{"exists":{"field":"TemporalNamespaceDivision"}}]}}`,
+		// The query already filters on TemporalNamespaceDivision, so the default filter is
+		// not applied and the expression is not wrapped.
+		sql: "TemporalNamespaceDivision is null or TemporalNamespaceDivision is not null",
+		es:  `{"bool":{"minimum_should_match":"1","should":[{"bool":{"must_not":{"exists":{"field":"TemporalNamespaceDivision"}}}},{"exists":{"field":"TemporalNamespaceDivision"}}]}}`,
 	},
 	{
 		// The two equality conditions on the same field are merged into a single terms
@@ -945,9 +947,8 @@ var queryConverterTestCases = []queryConverterTestCase{
 		// filter clause.
 		name: "namespace division in complex query",
 		in:   "WorkflowId = 'wid' AND (TemporalNamespaceDivision = 'foo' OR TemporalNamespaceDivision = 'bar')",
-		sql:  "(workflow_id = 'wid' and (TemporalNamespaceDivision = 'foo' or TemporalNamespaceDivision = 'bar'))",
-		es: `{"bool":{"filter":[{"term":{"WorkflowId":"wid"}},` +
-			`{"bool":{"filter":{"terms":{"TemporalNamespaceDivision":["foo","bar"]}}}}]}}`,
+		sql:  "workflow_id = 'wid' and (TemporalNamespaceDivision = 'foo' or TemporalNamespaceDivision = 'bar')",
+		es:   `{"bool":{"filter":[{"term":{"WorkflowId":"wid"}},{"bool":{"filter":{"terms":{"TemporalNamespaceDivision":["foo","bar"]}}}}]}}`,
 	},
 
 	// Logical operators.
