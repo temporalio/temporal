@@ -106,6 +106,9 @@ func (v *validator) validateAndNormalizeStartRequest(
 		v.recordHeaderPrefixUsage(ns, rejected, true)
 		return serviceerror.NewInvalidArgumentf("nexus_header contains keys with a rejected prefix: %q", rejected.Keys())
 	}
+	if tracked := commonnexus.MatchHeaderPrefixes(loweredHeaders, v.config.TrackedHeaderPrefixes(ns)); len(tracked) > 0 {
+		v.recordHeaderPrefixUsage(ns, tracked, false)
+	}
 
 	if err := v.validateAndNormalizeSearchAttributes(req); err != nil {
 		return err
@@ -131,10 +134,6 @@ func (v *validator) validateAndNormalizeStartRequest(
 	}
 
 	v.normalizeIDPolicies(req)
-
-	if tracked := commonnexus.MatchHeaderPrefixes(loweredHeaders, v.config.TrackedHeaderPrefixes(ns)); len(tracked) > 0 {
-		v.recordHeaderPrefixUsage(ns, tracked, false)
-	}
 	return nil
 }
 

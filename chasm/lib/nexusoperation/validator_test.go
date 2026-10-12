@@ -390,7 +390,7 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			wantHeaderPrefixUsage: "true",
 		},
 		{
-			name: "nexus_header - not tracked when a later validation fails",
+			name: "nexus_header - tracked when a later validation fails",
 			mutate: func(r *workflowservice.StartNexusOperationExecutionRequest) {
 				r.NexusHeader = map[string]string{"Temporal-A": "v"}
 				r.Links = []*commonpb.Link{{Variant: &commonpb.Link_WorkflowEvent_{
@@ -400,7 +400,8 @@ func TestValidateStartNexusOperationExecutionRequest(t *testing.T) {
 			mutateConfig: func(c *Config) {
 				c.MaxOperationHeaderSize = func(string) int { return 20 }
 			},
-			wantErr: "must not have an empty namespace",
+			wantErr:               "must not have an empty namespace",
+			wantHeaderPrefixUsage: "false",
 		},
 		{
 			name: "nexus_header - exceeds size limit",

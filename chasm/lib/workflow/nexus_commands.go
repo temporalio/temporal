@@ -177,6 +177,9 @@ func (ch *nexusCommandHandler) handleScheduleCommand(
 			Message: fmt.Sprintf("ScheduleNexusOperationCommandAttributes.NexusHeader contains keys with a rejected prefix: %q", rejected.Keys()),
 		}
 	}
+	if tracked := commonnexus.MatchHeaderPrefixes(lowerCaseHeader, ch.config.TrackedHeaderPrefixes(nsName)); len(tracked) > 0 {
+		ch.recordHeaderPrefixUsage(ctx, nsName, tracked, false)
+	}
 
 	if headerLength > ch.config.MaxOperationHeaderSize(nsName) {
 		return FailWorkflowTaskError{
@@ -238,13 +241,7 @@ func (ch *nexusCommandHandler) handleScheduleCommand(
 		}
 		he.UserMetadata = cmd.UserMetadata
 	})
-	if err != nil {
-		return err
-	}
-	if tracked := commonnexus.MatchHeaderPrefixes(lowerCaseHeader, ch.config.TrackedHeaderPrefixes(nsName)); len(tracked) > 0 {
-		ch.recordHeaderPrefixUsage(ctx, nsName, tracked, false)
-	}
-	return nil
+	return err
 }
 
 func (ch *nexusCommandHandler) recordHeaderPrefixUsage(

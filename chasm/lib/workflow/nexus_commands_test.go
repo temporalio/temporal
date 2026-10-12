@@ -421,7 +421,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 			requireRecorded(t, tcx.metricsCapture, "true", "tmprl-")
 		})
 
-		t.Run("not tracked when a later validation fails", func(t *testing.T) {
+		t.Run("tracked when a later validation fails", func(t *testing.T) {
 			cfg := newConfig([]string{"temporal-"}, nil)
 			cfg.MaxConcurrentOperationsPerWorkflow = dynamicconfig.GetIntPropertyFnFilteredByNamespace(0)
 			tcx := newTestContext(t, cfg)
@@ -429,7 +429,7 @@ func TestHandleScheduleCommand(t *testing.T) {
 			var failWFTErr FailWorkflowTaskError
 			require.ErrorAs(t, err, &failWFTErr)
 			require.Equal(t, enumspb.WORKFLOW_TASK_FAILED_CAUSE_PENDING_NEXUS_OPERATIONS_LIMIT_EXCEEDED, failWFTErr.Cause)
-			requireRecorded(t, tcx.metricsCapture, "false")
+			requireRecorded(t, tcx.metricsCapture, "false", "temporal-")
 		})
 	})
 

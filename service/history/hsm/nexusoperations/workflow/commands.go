@@ -187,6 +187,9 @@ func (ch *commandHandler) HandleScheduleCommand(
 			Message: fmt.Sprintf("ScheduleNexusOperationCommandAttributes.NexusHeader contains keys with a rejected prefix: %q", rejected.Keys()),
 		}
 	}
+	if tracked := commonnexus.MatchHeaderPrefixes(lowerCaseHeader, ch.config.TrackedHeaderPrefixes(nsName)); len(tracked) > 0 {
+		ch.recordHeaderPrefixUsage(ms, nsName, tracked, false)
+	}
 
 	if headerLength > ch.config.MaxOperationHeaderSize(nsName) {
 		return chasmworkflow.FailWorkflowTaskError{
@@ -252,13 +255,7 @@ func (ch *commandHandler) HandleScheduleCommand(
 		he.EventGroupMarkers = command.EventGroupMarkers
 	})
 
-	if err := (nexusoperations.ScheduledEventDefinition{}).Apply(root, event); err != nil {
-		return err
-	}
-	if tracked := commonnexus.MatchHeaderPrefixes(lowerCaseHeader, ch.config.TrackedHeaderPrefixes(nsName)); len(tracked) > 0 {
-		ch.recordHeaderPrefixUsage(ms, nsName, tracked, false)
-	}
-	return nil
+	return nexusoperations.ScheduledEventDefinition{}.Apply(root, event)
 }
 
 func (ch *commandHandler) recordHeaderPrefixUsage(
