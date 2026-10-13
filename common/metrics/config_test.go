@@ -161,8 +161,10 @@ func TestPrometheusReporterErrors(t *testing.T) {
 			},
 		},
 		{
-			name:           "invalid label",
-			recordingTags:  []map[string]string{{"__reserved": "value"}},
+			name: "invalid label",
+			recordingTags: []map[string]string{
+				{"__reserved": "value"},
+			},
 			wantLogLevel:   testlogger.Warn,
 			wantLogMessage: "error in prometheus reporter",
 			wantLogTags: []tag.Tag{
@@ -178,12 +180,8 @@ func TestPrometheusReporterErrors(t *testing.T) {
 			capture := logger.StartCapture()
 			t.Cleanup(func() { logger.StopCapture(capture) })
 
-			scope := NewScope(logger, &Config{
-				Prometheus: &PrometheusConfig{ListenAddress: "127.0.0.1:0"},
-			})
-			t.Cleanup(func() {
-				require.NoError(t, scope.(io.Closer).Close())
-			})
+			scope := NewScope(logger, &Config{Prometheus: &PrometheusConfig{ListenAddress: "127.0.0.1:0"}})
+			t.Cleanup(func() { require.NoError(t, scope.(io.Closer).Close()) })
 
 			for _, recordingTags := range tc.recordingTags {
 				scope.Tagged(recordingTags).Counter("test_counter").Inc(1)
