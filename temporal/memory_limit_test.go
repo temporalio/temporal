@@ -124,13 +124,14 @@ func TestGoMemoryLimitRefresh(t *testing.T) {
 func TestGoMemoryLimitLifecycle(t *testing.T) {
 	prepareGoMemoryLimitTest(t)
 	var events []string
+	limitAtServiceStart := make(chan int64, 1)
 	app := newGoMemoryLimitTestApp(t,
 		newGoMemoryLimitHook(config.GoMemoryLimit{Ratio: 0.5}, log.NewNoopLogger(), func() (uint64, error) {
 			events = append(events, "memory limit")
 			return 4 << 30, nil
 		}),
 		fx.Hook{OnStart: func(context.Context) error {
-			require.Equal(t, int64(2<<30), debug.SetMemoryLimit(-1))
+			limitAtServiceStart <- debug.SetMemoryLimit(-1)
 			events = append(events, "service one")
 			return nil
 		}},
@@ -141,6 +142,7 @@ func TestGoMemoryLimitLifecycle(t *testing.T) {
 	)
 	require.Empty(t, events)
 	require.NoError(t, app.Start(t.Context()))
+	require.Equal(t, int64(2<<30), await.Rcv(t, limitAtServiceStart))
 	require.Equal(t, []string{"memory limit", "service one", "service two"}, events)
 	debug.SetMemoryLimit(7 << 30)
 	require.NoError(t, app.Stop(t.Context()))
@@ -150,19 +152,30 @@ func TestGoMemoryLimitLifecycle(t *testing.T) {
 func TestGoMemoryLimitRefreshUntilServicesStop(t *testing.T) {
 	prepareGoMemoryLimitTest(t)
 	var calls atomic.Int32
+	serviceStopping := make(chan struct{})
+	releaseServiceStop := make(chan struct{})
 	app := newGoMemoryLimitTestApp(t,
 		newGoMemoryLimitHook(config.GoMemoryLimit{Ratio: 0.5, RefreshInterval: time.Millisecond}, log.NewNoopLogger(), func() (uint64, error) {
 			calls.Add(1)
 			return 4 << 30, nil
 		}),
 		fx.Hook{OnStop: func(context.Context) error {
-			before := calls.Load()
-			await.RequireTrue(t, func() bool { return calls.Load() > before }, 5*time.Second, time.Millisecond)
+			close(serviceStopping)
+			<-releaseServiceStop
 			return nil
 		}},
 	)
 	require.NoError(t, app.Start(t.Context()))
-	require.NoError(t, app.Stop(t.Context()))
+	stopped := make(chan error, 1)
+	go func() { stopped <- app.Stop(t.Context()) }()
+	defer func() {
+		// Release the service and finish shutdown even if an assertion fails.
+		close(releaseServiceStop)
+		require.NoError(t, await.Rcv(t, stopped))
+	}()
+	await.Rcv(t, serviceStopping)
+	before := calls.Load()
+	await.RequireTrue(t, func() bool { return calls.Load() > before }, 5*time.Second, time.Millisecond)
 }
 
 func TestGoMemoryLimitStartupRollback(t *testing.T) {
