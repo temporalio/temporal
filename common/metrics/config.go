@@ -444,7 +444,6 @@ func newPrometheusScope(
 			OnError: func(err error) {
 				// Descriptor conflicts indicate inconsistent metric definitions and cause Tally to drop recordings.
 				// Soft-assert so tests can flag the programming error while production continues running.
-				// Prometheus does not expose a typed error for descriptor conflicts.
 				if strings.Contains(err.Error(), "has different label names or a different help string") {
 					softassert.Fail(logger, "error in prometheus reporter", tag.Error(err))
 					return
