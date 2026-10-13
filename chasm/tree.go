@@ -397,21 +397,6 @@ func (n *Node) SetRootComponent(
 	return root.syncSubComponents()
 }
 
-// SetStartedByPrincipal records the principal of the caller creating the execution
-// on the root component. It must be called in the transaction that creates the
-// execution, after SetRootComponent, and never overwrites an existing value.
-func (n *Node) SetStartedByPrincipal(principal *commonpb.Principal) {
-	if principal == nil || n.backend.IsWorkflow() {
-		// Workflows record principals on their history events instead.
-		return
-	}
-	attrs := n.root().serializedNode.GetMetadata().GetComponentAttributes()
-	if attrs == nil || attrs.StartedByPrincipal != nil {
-		return
-	}
-	attrs.StartedByPrincipal = principal
-}
-
 // setValue sets the value field of the node.
 // If the node is a component or data node, the index from node value to node (valueToNode)
 // is also updated.
@@ -1647,35 +1632,56 @@ func (n *Node) markMetadataUpdated(node *Node) error {
 	return nil
 }
 
-// closeTransactionRecordClosedByPrincipal records the caller's principal on the
-// root component when this transaction closes the execution. It is write-once:
-// rootClosed is only true for the transaction that first closes the execution.
-func (n *Node) closeTransactionRecordClosedByPrincipal(
+// closeTransactionRecordPrincipals records the caller's principal on the root component
+// when this transaction creates or closes the execution. Both principals are write-once:
+// rootCreated and rootClosed are only true for the transaction that first creates or
+// closes the execution.
+func (n *Node) closeTransactionRecordPrincipals(
 	ctx context.Context,
 	isActive bool,
+	rootCreated bool,
 	rootClosed bool,
 ) error {
-	if !isActive || !rootClosed || n.backend.IsWorkflow() {
-		// Standby clusters receive the principal through replication.
-		// Workflows record principals on their history events instead.
+	if !isActive || (!rootCreated && !rootClosed) || !n.recordsPrincipals() {
+		// Standby clusters receive the principals through replication.
 		return nil
 	}
 	principal := headers.GetPrincipal(ctx)
 	if principal == nil {
 		return nil
 	}
-	attrs := n.serializedNode.GetMetadata().GetComponentAttributes()
+	root := n.root()
+	attrs := root.serializedNode.GetMetadata().GetComponentAttributes()
 	if attrs == nil {
 		return softassert.UnexpectedInternalErr(
 			n.logger,
 			"root node is not a component",
-			fmt.Errorf("%v", n.serializedNode.GetMetadata().GetAttributes()))
+			fmt.Errorf("%v", root.serializedNode.GetMetadata().GetAttributes()))
 	}
-	if attrs.ClosedByPrincipal != nil {
+	updated := false
+	if rootCreated && attrs.StartedByPrincipal == nil {
+		attrs.StartedByPrincipal = principal
+		updated = true
+	}
+	if rootClosed && attrs.ClosedByPrincipal == nil {
+		attrs.ClosedByPrincipal = principal
+		updated = true
+	}
+	if !updated {
 		return nil
 	}
-	attrs.ClosedByPrincipal = principal
-	return n.markMetadataUpdated(n)
+	return n.markMetadataUpdated(root)
+}
+
+// recordsPrincipals reports whether the execution's archetype was registered with
+// WithRecordPrincipals.
+func (n *Node) recordsPrincipals() bool {
+	archetypeID := n.ArchetypeID()
+	if archetypeID == UnspecifiedArchetypeID {
+		return false
+	}
+	rc, ok := n.registry.ComponentByID(archetypeID)
+	return ok && rc.recordPrincipals
 }
 
 // applyPendingComponentMetadata writes staged per-component framework metadata
@@ -1782,9 +1788,10 @@ func (n *Node) AddTask(
 // track changes made in the current transaction.
 //
 // isActive reports whether the transaction runs on the active cluster. The principal
-// in ctx, if any, is the caller whose request is being committed. It is recorded on
-// the root component only when an active transaction closes the execution; standby
-// clusters receive it through replication.
+// in ctx, if any, is the caller whose request is being committed. For archetypes
+// registered with WithRecordPrincipals, it is recorded on the root component when an
+// active transaction creates or closes the execution; standby clusters receive it
+// through replication.
 func (n *Node) CloseTransaction(ctx context.Context, isActive bool) (NodesMutation, error) {
 	defer n.cleanupTransaction()
 
@@ -1819,6 +1826,10 @@ func (n *Node) CloseTransaction(ctx context.Context, isActive bool) (NodesMutati
 		}
 	}
 
+	// The root has no LastUpdateVersionedTransition until it is first persisted, so this
+	// must be read before serialization.
+	rootCreated := n.root().serializedNode.GetMetadata().GetLastUpdateVersionedTransition() == nil
+
 	if err := n.closeTransactionSerializeNodes(); err != nil {
 		return NodesMutation{}, err
 	}
@@ -1831,7 +1842,7 @@ func (n *Node) CloseTransaction(ctx context.Context, isActive bool) (NodesMutati
 		return NodesMutation{}, err
 	}
 
-	if err := n.closeTransactionRecordClosedByPrincipal(ctx, isActive, rootClosed); err != nil {
+	if err := n.closeTransactionRecordPrincipals(ctx, isActive, rootCreated, rootClosed); err != nil {
 		return NodesMutation{}, err
 	}
 

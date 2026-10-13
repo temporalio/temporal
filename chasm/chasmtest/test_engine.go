@@ -17,7 +17,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -474,7 +473,6 @@ func (e *Engine) startNew(
 	if err := exec.node.SetRootComponent(root); err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
-	exec.node.SetStartedByPrincipal(headers.GetPrincipal(ctx))
 	exec.root = root
 	if err = e.closeTransaction(ctx, exec); err != nil {
 		return chasm.StartExecutionResult{}, err
@@ -516,7 +514,6 @@ func (e *Engine) startAndUpdateNew(
 	if err := exec.node.SetRootComponent(root); err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
-	exec.node.SetStartedByPrincipal(headers.GetPrincipal(ctx))
 	if err := updateFn(mutableCtx, root); err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}

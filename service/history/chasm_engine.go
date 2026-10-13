@@ -921,7 +921,6 @@ func (e *ChasmEngine) createNewExecutionWithUpdate(
 	if err := chasmTree.SetRootComponent(rootComponent); err != nil {
 		return newExecutionParams{}, err
 	}
-	chasmTree.SetStartedByPrincipal(headers.GetPrincipal(ctx))
 
 	if updateFn != nil {
 		if err = updateFn(chasmContext, rootComponent); err != nil {

@@ -40,6 +40,7 @@ func (l *library) Components() []*chasm.RegistrableComponent {
 		chasm.NewRegistrableComponent[*PayloadStore](
 			componentName,
 			chasm.WithBusinessIDAlias("PayloadStoreId"),
+			chasm.WithRecordPrincipals(),
 			chasm.WithSearchAttributes(
 				PayloadTotalCountSearchAttribute,
 				PayloadTotalSizeSearchAttribute,

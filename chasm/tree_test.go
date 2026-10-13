@@ -3512,7 +3512,6 @@ func (s *nodeSuite) TestCloseTransaction_RecordPrincipal() {
 	chasmCtx := NewMutableContext(context.Background(), node)
 
 	// Creating the execution records the starter.
-	node.SetStartedByPrincipal(alice)
 	mutation, err := node.CloseTransaction(principalContext(alice), true)
 	s.NoError(err)
 	s.Require().Contains(mutation.UpdatedNodes, "")
@@ -3557,7 +3556,6 @@ func (s *nodeSuite) TestCloseTransaction_RecordPrincipal_Terminate() {
 	}
 	s.useStatefulExecutionState()
 	node := s.testComponentTree()
-	node.SetStartedByPrincipal(alice)
 	_, err := node.CloseTransaction(principalContext(alice), true)
 	s.NoError(err)
 
@@ -3581,7 +3579,6 @@ func (s *nodeSuite) TestCloseTransaction_RecordPrincipal_CloseWithoutPrincipal()
 	s.useStatefulExecutionState()
 	node := s.testComponentTree()
 	chasmCtx := NewMutableContext(context.Background(), node)
-	node.SetStartedByPrincipal(alice)
 	_, err := node.CloseTransaction(principalContext(alice), true)
 	s.NoError(err)
 
@@ -3611,7 +3608,6 @@ func (s *nodeSuite) TestCloseTransaction_RecordPrincipal_Passive() {
 	s.useStatefulExecutionState()
 	node := s.testComponentTree()
 	chasmCtx := NewMutableContext(context.Background(), node)
-	node.SetStartedByPrincipal(alice)
 	_, err := node.CloseTransaction(principalContext(alice), true)
 	s.NoError(err)
 
@@ -3626,13 +3622,29 @@ func (s *nodeSuite) TestCloseTransaction_RecordPrincipal_Passive() {
 	s.Nil(s.rootComponentAttributes(node).GetClosedByPrincipal())
 }
 
-func (s *nodeSuite) TestSetStartedByPrincipal() {
+func (s *nodeSuite) TestCloseTransaction_RecordStartedByPrincipal() {
 	alice := &commonpb.Principal{Type: "jwt", Name: "alice"}
 	bob := &commonpb.Principal{Type: "jwt", Name: "bob"}
 
+	s.Run("RecordedOnCreate", func() {
+		node := s.testComponentTree()
+		mutation, err := node.CloseTransaction(principalContext(alice), true)
+		s.NoError(err)
+		s.Require().Contains(mutation.UpdatedNodes, "")
+		s.ProtoEqual(alice, mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetStartedByPrincipal())
+
+		// A later request never overwrites started_by.
+		chasmCtx := NewMutableContext(context.Background(), node)
+		tc, err := node.Component(chasmCtx, ComponentRef{componentPath: rootPath})
+		s.NoError(err)
+		tc.(*TestComponent).ComponentData.CreateRequestId = "updated"
+		_, err = node.CloseTransaction(principalContext(bob), true)
+		s.NoError(err)
+		s.ProtoEqual(alice, s.rootComponentAttributes(node).GetStartedByPrincipal())
+	})
+
 	s.Run("NoPrincipal", func() {
 		node := s.testComponentTree()
-		node.SetStartedByPrincipal(nil)
 		_, err := node.CloseTransaction(context.Background(), true)
 		s.NoError(err)
 		s.Nil(s.rootComponentAttributes(node).GetStartedByPrincipal())
@@ -3647,25 +3659,25 @@ func (s *nodeSuite) TestSetStartedByPrincipal() {
 		s.Nil(s.rootComponentAttributes(node).GetStartedByPrincipal())
 	})
 
-	s.Run("NeverOverwritten", func() {
+	s.Run("Passive", func() {
 		node := s.testComponentTree()
-		node.SetStartedByPrincipal(alice)
-		node.SetStartedByPrincipal(bob)
-		mutation, err := node.CloseTransaction(principalContext(bob), true)
-		s.NoError(err)
-		s.Require().Contains(mutation.UpdatedNodes, "")
-		s.ProtoEqual(alice, mutation.UpdatedNodes[""].GetMetadata().GetComponentAttributes().GetStartedByPrincipal())
-	})
-
-	s.Run("SkippedForWorkflow", func() {
-		s.nodeBackend.HandleIsWorkflow = func() bool { return true }
-		defer func() { s.nodeBackend.HandleIsWorkflow = nil }()
-		node := s.testComponentTree()
-		node.SetStartedByPrincipal(alice)
-		_, err := node.CloseTransaction(principalContext(alice), true)
+		_, err := node.CloseTransaction(principalContext(alice), false)
 		s.NoError(err)
 		s.Nil(s.rootComponentAttributes(node).GetStartedByPrincipal())
-		s.Nil(s.rootComponentAttributes(node).GetClosedByPrincipal())
+	})
+
+	s.Run("ArchetypeNotOptedIn", func() {
+		s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
+		s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
+		var nilSerializedNodes map[string]*persistencespb.ChasmNode
+		node, err := s.newTestTree(nilSerializedNodes)
+		s.NoError(err)
+		s.NoError(node.SetRootComponent(&TestTimeSkippingImplComponent{
+			ComponentData: &protoMessageType{CreateRequestId: "not-opted-in"},
+		}))
+		_, err = node.CloseTransaction(principalContext(alice), true)
+		s.NoError(err)
+		s.Nil(s.rootComponentAttributes(node).GetStartedByPrincipal())
 	})
 }
 
