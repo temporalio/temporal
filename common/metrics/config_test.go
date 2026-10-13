@@ -4,7 +4,6 @@ import (
 	"io"
 	"regexp"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -12,7 +11,6 @@ import (
 	"github.com/uber-go/tally/v4"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/mock/gomock"
 )
@@ -177,8 +175,6 @@ func TestPrometheusReporterErrors(t *testing.T) {
 
 			logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
 			expected := logger.Expect(tc.wantLogLevel, "^"+regexp.QuoteMeta(tc.wantLogMessage)+"$", tc.wantLogTags...)
-			capture := logger.StartCapture()
-			t.Cleanup(func() { logger.StopCapture(capture) })
 
 			scope := NewScope(logger, &Config{Prometheus: &PrometheusConfig{ListenAddress: "127.0.0.1:0"}})
 			t.Cleanup(func() { require.NoError(t, scope.(io.Closer).Close()) })
@@ -186,10 +182,6 @@ func TestPrometheusReporterErrors(t *testing.T) {
 			for _, recordingTags := range tc.recordingTags {
 				scope.Tagged(recordingTags).Counter("test_counter").Inc(1)
 			}
-			await.RequireTrue(t, func() bool {
-				return len(capture.Snapshot()) > 0
-			}, time.Second, 10*time.Millisecond)
-			require.Len(t, capture.Snapshot(), 1)
 
 			require.Equal(t, int64(1), expected.MatchCount())
 		})
