@@ -719,6 +719,7 @@ func NamespaceCountLimitInterceptorProvider(
 			Global:      serviceConfig.MaxGlobalInternalPerNSConcurrentLongRunningRequests,
 		},
 		configs.ExecutionAPICountLimitOverride,
+		interceptor.WithResourceExhaustedRetryDelayFloor(serviceConfig.ResourceExhaustedRetryDelayFloor),
 	)
 }
 
