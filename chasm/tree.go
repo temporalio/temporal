@@ -4132,7 +4132,10 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 
 	// state change
 	n.backend.RecordTimeSkippingTransition(transition)
-	return n.regenerateTimerTasksForTimeSkipping()
+	if transition.GetSkippedDuration() > 0 {
+		return n.regenerateTimerTasksForTimeSkipping()
+	}
+	return nil
 }
 
 func (n *Node) regenerateTimerTasksForTimeSkipping() error {
