@@ -7,6 +7,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
@@ -24,24 +25,25 @@ type eagerActivityTaskRequest struct {
 }
 
 type eagerActivityTaskData struct {
-	namespaceID                 string
-	namespace                   string
-	runID                       string
-	activityType                *commonpb.ActivityType
-	activityID                  string
-	header                      *commonpb.Header
-	input                       *commonpb.Payloads
-	heartbeatDetails            *commonpb.Payloads
-	scheduledTime               *timestamppb.Timestamp
-	currentAttemptScheduledTime *timestamppb.Timestamp
-	startedTime                 *timestamppb.Timestamp
-	attempt                     int32
-	scheduleToCloseTimeout      *durationpb.Duration
-	startToCloseTimeout         *durationpb.Duration
-	heartbeatTimeout            *durationpb.Duration
-	retryPolicy                 *commonpb.RetryPolicy
-	priority                    *commonpb.Priority
-	activityAttemptStartedStamp int32
+	namespaceID                         string
+	namespace                           string
+	runID                               string
+	activityType                        *commonpb.ActivityType
+	activityID                          string
+	header                              *commonpb.Header
+	input                               *commonpb.Payloads
+	heartbeatDetails                    *commonpb.Payloads
+	scheduledTime                       *timestamppb.Timestamp
+	currentAttemptScheduledTime         *timestamppb.Timestamp
+	startedTime                         *timestamppb.Timestamp
+	attempt                             int32
+	scheduleToCloseTimeout              *durationpb.Duration
+	startToCloseTimeout                 *durationpb.Duration
+	heartbeatTimeout                    *durationpb.Duration
+	retryPolicy                         *commonpb.RetryPolicy
+	priority                            *commonpb.Priority
+	propagatedNexusSerializationContext *nexuspb.PropagatedSerializationContext
+	activityAttemptStartedStamp         int32
 }
 
 func (a *Activity) eagerActivityTaskData(
@@ -68,65 +70,44 @@ func (a *Activity) eagerActivityTaskData(
 	heartbeatTimeout := a.GetHeartbeatTimeout()
 	retryPolicy := a.GetRetryPolicy()
 	priority := a.GetPriority()
+	propagatedNexusSerializationContext := requestData.GetPropagatedNexusSerializationContext()
 
 	// This data is used to construct the eager response after the transaction has completed, so
 	// it must not retain mutable state owned by the transaction.
-	if activityType != nil {
-		activityType = common.CloneProto(activityType)
-	}
-	if header != nil {
-		header = common.CloneProto(header)
-	}
-	if input != nil {
-		input = common.CloneProto(input)
-	}
-	if heartbeatDetails != nil {
-		heartbeatDetails = common.CloneProto(heartbeatDetails)
-	}
-	if scheduledTime != nil {
-		scheduledTime = common.CloneProto(scheduledTime)
-	}
-	if currentAttemptScheduledTime != nil {
-		currentAttemptScheduledTime = common.CloneProto(currentAttemptScheduledTime)
-	}
-	if startedTime != nil {
-		startedTime = common.CloneProto(startedTime)
-	}
-	if scheduleToCloseTimeout != nil {
-		scheduleToCloseTimeout = common.CloneProto(scheduleToCloseTimeout)
-	}
-	if startToCloseTimeout != nil {
-		startToCloseTimeout = common.CloneProto(startToCloseTimeout)
-	}
-	if heartbeatTimeout != nil {
-		heartbeatTimeout = common.CloneProto(heartbeatTimeout)
-	}
-	if retryPolicy != nil {
-		retryPolicy = common.CloneProto(retryPolicy)
-	}
-	if priority != nil {
-		priority = common.CloneProto(priority)
-	}
+	activityType = common.CloneProto(activityType)
+	header = common.CloneProto(header)
+	input = common.CloneProto(input)
+	heartbeatDetails = common.CloneProto(heartbeatDetails)
+	scheduledTime = common.CloneProto(scheduledTime)
+	currentAttemptScheduledTime = common.CloneProto(currentAttemptScheduledTime)
+	startedTime = common.CloneProto(startedTime)
+	scheduleToCloseTimeout = common.CloneProto(scheduleToCloseTimeout)
+	startToCloseTimeout = common.CloneProto(startToCloseTimeout)
+	heartbeatTimeout = common.CloneProto(heartbeatTimeout)
+	retryPolicy = common.CloneProto(retryPolicy)
+	priority = common.CloneProto(priority)
+	propagatedNexusSerializationContext = common.CloneProto(propagatedNexusSerializationContext)
 
 	return &eagerActivityTaskData{
-		namespaceID:                 request.namespaceID,
-		namespace:                   request.namespace,
-		runID:                       key.RunID,
-		activityType:                activityType,
-		activityID:                  key.BusinessID,
-		header:                      header,
-		input:                       input,
-		heartbeatDetails:            heartbeatDetails,
-		scheduledTime:               scheduledTime,
-		currentAttemptScheduledTime: currentAttemptScheduledTime,
-		startedTime:                 startedTime,
-		attempt:                     attempt.GetCount(),
-		scheduleToCloseTimeout:      scheduleToCloseTimeout,
-		startToCloseTimeout:         startToCloseTimeout,
-		heartbeatTimeout:            heartbeatTimeout,
-		retryPolicy:                 retryPolicy,
-		priority:                    priority,
-		activityAttemptStartedStamp: attempt.GetStartedStamp(),
+		namespaceID:                         request.namespaceID,
+		namespace:                           request.namespace,
+		runID:                               key.RunID,
+		activityType:                        activityType,
+		activityID:                          key.BusinessID,
+		header:                              header,
+		input:                               input,
+		heartbeatDetails:                    heartbeatDetails,
+		scheduledTime:                       scheduledTime,
+		currentAttemptScheduledTime:         currentAttemptScheduledTime,
+		startedTime:                         startedTime,
+		attempt:                             attempt.GetCount(),
+		scheduleToCloseTimeout:              scheduleToCloseTimeout,
+		startToCloseTimeout:                 startToCloseTimeout,
+		heartbeatTimeout:                    heartbeatTimeout,
+		retryPolicy:                         retryPolicy,
+		priority:                            priority,
+		propagatedNexusSerializationContext: propagatedNexusSerializationContext,
+		activityAttemptStartedStamp:         attempt.GetStartedStamp(),
 	}, nil
 }
 
@@ -150,23 +131,24 @@ func (d *eagerActivityTaskData) response(componentRef []byte) (*workflowservice.
 	}
 
 	return &workflowservice.PollActivityTaskQueueResponse{
-		TaskToken:                   token,
-		WorkflowNamespace:           d.namespace,
-		ActivityType:                d.activityType,
-		ActivityId:                  d.activityID,
-		Header:                      d.header,
-		Input:                       d.input,
-		HeartbeatDetails:            d.heartbeatDetails,
-		ScheduledTime:               d.scheduledTime,
-		CurrentAttemptScheduledTime: d.currentAttemptScheduledTime,
-		StartedTime:                 d.startedTime,
-		Attempt:                     d.attempt,
-		ScheduleToCloseTimeout:      d.scheduleToCloseTimeout,
-		StartToCloseTimeout:         d.startToCloseTimeout,
-		HeartbeatTimeout:            d.heartbeatTimeout,
-		RetryPolicy:                 d.retryPolicy,
-		Priority:                    d.priority,
-		ActivityRunId:               d.runID,
+		TaskToken:                           token,
+		WorkflowNamespace:                   d.namespace,
+		ActivityType:                        d.activityType,
+		ActivityId:                          d.activityID,
+		Header:                              d.header,
+		Input:                               d.input,
+		HeartbeatDetails:                    d.heartbeatDetails,
+		ScheduledTime:                       d.scheduledTime,
+		CurrentAttemptScheduledTime:         d.currentAttemptScheduledTime,
+		StartedTime:                         d.startedTime,
+		Attempt:                             d.attempt,
+		ScheduleToCloseTimeout:              d.scheduleToCloseTimeout,
+		StartToCloseTimeout:                 d.startToCloseTimeout,
+		HeartbeatTimeout:                    d.heartbeatTimeout,
+		RetryPolicy:                         d.retryPolicy,
+		Priority:                            d.priority,
+		PropagatedNexusSerializationContext: d.propagatedNexusSerializationContext,
+		ActivityRunId:                       d.runID,
 	}, nil
 }
 

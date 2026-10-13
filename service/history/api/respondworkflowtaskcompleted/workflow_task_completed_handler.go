@@ -22,12 +22,12 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/eagerdispatch"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/log"
@@ -600,20 +600,19 @@ func (handler *workflowTaskCompletedHandler) grantEagerActivityDispatch(
 	}
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	response, err := handler.matchingClient.GrantEagerDispatch(ctx, &matchingservice.GrantEagerDispatchRequest{
-		NamespaceId: executionInfo.GetNamespaceId(),
-		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-			TaskQueue:     attr.GetTaskQueue().GetName(),
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-		},
-		Items: []*matchingservice.GrantEagerDispatchRequest_Item{
+	response, err := eagerdispatch.Grant(
+		ctx,
+		handler.matchingClient,
+		executionInfo.GetNamespaceId(),
+		attr.GetTaskQueue().GetName(),
+		[]*matchingservice.GrantEagerDispatchRequest_Item{
 			{
 				Count:    1,
 				Priority: attr.GetPriority(),
 				Version:  worker_versioning.DeploymentVersionFromDeployment(handler.workflowTaskDeployment),
 			},
 		},
-	})
+	)
 	return err == nil && len(response.GetItems()) == 1 && response.GetItems()[0].GetGrantedCount() == 1
 }
 

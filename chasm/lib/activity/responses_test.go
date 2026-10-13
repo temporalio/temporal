@@ -7,6 +7,7 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
@@ -99,6 +100,7 @@ func TestEagerActivityTaskDataSnapshotsState(t *testing.T) {
 	heartbeatTimeout := durationpb.New(3 * time.Minute)
 	retryPolicy := &commonpb.RetryPolicy{MaximumAttempts: 2}
 	priority := &commonpb.Priority{PriorityKey: 1}
+	propagatedNexusSerializationContext := &nexuspb.PropagatedSerializationContext{Endpoint: "endpoint", Service: "service", Operation: "operation"}
 
 	activity := &Activity{
 		ActivityState: &activitypb.ActivityState{
@@ -119,8 +121,9 @@ func TestEagerActivityTaskDataSnapshotsState(t *testing.T) {
 		}),
 		LastHeartbeat: chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{Details: heartbeatDetails}),
 		RequestData: chasm.NewDataField(ctx, &activitypb.ActivityRequestData{
-			Header: header,
-			Input:  input,
+			Header:                              header,
+			Input:                               input,
+			PropagatedNexusSerializationContext: propagatedNexusSerializationContext,
 		}),
 	}
 
@@ -144,6 +147,7 @@ func TestEagerActivityTaskDataSnapshotsState(t *testing.T) {
 	heartbeatTimeout.Seconds++
 	retryPolicy.MaximumAttempts++
 	priority.PriorityKey++
+	propagatedNexusSerializationContext.Endpoint = "changed-endpoint"
 
 	response, err := data.response([]byte("component-ref"))
 	require.NoError(t, err)
@@ -159,4 +163,5 @@ func TestEagerActivityTaskDataSnapshotsState(t *testing.T) {
 	require.Equal(t, int64(3*time.Minute/time.Second), response.GetHeartbeatTimeout().GetSeconds())
 	require.EqualValues(t, 2, response.GetRetryPolicy().GetMaximumAttempts())
 	require.EqualValues(t, 1, response.GetPriority().GetPriorityKey())
+	require.Equal(t, "endpoint", response.GetPropagatedNexusSerializationContext().GetEndpoint())
 }

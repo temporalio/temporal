@@ -10,10 +10,10 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common/contextutil"
+	"go.temporal.io/server/common/eagerdispatch"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -269,17 +269,16 @@ func (h *handler) grantEagerActivityDispatch(
 		return false
 	}
 
-	response, err := h.matchingClient.GrantEagerDispatch(ctx, &matchingservice.GrantEagerDispatchRequest{
-		NamespaceId: namespaceID,
-		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-			TaskQueue:     request.GetTaskQueue().GetName(),
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-		},
-		Items: []*matchingservice.GrantEagerDispatchRequest_Item{{
+	response, err := eagerdispatch.Grant(
+		ctx,
+		h.matchingClient,
+		namespaceID,
+		request.GetTaskQueue().GetName(),
+		[]*matchingservice.GrantEagerDispatchRequest_Item{{
 			Count:    1,
 			Priority: request.GetPriority(),
 		}},
-	})
+	)
 	return err == nil && len(response.GetItems()) == 1 && response.GetItems()[0].GetGrantedCount() == 1
 }
 
