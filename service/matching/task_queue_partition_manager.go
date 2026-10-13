@@ -660,56 +660,10 @@ type eagerDispatchGrantTarget struct {
 	checkDefaultBacklog bool
 }
 
-const (
-	eagerDispatchOutcomeGranted         = "granted"
-	eagerDispatchOutcomeError           = "error"
-	eagerDispatchOutcomeBacklog         = "backlog"
-	eagerDispatchOutcomeRateLimit       = "rate_limit"
-	eagerDispatchOutcomePerKeyRateLimit = "per_key_rate_limit"
-)
-
-type eagerDispatchOutcomeCounts struct {
-	granted         int64
-	backlog         int64
-	rateLimit       int64
-	perKeyRateLimit int64
-}
-
-func (counts eagerDispatchOutcomeCounts) record(metricsHandler metrics.Handler) {
-	recordEagerDispatchResult(metricsHandler, eagerDispatchOutcomeGranted, counts.granted)
-	recordEagerDispatchResult(metricsHandler, eagerDispatchOutcomeBacklog, counts.backlog)
-	recordEagerDispatchResult(metricsHandler, eagerDispatchOutcomeRateLimit, counts.rateLimit)
-	recordEagerDispatchResult(metricsHandler, eagerDispatchOutcomePerKeyRateLimit, counts.perKeyRateLimit)
-}
-
-func recordEagerDispatchResult(metricsHandler metrics.Handler, outcome string, count int64) {
-	if count > 0 {
-		metrics.EagerDispatchResults.With(metricsHandler).Record(count, metrics.OutcomeTag(outcome))
-	}
-}
-
-func eagerDispatchRequestCount(items []*matchingservice.GrantEagerDispatchRequest_Item) int64 {
-	var count int64
-	for _, item := range items {
-		if itemCount := item.GetCount(); itemCount > 0 {
-			count += int64(itemCount)
-		}
-	}
-	return count
-}
-
 func (pm *taskQueuePartitionManagerImpl) GrantEagerDispatch(
 	ctx context.Context,
 	items []*matchingservice.GrantEagerDispatchRequest_Item,
-) (_ []*matchingservice.GrantEagerDispatchResponse_Item, retErr error) {
-	requestedCount := eagerDispatchRequestCount(items)
-	metrics.EagerDispatchRequests.With(pm.metricsHandler).Record(requestedCount)
-	defer func() {
-		if retErr != nil {
-			recordEagerDispatchResult(pm.metricsHandler, eagerDispatchOutcomeError, requestedCount)
-		}
-	}()
-
+) ([]*matchingservice.GrantEagerDispatchResponse_Item, error) {
 	if _, ok := pm.partition.(*tqid.NormalPartition); !ok {
 		return nil, serviceerror.NewInvalidArgument("eager dispatch grants only support normal task queue partitions")
 	}
@@ -724,12 +678,7 @@ func (pm *taskQueuePartitionManagerImpl) GrantEagerDispatch(
 	if err != nil {
 		return nil, err
 	}
-	responseItems, outcomeCounts, err := pm.grantEagerDispatch(items, targets)
-	if err != nil {
-		return nil, err
-	}
-	outcomeCounts.record(pm.metricsHandler)
-	return responseItems, nil
+	return pm.grantEagerDispatch(items, targets)
 }
 
 func (pm *taskQueuePartitionManagerImpl) resolveEagerDispatchGrantTargets(
@@ -789,14 +738,13 @@ func (pm *taskQueuePartitionManagerImpl) getEagerDispatchVersioningInfo() (eager
 func (pm *taskQueuePartitionManagerImpl) grantEagerDispatch(
 	items []*matchingservice.GrantEagerDispatchRequest_Item,
 	targets []eagerDispatchGrantTarget,
-) ([]*matchingservice.GrantEagerDispatchResponse_Item, eagerDispatchOutcomeCounts, error) {
+) ([]*matchingservice.GrantEagerDispatchResponse_Item, error) {
 	responseItems := make([]*matchingservice.GrantEagerDispatchResponse_Item, len(items))
-	var outcomeCounts eagerDispatchOutcomeCounts
 	backlogPriorities := make(map[physicalTaskQueueManager]priorityKey)
 	for index, item := range items {
 		backlogPriority, err := pm.eagerDispatchBacklogPriority(targets[index], backlogPriorities)
 		if err != nil {
-			return nil, eagerDispatchOutcomeCounts{}, err
+			return nil, err
 		}
 
 		priority := pm.config.clipPriority(priorityKey(item.GetPriority().GetPriorityKey()))
@@ -804,26 +752,13 @@ func (pm *taskQueuePartitionManagerImpl) grantEagerDispatch(
 		// backlog priority is higher and prevents eager dispatch when it is <= priority.
 		granted := int32(0)
 		if backlogPriority == 0 || backlogPriority > priority {
-			var limitedBy eagerDispatchRateLimit
-			granted, limitedBy = pm.rateLimitManager.grantTokens(item.GetPriority(), item.GetCount())
-			outcomeCounts.granted += int64(granted)
-			denied := int64(item.GetCount() - granted)
-			switch limitedBy {
-			case eagerDispatchRateLimitGeneral:
-				outcomeCounts.rateLimit += denied
-			case eagerDispatchRateLimitPerKey:
-				outcomeCounts.perKeyRateLimit += denied
-			default:
-				// All requested tokens were granted.
-			}
-		} else {
-			outcomeCounts.backlog += int64(item.GetCount())
+			granted = pm.rateLimitManager.grantTokens(item.GetPriority(), item.GetCount())
 		}
 		responseItems[index] = &matchingservice.GrantEagerDispatchResponse_Item{
 			GrantedCount: granted,
 		}
 	}
-	return responseItems, outcomeCounts, nil
+	return responseItems, nil
 }
 
 func (pm *taskQueuePartitionManagerImpl) eagerDispatchBacklogPriority(

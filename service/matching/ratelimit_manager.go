@@ -57,13 +57,7 @@ const (
 	// 100/second and burst duration of 2 seconds, the capacity of a bucket-type limiting
 	// algorithm would be 200.
 	defaultBurstDuration = time.Second
-
-	eagerDispatchRateLimitNone eagerDispatchRateLimit = iota
-	eagerDispatchRateLimitGeneral
-	eagerDispatchRateLimitPerKey
 )
-
-type eagerDispatchRateLimit int
 
 // Create a new rate limit manager for the task queue partition. This only allocates;
 // dynamic config subscriptions are registered in Start, so an unstarted manager holds
@@ -346,22 +340,14 @@ func (r *rateLimitManager) consumeTokens(now int64, task *internalTask, tokens i
 	}
 }
 
-func (r *rateLimitManager) grantTokens(
-	priority *commonpb.Priority,
-	requested int32,
-) (int32, eagerDispatchRateLimit) {
+func (r *rateLimitManager) grantTokens(priority *commonpb.Priority, requested int32) int32 {
 	now := r.timeSource.Now()
 
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
 	nowNanos := now.UnixNano()
-	wholeQueueAvailable := r.wholeQueueReady.Available(r.wholeQueueLimit, nowNanos)
-	granted := min(requested, wholeQueueAvailable)
-	limitedBy := eagerDispatchRateLimitNone
-	if granted < requested {
-		limitedBy = eagerDispatchRateLimitGeneral
-	}
+	granted := min(requested, r.wholeQueueReady.Available(r.wholeQueueLimit, nowNanos))
 	if r.perKeyLimit.Limited() {
 		key := priority.GetFairnessKey()
 		var ready simplelimiter.Ready
@@ -369,13 +355,9 @@ func (r *rateLimitManager) grantTokens(
 			ready = value.(simplelimiter.Ready) // nolint:revive
 		}
 		params := r.perKeyLimit.DivideInterval(getEffectiveWeight(r.perKeyOverrides, priority))
-		perKeyAvailable := ready.Available(params, nowNanos)
-		if perKeyAvailable < granted {
-			limitedBy = eagerDispatchRateLimitPerKey
-		}
-		granted = min(granted, perKeyAvailable)
+		granted = min(granted, ready.Available(params, nowNanos))
 		if granted == 0 {
-			return 0, limitedBy
+			return 0
 		}
 		r.perKeyReady.Put(key, ready.Consume(params, nowNanos, int64(granted)))
 	}
@@ -383,7 +365,7 @@ func (r *rateLimitManager) grantTokens(
 	if granted > 0 {
 		r.wholeQueueReady = r.wholeQueueReady.Consume(r.wholeQueueLimit, nowNanos, int64(granted))
 	}
-	return granted, limitedBy
+	return granted
 }
 
 // GetFairnessWeightOverrides returns the current fairness weight overrides.

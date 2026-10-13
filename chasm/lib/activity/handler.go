@@ -269,9 +269,6 @@ func (h *handler) grantEagerActivityDispatch(
 		return false
 	}
 
-	metrics.EagerDispatchRequestsSent.With(
-		eagerActivityMetricsHandler(h.metricsHandler, h.config, request),
-	).Record(1)
 	response, err := h.matchingClient.GrantEagerDispatch(ctx, &matchingservice.GrantEagerDispatchRequest{
 		NamespaceId: namespaceID,
 		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
