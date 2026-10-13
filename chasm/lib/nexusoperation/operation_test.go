@@ -421,7 +421,7 @@ func TestDescribeCircuitBreaker(t *testing.T) {
 					op := newTestOperation()
 					op.Status = status
 					op.RequestData = chasm.NewDataField(ctx, &nexusoperationpb.OperationRequestData{})
-					op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibilityWithData(ctx, nil, nil))
+					op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibility(ctx))
 					if cancellationStatus != nexusoperationpb.CANCELLATION_STATUS_UNSPECIFIED {
 						op.Cancellation = chasm.NewComponentField(ctx, newCancellation(&nexusoperationpb.CancellationState{
 							Status: cancellationStatus,
@@ -568,13 +568,15 @@ func TestOperation_BuildExecutionInfo_ReturnsIsolatedSearchAttributes(t *testing
 
 	op := NewOperation(&nexusoperationpb.OperationState{Status: nexusoperationpb.OPERATION_STATUS_STARTED})
 	op.RequestData = chasm.NewDataField(ctx, &nexusoperationpb.OperationRequestData{})
-	op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibilityWithData(
+	visibility, err := chasm.NewVisibilityWithData(
 		ctx,
 		map[string]*commonpb.Payload{"saKey": payload.EncodeString("v")},
 		nil,
-	))
+	)
+	require.NoError(t, err)
+	op.Visibility = chasm.NewComponentField(ctx, visibility)
 	require.NoError(t, root.SetRootComponent(op))
-	_, err := root.CloseTransaction()
+	_, err = root.CloseTransaction()
 	require.NoError(t, err)
 
 	ctx = chasm.NewMutableContext(context.Background(), root)
