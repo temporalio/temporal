@@ -46,6 +46,8 @@ const (
 	destination             = "destination"
 	// Generic reason tag can be used anywhere a reason is needed.
 	reason = "reason"
+
+	nexusSerializationContextMatch = "context_match"
 	// See server.api.enums.v1.ReplicationTaskType
 	replicationTaskType                            = "replicationTaskType"
 	replicationTaskPriority                        = "replicationTaskPriority"
@@ -456,6 +458,10 @@ func NexusOperationTag(value string) Tag {
 
 func NexusOperationBackendTag(value string) Tag {
 	return Tag{Key: nexusOperationBackendTagName, Value: value}
+}
+
+func NexusSerializationContextMatchTag(value ReasonString) Tag {
+	return Tag{Key: nexusSerializationContextMatch, Value: string(value)}
 }
 
 // HttpStatusTag returns a new httpStatusTag.

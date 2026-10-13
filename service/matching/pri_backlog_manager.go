@@ -23,27 +23,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-// this retry policy is currently only used for matching persistence operations
-// that, if failed, the entire task queue needs to be reloaded
-// TODO(pri): old matcher cleanup: move here
-// var persistenceOperationRetryPolicy = backoff.NewExponentialRetryPolicy(50 * time.Millisecond).
-// 	WithMaximumInterval(1 * time.Second).
-// 	WithExpirationInterval(30 * time.Second)
-
 type (
-	// backlogManager manages the backlog and persistence of a physical task queue
-	// TODO(pri): old matcher cleanup: move here
-	// backlogManager interface {
-	// 	Start()
-	// 	Stop()
-	// 	WaitUntilInitialized(context.Context) error
-	// 	SpoolTask(taskInfo *persistencespb.TaskInfo) error
-	// 	BacklogCountHint() int64
-	// 	BacklogStatus() *taskqueuepb.TaskQueueStatus
-	// 	TotalApproximateBacklogCount() int64
-	// 	BacklogHeadAge() time.Duration
-	// }
-
 	priBacklogManagerImpl struct {
 		pqMgr      physicalTaskQueueManager
 		config     *taskQueueConfig
@@ -403,14 +383,6 @@ func (c *priBacklogManagerImpl) respoolTaskAfterError(task *persistencespb.TaskI
 	c.pqMgr.UnloadFromPartitionManager(unloadCauseOtherError)
 	return err
 }
-
-// TODO(pri): old matcher cleanup: move here
-// func rangeIDToTaskIDBlock(rangeID int64, rangeSize int64) taskIDBlock {
-// 	return taskIDBlock{
-// 		start: (rangeID-1)*rangeSize + 1,
-// 		end:   rangeID * rangeSize,
-// 	}
-// }
 
 func (c *priBacklogManagerImpl) queueKey() *PhysicalTaskQueueKey {
 	return c.pqMgr.QueueKey()

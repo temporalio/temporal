@@ -1305,11 +1305,6 @@ If value less or equal to 0, will fall back to MatchingRPS`,
 Fields: Enabled, RefreshInterval, LatencyThreshold, ErrorThreshold, RateBackoffStepSize, RateIncreaseStepSize, RateMultiMin, RateMultiMax.
 See DynamicRateLimitingParams comments for more details.`,
 	)
-	MatchingMinTaskThrottlingBurstSize = NewTaskQueueIntSetting(
-		"matching.minTaskThrottlingBurstSize",
-		1,
-		`MatchingMinTaskThrottlingBurstSize is the minimum burst size for task queue throttling`,
-	)
 	MatchingGetTasksBatchSize = NewTaskQueueIntSetting(
 		"matching.getTasksBatchSize",
 		1000,
@@ -1318,18 +1313,12 @@ See DynamicRateLimitingParams comments for more details.`,
 	MatchingGetTasksReloadAt = NewTaskQueueIntSetting(
 		"matching.getTasksReloadAt",
 		100,
-		`Reload a batch of tasks when there are this many remaining. Must be less than MatchingGetTasksBatchSize. (Requires new matcher.)`,
+		`Reload a batch of tasks when there are this many remaining. Must be less than MatchingGetTasksBatchSize.`,
 	)
 	MatchingLongPollExpirationInterval = NewTaskQueueDurationSetting(
 		"matching.longPollExpirationInterval",
 		time.Minute,
 		`MatchingLongPollExpirationInterval is the long poll expiration interval in the matching service`,
-	)
-	// TODO(pri): old matcher cleanup
-	MatchingSyncMatchWaitDuration = NewTaskQueueDurationSetting(
-		"matching.syncMatchWaitDuration",
-		200*time.Millisecond,
-		`MatchingSyncMatchWaitDuration is to wait time for sync match`,
 	)
 	MatchingHistoryMaxPageSize = NewNamespaceIntSetting(
 		"matching.historyMaxPageSize",
@@ -1623,17 +1612,11 @@ scoped by namespace and/or task queue.`,
 (1) sync match rate instead of total dispatch rate for the add-to-dispatch ratio check, and
 (2) task dispatch latency instead of backlog age stats for the backlog scale-up check.`,
 	)
-	MatchingUseNewMatcher = NewTaskQueueTypedSettingWithConverter(
-		"matching.useNewMatcher",
-		ConvertGradualChange(true),
-		StaticGradualChange(true),
-		`Use priority-enabled TaskMatcher`,
-	)
 	MatchingEnableFairness = NewTaskQueueTypedSettingWithConverter(
 		"matching.enableFairness",
 		ConvertGradualChange(false),
 		StaticGradualChange(false),
-		`Enable fairness for task dispatching. Implies matching.useNewMatcher.`,
+		`Enable fairness for task dispatching.`,
 	)
 	MatchingPriorityLevels = NewTaskQueueIntSetting(
 		"matching.priorityLevels",
@@ -1690,7 +1673,7 @@ default as namespace cardinality can be high and this requires a metrics collect
 	MatchingAutoEnableV2 = NewTaskQueueBoolSetting(
 		"matching.autoEnableV2",
 		false,
-		`MatchingAutoEnableV2 automatically enables fairness when a fairness or priority key is seen`,
+		`MatchingAutoEnableV2 automatically enables fairness when a fairness key is seen`,
 	)
 	MatchingPartitionScaleAllowedDrift = NewTaskQueueTypedSetting(
 		"matching.partitionScaleAllowedDrift",

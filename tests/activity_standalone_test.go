@@ -942,6 +942,16 @@ func (s *standaloneActivityTestSuite) TestStart() {
 	t.Run("AttachLinksOnConflictUnionsLinks", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
+		serializationContext := &nexuspb.PropagatedSerializationContext{
+			Endpoint:  "endpoint",
+			Service:   "service",
+			Operation: "operation",
+		}
+		otherSerializationContext := &nexuspb.PropagatedSerializationContext{
+			Endpoint:  "other-endpoint",
+			Service:   "other-service",
+			Operation: "other-operation",
+		}
 
 		firstLinks := []*commonpb.Link{
 			{
@@ -981,10 +991,11 @@ func (s *standaloneActivityTestSuite) TestStart() {
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
-			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
-			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
-			Links:               firstLinks,
+			StartToCloseTimeout:                 durationpb.New(defaultStartToCloseTimeout),
+			RequestId:                           env.Tv().Any().String(),
+			IdConflictPolicy:                    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+			Links:                               firstLinks,
+			PropagatedNexusSerializationContext: serializationContext,
 		})
 		require.NoError(t, err)
 		require.True(t, firstResp.Started)
@@ -998,10 +1009,11 @@ func (s *standaloneActivityTestSuite) TestStart() {
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
-			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
-			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
-			Links:               secondLinks,
+			StartToCloseTimeout:                 durationpb.New(defaultStartToCloseTimeout),
+			RequestId:                           env.Tv().Any().String(),
+			IdConflictPolicy:                    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+			Links:                               secondLinks,
+			PropagatedNexusSerializationContext: otherSerializationContext,
 			OnConflictOptions: &commonpb.OnConflictOptions{
 				AttachLinks: true,
 			},
@@ -1016,6 +1028,7 @@ func (s *standaloneActivityTestSuite) TestStart() {
 			RunId:      firstResp.RunId,
 		})
 		require.NoError(t, err)
+		protorequire.ProtoEqual(t, serializationContext, descResp.GetInfo().GetPropagatedNexusSerializationContext())
 		expected := append([]*commonpb.Link{}, firstLinks...)
 		expected = append(expected, secondLinks...)
 		// Links across requests are stored in a map keyed by request ID, so their relative order is non-deterministic.
@@ -4768,6 +4781,108 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 			require.NotNil(t, pollActivityResp)
 			require.Equal(t, startResp.RunId, pollActivityResp.GetRunId())
 			tc.completionValidationFn(t, pollActivityResp)
+		})
+	}
+}
+
+func (s *standaloneActivityTestSuite) TestNexusSerializationContextPropagation() {
+	env := s.newTestEnv()
+	serializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "test-endpoint",
+		Service:   "test-service",
+		Operation: "test-operation",
+	}
+
+	for _, tc := range []struct {
+		name   string
+		failed bool
+	}{
+		{name: "Completed"},
+		{name: "Failed", failed: true},
+	} {
+		s.Run(tc.name, func(s *standaloneActivityTestSuite) {
+			t := s.T()
+			ctx := s.Context()
+			activityID := testcore.RandomizeStr(t.Name())
+			taskQueue := testcore.RandomizeStr(t.Name())
+
+			// Start with a context that should remain unchanged across retries.
+			startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+				Namespace:                           env.Namespace().String(),
+				ActivityId:                          activityID,
+				ActivityType:                        env.Tv().ActivityType(),
+				TaskQueue:                           &taskqueuepb.TaskQueue{Name: taskQueue},
+				ScheduleToCloseTimeout:              durationpb.New(time.Minute),
+				RetryPolicy:                         &commonpb.RetryPolicy{MaximumAttempts: 2},
+				PropagatedNexusSerializationContext: serializationContext,
+			})
+			require.NoError(t, err)
+
+			firstTask, err := env.pollActivityTaskQueue(ctx, taskQueue)
+			require.NoError(t, err)
+			require.EqualValues(t, 1, firstTask.GetAttempt())
+			protorequire.ProtoEqual(t, serializationContext, firstTask.GetPropagatedNexusSerializationContext())
+
+			// Fail the first attempt so the server dispatches a second worker task.
+			_, err = env.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+				Namespace: env.Namespace().String(),
+				TaskToken: firstTask.GetTaskToken(),
+				Failure: &failurepb.Failure{
+					Message: "retryable failure",
+					FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+						NextRetryDelay: durationpb.New(time.Second),
+					}},
+				},
+			})
+			require.NoError(t, err)
+
+			secondTask, err := env.pollActivityTaskQueue(ctx, taskQueue)
+			require.NoError(t, err)
+			require.EqualValues(t, 2, secondTask.GetAttempt())
+			protorequire.ProtoEqual(t, serializationContext, secondTask.GetPropagatedNexusSerializationContext())
+
+			if tc.failed {
+				_, err = env.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+					Namespace: env.Namespace().String(),
+					TaskToken: secondTask.GetTaskToken(),
+					Failure:   defaultFailure,
+				})
+			} else {
+				_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+					Namespace: env.Namespace().String(),
+					TaskToken: secondTask.GetTaskToken(),
+					Result:    defaultResult,
+				})
+			}
+			require.NoError(t, err)
+
+			// Check that both result APIs retain the context after either outcome.
+			pollResp, err := env.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+				Namespace:  env.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.GetRunId(),
+			})
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, serializationContext, pollResp.GetPropagatedNexusSerializationContext())
+
+			describeResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:      env.Namespace().String(),
+				ActivityId:     activityID,
+				RunId:          startResp.GetRunId(),
+				IncludeOutcome: true,
+			})
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, serializationContext, describeResp.GetInfo().GetPropagatedNexusSerializationContext())
+
+			if tc.failed {
+				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, describeResp.GetInfo().GetStatus())
+				protorequire.ProtoEqual(t, defaultFailure, pollResp.GetOutcome().GetFailure())
+				protorequire.ProtoEqual(t, defaultFailure, describeResp.GetOutcome().GetFailure())
+			} else {
+				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, describeResp.GetInfo().GetStatus())
+				protorequire.ProtoEqual(t, defaultResult, pollResp.GetOutcome().GetResult())
+				protorequire.ProtoEqual(t, defaultResult, describeResp.GetOutcome().GetResult())
+			}
 		})
 	}
 }
