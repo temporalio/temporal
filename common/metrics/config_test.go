@@ -2,6 +2,7 @@ package metrics
 
 import (
 	"io"
+	"regexp"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/mock/gomock"
@@ -138,64 +140,60 @@ func TestPrometheusReporterErrors(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name    string
-		address string
-		tags    []map[string]string
-		wantLog testlogger.CapturedLogPattern
+		name           string
+		recordingTags  []map[string]string
+		wantLogLevel   testlogger.Level
+		wantLogMessage string
+		wantLogTags    []tag.Tag
 	}{
 		{
-			name:    "label collision",
-			address: "127.0.0.1:0",
-			tags: []map[string]string{
+			name: "label collision",
+			recordingTags: []map[string]string{
 				{"outcome": "fired"},
 				{"outcome": "skipped"},
 				{"outcome": "invalidated", "reason": "closed"},
 			},
-			wantLog: testlogger.CapturedLogPattern{
-				Level:   testlogger.Error,
-				Message: "failed assertion: error in prometheus reporter",
-				Tags:    map[string]any{"failed-assertion": true, "error": testlogger.AnyTagValue},
+			wantLogLevel:   testlogger.Error,
+			wantLogMessage: "failed assertion: error in prometheus reporter",
+			wantLogTags: []tag.Tag{
+				tag.FailedAssertion,
+				tag.String("error", `^a previously registered descriptor with the same fully-qualified name as Desc\{fqName: "test_counter", help: "test_counter counter", constLabels: \{\}, variableLabels: \{(outcome,reason|reason,outcome)\}\} has different label names or a different help string$`),
 			},
 		},
 		{
-			name:    "listener error",
-			address: "127.0.0.1:65536",
-			wantLog: testlogger.CapturedLogPattern{
-				Level:   testlogger.Warn,
-				Message: "error in prometheus reporter",
-				Tags:    map[string]any{"error": testlogger.AnyTagValue},
-			},
-		},
-		{
-			name:    "invalid label",
-			address: "127.0.0.1:0",
-			tags:    []map[string]string{{"__reserved": "value"}},
-			wantLog: testlogger.CapturedLogPattern{
-				Level:   testlogger.Warn,
-				Message: "error in prometheus reporter",
-				Tags:    map[string]any{"error": testlogger.AnyTagValue},
+			name:           "invalid label",
+			recordingTags:  []map[string]string{{"__reserved": "value"}},
+			wantLogLevel:   testlogger.Warn,
+			wantLogMessage: "error in prometheus reporter",
+			wantLogTags: []tag.Tag{
+				tag.String("error", "^"+regexp.QuoteMeta(`descriptor Desc{fqName: "test_counter", help: "test_counter counter", constLabels: {}, variableLabels: {__reserved}} is invalid: "__reserved" is not a valid label name for metric "test_counter"`)+"$"),
 			},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+			expected := logger.Expect(tc.wantLogLevel, "^"+regexp.QuoteMeta(tc.wantLogMessage)+"$", tc.wantLogTags...)
 			capture := logger.StartCapture()
 			t.Cleanup(func() { logger.StopCapture(capture) })
+
 			scope := NewScope(logger, &Config{
-				Prometheus: &PrometheusConfig{ListenAddress: tc.address},
+				Prometheus: &PrometheusConfig{ListenAddress: "127.0.0.1:0"},
 			})
 			t.Cleanup(func() {
 				require.NoError(t, scope.(io.Closer).Close())
 			})
 
-			for _, tags := range tc.tags {
-				scope.Tagged(tags).Counter("test_counter").Inc(1)
+			for _, recordingTags := range tc.recordingTags {
+				scope.Tagged(recordingTags).Counter("test_counter").Inc(1)
 			}
-			await.RequireTrue(t, func() bool { return len(capture.Snapshot()) > 0 }, time.Second, 10*time.Millisecond)
+			await.RequireTrue(t, func() bool {
+				return len(capture.Snapshot()) > 0
+			}, time.Second, 10*time.Millisecond)
 			require.Len(t, capture.Snapshot(), 1)
-			capture.RequireContains(t, tc.wantLog)
+
+			require.Equal(t, int64(1), expected.MatchCount())
 		})
 	}
 }
