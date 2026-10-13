@@ -1100,6 +1100,22 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 		s.Equal(baseTime.Add(2*time.Hour), tr.GetTargetTime())
 	})
 
+	for _, tc := range []struct {
+		name   string
+		expiry time.Time
+	}{
+		{name: "UserTimerDueNow_BlocksSkipping", expiry: baseTime},
+		{name: "UserTimerOverdue_BlocksSkipping", expiry: baseTime.Add(-time.Minute)},
+	} {
+		s.Run(tc.name, func() {
+			resetMS()
+			addTimer("due", tc.expiry)
+			addTimer("future", baseTime.Add(time.Hour))
+
+			s.Nil(s.mutableState.findNextSkipTarget(), "a pending due timer blocks skipping to a future timer")
+		})
+	}
+
 	s.Run("UserTimerAndEarlierFastForward_TargetIsFastForward", func() {
 		resetMS()
 		addTimer("t1", baseTime.Add(3*time.Hour))

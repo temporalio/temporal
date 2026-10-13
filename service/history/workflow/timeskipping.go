@@ -357,9 +357,14 @@ func (ms *MutableStateImpl) isWorkflowSkippable() bool {
 // workflow backoff timers, and workflow execution timeout, etc that those are skippable and scheduled in the future
 // it should only be called after isWorkflowSkippable returns true
 func (ms *MutableStateImpl) findNextSkipTarget() *chasm.TimeSkippingTransition {
-	transition := chasm.NewTimeSkippingTransition(ms.Now())
+	now := ms.Now()
+	transition := chasm.NewTimeSkippingTransition(now)
 	for _, timerInfo := range ms.GetPendingTimerInfos() {
-		transition.TrackEarliestFutureTime(timerInfo.ExpiryTime.AsTime())
+		expiryTime := timerInfo.ExpiryTime.AsTime()
+		if !expiryTime.After(now) {
+			return nil
+		}
+		transition.TrackEarliestFutureTime(expiryTime)
 	}
 
 	// Activities waiting out a retry backoff are skip targets: advance to the earliest
