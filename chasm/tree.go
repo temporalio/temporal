@@ -1651,11 +1651,17 @@ func (n *Node) markMetadataUpdated(node *Node) error {
 // root component when this transaction closes the execution. It is write-once:
 // rootClosed is only true for the transaction that first closes the execution.
 func (n *Node) closeTransactionRecordClosedByPrincipal(
-	principal *commonpb.Principal,
+	ctx context.Context,
+	isActive bool,
 	rootClosed bool,
 ) error {
-	if principal == nil || !rootClosed || n.backend.IsWorkflow() {
+	if !isActive || !rootClosed || n.backend.IsWorkflow() {
+		// Standby clusters receive the principal through replication.
 		// Workflows record principals on their history events instead.
+		return nil
+	}
+	principal := headers.GetPrincipal(ctx)
+	if principal == nil {
 		return nil
 	}
 	attrs := n.serializedNode.GetMetadata().GetComponentAttributes()
@@ -1775,11 +1781,11 @@ func (n *Node) AddTask(
 // CloseTransaction is used by MutableState to close the transaction and
 // track changes made in the current transaction.
 //
-// The principal in ctx, if any, is the caller whose request is being committed.
-// It is recorded on the root component when this transaction closes the execution,
-// so callers must not pass one when the transaction is not driven by a caller on
-// the active cluster (e.g. passive replication).
-func (n *Node) CloseTransaction(ctx context.Context) (NodesMutation, error) {
+// isActive reports whether the transaction runs on the active cluster. The principal
+// in ctx, if any, is the caller whose request is being committed. It is recorded on
+// the root component only when an active transaction closes the execution; standby
+// clusters receive it through replication.
+func (n *Node) CloseTransaction(ctx context.Context, isActive bool) (NodesMutation, error) {
 	defer n.cleanupTransaction()
 
 	if err := n.executeImmediatePureTasks(); err != nil {
@@ -1801,13 +1807,11 @@ func (n *Node) CloseTransaction(ctx context.Context) (NodesMutation, error) {
 		TransitionCount:          n.backend.NextTransitionCount(),
 	}
 
-	wasClosed := n.isExecutionClosed()
 	immutableContext := NewContext(context.TODO(), n)
-	rootLifecycleChanged, err := n.closeTransactionHandleRootLifecycleChange(immutableContext)
+	rootLifecycleChanged, rootClosed, err := n.closeTransactionHandleRootLifecycleChange(immutableContext)
 	if err != nil {
 		return NodesMutation{}, err
 	}
-	rootClosed := !wasClosed && n.isExecutionClosed()
 
 	if n.subtreeIsDirty {
 		if err := n.closeTransactionForceUpdateVisibility(immutableContext, rootLifecycleChanged); err != nil {
@@ -1827,7 +1831,7 @@ func (n *Node) CloseTransaction(ctx context.Context) (NodesMutation, error) {
 		return NodesMutation{}, err
 	}
 
-	if err := n.closeTransactionRecordClosedByPrincipal(headers.GetPrincipal(ctx), rootClosed); err != nil {
+	if err := n.closeTransactionRecordClosedByPrincipal(ctx, isActive, rootClosed); err != nil {
 		return NodesMutation{}, err
 	}
 
@@ -1886,25 +1890,28 @@ func (n *Node) executeImmediatePureTasks() error {
 	return nil
 }
 
+// closeTransactionHandleRootLifecycleChange syncs the execution state and status
+// with the root component's lifecycle state. executionClosed is true only for the
+// transaction that closes the execution.
 func (n *Node) closeTransactionHandleRootLifecycleChange(
 	immutableContext Context,
-) (bool, error) {
+) (lifecycleChanged bool, executionClosed bool, err error) {
 	if n.backend.IsWorkflow() {
 		// Workflow manages its lifecycle directly in mutable state.
-		return false, nil
+		return false, false, nil
 	}
 
 	if n.valueState != valueStateNeedSerialize {
-		return false, nil
+		return false, false, nil
 	}
 
 	if n.backend.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// Already in completed state, no need to update lifecycle state.
-		return false, nil
+		return false, false, nil
 	}
 
 	if n.terminated {
-		return n.backend.UpdateWorkflowStateStatus(
+		return n.updateRootStateStatus(
 			enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 			enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 		)
@@ -1912,7 +1919,7 @@ func (n *Node) closeTransactionHandleRootLifecycleChange(
 
 	rootComponent, err := n.Component(immutableContext, ComponentRef{})
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 	lifecycleState := rootComponent.LifecycleState(immutableContext)
 
@@ -1930,17 +1937,27 @@ func (n *Node) closeTransactionHandleRootLifecycleChange(
 		newState = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 		newStatus = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 	default:
-		return false, softassert.UnexpectedInternalErr(
+		return false, false, softassert.UnexpectedInternalErr(
 			n.logger,
 			"unknown component lifecycle state",
 			fmt.Errorf("%v", lifecycleState))
 	}
 
-	return n.backend.UpdateWorkflowStateStatus(newState, newStatus)
+	return n.updateRootStateStatus(newState, newStatus)
 }
 
-func (n *Node) isExecutionClosed() bool {
-	return n.backend.GetExecutionState().GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+// updateRootStateStatus applies the new execution state and status. executionClosed
+// reports whether the execution moved to the completed state. Callers only reach this
+// when the execution is not already completed.
+func (n *Node) updateRootStateStatus(
+	state enumsspb.WorkflowExecutionState,
+	status enumspb.WorkflowExecutionStatus,
+) (lifecycleChanged bool, executionClosed bool, err error) {
+	lifecycleChanged, err = n.backend.UpdateWorkflowStateStatus(state, status)
+	if err != nil {
+		return false, false, err
+	}
+	return lifecycleChanged, lifecycleChanged && state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, nil
 }
 
 func (n *Node) closeTransactionForceUpdateVisibility(

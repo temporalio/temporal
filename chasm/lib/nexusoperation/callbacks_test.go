@@ -464,7 +464,7 @@ func TestCompletionCallbacksRoundTripThroughTheTree(t *testing.T) {
 		newNexusCallback(),
 	}, 10))
 	require.NoError(t, root.SetRootComponent(op))
-	_, err := root.CloseTransaction(context.Background())
+	_, err := root.CloseTransaction(context.Background(), true)
 	require.NoError(t, err)
 
 	ctx = chasm.NewMutableContext(context.Background(), root)
