@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"strings"
 	"time"
 
 	"github.com/cactus/go-statsd-client/v5/statsd"
@@ -441,7 +442,12 @@ func newPrometheusScope(
 		prometheus.ConfigurationOptions{
 			Registry: prom.NewRegistry(),
 			OnError: func(err error) {
-				softassert.Fail(logger, "error in prometheus reporter", tag.Error(err))
+				// Prometheus does not expose a typed error for descriptor conflicts.
+				if strings.Contains(err.Error(), "has different label names or a different help string") {
+					softassert.Fail(logger, "error in prometheus reporter", tag.Error(err))
+					return
+				}
+				logger.Warn("error in prometheus reporter", tag.Error(err))
 			},
 		},
 	)
