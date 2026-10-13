@@ -1282,20 +1282,27 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 	if err != nil {
 		return nil, err
 	}
-	if e.config.EnableMatchingFanOutForPollCancellation(ns.String()) {
-		// TODO: Remove the IsRoot/Sticky guard after EnableMatchingFanOutForPollCancellation is
-		// fully rolled out. This check is only needed during the transition since the legacy
-		// frontend fan-out path may send non-root partitions to this handler.
-		if partition.IsRoot() && partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
-			return e.cancelOutstandingWorkerPollsForAllPartitions(ctx, request, partition)
-		}
-	}
-	// TODO: Delete this code path after EnableMatchingFanOutForPollCancellation is rolled out.
+	// Record shutdown locally even when the root partition is not loaded and fan-out is skipped.
 	if request.WorkerInstanceKey != "" {
 		// Keep Put before CancelAll; poll registration uses the inverse order to avoid missed polls.
 		e.shutdownWorkers.Put(request.WorkerInstanceKey, struct{}{})
 	}
 	cancelledCount := e.workerInstancePollers.CancelAll(request.WorkerInstanceKey)
+
+	if e.config.EnableMatchingFanOutForPollCancellation(ns.String()) {
+		// TODO: Remove the IsRoot/Sticky guard after EnableMatchingFanOutForPollCancellation is
+		// fully rolled out. This check is only needed during the transition since the legacy
+		// frontend fan-out path may send non-root partitions to this handler.
+		if partition.IsRoot() && partition.Kind() != enumspb.TASK_QUEUE_KIND_STICKY {
+			resp, err := e.cancelOutstandingWorkerPollsForAllPartitions(ctx, request, partition)
+			if err != nil {
+				return nil, err
+			}
+			resp.CancelledCount += cancelledCount
+			return resp, nil
+		}
+	}
+	// TODO: Delete this code path after EnableMatchingFanOutForPollCancellation is rolled out.
 	e.removePollerFromHistory(ctx, partition, request.GetWorkerIdentity())
 	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: cancelledCount}, nil
 }
@@ -1313,8 +1320,8 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 		return nil, err
 	}
 	if rootPM == nil {
-		// Root not loaded means no pending polls anywhere — child partitions loading
-		// triggers root to load via user data fetch chain.
+		// Without a loaded root, the current read partition count is unavailable.
+		// Local cancellation still rejects late polls on this host, but remote hosts are not notified.
 		e.logger.Debug("Skipping poll cancellation fan-out: root partition not loaded",
 			tag.WorkflowNamespaceID(request.GetNamespaceId()),
 			tag.WorkflowTaskQueueName(rootPartition.TaskQueue().Name()),

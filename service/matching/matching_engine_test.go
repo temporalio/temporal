@@ -6210,6 +6210,61 @@ func staticFalseChange(_, _ string, _ enumspb.TaskQueueType, _ func(dynamicconfi
 func TestCancelOutstandingWorkerPolls(t *testing.T) {
 	t.Parallel()
 
+	for _, taskType := range []enumspb.TaskQueueType{
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+		enumspb.TASK_QUEUE_TYPE_NEXUS,
+	} {
+		t.Run("unloaded root rejects late "+taskType.String()+" polls", func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			tv := testvars.New(t)
+			nsRegistry := namespace.NewMockRegistry(ctrl)
+			nsRegistry.EXPECT().GetNamespaceName(tv.NamespaceID()).Return(tv.NamespaceName(), nil)
+			config := defaultTestConfig()
+			config.EnableMatchingFanOutForPollCancellation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
+			engine := &matchingEngineImpl{
+				config:                config,
+				namespaceRegistry:     nsRegistry,
+				logger:                log.NewNoopLogger(),
+				timeSource:            clock.NewRealTimeSource(),
+				workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+				shutdownWorkers:       cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
+				partitions:            make(map[tqid.PartitionKey]taskQueuePartitionManager),
+			}
+			workerKey := "shutdown-worker"
+			pollCtx, cancelPoll := context.WithCancel(t.Context())
+			defer cancelPoll()
+			engine.workerInstancePollers.Add(workerKey, "outstanding-poll", cancelPoll)
+			resp, err := engine.CancelOutstandingWorkerPolls(t.Context(), &matchingservice.CancelOutstandingWorkerPollsRequest{
+				NamespaceId:       tv.NamespaceID().String(),
+				TaskQueue:         tv.TaskQueue(),
+				TaskQueueType:     taskType,
+				WorkerInstanceKey: workerKey,
+				WorkerIdentity:    tv.WorkerIdentity(),
+			})
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, resp)
+			require.ErrorIs(t, pollCtx.Err(), context.Canceled)
+			require.Empty(t, engine.partitions, "shutdown must not load partitions")
+
+			// Late polls can load either the root or a child on the same matching host.
+			tq := tqid.UnsafeTaskQueueFamily(tv.NamespaceID().String(), tv.TaskQueue().GetName()).TaskQueue(taskType)
+			for _, partitionID := range []int{0, 1} {
+				partition := tq.NormalPartition(partitionID)
+				pm := NewMocktaskQueuePartitionManager(ctrl)
+				pm.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil)
+				pm.EXPECT().LongPollExpirationInterval().Return(time.Minute)
+				engine.partitions[partition.Key()] = pm
+
+				// PollTask must not be called on the partition manager after shutdown.
+				task, _, err := engine.pollTask(t.Context(), partition, &pollMetadata{workerInstanceKey: workerKey})
+				require.ErrorIs(t, err, errNoTasks)
+				require.Nil(t, task)
+			}
+		})
+	}
+
 	t.Run("unknown worker key succeeds", func(t *testing.T) {
 		t.Parallel()
 		ctrl := gomock.NewController(t)
@@ -6716,10 +6771,14 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 
 		// Without routing, all partitions are "ungrouped" — each gets its own RPC.
 		// Root partition (0) also goes as ungrouped since we can't determine self.
+		requests := make(chan *matchingservice.CancelOutstandingWorkerPollsPartitionRequest, 3)
 		mockMatchingClient.EXPECT().
 			CancelOutstandingWorkerPollsPartition(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(_ context.Context, req *matchingservice.CancelOutstandingWorkerPollsPartitionRequest, _ ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
-				require.Len(t, req.GetPartitions(), 1, "without routing, each partition should be individual")
+			DoAndReturn(func(ctx context.Context, req *matchingservice.CancelOutstandingWorkerPollsPartitionRequest, _ ...grpc.CallOption) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
+				requests <- req
+				if req.GetTaskQueuePartition().GetNormalPartitionId() == 0 {
+					return engine.CancelOutstandingWorkerPollsPartition(ctx, req)
+				}
 				return &matchingservice.CancelOutstandingWorkerPollsPartitionResponse{CancelledCount: 1}, nil
 			}).
 			Times(3) // all 3 partitions
@@ -6734,8 +6793,11 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 			})
 
 		require.NoError(t, err)
-		// 3 RPCs return 1 each = 3 total (no local handling without routing)
+		// Local cancellation and the RPC back to the root must not count the same poll twice.
 		require.Equal(t, int32(3), resp.CancelledCount)
+		for range 3 {
+			require.Len(t, await.Rcv(t, requests).GetPartitions(), 1, "without routing, each partition should be individual")
+		}
 	})
 
 	t.Run("fan-out: uses dynamic partition count from scale info", func(t *testing.T) {
