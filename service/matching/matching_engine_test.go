@@ -6215,12 +6215,14 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 		enumspb.TASK_QUEUE_TYPE_NEXUS,
 	} {
-		t.Run("unloaded root rejects late "+taskType.String()+" polls", func(t *testing.T) {
+		t.Run("root initialization failure still rejects late "+taskType.String()+" polls", func(t *testing.T) {
 			t.Parallel()
 			ctrl := gomock.NewController(t)
 			tv := testvars.New(t)
 			nsRegistry := namespace.NewMockRegistry(ctrl)
 			nsRegistry.EXPECT().GetNamespaceName(tv.NamespaceID()).Return(tv.NamespaceName(), nil)
+			initErr := serviceerror.NewUnavailable("namespace lookup failed")
+			nsRegistry.EXPECT().GetNamespaceByID(tv.NamespaceID()).Return(nil, initErr)
 			config := defaultTestConfig()
 			config.EnableMatchingFanOutForPollCancellation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 			engine := &matchingEngineImpl{
@@ -6243,10 +6245,9 @@ func TestCancelOutstandingWorkerPolls(t *testing.T) {
 				WorkerInstanceKey: workerKey,
 				WorkerIdentity:    tv.WorkerIdentity(),
 			})
-			require.NoError(t, err)
-			protorequire.ProtoEqual(t, &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: 1}, resp)
+			require.ErrorIs(t, err, initErr)
+			require.Nil(t, resp)
 			require.ErrorIs(t, pollCtx.Err(), context.Canceled)
-			require.Empty(t, engine.partitions, "shutdown must not load partitions")
 
 			// Late polls can load either the root or a child on the same matching host.
 			tq := tqid.UnsafeTaskQueueFamily(tv.NamespaceID().String(), tv.TaskQueue().GetName()).TaskQueue(taskType)

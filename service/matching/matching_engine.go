@@ -1282,7 +1282,7 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 	if err != nil {
 		return nil, err
 	}
-	// Record shutdown locally even when the root partition is not loaded and fan-out is skipped.
+	// Cancel local polls before waiting for root initialization or remote fan-out.
 	if request.WorkerInstanceKey != "" {
 		// Keep Put before CancelAll; poll registration uses the inverse order to avoid missed polls.
 		e.shutdownWorkers.Put(request.WorkerInstanceKey, struct{}{})
@@ -1315,20 +1315,11 @@ func (e *matchingEngineImpl) cancelOutstandingWorkerPollsForAllPartitions(
 	request *matchingservice.CancelOutstandingWorkerPollsRequest,
 	rootPartition tqid.Partition,
 ) (*matchingservice.CancelOutstandingWorkerPollsResponse, error) {
-	rootPM, _, err := e.getTaskQueuePartitionManager(ctx, rootPartition, false, loadCauseOtherWrite)
+	// Late polls can reach remote partitions even if the root has not loaded yet.
+	// Initialize the root to recover its authoritative read count before notifying those hosts.
+	rootPM, _, err := e.getTaskQueuePartitionManager(ctx, rootPartition, true, loadCauseOtherWrite)
 	if err != nil {
 		return nil, err
-	}
-	if rootPM == nil {
-		// Without a loaded root, the current read partition count is unavailable.
-		// Local cancellation still rejects late polls on this host, but remote hosts are not notified.
-		e.logger.Debug("Skipping poll cancellation fan-out: root partition not loaded",
-			tag.WorkflowNamespaceID(request.GetNamespaceId()),
-			tag.WorkflowTaskQueueName(rootPartition.TaskQueue().Name()),
-			tag.WorkflowTaskQueueType(request.GetTaskQueueType()),
-			tag.NewStringTag("worker-instance-key", request.GetWorkerInstanceKey()),
-		)
-		return &matchingservice.CancelOutstandingWorkerPollsResponse{}, nil
 	}
 	// Ephemeral data carries the real read partition count once dynamic partitioning is active.
 	numPartitions := int(rootPM.GetUserDataManager().PartitionScale().GetRead())
