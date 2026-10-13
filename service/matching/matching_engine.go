@@ -194,6 +194,9 @@ type (
 		// Polls from workers in this cache are rejected immediately to prevent
 		// zombie re-polls from stealing tasks after ShutdownWorker.
 		shutdownWorkers cache.Cache
+		// In-flight shutdowns must reject polls even when their cache entries expire.
+		workerShutdownLock      sync.Mutex
+		inFlightWorkerShutdowns map[string]int
 		// Only set if global namespaces are enabled on the cluster.
 		namespaceReplicationQueue persistence.NamespaceReplicationQueue
 		// Lock to serialize replication queue updates.
@@ -1284,8 +1287,7 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 	}
 	// Cancel local polls before waiting for root initialization or remote fan-out.
 	if request.WorkerInstanceKey != "" {
-		// Keep Put before CancelAll; poll registration uses the inverse order to avoid missed polls.
-		e.shutdownWorkers.Put(request.WorkerInstanceKey, struct{}{})
+		defer e.beginWorkerShutdown(request.WorkerInstanceKey)()
 	}
 	cancelledCount := e.workerInstancePollers.CancelAll(request.WorkerInstanceKey)
 
@@ -1305,6 +1307,33 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPolls(
 	// TODO: Delete this code path after EnableMatchingFanOutForPollCancellation is rolled out.
 	e.removePollerFromHistory(ctx, partition, request.GetWorkerIdentity())
 	return &matchingservice.CancelOutstandingWorkerPollsResponse{CancelledCount: cancelledCount}, nil
+}
+
+// beginWorkerShutdown keeps a worker marked until all overlapping shutdowns finish.
+// The returned function refreshes the cache before releasing the in-flight marker.
+func (e *matchingEngineImpl) beginWorkerShutdown(workerKey string) func() {
+	e.workerShutdownLock.Lock()
+	if e.inFlightWorkerShutdowns == nil {
+		e.inFlightWorkerShutdowns = make(map[string]int)
+	}
+	e.inFlightWorkerShutdowns[workerKey]++
+	e.workerShutdownLock.Unlock()
+	e.shutdownWorkers.Put(workerKey, struct{}{})
+	return func() {
+		e.workerShutdownLock.Lock()
+		defer e.workerShutdownLock.Unlock()
+		e.shutdownWorkers.Put(workerKey, struct{}{})
+		e.inFlightWorkerShutdowns[workerKey]--
+		if e.inFlightWorkerShutdowns[workerKey] == 0 {
+			delete(e.inFlightWorkerShutdowns, workerKey)
+		}
+	}
+}
+
+func (e *matchingEngineImpl) isWorkerShutdown(workerKey string) bool {
+	e.workerShutdownLock.Lock()
+	defer e.workerShutdownLock.Unlock()
+	return e.inFlightWorkerShutdowns[workerKey] > 0 || e.shutdownWorkers.Get(workerKey) != nil
 }
 
 // cancelOutstandingWorkerPollsForAllPartitions performs flat fan-out from the root partition.
@@ -3118,14 +3147,14 @@ func (e *matchingEngineImpl) pollTask(
 	defer cancel()
 
 	if workerInstanceKey := pollMetadata.workerInstanceKey; workerInstanceKey != "" {
-		// Register before checking shutdownWorkers. The shutdown path does the reverse:
-		// it populates shutdownWorkers before calling CancelAll. So either the check
+		// Register before checking for shutdown. The shutdown path does the reverse:
+		// it marks the worker before calling CancelAll. So either the check
 		// sees the shutdown, or CancelAll sees the registration.
 		pollerTrackerKey := uuid.NewString()
 		e.workerInstancePollers.Add(workerInstanceKey, pollerTrackerKey, cancel)
 		defer e.workerInstancePollers.Remove(workerInstanceKey, pollerTrackerKey)
 
-		if e.shutdownWorkers.Get(workerInstanceKey) != nil {
+		if e.isWorkerShutdown(workerInstanceKey) {
 			e.logger.Debug("Rejecting poll from recently-shutdown worker",
 				tag.WorkflowNamespaceID(partition.NamespaceId()),
 				tag.WorkflowTaskQueueName(partition.TaskQueue().Name()),
