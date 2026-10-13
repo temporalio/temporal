@@ -147,24 +147,19 @@ func TestPrometheusReporterErrors(t *testing.T) {
 		name                      string
 		recordingTags             []map[string]string
 		wantLogLevel              testlogger.Level
-		wantLogMessage            string
-		wantLogTags               []tag.Tag
+		wantError                 string
 		wantRegistrationConflicts int
 	}{
 		{
 			name: "label collision",
 			recordingTags: []map[string]string{
-				{"outcome": "fired"},
-				{"outcome": "skipped"},
-				{"outcome": "invalidated", "reason": "closed"},
+				{"outcome": "fired", "reason": ""},
+				{"outcome": "skipped", "reason": ""},
+				{"outcome": "invalidated"},
 			},
 			wantRegistrationConflicts: 1,
 			wantLogLevel:              testlogger.Error,
-			wantLogMessage:            "failed assertion: error in prometheus reporter",
-			wantLogTags: []tag.Tag{
-				tag.FailedAssertion,
-				tag.String("error", `^a previously registered descriptor with the same fully-qualified name as Desc\{fqName: "test_counter", help: "test_counter counter", constLabels: \{\}, variableLabels: \{(outcome,reason|reason,outcome)\}\} has different label names or a different help string$`),
-			},
+			wantError:                 `a previously registered descriptor with the same fully-qualified name as Desc{fqName: "test_counter", help: "test_counter counter", constLabels: {}, variableLabels: {outcome}} has different label names or a different help string`,
 		},
 		{
 			name: "label collision on root scope",
@@ -174,29 +169,26 @@ func TestPrometheusReporterErrors(t *testing.T) {
 			},
 			wantRegistrationConflicts: 1,
 			wantLogLevel:              testlogger.Error,
-			wantLogMessage:            "failed assertion: error in prometheus reporter",
-			wantLogTags: []tag.Tag{
-				tag.FailedAssertion,
-				tag.String("error", "^"+regexp.QuoteMeta(`a previously registered descriptor with the same fully-qualified name as Desc{fqName: "test_counter", help: "test_counter counter", constLabels: {}, variableLabels: {}} has different label names or a different help string`)+"$"),
-			},
+			wantError:                 `a previously registered descriptor with the same fully-qualified name as Desc{fqName: "test_counter", help: "test_counter counter", constLabels: {}, variableLabels: {}} has different label names or a different help string`,
 		},
 		{
 			name: "invalid label",
 			recordingTags: []map[string]string{
 				{"__reserved": "value"},
 			},
-			wantLogLevel:   testlogger.Warn,
-			wantLogMessage: "error in prometheus reporter",
-			wantLogTags: []tag.Tag{
-				tag.String("error", "^"+regexp.QuoteMeta(`descriptor Desc{fqName: "test_counter", help: "test_counter counter", constLabels: {}, variableLabels: {__reserved}} is invalid: "__reserved" is not a valid label name for metric "test_counter"`)+"$"),
-			},
+			wantLogLevel: testlogger.Warn,
+			wantError:    `descriptor Desc{fqName: "test_counter", help: "test_counter counter", constLabels: {}, variableLabels: {__reserved}} is invalid: "__reserved" is not a valid label name for metric "test_counter"`,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
 			logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
-			expected := logger.Expect(tc.wantLogLevel, "^"+regexp.QuoteMeta(tc.wantLogMessage)+"$", tc.wantLogTags...)
+			logTags := []tag.Tag{tag.String("error", "^"+regexp.QuoteMeta(tc.wantError)+"$")}
+			if tc.wantLogLevel == testlogger.Error {
+				logTags = append(logTags, tag.FailedAssertion)
+			}
+			expected := logger.Expect(tc.wantLogLevel, "error in prometheus reporter$", logTags...)
 
 			address := fmt.Sprintf("127.0.0.1:%d", freeport.MustGetFreePort())
 			scope := NewScope(logger, &Config{Prometheus: &PrometheusConfig{ListenAddress: address}})
