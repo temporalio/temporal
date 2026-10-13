@@ -4132,6 +4132,13 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 
 	// state change
 	n.backend.RecordTimeSkippingTransition(transition)
+	n.logger.Info("CHASM time skipping transition recorded",
+		tag.ArchetypeID(n.ArchetypeID()),
+		tag.Time("currentTime", transition.CurrentTime),
+		tag.Time("targetTime", transition.GetTargetTime()),
+		tag.Duration("skippedDuration", transition.GetSkippedDuration()),
+		tag.Bool("disabledAfterFastForward", transition.DisabledAfterFastForward),
+	)
 	if transition.GetSkippedDuration() > 0 {
 		return n.regenerateTimerTasksForTimeSkipping()
 	}

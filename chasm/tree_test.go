@@ -6100,6 +6100,26 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		s.Equal(baseTime.Add(time.Hour).UTC(), s.nodeBackend.LastDeletePureTaskCall(),
 			"pure-task deletion is anchored at the earliest pure scheduled time")
 	})
+
+	s.Run("FastForwardReached_RecordsTransitionWithoutRegeneratingTasks", func() {
+		root := gateRoot(true)
+		executionInfo(&persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+			FastForwardInfo: &persistencespb.FastForwardInfo{
+				TargetTime: timestamppb.New(baseTime),
+			},
+		})
+		var recorded *TimeSkippingTransition
+		s.nodeBackend.HandleRecordTimeSkippingTransition = func(tr *TimeSkippingTransition) { recorded = tr }
+
+		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+		s.NoError(err)
+		s.Require().NotNil(recorded)
+		s.True(recorded.IsValid())
+		s.True(recorded.DisabledAfterFastForward)
+		s.Zero(recorded.GetSkippedDuration())
+		s.Zero(s.nodeBackend.NumTasksAdded(), "a zero-duration transition must not regenerate timer tasks")
+	})
 }
 
 // TestDefaultFindNextTargetTime covers the earliest-future-timer selection across the whole tree:
