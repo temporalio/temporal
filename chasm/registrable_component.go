@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"maps"
 	"reflect"
+	"time"
 
 	"github.com/dgryski/go-farm"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
@@ -24,6 +26,7 @@ type (
 		singleCluster bool
 		detached      bool
 		executionType enumspb.ExecutionType // May be unset, defaulting to UNSPECIFIED.
+		retention     func(*namespace.Namespace) time.Duration
 
 		searchAttributesMapper *VisibilitySearchAttributesMapper
 
@@ -88,6 +91,34 @@ func WithExecutionType(
 	return func(rc *RegistrableComponent) {
 		rc.executionType = executionType
 	}
+}
+
+// WithRetention overrides how long closed executions of this archetype are kept before deletion.
+// The function is evaluated when an execution closes, so it may read the namespace or dynamic
+// config to compute the value. It only has an effect on a component registered as the root of an
+// execution.
+//
+// The namespace retention acts as a floor: a value shorter than it, or a non-positive value, falls
+// back to the namespace retention.
+func WithRetention(
+	retention func(*namespace.Namespace) time.Duration,
+) RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		rc.retention = retention
+	}
+}
+
+// Retention returns the retention registered via WithRetention for the given namespace, and
+// whether one is registered and positive.
+func (rc *RegistrableComponent) Retention(ns *namespace.Namespace) (time.Duration, bool) {
+	if rc.retention == nil {
+		return 0, false
+	}
+	retention := rc.retention(ns)
+	if retention <= 0 {
+		return 0, false
+	}
+	return retention, true
 }
 
 // WithBusinessIDAlias allows specifying the business ID alias of the component.

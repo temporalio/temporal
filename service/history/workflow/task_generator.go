@@ -99,6 +99,7 @@ type (
 
 	TaskGeneratorImpl struct {
 		namespaceRegistry namespace.Registry
+		chasmRegistry     *chasm.Registry
 		mutableState      historyi.MutableState
 		config            *configs.Config
 		archivalMetadata  archiver.ArchivalMetadata
@@ -112,6 +113,7 @@ var _ TaskGenerator = (*TaskGeneratorImpl)(nil)
 
 func NewTaskGenerator(
 	namespaceRegistry namespace.Registry,
+	chasmRegistry *chasm.Registry,
 	mutableState historyi.MutableState,
 	config *configs.Config,
 	archivalMetadata archiver.ArchivalMetadata,
@@ -119,6 +121,7 @@ func NewTaskGenerator(
 ) *TaskGeneratorImpl {
 	return &TaskGeneratorImpl{
 		namespaceRegistry: namespaceRegistry,
+		chasmRegistry:     chasmRegistry,
 		mutableState:      mutableState,
 		config:            config,
 		archivalMetadata:  archivalMetadata,
@@ -286,12 +289,34 @@ func (r *TaskGeneratorImpl) getRetention() (time.Duration, error) {
 	switch err.(type) {
 	case nil:
 		retention = namespaceEntry.Retention()
+		// Archetypes may only extend the namespace retention, never shorten what the namespace owner configured.
+		if archetypeRetention, ok := r.getArchetypeRetention(namespaceEntry); ok {
+			retention = max(retention, archetypeRetention)
+		}
 	case *serviceerror.NamespaceNotFound:
 		// namespace is not accessible, use default value above
 	default:
 		return 0, err
 	}
 	return retention, nil
+}
+
+// getArchetypeRetention returns the retention registered by this execution's archetype via
+// chasm.WithRetention, if any.
+func (r *TaskGeneratorImpl) getArchetypeRetention(namespaceEntry *namespace.Namespace) (time.Duration, bool) {
+	if r.chasmRegistry == nil {
+		return 0, false
+	}
+
+	archetypeID := r.mutableState.ChasmTree().ArchetypeID()
+	if archetypeID == chasm.UnspecifiedArchetypeID {
+		archetypeID = chasm.WorkflowArchetypeID
+	}
+	rc, ok := r.chasmRegistry.ComponentByID(archetypeID)
+	if !ok {
+		return 0, false
+	}
+	return rc.Retention(namespaceEntry)
 }
 
 func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
