@@ -341,6 +341,14 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 		baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 		baseNextEventID := baseMutableState.GetNextEventID()
 
+		namespaceName, err := r.namespaceRegistry.GetNamespaceName(namespaceID)
+		if err != nil {
+			return 0, historyi.TransactionPolicyActive, err
+		}
+		var resetRequestID string
+		if r.shardContext.GetConfig().EnableResetWorkflowRequestIDDeduplication(namespaceName.String()) {
+			resetRequestID = uuid.New().String()
+		}
 		err = r.workflowResetter.ResetWorkflow(
 			ctx,
 			namespaceID,
@@ -351,7 +359,7 @@ func (r *transactionMgrImpl) backfillWorkflowEventsReapply(
 			baseRebuildLastEventVersion,
 			baseNextEventID,
 			resetRunID,
-			"",
+			resetRequestID,
 			targetWorkflow,
 			targetWorkflow,
 			EventsReapplicationResetWorkflowReason,

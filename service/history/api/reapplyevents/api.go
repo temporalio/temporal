@@ -123,6 +123,10 @@ func Invoke(
 					wcache.NoopReleaseFn,
 				)
 
+				var resetRequestID string
+				if shardContext.GetConfig().EnableResetWorkflowRequestIDDeduplication(namespaceEntry.Name().String()) {
+					resetRequestID = uuid.New().String()
+				}
 				err = workflowResetter.ResetWorkflow(
 					ctx,
 					namespaceID,
@@ -133,7 +137,7 @@ func Invoke(
 					baseRebuildLastEventVersion,
 					baseNextEventID,
 					resetRunID.String(),
-					"",
+					resetRequestID,
 					baseWorkflow,
 					baseWorkflow,
 					ndc.EventsReapplicationResetWorkflowReason,
