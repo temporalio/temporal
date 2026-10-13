@@ -144,11 +144,10 @@ func TestPrometheusReporterErrors(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name                      string
-		recordingTags             []map[string]string
-		wantLogLevel              testlogger.Level
-		wantError                 string
-		wantRegistrationConflicts int
+		name          string
+		recordingTags []map[string]string
+		wantLogLevel  testlogger.Level
+		wantError     string
 	}{
 		{
 			name: "label collision",
@@ -157,9 +156,8 @@ func TestPrometheusReporterErrors(t *testing.T) {
 				{"outcome": "skipped", "reason": ""},
 				{"outcome": "invalidated"},
 			},
-			wantRegistrationConflicts: 1,
-			wantLogLevel:              testlogger.Error,
-			wantError:                 `a previously registered descriptor with the same fully-qualified name as Desc{fqName: "test_counter", help: "test_counter counter", constLabels: {}, variableLabels: {outcome}} has different label names or a different help string`,
+			wantLogLevel: testlogger.Error,
+			wantError:    `a previously registered descriptor with the same fully-qualified name as Desc{fqName: "test_counter", help: "test_counter counter", constLabels: {}, variableLabels: {outcome}} has different label names or a different help string`,
 		},
 		{
 			name: "label collision on root scope",
@@ -167,9 +165,8 @@ func TestPrometheusReporterErrors(t *testing.T) {
 				{"outcome": "fired"},
 				nil,
 			},
-			wantRegistrationConflicts: 1,
-			wantLogLevel:              testlogger.Error,
-			wantError:                 `a previously registered descriptor with the same fully-qualified name as Desc{fqName: "test_counter", help: "test_counter counter", constLabels: {}, variableLabels: {}} has different label names or a different help string`,
+			wantLogLevel: testlogger.Error,
+			wantError:    `a previously registered descriptor with the same fully-qualified name as Desc{fqName: "test_counter", help: "test_counter counter", constLabels: {}, variableLabels: {}} has different label names or a different help string`,
 		},
 		{
 			name: "invalid label",
@@ -185,8 +182,10 @@ func TestPrometheusReporterErrors(t *testing.T) {
 
 			logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
 			logTags := []tag.Tag{tag.String("error", "^"+regexp.QuoteMeta(tc.wantError)+"$")}
+			wantRegistrationConflicts := 0
 			if tc.wantLogLevel == testlogger.Error {
 				logTags = append(logTags, tag.FailedAssertion)
+				wantRegistrationConflicts = 1
 			}
 			expected := logger.Expect(tc.wantLogLevel, "error in prometheus reporter$", logTags...)
 
@@ -206,7 +205,7 @@ func TestPrometheusReporterErrors(t *testing.T) {
 					strings.NewReader(fmt.Sprintf(`# HELP prometheus_metric_registration_conflicts prometheus_metric_registration_conflicts counter
 # TYPE prometheus_metric_registration_conflicts counter
 prometheus_metric_registration_conflicts %d
-`, tc.wantRegistrationConflicts)),
+`, wantRegistrationConflicts)),
 					"prometheus_metric_registration_conflicts",
 				))
 			}, 5*time.Second, 10*time.Millisecond)
