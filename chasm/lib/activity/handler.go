@@ -9,11 +9,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/contextutil"
-	"go.temporal.io/server/common/eagerdispatch"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -265,21 +264,14 @@ func (h *handler) grantEagerActivityDispatch(
 	namespaceID string,
 	request *workflowservice.StartActivityExecutionRequest,
 ) bool {
-	if h.matchingClient == nil {
-		return false
-	}
-
-	response, err := eagerdispatch.Grant(
+	return common.GrantEagerDispatch(
 		ctx,
 		h.matchingClient,
 		namespaceID,
 		request.GetTaskQueue().GetName(),
-		[]*matchingservice.GrantEagerDispatchRequest_Item{{
-			Count:    1,
-			Priority: request.GetPriority(),
-		}},
+		request.GetPriority(),
+		nil,
 	)
-	return err == nil && len(response.GetItems()) == 1 && response.GetItems()[0].GetGrantedCount() == 1
 }
 
 // DescribeActivityExecution queries current activity state, optionally as a long-poll that waits

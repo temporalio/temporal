@@ -27,7 +27,6 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/eagerdispatch"
 	"go.temporal.io/server/common/effect"
 	"go.temporal.io/server/common/enums"
 	"go.temporal.io/server/common/log"
@@ -595,25 +594,15 @@ func (handler *workflowTaskCompletedHandler) grantEagerActivityDispatch(
 	ctx context.Context,
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
 ) bool {
-	if handler.matchingClient == nil {
-		return false
-	}
-
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	response, err := eagerdispatch.Grant(
+	return common.GrantEagerDispatch(
 		ctx,
 		handler.matchingClient,
 		executionInfo.GetNamespaceId(),
 		attr.GetTaskQueue().GetName(),
-		[]*matchingservice.GrantEagerDispatchRequest_Item{
-			{
-				Count:    1,
-				Priority: attr.GetPriority(),
-				Version:  worker_versioning.DeploymentVersionFromDeployment(handler.workflowTaskDeployment),
-			},
-		},
+		attr.GetPriority(),
+		worker_versioning.DeploymentVersionFromDeployment(handler.workflowTaskDeployment),
 	)
-	return err == nil && len(response.GetItems()) == 1 && response.GetItems()[0].GetGrantedCount() == 1
 }
 
 func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivity(

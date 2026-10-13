@@ -58,55 +58,28 @@ func (a *Activity) eagerActivityTaskData(
 	key := ctx.ExecutionKey()
 	requestData := a.RequestData.Get(ctx)
 	lastHeartbeat, _ := a.LastHeartbeat.TryGet(ctx)
-	activityType := a.GetActivityType()
-	header := requestData.GetHeader()
-	input := requestData.GetInput()
-	heartbeatDetails := lastHeartbeat.GetDetails()
-	scheduledTime := a.GetScheduleTime()
-	currentAttemptScheduledTime := a.dispatchTimeForAttempt(attempt)
-	startedTime := attempt.GetStartedTime()
-	scheduleToCloseTimeout := a.GetScheduleToCloseTimeout()
-	startToCloseTimeout := a.GetStartToCloseTimeout()
-	heartbeatTimeout := a.GetHeartbeatTimeout()
-	retryPolicy := a.GetRetryPolicy()
-	priority := a.GetPriority()
-	propagatedNexusSerializationContext := requestData.GetPropagatedNexusSerializationContext()
 
 	// This data is used to construct the eager response after the transaction has completed, so
 	// it must not retain mutable state owned by the transaction.
-	activityType = common.CloneProto(activityType)
-	header = common.CloneProto(header)
-	input = common.CloneProto(input)
-	heartbeatDetails = common.CloneProto(heartbeatDetails)
-	scheduledTime = common.CloneProto(scheduledTime)
-	currentAttemptScheduledTime = common.CloneProto(currentAttemptScheduledTime)
-	startedTime = common.CloneProto(startedTime)
-	scheduleToCloseTimeout = common.CloneProto(scheduleToCloseTimeout)
-	startToCloseTimeout = common.CloneProto(startToCloseTimeout)
-	heartbeatTimeout = common.CloneProto(heartbeatTimeout)
-	retryPolicy = common.CloneProto(retryPolicy)
-	priority = common.CloneProto(priority)
-	propagatedNexusSerializationContext = common.CloneProto(propagatedNexusSerializationContext)
-
 	return &eagerActivityTaskData{
 		namespaceID:                         request.namespaceID,
 		namespace:                           request.namespace,
 		runID:                               key.RunID,
-		activityType:                        activityType,
+		activityType:                        common.CloneProto(a.GetActivityType()),
 		activityID:                          key.BusinessID,
-		header:                              header,
-		input:                               input,
-		heartbeatDetails:                    heartbeatDetails,
-		scheduledTime:                       scheduledTime,
-		currentAttemptScheduledTime:         currentAttemptScheduledTime,
-		startedTime:                         startedTime,
+		header:                              common.CloneProto(requestData.GetHeader()),
+		input:                               common.CloneProto(requestData.GetInput()),
+		heartbeatDetails:                    common.CloneProto(lastHeartbeat.GetDetails()),
+		scheduledTime:                       common.CloneProto(a.GetScheduleTime()),
+		currentAttemptScheduledTime:         common.CloneProto(a.dispatchTimeForAttempt(attempt)),
+		startedTime:                         common.CloneProto(attempt.GetStartedTime()),
 		attempt:                             attempt.GetCount(),
-		scheduleToCloseTimeout:              scheduleToCloseTimeout,
-		startToCloseTimeout:                 startToCloseTimeout,
-		heartbeatTimeout:                    heartbeatTimeout,
-		retryPolicy:                         retryPolicy,
-		priority:                            priority,
-		propagatedNexusSerializationContext: propagatedNexusSerializationContext,
+		scheduleToCloseTimeout:              common.CloneProto(a.GetScheduleToCloseTimeout()),
+		startToCloseTimeout:                 common.CloneProto(a.GetStartToCloseTimeout()),
+		heartbeatTimeout:                    common.CloneProto(a.GetHeartbeatTimeout()),
+		retryPolicy:                         common.CloneProto(a.GetRetryPolicy()),
+		priority:                            common.CloneProto(a.GetPriority()),
+		propagatedNexusSerializationContext: common.CloneProto(requestData.GetPropagatedNexusSerializationContext()),
 		activityAttemptStartedStamp:         attempt.GetStartedStamp(),
 	}, nil
 }
