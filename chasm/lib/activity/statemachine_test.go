@@ -421,11 +421,7 @@ func TestTransitionStarted(t *testing.T) {
 	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
 	ctx.GoCtx = headers.SetVersionsForTests(context.Background(), temporal.SDKVersion, headers.ClientNameGoSDK, "", "")
 	attemptState := &activitypb.ActivityAttemptState{
-		Count: 1,
-		LastWorkerPrincipal: &commonpb.Principal{
-			Type: "jwt",
-			Name: "previous-worker",
-		},
+		Count:       1,
 		StartedTime: timestamppb.New(defaultTime),
 	}
 	outcome := &activitypb.ActivityOutcome{}
@@ -461,11 +457,6 @@ func TestTransitionStarted(t *testing.T) {
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, activity.Status)
 	require.EqualValues(t, 1, attemptState.Count)
 	require.Equal(t, defaultTime, attemptState.StartedTime.AsTime())
-	require.Equal(t, "test-worker", attemptState.LastWorkerIdentity)
-	protorequire.ProtoEqual(t, &commonpb.Principal{
-		Type: "jwt",
-		Name: "previous-worker",
-	}, attemptState.LastWorkerPrincipal)
 	require.Equal(t, headers.ClientNameGoSDK, attemptState.SdkName)
 	require.Equal(t, temporal.SDKVersion, attemptState.SdkVersion)
 
@@ -760,7 +751,6 @@ func TestTransitionCompleted(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED, activity.Status)
 	require.EqualValues(t, 1, attemptState.Count)
-	require.Equal(t, "worker", attemptState.GetLastWorkerIdentity())
 	require.NotNil(t, attemptState.GetCompleteTime())
 	protorequire.ProtoEqual(t, payload, outcome.GetSuccessful().GetOutput())
 }
@@ -904,7 +894,6 @@ func TestTransitionFailed(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_FAILED, activity.Status)
 	require.EqualValues(t, 1, attemptState.Count)
-	require.Equal(t, "worker", attemptState.GetLastWorkerIdentity())
 	require.NotNil(t, attemptState.GetCompleteTime())
 	protorequire.ProtoEqual(t, failure, attemptState.GetLastFailureDetails().GetFailure())
 	require.NotNil(t, attemptState.GetLastFailureDetails().GetTime())
@@ -917,8 +906,7 @@ func TestTransitionTerminated(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
 	ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
 	attemptState := &activitypb.ActivityAttemptState{
-		Count:              1,
-		LastWorkerIdentity: "worker",
+		Count: 1,
 	}
 	outcome := &activitypb.ActivityOutcome{}
 
@@ -958,7 +946,6 @@ func TestTransitionTerminated(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED, activity.Status)
 	require.EqualValues(t, 1, attemptState.Count)
-	require.Equal(t, "worker", attemptState.GetLastWorkerIdentity())
 	require.Equal(t, "test-request-id", activity.GetTerminateState().RequestId)
 
 	expectedFailure := &failurepb.Failure{
