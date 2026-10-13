@@ -183,9 +183,9 @@ func Invoke(
 				// converts it to a normal workflow task and persists all of the changes.
 				updateAction.Noop = !mutableState.IsDirty()
 			} else {
-				// If the WFT is speculative, skip starting the transition here even when dirty mutable
-				// state causes the start to be persisted. This is OK
-				// because once the speculative task completes the transition will be applied
+				// Start the deployment transition here only for a normal WFT. For a speculative WFT,
+				// even when dirty mutable state causes the start to be persisted, the transition can
+				// wait because once the speculative task completes it will be applied
 				// automatically based on wft completion info. If the speculative task fails or times
 				// out, future wft will be redirected by matching again and the transition will
 				// eventually happen. If an activity starts while the speculative is also started on the
