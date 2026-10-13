@@ -56,14 +56,16 @@ func NewWorkflow(
 	}
 }
 
+// LifecycleState reports the workflow's lifecycle as derived from mutable state.
+//
+// NOTE: For legacy reasons this is the reverse of other archetypes. Elsewhere the root component's
+// LifecycleState drives the execution state in mutable state (see closeTransactionHandleRootLifecycleChange,
+// which is bypassed for workflows). Here mutableStateImpl updates the execution state directly and this method
+// only reflects it, so it is meant for the read path (e.g. task validation), not for driving state transitions.
 func (w *Workflow) LifecycleState(
 	_ chasm.Context,
 ) chasm.LifecycleState {
-	// NOTE: closeTransactionHandleRootLifecycleChange() is bypassed in tree.go
-	//
-	// NOTE: detached mode is not implemented yet, so always return Running here.
-	// Otherwise, tasks for callback component can't be executed after workflow is closed.
-	return chasm.LifecycleStateRunning
+	return w.MSPointer.LifecycleState()
 }
 
 func (w *Workflow) ContextMetadata(_ chasm.Context) map[string]string {

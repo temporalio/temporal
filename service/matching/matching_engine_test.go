@@ -89,7 +89,6 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		newMatcher               bool
 		fairness                 bool
 		controller               *gomock.Controller
 		mockHistoryClient        *historyservicemock.MockHistoryServiceClient
@@ -102,11 +101,11 @@ type (
 		hostInfoForResolver      membership.HostInfo
 		mockNexusEndpointManager *persistence.MockNexusEndpointManager
 
-		matchingEngine     *matchingEngineImpl
-		taskManager        *testTaskManager // points to classicTaskManager or fairTaskManager
-		classicTaskManager *testTaskManager
-		fairTaskManager    *testTaskManager
-		logger             *testlogger.TestLogger
+		matchingEngine  *matchingEngineImpl
+		taskManager     *testTaskManager // equal to either v1TaskManager or fairTaskManager
+		v1TaskManager   *testTaskManager
+		fairTaskManager *testTaskManager
+		logger          *testlogger.TestLogger
 	}
 )
 
@@ -148,17 +147,12 @@ func createMockNamespaceCache(controller *gomock.Controller, nsName namespace.Na
 	return ns, mockNamespaceCache
 }
 
-// TODO(pri): cleanup; delete this
-func TestMatchingEngine_Classic_Suite(t *testing.T) {
-	suite.Run(t, &matchingEngineSuite{newMatcher: false})
-}
-
 func TestMatchingEngine_Pri_Suite(t *testing.T) {
-	suite.Run(t, &matchingEngineSuite{newMatcher: true})
+	suite.Run(t, &matchingEngineSuite{})
 }
 
 func TestMatchingEngine_Fair_Suite(t *testing.T) {
-	suite.Run(t, &matchingEngineSuite{newMatcher: true, fairness: true})
+	suite.Run(t, &matchingEngineSuite{fairness: true})
 }
 
 func (s *matchingEngineSuite) SetupSuite() {
@@ -184,12 +178,12 @@ func (s *matchingEngineSuite) SetupTest() {
 
 	// create and supply two task managers, but only one is expected to be used at a time since
 	// we run tests with fairness enabled in separate suite.
-	s.classicTaskManager = newTestTaskManager(s.logger)
+	s.v1TaskManager = newTestTaskManager(s.logger)
 	s.fairTaskManager = newTestFairTaskManager(s.logger)
 	if s.fairness {
 		s.taskManager = s.fairTaskManager
 	} else {
-		s.taskManager = s.classicTaskManager
+		s.taskManager = s.v1TaskManager
 	}
 
 	s.ns, s.mockNamespaceCache = createMockNamespaceCache(s.controller, matchingTestNamespace)
@@ -208,7 +202,7 @@ func (s *matchingEngineSuite) SetupTest() {
 	s.mockNexusEndpointManager = persistence.NewMockNexusEndpointManager(s.controller)
 	s.mockNexusEndpointManager.EXPECT().ListNexusEndpoints(gomock.Any(), gomock.Any()).Return(&persistence.ListNexusEndpointsResponse{}, nil).AnyTimes()
 
-	s.matchingEngine = s.newMatchingEngine(s.newConfig(), s.classicTaskManager, s.fairTaskManager)
+	s.matchingEngine = s.newMatchingEngine(s.newConfig(), s.v1TaskManager, s.fairTaskManager)
 	s.matchingEngine.Start()
 }
 
@@ -216,8 +210,6 @@ func (s *matchingEngineSuite) newConfig() *Config {
 	res := defaultTestConfig()
 	if s.fairness {
 		useFairness(res)
-	} else if !s.newMatcher {
-		useClassicMatcher(res)
 	}
 	return res
 }
@@ -1266,33 +1258,6 @@ func (s *matchingEngineSuite) TestAddWorkflowAutoEnable() {
 	}
 }
 
-func (s *matchingEngineSuite) TestSkipAutoEnable() {
-	if !s.newMatcher && !s.fairness {
-		s.T().Skip("We only skip auto enable if new matcher is explicitly enabled already")
-	}
-
-	// Explicitly set to zero times in the event this call is added as expected during setup in the future
-	s.mockMatchingClient.EXPECT().UpdateFairnessState(context.Background(), nil).DoAndReturn(
-		func(ctx context.Context, req *matchingservice.UpdateFairnessStateRequest, opts ...grpc.CallOption) (*matchingservice.UpdateFairnessStateResponse, error) {
-			return s.matchingEngine.UpdateFairnessState(ctx, req)
-		},
-	).Times(0)
-
-	tv := testvars.New(s.T())
-	_, _, err := s.matchingEngine.AddWorkflowTask(
-		context.Background(),
-		&matchingservice.AddWorkflowTaskRequest{
-			NamespaceId: tv.NamespaceID().String(),
-			Execution:   tv.WorkflowExecution(),
-			TaskQueue:   tv.TaskQueue(),
-			Priority: &commonpb.Priority{
-				PriorityKey: 3,
-			},
-		},
-	)
-	s.Require().NoError(err)
-}
-
 func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isForwarded bool) {
 	s.matchingEngine.config.RangeSize = 300 // override to low number for the test
 
@@ -1391,9 +1356,7 @@ func (s *matchingEngineSuite) TestQueryWorkflowDoesNotLoadSticky() {
 }
 
 func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher; flaky")
-	}
+	s.T().Skip("not supported by new matcher; flaky")
 
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Millisecond)
 
@@ -1510,9 +1473,8 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 
 // TODO: this unit test does not seem to belong to matchingEngine, move it to the right place
 func (s *matchingEngineSuite) TestSyncMatchActivities() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher")
-	}
+	s.T().Skip("not supported by new matcher")
+
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
 
 	scope := tally.NewTestScope("test", nil)
@@ -1520,11 +1482,8 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 
 	// Set a short long poll expiration so that we don't have to wait too long for 0 throttling cases
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(2 * time.Second)
-	s.matchingEngine.config.MinTaskThrottlingBurstSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(0)
 	s.matchingEngine.config.RangeSize = 30 // override to low number for the test
 
-	// Overriding the dynamic config so that the rate-limiter has a refresh rate of 0. By default, the rate-limiter has a refresh rate of 1 minute which is too long for this test.
-	s.matchingEngine.config.RateLimiterRefreshInterval = 0
 	s.matchingEngine.config.AdminNamespaceToPartitionDispatchRate = dynamicconfig.GetFloatPropertyFnFilteredByNamespace(25000)
 	s.matchingEngine.config.AdminNamespaceTaskqueueToPartitionDispatchRate = dynamicconfig.GetFloatPropertyFnFilteredByTaskQueue(25000)
 
@@ -1692,9 +1651,7 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 		5. Verify that both the pollers have received tasks.
 	*/
 
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher")
-	}
+	s.T().Skip("not supported by new matcher")
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
 
 	scope := tally.NewTestScope("test", nil)
@@ -1702,12 +1659,8 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 
 	// Set a short long poll expiration so that the pollers don't wait too long for tasks
 	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(5 * time.Second)
-	s.matchingEngine.config.MinTaskThrottlingBurstSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(0)
 	// Disable deployment versions since a nil DeploymentClient is used in unit tests
 	s.matchingEngine.config.EnableDeploymentVersions = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false)
-
-	// Overriding the dynamic config so that the rate-limiter has a refresh rate of 0. By default, the rate-limiter has a refresh rate of 1 minute which is too long for this test.
-	s.matchingEngine.config.RateLimiterRefreshInterval = 0
 
 	tl := "makeToast"
 	dbq := newUnversionedRootQueueKey(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
@@ -1872,9 +1825,7 @@ func (s *matchingEngineSuite) TestRateLimiterAcrossVersionedQueues() {
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
-	if s.newMatcher {
-		s.T().Skip("test is flaky with new matcher")
-	}
+	s.T().Skip("test is flaky with new matcher")
 	dispatchLimitFn := func(int, int64) float64 {
 		return defaultTaskDispatchRPS
 	}
@@ -1910,7 +1861,6 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 ) int64 {
 	scope := tally.NewTestScope("test", nil)
 	s.matchingEngine.metricsHandler = metrics.NewTallyMetricsHandler(metrics.ClientConfig{}, scope).WithTags(metrics.ServiceNameTag(primitives.MatchingService))
-	s.matchingEngine.config.MinTaskThrottlingBurstSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(0)
 
 	runID := uuid.NewString()
 	workflowID := "workflow1"
@@ -2051,9 +2001,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 }
 
 func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher; flaky")
-	}
+	s.T().Skip("not supported by new matcher; flaky")
 
 	runID := uuid.NewString()
 	workflowID := "workflow1"
@@ -2340,7 +2288,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 
 	engines := make([]*matchingEngineImpl, engineCount)
 	for p := range engineCount {
-		e := s.newMatchingEngine(s.newConfig(), s.classicTaskManager, s.fairTaskManager)
+		e := s.newMatchingEngine(s.newConfig(), s.v1TaskManager, s.fairTaskManager)
 		e.config.RangeSize = rangeSize
 		engines[p] = e
 		e.Start()
@@ -2464,10 +2412,6 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 
 	totalTasks := taskCount * engineCount * iterations
 	s.Len(startedTasks, totalTasks, "some tasks were never dispatched")
-	if !s.newMatcher {
-		// new matcher does gc lazily so some acked tasks may remain
-		s.Equal(0, s.taskManager.getTaskCount(tlID))
-	}
 	persisted := s.taskManager.getCreateTaskCount(tlID)
 	// No sync matching as all messages are published first
 	s.Equal(totalTasks, persisted)
@@ -2499,7 +2443,7 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 
 	engines := make([]*matchingEngineImpl, engineCount)
 	for p := range engineCount {
-		e := s.newMatchingEngine(s.newConfig(), s.classicTaskManager, s.fairTaskManager)
+		e := s.newMatchingEngine(s.newConfig(), s.v1TaskManager, s.fairTaskManager)
 		e.config.RangeSize = rangeSize
 		engines[p] = e
 		e.Start()
@@ -2611,158 +2555,12 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 
 	totalTasks := taskCount * engineCount * iterations
 	s.Len(startedTasks, totalTasks, "some tasks were never dispatched")
-	if !s.newMatcher {
-		// new matcher does gc lazily so some acked tasks may remain
-		s.Equal(0, s.taskManager.getTaskCount(tlID))
-	}
 	persisted := s.taskManager.getCreateTaskCount(tlID)
 	// No sync matching as all messages are published first
 	s.Equal(totalTasks, persisted)
 	expectedRange := int64((persisted + 1) / rangeSize)
 	// Due to conflicts some ids are skipped and more real ranges are used.
 	s.LessOrEqual(expectedRange, s.taskManager.getQueueDataByKey(tlID).rangeID)
-}
-
-func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher")
-	}
-
-	// test default is 100ms, but make it longer for this test so it's not flaky
-	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(10 * time.Second)
-
-	namespaceID := uuid.NewString()
-	tl := "makeToast"
-	dbq := newUnversionedRootQueueKey(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-
-	_, _, err := s.matchingEngine.AddActivityTask(context.Background(),
-		&matchingservice.AddActivityTaskRequest{
-			NamespaceId:      namespaceID,
-			Execution:        &commonpb.WorkflowExecution{RunId: uuid.NewString(), WorkflowId: "workflow1"},
-			ScheduledEventId: int64(0),
-			TaskQueue: &taskqueuepb.TaskQueue{
-				Name: tl,
-				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			},
-			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-		})
-	s.NoError(err)
-	s.Equal(1, s.taskManager.getTaskCount(dbq))
-
-	task1, _, err := s.matchingEngine.pollTask(context.Background(), dbq.partition, &pollMetadata{})
-	s.NoError(err)
-
-	task1.finish(taskFinishResult{err: serviceerror.NewInternal("test error"), consumedToken: true})
-	s.EqualValues(1, s.taskManager.getTaskCount(dbq))
-
-	task2, _, err := s.matchingEngine.pollTask(context.Background(), dbq.partition, &pollMetadata{})
-	s.NoError(err)
-	protoassert.ProtoEqual(s.T(), task1.event.Data, task2.event.Data)
-	s.NotEqual(task1.event.GetTaskId(), task2.event.GetTaskId(), "IDs should not match")
-
-	task2.finish(taskFinishResult{consumedToken: true})
-	s.EqualValues(0, s.taskManager.getTaskCount(dbq))
-}
-
-// TODO: should be moved to backlog_manager_test
-func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher")
-	}
-
-	runID := uuid.NewString()
-	workflowID := "workflow1"
-	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
-
-	namespaceID := uuid.NewString()
-	tl := "makeToast"
-	dbq := newUnversionedRootQueueKey(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-
-	taskQueue := &taskqueuepb.TaskQueue{
-		Name: tl,
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
-
-	const taskCount = 1200
-	const rangeSize = 10
-	s.matchingEngine.config.RangeSize = rangeSize
-
-	// add taskCount tasks
-	for i := range int64(taskCount) {
-		scheduledEventID := i * 3
-		addRequest := matchingservice.AddActivityTaskRequest{
-			NamespaceId:            namespaceID,
-			Execution:              workflowExecution,
-			ScheduledEventId:       scheduledEventID,
-			TaskQueue:              taskQueue,
-			ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-		}
-
-		_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
-		s.NoError(err)
-	}
-
-	tlMgr := s.getPhysicalTaskQueueManagerImplFromKey(dbq)
-	s.Equal(taskCount, s.taskManager.getTaskCount(dbq))
-
-	// wait until all tasks are read by the task pump and enqueued into the in-memory buffer
-	// at the end of this step, ackManager readLevel will also be equal to the buffer size
-	blm := tlMgr.backlogMgr.(*backlogManagerImpl)
-	expectedBufSize := min(cap(blm.taskReader.taskBuffer), taskCount)
-	s.Eventually(func() bool { return len(blm.taskReader.taskBuffer) == expectedBufSize },
-		time.Second, 5*time.Millisecond)
-
-	// unload the queue and stop all goroutines that read / write tasks in the background
-	// remainder of this test works with the in-memory buffer
-	tlMgr.UnloadFromPartitionManager(unloadCauseUnspecified)
-
-	// setReadLevel should NEVER be called without updating ackManager.outstandingTasks
-	// This is only for unit test purpose
-	blm.taskAckManager.setReadLevel(blm.getDB().GetMaxReadLevel(0))
-	batch, err := blm.taskReader.getTaskBatch(context.Background())
-	s.NoError(err)
-	s.Empty(batch.tasks)
-	s.Equal(blm.getDB().GetMaxReadLevel(0), batch.readLevel)
-	s.True(batch.isReadBatchDone)
-
-	blm.taskAckManager.setReadLevel(0)
-	batch, err = blm.taskReader.getTaskBatch(context.Background())
-	s.NoError(err)
-	s.Len(batch.tasks, rangeSize)
-	s.EqualValues(rangeSize, batch.readLevel)
-	s.True(batch.isReadBatchDone)
-
-	s.setupRecordActivityTaskStartedMock(tl)
-
-	// reset the ackManager readLevel to the buffer size and consume
-	// the in-memory tasks by calling Poll API - assert ackMgr state
-	// at the end
-	blm.taskAckManager.setReadLevel(int64(expectedBufSize))
-
-	// complete rangeSize events
-	for range int64(rangeSize) {
-		identity := "nobody"
-		result, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
-			NamespaceId: namespaceID,
-			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
-				TaskQueue: taskQueue,
-				Identity:  identity,
-			},
-		}, metrics.NoopMetricsHandler)
-
-		s.NoError(err)
-		s.NotNil(result)
-		s.NotEqual(emptyPollActivityTaskQueueResponse, result)
-		if len(result.TaskToken) == 0 {
-			s.logger.Debug("empty poll returned")
-			continue
-		}
-	}
-	s.Equal(taskCount-rangeSize, s.taskManager.getTaskCount(dbq))
-	batch, err = blm.taskReader.getTaskBatch(context.Background())
-	s.NoError(err)
-	s.True(0 < len(batch.tasks) && len(batch.tasks) <= rangeSize)
-	s.True(batch.isReadBatchDone)
 }
 
 func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
@@ -2780,105 +2578,6 @@ func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
 		mgr.Stop(unloadCauseUnspecified)
 
 		s.LessOrEqual(s.taskManager.getGetTasksCount(dbq)-prevGetTasksCount, 1)
-	}
-}
-
-// TODO: should be moved to backlog_manager_test
-func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher")
-	}
-
-	runID := uuid.NewString()
-	workflowID := uuid.NewString()
-	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
-
-	namespaceID := uuid.NewString()
-	tl := "task-expiry-completion-tl0"
-	dbq := newUnversionedRootQueueKey(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
-
-	taskQueue := &taskqueuepb.TaskQueue{
-		Name: tl,
-		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-	}
-
-	const taskCount = 20 // must be multiple of 4
-	const rangeSize = 10
-	s.matchingEngine.config.RangeSize = rangeSize
-	s.matchingEngine.config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(2)
-
-	testCases := []struct {
-		maxTimeBtwnDeletes time.Duration
-	}{
-		{time.Minute},     // test taskGC deleting due to size threshold
-		{time.Nanosecond}, // test taskGC deleting due to time condition
-	}
-
-	for _, tc := range testCases {
-		for i := range int64(taskCount) {
-			scheduledEventID := i * 3
-			addRequest := matchingservice.AddActivityTaskRequest{
-				NamespaceId:            namespaceID,
-				Execution:              workflowExecution,
-				ScheduledEventId:       scheduledEventID,
-				TaskQueue:              taskQueue,
-				ScheduleToStartTimeout: timestamp.DurationFromSeconds(100),
-			}
-			switch i % 4 {
-			case 0:
-				// simulates creating a task whose scheduledToStartTimeout is already expired
-				addRequest.ScheduleToStartTimeout = timestamp.DurationFromSeconds(-5)
-			case 2:
-				// simulates creating a task which will time out in the buffer
-				addRequest.ScheduleToStartTimeout = durationpb.New(250 * time.Millisecond)
-			}
-			_, _, err := s.matchingEngine.AddActivityTask(context.Background(), &addRequest)
-			s.NoError(err)
-		}
-
-		tlMgr := s.getPhysicalTaskQueueManagerImplFromKey(dbq)
-		s.Equal(taskCount, s.taskManager.getTaskCount(dbq))
-		blm := tlMgr.backlogMgr.(*backlogManagerImpl)
-
-		// wait until all tasks are loaded by into in-memory buffers by task queue manager
-		// the buffer size should be one less than expected because dispatcher will dequeue the head
-		// 1/4 should be thrown out because they are expired before they hit the buffer
-		s.Eventually(func() bool { return len(blm.taskReader.taskBuffer) >= (3*taskCount/4 - 1) },
-			time.Second, 5*time.Millisecond)
-
-		// ensure the 1/4 of tasks with small ScheduleToStartTimeout will be expired when they come out of the buffer
-		time.Sleep(300 * time.Millisecond)
-
-		maxTimeBetweenTaskDeletes = tc.maxTimeBtwnDeletes
-
-		s.setupRecordActivityTaskStartedMock(tl)
-
-		pollReq := &matchingservice.PollActivityTaskQueueRequest{
-			NamespaceId: namespaceID,
-			PollRequest: &workflowservice.PollActivityTaskQueueRequest{TaskQueue: taskQueue, Identity: "test"},
-		}
-
-		remaining := taskCount
-		for range 2 {
-			// verify that (1) expired tasks are not returned in poll result (2) taskCleaner deletes tasks correctly
-			for range int64(taskCount / 4) {
-				result, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), pollReq, metrics.NoopMetricsHandler)
-				s.NoError(err)
-				s.NotNil(result)
-				s.NotEqual(result, emptyPollActivityTaskQueueResponse)
-			}
-			remaining -= taskCount / 2
-			// since every other task is expired, we expect half the tasks to be deleted
-			// after poll consumed 1/4th of what is available.
-			// however, the gc is best-effort and might not run exactly when we want it to.
-			// various thread interleavings between the two task reader threads and this one
-			// might leave the gc behind by up to 3 tasks, or ahead by up to 1.
-			delta := remaining - s.taskManager.getTaskCount(dbq)
-			s.Truef(-3 <= delta && delta <= 1, "remaining %d, getTaskCount %d", remaining, s.taskManager.getTaskCount(dbq))
-		}
-		// ensure full gc for the next case (twice in case one doesn't get the gc lock)
-		blm.taskGC.RunNow(blm.taskAckManager.getAckLevel())
-		blm.taskGC.RunNow(blm.taskAckManager.getAckLevel())
 	}
 }
 
@@ -3039,7 +2738,7 @@ func (s *matchingEngineSuite) applyTaskQueueUserDataReplicationEvent(
 }
 
 func (s *matchingEngineSuite) seedTaskQueueUserData(taskQueue string, data *persistencespb.TaskQueueUserData) {
-	s.Require().NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(), &persistence.UpdateTaskQueueUserDataRequest{
+	s.Require().NoError(s.v1TaskManager.UpdateTaskQueueUserData(context.Background(), &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: s.ns.ID().String(),
 		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
 			taskQueue: {UserData: &persistencespb.VersionedTaskQueueUserData{Data: data}},
@@ -3235,7 +2934,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsData() {
 		Version: 1,
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
+	s.NoError(s.v1TaskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
 			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
@@ -3264,7 +2963,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_ReturnsEmpty() {
 		Version: 1,
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
+	s.NoError(s.v1TaskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
 			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
@@ -3293,7 +2992,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_Expires() {
 		Version: 1,
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
+	s.NoError(s.v1TaskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
 			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
@@ -3375,7 +3074,7 @@ func (s *matchingEngineSuite) TestGetTaskQueueUserData_LongPoll_WakesUp_From2to3
 		Version: 1,
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
-	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
+	s.NoError(s.v1TaskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
 			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
@@ -3465,7 +3164,7 @@ func (s *matchingEngineSuite) TestUpdateUserData_FailsOnKnownVersionMismatch() {
 		Data:    &persistencespb.TaskQueueUserData{Clock: &clockspb.HybridLogicalClock{WallClock: 123456}},
 	}
 
-	err := s.classicTaskManager.UpdateTaskQueueUserData(context.Background(),
+	err := s.v1TaskManager.UpdateTaskQueueUserData(context.Background(),
 		&persistence.UpdateTaskQueueUserDataRequest{
 			NamespaceID: namespaceID.String(),
 			Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
@@ -3565,7 +3264,7 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 		},
 	}
 
-	err := s.classicTaskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
+	err := s.v1TaskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceID,
 		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
 			tq: &persistence.SingleTaskQueueUserDataUpdate{
@@ -3618,7 +3317,7 @@ func (s *matchingEngineSuite) TestDemotedMatch() {
 		},
 	}
 
-	err = s.classicTaskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
+	err = s.v1TaskManager.UpdateTaskQueueUserData(ctx, &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceID,
 		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
 			tq: &persistence.SingleTaskQueueUserDataUpdate{
@@ -3676,7 +3375,7 @@ func (s *matchingEngineSuite) TestUnloadOnMembershipChange() {
 	config := s.newConfig()
 	config.MembershipUnloadDelay = dynamicconfig.GetDurationPropertyFn(10 * time.Millisecond)
 
-	e := newMatchingEngine(config, s.classicTaskManager, s.fairTaskManager, s.mockHistoryClient,
+	e := newMatchingEngine(config, s.v1TaskManager, s.fairTaskManager, s.mockHistoryClient,
 		s.logger, s.mockNamespaceCache, routingClient, s.mockVisibilityManager,
 		s.mockHostInfoProvider, s.mockServiceResolver, s.mockNexusEndpointManager)
 	e.Start()
@@ -4107,108 +3806,6 @@ func (s *matchingEngineSuite) TestAddConsumeWorkflowTasksDBErrors() {
 	s.addConsumeAllWorkflowTasksNonConcurrently(200)
 }
 
-func (s *matchingEngineSuite) resetBacklogCounter(numWorkers int, taskCount int, rangeSize int) {
-	s.matchingEngine.config.LongPollExpirationInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(1 * time.Millisecond)
-	s.matchingEngine.config.UpdateAckInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(100 * time.Millisecond)
-
-	workflowType, workflowExecution := s.generateWorkflowExecution()
-	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
-	s.matchingEngine.config.RangeSize = int64(rangeSize)
-
-	s.addWorkflowTasks(taskCount*numWorkers, taskQueue, workflowExecution)
-
-	// TaskID of the first task to be added
-	minTaskID, done := s.taskManager.minTaskID(ptq)
-	s.True(done)
-
-	partitionManager, _, err := s.matchingEngine.getTaskQueuePartitionManager(context.Background(), ptq.Partition(), false, loadCauseTask)
-	s.NoError(err)
-	pqMgr := s.getPhysicalTaskQueueManagerImplFromKey(ptq)
-
-	s.Equal(taskCount*numWorkers, s.taskManager.getTaskCount(ptq))
-
-	// Check the maxReadLevel with the value of task stored in db
-	maxTaskId, ok := s.taskManager.maxTaskID(ptq)
-	s.True(ok)
-	s.Equal(maxTaskId, pqMgr.backlogMgr.getDB().GetMaxReadLevel(0))
-
-	// validate the approximateBacklogCounter
-	s.EqualValues(taskCount*numWorkers, totalApproximateBacklogCount(pqMgr.backlogMgr))
-
-	// Unload the PQM
-	s.matchingEngine.unloadTaskQueuePartition(partitionManager, unloadCauseForce)
-
-	// Simulate a TTL'ed task in Cassandra by removing it from the DB
-	// Remove the task from testTaskManager but not from db/AckManager
-
-	// Stop the backlogManager so that we TTL and the taskReader does not catch this
-	request := &persistence.CompleteTasksLessThanRequest{
-		NamespaceID:        namespaceID,
-		TaskQueueName:      taskQueue.Name,
-		TaskType:           enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-		ExclusiveMaxTaskID: minTaskID + 1,
-		Limit:              100,
-	}
-	_, err = s.taskManager.CompleteTasksLessThan(context.Background(), request)
-	s.NoError(err)
-	s.Equal((taskCount*numWorkers)-1, s.taskManager.getTaskCount(ptq))
-
-	// Add pollers which shall also load the fresher version of tqMgr
-	s.pollWorkflowTasks(workflowType, (taskCount*numWorkers)-1, ptq, taskQueue)
-
-	// Update pgMgr to have the latest pgMgr
-	pqMgr = s.getPhysicalTaskQueueManagerImplFromKey(ptq)
-
-	// Overwrite the maxReadLevel since it could have increased if the previous taskWriter was
-	// stopped (which would not result in resetting).
-	pqMgr.backlogMgr.getDB().setMaxReadLevelForTesting(subqueueZero, maxTaskId)
-
-	s.Equal(0, s.taskManager.getTaskCount(ptq))
-	s.EventuallyWithT(func(collect *assert.CollectT) {
-		require.Equal(collect, int64(0), totalApproximateBacklogCount(pqMgr.backlogMgr))
-	}, 4*time.Second, 10*time.Millisecond, "backlog counter should have been reset")
-}
-
-// TestResettingBacklogCounter tests the scenario where approximateBacklogCounter over-counts and resets it accordingly
-func (s *matchingEngineSuite) TestResetBacklogCounterNoDBErrors() {
-	if s.newMatcher {
-		s.T().Skip("not supported by new matcher; flaky")
-	}
-
-	s.resetBacklogCounter(2, 2, 2)
-}
-
-func (s *matchingEngineSuite) TestResetBacklogCounterDBErrors() {
-	if s.newMatcher {
-		s.T().Skip("test is flaky with new matcher")
-	}
-	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
-	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
-	s.taskManager.addFault("CreateTasks", "ConditionFailed", 0.1)
-	s.taskManager.addFault("GetTasks", "Unavailable", 0.1)
-
-	s.resetBacklogCounter(2, 2, 2)
-}
-
-func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterNoDBErrors() {
-	if s.newMatcher {
-		s.T().Skip("test is flaky with new matcher")
-	}
-	s.resetBacklogCounter(10, 20, 2)
-}
-
-func (s *matchingEngineSuite) TestMoreTasksResetBacklogCounterDBErrors() {
-	if s.newMatcher {
-		s.T().Skip("test is flaky with new matcher")
-	}
-	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
-	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
-	s.taskManager.addFault("CreateTasks", "ConditionFailed", 0.1)
-	s.taskManager.addFault("GetTasks", "Unavailable", 0.1)
-
-	s.resetBacklogCounter(10, 50, 5)
-}
-
 // Concurrent tests for testing approximateBacklogCounter
 
 func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(
@@ -4260,9 +3857,7 @@ func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksDBErrors() {
 }
 
 func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksNoDBErrors() {
-	if s.newMatcher {
-		s.T().Skip("test is flaky with new matcher")
-	}
+	s.T().Skip("test is flaky with new matcher")
 	s.concurrentPublishAndConsumeValidateBacklogCounter(20, 100, 100)
 }
 
@@ -4605,7 +4200,7 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_NewDeploymentDataRemove
 	}
 
 	// Using the lower level UpdateTaskQueueUserData to set the user data for multiple versions at once.
-	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(), &persistence.UpdateTaskQueueUserDataRequest{
+	s.NoError(s.v1TaskManager.UpdateTaskQueueUserData(context.Background(), &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceID,
 		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
 			tq: {UserData: userData},
@@ -5347,7 +4942,7 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_DeletedVersionRemovesOl
 		},
 	}
 
-	s.NoError(s.classicTaskManager.UpdateTaskQueueUserData(context.Background(), &persistence.UpdateTaskQueueUserDataRequest{
+	s.NoError(s.v1TaskManager.UpdateTaskQueueUserData(context.Background(), &persistence.UpdateTaskQueueUserDataRequest{
 		NamespaceID: namespaceID,
 		Updates: map[string]*persistence.SingleTaskQueueUserDataUpdate{
 			tq: {UserData: userData},
@@ -6596,11 +6191,6 @@ func (d *dynamicRateBurstWrapper) Burst() int {
 	return d.RateLimiterImpl.Burst()
 }
 
-// TODO(pri): cleanup; delete this
-func useClassicMatcher(config *Config) {
-	config.NewMatcherSub = staticFalseChange
-}
-
 func useFairness(config *Config) {
 	config.EnableFairnessSub = staticTrueChange
 }
@@ -7423,13 +7013,11 @@ func TestAutoEnableV2ConfigChange(t *testing.T) {
 	engine.Start()
 	defer engine.Stop()
 
-	// autoEnable ON, base configs OFF -> with V2 fairnessState, effective config is NewMatcher=true, EnableFairness=true
+	// autoEnable ON, base configs OFF -> with V2 fairnessState, effective config is EnableFairness=true
 	cleanupAutoEnable := dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, true)
 	cleanupFairness := dcClient.OverrideSetting(dynamicconfig.MatchingEnableFairness, false)
-	cleanupNewMatcher := dcClient.OverrideSetting(dynamicconfig.MatchingUseNewMatcher, false)
 	defer cleanupAutoEnable()
 	defer cleanupFairness()
-	defer cleanupNewMatcher()
 
 	testNamespaceID := uuid.NewString()
 	testTaskQueueName := "test-tq-" + uuid.NewString()
@@ -7483,7 +7071,7 @@ func TestAutoEnableV2ConfigChange(t *testing.T) {
 	pq, err := pm.defaultQueueFuture.Get(ctx)
 	require.NoError(t, err)
 
-	// Turn autoEnable OFF -> effective config changes to NewMatcher=false, EnableFairness=false
+	// Turn autoEnable OFF -> effective config changes to EnableFairness=false
 	cleanupAutoEnable()
 	_ = dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, false)
 
@@ -7520,13 +7108,11 @@ func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testin
 	engine.Start()
 	defer engine.Stop()
 
-	// autoEnable OFF, base configs ON -> with V2 fairnessState, effective config is NewMatcher=true, EnableFairness=true
+	// autoEnable OFF, base configs ON -> with V2 fairnessState, effective config is EnableFairness=true
 	cleanupAutoEnable := dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, false)
 	cleanupFairness := dcClient.OverrideSetting(dynamicconfig.MatchingEnableFairness, true)
-	cleanupNewMatcher := dcClient.OverrideSetting(dynamicconfig.MatchingUseNewMatcher, true)
 	defer cleanupAutoEnable()
 	defer cleanupFairness()
-	defer cleanupNewMatcher()
 
 	testNamespaceID := uuid.NewString()
 	testTaskQueueName := "test-tq-" + uuid.NewString()
@@ -7578,13 +7164,13 @@ func TestAutoEnableV2ConfigChange_NoUnloadWhenEffectiveConfigUnchanged(t *testin
 	require.NoError(t, err)
 
 	require.Eventually(t, func() bool {
-		return !pm.config.AutoEnableV2() && pm.config.NewMatcher && pm.config.EnableFairness
+		return !pm.config.AutoEnableV2() && pm.config.EnableFairness
 	}, 2*time.Second, 10*time.Millisecond, "config should be initialized")
 
 	pq, err := pm.defaultQueueFuture.Get(ctx)
 	require.NoError(t, err)
 
-	// Turn autoEnable ON -> effective config stays NewMatcher=true, EnableFairness=true (same as before)
+	// Turn autoEnable ON -> effective config stays EnableFairness=true (same as before)
 	cleanupAutoEnable()
 	_ = dcClient.OverrideSetting(dynamicconfig.MatchingAutoEnableV2, true)
 
