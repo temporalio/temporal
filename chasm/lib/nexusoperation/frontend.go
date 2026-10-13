@@ -12,6 +12,7 @@ import (
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/searchattribute"
@@ -46,6 +47,8 @@ func NewFrontendHandler(
 	client nexusoperationpb.NexusOperationServiceClient,
 	config *Config,
 	logger log.Logger,
+	throttledLogger log.ThrottledLogger,
+	metricsHandler metrics.Handler,
 	namespaceRegistry namespace.Registry,
 	endpointRegistry commonnexus.EndpointRegistry,
 	saMapperProvider searchattribute.MapperProvider,
@@ -58,7 +61,7 @@ func NewFrontendHandler(
 		config:            config,
 		namespaceRegistry: namespaceRegistry,
 		endpointRegistry:  endpointRegistry,
-		validator:         newValidator(config, logger, saMapperProvider, saValidator, callbackValidator, linkValidator),
+		validator:         newValidator(config, logger, throttledLogger, metricsHandler, saMapperProvider, saValidator, callbackValidator, linkValidator),
 	}
 }
 
