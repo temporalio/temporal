@@ -688,6 +688,7 @@ var (
 	ServiceErrInvalidArgumentCounter         = NewCounterDef("service_errors_invalid_argument")
 	ServiceErrNamespaceNotActiveCounter      = NewCounterDef("service_errors_namespace_not_active")
 	ServiceErrResourceExhaustedCounter       = NewCounterDef("service_errors_resource_exhausted")
+	ResourceExhaustedRetryDelayFloorEmitted  = NewCounterDef("resource_exhausted_retry_delay_floor_emitted", WithDescription("Number of ResourceExhausted responses that carried a google.rpc.RetryInfo retry delay floor."))
 	ServiceErrNotFoundCounter                = NewCounterDef("service_errors_entity_not_found")
 	ServiceErrExecutionAlreadyStartedCounter = NewCounterDef("service_errors_execution_already_started")
 	ServiceErrContextTimeoutCounter          = NewCounterDef("service_errors_context_timeout")

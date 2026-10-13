@@ -782,6 +782,13 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		`FrontendMaxNamespaceBurstRatioPerInstance is workflow namespace burst limit as a ratio of namespace RPS. The RPS
 used here will be the effective RPS from global and per-instance limits. The value must be 1 or higher.`,
 	)
+	FrontendResourceExhaustedRetryDelayFloor = NewNamespaceDurationSetting(
+		"frontend.resourceExhaustedRetryDelayFloor",
+		0,
+		`FrontendResourceExhaustedRetryDelayFloor is the minimum retry delay hint (google.rpc.RetryInfo) attached to
+ResourceExhausted errors returned by the frontend namespace RPS and namespace concurrency limiters. SDKs that support
+it wait at least this long before retrying, even if this exceeds their local retry limits. 0 disables the hint.`,
+	)
 	FrontendGlobalWorkerDeploymentReadRPS = NewNamespaceIntSetting(
 		"frontend.globalNamespaceWorkerDeploymentReadRPS",
 		50,
