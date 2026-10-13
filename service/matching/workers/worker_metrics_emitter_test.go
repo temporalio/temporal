@@ -204,8 +204,14 @@ func TestEmitWorkerConfigEvent(t *testing.T) {
 		return true
 	})
 	require.Equal(t, "temporal-go", attrs["sdk_name"].AsString())
-	require.Equal(t, `["go","roadrunner"]`, attrs["runtimes"].AsString())
-	require.Equal(t, `["docker","k8s"]`, attrs["hosting_environments"].AsString())
+	runtimes := attrs["runtimes"].AsSlice()
+	require.Len(t, runtimes, 2)
+	require.Equal(t, "go", runtimes[0].AsString())
+	require.Equal(t, "roadrunner", runtimes[1].AsString())
+	hostingEnvs := attrs["hosting_environments"].AsSlice()
+	require.Len(t, hostingEnvs, 2)
+	require.Equal(t, "docker", hostingEnvs[0].AsString())
+	require.Equal(t, "k8s", hostingEnvs[1].AsString())
 	require.Equal(t, "linux", attrs["os"].AsString())
 	require.Equal(t, "arm64", attrs["architecture"].AsString())
 }

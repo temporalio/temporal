@@ -7,6 +7,16 @@ import (
 	"go.opentelemetry.io/otel/log"
 )
 
+// stringSliceAttr records a []string as a native OTEL slice attribute, so Chronicle can map it
+// to an Array(String) column in ClickHouse.
+func stringSliceAttr(key string, values []string) log.KeyValue {
+	vals := make([]log.Value, len(values))
+	for i, v := range values {
+		vals[i] = log.StringValue(v)
+	}
+	return log.Slice(key, vals...)
+}
+
 // jsonAttr records v as a compact JSON string under key rather than a nested structure, so the
 // logging / ingestion layer keeps one low-cardinality field (e.g. details) instead of flattening
 // into a dynamic key per leaf path. Used for composite fields (maps/slices/whole objects).
