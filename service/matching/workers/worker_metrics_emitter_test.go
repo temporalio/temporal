@@ -3,6 +3,7 @@ package workers
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -10,6 +11,7 @@ import (
 	"go.opentelemetry.io/otel/log/embedded"
 	enumspb "go.temporal.io/api/enums/v1"
 	workerpb "go.temporal.io/api/worker/v1"
+	"google.golang.org/protobuf/types/known/timestamppb"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
@@ -172,8 +174,16 @@ func TestEmitWorkerConfigEvent(t *testing.T) {
 
 	hb := &workerpb.WorkerHeartbeat{
 		WorkerInstanceKey: "w1",
+		WorkerIdentity:    "12345@my-host",
 		TaskQueue:         "my-queue",
 		SdkName:           "temporal-go",
+		SdkVersion:        "1.30.0",
+		StartTime:         timestamppb.New(time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)),
+		Plugins:           []*workerpb.PluginInfo{{Name: "my-plugin"}},
+		Drivers:           []*workerpb.StorageDriverInfo{{Type: "s3"}},
+		WorkflowPollerInfo: &workerpb.WorkerPollerInfo{
+			IsAutoscaling: true,
+		},
 		Environment: &workerpb.EnvironmentInfo{
 			Runtimes: []*workerpb.EnvironmentInfo_Runtime{
 				{Type: workerpb.EnvironmentInfo_Runtime_RUNTIME_TYPE_GO},
@@ -203,15 +213,54 @@ func TestEmitWorkerConfigEvent(t *testing.T) {
 		attrs[kv.Key] = kv.Value
 		return true
 	})
+	require.Equal(t, "ns", attrs["namespace"].AsString())
+	require.Equal(t, "my-queue", attrs["task_queue"].AsString())
+	require.Equal(t, "w1", attrs["worker_instance_key"].AsString())
+	require.Equal(t, "12345@my-host", attrs["worker_identity"].AsString())
+	require.Equal(t, "2026-10-09T12:00:00Z", attrs["start_time"].AsString())
 	require.Equal(t, "temporal-go", attrs["sdk_name"].AsString())
+	require.Equal(t, "1.30.0", attrs["sdk_version"].AsString())
+	require.Equal(t, "linux", attrs["os"].AsString())
+	require.Equal(t, "arm64", attrs["architecture"].AsString())
+	require.Equal(t, true, attrs["workflow_poller_autoscaling"].AsBool())
+	require.Equal(t, false, attrs["activity_poller_autoscaling"].AsBool())
+	require.Equal(t, false, attrs["nexus_poller_autoscaling"].AsBool())
+
 	runtimes := attrs["runtimes"].AsSlice()
 	require.Len(t, runtimes, 2)
 	require.Equal(t, "go", runtimes[0].AsString())
 	require.Equal(t, "roadrunner", runtimes[1].AsString())
+
 	hostingEnvs := attrs["hosting_environments"].AsSlice()
 	require.Len(t, hostingEnvs, 2)
 	require.Equal(t, "docker", hostingEnvs[0].AsString())
 	require.Equal(t, "k8s", hostingEnvs[1].AsString())
-	require.Equal(t, "linux", attrs["os"].AsString())
-	require.Equal(t, "arm64", attrs["architecture"].AsString())
+
+	plugins := attrs["plugins"].AsSlice()
+	require.Len(t, plugins, 1)
+	require.Equal(t, "my-plugin", plugins[0].AsString())
+
+	drivers := attrs["drivers"].AsSlice()
+	require.Len(t, drivers, 1)
+	require.Equal(t, "s3", drivers[0].AsString())
+}
+
+func TestEmitWorkerConfigEventNoEnvironment(t *testing.T) {
+	eventLogger := &captureEventLogger{}
+
+	hb := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: "w1",
+		SdkName:           "temporal-go",
+	}
+
+	emitWorkerConfigEvent(eventLogger, namespace.Name("ns"), hb)
+
+	attrs := map[string]otellog.Value{}
+	eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		attrs[kv.Key] = kv.Value
+		return true
+	})
+	// Without environment, os and architecture should be "unknown" (not empty)
+	require.Equal(t, "unknown", attrs["os"].AsString())
+	require.Equal(t, "unknown", attrs["architecture"].AsString())
 }
