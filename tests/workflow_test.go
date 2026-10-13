@@ -20,6 +20,7 @@ import (
 	updatepb "go.temporal.io/api/update/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
@@ -32,6 +33,7 @@ import (
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
+	"go.temporal.io/server/service/history/api/startworkflow"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -165,6 +167,343 @@ func (s *WorkflowTestSuite) TestStartWorkflowExecution() {
 		s.ErrorAs(err, &alreadyStarted)
 		s.Nil(we2)
 	})
+}
+
+// TestStartWorkflowExecution_RunIDDedup covers EnableCrossRunRequestIDDedup.
+func (s *WorkflowTestSuite) TestStartWorkflowExecution_RunIDDedup() {
+	newStartRequest := func(env *testcore.TestEnv, tv *testvars.TestVars, workflowID, requestID string) *workflowservice.StartWorkflowExecutionRequest {
+		return &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:          requestID,
+			Namespace:          env.Namespace().String(),
+			WorkflowId:         workflowID,
+			WorkflowType:       tv.WorkflowType(),
+			TaskQueue:          tv.TaskQueue(),
+			WorkflowRunTimeout: durationpb.New(100 * time.Second),
+			Identity:           tv.WorkerIdentity(),
+		}
+	}
+
+	s.Run("run ID is derived deterministically from the request ID", func(s *WorkflowTestSuite) {
+		env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.EnableCrossRunRequestIDDedup, true))
+		tv := testvars.New(s.T())
+		workflowID := testcore.RandomizeStr(s.T().Name())
+		requestID := uuid.NewString()
+
+		we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), newStartRequest(env, tv, workflowID, requestID))
+		s.NoError(err)
+
+		expected := runIDDedupDerivedRunID(env, workflowID, requestID)
+		s.Equal(expected, we.RunId)
+	})
+
+	s.Run("same request ID dedups across runs (multi-writer gap)", func(s *WorkflowTestSuite) {
+		// run1 (req1) superseded by run2 (req2); a retry of req1 dedups to run1.
+		env := testcore.NewEnv(s.T(),
+			testcore.WithDynamicConfig(dynamicconfig.EnableCrossRunRequestIDDedup, true),
+			testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
+		tv := testvars.New(s.T())
+		workflowID := testcore.RandomizeStr(s.T().Name())
+		req1 := uuid.NewString()
+		req2 := uuid.NewString()
+
+		start := func(requestID string) *workflowservice.StartWorkflowExecutionResponse {
+			req := newStartRequest(env, tv, workflowID, requestID)
+			req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+			we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), req)
+			s.NoError(err)
+			return we
+		}
+
+		run1 := start(req1)
+		run2 := start(req2) // supersedes run1 as current
+		s.NotEqual(run1.RunId, run2.RunId)
+
+		req := newStartRequest(env, tv, workflowID, req1)
+		req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+		retry, err := env.FrontendClient().StartWorkflowExecution(s.Context(), req)
+		s.NoError(err)
+		runIDDedupAssertResponse(s, env, retry, workflowID, run1.RunId, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
+
+		// The terminate rolls back with the rejected create, so run2 is still running.
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, runIDDedupStatus(s, env, workflowID, run2.RunId))
+	})
+
+	s.Run("dedups on the createAsCurrent path (ALLOW_DUPLICATE over a completed current run)", func(s *WorkflowTestSuite) {
+		// Completed current run: conflict surfaces in createAsCurrent instead of the terminate path.
+		env := testcore.NewEnv(s.T(),
+			testcore.WithDynamicConfig(dynamicconfig.EnableCrossRunRequestIDDedup, true),
+			testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
+		tv := testvars.New(s.T())
+		workflowID := testcore.RandomizeStr(s.T().Name())
+		req1 := uuid.NewString()
+
+		start := func(requestID string) *workflowservice.StartWorkflowExecutionResponse {
+			req := newStartRequest(env, tv, workflowID, requestID)
+			req.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
+			we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), req)
+			s.NoError(err)
+			return we
+		}
+
+		run1 := start(req1)
+		runIDDedupCompleteWorkflow(s, env, tv)
+		run2 := start(uuid.NewString()) // allowed: run1 has completed; run2 becomes current
+		s.NotEqual(run1.RunId, run2.RunId)
+		runIDDedupCompleteWorkflow(s, env, tv)
+
+		retry := start(req1)
+		runIDDedupAssertResponse(s, env, retry, workflowID, run1.RunId, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
+	})
+
+	s.Run("USE_EXISTING retry returns the original run, not the current run", func(s *WorkflowTestSuite) {
+		env := testcore.NewEnv(s.T(),
+			testcore.WithDynamicConfig(dynamicconfig.EnableCrossRunRequestIDDedup, true),
+			testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
+		tv := testvars.New(s.T())
+		workflowID := testcore.RandomizeStr(s.T().Name())
+		req1 := uuid.NewString()
+
+		start := func(requestID string, policy enumspb.WorkflowIdConflictPolicy) *workflowservice.StartWorkflowExecutionResponse {
+			req := newStartRequest(env, tv, workflowID, requestID)
+			req.WorkflowIdConflictPolicy = policy
+			we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), req)
+			s.NoError(err)
+			return we
+		}
+
+		run1 := start(req1, enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING)
+		run2 := start(uuid.NewString(), enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING)
+		s.NotEqual(run1.RunId, run2.RunId)
+
+		retry := start(req1, enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING)
+		runIDDedupAssertResponse(s, env, retry, workflowID, run1.RunId, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, runIDDedupStatus(s, env, workflowID, run2.RunId))
+	})
+
+	s.Run("FAIL retry returns the original run instead of AlreadyStarted", func(s *WorkflowTestSuite) {
+		env := testcore.NewEnv(s.T(),
+			testcore.WithDynamicConfig(dynamicconfig.EnableCrossRunRequestIDDedup, true),
+			testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
+		tv := testvars.New(s.T())
+		workflowID := testcore.RandomizeStr(s.T().Name())
+		req1 := uuid.NewString()
+
+		start := func(requestID string) (*workflowservice.StartWorkflowExecutionResponse, error) {
+			req := newStartRequest(env, tv, workflowID, requestID)
+			req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
+			return env.FrontendClient().StartWorkflowExecution(s.Context(), req)
+		}
+
+		run1, err := start(req1)
+		s.NoError(err)
+		runIDDedupCompleteWorkflow(s, env, tv)
+		run2, err := start(uuid.NewString())
+		s.NoError(err)
+		s.NotEqual(run1.RunId, run2.RunId)
+
+		retry, err := start(req1)
+		s.NoError(err)
+		runIDDedupAssertResponse(s, env, retry, workflowID, run1.RunId, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, runIDDedupStatus(s, env, workflowID, run2.RunId))
+	})
+
+	s.Run("USE_EXISTING retry after the current run closed returns the original run", func(s *WorkflowTestSuite) {
+		// USE_EXISTING with a completed current run goes through the reuse policy and gets dedup.
+		env := testcore.NewEnv(s.T(),
+			testcore.WithDynamicConfig(dynamicconfig.EnableCrossRunRequestIDDedup, true),
+			testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
+		tv := testvars.New(s.T())
+		workflowID := testcore.RandomizeStr(s.T().Name())
+		req1 := uuid.NewString()
+
+		start := func(requestID string) *workflowservice.StartWorkflowExecutionResponse {
+			req := newStartRequest(env, tv, workflowID, requestID)
+			req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_USE_EXISTING
+			req.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
+			we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), req)
+			s.NoError(err)
+			return we
+		}
+
+		run1 := start(req1)
+		runIDDedupCompleteWorkflow(s, env, tv)
+		run2 := start(uuid.NewString())
+		s.NotEqual(run1.RunId, run2.RunId)
+		runIDDedupCompleteWorkflow(s, env, tv)
+
+		retry := start(req1)
+		runIDDedupAssertResponse(s, env, retry, workflowID, run1.RunId, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
+	})
+
+	s.Run("a continued-as-new run dedups to the original run, not the new one", func(s *WorkflowTestSuite) {
+		// The CAN'd run gets a fresh request ID, so a retry dedups to the chain head.
+		env := testcore.NewEnv(s.T(),
+			testcore.WithDynamicConfig(dynamicconfig.EnableCrossRunRequestIDDedup, true),
+			testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
+		tv := testvars.New(s.T())
+		workflowID := testcore.RandomizeStr(s.T().Name())
+		req1 := uuid.NewString()
+
+		start := func(requestID string) *workflowservice.StartWorkflowExecutionResponse {
+			req := newStartRequest(env, tv, workflowID, requestID)
+			req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+			we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), req)
+			s.NoError(err)
+			return we
+		}
+
+		run1 := start(req1)
+		runIDDedupCompleteWorkflowTask(s, env, tv, &commandpb.Command{
+			CommandType: enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+			Attributes: &commandpb.Command_ContinueAsNewWorkflowExecutionCommandAttributes{
+				ContinueAsNewWorkflowExecutionCommandAttributes: &commandpb.ContinueAsNewWorkflowExecutionCommandAttributes{
+					WorkflowType: tv.WorkflowType(),
+					TaskQueue:    tv.TaskQueue(),
+				},
+			},
+		})
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW, runIDDedupStatus(s, env, workflowID, run1.RunId))
+
+		// The CAN'd run keeps a random run ID.
+		canRunID := runIDDedupCurrentRunID(s, env, workflowID)
+		s.NotEqual(run1.RunId, canRunID)
+		s.NotEqual(runIDDedupDerivedRunID(env, workflowID, req1), canRunID)
+
+		retry := start(req1)
+		runIDDedupAssertResponse(s, env, retry, workflowID, run1.RunId, enumspb.WORKFLOW_EXECUTION_STATUS_CONTINUED_AS_NEW)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, runIDDedupStatus(s, env, workflowID, canRunID))
+	})
+
+	s.Run("disabled: the multi-writer gap still creates a duplicate", func(s *WorkflowTestSuite) {
+		// Feature off: a retry of req1 after run1 is superseded creates a new run.
+		env := testcore.NewEnv(s.T(),
+			testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
+		tv := testvars.New(s.T())
+		workflowID := testcore.RandomizeStr(s.T().Name())
+		req1 := uuid.NewString()
+
+		start := func(requestID string) *workflowservice.StartWorkflowExecutionResponse {
+			req := newStartRequest(env, tv, workflowID, requestID)
+			req.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+			we, err := env.FrontendClient().StartWorkflowExecution(s.Context(), req)
+			s.NoError(err)
+			return we
+		}
+
+		run1 := start(req1)
+		start(uuid.NewString()) // supersedes run1
+
+		retry := start(req1) // not deduped: a fresh run, different from run1
+		s.NotEqual(run1.RunId, retry.RunId)
+		s.True(retry.Started)
+	})
+
+	s.Run("retry while the original run is still current returns it", func(s *WorkflowTestSuite) {
+		// Current-run request-ID dedup still works.
+		env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.EnableCrossRunRequestIDDedup, true))
+		tv := testvars.New(s.T())
+		workflowID := testcore.RandomizeStr(s.T().Name())
+		requestID := uuid.NewString()
+
+		we1, err := env.FrontendClient().StartWorkflowExecution(s.Context(), newStartRequest(env, tv, workflowID, requestID))
+		s.NoError(err)
+		we2, err := env.FrontendClient().StartWorkflowExecution(s.Context(), newStartRequest(env, tv, workflowID, requestID))
+		s.NoError(err)
+		s.Equal(we1.RunId, we2.RunId)
+	})
+}
+
+// Helpers take the subtest's suite explicitly since subtests run in parallel.
+
+// runIDDedupCompleteWorkflowTask drives the single pending workflow task with the given commands.
+func runIDDedupCompleteWorkflowTask(
+	s *WorkflowTestSuite,
+	env *testcore.TestEnv,
+	tv *testvars.TestVars,
+	commands ...*commandpb.Command,
+) {
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+	_, err := poller.PollAndHandleWorkflowTask(tv,
+		func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+			return &workflowservice.RespondWorkflowTaskCompletedRequest{Commands: commands}, nil
+		})
+	s.NoError(err)
+}
+
+func runIDDedupCompleteWorkflow(s *WorkflowTestSuite, env *testcore.TestEnv, tv *testvars.TestVars) {
+	runIDDedupCompleteWorkflowTask(s, env, tv, &commandpb.Command{
+		CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+		Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{
+			CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{},
+		},
+	})
+}
+
+func runIDDedupDescribe(
+	s *WorkflowTestSuite,
+	env *testcore.TestEnv,
+	workflowID, runID string,
+) *workflowpb.WorkflowExecutionInfo {
+	desc, err := env.FrontendClient().DescribeWorkflowExecution(s.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+	})
+	s.NoError(err)
+	return desc.GetWorkflowExecutionInfo()
+}
+
+func runIDDedupStatus(
+	s *WorkflowTestSuite,
+	env *testcore.TestEnv,
+	workflowID, runID string,
+) enumspb.WorkflowExecutionStatus {
+	return runIDDedupDescribe(s, env, workflowID, runID).GetStatus()
+}
+
+// runIDDedupDerivedRunID returns the run ID the server derives for requestID.
+func runIDDedupDerivedRunID(env *testcore.TestEnv, workflowID, requestID string) string {
+	return startworkflow.DeriveRunID(
+		env.NamespaceID().String(),
+		workflowID,
+		chasm.WorkflowArchetypeID,
+		requestID,
+		env.GetTestCluster().TestBase().ClusterMetadata.GetClusterID(),
+	)
+}
+
+// runIDDedupCurrentRunID returns the workflow ID's current run; an empty run ID resolves to it.
+func runIDDedupCurrentRunID(s *WorkflowTestSuite, env *testcore.TestEnv, workflowID string) string {
+	return runIDDedupDescribe(s, env, workflowID, "").GetExecution().GetRunId()
+}
+
+// runIDDedupAssertResponse asserts the shape of a dedup hit: Started=true, matching current-run dedup,
+// and a WorkflowExecutionStarted link.
+func runIDDedupAssertResponse(
+	s *WorkflowTestSuite,
+	env *testcore.TestEnv,
+	resp *workflowservice.StartWorkflowExecutionResponse,
+	workflowID string,
+	expectedRunID string,
+	expectedStatus enumspb.WorkflowExecutionStatus,
+) {
+	s.Equal(expectedRunID, resp.RunId)
+	s.True(resp.Started)
+	s.Equal(expectedStatus, resp.Status)
+	s.Equal(expectedRunID, resp.FirstExecutionRunId)
+	s.ProtoEqual(
+		&commonpb.Link_WorkflowEvent{
+			Namespace:  env.Namespace().String(),
+			WorkflowId: workflowID,
+			RunId:      expectedRunID,
+			Reference: &commonpb.Link_WorkflowEvent_EventRef{
+				EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+				},
+			},
+		},
+		resp.Link.GetWorkflowEvent(),
+	)
 }
 
 func (s *WorkflowTestSuite) TestStartWorkflowExecution_UseExisting() {
