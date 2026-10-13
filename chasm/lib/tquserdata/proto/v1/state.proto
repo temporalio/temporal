@@ -2,8 +2,15 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.tquserdata.proto.v1;
 
+import "temporal/server/api/clock/v1/message.proto";
+
 option go_package = "go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapb";
 
 message TaskQueueUserDataState {
+  // CHASM CAS version, independent of the DB version; starts at 1 and increments on successful updates.
   int64 version = 1;
+  // Set by termination; closes the lifecycle and prevents further updates to this execution.
+  bool closed = 2;
+  // Incoming user data HLC, preserved without modification; not used for CHASM CAS.
+  temporal.server.api.clock.v1.HybridLogicalClock clock = 3;
 }

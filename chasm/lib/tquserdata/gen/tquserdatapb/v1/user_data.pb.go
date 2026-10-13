@@ -25,9 +25,11 @@ const (
 )
 
 type TaskQueueUserData struct {
-	state         protoimpl.MessageState              `protogen:"open.v1"`
-	PerType       map[int32]*v1.TaskQueueTypeUserData `protobuf:"bytes,1,rep,name=per_type,json=perType,proto3" json:"per_type,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	Clock         *v11.HybridLogicalClock             `protobuf:"bytes,2,opt,name=clock,proto3" json:"clock,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Per-type payloads keyed by temporal.api.enums.v1.TaskQueueType.
+	PerType map[int32]*v1.TaskQueueTypeUserData `protobuf:"bytes,1,rep,name=per_type,json=perType,proto3" json:"per_type,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Incoming user data HLC, preserved unchanged and persisted in component state.
+	Clock         *v11.HybridLogicalClock `protobuf:"bytes,2,opt,name=clock,proto3" json:"clock,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }

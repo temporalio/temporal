@@ -21,12 +21,12 @@ func newLibrary(handler *handler) *library {
 }
 
 func (*library) Name() string {
-	return "task_queue_user_data"
+	return "taskQueueUserData"
 }
 
 func (*library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*TaskQueueUserData]("task_queue_user_data"),
+		chasm.NewRegistrableComponent[*TaskQueueUserData]("taskQueueUserData"),
 	}
 }
 

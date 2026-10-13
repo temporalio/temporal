@@ -7,25 +7,34 @@ import "chasm/lib/tquserdata/proto/v1/user_data.proto";
 option go_package = "go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapb";
 
 message UpsertTaskQueueUserDataRequest {
+  // Namespace containing the task queue family.
   string namespace_id = 1;
+  // Task queue family name, used internally as the CHASM business ID.
   string task_queue = 2;
+  // Complete replacement payload, including all task queue types.
   TaskQueueUserData task_queue_user_data = 3;
-  oneof precondition {
-    bool expect_missing = 4;
-    int64 expected_version = 5;
-  }
+  // Expected CHASM CAS version, independent of the DB version.
+  // Zero starts a new execution if none is running; positive values require an exact version match.
+  // Negative values are invalid.
+  int64 expected_version = 4;
 }
 
 message UpsertTaskQueueUserDataResponse {
+  // CHASM CAS version after the write; starts at 1 and increments on each successful update.
   int64 version = 1;
 }
 
+// TODO: Accept a task queue type and return user data for that type only.
 message GetTaskQueueUserDataSnapshotRequest {
+  // Namespace containing the task queue family.
   string namespace_id = 1;
+  // Task queue family name, used internally as the CHASM business ID.
   string task_queue = 2;
 }
 
 message GetTaskQueueUserDataSnapshotResponse {
+  // Snapshot containing all task queue types and the incoming HLC.
   TaskQueueUserData task_queue_user_data = 1;
+  // CHASM CAS version of this snapshot, independent of the DB version.
   int64 version = 2;
 }

@@ -23,17 +23,19 @@ const (
 )
 
 type UpsertTaskQueueUserDataRequest struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId       string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	TaskQueue         string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	TaskQueueUserData *TaskQueueUserData     `protobuf:"bytes,3,opt,name=task_queue_user_data,json=taskQueueUserData,proto3" json:"task_queue_user_data,omitempty"`
-	// Types that are valid to be assigned to Precondition:
-	//
-	//	*UpsertTaskQueueUserDataRequest_ExpectMissing
-	//	*UpsertTaskQueueUserDataRequest_ExpectedVersion
-	Precondition  isUpsertTaskQueueUserDataRequest_Precondition `protobuf_oneof:"precondition"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Namespace containing the task queue family.
+	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	// Task queue family name, used internally as the CHASM business ID.
+	TaskQueue string `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	// Complete replacement payload, including all task queue types.
+	TaskQueueUserData *TaskQueueUserData `protobuf:"bytes,3,opt,name=task_queue_user_data,json=taskQueueUserData,proto3" json:"task_queue_user_data,omitempty"`
+	// Expected CHASM CAS version, independent of the DB version.
+	// Zero starts a new execution if none is running; positive values require an exact version match.
+	// Negative values are invalid.
+	ExpectedVersion int64 `protobuf:"varint,4,opt,name=expected_version,json=expectedVersion,proto3" json:"expected_version,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *UpsertTaskQueueUserDataRequest) Reset() {
@@ -87,52 +89,17 @@ func (x *UpsertTaskQueueUserDataRequest) GetTaskQueueUserData() *TaskQueueUserDa
 	return nil
 }
 
-func (x *UpsertTaskQueueUserDataRequest) GetPrecondition() isUpsertTaskQueueUserDataRequest_Precondition {
-	if x != nil {
-		return x.Precondition
-	}
-	return nil
-}
-
-func (x *UpsertTaskQueueUserDataRequest) GetExpectMissing() bool {
-	if x != nil {
-		if x, ok := x.Precondition.(*UpsertTaskQueueUserDataRequest_ExpectMissing); ok {
-			return x.ExpectMissing
-		}
-	}
-	return false
-}
-
 func (x *UpsertTaskQueueUserDataRequest) GetExpectedVersion() int64 {
 	if x != nil {
-		if x, ok := x.Precondition.(*UpsertTaskQueueUserDataRequest_ExpectedVersion); ok {
-			return x.ExpectedVersion
-		}
+		return x.ExpectedVersion
 	}
 	return 0
 }
 
-type isUpsertTaskQueueUserDataRequest_Precondition interface {
-	isUpsertTaskQueueUserDataRequest_Precondition()
-}
-
-type UpsertTaskQueueUserDataRequest_ExpectMissing struct {
-	ExpectMissing bool `protobuf:"varint,4,opt,name=expect_missing,json=expectMissing,proto3,oneof"`
-}
-
-type UpsertTaskQueueUserDataRequest_ExpectedVersion struct {
-	ExpectedVersion int64 `protobuf:"varint,5,opt,name=expected_version,json=expectedVersion,proto3,oneof"`
-}
-
-func (*UpsertTaskQueueUserDataRequest_ExpectMissing) isUpsertTaskQueueUserDataRequest_Precondition() {
-}
-
-func (*UpsertTaskQueueUserDataRequest_ExpectedVersion) isUpsertTaskQueueUserDataRequest_Precondition() {
-}
-
 type UpsertTaskQueueUserDataResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Version       int64                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// CHASM CAS version after the write; starts at 1 and increments on each successful update.
+	Version       int64 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -174,10 +141,13 @@ func (x *UpsertTaskQueueUserDataResponse) GetVersion() int64 {
 	return 0
 }
 
+// TODO: Accept a task queue type and return user data for that type only.
 type GetTaskQueueUserDataSnapshotRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NamespaceId   string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	TaskQueue     string                 `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Namespace containing the task queue family.
+	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	// Task queue family name, used internally as the CHASM business ID.
+	TaskQueue     string `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -227,11 +197,13 @@ func (x *GetTaskQueueUserDataSnapshotRequest) GetTaskQueue() string {
 }
 
 type GetTaskQueueUserDataSnapshotResponse struct {
-	state             protoimpl.MessageState `protogen:"open.v1"`
-	TaskQueueUserData *TaskQueueUserData     `protobuf:"bytes,1,opt,name=task_queue_user_data,json=taskQueueUserData,proto3" json:"task_queue_user_data,omitempty"`
-	Version           int64                  `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Snapshot containing all task queue types and the incoming HLC.
+	TaskQueueUserData *TaskQueueUserData `protobuf:"bytes,1,opt,name=task_queue_user_data,json=taskQueueUserData,proto3" json:"task_queue_user_data,omitempty"`
+	// CHASM CAS version of this snapshot, independent of the DB version.
+	Version       int64 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *GetTaskQueueUserDataSnapshotResponse) Reset() {
@@ -282,15 +254,13 @@ var File_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto pr
 
 const file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"Dtemporal/server/chasm/lib/tquserdata/proto/v1/request_response.proto\x12-temporal.server.chasm.lib.tquserdata.proto.v1\x1a=temporal/server/chasm/lib/tquserdata/proto/v1/user_data.proto\"\xbb\x02\n" +
+	"Dtemporal/server/chasm/lib/tquserdata/proto/v1/request_response.proto\x12-temporal.server.chasm.lib.tquserdata.proto.v1\x1a=temporal/server/chasm/lib/tquserdata/proto/v1/user_data.proto\"\x80\x02\n" +
 	"\x1eUpsertTaskQueueUserDataRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1d\n" +
 	"\n" +
 	"task_queue\x18\x02 \x01(\tR\ttaskQueue\x12q\n" +
-	"\x14task_queue_user_data\x18\x03 \x01(\v2@.temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataR\x11taskQueueUserData\x12'\n" +
-	"\x0eexpect_missing\x18\x04 \x01(\bH\x00R\rexpectMissing\x12+\n" +
-	"\x10expected_version\x18\x05 \x01(\x03H\x00R\x0fexpectedVersionB\x0e\n" +
-	"\fprecondition\";\n" +
+	"\x14task_queue_user_data\x18\x03 \x01(\v2@.temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataR\x11taskQueueUserData\x12)\n" +
+	"\x10expected_version\x18\x04 \x01(\x03R\x0fexpectedVersion\";\n" +
 	"\x1fUpsertTaskQueueUserDataResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\"g\n" +
 	"#GetTaskQueueUserDataSnapshotRequest\x12!\n" +
@@ -337,10 +307,6 @@ func file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_i
 		return
 	}
 	file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_init()
-	file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes[0].OneofWrappers = []any{
-		(*UpsertTaskQueueUserDataRequest_ExpectMissing)(nil),
-		(*UpsertTaskQueueUserDataRequest_ExpectedVersion)(nil),
-	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

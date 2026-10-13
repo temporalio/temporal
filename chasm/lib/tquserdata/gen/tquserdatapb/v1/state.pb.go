@@ -11,6 +11,7 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
+	v1 "go.temporal.io/server/api/clock/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
@@ -23,8 +24,13 @@ const (
 )
 
 type TaskQueueUserDataState struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Version       int64                  `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// CHASM CAS version, independent of the DB version; starts at 1 and increments on successful updates.
+	Version int64 `protobuf:"varint,1,opt,name=version,proto3" json:"version,omitempty"`
+	// Set by termination; closes the lifecycle and prevents further updates to this execution.
+	Closed bool `protobuf:"varint,2,opt,name=closed,proto3" json:"closed,omitempty"`
+	// Incoming user data HLC, preserved without modification; not used for CHASM CAS.
+	Clock         *v1.HybridLogicalClock `protobuf:"bytes,3,opt,name=clock,proto3" json:"clock,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -66,13 +72,29 @@ func (x *TaskQueueUserDataState) GetVersion() int64 {
 	return 0
 }
 
+func (x *TaskQueueUserDataState) GetClosed() bool {
+	if x != nil {
+		return x.Closed
+	}
+	return false
+}
+
+func (x *TaskQueueUserDataState) GetClock() *v1.HybridLogicalClock {
+	if x != nil {
+		return x.Clock
+	}
+	return nil
+}
+
 var File_temporal_server_chasm_lib_tquserdata_proto_v1_state_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_tquserdata_proto_v1_state_proto_rawDesc = "" +
 	"\n" +
-	"9temporal/server/chasm/lib/tquserdata/proto/v1/state.proto\x12-temporal.server.chasm.lib.tquserdata.proto.v1\"2\n" +
+	"9temporal/server/chasm/lib/tquserdata/proto/v1/state.proto\x12-temporal.server.chasm.lib.tquserdata.proto.v1\x1a*temporal/server/api/clock/v1/message.proto\"\x92\x01\n" +
 	"\x16TaskQueueUserDataState\x12\x18\n" +
-	"\aversion\x18\x01 \x01(\x03R\aversionBJZHgo.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapbb\x06proto3"
+	"\aversion\x18\x01 \x01(\x03R\aversion\x12\x16\n" +
+	"\x06closed\x18\x02 \x01(\bR\x06closed\x12F\n" +
+	"\x05clock\x18\x03 \x01(\v20.temporal.server.api.clock.v1.HybridLogicalClockR\x05clockBJZHgo.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_tquserdata_proto_v1_state_proto_rawDescOnce sync.Once
@@ -89,13 +111,15 @@ func file_temporal_server_chasm_lib_tquserdata_proto_v1_state_proto_rawDescGZIP(
 var file_temporal_server_chasm_lib_tquserdata_proto_v1_state_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_temporal_server_chasm_lib_tquserdata_proto_v1_state_proto_goTypes = []any{
 	(*TaskQueueUserDataState)(nil), // 0: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataState
+	(*v1.HybridLogicalClock)(nil),  // 1: temporal.server.api.clock.v1.HybridLogicalClock
 }
 var file_temporal_server_chasm_lib_tquserdata_proto_v1_state_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	1, // 0: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataState.clock:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	1, // [1:1] is the sub-list for method output_type
+	1, // [1:1] is the sub-list for method input_type
+	1, // [1:1] is the sub-list for extension type_name
+	1, // [1:1] is the sub-list for extension extendee
+	0, // [0:1] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_tquserdata_proto_v1_state_proto_init() }
