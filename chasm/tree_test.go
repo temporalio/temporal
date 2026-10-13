@@ -4348,6 +4348,14 @@ func (s *nodeSuite) TestExecutePureTask() {
 		Data: []byte("some-random-data"),
 	}
 
+	metricsHandler := metricstest.NewCaptureHandler()
+	s.metricsHandler = metricsHandler
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	notInvalidatedRecordings := func() []*metricstest.CapturedRecording {
+		return capture.Snapshot()[metrics.ChasmPureTaskNotInvalidated.Name()]
+	}
+
 	s.nodeBackend.HandleChasmDLQScheduledPureTaskOnValidationEnabled = func() bool { return true }
 	root, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
@@ -4399,6 +4407,7 @@ func (s *nodeSuite) TestExecutePureTask() {
 	s.NoError(err)
 	s.True(executed)
 	s.Equal(valueStateNeedSyncStructure, root.valueState)
+	s.Empty(notInvalidatedRecordings())
 
 	expectedErr := errors.New("dummy")
 
@@ -4437,6 +4446,11 @@ func (s *nodeSuite) TestExecutePureTask() {
 	s.Empty(logTags["chasm-component-path"])
 	s.Equal(taskAttributes.ScheduledTime, logTags["chasm-task-scheduled-time"])
 	s.Equal(valueStateNeedSyncStructure, root.valueState)
+	recordings := notInvalidatedRecordings()
+	s.Len(recordings, 1)
+	s.Equal(int64(1), recordings[0].Value)
+	s.Equal(testComponentName, recordings[0].Tags[metrics.ArchetypeTagName])
+	s.Equal(testPureTaskFQN, recordings[0].Tags[metrics.ChasmTaskTypeTagName])
 
 	// Succeed execution, but post-execution validation errors.
 	root.setValueState(valueStateSynced)
@@ -4465,24 +4479,48 @@ func (s *nodeSuite) TestExecutePureTask() {
 	s.ErrorIs(expectedErr, err)
 	s.Equal(valueStateSynced, root.valueState) // task not executed, so node is clean
 
-	// When DLQScheduledPureTaskOnValidation is disabled, remaining valid after execution is not an error.
+	// When DLQScheduledPureTaskOnValidation is disabled, remaining valid after execution is not an
+	// error, but the metric is still emitted.
 	s.nodeBackend.HandleChasmDLQScheduledPureTaskOnValidationEnabled = func() bool { return false }
 	rootNoDLQ, err := s.newTestTree(persistenceNodes)
 	s.NoError(err)
 	rootNoDLQ.setValueState(valueStateSynced)
-	s.testLibrary.mockPureTaskHandler.EXPECT().
-		Validate(gomock.Any(), gomock.Any(), gomock.Eq(TaskInvocation{TaskAttributes: taskAttributes}), gomock.Eq(pureTask)).
-		Return(true, nil).Times(1)
-	s.testLibrary.mockPureTaskHandler.EXPECT().
-		Execute(
-			gomock.AssignableToTypeOf(&mutableCtx{}),
-			gomock.AssignableToTypeOf(&TestComponent{}),
-			gomock.Eq(taskAttributes),
-			gomock.Eq(pureTask),
-		).Return(nil).Times(1)
+	expectExecute(nil)
+	expectValidateSequence(
+		validateResult{valid: true},
+		validateResult{valid: true},
+	)
 	executed, err = rootNoDLQ.ExecutePureTask(ctx, taskAttributes, pureTask)
 	s.NoError(err)
 	s.True(executed)
+	recordings = notInvalidatedRecordings()
+	s.Len(recordings, 2)
+	s.Equal(testComponentName, recordings[1].Tags[metrics.ArchetypeTagName])
+	s.Equal(testPureTaskFQN, recordings[1].Tags[metrics.ChasmTaskTypeTagName])
+
+	// When disabled, post-execution validation that invalidates the task emits no metric.
+	rootNoDLQ.setValueState(valueStateSynced)
+	expectExecute(nil)
+	expectValidateSequence(
+		validateResult{valid: true},
+		validateResult{valid: false},
+	)
+	executed, err = rootNoDLQ.ExecutePureTask(ctx, taskAttributes, pureTask)
+	s.NoError(err)
+	s.True(executed)
+	s.Len(notInvalidatedRecordings(), 2)
+
+	// When disabled, post-execution validation errors do not fail the task.
+	rootNoDLQ.setValueState(valueStateSynced)
+	expectExecute(nil)
+	expectValidateSequence(
+		validateResult{valid: true},
+		validateResult{valid: false, err: expectedErr},
+	)
+	executed, err = rootNoDLQ.ExecutePureTask(ctx, taskAttributes, pureTask)
+	s.NoError(err)
+	s.True(executed)
+	s.Len(notInvalidatedRecordings(), 2)
 }
 
 func (s *nodeSuite) TestExecuteSideEffectTask() {
@@ -6061,6 +6099,26 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		s.Equal(3, s.nodeBackend.NumTasksAdded(), "two side-effect tasks and the earliest pure task are regenerated")
 		s.Equal(baseTime.Add(time.Hour).UTC(), s.nodeBackend.LastDeletePureTaskCall(),
 			"pure-task deletion is anchored at the earliest pure scheduled time")
+	})
+
+	s.Run("FastForwardReached_RecordsTransitionWithoutRegeneratingTasks", func() {
+		root := gateRoot(true)
+		executionInfo(&persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+			FastForwardInfo: &persistencespb.FastForwardInfo{
+				TargetTime: timestamppb.New(baseTime),
+			},
+		})
+		var recorded *TimeSkippingTransition
+		s.nodeBackend.HandleRecordTimeSkippingTransition = func(tr *TimeSkippingTransition) { recorded = tr }
+
+		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+		s.NoError(err)
+		s.Require().NotNil(recorded)
+		s.True(recorded.IsValid())
+		s.True(recorded.DisabledAfterFastForward)
+		s.Zero(recorded.GetSkippedDuration())
+		s.Zero(s.nodeBackend.NumTasksAdded(), "a zero-duration transition must not regenerate timer tasks")
 	})
 }
 

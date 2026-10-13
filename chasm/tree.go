@@ -3728,27 +3728,50 @@ func (n *Node) ExecutePureTask(
 		return true, execErr
 	}
 
-	if !taskAttributes.IsImmediate() && n.backend.ChasmDLQScheduledPureTaskOnValidationEnabled() {
-		valid, err = n.validateTask(validationContext, TaskInvocation{TaskAttributes: taskAttributes}, taskInstance)
-		if err != nil {
-			return true, err
-		}
-		if valid {
-			archetypeID := n.ArchetypeID()
-			archetype, _ := n.registry.ArchetypeDisplayName(archetypeID)
-			encodedPath, _ := n.getEncodedPath()
-			return true, NewTaskNotInvalidatedErrorWithDetails("pure", TaskNotInvalidatedDetails{
-				TaskType:             registrableTask.fqType(),
-				TaskTypeID:           registrableTask.taskTypeID,
-				Archetype:            archetype,
-				ArchetypeID:          archetypeID,
-				ComponentPath:        n.path(),
-				EncodedComponentPath: encodedPath,
-				TaskAttributes:       taskAttributes,
-			})
-		}
+	if taskAttributes.IsImmediate() {
+		return true, nil
 	}
 
+	// A scheduled pure task must be invalidated by its own successful execution, otherwise
+	// the logical task stays in the tree with no physical task left to drive it. The metric
+	// is always emitted so the condition can be observed before DLQ-ing is enabled.
+	dlqEnabled := n.backend.ChasmDLQScheduledPureTaskOnValidationEnabled()
+	valid, err = n.validateTask(validationContext, TaskInvocation{TaskAttributes: taskAttributes}, taskInstance)
+	if err != nil {
+		if dlqEnabled {
+			return true, err
+		}
+		n.logger.Warn("chasm: failed to validate pure task after successful execution", tag.Error(err))
+		return true, nil
+	}
+	if !valid {
+		return true, nil
+	}
+
+	metrics.ChasmPureTaskNotInvalidated.With(metricsHandler).Record(1, chasmTaskTypeTag)
+
+	archetypeID := n.ArchetypeID()
+	archetype, _ := n.registry.ArchetypeDisplayName(archetypeID)
+	encodedPath, _ := n.getEncodedPath()
+	notInvalidatedErr := NewTaskNotInvalidatedErrorWithDetails("pure", TaskNotInvalidatedDetails{
+		TaskType:             registrableTask.fqType(),
+		TaskTypeID:           registrableTask.taskTypeID,
+		Archetype:            archetype,
+		ArchetypeID:          archetypeID,
+		ComponentPath:        n.path(),
+		EncodedComponentPath: encodedPath,
+		TaskAttributes:       taskAttributes,
+	})
+	if dlqEnabled {
+		return true, notInvalidatedErr
+	}
+
+	workflowKey := n.backend.GetWorkflowKey()
+	n.logger.Warn(notInvalidatedErr.Error(), append([]tag.Tag{
+		tag.WorkflowNamespaceID(workflowKey.NamespaceID),
+		tag.WorkflowID(workflowKey.WorkflowID),
+		tag.WorkflowRunID(workflowKey.RunID),
+	}, notInvalidatedErr.LogTags()...)...)
 	return true, nil
 }
 
@@ -4109,7 +4132,17 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 
 	// state change
 	n.backend.RecordTimeSkippingTransition(transition)
-	return n.regenerateTimerTasksForTimeSkipping()
+	n.logger.Info("CHASM time skipping transition recorded",
+		tag.ArchetypeID(n.ArchetypeID()),
+		tag.Time("currentTime", transition.CurrentTime),
+		tag.Time("targetTime", transition.GetTargetTime()),
+		tag.Duration("skippedDuration", transition.GetSkippedDuration()),
+		tag.Bool("disabledAfterFastForward", transition.DisabledAfterFastForward),
+	)
+	if transition.GetSkippedDuration() > 0 {
+		return n.regenerateTimerTasksForTimeSkipping()
+	}
+	return nil
 }
 
 func (n *Node) regenerateTimerTasksForTimeSkipping() error {
