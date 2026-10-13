@@ -273,10 +273,6 @@ func (p *executionRateLimitedPersistenceClient) GetHistoryBranchUtil() HistoryBr
 	return p.persistence.GetHistoryBranchUtil()
 }
 
-func (p *executionRateLimitedPersistenceClient) SupportsCheckRunAlreadyExists() bool {
-	return p.persistence.SupportsCheckRunAlreadyExists()
-}
-
 func (p *executionRateLimitedPersistenceClient) CreateWorkflowExecution(
 	ctx context.Context,
 	request *CreateWorkflowExecutionRequest,

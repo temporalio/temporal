@@ -66,7 +66,6 @@ func (m *SqlStore) txExecute(ctx context.Context, operation string, f func(tx sq
 		case *persistence.ConditionFailedError,
 			*persistence.CurrentWorkflowConditionFailedError,
 			*persistence.WorkflowConditionFailedError,
-			*persistence.WorkflowRunAlreadyExistsError,
 			*serviceerror.NamespaceAlreadyExists,
 			*persistence.ShardOwnershipLostError,
 			*serviceerror.Unavailable,

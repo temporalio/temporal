@@ -114,14 +114,6 @@ func NewStarter(
 	derivedRunID := allowDerivedRunID &&
 		shardContext.GetConfig().EnableCrossRunRequestIDDedup(namespaceEntry.Name().String()) &&
 		request.StartRequest.GetRequestId() != ""
-	if executionManager := shardContext.GetExecutionManager(); derivedRunID && !executionManager.SupportsCheckRunAlreadyExists() {
-		shardContext.GetThrottledLogger().Warn(
-			"EnableCrossRunRequestIDDedup is ignored: the execution store does not support CheckRunAlreadyExists",
-			tag.WorkflowNamespace(namespaceEntry.Name().String()),
-			tag.NewStringTag("store", executionManager.GetName()),
-		)
-		derivedRunID = false
-	}
 
 	return &Starter{
 		// metricsHandler is lazily created when needed in Starter.getMetricsHandler
