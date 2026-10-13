@@ -517,6 +517,10 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		if retErr != nil || retPM == nil {
 			return
 		}
+		// Runs after the deferred partitionsLock.Unlock below, so Start is outside the lock.
+		if retCreated {
+			retPM.Start()
+		}
 		if retErr = retPM.WaitUntilInitialized(ctx); retErr != nil {
 			e.unloadTaskQueuePartition(retPM, unloadCauseInitError)
 		}
@@ -543,32 +547,27 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 
 	// If it gets here, write lock and check again in case a task queue is created between the two locks
 	e.partitionsLock.Lock()
+	defer e.partitionsLock.Unlock()
 	pm, ok = e.partitions[key]
 	if ok {
-		e.partitionsLock.Unlock()
 		return pm, false, nil
 	}
 
 	// Building under the lock is cheap, and reading the namespace here sees any failover or deletion
 	// whose onNamespaceStateChange scan already ran, since the registry updates its cache before it
-	// invokes callbacks.
+	// invokes callbacks (see TestCallbackSeesUpdatedCache in nsregistry).
 	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByIDWithOptions(
 		namespaceID,
 		namespace.GetNamespaceOptions{DisableReadthrough: true},
 	)
 	if err != nil {
-		e.partitionsLock.Unlock()
 		return nil, false, err
 	}
 	newPM, err := e.buildTaskQueuePartitionManager(namespaceEntry, partition, loadCause)
 	if err != nil {
-		e.partitionsLock.Unlock()
 		return nil, false, err
 	}
 	e.partitions[key] = newPM
-	e.partitionsLock.Unlock()
-
-	newPM.Start()
 	return newPM, true, nil
 }
 
