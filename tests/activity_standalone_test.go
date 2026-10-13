@@ -126,10 +126,12 @@ func (s *standaloneActivityTestSuite) newTestEnv(opts ...testcore.TestOption) *s
 	return env
 }
 
-func (s *standaloneActivityTestSuite) TestLastWorkerPrincipalIsPersisted() {
+func (s *standaloneActivityTestSuite) TestLastWorkerIdentityAndPrincipalArePersisted() {
 	const (
-		principalType = "jwt"
-		principalName = "worker-subject"
+		principalType        = "jwt"
+		pollPrincipalName    = "poll-worker-subject"
+		respondPrincipalName = "respond-worker-subject"
+		respondIdentity      = "respond-worker-identity"
 	)
 
 	env := s.newTestEnv(
@@ -140,12 +142,20 @@ func (s *standaloneActivityTestSuite) TestLastWorkerPrincipalIsPersisted() {
 
 	env.SetOnGetClaims(func(*authorization.AuthInfo) (*authorization.Claims, error) {
 		return &authorization.Claims{
-			Subject:  principalName,
+			Subject:  "test-subject",
 			AuthType: principalType,
 			System:   authorization.RoleAdmin,
 		}, nil
 	})
-	env.SetOnAuthorize(func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error) {
+	env.SetOnAuthorize(func(_ context.Context, _ *authorization.Claims, target *authorization.CallTarget) (authorization.Result, error) {
+		principalName := "client-subject"
+		switch target.APIName {
+		case "/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":
+			principalName = pollPrincipalName
+		case "/temporal.api.workflowservice.v1.WorkflowService/RespondActivityTaskCompleted":
+			principalName = respondPrincipalName
+		default:
+		}
 		return authorization.Result{
 			Decision: authorization.DecisionAllow,
 			Principal: &commonpb.Principal{
@@ -160,35 +170,48 @@ func (s *standaloneActivityTestSuite) TestLastWorkerPrincipalIsPersisted() {
 	startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
 	pollTaskResp := env.pollActivityTaskAndValidate(s.Context(), t, activityID, taskQueue, startResp.RunId)
 
-	_, err := env.FrontendClient().RespondActivityTaskCompleted(s.Context(), &workflowservice.RespondActivityTaskCompletedRequest{
-		Namespace: env.Namespace().String(),
-		TaskToken: pollTaskResp.TaskToken,
-		Result:    defaultResult,
-		Identity:  defaultIdentity,
-	})
-	require.NoError(t, err)
-
 	shardID := common.WorkflowIDToHistoryShard(
 		env.NamespaceID().String(),
 		activityID,
 		env.GetTestClusterConfig().HistoryConfig.NumHistoryShards,
 	)
-	persistedExecution, err := env.GetTestCluster().ExecutionManager().GetWorkflowExecution(s.Context(), &persistence.GetWorkflowExecutionRequest{
-		ShardID:     shardID,
-		NamespaceID: env.NamespaceID().String(),
-		WorkflowID:  activityID,
-		RunID:       startResp.RunId,
-		ArchetypeID: activity.ArchetypeID,
+	loadLastAttempt := func() *activitystatepb.ActivityAttemptState {
+		persistedExecution, err := env.GetTestCluster().ExecutionManager().GetWorkflowExecution(s.Context(), &persistence.GetWorkflowExecutionRequest{
+			ShardID:     shardID,
+			NamespaceID: env.NamespaceID().String(),
+			WorkflowID:  activityID,
+			RunID:       startResp.RunId,
+			ArchetypeID: activity.ArchetypeID,
+		})
+		require.NoError(t, err)
+
+		attemptNode := persistedExecution.State.ChasmNodes["LastAttempt"]
+		require.NotNil(t, attemptNode)
+		attemptState := &activitystatepb.ActivityAttemptState{}
+		require.NoError(t, serialization.Decode(attemptNode.Data, attemptState))
+		return attemptState
+	}
+
+	attemptState := loadLastAttempt()
+	require.Equal(t, env.Tv().WorkerIdentity(), attemptState.GetLastWorkerIdentity())
+	protorequire.ProtoEqual(t, &commonpb.Principal{
+		Type: principalType,
+		Name: pollPrincipalName,
+	}, attemptState.GetLastWorkerPrincipal())
+
+	_, err := env.FrontendClient().RespondActivityTaskCompleted(s.Context(), &workflowservice.RespondActivityTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
+		TaskToken: pollTaskResp.TaskToken,
+		Result:    defaultResult,
+		Identity:  respondIdentity,
 	})
 	require.NoError(t, err)
 
-	attemptNode := persistedExecution.State.ChasmNodes["LastAttempt"]
-	require.NotNil(t, attemptNode)
-	attemptState := &activitystatepb.ActivityAttemptState{}
-	require.NoError(t, serialization.Decode(attemptNode.Data, attemptState))
+	attemptState = loadLastAttempt()
+	require.Equal(t, respondIdentity, attemptState.GetLastWorkerIdentity())
 	protorequire.ProtoEqual(t, &commonpb.Principal{
 		Type: principalType,
-		Name: principalName,
+		Name: respondPrincipalName,
 	}, attemptState.GetLastWorkerPrincipal())
 }
 

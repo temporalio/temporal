@@ -246,6 +246,7 @@ func (a *Activity) HandleStarted(ctx chasm.MutableContext, request *historyservi
 		}
 		return nil, err
 	}
+	a.recordLastWorker(ctx, request.GetPollRequest().GetIdentity())
 	if dispatchTime := a.dispatchTimeForAttempt(lastAttempt); dispatchTime != nil {
 		metrics.TaskScheduleToStartLatency.With(a.taskScheduleToStartMetricsHandler(ctx)).Record(
 			lastAttempt.GetStartedTime().AsTime().Sub(dispatchTime.AsTime()),
@@ -470,7 +471,7 @@ func (a *Activity) HandleCompleted(
 	}); err != nil {
 		return nil, err
 	}
-	a.recordLastWorkerPrincipal(ctx)
+	a.recordLastWorker(ctx, event.Request.GetCompleteRequest().GetIdentity())
 
 	return &historyservice.RespondActivityTaskCompletedResponse{}, nil
 }
@@ -510,7 +511,7 @@ func (a *Activity) HandleFailed(
 	}
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
 		a.emitOnAttemptFailedMetrics(ctx, enrichedHandler)
-		a.recordLastWorkerPrincipal(ctx)
+		a.recordLastWorker(ctx, failedRequest.GetIdentity())
 
 		return &historyservice.RespondActivityTaskFailedResponse{}, nil
 	}
@@ -523,7 +524,7 @@ func (a *Activity) HandleFailed(
 	}); err != nil {
 		return nil, err
 	}
-	a.recordLastWorkerPrincipal(ctx)
+	a.recordLastWorker(ctx, failedRequest.GetIdentity())
 
 	return &historyservice.RespondActivityTaskFailedResponse{}, nil
 }
@@ -549,15 +550,18 @@ func (a *Activity) HandleCanceled(
 	}); err != nil {
 		return nil, err
 	}
-	a.recordLastWorkerPrincipal(ctx)
+	a.recordLastWorker(ctx, event.Request.GetCancelRequest().GetIdentity())
 
 	return &historyservice.RespondActivityTaskCanceledResponse{}, nil
 }
 
-func (a *Activity) recordLastWorkerPrincipal(
+func (a *Activity) recordLastWorker(
 	ctx chasm.MutableContext,
+	identity string,
 ) {
-	a.LastAttempt.Get(ctx).LastWorkerPrincipal = requestPrincipal(ctx)
+	attempt := a.LastAttempt.Get(ctx)
+	attempt.LastWorkerIdentity = identity
+	attempt.LastWorkerPrincipal = requestPrincipal(ctx)
 }
 
 func requestPrincipal(ctx chasm.Context) *commonpb.Principal {
