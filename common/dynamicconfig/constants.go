@@ -3240,6 +3240,14 @@ time (mirrors gRPC MaxConnectionAge's +/-10% jitter). Values outside [0, 1] are 
 		false,
 		`If true, validate the start time of the old workflow is older than WorkflowIdReuseMinimalInterval when reusing workflow ID.`,
 	)
+	EnableResetWorkflowRequestIDDeduplication = NewNamespaceBoolSetting(
+		"history.enableResetWorkflowRequestIdDeduplication",
+		true,
+		`If true, the run created by ResetWorkflowExecution is tagged with the reset request's ID, so a retry
+with the same request ID returns the existing reset run instead of creating another one. If false, the
+reset run inherits the request ID of the original run's start. This config exists to safely rollback to the old 
+behavior, and will be removed in the future.`,
+	)
 	EnableSignalWithStartRequestIDDeduplication = NewNamespaceBoolSetting(
 		"history.enableSignalWithStartRequestIdDeduplication",
 		true,

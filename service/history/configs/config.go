@@ -450,6 +450,7 @@ type Config struct {
 	BusinessIDReuseLimiterCacheSize          dynamicconfig.IntPropertyFn
 	BusinessIDReuseLimiterCacheTTL           dynamicconfig.DurationPropertyFn
 
+	EnableResetWorkflowRequestIDDeduplication   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableSignalWithStartRequestIDDeduplication dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	HealthCheckHistoryGRPCSettings      dynamicconfig.TypedPropertyFn[health.Settings]
@@ -878,6 +879,7 @@ func NewConfig(
 		BusinessIDReuseLimiterCacheSize:          dynamicconfig.BusinessIDReuseLimiterCacheSize.Get(dc),
 		BusinessIDReuseLimiterCacheTTL:           dynamicconfig.BusinessIDReuseLimiterCacheTTL.Get(dc),
 
+		EnableResetWorkflowRequestIDDeduplication:   dynamicconfig.EnableResetWorkflowRequestIDDeduplication.Get(dc),
 		EnableSignalWithStartRequestIDDeduplication: dynamicconfig.EnableSignalWithStartRequestIDDeduplication.Get(dc),
 
 		HealthCheckHistoryGRPCSettings:      dynamicconfig.HealthCheckHistoryGRPCSettings.Get(dc),
