@@ -116,7 +116,7 @@ func TestQueryConverter_Convert(t *testing.T) {
 			// applied and SeenNamespaceDivision() is expected to be true.
 			name:                  "success group by TemporalNamespaceDivision suppresses default filter",
 			in:                    "group by TemporalNamespaceDivision",
-			mockBuildFinalAndExpr: true,
+			mockBuildFinalAndExpr: false,
 			mockBuildFinalAndRes:  nil,
 		},
 
@@ -158,19 +158,17 @@ func TestQueryConverter_Convert(t *testing.T) {
 					Return(e2, nil)
 				storeQCMock.EXPECT().BuildAndExpr(e1, e2).Return(e1e2, nil)
 			},
-			mockBuildFinalAndExpr: true,
-			mockBuildFinalAndRes: &sqlparser.ParenExpr{
-				Expr: &sqlparser.AndExpr{
-					Left: &sqlparser.ComparisonExpr{
-						Operator: sqlparser.EqualStr,
-						Left:     keywordCol,
-						Right:    NewUnsafeSQLString("foo"),
-					},
-					Right: &sqlparser.ComparisonExpr{
-						Operator: sqlparser.EqualStr,
-						Left:     NamespaceDivisionSAColumn(),
-						Right:    NewUnsafeSQLString("bar"),
-					},
+			mockBuildFinalAndExpr: false,
+			mockBuildFinalAndRes: &sqlparser.AndExpr{
+				Left: &sqlparser.ComparisonExpr{
+					Operator: sqlparser.EqualStr,
+					Left:     keywordCol,
+					Right:    NewUnsafeSQLString("foo"),
+				},
+				Right: &sqlparser.ComparisonExpr{
+					Operator: sqlparser.EqualStr,
+					Left:     NamespaceDivisionSAColumn(),
+					Right:    NewUnsafeSQLString("bar"),
 				},
 			},
 		},
@@ -272,6 +270,88 @@ func TestQueryConverter_Convert(t *testing.T) {
 					r.True(queryConverter.SeenNamespaceDivision())
 				}
 			}
+		})
+	}
+}
+
+// TestQueryConverter_Convert_DisableDefaultNamespaceDivision covers
+// WithDisableDefaultNamespaceDivision, used by queries that span all namespaces (admin
+// visibility APIs) and must not be narrowed to the default namespace division. The store
+// converter mocks have no expectation for ConvertIsExpr/BuildAndExpr, so gomock fails the
+// test if the default filter is built or applied.
+func TestQueryConverter_Convert_DisableDefaultNamespaceDivision(t *testing.T) {
+	t.Parallel()
+
+	keywordCol := NewSAColumn(
+		"AliasForKeyword01",
+		"Keyword01",
+		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+	)
+	keywordExpr := &sqlparser.ComparisonExpr{
+		Operator: sqlparser.EqualStr,
+		Left:     keywordCol,
+		Right:    NewUnsafeSQLString("foo"),
+	}
+	nsDivisionExpr := &sqlparser.ComparisonExpr{
+		Operator: sqlparser.EqualStr,
+		Left:     NamespaceDivisionSAColumn(),
+		Right:    NewUnsafeSQLString("bar"),
+	}
+
+	testCases := []struct {
+		name                  string
+		in                    string
+		setupMocks            func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr])
+		out                   sqlparser.Expr
+		seenNamespaceDivision bool
+	}{
+		{
+			name: "success empty",
+			in:   "",
+			out:  nil,
+		},
+
+		{
+			name: "success query is not wrapped",
+			in:   "AliasForKeyword01 = 'foo'",
+			setupMocks: func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr]) {
+				storeQCMock.EXPECT().
+					ConvertKeywordComparisonExpr(sqlparser.EqualStr, keywordCol, "foo").
+					Return(keywordExpr, nil)
+			},
+			out: keywordExpr,
+		},
+
+		{
+			// An explicit namespace division filter is still honored.
+			name: "success explicit namespace division",
+			in:   "TemporalNamespaceDivision = 'bar'",
+			setupMocks: func(storeQCMock *MockStoreQueryConverter[sqlparser.Expr]) {
+				storeQCMock.EXPECT().
+					ConvertKeywordComparisonExpr(sqlparser.EqualStr, NamespaceDivisionSAColumn(), "bar").
+					Return(nsDivisionExpr, nil)
+			},
+			out:                   nsDivisionExpr,
+			seenNamespaceDivision: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			ctrl := gomock.NewController(t)
+			storeQCMock := NewMockStoreQueryConverter[sqlparser.Expr](ctrl)
+			queryConverter := newTestQueryConverter(storeQCMock).
+				WithDisableDefaultNamespaceDivision()
+
+			if tc.setupMocks != nil {
+				tc.setupMocks(storeQCMock)
+			}
+
+			out, err := queryConverter.Convert(tc.in)
+			r.NoError(err)
+			r.Equal(tc.out, out.QueryExpr)
+			r.Equal(tc.seenNamespaceDivision, queryConverter.SeenNamespaceDivision())
 		})
 	}
 }
@@ -2445,6 +2525,8 @@ func TestQueryConverter_FieldNameFilterMetric(t *testing.T) {
 		customSAs map[string]enumspb.IndexedValueType
 		// saMapper overrides the search attribute mapper. Defaults to searchattribute.TestMapper.
 		saMapper searchattribute.Mapper
+		// nilSAMapper installs a nil search attribute mapper, overriding saMapper.
+		nilSAMapper bool
 		// count is the expected number of times the field name counter was recorded. It's
 		// recorded at most once per query, and only if the query is converted successfully.
 		count int
@@ -2636,6 +2718,49 @@ func TestQueryConverter_FieldNameFilterMetric(t *testing.T) {
 			count:    0,
 		},
 
+		// Without a search attribute mapper, custom search attributes can only be referenced by
+		// their field names, and a preallocated field name is always counted.
+		{
+			name:        "field name of custom search attribute without mapper",
+			query:       "Keyword01 = 'foo'",
+			nilSAMapper: true,
+			count:       1,
+		},
+		{
+			name:        "multiple field names without mapper",
+			query:       "Keyword01 = 'foo' and Int01 > 1 order by Double01",
+			nilSAMapper: true,
+			count:       1,
+		},
+		{
+			// Aliases can't be resolved without a mapper, so the query is rejected.
+			name:        "alias of custom search attribute without mapper",
+			query:       "AliasForKeyword01 = 'foo'",
+			nilSAMapper: true,
+			count:       0,
+			err:         InvalidSearchAttribute,
+		},
+		{
+			name:        "system search attribute without mapper",
+			query:       "WorkflowId = 'foo'",
+			nilSAMapper: true,
+			count:       0,
+		},
+		{
+			name:        "self-mapped custom search attribute without mapper",
+			query:       "CustomKeywordField = 'foo'",
+			customSAs:   map[string]enumspb.IndexedValueType{"CustomKeywordField": enumspb.INDEXED_VALUE_TYPE_KEYWORD},
+			nilSAMapper: true,
+			count:       0,
+		},
+		{
+			name:        "preallocated shape with mismatched type without mapper",
+			query:       "Keyword01 = 'foo'",
+			customSAs:   map[string]enumspb.IndexedValueType{"Keyword01": enumspb.INDEXED_VALUE_TYPE_TEXT},
+			nilSAMapper: true,
+			count:       0,
+		},
+
 		// A raw CHASM field name resolves by stripping the Temporal prefix, so alias != field
 		// name; it is recognised via the CHASM mapper's type map instead.
 		{
@@ -2701,6 +2826,9 @@ func TestQueryConverter_FieldNameFilterMetric(t *testing.T) {
 			var saMapper searchattribute.Mapper = &searchattribute.TestMapper{}
 			if tc.saMapper != nil {
 				saMapper = tc.saMapper
+			}
+			if tc.nilSAMapper {
+				saMapper = nil
 			}
 			queryConverter := NewNilQueryConverter(
 				testNamespaceName,

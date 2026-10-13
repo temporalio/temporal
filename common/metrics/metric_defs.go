@@ -305,6 +305,10 @@ const (
 	VisibilityPersistenceGetWorkflowExecutionScope = "GetWorkflowExecution"
 	// VisibilityPersistenceAddSearchAttributesScope tracks AddSearchAttributes calls made by service to visibility persistence layer
 	VisibilityPersistenceAddSearchAttributesScope = "AddSearchAttributes"
+	// VisibilityPersistenceListExecutionsScope tracks ListExecutions calls made by service to visibility persistence layer
+	VisibilityPersistenceListExecutionsScope = "ListExecutions"
+	// VisibilityPersistenceCountExecutionsScope tracks CountExecutions calls made by service to visibility persistence layer
+	VisibilityPersistenceCountExecutionsScope = "CountExecutions"
 )
 
 // Common
@@ -945,6 +949,11 @@ var (
 	ChasmPureTaskErrors = NewCounterDef(
 		"chasm_pure_task_errors",
 		WithDescription("The number of errors during CHASM pure task execution."),
+	)
+	ChasmPureTaskNotInvalidated = NewCounterDef(
+		"chasm_pure_task_not_invalidated",
+		WithDescription("The number of scheduled CHASM pure tasks that remained valid after successful execution. "+
+			"Such tasks are sent to DLQ only when history.chasmDLQScheduledPureTaskOnValidation is enabled."),
 	)
 	ChasmLogicalTaskCount = NewDimensionlessHistogramDef(
 		"chasm_logical_task_count",
