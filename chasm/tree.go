@@ -3971,13 +3971,26 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 		return nil
 	}
 	transition := n.defaultFindNextTargetTime()
-	if !transition.IsValid() {
+	if transition == nil || !transition.IsValid() {
 		return nil
 	}
 
 	// state change
 	n.backend.RecordTimeSkippingTransition(transition)
-	return n.regenerateTimerTasksForTimeSkipping()
+	if err := n.regenerateTimerTasksForTimeSkipping(); err != nil {
+		return err
+	}
+	if !transition.GetTargetTime().IsZero() {
+		n.logger.Info(
+			"CHASM execution skipped time",
+			tag.ArchetypeID(n.ArchetypeID()),
+			tag.Time("time-skipping-current-time", transition.CurrentTime),
+			tag.Time("time-skipping-target-time", transition.GetTargetTime()),
+			tag.Duration("time-skipping-duration", transition.GetSkippedDuration()),
+			tag.Bool("time-skipping-disabled-after-fast-forward", transition.DisabledAfterFastForward),
+		)
+	}
+	return nil
 }
 
 func (n *Node) regenerateTimerTasksForTimeSkipping() error {
@@ -4044,7 +4057,14 @@ func (n *Node) defaultFindNextTargetTime() *TimeSkippingTransition {
 				}
 				scheduledTime := task.GetScheduledTime().AsTime()
 				if !scheduledTime.After(now) {
-					continue
+					// A due timer must execute or be invalidated before time can skip again.
+					n.logger.Debug(
+						"CHASM time skipping blocked by pending timer",
+						tag.ArchetypeID(n.ArchetypeID()),
+						tag.Time("time-skipping-current-time", now),
+						tag.Time("time-skipping-pending-timer-time", scheduledTime),
+					)
+					return nil
 				}
 				transition.TrackEarliestFutureTime(scheduledTime)
 			}

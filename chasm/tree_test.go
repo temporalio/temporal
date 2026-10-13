@@ -5665,13 +5665,42 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		s.Equal(0, s.nodeBackend.NumTasksAdded(), "no timer tasks are regenerated when skipping is gated out")
 	})
 
+	s.Run("GateSkippableButTimerDue_NoStateChange", func() {
+		root := gateRoot(true)
+		root.serializedNode.GetMetadata().GetComponentAttributes().GetPureTasks()[0].ScheduledTime =
+			timestamppb.New(baseTime)
+		var recorded *TimeSkippingTransition
+		s.nodeBackend.HandleRecordTimeSkippingTransition = func(tr *TimeSkippingTransition) { recorded = tr }
+		tl, ok := s.logger.(*testlogger.TestLogger)
+		s.Require().True(ok)
+		expectedLog := tl.Expect(
+			testlogger.Debug,
+			"CHASM time skipping blocked by pending timer",
+			tag.ArchetypeID(root.ArchetypeID()),
+		)
+
+		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+		s.NoError(err)
+		s.True(expectedLog.Matched())
+		s.Nil(recorded, "a nil transition must be handled as no time skip")
+		s.Equal(0, s.nodeBackend.NumTasksAdded(), "timer tasks are not regenerated when a timer is already due")
+	})
+
 	s.Run("GateSkippable_RecordsTransitionAndRegeneratesTasks", func() {
 		root := gateRoot(true)
 		var recorded *TimeSkippingTransition
 		s.nodeBackend.HandleRecordTimeSkippingTransition = func(tr *TimeSkippingTransition) { recorded = tr }
+		tl, ok := s.logger.(*testlogger.TestLogger)
+		s.Require().True(ok)
+		expectedLog := tl.Expect(
+			testlogger.Info,
+			"CHASM execution skipped time",
+			tag.ArchetypeID(root.ArchetypeID()),
+		)
 
 		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
 		s.NoError(err)
+		s.True(expectedLog.Matched())
 		s.Require().NotNil(recorded, "a skippable execution with a future timer must record a transition")
 		s.True(recorded.IsValid())
 		s.True(baseTime.Add(time.Hour).Equal(recorded.GetTargetTime()), "skips to the earliest future timer task")
@@ -5684,8 +5713,8 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 }
 
 // TestDefaultFindNextTargetTime covers the earliest-future-timer selection across the whole tree:
-// non-timer and past tasks are ignored, the earliest future timer wins, and an active fast-forward
-// caps (and disables) the skip when it is the earliest target.
+// due timers block another skip, non-timer tasks are ignored, the earliest future timer wins, and
+// an active fast-forward caps (and disables) the skip when it is the earliest target.
 func (s *nodeSuite) TestDefaultFindNextTargetTime() {
 	baseTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
 
@@ -5752,16 +5781,39 @@ func (s *nodeSuite) TestDefaultFindNextTargetTime() {
 		s.False(tr.DisabledAfterFastForward)
 	})
 
-	s.Run("PastAndNonTimerTasksIgnored", func() {
+	s.Run("NonTimerTasksIgnored", func() {
 		root := buildRoot(
-			[]*persistencespb.ChasmComponentAttributes_Task{timerTask(-time.Hour), transferTask()},
+			[]*persistencespb.ChasmComponentAttributes_Task{transferTask()},
 			[]*persistencespb.ChasmComponentAttributes_Task{timerTask(3 * time.Hour)},
 		)
 		tr := root.defaultFindNextTargetTime()
 		s.Require().NotNil(tr)
 		s.Equal(baseTime.Add(3*time.Hour), tr.GetTargetTime(),
-			"past timers and non-timer (transfer) tasks must not be skip targets")
+			"non-timer tasks must not be skip targets")
 	})
+
+	for _, test := range []struct {
+		name       string
+		sideEffect []*persistencespb.ChasmComponentAttributes_Task
+		pure       []*persistencespb.ChasmComponentAttributes_Task
+	}{
+		{
+			name:       "DuePureTimerBlocksFutureSideEffectTimer",
+			sideEffect: []*persistencespb.ChasmComponentAttributes_Task{timerTask(3 * time.Hour)},
+			pure:       []*persistencespb.ChasmComponentAttributes_Task{timerTask(0)},
+		},
+		{
+			name:       "OverdueSideEffectTimerBlocksFuturePureTimer",
+			sideEffect: []*persistencespb.ChasmComponentAttributes_Task{timerTask(-time.Hour)},
+			pure:       []*persistencespb.ChasmComponentAttributes_Task{timerTask(3 * time.Hour)},
+		},
+	} {
+		s.Run(test.name, func() {
+			root := buildRoot(test.sideEffect, test.pure)
+			tr := root.defaultFindNextTargetTime()
+			s.Nil(tr, "a due timer must execute before time skips again")
+		})
+	}
 
 	s.Run("EarlierFastForwardCapsAndDisables", func() {
 		root := buildRoot(nil, []*persistencespb.ChasmComponentAttributes_Task{timerTask(3 * time.Hour), transferTask()})
