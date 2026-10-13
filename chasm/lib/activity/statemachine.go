@@ -479,7 +479,6 @@ func (a *Activity) applyStarted(ctx chasm.MutableContext, request *historyservic
 		a.FirstAttemptStartedTime = attempt.GetStartedTime()
 	}
 	attempt.StartRequestId = request.GetRequestId()
-	attempt.LastWorkerIdentity = request.GetPollRequest().GetIdentity()
 	attempt.SdkName = ctx.RequestHeader(headers.ClientNameHeaderName)
 	attempt.SdkVersion = ctx.RequestHeader(headers.ClientVersionHeaderName)
 	if versionDirective := request.GetVersionDirective().GetDeploymentVersion(); versionDirective != nil {
@@ -527,7 +526,6 @@ func (a *Activity) applyCompleted(ctx chasm.MutableContext, event completeEvent)
 			}
 		}
 		attempt.CompleteTime = timestamppb.New(ctx.Now(a))
-		attempt.LastWorkerIdentity = req.GetIdentity()
 		outcome := a.Outcome.Get(ctx)
 		outcome.Variant = &activitypb.ActivityOutcome_Successful_{
 			Successful: &activitypb.ActivityOutcome_Successful{
@@ -548,9 +546,6 @@ func (a *Activity) applyFailed(ctx chasm.MutableContext, event failedEvent) erro
 	return a.StoreOrSelf(ctx).RecordCompleted(ctx, func(ctx chasm.MutableContext) error {
 		req := event.req.GetFailedRequest()
 		a.Outcome.Get(ctx).RetryState = event.retryState
-
-		attempt := a.LastAttempt.Get(ctx)
-		attempt.LastWorkerIdentity = req.GetIdentity()
 
 		// A worker may respond failed without a Failure. Synthesize a generic terminal failure so
 		// the closed activity still exposes a consumable outcome; otherwise PollActivityExecution
