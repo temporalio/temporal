@@ -2335,6 +2335,7 @@ func (p *testTaskGeneratorProvider) NewTaskGenerator(
 
 	return NewTaskGenerator(
 		shardContext.GetNamespaceRegistry(),
+		shardContext.ChasmRegistry(),
 		mutableState,
 		shardContext.GetConfig(),
 		shardContext.GetArchivalMetadata(),
