@@ -696,6 +696,7 @@ func NamespaceRateLimitInterceptorProvider(
 		configs.PollTaskAPISet,
 		serviceConfig.PollWaitForNamespaceRateLimitToken,
 		metricsHandler,
+		interceptor.WithResourceExhaustedRetryDelayFloor(serviceConfig.ResourceExhaustedRetryDelayFloor),
 	)
 }
 
