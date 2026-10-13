@@ -427,6 +427,44 @@ func (x *HeartbeatTimeoutTask) GetStamp() int32 {
 	return 0
 }
 
+// CancelCommandDispatchTask is a side-effect task that dispatches a cancel command to the worker
+// via the Nexus worker commands control queue.
+type CancelCommandDispatchTask struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *CancelCommandDispatchTask) Reset() {
+	*x = CancelCommandDispatchTask{}
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *CancelCommandDispatchTask) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CancelCommandDispatchTask) ProtoMessage() {}
+
+func (x *CancelCommandDispatchTask) ProtoReflect() protoreflect.Message {
+	mi := &file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CancelCommandDispatchTask.ProtoReflect.Descriptor instead.
+func (*CancelCommandDispatchTask) Descriptor() ([]byte, []int) {
+	return file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP(), []int{5}
+}
+
 var File_temporal_server_chasm_lib_activity_proto_v1_tasks_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc = "" +
@@ -443,7 +481,8 @@ const file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc = "" 
 	"\x17StartToCloseTimeoutTask\x12\x14\n" +
 	"\x05stamp\x18\x01 \x01(\x05R\x05stamp\",\n" +
 	"\x14HeartbeatTimeoutTask\x12\x14\n" +
-	"\x05stamp\x18\x01 \x01(\x05R\x05stamp*\x8c\x01\n" +
+	"\x05stamp\x18\x01 \x01(\x05R\x05stamp\"\x1b\n" +
+	"\x19CancelCommandDispatchTask*\x8c\x01\n" +
 	"\x0eDispatchReason\x12\x1f\n" +
 	"\x1bDISPATCH_REASON_UNSPECIFIED\x10\x00\x12\x1d\n" +
 	"\x19DISPATCH_REASON_IMMEDIATE\x10\x01\x12\x1f\n" +
@@ -474,7 +513,7 @@ func file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDescGZIP() 
 }
 
 var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_goTypes = []any{
 	(DispatchReason)(0),                // 0: temporal.server.chasm.lib.activity.proto.v1.DispatchReason
 	(StartDelayBucket)(0),              // 1: temporal.server.chasm.lib.activity.proto.v1.StartDelayBucket
@@ -483,6 +522,7 @@ var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_goTypes = []any
 	(*ScheduleToCloseTimeoutTask)(nil), // 4: temporal.server.chasm.lib.activity.proto.v1.ScheduleToCloseTimeoutTask
 	(*StartToCloseTimeoutTask)(nil),    // 5: temporal.server.chasm.lib.activity.proto.v1.StartToCloseTimeoutTask
 	(*HeartbeatTimeoutTask)(nil),       // 6: temporal.server.chasm.lib.activity.proto.v1.HeartbeatTimeoutTask
+	(*CancelCommandDispatchTask)(nil),  // 7: temporal.server.chasm.lib.activity.proto.v1.CancelCommandDispatchTask
 }
 var file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_depIdxs = []int32{
 	0, // 0: temporal.server.chasm.lib.activity.proto.v1.ActivityDispatchTask.dispatch_reason:type_name -> temporal.server.chasm.lib.activity.proto.v1.DispatchReason
@@ -505,7 +545,7 @@ func file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc), len(file_temporal_server_chasm_lib_activity_proto_v1_tasks_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   5,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
