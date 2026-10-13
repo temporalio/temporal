@@ -1466,8 +1466,7 @@ func (e *matchingEngineImpl) CancelOutstandingWorkerPollsPartition(
 	var cancelledCount int32
 	for _, worker := range request.GetWorkers() {
 		if worker.GetWorkerInstanceKey() != "" {
-			// Keep Put before CancelAll; poll registration uses the inverse order to avoid missed polls.
-			e.shutdownWorkers.Put(worker.GetWorkerInstanceKey(), struct{}{})
+			defer e.beginWorkerShutdown(worker.GetWorkerInstanceKey())()
 		}
 		cancelledCount += e.workerInstancePollers.CancelAll(worker.GetWorkerInstanceKey())
 	}

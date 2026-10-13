@@ -90,6 +90,10 @@ func TestWorkerShutdownMarkerLifetime(t *testing.T) {
 					return ctx.Err()
 				}
 			}).Times(tc.requests)
+			// Late root polls can finish initialization before fan-out completes.
+			rootPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
+			rootPM.EXPECT().LongPollExpirationInterval().Return(time.Minute).AnyTimes()
+			rootPM.EXPECT().PollTask(gomock.Any(), gomock.Any()).Return(availableTask, false, nil).AnyTimes()
 			fanOutEntered := make(chan struct{}, tc.requests)
 			fanOutRelease := make(chan struct{})
 			if tc.initErr != nil {
@@ -112,12 +116,12 @@ func TestWorkerShutdownMarkerLifetime(t *testing.T) {
 					}).Times(tc.requests)
 			}
 
-			checkPolls := func() {
+			checkPolls := func(partition tqid.Partition) {
 				t.Helper()
-				task, _, err := engine.pollTask(t.Context(), pollPartition, &pollMetadata{workerInstanceKey: "stopped-worker"})
+				task, _, err := engine.pollTask(t.Context(), partition, &pollMetadata{workerInstanceKey: "stopped-worker"})
 				require.ErrorIs(t, err, errNoTasks)
 				require.Nil(t, task)
-				task, _, err = engine.pollTask(t.Context(), pollPartition, &pollMetadata{workerInstanceKey: "live-worker"})
+				task, _, err = engine.pollTask(t.Context(), partition, &pollMetadata{workerInstanceKey: "live-worker"})
 				require.NoError(t, err)
 				require.Same(t, availableTask, task)
 			}
@@ -140,19 +144,98 @@ func TestWorkerShutdownMarkerLifetime(t *testing.T) {
 			for range tc.requests {
 				// Initialization and fan-out can each outlast the shutdown cache TTL.
 				timeSource.Advance(shutdownWorkersCacheTTL + time.Second)
-				checkPolls()
+				checkPolls(pollPartition)
 				await.Snd(t, initRelease, struct{}{})
 				if tc.initErr == nil {
 					await.Rcv(t, fanOutEntered)
 					timeSource.Advance(shutdownWorkersCacheTTL + time.Second)
-					checkPolls()
+					checkPolls(root)
 					await.Snd(t, fanOutRelease, struct{}{})
 				}
 				require.ErrorIs(t, await.Rcv(t, completed), tc.initErr)
-				checkPolls()
+				checkPolls(pollPartition)
 			}
 
 			// The last completed request starts a fresh TTL, even after an initialization error.
+			timeSource.Advance(shutdownWorkersCacheTTL - time.Second)
+			checkPolls(pollPartition)
+			timeSource.Advance(2 * time.Second)
+			task, _, err := engine.pollTask(t.Context(), pollPartition, &pollMetadata{workerInstanceKey: "stopped-worker"})
+			require.NoError(t, err)
+			require.Same(t, availableTask, task)
+		})
+	}
+}
+
+func TestWorkerShutdownPartitionMarkerLifetime(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		initErr error
+	}{
+		{name: "successful initialization"},
+		{name: "initialization failure", initErr: serviceerror.NewUnavailable("initialization failed")},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctrl := gomock.NewController(t)
+			tv := testvars.New(t)
+			timeSource := clock.NewEventTimeSource()
+			tq := tqid.UnsafeTaskQueueFamily(tv.NamespaceID().String(), tv.TaskQueue().GetName()).
+				TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+			loadingPartition, pollPartition := tq.NormalPartition(1), tq.NormalPartition(2)
+			loadingPM, pollPM := NewMocktaskQueuePartitionManager(ctrl), NewMocktaskQueuePartitionManager(ctrl)
+			pollPM.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
+			pollPM.EXPECT().LongPollExpirationInterval().Return(time.Minute).AnyTimes()
+			availableTask := &internalTask{}
+			pollPM.EXPECT().PollTask(gomock.Any(), gomock.Any()).Return(availableTask, false, nil).AnyTimes()
+			engine := &matchingEngineImpl{
+				logger:                log.NewNoopLogger(),
+				timeSource:            timeSource,
+				workerInstancePollers: workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
+				shutdownWorkers: cache.New(shutdownWorkersCacheMaxSize, &cache.Options{
+					TTL: shutdownWorkersCacheTTL, TimeSource: timeSource,
+				}),
+				partitions: map[tqid.PartitionKey]taskQueuePartitionManager{
+					loadingPartition.Key(): loadingPM, pollPartition.Key(): pollPM,
+				},
+			}
+			checkPolls := func() {
+				t.Helper()
+				task, _, err := engine.pollTask(t.Context(), pollPartition, &pollMetadata{workerInstanceKey: "stopped-worker"})
+				require.ErrorIs(t, err, errNoTasks)
+				require.Nil(t, task)
+				task, _, err = engine.pollTask(t.Context(), pollPartition, &pollMetadata{workerInstanceKey: "live-worker"})
+				require.NoError(t, err)
+				require.Same(t, availableTask, task)
+			}
+			// Poller-history cleanup waits for initialization after marking the worker.
+			loadingPM.EXPECT().WaitUntilInitialized(gomock.Any()).DoAndReturn(func(context.Context) error {
+				timeSource.Advance(shutdownWorkersCacheTTL + time.Second)
+				checkPolls()
+				return tc.initErr
+			})
+			if tc.initErr != nil {
+				loadingPM.EXPECT().Partition().Return(loadingPartition)
+				loadingPM.EXPECT().Stop(unloadCauseInitError)
+			} else {
+				loadingPM.EXPECT().RemovePoller(pollerIdentity(tv.WorkerIdentity()))
+			}
+			partitionProto := &taskqueuespb.TaskQueuePartition{
+				TaskQueue:     tq.Name(),
+				TaskQueueType: tq.TaskType(),
+				PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 1},
+			}
+			_, err := engine.CancelOutstandingWorkerPollsPartition(t.Context(), &matchingservice.CancelOutstandingWorkerPollsPartitionRequest{
+				NamespaceId:        tv.NamespaceID().String(),
+				TaskQueuePartition: partitionProto,
+				Partitions:         []*taskqueuespb.TaskQueuePartition{partitionProto},
+				Workers: []*matchingservice.CancelOutstandingWorkerPollsPartitionRequest_WorkerEntry{{
+					WorkerInstanceKey: "stopped-worker",
+					WorkerIdentity:    tv.WorkerIdentity(),
+				}},
+			})
+			require.NoError(t, err)
 			timeSource.Advance(shutdownWorkersCacheTTL - time.Second)
 			checkPolls()
 			timeSource.Advance(2 * time.Second)
