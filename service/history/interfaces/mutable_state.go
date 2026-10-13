@@ -421,9 +421,10 @@ type (
 		// Now returns the current time of the mutable state, which may be ahead of
 		// wall-clock time if time skipping has happened.
 		Now() time.Time
-		// ToRealTime converts a virtual timestamp from mutable state to wall-clock time,
-		// adjusting for accumulated skipped duration which may have happened.
-		ToRealTime(virtualTime time.Time) time.Time
+		// ToRealTimeWithCurrentOffset converts a virtual timestamp to wall-clock time using
+		// the current accumulated skipped duration. It cannot recover the wall-clock
+		// time at which a past virtual timestamp was generated.
+		ToRealTimeWithCurrentOffset(virtualTime time.Time) time.Time
 		AddWorkflowExecutionTimeSkippingTransitionedEvent(
 			ctx context.Context, targetTime time.Time, disabledAfterFastForward bool) (*historypb.HistoryEvent, error)
 		ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error

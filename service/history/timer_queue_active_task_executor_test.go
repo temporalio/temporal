@@ -2242,7 +2242,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestExecuteStateMachineTimerTask_Exe
 	).AnyTimes()
 	ms.EXPECT().HSM().Return(root).AnyTimes()
 	ms.EXPECT().Now().Return(s.now).AnyTimes()
-	ms.EXPECT().ToRealTime(gomock.Any()).DoAndReturn(func(t time.Time) time.Time { return t }).AnyTimes()
+	ms.EXPECT().ToRealTimeWithCurrentOffset(gomock.Any()).DoAndReturn(func(t time.Time) time.Time { return t }).AnyTimes()
 
 	_, err = dummy.MachineCollection(root).Add("dummy", dummy.NewDummy())
 	s.NoError(err)
@@ -2825,15 +2825,15 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_Heartbeat
 	s.Equal(enumspb.TIMEOUT_TYPE_HEARTBEAT, createdTask.(*tasks.ActivityTimeoutTask).TimeoutType)
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, scheduledEvent.GetEventId(), scheduledEvent.GetVersion())
-	// Attach time-skipping state to the persisted MS so ToRealTime sees a 1h offset
+	// Attach time-skipping state to the persisted MS so ToRealTimeWithCurrentOffset sees a 1h offset
 	// on reload. After load, pendingActivityTimerHeartbeats[id] is reset to the
-	// year-2000 sentinel by NewMutableStateFromDB, and ToRealTime(year 2000) = 1999-12-31 23:00.
+	// year-2000 sentinel by NewMutableStateFromDB, and ToRealTimeWithCurrentOffset(year 2000) = 1999-12-31 23:00.
 	persistenceMutableState.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 		Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
 		AccumulatedSkippedDuration: durationpb.New(time.Hour),
 	}
 
-	// 1999-12-31 23:30 — strictly between ToRealTime(year 2000) and year 2000.
+	// 1999-12-31 23:30 — strictly between ToRealTimeWithCurrentOffset(year 2000) and year 2000.
 	// Lands in the 1h window where the fix and the bug diverge.
 	heartbeatYear2000Reset := time.Unix(946684800, 0).UTC()
 	timerTask := &tasks.ActivityTimeoutTask{
@@ -2851,12 +2851,12 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_Heartbeat
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	// Dedup fires only with the ToRealTime fix; that's what makes
+	// Dedup fires only with the ToRealTimeWithCurrentOffset fix; that's what makes
 	// updateMutableState=true and forces an UpdateWorkflowExecution call.
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(tests.UpdateWorkflowExecutionResponse, nil)
 
 	resp := s.timerQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NoError(resp.ExecutionErr,
-		"dedup branch must fire under accumulated skip via ToRealTime(heartbeatTimeoutVis); without it the executor would short-circuit with errNoTimerFired")
+		"dedup branch must fire under accumulated skip via ToRealTimeWithCurrentOffset(heartbeatTimeoutVis); without it the executor would short-circuit with errNoTimerFired")
 }
