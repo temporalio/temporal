@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -8,6 +9,8 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/mock/gomock"
 )
 
@@ -128,6 +131,27 @@ func (s *MetricsSuite) TestSetDefaultPerUnitHistogramBoundaries() {
 		setDefaultPerUnitHistogramBoundaries(config)
 		s.Equal(test.expectResult, config.PerUnitHistogramBoundaries)
 	}
+}
+
+func TestPrometheusLabelCollisionSoftAssertion(t *testing.T) {
+	t.Parallel()
+
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+	expected := logger.Expect(testlogger.Error, "failed assertion: error in prometheus reporter",
+		tag.FailedAssertion, tag.String("error", "different label names"))
+	scope := NewScope(logger, &Config{
+		Prometheus: &PrometheusConfig{ListenAddress: "127.0.0.1:0"},
+	})
+	t.Cleanup(func() {
+		require.NoError(t, scope.(io.Closer).Close())
+	})
+
+	scope.Tagged(map[string]string{"outcome": "fired"}).Counter("test_counter").Inc(1)
+	scope.Tagged(map[string]string{"outcome": "skipped"}).Counter("test_counter").Inc(1)
+	require.False(t, expected.Matched())
+
+	scope.Tagged(map[string]string{"outcome": "invalidated", "reason": "closed"}).Counter("test_counter").Inc(1)
+	require.EqualValues(t, 1, expected.MatchCount())
 }
 
 func TestMetricsHandlerFromConfig(t *testing.T) {

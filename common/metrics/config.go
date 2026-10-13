@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	statsdreporter "go.temporal.io/server/common/metrics/tally/statsd"
+	"go.temporal.io/server/common/softassert"
 )
 
 type (
@@ -440,7 +441,7 @@ func newPrometheusScope(
 		prometheus.ConfigurationOptions{
 			Registry: prom.NewRegistry(),
 			OnError: func(err error) {
-				logger.Warn("error in prometheus reporter", tag.Error(err))
+				softassert.Fail(logger, "error in prometheus reporter", tag.Error(err))
 			},
 		},
 	)
