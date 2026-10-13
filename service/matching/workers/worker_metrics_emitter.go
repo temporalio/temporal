@@ -116,10 +116,24 @@ func emitWorkerConfigEvent(logger otellog.Logger, nsName namespace.Name, hb *wor
 			hostingEnvs = append(hostingEnvs, hostingEnvironmentTypeName(he.GetType()))
 		}
 	}
+	var plugins []string
+	for _, p := range hb.GetPlugins() {
+		plugins = append(plugins, p.GetName())
+	}
+	var drivers []string
+	for _, d := range hb.GetDrivers() {
+		drivers = append(drivers, d.GetType())
+	}
+	var startTime string
+	if st := hb.GetStartTime(); st != nil {
+		startTime = st.AsTime().UTC().Format("2006-01-02T15:04:05Z")
+	}
 	wideevents.Emit(logger, wideevents.WorkerConfigPayload{
 		Namespace:                 nsName.String(),
 		TaskQueue:                 hb.GetTaskQueue(),
 		WorkerInstanceKey:         hb.GetWorkerInstanceKey(),
+		WorkerIdentity:            hb.GetWorkerIdentity(),
+		StartTime:                 startTime,
 		SdkName:                   hb.GetSdkName(),
 		SdkVersion:                hb.GetSdkVersion(),
 		DeploymentName:            hb.GetDeploymentVersion().GetDeploymentName(),
@@ -128,6 +142,8 @@ func emitWorkerConfigEvent(logger otellog.Logger, nsName namespace.Name, hb *wor
 		HostingEnvironments:       hostingEnvs,
 		OS:                        osTag,
 		Architecture:              archTag,
+		Plugins:                   plugins,
+		Drivers:                   drivers,
 		WorkflowPollerAutoscaling: hb.GetWorkflowPollerInfo().GetIsAutoscaling(),
 		ActivityPollerAutoscaling: hb.GetActivityPollerInfo().GetIsAutoscaling(),
 		NexusPollerAutoscaling:    hb.GetNexusPollerInfo().GetIsAutoscaling(),
