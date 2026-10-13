@@ -231,6 +231,8 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 			nil,
 			nil,
 			s.mockResource.GetLogger(),
+			s.mockResource.GetThrottledLogger(),
+			metrics.NoopMetricsHandler,
 			s.mockResource.GetNamespaceRegistry(),
 			nil,
 			s.mockResource.GetSearchAttributesMapperProvider(),

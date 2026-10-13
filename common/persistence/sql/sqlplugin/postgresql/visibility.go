@@ -212,5 +212,6 @@ func (pdb *db) processRowFromDB(row *sqlplugin.VisibilityRow) error {
 	// need to trim the run ID, or otherwise the returned value will
 	// come with lots of trailing spaces, probably due to the CHAR(64) type
 	row.RunID = strings.TrimSpace(row.RunID)
+	row.NamespaceID = strings.TrimSpace(row.NamespaceID)
 	return nil
 }
