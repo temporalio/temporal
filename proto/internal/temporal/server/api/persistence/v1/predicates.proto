@@ -49,6 +49,9 @@ message NotPredicateAttributes {
 
 message NamespaceIdPredicateAttributes {
   repeated string namespace_ids = 1;
+  // Indexes into QueueState.namespace_id_table. The effective namespace set is the union of
+  // namespace_ids and the resolved indexes.
+  repeated int32 namespace_id_indexes = 2;
 }
 
 // Deprecated: see the deprecated task_type_predicate_attributes field on Predicate.
