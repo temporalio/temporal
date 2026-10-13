@@ -115,26 +115,28 @@ func TestHandleStarted(t *testing.T) {
 	startedTime := timestamppb.New(testTime.Add(-1 * time.Minute))
 
 	testCases := []struct {
-		name           string
-		activityStatus activitypb.ActivityExecutionStatus
-		attemptStamp   int32
-		requestStamp   int32
-		startRequestID string
-		requestID      string
-		attemptCount   int32
-		dispatchTime   *timestamppb.Timestamp
-		metricSamples  int
-		metricLatency  time.Duration
-		checkOutcome   func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error)
+		name             string
+		activityStatus   activitypb.ActivityExecutionStatus
+		attemptStamp     int32
+		requestStamp     int32
+		startRequestID   string
+		requestID        string
+		attemptCount     int32
+		dispatchTime     *timestamppb.Timestamp
+		metricSamples    int
+		metricLatency    time.Duration
+		expectLastWorker bool
+		checkOutcome     func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error)
 	}{
 		{
-			name:           "successful transition from scheduled",
-			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
-			attemptStamp:   testStamp,
-			requestStamp:   testStamp,
-			requestID:      testRequestID,
-			metricSamples:  1,
-			metricLatency:  30 * time.Second,
+			name:             "successful transition from scheduled",
+			activityStatus:   activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			attemptStamp:     testStamp,
+			requestStamp:     testStamp,
+			requestID:        testRequestID,
+			metricSamples:    1,
+			metricLatency:    30 * time.Second,
+			expectLastWorker: true,
 			checkOutcome: func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error) {
 				require.Equal(t, int32(1), response.Attempt)
 				require.NoError(t, err)
@@ -143,15 +145,16 @@ func TestHandleStarted(t *testing.T) {
 		{
 			// Latency is measured from the attempt's dispatch time, 10s ago, not from the schedule
 			// time 30s ago: a retry excludes the earlier attempts and the backoff between them.
-			name:           "successful transition from scheduled - retry attempt",
-			activityStatus: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
-			attemptStamp:   testStamp,
-			requestStamp:   testStamp,
-			requestID:      testRequestID,
-			attemptCount:   2,
-			dispatchTime:   timestamppb.New(testTime.Add(-10 * time.Second)),
-			metricSamples:  1,
-			metricLatency:  10 * time.Second,
+			name:             "successful transition from scheduled - retry attempt",
+			activityStatus:   activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			attemptStamp:     testStamp,
+			requestStamp:     testStamp,
+			requestID:        testRequestID,
+			attemptCount:     2,
+			dispatchTime:     timestamppb.New(testTime.Add(-10 * time.Second)),
+			metricSamples:    1,
+			metricLatency:    10 * time.Second,
+			expectLastWorker: true,
 			checkOutcome: func(t *testing.T, response *historyservice.RecordActivityTaskStartedResponse, err error) {
 				require.Equal(t, int32(2), response.Attempt)
 				require.NoError(t, err)
@@ -282,6 +285,7 @@ func TestHandleStarted(t *testing.T) {
 					}),
 				},
 			}
+			ctx.GoCtx = headers.SetPrincipal(ctx.GoCtx, &commonpb.Principal{Type: "jwt", Name: "poll-worker"})
 
 			// Setup activity state
 			attemptState := &activitypb.ActivityAttemptState{
@@ -330,12 +334,20 @@ func TestHandleStarted(t *testing.T) {
 			request := &historyservice.RecordActivityTaskStartedRequest{
 				Stamp:     tc.requestStamp,
 				RequestId: tc.requestID,
+				PollRequest: &workflowservice.PollActivityTaskQueueRequest{
+					Namespace: "test-namespace",
+					Identity:  "poll-worker-identity",
+				},
 			}
 
 			// Execute HandleStarted
 			response, err := activity.HandleStarted(ctx, request)
 
 			tc.checkOutcome(t, response, err)
+			if tc.expectLastWorker {
+				require.Equal(t, "poll-worker-identity", attemptState.GetLastWorkerIdentity())
+				protorequire.ProtoEqual(t, &commonpb.Principal{Type: "jwt", Name: "poll-worker"}, attemptState.GetLastWorkerPrincipal())
+			}
 			recordings := metricCapture.Snapshot()[metrics.TaskScheduleToStartLatency.Name()]
 			require.Len(t, recordings, tc.metricSamples)
 			if tc.metricSamples > 0 {
@@ -876,7 +888,7 @@ func newWorkerResponseTestActivity(
 	}
 }
 
-func TestHandleFailedRetryRecordsLastWorkerPrincipal(t *testing.T) {
+func TestHandleFailedRetryRecordsLastWorker(t *testing.T) {
 	ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED)
 	principal := &commonpb.Principal{Type: "jwt", Name: "worker-1"}
 	ctx.GoCtx = headers.SetPrincipal(ctx.GoCtx, principal)
@@ -885,6 +897,7 @@ func TestHandleFailedRetryRecordsLastWorkerPrincipal(t *testing.T) {
 		Request: &historyservice.RespondActivityTaskFailedRequest{
 			NamespaceId: token.GetNamespaceId(),
 			FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
+				Identity: "retry-worker-identity",
 				Failure: &failurepb.Failure{
 					FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
 						ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: "retryable"},
@@ -894,10 +907,11 @@ func TestHandleFailedRetryRecordsLastWorkerPrincipal(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
+	require.Equal(t, "retry-worker-identity", activity.LastAttempt.Get(ctx).GetLastWorkerIdentity())
 	protorequire.ProtoEqual(t, principal, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
 }
 
-func TestWorkerResponsesRecordLastWorkerPrincipal(t *testing.T) {
+func TestWorkerResponsesRecordLastWorker(t *testing.T) {
 	t.Run("completed", func(t *testing.T) {
 		ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED)
 		principal := &commonpb.Principal{Type: "jwt", Name: "completion-worker"}
@@ -906,10 +920,11 @@ func TestWorkerResponsesRecordLastWorkerPrincipal(t *testing.T) {
 			Token: token,
 			Request: &historyservice.RespondActivityTaskCompletedRequest{
 				NamespaceId:     token.GetNamespaceId(),
-				CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{},
+				CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{Identity: "completion-worker-identity"},
 			},
 		})
 		require.NoError(t, err)
+		require.Equal(t, "completion-worker-identity", activity.LastAttempt.Get(ctx).GetLastWorkerIdentity())
 		protorequire.ProtoEqual(t, principal, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
 	})
 
@@ -922,6 +937,7 @@ func TestWorkerResponsesRecordLastWorkerPrincipal(t *testing.T) {
 			Request: &historyservice.RespondActivityTaskFailedRequest{
 				NamespaceId: token.GetNamespaceId(),
 				FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
+					Identity: "failure-worker-identity",
 					Failure: &failurepb.Failure{
 						FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
 							ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: true},
@@ -931,6 +947,7 @@ func TestWorkerResponsesRecordLastWorkerPrincipal(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
+		require.Equal(t, "failure-worker-identity", activity.LastAttempt.Get(ctx).GetLastWorkerIdentity())
 		protorequire.ProtoEqual(t, principal, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
 	})
 
@@ -942,10 +959,11 @@ func TestWorkerResponsesRecordLastWorkerPrincipal(t *testing.T) {
 			Token: token,
 			Request: &historyservice.RespondActivityTaskCanceledRequest{
 				NamespaceId:   token.GetNamespaceId(),
-				CancelRequest: &workflowservice.RespondActivityTaskCanceledRequest{},
+				CancelRequest: &workflowservice.RespondActivityTaskCanceledRequest{Identity: "cancel-worker-identity"},
 			},
 		})
 		require.NoError(t, err)
+		require.Equal(t, "cancel-worker-identity", activity.LastAttempt.Get(ctx).GetLastWorkerIdentity())
 		protorequire.ProtoEqual(t, principal, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
 	})
 }
