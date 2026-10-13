@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
@@ -1079,6 +1080,40 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 			"run/execution timeouts must not be skip targets before the first workflow task")
 	})
 
+	for _, tc := range []struct {
+		name       string
+		targetName string
+		setTimeout func()
+	}{
+		{"RunTimeoutDueBeforeFirstWorkflowTask", "workflow run timeout", func() {
+			s.mutableState.executionInfo.WorkflowRunExpirationTime = timestamppb.New(baseTime)
+		}},
+		{"ExecutionTimeoutDueBeforeFirstWorkflowTask", "workflow execution timeout", func() {
+			s.mutableState.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(baseTime)
+		}},
+	} {
+		s.Run(tc.name, func() {
+			resetMS()
+			s.mutableState.executionInfo.LastCompletedWorkflowTaskStartedEventId = common.EmptyEventID
+			s.mutableState.executionInfo.WorkflowTaskScheduledEventId = common.EmptyEventID
+			s.mutableState.executionInfo.ExecutionTime = timestamppb.New(baseTime.Add(time.Hour))
+			tc.setTimeout()
+			tl := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
+			s.mutableState.logger = tl
+			capture := tl.StartCapture()
+
+			s.Nil(s.mutableState.findNextSkipTarget(), "a due timeout blocks skipping to workflow backoff")
+			capture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+				Level:   testlogger.Debug,
+				Message: "a pending task stops workflow time skipping in the current transaction",
+				Tags: map[string]any{
+					"pending-task-type":     tc.targetName,
+					"pending-task-deadline": baseTime,
+				},
+			})
+		})
+	}
+
 	s.Run("OneUserTimer_TargetIsTimer", func() {
 		resetMS()
 		t1 := baseTime.Add(2 * time.Hour)
@@ -1101,19 +1136,60 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 	})
 
 	for _, tc := range []struct {
-		name   string
-		expiry time.Time
+		name       string
+		targetName string
+		setPending func(time.Time)
 	}{
-		{name: "UserTimerDueNow_BlocksSkipping", expiry: baseTime},
-		{name: "UserTimerOverdue_BlocksSkipping", expiry: baseTime.Add(-time.Minute)},
+		{"UserTimer", "user timer", func(deadline time.Time) {
+			addTimer("due", deadline)
+		}},
+		{"ActivityRetry", "activity retry", func(deadline time.Time) {
+			s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
+				ScheduledEventId: 1,
+				HasRetryPolicy:   true,
+				Attempt:          2,
+				ScheduledTime:    timestamppb.New(deadline),
+			}
+		}},
+		{"WorkflowBackoff", "workflow backoff", func(deadline time.Time) {
+			s.mutableState.executionInfo.LastCompletedWorkflowTaskStartedEventId = common.EmptyEventID
+			s.mutableState.executionInfo.WorkflowTaskScheduledEventId = common.EmptyEventID
+			s.mutableState.executionInfo.StartTime = timestamppb.New(baseTime.Add(-2 * time.Hour))
+			s.mutableState.executionInfo.ExecutionTime = timestamppb.New(deadline)
+		}},
+		{"RunTimeout", "workflow run timeout", func(deadline time.Time) {
+			s.mutableState.executionInfo.WorkflowRunExpirationTime = timestamppb.New(deadline)
+		}},
+		{"ExecutionTimeout", "workflow execution timeout", func(deadline time.Time) {
+			s.mutableState.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(deadline)
+		}},
 	} {
-		s.Run(tc.name, func() {
-			resetMS()
-			addTimer("due", tc.expiry)
-			addTimer("future", baseTime.Add(time.Hour))
+		for _, deadline := range []struct {
+			name string
+			time time.Time
+		}{
+			{name: "DueNow", time: baseTime},
+			{name: "Overdue", time: baseTime.Add(-time.Minute)},
+		} {
+			s.Run(tc.name+deadline.name+"_BlocksSkipping", func() {
+				resetMS()
+				addTimer("future", baseTime.Add(time.Hour))
+				tc.setPending(deadline.time)
+				tl := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
+				s.mutableState.logger = tl
+				capture := tl.StartCapture()
 
-			s.Nil(s.mutableState.findNextSkipTarget(), "a pending due timer blocks skipping to a future timer")
-		})
+				s.Nil(s.mutableState.findNextSkipTarget(), "a pending due deadline blocks skipping to a future timer")
+				capture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+					Level:   testlogger.Debug,
+					Message: "a pending task stops workflow time skipping in the current transaction",
+					Tags: map[string]any{
+						"pending-task-type":     tc.targetName,
+						"pending-task-deadline": deadline.time,
+					},
+				})
+			})
+		}
 	}
 
 	s.Run("UserTimerAndEarlierFastForward_TargetIsFastForward", func() {

@@ -353,54 +353,59 @@ func (ms *MutableStateImpl) isWorkflowSkippable() bool {
 	return true
 }
 
-// findNextSkipTarget finds the next skip target from the pending timers, activity-retries,
-// workflow backoff timers, and workflow execution timeout, etc that those are skippable and scheduled in the future
-// it should only be called after isWorkflowSkippable returns true
+// findNextSkipTarget finds the earliest future deadline among pending timers, activity retries,
+// workflow backoff, execution timeouts, and fast-forward. An already-due pending deadline blocks
+// skipping until its task is processed. It should only be called after isWorkflowSkippable returns true.
 func (ms *MutableStateImpl) findNextSkipTarget() *chasm.TimeSkippingTransition {
-	now := ms.Now()
-	transition := chasm.NewTimeSkippingTransition(now)
+	transition := chasm.NewTimeSkippingTransition(ms.Now())
 	for _, timerInfo := range ms.GetPendingTimerInfos() {
-		expiryTime := timerInfo.ExpiryTime.AsTime()
-		if !expiryTime.After(now) {
+		if ms.trackFutureOrReportDueTask(transition, timerInfo.ExpiryTime.AsTime(), "user timer", true) {
 			return nil
 		}
-		transition.TrackEarliestFutureTime(expiryTime)
 	}
 
 	// Activities waiting out a retry backoff are skip targets: advance to the earliest
 	// next-attempt time.
 	for _, ai := range ms.GetPendingActivityInfos() {
-		if activityPendingRetry(ai) && ms.Now().Before(ai.GetScheduledTime().AsTime()) {
-			transition.TrackEarliestFutureTime(ai.ScheduledTime.AsTime())
+		if !activityPendingRetry(ai) {
+			continue
+		}
+		if ms.trackFutureOrReportDueTask(transition, ai.GetScheduledTime().AsTime(), "activity retry", true) {
+			return nil
 		}
 	}
-	if !ms.HadOrHasWorkflowTask() {
+	hadOrHasWorkflowTask := ms.HadOrHasWorkflowTask()
+	if !hadOrHasWorkflowTask {
 		// Support start-with-delay, cron, retry, and CaN-with-backoff: the workflow is
-		// waiting on a WorkflowBackoffTimerTask. Two extra checks are needed:
-		//   - ExecutionTime > StartTime: a backoff is actually configured (FirstWorkflowTaskBackoff > 0).
-		//     For child workflows, !HadOrHasWorkflowTask is also true between "start event applied"
-		//     and "ScheduleWorkflowTask API call" but no backoff exists, so ExecutionTime == StartTime.
-		//   - ExecutionTime > ms.Now(): the candidate is in the (virtual) future. Defends against
-		//     CaN-with-backoff that inherits accumulated > backoff — past candidates would produce
-		//     a negative delta in ApplyWorkflowExecutionTimeSkippingTransitionedEvent and decrement accumulated.
+		// waiting on a WorkflowBackoffTimerTask. ExecutionTime > StartTime means a backoff
+		// is configured. A child workflow can have no workflow task yet without a backoff;
+		// in that case ExecutionTime == StartTime.
 		executionTime := ms.executionInfo.GetExecutionTime().AsTime()
 		startTime := ms.executionInfo.GetStartTime().AsTime()
-		if executionTime.After(startTime) && executionTime.After(ms.Now()) {
-			transition.TrackEarliestFutureTime(executionTime)
+		if executionTime.After(startTime) {
+			if ms.trackFutureOrReportDueTask(transition, executionTime, "workflow backoff", true) {
+				return nil
+			}
 		}
 	}
-	if ms.HadOrHasWorkflowTask() {
-		// The run/execution timeout is a valid skip target, but only once the workflow has
-		// actually started executing (it has had a workflow task). For example, a freshly-created child has a
-		// brief window — start event applied, first workflow task not yet scheduled — where it
-		// looks idle with no timers. If the timeout were an unconditional target, the child would
-		// skip all the way to its run timeout before ever running its first task, so it never sets
-		// its internal timers.
-		if t := ms.executionInfo.GetWorkflowRunExpirationTime(); t != nil && !t.AsTime().IsZero() {
-			transition.TrackEarliestFutureTime(t.AsTime())
+	// A future run/execution timeout is a skip target only after the workflow has had a task.
+	// A due timeout blocks skipping even before then, while its timer task is pending.
+	for _, timeout := range []struct {
+		taskType string
+		time     *timestamppb.Timestamp
+	}{
+		{"workflow run timeout", ms.executionInfo.GetWorkflowRunExpirationTime()},
+		{"workflow execution timeout", ms.executionInfo.GetWorkflowExecutionExpirationTime()},
+	} {
+		if timeout.time == nil {
+			continue
 		}
-		if t := ms.executionInfo.GetWorkflowExecutionExpirationTime(); t != nil && !t.AsTime().IsZero() {
-			transition.TrackEarliestFutureTime(t.AsTime())
+		deadline := timeout.time.AsTime()
+		if deadline.IsZero() {
+			continue
+		}
+		if ms.trackFutureOrReportDueTask(transition, deadline, timeout.taskType, hadOrHasWorkflowTask) {
+			return nil
 		}
 	}
 
@@ -414,6 +419,28 @@ func (ms *MutableStateImpl) findNextSkipTarget() *chasm.TimeSkippingTransition {
 		return transition
 	}
 	return nil
+}
+
+// trackFutureOrReportDueTask reports whether a due task blocks skipping. It tracks a future
+// deadline when trackFuture is true. A timeout before the first workflow task is checked but not tracked.
+func (ms *MutableStateImpl) trackFutureOrReportDueTask(
+	transition *chasm.TimeSkippingTransition,
+	deadline time.Time,
+	targetName string,
+	trackFuture bool,
+) (hasDueTask bool) {
+	if !deadline.After(transition.CurrentTime) {
+		ms.logger.Debug("a pending task stops workflow time skipping in the current transaction",
+			tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
+			tag.WorkflowRunID(ms.GetExecutionState().RunId),
+			tag.String("pending-task-type", targetName),
+			tag.Time("pending-task-deadline", deadline))
+		return true
+	}
+	if trackFuture {
+		transition.TrackEarliestFutureTime(deadline)
+	}
+	return false
 }
 
 func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
