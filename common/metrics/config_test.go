@@ -3,11 +3,12 @@ package metrics
 import (
 	"fmt"
 	"io"
-	"net/http"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -207,19 +208,15 @@ func TestPrometheusReporterErrors(t *testing.T) {
 
 			require.Equal(t, int64(1), expected.MatchCount())
 
-			client := &http.Client{Timeout: time.Second}
 			await.Require(t.Context(), t, func(t *await.T) {
-				request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+address+"/metrics", nil)
-				require.NoError(t, err)
-				response, err := client.Do(request)
-				require.NoError(t, err)
-				body, err := io.ReadAll(response.Body)
-				require.NoError(t, response.Body.Close())
-				require.NoError(t, err)
-				require.Contains(t, string(body), fmt.Sprintf(`# HELP prometheus_metric_registration_conflicts prometheus_metric_registration_conflicts counter
+				require.NoError(t, testutil.ScrapeAndCompare(
+					"http://"+address+"/metrics",
+					strings.NewReader(fmt.Sprintf(`# HELP prometheus_metric_registration_conflicts prometheus_metric_registration_conflicts counter
 # TYPE prometheus_metric_registration_conflicts counter
 prometheus_metric_registration_conflicts %d
-`, tc.wantRegistrationConflicts))
+`, tc.wantRegistrationConflicts)),
+					"prometheus_metric_registration_conflicts",
+				))
 			}, 5*time.Second, 10*time.Millisecond)
 		})
 	}
