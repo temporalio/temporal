@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/mock/gomock"
@@ -135,37 +134,48 @@ func (s *MetricsSuite) TestSetDefaultPerUnitHistogramBoundaries() {
 	}
 }
 
-func TestPrometheusLabelCollisionSoftAssertion(t *testing.T) {
-	t.Parallel()
-
-	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
-	expected := logger.Expect(testlogger.Error, "failed assertion: error in prometheus reporter",
-		tag.FailedAssertion, tag.String("error", "different label names"))
-	scope := NewScope(logger, &Config{
-		Prometheus: &PrometheusConfig{ListenAddress: "127.0.0.1:0"},
-	})
-	t.Cleanup(func() {
-		require.NoError(t, scope.(io.Closer).Close())
-	})
-
-	scope.Tagged(map[string]string{"outcome": "fired"}).Counter("test_counter").Inc(1)
-	scope.Tagged(map[string]string{"outcome": "skipped"}).Counter("test_counter").Inc(1)
-	require.False(t, expected.Matched())
-
-	scope.Tagged(map[string]string{"outcome": "invalidated", "reason": "closed"}).Counter("test_counter").Inc(1)
-	require.EqualValues(t, 1, expected.MatchCount())
-}
-
-func TestPrometheusOtherErrorsWarning(t *testing.T) {
+func TestPrometheusReporterErrors(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
 		name    string
 		address string
-		tags    map[string]string
+		tags    []map[string]string
+		wantLog testlogger.CapturedLogPattern
 	}{
-		{name: "listener error", address: "127.0.0.1:65536"},
-		{name: "invalid label", address: "127.0.0.1:0", tags: map[string]string{"__reserved": "value"}},
+		{
+			name:    "label collision",
+			address: "127.0.0.1:0",
+			tags: []map[string]string{
+				{"outcome": "fired"},
+				{"outcome": "skipped"},
+				{"outcome": "invalidated", "reason": "closed"},
+			},
+			wantLog: testlogger.CapturedLogPattern{
+				Level:   testlogger.Error,
+				Message: "failed assertion: error in prometheus reporter",
+				Tags:    map[string]any{"failed-assertion": true, "error": testlogger.AnyTagValue},
+			},
+		},
+		{
+			name:    "listener error",
+			address: "127.0.0.1:65536",
+			wantLog: testlogger.CapturedLogPattern{
+				Level:   testlogger.Warn,
+				Message: "error in prometheus reporter",
+				Tags:    map[string]any{"error": testlogger.AnyTagValue},
+			},
+		},
+		{
+			name:    "invalid label",
+			address: "127.0.0.1:0",
+			tags:    []map[string]string{{"__reserved": "value"}},
+			wantLog: testlogger.CapturedLogPattern{
+				Level:   testlogger.Warn,
+				Message: "error in prometheus reporter",
+				Tags:    map[string]any{"error": testlogger.AnyTagValue},
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -180,11 +190,12 @@ func TestPrometheusOtherErrorsWarning(t *testing.T) {
 				require.NoError(t, scope.(io.Closer).Close())
 			})
 
-			scope.Tagged(tc.tags).Counter("test_counter").Inc(1)
+			for _, tags := range tc.tags {
+				scope.Tagged(tags).Counter("test_counter").Inc(1)
+			}
 			await.RequireTrue(t, func() bool { return len(capture.Snapshot()) > 0 }, time.Second, 10*time.Millisecond)
-			logs := capture.Snapshot()
-			require.Len(t, logs, 1)
-			require.Equal(t, testlogger.Warn, logs[0].Level)
+			require.Len(t, capture.Snapshot(), 1)
+			capture.RequireContains(t, tc.wantLog)
 		})
 	}
 }
