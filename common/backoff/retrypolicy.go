@@ -151,7 +151,7 @@ func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, num
 	}
 
 	nextInterval := float64(p.initialInterval) * math.Pow(p.backoffCoefficient, float64(numAttempts-1))
-	// Disallow retries if initialInterval is negative or nextInterval overflows
+	// Disallow retries if initialInterval is negative
 	if nextInterval <= 0 {
 		return done
 	}
@@ -162,6 +162,14 @@ func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, num
 	if p.expirationInterval != NoInterval {
 		remainingTime := float64(math.Max(0, float64(p.expirationInterval-elapsedTime)))
 		nextInterval = math.Min(remainingTime, nextInterval)
+	}
+
+	// Disallow retries if nextInterval still overflows time.Duration after capping. The
+	// conversion of an out-of-range float64 to int64 is platform-dependent: it wraps to a
+	// negative value on amd64 (caught by the check below) but saturates to MaxInt64 on
+	// arm64, which would produce a ~292-year backoff instead of stopping.
+	if nextInterval >= float64(math.MaxInt64) {
+		return done
 	}
 
 	// Bail out if the next interval is smaller than initial retry interval
@@ -177,17 +185,44 @@ func (p *ExponentialRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, num
 
 func (p *ExponentialRetryPolicy) addJitter(nextInterval float64) float64 {
 	// add jitter to avoid global synchronization
-	jitterPortion := int(0.2 * nextInterval)
-	// Prevent overflow
-	if jitterPortion < 1 {
-		jitterPortion = 1
-	}
+	jitterPortion := max(
+		// Prevent overflow
+		int(0.2*nextInterval), 1)
 	nextInterval = nextInterval*0.8 + float64(getJitterRand().Intn(jitterPortion))
 	return nextInterval
 }
 
 func (r *disabledRetryPolicyImpl) ComputeNextDelay(_ time.Duration, _ int, _ error) time.Duration {
 	return done
+}
+
+var _ RetryPolicy = (*ConditionalRetryPolicy)(nil)
+
+// ConditionalRetryPolicy chooses between two underlying retry policies based on
+// a predicate evaluated against the error from the last attempt. The numAttempts
+// counter is shared across both branches, so a sequence that mixes error types
+// can hit the more conservative branch's cap on a later attempt.
+type ConditionalRetryPolicy struct {
+	predicate func(err error) bool
+	whenTrue  RetryPolicy
+	whenFalse RetryPolicy
+}
+
+// NewConditionalRetryPolicy returns a policy that delegates to whenTrue when
+// predicate(err) is true, and whenFalse otherwise.
+func NewConditionalRetryPolicy(predicate func(err error) bool, whenTrue, whenFalse RetryPolicy) *ConditionalRetryPolicy {
+	return &ConditionalRetryPolicy{
+		predicate: predicate,
+		whenTrue:  whenTrue,
+		whenFalse: whenFalse,
+	}
+}
+
+func (p *ConditionalRetryPolicy) ComputeNextDelay(elapsedTime time.Duration, numAttempts int, err error) time.Duration {
+	if p.predicate(err) {
+		return p.whenTrue.ComputeNextDelay(elapsedTime, numAttempts, err)
+	}
+	return p.whenFalse.ComputeNextDelay(elapsedTime, numAttempts, err)
 }
 
 // Reset will set the Retrier into initial state
@@ -266,7 +301,10 @@ func (p *ConstantDelayRetryPolicy) ComputeNextDelay(_ time.Duration, attempt int
 }
 
 func addJitter(duration time.Duration, jitterPct float64) time.Duration {
-	return duration * time.Duration(1+jitterPct*rand.Float64())
+	// Multiply in float space and convert once at the end. Converting the (1 + jitter)
+	// factor to a time.Duration on its own truncates it to the integer 1 for any
+	// jitterPct < 1.0, which silently discards the jitter entirely.
+	return time.Duration(float64(duration) * (1 + jitterPct*rand.Float64()))
 }
 
 func getJitterRand() *rand.Rand {

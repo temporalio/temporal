@@ -30,6 +30,7 @@ import (
 
 const (
 	recordChildCompletionVerificationFailedMsg = "Failed to verify child execution completion recorded"
+	verifyFirstWorkflowTaskScheduledFailedMsg  = "Failed to verify first workflow task scheduled"
 )
 
 type (
@@ -86,7 +87,10 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 		metrics.OperationTag(taskType), // for backward compatibility
 	}
 
-	var err error
+	var (
+		err          error
+		eventDetails map[string]any
+	)
 	switch task := task.(type) {
 	case *tasks.ActivityTask:
 		err = t.processActivityTask(ctx, task)
@@ -97,20 +101,24 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 	case *tasks.SignalExecutionTask:
 		err = t.processSignalExecution(ctx, task)
 	case *tasks.StartChildExecutionTask:
-		err = t.processStartChildExecution(ctx, task)
+		eventDetails = make(map[string]any)
+		err = t.processStartChildExecution(ctx, task, eventDetails)
 	case *tasks.ResetWorkflowTask:
 		// no reset needed for standby
 		// TODO: add error logs
 		err = nil
 	case *tasks.CloseExecutionTask:
-		err = t.processCloseExecution(ctx, task)
+		eventDetails = make(map[string]any)
+		err = t.processCloseExecution(ctx, task, executable.Attempt(), eventDetails)
 	case *tasks.DeleteExecutionTask:
 		err = t.processDeleteExecutionTask(ctx, task, false)
 	case *tasks.ChasmTask:
+		task.Attempt = executable.Attempt()
 		err = t.executeChasmSideEffectTransferTask(ctx, task)
 	default:
 		err = errUnknownTransferTask
 	}
+	emitStandbyTaskError(t.shardContext, executable, taskType, eventDetails, err)
 
 	return queues.ExecuteResponse{
 		ExecutionMetricTags: metricsTags,
@@ -129,10 +137,18 @@ func (t *transferQueueStandbyTaskExecutor) executeChasmSideEffectTransferTask(
 		ms historyi.MutableState,
 		_ historyi.ReleaseWorkflowContextFunc,
 	) (any, error) {
-		valid, err := validateChasmSideEffectTask(ctx, ms, task)
-		if err != nil || !valid {
+		isTaskInTree, isValid, err := validateChasmSideEffectTask(ctx, ms, task)
+		if err != nil {
 			return nil, err
 		}
+		if !isTaskInTree || !isValid {
+			// Replication has removed the logical task, or the component reports it
+			// invalid — drop the physical task.
+			return nil, nil
+		}
+
+		// Task still exists in the tree; retry until the active cluster executes
+		// and replicates the resulting state change.
 		return ms.ChasmTree(), nil
 	}
 
@@ -284,6 +300,8 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 	ctx context.Context,
 	transferTask *tasks.CloseExecutionTask,
+	attempt int,
+	eventDetails map[string]any,
 ) error {
 	processTaskIfClosed := true
 	actionFn := func(ctx context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, release historyi.ReleaseWorkflowContextFunc) (any, error) {
@@ -320,7 +338,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			taskTime := transferTask.GetVisibilityTime()
 			localVerificationTime := taskTime.Add(t.config.MaxLocalParentWorkflowVerificationDuration())
 
-			resendParent := now.After(localVerificationTime) && mutableState.IsTransitionHistoryEnabled() && mutableState.CurrentVersionedTransition() != nil
+			resendParent := now.After(localVerificationTime)
 
 			// Copy needed values from executionInfo before releasing mutable state
 			parentNamespaceID := executionInfo.ParentNamespaceId
@@ -329,9 +347,35 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			parentInitiatedID := executionInfo.ParentInitiatedId
 			parentInitiatedVersion := executionInfo.ParentInitiatedVersion
 			parentClock := executionInfo.ParentClock
+			childWorkflowState := mutableState.GetExecutionState().GetState().String()
 
 			// no need for mutable state anymore, release workflow lock
 			release(nil)
+			if resendParent {
+				// Parent and child workflows may use different namespace transition-history settings.
+				parentNamespaceEntry, err := t.registry.GetNamespaceByID(namespace.ID(parentNamespaceID))
+				switch err.(type) {
+				case nil:
+					resendParent = t.config.EnableTransitionHistory(parentNamespaceEntry.Name().String())
+				case *serviceerror.NamespaceNotFound:
+					return nil, nil
+				default:
+					return nil, err
+				}
+			}
+
+			emitChildCompletionVerificationStarted(
+				t.shardContext,
+				transferTask,
+				parentNamespaceID,
+				parentWorkflowID,
+				parentRunID,
+				parentInitiatedID,
+				parentInitiatedVersion,
+				childWorkflowState,
+				resendParent,
+				attempt,
+			)
 
 			_, err := t.historyRawClient.VerifyChildExecutionCompletionRecorded(ctx, &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 				NamespaceId: parentNamespaceID,
@@ -348,6 +392,19 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 				Clock:                  parentClock,
 				ResendParent:           resendParent,
 			})
+			emitChildCompletionVerificationResult(
+				t.shardContext,
+				transferTask,
+				parentNamespaceID,
+				parentWorkflowID,
+				parentRunID,
+				parentInitiatedID,
+				parentInitiatedVersion,
+				childWorkflowState,
+				resendParent,
+				attempt,
+				err,
+			)
 			switch err.(type) {
 			case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
 				// Case 1: Target workflow is in the desired state.
@@ -384,7 +441,9 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			transferTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.checkParentWorkflowStillExistOnSourceBeforeDiscard,
+			func(ctx context.Context, task tasks.Task, postActionInfo any, logger log.Logger) error {
+				return t.checkParentWorkflowStillExistOnSourceBeforeDiscard(ctx, task, postActionInfo, logger, eventDetails)
+			},
 		),
 	)
 }
@@ -458,6 +517,7 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 	ctx context.Context,
 	transferTask *tasks.StartChildExecutionTask,
+	eventDetails map[string]any,
 ) error {
 	processTaskIfClosed := true
 	actionFn := func(ctx context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, release historyi.ReleaseWorkflowContextFunc) (any, error) {
@@ -485,7 +545,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		// no need for mutable state anymore, release workflow lock
 		release(nil)
 
-		if workflowClosed && !(childStarted && childAbandon) {
+		if workflowClosed && (!childStarted || !childAbandon) {
 			// NOTE: ideally for workflowClosed, child not started, parent close policy is abandon case,
 			// we should continue to start the child workflow in active cluster, so standby logic also need to
 			// perform the verification. However, we can't do that due to some technial reasons.
@@ -495,7 +555,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		}
 
 		if !childStarted {
-			return &struct{}{}, nil
+			return &startChildExecutionPostActionInfo{}, nil
 		}
 
 		if childTargetNamespaceID == "" {
@@ -508,6 +568,27 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			}
 			childTargetNamespaceID = targetNamespaceEntry.ID().String()
 		}
+		childWorkflowKey := definition.NewWorkflowKey(
+			childTargetNamespaceID,
+			childStartedWorkflowID,
+			childStartedRunID,
+		)
+		resendTime := transferTask.GetVisibilityTime().Add(
+			t.config.StandbyTaskMissingEventsResendDelay(transferTask.GetType()),
+		)
+		resendChild := t.getCurrentTime().After(resendTime)
+		if resendChild {
+			// Parent and child workflows may use different namespace transition-history settings.
+			childNamespaceEntry, err := t.registry.GetNamespaceByID(namespace.ID(childTargetNamespaceID))
+			switch err.(type) {
+			case nil:
+				resendChild = t.config.EnableTransitionHistory(childNamespaceEntry.Name().String())
+			case *serviceerror.NamespaceNotFound:
+				return nil, nil
+			default:
+				return nil, err
+			}
+		}
 
 		_, err = t.historyRawClient.VerifyFirstWorkflowTaskScheduled(ctx, &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
 			NamespaceId: childTargetNamespaceID,
@@ -515,7 +596,8 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 				WorkflowId: childStartedWorkflowID,
 				RunId:      childStartedRunID,
 			},
-			Clock: childClock,
+			Clock:       childClock,
+			ResendChild: resendChild,
 		})
 		switch err.(type) {
 		case nil, *serviceerror.NamespaceNotFound, *serviceerror.Unimplemented:
@@ -524,13 +606,15 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		case *serviceerror.NotFound, *serviceerror.WorkflowNotReady:
 			// Case 2: Target workflow is not in the desired state.
 			// Return a non-nil pointer as postActionInfo here to indicate that verification is not done yet.
-			return &struct{}{}, nil
+			return &startChildExecutionPostActionInfo{
+				childWorkflowKey: &childWorkflowKey,
+			}, nil
 		default:
 			// Case 3: Verification itself failed.
 			// NOTE: Wrapping the error as a verification error to prevent mutable state from being cleared and reloaded upon retry,
 			// which is unnecessary as the error is in the target workflow, not this workflow.
 			return nil, &verificationErr{
-				msg: recordChildCompletionVerificationFailedMsg,
+				msg: verifyFirstWorkflowTaskScheduledFailedMsg,
 				err: err,
 			}
 		}
@@ -545,7 +629,9 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			transferTask,
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsDiscardDelay(transferTask.GetType()),
-			t.checkExecutionStillExistsOnSourceBeforeDiscard,
+			func(ctx context.Context, task tasks.Task, postActionInfo any, logger log.Logger) error {
+				return t.checkStartChildExecutionStillExistsOnSourceBeforeDiscard(ctx, task, postActionInfo, logger, eventDetails)
+			},
 		),
 	)
 }
@@ -687,9 +773,39 @@ func (t *transferQueueStandbyTaskExecutor) checkExecutionStillExistsOnSourceBefo
 		t.shardContext.GetNamespaceRegistry(),
 		t.shardContext.ChasmRegistry(),
 	) {
-		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger)
+		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger, nil)
 	}
-	return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)
+	return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger, nil)
+}
+
+func (t *transferQueueStandbyTaskExecutor) checkStartChildExecutionStillExistsOnSourceBeforeDiscard(
+	ctx context.Context,
+	taskInfo tasks.Task,
+	postActionInfo any,
+	logger log.Logger,
+	eventDetails map[string]any,
+) error {
+	if postActionInfo == nil {
+		return nil
+	}
+	startChildInfo, ok := postActionInfo.(*startChildExecutionPostActionInfo)
+	if !ok || startChildInfo.childWorkflowKey == nil {
+		return t.checkExecutionStillExistsOnSourceBeforeDiscard(ctx, taskInfo, postActionInfo, logger)
+	}
+
+	if !executionExistsOnSource(
+		ctx,
+		*startChildInfo.childWorkflowKey,
+		chasm.WorkflowArchetypeID,
+		logger,
+		t.clusterName,
+		t.clientBean,
+		t.shardContext.GetNamespaceRegistry(),
+		t.shardContext.ChasmRegistry(),
+	) {
+		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger, nil)
+	}
+	return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger, eventDetails)
 }
 
 func (t *transferQueueStandbyTaskExecutor) checkParentWorkflowStillExistOnSourceBeforeDiscard(
@@ -697,13 +813,14 @@ func (t *transferQueueStandbyTaskExecutor) checkParentWorkflowStillExistOnSource
 	taskInfo tasks.Task,
 	postActionInfo any,
 	logger log.Logger,
+	eventDetails map[string]any,
 ) error {
 	if postActionInfo == nil {
 		return nil
 	}
 	verifyCompletionInfo, ok := postActionInfo.(*verifyCompletionRecordedPostActionInfo)
 	if !ok || verifyCompletionInfo.parentWorkflowKey == nil {
-		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)
+		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger, eventDetails)
 	}
 
 	if !executionExistsOnSource(
@@ -716,7 +833,7 @@ func (t *transferQueueStandbyTaskExecutor) checkParentWorkflowStillExistOnSource
 		t.shardContext.GetNamespaceRegistry(),
 		t.shardContext.ChasmRegistry(),
 	) {
-		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger)
+		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger, nil)
 	}
-	return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger)
+	return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger, eventDetails)
 }

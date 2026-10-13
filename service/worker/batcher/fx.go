@@ -7,8 +7,12 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/quotas/calculator"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	workercommon "go.temporal.io/server/service/worker/common"
@@ -24,6 +28,8 @@ const (
 )
 
 type (
+	AdminBatcherRateLimiter quotas.RequestRateLimiter
+
 	workerComponent struct {
 		activityDeps   activityDeps
 		dc             *dynamicconfig.Collection
@@ -32,12 +38,13 @@ type (
 
 	activityDeps struct {
 		fx.In
-		MetricsHandler metrics.Handler
-		Logger         log.Logger
-		ClientFactory  sdk.ClientFactory
-		FrontendClient workflowservice.WorkflowServiceClient
-		AdminClient    adminservice.AdminServiceClient
-		HistoryClient  resource.HistoryClient
+		MetricsHandler          metrics.Handler
+		Logger                  log.Logger
+		ClientFactory           sdk.ClientFactory
+		FrontendClient          workflowservice.WorkflowServiceClient
+		AdminClient             adminservice.AdminServiceClient
+		HistoryClient           resource.HistoryClient
+		AdminBatcherRateLimiter AdminBatcherRateLimiter
 	}
 
 	fxResult struct {
@@ -47,8 +54,28 @@ type (
 )
 
 var Module = fx.Options(
+	fx.Provide(AdminBatcherRateLimiterProvider),
 	fx.Provide(NewResult),
 )
+
+func AdminBatcherRateLimiterProvider(
+	dc *dynamicconfig.Collection,
+	serviceResolver membership.ServiceResolver,
+	logger log.Logger,
+) AdminBatcherRateLimiter {
+	return quotas.NewRequestRateLimiterAdapter(
+		quotas.NewDefaultOutgoingRateLimiter(
+			calculator.NewLoggedCalculator(
+				calculator.ClusterAwareQuotaCalculator{
+					MemberCounter:    serviceResolver,
+					PerInstanceQuota: dynamicconfig.AdminBatcherHostRPS.Get(dc),
+					GlobalQuota:      dynamicconfig.AdminBatcherGlobalRPS.Get(dc),
+				},
+				log.With(logger, tag.ComponentAdminBatcher, tag.ScopeHost),
+			).GetQuota,
+		),
+	)
+}
 
 func NewResult(
 	dc *dynamicconfig.Collection,

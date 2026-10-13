@@ -20,7 +20,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -127,12 +126,22 @@ type (
 		// terminated as part of a delete operation. Like terminated, this is in-memory only
 		// and only needed for the current transaction. Set via SetDeleteAfterClose.
 		deleteAfterClose bool
+
+		// subtreeIsDirty is true if this node, any ancestor, or any descendant was mutated
+		// in the current transaction (valueState >= valueStateNeedSerialize), or if
+		// ExecutePureTask ran on this node or any such relative.
+		//
+		// markSubtreeDirty propagates the flag both upward (to ancestors) and downward (to
+		// all descendants) at mutation time, so CloseTransaction can skip task validation
+		// for nodes whose entire lineage is clean with a single O(1) flag check.
+		//
+		// This is a per-node field (not in nodeBase) and is reset after each transaction.
+		subtreeIsDirty bool
 	}
 
 	// nodeBase is a set of dependencies and states shared by all nodes in a CHASM tree.
 	nodeBase struct {
 		registry       *Registry
-		timeSource     clock.TimeSource
 		backend        NodeBackend
 		pathEncoder    NodePathEncoder
 		logger         log.Logger
@@ -161,23 +170,14 @@ type (
 
 		taskValueCache map[*commonpb.DataBlob]reflect.Value
 
-		// isActiveStateDirty is true if any user data is mutated.
-		// NOTE: this only captures active cluster's user data mutation.
-		// Replication logic (ApplySnapshot/Mutation) will not set this field.
-		//
-		// This flag in a CHASM tree level, while valueState is on node level.
-		// Tracking this flag on tree level avoids traversing the whole tree every time
-		// we want to know if something is updated.
-		//
-		// This flag is equivalent to checking if any node's valueState >= valueStateNeedSerialize
-		isActiveStateDirty bool
-
 		// Root component's search attributes and memo at the start of a transaction.
 		// They will be updated upon CloseTransaction() if they are changed.
 		currentSA   map[string]VisibilityValue
 		currentMemo proto.Message
 
 		needsPointerResolution bool
+
+		totalTimeSkippedUpdatedInPassive bool
 	}
 
 	taskWithAttributes struct {
@@ -208,6 +208,12 @@ type (
 		GetExecutionState() *persistencespb.WorkflowExecutionState
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
 		GetApproximatePersistedSize() int
+		ChasmSkipPersistenceEnabled() bool
+		// Returns the operator override of the logical task count that triggers the task count
+		// metrics for the given fully qualified task type. Zero means not set, so the registered
+		// threshold applies, and a negative value disables the metrics.
+		ChasmLogicalTaskCountAlertThreshold(chasmTaskType string) int
+		ChasmDLQScheduledPureTaskOnValidationEnabled() bool
 		GetNamespaceEntry() *namespace.Namespace
 		GetCurrentVersion() int64
 		NextTransitionCount() int64
@@ -234,6 +240,9 @@ type (
 			requestID string,
 		) (nexusrpc.CompleteOperationOptions, error)
 		EndpointRegistry() EndpointRegistry
+		Now() time.Time
+		SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
+		RecordTimeSkippingTransition(transition *TimeSkippingTransition)
 	}
 
 	// NodePathEncoder is an interface for encoding and decoding node paths.
@@ -250,7 +259,6 @@ type (
 	// framework only.
 	NodePureTask interface {
 		ExecutePureTask(baseCtx context.Context, taskAttributes TaskAttributes, taskInstance any) (bool, error)
-		ValidatePureTask(baseCtx context.Context, taskAttributes TaskAttributes, taskInstance any) (bool, error)
 	}
 )
 
@@ -260,20 +268,19 @@ type (
 func NewTreeFromDB(
 	serializedNodes map[string]*persistencespb.ChasmNode, // This is coming from MS map[nodePath]ChasmNode.
 	registry *Registry,
-	timeSource clock.TimeSource,
 	backend NodeBackend,
 	pathEncoder NodePathEncoder,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) (*Node, error) {
 	if len(serializedNodes) == 0 {
-		root := NewEmptyTree(registry, timeSource, backend, pathEncoder, logger, metricsHandler)
+		root := NewEmptyTree(registry, backend, pathEncoder, logger, metricsHandler)
 		// NewEmptyTree initializes the serializedNode to an empty component node,
 		root.serializedNode.Metadata.GetComponentAttributes().TypeId = WorkflowArchetypeID
 		return root, nil
 	}
 
-	root := newTreeHelper(registry, timeSource, backend, pathEncoder, logger, metricsHandler)
+	root := newTreeHelper(registry, backend, pathEncoder, logger, metricsHandler)
 	for encodedPath, serializedNode := range serializedNodes {
 		nodePath, err := pathEncoder.Decode(encodedPath)
 		if err != nil {
@@ -291,13 +298,12 @@ func NewTreeFromDB(
 // NewEmptyTree creates a new empty in-memory CHASM tree.
 func NewEmptyTree(
 	registry *Registry,
-	timeSource clock.TimeSource,
 	backend NodeBackend,
 	pathEncoder NodePathEncoder,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
 ) *Node {
-	root := newTreeHelper(registry, timeSource, backend, pathEncoder, logger, metricsHandler)
+	root := newTreeHelper(registry, backend, pathEncoder, logger, metricsHandler)
 
 	// If serializedNodes is empty, it means that this new tree.
 	// Initialize empty serializedNode.
@@ -313,7 +319,6 @@ func NewEmptyTree(
 
 func newTreeHelper(
 	registry *Registry,
-	timeSource clock.TimeSource,
 	backend NodeBackend,
 	pathEncoder NodePathEncoder,
 	logger log.Logger,
@@ -321,7 +326,6 @@ func newTreeHelper(
 ) *Node {
 	base := &nodeBase{
 		registry:       registry,
-		timeSource:     timeSource,
 		backend:        backend,
 		pathEncoder:    pathEncoder,
 		logger:         logger,
@@ -415,7 +419,37 @@ func (n *Node) setValue(value any) {
 func (n *Node) setValueState(state valueState) {
 	n.valueState = state
 	if state >= valueStateNeedSerialize {
-		n.isActiveStateDirty = true
+		n.markSubtreeDirty()
+	}
+}
+
+// markSubtreeDirty sets subtreeIsDirty on this node and propagates upward to all ancestors.
+// This ensures that ancestor nodes know their subtree contains a dirty node, which is used
+// during CloseTransaction to skip task validation for completely unrelated subtrees.
+// markSubtreeDirty marks this node and its entire lineage (ancestors and descendants)
+// as dirty so that CloseTransaction knows to validate their tasks.
+func (n *Node) markSubtreeDirty() {
+	// Propagate upward to ancestors.
+	for cur := n; cur != nil && !cur.subtreeIsDirty; cur = cur.parent {
+		cur.subtreeIsDirty = true
+	}
+	// Propagate downward to descendants.
+	for _, desc := range n.andAllChildren() {
+		desc.subtreeIsDirty = true
+	}
+}
+
+// clearAncestorNodeValues invalidates hydrated component ancestors after tree-structure changes.
+// Replication must always call this for child-only mutations because the source may omit an
+// unchanged parent component when its skip-persistence optimization is enabled.
+func (n *Node) clearAncestorNodeValues(parent *Node) {
+	for node := parent; node != nil; node = node.parent {
+		if node.serializedNode == nil || !node.isComponent() || node.value == nil {
+			continue
+		}
+
+		node.setValue(nil)
+		node.setValueState(valueStateNeedDeserialize)
 	}
 }
 
@@ -435,7 +469,8 @@ func (n *Node) Component(
 		return nil, errComponentNotFound
 	}
 
-	if ref.componentInitialVT != nil && transitionhistory.Compare(
+	// The root is identified by the execution key and archetype alone; see refComponentInitialVT.
+	if !isRootPath(ref.componentPath) && ref.componentInitialVT != nil && transitionhistory.Compare(
 		ref.componentInitialVT,
 		node.serializedNode.Metadata.InitialVersionedTransition,
 	) != 0 {
@@ -706,7 +741,7 @@ func assertStructPointer(t reflect.Type) error {
 		return nil
 	}
 
-	if t.Kind() != reflect.Ptr || t.Elem().Kind() != reflect.Struct {
+	if t.Kind() != reflect.Pointer || t.Elem().Kind() != reflect.Struct {
 		return serviceerror.NewInternalf("only pointer to struct is supported for tree node value: got %s", t.String())
 	}
 	return nil
@@ -1423,6 +1458,7 @@ func (n *Node) structuredRef(
 		return ComponentRef{}, errComponentNotFound
 	}
 
+	componentPath := refNode.path()
 	workflowKey := refNode.backend.GetWorkflowKey()
 	return ComponentRef{
 		ExecutionKey: ExecutionKey{
@@ -1434,10 +1470,38 @@ func (n *Node) structuredRef(
 		// TODO: Consider using node's LastUpdateVersionedTransition for checking staleness here.
 		// Using VersionedTransition of the entire tree might be too strict.
 		executionLastUpdateVT: transitionhistory.CopyVersionedTransition(refNode.backend.CurrentVersionedTransition()),
-		componentPath:         refNode.path(),
-		componentInitialVT:    refNode.serializedNode.GetMetadata().GetInitialVersionedTransition(),
+		componentPath:         componentPath,
+		componentInitialVT: refComponentInitialVT(
+			componentPath,
+			refNode.serializedNode.GetMetadata().GetInitialVersionedTransition(),
+		),
 	}, nil
 
+}
+
+// refComponentInitialVT returns the InitialVersionedTransition to embed in a ref for the component at
+// the given path. It is omitted for the root component: the root can't be deleted and recreated within
+// a run, so the execution key and archetype already identify it. The persisted value is also not
+// trustworthy for a Workflow root synthesized while loading an execution with no CHASM nodes, since
+// the root is created before the mutable state's current version is known.
+func refComponentInitialVT(
+	componentPath []string,
+	initialVT *persistencespb.VersionedTransition,
+) *persistencespb.VersionedTransition {
+	if isRootPath(componentPath) {
+		return nil
+	}
+	return initialVT
+}
+
+// componentPath returns the path of the given component relative to the root of the tree, or nil if
+// the component is not (yet) registered as a node.
+func (n *Node) componentPath(component Component) []string {
+	refNode, ok := n.valueToNode[component]
+	if !ok || !refNode.isComponent() {
+		return nil
+	}
+	return refNode.path()
 }
 
 // componentLinks returns the union of links across all requests stored on the
@@ -1633,7 +1697,7 @@ func (n *Node) Now(
 	_ Component,
 ) time.Time {
 	// TODO: Now() could be different for components after we support Pause for CHASM components.
-	return n.timeSource.Now()
+	return n.backend.Now()
 }
 
 // AddTask implements the CHASM MutableContext interface
@@ -1652,7 +1716,7 @@ func (n *Node) AddTask(
 		return
 	}
 
-	n.nodeBase.newTasks[component] = append(n.nodeBase.newTasks[component], taskWithAttributes{
+	n.newTasks[component] = append(n.newTasks[component], taskWithAttributes{
 		task:       task,
 		attributes: taskAttributes,
 	})
@@ -1688,7 +1752,7 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 		return NodesMutation{}, err
 	}
 
-	if n.isActiveStateDirty {
+	if n.subtreeIsDirty {
 		if err := n.closeTransactionForceUpdateVisibility(immutableContext, rootLifecycleChanged); err != nil {
 			return NodesMutation{}, err
 		}
@@ -1703,6 +1767,10 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 	}
 
 	if err := n.closeTransactionApplyPendingComponentMetadata(); err != nil {
+		return NodesMutation{}, err
+	}
+
+	if err := n.closeTransactionHandleTimeSkipping(immutableContext); err != nil {
 		return NodesMutation{}, err
 	}
 
@@ -1902,6 +1970,7 @@ func (n *Node) closeTransactionForceUpdateVisibility(
 }
 
 func (n *Node) closeTransactionSerializeNodes() error {
+	skipPersistenceIfClean := n.backend.ChasmSkipPersistenceEnabled()
 	for nodePath, node := range n.andAllChildren() {
 		if node.valueState > valueStateNeedSerialize {
 			return serviceerror.NewInternalf("invalid valueState for serializing: %v", node.valueState)
@@ -1923,7 +1992,8 @@ func (n *Node) closeTransactionSerializeNodes() error {
 		prevVersionedTransition := common.CloneProto(
 			node.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
 		)
-		skipIfClean := (node.isComponent() || node.isData() || node.isMap()) &&
+		skipIfClean := skipPersistenceIfClean &&
+			(node.isComponent() || node.isData() || node.isMap()) &&
 			prevVersionedTransition != nil &&
 			!node.hasNewTransactionSideEffects()
 		var prevData *commonpb.DataBlob
@@ -1939,6 +2009,15 @@ func (n *Node) closeTransactionSerializeNodes() error {
 		if skipIfClean && bytes.Equal(prevData.GetData(), node.serializedNode.Data.GetData()) {
 			node.serializedNode.GetMetadata().LastUpdateVersionedTransition = prevVersionedTransition
 			continue
+		}
+
+		// A root persisted for the first time may have been synthesized while loading an execution with
+		// no CHASM nodes, before the backend's current version was known. Stamp its creation with the
+		// transition that actually persists it.
+		if node.parent == nil && prevVersionedTransition == nil {
+			node.serializedNode.GetMetadata().InitialVersionedTransition = common.CloneProto(
+				node.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
+			)
 		}
 
 		if componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes(); componentAttr != nil &&
@@ -1967,12 +2046,16 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 	nextVersionedTransition *persistencespb.VersionedTransition,
 ) error {
 	taskOffset := int64(1)
-	taskValidationContext := NewContext(newContextWithOperationIntent(context.Background(), OperationIntentProgress), n)
+	taskValidationContext := NewContext(NewContextWithOperationIntent(context.Background(), OperationIntentProgress), n)
 
 	archetypeID := n.ArchetypeID()
 
 	var firstPureTask *persistencespb.ChasmComponentAttributes_Task
 	var firstPureTaskNode *Node
+
+	// Keyed by task type ID and aggregated across the whole execution. Stays nil unless a
+	// type opted in.
+	var taskCounts map[uint32]int
 
 	for nodePath, node := range n.andAllChildren() {
 		// no-op if node is not a component
@@ -1986,9 +2069,10 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		// Even if a node is not touched in this transaction, its task can still become invalid due to, e.g.
 		// - child component state update
 		// - parent component closing (access rule)
-		// - a pointer field pointing to an updated component
-		// As a result, we need to validate existing tasks for all components if we are in active cluster.
-		if n.isActiveStateDirty {
+		// - a pointer field pointing to an updated component (pointers are ancestors-only)
+		// markSubtreeDirty propagates to both ancestors and descendants at mutation time,
+		// so we skip validation only for nodes with no dirty node anywhere in their lineage.
+		if node.subtreeIsDirty {
 			// Ensure this node's component value is hydrated before cleaning up tasks.
 			if err := node.prepareComponentValue(taskValidationContext); err != nil {
 				return err
@@ -2034,9 +2118,11 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 			}
 		}
 
+		// Invalid tasks are removed and new tasks added by this point, so counts are final.
+		taskCounts = n.countLogicalTasks(componentAttr, taskCounts)
+
 		sideEffectTasks := componentAttr.GetSideEffectTasks()
-		for idx := len(sideEffectTasks) - 1; idx >= 0; idx-- {
-			sideEffectTask := sideEffectTasks[idx]
+		for _, sideEffectTask := range slices.Backward(sideEffectTasks) {
 			if sideEffectTask.PhysicalTaskStatus == physicalTaskStatusCreated {
 				break
 			}
@@ -2062,6 +2148,8 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		}
 	}
 
+	n.emitLogicalTaskCountMetrics(taskCounts, archetypeID)
+
 	// TODO: We cannot simply assert that all tasks in n.nodeBase.newTasks are processed.
 	// That should be the case when only one transition for each transaction.
 	// However, when processing pure tasks, we run multiple pure tasks, thus multiple transitions
@@ -2073,6 +2161,74 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		firstPureTaskNode,
 		archetypeID,
 	)
+}
+
+// countLogicalTasks adds componentAttr's logical task counts, keyed by task type ID, into
+// counts, tracking only task types opted into the task count metrics, and returns the
+// possibly reallocated map.
+func (n *Node) countLogicalTasks(
+	componentAttr *persistencespb.ChasmComponentAttributes,
+	counts map[uint32]int,
+) map[uint32]int {
+	if _, ok := n.registry.taskCountMetricComponentIDs[componentAttr.GetTypeId()]; !ok {
+		return counts
+	}
+
+	for _, componentTasks := range [2][]*persistencespb.ChasmComponentAttributes_Task{
+		componentAttr.GetPureTasks(),
+		componentAttr.GetSideEffectTasks(),
+	} {
+		for _, componentTask := range componentTasks {
+			registrableTask, ok := n.registry.TaskByID(componentTask.GetTypeId())
+			if !ok || !registrableTask.taskCountMetricEnabled() {
+				continue
+			}
+			if counts == nil {
+				counts = make(map[uint32]int)
+			}
+			counts[componentTask.GetTypeId()]++
+		}
+	}
+
+	return counts
+}
+
+// emitLogicalTaskCountMetrics records the task count metrics for each task type over threshold.
+func (n *Node) emitLogicalTaskCountMetrics(
+	counts map[uint32]int,
+	archetypeID ArchetypeID,
+) {
+	if len(counts) == 0 {
+		return
+	}
+
+	// Allocated on the first breach only.
+	var metricsHandler metrics.Handler
+
+	for taskTypeID, count := range counts {
+		registrableTask, ok := n.registry.TaskByID(taskTypeID)
+		if !ok {
+			continue
+		}
+		taskFqn := registrableTask.fqType()
+		threshold := registrableTask.resolveTaskCountMetricThreshold(
+			n.backend.ChasmLogicalTaskCountAlertThreshold(taskFqn),
+		)
+		if threshold <= 0 || count <= threshold {
+			continue
+		}
+		if metricsHandler == nil {
+			archetypeTag := metrics.ArchetypeTag("")
+			if name, ok := n.registry.ArchetypeDisplayName(archetypeID); ok {
+				archetypeTag = metrics.ArchetypeTag(name)
+			}
+			metricsHandler = n.metricsHandler.WithTags(archetypeTag)
+		}
+
+		taskTypeTag := metrics.ChasmTaskTypeTag(taskFqn)
+		metrics.ChasmLogicalTaskCount.With(metricsHandler).Record(int64(count), taskTypeTag)
+		metrics.ChasmLogicalTaskCountExceeded.With(metricsHandler).Record(1, taskTypeTag)
+	}
 }
 
 func (n *Node) deserializeComponentTask(
@@ -2098,7 +2254,7 @@ func (n *Node) deserializeComponentTask(
 // This method assumes component value is already hydrated.
 func (n *Node) validateTask(
 	validateContext Context,
-	taskAttributes TaskAttributes,
+	taskInvocation TaskInvocation,
 	taskInstance any,
 ) (_ bool, retErr error) {
 	registableTask, ok := n.registry.taskFor(taskInstance)
@@ -2123,7 +2279,7 @@ func (n *Node) validateTask(
 	return registableTask.validateFn(
 		validateContext,
 		n.value,
-		taskAttributes,
+		taskInvocation,
 		taskInstance,
 		n.registry,
 	)
@@ -2144,9 +2300,11 @@ func (n *Node) closeTransactionCleanupInvalidTasks(
 
 		valid, err := n.validateTask(
 			validateContext,
-			TaskAttributes{
-				ScheduledTime: existingTask.ScheduledTime.AsTime(),
-				Destination:   existingTask.Destination,
+			TaskInvocation{
+				TaskAttributes: TaskAttributes{
+					ScheduledTime: existingTask.ScheduledTime.AsTime(),
+					Destination:   existingTask.Destination,
+				},
 			},
 			existingTaskInstance,
 		)
@@ -2173,6 +2331,36 @@ func (n *Node) closeTransactionCleanupInvalidTasks(
 	return cleanedUp, nil
 }
 
+// applySingletonMode enforces singleton semantics for tasks registered with [WithSingletonTask].
+// It is called after task validation, so only valid new tasks reach this point.
+// Returns true if the new task should be skipped (SingletonTaskModeIgnore with existing task).
+func (n *Node) applySingletonMode(
+	rt *RegistrableTask,
+	taskList *[]*persistencespb.ChasmComponentAttributes_Task,
+) (skip bool) {
+	if rt.singletonMode == 0 {
+		return false
+	}
+
+	idx := slices.IndexFunc(*taskList, func(t *persistencespb.ChasmComponentAttributes_Task) bool {
+		return t.TypeId == rt.taskTypeID
+	})
+	if idx == -1 {
+		return false
+	}
+
+	switch rt.singletonMode {
+	case SingletonTaskModeReplace:
+		delete(n.taskValueCache, (*taskList)[idx].Data)
+		*taskList = slices.Delete(*taskList, idx, idx+1)
+		return false
+	case SingletonTaskModeIgnore:
+		return true
+	default:
+		return false
+	}
+}
+
 func (n *Node) closeTransactionHandleNewTasks(
 	nextVersionedTransition *persistencespb.VersionedTransition,
 	validateContext Context,
@@ -2196,7 +2384,7 @@ func (n *Node) closeTransactionHandleNewTasks(
 
 		valid, err := n.validateTask(
 			validateContext,
-			newTask.attributes,
+			TaskInvocation{TaskAttributes: newTask.attributes},
 			newTask.task,
 		)
 		if err != nil {
@@ -2230,9 +2418,15 @@ func (n *Node) closeTransactionHandleNewTasks(
 		}
 
 		if registrableTask.isPureTask {
+			if skip := n.applySingletonMode(registrableTask, &componentAttr.PureTasks); skip {
+				continue
+			}
 			componentAttr.PureTasks = append(componentAttr.PureTasks, componentTask)
 			sortPureTasks = true
 		} else {
+			if skip := n.applySingletonMode(registrableTask, &componentAttr.SideEffectTasks); skip {
+				continue
+			}
 			componentAttr.SideEffectTasks = append(componentAttr.SideEffectTasks, componentTask)
 		}
 
@@ -2426,8 +2620,13 @@ func (n *Node) cleanupTransaction() {
 		n.pendingUserMetadata = make(map[any]*sdkpb.UserMetadata)
 	}
 
-	n.isActiveStateDirty = false
 	n.needsPointerResolution = false
+	n.totalTimeSkippedUpdatedInPassive = false
+
+	// Reset per-node subtreeIsDirty on all nodes in the tree.
+	for _, node := range n.andAllChildren() {
+		node.subtreeIsDirty = false
+	}
 }
 
 // Snapshot returns all nodes in the tree that have been modified after the given min versioned transition.
@@ -2472,6 +2671,121 @@ func (n *Node) snapshotInternal(
 			nodes,
 		)
 	}
+}
+
+// PartitionedSnapshot returns the tree's state split into two parts:
+//   - A NodesSnapshot with cluster-local fields (physical task statuses) zeroed, safe to
+//     upload to object storage or replicate to another cluster.
+//   - A ChasmLocalState capturing the extracted cluster-local fields, keyed by encoded
+//     node path. Only nodes that carry such metadata are present.
+//
+// The returned snapshot has the same node keys as Snapshot would: PartitionedSnapshot only
+// zeroes field values, it never adds or removes nodes. The live in-memory tree is left
+// untouched: nodes whose cluster-local fields are zeroed are deep-copied first, since
+// Snapshot returns the tree's live node references.
+//
+// The returned ChasmLocalState has an empty Nodes map when no node carries cluster-local
+// fields; MergeClusterLocalState treats an empty (or nil) state as a no-op.
+func (n *Node) PartitionedSnapshot(
+	exclusiveMinVT *persistencespb.VersionedTransition,
+) (NodesSnapshot, *persistencespb.ChasmLocalState) {
+	snapshot := n.Snapshot(exclusiveMinVT)
+	localState := &persistencespb.ChasmLocalState{
+		Nodes: make(map[string]*persistencespb.ChasmNodeLocalState),
+	}
+	for path, node := range snapshot.Nodes {
+		componentAttr := node.GetMetadata().GetComponentAttributes()
+		if componentAttr == nil {
+			continue
+		}
+		if len(componentAttr.SideEffectTasks)+len(componentAttr.PureTasks) == 0 {
+			continue
+		}
+		// Deep-copy only the metadata (where physical task statuses live); the Data payload is
+		// read-only in a snapshot, so share its pointer rather than copying component payloads.
+		clean := &persistencespb.ChasmNode{Metadata: proto.CloneOf(node.GetMetadata()), Data: node.GetData()}
+		cleanAttr := clean.GetMetadata().GetComponentAttributes()
+		localState.Nodes[path] = &persistencespb.ChasmNodeLocalState{
+			SideEffectTaskStatuses: extractAndZeroTaskStatuses(cleanAttr.SideEffectTasks),
+			PureTaskStatuses:       extractAndZeroTaskStatuses(cleanAttr.PureTasks),
+		}
+		snapshot.Nodes[path] = clean
+	}
+	return snapshot, localState
+}
+
+// extractAndZeroTaskStatuses records each task's physical task status in order and zeroes
+// it in place. The caller must pass tasks from a node copy, not the live tree.
+func extractAndZeroTaskStatuses(taskList []*persistencespb.ChasmComponentAttributes_Task) []int32 {
+	if len(taskList) == 0 {
+		return nil
+	}
+	statuses := make([]int32, len(taskList))
+	for i, t := range taskList {
+		statuses[i] = t.PhysicalTaskStatus
+		t.PhysicalTaskStatus = physicalTaskStatusNone
+	}
+	return statuses
+}
+
+// ClusterLocalStateMergeResult reports, per direction, how many nodes had a task/status count
+// mismatch during MergeClusterLocalState. The two directions differ in significance, so they are
+// tracked separately rather than as a single count.
+type ClusterLocalStateMergeResult struct {
+	// NodesWithUncoveredTasks counts nodes that had more tasks than stored statuses. The extra
+	// tasks keep their zeroed status (physicalTaskStatusNone) and get a physical task created on
+	// the next transaction. Benign and self-healing — typically the writer's captured state was
+	// slightly behind the authoritative snapshot.
+	NodesWithUncoveredTasks int
+	// NodesWithExtraStatuses counts nodes that had more stored statuses than tasks. The surplus
+	// statuses have no task to apply to and are dropped. Suspicious: the stored state referenced
+	// tasks absent from the authoritative snapshot, which can indicate cluster divergence (e.g.
+	// split-brain). Detecting and resolving true divergence belongs to the replication conflict
+	// path; this count is a diagnostic signal, not the resolution.
+	NodesWithExtraStatuses int
+}
+
+// MergeClusterLocalState restores cluster-local metadata into the snapshot, inverting the
+// extraction performed by PartitionedSnapshot. Nodes present in both the snapshot and the
+// state are updated; nodes in the state but not the snapshot are silently skipped (the node
+// may have been deleted). Statuses are matched to tasks by position; a length mismatch applies
+// only the overlapping prefix. It returns per-direction counts of nodes whose status count didn't
+// match the task count (see ClusterLocalStateMergeResult), so callers can react to a (usually
+// stale-data) merge and escalate the suspicious direction.
+//
+// The merge performs no version/ordering checks; callers must apply it only against a final local
+// tree (e.g. defer until the execution is completed and its close version has caught up to the
+// source), so a length mismatch signals real divergence rather than normal replication lag.
+func (s *NodesSnapshot) MergeClusterLocalState(state *persistencespb.ChasmLocalState) ClusterLocalStateMergeResult {
+	var result ClusterLocalStateMergeResult
+	for path, nodeState := range state.GetNodes() {
+		node, ok := s.Nodes[path]
+		if !ok {
+			continue
+		}
+		componentAttr := node.GetMetadata().GetComponentAttributes()
+		if componentAttr == nil {
+			continue
+		}
+		seDiff := mergeTaskStatuses(componentAttr.SideEffectTasks, nodeState.GetSideEffectTaskStatuses())
+		pureDiff := mergeTaskStatuses(componentAttr.PureTasks, nodeState.GetPureTaskStatuses())
+		if seDiff > 0 || pureDiff > 0 {
+			result.NodesWithUncoveredTasks++
+		}
+		if seDiff < 0 || pureDiff < 0 {
+			result.NodesWithExtraStatuses++
+		}
+	}
+	return result
+}
+
+// mergeTaskStatuses applies statuses to tasks by position and returns len(taskList) - len(statuses)
+// (>0: extra tasks left zeroed; <0: surplus statuses dropped).
+func mergeTaskStatuses(taskList []*persistencespb.ChasmComponentAttributes_Task, statuses []int32) int {
+	for i := 0; i < len(taskList) && i < len(statuses); i++ {
+		taskList[i].PhysicalTaskStatus = statuses[i]
+	}
+	return len(taskList) - len(statuses)
 }
 
 // ApplySystemMutation should only used by internal persistence layer logic to force apply
@@ -2617,9 +2931,11 @@ func (n *Node) applyDeletions(
 			continue
 		}
 
+		parent := node.parent
 		if err := node.delete(isSystemUpdates); err != nil {
 			return err
 		}
+		n.clearAncestorNodeValues(parent)
 	}
 
 	return nil
@@ -2640,6 +2956,7 @@ func (n *Node) applyUpdates(
 			// Node doesn't exist, we need to create it.
 			newNode := n.setSerializedNode(path, encodedPath, updatedNode)
 			newNode.resetTaskStatus()
+			n.clearAncestorNodeValues(newNode.parent)
 			if isSystemUpdates {
 				n.systemMutation.UpdatedNodes[encodedPath] = newNode.serializedNode
 				delete(n.systemMutation.DeletedNodes, encodedPath)
@@ -2681,9 +2998,7 @@ func (n *Node) applyUpdates(
 			node.setValue(nil)
 			node.setValueState(valueStateNeedDeserialize)
 			node.serializedNode = updatedNode
-
-			// Clearing decoded value for ancestor nodes is not necessary because the value field is not referenced directly.
-			// Parent node is pointing to the Node struct.
+			n.clearAncestorNodeValues(node.parent)
 		}
 	}
 
@@ -2691,6 +3006,12 @@ func (n *Node) applyUpdates(
 }
 
 func (n *Node) RefreshTasks() error {
+	// A full refresh regenerates every physical task, including skip-adjusted timers (fire
+	// times are converted against the current accumulated skip in backend.AddTasks). It
+	// therefore subsumes any pending replication-driven time-skipping re-stamp, so clear the
+	// flag to avoid generating those timer tasks twice in the same CloseTransaction.
+	n.totalTimeSkippedUpdatedInPassive = false
+
 	for _, node := range n.andAllChildren() {
 		// Only reset task status here, the actual task generation will be done when
 		// CloseTransaction() is called to persist the changes.
@@ -2712,6 +3033,10 @@ func (n *Node) RefreshTasks() error {
 	}
 
 	return nil
+}
+
+func (n *Node) MarkTotalTimeSkippedUpdatedInPassive() {
+	n.totalTimeSkippedUpdatedInPassive = true
 }
 
 func (n *Node) resetTaskStatus() bool {
@@ -2863,7 +3188,7 @@ func (n *Node) IsDirty() bool {
 // which need to be persisted to DB AND replicated to other clusters.
 // The result will be reset to false after a call to CloseTransaction().
 func (n *Node) IsStateDirty() bool {
-	return n.isActiveStateDirty ||
+	return n.subtreeIsDirty ||
 		len(n.mutation.UpdatedNodes) > 0 ||
 		len(n.mutation.DeletedNodes) > 0
 }
@@ -2885,6 +3210,7 @@ func (n *Node) IsStale(
 
 func (n *Node) Terminate(
 	request TerminateComponentRequest,
+	forceTerminationReason metrics.ReasonString,
 ) error {
 	if n.parent != nil {
 		return softassert.UnexpectedInternalErr(
@@ -2914,6 +3240,24 @@ func (n *Node) Terminate(
 	}
 
 	n.terminated = true
+	namespaceName := ""
+	namespaceEntry := n.backend.GetNamespaceEntry()
+	if namespaceEntry != nil {
+		namespaceName = namespaceEntry.Name().String()
+	}
+
+	archetypeID := n.ArchetypeID()
+	archetypeName, ok := n.registry.ComponentFqnByID(archetypeID)
+	if !ok {
+		archetypeName = strconv.FormatUint(uint64(archetypeID), 10)
+	}
+
+	metrics.ExecutionForceTerminations.With(n.metricsHandler).Record(
+		1,
+		metrics.NamespaceTag(namespaceName),
+		metrics.ArchetypeTag(archetypeName),
+		metrics.ReasonTag(forceTerminationReason),
+	)
 	return nil
 }
 
@@ -2927,6 +3271,27 @@ func (n *Node) SetDeleteAfterClose(deleteAfterClose bool) {
 func (n *Node) ArchetypeID() ArchetypeID {
 	// Root must be a component.
 	return n.root().serializedNode.Metadata.GetComponentAttributes().GetTypeId()
+}
+
+// executionType returns the execution type registered for the root component's archetype.
+//
+// The execution type comes from the *root* component of the tree, not from the current node, so
+// every node of an execution reports the same value. May be [enumspb.EXECUTION_TYPE_UNSPECIFIED]
+// if the root component was registered without a WithExecutionType option.
+func (n *Node) executionType() enumspb.ExecutionType {
+	// ArchetypeID() resolves the root of the tree, regardless of which node it is called on.
+	archetypeID := n.ArchetypeID()
+	if archetypeID == UnspecifiedArchetypeID {
+		// The root component is not set yet, so the execution has no external representation.
+		return enumspb.EXECUTION_TYPE_UNSPECIFIED
+	}
+
+	rc, ok := n.registry.ComponentByID(archetypeID)
+	if !ok {
+		softassert.Fail(n.logger, "unknown archetype id", tag.ArchetypeID(archetypeID))
+		return enumspb.EXECUTION_TYPE_UNSPECIFIED
+	}
+	return rc.executionType
 }
 
 // Archetype returns the root component's fully qualified name.
@@ -3197,7 +3562,7 @@ func deserializeTask(
 	}
 
 	taskGoType := registrableTask.goType
-	if taskGoType.Kind() == reflect.Ptr {
+	if taskGoType.Kind() == reflect.Pointer {
 		taskGoType = taskGoType.Elem()
 	}
 	taskValue = reflect.New(taskGoType)
@@ -3253,7 +3618,7 @@ func serializeTask(
 	taskGoType := registrableTask.goType
 
 	// Handle pointer to struct.
-	if taskGoType.Kind() == reflect.Ptr {
+	if taskGoType.Kind() == reflect.Pointer {
 		taskGoType = taskGoType.Elem()
 		taskValue = taskValue.Elem()
 	}
@@ -3301,9 +3666,9 @@ func (n *Node) ExecutePureTask(
 ) (_ bool, retErr error) {
 	defer func() {
 		if retErr == nil {
-			// Mark the tree state to dirty so it will force the transaction to clean up
-			// invalid tasks (including the current one).
-			n.isActiveStateDirty = true
+			// Mark this node dirty so CloseTransaction cleans up invalid tasks,
+			// including the current one, even if the handler made no state mutations.
+			n.markSubtreeDirty()
 		}
 	}()
 
@@ -3316,7 +3681,7 @@ func (n *Node) ExecutePureTask(
 		return false, fmt.Errorf("ExecutePureTask called on a SideEffect task '%s'", registrableTask.fqType())
 	}
 
-	progressIntentCtx := newContextWithOperationIntent(baseCtx, OperationIntentProgress)
+	progressIntentCtx := NewContextWithOperationIntent(baseCtx, OperationIntentProgress)
 	validationContext := NewContext(progressIntentCtx, n)
 
 	// Ensure this node's component value is hydrated before execution.
@@ -3325,7 +3690,7 @@ func (n *Node) ExecutePureTask(
 	}
 
 	// Run the task's registered value before execution.
-	valid, err := n.validateTask(validationContext, taskAttributes, taskInstance)
+	valid, err := n.validateTask(validationContext, TaskInvocation{TaskAttributes: taskAttributes}, taskInstance)
 	if err != nil {
 		return false, err
 	}
@@ -3363,57 +3728,85 @@ func (n *Node) ExecutePureTask(
 		return true, execErr
 	}
 
-	// TODO - a task validator must succeed validation after a task executes
-	// successfully (without error), otherwise it will generate an infinite loop.
-	// Check for this case by marking the in-memory task as having executed, which the
-	// CloseTransaction method will check against.
-	//
-	// See: https://github.com/temporalio/temporal/pull/7701#discussion_r2072026993
+	if taskAttributes.IsImmediate() {
+		return true, nil
+	}
 
+	// A scheduled pure task must be invalidated by its own successful execution, otherwise
+	// the logical task stays in the tree with no physical task left to drive it. The metric
+	// is always emitted so the condition can be observed before DLQ-ing is enabled.
+	dlqEnabled := n.backend.ChasmDLQScheduledPureTaskOnValidationEnabled()
+	valid, err = n.validateTask(validationContext, TaskInvocation{TaskAttributes: taskAttributes}, taskInstance)
+	if err != nil {
+		if dlqEnabled {
+			return true, err
+		}
+		n.logger.Warn("chasm: failed to validate pure task after successful execution", tag.Error(err))
+		return true, nil
+	}
+	if !valid {
+		return true, nil
+	}
+
+	metrics.ChasmPureTaskNotInvalidated.With(metricsHandler).Record(1, chasmTaskTypeTag)
+
+	archetypeID := n.ArchetypeID()
+	archetype, _ := n.registry.ArchetypeDisplayName(archetypeID)
+	encodedPath, _ := n.getEncodedPath()
+	notInvalidatedErr := NewTaskNotInvalidatedErrorWithDetails("pure", TaskNotInvalidatedDetails{
+		TaskType:             registrableTask.fqType(),
+		TaskTypeID:           registrableTask.taskTypeID,
+		Archetype:            archetype,
+		ArchetypeID:          archetypeID,
+		ComponentPath:        n.path(),
+		EncodedComponentPath: encodedPath,
+		TaskAttributes:       taskAttributes,
+	})
+	if dlqEnabled {
+		return true, notInvalidatedErr
+	}
+
+	workflowKey := n.backend.GetWorkflowKey()
+	n.logger.Warn(notInvalidatedErr.Error(), append([]tag.Tag{
+		tag.WorkflowNamespaceID(workflowKey.NamespaceID),
+		tag.WorkflowID(workflowKey.WorkflowID),
+		tag.WorkflowRunID(workflowKey.RunID),
+	}, notInvalidatedErr.LogTags()...)...)
 	return true, nil
 }
 
-// ValidatePureTask runs a pure task's associated validator, returning true
-// if the task is valid. Intended for use by standby handlers as part of
-// EachPureTask's callback.
-// This method assumes the node's value has already been prepared (hydrated).
-func (n *Node) ValidatePureTask(
-	ctx context.Context,
-	taskAttributes TaskAttributes,
-	taskInstance any,
-) (bool, error) {
-	return n.validateTask(
-		NewContext(newContextWithOperationIntent(ctx, OperationIntentProgress), n),
-		taskAttributes,
-		taskInstance,
-	)
-}
-
-// ValidateSideEffectTask runs a side effect task's associated validator,
-// returning the deserialized task instance if the task is valid. Intended for
-// use by standby handlers.
+// ValidateSideEffectTask checks whether a side effect task should still be
+// executed. Intended for use by standby handlers.
 //
-// If validation succeeds but the task is invalid, nil is returned to signify the
-// task can be skipped/deleted.
+// It returns two booleans:
+//   - isTaskInTree: true if the task's logical counterpart still exists in the
+//     replicated tree state (node found, InitialVersionedTransition matches, and
+//     logical task present in SideEffectTasks). A false value here means the
+//     active cluster has definitively invalidated the task via replication — the
+//     physical task should be dropped.
+//   - isValidByComponent: true if the component's own Validate method approves
+//     the task. Only meaningful when isTaskInTree is true. A false value here
+//     may be a transient false-negative caused by a code deployment changing
+//     validation logic without a corresponding state change.
 //
-// If validation fails, that error is returned.
+// If an error is returned both booleans are false.
 func (n *Node) ValidateSideEffectTask(
 	ctx context.Context,
 	chasmTask *tasks.ChasmTask,
-) (isValid bool, retErr error) {
+) (isTaskInTree bool, isValidByComponent bool, retErr error) {
 
 	taskInfo := chasmTask.Info
 	taskTypeID := taskInfo.TypeId
 	registrableTask, ok := n.registry.TaskByID(taskTypeID)
 	if !ok {
-		return false, softassert.UnexpectedInternalErr(
+		return false, false, softassert.UnexpectedInternalErr(
 			n.logger,
 			"unknown task type id",
 			fmt.Errorf("%d", taskTypeID))
 	}
 
 	if registrableTask.isPureTask {
-		return false, softassert.UnexpectedInternalErr(
+		return false, false, softassert.UnexpectedInternalErr(
 			n.logger,
 			"ValidateSideEffectTask called on a Pure task, task type: ",
 			fmt.Errorf("%s", registrableTask.fqType()))
@@ -3421,7 +3814,7 @@ func (n *Node) ValidateSideEffectTask(
 
 	node, ok := n.findNode(taskInfo.Path)
 	if !ok {
-		return false, nil
+		return false, false, nil
 	}
 
 	// node.serializedNode should always be available when running a side effect task.
@@ -3429,7 +3822,7 @@ func (n *Node) ValidateSideEffectTask(
 		taskInfo.ComponentInitialVersionedTransition,
 		node.serializedNode.Metadata.InitialVersionedTransition,
 	) != 0 {
-		return false, nil
+		return false, false, nil
 	}
 
 	// Verify the logical task this physical task was generated from still exists,
@@ -3452,14 +3845,16 @@ func (n *Node) ValidateSideEffectTask(
 			}
 		}
 		if logicalTask == nil {
-			return false, nil
+			return false, false, nil
 		}
 	}
 
+	// All structural checks passed — the task exists in the tree.
+
 	// Component must be hydrated before the task's validator is called.
-	validateCtx := NewContext(newContextWithOperationIntent(ctx, OperationIntentProgress), n)
+	validateCtx := NewContext(NewContextWithOperationIntent(ctx, OperationIntentProgress), n)
 	if err := node.prepareComponentValue(validateCtx); err != nil {
-		return false, err
+		return false, false, err
 	}
 
 	defer func() {
@@ -3485,18 +3880,22 @@ func (n *Node) ValidateSideEffectTask(
 			chasmTask.DeserializedTask, err = deserializeTask(registrableTask, taskInfo.Data)
 		}
 		if err != nil {
-			return false, err
+			return false, false, err
 		}
 	}
 
-	return node.validateTask(
+	isValidByComponent, retErr = node.validateTask(
 		validateCtx,
-		TaskAttributes{
-			ScheduledTime: chasmTask.GetVisibilityTime(),
-			Destination:   chasmTask.Destination,
+		TaskInvocation{
+			TaskAttributes: TaskAttributes{
+				ScheduledTime: chasmTask.GetVisibilityTime(),
+				Destination:   chasmTask.Destination,
+			},
+			Attempt: chasmTask.Attempt,
 		},
 		chasmTask.DeserializedTask.Interface(),
 	)
+	return true, isValidByComponent, retErr
 }
 
 // ExecuteSideEffectTask executes the given ChasmTask on its associated node
@@ -3602,13 +4001,13 @@ func (n *Node) invokeSideEffectTaskFn(
 		archetypeID:           ArchetypeID(taskInfo.GetArchetypeId()),
 		executionLastUpdateVT: taskInfo.ComponentLastUpdateVersionedTransition,
 		componentPath:         taskInfo.Path,
-		componentInitialVT:    taskInfo.ComponentInitialVersionedTransition,
+		componentInitialVT:    refComponentInitialVT(taskInfo.Path, taskInfo.ComponentInitialVersionedTransition),
 
 		// Validate the Ref only once it is accessed by the task's handler.
-		validationFn: makeValidationFn(registrableTask, validate, taskAttributes, taskValue),
+		validationFn: makeValidationFn(registrableTask, validate, chasmTask.Attempt, taskAttributes, taskValue),
 	}
 
-	ctx = newContextWithOperationIntent(ctx, OperationIntentProgress)
+	ctx = NewContextWithOperationIntent(ctx, OperationIntentProgress)
 
 	defer log.CapturePanic(n.logger, &retErr)
 
@@ -3646,6 +4045,7 @@ func (n *Node) ComponentByPath(
 func makeValidationFn(
 	registrableTask *RegistrableTask,
 	validate func(NodeBackend, Context, Component) error,
+	attempt int,
 	taskAttributes TaskAttributes,
 	taskValue reflect.Value,
 ) func(NodeBackend, Context, Component, *Registry) error {
@@ -3663,7 +4063,7 @@ func makeValidationFn(
 		valid, err := registrableTask.validateFn(
 			ctx,
 			component,
-			taskAttributes,
+			TaskInvocation{TaskAttributes: taskAttributes, Attempt: attempt},
 			taskValue.Interface(),
 			registry,
 		)
@@ -3681,4 +4081,134 @@ func makeValidationFn(
 // serializer while preserving deterministic proto3 bytes for byte comparisons.
 func encodeChasmBlob(m proto.Message) (*commonpb.DataBlob, error) {
 	return serialization.Encode(m, serialization.WithDeterministicProto3)
+}
+
+func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) error {
+	// Replication does not mark the subtree dirty. Re-stamp timers only when the
+	// replicated accumulated skip changed.
+	if !n.subtreeIsDirty {
+		if n.totalTimeSkippedUpdatedInPassive {
+			if err := n.regenerateTimerTasksForTimeSkipping(); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	if n.parent != nil {
+		n.logger.Warn("time skipping handler called on non-root component is no-op")
+		return nil
+	}
+	if n.ArchetypeID() == WorkflowArchetypeID {
+		return nil
+	}
+
+	// conf check
+	tsi := n.backend.GetExecutionInfo().GetTimeSkippingInfo()
+	if !tsi.GetConfig().GetEnabled() {
+		return nil
+	}
+
+	rootComponent, err := n.Component(immutableContext, ComponentRef{})
+	if err != nil {
+		return err
+	}
+	tsRoot, ok := rootComponent.(TimeSkippingRuntimeGate)
+	if !ok {
+		n.logger.Error(
+			"root component does not implement TimeSkippingRuntimeGate when executions have turned on time skipping",
+			tag.Error(fmt.Errorf("type: %s", reflect.TypeOf(rootComponent).Name())))
+		return serviceerror.NewInternal("time skipping is not enabled for current execution type")
+	}
+
+	// runtime check
+	if !tsRoot.IsExecutionSkippable(immutableContext) {
+		return nil
+	}
+	transition := n.defaultFindNextTargetTime()
+	if !transition.IsValid() {
+		return nil
+	}
+
+	// state change
+	n.backend.RecordTimeSkippingTransition(transition)
+	return n.regenerateTimerTasksForTimeSkipping()
+}
+
+func (n *Node) regenerateTimerTasksForTimeSkipping() error {
+	archetypeID := n.ArchetypeID()
+	var firstPureTask *persistencespb.ChasmComponentAttributes_Task
+	var firstPureTaskNode *Node
+
+	for nodePath, node := range n.andAllChildren() {
+		componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes()
+		if componentAttr == nil {
+			continue
+		}
+
+		for _, sideEffectTask := range componentAttr.GetSideEffectTasks() {
+			if taskCategory(sideEffectTask) != tasks.CategoryTimer {
+				continue
+			}
+			sideEffectTask.PhysicalTaskStatus = physicalTaskStatusNone
+			node.closeTransactionGeneratePhysicalSideEffectTask(sideEffectTask, nodePath, archetypeID)
+		}
+
+		// Find the earliest pure task in the entire tree. Pure tasks are sorted
+		// by scheduled time, so pureTasks[0] is the earliest for this component.
+		pureTasks := componentAttr.GetPureTasks()
+		if len(pureTasks) == 0 {
+			continue
+		}
+
+		if firstPureTask == nil || comparePureTasks(pureTasks[0], firstPureTask) < 0 {
+			firstPureTask = pureTasks[0]
+			firstPureTaskNode = node
+		}
+	}
+
+	if firstPureTask != nil {
+		// Pure tasks are represented by a single physical task, so we only need to
+		// regenerate that one. The earliest pure task is already
+		// physicalTaskStatusCreated from a prior transaction, and
+		// closeTransactionGeneratePhysicalPureTask short-circuits on that status.
+		// Reset it so backend.AddTask re-converts the fire time for the skipped time.
+		firstPureTask.PhysicalTaskStatus = physicalTaskStatusNone
+	}
+	return n.closeTransactionGeneratePhysicalPureTask(firstPureTask, firstPureTaskNode, archetypeID)
+}
+
+// defaultFindNextTargetTime finds the earliest timer task from both pure tasks and side-effect tasks
+// as the target time for time skipping, and conditionally adjusts the target time with the fast-forward time if set.
+// this method doesn't validate tasks and is assumed to be called after invalidate tasks are deleted
+func (n *Node) defaultFindNextTargetTime() *TimeSkippingTransition {
+	transition := NewTimeSkippingTransition(n.Now(nil))
+	now := transition.CurrentTime
+	for _, node := range n.andAllChildren() {
+		componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes()
+		if componentAttr == nil {
+			continue
+		}
+		for _, taskList := range [][]*persistencespb.ChasmComponentAttributes_Task{
+			componentAttr.GetPureTasks(),
+			componentAttr.GetSideEffectTasks(),
+		} {
+			for _, task := range taskList {
+				if taskCategory(task) != tasks.CategoryTimer {
+					continue
+				}
+				scheduledTime := task.GetScheduledTime().AsTime()
+				if !scheduledTime.After(now) {
+					continue
+				}
+				transition.TrackEarliestFutureTime(scheduledTime)
+			}
+		}
+	}
+	tsi := n.backend.GetExecutionInfo().GetTimeSkippingInfo()
+	ff := tsi.GetFastForwardInfo()
+	if ff != nil && !ff.HasReached {
+		transition.GateByFastForward(ff)
+	}
+	return transition
 }

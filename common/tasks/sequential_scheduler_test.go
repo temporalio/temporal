@@ -172,16 +172,14 @@ func (s *sequentialSchedulerSuite) TestParallelSubmitProcess() {
 		}
 		close(channel)
 
-		endWaitGroup.Add(1)
-		go func() {
+		endWaitGroup.Go(func() {
 			startWaitGroup.Wait()
 
 			for mockTask := range channel {
 				s.scheduler.Submit(mockTask)
 			}
 
-			endWaitGroup.Done()
-		}()
+		})
 		startWaitGroup.Done()
 	}
 	endWaitGroup.Wait()
@@ -387,7 +385,7 @@ func (s *sequentialSchedulerSuite) newTestProcessor() *SequentialScheduler[*Mock
 		return 1
 	}
 	factory := func(task *MockTask) SequentialTaskQueue[*MockTask] {
-		return newTestSequentialTaskQueue[*MockTask](1, 3000)
+		return newTestSequentialTaskQueue[*MockTask](1)
 	}
 	return NewSequentialScheduler[*MockTask](
 		&SequentialSchedulerOptions{
@@ -407,7 +405,7 @@ func (s *sequentialSchedulerSuite) newTestProcessorWithQueueSize(queueSize int) 
 		return 1
 	}
 	factory := func(task *MockTask) SequentialTaskQueue[*MockTask] {
-		return newTestSequentialTaskQueue[*MockTask](1, 3000)
+		return newTestSequentialTaskQueue[*MockTask](1)
 	}
 	return NewSequentialScheduler[*MockTask](
 		&SequentialSchedulerOptions{

@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/server/tools/common/github"
 )
 
 func TestLogBetaBinomial(t *testing.T) {
@@ -294,7 +295,10 @@ func TestBuildObservations(t *testing.T) {
 		{Name: "TestFoo", Failed: false, RunID: 999},
 	}
 
-	obs := buildObservations("TestFoo", runs, commitOrderSlice, runToSHA)
+	index := buildTestRunIndex(runs)
+	obs := buildObservationsByTest(runs, []string{"TestFoo"}, commitOrderSlice, runToSHA)["TestFoo"]
+	require.Equal(t, 12, index.tests["TestFoo"].totalRuns)
+	require.Equal(t, 4, index.tests["TestFoo"].failures)
 
 	require.Len(t, obs, 4, "should have one observation per commit with data")
 
@@ -347,14 +351,14 @@ func TestSelectTopFlakyTests(t *testing.T) {
 	t.Run("excludes tests below MinFailures threshold", func(t *testing.T) {
 		runs := makeRunsForTest("TestLowFails", 100, 2) // 2 failures: below minBisectFailures=5
 		cfg := BisectConfig{TopN: 10, MinFailures: 5, MinRuns: 10}
-		result := selectTopFlakyTests(runs, cfg)
+		result := selectTopFlakyTests(buildTestRunIndex(runs), cfg)
 		assert.NotContains(t, result, "TestLowFails")
 	})
 
 	t.Run("excludes tests below MinRuns threshold", func(t *testing.T) {
 		runs := makeRunsForTest("TestFewRuns", 10, 6) // only 10 total runs: below minBisectRuns=30
 		cfg := BisectConfig{TopN: 10, MinFailures: 5, MinRuns: 30}
-		result := selectTopFlakyTests(runs, cfg)
+		result := selectTopFlakyTests(buildTestRunIndex(runs), cfg)
 		assert.NotContains(t, result, "TestFewRuns")
 	})
 
@@ -365,7 +369,7 @@ func TestSelectTopFlakyTests(t *testing.T) {
 		runs = append(runs, makeRunsForTest("TestHighRate", 40, 20)...)
 		runs = append(runs, makeRunsForTest("TestLowRate", 40, 10)...)
 		cfg := BisectConfig{TopN: 10, MinFailures: 5, MinRuns: 30}
-		result := selectTopFlakyTests(runs, cfg)
+		result := selectTopFlakyTests(buildTestRunIndex(runs), cfg)
 		require.GreaterOrEqual(t, len(result), 2)
 		assert.Equal(t, "TestHighRate", result[0])
 		assert.Equal(t, "TestLowRate", result[1])
@@ -377,7 +381,7 @@ func TestSelectTopFlakyTests(t *testing.T) {
 			runs = append(runs, makeRunsForTest("TestFlaky"+string(rune('A'+i)), 40, 10)...)
 		}
 		cfg := BisectConfig{TopN: 3, MinFailures: 5, MinRuns: 30}
-		result := selectTopFlakyTests(runs, cfg)
+		result := selectTopFlakyTests(buildTestRunIndex(runs), cfg)
 		assert.Len(t, result, 3)
 	})
 
@@ -387,7 +391,7 @@ func TestSelectTopFlakyTests(t *testing.T) {
 			{Name: "TestSkipped", Skipped: true, Failed: true},
 		}
 		cfg := BisectConfig{TopN: 10, MinFailures: 1, MinRuns: 1}
-		result := selectTopFlakyTests(runs, cfg)
+		result := selectTopFlakyTests(buildTestRunIndex(runs), cfg)
 		assert.NotContains(t, result, "TestSkipped")
 	})
 
@@ -401,7 +405,7 @@ func TestSelectTopFlakyTests(t *testing.T) {
 			runs = append(runs, TestRun{Name: "TestFlaky (retry 1)", Failed: true})
 		}
 		cfg := BisectConfig{TopN: 10, MinFailures: 5, MinRuns: 30}
-		result := selectTopFlakyTests(runs, cfg)
+		result := selectTopFlakyTests(buildTestRunIndex(runs), cfg)
 		require.Len(t, result, 1)
 		assert.Equal(t, "TestFlaky", result[0])
 	})
@@ -409,9 +413,9 @@ func TestSelectTopFlakyTests(t *testing.T) {
 
 func TestCommitPriorWeight(t *testing.T) {
 	t.Run("docs-only commit is deprioritized", func(t *testing.T) {
-		meta := CommitMeta{
+		meta := github.Commit{
 			SHA:   "abc",
-			Files: []string{".github/workflows/ci.yml", "docs/architecture.md"},
+			Files: []github.CommitFile{{Filename: ".github/workflows/ci.yml"}, {Filename: "docs/architecture.md"}},
 		}
 		weight, note := commitPriorWeight(meta, "TestWorkflowSuite/TestRun")
 		assert.InDelta(t, 0.05, weight, 1e-10)
@@ -419,9 +423,9 @@ func TestCommitPriorWeight(t *testing.T) {
 	})
 
 	t.Run("markdown-only commit is deprioritized", func(t *testing.T) {
-		meta := CommitMeta{
+		meta := github.Commit{
 			SHA:   "abc",
-			Files: []string{"README.md", "CHANGELOG.md"},
+			Files: []github.CommitFile{{Filename: "README.md"}, {Filename: "CHANGELOG.md"}},
 		}
 		weight, note := commitPriorWeight(meta, "TestWorkflowSuite/TestRun")
 		assert.InDelta(t, 0.05, weight, 1e-10)
@@ -429,9 +433,9 @@ func TestCommitPriorWeight(t *testing.T) {
 	})
 
 	t.Run("service/history/ commit is neutral weight", func(t *testing.T) {
-		meta := CommitMeta{
+		meta := github.Commit{
 			SHA:   "abc",
-			Files: []string{"service/history/workflow_executor.go", "service/history/mutable_state.go"},
+			Files: []github.CommitFile{{Filename: "service/history/workflow_executor.go"}, {Filename: "service/history/mutable_state.go"}},
 		}
 		weight, note := commitPriorWeight(meta, "TestWorkflowSuite/TestContinueAsNew")
 		assert.InDelta(t, 1.0, weight, 1e-10)
@@ -439,9 +443,9 @@ func TestCommitPriorWeight(t *testing.T) {
 	})
 
 	t.Run("test-only commit is mildly deprioritized", func(t *testing.T) {
-		meta := CommitMeta{
+		meta := github.Commit{
 			SHA:   "abc",
-			Files: []string{"service/frontend/nexus_handler_test.go", "service/worker/deployment_test.go"},
+			Files: []github.CommitFile{{Filename: "service/frontend/nexus_handler_test.go"}, {Filename: "service/worker/deployment_test.go"}},
 		}
 		weight, note := commitPriorWeight(meta, "TestWorkflowSuite/TestRun")
 		assert.InDelta(t, 0.3, weight, 1e-10)
@@ -449,9 +453,9 @@ func TestCommitPriorWeight(t *testing.T) {
 	})
 
 	t.Run("mixed code and doc files is neutral", func(t *testing.T) {
-		meta := CommitMeta{
+		meta := github.Commit{
 			SHA:   "abc",
-			Files: []string{"service/frontend/handler.go", "README.md"},
+			Files: []github.CommitFile{{Filename: "service/frontend/handler.go"}, {Filename: "README.md"}},
 		}
 		weight, note := commitPriorWeight(meta, "TestWorkflowSuite/TestRun")
 		// Not all files are docs/config (handler.go is not), not all are test files
@@ -461,16 +465,16 @@ func TestCommitPriorWeight(t *testing.T) {
 	})
 
 	t.Run("empty files list returns neutral weight", func(t *testing.T) {
-		meta := CommitMeta{SHA: "abc", Files: nil}
+		meta := github.Commit{SHA: "abc", Files: nil}
 		weight, note := commitPriorWeight(meta, "TestWorkflowSuite/TestRun")
 		assert.InDelta(t, 1.0, weight, 1e-10)
 		assert.Empty(t, note)
 	})
 
 	t.Run("service/frontend/ commit is neutral weight", func(t *testing.T) {
-		meta := CommitMeta{
+		meta := github.Commit{
 			SHA:   "abc",
-			Files: []string{"service/frontend/nexus_handler.go"},
+			Files: []github.CommitFile{{Filename: "service/frontend/nexus_handler.go"}},
 		}
 		weight, note := commitPriorWeight(meta, "TestNexusSuite/TestOperation")
 		assert.InDelta(t, 1.0, weight, 1e-10)
@@ -507,7 +511,8 @@ func TestRunBisectForTestDirectionFilter(t *testing.T) {
 		MinProbability: 0.5,
 	}
 
-	report := runBisectForTest(cfg, "TestFoo", allRuns, commitOrderSlice, runToSHA, nil)
+	obs := buildObservationsByTest(allRuns, []string{"TestFoo"}, commitOrderSlice, runToSHA)["TestFoo"]
+	report := runBisectForTest(cfg, "TestFoo", obs, nil)
 
 	// The only high-probability transition point (sha5, where rate dropped 80%→0%) should be
 	// filtered out by the direction filter, leaving no actionable suspects.
@@ -546,7 +551,8 @@ func TestRunBisectForTestDirectionFilterKeepsIntroduction(t *testing.T) {
 		MinProbability: 0.5,
 	}
 
-	report := runBisectForTest(cfg, "TestFoo", allRuns, commitOrderSlice, runToSHA, nil)
+	obs := buildObservationsByTest(allRuns, []string{"TestFoo"}, commitOrderSlice, runToSHA)["TestFoo"]
+	report := runBisectForTest(cfg, "TestFoo", obs, nil)
 
 	require.False(t, report.Skipped, "report should not be skipped: a real introduction exists")
 	require.NotEmpty(t, report.TopSuspects)

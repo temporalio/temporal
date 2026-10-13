@@ -117,7 +117,7 @@ func TestPatch_UnpauseBlockedDuringMigration(t *testing.T) {
 	require.ErrorIs(t, err, scheduler.ErrMigrationPending)
 }
 
-func TestPatch_PauseAllowedDuringMigration(t *testing.T) {
+func TestPatch_RejectedDuringMigration(t *testing.T) {
 	sched, ctx, _ := setupSchedulerForTest(t)
 
 	_, err := sched.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
@@ -126,19 +126,24 @@ func TestPatch_PauseAllowedDuringMigration(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Pause with different notes should succeed.
+	// Every patch mutation, including action-producing patches, must be fenced
+	// while the migration task prepares its V1 snapshot.
 	_, err = sched.Patch(ctx, &schedulerpb.PatchScheduleRequest{
 		NamespaceId: namespaceID,
 		FrontendRequest: &workflowservice.PatchScheduleRequest{
 			Namespace:  namespace,
 			ScheduleId: scheduleID,
 			Patch: &schedulepb.SchedulePatch{
-				Pause: "user pause during migration",
+				Pause:              "user pause during migration",
+				TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
+				BackfillRequest:    []*schedulepb.BackfillRequest{{}},
 			},
 		},
 	})
-	require.NoError(t, err)
+	require.ErrorIs(t, err, scheduler.ErrMigrationPending)
 	require.True(t, sched.Schedule.State.Paused)
+	require.Equal(t, "paused for migration to workflow-backed scheduler", sched.Schedule.State.Notes)
+	require.Empty(t, sched.Backfillers)
 }
 
 func TestUpdate_RejectedDuringMigration(t *testing.T) {
@@ -166,4 +171,24 @@ func TestUpdate_RejectedDuringMigration(t *testing.T) {
 	var unavailableErr *serviceerror.Unavailable
 	require.ErrorAs(t, err, &unavailableErr)
 	require.ErrorIs(t, err, scheduler.ErrMigrationPending)
+}
+
+func TestDelete_RejectedDuringMigration(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+
+	_, err := sched.MigrateToWorkflow(ctx, &schedulerpb.MigrateToWorkflowRequest{
+		NamespaceId: namespaceID,
+		ScheduleId:  scheduleID,
+	})
+	require.NoError(t, err)
+
+	_, err = sched.Delete(ctx, &schedulerpb.DeleteScheduleRequest{
+		NamespaceId: namespaceID,
+		FrontendRequest: &workflowservice.DeleteScheduleRequest{
+			Namespace:  namespace,
+			ScheduleId: scheduleID,
+		},
+	})
+	require.ErrorIs(t, err, scheduler.ErrMigrationPending)
+	require.False(t, sched.Closed)
 }

@@ -42,7 +42,7 @@ func (c *GlobalMetricCapture) collectMetric(name string, keep func(*metricstest.
 
 	keepAll := keep == nil
 	var collected []*metricstest.CapturedRecording
-	for _, rec := range c.capture.Snapshot()[name] {
+	for _, rec := range c.capture.SnapshotMetric(name) {
 		if keepAll || keep(rec) {
 			collected = append(collected, rec)
 		}
@@ -60,7 +60,7 @@ func (c *GlobalMetricCapture) checkForNamespaceCaptureMisuse() {
 		return
 	}
 
-	if allQueriedMetricsAreNamespaceScoped(c.capture.Snapshot(), queriedMetrics) {
+	if allQueriedMetricsAreNamespaceScoped(c.capture, queriedMetrics) {
 		panic("GlobalMetricCapture was used, but all queried metrics were namespace-scoped; use NamespaceMetricCapture instead")
 	}
 }
@@ -76,9 +76,9 @@ func (c *GlobalMetricCapture) queriedMetricNames() []string {
 	return queriedMetrics
 }
 
-func allQueriedMetricsAreNamespaceScoped(snap metricstest.CaptureSnapshot, queriedMetrics []string) bool {
+func allQueriedMetricsAreNamespaceScoped(capture *metricstest.Capture, queriedMetrics []string) bool {
 	for _, name := range queriedMetrics {
-		recordings := snap[name]
+		recordings := capture.SnapshotMetric(name)
 		if len(recordings) == 0 {
 			return false
 		}
@@ -92,15 +92,21 @@ func allQueriedMetricsAreNamespaceScoped(snap metricstest.CaptureSnapshot, queri
 }
 
 type NamespaceMetricCapture struct {
-	capture   *metricstest.Capture
-	namespace string
+	capture          *metricstest.Capture
+	missingNamespace sync.Map
 }
 
-func newNamespaceMetricCapture(capture *metricstest.Capture, namespace string) *NamespaceMetricCapture {
-	return &NamespaceMetricCapture{
-		capture:   capture,
-		namespace: namespace,
-	}
+func newNamespaceMetricCapture(handler *metricstest.CaptureHandler, namespace string) *NamespaceMetricCapture {
+	c := &NamespaceMetricCapture{}
+	c.capture = handler.StartCaptureWithFilter(func(name string, rec *metricstest.CapturedRecording) bool {
+		ns, ok := rec.Tags["namespace"]
+		if !ok {
+			// Preserve misuse detection without retaining cluster-global recordings.
+			c.missingNamespace.LoadOrStore(name, struct{}{})
+		}
+		return ok && ns == namespace
+	})
+	return c
 }
 
 func (c *NamespaceMetricCapture) Metric(name string) []*metricstest.CapturedRecording {
@@ -117,14 +123,13 @@ func (c *NamespaceMetricCapture) CollectMetric(name string, keep func(*metricste
 }
 
 func (c *NamespaceMetricCapture) collectMetric(name string, keep func(*metricstest.CapturedRecording) bool) []*metricstest.CapturedRecording {
+	if _, ok := c.missingNamespace.Load(name); ok {
+		panic(fmt.Sprintf("metric %q is not namespace-scoped; use GlobalMetricCapture instead", name))
+	}
 	keepAll := keep == nil
 	var collected []*metricstest.CapturedRecording
-	for _, rec := range c.capture.Snapshot()[name] {
-		namespace, ok := rec.Tags["namespace"]
-		if !ok {
-			panic(fmt.Sprintf("metric %q is not namespace-scoped; use GlobalMetricCapture instead", name))
-		}
-		if namespace == c.namespace && (keepAll || keep(rec)) {
+	for _, rec := range c.capture.SnapshotMetric(name) {
+		if keepAll || keep(rec) {
 			collected = append(collected, rec)
 		}
 	}

@@ -5,62 +5,71 @@ import (
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 )
 
-var _ Task = (*TimeSkippingTimerTask)(nil)
+var (
+	_ Task           = (*TimeSkippingFastForwardTimerTask)(nil)
+	_ HasArchetypeID = (*TimeSkippingFastForwardTimerTask)(nil)
+)
 
 type (
-	// TimeSkippingTimerTask wakes a workflow when the elapsed-duration bound configured
-	// on its TimeSkippingConfig is reached, so the executor can emit a disable transition.
-	//
-	// EventID identifies the event (WorkflowExecutionStartedEvent or
-	// WorkflowExecutionOptionsUpdatedEvent) that installed the bound this task targets.
-	// It is matched against TimeSkippingInfo.CurrentElapsedDurationBound.SourceEventId at
-	// firing time to detect superseded tasks: re-configuring the bound emits a new task
-	// with a new EventID, and the old task is silently dropped on mismatch.
-	// todo@time-skipping: replication related feature (ndc)
-	TimeSkippingTimerTask struct {
+	// TimeSkippingFastForwardTimerTask wakes a workflow when the fast-forward configured
+	// on its TimeSkippingConfig should take effect.
+	TimeSkippingFastForwardTimerTask struct {
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
+		VersionedTransition *persistencespb.VersionedTransition
 		TaskID              int64
-		EventID             int64
+		// ArchetypeID identifies the execution archetype (workflow or a CHASM component) this task
+		// targets. It is required to acquire the correct execution context at firing time, since the
+		// context cache is keyed by archetype. Always set at generation from the mutable state's
+		// archetype (chasm.WorkflowArchetypeID for workflows).
+		ArchetypeID uint32
 	}
 )
 
-func (t *TimeSkippingTimerTask) GetKey() Key {
+func (t *TimeSkippingFastForwardTimerTask) GetKey() Key {
 	return NewKey(t.VisibilityTimestamp, t.TaskID)
 }
 
-func (t *TimeSkippingTimerTask) GetTaskID() int64 {
+func (t *TimeSkippingFastForwardTimerTask) GetArchetypeID() uint32 {
+	return t.ArchetypeID
+}
+
+func (t *TimeSkippingFastForwardTimerTask) GetTaskID() int64 {
 	return t.TaskID
 }
 
-func (t *TimeSkippingTimerTask) SetTaskID(id int64) {
+func (t *TimeSkippingFastForwardTimerTask) SetTaskID(id int64) {
 	t.TaskID = id
 }
 
-func (t *TimeSkippingTimerTask) GetVisibilityTime() time.Time {
+func (t *TimeSkippingFastForwardTimerTask) GetVisibilityTime() time.Time {
 	return t.VisibilityTimestamp
 }
 
-func (t *TimeSkippingTimerTask) SetVisibilityTime(visibilityTime time.Time) {
+func (t *TimeSkippingFastForwardTimerTask) SetVisibilityTime(visibilityTime time.Time) {
 	t.VisibilityTimestamp = visibilityTime
 }
 
-func (t *TimeSkippingTimerTask) GetCategory() Category {
+func (t *TimeSkippingFastForwardTimerTask) GetCategory() Category {
 	return CategoryTimer
 }
 
-func (t *TimeSkippingTimerTask) GetType() enumsspb.TaskType {
+func (t *TimeSkippingFastForwardTimerTask) GetType() enumsspb.TaskType {
 	return enumsspb.TASK_TYPE_TIMESKIPPING_TIMER
 }
 
-func (t *TimeSkippingTimerTask) String() string {
-	return fmt.Sprintf("TimeSkippingTimerTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, EventID: %v}",
+func (t *TimeSkippingFastForwardTimerTask) String() string {
+	vt := t.VersionedTransition
+	return fmt.Sprintf("TimeSkippingFastForwardTimerTask{WorkflowKey: %s, VisibilityTimestamp: %v, TaskID: %v, FailoverVersion: %v, TransitionCount: %v, ArchetypeID: %v}",
 		t.WorkflowKey.String(),
 		t.VisibilityTimestamp,
 		t.TaskID,
-		t.EventID,
+		vt.GetNamespaceFailoverVersion(),
+		vt.GetTransitionCount(),
+		t.ArchetypeID,
 	)
 }

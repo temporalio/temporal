@@ -5,6 +5,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
@@ -43,9 +44,8 @@ func Invoke(
 	//
 	// Close workflow execution is deleted using DeleteExecutionTask.
 	//
-	// DeleteWorkflowExecution is not replicated automatically. Workflow executions must be deleted separately in each cluster.
-	// Although running workflows in active cluster are terminated first and the termination event might be replicated.
-	// In passive cluster, workflow executions are just deleted in regardless of its state.
+	// Running workflows are terminated with deleteAfterTerminate set; the close task then deletes the execution.
+	// In passive cluster, workflow executions are deleted regardless of state.
 
 	if workflowLease.GetMutableState().IsWorkflowExecutionRunning() {
 		if request.GetClosedWorkflowOnly() {
@@ -56,7 +56,7 @@ func Invoke(
 		if err != nil {
 			return nil, err
 		}
-		if ns.ActiveInCluster(shardContext.GetClusterMetadata().GetCurrentClusterName()) {
+		if ns.ActiveClusterName(namespace.RoutingKey{ID: request.WorkflowExecution.GetWorkflowId()}) == shardContext.GetClusterMetadata().GetCurrentClusterName() {
 			// If workflow execution is running and in active cluster.
 			if err := api.UpdateWorkflowWithNew(
 				shardContext,
@@ -65,7 +65,7 @@ func Invoke(
 				func(workflowLease api.WorkflowLease) (*api.UpdateWorkflowAction, error) {
 					mutableState := workflowLease.GetMutableState()
 
-					return api.UpdateWorkflowTerminate, workflow.TerminateWorkflow(
+					return api.UpdateWorkflowTerminate, workflow.ForceTerminateWorkflow(
 						mutableState,
 						"Delete workflow execution",
 						nil,
@@ -73,6 +73,8 @@ func Invoke(
 						true,
 						// TODO(bergundy): No links will be attached here for now, we may want to add support for this later though.
 						nil,
+						shardContext.GetMetricsHandler(),
+						chasm.ExecutionForceTerminationReasonDeleteExecution,
 					)
 				},
 				nil,

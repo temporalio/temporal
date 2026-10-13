@@ -11,6 +11,8 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/retrypolicy"
 	"go.temporal.io/server/common/searchattribute"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -28,6 +30,8 @@ func newTestValidator() *RequestValidator {
 		nil, // visibility manager not needed when SA is nil
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		metrics.NoopMetricsHandler,
+		log.NewNoopLogger(),
 	)
 	return NewValidator(
 		Config{

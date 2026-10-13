@@ -116,12 +116,16 @@ type (
 		// RequestIDs contains all request IDs associated with the workflow execution, ie., contain the
 		// request ID that started the workflow execution as well as the request IDs that were attached
 		// to the workflow execution when it was running.
-		RequestIDs       map[string]*persistencespb.RequestIDInfo
-		RunID            string
-		State            enumsspb.WorkflowExecutionState
-		Status           enumspb.WorkflowExecutionStatus
-		LastWriteVersion int64
-		StartTime        *time.Time
+		RequestIDs map[string]*persistencespb.RequestIDInfo
+		RunID      string
+		// FirstExecutionRunID is the run ID of the first execution in the continue-as-new chain.
+		// May be empty on records written before this field was added to WorkflowExecutionState;
+		// callers must not assume RunID in that case.
+		FirstExecutionRunID string
+		State               enumsspb.WorkflowExecutionState
+		Status              enumspb.WorkflowExecutionStatus
+		LastWriteVersion    int64
+		StartTime           *time.Time
 	}
 
 	// WorkflowConditionFailedError represents a failed conditional update for workflow record
@@ -657,6 +661,9 @@ type (
 		ExclusiveMaxTaskID int64 // Tasks less than this ID will be completed
 		Subqueue           int
 		Limit              int // Limit on the max number of tasks that can be completed. Required param
+		// If set, only delete if the task queue's range id matches this value, otherwise return
+		// ConditionFailedError. Only supported for fair (v2) task queues.
+		ConditionRangeID int64
 	}
 
 	// CreateNamespaceRequest is used to create the namespace
@@ -921,6 +928,12 @@ type (
 	ForkHistoryBranchResponse struct {
 		// branchToken to represent the new branch
 		NewBranchToken []byte
+		// The storage layer might have changed the base branch token. This
+		// response represents the changed base branch token to be used for further
+		// processing in a workflow rebuild operation.
+		// An empty value indicates that the caller's base branch token
+		// is still correct.
+		BaseBranchToken []byte
 	}
 
 	// CompleteForkBranchRequest is used to complete forking
@@ -1161,7 +1174,8 @@ type (
 		// ReadRawHistoryBranch returns history node raw data for a branch ByBatch
 		// NOTE: this API should only be used by 3+DC
 		ReadRawHistoryBranch(ctx context.Context, request *ReadHistoryBranchRequest) (*ReadRawHistoryBranchResponse, error)
-		// ForkHistoryBranch forks a new branch from a old branch
+		// ForkHistoryBranch forks a new branch from an old branch. The response may contain a different/rewritten base token that
+		// should be used for further action.
 		ForkHistoryBranch(ctx context.Context, request *ForkHistoryBranchRequest) (*ForkHistoryBranchResponse, error)
 		// DeleteHistoryBranch removes a branch
 		// If this is the last branch to delete, it will also remove the root node

@@ -10,7 +10,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/future"
-	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
@@ -36,7 +35,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 			TaskQueue:        "task-queue-name",
 			SearchAttributes: &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
-					"CustomTextField": payload.EncodeString("alex"),
+					"CustomTextField": sadefs.MustEncodeValue("alex", enumspb.INDEXED_VALUE_TYPE_TEXT),
 				},
 			},
 		},
@@ -65,7 +64,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 			s.EqualValues(request.SearchAttributes.GetIndexedFields()["CustomTextField"].Data, fmt.Sprintf("%q", CustomTextField))
 
 			s.Equal(client.BulkableRequestTypeIndex, bulkRequest.RequestType)
-			s.EqualValues(request.TaskID, bulkRequest.Version)
+			s.Equal(request.TaskID, bulkRequest.Version)
 			s.Equal("wid~rid", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
 
@@ -98,7 +97,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 			s.False(ok)
 
 			s.Equal(client.BulkableRequestTypeIndex, bulkRequest.RequestType)
-			s.EqualValues(request.TaskID, bulkRequest.Version)
+			s.Equal(request.TaskID, bulkRequest.Version)
 			s.Equal("~", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
 
@@ -128,7 +127,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 			TaskQueue:        "task-queue-name",
 			SearchAttributes: &commonpb.SearchAttributes{
 				IndexedFields: map[string]*commonpb.Payload{
-					"CustomTextField": payload.EncodeString("alex"),
+					"CustomTextField": sadefs.MustEncodeValue("alex", enumspb.INDEXED_VALUE_TYPE_TEXT),
 				},
 			},
 		},
@@ -155,7 +154,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 			s.EqualValues(request.HistoryLength, body[sadefs.HistoryLength])
 
 			s.Equal(client.BulkableRequestTypeIndex, bulkRequest.RequestType)
-			s.EqualValues(request.TaskID, bulkRequest.Version)
+			s.Equal(request.TaskID, bulkRequest.Version)
 			s.Equal("wid~rid", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
 
@@ -188,7 +187,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 			s.False(ok)
 
 			s.Equal(client.BulkableRequestTypeIndex, bulkRequest.RequestType)
-			s.EqualValues(request.TaskID, bulkRequest.Version)
+			s.Equal(request.TaskID, bulkRequest.Version)
 			s.Equal("~", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
 
@@ -215,7 +214,7 @@ func (s *ESVisibilitySuite) TestDeleteExecution() {
 			s.Equal("wid~rid", visibilityTaskKey)
 
 			s.Equal(client.BulkableRequestTypeDelete, bulkRequest.RequestType)
-			s.EqualValues(request.TaskID, bulkRequest.Version)
+			s.Equal(request.TaskID, bulkRequest.Version)
 			s.Equal("wid~rid", bulkRequest.ID)
 			s.Equal("test-index", bulkRequest.Index)
 

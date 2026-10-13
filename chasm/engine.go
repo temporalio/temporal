@@ -81,11 +81,39 @@ const (
 	BusinessIDConflictPolicyUseExisting
 )
 
+// RefConsistencyLevel controls how strictly a [ComponentRef] is validated when it is used to address a
+// component in UpdateComponent. Each level selects which versioned transition the execution staleness check
+// ([Node.IsStale]) keys off — i.e. how fresh the loaded mutable state must be — and, at the weakest level,
+// whether the run ID is honored. It governs only the consistency-token / run resolution of the ref;
+// archetype validation and access-intent (operation-intent) checks always apply.
+//
+// The levels form a ladder from strongest to weakest:
+//
+//   - ExecutionLastUpdate: staleness is checked against the execution's last-update versioned transition —
+//     the loaded state must be at the exact transition the ref was taken at. Strongest; the default.
+//   - ComponentCreation: staleness is checked against the target component's initial (creation) versioned
+//     transition — the loaded state need only be at least as new as when the component was created (so it
+//     is guaranteed to know about the component), tolerating a stale execution transition. The creation
+//     transition is additionally matched in [Node.Component] so the same component instance must still
+//     exist at the path.
+//   - CurrentRun: the ref is resolved by component path on the current run, dropping the run ID and every
+//     versioned transition (no staleness check). Callers relying on this level must re-establish identity
+//     in component logic (e.g. by request ID). Weakest; note this resolves the current run only and does
+//     NOT verify the ref's run and the current run are in the same chain.
+type RefConsistencyLevel int
+
+const (
+	RefConsistencyLevelExecutionLastUpdate RefConsistencyLevel = iota
+	RefConsistencyLevelComponentCreation
+	RefConsistencyLevelCurrentRun
+)
+
 type TransitionOptions struct {
-	ReusePolicy    BusinessIDReusePolicy
-	ConflictPolicy BusinessIDConflictPolicy
-	RequestID      string
-	Speculative    bool
+	ReusePolicy      BusinessIDReusePolicy
+	ConflictPolicy   BusinessIDConflictPolicy
+	ConsistencyLevel RefConsistencyLevel
+	RequestID        string
+	Speculative      bool
 }
 
 type TransitionOption func(*TransitionOptions)
@@ -162,13 +190,26 @@ func WithBusinessIDPolicy(
 	}
 }
 
-// WithRequestID sets the requestID used when creating a new execution.
-// This option only applies to StartExecution() and UpdateWithStartExecution().
+// WithRequestID sets the requestID for the transition.
+//
+// On StartExecution() and UpdateWithStartExecution() it is the request ID
+// recorded when creating a new execution. On UpdateComponent(), it is used for
+// execution-level idempotency, recording a request's ID on success, and failing
+// subsequent requests reusing a request ID by returning a FailedPrecondition error.
 func WithRequestID(
 	requestID string,
 ) TransitionOption {
 	return func(opts *TransitionOptions) {
 		opts.RequestID = requestID
+	}
+}
+
+// WithRefConsistencyLevel sets the [RefConsistencyLevel] for the transition, controlling how strictly the
+// supplied component ref is validated. Currently only UpdateComponent() honors it; it defaults to
+// [RefConsistencyLevelExecutionLastUpdate].
+func WithRefConsistencyLevel(level RefConsistencyLevel) TransitionOption {
+	return func(opts *TransitionOptions) {
+		opts.ConsistencyLevel = level
 	}
 }
 
@@ -288,11 +329,15 @@ func UpdateWithStartExecution[C RootComponent, I any, O any](
 //     comment of the NewRef method in MutableContext.
 //
 // UpdateComponent applies updateFn to the component identified by the supplied component reference.
-// opts are currently ignored.
+//
+// Two opts are honored: [WithRefConsistencyLevel] selects the [RefConsistencyLevel] used to resolve
+// and validate the ref (see that type for the ladder of levels); [WithRequestID] enables
+// execution-level idempotency, rejecting a repeated update that carries an already-recorded request
+// ID (see that option). Other options are ignored.
 //
 // It returns the result, along with the new component reference. The returned reference may be
 // nil when updateFn deletes the component in the same transaction and the component is not the
-// root component.
+// root component, or on the [WithRequestID] dedup rejection (along with a FailedPrecondition error).
 func UpdateComponent[C any, R []byte | ComponentRef, I any, O any](
 	ctx context.Context,
 	r R,
@@ -303,6 +348,15 @@ func UpdateComponent[C any, R []byte | ComponentRef, I any, O any](
 	var output O
 
 	ref, err := convertComponentRef(r)
+	if err != nil {
+		return output, nil, err
+	}
+
+	var options TransitionOptions
+	for _, opt := range opts {
+		opt(&options)
+	}
+	ref, err = ref.forConsistencyLevel(options.ConsistencyLevel)
 	if err != nil {
 		return output, nil, err
 	}

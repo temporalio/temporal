@@ -111,7 +111,7 @@ service HistoryService {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
 
-  // IsActivityTaskValid is called by matching service checking whether the workflow task is valid.
+  // IsActivityTaskValid is called by matching service checking whether the activity task is valid.
   rpc IsActivityTaskValid(IsActivityTaskValidRequest) returns (IsActivityTaskValidResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
   }
@@ -517,5 +517,9 @@ service HistoryService {
   // CancelNexusOperation cancels a Nexus operation on the __temporal_system endpoint.
   rpc CancelNexusOperation(CancelNexusOperationRequest) returns (CancelNexusOperationResponse) {
     option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_STANDARD;
+  }
+
+  rpc PollWorkflowExecutionTimeSkipping(PollWorkflowExecutionTimeSkippingRequest) returns (PollWorkflowExecutionTimeSkippingResponse) {
+    option (temporal.server.api.common.v1.api_category).category = API_CATEGORY_LONG_POLL;
   }
 }

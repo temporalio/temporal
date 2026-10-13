@@ -5,6 +5,7 @@ package history
 
 import (
 	"context"
+	"maps"
 	"math/rand"
 	"sync"
 	"time"
@@ -31,6 +32,9 @@ var (
 const (
 	// DefaultTimeout is the default timeout used to make calls
 	DefaultTimeout = time.Second * 30 * debug.TimeoutMultiplier
+	// DefaultStateSyncTimeout is a backstop for SyncWorkflowState, which ships a workflow's state
+	// across clusters. Callers set the real deadline; the smaller one wins.
+	DefaultStateSyncTimeout = 10 * time.Minute * debug.TimeoutMultiplier
 )
 
 type clientImpl struct {
@@ -51,7 +55,7 @@ func NewClient(
 	rpcFactory RPCFactory,
 	timeout time.Duration,
 ) historyservice.HistoryServiceClient {
-	connections := NewConnectionPool(historyServiceResolver, rpcFactory, historyservice.NewHistoryServiceClient)
+	connections := NewConnectionPool(historyServiceResolver, rpcFactory, historyservice.NewHistoryServiceClient, logger, dynamicconfig.HistoryConnectionCloseDelay.Get(dc))
 
 	var redirector Redirector[historyservice.HistoryServiceClient]
 	if dynamicconfig.HistoryClientOwnershipCachingEnabled.Get(dc)() {
@@ -165,9 +169,7 @@ func (c *clientImpl) GetReplicationMessages(
 
 	response := &historyservice.GetReplicationMessagesResponse{ShardMessages: make(map[int32]*replicationspb.ReplicationMessages)}
 	for resp := range respChan {
-		for shardID, tasks := range resp.ShardMessages {
-			response.ShardMessages[shardID] = tasks
-		}
+		maps.Copy(response.ShardMessages, resp.ShardMessages)
 	}
 	var err error
 	if len(errChan) > 0 {
@@ -289,8 +291,17 @@ func (c *clientImpl) createContext(parent context.Context) (context.Context, con
 	return context.WithTimeout(parent, c.timeout)
 }
 
+func (c *clientImpl) createContextWithStateSyncTimeout(parent context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(parent, DefaultStateSyncTimeout)
+}
+
 func (c *clientImpl) shardIDFromWorkflowID(namespaceID, workflowID string) int32 {
 	return common.WorkflowIDToHistoryShard(namespaceID, workflowID, c.numberOfShards)
+}
+
+// Stop stops the membership watcher and closes pooled connections.
+func (c *clientImpl) Stop() {
+	c.redirector.Close()
 }
 
 func checkShardID(shardID int32) error {

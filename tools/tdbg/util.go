@@ -248,7 +248,7 @@ func printTable(items []any, writer io.Writer) error {
 	}
 
 	e := reflect.ValueOf(items[0])
-	for e.Type().Kind() == reflect.Ptr {
+	for e.Type().Kind() == reflect.Pointer {
 		e = e.Elem()
 	}
 
@@ -266,10 +266,9 @@ func printTable(items []any, writer io.Writer) error {
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
 	table.SetHeader(fields)
-	table.SetHeaderLine(false)
 	for i := range items {
 		item := reflect.ValueOf(items[i])
-		for item.Type().Kind() == reflect.Ptr {
+		for item.Type().Kind() == reflect.Pointer {
 			item = item.Elem()
 		}
 		var columns []string

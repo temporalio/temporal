@@ -7,7 +7,7 @@ D2_FLAGS := --theme 7 --dark-theme 200
 
 install-d2:
 	@printf $(COLOR) "Install d2..."
-	@go install oss.terrastruct.com/d2@v0.7.1
+	@go install github.com/d2lang/d2@v0.9.0
 
 update-diagrams: install-d2
 	@printf $(COLOR) "Update diagrams"

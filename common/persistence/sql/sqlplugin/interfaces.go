@@ -1,3 +1,5 @@
+//go:generate mockgen -package $GOPACKAGE -source $GOFILE -destination interfaces_mock.go
+
 package sqlplugin
 
 import (
@@ -111,6 +113,11 @@ type (
 		GenericDB
 		ExpectedVersion() string
 		VerifyVersion() error
+	}
+
+	// SchemaStatementRewriter lets SQL plugins adjust schema statements before execution.
+	SchemaStatementRewriter interface {
+		RewriteSchemaStatements(statements []string) []string
 	}
 
 	GenericDB interface {

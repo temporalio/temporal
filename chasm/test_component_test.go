@@ -18,8 +18,7 @@ type (
 	// It would be nice to move it another package, but this creates a circular dependency.
 
 	protoMessageType = persistencespb.WorkflowExecutionState // Random proto message.
-
-	TestComponent struct {
+	TestComponent    struct {
 		UnimplementedComponent
 
 		ComponentData                *protoMessageType
@@ -65,6 +64,13 @@ type (
 		SubComponent2Data *protoMessageType
 	}
 
+	TestTimeSkippingImplComponent struct {
+		UnimplementedComponent
+
+		ComponentData        *protoMessageType
+		isExecutionSkippable bool
+	}
+
 	TestSubComponent interface {
 		GetData() string
 	}
@@ -83,6 +89,8 @@ var (
 	_ VisibilitySearchAttributesProvider = (*TestComponent)(nil)
 	_ VisibilityMemoProvider             = (*TestComponent)(nil)
 	_ RootComponent                      = (*TestComponent)(nil)
+	_ RootComponent                      = (*TestTimeSkippingImplComponent)(nil)
+	_ TimeSkippingRuntimeGate            = (*TestTimeSkippingImplComponent)(nil)
 )
 
 func (tc *TestComponent) LifecycleState(_ Context) LifecycleState {
@@ -181,6 +189,26 @@ func (tsc11 *TestSubComponent11) LifecycleState(_ Context) LifecycleState {
 
 func (tsc2 *TestSubComponent2) LifecycleState(_ Context) LifecycleState {
 	return LifecycleStateRunning
+}
+
+func (gc *TestTimeSkippingImplComponent) LifecycleState(_ Context) LifecycleState {
+	return LifecycleStateRunning
+}
+
+func (gc *TestTimeSkippingImplComponent) ContextMetadata(_ Context) map[string]string {
+	return nil
+}
+
+func (gc *TestTimeSkippingImplComponent) Terminate(
+	_ MutableContext,
+	_ TerminateComponentRequest,
+) (TerminateComponentResponse, error) {
+	return TerminateComponentResponse{}, nil
+}
+
+// IsExecutionSkippable implements the TimeSkippingRuntimeGate interface.
+func (gc *TestTimeSkippingImplComponent) IsExecutionSkippable(_ Context) bool {
+	return gc.isExecutionSkippable
 }
 
 func setTestComponentFields(c *TestComponent, backend *MockNodeBackend) {
@@ -375,7 +403,7 @@ func renderProtoPointer(v reflect.Value) string {
 		// Handle oneof-style interface fields
 		if field.Type.Kind() == reflect.Interface && !fieldValue.IsNil() {
 			oneofVal := fieldValue.Elem()
-			if oneofVal.Kind() == reflect.Ptr {
+			if oneofVal.Kind() == reflect.Pointer {
 				oneofVal = oneofVal.Elem()
 			}
 
@@ -388,7 +416,7 @@ func renderProtoPointer(v reflect.Value) string {
 				oneofFieldValue := oneofVal.Field(j)
 
 				// Handle nested proto inside oneof
-				if oneofFieldValue.Kind() == reflect.Ptr && oneofFieldValue.Elem().Kind() == reflect.Struct {
+				if oneofFieldValue.Kind() == reflect.Pointer && oneofFieldValue.Elem().Kind() == reflect.Struct {
 					result += fmt.Sprintf("\t\t\t%s: %s,\n", oneofField.Name, renderProtoPointer(oneofFieldValue))
 				} else {
 					result += fmt.Sprintf("\t\t\t%s: %#v,\n", oneofField.Name, oneofFieldValue.Interface())
@@ -399,7 +427,7 @@ func renderProtoPointer(v reflect.Value) string {
 		}
 
 		// Recursively handle nested proto messages (pointer to struct)
-		if field.Type.Kind() == reflect.Ptr && fieldValue.Kind() == reflect.Ptr && fieldValue.Elem().Kind() == reflect.Struct {
+		if field.Type.Kind() == reflect.Pointer && fieldValue.Kind() == reflect.Pointer && fieldValue.Elem().Kind() == reflect.Struct {
 			result += fmt.Sprintf("\t\t%s: %s,\n", field.Name, renderProtoPointer(fieldValue))
 			continue
 		}

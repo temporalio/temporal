@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
@@ -44,6 +46,51 @@ type perNsWorkerManagerSuite struct {
 
 func TestPerNsWorkerManager(t *testing.T) {
 	suite.Run(t, new(perNsWorkerManagerSuite))
+}
+
+func TestPerNsWorkerManagerStopStopsBackgroundLoops(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		controller := gomock.NewController(t)
+		logger := log.NewTestLogger()
+		cfactory := sdk.NewMockClientFactory(controller)
+		registry := namespace.NewMockRegistry(controller)
+		hostInfo := membership.NewHostInfoFromAddress("self")
+		serviceResolver := membership.NewMockServiceResolver(controller)
+
+		manager := PerNamespaceWorkerManagerProvider(perNamespaceWorkerManagerInitParams{
+			Logger:            logger,
+			SdkClientFactory:  cfactory,
+			NamespaceRegistry: registry,
+			HostName:          "self",
+			Config: &Config{
+				PerNamespaceWorkerStartRate: dynamicconfig.GetFloatPropertyFn(10),
+			},
+			ClusterMetadata: clustertest.NewMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true)),
+		})
+
+		registry.EXPECT().RegisterStateChangeCallback(gomock.Any(), gomock.Any())
+		serviceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any())
+		manager.Start(hostInfo, serviceResolver)
+
+		registry.EXPECT().UnregisterStateChangeCallback(gomock.Any())
+		serviceResolver.EXPECT().RemoveListener(gomock.Any())
+		stopManager(t, manager)
+	})
+}
+
+func stopManager(t *testing.T, manager *PerNamespaceWorkerManager) {
+	t.Helper()
+
+	stopped := make(chan struct{})
+	go func() {
+		manager.Stop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+	case <-time.After(time.Second):
+		require.FailNow(t, "manager stop timed out")
+	}
 }
 
 func (s *perNsWorkerManagerSuite) SetupTest() {
@@ -97,7 +144,7 @@ func (s *perNsWorkerManagerSuite) SetupTest() {
 func (s *perNsWorkerManagerSuite) TearDownTest() {
 	s.registry.EXPECT().UnregisterStateChangeCallback(gomock.Any())
 	s.serviceResolver.EXPECT().RemoveListener(gomock.Any())
-	s.manager.Stop()
+	stopManager(s.T(), s.manager)
 }
 
 func (s *perNsWorkerManagerSuite) TestDisabled() {

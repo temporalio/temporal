@@ -38,7 +38,7 @@ func (s *WorkflowTypeEncodingSuite) runWithWorkflowType(env *testcore.TestEnv, w
 	)
 
 	run, err := env.SdkClient().ExecuteWorkflow(
-		env.Context(),
+		s.Context(),
 		sdkclient.StartWorkflowOptions{
 			ID:        testcore.RandomizeStr("wf-trailer"),
 			TaskQueue: env.WorkerTaskQueue(),
@@ -48,7 +48,7 @@ func (s *WorkflowTypeEncodingSuite) runWithWorkflowType(env *testcore.TestEnv, w
 	if err != nil {
 		return err
 	}
-	return run.Get(env.Context(), nil)
+	return run.Get(s.Context(), nil)
 }
 
 func (s *WorkflowTypeEncodingSuite) TestPlainASCII() {

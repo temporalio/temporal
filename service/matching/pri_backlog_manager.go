@@ -23,27 +23,7 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
-// this retry policy is currently only used for matching persistence operations
-// that, if failed, the entire task queue needs to be reloaded
-// TODO(pri): old matcher cleanup: move here
-// var persistenceOperationRetryPolicy = backoff.NewExponentialRetryPolicy(50 * time.Millisecond).
-// 	WithMaximumInterval(1 * time.Second).
-// 	WithExpirationInterval(30 * time.Second)
-
 type (
-	// backlogManager manages the backlog and persistence of a physical task queue
-	// TODO(pri): old matcher cleanup: move here
-	// backlogManager interface {
-	// 	Start()
-	// 	Stop()
-	// 	WaitUntilInitialized(context.Context) error
-	// 	SpoolTask(taskInfo *persistencespb.TaskInfo) error
-	// 	BacklogCountHint() int64
-	// 	BacklogStatus() *taskqueuepb.TaskQueueStatus
-	// 	TotalApproximateBacklogCount() int64
-	// 	BacklogHeadAge() time.Duration
-	// }
-
 	priBacklogManagerImpl struct {
 		pqMgr      physicalTaskQueueManager
 		config     *taskQueueConfig
@@ -109,8 +89,7 @@ func (c *priBacklogManagerImpl) signalIfFatal(err error) bool {
 	if err == nil {
 		return false
 	}
-	var condfail *persistence.ConditionFailedError
-	if errors.As(err, &condfail) {
+	if _, ok := errors.AsType[*persistence.ConditionFailedError](err); ok {
 		c.metricsHandler.Counter(metrics.ConditionFailedErrorPerTaskQueueCounter.Name()).Record(1)
 		c.skipFinalUpdate.Store(true)
 		c.pqMgr.UnloadFromPartitionManager(unloadCauseConflict)
@@ -154,6 +133,12 @@ func (c *priBacklogManagerImpl) initState(state taskQueueState, err error) {
 		c.skipFinalUpdate.Store(true)
 		c.pqMgr.UnloadFromPartitionManager(unloadCauseInitError)
 		return
+	}
+
+	// Pass scale info back to physical tq from unversioned (default) queue.
+	// This must be done before c.initializedError.Set().
+	if c.queueKey().Partition().IsRoot() && !c.queueKey().IsVersioned() && !c.isDraining {
+		c.pqMgr.StartScaleManager(state.scaleState)
 	}
 
 	if state.otherHasTasks {
@@ -303,6 +288,23 @@ func (c *priBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb.
 	return result
 }
 
+// NonNegligibleBacklogPriority returns 0 when no priority has a non-negligible backlog.
+func (c *priBacklogManagerImpl) NonNegligibleBacklogPriority() priorityKey {
+	c.subqueueLock.Lock()
+	defer c.subqueueLock.Unlock()
+
+	var highest priorityKey
+	for subqueue, priority := range c.priorityBySubqueue {
+		oldestBacklogTime := c.subqueues[subqueue].getOldestBacklogTime()
+		if !oldestBacklogTime.IsZero() &&
+			time.Since(oldestBacklogTime) >= c.config.BacklogNegligibleAge() &&
+			(highest == 0 || priority < highest) {
+			highest = priority
+		}
+	}
+	return highest
+}
+
 func (c *priBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {
 	c.subqueueLock.Lock()
 	defer c.subqueueLock.Unlock()
@@ -381,14 +383,6 @@ func (c *priBacklogManagerImpl) respoolTaskAfterError(task *persistencespb.TaskI
 	c.pqMgr.UnloadFromPartitionManager(unloadCauseOtherError)
 	return err
 }
-
-// TODO(pri): old matcher cleanup: move here
-// func rangeIDToTaskIDBlock(rangeID int64, rangeSize int64) taskIDBlock {
-// 	return taskIDBlock{
-// 		start: (rangeID-1)*rangeSize + 1,
-// 		end:   rangeID * rangeSize,
-// 	}
-// }
 
 func (c *priBacklogManagerImpl) queueKey() *PhysicalTaskQueueKey {
 	return c.pqMgr.QueueKey()

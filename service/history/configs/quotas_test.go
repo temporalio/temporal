@@ -45,7 +45,7 @@ func (s *quotasSuite) TestCallerTypeToPriorityMapping() {
 
 func (s *quotasSuite) TestAPIPrioritiesOrdered() {
 	for idx := range APIPrioritiesOrdered[1:] {
-		s.True(APIPrioritiesOrdered[idx] < APIPrioritiesOrdered[idx+1])
+		s.Less(APIPrioritiesOrdered[idx], APIPrioritiesOrdered[idx+1])
 	}
 }
 

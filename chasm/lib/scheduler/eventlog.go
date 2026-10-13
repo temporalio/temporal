@@ -26,14 +26,57 @@ func NewEventLog(ctx chasm.MutableContext) *EventLog {
 	}
 }
 
+func (s *Scheduler) getOrCreateEventLog(ctx chasm.MutableContext) *EventLog {
+	eventLog, ok := s.EventLog.TryGet(ctx)
+	if ok {
+		return eventLog
+	}
+	eventLog = NewEventLog(ctx)
+	s.EventLog = chasm.NewComponentField(ctx, eventLog)
+	return eventLog
+}
+
+func (g *Generator) getOrCreateEventLog(ctx chasm.MutableContext) *EventLog {
+	eventLog, ok := g.EventLog.TryGet(ctx)
+	if ok {
+		return eventLog
+	}
+	eventLog = NewEventLog(ctx)
+	g.EventLog = chasm.NewComponentField(ctx, eventLog)
+	return eventLog
+}
+
+func (i *Invoker) getOrCreateEventLog(ctx chasm.MutableContext) *EventLog {
+	eventLog, ok := i.EventLog.TryGet(ctx)
+	if ok {
+		return eventLog
+	}
+	eventLog = NewEventLog(ctx)
+	i.EventLog = chasm.NewComponentField(ctx, eventLog)
+	return eventLog
+}
+
+func (b *Backfiller) getOrCreateEventLog(ctx chasm.MutableContext) *EventLog {
+	eventLog, ok := b.EventLog.TryGet(ctx)
+	if ok {
+		return eventLog
+	}
+	eventLog = NewEventLog(ctx)
+	b.EventLog = chasm.NewComponentField(ctx, eventLog)
+	return eventLog
+}
+
 func (e *EventLog) LifecycleState(ctx chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
 
-// LogEvent appends an event with the given message. Messages longer than
-// maxMessageLen bytes are truncated at a UTF-8 rune boundary; once the log
-// has more than maxEntries entries, the earliest entries are dropped.
-func (e *EventLog) LogEvent(ctx chasm.MutableContext, msg string, maxEntries, maxMessageLen int) {
+// LogEvent appends an event with the given message. Messages longer than the
+// configured maximum length are truncated at a UTF-8 rune boundary; once the
+// log exceeds the configured maximum entries, the earliest entries are dropped.
+func (e *EventLog) LogEvent(ctx chasm.MutableContext, msg string) {
+	tw := tweakablesFromContext(ctx)
+	maxEntries, maxMessageLen := tw.EventLogMaxEntries, tw.EventLogMaxMessageLen
+
 	if len(msg) > maxMessageLen {
 		// Back off to the nearest UTF-8 rune boundary so we don't split a
 		// multibyte rune.

@@ -54,6 +54,9 @@ type (
 		enabledForNs                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		enableCHASMMigration         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		chasmMigrationRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
+		migrateWithRunningWorkflows  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		schedulerV1VersionCeiling    dynamicconfig.IntPropertyFnWithNamespaceFilter
+		schedulerV1VersionOverride   dynamicconfig.IntPropertyFnWithNamespaceFilter
 		globalNSStartWorkflowRPS     dynamicconfig.TypedSubscribableWithNamespaceFilter[float64]
 		maxBlobSize                  dynamicconfig.IntPropertyFnWithNamespaceFilter
 		localActivitySleepLimit      dynamicconfig.DurationPropertyFnWithNamespaceFilter
@@ -91,6 +94,9 @@ func NewResult(
 			enabledForNs:                 dynamicconfig.WorkerEnableScheduler.Get(dc),
 			enableCHASMMigration:         dynamicconfig.EnableCHASMSchedulerMigration.Get(dc),
 			chasmMigrationRolloutPercent: dynamicconfig.CHASMSchedulerMigrationRolloutPercent.Get(dc),
+			migrateWithRunningWorkflows:  dynamicconfig.EnableCHASMSchedulerMigrationWithRunningWorkflows.Get(dc),
+			schedulerV1VersionCeiling:    dynamicconfig.SchedulerV1VersionCeiling.Get(dc),
+			schedulerV1VersionOverride:   dynamicconfig.SchedulerV1VersionOverride.Get(dc),
 			globalNSStartWorkflowRPS:     dynamicconfig.SchedulerNamespaceStartWorkflowRPS.Subscribe(dc),
 			maxBlobSize:                  dynamicconfig.BlobSizeLimitError.Get(dc),
 			localActivitySleepLimit:      dynamicconfig.SchedulerLocalActivitySleepLimit.Get(dc),
@@ -112,7 +118,21 @@ func (s *workerComponent) Register(registry sdkworker.Registry, ns *namespace.Na
 			return s.enableCHASMMigration(nsName) &&
 				dynamicconfig.RolloutAccepts(key, s.chasmMigrationRolloutPercent(nsName))
 		}
-		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder, enableMigration)
+		migrateWithRunningWorkflows := func() bool {
+			return s.migrateWithRunningWorkflows(nsName)
+		}
+		versionCeiling := func() int {
+			return s.schedulerV1VersionCeiling(nsName)
+		}
+		versionOverride := func() int {
+			return s.schedulerV1VersionOverride(nsName)
+		}
+		return schedulerWorkflowWithSpecBuilder(ctx, args, s.specBuilder, schedulerDynamicConfig{
+			enableCHASMMigration:        enableMigration,
+			migrateWithRunningWorkflows: migrateWithRunningWorkflows,
+			versionCeiling:              versionCeiling,
+			versionOverride:             versionOverride,
+		})
 	}
 	registry.RegisterWorkflowWithOptions(wfFunc, workflow.RegisterOptions{Name: WorkflowType})
 
@@ -140,5 +160,6 @@ func (s *workerComponent) newActivities(name namespace.Name, id namespace.ID, de
 		startWorkflowRateLimiter: lim,
 		maxBlobSize:              func() int { return s.maxBlobSize(name.String()) },
 		localActivitySleepLimit:  func() time.Duration { return s.localActivitySleepLimit(name.String()) },
+		migrationEnabled:         func() bool { return s.enableCHASMMigration(name.String()) },
 	}, cancel
 }

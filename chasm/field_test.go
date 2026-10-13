@@ -68,8 +68,7 @@ func (s *fieldSuite) initAssertions() {
 }
 
 func (s *fieldSuite) TestInternalFieldName() {
-	f := Field[any]{}
-	fT := reflect.TypeOf(f)
+	fT := reflect.TypeFor[Field[any]]()
 
 	_, ok := fT.FieldByName(internalFieldName)
 	s.True(ok, "expected field %s not found", internalFieldName)
@@ -144,7 +143,6 @@ func (s *fieldSuite) newTestTree(
 	if len(serializedNodes) == 0 {
 		return NewEmptyTree(
 			s.registry,
-			s.timeSource,
 			s.nodeBackend,
 			s.nodePathEncoder,
 			s.logger,
@@ -154,7 +152,6 @@ func (s *fieldSuite) newTestTree(
 	return NewTreeFromDB(
 		serializedNodes,
 		s.registry,
-		s.timeSource,
 		s.nodeBackend,
 		s.nodePathEncoder,
 		s.logger,
@@ -166,7 +163,6 @@ func (s *fieldSuite) newTestTree(
 func (s *fieldSuite) setupComponentWithTree(rootComponent *TestComponent) (*Node, MutableContext, error) {
 	rootNode := NewEmptyTree(
 		s.registry,
-		s.timeSource,
 		s.nodeBackend,
 		s.nodePathEncoder,
 		s.logger,

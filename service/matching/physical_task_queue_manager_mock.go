@@ -104,20 +104,6 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) DispatchQueryTask(ctx, task 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchQueryTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).DispatchQueryTask), ctx, task)
 }
 
-// DispatchSpooledTask mocks base method.
-func (m *MockphysicalTaskQueueManager) DispatchSpooledTask(ctx context.Context, task *internalTask, userDataChanged <-chan struct{}) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DispatchSpooledTask", ctx, task, userDataChanged)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// DispatchSpooledTask indicates an expected call of DispatchSpooledTask.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) DispatchSpooledTask(ctx, task, userDataChanged any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DispatchSpooledTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).DispatchSpooledTask), ctx, task, userDataChanged)
-}
-
 // FinishedDraining mocks base method.
 func (m *MockphysicalTaskQueueManager) FinishedDraining() {
 	m.ctrl.T.Helper()
@@ -215,17 +201,17 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) LegacyDescribeTaskQueue(incl
 }
 
 // MakePollerScalingDecision mocks base method.
-func (m *MockphysicalTaskQueueManager) MakePollerScalingDecision(ctx context.Context, pollStartTime time.Time) *taskqueue.PollerScalingDecision {
+func (m *MockphysicalTaskQueueManager) MakePollerScalingDecision(ctx context.Context, pollStartTime time.Time, task *internalTask) *taskqueue.PollerScalingDecision {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MakePollerScalingDecision", ctx, pollStartTime)
+	ret := m.ctrl.Call(m, "MakePollerScalingDecision", ctx, pollStartTime, task)
 	ret0, _ := ret[0].(*taskqueue.PollerScalingDecision)
 	return ret0
 }
 
 // MakePollerScalingDecision indicates an expected call of MakePollerScalingDecision.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) MakePollerScalingDecision(ctx, pollStartTime any) *gomock.Call {
+func (mr *MockphysicalTaskQueueManagerMockRecorder) MakePollerScalingDecision(ctx, pollStartTime, task any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MakePollerScalingDecision", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).MakePollerScalingDecision), ctx, pollStartTime)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MakePollerScalingDecision", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).MakePollerScalingDecision), ctx, pollStartTime, task)
 }
 
 // MarkAlive mocks base method.
@@ -238,6 +224,20 @@ func (m *MockphysicalTaskQueueManager) MarkAlive() {
 func (mr *MockphysicalTaskQueueManagerMockRecorder) MarkAlive() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkAlive", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).MarkAlive))
+}
+
+// NonNegligibleBacklogPriority mocks base method.
+func (m *MockphysicalTaskQueueManager) NonNegligibleBacklogPriority() priorityKey {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NonNegligibleBacklogPriority")
+	ret0, _ := ret[0].(priorityKey)
+	return ret0
+}
+
+// NonNegligibleBacklogPriority indicates an expected call of NonNegligibleBacklogPriority.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) NonNegligibleBacklogPriority() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NonNegligibleBacklogPriority", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).NonNegligibleBacklogPriority))
 }
 
 // PollTask mocks base method.
@@ -253,20 +253,6 @@ func (m *MockphysicalTaskQueueManager) PollTask(ctx context.Context, pollMetadat
 func (mr *MockphysicalTaskQueueManagerMockRecorder) PollTask(ctx, pollMetadata any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PollTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).PollTask), ctx, pollMetadata)
-}
-
-// ProcessSpooledTask mocks base method.
-func (m *MockphysicalTaskQueueManager) ProcessSpooledTask(ctx context.Context, task *internalTask) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ProcessSpooledTask", ctx, task)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ProcessSpooledTask indicates an expected call of ProcessSpooledTask.
-func (mr *MockphysicalTaskQueueManagerMockRecorder) ProcessSpooledTask(ctx, task any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ProcessSpooledTask", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).ProcessSpooledTask), ctx, task)
 }
 
 // QueueKey mocks base method.
@@ -357,6 +343,18 @@ func (mr *MockphysicalTaskQueueManagerMockRecorder) Start() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).Start))
 }
 
+// StartScaleManager mocks base method.
+func (m *MockphysicalTaskQueueManager) StartScaleManager(arg0 *persistence.PartitionScaleState) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "StartScaleManager", arg0)
+}
+
+// StartScaleManager indicates an expected call of StartScaleManager.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) StartScaleManager(arg0 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartScaleManager", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).StartScaleManager), arg0)
+}
+
 // Stop mocks base method.
 func (m *MockphysicalTaskQueueManager) Stop(arg0 unloadCause) {
 	m.ctrl.T.Helper()
@@ -418,6 +416,20 @@ func (m *MockphysicalTaskQueueManager) UpdateRemotePriorityBacklogs(arg0 remoteP
 func (mr *MockphysicalTaskQueueManagerMockRecorder) UpdateRemotePriorityBacklogs(arg0 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRemotePriorityBacklogs", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).UpdateRemotePriorityBacklogs), arg0)
+}
+
+// UpdateScaleState mocks base method.
+func (m *MockphysicalTaskQueueManager) UpdateScaleState(arg0 *persistence.PartitionScaleState, arg1 bool) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateScaleState", arg0, arg1)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateScaleState indicates an expected call of UpdateScaleState.
+func (mr *MockphysicalTaskQueueManagerMockRecorder) UpdateScaleState(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateScaleState", reflect.TypeOf((*MockphysicalTaskQueueManager)(nil).UpdateScaleState), arg0, arg1)
 }
 
 // UserDataChanged mocks base method.

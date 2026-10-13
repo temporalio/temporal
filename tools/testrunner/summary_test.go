@@ -56,7 +56,7 @@ func TestNewSummaryFromReports_RendersAlertRow(t *testing.T) {
 	require.Equal(t, []summaryRow{{
 		Kind:    failureTypeDataRace,
 		Name:    "DATA RACE: Data race detected in TestFoo",
-		Details: "WARNING: DATA RACE\nWrite at 0x00c000123456 by goroutine 7:\n  main.TestFoo()\n      /path/to/foo_test.go:42 +0x123\n\nPrevious read at 0x00c000123456 by goroutine 8:\n  main.TestFoo()\n      /path/to/foo_test.go:43 +0x456",
+		Details: "WARNING: DATA RACE\nWrite at 0x00c000123456 by goroutine 7:\n  go.temporal.io/server/service/worker/scheduler.(*scheduler).updateTweakables.func1()\n      /path/to/workflow.go:1442 +0x123\n\nPrevious read at 0x00c000123456 by goroutine 8:\n  go.temporal.io/server/service/worker/scheduler.(*scheduler).run()\n      /path/to/workflow.go:466 +0x456",
 	}}, s.Rows)
 }
 
@@ -101,7 +101,8 @@ func TestRenderSummaryFromReports_Markdown_RendersFailureRows(t *testing.T) {
 	require.Contains(t, s, "<table>")
 	require.NotContains(t, s, "<th>Details</th>")
 	require.Contains(t, s, "<details><summary>TestFoo</summary>")
-	require.Contains(t, s, "<pre>FAIL\n</pre>")
+	require.Contains(t, s, "\n\n```\nFAIL\n```\n\n")
+	require.NotContains(t, s, "<pre>")
 	require.Contains(t, s, "<details><summary>panic test (retry 1) (final)</summary>")
 	require.Contains(t, s, "❌ PANIC")
 	require.Equal(t, 2, strings.Count(s, "<tr><td>"))
@@ -121,7 +122,25 @@ func TestRenderSummaryFromReports_Markdown_RendersAlertRow(t *testing.T) {
 
 	rendered := newSummaryFromReports([]*junitReport{report}).Markdown()
 	require.Contains(t, rendered, failureTypeDataRace)
-	require.Contains(t, rendered, "Write at 0x00c000123456 by goroutine 7")
+	require.Contains(t, rendered, "\n\n```\nWARNING: DATA RACE")
+	require.Contains(t, rendered, "go.temporal.io/server/service/worker/scheduler.(*scheduler).run()")
+	require.NotContains(t, rendered, "<pre>")
+}
+
+func TestMarkdownCodeBlock_AvoidsFenceCollisions(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		content  string
+		expected string
+	}{
+		{name: "no fence", content: "line", expected: "```\nline\n```"},
+		{name: "three backticks", content: "line\n```", expected: "````\nline\n```\n````"},
+		{name: "four backticks", content: "line\n````", expected: "`````\nline\n````\n`````"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expected, markdownCodeBlock(tc.content))
+		})
+	}
 }
 
 func TestRenderSummaryFromReports_Markdown_EmptyWhenNoFailures(t *testing.T) {
@@ -136,7 +155,7 @@ func TestRenderSummaryFromReports_Markdown_ShowsTruncatedDetail(t *testing.T) {
 	}
 
 	s := summary.Markdown()
-	require.Contains(t, s, "truncated")
+	require.Equal(t, 1, strings.Count(s, "truncated"))
 	require.Contains(t, s, "head")
 	require.Contains(t, s, "tail")
 	require.Less(t, len(s), summaryMarkdownMaxBytes)

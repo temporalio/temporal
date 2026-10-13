@@ -137,7 +137,6 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 			closedCount = len(resp.Executions)
 			if closedCount == 1 {
 				historyLength = resp.Executions[0].HistoryLength
-				s.Nil(resp.NextPageToken)
 				return true
 			}
 			env.Logger.Info("Closed WorkflowExecution is not yet visible")
@@ -164,7 +163,6 @@ func (s *WorkflowVisibilityTestSuite) TestVisibility() {
 			s.NoError(err4)
 			openCount = len(resp.Executions)
 			if openCount == 1 {
-				s.Nil(resp.NextPageToken)
 				return true
 			}
 			env.Logger.Info("Open WorkflowExecution is not yet visible")

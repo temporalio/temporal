@@ -53,13 +53,11 @@ func (s *senderFlowControllerSuite) TestWait_HighPriority() {
 	s.mockRateLimiter.EXPECT().Wait(gomock.Any()).Return(nil)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := s.senderFlowCtrlImpl.Wait(context.Background(), enumsspb.TASK_PRIORITY_HIGH)
 		s.NoError(err)
-	}()
+	})
 
 	wg.Wait()
 }
@@ -71,13 +69,11 @@ func (s *senderFlowControllerSuite) TestWait_Error() {
 	s.mockRateLimiter.EXPECT().Wait(gomock.Any()).Return(context.Canceled)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := s.senderFlowCtrlImpl.Wait(context.Background(), enumsspb.TASK_PRIORITY_HIGH)
 		s.Error(err)
-	}()
+	})
 
 	wg.Wait()
 }
@@ -89,13 +85,11 @@ func (s *senderFlowControllerSuite) TestWait_LowPriority() {
 	s.mockRateLimiter.EXPECT().Wait(gomock.Any()).Return(nil)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := s.senderFlowCtrlImpl.Wait(context.Background(), enumsspb.TASK_PRIORITY_LOW)
 		s.NoError(err)
-	}()
+	})
 
 	wg.Wait()
 }
@@ -106,13 +100,11 @@ func (s *senderFlowControllerSuite) TestWait_DefaultPriority() {
 	s.mockRateLimiter.EXPECT().Wait(gomock.Any()).Return(nil)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := s.senderFlowCtrlImpl.Wait(context.Background(), enumsspb.TASK_PRIORITY_UNSPECIFIED)
 		s.NoError(err)
-	}()
+	})
 
 	wg.Wait()
 }
@@ -145,13 +137,11 @@ func (s *senderFlowControllerSuite) TestPauseToResume() {
 	s.mockRateLimiter.EXPECT().Wait(gomock.Any()).Return(nil)
 
 	var wg sync.WaitGroup
-	wg.Add(1)
 
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		err := s.senderFlowCtrlImpl.Wait(context.Background(), enumsspb.TASK_PRIORITY_HIGH)
 		s.NoError(err)
-	}()
+	})
 
 	// Ensure the goroutine has time to start and block
 	assert.Eventually(s.T(), func() bool {

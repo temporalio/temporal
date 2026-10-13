@@ -70,7 +70,7 @@ func Test_ReclaimResourcesWorkflow_Success(t *testing.T) {
 	require.NoError(t, env.GetWorkflowResult(&result))
 	require.Equal(t, 0, result.DeleteErrorCount)
 	require.Equal(t, 10, result.DeleteSuccessCount)
-	require.Equal(t, true, result.NamespaceDeleted)
+	require.True(t, result.NamespaceDeleted)
 }
 
 func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_Error(t *testing.T) {
@@ -119,8 +119,7 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_Error(t *testing.T
 	err := env.GetWorkflowError()
 	require.Error(t, err)
 	require.Equal(t,
-		err.Error(),
-		"workflow execution error (type: ReclaimResourcesWorkflow, workflowID: default-test-workflow-id, runID: default-test-run-id): activity error (type: EnsureNoExecutionsAdvVisibilityActivity, scheduledEventID: 0, startedEventID: 0, identity: ): specific_error_from_activity")
+		"workflow execution error (type: ReclaimResourcesWorkflow, workflowID: default-test-workflow-id, runID: default-test-run-id): activity error (type: EnsureNoExecutionsAdvVisibilityActivity, scheduledEventID: 0, startedEventID: 0, identity: ): specific_error_from_activity", err.Error())
 }
 
 func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_ExecutionsStillExist(t *testing.T) {
@@ -168,7 +167,7 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_ExecutionsStillExi
 	require.True(t, env.IsWorkflowCompleted())
 	err := env.GetWorkflowError()
 	var appErr *temporal.ApplicationError
-	require.True(t, stderrors.As(err, &appErr))
+	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, errors.ExecutionsStillExistErrType, appErr.Type())
 }
 
@@ -264,7 +263,7 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
 	require.NoError(t, env.GetWorkflowResult(&result))
 	require.Equal(t, 0, result.DeleteErrorCount)
 	require.Equal(t, 10, result.DeleteSuccessCount)
-	require.Equal(t, true, result.NamespaceDeleted)
+	require.True(t, result.NamespaceDeleted)
 }
 
 func Test_ReclaimResourcesWorkflow_NoActivityMocks_NoProgressMade(t *testing.T) {
@@ -340,7 +339,7 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_NoProgressMade(t *testing.T) 
 	err := env.GetWorkflowError()
 	require.Error(t, err)
 	var appErr *temporal.ApplicationError
-	require.True(t, stderrors.As(err, &appErr))
+	require.ErrorAs(t, err, &appErr)
 	require.Equal(t, errors.NoProgressErrType, appErr.Type())
 }
 
@@ -416,5 +415,5 @@ func Test_ReclaimResourcesWorkflow_UpdateDeleteDelay(t *testing.T) {
 	require.NoError(t, env.GetWorkflowResult(&result))
 	require.Equal(t, 0, result.DeleteErrorCount)
 	require.Equal(t, 10, result.DeleteSuccessCount)
-	require.Equal(t, true, result.NamespaceDeleted)
+	require.True(t, result.NamespaceDeleted)
 }

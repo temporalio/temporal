@@ -82,8 +82,10 @@ func (u UUID) Downcast() []byte {
 }
 
 // UUIDPtr simply returns a pointer for the given value type
+//
+//go:fix inline
 func UUIDPtr(u UUID) *UUID {
-	return &u
+	return new(u)
 }
 
 // String returns the 36 byte hexstring representation of this uuid
@@ -101,19 +103,20 @@ func (u UUID) String() string {
 // return empty string if this uuid is nil
 func (u UUID) StringPtr() *string {
 	if len(u) != 16 {
-		return stringPtr("")
+		return new("")
 	}
 	var buf [36]byte
 	u.encodeHex(buf[:])
-	return stringPtr(string(buf[:]))
+	return new(string(buf[:]))
 }
 
 func UUIDString(b []byte) string {
 	return UUID(b).String()
 }
 
+//go:fix inline
 func stringPtr(v string) *string {
-	return &v
+	return new(v)
 }
 
 // Scan implements sql.Scanner interface to allow this type to be

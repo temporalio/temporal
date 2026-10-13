@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"time"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -54,6 +55,8 @@ func Invoke(
 
 	var warnings []string
 	var branchTokens [][]byte
+	var startTime time.Time
+	var closeTime *time.Time
 
 	resp, err := persistenceExecutionMgr.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
@@ -81,6 +84,11 @@ func Invoke(
 				// non-workflow executions have empty version history and empty branch token
 				branchTokens = append(branchTokens, branchToken)
 			}
+		}
+		startTime = resp.State.GetExecutionState().GetStartTime().AsTime()
+		closeTime = new(executionInfo.GetCloseTime().AsTime())
+		if !closeTime.After(time.Unix(0, 0)) {
+			closeTime = nil
 		}
 	}
 
@@ -120,10 +128,13 @@ func Invoke(
 	// visibility queue processing is async. Operator can call this api again to delete visibility
 	// record again if this happens.
 	if err := persistenceVisibilityMgr.DeleteWorkflowExecution(ctx, &manager.VisibilityDeleteWorkflowExecutionRequest{
-		NamespaceID: namespace.ID(request.GetNamespaceId()),
-		WorkflowID:  execution.GetWorkflowId(),
-		RunID:       execution.GetRunId(),
-		TaskID:      math.MaxInt64,
+		NamespaceID:       namespace.ID(request.GetNamespaceId()),
+		WorkflowID:        execution.GetWorkflowId(),
+		RunID:             execution.GetRunId(),
+		TaskID:            math.MaxInt64,
+		StartTime:         startTime,
+		CloseTime:         closeTime,
+		IsRetentionDelete: false,
 	}); err != nil {
 		return nil, err
 	}

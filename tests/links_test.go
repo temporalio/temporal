@@ -12,6 +12,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/api/workflowservice/v1/workflowservicenexus"
 	"go.temporal.io/sdk/client"
 	"go.temporal.io/server/common/dynamicconfig"
 	commonnexus "go.temporal.io/server/common/nexus"
@@ -496,7 +497,7 @@ func (s *LinksSuite) TestSignalWorkflowExecution_BufferedDuringWorkflowTask() {
 
 	// Poll to move the WFT into "started" state to have the server wait for us to complete it.
 	// This will force the signal to stay in the buffer until the task is finished.
-	pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(env.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
+	pollResp, err := env.FrontendClient().PollWorkflowTaskQueue(s.Context(), &workflowservice.PollWorkflowTaskQueueRequest{
 		Namespace: env.Namespace().String(),
 		TaskQueue: &taskqueuepb.TaskQueue{Name: signalTest.taskQueueName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 		Identity:  "test",
@@ -518,7 +519,7 @@ func (s *LinksSuite) TestSignalWorkflowExecution_BufferedDuringWorkflowTask() {
 	s.True(gotRequestInfo.GetBuffered(), "backlink must be buffered while WFT is in progress")
 
 	// Complete the WFT, which flushes the signal to DB with a concrete EventID.
-	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(env.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
+	_, err = env.FrontendClient().RespondWorkflowTaskCompleted(s.Context(), &workflowservice.RespondWorkflowTaskCompletedRequest{
 		Namespace: env.Namespace().String(),
 		Identity:  "test",
 		TaskToken: pollResp.TaskToken,
@@ -887,7 +888,7 @@ func (swt *signalWorkflowTest) signalWithStartWorkflow(ctx context.Context, targ
 				Attributes: &commandpb.Command_ScheduleNexusOperationCommandAttributes{
 					ScheduleNexusOperationCommandAttributes: &commandpb.ScheduleNexusOperationCommandAttributes{
 						Endpoint:  commonnexus.SystemEndpoint,
-						Service:   "WorkflowService",
+						Service:   workflowservicenexus.TemporalAPIWorkflowserviceV1WorkflowService.ServiceName,
 						Operation: "SignalWithStartWorkflowExecution",
 						Input:     protoBinaryPayload,
 					},

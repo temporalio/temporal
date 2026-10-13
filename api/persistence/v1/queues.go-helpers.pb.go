@@ -5,6 +5,43 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+// Marshal an object of type TaskKey to the protobuf v3 wire format
+func (val *TaskKey) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type TaskKey from the protobuf v3 wire format
+func (val *TaskKey) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *TaskKey) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two TaskKey values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *TaskKey) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *TaskKey
+	switch t := that.(type) {
+	case *TaskKey:
+		that1 = t
+	case TaskKey:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type QueueState to the protobuf v3 wire format
 func (val *QueueState) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

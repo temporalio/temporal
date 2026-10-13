@@ -76,6 +76,30 @@ func (s *LogSuite) TestNewLogger() {
 
 }
 
+type panickingMarshaler struct{}
+
+func (panickingMarshaler) MarshalJSON() ([]byte, error) {
+	panic("boom")
+}
+
+func (s *LogSuite) TestReflectedEncoderRecoversFromPanic() {
+	dir := testutils.MkdirTemp(s.T(), "", "config.testReflectedEncoder")
+	logFile := dir + "/test.log"
+
+	zl := BuildZapLogger(Config{Level: "info", OutputFile: logFile})
+	logger := NewZapLogger(zl)
+
+	// A panicking MarshalJSON on a reflected (tag.Any) field must not take down the process.
+	s.NotPanics(func() {
+		logger.Info("reflected field", tag.Any("key", panickingMarshaler{}))
+	})
+	s.NoError(zl.Sync())
+
+	out, err := os.ReadFile(logFile)
+	s.NoError(err)
+	s.Contains(string(out), "panic serializing log field")
+}
+
 func TestDefaultLogger(t *testing.T) {
 	old := os.Stdout // keep backup of the real stdout
 	r, w, _ := os.Pipe()
@@ -128,7 +152,11 @@ func TestThrottleLogger(t *testing.T) {
 		outC <- buf.String()
 	}()
 
-	logger := NewThrottledLogger(NewZapLogger(zap.NewExample()),
+	// The service tag is applied before the throttled logger wraps it (and calls Skip()), exactly as
+	// the production ThrottledLoggerProvider does. Skip() must carry that tag forward so the later
+	// With() calls, which rebuild the logger from its untagged base, don't drop it.
+	logger := NewThrottledLogger(
+		With(NewZapLogger(zap.NewExample()), tag.Service("test-service")),
 		func() float64 { return 1 })
 	preCaller := caller(1)
 	With(With(logger, tag.Error(fmt.Errorf("test error"))), tag.ComponentShardContext).Info("test info", tag.WorkflowActionWorkflowStarted)
@@ -142,7 +170,7 @@ func TestThrottleLogger(t *testing.T) {
 	assert.Nil(t, err)
 	lineNum := fmt.Sprintf("%v", par+1)
 	fmt.Println(out, lineNum)
-	assert.Regexp(t, `{"level":"info","msg":"test info","error":"test error","component":"shard-context","wf-action":"add-workflow-started-event","logging-call-at":".*zap_logger_test.go:`+lineNum+`"}`+"\n", out)
+	require.Regexp(t, `{"level":"info","msg":"test info","service":"test-service","error":"test error","component":"shard-context","wf-action":"add-workflow-started-event","logging-call-at":".*zap_logger_test.go:`+lineNum+`"}`+"\n", out)
 }
 
 func TestEmptyMsg(t *testing.T) {

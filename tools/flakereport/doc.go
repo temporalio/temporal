@@ -13,7 +13,7 @@
 //
 // The raw input is a set of test runs downloaded from GitHub Actions artifacts. Each run
 // records whether a specific test passed or failed, and is tagged with the workflow RunID.
-// RunIDs are mapped to commit SHAs via the GitHub Actions API (WorkflowRun.HeadSHA).
+// RunIDs are mapped to commit SHAs via the gh CLI (Run.HeadSHA).
 // Runs are then grouped into CommitObservation records: for each (test, commit SHA) pair
 // we count the number of passing and failing runs.
 //

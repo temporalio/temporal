@@ -283,7 +283,6 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 			},
 		},
 	} {
-		c := c // store c in closure to prevent loop from changing it when a parallel task is accessing it
 		t.Run(c.Name, func(t *testing.T) {
 			t.Parallel()
 			var p params
@@ -483,7 +482,6 @@ func TestArchivalQueueTaskExecutor(t *testing.T) {
 					assert.Equal(t, p.CloseTime, request.CloseTime.AsTime())
 					assert.Equal(t, p.ExecutionDuration, request.ExecutionDuration.AsDuration())
 					assert.ElementsMatch(t, p.ExpectedTargets, request.Targets)
-
 					return &archival.Response{}, p.ArchiveError
 				})
 			}

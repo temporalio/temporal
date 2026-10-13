@@ -372,7 +372,7 @@ func TestUpdateState(t *testing.T) {
 						acceptedRequest *updatepb.Request,
 					) (*historypb.HistoryEvent, error) {
 						gotAcceptedRequestSequencingEventId = acceptedRequestSequencingEventId
-						return &historypb.HistoryEvent{}, nil
+						return &historypb.HistoryEvent{EventId: testAcceptedEventID}, nil
 					}
 
 					err := accept(t, store, upd)
@@ -911,7 +911,7 @@ func TestUpdateState(t *testing.T) {
 		runTests(t,
 			func() {
 				t.Helper()
-				upd = update.NewCompleted(tv.UpdateID(), future.NewReadyFuture(successOutcome, nil))
+				upd = update.NewCompleted(tv.UpdateID(), testAcceptedEventID, future.NewReadyFuture(successOutcome, nil))
 				assertCompleted(t, upd, successOutcome)
 			},
 			[]*stateTest{{
@@ -1215,7 +1215,7 @@ func TestAttachCallbacks(t *testing.T) {
 			Controller: effects,
 			AddWorkflowExecutionOptionsUpdatedEventFunc: func(
 				_ *workflowpb.VersioningOverride, _ bool, _ string, _ []*commonpb.Callback, _ []*commonpb.Link, _ string, _ *commonpb.Priority,
-				_ *workflowpb.TimeSkippingConfig, workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
+				_ *commonpb.TimeSkippingConfig, _ bool, workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 			) (*historypb.HistoryEvent, error) {
 				captured = workflowUpdateOptions
 				return &historypb.HistoryEvent{}, nil
@@ -1230,7 +1230,7 @@ func TestAttachCallbacks(t *testing.T) {
 			Controller: effects,
 			AddWorkflowExecutionOptionsUpdatedEventFunc: func(
 				_ *workflowpb.VersioningOverride, _ bool, _ string, _ []*commonpb.Callback, _ []*commonpb.Link, _ string, _ *commonpb.Priority,
-				_ *workflowpb.TimeSkippingConfig, _ []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
+				_ *commonpb.TimeSkippingConfig, _ bool, _ []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 			) (*historypb.HistoryEvent, error) {
 				eventCreated = true
 				return &historypb.HistoryEvent{}, nil
@@ -1245,7 +1245,7 @@ func TestAttachCallbacks(t *testing.T) {
 			Controller: effects,
 			AddWorkflowExecutionOptionsUpdatedEventFunc: func(
 				_ *workflowpb.VersioningOverride, _ bool, _ string, _ []*commonpb.Callback, _ []*commonpb.Link, _ string, _ *commonpb.Priority,
-				_ *workflowpb.TimeSkippingConfig, _ []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
+				_ *commonpb.TimeSkippingConfig, _ bool, _ []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 			) (*historypb.HistoryEvent, error) {
 				count++
 				return &historypb.HistoryEvent{}, nil
@@ -1271,7 +1271,7 @@ func TestAttachCallbacks(t *testing.T) {
 	t.Run("on stateCompleted returns true without attaching callbacks", func(t *testing.T) {
 		effects := &effect.Buffer{}
 		store, eventCreated := trackingStore(effects)
-		upd := update.NewCompleted(tv.UpdateID(), future.NewReadyFuture[*updatepb.Outcome](successOutcome, nil))
+		upd := update.NewCompleted(tv.UpdateID(), testAcceptedEventID, future.NewReadyFuture[*updatepb.Outcome](successOutcome, nil))
 
 		fired, err := upd.AttachCallbacks(testRequest, store)
 		require.NoError(t, err)
@@ -1403,7 +1403,7 @@ func TestAttachCallbacks(t *testing.T) {
 			Controller: effects,
 			AddWorkflowExecutionOptionsUpdatedEventFunc: func(
 				_ *workflowpb.VersioningOverride, _ bool, _ string, _ []*commonpb.Callback, _ []*commonpb.Link, _ string, _ *commonpb.Priority,
-				_ *workflowpb.TimeSkippingConfig, _ []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
+				_ *commonpb.TimeSkippingConfig, _ bool, _ []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 			) (*historypb.HistoryEvent, error) {
 				return nil, serviceerror.NewInternal("flush error")
 			},
@@ -1529,7 +1529,7 @@ func TestAttachCallbacks(t *testing.T) {
 			Controller: effects,
 			AddWorkflowExecutionOptionsUpdatedEventFunc: func(
 				_ *workflowpb.VersioningOverride, _ bool, _ string, _ []*commonpb.Callback, _ []*commonpb.Link, _ string, _ *commonpb.Priority,
-				_ *workflowpb.TimeSkippingConfig, _ []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
+				_ *commonpb.TimeSkippingConfig, _ bool, _ []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 			) (*historypb.HistoryEvent, error) {
 				return nil, serviceerror.NewInternal("store error")
 			},
@@ -1567,7 +1567,7 @@ func TestAttachCallbacks(t *testing.T) {
 			},
 			AddWorkflowExecutionOptionsUpdatedEventFunc: func(
 				_ *workflowpb.VersioningOverride, _ bool, _ string, _ []*commonpb.Callback, _ []*commonpb.Link, _ string, _ *commonpb.Priority,
-				_ *workflowpb.TimeSkippingConfig, _ []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
+				_ *commonpb.TimeSkippingConfig, _ bool, _ []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 			) (*historypb.HistoryEvent, error) {
 				eventCreated = true
 				return &historypb.HistoryEvent{}, nil

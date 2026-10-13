@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -16,6 +17,9 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/resource"
 	"go.uber.org/fx"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -24,17 +28,23 @@ import (
 type SchedulerIdleTaskHandlerOptions struct {
 	fx.In
 
-	Config *Config
+	Config         *Config
+	MetricsHandler metrics.Handler
+	BaseLogger     log.Logger
 }
 
 type SchedulerIdleTaskHandler struct {
 	chasm.PureTaskHandlerBase
-	config *Config
+	config         *Config
+	metricsHandler metrics.Handler
+	baseLogger     log.Logger
 }
 
 func NewSchedulerIdleTaskHandler(opts SchedulerIdleTaskHandlerOptions) *SchedulerIdleTaskHandler {
 	return &SchedulerIdleTaskHandler{
-		config: opts.Config,
+		config:         opts.Config,
+		metricsHandler: opts.MetricsHandler,
+		baseLogger:     opts.BaseLogger,
 	}
 }
 
@@ -44,34 +54,71 @@ func (r *SchedulerIdleTaskHandler) Execute(
 	_ chasm.TaskAttributes,
 	_ *schedulerpb.SchedulerIdleTask,
 ) error {
+	scheduler.getOrCreateEventLog(ctx).LogEvent(ctx, "schedule closed from idle timer")
 	scheduler.Closed = true
+	newTaggedMetricsHandler(r.metricsHandler, scheduler).
+		Counter(metrics.ScheduleIdleTask.Name()).
+		Record(1, metrics.OutcomeTag(outcomeFired), metrics.ReasonTag(reasonNone))
 	return nil
 }
 
-// Validate returns true when all three conditions hold:
-//  1. The schedule is still idle — no new actions have been queued since this
-//     task was created (getIdleExpiration returns isIdle=true).
-//  2. The idle expiration has not shifted — getIdleExpiration recomputes
-//     getLastEventTime()+idleTimeTotal and it must equal the task's scheduled
-//     time. If a workflow start has advanced getLastEventTime() since the task
-//     was written, the expiration no longer matches and the task is dropped.
-//  3. The scheduler is not already closed (idempotency guard).
+// Idle-task invalidation reasons. Limited cardinality for ReasonTag.
+const (
+	idleInvalidatedHeldOpen        metrics.ReasonString = "held_open"
+	idleInvalidatedExpirationShift metrics.ReasonString = "expiration_shift"
+	idleInvalidatedClosed          metrics.ReasonString = "closed"
+	idleAlreadyArmed               metrics.ReasonString = "already_armed"
+)
+
 func (r *SchedulerIdleTaskHandler) Validate(
 	ctx chasm.Context,
 	scheduler *Scheduler,
-	taskAttrs chasm.TaskAttributes,
+	taskAttrs chasm.TaskInvocation,
 	task *schedulerpb.SchedulerIdleTask,
 ) (bool, error) {
-	idleTimeTotal := task.IdleTimeTotal.AsDuration()
-	idleExpiration, isIdle := scheduler.getIdleExpiration(ctx, idleTimeTotal, time.Time{})
-
-	// If the scheduler has since woken up, or its idle expiration time changed, this
-	// task must be obsolete.
-	if !isIdle || idleExpiration.Compare(taskAttrs.ScheduledTime) != 0 {
+	if scheduler.Closed {
+		r.recordInvalidated(scheduler, idleInvalidatedClosed, taskAttrs.ScheduledTime, time.Time{})
+		return false, nil
+	}
+	if scheduler.isHeldOpen() {
+		r.recordInvalidated(scheduler, idleInvalidatedHeldOpen, taskAttrs.ScheduledTime, time.Time{})
 		return false, nil
 	}
 
-	return !scheduler.Closed, nil
+	// Use After (not strict equality) so sub-precision drift doesn't drop tasks
+	// that should still fire.
+	idleExpiration := scheduler.idleDeadline(ctx, task.IdleTimeTotal.AsDuration())
+	if idleExpiration.After(taskAttrs.ScheduledTime) {
+		r.recordInvalidated(scheduler, idleInvalidatedExpirationShift, taskAttrs.ScheduledTime, idleExpiration)
+		return false, nil
+	}
+
+	// Deadline moved earlier. getLastEventTime floors the recomputed value at the
+	// persisted LastEventTime mark, so this is now only reachable on a schedule
+	// whose mark predates that field (nil) - i.e. one that has not ticked since
+	// the upgrade. Fire anyway (closing the schedule is the safe call) but log,
+	// so a mark that is failing to hold the line still surfaces.
+	if idleExpiration.Before(taskAttrs.ScheduledTime) {
+		newTaggedLogger(r.baseLogger, scheduler).Warn("idle deadline regressed",
+			tag.Timestamp(idleExpiration),
+			tag.NewTimeTag("scheduled-time", taskAttrs.ScheduledTime))
+	}
+	return true, nil
+}
+
+func (r *SchedulerIdleTaskHandler) recordInvalidated(
+	scheduler *Scheduler,
+	reason metrics.ReasonString,
+	scheduledTime time.Time,
+	recomputedDeadline time.Time,
+) {
+	newTaggedMetricsHandler(r.metricsHandler, scheduler).
+		Counter(metrics.ScheduleIdleTask.Name()).
+		Record(1, metrics.OutcomeTag(outcomeInvalidated), metrics.ReasonTag(reason))
+	newTaggedLogger(r.baseLogger, scheduler).Debug("idle task invalidated",
+		tag.NewStringTag("reason", string(reason)),
+		tag.NewTimeTag("scheduled-time", scheduledTime),
+		tag.NewTimeTag("recomputed-deadline", recomputedDeadline))
 }
 
 type SchedulerCallbacksTaskHandlerOptions struct {
@@ -80,6 +127,7 @@ type SchedulerCallbacksTaskHandlerOptions struct {
 	Config         *Config
 	HistoryClient  resource.HistoryClient
 	FrontendClient workflowservice.WorkflowServiceClient
+	MetricsHandler metrics.Handler
 }
 
 type SchedulerCallbacksTaskHandler struct {
@@ -87,6 +135,7 @@ type SchedulerCallbacksTaskHandler struct {
 	config         *Config
 	historyClient  resource.HistoryClient
 	frontendClient workflowservice.WorkflowServiceClient
+	metricsHandler metrics.Handler
 }
 
 func NewSchedulerCallbacksTaskHandler(opts SchedulerCallbacksTaskHandlerOptions) *SchedulerCallbacksTaskHandler {
@@ -94,6 +143,7 @@ func NewSchedulerCallbacksTaskHandler(opts SchedulerCallbacksTaskHandlerOptions)
 		config:         opts.Config,
 		historyClient:  opts.HistoryClient,
 		frontendClient: opts.FrontendClient,
+		metricsHandler: opts.MetricsHandler,
 	}
 }
 
@@ -102,6 +152,9 @@ func NewSchedulerCallbacksTaskHandler(opts SchedulerCallbacksTaskHandlerOptions)
 // workflow is still running.
 type watchResult struct {
 	completed *schedulespb.CompletedResult
+
+	// reason attributes how completed was arrived at, for ScheduleCallbackReattach.
+	reason metrics.ReasonString
 }
 
 func (r *SchedulerCallbacksTaskHandler) Execute(
@@ -112,9 +165,9 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 ) error {
 	var scheduler *Scheduler
 	var starts []*schedulespb.BufferedStart
-	var callback *commonpb.Callback
+	var componentRef []byte
 
-	// Read scheduler state and generate the Nexus callback token.
+	// Read scheduler state and capture the scheduler's component ref.
 	_, err := chasm.ReadComponent(
 		ctx,
 		schedulerRef,
@@ -130,11 +183,11 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 				}
 			}
 
-			cb, err := chasm.GenerateNexusCallback(ctx, s)
+			ref, err := ctx.Ref(s)
 			if err != nil {
 				return struct{}{}, err
 			}
-			callback = common.CloneProto(cb)
+			componentRef = ref
 
 			return struct{}{}, nil
 		},
@@ -143,11 +196,14 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 	if err != nil {
 		return fmt.Errorf("failed to read component: %w", err)
 	}
+	if scheduler == nil {
+		return errors.New("scheduler component was nil after read")
+	}
 
 	// Attach callbacks and check workflow status.
 	results := make(map[string]*watchResult, len(starts))
 	for _, start := range starts {
-		result, err := r.watchRunningStart(ctx, scheduler, start, callback)
+		result, err := r.watchRunningStart(ctx, scheduler, start, componentRef)
 		if err != nil {
 			return err
 		}
@@ -161,15 +217,23 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 		func(s *Scheduler, ctx chasm.MutableContext, _ any) (chasm.NoValue, error) {
 			generator := s.Generator.Get(ctx)
 			invoker := s.Invoker.Get(ctx)
+			var completedRequestIDs []string
 
 			for _, start := range invoker.BufferedStarts {
 				if result, ok := results[start.RequestId]; ok {
-					start.HasCallback = true
 					if result.completed != nil {
-						start.Completed = result.completed
+						completedRequestIDs = append(completedRequestIDs, start.RequestId)
+					} else {
+						start.HasCallback = true
 					}
 				}
 			}
+			for _, requestID := range completedRequestIDs {
+				s.completeAction(ctx, requestID, results[requestID].completed, nil)
+			}
+
+			s.getOrCreateEventLog(ctx).LogEvent(ctx,
+				fmt.Sprintf("attached callbacks to %d already-running workflow(s)", len(results)))
 
 			// Now that running workflow state has been refreshed, scheduler tasks can be
 			// fired.
@@ -184,6 +248,18 @@ func (r *SchedulerCallbacksTaskHandler) Execute(
 		return fmt.Errorf("failed to update component state: %w", err)
 	}
 
+	// Only after the update commits, so a rolled-back re-attach isn't counted.
+	metricsHandler := newTaggedMetricsHandler(r.metricsHandler, scheduler)
+	for _, result := range results {
+		outcome := outcomeReattachAttached
+		if result.completed != nil {
+			outcome = outcomeReattachCompleted
+		}
+		metrics.ScheduleCallbackReattach.With(metricsHandler).Record(1,
+			metrics.OutcomeTag(outcome),
+			metrics.ReasonTag(result.reason))
+	}
+
 	return nil
 }
 
@@ -194,7 +270,7 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 	ctx context.Context,
 	scheduler *Scheduler,
 	start *schedulespb.BufferedStart,
-	callback *commonpb.Callback,
+	schedulerRef []byte,
 ) (*watchResult, error) {
 	// Describe the workflow to ensure it exists and is still running.
 	descResp, err := r.historyClient.DescribeWorkflowExecution(ctx, &historyservice.DescribeWorkflowExecutionRequest{
@@ -208,28 +284,27 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 		},
 	})
 	if err != nil {
-		var notFoundErr *serviceerror.NotFound
-		if errors.As(err, &notFoundErr) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			return &watchResult{
 				completed: &schedulespb.CompletedResult{
 					Status:    enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 					CloseTime: timestamppb.Now(),
 				},
+				reason: reasonReattachNotFound,
 			}, nil
 		}
 		return nil, err
 	}
 
 	wfInfo := descResp.GetWorkflowExecutionInfo()
-	wfProgressing := wfInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING ||
-		wfInfo.GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED
-
-	if !wfProgressing {
+	completed, err := completedResultFromWorkflowInfo(wfInfo)
+	if err != nil {
+		return nil, err
+	}
+	if completed != nil {
 		return &watchResult{
-			completed: &schedulespb.CompletedResult{
-				Status:    wfInfo.GetStatus(),
-				CloseTime: wfInfo.GetCloseTime(),
-			},
+			completed: completed,
+			reason:    reasonReattachAlreadyClosed,
 		}, nil
 	}
 
@@ -238,6 +313,13 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 	// reuse policy prevents accidentally starting a new workflow if the original
 	// completes between the describe and this call.
 	requestSpec := scheduler.GetSchedule().GetAction().GetStartWorkflow()
+
+	// Pack this start's request ID into the callback token so completions are matched from the token
+	// (which survives continue-as-new) rather than the started workflow's callback state.
+	callback, err := chasm.GenerateNexusCallback(schedulerRef, start.RequestId, r.config.EncodeInternalTokenWithEnvelope(scheduler.Namespace))
+	if err != nil {
+		return nil, err
+	}
 
 	_, err = r.frontendClient.StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
 		Namespace:                scheduler.Namespace,
@@ -255,34 +337,25 @@ func (r *SchedulerCallbacksTaskHandler) watchRunningStart(
 		},
 	})
 	if err != nil {
-		// WorkflowExecutionAlreadyStarted: workflow completed between describe
-		// and this attach call (REJECT_DUPLICATE rejects completed workflows).
-		if isAlreadyStartedError(err) {
-			return &watchResult{
-				completed: &schedulespb.CompletedResult{
-					Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-					CloseTime: timestamppb.Now(),
-				},
-			}, nil
-		}
+		// CONSIDER(scheduler): When this is WorkflowExecutionAlreadyStarted after a
+		// continued-as-new successor closes, retrying describes the predecessor and
+		// cannot observe the successor's terminal status. Follow the chain instead.
 		return nil, err
 	}
 
 	// Callback attached successfully.
-	return &watchResult{}, nil
+	return &watchResult{reason: reasonNone}, nil
 }
 
 func (r *SchedulerCallbacksTaskHandler) Validate(
 	ctx chasm.Context,
 	scheduler *Scheduler,
-	taskAttrs chasm.TaskAttributes,
+	taskAttrs chasm.TaskInvocation,
 	task *schedulerpb.SchedulerCallbacksTask,
 ) (bool, error) {
 	invoker := scheduler.Invoker.Get(ctx)
-	for _, start := range invoker.BufferedStarts {
-		if needsCallback(start) {
-			return true, nil
-		}
+	if slices.ContainsFunc(invoker.BufferedStarts, needsCallback) {
+		return true, nil
 	}
 	return false, nil
 }

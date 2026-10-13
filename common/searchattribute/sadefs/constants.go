@@ -205,11 +205,27 @@ var (
 		WorkflowID:           {},
 		RunID:                {},
 		StartTime:            {},
-		ExecutionTime:        {},
 		CloseTime:            {},
 		HistoryLength:        {},
 		HistorySizeBytes:     {},
 		StateTransitionCount: {},
+	}
+
+	// chasmOverridableSystemSearchAttributes are system search attributes whose visibility column
+	// a CHASM component may override, by registering an identity-mapped system search attribute
+	// (alias == field) and emitting its value from SearchAttributes().
+	//
+	// Excludes: CHASM system search attributes (managed by the CHASM framework), fields not on the
+	// visibility request base (e.g. ExecutionDuration), and ExecutionStatus (a reserved-column
+	// keyword for CHASM archetypes, not the system status enum).
+	chasmOverridableSystemSearchAttributes = map[string]struct{}{
+		WorkflowType:     {},
+		ExecutionTime:    {},
+		TaskQueue:        {},
+		ParentWorkflowID: {},
+		ParentRunID:      {},
+		RootWorkflowID:   {},
+		RootRunID:        {},
 	}
 
 	sqlDbSystemNameToColName = map[string]string{
@@ -309,6 +325,19 @@ func IsMappable(name string) bool {
 func IsChasmSystem(name string) bool {
 	_, ok := chasmSystemSearchAttributes[name]
 	return ok
+}
+
+// IsChasmOverridableSystem returns true if name is a system search attribute whose dedicated
+// visibility column a CHASM component may override with its own value. See
+// chasmOverridableSystemSearchAttributes for the semantics and exclusions.
+func IsChasmOverridableSystem(name string) bool {
+	_, ok := chasmOverridableSystemSearchAttributes[name]
+	return ok
+}
+
+// ChasmOverridableSystem returns a clone of the CHASM-overridable system search attributes set.
+func ChasmOverridableSystem() map[string]struct{} {
+	return maps.Clone(chasmOverridableSystemSearchAttributes)
 }
 
 // GetSqlDbColName maps system and reserved search attributes to column names for SQL tables.

@@ -16,8 +16,9 @@ const (
 )
 
 var (
-	system     = sadefs.System()
-	predefined = sadefs.Predefined()
+	system              = sadefs.System()
+	predefined          = sadefs.Predefined()
+	predefinedWhiteList = sadefs.PredefinedWhiteList()
 )
 
 type (

@@ -119,5 +119,5 @@ func (s *signalWorkflowSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 		s.workflowConsistencyChecker,
 	)
 	s.Nil(resp)
-	s.Error(consts.ErrWorkflowClosing, err)
+	s.ErrorIs(consts.ErrWorkflowClosing, err)
 }

@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
+	"maps"
 	"path"
 	"sort"
 	"strings"
@@ -468,9 +469,7 @@ func createExpirationLogMessage(cert CertExpirationData, expired bool) string {
 }
 
 func mergeMaps(to CertExpirationMap, from CertExpirationMap) {
-	for k, v := range from {
-		to[k] = v
-	}
+	maps.Copy(to, from)
 }
 
 func isSystemWorker(tls *config.RootTLS) bool {

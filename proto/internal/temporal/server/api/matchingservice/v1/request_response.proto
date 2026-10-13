@@ -149,6 +149,7 @@ message PollActivityTaskQueueResponse {
   temporal.api.common.v1.RetryPolicy retry_policy = 19;
   // ID of the activity run (applicable for standalone activities only)
   string activity_run_id = 20;
+  temporal.api.nexus.v1.PropagatedSerializationContext propagated_nexus_serialization_context = 21;
 }
 
 message AddWorkflowTaskRequest {
@@ -203,6 +204,43 @@ message AddActivityTaskResponse {
   string assigned_build_id = 1;
 }
 
+message GrantEagerDispatchRequest {
+  string namespace_id = 1;
+  // The task queue partition that decides for every item in this request. task_queue_type
+  // selects whether these are workflow or activity tasks.
+  //
+  // Callers should leave partition_id unset, the matching client will fill it in and use
+  // it for routing. Only normal partitions are currently supported.
+  temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
+  repeated Item items = 3;
+
+  message Item {
+    // Must be greater than 0. Use more than one to request a batch grant.
+    int32 count = 1;
+
+    // Carries priority_key and fairness_key. Drives both the priority comparison against
+    // the partition's next dispatchable task and the per-fairness-key rate limit check.
+    // A queued task with non-negligible backlog prevents a grant when it has equal or higher
+    // priority. Eager grants only honor per-fairness-key rate limits, not fairness itself.
+    temporal.api.common.v1.Priority priority = 2;
+
+    // Version of the worker. Matters because priority backlog is separate by version. For
+    // current versions and ramping versions with a non-zero ramp percentage, the default
+    // queue's backlog is considered too because unpinned tasks are persisted there until dispatch.
+    temporal.server.api.deployment.v1.WorkerDeploymentVersion version = 3;
+  }
+}
+
+message GrantEagerDispatchResponse {
+  // This list has the same length and order of the request items.
+  repeated Item items = 1;
+
+  message Item {
+    // Could be less than or equal to the requested count.
+    int32 granted_count = 1;
+  }
+}
+
 message QueryWorkflowRequest {
   string namespace_id = 1;
   temporal.api.taskqueue.v1.TaskQueue task_queue = 2;
@@ -252,6 +290,36 @@ message CancelOutstandingWorkerPollsRequest {
 
 message CancelOutstandingWorkerPollsResponse {
   // Used for debugging.
+  int32 cancelled_count = 1;
+}
+
+// CancelOutstandingWorkerPollsPartitionRequest cancels outstanding polls for the given workers
+// on the specified partitions. Sent by the matching root to each matching host during
+// fan-out.
+message CancelOutstandingWorkerPollsPartitionRequest {
+  message WorkerEntry {
+    // SDK-generated unique identifier for a worker instance. All pollers from the
+    // same worker share this key.
+    string worker_instance_key = 1;
+
+    // Worker identity string (e.g., "pid@hostname"). Poller history predates
+    // worker_instance_key and is keyed by identity, so we need both.
+    string worker_identity = 2;
+  }
+
+  string namespace_id = 1;
+
+  // Used for RPC routing only. Set to any partition on the target host.
+  temporal.server.api.taskqueue.v1.TaskQueuePartition task_queue_partition = 2;
+
+  // Partitions to process on this host.
+  repeated temporal.server.api.taskqueue.v1.TaskQueuePartition partitions = 3;
+
+  // Workers to cancel polls for.
+  repeated WorkerEntry workers = 4;
+}
+
+message CancelOutstandingWorkerPollsPartitionResponse {
   int32 cancelled_count = 1;
 }
 
@@ -308,10 +376,15 @@ message DescribeTaskQueuePartitionRequest {
   // Report list of pollers for requested task queue types and versions
   bool report_pollers = 5;
   bool report_internal_task_queue_status = 6;
+  // Only process the request if the task queue partition is already loaded, and do not refresh
+  // the idle timeout of described physical task queues. Explicitly requested physical task queues
+  // may still be loaded to serve the request.
+  bool only_if_loaded = 7;
 }
 
 message DescribeTaskQueuePartitionResponse {
   map<string, temporal.server.api.taskqueue.v1.TaskQueueVersionInfoInternal> versions_info_internal = 1;
+  temporal.server.api.taskqueue.v1.PartitionScaleInfo scale_info = 2;
 }
 
 message ListTaskQueuePartitionsRequest {
@@ -688,6 +761,16 @@ message ListWorkersResponse {
   repeated temporal.api.worker.v1.WorkerInfo workers_info = 1 [deprecated = true];
   bytes next_page_token = 2;
   repeated temporal.api.worker.v1.WorkerListInfo workers = 3;
+}
+
+message CountWorkersRequest {
+  string namespace_id = 1;
+  temporal.api.workflowservice.v1.CountWorkersRequest count_request = 2;
+}
+
+message CountWorkersResponse {
+  // Number of workers matching the query.
+  int64 count = 1;
 }
 
 // (-- api-linter: core::0134::request-resource-required=disabled

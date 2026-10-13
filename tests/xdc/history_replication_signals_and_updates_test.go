@@ -693,13 +693,14 @@ func (c *hrsuTestCluster) sendUpdateAndWaitUntilStage(ctx context.Context, updat
 
 	// Blocks until the update request causes a WFT to be dispatched; then sends the update acceptance message
 	// required for the update request to return.
-	if stage == sdkclient.WorkflowUpdateStageCompleted {
+	switch stage {
+	case sdkclient.WorkflowUpdateStageCompleted:
 		err := c.pollAndAcceptCompleteUpdate(updateId)
 		c.t.s.NoError(err)
-	} else if stage == sdkclient.WorkflowUpdateStageAccepted {
+	case sdkclient.WorkflowUpdateStageAccepted:
 		err := c.pollAndAcceptUpdate()
 		c.t.s.NoError(err)
-	} else {
+	default:
 		c.t.s.FailNow("invalid stage", stage)
 	}
 

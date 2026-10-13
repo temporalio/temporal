@@ -17,6 +17,12 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+// Both components hold callbacks, so both have to be a CompletionSource for their delivery.
+var (
+	_ callback.CompletionSource = (*Workflow)(nil)
+	_ callback.CompletionSource = (*WorkflowUpdate)(nil)
+)
+
 type Workflow struct {
 	chasm.UnimplementedComponent
 
@@ -50,14 +56,16 @@ func NewWorkflow(
 	}
 }
 
+// LifecycleState reports the workflow's lifecycle as derived from mutable state.
+//
+// NOTE: For legacy reasons this is the reverse of other archetypes. Elsewhere the root component's
+// LifecycleState drives the execution state in mutable state (see closeTransactionHandleRootLifecycleChange,
+// which is bypassed for workflows). Here mutableStateImpl updates the execution state directly and this method
+// only reflects it, so it is meant for the read path (e.g. task validation), not for driving state transitions.
 func (w *Workflow) LifecycleState(
 	_ chasm.Context,
 ) chasm.LifecycleState {
-	// NOTE: closeTransactionHandleRootLifecycleChange() is bypassed in tree.go
-	//
-	// NOTE: detached mode is not implemented yet, so always return Running here.
-	// Otherwise, tasks for callback component can't be executed after workflow is closed.
-	return chasm.LifecycleStateRunning
+	return w.MSPointer.LifecycleState()
 }
 
 func (w *Workflow) ContextMetadata(_ chasm.Context) map[string]string {
@@ -157,17 +165,9 @@ func addCallbacksToMap(
 ) error {
 	chasmCBs := make([]*callbackspb.Callback, len(completionCallbacks))
 	for i, cb := range completionCallbacks {
-		chasmCB := &callbackspb.Callback{Links: cb.GetLinks()}
-		switch variant := cb.Variant.(type) {
-		case *commonpb.Callback_Nexus_:
-			chasmCB.Variant = &callbackspb.Callback_Nexus_{
-				Nexus: &callbackspb.Callback_Nexus{
-					Url:    variant.Nexus.GetUrl(),
-					Header: variant.Nexus.GetHeader(),
-				},
-			}
-		default:
-			return serviceerror.NewInvalidArgumentf("unsupported callback variant: %T", variant)
+		chasmCB, err := callback.FromAPICallback(cb)
+		if err != nil {
+			return err
 		}
 		chasmCBs[i] = chasmCB
 	}
@@ -181,7 +181,7 @@ func addCallbacksToMap(
 			// Already registered, skip to avoid overwriting.
 			continue
 		}
-		callbackObj := callback.NewCallback(requestID, eventTime, &callbackspb.CallbackState{}, chasmCB)
+		callbackObj := callback.NewCallback(requestID, eventTime, chasmCB)
 		target[id] = chasm.NewComponentField(ctx, callbackObj)
 	}
 	return nil

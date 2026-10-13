@@ -21,6 +21,10 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.CountSchedulesResponse:
 		return nil
+	case *workflowservice.CountWorkersRequest:
+		return nil
+	case *workflowservice.CountWorkersResponse:
+		return nil
 	case *workflowservice.CountWorkflowExecutionsRequest:
 		return nil
 	case *workflowservice.CountWorkflowExecutionsResponse:
@@ -312,6 +316,13 @@ func (wt *WorkflowTags) extractFromWorkflowServiceServerMessage(message any) []t
 		return nil
 	case *workflowservice.PollNexusTaskQueueResponse:
 		return wt.fromTaskToken(r.GetTaskToken())
+	case *workflowservice.PollWorkflowExecutionTimeSkippingRequest:
+		return []tag.Tag{
+			tag.WorkflowID(r.GetWorkflowExecution().GetWorkflowId()),
+			tag.WorkflowRunID(r.GetWorkflowExecution().GetRunId()),
+		}
+	case *workflowservice.PollWorkflowExecutionTimeSkippingResponse:
+		return nil
 	case *workflowservice.PollWorkflowExecutionUpdateRequest:
 		return []tag.Tag{
 			tag.WorkflowID(r.GetUpdateRef().GetWorkflowExecution().GetWorkflowId()),

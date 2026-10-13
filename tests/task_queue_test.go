@@ -67,25 +67,26 @@ func (s *TaskQueueSuite) TestTaskQueueRateLimit() {
 }
 
 func (s *TaskQueueSuite) runTaskQueueRateLimitTest(nPartitions, nWorkers int, timeToDrain time.Duration, useNewMatching bool) {
-	s.Run(s.testTaskQueueRateLimitName(nPartitions, nWorkers, useNewMatching), func(s *TaskQueueSuite) {
-		s.taskQueueRateLimitTest(nPartitions, nWorkers, timeToDrain, useNewMatching)
+	s.Run(s.testTaskQueueRateLimitName(nPartitions, nWorkers), func(s *TaskQueueSuite) {
+		s.taskQueueRateLimitTest(nPartitions, nWorkers, timeToDrain)
 	})
 }
 
-func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeToDrain time.Duration, useNewMatching bool) {
+func (s *TaskQueueSuite) taskQueueRateLimitTest(nPartitions, nWorkers int, timeToDrain time.Duration) {
 	env := s.newTestEnv(
-		testcore.WithDynamicConfig(dynamicconfig.MatchingUseNewMatcher, useNewMatching),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, nPartitions),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, nPartitions),
-
 		// exclude the effect of the default forwarding rate limit (10)
 		testcore.WithDynamicConfig(dynamicconfig.MatchingForwarderMaxRatePerSecond, 1000),
-
 		// 30 tasks at 1 task per second is 30 seconds.
 		// if invalid tasks are NOT using the rate limit, then this should take well below that long.
 		// task forwarding between task queue partitions is rate-limited by default to 10 rps.
 		testcore.WithDynamicConfig(dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate, 1),
 		testcore.WithDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 0),
+		// Terminating workflows mid-backlog intentionally trips soft asserts in the
+		// matching task queue; disable fail-on-error so those logs don't poison the
+		// suite's shared cluster.
+		testcore.WithDisableTestloggerFailure(),
 	)
 
 	const maxBacklog = 30
@@ -173,12 +174,8 @@ func (s *TaskQueueSuite) getBacklogCount(env *testcore.TestEnv, tv *testvars.Tes
 	return resp.GetVersionsInfo()[""].GetTypesInfo()[sdkclient.TaskQueueTypeWorkflow].GetStats().GetApproximateBacklogCount()
 }
 
-func (s *TaskQueueSuite) testTaskQueueRateLimitName(nPartitions, nWorkers int, useNewMatching bool) string {
-	ret := fmt.Sprintf("%vPartitions_%vWorkers", nPartitions, nWorkers)
-	if useNewMatching {
-		return "NewMatching_" + ret
-	}
-	return "OldMatching_" + ret
+func (s *TaskQueueSuite) testTaskQueueRateLimitName(nPartitions, nWorkers int) string {
+	return fmt.Sprintf("%vPartitions_%vWorkers", nPartitions, nWorkers)
 }
 
 // configureRateLimitAndLaunchWorkflows sets up the test environment to validate task queue API rate limiting behavior.
@@ -265,7 +262,7 @@ func (s *TaskQueueSuite) configureRateLimitAndLaunchWorkflows(
 
 // TestTaskQueueAPIRateLimitOverridesWorkerLimit tests that the API rate limit overrides the worker rate limit.
 // It sets the API rate limit on a task queue to 5 RPS and then launches 25 activities.
-// Burst = 5 i.e max(int(math.Ceil(effectiveRPSPartitionWise)), r.config.MinTaskThrottlingBurstSize())
+// Burst = 5 i.e int(math.Ceil(effectiveRPSPartitionWise)))
 // The expected time for all activities to complete is ~ 4 seconds ((25 - 5)/5) +/- 1 second buffer.
 // The first five activities should run immediately, and the rest should be throttled to 5 RPS.
 // The test verifies that the total time taken for all activities to complete is within the expected range
@@ -376,6 +373,63 @@ func (s *TaskQueueSuite) TestTaskQueueAPIRateLimitZero() {
 	// Wait for the duration and ensure no tasks executed
 	s.False(common.AwaitWaitGroup(&wg, drainTimeout), "Some activities unexpectedly completed despite API RPS = 0")
 	s.Empty(runTimes, "No activities should run when API rate limit is 0")
+}
+
+// TestDescribeTaskQueue_RateLimitingActive verifies that the RateLimitingActive field
+// in TaskQueueStats is correctly propagated through DescribeTaskQueue when rate limiting
+// is active on a task queue.
+func (s *TaskQueueSuite) TestDescribeTaskQueue_RateLimitingActive() {
+	const (
+		apiRPS            = 1.0
+		taskCount         = 10
+		activityTaskQueue = "RateLimitTestDescribe"
+		activityName      = "rateLimitedActivity"
+		workerRPS         = 50.0
+		drainTimeout      = 15 * time.Second
+	)
+
+	env := s.newTestEnv(
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
+		testcore.WithDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, 1*time.Millisecond),
+	)
+
+	var (
+		mu       sync.Mutex
+		runTimes []time.Time
+		wg       sync.WaitGroup
+	)
+
+	_, cancel, activityWorker, wfWorker := s.configureRateLimitAndLaunchWorkflows(
+		env,
+		activityTaskQueue,
+		activityName,
+		taskCount,
+		workerRPS,
+		drainTimeout,
+		&runTimes,
+		&wg,
+		apiRPS,
+		&mu,
+	)
+	defer cancel()
+	defer activityWorker.Stop()
+	defer wfWorker.Stop()
+
+	// Poll DescribeTaskQueue until RateLimitingActive is true.
+	// The rate limit is 1 RPS with 10 tasks, so rate limiting should kick in quickly.
+	s.AwaitTruef(func() bool {
+		resp, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     env.Namespace().String(),
+			TaskQueue:     &taskqueuepb.TaskQueue{Name: activityTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			ReportStats:   true,
+		})
+		if err != nil {
+			return false
+		}
+		return resp.GetStats().GetRateLimitingActive()
+	}, 10*time.Second, 200*time.Millisecond, "DescribeTaskQueue should report RateLimitingActive=true when rate limiting is active")
 }
 
 func (s *TaskQueueSuite) TestTaskQueueRateLimit_UpdateFromWorkerConfigAndAPI() {
@@ -1051,7 +1105,6 @@ func testTaskDispatchLatencyEmitted(s *testcore.TestEnv, expectedForwarded, expe
 		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 	} {
-		tqType := tqType
 		s.Eventually(func() bool {
 			resp, err := s.GetTestCluster().MatchingClient().DescribeTaskQueuePartition(
 				s.Context(), &matchingservice.DescribeTaskQueuePartitionRequest{
@@ -1517,6 +1570,43 @@ func (s *TaskQueueSuite) TestShutdownWorkerCancelsOutstandingPolls() {
 	s.NotNil(actResp)
 	s.Empty(actResp.GetTaskToken(), "activity re-poll from shutdown worker should return empty response")
 	s.Less(time.Since(actStart), 2*time.Minute, "activity re-poll should be rejected quickly, not wait for timeout")
+}
+
+func (s *TaskQueueSuite) TestShutdownWorkerIsIdempotent() {
+	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.EnableCancelWorkerPollsOnShutdown, true))
+
+	tv := testvars.New(s.T())
+	workerInstanceKey := uuid.NewString()
+
+	shutdownReq := &workflowservice.ShutdownWorkerRequest{
+		Namespace:         env.Namespace().String(),
+		StickyTaskQueue:   tv.StickyTaskQueue().GetName(),
+		Identity:          tv.WorkerIdentity(),
+		Reason:            "idempotency test",
+		WorkerInstanceKey: workerInstanceKey,
+		TaskQueue:         tv.TaskQueue().GetName(),
+	}
+
+	// Call ShutdownWorker three times in a row — all should succeed.
+	for range 3 {
+		_, err := env.FrontendClient().ShutdownWorker(s.Context(), shutdownReq)
+		s.NoError(err)
+	}
+
+	// A poll from this worker should still be rejected after repeated shutdowns.
+	pollStart := time.Now()
+	pollCtx, pollCancel := context.WithTimeout(s.Context(), 5*time.Minute)
+	defer pollCancel()
+	resp, err := env.FrontendClient().PollWorkflowTaskQueue(pollCtx, &workflowservice.PollWorkflowTaskQueueRequest{
+		Namespace:         env.Namespace().String(),
+		TaskQueue:         tv.TaskQueue(),
+		Identity:          tv.WorkerIdentity(),
+		WorkerInstanceKey: workerInstanceKey,
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Empty(resp.GetTaskToken(), "poll from shutdown worker should return empty response")
+	s.Less(time.Since(pollStart), 2*time.Minute, "poll should be rejected quickly by shutdown cache")
 }
 
 func (s *TaskQueueSuite) TestAdminGetTaskQueueUserData_RootPartition() {

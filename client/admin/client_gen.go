@@ -59,6 +59,16 @@ func (c *clientImpl) CloseShard(
 	return c.client.CloseShard(ctx, request, opts...)
 }
 
+func (c *clientImpl) CountExecutions(
+	ctx context.Context,
+	request *adminservice.CountExecutionsRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.CountExecutionsResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.CountExecutions(ctx, request, opts...)
+}
+
 func (c *clientImpl) DeepHealthCheck(
 	ctx context.Context,
 	request *adminservice.DeepHealthCheckRequest,
@@ -299,6 +309,16 @@ func (c *clientImpl) ListClusters(
 	return c.client.ListClusters(ctx, request, opts...)
 }
 
+func (c *clientImpl) ListExecutions(
+	ctx context.Context,
+	request *adminservice.ListExecutionsRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListExecutionsResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.ListExecutions(ctx, request, opts...)
+}
+
 func (c *clientImpl) ListHistoryTasks(
 	ctx context.Context,
 	request *adminservice.ListHistoryTasksRequest,
@@ -454,7 +474,7 @@ func (c *clientImpl) SyncWorkflowState(
 	request *adminservice.SyncWorkflowStateRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.SyncWorkflowStateResponse, error) {
-	ctx, cancel := c.createContext(ctx)
+	ctx, cancel := c.createContextWithStateSyncTimeout(ctx)
 	defer cancel()
 	return c.client.SyncWorkflowState(ctx, request, opts...)
 }

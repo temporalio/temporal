@@ -86,6 +86,21 @@ func (c *retryableClient) CancelOutstandingWorkerPolls(
 	return resp, err
 }
 
+func (c *retryableClient) CancelOutstandingWorkerPollsPartition(
+	ctx context.Context,
+	request *matchingservice.CancelOutstandingWorkerPollsPartitionRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.CancelOutstandingWorkerPollsPartitionResponse, error) {
+	var resp *matchingservice.CancelOutstandingWorkerPollsPartitionResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CancelOutstandingWorkerPollsPartition(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) CheckTaskQueueUserDataPropagation(
 	ctx context.Context,
 	request *matchingservice.CheckTaskQueueUserDataPropagationRequest,
@@ -110,6 +125,21 @@ func (c *retryableClient) CheckTaskQueueVersionMembership(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.CheckTaskQueueVersionMembership(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) CountWorkers(
+	ctx context.Context,
+	request *matchingservice.CountWorkersRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.CountWorkersResponse, error) {
+	var resp *matchingservice.CountWorkersResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.CountWorkers(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
@@ -320,6 +350,21 @@ func (c *retryableClient) GetWorkerVersioningRules(
 	op := func(ctx context.Context) error {
 		var err error
 		resp, err = c.client.GetWorkerVersioningRules(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) GrantEagerDispatch(
+	ctx context.Context,
+	request *matchingservice.GrantEagerDispatchRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.GrantEagerDispatchResponse, error) {
+	var resp *matchingservice.GrantEagerDispatchResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GrantEagerDispatch(ctx, request, opts...)
 		return err
 	}
 	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)

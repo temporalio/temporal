@@ -26,10 +26,10 @@ func (h *PayloadTTLPureTaskHandler) Execute(
 func (h *PayloadTTLPureTaskHandler) Validate(
 	chasmContext chasm.Context,
 	store *PayloadStore,
-	attributes chasm.TaskAttributes,
+	attributes chasm.TaskInvocation,
 	task *testspb.TestPayloadTTLPureTask,
 ) (bool, error) {
-	return validateTask(chasmContext, store, attributes, task.PayloadKey)
+	return validateTask(chasmContext, store, attributes.TaskAttributes, task.PayloadKey)
 }
 
 type PayloadTTLSideEffectTaskHandler struct {
@@ -54,10 +54,10 @@ func (h *PayloadTTLSideEffectTaskHandler) Execute(
 func (h *PayloadTTLSideEffectTaskHandler) Validate(
 	chasmContext chasm.Context,
 	store *PayloadStore,
-	attributes chasm.TaskAttributes,
+	attributes chasm.TaskInvocation,
 	task *testspb.TestPayloadTTLSideEffectTask,
 ) (bool, error) {
-	return validateTask(chasmContext, store, attributes, task.PayloadKey)
+	return validateTask(chasmContext, store, attributes.TaskAttributes, task.PayloadKey)
 }
 
 func validateTask(

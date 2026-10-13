@@ -2,8 +2,10 @@ package workerdeployment
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	computepb "go.temporal.io/api/compute/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
@@ -48,4 +50,29 @@ func TestComputeConfigScalingGroupsToWCISpec_WithComputeAndScaling(t *testing.T)
 	assert.Equal(t, []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_ACTIVITY}, g2.TaskTypes)
 	assert.Equal(t, wciiface.ComputeProviderType("aws-ecs"), g2.Compute.ProviderType)
 	assert.Nil(t, g2.Scaling, "no scaler means nil scaling spec")
+}
+
+func TestWciValidationStatusToComputeStatus_Nil(t *testing.T) {
+	t.Parallel()
+	require.Nil(t, wciValidationStatusToComputeStatus(nil))
+}
+
+func TestWciValidationStatusToComputeStatus_Success(t *testing.T) {
+	t.Parallel()
+	ts := time.Date(2025, 1, 15, 12, 0, 0, 0, time.UTC)
+	result := wciValidationStatusToComputeStatus(wciiface.NewValidationStatusSuccess(ts))
+	require.NotNil(t, result)
+	require.NotNil(t, result.ProviderValidation)
+	require.Empty(t, result.ProviderValidation.ErrorMessage)
+	require.Equal(t, ts, result.ProviderValidation.LastCheckTime.AsTime())
+}
+
+func TestWciValidationStatusToComputeStatus_Failed(t *testing.T) {
+	t.Parallel()
+	ts := time.Date(2025, 1, 15, 12, 0, 0, 0, time.UTC)
+	result := wciValidationStatusToComputeStatus(wciiface.NewValidationStatusFailed(ts, "lambda unreachable"))
+	require.NotNil(t, result)
+	require.NotNil(t, result.ProviderValidation)
+	require.Equal(t, "lambda unreachable", result.ProviderValidation.ErrorMessage)
+	require.Equal(t, ts, result.ProviderValidation.LastCheckTime.AsTime())
 }

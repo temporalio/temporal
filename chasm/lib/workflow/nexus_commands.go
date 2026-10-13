@@ -14,14 +14,17 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type nexusCommandHandler struct {
-	config         *nexusoperation.Config
-	nexusProcessor *chasm.NexusEndpointProcessor
+	config          *nexusoperation.Config
+	nexusProcessor  *chasm.NexusEndpointProcessor
+	throttledLogger log.Logger
 }
 
 //nolint:revive // cognitive-complexity: this is a direct port of the HSM command handler
@@ -35,7 +38,12 @@ func (ch *nexusCommandHandler) handleScheduleCommand(
 	ns := ctx.NamespaceEntry()
 	nsName := ns.Name().String()
 
-	if !ch.config.EnableChasmNexusWorkflowOperations(nsName) {
+	// Use the shared rollout predicate. If it rejects, let HSM create the operation.
+	if !nexusoperation.UseChasmForWorkflow(
+		ch.config.EnableChasmNexusWorkflowOperations(nsName),
+		ch.config.ChasmNexusWorkflowOperationsRolloutPercent(nsName),
+		nsName, ctx.ExecutionKey().BusinessID,
+	) {
 		return ErrCommandNotSupported
 	}
 
@@ -64,8 +72,7 @@ func (ch *nexusCommandHandler) handleScheduleCommand(
 			// Links are not needed for validation.
 		}, attrs.Service, attrs.Operation, attrs.Input)
 		if err != nil {
-			var handlerErr *nexus.HandlerError
-			if errors.As(err, &handlerErr) {
+			if handlerErr, ok := errors.AsType[*nexus.HandlerError](err); ok {
 				//nolint:exhaustive
 				switch handlerErr.Type {
 				case nexus.HandlerErrorTypeNotFound, nexus.HandlerErrorTypeBadRequest:
@@ -163,6 +170,17 @@ func (ch *nexusCommandHandler) handleScheduleCommand(
 		}
 	}
 
+	if rejected := commonnexus.MatchHeaderPrefixes(lowerCaseHeader, ch.config.RejectedHeaderPrefixes(nsName)); len(rejected) > 0 {
+		ch.recordHeaderPrefixUsage(ctx, nsName, rejected, true)
+		return FailWorkflowTaskError{
+			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
+			Message: fmt.Sprintf("ScheduleNexusOperationCommandAttributes.NexusHeader contains keys with a rejected prefix: %q", rejected.Keys()),
+		}
+	}
+	if tracked := commonnexus.MatchHeaderPrefixes(lowerCaseHeader, ch.config.TrackedHeaderPrefixes(nsName)); len(tracked) > 0 {
+		ch.recordHeaderPrefixUsage(ctx, nsName, tracked, false)
+	}
+
 	if headerLength > ch.config.MaxOperationHeaderSize(nsName) {
 		return FailWorkflowTaskError{
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_NEXUS_OPERATION_ATTRIBUTES,
@@ -226,6 +244,25 @@ func (ch *nexusCommandHandler) handleScheduleCommand(
 	return err
 }
 
+func (ch *nexusCommandHandler) recordHeaderPrefixUsage(
+	ctx chasm.MutableContext,
+	nsName string,
+	matches commonnexus.HeaderPrefixMatches,
+	rejected bool,
+) {
+	executionKey := ctx.ExecutionKey()
+	nexusoperation.RecordHeaderPrefixUsage(
+		ctx.MetricsHandler(),
+		ch.throttledLogger,
+		nsName,
+		nexusoperation.HeaderPrefixSourceWorkflow,
+		matches,
+		rejected,
+		tag.WorkflowID(executionKey.BusinessID),
+		tag.WorkflowRunID(executionKey.RunID),
+	)
+}
+
 func (ch *nexusCommandHandler) handleCancelCommand(
 	ctx chasm.MutableContext,
 	wf *Workflow,
@@ -233,11 +270,6 @@ func (ch *nexusCommandHandler) handleCancelCommand(
 	cmd *commandpb.Command,
 	opts CommandHandlerOptions,
 ) error {
-	nsName := ctx.NamespaceEntry().Name().String()
-	if !ch.config.EnableChasmNexusWorkflowOperations(nsName) {
-		return ErrCommandNotSupported
-	}
-
 	attrs := cmd.GetRequestCancelNexusOperationCommandAttributes()
 	if attrs == nil {
 		return FailWorkflowTaskError{
@@ -251,11 +283,12 @@ func (ch *nexusCommandHandler) handleCancelCommand(
 		return wf.HasAnyBufferedEvent(makeNexusOperationTerminalEventFilter(attrs.ScheduledEventId))
 	}
 
+	// Route by the tree that owns the operation instead of the enableChasmWorkflowOperations flag: an operation's tree
+	// is fixed when it is scheduled and does not move when the flag is later flipped. The operation belongs to the
+	// CHASM tree if it is still present, or if a terminal event for it is buffered in this workflow. Otherwise, return
+	// ErrCommandTargetNotFound so the dispatcher falls back to the HSM command handler.
 	if !operationFound && !hasBufferedEvent() {
-		return FailWorkflowTaskError{
-			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
-			Message: fmt.Sprintf("requested cancelation for a non-existing or already completed operation with scheduled event ID of %d", attrs.ScheduledEventId),
-		}
+		return ErrCommandTargetNotFound
 	}
 
 	// Always create the event even if there's a buffered completion to avoid breaking replay in the SDK.
@@ -275,6 +308,11 @@ func (ch *nexusCommandHandler) handleCancelCommand(
 			Cause:   enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_REQUEST_CANCEL_NEXUS_OPERATION_ATTRIBUTES,
 			Message: fmt.Sprintf("cancelation was already requested for an operation with scheduled event ID %d", attrs.ScheduledEventId),
 		}
+	}
+	if errors.As(err, new(*serviceerror.NotFound)) {
+		// This may happen if there's a buffered completion. Ignore. (Mirrors the HSM command handler's
+		// own hsm.ErrStateMachineNotFound tolerance for the same race, in nexusoperations/workflow/commands.go.)
+		return nil
 	}
 	return err
 }

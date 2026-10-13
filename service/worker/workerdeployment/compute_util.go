@@ -1,9 +1,15 @@
 package workerdeployment
 
 import (
+	"errors"
+
 	computepb "go.temporal.io/api/compute/v1"
+	deploymentpb "go.temporal.io/api/deployment/v1"
+	"go.temporal.io/api/serviceerror"
 	wciiface "go.temporal.io/auto-scaled-workers/wci/workflow/iface"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 func computeConfigScalingGroupsToWCISpec(scalingGroups map[string]*computepb.ComputeConfigScalingGroup) *wciiface.WorkerControllerInstanceSpec {
@@ -34,8 +40,9 @@ func scalingGroupUpdatesToWCI(updates map[string]*computepb.ComputeConfigScaling
 		spec := wciiface.ScalingGroupSpec{
 			TaskTypes: sg.GetTaskQueueTypes(),
 			Compute: wciiface.ComputeProviderSpec{
-				ProviderType: wciiface.ComputeProviderType(sg.GetProvider().GetType()),
-				Config:       sg.GetProvider().GetDetails(),
+				ProviderType:  wciiface.ComputeProviderType(sg.GetProvider().GetType()),
+				Config:        sg.GetProvider().GetDetails(),
+				NexusEndpoint: sg.GetProvider().GetNexusEndpoint(),
 			},
 		}
 		if scaler := sg.GetScaler(); scaler != nil {
@@ -102,4 +109,29 @@ func scalingGroupsToUpsertUpdates(scalingGroups map[string]*computepb.ComputeCon
 		}
 	}
 	return updates
+}
+
+// wciValidationStatusToComputeStatus converts a WCI ValidationStatus to the public ComputeStatus proto.
+// A successful validation results in an empty error_message; a failed validation sets the error_message.
+func wciValidationStatusToComputeStatus(vs *wciiface.ValidationStatus) *deploymentpb.ComputeStatus {
+	if vs == nil {
+		return nil
+	}
+	pv := &deploymentpb.ComputeStatus_ProviderValidationStatus{
+		LastCheckTime: timestamppb.New(vs.LastValidationTime),
+	}
+	if vs.Status == wciiface.ValidationResultFailed {
+		pv.ErrorMessage = vs.ErrMessage
+	}
+	return &deploymentpb.ComputeStatus{ProviderValidation: pv}
+}
+
+func wciClientErrorToActivityError(err error) error {
+	if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); ok {
+		return temporal.NewNonRetryableApplicationError(err.Error(), errInvalidComputeConfig, nil)
+	}
+	if _, ok := errors.AsType[*serviceerror.FailedPrecondition](err); ok {
+		return temporal.NewNonRetryableApplicationError(err.Error(), errFailedPrecondition, nil)
+	}
+	return err
 }

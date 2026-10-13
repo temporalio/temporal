@@ -28,6 +28,7 @@ type mockUpdateStore struct {
 	update.UpdateStore
 	VisitUpdatesFunc               func(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
 	GetUpdateOutcomeFunc           func(context.Context, string) (*updatepb.Outcome, error)
+	GetUpdateAcceptedEventIDFunc   func(context.Context, string) (int64, error)
 	GetCurrentVersionFunc          func() int64
 	IsWorkflowExecutionRunningFunc func() bool
 }
@@ -45,6 +46,16 @@ func (m mockUpdateStore) GetUpdateOutcome(
 	updateID string,
 ) (*updatepb.Outcome, error) {
 	return m.GetUpdateOutcomeFunc(ctx, updateID)
+}
+
+func (m mockUpdateStore) GetUpdateAcceptedEventID(
+	ctx context.Context,
+	updateID string,
+) (int64, error) {
+	if m.GetUpdateAcceptedEventIDFunc == nil {
+		return testAcceptedEventID, nil
+	}
+	return m.GetUpdateAcceptedEventIDFunc(ctx, updateID)
 }
 
 func (m mockUpdateStore) GetCurrentVersion() int64 {
@@ -83,7 +94,8 @@ type mockEventStore struct {
 		links []*commonpb.Link,
 		identity string,
 		priority *commonpb.Priority,
-		timeSkippingConfig *workflowpb.TimeSkippingConfig,
+		timeSkippingConfig *commonpb.TimeSkippingConfig,
+		timeSkippingUpdated bool,
 		workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 	) (*historypb.HistoryEvent, error)
 
@@ -99,11 +111,12 @@ func (m mockEventStore) AddWorkflowExecutionOptionsUpdatedEvent(
 	links []*commonpb.Link,
 	identity string,
 	priority *commonpb.Priority,
-	timeSkippingConfig *workflowpb.TimeSkippingConfig,
+	timeSkippingConfig *commonpb.TimeSkippingConfig,
+	timeSkippingUpdated bool,
 	workflowUpdateOptions []*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate,
 ) (*historypb.HistoryEvent, error) {
 	if m.AddWorkflowExecutionOptionsUpdatedEventFunc != nil {
-		return m.AddWorkflowExecutionOptionsUpdatedEventFunc(versioningOverride, unsetVersioningOverride, attachRequestID, attachCompletionCallbacks, links, identity, priority, timeSkippingConfig, workflowUpdateOptions)
+		return m.AddWorkflowExecutionOptionsUpdatedEventFunc(versioningOverride, unsetVersioningOverride, attachRequestID, attachCompletionCallbacks, links, identity, priority, timeSkippingConfig, timeSkippingUpdated, workflowUpdateOptions)
 	}
 	return &historypb.HistoryEvent{}, nil
 }

@@ -1,7 +1,6 @@
 package migration
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -12,12 +11,22 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/wideevents"
 )
 
 func TestHandoverWorkflow(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	var a *activities
+	var lifecycleEvents []wideevents.NamespaceMigrationWorkflowLifecycleInput
+	env.OnGetVersion(migrationWorkflowLifecycleVersion, workflow.DefaultVersion, 1).Return(workflow.Version(1))
+	env.OnActivity(a.EmitNamespaceMigrationWorkflowLifecycle, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			lifecycleEvents = append(lifecycleEvents, args.Get(1).(wideevents.NamespaceMigrationWorkflowLifecycleInput))
+		}).
+		Return(nil).
+		Twice()
 
 	namespaceID := uuid.NewString()
 
@@ -48,6 +57,11 @@ func TestHandoverWorkflow(t *testing.T) {
 
 	require.True(t, env.IsWorkflowCompleted())
 	require.NoError(t, env.GetWorkflowError())
+	require.Equal(t, []string{
+		wideevents.PhaseNamespaceHandoverStarted,
+		wideevents.PhaseNamespaceHandoverFinished,
+	}, []string{lifecycleEvents[0].Phase, lifecycleEvents[1].Phase})
+	require.Equal(t, wideevents.NamespaceMigrationWorkflowSucceeded, lifecycleEvents[1].Status)
 	env.AssertExpectations(t)
 }
 
@@ -57,6 +71,14 @@ func TestHandoverWorkflow_CancelAfterHandoverState_ResetsToNormal(t *testing.T) 
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 	var a *activities
+	var lifecycleEvents []wideevents.NamespaceMigrationWorkflowLifecycleInput
+	env.OnGetVersion(migrationWorkflowLifecycleVersion, workflow.DefaultVersion, 1).Return(workflow.Version(1))
+	env.OnActivity(a.EmitNamespaceMigrationWorkflowLifecycle, mock.Anything, mock.Anything).
+		Run(func(args mock.Arguments) {
+			lifecycleEvents = append(lifecycleEvents, args.Get(1).(wideevents.NamespaceMigrationWorkflowLifecycleInput))
+		}).
+		Return(nil).
+		Twice()
 
 	namespaceID := uuid.NewString()
 
@@ -97,6 +119,7 @@ func TestHandoverWorkflow_CancelAfterHandoverState_ResetsToNormal(t *testing.T) 
 		stateUpdates,
 		"defer must reset state to NORMAL after cancel",
 	)
+	require.Equal(t, wideevents.NamespaceMigrationWorkflowCanceled, lifecycleEvents[1].Status)
 }
 
 func TestHandoverWorkflow_SetTimeout(t *testing.T) {
@@ -120,7 +143,7 @@ func TestHandoverWorkflow_SetTimeout(t *testing.T) {
 	require.Error(t, workflowErr)
 
 	var applicationErr *temporal.ApplicationError
-	require.True(t, errors.As(workflowErr, &applicationErr))
+	require.ErrorAs(t, workflowErr, &applicationErr)
 	assert.Equal(t, "InvalidTimeout", applicationErr.Type())
 	assert.True(t, applicationErr.NonRetryable())
 }

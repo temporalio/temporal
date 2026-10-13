@@ -141,6 +141,7 @@ func (x *Predicate) GetNamespaceIdPredicateAttributes() *NamespaceIdPredicateAtt
 	return nil
 }
 
+// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/predicates.proto.
 func (x *Predicate) GetTaskTypePredicateAttributes() *TaskTypePredicateAttributes {
 	if x != nil {
 		if x, ok := x.Attributes.(*Predicate_TaskTypePredicateAttributes); ok {
@@ -150,6 +151,7 @@ func (x *Predicate) GetTaskTypePredicateAttributes() *TaskTypePredicateAttribute
 	return nil
 }
 
+// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/predicates.proto.
 func (x *Predicate) GetDestinationPredicateAttributes() *DestinationPredicateAttributes {
 	if x != nil {
 		if x, ok := x.Attributes.(*Predicate_DestinationPredicateAttributes); ok {
@@ -159,6 +161,7 @@ func (x *Predicate) GetDestinationPredicateAttributes() *DestinationPredicateAtt
 	return nil
 }
 
+// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/predicates.proto.
 func (x *Predicate) GetOutboundTaskGroupPredicateAttributes() *OutboundTaskGroupPredicateAttributes {
 	if x != nil {
 		if x, ok := x.Attributes.(*Predicate_OutboundTaskGroupPredicateAttributes); ok {
@@ -206,14 +209,28 @@ type Predicate_NamespaceIdPredicateAttributes struct {
 }
 
 type Predicate_TaskTypePredicateAttributes struct {
+	// Deprecated: never built by any queue's grouper. Kept only so a shard that still holds one
+	// from before the outbound queue existed, and hasn't recompacted since, still deserializes
+	// correctly.
+	//
+	// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/predicates.proto.
 	TaskTypePredicateAttributes *TaskTypePredicateAttributes `protobuf:"bytes,8,opt,name=task_type_predicate_attributes,json=taskTypePredicateAttributes,proto3,oneof"`
 }
 
 type Predicate_DestinationPredicateAttributes struct {
+	// Deprecated: superseded by outbound_task_predicate_attributes (#6445), which combines
+	// task group, namespace and destination into one predicate. Kept only so a shard checkpointed
+	// before that change, and never checkpointed since, still deserializes correctly.
+	//
+	// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/predicates.proto.
 	DestinationPredicateAttributes *DestinationPredicateAttributes `protobuf:"bytes,9,opt,name=destination_predicate_attributes,json=destinationPredicateAttributes,proto3,oneof"`
 }
 
 type Predicate_OutboundTaskGroupPredicateAttributes struct {
+	// Deprecated: superseded by outbound_task_predicate_attributes (#6445); see above. Not to be
+	// confused with that message's own task_group field, which is very much in use.
+	//
+	// Deprecated: Marked as deprecated in temporal/server/api/persistence/v1/predicates.proto.
 	OutboundTaskGroupPredicateAttributes *OutboundTaskGroupPredicateAttributes `protobuf:"bytes,10,opt,name=outbound_task_group_predicate_attributes,json=outboundTaskGroupPredicateAttributes,proto3,oneof"`
 }
 
@@ -489,6 +506,7 @@ func (x *NamespaceIdPredicateAttributes) GetNamespaceIds() []string {
 	return nil
 }
 
+// Deprecated: see the deprecated task_type_predicate_attributes field on Predicate.
 type TaskTypePredicateAttributes struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	TaskTypes     []v1.TaskType          `protobuf:"varint,1,rep,packed,name=task_types,json=taskTypes,proto3,enum=temporal.server.api.enums.v1.TaskType" json:"task_types,omitempty"`
@@ -533,6 +551,7 @@ func (x *TaskTypePredicateAttributes) GetTaskTypes() []v1.TaskType {
 	return nil
 }
 
+// Deprecated: see the deprecated destination_predicate_attributes field on Predicate.
 type DestinationPredicateAttributes struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Destinations  []string               `protobuf:"bytes,1,rep,name=destinations,proto3" json:"destinations,omitempty"`
@@ -577,6 +596,8 @@ func (x *DestinationPredicateAttributes) GetDestinations() []string {
 	return nil
 }
 
+// Deprecated: see the deprecated outbound_task_group_predicate_attributes field on Predicate.
+// Not to be confused with OutboundTaskPredicateAttributes.Group.task_group, which is in use.
 type OutboundTaskGroupPredicateAttributes struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Groups        []string               `protobuf:"bytes,1,rep,name=groups,proto3" json:"groups,omitempty"`
@@ -729,7 +750,7 @@ var File_temporal_server_api_persistence_v1_predicates_proto protoreflect.FileDe
 
 const file_temporal_server_api_persistence_v1_predicates_proto_rawDesc = "" +
 	"\n" +
-	"3temporal/server/api/persistence/v1/predicates.proto\x12\"temporal.server.api.persistence.v1\x1a,temporal/server/api/enums/v1/predicate.proto\x1a'temporal/server/api/enums/v1/task.proto\"\xc1\v\n" +
+	"3temporal/server/api/persistence/v1/predicates.proto\x12\"temporal.server.api.persistence.v1\x1a,temporal/server/api/enums/v1/predicate.proto\x1a'temporal/server/api/enums/v1/task.proto\"\xcd\v\n" +
 	"\tPredicate\x12R\n" +
 	"\x0epredicate_type\x18\x01 \x01(\x0e2+.temporal.server.api.enums.v1.PredicateTypeR\rpredicateType\x12\x88\x01\n" +
 	"\x1euniversal_predicate_attributes\x18\x02 \x01(\v2@.temporal.server.api.persistence.v1.UniversalPredicateAttributesH\x00R\x1cuniversalPredicateAttributes\x12|\n" +
@@ -737,11 +758,11 @@ const file_temporal_server_api_persistence_v1_predicates_proto_rawDesc = "" +
 	"\x18and_predicate_attributes\x18\x04 \x01(\v2:.temporal.server.api.persistence.v1.AndPredicateAttributesH\x00R\x16andPredicateAttributes\x12s\n" +
 	"\x17or_predicate_attributes\x18\x05 \x01(\v29.temporal.server.api.persistence.v1.OrPredicateAttributesH\x00R\x15orPredicateAttributes\x12v\n" +
 	"\x18not_predicate_attributes\x18\x06 \x01(\v2:.temporal.server.api.persistence.v1.NotPredicateAttributesH\x00R\x16notPredicateAttributes\x12\x8f\x01\n" +
-	"!namespace_id_predicate_attributes\x18\a \x01(\v2B.temporal.server.api.persistence.v1.NamespaceIdPredicateAttributesH\x00R\x1enamespaceIdPredicateAttributes\x12\x86\x01\n" +
-	"\x1etask_type_predicate_attributes\x18\b \x01(\v2?.temporal.server.api.persistence.v1.TaskTypePredicateAttributesH\x00R\x1btaskTypePredicateAttributes\x12\x8e\x01\n" +
-	" destination_predicate_attributes\x18\t \x01(\v2B.temporal.server.api.persistence.v1.DestinationPredicateAttributesH\x00R\x1edestinationPredicateAttributes\x12\xa2\x01\n" +
+	"!namespace_id_predicate_attributes\x18\a \x01(\v2B.temporal.server.api.persistence.v1.NamespaceIdPredicateAttributesH\x00R\x1enamespaceIdPredicateAttributes\x12\x8a\x01\n" +
+	"\x1etask_type_predicate_attributes\x18\b \x01(\v2?.temporal.server.api.persistence.v1.TaskTypePredicateAttributesB\x02\x18\x01H\x00R\x1btaskTypePredicateAttributes\x12\x92\x01\n" +
+	" destination_predicate_attributes\x18\t \x01(\v2B.temporal.server.api.persistence.v1.DestinationPredicateAttributesB\x02\x18\x01H\x00R\x1edestinationPredicateAttributes\x12\xa6\x01\n" +
 	"(outbound_task_group_predicate_attributes\x18\n" +
-	" \x01(\v2H.temporal.server.api.persistence.v1.OutboundTaskGroupPredicateAttributesH\x00R$outboundTaskGroupPredicateAttributes\x12\x92\x01\n" +
+	" \x01(\v2H.temporal.server.api.persistence.v1.OutboundTaskGroupPredicateAttributesB\x02\x18\x01H\x00R$outboundTaskGroupPredicateAttributes\x12\x92\x01\n" +
 	"\"outbound_task_predicate_attributes\x18\v \x01(\v2C.temporal.server.api.persistence.v1.OutboundTaskPredicateAttributesH\x00R\x1foutboundTaskPredicateAttributesB\f\n" +
 	"\n" +
 	"attributes\"\x1e\n" +

@@ -5,6 +5,7 @@ package ndc
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -16,6 +17,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
@@ -26,7 +28,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/util"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/api/updateworkflowoptions"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/hsm"
@@ -43,6 +45,7 @@ const (
 
 var (
 	errWorkflowResetterMaxChildren = serviceerror.NewInvalidArgumentf("WorkflowResetter encountered max allowed children [%d] while resetting.", maxChildrenInResetMutableState)
+	errChasmDisabled               = serviceerror.NewInternal("cannot reapply event: CHASM is disabled for this workflow.")
 )
 
 type (
@@ -135,9 +138,34 @@ func (r *workflowResetterImpl) ResetWorkflow(
 
 	var currentWorkflowMutation *persistence.WorkflowMutation
 	var currentWorkflowEventsSeq []*persistence.WorkflowEvents
+	// Every reapply path below deliberately uses the pre-fork baseBranchToken, not the rewritten
+	// token that forkAndGenerateBranchToken returns. A storage layer that rewrites the base token
+	// only guarantees the range below the fork point is readable through it; these reads start at
+	// the fork point and go up, so they must keep the caller's original token.
 	var reapplyEventsFn workflowResetReapplyEventsFn
-	currentMutableState := currentWorkflow.GetMutableState()
-	if currentMutableState.IsWorkflowExecutionRunning() {
+	// currentWorkflow is nil only for a reset by explicit runId whose workflow has no current
+	// execution (the current run was deleted while older runs survive). This is exclusive to the
+	// user-facing reset API path; all other callers pass a concrete current run.
+	currentExecutionMissing := currentWorkflow == nil
+	if currentExecutionMissing {
+		// No current run to terminate. Reapply along the continue-as-new chain as far as it survives.
+		reapplyEventsFn = func(ctx context.Context, resetMutableState historyi.MutableState) error {
+			_, err := r.reapplyContinueAsNewWorkflowEvents(
+				ctx,
+				resetMutableState,
+				nil,
+				namespaceID,
+				workflowID,
+				baseRunID,
+				baseBranchToken,
+				baseRebuildLastEventID+1,
+				baseNextEventID,
+				resetReapplyExcludeTypes,
+				allowResetWithPendingChildren,
+			)
+			return err
+		}
+	} else if currentMutableState := currentWorkflow.GetMutableState(); currentMutableState.IsWorkflowExecutionRunning() {
 		currentMutableState.GetExecutionInfo().WorkflowWasReset = true
 		if err := r.terminateWorkflow(
 			currentMutableState,
@@ -255,7 +283,9 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		return err
 	}
 
-	currentWorkflow.GetContext().UpdateRegistry(ctx).Abort(update.AbortReasonWorkflowCompleted)
+	if !currentExecutionMissing {
+		currentWorkflow.GetContext().UpdateRegistry(ctx).Abort(update.AbortReasonWorkflowCompleted)
+	}
 
 	return nil
 }
@@ -345,8 +375,6 @@ func (r *workflowResetterImpl) persistToDB(
 	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
 	resetWorkflow Workflow,
 ) error {
-	currentRunID := currentWorkflow.GetMutableState().GetExecutionState().GetRunId()
-	baseRunID := baseWorkflow.GetMutableState().GetExecutionState().GetRunId()
 	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := resetWorkflow.GetMutableState().CloseTransactionAsSnapshot(
 		ctx,
 		historyi.TransactionPolicyActive,
@@ -354,6 +382,52 @@ func (r *workflowResetterImpl) persistToDB(
 	if err != nil {
 		return err
 	}
+
+	currentExecutionMissing := currentWorkflow == nil
+	if currentExecutionMissing {
+		// There is no current_executions row (the current run was deleted), so the base->reset link
+		// and the new current run cannot be committed atomically: re-establishing a missing current
+		// requires a brand-new insert, while the base run needs a bypass-current update, and no
+		// single Transaction method does both. Write base-first so retries are safe: if the create
+		// fails, a retry rewrites the base link and the brand-new insert still succeeds. Creating
+		// first would leave the reset run as current and permanently conflict with the create.
+		baseWorkflowMutation, baseWorkflowEventsSeq, err := baseWorkflow.GetMutableState().CloseTransactionAsMutation(
+			ctx,
+			historyi.TransactionPolicyActive,
+		)
+		if err != nil {
+			return err
+		}
+		if _, _, err := r.transaction.UpdateWorkflowExecution(
+			ctx,
+			persistence.UpdateWorkflowModeBypassCurrent,
+			chasm.WorkflowArchetypeID,
+			baseWorkflow.GetMutableState().GetCurrentVersion(),
+			baseWorkflowMutation,
+			baseWorkflowEventsSeq,
+			nil,
+			nil,
+			nil,
+			baseWorkflow.GetMutableState().IsWorkflow(),
+		); err != nil {
+			return err
+		}
+		if _, err := r.transaction.CreateWorkflowExecution(
+			ctx,
+			persistence.CreateWorkflowModeBrandNew,
+			chasm.WorkflowArchetypeID,
+			resetWorkflow.GetMutableState().GetCurrentVersion(),
+			resetWorkflowSnapshot,
+			resetWorkflowEventsSeq,
+			resetWorkflow.GetMutableState().IsWorkflow(),
+		); err != nil {
+			return err
+		}
+		return nil
+	}
+
+	currentRunID := currentWorkflow.GetMutableState().GetExecutionState().GetRunId()
+	baseRunID := baseWorkflow.GetMutableState().GetExecutionState().GetRunId()
 
 	if currentRunID == baseRunID {
 		// There are just 2 runs to update - base & new run.
@@ -443,7 +517,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 	resetRequestID string,
 ) (Workflow, error) {
 
-	resetBranchToken, err := r.forkAndGenerateBranchToken(
+	resetBranchToken, newBaseBranchToken, err := r.forkAndGenerateBranchToken(
 		ctx,
 		namespaceID,
 		workflowID,
@@ -466,6 +540,8 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		r.logger,
 		r.shardContext.GetLogger(),
 		r.shardContext.GetMetricsHandler(),
+		nil, // no pagination buffer limiter as it is a transient context
+		testhooks.TestHooks{},
 	)
 
 	resetMutableState, resetStats, err := r.stateRebuilder.Rebuild(
@@ -476,9 +552,9 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 			workflowID,
 			baseRunID,
 		),
-		baseBranchToken,
+		newBaseBranchToken,
 		baseRebuildLastEventID,
-		util.Ptr(baseRebuildLastEventVersion),
+		new(baseRebuildLastEventVersion),
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			workflowID,
@@ -609,7 +685,7 @@ func (r *workflowResetterImpl) forkAndGenerateBranchToken(
 	forkBranchToken []byte,
 	forkNodeID int64,
 	resetRunID string,
-) ([]byte, error) {
+) (newBranchToken []byte, forkedBaseBranchToken []byte, err error) {
 	// fork a new history branch
 	shardID := r.shardContext.GetShardID()
 	resp, err := r.executionMgr.ForkHistoryBranch(ctx, &persistence.ForkHistoryBranchRequest{
@@ -621,10 +697,13 @@ func (r *workflowResetterImpl) forkAndGenerateBranchToken(
 		NewRunID:        resetRunID,
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return resp.NewBranchToken, nil
+	if len(resp.BaseBranchToken) == 0 {
+		return resp.NewBranchToken, forkBranchToken, nil
+	}
+	return resp.NewBranchToken, resp.BaseBranchToken, nil
 }
 
 func (r *workflowResetterImpl) terminateWorkflow(
@@ -695,7 +774,8 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		var wfCtx historyi.WorkflowContext
 		var err error
 
-		if runID == currentWorkflow.GetMutableState().GetWorkflowKey().RunID {
+		// currentWorkflow is nil when resetting a workflow with no current run; load every run from the cache.
+		if currentWorkflow != nil && runID == currentWorkflow.GetMutableState().GetWorkflowKey().RunID {
 			wfCtx = currentWorkflow.GetContext()
 		} else {
 			var release historyi.ReleaseWorkflowContextFunc
@@ -731,11 +811,16 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 
 	// Second, for remaining continue as new workflow, reapply eligible events
 	for len(nextRunID) != 0 {
-		lastVisitedRunID = nextRunID
 		nextWorkflowNextEventID, nextWorkflowBranchToken, err := getNextEventIDBranchToken(nextRunID)
 		if err != nil {
+			// A deleted run truncates the chain; other errors must fail the reset so a retry
+			// can reapply the full surviving chain, since reset is one-shot.
+			if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
+				break
+			}
 			return "", err
 		}
+		lastVisitedRunID = nextRunID
 
 		nextRunID, err = r.reapplyEventsFromBranch(
 			ctx,
@@ -836,7 +921,18 @@ func (r *workflowResetterImpl) reapplyEvents(
 	// When reapplying events during WorkflowReset, we do not check for conflicting update IDs (they are not possible,
 	// since the workflow was in a consistent state before reset), and we do not perform deduplication (because we never
 	// did, before the refactoring that unified two code paths; see comment below.)
-	return reapplyEvents(ctx, mutableState, nil, r.shardContext.StateMachineRegistry(), events, resetReapplyExcludeTypes, "", true)
+	return reapplyEvents(
+		ctx,
+		mutableState,
+		nil,
+		r.shardContext.StateMachineRegistry(),
+		r.shardContext.ChasmWorkflowRegistry(),
+		events,
+		resetReapplyExcludeTypes,
+		"",
+		true,
+		r.logger,
+	)
 }
 
 func reapplyEvents(
@@ -844,10 +940,12 @@ func reapplyEvents(
 	mutableState historyi.MutableState,
 	targetBranchUpdateRegistry update.Registry,
 	stateMachineRegistry *hsm.Registry,
+	chasmWorkflowRegistry *chasmworkflow.Registry,
 	events []*historypb.HistoryEvent,
 	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
 	runIdForDeduplication string,
 	isReset bool,
+	logger log.Logger,
 ) ([]*historypb.HistoryEvent, error) {
 	// TODO (dan): This implementation is the result of unifying two previous implementations, one of which did
 	// deduplication. Can we always/never do this deduplication, or must it be decided by the caller?
@@ -972,6 +1070,7 @@ func reapplyEvents(
 				attr.GetIdentity(),
 				attr.GetPriority(),
 				attr.GetTimeSkippingConfig(),
+				attr.GetTimeSkippingConfigUpdated(),
 				attr.GetWorkflowUpdateOptions(),
 			); err != nil {
 				return reappliedEvents, err
@@ -1012,17 +1111,50 @@ func reapplyEvents(
 				return nil, err
 			}
 		default:
-			root := mutableState.HSM()
-			def, ok := stateMachineRegistry.EventDefinition(event.GetEventType())
-			if !ok {
-				// Only reapply hardcoded events above or ones registered and are cherry-pickable in the HSM framework.
+			// Nexus operations (and other state-machine-backed components) can be backed by either the HSM tree or the
+			// CHASM tree, and both coexist on the same mutable state. Try CHASM first then HSM as a fallback.
+			hsmEventDef, eventDefInHsm := stateMachineRegistry.EventDefinition(event.GetEventType())
+			chasmEventDef, eventDefInChasm := chasmWorkflowRegistry.EventDefinitionByEventType(event.GetEventType())
+			if !eventDefInHsm && !eventDefInChasm {
+				// Neither framework defines this event type, so skip it.
 				continue
 			}
-			if err := def.CherryPick(root, event, resetReapplyExcludeTypes); err != nil {
-				if errors.Is(err, hsm.ErrNotCherryPickable) || errors.Is(err, hsm.ErrStateMachineNotFound) || errors.Is(err, hsm.ErrInvalidTransition) {
-					continue
+
+			var (
+				outcome = cherryPickFallback
+				err     error
+				// The CHASM tree can only be consulted when it is hydrated.
+				chasmUsable = eventDefInChasm && mutableState.ChasmEnabled()
+			)
+			if chasmUsable {
+				outcome, err = cherryPickChasmEvent(ctx, mutableState, chasmEventDef, event, resetReapplyExcludeTypes)
+				if err != nil {
+					return reappliedEvents, err
 				}
-				return reappliedEvents, err
+			}
+			if outcome == cherryPickFallback && eventDefInHsm {
+				outcome, err = cherryPickHSMEvent(mutableState, hsmEventDef, event, resetReapplyExcludeTypes)
+				if err != nil {
+					return reappliedEvents, err
+				}
+			}
+			if outcome == cherryPickFallback {
+				if eventDefInChasm && !chasmUsable {
+					// There is no hydrated tree to consult, and HSM does not hold the state machine either. The
+					// event may still address a component among the unhydrated CHASM nodes, so skipping would drop
+					// it while its component still exists. Fail here instead and let callers retry and potentially
+					// recover once EnableChasm is on again for the namespace.
+					return reappliedEvents, fmt.Errorf("%w: event type %v", errChasmDisabled, event.GetEventType())
+				}
+				// Every framework that defines this event type was consulted and none holds the state machine the
+				// event addresses, so it has nowhere to apply.
+				logSkippedStateMachineEvent(mutableState, event, isReset, logger)
+				continue
+			}
+			if outcome == cherryPickSkipped {
+				// Recognized but intentionally not applied. Only reapply hardcoded events above or ones
+				// cherry-picked in HSM or CHASM.
+				continue
 			}
 			mutableState.AddHistoryEvent(event.EventType, func(he *historypb.HistoryEvent) {
 				he.Attributes = event.Attributes
@@ -1035,6 +1167,99 @@ func reapplyEvents(
 		}
 	}
 	return reappliedEvents, nil
+}
+
+// cherryPickOutcome is the result of cherry-picking an event against a framework (HSM or CHASM) during reset reapply.
+type cherryPickOutcome int
+
+const (
+	// cherryPickApplied: the event was cherry-picked and should be reappended to history.
+	cherryPickApplied cherryPickOutcome = iota
+	// cherryPickSkipped: the framework recognizes the event but intentionally won't cherry-pick it
+	// (e.g. excluded by reset-reapply-exclude-types, or not a cherry-pickable transition). The event
+	// must be skipped, NOT routed to the other framework, to avoid double-applying.
+	cherryPickSkipped
+	// cherryPickFallback: this framework defines the event type but doesn't hold the state machine the event
+	// addresses, so the caller should try the other framework.
+	cherryPickFallback
+)
+
+// cherryPickHSMEvent attempts to cherry-pick an event against the HSM tree. def must be the HSM definition
+// registered for the event's type.
+func cherryPickHSMEvent(
+	mutableState historyi.MutableState,
+	def hsm.EventDefinition,
+	event *historypb.HistoryEvent,
+	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
+) (cherryPickOutcome, error) {
+	if err := def.CherryPick(mutableState.HSM(), event, resetReapplyExcludeTypes); err != nil {
+		switch {
+		case errors.Is(err, hsm.ErrStateMachineNotFound):
+			// The state machine isn't in the HSM tree, so it may be in the CHASM tree: fall back.
+			return cherryPickFallback, nil
+		case errors.Is(err, hsm.ErrNotCherryPickable), errors.Is(err, hsm.ErrInvalidTransition):
+			// Recognized by HSM but intentionally not cherry-pickable here; skip without falling back.
+			return cherryPickSkipped, nil
+		default:
+			return cherryPickSkipped, err
+		}
+	}
+	return cherryPickApplied, nil
+}
+
+// logSkippedStateMachineEvent records an event that reapply dropped because its state machine is in neither the
+// HSM nor the CHASM tree.
+func logSkippedStateMachineEvent(
+	mutableState historyi.MutableState,
+	event *historypb.HistoryEvent,
+	isReset bool,
+	logger log.Logger,
+) {
+	logAtLevel := logger.Debug
+	if isReset {
+		// On the reset path a missing state machine means a completion is silently dropped from the reset run,
+		// which is worth a warning.
+		logAtLevel = logger.Warn
+	}
+	workflowKey := mutableState.GetWorkflowKey()
+	logAtLevel("skipping reapply of event: state machine not found in HSM or CHASM tree",
+		tag.WorkflowNamespaceID(workflowKey.NamespaceID),
+		tag.WorkflowID(workflowKey.WorkflowID),
+		tag.WorkflowRunID(workflowKey.RunID),
+		tag.WorkflowEventID(event.GetEventId()),
+		tag.NewStringerTag("wf-history-event-type", event.GetEventType()),
+	)
+}
+
+// cherryPickChasmEvent attempts to cherry-pick an event against the CHASM workflow tree. It mirrors
+// cherryPickHSMEvent. def must be the CHASM definition registered for the event's type, and the caller must have
+// established that the tree is hydrated.
+func cherryPickChasmEvent(
+	ctx context.Context,
+	mutableState historyi.MutableState,
+	def chasmworkflow.EventDefinition,
+	event *historypb.HistoryEvent,
+	resetReapplyExcludeTypes map[enumspb.ResetReapplyExcludeType]struct{},
+) (cherryPickOutcome, error) {
+	wf, chasmCtx, err := mutableState.ChasmWorkflowComponent(ctx)
+	if err != nil {
+		return cherryPickSkipped, err
+	}
+	if err := def.CherryPick(chasmCtx, wf, event, resetReapplyExcludeTypes); err != nil {
+		_, isNotFound := errors.AsType[*serviceerror.NotFound](err)
+		switch {
+		case errors.Is(err, chasmworkflow.ErrEventNotCherryPickable), errors.Is(err, chasm.ErrInvalidTransition):
+			// Recognized by CHASM but intentionally not applied here: a command event, one excluded by
+			// resetReapplyExcludeTypes, or one the addressed operation cannot accept due to its current
+			// state or a request ID mismatch.
+			return cherryPickSkipped, nil
+		case isNotFound:
+			// The state machine isn't in the CHASM tree, so it may be in the HSM tree: fall back.
+			return cherryPickFallback, nil
+		}
+		return cherryPickSkipped, err
+	}
+	return cherryPickApplied, nil
 }
 
 // reapplyChildEvents reapplies all child events except EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED.

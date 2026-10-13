@@ -33,7 +33,7 @@ func (a *priorityAssignerImpl) Assign(executable Executable) tasks.Priority {
 	ns, err := a.nsRegistry.GetNamespaceByID(namespace.ID(executable.GetNamespaceID()))
 	if ns != nil && err == nil {
 		// Use lowest priority level for standby task processing
-		if !ns.ActiveInCluster(a.currentClusterName) {
+		if ns.ActiveClusterName(namespace.RoutingKey{ID: executable.GetWorkflowID()}) != a.currentClusterName {
 			return tasks.PriorityPreemptable
 		}
 	}

@@ -13,7 +13,7 @@ func MembershipModule(
 ) fx.Option {
 	return fx.Options(
 		fx.Provide(func() membership.Monitor {
-			return newStaticMonitor(hostsByService)
+			return NewMonitor(hostsByService)
 		}),
 		fx.Provide(func(serviceName primitives.ServiceName) membership.HostInfoProvider {
 			hosts := hostsByService[serviceName]

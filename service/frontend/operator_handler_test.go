@@ -34,6 +34,7 @@ import (
 	delnserrors "go.temporal.io/server/service/worker/deletenamespace/errors"
 	"go.uber.org/mock/gomock"
 	expmaps "golang.org/x/exp/maps"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 )
 
@@ -49,6 +50,8 @@ type (
 		controller   *gomock.Controller
 		mockResource *resourcetest.Test
 
+		currentClusterName string
+
 		handler *OperatorHandlerImpl
 	}
 )
@@ -61,7 +64,8 @@ func TestOperatorHandlerSuite(t *testing.T) {
 func (s *operatorHandlerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockResource = resourcetest.NewTest(s.controller, primitives.FrontendService)
-	s.mockResource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(uuid.NewString()).AnyTimes()
+	s.currentClusterName = "current-cluster"
+	s.mockResource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(s.currentClusterName).AnyTimes()
 
 	endpointClient := newNexusEndpointClient(
 		newNexusEndpointClientConfig(dynamicconfig.NewNoopCollection()),
@@ -74,6 +78,7 @@ func (s *operatorHandlerSuite) SetupTest() {
 	args := NewOperatorHandlerImplArgs{
 		&Config{NumHistoryShards: 4},
 		s.mockResource.Logger,
+		nil,
 		s.mockResource.GetSDKClientFactory(),
 		s.mockResource.GetMetricsHandler(),
 		s.mockResource.GetVisibilityManager(),
@@ -1141,7 +1146,12 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 
 func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_Success() {
 	var clusterName = "cluster"
-	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{clusterName: {}})
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		clusterName: {ClusterID: "cluster-id", Enabled: true, ReplicationEnabled: true},
+	})
 	s.mockResource.NamespaceCache.EXPECT().GetAllNamespaces().Return(nil)
 	s.mockResource.ClusterMetadataMgr.EXPECT().DeleteClusterMetadata(
 		gomock.Any(),
@@ -1150,10 +1160,17 @@ func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_Success() {
 
 	_, err := s.handler.RemoveRemoteCluster(context.Background(), &operatorservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
 	s.NoError(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeSucceeded, details["outcome"])
+	s.Equal(remoteClusterMutationRemoved, details["mutation"])
+	s.Equal("cluster-id", details["remote_cluster_id"])
 }
 
 func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_Error() {
 	var clusterName = "cluster"
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(false)
 	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{clusterName: {}})
 	s.mockResource.NamespaceCache.EXPECT().GetAllNamespaces().Return(nil)
 	s.mockResource.ClusterMetadataMgr.EXPECT().DeleteClusterMetadata(
@@ -1163,16 +1180,58 @@ func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_Error() {
 
 	_, err := s.handler.RemoveRemoteCluster(context.Background(), &operatorservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
 	s.Error(err)
+	s.Empty(eventLogger.records)
+}
+
+func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_PanicEmitsFailure() {
+	clusterName := "cluster"
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().DoAndReturn(func() map[string]cluster.ClusterInformation {
+		panic("test panic")
+	})
+
+	_, err := s.handler.RemoveRemoteCluster(
+		context.Background(),
+		&operatorservice.RemoveRemoteClusterRequest{ClusterName: clusterName},
+	)
+	s.Require().Error(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeFailed, details["outcome"])
+	s.Equal("Internal", details["error_code"])
+}
+
+func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_EventEmissionPanicCaptured() {
+	clusterName := "cluster"
+	s.handler.eventLogger = &panicRemoteClusterEventLogger{}
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().DoAndReturn(func() map[string]cluster.ClusterInformation {
+		panic("handler panic")
+	})
+
+	_, err := s.handler.RemoveRemoteCluster(
+		context.Background(),
+		&operatorservice.RemoveRemoteClusterRequest{ClusterName: clusterName},
+	)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "event logger panic")
 }
 
 func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_BlockedByGlobalNamespace() {
 	var clusterName = "cluster"
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	// The namespace lists both the current cluster and the cluster being
+	// removed, so removing clusterName would sever a link the current cluster
+	// relies on -> blocked.
 	globalNS := namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Name: "global-ns"},
 		nil,
 		&persistencespb.NamespaceReplicationConfig{
-			ActiveClusterName: "other",
-			Clusters:          []string{"other", clusterName},
+			ActiveClusterName: s.currentClusterName,
+			Clusters:          []string{s.currentClusterName, clusterName},
 		},
 		1,
 	)
@@ -1183,6 +1242,66 @@ func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_BlockedByGlobalNamespace
 	var failedPrecondition *serviceerror.FailedPrecondition
 	s.Require().ErrorAs(err, &failedPrecondition)
 	s.Contains(err.Error(), "global-ns")
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeFailed, details["outcome"])
+	s.NotNil(details["cached_before"])
+	s.NotContains(details, "persistence_request")
+}
+
+// Test_RemoveRemoteCluster_OrphanedNamespaceDoesNotBlock covers the case that
+// motivated adding the current-cluster membership check: the local registry
+// holds a stale copy of a global namespace that references clusterName but that
+// the current cluster is no longer a member of (e.g. left behind after a
+// namespace migration re-homed the namespace). Removing clusterName cannot
+// strand any replication the current cluster performs, so it must be allowed.
+func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_OrphanedNamespaceDoesNotBlock() {
+	var clusterName = "cluster"
+	orphanedNS := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "orphaned-ns"},
+		nil,
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: "other",
+			// References clusterName but NOT s.currentClusterName.
+			Clusters: []string{"other", clusterName},
+		},
+		1,
+	)
+	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{clusterName: {}})
+	s.mockResource.NamespaceCache.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{orphanedNS})
+	s.mockResource.ClusterMetadataMgr.EXPECT().DeleteClusterMetadata(
+		gomock.Any(),
+		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
+	).Return(nil)
+
+	_, err := s.handler.RemoveRemoteCluster(context.Background(), &operatorservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
+	s.NoError(err)
+}
+
+// Test_RemoveRemoteCluster_UnrelatedNamespaceDoesNotBlock covers the other half
+// of the conjunction: the current cluster participates in a multi-cluster
+// namespace, but that namespace does not involve the cluster being removed, so
+// removing it endangers nothing.
+func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_UnrelatedNamespaceDoesNotBlock() {
+	var clusterName = "cluster"
+	unrelatedNS := namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Name: "unrelated-ns"},
+		nil,
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: s.currentClusterName,
+			// Includes the current cluster but NOT clusterName.
+			Clusters: []string{s.currentClusterName, "another-cluster"},
+		},
+		1,
+	)
+	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{clusterName: {}})
+	s.mockResource.NamespaceCache.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{unrelatedNS})
+	s.mockResource.ClusterMetadataMgr.EXPECT().DeleteClusterMetadata(
+		gomock.Any(),
+		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
+	).Return(nil)
+
+	_, err := s.handler.RemoveRemoteCluster(context.Background(), &operatorservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
+	s.NoError(err)
 }
 
 func (s *operatorHandlerSuite) Test_RemoveRemoteCluster_DeletedNamespaceDoesNotBlock() {
@@ -1278,6 +1397,9 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Succ
 	var httpAddress = uuid.NewString()
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 
 	s.mockResource.ClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
 	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
@@ -1315,6 +1437,13 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Succ
 		FrontendAddress: rpcAddress,
 	})
 	s.NoError(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeSucceeded, details["outcome"])
+	s.Equal(remoteClusterMutationCreated, details["mutation"])
+	s.Equal(remoteClusterTransitionInitializedDisabled, details["requested_connection_transition"])
+	s.Equal(remoteClusterTransitionInitializedDisabled, details["requested_replication_transition"])
+	s.Nil(details["persisted_before"])
+	s.NotNil(details["persistence_request"])
 }
 
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_ClusterNameConflict() {
@@ -1533,6 +1662,9 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_Emp
 
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_DescribeCluster_Error() {
 	var rpcAddress = uuid.NewString()
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 
 	s.mockResource.ClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockResource.RemoteAdminClient,
@@ -1543,12 +1675,67 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_DescribeCluster_Err
 	)
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress})
 	s.Error(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeFailed, details["outcome"])
+	s.Equal("Unavailable", details["error_code"])
+	s.NotContains(details, "persisted_before")
+	s.NotContains(details, "persistence_request")
+}
+
+func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_PanicEmitsFailure() {
+	rpcAddress := uuid.NewString()
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockResource.ClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
+		s.mockResource.RemoteAdminClient,
+	)
+	s.mockResource.RemoteAdminClient.EXPECT().DescribeCluster(
+		gomock.Any(),
+		&adminservice.DescribeClusterRequest{},
+	).DoAndReturn(func(context.Context, *adminservice.DescribeClusterRequest, ...grpc.CallOption) (*adminservice.DescribeClusterResponse, error) {
+		panic("test panic")
+	})
+
+	_, err := s.handler.AddOrUpdateRemoteCluster(
+		context.Background(),
+		&operatorservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress},
+	)
+	s.Require().Error(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeFailed, details["outcome"])
+	s.Equal("Internal", details["error_code"])
+}
+
+func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_EventEmissionPanicCaptured() {
+	rpcAddress := uuid.NewString()
+	s.handler.eventLogger = &panicRemoteClusterEventLogger{}
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockResource.ClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
+		s.mockResource.RemoteAdminClient,
+	)
+	s.mockResource.RemoteAdminClient.EXPECT().DescribeCluster(
+		gomock.Any(),
+		&adminservice.DescribeClusterRequest{},
+	).DoAndReturn(func(context.Context, *adminservice.DescribeClusterRequest, ...grpc.CallOption) (*adminservice.DescribeClusterResponse, error) {
+		panic("handler panic")
+	})
+
+	_, err := s.handler.AddOrUpdateRemoteCluster(
+		context.Background(),
+		&operatorservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress},
+	)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "event logger panic")
 }
 
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_GetClusterMetadata_Error() {
 	var rpcAddress = uuid.NewString()
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 
 	s.mockResource.ClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
 	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
@@ -1570,6 +1757,9 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_GetClusterMetadata_
 	)
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &operatorservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress})
 	s.Error(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.NotContains(details, "persisted_before")
+	s.NotContains(details, "persistence_request")
 }
 
 func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_Error() {
@@ -1621,6 +1811,9 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 	var httpAddress = uuid.NewString()
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 
 	s.mockResource.ClusterMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
 	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
@@ -1659,4 +1852,7 @@ func (s *operatorHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata
 	})
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterMutationCreated, details["mutation"])
+	s.NotNil(details["persistence_request"])
 }

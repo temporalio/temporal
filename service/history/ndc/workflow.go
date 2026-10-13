@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/service/history/consts"
@@ -29,7 +30,7 @@ type (
 
 		HappensAfter(that Workflow) (bool, error)
 		Revive(ctx context.Context, taskRefresher workflow.TaskRefresher) error
-		SuppressBy(incomingWorkflow Workflow) (historyi.TransactionPolicy, error)
+		SuppressBy(incomingWorkflow Workflow, metricsHandler metrics.Handler) (historyi.TransactionPolicy, error)
 		FlushBufferedEvents() error
 	}
 
@@ -139,6 +140,7 @@ func (r *WorkflowImpl) Revive(ctx context.Context, taskRefresher workflow.TaskRe
 
 func (r *WorkflowImpl) SuppressBy(
 	incomingWorkflow Workflow,
+	metricsHandler metrics.Handler,
 ) (historyi.TransactionPolicy, error) {
 
 	// NOTE: READ BEFORE MODIFICATION
@@ -175,7 +177,7 @@ func (r *WorkflowImpl) SuppressBy(
 	currentCluster := r.clusterMetadata.GetCurrentClusterName()
 
 	if currentCluster == lastWriteCluster {
-		return historyi.TransactionPolicyActive, r.terminateMutableState(lastWriteVersion, incomingLastWriteVersion)
+		return historyi.TransactionPolicyActive, r.terminateMutableState(lastWriteVersion, incomingLastWriteVersion, metricsHandler)
 	}
 	_, err = r.mutableState.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
@@ -266,6 +268,7 @@ func (r *WorkflowImpl) failWorkflowTask() (*historypb.HistoryEvent, error) {
 func (r *WorkflowImpl) terminateMutableState(
 	lastWriteVersion int64,
 	incomingLastWriteVersion int64,
+	metricsHandler metrics.Handler,
 ) error {
 
 	if err := r.mutableState.UpdateCurrentVersion(lastWriteVersion, true); err != nil {
@@ -273,32 +276,38 @@ func (r *WorkflowImpl) terminateMutableState(
 	}
 
 	if !r.mutableState.IsWorkflow() {
-		return r.mutableState.ChasmTree().Terminate(chasm.TerminateComponentRequest{
-			Identity:  consts.IdentityHistoryService,
-			Reason:    common.FailureReasonWorkflowTerminationDueToVersionConflict,
-			Details:   payloads.EncodeString(fmt.Sprintf("terminated by version: %v", incomingLastWriteVersion)),
-			RequestID: primitives.NewUUID().String(),
-		})
+		return r.mutableState.ChasmTree().Terminate(
+			chasm.TerminateComponentRequest{
+				Identity:  consts.IdentityHistoryService,
+				Reason:    common.FailureReasonWorkflowTerminationDueToVersionConflict,
+				Details:   payloads.EncodeString(fmt.Sprintf("terminated by version: %v", incomingLastWriteVersion)),
+				RequestID: primitives.NewUUID().String(),
+			},
+			chasm.ExecutionForceTerminationReasonVersionConflict,
+		)
 	}
 
-	eventBatchFirstEventID := r.GetMutableState().GetNextEventID()
-	wtFailedEvent, err := r.failWorkflowTask()
-	if err != nil {
+	if _, err := r.failWorkflowTask(); err != nil {
 		return err
 	}
 
-	if wtFailedEvent != nil {
-		eventBatchFirstEventID = wtFailedEvent.GetEventId()
-	}
-
 	// do not persist the change right now, Workflow requires transaction
-	_, err = r.mutableState.AddWorkflowExecutionTerminatedEvent(
-		eventBatchFirstEventID,
+	_, err := r.mutableState.AddWorkflowExecutionTerminatedEvent(
 		common.FailureReasonWorkflowTerminationDueToVersionConflict,
 		payloads.EncodeString(fmt.Sprintf("terminated by version: %v", incomingLastWriteVersion)),
 		consts.IdentityHistoryService,
 		false,
 		nil, // No links necessary.
+	)
+	if err != nil {
+		return err
+	}
+
+	metrics.ExecutionForceTerminations.With(metricsHandler).Record(
+		1,
+		metrics.NamespaceTag(r.mutableState.GetNamespaceEntry().Name().String()),
+		metrics.ArchetypeTag(chasm.WorkflowArchetype),
+		metrics.ReasonTag(chasm.ExecutionForceTerminationReasonVersionConflict),
 	)
 
 	// Don't abort updates here for a few reasons:
@@ -307,7 +316,7 @@ func (r *WorkflowImpl) terminateMutableState(
 	//   3. New replication version will force update registry reload and waiters will get errors.
 	// r.GetContext().UpdateRegistry(context.Background(), nil).Abort(update.AbortReasonWorkflowTerminated)
 
-	return err
+	return nil
 }
 
 func WorkflowHappensAfter(
