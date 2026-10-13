@@ -972,11 +972,18 @@ This config is EXPERIMENTAL and may be changed or removed in a later release.`,
 		`ExposeAuthorizerErrors controls whether the frontend authorization interceptor will pass through errors returned by
 the Authorizer component. If false, a generic PermissionDenied error without details will be returned. Default false.`,
 	)
+	EnablePrincipalHeader = NewNamespaceBoolSetting(
+		"frontend.enablePrincipalHeader",
+		true,
+		`EnablePrincipalHeader controls whether the authorization interceptor sets the authenticated principal
+identity as gRPC headers, which are propagated to internal services. Disabling it also disables
+EnablePrincipalPropagation.`,
+	)
 	EnablePrincipalPropagation = NewNamespaceBoolSetting(
 		"frontend.enablePrincipalPropagation",
 		false,
-		`EnablePrincipalPropagation controls whether the authorization interceptor propagates the authenticated
-principal identity as gRPC headers.`,
+		`EnablePrincipalPropagation controls whether the authenticated principal identity is propagated to
+workflow history, i.e. written to the history events created by the caller. Requires EnablePrincipalHeader.`,
 	)
 	KeepAliveMinTime = NewGlobalDurationSetting(
 		"frontend.keepAliveMinTime",
