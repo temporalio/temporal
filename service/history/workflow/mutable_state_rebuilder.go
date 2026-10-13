@@ -793,8 +793,6 @@ func (b *MutableStateRebuilderImpl) applyChasmEvent(
 	if !ok {
 		return false, nil
 	}
-	// Ensure the root CHASM workflow component exists before applying.
-	b.mutableState.EnsureChasmWorkflowComponent(ctx)
 	wf, chasmCtx, err := b.mutableState.ChasmWorkflowComponent(ctx)
 	if err != nil {
 		return false, err

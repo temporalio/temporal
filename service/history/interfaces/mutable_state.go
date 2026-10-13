@@ -140,6 +140,7 @@ type (
 		ApplyWorkflowExecutionUpdateAdmittedEvent(event *historypb.HistoryEvent, batchId int64) error
 		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
+		GetUpdateAcceptedEventID(ctx context.Context, updateID string) (int64, error)
 		CheckResettable() error
 		// UpdateResetRunID saves the runID that resulted when this execution was reset.
 		UpdateResetRunID(runID string)
@@ -367,9 +368,6 @@ type (
 		ChasmSignalBacklinksEnabled() bool
 		ChasmWorkflowComponent(ctx context.Context) (*chasmworkflow.Workflow, chasm.MutableContext, error)
 		ChasmWorkflowComponentReadOnly(ctx context.Context) (*chasmworkflow.Workflow, chasm.Context, error)
-		// Ensures that the chasm workflow component is installed in the mutable state CHASM tree.
-		// Must be called before adding any components to the tree.
-		EnsureChasmWorkflowComponent(ctx context.Context)
 
 		// NextTransitionCount returns the next state transition count from the state transition history.
 		// If state transition history is empty (e.g. when disabled or fresh mutable state), returns 0.
@@ -423,9 +421,10 @@ type (
 		// Now returns the current time of the mutable state, which may be ahead of
 		// wall-clock time if time skipping has happened.
 		Now() time.Time
-		// ToRealTime converts a virtual timestamp from mutable state to wall-clock time,
-		// adjusting for accumulated skipped duration which may have happened.
-		ToRealTime(virtualTime time.Time) time.Time
+		// ToRealTimeWithCurrentOffset converts a virtual timestamp to wall-clock time using
+		// the current accumulated skipped duration. It cannot recover the wall-clock
+		// time at which a past virtual timestamp was generated.
+		ToRealTimeWithCurrentOffset(virtualTime time.Time) time.Time
 		AddWorkflowExecutionTimeSkippingTransitionedEvent(
 			ctx context.Context, targetTime time.Time, disabledAfterFastForward bool) (*historypb.HistoryEvent, error)
 		ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error

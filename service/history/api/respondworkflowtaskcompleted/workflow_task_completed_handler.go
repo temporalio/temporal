@@ -349,7 +349,6 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 		handledByCHASM := false
 		if handler.mutableState.ChasmEnabled() {
 			if chasmHandler, ok := handler.chasmWorkflowRegistry.CommandHandler(command.GetCommandType()); ok {
-				handler.mutableState.EnsureChasmWorkflowComponent(ctx)
 				chasmWorkflow, chasmCtx, chasmErr := handler.mutableState.ChasmWorkflowComponent(ctx)
 				if chasmErr != nil {
 					return nil, chasmErr
