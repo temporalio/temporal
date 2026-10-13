@@ -1,9 +1,12 @@
 package metrics
 
 import (
+	"fmt"
 	"io"
+	"net/http"
 	"regexp"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -11,6 +14,8 @@ import (
 	"github.com/uber-go/tally/v4"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/freeport"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/mock/gomock"
 )
@@ -138,11 +143,12 @@ func TestPrometheusReporterErrors(t *testing.T) {
 	t.Parallel()
 
 	for _, tc := range []struct {
-		name           string
-		recordingTags  []map[string]string
-		wantLogLevel   testlogger.Level
-		wantLogMessage string
-		wantLogTags    []tag.Tag
+		name                      string
+		recordingTags             []map[string]string
+		wantLogLevel              testlogger.Level
+		wantLogMessage            string
+		wantLogTags               []tag.Tag
+		wantRegistrationConflicts int
 	}{
 		{
 			name: "label collision",
@@ -151,11 +157,26 @@ func TestPrometheusReporterErrors(t *testing.T) {
 				{"outcome": "skipped"},
 				{"outcome": "invalidated", "reason": "closed"},
 			},
-			wantLogLevel:   testlogger.Error,
-			wantLogMessage: "failed assertion: error in prometheus reporter",
+			wantRegistrationConflicts: 1,
+			wantLogLevel:              testlogger.Error,
+			wantLogMessage:            "failed assertion: error in prometheus reporter",
 			wantLogTags: []tag.Tag{
 				tag.FailedAssertion,
 				tag.String("error", `^a previously registered descriptor with the same fully-qualified name as Desc\{fqName: "test_counter", help: "test_counter counter", constLabels: \{\}, variableLabels: \{(outcome,reason|reason,outcome)\}\} has different label names or a different help string$`),
+			},
+		},
+		{
+			name: "label collision on root scope",
+			recordingTags: []map[string]string{
+				{"outcome": "fired"},
+				nil,
+			},
+			wantRegistrationConflicts: 1,
+			wantLogLevel:              testlogger.Error,
+			wantLogMessage:            "failed assertion: error in prometheus reporter",
+			wantLogTags: []tag.Tag{
+				tag.FailedAssertion,
+				tag.String("error", "^"+regexp.QuoteMeta(`a previously registered descriptor with the same fully-qualified name as Desc{fqName: "test_counter", help: "test_counter counter", constLabels: {}, variableLabels: {}} has different label names or a different help string`)+"$"),
 			},
 		},
 		{
@@ -176,7 +197,8 @@ func TestPrometheusReporterErrors(t *testing.T) {
 			logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
 			expected := logger.Expect(tc.wantLogLevel, "^"+regexp.QuoteMeta(tc.wantLogMessage)+"$", tc.wantLogTags...)
 
-			scope := NewScope(logger, &Config{Prometheus: &PrometheusConfig{ListenAddress: "127.0.0.1:0"}})
+			address := fmt.Sprintf("127.0.0.1:%d", freeport.MustGetFreePort())
+			scope := NewScope(logger, &Config{Prometheus: &PrometheusConfig{ListenAddress: address}})
 			t.Cleanup(func() { require.NoError(t, scope.(io.Closer).Close()) })
 
 			for _, recordingTags := range tc.recordingTags {
@@ -184,6 +206,21 @@ func TestPrometheusReporterErrors(t *testing.T) {
 			}
 
 			require.Equal(t, int64(1), expected.MatchCount())
+
+			client := &http.Client{Timeout: time.Second}
+			await.Require(t.Context(), t, func(t *await.T) {
+				request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://"+address+"/metrics", nil)
+				require.NoError(t, err)
+				response, err := client.Do(request)
+				require.NoError(t, err)
+				body, err := io.ReadAll(response.Body)
+				require.NoError(t, response.Body.Close())
+				require.NoError(t, err)
+				require.Contains(t, string(body), fmt.Sprintf(`# HELP prometheus_metric_registration_conflicts prometheus_metric_registration_conflicts counter
+# TYPE prometheus_metric_registration_conflicts counter
+prometheus_metric_registration_conflicts %d
+`, tc.wantRegistrationConflicts))
+			}, 5*time.Second, 10*time.Millisecond)
 		})
 	}
 }
