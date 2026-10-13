@@ -49,10 +49,12 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexusrpc"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerror2 "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/fakedata"
@@ -2980,6 +2982,90 @@ func (s *mutableStateSuite) TestApplyWorkflowExecutionStartedEvent_PersistsChasm
 			s.NotEqual(common.EmptyVersion, rootNode.GetMetadata().GetInitialVersionedTransition().GetNamespaceFailoverVersion())
 			protorequire.ProtoEqual(s.T(), ms.CurrentVersionedTransition(), rootNode.GetMetadata().GetInitialVersionedTransition())
 			protorequire.ProtoEqual(s.T(), ms.CurrentVersionedTransition(), rootNode.GetMetadata().GetLastUpdateVersionedTransition())
+		})
+	}
+}
+
+func (s *mutableStateSuite) TestAddWorkflowExecutionStartedEvent_SearchAttributes() {
+	testCases := []struct {
+		name        string
+		input       map[string]*commonpb.Payload
+		mapperCalls int
+		expected    map[string]*commonpb.Payload
+		expectErr   bool
+	}{
+		{
+			name: "unaliased search attributes are not mapped",
+			input: map[string]*commonpb.Payload{
+				"Keyword01": payload.EncodeString("value"),
+			},
+			expected: map[string]*commonpb.Payload{
+				"Keyword01": payload.EncodeString("value"),
+			},
+		},
+		{
+			name: "aliased search attributes are unaliased",
+			input: map[string]*commonpb.Payload{
+				sadefs.TemporalAliasedSearchAttributes: sadefs.TemporalAliasedSearchAttributesPayload,
+				"AliasForKeyword01":                    payload.EncodeString("value"),
+			},
+			mapperCalls: 1,
+			expected: map[string]*commonpb.Payload{
+				"Keyword01": payload.EncodeString("value"),
+			},
+		},
+		{
+			name: "unknown alias is rejected",
+			input: map[string]*commonpb.Payload{
+				sadefs.TemporalAliasedSearchAttributes: sadefs.TemporalAliasedSearchAttributesPayload,
+				"wrong_alias":                          payload.EncodeString("value"),
+			},
+			mapperCalls: 1,
+			expectErr:   true,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			ms := NewMutableState(
+				s.mockShard,
+				s.mockEventsCache,
+				s.logger,
+				s.namespaceEntry,
+				tests.WorkflowID,
+				tests.RunID,
+				time.Now().UTC(),
+			)
+			s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+			s.mockShard.Resource.SearchAttributesMapperProvider.EXPECT().
+				GetMapper(s.namespaceEntry.Name()).
+				Return(&searchattribute.TestMapper{Namespace: s.namespaceEntry.Name().String()}, nil).
+				Times(tc.mapperCalls)
+
+			event, err := ms.AddWorkflowExecutionStartedEvent(
+				&commonpb.WorkflowExecution{WorkflowId: tests.WorkflowID, RunId: tests.RunID},
+				&historyservice.StartWorkflowExecutionRequest{
+					StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+						SearchAttributes: &commonpb.SearchAttributes{IndexedFields: tc.input},
+					},
+				},
+			)
+			if tc.expectErr {
+				var invalidArgErr *serviceerror.InvalidArgument
+				s.ErrorAs(err, &invalidArgErr)
+				return
+			}
+			s.Require().NoError(err)
+			protorequire.ProtoEqual(
+				s.T(),
+				&commonpb.SearchAttributes{IndexedFields: tc.expected},
+				event.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes(),
+			)
+			protorequire.ProtoEqual(
+				s.T(),
+				&commonpb.SearchAttributes{IndexedFields: tc.expected},
+				&commonpb.SearchAttributes{IndexedFields: ms.GetExecutionInfo().GetSearchAttributes()},
+			)
 		})
 	}
 }

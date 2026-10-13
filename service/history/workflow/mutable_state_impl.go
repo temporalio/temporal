@@ -59,6 +59,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/retrypolicy"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
@@ -3047,6 +3048,19 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 			tag.WorkflowEventID(eventID),
 			tag.ErrorTypeInvalidHistoryAction)
 		return nil, ms.createInternalServerError(opTag)
+	}
+
+	searchAttributes := startRequest.StartRequest.GetSearchAttributes()
+	if _, ok := searchAttributes.GetIndexedFields()[sadefs.TemporalAliasedSearchAttributes]; ok {
+		unaliasedSA, err := searchattribute.UnaliasFields(
+			ms.shard.GetSearchAttributesMapperProvider(),
+			searchAttributes,
+			ms.namespaceEntry.Name().String(),
+		)
+		if err != nil {
+			return nil, err
+		}
+		startRequest.StartRequest.SearchAttributes = unaliasedSA
 	}
 
 	event := ms.hBuilder.AddWorkflowExecutionStartedEvent(

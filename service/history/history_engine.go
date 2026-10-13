@@ -2,12 +2,14 @@ package history
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -34,6 +36,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
@@ -865,6 +868,58 @@ func (e *historyEngineImpl) ImportWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
+
+	nsName, err := e.shardContext.GetNamespaceRegistry().GetNamespaceName(namespace.ID(request.GetNamespaceId()))
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the search attributes maps have been unaliased.
+	for _, batch := range historyEvents {
+		for _, event := range batch {
+			sas, _ := searchattribute.GetFromEvent(event)
+			if sas == nil {
+				continue
+			}
+
+			if _, ok := sas.GetIndexedFields()[sadefs.TemporalAliasedSearchAttributes]; !ok {
+				// If it doesn't contain the key sadefs.TemporalAliasedSearchAttributes, then it
+				// has already been unaliased in frontend (older versions unalias in frontend).
+				continue
+			}
+
+			unaliasedSas, err := searchattribute.UnaliasFields(
+				e.shardContext.GetSearchAttributesMapperProvider(),
+				sas,
+				nsName.String(),
+			)
+			if err != nil {
+				if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); !ok {
+					return nil, err
+				}
+				// Mapper returns InvalidArgument if alias is not found.
+				// It means that history has field names, not aliases.
+				// Ignore the error and proceed with the original search attributes.
+				// This could be the case if frontend did not do any validation, and added
+				// the key sadefs.TemporalAliasedSearchAttributes delegating the validation
+				// to here (in older versions, frontend attempted to unalias and validated
+				// the map).
+				delete(sas.GetIndexedFields(), sadefs.TemporalAliasedSearchAttributes)
+				unaliasedSas = sas
+			}
+
+			// Now validate that search attributes are valid.
+			err = e.searchAttributesValidator.Validate(unaliasedSas, nsName.String())
+			if err != nil {
+				return nil, err
+			}
+
+			if unaliasedSas != sas {
+				_ = searchattribute.SetToEvent(event, unaliasedSas)
+			}
+		}
+	}
+
 	token, eventsApplied, err := e.nDCHistoryImporter.ImportWorkflow(
 		ctx,
 		definition.NewWorkflowKey(
