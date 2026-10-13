@@ -1835,11 +1835,9 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	var wg sync.WaitGroup
-	wg.Add(2 * workerCount)
 
 	for range workerCount {
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := int64(0); i < taskCount; i++ {
 				addRequest := matchingservice.AddActivityTaskRequest{
 					NamespaceId:            namespaceID,
@@ -1855,7 +1853,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 					i--
 				}
 			}
-		}()
+		})
 	}
 
 	activityTypeName := "activity1"
@@ -1893,8 +1891,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 		}).AnyTimes()
 
 	for range workerCount {
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := int64(0); i < taskCount; {
 				result, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
 					NamespaceId: namespaceID,
@@ -1929,7 +1926,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 				protoassert.ProtoEqual(s.T(), taskToken, resultToken)
 				i++
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	totalTasks := int(taskCount) * workerCount
