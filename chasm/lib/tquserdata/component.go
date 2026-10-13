@@ -15,6 +15,15 @@ type TaskQueueUserData struct {
 	PerType chasm.Map[int32, *persistencespb.TaskQueueTypeUserData]
 }
 
+// NewTaskQueueUserData creates a task queue family's user data at CHASM CAS version 1.
+func NewTaskQueueUserData(ctx chasm.MutableContext, data *tquserdatapb.TaskQueueUserData) *TaskQueueUserData {
+	taskQueueUserData := &TaskQueueUserData{
+		TaskQueueUserDataState: &tquserdatapb.TaskQueueUserDataState{Version: 1},
+	}
+	taskQueueUserData.setTaskQueueUserData(ctx, data)
+	return taskQueueUserData
+}
+
 func (t *TaskQueueUserData) LifecycleState(chasm.Context) chasm.LifecycleState {
 	if t.Closed {
 		return chasm.LifecycleStateCompleted
