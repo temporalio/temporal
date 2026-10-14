@@ -23,6 +23,28 @@ var (
 				WithExpirationInterval(backoff.NoInterval)
 )
 
+const (
+	// backlogSyncJitterCoefficient is the jitter coefficient applied to the
+	// periodic backlog sync interval (matching.updateAckInterval) by the
+	// priority and fairness backlog managers and by the fairness task writer.
+	//
+	// Every physical task queue runs its own sync timer on the same interval.
+	// Without jitter, queues that start together (e.g. all queues loaded by a
+	// host when it starts) stay phase-locked and hit persistence in
+	// synchronized bursts. The coefficient is deliberately large: each wait is
+	// spread over [interval/2, 3*interval/2], so even the first tick after a
+	// simultaneous start lands anywhere within a full interval, and because
+	// the jitter is re-rolled on every cycle the phases keep diffusing
+	// instead of settling back into lock-step.
+	backlogSyncJitterCoefficient = 0.5
+)
+
+// jitteredSyncInterval returns the backlog sync interval with jitter applied.
+// See backlogSyncJitterCoefficient for why.
+func jitteredSyncInterval(interval time.Duration) time.Duration {
+	return backoff.Jitter(interval, backlogSyncJitterCoefficient)
+}
+
 type (
 	// backlogManagerImpl manages the backlog and persistence of a physical task queue
 	backlogManager interface {

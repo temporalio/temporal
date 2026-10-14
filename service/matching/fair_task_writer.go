@@ -157,9 +157,12 @@ func (w *fairTaskWriter) taskWriterLoop() {
 		return
 	}
 
-	// TODO: this will be out of phase with the timer in fairBacklogManagerImpl.periodicSync.
-	// can we align them better?
-	persistFairnessKeys := time.NewTicker(w.config.UpdateAckInterval()).C
+	// Persist fairness keys on a jittered timer rather than a fixed ticker,
+	// so that writers don't all persist at the same phase. The sync timer in
+	// fairBacklogManagerImpl.periodicSync is jittered the same way. (This
+	// replaces a TODO that noted the two timers run out of phase: with jitter
+	// on both, there is no fixed phase to align to, which is the point.)
+	persistFairnessKeys := time.NewTimer(jitteredSyncInterval(w.config.UpdateAckInterval()))
 
 	var reqs []*writeTaskRequest
 	for {
@@ -190,7 +193,8 @@ func (w *fairTaskWriter) taskWriterLoop() {
 
 		// maybe persist fairness key counts if it's time
 		select {
-		case <-persistFairnessKeys:
+		case <-persistFairnessKeys.C:
+			persistFairnessKeys.Reset(jitteredSyncInterval(w.config.UpdateAckInterval()))
 			for subqueue, cntr := range w.counters {
 				w.db.persistTopKFairnessKeys(subqueue, cntr.TopK())
 			}
