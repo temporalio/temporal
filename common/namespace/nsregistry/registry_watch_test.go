@@ -345,6 +345,68 @@ func (s *registryWatchSuite) TestWatchEvents() {
 	s.InEpsilon(float64(1), snap[metrics.TotalNamespaces.Name()][3].Value, 0.01) // after delete: 1 namespace remains
 }
 
+// TestCallbackSeesUpdatedCache verifies that the cache is updated before state change callbacks
+// run, for both the refresh and watch paths. Matching relies on this to avoid loading a partition
+// with a namespace entry that a callback has already handled.
+func (s *registryWatchSuite) TestCallbackSeesUpdatedCache() {
+	nsID := namespace.NewID()
+	nsRecord := s.newGlobalNamespaceResponse(nsID, "failover-namespace", cluster.TestCurrentClusterName, 1)
+
+	watchCh := make(chan *persistence.NamespaceWatchEvent, 1)
+	s.expectWatchAndList(watchCh, nsRecord)
+
+	type observed struct {
+		cached  *namespace.Namespace
+		err     error
+		deleted bool
+	}
+	observedCh := make(chan observed, 3)
+	s.registry.RegisterStateChangeCallback("test", func(ns *namespace.Namespace, deletedFromDb bool) {
+		cached, err := s.registry.GetNamespaceByIDWithOptions(
+			ns.ID(),
+			namespace.GetNamespaceOptions{DisableReadthrough: true},
+		)
+		observedCh <- observed{cached: cached, err: err, deleted: deletedFromDb}
+	})
+
+	s.registry.Start()
+	defer s.registry.Stop()
+
+	waitForObserved := func(description string) observed {
+		select {
+		case o := <-observedCh:
+			return o
+		case <-time.After(30 * time.Second):
+			s.FailNow("Timed out waiting for callback: " + description)
+			return observed{}
+		}
+	}
+
+	// --- Initial refresh ---
+	o := waitForObserved("initial refresh")
+	s.NoError(o.err)
+	s.Equal(int64(1), o.cached.NotificationVersion())
+
+	// --- Failover via watch ---
+	watchCh <- &persistence.NamespaceWatchEvent{
+		Type:     persistence.NamespaceWatchEventTypeUpdate,
+		Response: s.newGlobalNamespaceResponse(nsID, "failover-namespace", cluster.TestAlternativeClusterName, 2),
+	}
+	o = waitForObserved("update event")
+	s.NoError(o.err)
+	s.Equal(int64(2), o.cached.NotificationVersion())
+	s.Equal(cluster.TestAlternativeClusterName, o.cached.ActiveClusterName(namespace.RoutingKey{}))
+
+	// --- Delete via watch ---
+	watchCh <- &persistence.NamespaceWatchEvent{
+		Type:        persistence.NamespaceWatchEventTypeDelete,
+		NamespaceID: nsID,
+	}
+	o = waitForObserved("delete event")
+	s.True(o.deleted)
+	s.ErrorAs(o.err, new(*serviceerror.NamespaceNotFound))
+}
+
 // TestWatchStaleUpdateIgnored verifies that update events with a NotificationVersion
 // less than or equal to the cached version are ignored.
 func (s *registryWatchSuite) TestWatchStaleUpdateIgnored() {
