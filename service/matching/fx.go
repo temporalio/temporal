@@ -1,6 +1,7 @@
 package matching
 
 import (
+	otellog "go.opentelemetry.io/otel/log"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
@@ -229,6 +230,7 @@ func WorkersRegistryProvider(
 	lc fx.Lifecycle,
 	metricsHandler metrics.Handler,
 	serviceConfig *Config,
+	eventLogger otellog.Logger,
 ) workers.Registry {
 	return workers.NewRegistry(lc, workers.RegistryParams{
 		NumBuckets:       serviceConfig.WorkerRegistryNumBuckets,
@@ -237,6 +239,7 @@ func WorkersRegistryProvider(
 		MaxItems:         serviceConfig.WorkerRegistryMaxEntries,
 		EvictionInterval: serviceConfig.WorkerRegistryEvictionInterval,
 		MetricsHandler:   metricsHandler,
+		EventLogger:      eventLogger,
 		MetricsConfig: workers.WorkerMetricsConfig{
 			EnablePluginMetrics:            serviceConfig.EnableWorkerPluginMetrics,
 			EnablePollerAutoscalingMetrics: serviceConfig.EnablePollerAutoscalingMetrics,

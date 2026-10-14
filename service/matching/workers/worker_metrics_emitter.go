@@ -1,12 +1,16 @@
 package workers
 
 import (
+	"strings"
+
+	otellog "go.opentelemetry.io/otel/log"
 	enumspb "go.temporal.io/api/enums/v1"
 	workerpb "go.temporal.io/api/worker/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/wideevents"
 )
 
 // WorkerMetricsConfig contains dynamic config flags for worker-related metrics.
@@ -97,5 +101,99 @@ func (e *workerMetricsEmitter) emitPollerAutoscaling(nsID namespace.ID, nsName n
 	}
 	if hb.NexusPollerInfo.GetIsAutoscaling() {
 		recordAutoscaling(enumspb.TASK_QUEUE_TYPE_NEXUS)
+	}
+}
+
+func emitWorkerConfigEvent(logger otellog.Logger, nsName namespace.Name, hb *workerpb.WorkerHeartbeat) {
+	osTag, archTag := platformTags(hb.GetEnvironment().GetPlatform())
+	var runtimes, hostingEnvs []string
+	for _, rt := range hb.GetEnvironment().GetRuntimes() {
+		runtimes = append(runtimes, runtimeTypeName(rt.GetType()))
+	}
+	for _, he := range hb.GetEnvironment().GetHostingEnvironments() {
+		hostingEnvs = append(hostingEnvs, hostingEnvironmentTypeName(he.GetType()))
+	}
+	var plugins []string
+	for _, p := range hb.GetPlugins() {
+		plugins = append(plugins, p.GetName())
+	}
+	var drivers []string
+	for _, d := range hb.GetDrivers() {
+		drivers = append(drivers, d.GetType())
+	}
+	var startTime string
+	if st := hb.GetStartTime(); st != nil {
+		startTime = st.AsTime().UTC().Format("2006-01-02T15:04:05Z")
+	}
+	wideevents.Emit(logger, wideevents.WorkerConfigPayload{
+		Namespace:                 nsName.String(),
+		TaskQueue:                 hb.GetTaskQueue(),
+		WorkerInstanceKey:         hb.GetWorkerInstanceKey(),
+		WorkerIdentity:            hb.GetWorkerIdentity(),
+		StartTime:                 startTime,
+		SdkName:                   hb.GetSdkName(),
+		SdkVersion:                hb.GetSdkVersion(),
+		DeploymentName:            hb.GetDeploymentVersion().GetDeploymentName(),
+		BuildID:                   hb.GetDeploymentVersion().GetBuildId(),
+		Runtimes:                  runtimes,
+		HostingEnvironments:       hostingEnvs,
+		OS:                        osTag,
+		Architecture:              archTag,
+		Plugins:                   plugins,
+		Drivers:                   drivers,
+		WorkflowPollerAutoscaling: hb.GetWorkflowPollerInfo().GetIsAutoscaling(),
+		ActivityPollerAutoscaling: hb.GetActivityPollerInfo().GetIsAutoscaling(),
+		NexusPollerAutoscaling:    hb.GetNexusPollerInfo().GetIsAutoscaling(),
+	})
+}
+
+// runtimeTypeName returns a clean tag value for a RuntimeType enum, e.g. "go", "cpython", "jvm".
+func runtimeTypeName(rt workerpb.EnvironmentInfo_Runtime_RuntimeType) string {
+	if rt == workerpb.EnvironmentInfo_Runtime_RUNTIME_TYPE_UNSPECIFIED {
+		return "unknown"
+	}
+	v := rt.Descriptor().Values().ByNumber(rt.Number())
+	if v == nil {
+		return "unknown"
+	}
+	return strings.ToLower(strings.TrimPrefix(string(v.Name()), "RUNTIME_TYPE_"))
+}
+
+func hostingEnvironmentTypeName(t workerpb.EnvironmentInfo_HostingEnvironment_HostingEnvironmentType) string {
+	if t == workerpb.EnvironmentInfo_HostingEnvironment_HOSTING_ENVIRONMENT_TYPE_UNSPECIFIED {
+		return "unknown"
+	}
+	v := t.Descriptor().Values().ByNumber(t.Number())
+	if v == nil {
+		return "unknown"
+	}
+	return strings.ToLower(strings.TrimPrefix(string(v.Name()), "HOSTING_ENVIRONMENT_TYPE_"))
+}
+
+func architectureName(a workerpb.EnvironmentInfo_Architecture) string {
+	if a == workerpb.EnvironmentInfo_ARCHITECTURE_UNSPECIFIED {
+		return "unknown"
+	}
+	v := a.Descriptor().Values().ByNumber(a.Number())
+	if v == nil {
+		return "unknown"
+	}
+	return strings.ToLower(strings.TrimPrefix(string(v.Name()), "ARCHITECTURE_"))
+}
+
+// platformTags extracts OS and architecture tag values from the platform oneof.
+func platformTags(p *workerpb.EnvironmentInfo_Platform) (os string, arch string) {
+	if p == nil {
+		return "unknown", "unknown"
+	}
+	switch v := p.GetVariant().(type) {
+	case *workerpb.EnvironmentInfo_Platform_Linux:
+		return "linux", architectureName(v.Linux.GetArchitecture())
+	case *workerpb.EnvironmentInfo_Platform_Macos:
+		return "macos", architectureName(v.Macos.GetArchitecture())
+	case *workerpb.EnvironmentInfo_Platform_Windows:
+		return "windows", architectureName(v.Windows.GetArchitecture())
+	default:
+		return "unknown", "unknown"
 	}
 }
