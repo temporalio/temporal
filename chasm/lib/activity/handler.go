@@ -222,13 +222,15 @@ func (h *handler) newActivityForStartExecution(
 	if request.GetRequestEagerExecution() {
 		err = TransitionEagerStarted.Apply(newActivity, mutableContext, eagerStartEvent{
 			requestID: request.GetRequestId(),
-			identity:  request.GetIdentity(),
 		})
 	} else {
 		err = TransitionScheduled.Apply(newActivity, mutableContext, nil)
 	}
 	if err != nil {
 		return nil, nil, err
+	}
+	if request.GetRequestEagerExecution() {
+		newActivity.recordLastWorker(mutableContext, request.GetIdentity())
 	}
 	if !request.GetRequestEagerExecution() {
 		return newActivity, nil, nil

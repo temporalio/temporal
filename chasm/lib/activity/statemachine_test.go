@@ -221,7 +221,6 @@ func TestTransitionEagerStarted(t *testing.T) {
 
 	err := TransitionEagerStarted.Apply(activity, ctx, eagerStartEvent{
 		requestID: "start-request-id",
-		identity:  "starter",
 	})
 	require.NoError(t, err)
 	require.Equal(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, activity.GetStatus())
@@ -230,7 +229,6 @@ func TestTransitionEagerStarted(t *testing.T) {
 	require.EqualValues(t, 1, attempt.GetStamp())
 	require.EqualValues(t, 1, attempt.GetStartedStamp())
 	require.Equal(t, "start-request-id", attempt.GetStartRequestId())
-	require.Equal(t, "starter", attempt.GetLastWorkerIdentity())
 	require.Equal(t, headers.ClientNameGoSDK, attempt.GetSdkName())
 	require.Equal(t, temporal.SDKVersion, attempt.GetSdkVersion())
 

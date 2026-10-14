@@ -1363,8 +1363,33 @@ func (s *standaloneActivityTestSuite) TestStart() {
 }
 
 func (s *standaloneActivityTestSuite) TestEagerStartResponseAndNoRedelivery() {
-	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, true))
+	const (
+		principalType = "jwt"
+		principalName = "eager-worker-subject"
+	)
+
+	env := s.newTestEnv(
+		testcore.WithDedicatedCluster(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnablePrincipalPropagation, true),
+	)
 	t := s.T()
+	env.SetOnGetClaims(func(*authorization.AuthInfo) (*authorization.Claims, error) {
+		return &authorization.Claims{
+			Subject:  principalName,
+			AuthType: principalType,
+			System:   authorization.RoleAdmin,
+		}, nil
+	})
+	env.SetOnAuthorize(func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error) {
+		return authorization.Result{
+			Decision: authorization.DecisionAllow,
+			Principal: &commonpb.Principal{
+				Type: principalType,
+				Name: principalName,
+			},
+		}, nil
+	})
 	ctx := metadata.NewOutgoingContext(s.Context(), metadata.Pairs(
 		headers.ClientNameHeaderName, headers.ClientNameGoSDK,
 		headers.ClientVersionHeaderName, temporal.SDKVersion,
@@ -1402,6 +1427,11 @@ func (s *standaloneActivityTestSuite) TestEagerStartResponseAndNoRedelivery() {
 	require.Equal(t, headers.ClientNameGoSDK, describe.GetInfo().GetSdkName())
 	require.Equal(t, temporal.SDKVersion, describe.GetInfo().GetSdkVersion())
 	require.True(t, describe.GetInfo().GetEagerExecutionAccepted())
+	require.Equal(t, defaultIdentity, describe.GetInfo().GetLastWorkerIdentity())
+	protorequire.ProtoEqual(t, &commonpb.Principal{
+		Type: principalType,
+		Name: principalName,
+	}, describe.GetInfo().GetLastWorkerPrincipal())
 
 	retry, err := env.FrontendClient().StartActivityExecution(ctx, request)
 	require.NoError(t, err)
