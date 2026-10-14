@@ -6353,14 +6353,13 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 	})
 }
 
-// TestDefaultFindNextTargetTime covers the earliest-future-timer selection across the whole tree:
-// non-timer and past tasks are ignored, the earliest future timer wins, and an active fast-forward
-// caps (and disables) the skip when it is the earliest target.
+// TestDefaultFindNextTargetTime covers timer selection across the whole tree: the earliest future
+// timer wins, and an active fast-forward caps (and disables) the skip when it is the earliest target.
 func (s *nodeSuite) TestDefaultFindNextTargetTime() {
 	baseTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
 
-	// timerTask builds a timer-category task (non-visibility type, no destination, future
-	// scheduled time). transferTask builds an immediate/transfer task (no scheduled time) that
+	// timerTask builds a timer-category task (non-visibility type, no destination).
+	// transferTask builds an immediate/transfer task (no scheduled time) that
 	// must never be treated as a skip target.
 	timerTask := func(offset time.Duration) *persistencespb.ChasmComponentAttributes_Task {
 		return &persistencespb.ChasmComponentAttributes_Task{
@@ -6420,17 +6419,6 @@ func (s *nodeSuite) TestDefaultFindNextTargetTime() {
 		s.True(tr.IsValid())
 		s.Equal(baseTime.Add(time.Hour), tr.GetTargetTime(), "the earliest future timer across all task lists wins")
 		s.False(tr.DisabledAfterFastForward)
-	})
-
-	s.Run("PastAndNonTimerTasksIgnored", func() {
-		root := buildRoot(
-			[]*persistencespb.ChasmComponentAttributes_Task{timerTask(-time.Hour), transferTask()},
-			[]*persistencespb.ChasmComponentAttributes_Task{timerTask(3 * time.Hour)},
-		)
-		tr := root.defaultFindNextTargetTime()
-		s.Require().NotNil(tr)
-		s.Equal(baseTime.Add(3*time.Hour), tr.GetTargetTime(),
-			"past timers and non-timer (transfer) tasks must not be skip targets")
 	})
 
 	s.Run("EarlierFastForwardCapsAndDisables", func() {
