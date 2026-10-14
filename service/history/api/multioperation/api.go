@@ -10,6 +10,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
@@ -199,6 +200,7 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 			// Capture status before releasing the lock to avoid a data race with concurrent goroutines that may
 			// modify ExecutionState after acquiring the lock.
 			status := workflowLease.GetMutableState().GetExecutionState().Status
+			nexusSerializationContext := common.CloneProto(workflowLease.GetMutableState().GetUpdateNexusSerializationContext(updateID))
 			workflowLease.GetReleaseFn()(nil)
 			return makeResponse(
 				&historyservice.StartWorkflowExecutionResponse{
@@ -206,7 +208,7 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 					Started: false, // set explicitly for emphasis
 					Status:  status,
 				},
-				uws.updater.CreateResponse(workflowKey, outcome, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED),
+				uws.updater.CreateResponse(workflowKey, outcome, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, nexusSerializationContext),
 			), nil
 		}
 

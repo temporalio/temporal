@@ -6,6 +6,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
@@ -58,6 +59,9 @@ type Updater struct {
 	// an event in history. It is set in ApplyRequest because deriving it needs MutableState, which
 	// OnSuccess doesn't have. See [Updater.responseLink] for details.
 	requestIDLink *commonpb.Link
+	// nexusSerializationContext is a copy of the Update's Nexus serialization context, captured in ApplyRequest
+	// because it must be read while holding the workflow lease.
+	nexusSerializationContext *nexuspb.PropagatedSerializationContext
 }
 
 func NewUpdater(
@@ -113,6 +117,10 @@ func (u *Updater) ApplyRequest(
 	action, err := u.applyRequest(ctx, updateReg, ms)
 	if err != nil {
 		return nil, err
+	}
+	u.nexusSerializationContext = nil
+	if u.upd != nil {
+		u.nexusSerializationContext = common.CloneProto(u.upd.NexusSerializationContext())
 	}
 	// Capture the anticipated link for the response after the request has been applied.
 	// If the request itself fails/is rejected, OnSuccess will link to the workflow itself instead.
@@ -347,7 +355,7 @@ func (u *Updater) OnSuccess(
 	if err != nil {
 		return nil, err
 	}
-	resp := u.CreateResponse(u.wfKey, status.Outcome, status.Stage)
+	resp := u.CreateResponse(u.wfKey, status.Outcome, status.Stage, u.nexusSerializationContext)
 
 	resp.Response.Link = u.responseLink(status)
 	return resp, nil
@@ -434,6 +442,7 @@ func (u *Updater) CreateResponse(
 	wfKey definition.WorkflowKey,
 	outcome *updatepb.Outcome,
 	stage enumspb.UpdateWorkflowExecutionLifecycleStage,
+	nexusSerializationContext *nexuspb.PropagatedSerializationContext,
 ) *historyservice.UpdateWorkflowExecutionResponse {
 	return &historyservice.UpdateWorkflowExecutionResponse{
 		Response: &workflowservice.UpdateWorkflowExecutionResponse{
@@ -444,8 +453,9 @@ func (u *Updater) CreateResponse(
 				},
 				UpdateId: u.req.GetRequest().GetRequest().GetMeta().GetUpdateId(),
 			},
-			Outcome: outcome,
-			Stage:   stage,
+			Outcome:                             outcome,
+			Stage:                               stage,
+			PropagatedNexusSerializationContext: nexusSerializationContext,
 		},
 	}
 }

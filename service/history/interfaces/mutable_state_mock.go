@@ -20,6 +20,7 @@ import (
 	enums "go.temporal.io/api/enums/v1"
 	failure "go.temporal.io/api/failure/v1"
 	history "go.temporal.io/api/history/v1"
+	nexus "go.temporal.io/api/nexus/v1"
 	taskqueue "go.temporal.io/api/taskqueue/v1"
 	update "go.temporal.io/api/update/v1"
 	worker "go.temporal.io/api/worker/v1"
@@ -2823,6 +2824,20 @@ func (m *MockMutableState) GetUpdateCondition() (int64, int64) {
 func (mr *MockMutableStateMockRecorder) GetUpdateCondition() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpdateCondition", reflect.TypeOf((*MockMutableState)(nil).GetUpdateCondition))
+}
+
+// GetUpdateNexusSerializationContext mocks base method.
+func (m *MockMutableState) GetUpdateNexusSerializationContext(updateID string) *nexus.PropagatedSerializationContext {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetUpdateNexusSerializationContext", updateID)
+	ret0, _ := ret[0].(*nexus.PropagatedSerializationContext)
+	return ret0
+}
+
+// GetUpdateNexusSerializationContext indicates an expected call of GetUpdateNexusSerializationContext.
+func (mr *MockMutableStateMockRecorder) GetUpdateNexusSerializationContext(updateID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUpdateNexusSerializationContext", reflect.TypeOf((*MockMutableState)(nil).GetUpdateNexusSerializationContext), updateID)
 }
 
 // GetUpdateOutcome mocks base method.
