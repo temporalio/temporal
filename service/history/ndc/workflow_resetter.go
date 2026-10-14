@@ -3,6 +3,7 @@
 package ndc
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -62,6 +63,7 @@ type (
 			baseRebuildLastEventVersion int64,
 			baseNextEventID int64,
 			resetRunID string,
+			resetRequestID string,
 			baseWorkflow Workflow,
 			currentWorkflow Workflow,
 			resetReason string,
@@ -117,6 +119,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 	baseRebuildLastEventVersion int64,
 	baseNextEventID int64,
 	resetRunID string,
+	resetRequestID string,
 	baseWorkflow Workflow,
 	currentWorkflow Workflow,
 	resetReason string,
@@ -229,13 +232,10 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		}
 	}
 
-	// Use the original start request ID from the base run so callbacks on the
-	// reset workflow are associated with the original start request.
-	// The run ID provides uniqueness per execution, so the start request ID can
-	// be used consistently across resets.
-	//
-	// Read from the base run's RequestIds map; fall back to CreateRequestId otherwise.
-	startRequestID := findStartRequestID(baseWorkflow.GetMutableState().GetExecutionState())
+	// The reset run's start event is replayed with this request ID, so it becomes the run's CreateRequestId,
+	// which ResetWorkflowExecution matches against the reset request ID to dedupe retries. Resets without a
+	// reset request ID keep the original start request ID.
+	requestID := cmp.Or(resetRequestID, findStartRequestID(baseWorkflow.GetMutableState().GetExecutionState()))
 
 	resetWorkflow, err := r.prepareResetWorkflow(
 		ctx,
@@ -246,7 +246,7 @@ func (r *workflowResetterImpl) ResetWorkflow(
 		baseRebuildLastEventID,
 		baseRebuildLastEventVersion,
 		resetRunID,
-		startRequestID,
+		requestID,
 		resetWorkflowVersion,
 		resetReason,
 		allowResetWithPendingChildren,

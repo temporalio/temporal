@@ -420,8 +420,14 @@ func TestScheduleCHASM(t *testing.T) {
 	t.Run("TestCreateScheduleAlreadyExists", func(t *testing.T) { t.Parallel(); testCreateScheduleAlreadyExists(t, newContext) })
 	t.Run("TestCreateScheduleDuplicateSdkError", func(t *testing.T) { t.Parallel(); testCreateScheduleDuplicateSdkError(t, true) })
 	t.Run("TestPatchRejectsExcessBackfillers", func(t *testing.T) { t.Parallel(); testPatchRejectsExcessBackfillers(t, newContext) })
-	t.Run("TestDoubleReset_HSMCallbacks", func(t *testing.T) { t.Parallel(); testScheduledWorkflowDoubleReset(t, newContext, false) })
-	t.Run("TestDoubleReset_ChasmCallbacks", func(t *testing.T) { t.Parallel(); testScheduledWorkflowDoubleReset(t, newContext, true) })
+	t.Run("TestDoubleReset_HSMCallbacks", func(t *testing.T) { t.Parallel(); testScheduledWorkflowDoubleReset(t, newContext, false, true) })
+	t.Run("TestDoubleReset_ChasmCallbacks", func(t *testing.T) { t.Parallel(); testScheduledWorkflowDoubleReset(t, newContext, true, true) })
+	t.Run("TestDoubleReset_ResetRequestIDDeduplicationDisabled", func(t *testing.T) {
+		t.Parallel()
+		testScheduledWorkflowDoubleReset(t, newContext, true, false)
+	})
+	t.Run("TestResetThenContinueAsNew", func(t *testing.T) { t.Parallel(); testScheduledWorkflowResetAndContinueAsNew(t, newContext, true) })
+	t.Run("TestContinueAsNewThenReset", func(t *testing.T) { t.Parallel(); testScheduledWorkflowResetAndContinueAsNew(t, newContext, false) })
 	t.Run("TestResetWithAdditionalCallback_HSMCallbacks", func(t *testing.T) { t.Parallel(); testResetWithAdditionalCallback(t, newContext, false) })
 	t.Run("TestResetWithAdditionalCallback_ChasmCallbacks", func(t *testing.T) { t.Parallel(); testResetWithAdditionalCallback(t, newContext, true) })
 	t.Run("TestMigrationCallbackAttach", func(t *testing.T) { t.Parallel(); testMigrationCallbackAttach(t, newContext) })
@@ -2786,9 +2792,13 @@ func testScheduleInternalTaskQueue(t *testing.T, newContext contextFactory) {
 	})
 }
 
-func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, enableCHASMCallbacks bool) {
-	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, enableCHASMCallbacks bool, resetRequestIDDeduplication bool) {
+	// A reset run no longer carries the original start's request ID, so the scheduler matches the completion
+	// only through the request ID in the envelope token.
+	opts := append(scheduleCommonOpts(t), testcore.WithDynamicConfig(callback.EncodeInternalTokenWithEnvelope, true))
+	s := newScheduleEnv(t, opts...)
 	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, enableCHASMCallbacks)
+	s.OverrideDynamicConfig(dynamicconfig.EnableResetWorkflowRequestIDDeduplication, resetRequestIDDeduplication)
 
 	sid := "sched-test-double-reset"
 	wid := "sched-test-double-reset-wf"
@@ -2863,13 +2873,22 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 		}
 	}
 	s.NotEmpty(originalStartReqID, "original run must have a request ID for WorkflowExecutionStarted")
+	// The reset run's start event is replayed with the reset request ID only when reset request ID
+	// deduplication is enabled.
+	expectedStartReqID := func(resetRequestID string) string {
+		if resetRequestIDDeduplication {
+			return resetRequestID
+		}
+		return originalStartReqID
+	}
 
+	resetRequestID1 := uuid.NewString()
 	resp1, err := s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 s.Namespace().String(),
 		WorkflowExecution:         wfExec,
 		Reason:                    "double-reset-test-first",
 		WorkflowTaskFinishEventId: 3,
-		RequestId:                 uuid.NewString(),
+		RequestId:                 resetRequestID1,
 	})
 	s.NoError(err)
 	resetRun1 := &commonpb.WorkflowExecution{
@@ -2890,16 +2909,16 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 				break
 			}
 		}
-		require.Equal(col, originalStartReqID, resetStartReqID,
-			"start request ID must be preserved across first reset")
+		require.Equal(col, expectedStartReqID(resetRequestID1), resetStartReqID)
 	}, 10*time.Second, 100*time.Millisecond)
 
+	resetRequestID2 := uuid.NewString()
 	resp2, err := s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 s.Namespace().String(),
 		WorkflowExecution:         resetRun1,
 		Reason:                    "double-reset-test-second",
 		WorkflowTaskFinishEventId: 3,
-		RequestId:                 uuid.NewString(),
+		RequestId:                 resetRequestID2,
 	})
 	s.NoError(err)
 	resetRun2 := &commonpb.WorkflowExecution{
@@ -2920,8 +2939,7 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 				break
 			}
 		}
-		require.Equal(col, originalStartReqID, resetStartReqID,
-			"start request ID must be preserved across double reset")
+		require.Equal(col, expectedStartReqID(resetRequestID2), resetStartReqID)
 	}, 10*time.Second, 100*time.Millisecond)
 
 	_, err = s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
@@ -2943,8 +2961,131 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 	})
 }
 
+// testScheduledWorkflowResetAndContinueAsNew validates that the scheduler observes the completion of a
+// scheduled workflow whose chain contains both a reset and a continue-as-new, in either order.
+func testScheduledWorkflowResetAndContinueAsNew(t *testing.T, newContext contextFactory, resetFirst bool) {
+	// A reset run no longer carries the original start's request ID, so the scheduler matches the completion
+	// only through the request ID in the envelope token.
+	opts := append(scheduleCommonOpts(t), testcore.WithDynamicConfig(callback.EncodeInternalTokenWithEnvelope, true))
+	s := newScheduleEnv(t, opts...)
+
+	sid := testcore.RandomizeStr("sched-test-reset-can")
+	wid := testcore.RandomizeStr("sched-test-reset-can-wf")
+	wt := testcore.RandomizeStr("sched-test-reset-can-wt")
+
+	s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		if workflow.GetInfo(ctx).ContinuedExecutionRunID == "" {
+			workflow.GetSignalChannel(ctx, "continue").Receive(ctx, nil)
+			return workflow.NewContinueAsNewError(ctx, wt)
+		}
+		workflow.GetSignalChannel(ctx, "complete").Receive(ctx, nil)
+		return nil
+	}, workflow.RegisterOptions{Name: wt})
+
+	ctx := newContext(testcontext.For(t))
+
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{
+					{Interval: durationpb.New(24 * time.Hour)},
+				},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   wid,
+						WorkflowType: &commonpb.WorkflowType{Name: wt},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+		},
+		InitialPatch: &schedulepb.SchedulePatch{
+			TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
+		},
+		RequestId: uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	listEntry := getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+		return len(ent.Info.RecentActions) >= 1 &&
+			ent.Info.RecentActions[0].GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	})
+	startResult := listEntry.Info.RecentActions[0].StartWorkflowResult
+	workflowID := startResult.WorkflowId
+	scheduledRunID := startResult.RunId
+
+	waitForFirstWorkflowTask := func(runID string) {
+		s.WaitForHistoryEvents(`
+			1 WorkflowExecutionStarted
+			2 WorkflowTaskScheduled
+			3 WorkflowTaskStarted
+			4 WorkflowTaskCompleted`,
+			s.GetHistoryFunc(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID}),
+			5*time.Second,
+			10*time.Millisecond,
+		)
+	}
+	reset := func(runID string) string {
+		waitForFirstWorkflowTask(runID)
+		resp, err := s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+			Namespace:                 s.Namespace().String(),
+			WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+			Reason:                    "reset-and-continue-as-new-test",
+			WorkflowTaskFinishEventId: 3,
+			RequestId:                 uuid.NewString(),
+		})
+		require.NoError(t, err)
+		return resp.RunId
+	}
+	signal := func(name string) {
+		_, err := s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+			Namespace:         s.Namespace().String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+			SignalName:        name,
+		})
+		require.NoError(t, err)
+	}
+	continueAsNew := func(runID string) string {
+		signal("continue")
+		var newRunID string
+		await.Require(ctx, t, func(t *await.T) {
+			desc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: s.Namespace().String(),
+				Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+			})
+			require.NoError(t, err)
+			newRunID = desc.GetWorkflowExecutionInfo().GetExecution().GetRunId()
+			require.NotEqual(t, runID, newRunID)
+		}, 10*time.Second, 100*time.Millisecond)
+		return newRunID
+	}
+
+	if resetFirst {
+		continueAsNew(reset(scheduledRunID))
+	} else {
+		reset(continueAsNew(scheduledRunID))
+	}
+	signal("complete")
+
+	getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+		for _, action := range ent.Info.RecentActions {
+			if action.GetStartWorkflowResult().GetRunId() == scheduledRunID {
+				return action.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+			}
+		}
+		return false
+	})
+}
+
 func testResetWithAdditionalCallback(t *testing.T, newContext contextFactory, enableCHASMCallbacks bool) {
-	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+	// A reset run no longer carries the original start's request ID, so the scheduler matches the completion
+	// only through the request ID in the envelope token.
+	opts := append(scheduleCommonOpts(t), testcore.WithDynamicConfig(callback.EncodeInternalTokenWithEnvelope, true))
+	s := newScheduleEnv(t, opts...)
 	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, enableCHASMCallbacks)
 	s.OverrideDynamicConfig(
 		callback.AllowedAddresses,
