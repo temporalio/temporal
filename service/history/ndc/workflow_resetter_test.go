@@ -517,6 +517,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_NoWorkflowTask() {
 		baseRebuildLastEventID,
 		baseRebuildLastEventVersion,
 		resetRunID,
+		"",
 		resetReason,
 	)
 	s.Error(err)
@@ -576,6 +577,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskScheduled() {
 		baseRebuildLastEventID,
 		baseRebuildLastEventVersion,
 		resetRunID,
+		"",
 		resetReason,
 	)
 	s.NoError(err)
@@ -617,6 +619,7 @@ func (s *workflowResetterSuite) TestFailWorkflowTask_WorkflowTaskStarted() {
 		baseRebuildLastEventID,
 		baseRebuildLastEventVersion,
 		resetRunID,
+		"",
 		resetReason,
 	)
 	s.NoError(err)
@@ -1914,6 +1917,7 @@ func (s *workflowResetterSuite) TestWorkflowRestartAfterExecutionTimeout() {
 		baseRebuildLastEventVersion,
 		s.resetRunID,
 		resetRequestID,
+		"",
 		resetWorkflowVersion,
 		resetReason,
 		false, // allowResetWithPendingChildren

@@ -177,6 +177,69 @@ func (s *WorkflowResetSuite) TestRepeatedResets() {
 	s.assertMutableStateStatus(env, workflowID, newRunID1, enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED) // newRunID1 was the current run.
 }
 
+func (s *WorkflowResetSuite) TestResetWorkflowExecutionDeduplicatesRequestID() {
+	for _, explicitRunID := range []bool{true, false} {
+		name := "without run ID"
+		if explicitRunID {
+			name = "with run ID"
+		}
+		s.Run(name, func(s *WorkflowResetSuite) {
+			env := testcore.NewEnv(s.T())
+			workflowID := env.Tv().WorkflowID()
+			baseRunID := s.prepareSingleRun(env, workflowID, true)
+			resetPoint := s.getFirstWFTaskCompleteEventID(env, workflowID, baseRunID)
+			execution := &commonpb.WorkflowExecution{WorkflowId: workflowID}
+			if explicitRunID {
+				execution.RunId = baseRunID
+			}
+
+			reset := func(requestID string) *workflowservice.ResetWorkflowExecutionResponse {
+				resp, err := env.FrontendClient().ResetWorkflowExecution(s.Context(), &workflowservice.ResetWorkflowExecutionRequest{
+					Namespace:                 env.Namespace().String(),
+					WorkflowExecution:         execution,
+					Reason:                    "test reset request deduplication",
+					WorkflowTaskFinishEventId: resetPoint,
+					RequestId:                 requestID,
+				})
+				s.Require().NoError(err)
+				return resp
+			}
+
+			requestID := uuid.NewString()
+			first := reset(requestID)
+			retry := reset(requestID)
+
+			s.Equal(first.GetRunId(), retry.GetRunId())
+			s.assertResetWorkflowLink(env, workflowID, baseRunID, first.GetRunId())
+			s.assertMutableStateStatus(env, workflowID, first.GetRunId(), enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
+
+			_, err := env.AdminClient().RebuildMutableState(s.Context(), &adminservice.RebuildMutableStateRequest{
+				Namespace: env.Namespace().String(),
+				Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: first.GetRunId()},
+			})
+			s.Require().NoError(err)
+			rebuilt, err := env.AdminClient().DescribeMutableState(s.Context(), &adminservice.DescribeMutableStateRequest{
+				Namespace: env.Namespace().String(),
+				Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: first.GetRunId()},
+			})
+			s.Require().NoError(err)
+			s.Contains(rebuilt.GetDatabaseMutableState().GetExecutionState().GetRequestIds(), requestID)
+
+			retryAfterRebuild := reset(requestID)
+			s.Equal(first.GetRunId(), retryAfterRebuild.GetRunId())
+			s.assertMutableStateStatus(env, workflowID, first.GetRunId(), enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)
+
+			if !explicitRunID {
+				return
+			}
+			distinct := reset(uuid.NewString())
+			s.NotEqual(first.GetRunId(), distinct.GetRunId())
+			s.assertResetWorkflowLink(env, workflowID, baseRunID, distinct.GetRunId())
+			s.assertMutableStateStatus(env, workflowID, first.GetRunId(), enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED)
+		})
+	}
+}
+
 // Resetting a failed workflow must not re-emit workflow_failed: the counter stays at 1 regardless of the number of resets.
 func (s *WorkflowResetSuite) TestRepeatedResets_FailedWorkflowDoesNotDoubleCountFailedMetric() {
 	env := testcore.NewEnv(s.T())

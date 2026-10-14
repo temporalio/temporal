@@ -317,6 +317,12 @@ func (b *MutableStateRebuilderImpl) applyEvents(
 			if err := b.mutableState.ApplyWorkflowTaskFailedEvent(); err != nil {
 				return nil, err
 			}
+			attributes := event.GetWorkflowTaskFailedEventAttributes()
+			// A reset may replay an ancestor run's reset event. Its request ID belongs only to that run.
+			if attributes.GetCause() == enumspb.WORKFLOW_TASK_FAILED_CAUSE_RESET_WORKFLOW &&
+				attributes.GetResetRequestId() != "" && attributes.GetNewRunId() == execution.GetRunId() {
+				b.mutableState.AttachRequestID(attributes.GetResetRequestId(), event.GetEventType(), event.GetEventId())
+			}
 
 			// this is for transient workflowTask
 			workflowTask, err := b.mutableState.ApplyTransientWorkflowTaskScheduled()
