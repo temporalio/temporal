@@ -81,9 +81,6 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
-// static error used in tests
-var randomTestError = errors.New("random error")
-
 type (
 	matchingEngineSuite struct {
 		suite.Suite
@@ -1838,11 +1835,9 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 	var wg sync.WaitGroup
-	wg.Add(2 * workerCount)
 
 	for range workerCount {
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := int64(0); i < taskCount; i++ {
 				addRequest := matchingservice.AddActivityTaskRequest{
 					NamespaceId:            namespaceID,
@@ -1858,7 +1853,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 					i--
 				}
 			}
-		}()
+		})
 	}
 
 	activityTypeName := "activity1"
@@ -1896,8 +1891,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 		}).AnyTimes()
 
 	for range workerCount {
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			for i := int64(0); i < taskCount; {
 				result, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
 					NamespaceId: namespaceID,
@@ -1932,7 +1926,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivities() {
 				protoassert.ProtoEqual(s.T(), taskToken, resultToken)
 				i++
 			}
-		}()
+		})
 	}
 	wg.Wait()
 	totalTasks := int(taskCount) * workerCount
@@ -3681,7 +3675,7 @@ func (s *matchingEngineSuite) pollWorkflowTasks(
 // pollWorkflowTasksConcurrently polls tasks using numWorkers concurrently
 func (s *matchingEngineSuite) pollWorkflowTasksConcurrently(
 	wg *sync.WaitGroup, workflowType *commonpb.WorkflowType, numPollers int, taskCount int,
-	ptq *PhysicalTaskQueueKey, taskQueue *taskqueuepb.TaskQueue,
+	taskQueue *taskqueuepb.TaskQueue,
 ) {
 	s.mockHistoryWhilePolling(workflowType)
 	for range numPollers {
@@ -3769,7 +3763,7 @@ func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(
 	workflowType, workflowExecution := s.generateWorkflowExecution()
 	taskQueue, ptq := s.createTQAndPTQForBacklogTests()
 	s.addWorkflowTasksConcurrently(&wg, numWorkers, tasksToAdd, taskQueue, workflowExecution)
-	s.pollWorkflowTasksConcurrently(&wg, workflowType, numWorkers, tasksToPoll, ptq, taskQueue)
+	s.pollWorkflowTasksConcurrently(&wg, workflowType, numWorkers, tasksToPoll, taskQueue)
 	wg.Wait()
 
 	ptqMgr := s.getPhysicalTaskQueueManagerImplFromKey(ptq)
@@ -4622,35 +4616,6 @@ func (s *matchingEngineSuite) TestSyncDeploymentUserData_ForgetOldFormat_Removes
 	s.False(deploymentExists)
 }
 
-func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) {
-	activityTypeName := "activity1"
-	activityID := "activityId1"
-	activityType := &commonpb.ActivityType{Name: activityTypeName}
-	activityInput := payloads.EncodeString("Activity1 Input")
-
-	// History service is using mock
-	s.mockHistoryClient.EXPECT().RecordActivityTaskStarted(gomock.Any(), gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, taskRequest *historyservice.RecordActivityTaskStartedRequest, arg2 ...any) (*historyservice.RecordActivityTaskStartedResponse, error) {
-			s.logger.Debug("Mock Received RecordActivityTaskStartedRequest")
-			return &historyservice.RecordActivityTaskStartedResponse{
-				Attempt: 1,
-				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduledEventId, 0,
-					&commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId: activityID,
-						TaskQueue: &taskqueuepb.TaskQueue{
-							Name: tlName,
-							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-						},
-						ActivityType:           activityType,
-						Input:                  activityInput,
-						ScheduleToCloseTimeout: durationpb.New(100 * time.Second),
-						ScheduleToStartTimeout: durationpb.New(50 * time.Second),
-						StartToCloseTimeout:    durationpb.New(50 * time.Second),
-						HeartbeatTimeout:       durationpb.New(10 * time.Second),
-					}),
-			}, nil
-		}).AnyTimes()
-}
 func newActivityTaskScheduledEvent(eventID int64, workflowTaskCompletedEventID int64,
 	scheduleAttributes *commandpb.ScheduleActivityTaskCommandAttributes,
 ) *historypb.HistoryEvent {
@@ -5291,16 +5256,6 @@ func (m *testTaskManager) GetTaskQueue(
 	}, nil
 }
 
-// minTaskID returns the minimum value of the TaskID present in testTaskManager
-func (m *testTaskManager) minTaskID(dbq *PhysicalTaskQueueKey) (int64, bool) {
-	tlm := m.getQueueDataByKey(dbq)
-	tlm.Lock()
-	defer tlm.Unlock()
-	minKey, _ := tlm.tasks.Min()
-	key, ok := minKey.(fairLevel)
-	return key.id, ok
-}
-
 // getTaskCountAbove returns the number of tasks in a task queue above the given level.
 func (m *testTaskManager) getTaskCountAbove(q *PhysicalTaskQueueKey, level fairLevel) int {
 	tlm := m.getQueueDataByKey(q)
@@ -5313,16 +5268,6 @@ func (m *testTaskManager) getTaskCountAbove(q *PhysicalTaskQueueKey, level fairL
 		}
 	}
 	return count
-}
-
-// maxTaskID returns the maximum value of the TaskID present in testTaskManager
-func (m *testTaskManager) maxTaskID(dbq *PhysicalTaskQueueKey) (int64, bool) {
-	tlm := m.getQueueDataByKey(dbq)
-	tlm.Lock()
-	defer tlm.Unlock()
-	maxKey, _ := tlm.tasks.Max()
-	key, ok := maxKey.(fairLevel)
-	return key.id, ok
 }
 
 func (m *testTaskManager) CompleteTasksLessThan(
@@ -6154,10 +6099,6 @@ func staticTrueChange(_, _ string, _ enumspb.TaskQueueType, _ func(dynamicconfig
 
 func trueTaskQueueSub(_, _ string, _ enumspb.TaskQueueType, _ func(bool)) (bool, func()) {
 	return true, func() {}
-}
-
-func staticFalseChange(_, _ string, _ enumspb.TaskQueueType, _ func(dynamicconfig.GradualChange[bool])) (dynamicconfig.GradualChange[bool], func()) {
-	return dynamicconfig.StaticGradualChange(false), func() {}
 }
 
 func TestCancelOutstandingWorkerPolls(t *testing.T) {
