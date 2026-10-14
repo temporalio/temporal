@@ -11,6 +11,8 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
+	v11 "go.temporal.io/server/api/clock/v1"
+	v1 "go.temporal.io/server/api/persistence/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
@@ -28,14 +30,17 @@ type UpsertTaskQueueUserDataRequest struct {
 	NamespaceId string `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	// Task queue family name, used internally as the CHASM business ID.
 	TaskQueue string `protobuf:"bytes,2,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	// Complete replacement payload, including all task queue types.
-	TaskQueueUserData *TaskQueueUserData `protobuf:"bytes,3,opt,name=task_queue_user_data,json=taskQueueUserData,proto3" json:"task_queue_user_data,omitempty"`
+	// Per-type updates keyed by temporal.api.enums.v1.TaskQueueType; the map must not be empty.
+	// Each non-empty payload replaces that type's data. Nil, empty, and omitted types are ignored.
+	PerType map[int32]*v1.TaskQueueTypeUserData `protobuf:"bytes,3,rep,name=per_type,json=perType,proto3" json:"per_type,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Expected CHASM CAS version, independent of the DB version.
 	// Zero starts a new execution if none is running; positive values require an exact version match.
 	// Negative values are invalid.
 	ExpectedVersion int64 `protobuf:"varint,4,opt,name=expected_version,json=expectedVersion,proto3" json:"expected_version,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Incoming user data HLC, preserved unchanged and persisted in component state.
+	Clock         *v11.HybridLogicalClock `protobuf:"bytes,5,opt,name=clock,proto3" json:"clock,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *UpsertTaskQueueUserDataRequest) Reset() {
@@ -82,9 +87,9 @@ func (x *UpsertTaskQueueUserDataRequest) GetTaskQueue() string {
 	return ""
 }
 
-func (x *UpsertTaskQueueUserDataRequest) GetTaskQueueUserData() *TaskQueueUserData {
+func (x *UpsertTaskQueueUserDataRequest) GetPerType() map[int32]*v1.TaskQueueTypeUserData {
 	if x != nil {
-		return x.TaskQueueUserData
+		return x.PerType
 	}
 	return nil
 }
@@ -94,6 +99,13 @@ func (x *UpsertTaskQueueUserDataRequest) GetExpectedVersion() int64 {
 		return x.ExpectedVersion
 	}
 	return 0
+}
+
+func (x *UpsertTaskQueueUserDataRequest) GetClock() *v11.HybridLogicalClock {
+	if x != nil {
+		return x.Clock
+	}
+	return nil
 }
 
 type UpsertTaskQueueUserDataResponse struct {
@@ -198,10 +210,12 @@ func (x *GetTaskQueueUserDataSnapshotRequest) GetTaskQueue() string {
 
 type GetTaskQueueUserDataSnapshotResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Snapshot containing all task queue types and the incoming HLC.
-	TaskQueueUserData *TaskQueueUserData `protobuf:"bytes,1,opt,name=task_queue_user_data,json=taskQueueUserData,proto3" json:"task_queue_user_data,omitempty"`
+	// Snapshot payloads keyed by temporal.api.enums.v1.TaskQueueType.
+	PerType map[int32]*v1.TaskQueueTypeUserData `protobuf:"bytes,1,rep,name=per_type,json=perType,proto3" json:"per_type,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// CHASM CAS version of this snapshot, independent of the DB version.
-	Version       int64 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	Version int64 `protobuf:"varint,2,opt,name=version,proto3" json:"version,omitempty"`
+	// Incoming user data HLC, preserved unchanged.
+	Clock         *v11.HybridLogicalClock `protobuf:"bytes,3,opt,name=clock,proto3" json:"clock,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -236,9 +250,9 @@ func (*GetTaskQueueUserDataSnapshotResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *GetTaskQueueUserDataSnapshotResponse) GetTaskQueueUserData() *TaskQueueUserData {
+func (x *GetTaskQueueUserDataSnapshotResponse) GetPerType() map[int32]*v1.TaskQueueTypeUserData {
 	if x != nil {
-		return x.TaskQueueUserData
+		return x.PerType
 	}
 	return nil
 }
@@ -250,26 +264,41 @@ func (x *GetTaskQueueUserDataSnapshotResponse) GetVersion() int64 {
 	return 0
 }
 
+func (x *GetTaskQueueUserDataSnapshotResponse) GetClock() *v11.HybridLogicalClock {
+	if x != nil {
+		return x.Clock
+	}
+	return nil
+}
+
 var File_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto protoreflect.FileDescriptor
 
 const file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	"Dtemporal/server/chasm/lib/tquserdata/proto/v1/request_response.proto\x12-temporal.server.chasm.lib.tquserdata.proto.v1\x1a=temporal/server/chasm/lib/tquserdata/proto/v1/user_data.proto\"\x80\x02\n" +
+	"Dtemporal/server/chasm/lib/tquserdata/proto/v1/request_response.proto\x12-temporal.server.chasm.lib.tquserdata.proto.v1\x1a*temporal/server/api/clock/v1/message.proto\x1a4temporal/server/api/persistence/v1/task_queues.proto\"\xc3\x03\n" +
 	"\x1eUpsertTaskQueueUserDataRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1d\n" +
 	"\n" +
-	"task_queue\x18\x02 \x01(\tR\ttaskQueue\x12q\n" +
-	"\x14task_queue_user_data\x18\x03 \x01(\v2@.temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataR\x11taskQueueUserData\x12)\n" +
-	"\x10expected_version\x18\x04 \x01(\x03R\x0fexpectedVersion\";\n" +
+	"task_queue\x18\x02 \x01(\tR\ttaskQueue\x12u\n" +
+	"\bper_type\x18\x03 \x03(\v2Z.temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataRequest.PerTypeEntryR\aperType\x12)\n" +
+	"\x10expected_version\x18\x04 \x01(\x03R\x0fexpectedVersion\x12F\n" +
+	"\x05clock\x18\x05 \x01(\v20.temporal.server.api.clock.v1.HybridLogicalClockR\x05clock\x1au\n" +
+	"\fPerTypeEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\x05R\x03key\x12O\n" +
+	"\x05value\x18\x02 \x01(\v29.temporal.server.api.persistence.v1.TaskQueueTypeUserDataR\x05value:\x028\x01\";\n" +
 	"\x1fUpsertTaskQueueUserDataResponse\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\x03R\aversion\"g\n" +
 	"#GetTaskQueueUserDataSnapshotRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1d\n" +
 	"\n" +
-	"task_queue\x18\x02 \x01(\tR\ttaskQueue\"\xb3\x01\n" +
-	"$GetTaskQueueUserDataSnapshotResponse\x12q\n" +
-	"\x14task_queue_user_data\x18\x01 \x01(\v2@.temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserDataR\x11taskQueueUserData\x12\x18\n" +
-	"\aversion\x18\x02 \x01(\x03R\aversionBJZHgo.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapbb\x06proto3"
+	"task_queue\x18\x02 \x01(\tR\ttaskQueue\"\xfc\x02\n" +
+	"$GetTaskQueueUserDataSnapshotResponse\x12{\n" +
+	"\bper_type\x18\x01 \x03(\v2`.temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataSnapshotResponse.PerTypeEntryR\aperType\x12\x18\n" +
+	"\aversion\x18\x02 \x01(\x03R\aversion\x12F\n" +
+	"\x05clock\x18\x03 \x01(\v20.temporal.server.api.clock.v1.HybridLogicalClockR\x05clock\x1au\n" +
+	"\fPerTypeEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\x05R\x03key\x12O\n" +
+	"\x05value\x18\x02 \x01(\v29.temporal.server.api.persistence.v1.TaskQueueTypeUserDataR\x05value:\x028\x01BJZHgo.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapbb\x06proto3"
 
 var (
 	file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDescOnce sync.Once
@@ -283,22 +312,29 @@ func file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_r
 	return file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_goTypes = []any{
 	(*UpsertTaskQueueUserDataRequest)(nil),       // 0: temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataRequest
 	(*UpsertTaskQueueUserDataResponse)(nil),      // 1: temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataResponse
 	(*GetTaskQueueUserDataSnapshotRequest)(nil),  // 2: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataSnapshotRequest
 	(*GetTaskQueueUserDataSnapshotResponse)(nil), // 3: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataSnapshotResponse
-	(*TaskQueueUserData)(nil),                    // 4: temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserData
+	nil,                              // 4: temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataRequest.PerTypeEntry
+	nil,                              // 5: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataSnapshotResponse.PerTypeEntry
+	(*v11.HybridLogicalClock)(nil),   // 6: temporal.server.api.clock.v1.HybridLogicalClock
+	(*v1.TaskQueueTypeUserData)(nil), // 7: temporal.server.api.persistence.v1.TaskQueueTypeUserData
 }
 var file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_depIdxs = []int32{
-	4, // 0: temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataRequest.task_queue_user_data:type_name -> temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserData
-	4, // 1: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataSnapshotResponse.task_queue_user_data:type_name -> temporal.server.chasm.lib.tquserdata.proto.v1.TaskQueueUserData
-	2, // [2:2] is the sub-list for method output_type
-	2, // [2:2] is the sub-list for method input_type
-	2, // [2:2] is the sub-list for extension type_name
-	2, // [2:2] is the sub-list for extension extendee
-	0, // [0:2] is the sub-list for field type_name
+	4, // 0: temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataRequest.per_type:type_name -> temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataRequest.PerTypeEntry
+	6, // 1: temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataRequest.clock:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	5, // 2: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataSnapshotResponse.per_type:type_name -> temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataSnapshotResponse.PerTypeEntry
+	6, // 3: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataSnapshotResponse.clock:type_name -> temporal.server.api.clock.v1.HybridLogicalClock
+	7, // 4: temporal.server.chasm.lib.tquserdata.proto.v1.UpsertTaskQueueUserDataRequest.PerTypeEntry.value:type_name -> temporal.server.api.persistence.v1.TaskQueueTypeUserData
+	7, // 5: temporal.server.chasm.lib.tquserdata.proto.v1.GetTaskQueueUserDataSnapshotResponse.PerTypeEntry.value:type_name -> temporal.server.api.persistence.v1.TaskQueueTypeUserData
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_init() }
@@ -306,14 +342,13 @@ func file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_i
 	if File_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto != nil {
 		return
 	}
-	file_temporal_server_chasm_lib_tquserdata_proto_v1_user_data_proto_init()
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDesc), len(file_temporal_server_chasm_lib_tquserdata_proto_v1_request_response_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

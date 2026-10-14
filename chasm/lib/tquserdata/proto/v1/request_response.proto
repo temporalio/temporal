@@ -2,7 +2,8 @@ syntax = "proto3";
 
 package temporal.server.chasm.lib.tquserdata.proto.v1;
 
-import "chasm/lib/tquserdata/proto/v1/user_data.proto";
+import "temporal/server/api/clock/v1/message.proto";
+import "temporal/server/api/persistence/v1/task_queues.proto";
 
 option go_package = "go.temporal.io/server/chasm/lib/tquserdata/gen/tquserdatapb;tquserdatapb";
 
@@ -11,12 +12,15 @@ message UpsertTaskQueueUserDataRequest {
   string namespace_id = 1;
   // Task queue family name, used internally as the CHASM business ID.
   string task_queue = 2;
-  // Complete replacement payload, including all task queue types.
-  TaskQueueUserData task_queue_user_data = 3;
+  // Per-type updates keyed by temporal.api.enums.v1.TaskQueueType; the map must not be empty.
+  // Each non-empty payload replaces that type's data. Nil, empty, and omitted types are ignored.
+  map<int32, temporal.server.api.persistence.v1.TaskQueueTypeUserData> per_type = 3;
   // Expected CHASM CAS version, independent of the DB version.
   // Zero starts a new execution if none is running; positive values require an exact version match.
   // Negative values are invalid.
   int64 expected_version = 4;
+  // Incoming user data HLC, preserved unchanged and persisted in component state.
+  temporal.server.api.clock.v1.HybridLogicalClock clock = 5;
 }
 
 message UpsertTaskQueueUserDataResponse {
@@ -33,8 +37,10 @@ message GetTaskQueueUserDataSnapshotRequest {
 }
 
 message GetTaskQueueUserDataSnapshotResponse {
-  // Snapshot containing all task queue types and the incoming HLC.
-  TaskQueueUserData task_queue_user_data = 1;
+  // Snapshot payloads keyed by temporal.api.enums.v1.TaskQueueType.
+  map<int32, temporal.server.api.persistence.v1.TaskQueueTypeUserData> per_type = 1;
   // CHASM CAS version of this snapshot, independent of the DB version.
   int64 version = 2;
+  // Incoming user data HLC, preserved unchanged.
+  temporal.server.api.clock.v1.HybridLogicalClock clock = 3;
 }

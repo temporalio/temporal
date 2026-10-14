@@ -42,10 +42,10 @@ func (h *handler) GetTaskQueueUserDataSnapshot(
 		ctx,
 		chasm.NewComponentRef[*TaskQueueUserData](chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: req.GetTaskQueue()}),
 		func(taskQueueUserData *TaskQueueUserData, chasmContext chasm.Context, _ *tquserdatapb.GetTaskQueueUserDataSnapshotRequest) (*tquserdatapb.GetTaskQueueUserDataSnapshotResponse, error) {
-			return &tquserdatapb.GetTaskQueueUserDataSnapshotResponse{
-				TaskQueueUserData: taskQueueUserData.getTaskQueueUserData(chasmContext),
-				Version:           taskQueueUserData.Version,
-			}, nil
+			if taskQueueUserData.Closed {
+				return nil, serviceerror.NewNotFound("task queue user data is terminated")
+			}
+			return taskQueueUserData.getTaskQueueUserData(chasmContext), nil
 		},
 		req,
 	)
@@ -55,8 +55,11 @@ func (h *handler) UpsertTaskQueueUserData(
 	ctx context.Context,
 	req *tquserdatapb.UpsertTaskQueueUserDataRequest,
 ) (*tquserdatapb.UpsertTaskQueueUserDataResponse, error) {
-	if req.GetNamespaceId() == "" || req.GetTaskQueue() == "" || req.GetTaskQueueUserData() == nil {
+	if req.GetNamespaceId() == "" || req.GetTaskQueue() == "" {
 		return nil, serviceerror.NewInvalidArgument("invalid task queue user data write request")
+	}
+	if len(req.GetPerType()) == 0 {
+		return nil, serviceerror.NewInvalidArgument("task queue user data per-type map must not be empty")
 	}
 	if req.GetExpectedVersion() < 0 {
 		return nil, serviceerror.NewInvalidArgument("expected task queue user data version must not be negative")
@@ -67,7 +70,7 @@ func (h *handler) UpsertTaskQueueUserData(
 			ctx,
 			key,
 			func(mutableContext chasm.MutableContext, _ *tquserdatapb.UpsertTaskQueueUserDataRequest) (*TaskQueueUserData, error) {
-				return NewTaskQueueUserData(mutableContext, req.GetTaskQueueUserData()), nil
+				return NewTaskQueueUserData(mutableContext, req), nil
 			},
 			req,
 			chasm.WithBusinessIDPolicy(chasm.BusinessIDReusePolicyAllowDuplicate, chasm.BusinessIDConflictPolicyFail),
@@ -91,7 +94,7 @@ func (h *handler) UpsertTaskQueueUserData(
 				return nil, serviceerror.NewFailedPrecondition("task queue user data version changed")
 			}
 			taskQueueUserData.Version++
-			taskQueueUserData.setTaskQueueUserData(mutableContext, req.GetTaskQueueUserData())
+			taskQueueUserData.setTaskQueueUserData(mutableContext, req)
 			return &tquserdatapb.UpsertTaskQueueUserDataResponse{Version: taskQueueUserData.Version}, nil
 		},
 		req,
