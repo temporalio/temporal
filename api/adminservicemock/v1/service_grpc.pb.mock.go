@@ -143,6 +143,26 @@ func (mr *MockAdminServiceClientMockRecorder) CloseShard(ctx, in any, opts ...an
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseShard", reflect.TypeOf((*MockAdminServiceClient)(nil).CloseShard), varargs...)
 }
 
+// CountExecutions mocks base method.
+func (m *MockAdminServiceClient) CountExecutions(ctx context.Context, in *adminservice.CountExecutionsRequest, opts ...grpc.CallOption) (*adminservice.CountExecutionsResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "CountExecutions", varargs...)
+	ret0, _ := ret[0].(*adminservice.CountExecutionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountExecutions indicates an expected call of CountExecutions.
+func (mr *MockAdminServiceClientMockRecorder) CountExecutions(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountExecutions", reflect.TypeOf((*MockAdminServiceClient)(nil).CountExecutions), varargs...)
+}
+
 // DeepHealthCheck mocks base method.
 func (m *MockAdminServiceClient) DeepHealthCheck(ctx context.Context, in *adminservice.DeepHealthCheckRequest, opts ...grpc.CallOption) (*adminservice.DeepHealthCheckResponse, error) {
 	m.ctrl.T.Helper()
@@ -621,6 +641,26 @@ func (mr *MockAdminServiceClientMockRecorder) ListClusters(ctx, in any, opts ...
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]any{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusters", reflect.TypeOf((*MockAdminServiceClient)(nil).ListClusters), varargs...)
+}
+
+// ListExecutions mocks base method.
+func (m *MockAdminServiceClient) ListExecutions(ctx context.Context, in *adminservice.ListExecutionsRequest, opts ...grpc.CallOption) (*adminservice.ListExecutionsResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListExecutions", varargs...)
+	ret0, _ := ret[0].(*adminservice.ListExecutionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListExecutions indicates an expected call of ListExecutions.
+func (mr *MockAdminServiceClientMockRecorder) ListExecutions(ctx, in any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListExecutions", reflect.TypeOf((*MockAdminServiceClient)(nil).ListExecutions), varargs...)
 }
 
 // ListHistoryTasks mocks base method.
@@ -1200,6 +1240,21 @@ func (mr *MockAdminServiceServerMockRecorder) CloseShard(arg0, arg1 any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseShard", reflect.TypeOf((*MockAdminServiceServer)(nil).CloseShard), arg0, arg1)
 }
 
+// CountExecutions mocks base method.
+func (m *MockAdminServiceServer) CountExecutions(arg0 context.Context, arg1 *adminservice.CountExecutionsRequest) (*adminservice.CountExecutionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountExecutions", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.CountExecutionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountExecutions indicates an expected call of CountExecutions.
+func (mr *MockAdminServiceServerMockRecorder) CountExecutions(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountExecutions", reflect.TypeOf((*MockAdminServiceServer)(nil).CountExecutions), arg0, arg1)
+}
+
 // DeepHealthCheck mocks base method.
 func (m *MockAdminServiceServer) DeepHealthCheck(arg0 context.Context, arg1 *adminservice.DeepHealthCheckRequest) (*adminservice.DeepHealthCheckResponse, error) {
 	m.ctrl.T.Helper()
@@ -1558,6 +1613,21 @@ func (m *MockAdminServiceServer) ListClusters(arg0 context.Context, arg1 *admins
 func (mr *MockAdminServiceServerMockRecorder) ListClusters(arg0, arg1 any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusters", reflect.TypeOf((*MockAdminServiceServer)(nil).ListClusters), arg0, arg1)
+}
+
+// ListExecutions mocks base method.
+func (m *MockAdminServiceServer) ListExecutions(arg0 context.Context, arg1 *adminservice.ListExecutionsRequest) (*adminservice.ListExecutionsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListExecutions", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.ListExecutionsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListExecutions indicates an expected call of ListExecutions.
+func (mr *MockAdminServiceServerMockRecorder) ListExecutions(arg0, arg1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListExecutions", reflect.TypeOf((*MockAdminServiceServer)(nil).ListExecutions), arg0, arg1)
 }
 
 // ListHistoryTasks mocks base method.

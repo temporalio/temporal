@@ -942,6 +942,16 @@ func (s *standaloneActivityTestSuite) TestStart() {
 	t.Run("AttachLinksOnConflictUnionsLinks", func(t *testing.T) {
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
+		serializationContext := &nexuspb.PropagatedSerializationContext{
+			Endpoint:  "endpoint",
+			Service:   "service",
+			Operation: "operation",
+		}
+		otherSerializationContext := &nexuspb.PropagatedSerializationContext{
+			Endpoint:  "other-endpoint",
+			Service:   "other-service",
+			Operation: "other-operation",
+		}
 
 		firstLinks := []*commonpb.Link{
 			{
@@ -981,10 +991,11 @@ func (s *standaloneActivityTestSuite) TestStart() {
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
-			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
-			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
-			Links:               firstLinks,
+			StartToCloseTimeout:                 durationpb.New(defaultStartToCloseTimeout),
+			RequestId:                           env.Tv().Any().String(),
+			IdConflictPolicy:                    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+			Links:                               firstLinks,
+			PropagatedNexusSerializationContext: serializationContext,
 		})
 		require.NoError(t, err)
 		require.True(t, firstResp.Started)
@@ -998,10 +1009,11 @@ func (s *standaloneActivityTestSuite) TestStart() {
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: taskQueue,
 			},
-			StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
-			RequestId:           env.Tv().Any().String(),
-			IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
-			Links:               secondLinks,
+			StartToCloseTimeout:                 durationpb.New(defaultStartToCloseTimeout),
+			RequestId:                           env.Tv().Any().String(),
+			IdConflictPolicy:                    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+			Links:                               secondLinks,
+			PropagatedNexusSerializationContext: otherSerializationContext,
 			OnConflictOptions: &commonpb.OnConflictOptions{
 				AttachLinks: true,
 			},
@@ -1016,6 +1028,7 @@ func (s *standaloneActivityTestSuite) TestStart() {
 			RunId:      firstResp.RunId,
 		})
 		require.NoError(t, err)
+		protorequire.ProtoEqual(t, serializationContext, descResp.GetInfo().GetPropagatedNexusSerializationContext())
 		expected := append([]*commonpb.Link{}, firstLinks...)
 		expected = append(expected, secondLinks...)
 		// Links across requests are stored in a map keyed by request ID, so their relative order is non-deterministic.
@@ -1204,6 +1217,264 @@ func (s *standaloneActivityTestSuite) TestStart() {
 		require.NoError(t, err, "over-cap Links must be ignored when attach_links is unset")
 		require.False(t, secondResp.Started)
 		require.Equal(t, firstResp.RunId, secondResp.RunId)
+	})
+}
+
+func (s *standaloneActivityTestSuite) TestEagerStartResponseAndNoRedelivery() {
+	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, true))
+	t := s.T()
+	ctx := metadata.NewOutgoingContext(s.Context(), metadata.Pairs(
+		headers.ClientNameHeaderName, headers.ClientNameGoSDK,
+		headers.ClientVersionHeaderName, temporal.SDKVersion,
+	))
+	activityID := testcore.RandomizeStr(t.Name())
+	taskQueue := testcore.RandomizeStr(t.Name())
+	requestID := testcore.RandomizeStr(t.Name())
+	request := &workflowservice.StartActivityExecutionRequest{
+		Namespace:             env.Namespace().String(),
+		RequestEagerExecution: true,
+		ActivityId:            activityID,
+		ActivityType:          env.Tv().ActivityType(),
+		Identity:              defaultIdentity,
+		Input:                 defaultInput,
+		TaskQueue:             &taskqueuepb.TaskQueue{Name: taskQueue},
+		StartToCloseTimeout:   durationpb.New(defaultStartToCloseTimeout),
+		RequestId:             requestID,
+	}
+
+	first, err := env.FrontendClient().StartActivityExecution(ctx, request)
+	require.NoError(t, err)
+	require.True(t, first.GetStarted())
+	require.NotNil(t, first.GetEagerActivityTask())
+	require.Equal(t, activityID, first.GetEagerActivityTask().GetActivityId())
+	require.Equal(t, first.GetRunId(), first.GetEagerActivityTask().GetActivityRunId())
+	require.Nil(t, first.GetEagerActivityTask().GetWorkflowExecution())
+	require.EqualValues(t, 1, first.GetEagerActivityTask().GetAttempt())
+
+	describe, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      first.GetRunId(),
+	})
+	require.NoError(t, err)
+	require.Equal(t, headers.ClientNameGoSDK, describe.GetInfo().GetSdkName())
+	require.Equal(t, temporal.SDKVersion, describe.GetInfo().GetSdkVersion())
+	require.True(t, describe.GetInfo().GetEagerExecutionAccepted())
+
+	retry, err := env.FrontendClient().StartActivityExecution(ctx, request)
+	require.NoError(t, err)
+	require.False(t, retry.GetStarted())
+	require.Nil(t, retry.GetEagerActivityTask())
+
+	useExisting := common.CloneProto(request)
+	useExisting.RequestId = testcore.RandomizeStr(t.Name())
+	useExisting.IdConflictPolicy = enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING
+	conflict, err := env.FrontendClient().StartActivityExecution(ctx, useExisting)
+	require.NoError(t, err)
+	require.False(t, conflict.GetStarted())
+	require.Nil(t, conflict.GetEagerActivityTask())
+
+	_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+		Namespace: env.Namespace().String(),
+		TaskToken: first.GetEagerActivityTask().GetTaskToken(),
+		Result:    defaultResult,
+		Identity:  defaultIdentity,
+	})
+	require.NoError(t, err)
+	env.validateCompletion(ctx, t, activityID, first.GetRunId(), defaultIdentity)
+
+}
+
+func (s *standaloneActivityTestSuite) TestEagerStartFallsBackWhenMatchingDenies() {
+	env := s.newTestEnv(
+		testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, true),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingBacklogNegligibleAge, time.Duration(0)),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
+	)
+	t := s.T()
+	ctx := s.Context()
+	taskQueue := testcore.RandomizeStr(t.Name())
+	backloggedActivityID := testcore.RandomizeStr(t.Name() + "-backlogged")
+	eagerActivityID := testcore.RandomizeStr(t.Name() + "-eager")
+
+	start := func(activityID string, eager bool, priority int32) *workflowservice.StartActivityExecutionResponse {
+		response, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:             env.Namespace().String(),
+			RequestEagerExecution: eager,
+			ActivityId:            activityID,
+			ActivityType:          env.Tv().ActivityType(),
+			Identity:              defaultIdentity,
+			Input:                 defaultInput,
+			TaskQueue:             &taskqueuepb.TaskQueue{Name: taskQueue},
+			Priority:              &commonpb.Priority{PriorityKey: priority},
+			StartToCloseTimeout:   durationpb.New(defaultStartToCloseTimeout),
+			RequestId:             testcore.RandomizeStr(t.Name()),
+		})
+		require.NoError(t, err)
+		require.True(t, response.GetStarted())
+		return response
+	}
+
+	backlogged := start(backloggedActivityID, false, 1)
+	await.RequireTruef(t, func() bool {
+		response, err := env.FrontendClient().DescribeTaskQueue(ctx, &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     env.Namespace().String(),
+			TaskQueue:     &taskqueuepb.TaskQueue{Name: taskQueue},
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+			ReportStats:   true,
+		})
+		return err == nil && response.GetStats().GetApproximateBacklogCount() >= 1
+	}, 10*time.Second, 100*time.Millisecond, "backlogged standalone activity never reached Matching")
+
+	eager := start(eagerActivityID, true, 5)
+	require.Nil(t, eager.GetEagerActivityTask(), "Matching denial must fall back to normal dispatch")
+
+	for _, startedActivity := range []struct {
+		id    string
+		runID string
+	}{
+		{backloggedActivityID, backlogged.GetRunId()},
+		{eagerActivityID, eager.GetRunId()},
+	} {
+		describe, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: startedActivity.id,
+			RunId:      startedActivity.runID,
+		})
+		require.NoError(t, err)
+		require.False(t, describe.GetInfo().GetEagerExecutionAccepted())
+	}
+
+	for _, startedActivity := range []struct {
+		id    string
+		runID string
+	}{
+		{backloggedActivityID, backlogged.GetRunId()},
+		{eagerActivityID, eager.GetRunId()},
+	} {
+		task := env.pollActivityTaskAndValidate(ctx, t, startedActivity.id, taskQueue, startedActivity.runID)
+		_, err := env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: task.GetTaskToken(),
+			Result:    defaultResult,
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+		env.validateCompletion(ctx, t, startedActivity.id, startedActivity.runID, defaultIdentity)
+	}
+}
+
+func (s *standaloneActivityTestSuite) TestLostEagerActivityTaskResponseRecovery() {
+	env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.EnableActivityEagerDispatchCheck, false))
+	t := s.T()
+
+	startEagerActivity := func(
+		ctx context.Context,
+		t *testing.T,
+		activityID string,
+		taskQueue string,
+		startToCloseTimeout time.Duration,
+		heartbeatTimeout time.Duration,
+		scheduleToCloseTimeout time.Duration,
+	) *workflowservice.StartActivityExecutionResponse {
+		response, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:              env.Namespace().String(),
+			RequestEagerExecution:  true,
+			ActivityId:             activityID,
+			ActivityType:           env.Tv().ActivityType(),
+			Identity:               defaultIdentity,
+			Input:                  defaultInput,
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue},
+			ScheduleToCloseTimeout: durationpb.New(scheduleToCloseTimeout),
+			StartToCloseTimeout:    durationpb.New(startToCloseTimeout),
+			HeartbeatTimeout:       durationpb.New(heartbeatTimeout),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval:    durationpb.New(time.Second),
+				BackoffCoefficient: 1,
+				MaximumAttempts:    2,
+			},
+			RequestId: testcore.RandomizeStr(t.Name()),
+		})
+		require.NoError(t, err)
+		require.True(t, response.GetStarted())
+		require.NotNil(t, response.GetEagerActivityTask())
+		return response
+	}
+
+	completeRetriedActivity := func(
+		ctx context.Context,
+		t *testing.T,
+		activityID string,
+		taskQueue string,
+		runID string,
+	) {
+		task, err := env.pollActivityTaskQueue(ctx, taskQueue)
+		require.NoError(t, err)
+		require.Equal(t, activityID, task.GetActivityId())
+		require.EqualValues(t, 2, task.GetAttempt(), "retry must use the normal task-queue poll path")
+
+		_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: task.GetTaskToken(),
+			Result:    defaultResult,
+			Identity:  defaultIdentity,
+		})
+		require.NoError(t, err)
+
+		describe, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:      env.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          runID,
+			IncludeOutcome: true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, describe.GetInfo().GetStatus())
+		require.EqualValues(t, 2, describe.GetInfo().GetAttempt())
+		protorequire.ProtoEqual(t, defaultResult, describe.GetOutcome().GetResult())
+	}
+
+	t.Run("StartToCloseTimeout", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(s.Context(), 20*time.Second)
+		defer cancel()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		response := startEagerActivity(ctx, t, activityID, taskQueue, time.Second, 0, time.Minute)
+		// Simulate a client that lost the eager response: it never responds using this token.
+		require.NotEmpty(t, response.GetEagerActivityTask().GetTaskToken())
+		completeRetriedActivity(ctx, t, activityID, taskQueue, response.GetRunId())
+	})
+
+	t.Run("HeartbeatTimeout", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(s.Context(), 20*time.Second)
+		defer cancel()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		response := startEagerActivity(ctx, t, activityID, taskQueue, time.Minute, time.Second, time.Minute)
+		// Simulate a client that lost the eager response: it never heartbeats or completes.
+		require.NotEmpty(t, response.GetEagerActivityTask().GetTaskToken())
+		completeRetriedActivity(ctx, t, activityID, taskQueue, response.GetRunId())
+	})
+
+	t.Run("ScheduleToCloseTimeout", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(s.Context(), 20*time.Second)
+		defer cancel()
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+
+		response := startEagerActivity(ctx, t, activityID, taskQueue, time.Minute, 0, time.Second)
+		// Schedule-to-close is the activity's terminal deadline, so a lost eager task must not retry.
+		require.NotEmpty(t, response.GetEagerActivityTask().GetTaskToken())
+
+		outcome, err := env.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      response.GetRunId(),
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE, outcome.GetOutcome().GetFailure().GetTimeoutFailureInfo().GetTimeoutType())
 	})
 }
 
@@ -4768,6 +5039,108 @@ func (s *standaloneActivityTestSuite) TestPollActivityExecution() {
 			require.NotNil(t, pollActivityResp)
 			require.Equal(t, startResp.RunId, pollActivityResp.GetRunId())
 			tc.completionValidationFn(t, pollActivityResp)
+		})
+	}
+}
+
+func (s *standaloneActivityTestSuite) TestNexusSerializationContextPropagation() {
+	env := s.newTestEnv()
+	serializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "test-endpoint",
+		Service:   "test-service",
+		Operation: "test-operation",
+	}
+
+	for _, tc := range []struct {
+		name   string
+		failed bool
+	}{
+		{name: "Completed"},
+		{name: "Failed", failed: true},
+	} {
+		s.Run(tc.name, func(s *standaloneActivityTestSuite) {
+			t := s.T()
+			ctx := s.Context()
+			activityID := testcore.RandomizeStr(t.Name())
+			taskQueue := testcore.RandomizeStr(t.Name())
+
+			// Start with a context that should remain unchanged across retries.
+			startResp, err := env.FrontendClient().StartActivityExecution(ctx, &workflowservice.StartActivityExecutionRequest{
+				Namespace:                           env.Namespace().String(),
+				ActivityId:                          activityID,
+				ActivityType:                        env.Tv().ActivityType(),
+				TaskQueue:                           &taskqueuepb.TaskQueue{Name: taskQueue},
+				ScheduleToCloseTimeout:              durationpb.New(time.Minute),
+				RetryPolicy:                         &commonpb.RetryPolicy{MaximumAttempts: 2},
+				PropagatedNexusSerializationContext: serializationContext,
+			})
+			require.NoError(t, err)
+
+			firstTask, err := env.pollActivityTaskQueue(ctx, taskQueue)
+			require.NoError(t, err)
+			require.EqualValues(t, 1, firstTask.GetAttempt())
+			protorequire.ProtoEqual(t, serializationContext, firstTask.GetPropagatedNexusSerializationContext())
+
+			// Fail the first attempt so the server dispatches a second worker task.
+			_, err = env.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+				Namespace: env.Namespace().String(),
+				TaskToken: firstTask.GetTaskToken(),
+				Failure: &failurepb.Failure{
+					Message: "retryable failure",
+					FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+						NextRetryDelay: durationpb.New(time.Second),
+					}},
+				},
+			})
+			require.NoError(t, err)
+
+			secondTask, err := env.pollActivityTaskQueue(ctx, taskQueue)
+			require.NoError(t, err)
+			require.EqualValues(t, 2, secondTask.GetAttempt())
+			protorequire.ProtoEqual(t, serializationContext, secondTask.GetPropagatedNexusSerializationContext())
+
+			if tc.failed {
+				_, err = env.FrontendClient().RespondActivityTaskFailed(ctx, &workflowservice.RespondActivityTaskFailedRequest{
+					Namespace: env.Namespace().String(),
+					TaskToken: secondTask.GetTaskToken(),
+					Failure:   defaultFailure,
+				})
+			} else {
+				_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+					Namespace: env.Namespace().String(),
+					TaskToken: secondTask.GetTaskToken(),
+					Result:    defaultResult,
+				})
+			}
+			require.NoError(t, err)
+
+			// Check that both result APIs retain the context after either outcome.
+			pollResp, err := env.FrontendClient().PollActivityExecution(ctx, &workflowservice.PollActivityExecutionRequest{
+				Namespace:  env.Namespace().String(),
+				ActivityId: activityID,
+				RunId:      startResp.GetRunId(),
+			})
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, serializationContext, pollResp.GetPropagatedNexusSerializationContext())
+
+			describeResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+				Namespace:      env.Namespace().String(),
+				ActivityId:     activityID,
+				RunId:          startResp.GetRunId(),
+				IncludeOutcome: true,
+			})
+			require.NoError(t, err)
+			protorequire.ProtoEqual(t, serializationContext, describeResp.GetInfo().GetPropagatedNexusSerializationContext())
+
+			if tc.failed {
+				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, describeResp.GetInfo().GetStatus())
+				protorequire.ProtoEqual(t, defaultFailure, pollResp.GetOutcome().GetFailure())
+				protorequire.ProtoEqual(t, defaultFailure, describeResp.GetOutcome().GetFailure())
+			} else {
+				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, describeResp.GetInfo().GetStatus())
+				protorequire.ProtoEqual(t, defaultResult, pollResp.GetOutcome().GetResult())
+				protorequire.ProtoEqual(t, defaultResult, describeResp.GetOutcome().GetResult())
+			}
 		})
 	}
 }

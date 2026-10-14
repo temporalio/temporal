@@ -500,6 +500,7 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 		s.True(proto.Equal(cfg, tsi.GetConfig()))
 		s.Require().NotNil(tsi.GetFastForwardInfo())
 		s.Require().Nil(tsi.GetAccumulatedSkippedDuration())
+		s.Require().Nil(tsi.GetInitialSkippedDuration())
 		// timestamppb translates to UTC time
 		s.Require().Equal(baseTime.Add(3*time.Hour).UTC(),
 			tsi.GetFastForwardInfo().GetTargetTime().AsTime())
@@ -533,6 +534,7 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 		s.Require().NotNil(tsi)
 		s.Equal(baseTime.Add(hasSkipped), s.mutableState.Now())
 		s.Equal(hasSkipped, tsi.GetAccumulatedSkippedDuration().AsDuration())
+		s.Equal(hasSkipped, tsi.GetInitialSkippedDuration().AsDuration())
 		s.Equal(targetTime.UTC(),
 			tsi.GetFastForwardInfo().GetTargetTime().AsTime())
 		s.True(s.mutableState.timeSkippingInfoUpdated)
@@ -583,6 +585,7 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 		s.Require().NotNil(tsi)
 		s.Nil(tsi.GetConfig())
 		s.Equal(hasSkipped, tsi.GetAccumulatedSkippedDuration().AsDuration())
+		s.Equal(hasSkipped, tsi.GetInitialSkippedDuration().AsDuration())
 		s.Equal(baseTime.Add(hasSkipped), s.mutableState.Now(), "inherited skip still shifts the virtual clock")
 		s.True(s.mutableState.timeSkippingInfoUpdated)
 	})
@@ -609,6 +612,21 @@ func (s *mutableStateSuite) TestInitTimeSkippingInfo() {
 		s.Equal(int32(0), tsi.GetSessionSkipCount())
 		s.True(s.mutableState.timeSkippingInfoUpdated)
 	})
+}
+
+func (s *mutableStateSuite) TestInitialSkippedDurationRemainsFixed() {
+	initialSkip := 2 * time.Hour
+	s.mutableState.initTimeSkippingInfo(
+		&commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 100},
+		&commonpb.TimeSkippingStatePropagation{InitialSkippedDuration: durationpb.New(initialSkip)},
+	)
+
+	s.mutableState.executeTimeSkippingTransition(time.Hour, true, false)
+	s.mutableState.updateTimeSkippingInfo(&commonpb.TimeSkippingConfig{Enabled: false})
+
+	tsi := s.mutableState.GetExecutionInfo().GetTimeSkippingInfo()
+	s.Equal(3*time.Hour, tsi.GetAccumulatedSkippedDuration().AsDuration())
+	s.Equal(initialSkip, tsi.GetInitialSkippedDuration().AsDuration())
 }
 
 func (s *mutableStateSuite) TestUpdateTimeSkippingInfo() {
@@ -830,7 +848,7 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 
 		timers := s.mutableState.PopTasks()[tasks.CategoryTimer]
 		s.Require().Len(timers, 1, "an enabled config with a pending target schedules a fast-forward timer")
-		s.WithinDuration(s.mutableState.ToRealTime(fastForward.GetTargetTime().AsTime()), timers[0].GetVisibilityTime(), 0)
+		s.WithinDuration(s.mutableState.ToRealTimeWithCurrentOffset(fastForward.GetTargetTime().AsTime()), timers[0].GetVisibilityTime(), 0)
 	})
 
 	s.Run("FuturePropagatedTarget_SchedulesTimer", func() {
@@ -855,7 +873,7 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 		timers := s.mutableState.PopTasks()[tasks.CategoryTimer]
 		s.Require().Len(timers, 1, "a future target schedules a fast-forward timer")
 		// AddTasks converts the virtual target to real wall-clock (minus accumulated skip).
-		s.Equal(s.mutableState.ToRealTime(propagatedTarget), timers[0].GetVisibilityTime())
+		s.Equal(s.mutableState.ToRealTimeWithCurrentOffset(propagatedTarget), timers[0].GetVisibilityTime())
 	})
 
 	s.Run("FuturePropagatedTargetDisabledConfig_NoTimer", func() {
@@ -1354,6 +1372,35 @@ func (s *mutableStateSuite) TestCloseTransactionHandleWorkflowTimeSkipping() {
 		s.True(s.mutableState.timeSkippingInfoUpdated, "a successful skip mutates state")
 		s.Positive(s.mutableState.executionInfo.TimeSkippingInfo.GetAccumulatedSkippedDuration().AsDuration(),
 			"the skip advances virtual time toward the timer target")
+	})
+
+	s.Run("ActiveWithBareDisable_PreservesAccumulatedDurationAndDoesNotRegenerateTasks", func() {
+		initialSkippedDuration := 30 * time.Minute
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
+			AccumulatedSkippedDuration: durationpb.New(initialSkippedDuration),
+			FastForwardInfo: &persistencespb.FastForwardInfo{
+				TargetTime: timestamppb.New(s.mutableState.Now().Add(-time.Second)),
+			},
+		}
+		s.mutableState.pendingTimerInfoIDs = map[string]*persistencespb.TimerInfo{}
+		s.mutableState.timeSkippingInfoUpdated = false
+
+		transition := s.mutableState.findNextSkipTarget()
+		s.Require().True(transition.IsValid())
+		s.True(transition.DisabledAfterFastForward)
+		s.True(transition.GetTargetTime().IsZero())
+
+		needRegen := s.mutableState.closeTransactionHandleWorkflowTimeSkipping(
+			context.Background(), historyi.TransactionPolicyActive)
+
+		s.False(needRegen, "unchanged accumulated duration must not regenerate timer tasks")
+		s.Equal(initialSkippedDuration, s.mutableState.accumulatedSkippedDuration(),
+			"the previously accumulated skip must be preserved")
+		s.False(s.mutableState.executionInfo.TimeSkippingInfo.GetConfig().GetEnabled(),
+			"the bare transition still disables time skipping")
+		s.True(s.mutableState.timeSkippingInfoUpdated,
+			"the transition still updates time-skipping state")
 	})
 
 	s.Run("ActiveWithoutValidTarget_NoSkip", func() {

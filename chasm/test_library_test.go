@@ -49,6 +49,7 @@ func (l *TestLibrary) Components() []*RegistrableComponent {
 			WithExecutionType(enumspb.EXECUTION_TYPE_WORKFLOW),
 			WithBusinessIDAlias("TestBusinessId"),
 			WithSearchAttributes(TestComponentStartTimeSearchAttribute),
+			WithRecordPrincipals(),
 		),
 		NewRegistrableComponent[*TestTimeSkippingImplComponent](testTimeSkippingComponentName),
 		NewRegistrableComponent[*TestSubComponent1](testSubComponent1Name),
@@ -62,6 +63,7 @@ func (l *TestLibrary) Tasks() []*RegistrableTask {
 		NewRegistrableSideEffectTask(
 			testSideEffectTaskName,
 			l.mockSideEffectTaskHandler,
+			WithTaskCountMetric(1000),
 		),
 		NewRegistrableSideEffectTask(
 			testDiscardableSideEffectTaskName,
@@ -75,6 +77,7 @@ func (l *TestLibrary) Tasks() []*RegistrableTask {
 		NewRegistrablePureTask(
 			testPureTaskName,
 			l.mockPureTaskHandler,
+			WithTaskCountMetric(1000),
 		),
 		NewRegistrableSideEffectTask[any, *TestSingletonReplaceSideEffectTask](
 			testSingletonReplaceSideEffectTaskName,

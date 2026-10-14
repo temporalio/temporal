@@ -22,7 +22,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -349,7 +348,6 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 		handledByCHASM := false
 		if handler.mutableState.ChasmEnabled() {
 			if chasmHandler, ok := handler.chasmWorkflowRegistry.CommandHandler(command.GetCommandType()); ok {
-				handler.mutableState.EnsureChasmWorkflowComponent(ctx)
 				chasmWorkflow, chasmCtx, chasmErr := handler.mutableState.ChasmWorkflowComponent(ctx)
 				if chasmErr != nil {
 					return nil, chasmErr
@@ -596,26 +594,15 @@ func (handler *workflowTaskCompletedHandler) grantEagerActivityDispatch(
 	ctx context.Context,
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
 ) bool {
-	if handler.matchingClient == nil {
-		return false
-	}
-
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	response, err := handler.matchingClient.GrantEagerDispatch(ctx, &matchingservice.GrantEagerDispatchRequest{
-		NamespaceId: executionInfo.GetNamespaceId(),
-		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
-			TaskQueue:     attr.GetTaskQueue().GetName(),
-			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-		},
-		Items: []*matchingservice.GrantEagerDispatchRequest_Item{
-			{
-				Count:    1,
-				Priority: attr.GetPriority(),
-				Version:  worker_versioning.DeploymentVersionFromDeployment(handler.workflowTaskDeployment),
-			},
-		},
-	})
-	return err == nil && len(response.GetItems()) == 1 && response.GetItems()[0].GetGrantedCount() == 1
+	return common.GrantEagerDispatch(
+		ctx,
+		handler.matchingClient,
+		executionInfo.GetNamespaceId(),
+		attr.GetTaskQueue().GetName(),
+		attr.GetPriority(),
+		worker_versioning.DeploymentVersionFromDeployment(handler.workflowTaskDeployment),
+	)
 }
 
 func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivity(
@@ -712,7 +699,17 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		},
 	}
 	metrics.ActivityEagerExecutionCounter.With(
-		workflow.GetPerTaskQueueFamilyScope(handler.metricsHandler, handler.mutableState.GetNamespaceEntry().Name(), ai.TaskQueue, handler.config),
+		metrics.GetPerActivityEagerExecutionScope(
+			handler.metricsHandler,
+			handler.mutableState.GetNamespaceEntry().Name().String(),
+			ai.TaskQueue,
+			handler.config.BreakdownMetricsByTaskQueue(
+				handler.mutableState.GetNamespaceEntry().Name().String(),
+				ai.TaskQueue,
+				enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			),
+			metrics.HistoryRespondWorkflowTaskCompletedScope,
+		),
 	).Record(1)
 
 	return func(resp *historyservice.RespondWorkflowTaskCompletedResponse) error {

@@ -41,6 +41,7 @@ import (
 // always send start-to-close, defaulted long enough not to fire. The other timeouts are simply
 // absent when unset.
 type activityConfig struct {
+	EagerStart             bool
 	MaxAttempts            int32         // RetryPolicy MaximumAttempts; 0 = unlimited
 	RetryInterval          time.Duration // RetryPolicy InitialInterval; 0 => activityShortRetryInterval
 	BackoffCoefficient     float64       // RetryPolicy BackoffCoefficient; 0 => 1.0 (constant interval)
@@ -157,12 +158,13 @@ type activityTerminalOutcome struct {
 // ways the options alone settle that no retry can follow. Deriving it means the two cannot disagree.
 func (c activityConfig) modelConfig() model.Config {
 	return model.Config{
-		MaxAttempts:          c.MaxAttempts,
-		HasStartDelay:        c.StartDelay > 0,
-		HasScheduleToClose:   c.ScheduleToClose > 0,
-		HasScheduleToStart:   c.ScheduleToStart > 0,
-		HasHeartbeat:         c.HeartbeatTimeout > 0,
-		NonRetryableTimeouts: c.nonRetryableTimeouts(),
+		InitialAttemptStarted: c.EagerStart,
+		MaxAttempts:           c.MaxAttempts,
+		HasStartDelay:         c.StartDelay > 0,
+		HasScheduleToClose:    c.ScheduleToClose > 0,
+		HasScheduleToStart:    c.ScheduleToStart > 0,
+		HasHeartbeat:          c.HeartbeatTimeout > 0,
+		NonRetryableTimeouts:  c.nonRetryableTimeouts(),
 		// In reality, the server decides this based on how long the attempt took, and any
 		// NextRetryDelay sent by the worker. The model cannot express that. Instead it supports a
 		// fixed retry delay and the calculation here pretends that the attempt duration is zero.

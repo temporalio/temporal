@@ -2,6 +2,7 @@ package matching
 
 import (
 	"context"
+	"errors"
 	"sync/atomic"
 	"time"
 
@@ -13,19 +14,21 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (
-	// writeTaskRequest struct {
-	// 	subqueue   int
-	// 	taskInfo   *persistencespb.TaskInfo
-	// 	responseCh chan<- *writeTaskResponse
-	// }
+	writeTaskRequest struct {
+		taskInfo   *persistencespb.TaskInfo
+		responseCh chan<- error
+		subqueue   subqueueIndex // for priTaskWriter only
+		fairLevel                // filled in by taskWriterLoop
+	}
 
-	// taskIDBlock struct {
-	// 	start int64
-	// 	end   int64
-	// }
+	taskIDBlock struct {
+		start int64
+		end   int64
+	}
 
 	// priTaskWriter writes tasks persistence split among subqueues
 	priTaskWriter struct {
@@ -40,11 +43,11 @@ type (
 )
 
 var (
-// errShutdown indicates that the task queue is shutting down
-// errShutdown            = &persistence.ConditionFailedError{Msg: "task queue shutting down"}
-// errNonContiguousBlocks = errors.New("previous block end is not equal to current block")
+	// errShutdown indicates that the task queue is shutting down
+	errShutdown            = &persistence.ConditionFailedError{Msg: "task queue shutting down"}
+	errNonContiguousBlocks = errors.New("previous block end is not equal to current block")
 
-// noTaskIDs = taskIDBlock{start: 1, end: 0}
+	noTaskIDs = taskIDBlock{start: 1, end: 0}
 )
 
 func newPriTaskWriter(

@@ -5,6 +5,7 @@ package temporal.server.api.adminservice.v1;
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 import "temporal/api/common/v1/message.proto";
+import "temporal/api/enums/v1/batch_operation.proto";
 import "temporal/api/enums/v1/common.proto";
 import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/namespace/v1/message.proto";
@@ -12,6 +13,7 @@ import "temporal/api/replication/v1/message.proto";
 import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/api/version/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
+import "temporal/server/api/adminservice/v1/message.proto";
 import "temporal/server/api/cluster/v1/message.proto";
 import "temporal/server/api/common/v1/dlq.proto";
 import "temporal/server/api/enums/v1/cluster.proto";
@@ -629,7 +631,8 @@ message StartAdminBatchOperationRequest {
   // This field and `executions` are mutually exclusive.
   string visibility_query = 2;
 
-  // A unique job identifier for this batch operation.
+  // A unique job identifier for this batch operation. The server prefixes it with the target
+  // namespace to form the workflow ID in temporal-system. Read the workflow ID from the response.
   string job_id = 3;
 
   // Reason for the operation.
@@ -645,10 +648,15 @@ message StartAdminBatchOperationRequest {
   // The admin batch operation to perform.
   oneof operation {
     BatchOperationRefreshTasks refresh_tasks_operation = 10;
+    // Supported types are workflow and activity termination and deletion.
+    temporal.api.enums.v1.BatchOperationType delegation_operation = 11;
   }
 }
 
-message StartAdminBatchOperationResponse {}
+message StartAdminBatchOperationResponse {
+  // Workflow ID of the batch operation in the temporal-system namespace.
+  string workflow_id = 1;
+}
 
 // BatchOperationRefreshTasks refreshes tasks for batch executions.
 // This regenerates all pending tasks for each execution.
@@ -681,3 +689,58 @@ message MigrateScheduleRequest {
 }
 
 message MigrateScheduleResponse {}
+
+message ListExecutionsRequest {
+  // Optional namespace name. If not set, search is made across all namespaces
+  // and you cannot filter on any custom search attribute. If set, you can filter
+  // on the namespace's custom search attributes.
+  // (-- api-linter: core::0203::required=disabled
+  //     aip.dev/not-precedent: Not following Google API format --)
+  string namespace = 1;
+
+  // Query string.
+  string query = 2;
+
+  // Page size.
+  int32 page_size = 3;
+
+  // Next page token.
+  bytes next_page_token = 4;
+}
+
+message ListExecutionsResponse {
+  // Executions.
+  repeated VisibilityExecutionInfo executions = 1;
+
+  // Next page token.
+  bytes next_page_token = 2;
+}
+
+message CountExecutionsRequest {
+  // Optional namespace name. If not set, count is made across all namespaces
+  // and you cannot filter on any custom search attribute. If set, you can filter
+  // on the namespace's custom search attributes.
+  // (-- api-linter: core::0203::required=disabled
+  //     aip.dev/not-precedent: Not following Google API format --)
+  string namespace = 1;
+
+  // Query string.
+  string query = 2;
+}
+
+message CountExecutionsResponse {
+  // Approximate count.
+  int64 count = 1;
+
+  // `groups` contains the groups if the request is grouping by a field.
+  // The list might not be complete, and the counts of each group are approximations.
+  repeated AggregationGroup groups = 2;
+
+  message AggregationGroup {
+    // Group keys values as payload.
+    repeated temporal.api.common.v1.Payload group_values = 1;
+
+    // Approximate count.
+    int64 count = 2;
+  }
+}
