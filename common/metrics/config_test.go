@@ -182,10 +182,10 @@ func TestPrometheusReporterErrors(t *testing.T) {
 
 			logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
 			logTags := []tag.Tag{tag.String("error", "^"+regexp.QuoteMeta(tc.wantError)+"$")}
-			wantRegistrationConflicts := 0
+			wantDefinitionConflicts := 0
 			if tc.wantLogLevel == testlogger.Error {
 				logTags = append(logTags, tag.FailedAssertion)
-				wantRegistrationConflicts = 1
+				wantDefinitionConflicts = 1
 			}
 			expected := logger.Expect(tc.wantLogLevel, "error in prometheus reporter$", logTags...)
 
@@ -202,11 +202,11 @@ func TestPrometheusReporterErrors(t *testing.T) {
 			await.Require(t.Context(), t, func(t *await.T) {
 				require.NoError(t, testutil.ScrapeAndCompare(
 					"http://"+address+"/metrics",
-					strings.NewReader(fmt.Sprintf(`# HELP prometheus_metric_registration_conflicts prometheus_metric_registration_conflicts counter
-# TYPE prometheus_metric_registration_conflicts counter
-prometheus_metric_registration_conflicts %d
-`, wantRegistrationConflicts)),
-					"prometheus_metric_registration_conflicts",
+					strings.NewReader(fmt.Sprintf(`# HELP prometheus_metric_definition_conflicts prometheus_metric_definition_conflicts counter
+# TYPE prometheus_metric_definition_conflicts counter
+prometheus_metric_definition_conflicts %d
+`, wantDefinitionConflicts)),
+					"prometheus_metric_definition_conflicts",
 				))
 			}, 5*time.Second, 10*time.Millisecond)
 		})

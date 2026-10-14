@@ -438,7 +438,7 @@ func newPrometheusScope(
 	sanitizeOptions tally.SanitizeOptions,
 	clientConfig *ClientConfig,
 ) tally.Scope {
-	var registrationConflicts tally.Counter
+	var definitionConflicts tally.Counter
 	reporter, err := config.NewReporter(
 		prometheus.ConfigurationOptions{
 			Registry: prom.NewRegistry(),
@@ -446,7 +446,7 @@ func newPrometheusScope(
 				// Tally drops recordings if the same metric name is used with different label names or help text.
 				// Report a soft assertion so tests using this reporter fail, while production keeps running.
 				if strings.Contains(err.Error(), "has different label names or a different help string") {
-					registrationConflicts.Inc(1)
+					definitionConflicts.Inc(1)
 					softassert.Fail(logger, "error in prometheus reporter", tag.Error(err))
 					return
 				}
@@ -466,7 +466,7 @@ func newPrometheusScope(
 	}
 	scope, _ := tally.NewRootScope(scopeOpts, time.Second)
 	// Cache the counter because OnError runs while a scope's metric lock is held.
-	registrationConflicts = scope.Counter(PrometheusMetricRegistrationConflicts.Name())
+	definitionConflicts = scope.Counter(PrometheusMetricDefinitionConflicts.Name())
 	return scope
 }
 
