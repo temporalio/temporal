@@ -785,9 +785,8 @@ used here will be the effective RPS from global and per-instance limits. The val
 	FrontendResourceExhaustedRetryDelayFloor = NewNamespaceDurationSetting(
 		"frontend.resourceExhaustedRetryDelayFloor",
 		0,
-		`Minimum retry delay hint (google.rpc.RetryInfo) on ResourceExhausted errors from the frontend namespace RPS and
-namespace concurrency limiters. Supporting SDKs wait at least this long before retrying, even beyond local retry limits.
-0 disables the hint.`,
+		`Minimum retry delay duration on ResourceExhausted errors from the frontend namespace RPS and
+concurrency limiters. 0 disables the feature.`,
 	)
 	FrontendGlobalWorkerDeploymentReadRPS = NewNamespaceIntSetting(
 		"frontend.globalNamespaceWorkerDeploymentReadRPS",
