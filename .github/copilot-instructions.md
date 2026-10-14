@@ -3,7 +3,7 @@
 These rules apply when authoring or reviewing code; the Review Feedback Style section applies only when reviewing code.
 Express each rule as a concise, direct statement of the expected code or review behavior.
 
-## 1. Structural Simplicity (Highest Priority)
+## 1. Structural Simplicity (Highest-Priority Guideline)
 
 - Designs minimize branches, special cases, indirection, and moving parts.
 - Every line contributes to the implementation or verifies behavior in a test.

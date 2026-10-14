@@ -9,8 +9,7 @@ allowed-tools: Read, Grep, Glob
 The main question of a review is whether the PR changes Temporal's behavior in the way it intends,
 and whether it changes Temporal's behavior in any way it does not intend. Behavior includes internal
 behavior that users do not observe directly, such as persisted state, tasks, and RPCs between
-services. Code quality comes second. Where the code guidelines at the end of this file disagree with
-this procedure about priorities, this procedure takes precedence.
+services.
 
 ## 1. State the intended change
 
