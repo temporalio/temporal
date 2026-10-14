@@ -126,6 +126,10 @@ func NewScheduler(
 	patch *schedulepb.SchedulePatch,
 ) (*Scheduler, error) {
 	var zero time.Time
+	if patch.GetTimeSkippingConfig().GetEnabled() &&
+		input.GetPolicies().GetOverlapPolicy() == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
+		return nil, serviceerror.NewInvalidArgument("Schedule time skipping cannot be enabled with the ALLOW_ALL overlap policy.")
+	}
 
 	sched := &Scheduler{
 		SchedulerState: &schedulerpb.SchedulerState{
@@ -144,7 +148,9 @@ func NewScheduler(
 		EventLog:             chasm.NewComponentField(ctx, NewEventLog(ctx)),
 	}
 	sched.setNullableFields()
-	ctx.SetTimeSkippingConfig(input.GetTimeSkippingConfig())
+	if config := patch.GetTimeSkippingConfig(); config != nil {
+		ctx.SetTimeSkippingConfig(config)
+	}
 	sched.Info.CreateTime = timestamppb.New(ctx.Now(sched))
 	sched.applyPausePatch(ctx, patch)
 
@@ -899,6 +905,10 @@ func (s *Scheduler) Update(
 	if !s.validateConflictToken(req.FrontendRequest.ConflictToken) {
 		return nil, ErrConflictTokenMismatch
 	}
+	if ctx.GetTimeSkippingInfo().GetEffectiveConfig().GetEnabled() &&
+		req.FrontendRequest.GetSchedule().GetPolicies().GetOverlapPolicy() == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
+		return nil, serviceerror.NewInvalidArgument("Schedule time skipping cannot be enabled with the ALLOW_ALL overlap policy.")
+	}
 
 	// Update custom search attributes.
 	if req.FrontendRequest.GetSearchAttributes() != nil {
@@ -924,7 +934,6 @@ func (s *Scheduler) Update(
 
 	s.Schedule = req.FrontendRequest.Schedule
 	s.setNullableFields()
-	ctx.SetTimeSkippingConfig(s.Schedule.GetTimeSkippingConfig())
 
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))
 	s.updateConflictToken()
@@ -954,10 +963,17 @@ func (s *Scheduler) Patch(
 	if s.WorkflowMigration != nil {
 		return nil, ErrMigrationPending
 	}
+	if req.FrontendRequest.GetPatch().GetTimeSkippingConfig().GetEnabled() &&
+		s.Schedule.GetPolicies().GetOverlapPolicy() == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
+		return nil, serviceerror.NewInvalidArgument("Schedule time skipping cannot be enabled with the ALLOW_ALL overlap policy.")
+	}
 	s.applyPausePatch(ctx, req.FrontendRequest.Patch)
 
 	if err := s.handlePatch(ctx, req.FrontendRequest.Patch); err != nil {
 		return nil, err
+	}
+	if config := req.FrontendRequest.GetPatch().GetTimeSkippingConfig(); config != nil {
+		ctx.SetTimeSkippingConfig(config)
 	}
 
 	s.Info.UpdateTime = timestamppb.New(ctx.Now(s))

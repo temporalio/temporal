@@ -762,11 +762,12 @@ func (wh *WorkflowHandler) validateAndPopulateWorkflowTimeSkippingConfig(
 }
 
 func (wh *WorkflowHandler) validateAndPopulateScheduleTimeSkippingConfig(
+	patch *schedulepb.SchedulePatch,
 	schedule *schedulepb.Schedule,
 	ns namespace.Name,
 	useV2 bool,
 ) error {
-	config := schedule.GetTimeSkippingConfig()
+	config := patch.GetTimeSkippingConfig()
 	if config == nil {
 		return nil
 	}
@@ -789,7 +790,7 @@ func (wh *WorkflowHandler) validateAndPopulateScheduleTimeSkippingConfig(
 	if !config.GetEnabled() {
 		return nil
 	}
-	if schedule.GetPolicies().GetOverlapPolicy() == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
+	if schedule != nil && schedule.GetPolicies().GetOverlapPolicy() == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
 		return serviceerror.NewInvalidArgument(
 			"Schedule time skipping cannot be enabled with the ALLOW_ALL overlap policy.")
 	}
@@ -3970,7 +3971,7 @@ func (wh *WorkflowHandler) CreateSchedule(
 	if err != nil {
 		return nil, err
 	}
-	if err = wh.validateAndPopulateScheduleTimeSkippingConfig(request.Schedule, namespaceName, useChasmScheduler); err != nil {
+	if err = wh.validateAndPopulateScheduleTimeSkippingConfig(request.InitialPatch, request.Schedule, namespaceName, useChasmScheduler); err != nil {
 		return nil, err
 	}
 
@@ -4812,9 +4813,6 @@ func (wh *WorkflowHandler) UpdateSchedule(
 	}
 
 	if wh.chasmSchedulerEnabled(ctx, request.Namespace) {
-		if err = wh.validateAndPopulateScheduleTimeSkippingConfig(request.Schedule, namespaceName, true); err != nil {
-			return nil, err
-		}
 		res, err := wh.updateScheduleCHASM(ctx, request)
 		if err == nil {
 			return res, nil
@@ -4823,10 +4821,6 @@ func (wh *WorkflowHandler) UpdateSchedule(
 			return nil, err
 		}
 	}
-	if err = wh.validateAndPopulateScheduleTimeSkippingConfig(request.Schedule, namespaceName, false); err != nil {
-		return nil, err
-	}
-
 	// Reject memo updates for V1 schedules.
 	if request.GetMemo() != nil {
 		return nil, serviceerror.NewFailedPrecondition("memo updates are not supported on workflow-backed schedules")
@@ -4945,6 +4939,10 @@ func (wh *WorkflowHandler) PatchSchedule(
 	if err := wh.validateSchedulePatchTimestamps(request.Patch, request.Namespace); err != nil {
 		return nil, err
 	}
+	useChasmScheduler := wh.chasmSchedulerEnabled(ctx, request.Namespace)
+	if err := wh.validateAndPopulateScheduleTimeSkippingConfig(request.Patch, nil, namespace.Name(request.Namespace), useChasmScheduler); err != nil {
+		return nil, err
+	}
 
 	if trigger := request.Patch.GetTriggerImmediately(); trigger != nil && trigger.ScheduledTime == nil {
 		trigger.ScheduledTime = timestamppb.Now()
@@ -4979,7 +4977,7 @@ func (wh *WorkflowHandler) PatchSchedule(
 		return nil, err
 	}
 
-	if wh.chasmSchedulerEnabled(ctx, request.Namespace) {
+	if useChasmScheduler {
 		res, err := wh.patchScheduleCHASM(ctx, request)
 		if err == nil {
 			return res, nil
@@ -4987,6 +4985,9 @@ func (wh *WorkflowHandler) PatchSchedule(
 		if !isSchedulerErrorLegacyRoutable(err) {
 			return nil, err
 		}
+	}
+	if err := wh.validateAndPopulateScheduleTimeSkippingConfig(request.Patch, nil, namespace.Name(request.Namespace), false); err != nil {
+		return nil, err
 	}
 
 	return wh.patchScheduleWorkflow(ctx, request, inputPayloads)

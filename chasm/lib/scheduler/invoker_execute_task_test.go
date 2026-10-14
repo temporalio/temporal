@@ -499,7 +499,6 @@ func TestExecuteTask_PropagatesScheduleTimeSkipping(t *testing.T) {
 					Duration: durationpb.New(5 * time.Hour),
 				},
 			}
-			env.Scheduler.Schedule.TimeSkippingConfig = config
 			env.NodeBackend.HandleGetExecutionInfo = func() *persistencespb.WorkflowExecutionInfo {
 				return &persistencespb.WorkflowExecutionInfo{
 					TimeSkippingInfo: &persistencespb.TimeSkippingInfo{

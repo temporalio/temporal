@@ -71,7 +71,6 @@ func TestMigrateToWorkflow_BlockedByTimeSkipping(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			sched, ctx, _ := setupSchedulerForTest(t)
-			sched.Schedule.TimeSkippingConfig = common.CloneProto(tt.config)
 			migrationCtx := &migrationTimeSkippingContext{
 				MutableContext: ctx,
 				info: &commonpb.TimeSkippingInfo{
@@ -88,7 +87,6 @@ func TestMigrateToWorkflow_BlockedByTimeSkipping(t *testing.T) {
 			require.False(t, sched.Schedule.State.Paused)
 			require.Nil(t, sched.WorkflowMigration)
 			require.Nil(t, migrationCtx.setConfig)
-			require.Equal(t, tt.config, sched.Schedule.GetTimeSkippingConfig())
 		})
 	}
 }
