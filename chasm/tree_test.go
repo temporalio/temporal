@@ -6293,6 +6293,28 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		s.Equal(0, s.nodeBackend.NumTasksAdded(), "no timer tasks are regenerated when skipping is gated out")
 	})
 
+	s.Run("GateSkippableButTimerDue_NoStateChange", func() {
+		root := gateRoot(true)
+		root.serializedNode.GetMetadata().GetComponentAttributes().GetPureTasks()[0].ScheduledTime =
+			timestamppb.New(baseTime)
+		var recorded *TimeSkippingTransition
+		s.nodeBackend.HandleRecordTimeSkippingTransition = func(tr *TimeSkippingTransition) { recorded = tr }
+		tl, ok := s.logger.(*testlogger.TestLogger)
+		s.Require().True(ok)
+		expectedLog := tl.Expect(
+			testlogger.Debug,
+			"a pending task blocks chasm time skipping",
+			tag.ArchetypeID(root.ArchetypeID()),
+			tag.String("chasm-task-type", testPureTaskFQN),
+		)
+
+		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+		s.NoError(err)
+		s.True(expectedLog.Matched())
+		s.Nil(recorded, "a nil transition must be handled as no time skip")
+		s.Equal(0, s.nodeBackend.NumTasksAdded(), "timer tasks are not regenerated when a timer is already due")
+	})
+
 	s.Run("GateSkippable_RecordsTransitionAndRegeneratesTasks", func() {
 		root := gateRoot(true)
 		var recorded *TimeSkippingTransition
@@ -6331,14 +6353,13 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 	})
 }
 
-// TestDefaultFindNextTargetTime covers the earliest-future-timer selection across the whole tree:
-// non-timer and past tasks are ignored, the earliest future timer wins, and an active fast-forward
-// caps (and disables) the skip when it is the earliest target.
+// TestDefaultFindNextTargetTime covers timer selection across the whole tree: the earliest future
+// timer wins, and an active fast-forward caps (and disables) the skip when it is the earliest target.
 func (s *nodeSuite) TestDefaultFindNextTargetTime() {
 	baseTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
 
-	// timerTask builds a timer-category task (non-visibility type, no destination, future
-	// scheduled time). transferTask builds an immediate/transfer task (no scheduled time) that
+	// timerTask builds a timer-category task (non-visibility type, no destination).
+	// transferTask builds an immediate/transfer task (no scheduled time) that
 	// must never be treated as a skip target.
 	timerTask := func(offset time.Duration) *persistencespb.ChasmComponentAttributes_Task {
 		return &persistencespb.ChasmComponentAttributes_Task{
@@ -6398,17 +6419,6 @@ func (s *nodeSuite) TestDefaultFindNextTargetTime() {
 		s.True(tr.IsValid())
 		s.Equal(baseTime.Add(time.Hour), tr.GetTargetTime(), "the earliest future timer across all task lists wins")
 		s.False(tr.DisabledAfterFastForward)
-	})
-
-	s.Run("PastAndNonTimerTasksIgnored", func() {
-		root := buildRoot(
-			[]*persistencespb.ChasmComponentAttributes_Task{timerTask(-time.Hour), transferTask()},
-			[]*persistencespb.ChasmComponentAttributes_Task{timerTask(3 * time.Hour)},
-		)
-		tr := root.defaultFindNextTargetTime()
-		s.Require().NotNil(tr)
-		s.Equal(baseTime.Add(3*time.Hour), tr.GetTargetTime(),
-			"past timers and non-timer (transfer) tasks must not be skip targets")
 	})
 
 	s.Run("EarlierFastForwardCapsAndDisables", func() {
