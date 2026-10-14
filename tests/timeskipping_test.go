@@ -3,6 +3,7 @@ package tests
 import (
 	"context"
 	"errors"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -29,6 +30,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/nexus/nexustest"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testvars"
@@ -997,6 +999,116 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWithDelay() {
 			"regenerated backoff task VisibilityTime must be ≈ wallStart (= virtual exec − accum), got %v vs wallStart %v",
 			latest.VisibilityTimestamp, wallStart)
 	}
+}
+
+func (s *TimeSkippingTestSuite) TestTimeSkipping_FastForwardUpdateDoesNotSkipPastPendingTimer() {
+	env := testcore.NewEnv(s.T(), testcore.WithHistoryTaskRecorder())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	runID := s.startWorkflowWithTimeSkipping(env, tv, 10*24*time.Hour)
+	execution := &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID}
+
+	// Hold the first due timer task before queue delivery so the options update runs before its TimerFired event.
+	timerTaskBlocked := make(chan struct{}, 1)
+	releaseTimerTask := make(chan struct{})
+	release := sync.OnceFunc(func() { close(releaseTimerTask) })
+	defer release()
+	removeInterceptor := env.GetTestCluster().GetHistoryTaskRecorder().SetTimerTaskReadInterceptor(func(task historytasks.Task) {
+		if _, ok := task.(*historytasks.UserTimerTask); ok && task.GetWorkflowID() == tv.WorkflowID() {
+			select {
+			case timerTaskBlocked <- struct{}{}:
+			default:
+			}
+			<-releaseTimerTask
+		}
+	})
+	defer removeInterceptor()
+
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+	_, err := poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{
+				startTimerCmd("first", 24*time.Hour),
+				startTimerCmd("second", 48*time.Hour),
+			},
+		}, nil
+	})
+	s.NoError(err)
+	await.Rcv(s.T(), timerTaskBlocked)
+
+	before := s.getMutableState(env, tv.WorkflowID(), runID).State.ExecutionInfo.GetTimeSkippingInfo()
+	firstSkip := before.GetAccumulatedSkippedDuration().AsDuration()
+	s.Positive(firstSkip)
+	historyBeforeUpdate := env.GetHistory(env.Namespace().String(), execution)
+	var firstTimerExpiry, secondTimerExpiry time.Time
+	for _, event := range historyBeforeUpdate {
+		if attrs := event.GetTimerStartedEventAttributes(); attrs != nil {
+			switch attrs.GetTimerId() {
+			case "first":
+				firstTimerExpiry = event.GetEventTime().AsTime().Add(attrs.GetStartToFireTimeout().AsDuration())
+			case "second":
+				secondTimerExpiry = event.GetEventTime().AsTime().Add(attrs.GetStartToFireTimeout().AsDuration())
+			default:
+				continue
+			}
+		}
+	}
+	s.Require().False(firstTimerExpiry.IsZero())
+	s.Require().False(secondTimerExpiry.IsZero())
+	transitionsBeforeUpdate := timeSkippingTransitions(historyBeforeUpdate)
+	s.Require().Len(transitionsBeforeUpdate, 1)
+	s.Equal(firstTimerExpiry, transitionsBeforeUpdate[0].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetTargetTime().AsTime())
+
+	_, err = env.FrontendClient().UpdateWorkflowExecutionOptions(s.Context(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:         env.Namespace().String(),
+		WorkflowExecution: execution,
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{
+			TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+				Enabled:           true,
+				FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(72 * time.Hour), Id: "after-first-timer"},
+			},
+		},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+	})
+	s.NoError(err)
+
+	after := s.getMutableState(env, tv.WorkflowID(), runID).State.ExecutionInfo.GetTimeSkippingInfo()
+	s.Equal(firstSkip, after.GetAccumulatedSkippedDuration().AsDuration(), "the options update must not skip past the pending first timer")
+	s.Equal("after-first-timer", after.GetConfig().GetFastForwardConfig().GetId())
+	history := env.GetHistory(env.Namespace().String(), execution)
+	s.Len(timeSkippingTransitions(history), 1, "the options update must not record another skip")
+	s.False(hasEventType(history, enumspb.EVENT_TYPE_TIMER_FIRED), "the first timer task is still blocked")
+
+	// Stop intercepting timer reads, then let the first timer fire. Closing its workflow task
+	// should allow time skipping to advance to the second timer only after the first is processed.
+	removeInterceptor()
+	release()
+	_, err = poller.PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask, taskpoller.WithTimeout(10*time.Second))
+	s.Require().NoError(err, "the first timer must fire within 10 seconds after release")
+	history = env.GetHistory(env.Namespace().String(), execution)
+	firstFired := s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_TIMER_FIRED)
+	s.Equal("first", firstFired.GetTimerFiredEventAttributes().GetTimerId())
+	transitionsAfterFirst := timeSkippingTransitions(history)
+	s.Require().Len(transitionsAfterFirst, 2)
+	s.Equal(secondTimerExpiry, transitionsAfterFirst[1].GetWorkflowExecutionTimeSkippingTransitionedEventAttributes().GetTargetTime().AsTime())
+	s.Less(firstFired.GetEventId(), transitionsAfterFirst[1].GetEventId())
+
+	// The second timer should now fire, allowing the workflow to complete.
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{completeWorkflowCmd()},
+		}, nil
+	}, taskpoller.WithTimeout(10*time.Second))
+	s.Require().NoError(err, "the second timer must fire and the workflow must complete within 10 seconds")
+	history = env.GetHistory(env.Namespace().String(), execution)
+	var firedTimerIDs []string
+	for _, event := range history {
+		if attrs := event.GetTimerFiredEventAttributes(); attrs != nil {
+			firedTimerIDs = append(firedTimerIDs, attrs.GetTimerId())
+		}
+	}
+	s.Equal([]string{"first", "second"}, firedTimerIDs)
+	s.RequireHistoryEvent(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED)
 }
 
 // TestTimeSkipping_CanceledTimerNotUsedAsSkipTarget confirms that a timer
