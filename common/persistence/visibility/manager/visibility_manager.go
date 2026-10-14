@@ -60,8 +60,15 @@ type (
 	AdminVisibilityManager interface {
 		VisibilityManager
 
-		AdminListExecutions(ctx context.Context, request *AdminListExecutionsRequest) (*AdminListExecutionsResponse, error)
-		AdminCountExecutions(ctx context.Context, request *AdminCountExecutionsRequest) (*AdminCountExecutionsResponse, error)
+		AdminListExecutions(
+			ctx context.Context,
+			request *adminservice.ListExecutionsRequest,
+		) (*adminservice.ListExecutionsResponse, error)
+
+		AdminCountExecutions(
+			ctx context.Context,
+			request *adminservice.CountExecutionsRequest,
+		) (*adminservice.CountExecutionsResponse, error)
 
 		AddSearchAttributes(ctx context.Context, request *AddSearchAttributesRequest) error
 	}
@@ -175,28 +182,6 @@ type (
 
 	AddSearchAttributesRequest struct {
 		SearchAttributes map[string]enumspb.IndexedValueType
-	}
-
-	AdminListExecutionsRequest struct {
-		Namespace     namespace.Name
-		Query         string
-		PageSize      int
-		NextPageToken []byte
-	}
-
-	AdminListExecutionsResponse struct {
-		Executions    []*adminservice.VisibilityExecutionInfo
-		NextPageToken []byte
-	}
-
-	AdminCountExecutionsRequest struct {
-		Namespace namespace.Name
-		Query     string
-	}
-
-	AdminCountExecutionsResponse struct {
-		Count  int64 // sum of counts in Groups
-		Groups []*adminservice.CountExecutionsResponse_AggregationGroup
 	}
 )
 
