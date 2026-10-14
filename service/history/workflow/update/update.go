@@ -65,7 +65,13 @@ type (
 		// Cleared on rejection, abort, or rollback. In-memory only; lost on lock release.
 		pendingCallbacks []pendingCallback
 		// nexusSerializationContext is the Nexus serialization context from the request that admitted this
-		// Update. Unlike request, it is retained after acceptance and loaded from UpdateInfo in MutableState.
+		// Update. Callers don't need to load it: it is populated on every path that produces an Update, i.e.
+		// Admit (from the request, before acceptance), Registry construction and Find (from UpdateInfo in
+		// MutableState), and TryResurrect (from the worker's echoed request). Unlike request, it is retained
+		// after acceptance. It is persisted in UpdateInfo only once an UpdateAdmitted or UpdateAccepted event
+		// is written; before that it is in-memory only, like request, since admission writes nothing so that
+		// rejected Updates leave no trace. It is nil if the Update is still in stateCreated, the request had no
+		// context, or the Update was persisted before this field existed.
 		nexusSerializationContext *nexuspb.PropagatedSerializationContext
 
 		// These fields might be accessed while not holding the workflow lock.
@@ -883,7 +889,8 @@ func (u *Update) GetSize() int {
 }
 
 // NexusSerializationContext returns the Nexus serialization context of the request that admitted this Update.
-// For a deduplicated request, this is the original request's context.
+// For a deduplicated request, this is the original request's context. A nil result means the Update has no
+// context (see the nexusSerializationContext field), not that it still needs to be loaded.
 // It must be invoked while holding the workflow lock.
 func (u *Update) NexusSerializationContext() *nexuspb.PropagatedSerializationContext {
 	return u.nexusSerializationContext

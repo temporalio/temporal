@@ -199,8 +199,10 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 			workflowKey := workflowLease.GetContext().GetWorkflowKey()
 			// Capture status before releasing the lock to avoid a data race with concurrent goroutines that may
 			// modify ExecutionState after acquiring the lock.
-			status := workflowLease.GetMutableState().GetExecutionState().Status
-			nexusSerializationContext := common.CloneProto(workflowLease.GetMutableState().GetUpdateNexusSerializationContext(updateID))
+			ms := workflowLease.GetMutableState()
+			status := ms.GetExecutionState().Status
+			updateNexusCtx := ms.GetUpdateNexusSerializationContext(updateID)
+			nexusSerializationContext := common.CloneProto(updateNexusCtx)
 			workflowLease.GetReleaseFn()(nil)
 			return makeResponse(
 				&historyservice.StartWorkflowExecutionResponse{

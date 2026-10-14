@@ -205,6 +205,8 @@ func TestNexusSerializationContext(t *testing.T) {
 		}, evStore))
 		require.Same(t, nsCtx, upd.NexusSerializationContext())
 
+		// A duplicate request (same Update ID, different context) gets the existing Update, and its Admit
+		// is a no-op, so the Update keeps the first request's context.
 		dup, existed, err := reg.FindOrCreate(context.Background(), tv.UpdateID())
 		require.NoError(t, err)
 		require.True(t, existed)
@@ -215,6 +217,7 @@ func TestNexusSerializationContext(t *testing.T) {
 				Endpoint: "other-endpoint",
 			},
 		}, evStore))
+		require.Same(t, upd, dup)
 		require.Same(t, nsCtx, dup.NexusSerializationContext())
 	})
 
