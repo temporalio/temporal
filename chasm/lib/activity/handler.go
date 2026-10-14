@@ -219,20 +219,16 @@ func (h *handler) newActivityForStartExecution(
 		}
 	}
 
-	if request.GetRequestEagerExecution() {
-		err = TransitionEagerStarted.Apply(newActivity, mutableContext, eagerStartEvent{
-			requestID: request.GetRequestId(),
-		})
+	eager := request.GetRequestEagerExecution()
+	if eager {
+		err = startEagerActivity(newActivity, mutableContext, request)
 	} else {
 		err = TransitionScheduled.Apply(newActivity, mutableContext, nil)
 	}
 	if err != nil {
 		return nil, nil, err
 	}
-	if request.GetRequestEagerExecution() {
-		newActivity.recordLastWorker(mutableContext, request.GetIdentity())
-	}
-	if !request.GetRequestEagerExecution() {
+	if !eager {
 		return newActivity, nil, nil
 	}
 
@@ -245,6 +241,20 @@ func (h *handler) newActivityForStartExecution(
 		return nil, nil, err
 	}
 	return newActivity, eagerTaskData, nil
+}
+
+func startEagerActivity(
+	activity *Activity,
+	ctx chasm.MutableContext,
+	request *workflowservice.StartActivityExecutionRequest,
+) error {
+	if err := TransitionEagerStarted.Apply(activity, ctx, eagerStartEvent{
+		requestID: request.GetRequestId(),
+	}); err != nil {
+		return err
+	}
+	activity.recordLastWorker(ctx, request.GetIdentity())
+	return nil
 }
 
 func businessIDPolicies(request *workflowservice.StartActivityExecutionRequest) (chasm.BusinessIDReusePolicy, chasm.BusinessIDConflictPolicy, error) {
