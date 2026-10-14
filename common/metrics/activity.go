@@ -27,3 +27,20 @@ func GetPerActivityScope(
 		WorkflowTypeTag(workflowType),
 	)
 }
+
+// GetPerActivityEagerExecutionScope returns the tags shared by eager activity execution metrics.
+func GetPerActivityEagerExecutionScope(
+	handler Handler,
+	namespaceName string,
+	taskQueueName string,
+	taskQueueBreakdown bool,
+	operation string,
+) Handler {
+	return GetPerTaskQueueFamilyScope(
+		handler,
+		namespaceName,
+		tqid.UnsafeTaskQueueFamily(namespaceName, taskQueueName),
+		taskQueueBreakdown,
+		OperationTag(operation),
+	)
+}

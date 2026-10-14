@@ -657,6 +657,10 @@ const (
 )
 
 var (
+	PrometheusMetricDefinitionConflicts = NewCounterDef(
+		"prometheus_metric_definition_conflicts",
+		WithDescription("Number of Prometheus metric registrations rejected due to conflicting label names or help text."),
+	)
 	ServiceRequests = NewCounterDef(
 		"service_requests",
 		WithDescription("The number of RPC requests received by the service."),
@@ -950,6 +954,11 @@ var (
 		"chasm_pure_task_errors",
 		WithDescription("The number of errors during CHASM pure task execution."),
 	)
+	ChasmPureTaskNotInvalidated = NewCounterDef(
+		"chasm_pure_task_not_invalidated",
+		WithDescription("The number of scheduled CHASM pure tasks that remained valid after successful execution. "+
+			"Such tasks are sent to DLQ only when history.chasmDLQScheduledPureTaskOnValidation is enabled."),
+	)
 	ChasmLogicalTaskCount = NewDimensionlessHistogramDef(
 		"chasm_logical_task_count",
 		WithDescription("The number of logical CHASM tasks of one task type in a single execution, recorded "+
@@ -1016,6 +1025,8 @@ var (
 	ActivityReset                                    = NewCounterDef("activity_reset", WithDescription("Number of activity resets."))
 	ActivityTimeout                                  = NewCounterDef("activity_timeout", WithDescription("Number of terminal activity timeouts."))
 	ActivityPayloadSize                              = NewCounterDef("activity_payload_size", WithDescription("Size of activity payloads in bytes."))
+	HistoryPrincipalSize                             = NewCounterDef("history_principal_size", WithDescription("Size in bytes of principal written to history events."))
+	HistoryPrincipalSizeSkipped                      = NewCounterDef("history_principal_size_skipped", WithDescription("Size in bytes of principal that would have been written to history events if principal propagation was enabled."))
 	ActivityHeartbeatCount                           = NewCounterDef("activity_heartbeat_count", WithDescription("Count of activity heartbeats, with has_details tag indicating whether the heartbeat carried a payload."))
 	AckLevelUpdateCounter                            = NewCounterDef("ack_level_update")
 	AckLevelUpdateFailedCounter                      = NewCounterDef("ack_level_update_failed")
@@ -1369,8 +1380,6 @@ var (
 	)
 	TaskLagPerTaskQueueGauge               = NewGaugeDef("task_lag_per_tl")
 	NoRecentPollerTasksPerTaskQueueCounter = NewCounterDef("no_poller_tasks")
-	UnknownBuildPollsCounter               = NewCounterDef("unknown_build_polls")
-	UnknownBuildTasksCounter               = NewCounterDef("unknown_build_tasks")
 	TaskDispatchLatencyPerTaskQueue        = NewTimerDef("task_dispatch_latency")
 	ApproximateBacklogCount                = NewGaugeDef("approximate_backlog_count")
 	ApproximateBacklogAgeSeconds           = NewGaugeDef("approximate_backlog_age_seconds")

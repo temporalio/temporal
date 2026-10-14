@@ -54,10 +54,7 @@ var (
 	errPartitionCountsStale = serviceerrors.NewStalePartitionCounts("counts are too far off")
 )
 
-const (
-	defaultTaskDispatchRPS    = 100000.0
-	defaultTaskDispatchRPSTTL = time.Minute
-)
+const defaultTaskDispatchRPS = 100000.0
 
 type (
 	// Represents a single partition of a (user-level) Task Queue in memory state. Under the hood, each Task Queue
@@ -2495,16 +2492,6 @@ func (pm *taskQueuePartitionManagerImpl) getVersionSetForAdd(directive *taskqueu
 	}
 
 	return versionSet, nil
-}
-
-func (pm *taskQueuePartitionManagerImpl) recordUnknownBuildPoll(buildId string) {
-	pm.logger.Warn("unknown build ID in poll", tag.BuildId(buildId))
-	pm.metricsHandler.Counter(metrics.UnknownBuildPollsCounter.Name()).Record(1)
-}
-
-func (pm *taskQueuePartitionManagerImpl) recordUnknownBuildTask(buildId string) {
-	pm.logger.Warn("unknown build ID in task", tag.BuildId(buildId))
-	pm.metricsHandler.Counter(metrics.UnknownBuildTasksCounter.Name()).Record(1)
 }
 
 //nolint:staticcheck // SA1019: [cleanup-wv-3.1]

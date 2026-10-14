@@ -70,7 +70,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.44.0
 	go.opentelemetry.io/otel/trace v1.44.0
 	go.opentelemetry.io/proto/otlp v1.10.0
-	go.temporal.io/api v1.63.7-0.20261006170555-05ff170da40c
+	go.temporal.io/api v1.63.7-0.20261008212609-555b97e92c27
 	go.temporal.io/auto-scaled-workers v0.0.0-20260928183627-719679297cbe
 	go.temporal.io/sdk v1.49.0
 	go.uber.org/fx v1.24.0
@@ -164,6 +164,7 @@ require (
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/klauspost/compress v1.18.5 // indirect
+	github.com/kylelemons/godebug v1.1.0 // indirect
 	github.com/mailru/easyjson v0.9.2 // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
 	github.com/mattn/go-isatty v0.0.21 // indirect

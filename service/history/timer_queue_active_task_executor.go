@@ -175,7 +175,7 @@ Loop:
 			return serviceerror.NewInternal(errString)
 		}
 
-		if !queues.IsTimeExpired(task, referenceTime, mutableState.ToRealTime(timerSequenceID.Timestamp)) {
+		if !queues.IsTimeExpired(task, referenceTime, mutableState.ToRealTimeWithCurrentOffset(timerSequenceID.Timestamp)) {
 			// Timer sequence IDs are sorted; once we encounter a timer whose
 			// sequence ID has not expired, all subsequent timers will not have
 			// expired.
@@ -239,7 +239,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	// created.
 	isHeartBeatTask := task.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
 	ai, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(task.EventID)
-	if isHeartBeatTask && ok && queues.IsTimeExpired(task, task.GetVisibilityTime(), mutableState.ToRealTime(heartbeatTimeoutVis)) {
+	if isHeartBeatTask && ok && queues.IsTimeExpired(task, task.GetVisibilityTime(), mutableState.ToRealTimeWithCurrentOffset(heartbeatTimeoutVis)) {
 		if err := mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(
 			ai.ScheduledEventId, ai.TimerTaskStatus&^workflow.TimerTaskStatusCreatedHeartbeat, nil); err != nil {
 			return err
@@ -249,7 +249,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 
 Loop:
 	for _, timerSequenceID := range timerSequence.LoadAndSortActivityTimers() {
-		if !queues.IsTimeExpired(task, referenceTime, mutableState.ToRealTime(timerSequenceID.Timestamp)) {
+		if !queues.IsTimeExpired(task, referenceTime, mutableState.ToRealTimeWithCurrentOffset(timerSequenceID.Timestamp)) {
 			// timer sequence IDs are sorted, once there is one timer
 			// sequence ID not expired, all after that wil not expired
 			break Loop

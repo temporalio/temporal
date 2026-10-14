@@ -576,7 +576,7 @@ func TestOperation_BuildExecutionInfo_ReturnsIsolatedSearchAttributes(t *testing
 	require.NoError(t, err)
 	op.Visibility = chasm.NewComponentField(ctx, visibility)
 	require.NoError(t, root.SetRootComponent(op))
-	_, err = root.CloseTransaction()
+	_, err = root.CloseTransaction(context.Background(), true)
 	require.NoError(t, err)
 
 	ctx = chasm.NewMutableContext(context.Background(), root)
