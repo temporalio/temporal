@@ -3555,13 +3555,9 @@ func (ms *MutableStateImpl) addUpdateCallbacks(
 	if len(updateCallbacks) == 0 {
 		return nil
 	}
-
-	if ms.chasmCallbacksEnabled() && ms.config.EnableWorkflowUpdateCallbacks(ms.GetNamespaceEntry().Name().String()) {
-		if ms.attachesCallbacksToChasm(updateID) {
-			return ms.addUpdateCallbacksChasm(event, updateID, requestID, updateCallbacks)
-		}
+	if ms.attachesCallbacksToChasm(updateID) {
+		return ms.addUpdateCallbacksChasm(event, updateID, requestID, updateCallbacks)
 	}
-
 	return nil
 }
 

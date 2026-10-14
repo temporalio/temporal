@@ -192,7 +192,6 @@ func (w *Workflow) ValidateCallbackAddition(
 		Count:     int(w.GetCallbackMetadata().GetTotalCallbacksCount()),
 		TotalSize: int(w.GetCallbackMetadata().GetTotalCallbacksSize()),
 	}
-	attachedToUpdate := len(target)
 	seen := make(map[callbackRequestKey]struct{}, len(inFlight))
 	for _, held := range inFlight {
 		key := callbackRequestKey{updateID: held.UpdateID, requestID: held.RequestID}
@@ -210,9 +209,6 @@ func (w *Workflow) ValidateCallbackAddition(
 		currentCbInfo.Count += len(held.Callbacks)
 		for _, cb := range held.Callbacks {
 			currentCbInfo.TotalSize += cb.Size()
-		}
-		if held.UpdateID == addition.UpdateID {
-			attachedToUpdate += len(held.Callbacks)
 		}
 	}
 	// The same request is already held in flight, and is counted above.
