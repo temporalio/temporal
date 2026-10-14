@@ -14,10 +14,6 @@ import (
 )
 
 const (
-	dsnFmt = "postgres://%s@%s/%s?%s"
-)
-
-const (
 	sslMode        = "sslmode"
 	sslModeNoop    = "disable"
 	sslModeRequire = "require"
@@ -101,13 +97,14 @@ func buildDSN(
 		return "", err
 	}
 	resolvedAddr := r.Resolve(cfg.ConnectAddr)[0]
-	return fmt.Sprintf(
-		dsnFmt,
-		url.UserPassword(cfg.User, password).String(),
-		resolvedAddr,
-		cfg.DatabaseName,
-		tlsAttrs.Encode(),
-	), nil
+	dsn := url.URL{
+		Scheme:   "postgres",
+		User:     url.UserPassword(cfg.User, password),
+		Host:     resolvedAddr,
+		Path:     "/" + cfg.DatabaseName,
+		RawQuery: tlsAttrs.Encode(),
+	}
+	return dsn.String(), nil
 }
 
 // nolint: revive

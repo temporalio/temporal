@@ -181,6 +181,30 @@ func TestBuildDSN_UsernameEscaping(t *testing.T) {
 	require.Equal(t, cfg.User, username, "username should be properly escaped and parsed")
 }
 
+func TestBuildDSN_DatabaseNameEscaping(t *testing.T) {
+	for _, databaseName := range []string{"temporal?x", "temporal#1"} {
+		t.Run(databaseName, func(t *testing.T) {
+			cfg := &config.SQL{
+				User:         "testuser",
+				Password:     "testpass",
+				ConnectAddr:  "localhost:5432",
+				DatabaseName: databaseName,
+				TLS: &auth.TLS{
+					Enabled: true,
+				},
+			}
+			mockResolver := &mockServiceResolver{addr: "localhost:5432"}
+			result, err := buildDSN(cfg, mockResolver)
+			require.NoError(t, err)
+			parsed, err := url.Parse(result)
+			require.NoError(t, err)
+			require.Equal(t, "/"+databaseName, parsed.Path)
+			require.Equal(t, "require", parsed.Query().Get("sslmode"))
+			require.Empty(t, parsed.Fragment)
+		})
+	}
+}
+
 func TestBuildDSNAttr_TLSKeyFileWithoutCertFile_ReturnsError(t *testing.T) {
 	cfg := &config.SQL{
 		TLS: &auth.TLS{
