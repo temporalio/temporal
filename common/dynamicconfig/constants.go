@@ -3423,6 +3423,12 @@ existing workflows to attach callbacks.`,
 		`EnableCHASMSchedulerSentinels enables ID-space collision sentinels, and must be enabled and propagated in advance of EnableCHASMSchedulerCreation.`,
 	)
 
+	EnableCHASMSchedulerTimeSkipping = NewNamespaceBoolSetting(
+		"history.enableCHASMSchedulerTimeSkipping",
+		false,
+		`EnableCHASMSchedulerTimeSkipping allows time skipping for CHASM schedules.`,
+	)
+
 	EnableCHASMCallbacks = NewNamespaceBoolSetting(
 		"history.enableCHASMCallbacks",
 		true,
@@ -3874,11 +3880,6 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		"frontend.WorkflowTimeSkippingEnabled",
 		false,
 		`WorkflowTimeSkippingEnabled is a "feature enable" flag. When enabled it allows clients to skip time in executions.`,
-	)
-	ScheduleV2TimeSkippingEnabled = NewNamespaceBoolSetting(
-		"frontend.ScheduleV2TimeSkippingEnabled",
-		false,
-		`ScheduleV2TimeSkippingEnabled is a namespace-level feature flag that allows time skipping for CHASM (V2) schedules.`,
 	)
 	WorkflowTimeSkippingMaxSkipPerSession = NewNamespaceIntSetting(
 		"frontend.WorkflowTimeSkippingMaxSkipPerSession",

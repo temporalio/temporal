@@ -195,8 +195,9 @@ type Config struct {
 	EnableCHASMSchedulerRouting dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// Enables ID-space collision sentinels, and must be enabled and propagated in
 	// advance of EnableCHASMSchedulerCreation.
-	EnableCHASMSchedulerSentinels dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	DisabledScheduleValidations   dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
+	EnableCHASMSchedulerSentinels    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCHASMSchedulerTimeSkipping dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	DisabledScheduleValidations      dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
 
 	// Enable deployment RPCs
 	EnableDeployments dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -260,7 +261,6 @@ type Config struct {
 	PollerAutoscalingAutoEnroll             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkflowPauseEnabled                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkflowTimeSkippingEnabled             dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ScheduleV2TimeSkippingEnabled           dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkflowTimeSkippingMaxSkipPerSession   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	StandaloneNexusOperationsEnabled        dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkflowTaskCompletionPagination  dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -404,6 +404,7 @@ func NewConfig(
 		CHASMSchedulerCreationRolloutPercent: dynamicconfig.CHASMSchedulerCreationRolloutPercent.Get(dc),
 		EnableCHASMSchedulerRouting:          dynamicconfig.EnableCHASMSchedulerRouting.Get(dc),
 		EnableCHASMSchedulerSentinels:        dynamicconfig.EnableCHASMSchedulerSentinels.Get(dc),
+		EnableCHASMSchedulerTimeSkipping:     dynamicconfig.EnableCHASMSchedulerTimeSkipping.Get(dc),
 		DisabledScheduleValidations:          dynamicconfig.FrontendDisabledScheduleValidations.Get(dc),
 
 		// [cleanup-wv-pre-release]
@@ -456,7 +457,6 @@ func NewConfig(
 		PollerAutoscalingAutoEnroll:             dynamicconfig.PollerAutoscalingAutoEnroll.Get(dc),
 		WorkflowPauseEnabled:                    dynamicconfig.WorkflowPauseEnabled.Get(dc),
 		WorkflowTimeSkippingEnabled:             dynamicconfig.WorkflowTimeSkippingEnabled.Get(dc),
-		ScheduleV2TimeSkippingEnabled:           dynamicconfig.ScheduleV2TimeSkippingEnabled.Get(dc),
 		WorkflowTimeSkippingMaxSkipPerSession:   dynamicconfig.WorkflowTimeSkippingMaxSkipPerSession.Get(dc),
 		StandaloneNexusOperationsEnabled:        chasmnexus.Enabled.Get(dc),
 		EnableWorkflowTaskCompletionPagination:  dynamicconfig.EnableWorkflowTaskCompletionPagination.Get(dc),

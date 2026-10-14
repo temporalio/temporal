@@ -779,7 +779,7 @@ func (wh *WorkflowHandler) validateAndPopulateScheduleTimeSkippingConfig(
 	}
 
 	// a separate per-ns feature flag for time skipping of schedules
-	if !wh.config.ScheduleV2TimeSkippingEnabled(ns.String()) {
+	if !wh.config.EnableCHASMSchedulerTimeSkipping(ns.String()) {
 		return errScheduleTimeSkippingNotEnabled
 	}
 

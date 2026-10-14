@@ -4301,7 +4301,7 @@ func (s *WorkflowHandlerSuite) TestValidateWorkflowTimeSkippingConfig() {
 func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 	config := s.newConfig()
 	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
-	config.ScheduleV2TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.EnableCHASMSchedulerTimeSkipping = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 	s.Require().ErrorIs(
 		wh.validateAndPopulateScheduleTimeSkippingConfig(
@@ -4312,7 +4312,7 @@ func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 		errScheduleTimeSkippingNotEnabled,
 	)
 
-	config.ScheduleV2TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.EnableCHASMSchedulerTimeSkipping = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	wh = s.getWorkflowHandler(config)
 
 	testCases := []struct {
@@ -4361,7 +4361,7 @@ func (s *WorkflowHandlerSuite) TestCreatePatchSchedule_TimeSkippingRoutingValida
 		config.EnableCHASMSchedulerCreation = dc.GetBoolPropertyFnFilteredByNamespace(useV2)
 		config.CHASMSchedulerCreationRolloutPercent = dc.GetIntPropertyFnFilteredByNamespace(100)
 		config.EnableCHASMSchedulerRouting = dc.GetBoolPropertyFnFilteredByNamespace(useV2)
-		config.ScheduleV2TimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+		config.EnableCHASMSchedulerTimeSkipping = dc.GetBoolPropertyFnFilteredByNamespace(true)
 		wh := s.getWorkflowHandler(config)
 
 		patch := &schedulepb.SchedulePatch{TimeSkippingConfig: timeSkippingConfig}
