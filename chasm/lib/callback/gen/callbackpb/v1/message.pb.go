@@ -312,7 +312,7 @@ func (*Callback_Nexus_) isCallback_Variant() {}
 func (*Callback_NexusHandler_) isCallback_Variant() {}
 
 // Contains denormalized metadata about callbacks attached to a component. Used
-// to to enforce aggregate size limits without needing to deserialize existing
+// to enforce aggregate size limits without needing to deserialize existing
 // callbacks.
 //
 // There should only be one [CallbackMetadata] per execution. e.g. even though
