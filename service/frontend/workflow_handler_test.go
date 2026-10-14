@@ -4306,7 +4306,6 @@ func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 	s.Require().ErrorIs(
 		wh.validateAndPopulateScheduleTimeSkippingConfig(
 			&schedulepb.SchedulePatch{TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true}},
-			nil,
 			s.testNamespace,
 			true,
 		),
@@ -4319,22 +4318,19 @@ func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 	testCases := []struct {
 		name            string
 		config          *commonpb.TimeSkippingConfig
-		overlapPolicy   enumspb.ScheduleOverlapPolicy
 		wantErrContains string
 	}{
 		{name: "unset"},
 		{name: "disabled", config: &commonpb.TimeSkippingConfig{Enabled: false}},
-		{name: "disabled with allow all", config: &commonpb.TimeSkippingConfig{Enabled: false}, overlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL},
 		{name: "enabled without fast forward", config: &commonpb.TimeSkippingConfig{Enabled: true}, wantErrContains: "fast_forward_config is required when enabled"},
-		{name: "enabled with allow all", config: &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{
-			Id: "allow-all", Duration: durationpb.New(time.Hour),
-		}}, overlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL, wantErrContains: "ALLOW_ALL overlap policy"},
+		{name: "enabled with fast forward", config: &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{
+			Id: "fast-forward", Duration: durationpb.New(time.Hour),
+		}}},
 	}
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
 			err := wh.validateAndPopulateScheduleTimeSkippingConfig(
 				&schedulepb.SchedulePatch{TimeSkippingConfig: tc.config},
-				&schedulepb.Schedule{Policies: &schedulepb.SchedulePolicies{OverlapPolicy: tc.overlapPolicy}},
 				s.testNamespace,
 				true,
 			)
@@ -4349,9 +4345,9 @@ func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 	}
 
 	patchWithConfig := &schedulepb.SchedulePatch{TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true}}
-	s.Require().NoError(wh.validateAndPopulateScheduleTimeSkippingConfig(nil, nil, s.testNamespace, false))
+	s.Require().NoError(wh.validateAndPopulateScheduleTimeSkippingConfig(nil, s.testNamespace, false))
 	s.Require().ErrorIs(
-		wh.validateAndPopulateScheduleTimeSkippingConfig(patchWithConfig, nil, s.testNamespace, false),
+		wh.validateAndPopulateScheduleTimeSkippingConfig(patchWithConfig, s.testNamespace, false),
 		errScheduleTimeSkippingNotEnabled,
 	)
 }

@@ -763,15 +763,14 @@ func (wh *WorkflowHandler) validateAndPopulateWorkflowTimeSkippingConfig(
 
 func (wh *WorkflowHandler) validateAndPopulateScheduleTimeSkippingConfig(
 	patch *schedulepb.SchedulePatch,
-	schedule *schedulepb.Schedule,
 	ns namespace.Name,
-	useV2 bool,
+	useChasm bool,
 ) error {
 	config := patch.GetTimeSkippingConfig()
 	if config == nil {
 		return nil
 	}
-	if !useV2 {
+	if !useChasm {
 		wh.logger.Warn(
 			"Rejecting time-skipping configuration for workflow-backed schedule",
 			tag.WorkflowNamespace(ns.String()),
@@ -789,10 +788,6 @@ func (wh *WorkflowHandler) validateAndPopulateScheduleTimeSkippingConfig(
 	}
 	if !config.GetEnabled() {
 		return nil
-	}
-	if schedule != nil && schedule.GetPolicies().GetOverlapPolicy() == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
-		return serviceerror.NewInvalidArgument(
-			"Schedule time skipping cannot be enabled with the ALLOW_ALL overlap policy.")
 	}
 	fastForward := config.GetFastForwardConfig()
 	if fastForward == nil {
@@ -3971,7 +3966,7 @@ func (wh *WorkflowHandler) CreateSchedule(
 	if err != nil {
 		return nil, err
 	}
-	if err = wh.validateAndPopulateScheduleTimeSkippingConfig(request.InitialPatch, request.Schedule, namespaceName, useChasmScheduler); err != nil {
+	if err = wh.validateAndPopulateScheduleTimeSkippingConfig(request.InitialPatch, namespaceName, useChasmScheduler); err != nil {
 		return nil, err
 	}
 
@@ -4940,7 +4935,7 @@ func (wh *WorkflowHandler) PatchSchedule(
 		return nil, err
 	}
 	useChasmScheduler := wh.chasmSchedulerEnabled(ctx, request.Namespace)
-	if err := wh.validateAndPopulateScheduleTimeSkippingConfig(request.Patch, nil, namespace.Name(request.Namespace), useChasmScheduler); err != nil {
+	if err := wh.validateAndPopulateScheduleTimeSkippingConfig(request.Patch, namespace.Name(request.Namespace), useChasmScheduler); err != nil {
 		return nil, err
 	}
 
@@ -4986,7 +4981,7 @@ func (wh *WorkflowHandler) PatchSchedule(
 			return nil, err
 		}
 	}
-	if err := wh.validateAndPopulateScheduleTimeSkippingConfig(request.Patch, nil, namespace.Name(request.Namespace), false); err != nil {
+	if err := wh.validateAndPopulateScheduleTimeSkippingConfig(request.Patch, namespace.Name(request.Namespace), false); err != nil {
 		return nil, err
 	}
 

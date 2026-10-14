@@ -126,11 +126,6 @@ func NewScheduler(
 	patch *schedulepb.SchedulePatch,
 ) (*Scheduler, error) {
 	var zero time.Time
-	if patch.GetTimeSkippingConfig().GetEnabled() &&
-		input.GetPolicies().GetOverlapPolicy() == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
-		return nil, serviceerror.NewInvalidArgument("Schedule time skipping cannot be enabled with the ALLOW_ALL overlap policy.")
-	}
-
 	sched := &Scheduler{
 		SchedulerState: &schedulerpb.SchedulerState{
 			Schedule: input,
@@ -905,11 +900,6 @@ func (s *Scheduler) Update(
 	if !s.validateConflictToken(req.FrontendRequest.ConflictToken) {
 		return nil, ErrConflictTokenMismatch
 	}
-	if ctx.GetTimeSkippingInfo().GetEffectiveConfig().GetEnabled() &&
-		req.FrontendRequest.GetSchedule().GetPolicies().GetOverlapPolicy() == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
-		return nil, serviceerror.NewInvalidArgument("Schedule time skipping cannot be enabled with the ALLOW_ALL overlap policy.")
-	}
-
 	// Update custom search attributes.
 	if req.FrontendRequest.GetSearchAttributes() != nil {
 		// To preserve compatibility with V1 scheduler, we do a full replacement
@@ -962,10 +952,6 @@ func (s *Scheduler) Patch(
 	}
 	if s.WorkflowMigration != nil {
 		return nil, ErrMigrationPending
-	}
-	if req.FrontendRequest.GetPatch().GetTimeSkippingConfig().GetEnabled() &&
-		s.Schedule.GetPolicies().GetOverlapPolicy() == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL {
-		return nil, serviceerror.NewInvalidArgument("Schedule time skipping cannot be enabled with the ALLOW_ALL overlap policy.")
 	}
 	s.applyPausePatch(ctx, req.FrontendRequest.Patch)
 

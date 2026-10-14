@@ -138,6 +138,7 @@ func TestTimeSkippingConfigWiring(t *testing.T) {
 		},
 	}
 	input := defaultSchedule()
+	input.Policies.OverlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
 
 	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, input, &schedulepb.SchedulePatch{TimeSkippingConfig: initialConfig})
 	require.NoError(t, err)
@@ -151,6 +152,7 @@ func TestTimeSkippingConfigWiring(t *testing.T) {
 		},
 	}
 	updated := defaultSchedule()
+	updated.Policies.OverlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
 	_, err = sched.Update(ctx, &schedulerpb.UpdateScheduleRequest{
 		FrontendRequest: &workflowservice.UpdateScheduleRequest{Schedule: updated},
 	})
@@ -172,49 +174,10 @@ func TestTimeSkippingConfigWiring(t *testing.T) {
 	protorequire.ProtoEqual(t, updatedConfig, ctx.TimeSkippingConfig)
 
 	_, err = sched.Update(ctx, &schedulerpb.UpdateScheduleRequest{
-		FrontendRequest: &workflowservice.UpdateScheduleRequest{Schedule: defaultSchedule()},
+		FrontendRequest: &workflowservice.UpdateScheduleRequest{Schedule: updated},
 	})
 	require.NoError(t, err)
 	protorequire.ProtoEqual(t, updatedConfig, ctx.TimeSkippingConfig)
-}
-
-func TestTimeSkippingConfigRejectsAllowAll(t *testing.T) {
-	config := &commonpb.TimeSkippingConfig{Enabled: true}
-
-	t.Run("create", func(t *testing.T) {
-		input := defaultSchedule()
-		input.Policies.OverlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
-		_, err := scheduler.NewScheduler(
-			&chasm.MockMutableContext{}, namespace, namespaceID, scheduleID,
-			input, &schedulepb.SchedulePatch{TimeSkippingConfig: config},
-		)
-		require.ErrorContains(t, err, "ALLOW_ALL overlap policy")
-	})
-
-	t.Run("patch", func(t *testing.T) {
-		sched, ctx, _ := setupSchedulerForTest(t)
-		sched.Schedule.Policies.OverlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
-		_, err := sched.Patch(ctx, &schedulerpb.PatchScheduleRequest{
-			FrontendRequest: &workflowservice.PatchScheduleRequest{
-				Patch: &schedulepb.SchedulePatch{TimeSkippingConfig: config},
-			},
-		})
-		require.ErrorContains(t, err, "ALLOW_ALL overlap policy")
-	})
-
-	t.Run("update", func(t *testing.T) {
-		sched, baseCtx, _ := setupSchedulerForTest(t)
-		ctx := &migrationTimeSkippingContext{
-			MutableContext: baseCtx,
-			info:           &commonpb.TimeSkippingInfo{EffectiveConfig: config},
-		}
-		updated := defaultSchedule()
-		updated.Policies.OverlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
-		_, err := sched.Update(ctx, &schedulerpb.UpdateScheduleRequest{
-			FrontendRequest: &workflowservice.UpdateScheduleRequest{Schedule: updated},
-		})
-		require.ErrorContains(t, err, "ALLOW_ALL overlap policy")
-	})
 }
 
 func TestIsExecutionSkippable(t *testing.T) {
@@ -541,6 +504,11 @@ func TestCreateSchedulerFromMigration(t *testing.T) {
 	// Last completion result
 	lastResult := sched.LastCompletionResult.Get(ctx)
 	require.Equal(t, []byte("result-data"), lastResult.Success.Data)
+
+	events := sched.EventLog.Get(ctx).Events
+	require.Len(t, events, 1)
+	require.Equal(t, "created via migration from V1", events[0].Message)
+	require.NotNil(t, events[0].Time)
 
 	require.NoError(t, node.SetRootComponent(sched))
 	_, err = node.CloseTransaction(context.Background(), true)
