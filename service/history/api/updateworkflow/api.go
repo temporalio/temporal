@@ -118,10 +118,7 @@ func (u *Updater) ApplyRequest(
 	if err != nil {
 		return nil, err
 	}
-	u.nexusSerializationContext = nil
-	if u.upd != nil {
-		u.nexusSerializationContext = common.CloneProto(u.upd.NexusSerializationContext())
-	}
+	u.nexusSerializationContext = common.CloneProto(u.upd.NexusSerializationContext())
 	// Capture the anticipated link for the response after the request has been applied.
 	// If the request itself fails/is rejected, OnSuccess will link to the workflow itself instead.
 	u.requestIDLink = u.captureRequestIDLink(ms)
