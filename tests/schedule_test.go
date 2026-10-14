@@ -558,6 +558,8 @@ func testScheduleTimeSkippingWeekly(
 		expectedStart := firstTick.Add(time.Duration(i) * week)
 		action, ok := actionsByScheduleTime[expectedStart]
 		require.True(t, ok, "missing workflow scheduled at %s", expectedStart)
+		require.NotNil(t, action.GetActualTime())
+		require.WithinRange(t, action.GetActualTime().AsTime(), expectedStart, expectedStart.Add(10*time.Second))
 		execution := action.GetStartWorkflowResult()
 		require.NotNil(t, execution)
 		workflowDescription, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
@@ -565,9 +567,12 @@ func testScheduleTimeSkippingWeekly(
 			Execution: execution,
 		})
 		require.NoError(t, err)
+		workflowInfo := workflowDescription.GetWorkflowExecutionInfo()
+		require.NotNil(t, workflowInfo.GetStartTime())
+		require.WithinRange(t, workflowInfo.GetStartTime().AsTime(), expectedStart, expectedStart.Add(10*time.Second))
 		var workflowScheduledStart time.Time
 		require.NoError(t, payload.Decode(
-			workflowDescription.GetWorkflowExecutionInfo().GetSearchAttributes().GetIndexedFields()[sadefs.TemporalScheduledStartTime],
+			workflowInfo.GetSearchAttributes().GetIndexedFields()[sadefs.TemporalScheduledStartTime],
 			&workflowScheduledStart,
 		))
 		require.Equal(t, expectedStart, workflowScheduledStart)
