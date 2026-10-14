@@ -205,6 +205,78 @@ func (s *taskValidatorSuite) TestCache_ConcurrentFirstSeen() {
 	s.Equal(n, s.taskValidator.cache.Size())
 }
 
+func TestTaskValidatorCacheLifecycle(t *testing.T) {
+	t.Parallel()
+	for _, taskType := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
+		t.Run(taskType.String(), func(t *testing.T) {
+			t.Parallel()
+			for _, tc := range []struct {
+				name       string
+				expired    bool
+				valid      bool
+				rpcErr     error
+				wantValid  bool
+				wantCached bool
+			}{
+				{name: "expired", expired: true},
+				{name: "invalid"},
+				{name: "not found", rpcErr: serviceerror.NewNotFound("task not found")},
+				{name: "valid", valid: true, wantValid: true, wantCached: true},
+				{name: "RPC error", rpcErr: serviceerror.NewUnavailable("history unavailable"), wantValid: true, wantCached: true},
+			} {
+				t.Run(tc.name, func(t *testing.T) {
+					t.Parallel()
+					controller := gomock.NewController(t)
+					registry := namespace.NewMockRegistry(controller)
+					historyClient := historyservicemock.NewMockHistoryServiceClient(controller)
+					cfg := newTaskQueueConfig(
+						tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(taskType),
+						NewConfig(dynamicconfig.NewNoopCollection()), "nsname",
+					)
+					v := newTaskValidator(t.Context(), cfg, nil, registry, historyClient)
+					oldTime := time.Now().Add(-time.Hour)
+					task := &persistencespb.AllocatedTaskInfo{
+						TaskId: 1,
+						Data: &persistencespb.TaskInfo{
+							NamespaceId: "nsid",
+							CreateTime:  timestamppb.New(oldTime),
+						},
+					}
+					v.cache.Put(task, oldTime.UnixNano())
+					if tc.expired {
+						task.Data.ExpiryTime = timestamppb.New(oldTime)
+					} else {
+						registry.EXPECT().GetNamespaceByID(namespace.ID("nsid")).Return(nil, &serviceerror.NamespaceNotFound{})
+						if taskType == enumspb.TASK_QUEUE_TYPE_WORKFLOW {
+							historyClient.EXPECT().IsWorkflowTaskValid(gomock.Any(), gomock.Any()).Return(
+								&historyservice.IsWorkflowTaskValidResponse{IsValid: tc.valid}, tc.rpcErr,
+							)
+						} else {
+							historyClient.EXPECT().IsActivityTaskValid(gomock.Any(), gomock.Any()).Return(
+								&historyservice.IsActivityTaskValidResponse{IsValid: tc.valid}, tc.rpcErr,
+							)
+						}
+					}
+
+					beforeNs := time.Now().UnixNano()
+					require.Equal(t, tc.wantValid, v.maybeValidate(task, taskType))
+					validationTimeNs, cached := v.cache.Get(task).(int64)
+					require.Equal(t, tc.wantCached, cached)
+					if !cached {
+						return
+					}
+					if tc.rpcErr != nil {
+						require.Equal(t, oldTime.UnixNano(), validationTimeNs)
+					} else {
+						require.GreaterOrEqual(t, validationTimeNs, beforeNs)
+						require.LessOrEqual(t, validationTimeNs, time.Now().UnixNano())
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestTaskValidatorTasksWithSameID(t *testing.T) {
 	for _, active := range []bool{true, false} {
 		name := "passive"

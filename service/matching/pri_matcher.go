@@ -266,7 +266,8 @@ func (tm *priTaskMatcher) takeValidatorBatch(ctxs []context.Context, n int) ([]*
 func (tm *priTaskMatcher) validateTasks(retrier backoff.Retrier) {
 	ctxs := []context.Context{tm.tqCtx}
 	for {
-		n := max(1, tm.config.ValidatorBatchSize())
+		// Avoid evicting validation history because a batch exceeds the cache capacity.
+		n := min(taskValidatorCacheMaxSize, max(1, tm.config.ValidatorBatchSize()))
 		tasks, err := tm.takeValidatorBatch(ctxs, n)
 		if err != nil {
 			return // task queue closing

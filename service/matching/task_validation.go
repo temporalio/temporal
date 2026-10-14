@@ -65,6 +65,7 @@ func (v *taskValidatorImpl) maybeValidate(
 	taskType enumspb.TaskQueueType,
 ) bool {
 	if IsTaskExpired(task) {
+		v.cache.Delete(task)
 		return false
 	}
 	if !v.preValidate(task) {
@@ -74,7 +75,11 @@ func (v *taskValidatorImpl) maybeValidate(
 	if err != nil {
 		return true
 	}
-	v.postValidate(task)
+	if valid {
+		v.postValidate(task)
+	} else {
+		v.cache.Delete(task)
+	}
 	return valid
 }
 

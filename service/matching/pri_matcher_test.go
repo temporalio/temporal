@@ -760,43 +760,62 @@ func (s *PriMatcherSuite) TestValidatorBatch_MixedInvalidContinuesImmediately() 
 }
 
 func (s *PriMatcherSuite) TestValidatorBatch_ValidatesConcurrently() {
-	synctest.Test(s.T(), func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
-		defer cancel()
+	for _, tc := range []struct {
+		name      string
+		batchSize int
+		taskCount int
+		wantBatch int
+	}{
+		{name: "within cache capacity", batchSize: 2, taskCount: 2, wantBatch: 2},
+		{name: "above cache capacity", batchSize: taskValidatorCacheMaxSize + 1, taskCount: taskValidatorCacheMaxSize + 1, wantBatch: taskValidatorCacheMaxSize},
+	} {
+		s.Run(tc.name, func() {
+			synctest.Test(s.T(), func(t *testing.T) {
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
 
-		started := make(chan int64, 2)
-		release := make(chan struct{})
-		mockValidator := NewMocktaskValidator(s.controller)
-		mockValidator.EXPECT().maybeValidate(gomock.Any(), gomock.Any()).DoAndReturn(
-			func(task *persistencespb.AllocatedTaskInfo, _ enumspb.TaskQueueType) bool {
-				started <- task.TaskId
-				select {
-				case <-release:
-				case <-ctx.Done():
+				started := make(chan int64, tc.taskCount)
+				release := make(chan struct{})
+				mockValidator := NewMocktaskValidator(gomock.NewController(t))
+				mockValidator.EXPECT().maybeValidate(gomock.Any(), gomock.Any()).DoAndReturn(
+					func(task *persistencespb.AllocatedTaskInfo, _ enumspb.TaskQueueType) bool {
+						started <- task.TaskId
+						select {
+						case <-release:
+						case <-ctx.Done():
+						}
+						return true
+					},
+				).AnyTimes()
+
+				tm := s.newTestMatcher(ctx, testMatcherOpts{
+					validator: mockValidator,
+					config: func(cfg *taskQueueConfig) {
+						cfg.ValidatorBatchSize = func() int { return tc.batchSize }
+					},
+				})
+				defer tm.Stop()
+				done := make(chan taskResponse, tc.taskCount)
+				for id := int64(1); id <= int64(tc.taskCount); id++ {
+					require.NoError(t, tm.AddTask(s.newBacklogTask(id, done)))
 				}
-				return true
-			},
-		).Times(2)
+				tm.Start()
 
-		tm := s.newTestMatcher(ctx, testMatcherOpts{
-			validator: mockValidator,
-			config: func(cfg *taskQueueConfig) {
-				cfg.ValidatorBatchSize = func() int { return 2 }
-			},
+				synctest.Wait()
+				require.Len(t, started, tc.wantBatch)
+				var wantIDs, startedIDs []int64
+				for id := int64(1); id <= int64(tc.wantBatch); id++ {
+					wantIDs = append(wantIDs, id)
+					startedIDs = append(startedIDs, await.Rcv(t, started))
+				}
+				require.ElementsMatch(t, wantIDs, startedIDs)
+				close(release)
+				for range tc.wantBatch {
+					require.ErrorIs(t, await.Rcv(t, done).err(), errReprocessTask)
+				}
+			})
 		})
-		defer tm.Stop()
-		done := make(chan taskResponse, 2)
-		for id := int64(1); id <= 2; id++ {
-			require.NoError(t, tm.AddTask(s.newBacklogTask(id, done)))
-		}
-		tm.Start()
-
-		require.ElementsMatch(t, []int64{1, 2}, []int64{await.Rcv(t, started), await.Rcv(t, started)})
-		close(release)
-		for range 2 {
-			require.ErrorIs(t, await.Rcv(t, done).err(), errReprocessTask)
-		}
-	})
+	}
 }
 
 func (s *PriMatcherSuite) TestValidatorRunsOnChildBehindForwardedHead() {
