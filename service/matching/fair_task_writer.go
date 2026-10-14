@@ -159,7 +159,8 @@ func (w *fairTaskWriter) taskWriterLoop() {
 
 	// TODO: this will be out of phase with the timer in fairBacklogManagerImpl.periodicSync.
 	// can we align them better?
-	persistFairnessKeys := time.NewTicker(w.config.UpdateAckInterval()).C
+	persistFairnessKeys := time.NewTimer(backoff.Jitter(w.config.UpdateAckInterval(), 0.1))
+	defer persistFairnessKeys.Stop()
 
 	var reqs []*writeTaskRequest
 	for {
@@ -190,10 +191,11 @@ func (w *fairTaskWriter) taskWriterLoop() {
 
 		// maybe persist fairness key counts if it's time
 		select {
-		case <-persistFairnessKeys:
+		case <-persistFairnessKeys.C:
 			for subqueue, cntr := range w.counters {
 				w.db.persistTopKFairnessKeys(subqueue, cntr.TopK())
 			}
+			persistFairnessKeys.Reset(backoff.Jitter(w.config.UpdateAckInterval(), 0.1))
 		default:
 		}
 	}
