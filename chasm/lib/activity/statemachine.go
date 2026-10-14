@@ -37,7 +37,6 @@ func (a *Activity) SetStateMachineState(state activitypb.ActivityExecutionStatus
 type (
 	eagerStartEvent struct {
 		requestID string
-		identity  string
 	}
 
 	rescheduleEvent struct {
@@ -421,7 +420,6 @@ func (a *Activity) applyEagerStarted(ctx chasm.MutableContext, event eagerStartE
 		a.FirstAttemptStartedTime = attempt.GetStartedTime()
 	}
 	attempt.StartRequestId = event.requestID
-	attempt.LastWorkerIdentity = event.identity
 	attempt.SdkName = ctx.RequestHeader(headers.ClientNameHeaderName)
 	attempt.SdkVersion = ctx.RequestHeader(headers.ClientVersionHeaderName)
 	// TODO: Populate LastDeploymentVersion when standalone eager start supports worker versioning.
