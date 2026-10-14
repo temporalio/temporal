@@ -657,6 +657,10 @@ const (
 )
 
 var (
+	PrometheusMetricDefinitionConflicts = NewCounterDef(
+		"prometheus_metric_definition_conflicts",
+		WithDescription("Number of Prometheus metric registrations rejected due to conflicting label names or help text."),
+	)
 	ServiceRequests = NewCounterDef(
 		"service_requests",
 		WithDescription("The number of RPC requests received by the service."),
