@@ -101,23 +101,6 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 				return nil, err
 			}
 			eagerTaskData = newEagerTaskData
-
-			if cbs := request.GetCompletionCallbacks(); len(cbs) > 0 {
-				if err := newActivity.addCompletionCallbacks(mutableContext, request.GetRequestId(), cbs, request.GetNamespace(), h.callbackValidator); err != nil {
-					return nil, err
-				}
-			}
-			if len(request.GetLinks()) > 0 {
-				if err := newActivity.attachLinks(mutableContext, request.GetLinks(), request.GetRequestId(), h.linkValidator, frontendReq.GetNamespace()); err != nil {
-					return nil, err
-				}
-			}
-
-			err = TransitionScheduled.Apply(newActivity, mutableContext, nil)
-			if err != nil {
-				return nil, err
-			}
-
 			return newActivity, nil
 		},
 		frontendReq,
