@@ -252,9 +252,6 @@ func (tm *priTaskMatcher) takeValidatorBatch(ctxs []context.Context, n int) ([]*
 	if res.ctxErr != nil {
 		return nil, res.ctxErr
 	}
-	if res.task == nil {
-		return nil, nil
-	}
 	tasks := []*internalTask{res.task}
 	for len(tasks) < n {
 		more := tm.data.MatchPollerImmediately(&waitingPoller{taskForwarderType: validatorTaskForwarder})

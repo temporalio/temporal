@@ -3,7 +3,6 @@ package matching
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -33,11 +32,6 @@ type (
 		) bool
 	}
 
-	taskValidationInfo struct {
-		taskID         int64
-		validationTime time.Time
-	}
-
 	taskValidatorImpl struct {
 		tqCtx             context.Context
 		config            *taskQueueConfig
@@ -45,7 +39,6 @@ type (
 		namespaceRegistry namespace.Registry
 		historyClient     historyservice.HistoryServiceClient
 
-		mu    sync.Mutex
 		cache cache.Cache
 	}
 )
@@ -106,51 +99,43 @@ func (v *taskValidatorImpl) preValidate(
 	return v.preValidatePassive(task)
 }
 
-func (v *taskValidatorImpl) lookupOrInit(task *persistencespb.AllocatedTaskInfo) (info taskValidationInfo, existed bool) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
+func (v *taskValidatorImpl) lookupOrInit(task *persistencespb.AllocatedTaskInfo) (validationTimeNs int64, existed bool) {
 	// Redirected tasks from different physical queues can share the same task ID.
-	if info, ok := v.cache.Get(task).(taskValidationInfo); ok {
-		return info, true
+	if validationTimeNs, ok := v.cache.Get(task).(int64); ok {
+		return validationTimeNs, true
 	}
-	validationTime := time.Now().UTC()
+	validationTimeNs = time.Now().UnixNano()
 	if task.Data.CreateTime != nil {
-		validationTime = task.Data.CreateTime.AsTime()
+		validationTimeNs = task.Data.CreateTime.AsTime().UnixNano()
 	}
-	info = taskValidationInfo{taskID: task.TaskId, validationTime: validationTime}
-	v.cache.Put(task, info)
-	return info, false
+	v.cache.Put(task, validationTimeNs)
+	return validationTimeNs, false
 }
 
 // preValidateActive track a task and return if validation should be done, if namespace is active
 func (v *taskValidatorImpl) preValidateActive(
 	task *persistencespb.AllocatedTaskInfo,
 ) bool {
-	info, existed := v.lookupOrInit(task)
+	validationTimeNs, existed := v.lookupOrInit(task)
 	if !existed {
 		return false
 	}
-	return time.Since(info.validationTime) > v.config.ValidatorValidationThreshold()
+	return time.Since(time.Unix(0, validationTimeNs)) > v.config.ValidatorValidationThreshold()
 }
 
 // preValidatePassive track a task and return if validation should be done, if namespace is passive
 func (v *taskValidatorImpl) preValidatePassive(
 	task *persistencespb.AllocatedTaskInfo,
 ) bool {
-	info, _ := v.lookupOrInit(task)
-	return time.Since(info.validationTime) > v.config.ValidatorValidationThreshold()
+	validationTimeNs, _ := v.lookupOrInit(task)
+	return time.Since(time.Unix(0, validationTimeNs)) > v.config.ValidatorValidationThreshold()
 }
 
 // postValidate update tracked task info
 func (v *taskValidatorImpl) postValidate(
 	task *persistencespb.AllocatedTaskInfo,
 ) {
-	v.mu.Lock()
-	defer v.mu.Unlock()
-	v.cache.Put(task, taskValidationInfo{
-		taskID:         task.TaskId,
-		validationTime: time.Now().UTC(),
-	})
+	v.cache.Put(task, time.Now().UnixNano())
 }
 
 func (v *taskValidatorImpl) isTaskValid(

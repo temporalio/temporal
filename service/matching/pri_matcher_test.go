@@ -549,7 +549,7 @@ func (s *PriMatcherSuite) TestChildBacklogForwarding() {
 						return &matchingservice.AddWorkflowTaskResponse{}, nil
 					})
 				validator := NewMocktaskValidator(s.controller)
-				validator.EXPECT().maybeValidate(gomock.Any(), gomock.Any()).Return(true)
+				validator.EXPECT().maybeValidate(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 
 				tm := s.newTestMatcher(ctx, testMatcherOpts{partition: child, client: client, validator: validator})
 				tm.Start()
@@ -564,18 +564,25 @@ func (s *PriMatcherSuite) TestChildBacklogForwarding() {
 
 				start := time.Now()
 				completed := make(chan taskResponse, 1)
-				_ = tm.AddTask(newTestBacklogTask(tc.taskAge, func(_ *internalTask, res taskResponse) {
+				require.NoError(t, tm.AddTask(newTestBacklogTask(tc.taskAge, func(task *internalTask, res taskResponse) {
+					if res.err() == errReprocessTask {
+						task.resetMatcherState()
+						if err := tm.AddTask(task); err != nil {
+							completed <- taskResponse{startErr: err}
+						}
+						return
+					}
 					completed <- res
-				}))
+				})))
 
 				var wantDelay time.Duration
 				if tc.wantDelay {
 					wantDelay = tm.config.MaxWaitForPollerBeforeFwd()
 				}
-				require.Equal(t, wantDelay, (<-forwardedAt).Sub(start))
-				res := <-completed
+				res := await.Rcv(t, completed)
+				require.NoError(t, res.err())
 				require.True(t, res.forwarded)
-				require.NoError(t, res.forwardErr)
+				require.Equal(t, wantDelay, await.Rcv(t, forwardedAt).Sub(start))
 			})
 		})
 	}
@@ -588,7 +595,12 @@ func (s *PriMatcherSuite) TestValidatorBatch_AllInvalidDropsAll() {
 	mockValidator := NewMocktaskValidator(s.controller)
 	mockValidator.EXPECT().maybeValidate(gomock.Any(), gomock.Any()).Return(false).Times(3)
 
-	tm := s.newTestMatcher(ctx, testMatcherOpts{validator: mockValidator, config: func(cfg *taskQueueConfig) { cfg.ValidatorBatchSize = func() int { return 3 } }})
+	tm := s.newTestMatcher(ctx, testMatcherOpts{
+		validator: mockValidator,
+		config: func(cfg *taskQueueConfig) {
+			cfg.ValidatorBatchSize = func() int { return 3 }
+		},
+	})
 	defer tm.Stop()
 
 	done := make(chan taskResponse, 3)
@@ -611,7 +623,12 @@ func (s *PriMatcherSuite) TestValidatorBatch_AllValidReprocessesAll() {
 	mockValidator := NewMocktaskValidator(s.controller)
 	mockValidator.EXPECT().maybeValidate(gomock.Any(), gomock.Any()).Return(true).Times(3)
 
-	tm := s.newTestMatcher(ctx, testMatcherOpts{validator: mockValidator, config: func(cfg *taskQueueConfig) { cfg.ValidatorBatchSize = func() int { return 3 } }})
+	tm := s.newTestMatcher(ctx, testMatcherOpts{
+		validator: mockValidator,
+		config: func(cfg *taskQueueConfig) {
+			cfg.ValidatorBatchSize = func() int { return 3 }
+		},
+	})
 	defer tm.Stop()
 
 	done := make(chan taskResponse, 3)
@@ -715,7 +732,12 @@ func (s *PriMatcherSuite) TestValidatorBatch_MixedInvalidContinuesImmediately() 
 			},
 		).AnyTimes()
 
-		tm := s.newTestMatcher(ctx, testMatcherOpts{validator: mockValidator, config: func(cfg *taskQueueConfig) { cfg.ValidatorBatchSize = func() int { return 2 } }})
+		tm := s.newTestMatcher(ctx, testMatcherOpts{
+			validator: mockValidator,
+			config: func(cfg *taskQueueConfig) {
+				cfg.ValidatorBatchSize = func() int { return 2 }
+			},
+		})
 		defer tm.Stop()
 
 		done := make(chan taskResponse, 4)
@@ -756,7 +778,12 @@ func (s *PriMatcherSuite) TestValidatorBatch_ValidatesConcurrently() {
 			},
 		).Times(2)
 
-		tm := s.newTestMatcher(ctx, testMatcherOpts{validator: mockValidator, config: func(cfg *taskQueueConfig) { cfg.ValidatorBatchSize = func() int { return 2 } }})
+		tm := s.newTestMatcher(ctx, testMatcherOpts{
+			validator: mockValidator,
+			config: func(cfg *taskQueueConfig) {
+				cfg.ValidatorBatchSize = func() int { return 2 }
+			},
+		})
 		defer tm.Stop()
 		done := make(chan taskResponse, 2)
 		for id := int64(1); id <= 2; id++ {

@@ -998,19 +998,20 @@ func (s *MatcherDataSuite) TestFindMatch() {
 
 func TestPollerListOrdering(t *testing.T) {
 	p := pollerList{logger: testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)}
+	start := time.Unix(1, 0)
 	pollers := []*waitingPoller{
-		{taskForwarderType: validatorTaskForwarder},
-		{taskForwarderType: parentTaskForwarder},
-		{taskForwarderType: notTaskForwarder},
-		{taskForwarderType: validatorTaskForwarder},
-		{taskForwarderType: notTaskForwarder},
-		{taskForwarderType: parentTaskForwarder},
+		{taskForwarderType: validatorTaskForwarder, startTime: start},
+		{taskForwarderType: parentTaskForwarder, startTime: start.Add(2 * time.Second)},
+		{taskForwarderType: notTaskForwarder, startTime: start.Add(6 * time.Second)},
+		{taskForwarderType: validatorTaskForwarder, startTime: start},
+		{taskForwarderType: notTaskForwarder, startTime: start.Add(4 * time.Second)},
+		{taskForwarderType: parentTaskForwarder, startTime: start.Add(time.Second)},
 	}
 	for _, poller := range pollers {
 		p.Add(poller)
 	}
 
-	expected := []*waitingPoller{pollers[2], pollers[4], pollers[1], pollers[5], pollers[0], pollers[3]}
+	expected := []*waitingPoller{pollers[4], pollers[2], pollers[5], pollers[1], pollers[0], pollers[3]}
 	at := p.head
 	for _, poller := range expected {
 		require.Same(t, poller, at)

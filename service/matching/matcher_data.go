@@ -62,23 +62,23 @@ const maxTokens = 1
 
 // pollerList is an intrusive doubly-linked list of waiting pollers. Pollers are matched
 // by walking from the head, so the list is kept in the order we want to match them:
-// FIFO (insertion order), except that task forwarders/validators are kept after all
-// local pollers so a task is matched to a local poller in preference to a forwarder,
-// and parentTaskForwarder is kept before validatorTaskForwarder so the child forwarder
-// takes the head before the batch validator.
+// local pollers, parent forwarders, then validators. Within each type, earlier
+// poll start times come first; ties retain insertion order.
 //
 // It's intrusive (next/prev live in waitingPoller) so there's no per-poller allocation
-// and removal is O(1) given the poller. There are only ever a handful of forwarders, so
-// keeping them grouped at the tail on insert is cheap.
+// and removal is O(1) given the poller.
 type pollerList struct {
 	logger     log.Logger
 	head, tail *waitingPoller
 	count      int
 }
 
-// less orders local pollers before parent forwarders, and parent forwarders before validators.
-func (p *waitingPoller) less(other *waitingPoller) bool {
-	return p.taskForwarderType < other.taskForwarderType
+// comesBefore orders pollers by forwarder type, then by poll start time.
+func (p *waitingPoller) comesBefore(other *waitingPoller) bool {
+	if p.taskForwarderType != other.taskForwarderType {
+		return p.taskForwarderType < other.taskForwarderType
+	}
+	return p.startTime.Before(other.startTime)
 }
 
 func (p *pollerList) Len() int {
@@ -93,7 +93,7 @@ func (p *pollerList) Add(poller *waitingPoller) {
 	// validatorTaskForwarder. Locals must win over both. On child partitions
 	// the task forwarder must take the head before the batch validator.
 	at := p.tail
-	for at != nil && poller.less(at) {
+	for at != nil && poller.comesBefore(at) {
 		at = at.prev
 	}
 
