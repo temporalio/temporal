@@ -291,12 +291,19 @@ func scheduleClosed(ctx context.Context, env *testcore.TestEnv, sid string) bool
 // of the schedule and returns the number it signaled.
 func completeRunningWorkflows(ctx context.Context, t *testing.T, env *testcore.TestEnv, sid string) int {
 	t.Helper()
-	desc, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
-		Namespace:  env.Namespace().String(),
-		ScheduleId: sid,
-	})
-	require.NoError(t, err)
-	running := desc.GetInfo().GetRunningWorkflows()
+	// V1 DescribeSchedule is a consistent query, and history buffers at most one
+	// (history.MaxBufferedQueryCount) while a workflow task is in flight. A
+	// preceding require.Never can return with its last Describe still in flight,
+	// making this one fail with "consistent query buffer is full", so retry.
+	var running []*commonpb.WorkflowExecution
+	await.Require(ctx, t, func(t *await.T) {
+		desc, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  env.Namespace().String(),
+			ScheduleId: sid,
+		})
+		require.NoError(t, err)
+		running = desc.GetInfo().GetRunningWorkflows()
+	}, awaitTimeout, pollInterval)
 	for _, wf := range running {
 		_, err := env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace:         env.Namespace().String(),
