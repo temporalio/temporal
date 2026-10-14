@@ -17,9 +17,9 @@ type mapCounter struct {
 var _ Counter = (*mapCounter)(nil)
 
 // NewMapCounter creates a mapCounter that also tracks the top K entries.
+// The internal map is allocated lazily on the first insertion.
 func NewMapCounter(limit int) *mapCounter {
 	return &mapCounter{
-		m:     make(map[string]int),
 		limit: limit,
 	}
 }
@@ -61,7 +61,10 @@ func (m *mapCounter) updateHeap(key string, count int64) bool {
 	}
 
 	if len(m.heap) < m.limit {
-		// heap not full - add
+		// heap not full - add; initialize map lazily on first insertion
+		if m.m == nil {
+			m.m = make(map[string]int, m.limit)
+		}
 		m.m[key] = len(m.heap)
 		heap.Push(m, TopKEntry{Key: key, Count: count})
 		return false
