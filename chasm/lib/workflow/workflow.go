@@ -18,7 +18,7 @@ import (
 // However, the [callbackspb.CallbackMetadata] is only on Workflow. (It contains the aggregated
 // information about all callbacks in the CHASM tree, spanning all of the child WorkflowUpdates.)
 //
-// So while Workflow implements the [callback.Host] interface, WorkflowUpdate is only a [Holder].
+// So while Workflow implements the [callback.Host] interface, WorkflowUpdate is only a [callback.Holder].
 // And attaching completion callbacks to a WorkflowUpdate is done through an [updateCallbackHost].
 var (
 	_ callback.Host   = (*Workflow)(nil)
