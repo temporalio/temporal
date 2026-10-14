@@ -664,15 +664,15 @@ func (s *ScheduleSuite) TestBufferSizeReportedWhenBuffered(chasmEnabled bool) {
 	require.NoError(t, err)
 
 	var lastDescribe *workflowservice.DescribeScheduleResponse
-	await.Requiref(ctx, t, func(at *await.T) {
-		desc, descErr := env.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
+	s.Awaitf(func(s *ScheduleSuite) {
+		desc, descErr := env.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
 			Namespace:  env.Namespace().String(),
 			ScheduleId: sid,
 		})
-		require.NoError(at, descErr)
+		s.Require().NoError(descErr)
 		lastDescribe = desc
-		require.GreaterOrEqual(at, desc.GetInfo().GetBufferSize(), int64(1))
-		require.GreaterOrEqual(at, len(desc.GetInfo().GetRunningWorkflows()), 1)
+		s.Require().GreaterOrEqual(desc.GetInfo().GetBufferSize(), int64(1))
+		s.Require().GreaterOrEqual(len(desc.GetInfo().GetRunningWorkflows()), 1)
 	}, 30*time.Second, 500*time.Millisecond, "DescribeSchedule should report BufferSize >= 1 with a running workflow blocking the buffer")
 
 	env.GreaterOrEqual(lastDescribe.GetInfo().GetBufferSize(), int64(1), "BufferSize must reflect at least one buffered start")
@@ -709,14 +709,14 @@ func (s *ScheduleCHASMSuite) TestBufferOverrunDropsActions() {
 
 	// RunningWorkflows lags the drop (it needs the async StartWorkflow to land), so
 	// assert both together rather than after the wait.
-	await.Requiref(ctx, t, func(at *await.T) {
-		desc, err := env.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
+	s.Awaitf(func(s *ScheduleCHASMSuite) {
+		desc, err := env.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
 			Namespace:  env.Namespace().String(),
 			ScheduleId: sid,
 		})
-		require.NoError(at, err)
-		require.Positive(at, desc.GetInfo().GetBufferDropped())
-		require.GreaterOrEqual(at, len(desc.GetInfo().GetRunningWorkflows()), 1)
+		s.Require().NoError(err)
+		s.Require().Positive(desc.GetInfo().GetBufferDropped())
+		s.Require().GreaterOrEqual(len(desc.GetInfo().GetRunningWorkflows()), 1)
 	}, awaitTimeout, pollInterval, "expected BufferDropped > 0 with a gated workflow holding the buffer full")
 
 	require.Positive(t, runs.Load(), "the gated workflow should have started")
@@ -842,15 +842,15 @@ func (s *ScheduleSuite) TestBufferOneDeferredFiresAfterCompletion(chasmEnabled b
 	})
 
 	// Exactly one workflow runs with exactly one start buffered behind it (BUFFER_ONE caps the buffer at one).
-	await.Requiref(ctx, t, func(t *await.T) {
-		desc, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+	s.Awaitf(func(s *ScheduleSuite) {
+		desc, err := env.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
 			Namespace:  env.Namespace().String(),
 			ScheduleId: sid,
 		})
-		require.NoError(t, err)
-		require.Equal(t, int64(1), desc.GetInfo().GetBufferSize())
-		require.Len(t, desc.GetInfo().GetRunningWorkflows(), 1)
-		require.Equal(t, int32(1), runs.Load())
+		s.Require().NoError(err)
+		s.Require().Equal(int64(1), desc.GetInfo().GetBufferSize())
+		s.Require().Len(desc.GetInfo().GetRunningWorkflows(), 1)
+		s.Require().Equal(int32(1), runs.Load())
 	}, awaitTimeout, pollInterval, "expected exactly one running workflow with one deferred start buffered behind it")
 
 	// Keep the first workflow open across several more ticks. V1 evaluates the
@@ -941,12 +941,12 @@ func (s *ScheduleSuite) TestDeletedScheduleOperations(chasmEnabled bool) {
 
 	// Describe should return NotFound.
 	var notFoundErr *serviceerror.NotFound
-	await.Require(newContext(testcontext.For(t)), t, func(at *await.T) {
-		_, descErr := env.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
+	s.Await(func(s *ScheduleSuite) {
+		_, descErr := env.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
 			Namespace:  env.Namespace().String(),
 			ScheduleId: sid,
 		})
-		require.ErrorAs(at, descErr, &notFoundErr)
+		s.Require().ErrorAs(descErr, &notFoundErr)
 	}, 10*time.Second, 200*time.Millisecond)
 
 	// Update, Patch, and Delete behave differently across CHASM and V1,
@@ -1269,20 +1269,20 @@ func (s *ScheduleSuite) TestBasics(chasmEnabled bool) {
 	require.NoError(t, err)
 
 	// wait until search attributes are updated
-	await.Require(newContext(testcontext.For(t)), t, func(c *await.T) {
+	s.Await(func(s *ScheduleSuite) {
 		describeResp, err = env.FrontendClient().DescribeSchedule(
-			c.Context(),
+			newContext(s.Context()),
 			&workflowservice.DescribeScheduleRequest{
 				Namespace:  env.Namespace().String(),
 				ScheduleId: sid,
 			},
 		)
-		require.NoError(c, err)
-		require.Len(c, describeResp.SearchAttributes.GetIndexedFields(), 3)
-		require.Equal(c, schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csaKeyword].Data)
-		require.Equal(c, schSAIntValue.Data, describeResp.SearchAttributes.IndexedFields[csaInt].Data)
-		require.Equal(c, schSADoubleValue.Data, describeResp.SearchAttributes.IndexedFields[csaDouble].Data)
-		require.NotContains(c, describeResp.SearchAttributes.IndexedFields, csaBool)
+		s.Require().NoError(err)
+		s.Require().Len(describeResp.SearchAttributes.GetIndexedFields(), 3)
+		s.Require().Equal(schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csaKeyword].Data)
+		s.Require().Equal(schSAIntValue.Data, describeResp.SearchAttributes.IndexedFields[csaInt].Data)
+		s.Require().Equal(schSADoubleValue.Data, describeResp.SearchAttributes.IndexedFields[csaDouble].Data)
+		s.Require().NotContains(describeResp.SearchAttributes.IndexedFields, csaBool)
 	},
 		2*time.Second,
 		500*time.Millisecond,
@@ -1304,16 +1304,16 @@ func (s *ScheduleSuite) TestBasics(chasmEnabled bool) {
 	require.NoError(t, err)
 
 	// wait until search attributes are updated
-	await.Require(newContext(testcontext.For(t)), t, func(c *await.T) {
+	s.Await(func(s *ScheduleSuite) {
 		describeResp, err = env.FrontendClient().DescribeSchedule(
-			c.Context(),
+			newContext(s.Context()),
 			&workflowservice.DescribeScheduleRequest{
 				Namespace:  env.Namespace().String(),
 				ScheduleId: sid,
 			},
 		)
-		require.NoError(c, err)
-		require.Empty(c, describeResp.SearchAttributes.GetIndexedFields())
+		s.Require().NoError(err)
+		s.Require().Empty(describeResp.SearchAttributes.GetIndexedFields())
 	},
 		5*time.Second,
 		500*time.Millisecond,
@@ -1372,13 +1372,13 @@ func (s *ScheduleSuite) TestBasics(chasmEnabled bool) {
 	var notFoundErr *serviceerror.NotFound
 	env.ErrorAs(err, &notFoundErr)
 
-	await.Require(newContext(testcontext.For(t)), t, func(at *await.T) { // wait for visibility
-		listResp, err := env.FrontendClient().ListSchedules(at.Context(), &workflowservice.ListSchedulesRequest{
+	s.Await(func(s *ScheduleSuite) { // wait for visibility
+		listResp, err := env.FrontendClient().ListSchedules(newContext(s.Context()), &workflowservice.ListSchedulesRequest{
 			Namespace:       env.Namespace().String(),
 			MaximumPageSize: 5,
 		})
-		require.NoError(at, err)
-		require.Empty(at, listResp.Schedules)
+		s.Require().NoError(err)
+		s.Require().Empty(listResp.Schedules)
 	}, 10*time.Second, 1*time.Second)
 }
 
@@ -1445,7 +1445,7 @@ func (s *ScheduleSuite) TestInput(chasmEnabled bool) {
 	_, err = env.FrontendClient().CreateSchedule(ctx, req)
 	require.NoError(t, err)
 
-	await.RequireTrue(t, func() bool { return runs.Load() == 1 }, 8*time.Second, 200*time.Millisecond)
+	s.AwaitTrue(func() bool { return runs.Load() == 1 }, 8*time.Second, 200*time.Millisecond)
 }
 
 func (s *ScheduleSuite) TestLastCompletionAndError(chasmEnabled bool) {
@@ -1522,7 +1522,7 @@ func (s *ScheduleSuite) TestLastCompletionAndError(chasmEnabled bool) {
 	_, err := env.FrontendClient().CreateSchedule(ctx, req)
 	require.NoError(t, err)
 
-	await.RequireTrue(t, func() bool { return testComplete.Load() == 1 }, 20*time.Second, 200*time.Millisecond)
+	s.AwaitTrue(func() bool { return testComplete.Load() == 1 }, 20*time.Second, 200*time.Millisecond)
 }
 
 // testScheduleContinuesAfterWorkflowRetryFailure verifies a schedule keeps firing actions
@@ -1585,12 +1585,12 @@ func (s *ScheduleSuite) TestScheduleContinuesAfterWorkflowRetryFailure(chasmEnab
 	// Two FAILED actions proves the schedule kept firing past the first retry-failure.
 	var failedActions int
 	var lastDescribe *workflowservice.DescribeScheduleResponse
-	await.Requiref(ctx, t, func(at *await.T) {
-		desc, descErr := env.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
+	s.Awaitf(func(s *ScheduleSuite) {
+		desc, descErr := env.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
 			Namespace:  env.Namespace().String(),
 			ScheduleId: sid,
 		})
-		require.NoError(at, descErr)
+		s.Require().NoError(descErr)
 		lastDescribe = desc
 		failedActions = 0
 		for _, a := range desc.GetInfo().GetRecentActions() {
@@ -1598,8 +1598,8 @@ func (s *ScheduleSuite) TestScheduleContinuesAfterWorkflowRetryFailure(chasmEnab
 				failedActions++
 			}
 		}
-		require.Equal(at, int32(1), sawRetry.Load())
-		require.GreaterOrEqual(at, failedActions, 2)
+		s.Require().Equal(int32(1), sawRetry.Load())
+		s.Require().GreaterOrEqual(failedActions, 2)
 	}, 30*time.Second, 500*time.Millisecond,
 		"schedule should keep recording FAILED actions after the workflow retry-fails")
 
@@ -1694,12 +1694,12 @@ func (s *ScheduleCHASMSuite) TestScheduledWorkflowContinueAsNewCompletion() {
 	// callback the scheduler records, not from visibility.)
 	const wantCompleted = 3
 	var completedWFID string
-	await.Requiref(newContext(testcontext.For(t)), t, func(at *await.T) {
-		desc, descErr := env.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
+	s.Awaitf(func(s *ScheduleCHASMSuite) {
+		desc, descErr := env.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
 			Namespace:  env.Namespace().String(),
 			ScheduleId: sid,
 		})
-		require.NoError(at, descErr)
+		s.Require().NoError(descErr)
 		completed := 0
 		for _, a := range desc.GetInfo().GetRecentActions() {
 			if a.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
@@ -1707,7 +1707,7 @@ func (s *ScheduleCHASMSuite) TestScheduledWorkflowContinueAsNewCompletion() {
 				completedWFID = a.GetStartWorkflowResult().GetWorkflowId()
 			}
 		}
-		require.GreaterOrEqual(at, completed, wantCompleted)
+		s.Require().GreaterOrEqual(completed, wantCompleted)
 	}, 15*time.Second, 200*time.Millisecond,
 		"scheduler should record %d completed actions", wantCompleted)
 
@@ -1940,7 +1940,7 @@ func (s *ScheduleSuite) TestUpdateIntervalTakesEffect(chasmEnabled bool) {
 	require.NoError(t, err)
 
 	// After updating to 1s interval, we should see runs start within a few seconds.
-	await.RequireTruef(t, func() bool { return runs.Load() >= 2 },
+	s.AwaitTruef(func() bool { return runs.Load() >= 2 },
 		10*time.Second,
 		500*time.Millisecond,
 		"expected at least 2 runs within 10s after updating interval to 1s",
@@ -2152,32 +2152,32 @@ func (s *ScheduleSuite) TestCountSchedules(chasmEnabled bool) {
 	}
 
 	// Test basic count (all schedules)
-	await.Requiref(newContext(testcontext.For(t)), t, func(at *await.T) {
-		countResp, err := env.FrontendClient().CountSchedules(at.Context(), &workflowservice.CountSchedulesRequest{
+	s.Awaitf(func(s *ScheduleSuite) {
+		countResp, err := env.FrontendClient().CountSchedules(newContext(s.Context()), &workflowservice.CountSchedulesRequest{
 			Namespace: env.Namespace().String(),
 		})
-		require.NoError(at, err)
-		require.GreaterOrEqual(at, countResp.Count, int64(3))
+		s.Require().NoError(err)
+		s.Require().GreaterOrEqual(countResp.Count, int64(3))
 	}, 15*time.Second, 1*time.Second, "Expected at least 3 schedules")
 
 	// Test count with query filter for paused schedules
-	await.Requiref(newContext(testcontext.For(t)), t, func(at *await.T) {
-		countResp, err := env.FrontendClient().CountSchedules(at.Context(), &workflowservice.CountSchedulesRequest{
+	s.Awaitf(func(s *ScheduleSuite) {
+		countResp, err := env.FrontendClient().CountSchedules(newContext(s.Context()), &workflowservice.CountSchedulesRequest{
 			Namespace: env.Namespace().String(),
 			Query:     fmt.Sprintf("%s = true", sadefs.TemporalSchedulePaused),
 		})
-		require.NoError(at, err)
-		require.GreaterOrEqual(at, countResp.Count, int64(1))
+		s.Require().NoError(err)
+		s.Require().GreaterOrEqual(countResp.Count, int64(1))
 	}, 15*time.Second, 1*time.Second, "Expected at least 1 paused schedule")
 
 	// Test count with query filter for non-paused schedules
-	await.Requiref(newContext(testcontext.For(t)), t, func(at *await.T) {
-		countResp, err := env.FrontendClient().CountSchedules(at.Context(), &workflowservice.CountSchedulesRequest{
+	s.Awaitf(func(s *ScheduleSuite) {
+		countResp, err := env.FrontendClient().CountSchedules(newContext(s.Context()), &workflowservice.CountSchedulesRequest{
 			Namespace: env.Namespace().String(),
 			Query:     fmt.Sprintf("%s = false", sadefs.TemporalSchedulePaused),
 		})
-		require.NoError(at, err)
-		require.GreaterOrEqual(at, countResp.Count, int64(2))
+		s.Require().NoError(err)
+		s.Require().GreaterOrEqual(countResp.Count, int64(2))
 	}, 15*time.Second, 1*time.Second, "Expected at least 2 non-paused schedules")
 }
 
@@ -2218,12 +2218,12 @@ func (s *ScheduleSuite) TestListSchedulesPagination(chasmEnabled bool) {
 	}
 
 	// Wait for all schedules to be visible.
-	await.Requiref(newContext(testcontext.For(t)), t, func(at *await.T) {
-		countResp, err := env.FrontendClient().CountSchedules(at.Context(), &workflowservice.CountSchedulesRequest{
+	s.Awaitf(func(s *ScheduleSuite) {
+		countResp, err := env.FrontendClient().CountSchedules(newContext(s.Context()), &workflowservice.CountSchedulesRequest{
 			Namespace: env.Namespace().String(),
 		})
-		require.NoError(at, err)
-		require.GreaterOrEqual(at, countResp.Count, int64(numSchedules))
+		s.Require().NoError(err)
+		s.Require().GreaterOrEqual(countResp.Count, int64(numSchedules))
 	}, 15*time.Second, 1*time.Second, "Expected all schedules to be visible")
 
 	// Paginate with page size 2 and collect all schedule IDs.
@@ -2322,30 +2322,30 @@ func (s *ScheduleSuite) TestListSchedulesFilterAndEntryFields(chasmEnabled bool)
 	env.Equal("paused for test", entry.Info.Notes)
 
 	// Filter by TemporalSchedulePaused should find this schedule.
-	await.Require(ctx, t, func(c *await.T) {
-		listResp, err := env.FrontendClient().ListSchedules(c.Context(), &workflowservice.ListSchedulesRequest{
+	s.Await(func(s *ScheduleSuite) {
+		listResp, err := env.FrontendClient().ListSchedules(newContext(s.Context()), &workflowservice.ListSchedulesRequest{
 			Namespace:       env.Namespace().String(),
 			MaximumPageSize: 10,
 			Query:           fmt.Sprintf("%s = true", sadefs.TemporalSchedulePaused),
 		})
-		require.NoError(c, err)
+		s.Require().NoError(err)
 		var ids []string
 		for _, e := range listResp.Schedules {
 			ids = append(ids, e.ScheduleId)
 		}
-		require.Contains(c, ids, sid)
+		s.Require().Contains(ids, sid)
 	}, 15*time.Second, 1*time.Second)
 
 	// Filter for paused=false should not include this schedule.
-	await.Require(ctx, t, func(c *await.T) {
-		listResp, err := env.FrontendClient().ListSchedules(c.Context(), &workflowservice.ListSchedulesRequest{
+	s.Await(func(s *ScheduleSuite) {
+		listResp, err := env.FrontendClient().ListSchedules(newContext(s.Context()), &workflowservice.ListSchedulesRequest{
 			Namespace:       env.Namespace().String(),
 			MaximumPageSize: 10,
 			Query:           fmt.Sprintf("%s = false", sadefs.TemporalSchedulePaused),
 		})
-		require.NoError(c, err)
+		s.Require().NoError(err)
 		for _, e := range listResp.Schedules {
-			require.NotEqual(c, sid, e.ScheduleId)
+			s.Require().NotEqual(sid, e.ScheduleId)
 		}
 	}, 15*time.Second, 1*time.Second)
 }
@@ -2671,7 +2671,7 @@ func testScheduledWorkflowDoubleReset(s *ScheduleCHASMSuite, enableCHASMCallback
 	}
 
 	s.Await(func(s *ScheduleCHASMSuite) {
-		resetDesc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		resetDesc, err := env.FrontendClient().DescribeWorkflowExecution(newContext(s.Context()), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
 			Execution: resetRun1,
 		})
@@ -2701,7 +2701,7 @@ func testScheduledWorkflowDoubleReset(s *ScheduleCHASMSuite, enableCHASMCallback
 	}
 
 	s.Await(func(s *ScheduleCHASMSuite) {
-		resetDesc, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		resetDesc, err := env.FrontendClient().DescribeWorkflowExecution(newContext(s.Context()), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
 			Execution: resetRun2,
 		})
@@ -2866,7 +2866,7 @@ func testResetWithAdditionalCallback(s *ScheduleCHASMSuite, enableCHASMCallbacks
 
 	var startRequestID string
 	s.Await(func(s *ScheduleCHASMSuite) {
-		descResp, err := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		descResp, err := env.FrontendClient().DescribeWorkflowExecution(newContext(s.Context()), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
 			Execution: resetRun,
 		})
@@ -2963,12 +2963,12 @@ func (s *ScheduleCHASMSuite) TestCreatesWorkflowSentinel() {
 	// Verify the dummy workflow was created to reserve the V1 workflow ID.
 	sentinelWfID := scheduler.WorkflowIDPrefix + sid
 	var descResp *workflowservice.DescribeWorkflowExecutionResponse
-	await.Requiref(ctx, t, func(at *await.T) {
-		descResp, err = env.FrontendClient().DescribeWorkflowExecution(at.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+	s.Awaitf(func(s *ScheduleCHASMSuite) {
+		descResp, err = env.FrontendClient().DescribeWorkflowExecution(newContext(s.Context()), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: env.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{WorkflowId: sentinelWfID},
 		})
-		require.NoError(at, err)
+		s.Require().NoError(err)
 	}, 15*time.Second, 500*time.Millisecond, "dummy sentinel workflow should exist")
 	env.Equal(dummy.DummyWFTypeName, descResp.WorkflowExecutionInfo.Type.Name)
 	env.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
@@ -3075,21 +3075,21 @@ func (s *ScheduleV1Suite) TestCreatesCHASMSentinel() {
 	// Verify a CHASM sentinel was created to reserve the schedule ID.
 	// DescribeSchedule should return NotFound, as well as CreateSentinel
 	nsID := env.NamespaceID().String()
-	await.Requiref(ctx, t, func(at *await.T) {
+	s.Awaitf(func(s *ScheduleV1Suite) {
 		_, descErr := env.GetTestCluster().SchedulerClient().DescribeSchedule(
-			at.Context(),
+			newContext(s.Context()),
 			&schedulerpb.DescribeScheduleRequest{
 				NamespaceId:     nsID,
 				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: env.Namespace().String(), ScheduleId: sid},
 			},
 		)
 		var notFoundErr *serviceerror.NotFound
-		require.ErrorAs(at, descErr, &notFoundErr)
+		s.Require().ErrorAs(descErr, &notFoundErr)
 
 		// A CHASM CreateSchedule should also fail with NotFound because
 		// the sentinel blocks it.
 		_, createErr := env.GetTestCluster().SchedulerClient().CreateSchedule(
-			at.Context(),
+			newContext(s.Context()),
 			&schedulerpb.CreateScheduleRequest{
 				NamespaceId: nsID,
 				FrontendRequest: &workflowservice.CreateScheduleRequest{
@@ -3100,7 +3100,7 @@ func (s *ScheduleV1Suite) TestCreatesCHASMSentinel() {
 				},
 			},
 		)
-		require.ErrorAs(at, createErr, &notFoundErr)
+		s.Require().ErrorAs(createErr, &notFoundErr)
 	}, 15*time.Second, 500*time.Millisecond, "CHASM sentinel should exist for V1 schedule")
 
 	// Verify visibility shows exactly one schedule (not the sentinel).
@@ -3444,18 +3444,18 @@ func (s *ScheduleCHASMSuite) TestMigrationCallbackAttach() {
 	nsID := env.NamespaceID().String()
 	env.createSchedulerFromMigrationState(ctx, t, sid, wid, wt, startResp.RunId)
 
-	await.Requiref(ctx, t, func(at *await.T) {
+	s.Awaitf(func(s *ScheduleCHASMSuite) {
 		descResp, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(
-			at.Context(),
+			newContext(s.Context()),
 			&schedulerpb.DescribeScheduleRequest{
 				NamespaceId:     nsID,
 				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: env.Namespace().String(), ScheduleId: sid},
 			},
 		)
-		require.NoError(at, err)
+		s.Require().NoError(err)
 		running := descResp.GetFrontendResponse().GetInfo().GetRunningWorkflows()
-		require.NotEmpty(at, running)
-		require.Equal(at, wid, running[0].WorkflowId)
+		s.Require().NotEmpty(running)
+		s.Require().Equal(wid, running[0].WorkflowId)
 	}, 15*time.Second, 500*time.Millisecond, "CHASM scheduler should show running workflow")
 
 	// A genuine attach: the target was running when the re-attach task ran, so the
@@ -3479,15 +3479,15 @@ func (s *ScheduleCHASMSuite) TestMigrationCallbackAttach() {
 	})
 	require.NoError(t, err)
 
-	await.Requiref(ctx, t, func(at *await.T) {
+	s.Awaitf(func(s *ScheduleCHASMSuite) {
 		descResp, err := env.GetTestCluster().SchedulerClient().DescribeSchedule(
-			at.Context(),
+			newContext(s.Context()),
 			&schedulerpb.DescribeScheduleRequest{
 				NamespaceId:     nsID,
 				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: env.Namespace().String(), ScheduleId: sid},
 			},
 		)
-		require.NoError(at, err)
+		s.Require().NoError(err)
 		recent := descResp.GetFrontendResponse().GetInfo().GetRecentActions()
 		for _, action := range recent {
 			if action.GetStartWorkflowResult().GetWorkflowId() == wid &&
@@ -3495,7 +3495,7 @@ func (s *ScheduleCHASMSuite) TestMigrationCallbackAttach() {
 				return
 			}
 		}
-		require.FailNow(at, "workflow completion has not reached the schedule")
+		s.Require().FailNow("workflow completion has not reached the schedule")
 	}, 15*time.Second, 500*time.Millisecond, "CHASM scheduler should reflect workflow completion")
 
 	// The re-attached callback delivers over the same internal path as a natively
@@ -3822,7 +3822,7 @@ func (s *ScheduleV1Suite) TestRefresh() {
 	_, err := env.FrontendClient().CreateSchedule(newContext(testcontext.For(t)), req)
 	require.NoError(t, err)
 
-	await.RequireTrue(t, func() bool { return runs.Load() == 1 }, 20*time.Second, 200*time.Millisecond)
+	s.AwaitTrue(func() bool { return runs.Load() == 1 }, 20*time.Second, 200*time.Millisecond)
 
 	// workflow has started but is now sleeping. it will timeout in 2 seconds.
 
@@ -3870,14 +3870,14 @@ func (s *ScheduleV1Suite) TestRefresh() {
 	env.Empty(describeResp.Info.RunningWorkflows)
 
 	// check scheduler has gotten the refresh and done some stuff. signal is sent without waiting so we need to wait.
-	await.Require(testcontext.For(t), t, func(at *await.T) {
-		resp, err := env.FrontendClient().GetWorkflowExecutionHistory(at.Context(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+	s.Await(func(s *ScheduleV1Suite) {
+		resp, err := env.FrontendClient().GetWorkflowExecutionHistory(s.Context(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace:       env.Namespace().String(),
 			Execution:       &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid},
 			MaximumPageSize: int32(len(events2) + 1),
 		})
-		require.NoError(at, err)
-		require.Greater(at, len(resp.GetHistory().GetEvents()), len(events2))
+		s.Require().NoError(err)
+		s.Require().Greater(len(resp.GetHistory().GetEvents()), len(events2))
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
@@ -4038,7 +4038,7 @@ func (s *ScheduleV1Suite) TestNextTimeCache() {
 
 	// wait for at least 13 runs
 	const count = 13
-	await.RequireTrue(t, func() bool { return runs.Load() >= count }, (count+10)*time.Second, 500*time.Millisecond)
+	s.AwaitTrue(func() bool { return runs.Load() >= count }, (count+10)*time.Second, 500*time.Millisecond)
 
 	// there should be only four side effects for 13 runs, and only two mentioning "Next"
 	// (cache refills)
@@ -4353,7 +4353,7 @@ func (s *ScheduleSuite) TestUnpauseResumesProcessing(chasmEnabled bool) {
 	require.NoError(t, err)
 
 	// Wait for the schedule to fire at least once, confirming it's running.
-	await.RequireTrue(t, func() bool { return runs.Load() >= 1 }, 15*time.Second, 500*time.Millisecond)
+	s.AwaitTrue(func() bool { return runs.Load() >= 1 }, 15*time.Second, 500*time.Millisecond)
 
 	// Pause.
 	_, err = env.FrontendClient().PatchSchedule(newContext(testcontext.For(t)), &workflowservice.PatchScheduleRequest{
@@ -4370,7 +4370,7 @@ func (s *ScheduleSuite) TestUnpauseResumesProcessing(chasmEnabled bool) {
 	// becomes quiescent (no new runs over a stability window).
 	stableSamples := 0
 	lastRuns := runs.Load()
-	await.Require(testcontext.For(t), t, func(at *await.T) {
+	s.Await(func(s *ScheduleSuite) {
 		currentRuns := runs.Load()
 		if currentRuns == lastRuns {
 			stableSamples++
@@ -4378,7 +4378,7 @@ func (s *ScheduleSuite) TestUnpauseResumesProcessing(chasmEnabled bool) {
 			lastRuns = currentRuns
 			stableSamples = 0
 		}
-		require.GreaterOrEqual(at, stableSamples, 6)
+		s.Require().GreaterOrEqual(stableSamples, 6)
 	}, 15*time.Second, 500*time.Millisecond)
 	runsBeforeUnpause := runs.Load()
 
@@ -4393,7 +4393,7 @@ func (s *ScheduleSuite) TestUnpauseResumesProcessing(chasmEnabled bool) {
 	require.NoError(t, err)
 
 	// The generator should be kicked immediately on unpause and new runs should follow.
-	await.RequireTruef(t, func() bool { return runs.Load() > runsBeforeUnpause },
+	s.AwaitTruef(func() bool { return runs.Load() > runsBeforeUnpause },
 		15*time.Second,
 		500*time.Millisecond,
 		"schedule should resume processing after unpause",
@@ -4462,8 +4462,7 @@ func (s *ScheduleSuite) TestPausedScheduleNeverIdles(chasmEnabled bool) {
 		Action: env.startWorkflowAction(wid, wt),
 	})
 
-	await.RequireTruef(t,
-		func() bool { return runs.Load() >= 1 },
+	s.AwaitTruef(func() bool { return runs.Load() >= 1 },
 		awaitTimeout, pollInterval,
 		"schedule should have fired at least once before pause",
 	)
@@ -4485,8 +4484,7 @@ func (s *ScheduleSuite) TestPausedScheduleNeverIdles(chasmEnabled bool) {
 	// Also verify by unpausing and seeing actions resume.
 	runsBeforeUnpause := runs.Load()
 	env.patchSchedule(ctx, t, sid, &schedulepb.SchedulePatch{Unpause: "never-idles-test-resume"})
-	await.RequireTruef(t,
-		func() bool { return runs.Load() > runsBeforeUnpause },
+	s.AwaitTruef(func() bool { return runs.Load() > runsBeforeUnpause },
 		awaitTimeout, pollInterval,
 		"paused-then-unpaused schedule should resume firing (it should not have closed)",
 	)
@@ -4537,8 +4535,7 @@ func (s *ScheduleSuite) TestPausedEmptySpecStaysOpen(chasmEnabled bool) {
 		TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
 	})
 
-	await.RequireTruef(t,
-		func() bool { return runs.Load() == 1 },
+	s.AwaitTruef(func() bool { return runs.Load() == 1 },
 		awaitTimeout, pollInterval,
 		"manual trigger after unpause should fire exactly one action",
 	)
@@ -4922,7 +4919,7 @@ func (s *ScheduleCHASMSuite) TestLargeScheduleID() {
 		Action: env.startWorkflowAction(wid, wt),
 	})
 
-	await.RequireTruef(t, func() bool { return runs.Load() > 0 }, awaitTimeout, pollInterval,
+	s.AwaitTruef(func() bool { return runs.Load() > 0 }, awaitTimeout, pollInterval,
 		"schedule ID of length %d should start a workflow", scheduleIDLength)
 }
 
@@ -5048,7 +5045,7 @@ func (s *ScheduleCHASMSuite) TestScheduleCreationRolloutPercent() {
 		return err
 	}
 
-	await.Requiref(ctx, t, func(at *await.T) { require.NoError(at, describeOnCHASM(at.Context(), chasmSID)) }, 15*time.Second, 250*time.Millisecond,
+	s.Awaitf(func(s *ScheduleCHASMSuite) { s.Require().NoError(describeOnCHASM(s.Context(), chasmSID)) }, 15*time.Second, 250*time.Millisecond,
 		"schedule %q bucketed into CHASM should be describable via the CHASM handler", chasmSID)
 
 	var notFoundErr *serviceerror.NotFound
@@ -5060,12 +5057,12 @@ func (s *ScheduleCHASMSuite) TestScheduleCreationRolloutPercent() {
 	// must round-trip through the frontend's fallback path. The V1 workflow
 	// takes a moment to be queryable after creation, so poll.
 	for _, sid := range []string{chasmSID, v1SID} {
-		await.Requiref(ctx, t, func(at *await.T) {
-			_, err := env.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
+		s.Awaitf(func(s *ScheduleCHASMSuite) {
+			_, err := env.FrontendClient().DescribeSchedule(s.Context(), &workflowservice.DescribeScheduleRequest{
 				Namespace:  nsName,
 				ScheduleId: sid,
 			})
-			require.NoError(at, err)
+			s.Require().NoError(err)
 		}, 15*time.Second, 250*time.Millisecond, "frontend DescribeSchedule should succeed for %q", sid)
 	}
 }
@@ -5515,19 +5512,19 @@ func (s *ScheduleCHASMSuite) TestScheduleNextActionTimeVisibility() {
 		createTime.UTC().Format(time.RFC3339Nano),
 	)
 
-	await.Requiref(v2Ctx, t, func(at *await.T) {
-		listResp, err := env.FrontendClient().ListSchedules(at.Context(), &workflowservice.ListSchedulesRequest{
+	s.Awaitf(func(s *ScheduleCHASMSuite) {
+		listResp, err := env.FrontendClient().ListSchedules(newContext(s.Context()), &workflowservice.ListSchedulesRequest{
 			Namespace:       env.Namespace().String(),
 			MaximumPageSize: 100,
 			Query:           query,
 		})
-		require.NoError(at, err)
+		s.Require().NoError(err)
 		for _, ent := range listResp.Schedules {
 			if ent.ScheduleId == v2Sid {
 				return
 			}
 		}
-		require.FailNow(at, "schedule has not appeared in visibility")
+		s.Require().FailNow("schedule has not appeared in visibility")
 	}, 15*time.Second, 1*time.Second,
 		"schedule %q must be returned by query %q (next action time published to visibility and in the future)",
 		v2Sid, query)
@@ -5549,20 +5546,20 @@ func (s *ScheduleCHASMSuite) TestListSchedulesPreservesV2ScheduleIDWithV1Prefix(
 		})
 	}
 
-	await.Requiref(ctx, t, func(at *await.T) {
-		response, err := env.FrontendClient().ListSchedules(at.Context(), &workflowservice.ListSchedulesRequest{
+	s.Awaitf(func(s *ScheduleCHASMSuite) {
+		response, err := env.FrontendClient().ListSchedules(chasmContextFactory(s.Context()), &workflowservice.ListSchedulesRequest{
 			Namespace:       env.Namespace().String(),
 			MaximumPageSize: 10,
 		})
-		require.NoError(at, err)
+		s.Require().NoError(err)
 		ids := make(map[string]struct{}, len(response.Schedules))
 		for _, schedule := range response.Schedules {
 			ids[schedule.GetScheduleId()] = struct{}{}
 		}
 		_, foundPlainID := ids[plainID]
 		_, foundPrefixedID := ids[prefixedID]
-		require.True(at, foundPlainID)
-		require.True(at, foundPrefixedID)
+		s.Require().True(foundPlainID)
+		s.Require().True(foundPrefixedID)
 	}, awaitTimeout, pollInterval,
 		"ListSchedules must preserve both V2 IDs %q and %q", plainID, prefixedID)
 }
@@ -5989,7 +5986,7 @@ func (s *ScheduleCHASMSuite) TestScheduleManyCalendars() {
 		Action: env.startWorkflowAction(wid, wt),
 	})
 
-	await.RequireTruef(t, func() bool { return runs.Load() >= 3 },
+	s.AwaitTruef(func() bool { return runs.Load() >= 3 },
 		awaitTimeout, pollInterval, "schedule with many calendars should keep dispatching actions")
 
 	describe := func() *schedulepb.ScheduleInfo {
@@ -6109,13 +6106,13 @@ func (s *ScheduleCHASMSuite) TestScheduleCountsVisibility() {
 
 	// Starting the workflow and buffering the next fire takes a few seconds on top
 	// of visibility propagation, so allow 30s for each count to become queryable.
-	await.Requiref(ctx, t, func(at *await.T) {
-		require.True(at, matchesQuery(at.Context(), fmt.Sprintf("%s >= 1", chasmscheduler.ScheduleRunningWorkflowCountName)))
+	s.Awaitf(func(s *ScheduleCHASMSuite) {
+		s.Require().True(matchesQuery(newContext(s.Context()), fmt.Sprintf("%s >= 1", chasmscheduler.ScheduleRunningWorkflowCountName)))
 	}, 30*time.Second, 500*time.Millisecond,
 		"schedule must be queryable by ScheduleRunningWorkflowCount >= 1")
 
-	await.Requiref(ctx, t, func(at *await.T) {
-		require.True(at, matchesQuery(at.Context(), fmt.Sprintf("%s >= 1", chasmscheduler.ScheduleBufferedStartsCountName)))
+	s.Awaitf(func(s *ScheduleCHASMSuite) {
+		s.Require().True(matchesQuery(newContext(s.Context()), fmt.Sprintf("%s >= 1", chasmscheduler.ScheduleBufferedStartsCountName)))
 	}, 30*time.Second, 500*time.Millisecond,
 		"schedule must be queryable by ScheduleBufferedStartsCount >= 1")
 }
