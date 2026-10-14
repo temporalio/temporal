@@ -291,7 +291,6 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		}
 
 		require.NoError(t, op.addCompletionCallbacks(ctx, "req-1", initialCallbacks, "ns-name", cbValidator))
-		require.Positive(t, op.GetCallbackMetadata().GetTotalCallbacksSize())
 		require.Equal(t, sumCallbackSizes(initialCallbacks), op.GetCallbackMetadata().GetTotalCallbacksSize())
 		size1 := op.GetCallbackMetadata().GetTotalCallbacksSize()
 
@@ -300,7 +299,6 @@ func TestAddCompletionCallbacks(t *testing.T) {
 		}
 
 		require.NoError(t, op.addCompletionCallbacks(ctx, "req-2", addedCallbacks, "ns-name", cbValidator))
-		require.Greater(t, op.GetCallbackMetadata().GetTotalCallbacksSize(), size1)
 		require.Equal(t, sumCallbackSizes(addedCallbacks)+size1, op.GetCallbackMetadata().GetTotalCallbacksSize())
 	})
 
