@@ -4281,9 +4281,9 @@ func (n *Node) regenerateTimerTasksForTimeSkipping() error {
 	return n.closeTransactionGeneratePhysicalPureTask(firstPureTask, firstPureTaskNode, archetypeID)
 }
 
-// defaultFindNextTargetTime finds the earliest timer task from both pure tasks and side-effect tasks
-// as the target time for time skipping, and conditionally adjusts the target time with the fast-forward time if set.
-// this method doesn't validate tasks and is assumed to be called after invalidate tasks are deleted
+// defaultFindNextTargetTime finds the earliest timer task from both pure and side-effect tasks
+// and applies the fast-forward bound. Invalidated tasks are removed before this method runs.
+// A timer still scheduled at or before now is pending and blocks time skipping until it runs.
 func (n *Node) defaultFindNextTargetTime() *TimeSkippingTransition {
 	transition := NewTimeSkippingTransition(n.Now(nil))
 	now := transition.CurrentTime
