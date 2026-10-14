@@ -105,13 +105,10 @@ func ValidateAdditions(
 type AttachOption func(*attachOptions)
 
 type attachOptions struct {
-	// If set, the requestID that added the completion callback will be also be used for the
-	// Callback component itself.
-	//
 	// This is incorrect and is a bug. Reusing the originating request ID is ambiguous when
 	// multiple callbacks are attached in the same request that are routed to the same
-	// destination. This option is used to preserve the behavior for Workflows, which rely
-	// on the request ID to resolve buffered workflow events.
+	// destination. This option preserves the existing behavior for Workflows, which rely on
+	// the request ID to resolve buffered workflow events, and for standalone activities.
 	//
 	// TODO(https://github.com/temporalio/temporal/issues/11958): Fix this.
 	reuseRequestIDForCallback bool
