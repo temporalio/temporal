@@ -139,6 +139,11 @@ type (
 		PollerScalingTaskAddToDispatchRatio dynamicconfig.FloatPropertyFnWithTaskQueueFilter
 		EnablePollerScalingDecisionMetrics  dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 
+		// MaxConcurrentForceLoadPartitions caps parallel ForceLoadTaskQueuePartition processing
+		// to prevent the startup burst (all workers reconnecting simultaneously) from loading
+		// thousands of partition managers concurrently and OOM-killing the host.
+		MaxConcurrentForceLoadPartitions dynamicconfig.IntPropertyFn
+
 		FairnessCounter               dynamicconfig.TypedPropertyFnWithTaskQueueFilter[counter.CounterParams]
 		FairnessPassDither            dynamicconfig.BoolPropertyFnWithTaskQueueFilter
 		PartitionScaleAllowedDrift    dynamicconfig.TypedPropertyFnWithTaskQueueFilter[dynamicconfig.PartitionScaleAllowedDrift]
@@ -357,6 +362,7 @@ func NewConfig(
 		MembershipUnloadDelay:                    dynamicconfig.MatchingMembershipUnloadDelay.Get(dc),
 		TaskQueueInfoByBuildIdTTL:                dynamicconfig.TaskQueueInfoByBuildIdTTL.Get(dc),
 		PriorityLevels:                           dynamicconfig.MatchingPriorityLevels.Get(dc),
+		MaxConcurrentForceLoadPartitions:         dynamicconfig.MatchingMaxConcurrentForceLoadPartitions.Get(dc),
 		RateLimiterRefreshInterval:               time.Minute,
 		FairnessKeyRateLimitCacheSize:            dynamicconfig.MatchingFairnessKeyRateLimitCacheSize.Get(dc),
 		MaxFairnessKeyWeightOverrides:            dynamicconfig.MatchingMaxFairnessKeyWeightOverrides.Get(dc),

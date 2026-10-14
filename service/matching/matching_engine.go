@@ -201,6 +201,10 @@ type (
 		reachabilityCache reachabilityCache
 		// Rate limiter to limit the task dispatch
 		rateLimiter TaskDispatchRateLimiter
+		// forceLoadSem limits concurrent ForceLoadTaskQueuePartition processing to bound the
+		// memory spike from startup bursts (all workers reconnect simultaneously, each root
+		// partition fires ForceLoadAllChildPartitions). A nil channel means no limit.
+		forceLoadSem chan struct{}
 
 		taskHookFactories []hooks.TaskHookFactory
 	}
@@ -331,6 +335,9 @@ func NewEngine(
 		partitionScalerFactory:    partitionScalerFactory,
 	}
 	e.nexusEndpointsOwnershipLostCh.Store(make(chan struct{}))
+	if n := config.MaxConcurrentForceLoadPartitions(); n > 0 {
+		e.forceLoadSem = make(chan struct{}, n)
+	}
 	e.reachabilityCache = newReachabilityCache(
 		metrics.NoopMetricsHandler,
 		visibilityManager,
@@ -2552,6 +2559,17 @@ func (e *matchingEngineImpl) ForceLoadTaskQueuePartition(
 	req *matchingservice.ForceLoadTaskQueuePartitionRequest,
 ) (*matchingservice.ForceLoadTaskQueuePartitionResponse, error) {
 	partition := tqid.PartitionFromPartitionProto(req.GetTaskQueuePartition(), req.GetNamespaceId())
+	// Acquire the semaphore to limit concurrent partition manager initializations. This prevents
+	// the startup burst (all workers reconnecting simultaneously, each root partition firing
+	// ForceLoadAllChildPartitions) from loading thousands of partition managers in parallel.
+	if e.forceLoadSem != nil {
+		select {
+		case e.forceLoadSem <- struct{}{}:
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+		defer func() { <-e.forceLoadSem }()
+	}
 	// Leverage getTaskQueuePartitionManager to check and then create the partition
 	_, wasUnloaded, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseForce)
 	if err != nil {

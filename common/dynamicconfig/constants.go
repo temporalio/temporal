@@ -1631,6 +1631,16 @@ an optional feature and also requires a metrics collection system that can handl
 The metric has dimensions: namespace, taskqueue, and task_type (Workflow, Activity, Nexus). Disabled by
 default as namespace cardinality can be high and this requires a metrics collection system that can handle it.`,
 	)
+	MatchingMaxConcurrentForceLoadPartitions = NewGlobalIntSetting(
+		"matching.maxConcurrentForceLoadPartitions",
+		16,
+		`MatchingMaxConcurrentForceLoadPartitions limits how many ForceLoadTaskQueuePartition RPCs a
+single matching host processes concurrently. During startup, all worker clients reconnect
+simultaneously and each root partition calls ForceLoadAllChildPartitions, which can produce
+thousands of concurrent load requests. Without a limit this startup burst initialises all
+partition managers in parallel, causing a memory spike that may exceed the container limit.
+A value of 0 disables the limit.`,
+	)
 	MatchingAutoEnableV2 = NewTaskQueueBoolSetting(
 		"matching.autoEnableV2",
 		false,
