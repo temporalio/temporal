@@ -126,9 +126,10 @@ func (s *standaloneActivityTestSuite) newTestEnv(opts ...testcore.TestOption) *s
 	return env
 }
 
-func (s *standaloneActivityTestSuite) TestLastWorkerIdentityAndPrincipalArePersisted() {
+func (s *standaloneActivityTestSuite) TestPrincipalAttributionIsPersistedAndDescribed() {
 	const (
 		principalType        = "jwt"
+		startPrincipalName   = "client-subject"
 		pollPrincipalName    = "poll-worker-subject"
 		respondPrincipalName = "respond-worker-subject"
 		respondIdentity      = "respond-worker-identity"
@@ -148,7 +149,7 @@ func (s *standaloneActivityTestSuite) TestLastWorkerIdentityAndPrincipalArePersi
 		}, nil
 	})
 	env.SetOnAuthorize(func(_ context.Context, _ *authorization.Claims, target *authorization.CallTarget) (authorization.Result, error) {
-		principalName := "client-subject"
+		principalName := startPrincipalName
 		switch target.APIName {
 		case "/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":
 			principalName = pollPrincipalName
@@ -213,6 +214,26 @@ func (s *standaloneActivityTestSuite) TestLastWorkerIdentityAndPrincipalArePersi
 		Type: principalType,
 		Name: respondPrincipalName,
 	}, attemptState.GetLastWorkerPrincipal())
+
+	describeResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		ActivityId: activityID,
+		RunId:      startResp.RunId,
+	})
+	require.NoError(t, err)
+	info := describeResp.GetInfo()
+	protorequire.ProtoEqual(t, &commonpb.Principal{
+		Type: principalType,
+		Name: startPrincipalName,
+	}, info.GetStartedByPrincipal())
+	protorequire.ProtoEqual(t, &commonpb.Principal{
+		Type: principalType,
+		Name: respondPrincipalName,
+	}, info.GetClosedByPrincipal())
+	protorequire.ProtoEqual(t, &commonpb.Principal{
+		Type: principalType,
+		Name: respondPrincipalName,
+	}, info.GetLastWorkerPrincipal())
 }
 
 func (s *standaloneActivityTestSuite) TestIDReusePolicy() {
