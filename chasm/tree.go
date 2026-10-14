@@ -4302,7 +4302,11 @@ func (n *Node) defaultFindNextTargetTime() *TimeSkippingTransition {
 				}
 				scheduledTime := task.GetScheduledTime().AsTime()
 				if !scheduledTime.After(now) {
-					continue
+					taskType, _ := n.registry.TaskFqnByID(task.GetTypeId())
+					n.logger.Debug("a pending task blocks chasm time skipping",
+						tag.ArchetypeID(n.ArchetypeID()),
+						tag.String("chasm-task-type", taskType))
+					return nil
 				}
 				transition.TrackEarliestFutureTime(scheduledTime)
 			}

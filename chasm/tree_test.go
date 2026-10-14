@@ -6293,6 +6293,28 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		s.Equal(0, s.nodeBackend.NumTasksAdded(), "no timer tasks are regenerated when skipping is gated out")
 	})
 
+	s.Run("GateSkippableButTimerDue_NoStateChange", func() {
+		root := gateRoot(true)
+		root.serializedNode.GetMetadata().GetComponentAttributes().GetPureTasks()[0].ScheduledTime =
+			timestamppb.New(baseTime)
+		var recorded *TimeSkippingTransition
+		s.nodeBackend.HandleRecordTimeSkippingTransition = func(tr *TimeSkippingTransition) { recorded = tr }
+		tl, ok := s.logger.(*testlogger.TestLogger)
+		s.Require().True(ok)
+		expectedLog := tl.Expect(
+			testlogger.Debug,
+			"a pending task blocks chasm time skipping",
+			tag.ArchetypeID(root.ArchetypeID()),
+			tag.String("chasm-task-type", testPureTaskFQN),
+		)
+
+		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+		s.NoError(err)
+		s.True(expectedLog.Matched())
+		s.Nil(recorded, "a nil transition must be handled as no time skip")
+		s.Equal(0, s.nodeBackend.NumTasksAdded(), "timer tasks are not regenerated when a timer is already due")
+	})
+
 	s.Run("GateSkippable_RecordsTransitionAndRegeneratesTasks", func() {
 		root := gateRoot(true)
 		var recorded *TimeSkippingTransition
