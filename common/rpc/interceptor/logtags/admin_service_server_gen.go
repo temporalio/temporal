@@ -33,6 +33,10 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 		return nil
 	case *adminservice.CloseShardResponse:
 		return nil
+	case *adminservice.CountExecutionsRequest:
+		return nil
+	case *adminservice.CountExecutionsResponse:
+		return nil
 	case *adminservice.DeepHealthCheckRequest:
 		return nil
 	case *adminservice.DeepHealthCheckResponse:
@@ -149,6 +153,10 @@ func (wt *WorkflowTags) extractFromAdminServiceServerMessage(message any) []tag.
 	case *adminservice.ListClustersRequest:
 		return nil
 	case *adminservice.ListClustersResponse:
+		return nil
+	case *adminservice.ListExecutionsRequest:
+		return nil
+	case *adminservice.ListExecutionsResponse:
 		return nil
 	case *adminservice.ListHistoryTasksRequest:
 		return nil

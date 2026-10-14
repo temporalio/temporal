@@ -15,8 +15,10 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
@@ -689,6 +691,34 @@ func GetPayloadsMapSize(data map[string]*commonpb.Payloads) int {
 // CloneProto is a generic typed version of proto.Clone from proto.
 func CloneProto[T proto.Message](v T) T {
 	return proto.Clone(v).(T)
+}
+
+// GrantEagerDispatch asks Matching whether it may eagerly dispatch one activity task.
+func GrantEagerDispatch(
+	ctx context.Context,
+	client matchingservice.MatchingServiceClient,
+	namespaceID string,
+	taskQueue string,
+	priority *commonpb.Priority,
+	version *deploymentspb.WorkerDeploymentVersion,
+) bool {
+	if client == nil {
+		return false
+	}
+
+	response, err := client.GrantEagerDispatch(ctx, &matchingservice.GrantEagerDispatchRequest{
+		NamespaceId: namespaceID,
+		TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+			TaskQueue:     taskQueue,
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+		},
+		Items: []*matchingservice.GrantEagerDispatchRequest_Item{{
+			Count:    1,
+			Priority: priority,
+			Version:  version,
+		}},
+	})
+	return err == nil && len(response.GetItems()) == 1 && response.GetItems()[0].GetGrantedCount() == 1
 }
 
 func CloneProtoMap[K comparable, T proto.Message](src map[K]T) map[K]T {

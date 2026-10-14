@@ -163,7 +163,7 @@ func (t *timerQueueTaskExecutorBase) deleteHistoryBranch(
 // isValidExpirationTime returns true when the workflow is still running and
 // expirationTime has been reached. Callers pass fields from an execution
 // (e.g. WorkflowRunExpirationTime), which are stored in the execution's virtual
-// frame (if time skipping happens); this converts via ms.ToRealTime before
+// frame (if time skipping happens); this converts via ms.ToRealTimeWithCurrentOffset before
 // comparing to t.Now() because the timer queue dispatches against wall-clock.
 func (t *timerQueueTaskExecutorBase) isValidExpirationTime(
 	mutableState historyi.MutableState,
@@ -174,7 +174,7 @@ func (t *timerQueueTaskExecutorBase) isValidExpirationTime(
 		return false
 	}
 	taskShouldTriggerAt := expirationTime.AsTime()
-	expired := queues.IsTimeExpired(task, t.Now(), mutableState.ToRealTime(taskShouldTriggerAt))
+	expired := queues.IsTimeExpired(task, t.Now(), mutableState.ToRealTimeWithCurrentOffset(taskShouldTriggerAt))
 	return expired
 }
 
@@ -308,7 +308,7 @@ func (t *timerQueueTaskExecutorBase) executeStateMachineTimers(
 	// StateMachineTimers are sorted by Deadline, iterate through them as long as the deadline is expired.
 	for len(timers) > 0 {
 		group := timers[0]
-		if !queues.IsTimeExpired(task, t.Now(), ms.ToRealTime(group.Deadline.AsTime())) {
+		if !queues.IsTimeExpired(task, t.Now(), ms.ToRealTimeWithCurrentOffset(group.Deadline.AsTime())) {
 			break
 		}
 

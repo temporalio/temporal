@@ -22,6 +22,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	querypb "go.temporal.io/api/query/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
@@ -660,7 +661,11 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
-	if err := validateRequestId(&request.RequestId, wh.config.MaxIDLengthLimit()); err != nil {
+	maxIDLength := wh.config.MaxIDLengthLimit()
+	if err := validateRequestId(&request.RequestId, maxIDLength); err != nil {
+		return nil, err
+	}
+	if err := validatePropagatedNexusSerializationContext(request.GetPropagatedNexusSerializationContext(), maxIDLength); err != nil {
 		return nil, err
 	}
 
@@ -1414,26 +1419,27 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 	}
 
 	return &workflowservice.PollActivityTaskQueueResponse{
-		TaskToken:                   matchingResponse.TaskToken,
-		WorkflowExecution:           matchingResponse.WorkflowExecution,
-		ActivityId:                  matchingResponse.ActivityId,
-		ActivityType:                matchingResponse.ActivityType,
-		ActivityRunId:               matchingResponse.ActivityRunId,
-		Input:                       matchingResponse.Input,
-		ScheduledTime:               matchingResponse.ScheduledTime,
-		ScheduleToCloseTimeout:      matchingResponse.ScheduleToCloseTimeout,
-		StartedTime:                 matchingResponse.StartedTime,
-		StartToCloseTimeout:         matchingResponse.StartToCloseTimeout,
-		HeartbeatTimeout:            matchingResponse.HeartbeatTimeout,
-		Attempt:                     matchingResponse.Attempt,
-		CurrentAttemptScheduledTime: matchingResponse.CurrentAttemptScheduledTime,
-		HeartbeatDetails:            matchingResponse.HeartbeatDetails,
-		WorkflowType:                matchingResponse.WorkflowType,
-		WorkflowNamespace:           matchingResponse.WorkflowNamespace,
-		Header:                      matchingResponse.Header,
-		PollerScalingDecision:       matchingResponse.PollerScalingDecision,
-		Priority:                    matchingResponse.Priority,
-		RetryPolicy:                 matchingResponse.RetryPolicy,
+		TaskToken:                           matchingResponse.TaskToken,
+		WorkflowExecution:                   matchingResponse.WorkflowExecution,
+		ActivityId:                          matchingResponse.ActivityId,
+		ActivityType:                        matchingResponse.ActivityType,
+		ActivityRunId:                       matchingResponse.ActivityRunId,
+		Input:                               matchingResponse.Input,
+		ScheduledTime:                       matchingResponse.ScheduledTime,
+		ScheduleToCloseTimeout:              matchingResponse.ScheduleToCloseTimeout,
+		StartedTime:                         matchingResponse.StartedTime,
+		StartToCloseTimeout:                 matchingResponse.StartToCloseTimeout,
+		HeartbeatTimeout:                    matchingResponse.HeartbeatTimeout,
+		Attempt:                             matchingResponse.Attempt,
+		CurrentAttemptScheduledTime:         matchingResponse.CurrentAttemptScheduledTime,
+		HeartbeatDetails:                    matchingResponse.HeartbeatDetails,
+		WorkflowType:                        matchingResponse.WorkflowType,
+		WorkflowNamespace:                   matchingResponse.WorkflowNamespace,
+		Header:                              matchingResponse.Header,
+		PollerScalingDecision:               matchingResponse.PollerScalingDecision,
+		Priority:                            matchingResponse.Priority,
+		RetryPolicy:                         matchingResponse.RetryPolicy,
+		PropagatedNexusSerializationContext: matchingResponse.PropagatedNexusSerializationContext,
 	}, nil
 }
 
@@ -5251,7 +5257,6 @@ func (wh *WorkflowHandler) prepareSchedulerQuery(
 			saNameType,
 			wh.saMapperProvider,
 			chasmMapper,
-			wh.config.VisibilityEnableUnifiedQueryConverter,
 			query,
 			metricsHandler,
 			wh.logger,
@@ -6901,10 +6906,16 @@ func (wh *WorkflowHandler) getArchivedHistory(
 	for _, batch := range resp.HistoryBatches {
 		history.Events = append(history.Events, batch.Events...)
 	}
+	var serializationContext *nexuspb.PropagatedSerializationContext
+	// A nil request token starts at the workflow's first event, which carries this context.
+	if request.GetNextPageToken() == nil && len(history.Events) > 0 {
+		serializationContext = history.Events[0].GetWorkflowExecutionStartedEventAttributes().GetPropagatedNexusSerializationContext()
+	}
 	return &workflowservice.GetWorkflowExecutionHistoryResponse{
-		History:       history,
-		NextPageToken: resp.NextPageToken,
-		Archived:      true,
+		History:                             history,
+		NextPageToken:                       resp.NextPageToken,
+		Archived:                            true,
+		PropagatedNexusSerializationContext: serializationContext,
 	}, nil
 }
 
