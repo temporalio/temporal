@@ -84,10 +84,7 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingStatePropagation() {
 	state := &commonpb.TimeSkippingStatePropagation{InitialSkipCount: 1}
 
 	s.Require().NoError(validateTimeSkippingStatePropagation(context.Background(), nil))
-	s.Require().ErrorIs(
-		validateTimeSkippingStatePropagation(context.Background(), state),
-		errTimeSkippingStatePropagationNotInternal,
-	)
+	s.Require().NoError(validateTimeSkippingStatePropagation(context.Background(), state))
 	userCtx := headers.SetPrincipal(context.Background(), &commonpb.Principal{Type: "user", Name: "mockName"})
 	s.Require().ErrorIs(
 		validateTimeSkippingStatePropagation(userCtx, state),

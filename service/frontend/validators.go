@@ -107,8 +107,8 @@ func validateFairnessWeightUpdate(
 	return nil
 }
 
-// validateTimeSkippingStatePropagation keeps propagation state internal-only while CHASM Schedules
-// start Workflows through Frontend.
+// validateTimeSkippingStatePropagation rejects external principals while CHASM Schedules
+// start Workflows through Frontend. A nil principal is allowed for OSS noop authorization.
 // TODO: Delete this function once they start Workflows directly from History.
 func validateTimeSkippingStatePropagation(
 	ctx context.Context,
@@ -118,6 +118,9 @@ func validateTimeSkippingStatePropagation(
 		return nil
 	}
 	principal := headers.GetPrincipal(ctx)
+	if principal == nil {
+		return nil
+	}
 	if principal.GetType() != authorization.InternalPrincipalType ||
 		principal.GetName() != authorization.InternalPrincipalName {
 		return errTimeSkippingStatePropagationNotInternal
