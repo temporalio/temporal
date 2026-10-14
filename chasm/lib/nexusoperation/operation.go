@@ -488,9 +488,10 @@ func (o *Operation) addCompletionCallbacks(
 	}
 
 	// Validate
+	currentStats := o.GetCallbackMetadata()
 	err := validator.ValidateAdditions(namespaceName, newCallbacks, callbacks.CurrentCallbacksInfo{
-		Count:     len(o.Callbacks),
-		TotalSize: int(o.GetCallbackMetadata().GetTotalCallbacksSize()),
+		Count:     int(currentStats.GetTotalCallbacksCount()),
+		TotalSize: int(currentStats.GetTotalCallbacksSize()),
 	})
 	if err != nil {
 		return err
