@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/mockapi/workflowservicemock/v1"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/mock/gomock"
@@ -536,6 +537,69 @@ func TestExecuteTask_PropagatesScheduleTimeSkipping(t *testing.T) {
 				ExpectedRunningWorkflows: 1,
 				ExpectedActionCount:      1,
 			})
+		})
+	}
+}
+
+func TestExecuteTask_SkipsActionDelayMetricsWhenTimeSkippingEnabled(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		config      *commonpb.TimeSkippingConfig
+		wantMetrics bool
+	}{
+		{name: "no time skipping config", wantMetrics: true},
+		{name: "time skipping disabled", config: &commonpb.TimeSkippingConfig{}, wantMetrics: true},
+		{name: "time skipping enabled", config: &commonpb.TimeSkippingConfig{Enabled: true}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			env := newInvokerExecuteTestEnv(t)
+			if tc.config != nil {
+				env.NodeBackend.HandleGetExecutionInfo = func() *persistencespb.WorkflowExecutionInfo {
+					return &persistencespb.WorkflowExecutionInfo{
+						TimeSkippingInfo: &persistencespb.TimeSkippingInfo{Config: tc.config},
+					}
+				}
+			}
+			recorder := metricstest.NewCaptureHandler()
+			capture := recorder.StartCapture()
+			defer recorder.StopCapture(capture)
+			env.handler = scheduler.NewInvokerExecuteTaskHandler(scheduler.InvokerTaskHandlerOptions{
+				Config:         defaultConfig(),
+				MetricsHandler: recorder,
+				BaseLogger:     env.Logger,
+				HistoryClient:  env.mockHistoryClient,
+				FrontendClient: env.mockFrontendClient,
+			})
+			env.mockFrontendClient.EXPECT().
+				StartWorkflowExecution(gomock.Any(), gomock.Any()).
+				Return(&workflowservice.StartWorkflowExecutionResponse{RunId: "run-id"}, nil)
+
+			startTime := timestamppb.New(env.TimeSource.Now())
+			runExecuteTestCase(t, env, &executeTestCase{
+				InitialBufferedStarts: []*schedulespb.BufferedStart{{
+					NominalTime:   startTime,
+					ActualTime:    startTime,
+					DesiredTime:   startTime,
+					RequestId:     "request-id",
+					OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+					Attempt:       1,
+				}},
+				ExpectedBufferedStarts:   1,
+				ExpectedRunningWorkflows: 1,
+				ExpectedActionCount:      1,
+			})
+
+			wantCount := 0
+			if tc.wantMetrics {
+				wantCount = 1
+			}
+			require.Len(t, capture.SnapshotMetric(metrics.ScheduleActionDelay.Name()), wantCount)
+			require.Len(t, capture.SnapshotMetric(metrics.ScheduleActionE2EDelay.Name()), wantCount)
 		})
 	}
 }

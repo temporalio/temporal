@@ -755,7 +755,7 @@ func (h *InvokerExecuteTaskHandler) startWorkflow(
 	start.HasCallback = true
 
 	// Record time taken from action eligible to workflow started.
-	if !start.Manual {
+	if !start.Manual && !timeSkippingConfig.GetEnabled() {
 		desiredTime := cmp.Or(start.DesiredTime, start.ActualTime)
 		metricsHandler.
 			Timer(metrics.ScheduleActionDelay.Name()).
