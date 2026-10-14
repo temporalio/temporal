@@ -13,19 +13,18 @@ services.
 
 ## 1. State the intended change
 
-Read the PR title and description, and state the change to Temporal's behavior that they intend. If
-they do not say what the PR is intended to change and why, report that as the only finding: ask the
-author to describe the intended change in the PR description and then request another review. Do
-not review further.
+Read the PR title, description and commit messages, and state the change to Temporal's behavior
+that they intend. If the description does not say what the PR is intended to change and why, report
+that as a finding, infer the intended change from the commit messages and the diff, and continue.
 
 ## 2. Read the change in full
 
 Read the diff. Then read every changed file completely, together with the code that calls the
-changed code and the code it calls.
+changed code and the code it calls. Skip generated code (e.g. `*.pb.go`, mocks).
 
 ## 3. Find the reference behavior
 
-Find the existing code that does the most similar thing: code that the description says the change
+Try to find existing code that does something related: code that the description says the change
 mirrors or replaces, code that does the same thing for another execution type or service, and code
 paths that the change adds to or bypasses. Read it. The change should either behave like this code
 or differ from it for a reason.

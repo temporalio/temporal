@@ -247,7 +247,7 @@ jobs:
             The trusted base branch is checked out in the current working directory.
             The PR head is checked out in `pr-head/`.
             Review the changes in `pr-head/`.
-            Use `gh pr view ${{ needs.check-review-eligibility.outputs.pr_number }} --json title,body` to read the PR description.
+            Use `gh pr view ${{ needs.check-review-eligibility.outputs.pr_number }} --json title,body,commits` to read the PR description and commit messages.
             Use `gh pr diff ${{ needs.check-review-eligibility.outputs.pr_number }}` to inspect the diff; `git diff` does not work across the two checkouts.
 
             ## Posting rules
