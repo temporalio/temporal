@@ -608,7 +608,9 @@ func (s *NexusRequestForwardingSuite) TestOperationCompletionForwardedFromStandb
 			snap, err := s.sendNexusCompletionRequest(ctx, s.T(), s.clusters[1], publicCallbackUrl, completion)
 			s.NoError(err)
 			s.Len(snap["nexus_completion_requests"], 1)
-			s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": ns, "outcome": "request_forwarded"})
+			// The standby cluster does not resolve the operation, so the endpoint is unknown; the active cluster
+			// tags its own completion metric with the endpoint.
+			s.Subset(snap["nexus_completion_requests"][0].Tags, map[string]string{"namespace": ns, "outcome": "request_forwarded", "nexus_endpoint": "_unknown_"})
 
 			// Ensure that CompleteOperation request is tracked as part of normal service telemetry metrics
 			s.Condition(func() bool {

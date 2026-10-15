@@ -8918,7 +8918,12 @@ func (*CompleteNexusOperationChasmRequest_Success) isCompleteNexusOperationChasm
 func (*CompleteNexusOperationChasmRequest_Failure) isCompleteNexusOperationChasmRequest_Outcome() {}
 
 type CompleteNexusOperationChasmResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Endpoint, service, and operation of the completed Nexus operation. Used by the frontend to tag
+	// completion metrics. Empty if the completion did not target a Nexus operation.
+	Endpoint      string `protobuf:"bytes,1,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
+	Service       string `protobuf:"bytes,2,opt,name=service,proto3" json:"service,omitempty"`
+	Operation     string `protobuf:"bytes,3,opt,name=operation,proto3" json:"operation,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -8951,6 +8956,27 @@ func (x *CompleteNexusOperationChasmResponse) ProtoReflect() protoreflect.Messag
 // Deprecated: Use CompleteNexusOperationChasmResponse.ProtoReflect.Descriptor instead.
 func (*CompleteNexusOperationChasmResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{135}
+}
+
+func (x *CompleteNexusOperationChasmResponse) GetEndpoint() string {
+	if x != nil {
+		return x.Endpoint
+	}
+	return ""
+}
+
+func (x *CompleteNexusOperationChasmResponse) GetService() string {
+	if x != nil {
+		return x.Service
+	}
+	return ""
+}
+
+func (x *CompleteNexusOperationChasmResponse) GetOperation() string {
+	if x != nil {
+		return x.Operation
+	}
+	return ""
 }
 
 type CompleteNexusOperationRequest struct {
@@ -9083,7 +9109,12 @@ func (*CompleteNexusOperationRequest_Success) isCompleteNexusOperationRequest_Ou
 func (*CompleteNexusOperationRequest_Failure) isCompleteNexusOperationRequest_Outcome() {}
 
 type CompleteNexusOperationResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Endpoint, service, and operation of the completed Nexus operation. Used by the frontend to tag
+	// completion metrics. Empty if the completion did not target a Nexus operation.
+	Endpoint      string `protobuf:"bytes,1,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
+	Service       string `protobuf:"bytes,2,opt,name=service,proto3" json:"service,omitempty"`
+	Operation     string `protobuf:"bytes,3,opt,name=operation,proto3" json:"operation,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -9116,6 +9147,27 @@ func (x *CompleteNexusOperationResponse) ProtoReflect() protoreflect.Message {
 // Deprecated: Use CompleteNexusOperationResponse.ProtoReflect.Descriptor instead.
 func (*CompleteNexusOperationResponse) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_historyservice_v1_request_response_proto_rawDescGZIP(), []int{137}
+}
+
+func (x *CompleteNexusOperationResponse) GetEndpoint() string {
+	if x != nil {
+		return x.Endpoint
+	}
+	return ""
+}
+
+func (x *CompleteNexusOperationResponse) GetService() string {
+	if x != nil {
+		return x.Service
+	}
+	return ""
+}
+
+func (x *CompleteNexusOperationResponse) GetOperation() string {
+	if x != nil {
+		return x.Operation
+	}
+	return ""
 }
 
 type InvokeStateMachineMethodRequest struct {
@@ -11493,8 +11545,11 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\x0foperation_token\x18\x06 \x01(\tR\x0eoperationToken\x129\n" +
 	"\n" +
 	"start_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime:\x1e\x92\xc4\x03\x1aB\x18completion.component_refB\t\n" +
-	"\aoutcome\"%\n" +
-	"#CompleteNexusOperationChasmResponse\"\xe0\x03\n" +
+	"\aoutcome\"y\n" +
+	"#CompleteNexusOperationChasmResponse\x12\x1a\n" +
+	"\bendpoint\x18\x01 \x01(\tR\bendpoint\x12\x18\n" +
+	"\aservice\x18\x02 \x01(\tR\aservice\x12\x1c\n" +
+	"\toperation\x18\x03 \x01(\tR\toperation\"\xe0\x03\n" +
 	"\x1dCompleteNexusOperationRequest\x12V\n" +
 	"\n" +
 	"completion\x18\x01 \x01(\v26.temporal.server.api.token.v1.NexusOperationCompletionR\n" +
@@ -11506,8 +11561,11 @@ const file_temporal_server_api_historyservice_v1_request_response_proto_rawDesc 
 	"\n" +
 	"start_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x122\n" +
 	"\x05links\x18\a \x03(\v2\x1c.temporal.api.common.v1.LinkR\x05links:5\x92\xc4\x031\"\x17completion.namespace_id*\x16completion.workflow_idB\t\n" +
-	"\aoutcome\" \n" +
-	"\x1eCompleteNexusOperationResponse\"\x8d\x02\n" +
+	"\aoutcome\"t\n" +
+	"\x1eCompleteNexusOperationResponse\x12\x1a\n" +
+	"\bendpoint\x18\x01 \x01(\tR\bendpoint\x12\x18\n" +
+	"\aservice\x18\x02 \x01(\tR\aservice\x12\x1c\n" +
+	"\toperation\x18\x03 \x01(\tR\toperation\"\x8d\x02\n" +
 	"\x1fInvokeStateMachineMethodRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +

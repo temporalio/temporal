@@ -1419,7 +1419,10 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletion(chasmEnabled 
 	completionRequests = capture.Metric("nexus_completion_requests")
 	serviceRequests := capture.Metric("service_requests")
 	s.Len(completionRequests, 1)
-	s.Subset(completionRequests[0].Tags, map[string]string{"namespace": env.Namespace().String(), "outcome": "success"})
+	s.Subset(completionRequests[0].Tags, map[string]string{"namespace": env.Namespace().String(), "outcome": "success", "nexus_endpoint": endpointName})
+	// Service and operation tags are disabled by default.
+	s.NotContains(completionRequests[0].Tags, "nexus_service")
+	s.NotContains(completionRequests[0].Tags, "nexus_operation")
 	// Ensure that CompleteOperation request is tracked as part of normal service telemetry metrics
 	idx := slices.IndexFunc(serviceRequests, func(m *metricstest.CapturedRecording) bool {
 		opTag, ok := m.Tags["operation"]
@@ -1836,7 +1839,12 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure(chasmEnabled boo
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func(s *NexusWorkflowTestSuite) {
-			env := s.newTestEnv(chasmEnabled)
+			env := s.newTestEnv(chasmEnabled,
+				testcore.WithDynamicConfig(nexusoperations.MetricTagConfiguration, chasmnexus.NexusMetricTagConfig{
+					IncludeServiceTag:   true,
+					IncludeOperationTag: true,
+				}),
+			)
 			ctx := s.Context()
 			taskQueue := testcore.RandomizeStr(s.T().Name())
 
@@ -1883,7 +1891,13 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncFailure(chasmEnabled boo
 			completionRequests := capture.Metric("nexus_completion_requests")
 			s.NoError(err)
 			s.Len(completionRequests, 1)
-			s.Subset(completionRequests[0].Tags, map[string]string{"namespace": env.Namespace().String(), "outcome": "success"})
+			s.Subset(completionRequests[0].Tags, map[string]string{
+				"namespace":       env.Namespace().String(),
+				"outcome":         "success",
+				"nexus_endpoint":  endpointName,
+				"nexus_service":   "service",
+				"nexus_operation": "operation",
+			})
 
 			s.NoError(run.Get(ctx, nil))
 

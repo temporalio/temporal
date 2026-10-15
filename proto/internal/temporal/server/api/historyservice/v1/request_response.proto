@@ -1257,7 +1257,13 @@ message CompleteNexusOperationChasmRequest {
   google.protobuf.Timestamp start_time = 7;
 }
 
-message CompleteNexusOperationChasmResponse {}
+message CompleteNexusOperationChasmResponse {
+  // Endpoint, service, and operation of the completed Nexus operation. Used by the frontend to tag
+  // completion metrics. Empty if the completion did not target a Nexus operation.
+  string endpoint = 1;
+  string service = 2;
+  string operation = 3;
+}
 
 message CompleteNexusOperationRequest {
   option (routing) = {
@@ -1283,7 +1289,13 @@ message CompleteNexusOperationRequest {
   repeated temporal.api.common.v1.Link links = 7;
 }
 
-message CompleteNexusOperationResponse {}
+message CompleteNexusOperationResponse {
+  // Endpoint, service, and operation of the completed Nexus operation. Used by the frontend to tag
+  // completion metrics. Empty if the completion did not target a Nexus operation.
+  string endpoint = 1;
+  string service = 2;
+  string operation = 3;
+}
 
 message InvokeStateMachineMethodRequest {
   option (routing).workflow_id = "workflow_id";

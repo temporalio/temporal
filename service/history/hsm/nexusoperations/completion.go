@@ -12,6 +12,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/metrics"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/service/history/hsm"
@@ -167,7 +168,8 @@ func NewCompletionHandler(metricsHandler metrics.Handler, config *Config) *Compl
 	return &CompletionHandler{metricsHandler: metricsHandler, config: config}
 }
 
-// Handle resolves an async Nexus operation completion.
+// Handle resolves an async Nexus operation completion. The response identifies the completed
+// operation so the frontend can tag its completion metrics.
 func (h *CompletionHandler) Handle(
 	ctx context.Context,
 	env hsm.Environment,
@@ -178,7 +180,7 @@ func (h *CompletionHandler) Handle(
 	links []*commonpb.Link,
 	result *commonpb.Payload,
 	opFailedError *nexus.OperationError,
-) error {
+) (*historyservice.CompleteNexusOperationResponse, error) {
 	// The initial version of the completion token did not include a request ID.
 	// Only retry Access without a run ID if the request ID is not empty.
 	isRetryableNotFoundErr := requestID != ""
@@ -186,6 +188,7 @@ func (h *CompletionHandler) Handle(
 	// transaction commits successfully, so a failed commit (which retries the completion) does not
 	// double-count the metric. See operationMetricsHandler's doc comment.
 	var emitMetrics func()
+	resp := &historyservice.CompleteNexusOperationResponse{}
 	err := env.Access(ctx, ref, hsm.AccessWrite, func(node *hsm.Node) error {
 		if err := node.CheckRunning(); err != nil {
 			return err
@@ -223,6 +226,9 @@ func (h *CompletionHandler) Handle(
 		// fabricatedStart means the executor never emitted schedule-to-start, so we emit it here.
 		emitScheduleToStart := fabricatedStart && operation.StartedTime != nil
 		emitMetrics = h.deferredCompletionMetric(operation, node.NamespaceName(), node.WorkflowTypeName(), opFailedError, emitScheduleToStart, env.Now())
+		resp.Endpoint = operation.Endpoint
+		resp.Service = operation.Service
+		resp.Operation = operation.Operation
 		return nil
 	})
 	if errors.As(err, new(*serviceerror.NotFound)) && isRetryableNotFoundErr && ref.WorkflowKey.RunID != "" {
@@ -237,12 +243,12 @@ func (h *CompletionHandler) Handle(
 		return h.Handle(ctx, env, ref, requestID, operationToken, startTime, links, result, opFailedError)
 	}
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if emitMetrics != nil {
 		emitMetrics()
 	}
-	return nil
+	return resp, nil
 }
 
 // deferredCompletionMetric builds the post-commit caller-side emit for a resolved async completion:

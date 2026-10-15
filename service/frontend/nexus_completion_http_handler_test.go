@@ -12,7 +12,9 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/nexusworkflowref"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
@@ -79,14 +81,17 @@ func TestCompleteOperation_FrameworkFallback(t *testing.T) {
 		setupClient   func(t *testing.T, client *historyservicemock.MockHistoryServiceClient)
 		// wantErr is the exact error completeOperation must return; nil expects success.
 		wantErr error
+		// wantEndpoint is the endpoint of the operation completeOperation must return on success.
+		wantEndpoint string
 	}{
 		{
 			name:  "HSM primary succeeds, no fallback",
 			token: func(*testing.T) *tokenspb.NexusOperationCompletion { return hsmCompletionToken() },
 			setupClient: func(t *testing.T, client *historyservicemock.MockHistoryServiceClient) {
 				client.EXPECT().CompleteNexusOperation(gomock.Any(), gomock.Any()).
-					Return(&historyservice.CompleteNexusOperationResponse{}, nil)
+					Return(&historyservice.CompleteNexusOperationResponse{Endpoint: "hsm-endpoint"}, nil)
 			},
+			wantEndpoint: "hsm-endpoint",
 		},
 		{
 			name:  "HSM primary NotFound converts to CHASM and succeeds",
@@ -99,10 +104,11 @@ func TestCompleteOperation_FrameworkFallback(t *testing.T) {
 						DoAndReturn(func(_ context.Context, req *historyservice.CompleteNexusOperationChasmRequest, _ ...grpc.CallOption) (*historyservice.CompleteNexusOperationChasmResponse, error) {
 							require.NotEmpty(t, req.GetCompletion().GetComponentRef())
 							require.Equal(t, convTestRequestID, req.GetCompletion().GetRequestId())
-							return &historyservice.CompleteNexusOperationChasmResponse{}, nil
+							return &historyservice.CompleteNexusOperationChasmResponse{Endpoint: "chasm-endpoint"}, nil
 						}),
 				)
 			},
+			wantEndpoint: "chasm-endpoint",
 		},
 		{
 			name:  "CHASM primary NotFound converts to HSM and succeeds",
@@ -114,10 +120,11 @@ func TestCompleteOperation_FrameworkFallback(t *testing.T) {
 					client.EXPECT().CompleteNexusOperation(gomock.Any(), gomock.Any()).
 						DoAndReturn(func(_ context.Context, req *historyservice.CompleteNexusOperationRequest, _ ...grpc.CallOption) (*historyservice.CompleteNexusOperationResponse, error) {
 							require.NotNil(t, req.GetCompletion().GetRef())
-							return &historyservice.CompleteNexusOperationResponse{}, nil
+							return &historyservice.CompleteNexusOperationResponse{Endpoint: "hsm-endpoint"}, nil
 						}),
 				)
 			},
+			wantEndpoint: "hsm-endpoint",
 		},
 		{
 			name:          "no HSM to CHASM fallback when chasm disabled for namespace",
@@ -192,11 +199,13 @@ func TestCompleteOperation_FrameworkFallback(t *testing.T) {
 			h := &nexusCompletionHandler{HistoryClient: client}
 			req := &nexusrpc.CompletionRequest{State: nexus.OperationStateSucceeded, OperationToken: "operation-token"}
 
-			err := h.completeOperation(context.Background(), log.NewNoopLogger(), tc.token(t), &commonpb.Payload{}, req, nil, !tc.chasmDisabled)
+			op, err := h.completeOperation(context.Background(), log.NewNoopLogger(), tc.token(t), &commonpb.Payload{}, req, nil, !tc.chasmDisabled)
 			if tc.wantErr != nil {
 				require.ErrorIs(t, err, tc.wantErr)
+				require.Nil(t, op)
 			} else {
 				require.NoError(t, err)
+				require.Equal(t, tc.wantEndpoint, op.GetEndpoint())
 			}
 		})
 	}
@@ -224,7 +233,56 @@ func TestCompleteChasmOperation_CanceledBareFailure(t *testing.T) {
 			OriginalFailure: &nexus.Failure{Message: "operation canceled"},
 		},
 	}
-	require.NoError(t, h.completeChasmOperation(context.Background(), log.NewNoopLogger(), chasmCompletionToken(t), nil, req, nil))
+	_, err := h.completeChasmOperation(context.Background(), log.NewNoopLogger(), chasmCompletionToken(t), nil, req, nil)
+	require.NoError(t, err)
 	require.NotNil(t, captured.GetFailure().GetCanceledFailureInfo(),
 		"bare canceled failures must carry CanceledFailureInfo")
+}
+
+func TestCompletionMetricTags(t *testing.T) {
+	t.Parallel()
+
+	op := &historyservice.CompleteNexusOperationResponse{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
+
+	testCases := []struct {
+		name string
+		conf chasmnexus.NexusMetricTagConfig
+		op   completedNexusOperation
+		want []metrics.Tag
+	}{
+		{
+			name: "endpoint only by default",
+			op:   op,
+			want: []metrics.Tag{metrics.NexusEndpointTag("endpoint")},
+		},
+		{
+			name: "service and operation when enabled",
+			conf: chasmnexus.NexusMetricTagConfig{IncludeServiceTag: true, IncludeOperationTag: true},
+			op:   op,
+			want: []metrics.Tag{
+				metrics.NexusEndpointTag("endpoint"),
+				metrics.NexusServiceTag("service"),
+				metrics.NexusOperationTag("operation"),
+			},
+		},
+		{
+			name: "unknown when history did not resolve the completion",
+			conf: chasmnexus.NexusMetricTagConfig{IncludeServiceTag: true, IncludeOperationTag: true},
+			want: []metrics.Tag{
+				{Key: "nexus_endpoint", Value: "_unknown_"},
+				{Key: "nexus_service", Value: "_unknown_"},
+				{Key: "nexus_operation", Value: "_unknown_"},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, completionMetricTags(tc.conf, tc.op))
+		})
+	}
 }

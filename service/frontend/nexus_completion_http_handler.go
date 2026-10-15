@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
@@ -232,8 +233,9 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid completion state")
 	}
 
-	err = h.completeOperation(ctx, logger, completion, successPayload, r, links, h.Config.EnableChasm(ns.Name().String()))
+	op, err := h.completeOperation(ctx, logger, completion, successPayload, r, links, h.Config.EnableChasm(ns.Name().String()))
 	if err == nil {
+		rCtx.completedOperation = op
 		return nil
 	}
 	logger.Error("failed to process nexus completion request", tag.Error(err))
@@ -244,6 +246,33 @@ func (h *nexusCompletionHandler) CompleteOperation(ctx context.Context, r *nexus
 		return commonnexus.ConvertGRPCError(err, true)
 	}
 	return commonnexus.ConvertGRPCError(err, false)
+}
+
+// completedNexusOperation identifies the Nexus operation that history resolved a completion for.
+// Implemented by the history service's completion responses.
+type completedNexusOperation interface {
+	GetEndpoint() string
+	GetService() string
+	GetOperation() string
+}
+
+// completionMetricTags returns the Nexus operation tags for the completion metrics. The endpoint
+// is always included since it is bounded by the endpoint registry; service and operation are
+// user-defined and only included when enabled in the metric tag config. op is nil if history did
+// not resolve the completion (e.g. on error or when the request was forwarded).
+func completionMetricTags(conf chasmnexus.NexusMetricTagConfig, op completedNexusOperation) []metrics.Tag {
+	var endpoint, service, operation string
+	if op != nil {
+		endpoint, service, operation = op.GetEndpoint(), op.GetService(), op.GetOperation()
+	}
+	tags := []metrics.Tag{metrics.NexusEndpointTag(endpoint)}
+	if conf.IncludeServiceTag {
+		tags = append(tags, metrics.NexusServiceTag(service))
+	}
+	if conf.IncludeOperationTag {
+		tags = append(tags, metrics.NexusOperationTag(operation))
+	}
+	return tags
 }
 
 // completeOperation dispatches the completion to the framework named by its
@@ -257,42 +286,44 @@ func (h *nexusCompletionHandler) completeOperation(
 	req *nexusrpc.CompletionRequest,
 	links []*commonpb.Link,
 	chasmEnabled bool,
-) error {
+) (completedNexusOperation, error) {
 	isChasm := len(completion.GetComponentRef()) > 0
+	var op completedNexusOperation
 	var err error
 	if isChasm {
-		err = h.completeChasmOperation(ctx, logger, completion, successPayload, req, links)
+		op, err = h.completeChasmOperation(ctx, logger, completion, successPayload, req, links)
 	} else {
-		err = h.completeHSMOperation(ctx, completion, successPayload, req, links)
+		op, err = h.completeHSMOperation(ctx, completion, successPayload, req, links)
 	}
 	if _, notFound := errors.AsType[*serviceerror.NotFound](err); !notFound || completion.GetRequestId() == "" {
-		return err
+		return op, err
 	}
 	// If the workflow itself is gone, the operation cannot exist in either framework.
 	if isTerminalCompletionError(err) {
-		return err
+		return nil, err
 	}
 	// Only try HSM -> CHASM when this namespace can have CHASM workflow state.
 	if !isChasm && !chasmEnabled {
-		return err
+		return nil, err
 	}
 	converted, convErr := convertCompletionToOtherFramework(completion)
 	if convErr != nil {
 		logger.Warn("failed to convert nexus completion token to the other framework", tag.Error(convErr))
-		return err
+		return nil, err
 	}
+	var fallbackOp completedNexusOperation
 	var fallbackErr error
 	if isChasm {
-		fallbackErr = h.completeHSMOperation(ctx, converted, successPayload, req, links)
+		fallbackOp, fallbackErr = h.completeHSMOperation(ctx, converted, successPayload, req, links)
 	} else {
-		fallbackErr = h.completeChasmOperation(ctx, logger, converted, successPayload, req, links)
+		fallbackOp, fallbackErr = h.completeChasmOperation(ctx, logger, converted, successPayload, req, links)
 	}
 	// If the fallback also reports NotFound, the operation is gone in both frameworks.
 	// Return the error from the initial attempt.
 	if _, fbNotFound := errors.AsType[*serviceerror.NotFound](fallbackErr); fbNotFound {
-		return err
+		return nil, err
 	}
-	return fallbackErr
+	return fallbackOp, fallbackErr
 }
 
 // isTerminalCompletionError reports whether err means the workflow is already
@@ -321,7 +352,7 @@ func (h *nexusCompletionHandler) completeHSMOperation(
 	successPayload *commonpb.Payload,
 	req *nexusrpc.CompletionRequest,
 	links []*commonpb.Link,
-) error {
+) (completedNexusOperation, error) {
 	hr := &historyservice.CompleteNexusOperationRequest{
 		Completion:     completion,
 		State:          string(req.State),
@@ -341,11 +372,14 @@ func (h *nexusCompletionHandler) completeHSMOperation(
 		}
 	default:
 		// Should be unreachable as validated earlier.
-		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid completion state")
+		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid completion state")
 	}
 
-	_, err := h.HistoryClient.CompleteNexusOperation(ctx, hr)
-	return err
+	resp, err := h.HistoryClient.CompleteNexusOperation(ctx, hr)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func (h *nexusCompletionHandler) completeChasmOperation(
@@ -355,7 +389,7 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 	successPayload *commonpb.Payload,
 	req *nexusrpc.CompletionRequest,
 	links []*commonpb.Link,
-) error {
+) (completedNexusOperation, error) {
 	hr := &historyservice.CompleteNexusOperationChasmRequest{
 		Completion: &tokenspb.NexusOperationCompletion{
 			RequestId:    completion.GetRequestId(),
@@ -380,7 +414,7 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 		failure, err := commonnexus.NexusFailureToTemporalFailure(*nexusFailure)
 		if err != nil {
 			logger.Error("cannot convert nexus failure from completion request", tag.Error(err))
-			return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid failure content")
+			return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid failure content")
 		}
 		// A canceled completion must carry CanceledFailureInfo so that it is recorded as canceled instead of failed.
 		if req.State == nexus.OperationStateCanceled {
@@ -395,11 +429,14 @@ func (h *nexusCompletionHandler) completeChasmOperation(
 		}
 	default:
 		// Should be unreachable as validated earlier.
-		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid completion state")
+		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid completion state")
 	}
 
-	_, err := h.HistoryClient.CompleteNexusOperationChasm(ctx, hr)
-	return err
+	resp, err := h.HistoryClient.CompleteNexusOperationChasm(ctx, hr)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func (h *nexusCompletionHandler) forwardCompleteOperation(ctx context.Context, r *nexusrpc.CompletionRequest, rCtx *requestContext) error {
@@ -502,6 +539,8 @@ type requestContext struct {
 	outcomeTag                    metrics.Tag
 	forwarded                     bool
 	originalHeaders               http.Header
+	// completedOperation is set once history resolves the completion; used to tag completion metrics.
+	completedOperation completedNexusOperation
 }
 
 func (c *requestContext) augmentContext(ctx context.Context, header http.Header) context.Context {
@@ -559,6 +598,7 @@ func (c *requestContext) capturePanicAndRecordMetrics(ctxPtr *context.Context, e
 	}
 
 	// Record Nexus-specific metrics
+	c.metricsHandler = c.metricsHandler.WithTags(completionMetricTags(c.Config.NexusOperationsMetricTagConfig(), c.completedOperation)...)
 	c.metricsHandler.Counter(metrics.NexusCompletionRequests.Name()).Record(1)
 	c.metricsHandler.Histogram(metrics.NexusCompletionLatencyHistogram.Name(), metrics.Milliseconds).Record(time.Since(c.requestStartTime).Milliseconds())
 
