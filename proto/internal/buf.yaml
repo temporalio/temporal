@@ -9,6 +9,11 @@ deps:
 breaking:
   use:
     - WIRE
+  ignore_only:
+    FIELD_NO_DELETE_UNLESS_NUMBER_RESERVED:
+      - temporal/server/api/replication/v1/message.proto
+    FIELD_WIRE_COMPATIBLE_TYPE:
+      - temporal/server/api/replication/v1/message.proto
 lint:
   use:
     - DEFAULT
