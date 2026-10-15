@@ -1,0 +1,20 @@
+{{- if .Values.grafanaDashboard.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "payment-retry-sample.fullname" . }}-grafana-dashboard
+  labels:
+    {{- include "payment-retry-sample.labels" . | nindent 4 }}
+    # Label to indicate this ConfigMap is for Grafana dashboard provisioning
+    # Adjust this label based on the Grafana sidecar/provisioner's discovery mechanism.
+    # Common one is grafana_dashboard: "1" or similar.
+    # For this example, we'll assume the Grafana instance is configured to look for
+    # ConfigMaps with a specific label or in a specific namespace.
+    # This label is for identification; actual provisioning depends on Grafana setup.
+    grafana_dashboard_source: "payment-retry-sample" 
+data:
+  # The key here (e.g., payment-retry-sample-dashboard.json) will be the filename
+  # created in the Grafana provisioning directory.
+  payment-retry-sample-dashboard.json: |-
+    {{- .Files.Get "grafana/payment_dashboard.json" | nindent 4 }}
+{{- end }}
