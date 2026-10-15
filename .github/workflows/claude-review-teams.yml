@@ -270,22 +270,24 @@ jobs:
 
             After posting, return every finding you posted as structured output, one entry per
             finding, inline or not. This structured output is a machine-readable log, not a review
-            message, so the posting rules above do not apply to it. Use the same severity, the repository-relative path, and the
-            line you commented on; omit `path` and `line` for findings not tied to a file.
-            Set `category` to exactly one of the following. Use a bug category only if the code
+            message, so the posting rules above do not apply to it. Use the same severity, the
+            repository-relative path, and the line you commented on; omit `path` and `line` for
+            findings not tied to a file.
+            Set `category` to exactly one of the following. Use a `bug:` category only if the code
             in the PR behaves incorrectly; otherwise use a non-bug category.
             Bugs:
-            - `logic`: wrong result, wrong condition, off-by-one.
-            - `crash`: nil dereference, panic, out-of-bounds access.
-            - `concurrency`: race, deadlock, I/O inside a critical section.
-            - `data-loss`: lost or corrupted state, wrong persistence or transaction boundary.
-            - `liveness`: an execution or task that stops making progress or is never retried.
-            - `error-handling`: swallowed or misclassified error, wrong retryable or gRPC status.
-            - `compatibility`: replay or determinism break, backwards-incompatible proto, API,
+            - `bug:logic`: wrong result, wrong condition, off-by-one.
+            - `bug:crash`: nil dereference, panic, out-of-bounds access.
+            - `bug:concurrency`: race, deadlock, I/O inside a critical section.
+            - `bug:data-loss`: lost or corrupted state, wrong persistence or transaction boundary.
+            - `bug:liveness`: an execution or task that stops making progress or is never retried.
+            - `bug:error-handling`: swallowed or misclassified error, wrong retryable or gRPC
+              status.
+            - `bug:compatibility`: replay or determinism break, backwards-incompatible proto, API,
               history, or persistence change, unsafe rollout.
-            - `resource`: leak, unbounded growth, missing limit.
-            - `security`: authorization bypass, injection, secret exposure.
-            - `behavior`: unintended change to a guarantee the server provides.
+            - `bug:resource`: leak, unbounded growth, missing limit.
+            - `bug:security`: authorization bypass, injection, secret exposure.
+            - `bug:behavior`: unintended change to a guarantee the server provides.
             Not bugs:
             - `testing`: missing, wrong, or unreliable tests.
             - `design`: structure, abstractions, API shape.
@@ -310,9 +312,20 @@ jobs:
                       "category": {
                         "type": "string",
                         "enum": [
-                          "logic", "crash", "concurrency", "data-loss", "liveness",
-                          "error-handling", "compatibility", "resource", "security", "behavior",
-                          "testing", "design", "style", "description"
+                          "bug:logic",
+                          "bug:crash",
+                          "bug:concurrency",
+                          "bug:data-loss",
+                          "bug:liveness",
+                          "bug:error-handling",
+                          "bug:compatibility",
+                          "bug:resource",
+                          "bug:security",
+                          "bug:behavior",
+                          "testing",
+                          "design",
+                          "style",
+                          "description"
                         ]
                       },
                       "path": {"type": "string"},
@@ -340,7 +353,6 @@ jobs:
 
           # Workflow context comes from the event, not from Claude, so each finding
           # can be traced back to the exact commit that was reviewed.
-          # `is_bug` is derived from the category so the two can't disagree.
           jq -n \
             --argjson output "$STRUCTURED_OUTPUT" \
             --arg repo "$REPO" \
@@ -361,18 +373,15 @@ jobs:
               run_attempt: $run_attempt,
               workflow_sha: $workflow_sha,
               reviewed_at: $reviewed_at,
-              findings: [
-                $output.findings[]
-                | .is_bug = (.category | IN("testing", "design", "style", "description") | not)
-              ]
-            }' > "$RUNNER_TEMP/claude-review-findings.json"
+              findings: $output.findings
+            }' > "$RUNNER_TEMP/review-findings.json"
 
-          echo "Logged $(jq '.findings | length' "$RUNNER_TEMP/claude-review-findings.json") finding(s), $(jq '[.findings[] | select(.is_bug)] | length' "$RUNNER_TEMP/claude-review-findings.json") bug(s), for PR #${PR_NUMBER} at ${HEAD_SHA}"
+          echo "Saved Claude review findings"
       - name: Upload review findings
         if: ${{ !cancelled() && steps.claude.outputs.structured_output != '' }}
         uses: ./.github/actions/upload-artifact-with-retry
         with:
           name: claude-review-findings-pr${{ needs.check-review-eligibility.outputs.pr_number }}-attempt${{ github.run_attempt }}
-          path: ${{ runner.temp }}/claude-review-findings.json
+          path: ${{ runner.temp }}/review-findings.json
           if-no-files-found: ignore
           retention-days: 90
