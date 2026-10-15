@@ -125,12 +125,6 @@ func (w *priTaskWriter) assignTaskIDs(reqs []*writeTaskRequest) error {
 }
 
 func (w *priTaskWriter) appendTasks(reqs []*writeTaskRequest) error {
-	// re-check context before writing since we may lose a metadata write
-	// TODO: consider removing this after fixing lost metadata write on takeover
-	if err := w.backlogMgr.tqCtx.Err(); err != nil {
-		return err
-	}
-
 	resp, err := w.db.CreateTasks(w.backlogMgr.tqCtx, reqs)
 	if err != nil {
 		w.backlogMgr.signalIfFatal(err)

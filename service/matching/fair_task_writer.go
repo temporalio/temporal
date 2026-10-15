@@ -212,12 +212,6 @@ func (w *fairTaskWriter) getWriteBatch(reqs []*writeTaskRequest) []*writeTaskReq
 }
 
 func (w *fairTaskWriter) writeBatch(reqs []*writeTaskRequest) (retErr error) {
-	// re-check context before writing since we may lose a metadata write
-	// TODO: consider removing this after fixing lost metadata write on takeover
-	if err := w.backlogMgr.tqCtx.Err(); err != nil {
-		return err
-	}
-
 	bases, unpin := w.backlogMgr.getAndPinAckLevels()
 	defer func() { unpin(retErr) }()
 
