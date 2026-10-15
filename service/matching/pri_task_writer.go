@@ -125,6 +125,12 @@ func (w *priTaskWriter) assignTaskIDs(reqs []*writeTaskRequest) error {
 }
 
 func (w *priTaskWriter) appendTasks(reqs []*writeTaskRequest) error {
+	// Buffered appends can be selected after cancellation. Do not start another write
+	// after unloading, even if persistence would still accept the old range ID.
+	if err := w.backlogMgr.tqCtx.Err(); err != nil {
+		return err
+	}
+
 	resp, err := w.db.CreateTasks(w.backlogMgr.tqCtx, reqs)
 	if err != nil {
 		w.backlogMgr.signalIfFatal(err)
