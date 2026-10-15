@@ -8319,6 +8319,7 @@ func (s *mutableStateSuite) TestAccumulatedSkippedDuration_NilSafety() {
 //   - closeTransactionRegenerateTimerTasksForTimeSkipping: regenerates UserTimerTask entries
 //     with timestamps shifted back by AccumulatedSkippedDuration.
 func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
+	s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return true }
 	failoverVersion := s.namespaceEntry.FailoverVersion(tests.WorkflowID)
 
 	// buildEligibleState returns a minimal running workflow state that satisfies
@@ -8612,6 +8613,7 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
 // active, calls closeTransactionRegenerateTimerTasksForTimeSkipping afterward — testing
 // that the ordering is correct.
 func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
+	s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return true }
 	failoverVersion := s.namespaceEntry.FailoverVersion(tests.WorkflowID)
 	now := s.mockShard.GetTimeSource().Now()
 	timerExpiry := now.Add(time.Hour)

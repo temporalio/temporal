@@ -24,6 +24,20 @@ import (
 // =============================================================================
 // Time Skipping Configuration Management
 // =============================================================================
+
+// IsTimeSkippingFeatureEnabled reports whether the namespace flag permits time skipping for an archetype.
+func (ms *MutableStateImpl) IsTimeSkippingFeatureEnabled(archetypeID chasm.ArchetypeID) bool {
+	namespace := ms.GetNamespaceEntry().Name().String()
+	switch archetypeID {
+	case chasm.WorkflowArchetypeID:
+		return ms.config.WorkflowTimeSkippingEnabled(namespace)
+	case chasm.SchedulerArchetypeID:
+		return ms.config.CHASMSchedulerTimeSkippingEnabled(namespace)
+	default:
+		return false
+	}
+}
+
 // initTimeSkippingInfo creates TimeSkippingInfo when an execution first receives a time-skipping
 // config or propagated virtual-time state. This can happen at execution start, through an options
 // update on an existing execution, or when a CHASM component first sets its config.
@@ -446,16 +460,26 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 	}
 	switch transactionPolicy {
 	case historyi.TransactionPolicyActive:
-		// 1. gate: only a running, time-skipping-enabled, idle workflow may skip time
+		// 1. feature-flag gate, no history events generated in this path
+		config := ms.GetExecutionInfo().GetTimeSkippingInfo().GetConfig()
+		if config.GetEnabled() && !ms.IsTimeSkippingFeatureEnabled(chasm.WorkflowArchetypeID) {
+			config.Enabled = false
+			ms.timeSkippingInfoUpdated = true
+			ms.logger.Info("workflow time skipping disabled by namespace feature flag",
+				tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
+				tag.WorkflowRunID(ms.GetExecutionState().RunId))
+			return false
+		}
+		// 2. gate: only a running, time-skipping-enabled, idle workflow may skip time
 		if !ms.isWorkflowSkippable() {
 			return false
 		}
-		// 2. find the next skip target; if there is none, time skipping is not needed
+		// 3. find the next skip target; if there is none, time skipping is not needed
 		transition := ms.findNextSkipTarget()
 		if !transition.IsValid() {
 			return false
 		}
-		// 3. state change.
+		// 4. state change.
 		previousDuration := ms.accumulatedSkippedDuration()
 		_, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(
 			ctx, transition.GetTargetTime(), transition.DisabledAfterFastForward)
@@ -463,7 +487,7 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 			ms.logger.Error("failed to add workflow execution time skipping transitioned event", tag.Error(err))
 			return false
 		}
-		// 4. Timer tasks only need to be re-stamped when the virtual-time offset changed.
+		// 5. Timer tasks only need to be re-stamped when the virtual-time offset changed.
 		// A valid transition may only disable time skipping or update session state.
 		return ms.accumulatedSkippedDuration() != previousDuration
 	case historyi.TransactionPolicyPassive:

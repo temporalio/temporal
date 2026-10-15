@@ -243,6 +243,7 @@ type (
 		EndpointRegistry() EndpointRegistry
 		Now() time.Time
 		SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
+		IsTimeSkippingFeatureEnabled(archetypeID ArchetypeID) bool
 		RecordTimeSkippingTransition(transition *TimeSkippingTransition)
 	}
 

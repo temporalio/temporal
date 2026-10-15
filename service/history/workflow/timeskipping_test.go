@@ -26,6 +26,36 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+func (s *mutableStateSuite) TestIsTimeSkippingFeatureEnabled() {
+	cases := []struct {
+		name             string
+		archetypeID      chasm.ArchetypeID
+		workflowEnabled  bool
+		schedulerEnabled bool
+		want             bool
+	}{
+		{name: "workflow enabled", archetypeID: chasm.WorkflowArchetypeID, workflowEnabled: true, want: true},
+		{name: "workflow disabled", archetypeID: chasm.WorkflowArchetypeID, schedulerEnabled: true},
+		{name: "schedule enabled", archetypeID: chasm.SchedulerArchetypeID, schedulerEnabled: true, want: true},
+		{name: "schedule disabled", archetypeID: chasm.SchedulerArchetypeID, workflowEnabled: true},
+		{name: "unknown archetype", archetypeID: 0, workflowEnabled: true, schedulerEnabled: true},
+	}
+	for _, test := range cases {
+		s.Run(test.name, func() {
+			namespace := s.mutableState.GetNamespaceEntry().Name().String()
+			s.mockConfig.WorkflowTimeSkippingEnabled = func(name string) bool {
+				s.Equal(namespace, name)
+				return test.workflowEnabled
+			}
+			s.mockConfig.CHASMSchedulerTimeSkippingEnabled = func(name string) bool {
+				s.Equal(namespace, name)
+				return test.schedulerEnabled
+			}
+			s.Equal(test.want, s.mutableState.IsTimeSkippingFeatureEnabled(test.archetypeID))
+		})
+	}
+}
+
 func (s *mutableStateSuite) TestPropagateTimeSkippingToNextRun() {
 	fixed := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
 	fixedTS := timestamppb.New(fixed)
@@ -1393,6 +1423,8 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 }
 
 func (s *mutableStateSuite) TestCloseTransactionHandleWorkflowTimeSkipping() {
+	s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return true }
+
 	// A valid skip target exists: a user timer one hour in the (virtual) future.
 	s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{
 		TimerId:    "t1",
@@ -1538,6 +1570,24 @@ func (s *mutableStateSuite) TestCloseTransactionHandleWorkflowTimeSkipping() {
 			context.Background(), historyi.TransactionPolicyPassive)
 		s.False(needRegen, "passive policy never skips")
 		s.False(s.mutableState.timeSkippingInfoUpdated, "passive policy makes no state change")
+	})
+
+	s.Run("FeatureFlagDisabled_DisablesSavedConfigWithoutEvent", func() {
+		s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return false }
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 10},
+		}
+		s.mutableState.timeSkippingInfoUpdated = false
+		s.False(s.mutableState.hBuilder.IsDirty())
+
+		needRegen := s.mutableState.closeTransactionHandleWorkflowTimeSkipping(
+			context.Background(), historyi.TransactionPolicyActive)
+
+		s.False(needRegen)
+		s.False(s.mutableState.executionInfo.TimeSkippingInfo.GetConfig().GetEnabled())
+		s.True(s.mutableState.timeSkippingInfoUpdated)
+		s.Zero(s.mutableState.executionInfo.TimeSkippingInfo.GetSessionSkipCount())
+		s.False(s.mutableState.hBuilder.IsDirty(), "disabling the flag does not add a history event")
 	})
 }
 
