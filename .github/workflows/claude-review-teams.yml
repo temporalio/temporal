@@ -297,9 +297,9 @@ jobs:
             - `idiom`: non-idiomatic Go, or not using a language or standard library feature that
               fits, such as typed constants, `errors.Is`, generated proto getters, or `slices`.
             - `visual`: layout and formatting that hinder readability.
-            - `organization`: code that should be restructured, such as moved, split,
-              deduplicated, or removed as dead code.
-            - `solution`: a different implementation approach would be better.
+            - `structure`: code that should be organized or implemented differently, such as
+              moved, split, deduplicated, or removed as dead code, or rewritten to reuse an
+              existing helper or pattern, drop an abstraction, or take a simpler approach.
             - `testing`: missing, wrong, or unreliable tests.
             - `pr-description`: missing or unclear PR description or intent.
             Return an empty `findings` list if you posted none.
@@ -331,8 +331,7 @@ jobs:
                           "wording",
                           "idiom",
                           "visual",
-                          "organization",
-                          "solution",
+                          "structure",
                           "testing",
                           "pr-description"
                         ]
