@@ -2,6 +2,7 @@ package ringpop
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math"
 	"math/rand"
@@ -50,6 +51,10 @@ const (
 type monitor struct {
 	stateLock sync.Mutex
 	status    int32
+	// evicted is set once EvictSelf/EvictSelfAt is called. After that, Start must not join the ring.
+	evicted bool
+	// joined is set once Start has advertised our role and started the rings.
+	joined bool
 
 	lifecycleCtx    context.Context
 	lifecycleCancel context.CancelFunc
@@ -120,11 +125,16 @@ func newMonitor(
 
 // Start the membership monitor. Stop() can be called concurrently so we relinquish the state lock when
 // it's safe for Stop() to run, which is at any point when we are neither updating the status field nor
-// starting rings
+// joining the ring. If EvictSelf/EvictSelfAt is called before we join, Start will not join.
 func (rpo *monitor) Start() {
 	rpo.stateLock.Lock()
 	if rpo.status != common.DaemonStatusInitialized {
 		rpo.stateLock.Unlock()
+		return
+	}
+	if rpo.evicted {
+		rpo.stateLock.Unlock()
+		rpo.logger.Info("membership monitor evicted before start, not joining membership")
 		return
 	}
 	rpo.status = common.DaemonStatusStarted
@@ -140,15 +150,38 @@ func (rpo *monitor) Start() {
 	// we must know our seed nodes before bootstrapping
 
 	if err = rpo.startHeartbeat(broadcastAddress); err != nil {
+		if rpo.lifecycleCtx.Err() != nil {
+			// Stop() called during Start()'s execution. This is ok
+			return
+		}
 		rpo.logger.Fatal("unable to initialize membership heartbeats", tag.Error(err))
 	}
 
 	if err = rpo.bootstrapRingPop(); err != nil {
-		// Stop() called during Start()'s execution. This is ok
-		if strings.Contains(err.Error(), "destroyed while attempting to join") {
+		// Stop() cancels lifecycleCtx before destroying ringpop, so any failure caused by a
+		// concurrent Stop() (including ringpop's "destroyed while attempting to join") lands here.
+		if rpo.lifecycleCtx.Err() != nil {
 			return
 		}
 		rpo.logger.Fatal("failed to start ringpop", tag.Error(err))
+	}
+
+	// Hold the state lock while advertising our role and starting the rings, so this can't
+	// interleave with EvictSelf/EvictSelfAt or Stop. Otherwise an eviction that happens while
+	// we're bootstrapping would be lost: we'd join the ring after the caller believes we've
+	// left, and stay in it after the process exits.
+	rpo.stateLock.Lock()
+	defer rpo.stateLock.Unlock()
+	if rpo.status != common.DaemonStatusStarted {
+		// Stop() was called while we were bootstrapping. This is ok.
+		return
+	}
+	if rpo.evicted {
+		rpo.logger.Info("membership monitor evicted during start, not joining membership")
+		// We've bootstrapped into ringpop, but without our role label we aren't in any service
+		// ring. Leave anyway so peers don't need to wait for failure detection.
+		_ = rpo.rp.SelfEvict()
+		return
 	}
 
 	labels, err := rpo.rp.Labels()
@@ -176,12 +209,10 @@ func (rpo *monitor) Start() {
 		rpo.logger.Fatal("unable to set ringpop label", tag.Error(err), tag.Key(roleKey))
 	}
 
-	// Our individual rings may not support concurrent start/stop calls so we reacquire the state lock while acting upon them
-	rpo.stateLock.Lock()
 	for _, ring := range rpo.rings {
 		ring.Start()
 	}
-	rpo.stateLock.Unlock()
+	rpo.joined = true
 
 	rpo.initialized.Set(struct{}{}, nil)
 }
@@ -191,7 +222,7 @@ func (rpo *monitor) bootstrapRingPop() error {
 	policy := backoff.NewExponentialRetryPolicy(healthyHostLastHeartbeatCutoff / 2).
 		WithBackoffCoefficient(1).
 		WithMaximumAttempts(maxBootstrapRetries)
-	op := func() error {
+	op := func(context.Context) error {
 		hostPorts, err := rpo.fetchCurrentBootstrapHostports()
 		if err != nil {
 			return err
@@ -211,7 +242,8 @@ func (rpo *monitor) bootstrapRingPop() error {
 		return err
 	}
 
-	if err := backoff.ThrottleRetry(op, policy, nil); err != nil {
+	// Use lifecycleCtx so that Stop() interrupts the backoff between attempts.
+	if err := backoff.ThrottleRetryContext(rpo.lifecycleCtx, op, policy, nil); err != nil {
 		return fmt.Errorf("exhausted all retries: %w", err)
 	}
 	return nil
@@ -378,7 +410,12 @@ func (rpo *monitor) startHeartbeatUpsertLoop(request *persistence.UpsertClusterM
 
 // Stop the membership monitor and all associated rings. This holds the state lock
 // for the entire call as the individual ring Start/Stop functions may not be safe to
-// call concurrently
+// call concurrently.
+//
+// If we joined the ring, Stop evicts us before destroying ringpop, since destroying it just
+// stops gossip without telling peers we're gone, and they'd keep routing to us until failure
+// detection removes us. Callers should still call EvictSelf/EvictSelfAt and drain before
+// stopping the gRPC server; this is a backstop for when they didn't.
 func (rpo *monitor) Stop() {
 	rpo.stateLock.Lock()
 	defer rpo.stateLock.Unlock()
@@ -393,14 +430,39 @@ func (rpo *monitor) Stop() {
 		ring.Stop()
 	}
 
+	if rpo.joined {
+		rpo.evicted = true
+		// Returns ErrSelfEvictionInProgress if EvictSelf/EvictSelfAt already evicted us.
+		if err := rpo.rp.SelfEvict(); err != nil && !errors.Is(err, swim.ErrSelfEvictionInProgress) {
+			rpo.logger.Warn("unable to evict self from membership on stop", tag.Error(err))
+		}
+	}
+
 	rpo.rp.Destroy()
 }
 
+// markEvicted records that we're leaving membership, so that a Start that hasn't joined yet
+// won't join. It returns whether we had already joined (and so actually need to leave).
+func (rpo *monitor) markEvicted() bool {
+	rpo.stateLock.Lock()
+	defer rpo.stateLock.Unlock()
+	rpo.evicted = true
+	return rpo.joined
+}
+
 func (rpo *monitor) EvictSelf() error {
+	if !rpo.markEvicted() {
+		rpo.logger.Info("evicting self before joining membership, membership will not be joined")
+		return nil
+	}
 	return rpo.rp.SelfEvict()
 }
 
 func (rpo *monitor) EvictSelfAt(asOf time.Time) (time.Duration, error) {
+	if !rpo.markEvicted() {
+		rpo.logger.Info("evicting self before joining membership, membership will not be joined")
+		return 0, nil
+	}
 	until := time.Until(asOf)
 	if until <= 0 || until.Seconds() >= maxScheduledEventTimeSeconds {
 		return 0, rpo.rp.SelfEvict()
