@@ -21,11 +21,10 @@ import (
 // Tasks are stored flattened by category - all tasks of the same type are in a single list,
 // with each task wrapped with metadata about when/where it was written.
 type HistoryTaskRecorder struct {
-	mu                       sync.RWMutex
-	tasks                    map[tasks.Category][]RecordedTask // All tasks by category, in order
-	timerTaskReadInterceptor func(tasks.Task)
-	delegate                 persistence.ExecutionManager
-	logger                   log.Logger
+	mu       sync.RWMutex
+	tasks    map[tasks.Category][]RecordedTask // All tasks by category, in order
+	delegate persistence.ExecutionManager
+	logger   log.Logger
 }
 
 // RecordedTask wraps a task with metadata about when and where it was written
@@ -46,18 +45,6 @@ func NewHistoryTaskRecorder(delegate persistence.ExecutionManager, logger log.Lo
 		tasks:    make(map[tasks.Category][]RecordedTask),
 		delegate: delegate,
 		logger:   logger,
-	}
-}
-
-// SetTimerTaskReadInterceptor lets a functional test hold a timer task before the queue receives it.
-func (r *HistoryTaskRecorder) SetTimerTaskReadInterceptor(interceptor func(tasks.Task)) (cleanup func()) {
-	r.mu.Lock()
-	r.timerTaskReadInterceptor = interceptor
-	r.mu.Unlock()
-	return func() {
-		r.mu.Lock()
-		r.timerTaskReadInterceptor = nil
-		r.mu.Unlock()
 	}
 }
 
@@ -507,19 +494,7 @@ func (r *HistoryTaskRecorder) GetHistoryTasks(
 	ctx context.Context,
 	request *persistence.GetHistoryTasksRequest,
 ) (*persistence.GetHistoryTasksResponse, error) {
-	response, err := r.delegate.GetHistoryTasks(ctx, request)
-	if err != nil || response == nil || request.TaskCategory != tasks.CategoryTimer {
-		return response, err
-	}
-	r.mu.RLock()
-	interceptor := r.timerTaskReadInterceptor
-	r.mu.RUnlock()
-	if interceptor != nil {
-		for _, task := range response.Tasks {
-			interceptor(task)
-		}
-	}
-	return response, nil
+	return r.delegate.GetHistoryTasks(ctx, request)
 }
 
 func (r *HistoryTaskRecorder) CompleteHistoryTask(
