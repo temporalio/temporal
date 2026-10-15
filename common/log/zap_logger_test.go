@@ -41,6 +41,49 @@ func (s *LogSuite) TestParseLogLevel() {
 	s.Equal(zap.InfoLevel, ParseZapLevel("unknown"))
 }
 
+func (s *LogSuite) TestNewLoggerStdoutAndFile() {
+	t := s.T()
+	dir := testutils.MkdirTemp(s.T(), "", "config.testNewLogger")
+
+	old := os.Stdout // keep backup of the real stdout
+	r, w, _ := os.Pipe()
+	os.Stdout = w
+	outC := make(chan string)
+	// copy the output in a separate goroutine so logging can't block indefinitely
+	go func() {
+		var buf bytes.Buffer
+		_, err := io.Copy(&buf, r)
+		assert.NoError(t, err)
+		outC <- buf.String()
+	}()
+
+	cfg := Config{
+		Level:      "info",
+		Stdout:     true,
+		OutputFile: dir + "/test.log",
+	}
+
+	log := NewZapLogger(BuildZapLogger(cfg))
+	msg := "Test Multiple output paths"
+	preCaller := caller(1)
+	log.Info(msg)
+	_, err := os.Stat(dir + "/test.log")
+	s.Nil(err)
+
+	// back to normal state
+	require.Nil(t, w.Close())
+	os.Stdout = old // restoring the real stdout
+	out := <-outC
+	sps := strings.Split(preCaller, ":")
+	par, err := strconv.Atoi(sps[1])
+	assert.Nil(t, err)
+	lineNum := fmt.Sprintf("%v", par+1)
+	fmt.Println(out, lineNum)
+
+	assert.Contains(t, out, lineNum)
+	assert.Contains(t, out, msg)
+}
+
 func (s *LogSuite) TestNewLogger() {
 	dir := testutils.MkdirTemp(s.T(), "", "config.testNewLogger")
 
