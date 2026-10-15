@@ -163,6 +163,7 @@ func (w *fairTaskWriter) taskWriterLoop() {
 	// TODO: this will be out of phase with the timer in fairBacklogManagerImpl.periodicSync.
 	// can we align them better?
 	persistFairnessKeys := time.NewTicker(w.config.UpdateAckInterval()).C
+	emittedKeyCount := false
 
 	var reqs []*writeTaskRequest
 	for {
@@ -175,6 +176,10 @@ func (w *fairTaskWriter) taskWriterLoop() {
 
 		select {
 		case <-w.backlogMgr.tqCtx.Done():
+			if emittedKeyCount {
+				// zero the gauge so a stale value doesn't persist after unload
+				w.recordFairnessKeyCountGauge(0)
+			}
 			return
 		case req := <-w.appendCh:
 			// read a batch of requests from the channel
@@ -194,14 +199,24 @@ func (w *fairTaskWriter) taskWriterLoop() {
 		// maybe persist fairness key counts if it's time
 		select {
 		case <-persistFairnessKeys:
-			// estimating may require scanning the whole sketch, so do it here instead of on
-			// every write. counters only change on writes so this is only a little stale.
-			estimates := make(map[subqueueIndex]int64, len(w.counters))
+			// estimating key count may require scanning the whole sketch, so do it here instead of
+			// on every write. counters only change on writes so this is only a little stale.
+			keyCountEstimates := make(map[subqueueIndex]int64, len(w.counters))
+			var maxKeyCountEstimate int64
 			for subqueue, cntr := range w.counters {
 				w.db.persistTopKFairnessKeys(subqueue, cntr.TopK())
-				estimates[subqueue] = int64(cntr.EstimateDistinctKeys())
+
+				estimate := int64(cntr.EstimateDistinctKeys())
+				keyCountEstimates[subqueue] = estimate
+				maxKeyCountEstimate = max(maxKeyCountEstimate, estimate)
 			}
-			w.keyCountEstimates.Store(&estimates)
+			w.keyCountEstimates.Store(&keyCountEstimates)
+			// Counters for different subqueues can't be unioned, so use the max as a lower
+			// bound. Skip if we have no counters (e.g. draining) to not overwrite the active one.
+			if len(w.counters) > 0 {
+				w.recordFairnessKeyCountGauge(maxKeyCountEstimate)
+				emittedKeyCount = true
+			}
 		default:
 		}
 	}
@@ -267,9 +282,20 @@ func (w *fairTaskWriter) allocTaskIDBlock(prevBlockEnd int64) (taskIDBlock, erro
 	return rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize), nil
 }
 
-// getApproximateFairnessKeyCount returns the estimated number of distinct fairness keys for a
+// recordFairnessKeyCountGauge emits the fairness key count gauge. Like the physical backlog
+// gauges, it's only meaningful when broken down by partition (gauges from different partitions
+// can't be aggregated).
+func (w *fairTaskWriter) recordFairnessKeyCountGauge(count int64) {
+	if !w.config.BreakdownMetricsByTaskQueue() || !w.config.BreakdownMetricsByPartition() ||
+		(w.db.queue.IsVersioned() && !w.config.BreakdownMetricsByBuildID()) {
+		return
+	}
+	metrics.ApproximateFairnessKeyCount.With(w.backlogMgr.metricsHandler).Record(float64(count))
+}
+
+// getFairnessKeyCountEstimate returns the estimated number of distinct fairness keys for a
 // subqueue, as of the last time fairness keys were persisted. Safe to be called concurrently.
-func (w *fairTaskWriter) getApproximateFairnessKeyCount(subqueue subqueueIndex) int64 {
+func (w *fairTaskWriter) getFairnessKeyCountEstimate(subqueue subqueueIndex) int64 {
 	if m := w.keyCountEstimates.Load(); m != nil {
 		return (*m)[subqueue]
 	}

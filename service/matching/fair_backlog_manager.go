@@ -371,11 +371,11 @@ func (c *fairBacklogManagerImpl) InternalStatus() []*taskqueuespb.InternalTaskQu
 				StartId: currentTaskIDBlock.start,
 				EndId:   currentTaskIDBlock.end,
 			},
-			LoadedTasks:                 int64(r.getLoadedTasks()),
-			FairMaxReadLevel:            maxReadLevel.toProto(),
-			ApproximateBacklogCount:     count,
-			BacklogDrained:              r.isDrained(),
-			ApproximateFairnessKeyCount: c.taskWriter.getApproximateFairnessKeyCount(subqueueIndex(i)),
+			LoadedTasks:              int64(r.getLoadedTasks()),
+			FairMaxReadLevel:         maxReadLevel.toProto(),
+			ApproximateBacklogCount:  count,
+			BacklogDrained:           r.isDrained(),
+			FairnessKeyCountEstimate: c.taskWriter.getFairnessKeyCountEstimate(subqueueIndex(i)),
 		}
 	}
 	return status
