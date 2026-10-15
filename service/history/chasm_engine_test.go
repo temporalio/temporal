@@ -553,159 +553,6 @@ func (s *chasmEngineSuite) TestStartExecution_ReusePolicy_RejectDuplicate() {
 	s.False(result.Created)
 }
 
-// TestStartExecution_CheckExecutionRequestIDsOnConflict verifies that with
-// chasm.WithCheckExecutionRequestIDsOnConflict, a start conflicting with a closed run returns that run
-// when the start's request ID was recorded in the run's request IDs data node, and that the run is only
-// loaded when it is closed and the option is set.
-func (s *chasmEngineSuite) TestStartExecution_CheckExecutionRequestIDsOnConflict() {
-	const attachRequestID = "attach-request-id"
-
-	testCases := []struct {
-		name            string
-		state           enumsspb.WorkflowExecutionState
-		status          enumspb.WorkflowExecutionStatus
-		withOption      bool
-		recordedIDs     []string // request IDs in the current run's data node
-		expectRunLoaded bool
-		expectCreated   bool
-	}{
-		{
-			name:            "closed run with the request ID returns the run",
-			state:           enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-			status:          enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-			withOption:      true,
-			recordedIDs:     []string{"other-request-id", attachRequestID},
-			expectRunLoaded: true,
-			expectCreated:   false,
-		},
-		{
-			name:            "closed run without the request ID applies the reuse policy",
-			state:           enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-			status:          enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-			withOption:      true,
-			recordedIDs:     []string{"other-request-id"},
-			expectRunLoaded: true,
-			expectCreated:   true,
-		},
-		{
-			name:            "closed run without the option is not loaded",
-			state:           enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-			status:          enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-			withOption:      false,
-			recordedIDs:     []string{attachRequestID},
-			expectRunLoaded: false,
-			expectCreated:   true,
-		},
-		{
-			name:            "running run is not loaded",
-			state:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-			status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-			withOption:      true,
-			recordedIDs:     []string{attachRequestID},
-			expectRunLoaded: false,
-			expectCreated:   false,
-		},
-	}
-
-	for _, tc := range testCases {
-		s.Run(tc.name, func() {
-			tv := testvars.New(s.T())
-			tv = tv.WithRunID(tv.Any().RunID())
-			ref := chasm.NewComponentRef[*testComponent](
-				chasm.ExecutionKey{
-					NamespaceID: string(tests.NamespaceID),
-					BusinessID:  tv.WorkflowID(),
-				},
-			)
-			currentRunConditionFailedErr := s.currentRunConditionFailedErr(tv, tc.state, tc.status)
-
-			s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).
-				Return(nil, currentRunConditionFailedErr).Times(1)
-
-			if tc.expectRunLoaded {
-				var closeTime *timestamppb.Timestamp
-				if tc.state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-					closeTime = timestamppb.New(s.mockShard.GetTimeSource().Now())
-				}
-				persistedState := s.buildPersistenceMutableState(
-					chasm.ExecutionKey{
-						NamespaceID: string(tests.NamespaceID),
-						BusinessID:  tv.WorkflowID(),
-						RunID:       tv.RunID(),
-					},
-					&persistencespb.ActivityInfo{},
-					tc.state,
-					tc.status,
-					closeTime,
-				)
-				persistedState.ChasmNodes[requestIDsNodePath] = s.requestIDsNode(tc.recordedIDs...)
-				s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ context.Context, request *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error) {
-						s.Equal(tv.RunID(), request.RunID, "only the conflicting current run should be loaded")
-						return &persistence.GetWorkflowExecutionResponse{State: persistedState}, nil
-					}).Times(1)
-			}
-
-			var newRunID string
-			if tc.expectCreated {
-				s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
-					func(_ context.Context, request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
-						newRunID = request.NewWorkflowSnapshot.ExecutionState.RunId
-						return tests.CreateWorkflowExecutionResponse, nil
-					}).Times(1)
-				s.mockEngine.EXPECT().NotifyChasmExecution(gomock.Any(), gomock.Any()).Return().Times(1)
-			}
-
-			opts := []chasm.TransitionOption{
-				chasm.WithRequestID(attachRequestID),
-				chasm.WithBusinessIDPolicy(
-					chasm.BusinessIDReusePolicyAllowDuplicate,
-					chasm.BusinessIDConflictPolicyUseExisting,
-				),
-			}
-			if tc.withOption {
-				opts = append(opts, chasm.WithCheckExecutionRequestIDsOnConflict())
-			}
-			result, err := s.engine.StartExecution(
-				context.Background(),
-				ref,
-				s.newTestExecutionFn(tv.ActivityID()),
-				opts...,
-			)
-			s.NoError(err)
-			s.Equal(tc.expectCreated, result.Created)
-			if tc.expectCreated {
-				s.Equal(newRunID, result.ExecutionKey.RunID)
-			} else {
-				s.Equal(tv.RunID(), result.ExecutionKey.RunID)
-			}
-		})
-	}
-}
-
-// requestIDsNode returns a persisted request IDs data node recording the given request IDs.
-func (s *chasmEngineSuite) requestIDsNode(requestIDs ...string) *persistencespb.ChasmNode {
-	state := &persistencespb.ChasmRequestIDs{}
-	for _, requestID := range requestIDs {
-		state.Entries = append(state.Entries, &persistencespb.ChasmRequestIDs_Entry{
-			RequestId:  requestID,
-			RecordTime: timestamppb.New(s.mockShard.GetTimeSource().Now()),
-		})
-	}
-	data, err := serialization.Encode(state)
-	s.NoError(err)
-	return &persistencespb.ChasmNode{
-		Metadata: &persistencespb.ChasmNodeMetadata{
-			InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
-			LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
-			Attributes: &persistencespb.ChasmNodeMetadata_DataAttributes{
-				DataAttributes: &persistencespb.ChasmDataAttributes{},
-			},
-		},
-		Data: data,
-	}
-}
-
 func (s *chasmEngineSuite) TestStartExecution_ConflictPolicy_UseExisting() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
@@ -1489,7 +1336,8 @@ func (s *chasmEngineSuite) TestUpdateComponent_RequestIDDataNode() {
 
 // TestUpdateComponent_RequestIDDataNode_DifferentRequestIDsWithEviction verifies that with
 // history.enableChasmRequestIDDataNode on, distinct request IDs each run and are recorded in the data
-// node, and that with a limit of 1 the older request ID is dropped when the second is recorded.
+// node, and that once history.maximumRequestIDsInChasmDataNode IDs are recorded the oldest is dropped,
+// regardless of history.maximumRequestIDsPerExecution (which only caps the execution state).
 func (s *chasmEngineSuite) TestUpdateComponent_RequestIDDataNode_DifferentRequestIDsWithEviction() {
 	tv := testvars.New(s.T())
 	tv = tv.WithRunID(tv.Any().RunID())
@@ -1500,8 +1348,12 @@ func (s *chasmEngineSuite) TestUpdateComponent_RequestIDDataNode_DifferentReques
 	})
 	s.config.EnableChasmRequestIDDataNode = func(string) bool { return true }
 	s.config.MaximumRequestIDsPerExecution = func(string) int { return 1 }
-	requestID1 := "request-id-1"
-	requestID2 := "request-id-2"
+	const limit = 3
+	s.config.MaximumRequestIDsInChasmDataNode = func(string) int { return limit }
+	requestIDs := make([]string, limit+1)
+	for i := range requestIDs {
+		requestIDs[i] = fmt.Sprintf("request-id-%d", i)
+	}
 
 	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(&persistence.GetWorkflowExecutionResponse{
@@ -1522,11 +1374,11 @@ func (s *chasmEngineSuite) TestUpdateComponent_RequestIDDataNode_DifferentReques
 			}
 			persisted = append(persisted, ids)
 			return tests.UpdateWorkflowExecutionResponse, nil
-		}).Times(2)
-	s.mockEngine.EXPECT().NotifyChasmExecution(ref.ExecutionKey, gomock.Any()).Return().Times(2)
+		}).Times(len(requestIDs))
+	s.mockEngine.EXPECT().NotifyChasmExecution(ref.ExecutionKey, gomock.Any()).Return().Times(len(requestIDs))
 
 	updateCount := 0
-	for _, id := range []string{requestID1, requestID2} {
+	for _, id := range requestIDs {
 		_, err := s.engine.UpdateComponent(
 			context.Background(),
 			ref,
@@ -1540,9 +1392,12 @@ func (s *chasmEngineSuite) TestUpdateComponent_RequestIDDataNode_DifferentReques
 		s.NoError(err)
 	}
 
-	s.Equal(2, updateCount, "distinct request IDs must each run updateFn")
-	s.Equal([][]string{{requestID1}, {requestID2}}, persisted,
-		"with a limit of 1, recording the second request ID drops the first")
+	s.Equal(len(requestIDs), updateCount, "distinct request IDs must each run updateFn")
+	s.Require().Len(persisted, len(requestIDs))
+	s.Equal(requestIDs[:limit], persisted[limit-1],
+		"the node keeps up to history.maximumRequestIDsInChasmDataNode IDs, ignoring history.maximumRequestIDsPerExecution")
+	s.Equal(requestIDs[1:], persisted[limit],
+		"recording one more request ID drops the oldest")
 }
 
 // TestUpdateComponent_RequestIDDataNode_LegacyRequestIDRejected verifies that a request ID recorded in the
@@ -1580,6 +1435,55 @@ func (s *chasmEngineSuite) TestUpdateComponent_RequestIDDataNode_LegacyRequestID
 		chasm.WithRequestID(requestID),
 	)
 	s.ErrorIs(err, chasm.ErrRequestIDAlreadyUsed)
+}
+
+// TestUpdateComponent_StartRequestID verifies that a request ID set with chasm.WithStartRequestID is
+// recorded in the execution state, where the start path checks for retried starts, even with
+// history.enableChasmRequestIDDataNode on, and that its reuse is rejected.
+func (s *chasmEngineSuite) TestUpdateComponent_StartRequestID() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+	ref := chasm.NewComponentRef[*testComponent](chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		RunID:       tv.RunID(),
+	})
+	s.config.EnableChasmRequestIDDataNode = func(string) bool { return true }
+	requestID := tv.RequestID()
+
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(ref.ExecutionKey, &persistencespb.ActivityInfo{},
+				enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, nil),
+		}, nil).Times(1)
+	s.mockExecutionManager.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+			info, ok := request.UpdateWorkflowMutation.ExecutionState.RequestIds[requestID]
+			s.True(ok, "a start request ID must be recorded in the execution state")
+			s.NotNil(info.GetAttachTime(), "a start request ID recorded by UpdateComponent is swept like today")
+			s.NotContains(request.UpdateWorkflowMutation.UpsertChasmNodes, requestIDsNodePath)
+			return tests.UpdateWorkflowExecutionResponse, nil
+		}).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(ref.ExecutionKey, gomock.Any()).Return().Times(1)
+
+	updateCount := 0
+	update := func() error {
+		_, err := s.engine.UpdateComponent(
+			context.Background(),
+			ref,
+			func(ctx chasm.MutableContext, component chasm.Component) error {
+				updateCount++
+				component.(*testComponent).ActivityInfo.ActivityId = tv.ActivityID()
+				return nil
+			},
+			chasm.WithStartRequestID(requestID),
+		)
+		return err
+	}
+
+	s.NoError(update())
+	s.ErrorIs(update(), chasm.ErrRequestIDAlreadyUsed)
+	s.Equal(1, updateCount, "updateFn must not run again for a reused start request ID")
 }
 
 func (s *chasmEngineSuite) TestReadComponent_Success() {
@@ -2464,69 +2368,6 @@ func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingClosed() {
 	deserializedRef, err := chasm.DeserializeComponentRef(result.ExecutionRef)
 	s.NoError(err)
 	s.Equal(result.ExecutionKey, deserializedRef.ExecutionKey)
-}
-
-// TestUpdateWithStartExecution_ExistingClosed_CheckExecutionRequestIDs verifies that on the
-// UpdateWithStart path, which already holds the closed run's lock, chasm.WithCheckExecutionRequestIDsOnConflict
-// checks the run's request IDs data node using the held mutable state (without locking the run again,
-// which would deadlock), and returns the closed run instead of creating a new one.
-func (s *chasmEngineSuite) TestUpdateWithStartExecution_ExistingClosed_CheckExecutionRequestIDs() {
-	tv := testvars.New(s.T())
-	tv = tv.WithRunID(tv.Any().RunID())
-	const attachRequestID = "attach-request-id"
-
-	executionKey := chasm.ExecutionKey{
-		NamespaceID: string(tests.NamespaceID),
-		BusinessID:  tv.WorkflowID(),
-	}
-
-	s.mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).
-		Return(&persistence.GetCurrentExecutionResponse{
-			RunID: tv.RunID(),
-		}, nil).Times(2)
-
-	persistedState := s.buildPersistenceMutableState(
-		chasm.ExecutionKey{
-			NamespaceID: executionKey.NamespaceID,
-			BusinessID:  executionKey.BusinessID,
-			RunID:       tv.RunID(),
-		},
-		&persistencespb.ActivityInfo{ActivityId: tv.ActivityID()},
-		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
-		timestamppb.New(s.mockShard.GetTimeSource().Now()),
-	)
-	persistedState.ChasmNodes[requestIDsNodePath] = s.requestIDsNode(attachRequestID)
-	// Loaded once, under the lease UpdateWithStart takes; the request ID check must reuse it.
-	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
-		Return(&persistence.GetWorkflowExecutionResponse{State: persistedState}, nil).Times(1)
-	// No new run is created.
-	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Times(0)
-
-	// Bound the call so a deadlock on re-locking the run fails the test instead of hanging it.
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	result, err := s.engine.UpdateWithStartExecution(
-		ctx,
-		chasm.NewComponentRef[*testComponent](executionKey),
-		func(ctx chasm.MutableContext) (chasm.RootComponent, error) {
-			return &testComponent{
-				ActivityInfo: &persistencespb.ActivityInfo{ActivityId: tv.Any().String()},
-			}, nil
-		},
-		func(ctx chasm.MutableContext, component chasm.Component) error {
-			return nil
-		},
-		chasm.WithRequestID(attachRequestID),
-		chasm.WithBusinessIDPolicy(
-			chasm.BusinessIDReusePolicyAllowDuplicate,
-			chasm.BusinessIDConflictPolicyUseExisting,
-		),
-		chasm.WithCheckExecutionRequestIDsOnConflict(),
-	)
-	s.NoError(err)
-	s.False(result.Created)
-	s.Equal(tv.RunID(), result.ExecutionKey.RunID)
 }
 
 func (s *chasmEngineSuite) TestUpdateWithStartExecution_UpdateFnError() {

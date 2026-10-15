@@ -11,11 +11,9 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -24,8 +22,8 @@ import (
 const requestIDsNodePath = "__chasm_requestIDs"
 
 // TestIDConflictPolicy_RequestIDDataNode covers attach-on-conflict request ID dedup with
-// history.enableChasmRequestIDDataNode on, where the attach request ID is recorded in the activity's
-// request IDs data node instead of on the current record.
+// history.enableChasmRequestIDDataNode on. The attach request ID completes a start request, so it must
+// still be recorded on the current record (ExecutionState), not in the request IDs data node.
 func (s *standaloneActivityTestSuite) TestIDConflictPolicy_RequestIDDataNode() {
 	env := s.newTestEnv()
 	env.OverrideDynamicConfig(dynamicconfig.EnableChasmRequestIDDataNode, true)
@@ -82,15 +80,12 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy_RequestIDDataNode() {
 		require.False(t, conflictResp.GetStarted())
 		require.Equal(t, startResp.GetRunId(), conflictResp.GetRunId())
 
-		// The attach request ID is recorded in the data node, not on the current record.
+		// The attach request ID is a start request ID: it is recorded on the current record
+		// (ExecutionState), not in the request IDs data node.
 		dbState := s.describeMutableState(t, env, activityID).GetDatabaseMutableState()
-		require.NotContains(t, dbState.GetExecutionState().GetRequestIds(), requestID)
-		requestIDsNode, ok := dbState.GetChasmNodes()[requestIDsNodePath]
-		require.True(t, ok)
-		requestIDs := &persistencespb.ChasmRequestIDs{}
-		require.NoError(t, serialization.Decode(requestIDsNode.GetData(), requestIDs))
-		require.Len(t, requestIDs.GetEntries(), 1)
-		require.Equal(t, requestID, requestIDs.GetEntries()[0].GetRequestId())
+		require.Contains(t, dbState.GetExecutionState().GetRequestIds(), requestID)
+		_, hasRequestIDsNode := dbState.GetChasmNodes()[requestIDsNodePath]
+		require.False(t, hasRequestIDsNode)
 
 		pollResp := env.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, startResp.GetRunId())
 		_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
