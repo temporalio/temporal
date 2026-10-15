@@ -130,7 +130,7 @@ func (h *applyLocalTaskHandler) Execute(
 		return resolveErr
 	}
 	namespaceTask := nsreplicationcommon.NamespaceDetailToTaskAttributes(
-		convertOperation(loaded.Operation),
+		loaded.Operation,
 		loaded.Detail,
 	)
 	observe := func(outcome string, applyErr error, details map[string]any) {
