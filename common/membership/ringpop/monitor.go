@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 )
@@ -67,6 +68,7 @@ type monitor struct {
 	broadcastHostPortResolver func() (string, error)
 	hostID                    []byte
 	initialized               *future.FutureImpl[struct{}]
+	metricsHandler            metrics.Handler
 }
 
 var _ membership.Monitor = (*monitor)(nil)
@@ -83,6 +85,7 @@ func newMonitor(
 	propagationTime time.Duration,
 	joinTime time.Time,
 	replicaPoints int,
+	metricsHandler metrics.Handler,
 ) *monitor {
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	lifecycleCtx = headers.SetCallerInfo(
@@ -111,9 +114,10 @@ func newMonitor(
 		maxJoinDuration:           maxJoinDuration,
 		propagationTime:           propagationTime,
 		joinTime:                  joinTime,
+		metricsHandler:            metricsHandler,
 	}
 	for service, port := range services {
-		rpo.rings[service] = newServiceResolver(service, port, rp, replicaPoints, logger)
+		rpo.rings[service] = newServiceResolver(service, port, rp, replicaPoints, logger, metricsHandler)
 	}
 	return rpo
 }
