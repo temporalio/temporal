@@ -109,13 +109,27 @@ const (
 )
 
 type TransitionOptions struct {
-	ReusePolicy                        BusinessIDReusePolicy
-	ConflictPolicy                     BusinessIDConflictPolicy
-	ConsistencyLevel                   RefConsistencyLevel
-	RequestID                          string
-	Speculative                        bool
-	CheckExecutionRequestIDsOnConflict bool
+	ReusePolicy      BusinessIDReusePolicy
+	ConflictPolicy   BusinessIDConflictPolicy
+	ConsistencyLevel RefConsistencyLevel
+	RequestID        string
+	RequestIDType    RequestIDType
+	Speculative      bool
 }
+
+// RequestIDType says which code path checks a request ID for retries, which decides where the request ID
+// must be recorded. It only matters for UpdateComponent().
+type RequestIDType int
+
+const (
+	// RequestIDTypeUpdate is the request ID of an UpdateComponent() call (see [WithRequestID]). A retry
+	// is checked on the execution itself, so it can be recorded in the execution's CHASM tree.
+	RequestIDTypeUpdate RequestIDType = iota
+	// RequestIDTypeStart is the request ID of a start request that an UpdateComponent() call completes
+	// (see [WithStartRequestID]). A retried start is checked on the execution's current record, before
+	// the execution is loaded, so it must be recorded there.
+	RequestIDTypeStart
+)
 
 type TransitionOption func(*TransitionOptions)
 
@@ -195,29 +209,32 @@ func WithBusinessIDPolicy(
 //
 // On StartExecution() and UpdateWithStartExecution() it is the request ID
 // recorded when creating a new execution. On UpdateComponent(), it is used for
-// execution-level idempotency, recording a request's ID on success, and failing
+// execution-level idempotency of that update, recording a request's ID on success, and failing
 // subsequent requests reusing a request ID by returning a FailedPrecondition error.
+//
+// An UpdateComponent() call that completes a start request must use [WithStartRequestID] instead.
 func WithRequestID(
 	requestID string,
 ) TransitionOption {
 	return func(opts *TransitionOptions) {
 		opts.RequestID = requestID
+		opts.RequestIDType = RequestIDTypeUpdate
 	}
 }
 
-// WithCheckExecutionRequestIDsOnConflict makes a start that conflicts with a closed execution also check
-// the request IDs recorded by UpdateComponent on that execution (see [WithRequestID]), not only the ones
-// recorded on the current record. If the start's request ID is found, the existing execution is returned
-// instead of applying the [BusinessIDReusePolicy].
+// WithStartRequestID sets the request ID of the start request that an UpdateComponent() call completes,
+// for example attaching callbacks to an existing execution when a start conflicts with it. It dedups the
+// update like [WithRequestID], but the ID is recorded where the start path checks for retried starts (the
+// execution's current record), so a retry of that start that resolves to this execution, even after the
+// execution closed, returns it instead of creating a new execution.
 //
-// Use it when a start may have previously been applied to an existing execution through a follow-up
-// UpdateComponent with the same request ID (for example, attaching callbacks on conflict), so that a
-// retry of that start after the execution closed doesn't create a new execution. The check loads the
-// existing execution, so it is only done when the existing execution is closed.
-// This option only applies to StartExecution() and UpdateWithStartExecution().
-func WithCheckExecutionRequestIDsOnConflict() TransitionOption {
+// This option only applies to UpdateComponent().
+func WithStartRequestID(
+	requestID string,
+) TransitionOption {
 	return func(opts *TransitionOptions) {
-		opts.CheckExecutionRequestIDsOnConflict = true
+		opts.RequestID = requestID
+		opts.RequestIDType = RequestIDTypeStart
 	}
 }
 
