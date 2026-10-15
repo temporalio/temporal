@@ -15,6 +15,7 @@ import (
 	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -29,6 +30,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -232,6 +234,27 @@ type ErrRegister struct{ error }
 
 var retryPolicy = backoff.NewExponentialRetryPolicy(100 * time.Millisecond).WithExpirationInterval(1 * time.Minute)
 
+type tooManyDeploymentsCacheKey struct {
+	namespaceID string
+}
+
+type tooManyVersionsCacheKey struct {
+	namespaceID    string
+	deploymentName string
+}
+
+type maxTaskQueuesInVersionCacheKey struct {
+	namespaceID    string
+	deploymentName string
+	buildID        string
+}
+
+type registrationErrorCacheValue struct {
+	err                 error
+	expiresAt           time.Time
+	versionFingerprints map[int64]struct{}
+}
+
 // ClientImpl implements Client
 // reactivationVersionKey identifies one target version workflow for reactivation-signal dedup.
 type reactivationVersionKey struct {
@@ -260,6 +283,10 @@ type ClientImpl struct {
 	// hygiene, not part of the dedup contract. Cross-pod deduplication is handled
 	// separately by the deterministic UUID RequestId on each signal.
 	highestRevSignaledToVersionWf cache.Cache
+
+	registrationErrorCache                    cache.Cache
+	workerDeploymentRegistrationErrorCacheTTL time.Duration
+	registrationErrorCacheTimeSource          clock.TimeSource
 }
 
 func (d *ClientImpl) SetManager(
@@ -349,6 +376,19 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 ) (retErr error) {
 	//revive:disable-next-line:defer
 	defer d.convertAndRecordError("RegisterTaskQueueWorker", deploymentName, &retErr, taskQueueName, taskQueueType, identity)()
+	errorType := ""
+	cacheHit := false
+	defer func() {
+		if retErr != nil {
+			d.recordRegistrationError("RegisterTaskQueueWorker", namespaceEntry.Name().String(), errorType, retErr, cacheHit)
+		}
+	}()
+
+	if cachedErrorType, cachedErr := d.getCachedTooManyVersionsOrTaskQueuesError(namespaceEntry.ID().String(), deploymentName, buildId); cachedErr != nil {
+		errorType = cachedErrorType
+		cacheHit = true
+		return cachedErr
+	}
 
 	// Creating request ID out of build ID + TQ name + TQ type. Many updates may come from multiple
 	// matching partitions, we do not want them to create new update requests.
@@ -373,14 +413,190 @@ func (d *ClientImpl) RegisterTaskQueueWorker(
 	}
 
 	// starting and updating the deployment version workflow, which in turn starts a deployment workflow.
-	outcome, err := d.updateWithStartWorkerDeployment(ctx, namespaceEntry, deploymentName, &updatepb.Request{
+	outcome, cacheHit, errorType, err := d.updateWithStartWorkerDeployment(ctx, namespaceEntry, deploymentName, &updatepb.Request{
 		Input: &updatepb.Input{Name: RegisterWorkerInWorkerDeployment, Args: updatePayload},
 		Meta:  &updatepb.Meta{UpdateId: requestID, Identity: identity},
 	}, identity, requestID, d.getSyncBatchSize())
 	if err != nil {
 		return err
 	}
-	return d.handleRegisterVersionFailures(outcome)
+	if failure := outcome.GetFailure(); failure != nil {
+		errorType = failure.GetApplicationFailureInfo().GetType()
+	}
+	retErr = d.handleRegisterVersionFailures(outcome)
+	switch errorType {
+	case errTooManyVersions:
+		d.cacheTooManyVersionsFailure(namespaceEntry.ID().String(), deploymentName, outcome.GetFailure(), retErr)
+	case errMaxTaskQueuesInVersionType:
+		d.cacheMaxTaskQueuesInVersionError(namespaceEntry.ID().String(), deploymentName, buildId, retErr)
+	default:
+	}
+	return retErr
+}
+
+func (d *ClientImpl) getCachedTooManyVersionsOrTaskQueuesError(namespaceID, deploymentName, buildID string) (string, error) {
+	if d.registrationErrorCache == nil {
+		return "", nil
+	}
+
+	versionKey := maxTaskQueuesInVersionCacheKey{
+		namespaceID:    namespaceID,
+		deploymentName: deploymentName,
+		buildID:        buildID,
+	}
+	if cachedErr, ok := d.registrationErrorCache.Get(versionKey).(registrationErrorCacheValue); ok {
+		return errMaxTaskQueuesInVersionType, cachedErr.err
+	}
+	if cachedErr := d.getCachedTooManyVersionsError(namespaceID, deploymentName, buildID); cachedErr != nil {
+		return errTooManyVersions, d.cachedTooManyVersionsError(cachedErr)
+	}
+	return "", nil
+}
+
+func (d *ClientImpl) getCachedTooManyVersionsError(namespaceID, deploymentName, buildID string) *registrationErrorCacheValue {
+	if d.registrationErrorCache == nil {
+		return nil
+	}
+
+	key := tooManyVersionsCacheKey{
+		namespaceID:    namespaceID,
+		deploymentName: deploymentName,
+	}
+	cachedErr, ok := d.registrationErrorCache.Get(key).(registrationErrorCacheValue)
+	if !ok {
+		return nil
+	}
+	if _, exists := cachedErr.versionFingerprints[workerDeploymentVersionFingerprint(deploymentName, buildID)]; exists {
+		return nil
+	}
+	return &cachedErr
+}
+
+func (d *ClientImpl) getCachedTooManyDeploymentsError(namespaceID string) *registrationErrorCacheValue {
+	if d.registrationErrorCache == nil {
+		return nil
+	}
+
+	key := tooManyDeploymentsCacheKey{
+		namespaceID: namespaceID,
+	}
+	if cachedErr, ok := d.registrationErrorCache.Get(key).(registrationErrorCacheValue); ok {
+		return &cachedErr
+	}
+	return nil
+}
+
+func (d *ClientImpl) cacheTooManyVersionsError(
+	namespaceID string,
+	deploymentName string,
+	err error,
+	versionFingerprints map[int64]struct{},
+) {
+	if err == nil || versionFingerprints == nil || d.registrationErrorCache == nil {
+		return
+	}
+	d.putRegistrationError(tooManyVersionsCacheKey{
+		namespaceID:    namespaceID,
+		deploymentName: deploymentName,
+	}, err, versionFingerprints)
+}
+
+func (d *ClientImpl) cacheTooManyVersionsFailure(
+	namespaceID string,
+	deploymentName string,
+	failure *failurepb.Failure,
+	registrationErr error,
+) {
+	versionFingerprints, err := d.getVersionFingerprintsFromFailure(failure)
+	if err != nil {
+		d.logger.Error("failed to decode too-many-versions failure details", tag.Error(err))
+		return
+	}
+	d.cacheTooManyVersionsError(namespaceID, deploymentName, registrationErr, versionFingerprints)
+}
+
+func (d *ClientImpl) cacheMaxTaskQueuesInVersionError(namespaceID, deploymentName, buildID string, err error) {
+	if err == nil || d.registrationErrorCache == nil {
+		return
+	}
+	d.putRegistrationError(maxTaskQueuesInVersionCacheKey{
+		namespaceID:    namespaceID,
+		deploymentName: deploymentName,
+		buildID:        buildID,
+	}, err, nil)
+}
+
+func (d *ClientImpl) cacheTooManyDeploymentsError(namespaceID string, err error) {
+	if err == nil || d.registrationErrorCache == nil {
+		return
+	}
+	d.putRegistrationError(tooManyDeploymentsCacheKey{namespaceID: namespaceID}, err, nil)
+}
+
+func (d *ClientImpl) putRegistrationError(key any, err error, versionFingerprints map[int64]struct{}) {
+	cachedErr := registrationErrorCacheValue{
+		err:                 err,
+		versionFingerprints: versionFingerprints,
+	}
+	if d.registrationErrorCacheTimeSource != nil && d.workerDeploymentRegistrationErrorCacheTTL > 0 {
+		cachedErr.expiresAt = d.registrationErrorCacheTimeSource.Now().Add(d.workerDeploymentRegistrationErrorCacheTTL)
+	}
+	d.registrationErrorCache.Put(key, cachedErr)
+}
+
+func (d *ClientImpl) cachedTooManyDeploymentsError(cachedErr *registrationErrorCacheValue) error {
+	return newResourceExhaustedError(fmt.Sprintf(
+		"%s; this cached result may not reflect a recent deletion, retry in up to %s",
+		cachedErr.err.Error(),
+		d.cachedErrorRemainingTTL(cachedErr),
+	))
+}
+
+func (d *ClientImpl) cachedTooManyVersionsError(cachedErr *registrationErrorCacheValue) error {
+	return newResourceExhaustedError(fmt.Sprintf(
+		"%s; this cached result may not reflect recent version changes, retry in up to %s",
+		cachedErr.err.Error(),
+		d.cachedErrorRemainingTTL(cachedErr),
+	))
+}
+
+func (d *ClientImpl) cachedErrorRemainingTTL(cachedErr *registrationErrorCacheValue) time.Duration {
+	remainingTTL := d.workerDeploymentRegistrationErrorCacheTTL
+	if d.registrationErrorCacheTimeSource != nil && !cachedErr.expiresAt.IsZero() {
+		remainingTTL = cachedErr.expiresAt.Sub(d.registrationErrorCacheTimeSource.Now())
+	}
+	return max(time.Second, ((remainingTTL+time.Second-1)/time.Second)*time.Second)
+}
+
+func (d *ClientImpl) getVersionFingerprintsFromFailure(failure *failurepb.Failure) (map[int64]struct{}, error) {
+	detailsPayloads := failure.GetApplicationFailureInfo().GetDetails()
+	if detailsPayloads == nil {
+		return nil, nil
+	}
+
+	var details deploymentspb.TooManyVersionsFailureDetails
+	if err := sdk.PreferProtoDataConverter.FromPayloads(detailsPayloads, &details); err != nil {
+		return nil, err
+	}
+	fingerprints := make(map[int64]struct{}, len(details.GetVersionFingerprints()))
+	for _, fingerprint := range details.GetVersionFingerprints() {
+		fingerprints[fingerprint] = struct{}{}
+	}
+	return fingerprints, nil
+}
+
+func (d *ClientImpl) recordRegistrationError(operation, namespaceName, errorType string, err error, cacheHit bool) {
+	errorTypeTag := metrics.StringTag(metrics.ErrorTypeTagName, errorType)
+	if errorType == "" {
+		errorTypeTag = metrics.ServiceErrorTypeTag(err)
+	}
+	metrics.WorkerDeploymentRegistrationErrors.With(d.metricsHandler).Record(
+		1,
+		metrics.OperationTag(operation),
+		metrics.NamespaceTag(namespaceName),
+		errorTypeTag,
+		metrics.CacheHitTag(cacheHit),
+	)
 }
 
 func (d *ClientImpl) handleRegisterVersionFailures(outcome *updatepb.Outcome) error {
@@ -821,6 +1037,13 @@ func (d *ClientImpl) SetCurrentVersion(
 ) (_ *deploymentspb.SetCurrentVersionResponse, retErr error) {
 	//revive:disable-next-line:defer
 	defer d.convertAndRecordError("SetCurrentVersion", deploymentName, &retErr, namespaceEntry.Name(), version, identity)()
+	errorType := ""
+	cacheHit := false
+	defer func() {
+		if allowNoPollers && retErr != nil {
+			d.recordRegistrationError("SetCurrentVersion", namespaceEntry.Name().String(), errorType, retErr, cacheHit)
+		}
+	}()
 
 	versionObj, err := worker_versioning.WorkerDeploymentVersionFromStringV31(version)
 	if err != nil {
@@ -858,7 +1081,7 @@ func (d *ClientImpl) SetCurrentVersion(
 				return nil, err
 			}
 		}
-		outcome, err = d.updateWithStartWorkerDeployment(
+		outcome, cacheHit, errorType, err = d.updateWithStartWorkerDeployment(
 			ctx,
 			namespaceEntry,
 			deploymentName,
@@ -904,6 +1127,11 @@ func (d *ClientImpl) SetCurrentVersion(
 			res.ConflictToken = details[0].GetData()
 		}
 		return &res, nil
+	} else if allowNoPollers && failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
+		errorType = errTooManyVersions
+		retErr = newResourceExhaustedError(failure.GetMessage())
+		d.cacheTooManyVersionsFailure(namespaceEntry.ID().String(), deploymentName, failure, retErr)
+		return nil, retErr
 	} else if updateErr := d.handleUpdateVersionFailures(outcome, deploymentName, versionObj.GetBuildId()); updateErr != nil {
 		return nil, updateErr
 	} else if registerErr := d.handleRegisterVersionFailures(outcome); registerErr != nil {
@@ -931,6 +1159,13 @@ func (d *ClientImpl) SetRampingVersion(
 ) (_ *deploymentspb.SetRampingVersionResponse, retErr error) {
 	//revive:disable-next-line:defer
 	defer d.convertAndRecordError("SetRampingVersion", deploymentName, &retErr, namespaceEntry.Name(), version, percentage, identity)()
+	errorType := ""
+	cacheHit := false
+	defer func() {
+		if allowNoPollers && retErr != nil {
+			d.recordRegistrationError("SetRampingVersion", namespaceEntry.Name().String(), errorType, retErr, cacheHit)
+		}
+	}()
 
 	var err error
 	var versionObj *deploymentspb.WorkerDeploymentVersion
@@ -977,7 +1212,7 @@ func (d *ClientImpl) SetRampingVersion(
 				return nil, err
 			}
 		}
-		outcome, err = d.updateWithStartWorkerDeployment(
+		outcome, cacheHit, errorType, err = d.updateWithStartWorkerDeployment(
 			ctx,
 			namespaceEntry,
 			deploymentName,
@@ -1023,6 +1258,11 @@ func (d *ClientImpl) SetRampingVersion(
 		}
 
 		return &res, nil
+	} else if allowNoPollers && failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
+		errorType = errTooManyVersions
+		retErr = newResourceExhaustedError(failure.GetMessage())
+		d.cacheTooManyVersionsFailure(namespaceEntry.ID().String(), deploymentName, failure, retErr)
+		return nil, retErr
 	} else if updateErr := d.handleUpdateVersionFailures(outcome, deploymentName, versionObj.GetBuildId()); updateErr != nil {
 		return nil, updateErr
 	} else if registerErr := d.handleRegisterVersionFailures(outcome); registerErr != nil {
@@ -1165,6 +1405,13 @@ func (d *ClientImpl) CreateWorkerDeployment(
 ) (_ []byte, retErr error) {
 	//revive:disable-next-line:defer
 	defer d.convertAndRecordError("CreateWorkerDeployment", deploymentName, &retErr, namespaceEntry.Name(), identity)()
+	errorType := ""
+	cacheHit := false
+	defer func() {
+		if retErr != nil {
+			d.recordRegistrationError("CreateWorkerDeployment", namespaceEntry.Name().String(), errorType, retErr, cacheHit)
+		}
+	}()
 
 	// Validate deployment name
 	err := validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
@@ -1182,14 +1429,9 @@ func (d *ClientImpl) CreateWorkerDeployment(
 		return conflictToken, nil
 	}
 
-	// Check resource limits
-	count, err := d.countWorkerDeployments(ctx, namespaceEntry)
+	cacheHit, errorType, err = d.checkWorkerDeploymentLimit(ctx, namespaceEntry)
 	if err != nil {
 		return nil, err
-	}
-	limit := d.maxDeployments(namespaceEntry.Name().String())
-	if count >= int64(limit) {
-		return nil, newResourceExhaustedError(fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))
 	}
 
 	// Start the deployment workflow
@@ -1302,6 +1544,13 @@ func (d *ClientImpl) CreateWorkerDeploymentVersion(
 ) (retErr error) {
 	//revive:disable-next-line:defer
 	defer d.convertAndRecordError("CreateWorkerDeploymentVersion", deploymentName, &retErr, namespaceEntry.Name(), identity)()
+	errorType := ""
+	cacheHit := false
+	defer func() {
+		if retErr != nil {
+			d.recordRegistrationError("CreateWorkerDeploymentVersion", namespaceEntry.Name().String(), errorType, retErr, cacheHit)
+		}
+	}()
 
 	err := validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
@@ -1334,6 +1583,12 @@ func (d *ClientImpl) CreateWorkerDeploymentVersion(
 		Meta:  &updatepb.Meta{UpdateId: "_create_version_" + requestID, Identity: identity},
 	}
 
+	if cachedErr := d.getCachedTooManyVersionsError(namespaceEntry.ID().String(), deploymentName, buildID); cachedErr != nil {
+		errorType = errTooManyVersions
+		cacheHit = true
+		return d.cachedTooManyVersionsError(cachedErr)
+	}
+
 	outcome, err := updateWorkflow(
 		ctx,
 		d.historyClient,
@@ -1352,7 +1607,10 @@ func (d *ClientImpl) CreateWorkerDeploymentVersion(
 			return serviceerror.NewAlreadyExists(fmt.Sprintf(ErrWorkerDeploymentVersionAlreadyExists, version))
 		}
 		if failure.GetApplicationFailureInfo().GetType() == errTooManyVersions {
-			return newResourceExhaustedError(failure.GetMessage())
+			errorType = errTooManyVersions
+			retErr = newResourceExhaustedError(failure.GetMessage())
+			d.cacheTooManyVersionsFailure(namespaceEntry.ID().String(), deploymentName, failure, retErr)
+			return retErr
 		}
 		if failure.GetApplicationFailureInfo().GetType() == errInvalidComputeConfig {
 			return serviceerror.NewInvalidArgument(failure.GetMessage())
@@ -1499,27 +1757,22 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 	identity string,
 	requestID string,
 	syncBatchSize int32,
-) (*updatepb.Outcome, error) {
+) (*updatepb.Outcome, bool, string, error) {
 	err := validateVersionWfParams(worker_versioning.WorkerDeploymentNameFieldName, deploymentName, d.maxIDLengthLimit())
 	if err != nil {
-		return nil, err
+		return nil, false, "", err
 	}
 
 	workflowID := GenerateDeploymentWorkflowID(deploymentName)
 
 	exists, err := d.workerDeploymentExists(ctx, namespaceEntry, deploymentName)
 	if err != nil {
-		return nil, err
+		return nil, false, "", err
 	}
 	if !exists {
-		// New deployment, make sure we're not exceeding the limit
-		count, err := d.countWorkerDeployments(ctx, namespaceEntry)
+		cacheHit, errorType, err := d.checkWorkerDeploymentLimit(ctx, namespaceEntry)
 		if err != nil {
-			return nil, err
-		}
-		limit := d.maxDeployments(namespaceEntry.Name().String())
-		if count >= int64(limit) {
-			return nil, newResourceExhaustedError(fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))
+			return nil, cacheHit, errorType, err
 		}
 	}
 
@@ -1533,10 +1786,10 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 		},
 	})
 	if err != nil {
-		return nil, err
+		return nil, false, "", err
 	}
 
-	return updateWorkflowWithStart(
+	outcome, err := updateWorkflowWithStart(
 		ctx,
 		d.historyClient,
 		namespaceEntry,
@@ -1548,6 +1801,7 @@ func (d *ClientImpl) updateWithStartWorkerDeployment(
 		identity,
 		requestID,
 	)
+	return outcome, false, "", err
 }
 
 // TODO: this is an expensive query that is called every time a new deployment name is seen.
@@ -1571,6 +1825,27 @@ func (d *ClientImpl) countWorkerDeployments(
 		return 0, err
 	}
 	return persistenceResp.Count, nil
+}
+
+func (d *ClientImpl) checkWorkerDeploymentLimit(
+	ctx context.Context,
+	namespaceEntry *namespace.Namespace,
+) (bool, string, error) {
+	if cachedErr := d.getCachedTooManyDeploymentsError(namespaceEntry.ID().String()); cachedErr != nil {
+		return true, errTooManyDeployments, d.cachedTooManyDeploymentsError(cachedErr)
+	}
+
+	count, err := d.countWorkerDeployments(ctx, namespaceEntry)
+	if err != nil {
+		return false, "", err
+	}
+	limit := d.maxDeployments(namespaceEntry.Name().String())
+	if count < int64(limit) {
+		return false, "", nil
+	}
+	err = newResourceExhaustedError(fmt.Sprintf("reached maximum deployments in namespace (%d)", limit))
+	d.cacheTooManyDeploymentsError(namespaceEntry.ID().String(), err)
+	return false, errTooManyDeployments, err
 }
 
 func (d *ClientImpl) updateWithStartWorkerDeploymentVersion(

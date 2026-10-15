@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dgryski/go-farm"
 	commonpb "go.temporal.io/api/common/v1"
 	computepb "go.temporal.io/api/compute/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -121,6 +122,14 @@ var (
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
 	)
 )
+
+func workerDeploymentVersionFingerprint(deploymentName, buildID string) int64 {
+	version := worker_versioning.WorkerDeploymentVersionToStringV32(&deploymentspb.WorkerDeploymentVersion{
+		DeploymentName: deploymentName,
+		BuildId:        buildID,
+	})
+	return int64(farm.Fingerprint64([]byte(version)))
+}
 
 var (
 	defaultActivityOptions = workflow.ActivityOptions{
