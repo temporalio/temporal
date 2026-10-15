@@ -2384,3 +2384,48 @@ func (s *workflowReplicatorSuite) Test_bringLocalEventsUpToSourceCurrentBranch_E
 		true)
 	s.NoError(err)
 }
+
+func (s *workflowReplicatorSuite) TestApplySnapshotHistorySwitchKeepsParentVerification() {
+	localInfo := &persistencespb.WorkflowExecutionInfo{
+		VersionHistories: &historyspb.VersionHistories{
+			Histories: []*historyspb.VersionHistory{
+				versionhistory.NewVersionHistory([]byte("local"), []*historyspb.VersionHistoryItem{{EventId: 2, Version: 1}, {EventId: 5, Version: 2}}),
+				versionhistory.NewVersionHistory([]byte("source"), []*historyspb.VersionHistoryItem{{EventId: 2, Version: 1}, {EventId: 5, Version: 3}}),
+			},
+		},
+		TransitionHistory: []*persistencespb.VersionedTransition{{NamespaceFailoverVersion: 2, TransitionCount: 3}},
+	}
+	snapshot := &persistencespb.WorkflowMutableState{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			VersionHistories:  versionhistory.NewVersionHistories(localInfo.VersionHistories.Histories[1]),
+			TransitionHistory: []*persistencespb.VersionedTransition{{NamespaceFailoverVersion: 3, TransitionCount: 4}},
+		},
+		ExecutionState: &persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED},
+	}
+	mutableState := historyi.NewMockMutableState(s.controller)
+	mutableState.EXPECT().GetExecutionInfo().Return(localInfo).AnyTimes()
+	mutableState.EXPECT().GetExecutionState().Return(snapshot.ExecutionState)
+	mutableState.EXPECT().IsWorkflow().Return(true)
+	mutableState.EXPECT().SetHistoryBuilder(gomock.Any())
+	mutableState.EXPECT().GetPendingChildIds().Return(nil)
+	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), gomock.Any()).Return(
+		&persistence.ReadHistoryBranchByBatchResponse{TransactionIDs: []int64{1}}, nil,
+	)
+	mutableState.EXPECT().ApplySnapshot(snapshot).DoAndReturn(func(*persistencespb.WorkflowMutableState) error {
+		localHistory, err := versionhistory.GetCurrentVersionHistory(localInfo.VersionHistories)
+		s.Require().NoError(err)
+		s.True(versionhistory.IsEqualVersionHistoryItems(localHistory.Items, snapshot.ExecutionInfo.VersionHistories.Histories[0].Items))
+		return nil
+	})
+	refresher := workflow.NewMockTaskRefresher(s.controller)
+	refresher.EXPECT().Refresh(gomock.Any(), mutableState, false).Return(nil)
+	transactionManager := NewMockTransactionManager(s.controller)
+	transactionManager.EXPECT().UpdateWorkflow(gomock.Any(), true, chasm.WorkflowArchetypeID, gomock.Any(), nil).Return(nil)
+	s.workflowStateReplicator.taskRefresher = refresher
+	s.workflowStateReplicator.transactionMgr = transactionManager
+	workflowContext := historyi.NewMockWorkflowContext(s.controller)
+	s.Require().NoError(s.workflowStateReplicator.applySnapshotWhenWorkflowExist(
+		s.T().Context(), tests.NamespaceID, s.workflowID, s.runID, chasm.WorkflowArchetypeID,
+		workflowContext, wcache.NoopReleaseFn, mutableState, snapshot, nil, nil, "source",
+	))
+}
