@@ -1,0 +1,88 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.wci.proto.v1;
+
+import "chasm/lib/wci/proto/v1/message.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/wci/gen/wcipb;wcipb";
+
+// Every request carries namespace_id (internal UUID) and instance_id
+// (= GenerateWorkerControllerInstanceWorkflowID(version)), the routing business ID.
+
+message UpdateWorkerControllerInstanceRequest {
+  string namespace_id = 1;
+  string instance_id = 2;
+  // Needed on create.
+  string deployment_name = 3;
+  string build_id = 4;
+  bytes conflict_token = 5;
+  string identity = 6;
+  map<string, ScalingGroupSpecUpdate> upsert_scaling_groups = 7;
+  repeated string remove_scaling_groups = 8;
+}
+
+message UpdateWorkerControllerInstanceResponse {
+  map<string, ScalingGroupSpec> scaling_group_specs = 1;
+  bytes conflict_token = 2;
+}
+
+message DescribeWorkerControllerInstanceRequest {
+  string namespace_id = 1;
+  string instance_id = 2;
+}
+
+message DescribeWorkerControllerInstanceResponse {
+  string deployment_name = 1;
+  string build_id = 2;
+  google.protobuf.Timestamp create_time = 3;
+  map<string, ScalingGroupSpec> scaling_group_specs = 4;
+  bytes conflict_token = 5;
+  string last_modifier_identity = 6;
+  ValidationStatus validation_status = 7;
+}
+
+message DeleteWorkerControllerInstanceRequest {
+  string namespace_id = 1;
+  string instance_id = 2;
+  string identity = 3;
+}
+
+message DeleteWorkerControllerInstanceResponse {}
+
+message ValidateWorkerControllerInstanceSpecRequest {
+  string namespace_id = 1;
+  string instance_id = 2;
+  string identity = 3;
+  map<string, ScalingGroupSpecUpdate> upsert_scaling_groups = 4;
+  repeated string remove_scaling_groups = 5;
+}
+
+// Failure is returned as the error.
+message ValidateWorkerControllerInstanceSpecResponse {}
+
+message RecordTaskAddRequest {
+  string namespace_id = 1;
+  string instance_id = 2;
+  TaskAddEvent event = 3;
+}
+
+message RecordTaskAddResponse {}
+
+message CreateFromMigrationStateRequest {
+  string namespace_id = 1;
+  string instance_id = 2;
+  WorkerControllerInstanceState state = 3;
+  map<string, ScalingGroupState> scaling_groups = 4;
+  // Replayed through ProcessTaskAdd at create.
+  repeated TaskAddEvent pending_task_adds = 5;
+}
+
+message CreateFromMigrationStateResponse {}
+
+message MigrateToWorkflowRequest {
+  string namespace_id = 1;
+  string instance_id = 2;
+}
+
+message MigrateToWorkflowResponse {}

@@ -1,0 +1,109 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.wci.proto.v1;
+
+import "google/protobuf/timestamp.proto";
+import "temporal/api/common/v1/message.proto";
+import "temporal/api/enums/v1/task_queue.proto";
+import "temporal/api/failure/v1/message.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/wci/gen/wcipb;wcipb";
+
+// Root component state.
+message WorkerControllerInstanceState {
+  string deployment_name = 1;
+  string build_id = 2;
+  WciStatus status = 3;
+  map<string, ScalingGroupSpec> scaling_group_specs = 4;
+  google.protobuf.Timestamp create_time = 5;
+  // Same semantics as the workflow's ConflictToken.
+  bytes conflict_token = 6;
+  string last_modifier_identity = 7;
+  ValidationStatus validation_status = 8;
+  // MetricsPollTimerTask deadline.
+  google.protobuf.Timestamp next_poll_time = 9;
+  google.protobuf.Timestamp next_validation_time = 10;
+}
+
+// Per-group runtime state; the spec lives on the root.
+message ScalingGroupState {
+  // ScalingAlgorithmStatus, JSON-encoded as in the workflow.
+  temporal.api.common.v1.Payload algorithm_status = 1;
+  ScalingGroupStatus status = 2;
+  int32 desired_size = 3;
+  // -1 = unknown.
+  int32 applied_size = 4;
+  int32 attempt = 5;
+  temporal.api.failure.v1.Failure last_failure = 6;
+  google.protobuf.Timestamp next_attempt_time = 7;
+  int32 pending_invokes = 8;
+  // request_id of the running InvokeTask; 0 = none.
+  int64 inflight_invoke_id = 9;
+  int32 inflight_invoke_attempt = 10;
+}
+
+message ScalingGroupSpec {
+  repeated temporal.api.enums.v1.TaskQueueType task_types = 1;
+  ComputeProviderSpec compute = 2;
+  // Unset = no algorithm.
+  ScalingAlgorithmSpec scaling = 3;
+}
+
+message ComputeProviderSpec {
+  string provider_type = 1;
+  temporal.api.common.v1.Payload config = 2;
+  string nexus_endpoint = 3;
+}
+
+message ScalingAlgorithmSpec {
+  string scaling_algorithm = 1;
+  temporal.api.common.v1.Payload config = 2;
+}
+
+message ScalingGroupSpecUpdate {
+  ScalingGroupSpec spec = 1;
+  repeated string update_mask = 2;
+}
+
+message ValidationStatus {
+  google.protobuf.Timestamp last_validation_time = 1;
+  // UNSPECIFIED maps to the workflow's empty result.
+  ValidationResult result = 2;
+  string err_message = 3;
+}
+
+message WorkerControllerInstanceMemo {
+  string deployment_name = 1;
+  string build_id = 2;
+  google.protobuf.Timestamp create_time = 3;
+}
+
+// A batched task-add from matching's hook.
+message TaskAddEvent {
+  string task_queue_name = 1;
+  temporal.api.enums.v1.TaskQueueType task_queue_type = 2;
+  bool is_sync_match = 3;
+  int32 sync_match_signals_since_last = 4;
+  int32 no_sync_match_signals_since_last = 5;
+}
+
+enum WciStatus {
+  WCI_STATUS_UNSPECIFIED = 0;
+  WCI_STATUS_RUNNING = 1;
+  WCI_STATUS_MIGRATING_TO_WORKFLOW = 2;
+  WCI_STATUS_MIGRATED = 3;
+  WCI_STATUS_DELETED = 4;
+}
+
+enum ScalingGroupStatus {
+  SCALING_GROUP_STATUS_UNSPECIFIED = 0;
+  SCALING_GROUP_STATUS_IDLE = 1;
+  SCALING_GROUP_STATUS_SCALING = 2;
+  SCALING_GROUP_STATUS_BACKING_OFF = 3;
+}
+
+enum ValidationResult {
+  VALIDATION_RESULT_UNSPECIFIED = 0;
+  VALIDATION_RESULT_SUCCESS = 1;
+  VALIDATION_RESULT_FAILED = 2;
+}

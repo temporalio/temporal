@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.wci.proto.v1;
+
+import "chasm/lib/wci/proto/v1/request_response.proto";
+import "temporal/server/api/routing/v1/extension.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/wci/gen/wcipb;wcipb";
+
+// Internal only: called by server components, so no api_category.
+service WorkerControllerInstanceService {
+  rpc UpdateWorkerControllerInstance(UpdateWorkerControllerInstanceRequest) returns (UpdateWorkerControllerInstanceResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "instance_id";
+  }
+
+  rpc DescribeWorkerControllerInstance(DescribeWorkerControllerInstanceRequest) returns (DescribeWorkerControllerInstanceResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "instance_id";
+  }
+
+  rpc DeleteWorkerControllerInstance(DeleteWorkerControllerInstanceRequest) returns (DeleteWorkerControllerInstanceResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "instance_id";
+  }
+
+  rpc ValidateWorkerControllerInstanceSpec(ValidateWorkerControllerInstanceSpecRequest) returns (ValidateWorkerControllerInstanceSpecResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "instance_id";
+  }
+
+  rpc RecordTaskAdd(RecordTaskAddRequest) returns (RecordTaskAddResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "instance_id";
+  }
+
+  rpc CreateFromMigrationState(CreateFromMigrationStateRequest) returns (CreateFromMigrationStateResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "instance_id";
+  }
+
+  rpc MigrateToWorkflow(MigrateToWorkflowRequest) returns (MigrateToWorkflowResponse) {
+    option (temporal.server.api.routing.v1.routing).business_id = "instance_id";
+  }
+}
