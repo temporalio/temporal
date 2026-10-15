@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log/tag"
@@ -43,6 +44,7 @@ const (
 	eagerStartDeniedReasonDynamicConfigDisabled      metrics.ReasonString = "dynamic_config_disabled"
 	eagerStartDeniedReasonFirstWorkflowTaskBackoff   metrics.ReasonString = "first_workflow_task_backoff"
 	eagerStartDeniedReasonTaskAlreadyDispatched      metrics.ReasonString = "task_already_dispatched"
+	eagerStartDeniedReasonDispatchNotGranted         metrics.ReasonString = "dispatch_not_granted"
 	orphanedChildReplacementReplaced                                      = "replaced"
 	orphanedChildReplacementRejectedUnsupportedState                      = "rejected_unsupported_state"
 )
@@ -170,9 +172,35 @@ func (s *Starter) prepare(ctx context.Context) error {
 			metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
 				Record(1, metrics.ReasonTag(eagerStartDeniedReasonFirstWorkflowTaskBackoff))
 			request.RequestEagerExecution = false
+		} else if s.shardContext.GetConfig().EnableWorkflowEagerDispatchCheck(s.namespace.Name().String()) &&
+			// This line makes an RPC call to matching.
+			// TODO: Reconcile the Matching grant when the start does not create a new execution.
+			!s.grantEagerWorkflowDispatch(ctx) {
+			// Matching grants are best-effort. On a denial or any matching failure, start the
+			// workflow normally instead of failing the start request.
+			metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
+				Record(1, metrics.ReasonTag(eagerStartDeniedReasonDispatchNotGranted))
+			request.RequestEagerExecution = false
 		}
 	}
 	return nil
+}
+
+func (s *Starter) grantEagerWorkflowDispatch(ctx context.Context) bool {
+	request := s.request.StartRequest
+	// Pinned and pending one-time overrides route the first workflow task to their target version.
+	version := worker_versioning.DeploymentVersionFromDeployment(worker_versioning.DeploymentFromExternalDeploymentVersion(
+		worker_versioning.GetOverrideTargetDeploymentVersion(request.GetVersioningOverride()),
+	))
+	return common.GrantEagerDispatch(
+		ctx,
+		s.matchingClient,
+		s.namespace.ID().String(),
+		request.GetTaskQueue().GetName(),
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		request.GetPriority(),
+		version,
+	)
 }
 
 func (s *Starter) getMetricsHandler() metrics.Handler {

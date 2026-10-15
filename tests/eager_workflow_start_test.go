@@ -264,3 +264,58 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_WorkflowRetry() {
 		s.Equal(int64(2), resp.Count)
 	}, testcore.WaitForESToSettle, 200*time.Millisecond)
 }
+
+func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_MatchingGrant() {
+	env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowEagerDispatchCheck, true))
+	response := s.startEagerWorkflow(env, &workflowservice.StartWorkflowExecutionRequest{})
+	task := response.GetEagerWorkflowTask()
+	s.NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
+
+	s.respondWorkflowTaskCompleted(env, task, "ok")
+	// Verify workflow completes and client can get the result
+	result := s.getWorkflowStringResult(env, s.defaultWorkflowID(), response.RunId)
+	s.Equal("ok", result)
+}
+
+func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_FallsBackWhenBacklogExists() {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowEagerDispatchCheck, true),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingBacklogNegligibleAge, time.Duration(0)),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
+	)
+
+	backloggedWorkflowID := s.defaultWorkflowID() + "-backlogged"
+	_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:    uuid.NewString(),
+		Namespace:    env.Namespace().String(),
+		WorkflowId:   backloggedWorkflowID,
+		WorkflowType: &commonpb.WorkflowType{Name: "Workflow"},
+		TaskQueue:    s.defaultTaskQueue(),
+		Identity:     "test",
+	})
+	s.NoError(err)
+	s.Await(func(s *EagerWorkflowTestSuite) {
+		response, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     env.Namespace().String(),
+			TaskQueue:     s.defaultTaskQueue(),
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			ReportStats:   true,
+		})
+		s.NoError(err)
+		s.GreaterOrEqual(response.GetStats().GetApproximateBacklogCount(), int64(1))
+	}, 10*time.Second, 100*time.Millisecond)
+
+	response := s.startEagerWorkflow(env, &workflowservice.StartWorkflowExecutionRequest{})
+	s.Nil(response.GetEagerWorkflowTask(), "StartWorkflowExecution response contained a workflow task")
+
+	// Both workflow tasks are dispatched by matching, and the backlogged one is dispatched first.
+	for _, workflowID := range []string{backloggedWorkflowID, s.defaultWorkflowID()} {
+		task := s.pollWorkflowTaskQueue(env)
+		s.Equal(workflowID, task.GetWorkflowExecution().GetWorkflowId())
+		s.False(task.GetHistory().GetEvents()[0].GetWorkflowExecutionStartedEventAttributes().GetEagerExecutionAccepted())
+		s.respondWorkflowTaskCompleted(env, task, "ok")
+	}
+	result := s.getWorkflowStringResult(env, s.defaultWorkflowID(), response.RunId)
+	s.Equal("ok", result)
+}
