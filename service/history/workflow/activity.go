@@ -131,6 +131,7 @@ func GetPendingActivityInfo(
 			if now.Before(scheduledTime) && !ai.Paused {
 				// waiting for the retry to be dispatched to Matching
 				p.NextAttemptScheduleTime = ai.ScheduledTime
+				// A reset clears the completion time, so only derive a retry interval when an attempt completed.
 				if p.LastAttemptCompleteTime != nil {
 					currentRetryDuration := p.NextAttemptScheduleTime.AsTime().Sub(p.LastAttemptCompleteTime.AsTime())
 					p.CurrentRetryInterval = durationpb.New(currentRetryDuration)
