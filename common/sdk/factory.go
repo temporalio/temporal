@@ -42,6 +42,9 @@ type (
 		systemSdkClient sdkclient.Client
 		stickyCacheSize dynamicconfig.IntPropertyFn
 		once            sync.Once
+
+		clientsLock sync.Mutex
+		closed      bool
 	}
 )
 
@@ -90,15 +93,16 @@ func (f *clientFactory) NewClient(options sdkclient.Options) sdkclient.Client {
 
 func (f *clientFactory) GetSystemClient() sdkclient.Client {
 	f.once.Do(func() {
+		var sdkClient sdkclient.Client
 		err := backoff.ThrottleRetry(func() error {
-			sdkClient, err := sdkclient.Dial(f.options(sdkclient.Options{
+			var err error
+			sdkClient, err = sdkclient.Dial(f.options(sdkclient.Options{
 				Namespace: primitives.SystemLocalNamespace,
 			}))
 			if err != nil {
 				f.logger.Warn("error creating sdk client", tag.Error(err))
 				return err
 			}
-			f.systemSdkClient = sdkClient
 			return nil
 		}, common.CreateSdkClientFactoryRetryPolicy(), func(err error) bool {
 			// note err is wrapped by sdk
@@ -113,6 +117,14 @@ func (f *clientFactory) GetSystemClient() sdkclient.Client {
 			f.logger.Info("setting sticky workflow cache size", tag.Int("size", size))
 			sdkworker.SetStickyWorkflowCacheSize(size)
 		}
+
+		f.clientsLock.Lock()
+		defer f.clientsLock.Unlock()
+
+		f.systemSdkClient = sdkClient
+		if f.closed {
+			sdkClient.Close()
+		}
 	})
 	return f.systemSdkClient
 }
@@ -123,6 +135,20 @@ func (f *clientFactory) NewWorker(
 	options sdkworker.Options,
 ) sdkworker.Worker {
 	return sdkworker.New(client, taskQueue, options)
+}
+
+func (f *clientFactory) Close() {
+	f.clientsLock.Lock()
+	defer f.clientsLock.Unlock()
+
+	if f.closed {
+		return
+	}
+	f.closed = true
+
+	if f.systemSdkClient != nil {
+		f.systemSdkClient.Close()
+	}
 }
 
 // Overwrite the 'client-name' and 'client-version' headers on gRPC requests sent using the Go SDK

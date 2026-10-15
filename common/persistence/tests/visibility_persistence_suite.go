@@ -11,6 +11,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/debug"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -23,10 +25,12 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/searchattribute/sadefs"
+	"go.temporal.io/server/common/testing/await"
 	"go.uber.org/mock/gomock"
 )
 
@@ -43,7 +47,7 @@ type (
 		taskID int64
 
 		*persistencetests.TestBase
-		NamespaceRegistry              namespace.Registry
+		NamespaceRegistry              *namespace.MockRegistry
 		VisibilityMgr                  manager.VisibilityManager
 		SearchAttributesProvider       searchattribute.Provider
 		SearchAttributesMapperProvider searchattribute.MapperProvider
@@ -65,27 +69,40 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 	s.SearchAttributesMapperProvider = searchattribute.NewTestMapperProvider(nil)
 	s.NamespaceRegistry = namespace.NewMockRegistry(s.controller)
 	s.VisibilityMgr, err = visibility.NewManager(
-		cfg,
-		resolver.NewNoopResolver(),
-		s.CustomVisibilityStoreFactory,
-		nil,
-		s.SearchAttributesProvider,
-		s.SearchAttributesMapperProvider,
-		s.NamespaceRegistry,
-		chasm.NewRegistry(nil),
-		dynamicconfig.GetIntPropertyFn(1000),
-		dynamicconfig.GetIntPropertyFn(1000),
-		dynamicconfig.GetFloatPropertyFn(0.2),
-		dynamicconfig.GetDurationPropertyFn(time.Second),
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
-		dynamicconfig.GetBoolPropertyFn(false),
-		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff),
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
-		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
-		dynamicconfig.GetBoolPropertyFn(true),
-		metrics.NoopMetricsHandler,
-		s.Logger,
-		serialization.NewSerializer(),
+		&visibility.ManagerParams{
+			PersistenceCfg:               &cfg,
+			PersistenceResolver:          resolver.NewNoopResolver(),
+			CustomVisibilityStoreFactory: s.CustomVisibilityStoreFactory,
+
+			SearchAttributesProvider:       s.SearchAttributesProvider,
+			SearchAttributesMapperProvider: s.SearchAttributesMapperProvider,
+			NamespaceRegistry:              s.NamespaceRegistry,
+			ChasmRegistry:                  chasm.NewRegistry(nil),
+
+			MetricsHandler: metrics.NoopMetricsHandler,
+			Logger:         s.Logger,
+			Serializer:     serialization.NewSerializer(),
+		},
+		&visibility.ManagerConfig{
+			EsProcessorConfig: &elasticsearch.ProcessorConfig{
+				IndexerConcurrency:       dynamicconfig.GetIntPropertyFn(10),
+				ESProcessorNumOfWorkers:  dynamicconfig.GetIntPropertyFn(2),
+				ESProcessorBulkActions:   dynamicconfig.GetIntPropertyFn(10),
+				ESProcessorBulkSize:      dynamicconfig.GetIntPropertyFn(1 * 1024 * 1024), // 1MB
+				ESProcessorFlushInterval: dynamicconfig.GetDurationPropertyFn(time.Second),
+				ESProcessorAckTimeout:    dynamicconfig.GetDurationPropertyFn(30 * time.Second),
+			},
+
+			MaxReadQPS:                     dynamicconfig.GetIntPropertyFn(1000),
+			MaxWriteQPS:                    dynamicconfig.GetIntPropertyFn(1000),
+			OperatorRPSRatio:               dynamicconfig.GetFloatPropertyFn(0.2),
+			SlowQueryThreshold:             dynamicconfig.GetDurationPropertyFn(time.Second),
+			EnableReadFromSecondary:        dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			EnableShadowReadMode:           dynamicconfig.GetBoolPropertyFn(false),
+			SecondaryVisibilityWritingMode: dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff),
+			DisableOrderByClause:           dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+			EnableManualPagination:         dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+		},
 	)
 
 	if err != nil {
@@ -125,21 +142,25 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibility() {
 	)
 
 	// ListOpenWorkflowExecutions
-	resp, err1 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    1,
-		Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s = '%s'",
-			sadefs.StartTime,
-			startTime.Format(time.RFC3339Nano),
-			sadefs.StartTime,
-			startTime.Format(time.RFC3339Nano),
-			sadefs.ExecutionStatus,
-			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		),
-	})
-	s.NoError(err1)
-	s.Len(resp.Executions, 1)
-	s.assertOpenExecutionEquals(startReq, resp.Executions[0])
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    1,
+			Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s = '%s'",
+				sadefs.StartTime,
+				startTime.Format(time.RFC3339Nano),
+				sadefs.StartTime,
+				startTime.Format(time.RFC3339Nano),
+				sadefs.ExecutionStatus,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			),
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 1)
+			s.assertOpenExecutionEquals(t, startReq, resp.Executions[0])
+		},
+	)
 
 	closeReq := s.createClosedWorkflowRecord(
 		startReq,
@@ -148,37 +169,45 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibility() {
 	)
 
 	// ListOpenWorkflowExecutions
-	resp, err3 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    1,
-		Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s = '%s'",
-			sadefs.StartTime,
-			startTime.Format(time.RFC3339Nano),
-			sadefs.StartTime,
-			startTime.Format(time.RFC3339Nano),
-			sadefs.ExecutionStatus,
-			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		),
-	})
-	s.NoError(err3)
-	s.Empty(resp.Executions)
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    1,
+			Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s = '%s'",
+				sadefs.StartTime,
+				startTime.Format(time.RFC3339Nano),
+				sadefs.StartTime,
+				startTime.Format(time.RFC3339Nano),
+				sadefs.ExecutionStatus,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			),
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Empty(t, resp.Executions)
+		},
+	)
 
 	// ListClosedWorkflowExecutions
-	resp, err4 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    1,
-		Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s != '%s'",
-			sadefs.CloseTime,
-			startTime.Format(time.RFC3339Nano),
-			sadefs.CloseTime,
-			time.Now().Format(time.RFC3339Nano),
-			sadefs.ExecutionStatus,
-			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		),
-	})
-	s.NoError(err4)
-	s.Len(resp.Executions, 1)
-	s.assertClosedExecutionEquals(closeReq, resp.Executions[0])
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    1,
+			Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s != '%s'",
+				sadefs.CloseTime,
+				startTime.Format(time.RFC3339Nano),
+				sadefs.CloseTime,
+				time.Now().Format(time.RFC3339Nano),
+				sadefs.ExecutionStatus,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			),
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 1)
+			s.assertClosedExecutionEquals(t, closeReq, resp.Executions[0])
+		},
+	)
 }
 
 // TestBasicVisibilityTimeSkew test
@@ -196,21 +225,25 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityTimeSkew() {
 	)
 
 	// ListOpenWorkflowExecutions
-	resp, err1 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    1,
-		Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s = '%s'",
-			sadefs.StartTime,
-			startTime.Format(time.RFC3339Nano),
-			sadefs.StartTime,
-			startTime.Format(time.RFC3339Nano),
-			sadefs.ExecutionStatus,
-			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		),
-	})
-	s.NoError(err1)
-	s.Len(resp.Executions, 1)
-	s.assertOpenExecutionEquals(openRecord, resp.Executions[0])
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    1,
+			Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s = '%s'",
+				sadefs.StartTime,
+				startTime.Format(time.RFC3339Nano),
+				sadefs.StartTime,
+				startTime.Format(time.RFC3339Nano),
+				sadefs.ExecutionStatus,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			),
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 1)
+			s.assertOpenExecutionEquals(t, openRecord, resp.Executions[0])
+		},
+	)
 
 	closedRecord := s.createClosedWorkflowRecord(
 		openRecord,
@@ -219,37 +252,45 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityTimeSkew() {
 	)
 
 	// ListOpenWorkflowExecutions
-	resp, err3 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    1,
-		Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s = '%s'",
-			sadefs.StartTime,
-			startTime.Format(time.RFC3339Nano),
-			sadefs.StartTime,
-			startTime.Format(time.RFC3339Nano),
-			sadefs.ExecutionStatus,
-			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		),
-	})
-	s.NoError(err3)
-	s.Empty(resp.Executions)
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    1,
+			Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s = '%s'",
+				sadefs.StartTime,
+				startTime.Format(time.RFC3339Nano),
+				sadefs.StartTime,
+				startTime.Format(time.RFC3339Nano),
+				sadefs.ExecutionStatus,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			),
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Empty(t, resp.Executions)
+		},
+	)
 
 	// ListClosedWorkflowExecutions
-	resp, err4 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    1,
-		Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s != '%s'",
-			sadefs.CloseTime,
-			startTime.Add(-10*time.Millisecond).Format(time.RFC3339Nano),
-			sadefs.CloseTime,
-			startTime.Add(-10*time.Millisecond).Format(time.RFC3339Nano),
-			sadefs.ExecutionStatus,
-			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		),
-	})
-	s.NoError(err4)
-	s.Len(resp.Executions, 1)
-	s.assertClosedExecutionEquals(closedRecord, resp.Executions[0])
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    1,
+			Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s != '%s'",
+				sadefs.CloseTime,
+				startTime.Add(-10*time.Millisecond).Format(time.RFC3339Nano),
+				sadefs.CloseTime,
+				startTime.Add(-10*time.Millisecond).Format(time.RFC3339Nano),
+				sadefs.ExecutionStatus,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			),
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 1)
+			s.assertClosedExecutionEquals(t, closedRecord, resp.Executions[0])
+		},
+	)
 }
 
 func (s *VisibilityPersistenceSuite) TestBasicVisibilityShortWorkflow() {
@@ -271,42 +312,51 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityShortWorkflow() {
 	)
 
 	// ListOpenWorkflowExecutions
-	resp, err3 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    1,
-		Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s = '%s'",
-			sadefs.StartTime,
-			startTime.Format(time.RFC3339Nano),
-			sadefs.StartTime,
-			startTime.Format(time.RFC3339Nano),
-			sadefs.ExecutionStatus,
-			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		),
-	})
-	s.NoError(err3)
-	s.Empty(resp.Executions)
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    1,
+			Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s = '%s'",
+				sadefs.StartTime,
+				startTime.Format(time.RFC3339Nano),
+				sadefs.StartTime,
+				startTime.Format(time.RFC3339Nano),
+				sadefs.ExecutionStatus,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			),
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Empty(t, resp.Executions)
+		},
+	)
 
 	// ListClosedWorkflowExecutions
-	resp, err4 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    1,
-		Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s != '%s'",
-			sadefs.CloseTime,
-			startTime.Add(10*time.Millisecond).Format(time.RFC3339Nano),
-			sadefs.CloseTime,
-			startTime.Add(10*time.Millisecond).Format(time.RFC3339Nano),
-			sadefs.ExecutionStatus,
-			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		),
-	})
-	s.NoError(err4)
-	s.Len(resp.Executions, 1)
-	s.assertClosedExecutionEquals(closedRecord, resp.Executions[0])
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    1,
+			Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s != '%s'",
+				sadefs.CloseTime,
+				startTime.Add(10*time.Millisecond).Format(time.RFC3339Nano),
+				sadefs.CloseTime,
+				startTime.Add(10*time.Millisecond).Format(time.RFC3339Nano),
+				sadefs.ExecutionStatus,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			),
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 1)
+			s.assertClosedExecutionEquals(t, closedRecord, resp.Executions[0])
+		},
+	)
 }
 
 // TestVisibilityPagination test
 func (s *VisibilityPersistenceSuite) TestVisibilityPagination() {
 	testNamespaceUUID := namespace.ID(uuid.NewString())
+	var nextPageToken []byte
 
 	// Create 2 executions
 	startTime1 := time.Now().UTC()
@@ -330,44 +380,8 @@ func (s *VisibilityPersistenceSuite) TestVisibilityPagination() {
 	)
 
 	// Get the first one
-	resp, err2 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    1,
-		Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s = '%s'",
-			sadefs.StartTime,
-			startTime1.Format(time.RFC3339Nano),
-			sadefs.StartTime,
-			startTime2.Format(time.RFC3339Nano),
-			sadefs.ExecutionStatus,
-			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		),
-	})
-	s.NoError(err2)
-	s.Len(resp.Executions, 1)
-	s.assertOpenExecutionEquals(openRecord2, resp.Executions[0])
-
-	// Use token to get the second one
-	resp, err3 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    1,
-		Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s = '%s'",
-			sadefs.StartTime,
-			startTime1.Format(time.RFC3339Nano),
-			sadefs.StartTime,
-			startTime2.Format(time.RFC3339Nano),
-			sadefs.ExecutionStatus,
-			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		),
-		NextPageToken: resp.NextPageToken,
-	})
-	s.NoError(err3)
-	s.Len(resp.Executions, 1)
-	s.assertOpenExecutionEquals(openRecord1, resp.Executions[0])
-
-	// It is possible to not return non empty token which is going to return empty result
-	if len(resp.NextPageToken) != 0 {
-		// Now should get empty result by using token
-		resp, err4 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
 			NamespaceID: testNamespaceUUID,
 			PageSize:    1,
 			Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s = '%s'",
@@ -378,11 +392,139 @@ func (s *VisibilityPersistenceSuite) TestVisibilityPagination() {
 				sadefs.ExecutionStatus,
 				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			),
-			NextPageToken: resp.NextPageToken,
-		})
-		s.NoError(err4)
-		s.Empty(resp.Executions)
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 1)
+			s.assertOpenExecutionEquals(t, openRecord2, resp.Executions[0])
+			nextPageToken = resp.NextPageToken
+		},
+	)
+
+	// Use token to get the second one
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    1,
+			Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s = '%s'",
+				sadefs.StartTime,
+				startTime1.Format(time.RFC3339Nano),
+				sadefs.StartTime,
+				startTime2.Format(time.RFC3339Nano),
+				sadefs.ExecutionStatus,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			),
+			NextPageToken: nextPageToken,
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 1)
+			s.assertOpenExecutionEquals(t, openRecord1, resp.Executions[0])
+			nextPageToken = resp.NextPageToken
+		},
+	)
+
+	// It is possible to not return non empty token which is going to return empty result
+	if len(nextPageToken) != 0 {
+		// Now should get empty result by using token
+		s.assertListWorkflowExecutions(
+			&manager.ListWorkflowExecutionsRequestV2{
+				NamespaceID: testNamespaceUUID,
+				PageSize:    1,
+				Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s = '%s'",
+					sadefs.StartTime,
+					startTime1.Format(time.RFC3339Nano),
+					sadefs.StartTime,
+					startTime2.Format(time.RFC3339Nano),
+					sadefs.ExecutionStatus,
+					enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				),
+				NextPageToken: nextPageToken,
+			},
+			func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+				require.NoError(t, err)
+				require.Empty(t, resp.Executions)
+			},
+		)
 	}
+}
+
+// TestPaginationEdgeCase verifies that the datatime filters works as expected
+// in the pagination filter.
+// Particularly, when a datetime is missing a component (eg: nanoseconds),
+// Elasticsearch fills it in unexpected ways.
+// Eg: if a workflow has CloseTime at 2023-04-05T06:07:08.100000000Z, a filter
+// like `CloseTime = '2023-04-05T06:07:08Z'` will match the workflow.
+// This can leads to unexpected behaviors during pagination.
+func (s *VisibilityPersistenceSuite) TestPaginationEdgeCase() {
+	testNamespaceUUID := namespace.ID(uuid.NewString())
+	startTime := time.Date(2023, 4, 5, 6, 7, 8, 0, time.UTC)
+	closeTime := startTime.Add(2 * time.Second)
+
+	// Generating workflows with oposite orders for CloseTime and StartTime.
+	// Eg: WF1 (CT1, ST1), WF2 (CT2, ST2), etc.
+	// We want ST1 < ST2 < ST3 < ... and CT1 > CT2 > CT3 > ...
+	// Furthermore, we want all of them to be within the same second and
+	// CTn must be an exact second, ie., no nanoseconds part.
+	// Since the step in time is 100ms, n must be less than 10.
+	n := 3
+	var startReqs []*manager.RecordWorkflowExecutionStartedRequest
+	for i := range n {
+		r := s.createOpenWorkflowRecord(
+			testNamespaceUUID,
+			fmt.Sprintf("visibility-datetime-filter-%d", i),
+			"visibility-datetime-filter",
+			startTime.Add(time.Duration(i)*100*time.Millisecond),
+			startTime.Add(time.Duration(i)*100*time.Millisecond),
+			"test-queue",
+		)
+		startReqs = append(startReqs, r)
+	}
+	for i := range startReqs {
+		_ = s.createClosedWorkflowRecord(
+			startReqs[i],
+			closeTime.Add(time.Duration(n-i-1)*100*time.Millisecond),
+			enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		)
+	}
+
+	s.assertCountWorkflowExecutions(
+		&manager.CountWorkflowExecutionsRequest{
+			NamespaceID: testNamespaceUUID,
+			Query:       "ExecutionStatus = 'Completed'",
+		},
+		func(t require.TestingT, resp *manager.CountWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Equal(t, int64(n), resp.Count)
+		},
+	)
+
+	pageSize := n
+	var nextPageToken []byte
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    pageSize,
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, pageSize)
+			require.NotEmpty(t, resp.NextPageToken)
+			nextPageToken = resp.NextPageToken
+		},
+	)
+
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID:   testNamespaceUUID,
+			PageSize:      pageSize,
+			NextPageToken: nextPageToken,
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Empty(t, resp.Executions)
+		},
+	)
 }
 
 // TestFilteringByStartTime test
@@ -409,50 +551,76 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStartTime() {
 	)
 
 	// List open workflows with start time filter
-	resp, err := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    2,
-		Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s = '%s'",
-			sadefs.StartTime,
-			time.Now().Add(-time.Hour).Format(time.RFC3339Nano),
-			sadefs.StartTime,
-			time.Now().Format(time.RFC3339Nano),
-			sadefs.ExecutionStatus,
-			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		),
-	})
-	s.NoError(err)
-	s.Len(resp.Executions, 1)
-	s.assertOpenExecutionEquals(openRecord2, resp.Executions[0])
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    2,
+			Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s = '%s'",
+				sadefs.StartTime,
+				time.Now().Add(-time.Hour).Format(time.RFC3339Nano),
+				sadefs.StartTime,
+				time.Now().Format(time.RFC3339Nano),
+				sadefs.ExecutionStatus,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			),
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 1)
+			s.assertOpenExecutionEquals(t, openRecord2, resp.Executions[0])
+		},
+	)
 
 	// List with WorkflowType filter in query string
-	queryStr := fmt.Sprintf(`StartTime BETWEEN "%v" AND "%v"`, time.Now().Add(-time.Hour).Format(time.RFC3339Nano), time.Now().Format(time.RFC3339Nano))
-	resp, err = s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    2,
-		Query:       queryStr,
-	})
-	s.NoError(err)
-	s.Len(resp.Executions, 1)
-	s.assertOpenExecutionEquals(openRecord2, resp.Executions[0])
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    2,
+			Query: fmt.Sprintf(
+				`StartTime BETWEEN "%v" AND "%v"`,
+				time.Now().Add(-time.Hour).Format(time.RFC3339Nano),
+				time.Now().Format(time.RFC3339Nano),
+			),
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 1)
+			s.assertOpenExecutionEquals(t, openRecord2, resp.Executions[0])
+		},
+	)
 
-	queryStr = fmt.Sprintf(`StartTime BETWEEN "%v" AND "%v"`, time.Now().Add(-3*time.Hour).Format(time.RFC3339Nano), time.Now().Format(time.RFC3339Nano))
-	resp, err = s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    2,
-		Query:       queryStr,
-	})
-	s.NoError(err)
-	s.Len(resp.Executions, 2)
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    2,
+			Query: fmt.Sprintf(
+				`StartTime BETWEEN "%v" AND "%v"`,
+				time.Now().Add(-3*time.Hour).Format(time.RFC3339Nano),
+				time.Now().Format(time.RFC3339Nano),
+			),
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 2)
+		},
+	)
 
-	resp, err = s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    2,
-		Query:       queryStr + ` AND WorkflowType = "visibility-workflow-1"`,
-	})
-	s.NoError(err)
-	s.Len(resp.Executions, 1)
-	s.assertOpenExecutionEquals(openRecord1, resp.Executions[0])
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    2,
+			Query: fmt.Sprintf(
+				`StartTime BETWEEN "%v" AND "%v" AND WorkflowType = "visibility-workflow-1"`,
+				time.Now().Add(-3*time.Hour).Format(time.RFC3339Nano),
+				time.Now().Format(time.RFC3339Nano),
+			),
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 1)
+			s.assertOpenExecutionEquals(s.T(), openRecord1, resp.Executions[0])
+		},
+	)
 }
 
 // TestFilteringByType test
@@ -479,33 +647,41 @@ func (s *VisibilityPersistenceSuite) TestFilteringByType() {
 	)
 
 	// List open with filtering: ListOpenWorkflowExecutionsByType
-	resp, err2 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    2,
-		Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s = '%s' AND %s = '%s'",
-			sadefs.StartTime,
-			startTime.Format(time.RFC3339Nano),
-			sadefs.StartTime,
-			startTime.Format(time.RFC3339Nano),
-			sadefs.ExecutionStatus,
-			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-			sadefs.WorkflowType,
-			"visibility-workflow-1",
-		),
-	})
-	s.NoError(err2)
-	s.Len(resp.Executions, 1)
-	s.assertOpenExecutionEquals(openRecord1, resp.Executions[0])
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    2,
+			Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s = '%s' AND %s = '%s'",
+				sadefs.StartTime,
+				startTime.Format(time.RFC3339Nano),
+				sadefs.StartTime,
+				startTime.Format(time.RFC3339Nano),
+				sadefs.ExecutionStatus,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				sadefs.WorkflowType,
+				"visibility-workflow-1",
+			),
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 1)
+			s.assertOpenExecutionEquals(t, openRecord1, resp.Executions[0])
+		},
+	)
 
 	// List with WorkflowType filter in query string
-	resp, err := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    2,
-		Query:       `WorkflowType = "visibility-workflow-1"`,
-	})
-	s.NoError(err)
-	s.Len(resp.Executions, 1)
-	s.assertOpenExecutionEquals(openRecord1, resp.Executions[0])
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    2,
+			Query:       `WorkflowType = "visibility-workflow-1"`,
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 1)
+			s.assertOpenExecutionEquals(t, openRecord1, resp.Executions[0])
+		},
+	)
 
 	// Close both executions
 	s.createClosedWorkflowRecord(openRecord1, time.Now(), enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
@@ -516,33 +692,41 @@ func (s *VisibilityPersistenceSuite) TestFilteringByType() {
 	)
 
 	// List closed with filtering: ListClosedWorkflowExecutionsByType
-	resp, err5 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    2,
-		Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s != '%s' AND %s = '%s'",
-			sadefs.CloseTime,
-			startTime.Format(time.RFC3339Nano),
-			sadefs.CloseTime,
-			time.Now().Format(time.RFC3339Nano),
-			sadefs.ExecutionStatus,
-			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-			sadefs.WorkflowType,
-			"visibility-workflow-2",
-		),
-	})
-	s.NoError(err5)
-	s.Len(resp.Executions, 1)
-	s.assertClosedExecutionEquals(closedRecord2, resp.Executions[0])
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    2,
+			Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s != '%s' AND %s = '%s'",
+				sadefs.CloseTime,
+				startTime.Format(time.RFC3339Nano),
+				sadefs.CloseTime,
+				time.Now().Format(time.RFC3339Nano),
+				sadefs.ExecutionStatus,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				sadefs.WorkflowType,
+				"visibility-workflow-2",
+			),
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 1)
+			s.assertClosedExecutionEquals(t, closedRecord2, resp.Executions[0])
+		},
+	)
 
 	// List with WorkflowType filter in query string
-	resp, err = s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    2,
-		Query:       `WorkflowType = "visibility-workflow-2"`,
-	})
-	s.NoError(err)
-	s.Len(resp.Executions, 1)
-	s.assertClosedExecutionEquals(closedRecord2, resp.Executions[0])
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    2,
+			Query:       `WorkflowType = "visibility-workflow-2"`,
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 1)
+			s.assertClosedExecutionEquals(t, closedRecord2, resp.Executions[0])
+		},
+	)
 }
 
 // TestFilteringByWorkflowID test
@@ -569,33 +753,41 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 	)
 
 	// List open with filtering: ListOpenWorkflowExecutionsByWorkflowID
-	resp, err2 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    2,
-		Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s = '%s' AND %s = '%s'",
-			sadefs.StartTime,
-			startTime.Format(time.RFC3339Nano),
-			sadefs.StartTime,
-			startTime.Format(time.RFC3339Nano),
-			sadefs.ExecutionStatus,
-			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-			sadefs.WorkflowID,
-			"visibility-filtering-test1",
-		),
-	})
-	s.NoError(err2)
-	s.Len(resp.Executions, 1)
-	s.assertOpenExecutionEquals(openRecord1, resp.Executions[0])
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    2,
+			Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s = '%s' AND %s = '%s'",
+				sadefs.StartTime,
+				startTime.Format(time.RFC3339Nano),
+				sadefs.StartTime,
+				startTime.Format(time.RFC3339Nano),
+				sadefs.ExecutionStatus,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				sadefs.WorkflowID,
+				"visibility-filtering-test1",
+			),
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 1)
+			s.assertOpenExecutionEquals(t, openRecord1, resp.Executions[0])
+		},
+	)
 
 	// List workflow with workflowID filter in query string
-	resp, err := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    2,
-		Query:       `WorkflowId = "visibility-filtering-test1"`,
-	})
-	s.NoError(err)
-	s.Len(resp.Executions, 1)
-	s.assertOpenExecutionEquals(openRecord1, resp.Executions[0])
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    2,
+			Query:       `WorkflowId = "visibility-filtering-test1"`,
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 1)
+			s.assertOpenExecutionEquals(t, openRecord1, resp.Executions[0])
+		},
+	)
 
 	// Close both executions
 	s.createClosedWorkflowRecord(openRecord1, time.Now(), enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
@@ -606,33 +798,41 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 	)
 
 	// List closed with filtering: ListClosedWorkflowExecutionsByWorkflowID
-	resp, err5 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    2,
-		Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s != '%s' AND %s = '%s'",
-			sadefs.CloseTime,
-			startTime.Format(time.RFC3339Nano),
-			sadefs.CloseTime,
-			time.Now().Format(time.RFC3339Nano),
-			sadefs.ExecutionStatus,
-			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-			sadefs.WorkflowID,
-			"visibility-filtering-test2",
-		),
-	})
-	s.NoError(err5)
-	s.Len(resp.Executions, 1)
-	s.assertClosedExecutionEquals(closedRecord2, resp.Executions[0])
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    2,
+			Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s != '%s' AND %s = '%s'",
+				sadefs.CloseTime,
+				startTime.Format(time.RFC3339Nano),
+				sadefs.CloseTime,
+				time.Now().Format(time.RFC3339Nano),
+				sadefs.ExecutionStatus,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				sadefs.WorkflowID,
+				"visibility-filtering-test2",
+			),
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 1)
+			s.assertClosedExecutionEquals(t, closedRecord2, resp.Executions[0])
+		},
+	)
 
 	// List workflow with workflowID filter in query string
-	resp, err = s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    2,
-		Query:       `WorkflowId = "visibility-filtering-test2"`,
-	})
-	s.NoError(err)
-	s.Len(resp.Executions, 1)
-	s.assertClosedExecutionEquals(closedRecord2, resp.Executions[0])
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    2,
+			Query:       `WorkflowId = "visibility-filtering-test2"`,
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 1)
+			s.assertClosedExecutionEquals(t, closedRecord2, resp.Executions[0])
+		},
+	)
 }
 
 // TestFilteringByStatus test
@@ -670,30 +870,38 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 	)
 
 	// List closed with filtering: ListClosedWorkflowExecutionsByStatus
-	resp, err4 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    2,
-		Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s = '%s'",
-			sadefs.CloseTime,
-			startTime.Format(time.RFC3339Nano),
-			sadefs.CloseTime,
-			time.Now().Format(time.RFC3339Nano),
-			sadefs.ExecutionStatus,
-			enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
-		),
-	})
-	s.NoError(err4)
-	s.Len(resp.Executions, 1)
-	s.assertClosedExecutionEquals(closeRecord2, resp.Executions[0])
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    2,
+			Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s = '%s'",
+				sadefs.CloseTime,
+				startTime.Format(time.RFC3339Nano),
+				sadefs.CloseTime,
+				time.Now().Format(time.RFC3339Nano),
+				sadefs.ExecutionStatus,
+				enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+			),
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 1)
+			s.assertClosedExecutionEquals(t, closeRecord2, resp.Executions[0])
+		},
+	)
 
-	resp, err := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    5,
-		Query:       `ExecutionStatus = "Failed"`,
-	})
-	s.NoError(err)
-	s.Len(resp.Executions, 1)
-	s.assertClosedExecutionEquals(closeRecord2, resp.Executions[0])
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    5,
+			Query:       `ExecutionStatus = "Failed"`,
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 1)
+			s.assertClosedExecutionEquals(t, closeRecord2, resp.Executions[0])
+		},
+	)
 }
 
 // TestDelete test
@@ -726,88 +934,109 @@ func (s *VisibilityPersistenceSuite) TestDeleteWorkflow() {
 	}
 
 	// ListClosedWorkflowExecutions
-	resp, err3 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    10,
-		Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s != '%s'",
-			sadefs.CloseTime,
-			startTime.Format(time.RFC3339Nano),
-			sadefs.CloseTime,
-			closeTime.Format(time.RFC3339Nano),
-			sadefs.ExecutionStatus,
-			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		),
-	})
-	s.NoError(err3)
-	s.Len(resp.Executions, closedRows)
+	var executions []*workflowpb.WorkflowExecutionInfo
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    10,
+			Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s != '%s'",
+				sadefs.CloseTime,
+				startTime.Format(time.RFC3339Nano),
+				sadefs.CloseTime,
+				closeTime.Format(time.RFC3339Nano),
+				sadefs.ExecutionStatus,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			),
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, closedRows)
+			executions = resp.Executions
+		},
+	)
 
 	// Delete closed workflow
-	for _, row := range resp.Executions {
-		err4 := s.VisibilityMgr.DeleteWorkflowExecution(s.ctx, &manager.VisibilityDeleteWorkflowExecutionRequest{
-			NamespaceID: testNamespaceUUID,
-			WorkflowID:  row.GetExecution().GetWorkflowId(),
-			RunID:       row.GetExecution().GetRunId(),
-		})
-		s.NoError(err4)
+	for _, row := range executions {
+		s.deleteWorkflowRecord(
+			testNamespaceUUID,
+			row.GetExecution().GetWorkflowId(),
+			row.GetExecution().GetRunId(),
+		)
 	}
 
 	// ListClosedWorkflowExecutions
-	resp, err5 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		PageSize:    10,
-		Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s != '%s'",
-			sadefs.CloseTime,
-			startTime.Format(time.RFC3339Nano),
-			sadefs.CloseTime,
-			closeTime.Format(time.RFC3339Nano),
-			sadefs.ExecutionStatus,
-			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		),
-	})
-	s.NoError(err5)
-	s.Empty(resp.Executions)
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			PageSize:    10,
+			Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s' AND %s != '%s'",
+				sadefs.CloseTime,
+				startTime.Format(time.RFC3339Nano),
+				sadefs.CloseTime,
+				closeTime.Format(time.RFC3339Nano),
+				sadefs.ExecutionStatus,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			),
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Empty(t, resp.Executions)
+		},
+	)
 
 	// ListOpenWorkflowExecutions
-	resp, err6 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s'AND %s = '%s'",
-			sadefs.StartTime,
-			startTime.Format(time.RFC3339Nano),
-			sadefs.StartTime,
-			closeTime.Format(time.RFC3339Nano),
-			sadefs.ExecutionStatus,
-			enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
-		),
-		PageSize: 10,
-	})
-	s.NoError(err6)
-	s.Len(resp.Executions, openRows-closedRows)
-	// Delete open workflow
-	for _, row := range resp.Executions {
-		err7 := s.VisibilityMgr.DeleteWorkflowExecution(s.ctx, &manager.VisibilityDeleteWorkflowExecutionRequest{
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
 			NamespaceID: testNamespaceUUID,
-			WorkflowID:  row.GetExecution().GetWorkflowId(),
-			RunID:       row.GetExecution().GetRunId(),
-		})
-		s.NoError(err7)
+			Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s'AND %s = '%s'",
+				sadefs.StartTime,
+				startTime.Format(time.RFC3339Nano),
+				sadefs.StartTime,
+				closeTime.Format(time.RFC3339Nano),
+				sadefs.ExecutionStatus,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			),
+			PageSize: 10,
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, openRows-closedRows)
+			executions = resp.Executions
+		},
+	)
+
+	// Delete open workflow
+	for _, row := range executions {
+		s.deleteWorkflowRecord(
+			testNamespaceUUID,
+			row.GetExecution().GetWorkflowId(),
+			row.GetExecution().GetRunId(),
+		)
 	}
-	resp, err8 := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: testNamespaceUUID,
-		Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s'",
-			sadefs.StartTime,
-			startTime.Format(time.RFC3339Nano),
-			sadefs.StartTime,
-			closeTime.Format(time.RFC3339Nano),
-		),
-		PageSize: 10,
-	})
-	s.NoError(err8)
-	s.Empty(resp.Executions)
+
+	s.assertListWorkflowExecutions(
+		&manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: testNamespaceUUID,
+			Query: fmt.Sprintf("%s >= '%s' AND %s <= '%s'",
+				sadefs.StartTime,
+				startTime.Format(time.RFC3339Nano),
+				sadefs.StartTime,
+				closeTime.Format(time.RFC3339Nano),
+			),
+			PageSize: 10,
+		},
+		func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Empty(t, resp.Executions)
+		},
+	)
 }
 
 // TestUpsertWorkflowExecution test
 func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
+	testNamespaceUUID := namespace.ID(uuid.NewString())
 	temporalChangeVersionPayload, _ := payload.Encode([]string{"dummy"})
+	now := time.Now()
 	tests := []struct {
 		request  *manager.UpsertWorkflowExecutionRequest
 		expected error
@@ -815,13 +1044,15 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 		{
 			request: &manager.UpsertWorkflowExecutionRequest{
 				VisibilityRequestBase: &manager.VisibilityRequestBase{
-					NamespaceID:      "",
-					Namespace:        "",
-					Execution:        &commonpb.WorkflowExecution{},
-					WorkflowTypeName: "",
-					StartTime:        time.Time{},
-					ExecutionTime:    time.Time{},
-					TaskID:           0,
+					NamespaceID: testNamespaceUUID,
+					Execution: &commonpb.WorkflowExecution{
+						WorkflowId: "upsert-workflow-1",
+						RunId:      uuid.NewString(),
+					},
+					WorkflowTypeName: "upsert-workflow",
+					StartTime:        now,
+					ExecutionTime:    now,
+					TaskID:           1,
 					Memo:             nil,
 					SearchAttributes: &commonpb.SearchAttributes{
 						IndexedFields: map[string]*commonpb.Payload{
@@ -836,13 +1067,15 @@ func (s *VisibilityPersistenceSuite) TestUpsertWorkflowExecution() {
 		{
 			request: &manager.UpsertWorkflowExecutionRequest{
 				VisibilityRequestBase: &manager.VisibilityRequestBase{
-					NamespaceID:      "",
-					Namespace:        "",
-					Execution:        &commonpb.WorkflowExecution{},
-					WorkflowTypeName: "",
-					StartTime:        time.Time{},
-					ExecutionTime:    time.Time{},
-					TaskID:           0,
+					NamespaceID: testNamespaceUUID,
+					Execution: &commonpb.WorkflowExecution{
+						WorkflowId: "upsert-workflow-2",
+						RunId:      uuid.NewString(),
+					},
+					WorkflowTypeName: "upsert-workflow",
+					StartTime:        now,
+					ExecutionTime:    now,
+					TaskID:           2,
 					Memo:             nil,
 					SearchAttributes: nil,
 					Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -881,34 +1114,42 @@ func (s *VisibilityPersistenceSuite) TestGetWorkflowExecution() {
 		)
 	}
 	for _, req := range startRequests {
-		resp, err := s.VisibilityMgr.GetWorkflowExecution(
-			s.ctx,
+		s.assertGetWorkflowExecution(
 			&manager.GetWorkflowExecutionRequest{
 				NamespaceID: testNamespaceUUID,
+				WorkflowID:  req.Execution.WorkflowId,
 				RunID:       req.Execution.RunId,
 			},
+			func(t require.TestingT, resp *manager.GetWorkflowExecutionResponse, err error) {
+				require.NoErrorf(t, err, "execution %s not found", req.Execution.RunId)
+				s.assertOpenExecutionEquals(t, req, resp.Execution)
+			},
 		)
-		s.NoError(err)
-		s.assertOpenExecutionEquals(req, resp.Execution)
 	}
 
 	var closeRequests []*manager.RecordWorkflowExecutionClosedRequest
 	for _, startReq := range startRequests {
 		closeRequests = append(
 			closeRequests,
-			s.createClosedWorkflowRecord(startReq, closeTime, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED),
+			s.createClosedWorkflowRecord(
+				startReq,
+				closeTime,
+				enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			),
 		)
 	}
 	for _, req := range closeRequests {
-		resp, err := s.VisibilityMgr.GetWorkflowExecution(
-			s.ctx,
+		s.assertGetWorkflowExecution(
 			&manager.GetWorkflowExecutionRequest{
 				NamespaceID: testNamespaceUUID,
+				WorkflowID:  req.Execution.WorkflowId,
 				RunID:       req.Execution.RunId,
 			},
+			func(t require.TestingT, resp *manager.GetWorkflowExecutionResponse, err error) {
+				require.NoError(t, err)
+				s.assertClosedExecutionEquals(t, req, resp.Execution)
+			},
 		)
-		s.NoError(err)
-		s.assertClosedExecutionEquals(req, resp.Execution)
 	}
 }
 
@@ -941,6 +1182,41 @@ func (s *VisibilityPersistenceSuite) TestAdvancedVisibilityPagination() {
 		}
 	}
 
+	// Wait until all workflows are persisted.
+	s.assertCountWorkflowExecutions(
+		&manager.CountWorkflowExecutionsRequest{
+			NamespaceID: testNamespaceUUID,
+			Query:       "GROUP BY ExecutionStatus",
+		},
+		func(t require.TestingT, resp *manager.CountWorkflowExecutionsResponse, err error) {
+			require.Equal(t, int64(5), resp.Count)
+			require.Len(t, resp.Groups, 2)
+			require.Subset(t, []int64{2, 3}, []int64{resp.Groups[0].Count, resp.Groups[1].Count})
+			var openGroup, closedGroup *workflowservice.CountWorkflowExecutionsResponse_AggregationGroup
+			if resp.Groups[0].Count == 2 {
+				openGroup = resp.Groups[0]
+				closedGroup = resp.Groups[1]
+			} else {
+				openGroup = resp.Groups[1]
+				closedGroup = resp.Groups[0]
+			}
+			require.Equal(t,
+				sadefs.MustEncodeValue(
+					enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+					enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				),
+				openGroup.GroupValues[0],
+			)
+			require.Equal(t,
+				sadefs.MustEncodeValue(
+					enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED.String(),
+					enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+				),
+				closedGroup.GroupValues[0],
+			)
+		},
+	)
+
 	for pageSize := 1; pageSize <= 5; pageSize++ {
 		executions := make(map[string]*workflowpb.WorkflowExecutionInfo)
 		for _, e := range s.listWithPagination(testNamespaceUUID, 5) {
@@ -952,14 +1228,14 @@ func (s *VisibilityPersistenceSuite) TestAdvancedVisibilityPagination() {
 			id := r.Execution.GetWorkflowId()
 			e, ok := executions[id]
 			s.True(ok)
-			s.assertOpenExecutionEquals(r, e)
+			s.assertOpenExecutionEquals(s.T(), r, e)
 			delete(executions, id)
 		}
 		for _, r := range closeReqs {
 			id := r.Execution.GetWorkflowId()
 			e, ok := executions[id]
 			s.True(ok)
-			s.assertClosedExecutionEquals(r, e)
+			s.assertClosedExecutionEquals(s.T(), r, e)
 			delete(executions, id)
 		}
 		s.Empty(executions, "Unexpected executions returned from list method")
@@ -982,16 +1258,17 @@ func (s *VisibilityPersistenceSuite) TestCountWorkflowExecutions() {
 		)
 	}
 
-	resp, err := s.VisibilityMgr.CountWorkflowExecutions(
-		s.ctx,
+	s.assertCountWorkflowExecutions(
 		&manager.CountWorkflowExecutionsRequest{
 			NamespaceID: testNamespaceUUID,
 			Query:       "",
 		},
+		func(t require.TestingT, resp *manager.CountWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Equal(t, int64(5), resp.Count)
+			require.Nil(t, resp.Groups)
+		},
 	)
-	s.NoError(err)
-	s.Equal(int64(5), resp.Count)
-	s.Nil(resp.Groups)
 }
 
 func (s *VisibilityPersistenceSuite) TestCountGroupByWorkflowExecutions() {
@@ -1014,27 +1291,30 @@ func (s *VisibilityPersistenceSuite) TestCountGroupByWorkflowExecutions() {
 		)
 	}
 
-	runningStatusPayload, _ := sadefs.EncodeValue(
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
-		enumspb.INDEXED_VALUE_TYPE_KEYWORD,
-	)
-	resp, err := s.VisibilityMgr.CountWorkflowExecutions(
-		s.ctx,
+	s.assertCountWorkflowExecutions(
 		&manager.CountWorkflowExecutionsRequest{
 			NamespaceID: testNamespaceUUID,
 			Query:       "GROUP BY ExecutionStatus",
 		},
-	)
-	s.NoError(err)
-	s.Equal(int64(5), resp.Count)
-	s.Equal(
-		[]*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
-			{
-				GroupValues: []*commonpb.Payload{runningStatusPayload},
-				Count:       int64(5),
-			},
+		func(t require.TestingT, resp *manager.CountWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Equal(t, int64(5), resp.Count)
+			require.Equal(
+				t,
+				[]*workflowservice.CountWorkflowExecutionsResponse_AggregationGroup{
+					{
+						GroupValues: []*commonpb.Payload{
+							sadefs.MustEncodeValue(
+								enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+								enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+							),
+						},
+						Count: int64(5),
+					},
+				},
+				resp.Groups,
+			)
 		},
-		resp.Groups,
 	)
 
 	for i := range 2 {
@@ -1045,18 +1325,281 @@ func (s *VisibilityPersistenceSuite) TestCountGroupByWorkflowExecutions() {
 		)
 	}
 
-	resp, err = s.VisibilityMgr.CountWorkflowExecutions(
-		s.ctx,
+	s.assertCountWorkflowExecutions(
 		&manager.CountWorkflowExecutionsRequest{
 			NamespaceID: testNamespaceUUID,
 			Query:       "GROUP BY ExecutionStatus",
 		},
+		func(t require.TestingT, resp *manager.CountWorkflowExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Equal(t, int64(5), resp.Count)
+		},
 	)
-	s.NoError(err)
-	s.Equal(int64(5), resp.Count)
 }
 
-func (s *VisibilityPersistenceSuite) listWithPagination(namespaceID namespace.ID, pageSize int) []*workflowpb.WorkflowExecutionInfo {
+// TestListExecutions covers the admin ListExecutions API, which unlike
+// ListWorkflowExecutions takes a namespace *name* (resolved through the namespace registry)
+// and treats it as optional: an empty namespace lists executions across all namespaces.
+func (s *VisibilityPersistenceSuite) TestListExecutions() {
+	// The test database is shared by every test in this suite, so the all-namespaces
+	// queries below are scoped by a workflow type unique to this test.
+	workflowType := "admin-list-executions-" + uuid.NewString()
+	ns1Name, ns1ID := s.registerTestNamespace()
+	ns2Name, ns2ID := s.registerTestNamespace()
+
+	startTime := time.Now().UTC().Add(-5 * time.Second)
+	closeTime := startTime.Add(time.Second)
+
+	ns1Open := s.createOpenWorkflowRecord(
+		ns1ID, "wf-ns1-open", workflowType, startTime, startTime, "test-queue")
+	ns1Open.Namespace = ns1Name
+	ns1ClosedStart := s.createOpenWorkflowRecord(
+		ns1ID, "wf-ns1-closed", workflowType, startTime, startTime, "test-queue")
+	ns1ClosedStart.Namespace = ns1Name
+	ns1Closed := s.createClosedWorkflowRecord(
+		ns1ClosedStart, closeTime, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
+	ns2Open := s.createOpenWorkflowRecord(
+		ns2ID, "wf-ns2-open", workflowType, startTime, startTime, "test-queue")
+	ns2Open.Namespace = ns2Name
+
+	typeQuery := fmt.Sprintf("%s = '%s'", sadefs.WorkflowType, workflowType)
+
+	// Single namespace: only that namespace's executions are returned.
+	s.assertListExecutions(
+		&manager.AdminListExecutionsRequest{
+			Namespace: ns1Name,
+			Query:     typeQuery,
+			PageSize:  10,
+		},
+		func(t require.TestingT, resp *manager.AdminListExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 2)
+			for _, exec := range resp.Executions {
+				require.Equal(t, ns1ID.String(), exec.GetNamespaceId())
+				require.Equal(t, ns1Name.String(), exec.GetNamespace())
+			}
+			require.ElementsMatch(
+				t,
+				[]string{
+					ns1Open.Execution.GetRunId(),
+					ns1ClosedStart.Execution.GetRunId(),
+				},
+				runIDsOf(resp.Executions),
+			)
+		},
+	)
+
+	s.assertListExecutions(
+		&manager.AdminListExecutionsRequest{
+			Namespace: ns2Name,
+			Query:     typeQuery,
+			PageSize:  10,
+		},
+		func(t require.TestingT, resp *manager.AdminListExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 1)
+			require.Equal(t, ns2ID.String(), resp.Executions[0].GetNamespaceId())
+			require.Equal(t, ns2Name.String(), resp.Executions[0].GetNamespace())
+			require.Equal(t, ns2Open.Execution.GetRunId(), resp.Executions[0].GetRunId())
+		},
+	)
+
+	// All namespaces: an empty namespace spans both, and each execution still carries the
+	// namespace it belongs to.
+	s.assertListExecutions(
+		&manager.AdminListExecutionsRequest{
+			Query:    typeQuery,
+			PageSize: 10,
+		},
+		func(t require.TestingT, resp *manager.AdminListExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 3)
+			require.ElementsMatch(
+				t,
+				[]string{
+					ns1Open.Execution.GetRunId(),
+					ns1ClosedStart.Execution.GetRunId(),
+					ns2Open.Execution.GetRunId(),
+				},
+				runIDsOf(resp.Executions),
+			)
+
+			byRunID := make(map[string]*adminservice.VisibilityExecutionInfo, len(resp.Executions))
+			for _, exec := range resp.Executions {
+				byRunID[exec.GetRunId()] = exec
+			}
+			for _, startedRequest := range []*manager.RecordWorkflowExecutionStartedRequest{
+				ns1Open, ns1ClosedStart, ns2Open,
+			} {
+				runID := startedRequest.Execution.GetRunId()
+				require.Equal(t, startedRequest.NamespaceID.String(), byRunID[runID].GetNamespaceId())
+				require.Equal(t, startedRequest.Namespace.String(), byRunID[runID].GetNamespace())
+			}
+
+			// A running execution carries no close-time fields; a closed one does.
+			openExec := byRunID[ns1Open.Execution.GetRunId()]
+			require.Equal(t, enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, openExec.GetState())
+			require.Nil(t, openExec.GetCloseTime())
+			require.Zero(t, openExec.GetHistoryLength())
+
+			closedExec := byRunID[ns1ClosedStart.Execution.GetRunId()]
+			require.Equal(t, enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, closedExec.GetState())
+			require.Equal(
+				t,
+				persistence.UnixMilliseconds(ns1Closed.CloseTime),
+				persistence.UnixMilliseconds(timestamp.TimeValue(closedExec.GetCloseTime())),
+			)
+			require.Equal(
+				t,
+				ns1Closed.ExecutionDuration,
+				closedExec.GetExecutionDuration().AsDuration(),
+			)
+			require.Equal(t, ns1Closed.HistoryLength, closedExec.GetHistoryLength())
+		},
+	)
+
+	// All namespaces, paginated: the page token carries across namespaces.
+	s.assertListExecutions(
+		&manager.AdminListExecutionsRequest{
+			Query:    typeQuery,
+			PageSize: 2,
+		},
+		func(t require.TestingT, resp *manager.AdminListExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Len(t, resp.Executions, 2)
+			require.NotEmpty(t, resp.NextPageToken)
+
+			runIDs := runIDsOf(resp.Executions)
+			next, err := s.adminVisibilityMgr().AdminListExecutions(
+				s.ctx,
+				&manager.AdminListExecutionsRequest{
+					Query:         typeQuery,
+					PageSize:      2,
+					NextPageToken: resp.NextPageToken,
+				},
+			)
+			require.NoError(t, err)
+			require.Len(t, next.Executions, 1)
+			runIDs = append(runIDs, runIDsOf(next.Executions)...)
+			require.ElementsMatch(
+				t,
+				[]string{
+					ns1Open.Execution.GetRunId(),
+					ns1ClosedStart.Execution.GetRunId(),
+					ns2Open.Execution.GetRunId(),
+				},
+				runIDs,
+			)
+		},
+	)
+}
+
+// TestCountExecutions covers the admin CountExecutions API for a single namespace and
+// across all namespaces, with and without a GROUP BY clause.
+func (s *VisibilityPersistenceSuite) TestCountExecutions() {
+	// The test database is shared by every test in this suite, so the all-namespaces
+	// queries below are scoped by a workflow type unique to this test.
+	workflowType := "admin-count-executions-" + uuid.NewString()
+	ns1Name, ns1ID := s.registerTestNamespace()
+	ns2Name, ns2ID := s.registerTestNamespace()
+
+	startTime := time.Now().UTC().Add(-5 * time.Second)
+	closeTime := startTime.Add(time.Second)
+
+	for i := range 2 {
+		s.createOpenWorkflowRecord(
+			ns1ID, fmt.Sprintf("wf-ns1-%d", i), workflowType, startTime, startTime, "test-queue")
+	}
+	ns2Start := s.createOpenWorkflowRecord(
+		ns2ID, "wf-ns2-0", workflowType, startTime, startTime, "test-queue")
+	s.createClosedWorkflowRecord(ns2Start, closeTime, enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED)
+	s.createOpenWorkflowRecord(
+		ns2ID, "wf-ns2-1", workflowType, startTime, startTime, "test-queue")
+
+	typeQuery := fmt.Sprintf("%s = '%s'", sadefs.WorkflowType, workflowType)
+
+	// Single namespace.
+	s.assertCountExecutions(
+		&manager.AdminCountExecutionsRequest{Namespace: ns1Name, Query: typeQuery},
+		func(t require.TestingT, resp *manager.AdminCountExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Equal(t, int64(2), resp.Count)
+			require.Empty(t, resp.Groups)
+		},
+	)
+
+	s.assertCountExecutions(
+		&manager.AdminCountExecutionsRequest{Namespace: ns2Name, Query: typeQuery},
+		func(t require.TestingT, resp *manager.AdminCountExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Equal(t, int64(2), resp.Count)
+		},
+	)
+
+	// All namespaces: the counts of both namespaces are summed.
+	s.assertCountExecutions(
+		&manager.AdminCountExecutionsRequest{Query: typeQuery},
+		func(t require.TestingT, resp *manager.AdminCountExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Equal(t, int64(4), resp.Count)
+		},
+	)
+
+	// All namespaces, grouped by the namespace division: the default division filter is
+	// suppressed by the GROUP BY and there is no namespace to filter on, leaving no query
+	// at all, which must count every execution rather than failing.
+	s.assertCountExecutions(
+		&manager.AdminCountExecutionsRequest{
+			Query: "GROUP BY " + sadefs.TemporalNamespaceDivision,
+		},
+		func(t require.TestingT, resp *manager.AdminCountExecutionsResponse, err error) {
+			require.NoError(t, err)
+			// Other tests in this suite share the database, so this count is not exact.
+			require.GreaterOrEqual(t, resp.Count, int64(4))
+			require.NotEmpty(t, resp.Groups)
+		},
+	)
+
+	// All namespaces, grouped by status: 3 running (2 in ns1, 1 in ns2) and 1 completed.
+	s.assertCountExecutions(
+		&manager.AdminCountExecutionsRequest{
+			Query: typeQuery + " GROUP BY " + sadefs.ExecutionStatus,
+		},
+		func(t require.TestingT, resp *manager.AdminCountExecutionsResponse, err error) {
+			require.NoError(t, err)
+			require.Equal(t, int64(4), resp.Count)
+			require.ElementsMatch(
+				t,
+				[]*adminservice.CountExecutionsResponse_AggregationGroup{
+					{
+						GroupValues: []*commonpb.Payload{
+							sadefs.MustEncodeValue(
+								enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING.String(),
+								enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+							),
+						},
+						Count: 3,
+					},
+					{
+						GroupValues: []*commonpb.Payload{
+							sadefs.MustEncodeValue(
+								enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED.String(),
+								enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+							),
+						},
+						Count: 1,
+					},
+				},
+				resp.Groups,
+			)
+		},
+	)
+}
+
+func (s *VisibilityPersistenceSuite) listWithPagination(
+	namespaceID namespace.ID,
+	pageSize int,
+) []*workflowpb.WorkflowExecutionInfo {
 	var executions []*workflowpb.WorkflowExecutionInfo
 	resp, err := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID: namespaceID,
@@ -1135,25 +1678,155 @@ func (s *VisibilityPersistenceSuite) createOpenWorkflowRecord(
 	return startReq
 }
 
+func (s *VisibilityPersistenceSuite) deleteWorkflowRecord(
+	namespaceID namespace.ID,
+	workflowID string,
+	runID string,
+) {
+	s.taskID++
+	deleteReq := &manager.VisibilityDeleteWorkflowExecutionRequest{
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+		TaskID:      s.taskID,
+	}
+	err := s.VisibilityMgr.DeleteWorkflowExecution(s.ctx, deleteReq)
+	s.NoError(err)
+}
+
 func (s *VisibilityPersistenceSuite) assertClosedExecutionEquals(
-	req *manager.RecordWorkflowExecutionClosedRequest, resp *workflowpb.WorkflowExecutionInfo) {
-	s.Equal(req.Execution.RunId, resp.Execution.RunId)
-	s.Equal(req.Execution.WorkflowId, resp.Execution.WorkflowId)
-	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())
-	s.Equal(persistence.UnixMilliseconds(req.StartTime), persistence.UnixMilliseconds(timestamp.TimeValue(resp.GetStartTime())))
-	s.Equal(persistence.UnixMilliseconds(req.CloseTime), persistence.UnixMilliseconds(timestamp.TimeValue(resp.GetCloseTime())))
-	s.Equal(req.Status, resp.GetStatus())
-	s.Equal(req.HistoryLength, resp.HistoryLength)
-	s.Equal(req.ExecutionDuration, resp.GetExecutionDuration().AsDuration())
+	t require.TestingT,
+	req *manager.RecordWorkflowExecutionClosedRequest,
+	resp *workflowpb.WorkflowExecutionInfo,
+) {
+	require.Equal(t, req.Execution.RunId, resp.Execution.RunId)
+	require.Equal(t, req.Execution.WorkflowId, resp.Execution.WorkflowId)
+	require.Equal(t, req.WorkflowTypeName, resp.GetType().GetName())
+	require.Equal(t, persistence.UnixMilliseconds(req.StartTime), persistence.UnixMilliseconds(timestamp.TimeValue(resp.GetStartTime())))
+	require.Equal(t, persistence.UnixMilliseconds(req.CloseTime), persistence.UnixMilliseconds(timestamp.TimeValue(resp.GetCloseTime())))
+	require.Equal(t, req.Status, resp.GetStatus())
+	require.Equal(t, req.HistoryLength, resp.HistoryLength)
+	require.Equal(t, req.ExecutionDuration, resp.GetExecutionDuration().AsDuration())
 }
 
 func (s *VisibilityPersistenceSuite) assertOpenExecutionEquals(
-	req *manager.RecordWorkflowExecutionStartedRequest, resp *workflowpb.WorkflowExecutionInfo) {
-	s.Equal(req.Execution.GetRunId(), resp.Execution.GetRunId())
-	s.Equal(req.Execution.WorkflowId, resp.Execution.WorkflowId)
-	s.Equal(req.WorkflowTypeName, resp.GetType().GetName())
-	s.Equal(persistence.UnixMilliseconds(req.StartTime), persistence.UnixMilliseconds(timestamp.TimeValue(resp.GetStartTime())))
-	s.Nil(resp.CloseTime)
-	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, resp.Status)
-	s.Zero(resp.HistoryLength)
+	t require.TestingT,
+	req *manager.RecordWorkflowExecutionStartedRequest,
+	resp *workflowpb.WorkflowExecutionInfo,
+) {
+	require.Equal(t, req.Execution.GetRunId(), resp.Execution.GetRunId())
+	require.Equal(t, req.Execution.WorkflowId, resp.Execution.WorkflowId)
+	require.Equal(t, req.WorkflowTypeName, resp.GetType().GetName())
+	require.Equal(t, persistence.UnixMilliseconds(req.StartTime), persistence.UnixMilliseconds(timestamp.TimeValue(resp.GetStartTime())))
+	require.Nil(t, resp.CloseTime)
+	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, resp.Status)
+	require.Zero(t, resp.HistoryLength)
+}
+
+func (s *VisibilityPersistenceSuite) assertListWorkflowExecutions(
+	request *manager.ListWorkflowExecutionsRequestV2,
+	assertFn func(t require.TestingT, resp *manager.ListWorkflowExecutionsResponse, err error),
+) {
+	await.Require(
+		s.ctx,
+		s.T(),
+		func(t *await.T) {
+			resp, err := s.VisibilityMgr.ListWorkflowExecutions(s.ctx, request)
+			assertFn(t, resp, err)
+		},
+		4*time.Second,
+		200*time.Millisecond,
+	)
+}
+
+func (s *VisibilityPersistenceSuite) assertCountWorkflowExecutions(
+	request *manager.CountWorkflowExecutionsRequest,
+	assertFn func(t require.TestingT, resp *manager.CountWorkflowExecutionsResponse, err error),
+) {
+	await.Require(
+		s.ctx,
+		s.T(),
+		func(t *await.T) {
+			resp, err := s.VisibilityMgr.CountWorkflowExecutions(s.ctx, request)
+			assertFn(t, resp, err)
+		},
+		4*time.Second,
+		200*time.Millisecond,
+	)
+}
+
+func (s *VisibilityPersistenceSuite) assertGetWorkflowExecution(
+	request *manager.GetWorkflowExecutionRequest,
+	assertFn func(t require.TestingT, resp *manager.GetWorkflowExecutionResponse, err error),
+) {
+	await.Require(
+		s.ctx,
+		s.T(),
+		func(t *await.T) {
+			resp, err := s.VisibilityMgr.GetWorkflowExecution(s.ctx, request)
+			assertFn(t, resp, err)
+		},
+		4*time.Second,
+		200*time.Millisecond,
+	)
+}
+
+// adminVisibilityMgr returns the visibility manager as a manager.AdminVisibilityManager,
+// the interface backing the admin visibility APIs.
+func (s *VisibilityPersistenceSuite) adminVisibilityMgr() manager.AdminVisibilityManager {
+	adminMgr, ok := s.VisibilityMgr.(manager.AdminVisibilityManager)
+	s.True(ok, "visibility manager does not implement manager.AdminVisibilityManager")
+	return adminMgr
+}
+
+// registerTestNamespace returns a fresh namespace whose name and ID resolve through the
+// namespace registry, which the admin visibility APIs use to translate between the two.
+func (s *VisibilityPersistenceSuite) registerTestNamespace() (namespace.Name, namespace.ID) {
+	nsID := namespace.ID(uuid.NewString())
+	nsName := namespace.Name("namespace-" + nsID.String())
+
+	s.NamespaceRegistry.EXPECT().GetNamespaceID(nsName).Return(nsID, nil).AnyTimes()
+	s.NamespaceRegistry.EXPECT().GetNamespaceName(nsID).Return(nsName, nil).AnyTimes()
+
+	return nsName, nsID
+}
+
+func (s *VisibilityPersistenceSuite) assertListExecutions(
+	request *manager.AdminListExecutionsRequest,
+	assertFn func(t require.TestingT, resp *manager.AdminListExecutionsResponse, err error),
+) {
+	await.Require(
+		s.ctx,
+		s.T(),
+		func(t *await.T) {
+			resp, err := s.adminVisibilityMgr().AdminListExecutions(s.ctx, request)
+			assertFn(t, resp, err)
+		},
+		4*time.Second,
+		200*time.Millisecond,
+	)
+}
+
+func (s *VisibilityPersistenceSuite) assertCountExecutions(
+	request *manager.AdminCountExecutionsRequest,
+	assertFn func(t require.TestingT, resp *manager.AdminCountExecutionsResponse, err error),
+) {
+	await.Require(
+		s.ctx,
+		s.T(),
+		func(t *await.T) {
+			resp, err := s.adminVisibilityMgr().AdminCountExecutions(s.ctx, request)
+			assertFn(t, resp, err)
+		},
+		4*time.Second,
+		200*time.Millisecond,
+	)
+}
+
+func runIDsOf(executions []*adminservice.VisibilityExecutionInfo) []string {
+	runIDs := make([]string, len(executions))
+	for i, exec := range executions {
+		runIDs[i] = exec.GetRunId()
+	}
+	return runIDs
 }

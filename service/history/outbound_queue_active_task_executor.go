@@ -107,7 +107,7 @@ func (e *outboundQueueActiveTaskExecutor) Execute(
 		task.Attempt = executable.Attempt()
 		return respond(e.executeChasmSideEffectTask(ctx, task))
 	case *tasks.WorkerCommandsTask:
-		if executable.Attempt() > workercommands.MaxTaskAttempts {
+		if executable.Attempt() > e.shardContext.GetConfig().WorkerCommandsMaxAttempts() {
 			e.logger.Info("Worker commands task exceeded max attempts, dropping",
 				tag.WorkflowID(task.WorkflowID),
 				tag.WorkflowRunID(task.RunID),

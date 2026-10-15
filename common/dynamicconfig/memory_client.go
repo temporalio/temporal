@@ -1,6 +1,7 @@
 package dynamicconfig
 
 import (
+	"slices"
 	"sync"
 	"sync/atomic"
 )
@@ -34,15 +35,15 @@ func (d *MemoryClient) GetValue(key Key) []ConstrainedValue {
 
 func (d *MemoryClient) getValueLocked(key Key) []ConstrainedValue {
 	var result []ConstrainedValue
-	for i := len(d.overrides) - 1; i >= 0; i-- {
-		if d.overrides[i].valid && d.overrides[i].key == key {
-			v := d.overrides[i].value
-			if cvs, ok := v.([]ConstrainedValue); ok {
+	for _, override := range slices.Backward(d.overrides) {
+		if override.valid && override.key == key {
+			value := override.value
+			if cvs, ok := value.([]ConstrainedValue); ok {
 				result = append(result, cvs...)
 			} else {
-				result = append(result, ConstrainedValue{Value: v})
+				result = append(result, ConstrainedValue{Value: value})
 			}
-			if !d.overrides[i].mergeable {
+			if !override.mergeable {
 				// Non-mergeable: take this value and stop.
 				return result
 			}

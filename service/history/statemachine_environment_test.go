@@ -26,10 +26,11 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/tasktoken"
-	"go.temporal.io/server/components/callbacks"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/callbacks"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/notification"
 	"go.temporal.io/server/service/history/queues"
@@ -87,7 +88,7 @@ func newStateMachineEnvTestContext(t *testing.T, enableTransitionHistory bool) *
 	require.NoError(t, callbacks.RegisterStateMachine(reg))
 	require.NoError(t, callbacks.RegisterTaskSerializers(reg))
 	s.mockShard.SetStateMachineRegistry(reg)
-	s.workflowCache = cache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler())
+	s.workflowCache = cache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), s.mockShard.GetMetricsHandler(), testhooks.TestHooks{})
 
 	mockClusterMetadata := s.mockShard.Resource.ClusterMetadata
 	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -277,7 +278,7 @@ func TestValidateStateMachineRef(t *testing.T) {
 			tc.mutateNode(node)
 			tc.mutateRef(&ref)
 
-			workflowContext := workflow.NewContext(s.mockShard.GetConfig(), mutableState.GetWorkflowKey(), chasm.WorkflowArchetypeID, log.NewTestLogger(), log.NewTestLogger(), metrics.NoopMetricsHandler, nil)
+			workflowContext := workflow.NewContext(s.mockShard.GetConfig(), mutableState.GetWorkflowKey(), chasm.WorkflowArchetypeID, log.NewTestLogger(), log.NewTestLogger(), metrics.NoopMetricsHandler, nil, testhooks.TestHooks{})
 			if tc.clearTransitionHistory {
 				mutableState.GetExecutionInfo().TransitionHistory = nil
 			}

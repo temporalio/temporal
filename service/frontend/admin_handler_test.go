@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -47,6 +48,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/namespace/nsreplication"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -72,6 +74,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type (
@@ -87,7 +90,7 @@ type (
 		mockNamespaceCache *namespace.MockRegistry
 
 		mockExecutionMgr           *persistence.MockExecutionManager
-		mockVisibilityMgr          *manager.MockVisibilityManager
+		mockAdminVisibilityMgr     *manager.MockAdminVisibilityManager
 		mockClusterMetadataManager *persistence.MockClusterMetadataManager
 		mockClientFactory          *clientmocks.MockFactory
 		mockAdminClient            *adminservicemock.MockAdminServiceClient
@@ -138,7 +141,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockClientFactory = s.mockResource.ClientFactory
 	s.mockAdminClient = adminservicemock.NewMockAdminServiceClient(s.controller)
 	s.mockMetadata = s.mockResource.ClusterMetadata
-	s.mockVisibilityMgr = s.mockResource.VisibilityManager
+	s.mockAdminVisibilityMgr = s.mockResource.AdminVisibilityManager
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
 	s.mockMatchingClient = s.mockResource.MatchingClient
 
@@ -156,6 +159,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		SearchAttributesNumberOfKeysLimit:     dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
 		SearchAttributesSizeOfValueLimit:      dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
 		SearchAttributesTotalSizeLimit:        dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
+		VisibilityMaxPageSize:                 dynamicconfig.GetIntPropertyFnFilteredByNamespace(10),
 		VisibilityAllowList:                   dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		SuppressErrorSetSystemSearchAttribute: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 	}
@@ -170,7 +174,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		cfg.SearchAttributesNumberOfKeysLimit,
 		cfg.SearchAttributesSizeOfValueLimit,
 		cfg.SearchAttributesTotalSizeLimit,
-		s.mockVisibilityMgr,
+		s.mockAdminVisibilityMgr,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
 		cfg.SuppressErrorSetSystemSearchAttribute,
 		metrics.NoopMetricsHandler,
@@ -182,8 +186,9 @@ func (s *adminHandlerSuite) SetupTest() {
 		cfg,
 		s.mockResource.GetNamespaceReplicationQueue(),
 		s.mockProducer,
-		s.mockVisibilityMgr,
+		s.mockAdminVisibilityMgr,
 		s.mockResource.GetLogger(),
+		nil,
 		s.mockResource.GetTaskManager(),
 		s.mockResource.GetTaskManager(),
 		s.mockResource.GetExecutionManager(),
@@ -231,6 +236,12 @@ func (s *adminHandlerSuite) TearDownTest() {
 
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {
 	var clusterName = "cluster"
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		clusterName: {ClusterID: "cluster-id"},
+	})
 	s.mockNamespaceCache.EXPECT().GetAllNamespaces().Return(nil)
 	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
 		gomock.Any(),
@@ -239,10 +250,20 @@ func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {
 
 	_, err := s.handler.RemoveRemoteCluster(context.Background(), &adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
 	s.NoError(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeSucceeded, details["outcome"])
+	s.Equal(remoteClusterMutationRemoved, details["mutation"])
+	s.Equal("cluster-id", details["remote_cluster_id"])
 }
 
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Error() {
 	var clusterName = "cluster"
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
+		clusterName: {},
+	})
 	s.mockNamespaceCache.EXPECT().GetAllNamespaces().Return(nil)
 	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
 		gomock.Any(),
@@ -251,6 +272,45 @@ func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Error() {
 
 	_, err := s.handler.RemoveRemoteCluster(context.Background(), &adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
 	s.Error(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeFailed, details["outcome"])
+	s.Equal(remoteClusterMutationUnknown, details["mutation"])
+	s.NotNil(details["persistence_request"])
+}
+
+func (s *adminHandlerSuite) Test_RemoveRemoteCluster_PanicEmitsFailure() {
+	clusterName := "cluster"
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockMetadata.EXPECT().GetAllClusterInfo().DoAndReturn(func() map[string]cluster.ClusterInformation {
+		panic("test panic")
+	})
+
+	_, err := s.handler.RemoveRemoteCluster(
+		context.Background(),
+		&adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName},
+	)
+	s.Require().Error(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeFailed, details["outcome"])
+	s.Equal("Internal", details["error_code"])
+}
+
+func (s *adminHandlerSuite) Test_RemoveRemoteCluster_EventEmissionPanicCaptured() {
+	clusterName := "cluster"
+	s.handler.eventLogger = &panicRemoteClusterEventLogger{}
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockMetadata.EXPECT().GetAllClusterInfo().DoAndReturn(func() map[string]cluster.ClusterInformation {
+		panic("handler panic")
+	})
+
+	_, err := s.handler.RemoveRemoteCluster(
+		context.Background(),
+		&adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName},
+	)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "event logger panic")
 }
 
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_BlockedByGlobalNamespace() {
@@ -376,6 +436,9 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success() 
 	var clusterName = uuid.NewString()
 	var clusterID = uuid.NewString()
 	var recordVersion int64 = 5
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 
 	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(10)).Times(2)
 	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
@@ -413,6 +476,11 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success() 
 		FrontendAddress: rpcAddress,
 	})
 	s.NoError(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeSucceeded, details["outcome"])
+	s.Equal(remoteClusterMutationUpdated, details["mutation"])
+	s.Equal(remoteClusterTransitionUnchanged, details["requested_connection_transition"])
+	s.Equal(remoteClusterTransitionUnchanged, details["requested_replication_transition"])
 }
 
 func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Success() {
@@ -672,6 +740,9 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_EmptyR
 
 func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_DescribeCluster_Error() {
 	var rpcAddress = uuid.NewString()
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 
 	s.mockClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockAdminClient,
@@ -682,6 +753,56 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_DescribeCluster_Error(
 	)
 	_, err := s.handler.AddOrUpdateRemoteCluster(context.Background(), &adminservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress})
 	s.Error(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeFailed, details["outcome"])
+	s.Equal("Unknown", details["error_code"])
+}
+
+func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_PanicEmitsFailure() {
+	rpcAddress := uuid.NewString()
+	eventLogger := &captureRemoteClusterEventLogger{}
+	s.handler.eventLogger = eventLogger
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
+		s.mockAdminClient,
+	)
+	s.mockAdminClient.EXPECT().DescribeCluster(
+		gomock.Any(),
+		&adminservice.DescribeClusterRequest{},
+	).DoAndReturn(func(context.Context, *adminservice.DescribeClusterRequest, ...grpc.CallOption) (*adminservice.DescribeClusterResponse, error) {
+		panic("test panic")
+	})
+
+	_, err := s.handler.AddOrUpdateRemoteCluster(
+		context.Background(),
+		&adminservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress},
+	)
+	s.Require().Error(err)
+	_, details := remoteClusterEventValues(s.T(), eventLogger.records)
+	s.Equal(remoteClusterOutcomeFailed, details["outcome"])
+	s.Equal("Internal", details["error_code"])
+}
+
+func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_EventEmissionPanicCaptured() {
+	rpcAddress := uuid.NewString()
+	s.handler.eventLogger = &panicRemoteClusterEventLogger{}
+	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
+	s.mockClientFactory.EXPECT().NewRemoteAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
+		s.mockAdminClient,
+	)
+	s.mockAdminClient.EXPECT().DescribeCluster(
+		gomock.Any(),
+		&adminservice.DescribeClusterRequest{},
+	).DoAndReturn(func(context.Context, *adminservice.DescribeClusterRequest, ...grpc.CallOption) (*adminservice.DescribeClusterResponse, error) {
+		panic("handler panic")
+	})
+
+	_, err := s.handler.AddOrUpdateRemoteCluster(
+		context.Background(),
+		&adminservice.AddOrUpdateRemoteClusterRequest{FrontendAddress: rpcAddress},
+	)
+	s.Require().Error(err)
+	s.Contains(err.Error(), "event logger panic")
 }
 
 func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_GetClusterMetadata_Error() {
@@ -813,7 +934,7 @@ func (s *adminHandlerSuite) Test_DescribeCluster_CurrentCluster_Success() {
 	s.mockResource.MatchingServiceResolver.EXPECT().MemberCount().Return(0)
 	s.mockResource.WorkerServiceResolver.EXPECT().Members().Return([]membership.HostInfo{})
 	s.mockResource.WorkerServiceResolver.EXPECT().MemberCount().Return(0)
-	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
+	s.mockAdminVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
 	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		&persistence.GetClusterMetadataResponse{
 			ClusterMetadata: &persistencespb.ClusterMetadata{
@@ -851,7 +972,7 @@ func (s *adminHandlerSuite) Test_DescribeCluster_NonCurrentCluster_Success() {
 	s.mockResource.MatchingServiceResolver.EXPECT().MemberCount().Return(0)
 	s.mockResource.WorkerServiceResolver.EXPECT().Members().Return([]membership.HostInfo{})
 	s.mockResource.WorkerServiceResolver.EXPECT().MemberCount().Return(0)
-	s.mockVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
+	s.mockAdminVisibilityMgr.EXPECT().GetStoreNames().Return([]string{elasticsearch.PersistenceName})
 	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		&persistence.GetClusterMetadataResponse{
 			ClusterMetadata: &persistencespb.ClusterMetadata{
@@ -1835,7 +1956,7 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithAliasedSearchAttribu
 			}
 
 			s.mockNamespaceCache.EXPECT().GetNamespaceID(tv.NamespaceName()).Return(tv.NamespaceID(), nil)
-			s.mockVisibilityMgr.EXPECT().GetIndexName().Return(tv.IndexName()).Times(eventsWithSasCount)
+			s.mockAdminVisibilityMgr.EXPECT().GetIndexName().Return(tv.IndexName()).Times(eventsWithSasCount)
 
 			// Mock mapper remove alias from alias name.
 			s.mockSaMapper.EXPECT().GetFieldName(gomock.Any(), tv.NamespaceName().String()).DoAndReturn(func(alias string, nsName string) (string, error) {
@@ -1850,7 +1971,7 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithAliasedSearchAttribu
 			if subTest.ExpectedErr != nil {
 				s.mockSaMapper.EXPECT().GetAlias(gomock.Any(), tv.NamespaceName().String()).Return("", serviceerror.NewInvalidArgument(""))
 			} else {
-				s.mockVisibilityMgr.EXPECT().ValidateCustomSearchAttributes(gomock.Any()).Return(nil, nil).Times(eventsWithSasCount)
+				s.mockAdminVisibilityMgr.EXPECT().ValidateCustomSearchAttributes(gomock.Any()).Return(nil, nil).Times(eventsWithSasCount)
 				s.mockHistoryClient.EXPECT().ImportWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *historyservice.ImportWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.ImportWorkflowExecutionResponse, error) {
 					s.Equal(tv.NamespaceID().String(), request.NamespaceId)
 					for _, historyBatch := range request.HistoryBatches {
@@ -1937,7 +2058,7 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithNonAliasedSearchAttr
 			}
 
 			s.mockNamespaceCache.EXPECT().GetNamespaceID(tv.NamespaceName()).Return(tv.NamespaceID(), nil)
-			s.mockVisibilityMgr.EXPECT().GetIndexName().Return(tv.IndexName()).Times(eventsWithSasCount)
+			s.mockAdminVisibilityMgr.EXPECT().GetIndexName().Return(tv.IndexName()).Times(eventsWithSasCount)
 
 			s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes(tv.IndexName(), gomock.Any()).Return(searchattribute.TestEsNameTypeMap(), nil).Times(eventsWithSasCount)
 
@@ -1949,7 +2070,7 @@ func (s *adminHandlerSuite) TestImportWorkflowExecution_WithNonAliasedSearchAttr
 			if subTest.ExpectedErr != nil {
 				s.mockSaMapper.EXPECT().GetAlias(gomock.Any(), tv.NamespaceName().String()).Return("", serviceerror.NewInvalidArgument(""))
 			} else {
-				s.mockVisibilityMgr.EXPECT().ValidateCustomSearchAttributes(gomock.Any()).Return(nil, nil).Times(eventsWithSasCount)
+				s.mockAdminVisibilityMgr.EXPECT().ValidateCustomSearchAttributes(gomock.Any()).Return(nil, nil).Times(eventsWithSasCount)
 				s.mockHistoryClient.EXPECT().ImportWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(func(ctx context.Context, request *historyservice.ImportWorkflowExecutionRequest, opts ...grpc.CallOption) (*historyservice.ImportWorkflowExecutionResponse, error) {
 					s.Equal(tv.NamespaceID().String(), request.NamespaceId)
 					for _, historyBatch := range request.HistoryBatches {
@@ -2075,7 +2196,8 @@ func (s *adminHandlerSuite) TestMigrateScheduleToWorkflowExistingWorkflow() {
 		},
 	}).Return(&historyservice.DescribeWorkflowExecutionResponse{
 		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
-			Type: &commonpb.WorkflowType{Name: legacyscheduler.WorkflowType},
+			Type:   &commonpb.WorkflowType{Name: legacyscheduler.WorkflowType},
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		},
 	}, nil)
 
@@ -2115,7 +2237,9 @@ func (s *adminHandlerSuite) TestMigrateScheduleToWorkflowBlockedByWorkflowSentin
 		},
 	}).Return(&historyservice.DescribeWorkflowExecutionResponse{
 		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
-			Type: &commonpb.WorkflowType{Name: dummy.DummyWFTypeName},
+			Type:      &commonpb.WorkflowType{Name: dummy.DummyWFTypeName},
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			StartTime: timestamppb.New(time.Now()),
 		},
 	}, nil)
 
@@ -2137,6 +2261,51 @@ func (s *adminHandlerSuite) TestMigrateScheduleToWorkflowBlockedByWorkflowSentin
 	s.ErrorIs(err, chasmscheduler.ErrSentinelBlocked)
 	var unavailableErr *serviceerror.Unavailable
 	s.ErrorAs(err, &unavailableErr)
+}
+
+// A dummy sentinel completes after its idle window rather than disappearing, and stays
+// describable for the namespace's whole retention period. Blocking on it would stall rollback
+// for days instead of the minutes the sentinel is meant to reserve, so a closed sentinel must
+// not block.
+func (s *adminHandlerSuite) TestMigrateScheduleToWorkflowClosedSentinelDoesNotBlock() {
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(s.namespace).Return(s.namespaceID, nil)
+	s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), &historyservice.DescribeWorkflowExecutionRequest{
+		NamespaceId: s.namespaceID.String(),
+		Request: &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.namespace.String(),
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: legacyscheduler.WorkflowIDPrefix + "test-schedule",
+			},
+		},
+	}).Return(&historyservice.DescribeWorkflowExecutionResponse{
+		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+			Type:      &commonpb.WorkflowType{Name: dummy.DummyWFTypeName},
+			Status:    enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+			StartTime: timestamppb.New(time.Now().Add(-chasmscheduler.SentinelIdleTime)),
+			CloseTime: timestamppb.New(time.Now()),
+		},
+	}, nil)
+
+	var capturedReq *schedulerpb.MigrateToWorkflowRequest
+	fake := &fakeSchedulerClient{
+		migrateToWorkflowFn: func(_ context.Context, req *schedulerpb.MigrateToWorkflowRequest) (*schedulerpb.MigrateToWorkflowResponse, error) {
+			capturedReq = req
+			return &schedulerpb.MigrateToWorkflowResponse{}, nil
+		},
+	}
+	s.handler.schedulerClient = fake
+
+	resp, err := s.handler.MigrateSchedule(context.Background(), &adminservice.MigrateScheduleRequest{
+		Namespace:  s.namespace.String(),
+		ScheduleId: "test-schedule",
+		Target:     adminservice.MigrateScheduleRequest_SCHEDULER_TARGET_WORKFLOW,
+		Identity:   "test-identity",
+		RequestId:  "test-request-id",
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Require().NotNil(capturedReq)
+	s.Equal("test-schedule", capturedReq.ScheduleId)
 }
 
 func (s *adminHandlerSuite) TestMigrateScheduleToWorkflowError() {
@@ -2489,5 +2658,246 @@ func (s *adminHandlerSuite) TestGetSearchAttributes() {
 		s.Nil(resp)
 		var unavailable *serviceerror.Unavailable
 		s.ErrorAs(err, &unavailable)
+	})
+}
+
+func TestCreateDelegatedBatchRequest(t *testing.T) {
+	adminRequest := &adminservice.StartAdminBatchOperationRequest{
+		Namespace:       "target-namespace",
+		VisibilityQuery: "WorkflowType = 'test'",
+		JobId:           "job-id",
+		Reason:          "test reason",
+		Identity:        "test identity",
+	}
+
+	tests := []struct {
+		name      string
+		batchType enumspb.BatchOperationType
+		validate  func(*testing.T, *workflowservice.StartBatchOperationRequest)
+		wantError bool
+	}{
+		{
+			name:      "terminate workflows",
+			batchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+			validate: func(t *testing.T, request *workflowservice.StartBatchOperationRequest) {
+				op, ok := request.GetOperation().(*workflowservice.StartBatchOperationRequest_TerminationOperation)
+				require.True(t, ok)
+				require.Equal(t, adminRequest.GetIdentity(), op.TerminationOperation.GetIdentity())
+			},
+		},
+		{
+			name:      "terminate activities",
+			batchType: enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+			validate: func(t *testing.T, request *workflowservice.StartBatchOperationRequest) {
+				op, ok := request.GetOperation().(*workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation)
+				require.True(t, ok)
+				require.Equal(t, adminRequest.GetIdentity(), op.TerminateActivitiesOperation.GetIdentity())
+				require.Equal(t, adminRequest.GetReason(), op.TerminateActivitiesOperation.GetReason())
+			},
+		},
+		{
+			name:      "delete workflows",
+			batchType: enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW,
+			validate: func(t *testing.T, request *workflowservice.StartBatchOperationRequest) {
+				op, ok := request.GetOperation().(*workflowservice.StartBatchOperationRequest_DeletionOperation)
+				require.True(t, ok)
+				require.Equal(t, adminRequest.GetIdentity(), op.DeletionOperation.GetIdentity())
+			},
+		},
+		{
+			name:      "delete activities",
+			batchType: enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY,
+			validate: func(t *testing.T, request *workflowservice.StartBatchOperationRequest) {
+				_, ok := request.GetOperation().(*workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation)
+				require.True(t, ok)
+			},
+		},
+		{
+			name:      "unsupported operation",
+			batchType: enumspb.BATCH_OPERATION_TYPE_SIGNAL_WORKFLOW,
+			wantError: true,
+		},
+		{
+			name:      "unspecified operation",
+			batchType: enumspb.BATCH_OPERATION_TYPE_UNSPECIFIED,
+			wantError: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			request, err := createDelegatedBatchRequest(adminRequest, tc.batchType)
+			if tc.wantError {
+				var invalidArgument *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgument)
+				require.Nil(t, request)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Equal(t, adminRequest.GetNamespace(), request.GetNamespace())
+			require.Equal(t, adminRequest.GetVisibilityQuery(), request.GetVisibilityQuery())
+			require.Equal(t, adminRequest.GetJobId(), request.GetJobId())
+			require.Equal(t, adminRequest.GetReason(), request.GetReason())
+			tc.validate(t, request)
+		})
+	}
+}
+
+func TestCreateDelegatedBatchRequestConvertsExecutions(t *testing.T) {
+	adminRequest := &adminservice.StartAdminBatchOperationRequest{
+		Namespace: "target-namespace",
+		JobId:     "job-id",
+		Reason:    "test reason",
+		Executions: []*commonpb.WorkflowExecution{
+			{WorkflowId: "business-id", RunId: "run-id"},
+		},
+	}
+
+	tests := []struct {
+		name          string
+		batchType     enumspb.BatchOperationType
+		executionType enumspb.ExecutionType
+	}{
+		{
+			name:          "workflow operation",
+			batchType:     enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW,
+			executionType: enumspb.EXECUTION_TYPE_WORKFLOW,
+		},
+		{
+			name:          "activity operation",
+			batchType:     enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY,
+			executionType: enumspb.EXECUTION_TYPE_ACTIVITY,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			request, err := createDelegatedBatchRequest(adminRequest, tc.batchType)
+			require.NoError(t, err)
+			require.Equal(t, []*commonpb.Execution{
+				{Type: tc.executionType, BusinessId: "business-id", RunId: "run-id"},
+			}, request.GetTargetExecutions())
+		})
+	}
+}
+
+func (s *adminHandlerSuite) TestListExecutions() {
+	ctx := context.Background()
+	request := &adminservice.ListExecutionsRequest{
+		Namespace:     s.namespace.String(),
+		Query:         "ExecutionStatus = 'Completed'",
+		PageSize:      10,
+		NextPageToken: []byte("page-token"),
+	}
+	executions := []*adminservice.VisibilityExecutionInfo{
+		{
+			NamespaceId: s.namespaceID.String(),
+			Namespace:   s.namespace.String(),
+			BusinessId:  "test-workflow-id",
+			RunId:       "test-run-id",
+			State:       enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		},
+	}
+
+	s.Run("success", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			AdminListExecutions(ctx, &manager.AdminListExecutionsRequest{
+				Namespace:     s.namespace,
+				Query:         request.GetQuery(),
+				PageSize:      int(request.GetPageSize()),
+				NextPageToken: request.GetNextPageToken(),
+			}).
+			Return(&manager.AdminListExecutionsResponse{
+				Executions:    executions,
+				NextPageToken: []byte("next-page-token"),
+			}, nil)
+
+		resp, err := s.handler.ListExecutions(ctx, request)
+		s.NoError(err)
+		protorequire.ProtoSliceEqual(s.T(), executions, resp.GetExecutions())
+		s.Equal([]byte("next-page-token"), resp.GetNextPageToken())
+	})
+
+	s.Run("all namespaces", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			AdminListExecutions(ctx, &manager.AdminListExecutionsRequest{
+				Query:    request.GetQuery(),
+				PageSize: int(request.GetPageSize()),
+			}).
+			Return(&manager.AdminListExecutionsResponse{}, nil)
+
+		resp, err := s.handler.ListExecutions(ctx, &adminservice.ListExecutionsRequest{
+			Query:    request.GetQuery(),
+			PageSize: request.GetPageSize(),
+		})
+		s.NoError(err)
+		s.Empty(resp.GetExecutions())
+		s.Empty(resp.GetNextPageToken())
+	})
+
+	s.Run("visibility manager error", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			AdminListExecutions(ctx, gomock.Any()).
+			Return(nil, serviceerror.NewInvalidArgument("invalid query"))
+
+		resp, err := s.handler.ListExecutions(ctx, request)
+		s.Nil(resp)
+		var invalidArg *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArg)
+	})
+}
+
+func (s *adminHandlerSuite) TestCountExecutions() {
+	ctx := context.Background()
+	request := &adminservice.CountExecutionsRequest{
+		Namespace: s.namespace.String(),
+		Query:     "GROUP BY ExecutionStatus",
+	}
+	groups := []*adminservice.CountExecutionsResponse_AggregationGroup{
+		{
+			GroupValues: []*commonpb.Payload{
+				payload.EncodeString(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED.String()),
+			},
+			Count: 100,
+		},
+	}
+
+	s.Run("success", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			AdminCountExecutions(ctx, &manager.AdminCountExecutionsRequest{
+				Namespace: s.namespace,
+				Query:     request.GetQuery(),
+			}).
+			Return(&manager.AdminCountExecutionsResponse{Count: 100, Groups: groups}, nil)
+
+		resp, err := s.handler.CountExecutions(ctx, request)
+		s.NoError(err)
+		s.Equal(int64(100), resp.GetCount())
+		protorequire.ProtoSliceEqual(s.T(), groups, resp.GetGroups())
+	})
+
+	s.Run("all namespaces", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			AdminCountExecutions(ctx, &manager.AdminCountExecutionsRequest{Query: request.GetQuery()}).
+			Return(&manager.AdminCountExecutionsResponse{Count: 100}, nil)
+
+		resp, err := s.handler.CountExecutions(ctx, &adminservice.CountExecutionsRequest{
+			Query: request.GetQuery(),
+		})
+		s.NoError(err)
+		s.Equal(int64(100), resp.GetCount())
+		s.Empty(resp.GetGroups())
+	})
+
+	s.Run("visibility manager error", func() {
+		s.mockAdminVisibilityMgr.EXPECT().
+			AdminCountExecutions(ctx, gomock.Any()).
+			Return(nil, serviceerror.NewInvalidArgument("invalid query"))
+
+		resp, err := s.handler.CountExecutions(ctx, request)
+		s.Nil(resp)
+		var invalidArg *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArg)
 	})
 }

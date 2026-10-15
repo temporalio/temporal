@@ -2,21 +2,26 @@ package startworkflow
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"time"
 
+	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/softassert"
@@ -35,9 +40,11 @@ type (
 )
 
 const (
-	eagerStartDeniedReasonDynamicConfigDisabled    metrics.ReasonString = "dynamic_config_disabled"
-	eagerStartDeniedReasonFirstWorkflowTaskBackoff metrics.ReasonString = "first_workflow_task_backoff"
-	eagerStartDeniedReasonTaskAlreadyDispatched    metrics.ReasonString = "task_already_dispatched"
+	eagerStartDeniedReasonDynamicConfigDisabled      metrics.ReasonString = "dynamic_config_disabled"
+	eagerStartDeniedReasonFirstWorkflowTaskBackoff   metrics.ReasonString = "first_workflow_task_backoff"
+	eagerStartDeniedReasonTaskAlreadyDispatched      metrics.ReasonString = "task_already_dispatched"
+	orphanedChildReplacementReplaced                                      = "replaced"
+	orphanedChildReplacementRejectedUnsupportedState                      = "rejected_unsupported_state"
 )
 
 const (
@@ -61,6 +68,7 @@ type Starter struct {
 	reactivationSignaler       api.VersionReactivationSignalerFn
 	shouldSkipReactivation     bool
 	revisionNumber             int64
+	derivedRunID               bool
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -94,11 +102,18 @@ func NewStarter(
 	versionCache worker_versioning.VersionMembershipAndReactivationStatusCache,
 	reactivationSignaler api.VersionReactivationSignalerFn,
 	createLeaseFn api.CreateOrUpdateLeaseFunc,
+	// allowDerivedRunID must be false when createLeaseFn holds a real cache lock on the new run.
+	// TODO: remove once Update-with-Start supports derived run IDs.
+	allowDerivedRunID bool,
 ) (*Starter, error) {
 	namespaceEntry, err := api.GetActiveNamespace(shardContext, namespace.ID(request.GetNamespaceId()), request.StartRequest.WorkflowId)
 	if err != nil {
 		return nil, err
 	}
+
+	derivedRunID := allowDerivedRunID &&
+		shardContext.GetConfig().EnableCrossRunRequestIDDedup(namespaceEntry.Name().String()) &&
+		request.StartRequest.GetRequestId() != ""
 
 	return &Starter{
 		// metricsHandler is lazily created when needed in Starter.getMetricsHandler
@@ -112,6 +127,7 @@ func NewStarter(
 		createOrUpdateLeaseFn:      createLeaseFn,
 		versionCache:               versionCache,
 		reactivationSignaler:       reactivationSignaler,
+		derivedRunID:               derivedRunID,
 	}, nil
 }
 
@@ -176,6 +192,64 @@ func (s *Starter) requestEagerStart() bool {
 	return s.request.StartRequest.GetRequestEagerExecution()
 }
 
+// uuidSpaceRunID is a randomly generated UUIDv5 namespace for derived run IDs
+var uuidSpaceRunID = uuid.MustParse("e96ecb9a-482c-4f69-9b66-a40bc6b50553")
+
+// newRunID is deterministic when derivation is active.
+func (s *Starter) newRunID() string {
+	if s.derivedRunID {
+		return DeriveRunID(
+			s.namespace.ID().String(),
+			s.request.StartRequest.GetWorkflowId(),
+			chasm.WorkflowArchetypeID,
+			s.request.StartRequest.GetRequestId(),
+			s.shardContext.GetClusterMetadata().GetClusterID(),
+		)
+	}
+	return primitives.NewUUID().String()
+}
+
+// DeriveRunID returns the UUIDv5, in uuidSpaceRunID, of (namespaceID, workflowID, archetypeID, requestID,
+// clusterID), with the string fields length-prefixed. clusterID gives each cluster its own run ID for a
+// request, so runs created in two clusters never collide.
+func DeriveRunID(namespaceID, workflowID string, archetypeID uint32, requestID string, clusterID int64) string {
+	var data []byte
+	data = appendLenPrefixed(data, namespaceID)
+	data = appendLenPrefixed(data, workflowID)
+	data = binary.BigEndian.AppendUint32(data, archetypeID)
+	data = appendLenPrefixed(data, requestID)
+	data = binary.BigEndian.AppendUint64(data, uint64(clusterID))
+	return uuid.NewSHA1(uuidSpaceRunID, data).String()
+}
+
+func appendLenPrefixed(dst []byte, s string) []byte {
+	dst = binary.BigEndian.AppendUint32(dst, uint32(len(s)))
+	return append(dst, s...)
+}
+
+// runIDDedupResponse turns WorkflowRunAlreadyExistsError into a dedup response for the existing run, and returns
+// err unchanged otherwise.
+func (s *Starter) runIDDedupResponse(
+	ctx context.Context,
+	err error,
+) (*historyservice.StartWorkflowExecutionResponse, StartOutcome, error) {
+	var existsErr *persistence.WorkflowRunAlreadyExistsError
+	if !errors.As(err, &existsErr) {
+		return nil, StartErr, err
+	}
+
+	metrics.StartWorkflowRequestDeduped.With(s.getMetricsHandler()).Record(1)
+
+	// WorkflowRunAlreadyExistsError outranks CurrentWorkflowConditionFailedError, so a retry while the run is still
+	// current lands here rather than in handleConflict. respondToRetriedRequest keeps returning its eager workflow task in that case.
+	resp, err := s.respondToRetriedRequest(ctx, existsErr.RunID, existsErr.RunID)
+	if err != nil {
+		return nil, StartErr, err
+	}
+	resp.Status = existsErr.Status
+	return resp, StartDeduped, nil
+}
+
 // Invoke starts a new workflow execution.
 // NOTE: `beforeCreateHook` might be invoked more than once in the case where the workflow policy
 // requires terminating the running workflow first; it is then invoked again on the newly started workflow.
@@ -217,7 +291,7 @@ func (s *Starter) Invoke(
 			}
 			return resp, outcome, conflictErr
 		}
-		return nil, StartErr, err
+		return s.runIDDedupResponse(ctx, err)
 	}
 
 	// Notify version workflow if we're pinning to a potentially drained version
@@ -252,7 +326,7 @@ func (s *Starter) lockCurrentWorkflowExecution(
 // prepareNewWorkflow creates a new workflow context, and closes its mutable state transaction as snapshot.
 // It returns the creationContext which can later be used to insert into the executions table.
 func (s *Starter) prepareNewWorkflow(ctx context.Context, workflowID string) (*creationParams, error) {
-	runID := primitives.NewUUID().String()
+	runID := s.newRunID()
 	mutableState, err := api.NewWorkflowWithSignal(
 		s.shardContext,
 		s.namespace,
@@ -269,6 +343,9 @@ func (s *Starter) prepareNewWorkflow(ctx context.Context, workflowID string) (*c
 	if err != nil {
 		return nil, err
 	}
+
+	// A derived run ID is not unique by construction, so the store must verify it.
+	workflowLease.GetContext().SetCheckRunAlreadyExists(s.derivedRunID)
 
 	workflowTaskInfo := mutableState.GetStartedWorkflowTask()
 	if s.requestEagerStart() && workflowTaskInfo == nil {
@@ -370,7 +447,7 @@ func (s *Starter) handleConflict(
 	}
 
 	if err := s.createAsCurrent(ctx, creationParams, currentWorkflowConditionFailed); err != nil {
-		return nil, StartErr, err
+		return s.runIDDedupResponse(ctx, err)
 	}
 	resp, err := s.generateResponse(
 		creationParams.runID,
@@ -392,13 +469,30 @@ func (s *Starter) createAsCurrent(
 	if _, err := s.createOrUpdateLeaseFn(creationParams.workflowLease, s.shardContext, nil); err != nil {
 		return err
 	}
+
+	// If current workflow is closed after the original creationParams were prepared,
+	// the LastRunningClock in the prepared workflow snapshot will be smaller than
+	// the current workflow's LastRunningClock, causing the new workflow to be marked
+	// as zombie in standby cluster.
+	//
+	// Here we basically refresh the LastRunningClock in the prepared workflow snapshot to avoid this issue.
+	mutableState := creationParams.workflowLease.GetMutableState()
+	updateExecutionInfo, updatedWorkflowEventBatches, err := mutableState.UpdateLastRunningClock(creationParams.workflowEventBatches)
+	if err != nil {
+		return err
+	}
+	// Following assignments are technically not necessary since those pointers point to the same underlying fields that are updated,
+	// but it makes the code more explicit and easier to read.
+	creationParams.workflowSnapshot.ExecutionInfo = updateExecutionInfo
+	creationParams.workflowEventBatches = updatedWorkflowEventBatches
+
 	return creationParams.workflowLease.GetContext().CreateWorkflowExecution(
 		ctx,
 		s.shardContext,
 		persistence.CreateWorkflowModeUpdateCurrent,
 		currentWorkflowConditionFailed.RunID,
 		currentWorkflowConditionFailed.LastWriteVersion,
-		creationParams.workflowLease.GetMutableState(),
+		mutableState,
 		creationParams.workflowSnapshot,
 		creationParams.workflowEventBatches,
 		historyi.TransactionPolicyActive,
@@ -441,26 +535,50 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		currentWorkflowConditionFailed.RunID,
 	)
 
-	// Using a new RunID here to simplify locking: MultiOperation, that re-uses the Starter, is creating
-	// a locked workflow context for each new workflow. Using a fresh RunID prevents a deadlock with the
-	// previously created workflow context.
-	newRunID := primitives.NewUUID().String()
+	// MultiOperation, which re-uses the Starter, creates a locked workflow context for each new workflow, so
+	// this run ID must differ from the one prepareNewWorkflow used to avoid a deadlock. A random run ID does;
+	// a derived one repeats it, which is why derivation is disabled for MultiOperation (see allowDerivedRunID).
+	newRunID := s.newRunID()
 
-	currentExecutionUpdateAction, err := api.ResolveDuplicateWorkflowID(
-		s.shardContext,
-		workflowKey,
-		s.namespace,
-		newRunID,
-		currentWorkflowConditionFailed.State,
-		currentWorkflowConditionFailed.Status,
-		currentWorkflowConditionFailed.RequestIDs,
-		currentWorkflowConditionFailed.FirstExecutionRunID,
-		s.request.StartRequest.GetWorkflowIdReusePolicy(),
-		s.request.StartRequest.GetWorkflowIdConflictPolicy(),
-		currentWorkflowStartTime,
-		s.request.ParentExecutionInfo,
-		s.request.ChildWorkflowOnly,
-	)
+	var currentExecutionUpdateAction api.UpdateWorkflowActionFunc
+	var err error
+	orphanedChildReplacementInfo := s.request.GetOrphanedChildReplacementInfo()
+	orphanedChildReplacementRequested := orphanedChildReplacementInfo != nil &&
+		s.request.StartRequest.GetWorkflowIdConflictPolicy() == enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL
+	replaceOrphanedChild := orphanedChildReplacementRequested &&
+		currentWorkflowConditionFailed.State == enumsspb.WORKFLOW_EXECUTION_STATE_CREATED
+	if orphanedChildReplacementRequested && !replaceOrphanedChild {
+		metrics.OrphanedChildWorkflowReplacement.With(s.getMetricsHandler()).Record(
+			1,
+			metrics.OutcomeTag(orphanedChildReplacementRejectedUnsupportedState),
+			metrics.StringTag("workflow_state", currentWorkflowConditionFailed.State.String()),
+		)
+	}
+	if replaceOrphanedChild {
+		currentExecutionUpdateAction = api.ReplaceOrphanedChildAction(
+			ctx,
+			s.request.ParentExecutionInfo,
+			orphanedChildReplacementInfo,
+			newRunID,
+			s.getMetricsHandler(),
+		)
+	} else {
+		currentExecutionUpdateAction, err = api.ResolveDuplicateWorkflowID(
+			s.shardContext,
+			workflowKey,
+			s.namespace,
+			newRunID,
+			currentWorkflowConditionFailed.State,
+			currentWorkflowConditionFailed.Status,
+			currentWorkflowConditionFailed.RequestIDs,
+			currentWorkflowConditionFailed.FirstExecutionRunID,
+			s.request.StartRequest.GetWorkflowIdReusePolicy(),
+			s.request.StartRequest.GetWorkflowIdConflictPolicy(),
+			currentWorkflowStartTime,
+			s.request.ParentExecutionInfo,
+			s.request.ChildWorkflowOnly,
+		)
+	}
 
 	switch {
 	case errors.Is(err, api.ErrUseCurrentExecution):
@@ -504,6 +622,8 @@ func (s *Starter) resolveDuplicateWorkflowID(
 				return nil, nil, err
 			}
 
+			workflowLease.GetContext().SetCheckRunAlreadyExists(s.derivedRunID)
+
 			// extract information from MutableState in case this is an eager start
 			mutableState := workflowLease.GetMutableState()
 			mutableStateInfo, err = extractMutableStateInfo(ctx, mutableState)
@@ -522,6 +642,25 @@ func (s *Starter) resolveDuplicateWorkflowID(
 
 	switch err {
 	case nil:
+		if replaceOrphanedChild {
+			metrics.OrphanedChildWorkflowReplacement.With(s.getMetricsHandler()).Record(
+				1,
+				metrics.OutcomeTag(orphanedChildReplacementReplaced),
+			)
+			parentExecutionInfo := s.request.GetParentExecutionInfo()
+			parentExecution := parentExecutionInfo.GetExecution()
+			s.shardContext.GetLogger().Info(
+				"Replaced orphaned child workflow",
+				tag.WorkflowNamespaceID(s.namespace.ID().String()),
+				tag.WorkflowID(workflowID),
+				tag.NewStringTag("orphaned-child-run-id", currentWorkflowConditionFailed.RunID),
+				tag.WorkflowNewRunID(newRunID),
+				tag.NewStringTag("parent-workflow-id", parentExecution.GetWorkflowId()),
+				tag.NewStringTag("parent-run-id", parentExecution.GetRunId()),
+				tag.NewInt64("parent-initiated-event-id", parentExecutionInfo.GetInitiatedId()),
+				tag.NewInt64("parent-initiated-event-version", parentExecutionInfo.GetInitiatedVersion()),
+			)
+		}
 		if !s.requestEagerStart() {
 			return &historyservice.StartWorkflowExecutionResponse{
 				RunId:               newRunID,
@@ -543,7 +682,7 @@ func (s *Starter) resolveDuplicateWorkflowID(
 		// NOTE: This WorkflowIDReusePolicy cannot be RejectDuplicate as the frontend will reject that.
 		return nil, StartErr, serviceerror.NewUnavailablef("Termination failed: %v", err)
 	default:
-		return nil, StartErr, err
+		return s.runIDDedupResponse(ctx, err)
 	}
 }
 
@@ -688,6 +827,7 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 
 	var err error
 	onConflictOptions := s.request.StartRequest.GetOnConflictOptions()
+	var nexusContextMatch metrics.ReasonString
 	if onConflictOptions != nil {
 		requestID := ""
 		if onConflictOptions.AttachRequestId {
@@ -711,6 +851,11 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 				if !mutableState.IsWorkflowExecutionRunning() {
 					return nil, consts.ErrWorkflowCompleted
 				}
+				if onConflictOptions.AttachCompletionCallbacks && len(completionCallbacks) > 0 {
+					existing := mutableState.GetExecutionInfo().GetPropagatedNexusSerializationContext()
+					incoming := s.request.StartRequest.GetPropagatedNexusSerializationContext()
+					nexusContextMatch = commonnexus.SerializationContextMatch(existing, incoming)
+				}
 				_, err := mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
 					nil,
 					false,
@@ -733,6 +878,10 @@ func (s *Starter) handleUseExistingWorkflowOnConflictOptions(
 
 	switch err {
 	case nil:
+		if nexusContextMatch != "" {
+			// Count callback attachments involving Nexus context by whether that context matches or is missing.
+			metrics.NexusWorkflowUseExisting.With(s.getMetricsHandler()).Record(1, metrics.NexusSerializationContextMatchTag(nexusContextMatch))
+		}
 		resp := &historyservice.StartWorkflowExecutionResponse{
 			RunId:               workflowKey.RunID,
 			FirstExecutionRunId: currentWorkflowConditionFailed.FirstExecutionRunID,

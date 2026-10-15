@@ -40,12 +40,6 @@ type (
 		TrySyncMatch(ctx context.Context, task *internalTask) (syncMatchOutcome, error)
 		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is available.
 		SpoolTask(taskInfo *persistencespb.TaskInfo) error
-		// TODO(pri): old matcher cleanup
-		ProcessSpooledTask(ctx context.Context, task *internalTask) error
-		// DispatchSpooledTask dispatches a task to a poller. When there are no pollers to pick
-		// up the task, this method will return error. Task will not be persisted to db
-		// TODO(pri): old matcher cleanup
-		DispatchSpooledTask(ctx context.Context, task *internalTask, userDataChanged <-chan struct{}) error
 		AddSpooledTask(task *internalTask) error
 		AddSpooledTaskToMatcher(task *internalTask) error
 		UserDataChanged()
@@ -62,12 +56,15 @@ type (
 		// LegacyDescribeTaskQueue returns pollers info and legacy TaskQueueStatus for this physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		GetStatsByPriority(includeRates bool) map[int32]*taskqueuepb.TaskQueueStats
+		// NonNegligibleBacklogPriority returns the highest-priority non-negligible backlog
+		// across active and draining queues, or 0 as a sentinel when neither has one.
+		NonNegligibleBacklogPriority() priorityKey
 		GetInternalTaskQueueStatus() []*taskqueuespb.InternalTaskQueueStatus
 		UnloadFromPartitionManager(unloadCause)
 		QueueKey() *PhysicalTaskQueueKey
 		// MakePollerScalingDecision makes a decision on whether to scale pollers up or down based on the current state
 		// of the task queue and the task about to be returned.
-		MakePollerScalingDecision(ctx context.Context, pollStartTime time.Time) *taskqueuepb.PollerScalingDecision
+		MakePollerScalingDecision(ctx context.Context, pollStartTime time.Time, task *internalTask) *taskqueuepb.PollerScalingDecision
 		// GetFairnessWeightOverrides returns current fairness weight overrides for this queue.
 		GetFairnessWeightOverrides() fairnessWeightOverrides
 		UpdateRemotePriorityBacklogs(remotePriorityBacklogSet)

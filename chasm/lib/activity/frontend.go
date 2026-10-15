@@ -11,8 +11,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
-	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -44,7 +44,7 @@ var ErrStandaloneActivityOperatorCommandsDisabled = serviceerror.NewUnimplemente
 
 type frontendHandler struct {
 	FrontendHandler
-	callbackValidator callback.Validator
+	callbackValidator callbacks.Validator
 	linkValidator     *linkValidator
 	client            activitypb.ActivityServiceClient
 	config            *Config
@@ -57,7 +57,7 @@ type frontendHandler struct {
 
 // NewFrontendHandler creates a new FrontendHandler instance for processing activity frontend requests.
 func NewFrontendHandler(
-	callbackValidator callback.Validator,
+	callbackValidator callbacks.Validator,
 	linkValidator *linkValidator,
 	client activitypb.ActivityServiceClient,
 	config *Config,
@@ -375,6 +375,11 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	}
 	req = common.CloneProto(req)
 	activityType := req.ActivityType.GetName()
+	maxIDLengthLimit := h.config.MaxIDLengthLimit()
+	nexusSerializationContext := req.GetPropagatedNexusSerializationContext()
+	if err := validatePropagatedNexusSerializationContext(nexusSerializationContext, maxIDLengthLimit); err != nil {
+		return nil, err
+	}
 
 	if req.RetryPolicy == nil {
 		req.RetryPolicy = &commonpb.RetryPolicy{}
@@ -386,14 +391,17 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 	if req.GetStartDelay().AsDuration() > 0 && !h.config.StartDelayEnabled(req.GetNamespace()) {
 		return nil, serviceerror.NewInvalidArgument("start_delay is not enabled for this namespace")
 	}
-	// TODO(saa): when eager start is supported, deny it if start delay > 0 (same as workflow behavior).
+	if req.GetRequestEagerExecution() &&
+		(!h.config.EnableEagerStart(req.GetNamespace()) || req.GetStartDelay().AsDuration() > 0) {
+		req.RequestEagerExecution = false
+	}
 
 	opts := activityOptionsFromStartRequest(req)
 	err := ValidateAndNormalizeStandaloneActivity(
 		req.ActivityId,
 		activityType,
 		h.config.DefaultActivityRetryPolicy,
-		h.config.MaxIDLengthLimit(),
+		maxIDLengthLimit,
 		namespace.Name(req.GetNamespace()),
 		opts,
 		req.Priority,
@@ -418,12 +426,15 @@ func (h *frontendHandler) validateAndPopulateStartRequest(
 		if !h.config.EnableCallbacks(req.GetNamespace()) {
 			return nil, serviceerror.NewInvalidArgument("completion callbacks are not enabled for this namespace")
 		}
-		if err := h.callbackValidator.Validate(ctx, req.GetNamespace(), cbs); err != nil {
+		opts := callbacks.ValidatorOptions{
+			EnabledKinds: h.config.EnabledCallbackKinds(req.GetNamespace()),
+		}
+		if err := h.callbackValidator.Validate(ctx, req.GetNamespace(), cbs, opts); err != nil {
 			return nil, err
 		}
 	}
 
-	if err := h.linkValidator.ValidateRequest(req.GetNamespace(), req.GetLinks()); err != nil {
+	if err := h.linkValidator.ValidateRequestWithCallbacks(req.GetNamespace(), req.GetLinks(), req.GetCompletionCallbacks()); err != nil {
 		return nil, err
 	}
 

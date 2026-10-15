@@ -103,6 +103,9 @@ func Invoke(
 			versionCache,
 			reactivationSignaler,
 			uws.workflowLeaseCallback(ctx),
+			// allowDerivedRunID: false. The held lease would self-deadlock on terminate-existing with a derived run ID.
+			// TODO: support run-ID dedup for Update-with-Start and drop this parameter.
+			false,
 		)
 		if err != nil {
 			return nil, newMultiOpError(err, multiOpAbortedErr)
@@ -193,12 +196,15 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 		// If Update is complete, return it.
 		if outcome, err := workflowLease.GetMutableState().GetUpdateOutcome(ctx, updateID); err == nil {
 			workflowKey := workflowLease.GetContext().GetWorkflowKey()
+			// Capture status before releasing the lock to avoid a data race with concurrent goroutines that may
+			// modify ExecutionState after acquiring the lock.
+			status := workflowLease.GetMutableState().GetExecutionState().Status
 			workflowLease.GetReleaseFn()(nil)
 			return makeResponse(
 				&historyservice.StartWorkflowExecutionResponse{
 					RunId:   workflowKey.RunID,
 					Started: false, // set explicitly for emphasis
-					Status:  workflowLease.GetMutableState().GetExecutionState().Status,
+					Status:  status,
 				},
 				uws.updater.CreateResponse(workflowKey, outcome, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED),
 			), nil
@@ -290,8 +296,7 @@ func (uws *updateWithStart) getWorkflowLease(ctx context.Context) (api.WorkflowL
 		definition.NewWorkflowKey(uws.namespaceId.String(), uws.startReq.StartRequest.WorkflowId, ""),
 		locks.PriorityHigh,
 	)
-	var notFound *serviceerror.NotFound
-	if errors.As(err, &notFound) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 		return nil, nil
 	}
 	if err != nil {

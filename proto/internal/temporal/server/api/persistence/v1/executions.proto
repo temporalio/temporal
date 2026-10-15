@@ -12,6 +12,7 @@ import "temporal/api/enums/v1/failed_cause.proto";
 import "temporal/api/enums/v1/workflow.proto";
 import "temporal/api/failure/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
+import "temporal/api/nexus/v1/message.proto";
 import "temporal/api/worker/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
 import "temporal/server/api/clock/v1/message.proto";
@@ -319,6 +320,13 @@ message WorkflowExecutionInfo {
 
   // Time skipping info that contains the config and runtime history of the time skipping for the workflow.
   TimeSkippingInfo time_skipping_info = 115;
+
+  // Time of the most recent AdminRebuildMutableState call for this run, unset if the run
+  // was never rebuilt.
+  google.protobuf.Timestamp mutable_state_rebuild_time = 116;
+
+  // Nexus operation context retained across runs so workers can select payload serialization.
+  temporal.api.nexus.v1.PropagatedSerializationContext propagated_nexus_serialization_context = 117;
 }
 
 message TimeSkippingInfo {
@@ -343,6 +351,10 @@ message TimeSkippingInfo {
   // Tracks the number of times a time-skipping transition has occurred since time skipping
   // was most recently enabled. It is reset every time the skipping config is updated.
   int32 session_skip_count = 6;
+
+  // Skipped duration inherited when this execution started. Unlike accumulated_skipped_duration,
+  // this value remains fixed and can be used to calculate the execution's wall-clock start time.
+  google.protobuf.Duration initial_skipped_duration = 8;
 }
 
 message FastForwardInfo {
@@ -386,8 +398,11 @@ message WorkflowExecutionState {
   VersionedTransition last_update_versioned_transition = 5;
   google.protobuf.Timestamp start_time = 6;
   // Request IDs that are attached to the workflow execution. It can be the request ID that started
-  // the workflow execution or request IDs that were attached to an existing running workflow
-  // execution via StartWorkflowExecutionRequest.OnConflictOptions.
+  // the workflow execution, request IDs that were attached to an existing running workflow
+  // execution via StartWorkflowExecutionRequest.OnConflictOptions, or (for CHASM executions) request
+  // IDs recorded for UpdateComponent idempotency - the latter are marked by RequestIDInfo.attach_time
+  // and are swept per-execution by count (history.maximumRequestIDsPerExecution) and age
+  // (history.requestIDMaxAge).
   map<string, RequestIDInfo> request_ids = 7;
   // Run ID of the first execution in the chain (set on WorkflowExecutionStarted). Equals run_id
   // only for a first run; any continuation (continue-as-new, retry, cron, or reset)
@@ -399,6 +414,9 @@ message WorkflowExecutionState {
 message RequestIDInfo {
   temporal.api.enums.v1.EventType event_type = 1;
   int64 event_id = 2;
+  // Set only for request IDs attached by the CHASM framework for UpdateComponent idempotency.
+  // Used as an ordering key for lazy eviction when set.
+  google.protobuf.Timestamp attach_time = 3;
 }
 
 // transfer column
@@ -469,6 +487,9 @@ message ReplicationTaskInfo {
   bool is_force_replication = 24;
   // (-- api-linter: core::0141::forbidden-types=disabled --)
   uint32 archetype_id = 25;
+  // Contains the current version-history items captured when this replication task was created.
+  // The branch token is omitted; presence distinguishes captured tasks from legacy tasks.
+  history.v1.VersionHistory current_version_history = 26;
 }
 
 // visibility_task_data column

@@ -446,8 +446,7 @@ func (d *ClientImpl) DescribeVersion(
 
 	versionState, err := d.queryVersionState(ctx, namespaceEntry, deploymentName, buildID)
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			return nil, nil, serviceerror.NewNotFound("Worker Deployment Version not found")
 		}
 		return nil, nil, err
@@ -464,8 +463,7 @@ func (d *ClientImpl) DescribeVersion(
 	wciDesc, _, err := d.workerControllerInstanceClient.DescribeWorkerControllerInstance(ctx, namespaceEntry, apiVersion)
 	if err != nil {
 		// WCI may not exist if no compute config was ever set.
-		var notFound *serviceerror.NotFound
-		if !errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); !ok {
 			return nil, nil, err
 		}
 	} else {
@@ -555,8 +553,7 @@ func (d *ClientImpl) UpdateVersionComputeConfig(
 		Meta:  &updatepb.Meta{UpdateId: "_update_compute_config_" + requestID, Identity: identity},
 	})
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			return serviceerror.NewNotFound(fmt.Sprintf(ErrWorkerDeploymentVersionNotFound, version.GetBuildId(), version.GetDeploymentName()))
 		}
 		return err
@@ -601,8 +598,7 @@ func (d *ClientImpl) DescribeWorkerDeployment(
 
 	res, err := d.queryWorkflowWithRetry(ctx, req)
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			return nil, nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentNotFound, deploymentName)
 		}
 		var queryFailed *serviceerror.QueryFailed
@@ -655,8 +651,7 @@ func (d *ClientImpl) queryCreateRequestID(
 
 	res, err := d.queryWorkflowWithRetry(ctx, req)
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			return nil, err
 		}
 		var queryFailed *serviceerror.QueryFailed
@@ -700,8 +695,7 @@ func (d *ClientImpl) workerDeploymentExists(
 		},
 	})
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			return false, nil
 		}
 		return false, err
@@ -894,8 +888,7 @@ func (d *ClientImpl) SetCurrentVersion(
 			},
 		)
 		if err != nil {
-			var notFound *serviceerror.NotFound
-			if errors.As(err, &notFound) {
+			if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 				return nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentNotFound, deploymentName)
 			}
 			return nil, err
@@ -1011,8 +1004,7 @@ func (d *ClientImpl) SetRampingVersion(
 			},
 		)
 		if err != nil {
-			var notFound *serviceerror.NotFound
-			if errors.As(err, &notFound) {
+			if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 				return nil, serviceerror.NewNotFoundf(ErrWorkerDeploymentNotFound, deploymentName)
 			}
 			return nil, err
@@ -1152,8 +1144,7 @@ func (d *ClientImpl) DeleteWorkerDeployment(
 		},
 	)
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			return nil
 		}
 		return err
@@ -1277,8 +1268,7 @@ func (d *ClientImpl) ensureWorkerDeploymentDoesNotExist(
 	// right nothing in case of duplicate request ID.)
 	res, err := d.queryCreateRequestID(ctx, namespaceEntry, deploymentName)
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			return nil, nil
 		}
 		return nil, err
@@ -1352,8 +1342,7 @@ func (d *ClientImpl) CreateWorkerDeploymentVersion(
 		updateRequest,
 	)
 	if err != nil {
-		var notFound *serviceerror.NotFound
-		if errors.As(err, &notFound) {
+		if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 			return serviceerror.NewNotFound(fmt.Sprintf(ErrWorkerDeploymentNotFound, deploymentName))
 		}
 		return err
@@ -1890,12 +1879,12 @@ func (d *ClientImpl) IsVersionMissingTaskQueues(ctx context.Context, namespaceEn
 	// Check if all the task-queues in the prevCurrentVersion are present in the newCurrentVersion (newVersion is either the new ramping version or the new current version)
 	prevCurrentVersionInfo, _, err := d.DescribeVersion(ctx, namespaceEntry, prevCurrentVersion, false)
 	if err != nil {
-		return false, serviceerror.NewFailedPreconditionf("Version %s not found in deployment with error: %v", prevCurrentVersion, err)
+		return false, describeVersionFailedPrecondition(prevCurrentVersion, err)
 	}
 
 	newVersionInfo, _, err := d.DescribeVersion(ctx, namespaceEntry, newVersion, false)
 	if err != nil {
-		return false, serviceerror.NewFailedPreconditionf("Version %s not found in deployment with error: %v", newVersion, err)
+		return false, describeVersionFailedPrecondition(newVersion, err)
 	}
 
 	missingTaskQueues, err := d.checkForMissingTaskQueues(prevCurrentVersionInfo, newVersionInfo)
@@ -1921,6 +1910,17 @@ func (d *ClientImpl) IsVersionMissingTaskQueues(ctx context.Context, namespaceEn
 
 	// all expected task queues are present in the new version
 	return false, nil
+}
+
+func describeVersionFailedPrecondition(version string, err error) error {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
+		return serviceerror.NewFailedPreconditionf("Version %s not found in deployment", version)
+	}
+	return serviceerror.NewFailedPreconditionf(
+		"Failed to describe version %s while checking for missing task queues: %v",
+		version,
+		err,
+	)
 }
 
 // isTaskQueueExpectedInNewVersion checks if a task queue is expected in the new version. A task queue is expected in the new version if:

@@ -32,6 +32,10 @@ message CallbackState {
   google.protobuf.Timestamp next_attempt_schedule_time = 8;
 
   // Request ID that added the callback.
+  //
+  // TODO(temporal/issues/11958): This field is overloaded. It is used for _both_, the outgoing
+  // request ID (to serve as an idempotency key). As well as the source request ID, to identify
+  // when the callback was added (for buffered workflow event scenarios).
   string request_id = 9;
 }
 
@@ -61,9 +65,22 @@ message Callback {
     map<string, string> header = 2;
   }
 
+  // Forked from temporal.api.common.v1.Callback.NexusHandler in the api repo, with abbreviated comments.
+  message NexusHandler {
+    // Nexus task queue the Temporal worker is listening on.
+    string task_queue_name = 1;
+    // Target Nexus service.
+    string service = 2;
+    // Target operation.
+    string operation = 3;
+    // Arbitrary user-supplied data from the source operation's callsite.
+    temporal.api.common.v1.Payload source_context = 4;
+  }
+
   reserved 1; // For a generic callback mechanism to be added later.
   oneof variant {
     Nexus nexus = 2;
+    NexusHandler nexus_handler = 4;
   }
 
   repeated temporal.api.common.v1.Link links = 100;

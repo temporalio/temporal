@@ -110,11 +110,12 @@ func (t *timerQueueStandbyTaskExecutor) Execute(
 	case *tasks.ChasmTask:
 		task.Attempt = executable.Attempt()
 		err = t.executeChasmSideEffectTimerTask(ctx, task)
-	case *tasks.TimeSkippingTimerTask:
+	case *tasks.TimeSkippingFastForwardTimerTask:
 		err = t.executeTimeSkippingTimerTask(ctx, task)
 	default:
 		err = queueserrors.NewUnprocessableTaskError("unknown task type")
 	}
+	emitStandbyTaskError(t.shardContext, executable, taskTypeTagValue, nil, err)
 
 	return queues.ExecuteResponse{
 		ExecutionMetricTags: metricsTags,
@@ -237,7 +238,7 @@ func (t *timerQueueStandbyTaskExecutor) discardChasmTask(
 // task is retried until the discard delay elapses; otherwise it is acked.
 func (t *timerQueueStandbyTaskExecutor) executeTimeSkippingTimerTask(
 	ctx context.Context,
-	timerTask *tasks.TimeSkippingTimerTask,
+	timerTask *tasks.TimeSkippingFastForwardTimerTask,
 ) error {
 
 	actionFn := func(_ context.Context, wfContext historyi.WorkflowContext, mutableState historyi.MutableState, _ historyi.ReleaseWorkflowContextFunc) (any, error) {
@@ -279,7 +280,7 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 			return nil, nil
 		}
 
-		referenceTime := mutableState.Now()
+		referenceTime := t.getCurrentTime()
 
 		timerSequence := t.getTimerSequence(mutableState)
 		timerSequenceIDs := timerSequence.LoadAndSortUserTimers()
@@ -292,14 +293,11 @@ func (t *timerQueueStandbyTaskExecutor) executeUserTimerTimeoutTask(
 				return nil, serviceerror.NewInternal(errString)
 			}
 
-			// Use mutableState.Now() as reference time as a mutable state may use virtual time
-			// which can skip duration and be before the wall clock time.
-			// And when this happens the timerSequenceID.Timestamp is also virtual time and before the wall clock time,
-			// while the timerTask.VisibilityTimestamp uses the wall clock time that maps to the virtual time.
+			// Timer task visibility and the converted deadline use wall-clock time.
 			if queues.IsTimeExpired(
 				timerTask,
 				referenceTime,
-				mutableState.ToRealTime(timerSequenceID.Timestamp),
+				mutableState.ToRealTimeWithCurrentOffset(timerSequenceID.Timestamp),
 			) {
 				return &struct{}{}, nil
 			}
@@ -344,7 +342,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			return nil, nil
 		}
 
-		referenceTime := mutableState.Now()
+		referenceTime := t.getCurrentTime()
 
 		timerSequence := t.getTimerSequence(mutableState)
 		updateMutableState := false
@@ -358,14 +356,11 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 				return nil, serviceerror.NewInternal(errString)
 			}
 
-			// Use mutableState.Now() as reference time as a mutable state may use virtual time
-			// which can skip duration and be before the wall clock time.
-			// And when this happens the timerSequenceID.Timestamp is also virtual time and before the wall clock time,
-			// while the timerTask.VisibilityTimestamp uses the wall clock time that maps to the virtual time.
+			// Timer task visibility and the converted deadline use wall-clock time.
 			if queues.IsTimeExpired(
 				timerTask,
 				referenceTime,
-				mutableState.ToRealTime(timerSequenceID.Timestamp),
+				mutableState.ToRealTimeWithCurrentOffset(timerSequenceID.Timestamp),
 			) {
 				return &struct{}{}, nil
 			}
@@ -385,7 +380,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 		isHeartBeatTask := timerTask.TimeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT
 		ai, heartbeatTimeoutVis, ok := mutableState.GetActivityInfoWithTimerHeartbeat(timerTask.EventID)
 
-		if isHeartBeatTask && ok && queues.IsTimeExpired(timerTask, timerTask.GetVisibilityTime(), mutableState.ToRealTime(heartbeatTimeoutVis)) {
+		if isHeartBeatTask && ok && queues.IsTimeExpired(timerTask, timerTask.GetVisibilityTime(), mutableState.ToRealTimeWithCurrentOffset(heartbeatTimeoutVis)) {
 			if err := mutableState.UpdateActivityTaskStatusWithTimerHeartbeat(ai.ScheduledEventId, ai.TimerTaskStatus&^workflow.TimerTaskStatusCreatedHeartbeat, nil); err != nil {
 				return nil, err
 			}
@@ -826,8 +821,8 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 // getCurrentTime returns the shard's wall-clock view of "now" for t.clusterName.
 // Must stay wall-clock: it gates standby task-retry timing against VisibilityTime
 // (also wall-clock); mutableState.Now() is virtual time and would force-discard
-// time-skipping workflows. actionFn closures compare against virtual timestamps,
-// so they use mutableState.Now() instead.
+// time-skipping workflows. Timer actionFn closures also compare against
+// wall-clock timestamps after converting their virtual deadlines.
 //
 // TODO: deprecate this function and always use t.Now()
 // Only test code sets t.clusterName to be non-current cluster name

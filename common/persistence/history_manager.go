@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -179,8 +180,8 @@ func (m *executionManagerImpl) DeleteHistoryBranch(
 	var deleteRanges []InternalDeleteHistoryBranchRange
 	// for each branch range to delete, we iterate from bottom up, and stop when the range is also used by others
 findDeleteRanges:
-	for i := len(brsToDelete) - 1; i >= 0; i-- {
-		br := brsToDelete[i]
+	for _, br := range slices.Backward(brsToDelete) {
+
 		if maxEndNode, ok := usedBranches[br.GetBranchId()]; ok {
 			// branch is used by others, we can only delete from the maxEndNode
 			if maxEndNode != common.LastEventID {
@@ -418,7 +419,7 @@ func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
 		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse branch token: %v", err))
 	}
 
-	if len(request.History.Data) == 0 {
+	if request.History == nil || len(request.History.Data) == 0 {
 		return nil, &InvalidPersistenceRequestError{
 			Msg: "events to be appended cannot be empty",
 		}

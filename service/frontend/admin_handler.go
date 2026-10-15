@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	otellog "go.opentelemetry.io/otel/log"
+	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -85,11 +87,12 @@ type (
 		status int32
 
 		logger                     log.Logger
+		eventLogger                otellog.Logger
 		numberOfHistoryShards      int32
 		config                     *Config
 		namespaceDLQHandler        nsreplication.DLQMessageHandler
 		eventSerializer            serialization.Serializer
-		visibilityMgr              manager.VisibilityManager
+		visibilityMgr              manager.AdminVisibilityManager
 		persistenceExecutionName   string
 		namespaceReplicationQueue  persistence.NamespaceReplicationQueue
 		taskManager                persistence.TaskManager
@@ -121,8 +124,9 @@ type (
 		Config                              *Config
 		NamespaceReplicationQueue           persistence.NamespaceReplicationQueue
 		ReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
-		visibilityMgr                       manager.VisibilityManager
+		visibilityMgr                       manager.AdminVisibilityManager
 		Logger                              log.Logger
+		EventLogger                         otellog.Logger
 		TaskManager                         persistence.TaskManager
 		FairTaskManager                     persistence.FairTaskManager
 		PersistenceExecutionManager         persistence.ExecutionManager
@@ -151,9 +155,7 @@ type (
 	}
 )
 
-var (
-	_ adminservice.AdminServiceServer = (*AdminHandler)(nil)
-)
+var _ adminservice.AdminServiceServer = (*AdminHandler)(nil)
 
 // NewAdminHandler creates a gRPC handler for the adminservice
 func NewAdminHandler(
@@ -164,7 +166,6 @@ func NewAdminHandler(
 		primitives.HistoryService,
 		args.MembershipMonitor,
 		args.Config.HistoryHostErrorPercentage,
-		args.Config.HistoryHostSelfErrorProportion,
 		func(ctx context.Context, hostAddress string) (*historyservice.DeepHealthCheckResponse, error) {
 			return args.HistoryClient.DeepHealthCheck(ctx, &historyservice.DeepHealthCheckRequest{HostAddress: hostAddress})
 		},
@@ -173,6 +174,7 @@ func NewAdminHandler(
 
 	return &AdminHandler{
 		logger:                     args.Logger,
+		eventLogger:                args.EventLogger,
 		status:                     common.DaemonStatusInitialized,
 		numberOfHistoryShards:      args.PersistenceConfig.NumHistoryShards,
 		config:                     args.Config,
@@ -242,8 +244,9 @@ func (adh *AdminHandler) DeepHealthCheck(
 	}
 
 	return &adminservice.DeepHealthCheckResponse{
-		State:    result.State,
-		Services: services,
+		State:           result.State,
+		Services:        services,
+		UnenforcedState: result.ServiceDetail.GetUnenforcedState(),
 	}, nil
 }
 
@@ -398,8 +401,7 @@ func (adh *AdminHandler) unaliasAndValidateSearchAttributes(historyBatches []*co
 
 			unaliasedSas, err := searchattribute.UnaliasFields(adh.saMapperProvider, sas, nsName.String())
 			if err != nil {
-				var invArgErr *serviceerror.InvalidArgument
-				if !errors.As(err, &invArgErr) {
+				if _, ok := errors.AsType[*serviceerror.InvalidArgument](err); !ok {
 					return nil, err
 				}
 				// Mapper returns InvalidArgument if alias is not found. It means that history has field names, not aliases.
@@ -471,7 +473,6 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 		SkipForceReload: request.GetSkipForceReload(),
 		ArchetypeId:     archetypeID,
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -646,7 +647,6 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
 ) error {
-
 	execution := request.Execution
 	if execution.GetWorkflowId() == "" {
 		return workflow.ErrWorkflowIDNotSet
@@ -864,7 +864,32 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 	ctx context.Context,
 	request *adminservice.AddOrUpdateRemoteClusterRequest,
 ) (_ *adminservice.AddOrUpdateRemoteClusterResponse, retError error) {
+	var (
+		lifecycleEvent     *remoteClusterLifecycleEvent
+		remoteResponse     *adminservice.DescribeClusterResponse
+		persistedBefore    *persistence.GetClusterMetadataResponse
+		persistenceRequest *persistence.SaveClusterMetadataRequest
+	)
+	// Bracket deferred emission with panic capture: the inner capture converts handler panics
+	// into retError for the event, while the outer capture recovers panics from emission itself.
 	defer log.CapturePanic(adh.logger, &retError)
+	defer func() {
+		lifecycleEvent.emitUpsertFailure(retError, remoteResponse, persistedBefore, persistenceRequest)
+	}()
+	defer log.CapturePanic(adh.logger, &retError)
+	lifecycleEvent = newRemoteClusterUpsertLifecycleEvent(
+		ctx,
+		adh.eventLogger,
+		adh.clusterMetadata,
+		adh.config,
+		remoteClusterAPIAdmin,
+		remoteClusterUpsertRequestFields{
+			FrontendAddress:               request.GetFrontendAddress(),
+			FrontendHTTPAddress:           request.GetFrontendHttpAddress(), //nolint:staticcheck // Audit the deprecated API request as received.
+			EnableRemoteClusterConnection: request.GetEnableRemoteClusterConnection(),
+			EnableReplication:             request.GetEnableReplication(),
+		},
+	)
 
 	adminClient := adh.clientFactory.NewRemoteAdminClientWithTimeout(
 		request.GetFrontendAddress(),
@@ -874,6 +899,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 
 	// Fetch cluster metadata from remote cluster
 	resp, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
+	remoteResponse = resp
 	if err != nil {
 		return nil, err
 	}
@@ -905,14 +931,14 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 	)
 	switch err.(type) {
 	case nil:
+		persistedBefore = clusterData
 		updateRequestVersion = clusterData.Version
 	case *serviceerror.NotFound:
 		updateRequestVersion = 0
 	default:
 		return nil, err
 	}
-
-	applied, err := clusterMetadataMrg.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
+	saveRequest := &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: &persistencespb.ClusterMetadata{
 			ClusterName:              resp.GetClusterName(),
 			HistoryShardCount:        resp.GetHistoryShardCount(),
@@ -927,7 +953,9 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 			Tags:                     resp.GetTags(),
 		},
 		Version: updateRequestVersion,
-	})
+	}
+	persistenceRequest = saveRequest
+	applied, err := clusterMetadataMrg.SaveClusterMetadata(ctx, saveRequest)
 	if err != nil {
 		return nil, err
 	}
@@ -935,6 +963,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 		return nil, serviceerror.NewInvalidArgument(
 			"Cannot update remote cluster due to update immutable fields")
 	}
+	lifecycleEvent.emitUpsertSuccess(persistedBefore, persistenceRequest)
 	return &adminservice.AddOrUpdateRemoteClusterResponse{}, nil
 }
 
@@ -944,18 +973,42 @@ func (adh *AdminHandler) RemoveRemoteCluster(
 	ctx context.Context,
 	request *adminservice.RemoveRemoteClusterRequest,
 ) (_ *adminservice.RemoveRemoteClusterResponse, retError error) {
+	var (
+		lifecycleEvent     *remoteClusterLifecycleEvent
+		cachedBefore       cachedRemoteClusterLookup
+		persistenceRequest *persistence.DeleteClusterMetadataRequest
+	)
+	// Bracket deferred emission with panic capture: the inner capture converts handler panics
+	// into retError for the event, while the outer capture recovers panics from emission itself.
 	defer log.CapturePanic(adh.logger, &retError)
-
-	if err := validateClusterNotInUseByNamespaces(adh.namespaceRegistry, adh.clusterMetadata.GetCurrentClusterName(), request.GetClusterName()); err != nil {
-		return nil, err
-	}
-
-	if err := adh.clusterMetadataManager.DeleteClusterMetadata(
+	defer func() {
+		lifecycleEvent.emitRemoveFailure(retError, cachedBefore, persistenceRequest)
+	}()
+	defer log.CapturePanic(adh.logger, &retError)
+	clusterName := request.GetClusterName()
+	lifecycleEvent = newRemoteClusterRemoveLifecycleEvent(
 		ctx,
-		&persistence.DeleteClusterMetadataRequest{ClusterName: request.GetClusterName()},
-	); err != nil {
+		adh.eventLogger,
+		adh.clusterMetadata,
+		adh.config,
+		remoteClusterAPIAdmin,
+		remoteClusterRemoveRequestFields{ClusterName: clusterName},
+	)
+	if lifecycleEvent != nil {
+		// Admin does not use the cluster cache for removal; this lookup is audit-only.
+		cachedBefore = lookupCachedRemoteCluster(adh.clusterMetadata, clusterName)
+	}
+
+	if err := validateClusterNotInUseByNamespaces(adh.namespaceRegistry, adh.clusterMetadata.GetCurrentClusterName(), clusterName); err != nil {
 		return nil, err
 	}
+
+	deleteRequest := &persistence.DeleteClusterMetadataRequest{ClusterName: clusterName}
+	persistenceRequest = deleteRequest
+	if err := adh.clusterMetadataManager.DeleteClusterMetadata(ctx, deleteRequest); err != nil {
+		return nil, err
+	}
+	lifecycleEvent.emitRemoveSuccess(cachedBefore, persistenceRequest)
 	return &adminservice.RemoveRemoteClusterResponse{}, nil
 }
 
@@ -1263,34 +1316,36 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 // StartAdminBatchOperation starts an admin batch operation.
 func (adh *AdminHandler) StartAdminBatchOperation(
 	ctx context.Context,
-	request *adminservice.StartAdminBatchOperationRequest,
+	adminRequest *adminservice.StartAdminBatchOperationRequest,
 ) (_ *adminservice.StartAdminBatchOperationResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	if request == nil {
+	if adminRequest == nil {
 		return nil, errRequestNotSet
 	}
-
-	if err := validateAdminBatchOperation(request); err != nil {
+	if err := validateAdminBatchOperation(adminRequest); err != nil {
 		return nil, err
 	}
 
-	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	// Admin batch workflows run in the temporal-system namespace to operate on target namespaces.
+	targetNS := adminRequest.GetNamespace()
+	targetNSID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(targetNS))
 	if err != nil {
 		return nil, err
 	}
+	sysNS, sysNSID := primitives.SystemLocalNamespace, primitives.SystemNamespaceID
+	operateJobID := targetNS + ":" + adminRequest.GetJobId()
 
-	// Validate concurrent batch operation
-	maxConcurrentBatchOperation := adh.config.MaxConcurrentAdminBatchOperation(request.GetNamespace())
+	// Admin batch operations only run in the system namespace, so the concurrency limit is global.
+	maxConcurrentBatchOperation := adh.config.MaxConcurrentAdminBatchOperation()
 	countResp, err := adh.visibilityMgr.CountWorkflowExecutions(ctx, &manager.CountWorkflowExecutionsRequest{
-		NamespaceID: namespaceID,
-		Namespace:   namespace.Name(request.GetNamespace()),
+		NamespaceID: namespace.ID(sysNSID),
+		Namespace:   namespace.Name(sysNS),
 		Query:       batcher.OpenAdminBatchOperationQuery,
 	})
 	if err != nil {
 		return nil, err
 	}
-
 	openAdminBatchOperationCount := int(countResp.Count)
 	if openAdminBatchOperationCount >= maxConcurrentBatchOperation {
 		return nil, &serviceerror.ResourceExhausted{
@@ -1300,32 +1355,46 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 		}
 	}
 
-	input := &batchspb.BatchOperationInput{
-		AdminRequest: request,
-		NamespaceId:  namespaceID.String(),
+	// prepare the batch-workflow input
+	batchWfInput := &batchspb.BatchOperationInput{
+		AdminRequest: adminRequest,
+		NamespaceId:  targetNSID.String(),
 	}
-
-	identity := request.GetIdentity()
+	identity := adminRequest.GetIdentity()
 	var batchTypeMemo string
-	switch op := request.Operation.(type) {
+	switch op := adminRequest.Operation.(type) {
 	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
 		batchTypeMemo = "refresh_tasks"
+	case *adminservice.StartAdminBatchOperationRequest_DelegationOperation:
+		// These operations mutate workflow state of the target ns,
+		// so the cluster should be active for the target namespace.
+		if err := adh.checkTargetNamespaceActive(targetNS); err != nil {
+			return nil, err
+		}
+		delegatedBatchType := op.DelegationOperation
+		delegatedBatchRequest, err := createDelegatedBatchRequest(adminRequest, delegatedBatchType)
+		if err != nil {
+			return nil, err
+		}
+		if err := batcher.ValidateBatchOperation(delegatedBatchRequest); err != nil {
+			return nil, err
+		}
+		batchWfInput.Request = delegatedBatchRequest
+		batchWfInput.BatchType = delegatedBatchType
+		batchTypeMemo = snakeCaseBatchType(delegatedBatchType)
 	default:
 		return nil, serviceerror.NewInvalidArgumentf("The operation type %T is not supported", op)
 	}
-
-	inputPayload, err := payloads.Encode(input)
+	batchWfInputPayload, err := payloads.Encode(batchWfInput)
 	if err != nil {
 		return nil, err
 	}
-
 	memo := &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{
 			batcher.BatchOperationTypeMemo: payload.EncodeString(batchTypeMemo),
-			batcher.BatchReasonMemo:        payload.EncodeString(request.GetReason()),
+			batcher.BatchReasonMemo:        payload.EncodeString(adminRequest.GetReason()),
 		},
 	}
-
 	var searchAttributes *commonpb.SearchAttributes
 	searchattribute.AddSearchAttributes(
 		&searchAttributes,
@@ -1333,12 +1402,13 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 		chasm.SearchAttributeTemporalNamespaceDivision.Value(batcher.AdminNamespaceDivision),
 	)
 
+	// start batch workflow
 	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:                request.Namespace,
-		WorkflowId:               request.GetJobId(),
+		Namespace:                sysNS,
+		WorkflowId:               operateJobID,
 		WorkflowType:             &commonpb.WorkflowType{Name: batcher.BatchWFTypeProtobufName},
 		TaskQueue:                &taskqueuepb.TaskQueue{Name: primitives.PerNSWorkerTaskQueue},
-		Input:                    inputPayload,
+		Input:                    batchWfInputPayload,
 		Identity:                 identity,
 		RequestId:                uuid.NewString(),
 		WorkflowIdConflictPolicy: enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL,
@@ -1350,7 +1420,7 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 	_, err = adh.historyClient.StartWorkflowExecution(
 		ctx,
 		common.CreateHistoryStartWorkflowRequest(
-			namespaceID.String(),
+			sysNSID,
 			startReq,
 			nil,
 			nil,
@@ -1360,7 +1430,7 @@ func (adh *AdminHandler) StartAdminBatchOperation(
 	if err != nil {
 		return nil, err
 	}
-	return &adminservice.StartAdminBatchOperationResponse{}, nil
+	return &adminservice.StartAdminBatchOperationResponse{WorkflowId: operateJobID}, nil
 }
 
 func validateAdminBatchOperation(params *adminservice.StartAdminBatchOperationRequest) error {
@@ -1374,6 +1444,9 @@ func validateAdminBatchOperation(params *adminservice.StartAdminBatchOperationRe
 	if len(params.GetJobId()) == 0 {
 		return serviceerror.NewInvalidArgument("JobId is not set on request.")
 	}
+	if strings.Contains(params.GetJobId(), ":") {
+		return serviceerror.NewInvalidArgument("JobId cannot contain ':'")
+	}
 	if len(params.GetVisibilityQuery()) != 0 && len(params.GetExecutions()) != 0 {
 		return serviceerror.NewInvalidArgument("batch query and executions are mutually exclusive")
 	}
@@ -1382,9 +1455,80 @@ func validateAdminBatchOperation(params *adminservice.StartAdminBatchOperationRe
 	case *adminservice.StartAdminBatchOperationRequest_RefreshTasksOperation:
 		// No additional validation needed
 		return nil
+	case *adminservice.StartAdminBatchOperationRequest_DelegationOperation:
+		// The delegated batch type will be validated after the delegated request is built
+		return nil
 	default:
 		return serviceerror.NewInvalidArgumentf("not supported admin batch type: %T", op)
 	}
+}
+
+// checkTargetNamespaceActive reports whether this cluster may mutate the target namespace's
+// executions. The batch workflow itself runs in the system namespace, which is local and so
+// always active here, which is why the target namespace has to be checked separately.
+func (adh *AdminHandler) checkTargetNamespaceActive(targetNS string) error {
+	nsEntry, err := adh.namespaceRegistry.GetNamespace(namespace.Name(targetNS))
+	if err != nil {
+		return err
+	}
+	currentCluster := adh.clusterMetadata.GetCurrentClusterName()
+	//nolint:forbidigo // a batch spans many workflows, so there is no single businessID to route on
+	if !nsEntry.ActiveInCluster(currentCluster) {
+		return serviceerror.NewNamespaceNotActive(
+			targetNS,
+			currentCluster,
+			nsEntry.ActiveClusterName(namespace.RoutingKey{}),
+		)
+	}
+	return nil
+}
+
+func createDelegatedBatchRequest(
+	adminRequest *adminservice.StartAdminBatchOperationRequest,
+	batchType enumspb.BatchOperationType,
+) (*workflowservice.StartBatchOperationRequest, error) {
+	delegatedBatchRequest := &workflowservice.StartBatchOperationRequest{
+		Namespace:       adminRequest.GetNamespace(), // the target ns
+		JobId:           adminRequest.GetJobId(),
+		Reason:          adminRequest.GetReason(),
+		VisibilityQuery: adminRequest.GetVisibilityQuery(),
+	}
+	targetExecutionType := enumspb.EXECUTION_TYPE_WORKFLOW
+	// Only delegate destructive operations whose fields can be derived from the admin envelope.
+	switch batchType {
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_WORKFLOW:
+		delegatedBatchRequest.Operation = &workflowservice.StartBatchOperationRequest_TerminationOperation{
+			TerminationOperation: &batchpb.BatchOperationTermination{Identity: adminRequest.GetIdentity()},
+		}
+	case enumspb.BATCH_OPERATION_TYPE_TERMINATE_ACTIVITY:
+		delegatedBatchRequest.Operation = &workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation{
+			TerminateActivitiesOperation: &batchpb.BatchOperationTerminateActivities{
+				Identity: adminRequest.GetIdentity(),
+				Reason:   adminRequest.GetReason(),
+			},
+		}
+		targetExecutionType = enumspb.EXECUTION_TYPE_ACTIVITY
+	case enumspb.BATCH_OPERATION_TYPE_DELETE_WORKFLOW:
+		delegatedBatchRequest.Operation = &workflowservice.StartBatchOperationRequest_DeletionOperation{
+			DeletionOperation: &batchpb.BatchOperationDeletion{Identity: adminRequest.GetIdentity()},
+		}
+	case enumspb.BATCH_OPERATION_TYPE_DELETE_ACTIVITY:
+		delegatedBatchRequest.Operation = &workflowservice.StartBatchOperationRequest_DeleteActivitiesOperation{
+			DeleteActivitiesOperation: &batchpb.BatchOperationDeleteActivities{},
+		}
+		targetExecutionType = enumspb.EXECUTION_TYPE_ACTIVITY
+	default:
+		return nil, serviceerror.NewInvalidArgumentf(
+			"batch operation type %v cannot be delegated to the admin API", batchType)
+	}
+	for _, execution := range adminRequest.GetExecutions() {
+		delegatedBatchRequest.TargetExecutions = append(delegatedBatchRequest.TargetExecutions, &commonpb.Execution{
+			Type:       targetExecutionType,
+			BusinessId: execution.GetWorkflowId(),
+			RunId:      execution.GetRunId(),
+		})
+	}
+	return delegatedBatchRequest, nil
 }
 
 // ResendReplicationTasks requests replication task from remote cluster
@@ -1471,7 +1615,6 @@ func (adh *AdminHandler) DescribeTaskQueuePartition(
 		ReportPollers:                 true,
 		ReportInternalTaskQueueStatus: true,
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -1506,7 +1649,6 @@ func (adh *AdminHandler) ForceUnloadTaskQueuePartition(
 		NamespaceId:        namespaceID.String(),
 		TaskQueuePartition: request.GetTaskQueuePartition(),
 	})
-
 	if err != nil {
 		return nil, err
 	}
@@ -1678,7 +1820,6 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 			if err != nil {
 				logger.Error("Failed to close AdminStreamReplicationMessages server", tag.Error(err))
 			}
-
 		}()
 
 		for !shutdownChan.IsShutdown() {
@@ -1734,7 +1875,6 @@ func (adh *AdminHandler) StreamWorkflowReplicationMessages(
 				}); err != nil {
 					if err != io.EOF {
 						logger.Info("AdminStreamReplicationMessages server -> client encountered error", tag.Error(err))
-
 					}
 					return
 				}
@@ -2251,23 +2391,32 @@ func (adh *AdminHandler) migrateScheduleToWorkflow(
 			},
 		},
 	})
+	info := descResp.GetWorkflowExecutionInfo()
 	switch {
-	case common.IsNotFoundError(err):
-	case err != nil:
+	case err != nil && !common.IsNotFoundError(err):
 		return nil, err
-	case descResp.GetWorkflowExecutionInfo().GetType().GetName() == dummy.DummyWFTypeName:
-		sentinelIdleTimeRemaining := max(time.Until(descResp.GetWorkflowExecutionInfo().GetStartTime().AsTime().Add(chasmscheduler.SentinelIdleTime)), 0)
+	case common.IsNotFoundError(err) || info.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING:
+		// A closed workflow does not occupy the V1 ID: the create path only treats
+		// RUNNING workflows as occupying it (isRealSchedulerInV1KeySpace), and an
+		// expired sentinel completes rather than disappearing, staying describable
+		// for the namespace's whole retention period. Blocking on it here would
+		// stall rollback for days instead of the 15 minutes a sentinel reserves.
+	case info.GetType().GetName() == dummy.DummyWFTypeName:
+		startTime := info.GetStartTime().AsTime()
 		adh.logger.Warn(
 			"schedule migration to workflow blocked by workflow sentinel",
 			tag.ScheduleID(request.GetScheduleId()),
-			tag.Duration("sentinel-idle-time", sentinelIdleTimeRemaining),
+			tag.Duration("sentinel-idle-time", max(time.Until(startTime.Add(chasmscheduler.SentinelIdleTime)), 0)),
+			// Age disambiguates a sentinel still inside its idle window from one
+			// running past it (idle-time reads 0s in both cases).
+			tag.Duration("sentinel-age", time.Since(startTime)),
 		)
 		return nil, chasmscheduler.ErrSentinelBlocked
 	default:
 		adh.logger.Warn(
 			"schedule migration to workflow found existing workflow",
 			tag.ScheduleID(request.GetScheduleId()),
-			tag.WorkflowType(descResp.GetWorkflowExecutionInfo().GetType().GetName()),
+			tag.WorkflowType(info.GetType().GetName()),
 		)
 	}
 
@@ -2283,4 +2432,64 @@ func (adh *AdminHandler) migrateScheduleToWorkflow(
 		return nil, err
 	}
 	return &adminservice.MigrateScheduleResponse{}, nil
+}
+
+func (adh *AdminHandler) ListExecutions(
+	ctx context.Context,
+	request *adminservice.ListExecutionsRequest,
+) (_ *adminservice.ListExecutionsResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	pageSize := int(request.GetPageSize())
+	maxPageSize := adh.config.VisibilityMaxPageSize(request.GetNamespace())
+	if pageSize <= 0 || pageSize > maxPageSize {
+		pageSize = maxPageSize
+	}
+
+	resp, err := adh.visibilityMgr.AdminListExecutions(
+		ctx, &manager.AdminListExecutionsRequest{
+			Namespace:     namespace.Name(request.GetNamespace()),
+			Query:         request.GetQuery(),
+			PageSize:      pageSize,
+			NextPageToken: request.GetNextPageToken(),
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &adminservice.ListExecutionsResponse{
+		Executions:    resp.Executions,
+		NextPageToken: resp.NextPageToken,
+	}, nil
+}
+
+func (adh *AdminHandler) CountExecutions(
+	ctx context.Context,
+	request *adminservice.CountExecutionsRequest,
+) (_ *adminservice.CountExecutionsResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	resp, err := adh.visibilityMgr.AdminCountExecutions(
+		ctx, &manager.AdminCountExecutionsRequest{
+			Namespace: namespace.Name(request.GetNamespace()),
+			Query:     request.GetQuery(),
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return &adminservice.CountExecutionsResponse{
+		Count:  resp.Count,
+		Groups: resp.Groups,
+	}, nil
 }

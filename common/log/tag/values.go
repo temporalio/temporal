@@ -138,6 +138,14 @@ var (
 	VersionChecker                     = component("version-checker")
 )
 
+// Pre-defined values for Nexus stage tag. Nexus stage identifies the request lifecycle position.
+var (
+	NexusStageCallerOutbound  = nexusStage("caller-outbound")
+	NexusStageCallerInbound   = nexusStage("caller-inbound")
+	NexusStageHandlerInbound  = nexusStage("handler-inbound")
+	NexusStageHandlerOutbound = nexusStage("handler-outbound")
+)
+
 // Pre-defined values for scope tag
 var (
 	ScopeHost      = scope("host")

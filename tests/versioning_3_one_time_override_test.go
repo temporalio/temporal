@@ -31,7 +31,7 @@ func TestVersioning3OneTimeOverrideFunctionalSuite(t *testing.T) {
 }
 
 func (s *Versioning3OneTimeOverrideSuite) setupEnv(opts ...testcore.TestOption) *VersioningTestEnv {
-	return setupVersioning3Env(s.T(), opts...)
+	return newVersioning3TestEnv(s.T(), opts...)
 }
 
 // TestChildWorkflowExplicitOverrideRoutesToTargetAndClears verifies the

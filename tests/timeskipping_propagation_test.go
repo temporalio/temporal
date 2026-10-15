@@ -625,27 +625,26 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_ThreeGenerations() {
 		"P's initiated event for C carries P's full accumulated at command time (3h = G's 1h + P's pt1 2h)")
 }
 
-// TestTSPInChildWf_AdmissionTimestampsShifted verifies the time-shift block inside
-// initTimeSkippingInfo (mutable_state_impl.go): when a child workflow boots with a
-// non-zero PropagatedSkippedDuration, the boot-time admission timestamps on the
-// child's MS are shifted forward by accum so they live in the virtual frame, while
-// the WorkflowRunTimeoutTask's VisibilityTimestamp stays in the wall frame.
+// TestTSPInChildWf_AdmissionTimestampsShifted verifies that a child workflow with a
+// non-zero PropagatedSkippedDuration is admitted directly in the parent's virtual
+// clock frame, while the WorkflowRunTimeoutTask's VisibilityTimestamp stays in the
+// wall frame.
 //
 // Scenario:
 //   - Parent TSC enabled. Parent runs StartTimer(t1, 1h) → idle → server skips 1h.
 //     Parent's AccumulatedSkippedDuration ≈ 1h.
-//   - Parent issues StartChildWorkflow with WorkflowRunTimeout=2h. The child's
-//     initiated event carries InitialSkippedDuration=1h. On the child MS,
-//     applyTimeSkippingConfig seeds AccumulatedSkippedDuration=1h, and
-//     initTimeSkippingInfo shifts admission timestamps forward by accum=1h.
+//   - Parent issues StartChildWorkflow with WorkflowRunTimeout=2h and
+//     WorkflowExecutionTimeout=4h. The child's initiated event carries
+//     InitialSkippedDuration=1h. On the child MS,
+//     applyTimeSkippingConfig seeds AccumulatedSkippedDuration=1h, and the child
+//     start request uses wallChildBoot+1h as its admission time.
 //
 // Boot-time assertions (virtual frame):
 //   - executionState.StartTime ≈ wallChildBoot + 1h
 //   - executionInfo.StartTime ≈ wallChildBoot + 1h
 //   - executionInfo.ExecutionTime ≈ wallChildBoot + 1h (no first-WT delay)
 //   - executionInfo.WorkflowRunExpirationTime ≈ wallChildBoot + 1h + 2h
-//   - executionInfo.WorkflowExecutionExpirationTime: zero when ExecutionTimeout is
-//     unset on the child; otherwise shifted by the same formula.
+//   - executionInfo.WorkflowExecutionExpirationTime ≈ wallChildBoot + 1h + 4h
 //
 // Wall-clock assertion (the load-bearing one): the child's WorkflowRunTimeoutTask
 // must fire at wallChildBoot + 2h — i.e., virtual_expiration − accum — so a
@@ -700,13 +699,14 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_AdmissionTimestampsS
 				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
 				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{
 					StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
-						Namespace:           ns,
-						WorkflowId:          childWFID,
-						WorkflowType:        childWFType,
-						TaskQueue:           tq,
-						WorkflowRunTimeout:  durationpb.New(2 * time.Hour),
-						WorkflowTaskTimeout: durationpb.New(10 * time.Second),
-						ParentClosePolicy:   enumspb.PARENT_CLOSE_POLICY_ABANDON,
+						Namespace:                ns,
+						WorkflowId:               childWFID,
+						WorkflowType:             childWFType,
+						TaskQueue:                tq,
+						WorkflowExecutionTimeout: durationpb.New(4 * time.Hour),
+						WorkflowRunTimeout:       durationpb.New(2 * time.Hour),
+						WorkflowTaskTimeout:      durationpb.New(10 * time.Second),
+						ParentClosePolicy:        enumspb.PARENT_CLOSE_POLICY_ABANDON,
 					},
 				},
 			}
@@ -756,6 +756,7 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_AdmissionTimestampsS
 
 	const accum = time.Hour
 	const runTimeout = 2 * time.Hour
+	const executionTimeout = 4 * time.Hour
 	const tol = time.Minute
 
 	expectedStart := wallChildBoot.Add(accum)
@@ -772,15 +773,11 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInChildWf_AdmissionTimestampsS
 	s.WithinDuration(expectedRunExpiration, childMS.State.ExecutionInfo.WorkflowRunExpirationTime.AsTime(), tol,
 		"WorkflowRunExpirationTime = StartTime + RunTimeout in the virtual frame")
 
-	// WorkflowExecutionExpirationTime: the parent didn't set ExecutionTimeout, so the
-	// child's WorkflowExecutionTimeout is unset and the ExpirationTime is zero. The
-	// shift block in initTimeSkippingInfo only shifts non-nil values, so both branches
-	// are valid: zero is preserved as zero; non-zero is shifted by accum.
 	weExpiration := childMS.State.ExecutionInfo.WorkflowExecutionExpirationTime
-	if weExpiration != nil && !weExpiration.AsTime().IsZero() {
-		s.WithinDuration(expectedRunExpiration, weExpiration.AsTime(), tol,
-			"WorkflowExecutionExpirationTime, when set, lives in the virtual frame and is shifted by accum")
-	}
+	s.NotNil(weExpiration)
+	expectedExecutionExpiration := wallChildBoot.Add(accum + executionTimeout)
+	s.WithinDuration(expectedExecutionExpiration, weExpiration.AsTime(), tol,
+		"transfer request must derive WorkflowExecutionExpirationTime from the virtual child start")
 
 	recorder := env.GetTestCluster().GetHistoryTaskRecorder()
 	s.NotNil(recorder)
@@ -1185,6 +1182,9 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInReset() {
 	s.Equal(1, optionsUpdatedCount,
 		"reset run should contain exactly one reapplied OPTIONS_UPDATED event")
 	s.NotNil(startedEvent)
+	s.WithinDuration(startedEvent.GetEventTime().AsTime(), resetMS.State.ExecutionState.GetStartTime().AsTime(), 10*time.Second,
+		"reset/rebuild must preserve the already-materialized history start time")
+	s.WithinDuration(startedEvent.GetEventTime().AsTime(), resetMS.State.ExecutionInfo.GetStartTime().AsTime(), 10*time.Second)
 	startedTSC := startedEvent.GetWorkflowExecutionStartedEventAttributes().GetTimeSkippingConfig()
 	s.NotNil(startedTSC, "WorkflowExecutionStarted should carry the original TimeSkippingConfig")
 	s.False(startedTSC.GetEnabled(),
@@ -1303,6 +1303,11 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN() {
 	})
 	s.NoError(err)
 	s.NotEmpty(hist2.History.Events)
+	startedEventTime := hist2.History.Events[0].GetEventTime().AsTime()
+	s.WithinDuration(startedEventTime, run2MS.State.ExecutionState.GetStartTime().AsTime(), 10*time.Second,
+		"continue-as-new constructor time is already virtual and must not be shifted again")
+	s.WithinDuration(startedEventTime, run2MS.State.ExecutionInfo.GetStartTime().AsTime(), 10*time.Second)
+	s.WithinDuration(startedEventTime, run2MS.State.ExecutionInfo.GetExecutionTime().AsTime(), 10*time.Second)
 	startedAttr := hist2.History.Events[0].GetWorkflowExecutionStartedEventAttributes()
 	s.NotNil(startedAttr)
 	s.Equal(run1ID, startedAttr.GetContinuedExecutionRunId(),
@@ -1402,6 +1407,95 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN_SkipSessionPropagated() 
 		"started event TSC carries the propagated budget")
 	s.Equal(int32(1), startedAttr.GetTimeSkippingStatePropagation().GetInitialSkipCount(),
 		"started event carries run 1's SessionSkipCount as InitialSkipCount")
+}
+
+// TestTSPInCaN_ExecutionExpirationRemainsAbsolute verifies that time-skipping state
+// propagation does not extend the workflow execution timeout across runs. The expiration
+// timestamp is already expressed in virtual time and must remain unchanged when the next
+// run inherits the accumulated skipped duration.
+func (s *TimeSkippingPropagationTestSuite) TestTSPInCaN_ExecutionExpirationRemainsAbsolute() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	ctx := s.Context()
+
+	const executionTimeout = 3 * time.Hour
+	wfType := tv.WorkflowType()
+	wfID := tv.WorkflowID()
+	tq := tv.TaskQueue()
+
+	start, err := env.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:                uuid.NewString(),
+		Namespace:                env.Namespace().String(),
+		WorkflowId:               wfID,
+		WorkflowType:             wfType,
+		TaskQueue:                tq,
+		WorkflowExecutionTimeout: durationpb.New(executionTimeout),
+		WorkflowRunTimeout:       durationpb.New(24 * time.Hour),
+		WorkflowTaskTimeout:      durationpb.New(10 * time.Second),
+		TimeSkippingConfig:       &commonpb.TimeSkippingConfig{Enabled: true},
+	})
+	s.NoError(err)
+	run1ID := start.RunId
+
+	state := 0
+	handler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		fired := firedTimers(task)
+		switch {
+		case state == 0:
+			state = 1
+			return cmdsResponse(timerCmd("t1", time.Hour)), nil
+		case state == 1 && fired["t1"]:
+			state = 2
+			return cmdsResponse(continueAsNewCmd(wfType, tq)), nil
+		case state == 2:
+			state = 3
+			return cmdsResponse(), nil
+		}
+		return cmdsResponse(), nil
+	}
+
+	for i := range 3 {
+		_, pollErr := env.TaskPoller().PollAndHandleWorkflowTask(tv, handler)
+		if pollErr != nil {
+			s.T().Logf("iter %d: poll error: %v", i, pollErr)
+		}
+	}
+
+	var status enumspb.WorkflowExecutionStatus
+	s.AwaitTrue(func() bool {
+		desc, describeErr := env.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: wfID},
+		})
+		if describeErr != nil {
+			return false
+		}
+		status = desc.WorkflowExecutionInfo.Status
+		return status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	}, 15*time.Second, 100*time.Millisecond)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT, status)
+
+	run1MS := s.getMutableState(env, wfID, run1ID)
+	originalExpiration := run1MS.State.ExecutionInfo.GetWorkflowExecutionExpirationTime().AsTime()
+	s.False(originalExpiration.IsZero())
+
+	run2MS := s.getMutableStateByID(ctx, env, wfID)
+	run2ID := run2MS.State.ExecutionState.RunId
+	s.NotEqual(run1ID, run2ID)
+	s.Equal(originalExpiration, run2MS.State.ExecutionInfo.GetWorkflowExecutionExpirationTime().AsTime(),
+		"continue-as-new must preserve the chain's absolute virtual execution-expiration deadline")
+
+	hist2, err := env.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace: env.Namespace().String(),
+		Execution: &commonpb.WorkflowExecution{WorkflowId: wfID, RunId: run2ID},
+	})
+	s.NoError(err)
+	s.NotEmpty(hist2.History.Events)
+	terminalEvent := hist2.History.Events[len(hist2.History.Events)-1]
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT, terminalEvent.GetEventType())
+	s.WithinDuration(originalExpiration, terminalEvent.GetEventTime().AsTime(), 10*time.Second,
+		"workflow must time out at the original absolute virtual deadline")
 }
 
 // TestTSPInRetry verifies that a retried run is a same-lineage continuation: it inherits
@@ -1529,6 +1623,10 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInRetry() {
 	s.NotEmpty(hist2.History.Events)
 	startedAttr := hist2.History.Events[0].GetWorkflowExecutionStartedEventAttributes()
 	s.NotNil(startedAttr)
+	expectedAttempt2Start := hist2.History.Events[0].GetEventTime().AsTime()
+	s.WithinDuration(expectedAttempt2Start, attempt2MS.State.ExecutionState.GetStartTime().AsTime(), 10*time.Second,
+		"WFT-completion retry event and mutable state must be constructed in the same virtual frame")
+	s.WithinDuration(expectedAttempt2Start, attempt2MS.State.ExecutionInfo.GetStartTime().AsTime(), 10*time.Second)
 	s.Equal(attempt1ID, startedAttr.GetContinuedExecutionRunId(),
 		"attempt 2 references attempt 1 as its predecessor via ContinuedExecutionRunId")
 	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_RETRY, startedAttr.GetInitiator(),
@@ -1671,6 +1769,10 @@ func (s *TimeSkippingPropagationTestSuite) TestTSPInCron() {
 	s.NotEmpty(hist2.History.Events)
 	startedAttr := hist2.History.Events[0].GetWorkflowExecutionStartedEventAttributes()
 	s.NotNil(startedAttr)
+	expectedRun2Start := hist2.History.Events[0].GetEventTime().AsTime()
+	s.WithinDuration(expectedRun2Start, run2MS.State.ExecutionState.GetStartTime().AsTime(), 90*time.Second,
+		"cron event and mutable state must be constructed in the same virtual frame")
+	s.WithinDuration(expectedRun2Start, run2MS.State.ExecutionInfo.GetStartTime().AsTime(), 90*time.Second)
 	s.Equal(run1ID, startedAttr.GetContinuedExecutionRunId(),
 		"run 2 references run 1 as its predecessor via ContinuedExecutionRunId")
 	s.Equal(enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE, startedAttr.GetInitiator(),

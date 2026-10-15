@@ -65,7 +65,7 @@ func TestFinalizer(t *testing.T) {
 			capture := mh.StartCapture()
 
 			var completed atomic.Int32
-			for i := 0; i < 5; i += 1 {
+			for i := range 5 {
 				require.NoError(t, f.Register(
 					fmt.Sprintf("%v", i),
 					func(ctx context.Context) error {

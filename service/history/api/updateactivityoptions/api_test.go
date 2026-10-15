@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	activitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -20,7 +21,10 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/activityoptions"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives"
@@ -193,7 +197,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsWfNotRunning() {
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 
-	_, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId())
+	_, _, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId())
 	s.Error(err)
 	s.ErrorAs(err, &consts.ErrWorkflowCompleted)
 }
@@ -215,7 +219,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsWfNoActivity() {
 
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(nil, false)
-	_, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId())
+	_, _, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId())
 	s.Error(err)
 	s.ErrorAs(err, &consts.ErrActivityNotFound)
 }
@@ -278,11 +282,73 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsAcceptance() {
 		},
 	}
 
-	response, err := processActivityOptionsRequest(
+	response, _, err := processActivityOptionsRequest(
 		s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId())
 
 	s.NoError(err)
 	s.NotNil(response)
+}
+
+func (s *activityOptionsSuite) TestInvokeCapturesMetricsFromUpdatedActivity() {
+	s.mockShard.GetConfig().BreakdownMetricsByTaskQueue = dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true)
+	metricsHandler := metricstest.NewCaptureHandler()
+	metricCapture := metricsHandler.StartCapture()
+	s.T().Cleanup(func() {
+		metricsHandler.StopCapture(metricCapture)
+	})
+	s.mockShard.SetMetricsHandler(metricsHandler)
+
+	activityInfo := &persistencespb.ActivityInfo{
+		ActivityId:          "activity_id",
+		ActivityType:        &commonpb.ActivityType{Name: "activity_type"},
+		TaskQueue:           "old-task-queue",
+		ScheduledEventId:    1,
+		StartedEventId:      2,
+		StartToCloseTimeout: durationpb.New(time.Second),
+	}
+	workflowContext := historyi.NewMockWorkflowContext(s.controller)
+	workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.mockShard).Return(s.mockMutableState, nil)
+	workflowContext.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), s.mockShard).Return(nil)
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
+		gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+	).Return(workflowContext, wcache.NoopReleaseFn, nil)
+
+	s.mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
+		RunId: tests.RunID,
+	}).AnyTimes()
+	s.mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
+	s.mockMutableState.EXPECT().GetWorkflowType().Return(&commonpb.WorkflowType{Name: "workflow_type"})
+	s.mockMutableState.EXPECT().GetEffectiveVersioningBehavior().Return(enumspb.VERSIONING_BEHAVIOR_UNSPECIFIED)
+	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	s.mockMutableState.EXPECT().GetActivityByActivityID("activity_id").Return(activityInfo, true).Times(1)
+	s.mockMutableState.EXPECT().UpdateActivity(activityInfo.ScheduledEventId, gomock.Any()).DoAndReturn(
+		func(_ int64, updater historyi.ActivityUpdater) error {
+			return updater(activityInfo, s.mockMutableState)
+		},
+	)
+
+	response, err := Invoke(context.Background(), &historyservice.UpdateActivityOptionsRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		UpdateRequest: &workflowservice.UpdateActivityOptionsRequest{
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: tests.WorkflowID,
+				RunId:      tests.RunID,
+			},
+			Activity: &workflowservice.UpdateActivityOptionsRequest_Id{Id: activityInfo.ActivityId},
+			ActivityOptions: &activitypb.ActivityOptions{
+				TaskQueue: &taskqueuepb.TaskQueue{Name: "new-task-queue"},
+			},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"task_queue.name"}},
+		},
+	}, s.mockShard, s.workflowConsistencyChecker)
+
+	s.Require().NoError(err)
+	s.Require().NotNil(response)
+	s.Require().Equal("new-task-queue", activityInfo.TaskQueue)
+	recordings := metricCapture.Snapshot()[metrics.ActivityUpdateOptions.Name()]
+	s.Require().Len(recordings, 1)
+	s.Require().Equal("new-task-queue", recordings[0].Tags["taskqueue"])
+	s.Require().Equal(metrics.ActivityUpdateOptionsScope, recordings[0].Tags["operation"])
 }
 
 func (s *activityOptionsSuite) Test_updateActivityOptionsRejectsInvalidMergedRetryPolicy() {
@@ -317,7 +383,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptionsRejectsInvalidMergedRet
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.mockMutableState.EXPECT().GetActivityByActivityID("activity_id").Return(activityInfo, true)
 
-	_, err := processActivityOptionsRequest(
+	_, _, err := processActivityOptionsRequest(
 		s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId())
 	s.ErrorContains(err, "MaximumInterval cannot be less than InitialInterval")
 }
@@ -371,7 +437,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptions_RestoreDefaultFail() {
 	request.UpdateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_Type{Type: "activity_type"}
 	activityInfos := map[int64]*persistencespb.ActivityInfo{}
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(activityInfos)
-	_, err = restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest())
+	_, _, err = restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest())
 	s.Error(err)
 
 	// not pending activity with such id
@@ -379,7 +445,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptions_RestoreDefaultFail() {
 	request.UpdateRequest.UpdateMask = nil
 	request.UpdateRequest.Activity = &workflowservice.UpdateActivityOptionsRequest_Id{Id: "activity_id"}
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(nil, false)
-	_, err = restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest())
+	_, _, err = restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest())
 	s.Error(err)
 
 	ai := &persistencespb.ActivityInfo{
@@ -395,7 +461,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptions_RestoreDefaultFail() {
 	err = errors.New("some error")
 	s.mockMutableState.EXPECT().GetActivityScheduledEvent(gomock.Any(), gomock.Any()).Return(nil, err)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(ai, true)
-	_, err = restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest())
+	_, _, err = restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest())
 	s.Error(err)
 }
 
@@ -448,7 +514,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptions_RestoreDefaultSuccess(
 	s.mockMutableState.EXPECT().GetActivityScheduledEvent(gomock.Any(), gomock.Any()).Return(he, nil)
 	s.mockMutableState.EXPECT().GetActivityByActivityID(gomock.Any()).Return(ai, true)
 	s.mockMutableState.EXPECT().UpdateActivity(gomock.Any(), gomock.Any()).Return(nil)
-	response, err := restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest())
+	response, _, err := restoreOriginalOptions(ctx, s.mockMutableState, request.GetUpdateRequest())
 	s.NotNil(response)
 	s.NoError(err)
 }
@@ -480,7 +546,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptions_PerNSTQ_Blocked() {
 	s.mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	s.mockMutableState.EXPECT().GetActivityByActivityID("activity_id").Return(activityInfo, true)
 
-	_, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId())
+	_, _, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId())
 	s.Error(err)
 	s.Contains(err.Error(), "internal per-namespace task queue")
 }
@@ -515,7 +581,7 @@ func (s *activityOptionsSuite) Test_updateActivityOptions_PerNSTQ_Allowed() {
 	s.mockMutableState.EXPECT().RegenerateActivityRetryTask(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockMutableState.EXPECT().UpdateActivity(gomock.Any(), gomock.Any()).Return(nil)
 
-	resp, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId())
+	resp, _, err := processActivityOptionsRequest(s.validator, s.mockMutableState, request.GetUpdateRequest(), request.GetNamespaceId())
 	s.NoError(err)
 	s.NotNil(resp)
 }

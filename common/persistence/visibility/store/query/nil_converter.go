@@ -1,6 +1,8 @@
 package query
 
 import (
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -83,11 +85,15 @@ func NewNilQueryConverter(
 	namespaceName namespace.Name,
 	saTypeMap searchattribute.NameTypeMap,
 	saMapper searchattribute.Mapper,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
 ) NilQueryConverter {
 	return NewQueryConverter(
 		&nilStoreQueryConverter{},
 		namespaceName,
 		saTypeMap,
 		saMapper,
+		metricsHandler,
+		logger,
 	)
 }

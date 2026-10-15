@@ -37,7 +37,7 @@ func Invoke(
 	workflowConsistencyChecker api.WorkflowConsistencyChecker,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	matchingClient matchingservice.MatchingServiceClient,
-) (_ *historyservice.QueryWorkflowResponse, retError error) {
+) (resp *historyservice.QueryWorkflowResponse, retError error) {
 	scope := shardContext.GetMetricsHandler().WithTags(metrics.OperationTag(metrics.HistoryQueryWorkflowScope))
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	err := api.ValidateNamespaceUUID(namespaceID)
@@ -78,6 +78,27 @@ func Invoke(
 		// Do not clear mutable state when query failed. Clear mutable state will fail other buffered pending queries.
 		// Note: QueryWorkflow should not alter mutable state, so it is safe to ignore error and not clear ms.
 		workflowLease.GetReleaseFn()(nil)
+	}()
+	defer func() {
+		if retError != nil || resp.GetResponse() == nil {
+			return
+		}
+		// Add link to Workflow regardless of query status. A rejection on the query is not an RPC error,
+		// so it gets the same link that a processed query would get - only the reason differs.
+		reason := "Query processed"
+		if resp.GetResponse().GetQueryRejected() != nil {
+			reason = "Query rejected"
+		}
+		resp.Response.Link = &commonpb.Link{
+			Variant: &commonpb.Link_Workflow_{
+				Workflow: &commonpb.Link_Workflow{
+					Namespace:  nsEntry.Name().String(),
+					WorkflowId: workflowKey.WorkflowID,
+					RunId:      workflowKey.RunID,
+					Reason:     reason,
+				},
+			},
+		}
 	}()
 
 	// Context metadata is automatically set during mutable state transaction close for operations that mutate state.

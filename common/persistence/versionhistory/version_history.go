@@ -1,6 +1,8 @@
 package versionhistory
 
 import (
+	"slices"
+
 	"go.temporal.io/api/serviceerror"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/common"
@@ -185,8 +187,8 @@ func SplitVersionHistoryByLastLocalGeneratedItem(
 	initialFailoverVersion int64,
 	failoverVersionIncrement int64,
 ) (localItems []*historyspb.VersionHistoryItem, remoteItems []*historyspb.VersionHistoryItem) {
-	for i := len(versionHistoryItems) - 1; i >= 0; i-- {
-		if versionHistoryItems[i].Version%failoverVersionIncrement == initialFailoverVersion {
+	for i, versionHistoryItem := range slices.Backward(versionHistoryItems) {
+		if versionHistoryItem.Version%failoverVersionIncrement == initialFailoverVersion {
 			return versionHistoryItems[:i+1], versionHistoryItems[i+1:]
 		}
 	}

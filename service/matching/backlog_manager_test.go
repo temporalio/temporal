@@ -3,6 +3,7 @@ package matching
 import (
 	"container/list"
 	"context"
+	"errors"
 	"fmt"
 	"maps"
 	"math"
@@ -24,6 +25,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	testutil "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/common/util"
@@ -37,7 +39,6 @@ type BacklogManagerTestSuite struct {
 
 	cfgcli     *dynamicconfig.MemoryClient
 	cfgcol     *dynamicconfig.Collection
-	newMatcher bool
 	fairness   bool
 	logger     *testlogger.TestLogger
 	blm        backlogManager
@@ -51,19 +52,14 @@ type BacklogManagerTestSuite struct {
 	capturedTasksSlice []*internalTask
 }
 
-func TestBacklogManager_Classic_Suite(t *testing.T) {
-	t.Parallel()
-	suite.Run(t, &BacklogManagerTestSuite{newMatcher: false})
-}
-
 func TestBacklogManager_Pri_Suite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, &BacklogManagerTestSuite{newMatcher: true})
+	suite.Run(t, &BacklogManagerTestSuite{})
 }
 
 func TestBacklogManager_Fair_Suite(t *testing.T) {
 	t.Parallel()
-	suite.Run(t, &BacklogManagerTestSuite{newMatcher: true, fairness: true})
+	suite.Run(t, &BacklogManagerTestSuite{fairness: true})
 }
 
 func (s *BacklogManagerTestSuite) SetupTest() {
@@ -94,9 +90,10 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 
 	s.ptqMgr = NewMockphysicalTaskQueueManager(s.controller)
 	s.ptqMgr.EXPECT().QueueKey().Return(queue).AnyTimes()
-	s.ptqMgr.EXPECT().ProcessSpooledTask(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 	s.ptqMgr.EXPECT().GetFairnessWeightOverrides().AnyTimes().Return(fairnessWeightOverrides{ /* To avoid deadlock with gomock method */ })
 	s.ptqMgr.EXPECT().StartScaleManager(gomock.Any()).AnyTimes()
+	// New task queues assume the other table may have tasks (to allow migration), so draining gets set up.
+	s.ptqMgr.EXPECT().SetupDraining().AnyTimes()
 
 	var ctx context.Context
 	ctx, s.cancelCtx = context.WithCancel(context.Background())
@@ -115,7 +112,7 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 			func() counter.Counter { return counter.NewMapCounter(1000) },
 			false,
 		)
-	} else if s.newMatcher {
+	} else {
 		s.blm = newPriBacklogManager(
 			ctx,
 			s.ptqMgr,
@@ -126,17 +123,6 @@ func (s *BacklogManagerTestSuite) SetupTest() {
 			nil,
 			s.metricsCap,
 			false,
-		)
-	} else {
-		s.blm = newBacklogManager(
-			ctx,
-			s.ptqMgr,
-			tlCfg,
-			s.taskMgr,
-			s.logger,
-			s.logger,
-			nil,
-			s.metricsCap,
 		)
 	}
 }
@@ -162,60 +148,6 @@ func (s *BacklogManagerTestSuite) capturedTasks() []*internalTask {
 	return slices.Clone(s.capturedTasksSlice)
 }
 
-func (s *BacklogManagerTestSuite) TestReadLevelForAllExpiredTasksInBatch() {
-	if s.newMatcher {
-		s.T().Skip("not compatible with new backlog manager")
-	}
-	blm := s.blm.(*backlogManagerImpl)
-
-	s.NoError(blm.taskWriter.initReadWriteState())
-	s.Equal(int64(1), blm.getDB().rangeID)
-	s.Equal(int64(0), blm.taskAckManager.getAckLevel())
-	s.Equal(int64(0), blm.taskAckManager.getReadLevel())
-
-	// Add all expired tasks
-	tasks := []*persistencespb.AllocatedTaskInfo{
-		{
-			Data: &persistencespb.TaskInfo{
-				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
-				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
-			},
-			TaskId: 11,
-		},
-		{
-			Data: &persistencespb.TaskInfo{
-				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
-				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
-			},
-			TaskId: 12,
-		},
-	}
-
-	s.NoError(blm.taskReader.addTasksToBuffer(context.TODO(), tasks))
-	s.Equal(int64(0), blm.taskAckManager.getAckLevel())
-	s.Equal(int64(12), blm.taskAckManager.getReadLevel())
-
-	// Now add a mix of valid and expired tasks
-	s.NoError(blm.taskReader.addTasksToBuffer(context.TODO(), []*persistencespb.AllocatedTaskInfo{
-		{
-			Data: &persistencespb.TaskInfo{
-				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
-				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
-			},
-			TaskId: 13,
-		},
-		{
-			Data: &persistencespb.TaskInfo{
-				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
-				CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-60 * 60),
-			},
-			TaskId: 14,
-		},
-	}))
-	s.Equal(int64(0), blm.taskAckManager.getAckLevel())
-	s.Equal(int64(14), blm.taskAckManager.getReadLevel())
-}
-
 func (s *BacklogManagerTestSuite) TestTaskWriterShutdown() {
 	s.blm.Start()
 	defer s.blm.Stop()
@@ -230,97 +162,6 @@ func (s *BacklogManagerTestSuite) TestTaskWriterShutdown() {
 
 	err = s.blm.SpoolTask(&persistencespb.TaskInfo{})
 	s.Error(err)
-}
-
-func (s *BacklogManagerTestSuite) TestReadBatchDone() {
-	if s.newMatcher {
-		s.T().Skip("not compatible with new backlog manager")
-	}
-	blm := s.blm.(*backlogManagerImpl)
-
-	const rangeSize = 10
-	const maxReadLevel = int64(120)
-	blm.config.RangeSize = rangeSize
-
-	blm.Start()
-	defer blm.Stop()
-	s.NoError(blm.WaitUntilInitialized(context.Background()))
-
-	blm.taskAckManager.setReadLevel(0)
-	blm.getDB().setMaxReadLevelForTesting(subqueueZero, maxReadLevel)
-	batch, err := blm.taskReader.getTaskBatch(context.Background())
-	s.NoError(err)
-	s.Empty(batch.tasks)
-	s.Equal(int64(rangeSize*10), batch.readLevel)
-	s.False(batch.isReadBatchDone)
-	s.NoError(err)
-
-	blm.taskAckManager.setReadLevel(batch.readLevel)
-	batch, err = blm.taskReader.getTaskBatch(context.Background())
-	s.NoError(err)
-	s.Empty(batch.tasks)
-	s.Equal(maxReadLevel, batch.readLevel)
-	s.True(batch.isReadBatchDone)
-	s.NoError(err)
-}
-
-func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedByAppendTask() {
-	if s.newMatcher {
-		s.T().Skip("not compatible with new backlog manager")
-	}
-	blm := s.blm.(*backlogManagerImpl)
-
-	// Add tasks on the taskWriters channel
-	blm.taskWriter.appendCh <- &writeTaskRequest{
-		taskInfo: &persistencespb.TaskInfo{
-			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
-			CreateTime: timestamp.TimeNowPtrUtc(),
-		},
-		responseCh: make(chan<- error),
-	}
-
-	s.Equal(int64(0), totalApproximateBacklogCount(blm))
-
-	blm.taskWriter.Start()
-	// Adding tasks to the buffer will increase the in-memory counter by 1
-	// and this will be written to persistence
-	s.Eventually(func() bool {
-		return totalApproximateBacklogCount(blm) == int64(1)
-	}, time.Second*30, time.Millisecond)
-}
-
-func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_DecrementedByCompleteTask() {
-	if s.newMatcher {
-		s.T().Skip("not compatible with new backlog manager")
-	}
-	blm := s.blm.(*backlogManagerImpl)
-
-	_, err := blm.getDB().RenewLease(blm.tqCtx)
-	s.NoError(err)
-
-	blm.taskAckManager.addTask(int64(1))
-	blm.taskAckManager.addTask(int64(2))
-	blm.taskAckManager.addTask(int64(3))
-
-	// Manually update the backlog size since adding tasks to the outstanding map does not increment the counter
-	blm.getDB().updateBacklogStats(3, time.Time{})
-
-	s.Equal(int64(3), totalApproximateBacklogCount(blm), "1 task in the backlog")
-	s.Equal(int64(-1), blm.taskAckManager.getAckLevel(), "should only move ack level on completion")
-	s.Equal(int64(3), blm.taskAckManager.getReadLevel(), "read level should be 1 since a task has been added")
-
-	// Complete tasks
-	ackLevel, numAcked := blm.taskAckManager.completeTask(2)
-	s.Equal(int64(-1), ackLevel, "should not move the ack level")
-	s.Equal(int64(0), numAcked, "should not decrease the backlog counter as ack level has not gone up")
-
-	ackLevel, numAcked = blm.taskAckManager.completeTask(3)
-	s.Equal(int64(-1), ackLevel, "should not move the ack level")
-	s.Equal(int64(0), numAcked, "should not decrease the backlog counter as ack level has not gone up")
-
-	ackLevel, numAcked = blm.taskAckManager.completeTask(1)
-	s.Equal(int64(3), ackLevel, "should move the ack level")
-	s.Equal(int64(3), numAcked, "should decrease the backlog counter to 0 as no more tasks in the backlog")
 }
 
 func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_IncrementedBySpoolTask() {
@@ -438,8 +279,8 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_NotIncrementedBySp
 }
 
 func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
-	if !s.newMatcher || s.fairness {
-		s.T().Skip("only for priority backlog manager")
+	if s.fairness {
+		s.T().Skip("only for fairness backlog manager")
 	}
 
 	blm := s.blm.(*priBacklogManagerImpl)
@@ -465,7 +306,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 	s.EqualValues(3, totalApproximateBacklogCount(s.blm))
 
 	// Inject backlog count divergence (simulating accumulated drift).
-	db.updateBacklogStats(2, time.Time{})
+	updateBacklogStatsForTest(db, 2, time.Time{})
 	s.EqualValues(5, totalApproximateBacklogCount(s.blm))
 
 	// Advance maxReadLevel past all task IDs to simulate a range renewal.
@@ -500,8 +341,8 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 }
 
 func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnGapDrain() {
-	if !s.newMatcher || s.fairness {
-		s.T().Skip("only for priority backlog manager")
+	if s.fairness {
+		s.T().Skip("only for fairness backlog manager")
 	}
 
 	blm := s.blm.(*priBacklogManagerImpl)
@@ -516,7 +357,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnGapDrain() 
 	// carried across a reload. Since nothing is spooled, there are no outstanding tasks and
 	// completeTask never runs, so the only thing that can reset the count is the gap-drain path
 	// (setReadLevelAfterGap), not the completeTask path.
-	db.updateBacklogStats(5, time.Time{})
+	updateBacklogStatsForTest(db, 5, time.Time{})
 	s.Require().EqualValues(5, db.getTotalApproximateBacklogCount())
 
 	// Advance maxReadLevel past the ack level to simulate a range renewal that left a gap of
@@ -544,11 +385,181 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnGapDrain() 
 	s.Zero(db.getTotalApproximateBacklogCount())
 }
 
-func (s *BacklogManagerTestSuite) TestSyncState_UnloadsOnOwnershipLoss() {
-	if !s.newMatcher {
-		s.T().Skip("SyncState is only used by the new backlog manager")
-	}
+func updateBacklogStatsForTest(db *taskQueueDB, countDelta int64, oldestTime time.Time) {
+	db.Lock()
+	defer db.Unlock()
+	db.lastChange = time.Now()
+	db.updateBacklogStatsLocked(subqueueZero, countDelta, oldestTime)
+}
 
+// initPriReaderAtEnd initializes the db without starting the background reader pump, and returns
+// a reader that is caught up to the end of the queue (readLevel == ackLevel == maxReadLevel) so
+// the test can drive it deterministically.
+func (s *BacklogManagerTestSuite) initPriReaderAtEnd() (*priBacklogManagerImpl, *priTaskReader, int64) {
+	blm := s.blm.(*priBacklogManagerImpl)
+	_, err := blm.db.RenewLease(blm.tqCtx)
+	s.Require().NoError(err)
+	start := blm.db.GetMaxReadLevel(subqueueZero)
+	return blm, newPriTaskReader(blm, subqueueZero, start), start
+}
+
+// createTasksAt writes tasks with the given ids straight through the db, and returns the
+// subqueue-zero response that priTaskWriter would have handed to signalNewTasks.
+func (s *BacklogManagerTestSuite) createTasksAt(blm *priBacklogManagerImpl, ids ...int64) subqueueCreateTasksResponse {
+	reqs := make([]*writeTaskRequest, len(ids))
+	for i, id := range ids {
+		reqs[i] = &writeTaskRequest{
+			subqueue:  subqueueZero,
+			fairLevel: fairLevel{id: id},
+			taskInfo: &persistencespb.TaskInfo{
+				CreateTime: timestamp.TimeNowPtrUtc(),
+				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+			},
+		}
+	}
+	resp, err := blm.db.CreateTasks(blm.tqCtx, reqs)
+	s.Require().NoError(err)
+	return resp.bySubqueue[subqueueZero]
+}
+
+func (s *BacklogManagerTestSuite) dbAckLevel(blm *priBacklogManagerImpl) int64 {
+	blm.db.Lock()
+	defer blm.db.Unlock()
+	return blm.db.subqueues[subqueueZero].AckLevel
+}
+
+// TestSetReadLevelAfterGap_IgnoresStaleLevels covers the read/write race where getTaskBatch
+// reports "read to the end, found nothing" based on levels that signalNewTasks has already moved
+// past. Applying that stale result used to move readLevel backwards over loaded tasks, which then
+// let the reader re-read and re-dispatch them once they were acked.
+func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_IgnoresStaleLevels() {
+	if s.fairness {
+		s.T().Skip("only for fairness backlog manager")
+	}
+	s.setupToCaptureTasks()
+	blm, tr, start := s.initPriReaderAtEnd()
+
+	// The pump snapshots readLevel and maxReadLevel, both == start, so getTaskBatch does no IO.
+	batch, err := tr.getTaskBatch(blm.tqCtx)
+	s.Require().NoError(err)
+	s.Require().Empty(batch.tasks)
+	s.Require().True(batch.isReadBatchDone)
+	s.Require().Equal(start, batch.readLevel)
+
+	// A write lands before the pump applies that snapshot. maxReadLevelBefore == tr.readLevel,
+	// so signalNewTasks takes the direct-add path and advances readLevel past the snapshot.
+	tr.signalNewTasks(s.createTasksAt(blm, start+1, start+2))
+	readLevel, ackLevel := tr.getLevels()
+	s.Require().Equal(start+2, readLevel)
+	s.Require().Equal(start, ackLevel)
+	s.Require().Len(s.capturedTasks(), 2)
+
+	// Applying the stale snapshot must not move either level backwards.
+	tr.setReadLevelAfterGap(batch.readLevel)
+	readLevel, ackLevel = tr.getLevels()
+	s.Equal(start+2, readLevel)
+	s.Equal(start, ackLevel)
+
+	// It must also ask for another read: the caller decides that from isReadBatchDone, which
+	// came from the same stale snapshot.
+	select {
+	case <-tr.notifyC:
+	default:
+		s.Fail("expected setReadLevelAfterGap to signal a reload after discarding stale levels")
+	}
+}
+
+// TestSetReadLevelAfterGap_NoReloadSignalWhenCaughtUp guards the boundary: a scan that ends
+// exactly where readLevel already is isn't stale, and signalling there would spin the pump
+// (empty batch -> signal -> empty batch -> ...).
+func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_NoReloadSignalWhenCaughtUp() {
+	if s.fairness {
+		s.T().Skip("only for fairness backlog manager")
+	}
+	blm, tr, start := s.initPriReaderAtEnd()
+
+	batch, err := tr.getTaskBatch(blm.tqCtx)
+	s.Require().NoError(err)
+	s.Require().Equal(start, batch.readLevel)
+
+	tr.setReadLevelAfterGap(batch.readLevel)
+
+	readLevel, ackLevel := tr.getLevels()
+	s.Equal(start, readLevel)
+	s.Equal(start, ackLevel)
+
+	select {
+	case <-tr.notifyC:
+		s.Fail("setReadLevelAfterGap should not signal a reload when already at the given level")
+	default:
+	}
+}
+
+// TestProcessTaskBatch_IgnoresAlreadyAckedTasks covers the other half of the same read/write
+// race: here the in-flight read does return the newly-written rows, but they get acked before the
+// pump processes them. outstandingTasks only remembers tasks above the ack level, so its dedup
+// check can't see them and they used to be dispatched and acked a second time.
+func (s *BacklogManagerTestSuite) TestProcessTaskBatch_IgnoresAlreadyAckedTasks() {
+	if s.fairness {
+		s.T().Skip("only for fairness backlog manager")
+	}
+	s.setupToCaptureTasks()
+	blm, tr, start := s.initPriReaderAtEnd()
+
+	ignored := s.logger.Expect(testlogger.Info, "ignoring already-acked task read from persistence")
+
+	// A read is in flight: it snapshotted readLevel == start, and its GetTasks will pick up the
+	// rows written just below. Meanwhile signalNewTasks direct-adds the same tasks.
+	tr.signalNewTasks(s.createTasksAt(blm, start+1, start+2))
+
+	// Both tasks are dispatched and acked, which advances the ack level over them and removes
+	// them from outstandingTasks.
+	tasks := s.capturedTasks()
+	s.Require().Len(tasks, 2)
+	for _, t := range tasks {
+		t.finish(taskFinishResult{consumedToken: true})
+	}
+	_, ackLevel := tr.getLevels()
+	s.Require().Equal(start+2, ackLevel)
+	s.Require().Zero(totalApproximateBacklogCount(s.blm))
+
+	// Now the read that was already in flight comes back with those same rows.
+	readResp, err := blm.db.GetTasks(blm.tqCtx, subqueueZero, start+1, start+3, 100)
+	s.Require().NoError(err)
+	s.Require().Len(readResp.Tasks, 2)
+
+	tr.processTaskBatch(readResp.Tasks)
+
+	s.Len(s.capturedTasks(), 2, "already-acked tasks must not be dispatched again")
+	s.True(ignored.Matched(), "expected the already-acked tasks to be logged as ignored")
+
+	readLevel, ackLevel := tr.getLevels()
+	s.Equal(start+2, readLevel)
+	s.Equal(start+2, ackLevel)
+	s.Equal(start+2, s.dbAckLevel(blm))
+	s.Zero(totalApproximateBacklogCount(s.blm))
+}
+
+// TestUpdateAckLevel_DoesNotMoveBackwards checks that a caller racing itself into a lower ack
+// level gets flagged but cannot regress what we persist.
+func (s *BacklogManagerTestSuite) TestUpdateAckLevel_DoesNotMoveBackwards() {
+	if s.fairness {
+		s.T().Skip("only for fairness backlog manager")
+	}
+	blm, _, _ := s.initPriReaderAtEnd()
+
+	blm.db.updateAckLevelAndBacklogStats(subqueueZero, 50, 0, time.Time{})
+	s.Require().EqualValues(50, s.dbAckLevel(blm))
+
+	moved := s.logger.Expect(testlogger.Error,
+		"failed assertion: ack level in subqueue should not move backwards")
+	blm.db.updateAckLevelAndBacklogStats(subqueueZero, 40, 0, time.Time{})
+
+	s.True(moved.Matched(), "expected the backwards ack level to be flagged")
+	s.EqualValues(50, s.dbAckLevel(blm), "persisted ack level must not regress")
+}
+
+func (s *BacklogManagerTestSuite) TestSyncState_UnloadsOnOwnershipLoss() {
 	s.cfgcli.OverrideValue(dynamicconfig.MatchingUpdateAckInterval.Key(), 100*time.Millisecond)
 
 	s.blm.Start()
@@ -569,6 +580,141 @@ func (s *BacklogManagerTestSuite) TestSyncState_UnloadsOnOwnershipLoss() {
 	tqd.Unlock()
 
 	s.Eventually(unloadCalled.Load, time.Second, 100*time.Millisecond)
+}
+
+// TestGetTaskBatch_ReadsInRangeSizedChunks checks that an empty stretch of task ids is scanned
+// in chunks of RangeSize, and that one getTaskBatch call gives up after ten chunks so the pump
+// can check whether it should keep going.
+func (s *BacklogManagerTestSuite) TestGetTaskBatch_ReadsInRangeSizedChunks() {
+	if s.fairness {
+		s.T().Skip("only for priority backlog manager")
+	}
+	const rangeSize = 10
+	blm, tr, start := s.initPriReaderAtEnd()
+	blm.config.RangeSize = rangeSize
+	maxRL := start + 12*rangeSize
+	blm.db.setMaxReadLevelForTesting(subqueueZero, maxRL)
+
+	batch, err := tr.getTaskBatch(blm.tqCtx)
+	s.Require().NoError(err)
+	s.Empty(batch.tasks)
+	s.Equal(start+10*rangeSize, batch.readLevel)
+	s.False(batch.isReadBatchDone)
+
+	tr.setReadLevelAfterGap(batch.readLevel)
+	batch, err = tr.getTaskBatch(blm.tqCtx)
+	s.Require().NoError(err)
+	s.Empty(batch.tasks)
+	s.Equal(maxRL, batch.readLevel)
+	s.True(batch.isReadBatchDone)
+}
+
+// TestCompleteTask_OutOfOrder checks that the ack level (and backlog count) only advance over a
+// contiguous prefix of completed tasks.
+func (s *BacklogManagerTestSuite) TestCompleteTask_OutOfOrder() {
+	if s.fairness {
+		s.T().Skip("only for priority backlog manager")
+	}
+	s.setupToCaptureTasks()
+	blm, tr, start := s.initPriReaderAtEnd()
+
+	tr.signalNewTasks(s.createTasksAt(blm, start+1, start+2, start+3))
+	tasks := make(map[int64]*internalTask)
+	for _, t := range s.capturedTasks() {
+		tasks[t.event.TaskId] = t
+	}
+	s.Require().Len(tasks, 3)
+	s.Require().EqualValues(3, blm.db.getTotalApproximateBacklogCount())
+
+	for _, id := range []int64{start + 2, start + 3} {
+		tasks[id].finish(taskFinishResult{consumedToken: true})
+		_, ackLevel := tr.getLevels()
+		s.Equal(start, ackLevel, "ack level should not move past an outstanding task")
+		s.EqualValues(3, blm.db.getTotalApproximateBacklogCount(), "count should not change until ack level moves")
+	}
+
+	tasks[start+1].finish(taskFinishResult{consumedToken: true})
+	_, ackLevel := tr.getLevels()
+	s.Equal(start+3, ackLevel)
+	s.Equal(start+3, s.dbAckLevel(blm))
+	s.Zero(blm.db.getTotalApproximateBacklogCount())
+}
+
+// TestRespoolTaskAfterStartError checks that a task that fails to start with a non-retryable
+// error is written back to the backlog with a new id (so it isn't lost), and the original is acked.
+func (s *BacklogManagerTestSuite) TestRespoolTaskAfterStartError() {
+	s.cfgcli.OverrideSetting(dynamicconfig.MatchingMaxTaskDeleteBatchSize, 1) // gc immediately
+
+	s.setupToCaptureTasks()
+	s.blm.Start()
+	defer s.blm.Stop()
+	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
+
+	s.Require().NoError(s.blm.SpoolTask(&persistencespb.TaskInfo{
+		WorkflowId: "wf",
+		CreateTime: timestamp.TimeNowPtrUtc(),
+		ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+	}))
+	await.RequireTrue(s.T(), func() bool { return s.capturedTasksLen() == 1 }, 5*time.Second, 10*time.Millisecond)
+	task1 := s.capturedTasks()[0]
+
+	task1.finish(taskFinishResult{err: errors.New("failed to start"), consumedToken: true})
+
+	await.RequireTrue(s.T(), func() bool { return s.capturedTasksLen() == 2 }, 5*time.Second, 10*time.Millisecond)
+	task2 := s.capturedTasks()[1]
+	protorequire.ProtoEqual(s.T(), task1.event.Data, task2.event.Data)
+	s.NotEqual(task1.event.TaskId, task2.event.TaskId)
+	s.EqualValues(1, totalApproximateBacklogCount(s.blm))
+
+	// the original task gets acked and deleted, leaving only the respooled copy
+	queue := s.blm.getDB().queue
+	await.RequireTrue(s.T(), func() bool { return s.taskMgr.getTaskCount(queue) == 1 }, 5*time.Second, 10*time.Millisecond)
+
+	task2.finish(taskFinishResult{consumedToken: true})
+	s.Zero(totalApproximateBacklogCount(s.blm))
+}
+
+// TestTaskGC_BatchSize checks that acked tasks are deleted from persistence once
+// MaxTaskDeleteBatchSize of them have accumulated, even if TaskDeleteInterval hasn't passed.
+func (s *BacklogManagerTestSuite) TestTaskGC_BatchSize() {
+	s.cfgcli.OverrideSetting(dynamicconfig.MatchingMaxTaskDeleteBatchSize, 3)
+	s.cfgcli.OverrideSetting(dynamicconfig.MatchingTaskDeleteInterval, time.Hour)
+
+	s.setupToCaptureTasks()
+	s.blm.Start()
+	defer s.blm.Stop()
+	s.Require().NoError(s.blm.WaitUntilInitialized(context.Background()))
+
+	const taskCount = 7
+	for range taskCount {
+		s.Require().NoError(s.blm.SpoolTask(&persistencespb.TaskInfo{
+			CreateTime: timestamp.TimeNowPtrUtc(),
+			ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+		}))
+	}
+	await.RequireTrue(s.T(), func() bool { return s.capturedTasksLen() == taskCount }, 5*time.Second, 10*time.Millisecond)
+	tasks := s.capturedTasks()
+	slices.SortFunc(tasks, func(a, b *internalTask) int {
+		if a.fairLevel().less(b.fairLevel()) {
+			return -1
+		}
+		return 1
+	})
+
+	queue := s.blm.getDB().queue
+	dbTaskCount := func() int { return s.taskMgr.getTaskCount(queue) }
+
+	for batch := range 2 {
+		// The first two completions in a batch are below the batch size, so they stay.
+		tasks[3*batch].finish(taskFinishResult{consumedToken: true})
+		tasks[3*batch+1].finish(taskFinishResult{consumedToken: true})
+		time.Sleep(50 * time.Millisecond) //nolint:forbidigo // checking that something doesn't happen
+		s.Equal(taskCount-3*batch, dbTaskCount())
+
+		// The third one reaches the batch size.
+		tasks[3*batch+2].finish(taskFinishResult{consumedToken: true})
+		await.RequireTrue(s.T(), func() bool { return dbTaskCount() == taskCount-3*(batch+1) }, 5*time.Second, 10*time.Millisecond)
+	}
 }
 
 type taskBlock struct {
@@ -592,7 +738,7 @@ func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_ValidThenExpired() {
 }
 
 func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_AllExpired() {
-	if s.newMatcher && !s.fairness {
+	if !s.fairness {
 		s.T().Skip("this case doesn't work with priTaskReader yet")
 	}
 	s.testSkipExpiredTasks(10, expiredBlock(33))
@@ -601,10 +747,6 @@ func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_AllExpired() {
 // testSkipExpiredTasks verifies that the task reader correctly skips over expired tasks
 // in the DB and advances the ack level past them.
 func (s *BacklogManagerTestSuite) testSkipExpiredTasks(batchSize int, blocks ...taskBlock) {
-	if !s.newMatcher {
-		s.T().Skip("not compatible with classic backlog manager")
-	}
-
 	s.cfgcli.OverrideValue(dynamicconfig.MatchingGetTasksBatchSize.Key(), batchSize)
 
 	// Pre-populate the DB with tasks before starting the backlog manager.
@@ -699,32 +841,6 @@ func (s *BacklogManagerTestSuite) TestExpiredTasksOnRead_EmitTasksDropped() {
 		return reasons
 	}
 
-	if !s.newMatcher {
-		// Classic reader: drive addTasksToBuffer directly, mirroring
-		// TestReadLevelForAllExpiredTasksInBatch. The emission is synchronous.
-		blm := s.blm.(*backlogManagerImpl)
-		s.Require().NoError(blm.taskWriter.initReadWriteState())
-
-		expired := make([]*persistencespb.AllocatedTaskInfo, numExpired)
-		for i := range expired {
-			expired[i] = &persistencespb.AllocatedTaskInfo{
-				TaskId: int64(i + 1),
-				Data: &persistencespb.TaskInfo{
-					CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-3600),
-					ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
-				},
-			}
-		}
-		s.Require().NoError(blm.taskReader.addTasksToBuffer(context.TODO(), expired))
-
-		reasons := droppedReasons()
-		s.Require().Len(reasons, numExpired)
-		for _, reason := range reasons {
-			s.Equal(dropReasonExpiredRead.tag().Value, reason)
-		}
-		return
-	}
-
 	// Pri/fair readers read the backlog from the DB asynchronously after Start.
 	// Pre-populate the DB with already-expired tasks plus one valid task (a trailing
 	// valid task keeps this off the priTaskReader all-expired edge case).
@@ -781,6 +897,55 @@ func (s *BacklogManagerTestSuite) TestExpiredTasksOnRead_EmitTasksDropped() {
 	}
 }
 
+// TestPhysicalBacklogGauges_AgeTaggedByPriority verifies emitPhysicalBacklogGaugesLocked
+// records backlog age per priority with a task_priority tag, matching the count gauge,
+// rather than a single untagged "oldest across all priorities" value.
+func (s *BacklogManagerTestSuite) TestPhysicalBacklogGauges_AgeTaggedByPriority() {
+	const (
+		pri1 = int32(1)
+		pri2 = int32(2)
+	)
+
+	sq1 := &dbSubqueue{oldestTime: time.Now().Add(-30 * time.Second)}
+	sq1.Key = &persistencespb.SubqueueKey{Priority: pri1}
+	sq1.ApproximateBacklogCount = 3
+	sq2 := &dbSubqueue{oldestTime: time.Now().Add(-90 * time.Second)}
+	sq2.Key = &persistencespb.SubqueueKey{Priority: pri2}
+	sq2.ApproximateBacklogCount = 5
+
+	db := s.blm.getDB()
+	db.Lock()
+	db.subqueues = []*dbSubqueue{sq1, sq2}
+	db.Unlock()
+
+	capture := s.metricsCap.StartCapture()
+	defer s.metricsCap.StopCapture(capture)
+
+	db.Lock()
+	db.emitPhysicalBacklogGaugesLocked()
+	db.Unlock()
+
+	snap := capture.Snapshot()
+	byPriority := func(recs []*metricstest.CapturedRecording) map[string]float64 {
+		out := make(map[string]float64)
+		for _, rec := range recs {
+			out[rec.Tags[metrics.TaskPriorityTagName]] = rec.Value.(float64)
+		}
+		return out
+	}
+
+	tag1 := metrics.MatchingTaskPriorityTag(pri1).Value
+	tag2 := metrics.MatchingTaskPriorityTag(pri2).Value
+
+	counts := byPriority(snap[metrics.PhysicalApproximateBacklogCount.Name()])
+	s.Equal(map[string]float64{tag1: 3, tag2: 5}, counts)
+
+	ages := byPriority(snap[metrics.PhysicalApproximateBacklogAgeSeconds.Name()])
+	s.Len(ages, 2, "age gauge should be tagged per priority")
+	s.InDelta(30, ages[tag1], 5)
+	s.InDelta(90, ages[tag2], 5)
+}
+
 func totalApproximateBacklogCount(c backlogManager) (total int64) {
 	for _, stats := range c.BacklogStatsByPriority() {
 		total += stats.ApproximateBacklogCount
@@ -789,10 +954,6 @@ func totalApproximateBacklogCount(c backlogManager) (total int64) {
 }
 
 func (s *BacklogManagerTestSuite) TestBypassReader() {
-	if !s.newMatcher {
-		s.T().Skip("bypass only applies to pri/fair")
-	}
-
 	s.setupToCaptureTasks()
 
 	// set up initial qkey in db so that we always read one range on load
@@ -917,10 +1078,6 @@ func (s *BacklogManagerTestSuite) TestStandingBacklog_FiveMin() {
 }
 
 func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
-	if !s.newMatcher && !s.fairness {
-		s.T().Skip("TestStandingBacklogs is for priority + fairness backlog manager only")
-	}
-
 	zipf := rand.NewZipf(rand.New(rand.NewSource(time.Now().UnixNano())), p.zipfS, p.zipfV, uint64(p.keys-1))
 
 	for k, v := range p.cfg {
