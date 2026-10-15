@@ -294,7 +294,8 @@ jobs:
             - `bug:larger`: functionality that is missing or implemented incorrectly as a whole.
             Not bugs (evolvability defects):
             - `wording`: wording of names, comments, and log or error messages in the code.
-            - `language`: code that should use a language or standard library feature.
+            - `idiom`: non-idiomatic Go, or not using a language or standard library feature that
+              fits, such as typed constants, `errors.Is`, generated proto getters, or `slices`.
             - `visual`: layout and formatting that hinder readability.
             - `organization`: code that should be restructured, such as moved, split,
               deduplicated, or removed as dead code.
@@ -328,7 +329,7 @@ jobs:
                           "bug:support",
                           "bug:larger",
                           "wording",
-                          "language",
+                          "idiom",
                           "visual",
                           "organization",
                           "solution",
