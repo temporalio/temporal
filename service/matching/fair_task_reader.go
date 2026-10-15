@@ -45,6 +45,10 @@ type (
 		ackLevel         fairLevel                      // inclusive: task exactly at ackLevel _has_ been acked
 		atEnd            bool                           // whether we believe outstandingTasks represents the entire queue right now
 
+		// Completed tasks already excluded by a backlog count reset. Consume these before
+		// applying acknowledgement deltas to avoid subtracting the same completions twice.
+		acksExcludedFromBacklog int64
+
 		// Small cache of acked task levels that were evicted from outstandingTasks. When tasks
 		// are evicted from memory, we lose track of which ones were already acked. This cache
 		// helps avoid reprocessing tasks that we know were already acked but whose ack was
@@ -628,8 +632,16 @@ func (tr *fairTaskReader) advanceAckLevelLocked() {
 		tr.numToGC += int(numAcked)
 		tr.maybeGCLocked()
 
+		// Apply the exclusions to the next acknowledgements. If these are different
+		// tasks, the estimate remains conservative until the excluded tasks are acked.
+		countDelta := -max(0, numAcked-tr.acksExcludedFromBacklog)
+		tr.acksExcludedFromBacklog = max(0, tr.acksExcludedFromBacklog-numAcked)
+		knownCount := tr.knownCountLocked()
+		if knownCount >= 0 {
+			tr.acksExcludedFromBacklog = int64(tr.outstandingTasks.Len() - tr.loadedTasks + tr.evictedAcks.Len())
+		}
 		tr.backlogMgr.db.updateFairAckLevel(
-			tr.subqueue, tr.ackLevel, -numAcked, tr.knownCountLocked(), tr.backlogAge.oldestTime())
+			tr.subqueue, tr.ackLevel, countDelta, knownCount, tr.backlogAge.oldestTime())
 	}
 }
 
@@ -670,15 +682,14 @@ func (tr *fairTaskReader) knownCountLocked() int64 {
 	// Pending writes may have incremented the backlog count without being merged into
 	// outstandingTasks yet. Do not overwrite their increments with the reader's count.
 	if tr.atEnd && !tr.ackLevelPinnedLocked() {
-		// Include completed entries until the ack level advances. If we trim the backlog
-		// before that happens, delta updates will still subtract those entries.
-		return int64(tr.outstandingTasks.Len())
+		return int64(tr.loadedTasks)
 	}
 	return -1
 }
 
 func (tr *fairTaskReader) maybeResetBacklogCountLocked() {
 	if count := tr.knownCountLocked(); count >= 0 {
+		tr.acksExcludedFromBacklog = int64(tr.outstandingTasks.Len() - tr.loadedTasks + tr.evictedAcks.Len())
 		tr.backlogMgr.db.setKnownFairBacklogCount(tr.subqueue, count)
 	}
 }

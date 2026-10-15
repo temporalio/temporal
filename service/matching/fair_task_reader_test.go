@@ -139,11 +139,15 @@ func TestFairTaskReaderBacklogCountAfterOutOfOrderCompletion(t *testing.T) {
 	finish(3)
 	write(tasks[3])
 	require.True(t, reader.atEnd)
+	// The reset excludes completed task 3 from worker demand even though it remains in the DB.
+	require.EqualValues(t, 3, blm.db.getTotalApproximateBacklogCount())
 
 	// Another write exceeds the batch capacity, so subsequent acknowledgements use deltas.
 	write(tasks[4])
 	require.False(t, reader.atEnd)
 	finish(1)
+	// Until the previously excluded acknowledgement advances, the estimate may be conservative.
+	require.GreaterOrEqual(t, blm.db.getTotalApproximateBacklogCount(), int64(3))
 	finish(2)
 	// Tasks 4 and 5 are still pending. Task 3 must not be subtracted a second time.
 	require.EqualValues(t, 2, blm.db.getTotalApproximateBacklogCount())
