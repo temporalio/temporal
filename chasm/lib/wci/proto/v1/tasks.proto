@@ -1,0 +1,61 @@
+syntax = "proto3";
+
+package temporal.server.chasm.lib.wci.proto.v1;
+
+import "chasm/lib/wci/proto/v1/message.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "go.temporal.io/server/chasm/lib/wci/gen/wcipb;wcipb";
+
+// Each task snapshots the state field that makes it stale; Validate compares it.
+
+// Pure. Fires at next_poll_time; schedules FetchSnapshotTask.
+message MetricsPollTimerTask {
+  google.protobuf.Timestamp poll_time = 1;
+}
+
+// Pure. Fires at next_validation_time; schedules ValidateSpecTask.
+message PeriodicValidationTimerTask {
+  google.protobuf.Timestamp validation_time = 1;
+}
+
+// Side-effect. DescribeWorkerDeploymentVersion, then ProcessMetricsPoll and re-arm.
+message FetchSnapshotTask {
+  google.protobuf.Timestamp poll_time = 1;
+}
+
+// Side-effect. Fetches a snapshot, then ProcessDeferredScalingDecision.
+message DeferredDecisionTask {
+  string scaling_group_id = 1;
+  TaskAddEvent task_add = 2;
+}
+
+// Side-effect. Validates the whole spec.
+message ValidateSpecTask {
+  google.protobuf.Timestamp validation_time = 1;
+}
+
+// Side-effect. Signals the version workflow with the newest validation status.
+message SignalVersionWorkflowTask {
+  google.protobuf.Timestamp last_validation_time = 1;
+}
+
+// Side-effect. Starts the workflow from converted state.
+message MigrateToWorkflowTask {}
+
+// Pure. BACKING_OFF -> SCALING.
+message ScalingGroupBackoffTask {
+  int32 attempt = 1;
+}
+
+// Side-effect. UpdateWorkerSetSize(desired_size).
+message ResizeTask {
+  int32 attempt = 1;
+}
+
+// Side-effect. InvokeWorker.
+message InvokeTask {
+  // transition_count of the scheduling transaction; idempotency key.
+  int64 request_id = 1;
+  int32 attempt = 2;
+}
