@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/archiver/gcloud/connector"
 	"go.temporal.io/server/common/config"
 	"go.uber.org/mock/gomock"
+	"google.golang.org/api/googleapi"
 	"google.golang.org/api/iterator"
 )
 
@@ -67,12 +68,39 @@ func (s *clientSuite) TestUpload() {
 	mockStorageClient.EXPECT().Bucket("my-bucket-cad").Return(mockBucketHandleClient)
 	mockBucketHandleClient.EXPECT().Object("temporal_archival/development/myfile.history").Return(mockObjectHandler)
 	mockObjectHandler.EXPECT().NewWriter(ctx).Return(mockWriter)
-	mockWriter.EXPECT().Write(gomock.Any()).Return(2, nil)
-	mockWriter.EXPECT().Close().Return(nil)
+	gomock.InOrder(
+		mockWriter.EXPECT().SetChunkSize(3),
+		mockWriter.EXPECT().Write(gomock.Any()).Return(2, nil),
+		mockWriter.EXPECT().Close().Return(nil),
+	)
 
 	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	s.Require().NoError(err)
 	err = storageWrapper.Upload(ctx, URI, "myfile.history", []byte("{}"))
+	s.Require().NoError(err)
+}
+
+func (s *clientSuite) TestUploadLargeFileKeepsDefaultChunkSize() {
+	ctx := context.Background()
+
+	mockStorageClient := connector.NewMockGcloudStorageClient(s.controller)
+	mockBucketHandleClient := connector.NewMockBucketHandleWrapper(s.controller)
+	mockObjectHandler := connector.NewMockObjectHandleWrapper(s.controller)
+	mockWriter := connector.NewMockWriterWrapper(s.controller)
+
+	storageWrapper, _ := connector.NewClientWithParams(mockStorageClient)
+	file := make([]byte, googleapi.DefaultUploadChunkSize)
+
+	mockStorageClient.EXPECT().Bucket("my-bucket-cad").Return(mockBucketHandleClient)
+	mockBucketHandleClient.EXPECT().Object("temporal_archival/development/myfile.history").Return(mockObjectHandler)
+	mockObjectHandler.EXPECT().NewWriter(ctx).Return(mockWriter)
+	mockWriter.EXPECT().SetChunkSize(googleapi.DefaultUploadChunkSize)
+	mockWriter.EXPECT().Write(gomock.Any()).Return(len(file), nil)
+	mockWriter.EXPECT().Close().Return(nil)
+
+	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
+	s.Require().NoError(err)
+	err = storageWrapper.Upload(ctx, URI, "myfile.history", file)
 	s.Require().NoError(err)
 }
 
@@ -89,6 +117,7 @@ func (s *clientSuite) TestUploadWriterCloseError() {
 	mockStorageClient.EXPECT().Bucket("my-bucket-cad").Return(mockBucketHandleClient)
 	mockBucketHandleClient.EXPECT().Object("temporal_archival/development/myfile.history").Return(mockObjectHandler)
 	mockObjectHandler.EXPECT().NewWriter(ctx).Return(mockWriter)
+	mockWriter.EXPECT().SetChunkSize(3)
 	mockWriter.EXPECT().Write(gomock.Any()).Return(2, nil)
 	mockWriter.EXPECT().Close().Return(errors.New("Not Found"))
 
@@ -138,6 +167,7 @@ func (s *clientSuite) TestUploadIfHashChangedOverwritesDifferentObject() {
 		archiver.VisibilityArchivalRecordHashMetadataKey: "old-hash",
 	}}, nil)
 	mockObjectHandler.EXPECT().NewWriter(ctx).Return(mockWriter)
+	mockWriter.EXPECT().SetChunkSize(3)
 	mockWriter.EXPECT().SetMetadata(map[string]string{
 		archiver.VisibilityArchivalRecordHashMetadataKey: recordHash,
 	})
@@ -165,6 +195,7 @@ func (s *clientSuite) TestUploadIfHashChangedWritesMissingObject() {
 	mockBucketHandleClient.EXPECT().Object("temporal_archival/development/myfile.visibility").Return(mockObjectHandler)
 	mockObjectHandler.EXPECT().Attrs(ctx).Return(nil, storage.ErrObjectNotExist)
 	mockObjectHandler.EXPECT().NewWriter(ctx).Return(mockWriter)
+	mockWriter.EXPECT().SetChunkSize(3)
 	mockWriter.EXPECT().SetMetadata(map[string]string{
 		archiver.VisibilityArchivalRecordHashMetadataKey: recordHash,
 	})
