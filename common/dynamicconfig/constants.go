@@ -3423,6 +3423,12 @@ existing workflows to attach callbacks.`,
 		`EnableCHASMSchedulerSentinels enables ID-space collision sentinels, and must be enabled and propagated in advance of EnableCHASMSchedulerCreation.`,
 	)
 
+	EnableCHASMSchedulerTimeSkipping = NewNamespaceBoolSetting(
+		"history.enableCHASMSchedulerTimeSkipping",
+		false,
+		`EnableCHASMSchedulerTimeSkipping allows time skipping for CHASM schedules.`,
+	)
+
 	EnableCHASMCallbacks = NewNamespaceBoolSetting(
 		"history.enableCHASMCallbacks",
 		true,
