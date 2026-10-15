@@ -36,3 +36,16 @@ type Claims struct {
 }
 
 // @@@SNIPEND
+
+// hasAnyNamespaceRole reports whether these claims hold at least the given role on any
+// individual namespace. Used by the default authorizer to let a namespace-scoped reader
+// reach cluster-level readonly APIs that return low-sensitivity metadata rather than
+// requiring a separate System-level claim for them (see Authorize's doc comment).
+func (c *Claims) hasAnyNamespaceRole(role Role) bool {
+	for _, r := range c.Namespaces {
+		if r >= role {
+			return true
+		}
+	}
+	return false
+}
