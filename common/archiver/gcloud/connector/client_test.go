@@ -378,6 +378,91 @@ func (s *clientSuite) TestQueryWithFilter() {
 	s.Equal("closeTimeout_2020-02-27T09:42:28Z_12851121011173788097_4418294404690464320_15619178330501475177.visibility", strings.Join(fileNames, ", "))
 }
 
+func TestQueryWithFiltersPagination(t *testing.T) {
+	t.Parallel()
+	type page struct {
+		names     []string
+		completed bool
+		offset    int
+	}
+	for _, tc := range []struct {
+		name     string
+		names    []string
+		pageSize int
+		pages    []page
+	}{
+		{
+			name:     "multiple pages",
+			names:    []string{"first", "second"},
+			pageSize: 1,
+			pages:    []page{{[]string{"first"}, false, 1}, {[]string{"second"}, true, 2}},
+		},
+		{
+			name:     "filtered records between pages",
+			names:    []string{"skip", "first", "skip", "second"},
+			pageSize: 1,
+			pages:    []page{{[]string{"first"}, false, 1}, {[]string{"second"}, true, 2}},
+		},
+		{
+			name:     "exactly one page",
+			names:    []string{"first"},
+			pageSize: 1,
+			pages:    []page{{[]string{"first"}, true, 1}},
+		},
+		{
+			name:     "partial page",
+			names:    []string{"first", "second"},
+			pageSize: 3,
+			pages:    []page{{[]string{"first", "second"}, true, 2}},
+		},
+		{
+			name:     "empty results",
+			pageSize: 1,
+			pages:    []page{{[]string{}, true, 0}},
+		},
+		{
+			name:     "unlimited page size",
+			names:    []string{"first", "second"},
+			pageSize: 0,
+			pages:    []page{{[]string{"first", "second"}, true, 2}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			controller := gomock.NewController(t)
+			storageClient := connector.NewMockGcloudStorageClient(controller)
+			bucket := connector.NewMockBucketHandleWrapper(controller)
+			client, err := connector.NewClientWithParams(storageClient)
+			require.NoError(t, err)
+			uri, err := archiver.NewURI("gs://bucket/archive")
+			require.NoError(t, err)
+			storageClient.EXPECT().Bucket("bucket").Return(bucket).Times(len(tc.pages))
+			bucket.EXPECT().Objects(t.Context(), &storage.Query{Prefix: "archive/records"}).DoAndReturn(
+				func(context.Context, *storage.Query) connector.ObjectIteratorWrapper {
+					it := connector.NewMockObjectIteratorWrapper(controller)
+					index := 0
+					it.EXPECT().Next().DoAndReturn(func() (*storage.ObjectAttrs, error) {
+						if index == len(tc.names) {
+							return nil, iterator.Done
+						}
+						name := tc.names[index]
+						index++
+						return &storage.ObjectAttrs{Name: name}, nil
+					}).AnyTimes()
+					return it
+				}).Times(len(tc.pages))
+			filters := []connector.Precondition{func(subject any) bool { return subject != "skip" }}
+			offset := 0
+			for _, expected := range tc.pages {
+				names, completed, nextOffset, err := client.QueryWithFilters(t.Context(), uri, "records", tc.pageSize, offset, filters)
+				require.NoError(t, err)
+				require.Equal(t, expected, page{names, completed, nextOffset})
+				offset = nextOffset
+			}
+		})
+	}
+}
+
 func newWorkflowIDPrecondition(workflowID string) connector.Precondition {
 	return func(subject any) bool {
 
