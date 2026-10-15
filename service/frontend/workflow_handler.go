@@ -346,6 +346,7 @@ func NewWorkflowHandler(
 	workerDeploymentReadRateLimiter quotas.RequestRateLimiter,
 	validator *workflow.RequestValidator,
 	chasmNsReplClient namespacereplicationpb.NamespaceReplicationServiceClient,
+	metricsHandler metrics.Handler,
 ) *WorkflowHandler {
 	handler := &WorkflowHandler{
 		ActivityHandler:       activityHandler,
@@ -373,6 +374,7 @@ func NewWorkflowHandler(
 			timeSource,
 			config,
 			chasmNsReplClient,
+			metricsHandler,
 		),
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 		visibilityMgr:                   visibilityMgr,
