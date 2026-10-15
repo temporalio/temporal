@@ -6,12 +6,16 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cache"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/service/matching/simplelimiter"
 )
 
 type RateLimitManagerSuite struct {
@@ -40,23 +44,57 @@ func (s *RateLimitManagerSuite) TestUpdatePerKeySimpleRateLimitLocked_WhenFairne
 	// Simulate the condition where fairnessKeyRateLimitDefault is nil
 	rateLimitManager.fairnessKeyRateLimitDefault = nil
 	// Add per-key ready entries to verify they get cleared
-	rateLimitManager.perKeyReady.Put("key1", simpleLimiter(1000))
-	rateLimitManager.perKeyReady.Put("key2", simpleLimiter(2000))
+	rateLimitManager.perKeyReady.Put("key1", simplelimiter.Ready(1000))
+	rateLimitManager.perKeyReady.Put("key2", simplelimiter.Ready(2000))
 	// Set per-key limit to verify it gets cleared
-	rateLimitManager.perKeyLimit = simpleLimiterParams{
-		interval: time.Second,
-		burst:    10,
+	rateLimitManager.perKeyLimit = simplelimiter.Params{
+		Interval: time.Second,
+		Burst:    10,
 	}
 	// Verify initial state
 	s.Equal(2, rateLimitManager.perKeyReady.Size())
-	s.True(rateLimitManager.perKeyLimit.limited())
+	s.True(rateLimitManager.perKeyLimit.Limited())
 	// Update the per-key simple rate limit with fairnessKeyRateLimitDefault as nil
 	rateLimitManager.updatePerKeySimpleRateLimitWithBurstLocked(time.Second)
 	// Verify that clearPerKeyRateLimitsLocked was called
 	// The cache should be replaced with a new empty cache
 	s.Equal(0, rateLimitManager.perKeyReady.Size(), "All per-key ready entries should be cleared")
-	s.False(rateLimitManager.perKeyLimit.limited(), "Per-key limit should be cleared")
+	s.False(rateLimitManager.perKeyLimit.Limited(), "Per-key limit should be cleared")
 	rateLimitManager.mu.Unlock()
+}
+
+func TestRateLimitManagerGrantTokens(t *testing.T) {
+	t.Run("new matcher applies the whole queue limit", func(t *testing.T) {
+		manager := &rateLimitManager{
+			config:          &taskQueueConfig{},
+			timeSource:      clock.NewEventTimeSource().Update(time.Now()),
+			perKeyReady:     cache.New(10, nil),
+			wholeQueueLimit: simplelimiter.MakeParams(2, 500*time.Millisecond),
+		}
+
+		require.Equal(t, int32(2), manager.grantTokens(nil, 5))
+		require.Equal(t, int32(0), manager.grantTokens(nil, 1))
+	})
+
+	t.Run("new matcher isolates fairness keys", func(t *testing.T) {
+		timeSource := clock.NewEventTimeSource().Update(time.Now())
+		manager := &rateLimitManager{
+			config:          &taskQueueConfig{},
+			timeSource:      timeSource,
+			perKeyReady:     cache.New(10, nil),
+			wholeQueueLimit: simplelimiter.NoLimit(),
+			perKeyLimit:     simplelimiter.MakeParams(1, 0),
+		}
+
+		keyOne := &commonpb.Priority{FairnessKey: "one"}
+		keyTwo := &commonpb.Priority{FairnessKey: "two"}
+		require.Equal(t, int32(1), manager.grantTokens(keyOne, 20))
+		require.Equal(t, int32(0), manager.grantTokens(keyOne, 1))
+		require.Equal(t, int32(1), manager.grantTokens(keyTwo, 1))
+
+		timeSource.Advance(time.Second)
+		require.Equal(t, int32(1), manager.grantTokens(keyOne, 2))
+	})
 }
 
 // Additions to rateLimitManager for use by other unit tests:

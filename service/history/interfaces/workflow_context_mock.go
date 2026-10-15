@@ -62,6 +62,20 @@ func (mr *MockWorkflowContextMockRecorder) AppendTaskCompletionPage(schedID, att
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendTaskCompletionPage", reflect.TypeOf((*MockWorkflowContext)(nil).AppendTaskCompletionPage), schedID, attempt, request)
 }
 
+// CheckRunAlreadyExists mocks base method.
+func (m *MockWorkflowContext) CheckRunAlreadyExists() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CheckRunAlreadyExists")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// CheckRunAlreadyExists indicates an expected call of CheckRunAlreadyExists.
+func (mr *MockWorkflowContextMockRecorder) CheckRunAlreadyExists() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CheckRunAlreadyExists", reflect.TypeOf((*MockWorkflowContext)(nil).CheckRunAlreadyExists))
+}
+
 // Clear mocks base method.
 func (m *MockWorkflowContext) Clear() {
 	m.ctrl.T.Helper()
@@ -249,6 +263,18 @@ func (m *MockWorkflowContext) RefreshTasks(ctx context.Context, shardContext Sha
 func (mr *MockWorkflowContextMockRecorder) RefreshTasks(ctx, shardContext any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshTasks", reflect.TypeOf((*MockWorkflowContext)(nil).RefreshTasks), ctx, shardContext)
+}
+
+// SetCheckRunAlreadyExists mocks base method.
+func (m *MockWorkflowContext) SetCheckRunAlreadyExists(verify bool) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetCheckRunAlreadyExists", verify)
+}
+
+// SetCheckRunAlreadyExists indicates an expected call of SetCheckRunAlreadyExists.
+func (mr *MockWorkflowContextMockRecorder) SetCheckRunAlreadyExists(verify any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCheckRunAlreadyExists", reflect.TypeOf((*MockWorkflowContext)(nil).SetCheckRunAlreadyExists), verify)
 }
 
 // SetWorkflowExecution mocks base method.

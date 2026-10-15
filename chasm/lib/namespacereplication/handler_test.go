@@ -7,6 +7,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/api/serviceerror"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/chasmtest"
@@ -133,13 +134,13 @@ func TestValidateTriggerNamespaceMutationRequest(t *testing.T) {
 		{
 			name: "unspecified operation",
 			mutate: func(req *namespacereplicationpb.TriggerNamespaceMutationRequest) {
-				req.Mutation.Operation = namespacereplicationpb.NAMESPACE_OPERATION_UNSPECIFIED
+				req.Mutation.Operation = enumsspb.NAMESPACE_OPERATION_UNSPECIFIED
 			},
 		},
 		{
 			name: "valid create",
 			mutate: func(req *namespacereplicationpb.TriggerNamespaceMutationRequest) {
-				req.Mutation.Operation = namespacereplicationpb.NAMESPACE_OPERATION_CREATE
+				req.Mutation.Operation = enumsspb.NAMESPACE_OPERATION_CREATE
 			},
 			wantValid: true,
 		},
@@ -212,7 +213,7 @@ func validTriggerNamespaceMutationRequest() *namespacereplicationpb.TriggerNames
 		SystemNamespaceId: primitives.SystemNamespaceID,
 		BusinessId:        namespaceID + ":mutation-id",
 		Mutation: &namespacereplicationpb.NamespaceMutation{
-			Operation: namespacereplicationpb.NAMESPACE_OPERATION_UPDATE,
+			Operation: enumsspb.NAMESPACE_OPERATION_UPDATE,
 			NamespaceDetail: &persistencespb.NamespaceDetail{
 				Info:              &persistencespb.NamespaceInfo{Id: namespaceID},
 				Config:            &persistencespb.NamespaceConfig{},

@@ -4,6 +4,7 @@ package temporal.server.chasm.lib.namespacereplication.proto.v1;
 
 import "google/protobuf/timestamp.proto";
 import "temporal/api/failure/v1/message.proto";
+import "temporal/server/api/enums/v1/replication.proto";
 import "temporal/server/api/persistence/v1/namespaces.proto";
 
 option go_package = "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb;namespacereplicationpb";
@@ -11,8 +12,8 @@ option go_package = "go.temporal.io/server/chasm/lib/namespacereplication/gen/na
 // NamespaceMutation is the input to a NamespaceMutationComponent. It contains
 // the full target state of the namespace and the local CAS guard.
 message NamespaceMutation {
-  // CREATE or UPDATE. Mirrors transmission_task_handler's NamespaceOperation.
-  NamespaceOperation operation = 1;
+  // CREATE or UPDATE.
+  temporal.server.api.enums.v1.NamespaceOperation operation = 1;
 
   // Full target NamespaceDetail. The local apply writes this detail to the
   // metadata store. Peer applies convert it to NamespaceTaskAttributes before
@@ -31,12 +32,6 @@ message NamespaceMutation {
   // Shadow mutations exercise the full component and peer transport without
   // writing namespace state in either the source or destination cell.
   bool shadow = 5;
-}
-
-enum NamespaceOperation {
-  NAMESPACE_OPERATION_UNSPECIFIED = 0;
-  NAMESPACE_OPERATION_CREATE = 1;
-  NAMESPACE_OPERATION_UPDATE = 2;
 }
 
 // NamespaceMutationState is the persisted state of a NamespaceMutationComponent.

@@ -11,6 +11,11 @@ import (
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/nexus"
+	"go.uber.org/mock/gomock"
 )
 
 func newNexusCallback() *commonpb.Callback {
@@ -60,7 +65,7 @@ func newValidatorConfig() ValidatorConfig {
 
 func mustNewValidator(t *testing.T, cfg ValidatorConfig) Validator {
 	t.Helper()
-	v, err := NewValidator(cfg)
+	v, err := NewValidator(cfg, nil)
 	require.NoError(t, err)
 	return v
 }
@@ -70,7 +75,7 @@ func TestValidatorConfigValidate(t *testing.T) {
 	cfg.URLMaxLength = nil
 	cfg.EndpointRules = nil
 
-	_, err := NewValidator(cfg)
+	_, err := NewValidator(cfg, nil)
 	require.EqualError(t, err, "missing required fields: [URLMaxLength EndpointRules]")
 }
 
@@ -83,7 +88,7 @@ func TestValidatorConfigValidateNamesEveryField(t *testing.T) {
 		fields = append(fields, field.Name)
 	}
 
-	_, err := NewValidator(ValidatorConfig{})
+	_, err := NewValidator(ValidatorConfig{}, nil)
 	require.EqualError(t, err, fmt.Sprintf("missing required fields: %v", fields))
 }
 
@@ -353,5 +358,98 @@ func TestValidateEnabledKinds(t *testing.T) {
 		var invalidArgErr *serviceerror.InvalidArgument
 		require.ErrorAs(t, err, &invalidArgErr)
 		require.ErrorContains(t, err, "nexusHandler callbacks are not enabled for this execution type")
+	})
+}
+
+func TestValidateInternalCallbacks(t *testing.T) {
+	const namespaceName = "source-ns"
+	const namespaceID = namespace.ID("source-ns-id")
+	opts := ValidatorOptions{EnabledKinds: []Kind{KindNexus}}
+	for _, envelope := range []bool{false, true} {
+		for _, archetypeID := range []chasm.ArchetypeID{chasm.SchedulerArchetypeID, 1234, 0} {
+			for _, tc := range []struct {
+				name    string
+				ref     *persistencespb.ChasmComponentRef
+				raw     []byte
+				wantErr string
+			}{
+				{name: "same namespace", ref: &persistencespb.ChasmComponentRef{NamespaceId: namespaceID.String(), BusinessId: "business-id"}},
+				{name: "cross namespace", ref: &persistencespb.ChasmComponentRef{NamespaceId: "other-ns-id", BusinessId: "business-id"}, wantErr: "internal callback must target the same namespace"},
+				{name: "namespace name instead of ID", ref: &persistencespb.ChasmComponentRef{NamespaceId: namespaceName, BusinessId: "business-id"}, wantErr: "internal callback must target the same namespace"},
+				{name: "missing namespace", ref: &persistencespb.ChasmComponentRef{BusinessId: "business-id"}, wantErr: "requires namespace and business IDs"},
+				{name: "missing business ID", ref: &persistencespb.ChasmComponentRef{NamespaceId: namespaceID.String()}, wantErr: "requires namespace and business IDs"},
+				{name: "missing required fields", ref: &persistencespb.ChasmComponentRef{RunId: "run-id"}, wantErr: "requires namespace and business IDs"},
+				{name: "malformed reference", raw: []byte{0xff, 0xff, 0xff}, wantErr: "invalid internal callback component reference"},
+			} {
+				t.Run(fmt.Sprintf("%s/envelope=%t/archetype=%d", tc.name, envelope, archetypeID), func(t *testing.T) {
+					registry := namespace.NewMockRegistry(gomock.NewController(t))
+					if tc.ref != nil && tc.ref.NamespaceId != "" && tc.ref.BusinessId != "" {
+						registry.EXPECT().GetNamespaceID(namespace.Name(namespaceName)).Return(namespaceID, nil)
+					}
+					v, err := NewValidator(newValidatorConfig(), registry)
+					require.NoError(t, err)
+					raw := tc.raw
+					if tc.ref != nil {
+						tc.ref.ArchetypeId = archetypeID
+						raw, err = tc.ref.Marshal()
+						require.NoError(t, err)
+					}
+					cb, err := chasm.GenerateNexusCallback(raw, "request-id", envelope)
+					require.NoError(t, err)
+					token := cb.GetNexus().Header[strings.ToLower(nexus.CallbackTokenHeader)]
+					cb.GetNexus().Header = map[string]string{strings.ToUpper(nexus.CallbackTokenHeader): token}
+					err = v.Validate(context.Background(), namespaceName, []*commonpb.Callback{cb}, opts)
+					if tc.wantErr == "" {
+						require.NoError(t, err)
+						require.Equal(t, token, cb.GetNexus().Header[strings.ToLower(nexus.CallbackTokenHeader)])
+					} else {
+						var invalidArg *serviceerror.InvalidArgument
+						require.ErrorAs(t, err, &invalidArg)
+						require.ErrorContains(t, err, tc.wantErr)
+					}
+				})
+			}
+		}
+	}
+
+	for _, tc := range []struct {
+		name    string
+		headers map[string]string
+		wantErr string
+	}{
+		{name: "missing token", wantErr: "missing internal callback token"},
+		{name: "empty token", headers: map[string]string{nexus.CallbackTokenHeader: ""}, wantErr: "missing internal callback token"},
+		{name: "malformed token", headers: map[string]string{nexus.CallbackTokenHeader: "%%%"}, wantErr: "invalid internal callback token"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			v := mustNewValidator(t, newValidatorConfig())
+			cb := newNexusCallback()
+			cb.GetNexus().Url = chasm.NexusCompletionHandlerURL
+			cb.GetNexus().Header = tc.headers
+			err := v.Validate(context.Background(), namespaceName, []*commonpb.Callback{cb}, opts)
+			var invalidArg *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArg)
+			require.ErrorContains(t, err, tc.wantErr)
+		})
+	}
+
+	t.Run("namespace lookup failure", func(t *testing.T) {
+		registry := namespace.NewMockRegistry(gomock.NewController(t))
+		wantErr := serviceerror.NewNamespaceNotFound(namespaceName)
+		registry.EXPECT().GetNamespaceID(namespace.Name(namespaceName)).Return(namespace.EmptyID, wantErr)
+		v, err := NewValidator(newValidatorConfig(), registry)
+		require.NoError(t, err)
+		raw, err := (&persistencespb.ChasmComponentRef{NamespaceId: namespaceID.String(), BusinessId: "business-id"}).Marshal()
+		require.NoError(t, err)
+		cb, err := chasm.GenerateNexusCallback(raw, "request-id", true)
+		require.NoError(t, err)
+		require.ErrorIs(t, v.Validate(context.Background(), namespaceName, []*commonpb.Callback{cb}, opts), wantErr)
+	})
+
+	t.Run("system callback", func(t *testing.T) {
+		v := mustNewValidator(t, newValidatorConfig())
+		cb := newNexusCallback()
+		cb.GetNexus().Url = nexus.SystemCallbackURL
+		require.NoError(t, v.Validate(context.Background(), namespaceName, []*commonpb.Callback{cb}, opts))
 	})
 }

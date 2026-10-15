@@ -114,6 +114,13 @@ func TestParseArtifactName(t *testing.T) {
 			expectedMatrixName: "unknown",
 		},
 		{
+			name:               "artifact name with malformed attempt",
+			artifactName:       "junit-xml--22373551837--64609560063--invalid--mysql8--Shard-0--functional-test",
+			expectedRunID:      "22373551837",
+			expectedJobID:      "64609560063",
+			expectedMatrixName: "mysql8",
+		},
+		{
 			name:               "invalid artifact name",
 			artifactName:       "test-results",
 			expectedRunID:      "unknown",

@@ -241,6 +241,21 @@ func MethodName(fullApiName string) string {
 	return fullApiName
 }
 
+// ParseFullMethod splits a full gRPC method — "/pkg.Service/Method" — into its proto
+// service full name and method name. ok is false for anything that is not that shape.
+func ParseFullMethod(fullMethod string) (service string, method string, ok bool) {
+	rest, ok := strings.CutPrefix(fullMethod, "/")
+	if !ok {
+		return "", "", false
+	}
+	service, method, ok = strings.Cut(rest, "/")
+	if !ok || service == "" || method == "" || strings.ContainsRune(method, '/') {
+		return "", "", false
+	}
+	// A proto service is package-qualified, so no dot means this is not a service name.
+	return service, method, strings.ContainsRune(service, '.')
+}
+
 func ServiceName(fullApiName string) string {
 	index := strings.LastIndex(fullApiName, "/")
 	if index > -1 {

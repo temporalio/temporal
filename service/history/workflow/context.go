@@ -58,6 +58,8 @@ type (
 		// paginationLimiter enforces the process-wide and per-namespace limits on the
 		// total size of all in-flight pagination buffers. nil is treated as "no limit".
 		paginationLimiter *limiter.KeyedBytesLimiter
+
+		checkRunAlreadyExists bool
 	}
 
 	// workflowTaskIdentity identifies a specific workflow task attempt
@@ -94,10 +96,11 @@ type (
 	// ExecutionTransactionPayload contains the persistence payload produced by closing
 	// an update-with-new transaction.
 	ExecutionTransactionPayload struct {
-		ExecutionMutation    *persistence.WorkflowMutation
-		ExecutionEvents      []*persistence.WorkflowEvents
-		NewExecutionSnapshot *persistence.WorkflowSnapshot
-		NewExecutionEvents   []*persistence.WorkflowEvents
+		ExecutionMutation                 *persistence.WorkflowMutation
+		ExecutionEvents                   []*persistence.WorkflowEvents
+		NewExecutionSnapshot              *persistence.WorkflowSnapshot
+		NewExecutionEvents                []*persistence.WorkflowEvents
+		NewExecutionCheckRunAlreadyExists bool
 	}
 )
 
@@ -505,6 +508,14 @@ func (c *ContextImpl) PersistWorkflowEvents(
 	return PersistWorkflowEvents(ctx, shardContext, workflowEventsSlice...)
 }
 
+func (c *ContextImpl) SetCheckRunAlreadyExists(verify bool) {
+	c.checkRunAlreadyExists = verify
+}
+
+func (c *ContextImpl) CheckRunAlreadyExists() bool {
+	return c.checkRunAlreadyExists
+}
+
 func (c *ContextImpl) CreateWorkflowExecution(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
@@ -548,6 +559,8 @@ func (c *ContextImpl) CreateWorkflowExecution(
 		PreviousLastWriteVersion: prevLastWriteVersion,
 
 		ArchetypeID: c.archetypeID,
+
+		CheckRunAlreadyExists: c.checkRunAlreadyExists,
 
 		NewWorkflowSnapshot: *newWorkflow,
 		NewWorkflowEvents:   newWorkflowEvents,
@@ -997,6 +1010,7 @@ func (c *ContextImpl) closeMutableStateTransaction(
 		if err != nil {
 			return nil, err
 		}
+		payload.NewExecutionCheckRunAlreadyExists = payload.NewExecutionSnapshot != nil && newContext.CheckRunAlreadyExists()
 	}
 	return payload, nil
 }
@@ -1051,6 +1065,7 @@ func (c *ContextImpl) executeWorkflowTransaction(
 		MutableStateFailoverVersion(newMutableState),
 		payload.NewExecutionSnapshot,
 		payload.NewExecutionEvents,
+		payload.NewExecutionCheckRunAlreadyExists,
 		c.MutableState.IsWorkflow(),
 	); err != nil {
 		return err
@@ -1452,7 +1467,12 @@ func (c *ContextImpl) enforceHistorySizeCheck(
 ) (bool, error) {
 	// Hard terminate workflow if still running and breached history size limit
 	if c.maxHistorySizeExceeded(shardContext) {
-		if err := c.forceTerminateWorkflow(ctx, shardContext, common.FailureReasonHistorySizeExceedsLimit); err != nil {
+		if err := c.forceTerminateWorkflow(
+			ctx,
+			shardContext,
+			common.FailureReasonHistorySizeExceedsLimit,
+			chasm.ExecutionForceTerminationReasonHistorySizeExceedsLimit,
+		); err != nil {
 			return false, err
 		}
 		// Return true to caller to indicate workflow state is overwritten to force terminate execution on update
@@ -1490,7 +1510,12 @@ func (c *ContextImpl) enforceHistoryCountCheck(
 ) (bool, error) {
 	// Hard terminate workflow if still running and breached history count limit
 	if c.maxHistoryCountExceeded(shardContext) {
-		if err := c.forceTerminateWorkflow(ctx, shardContext, common.FailureReasonHistoryCountExceedsLimit); err != nil {
+		if err := c.forceTerminateWorkflow(
+			ctx,
+			shardContext,
+			common.FailureReasonHistoryCountExceedsLimit,
+			chasm.ExecutionForceTerminationReasonHistoryCountExceedsLimit,
+		); err != nil {
 			return false, err
 		}
 		// Return true to caller to indicate workflow state is overwritten to force terminate execution on update
@@ -1526,7 +1551,12 @@ func (c *ContextImpl) maxHistoryCountExceeded(shardContext historyi.ShardContext
 // TODO: ideally this check should be after closing mutable state tx, but that would require a large refactor
 func (c *ContextImpl) enforceMutableStateSizeCheck(ctx context.Context, shardContext historyi.ShardContext) (bool, error) {
 	if c.maxMutableStateSizeExceeded(shardContext.ChasmRegistry()) {
-		if err := c.forceTerminateWorkflow(ctx, shardContext, common.FailureReasonMutableStateSizeExceedsLimit); err != nil {
+		if err := c.forceTerminateWorkflow(
+			ctx,
+			shardContext,
+			common.FailureReasonMutableStateSizeExceedsLimit,
+			chasm.ExecutionForceTerminationReasonMutableStateSizeExceedsLimit,
+		); err != nil {
 			return false, err
 		}
 		// Return true to caller to indicate workflow state is overwritten to force terminate execution on update
@@ -1567,6 +1597,7 @@ func (c *ContextImpl) forceTerminateWorkflow(
 	ctx context.Context,
 	shardContext historyi.ShardContext,
 	failureReason string,
+	metricReasonString metrics.ReasonString,
 ) error {
 	if !c.MutableState.IsWorkflowExecutionRunning() {
 		return nil
@@ -1587,21 +1618,26 @@ func (c *ContextImpl) forceTerminateWorkflow(
 	}
 
 	if !mutableState.IsWorkflow() {
-		return mutableState.ChasmTree().Terminate(chasm.TerminateComponentRequest{
-			Identity:  consts.IdentityHistoryService,
-			Reason:    failureReason,
-			Details:   nil,
-			RequestID: primitives.NewUUID().String(),
-		})
+		return mutableState.ChasmTree().Terminate(
+			chasm.TerminateComponentRequest{
+				Identity:  consts.IdentityHistoryService,
+				Reason:    failureReason,
+				Details:   nil,
+				RequestID: primitives.NewUUID().String(),
+			},
+			metricReasonString,
+		)
 	}
 
-	return TerminateWorkflow(
+	return ForceTerminateWorkflow(
 		mutableState,
 		failureReason,
 		nil,
 		consts.IdentityHistoryService,
 		false,
 		nil, // No links necessary.
+		shardContext.GetMetricsHandler(),
+		metricReasonString,
 	)
 }
 

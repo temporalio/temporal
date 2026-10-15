@@ -348,7 +348,6 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 		handledByCHASM := false
 		if handler.mutableState.ChasmEnabled() {
 			if chasmHandler, ok := handler.chasmWorkflowRegistry.CommandHandler(command.GetCommandType()); ok {
-				handler.mutableState.EnsureChasmWorkflowComponent(ctx)
 				chasmWorkflow, chasmCtx, chasmErr := handler.mutableState.ChasmWorkflowComponent(ctx)
 				if chasmErr != nil {
 					return nil, chasmErr
@@ -468,7 +467,7 @@ func (handler *workflowTaskCompletedHandler) handleCommandProtocolMessage(
 }
 
 func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
-	_ context.Context,
+	ctx context.Context,
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
 ) (*historypb.HistoryEvent, *handleCommandResponse, error) {
 	executionInfo := handler.mutableState.GetExecutionInfo()
@@ -550,6 +549,14 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 	if handler.mutableState.GetExecutionState().Status == enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED {
 		bypassActivityTaskGeneration = true
 		eagerStartActivity = false
+	} else if eagerStartActivity &&
+		// This line makes an RPC call to matching
+		// TODO: batch possibly multiple activities in a single RPC call
+		!handler.eagerActivityDispatchAllowed(ctx, namespace, attr) {
+		// Matching grants are best-effort. On a denial or any matching failure, generate the
+		// activity task normally instead of failing workflow task completion.
+		bypassActivityTaskGeneration = false
+		eagerStartActivity = false
 	}
 
 	event, _, err := handler.mutableState.AddActivityTaskScheduledEvent(
@@ -572,6 +579,30 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 			},
 		},
 		nil
+}
+
+func (handler *workflowTaskCompletedHandler) eagerActivityDispatchAllowed(
+	ctx context.Context,
+	namespaceName string,
+	attr *commandpb.ScheduleActivityTaskCommandAttributes,
+) bool {
+	return !handler.config.EnableActivityEagerDispatchCheck(namespaceName) ||
+		handler.grantEagerActivityDispatch(ctx, attr)
+}
+
+func (handler *workflowTaskCompletedHandler) grantEagerActivityDispatch(
+	ctx context.Context,
+	attr *commandpb.ScheduleActivityTaskCommandAttributes,
+) bool {
+	executionInfo := handler.mutableState.GetExecutionInfo()
+	return common.GrantEagerDispatch(
+		ctx,
+		handler.matchingClient,
+		executionInfo.GetNamespaceId(),
+		attr.GetTaskQueue().GetName(),
+		attr.GetPriority(),
+		worker_versioning.DeploymentVersionFromDeployment(handler.workflowTaskDeployment),
+	)
 }
 
 func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivity(
@@ -668,7 +699,17 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		},
 	}
 	metrics.ActivityEagerExecutionCounter.With(
-		workflow.GetPerTaskQueueFamilyScope(handler.metricsHandler, handler.mutableState.GetNamespaceEntry().Name(), ai.TaskQueue, handler.config),
+		metrics.GetPerActivityEagerExecutionScope(
+			handler.metricsHandler,
+			handler.mutableState.GetNamespaceEntry().Name().String(),
+			ai.TaskQueue,
+			handler.config.BreakdownMetricsByTaskQueue(
+				handler.mutableState.GetNamespaceEntry().Name().String(),
+				ai.TaskQueue,
+				enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			),
+			metrics.HistoryRespondWorkflowTaskCompletedScope,
+		),
 	).Record(1)
 
 	return func(resp *historyservice.RespondWorkflowTaskCompletedResponse) error {

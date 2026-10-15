@@ -648,3 +648,14 @@ func TestCreateHistoryStartWorkflowRequestPayloads(t *testing.T) {
 	// ensure the original request object is unmodified
 	require.Equal(t, startRequestClone, startRequest)
 }
+
+func TestGrantEagerDispatchWithoutClient(t *testing.T) {
+	require.False(t, GrantEagerDispatch(
+		context.Background(),
+		nil,
+		"namespace-id",
+		"task-queue",
+		nil,
+		nil,
+	))
+}

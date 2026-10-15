@@ -94,7 +94,7 @@ func (c *esQueryConverter) BuildOrExpr(exprs ...elastic.Query) (elastic.Query, e
 	if len(validExprs) == 1 {
 		return validExprs[0], nil
 	}
-	return newBoolQuery().Should(validExprs...).MinimumNumberShouldMatch(1), nil
+	return newBoolQuery().Should(validExprs...), nil
 }
 
 func (c *esQueryConverter) ConvertComparisonExpr(
@@ -106,19 +106,27 @@ func (c *esQueryConverter) ConvertComparisonExpr(
 	negate := false
 	colName := col.FieldName
 	switch operator {
-	case sqlparser.GreaterEqualStr:
-		res = elastic.NewRangeQuery(colName).Gte(value)
-	case sqlparser.LessEqualStr:
-		res = elastic.NewRangeQuery(colName).Lte(value)
-	case sqlparser.GreaterThanStr:
-		res = elastic.NewRangeQuery(colName).Gt(value)
-	case sqlparser.LessThanStr:
-		res = elastic.NewRangeQuery(colName).Lt(value)
+	case sqlparser.GreaterEqualStr, sqlparser.GreaterThanStr:
+		res = &rangeQuery{
+			field: colName,
+			lower: &rangeQueryBound{
+				value:     value,
+				inclusive: operator == sqlparser.GreaterEqualStr,
+			},
+		}
+	case sqlparser.LessEqualStr, sqlparser.LessThanStr:
+		res = &rangeQuery{
+			field: colName,
+			upper: &rangeQueryBound{
+				value:     value,
+				inclusive: operator == sqlparser.LessEqualStr,
+			},
+		}
 	case sqlparser.EqualStr, sqlparser.NotEqualStr:
-		res = elastic.NewTermQuery(colName, value)
+		res = newTermQuery(colName, value)
 		negate = operator == sqlparser.NotEqualStr
 	case sqlparser.InStr, sqlparser.NotInStr:
-		res = elastic.NewTermsQuery(colName, value.([]any)...)
+		res = newTermsQuery(colName, value.([]any)...)
 		negate = operator == sqlparser.NotInStr
 	default:
 		return nil, query.NewOperatorNotSupportedError(col.Alias, col.ValueType, operator)
@@ -186,11 +194,16 @@ func (c *esQueryConverter) ConvertRangeExpr(
 	from, to any,
 ) (elastic.Query, error) {
 	colName := col.FieldName
+	rq := &rangeQuery{
+		field: colName,
+		lower: &rangeQueryBound{value: from, inclusive: true},
+		upper: &rangeQueryBound{value: to, inclusive: true},
+	}
 	switch operator {
 	case sqlparser.BetweenStr:
-		return elastic.NewRangeQuery(colName).Gte(from).Lte(to), nil
+		return rq, nil
 	case sqlparser.NotBetweenStr:
-		return newBoolQuery().MustNot(elastic.NewRangeQuery(colName).Gte(from).Lte(to)), nil
+		return newBoolQuery().MustNot(rq), nil
 	default:
 		// This should be impossible since the query parser only calls this function with one of those
 		// operators strings.

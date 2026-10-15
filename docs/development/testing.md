@@ -335,8 +335,6 @@ func (s* TestMyFeatureSuite) func TestXYZ(t *testing.T) {
 
 Note that each test has its own namespace (`s.Namespace()`) for isolation.
 
-> **Note:** The legacy `FunctionalTestBase` (using testify's `suite`) has been deprecated for new tests.
-
 ## OpenTelemetry (OTEL)
 
 To debug your test by analysing observability traces, set the following environment variables:

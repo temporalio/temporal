@@ -41,7 +41,6 @@ import (
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/quotas/calculator"
-	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
@@ -78,6 +77,14 @@ type (
 		Visibility                   quotas.RequestRateLimiter
 		NamespaceReplicationInducing quotas.RequestRateLimiter
 	}
+
+	// RateLimiters holds the three per-category pod-level rate limiters that
+	// RateLimitInterceptorProvider combines into a single routing rate limiter.
+	RateLimiters struct {
+		Execution                    quotas.RequestRateLimiter
+		Visibility                   quotas.RequestRateLimiter
+		NamespaceReplicationInducing quotas.RequestRateLimiter
+	}
 )
 
 var Module = fx.Options(
@@ -103,6 +110,7 @@ var Module = fx.Options(
 	fx.Provide(ErrorHandlerProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RetryableInterceptorProvider),
+	fx.Provide(RateLimitersProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(interceptor.NewHealthInterceptor),
 	fx.Provide(NamespaceCountLimitInterceptorProvider),
@@ -115,7 +123,9 @@ var Module = fx.Options(
 	fx.Provide(MaskInternalErrorDetailsInterceptorProvider),
 	fx.Provide(ContextMetadataInterceptorProvider),
 	fx.Provide(GrpcServerOptionsProvider),
+	fx.Provide(VisibilityManagerConfigProvider),
 	fx.Provide(VisibilityManagerProvider),
+	fx.Provide(AdminVisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(PersistenceRateLimitingParamsProvider),
 	service.PersistenceLazyLoadedServiceResolverModule,
@@ -217,7 +227,7 @@ func AuthorizationInterceptorProvider(
 		cfg.Global.Authorization.AuthExtraHeaderName,
 		serviceConfig.ExposeAuthorizerErrors,
 		dynamicconfig.EnableCrossNamespaceCommands.Get(dc),
-		dynamicconfig.EnablePrincipalPropagation.Get(dc),
+		dynamicconfig.EnablePrincipalHeader.Get(dc),
 		dynamicconfig.DisableStreamingAuthorizer.Get(dc),
 	)
 }
@@ -497,12 +507,12 @@ func getRateFnWithMetrics(rateFn quotas.RateFn, handler metrics.Handler) quotas.
 	}
 }
 
-func RateLimitInterceptorProvider(
+func RateLimitersProvider(
 	serviceConfig *Config,
 	frontendServiceResolver membership.ServiceResolver,
 	handler metrics.Handler,
 	logger log.SnTaggedLogger,
-) *interceptor.RateLimitInterceptor {
+) RateLimiters {
 	rateFn := calculator.NewLoggedCalculator(
 		calculator.ClusterAwareQuotaCalculator{
 			MemberCounter:    frontendServiceResolver,
@@ -517,13 +527,44 @@ func RateLimitInterceptorProvider(
 		return float64(serviceConfig.NamespaceReplicationInducingAPIsRPS())
 	}
 
+	return RateLimiters{
+		Execution: configs.NewExecutionPriorityRateLimiter(
+			quotas.NewDefaultIncomingRateBurst(rateFnWithMetrics), serviceConfig.OperatorRPSRatio),
+		Visibility: configs.NewVisibilityPriorityRateLimiter(
+			quotas.NewDefaultIncomingRateBurst(rateFn), serviceConfig.OperatorRPSRatio),
+		NamespaceReplicationInducing: configs.NewNamespaceReplicationInducingAPIPriorityRateLimiter(
+			quotas.NewDefaultIncomingRateBurst(namespaceReplicationInducingRateFn), serviceConfig.OperatorRPSRatio),
+	}
+}
+
+func RateLimitInterceptorProvider(
+	serviceConfig *Config,
+	rateLimiters RateLimiters,
+) *interceptor.RateLimitInterceptor {
+	mapping := make(map[string]quotas.RequestRateLimiter)
+	for api := range configs.APIToPriority {
+		mapping[api] = rateLimiters.Execution
+	}
+	for api := range configs.VisibilityAPIToPriority {
+		mapping[api] = rateLimiters.Visibility
+	}
+	for api := range configs.NamespaceReplicationInducingAPIToPriority {
+		mapping[api] = rateLimiters.NamespaceReplicationInducing
+	}
+	for api := range configs.PodOnlyAPIToPriority { // do not mirror this loop in NamespaceRateLimitInterceptorProvider
+		mapping[api] = rateLimiters.Execution
+	}
+	// EnableDescribeMutableStateRateLimit is read once, here, at fx-graph construction time — toggling
+	// it in production requires bouncing frontend pods to pick up the new value. Once DescribeMutableState's
+	// rollout is complete, move its entry into PodOnlyAPIToPriority above and delete this branch.
+	if serviceConfig.EnableDescribeMutableStateRateLimit() {
+		for api := range configs.DescribeMutableStateAPIToPriority { // do not mirror this loop in NamespaceRateLimitInterceptorProvider
+			mapping[api] = rateLimiters.Execution
+		}
+	}
+
 	return interceptor.NewRateLimitInterceptor(
-		configs.NewRequestToRateLimiter(
-			quotas.NewDefaultIncomingRateBurst(rateFnWithMetrics),
-			quotas.NewDefaultIncomingRateBurst(rateFn),
-			quotas.NewDefaultIncomingRateBurst(namespaceReplicationInducingRateFn),
-			serviceConfig.OperatorRPSRatio,
-		),
+		quotas.NewRoutingRateLimiter(mapping),
 		map[string]int{
 			healthpb.Health_Check_FullMethodName:                     0, // exclude health check requests from rate limiting.
 			adminservice.AdminService_DeepHealthCheck_FullMethodName: 0, // exclude deep health check requests from rate limiting.
@@ -672,8 +713,14 @@ func NamespaceCountLimitInterceptorProvider(
 		namespaceRegistry,
 		serviceResolver,
 		logger,
-		serviceConfig.MaxConcurrentLongRunningRequestsPerInstance,
-		serviceConfig.MaxGlobalConcurrentLongRunningRequests,
+		interceptor.ConcurrentRequestQuotas{
+			PerInstance: serviceConfig.MaxConcurrentLongRunningRequestsPerInstance,
+			Global:      serviceConfig.MaxGlobalConcurrentLongRunningRequests,
+		},
+		interceptor.ConcurrentRequestQuotas{
+			PerInstance: serviceConfig.MaxInternalPerNSConcurrentLongRunningRequestsPerInstance,
+			Global:      serviceConfig.MaxGlobalInternalPerNSConcurrentLongRunningRequests,
+		},
 		configs.ExecutionAPICountLimitOverride,
 	)
 }
@@ -735,42 +782,37 @@ func PersistenceRateLimitingParamsProvider(
 	)
 }
 
+func VisibilityManagerConfigProvider(serviceConfig *Config) *visibility.ManagerConfig {
+	return &visibility.ManagerConfig{
+		EsProcessorConfig: nil, // frontend visibility never write
+
+		MaxReadQPS:                     serviceConfig.VisibilityPersistenceMaxReadQPS,
+		MaxWriteQPS:                    serviceConfig.VisibilityPersistenceMaxWriteQPS,
+		OperatorRPSRatio:               serviceConfig.OperatorRPSRatio,
+		SlowQueryThreshold:             serviceConfig.VisibilityPersistenceSlowQueryThreshold,
+		EnableReadFromSecondary:        serviceConfig.EnableReadFromSecondaryVisibility,
+		EnableShadowReadMode:           serviceConfig.VisibilityEnableShadowReadMode,
+		SecondaryVisibilityWritingMode: dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // frontend visibility never write
+		DisableOrderByClause:           serviceConfig.VisibilityDisableOrderByClause,
+		EnableManualPagination:         serviceConfig.VisibilityEnableManualPagination,
+	}
+}
+
 func VisibilityManagerProvider(
-	logger log.Logger,
-	persistenceConfig *config.Persistence,
-	customVisibilityStoreFactory visibility.VisibilityStoreFactory,
-	metricsHandler metrics.Handler,
-	serviceConfig *Config,
-	persistenceServiceResolver resolver.ServiceResolver,
-	searchAttributesMapperProvider searchattribute.MapperProvider,
-	saProvider searchattribute.Provider,
-	namespaceRegistry namespace.Registry,
-	chasmRegistry *chasm.Registry,
-	serializer serialization.Serializer,
+	managerParams visibility.ManagerParams,
+	managerConfig *visibility.ManagerConfig,
 ) (manager.VisibilityManager, error) {
-	return visibility.NewManager(
-		*persistenceConfig,
-		persistenceServiceResolver,
-		customVisibilityStoreFactory,
-		nil, // frontend visibility never write
-		saProvider,
-		searchAttributesMapperProvider,
-		namespaceRegistry,
-		chasmRegistry,
-		serviceConfig.VisibilityPersistenceMaxReadQPS,
-		serviceConfig.VisibilityPersistenceMaxWriteQPS,
-		serviceConfig.OperatorRPSRatio,
-		serviceConfig.VisibilityPersistenceSlowQueryThreshold,
-		serviceConfig.EnableReadFromSecondaryVisibility,
-		serviceConfig.VisibilityEnableShadowReadMode,
-		dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // frontend visibility never write
-		serviceConfig.VisibilityDisableOrderByClause,
-		serviceConfig.VisibilityEnableManualPagination,
-		serviceConfig.VisibilityEnableUnifiedQueryConverter,
-		metricsHandler,
-		logger,
-		serializer,
-	)
+	return visibility.NewManager(&managerParams, managerConfig)
+}
+
+func AdminVisibilityManagerProvider(
+	visManager manager.VisibilityManager,
+) (manager.AdminVisibilityManager, error) {
+	adminVisManager, ok := visManager.(manager.AdminVisibilityManager)
+	if !ok {
+		return nil, manager.ErrNotAdminVisibilityManager
+	}
+	return adminVisManager, nil
 }
 
 func FEReplicatorNamespaceReplicationQueueProvider(
@@ -795,7 +837,7 @@ func AdminHandlerProvider(
 	persistenceConfig *config.Persistence,
 	configuration *Config,
 	replicatorNamespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
-	visibilityMgr manager.VisibilityManager,
+	visibilityMgr manager.AdminVisibilityManager,
 	logger log.SnTaggedLogger,
 	eventLogger otellog.Logger,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
@@ -921,7 +963,7 @@ func OperatorHandlerProvider(
 
 // callbackValidatorProvider creates a callback Validator using the production dynamic config keys
 // so that existing operator configurations (callback.allowedAddresses) are honored.
-func callbackValidatorProvider(dc *dynamicconfig.Collection) (callbacks.Validator, error) {
+func callbackValidatorProvider(dc *dynamicconfig.Collection, namespaceRegistry namespace.Registry) (callbacks.Validator, error) {
 	cfg := callbacks.ValidatorConfig{
 		MaxCallbacksPerExecution:         chasmcallback.MaxPerExecution.Get(dc),
 		MaxIDLengthLimit:                 dynamicconfig.MaxIDLengthLimit.Get(dc),
@@ -932,7 +974,7 @@ func callbackValidatorProvider(dc *dynamicconfig.Collection) (callbacks.Validato
 		MaxOperationNameLength:           chasmnexus.MaxOperationNameLength.Get(dc),
 		NexusHandlerSourceContextMaxSize: chasmcallback.NexusHandlerSourceContextMaxSize.Get(dc),
 	}
-	return callbacks.NewValidator(cfg)
+	return callbacks.NewValidator(cfg, namespaceRegistry)
 }
 
 func HandlerProvider(
