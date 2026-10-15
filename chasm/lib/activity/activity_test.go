@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	apiactivitypb "go.temporal.io/api/activity/v1" //nolint:importas
 	commonpb "go.temporal.io/api/common/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	sdkpb "go.temporal.io/api/sdk/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -70,6 +71,35 @@ func TestSearchAttributesIncludesExecutionTime(t *testing.T) {
 			require.Equal(t, testTime.Add(tc.startDelay), executionTime)
 		})
 	}
+}
+
+func TestStandaloneActivityPropagatesNexusSerializationContext(t *testing.T) {
+	ctx := &chasm.MockMutableContext{
+		MockContext: chasm.MockContext{
+			HandleNow: func(chasm.Component) time.Time { return time.Now() },
+			HandleExecutionKey: func() chasm.ExecutionKey {
+				return chasm.ExecutionKey{NamespaceID: "namespace-id", BusinessID: "activity-id", RunID: "run-id"}
+			},
+		},
+	}
+	serializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
+	activity, err := NewStandaloneActivity(ctx, &workflowservice.StartActivityExecutionRequest{
+		ActivityType:                        &commonpb.ActivityType{Name: "activity"},
+		TaskQueue:                           &taskqueuepb.TaskQueue{Name: "task-queue"},
+		StartToCloseTimeout:                 durationpb.New(time.Minute),
+		PropagatedNexusSerializationContext: serializationContext,
+	})
+	require.NoError(t, err)
+
+	response, err := activity.GenerateRecordActivityTaskStartedResponse(ctx, "namespace")
+	require.NoError(t, err)
+	require.Equal(t, serializationContext, response.GetNexusSerializationContext())
+	require.Equal(t, serializationContext, activity.buildActivityExecutionInfo(ctx, &workflowservice.DescribeActivityExecutionRequest{}).GetPropagatedNexusSerializationContext())
+	require.Equal(t, serializationContext, activity.buildPollActivityExecutionResponse(ctx).GetFrontendResponse().GetPropagatedNexusSerializationContext())
 }
 
 func TestHandleStarted(t *testing.T) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync/atomic"
 	"time"
 
@@ -870,6 +871,16 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	namespaceEntry, err := e.NamespaceCache.GetNamespaceByID(namespace.ID(namespaceID))
 	switch err.(type) {
 	case nil:
+		if e.Config.ValidateReplicationTaskSourceCluster() &&
+			!slices.Contains(namespaceEntry.ClusterNames(businessID), e.sourceClusterName) {
+			e.ThrottledLogger.Warn(
+				"Replication task skipped because source cluster is not in namespace cluster list",
+				tag.WorkflowNamespaceID(namespaceID),
+				tag.SourceCluster(e.sourceClusterName),
+			)
+			e.namespace.Store(namespaceEntry.Name())
+			return namespaceEntry.Name().String(), false, nil
+		}
 		if e.replicationTask.VersionedTransition != nil && e.replicationTask.VersionedTransition.NamespaceFailoverVersion > namespaceEntry.FailoverVersion(businessID) {
 			_, err = e.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
 			if err != nil {
@@ -877,6 +888,14 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 			}
 		}
 	case *serviceerror.NamespaceNotFound:
+		if e.Config.ValidateReplicationTaskSourceCluster() {
+			e.ThrottledLogger.Warn(
+				"Replication task skipped because namespace is not found",
+				tag.WorkflowNamespaceID(namespaceID),
+				tag.SourceCluster(e.sourceClusterName),
+			)
+			return "", false, nil
+		}
 		_, err = e.EagerNamespaceRefresher.SyncNamespaceFromSourceCluster(ctx, namespace.ID(namespaceID), e.sourceClusterName)
 		if err != nil {
 			e.ThrottledLogger.Error("Failed to SyncNamespaceFromSourceCluster", tag.Error(err))
@@ -902,24 +921,30 @@ func (e *ExecutableTaskImpl) GetNamespaceInfo(
 	if namespaceEntry.State() == enumspb.NAMESPACE_STATE_DELETED {
 		return namespaceEntry.Name().String(), false, nil
 	}
-	shouldProcessTask := false
-FilterLoop:
-	for _, targetCluster := range namespaceEntry.ClusterNames(businessID) {
-		if e.ClusterMetadata.GetCurrentClusterName() == targetCluster {
-			shouldProcessTask = true
-			break FilterLoop
-		}
+	clusterNames := namespaceEntry.ClusterNames(businessID)
+	if e.Config.ValidateReplicationTaskSourceCluster() && !slices.Contains(clusterNames, e.sourceClusterName) {
+		e.ThrottledLogger.Warn(
+			"Replication task skipped because source cluster is not in refreshed namespace cluster list",
+			tag.WorkflowNamespaceID(namespaceID),
+			tag.SourceCluster(e.sourceClusterName),
+		)
+		return namespaceEntry.Name().String(), false, nil
 	}
-	return namespaceEntry.Name().String(), shouldProcessTask, nil
+	return namespaceEntry.Name().String(), slices.Contains(clusterNames, e.ClusterMetadata.GetCurrentClusterName()), nil
 }
 
 func (e *ExecutableTaskImpl) MarkPoisonPill() error {
 	taskInfo := e.ReplicationTask().GetRawTaskInfo()
 
-	if e.markPoisonPillAttempts >= MarkPoisonPillMaxAttempts {
-		e.Logger.Error("MarkPoisonPill reached max attempts",
+	maxRetryAttempts := e.Config.ReplicationDLQMaxRetryAttempts()
+	if maxRetryAttempts > 0 && e.markPoisonPillAttempts >= maxRetryAttempts {
+		e.Logger.Error("MarkPoisonPill reached breakglass max attempts",
 			tag.SourceCluster(e.SourceClusterName()),
 			tag.ReplicationTask(taskInfo),
+		)
+		metrics.ReplicationDLQDropped.With(e.MetricsHandler).Record(
+			1,
+			metrics.SourceClusterTag(e.SourceClusterName()),
 		)
 		e.emitReplicationTaskError(wideevents.ReplOperationDLQWrite, "Writing replication task to DLQ reached maximum attempts", nil, map[string]any{
 			"dlq_attempt": e.markPoisonPillAttempts,

@@ -296,7 +296,7 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCompletionCallbacks() {
 			}},
 		})
 		s.NoError(err)
-		s.NoError(await.Rcv(s.T(), pollerErrCh))
+		s.NoError(s.Rcv(pollerErrCh))
 
 		cbInfo := s.awaitCallbackInfo(env, operationID, enumspb.CALLBACK_STATE_SUCCEEDED)
 		// Each callback is given its own request ID, rather than the one that started the operation.
@@ -306,7 +306,7 @@ func (s *NexusStandaloneCallbacksTestSuite) TestCompletionCallbacks() {
 			[]*commonpb.Link{{Variant: &commonpb.Link_WorkflowEvent_{WorkflowEvent: handlerReturnLink}}},
 			cbInfo.GetCallback().GetLinks())
 
-		gotLinks := await.Rcv(s.T(), inboundLinks)
+		gotLinks := s.Rcv(inboundLinks)
 		s.Require().Len(gotLinks, 1)
 		gotCallbackLink, err := commonnexus.ConvertNexusLinkToLinkCallback(commonnexus.ConvertLinksFromProto(gotLinks)[0])
 		s.NoError(err)

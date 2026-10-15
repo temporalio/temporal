@@ -182,19 +182,25 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartAfterTimeout()
 }
 
 func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartImmediately() {
-	env := testcore.NewEnv(s.T())
-	request := &workflowservice.StartWorkflowExecutionRequest{RequestId: uuid.NewString()}
-	response := s.startEagerWorkflow(env, request)
-	task := response.GetEagerWorkflowTask()
-	s.NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
-	response = s.startEagerWorkflow(env, request)
-	task = response.GetEagerWorkflowTask()
-	s.NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
+	for _, crossRunDedup := range []bool{false, true} {
+		s.Run(fmt.Sprintf("EnableCrossRunRequestIDDedup=%v", crossRunDedup), func(s *EagerWorkflowTestSuite) {
+			env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.EnableCrossRunRequestIDDedup, crossRunDedup))
+			request := &workflowservice.StartWorkflowExecutionRequest{RequestId: uuid.NewString()}
+			response := s.startEagerWorkflow(env, request)
+			task := response.GetEagerWorkflowTask()
+			s.NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
+			firstRunID := response.RunId
+			response = s.startEagerWorkflow(env, request)
+			task = response.GetEagerWorkflowTask()
+			s.NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
+			s.Equal(firstRunID, response.RunId)
 
-	s.respondWorkflowTaskCompleted(env, task, "ok")
-	// Verify workflow completes and client can get the result
-	result := s.getWorkflowStringResult(env, s.defaultWorkflowID(), response.RunId)
-	s.Equal("ok", result)
+			s.respondWorkflowTaskCompleted(env, task, "ok")
+			// Verify workflow completes and client can get the result
+			result := s.getWorkflowStringResult(env, s.defaultWorkflowID(), response.RunId)
+			s.Equal("ok", result)
+		})
+	}
 }
 
 func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_TerminateDuplicate() {

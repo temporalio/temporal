@@ -344,7 +344,6 @@ func (handler *workflowTaskCompletedHandler) handleCommand(
 		handledByCHASM := false
 		if handler.mutableState.ChasmEnabled() {
 			if chasmHandler, ok := handler.chasmWorkflowRegistry.CommandHandler(command.GetCommandType()); ok {
-				handler.mutableState.EnsureChasmWorkflowComponent(ctx)
 				chasmWorkflow, chasmCtx, chasmErr := handler.mutableState.ChasmWorkflowComponent(ctx)
 				if chasmErr != nil {
 					return nil, chasmErr
@@ -759,7 +758,17 @@ func (handler *workflowTaskCompletedHandler) handlePostCommandEagerExecuteActivi
 		},
 	}
 	metrics.ActivityEagerExecutionCounter.With(
-		workflow.GetPerTaskQueueFamilyScope(handler.metricsHandler, handler.mutableState.GetNamespaceEntry().Name(), ai.TaskQueue, handler.config),
+		metrics.GetPerActivityEagerExecutionScope(
+			handler.metricsHandler,
+			handler.mutableState.GetNamespaceEntry().Name().String(),
+			ai.TaskQueue,
+			handler.config.BreakdownMetricsByTaskQueue(
+				handler.mutableState.GetNamespaceEntry().Name().String(),
+				ai.TaskQueue,
+				enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			),
+			metrics.HistoryRespondWorkflowTaskCompletedScope,
+		),
 	).Record(1)
 
 	return func(resp *historyservice.RespondWorkflowTaskCompletedResponse) error {

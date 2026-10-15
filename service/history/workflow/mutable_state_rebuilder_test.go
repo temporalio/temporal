@@ -18,6 +18,7 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	chasmnexusoperation "go.temporal.io/server/chasm/lib/nexusoperation"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -2249,7 +2250,6 @@ func (s *stateBuilderSuite) TestApplyEvents_NexusScheduled_ChasmCreateSurfacesEr
 	s.mockMutableState.EXPECT().UpdateCurrentVersion(gomock.Any(), true).AnyTimes()
 	s.chasmEnabled = true
 	s.mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
-	s.mockMutableState.EXPECT().EnsureChasmWorkflowComponent(gomock.Any()).AnyTimes()
 	s.mockMutableState.EXPECT().ChasmWorkflowComponent(gomock.Any()).
 		Return(nil, nil, serviceerror.NewInternal("chasm unavailable")).AnyTimes()
 
@@ -2302,7 +2302,6 @@ func (s *stateBuilderSuite) TestApplyEvents_NexusScheduled_UsesSingleChasmSelect
 	s.mockMutableState.EXPECT().ClearStickyTaskQueue().Times(2)
 	s.mockMutableState.EXPECT().UpdateCurrentVersion(int64(1), true).Times(2)
 	s.chasmEnabled = true
-	s.mockMutableState.EXPECT().EnsureChasmWorkflowComponent(gomock.Any()).Times(2)
 	s.mockMutableState.EXPECT().ChasmWorkflowComponent(gomock.Any()).
 		Return(&chasmworkflow.Workflow{}, nil, nil).Times(2)
 	s.mockTaskGenerator.EXPECT().GenerateActivityTimerTasks().Return(nil)
@@ -2451,7 +2450,6 @@ func (s *stateBuilderSuite) runApplyStateMachineEvent(
 	ms.EXPECT().HSM().Return(nil).AnyTimes()
 	ms.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry).AnyTimes()
 	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{WorkflowId: "test-workflow-id"}).AnyTimes()
-	ms.EXPECT().EnsureChasmWorkflowComponent(gomock.Any()).AnyTimes()
 	ms.EXPECT().ChasmWorkflowComponent(gomock.Any()).
 		Return(&chasmworkflow.Workflow{}, nil, tc.chasmComponentErr).AnyTimes()
 
@@ -2466,6 +2464,18 @@ func nexusScheduledEvent() *historypb.HistoryEvent {
 
 func nexusCompletedEvent() *historypb.HistoryEvent {
 	return &historypb.HistoryEvent{EventId: 6, EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED}
+}
+
+func nexusCancelRequestedEvent() *historypb.HistoryEvent {
+	return &historypb.HistoryEvent{
+		EventId:   7,
+		EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED,
+		Attributes: &historypb.HistoryEvent_NexusOperationCancelRequestedEventAttributes{
+			NexusOperationCancelRequestedEventAttributes: &historypb.NexusOperationCancelRequestedEventAttributes{
+				ScheduledEventId: 5,
+			},
+		},
+	}
 }
 
 func (s *stateBuilderSuite) TestApplyStateMachineEvent() {
@@ -2564,6 +2574,16 @@ func (s *stateBuilderSuite) TestApplyStateMachineEvent() {
 			tc:               nexusRebuildCase{chasmEnabled: true, chasmHasDef: true, chasmApplyErr: chasmErr},
 			wantChasmApplied: true,
 			wantErr:          chasmErr,
+		},
+		{
+			// CancelRequestedEventDefinition in not an operation creating event, we should surface any error other than
+			// NotFound which is only returned when the operation is not the chasm tree. Do not try application of event
+			// to HSM when it is a different error other than NotFound.
+			name:             "cancel requested, chasm error surfaced without hsm fallback",
+			event:            nexusCancelRequestedEvent(),
+			tc:               nexusRebuildCase{chasmEnabled: true, chasmHasDef: true, chasmApplyErr: chasmnexusoperation.ErrOperationAlreadyCompleted},
+			wantChasmApplied: true,
+			wantErr:          chasmnexusoperation.ErrOperationAlreadyCompleted,
 		},
 	}
 

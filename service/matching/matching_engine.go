@@ -56,7 +56,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
-	"go.temporal.io/server/common/stream_batcher"
+	"go.temporal.io/server/common/streambatcher"
 	"go.temporal.io/server/common/taskqueue"
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/telemetry"
@@ -168,6 +168,7 @@ type (
 		metricsHandler                metrics.Handler
 		partitionsLock                sync.RWMutex // locks mutation of partitions
 		partitions                    map[tqid.PartitionKey]taskQueuePartitionManager
+		namespaceStateUnloads         sync.WaitGroup
 		gaugeMetrics                  gaugeMetrics // per-namespace task queue counters
 		config                        *Config
 		partitionScalerFactory        PartitionScalerFactory
@@ -199,7 +200,7 @@ type (
 		// Lock to serialize replication queue updates.
 		replicationLock sync.Mutex
 		// Serialize and batch user data updates by namespace.
-		userDataUpdateBatchers collection.SyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]]
+		userDataUpdateBatcher *streambatcher.KeyedBatcher[namespace.ID, *userDataUpdate, error]
 		// Stores results of reachability queries to visibility
 		reachabilityCache reachabilityCache
 		// Rate limiter to limit the task dispatch
@@ -252,11 +253,12 @@ var (
 	nexusEndpointsTablePartitionRoutingKey, _ = tqid.MustNormalPartitionFromRpcName("not-applicable", "not-applicable", enumspb.TASK_QUEUE_TYPE_UNSPECIFIED).RoutingKey(0)
 
 	// Options for batching user data updates.
-	userDataBatcherOptions = stream_batcher.BatcherOptions{
-		MaxItems: 100,
-		MinDelay: 100 * time.Millisecond,
-		MaxDelay: 500 * time.Millisecond,
-		IdleTime: time.Minute,
+	userDataBatcherOptions = streambatcher.BatcherOptions{
+		MaxItems:      100,
+		MinDelay:      100 * time.Millisecond,
+		MaxDelay:      500 * time.Millisecond,
+		IdleTime:      time.Minute,
+		ClearInterval: 0, // overlapping batchers would violate per-namespace serialization
 	}
 )
 
@@ -328,11 +330,15 @@ func NewEngine(
 		workerInstancePollers:     workerPollerTracker{pollers: make(map[string]map[string]context.CancelFunc)},
 		shutdownWorkers:           cache.New(shutdownWorkersCacheMaxSize, &cache.Options{TTL: shutdownWorkersCacheTTL}),
 		namespaceReplicationQueue: namespaceReplicationQueue,
-		userDataUpdateBatchers:    collection.NewSyncMap[namespace.ID, *stream_batcher.Batcher[*userDataUpdate, error]](),
 		rateLimiter:               rateLimiter,
 		taskHookFactories:         taskHookFactories,
 		partitionScalerFactory:    partitionScalerFactory,
 	}
+	e.userDataUpdateBatcher = streambatcher.NewKeyedBatcher(
+		e.applyUserDataUpdateBatch,
+		userDataBatcherOptions,
+		e.timeSource,
+	)
 	e.nexusEndpointsOwnershipLostCh.Store(make(chan struct{}))
 	e.reachabilityCache = newReachabilityCache(
 		metrics.NoopMetricsHandler,
@@ -353,6 +359,7 @@ func (e *matchingEngineImpl) Start() {
 
 	go e.watchMembership()
 	_ = e.serviceResolver.AddListener(e.listenerKey(), e.membershipChangedCh)
+	e.namespaceRegistry.RegisterStateChangeCallback(e, e.onNamespaceStateChange)
 }
 
 func (e *matchingEngineImpl) Stop() {
@@ -364,6 +371,7 @@ func (e *matchingEngineImpl) Stop() {
 		return
 	}
 
+	e.namespaceRegistry.UnregisterStateChangeCallback(e)
 	_ = e.serviceResolver.RemoveListener(e.listenerKey())
 	close(e.membershipChangedCh)
 
@@ -372,6 +380,48 @@ func (e *matchingEngineImpl) Stop() {
 	for _, l := range e.getTaskQueuePartitions(math.MaxInt32) {
 		l.Stop(unloadCauseShuttingDown)
 	}
+	e.namespaceStateUnloads.Wait()
+}
+
+// onNamespaceStateChange unloads a namespace's partitions when it fails over to or away from this
+// cluster, or is deleted from the DB, since their namespace_state metric tag is fixed at load time.
+// Removal and the status check happen under partitionsLock, so each partition is stopped exactly once.
+func (e *matchingEngineImpl) onNamespaceStateChange(ns *namespace.Namespace, deletedFromDB bool) {
+	e.partitionsLock.Lock()
+	defer e.partitionsLock.Unlock()
+	// Callbacks can still arrive after UnregisterStateChangeCallback returns.
+	if atomic.LoadInt32(&e.status) != common.DaemonStatusStarted {
+		return
+	}
+	var unloaded []taskQueuePartitionManager
+	for key, pm := range e.partitions {
+		if pm.Namespace().ID() != ns.ID() {
+			continue
+		}
+		stateChanged := e.namespaceStateTagValue(pm.Namespace()) != e.namespaceStateTagValue(ns)
+		if deletedFromDB || stateChanged {
+			delete(e.partitions, key)
+			unloaded = append(unloaded, pm)
+		}
+	}
+	// Stopping a partition waits on persistence, so it runs in the background.
+	const batchSize = 100
+	for i := 0; i < len(unloaded); i += batchSize {
+		batch := unloaded[i:min(len(unloaded), i+batchSize)]
+		e.namespaceStateUnloads.Go(func() {
+			for _, pm := range batch {
+				pm.Stop(unloadCauseNamespaceStateChange)
+			}
+		})
+	}
+}
+
+func (e *matchingEngineImpl) namespaceStateTagValue(ns *namespace.Namespace) string {
+	//nolint:forbidigo // metric tag for namespace state, not per-workflow
+	if ns.ActiveInCluster(e.clusterMeta.GetCurrentClusterName()) {
+		return metrics.ActiveNamespaceStateTagValue
+	}
+	return metrics.PassiveNamespaceStateTagValue
 }
 
 func (e *matchingEngineImpl) listenerKey() string {
@@ -472,6 +522,10 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		if retErr != nil || retPM == nil {
 			return
 		}
+		// Runs after the deferred partitionsLock.Unlock below, so Start is outside the lock.
+		if retCreated {
+			retPM.Start()
+		}
 		if retErr = retPM.WaitUntilInitialized(ctx); retErr != nil {
 			e.unloadTaskQueuePartition(retPM, unloadCauseInitError)
 		}
@@ -489,11 +543,44 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		return nil, false, nil
 	}
 
-	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(namespace.ID(partition.NamespaceId()))
-	if err != nil {
+	// Outside the lock because this may read through to persistence. It also makes the cache-only
+	// read below succeed, since a readthrough populates the cache.
+	namespaceID := namespace.ID(partition.NamespaceId())
+	if _, err := e.namespaceRegistry.GetNamespaceByID(namespaceID); err != nil {
 		return nil, false, err
 	}
 
+	// If it gets here, write lock and check again in case a task queue is created between the two locks
+	e.partitionsLock.Lock()
+	defer e.partitionsLock.Unlock()
+	pm, ok = e.partitions[key]
+	if ok {
+		return pm, false, nil
+	}
+
+	// Building under the lock is cheap, and reading the namespace here sees any failover or deletion
+	// whose onNamespaceStateChange scan already ran, since the registry updates its cache before it
+	// invokes callbacks (see TestCallbackSeesUpdatedCache in nsregistry).
+	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByIDWithOptions(
+		namespaceID,
+		namespace.GetNamespaceOptions{DisableReadthrough: true},
+	)
+	if err != nil {
+		return nil, false, err
+	}
+	newPM, err := e.buildTaskQueuePartitionManager(namespaceEntry, partition, loadCause)
+	if err != nil {
+		return nil, false, err
+	}
+	e.partitions[key] = newPM
+	return newPM, true, nil
+}
+
+func (e *matchingEngineImpl) buildTaskQueuePartitionManager(
+	namespaceEntry *namespace.Namespace,
+	partition tqid.Partition,
+	loadCause loadCause,
+) (*taskQueuePartitionManagerImpl, error) {
 	var newPM *taskQueuePartitionManagerImpl
 	tqConfig := newTaskQueueConfig(partition.TaskQueue(), e.config, namespaceEntry.Name())
 	tqConfig.loadCause = loadCause
@@ -512,7 +599,7 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		logger,
 		e.namespaceRegistry,
 	)
-	newPM, err = newTaskQueuePartitionManager(
+	newPM, err := newTaskQueuePartitionManager(
 		e,
 		namespaceEntry,
 		partition,
@@ -522,26 +609,7 @@ func (e *matchingEngineImpl) getTaskQueuePartitionManager(
 		metricsHandler,
 		userDataManager,
 	)
-	if err != nil {
-		return nil, false, err
-	}
-
-	// If it gets here, write lock and check again in case a task queue is created between the two locks
-	e.partitionsLock.Lock()
-	pm, ok = e.partitions[key]
-	if ok {
-		e.partitionsLock.Unlock()
-		// Lost the race with a concurrent load of the same partition. The unstarted
-		// newPM holds no external references (subscriptions etc. are only registered
-		// in Start), so it can simply be dropped and garbage collected.
-		return pm, false, nil
-	}
-
-	e.partitions[key] = newPM
-	e.partitionsLock.Unlock()
-
-	newPM.Start()
-	return newPM, true, nil
+	return newPM, err
 }
 
 func (e *matchingEngineImpl) loggerAndMetricsForPartition(
@@ -550,13 +618,7 @@ func (e *matchingEngineImpl) loggerAndMetricsForPartition(
 	tqConfig *taskQueueConfig,
 ) (log.Logger, log.Logger, metrics.Handler) {
 	nsName := nsEntry.Name().String()
-	var nsState string
-	//nolint:forbidigo // metric tag for namespace state, not per-workflow
-	if nsEntry.ActiveInCluster(e.clusterMeta.GetCurrentClusterName()) {
-		nsState = metrics.ActiveNamespaceStateTagValue
-	} else {
-		nsState = metrics.PassiveNamespaceStateTagValue
-	}
+	nsState := e.namespaceStateTagValue(nsEntry)
 	logger := log.With(e.logger,
 		tag.WorkflowTaskQueueName(partition.RpcName()),
 		tag.WorkflowTaskQueueType(partition.TaskType()),
@@ -2544,6 +2606,7 @@ func (e *matchingEngineImpl) ApplyTaskQueueUserDataReplicationEvent(
 				mergedData.RedirectRules = newVersioningData.GetRedirectRules()
 			}
 			mergedUserData.PerType = req.GetUserData().GetPerType()
+			mergedUserData.Clock = common.CloneProto(req.GetUserData().GetClock())
 		}
 
 		for _, buildId := range buildIdsToRevive {
@@ -2628,7 +2691,7 @@ func (e *matchingEngineImpl) ForceUnloadTaskQueuePartition(
 func (e *matchingEngineImpl) UpdateTaskQueueUserData(ctx context.Context, request *matchingservice.UpdateTaskQueueUserDataRequest) (*matchingservice.UpdateTaskQueueUserDataResponse, error) {
 	namespaceId := namespace.ID(request.NamespaceId)
 	var applied, conflicting bool
-	persistenceErr, ctxErr := e.getUserDataBatcher(namespaceId).Add(ctx, &userDataUpdate{
+	persistenceErr, ctxErr := e.userDataUpdateBatcher.Add(ctx, namespaceId, &userDataUpdate{
 		taskQueue: request.GetTaskQueue(),
 		update: persistence.SingleTaskQueueUserDataUpdate{
 			UserData:        request.UserData,
@@ -3021,20 +3084,6 @@ func (e *matchingEngineImpl) notifyNexusEndpointsOwnershipChange() {
 		close(e.nexusEndpointsOwnershipLostCh.Swap(make(chan struct{})).(chan struct{})) //nolint:revive // type is always chan struct{}
 	}
 	e.nexusEndpointClient.notifyOwnershipChanged(isOwner)
-}
-
-func (e *matchingEngineImpl) getUserDataBatcher(namespaceId namespace.ID) *stream_batcher.Batcher[*userDataUpdate, error] {
-	// Note that values are never removed from this map. The batcher's goroutine will exit
-	// after the idle time, though, which gets most of the desired resource savings.
-	if batcher, ok := e.userDataUpdateBatchers.Get(namespaceId); ok {
-		return batcher
-	}
-	fn := func(batch []*userDataUpdate) error {
-		return e.applyUserDataUpdateBatch(namespaceId, batch)
-	}
-	newBatcher := stream_batcher.NewBatcher[*userDataUpdate, error](fn, userDataBatcherOptions, e.timeSource)
-	batcher, _ := e.userDataUpdateBatchers.GetOrSet(namespaceId, newBatcher)
-	return batcher
 }
 
 func (e *matchingEngineImpl) applyUserDataUpdateBatch(namespaceId namespace.ID, batch []*userDataUpdate) error {
@@ -3498,26 +3547,27 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 	}
 
 	return &matchingservice.PollActivityTaskQueueResponse{
-		ActivityId:                  attributes.ActivityId,
-		ActivityType:                attributes.ActivityType,
-		ActivityRunId:               historyResponse.GetActivityRunId(),
-		Header:                      attributes.Header,
-		Input:                       attributes.Input,
-		WorkflowExecution:           task.workflowExecution(),
-		CurrentAttemptScheduledTime: historyResponse.CurrentAttemptScheduledTime,
-		ScheduledTime:               scheduledEvent.EventTime,
-		ScheduleToCloseTimeout:      scheduleToCloseTimeout,
-		StartedTime:                 historyResponse.StartedTime,
-		StartToCloseTimeout:         attributes.StartToCloseTimeout,
-		HeartbeatTimeout:            attributes.HeartbeatTimeout,
-		TaskToken:                   serializedToken,
-		Attempt:                     taskToken.Attempt,
-		HeartbeatDetails:            historyResponse.HeartbeatDetails,
-		WorkflowType:                historyResponse.WorkflowType,
-		WorkflowNamespace:           historyResponse.WorkflowNamespace,
-		PollerScalingDecision:       task.pollerScalingDecision,
-		Priority:                    historyResponse.Priority,
-		RetryPolicy:                 historyResponse.RetryPolicy,
+		ActivityId:                          attributes.ActivityId,
+		ActivityType:                        attributes.ActivityType,
+		ActivityRunId:                       historyResponse.GetActivityRunId(),
+		Header:                              attributes.Header,
+		Input:                               attributes.Input,
+		WorkflowExecution:                   task.workflowExecution(),
+		CurrentAttemptScheduledTime:         historyResponse.CurrentAttemptScheduledTime,
+		ScheduledTime:                       scheduledEvent.EventTime,
+		ScheduleToCloseTimeout:              scheduleToCloseTimeout,
+		StartedTime:                         historyResponse.StartedTime,
+		StartToCloseTimeout:                 attributes.StartToCloseTimeout,
+		HeartbeatTimeout:                    attributes.HeartbeatTimeout,
+		TaskToken:                           serializedToken,
+		Attempt:                             taskToken.Attempt,
+		HeartbeatDetails:                    historyResponse.HeartbeatDetails,
+		WorkflowType:                        historyResponse.WorkflowType,
+		WorkflowNamespace:                   historyResponse.WorkflowNamespace,
+		PropagatedNexusSerializationContext: historyResponse.GetNexusSerializationContext(),
+		PollerScalingDecision:               task.pollerScalingDecision,
+		Priority:                            historyResponse.Priority,
+		RetryPolicy:                         historyResponse.RetryPolicy,
 	}
 }
 
@@ -3854,46 +3904,6 @@ func (e *matchingEngineImpl) UpdateTaskQueueConfig(
 	return &matchingservice.UpdateTaskQueueConfigResponse{
 		UpdatedTaskqueueConfig: userData.GetData().GetPerType()[int32(taskQueueType)].GetConfig(),
 	}, nil
-}
-
-func (e *matchingEngineImpl) UpdateFairnessState(
-	ctx context.Context,
-	req *matchingservice.UpdateFairnessStateRequest,
-) (*matchingservice.UpdateFairnessStateResponse, error) {
-	partition, err := tqid.NormalPartitionFromRpcName(req.GetTaskQueue(), req.GetNamespaceId(), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	if err != nil {
-		return nil, err
-	}
-
-	pm, _, err := e.getTaskQueuePartitionManager(ctx, partition, true, loadCauseOtherWrite)
-	if err != nil {
-		return nil, err
-	}
-
-	updateFn := func(old *persistencespb.TaskQueueUserData) (*persistencespb.TaskQueueUserData, bool, error) {
-		data := old
-		if data != nil {
-			data = common.CloneProto(old)
-		} else {
-			data = &persistencespb.TaskQueueUserData{}
-		}
-		if data.PerType == nil {
-			data.PerType = make(map[int32]*persistencespb.TaskQueueTypeUserData)
-		}
-		typ := int32(req.GetTaskQueueType())
-		perType := data.PerType[typ]
-		if perType == nil {
-			data.PerType[typ] = &persistencespb.TaskQueueTypeUserData{}
-			perType = data.PerType[typ]
-		}
-		perType.FairnessState = req.FairnessState
-		return data, true, nil
-	}
-	_, err = pm.GetUserDataManager().UpdateUserData(ctx, UserDataUpdateOptions{Source: "Matching auto enable"}, updateFn)
-	if err != nil {
-		return nil, err
-	}
-	return &matchingservice.UpdateFairnessStateResponse{}, nil
 }
 
 func (e *matchingEngineImpl) newTaskTracker() *taskTracker {

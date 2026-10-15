@@ -25,6 +25,7 @@ type (
 	localActivities struct {
 		metadataManager              persistence.MetadataManager
 		clusterMetadata              cluster.Metadata
+		replicationResolverFactory   namespace.ReplicationResolverFactory
 		nexusEndpointManager         persistence.NexusEndpointManager
 		logger                       log.Logger
 		eventLogger                  otellog.Logger
@@ -36,17 +37,19 @@ type (
 	}
 
 	getNamespaceInfoResult struct {
-		NamespaceID    namespace.ID
-		Namespace      namespace.Name
-		Clusters       []string
-		ActiveCluster  string
-		CurrentCluster string
+		NamespaceID                 namespace.ID
+		Namespace                   namespace.Name
+		Clusters                    []string
+		ActiveCluster               string
+		CurrentCluster              string
+		CanDeleteFromCurrentCluster bool
 	}
 )
 
 func newLocalActivities(
 	metadataManager persistence.MetadataManager,
 	clusterMetadata cluster.Metadata,
+	replicationResolverFactory namespace.ReplicationResolverFactory,
 	nexusEndpointManager persistence.NexusEndpointManager,
 	logger log.Logger,
 	eventLogger otellog.Logger,
@@ -58,6 +61,7 @@ func newLocalActivities(
 	return &localActivities{
 		metadataManager:              metadataManager,
 		clusterMetadata:              clusterMetadata,
+		replicationResolverFactory:   replicationResolverFactory,
 		nexusEndpointManager:         nexusEndpointManager,
 		logger:                       logger,
 		eventLogger:                  eventLogger,
@@ -91,15 +95,18 @@ func (a *localActivities) GetNamespaceInfoActivity(ctx context.Context, nsID nam
 	if getNamespaceResponse.Namespace == nil || getNamespaceResponse.Namespace.Info == nil || getNamespaceResponse.Namespace.Info.Id == "" {
 		return getNamespaceInfoResult{}, stderrors.New("namespace info is corrupted")
 	}
+	resolver := a.replicationResolverFactory(getNamespaceResponse.Namespace)
+	currentCluster := a.clusterMetadata.GetCurrentClusterName()
 
 	return getNamespaceInfoResult{
-		NamespaceID:   namespace.ID(getNamespaceResponse.Namespace.Info.Id),
-		Namespace:     namespace.Name(getNamespaceResponse.Namespace.Info.Name),
-		Clusters:      getNamespaceResponse.Namespace.ReplicationConfig.Clusters,
-		ActiveCluster: getNamespaceResponse.Namespace.ReplicationConfig.ActiveClusterName,
+		NamespaceID:                 namespace.ID(getNamespaceResponse.Namespace.Info.Id),
+		Namespace:                   namespace.Name(getNamespaceResponse.Namespace.Info.Name),
+		Clusters:                    resolver.ClusterNames(""),
+		ActiveCluster:               resolver.ActiveClusterName(namespace.RoutingKey{}),
+		CanDeleteFromCurrentCluster: resolver.CanDeleteNamespaceFromCluster(currentCluster),
 		// CurrentCluster is not technically a "namespace info", but since all cluster data is here,
 		// it is convenient to have the current cluster name here too.
-		CurrentCluster: a.clusterMetadata.GetCurrentClusterName(),
+		CurrentCluster: currentCluster,
 	}, nil
 }
 
