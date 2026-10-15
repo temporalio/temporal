@@ -16,10 +16,12 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/service/history/api/workflowresend"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/ndc"
@@ -803,7 +805,18 @@ func (t *transferQueueStandbyTaskExecutor) checkStartChildExecutionStillExistsOn
 		t.shardContext.GetNamespaceRegistry(),
 		t.shardContext.ChasmRegistry(),
 	) {
-		return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger, nil)
+		childKey := startChildInfo.childWorkflowKey
+		_, err := workflowresend.ResolveCurrentChildExecutionOnSource(ctx, t.shardContext,
+			namespace.ID(childKey.NamespaceID),
+			&commonpb.WorkflowExecution{WorkflowId: childKey.WorkflowID, RunId: childKey.RunID})
+		if common.IsNotFoundError(err) {
+			return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, nil, logger, nil)
+		}
+		// A retained successor means the chain still exists on the source. An
+		// unrelated current run or a lookup failure is not evidence of convergence.
+		if err != nil {
+			logger.Warn("Unable to resolve current child execution before standby task discard", tag.Error(err))
+		}
 	}
 	return standbyTransferTaskPostActionTaskDiscarded(ctx, taskInfo, postActionInfo, logger, eventDetails)
 }

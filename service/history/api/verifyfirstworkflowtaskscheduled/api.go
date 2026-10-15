@@ -158,12 +158,40 @@ func verifyFirstWorkflowTaskScheduled(
 		),
 		locks.PriorityLow,
 	)
+	resolvedCurrent := common.IsNotFoundError(err)
+	if resolvedCurrent {
+		// The parent's child record retains the first run ID even after that run has
+		// continued or reset and aged out. Resolve current through the consistency
+		// checker rather than choosing a run by time, since the workflow ID may be reused.
+		workflowLease, err = workflowConsistencyChecker.GetWorkflowLease(
+			ctx,
+			req.Clock,
+			definition.NewWorkflowKey(req.NamespaceId, req.WorkflowExecution.WorkflowId, ""),
+			locks.PriorityLow,
+		)
+	}
 	if err != nil {
 		return nil, nil, false, err
 	}
 	defer func() { workflowLease.GetReleaseFn()(retError) }()
 
 	mutableState := workflowLease.GetMutableState()
+	if resolvedCurrent {
+		firstRunID, err := mutableState.GetFirstRunID(ctx)
+		if err != nil {
+			return nil, nil, false, err
+		}
+		if firstRunID != req.WorkflowExecution.RunId {
+			return nil, nil, false, serviceerror.NewNotFound("current child execution belongs to a different workflow chain")
+		}
+		if mutableState.GetExecutionState().GetRunId() != req.WorkflowExecution.RunId {
+			// A successor owns its scheduling: its creation either schedules a workflow
+			// task or installs a backoff timer, which replication recreates locally.
+			return nil, nil, false, nil
+		}
+		// Current can resolve back to the original if it arrived during the lookup.
+		// Preserve the original run's first-workflow-task readiness check below.
+	}
 	if !mutableState.IsWorkflowExecutionRunning() &&
 		mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		return nil, nil, false, nil
@@ -248,6 +276,21 @@ func resendChildAndVerify(
 			emitResult(wideevents.ParentChildOutcomeStarted, nil, "sync_workflow_state")
 		},
 	)
+	if err == nil && result == workflowresend.SyncWorkflowStateResultSourceNotFound {
+		// The source may also have retained only a successor. Resolve and validate
+		// that chain before asking the unchanged sync helper to pull its exact run.
+		execution, resolveErr := workflowresend.ResolveCurrentChildExecutionOnSource(ctx, shardContext, namespaceID, req.WorkflowExecution)
+		if resolveErr != nil {
+			if !common.IsNotFoundError(resolveErr) {
+				emitResult(wideevents.ParentChildOutcomeFailed, resolveErr, "resolve_current_child")
+				return resolveErr
+			}
+		} else {
+			// Replication hints describe a specific run; the original run's hints must
+			// not be used to request a successor's state.
+			result, err = workflowresend.SyncWorkflowStateFromSource(ctx, shardContext, namespaceID, execution, nil, nil, nil)
+		}
+	}
 	if err != nil {
 		emitResult(wideevents.ParentChildOutcomeFailed, err, "sync_workflow_state")
 		return err

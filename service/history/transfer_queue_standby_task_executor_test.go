@@ -92,6 +92,7 @@ type (
 		namespaceEntry            *namespace.Namespace
 		version                   int64
 		clusterName               string
+		currentClusterName        string
 		now                       time.Time
 		timeSource                *clock.EventTimeSource
 		localVerificationDuration time.Duration
@@ -184,7 +185,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.StandbyWithVisibilityArchivalNamespaceID).
 		Return(tests.StandbyWithVisibilityArchivalNamespace, nil).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetClusterID().Return(cluster.TestCurrentClusterInitialFailoverVersion).AnyTimes()
-	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.currentClusterName = cluster.TestCurrentClusterName
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().DoAndReturn(func() string { return s.currentClusterName }).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(s.clusterName).AnyTimes()
@@ -1369,11 +1371,38 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	s.Equal(childWorkflowID, standbyErrorDetails["child_workflow_id"])
 	s.Equal(childRunID, standbyErrorDetails["child_run_id"])
 
-	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), expectedVerificationWithResendChildRequest).Return(nil, &serviceerror.WorkflowNotReady{})
-	s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), expectedDescribeChildMutableStateRequest).Return(nil, &serviceerror.NotFound{})
-	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
-	s.NoError(resp.ExecutionErr)
+	// Model verification on the child namespace's passive cluster.
+	s.currentClusterName = cluster.TestAlternativeClusterName
+	s.mockShard.Resource.ClientBean.EXPECT().GetRemoteAdminClient(
+		tests.GlobalChildNamespaceEntry.ActiveClusterName(namespace.RoutingKey{ID: childWorkflowID}),
+	).Return(s.mockRemoteAdminClient, nil).AnyTimes()
+	for _, tc := range []struct {
+		name        string
+		firstRunID  string
+		rpcErr      error
+		expectedErr error
+	}{
+		{name: "whole chain missing", rpcErr: serviceerror.NewNotFound("missing")},
+		{name: "retained successor", firstRunID: childRunID, expectedErr: consts.ErrTaskDiscarded},
+		{name: "workflow ID reused", firstRunID: "unrelated", expectedErr: consts.ErrTaskDiscarded},
+		{name: "source unavailable", rpcErr: serviceerror.NewUnavailable("unavailable"), expectedErr: consts.ErrTaskDiscarded},
+	} {
+		s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), expectedDescribeChildMutableStateRequest).Return(nil, &serviceerror.NotFound{})
+		s.mockRemoteAdminClient.EXPECT().DescribeMutableState(gomock.Any(), protomock.Eq(&adminservice.DescribeMutableStateRequest{
+			Namespace:       tests.ChildNamespace.String(),
+			Execution:       &commonpb.WorkflowExecution{WorkflowId: childWorkflowID},
+			Archetype:       chasm.WorkflowArchetype,
+			SkipForceReload: true,
+		})).Return(&adminservice.DescribeMutableStateResponse{DatabaseMutableState: &persistencespb.WorkflowMutableState{
+			ExecutionState: &persistencespb.WorkflowExecutionState{RunId: "successor", FirstExecutionRunId: tc.firstRunID},
+		}}, tc.rpcErr)
+		childKey := definition.NewWorkflowKey(tests.ChildNamespaceID.String(), childWorkflowID, childRunID)
+		err := s.transferQueueStandbyTaskExecutor.checkStartChildExecutionStillExistsOnSourceBeforeDiscard(
+			context.Background(), transferTask, &startChildExecutionPostActionInfo{childWorkflowKey: &childKey}, s.logger, nil)
+		s.Require().Equal(tc.expectedErr, err, tc.name)
+	}
 
+	s.currentClusterName = cluster.TestCurrentClusterName
 	randomErr := errors.New("some random error")
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), expectedVerificationWithResendChildRequest).Return(nil, randomErr)
 	resp = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
