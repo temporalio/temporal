@@ -69,7 +69,7 @@ func (e *outboundQueueStandbyTaskExecutor) Execute(
 		executable.GetWorkflowID(),
 	)
 	respond := func(err error) queues.ExecuteResponse {
-		emitStandbyTaskError(e.shardContext, executable, taskType, err)
+		emitStandbyTaskError(e.shardContext, executable, taskType, nil, err)
 		metricsTags := []metrics.Tag{
 			namespaceTag,
 			metrics.TaskTypeTag(taskType),

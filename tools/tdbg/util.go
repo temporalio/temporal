@@ -266,7 +266,6 @@ func printTable(items []any, writer io.Writer) error {
 	table.SetBorder(false)
 	table.SetColumnSeparator("|")
 	table.SetHeader(fields)
-	table.SetHeaderLine(false)
 	for i := range items {
 		item := reflect.ValueOf(items[i])
 		for item.Type().Kind() == reflect.Pointer {

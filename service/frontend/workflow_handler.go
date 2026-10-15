@@ -22,6 +22,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 	filterpb "go.temporal.io/api/filter/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	querypb "go.temporal.io/api/query/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
 	"go.temporal.io/api/serviceerror"
@@ -665,7 +666,11 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
-	if err := validateRequestId(&request.RequestId, wh.config.MaxIDLengthLimit()); err != nil {
+	maxIDLength := wh.config.MaxIDLengthLimit()
+	if err := validateRequestId(&request.RequestId, maxIDLength); err != nil {
+		return nil, err
+	}
+	if err := validatePropagatedNexusSerializationContext(request.GetPropagatedNexusSerializationContext(), maxIDLength); err != nil {
 		return nil, err
 	}
 
@@ -735,6 +740,9 @@ func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 		defaultMaxSkipPerSession := wh.config.WorkflowTimeSkippingMaxSkipPerSession(ns.String())
 		tsc.MaxSessionSkipCount = max(1, int32(defaultMaxSkipPerSession))
 	}
+	if !tsc.GetEnabled() && tsc.GetFastForwardConfig() != nil {
+		return serviceerror.NewInvalidArgument("time_skipping_config: cannot set fast_forward when enabled is false")
+	}
 
 	if ff := tsc.GetFastForwardConfig(); ff != nil {
 		if ff.GetDuration().AsDuration() <= 0 {
@@ -743,13 +751,6 @@ func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 		if strings.TrimSpace(ff.GetId()) == "" {
 			return errTimeSkippingFastForwardIDNotSet
 		}
-	}
-
-	if !tsc.GetEnabled() {
-		if tsc.GetFastForwardConfig() != nil {
-			return serviceerror.NewInvalidArgument("time_skipping_config: cannot set fast_forward when enabled is false")
-		}
-		return nil
 	}
 	return nil
 }
@@ -1423,26 +1424,27 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 	}
 
 	return &workflowservice.PollActivityTaskQueueResponse{
-		TaskToken:                   matchingResponse.TaskToken,
-		WorkflowExecution:           matchingResponse.WorkflowExecution,
-		ActivityId:                  matchingResponse.ActivityId,
-		ActivityType:                matchingResponse.ActivityType,
-		ActivityRunId:               matchingResponse.ActivityRunId,
-		Input:                       matchingResponse.Input,
-		ScheduledTime:               matchingResponse.ScheduledTime,
-		ScheduleToCloseTimeout:      matchingResponse.ScheduleToCloseTimeout,
-		StartedTime:                 matchingResponse.StartedTime,
-		StartToCloseTimeout:         matchingResponse.StartToCloseTimeout,
-		HeartbeatTimeout:            matchingResponse.HeartbeatTimeout,
-		Attempt:                     matchingResponse.Attempt,
-		CurrentAttemptScheduledTime: matchingResponse.CurrentAttemptScheduledTime,
-		HeartbeatDetails:            matchingResponse.HeartbeatDetails,
-		WorkflowType:                matchingResponse.WorkflowType,
-		WorkflowNamespace:           matchingResponse.WorkflowNamespace,
-		Header:                      matchingResponse.Header,
-		PollerScalingDecision:       matchingResponse.PollerScalingDecision,
-		Priority:                    matchingResponse.Priority,
-		RetryPolicy:                 matchingResponse.RetryPolicy,
+		TaskToken:                           matchingResponse.TaskToken,
+		WorkflowExecution:                   matchingResponse.WorkflowExecution,
+		ActivityId:                          matchingResponse.ActivityId,
+		ActivityType:                        matchingResponse.ActivityType,
+		ActivityRunId:                       matchingResponse.ActivityRunId,
+		Input:                               matchingResponse.Input,
+		ScheduledTime:                       matchingResponse.ScheduledTime,
+		ScheduleToCloseTimeout:              matchingResponse.ScheduleToCloseTimeout,
+		StartedTime:                         matchingResponse.StartedTime,
+		StartToCloseTimeout:                 matchingResponse.StartToCloseTimeout,
+		HeartbeatTimeout:                    matchingResponse.HeartbeatTimeout,
+		Attempt:                             matchingResponse.Attempt,
+		CurrentAttemptScheduledTime:         matchingResponse.CurrentAttemptScheduledTime,
+		HeartbeatDetails:                    matchingResponse.HeartbeatDetails,
+		WorkflowType:                        matchingResponse.WorkflowType,
+		WorkflowNamespace:                   matchingResponse.WorkflowNamespace,
+		Header:                              matchingResponse.Header,
+		PollerScalingDecision:               matchingResponse.PollerScalingDecision,
+		Priority:                            matchingResponse.Priority,
+		RetryPolicy:                         matchingResponse.RetryPolicy,
+		PropagatedNexusSerializationContext: matchingResponse.PropagatedNexusSerializationContext,
 	}, nil
 }
 
@@ -5260,7 +5262,6 @@ func (wh *WorkflowHandler) prepareSchedulerQuery(
 			saNameType,
 			wh.saMapperProvider,
 			chasmMapper,
-			wh.config.VisibilityEnableUnifiedQueryConverter,
 			query,
 			metricsHandler,
 			wh.logger,
@@ -6174,19 +6175,66 @@ func (wh *WorkflowHandler) StopBatchOperation(
 		return nil, errBatchAPINotAllowed
 	}
 
+	// Check that the target job ID is a batcher workflow.
+	jobResp, err := wh.describeBatchJob(ctx, request.GetNamespace(), request.GetJobId())
+	if err != nil {
+		return nil, err
+	}
+
 	terminateReq := &workflowservice.TerminateWorkflowExecutionRequest{
 		Namespace: request.GetNamespace(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
-			WorkflowId: request.GetJobId(),
-		},
-		Reason:   request.GetReason(),
-		Identity: request.GetIdentity(),
+		// Use the validated execution from above, so that a run of the same workflow ID
+		// started in between is not terminated in its place.
+		WorkflowExecution: jobResp.GetWorkflowExecutionInfo().GetExecution(),
+		Reason:            request.GetReason(),
+		Identity:          request.GetIdentity(),
 	}
-	_, err := wh.TerminateWorkflowExecution(ctx, terminateReq)
+	_, err = wh.TerminateWorkflowExecution(ctx, terminateReq)
 	if err != nil {
 		return nil, err
 	}
 	return &workflowservice.StopBatchOperationResponse{}, nil
+}
+
+// describeBatchJob describes a batch job by ID, verifies that the ID is in fact
+// a batcher workflow started by StartBatchOperation or StartAdminBatchOperation,
+// that use a known workflow type, and hide behind a batcher namespace division.
+// This is used to prevent batch APIs on non-batch workflows/jobs.
+func (wh *WorkflowHandler) describeBatchJob(
+	ctx context.Context,
+	nsName string,
+	jobID string,
+) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
+	resp, err := wh.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: nsName,
+		Execution: &commonpb.WorkflowExecution{WorkflowId: jobID},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	executionInfo := resp.GetWorkflowExecutionInfo()
+	switch executionInfo.GetType().GetName() {
+	case batcher.BatchWFTypeName, batcher.BatchWFTypeProtobufName:
+	default:
+		return nil, errBatchJobIDNotValid
+	}
+
+	if resp.GetExecutionConfig().GetTaskQueue().GetName() != primitives.PerNSWorkerTaskQueue {
+		return nil, errBatchJobIDNotValid
+	}
+
+	var division string
+	if divisionPayload, ok := executionInfo.GetSearchAttributes().GetIndexedFields()[sadefs.TemporalNamespaceDivision]; ok {
+		if err := payload.Decode(divisionPayload, &division); err != nil {
+			return nil, err
+		}
+	}
+	if division != batcher.NamespaceDivision && division != batcher.AdminNamespaceDivision {
+		return nil, errBatchJobIDNotValid
+	}
+
+	return resp, nil
 }
 
 func (wh *WorkflowHandler) DescribeBatchOperation(
@@ -6214,14 +6262,7 @@ func (wh *WorkflowHandler) DescribeBatchOperation(
 		return nil, errBatchAPINotAllowed
 	}
 
-	execution := &commonpb.WorkflowExecution{
-		WorkflowId: request.GetJobId(),
-		RunId:      "",
-	}
-	resp, err := wh.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: request.GetNamespace(),
-		Execution: execution,
-	})
+	resp, err := wh.describeBatchJob(ctx, request.GetNamespace(), request.GetJobId())
 	if err != nil {
 		return nil, err
 	}
@@ -6870,10 +6911,16 @@ func (wh *WorkflowHandler) getArchivedHistory(
 	for _, batch := range resp.HistoryBatches {
 		history.Events = append(history.Events, batch.Events...)
 	}
+	var serializationContext *nexuspb.PropagatedSerializationContext
+	// A nil request token starts at the workflow's first event, which carries this context.
+	if request.GetNextPageToken() == nil && len(history.Events) > 0 {
+		serializationContext = history.Events[0].GetWorkflowExecutionStartedEventAttributes().GetPropagatedNexusSerializationContext()
+	}
 	return &workflowservice.GetWorkflowExecutionHistoryResponse{
-		History:       history,
-		NextPageToken: resp.NextPageToken,
-		Archived:      true,
+		History:                             history,
+		NextPageToken:                       resp.NextPageToken,
+		Archived:                            true,
+		PropagatedNexusSerializationContext: serializationContext,
 	}, nil
 }
 

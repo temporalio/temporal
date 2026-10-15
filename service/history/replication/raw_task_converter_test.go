@@ -155,6 +155,30 @@ func (s *rawTaskConverterSuite) TearDownTest() {
 	s.shardContext.StopForTest()
 }
 
+func (s *rawTaskConverterSuite) TestSourceTaskConverterSetsWorkflowLockPriority() {
+	task := &tasks.SyncActivityTask{
+		WorkflowKey: definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.runID),
+	}
+	targetClusterID := int32(3)
+	s.mockEngine.EXPECT().ConvertReplicationTask(gomock.Any(), task, targetClusterID).DoAndReturn(
+		func(ctx context.Context, _ tasks.Task, _ int32) (*replicationspb.ReplicationTask, error) {
+			s.Equal(locks.PriorityHigh, workflowLockPriorityFromContext(ctx))
+			return nil, nil
+		},
+	)
+	converter := NewSourceTaskConverter(
+		s.mockEngine,
+		s.shardContext.Resource.NamespaceCache,
+		nil,
+		nil,
+		s.shardContext.GetConfig(),
+	)
+
+	result, err := converter.Convert(task, targetClusterID, enumsspb.TASK_PRIORITY_LOW, locks.PriorityHigh)
+	s.NoError(err)
+	s.Nil(result)
+}
+
 func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_WorkflowMissing() {
 	ctx := context.Background()
 	scheduledEventID := int64(144)
@@ -181,6 +205,27 @@ func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_Workflow
 		},
 		chasm.WorkflowArchetypeID,
 		locks.PriorityLow,
+	).Return(s.workflowContext, s.releaseFn, nil)
+	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(nil, serviceerror.NewNotFound(""))
+
+	result, err := convertActivityStateReplicationTask(ctx, s.shardContext, task, s.workflowCache)
+	s.NoError(err)
+	s.Nil(result)
+	s.True(s.lockReleased)
+}
+
+func (s *rawTaskConverterSuite) TestConvertActivityStateReplicationTask_HighPriorityLock() {
+	ctx := withWorkflowLockPriority(context.Background(), locks.PriorityHigh)
+	task := &tasks.SyncActivityTask{
+		WorkflowKey: definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.runID),
+	}
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
+		gomock.Any(),
+		s.shardContext,
+		namespace.ID(s.namespaceID),
+		&commonpb.WorkflowExecution{WorkflowId: s.workflowID, RunId: s.runID},
+		chasm.WorkflowArchetypeID,
+		locks.PriorityHigh,
 	).Return(s.workflowContext, s.releaseFn, nil)
 	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(nil, serviceerror.NewNotFound(""))
 
@@ -1259,6 +1304,152 @@ func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_Backfill(
 		VersionedTransition: task.VersionedTransition,
 		VisibilityTime:      timestamppb.New(task.VisibilityTimestamp),
 	}, result)
+	s.True(s.lockReleased)
+}
+
+func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_VerifyWithoutLoadingMutableState() {
+	ctx := context.Background()
+	targetClusterID := int32(3)
+	versionedTransition := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 3,
+		TransitionCount:          6,
+	}
+	currentVersionHistory := &historyspb.VersionHistory{
+		Items: []*historyspb.VersionHistoryItem{
+			{EventId: 5, Version: 1},
+			{EventId: 10, Version: 3},
+		},
+	}
+	task := &tasks.SyncVersionedTransitionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID,
+			s.workflowID,
+			s.runID,
+		),
+		VisibilityTimestamp:   time.Now().UTC(),
+		TaskID:                1444,
+		ArchetypeID:           chasm.WorkflowArchetypeID,
+		NextEventID:           9,
+		VersionedTransition:   versionedTransition,
+		CurrentVersionHistory: currentVersionHistory,
+	}
+	progress := &ReplicationProgress{
+		versionedTransitions: [][]*persistencespb.VersionedTransition{
+			{versionedTransition},
+		},
+	}
+	s.progressCache.EXPECT().Get(s.runID, targetClusterID).Return(progress)
+
+	converter := newSyncVersionedTransitionTaskConverter(s.shardContext, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
+	result, err := convertSyncVersionedTransitionTask(ctx, task, targetClusterID, converter)
+	s.NoError(err)
+	s.Equal(&replicationspb.ReplicationTask{
+		TaskType:     enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
+		SourceTaskId: task.TaskID,
+		Attributes: &replicationspb.ReplicationTask_VerifyVersionedTransitionTaskAttributes{
+			VerifyVersionedTransitionTaskAttributes: &replicationspb.VerifyVersionedTransitionTaskAttributes{
+				NamespaceId: s.namespaceID,
+				WorkflowId:  s.workflowID,
+				RunId:       s.runID,
+				ArchetypeId: chasm.WorkflowArchetypeID,
+				EventVersionHistory: []*historyspb.VersionHistoryItem{
+					{EventId: 5, Version: 1},
+					{EventId: 8, Version: 3},
+				},
+				NextEventId: 9,
+			},
+		},
+		VersionedTransition: versionedTransition,
+		VisibilityTime:      timestamppb.New(task.VisibilityTimestamp),
+	}, result)
+}
+
+func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_VerifyWithEmptyCurrentVersionHistoryWithoutLoadingMutableState() {
+	ctx := context.Background()
+	targetClusterID := int32(3)
+	versionedTransition := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 3,
+		TransitionCount:          6,
+	}
+	task := &tasks.SyncVersionedTransitionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID,
+			s.workflowID,
+			s.runID,
+		),
+		VisibilityTimestamp:   time.Now().UTC(),
+		TaskID:                1444,
+		ArchetypeID:           chasm.WorkflowArchetypeID,
+		VersionedTransition:   versionedTransition,
+		CurrentVersionHistory: &historyspb.VersionHistory{},
+	}
+	progress := &ReplicationProgress{
+		versionedTransitions: [][]*persistencespb.VersionedTransition{
+			{versionedTransition},
+		},
+	}
+	s.progressCache.EXPECT().Get(s.runID, targetClusterID).Return(progress)
+
+	converter := newSyncVersionedTransitionTaskConverter(s.shardContext, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
+	result, err := convertSyncVersionedTransitionTask(ctx, task, targetClusterID, converter)
+	s.NoError(err)
+	s.Empty(result.GetVerifyVersionedTransitionTaskAttributes().EventVersionHistory)
+}
+
+func (s *rawTaskConverterSuite) TestConvertSyncVersionedTransitionTask_VerifyLegacyTaskLoadsMutableState() {
+	ctx := context.Background()
+	targetClusterID := int32(3)
+	versionedTransition := &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 3,
+		TransitionCount:          6,
+	}
+	task := &tasks.SyncVersionedTransitionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID,
+			s.workflowID,
+			s.runID,
+		),
+		VisibilityTimestamp: time.Now().UTC(),
+		TaskID:              1444,
+		ArchetypeID:         chasm.WorkflowArchetypeID,
+		NextEventID:         9,
+		VersionedTransition: versionedTransition,
+	}
+	progress := &ReplicationProgress{
+		versionedTransitions: [][]*persistencespb.VersionedTransition{
+			{versionedTransition},
+		},
+	}
+	versionHistories := &historyspb.VersionHistories{
+		CurrentVersionHistoryIndex: 0,
+		Histories: []*historyspb.VersionHistory{
+			{
+				Items: []*historyspb.VersionHistoryItem{
+					{EventId: 10, Version: 3},
+				},
+			},
+		},
+	}
+	s.progressCache.EXPECT().Get(s.runID, targetClusterID).Return(progress)
+	s.workflowCache.EXPECT().GetOrCreateChasmExecution(
+		gomock.Any(),
+		s.shardContext,
+		namespace.ID(s.namespaceID),
+		&commonpb.WorkflowExecution{WorkflowId: s.workflowID, RunId: s.runID},
+		chasm.WorkflowArchetypeID,
+		locks.PriorityLow,
+	).Return(s.workflowContext, s.releaseFn, nil)
+	s.workflowContext.EXPECT().LoadMutableState(gomock.Any(), s.shardContext).Return(s.mutableState, nil)
+	s.mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		VersionHistories:  versionHistories,
+		TransitionHistory: []*persistencespb.VersionedTransition{versionedTransition},
+	})
+
+	converter := newSyncVersionedTransitionTaskConverter(s.shardContext, s.workflowCache, nil, s.progressCache, s.executionManager, s.syncStateRetriever, s.logger)
+	result, err := convertSyncVersionedTransitionTask(ctx, task, targetClusterID, converter)
+	s.NoError(err)
+	s.Equal(enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK, result.TaskType)
+	s.Equal([]*historyspb.VersionHistoryItem{{EventId: 8, Version: 3}}, result.GetVerifyVersionedTransitionTaskAttributes().EventVersionHistory)
 	s.True(s.lockReleased)
 }
 

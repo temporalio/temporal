@@ -76,6 +76,7 @@ var (
 	FlagFair                       = "fair"
 	FlagMinPass                    = "min-pass"
 	FlagVisibilityQuery            = "query"
+	FlagVisibilityQueryAlias       = []string{"q"}
 	FlagJobID                      = "job-id"
 	FlagDecode                     = "decode"
 	FlagScheduleID                 = "schedule-id"
@@ -85,6 +86,22 @@ var (
 	FlagExecute                    = "execute"
 	FlagWorkers                    = "workers"
 	FlagOutputLog                  = "output-log"
+	FlagBatchType                  = "batch-type"
+	FlagFile                       = "file"
+	FlagStart                      = "lookback-start"
+	FlagStartTime                  = "start-time"
+	FlagEnd                        = "lookback-end"
+	FlagEndTime                    = "end-time"
+	FlagConcurrency                = "concurrency"
+	FlagRPS                        = "rps"
+	FlagListRPS                    = "list-rps"
+	FlagDelayThreshold             = "delay-threshold"
+	FlagIncludePaused              = "include-paused"
+	FlagQuiet                      = "quiet"
+)
+
+var (
+	FlagFileAlias = []string{"f"}
 )
 
 const defaultMigrateWorkers = 5

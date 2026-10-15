@@ -2,6 +2,7 @@ package history
 
 import (
 	"errors"
+	"maps"
 	"time"
 
 	"go.temporal.io/server/common/namespace"
@@ -16,6 +17,7 @@ func emitStandbyTaskError(
 	shardContext historyi.ShardContext,
 	executable queues.Executable,
 	taskType string,
+	extraDetails map[string]any,
 	err error,
 ) {
 	if err == nil || !shardContext.GetConfig().EmitReplicationLifecycleEvents() {
@@ -43,6 +45,7 @@ func emitStandbyTaskError(
 		"target_cluster":  shardContext.GetClusterMetadata().GetCurrentClusterName(),
 		"visibility_time": task.GetVisibilityTime().Format(time.RFC3339Nano),
 	}
+	maps.Copy(details, extraDetails)
 	if errors.Is(err, consts.ErrTaskRetry) {
 		details["disposition"] = wideevents.ReplDispositionRetry
 	} else if errors.Is(err, consts.ErrTaskDiscarded) {
