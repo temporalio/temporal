@@ -359,6 +359,7 @@ func ResetActivity(
 		}
 
 		activityState := GetActivityState(activityInfo)
+		// An immediate reset clears old attempt metadata; a running attempt records its outcome when it yields.
 		if activityState != enumspb.PENDING_ACTIVITY_STATE_STARTED {
 			clearActivityAttemptMetadataForReset(activityInfo)
 		}
