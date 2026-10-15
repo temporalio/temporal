@@ -271,13 +271,29 @@ jobs:
             After posting, return every finding you posted as structured output, one entry per
             finding, inline or not. Use the same severity, the repository-relative path, and the
             line you commented on; omit `path` and `line` for findings not tied to a file.
+            Set `category` to exactly one of the following. Use a bug category only if the code
+            in the PR behaves incorrectly; otherwise use a non-bug category.
+            Bugs:
+            - `logic`: wrong result, wrong condition, off-by-one.
+            - `crash`: nil dereference, panic, out-of-bounds access.
+            - `concurrency`: race, deadlock, I/O inside a critical section.
+            - `data-loss`: lost or corrupted state, wrong persistence or transaction boundary.
+            - `liveness`: an execution or task that stops making progress or is never retried.
+            - `error-handling`: swallowed or misclassified error, wrong retryable or gRPC status.
+            - `compatibility`: replay or determinism break, backwards-incompatible proto, API,
+              history, or persistence change, unsafe rollout.
+            - `resource`: leak, unbounded growth, missing limit.
+            - `security`: authorization bypass, injection, secret exposure.
+            - `behavior`: unintended change to a guarantee the server provides.
+            Not bugs:
+            - `testing`: missing, wrong, or unreliable tests.
+            - `design`: structure, abstractions, API shape.
+            - `style`: conventions, naming, comments.
+            - `description`: missing or unclear PR description or intent.
             Return an empty `findings` list if you posted none.
-          # --json-schema makes the action emit `structured_output`, which the next
-          # step saves as a workflow artifact so findings can be compared against
-          # known bugs later.
           claude_args: |
             --add-dir pr-head --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr diff:*),Bash(gh pr view:*)"
-            --json-schema '{"type":"object","properties":{"findings":{"type":"array","items":{"type":"object","properties":{"severity":{"type":"string","enum":["nit","small","med","high"]},"path":{"type":"string"},"line":{"type":"integer"},"summary":{"type":"string"},"details":{"type":"string"}},"required":["severity","summary","details"],"additionalProperties":false}}},"required":["findings"],"additionalProperties":false}'
+            --json-schema '{"type":"object","properties":{"findings":{"type":"array","items":{"type":"object","properties":{"severity":{"type":"string","enum":["nit","small","med","high"]},"path":{"type":"string"},"line":{"type":"integer"},"category":{"type":"string","enum":["logic","crash","concurrency","data-loss","liveness","error-handling","compatibility","resource","security","behavior","testing","design","style","description"]},"summary":{"type":"string"},"details":{"type":"string"}},"required":["severity","category","summary","details"],"additionalProperties":false}}},"required":["findings"],"additionalProperties":false}'
       - name: Save review findings
         if: ${{ !cancelled() && steps.claude.outputs.structured_output != '' }}
         env:
@@ -293,6 +309,7 @@ jobs:
 
           # Workflow context comes from the event, not from Claude, so each finding
           # can be traced back to the exact commit that was reviewed.
+          # `is_bug` is derived from the category so the two can't disagree.
           jq -n \
             --argjson output "$STRUCTURED_OUTPUT" \
             --arg repo "$REPO" \
@@ -311,13 +328,16 @@ jobs:
               run_id: $run_id,
               run_attempt: $run_attempt,
               reviewed_at: $reviewed_at,
-              findings: $output.findings
+              findings: [
+                $output.findings[]
+                | .is_bug = (.category | IN("testing", "design", "style", "description") | not)
+              ]
             }' > "$RUNNER_TEMP/claude-review-findings.json"
 
-          echo "Logged $(jq '.findings | length' "$RUNNER_TEMP/claude-review-findings.json") finding(s) for PR #${PR_NUMBER} at ${HEAD_SHA}"
+          echo "Logged $(jq '.findings | length' "$RUNNER_TEMP/claude-review-findings.json") finding(s), $(jq '[.findings[] | select(.is_bug)] | length' "$RUNNER_TEMP/claude-review-findings.json") bug(s), for PR #${PR_NUMBER} at ${HEAD_SHA}"
       - name: Upload review findings
         if: ${{ !cancelled() && steps.claude.outputs.structured_output != '' }}
-        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        uses: ./.github/actions/upload-artifact-with-retry
         with:
           name: claude-review-findings-pr${{ needs.check-review-eligibility.outputs.pr_number }}-attempt${{ github.run_attempt }}
           path: ${{ runner.temp }}/claude-review-findings.json
