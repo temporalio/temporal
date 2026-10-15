@@ -221,7 +221,7 @@ func (a *Activity) buildActivityExecutionInfo(
 		ActivityType:                        a.GetActivityType(),
 		Attempt:                             attempt.GetCount(),
 		CanceledReason:                      a.CancelState.GetReason(),
-		ClosedByPrincipal:                   executionInfo.ClosedByPrincipal,
+		ClosedByPrincipal:                   resolvedPrincipal(executionInfo.ClosedByPrincipal),
 		CloseTime:                           closeTime,
 		CurrentRetryInterval:                a.currentRetryInterval(ctx, attempt),
 		EagerExecutionAccepted:              a.GetEagerExecutionAccepted(),
@@ -236,7 +236,7 @@ func (a *Activity) buildActivityExecutionInfo(
 		LastHeartbeatTime:                   heartbeat.GetRecordedTime(),
 		LastStartedTime:                     attempt.GetStartedTime(),
 		LastWorkerIdentity:                  attempt.GetLastWorkerIdentity(),
-		LastWorkerPrincipal:                 attempt.GetLastWorkerPrincipal(),
+		LastWorkerPrincipal:                 resolvedPrincipal(attempt.GetLastWorkerPrincipal()),
 		LastDeploymentVersion:               attempt.GetLastDeploymentVersion(),
 		SdkName:                             attempt.GetSdkName(),
 		SdkVersion:                          attempt.GetSdkVersion(),
@@ -250,7 +250,7 @@ func (a *Activity) buildActivityExecutionInfo(
 		ScheduleToCloseTimeout:              a.GetScheduleToCloseTimeout(),
 		ScheduleToStartTimeout:              a.GetScheduleToStartTimeout(),
 		StartDelay:                          a.GetStartDelay(),
-		StartedByPrincipal:                  executionInfo.StartedByPrincipal,
+		StartedByPrincipal:                  resolvedPrincipal(executionInfo.StartedByPrincipal),
 		StartToCloseTimeout:                 a.GetStartToCloseTimeout(),
 		StateSizeBytes:                      int64(executionInfo.ApproximateStateSize),
 		StateTransitionCount:                executionInfo.StateTransitionCount,
@@ -267,6 +267,16 @@ func (a *Activity) buildActivityExecutionInfo(
 	}
 
 	return info
+}
+
+func resolvedPrincipal(principal *commonpb.Principal) *commonpb.ResolvedPrincipal {
+	if principal == nil {
+		return nil
+	}
+	return &commonpb.ResolvedPrincipal{
+		Type:            principal.GetType(),
+		NameAtWriteTime: principal.GetName(),
+	}
 }
 
 func (a *Activity) buildDescribeActivityExecutionResponse(
