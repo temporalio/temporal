@@ -8,6 +8,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/enums"
 	commonlinks "go.temporal.io/server/common/links"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -187,6 +188,10 @@ func (v *RequestValidator) ValidateSignalWithStartRequest(request *workflowservi
 	}
 
 	if err := v.ValidateRetryPolicy(request.GetNamespace(), request.RetryPolicy); err != nil {
+		return err
+	}
+
+	if err := backoff.ValidateSchedule(request.GetCronSchedule()); err != nil {
 		return err
 	}
 
