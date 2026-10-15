@@ -44,8 +44,6 @@ linters:
           msg: "Do not use .UnixMilli() for Cassandra timestamps. Use p.UnixMilliseconds() for consistency and proper zero-time handling."
         - pattern: "^UnixNano$"
           msg: "Do not use .UnixNano() for Cassandra timestamps. Use p.UnixMilliseconds() which returns milliseconds."
-        - pattern: FunctionalTestBase
-          msg: "FunctionalTestBase is deprecated. Use testcore.NewEnv(t) instead. See docs/development/testing.md for details."
         - pattern: context\.Background\(\)
           msg: "Avoid context.Background() in tests; use t.Context() to respect test timeouts and cancellation"
         - pattern: '(^|\.)(Eventually|Eventuallyf|EventuallyWithT|EventuallyWithTf)(\(|$)'
@@ -198,8 +196,8 @@ linters:
         text: "panic"
         linters:
           - forbidigo
-      - path: tests/testcore/.*\.go$ # still needed in tests/testcore/ until we remove testify suites entirely
-        text: "FunctionalTestBase"
+      - path: chasm/lib/activity/model/.*\.go$ # the activity model transition function deliberately panics if it can't accept an event
+        text: "panic"
         linters:
           - forbidigo
       - path: common/namespace/(namespace|replication_resolver)(_test)?\.go$ # ActiveInCluster definition and direct unit tests
@@ -212,7 +210,7 @@ linters:
           - forbidigo
       # Existing legacy call sites are tracked separately; keep this PR scoped
       # to preventing new usage while migrating touched tests.
-      - path: tests/(nexus_standalone|nexus_workflow|schedule|schedule_migration)_test\.go$
+      - path: tests/(nexus_standalone|nexus_workflow)_test\.go$
         text: "Eventually"
         linters:
           - forbidigo
@@ -236,6 +234,11 @@ linters:
           - revive
       # These packages remain imported to read and maintain persisted HSM state.
       - text: "SA1019: go.temporal.io/server/service/history/hsm/(callbacks|nexusoperations) is deprecated"
+        linters:
+          - staticcheck
+      # Underscores in method names are allowed in test code.
+      - path: _test\.go|tests/.+\.go|common/testing/
+        text: "ST1003: should not use underscores in Go names; (func|method) "
         linters:
           - staticcheck
 issues:

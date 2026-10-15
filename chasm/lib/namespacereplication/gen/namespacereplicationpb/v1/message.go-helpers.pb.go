@@ -156,25 +156,6 @@ func (this *PeerApplyStatus) Equal(that interface{}) bool {
 }
 
 var (
-	NamespaceOperation_shorthandValue = map[string]int32{
-		"Unspecified": 0,
-		"Create":      1,
-		"Update":      2,
-	}
-)
-
-// NamespaceOperationFromString parses a NamespaceOperation value from  either the protojson
-// canonical SCREAMING_CASE enum or the traditional temporal PascalCase enum to NamespaceOperation
-func NamespaceOperationFromString(s string) (NamespaceOperation, error) {
-	if v, ok := NamespaceOperation_value[s]; ok {
-		return NamespaceOperation(v), nil
-	} else if v, ok := NamespaceOperation_shorthandValue[s]; ok {
-		return NamespaceOperation(v), nil
-	}
-	return NamespaceOperation(0), fmt.Errorf("%s is not a valid NamespaceOperation", s)
-}
-
-var (
 	ComponentStatus_shorthandValue = map[string]int32{
 		"Unspecified": 0,
 		"Running":     1,

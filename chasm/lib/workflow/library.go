@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"github.com/nexus-rpc/sdk-go/nexus"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
@@ -42,6 +43,12 @@ func NewLibrary(registry *Registry) chasm.Library {
 	return &library{registry: registry}
 }
 
+// NewNilLibrary returns a Library with nil handlers, for decoding contexts such as tdbg where
+// no task execution happens.
+func NewNilLibrary() chasm.Library {
+	return &library{registry: NewRegistry()}
+}
+
 func (l *library) Name() string {
 	return chasm.WorkflowLibraryName
 }
@@ -64,9 +71,13 @@ func workflowContextFromChasm(ctx chasm.Context) *workflowContext {
 
 func (l *library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*Workflow](chasm.WorkflowComponentName, chasm.WithContextValues(map[any]any{
-			ctxKeyWorkflowContext: &workflowContext{registry: l.registry},
-		})),
+		chasm.NewRegistrableComponent[*Workflow](
+			chasm.WorkflowComponentName,
+			chasm.WithExecutionType(enumspb.EXECUTION_TYPE_WORKFLOW),
+			chasm.WithContextValues(map[any]any{
+				ctxKeyWorkflowContext: &workflowContext{registry: l.registry},
+			}),
+		),
 		chasm.NewRegistrableComponent[*WorkflowUpdate]("update"),
 	}
 }

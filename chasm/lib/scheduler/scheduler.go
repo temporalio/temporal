@@ -311,6 +311,7 @@ func CreateSchedulerFromMigration(
 		EventLog:             chasm.NewComponentField(ctx, NewEventLog(ctx)),
 	}
 	sched.setNullableFields()
+	sched.getOrCreateEventLog(ctx).LogEvent(ctx, "created via migration from V1")
 
 	// These components won't start with any tasks, as stale running workflow entries
 	// can cause immediate computation after migration to drop actions due to overlap

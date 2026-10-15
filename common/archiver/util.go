@@ -1,12 +1,18 @@
 package archiver
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"google.golang.org/protobuf/proto"
 )
+
+// VisibilityArchivalRecordHashMetadataKey is the object metadata key used for visibility record hashes.
+const VisibilityArchivalRecordHashMetadataKey = "temporal-visibility-record-sha256"
 
 var (
 	errEmptyNamespaceID      = errors.New("field NamespaceId is empty")
@@ -108,6 +114,17 @@ func ValidateVisibilityArchivalRequest(request *archiverspb.VisibilityRecord) er
 		return errEmptyCloseTime
 	}
 	return nil
+}
+
+// VisibilityArchivalRecordHash returns the SHA-256 hash of a deterministic protobuf encoding.
+// Protojson output is intentionally unstable across builds and cannot provide a stable hash source.
+func VisibilityArchivalRecordHash(record *archiverspb.VisibilityRecord) (string, error) {
+	data, err := proto.MarshalOptions{Deterministic: true}.Marshal(record)
+	if err != nil {
+		return "", err
+	}
+	hash := sha256.Sum256(data)
+	return hex.EncodeToString(hash[:]), nil
 }
 
 // ValidateQueryRequest validates the query visibility request
