@@ -292,6 +292,8 @@ jobs:
             - `bug:support`: wrong use or configuration of a library or support system, such as
               dynamic config that is not read or has the wrong default or scope.
             - `bug:larger`: functionality that is missing or implemented incorrectly as a whole.
+              Includes a change that does not implement the design stated in the PR description,
+              commits, or linked issue.
             Not bugs (evolvability defects):
             - `textual`: wording of names, comments, and log or error messages in the code.
             - `idiom`: non-idiomatic Go, or not using a language or standard library feature that
@@ -301,6 +303,7 @@ jobs:
               deduplicated, simplified, or removed as dead code.
             - `solution`: different logic would be better, such as reusing an existing helper or
               pattern, dropping an abstraction, or taking a simpler approach.
+            - `design`: the change does what it intends, but the intended design is wrong.
             - `testing`: missing, wrong, or unreliable tests.
             - `pr-description`: missing or unclear PR description or intent.
             Return an empty `findings` list if you posted none.
@@ -334,6 +337,7 @@ jobs:
                           "visual",
                           "organization",
                           "solution",
+                          "design",
                           "testing",
                           "pr-description"
                         ]
