@@ -106,10 +106,10 @@ func (s *CallbacksSuite) TestHTTPFaultInjection_NexusCallbackRetriesAfterRespons
 	_, err := env.FrontendClient().StartWorkflowExecution(ctx, request)
 	s.NoError(err)
 
-	await.Rcv(s.T(), ch.requestCh)
-	await.Snd(s.T(), ch.requestCompleteCh, nil)
-	await.Rcv(s.T(), ch.requestCh)
-	await.Snd(s.T(), ch.requestCompleteCh, nil)
+	s.Rcv(ch.requestCh)
+	s.Snd(ch.requestCompleteCh, nil)
+	s.Rcv(ch.requestCh)
+	s.Snd(ch.requestCompleteCh, nil)
 
 	sdkClient := env.SdkClient()
 	s.Await(func(s *CallbacksSuite) {

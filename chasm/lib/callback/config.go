@@ -75,14 +75,12 @@ func configProvider(dc *dynamicconfig.Collection) *Config {
 	}
 }
 
+// EncodeInternalTokenWithEnvelope controls token encoding. todo (david.porter): remove this entirely.
 var EncodeInternalTokenWithEnvelope = dynamicconfig.NewNamespaceBoolSetting(
 	"callback.encodeInternalTokenWithEnvelope",
-	false,
+	true,
 	`Controls how the internal CHASM Nexus completion callback token is encoded. When true the token is
-encoded as a NexusOperationCompletion envelope; when false (default) it is the legacy bare base64-encoded
-ChasmComponentRef. Gates a safe fleet-wide rollout of the envelope encoding: keep disabled until every
-server can read it (any server able to read the envelope also accepts the legacy form), then enable
-per-namespace.`,
+encoded as a NexusOperationCompletion envelope. This can be removed in future and existed only as a means to control a breaking enconding change from a buggy one.`,
 )
 
 var AllowedAddresses = dynamicconfig.NewNamespaceTypedSettingWithConverter(

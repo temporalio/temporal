@@ -1428,6 +1428,7 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		return nil, nil
 	}
 
+	originalIndex := localVersionHistories.CurrentVersionHistoryIndex
 	index, isNewBranch, err := r.getBranchToAppend(
 		ctx,
 		wfCtx,
@@ -1456,6 +1457,14 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 		localLastItem, err = versionhistory.GetLastVersionHistoryItem(versionHistoryToAppend)
 		if err != nil {
 			return newBranchToken, err
+		}
+		// LastFirstEventTxnId still points at the branch we moved off. Chain onto this branch instead.
+		if isNewBranch || index != originalIndex {
+			lastTxnID, err := r.lastTransactionID(ctx, versionHistoryToAppend.GetBranchToken(), localLastItem.GetEventId())
+			if err != nil {
+				return newBranchToken, err
+			}
+			localMutableState.GetExecutionInfo().LastFirstEventTxnId = lastTxnID
 		}
 	}
 
@@ -1680,6 +1689,41 @@ func (r *WorkflowStateReplicatorImpl) bringLocalEventsUpToSourceCurrentBranch(
 	localMutableState.SetHistoryBuilder(historybuilder.NewImmutableForUpdateNextEventID(sourceLastItem))
 	localMutableState.GetExecutionInfo().LastFirstEventTxnId = prevTxnID
 	return newBranchToken, nil
+}
+
+// lastTransactionID returns the txn ID of the node containing lastEventID. Nodes are keyed by their
+// first event ID, so this has to read from the start of the branch.
+func (r *WorkflowStateReplicatorImpl) lastTransactionID(
+	ctx context.Context,
+	branchToken []byte,
+	lastEventID int64,
+) (int64, error) {
+	lastTxnID := common.EmptyEventTaskID
+	var pageToken []byte
+	for {
+		resp, err := r.executionMgr.ReadHistoryBranchByBatch(ctx, &persistence.ReadHistoryBranchRequest{
+			ShardID:       r.shardContext.GetShardID(),
+			BranchToken:   branchToken,
+			MinEventID:    common.FirstEventID,
+			MaxEventID:    lastEventID + 1,
+			PageSize:      defaultPageSize,
+			NextPageToken: pageToken,
+		})
+		if err != nil {
+			return 0, err
+		}
+		if n := len(resp.TransactionIDs); n > 0 {
+			lastTxnID = resp.TransactionIDs[n-1]
+		}
+		pageToken = resp.NextPageToken
+		if len(pageToken) == 0 {
+			break
+		}
+	}
+	if lastTxnID == common.EmptyEventTaskID {
+		return 0, serviceerror.NewInternalf("no history node found up to event %v", lastEventID)
+	}
+	return lastTxnID, nil
 }
 
 func (r *WorkflowStateReplicatorImpl) getBranchToAppend(

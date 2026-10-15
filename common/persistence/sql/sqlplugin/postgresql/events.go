@@ -16,16 +16,16 @@ const (
 		`UPDATE SET prev_txn_id=:prev_txn_id, data=:data, data_encoding=:data_encoding `
 
 	getHistoryNodesQuery = `SELECT node_id, prev_txn_id, txn_id, data, data_encoding FROM history_node ` +
-		`WHERE shard_id = $1 AND tree_id = $2 AND branch_id = $3 AND ((node_id = $4 AND txn_id > $5) OR node_id > $6) AND node_id < $7 ` +
-		`ORDER BY shard_id, tree_id, branch_id, node_id, txn_id LIMIT $8 `
+		`WHERE shard_id = $1 AND tree_id = $2 AND branch_id = $3 AND (node_id, txn_id) > ($4, $5) AND node_id < $6 ` +
+		`ORDER BY shard_id, tree_id, branch_id, node_id, txn_id LIMIT $7 `
 
 	getHistoryNodesReverseQuery = `SELECT node_id, prev_txn_id, txn_id, data, data_encoding FROM history_node ` +
 		`WHERE shard_id = $1 AND tree_id = $2 AND branch_id = $3 AND node_id >= $4 AND ((node_id = $5 AND txn_id < $6) OR node_id < $7) ` +
 		`ORDER BY shard_id, tree_id, branch_id DESC, node_id DESC, txn_id DESC LIMIT $8 `
 
 	getHistoryNodeMetadataQuery = `SELECT node_id, prev_txn_id, txn_id FROM history_node ` +
-		`WHERE shard_id = $1 AND tree_id = $2 AND branch_id = $3 AND ((node_id = $4 AND txn_id > $5) OR node_id > $6) AND node_id < $7 ` +
-		`ORDER BY shard_id, tree_id, branch_id, node_id, txn_id LIMIT $8 `
+		`WHERE shard_id = $1 AND tree_id = $2 AND branch_id = $3 AND (node_id, txn_id) > ($4, $5) AND node_id < $6 ` +
+		`ORDER BY shard_id, tree_id, branch_id, node_id, txn_id LIMIT $7 `
 
 	deleteHistoryNodeQuery = `DELETE FROM history_node WHERE shard_id = $1 AND tree_id = $2 AND branch_id = $3 AND node_id = $4 AND txn_id = $5 `
 
@@ -114,7 +114,6 @@ func (pdb *db) RangeSelectFromHistoryNode(
 			filter.BranchID,
 			filter.MinNodeID,
 			-filter.MinTxnID, // NOTE: transaction ID is *= -1 when stored
-			filter.MinNodeID,
 			filter.MaxNodeID,
 			filter.PageSize,
 		}

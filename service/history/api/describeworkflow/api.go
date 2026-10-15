@@ -101,6 +101,7 @@ func Invoke(
 	if err != nil {
 		return nil, err
 	}
+	startAttributes := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	result := &historyservice.DescribeWorkflowExecutionResponse{
 		ExecutionConfig: &workflowpb.WorkflowExecutionConfig{
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -141,12 +142,13 @@ func Invoke(
 			Priority:                     executionInfo.Priority,
 		},
 		WorkflowExtendedInfo: &workflowpb.WorkflowExecutionExtendedInfo{
-			ExecutionExpirationTime: executionInfo.WorkflowExecutionExpirationTime,
-			RunExpirationTime:       executionInfo.WorkflowRunExpirationTime,
-			OriginalStartTime:       startEvent.EventTime,
-			CancelRequested:         executionInfo.CancelRequested,
-			ResetRunId:              executionInfo.ResetRunId,
-			RequestIdInfos:          make(map[string]*workflowpb.RequestIdInfo),
+			ExecutionExpirationTime:             executionInfo.WorkflowExecutionExpirationTime,
+			RunExpirationTime:                   executionInfo.WorkflowRunExpirationTime,
+			OriginalStartTime:                   startEvent.EventTime,
+			PropagatedNexusSerializationContext: startAttributes.GetPropagatedNexusSerializationContext(),
+			CancelRequested:                     executionInfo.CancelRequested,
+			ResetRunId:                          executionInfo.ResetRunId,
+			RequestIdInfos:                      make(map[string]*workflowpb.RequestIdInfo),
 		},
 	}
 
@@ -567,32 +569,29 @@ func buildCallbackInfosFromChasm(
 }
 
 // buildChasmCallbackInfo converts a single CHASM callback to API CallbackInfo format.
-// Returns nil if the callback should not be included in the response.
 func buildChasmCallbackInfo(
 	ctx chasm.Context,
 	cb *chasmcallback.Callback,
 	trigger *workflowpb.CallbackInfo_Trigger,
 ) (*workflowpb.CallbackInfo, error) {
-	apiCb, err := cb.ToAPICallback()
-	if err != nil {
-		return nil, err
-	}
-	state, blockedReason, err := cb.APIState(ctx)
+	// workflowpb.CallbackInfo forks rather than embeds callbackpb.CallbackInfo, so every shared
+	// field has to be copied.
+	info, err := cb.ToAPICallbackInfo(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	return &workflowpb.CallbackInfo{
-		Callback:                apiCb,
+		Callback:                info.GetCallback(),
 		Trigger:                 trigger,
-		RegistrationTime:        common.CloneProto(cb.RegistrationTime),
-		State:                   state,
-		Attempt:                 cb.Attempt,
-		LastAttemptCompleteTime: common.CloneProto(cb.LastAttemptCompleteTime),
-		LastAttemptFailure:      common.CloneProto(cb.LastAttemptFailure),
-		NextAttemptScheduleTime: common.CloneProto(cb.NextAttemptScheduleTime),
-		BlockedReason:           blockedReason,
-		RequestId:               cb.GetRequestId(),
+		RegistrationTime:        info.GetRegistrationTime(),
+		State:                   info.GetState(),
+		Attempt:                 info.GetAttempt(),
+		LastAttemptCompleteTime: info.GetLastAttemptCompleteTime(),
+		LastAttemptFailure:      info.GetLastAttemptFailure(),
+		NextAttemptScheduleTime: info.GetNextAttemptScheduleTime(),
+		BlockedReason:           info.GetBlockedReason(),
+		RequestId:               info.GetRequestId(),
 	}, nil
 }
 

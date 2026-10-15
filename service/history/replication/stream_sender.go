@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -30,6 +31,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -575,6 +577,8 @@ Loop:
 		)
 
 		var attempt int64
+		workflowLockPriority := locks.PriorityLow
+		lowPriorityLockAttempts := 0
 		operation := func() error {
 			attempt++
 			startTime := time.Now().UTC()
@@ -587,8 +591,14 @@ Loop:
 					metrics.ReplicationTaskPriorityTag(priority),
 				)
 			}()
-			task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID, priority)
+			task, err := s.taskConverter.Convert(item, s.clientShardKey.ClusterID, priority, workflowLockPriority)
 			if err != nil {
+				if workflowLockPriority == locks.PriorityLow && errors.Is(err, consts.ErrResourceExhaustedBusyWorkflow) {
+					lowPriorityLockAttempts++
+					if lowPriorityLockAttempts >= max(1, s.config.ReplicationTaskConverterLowPriorityLockMaxAttempts()) {
+						workflowLockPriority = locks.PriorityHigh
+					}
+				}
 				// Wrap as convertError so isSkippable can tell "the task could not be built"
 				// (its source info is corrupt/unusable) apart from transient send/rate-limit
 				// failures, which must not be skipped.

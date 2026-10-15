@@ -34,14 +34,13 @@ func (a *Activity) UpdateActivityExecutionOptions(
 		return a.updateActivityExecutionOptionsResponse(), nil
 	}
 
+	if a.isTerminal() {
+		return nil, a.errClosed()
+	}
+
 	switch a.Status {
-	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCELED,
-		activitypb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
-		activitypb.ACTIVITY_EXECUTION_STATUS_FAILED,
-		activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+	case activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 		activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
-		activitypb.ACTIVITY_EXECUTION_STATUS_TERMINATED,
-		activitypb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
 		activitypb.ACTIVITY_EXECUTION_STATUS_UNSPECIFIED:
 		return nil, serviceerror.NewFailedPreconditionf("Cannot update options for activity in state %s", a.Status.String())
 	default:
@@ -247,7 +246,7 @@ func (a *Activity) handleCancellationRequested(ctx chasm.MutableContext, request
 	}
 
 	if a.isTerminal() {
-		return nil, serviceerror.NewFailedPreconditionf("activity is in terminal state %v", a.GetStatus())
+		return nil, a.errClosed()
 	}
 
 	// Reject a second cancellation request with a different request ID.
@@ -297,6 +296,10 @@ func (a *Activity) handlePauseRequested(ctx chasm.MutableContext, req *activityp
 		return &activitypb.PauseActivityExecutionResponse{}, nil
 	}
 
+	if a.isTerminal() {
+		return nil, a.errClosed()
+	}
+
 	canPause := TransitionPaused.Possible(a)
 	canRequestPause := TransitionPauseRequested.Possible(a)
 	if !canPause && !canRequestPause {
@@ -335,7 +338,7 @@ func (a *Activity) handleUnpauseRequested(ctx chasm.MutableContext, req *activit
 	}
 
 	if a.isTerminal() {
-		return nil, serviceerror.NewFailedPreconditionf("activity is in terminal state %v", a.GetStatus())
+		return nil, a.errClosed()
 	}
 	metricsHandler := a.enrichedMetricsHandler(ctx, metrics.ActivityUnpausedScope)
 
@@ -439,6 +442,10 @@ func (a *Activity) handleReset(
 		}()
 	}
 
+	if a.isTerminal() {
+		return nil, a.errClosed()
+	}
+
 	if frontendReq.GetRestoreOriginalOptions() {
 		if err := validateOriginalOptionsRestorable(a.GetOriginalOptions()); err != nil {
 			return nil, err
@@ -471,7 +478,6 @@ func (a *Activity) handleReset(
 	case activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED:
 		return a.resetImmediately(ctx, frontendReq, metricsHandler, frontendReq.GetRestoreOriginalOptions())
 	default:
-		// Terminal or unspecified state.
 		return nil, serviceerror.NewFailedPrecondition("activity execution is not running")
 	}
 }
