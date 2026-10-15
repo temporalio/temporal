@@ -758,7 +758,6 @@ func (s *activityParityTestSuite) TestReset() {
 	// the pause — Describe reports the activity as pause-requested, so a heartbeat response that named
 	// only the reset would contradict what an operator reading the activity is shown. The flags are
 	// independent, and each says something true about what will happen when the attempt yields.
-	// Currently failing: SAA.
 	t.Run("HeartbeatWhilePauseAndKeepPausedResetArePending", func(t *testing.T) {
 		parityDrive(t, env, deferredResetCfg,
 			[]model.Event{model.Poll, model.Pause, model.ResetKeepPaused, model.Heartbeat},
