@@ -798,7 +798,7 @@ func (c *physicalTaskQueueManagerImpl) MakePollerScalingDecision(
 	task *internalTask,
 	pollMetadata *pollMetadata,
 ) *taskqueuepb.PollerScalingDecision {
-	decision := c.makePollerScalingDecisionImpl(pollStartTime, task, func() *taskqueuepb.TaskQueueStats {
+	decision := c.makePollerScalingDecisionImpl(pollStartTime, task, pollMetadata, func() *taskqueuepb.TaskQueueStats {
 		return c.partitionMgr.GetPhysicalQueueAdjustedStats(ctx, c)
 	})
 	return c.applyFairShare(decision, pollMetadata)
@@ -839,6 +839,7 @@ func (c *physicalTaskQueueManagerImpl) applyFairShare(
 func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	pollStartTime time.Time,
 	task *internalTask,
+	pollMetadata *pollMetadata,
 	statsFn func() *taskqueuepb.TaskQueueStats,
 ) *taskqueuepb.PollerScalingDecision {
 	pollWaitTime := c.partitionMgr.engine.timeSource.Since(pollStartTime)
@@ -874,16 +875,28 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 		return nil
 	}
 
+	// Only the root has a complete view when multiple partitions exist, so ratio-based scaling
+	// is root-only. Queues without partition support have one partition and remain eligible.
+	// A worker's share is a per-queue fact rather than a fleet-wide one, so rebalancing below
+	// stays eligible on every partition -- which is why this is a condition rather than the
+	// early return it used to be.
+	hasFullView := !c.queue.Partition().SupportsPartitions() || c.queue.Partition().IsRoot()
+
 	if c.delaySignalFiring(stats, task) {
 		delta = 1
 		reason = metrics.PollerScaleReasonDelay
-	} else if c.queue.Partition().SupportsPartitions() && !c.queue.Partition().IsRoot() {
-		// Only the root has a complete view when multiple partitions exist, so skip ratio-based scaling
-		// for non-root partitions. Queues without partition support have one partition and remain eligible.
-		return nil
-	} else if c.ratioSignalFiring(stats) {
+	} else if hasFullView && c.ratioSignalFiring(stats) {
 		delta = 1
 		reason = metrics.PollerScaleReasonRatio
+	}
+
+	// The queue wants no change, so this decision was about to be discarded -- and its
+	// rate-limiter token is already spent. Spend it instead on pulling an under-share worker
+	// up, which withholding alone cannot do: a starved worker is starved of suggestions
+	// precisely because it is starved of tasks, so denying its over-share peers a +1 never
+	// hands that +1 to it.
+	if delta == 0 {
+		delta, reason = c.rebalanceSuggestion(pollMetadata)
 	}
 
 	if delta == 0 {
@@ -894,6 +907,27 @@ func (c *physicalTaskQueueManagerImpl) makePollerScalingDecisionImpl(
 	return &taskqueuepb.PollerScalingDecision{
 		PollRequestDeltaSuggestion: delta,
 	}
+}
+
+// rebalanceSuggestion returns a scale-up for a worker sitting below its share of the
+// fleet's pollers, used only when the queue itself decided on nothing.
+//
+// This is the half of fair-share that moves capacity rather than withholding it. Withholding
+// prevents a gap from forming but cannot close one that already exists: measured on a worker
+// joining a settled fleet, it reached 8.2% of pollers against an even 33.3%. Scale-up events
+// and rolling restarts make that the common case.
+//
+// Self-limiting -- once the worker climbs back inside the band, classify returns shareFair
+// and this stops firing.
+func (c *physicalTaskQueueManagerImpl) rebalanceSuggestion(pollMetadata *pollMetadata) (int32, metrics.ReasonString) {
+	band := c.partitionMgr.config.PollerScalingFairnessBand()
+	if pollMetadata == nil || band <= 1 {
+		return 0, ""
+	}
+	if c.pollerShares.classify(pollMetadata.workerInstanceKey, band) != shareUnder {
+		return 0, ""
+	}
+	return 1, metrics.PollerScaleReasonRebalance
 }
 
 // recordPollerScaleDecision emits the poller_scale_decision metric describing the direction of a
