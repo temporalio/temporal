@@ -198,7 +198,7 @@ func loadMutableStateForTask(
 		1,
 		getNamespaceTagByID(shardContext.GetNamespaceRegistry(), task.GetNamespaceID()),
 		metrics.TaskTypeTag(taskTypeTag),
-		metrics.ArchetypeTag(chasm.WorkflowComponentName),
+		metrics.ArchetypeTag(chasm.WorkflowArchetype),
 	)
 	logger.Info("Task processor skipping task: task event ID >= MS NextEventID.",
 		tag.WorkflowNextEventID(mutableState.GetNextEventID()),
