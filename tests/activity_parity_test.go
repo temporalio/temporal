@@ -702,18 +702,17 @@ func (s *activityParityTestSuite) TestResetClearsAttemptMetadata() {
 		require.Nil(t, actual.lastAttemptCompleteTime)
 		require.Empty(t, actual.lastWorkerIdentity)
 	}
+	assertClearedByReset := func(t *testing.T, a parityActivity, resetEvent model.Event, read func() attemptMetadata) {
+		assertReported(t, read())
+		a.driveEvent(t, resetEvent)
+		assertCleared(t, read())
+	}
 
 	s.Run("ImmediateReset", func(s *activityParityTestSuite) {
-		assertClearedByReset := func(t *testing.T, a parityActivity, read func() attemptMetadata) {
-			assertReported(t, read())
-			a.driveEvent(t, model.Reset)
-			assertCleared(t, read())
-		}
-
 		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
 			t := s.T()
 			a := newWFADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll, model.FailRetryably})
-			assertClearedByReset(t, a, func() attemptMetadata {
+			assertClearedByReset(t, a, model.Reset, func() attemptMetadata {
 				info := a.pendingActivityInfo(t)
 				return attemptMetadata{
 					lastFailure:             info.GetLastFailure(),
@@ -726,7 +725,7 @@ func (s *activityParityTestSuite) TestResetClearsAttemptMetadata() {
 		s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
 			t := s.T()
 			a := newSAADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll, model.FailRetryably})
-			assertClearedByReset(t, a, func() attemptMetadata {
+			assertClearedByReset(t, a, model.Reset, func() attemptMetadata {
 				info := a.describe(t).GetInfo()
 				return attemptMetadata{
 					lastFailure:             info.GetLastFailure(),
@@ -737,10 +736,46 @@ func (s *activityParityTestSuite) TestResetClearsAttemptMetadata() {
 		})
 	})
 
+	s.Run("ImmediateResetKeepPaused", func(s *activityParityTestSuite) {
+		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+			t := s.T()
+			a := newWFADriver(t, env, cfg).driveTrace(t,
+				[]model.Event{model.Poll, model.FailRetryably, model.Pause})
+			read := func() attemptMetadata {
+				info := a.pendingActivityInfo(t)
+				return attemptMetadata{
+					lastFailure:             info.GetLastFailure(),
+					lastAttemptCompleteTime: info.GetLastAttemptCompleteTime(),
+					lastWorkerIdentity:      info.GetLastWorkerIdentity(),
+				}
+			}
+			assertClearedByReset(t, a, model.ResetKeepPaused, read)
+			a.driveEvent(t, model.Unpause)
+			assertCleared(t, read())
+		})
+
+		s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+			t := s.T()
+			a := newSAADriver(t, env, cfg).driveTrace(t,
+				[]model.Event{model.Poll, model.FailRetryably, model.Pause})
+			read := func() attemptMetadata {
+				info := a.describe(t).GetInfo()
+				return attemptMetadata{
+					lastFailure:             info.GetLastFailure(),
+					lastAttemptCompleteTime: info.GetLastAttemptCompleteTime(),
+					lastWorkerIdentity:      info.GetLastWorkerIdentity(),
+				}
+			}
+			assertClearedByReset(t, a, model.ResetKeepPaused, read)
+			a.driveEvent(t, model.Unpause)
+			assertCleared(t, read())
+		})
+	})
+
 	s.Run("DeferredReset", func(s *activityParityTestSuite) {
-		// The state model expects a deferred reset to rewind the attempt counter. WFA currently does not
-		// (covered separately by R01), so issue this trace through the drivers' raw RPC helpers to isolate
-		// what R13 checks: whether the completed attempt's metadata remains visible.
+		// driveTrace checks each step against the state model, which expects a deferred reset to rewind
+		// the attempt counter. WFA does not rewind it, so these subtests issue the RPCs directly and check
+		// only that the yielding attempt's metadata remains visible.
 		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
 			t := s.T()
 			a := newWFADriver(t, env, cfg).start(t, cfg)
