@@ -293,13 +293,14 @@ jobs:
               dynamic config that is not read or has the wrong default or scope.
             - `bug:larger`: functionality that is missing or implemented incorrectly as a whole.
             Not bugs (evolvability defects):
-            - `wording`: wording of names, comments, and log or error messages in the code.
+            - `textual`: wording of names, comments, and log or error messages in the code.
             - `idiom`: non-idiomatic Go, or not using a language or standard library feature that
               fits, such as typed constants, `errors.Is`, generated proto getters, or `slices`.
             - `visual`: layout and formatting that hinder readability.
-            - `structure`: code that should be organized or implemented differently, such as
-              moved, split, deduplicated, or removed as dead code, or rewritten to reuse an
-              existing helper or pattern, drop an abstraction, or take a simpler approach.
+            - `organization`: the same logic should be restructured, such as moved, split,
+              deduplicated, simplified, or removed as dead code.
+            - `solution`: different logic would be better, such as reusing an existing helper or
+              pattern, dropping an abstraction, or taking a simpler approach.
             - `testing`: missing, wrong, or unreliable tests.
             - `pr-description`: missing or unclear PR description or intent.
             Return an empty `findings` list if you posted none.
@@ -328,10 +329,11 @@ jobs:
                           "bug:timing",
                           "bug:support",
                           "bug:larger",
-                          "wording",
+                          "textual",
                           "idiom",
                           "visual",
-                          "structure",
+                          "organization",
+                          "solution",
                           "testing",
                           "pr-description"
                         ]
