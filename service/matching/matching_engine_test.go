@@ -3784,7 +3784,7 @@ func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(
 		ackLevel := fairLevelFromProto(db.subqueues[subqueueZero].FairAckLevel)
 		db.Unlock()
 		dbTasks := int64(s.taskManager.getTaskCountAbove(ptq, ackLevel))
-		completedTasks := int64(reader.outstandingTasks.Len() - reader.loadedTasks + reader.evictedAcks.Len())
+		completedTasks := reader.completedTaskCountLocked()
 
 		// Completed tasks above the ack level may already be excluded from the estimate.
 		// Require enough backlog for the remaining dispatches, allowing a conservative overestimate.

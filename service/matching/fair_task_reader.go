@@ -638,7 +638,7 @@ func (tr *fairTaskReader) advanceAckLevelLocked() {
 		tr.acksExcludedFromBacklog = max(0, tr.acksExcludedFromBacklog-numAcked)
 		knownCount := tr.knownCountLocked()
 		if knownCount >= 0 {
-			tr.acksExcludedFromBacklog = int64(tr.outstandingTasks.Len() - tr.loadedTasks + tr.evictedAcks.Len())
+			tr.acksExcludedFromBacklog = tr.completedTaskCountLocked()
 		}
 		tr.backlogMgr.db.updateFairAckLevel(
 			tr.subqueue, tr.ackLevel, countDelta, knownCount, tr.backlogAge.oldestTime())
@@ -689,9 +689,14 @@ func (tr *fairTaskReader) knownCountLocked() int64 {
 
 func (tr *fairTaskReader) maybeResetBacklogCountLocked() {
 	if count := tr.knownCountLocked(); count >= 0 {
-		tr.acksExcludedFromBacklog = int64(tr.outstandingTasks.Len() - tr.loadedTasks + tr.evictedAcks.Len())
+		tr.acksExcludedFromBacklog = tr.completedTaskCountLocked()
 		tr.backlogMgr.db.setKnownFairBacklogCount(tr.subqueue, count)
 	}
+}
+
+// completedTaskCountLocked counts known completions above the ack level, including evicted acks.
+func (tr *fairTaskReader) completedTaskCountLocked() int64 {
+	return int64(tr.outstandingTasks.Len() - tr.loadedTasks + tr.evictedAcks.Len())
 }
 
 // gc
