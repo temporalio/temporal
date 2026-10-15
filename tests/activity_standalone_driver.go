@@ -55,11 +55,12 @@ func (d *saaDriver) testContext() context.Context {
 // saaHandle is a handle to an activity instance.
 type saaHandle struct {
 	activityDriverState
-	model      *activityModel // the model state reached, so driveEvent can check each event
-	d          *saaDriver
-	activityID string
-	runID      string
-	taskQueue  string
+	model         *activityModel // the model state reached, so driveEvent can check each event
+	d             *saaDriver
+	activityID    string
+	runID         string
+	taskQueue     string
+	lastHeartbeat *workflowservice.RecordActivityTaskHeartbeatResponse
 }
 
 // driveTrace schedules an activity, and then advances that activity through a sequence of events (a
@@ -265,9 +266,10 @@ func (a *saaHandle) rpc(_ testing.TB, e model.Event) error {
 	ctx := a.testContext()
 	switch e.Type {
 	case model.HeartbeatType:
-		_, err := fc.RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+		resp, err := fc.RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
 			Namespace: ns, TaskToken: a.token, Details: activityRecordedHeartbeatDetails,
 		})
+		a.lastHeartbeat = resp
 		return err
 	case model.RespondCompletedType:
 		_, err := fc.RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{

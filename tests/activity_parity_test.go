@@ -714,6 +714,59 @@ func (s *activityParityTestSuite) TestActivityCore() {
 // it, so a test states its claim once instead of once per implementation.
 type parityActivity interface {
 	driveEvent(testing.TB, model.Event)
+	heartbeatFlags() model.HeartbeatFlags
+}
+
+// parityDrive drives trace through both implementations and hands each resulting activity to check.
+func parityDrive(
+	t *testing.T,
+	env *testcore.TestEnv,
+	cfg activityConfig,
+	trace []model.Event,
+	check func(*testing.T, parityActivity),
+) {
+	t.Run("WorkflowActivity", func(t *testing.T) {
+		check(t, newWFADriver(t, env, cfg).driveTrace(t, trace))
+	})
+	t.Run("StandaloneActivity", func(t *testing.T) {
+		check(t, newSAADriver(t, env, cfg).driveTrace(t, trace))
+	})
+}
+
+func (a *wfaHandle) heartbeatFlags() model.HeartbeatFlags {
+	return model.HeartbeatFlags{
+		CancelRequested: a.lastHeartbeat.GetCancelRequested(),
+		ActivityPaused:  a.lastHeartbeat.GetActivityPaused(),
+		ActivityReset:   a.lastHeartbeat.GetActivityReset(),
+	}
+}
+
+func (a *saaHandle) heartbeatFlags() model.HeartbeatFlags {
+	return model.HeartbeatFlags{
+		CancelRequested: a.lastHeartbeat.GetCancelRequested(),
+		ActivityPaused:  a.lastHeartbeat.GetActivityPaused(),
+		ActivityReset:   a.lastHeartbeat.GetActivityReset(),
+	}
+}
+
+func (s *activityParityTestSuite) TestReset() {
+	t := s.T()
+	env := newActivityParityEnv(t)
+	deferredResetCfg := activityConfig{MaxAttempts: 10, RetryInterval: activityLongDuration}
+
+	// R14: both intents are pending and the worker is told of both. A keep_paused reset does not subsume
+	// the pause — Describe reports the activity as pause-requested, so a heartbeat response that named
+	// only the reset would contradict what an operator reading the activity is shown. The flags are
+	// independent, and each says something true about what will happen when the attempt yields.
+	// Currently failing: SAA.
+	t.Run("HeartbeatWhilePauseAndKeepPausedResetArePending", func(t *testing.T) {
+		parityDrive(t, env, deferredResetCfg,
+			[]model.Event{model.Poll, model.Pause, model.ResetKeepPaused, model.Heartbeat},
+			func(t *testing.T, a parityActivity) {
+				require.Equal(t, model.HeartbeatFlags{ActivityPaused: true, ActivityReset: true}, a.heartbeatFlags(),
+					"a worker whose attempt is both superseded and pause-bound must be told of both")
+			})
+	})
 }
 
 // parityDriveOutlivingActivity drives trace through both implementations and hands each resulting
