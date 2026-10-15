@@ -232,6 +232,7 @@ jobs:
           ref: ${{ needs.check-review-eligibility.outputs.head_sha }}
           path: pr-head
       - name: Claude PR review
+        id: claude
         uses: anthropics/claude-code-action@v1
         with:
           github_token: ${{ github.token }}
@@ -264,5 +265,61 @@ jobs:
             Findings with no changed line to attach to may follow that line, formatted like
             inline findings.
             Only post GitHub comments - don't submit review text as messages.
+
+            ## Findings log
+
+            After posting, return every finding you posted as structured output, one entry per
+            finding, inline or not. Use the same severity, the repository-relative path, and the
+            line you commented on; omit `path` and `line` for findings not tied to a file.
+            Return an empty `findings` list if you posted none.
+          # --json-schema makes the action emit `structured_output`, which the next
+          # step saves as a workflow artifact so findings can be compared against
+          # known bugs later.
           claude_args: |
             --add-dir pr-head --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr diff:*),Bash(gh pr view:*)"
+            --json-schema '{"type":"object","properties":{"findings":{"type":"array","items":{"type":"object","properties":{"severity":{"type":"string","enum":["nit","small","med","high"]},"path":{"type":"string"},"line":{"type":"integer"},"summary":{"type":"string"},"details":{"type":"string"}},"required":["severity","summary","details"],"additionalProperties":false}}},"required":["findings"],"additionalProperties":false}'
+      - name: Save review findings
+        if: ${{ !cancelled() && steps.claude.outputs.structured_output != '' }}
+        env:
+          STRUCTURED_OUTPUT: ${{ steps.claude.outputs.structured_output }}
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ needs.check-review-eligibility.outputs.pr_number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ needs.check-review-eligibility.outputs.head_sha }}
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          set -euo pipefail
+
+          # Workflow context comes from the event, not from Claude, so each finding
+          # can be traced back to the exact commit that was reviewed.
+          jq -n \
+            --argjson output "$STRUCTURED_OUTPUT" \
+            --arg repo "$REPO" \
+            --argjson pr_number "$PR_NUMBER" \
+            --arg base_sha "$BASE_SHA" \
+            --arg head_sha "$HEAD_SHA" \
+            --arg run_id "$RUN_ID" \
+            --arg run_attempt "$RUN_ATTEMPT" \
+            --arg reviewed_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+              schema_version: 1,
+              repo: $repo,
+              pr_number: $pr_number,
+              base_sha: $base_sha,
+              head_sha: $head_sha,
+              run_id: $run_id,
+              run_attempt: $run_attempt,
+              reviewed_at: $reviewed_at,
+              findings: $output.findings
+            }' > "$RUNNER_TEMP/claude-review-findings.json"
+
+          echo "Logged $(jq '.findings | length' "$RUNNER_TEMP/claude-review-findings.json") finding(s) for PR #${PR_NUMBER} at ${HEAD_SHA}"
+      - name: Upload review findings
+        if: ${{ !cancelled() && steps.claude.outputs.structured_output != '' }}
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: claude-review-findings-pr${{ needs.check-review-eligibility.outputs.pr_number }}-attempt${{ github.run_attempt }}
+          path: ${{ runner.temp }}/claude-review-findings.json
+          if-no-files-found: ignore
+          retention-days: 90
