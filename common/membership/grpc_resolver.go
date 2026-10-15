@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"go.temporal.io/server/common/primitives"
 	"go.uber.org/fx"
@@ -22,12 +24,13 @@ const (
 type (
 	// grpcBuilder implements grpc/resolver.Builder. This is a singleton that's registered with grpc.
 	grpcBuilder struct {
-		resolvers sync.Map // pointer as string -> *GRPCResolver
+		resolvers sync.Map // registration ID string -> Monitor
 	}
 
 	// GRPCResolver and the resolvers map in grpcBuilder is used to pass a Monitor through a string url.
 	GRPCResolver struct {
-		monitor Monitor
+		registrationID string
+		cleanup        runtime.Cleanup
 	}
 
 	// grpcResolver is a single instance of a resolver.
@@ -47,9 +50,10 @@ var (
 	_ resolver.Builder = (*grpcBuilder)(nil)
 
 	globalGrpcBuilder grpcBuilder
+	grpcResolverID    atomic.Uint64
 
-	errInvalidUrl     = errors.New("invalid grpc resolver url")
-	errNotInitialized = errors.New("grpc resolver has not been initialized yet")
+	errInvalidURL    = errors.New("invalid grpc resolver url")
+	errNotRegistered = errors.New("grpc resolver is not registered; it may not have been created or may already have been released")
 )
 
 func init() {
@@ -65,18 +69,37 @@ func GetServiceResolverFromURL(u *url.URL) (ServiceResolver, error) {
 
 // This should only be used in unit tests. For normal code, use the *GRPCResolver provided by fx.
 // Monitor may be nil if it's not needed, but then note that GetServiceResolverFromURL will panic.
-func GRPCResolverURLForTesting(monitor Monitor, service primitives.ServiceName) string {
-	return newGRPCResolver(monitor).MakeURL(service)
+// Keep the returned cleanup func reachable while using the URL so the GC fallback does not remove
+// the registration, and call it when the URL is no longer needed.
+func GRPCResolverURLForTesting(monitor Monitor, service primitives.ServiceName) (string, func()) {
+	res := newGRPCResolverRegistration(monitor)
+	return res.MakeURL(service), res.unregister
 }
 
-func newGRPCResolver(monitor Monitor) *GRPCResolver {
-	res := &GRPCResolver{monitor: monitor}
-	globalGrpcBuilder.resolvers.Store(fmt.Sprintf("%p", res), res)
+func newGRPCResolver(lifecycle fx.Lifecycle, monitor Monitor) *GRPCResolver {
+	res := newGRPCResolverRegistration(monitor)
+	lifecycle.Append(fx.StopHook(res.unregister))
 	return res
 }
 
+func newGRPCResolverRegistration(monitor Monitor) *GRPCResolver {
+	registrationID := fmt.Sprintf("%d", grpcResolverID.Add(1))
+	res := &GRPCResolver{registrationID: registrationID}
+	globalGrpcBuilder.resolvers.Store(registrationID, monitor)
+	// Fx does not run OnStop hooks when graph construction fails, so retain a GC fallback.
+	res.cleanup = runtime.AddCleanup(res, func(registrationID string) {
+		globalGrpcBuilder.resolvers.Delete(registrationID)
+	}, registrationID)
+	return res
+}
+
+func (g *GRPCResolver) unregister() {
+	g.cleanup.Stop()
+	globalGrpcBuilder.resolvers.Delete(g.registrationID)
+}
+
 func (g *GRPCResolver) MakeURL(service primitives.ServiceName) string {
-	return fmt.Sprintf("%s://%s%s%p", grpcResolverScheme, string(service), delim, g)
+	return fmt.Sprintf("%s://%s%s%s", grpcResolverScheme, string(service), delim, g.registrationID)
 }
 
 func (m *grpcBuilder) Scheme() string {
@@ -85,17 +108,17 @@ func (m *grpcBuilder) Scheme() string {
 
 func (m *grpcBuilder) getServiceResolver(u *url.URL) (ServiceResolver, error) {
 	if u.Scheme != grpcResolverScheme {
-		return nil, errInvalidUrl
+		return nil, errInvalidURL
 	}
-	service, ptr, found := strings.Cut(u.Host, delim)
+	service, registrationID, found := strings.Cut(u.Host, delim)
 	if !found {
-		return nil, errInvalidUrl
+		return nil, errInvalidURL
 	}
-	v, ok := m.resolvers.Load(ptr)
+	v, ok := m.resolvers.Load(registrationID)
 	if !ok {
-		return nil, errNotInitialized
+		return nil, errNotRegistered
 	}
-	return v.(*GRPCResolver).monitor.GetResolver(primitives.ServiceName(service))
+	return v.(Monitor).GetResolver(primitives.ServiceName(service))
 }
 
 func (m *grpcBuilder) Build(target resolver.Target, cc resolver.ClientConn, _ resolver.BuildOptions) (resolver.Resolver, error) {
