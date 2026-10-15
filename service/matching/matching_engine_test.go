@@ -5203,11 +5203,15 @@ func (q *testQueueData) persistenceStats() testQueuePersistenceStats {
 }
 
 func (m *testTaskManager) CreateTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.CreateTaskQueueRequest,
 ) (*persistence.CreateTaskQueueResponse, error) {
 	tli := request.TaskQueueInfo
 	tlm := m.getQueueData(tli.Name, tli.NamespaceId, tli.TaskType)
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 
 	m.delay()
 	defer m.delay()
@@ -5228,11 +5232,15 @@ func (m *testTaskManager) CreateTaskQueue(
 }
 
 func (m *testTaskManager) UpdateTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.UpdateTaskQueueRequest,
 ) (*persistence.UpdateTaskQueueResponse, error) {
 	tli := request.TaskQueueInfo
 	tlm := m.getQueueData(tli.Name, tli.NamespaceId, tli.TaskType)
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 
 	m.delay()
 	defer m.delay()
@@ -5253,9 +5261,13 @@ func (m *testTaskManager) UpdateTaskQueue(
 }
 
 func (m *testTaskManager) GetTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.GetTaskQueueRequest,
 ) (*persistence.GetTaskQueueResponse, error) {
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
+
 	tlm := m.getQueueData(request.TaskQueue, request.NamespaceID, request.TaskType)
 	tlm.Lock()
 	defer tlm.Unlock()
@@ -5284,13 +5296,17 @@ func (m *testTaskManager) getTaskCountAbove(q *PhysicalTaskQueueKey, level fairL
 }
 
 func (m *testTaskManager) CompleteTasksLessThan(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.CompleteTasksLessThanRequest,
 ) (int, error) {
 	if m.fairness && request.ExclusiveMaxPass < 1 {
 		return 0, serviceerror.NewInternal("invalid CompleteTasksLessThan request on fair queue")
 	} else if !m.fairness && (request.ExclusiveMaxPass != 0 || request.ConditionRangeID != 0) {
 		return 0, serviceerror.NewInternal("invalid CompleteTasksLessThan request on queue")
+	}
+
+	if ctx.Err() != nil {
+		return 0, ctx.Err()
 	}
 
 	m.delay()
@@ -5358,13 +5374,17 @@ func (m *testTaskManager) fault(method, err string) bool {
 }
 
 func (m *testTaskManager) CreateTasks(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.CreateTasksRequest,
 ) (*persistence.CreateTasksResponse, error) {
 	namespaceID := request.TaskQueueInfo.Data.GetNamespaceId()
 	taskQueue := request.TaskQueueInfo.Data.Name
 	taskType := request.TaskQueueInfo.Data.TaskType
 	rangeID := request.TaskQueueInfo.RangeID
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
+	}
 
 	m.delay()
 	defer m.delay()
@@ -5431,7 +5451,7 @@ func (m *testTaskManager) CreateTasks(
 }
 
 func (m *testTaskManager) GetTasks(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.GetTasksRequest,
 ) (*persistence.GetTasksResponse, error) {
 	m.logger.Debug("testTaskManager.GetTasks", tag.Value(request))
@@ -5440,6 +5460,10 @@ func (m *testTaskManager) GetTasks(
 		return nil, serviceerror.NewInternal("invalid GetTasks request on fair queue")
 	} else if !m.fairness && request.InclusiveMinPass != 0 {
 		return nil, serviceerror.NewInternal("invalid GetTasks request on queue")
+	}
+
+	if ctx.Err() != nil {
+		return nil, ctx.Err()
 	}
 
 	m.delay()
