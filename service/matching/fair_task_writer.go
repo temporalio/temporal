@@ -34,7 +34,7 @@ type (
 		counters           map[subqueueIndex]counter.Counter // only used in taskWriterLoop.
 		ditherSeed         maphash.Seed                      // seed for fairness pass dither (see pickPasses).
 		// copy of counters' distinct key estimates for safe concurrent access via
-		// getApproximateFairnessKeyCount().
+		// getFairnessKeyCountEstimate().
 		keyCountEstimates atomic.Pointer[map[subqueueIndex]int64]
 	}
 )
