@@ -78,7 +78,7 @@ func (h *applyLocalTaskHandler) Execute(
 ) error {
 	// Read the mutation payload from component state.
 	type loadResult struct {
-		Operation   namespacereplicationpb.NamespaceOperation
+		Operation   enumsspb.NamespaceOperation
 		Detail      *persistencespb.NamespaceDetail
 		ExpectedVer int64
 	}
@@ -104,12 +104,12 @@ func (h *applyLocalTaskHandler) Execute(
 	// the component.
 	var applyErr error
 	switch loaded.Operation {
-	case namespacereplicationpb.NAMESPACE_OPERATION_CREATE:
+	case enumsspb.NAMESPACE_OPERATION_CREATE:
 		_, applyErr = h.metadataManager.CreateNamespace(ctx, &persistence.CreateNamespaceRequest{
 			Namespace:         loaded.Detail,
 			IsGlobalNamespace: true,
 		})
-	case namespacereplicationpb.NAMESPACE_OPERATION_UPDATE:
+	case enumsspb.NAMESPACE_OPERATION_UPDATE:
 		applyErr = h.metadataManager.UpdateNamespace(ctx, &persistence.UpdateNamespaceRequest{
 			Namespace:           loaded.Detail,
 			IsGlobalNamespace:   true,
@@ -180,19 +180,19 @@ func (h *applyLocalTaskHandler) Execute(
 // in that case the newer full namespace snapshot owns peer fan-out.
 func (h *applyLocalTaskHandler) localMutationResolvedAsFailure(
 	ctx context.Context,
-	operation namespacereplicationpb.NamespaceOperation,
+	operation enumsspb.NamespaceOperation,
 	expectedVersion int64,
 	applyErr error,
 ) (bool, error) {
 	if _, ok := errors.AsType[*serviceerror.NamespaceAlreadyExists](applyErr); ok &&
-		operation == namespacereplicationpb.NAMESPACE_OPERATION_CREATE {
+		operation == enumsspb.NAMESPACE_OPERATION_CREATE {
 		// Exact-state reconciliation already ruled out a retry of our own create.
 		return true, nil
 	}
 	if !persistence.OperationPossiblySucceeded(applyErr) {
 		return true, nil
 	}
-	if operation != namespacereplicationpb.NAMESPACE_OPERATION_UPDATE {
+	if operation != enumsspb.NAMESPACE_OPERATION_UPDATE {
 		return false, nil
 	}
 
@@ -206,12 +206,12 @@ func (h *applyLocalTaskHandler) localMutationResolvedAsFailure(
 }
 
 func shouldReconcileLocalApply(
-	operation namespacereplicationpb.NamespaceOperation,
+	operation enumsspb.NamespaceOperation,
 	applyErr error,
 ) bool {
 	errType := classifyLocalErr(applyErr)
 	return errType == localFailureUnavailable ||
-		(operation == namespacereplicationpb.NAMESPACE_OPERATION_CREATE && errType == localFailureAlreadyExists)
+		(operation == enumsspb.NAMESPACE_OPERATION_CREATE && errType == localFailureAlreadyExists)
 }
 
 // localMutationIsCurrentPersistedState reports whether the current namespace
@@ -220,7 +220,7 @@ func shouldReconcileLocalApply(
 // namespace snapshots happen to match.
 func (h *applyLocalTaskHandler) localMutationIsCurrentPersistedState(
 	ctx context.Context,
-	operation namespacereplicationpb.NamespaceOperation,
+	operation enumsspb.NamespaceOperation,
 	detail *persistencespb.NamespaceDetail,
 	expectedVersion int64,
 ) (bool, error) {
@@ -247,7 +247,7 @@ func (h *applyLocalTaskHandler) localMutationIsCurrentPersistedState(
 	// advancing the cell-global metadata version. Exact equality therefore ties
 	// the observed row to this mutation. A larger row version means a later
 	// same-namespace mutation has superseded it, even if the snapshots match.
-	if operation == namespacereplicationpb.NAMESPACE_OPERATION_UPDATE &&
+	if operation == enumsspb.NAMESPACE_OPERATION_UPDATE &&
 		response.NotificationVersion != expectedVersion {
 		return false, nil
 	}
@@ -491,7 +491,7 @@ func (h *applyPeerTaskHandler) Execute(
 		func(c *NamespaceMutationComponent, _ chasm.Context, _ chasm.NoValue) (loadResult, error) {
 			m := c.GetMutation()
 			return loadResult{
-				Operation: convertOperation(m.GetOperation()),
+				Operation: m.GetOperation(),
 				Detail:    common.CloneProto(m.GetNamespaceDetail()),
 			}, nil
 		},
@@ -718,17 +718,4 @@ func (h *applyPeerBackoffTaskHandler) Execute(
 		TargetCell: task.GetTargetCell(),
 		Attempt:    task.GetAttempt(),
 	})
-}
-
-// convertOperation maps our local NamespaceOperation enum to the OSS one used in
-// NamespaceTaskAttributes. Same values, different proto package.
-func convertOperation(op namespacereplicationpb.NamespaceOperation) enumsspb.NamespaceOperation {
-	switch op {
-	case namespacereplicationpb.NAMESPACE_OPERATION_CREATE:
-		return enumsspb.NAMESPACE_OPERATION_CREATE
-	case namespacereplicationpb.NAMESPACE_OPERATION_UPDATE:
-		return enumsspb.NAMESPACE_OPERATION_UPDATE
-	default:
-		return enumsspb.NAMESPACE_OPERATION_UNSPECIFIED
-	}
 }
