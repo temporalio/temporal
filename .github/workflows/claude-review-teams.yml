@@ -292,14 +292,14 @@ jobs:
               dynamic config that is not read or has the wrong default or scope.
             - `bug:larger`: functionality that is missing or implemented incorrectly as a whole.
             Not bugs (evolvability defects):
-            - `naming`: wording of names and comments.
+            - `wording`: wording of names, comments, and log or error messages in the code.
             - `language`: code that should use a language or standard library feature.
             - `visual`: layout and formatting that hinder readability.
             - `organization`: code that should be restructured, such as moved, split,
               deduplicated, or removed as dead code.
             - `solution`: a different implementation approach would be better.
             - `testing`: missing, wrong, or unreliable tests.
-            - `description`: missing or unclear PR description or intent.
+            - `pr-description`: missing or unclear PR description or intent.
             Return an empty `findings` list if you posted none.
           claude_args: |
             --add-dir pr-head --allowedTools "Read,Grep,Glob,mcp__github_inline_comment__create_inline_comment,Bash(gh pr diff:*),Bash(gh pr view:*)"
@@ -326,13 +326,13 @@ jobs:
                           "bug:timing",
                           "bug:support",
                           "bug:larger",
-                          "naming",
+                          "wording",
                           "language",
                           "visual",
                           "organization",
                           "solution",
                           "testing",
-                          "description"
+                          "pr-description"
                         ]
                       },
                       "path": {"type": "string"},
