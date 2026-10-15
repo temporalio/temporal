@@ -232,9 +232,7 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentVersionAbsorbsUnversionedBacklog
 	// Stopping the pollers so that we verify the backlog expectations
 	cancelPoller()
 
-	// Wait for the current-version routing to propagate before enqueuing, otherwise the
-	// unversioned workflows can be added before the task queue knows about the current
-	// version and end up attributed to the wrong (unversioned) backlog. See #10773.
+	// Wait for the current-version routing to propagate.
 	env.waitForTaskQueueVersioningInfo(
 		s,
 		&taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -498,9 +496,7 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentAbsorbsUnversionedBacklog_WhenRa
 	rampPercentage := 20
 	s.setRampingVersion(env, deploymentName, "", rampPercentage)
 
-	// Wait for the current/ramping routing to propagate before enqueuing, otherwise the
-	// unversioned workflows can be added before the task queue knows about the routing
-	// config and end up attributed to the wrong backlog. See #10773.
+	// Wait for the current/ramping routing to propagate.
 	env.waitForTaskQueueVersioningInfo(
 		s,
 		&taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -573,9 +569,7 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAbsorbsUnversionedBacklog_WhenCu
 	rampPercentage := 30
 	s.setRampingVersion(env, deploymentName, rampingBuildID, rampPercentage)
 
-	// Wait for the current/ramping routing to propagate before enqueuing, otherwise the
-	// unversioned workflows can be added before the task queue knows about the routing
-	// config and end up attributed to the wrong backlog. See #10773.
+	// Wait for the current/ramping routing to propagate.
 	env.waitForTaskQueueVersioningInfo(
 		s,
 		&taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
@@ -647,9 +641,7 @@ func (s *TaskQueueStatsVersionSuite) TestInactiveVersionDoesNotAbsorbUnversioned
 	// Stopping the pollers so that we verify the backlog expectations
 	cancelPoller()
 
-	// Wait for the current-version routing to propagate before enqueuing, otherwise the
-	// unversioned workflows can be added before the task queue knows about the current
-	// version and end up attributed to the wrong (unversioned) backlog. See #10773.
+	// Wait for the current-version routing to propagate.
 	env.waitForTaskQueueVersioningInfo(
 		s,
 		&taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
