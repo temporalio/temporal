@@ -326,12 +326,11 @@ func CreateSchedulerFromMigration(
 		sched.Backfillers[backfillID] = chasm.NewComponentField(ctx, newBackfillerWithState(ctx, backfillerState))
 	}
 
-	visibility := chasm.NewVisibility(ctx)
-	sched.Visibility = chasm.NewComponentField(ctx, visibility)
-	if err := visibility.MergeCustomSearchAttributes(ctx, state.GetSearchAttributes()); err != nil {
+	visibility, err := chasm.NewVisibilityWithData(ctx, state.GetSearchAttributes(), state.GetMemo())
+	if err != nil {
 		return nil, err
 	}
-	visibility.MergeCustomMemo(ctx, state.GetMemo())
+	sched.Visibility = chasm.NewComponentField(ctx, visibility)
 
 	// Defer generation until SchedulerCallbacksTask resolves stale running-workflow
 	// state; if there are none, generate directly.
@@ -876,16 +875,10 @@ func (s *Scheduler) Update(
 		// `CustomSearchAttributes` map. Search attribute replacement is ignored entirely
 		// when that map is unset, however, an allocated yet empty map will clear all
 		// attributes.
-
-		// Preserve the old custom memo in the new Visibility component.
-		oldVisibility := s.Visibility.Get(ctx)
-		oldMemo := oldVisibility.CustomMemo(ctx)
-
-		visibility, err := chasm.NewVisibilityWithData(ctx, userCustomSearchAttributes(req.FrontendRequest.GetSearchAttributes().GetIndexedFields()), oldMemo)
-		if err != nil {
+		visibility := s.Visibility.Get(ctx)
+		if err := visibility.ReplaceCustomSearchAttributes(ctx, userCustomSearchAttributes(req.FrontendRequest.GetSearchAttributes().GetIndexedFields())); err != nil {
 			return nil, err
 		}
-		s.Visibility = chasm.NewComponentField(ctx, visibility)
 	}
 
 	// Update custom memo.
