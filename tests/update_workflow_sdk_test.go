@@ -19,7 +19,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -561,12 +560,12 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateCallbackCloseWhenWorkflowCloses() {
 	})
 	s.NoError(err)
 
-	completion := await.Rcv(s.T(), completionHandler.requestCh)
+	completion := s.Rcv(completionHandler.requestCh)
 	s.Equal(nexus.OperationStateSucceeded, completion.State)
 	var result string
 	s.NoError(completion.Result.Consume(&result))
 	s.Equal(updateResult, result)
-	await.Snd(s.T(), completionHandler.requestCompleteCh, nil)
+	s.Snd(completionHandler.requestCompleteCh, nil)
 
 	var workflowResult string
 	s.NoError(run.Get(s.Context(), &workflowResult))

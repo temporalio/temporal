@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -234,6 +235,81 @@ func TestResolveSearchAttributeAlias(t *testing.T) {
 				searchattribute.TestNameTypeMap(),
 				nil, // chasmMapper
 				tc.archetypeID,
+			)
+			if tc.err != "" {
+				r.Error(err)
+				r.ErrorContains(err, tc.err)
+				var expectedErr *ConverterError
+				r.ErrorAs(err, &expectedErr)
+				r.Empty(fn)
+				r.Equal(enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED, ft)
+			} else {
+				r.NoError(err)
+				r.Equal(tc.outFn, fn)
+				r.Equal(tc.outFt, ft)
+			}
+		})
+	}
+}
+
+// TestResolveSearchAttributeAlias_NilMapper covers queries that span all namespaces (admin
+// visibility APIs), where there is no namespace to pick a search attribute mapper from.
+// System and reserved search attributes still resolve, and custom search attributes must be
+// referenced by their field name because there is no alias to resolve them with.
+func TestResolveSearchAttributeAlias_NilMapper(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name  string
+		in    string
+		outFn string
+		outFt enumspb.IndexedValueType
+		err   string
+	}{
+		{
+			name:  "success system WorkflowId",
+			in:    "WorkflowId",
+			outFn: "WorkflowId",
+			outFt: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+
+		{
+			name:  "success reserved TemporalBuildIds",
+			in:    "TemporalBuildIds",
+			outFn: "BuildIds",
+			outFt: enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST,
+		},
+
+		{
+			name:  "success custom field name Keyword01",
+			in:    "Keyword01",
+			outFn: "Keyword01",
+			outFt: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		},
+
+		{
+			name: "invalid custom search attribute alias",
+			in:   "AliasForKeyword01",
+			err:  "invalid search attribute: AliasForKeyword01",
+		},
+
+		{
+			name: "invalid search attribute",
+			in:   "Foo",
+			err:  "invalid search attribute: Foo",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			r := require.New(t)
+			fn, ft, err := ResolveSearchAttributeAlias(
+				tc.in,
+				namespace.EmptyName,
+				nil, // saMapper
+				searchattribute.TestNameTypeMap(),
+				nil, // chasmMapper
+				chasm.UnspecifiedArchetypeID,
 			)
 			if tc.err != "" {
 				r.Error(err)

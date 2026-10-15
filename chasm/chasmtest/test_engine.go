@@ -474,7 +474,7 @@ func (e *Engine) startNew(
 		return chasm.StartExecutionResult{}, err
 	}
 	exec.root = root
-	if err = e.closeTransaction(exec); err != nil {
+	if err = e.closeTransaction(ctx, exec); err != nil {
 		return chasm.StartExecutionResult{}, err
 	}
 
@@ -518,7 +518,7 @@ func (e *Engine) startAndUpdateNew(
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
 	exec.root = root
-	if err = e.closeTransaction(exec); err != nil {
+	if err = e.closeTransaction(ctx, exec); err != nil {
 		return chasm.EngineUpdateWithStartExecutionResult{}, err
 	}
 
@@ -550,6 +550,7 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 	)
 
 	backend := &chasm.MockNodeBackend{
+		HandleNow: e.timeSource.Now,
 		// NextTransitionCount is the count the in-flight transaction will commit as.
 		HandleNextTransitionCount: func() int64 {
 			bsMu.Lock()
@@ -608,7 +609,6 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 		backend: backend,
 		node: chasm.NewEmptyTree(
 			e.registry,
-			e.timeSource,
 			backend,
 			chasm.DefaultPathEncoder,
 			e.logger,
@@ -624,8 +624,8 @@ func (e *Engine) newExecution(key chasm.ExecutionKey) *execution {
 
 // closeTransaction closes the execution's transaction, commits its transition
 // count, and validates the resulting clean tree.
-func (e *Engine) closeTransaction(x *execution) error {
-	if _, err := x.node.CloseTransaction(); err != nil {
+func (e *Engine) closeTransaction(ctx context.Context, x *execution) error {
+	if _, err := x.node.CloseTransaction(ctx, true); err != nil {
 		return err
 	}
 	x.commitTransition()
@@ -683,7 +683,7 @@ func (e *Engine) updateComponentInExecution(
 		return nil, err
 	}
 
-	if err = e.closeTransaction(execution); err != nil {
+	if err = e.closeTransaction(ctx, execution); err != nil {
 		return nil, err
 	}
 	execution.recordRequestID(requestID)
