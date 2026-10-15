@@ -5,6 +5,7 @@ package temporalite
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand"
 	"os"
@@ -252,10 +253,6 @@ func NewLiteServer(liteConfig *LiteServerConfig, opts ...temporal.ServerOption) 
 		}
 		namespaces = append(namespaces, nsConfig)
 	}
-	if err := sqlite.CreateNamespaces(sqlConfig, namespaces...); err != nil {
-		return nil, fmt.Errorf("error creating namespaces: %w", err)
-	}
-
 	authorizer, err := authorization.GetAuthorizerFromConfig(&liteConfig.BaseConfig.Global.Authorization)
 	if err != nil {
 		return nil, fmt.Errorf("unable to instantiate authorizer: %w", err)
@@ -291,6 +288,9 @@ func NewLiteServer(liteConfig *LiteServerConfig, opts ...temporal.ServerOption) 
 	srv, err := temporal.NewServer(serverOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("unable to instantiate server: %w", err)
+	}
+	if err := sqlite.CreateNamespaces(sqlConfig, namespaces...); err != nil {
+		return nil, errors.Join(fmt.Errorf("error creating namespaces: %w", err), srv.Stop())
 	}
 
 	s := &LiteServer{
