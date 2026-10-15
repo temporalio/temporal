@@ -4,8 +4,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 )
 
-// The following helpers classify whether a request is in long-poll mode. Several APIs are only
-// long-running when their long-poll parameter is set; otherwise they are cheap point-reads.
+// IsLongPollGetWorkflowExecutionHistoryRequest reports whether req is a
+// GetWorkflowExecutionHistory request in long-poll mode.
 func IsLongPollGetWorkflowExecutionHistoryRequest(
 	req any,
 ) bool {
@@ -16,6 +16,8 @@ func IsLongPollGetWorkflowExecutionHistoryRequest(
 	return false
 }
 
+// IsLongPollDescribeActivityExecutionRequest reports whether req is a
+// DescribeActivityExecution request in long-poll mode.
 func IsLongPollDescribeActivityExecutionRequest(
 	req any,
 ) bool {
@@ -26,6 +28,8 @@ func IsLongPollDescribeActivityExecutionRequest(
 	return false
 }
 
+// IsLongPollDescribeNexusOperationExecutionRequest reports whether req is a
+// DescribeNexusOperationExecution request in long-poll mode.
 func IsLongPollDescribeNexusOperationExecutionRequest(
 	req any,
 ) bool {
