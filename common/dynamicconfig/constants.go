@@ -253,6 +253,11 @@ in the consistent hash ring used by ringpop. Changing it may cause service disru
 		`Toggles "eager workflow start" - returning the first workflow task inline in the
 response to a StartWorkflowExecution request and skipping the trip through matching.`,
 	)
+	EnableWorkflowEagerDispatchCheck = NewNamespaceBoolSetting(
+		"system.enableWorkflowEagerDispatchCheck",
+		false,
+		`EnableWorkflowEagerDispatchCheck controls whether history asks matching for a grant before eagerly starting a workflow.`,
+	)
 	NamespaceCacheRefreshInterval = NewGlobalDurationSetting(
 		"system.namespaceCacheRefreshInterval",
 		2*time.Second,

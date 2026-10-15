@@ -283,6 +283,7 @@ func (h *handler) grantEagerActivityDispatch(
 		h.matchingClient,
 		namespaceID,
 		request.GetTaskQueue().GetName(),
+		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
 		request.GetPriority(),
 		nil,
 	)
