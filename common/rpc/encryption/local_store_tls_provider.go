@@ -55,6 +55,13 @@ var _ CertExpirationChecker = (*localStoreTlsProvider)(nil)
 func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, metricsHandler metrics.Handler, logger log.Logger, certProviderFactory CertProviderFactory,
 ) (TLSConfigProvider, error) {
 
+	// Resolved before any cert provider is created: providers may start refresh goroutines
+	// that would be left running if construction failed afterwards.
+	frontendPerHostSettings, err := resolvePerHostTLSSettings(&tlsConfig.Frontend)
+	if err != nil {
+		return nil, err
+	}
+
 	internodeProvider := certProviderFactory(&tlsConfig.Internode, nil, nil, tlsConfig.RefreshInterval, logger)
 	var workerProvider CertProvider
 	if isSystemWorker(tlsConfig) { // explicit system worker config
@@ -75,7 +82,7 @@ func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, metricsHandler metrics.
 		frontendCertProvider:        certProviderFactory(&tlsConfig.Frontend, nil, nil, tlsConfig.RefreshInterval, logger),
 		workerCertProvider:          workerProvider,
 		frontendPerHostCertProviderMap: newLocalStorePerHostCertProviderMap(
-			tlsConfig.Frontend.PerHostOverrides, certProviderFactory, tlsConfig.RefreshInterval, logger),
+			frontendPerHostSettings, certProviderFactory, tlsConfig.RefreshInterval, logger),
 		remoteClusterClientCertProvider: remoteClusterClientCertProvider,
 		RWMutex:                         sync.RWMutex{},
 		settings:                        tlsConfig,
@@ -114,8 +121,12 @@ func (s *localStoreTlsProvider) GetInternodeClientConfig() (*tls.Config, error) 
 	return s.getOrCreateConfig(
 		&s.cachedInternodeClientConfig,
 		func() (*tls.Config, error) {
+			versions, err := auth.NewTLSVersions(client.MinVersion, client.MaxVersion)
+			if err != nil {
+				return nil, err
+			}
 			return newClientTLSConfig(s.internodeClientCertProvider, client.ServerName,
-				s.settings.Internode.Server.RequireClientAuth, false, !client.DisableHostVerification)
+				s.settings.Internode.Server.RequireClientAuth, false, !client.DisableHostVerification, versions)
 		},
 		s.settings.Internode.IsClientEnabled(),
 	)
@@ -135,8 +146,12 @@ func (s *localStoreTlsProvider) GetFrontendClientConfig() (*tls.Config, error) {
 	return s.getOrCreateConfig(
 		&s.cachedFrontendClientConfig,
 		func() (*tls.Config, error) {
+			versions, err := auth.NewTLSVersions(client.MinVersion, client.MaxVersion)
+			if err != nil {
+				return nil, err
+			}
 			return newClientTLSConfig(s.workerCertProvider, client.ServerName,
-				useTLS, true, !client.DisableHostVerification)
+				useTLS, true, !client.DisableHostVerification, versions)
 		},
 		useTLS,
 	)
@@ -151,12 +166,17 @@ func (s *localStoreTlsProvider) GetRemoteClusterClientConfig(hostname string) (*
 	return s.getOrCreateRemoteClusterClientConfig(
 		hostname,
 		func() (*tls.Config, error) {
+			versions, err := auth.NewTLSVersions(groupTLS.Client.MinVersion, groupTLS.Client.MaxVersion)
+			if err != nil {
+				return nil, err
+			}
 			return newClientTLSConfig(
 				s.remoteClusterClientCertProvider[key],
 				groupTLS.Client.ServerName,
 				groupTLS.Server.RequireClientAuth,
 				false,
-				!groupTLS.Client.DisableHostVerification)
+				!groupTLS.Client.DisableHostVerification,
+				versions)
 		},
 		groupTLS.IsClientEnabled(),
 	)
@@ -289,9 +309,18 @@ func newServerTLSConfig(
 ) (*tls.Config, error) {
 
 	clientAuthRequired := config.Server.RequireClientAuth
-	tlsConfig, err := getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, "", "", logger)
+	versions, err := auth.NewTLSVersions(config.Server.MinVersion, config.Server.MaxVersion)
 	if err != nil {
 		return nil, err
+	}
+	tlsConfig, err := getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, versions, "", "", logger)
+	if err != nil {
+		return nil, err
+	}
+
+	var versionsProvider perHostTLSVersionsProvider
+	if provider, ok := perHostCertProviderMap.(perHostTLSVersionsProvider); ok {
+		versionsProvider = provider
 	}
 
 	tlsConfig.GetConfigForClient = func(c *tls.ClientHelloInfo) (*tls.Config, error) {
@@ -308,13 +337,19 @@ func newServerTLSConfig(
 			}
 
 			if perHostCertProvider != nil {
-				return getServerTLSConfigFromCertProvider(perHostCertProvider, hostClientAuthRequired, remoteAddress, c.ServerName, logger)
+				hostVersions := versions
+				if versionsProvider != nil {
+					if v, ok := versionsProvider.getTLSVersions(c.ServerName); ok {
+						hostVersions = v
+					}
+				}
+				return getServerTLSConfigFromCertProvider(perHostCertProvider, hostClientAuthRequired, hostVersions, remoteAddress, c.ServerName, logger)
 			}
 			logger.Warn("cannot find a per-host provider for attempted incoming TLS connection. returning default TLS configuration",
 				tag.ServerName(c.ServerName), tag.Address(remoteAddress))
-			return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, remoteAddress, c.ServerName, logger)
+			return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, versions, remoteAddress, c.ServerName, logger)
 		}
-		return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, remoteAddress, c.ServerName, logger)
+		return getServerTLSConfigFromCertProvider(certProvider, clientAuthRequired, versions, remoteAddress, c.ServerName, logger)
 	}
 
 	return tlsConfig, nil
@@ -323,6 +358,7 @@ func newServerTLSConfig(
 func getServerTLSConfigFromCertProvider(
 	certProvider CertProvider,
 	requireClientAuth bool,
+	versions auth.TLSVersions,
 	remoteAddress string,
 	serverName string,
 	logger log.Logger) (*tls.Config, error) {
@@ -356,11 +392,12 @@ func getServerTLSConfigFromCertProvider(
 	if remoteAddress != "" { // remoteAddress=="" when we return initial tls.Config object when configuring server
 		logger.Debug("returning TLS config for connection", tag.Address(remoteAddress), tag.ServerName(serverName))
 	}
-	return auth.NewTLSConfigWithCertsAndCAs(
+	return auth.NewTLSConfigWithCertsAndCAsWithVersions(
 		clientAuthType,
 		[]tls.Certificate{*serverCert},
 		clientCaPool,
-		logger), nil
+		logger,
+		versions), nil
 }
 
 func newClientTLSConfig(
@@ -369,6 +406,7 @@ func newClientTLSConfig(
 	isAuthRequired bool,
 	isWorker bool,
 	enableHostVerification bool,
+	versions auth.TLSVersions,
 ) (*tls.Config, error) {
 	// Optional ServerCA for client if not already trusted by host
 	serverCa, err := clientProvider.FetchServerRootCAsForClient(isWorker)
@@ -393,11 +431,12 @@ func newClientTLSConfig(
 		}
 	}
 
-	return auth.NewDynamicTLSClientConfig(
+	return auth.NewDynamicTLSClientConfigWithVersions(
 		getCert,
 		serverCa,
 		serverName,
 		enableHostVerification,
+		versions,
 	), nil
 }
 
