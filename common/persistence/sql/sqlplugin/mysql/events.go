@@ -19,7 +19,7 @@ const (
 		`ORDER BY shard_id, tree_id, branch_id, node_id, txn_id LIMIT ? `
 
 	getHistoryNodesReverseQuery = `SELECT node_id, prev_txn_id, txn_id, data, data_encoding FROM history_node ` +
-		`WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND node_id >= ? AND ((node_id = ? AND txn_id < ?) OR node_id < ?) ` +
+		`WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND node_id >= ? AND (node_id, txn_id) < (?, ?) ` +
 		`ORDER BY shard_id, tree_id, branch_id DESC, node_id DESC, txn_id DESC LIMIT ? `
 
 	getHistoryNodeMetadataQuery = `SELECT node_id, prev_txn_id, txn_id FROM history_node ` +
@@ -102,9 +102,8 @@ func (mdb *db) RangeSelectFromHistoryNode(
 			filter.TreeID,
 			filter.BranchID,
 			filter.MinNodeID,
-			filter.MaxTxnID,
-			-filter.MaxTxnID,
 			filter.MaxNodeID,
+			-filter.MaxTxnID, // NOTE: transaction ID is *= -1 when stored
 			filter.PageSize,
 		}
 	} else {

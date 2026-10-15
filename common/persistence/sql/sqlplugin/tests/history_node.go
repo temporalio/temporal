@@ -352,6 +352,169 @@ func (s *historyNodeSuite) TestInsertDeleteSelect_Multiple() {
 	s.Equal([]sqlplugin.HistoryNodeRow(nil), rows)
 }
 
+// TestInsertSelectReverseCursorBoundary verifies that the reverse cursor uses
+// strict < semantics: the cursor row is excluded and all rows before it at the
+// same node_id are included.
+func (s *historyNodeSuite) TestInsertSelectReverseCursorBoundary() {
+	shardID := rand.Int31()
+	treeID := primitives.NewUUID()
+	branchID := primitives.NewUUID()
+	nodeID := int64(10)
+
+	// Insert 3 txns at the same node_id
+	for txnID := int64(1); txnID <= 3; txnID++ {
+		node := s.newRandomNodeRow(shardID, treeID, branchID, nodeID, rand.Int63(), txnID)
+		result, err := s.store.InsertIntoHistoryNode(newExecutionContext(), &node)
+		s.NoError(err)
+		rowsAffected, err := result.RowsAffected()
+		s.NoError(err)
+		s.Equal(1, int(rowsAffected))
+	}
+
+	// Cursor at (nodeID=10, txnID=2).
+	// Stored: txn_id -1, -2, -3. Query: (node_id, txn_id) < (10, -2)
+	// -3 < -2 → included (logical txn=3). -2 < -2 → excluded. -1 < -2 → excluded.
+	selectFilter := sqlplugin.HistoryNodeSelectFilter{
+		ShardID:      shardID,
+		TreeID:       treeID,
+		BranchID:     branchID,
+		MinNodeID:    nodeID,
+		MaxNodeID:    nodeID,
+		MaxTxnID:     2,
+		PageSize:     10,
+		ReverseOrder: true,
+	}
+	rows, err := s.store.RangeSelectFromHistoryNode(newExecutionContext(), selectFilter)
+	s.NoError(err)
+	// Only txn_id=3 (stored as -3, which is < -2)
+	s.Len(rows, 1, "only rows before cursor should be returned")
+	s.Equal(nodeID, rows[0].NodeID)
+	s.Equal(int64(3), rows[0].TxnID) // negated back on read
+}
+
+// TestInsertSelectReverseMultiPageSameNode verifies that reverse pagination
+// across multiple pages within a single node_id produces no duplicates or gaps,
+// and that the page boundary correctly splits within the same node's txn_ids.
+func (s *historyNodeSuite) TestInsertSelectReverseMultiPageSameNode() {
+	shardID := rand.Int31()
+	treeID := primitives.NewUUID()
+	branchID := primitives.NewUUID()
+	nodeID := int64(5)
+
+	// Insert 5 txns at the same node_id
+	for txnID := int64(1); txnID <= 5; txnID++ {
+		node := s.newRandomNodeRow(shardID, treeID, branchID, nodeID, rand.Int63(), txnID)
+		result, err := s.store.InsertIntoHistoryNode(newExecutionContext(), &node)
+		s.NoError(err)
+		rowsAffected, err := result.RowsAffected()
+		s.NoError(err)
+		s.Equal(1, int(rowsAffected))
+	}
+
+	// Page through in reverse with pageSize=2
+	var allRows []sqlplugin.HistoryNodeRow
+	selectFilter := sqlplugin.HistoryNodeSelectFilter{
+		ShardID:      shardID,
+		TreeID:       treeID,
+		BranchID:     branchID,
+		MinNodeID:    nodeID,
+		MaxNodeID:    nodeID,
+		MaxTxnID:     sql.MaxTxnID,
+		PageSize:     2,
+		ReverseOrder: true,
+	}
+	for {
+		page, err := s.store.RangeSelectFromHistoryNode(newExecutionContext(), selectFilter)
+		s.NoError(err)
+		if len(page) == 0 {
+			break
+		}
+		allRows = append(allRows, page...)
+		lastRow := page[len(page)-1]
+		selectFilter.MaxNodeID = lastRow.NodeID
+		selectFilter.MaxTxnID = lastRow.TxnID
+	}
+	s.Len(allRows, 5, "reverse pagination must return all rows exactly once")
+	s.assertUniqueAndExpectedKeys(allRows, nodeID, nodeID, 1, 5)
+}
+
+// TestInsertSelectReverseAcrossNodes verifies reverse pagination across
+// multiple node_ids, each with multiple txn_ids. Earlier nodes must return
+// ALL their txn_ids regardless of the cursor's txn_id value.
+func (s *historyNodeSuite) TestInsertSelectReverseAcrossNodes() {
+	shardID := rand.Int31()
+	treeID := primitives.NewUUID()
+	branchID := primitives.NewUUID()
+
+	// Insert 3 txns at each of node_id 1, 2, 3 (9 rows total)
+	totalInserted := 0
+	for nodeID := int64(1); nodeID <= 3; nodeID++ {
+		for txnID := int64(1); txnID <= 3; txnID++ {
+			node := s.newRandomNodeRow(shardID, treeID, branchID, nodeID, rand.Int63(), txnID)
+			result, err := s.store.InsertIntoHistoryNode(newExecutionContext(), &node)
+			s.NoError(err)
+			rowsAffected, err := result.RowsAffected()
+			s.NoError(err)
+			s.Equal(1, int(rowsAffected))
+			totalInserted++
+		}
+	}
+	s.Equal(9, totalInserted)
+
+	// Reverse page through all with pageSize=2, starting from sentinel
+	var allRows []sqlplugin.HistoryNodeRow
+	selectFilter := sqlplugin.HistoryNodeSelectFilter{
+		ShardID:      shardID,
+		TreeID:       treeID,
+		BranchID:     branchID,
+		MinNodeID:    1,
+		MaxNodeID:    3,
+		MaxTxnID:     sql.MaxTxnID,
+		PageSize:     2,
+		ReverseOrder: true,
+	}
+	for {
+		page, err := s.store.RangeSelectFromHistoryNode(newExecutionContext(), selectFilter)
+		s.NoError(err)
+		if len(page) == 0 {
+			break
+		}
+		allRows = append(allRows, page...)
+		lastRow := page[len(page)-1]
+		selectFilter.MaxNodeID = lastRow.NodeID
+		selectFilter.MaxTxnID = lastRow.TxnID
+	}
+	// Must get all 9 rows — no gaps, no duplicates
+	s.Len(allRows, 9, "reverse pagination across nodes must return all rows")
+	s.assertUniqueAndExpectedKeys(allRows, 1, 3, 1, 3)
+}
+
+// assertUniqueAndExpectedKeys checks that rows contain no duplicate (NodeID, TxnID)
+// pairs and that their set equals the expected cartesian product of
+// [minNode, maxNode] × [minTxn, maxTxn].
+func (s *historyNodeSuite) assertUniqueAndExpectedKeys(
+	rows []sqlplugin.HistoryNodeRow,
+	minNode, maxNode, minTxn, maxTxn int64,
+) {
+	type key struct{ NodeID, TxnID int64 }
+
+	got := make(map[key]struct{}, len(rows))
+	for _, r := range rows {
+		k := key{r.NodeID, r.TxnID}
+		_, dup := got[k]
+		s.False(dup, "duplicate row: NodeID=%d TxnID=%d", r.NodeID, r.TxnID)
+		got[k] = struct{}{}
+	}
+
+	expected := make(map[key]struct{})
+	for n := minNode; n <= maxNode; n++ {
+		for t := minTxn; t <= maxTxn; t++ {
+			expected[key{n, t}] = struct{}{}
+		}
+	}
+	s.Equal(expected, got, "returned key set must match expected set")
+}
+
 func (s *historyNodeSuite) newRandomNodeRow(
 	shardID int32,
 	treeID primitives.UUID,
