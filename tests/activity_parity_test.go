@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type activityParityTestSuite struct {
@@ -680,43 +681,66 @@ func (s *activityParityTestSuite) TestUnpauseWithoutPause() {
 	})
 }
 
-// Resetting an activity while it waits to retry clears the completed attempt's failure. If reset is
-// deferred until a running attempt yields, that attempt's later failure remains visible on both surfaces.
-func (s *activityParityTestSuite) TestResetClearsLastFailure() {
+// Resetting an activity while it waits to retry clears the completed attempt's metadata. If reset is
+// deferred until a running attempt yields, that attempt's later metadata remains visible on both surfaces.
+func (s *activityParityTestSuite) TestResetClearsAttemptMetadata() {
 	env := newActivityParityEnv(s.T())
 	cfg := activityConfig{MaxAttempts: 3, RetryInterval: activityLongDuration}
-	lastFailure := []struct {
-		name string
-		read func(*testing.T) *failurepb.Failure
-	}{
-		{
-			name: "WorkflowActivity",
-			read: func(t *testing.T) *failurepb.Failure {
-				return newWFADriver(t, env, cfg).driveTrace(t,
-					[]model.Event{model.Poll, model.FailRetryably, model.Reset}).pendingActivityInfo(t).GetLastFailure()
-			},
-		},
-		{
-			name: "StandaloneActivity",
-			read: func(t *testing.T) *failurepb.Failure {
-				return newSAADriver(t, env, cfg).driveTrace(t,
-					[]model.Event{model.Poll, model.FailRetryably, model.Reset}).describe(t).GetInfo().GetLastFailure()
-			},
-		},
+
+	type attemptMetadata struct {
+		lastFailure             *failurepb.Failure
+		lastAttemptCompleteTime *timestamppb.Timestamp
+		lastWorkerIdentity      string
+	}
+	assertReported := func(t *testing.T, actual attemptMetadata) {
+		require.NotNil(t, actual.lastFailure)
+		require.NotNil(t, actual.lastAttemptCompleteTime)
+		require.NotEmpty(t, actual.lastWorkerIdentity)
+	}
+	assertCleared := func(t *testing.T, actual attemptMetadata) {
+		require.Nil(t, actual.lastFailure)
+		require.Nil(t, actual.lastAttemptCompleteTime)
+		require.Empty(t, actual.lastWorkerIdentity)
 	}
 
 	s.Run("ImmediateReset", func(s *activityParityTestSuite) {
-		for _, tc := range lastFailure {
-			s.Run(tc.name, func(s *activityParityTestSuite) {
-				require.Nil(s.T(), tc.read(s.T()))
-			})
+		assertClearedByReset := func(t *testing.T, a parityActivity, read func() attemptMetadata) {
+			assertReported(t, read())
+			a.driveEvent(t, model.Reset)
+			assertCleared(t, read())
 		}
+
+		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+			t := s.T()
+			a := newWFADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll, model.FailRetryably})
+			assertClearedByReset(t, a, func() attemptMetadata {
+				info := a.pendingActivityInfo(t)
+				return attemptMetadata{
+					lastFailure:             info.GetLastFailure(),
+					lastAttemptCompleteTime: info.GetLastAttemptCompleteTime(),
+					lastWorkerIdentity:      info.GetLastWorkerIdentity(),
+				}
+			})
+		})
+
+		s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+			t := s.T()
+			a := newSAADriver(t, env, cfg).driveTrace(t, []model.Event{model.Poll, model.FailRetryably})
+			assertClearedByReset(t, a, func() attemptMetadata {
+				info := a.describe(t).GetInfo()
+				return attemptMetadata{
+					lastFailure:             info.GetLastFailure(),
+					lastAttemptCompleteTime: info.GetLastAttemptCompleteTime(),
+					lastWorkerIdentity:      info.GetLastWorkerIdentity(),
+				}
+			})
+		})
 	})
 
 	s.Run("DeferredReset", func(s *activityParityTestSuite) {
 		// The state model expects a deferred reset to rewind the attempt counter. WFA currently does not
 		// (covered separately by R01), so issue this trace through the drivers' raw RPC helpers to isolate
-		// what R13 checks: whether the completed attempt's failure remains visible.
+		// what R13 checks: whether the completed attempt's metadata remains visible.
 		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
 			t := s.T()
 			a := newWFADriver(t, env, cfg).start(t, cfg)
@@ -725,7 +749,12 @@ func (s *activityParityTestSuite) TestResetClearsLastFailure() {
 			a.token = task.GetTaskToken()
 			require.NoError(t, a.rpc(t, model.Reset))
 			require.NoError(t, a.rpc(t, model.FailRetryably))
-			require.NotNil(t, a.pendingActivityInfo(t).GetLastFailure())
+			info := a.pendingActivityInfo(t)
+			assertReported(t, attemptMetadata{
+				lastFailure:             info.GetLastFailure(),
+				lastAttemptCompleteTime: info.GetLastAttemptCompleteTime(),
+				lastWorkerIdentity:      info.GetLastWorkerIdentity(),
+			})
 		})
 
 		s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
@@ -736,7 +765,12 @@ func (s *activityParityTestSuite) TestResetClearsLastFailure() {
 			a.token = task.GetTaskToken()
 			require.NoError(t, a.rpc(t, model.Reset))
 			require.NoError(t, a.rpc(t, model.FailRetryably))
-			require.NotNil(t, a.describe(t).GetInfo().GetLastFailure())
+			info := a.describe(t).GetInfo()
+			assertReported(t, attemptMetadata{
+				lastFailure:             info.GetLastFailure(),
+				lastAttemptCompleteTime: info.GetLastAttemptCompleteTime(),
+				lastWorkerIdentity:      info.GetLastWorkerIdentity(),
+			})
 		})
 	})
 }

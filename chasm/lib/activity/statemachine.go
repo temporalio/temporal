@@ -742,7 +742,9 @@ func (a *Activity) applyReset(ctx chasm.MutableContext, event resetEvent) error 
 	attempt.Stamp++
 	attempt.CurrentRetryInterval = nil
 	attempt.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
+	attempt.CompleteTime = nil
 	attempt.LastFailureDetails = nil
+	attempt.LastWorkerIdentity = ""
 	if event.req.GetResetHeartbeat() {
 		a.clearHeartbeatDetails(ctx)
 	}

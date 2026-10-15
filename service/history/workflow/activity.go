@@ -57,6 +57,13 @@ func ClearActivityStartedState(ai *persistencespb.ActivityInfo) {
 	ai.StartedClock = nil
 }
 
+func clearActivityAttemptMetadataForReset(ai *persistencespb.ActivityInfo) {
+	ai.StartedIdentity = ""
+	ai.RetryLastFailure = nil
+	ai.RetryLastWorkerIdentity = ""
+	ai.LastAttemptCompleteTime = nil
+}
+
 func UpdateActivityInfoForRetries(
 	ai *persistencespb.ActivityInfo,
 	version int64,
@@ -124,8 +131,10 @@ func GetPendingActivityInfo(
 			if now.Before(scheduledTime) && !ai.Paused {
 				// waiting for the retry to be dispatched to Matching
 				p.NextAttemptScheduleTime = ai.ScheduledTime
-				currentRetryDuration := p.NextAttemptScheduleTime.AsTime().Sub(p.LastAttemptCompleteTime.AsTime())
-				p.CurrentRetryInterval = durationpb.New(currentRetryDuration)
+				if p.LastAttemptCompleteTime != nil {
+					currentRetryDuration := p.NextAttemptScheduleTime.AsTime().Sub(p.LastAttemptCompleteTime.AsTime())
+					p.CurrentRetryInterval = durationpb.New(currentRetryDuration)
+				}
 			} else {
 				// retry has been dispatched to Matching, or the activity is paused so no dispatch will occur
 				p.NextAttemptScheduleTime = nil
@@ -349,8 +358,13 @@ func ResetActivity(
 			unpauseActivityInfo(activityInfo)
 		}
 
+		activityState := GetActivityState(activityInfo)
+		if activityState != enumspb.PENDING_ACTIVITY_STATE_STARTED {
+			clearActivityAttemptMetadataForReset(activityInfo)
+		}
+
 		// if activity is running, or it remains paused, we don't need to schedule a new run
-		if GetActivityState(activityInfo) == enumspb.PENDING_ACTIVITY_STATE_STARTED || activityInfo.Paused {
+		if activityState == enumspb.PENDING_ACTIVITY_STATE_STARTED || activityInfo.Paused {
 			return nil
 		}
 
