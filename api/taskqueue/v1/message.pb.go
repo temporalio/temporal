@@ -249,8 +249,11 @@ type InternalTaskQueueStatus struct {
 	// check. Consumers must use version-based validation (see scaleManager) to
 	// ensure correctness.
 	BacklogDrained bool `protobuf:"varint,11,opt,name=backlog_drained,json=backlogDrained,proto3" json:"backlog_drained,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Estimate of the number of distinct fairness keys seen recently by this
+	// subqueue (fairness only).
+	ApproximateFairnessKeyCount int64 `protobuf:"varint,12,opt,name=approximate_fairness_key_count,json=approximateFairnessKeyCount,proto3" json:"approximate_fairness_key_count,omitempty"`
+	unknownFields               protoimpl.UnknownFields
+	sizeCache                   protoimpl.SizeCache
 }
 
 func (x *InternalTaskQueueStatus) Reset() {
@@ -358,6 +361,13 @@ func (x *InternalTaskQueueStatus) GetBacklogDrained() bool {
 		return x.BacklogDrained
 	}
 	return false
+}
+
+func (x *InternalTaskQueueStatus) GetApproximateFairnessKeyCount() int64 {
+	if x != nil {
+		return x.ApproximateFairnessKeyCount
+	}
+	return 0
 }
 
 type TaskQueueVersionInfoInternal struct {
@@ -1180,7 +1190,7 @@ const file_temporal_server_api_taskqueue_v1_message_proto_rawDesc = "" +
 	"\bbuild_id\"A\n" +
 	"\tFairLevel\x12\x1b\n" +
 	"\ttask_pass\x18\x01 \x01(\x03R\btaskPass\x12\x17\n" +
-	"\atask_id\x18\x02 \x01(\x03R\x06taskId\"\xef\x04\n" +
+	"\atask_id\x18\x02 \x01(\x03R\x06taskId\"\xb4\x05\n" +
 	"\x17InternalTaskQueueStatus\x12\x1d\n" +
 	"\n" +
 	"read_level\x18\x01 \x01(\x03R\treadLevel\x12S\n" +
@@ -1194,7 +1204,8 @@ const file_temporal_server_api_taskqueue_v1_message_proto_rawDesc = "" +
 	"\x13fair_max_read_level\x18\t \x01(\v2+.temporal.server.api.taskqueue.v1.FairLevelR\x10fairMaxReadLevel\x12\x1a\n" +
 	"\bdraining\x18\n" +
 	" \x01(\bR\bdraining\x12'\n" +
-	"\x0fbacklog_drained\x18\v \x01(\bR\x0ebacklogDrained\"\x90\x01\n" +
+	"\x0fbacklog_drained\x18\v \x01(\bR\x0ebacklogDrained\x12C\n" +
+	"\x1eapproximate_fairness_key_count\x18\f \x01(\x03R\x1bapproximateFairnessKeyCount\"\x90\x01\n" +
 	"\x1cTaskQueueVersionInfoInternal\x12p\n" +
 	"\x18physical_task_queue_info\x18\x02 \x01(\v27.temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfoR\x15physicalTaskQueueInfo\"\xc2\x04\n" +
 	"\x15PhysicalTaskQueueInfo\x12?\n" +

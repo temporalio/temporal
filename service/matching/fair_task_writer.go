@@ -33,6 +33,9 @@ type (
 		currentTaskIDBlock taskIDBlock                       // copy of taskIDBlock for safe concurrent access via getCurrentTaskIDBlock()
 		counters           map[subqueueIndex]counter.Counter // only used in taskWriterLoop.
 		ditherSeed         maphash.Seed                      // seed for fairness pass dither (see pickPasses).
+		// copy of counters' distinct key estimates for safe concurrent access via
+		// getApproximateFairnessKeyCount().
+		keyCountEstimates atomic.Pointer[map[subqueueIndex]int64]
 	}
 )
 
@@ -191,9 +194,14 @@ func (w *fairTaskWriter) taskWriterLoop() {
 		// maybe persist fairness key counts if it's time
 		select {
 		case <-persistFairnessKeys:
+			// estimating may require scanning the whole sketch, so do it here instead of on
+			// every write. counters only change on writes so this is only a little stale.
+			estimates := make(map[subqueueIndex]int64, len(w.counters))
 			for subqueue, cntr := range w.counters {
 				w.db.persistTopKFairnessKeys(subqueue, cntr.TopK())
+				estimates[subqueue] = int64(cntr.EstimateDistinctKeys())
 			}
+			w.keyCountEstimates.Store(&estimates)
 		default:
 		}
 	}
@@ -257,6 +265,15 @@ func (w *fairTaskWriter) allocTaskIDBlock(prevBlockEnd int64) (taskIDBlock, erro
 		return taskIDBlock{}, err
 	}
 	return rangeIDToTaskIDBlock(state.rangeID, w.config.RangeSize), nil
+}
+
+// getApproximateFairnessKeyCount returns the estimated number of distinct fairness keys for a
+// subqueue, as of the last time fairness keys were persisted. Safe to be called concurrently.
+func (w *fairTaskWriter) getApproximateFairnessKeyCount(subqueue subqueueIndex) int64 {
+	if m := w.keyCountEstimates.Load(); m != nil {
+		return (*m)[subqueue]
+	}
+	return 0
 }
 
 // getCurrentTaskIDBlock returns the current taskIDBlock. Safe to be called concurrently.
