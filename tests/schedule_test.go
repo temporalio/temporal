@@ -254,6 +254,19 @@ func registerCountingWorkflow(env *testcore.TestEnv, wt string, runs *atomic.Int
 	}, workflow.RegisterOptions{Name: wt})
 }
 
+// registerOneDayTimerWorkflow records when each workflow starts and finishes
+// its user timer. SideEffect prevents workflow replay from double-counting.
+func registerOneDayTimerWorkflow(env *testcore.TestEnv, wt string, started, completed *atomic.Int32) {
+	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		_ = workflow.SideEffect(ctx, func(workflow.Context) any { started.Add(1); return 0 })
+		if err := workflow.NewTimer(ctx, 24*time.Hour).Get(ctx, nil); err != nil {
+			return err
+		}
+		_ = workflow.SideEffect(ctx, func(workflow.Context) any { completed.Add(1); return 0 })
+		return nil
+	}, workflow.RegisterOptions{Name: wt})
+}
+
 // registerGatedWorkflow is like registerCountingWorkflow but the workflow stays
 // running until the test signals completeSignalName (via completeRunningWorkflows).
 func registerGatedWorkflow(env *testcore.TestEnv, wt string, runs *atomic.Int32) {
@@ -482,10 +495,11 @@ func testScheduleTimeSkippingWeekly(
 	sid := testcore.RandomizeStr("sched-time-skipping-weekly")
 	wid := testcore.RandomizeStr("sched-time-skipping-weekly-wf")
 	wt := testcore.RandomizeStr("sched-time-skipping-weekly-wt")
-	var runs atomic.Int32
-	registerCountingWorkflow(s, wt, &runs)
+	var started, completed atomic.Int32
+	registerOneDayTimerWorkflow(s, wt, &started, &completed)
 
 	week := 7 * 24 * time.Hour
+	fastForwardDuration := 3*week + 2*24*time.Hour
 	now := time.Now().UTC()
 	firstTick := now.Add(12 * time.Hour).Truncate(time.Second)
 	schedule := &schedulepb.Schedule{
@@ -507,7 +521,7 @@ func testScheduleTimeSkippingWeekly(
 			Enabled: true,
 			FastForwardConfig: &commonpb.FastForwardConfig{
 				Id:       fastForwardID,
-				Duration: durationpb.New(3*week + 24*time.Hour),
+				Duration: durationpb.New(fastForwardDuration),
 			},
 		},
 	}
@@ -540,8 +554,13 @@ func testScheduleTimeSkippingWeekly(
 		require.NotNil(at, timeSkippingInfo)
 		require.Equal(at, fastForwardID, timeSkippingInfo.GetFastForwardInfo().GetFastForwardId())
 		require.True(at, timeSkippingInfo.GetFastForwardInfo().GetHasCompleted())
-		require.False(at, timeSkippingInfo.GetCurrentTime().AsTime().Before(now.Add(3*week+24*time.Hour)))
-	}, 2*time.Minute, pollInterval)
+		require.False(at, timeSkippingInfo.GetCurrentTime().AsTime().Before(now.Add(fastForwardDuration)))
+	}, 10*time.Second, pollInterval)
+	await.RequireTruef(t, func() bool {
+		return completed.Load() >= 4
+	}, 10*time.Second, pollInterval, "four weekly workflows should finish their one-day user timers")
+	require.Equal(t, int32(4), started.Load())
+	require.Equal(t, int32(4), completed.Load())
 	describe, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
@@ -577,10 +596,6 @@ func testScheduleTimeSkippingWeekly(
 		))
 		require.Equal(t, expectedStart, workflowScheduledStart)
 	}
-	await.RequireTruef(t, func() bool {
-		return runs.Load() >= 4
-	}, time.Minute, pollInterval, "four weekly workflows should start")
-	require.Equal(t, int32(4), runs.Load())
 }
 
 func (suite *ScheduleCHASMSuite) TestTimeSkippingDynamicConfigGate() {
