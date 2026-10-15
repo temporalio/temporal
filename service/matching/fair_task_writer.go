@@ -162,7 +162,7 @@ func (w *fairTaskWriter) taskWriterLoop() {
 
 	// TODO: this will be out of phase with the timer in fairBacklogManagerImpl.periodicSync.
 	// can we align them better?
-	persistFairnessKeys := time.NewTicker(w.config.UpdateAckInterval()).C
+	persistFairnessKeys := time.NewTimer(backoff.Jitter(w.config.UpdateAckInterval(), 0.1))
 	emittedKeyCount := false
 
 	var reqs []*writeTaskRequest
@@ -198,7 +198,7 @@ func (w *fairTaskWriter) taskWriterLoop() {
 
 		// maybe persist fairness key counts if it's time
 		select {
-		case <-persistFairnessKeys:
+		case <-persistFairnessKeys.C:
 			// estimating key count may require scanning the whole sketch, so do it here instead of
 			// on every write. counters only change on writes so this is only a little stale.
 			keyCountEstimates := make(map[subqueueIndex]int64, len(w.counters))
@@ -217,6 +217,8 @@ func (w *fairTaskWriter) taskWriterLoop() {
 				w.recordFairnessKeyCountGauge(maxKeyCountEstimate)
 				emittedKeyCount = true
 			}
+
+			persistFairnessKeys.Reset(backoff.Jitter(w.config.UpdateAckInterval(), 0.1))
 		default:
 		}
 	}
