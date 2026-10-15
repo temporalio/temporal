@@ -314,7 +314,8 @@ func TestRequire_FailureScenarios(t *testing.T) {
 		})
 		require.True(t, tb.Failed())
 		require.Contains(t, tb.fatals(), "not satisfied after")
-		require.Equal(t, "attempt errors:\n\n  --- attempt 1 ---\n    first attempt error\n\n  --- attempt 2 ---\n    last attempt error", tb.errors())
+		require.Contains(t, tb.fatals(), "attempt errors:\n\n    --- attempt 1 ---\n      first attempt error\n\n    --- attempt 2 ---\n      last attempt error")
+		require.Empty(t, tb.errors())
 		require.Equal(t, int32(2), attempts.Load())
 	})
 
@@ -336,13 +337,14 @@ func TestRequire_FailureScenarios(t *testing.T) {
 		n := attempts.Load()
 		require.Greater(t, n, int32(4), "need >4 attempts to exercise truncation")
 
-		errs := tb.errors()
-		require.Contains(t, errs, "attempt errors:\n\n  --- attempt 1 ---\n    attempt 1 failed\n")
-		require.Contains(t, errs, fmt.Sprintf("... %d attempts omitted ...", n-4))
+		fatals := tb.fatals()
+		require.Contains(t, fatals, "attempt errors:\n\n    --- attempt 1 ---\n      attempt 1 failed\n")
+		require.Contains(t, fatals, fmt.Sprintf("... %d attempts omitted ...", n-4))
 		// Last three attempts present in order.
 		for i := n - 2; i <= n; i++ {
-			require.Contains(t, errs, fmt.Sprintf("--- attempt %d ---\n    attempt %d failed", i, i))
+			require.Contains(t, fatals, fmt.Sprintf("--- attempt %d ---\n      attempt %d failed", i, i))
 		}
+		require.Empty(t, tb.errors())
 	})
 
 	t.Run("Requiref includes message on timeout", func(t *testing.T) {
