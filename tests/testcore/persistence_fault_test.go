@@ -13,14 +13,14 @@ func TestInjectPersistenceFault_SetsOneInjector(t *testing.T) {
 
 	errOne := errors.New("one")
 	errTwo := errors.New("two")
-	first := InjectPersistenceFault(t, func(config.FaultInjectionTarget) error {
+	first := InjectPersistenceFault(func(config.FaultInjectionTarget) error {
 		return errOne
 	}, WithMethod("MethodOne"))
-	second := InjectPersistenceFault(t, func(config.FaultInjectionTarget) error {
+	second := InjectPersistenceFault(func(config.FaultInjectionTarget) error {
 		return errTwo
 	}, WithMethod("MethodTwo"))
 
-	var options testOptions
+	options := testOptions{t: t}
 	first(&options)
 	second(&options)
 	require.Len(t, options.clusterOptions, 1)

@@ -252,7 +252,7 @@ Use `testcore.InjectPersistenceFault` to return custom errors from persistence c
 active before the test cluster starts. You can filter it by store and method.
 
 ```go
-option := testcore.InjectPersistenceFault(t,
+option := testcore.InjectPersistenceFault(
     func(config.FaultInjectionTarget) error {
         return context.DeadlineExceeded
     },
@@ -262,10 +262,35 @@ option := testcore.InjectPersistenceFault(t,
 env := testcore.NewEnv(t, option)
 ```
 
-Use `testcore.NewPersistenceCallGate` when a test must control call order. Call
-`WaitForPersistenceCall` before you check other state. Call `Gate.Release` to continue the
-persistence operation. Call `Gate.ReleaseWithError` to return an error from the blocked operation.
-The test fails if no matching call reaches the fault or gate.
+The test fails if no matching call reaches the faulty path. This ensures that if we end up refactoring
+the code (i.e., "UpdateShard" doesn't exist anymore), and the path isn't reachable, that the test
+that injects fault there will intentionally fail.
+
+### Persistence order enforcement
+
+Use `testcore.NewPersistenceCallGate` when a test must control call order. It returns a
+`*testcore.PersistenceCallGate` and a `TestOption` that installs the gate. Matching calls block at
+the gate. Call `WaitForPersistenceCall` before you check other state. Call `Release` on the gate to
+continue the persistence operation. Call `ReleaseWithError` to return an error from the blocked
+operation. 
+
+```go
+gate, option := testcore.NewPersistenceCallGate(
+    testcore.WithStore(config.ShardStoreName),
+    testcore.WithMethod("UpdateShard"),
+)
+env := testcore.NewEnv(t, option)
+
+// Wait until one UpdateShard call blocks at the gate.
+testcore.WaitForPersistenceCall(t, gate, 10*time.Second)
+
+// Check state, do work, make assertions, etc... while the call is blocked.
+
+// Later, release the gate manually.
+gate.Release() // Or gate.ReleaseWithError(err) to fail the blocked call.
+```
+
+The test fails if no matching call reaches the gate.
 
 ### testhooks package
 

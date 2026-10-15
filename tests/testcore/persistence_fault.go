@@ -1,8 +1,6 @@
 package testcore
 
 import (
-	"testing"
-
 	"go.temporal.io/server/common/config"
 )
 
@@ -14,12 +12,11 @@ type PersistenceFaultOption func(*persistenceFaultOptions)
 
 // InjectPersistenceFault adds a fault and enables it before cluster startup.
 // The test fails if the fault does not fire.
-func InjectPersistenceFault(t testing.TB, fault PersistenceFault, opts ...PersistenceFaultOption) TestOption {
-	t.Helper()
-
+func InjectPersistenceFault(fault PersistenceFault, opts ...PersistenceFaultOption) TestOption {
 	options := applyPersistenceFaultOptions(opts)
-	tracker := newFaultTracker(t)
 	return func(o *testOptions) {
+		tracker := newFaultTracker(o.t)
+		tracker.attach(func() {})
 		o.addPersistenceFault(func(target config.FaultInjectionTarget) error {
 			if !options.matches(target) {
 				return nil
@@ -31,7 +28,6 @@ func InjectPersistenceFault(t testing.TB, fault PersistenceFault, opts ...Persis
 			tracker.markFired(target)
 			return injectedErr
 		})
-		tracker.attach(func() {})
 	}
 }
 

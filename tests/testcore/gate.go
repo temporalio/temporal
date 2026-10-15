@@ -6,12 +6,12 @@ import (
 	"sync"
 )
 
-// ErrGateReleased means the gate opened before enough calls arrived.
-var ErrGateReleased = errors.New("gate is already released before enough calls arrived")
+// errGateReleased means the gate opened before enough calls arrived.
+var errGateReleased = errors.New("gate is already released before enough calls arrived")
 
-// Gate blocks operations until it is released.
+// gate blocks operations until it is released.
 // A released gate does not block new operations.
-type Gate struct {
+type gate struct {
 	mu sync.Mutex
 	// Optionally allows users to inject an error that releasing returns
 	// to propagate back to the waiters.
@@ -23,20 +23,20 @@ type Gate struct {
 	// to use it in a select in conjunction with context deadline.
 	callsArrivedCv chan struct{}
 	// Similarly, releaseCv is the equivalent condition variable that
-	// releases all waiters. Only Release and ReleaseWithError close it.
+	// releases all waiters. Only release and releaseWithError close it.
 	releaseCv chan struct{}
 }
 
-// NewGate returns a gate that blocks operations.
-func NewGate() *Gate {
-	return &Gate{
+// newGate returns a gate that blocks operations.
+func newGate() *gate {
+	return &gate{
 		callsArrivedCv: make(chan struct{}),
 		releaseCv:      make(chan struct{}),
 	}
 }
 
-// Arrive records the call and blocks until the gate is released or ctx is canceled.
-func (g *Gate) Arrive(ctx context.Context) error {
+// arrive records the call and blocks until the gate is released or ctx is canceled.
+func (g *gate) arrive(ctx context.Context) error {
 	g.mu.Lock()
 	if g.released {
 		g.mu.Unlock()
@@ -58,15 +58,15 @@ func (g *Gate) Arrive(ctx context.Context) error {
 	}
 }
 
-// NumArrived returns the number of calls that reached the closed gate.
-func (g *Gate) NumArrived() int {
+// numArrived returns the number of calls that reached the closed gate.
+func (g *gate) numArrived() int {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	return g.callsArrived
 }
 
-// WaitForArrived waits for n calls, gate release, or context cancellation.
-func (g *Gate) WaitForArrived(ctx context.Context, n int) error {
+// waitForArrived waits for n calls, gate release, or context cancellation.
+func (g *gate) waitForArrived(ctx context.Context, n int) error {
 	for {
 		g.mu.Lock()
 		switch {
@@ -75,7 +75,7 @@ func (g *Gate) WaitForArrived(ctx context.Context, n int) error {
 			return nil
 		case g.released:
 			g.mu.Unlock()
-			return ErrGateReleased
+			return errGateReleased
 		}
 		callsArrivedCv := g.callsArrivedCv
 		g.mu.Unlock()
@@ -88,17 +88,17 @@ func (g *Gate) WaitForArrived(ctx context.Context, n int) error {
 	}
 }
 
-// Release opens the gate without an error.
-func (g *Gate) Release() {
+// release opens the gate without an error.
+func (g *gate) release() {
 	g.doRelease(nil)
 }
 
-// ReleaseWithError opens the gate and returns err from each blocked callback.
-func (g *Gate) ReleaseWithError(err error) {
+// releaseWithError opens the gate and returns err from each blocked callback.
+func (g *gate) releaseWithError(err error) {
 	g.doRelease(err)
 }
 
-func (g *Gate) doRelease(err error) {
+func (g *gate) doRelease(err error) {
 	g.mu.Lock()
 	if g.released {
 		g.mu.Unlock()

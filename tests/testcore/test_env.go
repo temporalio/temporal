@@ -101,6 +101,10 @@ type testOptions struct {
 	testVars                 func(*testvars.TestVars) *testvars.TestVars
 	historyTaskRecorder      bool
 	persistenceFaults        []PersistenceFault
+	// t is the test passed to NewEnv. This allows testOptions hooks to
+	// be able to access t, i.e., to register a t.Cleanup(...) hook in
+	// an option function
+	t *testing.T
 }
 
 type dynamicConfigOverride struct {
@@ -256,7 +260,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	// extension below can compensate for the time setup takes.
 	ctx := testcontext.For(t)
 
-	var options testOptions
+	options := testOptions{t: t}
 	for _, opt := range opts {
 		opt(&options)
 	}

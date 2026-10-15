@@ -14,13 +14,13 @@ import (
 func TestGate_BlocksUntilReleased(t *testing.T) {
 	t.Parallel()
 
-	g := NewGate()
+	g := newGate()
 
 	done := make(chan error, 1)
-	go func() { done <- g.Arrive(context.Background()) }()
+	go func() { done <- g.arrive(context.Background()) }()
 
-	require.NoError(t, g.WaitForArrived(context.Background(), 1))
-	require.Equal(t, 1, g.NumArrived())
+	require.NoError(t, g.waitForArrived(context.Background(), 1))
+	require.Equal(t, 1, g.numArrived())
 
 	require.Never(t, func() bool {
 		select {
@@ -31,44 +31,44 @@ func TestGate_BlocksUntilReleased(t *testing.T) {
 		}
 	}, 50*time.Millisecond, time.Millisecond)
 
-	g.Release()
+	g.release()
 	require.NoError(t, await.Rcv(t, done))
 }
 
 func TestGate_ReleaseWithError(t *testing.T) {
 	t.Parallel()
 
-	g := NewGate()
+	g := newGate()
 	errX := errors.New("x")
 
 	done := make(chan error, 1)
-	go func() { done <- g.Arrive(context.Background()) }()
+	go func() { done <- g.arrive(context.Background()) }()
 
-	require.NoError(t, g.WaitForArrived(context.Background(), 1))
-	g.ReleaseWithError(errX)
+	require.NoError(t, g.waitForArrived(context.Background(), 1))
+	g.releaseWithError(errX)
 	require.ErrorIs(t, await.Rcv(t, done), errX)
-	require.NoError(t, g.Arrive(context.Background()))
-	require.Equal(t, 1, g.NumArrived())
+	require.NoError(t, g.arrive(context.Background()))
+	require.Equal(t, 1, g.numArrived())
 }
 
 func TestGate_OneShot(t *testing.T) {
 	t.Parallel()
 
-	g := NewGate()
-	g.Release()
+	g := newGate()
+	g.release()
 
-	// A call arriving after Release should not block.
+	// A call arriving after release should not block.
 	done := make(chan error, 1)
-	go func() { done <- g.Arrive(context.Background()) }()
+	go func() { done <- g.arrive(context.Background()) }()
 
 	require.NoError(t, await.Rcv(t, done))
-	require.Zero(t, g.NumArrived())
+	require.Zero(t, g.numArrived())
 }
 
 func TestGate_ConcurrentArrivals(t *testing.T) {
 	t.Parallel()
 
-	g := NewGate()
+	g := newGate()
 
 	const n = 20
 	var wg sync.WaitGroup
@@ -76,14 +76,14 @@ func TestGate_ConcurrentArrivals(t *testing.T) {
 	for range n {
 		go func() {
 			defer wg.Done()
-			_ = g.Arrive(context.Background())
+			_ = g.arrive(context.Background())
 		}()
 	}
 
-	require.NoError(t, g.WaitForArrived(context.Background(), n))
-	require.Equal(t, n, g.NumArrived())
+	require.NoError(t, g.waitForArrived(context.Background(), n))
+	require.Equal(t, n, g.numArrived())
 
-	g.Release()
+	g.release()
 	done := make(chan struct{})
 	go func() {
 		wg.Wait()
@@ -95,43 +95,43 @@ func TestGate_ConcurrentArrivals(t *testing.T) {
 func TestGate_WaitForArrived_TimesOut(t *testing.T) {
 	t.Parallel()
 
-	g := NewGate()
+	g := newGate()
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
 
-	require.ErrorIs(t, g.WaitForArrived(ctx, 1), context.DeadlineExceeded)
+	require.ErrorIs(t, g.waitForArrived(ctx, 1), context.DeadlineExceeded)
 }
 
 func TestGate_WaitForArrived_UnblocksOnRelease(t *testing.T) {
 	t.Parallel()
 
-	g := NewGate()
+	g := newGate()
 	done := make(chan error, 1)
 	go func() {
-		done <- g.WaitForArrived(context.Background(), 5) // no one will ever arrive
+		done <- g.waitForArrived(context.Background(), 5) // no one will ever arrive
 	}()
 
-	g.Release()
-	require.ErrorIs(t, await.Rcv(t, done), ErrGateReleased)
+	g.release()
+	require.ErrorIs(t, await.Rcv(t, done), errGateReleased)
 }
 
 func TestGate_DoubleReleaseIsSafe(t *testing.T) {
 	t.Parallel()
 
-	g := NewGate()
-	g.Release()
-	g.ReleaseWithError(errors.New("should be ignored"))
+	g := newGate()
+	g.release()
+	g.releaseWithError(errors.New("should be ignored"))
 
-	require.NoError(t, g.Arrive(context.Background()), "the first Release should win")
+	require.NoError(t, g.arrive(context.Background()), "the first release should win")
 }
 
 func TestGate_ArriveStopsWhenContextIsCanceled(t *testing.T) {
 	t.Parallel()
 
-	g := NewGate()
+	g := newGate()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 
-	require.ErrorIs(t, g.Arrive(ctx), context.Canceled)
-	require.Equal(t, 1, g.NumArrived())
+	require.ErrorIs(t, g.arrive(ctx), context.Canceled)
+	require.Equal(t, 1, g.numArrived())
 }

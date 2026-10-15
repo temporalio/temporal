@@ -51,7 +51,6 @@ type (
 		dlq             persistence.HistoryTaskQueueManager
 		writer          bytes.Buffer
 		systemSDKClient sdkclient.Client
-		deleteBlockCh   chan any
 
 		failingWorkflowIDPrefix atomic.Pointer[string]
 	}
@@ -90,7 +89,7 @@ func (s *DLQSuite) startTestEnv(failDoomedWorkflows bool, opts ...testcore.TestO
 
 	if failDoomedWorkflows {
 		// Return a terminal error that will cause workflow task to be added to the DLQ.
-		opts = append(opts, testcore.InjectPersistenceFault(s.T(),
+		opts = append(opts, testcore.InjectPersistenceFault(
 			func(target config.FaultInjectionTarget) error {
 				request, ok := target.Request.(*persistence.GetWorkflowExecutionRequest)
 				if !ok || !strings.HasPrefix(request.WorkflowID, *w.failingWorkflowIDPrefix.Load()) {
@@ -102,8 +101,6 @@ func (s *DLQSuite) startTestEnv(failDoomedWorkflows bool, opts ...testcore.TestO
 			testcore.WithMethod("GetWorkflowExecution"),
 		))
 	}
-	// The DLQ delete hook below is a global hook, so it needs a dedicated cluster.
-	opts = append(opts, testcore.WithDedicatedCluster())
 	w.TestEnv = testcore.NewEnv(s.T(), opts...)
 	w.SdkWorker().RegisterWorkflow(s.myWorkflow)
 
@@ -118,22 +115,6 @@ func (s *DLQSuite) startTestEnv(failDoomedWorkflows bool, opts ...testcore.TestO
 	})
 	s.NoError(err)
 	s.T().Cleanup(w.systemSDKClient.Close)
-
-	w.deleteBlockCh = make(chan any)
-	close(w.deleteBlockCh)
-
-	// DeleteDLQTasks is used to block the dlq job workflow until one of them is cancelled in TestCancelRunningMerge.
-	w.InjectHook(testhooks.NewHook(
-		testhooks.HistoryDLQTaskDeleteInterceptor,
-		func(
-			ctx context.Context,
-			request *historyservice.DeleteDLQTasksRequest,
-			deleteTasks func(context.Context, *historyservice.DeleteDLQTasksRequest) (*historyservice.DeleteDLQTasksResponse, error),
-		) (*historyservice.DeleteDLQTasksResponse, error) {
-			<-w.deleteBlockCh
-			return deleteTasks(ctx, request)
-		},
-	))
 
 	return w
 }
@@ -337,7 +318,20 @@ func (s *DLQSuite) TestMergeRealWorkflow() {
 
 func (s *DLQSuite) TestCancelRunningMerge() {
 	env := s.newTestEnvWithDoomedWorkflows(testcore.WithWorkerService("dlq merge workflow"))
-	env.deleteBlockCh = make(chan any)
+
+	// DeleteDLQTasks is used to block the dlq job workflow until it is cancelled.
+	deleteBlockCh := make(chan any)
+	env.InjectHook(testhooks.NewHook(
+		testhooks.HistoryDLQTaskDeleteInterceptor,
+		func(
+			ctx context.Context,
+			request *historyservice.DeleteDLQTasksRequest,
+			deleteTasks func(context.Context, *historyservice.DeleteDLQTasksRequest) (*historyservice.DeleteDLQTasksResponse, error),
+		) (*historyservice.DeleteDLQTasksResponse, error) {
+			<-deleteBlockCh
+			return deleteTasks(ctx, request)
+		},
+	))
 
 	// Execute several doomed workflows.
 	_, dlqMessageID := s.executeDoomedWorkflow(env)
@@ -348,7 +342,7 @@ func (s *DLQSuite) TestCancelRunningMerge() {
 	cancelResponse := s.cancelJob(env, token)
 	s.True(cancelResponse.Canceled)
 	// Unblock waiting tests on Delete
-	close(env.deleteBlockCh)
+	close(deleteBlockCh)
 	// Delete the workflow task from the DLQ.
 	s.purgeMessages(env, dlqMessageID)
 }

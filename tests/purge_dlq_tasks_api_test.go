@@ -37,8 +37,6 @@ func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
 		apiErr        string
 		workflowErr   string
 		faultCount    *atomic.Int32
-		// persistenceFault builds the fault for the subtest, so that the fault check runs on the subtest.
-		persistenceFault func(testing.TB) testcore.TestOption
 	}{
 		{
 			name:       "HappyPath",
@@ -70,9 +68,7 @@ func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
 			name: "DeleteTasksUnavailableError",
 			envOptions: []testcore.TestOption{
 				testcore.WithWorkerService("purge DLQ workflow"),
-			},
-			persistenceFault: func(t testing.TB) testcore.TestOption {
-				return testcore.InjectPersistenceFault(t,
+				testcore.InjectPersistenceFault(
 					func(config.FaultInjectionTarget) error {
 						if deleteTasksFaultCount.CompareAndSwap(0, 1) {
 							return serviceerror.NewUnavailable("DLQ unavailable")
@@ -81,17 +77,13 @@ func (s *PurgeDLQTasksSuite) TestPurgeDLQTasks() {
 					},
 					testcore.WithStore(config.QueueV2Name),
 					testcore.WithMethod("RangeDeleteMessages"),
-				)
+				),
 			},
 			faultCount: &deleteTasksFaultCount,
 		},
 	} {
 		s.Run(tc.name, func(s *PurgeDLQTasksSuite) {
-			envOptions := tc.envOptions
-			if tc.persistenceFault != nil {
-				envOptions = append(envOptions, tc.persistenceFault(s.T()))
-			}
-			env := testcore.NewEnv(s.T(), envOptions...)
+			env := testcore.NewEnv(s.T(), tc.envOptions...)
 			defaultQueueKey := persistencetest.GetQueueKey(s.T())
 
 			queueKey := persistence.QueueKey{
