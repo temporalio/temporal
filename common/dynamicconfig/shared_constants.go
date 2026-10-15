@@ -90,7 +90,7 @@ var DefaultDynamicRateLimitingParams = DynamicRateLimitingParams{
 	RateMultiMax:         1.0,
 }
 
-// ScheduleInvariantsScannerParams configures the schedule-invariants scanners. The three
+// ScheduleInvariantsScannerParams configures the schedule-invariants scanners. The four
 // invariant checks are independently toggleable but otherwise share their timing and
 // rate-limiting knobs, so they're grouped into a single struct-valued dynamic config.
 type ScheduleInvariantsScannerParams struct {
@@ -103,6 +103,10 @@ type ScheduleInvariantsScannerParams struct {
 	// TemporalScheduleNextActionTime. Ship disabled until TemporalScheduleNextActionTime is known
 	// to be backfilled on legacy schedules.
 	UnknownStateEnabled bool
+	// StaleRunningWorkflowsEnabled enables flagging schedules whose running-workflows list
+	// holds a workflow that no longer exists or closed longer ago than
+	// StaleRunningWorkflowsCloseTimeTolerance.
+	StaleRunningWorkflowsEnabled bool
 	// OverdueNextActionTimeTolerance is how far in the past TemporalScheduleNextActionTime must be
 	// before the schedule is flagged.
 	OverdueNextActionTimeTolerance time.Duration
@@ -110,6 +114,15 @@ type ScheduleInvariantsScannerParams struct {
 	// overdue scanner will DescribeSchedule per namespace per scan pass. Schedules beyond
 	// the cap are left unchecked for that pass, so a large backlog can't hammer the frontend.
 	OverdueNextActionTimeMaxChecksPerNamespace int
+	// StaleRunningWorkflowsCloseTimeTolerance is how long after a listed running workflow
+	// closed the stale-running-workflows scanner waits before flagging it. The scheduler
+	// learns about closes asynchronously, so a just-closed workflow can legitimately still
+	// be listed. A workflow that no longer exists at all is flagged without a grace period.
+	StaleRunningWorkflowsCloseTimeTolerance time.Duration
+	// StaleRunningWorkflowsMaxChecksPerNamespace bounds how many schedules the
+	// stale-running-workflows scanner checks per namespace per scan pass. Each check is one
+	// DescribeSchedule plus one DescribeWorkflowExecution per listed running workflow.
+	StaleRunningWorkflowsMaxChecksPerNamespace int
 	// VisibilityRPS rate-limits visibility calls from the schedule-invariants scanner.
 	VisibilityRPS float64
 	// ScanInterval is how often each schedule-invariants scanner activity kicks off a fresh scan pass.
@@ -123,8 +136,11 @@ var DefaultScheduleInvariantsScannerParams = ScheduleInvariantsScannerParams{
 	OverdueNextActionTimeEnabled:               false,
 	StuckOpenEnabled:                           false,
 	UnknownStateEnabled:                        false,
+	StaleRunningWorkflowsEnabled:               false,
 	OverdueNextActionTimeTolerance:             10 * time.Minute,
 	OverdueNextActionTimeMaxChecksPerNamespace: 100,
+	StaleRunningWorkflowsCloseTimeTolerance:    10 * time.Minute,
+	StaleRunningWorkflowsMaxChecksPerNamespace: 100,
 	VisibilityRPS:                              1.0,
 	ScanInterval:                               15 * time.Minute,
 	StuckOpenIdleTimeBufferMultiplier:          2,

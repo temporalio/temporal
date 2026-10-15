@@ -6,6 +6,7 @@ import (
 	"iter"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
@@ -30,11 +31,21 @@ const (
 	// activity. It must be comfortably below the activity's HeartbeatTimeout.
 	heartbeatInterval = 10 * time.Second
 	// scheduleListPageSize controls pagination of ListChasmExecutions inside
-	// ScanOverdueNextActionTime. Each page is also one unit of rate-limited progress.
+	// ScanOverdueNextActionTime and ScanStaleRunningWorkflows. Each page is also one unit of
+	// rate-limited progress.
 	scheduleListPageSize = 100
+	// maxRunningWorkflowChecksPerSchedule bounds the DescribeWorkflowExecution calls
+	// ScanStaleRunningWorkflows makes for one schedule. Only completion-tracking overlap
+	// policies list running workflows, so a healthy schedule lists at most a handful; the
+	// cap only guards against a pathological list. Entries are ordered oldest first, which
+	// is where stale entries sit.
+	maxRunningWorkflowChecksPerSchedule = 10
+
+	staleReasonNotFound = "not_found"
+	staleReasonClosed   = "closed"
 )
 
-// Activities holds shared dependencies for all three schedule-invariants scanner activities.
+// Activities holds shared dependencies for all schedule-invariants scanner activities.
 type Activities struct {
 	logger             log.Logger
 	metricsHandler     metrics.Handler
@@ -134,6 +145,29 @@ func (a *Activities) ScanUnknownState(ctx context.Context) error {
 			scheduler.ScheduleIdleCloseTimeName,
 		)
 		return a.runScan(scanCtx, "unknown_state", query, metrics.ScheduleInvariantsScannerUnknownStateCount.Name())
+	})
+}
+
+// ScanStaleRunningWorkflows is a long-running activity that periodically finds schedules
+// whose running-workflows list holds a workflow the scheduler never saw close: the
+// workflow no longer exists (closed and purged after retention), or it closed longer ago
+// than StaleRunningWorkflowsCloseTimeTolerance. Under a SKIP or BUFFER overlap policy such
+// an entry blocks every future fire, while ScheduleNextActionTime keeps advancing, so the
+// timestamp-based scanners see a healthy schedule.
+//
+// Candidates are narrowed with ScheduleRunningWorkflowCount > 0, which is derived from the
+// same list DescribeSchedule returns, so a stale entry keeps its schedule in the result.
+// Paused schedules are deliberately included: pausing doesn't clear the list, so a paused
+// schedule with a stale entry silently skips every fire once it is unpaused. Flagging it
+// while paused lets it be repaired first, and the running-count filter keeps the extra
+// candidates cheap.
+func (a *Activities) ScanStaleRunningWorkflows(ctx context.Context) error {
+	return a.runForeverWithInterval(ctx, func(scanCtx context.Context) error {
+		query := fmt.Sprintf(
+			`%s > 0 AND ExecutionStatus = "Running"`,
+			scheduler.ScheduleRunningWorkflowCountName,
+		)
+		return a.runStaleRunningWorkflowsScan(scanCtx, query)
 	})
 }
 
@@ -243,6 +277,150 @@ func (a *Activities) runOverdueScan(ctx context.Context, query string) error {
 		a.emitCount(metricName, nsName, nsAnomalies)
 	}
 	return nil
+}
+
+// runStaleRunningWorkflowsScan lists candidate schedules per namespace and checks each
+// one's running workflows against DescribeWorkflowExecution. A schedule counts as an
+// anomaly when at least one entry is definitively stale; a failed check is recorded as an
+// error, never as an anomaly.
+func (a *Activities) runStaleRunningWorkflowsScan(ctx context.Context, query string) error {
+	const subScanner = "stale_running_workflows"
+	metricName := metrics.ScheduleInvariantsScannerStaleRunningWorkflowsCount.Name()
+
+	// Separate from the overdue cap: a check here costs a DescribeSchedule plus one
+	// DescribeWorkflowExecution per listed running workflow, and the candidate set (every
+	// schedule with a running workflow) has a different size, so the two need tuning apart.
+	maxChecks := a.opts().StaleRunningWorkflowsMaxChecksPerNamespace
+	for _, nsName := range a.ListAllNamespaces() {
+		var nsAnomalies, checked int64
+		var scanErr error
+		for scheduleID, err := range a.schedulesInNamespace(ctx, nsName, query) {
+			if err != nil {
+				scanErr = err
+				break
+			}
+			if checked >= int64(maxChecks) {
+				a.logger.Warn("stale-running-workflows scan hit per-namespace check cap; remaining schedules left unchecked this pass",
+					tag.WorkflowNamespace(nsName),
+					tag.ScheduleID(scheduleID),
+					tag.NewInt64("checked", checked),
+					tag.NewInt("cap", maxChecks),
+					tag.NewInt64("anomalies-found-so-far", nsAnomalies))
+				metrics.ScheduleInvariantsScannerStaleRunningWorkflowsCapHitCount.With(
+					a.metricsHandler.WithTags(metrics.NamespaceTag(nsName))).Record(1)
+				break
+			}
+			checked++
+			stale, err := a.scheduleHasStaleRunningWorkflow(ctx, nsName, scheduleID)
+			if stale {
+				nsAnomalies++
+			}
+			if err != nil {
+				if ctx.Err() != nil {
+					scanErr = ctx.Err()
+					break
+				}
+				a.recordCheckError(nsName, subScanner, scheduleID, err)
+			}
+		}
+		if scanErr != nil {
+			a.recordScanError(nsName, subScanner, scanErr)
+			continue
+		}
+		a.emitCount(metricName, nsName, nsAnomalies)
+	}
+	return nil
+}
+
+// scheduleHasStaleRunningWorkflow reports whether any workflow in the schedule's
+// running-workflows list is definitively stale, logging each stale entry. It returns an
+// error when some part of the check couldn't be completed, alongside whatever the entries
+// that could be checked showed; a schedule that no longer exists is simply not stale.
+// Every entry is checked, rather than stopping at the first stale one, so the logs name
+// all of them.
+func (a *Activities) scheduleHasStaleRunningWorkflow(ctx context.Context, nsName, scheduleID string) (bool, error) {
+	if err := a.rateLimiter.Wait(ctx); err != nil {
+		return false, err
+	}
+	desc, err := a.sdkClientFactory.GetSystemClient().WorkflowService().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  nsName,
+		ScheduleId: scheduleID,
+	})
+	if err != nil {
+		if common.IsNotFoundError(err) {
+			// Deleted between the listing and the describe.
+			return false, nil
+		}
+		return false, fmt.Errorf("DescribeSchedule: %w", err)
+	}
+
+	running := desc.GetInfo().GetRunningWorkflows()
+	if len(running) > maxRunningWorkflowChecksPerSchedule {
+		running = running[:maxRunningWorkflowChecksPerSchedule]
+	}
+	var stale bool
+	var checkErr error
+	for _, wf := range running {
+		reason, status, err := a.runningWorkflowStaleReason(ctx, nsName, wf)
+		if err != nil {
+			checkErr = fmt.Errorf("DescribeWorkflowExecution %s/%s: %w", wf.GetWorkflowId(), wf.GetRunId(), err)
+			if ctx.Err() != nil {
+				break
+			}
+			continue
+		}
+		if reason == "" {
+			continue
+		}
+		stale = true
+		a.logger.Warn("schedule lists a running workflow that is no longer running",
+			tag.WorkflowNamespace(nsName),
+			tag.ScheduleID(scheduleID),
+			tag.WorkflowID(wf.GetWorkflowId()),
+			tag.WorkflowRunID(wf.GetRunId()),
+			tag.NewStringTag("reason", reason),
+			tag.NewStringTag("workflow-status", status.String()),
+			tag.NewStringTag("overlap-policy", desc.GetSchedule().GetPolicies().GetOverlapPolicy().String()),
+			tag.NewBoolTag("paused", desc.GetSchedule().GetState().GetPaused()))
+	}
+	return stale, checkErr
+}
+
+// runningWorkflowStaleReason returns staleReasonNotFound or staleReasonClosed (with the
+// closed status) when wf is definitively stale, and "" when it is still running or closed
+// within the grace period.
+func (a *Activities) runningWorkflowStaleReason(
+	ctx context.Context,
+	nsName string,
+	wf *commonpb.WorkflowExecution,
+) (string, enumspb.WorkflowExecutionStatus, error) {
+	if err := a.rateLimiter.Wait(ctx); err != nil {
+		return "", enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, err
+	}
+	resp, err := a.sdkClientFactory.GetSystemClient().WorkflowService().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: nsName,
+		Execution: wf,
+	})
+	if err != nil {
+		if common.IsNotFoundError(err) {
+			// Closed and purged after retention (or never existed): definitive, no grace.
+			return staleReasonNotFound, enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, nil
+		}
+		return "", enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED, err
+	}
+	info := resp.GetWorkflowExecutionInfo()
+	status := info.GetStatus()
+	if status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		return "", status, nil
+	}
+	// The scheduler learns about closes asynchronously, so a recent close is expected.
+	// A closed workflow without a close time can't be given a grace period; its status is
+	// already definitive, so it counts.
+	if closeTime := info.GetCloseTime(); closeTime != nil &&
+		!closeTime.AsTime().Before(a.timeSource.Now().UTC().Add(-a.opts().StaleRunningWorkflowsCloseTimeTolerance)) {
+		return "", status, nil
+	}
+	return staleReasonClosed, status, nil
 }
 
 // ListAllNamespaces returns the names of every namespace active in the current cluster,
@@ -418,6 +596,20 @@ func (a *Activities) emitCount(metricName, namespaceTagValue string, count int64
 func (a *Activities) recordScanError(nsName, subScanner string, err error) {
 	a.logger.Warn("schedule-invariants scan failed for namespace",
 		tag.WorkflowNamespace(nsName),
+		tag.NewStringTag("sub_scanner", subScanner),
+		tag.Error(err))
+	metrics.ScheduleInvariantsScannerErrorCount.With(a.metricsHandler.WithTags(
+		metrics.NamespaceTag(nsName),
+		metrics.StringTag("sub_scanner", subScanner),
+	)).Record(1)
+}
+
+// recordCheckError records a failed per-schedule check. It shares the scan-error metric
+// and its tags with recordScanError so the error series keeps one label set.
+func (a *Activities) recordCheckError(nsName, subScanner, scheduleID string, err error) {
+	a.logger.Warn("schedule-invariants check failed for schedule",
+		tag.WorkflowNamespace(nsName),
+		tag.ScheduleID(scheduleID),
 		tag.NewStringTag("sub_scanner", subScanner),
 		tag.Error(err))
 	metrics.ScheduleInvariantsScannerErrorCount.With(a.metricsHandler.WithTags(

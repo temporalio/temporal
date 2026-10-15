@@ -10,6 +10,8 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	schedulepb "go.temporal.io/api/schedule/v1"
+	"go.temporal.io/api/serviceerror"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	chasmspb "go.temporal.io/server/api/chasm/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -579,4 +581,316 @@ func TestEmitCount_IgnoresZeroAndNegative(t *testing.T) {
 	a.emitCount("metric", "ns", 0)
 	a.emitCount("metric", "ns", -1)
 	a.emitCount("metric", "ns", 5) // exercise positive path
+}
+
+var staleCloseTolerance = dynamicconfig.DefaultScheduleInvariantsScannerParams.StaleRunningWorkflowsCloseTimeTolerance
+
+func wfExec(id string) *commonpb.WorkflowExecution {
+	return &commonpb.WorkflowExecution{WorkflowId: id, RunId: id + "-run"}
+}
+
+// describeRunningResp builds a DescribeSchedule response listing the given running workflows.
+func describeRunningResp(paused bool, running ...*commonpb.WorkflowExecution) *workflowservice.DescribeScheduleResponse {
+	return &workflowservice.DescribeScheduleResponse{
+		Schedule: &schedulepb.Schedule{
+			State:    &schedulepb.ScheduleState{Paused: paused},
+			Policies: &schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP},
+		},
+		Info: &schedulepb.ScheduleInfo{RunningWorkflows: running},
+	}
+}
+
+func runningWFResp() *workflowservice.DescribeWorkflowExecutionResponse {
+	return &workflowservice.DescribeWorkflowExecutionResponse{
+		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
+	}
+}
+
+func closedWFResp(status enumspb.WorkflowExecutionStatus, closeTime time.Time) *workflowservice.DescribeWorkflowExecutionResponse {
+	return &workflowservice.DescribeWorkflowExecutionResponse{
+		WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{Status: status, CloseTime: timestamppb.New(closeTime)},
+	}
+}
+
+// expectDescribeWF registers a DescribeWorkflowExecution expectation for exactly wf.
+func (d *testDeps) expectDescribeWF(wf *commonpb.WorkflowExecution, resp *workflowservice.DescribeWorkflowExecutionResponse, err error) {
+	d.frontendClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: "ns-1",
+		Execution: wf,
+	}).Return(resp, err)
+}
+
+func (d *testDeps) expectDescribeSchedule(scheduleID string, resp *workflowservice.DescribeScheduleResponse, err error) {
+	d.frontendClient.EXPECT().DescribeSchedule(gomock.Any(), &workflowservice.DescribeScheduleRequest{
+		Namespace: "ns-1", ScheduleId: scheduleID,
+	}).Return(resp, err)
+}
+
+// expectSingleNamespaceListing sets up ns-1 as the only namespace, listing scheduleIDs.
+func (d *testDeps) expectSingleNamespaceListing(scheduleIDs ...string) {
+	d.namespaceRegistry.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{localNS("id-1", "ns-1", testClusterName)})
+	d.namespaceRegistry.EXPECT().GetNamespaceID(namespace.Name("ns-1")).Return(namespace.ID("id-1"), nil)
+	var execs []*chasmspb.VisibilityExecutionInfo
+	for _, id := range scheduleIDs {
+		execs = append(execs, chasmExec(id))
+	}
+	d.visibilityManager.EXPECT().ListChasmExecutions(gomock.Any(), gomock.Any()).
+		Return(&visibilityservice.ListChasmExecutionsResponse{Executions: execs}, nil)
+}
+
+func (d *testDeps) captureMetrics(t *testing.T) *metricstest.Capture {
+	t.Helper()
+	rec := metricstest.NewCaptureHandler()
+	d.metricsHandler = rec
+	capture := rec.StartCapture()
+	t.Cleanup(func() { rec.StopCapture(capture) })
+	return capture
+}
+
+func TestRunningWorkflowStaleReason(t *testing.T) {
+	cases := []struct {
+		name       string
+		resp       *workflowservice.DescribeWorkflowExecutionResponse
+		err        error
+		wantReason string
+		wantErr    bool
+	}{
+		{
+			// Closed and purged after retention: the production failure mode.
+			name:       "not_found",
+			err:        serviceerror.NewNotFound("workflow not found"),
+			wantReason: staleReasonNotFound,
+		},
+		{
+			name: "running",
+			resp: runningWFResp(),
+		},
+		{
+			name:       "closed_past_grace_period",
+			resp:       closedWFResp(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, testNow.Add(-staleCloseTolerance).Add(-time.Minute)),
+			wantReason: staleReasonClosed,
+		},
+		{
+			// The scheduler may not have processed the completion yet.
+			name: "closed_within_grace_period",
+			resp: closedWFResp(enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, testNow.Add(-time.Minute)),
+		},
+		{
+			name: "closed_exactly_at_grace_threshold",
+			resp: closedWFResp(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, testNow.Add(-staleCloseTolerance)),
+		},
+		{
+			name: "closed_without_close_time",
+			resp: &workflowservice.DescribeWorkflowExecutionResponse{
+				WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{Status: enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED},
+			},
+			wantReason: staleReasonClosed,
+		},
+		{
+			name:    "other_error",
+			err:     serviceerror.NewUnavailable("frontend unavailable"),
+			wantErr: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			d := newTestDeps(t)
+			wf := wfExec("wf-1")
+			d.expectDescribeWF(wf, tc.resp, tc.err)
+
+			reason, _, err := d.newActivities().runningWorkflowStaleReason(context.Background(), "ns-1", wf)
+			if tc.wantErr {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+			require.Equal(t, tc.wantReason, reason)
+		})
+	}
+}
+
+func TestRunStaleRunningWorkflowsScan_CountsSchedulesWithStaleEntries(t *testing.T) {
+	d := newTestDeps(t)
+	d.expectSingleNamespaceListing(
+		"sched-not-found",
+		"sched-closed-long-ago",
+		"sched-closed-recently",
+		"sched-running",
+		"sched-no-running",
+		"sched-deleted",
+		"sched-two-stale",
+	)
+
+	d.expectDescribeSchedule("sched-not-found", describeRunningResp(false, wfExec("wf-a")), nil)
+	d.expectDescribeWF(wfExec("wf-a"), nil, serviceerror.NewNotFound("gone"))
+
+	d.expectDescribeSchedule("sched-closed-long-ago", describeRunningResp(false, wfExec("wf-b")), nil)
+	d.expectDescribeWF(wfExec("wf-b"), closedWFResp(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, testNow.Add(-24*time.Hour)), nil)
+
+	d.expectDescribeSchedule("sched-closed-recently", describeRunningResp(false, wfExec("wf-c")), nil)
+	d.expectDescribeWF(wfExec("wf-c"), closedWFResp(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, testNow.Add(-time.Minute)), nil)
+
+	d.expectDescribeSchedule("sched-running", describeRunningResp(false, wfExec("wf-d")), nil)
+	d.expectDescribeWF(wfExec("wf-d"), runningWFResp(), nil)
+
+	// Listed by visibility but nothing running by the time of the describe.
+	d.expectDescribeSchedule("sched-no-running", describeRunningResp(false), nil)
+
+	// Deleted between the listing and the describe: neither an anomaly nor an error.
+	d.expectDescribeSchedule("sched-deleted", nil, serviceerror.NewNotFound("schedule not found"))
+
+	// Two stale entries on one schedule count as one anomalous schedule.
+	d.expectDescribeSchedule("sched-two-stale", describeRunningResp(false, wfExec("wf-e"), wfExec("wf-f")), nil)
+	d.expectDescribeWF(wfExec("wf-e"), nil, serviceerror.NewNotFound("gone"))
+	d.expectDescribeWF(wfExec("wf-f"), nil, serviceerror.NewNotFound("gone"))
+
+	capture := d.captureMetrics(t)
+	require.NoError(t, d.newActivities().runStaleRunningWorkflowsScan(context.Background(), "q"))
+
+	snapshot := capture.Snapshot()
+	anomalies := snapshot[metrics.ScheduleInvariantsScannerStaleRunningWorkflowsCount.Name()]
+	require.Len(t, anomalies, 1)
+	require.Equal(t, int64(3), anomalies[0].Value,
+		"sched-not-found, sched-closed-long-ago and sched-two-stale should count")
+	require.Equal(t, "ns-1", anomalies[0].Tags["namespace"])
+	require.Empty(t, snapshot[metrics.ScheduleInvariantsScannerErrorCount.Name()])
+}
+
+func TestRunStaleRunningWorkflowsScan_NoStaleEntriesEmitsNoAnomaly(t *testing.T) {
+	d := newTestDeps(t)
+	d.expectSingleNamespaceListing("sched-running", "sched-no-running")
+	d.expectDescribeSchedule("sched-running", describeRunningResp(false, wfExec("wf-a")), nil)
+	d.expectDescribeWF(wfExec("wf-a"), runningWFResp(), nil)
+	d.expectDescribeSchedule("sched-no-running", describeRunningResp(false), nil)
+
+	capture := d.captureMetrics(t)
+	require.NoError(t, d.newActivities().runStaleRunningWorkflowsScan(context.Background(), "q"))
+
+	snapshot := capture.Snapshot()
+	require.Empty(t, snapshot[metrics.ScheduleInvariantsScannerStaleRunningWorkflowsCount.Name()])
+	require.Empty(t, snapshot[metrics.ScheduleInvariantsScannerErrorCount.Name()])
+}
+
+// Pausing doesn't clear the running list, so a paused schedule is still flagged.
+func TestRunStaleRunningWorkflowsScan_FlagsPausedSchedule(t *testing.T) {
+	d := newTestDeps(t)
+	d.expectSingleNamespaceListing("sched-paused")
+	d.expectDescribeSchedule("sched-paused", describeRunningResp(true, wfExec("wf-a")), nil)
+	d.expectDescribeWF(wfExec("wf-a"), nil, serviceerror.NewNotFound("gone"))
+
+	capture := d.captureMetrics(t)
+	require.NoError(t, d.newActivities().runStaleRunningWorkflowsScan(context.Background(), "q"))
+
+	anomalies := capture.Snapshot()[metrics.ScheduleInvariantsScannerStaleRunningWorkflowsCount.Name()]
+	require.Len(t, anomalies, 1)
+	require.Equal(t, int64(1), anomalies[0].Value)
+}
+
+// Unlike the overdue scan, a failed describe is an error, never an anomaly.
+func TestRunStaleRunningWorkflowsScan_DescribeErrorsAreRecordedNotCounted(t *testing.T) {
+	d := newTestDeps(t)
+	d.expectSingleNamespaceListing("sched-describe-fails", "sched-wf-describe-fails")
+	d.expectDescribeSchedule("sched-describe-fails", nil, errors.New("describe schedule failed"))
+	d.expectDescribeSchedule("sched-wf-describe-fails", describeRunningResp(false, wfExec("wf-a")), nil)
+	d.expectDescribeWF(wfExec("wf-a"), nil, serviceerror.NewUnavailable("frontend unavailable"))
+
+	capture := d.captureMetrics(t)
+	require.NoError(t, d.newActivities().runStaleRunningWorkflowsScan(context.Background(), "q"))
+
+	snapshot := capture.Snapshot()
+	require.Empty(t, snapshot[metrics.ScheduleInvariantsScannerStaleRunningWorkflowsCount.Name()])
+	scanErrors := snapshot[metrics.ScheduleInvariantsScannerErrorCount.Name()]
+	require.Len(t, scanErrors, 2)
+	for _, e := range scanErrors {
+		require.Equal(t, "ns-1", e.Tags["namespace"])
+		require.Equal(t, "stale_running_workflows", e.Tags["sub_scanner"])
+	}
+}
+
+// A failure on one entry doesn't hide a stale sibling: both are reported.
+func TestRunStaleRunningWorkflowsScan_StaleEntryCountsDespiteSiblingError(t *testing.T) {
+	d := newTestDeps(t)
+	d.expectSingleNamespaceListing("sched-1")
+	d.expectDescribeSchedule("sched-1", describeRunningResp(false, wfExec("wf-a"), wfExec("wf-b")), nil)
+	d.expectDescribeWF(wfExec("wf-a"), nil, serviceerror.NewUnavailable("frontend unavailable"))
+	d.expectDescribeWF(wfExec("wf-b"), nil, serviceerror.NewNotFound("gone"))
+
+	capture := d.captureMetrics(t)
+	require.NoError(t, d.newActivities().runStaleRunningWorkflowsScan(context.Background(), "q"))
+
+	snapshot := capture.Snapshot()
+	anomalies := snapshot[metrics.ScheduleInvariantsScannerStaleRunningWorkflowsCount.Name()]
+	require.Len(t, anomalies, 1)
+	require.Equal(t, int64(1), anomalies[0].Value)
+	require.Len(t, snapshot[metrics.ScheduleInvariantsScannerErrorCount.Name()], 1)
+}
+
+func TestRunStaleRunningWorkflowsScan_StopsAtPerNamespaceCap(t *testing.T) {
+	d := newTestDeps(t)
+	d.expectSingleNamespaceListing("sched-1", "sched-2", "sched-3", "sched-4", "sched-5")
+
+	// Exactly two schedules are checked; gomock fails the test on a third describe.
+	d.frontendClient.EXPECT().DescribeSchedule(gomock.Any(), gomock.Any()).
+		Return(describeRunningResp(false, wfExec("wf-a")), nil).Times(2)
+	d.frontendClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(nil, serviceerror.NewNotFound("gone")).Times(2)
+
+	capture := d.captureMetrics(t)
+	params := dynamicconfig.DefaultScheduleInvariantsScannerParams
+	params.StaleRunningWorkflowsMaxChecksPerNamespace = 2
+	require.NoError(t, d.newActivitiesWithParams(params).runStaleRunningWorkflowsScan(context.Background(), "q"))
+
+	snapshot := capture.Snapshot()
+	capHits := snapshot[metrics.ScheduleInvariantsScannerStaleRunningWorkflowsCapHitCount.Name()]
+	require.Len(t, capHits, 1)
+	require.Equal(t, "ns-1", capHits[0].Tags["namespace"])
+	anomalies := snapshot[metrics.ScheduleInvariantsScannerStaleRunningWorkflowsCount.Name()]
+	require.Len(t, anomalies, 1)
+	require.Equal(t, int64(2), anomalies[0].Value, "anomalies found before the cap are still emitted")
+}
+
+func TestRunStaleRunningWorkflowsScan_BoundsChecksPerSchedule(t *testing.T) {
+	d := newTestDeps(t)
+	d.expectSingleNamespaceListing("sched-1")
+	var running []*commonpb.WorkflowExecution
+	for range maxRunningWorkflowChecksPerSchedule + 5 {
+		running = append(running, wfExec("wf"))
+	}
+	d.expectDescribeSchedule("sched-1", describeRunningResp(false, running...), nil)
+	d.frontendClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(runningWFResp(), nil).Times(maxRunningWorkflowChecksPerSchedule)
+
+	require.NoError(t, d.newActivities().runStaleRunningWorkflowsScan(context.Background(), "q"))
+}
+
+func TestRunStaleRunningWorkflowsScan_ListErrorIsRecordedPerNamespace(t *testing.T) {
+	d := newTestDeps(t)
+	d.namespaceRegistry.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{localNS("id-1", "ns-1", testClusterName)})
+	d.namespaceRegistry.EXPECT().GetNamespaceID(namespace.Name("ns-1")).Return(namespace.ID("id-1"), nil)
+	d.visibilityManager.EXPECT().ListChasmExecutions(gomock.Any(), gomock.Any()).Return(nil, errors.New("list failed"))
+
+	capture := d.captureMetrics(t)
+	require.NoError(t, d.newActivities().runStaleRunningWorkflowsScan(context.Background(), "q"))
+	require.Len(t, capture.Snapshot()[metrics.ScheduleInvariantsScannerErrorCount.Name()], 1)
+}
+
+// The activity queries schedules with at least one running workflow, paused or not.
+func TestScanStaleRunningWorkflows_Query(t *testing.T) {
+	d := newTestDeps(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	d.namespaceRegistry.EXPECT().GetAllNamespaces().Return([]*namespace.Namespace{localNS("id-1", "ns-1", testClusterName)})
+	d.namespaceRegistry.EXPECT().GetNamespaceID(namespace.Name("ns-1")).Return(namespace.ID("id-1"), nil)
+	d.visibilityManager.EXPECT().ListChasmExecutions(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, req *visibilityservice.ListChasmExecutionsRequest) (*visibilityservice.ListChasmExecutionsResponse, error) {
+			require.Equal(t, chasm.SchedulerArchetypeID, req.ArchetypeId)
+			require.Equal(t, `ScheduleRunningWorkflowCount > 0 AND ExecutionStatus = "Running"`, req.Query)
+			// End the activity after its first pass.
+			cancel()
+			return &visibilityservice.ListChasmExecutionsResponse{}, nil
+		})
+
+	err := d.newActivities().ScanStaleRunningWorkflows(ctx)
+	require.ErrorIs(t, err, context.Canceled)
 }

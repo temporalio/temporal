@@ -216,7 +216,8 @@ func (s *Scanner) Start() error {
 	}
 
 	siOpts := s.context.cfg.ScheduleInvariantsScannerOptions()
-	if siOpts.OverdueNextActionTimeEnabled || siOpts.StuckOpenEnabled || siOpts.UnknownStateEnabled {
+	if siOpts.OverdueNextActionTimeEnabled || siOpts.StuckOpenEnabled || siOpts.UnknownStateEnabled ||
+		siOpts.StaleRunningWorkflowsEnabled {
 		scheduleActivities := scheduleinvariants.NewActivities(
 			s.context.logger,
 			s.context.metricsHandler,
@@ -261,6 +262,19 @@ func (s *Scanner) Start() error {
 			work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), scheduleinvariants.UnknownStateTaskQueue, workerOpts)
 			work.RegisterWorkflowWithOptions(scheduleinvariants.UnknownStateWorkflow, workflow.RegisterOptions{Name: scheduleinvariants.UnknownStateWorkflowName})
 			work.RegisterActivityWithOptions(scheduleActivities.ScanUnknownState, activity.RegisterOptions{Name: scheduleinvariants.UnknownStateActivityName})
+
+			if err := s.startWorker(work); err != nil {
+				return err
+			}
+		}
+
+		if siOpts.StaleRunningWorkflowsEnabled {
+			s.wg.Add(1)
+			go s.startWorkflowWithRetry(ctx, scheduleinvariants.StaleRunningWorkflowsWFStartOptions, scheduleinvariants.StaleRunningWorkflowsWorkflowName)
+
+			work := s.context.sdkClientFactory.NewWorker(s.context.sdkClientFactory.GetSystemClient(), scheduleinvariants.StaleRunningWorkflowsTaskQueue, workerOpts)
+			work.RegisterWorkflowWithOptions(scheduleinvariants.StaleRunningWorkflowsWorkflow, workflow.RegisterOptions{Name: scheduleinvariants.StaleRunningWorkflowsWorkflowName})
+			work.RegisterActivityWithOptions(scheduleActivities.ScanStaleRunningWorkflows, activity.RegisterOptions{Name: scheduleinvariants.StaleRunningWorkflowsActivityName})
 
 			if err := s.startWorker(work); err != nil {
 				return err
