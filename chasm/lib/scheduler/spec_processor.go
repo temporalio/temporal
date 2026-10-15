@@ -163,6 +163,7 @@ func (s *SpecProcessorImpl) ProcessTimeRange(
 			// the generator processed the time range. It was never buffered.
 			metricsHandler.WithTags(
 				metrics.StringTag(metrics.ScheduleMissedReasonTag, metrics.ScheduleMissedReasonNotBuffered),
+				metrics.StringTag(metrics.ScheduleActionRunningTag, metrics.ScheduleActionRunningNone),
 			).Counter(metrics.ScheduleMissedCatchupWindow.Name()).Record(1)
 
 			scheduler.Info.MissedCatchupWindow++
