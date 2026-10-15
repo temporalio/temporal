@@ -382,7 +382,7 @@ func (h *OperatorHandlerImpl) removeSearchAttributesElasticsearch(
 	request *operatorservice.RemoveSearchAttributesRequest,
 	visManager manager.VisibilityManager,
 ) error {
-	indexName := h.visibilityMgr.GetIndexName()
+	indexName := visManager.GetIndexName()
 	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
@@ -418,7 +418,7 @@ func (h *OperatorHandlerImpl) removeSearchAttributesSQL(
 	request *operatorservice.RemoveSearchAttributesRequest,
 	visManager manager.VisibilityManager,
 ) error {
-	indexName := h.visibilityMgr.GetIndexName()
+	indexName := visManager.GetIndexName()
 	currentSearchAttributes, err := h.saManager.GetSearchAttributes(indexName, true)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
