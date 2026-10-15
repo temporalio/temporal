@@ -3790,6 +3790,9 @@ func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(
 		// Require enough backlog for the remaining dispatches, allowing a conservative overestimate.
 		s.LessOrEqual(completedTasks, dbTasks)
 		s.GreaterOrEqual(backlogCount, dbTasks-completedTasks)
+		// This upper bound only holds because these tests don't inject CreateTasks faults.
+		// A write that fails without definitely failing (e.g. Unavailable) leaves the count
+		// incremented even if no task was written, so the count could legitimately exceed dbTasks.
 		s.LessOrEqual(backlogCount, dbTasks)
 	} else {
 		backlogCount := totalApproximateBacklogCount(ptqMgr.backlogMgr)

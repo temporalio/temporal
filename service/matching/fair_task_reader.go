@@ -634,14 +634,11 @@ func (tr *fairTaskReader) advanceAckLevelLocked() {
 
 		// Apply the exclusions to the next acks. If these are different tasks,
 		// the estimate remains conservative until the excluded tasks are acked.
-		countDelta := -max(0, numAcked-tr.acksExcludedFromBacklog)
-		tr.acksExcludedFromBacklog = max(0, tr.acksExcludedFromBacklog-numAcked)
-		knownCount := tr.knownCountLocked()
-		if knownCount >= 0 {
-			tr.acksExcludedFromBacklog = tr.completedTaskCountLocked()
-		}
+		excluded := min(numAcked, tr.acksExcludedFromBacklog)
+		tr.acksExcludedFromBacklog -= excluded
+		countDelta := excluded - numAcked
 		tr.backlogMgr.db.updateFairAckLevel(
-			tr.subqueue, tr.ackLevel, countDelta, knownCount, tr.backlogAge.oldestTime())
+			tr.subqueue, tr.ackLevel, countDelta, tr.knownCountForResetLocked(), tr.backlogAge.oldestTime())
 	}
 }
 
@@ -678,18 +675,21 @@ func (tr *fairTaskReader) getLevels() (readLevel, ackLevel fairLevel) {
 	return tr.readLevel, tr.ackLevel
 }
 
-func (tr *fairTaskReader) knownCountLocked() int64 {
+// knownCountForResetLocked returns the backlog count if we know it, or -1 if we don't. The
+// caller must write a known count to the db: it excludes completed tasks above the ack level,
+// so this also records those in acksExcludedFromBacklog.
+func (tr *fairTaskReader) knownCountForResetLocked() int64 {
 	// Pending writes may have incremented the backlog count without being merged into
 	// outstandingTasks yet. Do not overwrite their increments with the reader's count.
 	if tr.atEnd && !tr.ackLevelPinnedLocked() {
+		tr.acksExcludedFromBacklog = tr.completedTaskCountLocked()
 		return int64(tr.loadedTasks)
 	}
 	return -1
 }
 
 func (tr *fairTaskReader) maybeResetBacklogCountLocked() {
-	if count := tr.knownCountLocked(); count >= 0 {
-		tr.acksExcludedFromBacklog = tr.completedTaskCountLocked()
+	if count := tr.knownCountForResetLocked(); count >= 0 {
 		tr.backlogMgr.db.setKnownFairBacklogCount(tr.subqueue, count)
 	}
 }
