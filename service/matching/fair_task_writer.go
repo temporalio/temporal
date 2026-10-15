@@ -160,7 +160,6 @@ func (w *fairTaskWriter) taskWriterLoop() {
 	// TODO: this will be out of phase with the timer in fairBacklogManagerImpl.periodicSync.
 	// can we align them better?
 	persistFairnessKeys := time.NewTimer(backoff.Jitter(w.config.UpdateAckInterval(), 0.1))
-	defer persistFairnessKeys.Stop()
 
 	var reqs []*writeTaskRequest
 	for {
