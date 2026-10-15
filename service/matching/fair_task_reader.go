@@ -268,6 +268,7 @@ func (tr *fairTaskReader) readTasksImpl() {
 		// ack level would have been pinned here, we may be able to advance it now (if it's not
 		// explicitly pinned by another write)
 		tr.advanceAckLevelLocked()
+		tr.maybeResetBacklogCountLocked()
 	}
 
 	// If a backoff timer fired while readPending was still true, its maybeReadTasksLocked call
@@ -555,10 +556,8 @@ func (tr *fairTaskReader) mergeTasksLocked(tasks []*persistencespb.AllocatedTask
 		tr.atEnd = true
 	}
 
-	// If we're at the end, then outstandingTasks is the whole queue so we can set count.
-	if count := tr.knownCountLocked(); count >= 0 {
-		tr.backlogMgr.db.setKnownFairBacklogCount(tr.subqueue, count)
-	}
+	// If we're at the end and all writes are accounted for, we can set the count.
+	tr.maybeResetBacklogCountLocked()
 
 	return created
 
@@ -658,6 +657,7 @@ func (tr *fairTaskReader) unpinAckLevel(writeErr error) {
 	softassert.That(tr.logger, tr.ackLevelPinnedByWriter, "ack level wasn't pinned")
 	tr.ackLevelPinnedByWriter = false
 	tr.advanceAckLevelLocked()
+	tr.maybeResetBacklogCountLocked()
 }
 
 func (tr *fairTaskReader) getLevels() (readLevel, ackLevel fairLevel) {
@@ -667,10 +667,18 @@ func (tr *fairTaskReader) getLevels() (readLevel, ackLevel fairLevel) {
 }
 
 func (tr *fairTaskReader) knownCountLocked() int64 {
-	if tr.atEnd {
+	// Pending writes may have incremented the backlog count without being merged into
+	// outstandingTasks yet. Do not overwrite their increments with the loaded task count.
+	if tr.atEnd && !tr.ackLevelPinnedLocked() {
 		return int64(tr.loadedTasks)
 	}
 	return -1
+}
+
+func (tr *fairTaskReader) maybeResetBacklogCountLocked() {
+	if count := tr.knownCountLocked(); count >= 0 {
+		tr.backlogMgr.db.setKnownFairBacklogCount(tr.subqueue, count)
+	}
 }
 
 // gc
