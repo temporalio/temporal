@@ -46,7 +46,7 @@ type (
 		atEnd            bool                           // whether we believe outstandingTasks represents the entire queue right now
 
 		// Completed tasks already excluded by a backlog count reset. Consume these before
-		// applying acknowledgement deltas to avoid subtracting the same completions twice.
+		// applying ack deltas to avoid subtracting the same completions twice.
 		acksExcludedFromBacklog int64
 
 		// Small cache of acked task levels that were evicted from outstandingTasks. When tasks
@@ -632,8 +632,8 @@ func (tr *fairTaskReader) advanceAckLevelLocked() {
 		tr.numToGC += int(numAcked)
 		tr.maybeGCLocked()
 
-		// Apply the exclusions to the next acknowledgements. If these are different
-		// tasks, the estimate remains conservative until the excluded tasks are acked.
+		// Apply the exclusions to the next acks. If these are different tasks,
+		// the estimate remains conservative until the excluded tasks are acked.
 		countDelta := -max(0, numAcked-tr.acksExcludedFromBacklog)
 		tr.acksExcludedFromBacklog = max(0, tr.acksExcludedFromBacklog-numAcked)
 		knownCount := tr.knownCountLocked()

@@ -125,8 +125,8 @@ func (w *priTaskWriter) assignTaskIDs(reqs []*writeTaskRequest) error {
 }
 
 func (w *priTaskWriter) appendTasks(reqs []*writeTaskRequest) error {
-	// Buffered appends can be selected after cancellation. Do not start another write
-	// after unloading, even if persistence would still accept the old range ID.
+	// re-check context before writing since we may lose a metadata write
+	// TODO: consider removing this after fixing lost metadata write on takeover
 	if err := w.backlogMgr.tqCtx.Err(); err != nil {
 		return err
 	}

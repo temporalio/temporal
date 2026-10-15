@@ -135,7 +135,7 @@ func TestFairTaskReaderBacklogCountAfterOutOfOrderCompletion(t *testing.T) {
 	}
 
 	reader.mergeTasks(tasks[:3], mergeReadToEnd)
-	// Task 3 completes before tasks 1 and 2, so its acknowledgement cannot advance yet.
+	// Task 3 completes before tasks 1 and 2, so the ack level can't advance yet.
 	finish(3)
 	write(tasks[3])
 	require.True(t, reader.atEnd)
@@ -146,7 +146,7 @@ func TestFairTaskReaderBacklogCountAfterOutOfOrderCompletion(t *testing.T) {
 	write(tasks[4])
 	require.False(t, reader.atEnd)
 	finish(1)
-	// Until the previously excluded acknowledgement advances, the estimate may be conservative.
+	// Until the previously excluded ack advances the ack level, the estimate may be conservative.
 	require.GreaterOrEqual(t, blm.db.getTotalApproximateBacklogCount(), int64(3))
 	finish(2)
 	// Tasks 4 and 5 are still pending. Task 3 must not be subtracted a second time.

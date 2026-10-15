@@ -3774,17 +3774,17 @@ func (s *matchingEngineSuite) concurrentPublishAndConsumeValidateBacklogCounter(
 	if s.fairness {
 		bm := ptqMgr.backlogMgr.(*fairBacklogManagerImpl)
 		bm.subqueueLock.Lock()
-		reader := bm.subqueues[subqueueZero]
+		tr := bm.subqueues[subqueueZero]
 		bm.subqueueLock.Unlock()
-		reader.lock.Lock()
-		defer reader.lock.Unlock()
+		tr.lock.Lock()
+		defer tr.lock.Unlock()
 
 		db.Lock()
 		backlogCount := db.subqueues[subqueueZero].ApproximateBacklogCount
 		ackLevel := fairLevelFromProto(db.subqueues[subqueueZero].FairAckLevel)
 		db.Unlock()
 		dbTasks := int64(s.taskManager.getTaskCountAbove(ptq, ackLevel))
-		completedTasks := reader.completedTaskCountLocked()
+		completedTasks := tr.completedTaskCountLocked()
 
 		// Completed tasks above the ack level may already be excluded from the estimate.
 		// Require enough backlog for the remaining dispatches, allowing a conservative overestimate.
