@@ -5,6 +5,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -173,4 +174,16 @@ func (t *TimeSkippingTransition) GetSkippedDuration() time.Duration {
 		return 0
 	}
 	return t.targetTime.Sub(t.CurrentTime)
+}
+
+func TimeSkippingFeatureFlagTurnedOn(
+	archetypeID chasm.ArchetypeID,
+	namespace string,
+	config *Config,
+) bool {
+	switch archetypeID {
+	case chasm.SchedulerArchetypeID:
+	default:
+		return false
+	}
 }

@@ -487,7 +487,7 @@ func testScheduleTimeSkippingWeekly(
 	opts := append(
 		scheduleCommonOpts(t),
 		testcore.WithDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true),
-		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerTimeSkipping, true),
+		testcore.WithDynamicConfig(dynamicconfig.CHASMSchedulerTimeSkippingEnabled, true),
 	)
 	s := newScheduleEnv(t, opts...)
 	ctx := chasmContextFactory(testcontext.For(t))
@@ -602,7 +602,7 @@ func (suite *ScheduleCHASMSuite) TestTimeSkippingDynamicConfigGate() {
 	t := suite.T()
 	s := newScheduleEnv(t, append(
 		scheduleCommonOpts(t),
-		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerTimeSkipping, false),
+		testcore.WithDynamicConfig(dynamicconfig.CHASMSchedulerTimeSkippingEnabled, false),
 	)...)
 	ctx := chasmContextFactory(testcontext.For(t))
 
@@ -633,7 +633,7 @@ func (suite *ScheduleCHASMSuite) TestTimeSkippingDynamicConfigGate() {
 	require.ErrorAs(t, err, &unimplemented)
 	require.ErrorContains(t, err, "Schedule time skipping is not enabled for the namespace")
 
-	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMSchedulerTimeSkipping, true)
+	s.OverrideDynamicConfig(dynamicconfig.CHASMSchedulerTimeSkippingEnabled, true)
 	patchSchedule(ctx, t, s, sid, patch)
 	describe, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
 		Namespace:  s.Namespace().String(),

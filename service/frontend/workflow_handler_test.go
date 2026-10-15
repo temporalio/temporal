@@ -4275,7 +4275,7 @@ func (s *WorkflowHandlerSuite) TestValidateWorkflowTimeSkippingConfig() {
 	const otherNamespace = "other-namespace"
 	maxSkipClient := dc.StaticClient{
 		dc.WorkflowTimeSkippingEnabled.Key(): true,
-		dc.WorkflowTimeSkippingMaxSkipPerSession.Key(): []dc.ConstrainedValue{
+		dc.TimeSkippingMaxSkipPerSession.Key(): []dc.ConstrainedValue{
 			{Value: 42}, // per-cell (constraint-less) value
 			{Constraints: dc.Constraints{Namespace: s.testNamespace.String()}, Value: 7}, // per-namespace override
 		},
@@ -4301,7 +4301,7 @@ func (s *WorkflowHandlerSuite) TestValidateWorkflowTimeSkippingConfig() {
 func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 	config := s.newConfig()
 	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
-	config.EnableCHASMSchedulerTimeSkipping = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.CHASMSchedulerTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 	s.Require().ErrorIs(
 		wh.validateAndPopulateScheduleTimeSkippingConfig(
@@ -4312,7 +4312,7 @@ func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 		errScheduleTimeSkippingNotEnabled,
 	)
 
-	config.EnableCHASMSchedulerTimeSkipping = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.CHASMSchedulerTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	wh = s.getWorkflowHandler(config)
 
 	testCases := []struct {
@@ -4361,7 +4361,7 @@ func (s *WorkflowHandlerSuite) TestCreatePatchSchedule_TimeSkippingRoutingValida
 		config.EnableCHASMSchedulerCreation = dc.GetBoolPropertyFnFilteredByNamespace(useV2)
 		config.CHASMSchedulerCreationRolloutPercent = dc.GetIntPropertyFnFilteredByNamespace(100)
 		config.EnableCHASMSchedulerRouting = dc.GetBoolPropertyFnFilteredByNamespace(useV2)
-		config.EnableCHASMSchedulerTimeSkipping = dc.GetBoolPropertyFnFilteredByNamespace(true)
+		config.CHASMSchedulerTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 		wh := s.getWorkflowHandler(config)
 
 		patch := &schedulepb.SchedulePatch{TimeSkippingConfig: timeSkippingConfig}
