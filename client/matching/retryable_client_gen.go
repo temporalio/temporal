@@ -356,6 +356,21 @@ func (c *retryableClient) GetWorkerVersioningRules(
 	return resp, err
 }
 
+func (c *retryableClient) GrantEagerDispatch(
+	ctx context.Context,
+	request *matchingservice.GrantEagerDispatchRequest,
+	opts ...grpc.CallOption,
+) (*matchingservice.GrantEagerDispatchResponse, error) {
+	var resp *matchingservice.GrantEagerDispatchResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.GrantEagerDispatch(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) ListNexusEndpoints(
 	ctx context.Context,
 	request *matchingservice.ListNexusEndpointsRequest,

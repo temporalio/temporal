@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -60,11 +61,12 @@ func (s *parentChildXDCTestSuite) TearDownSuite() {
 //	retry StartChild       | reissued initiation on the new branch    | old run terminated, new run open | initial standby | orphan is replaced atomically
 //	assert                 | ChildWorkflowExecutionStarted            | replacement is current           | initial standby | parent can make progress
 //
-// This scenario uses the default transition-history replication. Event checkpoints select an entire
-// replication task, and the delayed parent task remains unapplied through the assertions.
+// Legacy history replication keeps child Started and its first WFT in separate tasks, allowing the
+// target child to remain pristine. The delayed parent task stays unapplied through the assertions.
 func (s *parentChildXDCTestSuite) TestRecoversOrphanedChildAfterForceFailover() {
 	s.runParentChildScenario(parentChildScenario{
 		steps: []parentChildScenarioStep{
+			useLegacyHistoryReplication(),
 			enableOrphanedChildWorkflowReplacement(),
 			startParentWorkflow(),
 			applyReplicationThroughTaskContainingEvent(
@@ -83,6 +85,20 @@ func (s *parentChildXDCTestSuite) TestRecoversOrphanedChildAfterForceFailover() 
 				childWorkflow,
 				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 			),
+			{
+				name: "confirm the orphaned child is pristine before failover",
+				run: func(ctx context.Context, runtime *parentChildScenarioRuntime) error {
+					state, err := runtime.workflowMutableState(ctx, initialStandbyCluster, childWorkflow)
+					if err != nil {
+						return err
+					}
+					if state.GetExecutionState().GetState() != enumsspb.WORKFLOW_EXECUTION_STATE_CREATED ||
+						state.GetNextEventId() != common.FirstEventID+1 {
+						return fmt.Errorf("child is not pristine: state=%s, next event ID=%d", state.GetExecutionState().GetState(), state.GetNextEventId())
+					}
+					return nil
+				},
+			},
 			forceFailoverNamespaceTo(initialStandbyCluster),
 			completeParentWorkflowTaskWithStartChildCommand(),
 		},
@@ -681,6 +697,85 @@ func (s *parentChildXDCTestSuite) TestStandbyDiscardsChildCloseTaskWhenParentCom
 				initialStandbyCluster,
 				metrics.TaskTypeTransferStandbyTaskCloseExecution,
 			),
+		},
+	})
+}
+
+// TestStandbyCompletesChildCloseTaskWhenParentIsDeletedOnSource covers source parent deletion
+// while the standby child is waiting for its parent to record the child's completion.
+//
+//	                       | parent on standby          | child on standby | outcome
+//	-----------------------+----------------------------+------------------+------------------------------------------
+//	starts replicated      | RUNNING, child started     | RUNNING          | parent-child relationship exists
+//	child closes on source | still tracks running child | unchanged        | parent completion replication is delayed
+//	source parent deleted  | unchanged                  | unchanged        | source parent no longer exists
+//	child close arrives    | still tracks running child | COMPLETED        | local verification: WorkflowNotReady
+//	async parent resend    | unchanged                  | unchanged        | source NotFound is retained for retry
+//	next retry             | RUNNING                    | COMPLETED        | child CloseExecution is acknowledged
+//
+// Keep ChildWorkflowExecutionCompleted off the standby parent so ordinary replication cannot
+// satisfy verification. The one-hour discard delay ensures the ACK within the test timeout comes
+// from carrying source NotFound across async retries.
+func (s *parentChildXDCTestSuite) TestStandbyCompletesChildCloseTaskWhenParentIsDeletedOnSource() {
+	s.runParentChildScenario(parentChildScenario{
+		steps: []parentChildScenarioStep{
+			setStandbyClusterDelay(initialStandbyCluster, 0),
+			enableAsyncParentWorkflowResend(initialStandbyCluster),
+			setLocalParentVerificationGrace(initialStandbyCluster, 0),
+			setStandbyTaskDiscardDelay(initialStandbyCluster, enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION, time.Hour),
+			startParentWorkflow(),
+			applyReplicationThroughTaskContainingEvent(
+				initialStandbyCluster,
+				parentWorkflow,
+				enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			),
+			completeParentWorkflowTaskWithStartChildCommand(),
+			applyReplicationThroughTaskContainingEvent(
+				initialStandbyCluster,
+				childWorkflow,
+				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+			),
+			applyReplicationThroughTaskContainingEvent(
+				initialStandbyCluster,
+				parentWorkflow,
+				enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED,
+			),
+			completeChildWorkflowTask(),
+			delayReplicationAtTaskContainingEvent(
+				initialStandbyCluster,
+				parentWorkflow,
+				enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_COMPLETED,
+			),
+			deleteWorkflowOnCluster(initialActiveCluster, parentWorkflow),
+			applyReplicationThroughTaskContainingEvent(
+				initialStandbyCluster,
+				childWorkflow,
+				enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+			),
+			waitForHistoryVerificationFailureOnCluster(
+				initialStandbyCluster,
+				historyClientVerifyChildCompletion,
+				&serviceerror.WorkflowNotReady{},
+			),
+		},
+		expectations: []parentChildExpectation{
+			currentWorkflowHasStatusOnCluster(initialStandbyCluster, parentWorkflow, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING),
+			{
+				name: "parent workflow resend is attempted on the initial standby cluster",
+				check: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+					return runtime.requireCapturedMetric(initialStandbyCluster, metrics.ParentWorkflowResendAttempts.Name(), nil)
+				},
+			},
+			{
+				name: "child CloseExecution is acknowledged before the discard window",
+				check: func(_ context.Context, runtime *parentChildScenarioRuntime) error {
+					namespaceTag := metrics.NamespaceTag(runtime.namespace)
+					return runtime.requireCapturedMetric(initialStandbyCluster, metrics.TaskLatency.Name(), map[string]string{
+						metrics.OperationTagName: metrics.TaskTypeTransferStandbyTaskCloseExecution,
+						namespaceTag.Key:         namespaceTag.Value,
+					})
+				},
+			},
 		},
 	})
 }

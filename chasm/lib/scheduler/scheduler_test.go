@@ -113,6 +113,12 @@ func TestCreateScheduler_InitialPauseState(t *testing.T) {
 	}
 }
 
+func TestCreateScheduler_NoMigrationEvent(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+
+	require.Empty(t, sched.EventLog.Get(ctx).Events)
+}
+
 // TestListInfo_RecentActionsCapped verifies that the ScheduleListInfo memo
 // hard-caps RecentActions. recentActions() includes running starts, which
 // aren't bounded by completed-action retention, so without the cap the
@@ -310,8 +316,13 @@ func TestCreateSchedulerFromMigration(t *testing.T) {
 	lastResult := sched.LastCompletionResult.Get(ctx)
 	require.Equal(t, []byte("result-data"), lastResult.Success.Data)
 
+	events := sched.EventLog.Get(ctx).Events
+	require.Len(t, events, 1)
+	require.Equal(t, "created via migration from V1", events[0].Message)
+	require.NotNil(t, events[0].Time)
+
 	require.NoError(t, node.SetRootComponent(sched))
-	_, err = node.CloseTransaction()
+	_, err = node.CloseTransaction(context.Background(), true)
 	require.NoError(t, err)
 }
 
@@ -345,7 +356,7 @@ func TestUpdate_WithNilMemo(t *testing.T) {
 	visibility.MergeCustomMemo(ctx, map[string]*commonpb.Payload{
 		"existing": {Data: []byte("value")},
 	})
-	_, err := node.CloseTransaction()
+	_, err := node.CloseTransaction(context.Background(), true)
 	require.NoError(t, err)
 
 	// Update without memo (nil) should preserve existing memo.
@@ -374,7 +385,7 @@ func TestUpdate_MemoReplaceSemantics(t *testing.T) {
 		"A": {Data: []byte("1")},
 		"B": {Data: []byte("2")},
 	})
-	_, err := node.CloseTransaction()
+	_, err := node.CloseTransaction(context.Background(), true)
 	require.NoError(t, err)
 
 	// Update with only C: should fully replace memo (A and B are gone).
@@ -401,7 +412,7 @@ func TestUpdate_MemoReplaceSemantics(t *testing.T) {
 	protorequire.ProtoEqual(t, &commonpb.Payload{Data: []byte("3")}, memo["C"])
 
 	// Update with empty memo: should clear all memo fields.
-	_, err = node.CloseTransaction()
+	_, err = node.CloseTransaction(context.Background(), true)
 	require.NoError(t, err)
 	ctx = chasm.NewMutableContext(context.Background(), node)
 	_, err = sched.Update(ctx, &schedulerpb.UpdateScheduleRequest{
@@ -452,7 +463,7 @@ func TestCreateSchedulerFromMigration_EmptyState(t *testing.T) {
 	require.Empty(t, invoker.BufferedStarts)
 
 	require.NoError(t, node.SetRootComponent(sched))
-	_, err = node.CloseTransaction()
+	_, err = node.CloseTransaction(context.Background(), true)
 	require.NoError(t, err)
 }
 
@@ -482,7 +493,7 @@ func TestCreateSchedulerFromMigration_NoRunning(t *testing.T) {
 	sched, err := scheduler.CreateSchedulerFromMigration(ctx, req)
 	require.NoError(t, err)
 	require.NoError(t, infra.node.SetRootComponent(sched))
-	_, err = infra.node.CloseTransaction()
+	_, err = infra.node.CloseTransaction(context.Background(), true)
 	require.NoError(t, err)
 
 	hasGeneratorTask := false
@@ -819,7 +830,7 @@ func TestSearchAttributes_RoundTripThroughCloseTransaction(t *testing.T) {
 	sched.IdleCloseTime = timestamppb.New(time.Now().Add(7 * 24 * time.Hour))
 
 	require.NoError(t, node.SetRootComponent(sched))
-	_, err := node.CloseTransaction()
+	_, err := node.CloseTransaction(context.Background(), true)
 	require.NoError(t, err, "CloseTransaction should accept the scheduler search attributes")
 }
 

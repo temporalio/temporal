@@ -103,6 +103,9 @@ func Invoke(
 			versionCache,
 			reactivationSignaler,
 			uws.workflowLeaseCallback(ctx),
+			// allowDerivedRunID: false. The held lease would self-deadlock on terminate-existing with a derived run ID.
+			// TODO: support run-ID dedup for Update-with-Start and drop this parameter.
+			false,
 		)
 		if err != nil {
 			return nil, newMultiOpError(err, multiOpAbortedErr)

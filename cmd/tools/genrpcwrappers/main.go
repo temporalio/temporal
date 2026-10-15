@@ -4,9 +4,12 @@ import (
 	"cmp"
 	"flag"
 	"fmt"
+	"go/format"
 	"io"
 	"log"
+	"os"
 	"reflect"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -33,6 +36,20 @@ type (
 	fieldWithPath struct {
 		field *reflect.StructField
 		path  string
+	}
+
+	// loadBalancedMethod describes a matching client method that picks a partition with
+	// the load balancer (when the request is for a non-forwarded root partition) in
+	// addition to routing it to the owning host.
+	loadBalancedMethod struct {
+		// taskQueueType is the task queue type of the partition to route to. If empty,
+		// the request carries the type in a TaskQueuePartition proto.
+		taskQueueType string
+		// read picks the read partition, which may hold a lease that has to be released
+		// after the call, instead of the write partition.
+		read bool
+		// longPoll uses the long poll timeout instead of the regular one.
+		longPoll bool
 	}
 )
 
@@ -103,24 +120,19 @@ var (
 		// Nexus metrics are an exception since they use the information from the request.
 		"metricsClient.history.StartNexusOperation":  true,
 		"metricsClient.history.CancelNexusOperation": true,
-
-		// these need to pick a partition. too complicated.
-		"client.matching.AddActivityTask":       true,
-		"client.matching.AddWorkflowTask":       true,
-		"client.matching.PollActivityTaskQueue": true,
-		"client.matching.PollWorkflowTaskQueue": true,
-		"client.matching.QueryWorkflow":         true,
-		"client.matching.DispatchNexusTask":     true,
-		"client.matching.PollNexusTaskQueue":    true,
-
-		// these do forwarding stats. too complicated.
-		"metricsClient.matching.AddActivityTask":       true,
-		"metricsClient.matching.AddWorkflowTask":       true,
-		"metricsClient.matching.PollActivityTaskQueue": true,
-		"metricsClient.matching.PollWorkflowTaskQueue": true,
-		"metricsClient.matching.QueryWorkflow":         true,
-		"metricsClient.matching.DispatchNexusTask":     true,
-		"metricsClient.matching.PollNexusTaskQueue":    true,
+	}
+	// loadBalancedMethods are the matching methods that load balance across the
+	// partitions of a task queue instead of routing to one given partition. They get a
+	// different client wrapper (and a metric wrapper that emits forwarding stats).
+	loadBalancedMethods = map[string]loadBalancedMethod{
+		"matching.AddActivityTask":       {taskQueueType: "ACTIVITY"},
+		"matching.AddWorkflowTask":       {taskQueueType: "WORKFLOW"},
+		"matching.QueryWorkflow":         {taskQueueType: "WORKFLOW"},
+		"matching.DispatchNexusTask":     {taskQueueType: "NEXUS"},
+		"matching.PollActivityTaskQueue": {taskQueueType: "ACTIVITY", read: true, longPoll: true},
+		"matching.PollWorkflowTaskQueue": {taskQueueType: "WORKFLOW", read: true, longPoll: true},
+		"matching.PollNexusTaskQueue":    {taskQueueType: "NEXUS", read: true, longPoll: true},
+		"matching.GrantEagerDispatch":    {},
 	}
 	// Fields to ignore when looking for the routing fields in a request object.
 	ignoreField = map[string]bool{
@@ -139,6 +151,8 @@ var (
 		"VerifyChildExecutionCompletionRecordedRequest.ChildExecution": true,
 	}
 )
+
+var getterRegexp = regexp.MustCompile(`Get(\w+)\(\)`)
 
 var historyRoutingProtoExtension = func() protoreflect.ExtensionType {
 	ext, err := protoregistry.GlobalTypes.FindExtensionByName("temporal.server.api.historyservice.v1.routing")
@@ -410,9 +424,7 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 		tq = findOneNestedField(t, "TaskQueue", "request", 2)
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_WORKFLOW"}
 		nsID = findOneNestedField(t, "NamespaceId", "request", 1)
-	case "DispatchNexusTaskRequest",
-		"PollNexusTaskQueueRequest",
-		"RespondNexusTaskCompletedRequest",
+	case "RespondNexusTaskCompletedRequest",
 		"RespondNexusTaskFailedRequest":
 		tq = findOneNestedField(t, "TaskQueue", "request", 2)
 		tqt = fieldWithPath{path: "enumspb.TASK_QUEUE_TYPE_NEXUS"}
@@ -464,6 +476,172 @@ func makeGetMatchingClient(reqType reflect.Type) string {
 	panic("I don't know how to get a client from a " + t.String())
 }
 
+// makeLoadBalancedFields computes the template fields for a matching method that load
+// balances across the partitions of a task queue.
+func makeLoadBalancedFields(reqType reflect.Type, lb loadBalancedMethod, fields map[string]string) {
+	if lb.taskQueueType == "" {
+		makeTaskQueuePartitionLoadBalancedFields(reqType, lb, fields)
+		return
+	}
+	makeTaskQueueLoadBalancedFields(reqType, lb, fields)
+}
+
+func findForwardedSource(t reflect.Type) fieldWithPath {
+	// The source partition of a forwarded request lives either in a plain field on the
+	// request or inside its forward info. Some load-balanced requests have neither.
+	forwardedSource := tryFindOneNestedField(t, "ForwardedSource", "request", 1)
+	if !forwardedSource.found() {
+		if fi := tryFindOneNestedField(t, "ForwardInfo", "request", 1); fi.found() {
+			forwardedSource = fieldWithPath{path: fi.path + ".GetSourcePartition()"}
+		}
+	}
+	return forwardedSource
+}
+
+func makeTaskQueuePartitionLoadBalancedFields(reqType reflect.Type, lb loadBalancedMethod, fields map[string]string) {
+	if lb.read || lb.longPoll {
+		// nolint:forbidigo // Panic is intended here to stop codegen
+		panic("task queue partition load balancing does not currently support reads or long polls")
+	}
+	t := reqType.Elem() // we know it's a pointer
+	nsID := findOneNestedField(t, "NamespaceId", "request", 1)
+	forwardedSource := findForwardedSource(t)
+	tqp := findOneNestedField(t, "TaskQueuePartition", "request", 1)
+
+	notForwardedCondition := ""
+	if forwardedSource.found() {
+		notForwardedCondition = " && " + forwardedSource.path + ` == ""`
+		fields["ForwardingStats"] = fmt.Sprintf(
+			"c.emitForwardedSourceStatsForTaskQueueName(metricsHandler, %s, %s.GetTaskQueue())",
+			forwardedSource.path,
+			tqp.path,
+		)
+	} else {
+		fields["ForwardingStats"] = ""
+	}
+	fields["ResolvePartition"] = fmt.Sprintf(`p := tqid.PartitionFromPartitionProto(%s, %s)
+	if _, ok := p.(*tqid.NormalPartition); !ok {
+		return nil, serviceerror.NewInvalidArgument("load balanced requests only support normal task queue partitions")
+	}
+	loadBalance := p.SupportsPartitions() && p.IsRoot()%s`, tqp.path, nsID.path, notForwardedCondition)
+	fields["CopyRequest"] = makeCopyRequest(reqType, tqp.path)
+	fields["PickPartition"] = fmt.Sprintf(`targetPartition, _ := c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
+		p = targetPartition
+		%s.PartitionId = &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: int32(targetPartition.PartitionId())}`, tqp.path)
+}
+
+func makeTaskQueueLoadBalancedFields(reqType reflect.Type, lb loadBalancedMethod, fields map[string]string) {
+	t := reqType.Elem() // we know it's a pointer
+	nsID := findOneNestedField(t, "NamespaceId", "request", 1)
+	forwardedSource := findForwardedSource(t)
+	tq := findOneNestedField(t, "TaskQueue", "request", 2)
+
+	fields["TaskQueue"] = tq.path
+	fields["NamespaceId"] = nsID.path
+	fields["TaskQueueType"] = "enumspb.TASK_QUEUE_TYPE_" + lb.taskQueueType
+	fields["ForwardingStats"] = fmt.Sprintf("c.emitForwardedSourceStats(metricsHandler, %s, %s)", forwardedSource.path, tq.path)
+	fields["CopyRequest"] = makeCopyRequest(reqType, tq.path)
+	fields["ResolvePartition"] = fmt.Sprintf(`p, loadBalance := c.resolvePartition(
+		%s,
+		%s,
+		%s,
+		%s,
+	)`, tq.path, nsID.path, fields["TaskQueueType"], forwardedSource.path)
+
+	if lb.longPoll {
+		fields["LongPoll"] = "LongPoll"
+	}
+	if lb.read {
+		fields["PickPartition"] = fmt.Sprintf(`
+		token := c.loadBalancer.PickReadPartition(p.TaskQueue(), pc)
+		p = token.TQPartition
+		%s.Name = p.RpcName()
+		if release := token.Release; release != nil {
+		 defer release()
+		}`, tq.path)
+	} else {
+		fields["PickPartition"] = fmt.Sprintf(`
+		targetPartition, estimatedTasksAllPartitions := c.loadBalancer.PickWritePartition(p.TaskQueue(), pc)
+		p = targetPartition
+		%s.Name = targetPartition.RpcName()
+		ctx = appendEstimatedTasksAllPartitions(ctx, estimatedTasksAllPartitions)`, tq.path)
+	}
+}
+
+// makeCopyRequest returns code that replaces request with a copy, since picking a
+// partition rewrites the name of the task queue in it. Only the messages on the path to
+// the task queue are copied, field by field; everything else is shared with the original
+// request, which may be large.
+func makeCopyRequest(reqType reflect.Type, tqPath string) string {
+	// tqPath looks like "request.GetPollRequest().GetTaskQueue()", i.e. it names the
+	// chain of fields from the request down to the task queue.
+	var chain []string
+	for _, m := range getterRegexp.FindAllStringSubmatch(tqPath, -1) {
+		chain = append(chain, m[1])
+	}
+
+	var b strings.Builder
+	b.WriteString("// Copy the messages on the path to the task queue, since picking a partition\n")
+	b.WriteString("\t// rewrites its name. The rest is shared with the original request.\n")
+	b.WriteString("\trequest = ")
+	writeCopy(&b, reqType.Elem(), "request", chain)
+	return b.String()
+}
+
+// writeCopy writes a composite literal copying each field of t, recursing into the field
+// named by the head of chain. The output is not indented or aligned since the generated
+// file is gofmt-ed afterwards.
+func writeCopy(b *strings.Builder, t reflect.Type, path string, chain []string) {
+	fmt.Fprintf(b, "&%s{\n", goTypeName(t))
+	for f := range t.Fields() {
+		if !f.IsExported() {
+			continue // state, sizeCache, unknownFields
+		}
+		fmt.Fprintf(b, "%s: ", f.Name)
+		if len(chain) > 0 && f.Name == chain[0] {
+			if f.Type.Kind() != reflect.Pointer {
+				codegen.Fatalf("%s.%s is not a message", t, f.Name)
+			}
+			writeCopy(b, f.Type.Elem(), path+"."+f.Name, chain[1:])
+		} else {
+			fmt.Fprintf(b, "%s.%s", path, f.Name)
+		}
+		b.WriteString(",\n")
+	}
+	b.WriteString("}")
+}
+
+// pbPackage matches the api proto packages whose imports the linter requires to be
+// aliased: public ones as "<name>pb" and internal server ones as "<name>spb". Services
+// are the exception, they're imported unaliased. See .github/.golangci.yml.
+var pbPackage = regexp.MustCompile(`^go\.temporal\.io(/server)?/api/(\w+)/v1$`)
+
+// goTypeName returns how t is referred to in generated code.
+func goTypeName(t reflect.Type) string {
+	m := pbPackage.FindStringSubmatch(t.PkgPath())
+	if m == nil || strings.HasSuffix(m[2], "service") {
+		return t.String()
+	}
+	if m[1] == "" {
+		return m[2] + "pb." + t.Name()
+	}
+	return m[2] + "spb." + t.Name()
+}
+
+// verifyLoadBalancedMethods catches typos in the loadBalancedMethods table, which would
+// otherwise just generate a plain routing wrapper.
+func verifyLoadBalancedMethods(svc service) {
+	for key := range loadBalancedMethods {
+		name, ok := strings.CutPrefix(key, svc.name+".")
+		if !ok {
+			continue
+		}
+		if _, found := svc.clientType.Elem().MethodByName(name); !found {
+			codegen.Fatalf("%s service has no method %s", svc.name, name)
+		}
+	}
+}
+
 func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.Method, tmpl string) {
 	key := fmt.Sprintf("%s.%s.%s", impl, service.name, m.Name)
 	if ignoreMethod[key] {
@@ -498,7 +676,15 @@ func writeTemplatedMethod(w io.Writer, service service, impl string, m reflect.M
 	if stateSyncTimeoutContext[key] {
 		fields["WithLargeTimeout"] = "WithStateSyncTimeout"
 	}
-	if impl == "client" {
+	lb, isLoadBalanced := loadBalancedMethods[service.name+"."+m.Name]
+	if isLoadBalanced && (impl == "client" || impl == "metricsClient") {
+		makeLoadBalancedFields(reqType, lb, fields)
+		if impl == "client" {
+			tmpl = loadBalancedClientTemplate
+		} else {
+			tmpl = loadBalancedMetricClientTemplate
+		}
+	} else if impl == "client" {
 		if service.name == "history" {
 			routingOptions := historyRoutingOptions(reqType)
 			if routingOptions.Custom {
@@ -591,6 +777,62 @@ func (c *clientImpl) {{.Method}}(
 	return nil
 }
 
+// loadBalancedClientTemplate wraps a matching method that picks a partition with the
+// load balancer: the exported method resolves the partition and hands the call to the
+// unexported one, which may be retried by invokeWithPartitionCounts with fresh partition
+// counts.
+const loadBalancedClientTemplate = `
+func (c *clientImpl) {{.Method}}(
+	ctx context.Context,
+	request {{.RequestType}},
+	opts ...grpc.CallOption,
+) ({{.ResponseType}}, error) {
+	{{.ResolvePartition}}
+	return invokeWithPartitionCounts(ctx, c.logger, c.partitionCache, p, loadBalance, request, opts, c.do{{.Method}})
+}
+
+func (c *clientImpl) do{{.Method}}(
+	ctx context.Context,
+	p tqid.Partition,
+	loadBalance bool,
+	pc PartitionCounts,
+	request {{.RequestType}},
+	opts []grpc.CallOption,
+) ({{.ResponseType}}, error) {
+	if loadBalance {
+		{{.CopyRequest}}
+		{{.PickPartition}}
+	}
+	client, err := c.getClientForTaskQueuePartition(p)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.create{{or .LongPoll ""}}Context(ctx)
+	defer cancel()
+	return client.{{.Method}}(ctx, request, opts...)
+}
+`
+
+// loadBalancedMetricClientTemplate is the metric wrapper for a load balanced method: the
+// same as the regular one plus forwarding stats.
+const loadBalancedMetricClientTemplate = `
+func (c *metricClient) {{.Method}}(
+	ctx context.Context,
+	request {{.RequestType}},
+	opts ...grpc.CallOption,
+) (_ {{.ResponseType}}, retError error) {
+
+	metricsHandler, startTime := c.startMetricsRecording(ctx, "{{.MetricPrefix}}{{.Method}}")
+	defer func() {
+		c.finishMetricsRecording(metricsHandler, startTime, retError)
+	}()
+
+	{{.ForwardingStats}}
+
+	return c.client.{{.Method}}(ctx, request, opts...)
+}
+`
+
 func generateMatchingClient(w io.Writer, service service) error {
 	writeTemplatedCode(w, service, `// Code generated by cmd/tools/genrpcwrappers. DO NOT EDIT.
 
@@ -602,7 +844,11 @@ import (
 	"math/rand"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflowservice/v1"
 	"{{.ServicePackagePath}}"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/common/tqid"
 	"google.golang.org/grpc"
 )
@@ -692,6 +938,18 @@ func (c *retryableClient) {{.Method}}(
 	return nil
 }
 
+// generateToFormattedFile generates a file and then gofmts it, so that the templates
+// don't have to worry about indentation and alignment.
+func generateToFormattedFile(generator func(io.Writer, service) error, svc service, name string) {
+	filename := name + "_gen.go"
+	codegen.GenerateToFile(generator, svc, "", name)
+	src, err := os.ReadFile(filename)
+	codegen.FatalIfErr(err)
+	formatted, err := format.Source(src)
+	codegen.FatalIfErr(err)
+	codegen.FatalIfErr(os.WriteFile(filename, formatted, 0644))
+}
+
 func main() {
 	serviceFlag := flag.String("service", "", "which service to generate rpc client wrappers for")
 	flag.Parse()
@@ -701,8 +959,9 @@ func main() {
 		codegen.Fatalf("unknown service: %s", *serviceFlag)
 	}
 	svc := services[i]
+	verifyLoadBalancedMethods(svc)
 
-	codegen.GenerateToFile(svc.clientGenerator, svc, "", "client")
-	codegen.GenerateToFile(generateMetricClient, svc, "", "metric_client")
-	codegen.GenerateToFile(generateRetryableClient, svc, "", "retryable_client")
+	generateToFormattedFile(svc.clientGenerator, svc, "client")
+	generateToFormattedFile(generateMetricClient, svc, "metric_client")
+	generateToFormattedFile(generateRetryableClient, svc, "retryable_client")
 }

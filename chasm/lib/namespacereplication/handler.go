@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go.temporal.io/api/serviceerror"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/chasm"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 	"go.temporal.io/server/common/log"
@@ -113,8 +114,8 @@ func validateTriggerNamespaceMutationRequest(req *namespacereplicationpb.Trigger
 		return serviceerror.NewInvalidArgument("namespace_id must match mutation.namespace_detail.info.id")
 	}
 	switch req.GetMutation().GetOperation() {
-	case namespacereplicationpb.NAMESPACE_OPERATION_CREATE,
-		namespacereplicationpb.NAMESPACE_OPERATION_UPDATE:
+	case enumsspb.NAMESPACE_OPERATION_CREATE,
+		enumsspb.NAMESPACE_OPERATION_UPDATE:
 		return nil
 	default:
 		return serviceerror.NewInvalidArgument("mutation.operation must be create or update")

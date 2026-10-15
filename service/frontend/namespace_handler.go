@@ -1550,7 +1550,7 @@ func (d *namespaceHandler) triggerNamespaceMutation(
 		SystemNamespaceId: primitives.SystemNamespaceID,
 		BusinessId:        namespaceID + ":" + uuid.NewString(),
 		Mutation: &namespacereplicationpb.NamespaceMutation{
-			Operation:       toCHASMNamespaceOperation(operation),
+			Operation:       operation,
 			NamespaceDetail: detail,
 			ExpectedVersion: expectedVersion,
 			PeerCells: peerCellsFromClusters(
@@ -1562,18 +1562,6 @@ func (d *namespaceHandler) triggerNamespaceMutation(
 		},
 	})
 }
-
-func toCHASMNamespaceOperation(operation enumsspb.NamespaceOperation) namespacereplicationpb.NamespaceOperation {
-	switch operation {
-	case enumsspb.NAMESPACE_OPERATION_CREATE:
-		return namespacereplicationpb.NAMESPACE_OPERATION_CREATE
-	case enumsspb.NAMESPACE_OPERATION_UPDATE:
-		return namespacereplicationpb.NAMESPACE_OPERATION_UPDATE
-	default:
-		return namespacereplicationpb.NAMESPACE_OPERATION_UNSPECIFIED
-	}
-}
-
 func peerCellsFromClusters(currentCluster string, newClusters, previousClusters []string) []string {
 	seen := make(map[string]struct{}, len(newClusters)+len(previousClusters))
 	var peerCells []string

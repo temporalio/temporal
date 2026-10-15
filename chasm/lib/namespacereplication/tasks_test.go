@@ -314,7 +314,7 @@ func TestNamespaceDetailsEqualAfterPersistenceRead(t *testing.T) {
 // A successful local UPDATE commits and schedules one peer task per peer cell.
 func (env *nsreplTestEnv) mutationUpdate(peers ...string) *namespacereplicationpb.NamespaceMutation {
 	return &namespacereplicationpb.NamespaceMutation{
-		Operation:       namespacereplicationpb.NAMESPACE_OPERATION_UPDATE,
+		Operation:       enumsspb.NAMESPACE_OPERATION_UPDATE,
 		NamespaceDetail: testDetail(),
 		ExpectedVersion: 7,
 		PeerCells:       peers,
@@ -397,7 +397,7 @@ func TestApplyLocalTask_Execute_NoPeersCompletes(t *testing.T) {
 func TestApplyLocalTask_Execute_CreateCommit(t *testing.T) {
 	env := newNsreplTestEnv(t)
 	mutation := env.mutationUpdate("cellB")
-	mutation.Operation = namespacereplicationpb.NAMESPACE_OPERATION_CREATE
+	mutation.Operation = enumsspb.NAMESPACE_OPERATION_CREATE
 	ref := env.start(mutation, nil)
 
 	env.metadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -481,7 +481,7 @@ func TestApplyLocalTask_Execute_UpdateLateCommitRecoveredOnRetry(t *testing.T) {
 func TestApplyLocalTask_Execute_CreateRetryRecoversCommittedWrite(t *testing.T) {
 	env := newNsreplTestEnv(t)
 	mutation := env.mutationUpdate("cellB")
-	mutation.Operation = namespacereplicationpb.NAMESPACE_OPERATION_CREATE
+	mutation.Operation = enumsspb.NAMESPACE_OPERATION_CREATE
 	ref := env.start(mutation, nil)
 
 	env.metadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(
@@ -505,7 +505,7 @@ func TestApplyLocalTask_Execute_CreateRetryRecoversCommittedWrite(t *testing.T) 
 func TestApplyLocalTask_Execute_CreateLateCommitRecoveredOnRetry(t *testing.T) {
 	env := newNsreplTestEnv(t)
 	mutation := env.mutationUpdate("cellB")
-	mutation.Operation = namespacereplicationpb.NAMESPACE_OPERATION_CREATE
+	mutation.Operation = enumsspb.NAMESPACE_OPERATION_CREATE
 	ref := env.start(mutation, nil)
 
 	gomock.InOrder(
@@ -542,7 +542,7 @@ func TestApplyLocalTask_Execute_CreateLateCommitRecoveredOnRetry(t *testing.T) {
 func TestApplyLocalTask_Execute_CreateCollisionStillFails(t *testing.T) {
 	env := newNsreplTestEnv(t)
 	mutation := env.mutationUpdate("cellB")
-	mutation.Operation = namespacereplicationpb.NAMESPACE_OPERATION_CREATE
+	mutation.Operation = enumsspb.NAMESPACE_OPERATION_CREATE
 	ref := env.start(mutation, nil)
 
 	env.metadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(

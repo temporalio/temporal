@@ -309,8 +309,11 @@ func (e *stateMachineEnvironment) validateStateMachineRefWithoutTransitionHistor
 		return fmt.Errorf("%w: %w", serviceerror.NewInternal("node lookup failed"), err)
 	}
 
-	if node.InternalRepr().InitialVersionedTransition.NamespaceFailoverVersion !=
-		ref.StateMachineRef.MachineInitialVersionedTransition.NamespaceFailoverVersion {
+	// Skip the namespace failover version based check, when there is nothing to compare against.
+	// (e.g. During Nexus op completion, a HSM ref converted from a CHASM component ref which has no
+	// HSM versioned-transition equivalent).
+	if refFailoverVersion := ref.StateMachineRef.MachineInitialVersionedTransition.GetNamespaceFailoverVersion(); refFailoverVersion != 0 &&
+		node.InternalRepr().InitialVersionedTransition.NamespaceFailoverVersion != refFailoverVersion {
 		if potentialStaleState {
 			return fmt.Errorf("%w: state machine ref initial failover version mismatch", consts.ErrStaleState)
 		}
