@@ -48,6 +48,76 @@ classDiagram
 ```
 *Figure: A scheduler tree showing important state and tasks of the components. Not all state is shown here.*
 
+### Schedule Lifecycle
+
+A schedule has no persisted state enum. Its lifecycle state is *derived* from the tuple `(Sentinel, WorkflowMigration, Closed, IdleCloseTime, live task count)` — see `derivedState` in [`invariant_test.go`](https://github.com/temporalio/temporal/blob/main/chasm/lib/scheduler/invariant_test.go). `Scheduler.LifecycleState` itself is two-valued: `Completed` iff `Closed`.
+
+What holds the machine together is a single liveness invariant:
+
+> A schedule that is not `Closed` carries at least one live logical task.
+
+Every state below is therefore defined by *what is armed*, not by a stored flag. The re-arm decision happens in one place, `GeneratorTaskHandler.rearmTasks`, which has exactly three outcomes: arm the next generator tick, arm the idle task, or hold open with nothing armed.
+
+```mermaid
+stateDiagram-v2
+    state "Running" as RUNNING {
+        direction LR
+        [*] --> Buffered : generator tick
+        Buffered --> Started : execute — StartWorkflow
+        Started --> Completed : completion callback
+        Completed --> [*] : re-arms the generator
+    }
+    state "Paused" as PAUSED
+    state "Held open" as HELD
+    state "Idle" as IDLE
+    state "Closed" as CLOSED
+
+    [*] --> RUNNING : CreateSchedule
+
+    RUNNING --> PAUSED : pause
+    PAUSED --> RUNNING : unpause / update
+    PAUSED --> PAUSED : tick only
+    PAUSED --> HELD : no spec wakeup
+    HELD --> RUNNING : unpause / update
+
+    RUNNING --> IDLE : work exhausted
+    IDLE --> RUNNING : update / patch / backfill
+    IDLE --> CLOSED : idle timer (7d)
+    RUNNING --> CLOSED : delete / terminate
+
+    CLOSED --> [*]
+
+    note right of RUNNING
+        Invariant: while open,
+        a task is always armed.
+    end note
+
+    note right of HELD
+        The one exception:
+        nothing armed.
+    end note
+```
+*Figure: A schedule's lifecycle. States are derived rather than persisted; each is characterised by which task is armed. `Running` is expanded to show the per-action pipeline inside it.*
+
+* **Running** — a `GeneratorTask` is armed for the next spec time and re-arms itself on every fire. Nested inside it is the per-action pipeline: a tick buffers a `BufferedStart`, `InvokerProcessBufferTask` readies it, `InvokerExecuteTask` starts the workflow, and the Nexus completion callback closes the loop by recording the result and calling `Generate` again. The figure shows only the happy path; `ProcessBuffer` may instead drop a start (missed catchup window, or paused/limited) or defer it behind a running workflow per the overlap policy (`Attempt = -1`), in which case a predecessor's completion re-enables it. See [BufferedStart Lifecycle](#bufferedstart-lifecycle) for the full per-action state machine. That last edge is load-bearing — a completion that never arrives is one of the ways a schedule stops re-arming. `ALLOW_ALL` actions are the exception: they track no completion result and are recorded as start-only actions at start time.
+* **Paused** — still ticking. A paused fire advances the high water mark and buffers nothing, which keeps `FutureActionTimes` accurate; `isHeldOpen()` suppresses idle close so the schedule cannot expire out from under a customer who intends to resume. Occurrences inside the paused window are dropped, not deferred.
+* **Held open** — paused (or draining a backfill) *and* the spec offers no next wakeup, e.g. a paused manual-only schedule. Nothing is armed; only `Patch`, `Update` or a completing backfiller revives it. This is the sole legitimate taskless non-closed state.
+* **Idle** — the schedule has no more work but is deliberately kept open for `IdleTime` (default 7 days) so it stays describable and restartable. A `SchedulerIdleTask` is armed and `IdleCloseTime` is published as a search attribute. Exhausting a spec, passing `endTime`, or spending the last of `RemainingActions` all route through here — none of them close directly. See [Idle Task (Closing)](#idle-task-closing).
+* **Closed** — terminal. Reached from the idle timer, or from any open state via `DeleteSchedule` (which skips the idle window) or `Terminate`, or on completion of a migration to a V1 workflow.
+Two further states are excused from the liveness invariant by construction and are omitted from the figure. **Sentinels** are schedule-ID reservations for the V1 path with no `Generator`, `Invoker` or `Visibility` component, inert apart from a 15-minute idle task that closes them. **Migrating** schedules (`WorkflowMigration != nil`) are force-paused while a side-effect task hands ownership to a V1 workflow, and reject `Update`/`Patch`/`Delete` with `ErrMigrationPending`.
+
+None of the open states above is self-sustaining by accident: each one is held by a task, and losing that task without arming a replacement is the "stuck" failure mode behind repeated production incidents — open and unpaused with nothing armed, so the schedule neither re-arms nor closes. It is a bug class rather than a design state, which is why it is absent from the figure. The invariant check in [`invariant_test.go`](https://github.com/temporalio/temporal/blob/main/chasm/lib/scheduler/invariant_test.go) runs after every committed transaction in the package specifically to keep it unrepresentable in tests.
+
+The production invariants scanner watches for the same failure from the other side, one signal per open state:
+
+| State | Signal when its task never fired | Visibility predicate |
+| --- | --- | --- |
+| Running | `overdue_next_action_time` | `TemporalScheduleNextActionTime` is in the past |
+| Idle | `stuck_open` | `ScheduleIdleCloseTime` is well past due |
+| any open state, nothing armed | `unknown_state` | both attributes are null while open and unpaused |
+
+All three also require `TemporalSchedulePaused = false`, which is what keeps held-open schedules from reporting as anomalies.
+
 ### Generator (Automated Actions)
 
 The Generator component buffers automated actions according to the schedule's specification. This is driven through `GeneratorTask`, a timer task that fires, and re-schedules itself, on the schedule's interval until the schedule is complete. Generator is solely responsible for buffering automated actions, not driving those actions to execution; that work is handed off to the `Invoker`.

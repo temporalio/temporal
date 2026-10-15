@@ -146,6 +146,7 @@ func (g *GeneratorTaskHandler) Execute(
 	generator.UpdateFutureActionTimes(ctx, g.specBuilder)
 
 	g.rearmTasks(ctx, generator, scheduler, metricsHandler, tweakables.IdleTime, result.NextWakeupTime)
+	scheduler.PrepareVisibility(ctx)
 	return nil
 }
 

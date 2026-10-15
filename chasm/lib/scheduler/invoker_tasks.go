@@ -266,6 +266,7 @@ func (h *InvokerExecuteTaskHandler) Execute(
 			if droppedDuplicates > 0 {
 				h.recordDuplicateExecuteDrops(s, droppedDuplicates)
 			}
+			s.PrepareVisibility(ctx)
 			return nil, nil
 		},
 		nil,
@@ -514,6 +515,7 @@ func (h *InvokerProcessBufferTaskHandler) Execute(
 
 	// Update internal state and create new tasks.
 	invoker.recordProcessBufferResult(ctx, &result)
+	scheduler.PrepareVisibility(ctx)
 
 	return nil
 }
