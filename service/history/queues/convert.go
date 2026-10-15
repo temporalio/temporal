@@ -2,7 +2,9 @@ package queues
 
 import (
 	"fmt"
+	"slices"
 
+	"github.com/google/uuid"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/predicates"
@@ -34,11 +36,12 @@ func ToPersistenceQueueState(
 func FromPersistenceQueueState(
 	state *persistencespb.QueueState,
 ) *queueState {
+	table := newNamespaceIDTable(state.NamespaceIdTable)
 	readerScopes := make(map[int64][]Scope, len(state.ReaderStates))
 	for id, persistenceReaderState := range state.ReaderStates {
 		scopes := make([]Scope, 0, len(persistenceReaderState.Scopes))
 		for _, persistenceScope := range persistenceReaderState.Scopes {
-			scopes = append(scopes, FromPersistenceScope(persistenceScope))
+			scopes = append(scopes, FromPersistenceScope(persistenceScope, table))
 		}
 		readerScopes[id] = scopes
 	}
@@ -60,10 +63,11 @@ func ToPersistenceScope(
 
 func FromPersistenceScope(
 	scope *persistencespb.QueueSliceScope,
+	table *namespaceIDTable,
 ) Scope {
 	return NewScope(
 		FromPersistenceRange(scope.Range),
-		FromPersistencePredicate(scope.Predicate),
+		FromPersistencePredicate(scope.Predicate, table),
 	)
 }
 
@@ -131,6 +135,7 @@ func ToPersistencePredicate(
 
 func FromPersistencePredicate(
 	predicate *persistencespb.Predicate,
+	table *namespaceIDTable,
 ) tasks.Predicate {
 	switch predicate.GetPredicateType() {
 	case enumsspb.PREDICATE_TYPE_UNIVERSAL:
@@ -138,13 +143,13 @@ func FromPersistencePredicate(
 	case enumsspb.PREDICATE_TYPE_EMPTY:
 		return FromPersistenceEmptyPredicate(predicate.GetEmptyPredicateAttributes())
 	case enumsspb.PREDICATE_TYPE_AND:
-		return FromPersistenceAndPredicate(predicate.GetAndPredicateAttributes())
+		return FromPersistenceAndPredicate(predicate.GetAndPredicateAttributes(), table)
 	case enumsspb.PREDICATE_TYPE_OR:
-		return FromPersistenceOrPredicate(predicate.GetOrPredicateAttributes())
+		return FromPersistenceOrPredicate(predicate.GetOrPredicateAttributes(), table)
 	case enumsspb.PREDICATE_TYPE_NOT:
-		return FromPersistenceNotPredicate(predicate.GetNotPredicateAttributes())
+		return FromPersistenceNotPredicate(predicate.GetNotPredicateAttributes(), table)
 	case enumsspb.PREDICATE_TYPE_NAMESPACE_ID:
-		return FromPersistenceNamespaceIDPredicate(predicate.GetNamespaceIdPredicateAttributes())
+		return FromPersistenceNamespaceIDPredicate(predicate.GetNamespaceIdPredicateAttributes(), table)
 	case enumsspb.PREDICATE_TYPE_TASK_TYPE:
 		return FromPersistenceTaskTypePredicate(predicate.GetTaskTypePredicateAttributes())
 	case enumsspb.PREDICATE_TYPE_DESTINATION:
@@ -208,10 +213,11 @@ func ToPersistenceAndPredicate(
 
 func FromPersistenceAndPredicate(
 	attributes *persistencespb.AndPredicateAttributes,
+	table *namespaceIDTable,
 ) tasks.Predicate {
 	taskPredicates := make([]predicates.Predicate[tasks.Task], 0, len(attributes.Predicates))
 	for _, p := range attributes.Predicates {
-		taskPredicates = append(taskPredicates, FromPersistencePredicate(p))
+		taskPredicates = append(taskPredicates, FromPersistencePredicate(p, table))
 	}
 
 	return predicates.And(taskPredicates...)
@@ -237,10 +243,11 @@ func ToPersistenceOrPredicate(
 
 func FromPersistenceOrPredicate(
 	attributes *persistencespb.OrPredicateAttributes,
+	table *namespaceIDTable,
 ) tasks.Predicate {
 	taskPredicates := make([]predicates.Predicate[tasks.Task], 0, len(attributes.Predicates))
 	for _, p := range attributes.Predicates {
-		taskPredicates = append(taskPredicates, FromPersistencePredicate(p))
+		taskPredicates = append(taskPredicates, FromPersistencePredicate(p, table))
 	}
 
 	return predicates.Or(taskPredicates...)
@@ -261,8 +268,9 @@ func ToPersistenceNotPredicate(
 
 func FromPersistenceNotPredicate(
 	attributes *persistencespb.NotPredicateAttributes,
+	table *namespaceIDTable,
 ) tasks.Predicate {
-	return predicates.Not(FromPersistencePredicate(attributes.Predicate))
+	return predicates.Not(FromPersistencePredicate(attributes.Predicate, table))
 }
 
 func ToPersistenceNamespaceIDPredicate(
@@ -280,8 +288,34 @@ func ToPersistenceNamespaceIDPredicate(
 
 func FromPersistenceNamespaceIDPredicate(
 	attributes *persistencespb.NamespaceIdPredicateAttributes,
+	table *namespaceIDTable,
 ) tasks.Predicate {
-	return tasks.NewNamespacePredicate(attributes.NamespaceIds)
+	namespaceIDs := slices.Clone(attributes.NamespaceIds)
+	for _, index := range attributes.NamespaceIdIndexes {
+		if id, ok := table.resolve(index); ok {
+			namespaceIDs = append(namespaceIDs, id)
+		}
+	}
+	return tasks.NewNamespacePredicate(namespaceIDs)
+}
+
+type namespaceIDTable struct {
+	entries [][]byte
+}
+
+func newNamespaceIDTable(entries [][]byte) *namespaceIDTable {
+	return &namespaceIDTable{entries: entries}
+}
+
+func (t *namespaceIDTable) resolve(index int32) (string, bool) {
+	if t == nil || index < 0 || int(index) >= len(t.entries) {
+		return "", false
+	}
+	id, err := uuid.FromBytes(t.entries[index])
+	if err != nil {
+		return "", false
+	}
+	return id.String(), true
 }
 
 func ToPersistenceTaskTypePredicate(
