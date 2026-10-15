@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/namespace/nsregistry"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/mock/gomock"
 )
@@ -226,6 +227,14 @@ func (s *registryWatchSuite) waitForCallback(ch <-chan struct{}, description str
 	case <-time.After(30 * time.Second):
 		s.FailNow("Timed out waiting for callback: " + description)
 	}
+}
+
+func (s *registryWatchSuite) waitForRefreshLatencyMetrics(expectedCount int) {
+	s.T().Helper()
+	// Refresh latency is recorded after state change callbacks return.
+	await.Require(s.T().Context(), s.T(), func(t *await.T) {
+		require.Len(t, s.capture.SnapshotMetric(metrics.NamespaceRegistryRefreshLatency.Name()), expectedCount)
+	}, 30*time.Second, time.Millisecond)
 }
 
 // TestWatchEvents verifies the registry can start with a watch-enabled persistence
@@ -945,7 +954,7 @@ func (s *registryWatchSuite) TestWatchChannelCloses() {
 	snapshot := s.capture.Snapshot()
 	s.Len(snapshot[metrics.NamespaceRegistryWatchReconnections.Name()], 1)
 	// Verify refresh latency metric was recorded (initial + after reconnect).
-	s.Len(snapshot[metrics.NamespaceRegistryRefreshLatency.Name()], 2)
+	s.waitForRefreshLatencyMetrics(2)
 }
 
 // TestWatchEventWithError verifies that when a watch event contains an error, the registry reconnects and continues
@@ -1020,7 +1029,7 @@ func (s *registryWatchSuite) TestWatchEventWithError() {
 	snapshot := s.capture.Snapshot()
 	s.Len(snapshot[metrics.NamespaceRegistryWatchReconnections.Name()], 1)
 	// Verify refresh latency metric was recorded (initial + after reconnect).
-	s.Len(snapshot[metrics.NamespaceRegistryRefreshLatency.Name()], 2)
+	s.waitForRefreshLatencyMetrics(2)
 }
 
 // TestWatchEmptyInitialRefresh verifies the registry handles an empty initial
@@ -1223,7 +1232,7 @@ func (s *registryWatchSuite) TestWatchReconnectSucceedsAfterRetry() {
 	snapshot := s.capture.Snapshot()
 	s.Len(snapshot[metrics.NamespaceRegistryWatchReconnections.Name()], 1)
 	// Verify refresh latency metric was recorded (initial + after reconnect).
-	s.Len(snapshot[metrics.NamespaceRegistryRefreshLatency.Name()], 2)
+	s.waitForRefreshLatencyMetrics(2)
 }
 
 // TestWatchNamespaceDeletedDuringRefresh verifies that when a namespace is removed
@@ -1326,7 +1335,7 @@ func (s *registryWatchSuite) TestWatchNamespaceDeletedDuringRefresh() {
 	snapshot := s.capture.Snapshot()
 	s.Len(snapshot[metrics.NamespaceRegistryWatchReconnections.Name()], 1)
 	// Verify refresh latency metric was recorded (initial + after reconnect).
-	s.Len(snapshot[metrics.NamespaceRegistryRefreshLatency.Name()], 2)
+	s.waitForRefreshLatencyMetrics(2)
 }
 
 // TestWatchStop verifies the registry stops gracefully without panics.
@@ -1561,5 +1570,5 @@ func (s *registryWatchSuite) TestWatchProcessEventError() {
 	snapshot := s.capture.Snapshot()
 	s.Len(snapshot[metrics.NamespaceRegistryWatchReconnections.Name()], 1)
 	// Verify refresh latency metric was recorded (initial + after reconnect).
-	s.Len(snapshot[metrics.NamespaceRegistryRefreshLatency.Name()], 2)
+	s.waitForRefreshLatencyMetrics(2)
 }
