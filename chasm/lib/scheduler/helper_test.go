@@ -92,8 +92,11 @@ func defaultConfig() *scheduler.Config {
 	}
 }
 
-func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor) *scheduler.Library {
+func newTestLibrary(logger log.Logger, specProcessor scheduler.SpecProcessor, configs ...*scheduler.Config) *scheduler.Library {
 	config := defaultConfig()
+	if len(configs) > 0 {
+		config = configs[0]
+	}
 	specBuilder := newLegacySpecBuilder(0, 0)
 	invokerOpts := scheduler.InvokerTaskHandlerOptions{
 		Config:         config,
@@ -156,9 +159,12 @@ type testEnv struct {
 
 // testEnvConfig holds configuration options for testEnv.
 type testEnvConfig struct {
-	specProcessor  scheduler.SpecProcessor
-	withMockEngine bool
-	schedule       *schedulepb.Schedule
+	specProcessor                 scheduler.SpecProcessor
+	withMockEngine                bool
+	schedule                      *schedulepb.Schedule
+	visibilityCoalesceInterval    time.Duration
+	visibilityCoalesceIntervalFn  func() time.Duration
+	visibilityCoalescingEnabledFn func() bool
 }
 
 // testEnvOption is a functional option for configuring testEnv.
@@ -189,6 +195,24 @@ func withSchedule(schedule *schedulepb.Schedule) testEnvOption {
 	}
 }
 
+func withVisibilityCoalesceInterval(interval time.Duration) testEnvOption {
+	return func(c *testEnvConfig) {
+		c.visibilityCoalesceInterval = interval
+	}
+}
+
+func withVisibilityCoalesceIntervalFn(interval func() time.Duration) testEnvOption {
+	return func(c *testEnvConfig) {
+		c.visibilityCoalesceIntervalFn = interval
+	}
+}
+
+func withVisibilityCoalescingEnabledFn(enabled func() bool) testEnvOption {
+	return func(c *testEnvConfig) {
+		c.visibilityCoalescingEnabledFn = enabled
+	}
+}
+
 // expiredSchedule returns a schedule whose spec has already ended, so the
 // Generator finds no next wakeup and takes its idle branch. This is the shape
 // of a real schedule that has run to the end of its subscription window.
@@ -216,9 +240,12 @@ func newRealSpecProcessor(ctrl *gomock.Controller, logger log.Logger) scheduler.
 
 // engineTestConfig holds configuration options for newTestEngineContext.
 type engineTestConfig struct {
-	specProcessor scheduler.SpecProcessor
-	timeSource    *clock.EventTimeSource
-	engineOpts    []chasmtest.EngineOption
+	specProcessor                 scheduler.SpecProcessor
+	timeSource                    *clock.EventTimeSource
+	engineOpts                    []chasmtest.EngineOption
+	visibilityCoalesceInterval    time.Duration
+	visibilityCoalesceIntervalFn  func() time.Duration
+	visibilityCoalescingEnabledFn func() bool
 }
 
 // engineTestOption is a functional option for configuring newTestEngineContext.
@@ -238,6 +265,18 @@ func withEngineTimeSource(ts *clock.EventTimeSource) engineTestOption {
 	return func(c *engineTestConfig) {
 		c.timeSource = ts
 		c.engineOpts = append(c.engineOpts, chasmtest.WithTimeSource(ts))
+	}
+}
+
+func withEngineVisibilityCoalesceInterval(interval time.Duration) engineTestOption {
+	return func(c *engineTestConfig) {
+		c.visibilityCoalesceInterval = interval
+	}
+}
+
+func withEngineVisibilityCoalescingEnabledFn(enabled func() bool) engineTestOption {
+	return func(c *engineTestConfig) {
+		c.visibilityCoalescingEnabledFn = enabled
 	}
 }
 
@@ -275,7 +314,23 @@ func newTestEngineContextFromConfig(
 
 	registry := chasm.NewRegistry(logger)
 	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
-	require.NoError(t, registry.Register(newTestLibrary(logger, specProcessor)))
+	libraryConfig := defaultConfig()
+	if config.visibilityCoalesceIntervalFn != nil || config.visibilityCoalesceInterval > 0 || config.visibilityCoalescingEnabledFn != nil {
+		libraryConfig.Tweakables = func(string) scheduler.Tweakables {
+			tweakables := scheduler.DefaultTweakables
+			tweakables.EnableVisibilityCoalescing = true
+			if config.visibilityCoalescingEnabledFn != nil {
+				tweakables.EnableVisibilityCoalescing = config.visibilityCoalescingEnabledFn()
+			}
+			if config.visibilityCoalesceIntervalFn != nil {
+				tweakables.VisibilityCoalesceInterval = config.visibilityCoalesceIntervalFn()
+			} else if config.visibilityCoalesceInterval > 0 {
+				tweakables.VisibilityCoalesceInterval = config.visibilityCoalesceInterval
+			}
+			return tweakables
+		}
+	}
+	require.NoError(t, registry.Register(newTestLibrary(logger, specProcessor, libraryConfig)))
 
 	config.engineOpts = append(config.engineOpts, chasmtest.WithInvariantCheck(
 		func(t *testing.T, node *chasm.Node, root chasm.RootComponent) {
@@ -394,7 +449,23 @@ func newTestEnv(t *testing.T, opts ...testEnvOption) *testEnv {
 	if err := registry.Register(&chasm.CoreLibrary{}); err != nil {
 		t.Fatalf("failed to register core library: %v", err)
 	}
-	if err := registry.Register(newTestLibrary(logger, specProcessor)); err != nil {
+	libraryConfig := defaultConfig()
+	if config.visibilityCoalesceIntervalFn != nil || config.visibilityCoalesceInterval > 0 || config.visibilityCoalescingEnabledFn != nil {
+		libraryConfig.Tweakables = func(string) scheduler.Tweakables {
+			tweakables := scheduler.DefaultTweakables
+			tweakables.EnableVisibilityCoalescing = true
+			if config.visibilityCoalescingEnabledFn != nil {
+				tweakables.EnableVisibilityCoalescing = config.visibilityCoalescingEnabledFn()
+			}
+			if config.visibilityCoalesceIntervalFn != nil {
+				tweakables.VisibilityCoalesceInterval = config.visibilityCoalesceIntervalFn()
+			} else if config.visibilityCoalesceInterval > 0 {
+				tweakables.VisibilityCoalesceInterval = config.visibilityCoalesceInterval
+			}
+			return tweakables
+		}
+	}
+	if err := registry.Register(newTestLibrary(logger, specProcessor, libraryConfig)); err != nil {
 		t.Fatalf("failed to register scheduler library: %v", err)
 	}
 

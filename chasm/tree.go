@@ -1809,6 +1809,24 @@ func (n *Node) CloseTransaction(ctx context.Context, isActive bool) (NodesMutati
 		}
 	}
 
+	visibilityPrepared := false
+	if n.subtreeIsDirty {
+		rootComponent, err := n.Component(NewContext(context.TODO(), n), ComponentRef{})
+		if err != nil {
+			return NodesMutation{}, err
+		}
+		if preparer, ok := rootComponent.(VisibilityTransactionPreparer); ok {
+			visibilityPrepared = true
+			changed, err := preparer.PrepareVisibility(NewMutableContext(context.TODO(), n))
+			if err != nil {
+				return NodesMutation{}, err
+			}
+			if changed {
+				n.setValueState(valueStateNeedSerialize)
+			}
+		}
+	}
+
 	nextVersionedTransition := &persistencespb.VersionedTransition{
 		NamespaceFailoverVersion: n.backend.GetCurrentVersion(),
 		TransitionCount:          n.backend.NextTransitionCount(),
@@ -1823,6 +1841,11 @@ func (n *Node) CloseTransaction(ctx context.Context, isActive bool) (NodesMutati
 	if n.subtreeIsDirty {
 		if err := n.closeTransactionForceUpdateVisibility(immutableContext, rootLifecycleChanged); err != nil {
 			return NodesMutation{}, err
+		}
+		if visibilityPrepared {
+			if err := n.syncSubComponents(); err != nil {
+				return NodesMutation{}, err
+			}
 		}
 	}
 
