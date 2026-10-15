@@ -2,6 +2,7 @@ package matching
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -90,4 +91,60 @@ func TestFairTaskReaderBacklogCountWithPendingWrite(t *testing.T) {
 			require.EqualValues(t, 4, blm.db.getTotalApproximateBacklogCount())
 		})
 	}
+}
+
+func TestFairTaskReaderBacklogCountAfterOutOfOrderCompletion(t *testing.T) {
+	t.Parallel()
+
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+	config := defaultTestConfig()
+	config.GetTasksBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(3)
+	config.GetTasksReloadAt = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(0)
+	config.MaxTaskDeleteBatchSize = dynamicconfig.GetIntPropertyFnFilteredByTaskQueue(100)
+	config.TaskDeleteInterval = dynamicconfig.GetDurationPropertyFnFilteredByTaskQueue(time.Hour)
+	queue := newUnversionedRootQueueKey(namespaceID, "test-queue", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	pqMgr := NewMockphysicalTaskQueueManager(gomock.NewController(t))
+	pqMgr.EXPECT().AddSpooledTask(gomock.Any()).Return(nil).AnyTimes()
+	blm := &fairBacklogManagerImpl{
+		pqMgr:  pqMgr,
+		config: newTaskQueueConfig(queue.Partition().TaskQueue(), config, matchingTestNamespace),
+		db: &taskQueueDB{
+			subqueues: []*dbSubqueue{{SubqueueInfo: persistencespb.SubqueueInfo{ApproximateBacklogCount: 3}}},
+		},
+		logger:          logger,
+		throttledLogger: logger,
+		metricsHandler:  metrics.NoopMetricsHandler,
+	}
+	reader := newFairTaskReader(blm, subqueueZero, fairLevel{})
+	var tasks []*persistencespb.AllocatedTaskInfo
+	for id := int64(1); id <= 5; id++ {
+		tasks = append(tasks, &persistencespb.AllocatedTaskInfo{TaskPass: 1, TaskId: id, Data: &persistencespb.TaskInfo{}})
+	}
+	finish := func(id int64) {
+		t.Helper()
+		entry, ok := reader.outstandingTasks.Get(outstandingTask{level: fairLevel{pass: 1, id: id}})
+		require.True(t, ok)
+		require.NotNil(t, entry.task)
+		entry.task.finish(taskFinishResult{consumedToken: true})
+	}
+	write := func(task *persistencespb.AllocatedTaskInfo) {
+		reader.getAndPinAckLevel()
+		updateBacklogStatsForTest(blm.db, 1, time.Time{})
+		reader.wroteNewTasks([]*persistencespb.AllocatedTaskInfo{task})
+		reader.unpinAckLevel(nil)
+	}
+
+	reader.mergeTasks(tasks[:3], mergeReadToEnd)
+	// Task 3 completes before tasks 1 and 2, so its acknowledgement cannot advance yet.
+	finish(3)
+	write(tasks[3])
+	require.True(t, reader.atEnd)
+
+	// Another write exceeds the batch capacity, so subsequent acknowledgements use deltas.
+	write(tasks[4])
+	require.False(t, reader.atEnd)
+	finish(1)
+	finish(2)
+	// Tasks 4 and 5 are still pending. Task 3 must not be subtracted a second time.
+	require.EqualValues(t, 2, blm.db.getTotalApproximateBacklogCount())
 }

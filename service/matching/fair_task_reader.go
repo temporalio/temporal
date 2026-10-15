@@ -668,9 +668,11 @@ func (tr *fairTaskReader) getLevels() (readLevel, ackLevel fairLevel) {
 
 func (tr *fairTaskReader) knownCountLocked() int64 {
 	// Pending writes may have incremented the backlog count without being merged into
-	// outstandingTasks yet. Do not overwrite their increments with the loaded task count.
+	// outstandingTasks yet. Do not overwrite their increments with the reader's count.
 	if tr.atEnd && !tr.ackLevelPinnedLocked() {
-		return int64(tr.loadedTasks)
+		// Include completed entries until the ack level advances. If we trim the backlog
+		// before that happens, delta updates will still subtract those entries.
+		return int64(tr.outstandingTasks.Len())
 	}
 	return -1
 }

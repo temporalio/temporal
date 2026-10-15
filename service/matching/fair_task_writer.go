@@ -212,6 +212,12 @@ func (w *fairTaskWriter) getWriteBatch(reqs []*writeTaskRequest) []*writeTaskReq
 }
 
 func (w *fairTaskWriter) writeBatch(reqs []*writeTaskRequest) (retErr error) {
+	// Buffered appends can be selected after cancellation. Do not start another write
+	// after unloading, even if persistence would still accept the old range ID.
+	if err := w.backlogMgr.tqCtx.Err(); err != nil {
+		return err
+	}
+
 	bases, unpin := w.backlogMgr.getAndPinAckLevels()
 	defer func() { unpin(retErr) }()
 
