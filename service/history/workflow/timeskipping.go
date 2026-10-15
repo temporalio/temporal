@@ -569,6 +569,11 @@ func (ms *MutableStateImpl) RecordTimeSkippingTransition(transition *chasm.TimeS
 	if tsi == nil {
 		return
 	}
+	if transition.DisabledByFeatureFlag {
+		tsi.Config.Enabled = false
+		ms.timeSkippingInfoUpdated = true
+		return
+	}
 
 	skippedDuration := transition.GetSkippedDuration()
 	ms.executeTimeSkippingTransition(

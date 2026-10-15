@@ -111,6 +111,29 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_StartWorkflow_DCEnabled() {
 	s.Equal(startTime, ms.State.ExecutionInfo.GetExecutionTime().AsTime())
 }
 
+func (s *TimeSkippingTestSuite) TestTimeSkipping_FeatureDisabledAfterStart() {
+	env := testcore.NewEnv(s.T())
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true)
+	tv := testvars.New(s.T())
+	runID := s.startWorkflowWithTimeSkipping(env, tv, time.Hour)
+	s.True(s.getMutableState(env, tv.WorkflowID(), runID).State.ExecutionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled())
+
+	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, false)
+	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
+	_, err := poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+		return &workflowservice.RespondWorkflowTaskCompletedRequest{
+			Commands: []*commandpb.Command{scheduleActivityCmd(tv)},
+		}, nil
+	})
+	s.NoError(err)
+
+	tsi := s.getMutableState(env, tv.WorkflowID(), runID).State.ExecutionInfo.GetTimeSkippingInfo()
+	s.False(tsi.GetConfig().GetEnabled())
+	s.Zero(tsi.GetSessionSkipCount())
+	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
+	s.False(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED))
+}
+
 // TestTimeSkipping_SignalWithStart_DCEnabled verifies that SignalWithStartWorkflowExecution
 // with TimeSkippingConfig persists the config in mutable state when the feature flag is on.
 func (s *TimeSkippingTestSuite) TestTimeSkipping_SignalWithStart_DCEnabled() {
