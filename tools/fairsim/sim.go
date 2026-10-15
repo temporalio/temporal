@@ -106,18 +106,15 @@ func RunTool(args []string) error {
 	if err != nil {
 		return err
 	}
+	if *partitions <= 0 {
+		return fmt.Errorf("partitions must be positive, got %d", *partitions)
+	}
 
-	// Load counter params
-	var params counter.CounterParams
-	if *counterFile == "" {
-		params = counter.DefaultCounterParams
-	} else {
-		data, err := os.ReadFile(*counterFile)
-		if err != nil {
-			return fmt.Errorf("failed to load counter params: %w", err)
-		} else if err = json.Unmarshal(data, &params); err != nil {
-			return fmt.Errorf("failed to load counter params: %w", err)
-		}
+	params, err := loadCounterParams(*counterFile)
+	if err != nil {
+		return err
+	}
+	if *counterFile != "" {
 		fmt.Printf("Using counter params: %#v\n\n", params)
 	}
 
@@ -147,6 +144,22 @@ func RunTool(args []string) error {
 
 	sim.finish()
 	return nil
+}
+
+func loadCounterParams(path string) (counter.CounterParams, error) {
+	params := counter.DefaultCounterParams
+	if path == "" {
+		return params, nil
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return counter.CounterParams{}, fmt.Errorf("failed to load counter params: %w", err)
+	}
+	if err := json.Unmarshal(data, &params); err != nil {
+		return counter.CounterParams{}, fmt.Errorf("failed to load counter params: %w", err)
+	}
+	return params, nil
 }
 
 func newLatencyStats() *latencyStats {
