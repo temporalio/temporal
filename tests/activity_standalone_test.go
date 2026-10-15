@@ -222,18 +222,139 @@ func (s *standaloneActivityTestSuite) TestPrincipalAttributionIsPersistedAndDesc
 	})
 	require.NoError(t, err)
 	info := describeResp.GetInfo()
-	protorequire.ProtoEqual(t, &commonpb.Principal{
-		Type: principalType,
-		Name: startPrincipalName,
+	protorequire.ProtoEqual(t, &commonpb.ResolvedPrincipal{
+		Type:            principalType,
+		NameAtWriteTime: startPrincipalName,
 	}, info.GetStartedByPrincipal())
-	protorequire.ProtoEqual(t, &commonpb.Principal{
-		Type: principalType,
-		Name: respondPrincipalName,
+	protorequire.ProtoEqual(t, &commonpb.ResolvedPrincipal{
+		Type:            principalType,
+		NameAtWriteTime: respondPrincipalName,
 	}, info.GetClosedByPrincipal())
-	protorequire.ProtoEqual(t, &commonpb.Principal{
-		Type: principalType,
-		Name: respondPrincipalName,
+	protorequire.ProtoEqual(t, &commonpb.ResolvedPrincipal{
+		Type:            principalType,
+		NameAtWriteTime: respondPrincipalName,
 	}, info.GetLastWorkerPrincipal())
+}
+
+func (s *standaloneActivityTestSuite) TestLastWorkerAttributionSurvivesTerminationAndTimeout() {
+	const (
+		principalType           = "jwt"
+		startPrincipalName      = "client-subject"
+		workerPrincipalName     = "worker-subject"
+		terminatorPrincipalName = "terminator-subject"
+		workerIdentity          = "worker-identity"
+	)
+
+	env := s.newTestEnv(
+		testcore.WithDedicatedCluster(),
+		testcore.WithDynamicConfig(dynamicconfig.EnablePrincipalPropagation, true),
+	)
+	t := s.T()
+	env.SetOnGetClaims(func(*authorization.AuthInfo) (*authorization.Claims, error) {
+		return &authorization.Claims{
+			Subject:  "test-subject",
+			AuthType: principalType,
+			System:   authorization.RoleAdmin,
+		}, nil
+	})
+	env.SetOnAuthorize(func(_ context.Context, _ *authorization.Claims, target *authorization.CallTarget) (authorization.Result, error) {
+		principalName := startPrincipalName
+		switch target.APIName {
+		case "/temporal.api.workflowservice.v1.WorkflowService/PollActivityTaskQueue":
+			principalName = workerPrincipalName
+		case "/temporal.api.workflowservice.v1.WorkflowService/TerminateActivityExecution":
+			principalName = terminatorPrincipalName
+		default:
+		}
+		return authorization.Result{
+			Decision: authorization.DecisionAllow,
+			Principal: &commonpb.Principal{
+				Type: principalType,
+				Name: principalName,
+			},
+		}, nil
+	})
+
+	assertLastWorker := func(t *testing.T, activityID, runID string) *activitypb.ActivityExecutionInfo {
+		t.Helper()
+		describeResp, err := env.FrontendClient().DescribeActivityExecution(s.Context(), &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      runID,
+		})
+		require.NoError(t, err)
+		info := describeResp.GetInfo()
+		require.Equal(t, workerIdentity, info.GetLastWorkerIdentity())
+		protorequire.ProtoEqual(t, &commonpb.ResolvedPrincipal{
+			Type:            principalType,
+			NameAtWriteTime: workerPrincipalName,
+		}, info.GetLastWorkerPrincipal())
+		return info
+	}
+
+	t.Run("termination does not overwrite the last worker", func(t *testing.T) {
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		startResp := env.startAndValidateActivity(s.Context(), t, activityID, taskQueue)
+
+		pollTaskResp, err := env.FrontendClient().PollActivityTaskQueue(s.Context(), &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			},
+			Identity: workerIdentity,
+		})
+		require.NoError(t, err)
+		require.Equal(t, activityID, pollTaskResp.GetActivityId())
+
+		_, err = env.FrontendClient().TerminateActivityExecution(s.Context(), &workflowservice.TerminateActivityExecutionRequest{
+			Namespace:  env.Namespace().String(),
+			ActivityId: activityID,
+			RunId:      startResp.RunId,
+			Identity:   terminatorPrincipalName,
+		})
+		require.NoError(t, err)
+
+		info := assertLastWorker(t, activityID, startResp.RunId)
+		protorequire.ProtoEqual(t, &commonpb.ResolvedPrincipal{
+			Type:            principalType,
+			NameAtWriteTime: terminatorPrincipalName,
+		}, info.GetClosedByPrincipal())
+	})
+
+	t.Run("timeout does not overwrite the last worker", func(t *testing.T) {
+		timedOutCtx, cancel := context.WithTimeout(s.Context(), 30*time.Second)
+		defer cancel()
+
+		activityID := testcore.RandomizeStr(t.Name())
+		taskQueue := testcore.RandomizeStr(t.Name())
+		startResp, err := env.FrontendClient().StartActivityExecution(timedOutCtx, &workflowservice.StartActivityExecutionRequest{
+			Namespace:           env.Namespace().String(),
+			ActivityId:          activityID,
+			ActivityType:        env.Tv().ActivityType(),
+			Input:               defaultInput,
+			TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+			StartToCloseTimeout: durationpb.New(time.Second),
+			RetryPolicy:         &commonpb.RetryPolicy{MaximumAttempts: 1},
+			RequestId:           env.Tv().RequestID(),
+		})
+		require.NoError(t, err)
+
+		_, err = env.FrontendClient().PollActivityTaskQueue(timedOutCtx, &workflowservice.PollActivityTaskQueueRequest{
+			Namespace: env.Namespace().String(),
+			TaskQueue: &taskqueuepb.TaskQueue{
+				Name: taskQueue,
+				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+			},
+			Identity: workerIdentity,
+		})
+		require.NoError(t, err)
+		env.eventuallyTimedOut(timedOutCtx, t, activityID, startResp.RunId)
+
+		info := assertLastWorker(t, activityID, startResp.RunId)
+		require.Nil(t, info.GetClosedByPrincipal())
+	})
 }
 
 func (s *standaloneActivityTestSuite) TestIDReusePolicy() {
@@ -1428,9 +1549,9 @@ func (s *standaloneActivityTestSuite) TestEagerStartResponseAndNoRedelivery() {
 	require.Equal(t, temporal.SDKVersion, describe.GetInfo().GetSdkVersion())
 	require.True(t, describe.GetInfo().GetEagerExecutionAccepted())
 	require.Equal(t, defaultIdentity, describe.GetInfo().GetLastWorkerIdentity())
-	protorequire.ProtoEqual(t, &commonpb.Principal{
-		Type: principalType,
-		Name: principalName,
+	protorequire.ProtoEqual(t, &commonpb.ResolvedPrincipal{
+		Type:            principalType,
+		NameAtWriteTime: principalName,
 	}, describe.GetInfo().GetLastWorkerPrincipal())
 
 	retry, err := env.FrontendClient().StartActivityExecution(ctx, request)

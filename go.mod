@@ -225,4 +225,4 @@ require (
 
 tool golang.org/x/perf/cmd/benchstat
 
-replace go.temporal.io/api => github.com/wenlong-gu/api-go v1.63.7-0.20261014143111-f5942ce6cf53
+replace go.temporal.io/api => github.com/wenlong-gu/api-go v1.63.7-0.20261015152748-df36db998c32
