@@ -1024,6 +1024,13 @@ func (n *Node) syncSubComponents() error {
 		}
 	}
 
+	// Framework-owned children of the root are not backed by a component field, keep them explicitly.
+	if n.parent == nil {
+		for _, name := range reservedRootChildren {
+			childrenToKeep[name] = struct{}{}
+		}
+	}
+
 	err := n.deleteChildren(childrenToKeep)
 	n.setValueState(valueStateNeedSerialize)
 

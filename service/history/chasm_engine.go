@@ -58,6 +58,11 @@ type (
 
 	currentExecutionInfo struct {
 		createRequestID string
+		// lockedMutableState is the current run's mutable state, set only when the caller holds that
+		// run's lock (see currentExecutionInfoFromMutableState). Code that needs the run's state uses it
+		// instead of locking the run again, which would deadlock. Never set it from state read without
+		// the lock; leave it nil and the run is locked and loaded when needed.
+		lockedMutableState historyi.MutableState
 		*persistence.CurrentWorkflowConditionFailedError
 	}
 )
@@ -438,10 +443,12 @@ func (e *ChasmEngine) applyUpdateWithLease(
 		return nil, err
 	}
 
-	// Record the accepted request ID so a later reuse is deduplicated (see AttachChasmRequestID).
+	// Record the accepted request ID so a later reuse is deduplicated (see isRequestIDUsed).
 	// The dedup check itself runs earlier in updateComponent, before the lease work.
 	if requestID != "" {
-		mutableState.AttachChasmRequestID(requestID)
+		if err := e.recordRequestID(mutableState, chasmTree, requestID); err != nil {
+			return nil, err
+		}
 	}
 
 	// TODO: Support WithSpeculative() TransitionOption.
@@ -565,9 +572,16 @@ func (e *ChasmEngine) updateComponent(
 
 	// When a request ID has already been recorded, we know this is a retry of a successful call, so
 	// reject it as non-retryable (FailedPrecondition) without running updateFn or persisting.
-	if requestID != "" && executionLease.GetMutableState().HasRequestID(requestID) {
-		executionLease.GetReleaseFn()(nil)
-		return nil, chasm.ErrRequestIDAlreadyUsed
+	if requestID != "" {
+		used, err := e.isRequestIDUsed(shardContext.GetLogger(), executionLease.GetMutableState(), requestID)
+		if err != nil {
+			executionLease.GetReleaseFn()(err)
+			return nil, err
+		}
+		if used {
+			executionLease.GetReleaseFn()(nil)
+			return nil, chasm.ErrRequestIDAlreadyUsed
+		}
 	}
 
 	defer func() {
@@ -575,6 +589,44 @@ func (e *ChasmEngine) updateComponent(
 	}()
 
 	return e.applyUpdateWithLease(ctx, shardContext, executionLease, ref, updateFn, requestID)
+}
+
+// isRequestIDUsed reports whether requestID was already recorded for the execution. Request IDs are
+// recorded either in the CHASM tree's request IDs data node or, when
+// history.enableChasmRequestIDDataNode is off (and for IDs recorded before it was enabled), in the
+// execution state, so both are checked.
+func (e *ChasmEngine) isRequestIDUsed(
+	logger log.Logger,
+	mutableState historyi.MutableState,
+	requestID string,
+) (bool, error) {
+	if mutableState.HasRequestID(requestID) {
+		return true, nil
+	}
+	chasmTree, err := chasmTreeFromMutableState(logger, mutableState)
+	if err != nil {
+		return false, err
+	}
+	return chasmTree.HasRequestID(requestID)
+}
+
+// recordRequestID records an accepted request ID for UpdateComponent idempotency, in the CHASM tree's
+// request IDs data node when history.enableChasmRequestIDDataNode is on, otherwise in the execution state.
+func (e *ChasmEngine) recordRequestID(
+	mutableState historyi.MutableState,
+	chasmTree *chasm.Node,
+	requestID string,
+) error {
+	nsName := mutableState.GetNamespaceEntry().Name().String()
+	if !e.config.EnableChasmRequestIDDataNode(nsName) {
+		mutableState.AttachChasmRequestID(requestID)
+		return nil
+	}
+	return chasmTree.AttachRequestID(
+		requestID,
+		e.config.MaximumRequestIDsPerExecution(nsName),
+		e.config.RequestIDMaxAge(nsName),
+	)
 }
 
 // DeleteExecution deletes a CHASM execution. If the execution is still running on the active
@@ -997,11 +1049,14 @@ func (e *ChasmEngine) persistAsBrandNew(
 	}, true, nil
 }
 
+// currentExecutionInfoFromMutableState builds the current run's info from its mutable state. The caller
+// must hold the run's lock.
 func currentExecutionInfoFromMutableState(ms historyi.MutableState) currentExecutionInfo {
 	execState := ms.GetExecutionState()
 	state, status := ms.GetWorkflowStateStatus()
 	return currentExecutionInfo{
-		createRequestID: execState.GetCreateRequestId(),
+		createRequestID:    execState.GetCreateRequestId(),
+		lockedMutableState: ms,
 		CurrentWorkflowConditionFailedError: &persistence.CurrentWorkflowConditionFailedError{
 			RunID:            ms.GetWorkflowKey().RunID,
 			State:            state,
@@ -1019,17 +1074,18 @@ func (e *ChasmEngine) handleExecutionConflict(
 	currentRunInfo currentExecutionInfo,
 	options chasm.TransitionOptions,
 ) (chasm.StartExecutionResult, error) {
-	// Check if this a retried request using requestID.
-	if _, ok := currentRunInfo.RequestIDs[options.RequestID]; ok {
-		newExecutionParams.executionRef.RunID = currentRunInfo.RunID
-		serializedRef, err := newExecutionParams.executionRef.Serialize(e.registry)
-		if err != nil {
-			return chasm.StartExecutionResult{}, err
-		}
-		return chasm.StartExecutionResult{
-			ExecutionKey: newExecutionParams.executionRef.ExecutionKey,
-			ExecutionRef: serializedRef,
-		}, nil
+	retried, err := e.isRetriedStart(
+		ctx,
+		shardContext,
+		newExecutionParams.executionRef,
+		currentRunInfo,
+		options,
+	)
+	if err != nil {
+		return chasm.StartExecutionResult{}, err
+	}
+	if retried {
+		return e.existingExecutionResult(newExecutionParams, currentRunInfo.RunID)
 	}
 
 	// Verify failover version and make sure it won't go backwards even if the case of split brain.
@@ -1058,6 +1114,99 @@ func (e *ChasmEngine) handleExecutionConflict(
 			fmt.Sprintf("unexpected current run state when creating new execution: %v", currentRunInfo.State),
 		)
 	}
+}
+
+// isRetriedStart reports whether a start that conflicts with the current run is a retry of an earlier
+// start, identified by its request ID.
+//
+// The request ID is first checked on the current record. A start that was previously applied to the
+// current run through a follow-up UpdateComponent (see chasm.WithCheckExecutionRequestIDsOnConflict)
+// recorded its request ID on that run instead, so once the run is closed it is also checked there,
+// before the reuse policy can create a new run. A running current run needs no such check: the
+// conflict policy returns it, and the follow-up UpdateComponent rejects the reused request ID.
+func (e *ChasmEngine) isRetriedStart(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	executionRef chasm.ComponentRef,
+	currentRunInfo currentExecutionInfo,
+	options chasm.TransitionOptions,
+) (bool, error) {
+	if _, ok := currentRunInfo.RequestIDs[options.RequestID]; ok {
+		return true, nil
+	}
+
+	if !options.CheckExecutionRequestIDsOnConflict ||
+		options.RequestID == "" ||
+		currentRunInfo.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		return false, nil
+	}
+	return e.isRequestIDUsedOnRun(
+		ctx,
+		shardContext,
+		executionRef,
+		currentRunInfo.RunID,
+		currentRunInfo.lockedMutableState,
+		options.RequestID,
+	)
+}
+
+// existingExecutionResult returns the result of a start that resolves to the existing run runID.
+func (e *ChasmEngine) existingExecutionResult(
+	newExecutionParams newExecutionParams,
+	runID string,
+) (chasm.StartExecutionResult, error) {
+	existingExecutionRef := newExecutionParams.executionRef
+	existingExecutionRef.RunID = runID
+	serializedRef, err := existingExecutionRef.Serialize(e.registry)
+	if err != nil {
+		return chasm.StartExecutionResult{}, err
+	}
+	return chasm.StartExecutionResult{
+		ExecutionKey: existingExecutionRef.ExecutionKey,
+		ExecutionRef: serializedRef,
+	}, nil
+}
+
+// isRequestIDUsedOnRun reports whether requestID was recorded on run runID of the execution. It uses
+// runMutableState when the caller already holds that run's lock (the lock is not reentrant), and
+// otherwise locks and loads the run for the duration of the check.
+func (e *ChasmEngine) isRequestIDUsedOnRun(
+	ctx context.Context,
+	shardContext historyi.ShardContext,
+	executionRef chasm.ComponentRef,
+	runID string,
+	runMutableState historyi.MutableState,
+	requestID string,
+) (_ bool, retErr error) {
+	if runMutableState == nil {
+		archetypeID, err := executionRef.ArchetypeID(e.registry)
+		if err != nil {
+			return false, err
+		}
+		executionContext, release, err := e.executionCache.GetOrCreateChasmExecution(
+			ctx,
+			shardContext,
+			namespace.ID(executionRef.NamespaceID),
+			&commonpb.WorkflowExecution{
+				WorkflowId: executionRef.BusinessID,
+				RunId:      runID,
+			},
+			archetypeID,
+			locks.PriorityHigh,
+		)
+		if err != nil {
+			return false, err
+		}
+		defer func() {
+			release(retErr)
+		}()
+
+		runMutableState, err = executionContext.LoadMutableState(ctx, shardContext)
+		if err != nil {
+			return false, err
+		}
+	}
+	return e.isRequestIDUsed(shardContext.GetLogger(), runMutableState, requestID)
 }
 
 func (e *ChasmEngine) handleConflictPolicy(

@@ -109,11 +109,12 @@ const (
 )
 
 type TransitionOptions struct {
-	ReusePolicy      BusinessIDReusePolicy
-	ConflictPolicy   BusinessIDConflictPolicy
-	ConsistencyLevel RefConsistencyLevel
-	RequestID        string
-	Speculative      bool
+	ReusePolicy                        BusinessIDReusePolicy
+	ConflictPolicy                     BusinessIDConflictPolicy
+	ConsistencyLevel                   RefConsistencyLevel
+	RequestID                          string
+	Speculative                        bool
+	CheckExecutionRequestIDsOnConflict bool
 }
 
 type TransitionOption func(*TransitionOptions)
@@ -201,6 +202,22 @@ func WithRequestID(
 ) TransitionOption {
 	return func(opts *TransitionOptions) {
 		opts.RequestID = requestID
+	}
+}
+
+// WithCheckExecutionRequestIDsOnConflict makes a start that conflicts with a closed execution also check
+// the request IDs recorded by UpdateComponent on that execution (see [WithRequestID]), not only the ones
+// recorded on the current record. If the start's request ID is found, the existing execution is returned
+// instead of applying the [BusinessIDReusePolicy].
+//
+// Use it when a start may have previously been applied to an existing execution through a follow-up
+// UpdateComponent with the same request ID (for example, attaching callbacks on conflict), so that a
+// retry of that start after the execution closed doesn't create a new execution. The check loads the
+// existing execution, so it is only done when the existing execution is closed.
+// This option only applies to StartExecution() and UpdateWithStartExecution().
+func WithCheckExecutionRequestIDsOnConflict() TransitionOption {
+	return func(opts *TransitionOptions) {
+		opts.CheckExecutionRequestIDsOnConflict = true
 	}
 }
 

@@ -76,6 +76,23 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 		return nil, err
 	}
 
+	cbs := frontendReq.GetCompletionCallbacks()
+	links := frontendReq.GetLinks()
+	onConflict := frontendReq.GetOnConflictOptions()
+	attachCallbacks := onConflict.GetAttachCompletionCallbacks() && len(cbs) > 0
+	attachLinks := onConflict.GetAttachLinks() && len(links) > 0
+
+	startOpts := []chasm.TransitionOption{
+		chasm.WithRequestID(frontendReq.GetRequestId()),
+		chasm.WithBusinessIDPolicy(reusePolicy, conflictPolicy),
+	}
+	if attachCallbacks || attachLinks {
+		// A conflicting start attaches to the existing activity through UpdateComponent below, which records
+		// the request ID on that activity. Have a retry after the activity closed find it there, instead of
+		// starting a new activity.
+		startOpts = append(startOpts, chasm.WithCheckExecutionRequestIDsOnConflict())
+	}
+
 	maxCallbacks := h.config.MaxCallbacksPerExecution(frontendReq.GetNamespace())
 	// TODO: Reconcile the Matching grant when the subsequent start does not create an eager task.
 	if frontendReq.GetRequestEagerExecution() &&
@@ -101,8 +118,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			return newActivity, nil
 		},
 		frontendReq,
-		chasm.WithRequestID(frontendReq.GetRequestId()),
-		chasm.WithBusinessIDPolicy(reusePolicy, conflictPolicy),
+		startOpts...,
 	)
 
 	if err != nil {
@@ -137,11 +153,6 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 
 	// Apply on_conflict_options to an existing activity.
 	// TODO: Use chasm.UpdateWithStartExecution to avoid a second transaction once the engine supports BusinessIDConflictPolicyFail in the updateFn path.
-	cbs := frontendReq.GetCompletionCallbacks()
-	links := frontendReq.GetLinks()
-	onConflict := frontendReq.GetOnConflictOptions()
-	attachCallbacks := onConflict.GetAttachCompletionCallbacks() && len(cbs) > 0
-	attachLinks := onConflict.GetAttachLinks() && len(links) > 0
 	if !result.Created && (attachCallbacks || attachLinks) {
 		requestID := frontendReq.GetRequestId()
 		ref := chasm.NewComponentRef[*Activity](result.ExecutionKey)

@@ -2700,6 +2700,14 @@ execution for UpdateComponent idempotency; the oldest are swept beyond this limi
 		`RequestIDMaxAge is the maximum age of a CHASM-attached request ID retained per execution for
 UpdateComponent idempotency. Set to 0 to disable age-based sweeping.`,
 	)
+	EnableChasmRequestIDDataNode = NewNamespaceBoolSetting(
+		"history.enableChasmRequestIDDataNode",
+		false,
+		`EnableChasmRequestIDDataNode records request IDs accepted by CHASM UpdateComponent in a framework-owned
+data node of the CHASM tree instead of the execution state, so they are only written when a request ID is added.
+Request IDs are always checked in both places. Only enable once all history hosts run a version that keeps the
+data node.`,
+	)
 	ShardUpdateMinInterval = NewGlobalDurationSetting(
 		"history.shardUpdateMinInterval",
 		5*time.Minute,

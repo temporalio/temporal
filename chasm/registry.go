@@ -293,7 +293,29 @@ func (r *Registry) validate(rc *RegistrableComponent) error {
 	if err := r.validateName(rc.componentType); err != nil {
 		return err
 	}
+	if err := validateFieldNames(rc); err != nil {
+		return err
+	}
 	return r.validateVisibilityBusinessIDAlias(rc)
+}
+
+// validateFieldNames rejects component fields whose node name uses the prefix reserved for
+// framework-owned nodes.
+func validateFieldNames(rc *RegistrableComponent) error {
+	componentT := rc.goType
+	if componentT.Kind() == reflect.Pointer {
+		componentT = componentT.Elem()
+	}
+	if componentT.Kind() != reflect.Struct {
+		return nil
+	}
+	for field := range componentT.Fields() {
+		if name := fieldName(field); strings.HasPrefix(name, reservedNodeNamePrefix) {
+			return fmt.Errorf("component %s field %s uses reserved name %q: names starting with %q are reserved for the CHASM framework",
+				rc.componentType, field.Name, name, reservedNodeNamePrefix)
+		}
+	}
+	return nil
 }
 
 func (r *Registry) registerTask(
