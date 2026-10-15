@@ -28,6 +28,15 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
+type contextWithTimeSkippingInfo struct {
+	chasm.Context
+	info *commonpb.TimeSkippingInfo
+}
+
+func (c contextWithTimeSkippingInfo) GetTimeSkippingInfo() *commonpb.TimeSkippingInfo {
+	return c.info
+}
+
 func TestListInfo(t *testing.T) {
 	scheduler, ctx, _ := setupSchedulerForTest(t)
 
@@ -117,6 +126,186 @@ func TestCreateScheduler_NoMigrationEvent(t *testing.T) {
 	sched, ctx, _ := setupSchedulerForTest(t)
 
 	require.Empty(t, sched.EventLog.Get(ctx).Events)
+}
+
+func TestTimeSkippingConfigWiring(t *testing.T) {
+	ctx := &chasm.MockMutableContext{}
+	initialConfig := &commonpb.TimeSkippingConfig{
+		Enabled: true,
+		FastForwardConfig: &commonpb.FastForwardConfig{
+			Id:       "initial",
+			Duration: durationpb.New(5 * time.Hour),
+		},
+	}
+	input := defaultSchedule()
+	input.Policies.OverlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
+
+	sched, err := scheduler.NewScheduler(ctx, namespace, namespaceID, scheduleID, input, &schedulepb.SchedulePatch{TimeSkippingConfig: initialConfig})
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, initialConfig, ctx.TimeSkippingConfig)
+
+	updatedConfig := &commonpb.TimeSkippingConfig{
+		Enabled: true,
+		FastForwardConfig: &commonpb.FastForwardConfig{
+			Id:       "updated",
+			Duration: durationpb.New(6 * time.Hour),
+		},
+	}
+	updated := defaultSchedule()
+	updated.Policies.OverlapPolicy = enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL
+	_, err = sched.Update(ctx, &schedulerpb.UpdateScheduleRequest{
+		FrontendRequest: &workflowservice.UpdateScheduleRequest{Schedule: updated},
+	})
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, initialConfig, ctx.TimeSkippingConfig)
+
+	_, err = sched.Patch(ctx, &schedulerpb.PatchScheduleRequest{
+		FrontendRequest: &workflowservice.PatchScheduleRequest{
+			Patch: &schedulepb.SchedulePatch{TimeSkippingConfig: updatedConfig},
+		},
+	})
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, updatedConfig, ctx.TimeSkippingConfig)
+
+	_, err = sched.Patch(ctx, &schedulerpb.PatchScheduleRequest{
+		FrontendRequest: &workflowservice.PatchScheduleRequest{Patch: &schedulepb.SchedulePatch{}},
+	})
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, updatedConfig, ctx.TimeSkippingConfig)
+
+	_, err = sched.Update(ctx, &schedulerpb.UpdateScheduleRequest{
+		FrontendRequest: &workflowservice.UpdateScheduleRequest{Schedule: updated},
+	})
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, updatedConfig, ctx.TimeSkippingConfig)
+}
+
+func TestIsExecutionSkippable(t *testing.T) {
+	markGeneratorReady := func(sched *scheduler.Scheduler, ctx chasm.MutableContext) {
+		sched.Generator.Get(ctx).LastProcessedTime = timestamppb.New(ctx.Now(sched))
+	}
+
+	t.Run("generator has not processed initial configuration", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+		sched.Generator.Get(ctx).LastProcessedTime = nil
+		require.Nil(t, sched.Generator.Get(ctx).GetLastProcessedTime())
+		require.False(t, sched.IsExecutionSkippable(ctx))
+	})
+
+	t.Run("generator has not processed latest update", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+		lastProcessedTime := ctx.Now(sched)
+		sched.Generator.Get(ctx).LastProcessedTime = timestamppb.New(lastProcessedTime)
+		sched.Info.UpdateTime = timestamppb.New(lastProcessedTime.Add(time.Second))
+		require.False(t, sched.IsExecutionSkippable(ctx))
+	})
+
+	t.Run("idle", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+		markGeneratorReady(sched, ctx)
+		require.True(t, sched.IsExecutionSkippable(ctx))
+	})
+
+	for _, policy := range []enumspb.ScheduleOverlapPolicy{
+		enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED,
+		enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+		enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+		enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ALL,
+		enumspb.SCHEDULE_OVERLAP_POLICY_CANCEL_OTHER,
+		enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER,
+	} {
+		t.Run("running workflow blocks scheduler time/"+policy.String(), func(t *testing.T) {
+			sched, ctx, _ := setupSchedulerForTest(t)
+			markGeneratorReady(sched, ctx)
+			sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{{
+				RequestId: "running", RunId: "run-id", OverlapPolicy: policy,
+			}}
+			require.False(t, sched.IsExecutionSkippable(ctx))
+		})
+	}
+
+	t.Run("retained completed workflow does not block scheduler time", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+		markGeneratorReady(sched, ctx)
+		sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{
+			{RequestId: "completed", RunId: "completed-run-id", Completed: &schedulespb.CompletedResult{}},
+		}
+		require.True(t, sched.IsExecutionSkippable(ctx))
+	})
+
+	t.Run("incomplete entry blocks alongside retained completed entries", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+		markGeneratorReady(sched, ctx)
+		sched.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{
+			{RequestId: "completed", RunId: "completed-run-id", Completed: &schedulespb.CompletedResult{}},
+			{RequestId: "pending"},
+		}
+		require.False(t, sched.IsExecutionSkippable(ctx))
+	})
+
+	t.Run("allow all preserves start-only lifecycle", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+		markGeneratorReady(sched, ctx)
+		startTime := timestamppb.New(ctx.Now(sched))
+		invoker := sched.Invoker.Get(ctx)
+		invoker.BufferedStarts = []*schedulespb.BufferedStart{{
+			RequestId:     "allow-all",
+			OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL,
+		}}
+		require.False(t, sched.IsExecutionSkippable(ctx))
+
+		_, _, startOnlyActions := invoker.RecordExecuteResult(ctx, []*schedulespb.BufferedStart{{
+			RequestId: "allow-all",
+			RunId:     "run-id",
+			StartTime: startTime,
+		}}, nil)
+		sched.RecordStartOnlyActions(ctx, startOnlyActions)
+
+		require.Empty(t, invoker.GetBufferedStarts())
+		require.Len(t, sched.Info.GetRecentActions(), 1)
+		require.True(t, sched.IsExecutionSkippable(ctx))
+	})
+
+	t.Run("completed backfill stops blocking", func(t *testing.T) {
+		sched, ctx, _ := setupSchedulerForTest(t)
+		markGeneratorReady(sched, ctx)
+		sched.Backfillers["pending"] = chasm.NewComponentField(ctx, &scheduler.Backfiller{})
+		require.False(t, sched.IsExecutionSkippable(ctx))
+		delete(sched.Backfillers, "pending")
+		require.True(t, sched.IsExecutionSkippable(ctx))
+	})
+
+	tests := []struct {
+		name  string
+		block func(*scheduler.Scheduler, chasm.MutableContext)
+	}{
+		{name: "paused", block: func(s *scheduler.Scheduler, _ chasm.MutableContext) { s.Schedule.State.Paused = true }},
+		{name: "sentinel", block: func(s *scheduler.Scheduler, _ chasm.MutableContext) { s.Sentinel = true }},
+		{name: "closed", block: func(s *scheduler.Scheduler, _ chasm.MutableContext) { s.Closed = true }},
+		{name: "migration", block: func(s *scheduler.Scheduler, _ chasm.MutableContext) {
+			s.WorkflowMigration = &schedulerpb.WorkflowMigrationState{}
+		}},
+		{name: "backfill", block: func(s *scheduler.Scheduler, ctx chasm.MutableContext) {
+			s.Backfillers["pending"] = chasm.NewComponentField(ctx, &scheduler.Backfiller{})
+		}},
+		{name: "pending start", block: func(s *scheduler.Scheduler, ctx chasm.MutableContext) {
+			s.Invoker.Get(ctx).BufferedStarts = []*schedulespb.BufferedStart{{RequestId: "pending"}}
+		}},
+		{name: "cancel", block: func(s *scheduler.Scheduler, ctx chasm.MutableContext) {
+			s.Invoker.Get(ctx).CancelWorkflows = []*commonpb.WorkflowExecution{{WorkflowId: "wf"}}
+		}},
+		{name: "terminate", block: func(s *scheduler.Scheduler, ctx chasm.MutableContext) {
+			s.Invoker.Get(ctx).TerminateWorkflows = []*commonpb.WorkflowExecution{{WorkflowId: "wf"}}
+		}},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			sched, ctx, _ := setupSchedulerForTest(t)
+			markGeneratorReady(sched, ctx)
+			tc.block(sched, ctx)
+			require.False(t, sched.IsExecutionSkippable(ctx))
+		})
+	}
 }
 
 // TestListInfo_RecentActionsCapped verifies that the ScheduleListInfo memo
@@ -322,7 +511,7 @@ func TestCreateSchedulerFromMigration(t *testing.T) {
 	require.NotNil(t, events[0].Time)
 
 	require.NoError(t, node.SetRootComponent(sched))
-	_, err = node.CloseTransaction()
+	_, err = node.CloseTransaction(context.Background(), true)
 	require.NoError(t, err)
 }
 
@@ -356,7 +545,7 @@ func TestUpdate_WithNilMemo(t *testing.T) {
 	visibility.MergeCustomMemo(ctx, map[string]*commonpb.Payload{
 		"existing": {Data: []byte("value")},
 	})
-	_, err := node.CloseTransaction()
+	_, err := node.CloseTransaction(context.Background(), true)
 	require.NoError(t, err)
 
 	// Update without memo (nil) should preserve existing memo.
@@ -385,7 +574,7 @@ func TestUpdate_MemoReplaceSemantics(t *testing.T) {
 		"A": {Data: []byte("1")},
 		"B": {Data: []byte("2")},
 	})
-	_, err := node.CloseTransaction()
+	_, err := node.CloseTransaction(context.Background(), true)
 	require.NoError(t, err)
 
 	// Update with only C: should fully replace memo (A and B are gone).
@@ -412,7 +601,7 @@ func TestUpdate_MemoReplaceSemantics(t *testing.T) {
 	protorequire.ProtoEqual(t, &commonpb.Payload{Data: []byte("3")}, memo["C"])
 
 	// Update with empty memo: should clear all memo fields.
-	_, err = node.CloseTransaction()
+	_, err = node.CloseTransaction(context.Background(), true)
 	require.NoError(t, err)
 	ctx = chasm.NewMutableContext(context.Background(), node)
 	_, err = sched.Update(ctx, &schedulerpb.UpdateScheduleRequest{
@@ -463,7 +652,7 @@ func TestCreateSchedulerFromMigration_EmptyState(t *testing.T) {
 	require.Empty(t, invoker.BufferedStarts)
 
 	require.NoError(t, node.SetRootComponent(sched))
-	_, err = node.CloseTransaction()
+	_, err = node.CloseTransaction(context.Background(), true)
 	require.NoError(t, err)
 }
 
@@ -493,7 +682,7 @@ func TestCreateSchedulerFromMigration_NoRunning(t *testing.T) {
 	sched, err := scheduler.CreateSchedulerFromMigration(ctx, req)
 	require.NoError(t, err)
 	require.NoError(t, infra.node.SetRootComponent(sched))
-	_, err = infra.node.CloseTransaction()
+	_, err = infra.node.CloseTransaction(context.Background(), true)
 	require.NoError(t, err)
 
 	hasGeneratorTask := false
@@ -830,7 +1019,7 @@ func TestSearchAttributes_RoundTripThroughCloseTransaction(t *testing.T) {
 	sched.IdleCloseTime = timestamppb.New(time.Now().Add(7 * 24 * time.Hour))
 
 	require.NoError(t, node.SetRootComponent(sched))
-	_, err := node.CloseTransaction()
+	_, err := node.CloseTransaction(context.Background(), true)
 	require.NoError(t, err, "CloseTransaction should accept the scheduler search attributes")
 }
 
@@ -874,6 +1063,23 @@ func TestScheduler_Describe_ReturnsIsolatedVisibilityMaps(t *testing.T) {
 		"DescribeSchedule response Memo must be a copy, not the live Visibility map")
 	require.NotContains(t, vis.CustomSearchAttributes(ctx), "injectedSA",
 		"DescribeSchedule response SearchAttributes must be a copy, not the live Visibility map")
+}
+
+func TestScheduler_Describe_ReturnsTimeSkippingInfo(t *testing.T) {
+	sched, ctx, _ := setupSchedulerForTest(t)
+	want := &commonpb.TimeSkippingInfo{
+		CurrentTime:             timestamppb.New(time.Now().UTC()),
+		EffectiveConfig:         &commonpb.TimeSkippingConfig{Enabled: true},
+		CurrentSessionSkipCount: 3,
+	}
+
+	resp, err := sched.Describe(
+		contextWithTimeSkippingInfo{Context: ctx, info: want},
+		&schedulerpb.DescribeScheduleRequest{},
+		newLegacySpecBuilder(0, 0),
+	)
+	require.NoError(t, err)
+	protorequire.ProtoEqual(t, want, resp.GetFrontendResponse().GetInfo().GetTimeSkippingInfo())
 }
 
 // TestScheduler_Describe_DoesNotMutateCachedComponent proves Describe defaults and

@@ -114,12 +114,6 @@ func (r *rateLimitManager) setNumReadPartitions(val int) {
 	r.computeAndApplyRateLimitLocked()
 }
 
-func (r *rateLimitManager) computeEffectiveRPSAndSource() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.computeEffectiveRPSAndSourceLocked()
-}
-
 // Computes the effectiveRPS and its source by evaluating all possible rate limit configurations.
 // - If an API-level RPS is configured, effectiveRPS = min(system default RPS, API-configured RPS)
 // - Else if a worker-level RPS is configured, effectiveRPS = min(system default RPS, worker-configured RPS)
