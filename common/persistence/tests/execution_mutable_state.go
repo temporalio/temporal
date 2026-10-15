@@ -103,6 +103,7 @@ func (s *ExecutionMutableStateSuite) SetupTest() {
 			ShardId: s.ShardID,
 			RangeId: 1,
 		},
+		LifecycleContext: s.Ctx,
 	})
 	s.NoError(err)
 	previousRangeID := resp.ShardInfo.RangeId

@@ -185,6 +185,21 @@ func (p *shardPersistenceClient) GetOrCreateShard(
 	return p.persistence.GetOrCreateShard(ctx, request)
 }
 
+func (p *shardPersistenceClient) GetShard(
+	ctx context.Context,
+	request *GetShardRequest,
+) (_ *GetShardResponse, retErr error) {
+	caller := headers.GetCallerInfo(ctx).CallerName
+	startTime := time.Now().UTC()
+	defer func() {
+		latency := time.Since(startTime)
+		p.healthSignals.Record(request.ShardID, latency, retErr)
+		p.recordRequestMetrics(metrics.PersistenceGetShardScope, caller, latency, retErr)
+		p.recordDataLossMetrics(metrics.PersistenceGetShardScope, caller, retErr, "", "")
+	}()
+	return p.persistence.GetShard(ctx, request)
+}
+
 func (p *shardPersistenceClient) UpdateShard(
 	ctx context.Context,
 	request *UpdateShardRequest,

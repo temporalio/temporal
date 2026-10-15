@@ -69,6 +69,7 @@ func (s *connectionSuite) TestClosedConnectionError() {
 	resp, err := manager.GetOrCreateShard(ctx, &p.GetOrCreateShardRequest{
 		ShardID:          shardID,
 		InitialShardInfo: shardInfo,
+		LifecycleContext: ctx,
 	})
 
 	s.Nil(resp)
