@@ -273,25 +273,32 @@ jobs:
             message, so the posting rules above do not apply to it. Use the same severity, the
             repository-relative path, and the line you commented on; omit `path` and `line` for
             findings not tied to a file.
-            Set `category` to exactly one of the following. Use a `bug:` category only if the code
-            in the PR behaves incorrectly; otherwise use a non-bug category.
-            Bugs:
-            - `bug:logic`: wrong result, wrong condition, off-by-one.
-            - `bug:crash`: nil dereference, panic, out-of-bounds access.
-            - `bug:concurrency`: race, deadlock, I/O inside a critical section.
-            - `bug:data-loss`: lost or corrupted state, wrong persistence or transaction boundary.
-            - `bug:liveness`: an execution or task that stops making progress or is never retried.
-            - `bug:error-handling`: swallowed or misclassified error, wrong retryable or gRPC
-              status.
-            - `bug:compatibility`: replay or determinism break, backwards-incompatible proto, API,
-              history, or persistence change, unsafe rollout.
-            - `bug:resource`: leak, unbounded growth, missing limit.
-            - `bug:security`: authorization bypass, injection, secret exposure.
-            - `bug:behavior`: unintended change to a guarantee the server provides.
-            Not bugs:
+            Set `category` to exactly one of the following, which follow the code review defect
+            classes of Mäntylä and Lassenius (2009). Use a `bug:` category only if the code in the
+            PR behaves incorrectly; otherwise use a non-bug category. If more than one category
+            fits, pick the one that describes the change that would fix the finding.
+            Bugs (functional defects):
+            - `bug:resource`: wrong data handling, initialization, or release, such as an
+              uninitialized field, a leak, or unbounded growth.
+            - `bug:check`: missing or wrong validation or condition check, such as a missing nil,
+              bounds, input, or authorization check.
+            - `bug:interface`: wrong use of another component's contract, such as an API,
+              persistence, proto, or history contract, or a backwards-incompatible change to one.
+            - `bug:logic`: wrong comparison, control flow, or computation, such as a wrong state
+              transition, error classification, or retry policy.
+            - `bug:timing`: concurrency defect, such as a race, deadlock, or I/O inside a critical
+              section.
+            - `bug:support`: wrong use or configuration of a library or support system, such as
+              dynamic config that is not read or has the wrong default or scope.
+            - `bug:larger`: functionality that is missing or implemented incorrectly as a whole.
+            Not bugs (evolvability defects):
+            - `naming`: wording of names and comments.
+            - `language`: code that should use a language or standard library feature.
+            - `visual`: layout and formatting that hinder readability.
+            - `organization`: code that should be restructured, such as moved, split,
+              deduplicated, or removed as dead code.
+            - `solution`: a different implementation approach would be better.
             - `testing`: missing, wrong, or unreliable tests.
-            - `design`: structure, abstractions, API shape.
-            - `style`: conventions, naming, comments.
             - `description`: missing or unclear PR description or intent.
             Return an empty `findings` list if you posted none.
           claude_args: |
@@ -312,19 +319,19 @@ jobs:
                       "category": {
                         "type": "string",
                         "enum": [
-                          "bug:logic",
-                          "bug:crash",
-                          "bug:concurrency",
-                          "bug:data-loss",
-                          "bug:liveness",
-                          "bug:error-handling",
-                          "bug:compatibility",
                           "bug:resource",
-                          "bug:security",
-                          "bug:behavior",
+                          "bug:check",
+                          "bug:interface",
+                          "bug:logic",
+                          "bug:timing",
+                          "bug:support",
+                          "bug:larger",
+                          "naming",
+                          "language",
+                          "visual",
+                          "organization",
+                          "solution",
                           "testing",
-                          "design",
-                          "style",
                           "description"
                         ]
                       },
