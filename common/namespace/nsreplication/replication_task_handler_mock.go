@@ -54,3 +54,42 @@ func (mr *MockTaskExecutorMockRecorder) Execute(ctx, task any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockTaskExecutor)(nil).Execute), ctx, task)
 }
+
+// MockMutationTaskExecutor is a mock of MutationTaskExecutor interface.
+type MockMutationTaskExecutor struct {
+	ctrl     *gomock.Controller
+	recorder *MockMutationTaskExecutorMockRecorder
+	isgomock struct{}
+}
+
+// MockMutationTaskExecutorMockRecorder is the mock recorder for MockMutationTaskExecutor.
+type MockMutationTaskExecutorMockRecorder struct {
+	mock *MockMutationTaskExecutor
+}
+
+// NewMockMutationTaskExecutor creates a new mock instance.
+func NewMockMutationTaskExecutor(ctrl *gomock.Controller) *MockMutationTaskExecutor {
+	mock := &MockMutationTaskExecutor{ctrl: ctrl}
+	mock.recorder = &MockMutationTaskExecutorMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockMutationTaskExecutor) EXPECT() *MockMutationTaskExecutorMockRecorder {
+	return m.recorder
+}
+
+// ExecuteWithOutcome mocks base method.
+func (m *MockMutationTaskExecutor) ExecuteWithOutcome(ctx context.Context, task *repication.NamespaceTaskAttributes) (ApplyOutcome, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExecuteWithOutcome", ctx, task)
+	ret0, _ := ret[0].(ApplyOutcome)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ExecuteWithOutcome indicates an expected call of ExecuteWithOutcome.
+func (mr *MockMutationTaskExecutorMockRecorder) ExecuteWithOutcome(ctx, task any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExecuteWithOutcome", reflect.TypeOf((*MockMutationTaskExecutor)(nil).ExecuteWithOutcome), ctx, task)
+}
