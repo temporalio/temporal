@@ -363,6 +363,27 @@ func getServerTLSConfigFromCertProvider(
 		logger), nil
 }
 
+func newDynamicTLSClientConfig(
+	getCert tlsCertFetcher,
+	getRootCAs func() (*x509.CertPool, error),
+	serverName string,
+	enableHostVerification bool,
+) *tls.Config {
+	c := auth.NewTLSConfigForServerWithRootCAProvider(
+		serverName,
+		enableHostVerification,
+		getRootCAs,
+	)
+
+	if getCert != nil {
+		c.GetClientCertificate = func(*tls.CertificateRequestInfo) (*tls.Certificate, error) {
+			return getCert()
+		}
+	}
+
+	return c
+}
+
 func newClientTLSConfig(
 	clientProvider CertProvider,
 	serverName string,
@@ -370,10 +391,13 @@ func newClientTLSConfig(
 	isWorker bool,
 	enableHostVerification bool,
 ) (*tls.Config, error) {
-	// Optional ServerCA for client if not already trusted by host
-	serverCa, err := clientProvider.FetchServerRootCAsForClient(isWorker)
-	if err != nil {
+	// Validate the CA source at construction time, then resolve the cached pool
+	// on every handshake so provider refreshes apply to already-created clients.
+	if _, err := clientProvider.FetchServerRootCAsForClient(isWorker); err != nil {
 		return nil, fmt.Errorf("failed to load client ca: %v", err)
+	}
+	getRootCAs := func() (*x509.CertPool, error) {
+		return clientProvider.FetchServerRootCAsForClient(isWorker)
 	}
 
 	var getCert tlsCertFetcher
@@ -393,9 +417,9 @@ func newClientTLSConfig(
 		}
 	}
 
-	return auth.NewDynamicTLSClientConfig(
+	return newDynamicTLSClientConfig(
 		getCert,
-		serverCa,
+		getRootCAs,
 		serverName,
 		enableHostVerification,
 	), nil
