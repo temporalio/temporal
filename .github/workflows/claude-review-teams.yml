@@ -272,7 +272,8 @@ jobs:
             finding, inline or not. This structured output is a machine-readable log, not a review
             message, so the posting rules above do not apply to it. Use the same severity, the
             repository-relative path, and the line you commented on; omit `path` and `line` for
-            findings not tied to a file.
+            findings not tied to a file. Set `comment_url` to the `html_url` returned when you
+            posted the inline comment; omit it for findings not posted inline.
             Set `category` to exactly one of the following, which follow the code review defect
             classes of Mäntylä and Lassenius (2009). Use a `bug:` category only if the code in the
             PR behaves incorrectly; otherwise use a non-bug category. If more than one category
@@ -337,6 +338,7 @@ jobs:
                       },
                       "path": {"type": "string"},
                       "line": {"type": "integer"},
+                      "comment_url": {"type": "string"},
                       "summary": {"type": "string"},
                       "details": {"type": "string"}
                     }
