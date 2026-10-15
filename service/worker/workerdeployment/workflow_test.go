@@ -2042,15 +2042,18 @@ func (s *WorkerDeploymentSuite) Test_CreateWorkerDeploymentVersion_MaxVersionsLi
 	s.True(s.env.IsWorkflowCompleted())
 }
 
-// Test_CreateWorkerDeploymentVersion_SyncSummaryPreservesCreateRequestID tests that
-// syncing a version summary from the version workflow preserves the create_request_id
-func (s *WorkerDeploymentSuite) Test_CreateWorkerDeploymentVersion_SyncSummaryPreservesCreateRequestID() {
+// Test_CreateWorkerDeploymentVersion_SyncSummaryPreservesDeploymentOwnedFields tests that
+// syncing a version summary from the version workflow preserves fields owned by the deployment workflow.
+func (s *WorkerDeploymentSuite) Test_CreateWorkerDeploymentVersion_SyncSummaryPreservesDeploymentOwnedFields() {
 	tv := testvars.New(s.T())
 	s.env.OnUpsertMemo(mock.Anything).Return(nil)
 
 	requestID := tv.Any().String()
 	identity := tv.ClientIdentity()
 	version := tv.DeploymentVersionString()
+	taskQueueFamilySummary := buildTaskQueueFamilySummary(map[string]*deploymentspb.VersionLocalState_TaskQueueFamilyData{
+		"existing-queue": {},
+	})
 
 	var a *Activities
 	s.env.RegisterActivity(a.StartWorkerDeploymentVersionWorkflow)
@@ -2073,7 +2076,14 @@ func (s *WorkerDeploymentSuite) Test_CreateWorkerDeploymentVersion_SyncSummaryPr
 		})
 	}, 1*time.Millisecond)
 
-	// Then send a SyncVersionSummary signal (simulating version workflow syncing back)
+	// Cache a task queue family summary, then simulate the version workflow syncing back without it.
+	s.env.RegisterDelayedCallback(func() {
+		s.env.SignalWorkflow(SyncVersionSummarySignal, &deploymentspb.WorkerDeploymentVersionSummary{
+			Version:                version,
+			TaskQueueFamilySummary: taskQueueFamilySummary,
+		})
+	}, 4*time.Millisecond)
+
 	s.env.RegisterDelayedCallback(func() {
 		s.env.SignalWorkflow(SyncVersionSummarySignal, &deploymentspb.WorkerDeploymentVersionSummary{
 			Version:    version,
@@ -2092,6 +2102,8 @@ func (s *WorkerDeploymentSuite) Test_CreateWorkerDeploymentVersion_SyncSummaryPr
 		s.Require().Contains(state.State.Versions, version)
 		s.Equal(requestID, state.State.Versions[version].CreateRequestId,
 			"create_request_id should be preserved after summary sync")
+		s.Equal(taskQueueFamilySummary, state.State.Versions[version].TaskQueueFamilySummary,
+			"task queue family summary should be preserved after summary sync")
 	}, 10*time.Millisecond)
 
 	s.env.ExecuteWorkflow(WorkerDeploymentWorkflowType, &deploymentspb.WorkerDeploymentWorkflowArgs{

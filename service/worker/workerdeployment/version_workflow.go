@@ -713,6 +713,9 @@ func (d *VersionWorkflowRunner) validateRegisterWorker(args *deploymentspb.Regis
 		return temporal.NewApplicationError(
 			fmt.Sprintf("maximum number of task queues (%d) have been registered in deployment", args.MaxTaskQueues),
 			errMaxTaskQueuesInVersionType,
+			&deploymentspb.MaxTaskQueuesInVersionFailureDetails{
+				TaskQueueFamilySummary: buildTaskQueueFamilySummary(d.VersionState.TaskQueueFamilies),
+			},
 		)
 	}
 	return nil
