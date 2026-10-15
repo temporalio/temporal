@@ -85,6 +85,21 @@ func TestLRU(t *testing.T) {
 	require.InDelta(t, float64(3), snapshot[metrics.CacheUsage.Name()][0].Value, 0)
 }
 
+func TestNewLRUUsesMetricsHandler(t *testing.T) {
+	t.Parallel()
+
+	handler := metricstest.NewCaptureHandler()
+	capture := handler.StartCapture()
+	cache := NewLRU(4, handler)
+	cache.Put("A", "Foo")
+
+	snapshot := capture.Snapshot()
+	require.Len(t, snapshot[metrics.CacheSize.Name()], 1)
+	require.InDelta(t, float64(4), snapshot[metrics.CacheSize.Name()][0].Value, 0)
+	require.Len(t, snapshot[metrics.CacheUsage.Name()], 1)
+	require.InDelta(t, float64(1), snapshot[metrics.CacheUsage.Name()][0].Value, 0)
+}
+
 func TestGenerics(t *testing.T) {
 	t.Parallel()
 
