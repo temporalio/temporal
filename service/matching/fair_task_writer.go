@@ -292,7 +292,7 @@ func (w *fairTaskWriter) recordFairnessKeyCountGauge(count int64) {
 		(w.db.queue.IsVersioned() && !w.config.BreakdownMetricsByBuildID()) {
 		return
 	}
-	metrics.ApproximateFairnessKeyCount.With(w.backlogMgr.metricsHandler).Record(float64(count))
+	metrics.FairnessKeyCountEstimate.With(w.backlogMgr.metricsHandler).Record(float64(count))
 }
 
 // getFairnessKeyCountEstimate returns the estimated number of distinct fairness keys for a

@@ -1385,8 +1385,8 @@ var (
 	ApproximateBacklogAgeSeconds           = NewGaugeDef("approximate_backlog_age_seconds")
 	PhysicalApproximateBacklogCount        = NewGaugeDef("physical_approximate_backlog_count")
 	PhysicalApproximateBacklogAgeSeconds   = NewGaugeDef("physical_approximate_backlog_age_seconds")
-	ApproximateFairnessKeyCount            = NewGaugeDef(
-		"approximate_fairness_key_count",
+	FairnessKeyCountEstimate               = NewGaugeDef(
+		"fairness_key_count_estimate",
 		WithDescription("Estimated number of distinct fairness keys recently used in a physical task queue partition (max across priority levels)"),
 	)
 	NonRetryableTasks = NewCounterDef(
