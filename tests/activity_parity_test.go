@@ -680,6 +680,67 @@ func (s *activityParityTestSuite) TestUnpauseWithoutPause() {
 	})
 }
 
+// Resetting an activity while it waits to retry clears the completed attempt's failure. If reset is
+// deferred until a running attempt yields, that attempt's later failure remains visible on both surfaces.
+func (s *activityParityTestSuite) TestResetClearsLastFailure() {
+	env := newActivityParityEnv(s.T())
+	cfg := activityConfig{MaxAttempts: 3, RetryInterval: activityLongDuration}
+	lastFailure := []struct {
+		name string
+		read func(*testing.T) *failurepb.Failure
+	}{
+		{
+			name: "WorkflowActivity",
+			read: func(t *testing.T) *failurepb.Failure {
+				return newWFADriver(t, env, cfg).driveTrace(t,
+					[]model.Event{model.Poll, model.FailRetryably, model.Reset}).pendingActivityInfo(t).GetLastFailure()
+			},
+		},
+		{
+			name: "StandaloneActivity",
+			read: func(t *testing.T) *failurepb.Failure {
+				return newSAADriver(t, env, cfg).driveTrace(t,
+					[]model.Event{model.Poll, model.FailRetryably, model.Reset}).describe(t).GetInfo().GetLastFailure()
+			},
+		},
+	}
+
+	s.Run("ImmediateReset", func(s *activityParityTestSuite) {
+		for _, tc := range lastFailure {
+			s.Run(tc.name, func(s *activityParityTestSuite) {
+				require.Nil(s.T(), tc.read(s.T()))
+			})
+		}
+	})
+
+	s.Run("DeferredReset", func(s *activityParityTestSuite) {
+		// The state model expects a deferred reset to rewind the attempt counter. WFA currently does not
+		// (covered separately by R01), so issue this trace through the drivers' raw RPC helpers to isolate
+		// what R13 checks: whether the completed attempt's failure remains visible.
+		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+			t := s.T()
+			a := newWFADriver(t, env, cfg).start(t, cfg)
+			task := a.pollForTask(t, activityDriverTimeout)
+			require.NotNil(t, task)
+			a.token = task.GetTaskToken()
+			require.NoError(t, a.rpc(t, model.Reset))
+			require.NoError(t, a.rpc(t, model.FailRetryably))
+			require.NotNil(t, a.pendingActivityInfo(t).GetLastFailure())
+		})
+
+		s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+			t := s.T()
+			a := newSAADriver(t, env, cfg).start(t, cfg)
+			task := a.pollForTask(t, activityDriverTimeout)
+			require.NotNil(t, task)
+			a.token = task.GetTaskToken()
+			require.NoError(t, a.rpc(t, model.Reset))
+			require.NoError(t, a.rpc(t, model.FailRetryably))
+			require.NotNil(t, a.describe(t).GetInfo().GetLastFailure())
+		})
+	})
+}
+
 // TestActivityCore covers the core-activity (A) entries of the WFA/SAA parity survey.
 func (s *activityParityTestSuite) TestActivityCore() {
 	t := s.T()
