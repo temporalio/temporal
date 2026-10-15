@@ -22,11 +22,12 @@ type (
 		componentID uint32
 		fqn         string
 
-		ephemeral     bool
-		singleCluster bool
-		detached      bool
-		executionType enumspb.ExecutionType // May be unset, defaulting to UNSPECIFIED.
-		retention     func(*namespace.Namespace) time.Duration
+		ephemeral        bool
+		singleCluster    bool
+		detached         bool
+		recordPrincipals bool
+		executionType    enumspb.ExecutionType // May be unset, defaulting to UNSPECIFIED.
+		retention        func(*namespace.Namespace) time.Duration
 
 		searchAttributesMapper *VisibilitySearchAttributesMapper
 
@@ -77,6 +78,16 @@ func WithDetached() RegistrableComponentOption {
 // IsDetached returns true if the component type is registered as detached.
 func (rc *RegistrableComponent) IsDetached() bool {
 	return rc.detached
+}
+
+// WithRecordPrincipals records, on the root component, the principal of the caller that
+// creates an execution and of the caller that closes it. It only has an effect on a component
+// registered as the root of an execution. Archetypes opt in because the principals are stored
+// on every execution; workflows record principals on their history events instead.
+func WithRecordPrincipals() RegistrableComponentOption {
+	return func(rc *RegistrableComponent) {
+		rc.recordPrincipals = true
+	}
 }
 
 // WithExecutionType declares how executions of this archetype are named outside of CHASM, e.g. in
