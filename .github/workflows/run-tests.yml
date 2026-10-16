@@ -26,7 +26,7 @@ env:
   TEMPORAL_AWAIT_ATTEMPT_TIMEOUT: 15s
   MAX_TEST_ATTEMPTS: 3
   SHARD_COUNT: 5 # NOTE: must match shard count in optimize-test-sharding.yml
-  # Functional tests doesn't use all the integrations that temporal_minimal compiles out.
+  # Functional tests don't use all the integrations that temporal_minimal compiles out.
   FUNCTIONAL_TEST_BUILD_TAGS: temporal_minimal
 
 jobs:
@@ -289,8 +289,11 @@ jobs:
           ./develop/github/monitor_test.sh make unit-test-coverage
 
       - name: Run unit tests with build tags
+        if: ${{ !cancelled() }}
         timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
-        run: make unit-test-build-tags
+        run: |
+          export TEST_RUNNER_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m"
+          ./develop/github/monitor_test.sh make unit-test-build-tags
 
       - name: Post-test reporting
         if: always()

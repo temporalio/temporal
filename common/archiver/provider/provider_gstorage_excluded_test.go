@@ -3,6 +3,7 @@
 package provider
 
 import (
+	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/config"
 )
 
@@ -17,12 +18,12 @@ func (s *ProviderSuite) TestGetArchiver_GstorageExcluded() {
 		s.metricsHandler,
 	)
 
-	historyArchiver, err := provider.GetHistoryArchiver("gs")
+	historyArchiver, err := provider.GetHistoryArchiver(archiver.URISchemeGstorage)
 	s.ErrorIs(err, ErrUnknownScheme)
 	s.ErrorContains(err, "temporal_with_gstorage")
 	s.Nil(historyArchiver)
 
-	visibilityArchiver, err := provider.GetVisibilityArchiver("gs")
+	visibilityArchiver, err := provider.GetVisibilityArchiver(archiver.URISchemeGstorage)
 	s.ErrorIs(err, ErrUnknownScheme)
 	s.ErrorContains(err, "temporal_with_gstorage")
 	s.Nil(visibilityArchiver)
