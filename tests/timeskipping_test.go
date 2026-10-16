@@ -40,7 +40,7 @@ import (
 )
 
 // defaultMaxSkipPerSession mirrors the compiled default of
-// dynamicconfig.WorkflowTimeSkippingMaxSkipPerSession. The frontend populates a request's
+// dynamicconfig.TimeSkippingMaxSkipPerSession. The frontend populates a request's
 // unset MaxSkipPerSession with this value, so tests that leave it empty expect it back.
 const defaultMaxSkipPerSession = 200
 
