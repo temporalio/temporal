@@ -7337,7 +7337,10 @@ func (ms *MutableStateImpl) truncateRetryableActivityFailure(
 
 	// What every other pending activity holds. activityInfo's own failure is being replaced, so excluding it here.
 	totalWithout := ms.activityFailureSize - activityInfo.GetRetryLastFailure().Size()
-	metrics.ActivityFailureTotalSize.With(ms.metricsHandler).Record(int64(totalWithout + failureSize))
+	metrics.ActivityFailureTotalSize.With(ms.metricsHandler).Record(
+		int64(totalWithout+failureSize),
+		metrics.NamespaceTag(namespaceName),
+	)
 
 	totalLimitError := ms.config.MutableStateActivityFailureTotalSizeLimitError(namespaceName)
 	if totalLimitError > 0 && failureSize+totalWithout > totalLimitError {
