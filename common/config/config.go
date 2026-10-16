@@ -132,12 +132,21 @@ type (
 		Membership Membership `yaml:"membership"`
 		// PProf is the PProf configuration
 		PProf PProf `yaml:"pprof"`
+		// GoMemoryLimit configures the process-wide Go memory limit.
+		GoMemoryLimit GoMemoryLimit `yaml:"goMemoryLimit"`
 		// TLS controls the communication encryption configuration
 		TLS RootTLS `yaml:"tls"`
 		// Metrics is the metrics subsystem configuration
 		Metrics *metrics.Config `yaml:"metrics"`
 		// Settings for authentication and authorization
 		Authorization Authorization `yaml:"authorization"`
+	}
+
+	GoMemoryLimit struct {
+		// A zero ratio disables automatic memory limiting.
+		Ratio float64 `yaml:"ratio"`
+		// A zero interval applies the limit only at startup.
+		RefreshInterval time.Duration `yaml:"refreshInterval"`
 	}
 
 	// RootTLS contains all TLS settings for the Temporal server
@@ -700,6 +709,9 @@ func (c *Config) Validate() error {
 	if err := c.Archival.Validate(&c.NamespaceDefaults.Archival); err != nil {
 		return err
 	}
+	if err := c.Global.GoMemoryLimit.Validate(); err != nil {
+		return err
+	}
 
 	_, hasIFE := c.Services[string(primitives.InternalFrontendService)]
 	if hasIFE && (c.PublicClient.HostPort != "" || c.PublicClient.ForceTLSConfig != "" || c.PublicClient.HTTPHostPort != "") {
@@ -712,6 +724,16 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("invalid value for publicClient.forceTLSConfig: %q", c.PublicClient.ForceTLSConfig)
 	}
 
+	return nil
+}
+
+func (c *GoMemoryLimit) Validate() error {
+	if !(c.Ratio >= 0 && c.Ratio <= 1) {
+		return fmt.Errorf("global.goMemoryLimit.ratio must be in [0, 1], got %v", c.Ratio)
+	}
+	if c.RefreshInterval < 0 {
+		return fmt.Errorf("global.goMemoryLimit.refreshInterval must not be negative, got %s", c.RefreshInterval)
+	}
 	return nil
 }
 
