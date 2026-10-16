@@ -767,10 +767,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 	s.NoError(resp.ExecutionErr)
 }
 
-// TestProcessUserTimerTimeout_StandbyFiresUnderSkip: without virtual time, the
-// task's wall fire time arrives before MS's virtual deadline so standby acks
-// silently. With virtual time, standby sees the timer as expired and retries
-// until the fired event replicates.
+// TestProcessUserTimerTimeout_StandbyFiresUnderSkip verifies standby retries
+// after the virtual deadline maps to a wall-clock time that has passed.
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_StandbyFiresUnderSkip() {
 	execution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
@@ -805,16 +803,12 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Standby
 	event, _ = addTimerStartedEvent(mutableState, event.GetEventId(), timerID, timerDur)
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
-	// Attach time-skipping state on the persistence proto. On reload, the wrapper
-	// makes ms.Now() return s.now + 1h, so the persisted virtual expiry (~s.now+30min)
-	// is already past in the virtual frame.
+	// The skip moves the virtual deadline into the wall-clock past.
 	persistenceMutableState.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 		AccumulatedSkippedDuration: durationpb.New(30 * time.Minute),
 	}
 
-	// VisibilityTimestamp = virtual_deadline - skip = wall_deadline ≈ s.now - 30min.
-	// Dispatchable (≤ wall_now = s.now); mirrors what AddTasks would have produced
-	// if TSI had been present at scheduling time.
+	// The task is dispatchable at the shard's current wall-clock time.
 	timerTask := &tasks.UserTimerTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			s.namespaceID.String(),
@@ -831,7 +825,52 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Standby
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr,
-		"standby user-timer branch must see virtual expiry as elapsed under accumulated skip and retry until the fired event replicates")
+		"standby user-timer branch must retry after the converted deadline has passed")
+}
+
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_StandbyWaitsForWallDeadline() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.NewString(),
+	}
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:       &commonpb.WorkflowType{Name: "workflow-type"},
+				TaskQueue:          &taskqueuepb.TaskQueue{Name: "task-queue"},
+				WorkflowRunTimeout: durationpb.New(72 * time.Hour),
+			},
+		},
+	)
+	s.Require().NoError(err)
+
+	wt := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, "task-queue", uuid.NewString())
+	wt.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "identity")
+	event, _ = addTimerStartedEvent(mutableState, event.GetEventId(), "timer", 30*time.Minute)
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	persistenceMutableState.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		AccumulatedSkippedDuration: durationpb.New(20 * time.Minute),
+	}
+	timerTask := &tasks.UserTimerTask{
+		WorkflowKey: definition.NewWorkflowKey(s.namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
+		TaskID:      s.mustGenerateTaskID(),
+		// An older task may be dispatched before the current timer's wall-clock deadline.
+		VisibilityTimestamp: s.now,
+		EventID:             event.EventId,
+	}
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockShard.SetCurrentTime(s.clusterName, s.now)
+	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Require().NoError(resp.ExecutionErr)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_StandbyFiresUnderSkip() {
@@ -897,7 +936,59 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_StandbyF
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(-29*time.Minute))
 	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.Equal(consts.ErrTaskRetry, resp.ExecutionErr,
-		"standby activity-timer branch must see virtual deadline as elapsed under accumulated skip — referenceTime must come from mutableState.Now() (virtual)")
+		"standby activity-timer branch must retry after the converted deadline has passed")
+}
+
+func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_StandbyWaitsForWallDeadline() {
+	execution := &commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.NewString(),
+	}
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetWorkflowId(), execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:       &commonpb.WorkflowType{Name: "workflow-type"},
+				TaskQueue:          &taskqueuepb.TaskQueue{Name: "task-queue"},
+				WorkflowRunTimeout: durationpb.New(72 * time.Hour),
+			},
+		},
+	)
+	s.Require().NoError(err)
+
+	wt := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduledEventID, "task-queue", uuid.NewString())
+	wt.StartedEventID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(&s.Suite, mutableState, wt.ScheduledEventID, wt.StartedEventID, "identity")
+	scheduledEvent, _ := addActivityTaskScheduledEvent(
+		mutableState,
+		event.GetEventId(),
+		"activity", "activity-type", "task-queue", nil,
+		30*time.Minute, 30*time.Minute, 30*time.Minute, 30*time.Minute,
+	)
+	mutableState.GetPendingActivityInfos()[scheduledEvent.GetEventId()].TimerTaskStatus |= workflow.TimerTaskStatusCreatedScheduleToStart
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, scheduledEvent.GetEventId(), scheduledEvent.GetVersion())
+	persistenceMutableState.ExecutionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		AccumulatedSkippedDuration: durationpb.New(20 * time.Minute),
+	}
+	timerTask := &tasks.ActivityTimeoutTask{
+		WorkflowKey:         definition.NewWorkflowKey(s.namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId()),
+		Attempt:             1,
+		TaskID:              s.mustGenerateTaskID(),
+		TimeoutType:         enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+		VisibilityTimestamp: s.now,
+		EventID:             scheduledEvent.GetEventId(),
+	}
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockShard.SetCurrentTime(s.clusterName, s.now)
+	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
+	s.Require().NoError(resp.ExecutionErr)
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_StandbyHeartbeat_DedupUnderSkip() {
@@ -976,14 +1067,14 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_StandbyH
 		Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	// Dedup branch must fire → bit cleared → CreateNextActivityTimer regenerates
 	// → UpdateWorkflowExecutionAsPassive routes through persistence.UpdateWorkflowExecution.
-	// Without ToRealTime the gate would skip and this expectation would go unmet.
+	// Without ToRealTimeWithCurrentOffset the gate would skip and this expectation would go unmet.
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(tests.UpdateWorkflowExecutionResponse, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now)
 	resp := s.timerQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(timerTask))
 	s.NoError(resp.ExecutionErr,
-		"standby heartbeat-dedup gate must fire under accumulated skip via ToRealTime(heartbeatTimeoutVis)")
+		"standby heartbeat-dedup gate must fire under accumulated skip via ToRealTimeWithCurrentOffset(heartbeatTimeoutVis)")
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pending() {
@@ -1950,7 +2041,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Ex
 	).AnyTimes()
 	ms.EXPECT().HSM().Return(root).AnyTimes()
 	ms.EXPECT().Now().Return(s.mockShard.GetTimeSource().Now()).AnyTimes()
-	ms.EXPECT().ToRealTime(gomock.Any()).DoAndReturn(func(t time.Time) time.Time { return t }).AnyTimes()
+	ms.EXPECT().ToRealTimeWithCurrentOffset(gomock.Any()).DoAndReturn(func(t time.Time) time.Time { return t }).AnyTimes()
 
 	_, err = dummy.MachineCollection(root).Add("dummy", dummy.NewDummy())
 	s.NoError(err)
@@ -2086,7 +2177,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_Va
 	).AnyTimes()
 	ms.EXPECT().HSM().Return(root).AnyTimes()
 	ms.EXPECT().Now().Return(s.mockShard.GetTimeSource().Now()).AnyTimes()
-	ms.EXPECT().ToRealTime(gomock.Any()).DoAndReturn(func(t time.Time) time.Time { return t }).AnyTimes()
+	ms.EXPECT().ToRealTimeWithCurrentOffset(gomock.Any()).DoAndReturn(func(t time.Time) time.Time { return t }).AnyTimes()
 
 	_, err = dummy.MachineCollection(root).Add("dummy", dummy.NewDummy())
 	s.NoError(err)
@@ -2197,7 +2288,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteStateMachineTimerTask_St
 	).AnyTimes()
 	ms.EXPECT().HSM().Return(root).AnyTimes()
 	ms.EXPECT().Now().Return(s.mockShard.GetTimeSource().Now()).AnyTimes()
-	ms.EXPECT().ToRealTime(gomock.Any()).DoAndReturn(func(t time.Time) time.Time { return t }).AnyTimes()
+	ms.EXPECT().ToRealTimeWithCurrentOffset(gomock.Any()).DoAndReturn(func(t time.Time) time.Time { return t }).AnyTimes()
 
 	_, err = dummy.MachineCollection(root).Add("dummy", dummy.NewDummy())
 	s.NoError(err)
@@ -2514,7 +2605,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() 
 	s.Run("Wait", func() {
 		pms, workflowKey := makeTimeSkippingPendingMS()
 
-		timerTask := &tasks.TimeSkippingTimerTask{
+		timerTask := &tasks.TimeSkippingFastForwardTimerTask{
 			WorkflowKey:         workflowKey,
 			TaskID:              s.mustGenerateTaskID(),
 			VisibilityTimestamp: s.now,
@@ -2534,7 +2625,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() 
 		pms, workflowKey := makeTimeSkippingPendingMS()
 		pms.ExecutionInfo.TimeSkippingInfo.FastForwardInfo.HasReached = true
 
-		timerTask := &tasks.TimeSkippingTimerTask{
+		timerTask := &tasks.TimeSkippingFastForwardTimerTask{
 			WorkflowKey:         workflowKey,
 			TaskID:              s.mustGenerateTaskID(),
 			VisibilityTimestamp: s.now.Add(time.Hour),
@@ -2551,7 +2642,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestExecuteTimeSkippingTimerTask() 
 	s.Run("Discard", func() {
 		pms, workflowKey := makeTimeSkippingPendingMS()
 
-		timerTask := &tasks.TimeSkippingTimerTask{
+		timerTask := &tasks.TimeSkippingFastForwardTimerTask{
 			WorkflowKey:         workflowKey,
 			TaskID:              s.mustGenerateTaskID(),
 			VisibilityTimestamp: s.now,

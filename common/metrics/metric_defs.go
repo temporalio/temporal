@@ -21,6 +21,7 @@ const (
 	nexusEndpointTagName           = "nexus_endpoint"
 	nexusServiceTagName            = "nexus_service"
 	nexusOperationTagName          = "nexus_operation"
+	nexusOperationBackendTagName   = "backend"
 	outcomeTagName                 = "outcome"
 	nexusCompletionSourceTagName   = "nexus_completion_source"
 	versionedTagName               = "versioned"
@@ -304,6 +305,10 @@ const (
 	VisibilityPersistenceGetWorkflowExecutionScope = "GetWorkflowExecution"
 	// VisibilityPersistenceAddSearchAttributesScope tracks AddSearchAttributes calls made by service to visibility persistence layer
 	VisibilityPersistenceAddSearchAttributesScope = "AddSearchAttributes"
+	// VisibilityPersistenceListExecutionsScope tracks ListExecutions calls made by service to visibility persistence layer
+	VisibilityPersistenceListExecutionsScope = "ListExecutions"
+	// VisibilityPersistenceCountExecutionsScope tracks CountExecutions calls made by service to visibility persistence layer
+	VisibilityPersistenceCountExecutionsScope = "CountExecutions"
 )
 
 // Common
@@ -652,6 +657,10 @@ const (
 )
 
 var (
+	PrometheusMetricDefinitionConflicts = NewCounterDef(
+		"prometheus_metric_definition_conflicts",
+		WithDescription("Number of Prometheus metric registrations rejected due to conflicting label names or help text."),
+	)
 	ServiceRequests = NewCounterDef(
 		"service_requests",
 		WithDescription("The number of RPC requests received by the service."),
@@ -945,6 +954,21 @@ var (
 		"chasm_pure_task_errors",
 		WithDescription("The number of errors during CHASM pure task execution."),
 	)
+	ChasmPureTaskNotInvalidated = NewCounterDef(
+		"chasm_pure_task_not_invalidated",
+		WithDescription("The number of scheduled CHASM pure tasks that remained valid after successful execution. "+
+			"Such tasks are sent to DLQ only when history.chasmDLQScheduledPureTaskOnValidation is enabled."),
+	)
+	ChasmLogicalTaskCount = NewDimensionlessHistogramDef(
+		"chasm_logical_task_count",
+		WithDescription("The number of logical CHASM tasks of one task type in a single execution, recorded "+
+			"only when it exceeds history.chasmLogicalTaskCountAlertThreshold."),
+	)
+	ChasmLogicalTaskCountExceeded = NewCounterDef(
+		"chasm_logical_task_count_exceeded",
+		WithDescription("The number of times an execution's logical CHASM task count for one task type exceeded "+
+			"history.chasmLogicalTaskCountAlertThreshold."),
+	)
 	ChasmIncomingSignalWritten = NewCounterDef(
 		"chasm_incoming_signal_written",
 		WithDescription("The number of signal backlinks written to the CHASM IncomingSignals map."),
@@ -1001,6 +1025,8 @@ var (
 	ActivityReset                                    = NewCounterDef("activity_reset", WithDescription("Number of activity resets."))
 	ActivityTimeout                                  = NewCounterDef("activity_timeout", WithDescription("Number of terminal activity timeouts."))
 	ActivityPayloadSize                              = NewCounterDef("activity_payload_size", WithDescription("Size of activity payloads in bytes."))
+	HistoryPrincipalSize                             = NewCounterDef("history_principal_size", WithDescription("Size in bytes of principal written to history events."))
+	HistoryPrincipalSizeSkipped                      = NewCounterDef("history_principal_size_skipped", WithDescription("Size in bytes of principal that would have been written to history events if principal propagation was enabled."))
 	ActivityHeartbeatCount                           = NewCounterDef("activity_heartbeat_count", WithDescription("Count of activity heartbeats, with has_details tag indicating whether the heartbeat carried a payload."))
 	AckLevelUpdateCounter                            = NewCounterDef("ack_level_update")
 	AckLevelUpdateFailedCounter                      = NewCounterDef("ack_level_update_failed")
@@ -1025,6 +1051,10 @@ var (
 	SpeculativeWorkflowTaskRollbacks                 = NewCounterDef("speculative_workflow_task_rollbacks")
 
 	ActivityEagerExecutionCounter = NewCounterDef("activity_eager_execution")
+	EagerDispatchRequestsSent     = NewCounterDef(
+		"eager_dispatch_requests_sent",
+		WithDescription("Number of task grants sent by History through GrantEagerDispatch, summed from the request item counts."),
+	)
 	// WorkflowEagerExecutionCounter is emitted any time eager workflow start is requested.
 	WorkflowEagerExecutionCounter = NewCounterDef("workflow_eager_execution")
 	// WorkflowEagerExecutionDeniedCounter is emitted any time eager workflow start is requested and the serer fell back
@@ -1033,6 +1063,8 @@ var (
 	// This metric has a "reason" tag attached to it to understand why eager start was denied.
 	WorkflowEagerExecutionDeniedCounter           = NewCounterDef("workflow_eager_execution_denied")
 	StartWorkflowRequestDeduped                   = NewCounterDef("start_workflow_request_deduped")
+	NexusWorkflowUseExisting                      = NewCounterDef("nexus_workflow_use_existing", WithDescription("Successful callback attachments to existing workflows involving Nexus serialization context, tagged by context match or missing context."))
+	NexusActivityUseExisting                      = NewCounterDef("nexus_activity_use_existing", WithDescription("Successful callback attachments to existing standalone activities involving Nexus serialization context, tagged by context match or missing context."))
 	OrphanedChildWorkflowReplacement              = NewCounterDef("orphaned_child_workflow_replacement")
 	EmptyCompletionCommandsCounter                = NewCounterDef("empty_completion_commands")
 	MultipleCompletionCommandsCounter             = NewCounterDef("multiple_completion_commands")
@@ -1062,8 +1094,8 @@ var (
 	CompleteWorkflowTaskWithStickyEnabledCounter  = NewCounterDef("complete_workflow_task_sticky_enabled_count")
 	CompleteWorkflowTaskWithStickyDisabledCounter = NewCounterDef("complete_workflow_task_sticky_disabled_count")
 	WorkflowTaskHeartbeatTimeoutCounter           = NewCounterDef("workflow_task_heartbeat_timeout_count")
-	SignalWithStartSkipDelayCounter               = NewCounterDef("signal_with_start_skip_delay_count")
 	SignalWithStartWorkflowStartDeduped           = NewCounterDef("signal_with_start_workflow_start_deduped")
+	SignalWithStartWorkflowTaskBackoffCounter     = NewCounterDef("signal_with_start_workflow_task_backoff_count")
 	DuplicateReplicationEventsCounter             = NewCounterDef("duplicate_replication_events")
 	AcquireLockFailedCounter                      = NewCounterDef("acquire_lock_failed")
 	WorkflowContextCleared                        = NewCounterDef("workflow_context_cleared")
@@ -1203,6 +1235,7 @@ var (
 	ReplicationTasksAttempt                        = NewDimensionlessHistogramDef("replication_tasks_attempt")
 	ReplicationTasksErrorByType                    = NewCounterDef("replication_tasks_error_by_type")
 	ReplicationDLQFailed                           = NewCounterDef("replication_dlq_enqueue_failed")
+	ReplicationDLQDropped                          = NewCounterDef("replication_dlq_dropped")
 	ReplicationDLQMaxLevelGauge                    = NewGaugeDef("replication_dlq_max_level")
 	ReplicationDLQAckLevelGauge                    = NewGaugeDef("replication_dlq_ack_level")
 	ReplicationNonEmptyDLQCount                    = NewCounterDef("replication_dlq_non_empty")
@@ -1299,7 +1332,7 @@ var (
 	)
 	WorkflowTaskCompletionBufferLost = NewCounterDef(
 		"workflow_task_completion_buffer_lost",
-		WithDescription("Paginated workflow task completions aborted because the buffer was lost (evicted, process limit exceeded, or a page was missing)."),
+		WithDescription("Paginated workflow task completions aborted because the buffer was lost."),
 	)
 
 	// Matching
@@ -1317,7 +1350,15 @@ var (
 	ConditionFailedErrorPerTaskQueueCounter   = NewCounterDef("condition_failed_errors")
 	RespondQueryTaskFailedPerTaskQueueCounter = NewCounterDef("respond_query_failed")
 	RespondNexusTaskFailedPerTaskQueueCounter = NewCounterDef("respond_nexus_failed")
-	NexusTaskRequests                         = NewCounterDef(
+	EagerDispatchRequests                     = NewCounterDef(
+		"eager_dispatch_requests",
+		WithDescription("Number of task grants requested through GrantEagerDispatch, summed from the request item counts."),
+	)
+	EagerDispatchResults = NewCounterDef(
+		"eager_dispatch_results",
+		WithDescription("Number of requested task grants by outcome: granted, error, backlog, rate_limit, or per_key_rate_limit."),
+	)
+	NexusTaskRequests = NewCounterDef(
 		"nexus_task_requests",
 		WithDescription("The number of Nexus task poll and respond requests received by the matching service, broken down by namespace, operation, client_name, and is_internal."),
 	)
@@ -1351,8 +1392,6 @@ var (
 	)
 	TaskLagPerTaskQueueGauge               = NewGaugeDef("task_lag_per_tl")
 	NoRecentPollerTasksPerTaskQueueCounter = NewCounterDef("no_poller_tasks")
-	UnknownBuildPollsCounter               = NewCounterDef("unknown_build_polls")
-	UnknownBuildTasksCounter               = NewCounterDef("unknown_build_tasks")
 	TaskDispatchLatencyPerTaskQueue        = NewTimerDef("task_dispatch_latency")
 	ApproximateBacklogCount                = NewGaugeDef("approximate_backlog_count")
 	ApproximateBacklogAgeSeconds           = NewGaugeDef("approximate_backlog_age_seconds")
@@ -1378,7 +1417,11 @@ var (
 		"fair_reader_stuck_detected",
 		WithDescription("Count of times the fair task reader detected a stuck state (atEnd=false, loadedTasks=0, readPending=false, backoffTimer=nil) on the write path"),
 	)
-	PartitionScaleEvents = NewCounterDef("partition_scale_events")
+	PartitionScaleEvents     = NewCounterDef("partition_scale_events")
+	PartitionScaleMaxClamped = NewCounterDef(
+		"partition_scale_max_clamped",
+		WithDescription("Count of partition scaler decisions whose target was reduced by a configured maximum"),
+	)
 	PartitionScaleRead   = NewGaugeDef("partition_scale_read")
 	PartitionScaleWrite  = NewGaugeDef("partition_scale_write")
 	PartitionScaleTarget = NewGaugeDef("partition_scale_target")

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"errors"
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -27,11 +28,16 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/testing/await"
@@ -141,6 +147,97 @@ func (s *FunctionalClustersTestSuite) TestNamespaceFailover_ReplicationStateIsNo
 			)
 		}
 	}, replicationWaitTime, replicationCheckInterval)
+}
+
+// TestNamespaceFailover_BacklogMetricsFollowNamespaceState guards against loaded task queue partitions
+// continuing to report backlog under the namespace_state tag they were loaded with after a failover.
+func (s *FunctionalClustersTestSuite) TestNamespaceFailover_BacklogMetricsFollowNamespaceState() {
+	for _, c := range s.clusters {
+		c.OverrideDynamicConfig(s.T(), dynamicconfig.MatchingBacklogMetricsEmitInterval, 500*time.Millisecond)
+		// Lets the standby cluster push the replicated workflow tasks to its matching service quickly,
+		// so it has a passive backlog loaded before the failover.
+		c.OverrideDynamicConfig(s.T(), dynamicconfig.StandbyTaskMissingEventsDiscardDelay, time.Second)
+	}
+	namespace := s.createGlobalNamespace()
+	tq := testcore.RandomizeStr("backlog-metrics-failover-tq")
+	captures := make([]*metricstest.Capture, len(s.clusters))
+	for i, c := range s.clusters {
+		captureHandler, ok := c.Host().GetMetricsHandler().(*metricstest.CaptureHandler)
+		s.Require().True(ok, "cluster metrics handler does not support capture")
+		capture := captureHandler.StartCapture()
+		captures[i] = capture
+		s.T().Cleanup(func() { captureHandler.StopCapture(capture) })
+	}
+
+	const numWorkflows = 5
+	for i := range numWorkflows {
+		_, err := s.clusters[0].FrontendClient().StartWorkflowExecution(testcore.NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+			RequestId:    uuid.NewString(),
+			Namespace:    namespace,
+			WorkflowId:   fmt.Sprintf("backlog-metrics-failover-%d", i),
+			WorkflowType: &commonpb.WorkflowType{Name: "backlog-metrics-failover-type"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: tq, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		})
+		s.NoError(err)
+	}
+
+	// Sums the latest backlog gauge value of each partition in a cluster, per namespace_state tag.
+	backlogByState := func(clusterIdx int) map[string]float64 {
+		latest := make(map[[2]string]float64)
+		for _, r := range captures[clusterIdx].SnapshotMetric(metrics.ApproximateBacklogCount.Name()) {
+			if r.Tags["namespace"] != namespace || r.Tags["taskqueue"] != tq || r.Tags["task_type"] != "Workflow" {
+				continue
+			}
+			latest[[2]string{r.Tags["namespace_state"], r.Tags["partition"]}] = r.Value.(float64)
+		}
+		totals := make(map[string]float64)
+		for key, value := range latest {
+			totals[key[0]] += value
+		}
+		return totals
+	}
+	requireBacklog := func(t *await.T, clusterIdx int, active, passive float64) {
+		totals := backlogByState(clusterIdx)
+		require.InDelta(t, active, totals[metrics.ActiveNamespaceStateTagValue], 0.1, "cluster %d active backlog", clusterIdx)
+		require.InDelta(t, passive, totals[metrics.PassiveNamespaceStateTagValue], 0.1, "cluster %d passive backlog", clusterIdx)
+	}
+
+	await.Require(testcore.NewContext(), s.T(), func(t *await.T) {
+		requireBacklog(t, 0, numWorkflows, 0)
+		requireBacklog(t, 1, 0, numWorkflows)
+	}, 30*time.Second, 500*time.Millisecond)
+
+	s.failover(namespace, 0, s.clusters[1].ClusterName(), 2)
+
+	// The failover unloads the partitions on both clusters, which zeroes their old-tag backlog. The new
+	// active cluster may already be reloading some of them as history pushes tasks.
+	await.Require(testcore.NewContext(), s.T(), func(t *await.T) {
+		totals0, totals1 := backlogByState(0), backlogByState(1)
+		require.InDelta(t, 0, totals0[metrics.ActiveNamespaceStateTagValue], 0.1, "cluster 0 active backlog")
+		require.InDelta(t, 0, totals1[metrics.PassiveNamespaceStateTagValue], 0.1, "cluster 1 passive backlog")
+	}, 30*time.Second, 500*time.Millisecond)
+
+	// Partitions reload with the new tag on their next access. Load each root partition directly, which
+	// also loads its child partitions.
+	nsResp, err := s.clusters[0].FrontendClient().DescribeNamespace(testcore.NewContext(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: namespace,
+	})
+	s.NoError(err)
+	for _, c := range s.clusters {
+		_, err := c.MatchingClient().ForceLoadTaskQueuePartition(testcore.NewContext(), &matchingservice.ForceLoadTaskQueuePartitionRequest{
+			NamespaceId: nsResp.GetNamespaceInfo().GetId(),
+			TaskQueuePartition: &taskqueuespb.TaskQueuePartition{
+				TaskQueue:     tq,
+				TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+				PartitionId:   &taskqueuespb.TaskQueuePartition_NormalPartitionId{NormalPartitionId: 0},
+			},
+		})
+		s.NoError(err)
+	}
+	await.Require(testcore.NewContext(), s.T(), func(t *await.T) {
+		requireBacklog(t, 0, 0, numWorkflows)
+		requireBacklog(t, 1, numWorkflows, 0)
+	}, 30*time.Second, 500*time.Millisecond)
 }
 
 func (s *FunctionalClustersTestSuite) TestSimpleWorkflowFailover() {

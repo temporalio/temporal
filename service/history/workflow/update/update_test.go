@@ -372,7 +372,7 @@ func TestUpdateState(t *testing.T) {
 						acceptedRequest *updatepb.Request,
 					) (*historypb.HistoryEvent, error) {
 						gotAcceptedRequestSequencingEventId = acceptedRequestSequencingEventId
-						return &historypb.HistoryEvent{}, nil
+						return &historypb.HistoryEvent{EventId: testAcceptedEventID}, nil
 					}
 
 					err := accept(t, store, upd)
@@ -911,7 +911,7 @@ func TestUpdateState(t *testing.T) {
 		runTests(t,
 			func() {
 				t.Helper()
-				upd = update.NewCompleted(tv.UpdateID(), future.NewReadyFuture(successOutcome, nil))
+				upd = update.NewCompleted(tv.UpdateID(), testAcceptedEventID, future.NewReadyFuture(successOutcome, nil))
 				assertCompleted(t, upd, successOutcome)
 			},
 			[]*stateTest{{
@@ -1271,7 +1271,7 @@ func TestAttachCallbacks(t *testing.T) {
 	t.Run("on stateCompleted returns true without attaching callbacks", func(t *testing.T) {
 		effects := &effect.Buffer{}
 		store, eventCreated := trackingStore(effects)
-		upd := update.NewCompleted(tv.UpdateID(), future.NewReadyFuture[*updatepb.Outcome](successOutcome, nil))
+		upd := update.NewCompleted(tv.UpdateID(), testAcceptedEventID, future.NewReadyFuture[*updatepb.Outcome](successOutcome, nil))
 
 		fired, err := upd.AttachCallbacks(testRequest, store)
 		require.NoError(t, err)

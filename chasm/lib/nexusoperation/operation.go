@@ -139,11 +139,15 @@ func newStandaloneOperation(
 		UserMetadata: frontendReq.GetUserMetadata(),
 		Identity:     frontendReq.GetIdentity(),
 	})
-	op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibilityWithData(
+	visibility, err := chasm.NewVisibilityWithData(
 		ctx,
 		frontendReq.GetSearchAttributes().GetIndexedFields(),
 		nil,
-	))
+	)
+	if err != nil {
+		return nil, err
+	}
+	op.Visibility = chasm.NewComponentField(ctx, visibility)
 	if err := op.addCompletionCallbacks(
 		ctx,
 		frontendReq.GetRequestId(),
@@ -226,6 +230,16 @@ func (o *Operation) RequestCancel(
 		return TransitionCancellationScheduled.Apply(cancel, ctx, EventCancellationScheduled{
 			Destination: o.GetEndpoint(),
 		})
+	}
+	return nil
+}
+
+// rejectMismatchedRequestID reports whether an event belongs to a different operation than this one.
+// Reported as [chasm.ErrInvalidTransition] since it is a precondition of the transition.
+func (o *Operation) rejectMismatchedRequestID(requestID string) error {
+	if requestID != "" && o.GetRequestId() != requestID {
+		return fmt.Errorf("%w: event request ID %q does not match operation request ID %q",
+			chasm.ErrInvalidTransition, requestID, o.GetRequestId())
 	}
 	return nil
 }
@@ -718,6 +732,11 @@ func (o *Operation) buildPollResponse(
 	resp := &workflowservice.PollNexusOperationExecutionResponse{
 		RunId:          ctx.ExecutionKey().RunID,
 		OperationToken: o.OperationToken,
+		PropagatedNexusSerializationContext: &nexuspb.PropagatedSerializationContext{
+			Endpoint:  o.GetEndpoint(),
+			Service:   o.GetService(),
+			Operation: o.GetOperation(),
+		},
 	}
 
 	if o.isClosed() {
@@ -831,6 +850,21 @@ func (o *Operation) buildExecutionInfo(ctx chasm.Context) *nexuspb.NexusOperatio
 		}
 	}
 
+	// If the Nexus operation is SCHEDULED, check the circuit breaker and upgrade it to BLOCKED if applicable.
+	if opCtx, ok := ctx.Value(OperationContextKey).(*OperationContext); ok && opCtx.DestinationBlocked != nil {
+		if info.State == enumspb.PENDING_NEXUS_OPERATION_STATE_SCHEDULED &&
+			opCtx.DestinationBlocked(key.NamespaceID, o.Endpoint) {
+			info.State = enumspb.PENDING_NEXUS_OPERATION_STATE_BLOCKED
+			info.BlockedReason = "The circuit breaker is open."
+		}
+
+		if info.GetCancellationInfo().GetState() == enumspb.NEXUS_OPERATION_CANCELLATION_STATE_SCHEDULED &&
+			opCtx.DestinationBlocked(key.NamespaceID, o.Endpoint) {
+			info.CancellationInfo.State = enumspb.NEXUS_OPERATION_CANCELLATION_STATE_BLOCKED
+			info.CancellationInfo.BlockedReason = "The circuit breaker is open."
+		}
+	}
+
 	return info
 }
 
@@ -839,7 +873,8 @@ func (o *Operation) metricsHandler(ctx chasm.Context) metrics.Handler {
 	namespaceName := ctx.NamespaceEntry().Name().String()
 
 	wftt := standaloneOperationWorkflowTypeName
-	if store, ok := o.Store.TryGet(ctx); ok {
+	store, workflowOperation := o.Store.TryGet(ctx)
+	if workflowOperation {
 		wftt = store.WorkflowTypeName()
 	}
 	tags := []metrics.Tag{
@@ -853,6 +888,9 @@ func (o *Operation) metricsHandler(ctx chasm.Context) metrics.Handler {
 		softassert.Fail(ctx.Logger(), "operation context missing")
 	} else {
 		conf := opCtx.MetricTagConfig()
+		if conf.IncludeBackendTag {
+			tags = append(tags, metrics.NexusOperationBackendTag("chasm"))
+		}
 		if conf.IncludeServiceTag {
 			tags = append(tags, metrics.NexusServiceTag(o.GetService()))
 		}
