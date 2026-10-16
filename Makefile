@@ -600,8 +600,8 @@ unit-test-coverage: prepare-coverage-test
 # Packages with a file constrained by temporal_minimal.
 MINIMAL_UNIT_TEST_DIRS = $(sort $(dir $(shell grep -rlE --include='*.go' '^//go:build .*temporal_minimal' .)))
 
-# Builds every package with temporal_minimal (the variant that ships), then runs the unit tests of
-# MINIMAL_UNIT_TEST_DIRS with it. unit-test-coverage covers the default build.
+# Builds every package using `temporal_minimal` build tag, then runs the unit tests of
+# MINIMAL_UNIT_TEST_DIRS with it.
 unit-test-build-tags:
 	$(if $(MINIMAL_UNIT_TEST_DIRS),,$(error No package has a file constrained by temporal_minimal))
 	@printf $(COLOR) "Build and run unit tests with temporal_minimal..."
