@@ -427,12 +427,24 @@ func TestPauseUnpauseReplacesDispatch(t *testing.T) {
 			ctx := &chasm.MockMutableContext{}
 			ctx.HandleNow = func(chasm.Component) time.Time { return defaultTime }
 			attemptState := &activitypb.ActivityAttemptState{Count: tc.attemptCount, Stamp: 7}
+			failure := &failurepb.Failure{Message: "last failure"}
+			if tc.attemptCount > 1 {
+				attemptState.CompleteTime = timestamppb.New(defaultTime.Add(-time.Minute))
+				attemptState.CurrentRetryInterval = durationpb.New(time.Hour)
+				attemptState.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY
+				attemptState.LastFailureDetails = &activitypb.ActivityAttemptState_LastFailureDetails{Failure: failure}
+			}
 			activity := &Activity{
 				ActivityState: &activitypb.ActivityState{
-					Status:       activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
-					ScheduleTime: timestamppb.New(defaultTime),
+					Status:                 activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+					ScheduleTime:           timestamppb.New(defaultTime),
+					ScheduleToStartTimeout: durationpb.New(time.Minute),
+					ScheduleToCloseStamp:   5,
 				},
 				LastAttempt: chasm.NewDataField(ctx, attemptState),
+				LastHeartbeat: chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{
+					Details: &commonpb.Payloads{Payloads: []*commonpb.Payload{{Data: []byte("checkpoint")}}},
+				}),
 			}
 			handler := newActivityDispatchTaskHandler(activityDispatchTaskHandlerOptions{})
 			oldTask := &activitypb.ActivityDispatchTask{Stamp: 7}
@@ -449,8 +461,20 @@ func TestPauseUnpauseReplacesDispatch(t *testing.T) {
 			})
 			require.NoError(t, err)
 			require.Equal(t, tc.attemptCount, attemptState.GetCount())
-			require.Len(t, ctx.Tasks, 1)
-			dispatchTask := ctx.Tasks[0].Payload.(*activitypb.ActivityDispatchTask)
+			require.Len(t, ctx.Tasks, 2)
+			require.Equal(t, defaultTime, attemptState.GetDispatchTime().AsTime())
+			require.Nil(t, attemptState.GetCurrentRetryInterval())
+			require.Equal(t, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED, attemptState.GetCurrentRetryIntervalSource())
+			require.EqualValues(t, 5, activity.GetScheduleToCloseStamp())
+			require.Equal(t, []byte("checkpoint"), activity.LastHeartbeat.Get(ctx).GetDetails().GetPayloads()[0].GetData())
+			if tc.attemptCount > 1 {
+				protorequire.ProtoEqual(t, failure, attemptState.GetLastFailureDetails().GetFailure())
+				require.Equal(t, defaultTime.Add(-time.Minute), attemptState.GetCompleteTime().AsTime())
+			}
+			require.Equal(t, defaultTime.Add(time.Minute), ctx.Tasks[0].Attributes.ScheduledTime)
+			require.EqualValues(t, 9, ctx.Tasks[0].Payload.(*activitypb.ScheduleToStartTimeoutTask).GetStamp())
+			require.Equal(t, defaultTime, ctx.Tasks[1].Attributes.ScheduledTime)
+			dispatchTask := ctx.Tasks[1].Payload.(*activitypb.ActivityDispatchTask)
 			require.Equal(t, int32(9), dispatchTask.GetStamp())
 			require.Equal(t, tc.expectedReason, dispatchTask.GetDispatchReason())
 			valid, err = handler.Validate(ctx, activity, chasm.TaskInvocation{}, dispatchTask)

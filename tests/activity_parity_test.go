@@ -9,10 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/activity/model"
@@ -24,6 +26,8 @@ import (
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type activityParityTestSuite struct {
@@ -850,6 +854,7 @@ func (s *activityParityTestSuite) TestReset() {
 func (s *activityParityTestSuite) TestPauseUnpause() {
 	t := s.T()
 	env := newActivityParityEnv(t)
+	pausedRetryCfg := activityConfig{MaxAttempts: 10, RetryInterval: activityLongDuration}
 	pausedRetry := activityInfo{RunState: enumspb.PENDING_ACTIVITY_STATE_PAUSED, Attempt: 2}
 
 	// A pending pause preserves the next attempt even beyond MaximumAttempts; unpause lets it run.
@@ -859,13 +864,81 @@ func (s *activityParityTestSuite) TestPauseUnpause() {
 			func(t *testing.T, a parityActivity) {
 				require.Equal(t, pausedRetry, a.activityInfo(t),
 					"a pause must be honoured whether or not the activity has retries left")
-				for _, event := range []model.Event{model.Unpause, model.BackoffElapses, model.Poll} {
+				for _, event := range []model.Event{model.Unpause, model.Poll} {
 					a.driveEvent(t, event)
 				}
 				require.Equal(t, int32(2), a.activityInfo(t).Attempt)
 				a.driveEvent(t, model.Complete)
 				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, a.terminal(t).Status)
 			})
+	})
+
+	t.Run("UnpauseAnActivityPausedInRetryBackoff", func(t *testing.T) {
+		// Keep jitter shorter than activityLongDuration to distinguish it from the old backoff.
+		const jitter = time.Hour
+
+		trace := []model.Event{model.Poll, model.FailRetryably}
+		assertBackoffDiscarded := func(
+			t *testing.T,
+			a parityActivity,
+			nextAttemptScheduleTime func() *timestamppb.Timestamp,
+			unpause func() error,
+		) {
+			deadline := nextAttemptScheduleTime()
+			require.NotNil(t, deadline, "an activity backing off must report the deadline its retry dispatches at")
+			a.driveEvent(t, model.Pause)
+			unpausedAt := time.Now()
+			// Call the API directly to specify jitter. This bypasses model tracking,
+			// so do not drive further model events afterward.
+			require.NoError(t, unpause())
+			released := nextAttemptScheduleTime()
+			if released == nil {
+				// A short random jitter may expire before Describe, which omits an already-due deadline.
+				require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, a.activityInfo(t).RunState)
+				return
+			}
+			require.True(t, released.AsTime().Before(deadline.AsTime()),
+				"unpausing must discard the remaining backoff rather than serving out a deadline set before the pause")
+			// Allow for client/server clock skew.
+			require.False(t, released.AsTime().Before(unpausedAt.Add(-activityDriverTimerMargin)),
+				"...and must not dispatch before the unpause that released it")
+			require.False(t, released.AsTime().After(unpausedAt.Add(jitter+activityDriverTimerMargin)),
+				"...placing the dispatch inside the jitter window the unpause asked for")
+		}
+
+		t.Run("WorkflowActivity", func(t *testing.T) {
+			a := newWFADriver(t, env, pausedRetryCfg).driveTrace(t, trace)
+			assertBackoffDiscarded(t, a, func() *timestamppb.Timestamp {
+				return a.pendingActivityInfo(t).GetNextAttemptScheduleTime()
+			}, func() error {
+				_, err := env.FrontendClient().UnpauseActivityExecution(a.testContext(), &workflowservice.UnpauseActivityExecutionRequest{
+					Namespace:  env.Namespace().String(),
+					WorkflowId: a.workflowID,
+					ActivityId: a.activityID,
+					RunId:      a.runID,
+					Identity:   env.Tv().ClientIdentity(),
+					RequestId:  uuid.NewString(),
+					Jitter:     durationpb.New(jitter),
+				})
+				return err
+			})
+		})
+		t.Run("StandaloneActivity", func(t *testing.T) {
+			a := newSAADriver(t, env, pausedRetryCfg).driveTrace(t, trace)
+			assertBackoffDiscarded(t, a, func() *timestamppb.Timestamp {
+				return a.describe(t).GetInfo().GetNextAttemptScheduleTime()
+			}, func() error {
+				_, err := env.FrontendClient().UnpauseActivityExecution(a.testContext(), &workflowservice.UnpauseActivityExecutionRequest{
+					Namespace:  env.Namespace().String(),
+					ActivityId: a.activityID,
+					RunId:      a.runID,
+					Identity:   env.Tv().ClientIdentity(),
+					RequestId:  uuid.NewString(),
+					Jitter:     durationpb.New(jitter),
+				})
+				return err
+			})
+		})
 	})
 }
 

@@ -258,6 +258,9 @@ func unpause(_ Config, s AbstractState, _ Event) Outcome {
 	case Paused:
 		n := s
 		n.Status = Scheduled
+		if n.Dispatchability == BackoffPending {
+			n.Dispatchability = Dispatchable
+		}
 		return Outcome{Next: n}
 	case PauseRequested:
 		// Unlike CancelRequested and ResetRequested, PauseRequested can be "undone" (by Unpause).
