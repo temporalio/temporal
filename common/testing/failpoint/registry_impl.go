@@ -9,6 +9,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/failpointservice/v1"
+	"go.temporal.io/server/common/namespace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -48,21 +49,27 @@ func (r *registryImpl) Delete(key Key) {
 
 // gRPC service implementation
 
-// validateKey rejects the proto zero value, which is the FailpointKey enum's
-// "unknown" sentinel. Without this check, a request with no key set would
+// requestKey returns the key named by a request. Requests address failpoints by name, so the key
+// is not declared with NewKey.
+func requestKey(name, namespaceID string) Key {
+	return Key{name: name, namespaceID: namespace.ID(namespaceID)}
+}
+
+// validateKey rejects an empty key name. Without this check, a request with no key set would
 // silently create a failpoint that no ExecuteCtx call site can ever match.
 func validateKey(key Key) error {
-	if key == enumsspb.FAILPOINT_KEY_UNSPECIFIED {
+	if key.name == "" {
 		return status.Error(codes.InvalidArgument, "failpoint key must be set")
 	}
 	return nil
 }
 
 func (r *registryImpl) DisableFailpoint(ctx context.Context, req *failpointservice.DisableFailpointRequest) (*failpointservice.DisableFailpointResponse, error) {
+	key := requestKey(req.Key, req.NamespaceId)
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	fp := r.failpoints[req.Key]
+	fp := r.failpoints[key]
 	if fp == nil {
 		// Disable is idempotent: a missing key means there's nothing to do, not an error.
 		// Tests that disable in cleanup hooks would otherwise see flaky NotFound errors.
@@ -72,13 +79,11 @@ func (r *registryImpl) DisableFailpoint(ctx context.Context, req *failpointservi
 	switch f := fp.(type) {
 	case *Failpoint[error]:
 		f.Disable()
-	case *Failpoint2[error, error]:
-		f.Disable()
 	default:
-		return nil, status.Errorf(codes.Internal, "unsupported failpoint type for key %d: %T", req.Key, fp)
+		return nil, status.Errorf(codes.Internal, "unsupported failpoint type for key %s: %T", key, fp)
 	}
 
-	delete(r.failpoints, req.Key)
+	delete(r.failpoints, key)
 	return &failpointservice.DisableFailpointResponse{}, nil
 }
 
@@ -96,8 +101,6 @@ func (r *registryImpl) DisableAllFailpoints(ctx context.Context, req *failpoints
 		switch f := r.failpoints[key].(type) {
 		case *Failpoint[error]:
 			f.Disable()
-		case *Failpoint2[error, error]:
-			f.Disable()
 		default:
 			// Unknown type — skip Disable; we still drop the entry below.
 		}
@@ -108,16 +111,17 @@ func (r *registryImpl) DisableAllFailpoints(ctx context.Context, req *failpoints
 }
 
 func (r *registryImpl) InjectPanic(ctx context.Context, req *failpointservice.InjectPanicRequest) (*failpointservice.InjectPanicResponse, error) {
-	if err := validateKey(req.Key); err != nil {
+	key := requestKey(req.Key, req.NamespaceId)
+	if err := validateKey(key); err != nil {
 		return nil, err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	fp := r.failpoints[req.Key]
+	fp := r.failpoints[key]
 	if fp == nil {
-		fp = NewFailpoint[error](req.Key)
-		r.failpoints[req.Key] = fp
+		fp = NewFailpoint[error](key)
+		r.failpoints[key] = fp
 	}
 
 	recurrence := req.Recurrence
@@ -128,26 +132,25 @@ func (r *registryImpl) InjectPanic(ctx context.Context, req *failpointservice.In
 	switch f := fp.(type) {
 	case *Failpoint[error]:
 		f.Panic(errors.New(req.PanicValue), recurrence)
-	case *Failpoint2[error, error]:
-		f.Panic(errors.New(req.PanicValue), recurrence)
 	default:
-		return nil, status.Errorf(codes.Internal, "unsupported failpoint type for key %d: %T", req.Key, fp)
+		return nil, status.Errorf(codes.Internal, "unsupported failpoint type for key %s: %T", key, fp)
 	}
 
 	return &failpointservice.InjectPanicResponse{}, nil
 }
 
 func (r *registryImpl) InjectBlock(ctx context.Context, req *failpointservice.InjectBlockRequest) (*failpointservice.InjectBlockResponse, error) {
-	if err := validateKey(req.Key); err != nil {
+	key := requestKey(req.Key, req.NamespaceId)
+	if err := validateKey(key); err != nil {
 		return nil, err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	fp := r.failpoints[req.Key]
+	fp := r.failpoints[key]
 	if fp == nil {
-		fp = NewFailpoint[error](req.Key)
-		r.failpoints[req.Key] = fp
+		fp = NewFailpoint[error](key)
+		r.failpoints[key] = fp
 	}
 
 	recurrence := req.Recurrence
@@ -158,26 +161,25 @@ func (r *registryImpl) InjectBlock(ctx context.Context, req *failpointservice.In
 	switch f := fp.(type) {
 	case *Failpoint[error]:
 		f.Block(recurrence)
-	case *Failpoint2[error, error]:
-		f.Block(recurrence)
 	default:
-		return nil, status.Errorf(codes.Internal, "unsupported failpoint type for key %d: %T", req.Key, fp)
+		return nil, status.Errorf(codes.Internal, "unsupported failpoint type for key %s: %T", key, fp)
 	}
 
 	return &failpointservice.InjectBlockResponse{}, nil
 }
 
 func (r *registryImpl) InjectReturn(ctx context.Context, req *failpointservice.InjectReturnRequest) (*failpointservice.InjectReturnResponse, error) {
-	if err := validateKey(req.Key); err != nil {
+	key := requestKey(req.Key, req.NamespaceId)
+	if err := validateKey(key); err != nil {
 		return nil, err
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	fp := r.failpoints[req.Key]
+	fp := r.failpoints[key]
 	if fp == nil {
-		fp = NewFailpoint[error](req.Key)
-		r.failpoints[req.Key] = fp
+		fp = NewFailpoint[error](key)
+		r.failpoints[key] = fp
 	}
 
 	recurrence := req.Recurrence
@@ -188,32 +190,29 @@ func (r *registryImpl) InjectReturn(ctx context.Context, req *failpointservice.I
 	switch f := fp.(type) {
 	case *Failpoint[error]:
 		f.Return(errors.New(req.ErrorMessage), recurrence)
-	case *Failpoint2[error, error]:
-		f.Return(errors.New(req.ErrorMessage), errors.New(req.ErrorMessage), recurrence)
 	default:
-		return nil, status.Errorf(codes.Internal, "unsupported failpoint type for key %d: %T", req.Key, fp)
+		return nil, status.Errorf(codes.Internal, "unsupported failpoint type for key %s: %T", key, fp)
 	}
 
 	return &failpointservice.InjectReturnResponse{}, nil
 }
 
 func (r *registryImpl) WaitForBlock(ctx context.Context, req *failpointservice.WaitForBlockRequest) (*failpointservice.WaitForBlockResponse, error) {
+	key := requestKey(req.Key, req.NamespaceId)
 	r.mu.RLock()
-	fp := r.failpoints[req.Key]
+	fp := r.failpoints[key]
 	r.mu.RUnlock()
 
 	if fp == nil {
-		return nil, status.Errorf(codes.NotFound, "failpoint %d not found", req.Key)
+		return nil, status.Errorf(codes.NotFound, "failpoint %s not found", key)
 	}
 
 	var waitCh chan struct{}
 	switch f := fp.(type) {
 	case *Failpoint[error]:
 		waitCh = f.WaitCh()
-	case *Failpoint2[error, error]:
-		waitCh = f.WaitCh()
 	default:
-		return nil, status.Errorf(codes.Internal, "unsupported failpoint type for key %d: %T", req.Key, fp)
+		return nil, status.Errorf(codes.Internal, "unsupported failpoint type for key %s: %T", key, fp)
 	}
 
 	select {
@@ -244,7 +243,7 @@ func (r *registryImpl) ListFailpoints(ctx context.Context, req *failpointservice
 	}, nil
 }
 
-// infoProvider is implemented by Failpoint[T] and Failpoint2[T1, T2].
+// infoProvider is implemented by Failpoint[T].
 type infoProvider interface {
 	Info() *failpointservice.FailpointInfo
 }
@@ -262,7 +261,8 @@ func (r *registryImpl) getInfo(key Key) *failpointservice.FailpointInfo {
 		return ip.Info()
 	}
 	return &failpointservice.FailpointInfo{
-		Key:    key,
-		Action: Off,
+		Key:         key.name,
+		NamespaceId: key.namespaceID.String(),
+		Action:      Off,
 	}
 }
