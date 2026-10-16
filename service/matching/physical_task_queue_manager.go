@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -89,7 +90,8 @@ type (
 		pollerHistory            *pollerHistory
 		currentPolls             atomic.Int64
 		taskValidator            taskValidator
-		deploymentRegistrationCh chan struct{}
+		deploymentRegistrationCh     chan struct{}
+		monitorDeploymentVersionOnce sync.Once
 		pollerScalingRateLimiter quotas.RateLimiter
 
 		taskTrackerLock sync.Mutex
@@ -784,6 +786,10 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		return errMissingDeploymentVersion
 	}
 
+	c.monitorDeploymentVersionOnce.Do(func() {
+		go c.monitorDeploymentVersionInUserData()
+	})
+
 	userData, _, err := c.partitionMgr.getPerTypeUserData()
 	if err != nil {
 		return err
@@ -881,12 +887,55 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		select {
 		case <-userDataChanged:
 		case <-ctx.Done():
-			c.logger.Error("timed out waiting for worker deployment version to appear in user data")
+			c.logger.Error("timed out waiting for worker deployment version to appear in user data",
+				tag.Deployment(workerDeployment.SeriesName),
+				tag.NewStringTag("build_id", workerDeployment.BuildId),
+			)
 			return ctx.Err()
 		}
 	}
 
 	return nil
+}
+
+// monitorDeploymentVersionInUserData waits an initial grace period, then periodically checks
+// whether this physical task queue's deployment version is present in its task queue's user data.
+// If the version is missing after the grace period, it emits a counter on each check until the
+// version appears or the task queue unloads. No metric is emitted when the version is found.
+func (c *physicalTaskQueueManagerImpl) monitorDeploymentVersionInUserData() {
+	// Grace period before first check to allow normal propagation to complete.
+	select {
+	case <-c.tqCtx.Done():
+		return
+	case <-time.After(5 * time.Minute):
+	}
+
+	version := worker_versioning.DeploymentVersionFromDeployment(c.queue.Version().Deployment())
+	ticker := time.NewTicker(1 * time.Minute)
+	defer ticker.Stop()
+	for {
+		if c.isDeploymentVersionInUserData(version) {
+			return
+		}
+		c.metricsHandler.Counter(metrics.DeploymentVersionMissingFromUserData.Name()).Record(1)
+		select {
+		case <-c.tqCtx.Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+// isDeploymentVersionInUserData checks whether the given deployment version is present in this
+// task queue's user data.
+func (c *physicalTaskQueueManagerImpl) isDeploymentVersionInUserData(
+	version *deploymentspb.WorkerDeploymentVersion,
+) bool {
+	userData, _, err := c.partitionMgr.getPerTypeUserData()
+	if err != nil {
+		return false
+	}
+	return worker_versioning.HasDeploymentVersion(userData.GetDeploymentData(), version)
 }
 
 func (c *physicalTaskQueueManagerImpl) QueueKey() *PhysicalTaskQueueKey {
