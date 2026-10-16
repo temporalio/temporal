@@ -177,8 +177,13 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 		logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
 			Level:   testlogger.Error,
 			Message: "service failures",
-			Tags:    map[string]any{"nexus-stage": "caller-outbound", "operation": "StartNexusOperationExecution"},
+			Tags:    map[string]any{"operation": "StartNexusOperationExecution"},
 		})
+		for _, record := range logCapture.Snapshot() {
+			for _, logTag := range record.Tags {
+				s.NotEqual("nexus-stage", logTag.Key())
+			}
+		}
 	})
 
 	s.Run("IDConflictPolicyFail", func(s *NexusStandaloneTestSuite) {
