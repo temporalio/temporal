@@ -161,14 +161,15 @@ func TestPrepareEagerDispatchCheck(t *testing.T) {
 			require.Equal(t, test.wantEager, starter.requestEagerStart())
 			require.Equal(t, !test.wantEager, starter.eagerDispatchNotGranted)
 
-			var sentTaskQueueTypes []string
-			for _, recording := range capture.Snapshot()[metrics.EagerDispatchRequestsSent.Name()] {
-				sentTaskQueueTypes = append(sentTaskQueueTypes, recording.Tags[metrics.TaskTypeTagName])
-			}
+			sent := capture.Snapshot()[metrics.EagerDispatchRequestsSent.Name()]
 			if test.checkEnabled {
-				require.Equal(t, []string{enumspb.TASK_QUEUE_TYPE_WORKFLOW.String()}, sentTaskQueueTypes)
+				require.Len(t, sent, 1)
+				require.Equal(t, enumspb.TASK_QUEUE_TYPE_WORKFLOW.String(), sent[0].Tags[metrics.TaskTypeTagName])
+				require.Equal(t, metrics.HistoryStartWorkflowExecutionScope, sent[0].Tags[metrics.OperationTagName])
+				// The activity paths that emit this metric have no workflow type tag.
+				require.NotContains(t, sent[0].Tags, metrics.WorkflowTypeTag("").Key)
 			} else {
-				require.Empty(t, sentTaskQueueTypes)
+				require.Empty(t, sent)
 			}
 
 			reasonTag := metrics.ReasonTag(eagerStartDeniedReasonDispatchNotGranted)
@@ -225,6 +226,9 @@ func TestGrantEagerWorkflowDispatchVersion(t *testing.T) {
 			t.Parallel()
 
 			ctrl := gomock.NewController(t)
+			shardContext := historyi.NewMockShardContext(ctrl)
+			shardContext.EXPECT().GetConfig().Return(tests.NewDynamicConfig()).AnyTimes()
+			shardContext.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
 			matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
 			matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), protomock.Eq(&matchingservice.GrantEagerDispatchRequest{
 				NamespaceId: tests.NamespaceID.String(),
@@ -238,7 +242,7 @@ func TestGrantEagerWorkflowDispatchVersion(t *testing.T) {
 			}}, nil)
 
 			starter := &Starter{
-				metricsHandler: metrics.NoopMetricsHandler,
+				shardContext:   shardContext,
 				matchingClient: matchingClient,
 				namespace:      tests.LocalNamespaceEntry,
 				request: &historyservice.StartWorkflowExecutionRequest{

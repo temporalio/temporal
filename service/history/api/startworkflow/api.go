@@ -195,7 +195,12 @@ func (s *Starter) grantEagerWorkflowDispatch(ctx context.Context) bool {
 	version := worker_versioning.DeploymentVersionFromDeployment(worker_versioning.DeploymentFromExternalDeploymentVersion(
 		worker_versioning.GetOverrideTargetDeploymentVersion(request.GetVersioningOverride()),
 	))
-	metrics.EagerDispatchRequestsSent.With(s.getMetricsHandler().WithTags(
+	// Not s.getMetricsHandler(): its workflow type tag is not on the activity paths that emit this metric.
+	metrics.EagerDispatchRequestsSent.With(workflow.GetPerTaskQueueFamilyScope(
+		s.shardContext.GetMetricsHandler(),
+		s.namespace.Name(),
+		request.GetTaskQueue().GetName(),
+		s.shardContext.GetConfig(),
 		metrics.OperationTag(metrics.HistoryStartWorkflowExecutionScope),
 		metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
 	)).Record(1)
