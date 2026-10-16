@@ -1,6 +1,7 @@
 package wci
 
 import (
+	wcimetrics "go.temporal.io/auto-scaled-workers/wci/metrics"
 	"go.temporal.io/server/chasm"
 	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
 )
@@ -31,6 +32,10 @@ func (g *ScalingGroup) scheduleInvoke(ctx chasm.MutableContext, providerType str
 // finishInvoke records an invoke result. Every outcome changes (inflight_invoke_id, inflight_invoke_attempt),
 // so the running task is invalid at close and singleton Ignore never drops its successor.
 func (w *WorkerControllerInstance) finishInvoke(ctx chasm.MutableContext, g *ScalingGroup, providerType string, err error) {
+	// One emission per invoke outcome; retried attempts are not counted, as with the workflow's activity.
+	if err == nil || !retryable(err) || g.InflightInvokeAttempt >= maxInvokeAttempts {
+		recordOperation(metricsFor(ctx, w, providerType), wcimetrics.OperationTypeInvokeWorker, computeErrorType(err))
+	}
 	switch {
 	case err == nil:
 		if g.PendingInvokes > 0 {

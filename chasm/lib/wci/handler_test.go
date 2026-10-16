@@ -12,6 +12,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/auto-scaled-workers/wci/compute"
+	wcimetrics "go.temporal.io/auto-scaled-workers/wci/metrics"
 	"go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	scalingalgorithm "go.temporal.io/auto-scaled-workers/wci/workflow/scaling_algorithm"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -20,6 +21,7 @@ import (
 	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/sdk"
 	"go.uber.org/mock/gomock"
@@ -96,6 +98,7 @@ type e2e struct {
 	frontend *fakeFrontend
 	lib      *Library
 	history  *fakeHistory
+	metrics  *metricstest.CaptureHandler
 }
 
 func newE2E(t *testing.T, script fakeAlgo) *e2e {
@@ -114,20 +117,21 @@ func newE2E(t *testing.T, script fakeAlgo) *e2e {
 		DynamicConfig:     dynamicconfig.NewNoopCollection(),
 		Logger:            log.NewNoopLogger(),
 	})
-	snapshotOpts := SnapshotTaskHandlerOptions{FrontendClient: frontend, Logger: log.NewNoopLogger()}
+	metricsHandler := metricstest.NewCaptureHandler()
+	snapshotOpts := SnapshotTaskHandlerOptions{FrontendClient: frontend, Logger: log.NewNoopLogger(), MetricsHandler: metricsHandler}
 	history := &fakeHistory{}
 	computeOpts := ComputeTaskHandlerOptions{ComputeClient: computeClient, HistoryClient: history, Logger: log.NewNoopLogger()}
 	lib := NewLibrary(h,
 		NewFetchSnapshotTaskHandler(snapshotOpts), NewDeferredDecisionTaskHandler(snapshotOpts),
 		NewResizeTaskHandler(computeOpts), NewInvokeTaskHandler(computeOpts),
 		NewValidateSpecTaskHandler(computeOpts), NewSignalVersionWorkflowTaskHandler(computeOpts),
-		NewMigrateToWorkflowTaskHandler(MigrateToWorkflowTaskHandlerOptions{HistoryClient: history, DynamicConfig: dynamicconfig.NewNoopCollection()}))
+		NewMigrateToWorkflowTaskHandler(MigrateToWorkflowTaskHandlerOptions{HistoryClient: history, DynamicConfig: dynamicconfig.NewNoopCollection(), MetricsHandler: metricsHandler}))
 
 	chasmRegistry := chasm.NewRegistry(log.NewTestLogger())
 	require.NoError(t, chasmRegistry.Register(&chasm.CoreLibrary{}))
 	require.NoError(t, chasmRegistry.Register(lib))
-	engine := chasmtest.NewEngine(t, chasmRegistry)
-	return &e2e{ctx: chasm.NewEngineContext(context.Background(), engine), engine: engine, handler: h, compute: computeClient, frontend: frontend, lib: lib, history: history}
+	engine := chasmtest.NewEngine(t, chasmRegistry, chasmtest.WithMetricsHandler(metricsHandler))
+	return &e2e{ctx: chasm.NewEngineContext(context.Background(), engine), engine: engine, handler: h, compute: computeClient, frontend: frontend, lib: lib, history: history, metrics: metricsHandler}
 }
 
 func groupUpsert(provider string) map[string]*wcipb.ScalingGroupSpecUpdate {
@@ -234,6 +238,40 @@ func TestE2E_TaskAddThenResizeEndToEnd(t *testing.T) {
 	require.Equal(t, wcipb.SCALING_GROUP_STATUS_IDLE, g.Status)
 	require.EqualValues(t, 4, g.AppliedSize)
 	require.Equal(t, []int32{4}, e.compute.sizes)
+}
+
+func TestE2E_EmitsWorkflowMetricsTaggedCHASM(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	capture := e.metrics.StartCapture()
+	defer e.metrics.StopCapture(capture)
+
+	_, err := e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+	fake.actions = []scalingalgorithm.ScalingAction{{Action: scalingalgorithm.ActionTypeUpdateWorkerSetSize, Count: count(4)}, {Action: scalingalgorithm.ActionTypeInvokeWorker}}
+	require.NoError(t, e.recordTaskAdd())
+	_, g := e.live(t)
+	_, err = chasmtest.ExecuteSideEffectTask(e.ctx, e.engine, g, chasm.SideEffectTaskHandler[*ScalingGroup, *wcipb.ResizeTask](e.lib.ResizeTaskHandler), chasm.TaskAttributes{Destination: "test-invoke"}, &wcipb.ResizeTask{Attempt: g.Attempt})
+	require.NoError(t, err)
+	require.NoError(t, e.migrateToWorkflow())
+	e.runMigrateTask(t)
+
+	snap := capture.Snapshot()
+	for _, name := range []string{
+		wcimetrics.InstanceCreated.Name(), wcimetrics.Signals.Name(), wcimetrics.ScaleUpCount.Name(),
+		wcimetrics.Operations.Name(), wcimetrics.TargetWorkerCount.Name(), MigrateToWorkflowCount.Name(),
+	} {
+		require.NotEmpty(t, snap[name], name)
+		for _, r := range snap[name] {
+			require.Equal(t, backendCHASM, r.Tags[wcimetrics.BackendTagName], name)
+		}
+	}
+	require.Equal(t, "test-invoke", snap[wcimetrics.ScaleUpCount.Name()][0].Tags[wcimetrics.ComputeProviderTag])
+	require.Equal(t, "dep", snap[wcimetrics.ScaleUpCount.Name()][0].Tags[wcimetrics.WorkerDeploymentNameTag])
+	require.InDelta(t, 4.0, snap[wcimetrics.TargetWorkerCount.Name()][0].Value, 0)
+	resize := snap[wcimetrics.Operations.Name()][0]
+	require.Equal(t, wcimetrics.OperationTypeUpdateWorkerSetSize, resize.Tags[wcimetrics.OperationTagName])
+	require.Equal(t, string(wcimetrics.ErrorTypeNone), resize.Tags[wcimetrics.ErrorTypeTagName])
+	require.Equal(t, migrationOutcomeSuccess, snap[MigrateToWorkflowCount.Name()][0].Tags[wcimetrics.MigrationOutcomeTagName])
 }
 
 func TestE2E_FetchSnapshotRunsPoll(t *testing.T) {

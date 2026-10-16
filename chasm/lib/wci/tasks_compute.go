@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/auto-scaled-workers/wci/compute"
+	wcimetrics "go.temporal.io/auto-scaled-workers/wci/metrics"
 	"go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
@@ -91,13 +92,17 @@ func (h *ResizeTaskHandler) Execute(ctx context.Context, ref chasm.ComponentRef,
 	}
 	callErr := h.client.UpdateWorkerSetSize(ctx, call.rc, call.cfg, call.size)
 	_, _, err = chasm.UpdateComponent(ctx, ref, func(g *ScalingGroup, mctx chasm.MutableContext, _ any) (struct{}, error) {
+		h := metricsFor(mctx, g.Root.Get(mctx), call.providerType)
 		switch {
 		case callErr == nil:
+			recordOperation(h, wcimetrics.OperationTypeUpdateWorkerSetSize, wcimetrics.ErrorTypeNone)
+			wcimetrics.TargetWorkerCount.With(h).Record(float64(call.size))
 			return struct{}{}, g.CompleteResize(mctx, call.size, call.providerType)
 		case retryable(callErr):
 			next := mctx.Now(g).Add(resizeBackoff.ComputeNextDelay(0, int(g.Attempt), callErr))
 			return struct{}{}, TransitionResizeRetryable.Apply(g, mctx, EventResizeRetryable{Failure: failureOf(callErr), NextAttemptTime: next})
 		default:
+			recordOperation(h, wcimetrics.OperationTypeUpdateWorkerSetSize, computeErrorType(callErr))
 			if err := TransitionResizeFailed.Apply(g, mctx, EventResizeFailed{Failure: failureOf(callErr)}); err != nil {
 				return struct{}{}, err
 			}
@@ -188,7 +193,12 @@ func (h *ValidateSpecTaskHandler) Execute(ctx context.Context, ref chasm.Compone
 		h.logger.Warn("Transient failure validating WCI spec", tag.Error(validationErr))
 		return nil
 	}
+	errorType := computeErrorType(validationErr)
+	if in.algoErr != nil {
+		errorType = wcimetrics.ErrorTypeInvalidSpec
+	}
 	_, _, err = chasm.UpdateComponent(ctx, ref, func(w *WorkerControllerInstance, mctx chasm.MutableContext, _ any) (struct{}, error) {
+		recordOperation(metricsFor(mctx, w, ""), wcimetrics.OperationTypeValidateSpec, errorType)
 		w.recordValidation(mctx, validationErr)
 		return struct{}{}, nil
 	}, nil)
