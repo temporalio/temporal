@@ -107,6 +107,7 @@ func (mi *MaskInternalErrorDetailsInterceptor) logError(
 
 	logTags = append(logTags, tag.Stringer("grpc_code", statusCode))
 	logTags = append(logTags, mi.workflowTags.Extract(req, fullMethod)...)
+	logTags = nexusTaskDeliveryLogTags(fullMethod, logTags)
 
 	mi.logger.Error("masked service failures", append(logTags, tag.Error(err))...)
 }
