@@ -736,6 +736,36 @@ func (s *activityParityTestSuite) TestResetClearsAttemptMetadata() {
 		})
 	})
 
+	s.Run("ImmediateResetFromPaused", func(s *activityParityTestSuite) {
+		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
+			t := s.T()
+			a := newWFADriver(t, env, cfg).driveTrace(t,
+				[]model.Event{model.Poll, model.FailRetryably, model.Pause})
+			assertClearedByReset(t, a, model.Reset, func() attemptMetadata {
+				info := a.pendingActivityInfo(t)
+				return attemptMetadata{
+					lastFailure:             info.GetLastFailure(),
+					lastAttemptCompleteTime: info.GetLastAttemptCompleteTime(),
+					lastWorkerIdentity:      info.GetLastWorkerIdentity(),
+				}
+			})
+		})
+
+		s.Run("StandaloneActivity", func(s *activityParityTestSuite) {
+			t := s.T()
+			a := newSAADriver(t, env, cfg).driveTrace(t,
+				[]model.Event{model.Poll, model.FailRetryably, model.Pause})
+			assertClearedByReset(t, a, model.Reset, func() attemptMetadata {
+				info := a.describe(t).GetInfo()
+				return attemptMetadata{
+					lastFailure:             info.GetLastFailure(),
+					lastAttemptCompleteTime: info.GetLastAttemptCompleteTime(),
+					lastWorkerIdentity:      info.GetLastWorkerIdentity(),
+				}
+			})
+		})
+	})
+
 	s.Run("ImmediateResetKeepPaused", func(s *activityParityTestSuite) {
 		s.Run("WorkflowActivity", func(s *activityParityTestSuite) {
 			t := s.T()
