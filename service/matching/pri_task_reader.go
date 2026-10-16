@@ -494,8 +494,11 @@ func (tr *priTaskReader) setReadLevelAfterGap(newReadLevel int64) {
 		return
 	}
 	if tr.outstandingTasks.Empty() {
-		// Expired tasks advance readLevel without entering outstandingTasks. Once no tasks
-		// remain outstanding, they and the empty range can be acknowledged.
+		// The scan found no tasks in (tr.readLevel, newReadLevel]. The stale-read guard above
+		// handles signalNewTasks advancing readLevel during that scan. Tasks through readLevel
+		// are already acked, expired, or in outstandingTasks, so an empty map means everything
+		// through newReadLevel can be acknowledged. This also advances idle queues over gaps
+		// left by range ID changes.
 		tr.ackLevel = newReadLevel
 		// Push the updated ack level to the db. If we didn't do this here, the updated ack level
 		// wouldn't reach the db until another task is written and acked, which could be far in the

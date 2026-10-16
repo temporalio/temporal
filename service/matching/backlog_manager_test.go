@@ -507,9 +507,6 @@ func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_ExpiredTail() {
 		{name: "with_gap", maxReadLevelOffset: 100},
 	} {
 		s.Run(tc.name, func() {
-			t := s.T()
-			s := &BacklogManagerTestSuite{}
-			s.SetT(t)
 			s.SetupTest()
 
 			s.setupToCaptureTasks()
