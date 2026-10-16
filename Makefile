@@ -48,9 +48,9 @@ VISIBILITY_DB ?= temporal_visibility
 # reducing binary size since we only use the REST client (storage.NewClient), not the
 # gRPC client (storage.NewGRPCClient). Related issue: https://github.com/googleapis/google-cloud-go/issues/12343
 ALL_BUILD_TAGS := disable_grpc_modules,$(BUILD_TAG)
-ALL_TEST_BUILD_TAGS := $(ALL_BUILD_TAGS),test_dep,$(TEST_TAG)
+ALL_TEST_TAGS := $(ALL_BUILD_TAGS),test_dep,$(TEST_TAG)
 BUILD_TAG_FLAG := -tags $(ALL_BUILD_TAGS)
-TEST_TAG_FLAG := -tags $(ALL_TEST_BUILD_TAGS)
+TEST_TAG_FLAG := -tags $(ALL_TEST_TAGS)
 
 # 20 minutes is the upper bound defined for all tests. (Tests in CI take up to about 14:30 now)
 # If you change this, also change .github/workflows/run-tests.yml!
@@ -427,13 +427,13 @@ lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
 	@printf $(COLOR) "Linting code..."
 	@$(GOLANGCI_LINT) run \
 		--verbose \
-		--build-tags $(ALL_TEST_BUILD_TAGS) \
+		--build-tags $(ALL_TEST_TAGS) \
 		--timeout 10m \
 		--fix=$(GOLANGCI_LINT_FIX) \
 		--new-from-rev=$(GOLANGCI_LINT_BASE_REV) \
 		--config=.github/.golangci.yml \
 		$(LINT_CODE_TARGETS)
-	@go vet -tags $(ALL_TEST_BUILD_TAGS) -vettool="$(ERRORTYPE)" -style-check=false $(LINT_CODE_TARGETS)
+	@go vet -tags $(ALL_TEST_TAGS) -vettool="$(ERRORTYPE)" -style-check=false $(LINT_CODE_TARGETS)
 
 lint-yaml: $(YAMLFMT)
 	@printf $(COLOR) "Checking YAML formatting..."
