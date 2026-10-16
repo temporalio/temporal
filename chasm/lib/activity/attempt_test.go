@@ -5,9 +5,11 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	apiactivitypb "go.temporal.io/api/activity/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
 	"go.temporal.io/server/common"
@@ -18,11 +20,12 @@ import (
 
 func TestTryRescheduleRetryStatePrecedence(t *testing.T) {
 	testCases := []struct {
-		name        string
-		status      activitypb.ActivityExecutionStatus
-		retryPolicy *commonpb.RetryPolicy
-		expected    enumspb.RetryState
-		finalStatus activitypb.ActivityExecutionStatus
+		name             string
+		failureRetryable bool
+		status           activitypb.ActivityExecutionStatus
+		retryPolicy      *commonpb.RetryPolicy
+		expected         enumspb.RetryState
+		finalStatus      activitypb.ActivityExecutionStatus
 	}{
 		{
 			name:        "retry policy not set",
@@ -44,10 +47,24 @@ func TestTryRescheduleRetryStatePrecedence(t *testing.T) {
 			finalStatus: activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 		},
 		{
-			name:        "reset requested takes precedence over retry policy not set",
+			name:             "reset requested takes precedence over retry policy not set",
+			failureRetryable: true,
+			status:           activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
+			expected:         enumspb.RETRY_STATE_IN_PROGRESS,
+			finalStatus:      activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+		},
+		{
+			name:        "non-retryable reset without retry policy",
 			status:      activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
-			expected:    enumspb.RETRY_STATE_IN_PROGRESS,
-			finalStatus: activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
+			expected:    enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
+			finalStatus: activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
+		},
+		{
+			name:             "pause does not override missing retry policy",
+			status:           activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
+			failureRetryable: true,
+			expected:         enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
+			finalStatus:      activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
 		},
 	}
 
@@ -60,7 +77,7 @@ func TestTryRescheduleRetryStatePrecedence(t *testing.T) {
 					},
 				},
 			}
-			injectActivityContext(t, ctx) // needed for last test case
+			injectActivityContext(t, ctx)
 			activity := &Activity{
 				ActivityState: &activitypb.ActivityState{
 					Status:                 tc.status,
@@ -71,11 +88,115 @@ func TestTryRescheduleRetryStatePrecedence(t *testing.T) {
 				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 1}),
 			}
 
-			retryState, err := activity.tryReschedule(ctx, false, 0, &failurepb.Failure{})
+			failure := &failurepb.Failure{FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: !tc.failureRetryable},
+			}}
+			retryState, err := activity.tryReschedule(ctx, tc.failureRetryable, 0, failure)
 
 			require.NoError(t, err)
 			require.Equal(t, tc.expected, retryState)
 			require.Equal(t, tc.finalStatus, activity.GetStatus())
+		})
+	}
+}
+
+func TestTryReschedulePendingOperatorIntent(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name             string
+		status           activitypb.ActivityExecutionStatus
+		retryable        bool
+		maximumAttempts  int32
+		keepPaused       bool
+		workerDelay      time.Duration
+		wantRetryState   enumspb.RetryState
+		wantStatus       activitypb.ActivityExecutionStatus
+		wantAttemptCount int32
+	}{
+		{"pause overrides exhausted budget", activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED, true, 3, false, 0,
+			enumspb.RETRY_STATE_IN_PROGRESS, activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED, 4},
+		{"pause overrides insufficient retry window", activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED, true, 0, false, 2 * time.Hour,
+			enumspb.RETRY_STATE_IN_PROGRESS, activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED, 4},
+		{"pause does not override non-retryability", activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED, false, 3, false, 0,
+			enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED, 3},
+		{"ordinary failure respects exhausted budget", activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, true, 3, false, 0,
+			enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED, 3},
+		{"retryable reset overrides exhausted budget", activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED, true, 3, false, 0,
+			enumspb.RETRY_STATE_IN_PROGRESS, activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED, 1},
+		{"retryable reset preserves pause", activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED, true, 3, true, 0,
+			enumspb.RETRY_STATE_IN_PROGRESS, activitypb.ACTIVITY_EXECUTION_STATUS_PAUSED, 1},
+		{"non-retryable reset leaves deferred mutations unapplied", activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED, false, 3, true, 0,
+			enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED, 3},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{
+				HandleNow: func(chasm.Component) time.Time { return defaultTime.Add(time.Second) },
+			}}
+			injectActivityContext(t, ctx)
+			policy := common.CloneProto(defaultRetryPolicy)
+			policy.MaximumAttempts = tc.maximumAttempts
+			activity := &Activity{
+				ActivityState: &activitypb.ActivityState{
+					Status: tc.status, RetryPolicy: policy,
+					ActivityType:        &commonpb.ActivityType{Name: "test-activity-type"},
+					TaskQueue:           &taskqueuepb.TaskQueue{Name: "current-task-queue"},
+					StartToCloseTimeout: durationpb.New(30 * time.Second),
+					ScheduleTime:        timestamppb.New(defaultTime), ScheduleToCloseTimeout: durationpb.New(time.Hour),
+					ScheduleToCloseStamp: 5, ResetShouldPause: tc.keepPaused,
+				},
+				LastAttempt: chasm.NewDataField(ctx, &activitypb.ActivityAttemptState{Count: 3, Stamp: 7}),
+				LastHeartbeat: chasm.NewDataField(ctx, &activitypb.ActivityHeartbeatState{
+					Details: &commonpb.Payloads{Payloads: []*commonpb.Payload{{Data: []byte("checkpoint")}}},
+				}),
+			}
+			if tc.status == activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED {
+				activity.ResetRestoreOptions = true
+				activity.ResetShouldClearHeartbeat = true
+				activity.OriginalOptions = &apiactivitypb.ActivityOptions{
+					TaskQueue:   &taskqueuepb.TaskQueue{Name: "original-task-queue"},
+					RetryPolicy: common.CloneProto(policy), ScheduleToCloseTimeout: durationpb.New(2 * time.Hour),
+					StartToCloseTimeout: durationpb.New(time.Minute),
+				}
+			}
+			stateBefore := common.CloneProto(activity.ActivityState)
+			attemptBefore := common.CloneProto(activity.LastAttempt.Get(ctx))
+			heartbeatBefore := common.CloneProto(activity.LastHeartbeat.Get(ctx))
+			failure := &failurepb.Failure{FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: !tc.retryable},
+			}}
+
+			retryState, err := activity.tryReschedule(ctx, tc.retryable, tc.workerDelay, failure)
+
+			require.NoError(t, err)
+			require.Equal(t, tc.wantRetryState, retryState)
+			require.Equal(t, tc.wantStatus, activity.GetStatus())
+			attempt := activity.LastAttempt.Get(ctx)
+			require.Equal(t, tc.wantAttemptCount, attempt.GetCount())
+			if tc.wantRetryState != enumspb.RETRY_STATE_IN_PROGRESS {
+				protorequire.ProtoEqual(t, stateBefore, activity.ActivityState)
+				protorequire.ProtoEqual(t, attemptBefore, attempt)
+				protorequire.ProtoEqual(t, heartbeatBefore, activity.LastHeartbeat.Get(ctx))
+				require.Empty(t, ctx.Tasks)
+				return
+			}
+			require.EqualValues(t, 8, attempt.GetStamp())
+			protorequire.ProtoEqual(t, failure, attempt.GetLastFailureDetails().GetFailure())
+			if tc.status == activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED {
+				require.Empty(t, ctx.Tasks)
+				require.EqualValues(t, 5, activity.GetScheduleToCloseStamp())
+				if tc.workerDelay == 0 {
+					// Attempt 3 under the 1s initial interval and coefficient 2 policy backs off for 4s.
+					require.Equal(t, 4*time.Second, attempt.GetCurrentRetryInterval().AsDuration())
+					require.Equal(t, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_RETRY_POLICY, attempt.GetCurrentRetryIntervalSource())
+				} else {
+					require.Equal(t, tc.workerDelay, attempt.GetCurrentRetryInterval().AsDuration())
+					require.Equal(t, activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_WORKER_OVERRIDE, attempt.GetCurrentRetryIntervalSource())
+				}
+			}
 		})
 	}
 }
