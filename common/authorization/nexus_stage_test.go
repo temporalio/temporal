@@ -17,7 +17,7 @@ func TestNexusStageAuthorizationFailure(t *testing.T) {
 	for _, tc := range []struct{ method, stage string }{
 		{api.WorkflowServicePrefix + "PollNexusTaskQueue", "handler-task-delivery"},
 		{api.NexusServicePrefix + "DispatchByEndpoint", "handler-inbound"},
-		{api.NexusServicePrefix + "CompleteNexusOperation", ""},
+		{api.NexusServicePrefix + "CompleteNexusOperation", "caller-inbound"},
 		{api.WorkflowServicePrefix + "StartNexusOperationExecution", "caller-outbound"},
 		{api.WorkflowServicePrefix + "StartWorkflowExecution", ""},
 	} {

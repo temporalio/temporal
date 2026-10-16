@@ -33,6 +33,10 @@ func NexusStage(req any, fullMethod string) []tag.Tag {
 		api.WorkflowServicePrefix + "ListNexusOperationExecutions",
 		api.WorkflowServicePrefix + "CountNexusOperationExecutions":
 		return []tag.Tag{tag.NexusStageCallerOutbound}
+	case api.HistoryServicePrefix + "CompleteNexusOperation",
+		api.HistoryServicePrefix + "CompleteNexusOperationChasm",
+		api.NexusServicePrefix + "CompleteNexusOperation":
+		return []tag.Tag{tag.NexusStageCallerInbound}
 	case api.HistoryServicePrefix + "StartNexusOperation",
 		api.HistoryServicePrefix + "CancelNexusOperation",
 		api.NexusServicePrefix + "DispatchByEndpoint",

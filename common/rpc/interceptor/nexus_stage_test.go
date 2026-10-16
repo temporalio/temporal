@@ -41,14 +41,14 @@ func TestNexusStageRPCErrorLogs(t *testing.T) {
 		{api.WorkflowServicePrefix + "DeleteNexusOperationExecution", "caller-outbound"},
 		{api.WorkflowServicePrefix + "ListNexusOperationExecutions", "caller-outbound"},
 		{api.WorkflowServicePrefix + "CountNexusOperationExecutions", "caller-outbound"},
-		{api.HistoryServicePrefix + "CompleteNexusOperation", ""},
-		{api.HistoryServicePrefix + "CompleteNexusOperationChasm", ""},
+		{api.HistoryServicePrefix + "CompleteNexusOperation", "caller-inbound"},
+		{api.HistoryServicePrefix + "CompleteNexusOperationChasm", "caller-inbound"},
 		{api.HistoryServicePrefix + "StartNexusOperation", "handler-inbound"},
 		{api.HistoryServicePrefix + "CancelNexusOperation", "handler-inbound"},
 		{"/temporal.server.chasm.lib.nexusoperation.proto.v1.NexusOperationService/StartNexusOperation", "caller-outbound"},
 		{api.NexusServicePrefix + "DispatchByEndpoint", "handler-inbound"},
 		{api.NexusServicePrefix + "DispatchByNamespaceAndTaskQueue", "handler-inbound"},
-		{api.NexusServicePrefix + "CompleteNexusOperation", ""},
+		{api.NexusServicePrefix + "CompleteNexusOperation", "caller-inbound"},
 		{"/unrelated.Service/StartNexusOperationExecution", ""},
 	} {
 		t.Run(tc.method, func(t *testing.T) {
@@ -97,6 +97,7 @@ func TestNexusStagePanicLogs(t *testing.T) {
 	for _, tc := range []struct{ method, stage string }{
 		{api.WorkflowServicePrefix + "PollNexusTaskQueue", "handler-task-delivery"},
 		{api.WorkflowServicePrefix + "StartNexusOperationExecution", "caller-outbound"},
+		{api.HistoryServicePrefix + "CompleteNexusOperation", "caller-inbound"},
 	} {
 		t.Run(tc.method, func(t *testing.T) {
 			t.Parallel()
