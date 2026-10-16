@@ -81,6 +81,7 @@ func TestInvokeShadowNamespaceMutation(t *testing.T) {
 	select {
 	case request := <-client.requests:
 		require.True(t, request.GetMutation().GetShadow())
+		require.True(t, request.GetMutation().GetIsGlobalNamespace())
 		require.Equal(t, int64(7), request.GetMutation().GetExpectedVersion())
 		require.Equal(t, []string{"cell-b", "cell-c"}, request.GetMutation().GetPeerCells())
 	case <-time.After(time.Second):
@@ -198,11 +199,13 @@ func TestTriggerNamespaceMutationModes(t *testing.T) {
 				detail,
 				7,
 				nil,
+				true,
 				tc.mode,
 			)
 			require.NoError(t, err)
 			request := <-client.requests
 			require.Equal(t, tc.wantShadow, request.GetMutation().GetShadow())
+			require.True(t, request.GetMutation().GetIsGlobalNamespace())
 		})
 	}
 }

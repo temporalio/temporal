@@ -79,6 +79,9 @@ func validateTriggerNamespaceMutationRequest(req *namespacereplicationpb.Trigger
 	if req == nil || req.GetMutation() == nil {
 		return serviceerror.NewInvalidArgument("mutation is required")
 	}
+	if !req.GetMutation().GetIsGlobalNamespace() {
+		return serviceerror.NewInvalidArgument("mutation.is_global_namespace must be true")
+	}
 	if !req.GetMutation().GetShadow() {
 		return serviceerror.NewFailedPrecondition("authoritative CHASM namespace replication is not enabled")
 	}

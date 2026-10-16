@@ -287,9 +287,12 @@ type NamespaceMutation struct {
 	// update, this is the union of the previous and target cluster lists, minus
 	// the local cell, so a removed peer receives the final configuration.
 	PeerCells []string `protobuf:"bytes,4,rep,name=peer_cells,json=peerCells,proto3" json:"peer_cells,omitempty"`
+	// Whether the target namespace state is global. The CHASM namespace
+	// replication component rejects local namespace mutations.
+	IsGlobalNamespace bool `protobuf:"varint,5,opt,name=is_global_namespace,json=isGlobalNamespace,proto3" json:"is_global_namespace,omitempty"`
 	// Shadow mutations exercise the full component and peer transport without
 	// writing namespace state in either the source or destination cell.
-	Shadow        bool `protobuf:"varint,5,opt,name=shadow,proto3" json:"shadow,omitempty"`
+	Shadow        bool `protobuf:"varint,6,opt,name=shadow,proto3" json:"shadow,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -350,6 +353,13 @@ func (x *NamespaceMutation) GetPeerCells() []string {
 		return x.PeerCells
 	}
 	return nil
+}
+
+func (x *NamespaceMutation) GetIsGlobalNamespace() bool {
+	if x != nil {
+		return x.IsGlobalNamespace
+	}
+	return false
 }
 
 func (x *NamespaceMutation) GetShadow() bool {
@@ -580,14 +590,15 @@ var File_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto p
 
 const file_temporal_server_chasm_lib_namespacereplication_proto_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"Etemporal/server/chasm/lib/namespacereplication/proto/v1/message.proto\x127temporal.server.chasm.lib.namespacereplication.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a%temporal/api/failure/v1/message.proto\x1a.temporal/server/api/enums/v1/replication.proto\x1a3temporal/server/api/persistence/v1/namespaces.proto\"\xa5\x02\n" +
+	"Etemporal/server/chasm/lib/namespacereplication/proto/v1/message.proto\x127temporal.server.chasm.lib.namespacereplication.proto.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a%temporal/api/failure/v1/message.proto\x1a.temporal/server/api/enums/v1/replication.proto\x1a3temporal/server/api/persistence/v1/namespaces.proto\"\xd5\x02\n" +
 	"\x11NamespaceMutation\x12N\n" +
 	"\toperation\x18\x01 \x01(\x0e20.temporal.server.api.enums.v1.NamespaceOperationR\toperation\x12^\n" +
 	"\x10namespace_detail\x18\x02 \x01(\v23.temporal.server.api.persistence.v1.NamespaceDetailR\x0fnamespaceDetail\x12)\n" +
 	"\x10expected_version\x18\x03 \x01(\x03R\x0fexpectedVersion\x12\x1d\n" +
 	"\n" +
-	"peer_cells\x18\x04 \x03(\tR\tpeerCells\x12\x16\n" +
-	"\x06shadow\x18\x05 \x01(\bR\x06shadow\"\xd6\x04\n" +
+	"peer_cells\x18\x04 \x03(\tR\tpeerCells\x12.\n" +
+	"\x13is_global_namespace\x18\x05 \x01(\bR\x11isGlobalNamespace\x12\x16\n" +
+	"\x06shadow\x18\x06 \x01(\bR\x06shadow\"\xd6\x04\n" +
 	"\x16NamespaceMutationState\x12f\n" +
 	"\bmutation\x18\x01 \x01(\v2J.temporal.server.chasm.lib.namespacereplication.proto.v1.NamespaceMutationR\bmutation\x12`\n" +
 	"\x06status\x18\x02 \x01(\x0e2H.temporal.server.chasm.lib.namespacereplication.proto.v1.ComponentStatusR\x06status\x12j\n" +

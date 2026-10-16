@@ -78,10 +78,11 @@ func (h *applyLocalTaskHandler) Execute(
 ) error {
 	// Read the mutation payload from component state.
 	type loadResult struct {
-		Operation   enumsspb.NamespaceOperation
-		Detail      *persistencespb.NamespaceDetail
-		ExpectedVer int64
-		Shadow      bool
+		Operation         enumsspb.NamespaceOperation
+		Detail            *persistencespb.NamespaceDetail
+		ExpectedVer       int64
+		IsGlobalNamespace bool
+		Shadow            bool
 	}
 	loaded, err := chasm.ReadComponent(
 		ctx,
@@ -89,16 +90,25 @@ func (h *applyLocalTaskHandler) Execute(
 		func(c *NamespaceMutationComponent, _ chasm.Context, _ chasm.NoValue) (loadResult, error) {
 			m := c.GetMutation()
 			return loadResult{
-				Operation:   m.GetOperation(),
-				Detail:      common.CloneProto(m.GetNamespaceDetail()),
-				ExpectedVer: m.GetExpectedVersion(),
-				Shadow:      m.GetShadow(),
+				Operation:         m.GetOperation(),
+				Detail:            common.CloneProto(m.GetNamespaceDetail()),
+				ExpectedVer:       m.GetExpectedVersion(),
+				IsGlobalNamespace: m.GetIsGlobalNamespace(),
+				Shadow:            m.GetShadow(),
 			}, nil
 		},
 		nil,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to read chasm component details: %w", err)
+	}
+	if !loaded.IsGlobalNamespace {
+		return h.recordLocalFailure(
+			ctx,
+			ref,
+			loaded.Detail.GetInfo().GetId(),
+			serviceerror.NewInvalidArgument("CHASM namespace replication only supports global namespaces"),
+		)
 	}
 	if loaded.Shadow {
 		return h.resolveLocal(ctx, ref, true)
@@ -112,12 +122,12 @@ func (h *applyLocalTaskHandler) Execute(
 	case enumsspb.NAMESPACE_OPERATION_CREATE:
 		_, applyErr = h.metadataManager.CreateNamespace(ctx, &persistence.CreateNamespaceRequest{
 			Namespace:         loaded.Detail,
-			IsGlobalNamespace: true,
+			IsGlobalNamespace: loaded.IsGlobalNamespace,
 		})
 	case enumsspb.NAMESPACE_OPERATION_UPDATE:
 		applyErr = h.metadataManager.UpdateNamespace(ctx, &persistence.UpdateNamespaceRequest{
 			Namespace:           loaded.Detail,
-			IsGlobalNamespace:   true,
+			IsGlobalNamespace:   loaded.IsGlobalNamespace,
 			NotificationVersion: loaded.ExpectedVer,
 		})
 	default:
@@ -430,6 +440,7 @@ type applyPeerTaskHandlerOptions struct {
 	fx.In
 
 	PeerApplier PeerApplier
+	Config      *config
 	Logger      log.Logger
 }
 
@@ -442,14 +453,16 @@ type applyPeerTaskHandler struct {
 	// state, completion) independent of which transport is injected.
 	peerApplier PeerApplier
 	// Retriable peer failures are retried with capped exponential backoff over a
-	// 7-day budget by recordPeerOutcome + TransitionPeerRetry (see statemachine.go),
-	// not by CHASM's default task retry.
+	// configurable budget by recordPeerOutcome + TransitionPeerRetry (see
+	// statemachine.go), not by CHASM's default task retry.
+	config *config
 	logger log.Logger
 }
 
 func newApplyPeerTaskHandler(opts applyPeerTaskHandlerOptions) *applyPeerTaskHandler {
 	return &applyPeerTaskHandler{
 		peerApplier: opts.PeerApplier,
+		config:      opts.Config,
 		logger:      opts.Logger,
 	}
 }
@@ -584,6 +597,7 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 	outcome namespacereplicationpb.PeerApplyOutcome,
 	execErr error,
 ) error {
+	retryPolicy := h.config.peerRetryPolicy()
 	if execErr != nil {
 		h.logger.Warn("namespacereplication peer apply failed",
 			tag.WorkflowNamespaceID(namespaceID),
@@ -612,11 +626,12 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 				if peer.GetFirstAttemptAt() != nil {
 					firstAt = peer.GetFirstAttemptAt().AsTime()
 				}
-				if now.Sub(firstAt) < peerRetryBudget {
+				if now.Sub(firstAt) < retryPolicy.expirationInterval {
 					return nil, TransitionPeerRetry.Apply(c, mctx, EventPeerRetry{
 						Time:       now,
 						TargetCell: task.GetTargetCell(),
 						Attempts:   completedAttempts,
+						Delay:      peerRetryBackoff(completedAttempts, retryPolicy),
 						Err:        execErr,
 					})
 				}

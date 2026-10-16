@@ -717,7 +717,10 @@ func (wh *WorkflowHandler) prepareStartWorkflowRequest(
 		return nil, err
 	}
 
-	if err := wh.validateAndPopulateTimeSkippingConfig(request.GetTimeSkippingConfig(), namespaceName); err != nil {
+	if err := validateTimeSkippingStatePropagation(ctx, request.GetTimeSkippingStatePropagation()); err != nil {
+		return nil, err
+	}
+	if err := wh.validateAndPopulateWorkflowTimeSkippingConfig(request.GetTimeSkippingConfig(), namespaceName); err != nil {
 		return nil, err
 	}
 	return request, nil
@@ -730,10 +733,6 @@ func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 	if tsc == nil {
 		return nil
 	}
-	// if this feature is not enabled, we don't allow setting any related config
-	if !wh.config.WorkflowTimeSkippingEnabled(ns.String()) {
-		return errWorkflowTimeSkippingNotEnabled
-	}
 	if tsc.GetMaxSessionSkipCount() <= 0 {
 		defaultMaxSkipPerSession := wh.config.WorkflowTimeSkippingMaxSkipPerSession(ns.String())
 		tsc.MaxSessionSkipCount = max(1, int32(defaultMaxSkipPerSession))
@@ -741,7 +740,6 @@ func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 	if !tsc.GetEnabled() && tsc.GetFastForwardConfig() != nil {
 		return serviceerror.NewInvalidArgument("time_skipping_config: cannot set fast_forward when enabled is false")
 	}
-
 	if ff := tsc.GetFastForwardConfig(); ff != nil {
 		if ff.GetDuration().AsDuration() <= 0 {
 			return serviceerror.NewInvalidArgument("Time skipping config invalid: fast_forward duration must be positive")
@@ -749,6 +747,55 @@ func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 		if strings.TrimSpace(ff.GetId()) == "" {
 			return errTimeSkippingFastForwardIDNotSet
 		}
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) validateAndPopulateWorkflowTimeSkippingConfig(
+	tsc *commonpb.TimeSkippingConfig,
+	ns namespace.Name,
+) error {
+	if tsc == nil {
+		return nil
+	}
+	if !wh.config.WorkflowTimeSkippingEnabled(ns.String()) {
+		return errWorkflowTimeSkippingNotEnabled
+	}
+	return wh.validateAndPopulateTimeSkippingConfig(tsc, ns)
+}
+
+func (wh *WorkflowHandler) validateAndPopulateScheduleTimeSkippingConfig(
+	patch *schedulepb.SchedulePatch,
+	ns namespace.Name,
+	useChasm bool,
+) error {
+	config := patch.GetTimeSkippingConfig()
+	if config == nil {
+		return nil
+	}
+	if !useChasm {
+		wh.logger.Warn(
+			"Rejecting time-skipping configuration for workflow-backed schedule",
+			tag.WorkflowNamespace(ns.String()),
+		)
+		return errScheduleTimeSkippingNotEnabled
+	}
+
+	// a separate per-ns feature flag for time skipping of schedules
+	if !wh.config.EnableCHASMSchedulerTimeSkipping(ns.String()) {
+		return errScheduleTimeSkippingNotEnabled
+	}
+
+	if err := wh.validateAndPopulateTimeSkippingConfig(config, ns); err != nil {
+		return err
+	}
+	if !config.GetEnabled() {
+		return nil
+	}
+	fastForward := config.GetFastForwardConfig()
+	if fastForward == nil {
+		return serviceerror.NewInvalidArgument(
+			"schedule time_skipping_config: fast_forward_config is required when enabled")
 	}
 	return nil
 }
@@ -2395,7 +2442,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	}
 
 	namespaceName := namespace.Name(request.GetNamespace())
-	if err := wh.validateAndPopulateTimeSkippingConfig(request.GetTimeSkippingConfig(), namespaceName); err != nil {
+	if err := wh.validateAndPopulateWorkflowTimeSkippingConfig(request.GetTimeSkippingConfig(), namespaceName); err != nil {
 		return nil, err
 	}
 
@@ -2447,7 +2494,7 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 
 	for _, postOp := range request.GetPostResetOperations() {
 		if updateOpts := postOp.GetUpdateWorkflowOptions(); updateOpts != nil {
-			if err := wh.validateAndPopulateTimeSkippingConfig(
+			if err := wh.validateAndPopulateWorkflowTimeSkippingConfig(
 				updateOpts.GetWorkflowExecutionOptions().GetTimeSkippingConfig(),
 				namespace.Name(request.GetNamespace()),
 			); err != nil {
@@ -3922,6 +3969,9 @@ func (wh *WorkflowHandler) CreateSchedule(
 	if err != nil {
 		return nil, err
 	}
+	if err = wh.validateAndPopulateScheduleTimeSkippingConfig(request.InitialPatch, namespaceName, useChasmScheduler); err != nil {
+		return nil, err
+	}
 
 	if err = wh.validateStartWorkflowArgsForSchedule(namespaceName, request.GetSchedule().GetAction().GetStartWorkflow()); err != nil {
 		return nil, err
@@ -4769,7 +4819,6 @@ func (wh *WorkflowHandler) UpdateSchedule(
 			return nil, err
 		}
 	}
-
 	// Reject memo updates for V1 schedules.
 	if request.GetMemo() != nil {
 		return nil, serviceerror.NewFailedPrecondition("memo updates are not supported on workflow-backed schedules")
@@ -4888,6 +4937,10 @@ func (wh *WorkflowHandler) PatchSchedule(
 	if err := wh.validateSchedulePatchTimestamps(request.Patch, request.Namespace); err != nil {
 		return nil, err
 	}
+	useChasmScheduler := wh.chasmSchedulerEnabled(ctx, request.Namespace)
+	if err := wh.validateAndPopulateScheduleTimeSkippingConfig(request.Patch, namespace.Name(request.Namespace), useChasmScheduler); err != nil {
+		return nil, err
+	}
 
 	if trigger := request.Patch.GetTriggerImmediately(); trigger != nil && trigger.ScheduledTime == nil {
 		trigger.ScheduledTime = timestamppb.Now()
@@ -4922,7 +4975,7 @@ func (wh *WorkflowHandler) PatchSchedule(
 		return nil, err
 	}
 
-	if wh.chasmSchedulerEnabled(ctx, request.Namespace) {
+	if useChasmScheduler {
 		res, err := wh.patchScheduleCHASM(ctx, request)
 		if err == nil {
 			return res, nil
@@ -4930,6 +4983,9 @@ func (wh *WorkflowHandler) PatchSchedule(
 		if !isSchedulerErrorLegacyRoutable(err) {
 			return nil, err
 		}
+	}
+	if err := wh.validateAndPopulateScheduleTimeSkippingConfig(request.Patch, namespace.Name(request.Namespace), false); err != nil {
+		return nil, err
 	}
 
 	return wh.patchScheduleWorkflow(ctx, request, inputPayloads)
@@ -5941,7 +5997,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 		identity = op.ResetOperation.GetIdentity()
 		for _, postOp := range op.ResetOperation.GetPostResetOperations() {
 			if updateOpts := postOp.GetUpdateWorkflowOptions(); updateOpts != nil {
-				if err := wh.validateAndPopulateTimeSkippingConfig(
+				if err := wh.validateAndPopulateWorkflowTimeSkippingConfig(
 					updateOpts.GetWorkflowExecutionOptions().GetTimeSkippingConfig(),
 					namespace.Name(request.GetNamespace()),
 				); err != nil {
@@ -5952,7 +6008,7 @@ func (wh *WorkflowHandler) StartBatchOperation(
 	case *workflowservice.StartBatchOperationRequest_UpdateWorkflowOptionsOperation:
 		input.BatchType = enumspb.BATCH_OPERATION_TYPE_UPDATE_EXECUTION_OPTIONS
 		identity = op.UpdateWorkflowOptionsOperation.GetIdentity()
-		if err := wh.validateAndPopulateTimeSkippingConfig(
+		if err := wh.validateAndPopulateWorkflowTimeSkippingConfig(
 			op.UpdateWorkflowOptionsOperation.GetWorkflowExecutionOptions().GetTimeSkippingConfig(),
 			namespace.Name(request.GetNamespace()),
 		); err != nil {
@@ -7376,7 +7432,7 @@ func (wh *WorkflowHandler) UpdateWorkflowExecutionOptions(
 	if err := priorities.Validate(opts.GetPriority()); err != nil {
 		return nil, err
 	}
-	if err := wh.validateAndPopulateTimeSkippingConfig(opts.GetTimeSkippingConfig(), namespace.Name(request.GetNamespace())); err != nil {
+	if err := wh.validateAndPopulateWorkflowTimeSkippingConfig(opts.GetTimeSkippingConfig(), namespace.Name(request.GetNamespace())); err != nil {
 		return nil, err
 	}
 

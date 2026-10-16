@@ -72,6 +72,12 @@ func TestValidateTriggerNamespaceMutationRequest(t *testing.T) {
 			wantFailed: true,
 		},
 		{
+			name: "local namespace rejected",
+			mutate: func(req *namespacereplicationpb.TriggerNamespaceMutationRequest) {
+				req.Mutation.IsGlobalNamespace = false
+			},
+		},
+		{
 			name: "missing namespace id",
 			mutate: func(req *namespacereplicationpb.TriggerNamespaceMutationRequest) {
 				req.NamespaceId = ""
@@ -213,7 +219,8 @@ func validTriggerNamespaceMutationRequest() *namespacereplicationpb.TriggerNames
 		SystemNamespaceId: primitives.SystemNamespaceID,
 		BusinessId:        namespaceID + ":mutation-id",
 		Mutation: &namespacereplicationpb.NamespaceMutation{
-			Operation: enumsspb.NAMESPACE_OPERATION_UPDATE,
+			Operation:         enumsspb.NAMESPACE_OPERATION_UPDATE,
+			IsGlobalNamespace: true,
 			NamespaceDetail: &persistencespb.NamespaceDetail{
 				Info:              &persistencespb.NamespaceInfo{Id: namespaceID},
 				Config:            &persistencespb.NamespaceConfig{},

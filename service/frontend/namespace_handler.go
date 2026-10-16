@@ -1509,6 +1509,7 @@ func (d *namespaceHandler) invokeShadowNamespaceMutation(
 			chasmDetail,
 			expectedVersion,
 			previousClusters,
+			isGlobalNamespace,
 			namespaceMutationModeShadow,
 		); err != nil {
 			d.logger.Warn(
@@ -1542,6 +1543,7 @@ func (d *namespaceHandler) triggerNamespaceMutation(
 	detail *persistencespb.NamespaceDetail,
 	expectedVersion int64,
 	previousClusters []string,
+	isGlobalNamespace bool,
 	mode namespaceMutationMode,
 ) (*namespacereplicationpb.TriggerNamespaceMutationResponse, error) {
 	namespaceID := detail.GetInfo().GetId()
@@ -1550,9 +1552,10 @@ func (d *namespaceHandler) triggerNamespaceMutation(
 		SystemNamespaceId: primitives.SystemNamespaceID,
 		BusinessId:        namespaceID + ":" + uuid.NewString(),
 		Mutation: &namespacereplicationpb.NamespaceMutation{
-			Operation:       operation,
-			NamespaceDetail: detail,
-			ExpectedVersion: expectedVersion,
+			Operation:         operation,
+			NamespaceDetail:   detail,
+			ExpectedVersion:   expectedVersion,
+			IsGlobalNamespace: isGlobalNamespace,
 			PeerCells: peerCellsFromClusters(
 				d.clusterMetadata.GetCurrentClusterName(),
 				detail.GetReplicationConfig().GetClusters(),
