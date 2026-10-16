@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
 	"go.temporal.io/server/client"
 	matchingclient "go.temporal.io/server/client/matching"
 	"go.temporal.io/server/common"
@@ -63,6 +64,7 @@ type historyClients struct {
 	conn      *grpc.ClientConn
 	history   historyservice.HistoryServiceClient
 	scheduler schedulerpb.SchedulerServiceClient
+	wci       wcipb.WorkerControllerInstanceServiceClient
 }
 
 type matchingClient struct {
@@ -132,6 +134,11 @@ func (c *clients) SchedulerClient() schedulerpb.SchedulerServiceClient {
 	return c.history.scheduler
 }
 
+func (c *clients) WCIClient() wcipb.WorkerControllerInstanceServiceClient {
+	c.ensureHistory()
+	return c.history.wci
+}
+
 func (c *clients) ensureHistory() {
 	c.history.once.Do(func() {
 		conn, err := c.newConn(primitives.HistoryService)
@@ -141,6 +148,7 @@ func (c *clients) ensureHistory() {
 		c.history.conn = conn
 		c.history.history = historyservice.NewHistoryServiceClient(conn)
 		c.history.scheduler = schedulerpb.NewSchedulerServiceClient(conn)
+		c.history.wci = wcipb.NewWorkerControllerInstanceServiceClient(conn)
 	})
 }
 
