@@ -34,6 +34,7 @@ type (
 		logger                                      log.Logger
 		pagingTokenSerializer                       *jsonHistoryTokenSerializer
 		transactionSizeLimit                        dynamicconfig.IntPropertyFn
+		historyNodeBlobCompressionThreshold         dynamicconfig.IntPropertyFn
 		enableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn
 		storeChecksRunAlreadyExists                 bool
 	}
@@ -48,16 +49,18 @@ func NewExecutionManager(
 	eventBlobCache XDCCache,
 	logger log.Logger,
 	transactionSizeLimit dynamicconfig.IntPropertyFn,
+	historyNodeBlobCompressionThreshold dynamicconfig.IntPropertyFn,
 	enableBestEffortDeleteTasksOnWorkflowUpdate dynamicconfig.BoolPropertyFn,
 ) ExecutionManager {
 	checker, ok := persistence.(RunAlreadyExistsChecker)
 	return &executionManagerImpl{
-		serializer:            serializer,
-		eventBlobCache:        eventBlobCache,
-		persistence:           persistence,
-		logger:                logger,
-		pagingTokenSerializer: newJSONHistoryTokenSerializer(),
-		transactionSizeLimit:  transactionSizeLimit,
+		serializer:                          serializer,
+		eventBlobCache:                      eventBlobCache,
+		persistence:                         persistence,
+		logger:                              logger,
+		pagingTokenSerializer:               newJSONHistoryTokenSerializer(),
+		transactionSizeLimit:                transactionSizeLimit,
+		historyNodeBlobCompressionThreshold: historyNodeBlobCompressionThreshold,
 		enableBestEffortDeleteTasksOnWorkflowUpdate: enableBestEffortDeleteTasksOnWorkflowUpdate,
 		storeChecksRunAlreadyExists:                 ok && checker.SupportsCheckRunAlreadyExists(),
 	}
