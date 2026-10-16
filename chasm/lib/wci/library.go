@@ -25,6 +25,7 @@ type Library struct {
 	InvokeTaskHandler                *InvokeTaskHandler
 	ValidateSpecTaskHandler          *ValidateSpecTaskHandler
 	SignalVersionWorkflowTaskHandler *SignalVersionWorkflowTaskHandler
+	MigrateToWorkflowTaskHandler     *MigrateToWorkflowTaskHandler
 }
 
 // NewNilLibrary has no handlers; non-history services and offline readers (tdbg) use it to
@@ -41,6 +42,7 @@ func NewLibrary(
 	invoke *InvokeTaskHandler,
 	validateSpec *ValidateSpecTaskHandler,
 	signalVersionWorkflow *SignalVersionWorkflowTaskHandler,
+	migrateToWorkflow *MigrateToWorkflowTaskHandler,
 ) *Library {
 	return &Library{
 		handler:                          handler,
@@ -50,6 +52,7 @@ func NewLibrary(
 		InvokeTaskHandler:                invoke,
 		ValidateSpecTaskHandler:          validateSpec,
 		SignalVersionWorkflowTaskHandler: signalVersionWorkflow,
+		MigrateToWorkflowTaskHandler:     migrateToWorkflow,
 	}
 }
 
@@ -64,7 +67,6 @@ func (l *Library) Components() []*chasm.RegistrableComponent {
 	}
 }
 
-// Tasks registers every task; MigrateToWorkflowTask is added with its handler in step 5b.
 func (l *Library) Tasks() []*chasm.RegistrableTask {
 	return []*chasm.RegistrableTask{
 		chasm.NewRegistrablePureTask("metricsPollTimer", &MetricsPollTimerTaskHandler{},
@@ -83,6 +85,8 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 			chasm.WithTaskGroup(computeTaskGroup)),
 		chasm.NewRegistrableSideEffectTask("invoke", l.InvokeTaskHandler,
 			chasm.WithTaskGroup(computeTaskGroup), chasm.WithSingletonTask(chasm.SingletonTaskModeIgnore)),
+		chasm.NewRegistrableSideEffectTask("migrateToWorkflow", l.MigrateToWorkflowTaskHandler,
+			chasm.WithSingletonTask(chasm.SingletonTaskModeIgnore)),
 	}
 }
 

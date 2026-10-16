@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/sdk"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 )
@@ -73,9 +74,17 @@ func (f *fakeFrontend) DescribeWorkerDeploymentVersion(context.Context, *workflo
 
 type fakeHistory struct {
 	historyservice.HistoryServiceClient
+
+	startErr error
+	starts   []*historyservice.StartWorkflowExecutionRequest
 }
 
-func (fakeHistory) SignalWorkflowExecution(context.Context, *historyservice.SignalWorkflowExecutionRequest, ...grpc.CallOption) (*historyservice.SignalWorkflowExecutionResponse, error) {
+func (f *fakeHistory) StartWorkflowExecution(_ context.Context, req *historyservice.StartWorkflowExecutionRequest, _ ...grpc.CallOption) (*historyservice.StartWorkflowExecutionResponse, error) {
+	f.starts = append(f.starts, req)
+	return &historyservice.StartWorkflowExecutionResponse{}, f.startErr
+}
+
+func (*fakeHistory) SignalWorkflowExecution(context.Context, *historyservice.SignalWorkflowExecutionRequest, ...grpc.CallOption) (*historyservice.SignalWorkflowExecutionResponse, error) {
 	return &historyservice.SignalWorkflowExecutionResponse{}, nil
 }
 
@@ -86,6 +95,7 @@ type e2e struct {
 	compute  *fakeCompute
 	frontend *fakeFrontend
 	lib      *Library
+	history  *fakeHistory
 }
 
 func newE2E(t *testing.T, script fakeAlgo) *e2e {
@@ -105,17 +115,19 @@ func newE2E(t *testing.T, script fakeAlgo) *e2e {
 		Logger:            log.NewNoopLogger(),
 	})
 	snapshotOpts := SnapshotTaskHandlerOptions{FrontendClient: frontend, Logger: log.NewNoopLogger()}
-	computeOpts := ComputeTaskHandlerOptions{ComputeClient: computeClient, HistoryClient: fakeHistory{}, Logger: log.NewNoopLogger()}
+	history := &fakeHistory{}
+	computeOpts := ComputeTaskHandlerOptions{ComputeClient: computeClient, HistoryClient: history, Logger: log.NewNoopLogger()}
 	lib := NewLibrary(h,
 		NewFetchSnapshotTaskHandler(snapshotOpts), NewDeferredDecisionTaskHandler(snapshotOpts),
 		NewResizeTaskHandler(computeOpts), NewInvokeTaskHandler(computeOpts),
-		NewValidateSpecTaskHandler(computeOpts), NewSignalVersionWorkflowTaskHandler(computeOpts))
+		NewValidateSpecTaskHandler(computeOpts), NewSignalVersionWorkflowTaskHandler(computeOpts),
+		NewMigrateToWorkflowTaskHandler(MigrateToWorkflowTaskHandlerOptions{HistoryClient: history, DynamicConfig: dynamicconfig.NewNoopCollection()}))
 
 	chasmRegistry := chasm.NewRegistry(log.NewTestLogger())
 	require.NoError(t, chasmRegistry.Register(&chasm.CoreLibrary{}))
 	require.NoError(t, chasmRegistry.Register(lib))
 	engine := chasmtest.NewEngine(t, chasmRegistry)
-	return &e2e{ctx: chasm.NewEngineContext(context.Background(), engine), engine: engine, handler: h, compute: computeClient, frontend: frontend, lib: lib}
+	return &e2e{ctx: chasm.NewEngineContext(context.Background(), engine), engine: engine, handler: h, compute: computeClient, frontend: frontend, lib: lib, history: history}
 }
 
 func groupUpsert(provider string) map[string]*wcipb.ScalingGroupSpecUpdate {
@@ -312,4 +324,68 @@ func TestE2E_CreateFromMigrationReplaysOnceAndIsIdempotent(t *testing.T) {
 
 func groupUpsertSpecs(provider string) map[string]*wcipb.ScalingGroupSpec {
 	return map[string]*wcipb.ScalingGroupSpec{"g": groupUpsert(provider)["g"].GetSpec()}
+}
+
+func (e *e2e) migrateToWorkflow() error {
+	_, err := e.handler.MigrateToWorkflow(e.ctx, &wcipb.MigrateToWorkflowRequest{NamespaceId: testNamespaceID, InstanceId: testInstanceID})
+	return err
+}
+
+func (e *e2e) runMigrateTask(t *testing.T) {
+	t.Helper()
+	w, _ := e.live(t)
+	dropped, err := chasmtest.ExecuteSideEffectTask(e.ctx, e.engine, w, chasm.SideEffectTaskHandler[*WorkerControllerInstance, *wcipb.MigrateToWorkflowTask](e.lib.MigrateToWorkflowTaskHandler), chasm.TaskAttributes{}, &wcipb.MigrateToWorkflowTask{})
+	require.NoError(t, err)
+	require.False(t, dropped)
+}
+
+func TestE2E_MigrateToWorkflow(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	_, err := e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+	w, _ := e.live(t)
+	nextPoll := w.NextPollTime.AsTime()
+
+	require.NoError(t, e.migrateToWorkflow())
+	require.NoError(t, e.migrateToWorkflow(), "repeating while migrating is a no-op")
+	require.ErrorIs(t, e.recordTaskAdd(), ErrMigrationPending, "mutations wait for the hand-off")
+
+	e.runMigrateTask(t)
+
+	require.Len(t, e.history.starts, 1)
+	start := e.history.starts[0].GetStartRequest()
+	require.Equal(t, testInstanceID, start.GetWorkflowId(), "the workflow ID is the CHASM business ID")
+	require.Equal(t, iface.WorkerControllerInstanceWorkflowType, start.GetWorkflowType().GetName())
+	require.Equal(t, enumspb.WORKFLOW_ID_CONFLICT_POLICY_FAIL, start.GetWorkflowIdConflictPolicy())
+
+	var args iface.WorkerControllerInstanceWorkflowArgs
+	require.NoError(t, sdk.PreferProtoDataConverter.FromPayloads(start.GetInput(), &args))
+	require.Equal(t, "dep", args.DeploymentName)
+	require.Contains(t, args.State.Spec.ScalingGroupSpecs, "g")
+	require.Equal(t, nextPoll, args.State.NextPollTime.AsTime(), "the poll cadence carries over")
+
+	w, _ = e.live(t)
+	require.Equal(t, wcipb.WCI_STATUS_MIGRATED, w.Status)
+	require.ErrorIs(t, e.recordTaskAdd(), ErrClosed, "the router falls back to the workflow")
+	_, err = e.describe()
+	require.ErrorIs(t, err, ErrClosed)
+}
+
+func TestE2E_MigrateToWorkflowAlreadyStarted(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	_, err := e.update(groupUpsert("test-invoke"))
+	require.NoError(t, err)
+	e.history.startErr = serviceerror.NewWorkflowExecutionAlreadyStarted("started", "req", "run")
+
+	require.NoError(t, e.migrateToWorkflow())
+	e.runMigrateTask(t)
+
+	w, _ := e.live(t)
+	require.Equal(t, wcipb.WCI_STATUS_MIGRATED, w.Status, "already started counts as success")
+}
+
+func TestE2E_MigrateToWorkflowOnMissing(t *testing.T) {
+	e := newE2E(t, fakeAlgo{})
+	var notFound *serviceerror.NotFound
+	require.ErrorAs(t, e.migrateToWorkflow(), &notFound)
 }
