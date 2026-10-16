@@ -6871,6 +6871,60 @@ func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesComplet
 	})
 }
 
+func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_NexusSerializationContextLength() {
+	const maxLength = 64
+	atLimit := strings.Repeat("x", maxLength)
+	tooLong := strings.Repeat("x", maxLength+1)
+
+	for _, tc := range []struct {
+		name      string
+		context   *nexuspb.PropagatedSerializationContext
+		wantError string
+	}{
+		{
+			name:    "at limit",
+			context: &nexuspb.PropagatedSerializationContext{Endpoint: atLimit, Service: atLimit, Operation: atLimit},
+		},
+		{
+			name:      "endpoint too long",
+			context:   &nexuspb.PropagatedSerializationContext{Endpoint: tooLong},
+			wantError: "Nexus serialization context endpoint field too long",
+		},
+		{
+			name:      "service too long",
+			context:   &nexuspb.PropagatedSerializationContext{Service: tooLong},
+			wantError: "Nexus serialization context service field too long",
+		},
+		{
+			name:      "operation too long",
+			context:   &nexuspb.PropagatedSerializationContext{Operation: tooLong},
+			wantError: "Nexus serialization context operation field too long",
+		},
+	} {
+		s.Run(tc.name, func() {
+			config := s.newConfig()
+			config.MaxIDLengthLimit = dc.GetIntPropertyFn(maxLength)
+			wh := s.getWorkflowHandler(config)
+			err := wh.prepareUpdateWorkflowRequest(context.Background(), s.testNamespace, &workflowservice.UpdateWorkflowExecutionRequest{
+				Namespace:         s.testNamespace.String(),
+				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: testWorkflowID},
+				Request: &updatepb.Request{
+					Meta:                                &updatepb.Meta{UpdateId: "update-id"},
+					Input:                               &updatepb.Input{Name: "update-name"},
+					PropagatedNexusSerializationContext: tc.context,
+				},
+			})
+			if tc.wantError == "" {
+				s.Require().NoError(err)
+			} else {
+				var invalidArgument *serviceerror.InvalidArgument
+				s.Require().ErrorAs(err, &invalidArgument)
+				s.Require().ErrorContains(err, tc.wantError)
+			}
+		})
+	}
+}
+
 func (s *WorkflowHandlerSuite) TestUpdateActivityOptions_Priority() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)

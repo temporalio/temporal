@@ -12,6 +12,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	updatepb "go.temporal.io/api/update/v1"
 	workerpb "go.temporal.io/api/worker/v1"
@@ -142,6 +143,7 @@ type (
 		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
 		GetUpdateAcceptedEventID(ctx context.Context, updateID string) (int64, error)
+		GetUpdateNexusSerializationContext(updateID string) *nexuspb.PropagatedSerializationContext
 		CheckResettable() error
 		// UpdateResetRunID saves the runID that resulted when this execution was reset.
 		UpdateResetRunID(runID string)
