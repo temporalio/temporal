@@ -67,8 +67,8 @@ func TestDecodePendingChasmNexusOperations(t *testing.T) {
 		ScheduledEventID:       5,
 		State:                  nexusoperationpb.OPERATION_STATUS_STARTED.String(),
 		Attempt:                3,
-		ScheduledTime:          timePtr(now.Add(-20 * time.Minute)),
-		LastPersistedStateTime: timePtr(now.Add(-15 * time.Minute)),
+		ScheduledTime:          new(now.Add(-20 * time.Minute)),
+		LastPersistedStateTime: new(now.Add(-15 * time.Minute)),
 	}}, operations)
 
 	encoded, err := json.Marshal(operations)
@@ -92,7 +92,7 @@ func TestAnalyzeNexusChasmResetSafety(t *testing.T) {
 	operations := []nexusChasmScanOperation{{
 		ScheduledEventID: 5,
 		State:            "STARTED",
-		ScheduledTime:    timePtr(now.Add(-20 * time.Minute)),
+		ScheduledTime:    new(now.Add(-20 * time.Minute)),
 	}}
 	tests := []struct {
 		name               string
@@ -329,8 +329,9 @@ func workflowTaskCompletedEvent(eventID int64, eventTime time.Time) *historypb.H
 	}
 }
 
+//go:fix inline
 func timePtr(value time.Time) *time.Time {
-	return &value
+	return new(value)
 }
 
 func TestScanOutputDoesNotContainHistoryPayload(t *testing.T) {

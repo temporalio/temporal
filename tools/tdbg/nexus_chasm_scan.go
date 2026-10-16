@@ -369,7 +369,6 @@ func (s *nexusChasmScanner) inspectPage(
 	g, groupCtx := errgroup.WithContext(ctx)
 	semaphore := make(chan struct{}, s.input.workers)
 	for i, execution := range executions {
-		i, execution := i, execution
 		if execution.GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 			continue
 		}
