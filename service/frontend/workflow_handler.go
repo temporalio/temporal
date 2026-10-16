@@ -7012,7 +7012,11 @@ func (wh *WorkflowHandler) cancelOutstandingPoll(
 	)
 	// We can not do much if this call fails.  Just log the error and move on.
 	if err != nil {
-		wh.logger.Warn("Failed to cancel outstanding poller.",
+		logger := wh.logger
+		if taskQueueType == enumspb.TASK_QUEUE_TYPE_NEXUS {
+			logger = log.With(logger, tag.NexusStageHandlerTaskDelivery)
+		}
+		logger.Warn("Failed to cancel outstanding poller.",
 			tag.WorkflowTaskQueueName(taskQueue.GetName()), tag.Error(err))
 	}
 

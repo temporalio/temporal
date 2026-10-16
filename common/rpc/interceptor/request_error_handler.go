@@ -8,7 +8,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -93,24 +92,9 @@ func (eh *RequestErrorHandler) logError(
 
 	logTags = append(logTags, tag.Stringer("grpc_code", statusCode))
 	logTags = append(logTags, eh.workflowTags.Extract(req, fullMethod)...)
-	logTags = nexusTaskDeliveryLogTags(fullMethod, logTags)
+	logTags = append(logTags, logtags.NexusStage(req, fullMethod)...)
 
 	eh.logger.Error("service failures", append(logTags, tag.Error(err))...)
-}
-
-func nexusTaskDeliveryLogTags(fullMethod string, logTags []tag.Tag) []tag.Tag {
-	switch fullMethod {
-	case api.WorkflowServicePrefix + "PollNexusTaskQueue",
-		api.WorkflowServicePrefix + "RespondNexusTaskCompleted",
-		api.WorkflowServicePrefix + "RespondNexusTaskFailed",
-		api.MatchingServicePrefix + "DispatchNexusTask",
-		api.MatchingServicePrefix + "PollNexusTaskQueue",
-		api.MatchingServicePrefix + "RespondNexusTaskCompleted",
-		api.MatchingServicePrefix + "RespondNexusTaskFailed":
-		return append(logTags, tag.NexusStageHandlerTaskDelivery)
-	default:
-		return logTags
-	}
 }
 
 func recordErrorMetrics(req any, metricsHandler metrics.Handler, err error, isExpectedError bool) {
