@@ -36,7 +36,7 @@ func WorkflowStateToCHASM(instanceID string, args *iface.WorkerControllerInstanc
 	if local.Spec != nil {
 		state.ScalingGroupSpecs = make(map[string]*wcipb.ScalingGroupSpec, len(local.Spec.ScalingGroupSpecs))
 		for id, spec := range local.Spec.ScalingGroupSpecs {
-			state.ScalingGroupSpecs[id] = specToCHASM(spec)
+			state.ScalingGroupSpecs[id] = SpecToCHASM(spec)
 		}
 	}
 	validation, err := validationToCHASM(local.ValidationStatus)
@@ -156,7 +156,8 @@ func TaskAddToWorkflow(event *wcipb.TaskAddEvent) *iface.SignalTaskAddRequest {
 	}
 }
 
-func specToCHASM(spec iface.ScalingGroupSpec) *wcipb.ScalingGroupSpec {
+// SpecToCHASM converts an iface group spec to the CHASM proto.
+func SpecToCHASM(spec iface.ScalingGroupSpec) *wcipb.ScalingGroupSpec {
 	out := &wcipb.ScalingGroupSpec{
 		TaskTypes: slices.Clone(spec.TaskTypes),
 		Compute: &wcipb.ComputeProviderSpec{
