@@ -326,7 +326,8 @@ func (s *NexusAPIValidationTestSuite) TestNexus_RespondNexusTaskCompleted_Valida
 }
 
 func (s *NexusAPIValidationTestSuite) TestNexus_RespondNexusTaskMethods_ValidateFailureDetailsJSON() {
-	env := newNexusTestEnv(s.T(), false)
+	env := newNexusTestEnv(s.T(), false, testcore.WithDynamicConfig(dynamicconfig.LogAllReqErrors, true))
+	logCapture := env.StartNamespaceLogCapture()
 
 	tt := tokenspb.NexusTask{
 		NamespaceId: env.NamespaceID().String(),
@@ -371,6 +372,13 @@ func (s *NexusAPIValidationTestSuite) TestNexus_RespondNexusTaskMethods_Validate
 	})
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.Equal("failure details must be JSON serializable", invalidArgumentErr.Message)
+	for _, operation := range []string{"RespondNexusTaskCompleted", "RespondNexusTaskFailed"} {
+		logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+			Level:   testlogger.Error,
+			Message: "service failures",
+			Tags:    map[string]any{"nexus-stage": "handler-task-delivery", "operation": operation},
+		})
+	}
 }
 
 func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_ByEndpoint_EndpointNotFound() {
