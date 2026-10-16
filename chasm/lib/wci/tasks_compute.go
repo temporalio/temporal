@@ -3,6 +3,7 @@ package wci
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
 	deploymentpb "go.temporal.io/api/deployment/v1"
@@ -172,7 +173,8 @@ func (h *ValidateSpecTaskHandler) Execute(ctx context.Context, ref chasm.Compone
 		algoErr error
 	}
 	in, err := chasm.ReadComponent(ctx, ref, func(w *WorkerControllerInstance, cctx chasm.Context, _ any) (input, error) {
-		return input{rc: requestContext(cctx, w), spec: w.spec(), algoErr: w.validateAlgorithms(cctx)}, nil
+		spec := w.spec()
+		return input{rc: requestContext(cctx, w), spec: spec, algoErr: validateAlgorithms(w.algorithmContext(cctx), spec)}, nil
 	}, nil)
 	if err != nil {
 		return err
@@ -194,18 +196,17 @@ func (h *ValidateSpecTaskHandler) Execute(ctx context.Context, ref chasm.Compone
 }
 
 // validateAlgorithms checks each group's algorithm config; CPU-only.
-func (w *WorkerControllerInstance) validateAlgorithms(ctx chasm.Context) error {
-	algoCtx := w.algorithmContext(ctx)
-	for id, spec := range w.spec().ScalingGroupSpecs {
-		if spec.Scaling == nil {
+func validateAlgorithms(algoCtx context.Context, spec *iface.WorkerControllerInstanceSpec) error {
+	for id, group := range spec.ScalingGroupSpecs {
+		if group.Scaling == nil {
 			continue
 		}
-		algo, config, err := algorithmFor(algoCtx, spec)
+		algo, config, err := algorithmFor(algoCtx, group)
 		if err != nil {
-			return errors.New(id + ": " + err.Error())
+			return fmt.Errorf("%s: %w", id, err)
 		}
 		if err := algo.ValidateConfig(algoCtx, config); err != nil {
-			return errors.New(id + ": " + err.Error())
+			return fmt.Errorf("%s: %w", id, err)
 		}
 	}
 	return nil

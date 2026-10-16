@@ -28,12 +28,14 @@ type fakeAlgo struct {
 	nextPoll     *time.Duration
 	seen         *scalingalgorithm.ScalingMetricsSnapshot
 	validateErr  error
+	regActions   []scalingalgorithm.ScalingAction
 }
 
 var fake = &fakeAlgo{}
 
 func init() {
-	scalingalgorithm.RegisterScalingAlgorithm(fakeAlgorithm, func(context.Context) (scalingalgorithm.ScalingAlgorithm, error) { return fake, nil })
+	// Also the default for test-invoke, so specs without Scaling pass iface Validate() and reach the fake.
+	scalingalgorithm.RegisterScalingAlgorithm(fakeAlgorithm, func(context.Context) (scalingalgorithm.ScalingAlgorithm, error) { return fake, nil }, iface.ComputeProviderTypeTestInvoke)
 }
 
 func (f *fakeAlgo) CompatibleLaunchStrategies() []compute.LaunchStrategy { return nil }
@@ -54,7 +56,7 @@ func (f *fakeAlgo) ProcessMetricsPoll(_ context.Context, _ iface.ScalingAlgorith
 	return &scalingalgorithm.MetricsPollResponse{Actions: f.actions, Status: f.status, NextPoll: f.nextPoll}, nil
 }
 func (f *fakeAlgo) TaskQueueRegistrationActions(context.Context, iface.ScalingAlgorithmConfig, iface.ScalingAlgorithmStatus) (*scalingalgorithm.TaskQueueRegistrationResponse, error) {
-	return &scalingalgorithm.TaskQueueRegistrationResponse{}, nil
+	return &scalingalgorithm.TaskQueueRegistrationResponse{Actions: f.regActions}, nil
 }
 
 var testNow = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
