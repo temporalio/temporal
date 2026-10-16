@@ -26,8 +26,10 @@ const (
 // FailpointInfo describes the state of a failpoint.
 type FailpointInfo struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// key is the failpoint identifier.
-	Key v1.FailpointKey `protobuf:"varint,1,opt,name=key,proto3,enum=temporal.server.api.enums.v1.FailpointKey" json:"key,omitempty"`
+	// key is the failpoint name.
+	Key string `protobuf:"bytes,5,opt,name=key,proto3" json:"key,omitempty"`
+	// namespace_id is the namespace the failpoint is scoped to. Empty means all namespaces.
+	NamespaceId string `protobuf:"bytes,6,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	// enabled indicates whether the failpoint is active.
 	Enabled bool `protobuf:"varint,2,opt,name=enabled,proto3" json:"enabled,omitempty"`
 	// action describes what the failpoint does.
@@ -68,11 +70,18 @@ func (*FailpointInfo) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_failpointservice_v1_message_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *FailpointInfo) GetKey() v1.FailpointKey {
+func (x *FailpointInfo) GetKey() string {
 	if x != nil {
 		return x.Key
 	}
-	return v1.FailpointKey(0)
+	return ""
+}
+
+func (x *FailpointInfo) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
 }
 
 func (x *FailpointInfo) GetEnabled() bool {
@@ -100,14 +109,15 @@ var File_temporal_server_api_failpointservice_v1_message_proto protoreflect.File
 
 const file_temporal_server_api_failpointservice_v1_message_proto_rawDesc = "" +
 	"\n" +
-	"5temporal/server/api/failpointservice/v1/message.proto\x12'temporal.server.api.failpointservice.v1\x1a,temporal/server/api/enums/v1/failpoint.proto\"\x81\x02\n" +
-	"\rFailpointInfo\x12<\n" +
-	"\x03key\x18\x01 \x01(\x0e2*.temporal.server.api.enums.v1.FailpointKeyR\x03key\x12\x18\n" +
+	"5temporal/server/api/failpointservice/v1/message.proto\x12'temporal.server.api.failpointservice.v1\x1a,temporal/server/api/enums/v1/failpoint.proto\"\xfe\x01\n" +
+	"\rFailpointInfo\x12\x10\n" +
+	"\x03key\x18\x05 \x01(\tR\x03key\x12!\n" +
+	"\fnamespace_id\x18\x06 \x01(\tR\vnamespaceId\x12\x18\n" +
 	"\aenabled\x18\x02 \x01(\bR\aenabled\x12E\n" +
 	"\x06action\x18\x03 \x01(\x0e2-.temporal.server.api.enums.v1.FailpointActionR\x06action\x12Q\n" +
 	"\n" +
 	"recurrence\x18\x04 \x01(\x0e21.temporal.server.api.enums.v1.FailpointRecurrenceR\n" +
-	"recurrenceB@Z>go.temporal.io/server/api/failpointservice/v1;failpointserviceb\x06proto3"
+	"recurrenceJ\x04\b\x01\x10\x02B@Z>go.temporal.io/server/api/failpointservice/v1;failpointserviceb\x06proto3"
 
 var (
 	file_temporal_server_api_failpointservice_v1_message_proto_rawDescOnce sync.Once
@@ -124,19 +134,17 @@ func file_temporal_server_api_failpointservice_v1_message_proto_rawDescGZIP() []
 var file_temporal_server_api_failpointservice_v1_message_proto_msgTypes = make([]protoimpl.MessageInfo, 1)
 var file_temporal_server_api_failpointservice_v1_message_proto_goTypes = []any{
 	(*FailpointInfo)(nil),       // 0: temporal.server.api.failpointservice.v1.FailpointInfo
-	(v1.FailpointKey)(0),        // 1: temporal.server.api.enums.v1.FailpointKey
-	(v1.FailpointAction)(0),     // 2: temporal.server.api.enums.v1.FailpointAction
-	(v1.FailpointRecurrence)(0), // 3: temporal.server.api.enums.v1.FailpointRecurrence
+	(v1.FailpointAction)(0),     // 1: temporal.server.api.enums.v1.FailpointAction
+	(v1.FailpointRecurrence)(0), // 2: temporal.server.api.enums.v1.FailpointRecurrence
 }
 var file_temporal_server_api_failpointservice_v1_message_proto_depIdxs = []int32{
-	1, // 0: temporal.server.api.failpointservice.v1.FailpointInfo.key:type_name -> temporal.server.api.enums.v1.FailpointKey
-	2, // 1: temporal.server.api.failpointservice.v1.FailpointInfo.action:type_name -> temporal.server.api.enums.v1.FailpointAction
-	3, // 2: temporal.server.api.failpointservice.v1.FailpointInfo.recurrence:type_name -> temporal.server.api.enums.v1.FailpointRecurrence
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	1, // 0: temporal.server.api.failpointservice.v1.FailpointInfo.action:type_name -> temporal.server.api.enums.v1.FailpointAction
+	2, // 1: temporal.server.api.failpointservice.v1.FailpointInfo.recurrence:type_name -> temporal.server.api.enums.v1.FailpointRecurrence
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_failpointservice_v1_message_proto_init() }
