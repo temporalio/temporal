@@ -109,8 +109,8 @@ func WithExecutionType(
 // config to compute the value. It only has an effect on a component registered as the root of an
 // execution.
 //
-// The namespace retention acts as a floor: a value shorter than it, or a non-positive value, falls
-// back to the namespace retention.
+// The returned value replaces the namespace retention and may be shorter or longer than it, but is
+// floored at the namespace min retention. A non-positive value falls back to the namespace retention.
 func WithRetention(
 	retention func(*namespace.Namespace) time.Duration,
 ) RegistrableComponentOption {
