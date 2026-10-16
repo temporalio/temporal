@@ -280,7 +280,9 @@ func CreateScheduler(
 
 	// Update visibility with custom attributes.
 	visibility := sched.Visibility.Get(ctx)
-	visibility.MergeCustomSearchAttributes(ctx, userCustomSearchAttributes(req.FrontendRequest.GetSearchAttributes().GetIndexedFields()))
+	if err := visibility.MergeCustomSearchAttributes(ctx, userCustomSearchAttributes(req.FrontendRequest.GetSearchAttributes().GetIndexedFields())); err != nil {
+		return nil, err
+	}
 	visibility.MergeCustomMemo(ctx, req.FrontendRequest.GetMemo().GetFields())
 
 	return sched, nil
@@ -327,10 +329,11 @@ func CreateSchedulerFromMigration(
 		sched.Backfillers[backfillID] = chasm.NewComponentField(ctx, newBackfillerWithState(ctx, backfillerState))
 	}
 
-	visibility := chasm.NewVisibility(ctx)
+	visibility, err := chasm.NewVisibilityWithData(ctx, state.GetSearchAttributes(), state.GetMemo())
+	if err != nil {
+		return nil, err
+	}
 	sched.Visibility = chasm.NewComponentField(ctx, visibility)
-	visibility.MergeCustomSearchAttributes(ctx, state.GetSearchAttributes())
-	visibility.MergeCustomMemo(ctx, state.GetMemo())
 
 	// Defer generation until SchedulerCallbacksTask resolves stale running-workflow
 	// state; if there are none, generate directly.
@@ -907,13 +910,10 @@ func (s *Scheduler) Update(
 		// `CustomSearchAttributes` map. Search attribute replacement is ignored entirely
 		// when that map is unset, however, an allocated yet empty map will clear all
 		// attributes.
-
-		// Preserve the old custom memo in the new Visibility component.
-		oldVisibility := s.Visibility.Get(ctx)
-		oldMemo := oldVisibility.CustomMemo(ctx)
-
-		visibility := chasm.NewVisibilityWithData(ctx, userCustomSearchAttributes(req.FrontendRequest.GetSearchAttributes().GetIndexedFields()), oldMemo)
-		s.Visibility = chasm.NewComponentField(ctx, visibility)
+		visibility := s.Visibility.Get(ctx)
+		if err := visibility.ReplaceCustomSearchAttributes(ctx, userCustomSearchAttributes(req.FrontendRequest.GetSearchAttributes().GetIndexedFields())); err != nil {
+			return nil, err
+		}
 	}
 
 	// Update custom memo.
