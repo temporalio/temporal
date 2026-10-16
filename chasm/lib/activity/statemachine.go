@@ -288,8 +288,8 @@ var TransitionUnpausedWhilePauseRequested = chasm.NewTransition(
 )
 
 // TransitionAttemptFailedWhilePauseRequested transitions PAUSE_REQUESTED → PAUSED. It is performed instead of
-// TransitionReschedule, when the activity is in PAUSE_REQUESTED and the worker yields (failure or
-// timeout) with retries remaining. The failed attempt is recorded and Count is incremented.
+// TransitionRescheduled, when the activity is in PAUSE_REQUESTED and the worker yields a retryable
+// failure or timeout, even with no retries remaining. The failed attempt is recorded and Count is incremented.
 var TransitionAttemptFailedWhilePauseRequested = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED,
@@ -728,7 +728,7 @@ func (a *Activity) applyUnpaused(
 	return nil
 }
 
-// applyFailedAttempt mutates activity state when a worker yields with retries remaining.
+// applyFailedAttempt records a retryable failure for a scheduled retry or pending pause.
 func (a *Activity) applyFailedAttempt(ctx chasm.MutableContext, event rescheduleEvent) error {
 	attempt := a.LastAttempt.Get(ctx)
 	attempt.Count++

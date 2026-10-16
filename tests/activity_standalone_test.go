@@ -14517,7 +14517,7 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		}
 	})
 
-	// A Reset request when STARTED should be honored even if the attempt fails non-retryably.
+	// A non-retryable failure takes precedence over a pending reset.
 	t.Run("RestoreOriginalOptions_WhileStarted_AttemptFailsNonRetryably", func(t *testing.T) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -14538,17 +14538,30 @@ func (s *standaloneActivityTestSuite) TestResetActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Fail attempt non-retryably -> should still reset
+		// A non-retryable failure closes the activity without applying the deferred reset.
 		failAttemptNonRetryably(ctx, t, taskToken)
 
-		// The reset should have been applied with the restore
-		desc := describeActivity(ctx, t, activityID, startResp.GetRunId())
-		require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, desc.GetInfo().GetRunState(), "expected in SCHEDULED")
+		// The updated options remain effective on the terminal activity.
+		desc, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+			Namespace:      env.Namespace().String(),
+			ActivityId:     activityID,
+			RunId:          startResp.GetRunId(),
+			IncludeOutcome: true,
+		})
+		require.NoError(t, err)
+		require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_FAILED, desc.GetInfo().GetStatus())
+		require.Equal(t, enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE, desc.GetOutcome().GetRetryState())
+		protorequire.ProtoEqual(t, &failurepb.Failure{
+			Message: "non-retryable failure",
+			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+				ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{NonRetryable: true},
+			},
+		}, desc.GetOutcome().GetFailure())
 		require.EqualValues(t, 1, desc.GetInfo().GetAttempt(), "expected attempt 1")
-		require.Equal(t, originalTimeouts[0], desc.GetInfo().GetStartToCloseTimeout().AsDuration(),
-			"reset should have restored options")
-		require.Equal(t, originalTimeouts[1], desc.GetInfo().GetHeartbeatTimeout().AsDuration(),
-			"reset should have restored options")
+		require.Equal(t, updatedTimeouts[0], desc.GetInfo().GetStartToCloseTimeout().AsDuration(),
+			"terminal failure must not apply deferred option restore")
+		require.Equal(t, updatedTimeouts[1], desc.GetInfo().GetHeartbeatTimeout().AsDuration(),
+			"terminal failure must not apply deferred option restore")
 	})
 
 	t.Run("RestoreOriginalOptions_WhileStarted_AttemptSucceeds", func(t *testing.T) {

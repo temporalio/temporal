@@ -202,3 +202,90 @@ func TestPossible(t *testing.T) {
 		})
 	}
 }
+
+func TestFailureRetryEligibility(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name  string
+		cfg   Config
+		state AbstractState
+		event Event
+		want  AbstractState
+	}{
+		{"reset rejects non-retryable failure", Config{},
+			AbstractState{Status: ResetRequested, AttemptCount: 3, ResetKeepPaused: true}, FailNonRetryably,
+			AbstractState{Status: Failed, AttemptCount: 3, ResetKeepPaused: true}},
+		{"reset ignores exhausted old budget", Config{MaxAttempts: 3},
+			AbstractState{Status: ResetRequested, AttemptCount: 3}, FailRetryably,
+			AbstractState{Status: Scheduled, AttemptCount: 1}},
+		{"reset preserves pause with exhausted old budget", Config{MaxAttempts: 3},
+			AbstractState{Status: ResetRequested, AttemptCount: 3, ResetKeepPaused: true}, FailRetryably,
+			AbstractState{Status: Paused, AttemptCount: 1}},
+		{"reset ignores old retry window", Config{RetryOutlivesScheduleToClose: true},
+			AbstractState{Status: ResetRequested, AttemptCount: 3}, FailRetryably,
+			AbstractState{Status: Scheduled, AttemptCount: 1}},
+		{"retryable timeout resets despite old retry limits", Config{MaxAttempts: 3, HasScheduleToClose: true, RetryOutlivesScheduleToClose: true},
+			AbstractState{Status: ResetRequested, AttemptCount: 3, ResetKeepPaused: true}, StartToCloseElapses,
+			AbstractState{Status: Paused, AttemptCount: 1}},
+		{"reset rejects non-retryable start to close", Config{NonRetryableTimeouts: []EventType{StartToCloseElapsesType}},
+			AbstractState{Status: ResetRequested, AttemptCount: 3}, StartToCloseElapses,
+			AbstractState{Status: TimedOut, AttemptCount: 3}},
+		{"reset rejects non-retryable heartbeat", Config{HasHeartbeat: true, NonRetryableTimeouts: []EventType{HeartbeatElapsesType}},
+			AbstractState{Status: ResetRequested, AttemptCount: 3}, HeartbeatElapses,
+			AbstractState{Status: TimedOut, AttemptCount: 3}},
+		{"ordinary failure exhausts budget", Config{MaxAttempts: 3},
+			AbstractState{Status: Started, AttemptCount: 3}, FailRetryably,
+			AbstractState{Status: Failed, AttemptCount: 3}},
+		{"ordinary failure permits unlimited retries", Config{},
+			AbstractState{Status: Started, AttemptCount: 3}, FailRetryably,
+			AbstractState{Status: Scheduled, AttemptCount: 4, Dispatchability: BackoffPending}},
+		{"ordinary failure respects retry window", Config{RetryOutlivesScheduleToClose: true},
+			AbstractState{Status: Started, AttemptCount: 3}, FailRetryably,
+			AbstractState{Status: Failed, AttemptCount: 3}},
+		{"ordinary timeout respects retry window", Config{RetryOutlivesScheduleToClose: true},
+			AbstractState{Status: Started, AttemptCount: 3}, StartToCloseElapses,
+			AbstractState{Status: TimedOut, AttemptCount: 3}},
+		{"ordinary timeout exhausts budget", Config{MaxAttempts: 3},
+			AbstractState{Status: Started, AttemptCount: 3}, StartToCloseElapses,
+			AbstractState{Status: TimedOut, AttemptCount: 3}},
+		{"pause ignores exhausted budget", Config{MaxAttempts: 3},
+			AbstractState{Status: PauseRequested, AttemptCount: 3}, FailRetryably,
+			AbstractState{Status: Paused, AttemptCount: 4, Dispatchability: BackoffPending}},
+		{"pause ignores retry window", Config{RetryOutlivesScheduleToClose: true},
+			AbstractState{Status: PauseRequested, AttemptCount: 3}, FailRetryably,
+			AbstractState{Status: Paused, AttemptCount: 4, Dispatchability: BackoffPending}},
+		{"pause rejects non-retryable failure", Config{},
+			AbstractState{Status: PauseRequested, AttemptCount: 3}, FailNonRetryably,
+			AbstractState{Status: Failed, AttemptCount: 3}},
+		{"pause parks start to close despite exhausted retry limits", Config{MaxAttempts: 3, RetryOutlivesScheduleToClose: true},
+			AbstractState{Status: PauseRequested, AttemptCount: 3}, StartToCloseElapses,
+			AbstractState{Status: Paused, AttemptCount: 4, Dispatchability: BackoffPending}},
+		{"pause rejects non-retryable timeout", Config{NonRetryableTimeouts: []EventType{StartToCloseElapsesType}},
+			AbstractState{Status: PauseRequested, AttemptCount: 3}, StartToCloseElapses,
+			AbstractState{Status: TimedOut, AttemptCount: 3}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			require.Equal(t, Outcome{Next: tc.want}, Transition(tc.cfg, tc.state, tc.event))
+		})
+	}
+}
+
+// Unpause releases the held attempt even beyond MaximumAttempts.
+// If that attempt fails without another pending pause or reset, normal retry limits apply.
+func TestFailureAfterResumingExhaustedPause(t *testing.T) {
+	t.Parallel()
+
+	cfg := Config{MaxAttempts: 1}
+	state := Initial(cfg)
+	for _, event := range []Event{Poll, Pause, FailRetryably, Unpause, BackoffElapses, Poll, FailRetryably} {
+		outcome := Transition(cfg, state, event)
+		require.Equal(t, NoError, outcome.Reject)
+		require.False(t, outcome.ImpossibleTimeWindowElapse)
+		state = outcome.Next
+	}
+	require.Equal(t, AbstractState{Status: Failed, AttemptCount: 2}, state)
+}

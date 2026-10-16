@@ -9,10 +9,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/server/chasm/lib/activity"
 	"go.temporal.io/server/chasm/lib/activity/model"
@@ -24,6 +26,8 @@ import (
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
+	"google.golang.org/protobuf/types/known/durationpb"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type activityParityTestSuite struct {
@@ -336,6 +340,8 @@ func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {
 		t *testing.T,
 		cfg activityConfig,
 		trace []model.Event,
+		wantTimeout enumspb.TimeoutType,
+		wantRetryState enumspb.RetryState,
 	) {
 		const message = "the terminal timeout must chain the underlying application failure as its Cause"
 		t.Run("WorkflowActivity", func(t *testing.T) {
@@ -344,14 +350,22 @@ func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {
 			require.True(t, ok)
 			appErr, ok := errors.AsType[*temporal.ApplicationError](timeout.Unwrap())
 			require.True(t, ok)
-			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, activity.terminalOutcome(t).status, message)
+			require.Equal(t, activityTerminalProjection{
+				Status:      enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+				FailureType: wantTimeout.String(),
+				RetryState:  wantRetryState,
+			}, activity.terminal(t), message)
 			require.Equal(t, "TestFailure", appErr.Type(), message)
 			require.Equal(t, "test failure", appErr.Message(), message)
 		})
 		t.Run("StandaloneActivity", func(t *testing.T) {
 			activity := newSAADriver(t, env, cfg).driveTrace(t, trace)
 			cause := activity.describe(t).GetOutcome().GetFailure().GetCause()
-			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, activity.terminalOutcome(t).status, message)
+			require.Equal(t, activityTerminalProjection{
+				Status:      enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+				FailureType: wantTimeout.String(),
+				RetryState:  wantRetryState,
+			}, activity.terminal(t), message)
 			require.Equal(t, "TestFailure", cause.GetApplicationFailureInfo().GetType(), message)
 			require.Equal(t, "test failure", cause.GetMessage(), message)
 		})
@@ -366,6 +380,8 @@ func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {
 				model.Poll,
 				model.StartToCloseElapses,
 			},
+			enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
 		)
 	})
 	s.Run("Heartbeat", func(s *activityParityTestSuite) {
@@ -377,6 +393,8 @@ func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {
 				model.Poll,
 				model.HeartbeatElapses,
 			},
+			enumspb.TIMEOUT_TYPE_HEARTBEAT,
+			enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
 		)
 	})
 	s.Run("ScheduleToClose", func(s *activityParityTestSuite) {
@@ -386,6 +404,8 @@ func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {
 				model.FailRetryably,
 				model.ScheduleToCloseElapses,
 			},
+			enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			enumspb.RETRY_STATE_TIMEOUT,
 		)
 	})
 }
@@ -713,6 +733,8 @@ func (s *activityParityTestSuite) TestActivityCore() {
 // parityActivity is what a parity test reads from a driven activity. Both drivers' handles satisfy
 // it, so a test states its claim once instead of once per implementation.
 type parityActivity interface {
+	activityInfo(require.TestingT) activityInfo
+	terminal(require.TestingT) activityTerminalProjection
 	driveEvent(testing.TB, model.Event)
 	heartbeatFlags() model.HeartbeatFlags
 }
@@ -749,10 +771,76 @@ func (a *saaHandle) heartbeatFlags() model.HeartbeatFlags {
 	}
 }
 
+func (a *wfaHandle) terminal(t require.TestingT) activityTerminalProjection {
+	outcome := a.terminalOutcome(t)
+	err := a.run.Get(a.testContext(), nil)
+	var failureType string
+	if outcome.status == enumspb.ACTIVITY_EXECUTION_STATUS_FAILED || outcome.status == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT {
+		activityErr, ok := errors.AsType[*temporal.ActivityError](err)
+		require.True(t, ok)
+		switch cause := activityErr.Unwrap().(type) {
+		case *temporal.ApplicationError:
+			failureType = cause.Type()
+		case *temporal.TimeoutError:
+			failureType = cause.TimeoutType().String()
+		}
+	}
+	return activityTerminalProjection{
+		Status:      outcome.status,
+		FailureType: failureType,
+		RetryState:  outcome.retryState,
+	}
+}
+
+func (a *saaHandle) terminal(t require.TestingT) activityTerminalProjection {
+	outcome := a.terminalOutcome(t)
+	failure := a.describe(t).GetOutcome().GetFailure()
+	var failureType string
+	if application := failure.GetApplicationFailureInfo(); application != nil {
+		failureType = application.GetType()
+	} else if timeout := failure.GetTimeoutFailureInfo(); timeout != nil {
+		failureType = timeout.GetTimeoutType().String()
+	}
+	return activityTerminalProjection{
+		Status:      outcome.status,
+		FailureType: failureType,
+		RetryState:  outcome.retryState,
+	}
+}
+
 func (s *activityParityTestSuite) TestReset() {
 	t := s.T()
 	env := newActivityParityEnv(t)
 	deferredResetCfg := activityConfig{MaxAttempts: 10, RetryInterval: activityLongDuration}
+	spentBudgetCfg := activityConfig{MaxAttempts: 1, RetryInterval: activityLongDuration}
+
+	// R02: a non-retryable failure closes the activity and the pending reset is discarded. A worker that
+	// obeys the reset it was told of reports a *retryable* ActivityReset error, which is the path R08
+	// covers; a non-retryable failure therefore means the attempt failed on its own merits, and the user
+	// declared that class of failure not worth retrying. The reset does not change retryability, so it
+	// does not get to override it. The retry budget makes no difference either way.
+	t.Run("NonRetryableFailureWhileResetPending", func(t *testing.T) {
+		failedNonRetryably := activityTerminalProjection{
+			Status:      enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
+			FailureType: "TestFailure",
+			RetryState:  enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
+		}
+		for _, tc := range []struct {
+			name string
+			cfg  activityConfig
+		}{
+			{name: "WithRetriesLeft", cfg: deferredResetCfg},
+			{name: "WithRetryBudgetSpent", cfg: spentBudgetCfg},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				parityDrive(t, env, tc.cfg, []model.Event{model.Poll, model.Reset, model.FailNonRetryably},
+					func(t *testing.T, a parityActivity) {
+						require.Equal(t, failedNonRetryably, a.terminal(t),
+							"a non-retryable failure closes the activity, and the pending reset is discarded")
+					})
+			})
+		}
+	})
 
 	// R14: both intents are pending and the worker is told of both. A keep_paused reset does not subsume
 	// the pause — Describe reports the activity as pause-requested, so a heartbeat response that named
@@ -765,6 +853,86 @@ func (s *activityParityTestSuite) TestReset() {
 				require.Equal(t, model.HeartbeatFlags{ActivityPaused: true, ActivityReset: true}, a.heartbeatFlags(),
 					"a worker whose attempt is both superseded and pause-bound must be told of both")
 			})
+	})
+}
+
+func (s *activityParityTestSuite) TestPauseUnpause() {
+	t := s.T()
+	env := newActivityParityEnv(t)
+	pausedRetryCfg := activityConfig{MaxAttempts: 10, RetryInterval: activityLongDuration}
+	pausedRetry := activityInfo{RunState: enumspb.PENDING_ACTIVITY_STATE_PAUSED, Attempt: 2}
+
+	// P11: the pause takes effect even though the retry budget is spent. A paused activity is one the
+	// user has stopped, not one the server has finished with, and closing it on the retry policy would
+	// decide the question the pause was asked in order to postpone — the operator paused precisely so
+	// they could look at it before it went anywhere. The activity parks PAUSED at the next attempt; the
+	// held attempt can run after unpause even beyond MaximumAttempts.
+	t.Run("LastPermittedAttemptFailsRetryablyWhilePausePending", func(t *testing.T) {
+		parityDrive(t, env, activityConfig{MaxAttempts: 1},
+			[]model.Event{model.Poll, model.Pause, model.FailRetryably},
+			func(t *testing.T, a parityActivity) {
+				require.Equal(t, pausedRetry, a.activityInfo(t),
+					"a pause must be honoured whether or not the activity has retries left")
+				for _, event := range []model.Event{model.Unpause, model.BackoffElapses, model.Poll} {
+					a.driveEvent(t, event)
+				}
+				require.Equal(t, int32(2), a.activityInfo(t).Attempt)
+				a.driveEvent(t, model.Complete)
+				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, a.terminal(t).Status)
+			})
+	})
+
+	// P13: unpause means resume now. An operator who paused an activity, fixed whatever was wrong and
+	// unpaused it is not thinking about how far into attempt 10's backoff it happened to be, and making
+	// them wait out a deadline computed before the fix serves nothing. So the remaining backoff is
+	// discarded and the dispatch is scheduled from the unpause, within the jitter window the caller
+	// asked for. A start delay is the opposite case and is honoured, being an absolute time the caller
+	// chose rather than a deadline the retry policy computed.
+	//
+	// The retry interval here is far longer than the jitter, so the deadline reported after the unpause
+	// discriminates cleanly. Per-surface arms, because the trace vocabulary cannot send jitter and the
+	// shared activityInfo projection reduces the deadline to a bool.
+	// Currently failing: SAA.
+	t.Run("UnpauseAnActivityPausedInRetryBackoff", func(t *testing.T) {
+		trace := []model.Event{model.Poll, model.FailRetryably}
+		assertBackoffDiscarded := func(
+			t *testing.T,
+			a parityActivity,
+			nextAttemptScheduleTime func() *timestamppb.Timestamp,
+			unpause pauseParityUnpause,
+		) {
+			deadline := nextAttemptScheduleTime()
+			require.NotNil(t, deadline, "an activity backing off must report the deadline its retry dispatches at")
+			a.driveEvent(t, model.Pause)
+			unpausedAt := time.Now()
+			require.NoError(t, unpause(uuid.NewString(), pauseParityUnpauseJitter))
+			released := nextAttemptScheduleTime()
+			if released == nil {
+				// A short random jitter may expire before Describe, which omits an already-due deadline.
+				require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, a.activityInfo(t).RunState)
+				return
+			}
+			require.True(t, released.AsTime().Before(deadline.AsTime()),
+				"unpausing must discard the remaining backoff rather than serving out a deadline set before the pause")
+			// Bounded on both sides by the test's own clock, so the margin covers skew against the server's.
+			require.False(t, released.AsTime().Before(unpausedAt.Add(-activityDriverTimerMargin)),
+				"...and must not dispatch before the unpause that released it")
+			require.False(t, released.AsTime().After(unpausedAt.Add(pauseParityUnpauseJitter+activityDriverTimerMargin)),
+				"...placing the dispatch inside the jitter window the unpause asked for")
+		}
+
+		t.Run("WorkflowActivity", func(t *testing.T) {
+			a := newWFADriver(t, env, pausedRetryCfg).driveTrace(t, trace)
+			assertBackoffDiscarded(t, a, func() *timestamppb.Timestamp {
+				return a.pendingActivityInfo(t).GetNextAttemptScheduleTime()
+			}, pauseParityUnpauseWFA(a))
+		})
+		t.Run("StandaloneActivity", func(t *testing.T) {
+			a := newSAADriver(t, env, pausedRetryCfg).driveTrace(t, trace)
+			assertBackoffDiscarded(t, a, func() *timestamppb.Timestamp {
+				return a.describe(t).GetInfo().GetNextAttemptScheduleTime()
+			}, pauseParityUnpauseSAA(a))
+		})
 	})
 }
 
@@ -1146,4 +1314,40 @@ func (s *activityParityTestSuite) TestTerminalRetryState() {
 			})
 		})
 	}
+}
+
+// pauseParityUnpauseJitter is the unpause jitter P13 asks for: shorter than activityLongDuration, so a
+// dispatch scheduled from the unpause time falls well before the backoff deadline being kept.
+const pauseParityUnpauseJitter = time.Hour
+
+// pauseParityUnpause is an UnpauseActivityExecution carrying a request id and a jitter, neither of
+// which the trace vocabulary can send. It bypasses the driver's model check, so nothing may be driven
+// on the handle after it.
+type pauseParityUnpause func(requestID string, jitter time.Duration) error
+
+func pauseParityUnpauseWFA(a *wfaHandle) pauseParityUnpause {
+	return func(requestID string, jitter time.Duration) error {
+		_, err := a.d.env.FrontendClient().UnpauseActivityExecution(a.testContext(), &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace: a.d.env.Namespace().String(), WorkflowId: a.workflowID, ActivityId: a.activityID, RunId: a.runID,
+			Identity: a.d.env.Tv().ClientIdentity(), RequestId: requestID, Jitter: pauseParityDuration(jitter),
+		})
+		return err
+	}
+}
+
+func pauseParityUnpauseSAA(a *saaHandle) pauseParityUnpause {
+	return func(requestID string, jitter time.Duration) error {
+		_, err := a.d.env.FrontendClient().UnpauseActivityExecution(a.testContext(), &workflowservice.UnpauseActivityExecutionRequest{
+			Namespace: a.d.env.Namespace().String(), ActivityId: a.activityID, RunId: a.runID,
+			Identity: a.d.env.Tv().ClientIdentity(), RequestId: requestID, Jitter: pauseParityDuration(jitter),
+		})
+		return err
+	}
+}
+
+func pauseParityDuration(d time.Duration) *durationpb.Duration {
+	if d == 0 {
+		return nil
+	}
+	return durationpb.New(d)
 }

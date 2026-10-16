@@ -56,7 +56,8 @@ type Config struct {
 	NonRetryableTimeouts []EventType
 
 	// RetryOutlivesScheduleToClose says a retry backoff would run past the schedule-to-close
-	// deadline, in which case the server will close the activity rather than retrying.
+	// deadline, preventing an ordinary retry. Pending pause/reset can preserve the activity despite
+	// this backoff constraint; the schedule-to-close deadline itself remains in effect.
 	//
 	// We model this as a fixed value throughout the whole activity. This means that the model
 	// predictions may be incorrect because in reality, the server decides per retry, based on the
