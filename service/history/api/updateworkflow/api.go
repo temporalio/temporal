@@ -385,12 +385,16 @@ func (u *Updater) responseLink(status *update.Status) *commonpb.Link {
 	}
 	// If there isnt a requestIdRef link- due to empty callbacks/requestID- link
 	// to the Accepted event itself.
+	return u.acceptedEventLink(u.wfKey, acceptedEventID)
+}
+
+func (u *Updater) acceptedEventLink(wfKey definition.WorkflowKey, acceptedEventID int64) *commonpb.Link {
 	return &commonpb.Link{
 		Variant: &commonpb.Link_WorkflowEvent_{
 			WorkflowEvent: &commonpb.Link_WorkflowEvent{
 				Namespace:  u.req.Request.Namespace,
-				WorkflowId: u.wfKey.WorkflowID,
-				RunId:      u.wfKey.RunID,
+				WorkflowId: wfKey.WorkflowID,
+				RunId:      wfKey.RunID,
 				Reference: &commonpb.Link_WorkflowEvent_EventRef{
 					EventRef: &commonpb.Link_WorkflowEvent_EventReference{
 						EventId:   acceptedEventID,
@@ -448,4 +452,15 @@ func (u *Updater) CreateResponse(
 			Stage:   stage,
 		},
 	}
+}
+
+// CreateCompletedResponse creates a completed Update response linked to its acceptance event.
+func (u *Updater) CreateCompletedResponse(
+	wfKey definition.WorkflowKey,
+	outcome *updatepb.Outcome,
+	acceptedEventID int64,
+) *historyservice.UpdateWorkflowExecutionResponse {
+	resp := u.CreateResponse(wfKey, outcome, enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED)
+	resp.Response.Link = u.acceptedEventLink(wfKey, acceptedEventID)
+	return resp
 }
