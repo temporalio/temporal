@@ -2,6 +2,8 @@ package namespacereplication
 
 import (
 	"go.temporal.io/server/chasm"
+	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
+	"google.golang.org/grpc"
 )
 
 type Library struct {
@@ -10,6 +12,7 @@ type Library struct {
 	ApplyLocalTaskHandler  *applyLocalTaskHandler
 	ApplyPeerTaskHandler   *applyPeerTaskHandler
 	PeerBackoffTaskHandler *applyPeerBackoffTaskHandler
+	handler                *handler
 }
 
 // NewNilLibrary creates a Library with all nil handlers. Useful for
@@ -22,11 +25,19 @@ func newLibrary(
 	applyLocal *applyLocalTaskHandler,
 	applyPeer *applyPeerTaskHandler,
 	peerBackoff *applyPeerBackoffTaskHandler,
+	handler *handler,
 ) *Library {
 	return &Library{
 		ApplyLocalTaskHandler:  applyLocal,
 		ApplyPeerTaskHandler:   applyPeer,
 		PeerBackoffTaskHandler: peerBackoff,
+		handler:                handler,
+	}
+}
+
+func (l *Library) RegisterServices(server *grpc.Server) {
+	if l.handler != nil {
+		server.RegisterService(&namespacereplicationpb.NamespaceReplicationService_ServiceDesc, l.handler)
 	}
 }
 
@@ -38,6 +49,11 @@ func (l *Library) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*NamespaceMutationComponent](
 			chasm.NamespaceReplicationComponentName,
+			// This alias is visibility schema, not Workflow wiring. The eventual
+			// operator repair CLI uses it to resolve the exact CHASM business/run
+			// IDs returned by namespace-indexed queries.
+			chasm.WithBusinessIDAlias("NamespaceMutationBusinessId"),
+			chasm.WithSearchAttributes(namespaceIDSearchAttribute, namespaceNameSearchAttribute),
 		),
 	}
 }
@@ -58,8 +74,3 @@ func (l *Library) Tasks() []*chasm.RegistrableTask {
 		),
 	}
 }
-
-// NOTE: the history-side NamespaceReplicationService gRPC handler and the
-// RegisterServices override that binds it land in a later PR. Until then the
-// Library inherits the no-op RegisterServices from chasm.UnimplementedLibrary,
-// so this foundation registers its component and tasks without exposing any RPC.

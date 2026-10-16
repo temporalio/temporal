@@ -5,26 +5,51 @@ import (
 
 	"go.temporal.io/server/chasm"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
-// NamespaceMutationComponent is a CHASM component that applies a single
-// namespace mutation: local CAS commit on the host cell, then parallel apply-if-higher
-// fan-out to peer cells via the cross-cluster admin RPC.
+// NamespaceMutationComponent is a CHASM component that processes a single
+// namespace mutation: an authoritative local CAS commit or a shadow-mode skip,
+// then parallel peer fan-out via the cross-cluster admin RPC.
 //
 // One component per mutation invocation. BusinessID = namespace_id:mutation_uuid
 // (unique per invocation), so concurrent mutations on the same namespace each get
 // their own component rather than blocking one another; the component is started
-// with chasm.StartExecution and awaited with chasm.PollComponent. Serialization of
-// concurrent same-namespace mutations happens at the metadata store's version-CAS
-// in ApplyLocalTask (matching legacy UpdateNamespace), not in the CHASM engine.
+// with chasm.StartExecution and awaited with chasm.PollComponent. Authoritative
+// same-namespace mutations are serialized by the metadata store's version-CAS in
+// ApplyLocalTask (matching legacy UpdateNamespace), not in the CHASM engine.
 type NamespaceMutationComponent struct {
 	chasm.UnimplementedComponent
 
 	*namespacereplicationpb.NamespaceMutationState
+
+	// Visibility is installed before the repair tooling exists so the eventual
+	// operator CLI can discover every in-flight mutation by namespace, including
+	// executions created while shadow mode is being validated. Consumers still
+	// update each exact business/run ID returned by this durable index.
+	Visibility chasm.Field[*chasm.Visibility]
 }
 
 var _ chasm.RootComponent = (*NamespaceMutationComponent)(nil)
 var _ chasm.StateMachine[namespacereplicationpb.ComponentStatus] = (*NamespaceMutationComponent)(nil)
+var _ chasm.VisibilitySearchAttributesProvider = (*NamespaceMutationComponent)(nil)
+var _ chasm.VisibilityMemoProvider = (*NamespaceMutationComponent)(nil)
+
+const (
+	NamespaceIDSearchAttributeName   = "ReplicatedNamespaceId"
+	NamespaceNameSearchAttributeName = "ReplicatedNamespaceName"
+)
+
+var namespaceIDSearchAttribute = chasm.NewSearchAttributeKeyword(
+	NamespaceIDSearchAttributeName,
+	chasm.SearchAttributeFieldKeyword01,
+)
+
+var namespaceNameSearchAttribute = chasm.NewSearchAttributeKeyword(
+	NamespaceNameSearchAttributeName,
+	chasm.SearchAttributeFieldKeyword02,
+)
 
 // NewNamespaceMutationComponent constructs a fresh component with the mutation set
 // and per-peer status entries initialized to PENDING.
@@ -47,6 +72,32 @@ func NewNamespaceMutationComponent(
 			PeerApply: peerApply,
 		},
 	}
+}
+
+// initializeVisibility attaches the framework visibility component while the
+// execution is being created. It is intentionally separate from the pure state
+// constructor so state-machine unit tests do not need a mutable CHASM context.
+func (c *NamespaceMutationComponent) initializeVisibility(ctx chasm.MutableContext) {
+	c.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibility(ctx))
+}
+
+// SearchAttributes indexes the namespace being mutated for eventual CLI-based
+// repair and manual discovery. The CHASM execution itself lives in
+// temporal-system, so its storage namespace cannot be used to find all mutation
+// executions for an application namespace. Repair remains keyed by the stable
+// namespace ID; the name is a human-friendly discovery alias.
+func (c *NamespaceMutationComponent) SearchAttributes(_ chasm.Context) []chasm.SearchAttributeKeyValue {
+	return []chasm.SearchAttributeKeyValue{
+		namespaceIDSearchAttribute.Value(c.GetMutation().GetNamespaceDetail().GetInfo().GetId()),
+		namespaceNameSearchAttribute.Value(c.GetMutation().GetNamespaceDetail().GetInfo().GetName()),
+	}
+}
+
+// Memo supplies an explicitly empty CHASM memo. ListExecutions always decodes
+// the registered memo type, so visibility records need a payload even though
+// namespace-indexed discovery has no memo fields to project.
+func (c *NamespaceMutationComponent) Memo(chasm.Context) proto.Message {
+	return &emptypb.Empty{}
 }
 
 // LifecycleState implements the chasm.Component interface.
@@ -108,12 +159,14 @@ func (c *NamespaceMutationComponent) Terminate(
 }
 
 // allPeersTerminal reports whether every peer has reached a terminal outcome
-// (Applied, NoOpStale, NotAdmitted, or FailedTerminal). Used to decide when to
-// move the component to COMPLETED.
+// (Applied, ShadowMatch, ShadowMismatch, NoOpStale, NotAdmitted, or
+// FailedTerminal). Used to decide when to move the component to COMPLETED.
 func (c *NamespaceMutationComponent) allPeersTerminal() bool {
 	for _, status := range c.GetPeerApply() {
 		switch status.GetOutcome() {
 		case namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED,
+			namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MATCH,
+			namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MISMATCH,
 			namespacereplicationpb.PEER_APPLY_OUTCOME_NO_OP_STALE,
 			namespacereplicationpb.PEER_APPLY_OUTCOME_NOT_ADMITTED,
 			namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL:

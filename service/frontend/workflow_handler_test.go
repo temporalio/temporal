@@ -247,6 +247,7 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 			s.mockSearchAttributesMapperProvider,
 			saValidator,
 		),
+		nil,
 	)
 }
 

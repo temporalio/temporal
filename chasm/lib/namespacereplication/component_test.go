@@ -6,8 +6,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
+	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 // TestNewNamespaceMutationComponent verifies the component starts RUNNING with a
@@ -24,6 +26,23 @@ func TestNewNamespaceMutationComponent(t *testing.T) {
 	for _, cell := range []string{"cellB", "cellC"} {
 		require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, c.GetPeerApply()[cell].GetOutcome(), cell)
 	}
+}
+
+func TestNamespaceMutationComponentVisibility(t *testing.T) {
+	c := NewNamespaceMutationComponent(&namespacereplicationpb.NamespaceMutation{
+		NamespaceDetail: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{Id: "namespace-id", Name: "namespace-name"},
+		},
+	})
+	c.initializeVisibility(&chasm.MockMutableContext{})
+
+	_, ok := c.Visibility.TryGet(nil)
+	require.True(t, ok)
+	require.Equal(t, []chasm.SearchAttributeKeyValue{
+		namespaceIDSearchAttribute.Value("namespace-id"),
+		namespaceNameSearchAttribute.Value("namespace-name"),
+	}, c.SearchAttributes(nil))
+	require.IsType(t, &emptypb.Empty{}, c.Memo(nil))
 }
 
 // TestLifecycleState maps each component status onto the CHASM lifecycle state
@@ -75,8 +94,8 @@ func TestTerminateAfterLocalCommitPreservesCommitOutcome(t *testing.T) {
 }
 
 // TestAllPeersTerminal verifies the completion predicate: true only when every
-// peer reached a terminal outcome (Applied / NoOpStale / FailedTerminal), false
-// while any peer is still Pending or FailedRetriable.
+// peer reached a terminal outcome, false while any peer is still Pending or
+// FailedRetriable.
 func TestAllPeersTerminal(t *testing.T) {
 	testCases := []struct {
 		name  string
@@ -96,6 +115,8 @@ func TestAllPeersTerminal(t *testing.T) {
 				"b": namespacereplicationpb.PEER_APPLY_OUTCOME_NO_OP_STALE,
 				"c": namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL,
 				"d": namespacereplicationpb.PEER_APPLY_OUTCOME_NOT_ADMITTED,
+				"e": namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MATCH,
+				"f": namespacereplicationpb.PEER_APPLY_OUTCOME_SHADOW_MISMATCH,
 			},
 			want: true,
 		},
