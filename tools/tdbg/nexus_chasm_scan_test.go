@@ -3,6 +3,7 @@ package tdbg
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"strconv"
 	"testing"
 	"time"
@@ -223,7 +224,7 @@ func TestAnalyzeNexusChasmResetSafety(t *testing.T) {
 			},
 			resetPointValid:    false,
 			unsafeContains:     "terminal history event 8",
-			latestRelevantID:   5,
+			latestRelevantID:   8,
 			recommendedResetID: 9,
 		},
 		{
@@ -277,6 +278,41 @@ func TestAnalyzeNexusChasmResetSafetyRejectsOperationInBothTrees(t *testing.T) {
 	require.Contains(t, candidate.ResetPointIssue, "exists in both state trees")
 }
 
+func TestAnalyzeNexusChasmResetSafetyIncludesEventsForNonPendingOperations(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	candidate := analyzeNexusChasmResetSafety(
+		"namespace",
+		"workflow",
+		"run",
+		[]nexusChasmScanOperation{{
+			ScheduledEventID: 10,
+			Backend:          "chasm",
+			ScheduledTime:    new(now.Add(-time.Hour)),
+		}},
+		[]*historypb.HistoryEvent{
+			nexusScheduledEvent(10, now.Add(-time.Hour)),
+			workflowTaskCompletedEvent(30, now.Add(-time.Minute)),
+			{
+				EventId:   40,
+				EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_COMPLETED,
+				EventTime: timestamppb.New(now),
+				Attributes: &historypb.HistoryEvent_NexusOperationCompletedEventAttributes{
+					NexusOperationCompletedEventAttributes: &historypb.NexusOperationCompletedEventAttributes{
+						ScheduledEventId: 5,
+					},
+				},
+			},
+		},
+	)
+
+	require.False(t, candidate.ResetPointValid)
+	require.Equal(t, int64(40), candidate.LatestRelevantNexusEvent.EventID)
+	require.Zero(t, candidate.ResetEventID)
+	require.Contains(t, candidate.ResetPointIssue, "no WorkflowTaskCompleted event exists after Nexus event 40")
+}
+
 func TestNexusChasmScanCursorRoundTrip(t *testing.T) {
 	t.Parallel()
 
@@ -287,7 +323,7 @@ func TestNexusChasmScanCursorRoundTrip(t *testing.T) {
 		maxHistoryPages: 100,
 		asOf:            time.Date(2026, time.October, 15, 12, 0, 0, 123, time.UTC),
 	}
-	token, err := encodeNexusChasmScanCursor(in, []byte("next-page"), 10, 9, 2)
+	token, err := encodeNexusChasmScanCursor(in, []byte("next-page"), 10, 9, 2, 1)
 	require.NoError(t, err)
 	cursor, err := decodeNexusChasmScanCursor(token)
 	require.NoError(t, err)
@@ -300,6 +336,7 @@ func TestNexusChasmScanCursorRoundTrip(t *testing.T) {
 	require.Equal(t, int64(10), cursor.Listed)
 	require.Equal(t, int64(9), cursor.Described)
 	require.Equal(t, int64(2), cursor.Candidates)
+	require.Equal(t, int64(1), cursor.Errors)
 	require.NotContains(t, token, "next-page")
 }
 
@@ -316,6 +353,31 @@ func TestNexusChasmScanRetryable(t *testing.T) {
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
 	require.False(t, nexusChasmScanRetryable(canceled, context.DeadlineExceeded))
+}
+
+func TestNexusChasmScanExecutionErrorClassification(t *testing.T) {
+	t.Parallel()
+
+	permissionDenied := &nexusChasmScanExecutionError{
+		stage: nexusChasmScanStageDescribe,
+		err:   serviceerror.NewPermissionDenied("secret", ""),
+	}
+	require.True(t, nexusChasmScanFatalError(context.Background(), permissionDenied))
+
+	internal := &nexusChasmScanExecutionError{
+		stage: nexusChasmScanStageHistory,
+		err:   serviceerror.NewInternal("secret"),
+	}
+	require.False(t, nexusChasmScanFatalError(context.Background(), internal))
+	require.Equal(t, "internal", nexusChasmScanErrorClass(internal.stage, internal.err))
+	require.Equal(t, "history_page_limit", nexusChasmScanErrorClass(
+		nexusChasmScanStageHistory,
+		fmt.Errorf("%w: 10", errNexusChasmHistoryPageLimit),
+	))
+	require.Equal(t, "deadlineexceeded", nexusChasmScanErrorClass(
+		nexusChasmScanStageHistory,
+		context.DeadlineExceeded,
+	))
 }
 
 func TestCanonicalVisibilityPredicate(t *testing.T) {

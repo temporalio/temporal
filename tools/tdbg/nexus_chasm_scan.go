@@ -20,7 +20,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
@@ -36,12 +35,13 @@ import (
 	hsmnexusoperations "go.temporal.io/server/service/history/hsm/nexusoperations"
 	"golang.org/x/sync/errgroup"
 	"golang.org/x/time/rate"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 const (
-	nexusChasmScanCursorVersion = 2
+	nexusChasmScanCursorVersion = 3
 	nexusChasmScanMaxPageSize   = 1000
 )
 
@@ -66,6 +66,7 @@ type nexusChasmScanInput struct {
 	resumeListed     int64
 	resumeDescribed  int64
 	resumeCandidates int64
+	resumeErrors     int64
 }
 
 type nexusChasmScanCursor struct {
@@ -79,6 +80,7 @@ type nexusChasmScanCursor struct {
 	Listed          int64  `json:"listed"`
 	Described       int64  `json:"described"`
 	Candidates      int64  `json:"candidates"`
+	Errors          int64  `json:"errors"`
 }
 
 type nexusChasmScanOperation struct {
@@ -114,6 +116,28 @@ type nexusChasmScanCandidate struct {
 	ResetPointIssue                  string                    `json:"resetPointIssue,omitempty"`
 }
 
+func (*nexusChasmScanCandidate) nexusChasmScanRecord() {}
+
+type nexusChasmScanError struct {
+	RecordType string `json:"recordType"`
+	Namespace  string `json:"namespace"`
+	WorkflowID string `json:"workflowId"`
+	RunID      string `json:"runId"`
+	Stage      string `json:"stage"`
+	ErrorClass string `json:"errorClass"`
+}
+
+func (*nexusChasmScanError) nexusChasmScanRecord() {}
+
+type nexusChasmScanRecord interface {
+	nexusChasmScanRecord()
+}
+
+type nexusChasmInspectionJob struct {
+	index     int
+	execution *workflowpb.WorkflowExecutionInfo
+}
+
 type nexusChasmScanCheckpoint struct {
 	RecordType       string    `json:"recordType"`
 	Namespace        string    `json:"namespace"`
@@ -123,6 +147,7 @@ type nexusChasmScanCheckpoint struct {
 	Listed           int64     `json:"listed"`
 	Described        int64     `json:"described"`
 	Candidates       int64     `json:"candidates"`
+	Errors           int64     `json:"errors"`
 	SnapshotComplete bool      `json:"snapshotComplete"`
 	ResumeToken      string    `json:"resumeToken,omitempty"`
 }
@@ -131,7 +156,31 @@ type nexusChasmScanStats struct {
 	listed     atomic.Int64
 	described  atomic.Int64
 	candidates atomic.Int64
+	errors     atomic.Int64
 }
+
+type nexusChasmScanStage string
+
+const (
+	nexusChasmScanStageDescribe nexusChasmScanStage = "describe"
+	nexusChasmScanStageDecode   nexusChasmScanStage = "decode"
+	nexusChasmScanStageHistory  nexusChasmScanStage = "history"
+)
+
+type nexusChasmScanExecutionError struct {
+	stage nexusChasmScanStage
+	err   error
+}
+
+func (e *nexusChasmScanExecutionError) Error() string {
+	return fmt.Sprintf("%s: %v", e.stage, e.err)
+}
+
+func (e *nexusChasmScanExecutionError) Unwrap() error {
+	return e.err
+}
+
+var errNexusChasmHistoryPageLimit = errors.New("history page limit exceeded")
 
 // AdminScanNexusChasm lists and inspects workflow executions without mutating server state. It
 // emits only minimal recovery metadata: never mutable-state blobs, payloads, headers, endpoint
@@ -159,6 +208,7 @@ func AdminScanNexusChasm(c *cli.Context, clientFactory ClientFactory) error {
 	scanner.stats.listed.Store(in.resumeListed)
 	scanner.stats.described.Store(in.resumeDescribed)
 	scanner.stats.candidates.Store(in.resumeCandidates)
+	scanner.stats.errors.Store(in.resumeErrors)
 	return scanner.run(c.Context, c.App.Writer, c.App.ErrWriter)
 }
 
@@ -238,6 +288,7 @@ func parseNexusChasmScanInput(c *cli.Context) (*nexusChasmScanInput, error) {
 		in.resumeListed = cursor.Listed
 		in.resumeDescribed = cursor.Described
 		in.resumeCandidates = cursor.Candidates
+		in.resumeErrors = cursor.Errors
 	}
 
 	cutoff := in.asOf.Add(-in.minPendingAge).Format(time.RFC3339Nano)
@@ -267,6 +318,7 @@ func encodeNexusChasmScanCursor(
 	listed int64,
 	described int64,
 	candidates int64,
+	scanErrors int64,
 ) (string, error) {
 	cursor := nexusChasmScanCursor{
 		Version:         nexusChasmScanCursorVersion,
@@ -279,6 +331,7 @@ func encodeNexusChasmScanCursor(
 		Listed:          listed,
 		Described:       described,
 		Candidates:      candidates,
+		Errors:          scanErrors,
 	}
 	b, err := json.Marshal(cursor)
 	if err != nil {
@@ -363,16 +416,23 @@ func (s *nexusChasmScanner) listPage(
 
 func (s *nexusChasmScanner) writeScanRecords(
 	encoder *json.Encoder,
-	records []*nexusChasmScanCandidate,
+	records []nexusChasmScanRecord,
 ) error {
 	for _, record := range records {
 		if record == nil {
 			continue
 		}
 		if err := encoder.Encode(record); err != nil {
-			return fmt.Errorf("write candidate: %w", err)
+			return fmt.Errorf("write scan record: %w", err)
 		}
-		s.stats.candidates.Add(1)
+		switch record.(type) {
+		case *nexusChasmScanCandidate:
+			s.stats.candidates.Add(1)
+		case *nexusChasmScanError:
+			s.stats.errors.Add(1)
+		default:
+			return fmt.Errorf("unsupported scan record type %T", record)
+		}
 	}
 	return nil
 }
@@ -391,6 +451,7 @@ func (s *nexusChasmScanner) writeCheckpoint(
 		Listed:           s.stats.listed.Load(),
 		Described:        s.stats.described.Load(),
 		Candidates:       s.stats.candidates.Load(),
+		Errors:           s.stats.errors.Load(),
 		SnapshotComplete: len(nextPageToken) == 0,
 	}
 	if len(nextPageToken) != 0 {
@@ -401,6 +462,7 @@ func (s *nexusChasmScanner) writeCheckpoint(
 			checkpoint.Listed,
 			checkpoint.Described,
 			checkpoint.Candidates,
+			checkpoint.Errors,
 		)
 		if err != nil {
 			return checkpoint, fmt.Errorf("encode resume token: %w", err)
@@ -409,22 +471,84 @@ func (s *nexusChasmScanner) writeCheckpoint(
 	if err := encoder.Encode(checkpoint); err != nil {
 		return checkpoint, fmt.Errorf("write checkpoint: %w", err)
 	}
-	_, _ = fmt.Fprintf(progress, "scan checkpoint: %d listed, %d described, %d candidates, snapshot-complete=%t\n",
-		checkpoint.Listed, checkpoint.Described, checkpoint.Candidates, checkpoint.SnapshotComplete)
+	_, _ = fmt.Fprintf(progress, "scan checkpoint: %d listed, %d described, %d candidates, %d errors, snapshot-complete=%t\n",
+		checkpoint.Listed, checkpoint.Described, checkpoint.Candidates, checkpoint.Errors, checkpoint.SnapshotComplete)
 	return checkpoint, nil
+}
+
+func (s *nexusChasmScanner) scanError(
+	execution *workflowpb.WorkflowExecutionInfo,
+	err error,
+) *nexusChasmScanError {
+	inspectionErr, ok := errors.AsType[*nexusChasmScanExecutionError](err)
+	if !ok {
+		return &nexusChasmScanError{
+			RecordType: "scan_error",
+			Namespace:  s.input.namespace,
+			WorkflowID: execution.GetExecution().GetWorkflowId(),
+			RunID:      execution.GetExecution().GetRunId(),
+			Stage:      "unknown",
+			ErrorClass: "unknown",
+		}
+	}
+	return &nexusChasmScanError{
+		RecordType: "scan_error",
+		Namespace:  s.input.namespace,
+		WorkflowID: execution.GetExecution().GetWorkflowId(),
+		RunID:      execution.GetExecution().GetRunId(),
+		Stage:      string(inspectionErr.stage),
+		ErrorClass: nexusChasmScanErrorClass(inspectionErr.stage, inspectionErr.err),
+	}
+}
+
+func nexusChasmScanFatalError(ctx context.Context, err error) bool {
+	if ctx.Err() != nil || errors.Is(err, context.Canceled) {
+		return true
+	}
+	inspectionErr, ok := errors.AsType[*nexusChasmScanExecutionError](err)
+	if !ok {
+		return true
+	}
+	switch nexusChasmScanStatusCode(inspectionErr.err) {
+	case codes.PermissionDenied, codes.Unauthenticated, codes.Unimplemented:
+		return true
+	default:
+		return false
+	}
+}
+
+func nexusChasmScanErrorClass(stage nexusChasmScanStage, err error) string {
+	if errors.Is(err, errNexusChasmHistoryPageLimit) {
+		return "history_page_limit"
+	}
+	if code := nexusChasmScanStatusCode(err); code != codes.Unknown {
+		return strings.ToLower(code.String())
+	}
+	return string(stage) + "_failed"
+}
+
+func nexusChasmScanStatusCode(err error) codes.Code {
+	if errors.Is(err, context.Canceled) {
+		return codes.Canceled
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return codes.DeadlineExceeded
+	}
+	for current := err; current != nil; current = errors.Unwrap(current) {
+		if rpcStatus, ok := common.GetRPCStatus(current); ok {
+			return rpcStatus.Code()
+		}
+	}
+	return codes.Unknown
 }
 
 func (s *nexusChasmScanner) inspectPage(
 	ctx context.Context,
 	executions []*workflowpb.WorkflowExecutionInfo,
-) ([]*nexusChasmScanCandidate, error) {
-	results := make([]*nexusChasmScanCandidate, len(executions))
+) ([]nexusChasmScanRecord, error) {
+	results := make([]nexusChasmScanRecord, len(executions))
 	g, groupCtx := errgroup.WithContext(ctx)
-	type inspectionJob struct {
-		index     int
-		execution *workflowpb.WorkflowExecutionInfo
-	}
-	jobs := make(chan inspectionJob)
+	jobs := make(chan nexusChasmInspectionJob)
 	g.Go(func() error {
 		defer close(jobs)
 		for i, execution := range executions {
@@ -432,7 +556,7 @@ func (s *nexusChasmScanner) inspectPage(
 				continue
 			}
 			select {
-			case jobs <- inspectionJob{index: i, execution: execution}:
+			case jobs <- nexusChasmInspectionJob{index: i, execution: execution}:
 			case <-groupCtx.Done():
 				return groupCtx.Err()
 			}
@@ -441,22 +565,34 @@ func (s *nexusChasmScanner) inspectPage(
 	})
 	workerCount := min(s.input.workers, len(executions))
 	for range workerCount {
-		g.Go(func() error {
-			for job := range jobs {
-				candidate, err := s.inspectExecution(groupCtx, job.execution)
-				if err != nil {
-					return fmt.Errorf("inspect workflow %q run %q: %w",
-						job.execution.GetExecution().GetWorkflowId(), job.execution.GetExecution().GetRunId(), err)
-				}
-				results[job.index] = candidate
-			}
-			return nil
-		})
+		g.Go(func() error { return s.inspectJobs(groupCtx, jobs, results) })
 	}
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
 	return results, nil
+}
+
+func (s *nexusChasmScanner) inspectJobs(
+	ctx context.Context,
+	jobs <-chan nexusChasmInspectionJob,
+	results []nexusChasmScanRecord,
+) error {
+	for job := range jobs {
+		candidate, err := s.inspectExecution(ctx, job.execution)
+		if err != nil {
+			if nexusChasmScanFatalError(ctx, err) {
+				return fmt.Errorf("inspect workflow %q run %q: %w",
+					job.execution.GetExecution().GetWorkflowId(), job.execution.GetExecution().GetRunId(), err)
+			}
+			results[job.index] = s.scanError(job.execution, err)
+			continue
+		}
+		if candidate != nil {
+			results[job.index] = candidate
+		}
+	}
+	return nil
 }
 
 func (s *nexusChasmScanner) inspectExecution(
@@ -478,7 +614,7 @@ func (s *nexusChasmScanner) inspectExecution(
 		if common.IsNotFoundError(err) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("DescribeMutableState failed: %w", err)
+		return nil, &nexusChasmScanExecutionError{stage: nexusChasmScanStageDescribe, err: err}
 	}
 	s.stats.described.Add(1)
 	if description.GetDatabaseMutableState().GetExecutionState().GetStatus() != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
@@ -490,11 +626,8 @@ func (s *nexusChasmScanner) inspectExecution(
 		description.GetDatabaseMutableState(),
 		s.registry,
 	)
-	if errors.Is(err, chasm.ErrNoChasmNodes) {
-		return nil, nil
-	}
 	if err != nil {
-		return nil, fmt.Errorf("nexus operation decode failed: %w", err)
+		return nil, &nexusChasmScanExecutionError{stage: nexusChasmScanStageDecode, err: err}
 	}
 	if !markNexusChasmCandidateTriggers(operations, s.input.asOf.Add(-s.input.minPendingAge)) {
 		return nil, nil
@@ -505,7 +638,7 @@ func (s *nexusChasmScanner) inspectExecution(
 		if ctx.Err() != nil {
 			return nil, ctx.Err()
 		}
-		return nil, fmt.Errorf("workflow history read failed: %w", err)
+		return nil, &nexusChasmScanExecutionError{stage: nexusChasmScanStageHistory, err: err}
 	}
 	candidate := analyzeNexusChasmResetSafety(
 		s.input.namespace,
@@ -701,7 +834,7 @@ func (s *nexusChasmScanner) loadHistory(
 			return collector.sortedEvents(), nil
 		}
 		if pageNumber >= s.input.maxHistoryPages {
-			return nil, fmt.Errorf("history scan exceeded --max-history-pages=%d", s.input.maxHistoryPages)
+			return nil, fmt.Errorf("%w: exceeded --max-history-pages=%d", errNexusChasmHistoryPageLimit, s.input.maxHistoryPages)
 		}
 	}
 }
@@ -786,11 +919,7 @@ func nexusChasmScanRetryable(parent context.Context, err error) bool {
 	if errors.Is(err, context.DeadlineExceeded) {
 		return true
 	}
-	var internal *serviceerror.Internal
-	var unavailable *serviceerror.Unavailable
-	var resourceExhausted *serviceerror.ResourceExhausted
-	return errors.As(err, &internal) || errors.As(err, &unavailable) ||
-		errors.As(err, &resourceExhausted) || common.IsRetryableRPCError(err)
+	return common.IsRetryableRPCError(err)
 }
 
 func analyzeNexusChasmResetSafety(
@@ -814,7 +943,7 @@ func analyzeNexusChasmResetSafety(
 	issues = append(issues, validateNexusResetHistory(pendingIDs, evidence)...)
 	candidate.LatestRelevantNexusEvent = evidence.latestRelevant
 	if evidence.latestRelevant == nil {
-		issues = append(issues, "no relevant Nexus event exists for the pending operations")
+		issues = append(issues, "no Nexus event exists in the inspected history")
 	} else {
 		candidate.QualifyingWorkflowTaskCompletion = latestWorkflowTaskCompletionAfter(
 			evidence.workflowTaskCompletions,
@@ -896,19 +1025,25 @@ func (e *nexusResetHistoryEvidence) addEvent(
 	}
 
 	scheduledID, relevant, terminal := nexusHistoryEventScheduledID(event, cancelRequestedToScheduled)
+	if !relevant && !terminal {
+		return
+	}
 	if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED && scheduledID > 0 {
 		cancelRequestedToScheduled[event.GetEventId()] = scheduledID
+	}
+	summary := summarizeHistoryEvent(event)
+	// A reset must not discard any Nexus event, including terminal events for operations that
+	// are no longer pending in mutable state. Use the latest Nexus event across the entire
+	// inspected history window when choosing the Workflow Task boundary.
+	if e.latestRelevant == nil || summary.EventID > e.latestRelevant.EventID {
+		summaryCopy := summary
+		e.latestRelevant = &summaryCopy
 	}
 	if _, pending := pendingIDs[scheduledID]; !pending {
 		return
 	}
 	if event.GetEventType() == enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED {
 		e.scheduledFound[scheduledID] = true
-	}
-	summary := summarizeHistoryEvent(event)
-	if relevant && (e.latestRelevant == nil || summary.EventID > e.latestRelevant.EventID) {
-		summaryCopy := summary
-		e.latestRelevant = &summaryCopy
 	}
 	if terminal {
 		e.terminalEvents[scheduledID] = append(e.terminalEvents[scheduledID], summary)

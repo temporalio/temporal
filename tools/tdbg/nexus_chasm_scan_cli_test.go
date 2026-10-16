@@ -206,9 +206,10 @@ func TestAdminScanNexusChasm(t *testing.T) {
 	require.Equal(t, true, checkpoint["snapshotComplete"])
 	require.NotEmpty(t, checkpoint["snapshotAsOf"])
 	require.InDelta(t, 1, checkpoint["candidates"], 0)
+	require.InDelta(t, 0, checkpoint["errors"], 0)
 	require.NotContains(t, stdout.String(), "payload-secret")
 	require.NotContains(t, stdout.String(), "completion-token-secret")
-	require.Contains(t, stderr.String(), "2 listed, 2 described, 1 candidates, snapshot-complete=true")
+	require.Contains(t, stderr.String(), "2 listed, 2 described, 1 candidates, 0 errors, snapshot-complete=true")
 }
 
 func TestAdminScanNexusChasmRequiresExplicitNamespace(t *testing.T) {
@@ -250,12 +251,93 @@ func TestAdminScanNexusChasmDoesNotCheckpointPastInspectionFailure(t *testing.T)
 		"--rps", "10000",
 		"--list-rps", "10000",
 	})
-	require.ErrorContains(t, err, "DescribeMutableState failed")
+	require.ErrorContains(t, err, "describe")
 	require.ErrorContains(t, err, "denied")
 	require.Empty(t, stdout.String(), "a failed page must not emit a checkpoint that skips the execution")
 	admin.mu.Lock()
 	require.Len(t, admin.requests, 1, "permission errors must not be retried")
 	admin.mu.Unlock()
+}
+
+func TestAdminScanNexusChasmRecordsExecutionErrorAndContinues(t *testing.T) {
+	now := time.Now().UTC().Add(-time.Hour)
+	admin := &nexusScanAdminClient{responses: map[string]*adminservice.DescribeMutableStateResponse{
+		"corrupt-workflow": {
+			DatabaseMutableState: nexusScanMutableStateWithCorruptHSMOperation(),
+		},
+		"chasm-workflow": {
+			DatabaseMutableState: nexusScanMutableStateWithOperation(t, now),
+		},
+	}}
+	workflowClient := &nexusScanWorkflowClient{
+		listResponse: &workflowservice.ListWorkflowExecutionsResponse{Executions: []*workflowpb.WorkflowExecutionInfo{
+			{
+				Execution: &commonpb.WorkflowExecution{WorkflowId: "corrupt-workflow", RunId: "corrupt-run"},
+				Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			},
+			{
+				Execution: &commonpb.WorkflowExecution{WorkflowId: "chasm-workflow", RunId: "chasm-run"},
+				Status:    enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+			},
+		}},
+		historyResponse: &workflowservice.GetWorkflowExecutionHistoryReverseResponse{
+			History: &historypb.History{Events: []*historypb.HistoryEvent{
+				workflowTaskCompletedHistoryEvent(9, now.Add(3*time.Minute)),
+				{
+					EventId:   8,
+					EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+					EventTime: timestamppb.New(now.Add(2*time.Minute + time.Second)),
+					Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
+						NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{},
+					},
+				},
+				{
+					EventId:   5,
+					EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+					EventTime: timestamppb.New(now),
+					Attributes: &historypb.HistoryEvent_NexusOperationScheduledEventAttributes{
+						NexusOperationScheduledEventAttributes: &historypb.NexusOperationScheduledEventAttributes{},
+					},
+				},
+			}},
+		},
+	}
+
+	var stdout bytes.Buffer
+	app := tdbgtest.NewCliApp(func(params *tdbg.Params) {
+		params.ClientFactory = migrateClientFactory{admin: admin, workflow: workflowClient}
+		params.Writer = &stdout
+	})
+	err := app.Run([]string{
+		"tdbg",
+		"--namespace", "test-namespace",
+		"workflow", "scan-nexus-chasm",
+		"--min-pending-age", "10m",
+		"--rps", "10000",
+		"--list-rps", "10000",
+	})
+	require.NoError(t, err)
+
+	lines := bytes.Split(bytes.TrimSpace(stdout.Bytes()), []byte("\n"))
+	require.Len(t, lines, 3)
+	var scanError map[string]any
+	require.NoError(t, json.Unmarshal(lines[0], &scanError))
+	require.Equal(t, "scan_error", scanError["recordType"])
+	require.Equal(t, "corrupt-workflow", scanError["workflowId"])
+	require.Equal(t, "decode", scanError["stage"])
+	require.Equal(t, "decode_failed", scanError["errorClass"])
+	require.NotContains(t, scanError, "error")
+
+	var candidate map[string]any
+	require.NoError(t, json.Unmarshal(lines[1], &candidate))
+	require.Equal(t, "candidate", candidate["recordType"])
+	require.Equal(t, "chasm-workflow", candidate["workflowId"])
+
+	var checkpoint map[string]any
+	require.NoError(t, json.Unmarshal(lines[2], &checkpoint))
+	require.Equal(t, true, checkpoint["snapshotComplete"])
+	require.InDelta(t, 1, checkpoint["candidates"], 0)
+	require.InDelta(t, 1, checkpoint["errors"], 0)
 }
 
 func nexusScanMutableStateWithOperation(t *testing.T, scheduledTime time.Time) *persistencespb.WorkflowMutableState {
@@ -311,6 +393,26 @@ func nexusScanMutableStateWithOperation(t *testing.T, scheduledTime time.Time) *
 		ChasmNodes:     tree.Snapshot(nil).Nodes,
 		ExecutionInfo:  executionInfo,
 		ExecutionState: executionState,
+	}
+}
+
+func nexusScanMutableStateWithCorruptHSMOperation() *persistencespb.WorkflowMutableState {
+	return &persistencespb.WorkflowMutableState{
+		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
+			NamespaceId: "namespace-id",
+			WorkflowId:  "corrupt-workflow",
+			SubStateMachinesByType: map[string]*persistencespb.StateMachineMap{
+				hsmnexusoperations.OperationMachineType: {
+					MachinesById: map[string]*persistencespb.StateMachineNode{
+						"5": {Data: []byte{0xff}},
+					},
+				},
+			},
+		},
+		ExecutionState: &persistencespb.WorkflowExecutionState{
+			RunId:  "corrupt-run",
+			Status: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		},
 	}
 }
 
