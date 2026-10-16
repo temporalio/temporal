@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"go.temporal.io/server/common/rpc/httpfaults"
+	"go.temporal.io/server/common/testing/failpoint"
 	"go.temporal.io/server/common/testing/faultinjectiontest"
 	commontesthooks "go.temporal.io/server/common/testing/testhooks"
 )
@@ -30,5 +31,6 @@ func newAdapter(testHooks commontesthooks.TestHooks) faultinjectiontest.Adapter[
 			ByNamespaceID:   commontesthooks.HTTPResponseFaultGeneratorByNamespaceID,
 			ByNamespaceName: commontesthooks.HTTPResponseFaultGeneratorByNamespaceName,
 		},
+		Failpoint: failpoint.HTTPKey,
 	})
 }

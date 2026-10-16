@@ -32,6 +32,14 @@ func TestKey(t *testing.T) {
 	require.NotEqual(t, key1, scoped)
 }
 
+func TestBoundaryKeys(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, "grpc:/test.Service/Method", failpoint.GRPCKey("/test.Service/Method").Name())
+	require.Equal(t, "http:POST /callback", failpoint.HTTPKey("POST /callback").Name())
+	require.Equal(t, "persistence:ExecutionStore.UpdateWorkflowExecution", failpoint.PersistenceKey("ExecutionStore", "UpdateWorkflowExecution").Name())
+}
+
 func TestNewKey_PanicsOnDuplicateName(t *testing.T) {
 	t.Parallel()
 
