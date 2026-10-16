@@ -107,9 +107,10 @@ type (
 	}
 
 	eagerActivityCandidate struct {
-		attr         *commandpb.ScheduleActivityTaskCommandAttributes
-		activityInfo *persistencespb.ActivityInfo
-		granted      bool
+		scheduledEventID int64
+		attr             *commandpb.ScheduleActivityTaskCommandAttributes
+		activityInfo     *persistencespb.ActivityInfo
+		granted          bool
 	}
 )
 
@@ -560,7 +561,10 @@ func (handler *workflowTaskCompletedHandler) handleCommandScheduleActivity(
 		return event, &handleCommandResponse{}, nil
 	}
 
-	handler.eagerActivityCandidates = append(handler.eagerActivityCandidates, eagerActivityCandidate{attr: attr})
+	handler.eagerActivityCandidates = append(handler.eagerActivityCandidates, eagerActivityCandidate{
+		scheduledEventID: event.GetEventId(),
+		attr:             attr,
+	})
 	return event, &handleCommandResponse{}, nil
 }
 
@@ -576,7 +580,7 @@ func (handler *workflowTaskCompletedHandler) handleEagerActivityCandidates(
 	candidateIndexesByTaskQueue := make(map[string][]int)
 	for index := range handler.eagerActivityCandidates {
 		candidate := &handler.eagerActivityCandidates[index]
-		activityInfo, ok := handler.mutableState.GetActivityByActivityID(candidate.attr.GetActivityId())
+		activityInfo, ok := handler.mutableState.GetActivityInfo(candidate.scheduledEventID)
 		if !ok {
 			// The activity was cancelled by a later command in this workflow task.
 			continue
@@ -647,9 +651,15 @@ func (handler *workflowTaskCompletedHandler) grantEagerActivityDispatchBatch(
 	}
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
-	namespaceName := handler.mutableState.GetNamespaceEntry().Name()
+	namespaceName := handler.mutableState.GetNamespaceEntry().Name().String()
 	metrics.EagerDispatchRequestsSent.With(
-		workflow.GetPerTaskQueueFamilyScope(handler.metricsHandler, namespaceName, taskQueue, handler.config),
+		metrics.GetPerActivityEagerExecutionScope(
+			handler.metricsHandler,
+			namespaceName,
+			taskQueue,
+			handler.config.BreakdownMetricsByTaskQueue(namespaceName, taskQueue, enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+			metrics.HistoryRespondWorkflowTaskCompletedScope,
+		),
 	).Record(eagerDispatchRequestCount(items))
 	response, err := handler.matchingClient.GrantEagerDispatch(ctx, &matchingservice.GrantEagerDispatchRequest{
 		NamespaceId: executionInfo.GetNamespaceId(),

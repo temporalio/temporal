@@ -117,9 +117,10 @@ func TestGrantEagerActivityDispatch(t *testing.T) {
 				expectedTaskQueue = "__omitted__"
 			}
 			require.Equal(t, map[string]string{
-				metrics.NamespaceTag("").Key:       "namespace",
-				metrics.UnsafeTaskQueueTag("").Key: expectedTaskQueue,
-				metrics.OperationTag("").Key:       "StartActivityExecution",
+				metrics.NamespaceTag("").Key:                                   "namespace",
+				metrics.UnsafeTaskQueueTag("").Key:                             expectedTaskQueue,
+				metrics.OperationTag("").Key:                                   "StartActivityExecution",
+				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_ACTIVITY).Key: "Activity",
 			}, requestMetrics[0].Tags)
 		})
 	}

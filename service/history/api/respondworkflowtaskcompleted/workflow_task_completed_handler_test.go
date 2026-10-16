@@ -774,6 +774,7 @@ func TestGrantEagerActivityDispatchBatch(t *testing.T) {
 			requestMetrics := capture.SnapshotMetric(metrics.EagerDispatchRequestsSent.Name())
 			require.Len(t, requestMetrics, 1)
 			require.Equal(t, int64(2), requestMetrics[0].Value)
+			require.Equal(t, enumspb.TASK_QUEUE_TYPE_ACTIVITY.String(), requestMetrics[0].Tags[metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_ACTIVITY).Key])
 			require.Equal(t, metrics.HistoryRespondWorkflowTaskCompletedScope, requestMetrics[0].Tags[metrics.OperationTag("").Key])
 			require.Equal(t, tests.LocalNamespaceEntry.Name().String(), requestMetrics[0].Tags[metrics.NamespaceTag("").Key])
 			require.Equal(t, "activity-task-queue", requestMetrics[0].Tags[metrics.UnsafeTaskQueueTag("").Key])
@@ -795,10 +796,10 @@ func TestHandleEagerActivityCandidatesBatchesByTaskQueue(t *testing.T) {
 	ms := historyi.NewMockMutableState(ctrl)
 	matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
 	candidates := []eagerActivityCandidate{
-		{attr: &commandpb.ScheduleActivityTaskCommandAttributes{ActivityId: "activity-1", TaskQueue: &taskqueuepb.TaskQueue{Name: "queue-1"}}},
-		{attr: &commandpb.ScheduleActivityTaskCommandAttributes{ActivityId: "activity-2", TaskQueue: &taskqueuepb.TaskQueue{Name: "queue-1"}}},
-		{attr: &commandpb.ScheduleActivityTaskCommandAttributes{ActivityId: "activity-3", TaskQueue: &taskqueuepb.TaskQueue{Name: "queue-2"}}},
-		{attr: &commandpb.ScheduleActivityTaskCommandAttributes{ActivityId: "cancelled-activity", TaskQueue: &taskqueuepb.TaskQueue{Name: "queue-3"}}},
+		{scheduledEventID: 11, attr: &commandpb.ScheduleActivityTaskCommandAttributes{ActivityId: "activity-1", TaskQueue: &taskqueuepb.TaskQueue{Name: "queue-1"}}},
+		{scheduledEventID: 12, attr: &commandpb.ScheduleActivityTaskCommandAttributes{ActivityId: "activity-2", TaskQueue: &taskqueuepb.TaskQueue{Name: "queue-1"}}},
+		{scheduledEventID: 13, attr: &commandpb.ScheduleActivityTaskCommandAttributes{ActivityId: "activity-3", TaskQueue: &taskqueuepb.TaskQueue{Name: "queue-2"}}},
+		{scheduledEventID: 14, attr: &commandpb.ScheduleActivityTaskCommandAttributes{ActivityId: "cancelled-activity", TaskQueue: &taskqueuepb.TaskQueue{Name: "queue-3"}}},
 	}
 	activityInfos := []*persistencespb.ActivityInfo{
 		{ScheduledEventId: 11},
@@ -809,10 +810,10 @@ func TestHandleEagerActivityCandidatesBatchesByTaskQueue(t *testing.T) {
 	ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).Times(3)
 	for index, candidate := range candidates[:3] {
-		ms.EXPECT().GetActivityByActivityID(candidate.attr.GetActivityId()).Return(activityInfos[index], true)
+		ms.EXPECT().GetActivityInfo(candidate.scheduledEventID).Return(activityInfos[index], true)
 		ms.EXPECT().GenerateActivityTask(activityInfos[index].GetScheduledEventId()).Return(nil)
 	}
-	ms.EXPECT().GetActivityByActivityID("cancelled-activity").Return(nil, false)
+	ms.EXPECT().GetActivityInfo(int64(14)).Return(nil, false)
 	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{NamespaceId: "namespace-id"}).Times(2)
 
 	matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -841,6 +842,47 @@ func TestHandleEagerActivityCandidatesBatchesByTaskQueue(t *testing.T) {
 	mutations, err := handler.handleEagerActivityCandidates(context.Background())
 	require.NoError(t, err)
 	require.Empty(t, mutations)
+}
+
+func TestHandleEagerActivityCandidatesRescheduledActivity(t *testing.T) {
+	t.Parallel()
+
+	ctrl := gomock.NewController(t)
+	ms := historyi.NewMockMutableState(ctrl)
+	matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+	attr := &commandpb.ScheduleActivityTaskCommandAttributes{
+		ActivityId: "reused-activity-id",
+		TaskQueue:  &taskqueuepb.TaskQueue{Name: "activity-task-queue"},
+	}
+	activityInfo := &persistencespb.ActivityInfo{ScheduledEventId: 12, ActivityId: attr.GetActivityId()}
+	ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
+	ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).Times(2)
+	ms.EXPECT().GetActivityInfo(int64(11)).Return(nil, false)
+	ms.EXPECT().GetActivityInfo(int64(12)).Return(activityInfo, true)
+	ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{NamespaceId: "namespace-id"})
+	ms.EXPECT().GenerateActivityTask(int64(12)).Return(nil)
+	matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *matchingservice.GrantEagerDispatchRequest, _ ...grpc.CallOption) (*matchingservice.GrantEagerDispatchResponse, error) {
+			require.Len(t, request.GetItems(), 1, "only the replacement activity should request a grant")
+			return &matchingservice.GrantEagerDispatchResponse{Items: []*matchingservice.GrantEagerDispatchResponse_Item{{}}}, nil
+		},
+	)
+	handler := &workflowTaskCompletedHandler{
+		mutableState:   ms,
+		matchingClient: matchingClient,
+		metricsHandler: metrics.NoopMetricsHandler,
+		config:         newEagerActivityDispatchTestConfig(true),
+		eagerActivityCandidates: []eagerActivityCandidate{
+			{scheduledEventID: 11, attr: attr},
+			{scheduledEventID: 12, attr: attr},
+		},
+	}
+
+	mutations, err := handler.handleEagerActivityCandidates(t.Context())
+	require.NoError(t, err)
+	require.Empty(t, mutations)
+	require.Nil(t, handler.eagerActivityCandidates[0].activityInfo)
+	require.Same(t, activityInfo, handler.eagerActivityCandidates[1].activityInfo)
 }
 
 func TestHandleEagerActivityCandidatesPartialGrant(t *testing.T) {
@@ -878,9 +920,9 @@ func TestHandleEagerActivityCandidatesPartialGrant(t *testing.T) {
 
 	ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
-	ms.EXPECT().GetActivityByActivityID(attrs[0].GetActivityId()).Return(activityInfos[0], true)
-	ms.EXPECT().GetActivityByActivityID(attrs[1].GetActivityId()).Return(activityInfos[1], true)
-	ms.EXPECT().GetActivityByActivityID(attrs[2].GetActivityId()).Return(activityInfos[2], true)
+	ms.EXPECT().GetActivityInfo(activityInfos[0].GetScheduledEventId()).Return(activityInfos[0], true)
+	ms.EXPECT().GetActivityInfo(activityInfos[1].GetScheduledEventId()).Return(activityInfos[1], true)
+	ms.EXPECT().GetActivityInfo(activityInfos[2].GetScheduledEventId()).Return(activityInfos[2], true)
 	ms.EXPECT().GetExecutionInfo().Return(executionInfo).Times(3)
 	ms.EXPECT().GetAssignedBuildId().Return("").Times(2)
 	ms.EXPECT().AddActivityTaskStartedEvent(
@@ -915,9 +957,9 @@ func TestHandleEagerActivityCandidatesPartialGrant(t *testing.T) {
 		matchingClient:  matchingClient,
 		config:          config,
 		eagerActivityCandidates: []eagerActivityCandidate{
-			{attr: attrs[0]},
-			{attr: attrs[1]},
-			{attr: attrs[2]},
+			{scheduledEventID: activityInfos[0].GetScheduledEventId(), attr: attrs[0]},
+			{scheduledEventID: activityInfos[1].GetScheduledEventId(), attr: attrs[1]},
+			{scheduledEventID: activityInfos[2].GetScheduledEventId(), attr: attrs[2]},
 		},
 	}
 
@@ -955,7 +997,7 @@ func TestHandleEagerActivityCandidatesDispatchCheckDisabled(t *testing.T) {
 
 	ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
 	ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).AnyTimes()
-	ms.EXPECT().GetActivityByActivityID(attr.GetActivityId()).Return(activityInfo, true)
+	ms.EXPECT().GetActivityInfo(activityInfo.GetScheduledEventId()).Return(activityInfo, true)
 	ms.EXPECT().GetAssignedBuildId().Return("")
 	ms.EXPECT().AddActivityTaskStartedEvent(
 		activityInfo, int64(11), gomock.Any(), "worker", gomock.Any(), nil, nil, "", clock,
@@ -979,7 +1021,7 @@ func TestHandleEagerActivityCandidatesDispatchCheckDisabled(t *testing.T) {
 		matchingClient:  matchingClient,
 		config:          config,
 		eagerActivityCandidates: []eagerActivityCandidate{
-			{attr: attr},
+			{scheduledEventID: activityInfo.GetScheduledEventId(), attr: attr},
 		},
 	}
 
@@ -1032,7 +1074,7 @@ func TestHandleEagerActivityCandidatesFallback(t *testing.T) {
 
 			ms.EXPECT().IsWorkflowExecutionRunning().Return(true)
 			ms.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry).Times(2)
-			ms.EXPECT().GetActivityByActivityID(attr.GetActivityId()).Return(activityInfo, true)
+			ms.EXPECT().GetActivityInfo(activityInfo.GetScheduledEventId()).Return(activityInfo, true)
 			ms.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{NamespaceId: "namespace-id"})
 			ms.EXPECT().GenerateActivityTask(int64(11)).Return(test.generateErr)
 			matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).Return(test.response, test.matchingErr)
@@ -1041,7 +1083,7 @@ func TestHandleEagerActivityCandidatesFallback(t *testing.T) {
 				mutableState:            ms,
 				matchingClient:          matchingClient,
 				metricsHandler:          metrics.NoopMetricsHandler,
-				eagerActivityCandidates: []eagerActivityCandidate{{attr: attr}},
+				eagerActivityCandidates: []eagerActivityCandidate{{scheduledEventID: activityInfo.GetScheduledEventId(), attr: attr}},
 				config:                  newEagerActivityDispatchTestConfig(true),
 			}
 			mutations, err := handler.handleEagerActivityCandidates(context.Background())
@@ -1140,6 +1182,7 @@ func TestHandleCommandScheduleActivityCollectsEagerCandidate(t *testing.T) {
 	require.NotNil(t, response)
 	require.Len(t, handler.eagerActivityCandidates, 1)
 	require.Same(t, attr, handler.eagerActivityCandidates[0].attr)
+	require.Equal(t, event.GetEventId(), handler.eagerActivityCandidates[0].scheduledEventID)
 }
 
 func TestHandleCommandRequestCancelActivity_WorkerCommands(t *testing.T) {

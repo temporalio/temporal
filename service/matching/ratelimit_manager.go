@@ -90,6 +90,7 @@ func (r *rateLimitManager) Start() {
 	r.numReadPartitions, cancel = r.config.NumReadPartitionsSub(r.setNumReadPartitions)
 	r.cancels = append(r.cancels, cancel)
 	r.computeEffectiveRPSAndSourceLocked()
+	r.updateSimpleRateLimitWithBurstLocked(defaultBurstDuration)
 }
 
 func (r *rateLimitManager) setAdminNsRate(rps float64) {

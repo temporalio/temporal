@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/service/matching/simplelimiter"
@@ -61,6 +62,39 @@ func (s *RateLimitManagerSuite) TestUpdatePerKeySimpleRateLimitLocked_WhenFairne
 	s.Equal(0, rateLimitManager.perKeyReady.Size(), "All per-key ready entries should be cleared")
 	s.False(rateLimitManager.perKeyLimit.Limited(), "Per-key limit should be cleared")
 	rateLimitManager.mu.Unlock()
+}
+
+func TestRateLimitManagerInitialGrants(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name    string
+		rate    float64
+		granted int32
+	}{
+		{name: "zero rate", rate: 0, granted: 0},
+		{name: "one per second", rate: 1, granted: 2},
+		{name: "ten per second", rate: 10, granted: 11},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			configClient := dynamicconfig.NewMemoryClient()
+			configClient.OverrideSetting(dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate, test.rate)
+			config := newTaskQueueConfig(
+				tqid.UnsafeTaskQueueFamily("test-namespace", "test-task-queue").TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+				NewConfig(dynamicconfig.NewCollection(configClient, log.NewNoopLogger())),
+				"test-namespace",
+			)
+			manager := newRateLimitManager(nil, config, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+			manager.timeSource = clock.NewEventTimeSource().Update(time.Now())
+			manager.Start()
+			t.Cleanup(manager.Stop)
+
+			require.Equal(t, test.granted, manager.grantTokens(nil, 20))
+			require.Zero(t, manager.grantTokens(nil, 1))
+		})
+	}
 }
 
 func TestRateLimitManagerGrantTokens(t *testing.T) {
