@@ -14,7 +14,6 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -39,16 +38,14 @@ type (
 	Handler struct {
 		matchingservice.UnimplementedMatchingServiceServer
 
-		engine                   Engine
-		config                   *Config
-		metricsHandler           metrics.Handler
-		logger                   log.Logger
-		nexusTaskLogger          log.Logger
-		startWG                  sync.WaitGroup
-		throttledLogger          log.Logger
-		nexusTaskThrottledLogger log.Logger
-		namespaceRegistry        namespace.Registry
-		workersRegistry          workers.Registry
+		engine            Engine
+		config            *Config
+		metricsHandler    metrics.Handler
+		logger            log.Logger
+		startWG           sync.WaitGroup
+		throttledLogger   log.Logger
+		namespaceRegistry namespace.Registry
+		workersRegistry   workers.Registry
 	}
 
 	HandlerParams struct {
@@ -94,12 +91,10 @@ func NewHandler(
 	params HandlerParams,
 ) *Handler {
 	handler := &Handler{
-		config:                   params.Config,
-		metricsHandler:           params.MetricsHandler,
-		logger:                   params.Logger,
-		nexusTaskLogger:          log.With(params.Logger, tag.NexusStageHandlerTaskDelivery),
-		throttledLogger:          params.ThrottledLogger,
-		nexusTaskThrottledLogger: log.With(params.ThrottledLogger, tag.NexusStageHandlerTaskDelivery),
+		config:          params.Config,
+		metricsHandler:  params.MetricsHandler,
+		logger:          params.Logger,
+		throttledLogger: params.ThrottledLogger,
 		engine: NewEngine(
 			params.TaskManager,
 			params.FairTaskManager,
@@ -331,11 +326,7 @@ func (h *Handler) RespondQueryTaskCompleted(
 // CancelOutstandingPoll is used to cancel outstanding pollers
 func (h *Handler) CancelOutstandingPoll(ctx context.Context,
 	request *matchingservice.CancelOutstandingPollRequest) (_ *matchingservice.CancelOutstandingPollResponse, retError error) {
-	logger := h.logger
-	if request.GetTaskQueueType() == enumspb.TASK_QUEUE_TYPE_NEXUS {
-		logger = log.With(h.nexusTaskLogger, tag.Operation("CancelOutstandingPoll"))
-	}
-	defer log.CapturePanic(logger, &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	err := h.engine.CancelOutstandingPoll(ctx, request)
 	return &matchingservice.CancelOutstandingPollResponse{}, err
 }
@@ -536,12 +527,12 @@ func (h *Handler) CheckTaskQueueVersionMembership(
 }
 
 func (h *Handler) DispatchNexusTask(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest) (_ *matchingservice.DispatchNexusTaskResponse, retError error) {
-	defer log.CapturePanic(log.With(h.nexusTaskLogger, tag.Operation("DispatchNexusTask")), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	return h.engine.DispatchNexusTask(ctx, request)
 }
 
 func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservice.PollNexusTaskQueueRequest) (_ *matchingservice.PollNexusTaskQueueResponse, retError error) {
-	defer log.CapturePanic(log.With(h.nexusTaskLogger, tag.Operation("PollNexusTaskQueue")), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	opMetrics := h.opMetricsHandler(
 		request.GetNamespaceId(),
 		request.GetRequest().GetTaskQueue(),
@@ -561,7 +552,7 @@ func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservi
 	if _, err := common.ValidateLongPollContextTimeoutIsSet(
 		ctx,
 		"PollNexusTaskQueue",
-		log.With(h.nexusTaskThrottledLogger, tag.Operation("PollNexusTaskQueue")),
+		h.throttledLogger,
 	); err != nil {
 		return nil, err
 	}
@@ -569,7 +560,7 @@ func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservi
 }
 
 func (h *Handler) RespondNexusTaskCompleted(ctx context.Context, request *matchingservice.RespondNexusTaskCompletedRequest) (_ *matchingservice.RespondNexusTaskCompletedResponse, retError error) {
-	defer log.CapturePanic(log.With(h.nexusTaskLogger, tag.Operation("RespondNexusTaskCompleted")), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	opMetrics := h.opMetricsHandler(
 		request.GetNamespaceId(),
 		request.GetTaskQueue(),
@@ -582,7 +573,7 @@ func (h *Handler) RespondNexusTaskCompleted(ctx context.Context, request *matchi
 }
 
 func (h *Handler) RespondNexusTaskFailed(ctx context.Context, request *matchingservice.RespondNexusTaskFailedRequest) (_ *matchingservice.RespondNexusTaskFailedResponse, retError error) {
-	defer log.CapturePanic(log.With(h.nexusTaskLogger, tag.Operation("RespondNexusTaskFailed")), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	opMetrics := h.opMetricsHandler(
 		request.GetNamespaceId(),
 		request.GetTaskQueue(),

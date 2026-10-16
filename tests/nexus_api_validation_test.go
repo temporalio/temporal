@@ -15,7 +15,6 @@ import (
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/testlogger"
@@ -83,12 +82,11 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_WithNamespaceAndTa
 
 func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_Forbidden() {
 	type testcase struct {
-		name                      string
-		onAuthorize               func(endpointName string) func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
-		checkFailure              func(s *NexusAPIValidationTestSuite, handlerErr *nexus.HandlerError)
-		exposeAuthorizerErrors    bool
-		expectedOutcomeMetric     string
-		captureAuthorizationError bool
+		name                   string
+		onAuthorize            func(endpointName string) func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error)
+		checkFailure           func(s *NexusAPIValidationTestSuite, handlerErr *nexus.HandlerError)
+		exposeAuthorizerErrors bool
+		expectedOutcomeMetric  string
 	}
 	testCases := []testcase{
 		{
@@ -138,18 +136,17 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_Forbidden() {
 			exposeAuthorizerErrors: false,
 		},
 		{
-			name:                      "deny with generic error",
-			captureAuthorizationError: true,
+			name: "deny with generic error",
 			onAuthorize: func(endpointName string) func(context.Context, *authorization.Claims, *authorization.CallTarget) (authorization.Result, error) {
 				return func(ctx context.Context, c *authorization.Claims, ct *authorization.CallTarget) (authorization.Result, error) {
 					if ct.APIName == configs.DispatchNexusTaskByNamespaceAndTaskQueueAPIName {
-						return authorization.Result{}, errors.New("some generic error for " + ct.Namespace)
+						return authorization.Result{}, errors.New("some generic error")
 					}
 					if ct.APIName == configs.DispatchNexusTaskByEndpointAPIName {
 						if ct.NexusEndpointName != endpointName {
 							panic("expected nexus endpoint name")
 						}
-						return authorization.Result{}, errors.New("some generic error for " + ct.Namespace)
+						return authorization.Result{}, errors.New("some generic error")
 					}
 					return authorization.Result{Decision: authorization.DecisionAllow}, nil
 				}
@@ -194,9 +191,6 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_Forbidden() {
 		testEndpoint := env.createNexusEndpoint(s.Context(), s.T(), testcore.RandomizeStr("test-endpoint"), taskQueue)
 
 		env.SetOnAuthorize(tc.onAuthorize(testEndpoint.Spec.Name))
-		logger := env.Logger.(*testlogger.TestLogger)
-		logCapture := logger.StartCapture(tag.Error(errors.New("some generic error for " + env.Namespace().String())))
-		s.T().Cleanup(func() { logger.StopCapture(logCapture) })
 
 		var dispatchURL string
 		if dispatchOnlyByEndpoint {
@@ -215,13 +209,6 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_Forbidden() {
 		var handlerErr *nexus.HandlerError
 		s.ErrorAs(err, &handlerErr)
 		tc.checkFailure(s, handlerErr)
-		if tc.captureAuthorizationError {
-			logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
-				Level:   testlogger.Error,
-				Message: "Authorization error",
-				Tags:    map[string]any{"nexus-stage": "handler-inbound"},
-			})
-		}
 
 		requests := capture.Metric("nexus_requests")
 		s.Len(requests, 1)
@@ -339,8 +326,7 @@ func (s *NexusAPIValidationTestSuite) TestNexus_RespondNexusTaskCompleted_Valida
 }
 
 func (s *NexusAPIValidationTestSuite) TestNexus_RespondNexusTaskMethods_ValidateFailureDetailsJSON() {
-	env := newNexusTestEnv(s.T(), false, testcore.WithDynamicConfig(dynamicconfig.LogAllReqErrors, true))
-	logCapture := env.StartNamespaceLogCapture()
+	env := newNexusTestEnv(s.T(), false)
 
 	tt := tokenspb.NexusTask{
 		NamespaceId: env.NamespaceID().String(),
@@ -385,13 +371,6 @@ func (s *NexusAPIValidationTestSuite) TestNexus_RespondNexusTaskMethods_Validate
 	})
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.Equal("failure details must be JSON serializable", invalidArgumentErr.Message)
-	for _, operation := range []string{"RespondNexusTaskCompleted", "RespondNexusTaskFailed"} {
-		logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
-			Level:   testlogger.Error,
-			Message: "service failures",
-			Tags:    map[string]any{"nexus-stage": "handler-task-delivery", "operation": operation},
-		})
-	}
 }
 
 func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_ByEndpoint_EndpointNotFound() {

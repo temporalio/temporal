@@ -414,13 +414,11 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 		var notFound *serviceerror.NotFound
 		s.ErrorAs(err, &notFound)
 		s.Equal("operation not found for ID: does-not-exist", notFound.Error())
-		for _, operation := range []string{"DescribeNexusOperationExecution", "DescribeNexusOperation"} {
-			logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
-				Level:   testlogger.Error,
-				Message: "service failures",
-				Tags:    map[string]any{"nexus-stage": "caller-frontend", "operation": operation},
-			})
-		}
+		logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+			Level:   testlogger.Error,
+			Message: "service failures",
+			Tags:    map[string]any{"nexus-stage": "caller-frontend", "operation": "DescribeNexusOperationExecution"},
+		})
 	})
 
 	s.Run("LongPollStateChange", func(s *NexusStandaloneTestSuite) {

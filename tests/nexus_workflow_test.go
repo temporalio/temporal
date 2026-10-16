@@ -1935,8 +1935,7 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 	})
 
 	s.Run("OperationTokenTooLong", func(s *NexusWorkflowTestSuite) {
-		env := s.newTestEnv(chasmEnabled, testcore.WithDedicatedCluster(), testcore.WithDynamicConfig(dynamicconfig.LogAllReqErrors, true))
-		logCapture := env.StartNamespaceLogCapture()
+		env := s.newTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
 		ctx := s.Context()
 		publicCallbackURL := "http://" + env.HttpAPIAddress() + "/" + commonnexus.RouteCompletionCallback.Path(env.Namespace().String())
 
@@ -1960,16 +1959,10 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 		s.Empty(capture.Metric("nexus_completion_request_preprocess_errors"))
 		s.Len(completionRequests, 1)
 		s.Subset(completionRequests[0].Tags, map[string]string{"namespace": env.Namespace().String(), "outcome": "error_bad_request"})
-		logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
-			Level:   testlogger.Error,
-			Message: "service failures",
-			Tags:    map[string]any{"nexus-stage": "caller-inbound"},
-		})
 	})
 
 	s.Run("OperationTokenTooLongNoIdentifier", func(s *NexusWorkflowTestSuite) {
-		env := s.newTestEnv(chasmEnabled, testcore.WithDedicatedCluster(), testcore.WithDynamicConfig(dynamicconfig.LogAllReqErrors, true))
-		logCapture := env.StartNamespaceLogCapture()
+		env := s.newTestEnv(chasmEnabled, testcore.WithDedicatedCluster())
 		ctx := s.Context()
 		publicCallbackURL := "http://" + env.HttpAPIAddress() + commonnexus.PathCompletionCallbackNoIdentifier
 		// Generate a valid callback token to get past initial validation
@@ -1993,11 +1986,6 @@ func (s *NexusWorkflowTestSuite) TestNexusOperationAsyncCompletionErrors(chasmEn
 		s.Empty(capture.Metric("nexus_completion_request_preprocess_errors"))
 		s.Len(completionRequests, 1)
 		s.Subset(completionRequests[0].Tags, map[string]string{"namespace": env.Namespace().String(), "outcome": "error_bad_request"})
-		logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
-			Level:   testlogger.Error,
-			Message: "service failures",
-			Tags:    map[string]any{"nexus-stage": "caller-inbound"},
-		})
 	})
 
 	s.Run("InvalidCallbackToken", func(s *NexusWorkflowTestSuite) {

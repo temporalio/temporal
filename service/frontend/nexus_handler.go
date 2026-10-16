@@ -224,7 +224,7 @@ func (c *operationContext) interceptRequest(
 			if source, ok := respHeaders[commonnexus.FailureSourceHeaderName]; ok && source != commonnexus.FailureSourceWorker {
 				c.requestErrorHandler.HandleError(
 					request,
-					c.apiName,
+					"",
 					c.metricsHandlerForInterceptors,
 					[]tag.Tag{tag.Operation(c.method), tag.WorkflowNamespace(c.namespaceName)},
 					retErr,

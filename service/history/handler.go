@@ -2614,7 +2614,7 @@ func (h *Handler) StartNexusOperation(
 	case interface{ ValueAsAny() any }:
 		ps, err := sdkconverter.PreferProtoDataConverter.ToPayloads(r.ValueAsAny())
 		if err != nil {
-			h.logger.Error("failed to encode payload", tag.NexusStageHandlerInbound, tag.Error(err), tag.RequestID(requestID))
+			h.logger.Error("failed to encode payload", tag.Error(err), tag.RequestID(requestID))
 			return nil, serviceerror.NewInternal("internal error (request ID: " + requestID + ")")
 		}
 
@@ -2654,7 +2654,7 @@ func (h *Handler) StartNexusOperation(
 			},
 		}
 	default:
-		h.logger.Error(fmt.Sprintf("invalid result type: %T", result), tag.NexusStageHandlerInbound, tag.RequestID(req.Request.RequestId))
+		h.logger.Error(fmt.Sprintf("invalid result type: %T", result), tag.RequestID(req.Request.RequestId))
 		return nil, serviceerror.NewInternal("internal error (request ID: " + requestID + ")")
 	}
 
