@@ -97,6 +97,9 @@ var (
 	FlagDelayThreshold             = "delay-threshold"
 	FlagIncludePaused              = "include-paused"
 	FlagQuiet                      = "quiet"
+	FlagMinPendingAge              = "min-pending-age"
+	FlagResumeToken                = "resume-token"
+	FlagOutput                     = "output"
 )
 
 var (
