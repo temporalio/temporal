@@ -23,7 +23,7 @@ func (a *Archival) Validate(namespaceDefaults *ArchivalNamespaceDefaults) error 
 		return errors.New("invalid visibility archival config")
 	}
 
-	return nil
+	return validateGstorageArchival(a)
 }
 
 func isArchivalConfigValid(

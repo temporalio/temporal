@@ -372,7 +372,7 @@ func ArchiverProviderProvider(
 	persistenceExecutionManager persistence.ExecutionManager,
 	logger log.SnTaggedLogger,
 	metricsHandler metrics.Handler,
-) (provider.ArchiverProvider, error) {
+) provider.ArchiverProvider {
 	return provider.NewArchiverProvider(
 		cfg.Archival.History.Provider,
 		cfg.Archival.Visibility.Provider,

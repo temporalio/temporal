@@ -60,7 +60,7 @@ func (s *ProviderSuite) TestNewArchiverProvider() {
 	historyConfig := &config.HistoryArchiverProvider{}
 	visibilityConfig := &config.VisibilityArchiverProvider{}
 
-	provider, err := NewArchiverProvider(
+	provider := NewArchiverProvider(
 		historyConfig,
 		visibilityConfig,
 		s.mockCustomHistoryFactory,
@@ -69,7 +69,6 @@ func (s *ProviderSuite) TestNewArchiverProvider() {
 		s.logger,
 		s.metricsHandler,
 	)
-	s.NoError(err)
 
 	s.NotNil(provider)
 
@@ -89,7 +88,7 @@ func (s *ProviderSuite) TestNewArchiverProvider() {
 func (s *ProviderSuite) TestGetHistoryArchiver_CustomFactory_Success() {
 	scheme := "custom"
 
-	provider, err := NewArchiverProvider(
+	provider := NewArchiverProvider(
 		&config.HistoryArchiverProvider{
 			CustomStores: map[string]map[string]any{
 				scheme: {"key": "value"},
@@ -102,7 +101,6 @@ func (s *ProviderSuite) TestGetHistoryArchiver_CustomFactory_Success() {
 		s.logger,
 		s.metricsHandler,
 	)
-	s.NoError(err)
 
 	s.mockCustomHistoryFactory.EXPECT().
 		NewCustomHistoryArchiver(gomock.Any()).
@@ -129,7 +127,7 @@ func (s *ProviderSuite) TestGetHistoryArchiver_CustomFactory_ReturnsError() {
 	scheme := "custom"
 	expectedErr := errors.New("custom factory error")
 
-	provider, err := NewArchiverProvider(
+	provider := NewArchiverProvider(
 		nil,
 		nil,
 		s.mockCustomHistoryFactory,
@@ -138,7 +136,6 @@ func (s *ProviderSuite) TestGetHistoryArchiver_CustomFactory_ReturnsError() {
 		s.logger,
 		s.metricsHandler,
 	)
-	s.NoError(err)
 
 	s.mockCustomHistoryFactory.EXPECT().
 		NewCustomHistoryArchiver(gomock.Any()).
@@ -153,7 +150,7 @@ func (s *ProviderSuite) TestGetHistoryArchiver_CustomFactory_ReturnsError() {
 func (s *ProviderSuite) TestGetHistoryArchiver_CustomFactory_FallbackToBuiltIn() {
 	scheme := filestore.URIScheme
 
-	provider, err := NewArchiverProvider(
+	provider := NewArchiverProvider(
 		&config.HistoryArchiverProvider{
 			Filestore: &config.FilestoreArchiver{
 				FileMode: "0600",
@@ -167,7 +164,6 @@ func (s *ProviderSuite) TestGetHistoryArchiver_CustomFactory_FallbackToBuiltIn()
 		s.logger,
 		s.metricsHandler,
 	)
-	s.NoError(err)
 
 	// Custom factory returns ErrUnknownScheme, should fallback to built-in
 	s.mockCustomHistoryFactory.EXPECT().
@@ -187,7 +183,7 @@ func (s *ProviderSuite) TestGetHistoryArchiver_CustomFactory_FallbackToBuiltIn()
 func (s *ProviderSuite) TestGetHistoryArchiver_UnknownScheme() {
 	scheme := "unknown"
 
-	provider, err := NewArchiverProvider(
+	provider := NewArchiverProvider(
 		nil,
 		nil,
 		nil,
@@ -196,7 +192,6 @@ func (s *ProviderSuite) TestGetHistoryArchiver_UnknownScheme() {
 		s.logger,
 		s.metricsHandler,
 	)
-	s.NoError(err)
 
 	result, err := provider.GetHistoryArchiver(scheme)
 	s.Error(err)
@@ -207,7 +202,7 @@ func (s *ProviderSuite) TestGetHistoryArchiver_UnknownScheme() {
 func (s *ProviderSuite) TestGetHistoryArchiver_ConfigNotFound_Filestore() {
 	scheme := filestore.URIScheme
 
-	provider, err := NewArchiverProvider(
+	provider := NewArchiverProvider(
 		&config.HistoryArchiverProvider{
 			Filestore: nil, // Config not set
 		},
@@ -218,7 +213,6 @@ func (s *ProviderSuite) TestGetHistoryArchiver_ConfigNotFound_Filestore() {
 		s.logger,
 		s.metricsHandler,
 	)
-	s.NoError(err)
 
 	result, err := provider.GetHistoryArchiver(scheme)
 	s.Error(err)
@@ -229,7 +223,7 @@ func (s *ProviderSuite) TestGetHistoryArchiver_ConfigNotFound_Filestore() {
 func (s *ProviderSuite) TestGetHistoryArchiver_ConfigNotFound_S3() {
 	scheme := s3store.URIScheme
 
-	provider, err := NewArchiverProvider(
+	provider := NewArchiverProvider(
 		&config.HistoryArchiverProvider{
 			S3store: nil, // Config not set
 		},
@@ -240,7 +234,6 @@ func (s *ProviderSuite) TestGetHistoryArchiver_ConfigNotFound_S3() {
 		s.logger,
 		s.metricsHandler,
 	)
-	s.NoError(err)
 
 	result, err := provider.GetHistoryArchiver(scheme)
 	s.Error(err)
@@ -251,7 +244,7 @@ func (s *ProviderSuite) TestGetHistoryArchiver_ConfigNotFound_S3() {
 func (s *ProviderSuite) TestGetHistoryArchiver_ConcurrentAccess() {
 	scheme := "custom"
 
-	provider, err := NewArchiverProvider(
+	provider := NewArchiverProvider(
 		nil,
 		nil,
 		s.mockCustomHistoryFactory,
@@ -260,7 +253,6 @@ func (s *ProviderSuite) TestGetHistoryArchiver_ConcurrentAccess() {
 		s.logger,
 		s.metricsHandler,
 	)
-	s.NoError(err)
 
 	// The factory may be called multiple times before caching occurs,
 	// but all calls should return the same archiver.
@@ -297,7 +289,7 @@ func (s *ProviderSuite) TestGetHistoryArchiver_ConcurrentAccess() {
 func (s *ProviderSuite) TestGetHistoryArchiver_NilConfigs() {
 	scheme := "custom"
 
-	provider, err := NewArchiverProvider(
+	provider := NewArchiverProvider(
 		nil, // nil history config
 		nil,
 		s.mockCustomHistoryFactory,
@@ -306,7 +298,6 @@ func (s *ProviderSuite) TestGetHistoryArchiver_NilConfigs() {
 		s.logger,
 		s.metricsHandler,
 	)
-	s.NoError(err)
 
 	s.mockCustomHistoryFactory.EXPECT().
 		NewCustomHistoryArchiver(gomock.Any()).
@@ -342,7 +333,7 @@ func (s *ProviderSuite) TestCustomHistoryArchiverFactoryFunc() {
 func (s *ProviderSuite) TestGetVisibilityArchiver_CustomFactory_Success() {
 	scheme := "custom"
 
-	provider, err := NewArchiverProvider(
+	provider := NewArchiverProvider(
 		nil,
 		&config.VisibilityArchiverProvider{
 			CustomStores: map[string]map[string]any{
@@ -355,7 +346,6 @@ func (s *ProviderSuite) TestGetVisibilityArchiver_CustomFactory_Success() {
 		s.logger,
 		s.metricsHandler,
 	)
-	s.NoError(err)
 
 	s.mockCustomVisibilityFactory.EXPECT().
 		NewCustomVisibilityArchiver(gomock.Any()).
@@ -381,7 +371,7 @@ func (s *ProviderSuite) TestGetVisibilityArchiver_CustomFactory_ReturnsError() {
 	scheme := "custom"
 	expectedErr := errors.New("custom factory error")
 
-	provider, err := NewArchiverProvider(
+	provider := NewArchiverProvider(
 		nil,
 		nil,
 		nil,
@@ -390,7 +380,6 @@ func (s *ProviderSuite) TestGetVisibilityArchiver_CustomFactory_ReturnsError() {
 		s.logger,
 		s.metricsHandler,
 	)
-	s.NoError(err)
 
 	s.mockCustomVisibilityFactory.EXPECT().
 		NewCustomVisibilityArchiver(gomock.Any()).
@@ -405,7 +394,7 @@ func (s *ProviderSuite) TestGetVisibilityArchiver_CustomFactory_ReturnsError() {
 func (s *ProviderSuite) TestGetVisibilityArchiver_CustomFactory_FallbackToBuiltIn() {
 	scheme := filestore.URIScheme
 
-	provider, err := NewArchiverProvider(
+	provider := NewArchiverProvider(
 		nil,
 		&config.VisibilityArchiverProvider{
 			Filestore: &config.FilestoreArchiver{
@@ -419,7 +408,6 @@ func (s *ProviderSuite) TestGetVisibilityArchiver_CustomFactory_FallbackToBuiltI
 		s.logger,
 		s.metricsHandler,
 	)
-	s.NoError(err)
 
 	// Custom factory returns ErrUnknownScheme, should fallback to built-in
 	s.mockCustomVisibilityFactory.EXPECT().
@@ -439,7 +427,7 @@ func (s *ProviderSuite) TestGetVisibilityArchiver_CustomFactory_FallbackToBuiltI
 func (s *ProviderSuite) TestGetVisibilityArchiver_UnknownScheme() {
 	scheme := "unknown"
 
-	provider, err := NewArchiverProvider(
+	provider := NewArchiverProvider(
 		nil,
 		nil,
 		nil,
@@ -448,7 +436,6 @@ func (s *ProviderSuite) TestGetVisibilityArchiver_UnknownScheme() {
 		s.logger,
 		s.metricsHandler,
 	)
-	s.NoError(err)
 
 	result, err := provider.GetVisibilityArchiver(scheme)
 	s.Error(err)
@@ -459,7 +446,7 @@ func (s *ProviderSuite) TestGetVisibilityArchiver_UnknownScheme() {
 func (s *ProviderSuite) TestGetVisibilityArchiver_ConfigNotFound_Filestore() {
 	scheme := filestore.URIScheme
 
-	provider, err := NewArchiverProvider(
+	provider := NewArchiverProvider(
 		nil,
 		&config.VisibilityArchiverProvider{
 			Filestore: nil, // Config not set
@@ -470,7 +457,6 @@ func (s *ProviderSuite) TestGetVisibilityArchiver_ConfigNotFound_Filestore() {
 		s.logger,
 		s.metricsHandler,
 	)
-	s.NoError(err)
 
 	result, err := provider.GetVisibilityArchiver(scheme)
 	s.Error(err)
@@ -481,7 +467,7 @@ func (s *ProviderSuite) TestGetVisibilityArchiver_ConfigNotFound_Filestore() {
 func (s *ProviderSuite) TestGetVisibilityArchiver_ConfigNotFound_S3() {
 	scheme := s3store.URIScheme
 
-	provider, err := NewArchiverProvider(
+	provider := NewArchiverProvider(
 		nil,
 		&config.VisibilityArchiverProvider{
 			S3store: nil, // Config not set
@@ -492,7 +478,6 @@ func (s *ProviderSuite) TestGetVisibilityArchiver_ConfigNotFound_S3() {
 		s.logger,
 		s.metricsHandler,
 	)
-	s.NoError(err)
 
 	result, err := provider.GetVisibilityArchiver(scheme)
 	s.Error(err)
@@ -503,7 +488,7 @@ func (s *ProviderSuite) TestGetVisibilityArchiver_ConfigNotFound_S3() {
 func (s *ProviderSuite) TestGetVisibilityArchiver_ConcurrentAccess() {
 	scheme := "custom"
 
-	provider, err := NewArchiverProvider(
+	provider := NewArchiverProvider(
 		nil,
 		nil,
 		nil,
@@ -512,7 +497,6 @@ func (s *ProviderSuite) TestGetVisibilityArchiver_ConcurrentAccess() {
 		s.logger,
 		s.metricsHandler,
 	)
-	s.NoError(err)
 
 	// The factory may be called multiple times before caching occurs,
 	// but all calls should return the same archiver.
@@ -549,7 +533,7 @@ func (s *ProviderSuite) TestGetVisibilityArchiver_ConcurrentAccess() {
 func (s *ProviderSuite) TestGetVisibilityArchiver_NilConfigs() {
 	scheme := "custom"
 
-	provider, err := NewArchiverProvider(
+	provider := NewArchiverProvider(
 		nil,
 		nil, // nil visibility config
 		nil,
@@ -558,7 +542,6 @@ func (s *ProviderSuite) TestGetVisibilityArchiver_NilConfigs() {
 		s.logger,
 		s.metricsHandler,
 	)
-	s.NoError(err)
 
 	s.mockCustomVisibilityFactory.EXPECT().
 		NewCustomVisibilityArchiver(gomock.Any()).

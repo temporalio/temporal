@@ -5,12 +5,7 @@ package provider
 import (
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/gcloud"
-	"go.temporal.io/server/common/config"
 )
-
-func validateGstorageConfigs(*config.HistoryArchiverProvider, *config.VisibilityArchiverProvider) error {
-	return nil
-}
 
 func (p *archiverProvider) newGstorageHistoryArchiver() (archiver.HistoryArchiver, error) {
 	if p.historyArchiverConfigs.Gstorage == nil {

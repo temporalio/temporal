@@ -159,8 +159,7 @@ func (s *ArchivalSuite) newTestEnv() *archivalTestEnv {
 		testcore.WithArchival(),
 		testcore.WithCustomArchivers(customHistoryArchiverFactory, customVisibilityArchiverFactory),
 	)
-	var err error
-	ae.archiverProvider, err = provider.NewArchiverProvider(
+	ae.archiverProvider = provider.NewArchiverProvider(
 		historyProvider,
 		visibilityProvider,
 		customHistoryArchiverFactory,
@@ -169,7 +168,8 @@ func (s *ArchivalSuite) newTestEnv() *archivalTestEnv {
 		log.NewNoopLogger(),
 		metrics.NoopMetricsHandler,
 	)
-	s.NoError(err)
+
+	var err error
 
 	// Register namespace using built-in filestore archiver
 	ae.archivalNamespace = namespace.Name(testcore.RandomizeStr("archival-enabled-namespace"))
