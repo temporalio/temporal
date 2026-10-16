@@ -475,6 +475,10 @@ func (u *Update) AttachCallbacks(
 
 	default:
 		// All other states are too early or not applicable for callback attachment.
+		// Callbacks on the admitting request travel with u.request and are attached on acceptance.
+		if req.GetRequestId() != u.originalReqID {
+			u.instrumentation.logCallbacksNotAttached(u.id, req.GetRequestId(), u.state.String(), len(req.GetCompletionCallbacks()))
+		}
 		return false, nil
 	}
 }
