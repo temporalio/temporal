@@ -32,8 +32,9 @@ func NewHandle(registry Registry, key Key) *Handle {
 // Block configures the failpoint to block until disabled. Mirrors InjectBlock.
 func (h *Handle) Block(ctx context.Context, recurrence Recurrence) error {
 	_, err := h.registry.InjectBlock(ctx, &failpointservice.InjectBlockRequest{
-		Key:        h.key,
-		Recurrence: recurrence,
+		Key:         h.key.name,
+		NamespaceId: h.key.namespaceID.String(),
+		Recurrence:  recurrence,
 	})
 	return err
 }
@@ -42,7 +43,8 @@ func (h *Handle) Block(ctx context.Context, recurrence Recurrence) error {
 // InjectReturn.
 func (h *Handle) Return(ctx context.Context, errMsg string, recurrence Recurrence) error {
 	_, err := h.registry.InjectReturn(ctx, &failpointservice.InjectReturnRequest{
-		Key:          h.key,
+		Key:          h.key.name,
+		NamespaceId:  h.key.namespaceID.String(),
 		ErrorMessage: errMsg,
 		Recurrence:   recurrence,
 	})
@@ -52,9 +54,10 @@ func (h *Handle) Return(ctx context.Context, errMsg string, recurrence Recurrenc
 // Panic configures the failpoint to panic with the given value. Mirrors InjectPanic.
 func (h *Handle) Panic(ctx context.Context, panicValue string, recurrence Recurrence) error {
 	_, err := h.registry.InjectPanic(ctx, &failpointservice.InjectPanicRequest{
-		Key:        h.key,
-		PanicValue: panicValue,
-		Recurrence: recurrence,
+		Key:         h.key.name,
+		NamespaceId: h.key.namespaceID.String(),
+		PanicValue:  panicValue,
+		Recurrence:  recurrence,
 	})
 	return err
 }
@@ -62,7 +65,7 @@ func (h *Handle) Panic(ctx context.Context, panicValue string, recurrence Recurr
 // Wait blocks until the failpoint's Block action is hit by application code, or ctx is done.
 // Returns nil if it was hit, or the context error otherwise. Mirrors WaitForBlock.
 func (h *Handle) Wait(ctx context.Context) error {
-	_, err := h.registry.WaitForBlock(ctx, &failpointservice.WaitForBlockRequest{Key: h.key})
+	_, err := h.registry.WaitForBlock(ctx, &failpointservice.WaitForBlockRequest{Key: h.key.name, NamespaceId: h.key.namespaceID.String()})
 	return err
 }
 
@@ -75,6 +78,6 @@ func (h *Handle) Wait(ctx context.Context) error {
 func (h *Handle) Disable() error {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	_, err := h.registry.DisableFailpoint(ctx, &failpointservice.DisableFailpointRequest{Key: h.key})
+	_, err := h.registry.DisableFailpoint(ctx, &failpointservice.DisableFailpointRequest{Key: h.key.name, NamespaceId: h.key.namespaceID.String()})
 	return err
 }
