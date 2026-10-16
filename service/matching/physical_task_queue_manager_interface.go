@@ -56,6 +56,8 @@ type (
 		// LegacyDescribeTaskQueue returns pollers info and legacy TaskQueueStatus for this physical queue
 		LegacyDescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		GetStatsByPriority(includeRates bool) map[int32]*taskqueuepb.TaskQueueStats
+		// RecordEagerGrant records tasks granted eager dispatch on this physical queue.
+		RecordEagerGrant(priority priorityKey, count int32)
 		// NonNegligibleBacklogPriority returns the highest-priority non-negligible backlog
 		// across active and draining queues, or 0 as a sentinel when neither has one.
 		NonNegligibleBacklogPriority() priorityKey

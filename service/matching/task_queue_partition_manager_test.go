@@ -290,6 +290,31 @@ func (s *PartitionManagerTestSuite) TestGrantEagerDispatchChecksVersionBacklog()
 	}, items)
 }
 
+func (s *PartitionManagerTestSuite) TestGrantEagerDispatchRecordsGrantsOnTargetQueue() {
+	// The default queue is not targeted, so any RecordEagerGrant call on it fails the test.
+	defaultQueue := s.newStrictEagerDispatchPhysicalQueue(0)
+	versionQueue := s.newStrictEagerDispatchPhysicalQueue(3)
+	versionQueue.EXPECT().RecordEagerGrant(priorityKey(2), int32(2)).Times(1)
+
+	partitionMgr := s.newEagerDispatchPartitionManager(0, nil)
+	partitionMgr.defaultQueueFuture = future.NewFuture[physicalTaskQueueManager]()
+	partitionMgr.defaultQueueFuture.Set(defaultQueue, nil)
+	partitionMgr.versionedQueues = map[PhysicalTaskQueueVersion]physicalTaskQueueManager{
+		{deploymentSeriesName: "deployment", buildId: "old"}: versionQueue,
+	}
+
+	version := workerDeploymentVersion("old")
+	items, err := partitionMgr.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
+		{Count: 2, Priority: &commonpb.Priority{PriorityKey: 2}, Version: version},
+		{Count: 1, Priority: &commonpb.Priority{PriorityKey: 4}, Version: version}, // denied by backlog: not recorded
+	})
+	s.Require().NoError(err)
+	s.Require().Equal([]*matchingservice.GrantEagerDispatchResponse_Item{
+		{GrantedCount: 2},
+		{},
+	}, items)
+}
+
 func (s *PartitionManagerTestSuite) TestGrantEagerDispatchReturnsPartialRateLimitGrant() {
 	partitionMgr := s.newRateLimitedEagerDispatchPartitionManager()
 
@@ -2821,28 +2846,10 @@ func TestSplitTaskQueueStatsByRampPercentage_RateLimitingFalse(t *testing.T) {
 func TestStickyQueueAdjustedStats_VersioningAttributionSkipped(t *testing.T) {
 	t.Parallel()
 
-	ctrl := gomock.NewController(t)
-	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
-
-	ns, registry := createMockNamespaceCache(ctrl, namespace.Name(namespaceName))
-	config := defaultTestConfig()
-
-	matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
-	matchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{}, nil).AnyTimes()
-	engine := createTestMatchingEngine(logger, ctrl, config, matchingClient, registry)
-
-	// Use a fixed time source so rate calculations are deterministic across reads.
-	ts := clock.NewEventTimeSource()
-	ts.Update(time.Now())
-	engine.timeSource = ts
-
 	// Create a sticky partition (like a real worker's sticky queue)
 	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
 	require.NoError(t, err)
 	stickyPartition := f.TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW).StickyPartition("my-sticky-queue")
-
-	tqConfig := newTaskQueueConfig(stickyPartition.TaskQueue(), engine.config, ns.Name())
 
 	// Seed user data with a current deployment version (no ramping).
 	// This simulates a sticky queue that fetches user data from its normal queue,
@@ -2878,15 +2885,7 @@ func TestStickyQueueAdjustedStats_VersioningAttributionSkipped(t *testing.T) {
 		},
 	}
 
-	pm, err := newTaskQueuePartitionManager(engine, ns, stickyPartition, tqConfig, logger, logger, metrics.NoopMetricsHandler, userDataMgr)
-	require.NoError(t, err)
-	engine.partitions[stickyPartition.Key()] = pm
-	engine.Start()
-	pm.Start()
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
-	defer cancel()
-	err = pm.WaitUntilInitialized(ctx)
-	require.NoError(t, err)
+	pm, ts := newFakeClockPartitionManager(t, stickyPartition, userDataMgr)
 
 	dbq := pm.defaultQueue()
 	require.NotNil(t, dbq)
@@ -2911,6 +2910,170 @@ func TestStickyQueueAdjustedStats_VersioningAttributionSkipped(t *testing.T) {
 	require.NotNil(t, adjustedStats)
 	require.InDelta(t, rawStats[3].TasksAddRate, adjustedStats.TasksAddRate, 0)
 	require.InDelta(t, rawStats[3].TasksDispatchRate, adjustedStats.TasksDispatchRate, 0)
+}
+
+func TestEagerDispatchStats(t *testing.T) {
+	t.Parallel()
+
+	f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+	require.NoError(t, err)
+	pm, ts := newFakeClockPartitionManager(t, f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(), &mockUserDataManager{})
+
+	items, err := pm.GrantEagerDispatch(context.Background(), []*matchingservice.GrantEagerDispatchRequest_Item{
+		{Count: 3, Priority: &commonpb.Priority{PriorityKey: 3}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, int32(3), items[0].GetGrantedCount())
+
+	// Advance time so the task tracker has positive elapsed time for rate calculation.
+	ts.Advance(time.Second)
+
+	// Eager grants are reported separately from matching traffic and never as backlog.
+	desc, err := pm.Describe(context.Background(), map[string]bool{"": true}, false, true, false, false, true)
+	require.NoError(t, err)
+	described := desc.GetVersionsInfoInternal()[""].GetPhysicalTaskQueueInfo().GetTaskQueueStatsByPriorityKey()[3]
+	protorequire.ProtoEqual(t, &taskqueuepb.TaskQueueStats{
+		ApproximateBacklogAge: durationpb.New(0),
+		EagerDispatchRate:     3,
+	}, described)
+	protorequire.ProtoEqual(t, described, desc.GetVersionsInfoInternal()[""].GetPhysicalTaskQueueInfo().GetTaskQueueStats())
+}
+
+func TestEagerDispatchStatsPreservePollerScaling(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		v2   bool
+	}{
+		{name: "v1"},
+		{name: "v2", v2: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+			require.NoError(t, err)
+			pm, ts := newFakeClockPartitionManager(t, f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(), &mockUserDataManager{})
+			pm.config.UseSignalsV2ForPollerScaling = func() bool { return tc.v2 }
+			queue := pm.defaultQueue().(*physicalTaskQueueManagerImpl)
+			queue.incTaskTracker(queue.tasksAdded, 3, 20)
+			queue.incTaskTracker(queue.tasksDispatched, 3, 10)
+			queue.incTaskTracker(queue.tasksSyncMatched, 3, 10)
+			ts.Advance(time.Second)
+
+			before := pm.GetPhysicalQueueAdjustedStats(t.Context(), queue)
+			require.True(t, queue.ratioSignalFiring(before))
+			queue.RecordEagerGrant(3, 1000)
+			after := pm.GetPhysicalQueueAdjustedStats(t.Context(), queue)
+			protorequire.ProtoEqual(t, &taskqueuepb.TaskQueueStats{
+				ApproximateBacklogAge: durationpb.New(0),
+				TasksAddRate:          20,
+				TasksDispatchRate:     10,
+				EagerDispatchRate:     1000,
+			}, after)
+			require.True(t, queue.ratioSignalFiring(after))
+		})
+	}
+}
+
+func TestEagerDispatchStatsVersionAttribution(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name string
+		ramp float32
+	}{
+		{name: "current only"},
+		{name: "ramping", ramp: 30},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			current, ramping := workerDeploymentVersion("current"), workerDeploymentVersion("ramping")
+			routing := &deploymentpb.RoutingConfig{
+				CurrentDeploymentVersion:  worker_versioning.ExternalWorkerDeploymentVersionFromVersion(current),
+				CurrentVersionChangedTime: timestamppb.New(time.Unix(1, 0)),
+			}
+			if tc.ramp > 0 {
+				routing.RampingDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromVersion(ramping)
+				routing.RampingVersionPercentage = tc.ramp
+				routing.RampingVersionChangedTime = timestamppb.New(time.Unix(2, 0))
+			}
+			userDataMgr := &mockUserDataManager{
+				data: &persistencespb.VersionedTaskQueueUserData{
+					Data: &persistencespb.TaskQueueUserData{
+						PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+							int32(enumspb.TASK_QUEUE_TYPE_ACTIVITY): {
+								DeploymentData: &persistencespb.DeploymentData{
+									DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+										"deployment": {RoutingConfig: routing},
+									},
+								},
+							},
+						},
+					},
+				},
+			}
+			f, err := tqid.NewTaskQueueFamily(namespaceID, taskQueueName)
+			require.NoError(t, err)
+			pm, ts := newFakeClockPartitionManager(t, f.TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(), userDataMgr)
+			versions := []*deploymentspb.WorkerDeploymentVersion{nil, current, ramping}
+			for i, version := range versions {
+				items, err := pm.GrantEagerDispatch(t.Context(), []*matchingservice.GrantEagerDispatchRequest_Item{
+					{Count: int32(i + 1), Priority: &commonpb.Priority{PriorityKey: 3}, Version: version},
+				})
+				require.NoError(t, err)
+				require.Equal(t, int32(i+1), items[0].GetGrantedCount())
+			}
+			ts.Advance(time.Second)
+			desc, err := pm.Describe(t.Context(), map[string]bool{"": true}, true, true, false, false, true)
+			require.NoError(t, err)
+			require.Len(t, desc.GetVersionsInfoInternal(), len(versions))
+			for i, version := range versions {
+				key := ""
+				if version != nil {
+					key = worker_versioning.ExternalWorkerDeploymentVersionToString(worker_versioning.ExternalWorkerDeploymentVersionFromVersion(version))
+				}
+				info := desc.GetVersionsInfoInternal()[key].GetPhysicalTaskQueueInfo()
+				expected := &taskqueuepb.TaskQueueStats{
+					ApproximateBacklogAge: durationpb.New(0),
+					EagerDispatchRate:     float32(i + 1),
+				}
+				protorequire.ProtoEqual(t, expected, info.GetTaskQueueStats())
+				protorequire.ProtoEqual(t, expected, info.GetTaskQueueStatsByPriorityKey()[3])
+			}
+		})
+	}
+}
+
+// newFakeClockPartitionManager starts a partition manager whose engine uses a fixed time source, so
+// task tracker rates are deterministic across reads.
+func newFakeClockPartitionManager(
+	t *testing.T,
+	partition tqid.Partition,
+	userDataMgr userDataManager,
+) (*taskQueuePartitionManagerImpl, *clock.EventTimeSource) {
+	ctrl := gomock.NewController(t)
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+
+	ns, registry := createMockNamespaceCache(ctrl, namespace.Name(namespaceName))
+	matchingClient := matchingservicemock.NewMockMatchingServiceClient(ctrl)
+	matchingClient.EXPECT().ForceLoadTaskQueuePartition(gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(&matchingservice.ForceLoadTaskQueuePartitionResponse{}, nil).AnyTimes()
+	engine := createTestMatchingEngine(logger, ctrl, defaultTestConfig(), matchingClient, registry)
+
+	ts := clock.NewEventTimeSource()
+	ts.Update(time.Now())
+	engine.timeSource = ts
+
+	tqConfig := newTaskQueueConfig(partition.TaskQueue(), engine.config, ns.Name())
+	pm, err := newTaskQueuePartitionManager(engine, ns, partition, tqConfig, logger, logger, metrics.NoopMetricsHandler, userDataMgr)
+	require.NoError(t, err)
+	engine.partitions[partition.Key()] = pm
+	engine.Start()
+	pm.Start()
+	t.Cleanup(engine.Stop)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	require.NoError(t, pm.WaitUntilInitialized(ctx))
+	return pm, ts
 }
 
 func (s *PartitionManagerTestSuite) newEagerDispatchPartitionManager(
@@ -2948,6 +3111,14 @@ func workerDeploymentVersion(buildID string) *deploymentspb.WorkerDeploymentVers
 }
 
 func (s *PartitionManagerTestSuite) newEagerDispatchPhysicalQueue(backlogPriority priorityKey) *MockphysicalTaskQueueManager {
+	queue := s.newStrictEagerDispatchPhysicalQueue(backlogPriority)
+	queue.EXPECT().RecordEagerGrant(gomock.Any(), gomock.Any()).AnyTimes()
+	return queue
+}
+
+// newStrictEagerDispatchPhysicalQueue leaves RecordEagerGrant unexpected, so tests can set exact
+// expectations for it.
+func (s *PartitionManagerTestSuite) newStrictEagerDispatchPhysicalQueue(backlogPriority priorityKey) *MockphysicalTaskQueueManager {
 	queue := NewMockphysicalTaskQueueManager(s.controller)
 	queue.EXPECT().WaitUntilInitialized(gomock.Any()).Return(nil).AnyTimes()
 	queue.EXPECT().MarkAlive().AnyTimes()
