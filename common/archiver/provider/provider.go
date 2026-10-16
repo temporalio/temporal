@@ -8,7 +8,6 @@ import (
 
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/filestore"
-	"go.temporal.io/server/common/archiver/gcloud"
 	"go.temporal.io/server/common/archiver/s3store"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -153,12 +152,8 @@ func (p *archiverProvider) GetHistoryArchiver(scheme string) (historyArchiver ar
 			}
 			historyArchiver, err = filestore.NewHistoryArchiver(p.executionManager, p.logger, p.metricsHandler, p.historyArchiverConfigs.Filestore)
 
-		case gcloud.URIScheme:
-			if p.historyArchiverConfigs.Gstorage == nil {
-				return nil, ErrArchiverConfigNotFound
-			}
-
-			historyArchiver, err = gcloud.NewHistoryArchiver(p.executionManager, p.logger, p.metricsHandler, p.historyArchiverConfigs.Gstorage)
+		case gstorageURIScheme:
+			historyArchiver, err = p.newGstorageHistoryArchiver()
 
 		case s3store.URIScheme:
 			if p.historyArchiverConfigs.S3store == nil {
@@ -222,11 +217,8 @@ func (p *archiverProvider) GetVisibilityArchiver(scheme string) (archiver.Visibi
 				return nil, ErrArchiverConfigNotFound
 			}
 			visibilityArchiver, err = s3store.NewVisibilityArchiver(p.logger, p.metricsHandler, p.visibilityArchiverConfigs.S3store)
-		case gcloud.URIScheme:
-			if p.visibilityArchiverConfigs.Gstorage == nil {
-				return nil, ErrArchiverConfigNotFound
-			}
-			visibilityArchiver, err = gcloud.NewVisibilityArchiver(p.logger, p.metricsHandler, p.visibilityArchiverConfigs.Gstorage)
+		case gstorageURIScheme:
+			visibilityArchiver, err = p.newGstorageVisibilityArchiver()
 
 		default:
 			return nil, ErrUnknownScheme
