@@ -1094,7 +1094,7 @@ func (s *ChasmSuite) TestNamespaceDelete_WithChasmExecutions() {
 // DeleteHistoryEventTask instead of waiting for the retention period to elapse.
 func (s *ChasmSuite) TestArchetypeRetention() {
 	const (
-		namespaceRetention = 7 * 24 * time.Hour
+		namespaceRetention = 24 * time.Hour
 		minRetention       = 2 * time.Hour
 	)
 
@@ -1113,7 +1113,7 @@ func (s *ChasmSuite) TestArchetypeRetention() {
 
 	testCases := []struct {
 		name               string
-		archetypeRetention string
+		archetypeRetention time.Duration
 		expectedRetention  time.Duration
 	}{
 		{
@@ -1122,54 +1122,40 @@ func (s *ChasmSuite) TestArchetypeRetention() {
 		},
 		{
 			name:               "archetype retention overrides with longer retention",
-			archetypeRetention: "720h",
+			archetypeRetention: 30 * 24 * time.Hour,
 			expectedRetention:  30 * 24 * time.Hour,
 		},
 		{
 			name:               "archetype retention overrides with shorter retention",
-			archetypeRetention: "72h",
-			expectedRetention:  3 * 24 * time.Hour,
+			archetypeRetention: 12 * time.Hour,
+			expectedRetention:  12 * time.Hour,
 		},
 		{
 			name:               "archetype retention is floored at namespace min retention",
-			archetypeRetention: "1m",
+			archetypeRetention: time.Minute,
 			expectedRetention:  minRetention,
 		},
 	}
 
 	for _, tc := range testCases {
-		s.Run(tc.name, func(s *ChasmSuite) {
+		// Sequential because the retention override applies to the whole dedicated cluster.
+		s.RunSequential(tc.name, func(s *ChasmSuite) {
 			tv := testvars.New(s.T())
 			ctx, cancel := context.WithTimeout(chasmCtx, chasmTestTimeout)
 			defer cancel()
 
-			var namespaceData map[string]string
-			if tc.archetypeRetention != "" {
-				namespaceData = map[string]string{tests.RetentionNamespaceDataKey: tc.archetypeRetention}
-			}
-			namespaceName := testcore.RandomizeStr("chasm-retention")
-			_, err := env.FrontendClient().RegisterNamespace(s.Context(), &workflowservice.RegisterNamespaceRequest{
-				Namespace:                        namespaceName,
-				WorkflowExecutionRetentionPeriod: durationpb.New(namespaceRetention),
-				Data:                             namespaceData,
-			})
-			s.NoError(err)
-			descResp, err := env.FrontendClient().DescribeNamespace(s.Context(), &workflowservice.DescribeNamespaceRequest{
-				Namespace: namespaceName,
-			})
-			s.NoError(err)
-			nsID := namespace.ID(descResp.GetNamespaceInfo().GetId())
+			defer env.OverrideDynamicConfig(tests.Retention, tc.archetypeRetention)()
 
 			storeID := tv.Any().String()
 			createResp, err := tests.NewPayloadStoreHandler(ctx, tests.NewPayloadStoreRequest{
-				NamespaceID: nsID,
+				NamespaceID: env.NamespaceID(),
 				StoreID:     storeID,
 			})
 			s.NoError(err)
 
 			beforeClose := time.Now()
 			_, err = tests.ClosePayloadStoreHandler(ctx, tests.ClosePayloadStoreRequest{
-				NamespaceID: nsID,
+				NamespaceID: env.NamespaceID(),
 				StoreID:     storeID,
 			})
 			s.NoError(err)
@@ -1178,7 +1164,7 @@ func (s *ChasmSuite) TestArchetypeRetention() {
 			var deleteTask *historytasks.DeleteHistoryEventTask
 			await.Require(s.Context(), s.T(), func(t *await.T) {
 				recorded := recorder.GetRecordedTasksByCategoryFiltered(historytasks.CategoryTimer, testcore.TaskFilter{
-					NamespaceID: nsID.String(),
+					NamespaceID: env.NamespaceID().String(),
 					WorkflowID:  storeID,
 					RunID:       createResp.RunID,
 				})
