@@ -264,7 +264,7 @@ func TestTaskGeneratorImpl_GenerateWorkflowCloseTasks(t *testing.T) {
 
 			mutableState.EXPECT().GenerateActivityCancelCommandsForClose().Return(nil)
 
-			taskGenerator := NewTaskGenerator(namespaceRegistry, mutableState, cfg, archivalMetadata, log.NewTestLogger())
+			taskGenerator := NewTaskGenerator(namespaceRegistry, nil, mutableState, cfg, archivalMetadata, log.NewTestLogger())
 			err := taskGenerator.GenerateWorkflowCloseTasks(p.CloseEventTime, p.DeleteAfterClose, false)
 			require.NoError(t, err)
 
@@ -398,7 +398,7 @@ func TestTaskGenerator_GenerateDirtySubStateMachineTasks(t *testing.T) {
 		genTasks = append(genTasks, ts...)
 	}).AnyTimes()
 
-	taskGenerator := NewTaskGenerator(namespaceRegistry, mutableState, cfg, archivalMetadata, log.NewTestLogger())
+	taskGenerator := NewTaskGenerator(namespaceRegistry, nil, mutableState, cfg, archivalMetadata, log.NewTestLogger())
 	err = taskGenerator.GenerateDirtySubStateMachineTasks(reg)
 	require.NoError(t, err)
 
@@ -696,6 +696,7 @@ func TestTaskGenerator_GenerateWorkflowStartTasks(t *testing.T) {
 
 			taskGenerator := NewTaskGenerator(
 				mockShard.GetNamespaceRegistry(),
+				nil,
 				mockMutableState,
 				mockShard.GetConfig(),
 				mockShard.GetArchivalMetadata(),
@@ -823,6 +824,7 @@ func TestTaskGeneratorImpl_GenerateMigrationTasks(t *testing.T) {
 			)
 			taskGenerator := NewTaskGenerator(
 				mockShard.GetNamespaceRegistry(),
+				nil,
 				mockMutableState,
 				mockShard.GetConfig(),
 				mockShard.GetArchivalMetadata(),
@@ -938,6 +940,7 @@ func TestTaskGeneratorImpl_GenerateDirtySubStateMachineTasks_TrimsTimersForDelet
 
 	taskGenerator := NewTaskGenerator(
 		namespace.NewMockRegistry(ctrl),
+		nil,
 		ms,
 		&configs.Config{},
 		archiver.NewMockArchivalMetadata(ctrl),
@@ -951,88 +954,154 @@ func TestTaskGeneratorImpl_GenerateDirtySubStateMachineTasks_TrimsTimersForDelet
 	require.Empty(t, ms.GetExecutionInfo().StateMachineTimers) // Timer should be trimmed
 }
 
+type (
+	retentionTestComponent struct {
+		chasm.UnimplementedComponent
+	}
+	extendedRetentionComponent  struct{ retentionTestComponent }
+	shortRetentionComponent     struct{ retentionTestComponent }
+	shortenedRetentionComponent struct{ retentionTestComponent }
+	noRetentionComponent        struct{ retentionTestComponent }
+	workflowRetentionComponent  struct{ retentionTestComponent }
+)
+
+func (*retentionTestComponent) LifecycleState(chasm.Context) chasm.LifecycleState {
+	return chasm.LifecycleStateRunning
+}
+
 func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ChasmComponentRetention(t *testing.T) {
 	t.Parallel()
 
-	ctrl := gomock.NewController(t)
 	closeTime := time.Unix(0, 0)
 	retentionJitterDuration := time.Second
+	minRetentionGlobal := 24 * time.Hour
+	minRetentionLocal := time.Hour
+
+	const testLibraryName = "TestLibrary"
+	extendedArchetypeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(testLibraryName, "Extended"))
+	shortArchetypeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(testLibraryName, "Short"))
+	shortenedArchetypeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(testLibraryName, "Shortened"))
+	noRetentionArchetypeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(testLibraryName, "NoRetention"))
+
+	newChasmRegistry := func(t *testing.T) *chasm.Registry {
+		ctrl := gomock.NewController(t)
+		registry := chasm.NewRegistry(log.NewTestLogger())
+
+		testLib := chasm.NewMockLibrary(ctrl)
+		testLib.EXPECT().Name().Return(testLibraryName).AnyTimes()
+		testLib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
+			chasm.NewRegistrableComponent[*extendedRetentionComponent](
+				"Extended",
+				chasm.WithRetention(func(string) time.Duration {
+					return 21 * 24 * time.Hour
+				}),
+			),
+			chasm.NewRegistrableComponent[*shortRetentionComponent](
+				"Short",
+				chasm.WithRetention(func(string) time.Duration {
+					return time.Minute
+				}),
+			),
+			chasm.NewRegistrableComponent[*shortenedRetentionComponent](
+				"Shortened",
+				chasm.WithRetention(func(string) time.Duration {
+					return 3 * 24 * time.Hour
+				}),
+			),
+			chasm.NewRegistrableComponent[*noRetentionComponent]("NoRetention"),
+		})
+		testLib.EXPECT().Tasks().Return(nil)
+		testLib.EXPECT().NexusServices().Return(nil)
+		testLib.EXPECT().NexusServiceProcessors().Return(nil)
+		require.NoError(t, registry.Register(testLib))
+
+		workflowLib := chasm.NewMockLibrary(ctrl)
+		workflowLib.EXPECT().Name().Return(chasm.WorkflowLibraryName).AnyTimes()
+		workflowLib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
+			chasm.NewRegistrableComponent[*workflowRetentionComponent](
+				chasm.WorkflowComponentName,
+				chasm.WithRetention(func(string) time.Duration {
+					return 14 * 24 * time.Hour
+				}),
+			),
+		})
+		workflowLib.EXPECT().Tasks().Return(nil)
+		workflowLib.EXPECT().NexusServices().Return(nil)
+		workflowLib.EXPECT().NexusServiceProcessors().Return(nil)
+		require.NoError(t, registry.Register(workflowLib))
+
+		return registry
+	}
 
 	testCases := []struct {
-		name                   string
-		archetypeID            chasm.ArchetypeID
-		expectedMinRetention   time.Duration
-		expectedMaxRetention   time.Duration
-		setupNamespaceRegistry func(*namespace.MockRegistry)
+		name               string
+		archetypeID        chasm.ArchetypeID
+		namespaceRetention time.Duration
+		localNamespace     bool
+		nilChasmRegistry   bool
+		expectedRetention  time.Duration
 	}{
 		{
-			name:                 "standalone activity uses namespace retention",
-			archetypeID:          activity.ArchetypeID,
-			expectedMinRetention: 90 * 24 * time.Hour,
-			expectedMaxRetention: 90*24*time.Hour + retentionJitterDuration*2,
-			setupNamespaceRegistry: func(nr *namespace.MockRegistry) {
-				namespaceConfig := &persistencespb.NamespaceConfig{
-					Retention: durationpb.New(90 * 24 * time.Hour),
-				}
-				namespaceEntry := namespace.NewGlobalNamespaceForTest(
-					&persistencespb.NamespaceInfo{Id: tests.NamespaceID.String(), Name: tests.Namespace.String()},
-					namespaceConfig,
-					&persistencespb.NamespaceReplicationConfig{
-						ActiveClusterName: cluster.TestCurrentClusterName,
-						Clusters: []string{
-							cluster.TestCurrentClusterName,
-						},
-					},
-					tests.Version,
-				)
-				nr.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(namespaceEntry, nil).AnyTimes()
-			},
+			name:               "unregistered archetype uses namespace retention",
+			archetypeID:        activity.ArchetypeID,
+			namespaceRetention: 90 * 24 * time.Hour,
+			expectedRetention:  90 * 24 * time.Hour,
 		},
 		{
-			name:                 "workflow uses namespace retention",
-			archetypeID:          chasm.WorkflowArchetypeID,
-			expectedMinRetention: 7 * 24 * time.Hour,
-			expectedMaxRetention: 7*24*time.Hour + retentionJitterDuration*2,
-			setupNamespaceRegistry: func(nr *namespace.MockRegistry) {
-				namespaceConfig := &persistencespb.NamespaceConfig{
-					Retention: durationpb.New(7 * 24 * time.Hour),
-				}
-				namespaceEntry := namespace.NewGlobalNamespaceForTest(
-					&persistencespb.NamespaceInfo{Id: tests.NamespaceID.String(), Name: tests.Namespace.String()},
-					namespaceConfig,
-					&persistencespb.NamespaceReplicationConfig{
-						ActiveClusterName: cluster.TestCurrentClusterName,
-						Clusters: []string{
-							cluster.TestCurrentClusterName,
-						},
-					},
-					tests.Version,
-				)
-				nr.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(namespaceEntry, nil).AnyTimes()
-			},
+			name:               "archetype without retention option uses namespace retention",
+			archetypeID:        noRetentionArchetypeID,
+			namespaceRetention: 30 * 24 * time.Hour,
+			expectedRetention:  30 * 24 * time.Hour,
 		},
 		{
-			name:                 "scheduler uses namespace retention",
-			archetypeID:          chasm.SchedulerArchetypeID,
-			expectedMinRetention: 30 * 24 * time.Hour,
-			expectedMaxRetention: 30*24*time.Hour + retentionJitterDuration*2,
-			setupNamespaceRegistry: func(nr *namespace.MockRegistry) {
-				namespaceConfig := &persistencespb.NamespaceConfig{
-					Retention: durationpb.New(30 * 24 * time.Hour),
-				}
-				namespaceEntry := namespace.NewGlobalNamespaceForTest(
-					&persistencespb.NamespaceInfo{Id: tests.NamespaceID.String(), Name: tests.Namespace.String()},
-					namespaceConfig,
-					&persistencespb.NamespaceReplicationConfig{
-						ActiveClusterName: cluster.TestCurrentClusterName,
-						Clusters: []string{
-							cluster.TestCurrentClusterName,
-						},
-					},
-					tests.Version,
-				)
-				nr.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(namespaceEntry, nil).AnyTimes()
-			},
+			name:               "archetype retention overrides with longer retention",
+			archetypeID:        extendedArchetypeID,
+			namespaceRetention: 7 * 24 * time.Hour,
+			expectedRetention:  21 * 24 * time.Hour,
+		},
+		{
+			name:               "workflow archetype retention overrides namespace retention",
+			archetypeID:        chasm.WorkflowArchetypeID,
+			namespaceRetention: 7 * 24 * time.Hour,
+			expectedRetention:  14 * 24 * time.Hour,
+		},
+		{
+			name:               "unspecified archetype is treated as workflow",
+			archetypeID:        chasm.UnspecifiedArchetypeID,
+			namespaceRetention: 7 * 24 * time.Hour,
+			expectedRetention:  14 * 24 * time.Hour,
+		},
+		{
+			name:               "archetype retention overrides with shorter retention",
+			archetypeID:        shortenedArchetypeID,
+			namespaceRetention: 30 * 24 * time.Hour,
+			expectedRetention:  3 * 24 * time.Hour,
+		},
+		{
+			name:               "archetype retention is floored at global namespace min retention",
+			archetypeID:        shortArchetypeID,
+			namespaceRetention: 30 * 24 * time.Hour,
+			expectedRetention:  minRetentionGlobal,
+		},
+		{
+			name:               "archetype retention is floored at local namespace min retention",
+			archetypeID:        shortArchetypeID,
+			namespaceRetention: 30 * 24 * time.Hour,
+			localNamespace:     true,
+			expectedRetention:  minRetentionLocal,
+		},
+		{
+			name:               "namespace retention is not floored at namespace min retention",
+			archetypeID:        noRetentionArchetypeID,
+			namespaceRetention: 12 * time.Hour,
+			expectedRetention:  12 * time.Hour,
+		},
+		{
+			name:               "nil chasm registry uses namespace retention",
+			archetypeID:        extendedArchetypeID,
+			namespaceRetention: 7 * 24 * time.Hour,
+			nilChasmRegistry:   true,
+			expectedRetention:  7 * 24 * time.Hour,
 		},
 	}
 
@@ -1040,8 +1109,35 @@ func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ChasmComponentRetentio
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
+			ctrl := gomock.NewController(t)
+
+			namespaceInfo := &persistencespb.NamespaceInfo{Id: tests.NamespaceID.String(), Name: tests.Namespace.String()}
+			namespaceConfig := &persistencespb.NamespaceConfig{
+				Retention: durationpb.New(tc.namespaceRetention),
+			}
+			var namespaceEntry *namespace.Namespace
+			if tc.localNamespace {
+				namespaceEntry = namespace.NewLocalNamespaceForTest(namespaceInfo, namespaceConfig, cluster.TestCurrentClusterName)
+			} else {
+				namespaceEntry = namespace.NewGlobalNamespaceForTest(
+					namespaceInfo,
+					namespaceConfig,
+					&persistencespb.NamespaceReplicationConfig{
+						ActiveClusterName: cluster.TestCurrentClusterName,
+						Clusters: []string{
+							cluster.TestCurrentClusterName,
+						},
+					},
+					tests.Version,
+				)
+			}
 			namespaceRegistry := namespace.NewMockRegistry(ctrl)
-			tc.setupNamespaceRegistry(namespaceRegistry)
+			namespaceRegistry.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(namespaceEntry, nil).AnyTimes()
+
+			var chasmRegistry *chasm.Registry
+			if !tc.nilChasmRegistry {
+				chasmRegistry = newChasmRegistry(t)
+			}
 
 			mutableState := historyi.NewMockMutableState(ctrl)
 			mutableState.EXPECT().GetExecutionInfo().DoAndReturn(func() *persistencespb.WorkflowExecutionInfo {
@@ -1069,10 +1165,17 @@ func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ChasmComponentRetentio
 				RetentionTimerJitterDuration: func() time.Duration {
 					return retentionJitterDuration
 				},
+				NamespaceMinRetentionGlobal: func() time.Duration {
+					return minRetentionGlobal
+				},
+				NamespaceMinRetentionLocal: func() time.Duration {
+					return minRetentionLocal
+				},
 			}
 
 			taskGenerator := NewTaskGenerator(
 				namespaceRegistry,
+				chasmRegistry,
 				mutableState,
 				cfg,
 				nil, // archivalMetadata not needed for this test
@@ -1098,10 +1201,9 @@ func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ChasmComponentRetentio
 			assert.Equal(t, tc.archetypeID, deleteHistoryEventTask.ArchetypeID)
 
 			// Verify the retention time is within expected range
-			expectedDeleteTime := closeTime.Add(tc.expectedMinRetention)
-			assert.GreaterOrEqual(t, deleteHistoryEventTask.VisibilityTimestamp, expectedDeleteTime,
+			assert.GreaterOrEqual(t, deleteHistoryEventTask.VisibilityTimestamp, closeTime.Add(tc.expectedRetention),
 				"Delete time should be at least closeTime + retention")
-			assert.LessOrEqual(t, deleteHistoryEventTask.VisibilityTimestamp, closeTime.Add(tc.expectedMaxRetention),
+			assert.LessOrEqual(t, deleteHistoryEventTask.VisibilityTimestamp, closeTime.Add(tc.expectedRetention+retentionJitterDuration),
 				"Delete time should not exceed closeTime + retention + jitter")
 		})
 	}
@@ -1186,7 +1288,7 @@ func TestGenerateWorkerCommandsTasks(t *testing.T) {
 				EnableCancelActivityWorkerCommand: func(string) bool { return tc.featureEnabled },
 			}
 
-			taskGenerator := NewTaskGenerator(nil, mutableState, cfg, nil, log.NewTestLogger())
+			taskGenerator := NewTaskGenerator(nil, nil, mutableState, cfg, nil, log.NewTestLogger())
 			err := taskGenerator.GenerateWorkerCommandsTasks(tc.commands, tc.controlQueue)
 			require.NoError(t, err)
 
@@ -1252,7 +1354,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping(t *testing.T) {
 		capturedTasks = append(capturedTasks, ts...)
 	}).AnyTimes()
 
-	taskGenerator := NewTaskGenerator(nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
+	taskGenerator := NewTaskGenerator(nil, nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
 	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
 
 	// Both pending user timers must be regenerated.
@@ -1308,7 +1410,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ForceRegenerates(
 		emitCount += len(ts)
 	}).AnyTimes()
 
-	taskGenerator := NewTaskGenerator(nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
+	taskGenerator := NewTaskGenerator(nil, nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
 
 	// First call emits.
 	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
@@ -1370,7 +1472,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_EdgeCases(t *test
 				tc.setupTimers(mutableState)
 			}
 
-			taskGenerator := NewTaskGenerator(nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
+			taskGenerator := NewTaskGenerator(nil, nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
 			require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
 		})
 	}
@@ -1471,7 +1573,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ExecutionTimers(t
 				captured = append(captured, ts...)
 			}).AnyTimes()
 
-			taskGenerator := NewTaskGenerator(nil, mutableState, timeSkippingTestConfig(!tc.executionTimeoutTimerOffDC), nil, log.NewTestLogger())
+			taskGenerator := NewTaskGenerator(nil, nil, mutableState, timeSkippingTestConfig(!tc.executionTimeoutTimerOffDC), nil, log.NewTestLogger())
 			require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
 
 			// Expected task count: always user timer, plus any timeout tasks whose expiration is set.
@@ -1620,7 +1722,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 				captured = append(captured, ts...)
 			}).AnyTimes()
 
-			taskGenerator := NewTaskGenerator(nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
+			taskGenerator := NewTaskGenerator(nil, nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
 			require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
 
 			var fastForwardTasks []*tasks.TimeSkippingFastForwardTimerTask
@@ -1736,7 +1838,7 @@ func TestTaskGeneratorImpl_GenerateTimeSkippingFastForwardTimerTask(t *testing.T
 				captured = append(captured, ts...)
 			}).AnyTimes()
 
-			taskGenerator := NewTaskGenerator(nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
+			taskGenerator := NewTaskGenerator(nil, nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
 			require.NoError(t, taskGenerator.GenerateTimeSkippingFastForwardTimerTask())
 
 			if !tc.wantTask {
@@ -1861,7 +1963,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BackoffTimer(t *t
 				captured = append(captured, ts...)
 			}).AnyTimes()
 
-			taskGenerator := NewTaskGenerator(nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
+			taskGenerator := NewTaskGenerator(nil, nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
 			require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
 
 			var backoffTasks []*tasks.WorkflowBackoffTimerTask
@@ -1931,7 +2033,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ActivityRetry(t *
 		captured = append(captured, ts...)
 	}).AnyTimes()
 
-	taskGenerator := NewTaskGenerator(nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
+	taskGenerator := NewTaskGenerator(nil, nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
 	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
 
 	var retryTasks []*tasks.ActivityRetryTimerTask
@@ -1979,7 +2081,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_BackoffTimer_Star
 	wantErr := errors.New("boom")
 	mutableState.EXPECT().GetStartVersion().Return(int64(0), wantErr)
 
-	taskGenerator := NewTaskGenerator(nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
+	taskGenerator := NewTaskGenerator(nil, nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
 	err := taskGenerator.RegenerateTimerTasksForTimeSkipping()
 	require.ErrorIs(t, err, wantErr)
 }
@@ -2066,7 +2168,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_AllFieldsPopulate
 		captured = append(captured, ts...)
 	}).AnyTimes()
 
-	taskGenerator := NewTaskGenerator(nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
+	taskGenerator := NewTaskGenerator(nil, nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
 	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
 
 	// TaskID is set by the shard, never the generator, so it is the one field every task

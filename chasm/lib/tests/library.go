@@ -3,11 +3,16 @@ package tests
 import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/dynamicconfig"
 )
 
 type (
 	library struct {
 		chasm.UnimplementedLibrary
+
+		// retention is nil on the shared Library, so only test clusters, which register their own
+		// library instance (see Module), set a PayloadStore retention.
+		retention dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -36,21 +41,24 @@ func (l *library) NexusServiceProcessors() []*chasm.NexusServiceProcessor {
 }
 
 func (l *library) Components() []*chasm.RegistrableComponent {
-	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*PayloadStore](
-			componentName,
-			chasm.WithBusinessIDAlias("PayloadStoreId"),
-			chasm.WithRecordPrincipals(),
-			chasm.WithSearchAttributes(
-				PayloadTotalCountSearchAttribute,
-				PayloadTotalSizeSearchAttribute,
-				ExecutionStatusSearchAttribute,
-				chasm.SearchAttributeTaskQueue,
-			),
-			chasm.WithContextValues(map[any]any{
-				componentCtxKey: componentCtxVal,
-			}),
+	opts := []chasm.RegistrableComponentOption{
+		chasm.WithBusinessIDAlias("PayloadStoreId"),
+		chasm.WithRecordPrincipals(),
+		chasm.WithSearchAttributes(
+			PayloadTotalCountSearchAttribute,
+			PayloadTotalSizeSearchAttribute,
+			ExecutionStatusSearchAttribute,
+			chasm.SearchAttributeTaskQueue,
 		),
+		chasm.WithContextValues(map[any]any{
+			componentCtxKey: componentCtxVal,
+		}),
+	}
+	if l.retention != nil {
+		opts = append(opts, chasm.WithRetention(l.retention))
+	}
+	return []*chasm.RegistrableComponent{
+		chasm.NewRegistrableComponent[*PayloadStore](componentName, opts...),
 	}
 }
 

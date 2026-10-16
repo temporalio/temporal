@@ -99,6 +99,7 @@ type (
 
 	TaskGeneratorImpl struct {
 		namespaceRegistry namespace.Registry
+		chasmRegistry     *chasm.Registry
 		mutableState      historyi.MutableState
 		config            *configs.Config
 		archivalMetadata  archiver.ArchivalMetadata
@@ -112,6 +113,7 @@ var _ TaskGenerator = (*TaskGeneratorImpl)(nil)
 
 func NewTaskGenerator(
 	namespaceRegistry namespace.Registry,
+	chasmRegistry *chasm.Registry,
 	mutableState historyi.MutableState,
 	config *configs.Config,
 	archivalMetadata archiver.ArchivalMetadata,
@@ -119,6 +121,7 @@ func NewTaskGenerator(
 ) *TaskGeneratorImpl {
 	return &TaskGeneratorImpl{
 		namespaceRegistry: namespaceRegistry,
+		chasmRegistry:     chasmRegistry,
 		mutableState:      mutableState,
 		config:            config,
 		archivalMetadata:  archivalMetadata,
@@ -286,12 +289,45 @@ func (r *TaskGeneratorImpl) getRetention() (time.Duration, error) {
 	switch err.(type) {
 	case nil:
 		retention = namespaceEntry.Retention()
+		if archetypeRetention, ok := r.getArchetypeRetention(namespaceEntry); ok {
+			retention = archetypeRetention
+		}
 	case *serviceerror.NamespaceNotFound:
 		// namespace is not accessible, use default value above
 	default:
 		return 0, err
 	}
 	return retention, nil
+}
+
+// getArchetypeRetention returns the retention registered by this execution's archetype via
+// chasm.WithRetention, if any. It is floored at the namespace min retention because, unlike the
+// namespace retention, it never goes through the frontend validation that enforces that floor.
+func (r *TaskGeneratorImpl) getArchetypeRetention(namespaceEntry *namespace.Namespace) (time.Duration, bool) {
+	if r.chasmRegistry == nil {
+		return 0, false
+	}
+
+	archetypeID := r.mutableState.ChasmTree().ArchetypeID()
+	if archetypeID == chasm.UnspecifiedArchetypeID {
+		archetypeID = chasm.WorkflowArchetypeID
+	}
+	rc, ok := r.chasmRegistry.ComponentByID(archetypeID)
+	if !ok {
+		return 0, false
+	}
+	retention, ok := rc.Retention(namespaceEntry.Name().String())
+	if !ok {
+		return 0, false
+	}
+
+	var minRetention time.Duration
+	if namespaceEntry.IsGlobalNamespace() {
+		minRetention = r.config.NamespaceMinRetentionGlobal()
+	} else {
+		minRetention = r.config.NamespaceMinRetentionLocal()
+	}
+	return max(retention, minRetention), true
 }
 
 func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
