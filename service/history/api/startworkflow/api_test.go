@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
 	"go.uber.org/mock/gomock"
-	"google.golang.org/grpc"
 )
 
 const (
@@ -145,12 +144,11 @@ func TestPrepareEagerDispatchCheck(t *testing.T) {
 
 	priority := &commonpb.Priority{PriorityKey: 2}
 	testCases := []struct {
-		name               string
-		checkEnabled       bool
-		response           *matchingservice.GrantEagerDispatchResponse
-		matchingErr        error
-		blockUntilDeadline bool
-		wantEager          bool
+		name         string
+		checkEnabled bool
+		response     *matchingservice.GrantEagerDispatchResponse
+		matchingErr  error
+		wantEager    bool
 	}{
 		{
 			name:      "check disabled",
@@ -177,9 +175,9 @@ func TestPrepareEagerDispatchCheck(t *testing.T) {
 			matchingErr:  errors.New("matching unavailable"),
 		},
 		{
-			name:               "matching timeout",
-			checkEnabled:       true,
-			blockUntilDeadline: true,
+			name:         "matching timeout",
+			checkEnabled: true,
+			matchingErr:  context.DeadlineExceeded,
 		},
 	}
 
@@ -208,13 +206,7 @@ func TestPrepareEagerDispatchCheck(t *testing.T) {
 						TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
 					},
 					Items: []*matchingservice.GrantEagerDispatchRequest_Item{{Count: 1, Priority: priority}},
-				})).DoAndReturn(func(ctx context.Context, _ *matchingservice.GrantEagerDispatchRequest, _ ...grpc.CallOption) (*matchingservice.GrantEagerDispatchResponse, error) {
-					if test.blockUntilDeadline {
-						<-ctx.Done()
-						return nil, ctx.Err()
-					}
-					return test.response, test.matchingErr
-				})
+				})).Return(test.response, test.matchingErr)
 			}
 
 			starter := &Starter{
