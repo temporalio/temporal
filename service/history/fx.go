@@ -14,6 +14,7 @@ import (
 	chasmnexus "go.temporal.io/server/chasm/lib/nexusoperation"
 	"go.temporal.io/server/chasm/lib/scheduler"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
+	"go.temporal.io/server/chasm/lib/wci"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/common"
 	commoncache "go.temporal.io/server/common/cache"
@@ -52,6 +53,7 @@ import (
 	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/wcicompute"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/cache"
 	"go.temporal.io/server/service/worker/workerdeployment"
@@ -135,6 +137,8 @@ var Module = fx.Options(
 	chasmnexus.Module,
 	chasmworkflow.Module,
 	chasmworkflow.HistoryHandlerModule,
+	wci.HistoryModule,
+	wcicompute.Module,
 )
 
 // CallbackDestinationBlockedProvider lets the callback library report a callback as BLOCKED while
