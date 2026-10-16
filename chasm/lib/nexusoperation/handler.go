@@ -27,7 +27,7 @@ func newHandler(config *Config, linkValidator *linkValidator, logger log.Logger)
 	return &handler{
 		config:        config,
 		linkValidator: linkValidator,
-		logger:        log.With(logger, tag.NexusStageCallerOutbound),
+		logger:        log.With(logger, tag.NexusStageCallerFrontend),
 	}
 }
 

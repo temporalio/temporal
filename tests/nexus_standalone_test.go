@@ -177,7 +177,7 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 		logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
 			Level:   testlogger.Error,
 			Message: "service failures",
-			Tags:    map[string]any{"nexus-stage": "caller-outbound", "operation": "StartNexusOperationExecution"},
+			Tags:    map[string]any{"nexus-stage": "caller-frontend", "operation": "StartNexusOperationExecution"},
 		})
 	})
 
@@ -404,7 +404,8 @@ func (s *NexusStandaloneTestSuite) TestStandaloneNexusOperationLinks() {
 
 func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 	s.Run("NotFound", func(s *NexusStandaloneTestSuite) {
-		env := s.newTestEnv()
+		env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.LogAllReqErrors, true))
+		logCapture := env.StartNamespaceLogCapture()
 
 		_, err := env.FrontendClient().DescribeNexusOperationExecution(s.Context(), &workflowservice.DescribeNexusOperationExecutionRequest{
 			Namespace:   env.Namespace().String(),
@@ -413,6 +414,13 @@ func (s *NexusStandaloneTestSuite) TestDescribeStandaloneNexusOperation() {
 		var notFound *serviceerror.NotFound
 		s.ErrorAs(err, &notFound)
 		s.Equal("operation not found for ID: does-not-exist", notFound.Error())
+		for _, operation := range []string{"DescribeNexusOperationExecution", "DescribeNexusOperation"} {
+			logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+				Level:   testlogger.Error,
+				Message: "service failures",
+				Tags:    map[string]any{"nexus-stage": "caller-frontend", "operation": operation},
+			})
+		}
 	})
 
 	s.Run("LongPollStateChange", func(s *NexusStandaloneTestSuite) {
