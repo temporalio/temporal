@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	schedulespb "go.temporal.io/server/api/schedule/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
@@ -2575,6 +2576,150 @@ func (s *WorkflowHandlerSuite) TestDescribeWorkflowExecution_CompletedStatus() {
 	s.NoError(err)
 }
 
+func (s *WorkflowHandlerSuite) TestDescribeWorkflowExecution_SearchAttributes() {
+	testCases := []struct {
+		name        string
+		historySAs  map[string]*commonpb.Payload
+		expectedSAs map[string]*commonpb.Payload
+	}{
+		{
+			name: "unaliased search attributes are aliased",
+			historySAs: map[string]*commonpb.Payload{
+				"Keyword01": payload.EncodeString("value"),
+			},
+			expectedSAs: map[string]*commonpb.Payload{
+				"AliasForKeyword01": payload.EncodeString("value"),
+			},
+		},
+		{
+			name: "aliased search attributes keep aliases and marker is removed",
+			historySAs: map[string]*commonpb.Payload{
+				sadefs.TemporalAliasedSearchAttributes: sadefs.TemporalAliasedSearchAttributesPayload,
+				"AliasForKeyword01":                    payload.EncodeString("value"),
+			},
+			expectedSAs: map[string]*commonpb.Payload{
+				"AliasForKeyword01": payload.EncodeString("value"),
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			wh := s.getWorkflowHandler(s.newConfig())
+
+			s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil)
+			s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+				&historyservice.DescribeWorkflowExecutionResponse{
+					WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+						Execution: &commonpb.WorkflowExecution{
+							WorkflowId: testWorkflowID,
+							RunId:      testRunID,
+						},
+						SearchAttributes: &commonpb.SearchAttributes{IndexedFields: tc.historySAs},
+					},
+				},
+				nil,
+			)
+			s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(esIndexName, false).
+				Return(searchattribute.TestNameTypeMap(), nil)
+			s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(s.testNamespace).
+				Return(&searchattribute.TestMapper{Namespace: s.testNamespace.String()}, nil)
+			for _, p := range tc.expectedSAs {
+				sadefs.SetMetadataType(p, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+			}
+
+			resp, err := wh.DescribeWorkflowExecution(context.Background(), &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: s.testNamespace.String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: testWorkflowID,
+				},
+			})
+			s.Require().NoError(err)
+			s.ProtoEqual(
+				&commonpb.SearchAttributes{IndexedFields: tc.expectedSAs},
+				resp.GetWorkflowExecutionInfo().GetSearchAttributes(),
+			)
+		})
+	}
+}
+
+func (s *WorkflowHandlerSuite) TestDescribeScheduleWorkflow_SearchAttributes() {
+	testCases := []struct {
+		name        string
+		historySAs  map[string]*commonpb.Payload
+		expectedSAs map[string]*commonpb.Payload
+	}{
+		{
+			name: "unaliased search attributes are aliased",
+			historySAs: map[string]*commonpb.Payload{
+				"Keyword01":                      payload.EncodeString("value"),
+				sadefs.TemporalNamespaceDivision: payload.EncodeString(scheduler.NamespaceDivision),
+			},
+			expectedSAs: map[string]*commonpb.Payload{
+				"AliasForKeyword01": payload.EncodeString("value"),
+			},
+		},
+		{
+			name: "aliased search attributes keep aliases and marker is removed",
+			historySAs: map[string]*commonpb.Payload{
+				sadefs.TemporalAliasedSearchAttributes: sadefs.TemporalAliasedSearchAttributesPayload,
+				"AliasForKeyword01":                    payload.EncodeString("value"),
+				sadefs.TemporalNamespaceDivision:       payload.EncodeString(scheduler.NamespaceDivision),
+			},
+			expectedSAs: map[string]*commonpb.Payload{
+				"AliasForKeyword01": payload.EncodeString("value"),
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			wh := s.getWorkflowHandler(s.newConfig())
+
+			s.mockNamespaceCache.EXPECT().GetNamespaceID(s.testNamespace).Return(s.testNamespaceID, nil)
+			s.mockHistoryClient.EXPECT().DescribeWorkflowExecution(gomock.Any(), gomock.Any()).Return(
+				&historyservice.DescribeWorkflowExecutionResponse{
+					WorkflowExecutionInfo: &workflowpb.WorkflowExecutionInfo{
+						Execution: &commonpb.WorkflowExecution{
+							WorkflowId: scheduler.WorkflowIDPrefix + "schedule-id",
+							RunId:      testRunID,
+						},
+						Type:             &commonpb.WorkflowType{Name: scheduler.WorkflowType},
+						Status:           enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+						SearchAttributes: &commonpb.SearchAttributes{IndexedFields: tc.historySAs},
+					},
+				},
+				nil,
+			)
+			queryResult, err := payloads.Encode(&schedulespb.DescribeResponse{
+				Schedule: &schedulepb.Schedule{Spec: &schedulepb.ScheduleSpec{}},
+				Info:     &schedulepb.ScheduleInfo{},
+			})
+			s.Require().NoError(err)
+			s.mockHistoryClient.EXPECT().QueryWorkflow(gomock.Any(), gomock.Any()).Return(
+				&historyservice.QueryWorkflowResponse{
+					Response: &workflowservice.QueryWorkflowResponse{QueryResult: queryResult},
+				},
+				nil,
+			)
+			s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(esIndexName, false).
+				Return(searchattribute.TestNameTypeMap(), nil)
+			s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(s.testNamespace).
+				Return(&searchattribute.TestMapper{Namespace: s.testNamespace.String()}, nil)
+			for _, p := range tc.expectedSAs {
+				sadefs.SetMetadataType(p, enumspb.INDEXED_VALUE_TYPE_KEYWORD)
+			}
+
+			resp, err := wh.describeScheduleWorkflow(context.Background(), &workflowservice.DescribeScheduleRequest{
+				Namespace:  s.testNamespace.String(),
+				ScheduleId: "schedule-id",
+			})
+			s.Require().NoError(err)
+			s.ProtoEqual(&commonpb.SearchAttributes{IndexedFields: tc.expectedSAs}, resp.GetSearchAttributes())
+		})
+	}
+}
+
 func (s *WorkflowHandlerSuite) TestListWorkflowExecutions() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
@@ -4151,6 +4296,7 @@ func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_InternalRawHistor
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(tests.Namespace).Return(tests.NamespaceID, nil).Times(2)
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), gomock.Any()).Return(searchattribute.TestNameTypeMap(), nil).Times(2)
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).Return(nil, nil).Times(2)
 
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:              tests.Namespace.String(),

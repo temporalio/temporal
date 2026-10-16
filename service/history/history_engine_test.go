@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/contextutil"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/headers"
@@ -5860,6 +5861,7 @@ func (s *engineSuite) TestGetWorkflowExecutionHistory() {
 
 	s.mockExecutionMgr.EXPECT().TrimHistoryBranch(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap(), nil).AnyTimes()
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
 
 	engine, err := s.historyEngine.shardContext.GetEngine(context.Background())
@@ -7167,6 +7169,7 @@ func (s *engineSuite) getHistoryRequestWithPageToken(
 func (s *engineSuite) expectHistoryReadWithBranchToken(branchToken []byte) {
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).
 		Return(searchattribute.TestNameTypeMap(), nil).AnyTimes()
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil).AnyTimes()
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName).AnyTimes()
 	s.mockExecutionMgr.EXPECT().ReadHistoryBranch(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, request *persistence.ReadHistoryBranchRequest) (*persistence.ReadHistoryBranchResponse, error) {
@@ -7189,6 +7192,7 @@ func (s *engineSuite) expectReverseHistoryReadWithBranchToken(branchToken []byte
 	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil)
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).
 		Return(searchattribute.TestNameTypeMap(), nil)
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).Return(nil, nil)
 	s.mockVisibilityMgr.EXPECT().GetIndexName().Return(esIndexName)
 	s.mockExecutionMgr.EXPECT().ReadHistoryBranchReverse(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ context.Context, request *persistence.ReadHistoryBranchReverseRequest) (*persistence.ReadHistoryBranchReverseResponse, error) {
@@ -7516,4 +7520,136 @@ func (s *engineSuite) TestGetWorkflowExecutionHistoryReverse_RewrittenBranchToke
 		},
 	)
 	s.Require().NoError(err)
+}
+
+type capturingHistoryImporter struct {
+	events [][]*historypb.HistoryEvent
+}
+
+func (c *capturingHistoryImporter) ImportWorkflow(
+	_ context.Context,
+	_ definition.WorkflowKey,
+	_ []*historyspb.VersionHistoryItem,
+	events [][]*historypb.HistoryEvent,
+	_ []byte,
+) ([]byte, bool, error) {
+	c.events = events
+	return nil, true, nil
+}
+
+func (s *engineSuite) TestImportWorkflowExecution_SearchAttributes() {
+	testCases := []struct {
+		name      string
+		input     map[string]*commonpb.Payload
+		expected  map[string]*commonpb.Payload
+		expectErr bool
+	}{
+		{
+			name: "unaliased search attributes are passed through",
+			input: map[string]*commonpb.Payload{
+				"Keyword01": payload.EncodeString("value"),
+			},
+			expected: map[string]*commonpb.Payload{
+				"Keyword01": payload.EncodeString("value"),
+			},
+		},
+		{
+			name: "aliased search attributes are unaliased",
+			input: map[string]*commonpb.Payload{
+				sadefs.TemporalAliasedSearchAttributes: sadefs.TemporalAliasedSearchAttributesPayload,
+				"AliasForKeyword01":                    payload.EncodeString("value"),
+			},
+			expected: map[string]*commonpb.Payload{
+				"Keyword01": payload.EncodeString("value"),
+			},
+		},
+		{
+			name: "marker with field names falls back to field names",
+			input: map[string]*commonpb.Payload{
+				sadefs.TemporalAliasedSearchAttributes: sadefs.TemporalAliasedSearchAttributesPayload,
+				"Keyword01":                            payload.EncodeString("value"),
+			},
+			expected: map[string]*commonpb.Payload{
+				"Keyword01": payload.EncodeString("value"),
+			},
+		},
+		{
+			name: "aliased search attributes with invalid value are rejected",
+			input: map[string]*commonpb.Payload{
+				sadefs.TemporalAliasedSearchAttributes: sadefs.TemporalAliasedSearchAttributesPayload,
+				"AliasForInt01":                        payload.EncodeString("not-an-int"),
+			},
+			expectErr: true,
+		},
+	}
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.NamespaceID).Return(tests.Namespace, nil).AnyTimes()
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(tests.Namespace).
+		Return(&searchattribute.TestMapper{Namespace: tests.Namespace.String()}, nil).AnyTimes()
+	s.mockVisibilityMgr.EXPECT().GetIndexName().Return("").AnyTimes()
+	s.mockVisibilityMgr.EXPECT().ValidateCustomSearchAttributes(gomock.Any()).
+		DoAndReturn(func(sas map[string]any) (map[string]any, error) { return sas, nil }).AnyTimes()
+
+	serializer := serialization.NewSerializer()
+	s.historyEngine.serializer = serializer
+	s.historyEngine.searchAttributesValidator = searchattribute.NewValidator(
+		searchattribute.NewTestProvider(),
+		s.mockSearchAttributesMapperProvider,
+		s.config.SearchAttributesNumberOfKeysLimit,
+		s.config.SearchAttributesSizeOfValueLimit,
+		s.config.SearchAttributesTotalSizeLimit,
+		s.mockVisibilityMgr,
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false),
+		metrics.NoopMetricsHandler,
+		log.NewNoopLogger(),
+	)
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			importer := &capturingHistoryImporter{}
+			s.historyEngine.nDCHistoryImporter = importer
+
+			blob, err := serializer.SerializeEvents([]*historypb.HistoryEvent{
+				{
+					EventId:   1,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+					Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+						WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
+							SearchAttributes: &commonpb.SearchAttributes{IndexedFields: tc.input},
+						},
+					},
+				},
+				{
+					EventId:   2,
+					EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+					Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{
+						WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{},
+					},
+				},
+			})
+			s.Require().NoError(err)
+
+			_, err = s.historyEngine.ImportWorkflowExecution(context.Background(), &historyservice.ImportWorkflowExecutionRequest{
+				NamespaceId: tests.NamespaceID.String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: tests.WorkflowID,
+					RunId:      tests.RunID,
+				},
+				HistoryBatches: []*commonpb.DataBlob{blob},
+				VersionHistory: &historyspb.VersionHistory{},
+			})
+			if tc.expectErr {
+				var invalidArgErr *serviceerror.InvalidArgument
+				s.ErrorAs(err, &invalidArgErr)
+				s.Nil(importer.events)
+				return
+			}
+			s.Require().NoError(err)
+			s.Len(importer.events, 1)
+			s.Len(importer.events[0], 2)
+			sas, _ := searchattribute.GetFromEvent(importer.events[0][0])
+			protorequire.ProtoEqual(s.T(), &commonpb.SearchAttributes{IndexedFields: tc.expected}, sas)
+		})
+	}
 }

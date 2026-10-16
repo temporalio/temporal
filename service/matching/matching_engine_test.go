@@ -5767,7 +5767,8 @@ func TestConvertPollWorkflowTaskQueueResponse(t *testing.T) {
 			if tc.expectSearchAttributeProcessing && tc.inputResp != nil {
 				mockVisibilityManager.EXPECT().GetIndexName().Return("test-index").Times(1)
 				mockSAProvider.EXPECT().GetSearchAttributes("test-index", false).Return(searchattribute.NameTypeMap{}, nil).Times(1)
-				mockSAMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil).Times(1)
+				// GetMapper is called once by ProcessOutgoingSearchAttributes and once by AliasFields.
+				mockSAMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil).Times(2)
 			}
 
 			result, err := engine.convertPollWorkflowTaskQueueResponse(tc.inputResp, "test-namespace")

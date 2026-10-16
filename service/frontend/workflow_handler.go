@@ -3428,18 +3428,28 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		return nil, err
 	}
 
-	if response.GetWorkflowExecutionInfo().GetSearchAttributes() != nil {
+	if sas := response.GetWorkflowExecutionInfo().GetSearchAttributes(); sas != nil {
 		saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.visibilityMgr.GetIndexName(), false)
 		if err != nil {
 			return nil, serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
 		}
-		searchattribute.ApplyTypeMap(response.GetWorkflowExecutionInfo().GetSearchAttributes(), saTypeMap)
-		aliasedSas, err := searchattribute.AliasFields(wh.saMapperProvider, response.GetWorkflowExecutionInfo().GetSearchAttributes(), request.GetNamespace())
-		if err != nil {
-			return nil, err
-		}
-		if aliasedSas != response.GetWorkflowExecutionInfo().GetSearchAttributes() {
-			response.GetWorkflowExecutionInfo().SearchAttributes = aliasedSas
+		if _, ok := sas.GetIndexedFields()[sadefs.TemporalAliasedSearchAttributes]; ok {
+			saMapper, err := wh.saMapperProvider.GetMapper(namespace.Name(request.GetNamespace()))
+			if err != nil {
+				return nil, serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
+			}
+
+			delete(sas.GetIndexedFields(), sadefs.TemporalAliasedSearchAttributes)
+			searchattribute.ApplyTypeMapWithMapper(sas, saTypeMap, saMapper, request.GetNamespace())
+		} else {
+			searchattribute.ApplyTypeMap(sas, saTypeMap)
+			aliasedSas, err := searchattribute.AliasFields(wh.saMapperProvider, sas, request.GetNamespace())
+			if err != nil {
+				return nil, err
+			}
+			if aliasedSas != sas {
+				response.GetWorkflowExecutionInfo().SearchAttributes = aliasedSas
+			}
 		}
 	}
 
@@ -4601,13 +4611,24 @@ func (wh *WorkflowHandler) describeScheduleWorkflow(ctx context.Context, request
 		if err != nil {
 			return nil, serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
 		}
-		searchattribute.ApplyTypeMap(sas, saTypeMap)
-		aliasedSas, err := searchattribute.AliasFields(wh.saMapperProvider, sas, request.GetNamespace())
-		if err != nil {
-			return nil, err
-		}
-		if aliasedSas != sas {
-			executionInfo.SearchAttributes = aliasedSas
+
+		if _, ok := sas.GetIndexedFields()[sadefs.TemporalAliasedSearchAttributes]; ok {
+			saMapper, err := wh.saMapperProvider.GetMapper(namespace.Name(request.GetNamespace()))
+			if err != nil {
+				return nil, serviceerror.NewUnavailablef(errUnableToGetSearchAttributesMessage, err)
+			}
+
+			delete(sas.GetIndexedFields(), sadefs.TemporalAliasedSearchAttributes)
+			searchattribute.ApplyTypeMapWithMapper(sas, saTypeMap, saMapper, request.GetNamespace())
+		} else {
+			searchattribute.ApplyTypeMap(sas, saTypeMap)
+			aliasedSas, err := searchattribute.AliasFields(wh.saMapperProvider, sas, request.GetNamespace())
+			if err != nil {
+				return nil, err
+			}
+			if aliasedSas != sas {
+				executionInfo.SearchAttributes = aliasedSas
+			}
 		}
 	}
 

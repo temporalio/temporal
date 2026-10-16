@@ -4,9 +4,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/searchattribute/sadefs"
 )
 
 func Test_ApplyTypeMap_Success(t *testing.T) {
@@ -68,4 +70,41 @@ func Test_ApplyTypeMap_Skip(t *testing.T) {
 	assert.Panics(func() {
 		ApplyTypeMap(sa, validSearchAttributes)
 	})
+}
+
+func Test_ApplyTypeMapWithMapper(t *testing.T) {
+	typeMap := NameTypeMap{customSearchAttributes: map[string]enumspb.IndexedValueType{
+		"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+		"Int01":     enumspb.INDEXED_VALUE_TYPE_INT,
+	}}
+
+	payloadWithType := payload.EncodeString("str")
+	payloadWithType.Metadata[MetadataType] = []byte("Text")
+	sa := &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"AliasForKeyword01":          payload.EncodeString("keyword"),
+			"AliasForInt01":              payloadWithType, // Type already set.
+			sadefs.TemporalChangeVersion: payload.EncodeString("change"),
+			"wrong_alias":                payload.EncodeString("unknown"),
+			"AliasForUnknown":            payload.EncodeString("unknown"),
+		},
+	}
+
+	ApplyTypeMapWithMapper(sa, typeMap, &TestMapper{}, "test-namespace")
+	require.Equal(t, "Keyword", string(sa.GetIndexedFields()["AliasForKeyword01"].GetMetadata()[MetadataType]))
+	require.Equal(t, "Text", string(sa.GetIndexedFields()["AliasForInt01"].GetMetadata()[MetadataType]))
+	require.Equal(t, "KeywordList", string(sa.GetIndexedFields()[sadefs.TemporalChangeVersion].GetMetadata()[MetadataType]))
+	require.NotContains(t, sa.GetIndexedFields()["wrong_alias"].GetMetadata(), MetadataType)
+	require.NotContains(t, sa.GetIndexedFields()["AliasForUnknown"].GetMetadata(), MetadataType)
+
+	// Without a mapper, names are used as field names.
+	sa = &commonpb.SearchAttributes{
+		IndexedFields: map[string]*commonpb.Payload{
+			"Keyword01":                  payload.EncodeString("keyword"),
+			sadefs.TemporalChangeVersion: payload.EncodeString("change"),
+		},
+	}
+	ApplyTypeMapWithMapper(sa, typeMap, nil, "test-namespace")
+	require.Equal(t, "Keyword", string(sa.GetIndexedFields()["Keyword01"].GetMetadata()[MetadataType]))
+	require.Equal(t, "KeywordList", string(sa.GetIndexedFields()[sadefs.TemporalChangeVersion].GetMetadata()[MetadataType]))
 }
