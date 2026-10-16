@@ -354,8 +354,10 @@ type ScalingGroupState struct {
 	// request_id of the running InvokeTask; 0 = none.
 	InflightInvokeId      int64 `protobuf:"varint,9,opt,name=inflight_invoke_id,json=inflightInvokeId,proto3" json:"inflight_invoke_id,omitempty"`
 	InflightInvokeAttempt int32 `protobuf:"varint,10,opt,name=inflight_invoke_attempt,json=inflightInvokeAttempt,proto3" json:"inflight_invoke_attempt,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	// Key in the root's scaling_group_specs and ScalingGroups map.
+	Id            string `protobuf:"bytes,11,opt,name=id,proto3" json:"id,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ScalingGroupState) Reset() {
@@ -456,6 +458,13 @@ func (x *ScalingGroupState) GetInflightInvokeAttempt() int32 {
 		return x.InflightInvokeAttempt
 	}
 	return 0
+}
+
+func (x *ScalingGroupState) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
 }
 
 type ScalingGroupSpec struct {
@@ -901,7 +910,7 @@ const file_temporal_server_chasm_lib_wci_proto_v1_message_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\x12nextValidationTime\x1a~\n" +
 	"\x16ScalingGroupSpecsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12N\n" +
-	"\x05value\x18\x02 \x01(\v28.temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpecR\x05value:\x028\x01\"\xaf\x04\n" +
+	"\x05value\x18\x02 \x01(\v28.temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpecR\x05value:\x028\x01\"\xbf\x04\n" +
 	"\x11ScalingGroupState\x12J\n" +
 	"\x10algorithm_status\x18\x01 \x01(\v2\x1f.temporal.api.common.v1.PayloadR\x0falgorithmStatus\x12R\n" +
 	"\x06status\x18\x02 \x01(\x0e2:.temporal.server.chasm.lib.wci.proto.v1.ScalingGroupStatusR\x06status\x12!\n" +
@@ -913,7 +922,8 @@ const file_temporal_server_chasm_lib_wci_proto_v1_message_proto_rawDesc = "" +
 	"\x0fpending_invokes\x18\b \x01(\x05R\x0ependingInvokes\x12,\n" +
 	"\x12inflight_invoke_id\x18\t \x01(\x03R\x10inflightInvokeId\x126\n" +
 	"\x17inflight_invoke_attempt\x18\n" +
-	" \x01(\x05R\x15inflightInvokeAttempt\"\x86\x02\n" +
+	" \x01(\x05R\x15inflightInvokeAttempt\x12\x0e\n" +
+	"\x02id\x18\v \x01(\tR\x02id\"\x86\x02\n" +
 	"\x10ScalingGroupSpec\x12C\n" +
 	"\n" +
 	"task_types\x18\x01 \x03(\x0e2$.temporal.api.enums.v1.TaskQueueTypeR\ttaskTypes\x12U\n" +

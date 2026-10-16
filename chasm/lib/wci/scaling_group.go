@@ -18,15 +18,25 @@ type ScalingGroup struct {
 	chasm.UnimplementedComponent
 
 	*wcipb.ScalingGroupState
+
+	Root chasm.ParentPtr[*WorkerControllerInstance]
 }
 
-func NewScalingGroup() *ScalingGroup {
+func NewScalingGroup(id string) *ScalingGroup {
 	return &ScalingGroup{
 		ScalingGroupState: &wcipb.ScalingGroupState{
+			Id:          id,
 			Status:      wcipb.SCALING_GROUP_STATUS_IDLE,
 			AppliedSize: appliedSizeUnknown,
 		},
 	}
+}
+
+// rootRunning reports whether the root still runs scaling; without a tree (unit tests) there is no
+// parent to check. Closed roots already invalidate child tasks in the framework.
+func (g *ScalingGroup) rootRunning(ctx chasm.Context) bool {
+	root, ok := g.Root.TryGet(ctx)
+	return !ok || root.Status == wcipb.WCI_STATUS_RUNNING
 }
 
 // LifecycleState is always running: groups live as long as the root.

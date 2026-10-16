@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/chasm"
 	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
 	"go.temporal.io/server/chasm/lib/wci/migration"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/sdk"
@@ -242,11 +243,6 @@ func (w *WorkerControllerInstance) applyActions(
 	return nil
 }
 
-// requestInvoke is the InvokeWorker hand-off; step 3c adds the invoke task and pending_invokes.
-func (w *WorkerControllerInstance) requestInvoke(ctx chasm.MutableContext, _ *ScalingGroup, _ string) {
-	ctx.Logger().Warn("InvokeWorker is not supported on CHASM yet; dropping")
-}
-
 // withoutDeferred drops deferrals from paths that cannot chain into more deferred work.
 func withoutDeferred(ctx chasm.Context, actions []scalingalgorithm.ScalingAction) []scalingalgorithm.ScalingAction {
 	return slices.DeleteFunc(slices.Clone(actions), func(a scalingalgorithm.ScalingAction) bool {
@@ -261,10 +257,10 @@ func withoutDeferred(ctx chasm.Context, actions []scalingalgorithm.ScalingAction
 // armPollTimer replaces the poll timer; the new next_poll_time invalidates any older timer or fetch.
 func (w *WorkerControllerInstance) armPollTimer(ctx chasm.MutableContext, at time.Time) {
 	w.NextPollTime = timestamppb.New(at)
-	ctx.AddTask(w, chasm.TaskAttributes{ScheduledTime: at}, &wcipb.MetricsPollTimerTask{PollTime: w.NextPollTime})
+	ctx.AddTask(w, chasm.TaskAttributes{ScheduledTime: at}, &wcipb.MetricsPollTimerTask{PollTime: common.CloneProto(w.NextPollTime)})
 }
 
 func (w *WorkerControllerInstance) armValidationTimer(ctx chasm.MutableContext, at time.Time) {
 	w.NextValidationTime = timestamppb.New(at)
-	ctx.AddTask(w, chasm.TaskAttributes{ScheduledTime: at}, &wcipb.PeriodicValidationTimerTask{ValidationTime: w.NextValidationTime})
+	ctx.AddTask(w, chasm.TaskAttributes{ScheduledTime: at}, &wcipb.PeriodicValidationTimerTask{ValidationTime: common.CloneProto(w.NextValidationTime)})
 }
