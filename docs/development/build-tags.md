@@ -40,17 +40,3 @@ included.
 A server built without an integration rejects configuration that uses it, for example
 `unknown archiver scheme: "gs" (Google Cloud Storage archival is excluded from this build, see build
 tag temporal_with_gstorage)`.
-
-### Adding a build-tagged integration
-
-Each integration is split into an implementation file and a stub with exactly complementary
-constraints:
-
-```go
-//go:build !temporal_minimal || temporal_with_gstorage   // provider_gstorage.go
-//go:build temporal_minimal && !temporal_with_gstorage   // provider_gstorage_excluded.go
-```
-
-Keep types and constants that the rest of the server refers to in untagged files, so callers compile
-unchanged in both modes. The stub returns an error that names the tag. Add tests for the stub in a
-test file with the stub's constraint, so `make unit-test-minimal` runs them.
