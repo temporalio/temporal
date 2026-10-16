@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/chasm/lib/namespacereplication"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	chasmwci "go.temporal.io/server/chasm/lib/wci"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -48,6 +49,7 @@ var Module = fx.Options(
 	resource.Module,
 	deletenamespace.Module,
 	chasmscheduler.Module,
+	chasmwci.ComponentModule,
 	callback.Module,
 	namespacereplication.Module,
 	scheduler.Module,
