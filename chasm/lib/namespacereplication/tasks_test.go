@@ -309,10 +309,11 @@ func TestNamespaceDetailsEqualAfterPersistenceRead(t *testing.T) {
 // A successful local UPDATE commits and schedules one peer task per peer cell.
 func (env *nsreplTestEnv) mutationUpdate(peers ...string) *namespacereplicationpb.NamespaceMutation {
 	return &namespacereplicationpb.NamespaceMutation{
-		Operation:       enumsspb.NAMESPACE_OPERATION_UPDATE,
-		NamespaceDetail: testDetail(),
-		ExpectedVersion: 7,
-		PeerCells:       peers,
+		Operation:         enumsspb.NAMESPACE_OPERATION_UPDATE,
+		NamespaceDetail:   testDetail(),
+		ExpectedVersion:   7,
+		PeerCells:         peers,
+		IsGlobalNamespace: true,
 	}
 }
 
@@ -391,6 +392,44 @@ func TestApplyLocalTask_Execute_CreateCommit(t *testing.T) {
 
 	c := env.read(ref)
 	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, c.GetLocalApply().GetOutcome())
+}
+
+func TestApplyLocalTaskExecuteRejectsLocalNamespace(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name      string
+		operation enumsspb.NamespaceOperation
+	}{
+		{name: "create", operation: enumsspb.NAMESPACE_OPERATION_CREATE},
+		{name: "update", operation: enumsspb.NAMESPACE_OPERATION_UPDATE},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			env := newNsreplTestEnv(t)
+			mutation := env.mutationUpdate("cellB")
+			mutation.Operation = tc.operation
+			mutation.IsGlobalNamespace = false
+			ref := env.start(mutation, nil)
+
+			require.NoError(t, env.localHandler.Execute(
+				env.engineCtx,
+				ref,
+				chasm.TaskAttributes{},
+				&namespacereplicationpb.ApplyLocalTask{},
+			))
+
+			component := env.read(ref)
+			require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_FAILED, component.GetStatus())
+			require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_FAILED, component.GetLocalApply().GetOutcome())
+			require.Equal(
+				t,
+				localFailureInvalidArgument,
+				component.GetLocalApply().GetFailure().GetApplicationFailureInfo().GetType(),
+			)
+		})
+	}
 }
 
 func TestApplyLocalTask_Execute_UpdateRetryRecoversCommittedWrite(t *testing.T) {
@@ -732,6 +771,7 @@ func TestApplyPeerTask_Execute_RetriableReschedules(t *testing.T) {
 
 func TestApplyPeerTask_Execute_RetryBudgetBoundary(t *testing.T) {
 	now := time.Date(2026, 9, 19, 12, 0, 0, 0, time.UTC)
+	retryExpiration := 2 * time.Hour
 	testCases := []struct {
 		name             string
 		elapsed          time.Duration
@@ -741,20 +781,20 @@ func TestApplyPeerTask_Execute_RetryBudgetBoundary(t *testing.T) {
 	}{
 		{
 			name:             "below budget retries",
-			elapsed:          peerRetryBudget - time.Nanosecond,
+			elapsed:          retryExpiration - time.Nanosecond,
 			wantOutcome:      namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING,
 			wantStatus:       namespacereplicationpb.COMPONENT_STATUS_RUNNING,
 			wantNewTimerTask: 1,
 		},
 		{
 			name:        "at budget is terminal",
-			elapsed:     peerRetryBudget,
+			elapsed:     retryExpiration,
 			wantOutcome: namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL,
 			wantStatus:  namespacereplicationpb.COMPONENT_STATUS_COMPLETED,
 		},
 		{
 			name:        "above budget is terminal",
-			elapsed:     peerRetryBudget + time.Nanosecond,
+			elapsed:     retryExpiration + time.Nanosecond,
 			wantOutcome: namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL,
 			wantStatus:  namespacereplicationpb.COMPONENT_STATUS_COMPLETED,
 		},
@@ -764,6 +804,11 @@ func TestApplyPeerTask_Execute_RetryBudgetBoundary(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			timeSource := clock.NewEventTimeSource().Update(now)
 			env := newNsreplTestEnvWithOptions(t, chasmtest.WithTimeSource(timeSource))
+			env.peerHandler.config = &config{
+				peerRetryInitialInterval:    func() time.Duration { return 3 * time.Second },
+				peerRetryMaximumInterval:    func() time.Duration { return 20 * time.Second },
+				peerRetryExpirationInterval: func() time.Duration { return retryExpiration },
+			}
 			ref := env.start(env.mutationUpdate("cellB"), func(c *NamespaceMutationComponent) {
 				c.LocalApply.Outcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED
 				peer := c.PeerApply["cellB"]
@@ -797,6 +842,10 @@ func TestApplyPeerTask_Execute_RetryBudgetBoundary(t *testing.T) {
 			afterTasks, err := env.engine.Tasks(ref)
 			require.NoError(t, err)
 			require.Equal(t, tc.wantNewTimerTask, len(afterTasks[historytasks.CategoryTimer])-beforeTimers)
+			if tc.wantNewTimerTask > 0 {
+				timerTasks := afterTasks[historytasks.CategoryTimer]
+				require.Equal(t, now.Add(12*time.Second), timerTasks[len(timerTasks)-1].GetVisibilityTime())
+			}
 		})
 	}
 }

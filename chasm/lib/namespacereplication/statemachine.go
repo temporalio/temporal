@@ -150,33 +150,20 @@ var TransitionAllPeersTerminal = chasm.NewTransition(
 // Peer retry: capped exponential backoff with a total budget.
 // -----------------------------------------------------------------------------
 
-const (
-	// peerRetryBaseInterval is the first backoff interval; it doubles per attempt.
-	peerRetryBaseInterval = time.Second
-	// peerRetryMaxInterval caps the backoff so a long peer outage retries at a
-	// steady cadence instead of ever-growing gaps.
-	peerRetryMaxInterval = 5 * time.Minute
-	// peerRetryBudget is the total wall-clock window (from the first failed
-	// attempt) over which a retriable peer failure keeps retrying before it is
-	// given up as FAILED_TERMINAL so the component can still complete.
-	peerRetryBudget = 7 * 24 * time.Hour
-)
-
 // peerRetryBackoff returns the delay after the given number of completed
-// attempts: exponential (base * 2^(attempts-1)) capped at
-// peerRetryMaxInterval, overflow-safe.
-func peerRetryBackoff(completedAttempts int32) time.Duration {
-	if completedAttempts < 1 {
-		return peerRetryBaseInterval
+// attempts: exponential (initial * 2^(attempts-1)) capped at the configured
+// maximum interval, overflow-safe.
+func peerRetryBackoff(completedAttempts int32, policy peerRetryPolicy) time.Duration {
+	delay := min(policy.initialInterval, policy.maximumInterval)
+	for attempt := int32(1); attempt < completedAttempts && delay < policy.maximumInterval; attempt++ {
+		// Saturate before doubling would exceed the configured maximum or
+		// overflow time.Duration.
+		if delay > policy.maximumInterval/2 {
+			return policy.maximumInterval
+		}
+		delay *= 2
 	}
-	if completedAttempts > 20 { // 2^19s already dwarfs the cap; avoid shift overflow
-		return peerRetryMaxInterval
-	}
-	d := peerRetryBaseInterval * time.Duration(int64(1)<<uint(completedAttempts-1))
-	if d <= 0 || d > peerRetryMaxInterval {
-		return peerRetryMaxInterval
-	}
-	return d
+	return delay
 }
 
 // EventPeerRetry records a retriable peer failure without marking the peer
@@ -189,6 +176,7 @@ type EventPeerRetry struct {
 	Time       time.Time
 	TargetCell string
 	Attempts   int32
+	Delay      time.Duration
 	Err        error
 }
 
@@ -216,7 +204,7 @@ var TransitionPeerRetry = chasm.NewTransition(
 		// a pure timer task. Its attempt matches the peer's AttemptCount, allowing
 		// Validate to drop stale or duplicate timers from an earlier attempt.
 		ctx.AddTask(c, chasm.TaskAttributes{
-			ScheduledTime: event.Time.Add(peerRetryBackoff(event.Attempts)),
+			ScheduledTime: event.Time.Add(event.Delay),
 		}, &namespacereplicationpb.ApplyPeerBackoffTask{
 			TargetCell: event.TargetCell,
 			Attempt:    event.Attempts,
