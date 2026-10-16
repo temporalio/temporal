@@ -746,6 +746,23 @@ func (suite *ScheduleCHASMSuite) TestTimeSkippingFeatureDisabledWhileWorkflowRun
 	}, awaitTimeout, pollInterval)
 
 	s.OverrideDynamicConfig(dynamicconfig.CHASMSchedulerTimeSkippingEnabled, false)
+	_, err := s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Patch: &schedulepb.SchedulePatch{TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+			Enabled: true,
+			FastForwardConfig: &commonpb.FastForwardConfig{
+				Id:       uuid.NewString(),
+				Duration: durationpb.New(2 * week),
+			},
+		}},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	var unimplemented *serviceerror.Unimplemented
+	require.ErrorAs(t, err, &unimplemented)
+	require.ErrorContains(t, err, "Schedule time skipping is not enabled for the namespace")
+
 	patchSchedule(ctx, t, s, sid, &schedulepb.SchedulePatch{Unpause: "feature flag turned off"})
 	await.Require(ctx, t, func(at *await.T) {
 		desc, err := s.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
@@ -755,6 +772,7 @@ func (suite *ScheduleCHASMSuite) TestTimeSkippingFeatureDisabledWhileWorkflowRun
 		tsi := desc.GetInfo().GetTimeSkippingInfo()
 		require.True(at, tsi.GetEffectiveConfig().GetEnabled())
 		require.Zero(at, tsi.GetCurrentSessionSkipCount())
+		require.True(at, tsi.GetCurrentTime().AsTime().Before(firstTick))
 		require.Len(at, desc.GetInfo().GetRunningWorkflows(), 1)
 	}, awaitTimeout, pollInterval)
 
@@ -768,6 +786,7 @@ func (suite *ScheduleCHASMSuite) TestTimeSkippingFeatureDisabledWhileWorkflowRun
 		require.Equal(at, int64(1), desc.GetInfo().GetActionCount())
 		require.True(at, desc.GetInfo().GetTimeSkippingInfo().GetEffectiveConfig().GetEnabled())
 		require.Zero(at, desc.GetInfo().GetTimeSkippingInfo().GetCurrentSessionSkipCount())
+		require.True(at, desc.GetInfo().GetTimeSkippingInfo().GetCurrentTime().AsTime().Before(firstTick))
 	}, awaitTimeout, pollInterval)
 }
 

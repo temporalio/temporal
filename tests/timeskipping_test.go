@@ -119,10 +119,19 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_FeatureDisabledAfterStart() {
 	s.True(s.getMutableState(env, tv.WorkflowID(), runID).State.ExecutionInfo.GetTimeSkippingInfo().GetConfig().GetEnabled())
 
 	env.OverrideDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, false)
+	_, err := env.FrontendClient().UpdateWorkflowExecutionOptions(s.Context(), &workflowservice.UpdateWorkflowExecutionOptionsRequest{
+		Namespace:                env.Namespace().String(),
+		WorkflowExecution:        &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID},
+		WorkflowExecutionOptions: &workflowpb.WorkflowExecutionOptions{TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true}},
+		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
+	})
+	s.ErrorAs(err, new(*serviceerror.Unimplemented))
+	s.ErrorContains(err, "Workflow time skipping is not enabled for the namespace")
+
 	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
-	_, err := poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
 		return &workflowservice.RespondWorkflowTaskCompletedRequest{
-			Commands: []*commandpb.Command{scheduleActivityCmd(tv)},
+			Commands: []*commandpb.Command{startTimerCmd("flag-off-timer", 10*time.Minute)},
 		}, nil
 	})
 	s.NoError(err)
@@ -130,8 +139,10 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_FeatureDisabledAfterStart() {
 	tsi := s.getMutableState(env, tv.WorkflowID(), runID).State.ExecutionInfo.GetTimeSkippingInfo()
 	s.True(tsi.GetConfig().GetEnabled())
 	s.Zero(tsi.GetSessionSkipCount())
+	s.Zero(tsi.GetAccumulatedSkippedDuration().AsDuration())
 	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 	s.False(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED))
+	s.False(hasEventType(history, enumspb.EVENT_TYPE_TIMER_FIRED))
 }
 
 // TestTimeSkipping_SignalWithStart_DCEnabled verifies that SignalWithStartWorkflowExecution
