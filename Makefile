@@ -597,16 +597,6 @@ unit-test-coverage: prepare-coverage-test
 	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(UNIT_TEST_DIRS)
 
-# Packages with a file whose build constraint mentions temporal_minimal.
-TEMPORAL_MINIMAL_DIRS = $(sort $(addprefix ./,$(patsubst ./%,%,$(dir $(shell grep -rlE --include='*.go' --exclude-dir=.git '^//go:build .*temporal_minimal' .)))))
-MINIMAL_TEST_TAGS := $(ALL_TEST_TAGS),temporal_minimal
-
-# Runs the unit tests of packages affected by temporal_minimal with that tag set. unit-test-coverage
-# covers the default build. See docs/development/build-tags.md.
-unit-test-minimal:
-	@printf $(COLOR) "Run unit tests with temporal_minimal..."
-	$(if $(TEMPORAL_MINIMAL_DIRS),go test -tags $(MINIMAL_TEST_TAGS) -timeout=$(TEST_TIMEOUT) $(TEMPORAL_MINIMAL_DIRS),@echo "No packages use temporal_minimal.")
-
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
 	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \

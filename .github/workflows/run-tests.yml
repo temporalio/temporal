@@ -26,9 +26,8 @@ env:
   TEMPORAL_AWAIT_ATTEMPT_TIMEOUT: 15s
   MAX_TEST_ATTEMPTS: 3
   SHARD_COUNT: 5 # NOTE: must match shard count in optimize-test-sharding.yml
-  # Functional tests don't use the integrations that temporal_minimal compiles out. Used by both the
-  # pre-build and the functional-test jobs, so the functional tests reuse the cached build outputs.
-  FUNCTIONAL_TEST_BUILD_TAG: temporal_minimal
+  # Functional tests doesn't use all the integrations that temporal_minimal compiles out.
+  FUNCTIONAL_TEST_BUILD_TAGS: temporal_minimal
 
 jobs:
   test-setup:
@@ -218,7 +217,7 @@ jobs:
 
       - run: make pre-build-functional-test-coverage
         env:
-          TEST_TAG: ${{ env.FUNCTIONAL_TEST_BUILD_TAG }}
+          TEST_TAG: ${{ env.FUNCTIONAL_TEST_BUILD_TAGS }}
 
       - name: Save Go dependencies
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
@@ -291,7 +290,11 @@ jobs:
 
       - name: Run unit tests with temporal_minimal
         timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
-        run: make unit-test-minimal
+        # Re-runs the unit tests of every package with a file constrained by temporal_minimal, so both
+        # variants are tested. Packages are found automatically.
+        run: |
+          mapfile -t packages < <(grep -rlE --include='*.go' '^//go:build .*temporal_minimal' . | xargs -n1 dirname | sort -u)
+          go test -tags disable_grpc_modules,test_dep,temporal_minimal -timeout="$TEST_TIMEOUT" "${packages[@]}"
 
       - name: Post-test reporting
         if: always()
@@ -433,7 +436,7 @@ jobs:
           TEST_TOTAL_SHARDS: ${{ matrix.total_shards }}
           TEST_SHARD_INDEX: ${{ matrix.total_shards && matrix.shard_index }} # guard with total_shards to avoid falsy eval of shard_index=0
           TEST_ARGS: "${{ matrix.test_args }}"
-          TEST_TAG: ${{ env.FUNCTIONAL_TEST_BUILD_TAG }}
+          TEST_TAG: ${{ env.FUNCTIONAL_TEST_BUILD_TAGS }}
           TEMPORAL_TEST_LOG_FILE: ${{ github.workspace }}/.testoutput/debug.log
           TEMPORAL_TEST_LOG_LEVEL: warn
           TEMPORAL_TEST_CLUSTER_EVENTS_FILE: ${{ github.workspace }}/.testoutput/test-cluster-events.jsonl
