@@ -5586,8 +5586,14 @@ func (wh *WorkflowHandler) prepareUpdateWorkflowRequest(
 		return errUpdateMetaNotSet
 	}
 
-	if len(request.GetRequest().GetMeta().GetUpdateId()) > wh.config.MaxIDLengthLimit() {
+	maxIDLength := wh.config.MaxIDLengthLimit()
+	if len(request.GetRequest().GetMeta().GetUpdateId()) > maxIDLength {
 		return errUpdateIDTooLong
+	}
+
+	nexusContext := request.GetRequest().GetPropagatedNexusSerializationContext()
+	if err := validatePropagatedNexusSerializationContext(nexusContext, maxIDLength); err != nil {
+		return err
 	}
 
 	if request.GetRequest().GetMeta().GetUpdateId() == "" {

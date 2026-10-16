@@ -3013,6 +3013,76 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	s.IsType((*serviceerror.NotFound)(nil), err)
 }
 
+func (s *mutableStateSuite) TestUpdateInfos_NexusSerializationContext() {
+	cacheStore := map[events.EventKey]*historypb.HistoryEvent{}
+	namespaceEntry := tests.GlobalNamespaceEntry
+	var err error
+	s.mutableState, err = NewMutableStateFromDB(
+		s.mockShard,
+		NewMapEventCache(s.T(), cacheStore),
+		s.logger,
+		namespaceEntry,
+		s.buildWorkflowMutableState(),
+		123,
+	)
+	s.NoError(err)
+	err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(tests.WorkflowID), false)
+	s.NoError(err)
+
+	admittedCtx := &nexuspb.PropagatedSerializationContext{Endpoint: "endpoint-1", Service: "service-1", Operation: "operation-1"}
+	acceptedCtx := &nexuspb.PropagatedSerializationContext{Endpoint: "endpoint-2", Service: "service-2", Operation: "operation-2"}
+
+	// Durably admitted update (e.g. after reset) accepted without a request keeps the context from admission.
+	admittedUpdateID := s.T().Name() + "-admitted"
+	_, err = s.mutableState.AddWorkflowExecutionUpdateAdmittedEvent(
+		&updatepb.Request{
+			Meta:                                &updatepb.Meta{UpdateId: admittedUpdateID},
+			PropagatedNexusSerializationContext: admittedCtx,
+		},
+		enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_REAPPLY,
+	)
+	s.NoError(err)
+	protorequire.ProtoEqual(s.T(), admittedCtx, s.mutableState.GetUpdateNexusSerializationContext(admittedUpdateID))
+	_, err = s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(admittedUpdateID, "msg-1", 1, nil)
+	s.NoError(err)
+	protorequire.ProtoEqual(s.T(), admittedCtx, s.mutableState.GetUpdateNexusSerializationContext(admittedUpdateID))
+
+	// Update accepted with a request takes the context from the accepted request and retains it on completion.
+	acceptedUpdateID := s.T().Name() + "-accepted"
+	acptEvent, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
+		acceptedUpdateID,
+		"msg-2",
+		1,
+		&updatepb.Request{
+			Meta:                                &updatepb.Meta{UpdateId: acceptedUpdateID},
+			PropagatedNexusSerializationContext: acceptedCtx,
+		},
+	)
+	s.NoError(err)
+	protorequire.ProtoEqual(s.T(), acceptedCtx, s.mutableState.GetUpdateNexusSerializationContext(acceptedUpdateID))
+	_, err = s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(
+		acptEvent.EventId,
+		&updatepb.Response{
+			Meta:    &updatepb.Meta{UpdateId: acceptedUpdateID},
+			Outcome: &updatepb.Outcome{Value: &updatepb.Outcome_Success{Success: testPayloads}},
+		},
+	)
+	s.NoError(err)
+	protorequire.ProtoEqual(s.T(), acceptedCtx, s.mutableState.GetUpdateNexusSerializationContext(acceptedUpdateID))
+
+	// Update without a Nexus context.
+	noContextUpdateID := s.T().Name() + "-no-context"
+	_, err = s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
+		noContextUpdateID,
+		"msg-3",
+		1,
+		&updatepb.Request{Meta: &updatepb.Meta{UpdateId: noContextUpdateID}},
+	)
+	s.NoError(err)
+	s.Nil(s.mutableState.GetUpdateNexusSerializationContext(noContextUpdateID))
+	s.Nil(s.mutableState.GetUpdateNexusSerializationContext("not_an_update_id"))
+}
+
 func (s *mutableStateSuite) TestApplyWorkflowExecutionStartedEvent_PersistsChasmWorkflowRoot() {
 	registry := chasm.NewRegistry(s.logger)
 	s.NoError(registry.Register(&chasm.CoreLibrary{}))
