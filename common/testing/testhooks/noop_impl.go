@@ -37,11 +37,6 @@ func Get[T any, S any](_ TestHooks, _ Key[T, S], _ S) (T, bool) {
 	return zero, false
 }
 
-// Call calls a func() hook if present.
-//
-// TestHooks should be used very sparingly, see comment on TestHooks.
-func Call[S any](_ TestHooks, _ Key[func(), S], _ S) {}
-
 // Hook is an empty stub in production mode. NewHook and its methods are only available with -tags=test_dep.
 type Hook struct{}
 

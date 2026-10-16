@@ -306,6 +306,36 @@ conflict handling.
 
 _NOTE: Tests using testhooks must be run with `-tags=test_dep`._
 
+### failpoint package
+
+The `failpoint` package injects faults and timing control at named points in server code. Prefer
+it over a new testhooks key when the test only needs to fail, delay, block, or run a callback at
+a point in the code.
+
+A failpoint is declared once as a `failpoint.Key` in `common/testing/failpoint/keys.go`, with a
+comment that says where it fires and what tests use it for. Server code executes it through the
+server's test hooks, scoped to a namespace:
+
+```go
+if err := failpoint.Checkpoint(f.testHooks, failpoint.MatchingForwardTask.ForNamespace(nsID)); err != nil {
+    return err
+}
+```
+
+`Checkpoint` returns an error only if the failpoint returns one. Use `failpoint.Execute[T]` when
+the failpoint must return a value of another type. Without `-tags=test_dep`, both do nothing.
+
+Tests configure the failpoint for the test's namespace. It is removed when the test ends:
+
+```go
+fp := testcore.InjectFailpoint[error](env, failpoint.MatchingForwardTask)
+fp.Pause(100*time.Millisecond, failpoint.Always)  // Delay every forward.
+fp.Return(serviceerror.NewUnavailable("injected"), failpoint.Once)  // Fail the next forward.
+fp.Block(failpoint.Once)                         // Hold the next forward ...
+require.NoError(t, fp.Wait(ctx))                 // ... until it arrives ...
+fp.Disable()                                     // ... then release it.
+```
+
 ### softassert package
 
 `softassert.That` is a "soft" assertion that logs an error if the given condition is false.
