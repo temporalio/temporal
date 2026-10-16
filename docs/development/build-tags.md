@@ -19,13 +19,13 @@ integrations with `temporal_with_<integration>` tags:
 
 ```sh
 # Without optional integrations.
-make temporal-server BUILD_TAG=temporal_minimal
+make temporal-server EXTRA_BUILD_TAGS=temporal_minimal
 
 # Without optional integrations, except Google Cloud Storage archival.
-make temporal-server BUILD_TAG=temporal_minimal,temporal_with_gstorage
+make temporal-server EXTRA_BUILD_TAGS=temporal_minimal,temporal_with_gstorage
 
 # Tests with the same tags.
-make unit-test TEST_TAG=temporal_minimal
+make unit-test EXTRA_TEST_BUILD_TAGS=temporal_minimal
 ```
 
 Programs that embed the server pass the same tags to `go build -tags`.
