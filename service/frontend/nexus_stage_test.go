@@ -4,13 +4,19 @@ import (
 	"context"
 	"testing"
 
+	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
+	commonnexus "go.temporal.io/server/common/nexus"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/testing/testlogger"
+	"go.temporal.io/server/service/frontend/configs"
 	"go.uber.org/mock/gomock"
 )
 
@@ -48,4 +54,21 @@ func TestNexusStagePollCancellationFailure(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNexusStageHandlerHTTPServiceFailures(t *testing.T) {
+	t.Parallel()
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+	logger.Expect(testlogger.Error, "service failures")
+	capture := logger.StartCapture()
+	defer logger.StopCapture(capture)
+	oc := newOperationContext(contextOptions{namespaceState: enumspb.NAMESPACE_STATE_REGISTERED, quota: 1, namespaceRateLimitAllow: true, rateLimitAllow: true})
+	handler := interceptor.NewRequestErrorHandler(logger, dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false))
+	oc.apiName = configs.DispatchNexusTaskByEndpointAPIName
+	oc.requestErrorHandler = handler
+	require.NoError(t, oc.interceptRequest(t.Context(), &matchingservice.DispatchNexusTaskRequest{}, nexus.Header{}))
+	for _, cleanup := range oc.cleanupFunctions {
+		cleanup(map[string]string{commonnexus.FailureSourceHeaderName: "frontend"}, serviceerror.NewInternal("broken"))
+	}
+	capture.RequireContains(t, testlogger.CapturedLogPattern{Level: testlogger.Error, Message: "service failures", Tags: map[string]any{"nexus-stage": "handler-inbound"}})
 }
