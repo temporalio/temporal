@@ -51,6 +51,10 @@ func mapError(err error) error {
 	if err == nil {
 		return nil
 	}
+	var unavailable *serviceerror.Unavailable
+	if errors.As(err, &unavailable) && strings.Contains(unavailable.Message, wci.ErrMigrationPending.Error()) {
+		return fmt.Errorf("%w: %w", wciclient.ErrMigrationPending, err)
+	}
 	var precondition *serviceerror.FailedPrecondition
 	if errors.As(err, &precondition) {
 		switch {

@@ -64,6 +64,7 @@ func TestErrorMapping(t *testing.T) {
 	require.ErrorAs(t, mapError(overTheWire(serviceerror.NewNotFound("missing"))), &notFound)
 	var unavailable *serviceerror.Unavailable
 	require.ErrorAs(t, mapError(overTheWire(wci.ErrMigrationPending)), &unavailable, "retryable, not a fall-through")
+	require.ErrorIs(t, mapError(overTheWire(wci.ErrMigrationPending)), wciclient.ErrMigrationPending)
 }
 
 func TestExists(t *testing.T) {
