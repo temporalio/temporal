@@ -281,6 +281,7 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_FallsBackWhenBacklogExis
 	env := testcore.NewEnv(s.T(),
 		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowEagerDispatchCheck, true),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingBacklogNegligibleAge, time.Duration(0)),
+		testcore.WithDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, time.Duration(0)),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
 		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
 	)
