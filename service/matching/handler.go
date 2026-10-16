@@ -323,7 +323,11 @@ func (h *Handler) RespondQueryTaskCompleted(
 // CancelOutstandingPoll is used to cancel outstanding pollers
 func (h *Handler) CancelOutstandingPoll(ctx context.Context,
 	request *matchingservice.CancelOutstandingPollRequest) (_ *matchingservice.CancelOutstandingPollResponse, retError error) {
-	defer log.CapturePanic(h.logger, &retError)
+	logger := h.logger
+	if request.GetTaskQueueType() == enumspb.TASK_QUEUE_TYPE_NEXUS {
+		logger = log.With(h.nexusTaskLogger, tag.Operation("CancelOutstandingPoll"))
+	}
+	defer log.CapturePanic(logger, &retError)
 	err := h.engine.CancelOutstandingPoll(ctx, request)
 	return &matchingservice.CancelOutstandingPollResponse{}, err
 }

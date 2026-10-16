@@ -10,6 +10,7 @@ import (
 	"math"
 	"regexp"
 	"runtime/debug"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -246,7 +247,7 @@ func NewExecutable(
 		logger: log.NewLazyLogger(
 			logger,
 			func() []tag.Tag {
-				return tasks.Tags(task)
+				return append(tasks.Tags(task), nexusTaskLogTags(task, chasmRegistry)...)
 			},
 		),
 		baseMetricsHandler:         metricsHandler,
@@ -268,6 +269,28 @@ func NewExecutable(
 		metrics.QueueReaderIDTag(readerID),
 	)
 	return e
+}
+
+func nexusTaskLogTags(task tasks.Task, registry *chasm.Registry) []tag.Tag {
+	var taskType string
+	switch task := task.(type) {
+	case *tasks.StateMachineOutboundTask:
+		taskType = task.Info.GetType()
+	case *tasks.ChasmTask:
+		if registry != nil {
+			taskType, _ = registry.TaskFqnByID(task.Info.GetTypeId())
+		}
+	default:
+		return nil
+	}
+	switch {
+	case strings.HasPrefix(taskType, "nexusoperations."), strings.HasPrefix(taskType, "nexusoperation."):
+		return []tag.Tag{tag.NexusStageCallerOutbound}
+	case strings.HasPrefix(taskType, "callbacks."), strings.HasPrefix(taskType, chasm.CallbackLibraryName+"."):
+		return []tag.Tag{tag.NexusStageHandlerOutbound}
+	default:
+		return nil
+	}
 }
 
 func (e *executableImpl) Execute() (retErr error) {

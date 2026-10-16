@@ -11,6 +11,7 @@ import (
 	nexusoperationpb "go.temporal.io/server/chasm/lib/nexusoperation/gen/nexusoperationpb/v1"
 	"go.temporal.io/server/common/contextutil"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -26,7 +27,7 @@ func newHandler(config *Config, linkValidator *linkValidator, logger log.Logger)
 	return &handler{
 		config:        config,
 		linkValidator: linkValidator,
-		logger:        logger,
+		logger:        log.With(logger, tag.NexusStageCallerOutbound),
 	}
 }
 
