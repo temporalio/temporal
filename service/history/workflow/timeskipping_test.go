@@ -847,6 +847,7 @@ func (s *mutableStateSuite) TestSetTimeSkippingConfig() {
 
 func (s *mutableStateSuite) TestTimeSkippingConfigUpdatedMetric() {
 	s.Run("workflow options update", func() {
+		s.False(s.mutableState.ChasmEnabled())
 		metricsHandler := metricstest.NewCaptureHandler()
 		capture := metricsHandler.StartCapture()
 		defer metricsHandler.StopCapture(capture)

@@ -6299,6 +6299,7 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 
 	s.Run("GateNotSkippable_NoStateChange", func() {
 		root := gateRoot(false)
+		archetypeFqn := FullyQualifiedName(testLibraryName, testTimeSkippingComponentName)
 		var recorded *TimeSkippingTransition
 		s.nodeBackend.HandleRecordTimeSkippingTransition = func(tr *TimeSkippingTransition) { recorded = tr }
 		tl, ok := s.logger.(*testlogger.TestLogger)
@@ -6306,7 +6307,7 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		expectedLog := tl.Expect(
 			testlogger.Debug,
 			"chasm time skipping skipped because the execution is not skippable",
-			tag.ArchetypeID(root.ArchetypeID()),
+			tag.Archetype(archetypeFqn),
 		)
 
 		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
@@ -6318,6 +6319,7 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 
 	s.Run("GateSkippableButTimerDue_NoStateChange", func() {
 		root := gateRoot(true)
+		archetypeFqn := FullyQualifiedName(testLibraryName, testTimeSkippingComponentName)
 		root.serializedNode.GetMetadata().GetComponentAttributes().GetPureTasks()[0].ScheduledTime =
 			timestamppb.New(baseTime)
 		var recorded *TimeSkippingTransition
@@ -6327,7 +6329,7 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		expectedLog := tl.Expect(
 			testlogger.Debug,
 			"a pending task blocks chasm time skipping",
-			tag.ArchetypeID(root.ArchetypeID()),
+			tag.Archetype(archetypeFqn),
 			tag.String("chasm-task-type", testPureTaskFQN),
 		)
 
