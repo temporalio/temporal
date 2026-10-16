@@ -221,7 +221,10 @@ func (w *fairTaskWriter) writeBatch(reqs []*writeTaskRequest) (retErr error) {
 	if err == nil {
 		w.backlogMgr.wroteNewTasks(resp) // must be called before unpin()
 	} else {
-		w.logger.Error("Persistent store operation failure", tag.StoreOperationCreateTask, tag.Error(err))
+		// Context canceled is expected if the task queue unloads during a write.
+		if !common.IsContextCanceledErr(err) {
+			w.logger.Error("Persistent store operation failure", tag.StoreOperationCreateTask, tag.Error(err))
+		}
 		w.backlogMgr.signalIfFatal(err)
 	}
 	return err
