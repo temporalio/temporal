@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -21,6 +22,7 @@ import (
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/testing/fakedata"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -39,6 +41,7 @@ type (
 		controller     *gomock.Controller
 		shardContext   *historyi.MockShardContext
 		metricsHandler *metricstest.CaptureHandler
+		logger         *testlogger.TestLogger
 
 		namespaceID string
 		workflowID  string
@@ -78,6 +81,7 @@ func (s *signalWithStartWorkflowSuite) SetupTest() {
 	s.currentRunID = uuid.New().String()
 	s.timeSource = clock.NewEventTimeSource()
 	s.metricsHandler = metricstest.NewCaptureHandler()
+	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
 	s.currentExecutionInfo = &persistencespb.WorkflowExecutionInfo{
 		WorkflowId:    s.workflowID,
 		ExecutionTime: timestamppb.New(s.timeSource.Now()),
@@ -85,7 +89,7 @@ func (s *signalWithStartWorkflowSuite) SetupTest() {
 
 	s.config = tests.NewDynamicConfig()
 	s.shardContext.EXPECT().GetConfig().Return(s.config).AnyTimes()
-	s.shardContext.EXPECT().GetLogger().Return(log.NewTestLogger()).AnyTimes()
+	s.shardContext.EXPECT().GetLogger().Return(s.logger).AnyTimes()
 	s.shardContext.EXPECT().GetThrottledLogger().Return(log.NewTestLogger()).AnyTimes()
 	s.shardContext.EXPECT().GetMetricsHandler().Return(s.metricsHandler).AnyTimes()
 	s.shardContext.EXPECT().GetTimeSource().Return(s.timeSource).AnyTimes()
@@ -134,9 +138,11 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_Dedup() {
 		s.currentMutableState,
 	)
 	request := s.randomRequest()
+	request.Links = []*commonpb.Link{{}}
 
 	s.currentMutableState.EXPECT().IsWorkflowCloseAttempted().Return(false)
 	s.currentMutableState.EXPECT().IsSignalRequested(request.GetRequestId()).Return(true)
+	capture := s.logger.StartCapture()
 
 	err := signalWorkflow(
 		ctx,
@@ -146,6 +152,17 @@ func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_Dedup() {
 	)
 	s.NoError(err)
 	s.Zero(released)
+	capture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+		Level:   testlogger.Info,
+		Message: "Duplicate signal request ID, request links were not attached.",
+		Tags: map[string]any{
+			"wf-namespace": request.GetNamespace(),
+			"wf-id":        request.GetWorkflowId(),
+			"wf-run-id":    s.currentRunID,
+			"request-id":   request.GetRequestId(),
+			"link-count":   1,
+		},
+	})
 }
 
 func (s *signalWithStartWorkflowSuite) TestSignalWorkflow_NewWorkflowTask() {

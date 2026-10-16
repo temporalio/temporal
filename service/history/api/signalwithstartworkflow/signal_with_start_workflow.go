@@ -379,6 +379,14 @@ func signalWorkflow(
 	}
 
 	if request.GetRequestId() != "" && mutableState.IsSignalRequested(request.GetRequestId()) {
+		if len(request.GetLinks()) > 0 {
+			shardContext.GetLogger().Info("Duplicate signal request ID, request links were not attached.",
+				tag.WorkflowNamespace(request.GetNamespace()),
+				tag.WorkflowID(request.GetWorkflowId()),
+				tag.WorkflowRunID(mutableState.GetExecutionState().GetRunId()),
+				tag.RequestID(request.GetRequestId()),
+				tag.Int("link-count", len(request.GetLinks())))
+		}
 		return nil
 	}
 	if request.GetRequestId() != "" {
