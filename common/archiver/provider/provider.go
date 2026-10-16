@@ -96,15 +96,8 @@ func (f CustomVisibilityArchiverFactoryFunc) NewCustomVisibilityArchiver(
 	return f(params)
 }
 
-// ValidateConfigs returns an error if the configs set up an archiver that is excluded from this build.
-func ValidateConfigs(
-	historyArchiverConfigs *config.HistoryArchiverProvider,
-	visibilityArchiverConfigs *config.VisibilityArchiverProvider,
-) error {
-	return validateGstorageConfigs(historyArchiverConfigs, visibilityArchiverConfigs)
-}
-
-// NewArchiverProvider returns a new Archiver provider
+// NewArchiverProvider returns a new Archiver provider. It returns an error if the configs set up an
+// archiver that is excluded from this build.
 func NewArchiverProvider(
 	historyArchiverConfigs *config.HistoryArchiverProvider,
 	visibilityArchiverConfigs *config.VisibilityArchiverProvider,
@@ -113,7 +106,10 @@ func NewArchiverProvider(
 	executionManager persistence.ExecutionManager,
 	logger log.Logger,
 	metricsHandler metrics.Handler,
-) ArchiverProvider {
+) (ArchiverProvider, error) {
+	if err := validateGstorageConfigs(historyArchiverConfigs, visibilityArchiverConfigs); err != nil {
+		return nil, err
+	}
 	return &archiverProvider{
 		historyArchiverConfigs:          historyArchiverConfigs,
 		visibilityArchiverConfigs:       visibilityArchiverConfigs,
@@ -124,7 +120,7 @@ func NewArchiverProvider(
 		customVisibilityArchiverFactory: customVisibilityArchiverFactory,
 		historyArchivers:                make(map[string]archiver.HistoryArchiver),
 		visibilityArchivers:             make(map[string]archiver.VisibilityArchiver),
-	}
+	}, nil
 }
 
 func (p *archiverProvider) GetHistoryArchiver(scheme string) (historyArchiver archiver.HistoryArchiver, err error) {

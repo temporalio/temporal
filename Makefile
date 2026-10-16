@@ -44,19 +44,19 @@ PERSISTENCE_DRIVER ?= cassandra
 TEMPORAL_DB ?= temporal
 VISIBILITY_DB ?= temporal_visibility
 
-# Extra comma-separated Go build tags, appended to the defaults below, e.g.
-# EXTRA_BUILD_TAGS=temporal_minimal,temporal_with_gstorage. BUILD_TAG and TEST_TAG are the older names
+# Comma-separated Go build tags to add, e.g. BUILD_TAGS=temporal_minimal,temporal_with_gstorage. They
+# are added to the defaults below, which can't be removed. BUILD_TAG and TEST_TAG are the older names
 # and still work.
-EXTRA_BUILD_TAGS ?= $(BUILD_TAG)
-EXTRA_TEST_BUILD_TAGS ?= $(TEST_TAG)
+BUILD_TAGS ?= $(BUILD_TAG)
+TEST_BUILD_TAGS ?= $(TEST_TAG)
 
 # The `disable_grpc_modules` build tag excludes gRPC dependencies from cloud.google.com/go/storage,
 # reducing binary size since we only use the REST client (storage.NewClient), not the
 # gRPC client (storage.NewGRPCClient). Related issue: https://github.com/googleapis/google-cloud-go/issues/12343
-ALL_BUILD_TAGS := disable_grpc_modules,$(EXTRA_BUILD_TAGS)
-ALL_TEST_BUILD_TAGS := $(ALL_BUILD_TAGS),test_dep,$(EXTRA_TEST_BUILD_TAGS)
-BUILD_TAG_FLAG := -tags $(ALL_BUILD_TAGS)
-TEST_TAG_FLAG := -tags $(ALL_TEST_BUILD_TAGS)
+override ALL_BUILD_TAGS := disable_grpc_modules,$(BUILD_TAGS)
+override ALL_TEST_BUILD_TAGS := $(ALL_BUILD_TAGS),test_dep,$(TEST_BUILD_TAGS)
+override BUILD_TAG_FLAG := -tags $(ALL_BUILD_TAGS)
+override TEST_TAG_FLAG := -tags $(ALL_TEST_BUILD_TAGS)
 
 # 20 minutes is the upper bound defined for all tests. (Tests in CI take up to about 14:30 now)
 # If you change this, also change .github/workflows/run-tests.yml!
@@ -603,13 +603,18 @@ unit-test-coverage: prepare-coverage-test
 	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(UNIT_TEST_DIRS)
 
-# Builds every package with temporal_minimal, then runs the unit tests of every package with a file
-# constrained by it, so both variants are tested. unit-test-coverage covers the default build.
-unit-test-build-tags:
+# Packages with a file constrained by temporal_minimal.
+MINIMAL_UNIT_TEST_DIRS = $(sort $(dir $(shell grep -rlE --include='*.go' '^//go:build .*temporal_minimal' .)))
+
+# Builds every package with temporal_minimal (the variant that ships), then runs the unit tests of
+# MINIMAL_UNIT_TEST_DIRS with it, without test_dep. unit-test-coverage covers the default build. The
+# second -tags replaces the one in COMPILED_TEST_ARGS, since the last -tags flag wins.
+unit-test-build-tags: prepare-coverage-test
+	$(if $(MINIMAL_UNIT_TEST_DIRS),,$(error No package has a file constrained by temporal_minimal))
 	@printf $(COLOR) "Build and run unit tests with temporal_minimal..."
 	CGO_ENABLED=$(CGO_ENABLED) go build -tags $(ALL_BUILD_TAGS),temporal_minimal ./...
-	$(MAKE) unit-test-coverage EXTRA_TEST_BUILD_TAGS="$(EXTRA_TEST_BUILD_TAGS),temporal_minimal" \
-		UNIT_TEST_DIRS="$$(grep -rlE --include='*.go' '^//go:build .*temporal_minimal' . | xargs -n1 dirname | sort -u | tr '\n' ' ')"
+	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
+		$(COMPILED_TEST_ARGS) -tags $(ALL_BUILD_TAGS),temporal_minimal -coverprofile=$(NEW_COVER_PROFILE) $(MINIMAL_UNIT_TEST_DIRS)
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."

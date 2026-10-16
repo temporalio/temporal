@@ -217,7 +217,7 @@ jobs:
 
       - run: make pre-build-functional-test-coverage
         env:
-          EXTRA_TEST_BUILD_TAGS: ${{ env.FUNCTIONAL_TEST_BUILD_TAGS }}
+          TEST_BUILD_TAGS: ${{ env.FUNCTIONAL_TEST_BUILD_TAGS }}
 
       - name: Save Go dependencies
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
@@ -435,7 +435,7 @@ jobs:
           TEST_TOTAL_SHARDS: ${{ matrix.total_shards }}
           TEST_SHARD_INDEX: ${{ matrix.total_shards && matrix.shard_index }} # guard with total_shards to avoid falsy eval of shard_index=0
           TEST_ARGS: "${{ matrix.test_args }}"
-          EXTRA_TEST_BUILD_TAGS: ${{ env.FUNCTIONAL_TEST_BUILD_TAGS }}
+          TEST_BUILD_TAGS: ${{ env.FUNCTIONAL_TEST_BUILD_TAGS }}
           TEMPORAL_TEST_LOG_FILE: ${{ github.workspace }}/.testoutput/debug.log
           TEMPORAL_TEST_LOG_LEVEL: warn
           TEMPORAL_TEST_CLUSTER_EVENTS_FILE: ${{ github.workspace }}/.testoutput/test-cluster-events.jsonl

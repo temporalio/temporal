@@ -7,16 +7,40 @@ import (
 	"go.temporal.io/server/common/config"
 )
 
+func (s *ProviderSuite) TestNewArchiverProvider_GstorageExcluded() {
+	for _, configs := range []struct {
+		history    *config.HistoryArchiverProvider
+		visibility *config.VisibilityArchiverProvider
+	}{
+		{history: &config.HistoryArchiverProvider{Gstorage: &config.GstorageArchiver{}}},
+		{visibility: &config.VisibilityArchiverProvider{Gstorage: &config.GstorageArchiver{}}},
+	} {
+		provider, err := NewArchiverProvider(
+			configs.history,
+			configs.visibility,
+			nil,
+			nil,
+			s.mockExecutionManager,
+			s.logger,
+			s.metricsHandler,
+		)
+		s.ErrorContains(err, "temporal_with_gstorage")
+		s.Nil(provider)
+	}
+}
+
 func (s *ProviderSuite) TestGetArchiver_GstorageExcluded() {
-	provider := NewArchiverProvider(
-		&config.HistoryArchiverProvider{Gstorage: &config.GstorageArchiver{}},
-		&config.VisibilityArchiverProvider{Gstorage: &config.GstorageArchiver{}},
+	// A namespace can have a gs:// archival URI even if the gstorage provider isn't configured.
+	provider, err := NewArchiverProvider(
+		&config.HistoryArchiverProvider{},
+		&config.VisibilityArchiverProvider{},
 		nil,
 		nil,
 		s.mockExecutionManager,
 		s.logger,
 		s.metricsHandler,
 	)
+	s.NoError(err)
 
 	historyArchiver, err := provider.GetHistoryArchiver(archiver.URISchemeGstorage)
 	s.ErrorIs(err, ErrUnknownScheme)
@@ -27,15 +51,4 @@ func (s *ProviderSuite) TestGetArchiver_GstorageExcluded() {
 	s.ErrorIs(err, ErrUnknownScheme)
 	s.ErrorContains(err, "temporal_with_gstorage")
 	s.Nil(visibilityArchiver)
-}
-
-func (s *ProviderSuite) TestValidateConfigs_GstorageExcluded() {
-	s.NoError(ValidateConfigs(nil, nil))
-	s.NoError(ValidateConfigs(&config.HistoryArchiverProvider{}, &config.VisibilityArchiverProvider{}))
-
-	err := ValidateConfigs(&config.HistoryArchiverProvider{Gstorage: &config.GstorageArchiver{}}, nil)
-	s.ErrorContains(err, "temporal_with_gstorage")
-
-	err = ValidateConfigs(nil, &config.VisibilityArchiverProvider{Gstorage: &config.GstorageArchiver{}})
-	s.ErrorContains(err, "temporal_with_gstorage")
 }
