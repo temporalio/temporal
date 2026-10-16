@@ -254,6 +254,7 @@ func (i *Redirection) Intercept(
 ) (_ any, retError error) {
 	logger := log.With(i.logger, logtags.NexusStage(info.FullMethod)...)
 	defer log.CapturePanic(logger, &retError)
+
 	if raFn, ok := i.redirectResponsesByFullMethod[info.FullMethod]; ok {
 		if !i.RedirectionAllowed(ctx) {
 			return handler(ctx, req)
