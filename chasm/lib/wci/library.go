@@ -27,6 +27,12 @@ type Library struct {
 	SignalVersionWorkflowTaskHandler *SignalVersionWorkflowTaskHandler
 }
 
+// NewNilLibrary has no handlers; non-history services and offline readers (tdbg) use it to
+// resolve and decode WCI components and tasks.
+func NewNilLibrary() *Library {
+	return &Library{}
+}
+
 func NewLibrary(
 	handler *handler,
 	fetchSnapshot *FetchSnapshotTaskHandler,

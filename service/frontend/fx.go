@@ -15,6 +15,7 @@ import (
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	chasmtests "go.temporal.io/server/chasm/lib/tests"
+	chasmwci "go.temporal.io/server/chasm/lib/wci"
 	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -155,6 +156,7 @@ var Module = fx.Options(
 	fx.Provide(chasmnexus.NewFrontendHandler),
 	chasmnexus.Module,
 	chasmscheduler.Module,
+	chasmwci.ComponentModule,
 	chasmworkflow.Module,
 	chasmcallback.Module,
 	activity.FrontendModule,
