@@ -154,3 +154,25 @@ func TestReadTestcases(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []Testcase{{Name: "TestOne"}, {Name: "TestTwo"}}, cases)
 }
+
+func TestLeafTestDurations(t *testing.T) {
+	cases := []Testcase{
+		{Name: "TestSuite", Time: "25"},
+		{Name: "TestSuite/TestFlaky", Time: "4"},
+		{Name: "TestSuite/TestFlaky (retry 1) (final)", Time: "7"},
+		{Name: "TestSuite/TestSkipped", Time: "30", Skipped: &Result{}},
+		{Name: "TestSuite/TestDeep", Time: "11"},
+		{Name: "TestSuite/TestDeep/case-a", Time: "2"},
+		{Name: "TestSuite/TestDeep/case-b", Time: "3"},
+		{Name: "TestInvalid", Time: "invalid"},
+		{Name: "TestNegative", Time: "-1"},
+	}
+
+	require.Equal(t, map[string]float64{
+		"TestInvalid":               0,
+		"TestNegative":              0,
+		"TestSuite/TestDeep/case-a": 2,
+		"TestSuite/TestDeep/case-b": 3,
+		"TestSuite/TestFlaky":       7,
+	}, LeafTestDurations(cases))
+}
