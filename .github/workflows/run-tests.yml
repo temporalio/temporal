@@ -288,13 +288,9 @@ jobs:
           export TEST_RUNNER_TIMEOUT="$(("$GITHUB_TIMEOUT" - 1))m"
           ./develop/github/monitor_test.sh make unit-test-coverage
 
-      - name: Run unit tests with temporal_minimal
+      - name: Run unit tests with build tags
         timeout-minutes: ${{ fromJSON(env.GITHUB_TIMEOUT) }}
-        # Re-runs the unit tests of every package with a file constrained by temporal_minimal, so both
-        # variants are tested. Packages are found automatically.
-        run: |
-          mapfile -t packages < <(grep -rlE --include='*.go' '^//go:build .*temporal_minimal' . | xargs -n1 dirname | sort -u)
-          go test -tags disable_grpc_modules,test_dep,temporal_minimal -timeout="$TEST_TIMEOUT" "${packages[@]}"
+        run: make unit-test-build-tags
 
       - name: Post-test reporting
         if: always()

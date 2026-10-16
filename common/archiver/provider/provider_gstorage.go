@@ -7,8 +7,6 @@ import (
 	"go.temporal.io/server/common/archiver/gcloud"
 )
 
-const gstorageURIScheme = gcloud.URIScheme
-
 func (p *archiverProvider) newGstorageHistoryArchiver() (archiver.HistoryArchiver, error) {
 	if p.historyArchiverConfigs.Gstorage == nil {
 		return nil, ErrArchiverConfigNotFound

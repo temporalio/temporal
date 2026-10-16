@@ -9,9 +9,7 @@ import (
 )
 
 // The Google Cloud Storage archiver is excluded from this build.
-const gstorageURIScheme = "gs"
-
-var errGstorageExcluded = fmt.Errorf("%w: %q (Google Cloud Storage archival is excluded from this build, see build tag temporal_with_gstorage)", ErrUnknownScheme, gstorageURIScheme)
+var errGstorageExcluded = fmt.Errorf("%w: %q (Google Cloud Storage archival is excluded from this build, see build tag temporal_with_gstorage)", ErrUnknownScheme, archiver.URISchemeGstorage)
 
 func (p *archiverProvider) newGstorageHistoryArchiver() (archiver.HistoryArchiver, error) {
 	return nil, errGstorageExcluded
