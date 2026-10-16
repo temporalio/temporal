@@ -1321,8 +1321,10 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 	}
 
+	pendingScheduledEvents := make(map[int64]struct{}, taskCount)
 	for i := range int64(taskCount) {
 		scheduledEventID := i * 3
+		pendingScheduledEvents[scheduledEventID] = struct{}{}
 		addRequest := matchingservice.AddActivityTaskRequest{
 			NamespaceId:            namespaceID,
 			Execution:              workflowExecution,
@@ -1369,8 +1371,6 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		}).AnyTimes()
 
 	for i := int64(0); i < taskCount; {
-		scheduledEventID := i * 3
-
 		result, err := s.matchingEngine.PollActivityTaskQueue(context.Background(), &matchingservice.PollActivityTaskQueueRequest{
 			NamespaceId: namespaceID,
 			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
@@ -1384,6 +1384,13 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 		if len(result.TaskToken) == 0 {
 			s.logger.Debug("empty poll returned")
 			continue
+		}
+		actualToken, err := s.matchingEngine.tokenSerializer.Deserialize(result.TaskToken)
+		s.NoError(err)
+		s.Contains(pendingScheduledEvents, actualToken.GetScheduledEventId(), "each scheduled activity must be delivered exactly once")
+		delete(pendingScheduledEvents, actualToken.GetScheduledEventId())
+		if !s.fairness {
+			s.Equal(i*3, actualToken.GetScheduledEventId())
 		}
 		s.Equal(activityID, result.ActivityId)
 		s.Equal(activityType, result.ActivityType)
@@ -1399,15 +1406,17 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 			NamespaceId:      namespaceID,
 			WorkflowId:       workflowID,
 			RunId:            runID,
-			ScheduledEventId: scheduledEventID,
+			ScheduledEventId: actualToken.GetScheduledEventId(),
 			ActivityId:       activityID,
 			ActivityType:     activityTypeName,
 		}
 
-		serializedToken, _ := s.matchingEngine.tokenSerializer.Serialize(taskToken)
+		serializedToken, err := s.matchingEngine.tokenSerializer.Serialize(taskToken)
+		s.NoError(err)
 		s.Equal(serializedToken, result.TaskToken)
 		i++
 	}
+	s.Empty(pendingScheduledEvents)
 	s.expectEmptyBacklog(tlID)
 	expectedRange := int64((taskCount + 1) / rangeSize)
 	// Due to conflicts some ids are skipped and more real ranges are used.
@@ -3746,7 +3755,7 @@ func (s *matchingEngineSuite) TestConcurrentAddWorkflowTasksDBErrors() {
 	}
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
-	s.taskManager.addFault("CreateTasks", "ConditionFailed", 0.1)
+	s.taskManager.addFault("CreateTasks", "PersistenceLimit", 0.1)
 	s.taskManager.addFault("GetTasks", "Unavailable", 0.1)
 
 	s.concurrentPublishAndConsumeValidateBacklogCounter(150, 100, 0)
@@ -3759,7 +3768,7 @@ func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksNoDBErrors() {
 func (s *matchingEngineSuite) TestConcurrentAdd_PollWorkflowTasksDBErrors() {
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
-	s.taskManager.addFault("CreateTasks", "ConditionFailed", 0.1)
+	s.taskManager.addFault("CreateTasks", "PersistenceLimit", 0.1)
 	s.taskManager.addFault("GetTasks", "Unavailable", 0.1)
 
 	s.concurrentPublishAndConsumeValidateBacklogCounter(20, 100, 100)
@@ -3772,7 +3781,7 @@ func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasksNoDBErrors() {
 func (s *matchingEngineSuite) TestLesserNumberOfPollersThanTasksDBErrors() {
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
-	s.taskManager.addFault("CreateTasks", "ConditionFailed", 0.1)
+	s.taskManager.addFault("CreateTasks", "PersistenceLimit", 0.1)
 	s.taskManager.addFault("GetTasks", "Unavailable", 0.1)
 
 	s.concurrentPublishAndConsumeValidateBacklogCounter(1, 500, 200)
@@ -3785,7 +3794,8 @@ func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksN
 func (s *matchingEngineSuite) TestMultipleWorkersLesserNumberOfPollersThanTasksDBErrors() {
 	s.logger.Expect(testlogger.Error, "Persistent store operation failure")
 	s.logger.Expect(testlogger.Error, "unexpected error dispatching task")
-	s.taskManager.addFault("CreateTasks", "ConditionFailed", 0.1)
+	// Inject a retryable persistence failure without changing task queue ownership.
+	s.taskManager.addFault("CreateTasks", "PersistenceLimit", 0.1)
 	s.taskManager.addFault("GetTasks", "Unavailable", 0.1)
 
 	s.concurrentPublishAndConsumeValidateBacklogCounter(5, 500, 200)

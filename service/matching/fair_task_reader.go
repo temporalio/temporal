@@ -667,7 +667,8 @@ func (tr *fairTaskReader) getLevels() (readLevel, ackLevel fairLevel) {
 }
 
 func (tr *fairTaskReader) knownCountLocked() int64 {
-	if tr.atEnd {
+	// Pending writes may be counted in persistence before their tasks reach this reader.
+	if tr.atEnd && !tr.ackLevelPinnedLocked() {
 		return int64(tr.loadedTasks)
 	}
 	return -1

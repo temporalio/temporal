@@ -1232,6 +1232,41 @@ func (s *BacklogManagerTestSuite) testStandingBacklog(p standingBacklogParams) {
 	s.T().Logf("processed %d tasks, %.3f/s", processed.Load(), float64(processed.Load())/elapsed.Seconds())
 }
 
+func (s *BacklogManagerTestSuite) TestFairReaderCountWithPendingWrite() {
+	if !s.fairness {
+		s.T().Skip("specific to the fair task reader")
+	}
+	s.setupToCaptureTasks()
+	blm := s.blm.(*fairBacklogManagerImpl)
+	// Use an unstarted reader so the read/write interleaving is deterministic.
+	blm.db.subqueues = []*dbSubqueue{{
+		SubqueueInfo: persistencespb.SubqueueInfo{ApproximateBacklogCount: 2},
+	}}
+	reader := newFairTaskReader(blm, subqueueZero, fairLevel{})
+	task := func(id int64) *persistencespb.AllocatedTaskInfo {
+		return &persistencespb.AllocatedTaskInfo{
+			TaskId:   id,
+			TaskPass: 1,
+			Data: &persistencespb.TaskInfo{
+				CreateTime: timestamp.TimeNowPtrUtc(),
+				ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(3000),
+			},
+		}
+	}
+
+	// Persistence includes the writer's task, but the read snapshot predates it.
+	reader.getAndPinAckLevel()
+	reader.mergeTasks([]*persistencespb.AllocatedTaskInfo{task(1)}, mergeReadToEnd)
+	s.Require().Equal(int64(2), blm.db.getTotalApproximateBacklogCount())
+
+	// A write buffered behind a pending read must also keep the count pinned after unpin.
+	reader.readPending = true
+	reader.wroteNewTasks([]*persistencespb.AllocatedTaskInfo{task(2)})
+	reader.unpinAckLevel(nil)
+	reader.mergeTasks(nil, mergeReadToEnd)
+	s.Require().Equal(int64(2), blm.db.getTotalApproximateBacklogCount())
+}
+
 // TestFairReaderReMergeOfCompletedWriteKeepsReadLevel reproduces the write/read race that
 // triggered a bug in fair reader.
 func (s *BacklogManagerTestSuite) TestFairReaderReMergeOfCompletedWriteKeepsReadLevel() {
