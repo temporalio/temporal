@@ -12,12 +12,17 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/proto"
 )
 
 func TestGrantEagerActivityDispatch(t *testing.T) {
+	t.Parallel()
+
 	priority := &commonpb.Priority{PriorityKey: 2, FairnessKey: "fairness-key"}
 	request := &workflowservice.StartActivityExecutionRequest{
 		Namespace: "namespace",
@@ -26,10 +31,12 @@ func TestGrantEagerActivityDispatch(t *testing.T) {
 	}
 
 	testCases := []struct {
-		name     string
-		response *matchingservice.GrantEagerDispatchResponse
-		err      error
-		granted  bool
+		name                    string
+		response                *matchingservice.GrantEagerDispatchResponse
+		err                     error
+		granted                 bool
+		noClient                bool
+		disableTaskQueueMetrics bool
 	}{
 		{
 			name: "granted",
@@ -52,10 +59,39 @@ func TestGrantEagerActivityDispatch(t *testing.T) {
 			name:     "missing response item",
 			response: &matchingservice.GrantEagerDispatchResponse{},
 		},
+		{
+			name:     "missing client",
+			noClient: true,
+		},
+		{
+			name: "task queue metrics omitted",
+			response: &matchingservice.GrantEagerDispatchResponse{Items: []*matchingservice.GrantEagerDispatchResponse_Item{
+				{GrantedCount: 1},
+			}},
+			granted:                 true,
+			disableTaskQueueMetrics: true,
+		},
 	}
 
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			metricsHandler := metricstest.NewCaptureHandler()
+			capture := metricsHandler.StartCapture()
+			t.Cleanup(func() { metricsHandler.StopCapture(capture) })
+			h := &handler{
+				metricsHandler: metricsHandler,
+				config: &Config{
+					BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(!test.disableTaskQueueMetrics),
+				},
+			}
+			if test.noClient {
+				require.False(t, h.grantEagerActivityDispatch(t.Context(), "namespace-id", request))
+				require.Empty(t, capture.SnapshotMetric(metrics.EagerDispatchRequestsSent.Name()))
+				return
+			}
+
 			controller := gomock.NewController(t)
 			matchingClient := matchingservicemock.NewMockMatchingServiceClient(controller)
 			matchingClient.EXPECT().GrantEagerDispatch(gomock.Any(), gomock.Any()).DoAndReturn(
@@ -70,8 +106,22 @@ func TestGrantEagerActivityDispatch(t *testing.T) {
 				},
 			)
 
-			handler := &handler{matchingClient: matchingClient}
-			require.Equal(t, test.granted, handler.grantEagerActivityDispatch(context.Background(), "namespace-id", request))
+			h.matchingClient = matchingClient
+			require.Equal(t, test.granted, h.grantEagerActivityDispatch(t.Context(), "namespace-id", request))
+
+			requestMetrics := capture.SnapshotMetric(metrics.EagerDispatchRequestsSent.Name())
+			require.Len(t, requestMetrics, 1)
+			require.Equal(t, int64(1), requestMetrics[0].Value)
+			expectedTaskQueue := "activity-task-queue"
+			if test.disableTaskQueueMetrics {
+				expectedTaskQueue = "__omitted__"
+			}
+			require.Equal(t, map[string]string{
+				metrics.NamespaceTag("").Key:                                   "namespace",
+				metrics.UnsafeTaskQueueTag("").Key:                             expectedTaskQueue,
+				metrics.OperationTag("").Key:                                   "StartActivityExecution",
+				metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_ACTIVITY).Key: "Activity",
+			}, requestMetrics[0].Tags)
 		})
 	}
 }
