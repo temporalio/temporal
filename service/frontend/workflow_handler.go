@@ -6485,7 +6485,10 @@ func (wh *WorkflowHandler) ListBatchOperations(
 }
 
 func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *workflowservice.PollNexusTaskQueueRequest) (_ *workflowservice.PollNexusTaskQueueResponse, retError error) {
-	defer log.CapturePanic(wh.logger, &retError)
+	logTags := []tag.Tag{tag.NexusStageHandlerTaskDelivery, tag.Operation("PollNexusTaskQueue"), tag.WorkflowNamespace(request.GetNamespace())}
+	logger := log.With(wh.logger, logTags...)
+	throttledLogger := log.With(wh.throttledLogger, logTags...)
+	defer log.CapturePanic(logger, &retError)
 
 	callTime := time.Now().UTC()
 
@@ -6493,8 +6496,8 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 		return nil, errRequestNotSet
 	}
 
-	wh.logger.Debug("Received PollNexusTaskQueue")
-	if err := common.ValidateLongPollContextTimeout(ctx, "PollNexusTaskQueue", wh.throttledLogger); err != nil {
+	logger.Debug("Received PollNexusTaskQueue")
+	if err := common.ValidateLongPollContextTimeout(ctx, "PollNexusTaskQueue", throttledLogger); err != nil {
 		return nil, err
 	}
 
@@ -6528,7 +6531,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 				},
 			})
 			if err != nil {
-				wh.logger.Error("Failed to record worker heartbeat from nexus poll request.",
+				logger.Error("Failed to record worker heartbeat from nexus poll request.",
 					tag.NexusTaskQueueName(request.GetTaskQueue().GetName()),
 					tag.Error(err))
 			}
@@ -6572,7 +6575,7 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 		if ok {
 			ctxTimeout = ctxDeadline.Sub(callTime).String()
 		}
-		wh.logger.Error("Unable to call matching.PollNexusTaskQueue.",
+		logger.Error("Unable to call matching.PollNexusTaskQueue.",
 			tag.WorkflowTaskQueueName(request.GetTaskQueue().GetName()),
 			tag.Timeout(ctxTimeout),
 			tag.Error(err))
@@ -6589,7 +6592,8 @@ func (wh *WorkflowHandler) PollNexusTaskQueue(ctx context.Context, request *work
 }
 
 func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, request *workflowservice.RespondNexusTaskCompletedRequest) (_ *workflowservice.RespondNexusTaskCompletedResponse, retError error) {
-	defer log.CapturePanic(wh.logger, &retError)
+	logger := log.With(wh.logger, tag.NexusStageHandlerTaskDelivery, tag.Operation("RespondNexusTaskCompleted"), tag.WorkflowNamespace(request.GetNamespace()))
+	defer log.CapturePanic(logger, &retError)
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -6656,7 +6660,8 @@ func (wh *WorkflowHandler) RespondNexusTaskCompleted(ctx context.Context, reques
 }
 
 func (wh *WorkflowHandler) RespondNexusTaskFailed(ctx context.Context, request *workflowservice.RespondNexusTaskFailedRequest) (_ *workflowservice.RespondNexusTaskFailedResponse, retError error) {
-	defer log.CapturePanic(wh.logger, &retError)
+	logger := log.With(wh.logger, tag.NexusStageHandlerTaskDelivery, tag.Operation("RespondNexusTaskFailed"), tag.WorkflowNamespace(request.GetNamespace()))
+	defer log.CapturePanic(logger, &retError)
 
 	if request == nil {
 		return nil, errRequestNotSet
@@ -7007,7 +7012,11 @@ func (wh *WorkflowHandler) cancelOutstandingPoll(
 	)
 	// We can not do much if this call fails.  Just log the error and move on.
 	if err != nil {
-		wh.logger.Warn("Failed to cancel outstanding poller.",
+		logger := wh.logger
+		if taskQueueType == enumspb.TASK_QUEUE_TYPE_NEXUS {
+			logger = log.With(logger, tag.NexusStageHandlerTaskDelivery)
+		}
+		logger.Warn("Failed to cancel outstanding poller.",
 			tag.WorkflowTaskQueueName(taskQueue.GetName()), tag.Error(err))
 	}
 
