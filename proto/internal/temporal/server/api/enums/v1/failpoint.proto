@@ -1,0 +1,39 @@
+syntax = "proto3";
+
+package temporal.server.api.enums.v1;
+
+option go_package = "go.temporal.io/server/api/enums/v1;enums";
+
+// FailpointKey identifies a specific failpoint in the system.
+// Keys are added together with the failpoints that use them.
+enum FailpointKey {
+  FAILPOINT_KEY_UNSPECIFIED = 0;
+}
+
+// FailpointAction defines what a failpoint should do when triggered.
+enum FailpointAction {
+  // FAILPOINT_ACTION_UNSPECIFIED is invalid and should not be used.
+  FAILPOINT_ACTION_UNSPECIFIED = 0;
+  // FAILPOINT_ACTION_OFF disables the failpoint.
+  FAILPOINT_ACTION_OFF = 1;
+  // FAILPOINT_ACTION_RETURN causes the failpoint to deliver the specified value(s).
+  FAILPOINT_ACTION_RETURN = 2;
+  // FAILPOINT_ACTION_PANIC causes the failpoint to panic.
+  FAILPOINT_ACTION_PANIC = 3;
+  // FAILPOINT_ACTION_BLOCK causes the failpoint to hang until the failpoint is disabled.
+  FAILPOINT_ACTION_BLOCK = 4;
+  // FAILPOINT_ACTION_PAUSE causes the failpoint to sleep for a specified duration.
+  FAILPOINT_ACTION_PAUSE = 5;
+  // FAILPOINT_ACTION_CALL causes the failpoint to call a specified function.
+  FAILPOINT_ACTION_CALL = 6;
+}
+
+// FailpointRecurrence specifies how many times a failpoint should trigger.
+enum FailpointRecurrence {
+  // FAILPOINT_RECURRENCE_UNSPECIFIED is invalid and should not be used.
+  FAILPOINT_RECURRENCE_UNSPECIFIED = 0;
+  // FAILPOINT_RECURRENCE_ONCE causes the failpoint to trigger once then disable.
+  FAILPOINT_RECURRENCE_ONCE = 1;
+  // FAILPOINT_RECURRENCE_ALWAYS causes the failpoint to trigger every time.
+  FAILPOINT_RECURRENCE_ALWAYS = 2;
+}

@@ -44,3 +44,8 @@
     - 'core::0131::response-message-name'
     - 'core::0135::method-signature'
     - 'core::0135::response-message-name'
+
+- included_paths:
+    - '**/failpointservice/v1/service.proto'
+  disabled_rules:
+    - 'core::0136::prepositions'
