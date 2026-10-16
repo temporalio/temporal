@@ -958,10 +958,11 @@ type (
 	retentionTestComponent struct {
 		chasm.UnimplementedComponent
 	}
-	extendedRetentionComponent struct{ retentionTestComponent }
-	shortRetentionComponent    struct{ retentionTestComponent }
-	noRetentionComponent       struct{ retentionTestComponent }
-	workflowRetentionComponent struct{ retentionTestComponent }
+	extendedRetentionComponent  struct{ retentionTestComponent }
+	shortRetentionComponent     struct{ retentionTestComponent }
+	shortenedRetentionComponent struct{ retentionTestComponent }
+	noRetentionComponent        struct{ retentionTestComponent }
+	workflowRetentionComponent  struct{ retentionTestComponent }
 )
 
 func (*retentionTestComponent) LifecycleState(chasm.Context) chasm.LifecycleState {
@@ -973,10 +974,13 @@ func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ChasmComponentRetentio
 
 	closeTime := time.Unix(0, 0)
 	retentionJitterDuration := time.Second
+	minRetentionGlobal := 24 * time.Hour
+	minRetentionLocal := time.Hour
 
 	const testLibraryName = "TestLibrary"
 	extendedArchetypeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(testLibraryName, "Extended"))
 	shortArchetypeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(testLibraryName, "Short"))
+	shortenedArchetypeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(testLibraryName, "Shortened"))
 	noRetentionArchetypeID := chasm.GenerateTypeID(chasm.FullyQualifiedName(testLibraryName, "NoRetention"))
 
 	newChasmRegistry := func(t *testing.T) *chasm.Registry {
@@ -996,6 +1000,12 @@ func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ChasmComponentRetentio
 				"Short",
 				chasm.WithRetention(func(*namespace.Namespace) time.Duration {
 					return time.Minute
+				}),
+			),
+			chasm.NewRegistrableComponent[*shortenedRetentionComponent](
+				"Shortened",
+				chasm.WithRetention(func(*namespace.Namespace) time.Duration {
+					return 3 * 24 * time.Hour
 				}),
 			),
 			chasm.NewRegistrableComponent[*noRetentionComponent]("NoRetention"),
@@ -1027,6 +1037,7 @@ func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ChasmComponentRetentio
 		name               string
 		archetypeID        chasm.ArchetypeID
 		namespaceRetention time.Duration
+		localNamespace     bool
 		nilChasmRegistry   bool
 		expectedRetention  time.Duration
 	}{
@@ -1043,13 +1054,13 @@ func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ChasmComponentRetentio
 			expectedRetention:  30 * 24 * time.Hour,
 		},
 		{
-			name:               "archetype retention extends namespace retention",
+			name:               "archetype retention overrides with longer retention",
 			archetypeID:        extendedArchetypeID,
 			namespaceRetention: 7 * 24 * time.Hour,
 			expectedRetention:  21 * 24 * time.Hour,
 		},
 		{
-			name:               "workflow archetype retention extends namespace retention",
+			name:               "workflow archetype retention overrides namespace retention",
 			archetypeID:        chasm.WorkflowArchetypeID,
 			namespaceRetention: 7 * 24 * time.Hour,
 			expectedRetention:  14 * 24 * time.Hour,
@@ -1061,10 +1072,29 @@ func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ChasmComponentRetentio
 			expectedRetention:  14 * 24 * time.Hour,
 		},
 		{
-			name:               "archetype retention shorter than namespace retention uses namespace retention",
+			name:               "archetype retention overrides with shorter retention",
+			archetypeID:        shortenedArchetypeID,
+			namespaceRetention: 30 * 24 * time.Hour,
+			expectedRetention:  3 * 24 * time.Hour,
+		},
+		{
+			name:               "archetype retention is floored at global namespace min retention",
 			archetypeID:        shortArchetypeID,
 			namespaceRetention: 30 * 24 * time.Hour,
-			expectedRetention:  30 * 24 * time.Hour,
+			expectedRetention:  minRetentionGlobal,
+		},
+		{
+			name:               "archetype retention is floored at local namespace min retention",
+			archetypeID:        shortArchetypeID,
+			namespaceRetention: 30 * 24 * time.Hour,
+			localNamespace:     true,
+			expectedRetention:  minRetentionLocal,
+		},
+		{
+			name:               "namespace retention is not floored at namespace min retention",
+			archetypeID:        noRetentionArchetypeID,
+			namespaceRetention: 12 * time.Hour,
+			expectedRetention:  12 * time.Hour,
 		},
 		{
 			name:               "nil chasm registry uses namespace retention",
@@ -1081,19 +1111,26 @@ func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ChasmComponentRetentio
 
 			ctrl := gomock.NewController(t)
 
-			namespaceEntry := namespace.NewGlobalNamespaceForTest(
-				&persistencespb.NamespaceInfo{Id: tests.NamespaceID.String(), Name: tests.Namespace.String()},
-				&persistencespb.NamespaceConfig{
-					Retention: durationpb.New(tc.namespaceRetention),
-				},
-				&persistencespb.NamespaceReplicationConfig{
-					ActiveClusterName: cluster.TestCurrentClusterName,
-					Clusters: []string{
-						cluster.TestCurrentClusterName,
+			namespaceInfo := &persistencespb.NamespaceInfo{Id: tests.NamespaceID.String(), Name: tests.Namespace.String()}
+			namespaceConfig := &persistencespb.NamespaceConfig{
+				Retention: durationpb.New(tc.namespaceRetention),
+			}
+			var namespaceEntry *namespace.Namespace
+			if tc.localNamespace {
+				namespaceEntry = namespace.NewLocalNamespaceForTest(namespaceInfo, namespaceConfig, cluster.TestCurrentClusterName)
+			} else {
+				namespaceEntry = namespace.NewGlobalNamespaceForTest(
+					namespaceInfo,
+					namespaceConfig,
+					&persistencespb.NamespaceReplicationConfig{
+						ActiveClusterName: cluster.TestCurrentClusterName,
+						Clusters: []string{
+							cluster.TestCurrentClusterName,
+						},
 					},
-				},
-				tests.Version,
-			)
+					tests.Version,
+				)
+			}
 			namespaceRegistry := namespace.NewMockRegistry(ctrl)
 			namespaceRegistry.EXPECT().GetNamespaceByID(namespaceEntry.ID()).Return(namespaceEntry, nil).AnyTimes()
 
@@ -1127,6 +1164,12 @@ func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ChasmComponentRetentio
 			cfg := &configs.Config{
 				RetentionTimerJitterDuration: func() time.Duration {
 					return retentionJitterDuration
+				},
+				NamespaceMinRetentionGlobal: func() time.Duration {
+					return minRetentionGlobal
+				},
+				NamespaceMinRetentionLocal: func() time.Duration {
+					return minRetentionLocal
 				},
 			}
 
