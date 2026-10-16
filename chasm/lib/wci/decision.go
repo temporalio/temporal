@@ -6,6 +6,7 @@ import (
 	"slices"
 	"time"
 
+	wcimetrics "go.temporal.io/auto-scaled-workers/wci/metrics"
 	"go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	scalingalgorithm "go.temporal.io/auto-scaled-workers/wci/workflow/scaling_algorithm"
 	"go.temporal.io/server/chasm"
@@ -94,12 +95,15 @@ func (w *WorkerControllerInstance) ProcessTaskAdd(ctx chasm.MutableContext, even
 		}
 		group, ok := w.ScalingGroups[id].TryGet(ctx)
 		if !ok {
+			recordTaskAddSignal(metricsFor(ctx, w, ""), wcimetrics.SkippedReasonSpecMissing)
 			return nil
 		}
+		h := metricsFor(ctx, w, string(groupSpec.Compute.ProviderType))
 		algoCtx := w.algorithmContext(ctx)
 		algo, config, err := algorithmFor(algoCtx, groupSpec)
 		if err != nil {
 			ctx.Logger().Warn("Scaling algorithm unavailable for task add", tag.Error(err))
+			recordTaskAddSignal(h, wcimetrics.SkippedReasonAlgorithmUnavailable)
 			return nil
 		}
 		status, err := group.algorithmStatus()
@@ -109,14 +113,20 @@ func (w *WorkerControllerInstance) ProcessTaskAdd(ctx chasm.MutableContext, even
 		resp, err := algo.ProcessTaskAdd(algoCtx, config, status, request)
 		if err != nil || resp == nil {
 			ctx.Logger().Warn("Scaling algorithm failed on task add", tag.Error(err))
+			recordTaskAddSignal(h, wcimetrics.SkippedReasonAlgorithmFailed)
 			return nil
 		}
+		if resp.ThrottledCount > 0 {
+			wcimetrics.ScaleUpThrottledCount.With(h).Record(int64(resp.ThrottledCount))
+		}
+		recordTaskAddSignal(h, wcimetrics.SkippedReasonNone)
 		// Status is written with the actions it emits: it is intent, not confirmation.
 		if err := group.setAlgorithmStatus(resp.Status); err != nil {
 			return err
 		}
 		return w.applyActions(ctx, id, groupSpec, group, resp.Actions, event)
 	}
+	recordTaskAddSignal(metricsFor(ctx, w, ""), wcimetrics.SkippedReasonNoMatchingScaler)
 	return nil
 }
 
@@ -233,8 +243,10 @@ func (w *WorkerControllerInstance) applyActions(
 				ctx.Logger().Warn("Deferred decision without a source task-add; dropping")
 				continue
 			}
+			wcimetrics.DeferredScalingDecisionCount.With(metricsFor(ctx, w, providerType)).Record(1)
 			ctx.AddTask(w, chasm.TaskAttributes{}, &wcipb.DeferredDecisionTask{ScalingGroupId: groupID, TaskAdd: event})
 		case scalingalgorithm.ActionTypeInvokeWorker:
+			wcimetrics.ScaleUpCount.With(metricsFor(ctx, w, providerType)).Record(1)
 			w.requestInvoke(ctx, group, providerType)
 		default:
 			ctx.Logger().Warn("Unknown scaling action; dropping", tag.NewStringTag("action", string(action.Action)))

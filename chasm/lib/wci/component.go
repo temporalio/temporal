@@ -3,6 +3,7 @@ package wci
 
 import (
 	"go.temporal.io/api/serviceerror"
+	wcimetrics "go.temporal.io/auto-scaled-workers/wci/metrics"
 	"go.temporal.io/server/chasm"
 	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
 	"google.golang.org/protobuf/proto"
@@ -57,6 +58,7 @@ func NewWorkerControllerInstance(
 	// Same first-poll delay as the workflow.
 	w.armPollTimer(ctx, now.Add(maxPollInterval))
 	w.armValidationTimer(ctx, now.Add(validationInterval))
+	wcimetrics.InstanceCreated.With(metricsFor(ctx, w, "")).Record(1)
 	return w
 }
 
@@ -87,6 +89,7 @@ func NewWorkerControllerInstanceFromMigration(
 	}
 	w.armPollTimer(ctx, nextPoll)
 	w.armValidationTimer(ctx, now.Add(validationInterval))
+	wcimetrics.InstanceCreated.With(metricsFor(ctx, w, "")).Record(1)
 	return w
 }
 
