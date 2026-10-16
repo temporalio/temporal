@@ -1,8 +1,11 @@
 package tests
 
 import (
+	"time"
+
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/namespace"
 )
 
 type (
@@ -14,6 +17,10 @@ type (
 const (
 	libraryName   = "tests"
 	componentName = "payloadStore"
+
+	// RetentionNamespaceDataKey is the namespace data key that sets the PayloadStore archetype
+	// retention, so functional tests can exercise chasm.WithRetention per namespace.
+	RetentionNamespaceDataKey = "chasm-tests-payload-store-retention"
 )
 
 var (
@@ -50,6 +57,7 @@ func (l *library) Components() []*chasm.RegistrableComponent {
 			chasm.WithContextValues(map[any]any{
 				componentCtxKey: componentCtxVal,
 			}),
+			chasm.WithRetention(retentionFromNamespaceData),
 		),
 	}
 }
@@ -65,4 +73,13 @@ func (l *library) Tasks() []*chasm.RegistrableTask {
 			&PayloadTTLSideEffectTaskHandler{},
 		),
 	}
+}
+
+// retentionFromNamespaceData returns 0 (no override) when the namespace data key is absent or invalid.
+func retentionFromNamespaceData(ns *namespace.Namespace) time.Duration {
+	retention, err := time.ParseDuration(ns.GetCustomData(RetentionNamespaceDataKey))
+	if err != nil {
+		return 0
+	}
+	return retention
 }

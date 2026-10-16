@@ -289,9 +289,8 @@ func (r *TaskGeneratorImpl) getRetention() (time.Duration, error) {
 	switch err.(type) {
 	case nil:
 		retention = namespaceEntry.Retention()
-		// Archetypes may only extend the namespace retention, never shorten what the namespace owner configured.
 		if archetypeRetention, ok := r.getArchetypeRetention(namespaceEntry); ok {
-			retention = max(retention, archetypeRetention)
+			retention = archetypeRetention
 		}
 	case *serviceerror.NamespaceNotFound:
 		// namespace is not accessible, use default value above
@@ -302,7 +301,8 @@ func (r *TaskGeneratorImpl) getRetention() (time.Duration, error) {
 }
 
 // getArchetypeRetention returns the retention registered by this execution's archetype via
-// chasm.WithRetention, if any.
+// chasm.WithRetention, if any. It is floored at the namespace min retention because, unlike the
+// namespace retention, it never goes through the frontend validation that enforces that floor.
 func (r *TaskGeneratorImpl) getArchetypeRetention(namespaceEntry *namespace.Namespace) (time.Duration, bool) {
 	if r.chasmRegistry == nil {
 		return 0, false
@@ -316,7 +316,18 @@ func (r *TaskGeneratorImpl) getArchetypeRetention(namespaceEntry *namespace.Name
 	if !ok {
 		return 0, false
 	}
-	return rc.Retention(namespaceEntry)
+	retention, ok := rc.Retention(namespaceEntry)
+	if !ok {
+		return 0, false
+	}
+
+	var minRetention time.Duration
+	if namespaceEntry.IsGlobalNamespace() {
+		minRetention = r.config.NamespaceMinRetentionGlobal()
+	} else {
+		minRetention = r.config.NamespaceMinRetentionLocal()
+	}
+	return max(retention, minRetention), true
 }
 
 func (r *TaskGeneratorImpl) GenerateDirtySubStateMachineTasks(
