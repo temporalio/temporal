@@ -22,6 +22,11 @@ func NexusStage(req any, fullMethod string) []tag.Tag {
 		if request, ok := req.(*matchingservice.CancelOutstandingPollRequest); ok && request.GetTaskQueueType() == enumspb.TASK_QUEUE_TYPE_NEXUS {
 			return []tag.Tag{tag.NexusStageHandlerTaskDelivery}
 		}
+	case api.HistoryServicePrefix + "StartNexusOperation",
+		api.HistoryServicePrefix + "CancelNexusOperation",
+		api.NexusServicePrefix + "DispatchByEndpoint",
+		api.NexusServicePrefix + "DispatchByNamespaceAndTaskQueue":
+		return []tag.Tag{tag.NexusStageHandlerInbound}
 	default:
 	}
 	return nil
