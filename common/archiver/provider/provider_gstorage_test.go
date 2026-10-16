@@ -3,12 +3,12 @@
 package provider
 
 import (
-	"go.temporal.io/server/common/archiver/gcloud"
+	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/config"
 )
 
 func (s *ProviderSuite) TestGetHistoryArchiver_ConfigNotFound_GCloud() {
-	scheme := gcloud.URIScheme
+	scheme := archiver.URISchemeGstorage
 
 	provider := NewArchiverProvider(
 		&config.HistoryArchiverProvider{
@@ -29,7 +29,7 @@ func (s *ProviderSuite) TestGetHistoryArchiver_ConfigNotFound_GCloud() {
 }
 
 func (s *ProviderSuite) TestGetVisibilityArchiver_ConfigNotFound_GCloud() {
-	scheme := gcloud.URIScheme
+	scheme := archiver.URISchemeGstorage
 
 	provider := NewArchiverProvider(
 		nil,
