@@ -335,10 +335,10 @@ var TransitionResetRequested = chasm.NewTransition(
 )
 
 // TransitionResetAttemptFailedToPaused transitions RESET_REQUESTED → PAUSED. It is performed
-// when the worker yields in RESET_REQUESTED with ResetShouldPause set (i.e. reset was issued with
-// keepPaused=true while the activity was in PAUSE_REQUESTED). The failed attempt is recorded, the
-// attempt count is reset to 1, and no dispatch task is emitted — the activity stays paused until
-// an explicit unpause.
+// when the worker yields a retryable failure or timeout in RESET_REQUESTED with ResetShouldPause
+// set (i.e. reset was issued with keepPaused=true while the activity was in PAUSE_REQUESTED).
+// The failed attempt is recorded and the attempt count is reset to 1 regardless of the old retry
+// budget. No dispatch task is emitted; the activity stays paused until an explicit unpause.
 var TransitionResetAttemptFailedToPaused = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
@@ -351,8 +351,8 @@ var TransitionResetAttemptFailedToPaused = chasm.NewTransition(
 
 // TransitionResetAttemptFailedToScheduled transitions RESET_REQUESTED → SCHEDULED. It is performed
 // instead of TransitionRescheduled when the activity is in RESET_REQUESTED and the worker yields
-// (failure or timeout) with retries remaining. The failed attempt is recorded and the count is
-// reset to 1 (so the next attempt is "attempt 1").
+// a retryable failure or timeout, regardless of the old retry budget. The failed attempt is recorded
+// and the count is reset to 1 (so the next attempt is "attempt 1").
 var TransitionResetAttemptFailedToScheduled = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,

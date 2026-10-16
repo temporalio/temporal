@@ -417,8 +417,8 @@ func (a *Activity) clearHeartbeatDetails(ctx chasm.MutableContext) {
 //
 // For STARTED activities: transitions to RESET_REQUESTED. The worker is notified via
 // ActivityReset=true on its next heartbeat response and continues to use its existing task token.
-// If the attempt fails, the activity transitions back to SCHEDULED at attempt 1 via
-// TransitionResetAttemptFailedToScheduled.
+// A retryable failure or timeout applies the deferred reset at attempt 1, preserving any requested
+// pause. A non-retryable failure or timeout closes the activity without applying the reset.
 //
 // RestoreOriginalOptions follows the same split: applied immediately for a non-running activity,
 // and deferred for a running one, so the in-flight attempt is not disturbed — every restored option
@@ -484,7 +484,8 @@ func (a *Activity) handleReset(
 
 // deferResetWhileRunning defers reset mutations (option restore, heartbeat details clear,
 // attempt-count rewind) while a worker is still executing (STARTED or PAUSE_REQUESTED), so that the
-// in-flight attempt is undisturbed. The deferred reset applies when the worker yields.
+// in-flight attempt is undisturbed. The deferred reset applies when the worker yields a retryable
+// failure or timeout.
 func (a *Activity) deferResetWhileRunning(
 	ctx chasm.MutableContext,
 	frontendReq *workflowservice.ResetActivityExecutionRequest,
