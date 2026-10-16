@@ -10,16 +10,22 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/client/history/historytest"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/persistencetest"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/api/deletedlqtasks/deletedlqtaskstest"
 	"go.temporal.io/server/service/history/api/getdlqtasks/getdlqtaskstest"
 	"go.temporal.io/server/service/history/api/listqueues/listqueuestest"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
+	"go.uber.org/mock/gomock"
 )
 
 type (
@@ -94,6 +100,10 @@ func RunHistoryTaskQueueManagerTestSuite(t *testing.T, queue persistence.QueueV2
 		t.Parallel()
 		testHistoryTaskQueueManagerEnqueueTasks(t, historyTaskQueueManager)
 	})
+	t.Run("DLQWriter", func(t *testing.T) {
+		t.Parallel()
+		testDLQWriter(t, historyTaskQueueManager)
+	})
 	t.Run("TestHistoryTaskQueueManagerEnqueueTasksErr", func(t *testing.T) {
 		t.Parallel()
 		testHistoryTaskQueueManagerEnqueueTasksErr(t, queue)
@@ -126,6 +136,42 @@ func RunHistoryTaskQueueManagerTestSuite(t *testing.T, queue persistence.QueueV2
 		t.Parallel()
 		historytest.TestClient(t, historyTaskQueueManager)
 	})
+}
+
+func testDLQWriter(t *testing.T, manager persistence.HistoryTaskQueueManager) {
+	t.Helper()
+
+	queueKey := persistencetest.GetQueueKey(t, persistencetest.WithQueueType(persistence.QueueTypeHistoryDLQ))
+	namespaceRegistry := namespace.NewMockRegistry(gomock.NewController(t))
+	namespaceRegistry.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
+	logger := log.NewTestLogger()
+	writer := queues.NewDLQWriter(manager, metrics.NoopMetricsHandler, logger, namespaceRegistry, chasm.NewRegistry(logger))
+	for taskID := int64(1); taskID <= 2; taskID++ {
+		require.NoError(t, writer.WriteTaskToDLQ(t.Context(), queueKey.SourceCluster, queueKey.TargetCluster,
+			7, &tasks.WorkflowTask{TaskID: taskID}, true))
+	}
+	response, err := manager.ReadTasks(t.Context(), &persistence.ReadTasksRequest{
+		QueueKey: queueKey, PageSize: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, response.Tasks, 2)
+	for i, task := range response.Tasks {
+		require.Equal(t, int64(i), task.MessageMetadata.ID)
+		require.Equal(t, int64(i+1), task.Task.GetTaskID())
+	}
+	_, err = manager.DeleteTasks(t.Context(), &persistence.DeleteTasksRequest{
+		QueueKey: queueKey, InclusiveMaxMessageMetadata: persistence.MessageMetadata{ID: 1},
+	})
+	require.NoError(t, err)
+	require.NoError(t, writer.WriteTaskToDLQ(t.Context(), queueKey.SourceCluster, queueKey.TargetCluster,
+		7, &tasks.WorkflowTask{TaskID: 3}, true))
+	response, err = manager.ReadTasks(t.Context(), &persistence.ReadTasksRequest{
+		QueueKey: queueKey, PageSize: 10,
+	})
+	require.NoError(t, err)
+	require.Len(t, response.Tasks, 1)
+	require.Equal(t, int64(2), response.Tasks[0].MessageMetadata.ID)
+	require.Equal(t, int64(3), response.Tasks[0].Task.GetTaskID())
 }
 
 func testHistoryTaskQueueManagerCreateQueueErr(t *testing.T, queue persistence.QueueV2) {
