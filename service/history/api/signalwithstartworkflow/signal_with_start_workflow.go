@@ -395,26 +395,40 @@ func signalWorkflow(
 		return err
 	}
 
-	// Create a transfer task to schedule a workflow task
+	// Create a transfer task to schedule a workflow task.
 	if !mutableState.HasPendingWorkflowTask() && !mutableState.IsWorkflowExecutionStatusPaused() {
+		createWorkflowTask := true
+		now := shardContext.GetTimeSource().Now()
+		executionTime := mutableState.GetExecutionInfo().GetExecutionTime().AsTime()
 
-		executionInfo := mutableState.GetExecutionInfo()
-		executionState := mutableState.GetExecutionState()
-		if !mutableState.HadOrHasWorkflowTask() && !executionInfo.ExecutionTime.AsTime().Equal(executionState.StartTime.AsTime()) {
-			metrics.SignalWithStartSkipDelayCounter.With(shardContext.GetMetricsHandler()).Record(1, metrics.NamespaceTag(request.GetNamespace()))
+		if now.Before(executionTime) && mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() {
+			metrics.SignalWithStartWorkflowTaskBackoffCounter.With(shardContext.GetMetricsHandler()).Record(
+				1,
+				metrics.NamespaceTag(request.GetNamespace()),
+			)
+			if shardContext.GetConfig().EnableSignalWithStartWorkflowTaskBackoff(request.GetNamespace()) {
+				createWorkflowTask = false
+			}
+
+			message := "Skipped first workflow task backoff for signalWithStart request"
+			if !createWorkflowTask {
+				message = "Honored first workflow task backoff for signalWithStart request"
+			}
 
 			workflowKey := workflowLease.GetContext().GetWorkflowKey()
 			shardContext.GetThrottledLogger().Info(
-				"Skipped workflow start delay for signalWithStart request",
+				message,
 				tag.WorkflowNamespace(request.GetNamespace()),
 				tag.WorkflowID(workflowKey.WorkflowID),
 				tag.WorkflowRunID(workflowKey.RunID),
 			)
 		}
 
-		_, err := mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
-		if err != nil {
-			return err
+		if createWorkflowTask {
+			_, err := mutableState.AddWorkflowTaskScheduledEvent(false, enumsspb.WORKFLOW_TASK_TYPE_NORMAL)
+			if err != nil {
+				return err
+			}
 		}
 	}
 

@@ -1332,6 +1332,8 @@ func hasNexusEventForScheduledID(history []*historypb.HistoryEvent, eventType en
 			eventScheduledID = event.GetNexusOperationCanceledEventAttributes().GetScheduledEventId()
 		case enumspb.EVENT_TYPE_NEXUS_OPERATION_TIMED_OUT:
 			eventScheduledID = event.GetNexusOperationTimedOutEventAttributes().GetScheduledEventId()
+		case enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUESTED:
+			eventScheduledID = event.GetNexusOperationCancelRequestedEventAttributes().GetScheduledEventId()
 		case enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_COMPLETED:
 			eventScheduledID = event.GetNexusOperationCancelRequestCompletedEventAttributes().GetScheduledEventId()
 		case enumspb.EVENT_TYPE_NEXUS_OPERATION_CANCEL_REQUEST_FAILED:

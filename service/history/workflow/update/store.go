@@ -17,6 +17,7 @@ type (
 	UpdateStore interface {
 		VisitUpdates(visitor func(updID string, updInfo *persistencespb.UpdateInfo))
 		GetUpdateOutcome(ctx context.Context, updateID string) (*updatepb.Outcome, error)
+		GetUpdateAcceptedEventID(ctx context.Context, updateID string) (int64, error)
 		GetCurrentVersion() int64
 		IsWorkflowExecutionRunning() bool
 	}

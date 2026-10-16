@@ -1054,12 +1054,11 @@ func (e taskExecutor) logCallFailure(traceCtx invocationTraceContext, callErr er
 		return
 	}
 	tags := append(traceCtx.tags(), tag.Error(callErr))
-	msg := fmt.Sprintf("Nexus %s request failed", traceCtx.operationTag)
 	_, isTimeoutBelowMin := errors.AsType[*operationTimeoutBelowMinError](callErr)
 	if failureSource == commonnexus.FailureSourceWorker || isTimeoutBelowMin {
-		e.Logger.Debug(msg, tags...)
+		e.Logger.Debug("Nexus request failed", tags...)
 	} else {
-		e.Logger.Error(msg, tags...)
+		e.Logger.Error("Nexus request failed", tags...)
 	}
 }
 
