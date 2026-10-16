@@ -26,8 +26,10 @@ const (
 // DisableFailpointRequest specifies which failpoint to disable.
 type DisableFailpointRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// key is the failpoint key to disable.
-	Key           v1.FailpointKey `protobuf:"varint,1,opt,name=key,proto3,enum=temporal.server.api.enums.v1.FailpointKey" json:"key,omitempty"`
+	// key is the name of the failpoint to disable.
+	Key string `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	// namespace_id scopes the key to a namespace. Empty means all namespaces.
+	NamespaceId   string `protobuf:"bytes,3,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -62,11 +64,18 @@ func (*DisableFailpointRequest) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_failpointservice_v1_request_response_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *DisableFailpointRequest) GetKey() v1.FailpointKey {
+func (x *DisableFailpointRequest) GetKey() string {
 	if x != nil {
 		return x.Key
 	}
-	return v1.FailpointKey(0)
+	return ""
+}
+
+func (x *DisableFailpointRequest) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
 }
 
 // DisableFailpointResponse is returned after disabling a failpoint.
@@ -183,8 +192,10 @@ func (*DisableAllFailpointsResponse) Descriptor() ([]byte, []int) {
 // InjectPanicRequest configures a failpoint to panic.
 type InjectPanicRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// key is the failpoint key to configure.
-	Key v1.FailpointKey `protobuf:"varint,1,opt,name=key,proto3,enum=temporal.server.api.enums.v1.FailpointKey" json:"key,omitempty"`
+	// key is the name of the failpoint to configure.
+	Key string `protobuf:"bytes,4,opt,name=key,proto3" json:"key,omitempty"`
+	// namespace_id scopes the key to a namespace. Empty means all namespaces.
+	NamespaceId string `protobuf:"bytes,5,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	// panic_value is the string value passed to panic(errors.New(...)).
 	PanicValue string `protobuf:"bytes,2,opt,name=panic_value,json=panicValue,proto3" json:"panic_value,omitempty"`
 	// recurrence specifies whether this triggers once or always.
@@ -223,11 +234,18 @@ func (*InjectPanicRequest) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_failpointservice_v1_request_response_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *InjectPanicRequest) GetKey() v1.FailpointKey {
+func (x *InjectPanicRequest) GetKey() string {
 	if x != nil {
 		return x.Key
 	}
-	return v1.FailpointKey(0)
+	return ""
+}
+
+func (x *InjectPanicRequest) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
 }
 
 func (x *InjectPanicRequest) GetPanicValue() string {
@@ -284,8 +302,10 @@ func (*InjectPanicResponse) Descriptor() ([]byte, []int) {
 // InjectBlockRequest configures a failpoint to block.
 type InjectBlockRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// key is the failpoint key to configure.
-	Key v1.FailpointKey `protobuf:"varint,1,opt,name=key,proto3,enum=temporal.server.api.enums.v1.FailpointKey" json:"key,omitempty"`
+	// key is the name of the failpoint to configure.
+	Key string `protobuf:"bytes,3,opt,name=key,proto3" json:"key,omitempty"`
+	// namespace_id scopes the key to a namespace. Empty means all namespaces.
+	NamespaceId string `protobuf:"bytes,4,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	// recurrence specifies whether this triggers once or always.
 	Recurrence    v1.FailpointRecurrence `protobuf:"varint,2,opt,name=recurrence,proto3,enum=temporal.server.api.enums.v1.FailpointRecurrence" json:"recurrence,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -322,11 +342,18 @@ func (*InjectBlockRequest) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_failpointservice_v1_request_response_proto_rawDescGZIP(), []int{6}
 }
 
-func (x *InjectBlockRequest) GetKey() v1.FailpointKey {
+func (x *InjectBlockRequest) GetKey() string {
 	if x != nil {
 		return x.Key
 	}
-	return v1.FailpointKey(0)
+	return ""
+}
+
+func (x *InjectBlockRequest) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
 }
 
 func (x *InjectBlockRequest) GetRecurrence() v1.FailpointRecurrence {
@@ -376,8 +403,10 @@ func (*InjectBlockResponse) Descriptor() ([]byte, []int) {
 // WaitForBlockRequest specifies which block failpoint to wait for.
 type WaitForBlockRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// key is the failpoint key to wait for.
-	Key           v1.FailpointKey `protobuf:"varint,1,opt,name=key,proto3,enum=temporal.server.api.enums.v1.FailpointKey" json:"key,omitempty"`
+	// key is the name of the failpoint to wait for.
+	Key string `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	// namespace_id scopes the key to a namespace. Empty means all namespaces.
+	NamespaceId   string `protobuf:"bytes,3,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -412,11 +441,18 @@ func (*WaitForBlockRequest) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_failpointservice_v1_request_response_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *WaitForBlockRequest) GetKey() v1.FailpointKey {
+func (x *WaitForBlockRequest) GetKey() string {
 	if x != nil {
 		return x.Key
 	}
-	return v1.FailpointKey(0)
+	return ""
+}
+
+func (x *WaitForBlockRequest) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
 }
 
 // WaitForBlockResponse is returned when a block failpoint is triggered.
@@ -459,8 +495,10 @@ func (*WaitForBlockResponse) Descriptor() ([]byte, []int) {
 // InjectReturnRequest configures a failpoint to return an error.
 type InjectReturnRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// key is the failpoint key to configure.
-	Key v1.FailpointKey `protobuf:"varint,1,opt,name=key,proto3,enum=temporal.server.api.enums.v1.FailpointKey" json:"key,omitempty"`
+	// key is the name of the failpoint to configure.
+	Key string `protobuf:"bytes,4,opt,name=key,proto3" json:"key,omitempty"`
+	// namespace_id scopes the key to a namespace. Empty means all namespaces.
+	NamespaceId string `protobuf:"bytes,5,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	// error_message is the error message for the returned error.
 	ErrorMessage string `protobuf:"bytes,2,opt,name=error_message,json=errorMessage,proto3" json:"error_message,omitempty"`
 	// recurrence specifies whether this triggers once or always.
@@ -499,11 +537,18 @@ func (*InjectReturnRequest) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_failpointservice_v1_request_response_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *InjectReturnRequest) GetKey() v1.FailpointKey {
+func (x *InjectReturnRequest) GetKey() string {
 	if x != nil {
 		return x.Key
 	}
-	return v1.FailpointKey(0)
+	return ""
+}
+
+func (x *InjectReturnRequest) GetNamespaceId() string {
+	if x != nil {
+		return x.NamespaceId
+	}
+	return ""
 }
 
 func (x *InjectReturnRequest) GetErrorMessage() string {
@@ -644,35 +689,40 @@ var File_temporal_server_api_failpointservice_v1_request_response_proto protoref
 
 const file_temporal_server_api_failpointservice_v1_request_response_proto_rawDesc = "" +
 	"\n" +
-	">temporal/server/api/failpointservice/v1/request_response.proto\x12'temporal.server.api.failpointservice.v1\x1a,temporal/server/api/enums/v1/failpoint.proto\x1a5temporal/server/api/failpointservice/v1/message.proto\"W\n" +
-	"\x17DisableFailpointRequest\x12<\n" +
-	"\x03key\x18\x01 \x01(\x0e2*.temporal.server.api.enums.v1.FailpointKeyR\x03key\"\x1a\n" +
+	">temporal/server/api/failpointservice/v1/request_response.proto\x12'temporal.server.api.failpointservice.v1\x1a,temporal/server/api/enums/v1/failpoint.proto\x1a5temporal/server/api/failpointservice/v1/message.proto\"T\n" +
+	"\x17DisableFailpointRequest\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\x12!\n" +
+	"\fnamespace_id\x18\x03 \x01(\tR\vnamespaceIdJ\x04\b\x01\x10\x02\"\x1a\n" +
 	"\x18DisableFailpointResponse\"\x1d\n" +
 	"\x1bDisableAllFailpointsRequest\"\x1e\n" +
-	"\x1cDisableAllFailpointsResponse\"\xc6\x01\n" +
-	"\x12InjectPanicRequest\x12<\n" +
-	"\x03key\x18\x01 \x01(\x0e2*.temporal.server.api.enums.v1.FailpointKeyR\x03key\x12\x1f\n" +
+	"\x1cDisableAllFailpointsResponse\"\xc3\x01\n" +
+	"\x12InjectPanicRequest\x12\x10\n" +
+	"\x03key\x18\x04 \x01(\tR\x03key\x12!\n" +
+	"\fnamespace_id\x18\x05 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vpanic_value\x18\x02 \x01(\tR\n" +
 	"panicValue\x12Q\n" +
 	"\n" +
 	"recurrence\x18\x03 \x01(\x0e21.temporal.server.api.enums.v1.FailpointRecurrenceR\n" +
-	"recurrence\"\x15\n" +
-	"\x13InjectPanicResponse\"\xa5\x01\n" +
-	"\x12InjectBlockRequest\x12<\n" +
-	"\x03key\x18\x01 \x01(\x0e2*.temporal.server.api.enums.v1.FailpointKeyR\x03key\x12Q\n" +
+	"recurrenceJ\x04\b\x01\x10\x02\"\x15\n" +
+	"\x13InjectPanicResponse\"\xa2\x01\n" +
+	"\x12InjectBlockRequest\x12\x10\n" +
+	"\x03key\x18\x03 \x01(\tR\x03key\x12!\n" +
+	"\fnamespace_id\x18\x04 \x01(\tR\vnamespaceId\x12Q\n" +
 	"\n" +
 	"recurrence\x18\x02 \x01(\x0e21.temporal.server.api.enums.v1.FailpointRecurrenceR\n" +
-	"recurrence\"\x15\n" +
-	"\x13InjectBlockResponse\"S\n" +
-	"\x13WaitForBlockRequest\x12<\n" +
-	"\x03key\x18\x01 \x01(\x0e2*.temporal.server.api.enums.v1.FailpointKeyR\x03key\"\x16\n" +
-	"\x14WaitForBlockResponse\"\xcb\x01\n" +
-	"\x13InjectReturnRequest\x12<\n" +
-	"\x03key\x18\x01 \x01(\x0e2*.temporal.server.api.enums.v1.FailpointKeyR\x03key\x12#\n" +
+	"recurrenceJ\x04\b\x01\x10\x02\"\x15\n" +
+	"\x13InjectBlockResponse\"P\n" +
+	"\x13WaitForBlockRequest\x12\x10\n" +
+	"\x03key\x18\x02 \x01(\tR\x03key\x12!\n" +
+	"\fnamespace_id\x18\x03 \x01(\tR\vnamespaceIdJ\x04\b\x01\x10\x02\"\x16\n" +
+	"\x14WaitForBlockResponse\"\xc8\x01\n" +
+	"\x13InjectReturnRequest\x12\x10\n" +
+	"\x03key\x18\x04 \x01(\tR\x03key\x12!\n" +
+	"\fnamespace_id\x18\x05 \x01(\tR\vnamespaceId\x12#\n" +
 	"\rerror_message\x18\x02 \x01(\tR\ferrorMessage\x12Q\n" +
 	"\n" +
 	"recurrence\x18\x03 \x01(\x0e21.temporal.server.api.enums.v1.FailpointRecurrenceR\n" +
-	"recurrence\"\x16\n" +
+	"recurrenceJ\x04\b\x01\x10\x02\"\x16\n" +
 	"\x14InjectReturnResponse\"\x17\n" +
 	"\x15ListFailpointsRequest\"p\n" +
 	"\x16ListFailpointsResponse\x12V\n" +
@@ -708,25 +758,19 @@ var file_temporal_server_api_failpointservice_v1_request_response_proto_goTypes 
 	(*InjectReturnResponse)(nil),         // 11: temporal.server.api.failpointservice.v1.InjectReturnResponse
 	(*ListFailpointsRequest)(nil),        // 12: temporal.server.api.failpointservice.v1.ListFailpointsRequest
 	(*ListFailpointsResponse)(nil),       // 13: temporal.server.api.failpointservice.v1.ListFailpointsResponse
-	(v1.FailpointKey)(0),                 // 14: temporal.server.api.enums.v1.FailpointKey
-	(v1.FailpointRecurrence)(0),          // 15: temporal.server.api.enums.v1.FailpointRecurrence
-	(*FailpointInfo)(nil),                // 16: temporal.server.api.failpointservice.v1.FailpointInfo
+	(v1.FailpointRecurrence)(0),          // 14: temporal.server.api.enums.v1.FailpointRecurrence
+	(*FailpointInfo)(nil),                // 15: temporal.server.api.failpointservice.v1.FailpointInfo
 }
 var file_temporal_server_api_failpointservice_v1_request_response_proto_depIdxs = []int32{
-	14, // 0: temporal.server.api.failpointservice.v1.DisableFailpointRequest.key:type_name -> temporal.server.api.enums.v1.FailpointKey
-	14, // 1: temporal.server.api.failpointservice.v1.InjectPanicRequest.key:type_name -> temporal.server.api.enums.v1.FailpointKey
-	15, // 2: temporal.server.api.failpointservice.v1.InjectPanicRequest.recurrence:type_name -> temporal.server.api.enums.v1.FailpointRecurrence
-	14, // 3: temporal.server.api.failpointservice.v1.InjectBlockRequest.key:type_name -> temporal.server.api.enums.v1.FailpointKey
-	15, // 4: temporal.server.api.failpointservice.v1.InjectBlockRequest.recurrence:type_name -> temporal.server.api.enums.v1.FailpointRecurrence
-	14, // 5: temporal.server.api.failpointservice.v1.WaitForBlockRequest.key:type_name -> temporal.server.api.enums.v1.FailpointKey
-	14, // 6: temporal.server.api.failpointservice.v1.InjectReturnRequest.key:type_name -> temporal.server.api.enums.v1.FailpointKey
-	15, // 7: temporal.server.api.failpointservice.v1.InjectReturnRequest.recurrence:type_name -> temporal.server.api.enums.v1.FailpointRecurrence
-	16, // 8: temporal.server.api.failpointservice.v1.ListFailpointsResponse.failpoints:type_name -> temporal.server.api.failpointservice.v1.FailpointInfo
-	9,  // [9:9] is the sub-list for method output_type
-	9,  // [9:9] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	14, // 0: temporal.server.api.failpointservice.v1.InjectPanicRequest.recurrence:type_name -> temporal.server.api.enums.v1.FailpointRecurrence
+	14, // 1: temporal.server.api.failpointservice.v1.InjectBlockRequest.recurrence:type_name -> temporal.server.api.enums.v1.FailpointRecurrence
+	14, // 2: temporal.server.api.failpointservice.v1.InjectReturnRequest.recurrence:type_name -> temporal.server.api.enums.v1.FailpointRecurrence
+	15, // 3: temporal.server.api.failpointservice.v1.ListFailpointsResponse.failpoints:type_name -> temporal.server.api.failpointservice.v1.FailpointInfo
+	4,  // [4:4] is the sub-list for method output_type
+	4,  // [4:4] is the sub-list for method input_type
+	4,  // [4:4] is the sub-list for extension type_name
+	4,  // [4:4] is the sub-list for extension extendee
+	0,  // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_failpointservice_v1_request_response_proto_init() }
