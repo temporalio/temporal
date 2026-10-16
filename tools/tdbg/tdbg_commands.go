@@ -189,7 +189,7 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 		},
 		{
 			Name:  "scan-nexus-chasm",
-			Usage: "Read-only scan for running workflows with old pending CHASM-backed Nexus operations",
+			Usage: "Read-only snapshot scan for running workflows with old pending CHASM-backed Nexus operations; results require operator review",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
 					Name:    FlagVisibilityQuery,
@@ -215,16 +215,21 @@ func newAdminExecutionCommands(clientFactory ClientFactory, prompterFactory Prom
 				&cli.DurationFlag{
 					Name:  FlagMinPendingAge,
 					Value: 10 * time.Minute,
-					Usage: "Minimum age of a pending CHASM Nexus operation.",
+					Usage: "Minimum age for selecting a pending CHASM Nexus operation as a candidate; age alone does not prove it is stuck.",
 				},
 				&cli.IntFlag{
 					Name:  FlagPageSize,
 					Value: 100,
 					Usage: "Visibility page size. A checkpoint is emitted only after the whole page is processed.",
 				},
+				&cli.IntFlag{
+					Name:  FlagMaxHistoryPages,
+					Value: 100,
+					Usage: "Maximum reverse-history pages read per matching execution.",
+				},
 				&cli.StringFlag{
 					Name:  FlagResumeToken,
-					Usage: "Opaque resume token from a prior checkpoint record.",
+					Usage: "Opaque resume token from a prior checkpoint record. Resume continues the original time-bounded snapshot.",
 				},
 				&cli.StringFlag{
 					Name:  FlagOutput,
