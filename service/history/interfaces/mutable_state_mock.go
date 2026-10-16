@@ -2000,6 +2000,20 @@ func (mr *MockMutableStateMockRecorder) GenerateActivityCancelCommandsForClose()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityCancelCommandsForClose", reflect.TypeOf((*MockMutableState)(nil).GenerateActivityCancelCommandsForClose))
 }
 
+// GenerateActivityTask mocks base method.
+func (m *MockMutableState) GenerateActivityTask(scheduledEventID int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateActivityTask", scheduledEventID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GenerateActivityTask indicates an expected call of GenerateActivityTask.
+func (mr *MockMutableStateMockRecorder) GenerateActivityTask(scheduledEventID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityTask", reflect.TypeOf((*MockMutableState)(nil).GenerateActivityTask), scheduledEventID)
+}
+
 // GenerateEventLoadToken mocks base method.
 func (m *MockMutableState) GenerateEventLoadToken(event *history.HistoryEvent) ([]byte, error) {
 	m.ctrl.T.Helper()
@@ -3744,18 +3758,18 @@ func (mr *MockMutableStateMockRecorder) TaskQueueScheduleToStartTimeout(name any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TaskQueueScheduleToStartTimeout", reflect.TypeOf((*MockMutableState)(nil).TaskQueueScheduleToStartTimeout), name)
 }
 
-// ToRealTime mocks base method.
-func (m *MockMutableState) ToRealTime(virtualTime time.Time) time.Time {
+// ToRealTimeWithCurrentOffset mocks base method.
+func (m *MockMutableState) ToRealTimeWithCurrentOffset(virtualTime time.Time) time.Time {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ToRealTime", virtualTime)
+	ret := m.ctrl.Call(m, "ToRealTimeWithCurrentOffset", virtualTime)
 	ret0, _ := ret[0].(time.Time)
 	return ret0
 }
 
-// ToRealTime indicates an expected call of ToRealTime.
-func (mr *MockMutableStateMockRecorder) ToRealTime(virtualTime any) *gomock.Call {
+// ToRealTimeWithCurrentOffset indicates an expected call of ToRealTimeWithCurrentOffset.
+func (mr *MockMutableStateMockRecorder) ToRealTimeWithCurrentOffset(virtualTime any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ToRealTime", reflect.TypeOf((*MockMutableState)(nil).ToRealTime), virtualTime)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ToRealTimeWithCurrentOffset", reflect.TypeOf((*MockMutableState)(nil).ToRealTimeWithCurrentOffset), virtualTime)
 }
 
 // UpdateActivity mocks base method.

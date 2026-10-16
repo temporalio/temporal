@@ -90,6 +90,7 @@ func (r *rateLimitManager) Start() {
 	r.numReadPartitions, cancel = r.config.NumReadPartitionsSub(r.setNumReadPartitions)
 	r.cancels = append(r.cancels, cancel)
 	r.computeEffectiveRPSAndSourceLocked()
+	r.updateSimpleRateLimitWithBurstLocked(defaultBurstDuration)
 }
 
 func (r *rateLimitManager) setAdminNsRate(rps float64) {
@@ -112,12 +113,6 @@ func (r *rateLimitManager) setNumReadPartitions(val int) {
 	// Defaulting to 1 partition if misconfigured
 	r.numReadPartitions = max(val, 1)
 	r.computeAndApplyRateLimitLocked()
-}
-
-func (r *rateLimitManager) computeEffectiveRPSAndSource() {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.computeEffectiveRPSAndSourceLocked()
 }
 
 // Computes the effectiveRPS and its source by evaluating all possible rate limit configurations.
@@ -340,7 +335,10 @@ func (r *rateLimitManager) consumeTokens(now int64, task *internalTask, tokens i
 	}
 }
 
-func (r *rateLimitManager) grantTokens(priority *commonpb.Priority, requested int32) int32 {
+func (r *rateLimitManager) grantTokens(
+	priority *commonpb.Priority,
+	requested int32,
+) int32 {
 	now := r.timeSource.Now()
 
 	r.mu.Lock()

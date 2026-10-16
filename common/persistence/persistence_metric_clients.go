@@ -1445,6 +1445,7 @@ func updateErrorMetric(handler metrics.Handler, logger log.Logger, operation str
 			*AppendHistoryTimeoutError,
 			*CurrentWorkflowConditionFailedError,
 			*WorkflowConditionFailedError,
+			*WorkflowRunAlreadyExistsError,
 			*ConditionFailedError,
 			*TimeoutError,
 			*serviceerror.InvalidArgument,
