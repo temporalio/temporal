@@ -52,7 +52,7 @@ func NewWorkerControllerInstance(
 	now := ctx.Now(w)
 	w.CreateTime = timestamppb.New(now)
 	for id := range specs {
-		w.ScalingGroups[id] = chasm.NewComponentField(ctx, NewScalingGroup())
+		w.ScalingGroups[id] = chasm.NewComponentField(ctx, NewScalingGroup(id))
 	}
 	// Same first-poll delay as the workflow.
 	w.armPollTimer(ctx, now.Add(maxPollInterval))
@@ -73,6 +73,7 @@ func NewWorkerControllerInstanceFromMigration(
 	}
 	w.Status = wcipb.WCI_STATUS_RUNNING
 	for id, group := range groups {
+		group.Id = id
 		w.ScalingGroups[id] = chasm.NewComponentField(ctx, &ScalingGroup{ScalingGroupState: group})
 	}
 	// Keep the workflow's poll cadence; a past-due poll fires immediately.

@@ -40,6 +40,8 @@ message ScalingGroupState {
   // request_id of the running InvokeTask; 0 = none.
   int64 inflight_invoke_id = 9;
   int32 inflight_invoke_attempt = 10;
+  // Key in the root's scaling_group_specs and ScalingGroups map.
+  string id = 11;
 }
 
 message ScalingGroupSpec {

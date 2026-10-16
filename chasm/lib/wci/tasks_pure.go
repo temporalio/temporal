@@ -3,6 +3,7 @@ package wci
 import (
 	"go.temporal.io/server/chasm"
 	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
+	"go.temporal.io/server/common"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -51,6 +52,6 @@ func (h *PeriodicValidationTimerTaskHandler) Execute(
 	_ *wcipb.PeriodicValidationTimerTask,
 ) error {
 	w.armValidationTimer(ctx, ctx.Now(w).Add(validationInterval))
-	ctx.AddTask(w, chasm.TaskAttributes{}, &wcipb.ValidateSpecTask{ValidationTime: w.NextValidationTime})
+	ctx.AddTask(w, chasm.TaskAttributes{}, &wcipb.ValidateSpecTask{ValidationTime: common.CloneProto(w.NextValidationTime)})
 	return nil
 }
