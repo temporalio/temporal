@@ -301,6 +301,10 @@ func (o *Operation) HandleNexusCompletion(
 	if completion.GetRequestId() != "" && o.GetRequestId() != completion.GetRequestId() {
 		return serviceerror.NewNotFound("operation not found")
 	}
+	// A retry may have started a different operation; reject completions for a token other than the recorded one.
+	if o.GetOperationToken() != "" && completion.GetOperationToken() != "" && o.GetOperationToken() != completion.GetOperationToken() {
+		return serviceerror.NewNotFound("operation not found")
+	}
 
 	links := completion.GetLinks()
 

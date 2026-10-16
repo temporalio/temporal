@@ -10,6 +10,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
@@ -260,6 +261,21 @@ func TestHandleNexusCompletion(t *testing.T) {
 			})
 			require.NoError(t, err)
 			require.Equal(t, nexusoperationpb.OPERATION_STATUS_SUCCEEDED, op.GetStatus())
+		})
+
+		t.Run("RejectsStaleOperationToken", func(t *testing.T) {
+			ctx := newCtx()
+			op := newStartedOp(t, ctx)
+			err := op.HandleNexusCompletion(ctx, &persistencespb.ChasmNexusCompletion{
+				RequestId:      op.GetRequestId(),
+				OperationToken: "stale-tok",
+				Outcome: &persistencespb.ChasmNexusCompletion_Success{
+					Success: mustToPayload(t, "result"),
+				},
+			})
+			var notFound *serviceerror.NotFound
+			require.ErrorAs(t, err, &notFound)
+			require.Equal(t, nexusoperationpb.OPERATION_STATUS_STARTED, op.GetStatus())
 		})
 
 		t.Run("CompletionBeforeStart", func(t *testing.T) {
