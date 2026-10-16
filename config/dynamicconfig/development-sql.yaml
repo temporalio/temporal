@@ -56,6 +56,35 @@
 #
 ### END of Worker Versioning Replay Test configs
 
+### Worker Controller Instance on CHASM, in rollout order. Each step needs the ones above it.
+### Reversal: close the migration gate, migrate CHASM WCIs back (tdbg), then turn routing off.
+#
+#workercontroller.enabled:
+# - value: true
+### 1. Route reads/updates/task-adds CHASM-first, falling back to the workflow.
+#workercontroller.chasm.routing_enabled:
+# - value: true
+### 2. Create new WCIs on CHASM (percent keyed on deployment name + build ID).
+#workercontroller.chasm.creation_enabled:
+# - value: true
+#workercontroller.chasm.creation_rollout_percent:
+# - value: 100
+### 3. Migrate live workflow WCIs at their next continue-as-new (needs workflow version >= 5).
+#workercontroller.instanceWorkflowVersion:
+# - value: 5
+#workercontroller.chasm.migration_enabled:
+# - value: true
+#workercontroller.chasm.migration_rollout_percent:
+# - value: 100
+### History-side settings (defaults shown).
+#workercontroller.chasm.in_process_compute_providers:
+# - value: ["test-invoke", "test-worker-set"]
+#workercontroller.chasm.compute_concurrency_per_namespace:
+# - value: 10
+### Must match the WCI client's task queue; cloud uses temporal-sys-worker-controller-per-ns-tq.
+#workercontroller.chasm.workflow_task_queue:
+# - value: temporal-sys-per-ns-tq
+
 limit.maxIDLength:
   - value: 255
     constraints: {}
