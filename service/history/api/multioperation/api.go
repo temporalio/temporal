@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tasktoken"
+	"go.temporal.io/server/common/testing/failpoint"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/worker_versioning"
 	"go.temporal.io/server/service/history/api"
@@ -142,7 +143,9 @@ func Invoke(
 			return nil, err
 		}
 
-		testhooks.Call(uws.testHooks, testhooks.UpdateWithStartOnClosingWorkflowRetry, uws.namespaceId)
+		if err := failpoint.Checkpoint(uws.testHooks, failpoint.UpdateWithStartClosingWorkflowRetry.ForNamespace(uws.namespaceId)); err != nil {
+			return nil, err
+		}
 
 		res, err = uws.Invoke(ctx)
 		if err != nil {
@@ -232,7 +235,9 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 		workflowLease.GetReleaseFn()(nil)
 	}
 
-	testhooks.Call(uws.testHooks, testhooks.UpdateWithStartInBetweenLockAndStart, uws.namespaceId)
+	if err := failpoint.Checkpoint(uws.testHooks, failpoint.UpdateWithStartBetweenLockAndStart.ForNamespace(uws.namespaceId)); err != nil {
+		return nil, err
+	}
 
 	// Workflow does not exist or requires a new run - start and update it!
 	return uws.startAndUpdateWorkflow(ctx)
