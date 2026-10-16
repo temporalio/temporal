@@ -336,8 +336,23 @@ func (h *handler) CreateFromMigrationState(ctx context.Context, req *wcipb.Creat
 	return &wcipb.CreateFromMigrationStateResponse{}, nil
 }
 
-func (h *handler) MigrateToWorkflow(context.Context, *wcipb.MigrateToWorkflowRequest) (*wcipb.MigrateToWorkflowResponse, error) {
-	return nil, serviceerror.NewUnimplemented("MigrateToWorkflow lands in step 5b")
+// MigrateToWorkflow hands the WCI back to the workflow backend; repeating it while migrating is a no-op.
+func (h *handler) MigrateToWorkflow(ctx context.Context, req *wcipb.MigrateToWorkflowRequest) (resp *wcipb.MigrateToWorkflowResponse, err error) {
+	defer log.CapturePanic(h.logger, &err)
+
+	_, _, err = chasm.UpdateComponent(ctx, refFor(req.GetNamespaceId(), req.GetInstanceId()), func(w *WorkerControllerInstance, mctx chasm.MutableContext, _ any) (struct{}, error) {
+		if w.Status == wcipb.WCI_STATUS_MIGRATING_TO_WORKFLOW {
+			return struct{}{}, nil
+		}
+		if err := w.CheckMutable(); err != nil {
+			return struct{}{}, err
+		}
+		return struct{}{}, TransitionMigrateToWorkflow.Apply(w, mctx, EventMigrateToWorkflow{})
+	}, nil)
+	if err != nil {
+		return nil, err
+	}
+	return &wcipb.MigrateToWorkflowResponse{}, nil
 }
 
 // applySpec sets the spec, reconciles the group children and records a successful validation.
