@@ -8,6 +8,7 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
+	chasmwciclient "go.temporal.io/server/chasm/lib/wci/wciclient"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -58,7 +59,9 @@ type (
 	}
 )
 
+// ClientModule includes the CHASM backend, so ASW's ClientProvider routes CHASM first.
 var ClientModule = fx.Options(
+	chasmwciclient.Module,
 	wciclient.Module,
 	fx.Provide(ClientProvider),
 )

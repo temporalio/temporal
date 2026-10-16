@@ -6,11 +6,13 @@ import (
 
 	otellog "go.opentelemetry.io/otel/log"
 	wcicomponent "go.temporal.io/auto-scaled-workers/wci/workercomponent"
+	instancewf "go.temporal.io/auto-scaled-workers/wci/workflow"
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm/lib/callback"
 	chasmscheduler "go.temporal.io/server/chasm/lib/scheduler"
 	"go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	chasmwci "go.temporal.io/server/chasm/lib/wci"
+	chasmwciclient "go.temporal.io/server/chasm/lib/wci/wciclient"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -49,6 +51,8 @@ var Module = fx.Options(
 	deletenamespace.Module,
 	chasmscheduler.Module,
 	chasmwci.ComponentModule,
+	// The per-namespace WCI workflows migrate to CHASM through this.
+	fx.Provide(func(c *chasmwciclient.Client) instancewf.MigrationClient { return c }),
 	callback.Module,
 	scheduler.Module,
 	batcher.Module,
