@@ -5,8 +5,10 @@ These Go build tags compile out parts of the server. For tags that only affect t
 
 ## `disable_grpc_modules`
 
-Disables gRPC modules for faster compilation during unit tests. The Makefile builds and tests with
-it.
+Excludes the gRPC dependencies of `cloud.google.com/go/storage`, reducing binary size and compile
+time. The server only uses the storage REST client (`storage.NewClient`), not the gRPC client
+(`storage.NewGRPCClient`). The Makefile and release builds (`.goreleaser.yml`) set it. Related issue:
+https://github.com/googleapis/google-cloud-go/issues/12343
 
 ## Optional integrations
 
