@@ -730,9 +730,15 @@ func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 	if tsc == nil {
 		return nil
 	}
+	defaultMaxSkipPerSession := max(1, int32(wh.config.TimeSkippingMaxSkipPerSession(ns.String())))
 	if tsc.GetMaxSessionSkipCount() <= 0 {
-		defaultMaxSkipPerSession := wh.config.TimeSkippingMaxSkipPerSession(ns.String())
-		tsc.MaxSessionSkipCount = max(1, int32(defaultMaxSkipPerSession))
+		tsc.MaxSessionSkipCount = defaultMaxSkipPerSession
+	} else if tsc.GetMaxSessionSkipCount() != defaultMaxSkipPerSession {
+		wh.logger.Info("default max session skip count of time skipping overridden",
+			tag.WorkflowNamespace(ns.String()),
+			tag.Int32("max-session-skip-count", tsc.GetMaxSessionSkipCount()),
+			tag.Int32("default-max-session-skip-count", defaultMaxSkipPerSession),
+		)
 	}
 	if !tsc.GetEnabled() && tsc.GetFastForwardConfig() != nil {
 		return serviceerror.NewInvalidArgument("time_skipping_config: cannot set fast_forward when enabled is false")
@@ -772,7 +778,7 @@ func (wh *WorkflowHandler) validateAndPopulateScheduleTimeSkippingConfig(
 	}
 	if !useChasm {
 		wh.logger.Warn(
-			"Rejecting time-skipping configuration for workflow-backed schedule",
+			"rejecting time skipping configuration for workflow-backed schedule",
 			tag.WorkflowNamespace(ns.String()),
 		)
 		return errScheduleTimeSkippingNotEnabled

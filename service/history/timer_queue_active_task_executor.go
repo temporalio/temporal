@@ -975,7 +975,7 @@ func (t *timerQueueActiveTaskExecutor) executeTimeSkippingTimerTask(
 		// framework then records failure/corruption metrics, logs, and drops the task (or DLQs it
 		// only if that is enabled for the category).
 		errorMsg := fmt.Sprintf(
-			"time-skipping timer task validation failed: VersionedTransition is nil (task: %t, pending fast-forward: %t)",
+			"time skipping timer task validation failed: VersionedTransition is nil (task: %t, pending fast-forward: %t)",
 			task.VersionedTransition == nil,
 			ffVT == nil,
 		)

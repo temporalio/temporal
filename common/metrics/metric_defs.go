@@ -1324,6 +1324,7 @@ var (
 
 	ExecutionTimeSkippingTransitionedCounter      = NewCounterDef("execution_time_skipping_transitioned_count")
 	ExecutionTimeSkippingTransitionedErrorCounter = NewCounterDef("execution_time_skipping_transitioned_error_count")
+	ExecutionTimeSkippingConfigUpdatedCounter     = NewCounterDef("execution_time_skipping_config_updated_count")
 
 	// Pagination of RespondWorkflowTaskCompleted requests
 	WorkflowTaskCompletionPaginatedBytes = NewBytesHistogramDef(

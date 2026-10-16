@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/transitionhistory"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -81,6 +82,19 @@ func (ms *MutableStateImpl) SetTimeSkippingConfig(config *commonpb.TimeSkippingC
 	} else {
 		ms.updateTimeSkippingInfo(config)
 	}
+	ms.emitTimeSkippingConfigUpdatedMetric()
+}
+
+func (ms *MutableStateImpl) emitTimeSkippingConfigUpdatedMetric() {
+	metrics.ExecutionTimeSkippingConfigUpdatedCounter.With(ms.metricsHandler).Record(1, ms.timeSkippingMetricTags()...)
+}
+
+func (ms *MutableStateImpl) timeSkippingMetricTags() []metrics.Tag {
+	tags := []metrics.Tag{metrics.NamespaceTag(ms.namespaceEntry.Name().String())}
+	if archetypeTag, ok := getArchetypeMetricTag(ms.shard.ChasmRegistry(), ms.chasmTree.ArchetypeID()); ok {
+		tags = append(tags, archetypeTag)
+	}
+	return tags
 }
 
 // applyFastForward (re)computes the FastForwardInfo using the new TimeSkippingConfig (TSC) and propagated time-skippingstates.
@@ -302,22 +316,19 @@ func (util *TimeSkippingInfoUtil) ToFastForwardInfo() *commonpb.TimeSkippingFast
 // and if the workflow is at the correct state and status to skip time.
 // And if there is a time point to skip to is not the scope of this method.
 func (ms *MutableStateImpl) isWorkflowSkippable() bool {
+	// (1) gate by time skipping configuration; runs for every workflow, so it is not logged
+	if !NewTimeSkippingInfoUtil(ms.GetExecutionInfo().GetTimeSkippingInfo()).IsEnabled() {
+		return false
+	}
+
 	noSkippingReason := ""
 	defer func() {
 		if noSkippingReason != "" {
-			ms.logger.Debug(fmt.Sprintf("time skipping skipped for: %s", noSkippingReason),
-				tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
-				tag.WorkflowRunID(ms.GetExecutionState().RunId),
-			)
+			ms.logger.Debug("workflow time skipping skipped", tag.String("reason", noSkippingReason))
 		}
 	}()
 
-	// (1) gate by time skipping configuration
-	tsc := ms.GetExecutionInfo().GetTimeSkippingInfo().GetConfig()
-	if tsc == nil || !tsc.Enabled {
-		noSkippingReason = "time skipping is not enabled"
-		return false
-	}
+	// The feature flag may be disabled after a workflow enabled time skipping.
 	if !ms.IsTimeSkippingFeatureEnabled(chasm.WorkflowArchetypeID) {
 		noSkippingReason = "time skipping feature flag is disabled"
 		return false
@@ -445,8 +456,6 @@ func (ms *MutableStateImpl) trackFutureOrReportDueTaskForWorkflow(
 ) (hasDueTask bool) {
 	if !deadline.After(transition.CurrentTime) {
 		ms.logger.Debug("a pending task stops workflow time skipping in the current transaction",
-			tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
-			tag.WorkflowRunID(ms.GetExecutionState().RunId),
 			tag.String("pending-task-type", targetName),
 			tag.Time("pending-task-deadline", deadline))
 		return true
@@ -478,6 +487,7 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 		_, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(
 			ctx, transition.GetTargetTime(), transition.DisabledAfterFastForward)
 		if err != nil {
+			metrics.ExecutionTimeSkippingTransitionedErrorCounter.With(ms.metricsHandler).Record(1, ms.timeSkippingMetricTags()...)
 			ms.logger.Error("failed to add workflow execution time skipping transitioned event", tag.Error(err))
 			return false
 		}
@@ -487,10 +497,7 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 	case historyi.TransactionPolicyPassive:
 		return false
 	default:
-		ms.logger.Error(fmt.Sprintf("closeTransactionHandleTimeSkipping: unknown transaction policy: %v", transactionPolicy),
-			tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
-			tag.WorkflowRunID(ms.GetExecutionState().RunId),
-		)
+		ms.logger.Error(fmt.Sprintf("workflow time skipping: unknown transaction policy: %v", transactionPolicy))
 		return false
 	}
 }
@@ -503,7 +510,11 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippingTransitionedEvent(
 	}
 	event := ms.hBuilder.AddWorkflowExecutionTimeSkippingTransitionedEvent(
 		targetTime, disabledAfterFastForward)
-	return event, ms.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx, event)
+	if err := ms.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx, event); err != nil {
+		return event, err
+	}
+	metrics.ExecutionTimeSkippingTransitionedCounter.With(ms.metricsHandler).Record(1, ms.timeSkippingMetricTags()...)
+	return event, nil
 }
 
 func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx context.Context, event *historypb.HistoryEvent) error {
@@ -513,11 +524,11 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionTimeSkippingTransitionedEvent(
 	opTag := tag.WorkflowActionWorkflowExecutionTimeSkippingTransitioned
 	invalidTransitionError := serviceerror.NewInternal("TimeSkippingTransitionedEvent failed to apply")
 	if tsi == nil {
-		ms.logError("TimeSkippingTransitionedEvent failed to apply: TimeSkippingInfo is nil", opTag)
+		ms.logError("workflow time skipping transitioned event failed to apply: TimeSkippingInfo is nil", opTag)
 		return invalidTransitionError
 	}
 	if attr.TargetTime == nil && !attr.GetDisabledAfterFastForward() {
-		ms.logError("TimeSkippingTransitionedEvent failed to apply: TargetTime is nil and disabled after fast-forward is false", opTag)
+		ms.logError("workflow time skipping transitioned event failed to apply: TargetTime is nil and disabled after fast-forward is false", opTag)
 		return invalidTransitionError
 	}
 
@@ -569,6 +580,7 @@ func (ms *MutableStateImpl) RecordTimeSkippingTransition(transition *chasm.TimeS
 		!transition.GetTargetTime().IsZero(),
 		transition.DisabledAfterFastForward,
 	)
+	metrics.ExecutionTimeSkippingTransitionedCounter.With(ms.metricsHandler).Record(1, ms.timeSkippingMetricTags()...)
 	if skippedDuration > 0 {
 		ms.addTimeSkippingFastForwardTask()
 	}
@@ -589,11 +601,18 @@ func (ms *MutableStateImpl) executeTimeSkippingTransition(
 		reachedFFInfo.HasReached = true
 		ms.setAndStampFastForwardInfo(reachedFFInfo)
 		tsi.Config.Enabled = false
+		ms.logger.Info("execution time skipping disabled: fast-forward reached",
+			tag.Time("fast-forward-target-time", reachedFFInfo.GetTargetTime().AsTime()),
+			tag.Duration("accumulated-skipped-duration", ms.accumulatedSkippedDuration()))
 	}
 
 	tsi.SessionSkipCount++
 	if tsi.SessionSkipCount >= tsi.GetConfig().GetMaxSessionSkipCount() && tsi.GetConfig().GetEnabled() {
 		tsi.Config.Enabled = false
+		ms.logger.Info("execution time skipping disabled: max session skip count reached",
+			tag.Int32("max-session-skip-count", tsi.GetConfig().GetMaxSessionSkipCount()),
+			tag.Int32("session-skip-count", tsi.GetSessionSkipCount()),
+			tag.Duration("accumulated-skipped-duration", ms.accumulatedSkippedDuration()))
 	}
 	ms.timeSkippingInfoUpdated = true
 }
