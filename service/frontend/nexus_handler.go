@@ -470,7 +470,7 @@ func (h *nexusHandler) StartOperation(
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid input")
 	}
 	if startOperationRequest.Payload.Size() > h.payloadSizeLimit(oc.namespaceName) {
-		oc.logger.Error("payload size exceeds error limit for Nexus StartOperation request", tag.Operation(operation), tag.WorkflowNamespace(oc.namespaceName))
+		oc.logger.Warn("payload size exceeds error limit")
 		return nil, nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "input exceeds size limit")
 	}
 
@@ -480,7 +480,7 @@ func (h *nexusHandler) StartOperation(
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("matching_timeout"))
-		oc.logger.Error("received error from matching service for Nexus StartOperation request", tag.Error(err))
+		oc.logger.Error("received error from matching service", tag.Error(err))
 		return nil, commonnexus.ConvertGRPCError(err, false)
 	}
 	// Convert to standard Nexus SDK response.
@@ -546,7 +546,7 @@ func (h *nexusHandler) forwardStartOperation(
 
 	resp, err := client.StartOperation(ctx, operation, input.Reader, options)
 	if err != nil {
-		oc.logger.Error("received error from remote cluster for forwarded Nexus start operation request.", tag.Error(err))
+		oc.logger.Error("received error from remote cluster for forwarded request", tag.Error(err))
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("forwarded_request_error"))
 		return nil, err
 	}
@@ -598,7 +598,7 @@ func (h *nexusHandler) CancelOperation(ctx context.Context, service, operation, 
 	response, err := h.matchingClient.DispatchNexusTask(ctx, request)
 	if err != nil {
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("matching_timeout"))
-		oc.logger.Error("received error from matching service for Nexus CancelOperation request", tag.Error(err))
+		oc.logger.Error("received error from matching service", tag.Error(err))
 		return commonnexus.ConvertGRPCError(err, false)
 	}
 	// Convert to standard Nexus SDK response.
@@ -623,7 +623,7 @@ func (h *nexusHandler) forwardCancelOperation(
 
 	handle, err := client.NewOperationHandle(operation, id)
 	if err != nil {
-		oc.logger.Warn("invalid Nexus cancel operation.", tag.Error(err))
+		oc.logger.Warn("invalid operation handle", tag.Error(err))
 		return nexus.NewHandlerErrorf(nexus.HandlerErrorTypeBadRequest, "invalid operation")
 	}
 
@@ -644,7 +644,7 @@ func (h *nexusHandler) forwardCancelOperation(
 
 	err = handle.Cancel(ctx, options)
 	if err != nil {
-		oc.logger.Error("received error from remote cluster for forwarded Nexus cancel operation request.", tag.Error(err))
+		oc.logger.Error("received error from remote cluster for forwarded request", tag.Error(err))
 		oc.metricsHandler = oc.metricsHandler.WithTags(metrics.OutcomeTag("forwarded_request_error"))
 		return err
 	}

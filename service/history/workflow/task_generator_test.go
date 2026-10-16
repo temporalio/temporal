@@ -1623,9 +1623,9 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_FastForwardTimer(
 			taskGenerator := NewTaskGenerator(nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
 			require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
 
-			var fastForwardTasks []*tasks.TimeSkippingTimerTask
+			var fastForwardTasks []*tasks.TimeSkippingFastForwardTimerTask
 			for _, task := range captured {
-				if bt, ok := task.(*tasks.TimeSkippingTimerTask); ok {
+				if bt, ok := task.(*tasks.TimeSkippingFastForwardTimerTask); ok {
 					fastForwardTasks = append(fastForwardTasks, bt)
 				}
 			}
@@ -1745,8 +1745,8 @@ func TestTaskGeneratorImpl_GenerateTimeSkippingFastForwardTimerTask(t *testing.T
 			}
 
 			require.Len(t, captured, 1)
-			task, ok := captured[0].(*tasks.TimeSkippingTimerTask)
-			require.True(t, ok, "expected *tasks.TimeSkippingTimerTask, got %T", captured[0])
+			task, ok := captured[0].(*tasks.TimeSkippingFastForwardTimerTask)
+			require.True(t, ok, "expected *tasks.TimeSkippingFastForwardTimerTask, got %T", captured[0])
 			require.Equal(t, tests.WorkflowKey, task.WorkflowKey)
 			require.Equal(t, fastForwardTarget, task.VisibilityTimestamp)
 			protorequire.ProtoEqual(t, fastForwardVT, task.VersionedTransition)
@@ -2080,7 +2080,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_AllFieldsPopulate
 			*tasks.WorkflowExecutionTimeoutTask,
 			*tasks.WorkflowRunTimeoutTask,
 			*tasks.WorkflowBackoffTimerTask,
-			*tasks.TimeSkippingTimerTask:
+			*tasks.TimeSkippingFastForwardTimerTask:
 			name := reflect.TypeOf(task).Elem().Name()
 			seen[name] = true
 			requireAllFieldsPopulated(t, name, reflect.ValueOf(task).Elem(), taskIDOnly)
@@ -2096,7 +2096,7 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_AllFieldsPopulate
 		"WorkflowExecutionTimeoutTask",
 		"WorkflowRunTimeoutTask",
 		"WorkflowBackoffTimerTask",
-		"TimeSkippingTimerTask",
+		"TimeSkippingFastForwardTimerTask",
 	} {
 		require.Truef(t, seen[name], "expected RegenerateTimerTasksForTimeSkipping to emit a %s", name)
 	}

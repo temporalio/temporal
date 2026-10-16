@@ -32,6 +32,7 @@ const (
 	AdminService_GetWorkflowExecutionRawHistory_FullMethodName      = "/temporal.server.api.adminservice.v1.AdminService/GetWorkflowExecutionRawHistory"
 	AdminService_GetReplicationMessages_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/GetReplicationMessages"
 	AdminService_GetNamespaceReplicationMessages_FullMethodName     = "/temporal.server.api.adminservice.v1.AdminService/GetNamespaceReplicationMessages"
+	AdminService_ApplyNamespaceMutation_FullMethodName              = "/temporal.server.api.adminservice.v1.AdminService/ApplyNamespaceMutation"
 	AdminService_GetDLQReplicationMessages_FullMethodName           = "/temporal.server.api.adminservice.v1.AdminService/GetDLQReplicationMessages"
 	AdminService_ReapplyEvents_FullMethodName                       = "/temporal.server.api.adminservice.v1.AdminService/ReapplyEvents"
 	AdminService_AddSearchAttributes_FullMethodName                 = "/temporal.server.api.adminservice.v1.AdminService/AddSearchAttributes"
@@ -66,6 +67,8 @@ const (
 	AdminService_ForceUnloadTaskQueuePartition_FullMethodName       = "/temporal.server.api.adminservice.v1.AdminService/ForceUnloadTaskQueuePartition"
 	AdminService_GetTaskQueueUserData_FullMethodName                = "/temporal.server.api.adminservice.v1.AdminService/GetTaskQueueUserData"
 	AdminService_MigrateSchedule_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/MigrateSchedule"
+	AdminService_ListExecutions_FullMethodName                      = "/temporal.server.api.adminservice.v1.AdminService/ListExecutions"
+	AdminService_CountExecutions_FullMethodName                     = "/temporal.server.api.adminservice.v1.AdminService/CountExecutions"
 )
 
 // AdminServiceClient is the client API for AdminService service.
@@ -98,6 +101,11 @@ type AdminServiceClient interface {
 	GetReplicationMessages(ctx context.Context, in *GetReplicationMessagesRequest, opts ...grpc.CallOption) (*GetReplicationMessagesResponse, error)
 	// GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task Id.
 	GetNamespaceReplicationMessages(ctx context.Context, in *GetNamespaceReplicationMessagesRequest, opts ...grpc.CallOption) (*GetNamespaceReplicationMessagesResponse, error)
+	// ApplyNamespaceMutation is the receiver-side entry point for the CHASM-based
+	// namespace replication transport. The originating cell's NamespaceMutationComponent
+	// calls this RPC against each peer cell after its local apply commits.
+	// Apply semantics are apply-if-higher (config_version / failover_version).
+	ApplyNamespaceMutation(ctx context.Context, in *ApplyNamespaceMutationRequest, opts ...grpc.CallOption) (*ApplyNamespaceMutationResponse, error)
 	// GetDLQReplicationMessages return replication messages based on DLQ info.
 	GetDLQReplicationMessages(ctx context.Context, in *GetDLQReplicationMessagesRequest, opts ...grpc.CallOption) (*GetDLQReplicationMessagesResponse, error)
 	// ReapplyEvents applies stale events to the current workflow and current run.
@@ -158,6 +166,8 @@ type AdminServiceClient interface {
 	GetTaskQueueUserData(ctx context.Context, in *GetTaskQueueUserDataRequest, opts ...grpc.CallOption) (*GetTaskQueueUserDataResponse, error)
 	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
 	MigrateSchedule(ctx context.Context, in *MigrateScheduleRequest, opts ...grpc.CallOption) (*MigrateScheduleResponse, error)
+	ListExecutions(ctx context.Context, in *ListExecutionsRequest, opts ...grpc.CallOption) (*ListExecutionsResponse, error)
+	CountExecutions(ctx context.Context, in *CountExecutionsRequest, opts ...grpc.CallOption) (*CountExecutionsResponse, error)
 }
 
 type adminServiceClient struct {
@@ -270,6 +280,15 @@ func (c *adminServiceClient) GetReplicationMessages(ctx context.Context, in *Get
 func (c *adminServiceClient) GetNamespaceReplicationMessages(ctx context.Context, in *GetNamespaceReplicationMessagesRequest, opts ...grpc.CallOption) (*GetNamespaceReplicationMessagesResponse, error) {
 	out := new(GetNamespaceReplicationMessagesResponse)
 	err := c.cc.Invoke(ctx, AdminService_GetNamespaceReplicationMessages_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) ApplyNamespaceMutation(ctx context.Context, in *ApplyNamespaceMutationRequest, opts ...grpc.CallOption) (*ApplyNamespaceMutationResponse, error) {
+	out := new(ApplyNamespaceMutationResponse)
+	err := c.cc.Invoke(ctx, AdminService_ApplyNamespaceMutation_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -604,6 +623,24 @@ func (c *adminServiceClient) MigrateSchedule(ctx context.Context, in *MigrateSch
 	return out, nil
 }
 
+func (c *adminServiceClient) ListExecutions(ctx context.Context, in *ListExecutionsRequest, opts ...grpc.CallOption) (*ListExecutionsResponse, error) {
+	out := new(ListExecutionsResponse)
+	err := c.cc.Invoke(ctx, AdminService_ListExecutions_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) CountExecutions(ctx context.Context, in *CountExecutionsRequest, opts ...grpc.CallOption) (*CountExecutionsResponse, error) {
+	out := new(CountExecutionsResponse)
+	err := c.cc.Invoke(ctx, AdminService_CountExecutions_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AdminServiceServer is the server API for AdminService service.
 // All implementations must embed UnimplementedAdminServiceServer
 // for forward compatibility
@@ -634,6 +671,11 @@ type AdminServiceServer interface {
 	GetReplicationMessages(context.Context, *GetReplicationMessagesRequest) (*GetReplicationMessagesResponse, error)
 	// GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task Id.
 	GetNamespaceReplicationMessages(context.Context, *GetNamespaceReplicationMessagesRequest) (*GetNamespaceReplicationMessagesResponse, error)
+	// ApplyNamespaceMutation is the receiver-side entry point for the CHASM-based
+	// namespace replication transport. The originating cell's NamespaceMutationComponent
+	// calls this RPC against each peer cell after its local apply commits.
+	// Apply semantics are apply-if-higher (config_version / failover_version).
+	ApplyNamespaceMutation(context.Context, *ApplyNamespaceMutationRequest) (*ApplyNamespaceMutationResponse, error)
 	// GetDLQReplicationMessages return replication messages based on DLQ info.
 	GetDLQReplicationMessages(context.Context, *GetDLQReplicationMessagesRequest) (*GetDLQReplicationMessagesResponse, error)
 	// ReapplyEvents applies stale events to the current workflow and current run.
@@ -694,6 +736,8 @@ type AdminServiceServer interface {
 	GetTaskQueueUserData(context.Context, *GetTaskQueueUserDataRequest) (*GetTaskQueueUserDataResponse, error)
 	// MigrateSchedule migrates a schedule between V1 (workflow-backed) and V2 (CHASM-backed) implementations.
 	MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error)
+	ListExecutions(context.Context, *ListExecutionsRequest) (*ListExecutionsResponse, error)
+	CountExecutions(context.Context, *CountExecutionsRequest) (*CountExecutionsResponse, error)
 	mustEmbedUnimplementedAdminServiceServer()
 }
 
@@ -736,6 +780,9 @@ func (UnimplementedAdminServiceServer) GetReplicationMessages(context.Context, *
 }
 func (UnimplementedAdminServiceServer) GetNamespaceReplicationMessages(context.Context, *GetNamespaceReplicationMessagesRequest) (*GetNamespaceReplicationMessagesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetNamespaceReplicationMessages not implemented")
+}
+func (UnimplementedAdminServiceServer) ApplyNamespaceMutation(context.Context, *ApplyNamespaceMutationRequest) (*ApplyNamespaceMutationResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ApplyNamespaceMutation not implemented")
 }
 func (UnimplementedAdminServiceServer) GetDLQReplicationMessages(context.Context, *GetDLQReplicationMessagesRequest) (*GetDLQReplicationMessagesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetDLQReplicationMessages not implemented")
@@ -838,6 +885,12 @@ func (UnimplementedAdminServiceServer) GetTaskQueueUserData(context.Context, *Ge
 }
 func (UnimplementedAdminServiceServer) MigrateSchedule(context.Context, *MigrateScheduleRequest) (*MigrateScheduleResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method MigrateSchedule not implemented")
+}
+func (UnimplementedAdminServiceServer) ListExecutions(context.Context, *ListExecutionsRequest) (*ListExecutionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListExecutions not implemented")
+}
+func (UnimplementedAdminServiceServer) CountExecutions(context.Context, *CountExecutionsRequest) (*CountExecutionsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CountExecutions not implemented")
 }
 func (UnimplementedAdminServiceServer) mustEmbedUnimplementedAdminServiceServer() {}
 
@@ -1064,6 +1117,24 @@ func _AdminService_GetNamespaceReplicationMessages_Handler(srv interface{}, ctx 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AdminServiceServer).GetNamespaceReplicationMessages(ctx, req.(*GetNamespaceReplicationMessagesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_ApplyNamespaceMutation_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ApplyNamespaceMutationRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ApplyNamespaceMutation(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_ApplyNamespaceMutation_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ApplyNamespaceMutation(ctx, req.(*ApplyNamespaceMutationRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1688,6 +1759,42 @@ func _AdminService_MigrateSchedule_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_ListExecutions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListExecutionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ListExecutions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_ListExecutions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ListExecutions(ctx, req.(*ListExecutionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_CountExecutions_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CountExecutionsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).CountExecutions(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AdminService_CountExecutions_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).CountExecutions(ctx, req.(*CountExecutionsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AdminService_ServiceDesc is the grpc.ServiceDesc for AdminService service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -1742,6 +1849,10 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetNamespaceReplicationMessages",
 			Handler:    _AdminService_GetNamespaceReplicationMessages_Handler,
+		},
+		{
+			MethodName: "ApplyNamespaceMutation",
+			Handler:    _AdminService_ApplyNamespaceMutation_Handler,
 		},
 		{
 			MethodName: "GetDLQReplicationMessages",
@@ -1874,6 +1985,14 @@ var AdminService_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "MigrateSchedule",
 			Handler:    _AdminService_MigrateSchedule_Handler,
+		},
+		{
+			MethodName: "ListExecutions",
+			Handler:    _AdminService_ListExecutions_Handler,
+		},
+		{
+			MethodName: "CountExecutions",
+			Handler:    _AdminService_CountExecutions_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

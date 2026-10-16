@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
@@ -64,7 +65,16 @@ type (
 		chasmMapper   *chasm.VisibilitySearchAttributesMapper
 		archetypeID   chasm.ArchetypeID
 
-		seenNamespaceDivision bool
+		// If disableDefaultNsDivision is true, don't auto add TemporalNamespaceDivision
+		// filter if missing.
+		disableDefaultNsDivision bool
+		seenNamespaceDivision    bool
+
+		// seenIllegalFieldName tracks illegal usage of field names in filters.
+		// Eg: Keyword01 is a field name to be mapped to an alias. Using it directly
+		// in a filter should be illegal.
+		// This flag is only used to emit metric and log at this moment.
+		seenIllegalFieldName bool
 
 		metricsHandler metrics.Handler
 		logger         log.Logger
@@ -134,6 +144,8 @@ var (
 	}
 )
 
+var fieldNameFilterAccepted = metrics.NewCounterDef("visibility_field_name_filter_accepted")
+
 func NewQueryConverter[ExprT any](
 	storeQC StoreQueryConverter[ExprT],
 	namespaceName namespace.Name,
@@ -150,9 +162,11 @@ func NewQueryConverter[ExprT any](
 		saTypeMap:     saTypeMap,
 		saMapper:      saMapper,
 
-		seenNamespaceDivision: false,
+		disableDefaultNsDivision: false,
+		seenNamespaceDivision:    false,
+		seenIllegalFieldName:     false,
 
-		metricsHandler: metricsHandler,
+		metricsHandler: metricsHandler.WithTags(metrics.NamespaceTag(namespaceName.String())),
 		logger:         logger,
 	}
 	return c
@@ -182,6 +196,11 @@ func (c *QueryConverter[ExprT]) WithArchetypeID(
 	return c
 }
 
+func (c *QueryConverter[ExprT]) WithDisableDefaultNamespaceDivision() *QueryConverter[ExprT] {
+	c.disableDefaultNsDivision = true
+	return c
+}
+
 func (c *QueryConverter[ExprT]) SeenNamespaceDivision() bool {
 	return c.seenNamespaceDivision
 }
@@ -198,16 +217,25 @@ func (c *QueryConverter[ExprT]) Convert(
 		return nil, err
 	}
 
+	if c.seenIllegalFieldName {
+		c.logger.Warn(
+			"Visibility query contains a filter on a field name",
+			tag.WorkflowNamespace(c.namespaceName.String()),
+			tag.String("query", queryString),
+		)
+		fieldNameFilterAccepted.With(c.metricsHandler).Record(1)
+	}
+
 	// If the query did not explicitly filter on TemporalNamespaceDivision,
 	// try setting the namespace division filter based on the archetype ID,
 	// else filter by null (no division).
-	var namespaceDivisionExpr ExprT
-	if !c.seenNamespaceDivision {
+	if !c.seenNamespaceDivision && !c.disableDefaultNsDivision {
 		nsDivisionCol := NamespaceDivisionSAColumn()
 		if err := c.saInterceptor.Intercept(nsDivisionCol); err != nil {
 			return nil, err
 		}
 
+		var namespaceDivisionExpr ExprT
 		if c.archetypeID != chasm.UnspecifiedArchetypeID {
 			// For CHASM queries, filter by archetype ID
 			namespaceDivisionExpr, err = c.storeQC.ConvertComparisonExpr(
@@ -225,11 +253,11 @@ func (c *QueryConverter[ExprT]) Convert(
 		if err != nil {
 			return nil, err
 		}
-	}
 
-	queryParams.QueryExpr, err = c.storeQC.BuildAndExpr(namespaceDivisionExpr, queryParams.QueryExpr)
-	if err != nil {
-		return nil, err
+		queryParams.QueryExpr, err = c.storeQC.BuildAndExpr(namespaceDivisionExpr, queryParams.QueryExpr)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return queryParams, nil
@@ -504,6 +532,10 @@ func (c *QueryConverter[ExprT]) convertColName(in sqlparser.Expr) (*SAColumn, er
 		return nil, err
 	}
 
+	if c.isIllegalFieldName(saAlias, saFieldName, saType) {
+		c.seenIllegalFieldName = true
+	}
+
 	if saFieldName == sadefs.TemporalNamespaceDivision {
 		c.seenNamespaceDivision = true
 	}
@@ -513,6 +545,29 @@ func (c *QueryConverter[ExprT]) convertColName(in sqlparser.Expr) (*SAColumn, er
 		return nil, err
 	}
 	return colName, nil
+}
+
+// isIllegalFieldName returns true if saAlias is a field name used directly in the query instead
+// of its alias, ie, it's either a CHASM field name or a preallocated custom search attribute field
+// name. A namespace may register an alias identical to the field name it's mapped to, in which
+// case using it is a legitimate use of the alias, and not of the field name.
+func (c *QueryConverter[ExprT]) isIllegalFieldName(
+	saAlias string,
+	saFieldName string,
+	saType enumspb.IndexedValueType,
+) bool {
+	if _, ok := c.chasmMapper.SATypeMap()[saAlias]; ok && !sadefs.IsSystem(saAlias) {
+		return true
+	}
+	if saAlias != saFieldName || !sadefs.IsPreallocatedCSAFieldName(saAlias, saType) {
+		return false
+	}
+	if c.saMapper != nil {
+		// Check if the alias actually has the same name as the field name.
+		fieldName, err := c.saMapper.GetFieldName(saAlias, c.namespaceName.String())
+		return err != nil || fieldName != saAlias
+	}
+	return true
 }
 
 func (c *QueryConverter[ExprT]) parseValueExpr(

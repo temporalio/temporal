@@ -342,3 +342,93 @@ func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsFaile
 	env.Equal(codes.InvalidArgument, serviceerror.ToStatus(err).Code())
 	env.ErrorAs(err, new(*serviceerror.InvalidArgument))
 }
+
+// TestActivityBatchUpdateOptionsNoUpdateMask verifies that an activity-options
+// batch submitted without an UpdateMask fails its targets instead of reporting
+// them as updated. Validation only requires a mask for the workflow-options
+// operation, so this request reaches the batcher, where an empty mask would be
+// accepted by the server and applied as a no-op success.
+func (s *ActivityAPIBatchUpdateOptionsSuite) TestActivityBatchUpdateOptionsNoUpdateMask() {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithWorkerService("batch operations"),
+		testcore.WithDynamicConfig(dynamicconfig.FrontendMaxConcurrentBatchOperationPerNamespace, testcore.ClientSuiteLimit),
+	)
+
+	ctx := s.Context()
+	const workflowCount = 3
+	workflowTypeName := testcore.RandomizeStr("activity-batch-update-options-no-mask-workflow")
+
+	internalWorkflow := newInternalWorkflow()
+
+	env.SdkWorker().RegisterWorkflowWithOptions(internalWorkflow.WorkflowFunc, workflow.RegisterOptions{Name: workflowTypeName})
+	env.SdkWorker().RegisterActivity(internalWorkflow.ActivityFunc)
+
+	workflowRuns := make([]sdkclient.WorkflowRun, 0, workflowCount)
+	for range workflowCount {
+		workflowRun, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+			ID:        testcore.RandomizeStr("wf_id-" + s.T().Name()),
+			TaskQueue: env.WorkerTaskQueue(),
+		}, workflowTypeName)
+		s.NoError(err)
+		s.NotNil(workflowRun)
+		workflowRuns = append(workflowRuns, workflowRun)
+	}
+
+	s.Await(func(s *ActivityAPIBatchUpdateOptionsSuite) {
+		for _, workflowRun := range workflowRuns {
+			description, err := env.SdkClient().DescribeWorkflowExecution(s.Context(), workflowRun.GetID(), workflowRun.GetRunID())
+			s.NoError(err)
+			s.Len(description.GetPendingActivities(), 1)
+		}
+	}, 5*time.Second, 100*time.Millisecond)
+
+	query := fmt.Sprintf("WorkflowType='%s' AND ExecutionStatus = 'Running'", workflowTypeName)
+	s.Await(func(s *ActivityAPIBatchUpdateOptionsSuite) {
+		listResp, err := env.FrontendClient().ListWorkflowExecutions(s.Context(), &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: env.Namespace().String(),
+			PageSize:  workflowCount,
+			Query:     query,
+		})
+		s.NoError(err)
+		s.Len(listResp.GetExecutions(), workflowCount)
+	}, 5*time.Second, 500*time.Millisecond)
+
+	// UpdateMask deliberately unset.
+	jobID := uuid.NewString()
+	_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+		Namespace: env.Namespace().String(),
+		Operation: &workflowservice.StartBatchOperationRequest_UpdateActivityOptionsOperation{
+			UpdateActivityOptionsOperation: &batchpb.BatchOperationUpdateActivityOptions{
+				Activity: &batchpb.BatchOperationUpdateActivityOptions_MatchAll{MatchAll: true},
+				ActivityOptions: &activitypb.ActivityOptions{
+					ScheduleToCloseTimeout: durationpb.New(10 * time.Second),
+				},
+			},
+		},
+		VisibilityQuery: query,
+		JobId:           jobID,
+		Reason:          "test",
+	})
+	s.NoError(err)
+
+	// Every target must be reported as failed rather than updated.
+	s.Await(func(s *ActivityAPIBatchUpdateOptionsSuite) {
+		descResp, err := env.FrontendClient().DescribeBatchOperation(s.Context(), &workflowservice.DescribeBatchOperationRequest{
+			Namespace: env.Namespace().String(),
+			JobId:     jobID,
+		})
+		s.NoError(err)
+		s.Equal(enumspb.BATCH_OPERATION_STATE_COMPLETED, descResp.GetState())
+		s.EqualValues(workflowCount, descResp.GetFailureOperationCount())
+		s.Zero(descResp.GetCompleteOperationCount())
+	}, 15*time.Second, 100*time.Millisecond)
+
+	// And the activity options must be untouched.
+	for _, workflowRun := range workflowRuns {
+		description, err := env.SdkClient().DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+		s.NoError(err)
+		s.Len(description.GetPendingActivities(), 1)
+		s.Equal(internalWorkflow.scheduleToCloseTimeout,
+			description.GetPendingActivities()[0].GetActivityOptions().GetScheduleToCloseTimeout().AsDuration())
+	}
+}

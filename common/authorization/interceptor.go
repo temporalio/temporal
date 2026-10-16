@@ -92,7 +92,7 @@ type Interceptor struct {
 	authExtraHeaderName          string
 	exposeAuthorizerErrors       dynamicconfig.BoolPropertyFn
 	enableCrossNamespaceCommands dynamicconfig.BoolPropertyFn
-	enablePrincipalPropagation   dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	enablePrincipalHeader        dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	disableStreamingAuthorizer   dynamicconfig.BoolPropertyFn
 }
 
@@ -108,7 +108,7 @@ func NewInterceptor(
 	authExtraHeaderName string,
 	exposeAuthorizerErrors dynamicconfig.BoolPropertyFn,
 	enableCrossNamespaceCommands dynamicconfig.BoolPropertyFn,
-	enablePrincipalPropagation dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	enablePrincipalHeader dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	disableStreamingAuthorizer dynamicconfig.BoolPropertyFn,
 ) *Interceptor {
 	return &Interceptor{
@@ -122,7 +122,7 @@ func NewInterceptor(
 		audienceGetter:               audienceGetter,
 		exposeAuthorizerErrors:       exposeAuthorizerErrors,
 		enableCrossNamespaceCommands: enableCrossNamespaceCommands,
-		enablePrincipalPropagation:   enablePrincipalPropagation,
+		enablePrincipalHeader:        enablePrincipalHeader,
 		disableStreamingAuthorizer:   disableStreamingAuthorizer,
 	}
 }
@@ -173,7 +173,7 @@ func (a *Interceptor) Intercept(
 		if err != nil {
 			return nil, err
 		}
-		if a.enablePrincipalPropagation != nil && a.enablePrincipalPropagation(namespace) && principal != nil {
+		if a.enablePrincipalHeader != nil && a.enablePrincipalHeader(namespace) && principal != nil {
 			ctx = headers.SetPrincipal(ctx, principal)
 		}
 
