@@ -13,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/dgryski/go-farm"
 	"go.temporal.io/server/tools/common/github"
@@ -29,7 +30,8 @@ func Main() error {
 	tries := flag.Int("tries", 10000, "Number of tries")
 	workflow := flag.String("workflow", "", "GitHub Actions workflow name to fetch artifacts from (uses gh CLI)")
 	artifactPattern := flag.String("artifact-pattern", "", "Artifact name pattern to download")
-	runs := flag.Int("runs", 5, "Number of recent successful runs to download")
+	days := flag.Int("days", 7, "Number of days of successful runs to sample")
+	runs := flag.Int("runs", 200, "Maximum number of successful runs to download")
 	branch := flag.String("branch", "main", "Branch to find successful runs on")
 	event := flag.String("event", "push", "Event type to filter runs by")
 	saltFile := flag.String("file", "", "Path to the salt file to read/update (required)")
@@ -52,6 +54,12 @@ func Main() error {
 	if *saltFile == "" {
 		return errors.New("-file is required")
 	}
+	if *days < 1 {
+		return errors.New("-days must be >= 1")
+	}
+	if *runs < 1 {
+		return errors.New("-runs must be >= 1")
+	}
 
 	currentSaltBytes, err := os.ReadFile(*saltFile)
 	if err != nil {
@@ -60,7 +68,8 @@ func Main() error {
 	currentSalt := strings.TrimSpace(string(currentSaltBytes))
 	log.Printf("Current salt: %s", currentSalt)
 
-	dir, err := downloadArtifacts(*workflow, *artifactPattern, *branch, *event, *runs)
+	created := ">=" + time.Now().UTC().AddDate(0, 0, -*days).Format(time.DateOnly)
+	dir, err := downloadArtifacts(*workflow, *artifactPattern, *branch, *event, created, *runs)
 	if err != nil {
 		return fmt.Errorf("downloading artifacts: %w", err)
 	}
@@ -110,11 +119,11 @@ func Main() error {
 
 // downloadArtifacts finds the latest successful runs and downloads matching artifacts.
 // Returns the path to a temp directory containing the files.
-func downloadArtifacts(workflow, artifactPattern, branch, event string, limit int) (string, error) {
+func downloadArtifacts(workflow, artifactPattern, branch, event, created string, limit int) (string, error) {
 	if _, err := path.Match(artifactPattern, ""); err != nil {
 		return "", fmt.Errorf("invalid artifact name pattern %q: %w", artifactPattern, err)
 	}
-	runIDs, err := findLatestRuns(workflow, branch, event, limit)
+	runIDs, err := findLatestRuns(workflow, branch, event, created, limit)
 	if err != nil {
 		return "", err
 	}
@@ -184,12 +193,13 @@ func downloadJUnitArtifact(ctx context.Context, artifact github.Artifact, runDir
 	return nil
 }
 
-func findLatestRuns(workflow, branch, event string, limit int) ([]int64, error) {
+func findLatestRuns(workflow, branch, event, created string, limit int) ([]int64, error) {
 	runs, err := github.ListRuns(context.Background(), github.RunListOptions{
 		Workflow: workflow,
 		Event:    event,
 		Branch:   branch,
 		Status:   "success",
+		Created:  created,
 		Limit:    limit,
 	})
 	if err != nil {
@@ -320,11 +330,14 @@ func aggregateRuns(tmap map[string][]float64) map[string]float64 {
 	smap := make(map[string]float64)
 
 	for name, times := range tmap {
-		var total float64
-		for _, t := range times {
-			total += t
+		// Use the median observed duration so one slow run cannot dominate the salt.
+		slices.Sort(times)
+		middle := len(times) / 2
+		if len(times)%2 == 1 {
+			smap[name] = times[middle]
+		} else {
+			smap[name] = (times[middle-1] + times[middle]) / 2
 		}
-		smap[name] = total
 	}
 
 	return smap
