@@ -627,6 +627,10 @@ func (e *matchingEngineImpl) loggerAndMetricsForPartition(
 		tag.WorkflowTaskQueueName(partition.RpcName()),
 		tag.WorkflowTaskQueueType(partition.TaskType()),
 		tag.WorkflowNamespace(nsName))
+	if partition.TaskType() == enumspb.TASK_QUEUE_TYPE_NEXUS {
+		logger = log.With(logger, tag.NexusStageHandlerTaskDelivery)
+		throttledLogger = log.With(throttledLogger, tag.NexusStageHandlerTaskDelivery)
+	}
 	metricsHandler := metrics.GetPerTaskQueuePartitionIDScope(
 		e.metricsHandler,
 		nsName,

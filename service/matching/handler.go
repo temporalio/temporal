@@ -532,12 +532,12 @@ func (h *Handler) CheckTaskQueueVersionMembership(
 }
 
 func (h *Handler) DispatchNexusTask(ctx context.Context, request *matchingservice.DispatchNexusTaskRequest) (_ *matchingservice.DispatchNexusTaskResponse, retError error) {
-	defer log.CapturePanic(h.nexusTaskLogger, &retError)
+	defer log.CapturePanic(log.With(h.nexusTaskLogger, tag.Operation("DispatchNexusTask")), &retError)
 	return h.engine.DispatchNexusTask(ctx, request)
 }
 
 func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservice.PollNexusTaskQueueRequest) (_ *matchingservice.PollNexusTaskQueueResponse, retError error) {
-	defer log.CapturePanic(h.nexusTaskLogger, &retError)
+	defer log.CapturePanic(log.With(h.nexusTaskLogger, tag.Operation("PollNexusTaskQueue")), &retError)
 	opMetrics := h.opMetricsHandler(
 		request.GetNamespaceId(),
 		request.GetRequest().GetTaskQueue(),
@@ -557,7 +557,7 @@ func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservi
 	if _, err := common.ValidateLongPollContextTimeoutIsSet(
 		ctx,
 		"PollNexusTaskQueue",
-		h.nexusTaskThrottledLogger,
+		log.With(h.nexusTaskThrottledLogger, tag.Operation("PollNexusTaskQueue")),
 	); err != nil {
 		return nil, err
 	}
@@ -565,7 +565,7 @@ func (h *Handler) PollNexusTaskQueue(ctx context.Context, request *matchingservi
 }
 
 func (h *Handler) RespondNexusTaskCompleted(ctx context.Context, request *matchingservice.RespondNexusTaskCompletedRequest) (_ *matchingservice.RespondNexusTaskCompletedResponse, retError error) {
-	defer log.CapturePanic(h.nexusTaskLogger, &retError)
+	defer log.CapturePanic(log.With(h.nexusTaskLogger, tag.Operation("RespondNexusTaskCompleted")), &retError)
 	opMetrics := h.opMetricsHandler(
 		request.GetNamespaceId(),
 		request.GetTaskQueue(),
@@ -578,7 +578,7 @@ func (h *Handler) RespondNexusTaskCompleted(ctx context.Context, request *matchi
 }
 
 func (h *Handler) RespondNexusTaskFailed(ctx context.Context, request *matchingservice.RespondNexusTaskFailedRequest) (_ *matchingservice.RespondNexusTaskFailedResponse, retError error) {
-	defer log.CapturePanic(h.nexusTaskLogger, &retError)
+	defer log.CapturePanic(log.With(h.nexusTaskLogger, tag.Operation("RespondNexusTaskFailed")), &retError)
 	opMetrics := h.opMetricsHandler(
 		request.GetNamespaceId(),
 		request.GetTaskQueue(),
