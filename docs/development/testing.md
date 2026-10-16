@@ -336,6 +336,19 @@ require.NoError(t, fp.Wait(ctx))                 // ... until it arrives ...
 fp.Disable()                                     // ... then release it.
 ```
 
+Failpoints also run at the gRPC, HTTP, and persistence fault injection points, without a declared
+key:
+
+- `failpoint.GRPCKey(fullMethod)` fires before the handler of a unary gRPC method on frontend,
+  history, and matching.
+- `failpoint.HTTPKey("POST /path")` fires before an outgoing callback or Nexus HTTP request.
+- `failpoint.PersistenceKey("ExecutionStore", "UpdateWorkflowExecution")` fires before a
+  persistence store method.
+
+gRPC and HTTP failpoints are scoped to the namespace ID of the request when it has one. Persistence
+requests carry no namespace, so persistence failpoints apply to all namespaces; inject them with
+`testcore.InjectGlobalFailpoint`, which requires a dedicated cluster.
+
 ### softassert package
 
 `softassert.That` is a "soft" assertion that logs an error if the given condition is false.
