@@ -49,10 +49,6 @@ const (
 	orphanedChildReplacementRejectedUnsupportedState                      = "rejected_unsupported_state"
 )
 
-// eagerDispatchGrantTimeout bounds the Matching grant call on the start path. It is shorter than the
-// Matching client's retry backoff, so a failed or timed-out attempt is not retried.
-const eagerDispatchGrantTimeout = 500 * time.Millisecond
-
 const (
 	StartErr StartOutcome = iota
 	StartNew
@@ -179,7 +175,7 @@ func (s *Starter) prepare(ctx context.Context) error {
 				Record(1, metrics.ReasonTag(eagerStartDeniedReasonFirstWorkflowTaskBackoff))
 			request.RequestEagerExecution = false
 		} else if s.shardContext.GetConfig().EnableWorkflowEagerDispatchCheck(s.namespace.Name().String()) &&
-			// This line makes an RPC call to matching.
+			// This line makes an RPC call to matching, bounded and not retried by the Matching client.
 			// TODO: Reconcile the Matching grant when the start does not create a new execution.
 			!s.grantEagerWorkflowDispatch(ctx) {
 			// Matching grants are best-effort. On a denial or any matching failure, start the
@@ -194,8 +190,6 @@ func (s *Starter) prepare(ctx context.Context) error {
 }
 
 func (s *Starter) grantEagerWorkflowDispatch(ctx context.Context) bool {
-	ctx, cancel := context.WithTimeout(ctx, eagerDispatchGrantTimeout)
-	defer cancel()
 	request := s.request.StartRequest
 	// Pinned and pending one-time overrides route the first workflow task to their target version.
 	version := worker_versioning.DeploymentVersionFromDeployment(worker_versioning.DeploymentFromExternalDeploymentVersion(
