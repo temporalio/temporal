@@ -753,7 +753,7 @@ func TestGrantEagerActivityDispatchBatch(t *testing.T) {
 			handler := &workflowTaskCompletedHandler{
 				mutableState:   ms,
 				matchingClient: matchingClient,
-				metricsHandler: metricsHandler,
+				metricsHandler: metricsHandler.WithTags(metrics.OperationTag(metrics.HistoryRespondWorkflowTaskCompletedScope)),
 				config: &configs.Config{
 					BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(true),
 				},
@@ -774,6 +774,7 @@ func TestGrantEagerActivityDispatchBatch(t *testing.T) {
 			requestMetrics := capture.SnapshotMetric(metrics.EagerDispatchRequestsSent.Name())
 			require.Len(t, requestMetrics, 1)
 			require.Equal(t, int64(2), requestMetrics[0].Value)
+			require.Equal(t, metrics.HistoryRespondWorkflowTaskCompletedScope, requestMetrics[0].Tags[metrics.OperationTag("").Key])
 			require.Equal(t, tests.LocalNamespaceEntry.Name().String(), requestMetrics[0].Tags[metrics.NamespaceTag("").Key])
 			require.Equal(t, "activity-task-queue", requestMetrics[0].Tags[metrics.UnsafeTaskQueueTag("").Key])
 		})
