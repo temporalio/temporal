@@ -90,17 +90,15 @@ func TestPauseUnpauseDuringStartDelay(t *testing.T) {
 		"once the start delay elapses the activity must dispatch")
 }
 
-// Same as TestPauseUnpauseDuringStartDelay but for a retry backoff.
+// Unpause discards retry backoff so the held attempt can dispatch immediately.
 func TestPauseUnpauseDuringBackoff(t *testing.T) {
 	cfg := Config{}
 	paused := Transition(cfg, backedOffRetry(t, cfg), Event{Type: PauseType})
 	require.Equal(t, NoError, paused.Reject, "pause during a backoff must be accepted")
 	require.Equal(t, Paused, paused.Next.Status)
 	unpaused := Transition(cfg, paused.Next, Event{Type: UnpauseType}).Next
-	require.Equal(t, BackoffPending, unpaused.Dispatchability, "unpause must resume waiting for the backoff")
-	require.False(t, pollable(cfg, unpaused), "a poll must find no task while the backoff is still pending")
-	require.True(t, pollable(cfg, Transition(cfg, unpaused, Event{Type: BackoffElapsesType}).Next),
-		"once the backoff elapses the activity must dispatch")
+	require.Equal(t, AbstractState{Status: Scheduled, AttemptCount: 2}, unpaused)
+	require.True(t, pollable(cfg, unpaused), "unpause must discard the remaining retry backoff")
 }
 
 // Schedule-to-close is pushed back by a start delay (and a retry backoff)
@@ -281,7 +279,7 @@ func TestFailureAfterResumingExhaustedPause(t *testing.T) {
 
 	cfg := Config{MaxAttempts: 1}
 	state := Initial(cfg)
-	for _, event := range []Event{Poll, Pause, FailRetryably, Unpause, BackoffElapses, Poll, FailRetryably} {
+	for _, event := range []Event{Poll, Pause, FailRetryably, Unpause, Poll, FailRetryably} {
 		outcome := Transition(cfg, state, event)
 		require.Equal(t, NoError, outcome.Reject)
 		require.False(t, outcome.ImpossibleTimeWindowElapse)

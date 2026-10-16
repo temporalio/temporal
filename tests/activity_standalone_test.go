@@ -11765,11 +11765,8 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		require.EqualValues(t, 2, poll2Resp.Attempt)
 	})
 
-	// PauseWhileRetryHonorsBackoff: pausing an activity mid retry-backoff and immediately unpausing
-	// must not shortcut the remaining backoff. Unpause honors the pending retry's dispatch time
-	// (complete_time + retry_interval), just as it honors a pending start_delay, so the activity
-	// stays SCHEDULED until the original backoff would have elapsed rather than dispatching at once.
-	t.Run("PauseWhileRetryHonorsBackoff", func(t *testing.T) {
+	// Unpause discards the remaining retry backoff and releases the next attempt.
+	t.Run("PauseWhileRetryDiscardsBackoff", func(t *testing.T) {
 		ctx := testcore.NewContext()
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
@@ -11838,7 +11835,7 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 		})
 		require.NoError(t, err)
 
-		// Honor backoff: the task must not be pollable before the retry deadline.
+		// The retry must dispatch without waiting for the old 30-second backoff.
 		pollCtx, pollCancel := context.WithTimeout(ctx, 5*time.Second)
 		defer pollCancel()
 		poll2Resp, err := env.FrontendClient().PollActivityTaskQueue(pollCtx, &workflowservice.PollActivityTaskQueueRequest{
@@ -11846,20 +11843,18 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:  env.Tv().WorkerIdentity(),
 		})
-		if err != nil {
-			require.True(t, common.IsContextDeadlineExceededErr(err), "unexpected poll error: %v", err)
-		} else {
-			require.Empty(
-				t,
-				poll2Resp.GetActivityId(),
-				"unpause must honor the remaining retry backoff; activity task should not be pollable",
-			)
-		}
+		require.NoError(t, err)
+		require.Equal(t, activityID, poll2Resp.GetActivityId())
+		require.EqualValues(t, 2, poll2Resp.GetAttempt())
+		_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: poll2Resp.GetTaskToken(),
+		})
+		require.NoError(t, err)
 	})
 
-	// After unpause, force dispatch reissue with an options update. The retry backoff should still
-	// be preserved, so no activity task should be pollable before the original retry deadline.
-	t.Run("PauseWhileRetryBackoffSurvivesOptionsUpdateAfterUnpause", func(t *testing.T) {
+	// An options update after unpause must not restore the discarded retry backoff.
+	t.Run("OptionsUpdateAfterUnpauseDoesNotRestoreRetryBackoff", func(t *testing.T) {
 		ctx := testcore.NewContext()
 		activityID := testcore.RandomizeStr(t.Name())
 		taskQueue := testcore.RandomizeStr(t.Name())
@@ -11950,11 +11945,14 @@ func (s *standaloneActivityTestSuite) TestPauseActivityExecution() {
 			TaskQueue: &taskqueuepb.TaskQueue{Name: taskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
 			Identity:  env.Tv().WorkerIdentity(),
 		})
-		if err != nil {
-			require.True(t, common.IsContextDeadlineExceededErr(err), "unexpected poll error: %v", err)
-		} else {
-			require.Empty(t, poll2Resp.GetActivityId(), "options update after unpause must not lose the pending retry backoff")
-		}
+		require.NoError(t, err)
+		require.Equal(t, activityID, poll2Resp.GetActivityId())
+		require.EqualValues(t, 2, poll2Resp.GetAttempt())
+		_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+			Namespace: env.Namespace().String(),
+			TaskToken: poll2Resp.GetTaskToken(),
+		})
+		require.NoError(t, err)
 	})
 
 	// PauseWhileCancelRequested: pausing a CANCEL_REQUESTED activity must be rejected with

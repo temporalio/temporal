@@ -713,6 +713,9 @@ func (a *Activity) applyUnpaused(
 	attempt := a.LastAttempt.Get(ctx)
 	dispatchTime := a.unpauseDispatchTime(ctx, event)
 	attempt.DispatchTime = timestamppb.New(dispatchTime)
+	// Clear the old backoff so options updates cannot restore it.
+	attempt.CurrentRetryInterval = nil
+	attempt.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
 
 	attempt.Stamp++
 	if timeout := a.GetScheduleToStartTimeout().AsDuration(); timeout > 0 {
