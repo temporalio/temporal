@@ -75,6 +75,8 @@ type Starter struct {
 	shouldSkipReactivation     bool
 	revisionNumber             int64
 	derivedRunID               bool
+	// eagerDispatchNotGranted is set when eager execution was requested but Matching did not grant it.
+	eagerDispatchNotGranted bool
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -185,6 +187,7 @@ func (s *Starter) prepare(ctx context.Context) error {
 			metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
 				Record(1, metrics.ReasonTag(eagerStartDeniedReasonDispatchNotGranted))
 			request.RequestEagerExecution = false
+			s.eagerDispatchNotGranted = true
 		}
 	}
 	return nil
@@ -733,7 +736,8 @@ func (s *Starter) respondToRetriedRequest(
 	runID string,
 	firstExecutionRunID string,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
-	if !s.requestEagerStart() {
+	// A denied grant still returns the eager task that an earlier attempt started, since no new task is dispatched.
+	if !s.requestEagerStart() && !s.eagerDispatchNotGranted {
 		return &historyservice.StartWorkflowExecutionResponse{
 			RunId:               runID,
 			FirstExecutionRunId: firstExecutionRunID,
@@ -769,7 +773,7 @@ func (s *Starter) respondToRetriedRequest(
 		return nil, err
 	}
 
-	return s.generateResponse(runID, firstExecutionRunID, mutableStateInfo.workflowTask, events)
+	return s.generateEagerResponse(runID, firstExecutionRunID, mutableStateInfo.workflowTask, events)
 }
 
 // getMutableStateInfo gets the relevant mutable state information while getting the state for the given run from the
@@ -976,11 +980,6 @@ func (s *Starter) generateResponse(
 	workflowTaskInfo *historyi.WorkflowTaskInfo,
 	historyEvents []*historypb.HistoryEvent,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
-	shardCtx := s.shardContext
-	tokenSerializer := s.tokenSerializer
-	request := s.request.StartRequest
-	workflowID := request.WorkflowId
-
 	if !s.requestEagerStart() {
 		return &historyservice.StartWorkflowExecutionResponse{
 			RunId:               runID,
@@ -990,6 +989,21 @@ func (s *Starter) generateResponse(
 			Link:                s.generateStartedEventRefLink(runID),
 		}, nil
 	}
+	return s.generateEagerResponse(runID, firstExecutionRunID, workflowTaskInfo, historyEvents)
+}
+
+// generateEagerResponse generates a StartWorkflowExecutionResponse that includes workflowTaskInfo as the eager
+// workflow task.
+func (s *Starter) generateEagerResponse(
+	runID string,
+	firstExecutionRunID string,
+	workflowTaskInfo *historyi.WorkflowTaskInfo,
+	historyEvents []*historypb.HistoryEvent,
+) (*historyservice.StartWorkflowExecutionResponse, error) {
+	shardCtx := s.shardContext
+	tokenSerializer := s.tokenSerializer
+	request := s.request.StartRequest
+	workflowID := request.WorkflowId
 
 	clock, err := shardCtx.NewVectorClock()
 	if err != nil {

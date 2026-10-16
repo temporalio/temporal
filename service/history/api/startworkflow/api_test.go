@@ -167,6 +167,7 @@ func TestPrepareEagerDispatchCheck(t *testing.T) {
 			}
 			require.NoError(t, starter.prepare(t.Context()))
 			require.Equal(t, test.wantEager, starter.requestEagerStart())
+			require.Equal(t, !test.wantEager, starter.eagerDispatchNotGranted)
 
 			var sentTaskQueueTypes []string
 			for _, recording := range capture.Snapshot()[metrics.EagerDispatchRequestsSent.Name()] {
