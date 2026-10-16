@@ -18,11 +18,16 @@ integrations with `temporal_with_<integration>` tags:
 
 ```sh
 # Without optional integrations.
-go build -tags disable_grpc_modules,temporal_minimal ./cmd/server
+make temporal-server BUILD_TAG=temporal_minimal
 
 # Without optional integrations, except Google Cloud Storage archival.
-go build -tags disable_grpc_modules,temporal_minimal,temporal_with_gstorage ./cmd/server
+make temporal-server BUILD_TAG=temporal_minimal,temporal_with_gstorage
+
+# Tests with the same tags.
+make unit-test TEST_TAG=temporal_minimal
 ```
+
+Programs that embed the server pass the same tags to `go build -tags`.
 
 Without `temporal_minimal`, the `temporal_with_*` tags have no effect and every integration is
 included. The scheme follows Prometheus' service discovery plugins (`remove_all_sd` plus
