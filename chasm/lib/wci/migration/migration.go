@@ -101,7 +101,7 @@ func CHASMStateToWorkflow(
 			ScalingGroupSpecs: make(map[string]iface.ScalingGroupSpec, len(state.GetScalingGroupSpecs())),
 		}
 		for id, spec := range state.GetScalingGroupSpecs() {
-			local.Spec.ScalingGroupSpecs[id] = specToWorkflow(spec)
+			local.Spec.ScalingGroupSpecs[id] = SpecToWorkflow(spec)
 		}
 	}
 	validation, err := validationToWorkflow(state.GetValidationStatus())
@@ -173,7 +173,8 @@ func specToCHASM(spec iface.ScalingGroupSpec) *wcipb.ScalingGroupSpec {
 	return out
 }
 
-func specToWorkflow(spec *wcipb.ScalingGroupSpec) iface.ScalingGroupSpec {
+// SpecToWorkflow converts a CHASM group spec to the iface type the scaling algorithms use.
+func SpecToWorkflow(spec *wcipb.ScalingGroupSpec) iface.ScalingGroupSpec {
 	out := iface.ScalingGroupSpec{
 		TaskTypes: slices.Clone(spec.GetTaskTypes()),
 		Compute: iface.ComputeProviderSpec{
