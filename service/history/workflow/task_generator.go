@@ -1172,7 +1172,7 @@ func (r *TaskGeneratorImpl) GenerateTimeSkippingFastForwardTimerTask() error {
 	if !NewTimeSkippingInfoUtil(tsi).HasPendingFastForward() {
 		return nil
 	}
-	r.mutableState.AddTasks(&tasks.TimeSkippingTimerTask{
+	r.mutableState.AddTasks(&tasks.TimeSkippingFastForwardTimerTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: tsi.GetFastForwardInfo().GetTargetTime().AsTime(),

@@ -2,6 +2,7 @@ package replication
 
 import (
 	"math/rand"
+	"sync"
 	"testing"
 
 	"github.com/google/uuid"
@@ -161,6 +162,43 @@ func (s *progressCacheSuite) TestProgressCache() {
 
 	cachedProgress = s.progressCache.Get(s.runID, targetClusterID)
 	s.DeepEqual(expected3, cachedProgress)
+}
+
+// TestProgressCache_ConcurrentGetAndUpdate verifies a progress returned by Get can be read while Update runs. The stream
+// sender reads progress via VersionedTransitionSent while SyncWorkflowState calls Update for the same run. Run with
+// -race: the race detector fails this test if Update mutates a progress that Get already handed out.
+func (s *progressCacheSuite) TestProgressCache_ConcurrentGetAndUpdate() {
+	targetClusterID := rand.Int31()
+	seed := &persistencespb.VersionedTransition{NamespaceFailoverVersion: 80, TransitionCount: 1}
+	s.NoError(s.progressCache.Update(s.runID, targetClusterID, []*persistencespb.VersionedTransition{seed}, nil))
+
+	const iterations = 1000
+	var (
+		wg        sync.WaitGroup
+		updateErr error
+		unsent    int
+	)
+	wg.Go(func() {
+		for i := range iterations {
+			if err := s.progressCache.Update(s.runID, targetClusterID, []*persistencespb.VersionedTransition{
+				{NamespaceFailoverVersion: 80, TransitionCount: int64(i + 2)},
+			}, nil); err != nil {
+				updateErr = err
+				return
+			}
+		}
+	})
+	wg.Go(func() {
+		for range iterations {
+			if !s.progressCache.Get(s.runID, targetClusterID).VersionedTransitionSent(seed) {
+				unsent++
+			}
+		}
+	})
+	wg.Wait()
+
+	s.NoError(updateErr)
+	s.Zero(unsent, "seed transition should always be reported as sent")
 }
 
 func TestProgressCacheUsesDistinctMetricsTag(t *testing.T) {

@@ -7,10 +7,13 @@ import (
 
 func CombineTypeMaps(
 	customTypeMap searchattribute.NameTypeMap,
-	chasmTypeMap *chasm.VisibilitySearchAttributesMapper,
+	chasmMapper *chasm.VisibilitySearchAttributesMapper,
 ) searchattribute.NameTypeMap {
-	return searchattribute.MergeNameTypeMaps(
-		customTypeMap,
-		searchattribute.NewNameTypeMap(chasmTypeMap.SATypeMap()),
-	)
+	if chasmTypeMap := chasmMapper.SATypeMap(); len(chasmTypeMap) > 0 {
+		return searchattribute.MergeNameTypeMaps(
+			customTypeMap,
+			searchattribute.NewNameTypeMap(chasmTypeMap),
+		)
+	}
+	return customTypeMap
 }

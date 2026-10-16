@@ -4,6 +4,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/nexusoperation"
+	"go.temporal.io/server/common/log"
 	"go.uber.org/fx"
 )
 
@@ -16,9 +17,10 @@ var Module = fx.Module(
 		chasmRegistry *chasm.Registry,
 		library *library,
 		config *nexusoperation.Config,
+		throttledLogger log.ThrottledLogger,
 	) error {
 		if err := library.registry.Register(
-			newNexusLibrary(config, chasmRegistry.NexusEndpointProcessor),
+			newNexusLibrary(config, chasmRegistry.NexusEndpointProcessor, throttledLogger),
 		); err != nil {
 			return err
 		}

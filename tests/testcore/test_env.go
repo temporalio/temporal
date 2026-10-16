@@ -23,7 +23,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/authorization"
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -65,12 +64,12 @@ type Env interface {
 }
 
 type TestEnv struct {
-	*FunctionalTestBase
+	*functionalTestBase
 
-	// Shadows FunctionalTestBase.Assertions with a per-test instance bound to
+	// Shadows functionalTestBase.Assertions with a per-test instance bound to
 	// this TestEnv's own *testing.T, avoiding data races when parallel tests
-	// share the same *FunctionalTestBase cluster.
-	// TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
+	// share the same *functionalTestBase cluster.
+	// TODO: remove once all tests are migrated to TestEnv (and no longer use functionalTestBase directly).
 	*require.Assertions
 
 	Logger log.Logger
@@ -101,6 +100,11 @@ type testOptions struct {
 	clusterOptions           []TestClusterOption
 	testVars                 func(*testvars.TestVars) *testvars.TestVars
 	historyTaskRecorder      bool
+	persistenceFaults        []PersistenceFault
+	// t is the test passed to NewEnv. This allows testOptions hooks to
+	// be able to access t, i.e., to register a t.Cleanup(...) hook in
+	// an option function
+	t *testing.T
 }
 
 type dynamicConfigOverride struct {
@@ -171,15 +175,6 @@ func WithMTLS() TestOption {
 		o.dedicatedCluster = true
 		o.clusterOptions = append(o.clusterOptions, withMTLS())
 		o.dedicatedReason = "mTLS enabled"
-	}
-}
-
-// WithPersistenceFaultInjection requests a dedicated cluster with the given persistence fault injection config.
-func WithPersistenceFaultInjection(cfg *config.FaultInjection) TestOption {
-	return func(o *testOptions) {
-		o.dedicatedCluster = true
-		o.clusterOptions = append(o.clusterOptions, WithFaultInjectionConfig(cfg))
-		o.dedicatedReason = "fault injection config used"
 	}
 }
 
@@ -265,7 +260,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	// extension below can compensate for the time setup takes.
 	ctx := testcontext.For(t)
 
-	var options testOptions
+	options := testOptions{t: t}
 	for _, opt := range opts {
 		opt(&options)
 	}
@@ -324,7 +319,7 @@ func NewEnv(t *testing.T, opts ...TestOption) *TestEnv {
 	testcontext.EnsureRemaining(testcontext.For(t), t, testcontext.DefaultTimeout())
 
 	env := &TestEnv{
-		FunctionalTestBase: base,
+		functionalTestBase: base,
 		Assertions:         require.New(t),
 		cluster:            cluster,
 		nsName:             ns,
@@ -430,7 +425,7 @@ func (e *TestEnv) TaskPoller() *taskpoller.TaskPoller {
 // NoError asserts that err is nil.
 //
 // Deprecated: use require.NoError with the parent test or suite instead.
-// TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
+// TODO: remove once all tests are migrated to TestEnv (and no longer use functionalTestBase directly).
 func (e *TestEnv) NoError(err error, msgAndArgs ...any) {
 	e.Assertions.NoError(err, msgAndArgs...)
 }
@@ -438,7 +433,7 @@ func (e *TestEnv) NoError(err error, msgAndArgs ...any) {
 // Error asserts that err is not nil.
 //
 // Deprecated: use require.Error with the parent test or suite instead.
-// TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
+// TODO: remove once all tests are migrated to TestEnv (and no longer use functionalTestBase directly).
 func (e *TestEnv) Error(err error, msgAndArgs ...any) {
 	e.Assertions.Error(err, msgAndArgs...)
 }
@@ -446,9 +441,9 @@ func (e *TestEnv) Error(err error, msgAndArgs ...any) {
 // Run executes a subtest.
 //
 // Deprecated: use the suite's Run method instead.
-// TODO: remove once all tests are migrated to TestEnv (and no longer use FunctionalTestBase directly).
+// TODO: remove once all tests are migrated to TestEnv (and no longer use functionalTestBase directly).
 func (e *TestEnv) Run(name string, subtest func()) bool {
-	return e.FunctionalTestBase.Run(name, subtest)
+	return e.functionalTestBase.Run(name, subtest)
 }
 
 // T returns the *testing.T.

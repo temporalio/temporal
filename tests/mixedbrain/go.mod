@@ -7,7 +7,7 @@ require (
 	github.com/siderolabs/grpc-proxy v0.5.2
 	github.com/stretchr/testify v1.11.1
 	github.com/temporalio/omes v0.0.0-20260915193711-9667582a3051
-	go.temporal.io/api v1.63.6-0.20260909222256-20151aa90480
+	go.temporal.io/api v1.63.8-0.20261014221631-25d6833c5701
 	go.temporal.io/server v0.0.0-00010101000000-000000000000
 	google.golang.org/grpc v1.83.2
 	google.golang.org/protobuf v1.36.11
@@ -26,8 +26,8 @@ require (
 	golang.org/x/net v0.58.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20260526163538-3dc84a4a5aaa // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260526163538-3dc84a4a5aaa // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20260803160001-6ac0973c030d // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260803160001-6ac0973c030d // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 

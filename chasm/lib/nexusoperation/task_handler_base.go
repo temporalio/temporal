@@ -181,11 +181,10 @@ func (b *nexusTaskHandlerBase) logCallFailure(traceCtx invocationTraceContext, c
 		return
 	}
 	tags := append(traceCtx.tags(), tag.Error(callErr))
-	msg := fmt.Sprintf("Nexus %s request failed", traceCtx.operationTag)
 	_, isTimeoutBelowMin := errors.AsType[*operationTimeoutBelowMinError](callErr)
 	if failureSource == commonnexus.FailureSourceWorker || isTimeoutBelowMin {
-		b.logger.Debug(msg, tags...)
+		b.logger.Debug("Nexus request failed", tags...)
 	} else {
-		b.logger.Error(msg, tags...)
+		b.logger.Error("Nexus request failed", tags...)
 	}
 }

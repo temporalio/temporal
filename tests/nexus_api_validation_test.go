@@ -17,6 +17,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/nexus/nexusrpc"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/frontend/configs"
 	"go.temporal.io/server/tests/testcore"
 )
@@ -242,6 +243,7 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_PayloadSizeLimit()
 
 		client, err := nexusrpc.NewHTTPClient(nexusrpc.HTTPClientOptions{BaseURL: dispatchURL, Service: "test-service"})
 		s.NoError(err)
+		logCapture := env.StartNamespaceLogCapture()
 		result, err := nexusrpc.StartOperation(s.Context(), client, op, input, nexus.StartOperationOptions{
 			CallbackURL: "http://localhost/callback",
 			RequestID:   "request-id",
@@ -252,6 +254,11 @@ func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_PayloadSizeLimit()
 		s.ErrorAs(err, &handlerErr)
 		s.Equal(nexus.HandlerErrorTypeBadRequest, handlerErr.Type)
 		s.Equal("input exceeds size limit", handlerErr.Message)
+		logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+			Level:   testlogger.Warn,
+			Message: "payload size exceeds error limit",
+			Tags:    map[string]any{"operation": "StartNexusOperation"},
+		})
 	}
 
 	s.Run("ByNamespaceAndTaskQueue", func(s *NexusAPIValidationTestSuite) { testFn(s, false) })
@@ -319,7 +326,8 @@ func (s *NexusAPIValidationTestSuite) TestNexus_RespondNexusTaskCompleted_Valida
 }
 
 func (s *NexusAPIValidationTestSuite) TestNexus_RespondNexusTaskMethods_ValidateFailureDetailsJSON() {
-	env := newNexusTestEnv(s.T(), false)
+	env := newNexusTestEnv(s.T(), false, testcore.WithDynamicConfig(dynamicconfig.LogAllReqErrors, true))
+	logCapture := env.StartNamespaceLogCapture()
 
 	tt := tokenspb.NexusTask{
 		NamespaceId: env.NamespaceID().String(),
@@ -364,6 +372,13 @@ func (s *NexusAPIValidationTestSuite) TestNexus_RespondNexusTaskMethods_Validate
 	})
 	s.ErrorAs(err, &invalidArgumentErr)
 	s.Equal("failure details must be JSON serializable", invalidArgumentErr.Message)
+	for _, operation := range []string{"RespondNexusTaskCompleted", "RespondNexusTaskFailed"} {
+		logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+			Level:   testlogger.Error,
+			Message: "service failures",
+			Tags:    map[string]any{"nexus-stage": "handler-task-delivery", "operation": operation},
+		})
+	}
 }
 
 func (s *NexusAPIValidationTestSuite) TestNexusStartOperation_ByEndpoint_EndpointNotFound() {

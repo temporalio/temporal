@@ -219,7 +219,7 @@ func (c *fairBacklogManagerImpl) periodicSync() {
 		select {
 		case <-c.tqCtx.Done():
 			return
-		case <-time.After(c.config.UpdateAckInterval()):
+		case <-time.After(backoff.Jitter(c.config.UpdateAckInterval(), 0.1)):
 			ctx, cancel := context.WithTimeout(c.tqCtx, ioTimeout)
 			err := c.db.SyncState(ctx)
 			cancel()
@@ -292,8 +292,8 @@ func (c *fairBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb
 		// Note that there could be more than one subqueue for the same priority.
 		if _, ok := result[pk]; !ok {
 			result[pk] = &taskqueuepb.TaskQueueStats{
-				// TODO(pri): returning 0 to match existing behavior, but maybe emptyBacklogAge would
-				// be more appropriate in the future.
+				// TODO(pri): returning 0 to match existing behavior, but maybe -1 (meaning empty)
+				// would be more appropriate in the future.
 				ApproximateBacklogAge: durationpb.New(0),
 			}
 		}
@@ -311,6 +311,23 @@ func (c *fairBacklogManagerImpl) BacklogStatsByPriority() map[int32]*taskqueuepb
 		}
 	}
 	return result
+}
+
+// NonNegligibleBacklogPriority returns 0 when no priority has a non-negligible backlog.
+func (c *fairBacklogManagerImpl) NonNegligibleBacklogPriority() priorityKey {
+	c.subqueueLock.Lock()
+	defer c.subqueueLock.Unlock()
+
+	var highest priorityKey
+	for subqueue, priority := range c.priorityBySubqueue {
+		oldestBacklogTime := c.subqueues[subqueue].getOldestBacklogTime()
+		if !oldestBacklogTime.IsZero() &&
+			time.Since(oldestBacklogTime) >= c.config.BacklogNegligibleAge() &&
+			(highest == 0 || priority < highest) {
+			highest = priority
+		}
+	}
+	return highest
 }
 
 func (c *fairBacklogManagerImpl) BacklogStatus() *taskqueuepb.TaskQueueStatus {

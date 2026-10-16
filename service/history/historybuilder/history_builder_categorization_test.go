@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
 	commandpb "go.temporal.io/api/command/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -245,6 +246,24 @@ func TestHistoryBuilder_FlushBufferToCurrentBatch(t *testing.T) {
 		if eventID != nextEventID {
 			t.Errorf("expected requestIDToEventID[signal-request-id] == %d, got %d", nextEventID, eventID)
 		}
+	})
+
+	t.Run("per-update requestID should be wired into requestIDToEventID map after flush", func(t *testing.T) {
+		nextEventID := int64(12)
+		hb := newHistoryBuilderFromConfig(builderConfig{nextEventId: nextEventID})
+		// A duplicate Update records its requestID per update, not in AttachedRequestId.
+		optionsEvent := hb.AddWorkflowExecutionOptionsUpdatedEvent(
+			nil, false, "", nil, nil, "", nil, nil, false,
+			[]*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate{{
+				UpdateId:          "update-id",
+				AttachedRequestId: "update-request-id",
+			}},
+		)
+		require.Equal(t, common.BufferedEventID, optionsEvent.EventId, "options updated event should be buffered")
+
+		_, requestIDToEventID := hb.FlushBufferToCurrentBatch()
+		require.Equal(t, nextEventID, optionsEvent.EventId, "options event must be updated after flushing buffer")
+		require.Equal(t, nextEventID, requestIDToEventID["update-request-id"], "requestID must be present in requestIDToEventID after flush")
 	})
 
 	t.Run("when there is ACTIVITY_TASK_COMPLETED event will move it to the end", func(t *testing.T) {

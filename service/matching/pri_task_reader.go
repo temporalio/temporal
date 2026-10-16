@@ -25,8 +25,7 @@ import (
 )
 
 const (
-	// TODO(pri): old matcher cleanup, move to here
-	// taskReaderThrottleRetryDelay = 3 * time.Second
+	taskReaderThrottleRetryDelay = 3 * time.Second
 
 	concurrentAddRetries = 10
 )
@@ -201,12 +200,11 @@ func (tr *priTaskReader) getTasksPump() {
 	}
 }
 
-// TODO(pri): old matcher cleanup: move here
-// type getTasksBatchResponse struct {
-// 	tasks           []*persistencespb.AllocatedTaskInfo
-// 	readLevel       int64
-// 	isReadBatchDone bool
-// }
+type getTasksBatchResponse struct {
+	tasks           []*persistencespb.AllocatedTaskInfo
+	readLevel       int64
+	isReadBatchDone bool
+}
 
 // Returns a batch of tasks from persistence starting form current read level.
 // Also return a number that can be used to update readLevel
