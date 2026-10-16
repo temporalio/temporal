@@ -9,12 +9,14 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	wcimetrics "go.temporal.io/auto-scaled-workers/wci/metrics"
 	"go.temporal.io/auto-scaled-workers/wci/workflow/iface"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/chasm"
 	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
 	"go.temporal.io/server/chasm/lib/wci/migration"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
@@ -25,19 +27,21 @@ import (
 type MigrateToWorkflowTaskHandlerOptions struct {
 	fx.In
 
-	HistoryClient resource.HistoryClient
-	DynamicConfig *dynamicconfig.Collection
+	HistoryClient  resource.HistoryClient
+	DynamicConfig  *dynamicconfig.Collection
+	MetricsHandler metrics.Handler
 }
 
 // MigrateToWorkflowTaskHandler starts the workflow from converted state, then marks the root MIGRATED.
 type MigrateToWorkflowTaskHandler struct {
 	chasm.SideEffectTaskHandlerBase[*wcipb.MigrateToWorkflowTask]
-	historyClient resource.HistoryClient
-	taskQueue     dynamicconfig.StringPropertyFn
+	historyClient  resource.HistoryClient
+	taskQueue      dynamicconfig.StringPropertyFn
+	metricsHandler metrics.Handler
 }
 
 func NewMigrateToWorkflowTaskHandler(opts MigrateToWorkflowTaskHandlerOptions) *MigrateToWorkflowTaskHandler {
-	return &MigrateToWorkflowTaskHandler{historyClient: opts.HistoryClient, taskQueue: WorkflowTaskQueue.Get(opts.DynamicConfig)}
+	return &MigrateToWorkflowTaskHandler{historyClient: opts.HistoryClient, taskQueue: WorkflowTaskQueue.Get(opts.DynamicConfig), metricsHandler: opts.MetricsHandler}
 }
 
 func (h *MigrateToWorkflowTaskHandler) Validate(_ chasm.Context, w *WorkerControllerInstance, _ chasm.TaskInvocation, _ *wcipb.MigrateToWorkflowTask) (bool, error) {
@@ -90,10 +94,14 @@ func (h *MigrateToWorkflowTaskHandler) Execute(ctx context.Context, ref chasm.Co
 	_, err = h.historyClient.StartWorkflowExecution(ctx, req)
 	var started *serviceerror.WorkflowExecutionAlreadyStarted
 	if err != nil && !errors.As(err, &started) {
+		MigrateToWorkflowCount.With(h.metricsHandler.WithTags(metrics.NamespaceTag(req.GetStartRequest().GetNamespace()))).
+			Record(1, metrics.StringTag(wcimetrics.MigrationOutcomeTagName, migrationOutcomeError), metrics.StringTag(wcimetrics.BackendTagName, backendCHASM))
 		return err
 	}
 
 	_, _, err = chasm.UpdateComponent(ctx, ref, func(w *WorkerControllerInstance, mctx chasm.MutableContext, _ any) (struct{}, error) {
+		MigrateToWorkflowCount.With(mctx.MetricsHandler()).
+			Record(1, metrics.StringTag(wcimetrics.MigrationOutcomeTagName, migrationOutcomeSuccess), metrics.StringTag(wcimetrics.BackendTagName, backendCHASM))
 		return struct{}{}, TransitionWorkflowStarted.Apply(w, mctx, EventWorkflowStarted{})
 	}, nil)
 	return err
