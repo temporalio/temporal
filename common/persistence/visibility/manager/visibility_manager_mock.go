@@ -13,6 +13,7 @@ import (
 	context "context"
 	reflect "reflect"
 
+	adminservice "go.temporal.io/server/api/adminservice/v1"
 	visibilityservice "go.temporal.io/server/api/visibilityservice/v1"
 	namespace "go.temporal.io/server/common/namespace"
 	gomock "go.uber.org/mock/gomock"
@@ -309,10 +310,10 @@ func (mr *MockAdminVisibilityManagerMockRecorder) AddSearchAttributes(ctx, reque
 }
 
 // AdminCountExecutions mocks base method.
-func (m *MockAdminVisibilityManager) AdminCountExecutions(ctx context.Context, request *AdminCountExecutionsRequest) (*AdminCountExecutionsResponse, error) {
+func (m *MockAdminVisibilityManager) AdminCountExecutions(ctx context.Context, request *adminservice.CountExecutionsRequest) (*adminservice.CountExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AdminCountExecutions", ctx, request)
-	ret0, _ := ret[0].(*AdminCountExecutionsResponse)
+	ret0, _ := ret[0].(*adminservice.CountExecutionsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -324,10 +325,10 @@ func (mr *MockAdminVisibilityManagerMockRecorder) AdminCountExecutions(ctx, requ
 }
 
 // AdminListExecutions mocks base method.
-func (m *MockAdminVisibilityManager) AdminListExecutions(ctx context.Context, request *AdminListExecutionsRequest) (*AdminListExecutionsResponse, error) {
+func (m *MockAdminVisibilityManager) AdminListExecutions(ctx context.Context, request *adminservice.ListExecutionsRequest) (*adminservice.ListExecutionsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AdminListExecutions", ctx, request)
-	ret0, _ := ret[0].(*AdminListExecutionsResponse)
+	ret0, _ := ret[0].(*adminservice.ListExecutionsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
