@@ -42,9 +42,9 @@ func TestNexusStageQueueFailures(t *testing.T) {
 	}{
 		{"HSM invocation", &tasks.StateMachineOutboundTask{StateMachineTask: tasks.StateMachineTask{WorkflowKey: key, Info: &persistencespb.StateMachineTaskInfo{Type: "nexusoperations.Invocation"}}}, "caller-outbound"},
 		{"HSM cancellation", &tasks.StateMachineOutboundTask{StateMachineTask: tasks.StateMachineTask{WorkflowKey: key, Info: &persistencespb.StateMachineTaskInfo{Type: "nexusoperations.Cancelation"}}}, "caller-outbound"},
-		{"HSM callback", &tasks.StateMachineOutboundTask{StateMachineTask: tasks.StateMachineTask{WorkflowKey: key, Info: &persistencespb.StateMachineTaskInfo{Type: "callbacks.Invocation"}}}, "handler-outbound"},
+		{"HSM callback", &tasks.StateMachineOutboundTask{StateMachineTask: tasks.StateMachineTask{WorkflowKey: key, Info: &persistencespb.StateMachineTaskInfo{Type: "callbacks.Invocation"}}}, ""},
 		{"CHASM invocation", &tasks.ChasmTask{WorkflowKey: key, Category: tasks.CategoryOutbound, Info: &persistencespb.ChasmTaskInfo{TypeId: invocationID}}, "caller-outbound"},
-		{"CHASM callback", &tasks.ChasmTask{WorkflowKey: key, Category: tasks.CategoryOutbound, Info: &persistencespb.ChasmTaskInfo{TypeId: callbackID}}, "handler-outbound"},
+		{"CHASM callback", &tasks.ChasmTask{WorkflowKey: key, Category: tasks.CategoryOutbound, Info: &persistencespb.ChasmTaskInfo{TypeId: callbackID}}, ""},
 		{"unregistered task", &tasks.ChasmTask{WorkflowKey: key, Category: tasks.CategoryOutbound, Info: &persistencespb.ChasmTaskInfo{TypeId: 123}}, ""},
 		{"mixed timer", &tasks.StateMachineTimerTask{WorkflowKey: key}, ""},
 		{"unrelated HSM", &tasks.StateMachineOutboundTask{StateMachineTask: tasks.StateMachineTask{WorkflowKey: key, Info: &persistencespb.StateMachineTaskInfo{Type: "other.Invocation"}}}, ""},

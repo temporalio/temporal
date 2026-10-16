@@ -286,8 +286,6 @@ func nexusTaskLogTags(task tasks.Task, registry *chasm.Registry) []tag.Tag {
 	switch {
 	case strings.HasPrefix(taskType, "nexusoperations."), strings.HasPrefix(taskType, "nexusoperation."):
 		return []tag.Tag{tag.NexusStageCallerOutbound}
-	case strings.HasPrefix(taskType, "callbacks."), strings.HasPrefix(taskType, chasm.CallbackLibraryName+"."):
-		return []tag.Tag{tag.NexusStageHandlerOutbound}
 	default:
 		return nil
 	}

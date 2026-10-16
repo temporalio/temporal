@@ -33,17 +33,7 @@ func NexusStage(req any, fullMethod string) []tag.Tag {
 		api.WorkflowServicePrefix + "ListNexusOperationExecutions",
 		api.WorkflowServicePrefix + "CountNexusOperationExecutions":
 		return []tag.Tag{tag.NexusStageCallerOutbound}
-	case api.HistoryServicePrefix + "CompleteNexusOperation",
-		api.HistoryServicePrefix + "CompleteNexusOperationChasm",
-		api.NexusServicePrefix + "CompleteNexusOperation":
-		return []tag.Tag{tag.NexusStageCallerInbound}
-	case api.HistoryServicePrefix + "StartNexusOperation",
-		api.HistoryServicePrefix + "CancelNexusOperation":
-		return []tag.Tag{tag.NexusStageHandlerInbound}
 	default:
-		if strings.HasPrefix(fullMethod, api.NexusServicePrefix) {
-			return []tag.Tag{tag.NexusStageHandlerInbound}
-		}
 		if strings.HasPrefix(fullMethod, "/temporal.server.chasm.lib.nexusoperation.proto.v1.NexusOperationService/") {
 			return []tag.Tag{tag.NexusStageCallerOutbound}
 		}

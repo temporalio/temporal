@@ -638,7 +638,7 @@ func (c *requestContext) interceptRequest(ctx context.Context, request *nexusrpc
 		if retErr != nil {
 			c.RequestErrorHandler.HandleError(
 				request,
-				nexusCompletionAPIName,
+				"",
 				c.metricsHandlerForInterceptors,
 				[]tag.Tag{tag.Operation(nexusCompletionMethodName), tag.WorkflowNamespace(c.namespace.Name().String())},
 				retErr,

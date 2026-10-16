@@ -41,14 +41,14 @@ func TestNexusStageRPCErrorLogs(t *testing.T) {
 		{api.WorkflowServicePrefix + "DeleteNexusOperationExecution", "caller-outbound"},
 		{api.WorkflowServicePrefix + "ListNexusOperationExecutions", "caller-outbound"},
 		{api.WorkflowServicePrefix + "CountNexusOperationExecutions", "caller-outbound"},
-		{api.HistoryServicePrefix + "CompleteNexusOperation", "caller-inbound"},
-		{api.HistoryServicePrefix + "CompleteNexusOperationChasm", "caller-inbound"},
-		{api.HistoryServicePrefix + "StartNexusOperation", "handler-inbound"},
-		{api.HistoryServicePrefix + "CancelNexusOperation", "handler-inbound"},
+		{api.HistoryServicePrefix + "CompleteNexusOperation", ""},
+		{api.HistoryServicePrefix + "CompleteNexusOperationChasm", ""},
+		{api.HistoryServicePrefix + "StartNexusOperation", ""},
+		{api.HistoryServicePrefix + "CancelNexusOperation", ""},
 		{"/temporal.server.chasm.lib.nexusoperation.proto.v1.NexusOperationService/StartNexusOperation", "caller-outbound"},
-		{api.NexusServicePrefix + "DispatchByEndpoint", "handler-inbound"},
-		{api.NexusServicePrefix + "DispatchByNamespaceAndTaskQueue", "handler-inbound"},
-		{api.NexusServicePrefix + "CompleteNexusOperation", "caller-inbound"},
+		{api.NexusServicePrefix + "DispatchByEndpoint", ""},
+		{api.NexusServicePrefix + "DispatchByNamespaceAndTaskQueue", ""},
+		{api.NexusServicePrefix + "CompleteNexusOperation", ""},
 		{"/unrelated.Service/StartNexusOperationExecution", ""},
 	} {
 		t.Run(tc.method, func(t *testing.T) {
@@ -97,7 +97,6 @@ func TestNexusStagePanicLogs(t *testing.T) {
 	for _, tc := range []struct{ method, stage string }{
 		{api.WorkflowServicePrefix + "PollNexusTaskQueue", "handler-task-delivery"},
 		{api.WorkflowServicePrefix + "StartNexusOperationExecution", "caller-outbound"},
-		{api.HistoryServicePrefix + "CompleteNexusOperation", "caller-inbound"},
 	} {
 		t.Run(tc.method, func(t *testing.T) {
 			t.Parallel()
@@ -161,9 +160,9 @@ func TestNexusStageForwardingPanicLogs(t *testing.T) {
 			if name == "handover" {
 				intercept = (&NamespaceHandoverInterceptor{logger: logger}).Intercept
 			}
-			_, err := intercept(t.Context(), nil, &grpc.UnaryServerInfo{FullMethod: api.HistoryServicePrefix + "CompleteNexusOperation"}, func(context.Context, any) (any, error) { panic("broken") })
+			_, err := intercept(t.Context(), nil, &grpc.UnaryServerInfo{FullMethod: api.MatchingServicePrefix + "PollNexusTaskQueue"}, func(context.Context, any) (any, error) { panic("broken") })
 			require.Error(t, err)
-			capture.RequireContains(t, testlogger.CapturedLogPattern{Level: testlogger.Error, Message: "Panic is captured", Tags: map[string]any{"nexus-stage": "caller-inbound"}})
+			capture.RequireContains(t, testlogger.CapturedLogPattern{Level: testlogger.Error, Message: "Panic is captured", Tags: map[string]any{"nexus-stage": "handler-task-delivery"}})
 		})
 	}
 }

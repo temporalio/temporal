@@ -2,67 +2,17 @@ package frontend
 
 import (
 	"context"
-	"net/http/httptest"
 	"testing"
 
-	"github.com/nexus-rpc/sdk-go/nexus"
 	"github.com/stretchr/testify/require"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	commonnexus "go.temporal.io/server/common/nexus"
-	"go.temporal.io/server/common/nexus/nexusrpc"
-	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.uber.org/mock/gomock"
 )
-
-func TestNexusStageHTTPServiceFailures(t *testing.T) {
-	t.Parallel()
-	for _, completion := range []bool{false, true} {
-		stage := "handler-inbound"
-		if completion {
-			stage = "caller-inbound"
-		}
-		t.Run(stage, func(t *testing.T) {
-			t.Parallel()
-			logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
-			logger.Expect(testlogger.Error, "service failures")
-			capture := logger.StartCapture()
-			defer logger.StopCapture(capture)
-			oc := newOperationContext(contextOptions{namespaceState: enumspb.NAMESPACE_STATE_REGISTERED, quota: 1, namespaceRateLimitAllow: true, rateLimitAllow: true})
-			handler := interceptor.NewRequestErrorHandler(logger, dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false))
-			if completion {
-				c := &requestContext{
-					nexusCompletionHandler: &nexusCompletionHandler{
-						AuthInterceptor: oc.auth, ClusterMetadata: oc.clusterMetadata,
-						NamespaceValidationInterceptor:       oc.namespaceValidationInterceptor,
-						NamespaceConcurrencyLimitInterceptor: oc.namespaceConcurrencyLimitInterceptor,
-						NamespaceRateLimitInterceptor:        oc.namespaceRateLimitInterceptor, RateLimitInterceptor: oc.rateLimitInterceptor,
-						RequestErrorHandler: handler, clientVersionChecker: oc.clientVersionChecker,
-					},
-					logger: logger, namespace: oc.namespace, metricsHandler: metrics.NoopMetricsHandler, metricsHandlerForInterceptors: metrics.NoopMetricsHandler,
-				}
-				require.NoError(t, c.interceptRequest(t.Context(), &nexusrpc.CompletionRequest{HTTPRequest: httptest.NewRequest("POST", "/", nil)}))
-				for _, cleanup := range c.cleanupFunctions {
-					cleanup(serviceerror.NewInternal("broken"))
-				}
-			} else {
-				oc.requestErrorHandler = handler
-				require.NoError(t, oc.interceptRequest(t.Context(), &matchingservice.DispatchNexusTaskRequest{}, nexus.Header{}))
-				for _, cleanup := range oc.cleanupFunctions {
-					cleanup(map[string]string{commonnexus.FailureSourceHeaderName: "frontend"}, serviceerror.NewInternal("broken"))
-				}
-			}
-			capture.RequireContains(t, testlogger.CapturedLogPattern{Level: testlogger.Error, Message: "service failures", Tags: map[string]any{"nexus-stage": stage}})
-		})
-	}
-}
 
 func TestNexusStagePollCancellationFailure(t *testing.T) {
 	t.Parallel()
