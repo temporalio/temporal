@@ -9,13 +9,11 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.uber.org/mock/gomock"
-	"google.golang.org/protobuf/types/known/durationpb"
 )
 
 type (
@@ -116,19 +114,19 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_WithDetached() {
 func (s *RegistryTestSuite) TestRegistry_RegisterComponents_WithRetention() {
 	r := chasm.NewRegistry(s.logger)
 	ctrl := gomock.NewController(s.T())
-	ns := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: "test-namespace"},
-		&persistencespb.NamespaceConfig{Retention: durationpb.New(24 * time.Hour)},
-		"active",
-	)
+	// A namespace-scoped dynamic config setting can be passed to WithRetention directly.
+	retentionSetting := dynamicconfig.DurationPropertyFnWithNamespaceFilter(func(namespaceName string) time.Duration {
+		if namespaceName == "test-namespace" {
+			return 72 * time.Hour
+		}
+		return 0
+	})
 	lib := chasm.NewMockLibrary(ctrl)
 	lib.EXPECT().Name().Return("TestLibrary").AnyTimes()
 	lib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*chasm.MockComponent](
 			"RetentionComponent",
-			chasm.WithRetention(func(ns *namespace.Namespace) time.Duration {
-				return 3 * ns.Retention()
-			}),
+			chasm.WithRetention(retentionSetting),
 		),
 	})
 	lib.EXPECT().Tasks().Return(nil)
@@ -140,21 +138,17 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_WithRetention() {
 
 	rc, ok := r.Component("TestLibrary.RetentionComponent")
 	s.Require().True(ok)
-	retention, ok := rc.Retention(ns)
+	retention, ok := rc.Retention("test-namespace")
 	s.Require().True(ok)
 	s.Require().Equal(72*time.Hour, retention)
 
-	// Verify that a component without WithRetention() reports no retention
-	normalRC := chasm.NewRegistrableComponent[*chasm.MockComponent]("NormalComponent")
-	_, ok = normalRC.Retention(ns)
+	// Verify that a non-positive retention is treated as unset
+	_, ok = rc.Retention("other-namespace")
 	s.Require().False(ok)
 
-	// Verify that a non-positive retention is treated as unset
-	nonPositiveRC := chasm.NewRegistrableComponent[*chasm.MockComponent](
-		"NonPositiveComponent",
-		chasm.WithRetention(func(*namespace.Namespace) time.Duration { return 0 }),
-	)
-	_, ok = nonPositiveRC.Retention(ns)
+	// Verify that a component without WithRetention() reports no retention
+	normalRC := chasm.NewRegistrableComponent[*chasm.MockComponent]("NormalComponent")
+	_, ok = normalRC.Retention("test-namespace")
 	s.Require().False(ok)
 }
 

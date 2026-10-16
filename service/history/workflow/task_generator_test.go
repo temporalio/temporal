@@ -992,19 +992,19 @@ func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ChasmComponentRetentio
 		testLib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
 			chasm.NewRegistrableComponent[*extendedRetentionComponent](
 				"Extended",
-				chasm.WithRetention(func(ns *namespace.Namespace) time.Duration {
-					return 3 * ns.Retention()
+				chasm.WithRetention(func(string) time.Duration {
+					return 21 * 24 * time.Hour
 				}),
 			),
 			chasm.NewRegistrableComponent[*shortRetentionComponent](
 				"Short",
-				chasm.WithRetention(func(*namespace.Namespace) time.Duration {
+				chasm.WithRetention(func(string) time.Duration {
 					return time.Minute
 				}),
 			),
 			chasm.NewRegistrableComponent[*shortenedRetentionComponent](
 				"Shortened",
-				chasm.WithRetention(func(*namespace.Namespace) time.Duration {
+				chasm.WithRetention(func(string) time.Duration {
 					return 3 * 24 * time.Hour
 				}),
 			),
@@ -1020,7 +1020,7 @@ func TestTaskGeneratorImpl_GenerateDeleteHistoryEventTask_ChasmComponentRetentio
 		workflowLib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
 			chasm.NewRegistrableComponent[*workflowRetentionComponent](
 				chasm.WorkflowComponentName,
-				chasm.WithRetention(func(*namespace.Namespace) time.Duration {
+				chasm.WithRetention(func(string) time.Duration {
 					return 14 * 24 * time.Hour
 				}),
 			),
