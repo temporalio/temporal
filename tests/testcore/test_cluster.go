@@ -20,6 +20,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
+	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -424,6 +425,11 @@ func (tc *TestCluster) MatchingClient() matchingservice.MatchingServiceClient {
 // SchedulerClient returns a scheduler client from the test cluster
 func (tc *TestCluster) SchedulerClient() schedulerpb.SchedulerServiceClient {
 	return tc.host.SchedulerClient()
+}
+
+// WCIClient returns a worker controller instance CHASM client from the test cluster
+func (tc *TestCluster) WCIClient() wcipb.WorkerControllerInstanceServiceClient {
+	return tc.host.WCIClient()
 }
 
 // ExecutionManager returns an execution manager factory from the test cluster

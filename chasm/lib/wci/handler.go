@@ -194,28 +194,41 @@ func (h *handler) UpdateWorkerControllerInstance(ctx context.Context, req *wcipb
 		return nil, err
 	}
 
+	// apply re-merges against the current spec so a concurrent update is not overwritten wholesale.
+	apply := func(w *WorkerControllerInstance, mctx chasm.MutableContext) (*wcipb.UpdateWorkerControllerInstanceResponse, error) {
+		final, err := iface.BuildUpdatedSpec(w.spec(), merge)
+		if err != nil {
+			return nil, serviceerror.NewInvalidArgument(err.Error())
+		}
+		if err := final.Validate(); err != nil {
+			return nil, err
+		}
+		w.applySpec(mctx, specsToCHASM(final), registrations)
+		w.LastModifierIdentity = req.GetIdentity()
+		w.ConflictToken = req.GetConflictToken()
+		return &wcipb.UpdateWorkerControllerInstanceResponse{ScalingGroupSpecs: w.ScalingGroupSpecs, ConflictToken: w.ConflictToken}, nil
+	}
+
+	var created *WorkerControllerInstance
+	var createdResp *wcipb.UpdateWorkerControllerInstanceResponse
 	result, err := chasm.UpdateWithStartExecution(
 		ctx,
 		chasm.ExecutionKey{NamespaceID: req.GetNamespaceId(), BusinessID: req.GetInstanceId()},
 		func(mctx chasm.MutableContext, _ any) (*WorkerControllerInstance, error) {
-			return NewWorkerControllerInstance(mctx, req.GetDeploymentName(), req.GetBuildId(), nil), nil
+			// Short-term workaround: the engine drops children added by updateFn on create (see plan.md, 5c).
+			created = NewWorkerControllerInstance(mctx, req.GetDeploymentName(), req.GetBuildId(), nil)
+			resp, err := apply(created, mctx)
+			createdResp = resp
+			return created, err
 		},
 		func(w *WorkerControllerInstance, mctx chasm.MutableContext, _ any) (*wcipb.UpdateWorkerControllerInstanceResponse, error) {
+			if w == created {
+				return createdResp, nil
+			}
 			if err := w.CheckMutable(); err != nil {
 				return nil, err
 			}
-			// Re-merge against the current spec so a concurrent update is not overwritten wholesale.
-			final, err := iface.BuildUpdatedSpec(w.spec(), merge)
-			if err != nil {
-				return nil, serviceerror.NewInvalidArgument(err.Error())
-			}
-			if err := final.Validate(); err != nil {
-				return nil, err
-			}
-			w.applySpec(mctx, specsToCHASM(final), registrations)
-			w.LastModifierIdentity = req.GetIdentity()
-			w.ConflictToken = req.GetConflictToken()
-			return &wcipb.UpdateWorkerControllerInstanceResponse{ScalingGroupSpecs: w.ScalingGroupSpecs, ConflictToken: w.ConflictToken}, nil
+			return apply(w, mctx)
 		},
 		nil,
 	)
