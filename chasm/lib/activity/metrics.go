@@ -89,10 +89,7 @@ func (a *Activity) emitOnAttemptTimedOutMetrics(metricsHandler metrics.Handler, 
 	metrics.ActivityTaskTimeout.With(metricsHandler).Record(1, timeoutTag)
 }
 
-func (a *Activity) emitOnAttemptFailedMetrics(ctx chasm.Context, metricsHandler metrics.Handler) {
-	attempt := a.LastAttempt.Get(ctx)
-	startedTime := attempt.GetStartedTime().AsTime()
-
+func (a *Activity) emitOnAttemptFailedMetrics(metricsHandler metrics.Handler, startedTime time.Time) {
 	latency := time.Since(startedTime)
 	metrics.ActivityStartToCloseLatency.With(metricsHandler).Record(latency)
 
