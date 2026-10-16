@@ -2,6 +2,7 @@ package wci
 
 import (
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/primitives"
 )
 
 var (
@@ -16,5 +17,11 @@ assumed identity; "subprocess" executes on the history host and is for local dev
 		10,
 		`ComputeConcurrencyPerNamespace caps concurrent provider calls per namespace on a history host, so a
 slow provider cannot starve task processing.`,
+	)
+	WorkflowTaskQueue = dynamicconfig.NewGlobalStringSetting(
+		"workercontroller.chasm.workflow_task_queue",
+		primitives.PerNSWorkerTaskQueue,
+		`WorkflowTaskQueue is where a WCI migrated back to the workflow backend is started. It must match
+the WCI client's task queue (cloud uses temporal-sys-worker-controller-per-ns-tq).`,
 	)
 )
