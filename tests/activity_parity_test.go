@@ -338,6 +338,8 @@ func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {
 		t *testing.T,
 		cfg activityConfig,
 		trace []model.Event,
+		wantTimeout enumspb.TimeoutType,
+		wantRetryState enumspb.RetryState,
 	) {
 		const message = "the terminal timeout must chain the underlying application failure as its Cause"
 		t.Run("WorkflowActivity", func(t *testing.T) {
@@ -346,14 +348,22 @@ func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {
 			require.True(t, ok)
 			appErr, ok := errors.AsType[*temporal.ApplicationError](timeout.Unwrap())
 			require.True(t, ok)
-			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, activity.terminalOutcome(t).status, message)
+			require.Equal(t, activityTerminalProjection{
+				Status:      enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+				FailureType: wantTimeout.String(),
+				RetryState:  wantRetryState,
+			}, activity.terminal(t), message)
 			require.Equal(t, "TestFailure", appErr.Type(), message)
 			require.Equal(t, "test failure", appErr.Message(), message)
 		})
 		t.Run("StandaloneActivity", func(t *testing.T) {
 			activity := newSAADriver(t, env, cfg).driveTrace(t, trace)
 			cause := activity.describe(t).GetOutcome().GetFailure().GetCause()
-			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT, activity.terminalOutcome(t).status, message)
+			require.Equal(t, activityTerminalProjection{
+				Status:      enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+				FailureType: wantTimeout.String(),
+				RetryState:  wantRetryState,
+			}, activity.terminal(t), message)
 			require.Equal(t, "TestFailure", cause.GetApplicationFailureInfo().GetType(), message)
 			require.Equal(t, "test failure", cause.GetMessage(), message)
 		})
@@ -368,6 +378,8 @@ func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {
 				model.Poll,
 				model.StartToCloseElapses,
 			},
+			enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+			enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
 		)
 	})
 	s.Run("Heartbeat", func(s *activityParityTestSuite) {
@@ -379,6 +391,8 @@ func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {
 				model.Poll,
 				model.HeartbeatElapses,
 			},
+			enumspb.TIMEOUT_TYPE_HEARTBEAT,
+			enumspb.RETRY_STATE_MAXIMUM_ATTEMPTS_REACHED,
 		)
 	})
 	s.Run("ScheduleToClose", func(s *activityParityTestSuite) {
@@ -388,6 +402,8 @@ func (s *activityParityTestSuite) TestTimeoutPreservesUnderlyingFailureCause() {
 				model.FailRetryably,
 				model.ScheduleToCloseElapses,
 			},
+			enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE,
+			enumspb.RETRY_STATE_TIMEOUT,
 		)
 	})
 }
@@ -715,7 +731,144 @@ func (s *activityParityTestSuite) TestActivityCore() {
 // parityActivity is what a parity test reads from a driven activity. Both drivers' handles satisfy
 // it, so a test states its claim once instead of once per implementation.
 type parityActivity interface {
+	activityInfo(require.TestingT) activityInfo
+	terminal(require.TestingT) activityTerminalProjection
 	driveEvent(testing.TB, model.Event)
+	heartbeatFlags() model.HeartbeatFlags
+}
+
+// parityDrive drives trace through both implementations and hands each resulting activity to check.
+func parityDrive(
+	t *testing.T,
+	env *testcore.TestEnv,
+	cfg activityConfig,
+	trace []model.Event,
+	check func(*testing.T, parityActivity),
+) {
+	t.Run("WorkflowActivity", func(t *testing.T) {
+		check(t, newWFADriver(t, env, cfg).driveTrace(t, trace))
+	})
+	t.Run("StandaloneActivity", func(t *testing.T) {
+		check(t, newSAADriver(t, env, cfg).driveTrace(t, trace))
+	})
+}
+
+func (a *wfaHandle) heartbeatFlags() model.HeartbeatFlags {
+	return model.HeartbeatFlags{
+		CancelRequested: a.lastHeartbeat.GetCancelRequested(),
+		ActivityPaused:  a.lastHeartbeat.GetActivityPaused(),
+		ActivityReset:   a.lastHeartbeat.GetActivityReset(),
+	}
+}
+
+func (a *saaHandle) heartbeatFlags() model.HeartbeatFlags {
+	return model.HeartbeatFlags{
+		CancelRequested: a.lastHeartbeat.GetCancelRequested(),
+		ActivityPaused:  a.lastHeartbeat.GetActivityPaused(),
+		ActivityReset:   a.lastHeartbeat.GetActivityReset(),
+	}
+}
+
+func (a *wfaHandle) terminal(t require.TestingT) activityTerminalProjection {
+	outcome := a.terminalOutcome(t)
+	err := a.run.Get(a.testContext(), nil)
+	var failureType string
+	if outcome.status == enumspb.ACTIVITY_EXECUTION_STATUS_FAILED || outcome.status == enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT {
+		activityErr, ok := errors.AsType[*temporal.ActivityError](err)
+		require.True(t, ok)
+		switch cause := activityErr.Unwrap().(type) {
+		case *temporal.ApplicationError:
+			failureType = cause.Type()
+		case *temporal.TimeoutError:
+			failureType = cause.TimeoutType().String()
+		default:
+			require.Failf(t, "unexpected terminal activity failure", "%T", cause)
+		}
+	}
+	return activityTerminalProjection{
+		Status:      outcome.status,
+		FailureType: failureType,
+		RetryState:  outcome.retryState,
+	}
+}
+
+func (a *saaHandle) terminal(t require.TestingT) activityTerminalProjection {
+	outcome := a.terminalOutcome(t)
+	failure := a.describe(t).GetOutcome().GetFailure()
+	var failureType string
+	if application := failure.GetApplicationFailureInfo(); application != nil {
+		failureType = application.GetType()
+	} else if timeout := failure.GetTimeoutFailureInfo(); timeout != nil {
+		failureType = timeout.GetTimeoutType().String()
+	}
+	return activityTerminalProjection{
+		Status:      outcome.status,
+		FailureType: failureType,
+		RetryState:  outcome.retryState,
+	}
+}
+
+func (s *activityParityTestSuite) TestReset() {
+	t := s.T()
+	env := newActivityParityEnv(t)
+	deferredResetCfg := activityConfig{MaxAttempts: 10, RetryInterval: activityLongDuration}
+	spentBudgetCfg := activityConfig{MaxAttempts: 1, RetryInterval: activityLongDuration}
+
+	// A pending reset does not override a non-retryable failure, regardless of remaining retries.
+	t.Run("NonRetryableFailureWhileResetPending", func(t *testing.T) {
+		failedNonRetryably := activityTerminalProjection{
+			Status:      enumspb.ACTIVITY_EXECUTION_STATUS_FAILED,
+			FailureType: "TestFailure",
+			RetryState:  enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
+		}
+		for _, tc := range []struct {
+			name string
+			cfg  activityConfig
+		}{
+			{name: "WithRetriesLeft", cfg: deferredResetCfg},
+			{name: "WithRetryBudgetSpent", cfg: spentBudgetCfg},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				parityDrive(t, env, tc.cfg, []model.Event{model.Poll, model.Reset, model.FailNonRetryably},
+					func(t *testing.T, a parityActivity) {
+						require.Equal(t, failedNonRetryably, a.terminal(t),
+							"a non-retryable failure closes the activity, and the pending reset is discarded")
+					})
+			})
+		}
+	})
+
+	// Heartbeats report both pending requests so the worker knows to stop work for the pause.
+	t.Run("HeartbeatWhilePauseAndKeepPausedResetArePending", func(t *testing.T) {
+		parityDrive(t, env, deferredResetCfg,
+			[]model.Event{model.Poll, model.Pause, model.ResetKeepPaused, model.Heartbeat},
+			func(t *testing.T, a parityActivity) {
+				require.Equal(t, model.HeartbeatFlags{ActivityPaused: true, ActivityReset: true}, a.heartbeatFlags(),
+					"a worker whose attempt is both superseded and pause-bound must be told of both")
+			})
+	})
+}
+
+func (s *activityParityTestSuite) TestPauseUnpause() {
+	t := s.T()
+	env := newActivityParityEnv(t)
+	pausedRetry := activityInfo{RunState: enumspb.PENDING_ACTIVITY_STATE_PAUSED, Attempt: 2}
+
+	// A pending pause preserves the next attempt even beyond MaximumAttempts; unpause lets it run.
+	t.Run("LastPermittedAttemptFailsRetryablyWhilePausePending", func(t *testing.T) {
+		parityDrive(t, env, activityConfig{MaxAttempts: 1},
+			[]model.Event{model.Poll, model.Pause, model.FailRetryably},
+			func(t *testing.T, a parityActivity) {
+				require.Equal(t, pausedRetry, a.activityInfo(t),
+					"a pause must be honoured whether or not the activity has retries left")
+				for _, event := range []model.Event{model.Unpause, model.BackoffElapses, model.Poll} {
+					a.driveEvent(t, event)
+				}
+				require.Equal(t, int32(2), a.activityInfo(t).Attempt)
+				a.driveEvent(t, model.Complete)
+				require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, a.terminal(t).Status)
+			})
+	})
 }
 
 // parityDriveOutlivingActivity drives trace through both implementations and hands each resulting

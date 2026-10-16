@@ -23,6 +23,13 @@ import (
 	"slices"
 )
 
+// HeartbeatFlags are the flags a heartbeat response carries back to the worker.
+type HeartbeatFlags struct {
+	CancelRequested bool
+	ActivityPaused  bool
+	ActivityReset   bool
+}
+
 // Outcome is the return type of a transition function. It specifies the consequences of an event.
 type Outcome struct {
 	Next                       AbstractState
@@ -130,10 +137,16 @@ func respondCompleted(_ Config, s AbstractState, e Event) Outcome {
 func respondFailed(cfg Config, s AbstractState, e Event) Outcome {
 	switch s.Status {
 	case ResetRequested:
+		if !isRetryableFailure(cfg, e) {
+			n := s
+			n.Status = Failed
+			return Outcome{Next: n}
+		}
 		return applyDeferredReset(s)
 	case Started, PauseRequested:
 		n := s
-		if isRetryableFailure(cfg, e) && s.retriesRemaining(cfg) {
+		withinRetryLimits := !cfg.RetryOutlivesScheduleToClose && s.retriesRemaining(cfg)
+		if isRetryableFailure(cfg, e) && (s.Status == PauseRequested || withinRetryLimits) {
 			n.Status = Scheduled
 			n.Dispatchability = BackoffPending // the retry waits for the backoff interval
 			if s.Status == PauseRequested {
@@ -419,10 +432,16 @@ func handleEventInTerminalState(s AbstractState, e Event) Outcome {
 func attemptTimedOut(cfg Config, s AbstractState, e Event) Outcome {
 	switch s.Status {
 	case ResetRequested:
+		if !isRetryableTimeout(cfg, e.Type) {
+			n := s
+			n.Status = TimedOut
+			return Outcome{Next: n}
+		}
 		return applyDeferredReset(s)
 	case Started, PauseRequested:
 		n := s
-		if isRetryableTimeout(cfg, e.Type) && s.retriesRemaining(cfg) {
+		withinRetryLimits := !cfg.RetryOutlivesScheduleToClose && s.retriesRemaining(cfg)
+		if isRetryableTimeout(cfg, e.Type) && (s.Status == PauseRequested || withinRetryLimits) {
 			// retry
 			n.Status = Scheduled
 			if s.Status == PauseRequested {
@@ -451,11 +470,9 @@ func (s AbstractState) retriesRemaining(cfg Config) bool {
 	return cfg.MaxAttempts == 0 || s.AttemptCount < cfg.MaxAttempts
 }
 
-// isRetryableFailure is whether a reported failure should result in a retry.
+// isRetryableFailure reports whether the failure itself permits a retry, independently of the
+// remaining retry budget or schedule-to-close window.
 func isRetryableFailure(cfg Config, e Event) bool {
-	if cfg.RetryOutlivesScheduleToClose {
-		return false
-	}
 	f := e.Failure
 	if f == nil {
 		return true
@@ -476,12 +493,9 @@ func isRetryableFailure(cfg Config, e Event) bool {
 	}
 }
 
-// isRetryableTimeout is whether the timeout a timeout-elapse event type names should result in a
-// retry.
+// isRetryableTimeout reports whether the policy permits retrying this timeout type, independently
+// of the remaining retry budget or schedule-to-close window.
 func isRetryableTimeout(cfg Config, t EventType) bool {
-	if cfg.RetryOutlivesScheduleToClose {
-		return false
-	}
 	return !slices.Contains(cfg.NonRetryableTimeouts, t)
 }
 

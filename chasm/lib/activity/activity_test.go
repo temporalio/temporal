@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/common/testing/protorequire"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -474,15 +475,22 @@ func TestRecordHeartbeatPauseResetCancelFlags(t *testing.T) {
 			wantPaused: true,
 		},
 		{
-			name:             "reset with keep-paused propagates only reset",
+			name:             "reset with keep-paused propagates pause and reset",
 			status:           activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED,
 			resetShouldPause: true,
+			wantPaused:       true,
 			wantReset:        true,
 		},
 		{
 			name:       "cancel requested status propagates CancelRequested",
 			status:     activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
 			wantCancel: true,
+		},
+		{
+			name:             "cancellation takes precedence over stale reset pause intent",
+			status:           activitypb.ACTIVITY_EXECUTION_STATUS_CANCEL_REQUESTED,
+			resetShouldPause: true,
+			wantCancel:       true,
 		},
 	}
 
@@ -526,9 +534,11 @@ func TestRecordHeartbeatPauseResetCancelFlags(t *testing.T) {
 			})
 
 			require.NoError(t, err)
-			require.Equal(t, tc.wantPaused, resp.ActivityPaused, "ActivityPaused")
-			require.Equal(t, tc.wantReset, resp.ActivityReset, "ActivityReset")
-			require.Equal(t, tc.wantCancel, resp.CancelRequested, "CancelRequested")
+			protorequire.ProtoEqual(t, &historyservice.RecordActivityTaskHeartbeatResponse{
+				ActivityPaused:  tc.wantPaused,
+				ActivityReset:   tc.wantReset,
+				CancelRequested: tc.wantCancel,
+			}, resp)
 		})
 	}
 }

@@ -629,6 +629,7 @@ func (a *Activity) RecordHeartbeat(
 		response.CancelRequested = true
 	case activitypb.ACTIVITY_EXECUTION_STATUS_RESET_REQUESTED:
 		response.ActivityReset = true
+		response.ActivityPaused = a.GetResetShouldPause()
 	case activitypb.ACTIVITY_EXECUTION_STATUS_PAUSE_REQUESTED:
 		response.ActivityPaused = true
 	default:
