@@ -29,6 +29,12 @@ type Context interface {
 	ExecutionKey() ExecutionKey
 	// ExecutionInfo returns metadata information about the execution.
 	ExecutionInfo() ExecutionInfo
+	// GetTimeSkippingPropagateState returns the time-skipping configuration and state to propagate.
+	// It should be called when an execution with time skipping starts another execution.
+	GetTimeSkippingPropagateState() (*commonpb.TimeSkippingConfig, *commonpb.TimeSkippingStatePropagation)
+	// GetTimeSkippingInfo returns the execution's current time-skipping state for read APIs.
+	// It returns nil if the execution has never enabled time skipping.
+	GetTimeSkippingInfo() *commonpb.TimeSkippingInfo
 	// Logger returns a logger tagged with execution key and other chasm framework internal information.
 	Logger() log.Logger
 	// NamespaceEntry returns the namespace entry for the execution.
@@ -213,6 +219,20 @@ func (c *immutableCtx) ExecutionInfo() ExecutionInfo {
 		ApproximateStateSize: c.root.backend.GetApproximatePersistedSize(),
 		CloseTime:            closeTime,
 	}
+}
+
+func (c *immutableCtx) GetTimeSkippingPropagateState() (
+	*commonpb.TimeSkippingConfig,
+	*commonpb.TimeSkippingStatePropagation,
+) {
+	return PropagateTimeSkippingToOtherExecution(c.root.backend.GetExecutionInfo().GetTimeSkippingInfo())
+}
+
+func (c *immutableCtx) GetTimeSkippingInfo() *commonpb.TimeSkippingInfo {
+	return timeSkippingInfoForDescribe(
+		c.root.backend.GetExecutionInfo().GetTimeSkippingInfo(),
+		c.Now(nil),
+	)
 }
 
 func (c *immutableCtx) Logger() log.Logger {

@@ -42,22 +42,22 @@ type Config struct {
 	SecondaryVisibilityWritingMode          dynamicconfig.StringPropertyFn
 	VisibilityDisableOrderByClause          dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	VisibilityEnableManualPagination        dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	VisibilityEnableUnifiedQueryConverter   dynamicconfig.BoolPropertyFn
 	VisibilityAllowList                     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	SuppressErrorSetSystemSearchAttribute   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
-	EmitShardLagLog                            dynamicconfig.BoolPropertyFn
-	EmitImmediateQueueBacklogAge               dynamicconfig.BoolPropertyFn
-	EnableDataLossMetrics                      dynamicconfig.BoolPropertyFn
-	ThrottledLogRPS                            dynamicconfig.IntPropertyFn
-	EnableStickyQuery                          dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	EnableWorkflowTaskCompletionPagination     dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	AlignMembershipChange                      dynamicconfig.DurationPropertyFn
-	WorkflowTaskCompletionBufferTotalSizeLimit dynamicconfig.IntPropertyFn
-	WorkflowTaskCompletionBufferSizeLimit      dynamicconfig.IntPropertyFnWithNamespaceFilter
-	WorkflowTaskCompletionBufferNamespaceRatio dynamicconfig.FloatPropertyFnWithNamespaceFilter
-	ShutdownDrainDuration                      dynamicconfig.DurationPropertyFn
-	StartupMembershipJoinDelay                 dynamicconfig.DurationPropertyFn
+	EmitShardLagLog                                dynamicconfig.BoolPropertyFn
+	EmitImmediateQueueBacklogAge                   dynamicconfig.BoolPropertyFn
+	EnableDataLossMetrics                          dynamicconfig.BoolPropertyFn
+	ThrottledLogRPS                                dynamicconfig.IntPropertyFn
+	EnableStickyQuery                              dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableWorkflowTaskCompletionPagination         dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	AlignMembershipChange                          dynamicconfig.DurationPropertyFn
+	WorkflowTaskCompletionBufferTotalSizeLimit     dynamicconfig.IntPropertyFn
+	WorkflowTaskCompletionBufferSizeLimit          dynamicconfig.IntPropertyFnWithNamespaceFilter
+	WorkflowTaskCompletionBufferNamespaceRatio     dynamicconfig.FloatPropertyFnWithNamespaceFilter
+	WorkflowTaskCompletionBufferNewPaginationRatio dynamicconfig.FloatPropertyFnWithNamespaceFilter
+	ShutdownDrainDuration                          dynamicconfig.DurationPropertyFn
+	StartupMembershipJoinDelay                     dynamicconfig.DurationPropertyFn
 
 	// Workflow reset related settings.
 	AllowResetWithPendingChildren dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -76,6 +76,7 @@ type Config struct {
 	EnableWorkflowExecutionTimeoutTimer        dynamicconfig.BoolPropertyFn
 	EnableUpdateWorkflowModeIgnoreCurrent      dynamicconfig.BoolPropertyFn
 	EnableTransitionHistory                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnablePrincipalPropagation                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaxCallbacksPerWorkflow                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxCallbacksPerExecution                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxCallbacksPerUpdateID                    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -85,8 +86,10 @@ type Config struct {
 	ChasmNexusWorkflowOperationsRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableCHASMCallbacks                       dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSignalBacklinks                 dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCHASMWorkflowRootOnStart             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableWorkflowUpdateCallbacks              dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmMaxInMemoryPureTasks                  dynamicconfig.IntPropertyFn
+	ChasmLogicalTaskCountAlertThreshold        dynamicconfig.IntPropertyFnWithChasmTaskTypeFilter
 	ChasmDLQScheduledPureTaskOnValidation      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSchedulerCreation               dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableCHASMSchedulerMigration              dynamicconfig.BoolPropertyFnWithNamespaceFilter
@@ -285,6 +288,7 @@ type Config struct {
 	EnableWorkflowTaskStampIncrementOnFailure        dynamicconfig.BoolPropertyFn
 	DiscardSpeculativeWorkflowTaskMaximumEventsCount dynamicconfig.IntPropertyFn
 	EnableDropRepeatedWorkflowTaskFailures           dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableSignalWithStartWorkflowTaskBackoff         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	// TODO seankane: Added on 3/10/2026, if this is never used we should remove it at a later date
 	SendTransientOrSpeculativeWorkflowTaskEvents dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
@@ -309,8 +313,10 @@ type Config struct {
 	ReplicationTaskProcessorHostQPS                      dynamicconfig.FloatPropertyFn
 	ReplicationTaskProcessorShardQPS                     dynamicconfig.FloatPropertyFn
 	ReplicationEnableDLQMetrics                          dynamicconfig.BoolPropertyFn
+	ReplicationDLQMaxRetryAttempts                       dynamicconfig.IntPropertyFn
 	ReplicationEnableUpdateWithNewTaskMerge              dynamicconfig.BoolPropertyFn
 	ReplicationMultipleBatches                           dynamicconfig.BoolPropertyFn
+	ValidateReplicationTaskSourceCluster                 dynamicconfig.BoolPropertyFn
 	ReplicationTaskConverterLowPriorityLockMaxAttempts   dynamicconfig.IntPropertyFn
 	ReplicationStreamSenderErrorRetryWait                dynamicconfig.DurationPropertyFn
 	ReplicationStreamSenderErrorRetryBackoffCoefficient  dynamicconfig.FloatPropertyFn
@@ -401,6 +407,7 @@ type Config struct {
 
 	EnableCrossNamespaceCommands      dynamicconfig.BoolPropertyFn
 	EnableActivityEagerExecution      dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableActivityEagerDispatchCheck  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableActivityRetryStampIncrement dynamicconfig.BoolPropertyFn
 	EnableCancelActivityWorkerCommand dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	WorkerCommandsDispatchTimeout     dynamicconfig.DurationPropertyFn
@@ -440,11 +447,13 @@ type Config struct {
 
 	WorkflowIdReuseMinimalInterval           dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	EnableWorkflowIdReuseStartTimeValidation dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableCrossRunRequestIDDedup             dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	BusinessIDReuseRate                      dynamicconfig.IntPropertyFnWithNamespaceFilter
 	BusinessIDReuseBurstRatio                dynamicconfig.FloatPropertyFnWithNamespaceFilter
 	BusinessIDReuseLimiterCacheSize          dynamicconfig.IntPropertyFn
 	BusinessIDReuseLimiterCacheTTL           dynamicconfig.DurationPropertyFn
 
+	EnableResetWorkflowRequestIDDeduplication   dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableSignalWithStartRequestIDDeduplication dynamicconfig.BoolPropertyFnWithNamespaceFilter
 
 	HealthCheckHistoryGRPCSettings      dynamicconfig.TypedPropertyFn[health.Settings]
@@ -519,7 +528,6 @@ func NewConfig(
 		SecondaryVisibilityWritingMode:          dynamicconfig.SecondaryVisibilityWritingMode.Get(dc),
 		VisibilityDisableOrderByClause:          dynamicconfig.VisibilityDisableOrderByClause.Get(dc),
 		VisibilityEnableManualPagination:        dynamicconfig.VisibilityEnableManualPagination.Get(dc),
-		VisibilityEnableUnifiedQueryConverter:   dynamicconfig.VisibilityEnableUnifiedQueryConverter.Get(dc),
 		VisibilityAllowList:                     dynamicconfig.VisibilityAllowList.Get(dc),
 		SuppressErrorSetSystemSearchAttribute:   dynamicconfig.SuppressErrorSetSystemSearchAttribute.Get(dc),
 
@@ -536,6 +544,7 @@ func NewConfig(
 		EnableWorkflowExecutionTimeoutTimer:        dynamicconfig.EnableWorkflowExecutionTimeoutTimer.Get(dc),
 		EnableUpdateWorkflowModeIgnoreCurrent:      dynamicconfig.EnableUpdateWorkflowModeIgnoreCurrent.Get(dc),
 		EnableTransitionHistory:                    dynamicconfig.EnableTransitionHistory.Get(dc),
+		EnablePrincipalPropagation:                 dynamicconfig.EnablePrincipalPropagation.Get(dc),
 		MaxCallbacksPerWorkflow:                    dynamicconfig.MaxCallbacksPerWorkflow.Get(dc),
 		MaxCallbacksPerExecution:                   callback.MaxPerExecution.Get(dc),
 		MaxCallbacksPerUpdateID:                    dynamicconfig.MaxCallbacksPerUpdateID.Get(dc),
@@ -544,15 +553,17 @@ func NewConfig(
 		EnableChasmNexusWorkflowOperations:         nexusoperation.EnableChasmWorkflowOperations.Get(dc),
 		ChasmNexusWorkflowOperationsRolloutPercent: nexusoperation.ChasmWorkflowOperationsRolloutPercent.Get(dc),
 		ChasmMaxInMemoryPureTasks:                  dynamicconfig.ChasmMaxInMemoryPureTasks.Get(dc),
+		ChasmLogicalTaskCountAlertThreshold:        dynamicconfig.ChasmLogicalTaskCountAlertThreshold.Get(dc),
 		ChasmDLQScheduledPureTaskOnValidation:      dynamicconfig.ChasmDLQScheduledPureTaskOnValidation.Get(dc),
 
 		EnableCHASMSchedulerCreation:  dynamicconfig.EnableCHASMSchedulerCreation.Get(dc),
 		EnableCHASMSchedulerMigration: dynamicconfig.EnableCHASMSchedulerMigration.Get(dc),
 
-		EnableCHASMCallbacks:          dynamicconfig.EnableCHASMCallbacks.Get(dc),
-		EnableCHASMSignalBacklinks:    dynamicconfig.EnableCHASMSignalBacklinks.Get(dc),
-		ExternalPayloadsEnabled:       dynamicconfig.ExternalPayloadsEnabled.Get(dc),
-		EnableWorkflowUpdateCallbacks: dynamicconfig.EnableWorkflowUpdateCallbacks.Get(dc),
+		EnableCHASMCallbacks:           dynamicconfig.EnableCHASMCallbacks.Get(dc),
+		EnableCHASMSignalBacklinks:     dynamicconfig.EnableCHASMSignalBacklinks.Get(dc),
+		EnableCHASMWorkflowRootOnStart: dynamicconfig.EnableCHASMWorkflowRootOnStart.Get(dc),
+		ExternalPayloadsEnabled:        dynamicconfig.ExternalPayloadsEnabled.Get(dc),
+		EnableWorkflowUpdateCallbacks:  dynamicconfig.EnableWorkflowUpdateCallbacks.Get(dc),
 
 		EventsShardLevelCacheMaxSizeBytes: dynamicconfig.EventsCacheMaxSizeBytes.Get(dc),          // 512KB
 		EventsHostLevelCacheMaxSizeBytes:  dynamicconfig.EventsHostLevelCacheMaxSizeBytes.Get(dc), // 256MB
@@ -661,7 +672,9 @@ func NewConfig(
 		ReplicationTaskProcessorHostQPS:                     dynamicconfig.ReplicationTaskProcessorHostQPS.Get(dc),
 		ReplicationTaskProcessorShardQPS:                    dynamicconfig.ReplicationTaskProcessorShardQPS.Get(dc),
 		ReplicationEnableDLQMetrics:                         dynamicconfig.ReplicationEnableDLQMetrics.Get(dc),
+		ReplicationDLQMaxRetryAttempts:                      dynamicconfig.ReplicationDLQMaxRetryAttempts.Get(dc),
 		ReplicationEnableUpdateWithNewTaskMerge:             dynamicconfig.ReplicationEnableUpdateWithNewTaskMerge.Get(dc),
+		ValidateReplicationTaskSourceCluster:                dynamicconfig.ValidateReplicationTaskSourceCluster.Get(dc),
 		ReplicationStreamSyncStatusDuration:                 dynamicconfig.ReplicationStreamSyncStatusDuration.Get(dc),
 		ReplicationProcessorSchedulerQueueSize:              dynamicconfig.ReplicationProcessorSchedulerQueueSize.Get(dc),
 		ReplicationProcessorSchedulerWorkerCount:            dynamicconfig.ReplicationProcessorSchedulerWorkerCount.Subscribe(dc),
@@ -743,6 +756,7 @@ func NewConfig(
 		EnableWorkflowTaskStampIncrementOnFailure:        dynamicconfig.EnableWorkflowTaskStampIncrementOnFailure.Get(dc),
 		DiscardSpeculativeWorkflowTaskMaximumEventsCount: dynamicconfig.DiscardSpeculativeWorkflowTaskMaximumEventsCount.Get(dc),
 		EnableDropRepeatedWorkflowTaskFailures:           dynamicconfig.EnableDropRepeatedWorkflowTaskFailures.Get(dc),
+		EnableSignalWithStartWorkflowTaskBackoff:         dynamicconfig.EnableSignalWithStartWorkflowTaskBackoff.Get(dc),
 		SendTransientOrSpeculativeWorkflowTaskEvents:     dynamicconfig.SendTransientOrSpeculativeWorkflowTaskEvents.Get(dc),
 
 		ReplicationTaskApplyTimeout:                  dynamicconfig.ReplicationTaskApplyTimeout.Get(dc),
@@ -823,6 +837,7 @@ func NewConfig(
 
 		EnableCrossNamespaceCommands:      dynamicconfig.EnableCrossNamespaceCommands.Get(dc),
 		EnableActivityEagerExecution:      dynamicconfig.EnableActivityEagerExecution.Get(dc),
+		EnableActivityEagerDispatchCheck:  dynamicconfig.EnableActivityEagerDispatchCheck.Get(dc),
 		EnableActivityRetryStampIncrement: dynamicconfig.EnableActivityRetryStampIncrement.Get(dc),
 		EnableCancelActivityWorkerCommand: dynamicconfig.EnableCancelActivityWorkerCommand.Get(dc),
 		WorkerCommandsDispatchTimeout:     dynamicconfig.WorkerCommandsDispatchTimeout.Get(dc),
@@ -863,11 +878,13 @@ func NewConfig(
 
 		WorkflowIdReuseMinimalInterval:           dynamicconfig.WorkflowIdReuseMinimalInterval.Get(dc),
 		EnableWorkflowIdReuseStartTimeValidation: dynamicconfig.EnableWorkflowIdReuseStartTimeValidation.Get(dc),
+		EnableCrossRunRequestIDDedup:             dynamicconfig.EnableCrossRunRequestIDDedup.Get(dc),
 		BusinessIDReuseRate:                      dynamicconfig.BusinessIDReuseRate.Get(dc),
 		BusinessIDReuseBurstRatio:                dynamicconfig.BusinessIDReuseBurstRatio.Get(dc),
 		BusinessIDReuseLimiterCacheSize:          dynamicconfig.BusinessIDReuseLimiterCacheSize.Get(dc),
 		BusinessIDReuseLimiterCacheTTL:           dynamicconfig.BusinessIDReuseLimiterCacheTTL.Get(dc),
 
+		EnableResetWorkflowRequestIDDeduplication:   dynamicconfig.EnableResetWorkflowRequestIDDeduplication.Get(dc),
 		EnableSignalWithStartRequestIDDeduplication: dynamicconfig.EnableSignalWithStartRequestIDDeduplication.Get(dc),
 
 		HealthCheckHistoryGRPCSettings:      dynamicconfig.HealthCheckHistoryGRPCSettings.Get(dc),
@@ -897,10 +914,11 @@ func NewConfig(
 		RoutingInfoCacheMaxSize:              dynamicconfig.RoutingInfoCacheMaxSize.Get(dc),
 
 		// Workflow task completion pagination
-		EnableWorkflowTaskCompletionPagination:     dynamicconfig.EnableWorkflowTaskCompletionPagination.Get(dc),
-		WorkflowTaskCompletionBufferTotalSizeLimit: dynamicconfig.WorkflowTaskCompletionBufferTotalSizeLimit.Get(dc),
-		WorkflowTaskCompletionBufferSizeLimit:      dynamicconfig.WorkflowTaskCompletionBufferSizeLimit.Get(dc),
-		WorkflowTaskCompletionBufferNamespaceRatio: dynamicconfig.WorkflowTaskCompletionBufferNamespaceRatio.Get(dc),
+		EnableWorkflowTaskCompletionPagination:         dynamicconfig.EnableWorkflowTaskCompletionPagination.Get(dc),
+		WorkflowTaskCompletionBufferTotalSizeLimit:     dynamicconfig.WorkflowTaskCompletionBufferTotalSizeLimit.Get(dc),
+		WorkflowTaskCompletionBufferSizeLimit:          dynamicconfig.WorkflowTaskCompletionBufferSizeLimit.Get(dc),
+		WorkflowTaskCompletionBufferNamespaceRatio:     dynamicconfig.WorkflowTaskCompletionBufferNamespaceRatio.Get(dc),
+		WorkflowTaskCompletionBufferNewPaginationRatio: dynamicconfig.WorkflowTaskCompletionBufferNewPaginationRatio.Get(dc),
 	}
 
 	return cfg
