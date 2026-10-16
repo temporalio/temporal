@@ -2695,14 +2695,32 @@ system.transactionSizeLimit, since each batch is persisted within a single trans
 	MaximumRequestIDsPerExecution = NewNamespaceIntSetting(
 		"history.maximumRequestIDsPerExecution",
 		25,
-		`MaximumRequestIDsPerExecution is the hard cap on CHASM-attached request IDs retained per
-execution for UpdateComponent idempotency; the oldest are swept beyond this limit. Set to 0 to disable the count cap.`,
+		`MaximumRequestIDsPerExecution is the hard cap on CHASM-attached request IDs retained in the
+execution state per execution for UpdateComponent idempotency; the oldest are swept beyond this limit. Set to 0 to
+disable the count cap. Request IDs kept in the CHASM request IDs data node (see
+history.enableChasmRequestIDDataNode) are capped by history.maximumRequestIDsInChasmDataNode instead.`,
+	)
+	MaximumRequestIDsInChasmDataNode = NewNamespaceIntSetting(
+		"history.maximumRequestIDsInChasmDataNode",
+		50,
+		`MaximumRequestIDsInChasmDataNode is the hard cap on update request IDs retained per execution in the
+CHASM request IDs data node (see history.enableChasmRequestIDDataNode); the oldest are swept beyond this limit.
+It can be higher than history.maximumRequestIDsPerExecution because the node is only written when an ID is
+added. Set to 0 to disable the count cap.`,
 	)
 	RequestIDMaxAge = NewNamespaceDurationSetting(
 		"history.requestIDMaxAge",
 		7*24*time.Hour,
 		`RequestIDMaxAge is the maximum age of a CHASM-attached request ID retained per execution for
 UpdateComponent idempotency. Set to 0 to disable age-based sweeping.`,
+	)
+	EnableChasmRequestIDDataNode = NewNamespaceBoolSetting(
+		"history.enableChasmRequestIDDataNode",
+		false,
+		`EnableChasmRequestIDDataNode records request IDs accepted by CHASM UpdateComponent in a framework-owned
+data node of the CHASM tree instead of the execution state, so they are only written when a request ID is added.
+Request IDs are always checked in both places. Only enable once all history hosts run a version that keeps the
+data node.`,
 	)
 	ShardUpdateMinInterval = NewGlobalDurationSetting(
 		"history.shardUpdateMinInterval",

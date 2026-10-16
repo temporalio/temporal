@@ -31,9 +31,18 @@ type (
 		chasm.UnimplementedComponent
 		Visibility chasm.Field[*chasm.Visibility]
 	}
+
+	testComponentWithReservedFieldName struct {
+		chasm.UnimplementedComponent
+		RequestIDs chasm.Field[*chasm.MockComponent] `name:"__chasm_requestIDs"`
+	}
 )
 
 func (t *testComponentWithVisibility) LifecycleState(_ chasm.Context) chasm.LifecycleState {
+	return chasm.LifecycleStateRunning
+}
+
+func (t *testComponentWithReservedFieldName) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	return chasm.LifecycleStateRunning
 }
 
@@ -202,6 +211,15 @@ func (s *RegistryTestSuite) TestRegistry_RegisterComponents_Error() {
 		err := r.Register(lib)
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "name must follow golang identifier rules")
+	})
+
+	s.Run("component field must not use a reserved name", func() {
+		lib.EXPECT().Components().Return([]*chasm.RegistrableComponent{
+			chasm.NewRegistrableComponent[*testComponentWithReservedFieldName]("ComponentWithReservedField"),
+		})
+		r := chasm.NewRegistry(s.logger)
+		err := r.Register(lib)
+		s.Require().ErrorContains(err, `uses reserved name "__chasm_requestIDs"`)
 	})
 
 	s.T().Run("component is already registered by name", func(t *testing.T) {

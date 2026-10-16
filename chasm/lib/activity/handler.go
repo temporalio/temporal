@@ -166,7 +166,9 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 				return nil, nil
 			},
 			nil,
-			chasm.WithRequestID(requestID),
+			// This update completes the start request, so a retry of the start must find its request ID
+			// on the current record, including after the activity closed.
+			chasm.WithStartRequestID(requestID),
 		)
 		if err != nil && !errors.Is(err, chasm.ErrRequestIDAlreadyUsed) {
 			return nil, err

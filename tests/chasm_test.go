@@ -17,6 +17,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/tests"
 	testspb "go.temporal.io/server/chasm/lib/tests/gen/testspb/v1"
@@ -24,6 +25,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
@@ -52,18 +54,20 @@ type chasmTestEnv struct {
 }
 
 // newChasmTestEnv creates a chasmTestEnv backed by a dedicated cluster with
-// EnableChasm overridden for the test.
-func newChasmTestEnv(suiteContext context.Context, t *testing.T) chasmTestEnv {
+// EnableChasm overridden for the test. Additional options are applied after the defaults.
+func newChasmTestEnv(suiteContext context.Context, t *testing.T, opts ...testcore.TestOption) chasmTestEnv {
 	t.Helper()
 
 	// WithDedicatedCluster acquires an exclusive pooled slot — no fresh cluster
 	// creation per test, unlike passing startup dynamic config.
 	env := testcore.NewEnv(
 		t,
-		testcore.WithDedicatedCluster(),
-		testcore.WithWorkerService("delete namespace workflow"),
-		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
-		testcore.WithDynamicConfig(dynamicconfig.DeleteNamespaceUseChasmDeleteExecution, true),
+		append([]testcore.TestOption{
+			testcore.WithDedicatedCluster(),
+			testcore.WithWorkerService("delete namespace workflow"),
+			testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+			testcore.WithDynamicConfig(dynamicconfig.DeleteNamespaceUseChasmDeleteExecution, true),
+		}, opts...)...,
 	)
 
 	chasmCtx, err := env.GetTestCluster().Host().ChasmContext(suiteContext)
@@ -175,6 +179,93 @@ func (s *ChasmSuite) TestPayloadStore_UpdateComponent() {
 	s.NoError(err)
 	s.Equal(int64(1), descResp.State.TotalCount)
 	s.Positive(descResp.State.TotalSize)
+}
+
+// TestPayloadStore_UpdateComponent_RequestIDDedup verifies UpdateComponent request ID dedup end to end,
+// with request IDs recorded either in the execution state or in the CHASM request IDs data node.
+func (s *ChasmSuite) TestPayloadStore_UpdateComponent_RequestIDDedup() {
+	for _, dataNodeEnabled := range []bool{false, true} {
+		s.Run(fmt.Sprintf("EnableChasmRequestIDDataNode=%v", dataNodeEnabled), func(s *ChasmSuite) {
+			cenv := newChasmTestEnv(s.Context(), s.T(),
+				testcore.WithDynamicConfig(dynamicconfig.EnableChasmRequestIDDataNode, dataNodeEnabled),
+			)
+			tv := testvars.New(s.T())
+
+			ctx, cancel := context.WithTimeout(cenv.chasmCtx, chasmTestTimeout)
+			defer cancel()
+
+			storeID := tv.Any().String()
+			_, err := tests.NewPayloadStoreHandler(
+				ctx,
+				tests.NewPayloadStoreRequest{
+					NamespaceID: cenv.NamespaceID(),
+					StoreID:     storeID,
+				},
+			)
+			s.NoError(err)
+
+			addPayload := func(key, requestID string) error {
+				_, err := tests.AddPayloadHandler(
+					ctx,
+					tests.AddPayloadRequest{
+						NamespaceID: cenv.NamespaceID(),
+						StoreID:     storeID,
+						PayloadKey:  key,
+						Payload:     payload.EncodeString(key),
+						RequestID:   requestID,
+					},
+				)
+				return err
+			}
+
+			requestID1 := tv.Any().String()
+			requestID2 := tv.Any().String()
+			s.NoError(addPayload("key1", requestID1))
+
+			// Reusing a request ID is rejected without applying the update.
+			err = addPayload("key2", requestID1)
+			var failedPrecondition *serviceerror.FailedPrecondition
+			s.ErrorAs(err, &failedPrecondition)
+
+			// A different request ID is applied.
+			s.NoError(addPayload("key3", requestID2))
+
+			descResp, err := tests.DescribePayloadStoreHandler(
+				ctx,
+				tests.DescribePayloadStoreRequest{
+					NamespaceID: cenv.NamespaceID(),
+					StoreID:     storeID,
+				},
+			)
+			s.NoError(err)
+			s.Equal(int64(2), descResp.State.TotalCount, "the rejected update must not have been applied")
+
+			// Check where the request IDs were persisted.
+			adminDescResp, err := cenv.AdminClient().DescribeMutableState(s.Context(), &adminservice.DescribeMutableStateRequest{
+				Namespace: cenv.Namespace().String(),
+				Execution: &commonpb.WorkflowExecution{
+					WorkflowId: storeID,
+				},
+				ArchetypeId: tests.ArchetypeID,
+			})
+			s.NoError(err)
+			dbState := adminDescResp.GetDatabaseMutableState()
+			requestIDsNode, hasRequestIDsNode := dbState.GetChasmNodes()["__chasm_requestIDs"]
+			if dataNodeEnabled {
+				s.True(hasRequestIDsNode)
+				requestIDs := &persistencespb.ChasmRequestIDs{}
+				s.NoError(serialization.Decode(requestIDsNode.GetData(), requestIDs))
+				s.Len(requestIDs.GetEntries(), 2)
+				s.Equal(requestID1, requestIDs.GetEntries()[0].GetRequestId())
+				s.Equal(requestID2, requestIDs.GetEntries()[1].GetRequestId())
+				s.NotContains(dbState.GetExecutionState().GetRequestIds(), requestID1)
+			} else {
+				s.False(hasRequestIDsNode)
+				s.Contains(dbState.GetExecutionState().GetRequestIds(), requestID1)
+				s.Contains(dbState.GetExecutionState().GetRequestIds(), requestID2)
+			}
+		})
+	}
 }
 
 func (s *ChasmSuite) TestPayloadStore_PureTask() {

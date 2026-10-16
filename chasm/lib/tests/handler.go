@@ -52,6 +52,8 @@ type (
 		PayloadKey  string
 		Payload     *commonpb.Payload
 		TTL         time.Duration
+		// RequestID, when set, deduplicates the update via chasm.WithRequestID.
+		RequestID string
 	}
 
 	AddPayloadResponse struct {
@@ -178,6 +180,7 @@ func AddPayloadHandler(
 		),
 		(*PayloadStore).AddPayload,
 		request,
+		chasm.WithRequestID(request.RequestID),
 	)
 	if err != nil {
 		return AddPayloadResponse{}, err

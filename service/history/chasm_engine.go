@@ -373,7 +373,7 @@ func (e *ChasmEngine) updateExecution(
 
 	// TODO(awln-temporal): Add a separate execution-scoped request-ID set for
 	// UpdateWithStart updates. Retries currently reapply updateFn.
-	serializedRef, err := e.applyUpdateWithLease(ctx, shardContext, executionLease, actualRef, updateFn, "")
+	serializedRef, err := e.applyUpdateWithLease(ctx, shardContext, executionLease, actualRef, updateFn, "", chasm.RequestIDTypeUpdate)
 	if err != nil {
 		return chasm.ExecutionKey{}, nil, err
 	}
@@ -421,6 +421,7 @@ func (e *ChasmEngine) applyUpdateWithLease(
 	ref chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 	requestID string,
+	requestIDType chasm.RequestIDType,
 ) ([]byte, error) {
 	mutableState := executionLease.GetMutableState()
 	chasmTree, err := chasmTreeFromMutableState(shardContext.GetLogger(), mutableState)
@@ -438,10 +439,12 @@ func (e *ChasmEngine) applyUpdateWithLease(
 		return nil, err
 	}
 
-	// Record the accepted request ID so a later reuse is deduplicated (see AttachChasmRequestID).
+	// Record the accepted request ID so a later reuse is deduplicated (see isRequestIDUsed).
 	// The dedup check itself runs earlier in updateComponent, before the lease work.
 	if requestID != "" {
-		mutableState.AttachChasmRequestID(requestID)
+		if err := e.recordRequestID(mutableState, chasmTree, requestID, requestIDType); err != nil {
+			return nil, err
+		}
 	}
 
 	// TODO: Support WithSpeculative() TransitionOption.
@@ -528,8 +531,8 @@ func (e *ChasmEngine) startAndUpdateExecution(
 // the state transition specified by the supplied component reference is inconsistent with execution
 // transition history.
 //
-// A request ID supplied via chasm.WithRequestID deduplicates the update (see that option); other
-// opts are ignored on this path.
+// A request ID supplied via chasm.WithRequestID or chasm.WithStartRequestID deduplicates the update
+// (see those options); other opts are ignored on this path.
 func (e *ChasmEngine) UpdateComponent(
 	ctx context.Context,
 	ref chasm.ComponentRef,
@@ -548,7 +551,7 @@ func (e *ChasmEngine) UpdateComponent(
 		opt(&explicit)
 	}
 
-	result, err := e.updateComponent(ctx, ref, updateFn, explicit.RequestID)
+	result, err := e.updateComponent(ctx, ref, updateFn, explicit.RequestID, explicit.RequestIDType)
 	return result, e.convertError(err, ref, options.RequestID)
 }
 
@@ -557,6 +560,7 @@ func (e *ChasmEngine) updateComponent(
 	ref chasm.ComponentRef,
 	updateFn func(chasm.MutableContext, chasm.Component) error,
 	requestID string,
+	requestIDType chasm.RequestIDType,
 ) (updatedRef []byte, retError error) {
 	shardContext, executionLease, err := e.getExecutionLease(ctx, ref)
 	if err != nil {
@@ -565,16 +569,66 @@ func (e *ChasmEngine) updateComponent(
 
 	// When a request ID has already been recorded, we know this is a retry of a successful call, so
 	// reject it as non-retryable (FailedPrecondition) without running updateFn or persisting.
-	if requestID != "" && executionLease.GetMutableState().HasRequestID(requestID) {
-		executionLease.GetReleaseFn()(nil)
-		return nil, chasm.ErrRequestIDAlreadyUsed
+	if requestID != "" {
+		used, err := e.isRequestIDUsed(shardContext.GetLogger(), executionLease.GetMutableState(), requestID)
+		if err != nil {
+			executionLease.GetReleaseFn()(err)
+			return nil, err
+		}
+		if used {
+			executionLease.GetReleaseFn()(nil)
+			return nil, chasm.ErrRequestIDAlreadyUsed
+		}
 	}
 
 	defer func() {
 		executionLease.GetReleaseFn()(retError)
 	}()
 
-	return e.applyUpdateWithLease(ctx, shardContext, executionLease, ref, updateFn, requestID)
+	return e.applyUpdateWithLease(ctx, shardContext, executionLease, ref, updateFn, requestID, requestIDType)
+}
+
+// isRequestIDUsed reports whether requestID was already recorded for the execution. Request IDs are
+// recorded either in the execution state (start request IDs, and update request IDs when
+// history.enableChasmRequestIDDataNode is off or was off when they were recorded) or in the CHASM tree's
+// request IDs data node, so both are checked.
+func (e *ChasmEngine) isRequestIDUsed(
+	logger log.Logger,
+	mutableState historyi.MutableState,
+	requestID string,
+) (bool, error) {
+	if mutableState.HasRequestID(requestID) {
+		return true, nil
+	}
+	chasmTree, err := chasmTreeFromMutableState(logger, mutableState)
+	if err != nil {
+		return false, err
+	}
+	return chasmTree.HasRequestID(requestID)
+}
+
+// recordRequestID records an accepted request ID for UpdateComponent idempotency.
+//
+// A chasm.RequestIDTypeStart request ID is always recorded in the execution state, which is copied to
+// the current record where the start path checks for retried starts. A chasm.RequestIDTypeUpdate
+// request ID is only checked by UpdateComponent, so it is recorded in the CHASM tree's request IDs data
+// node when history.enableChasmRequestIDDataNode is on, and otherwise in the execution state.
+func (e *ChasmEngine) recordRequestID(
+	mutableState historyi.MutableState,
+	chasmTree *chasm.Node,
+	requestID string,
+	requestIDType chasm.RequestIDType,
+) error {
+	nsName := mutableState.GetNamespaceEntry().Name().String()
+	if requestIDType == chasm.RequestIDTypeStart || !e.config.EnableChasmRequestIDDataNode(nsName) {
+		mutableState.AttachChasmRequestID(requestID)
+		return nil
+	}
+	return chasmTree.AttachRequestID(
+		requestID,
+		e.config.MaximumRequestIDsInChasmDataNode(nsName),
+		e.config.RequestIDMaxAge(nsName),
+	)
 }
 
 // DeleteExecution deletes a CHASM execution. If the execution is still running on the active
