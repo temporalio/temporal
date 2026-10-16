@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -884,10 +885,17 @@ func (s *mutableStateSuite) TestTimeSkippingConfigUpdatedMetric() {
 }
 
 func (s *mutableStateSuite) requireTimeSkippingRecording(recording *metricstest.CapturedRecording, archetypeID chasm.ArchetypeID) {
-	archetypeTag, _ := getArchetypeMetricTag(s.mutableState.shard.ChasmRegistry(), archetypeID)
+	archetypeFqn := chasm.WorkflowArchetype
+	if archetypeID != chasm.WorkflowArchetypeID {
+		var ok bool
+		archetypeFqn, ok = s.mutableState.shard.ChasmRegistry().ComponentFqnByID(archetypeID)
+		if !ok {
+			archetypeFqn = strconv.FormatUint(uint64(archetypeID), 10)
+		}
+	}
 	s.Equal(int64(1), recording.Value)
 	s.Equal(s.namespaceEntry.Name().String(), recording.Tags["namespace"])
-	s.Equal(archetypeTag.Value, recording.Tags[metrics.ArchetypeTagName])
+	s.Equal(archetypeFqn, recording.Tags[metrics.ArchetypeTagName])
 }
 
 // TestApplyFastForward covers the full branch table of applyFastForward:

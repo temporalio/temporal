@@ -4210,13 +4210,13 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 	if err != nil {
 		return err
 	}
+	archetypeFqn, _ := n.registry.ComponentFqnByID(n.ArchetypeID())
 	tsRoot, ok := rootComponent.(TimeSkippingRuntimeGate)
 	if !ok {
-		archetypeTag := metrics.ArchetypeTag("")
-		if name, ok := n.registry.ArchetypeDisplayName(n.ArchetypeID()); ok {
-			archetypeTag = metrics.ArchetypeTag(name)
-		}
-		metrics.ExecutionTimeSkippingTransitionedErrorCounter.With(n.metricsHandler).Record(1, archetypeTag)
+		metrics.ExecutionTimeSkippingTransitionedErrorCounter.With(n.metricsHandler).Record(
+			1,
+			metrics.ArchetypeTag(archetypeFqn),
+		)
 		n.logger.Error(
 			"root component does not implement TimeSkippingRuntimeGate when executions have turned on time skipping",
 			tag.Error(fmt.Errorf("type: %s", reflect.TypeOf(rootComponent).Name())))
@@ -4226,7 +4226,7 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 	// runtime check
 	if !tsRoot.IsExecutionSkippable(immutableContext) {
 		n.logger.Debug("chasm time skipping skipped because the execution is not skippable",
-			tag.ArchetypeID(n.ArchetypeID()))
+			tag.Archetype(archetypeFqn))
 		return nil
 	}
 	transition := n.defaultFindNextTargetTime()
@@ -4237,7 +4237,7 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 	// state change
 	n.backend.RecordTimeSkippingTransition(transition)
 	n.logger.Debug("chasm time skipping transition recorded",
-		tag.ArchetypeID(n.ArchetypeID()),
+		tag.Archetype(archetypeFqn),
 		tag.Time("current-time", transition.CurrentTime),
 		tag.Time("target-time", transition.GetTargetTime()),
 		tag.Duration("skipped-duration", transition.GetSkippedDuration()),
@@ -4314,8 +4314,9 @@ func (n *Node) defaultFindNextTargetTime() *TimeSkippingTransition {
 				scheduledTime := task.GetScheduledTime().AsTime()
 				if !scheduledTime.After(now) {
 					taskType, _ := n.registry.TaskFqnByID(task.GetTypeId())
+					archetypeFqn, _ := n.registry.ComponentFqnByID(n.ArchetypeID())
 					n.logger.Debug("a pending task blocks chasm time skipping",
-						tag.ArchetypeID(n.ArchetypeID()),
+						tag.Archetype(archetypeFqn),
 						tag.String("chasm-task-type", taskType))
 					return nil
 				}

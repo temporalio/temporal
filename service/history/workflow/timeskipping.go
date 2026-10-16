@@ -3,6 +3,7 @@ package workflow
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -91,10 +92,20 @@ func (ms *MutableStateImpl) emitTimeSkippingConfigUpdatedMetric() {
 
 func (ms *MutableStateImpl) timeSkippingMetricTags() []metrics.Tag {
 	tags := []metrics.Tag{metrics.NamespaceTag(ms.namespaceEntry.Name().String())}
-	if archetypeTag, ok := getArchetypeMetricTag(ms.shard.ChasmRegistry(), ms.chasmTree.ArchetypeID()); ok {
-		tags = append(tags, archetypeTag)
+	archetypeID := ms.chasmTree.ArchetypeID()
+	var archetypeFqn string
+	switch archetypeID {
+	case chasm.UnspecifiedArchetypeID:
+	case chasm.WorkflowArchetypeID:
+		archetypeFqn = chasm.WorkflowArchetype
+	default:
+		var ok bool
+		archetypeFqn, ok = ms.shard.ChasmRegistry().ComponentFqnByID(archetypeID)
+		if !ok {
+			archetypeFqn = strconv.FormatUint(uint64(archetypeID), 10)
+		}
 	}
-	return tags
+	return append(tags, metrics.ArchetypeTag(archetypeFqn))
 }
 
 // applyFastForward (re)computes the FastForwardInfo using the new TimeSkippingConfig (TSC) and propagated time-skippingstates.
