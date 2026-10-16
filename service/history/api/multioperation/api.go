@@ -23,6 +23,7 @@ import (
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/history/workflow/update"
+	"go.temporal.io/server/testx/failpoint"
 )
 
 var multiOpAbortedErr = serviceerror.NewMultiOperationAborted("Operation was aborted.")
@@ -143,7 +144,9 @@ func Invoke(
 			return nil, err
 		}
 
-		testhooks.Call(uws.testHooks, testhooks.UpdateWithStartOnClosingWorkflowRetry, uws.namespaceId)
+		if err := failpoint.Checkpoint(uws.testHooks, failpoint.UpdateWithStartClosingWorkflowRetry.ForNamespace(uws.namespaceId)); err != nil {
+			return nil, err
+		}
 
 		res, err = uws.Invoke(ctx)
 		if err != nil {
@@ -243,7 +246,9 @@ func (uws *updateWithStart) Invoke(ctx context.Context) (*historyservice.Execute
 		workflowLease.GetReleaseFn()(nil)
 	}
 
-	testhooks.Call(uws.testHooks, testhooks.UpdateWithStartInBetweenLockAndStart, uws.namespaceId)
+	if err := failpoint.Checkpoint(uws.testHooks, failpoint.UpdateWithStartBetweenLockAndStart.ForNamespace(uws.namespaceId)); err != nil {
+		return nil, err
+	}
 
 	// Workflow does not exist or requires a new run - start and update it!
 	return uws.startAndUpdateWorkflow(ctx)
