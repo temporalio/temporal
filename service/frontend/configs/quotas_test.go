@@ -230,6 +230,56 @@ func (s *quotasSuite) TestGlobalNamespaceRateLimiterUsesConfiguredBurstRatio() {
 	s.False(limiter.Allow(requestTime, request))
 }
 
+// TestRecordWorkerHeartbeatP3SurvivesP0StartupBurst is a regression for #12564.
+//
+// When workers start concurrently, each WorkerFactory fires DescribeNamespace (P0).
+// In PriorityRateLimiterImpl.Allow, a P0 request decides on the P0 bucket and then
+// calls Reserve on every lower-priority bucket (P1 through P5). This means a startup
+// burst of 21 concurrent P0 calls drains 21 tokens from the P3 bucket.
+//
+// The test uses rate=30 (burst=60) so the numbers are tractable:
+//   - 21 P0 reserves leave the P3 bucket at 60-21 = 39 tokens.
+//   - The same 21 P0 reserves also drain 21 tokens from P4; then 39 concurrent
+//     PollWorkflowTaskQueue (P4) calls exhaust the remaining 39, leaving P4 at 0.
+//   - RecordWorkerHeartbeat is now P3: Allow decides on P3 (39 ≥ 1) → true.
+//     With the old P4 mapping it would decide on P4 (0 < 1) → false (RESOURCE_EXHAUSTED).
+func (s *quotasSuite) TestRecordWorkerHeartbeatP3SurvivesP0StartupBurst() {
+	rateBurstFn := quotas.NewDefaultIncomingRateBurst(func() float64 { return 30 })
+	limiter := NewExecutionPriorityRateLimiter(rateBurstFn, testOperatorRPSRatioFn)
+	now := time.Now()
+
+	makeReq := func(api string) quotas.Request {
+		return quotas.NewRequest(api, 1, "test-namespace", headers.CallerTypeAPI, -1, "")
+	}
+
+	// 21 concurrent P0 DescribeNamespace calls (simulates 21 WorkerFactory.start() firing
+	// in parallel). Each Allow also charges the P3 and P4 buckets via consumeRateLimiters.
+	describeNamespace := "/temporal.api.workflowservice.v1.WorkflowService/DescribeNamespace"
+	for range 21 {
+		s.True(limiter.Allow(now, makeReq(describeNamespace)), "P0 DescribeNamespace must be allowed")
+	}
+	// P3 bucket: burst(60) - 21 P0 charges = 39 tokens remaining.
+	// P4 bucket: burst(60) - 21 P0 charges = 39 tokens remaining.
+
+	// Saturate P4 with concurrent long-poll calls (the other P4 residents that share the bucket).
+	pollWorkflow := "/temporal.api.workflowservice.v1.WorkflowService/PollWorkflowTaskQueue"
+	for range 39 {
+		limiter.Allow(now, makeReq(pollWorkflow))
+	}
+	// P4 bucket: 39 - 39 = 0 tokens remaining.
+
+	// RecordWorkerHeartbeat is P3: P3 has 39 tokens → succeeds.
+	heartbeat := "/temporal.api.workflowservice.v1.WorkflowService/RecordWorkerHeartbeat"
+	s.True(limiter.Allow(now, makeReq(heartbeat)),
+		"RecordWorkerHeartbeat (P3) must succeed after P0 startup burst: "+
+			"P3 retains 39 tokens and is not affected by P4 long-poll saturation")
+
+	// Confirm P4 is fully exhausted — a PollWorkflowTaskQueue at this point is denied.
+	// This shows what would have happened to RecordWorkerHeartbeat under the old P4 mapping.
+	s.False(limiter.Allow(now, makeReq(pollWorkflow)),
+		"P4 is exhausted: old RecordWorkerHeartbeat (P4) mapping would have failed here")
+}
+
 func (s *quotasSuite) testOperatorPrioritized(limiter quotas.RequestRateLimiter, api string) {
 	operatorRequest := quotas.NewRequest(
 		api,
