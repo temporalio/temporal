@@ -788,6 +788,31 @@ func (suite *ScheduleCHASMSuite) TestTimeSkippingFeatureDisabledWhileWorkflowRun
 		require.Zero(at, desc.GetInfo().GetTimeSkippingInfo().GetCurrentSessionSkipCount())
 		require.True(at, desc.GetInfo().GetTimeSkippingInfo().GetCurrentTime().AsTime().Before(firstTick))
 	}, awaitTimeout, pollInterval)
+
+	s.OverrideDynamicConfig(dynamicconfig.CHASMSchedulerTimeSkippingEnabled, true)
+	fastForwardID := uuid.NewString()
+	patchSchedule(ctx, t, s, sid, &schedulepb.SchedulePatch{
+		TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+			Enabled: true,
+			FastForwardConfig: &commonpb.FastForwardConfig{
+				Id:       fastForwardID,
+				Duration: durationpb.New(6 * time.Hour),
+			},
+		},
+	})
+	await.Require(ctx, t, func(at *await.T) {
+		desc, err := s.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
+			Namespace: s.Namespace().String(), ScheduleId: sid,
+		})
+		require.NoError(at, err)
+		require.Empty(at, desc.GetInfo().GetRunningWorkflows())
+		require.Equal(at, int64(1), desc.GetInfo().GetActionCount())
+		tsi := desc.GetInfo().GetTimeSkippingInfo()
+		require.Equal(at, fastForwardID, tsi.GetFastForwardInfo().GetFastForwardId())
+		require.True(at, tsi.GetFastForwardInfo().GetHasCompleted())
+		require.Positive(at, tsi.GetCurrentSessionSkipCount())
+		require.True(at, tsi.GetCurrentTime().AsTime().Before(firstTick))
+	}, awaitTimeout, pollInterval)
 }
 
 func (suite *ScheduleCHASMSuite) TestDescribeCatchupWindowAfterCreateAndUpdate() {
