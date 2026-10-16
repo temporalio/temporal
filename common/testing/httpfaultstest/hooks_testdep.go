@@ -8,6 +8,7 @@ import (
 	"go.temporal.io/server/common/rpc/httpfaults"
 	"go.temporal.io/server/common/testing/faultinjectiontest"
 	commontesthooks "go.temporal.io/server/common/testing/testhooks"
+	"go.temporal.io/server/testx/failpoint"
 )
 
 // NewCallbackGenerator returns a generator that uses namespace-scoped test hooks.
@@ -30,5 +31,6 @@ func newAdapter(testHooks commontesthooks.TestHooks) faultinjectiontest.Adapter[
 			ByNamespaceID:   commontesthooks.HTTPResponseFaultGeneratorByNamespaceID,
 			ByNamespaceName: commontesthooks.HTTPResponseFaultGeneratorByNamespaceName,
 		},
+		Failpoint: failpoint.HTTPKey,
 	})
 }
