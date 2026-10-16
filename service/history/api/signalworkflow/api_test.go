@@ -18,6 +18,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -32,6 +33,7 @@ type (
 		*require.Assertions
 
 		controller        *gomock.Controller
+		logger            *testlogger.TestLogger
 		shardContext      *historyi.MockShardContext
 		namespaceRegistry *namespace.MockRegistry
 
@@ -58,12 +60,13 @@ func (s *signalWorkflowSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
+	s.logger = testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
 	s.namespaceRegistry = namespace.NewMockRegistry(s.controller)
 	s.namespaceRegistry.EXPECT().GetNamespaceByID(tests.GlobalNamespaceEntry.ID()).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 
 	s.shardContext = historyi.NewMockShardContext(s.controller)
 	s.shardContext.EXPECT().GetConfig().Return(tests.NewDynamicConfig()).AnyTimes()
-	s.shardContext.EXPECT().GetLogger().Return(log.NewTestLogger()).AnyTimes()
+	s.shardContext.EXPECT().GetLogger().Return(s.logger).AnyTimes()
 	s.shardContext.EXPECT().GetThrottledLogger().Return(log.NewTestLogger()).AnyTimes()
 	s.shardContext.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
 	s.shardContext.EXPECT().GetTimeSource().Return(clock.NewRealTimeSource()).AnyTimes()
@@ -120,4 +123,42 @@ func (s *signalWorkflowSuite) TestSignalWorkflow_WorkflowCloseAttempted() {
 	)
 	s.Nil(resp)
 	s.ErrorIs(consts.ErrWorkflowClosing, err)
+}
+
+func (s *signalWorkflowSuite) TestSignalWorkflow_DuplicateRequestID_LogsDroppedLinks() {
+	const requestID = "duplicate-request-id"
+	s.currentMutableState.EXPECT().IsSignalRequested(requestID).Return(true)
+	capture := s.logger.StartCapture()
+
+	_, err := Invoke(
+		context.Background(),
+		&historyservice.SignalWorkflowExecutionRequest{
+			NamespaceId: tests.NamespaceID.String(),
+			SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
+				Namespace: tests.Namespace.String(),
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: tests.WorkflowID,
+					RunId:      tests.RunID,
+				},
+				SignalName: "signal-name",
+				RequestId:  requestID,
+				Links:      []*commonpb.Link{{}},
+			},
+		},
+		s.shardContext,
+		s.workflowConsistencyChecker,
+	)
+	s.Require().NoError(err)
+	capture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+		Level:   testlogger.Info,
+		Message: "Duplicate signal request ID, request links were not attached.",
+		Tags: map[string]any{
+			"wf-namespace":    tests.Namespace.String(),
+			"wf-namespace-id": tests.NamespaceID.String(),
+			"wf-id":           tests.WorkflowID,
+			"wf-run-id":       tests.RunID,
+			"request-id":      requestID,
+			"link-count":      1,
+		},
+	})
 }
