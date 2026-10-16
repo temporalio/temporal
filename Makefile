@@ -601,14 +601,12 @@ unit-test-coverage: prepare-coverage-test
 MINIMAL_UNIT_TEST_DIRS = $(sort $(dir $(shell grep -rlE --include='*.go' '^//go:build .*temporal_minimal' .)))
 
 # Builds every package with temporal_minimal (the variant that ships), then runs the unit tests of
-# MINIMAL_UNIT_TEST_DIRS with it, without test_dep. unit-test-coverage covers the default build. The
-# second -tags replaces the one in COMPILED_TEST_ARGS, since the last -tags flag wins.
-unit-test-build-tags: prepare-coverage-test
+# MINIMAL_UNIT_TEST_DIRS with it. unit-test-coverage covers the default build.
+unit-test-build-tags:
 	$(if $(MINIMAL_UNIT_TEST_DIRS),,$(error No package has a file constrained by temporal_minimal))
 	@printf $(COLOR) "Build and run unit tests with temporal_minimal..."
 	CGO_ENABLED=$(CGO_ENABLED) go build -tags $(ALL_BUILD_TAGS),temporal_minimal ./...
-	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
-		$(COMPILED_TEST_ARGS) -tags $(ALL_BUILD_TAGS),temporal_minimal -coverprofile=$(NEW_COVER_PROFILE) $(MINIMAL_UNIT_TEST_DIRS)
+	$(MAKE) unit-test-coverage TEST_TAG="$(TEST_TAG),temporal_minimal" UNIT_TEST_DIRS="$(MINIMAL_UNIT_TEST_DIRS)"
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
