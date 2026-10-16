@@ -20,15 +20,19 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/workflow"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log/tag"
 	commonnexus "go.temporal.io/server/common/nexus"
 	"go.temporal.io/server/common/rpc/httpfaults"
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protoassert"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -124,6 +128,56 @@ func (s *CallbacksSuite) TestHTTPFaultInjection_NexusCallbackRetriesAfterRespons
 	}, 5*time.Second, 100*time.Millisecond)
 
 	s.GreaterOrEqual(attempts.Load(), int32(2))
+}
+
+func (s *CallbacksSuite) TestSystemCallbackNamespaceNotFound(opts []testcore.TestOption) {
+	env := s.newTestEnv(opts...)
+	missingNamespaceID := uuid.NewString()
+	token, err := commonnexus.NewCallbackTokenGenerator().Tokenize(&tokenspb.NexusOperationCompletion{
+		NamespaceId: missingNamespaceID,
+		WorkflowId:  env.Tv().WorkflowID(),
+		RunId:       uuid.NewString(),
+		Ref:         &persistencespb.StateMachineRef{},
+	})
+	s.Require().NoError(err)
+
+	logger := env.Logger.(*testlogger.TestLogger)
+	logCapture := logger.StartCapture(tag.WorkflowNamespaceID(missingNamespaceID))
+	s.T().Cleanup(func() { logger.StopCapture(logCapture) })
+	env.SdkWorker().RegisterWorkflowWithOptions(
+		func(workflow.Context) (int, error) { return 42, nil },
+		workflow.RegisterOptions{Name: env.Tv().WorkflowType().GetName()},
+	)
+	start, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:    env.Tv().RequestID(),
+		Namespace:    env.Namespace().String(),
+		WorkflowId:   env.Tv().WorkflowID(),
+		WorkflowType: env.Tv().WorkflowType(),
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: env.WorkerTaskQueue()},
+		CompletionCallbacks: []*commonpb.Callback{{Variant: &commonpb.Callback_Nexus_{
+			Nexus: &commonpb.Callback_Nexus{
+				Url:    commonnexus.SystemCallbackURL,
+				Header: map[string]string{commonnexus.CallbackTokenHeader: token},
+			},
+		}}},
+	})
+	s.Require().NoError(err)
+
+	// Callback delivery runs asynchronously after the workflow completes.
+	await.Require(s.Context(), s.T(), func(t *await.T) {
+		description, err := env.FrontendClient().DescribeWorkflowExecution(t.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: env.Namespace().String(),
+			Execution: &commonpb.WorkflowExecution{WorkflowId: env.Tv().WorkflowID(), RunId: start.RunId},
+		})
+		require.NoError(t, err)
+		require.Len(t, description.Callbacks, 1)
+		require.Equal(t, enumspb.CALLBACK_STATE_FAILED, description.Callbacks[0].State)
+	}, 10*time.Second, 100*time.Millisecond)
+	logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+		Level:   testlogger.Error,
+		Message: "failed to get namespace for nexus completion request",
+		Tags:    map[string]any{"nexus-stage": "handler-outbound", "wf-namespace-id": missingNamespaceID},
+	})
 }
 
 func (s *CallbacksSuite) TestScheduledCallbackTokenMigration_LegacyWriteEnvelopeRead(opts []testcore.TestOption) {
