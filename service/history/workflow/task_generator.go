@@ -306,7 +306,7 @@ func (r *TaskGeneratorImpl) getArchetypeRetention(namespaceEntry *namespace.Name
 	if !ok {
 		return 0, false
 	}
-	retention, ok := rc.Retention(namespaceEntry)
+	retention, ok := rc.Retention(namespaceEntry.Name().String())
 	if !ok {
 		return 0, false
 	}

@@ -1,26 +1,24 @@
 package tests
 
 import (
-	"time"
-
 	"github.com/nexus-rpc/sdk-go/nexus"
 	"go.temporal.io/server/chasm"
-	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/dynamicconfig"
 )
 
 type (
 	library struct {
 		chasm.UnimplementedLibrary
+
+		// retention is nil on the shared Library, so only test clusters, which register their own
+		// library instance (see Module), set a PayloadStore retention.
+		retention dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	}
 )
 
 const (
 	libraryName   = "tests"
 	componentName = "payloadStore"
-
-	// RetentionNamespaceDataKey is the namespace data key that sets the PayloadStore archetype
-	// retention, so functional tests can exercise chasm.WithRetention per namespace.
-	RetentionNamespaceDataKey = "chasm-tests-payload-store-retention"
 )
 
 var (
@@ -43,22 +41,24 @@ func (l *library) NexusServiceProcessors() []*chasm.NexusServiceProcessor {
 }
 
 func (l *library) Components() []*chasm.RegistrableComponent {
-	return []*chasm.RegistrableComponent{
-		chasm.NewRegistrableComponent[*PayloadStore](
-			componentName,
-			chasm.WithBusinessIDAlias("PayloadStoreId"),
-			chasm.WithRecordPrincipals(),
-			chasm.WithSearchAttributes(
-				PayloadTotalCountSearchAttribute,
-				PayloadTotalSizeSearchAttribute,
-				ExecutionStatusSearchAttribute,
-				chasm.SearchAttributeTaskQueue,
-			),
-			chasm.WithContextValues(map[any]any{
-				componentCtxKey: componentCtxVal,
-			}),
-			chasm.WithRetention(retentionFromNamespaceData),
+	opts := []chasm.RegistrableComponentOption{
+		chasm.WithBusinessIDAlias("PayloadStoreId"),
+		chasm.WithRecordPrincipals(),
+		chasm.WithSearchAttributes(
+			PayloadTotalCountSearchAttribute,
+			PayloadTotalSizeSearchAttribute,
+			ExecutionStatusSearchAttribute,
+			chasm.SearchAttributeTaskQueue,
 		),
+		chasm.WithContextValues(map[any]any{
+			componentCtxKey: componentCtxVal,
+		}),
+	}
+	if l.retention != nil {
+		opts = append(opts, chasm.WithRetention(l.retention))
+	}
+	return []*chasm.RegistrableComponent{
+		chasm.NewRegistrableComponent[*PayloadStore](componentName, opts...),
 	}
 }
 
@@ -73,13 +73,4 @@ func (l *library) Tasks() []*chasm.RegistrableTask {
 			&PayloadTTLSideEffectTaskHandler{},
 		),
 	}
-}
-
-// retentionFromNamespaceData returns 0 (no override) when the namespace data key is absent or invalid.
-func retentionFromNamespaceData(ns *namespace.Namespace) time.Duration {
-	retention, err := time.ParseDuration(ns.GetCustomData(RetentionNamespaceDataKey))
-	if err != nil {
-		return 0
-	}
-	return retention
 }
