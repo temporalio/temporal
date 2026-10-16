@@ -128,7 +128,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_FeatureDisabledAfterStart() {
 	s.NoError(err)
 
 	tsi := s.getMutableState(env, tv.WorkflowID(), runID).State.ExecutionInfo.GetTimeSkippingInfo()
-	s.False(tsi.GetConfig().GetEnabled())
+	s.True(tsi.GetConfig().GetEnabled())
 	s.Zero(tsi.GetSessionSkipCount())
 	history := env.GetHistory(env.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: tv.WorkflowID(), RunId: runID})
 	s.False(hasEventType(history, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIME_SKIPPING_TRANSITIONED))

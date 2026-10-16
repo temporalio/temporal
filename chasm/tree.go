@@ -4203,10 +4203,6 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 		return nil
 	}
 	if !n.backend.IsTimeSkippingFeatureEnabled(n.ArchetypeID()) {
-		transition := NewTimeSkippingTransition(n.Now(nil))
-		transition.DisabledByFeatureFlag = true
-		n.backend.RecordTimeSkippingTransition(transition)
-		n.logger.Info("CHASM time skipping disabled by namespace feature flag", tag.ArchetypeID(n.ArchetypeID()))
 		return nil
 	}
 

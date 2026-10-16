@@ -753,7 +753,7 @@ func (suite *ScheduleCHASMSuite) TestTimeSkippingFeatureDisabledWhileWorkflowRun
 		})
 		require.NoError(at, err)
 		tsi := desc.GetInfo().GetTimeSkippingInfo()
-		require.False(at, tsi.GetEffectiveConfig().GetEnabled())
+		require.True(at, tsi.GetEffectiveConfig().GetEnabled())
 		require.Zero(at, tsi.GetCurrentSessionSkipCount())
 		require.Len(at, desc.GetInfo().GetRunningWorkflows(), 1)
 	}, awaitTimeout, pollInterval)
@@ -766,7 +766,7 @@ func (suite *ScheduleCHASMSuite) TestTimeSkippingFeatureDisabledWhileWorkflowRun
 		require.NoError(at, err)
 		require.Empty(at, desc.GetInfo().GetRunningWorkflows())
 		require.Equal(at, int64(1), desc.GetInfo().GetActionCount())
-		require.False(at, desc.GetInfo().GetTimeSkippingInfo().GetEffectiveConfig().GetEnabled())
+		require.True(at, desc.GetInfo().GetTimeSkippingInfo().GetEffectiveConfig().GetEnabled())
 		require.Zero(at, desc.GetInfo().GetTimeSkippingInfo().GetCurrentSessionSkipCount())
 	}, awaitTimeout, pollInterval)
 }

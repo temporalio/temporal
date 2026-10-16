@@ -6284,7 +6284,7 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		s.ErrorAs(err, &internalErr, "the error must be an internal service error")
 	})
 
-	s.Run("FeatureFlagDisabled_RecordsDisableWithoutSkipping", func() {
+	s.Run("FeatureFlagDisabled_LeavesStateUnchanged", func() {
 		root := gateRoot(true)
 		s.nodeBackend.HandleIsTimeSkippingFeatureEnabled = func(ArchetypeID) bool { return false }
 		var recorded *TimeSkippingTransition
@@ -6292,10 +6292,8 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 
 		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
 		s.NoError(err)
-		s.Require().NotNil(recorded)
-		s.True(recorded.IsValid())
-		s.True(recorded.DisabledByFeatureFlag)
-		s.Zero(recorded.GetSkippedDuration())
+		s.Nil(recorded)
+		s.True(s.nodeBackend.GetExecutionInfo().GetTimeSkippingInfo().GetConfig().GetEnabled())
 		s.Zero(s.nodeBackend.NumTasksAdded())
 	})
 

@@ -103,7 +103,6 @@ type TimeSkippingTransition struct {
 	// is what keeps GetSkippedDuration from ever going negative. Read it via GetTargetTime.
 	targetTime               time.Time
 	DisabledAfterFastForward bool
-	DisabledByFeatureFlag    bool
 }
 
 // NewTimeSkippingTransition creates a new time-skipping transition with the current time.
@@ -115,7 +114,7 @@ func NewTimeSkippingTransition(currentTime time.Time) *TimeSkippingTransition {
 // IsValid reports whether the transition is worth applying: a real skip target, or a bare disable
 // signal. Nil-safe. A new transition without any field is not a valid one.
 func (t *TimeSkippingTransition) IsValid() bool {
-	return t.isInitialized() && (!t.targetTime.IsZero() || t.DisabledAfterFastForward || t.DisabledByFeatureFlag)
+	return t.isInitialized() && (!t.targetTime.IsZero() || t.DisabledAfterFastForward)
 }
 
 func (t *TimeSkippingTransition) isInitialized() bool {

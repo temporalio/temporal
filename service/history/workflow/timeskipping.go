@@ -318,6 +318,10 @@ func (ms *MutableStateImpl) isWorkflowSkippable() bool {
 		noSkippingReason = "time skipping is not enabled"
 		return false
 	}
+	if !ms.IsTimeSkippingFeatureEnabled(chasm.WorkflowArchetypeID) {
+		noSkippingReason = "time skipping feature flag is disabled"
+		return false
+	}
 
 	// (2) gate by workflow state and status
 	if !ms.IsWorkflowExecutionRunning() {
@@ -460,26 +464,16 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 	}
 	switch transactionPolicy {
 	case historyi.TransactionPolicyActive:
-		// 1. feature-flag gate, no history events generated in this path
-		config := ms.GetExecutionInfo().GetTimeSkippingInfo().GetConfig()
-		if config.GetEnabled() && !ms.IsTimeSkippingFeatureEnabled(chasm.WorkflowArchetypeID) {
-			config.Enabled = false
-			ms.timeSkippingInfoUpdated = true
-			ms.logger.Info("workflow time skipping disabled by namespace feature flag",
-				tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
-				tag.WorkflowRunID(ms.GetExecutionState().RunId))
-			return false
-		}
-		// 2. gate: only a running, time-skipping-enabled, idle workflow may skip time
+		// 1. gate: only a running, time-skipping-enabled, idle workflow may skip time
 		if !ms.isWorkflowSkippable() {
 			return false
 		}
-		// 3. find the next skip target; if there is none, time skipping is not needed
+		// 2. find the next skip target; if there is none, time skipping is not needed
 		transition := ms.findNextSkipTarget()
 		if !transition.IsValid() {
 			return false
 		}
-		// 4. state change.
+		// 3. state change.
 		previousDuration := ms.accumulatedSkippedDuration()
 		_, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(
 			ctx, transition.GetTargetTime(), transition.DisabledAfterFastForward)
@@ -487,7 +481,7 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 			ms.logger.Error("failed to add workflow execution time skipping transitioned event", tag.Error(err))
 			return false
 		}
-		// 5. Timer tasks only need to be re-stamped when the virtual-time offset changed.
+		// 4. Timer tasks only need to be re-stamped when the virtual-time offset changed.
 		// A valid transition may only disable time skipping or update session state.
 		return ms.accumulatedSkippedDuration() != previousDuration
 	case historyi.TransactionPolicyPassive:
@@ -569,12 +563,6 @@ func (ms *MutableStateImpl) RecordTimeSkippingTransition(transition *chasm.TimeS
 	if tsi == nil {
 		return
 	}
-	if transition.DisabledByFeatureFlag {
-		tsi.Config.Enabled = false
-		ms.timeSkippingInfoUpdated = true
-		return
-	}
-
 	skippedDuration := transition.GetSkippedDuration()
 	ms.executeTimeSkippingTransition(
 		skippedDuration,

@@ -350,7 +350,7 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToOtherExecution() {
 }
 
 func (s *mutableStateSuite) TestIsWorkflowSkippable() {
-
+	s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return true }
 	// base case: ensures the other tests modifications are the reason to make the workflow not skippable
 	s.Run("EnabledAndIdle_Skippable", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
@@ -490,6 +490,18 @@ func (s *mutableStateSuite) TestIsWorkflowSkippable() {
 		}
 		s.False(s.mutableState.isWorkflowSkippable())
 	})
+}
+
+func (s *mutableStateSuite) TestIsWorkflowSkippableFeatureFlagDisabled() {
+	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		Config: &commonpb.TimeSkippingConfig{Enabled: true},
+	}
+	s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return false }
+	s.False(s.mutableState.isWorkflowSkippable())
+	s.True(s.mutableState.executionInfo.TimeSkippingInfo.GetConfig().GetEnabled())
+
+	s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return true }
+	s.True(s.mutableState.isWorkflowSkippable())
 }
 
 func (s *mutableStateSuite) requireInitNoPanic(
@@ -1572,7 +1584,7 @@ func (s *mutableStateSuite) TestCloseTransactionHandleWorkflowTimeSkipping() {
 		s.False(s.mutableState.timeSkippingInfoUpdated, "passive policy makes no state change")
 	})
 
-	s.Run("FeatureFlagDisabled_DisablesSavedConfigWithoutEvent", func() {
+	s.Run("FeatureFlagDisabled_LeavesSavedConfigUnchanged", func() {
 		s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return false }
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 10},
@@ -1584,10 +1596,10 @@ func (s *mutableStateSuite) TestCloseTransactionHandleWorkflowTimeSkipping() {
 			context.Background(), historyi.TransactionPolicyActive)
 
 		s.False(needRegen)
-		s.False(s.mutableState.executionInfo.TimeSkippingInfo.GetConfig().GetEnabled())
-		s.True(s.mutableState.timeSkippingInfoUpdated)
+		s.True(s.mutableState.executionInfo.TimeSkippingInfo.GetConfig().GetEnabled())
+		s.False(s.mutableState.timeSkippingInfoUpdated)
 		s.Zero(s.mutableState.executionInfo.TimeSkippingInfo.GetSessionSkipCount())
-		s.False(s.mutableState.hBuilder.IsDirty(), "disabling the flag does not add a history event")
+		s.False(s.mutableState.hBuilder.IsDirty(), "the flag does not add a history event")
 	})
 }
 
