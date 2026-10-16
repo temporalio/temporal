@@ -8,7 +8,7 @@ import (
 )
 
 // NexusStage returns the lifecycle phase when the request identifies one unambiguously.
-func NexusStage(_ any, fullMethod string) []tag.Tag {
+func NexusStage(fullMethod string) []tag.Tag {
 	switch fullMethod {
 	case api.WorkflowServicePrefix + "StartNexusOperationExecution",
 		api.WorkflowServicePrefix + "DescribeNexusOperationExecution",

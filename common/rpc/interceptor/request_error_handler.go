@@ -92,7 +92,7 @@ func (eh *RequestErrorHandler) logError(
 
 	logTags = append(logTags, tag.Stringer("grpc_code", statusCode))
 	logTags = append(logTags, eh.workflowTags.Extract(req, fullMethod)...)
-	logTags = append(logTags, logtags.NexusStage(req, fullMethod)...)
+	logTags = append(logTags, logtags.NexusStage(fullMethod)...)
 
 	eh.logger.Error("service failures", append(logTags, tag.Error(err))...)
 }

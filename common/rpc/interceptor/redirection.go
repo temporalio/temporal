@@ -252,10 +252,7 @@ func (i *Redirection) Intercept(
 	info *grpc.UnaryServerInfo,
 	handler grpc.UnaryHandler,
 ) (_ any, retError error) {
-	logger := i.logger
-	if tags := logtags.NexusStage(req, info.FullMethod); len(tags) > 0 {
-		logger = log.With(logger, tags...)
-	}
+	logger := log.With(i.logger, logtags.NexusStage(info.FullMethod)...)
 	defer log.CapturePanic(logger, &retError)
 	if raFn, ok := i.redirectResponsesByFullMethod[info.FullMethod]; ok {
 		if !i.RedirectionAllowed(ctx) {

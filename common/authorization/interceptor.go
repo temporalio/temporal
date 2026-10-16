@@ -147,7 +147,10 @@ func (a *Interceptor) Intercept(
 		var err error
 		claims, err = a.GetClaims(authInfo)
 		if err != nil {
-			a.logger.Error("Authorization error", append(logtags.NexusStage(req, info.FullMethod), tag.Error(err))...)
+			a.logger.Error("Authorization error", append(
+				logtags.NexusStage(info.FullMethod),
+				tag.Error(err),
+			)...)
 			// return a generic error to the caller without disclosing details
 			return nil, errUnauthorized
 		}
@@ -314,7 +317,10 @@ func (a *Interceptor) Authorize(ctx context.Context, claims *Claims, ct *CallTar
 	metrics.ServiceAuthorizationLatency.With(mh).Record(time.Since(startTime))
 	if err != nil {
 		metrics.ServiceErrAuthorizeFailedCounter.With(mh).Record(1)
-		a.logger.Error("Authorization error", append(logtags.NexusStage(ct.Request, ct.APIName), tag.Error(err))...)
+		a.logger.Error("Authorization error", append(
+			logtags.NexusStage(ct.APIName),
+			tag.Error(err),
+		)...)
 		if a.exposeAuthorizerErrors() {
 			return nil, err
 		}

@@ -72,9 +72,7 @@ func (i *ServiceErrorInterceptor) capturePanicHandler(
 ) (_ any, retError error) {
 	logger := i.logger
 	if info != nil {
-		if tags := logtags.NexusStage(req, info.FullMethod); len(tags) > 0 {
-			logger = log.With(logger, tags...)
-		}
+		logger = log.With(logger, logtags.NexusStage(info.FullMethod)...)
 	}
 	defer metrics.CapturePanic(logger, i.metricsHandler, &retError)
 	return handler(ctx, req)
