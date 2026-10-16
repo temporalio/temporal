@@ -7,8 +7,9 @@ These Go build tags compile out parts of the server. For tags that only affect t
 
 Excludes the gRPC dependencies of `cloud.google.com/go/storage`, reducing binary size and compile
 time. The server only uses the storage REST client (`storage.NewClient`), not the gRPC client
-(`storage.NewGRPCClient`). The Makefile and release builds (`.goreleaser.yml`) set it. Related issue:
-https://github.com/googleapis/google-cloud-go/issues/12343
+(`storage.NewGRPCClient`).
+
+The Makefile and release builds (`.goreleaser.yml`) set it by default.
 
 ## Optional integrations
 
@@ -30,8 +31,7 @@ make unit-test TEST_TAG=temporal_minimal
 Programs that embed the server pass the same tags to `go build -tags`.
 
 Without `temporal_minimal`, the `temporal_with_*` tags have no effect and every integration is
-included. The scheme follows Prometheus' service discovery plugins (`remove_all_sd` plus
-`enable_<name>_sd`).
+included.
 
 | Tag                      | Integration                   | Dependencies it brings in |
 | ------------------------ | ----------------------------- | ------------------------- |
@@ -40,16 +40,6 @@ included. The scheme follows Prometheus' service discovery plugins (`remove_all_
 A server built without an integration rejects configuration that uses it, for example
 `unknown archiver scheme: "gs" (Google Cloud Storage archival is excluded from this build, see build
 tag temporal_with_gstorage)`.
-
-### CI coverage
-
-CI tests both variants:
-
-- Unit tests run with the default build. `make unit-test-minimal` runs them again with
-  `temporal_minimal`, for every package that contains a file constrained by `temporal_minimal`. It
-  finds these packages automatically, so new ones are covered without changes to CI.
-- Functional tests build with `temporal_minimal` (`FUNCTIONAL_TEST_BUILD_TAG` in
-  `.github/workflows/run-tests.yml`), because they don't use these integrations.
 
 ### Adding a build-tagged integration
 
