@@ -198,6 +198,10 @@ func (s *Starter) grantEagerWorkflowDispatch(ctx context.Context) bool {
 	version := worker_versioning.DeploymentVersionFromDeployment(worker_versioning.DeploymentFromExternalDeploymentVersion(
 		worker_versioning.GetOverrideTargetDeploymentVersion(request.GetVersioningOverride()),
 	))
+	metrics.EagerDispatchRequestsSent.With(s.getMetricsHandler().WithTags(
+		metrics.OperationTag(metrics.HistoryStartWorkflowExecutionScope),
+		metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+	)).Record(1)
 	return common.GrantEagerDispatch(
 		ctx,
 		s.matchingClient,

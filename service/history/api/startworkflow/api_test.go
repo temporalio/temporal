@@ -168,6 +168,16 @@ func TestPrepareEagerDispatchCheck(t *testing.T) {
 			require.NoError(t, starter.prepare(t.Context()))
 			require.Equal(t, test.wantEager, starter.requestEagerStart())
 
+			var sentTaskQueueTypes []string
+			for _, recording := range capture.Snapshot()[metrics.EagerDispatchRequestsSent.Name()] {
+				sentTaskQueueTypes = append(sentTaskQueueTypes, recording.Tags[metrics.TaskTypeTagName])
+			}
+			if test.checkEnabled {
+				require.Equal(t, []string{enumspb.TASK_QUEUE_TYPE_WORKFLOW.String()}, sentTaskQueueTypes)
+			} else {
+				require.Empty(t, sentTaskQueueTypes)
+			}
+
 			reasonTag := metrics.ReasonTag(eagerStartDeniedReasonDispatchNotGranted)
 			var deniedReasons []string
 			for _, recording := range capture.Snapshot()[metrics.WorkflowEagerExecutionDeniedCounter.Name()] {
@@ -235,6 +245,7 @@ func TestGrantEagerWorkflowDispatchVersion(t *testing.T) {
 			}}, nil)
 
 			starter := &Starter{
+				metricsHandler: metrics.NoopMetricsHandler,
 				matchingClient: matchingClient,
 				namespace:      tests.LocalNamespaceEntry,
 				request: &historyservice.StartWorkflowExecutionRequest{
