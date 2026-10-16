@@ -53,6 +53,7 @@ func WorkflowStateToCHASM(instanceID string, args *iface.WorkerControllerInstanc
 			continue
 		}
 		group := &wcipb.ScalingGroupState{
+			Id:          id,
 			Status:      wcipb.SCALING_GROUP_STATUS_IDLE,
 			AppliedSize: AppliedSizeUnknown,
 		}
@@ -104,7 +105,7 @@ func CHASMStateToWorkflow(
 			local.Spec.ScalingGroupSpecs[id] = SpecToWorkflow(spec)
 		}
 	}
-	validation, err := validationToWorkflow(state.GetValidationStatus())
+	validation, err := ValidationToWorkflow(state.GetValidationStatus())
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +214,8 @@ func validationToCHASM(v *iface.ValidationStatus) (*wcipb.ValidationStatus, erro
 	return out, nil
 }
 
-func validationToWorkflow(v *wcipb.ValidationStatus) (*iface.ValidationStatus, error) {
+// ValidationToWorkflow converts the CHASM validation status to the workflow (and version-workflow signal) type.
+func ValidationToWorkflow(v *wcipb.ValidationStatus) (*iface.ValidationStatus, error) {
 	if v == nil {
 		return nil, nil
 	}

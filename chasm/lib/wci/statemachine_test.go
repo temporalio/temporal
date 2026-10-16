@@ -57,7 +57,7 @@ func rootAt(status wcipb.WciStatus) *WorkerControllerInstance {
 }
 
 func groupAt(status wcipb.ScalingGroupStatus) *ScalingGroup {
-	g := NewScalingGroup()
+	g := NewScalingGroup("g")
 	g.Status = status
 	g.Attempt = 1
 	return g
@@ -147,7 +147,7 @@ func TestScalingGroupTransitions(t *testing.T) {
 // The resize task carries the attempt and the provider type as its outbound destination.
 func TestResizeAttemptsAndDestination(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
-	g := NewScalingGroup()
+	g := NewScalingGroup("g")
 
 	require.NoError(t, TransitionScaleDecided.Apply(g, ctx, EventScaleDecided{DesiredSize: 3, ProviderType: "aws-lambda"}))
 	require.NoError(t, TransitionResizeRetryable.Apply(g, ctx, EventResizeRetryable{NextAttemptTime: time.Now()}))
@@ -162,7 +162,7 @@ func TestResizeAttemptsAndDestination(t *testing.T) {
 
 func TestDecideOnlyStartsFromIdle(t *testing.T) {
 	ctx := &chasm.MockMutableContext{}
-	g := NewScalingGroup()
+	g := NewScalingGroup("g")
 
 	require.NoError(t, g.Decide(ctx, 3, "aws-lambda"))
 	require.Equal(t, wcipb.SCALING_GROUP_STATUS_SCALING, g.Status)

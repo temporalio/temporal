@@ -27,6 +27,7 @@ type fakeAlgo struct {
 	status       iface.ScalingAlgorithmStatus
 	nextPoll     *time.Duration
 	seen         *scalingalgorithm.ScalingMetricsSnapshot
+	validateErr  error
 }
 
 var fake = &fakeAlgo{}
@@ -37,7 +38,7 @@ func init() {
 
 func (f *fakeAlgo) CompatibleLaunchStrategies() []compute.LaunchStrategy { return nil }
 func (f *fakeAlgo) ValidateConfig(context.Context, iface.ScalingAlgorithmConfig) error {
-	return nil
+	return f.validateErr
 }
 func (f *fakeAlgo) ProcessTaskAdd(context.Context, iface.ScalingAlgorithmConfig, iface.ScalingAlgorithmStatus, iface.SignalTaskAddRequest) (*scalingalgorithm.TaskAddResponse, error) {
 	f.taskAddCalls++
@@ -62,7 +63,7 @@ func newDecisionTest(t *testing.T, script fakeAlgo) (*WorkerControllerInstance, 
 	t.Helper()
 	*fake = script
 	ctx := &chasm.MockMutableContext{MockContext: chasm.MockContext{HandleNow: func(chasm.Component) time.Time { return testNow }}}
-	group := NewScalingGroup()
+	group := NewScalingGroup("g")
 	w := &WorkerControllerInstance{
 		WorkerControllerInstanceState: &wcipb.WorkerControllerInstanceState{
 			Status: wcipb.WCI_STATUS_RUNNING,
