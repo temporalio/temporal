@@ -92,6 +92,18 @@ func TestLoadTestDataRejectsRunWithoutShardingUnits(t *testing.T) {
 	require.ErrorContains(t, err, "no test sharding units")
 }
 
+func TestOptimizeShardingSaltBreaksMaxTimeTiesBySpread(t *testing.T) {
+	weights := map[string]float64{
+		"TestSuite/TestA": 8,
+		"TestSuite/TestB": 5,
+		"TestSuite/TestC": 3,
+		"TestSuite/TestD": 2,
+	}
+
+	got, _ := optimizeShardingSalt(weights, 3, 100)
+	require.Equal(t, "-salt-33", got)
+}
+
 func writeJUnitReport(t *testing.T, path, contents string) {
 	t.Helper()
 	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
