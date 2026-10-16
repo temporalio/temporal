@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/tests/testcore"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
@@ -165,13 +166,24 @@ func (s *NexusStandaloneTestSuite) TestStartStandaloneNexusOperation() {
 	// Validates that request validation is wired up in the frontend.
 	// Exhaustive validation cases are covered in unit tests.
 	s.Run("Validation", func(s *NexusStandaloneTestSuite) {
-		env := s.newTestEnv()
+		env := s.newTestEnv(testcore.WithDynamicConfig(dynamicconfig.LogAllReqErrors, true))
+		logCapture := env.StartNamespaceLogCapture()
 
 		_, err := s.startNexusOperation(env, &workflowservice.StartNexusOperationExecutionRequest{
 			OperationId: "", // required field
 		})
 		s.Error(err)
 		s.Contains(err.Error(), "operation_id is required")
+		logCapture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+			Level:   testlogger.Error,
+			Message: "service failures",
+			Tags:    map[string]any{"operation": "StartNexusOperationExecution"},
+		})
+		for _, record := range logCapture.Snapshot() {
+			for _, logTag := range record.Tags {
+				s.NotEqual("nexus-stage", logTag.Key())
+			}
+		}
 	})
 
 	s.Run("IDConflictPolicyFail", func(s *NexusStandaloneTestSuite) {
