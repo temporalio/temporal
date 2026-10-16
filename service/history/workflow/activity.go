@@ -359,14 +359,13 @@ func ResetActivity(
 			unpauseActivityInfo(activityInfo)
 		}
 
-		activityState := GetActivityState(activityInfo)
 		// An immediate reset clears old attempt metadata; a running attempt records its outcome when it yields.
-		if activityState != enumspb.PENDING_ACTIVITY_STATE_STARTED {
+		if GetActivityState(activityInfo) != enumspb.PENDING_ACTIVITY_STATE_STARTED {
 			clearActivityAttemptMetadataForReset(activityInfo)
 		}
 
 		// if activity is running, or it remains paused, we don't need to schedule a new run
-		if activityState == enumspb.PENDING_ACTIVITY_STATE_STARTED || activityInfo.Paused {
+		if GetActivityState(activityInfo) == enumspb.PENDING_ACTIVITY_STATE_STARTED || activityInfo.Paused {
 			return nil
 		}
 
