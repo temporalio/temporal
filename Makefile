@@ -44,17 +44,15 @@ PERSISTENCE_DRIVER ?= cassandra
 TEMPORAL_DB ?= temporal
 VISIBILITY_DB ?= temporal_visibility
 
-# Comma-separated Go build tags to add, e.g. BUILD_TAGS=temporal_minimal,temporal_with_gstorage. They
-# are added to the defaults below, which can't be removed. BUILD_TAG and TEST_TAG are the older names
-# and still work.
-BUILD_TAGS ?= $(BUILD_TAG)
-TEST_BUILD_TAGS ?= $(TEST_TAG)
-
+# BUILD_TAG and TEST_TAG take comma-separated Go build tags to add, e.g.
+# BUILD_TAG=temporal_minimal,temporal_with_gstorage. They are added to the defaults below, which can't
+# be removed.
+#
 # The `disable_grpc_modules` build tag excludes gRPC dependencies from cloud.google.com/go/storage,
 # reducing binary size since we only use the REST client (storage.NewClient), not the
 # gRPC client (storage.NewGRPCClient). Related issue: https://github.com/googleapis/google-cloud-go/issues/12343
-override ALL_BUILD_TAGS := disable_grpc_modules,$(BUILD_TAGS)
-override ALL_TEST_BUILD_TAGS := $(ALL_BUILD_TAGS),test_dep,$(TEST_BUILD_TAGS)
+override ALL_BUILD_TAGS := disable_grpc_modules,$(BUILD_TAG)
+override ALL_TEST_BUILD_TAGS := $(ALL_BUILD_TAGS),test_dep,$(TEST_TAG)
 override BUILD_TAG_FLAG := -tags $(ALL_BUILD_TAGS)
 override TEST_TAG_FLAG := -tags $(ALL_TEST_BUILD_TAGS)
 
