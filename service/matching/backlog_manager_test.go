@@ -495,13 +495,102 @@ func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_NoReloadSignalWhenCau
 	}
 }
 
+func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_ExpiredTail() {
+	if s.fairness {
+		s.T().Skip("only for priority backlog manager")
+	}
+	for _, tc := range []struct {
+		name               string
+		maxReadLevelOffset int64
+	}{
+		{name: "no_gap", maxReadLevelOffset: 2},
+		{name: "with_gap", maxReadLevelOffset: 100},
+	} {
+		s.Run(tc.name, func() {
+			s.SetupTest()
+
+			s.setupToCaptureTasks()
+			blm, tr, start := s.initPriReaderAtEnd()
+
+			tr.signalNewTasks(s.createTasksAt(blm, start+1))
+			_, err := blm.db.CreateTasks(blm.tqCtx, []*writeTaskRequest{{
+				subqueue:  subqueueZero,
+				fairLevel: fairLevel{id: start + 2},
+				taskInfo: &persistencespb.TaskInfo{
+					CreateTime: timestamp.TimeNowPtrUtcAddSeconds(-3600),
+					ExpiryTime: timestamp.TimeNowPtrUtcAddSeconds(-60),
+				},
+			}})
+			s.Require().NoError(err)
+			maxReadLevel := start + tc.maxReadLevelOffset
+			blm.db.setMaxReadLevelForTesting(subqueueZero, maxReadLevel)
+
+			// Complete the valid task before the reader scans the expired tail.
+			tasks := s.capturedTasks()
+			s.Require().Len(tasks, 1)
+			tasks[0].finish(taskFinishResult{consumedToken: true})
+			s.Require().Equal(start+1, s.dbAckLevel(blm))
+
+			batch, err := tr.getTaskBatch(blm.tqCtx)
+			s.Require().NoError(err)
+			s.Require().Len(batch.tasks, 1)
+			tr.processTaskBatch(batch.tasks)
+
+			batch, err = tr.getTaskBatch(blm.tqCtx)
+			s.Require().NoError(err)
+			s.Require().Empty(batch.tasks)
+			s.Require().True(batch.isReadBatchDone)
+			tr.setReadLevelAfterGap(batch.readLevel)
+
+			readLevel, ackLevel := tr.getLevels()
+			s.Require().Equal(maxReadLevel, readLevel)
+			s.Require().Equal(maxReadLevel, ackLevel)
+			s.Require().Equal(maxReadLevel, s.dbAckLevel(blm))
+			s.Require().Zero(blm.db.getTotalApproximateBacklogCount())
+		})
+	}
+}
+
+func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_OutstandingTasks() {
+	if s.fairness {
+		s.T().Skip("this test is only for priority backlog manager")
+	}
+	s.setupToCaptureTasks()
+	blm, tr, start := s.initPriReaderAtEnd()
+
+	tr.signalNewTasks(s.createTasksAt(blm, start+1, start+2))
+	tasks := s.capturedTasks()
+	s.Require().Len(tasks, 2)
+	tasks[1].finish(taskFinishResult{consumedToken: true})
+	maxReadLevel := start + 100
+	blm.db.setMaxReadLevelForTesting(subqueueZero, maxReadLevel)
+
+	batch, err := tr.getTaskBatch(blm.tqCtx)
+	s.Require().NoError(err)
+	s.Require().Empty(batch.tasks)
+	s.Require().True(batch.isReadBatchDone)
+	tr.setReadLevelAfterGap(batch.readLevel)
+
+	readLevel, ackLevel := tr.getLevels()
+	s.Require().Equal(maxReadLevel, readLevel)
+	s.Require().Equal(start, ackLevel)
+	s.Require().Equal(start, s.dbAckLevel(blm))
+	s.Require().EqualValues(2, blm.db.getTotalApproximateBacklogCount())
+
+	tasks[0].finish(taskFinishResult{consumedToken: true})
+	_, ackLevel = tr.getLevels()
+	s.Require().Equal(maxReadLevel, ackLevel)
+	s.Require().Equal(maxReadLevel, s.dbAckLevel(blm))
+	s.Require().Zero(blm.db.getTotalApproximateBacklogCount())
+}
+
 // TestProcessTaskBatch_IgnoresAlreadyAckedTasks covers the other half of the same read/write
 // race: here the in-flight read does return the newly-written rows, but they get acked before the
 // pump processes them. outstandingTasks only remembers tasks above the ack level, so its dedup
 // check can't see them and they used to be dispatched and acked a second time.
 func (s *BacklogManagerTestSuite) TestProcessTaskBatch_IgnoresAlreadyAckedTasks() {
 	if s.fairness {
-		s.T().Skip("only for fairness backlog manager")
+		s.T().Skip("this test is only for priority backlog manager")
 	}
 	s.setupToCaptureTasks()
 	blm, tr, start := s.initPriReaderAtEnd()
@@ -738,9 +827,6 @@ func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_ValidThenExpired() {
 }
 
 func (s *BacklogManagerTestSuite) TestSkipExpiredTasks_AllExpired() {
-	if !s.fairness {
-		s.T().Skip("this case doesn't work with priTaskReader yet")
-	}
 	s.testSkipExpiredTasks(10, expiredBlock(33))
 }
 
