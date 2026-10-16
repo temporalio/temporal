@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/tqid"
 	"go.temporal.io/server/service/matching/simplelimiter"
@@ -63,6 +64,39 @@ func (s *RateLimitManagerSuite) TestUpdatePerKeySimpleRateLimitLocked_WhenFairne
 	rateLimitManager.mu.Unlock()
 }
 
+func TestRateLimitManagerInitialGrants(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name    string
+		rate    float64
+		granted int32
+	}{
+		{name: "zero rate", rate: 0, granted: 0},
+		{name: "one per second", rate: 1, granted: 2},
+		{name: "ten per second", rate: 10, granted: 11},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			configClient := dynamicconfig.NewMemoryClient()
+			configClient.OverrideSetting(dynamicconfig.AdminMatchingNamespaceTaskqueueToPartitionDispatchRate, test.rate)
+			config := newTaskQueueConfig(
+				tqid.UnsafeTaskQueueFamily("test-namespace", "test-task-queue").TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY),
+				NewConfig(dynamicconfig.NewCollection(configClient, log.NewNoopLogger())),
+				"test-namespace",
+			)
+			manager := newRateLimitManager(nil, config, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+			manager.timeSource = clock.NewEventTimeSource().Update(time.Now())
+			manager.Start()
+			t.Cleanup(manager.Stop)
+
+			require.Equal(t, test.granted, manager.grantTokens(nil, 20))
+			require.Zero(t, manager.grantTokens(nil, 1))
+		})
+	}
+}
+
 func TestRateLimitManagerGrantTokens(t *testing.T) {
 	t.Run("new matcher applies the whole queue limit", func(t *testing.T) {
 		manager := &rateLimitManager{
@@ -72,8 +106,10 @@ func TestRateLimitManagerGrantTokens(t *testing.T) {
 			wholeQueueLimit: simplelimiter.MakeParams(2, 500*time.Millisecond),
 		}
 
-		require.Equal(t, int32(2), manager.grantTokens(nil, 5))
-		require.Equal(t, int32(0), manager.grantTokens(nil, 1))
+		granted := manager.grantTokens(nil, 5)
+		require.Equal(t, int32(2), granted)
+		granted = manager.grantTokens(nil, 1)
+		require.Equal(t, int32(0), granted)
 	})
 
 	t.Run("new matcher isolates fairness keys", func(t *testing.T) {
@@ -88,12 +124,16 @@ func TestRateLimitManagerGrantTokens(t *testing.T) {
 
 		keyOne := &commonpb.Priority{FairnessKey: "one"}
 		keyTwo := &commonpb.Priority{FairnessKey: "two"}
-		require.Equal(t, int32(1), manager.grantTokens(keyOne, 20))
-		require.Equal(t, int32(0), manager.grantTokens(keyOne, 1))
-		require.Equal(t, int32(1), manager.grantTokens(keyTwo, 1))
+		granted := manager.grantTokens(keyOne, 20)
+		require.Equal(t, int32(1), granted)
+		granted = manager.grantTokens(keyOne, 1)
+		require.Equal(t, int32(0), granted)
+		granted = manager.grantTokens(keyTwo, 1)
+		require.Equal(t, int32(1), granted)
 
 		timeSource.Advance(time.Second)
-		require.Equal(t, int32(1), manager.grantTokens(keyOne, 2))
+		granted = manager.grantTokens(keyOne, 2)
+		require.Equal(t, int32(1), granted)
 	})
 }
 
