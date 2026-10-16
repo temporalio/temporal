@@ -146,7 +146,7 @@ func TestGroupTaskValidation(t *testing.T) {
 
 func TestValidateAlgorithms(t *testing.T) {
 	w, _, ctx := newDecisionTest(t, fakeAlgo{validateErr: errors.New("bad config")})
-	err := w.validateAlgorithms(ctx)
+	err := validateAlgorithms(w.algorithmContext(ctx), w.spec())
 	require.ErrorContains(t, err, "g: bad config")
 }
 
