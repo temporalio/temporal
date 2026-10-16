@@ -1,0 +1,56 @@
+package wci
+
+import (
+	"go.temporal.io/server/chasm"
+	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
+	"google.golang.org/protobuf/proto"
+)
+
+// MetricsPollTimerTaskHandler fires at next_poll_time and hands the I/O to FetchSnapshotTask.
+type MetricsPollTimerTaskHandler struct {
+	chasm.PureTaskHandlerBase
+}
+
+func (h *MetricsPollTimerTaskHandler) Validate(
+	_ chasm.Context,
+	w *WorkerControllerInstance,
+	_ chasm.TaskInvocation,
+	task *wcipb.MetricsPollTimerTask,
+) (bool, error) {
+	return w.Status == wcipb.WCI_STATUS_RUNNING && proto.Equal(task.GetPollTime(), w.NextPollTime), nil
+}
+
+func (h *MetricsPollTimerTaskHandler) Execute(
+	ctx chasm.MutableContext,
+	w *WorkerControllerInstance,
+	_ chasm.TaskAttributes,
+	task *wcipb.MetricsPollTimerTask,
+) error {
+	ctx.AddTask(w, chasm.TaskAttributes{}, &wcipb.FetchSnapshotTask{PollTime: task.GetPollTime()})
+	return nil
+}
+
+// PeriodicValidationTimerTaskHandler re-arms first, so a dropped validation never stops the cadence.
+type PeriodicValidationTimerTaskHandler struct {
+	chasm.PureTaskHandlerBase
+}
+
+func (h *PeriodicValidationTimerTaskHandler) Validate(
+	_ chasm.Context,
+	w *WorkerControllerInstance,
+	_ chasm.TaskInvocation,
+	task *wcipb.PeriodicValidationTimerTask,
+) (bool, error) {
+	return w.Status == wcipb.WCI_STATUS_RUNNING && proto.Equal(task.GetValidationTime(), w.NextValidationTime), nil
+}
+
+func (h *PeriodicValidationTimerTaskHandler) Execute(
+	ctx chasm.MutableContext,
+	w *WorkerControllerInstance,
+	_ chasm.TaskAttributes,
+	_ *wcipb.PeriodicValidationTimerTask,
+) error {
+	w.armValidationTimer(ctx, ctx.Now(w).Add(validationInterval))
+	ctx.AddTask(w, chasm.TaskAttributes{}, &wcipb.ValidateSpecTask{ValidationTime: w.NextValidationTime})
+	return nil
+}

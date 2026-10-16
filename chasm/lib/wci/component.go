@@ -49,10 +49,14 @@ func NewWorkerControllerInstance(
 		ScalingGroups: make(chasm.Map[string, *ScalingGroup], len(specs)),
 		Visibility:    chasm.NewComponentField(ctx, chasm.NewVisibility(ctx)),
 	}
-	w.CreateTime = timestamppb.New(ctx.Now(w))
+	now := ctx.Now(w)
+	w.CreateTime = timestamppb.New(now)
 	for id := range specs {
 		w.ScalingGroups[id] = chasm.NewComponentField(ctx, NewScalingGroup())
 	}
+	// Same first-poll delay as the workflow.
+	w.armPollTimer(ctx, now.Add(maxPollInterval))
+	w.armValidationTimer(ctx, now.Add(validationInterval))
 	return w
 }
 
@@ -71,6 +75,17 @@ func NewWorkerControllerInstanceFromMigration(
 	for id, group := range groups {
 		w.ScalingGroups[id] = chasm.NewComponentField(ctx, &ScalingGroup{ScalingGroupState: group})
 	}
+	// Keep the workflow's poll cadence; a past-due poll fires immediately.
+	now := ctx.Now(w)
+	nextPoll := now.Add(maxPollInterval)
+	if t := state.GetNextPollTime(); t != nil {
+		nextPoll = t.AsTime()
+		if nextPoll.Before(now) {
+			nextPoll = now
+		}
+	}
+	w.armPollTimer(ctx, nextPoll)
+	w.armValidationTimer(ctx, now.Add(validationInterval))
 	return w
 }
 
