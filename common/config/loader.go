@@ -201,12 +201,12 @@ func (opts *loadOptions) loadLegacy(config any) error {
 
 		processedData, err := processConfigFile(data, filepath.Base(f))
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to process config file %s: %w", f, err)
 		}
 
 		err = yaml.Unmarshal(processedData, config)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to unmarshal config file %s: %w", f, err)
 		}
 	}
 
