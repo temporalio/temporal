@@ -37,7 +37,7 @@ included.
 | ------------------------ | ----------------------------- | ------------------------- |
 | `temporal_with_gstorage` | Google Cloud Storage archival | Google Cloud Storage SDK  |
 
-A server built without an integration fails with an error that names the missing tag when the
-integration is used. For archival, that is when a namespace is registered or updated with a `gs://`
-URI, or when archiving for a namespace that already has one: `unknown archiver scheme: "gs" (Google
-Cloud Storage archival is excluded from this build, see build tag temporal_with_gstorage)`.
+A server built without an integration refuses to start if its configuration sets the integration up,
+for example `archival provider gstorage is configured, but Google Cloud Storage archival is excluded
+from this build, see build tag temporal_with_gstorage`. Many of the `config/development-*.yaml` files
+configure the `gstorage` archival provider, so a build without it needs a config that doesn't.

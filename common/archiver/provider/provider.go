@@ -96,6 +96,14 @@ func (f CustomVisibilityArchiverFactoryFunc) NewCustomVisibilityArchiver(
 	return f(params)
 }
 
+// ValidateConfigs returns an error if the configs set up an archiver that is excluded from this build.
+func ValidateConfigs(
+	historyArchiverConfigs *config.HistoryArchiverProvider,
+	visibilityArchiverConfigs *config.VisibilityArchiverProvider,
+) error {
+	return validateGstorageConfigs(historyArchiverConfigs, visibilityArchiverConfigs)
+}
+
 // NewArchiverProvider returns a new Archiver provider
 func NewArchiverProvider(
 	historyArchiverConfigs *config.HistoryArchiverProvider,

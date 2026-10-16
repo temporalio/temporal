@@ -602,9 +602,8 @@ unit-test-coverage: prepare-coverage-test
 unit-test-build-tags:
 	@printf $(COLOR) "Build and run unit tests with temporal_minimal..."
 	CGO_ENABLED=$(CGO_ENABLED) go build -tags $(ALL_BUILD_TAGS),temporal_minimal ./...
-	@dirs="$$(grep -rlE --include='*.go' '^//go:build .*temporal_minimal' . | xargs -r -n1 dirname | sort -u | tr '\n' ' ')"; \
-	if [ -z "$$dirs" ]; then echo "No packages use temporal_minimal."; exit 0; fi; \
-	$(MAKE) unit-test-coverage TEST_TAG="$(TEST_TAG),temporal_minimal" UNIT_TEST_DIRS="$$dirs"
+	$(MAKE) unit-test-coverage TEST_TAG="$(TEST_TAG),temporal_minimal" \
+		UNIT_TEST_DIRS="$$(grep -rlE --include='*.go' '^//go:build .*temporal_minimal' . | xargs -n1 dirname | sort -u | tr '\n' ' ')"
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."

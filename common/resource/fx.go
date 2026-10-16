@@ -372,7 +372,10 @@ func ArchiverProviderProvider(
 	persistenceExecutionManager persistence.ExecutionManager,
 	logger log.SnTaggedLogger,
 	metricsHandler metrics.Handler,
-) provider.ArchiverProvider {
+) (provider.ArchiverProvider, error) {
+	if err := provider.ValidateConfigs(cfg.Archival.History.Provider, cfg.Archival.Visibility.Provider); err != nil {
+		return nil, err
+	}
 	return provider.NewArchiverProvider(
 		cfg.Archival.History.Provider,
 		cfg.Archival.Visibility.Provider,
@@ -381,7 +384,7 @@ func ArchiverProviderProvider(
 		persistenceExecutionManager,
 		logger,
 		metricsHandler,
-	)
+	), nil
 }
 
 func SdkClientFactoryProvider(

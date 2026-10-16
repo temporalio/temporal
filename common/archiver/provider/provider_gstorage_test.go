@@ -48,3 +48,10 @@ func (s *ProviderSuite) TestGetVisibilityArchiver_ConfigNotFound_GCloud() {
 	s.Equal(ErrArchiverConfigNotFound, err)
 	s.Nil(result)
 }
+
+func (s *ProviderSuite) TestValidateConfigs_Gstorage() {
+	s.NoError(ValidateConfigs(
+		&config.HistoryArchiverProvider{Gstorage: &config.GstorageArchiver{}},
+		&config.VisibilityArchiverProvider{Gstorage: &config.GstorageArchiver{}},
+	))
+}

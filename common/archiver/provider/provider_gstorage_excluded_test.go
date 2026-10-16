@@ -28,3 +28,14 @@ func (s *ProviderSuite) TestGetArchiver_GstorageExcluded() {
 	s.ErrorContains(err, "temporal_with_gstorage")
 	s.Nil(visibilityArchiver)
 }
+
+func (s *ProviderSuite) TestValidateConfigs_GstorageExcluded() {
+	s.NoError(ValidateConfigs(nil, nil))
+	s.NoError(ValidateConfigs(&config.HistoryArchiverProvider{}, &config.VisibilityArchiverProvider{}))
+
+	err := ValidateConfigs(&config.HistoryArchiverProvider{Gstorage: &config.GstorageArchiver{}}, nil)
+	s.ErrorContains(err, "temporal_with_gstorage")
+
+	err = ValidateConfigs(nil, &config.VisibilityArchiverProvider{Gstorage: &config.GstorageArchiver{}})
+	s.ErrorContains(err, "temporal_with_gstorage")
+}
