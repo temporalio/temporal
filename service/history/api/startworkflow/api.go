@@ -50,6 +50,10 @@ const (
 	orphanedChildReplacementRejectedUnsupportedState                      = "rejected_unsupported_state"
 )
 
+// eagerDispatchGrantTimeout bounds the Matching grant call on the start path. It is shorter than the
+// Matching client's retry backoff, so a failed or timed-out attempt is not retried.
+const eagerDispatchGrantTimeout = 500 * time.Millisecond
+
 const (
 	StartErr StartOutcome = iota
 	StartNew
@@ -188,6 +192,8 @@ func (s *Starter) prepare(ctx context.Context) error {
 }
 
 func (s *Starter) grantEagerWorkflowDispatch(ctx context.Context) bool {
+	ctx, cancel := context.WithTimeout(ctx, eagerDispatchGrantTimeout)
+	defer cancel()
 	request := s.request.StartRequest
 	// Pinned and pending one-time overrides route the first workflow task to their target version.
 	version := worker_versioning.DeploymentVersionFromDeployment(worker_versioning.DeploymentFromExternalDeploymentVersion(
