@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/chasm"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log/tag"
@@ -43,6 +44,7 @@ const (
 	eagerStartDeniedReasonDynamicConfigDisabled      metrics.ReasonString = "dynamic_config_disabled"
 	eagerStartDeniedReasonFirstWorkflowTaskBackoff   metrics.ReasonString = "first_workflow_task_backoff"
 	eagerStartDeniedReasonTaskAlreadyDispatched      metrics.ReasonString = "task_already_dispatched"
+	eagerStartDeniedReasonDispatchNotGranted         metrics.ReasonString = "dispatch_not_granted"
 	orphanedChildReplacementReplaced                                      = "replaced"
 	orphanedChildReplacementRejectedUnsupportedState                      = "rejected_unsupported_state"
 )
@@ -69,6 +71,8 @@ type Starter struct {
 	shouldSkipReactivation     bool
 	revisionNumber             int64
 	derivedRunID               bool
+	// eagerDispatchNotGranted is set when eager execution was requested but Matching did not grant it.
+	eagerDispatchNotGranted bool
 }
 
 // creationParams is a container for all information obtained from creating the uncommitted execution.
@@ -170,9 +174,45 @@ func (s *Starter) prepare(ctx context.Context) error {
 			metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
 				Record(1, metrics.ReasonTag(eagerStartDeniedReasonFirstWorkflowTaskBackoff))
 			request.RequestEagerExecution = false
+		} else if s.shardContext.GetConfig().EnableWorkflowEagerDispatchCheck(s.namespace.Name().String()) &&
+			// This line makes an RPC call to matching, bounded and not retried by the Matching client.
+			// TODO: Reconcile the Matching grant when the start does not create a new execution.
+			!s.grantEagerWorkflowDispatch(ctx) {
+			// Matching grants are best-effort. On a denial or any matching failure, start the
+			// workflow normally instead of failing the start request.
+			metrics.WorkflowEagerExecutionDeniedCounter.With(metricsHandler).
+				Record(1, metrics.ReasonTag(eagerStartDeniedReasonDispatchNotGranted))
+			request.RequestEagerExecution = false
+			s.eagerDispatchNotGranted = true
 		}
 	}
 	return nil
+}
+
+func (s *Starter) grantEagerWorkflowDispatch(ctx context.Context) bool {
+	request := s.request.StartRequest
+	// Pinned and pending one-time overrides route the first workflow task to their target version.
+	version := worker_versioning.DeploymentVersionFromDeployment(worker_versioning.DeploymentFromExternalDeploymentVersion(
+		worker_versioning.GetOverrideTargetDeploymentVersion(request.GetVersioningOverride()),
+	))
+	// Not s.getMetricsHandler(): its workflow type tag is not on the activity paths that emit this metric.
+	metrics.EagerDispatchRequestsSent.With(workflow.GetPerTaskQueueFamilyScope(
+		s.shardContext.GetMetricsHandler(),
+		s.namespace.Name(),
+		request.GetTaskQueue().GetName(),
+		s.shardContext.GetConfig(),
+		metrics.OperationTag(metrics.HistoryStartWorkflowExecutionScope),
+		metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+	)).Record(1)
+	return common.GrantEagerDispatch(
+		ctx,
+		s.matchingClient,
+		s.namespace.ID().String(),
+		request.GetTaskQueue().GetName(),
+		enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+		request.GetPriority(),
+		version,
+	)
 }
 
 func (s *Starter) getMetricsHandler() metrics.Handler {
@@ -695,7 +735,8 @@ func (s *Starter) respondToRetriedRequest(
 	runID string,
 	firstExecutionRunID string,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
-	if !s.requestEagerStart() {
+	// A denied grant still returns the eager task that an earlier attempt started, since no new task is dispatched.
+	if !s.requestEagerStart() && !s.eagerDispatchNotGranted {
 		return &historyservice.StartWorkflowExecutionResponse{
 			RunId:               runID,
 			FirstExecutionRunId: firstExecutionRunID,
@@ -731,7 +772,7 @@ func (s *Starter) respondToRetriedRequest(
 		return nil, err
 	}
 
-	return s.generateResponse(runID, firstExecutionRunID, mutableStateInfo.workflowTask, events)
+	return s.generateEagerResponse(runID, firstExecutionRunID, mutableStateInfo.workflowTask, events)
 }
 
 // getMutableStateInfo gets the relevant mutable state information while getting the state for the given run from the
@@ -938,11 +979,6 @@ func (s *Starter) generateResponse(
 	workflowTaskInfo *historyi.WorkflowTaskInfo,
 	historyEvents []*historypb.HistoryEvent,
 ) (*historyservice.StartWorkflowExecutionResponse, error) {
-	shardCtx := s.shardContext
-	tokenSerializer := s.tokenSerializer
-	request := s.request.StartRequest
-	workflowID := request.WorkflowId
-
 	if !s.requestEagerStart() {
 		return &historyservice.StartWorkflowExecutionResponse{
 			RunId:               runID,
@@ -952,6 +988,21 @@ func (s *Starter) generateResponse(
 			Link:                s.generateStartedEventRefLink(runID),
 		}, nil
 	}
+	return s.generateEagerResponse(runID, firstExecutionRunID, workflowTaskInfo, historyEvents)
+}
+
+// generateEagerResponse generates a StartWorkflowExecutionResponse that includes workflowTaskInfo as the eager
+// workflow task.
+func (s *Starter) generateEagerResponse(
+	runID string,
+	firstExecutionRunID string,
+	workflowTaskInfo *historyi.WorkflowTaskInfo,
+	historyEvents []*historypb.HistoryEvent,
+) (*historyservice.StartWorkflowExecutionResponse, error) {
+	shardCtx := s.shardContext
+	tokenSerializer := s.tokenSerializer
+	request := s.request.StartRequest
+	workflowID := request.WorkflowId
 
 	clock, err := shardCtx.NewVectorClock()
 	if err != nil {

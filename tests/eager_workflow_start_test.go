@@ -264,3 +264,98 @@ func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_WorkflowRetry() {
 		s.Equal(int64(2), resp.Count)
 	}, testcore.WaitForESToSettle, 200*time.Millisecond)
 }
+
+func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_MatchingGrant() {
+	env := testcore.NewEnv(s.T(), testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowEagerDispatchCheck, true))
+	response := s.startEagerWorkflow(env, &workflowservice.StartWorkflowExecutionRequest{})
+	task := response.GetEagerWorkflowTask()
+	s.NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
+
+	s.respondWorkflowTaskCompleted(env, task, "ok")
+	// Verify workflow completes and client can get the result
+	result := s.getWorkflowStringResult(env, s.defaultWorkflowID(), response.RunId)
+	s.Equal("ok", result)
+}
+
+// newBacklogEnv returns an env where the eager dispatch check is on and any workflow task backlog denies a grant.
+func (s *EagerWorkflowTestSuite) newBacklogEnv(opts ...testcore.TestOption) *testcore.TestEnv {
+	return testcore.NewEnv(s.T(), append([]testcore.TestOption{
+		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowEagerDispatchCheck, true),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingBacklogNegligibleAge, time.Duration(0)),
+		testcore.WithDynamicConfig(dynamicconfig.TaskQueueInfoByBuildIdTTL, time.Duration(0)),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueReadPartitions, 1),
+		testcore.WithDynamicConfig(dynamicconfig.MatchingNumTaskqueueWritePartitions, 1),
+	}, opts...)...)
+}
+
+// startBackloggedWorkflow starts a workflow without eager execution, waits until its workflow task is in the
+// task queue backlog, and returns its workflow ID.
+func (s *EagerWorkflowTestSuite) startBackloggedWorkflow(env *testcore.TestEnv) string {
+	backloggedWorkflowID := s.defaultWorkflowID() + "-backlogged"
+	_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:    uuid.NewString(),
+		Namespace:    env.Namespace().String(),
+		WorkflowId:   backloggedWorkflowID,
+		WorkflowType: &commonpb.WorkflowType{Name: "Workflow"},
+		TaskQueue:    s.defaultTaskQueue(),
+		Identity:     "test",
+	})
+	s.NoError(err)
+	s.Await(func(s *EagerWorkflowTestSuite) {
+		response, err := env.FrontendClient().DescribeTaskQueue(s.Context(), &workflowservice.DescribeTaskQueueRequest{
+			Namespace:     env.Namespace().String(),
+			TaskQueue:     s.defaultTaskQueue(),
+			TaskQueueType: enumspb.TASK_QUEUE_TYPE_WORKFLOW,
+			ReportStats:   true,
+		})
+		s.NoError(err)
+		s.GreaterOrEqual(response.GetStats().GetApproximateBacklogCount(), int64(1))
+	}, 10*time.Second, 100*time.Millisecond)
+	return backloggedWorkflowID
+}
+
+func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_FallsBackWhenBacklogExists() {
+	env := s.newBacklogEnv()
+	backloggedWorkflowID := s.startBackloggedWorkflow(env)
+
+	response := s.startEagerWorkflow(env, &workflowservice.StartWorkflowExecutionRequest{})
+	s.Nil(response.GetEagerWorkflowTask(), "StartWorkflowExecution response contained a workflow task")
+
+	// Both workflow tasks are dispatched by matching, and the backlogged one is dispatched first.
+	for _, workflowID := range []string{backloggedWorkflowID, s.defaultWorkflowID()} {
+		task := s.pollWorkflowTaskQueue(env)
+		s.Equal(workflowID, task.GetWorkflowExecution().GetWorkflowId())
+		s.False(task.GetHistory().GetEvents()[0].GetWorkflowExecutionStartedEventAttributes().GetEagerExecutionAccepted())
+		s.respondWorkflowTaskCompleted(env, task, "ok")
+	}
+	result := s.getWorkflowStringResult(env, s.defaultWorkflowID(), response.RunId)
+	s.Equal("ok", result)
+}
+
+func (s *EagerWorkflowTestSuite) TestEagerWorkflowStart_RetryStartDeniedReturnsStartedTask() {
+	for _, crossRunDedup := range []bool{false, true} {
+		s.Run(fmt.Sprintf("EnableCrossRunRequestIDDedup=%v", crossRunDedup), func(s *EagerWorkflowTestSuite) {
+			env := s.newBacklogEnv(testcore.WithDynamicConfig(dynamicconfig.EnableCrossRunRequestIDDedup, crossRunDedup))
+			request := &workflowservice.StartWorkflowExecutionRequest{RequestId: uuid.NewString()}
+			response := s.startEagerWorkflow(env, request)
+			s.NotNil(response.GetEagerWorkflowTask(), "StartWorkflowExecution response did not contain a workflow task")
+			firstRunID := response.RunId
+
+			// The backlog denies the retry's grant. The retry still gets the task the first attempt started.
+			backloggedWorkflowID := s.startBackloggedWorkflow(env)
+			response = s.startEagerWorkflow(env, request)
+			task := response.GetEagerWorkflowTask()
+			s.NotNil(task, "StartWorkflowExecution response did not contain a workflow task")
+			s.Equal(firstRunID, response.RunId)
+			s.True(task.GetHistory().GetEvents()[0].GetWorkflowExecutionStartedEventAttributes().GetEagerExecutionAccepted())
+
+			s.respondWorkflowTaskCompleted(env, task, "ok")
+			result := s.getWorkflowStringResult(env, s.defaultWorkflowID(), response.RunId)
+			s.Equal("ok", result)
+
+			task = s.pollWorkflowTaskQueue(env)
+			s.Equal(backloggedWorkflowID, task.GetWorkflowExecution().GetWorkflowId())
+			s.respondWorkflowTaskCompleted(env, task, "ok")
+		})
+	}
+}
