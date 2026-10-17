@@ -24,8 +24,8 @@ make temporal-server BUILD_TAG=temporal_minimal
 # Without optional integrations, except Google Cloud Storage archival.
 make temporal-server BUILD_TAG=temporal_minimal,temporal_with_gstorage
 
-# Tests with the same tags.
-make unit-test TEST_TAG=temporal_minimal
+# Unit tests of the packages that temporal_minimal changes.
+make unit-test-build-tags
 ```
 
 Programs that embed the server pass the same tags to `go build -tags`.
