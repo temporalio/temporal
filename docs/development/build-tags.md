@@ -39,6 +39,6 @@ included.
 
 A server built without an integration refuses to start if its configuration sets the integration up.
 
-`make build-minimal`, which runs in CI, checks that the packages listed in `MINIMAL_EXCLUDED_PACKAGES`
+`make build-tags-check`, which runs in CI, checks that the packages listed in `MINIMAL_EXCLUDED_PACKAGES`
 in the `Makefile` are part of the default server but not of the `temporal_minimal` server. When adding
 an integration, add its packages there.
