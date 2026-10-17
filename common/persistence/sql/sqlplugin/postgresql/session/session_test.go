@@ -152,7 +152,7 @@ func TestBuildDSN(t *testing.T) {
 func TestBuildDSN_PasswordEscaping(t *testing.T) {
 	cfg := &config.SQL{
 		User:         "testuser",
-		Password:     "p@ss:w/rd&special",
+		Password:     "p@ss:w/rd&special pass",
 		ConnectAddr:  "localhost:5432",
 		DatabaseName: "testdb",
 	}
@@ -162,7 +162,47 @@ func TestBuildDSN_PasswordEscaping(t *testing.T) {
 	parsed, err := url.Parse(result)
 	require.NoError(t, err)
 	password, _ := parsed.User.Password()
-	require.Equal(t, "p@ss:w/rd&special", password, "password should be properly escaped and parsed")
+	require.Equal(t, "p@ss:w/rd&special pass", password, "password should be properly escaped and parsed")
+}
+
+func TestBuildDSN_UsernameEscaping(t *testing.T) {
+	cfg := &config.SQL{
+		User:         "entity:serv-abcd",
+		Password:     "testpass",
+		ConnectAddr:  "localhost:5432",
+		DatabaseName: "testdb",
+	}
+	mockResolver := &mockServiceResolver{addr: "localhost:5432"}
+	result, err := buildDSN(cfg, mockResolver)
+	require.NoError(t, err)
+	parsed, err := url.Parse(result)
+	require.NoError(t, err)
+	username := parsed.User.Username()
+	require.Equal(t, cfg.User, username, "username should be properly escaped and parsed")
+}
+
+func TestBuildDSN_DatabaseNameEscaping(t *testing.T) {
+	for _, databaseName := range []string{"temporal?x", "temporal#1"} {
+		t.Run(databaseName, func(t *testing.T) {
+			cfg := &config.SQL{
+				User:         "testuser",
+				Password:     "testpass",
+				ConnectAddr:  "localhost:5432",
+				DatabaseName: databaseName,
+				TLS: &auth.TLS{
+					Enabled: true,
+				},
+			}
+			mockResolver := &mockServiceResolver{addr: "localhost:5432"}
+			result, err := buildDSN(cfg, mockResolver)
+			require.NoError(t, err)
+			parsed, err := url.Parse(result)
+			require.NoError(t, err)
+			require.Equal(t, "/"+databaseName, parsed.Path)
+			require.Equal(t, "require", parsed.Query().Get("sslmode"))
+			require.Empty(t, parsed.Fragment)
+		})
+	}
 }
 
 func TestBuildDSNAttr_TLSKeyFileWithoutCertFile_ReturnsError(t *testing.T) {
