@@ -26,6 +26,7 @@ func TestReadOnlyNodeBackend_UnsupportedPanics(t *testing.T) {
 			backend.ChasmSkipPersistenceEnabled()
 		},
 		"SetTimeSkippingConfig":        func() { backend.SetTimeSkippingConfig(nil) },
+		"IsTimeSkippingFeatureEnabled": func() { backend.IsTimeSkippingFeatureEnabled(SchedulerArchetypeID) },
 		"RecordTimeSkippingTransition": func() { backend.RecordTimeSkippingTransition(nil) },
 		"ChasmDLQScheduledPureTaskOnValidationEnabled": func() {
 			backend.ChasmDLQScheduledPureTaskOnValidationEnabled()
