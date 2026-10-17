@@ -1161,8 +1161,21 @@ func (r *TaskGeneratorImpl) RegenerateTimerTasksForTimeSkipping() error {
 		}
 	}
 
-	// Generic StateMachineTimerTask (nexus HSM), WorkflowTaskTimeoutTask, and ActivityTimeoutTask
-	// are treated as a part of in-flight nexus operation and won't be regenerated.
+	// (6) HSM timers. More than one timer group can already have a physical task (for
+	// example, a long schedule-to-close timeout followed by an earlier retry backoff).
+	// Re-emit every scheduled group so each physical timer uses the new wall-clock time.
+	for _, timerGroup := range r.mutableState.GetExecutionInfo().GetStateMachineTimers() {
+		if !timerGroup.GetScheduled() {
+			continue
+		}
+		r.mutableState.AddTasks(&tasks.StateMachineTimerTask{
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			VisibilityTimestamp: timerGroup.GetDeadline().AsTime(),
+			Version:             r.mutableState.GetCurrentVersion(),
+		})
+	}
+
+	// WorkflowTaskTimeoutTask and ActivityTimeoutTask are treated as in-flight work and won't be regenerated.
 	// DeleteHistoryEventTask is not impacted by time skipping, and doesn't need regeneration.
 	return nil
 }

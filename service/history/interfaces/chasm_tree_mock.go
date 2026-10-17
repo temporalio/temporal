@@ -286,6 +286,20 @@ func (mr *MockChasmTreeMockRecorder) RefreshTasks() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshTasks", reflect.TypeOf((*MockChasmTree)(nil).RefreshTasks))
 }
 
+// RegenerateTimerTasksForTimeSkipping mocks base method.
+func (m *MockChasmTree) RegenerateTimerTasksForTimeSkipping() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RegenerateTimerTasksForTimeSkipping")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RegenerateTimerTasksForTimeSkipping indicates an expected call of RegenerateTimerTasksForTimeSkipping.
+func (mr *MockChasmTreeMockRecorder) RegenerateTimerTasksForTimeSkipping() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegenerateTimerTasksForTimeSkipping", reflect.TypeOf((*MockChasmTree)(nil).RegenerateTimerTasksForTimeSkipping))
+}
+
 // Snapshot mocks base method.
 func (m *MockChasmTree) Snapshot(arg0 *persistence.VersionedTransition) chasm.NodesSnapshot {
 	m.ctrl.T.Helper()

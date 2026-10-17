@@ -7744,6 +7744,54 @@ func (s *mutableStateSuite) TestDeleteCHASMPureTasks() {
 			s.Len(s.mutableState.BestEffortDeleteTasks[tasks.CategoryTimer], 3-tc.expectedRemaining)
 		})
 	}
+
+	s.Run("virtual cutoff is converted to wall clock", func() {
+		skipped := time.Hour
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(skipped),
+		}
+		s.mutableState.chasmPureTasks = []*tasks.ChasmTaskPure{
+			{VisibilityTimestamp: now.Add(3 * time.Minute)},
+			{VisibilityTimestamp: now.Add(2 * time.Minute)},
+			{VisibilityTimestamp: now.Add(time.Minute)},
+		}
+		s.mutableState.BestEffortDeleteTasks = make(map[tasks.Category][]tasks.Key)
+
+		virtualCutoff := now.Add(skipped + 2*time.Minute)
+		s.mutableState.DeleteCHASMPureTasks(virtualCutoff)
+
+		s.Len(s.mutableState.chasmPureTasks, 2)
+		s.Len(s.mutableState.BestEffortDeleteTasks[tasks.CategoryTimer], 1)
+	})
+}
+
+func (s *mutableStateSuite) TestAddTasksDeduplicatesStateMachineTimerForSameGroup() {
+	skipped := time.Hour
+	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		AccumulatedSkippedDuration: durationpb.New(skipped),
+	}
+	s.mutableState.InsertTasks = make(map[tasks.Category][]tasks.Task)
+	virtualDeadline := s.mutableState.Now().Add(time.Hour)
+
+	s.mutableState.AddTasks(
+		&tasks.StateMachineTimerTask{
+			WorkflowKey:         s.mutableState.GetWorkflowKey(),
+			VisibilityTimestamp: virtualDeadline,
+			Version:             s.mutableState.GetCurrentVersion(),
+		},
+		&tasks.StateMachineTimerTask{
+			WorkflowKey:         s.mutableState.GetWorkflowKey(),
+			VisibilityTimestamp: virtualDeadline,
+			Version:             s.mutableState.GetCurrentVersion(),
+		},
+	)
+
+	inserted := s.mutableState.InsertTasks[tasks.CategoryTimer]
+	s.Require().Len(inserted, 1)
+	s.Equal(
+		s.mutableState.ToRealTimeWithCurrentOffset(virtualDeadline),
+		inserted[0].GetVisibilityTime(),
+	)
 }
 
 func (s *mutableStateSuite) TestCHASMNodeSize() {
