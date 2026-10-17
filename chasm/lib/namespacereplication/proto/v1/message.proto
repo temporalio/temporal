@@ -28,6 +28,10 @@ message NamespaceMutation {
   // update, this is the union of the previous and target cluster lists, minus
   // the local cell, so a removed peer receives the final configuration.
   repeated string peer_cells = 4;
+
+  // Whether the target namespace state is global. The CHASM namespace
+  // replication component rejects local namespace mutations.
+  bool is_global_namespace = 5;
 }
 
 // NamespaceMutationState is the persisted state of a NamespaceMutationComponent.
