@@ -24,6 +24,20 @@ import (
 // =============================================================================
 // Time Skipping Configuration Management
 // =============================================================================
+
+// IsTimeSkippingFeatureEnabled reports whether the namespace flag permits time skipping for an archetype.
+func (ms *MutableStateImpl) IsTimeSkippingFeatureEnabled(archetypeID chasm.ArchetypeID) bool {
+	namespace := ms.GetNamespaceEntry().Name().String()
+	switch archetypeID {
+	case chasm.WorkflowArchetypeID:
+		return ms.config.WorkflowTimeSkippingEnabled(namespace)
+	case chasm.SchedulerArchetypeID:
+		return ms.config.CHASMSchedulerTimeSkippingEnabled(namespace)
+	default:
+		return false
+	}
+}
+
 // initTimeSkippingInfo creates TimeSkippingInfo when an execution first receives a time-skipping
 // config or propagated virtual-time state. This can happen at execution start, through an options
 // update on an existing execution, or when a CHASM component first sets its config.
@@ -304,6 +318,10 @@ func (ms *MutableStateImpl) isWorkflowSkippable() bool {
 		noSkippingReason = "time skipping is not enabled"
 		return false
 	}
+	if !ms.IsTimeSkippingFeatureEnabled(chasm.WorkflowArchetypeID) {
+		noSkippingReason = "time skipping feature flag is disabled"
+		return false
+	}
 
 	// (2) gate by workflow state and status
 	if !ms.IsWorkflowExecutionRunning() {
@@ -353,35 +371,38 @@ func (ms *MutableStateImpl) isWorkflowSkippable() bool {
 	return true
 }
 
-// findNextSkipTarget finds the next skip target from the pending timers, activity-retries,
-// workflow backoff timers, and workflow execution timeout, etc that those are skippable and scheduled in the future
-// it should only be called after isWorkflowSkippable returns true
+// findNextSkipTarget finds the earliest future target time among pending timers, activity retries,
+// workflow backoff, and execution timeouts, then applies the fast-forward bound. A pending task due
+// now or earlier blocks time skipping until it is processed. Call only after isWorkflowSkippable returns true.
 func (ms *MutableStateImpl) findNextSkipTarget() *chasm.TimeSkippingTransition {
 	transition := chasm.NewTimeSkippingTransition(ms.Now())
 	for _, timerInfo := range ms.GetPendingTimerInfos() {
-		transition.TrackEarliestFutureTime(timerInfo.ExpiryTime.AsTime())
+		if ms.trackFutureOrReportDueTaskForWorkflow(transition, timerInfo.ExpiryTime.AsTime(), "user timer") {
+			return nil
+		}
 	}
 
 	// Activities waiting out a retry backoff are skip targets: advance to the earliest
 	// next-attempt time.
 	for _, ai := range ms.GetPendingActivityInfos() {
-		if activityPendingRetry(ai) && ms.Now().Before(ai.GetScheduledTime().AsTime()) {
-			transition.TrackEarliestFutureTime(ai.ScheduledTime.AsTime())
+		if !activityPendingRetry(ai) {
+			continue
+		}
+		if ms.trackFutureOrReportDueTaskForWorkflow(transition, ai.GetScheduledTime().AsTime(), "activity retry") {
+			return nil
 		}
 	}
 	if !ms.HadOrHasWorkflowTask() {
 		// Support start-with-delay, cron, retry, and CaN-with-backoff: the workflow is
-		// waiting on a WorkflowBackoffTimerTask. Two extra checks are needed:
-		//   - ExecutionTime > StartTime: a backoff is actually configured (FirstWorkflowTaskBackoff > 0).
-		//     For child workflows, !HadOrHasWorkflowTask is also true between "start event applied"
-		//     and "ScheduleWorkflowTask API call" but no backoff exists, so ExecutionTime == StartTime.
-		//   - ExecutionTime > ms.Now(): the candidate is in the (virtual) future. Defends against
-		//     CaN-with-backoff that inherits accumulated > backoff — past candidates would produce
-		//     a negative delta in ApplyWorkflowExecutionTimeSkippingTransitionedEvent and decrement accumulated.
+		// waiting on a WorkflowBackoffTimerTask. ExecutionTime > StartTime means a backoff
+		// is configured. A child workflow can have no workflow task yet without a backoff;
+		// in that case ExecutionTime == StartTime.
 		executionTime := ms.executionInfo.GetExecutionTime().AsTime()
 		startTime := ms.executionInfo.GetStartTime().AsTime()
-		if executionTime.After(startTime) && executionTime.After(ms.Now()) {
-			transition.TrackEarliestFutureTime(executionTime)
+		if executionTime.After(startTime) {
+			if ms.trackFutureOrReportDueTaskForWorkflow(transition, executionTime, "workflow backoff") {
+				return nil
+			}
 		}
 	}
 	if ms.HadOrHasWorkflowTask() {
@@ -392,10 +413,14 @@ func (ms *MutableStateImpl) findNextSkipTarget() *chasm.TimeSkippingTransition {
 		// skip all the way to its run timeout before ever running its first task, so it never sets
 		// its internal timers.
 		if t := ms.executionInfo.GetWorkflowRunExpirationTime(); t != nil && !t.AsTime().IsZero() {
-			transition.TrackEarliestFutureTime(t.AsTime())
+			if ms.trackFutureOrReportDueTaskForWorkflow(transition, t.AsTime(), "workflow run timeout") {
+				return nil
+			}
 		}
 		if t := ms.executionInfo.GetWorkflowExecutionExpirationTime(); t != nil && !t.AsTime().IsZero() {
-			transition.TrackEarliestFutureTime(t.AsTime())
+			if ms.trackFutureOrReportDueTaskForWorkflow(transition, t.AsTime(), "workflow execution timeout") {
+				return nil
+			}
 		}
 	}
 
@@ -409,6 +434,25 @@ func (ms *MutableStateImpl) findNextSkipTarget() *chasm.TimeSkippingTransition {
 		return transition
 	}
 	return nil
+}
+
+// trackFutureOrReportDueTaskForWorkflow reports whether a due task blocks skipping and tracks a
+// future task time as a skip target.
+func (ms *MutableStateImpl) trackFutureOrReportDueTaskForWorkflow(
+	transition *chasm.TimeSkippingTransition,
+	deadline time.Time,
+	targetName string,
+) (hasDueTask bool) {
+	if !deadline.After(transition.CurrentTime) {
+		ms.logger.Debug("a pending task stops workflow time skipping in the current transaction",
+			tag.WorkflowID(ms.GetExecutionInfo().WorkflowId),
+			tag.WorkflowRunID(ms.GetExecutionState().RunId),
+			tag.String("pending-task-type", targetName),
+			tag.Time("pending-task-deadline", deadline))
+		return true
+	}
+	transition.TrackEarliestFutureTime(deadline)
+	return false
 }
 
 func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
@@ -519,7 +563,6 @@ func (ms *MutableStateImpl) RecordTimeSkippingTransition(transition *chasm.TimeS
 	if tsi == nil {
 		return
 	}
-
 	skippedDuration := transition.GetSkippedDuration()
 	ms.executeTimeSkippingTransition(
 		skippedDuration,

@@ -1,11 +1,13 @@
 package matching
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"maps"
 	"math"
 	"math/bits"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -18,7 +20,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	taskqueuespb "go.temporal.io/server/api/taskqueue/v1"
@@ -35,7 +36,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/number"
-	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/taskqueue"
@@ -87,14 +87,11 @@ type (
 
 		goroGroup goro.Group
 
-		autoEnableRateLimiter quotas.RateLimiter
-		fairnessState         enumsspb.FairnessState // Set once on initialization and read only after
-		defaultQueueFuture    *future.FutureImpl[physicalTaskQueueManager]
-		initCtx               context.Context
-		initCancel            func()
+		defaultQueueFuture *future.FutureImpl[physicalTaskQueueManager]
+		initCtx            context.Context
+		initCancel         func()
 
-		cancelFairnessSub   func()
-		cancelAutoEnableSub func()
+		cancelFairnessSub func()
 
 		// rateLimitManager is used to manage the rate limit for task queues.
 		rateLimitManager *rateLimitManager
@@ -176,21 +173,20 @@ func newTaskQueuePartitionManager(
 	}
 
 	pm := &taskQueuePartitionManagerImpl{
-		engine:                e,
-		partition:             partition,
-		ns:                    ns,
-		config:                tqConfig,
-		logger:                logger,
-		throttledLogger:       throttledLogger,
-		matchingClient:        e.matchingRawClient,
-		metricsHandler:        metricsHandler,
-		versionedQueues:       make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager),
-		userDataManager:       userDataManager,
-		rateLimitManager:      rateLimitManager,
-		scaleManager:          scaleManager,
-		defaultQueueFuture:    future.NewFuture[physicalTaskQueueManager](),
-		autoEnableRateLimiter: quotas.NewRateLimiter(1.0/60, 1),
-		taskHooks:             taskHooks,
+		engine:             e,
+		partition:          partition,
+		ns:                 ns,
+		config:             tqConfig,
+		logger:             logger,
+		throttledLogger:    throttledLogger,
+		matchingClient:     e.matchingRawClient,
+		metricsHandler:     metricsHandler,
+		versionedQueues:    make(map[PhysicalTaskQueueVersion]physicalTaskQueueManager),
+		userDataManager:    userDataManager,
+		rateLimitManager:   rateLimitManager,
+		scaleManager:       scaleManager,
+		defaultQueueFuture: future.NewFuture[physicalTaskQueueManager](),
+		taskHooks:          taskHooks,
 	}
 	pm.initCtx, pm.initCancel = context.WithCancel(context.Background())
 
@@ -203,29 +199,6 @@ func newTaskQueuePartitionManager(
 	return pm, nil
 }
 
-// computeEffectiveConfig determines the effective EnableFairness config value
-// based on fairnessState, autoEnable, and the base dynamic config value.
-func (pm *taskQueuePartitionManagerImpl) computeEffectiveConfig(autoEnable, fairness bool) (effectiveEnableFairness bool) {
-	effectiveEnableFairness = fairness && pm.partition.SupportsFairness()
-	if !autoEnable {
-		return
-	}
-
-	switch pm.fairnessState {
-	case enumsspb.FAIRNESS_STATE_UNSPECIFIED:
-		// use values from config
-	case enumsspb.FAIRNESS_STATE_V0:
-		effectiveEnableFairness = false
-	case enumsspb.FAIRNESS_STATE_V1:
-		effectiveEnableFairness = false
-	case enumsspb.FAIRNESS_STATE_V2:
-		effectiveEnableFairness = pm.partition.SupportsFairness()
-	default:
-		pm.logger.Error("unknown fairnessState in user data")
-	}
-	return
-}
-
 func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 	defer pm.initCancel()
 	defer func() { pm.defaultQueueFuture.SetIfNotReady(nil, retErr) }()
@@ -234,28 +207,17 @@ func (pm *taskQueuePartitionManagerImpl) initialize() (retErr error) {
 	if err != nil {
 		return err
 	}
-	data, _, err := pm.getPerTypeUserData()
-	if err != nil {
-		return err
-	}
-
-	pm.fairnessState = data.GetFairnessState()
 	changeKey := pm.partition.GradualChangeKey()
 
-	var autoEnable, fairness bool
-	autoEnable, pm.cancelAutoEnableSub = pm.config.AutoEnableV2Sub(pm.autoEnableChanged)
-
-	unloadOnBaseConfigChange := func(bool) {
-		if pm.fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED || !pm.config.AutoEnableV2() {
-			pm.unloadFromEngine(unloadCauseConfigChange)
-		}
+	unloadOnConfigChange := func(bool) {
+		pm.unloadFromEngine(unloadCauseConfigChange)
 	}
 
-	fairness, pm.cancelFairnessSub = dynamicconfig.SubscribeGradualChange(
-		pm.config.EnableFairnessSub, changeKey, unloadOnBaseConfigChange, pm.engine.timeSource)
+	fairness, cancelFairnessSub := dynamicconfig.SubscribeGradualChange(
+		pm.config.EnableFairnessSub, changeKey, unloadOnConfigChange, pm.engine.timeSource)
+	pm.cancelFairnessSub = cancelFairnessSub
 
-	// Determine initial config values
-	pm.config.EnableFairness = pm.computeEffectiveConfig(autoEnable, fairness)
+	pm.config.EnableFairness = fairness && pm.partition.SupportsFairness()
 
 	defaultQ, err := newPhysicalTaskQueueManager(pm, UnversionedQueueKey(pm.partition))
 	if err != nil {
@@ -309,9 +271,6 @@ func (pm *taskQueuePartitionManagerImpl) Stop(unloadCause unloadCause) {
 
 	if pm.cancelFairnessSub != nil {
 		pm.cancelFairnessSub()
-	}
-	if pm.cancelAutoEnableSub != nil {
-		pm.cancelAutoEnableSub()
 	}
 	pm.scaleManager.Stop()
 
@@ -478,52 +437,6 @@ func (pm *taskQueuePartitionManagerImpl) WaitUntilInitialized(ctx context.Contex
 	return queue.WaitUntilInitialized(ctx)
 }
 
-// autoEnableChanged is called when the AutoEnableV2 dynamic config value changes.
-// It determines the effective config based on the new autoEnable value and fairnessState,
-// and unloads if the effective config differs from the current config.
-func (pm *taskQueuePartitionManagerImpl) autoEnableChanged(en bool) {
-	_, err := pm.defaultQueueFuture.Get(context.Background())
-	if err != nil {
-		return
-	}
-
-	// When fairnessState is UNSPECIFIED, autoEnable changes don't affect the effective config
-	if pm.fairnessState == enumsspb.FAIRNESS_STATE_UNSPECIFIED {
-		return
-	}
-
-	changeKey := pm.partition.GradualChangeKey()
-	now := pm.engine.timeSource.Now()
-
-	fairnessGC, _ := pm.config.EnableFairnessSub(nil)
-	fairness := fairnessGC.Value(changeKey, now)
-
-	effectiveEnableFairness := pm.computeEffectiveConfig(en, fairness)
-
-	if effectiveEnableFairness != pm.config.EnableFairness {
-		pm.unloadFromEngine(unloadCauseConfigChange)
-	}
-}
-
-func (pm *taskQueuePartitionManagerImpl) autoEnableIfNeeded(ctx context.Context, params addTaskParams) {
-	if pm.fairnessState != enumsspb.FAIRNESS_STATE_UNSPECIFIED ||
-		params.taskInfo.Priority.GetFairnessKey() == "" ||
-		!pm.Partition().IsRoot() || !pm.Partition().SupportsFairness() || !pm.config.AutoEnableV2() ||
-		!pm.autoEnableRateLimiter.Allow() {
-		return
-	}
-	req := &matchingservice.UpdateFairnessStateRequest{
-		NamespaceId:   pm.Namespace().ID().String(),
-		TaskQueue:     pm.Partition().RpcName(),
-		TaskQueueType: pm.Partition().TaskType(),
-		FairnessState: enumsspb.FAIRNESS_STATE_V2,
-	}
-	_, err := pm.matchingClient.UpdateFairnessState(ctx, req)
-	if err != nil {
-		pm.logger.Error("could not update userdata for autoenable", tag.Error(err))
-	}
-}
-
 func (pm *taskQueuePartitionManagerImpl) AddTask(
 	ctx context.Context,
 	params addTaskParams,
@@ -539,7 +452,6 @@ func (pm *taskQueuePartitionManagerImpl) AddTask(
 	var spoolQueue, syncMatchQueue physicalTaskQueueManager
 	directive := params.taskInfo.GetVersionDirective()
 
-	pm.autoEnableIfNeeded(ctx, params)
 	// spoolQueue will be nil iff task is forwarded.
 reredirectTask:
 	spoolQueue, syncMatchQueue, _, taskDispatchRevisionNumber, targetVersion, err := pm.getPhysicalQueuesForAdd(ctx, directive, params.forwardInfo, params.taskInfo.GetRunId(), params.taskInfo.GetWorkflowId(), false)
@@ -657,10 +569,53 @@ type eagerDispatchGrantTarget struct {
 	checkDefaultBacklog bool
 }
 
+const (
+	eagerDispatchOutcomeGranted   = "granted"
+	eagerDispatchOutcomeError     = "error"
+	eagerDispatchOutcomeBacklog   = "backlog"
+	eagerDispatchOutcomeRateLimit = "rate_limit"
+)
+
+type eagerDispatchOutcomeCounts struct {
+	granted   int64
+	backlog   int64
+	rateLimit int64
+}
+
+func (counts eagerDispatchOutcomeCounts) record(metricsHandler metrics.Handler) {
+	recordEagerDispatchResult(metricsHandler, eagerDispatchOutcomeGranted, counts.granted)
+	recordEagerDispatchResult(metricsHandler, eagerDispatchOutcomeBacklog, counts.backlog)
+	recordEagerDispatchResult(metricsHandler, eagerDispatchOutcomeRateLimit, counts.rateLimit)
+}
+
+func recordEagerDispatchResult(metricsHandler metrics.Handler, outcome string, count int64) {
+	if count > 0 {
+		metrics.EagerDispatchResults.With(metricsHandler).Record(count, metrics.OutcomeTag(outcome))
+	}
+}
+
+func eagerDispatchRequestCount(items []*matchingservice.GrantEagerDispatchRequest_Item) int64 {
+	var count int64
+	for _, item := range items {
+		if itemCount := item.GetCount(); itemCount > 0 {
+			count += int64(itemCount)
+		}
+	}
+	return count
+}
+
 func (pm *taskQueuePartitionManagerImpl) GrantEagerDispatch(
 	ctx context.Context,
 	items []*matchingservice.GrantEagerDispatchRequest_Item,
-) ([]*matchingservice.GrantEagerDispatchResponse_Item, error) {
+) (_ []*matchingservice.GrantEagerDispatchResponse_Item, retErr error) {
+	requestedCount := eagerDispatchRequestCount(items)
+	metrics.EagerDispatchRequests.With(pm.metricsHandler).Record(requestedCount)
+	defer func() {
+		if retErr != nil {
+			recordEagerDispatchResult(pm.metricsHandler, eagerDispatchOutcomeError, requestedCount)
+		}
+	}()
+
 	if _, ok := pm.partition.(*tqid.NormalPartition); !ok {
 		return nil, serviceerror.NewInvalidArgument("eager dispatch grants only support normal task queue partitions")
 	}
@@ -675,7 +630,12 @@ func (pm *taskQueuePartitionManagerImpl) GrantEagerDispatch(
 	if err != nil {
 		return nil, err
 	}
-	return pm.grantEagerDispatch(items, targets)
+	responseItems, outcomeCounts, err := pm.grantEagerDispatch(items, targets)
+	if err != nil {
+		return nil, err
+	}
+	outcomeCounts.record(pm.metricsHandler)
+	return responseItems, nil
 }
 
 func (pm *taskQueuePartitionManagerImpl) resolveEagerDispatchGrantTargets(
@@ -735,13 +695,27 @@ func (pm *taskQueuePartitionManagerImpl) getEagerDispatchVersioningInfo() (eager
 func (pm *taskQueuePartitionManagerImpl) grantEagerDispatch(
 	items []*matchingservice.GrantEagerDispatchRequest_Item,
 	targets []eagerDispatchGrantTarget,
-) ([]*matchingservice.GrantEagerDispatchResponse_Item, error) {
+) ([]*matchingservice.GrantEagerDispatchResponse_Item, eagerDispatchOutcomeCounts, error) {
 	responseItems := make([]*matchingservice.GrantEagerDispatchResponse_Item, len(items))
+	var outcomeCounts eagerDispatchOutcomeCounts
 	backlogPriorities := make(map[physicalTaskQueueManager]priorityKey)
-	for index, item := range items {
+	grantOrder := make([]int, len(items))
+	for index := range items {
+		grantOrder[index] = index
+	}
+	// Allocate shared rate-limit capacity to higher-priority items first. Keep responseItems
+	// indexed by the original request order, as required by the RPC contract.
+	slices.SortStableFunc(grantOrder, func(left, right int) int {
+		leftPriority := pm.config.clipPriority(priorityKey(items[left].GetPriority().GetPriorityKey()))
+		rightPriority := pm.config.clipPriority(priorityKey(items[right].GetPriority().GetPriorityKey()))
+		return cmp.Compare(leftPriority, rightPriority)
+	})
+
+	for _, index := range grantOrder {
+		item := items[index]
 		backlogPriority, err := pm.eagerDispatchBacklogPriority(targets[index], backlogPriorities)
 		if err != nil {
-			return nil, err
+			return nil, eagerDispatchOutcomeCounts{}, err
 		}
 
 		priority := pm.config.clipPriority(priorityKey(item.GetPriority().GetPriorityKey()))
@@ -750,12 +724,16 @@ func (pm *taskQueuePartitionManagerImpl) grantEagerDispatch(
 		granted := int32(0)
 		if backlogPriority == 0 || backlogPriority > priority {
 			granted = pm.rateLimitManager.grantTokens(item.GetPriority(), item.GetCount())
+			outcomeCounts.granted += int64(granted)
+			outcomeCounts.rateLimit += int64(item.GetCount() - granted)
+		} else {
+			outcomeCounts.backlog += int64(item.GetCount())
 		}
 		responseItems[index] = &matchingservice.GrantEagerDispatchResponse_Item{
 			GrantedCount: granted,
 		}
 	}
-	return responseItems, nil
+	return responseItems, outcomeCounts, nil
 }
 
 func (pm *taskQueuePartitionManagerImpl) eagerDispatchBacklogPriority(
@@ -2537,7 +2515,7 @@ func (pm *taskQueuePartitionManagerImpl) getPerTypeUserData() (*persistencespb.T
 	return perType, userDataChanged, nil
 }
 
-func (pm *taskQueuePartitionManagerImpl) userDataChanged(to *persistencespb.VersionedTaskQueueUserData) {
+func (pm *taskQueuePartitionManagerImpl) userDataChanged(_ *persistencespb.VersionedTaskQueueUserData) {
 	// Update rateLimits if any change is userData.
 	pm.rateLimitManager.UserDataChanged()
 
@@ -2546,13 +2524,6 @@ func (pm *taskQueuePartitionManagerImpl) userDataChanged(to *persistencespb.Vers
 	defaultQ, err := pm.defaultQueueFuture.GetIfReady()
 	// Initialization error or not ready yet
 	if err != nil {
-		return
-	}
-
-	taskType := int32(pm.Partition().TaskType())
-	if to.GetData().GetPerType()[taskType].GetFairnessState() != pm.fairnessState {
-		pm.logger.Debug("unloading partitionManager due to change in FairnessState")
-		pm.unloadFromEngine(unloadCauseConfigChange)
 		return
 	}
 

@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
@@ -24,6 +25,36 @@ import (
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+func (s *mutableStateSuite) TestIsTimeSkippingFeatureEnabled() {
+	cases := []struct {
+		name             string
+		archetypeID      chasm.ArchetypeID
+		workflowEnabled  bool
+		schedulerEnabled bool
+		want             bool
+	}{
+		{name: "workflow enabled", archetypeID: chasm.WorkflowArchetypeID, workflowEnabled: true, want: true},
+		{name: "workflow disabled", archetypeID: chasm.WorkflowArchetypeID, schedulerEnabled: true},
+		{name: "schedule enabled", archetypeID: chasm.SchedulerArchetypeID, schedulerEnabled: true, want: true},
+		{name: "schedule disabled", archetypeID: chasm.SchedulerArchetypeID, workflowEnabled: true},
+		{name: "unknown archetype", archetypeID: 0, workflowEnabled: true, schedulerEnabled: true},
+	}
+	for _, test := range cases {
+		s.Run(test.name, func() {
+			namespace := s.mutableState.GetNamespaceEntry().Name().String()
+			s.mockConfig.WorkflowTimeSkippingEnabled = func(name string) bool {
+				s.Equal(namespace, name)
+				return test.workflowEnabled
+			}
+			s.mockConfig.CHASMSchedulerTimeSkippingEnabled = func(name string) bool {
+				s.Equal(namespace, name)
+				return test.schedulerEnabled
+			}
+			s.Equal(test.want, s.mutableState.IsTimeSkippingFeatureEnabled(test.archetypeID))
+		})
+	}
+}
 
 func (s *mutableStateSuite) TestPropagateTimeSkippingToNextRun() {
 	fixed := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -319,7 +350,7 @@ func (s *mutableStateSuite) TestPropagateTimeSkippingToOtherExecution() {
 }
 
 func (s *mutableStateSuite) TestIsWorkflowSkippable() {
-
+	s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return true }
 	// base case: ensures the other tests modifications are the reason to make the workflow not skippable
 	s.Run("EnabledAndIdle_Skippable", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
@@ -459,6 +490,18 @@ func (s *mutableStateSuite) TestIsWorkflowSkippable() {
 		}
 		s.False(s.mutableState.isWorkflowSkippable())
 	})
+}
+
+func (s *mutableStateSuite) TestIsWorkflowSkippableFeatureFlagDisabled() {
+	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		Config: &commonpb.TimeSkippingConfig{Enabled: true},
+	}
+	s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return false }
+	s.False(s.mutableState.isWorkflowSkippable())
+	s.True(s.mutableState.executionInfo.TimeSkippingInfo.GetConfig().GetEnabled())
+
+	s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return true }
+	s.True(s.mutableState.isWorkflowSkippable())
 }
 
 func (s *mutableStateSuite) requireInitNoPanic(
@@ -1014,6 +1057,32 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 	})
 }
 
+func (s *mutableStateSuite) TestTrackFutureOrReportDueTaskForWorkflow() {
+	now := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	existingTarget := now.Add(2 * time.Hour)
+
+	for _, tc := range []struct {
+		name           string
+		candidate      time.Time
+		hasDueTask     bool
+		expectedTarget time.Time
+	}{
+		{"DueNow", now, true, existingTarget},
+		{"Overdue", now.Add(-time.Minute), true, existingTarget},
+		{"EarlierFuture", now.Add(time.Hour), false, now.Add(time.Hour)},
+		{"LaterFuture", now.Add(3 * time.Hour), false, existingTarget},
+	} {
+		s.Run(tc.name, func() {
+			transition := chasm.NewTimeSkippingTransition(now)
+			transition.TrackEarliestFutureTime(existingTarget)
+
+			s.Equal(tc.hasDueTask,
+				s.mutableState.trackFutureOrReportDueTaskForWorkflow(transition, tc.candidate, "user timer"))
+			s.Equal(tc.expectedTarget, transition.GetTargetTime())
+		})
+	}
+}
+
 func (s *mutableStateSuite) TestFindNextSkipTarget() {
 	baseTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 	fixedTimeSource := clock.NewEventTimeSource()
@@ -1099,6 +1168,63 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 		s.Require().NotNil(tr)
 		s.Equal(baseTime.Add(2*time.Hour), tr.GetTargetTime())
 	})
+
+	for _, tc := range []struct {
+		name       string
+		targetName string
+		setPending func(time.Time)
+	}{
+		{"UserTimer", "user timer", func(deadline time.Time) {
+			addTimer("due", deadline)
+		}},
+		{"ActivityRetry", "activity retry", func(deadline time.Time) {
+			s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
+				ScheduledEventId: 1,
+				HasRetryPolicy:   true,
+				Attempt:          2,
+				ScheduledTime:    timestamppb.New(deadline),
+			}
+		}},
+		{"WorkflowBackoff", "workflow backoff", func(deadline time.Time) {
+			s.mutableState.executionInfo.LastCompletedWorkflowTaskStartedEventId = common.EmptyEventID
+			s.mutableState.executionInfo.WorkflowTaskScheduledEventId = common.EmptyEventID
+			s.mutableState.executionInfo.StartTime = timestamppb.New(baseTime.Add(-2 * time.Hour))
+			s.mutableState.executionInfo.ExecutionTime = timestamppb.New(deadline)
+		}},
+		{"RunTimeout", "workflow run timeout", func(deadline time.Time) {
+			s.mutableState.executionInfo.WorkflowRunExpirationTime = timestamppb.New(deadline)
+		}},
+		{"ExecutionTimeout", "workflow execution timeout", func(deadline time.Time) {
+			s.mutableState.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(deadline)
+		}},
+	} {
+		for _, deadline := range []struct {
+			name string
+			time time.Time
+		}{
+			{name: "DueNow", time: baseTime},
+			{name: "Overdue", time: baseTime.Add(-time.Minute)},
+		} {
+			s.Run(tc.name+deadline.name+"_BlocksSkipping", func() {
+				resetMS()
+				addTimer("future", baseTime.Add(time.Hour))
+				tc.setPending(deadline.time)
+				tl := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
+				s.mutableState.logger = tl
+				capture := tl.StartCapture()
+
+				s.Nil(s.mutableState.findNextSkipTarget(), "a pending due deadline blocks skipping to a future timer")
+				capture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+					Level:   testlogger.Debug,
+					Message: "a pending task stops workflow time skipping in the current transaction",
+					Tags: map[string]any{
+						"pending-task-type":     tc.targetName,
+						"pending-task-deadline": deadline.time,
+					},
+				})
+			})
+		}
+	}
 
 	s.Run("UserTimerAndEarlierFastForward_TargetIsFastForward", func() {
 		resetMS()
@@ -1309,6 +1435,8 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 }
 
 func (s *mutableStateSuite) TestCloseTransactionHandleWorkflowTimeSkipping() {
+	s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return true }
+
 	// A valid skip target exists: a user timer one hour in the (virtual) future.
 	s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{
 		TimerId:    "t1",
@@ -1374,6 +1502,29 @@ func (s *mutableStateSuite) TestCloseTransactionHandleWorkflowTimeSkipping() {
 			"the skip advances virtual time toward the timer target")
 	})
 
+	s.Run("ActiveWithDueTimer_NoSkip", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
+		now := s.mutableState.Now()
+		s.mutableState.pendingTimerInfoIDs["due"] = &persistencespb.TimerInfo{
+			TimerId:    "due",
+			ExpiryTime: timestamppb.New(now.Add(-time.Minute)),
+		}
+		s.mutableState.pendingTimerInfoIDs["future"] = &persistencespb.TimerInfo{
+			TimerId:    "future",
+			ExpiryTime: timestamppb.New(now.Add(time.Hour)),
+		}
+		s.Require().True(s.mutableState.isWorkflowSkippable())
+
+		needRegen := s.mutableState.closeTransactionHandleWorkflowTimeSkipping(
+			context.Background(), historyi.TransactionPolicyActive)
+
+		s.False(needRegen)
+		s.False(s.mutableState.timeSkippingInfoUpdated)
+		s.Zero(s.mutableState.accumulatedSkippedDuration())
+	})
+
 	s.Run("ActiveWithBareDisable_PreservesAccumulatedDurationAndDoesNotRegenerateTasks", func() {
 		initialSkippedDuration := 30 * time.Minute
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
@@ -1431,6 +1582,24 @@ func (s *mutableStateSuite) TestCloseTransactionHandleWorkflowTimeSkipping() {
 			context.Background(), historyi.TransactionPolicyPassive)
 		s.False(needRegen, "passive policy never skips")
 		s.False(s.mutableState.timeSkippingInfoUpdated, "passive policy makes no state change")
+	})
+
+	s.Run("FeatureFlagDisabled_LeavesSavedConfigUnchanged", func() {
+		s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return false }
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 10},
+		}
+		s.mutableState.timeSkippingInfoUpdated = false
+		s.False(s.mutableState.hBuilder.IsDirty())
+
+		needRegen := s.mutableState.closeTransactionHandleWorkflowTimeSkipping(
+			context.Background(), historyi.TransactionPolicyActive)
+
+		s.False(needRegen)
+		s.True(s.mutableState.executionInfo.TimeSkippingInfo.GetConfig().GetEnabled())
+		s.False(s.mutableState.timeSkippingInfoUpdated)
+		s.Zero(s.mutableState.executionInfo.TimeSkippingInfo.GetSessionSkipCount())
+		s.False(s.mutableState.hBuilder.IsDirty(), "the flag does not add a history event")
 	})
 }
 

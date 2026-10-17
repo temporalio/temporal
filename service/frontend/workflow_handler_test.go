@@ -4275,7 +4275,7 @@ func (s *WorkflowHandlerSuite) TestValidateWorkflowTimeSkippingConfig() {
 	const otherNamespace = "other-namespace"
 	maxSkipClient := dc.StaticClient{
 		dc.WorkflowTimeSkippingEnabled.Key(): true,
-		dc.WorkflowTimeSkippingMaxSkipPerSession.Key(): []dc.ConstrainedValue{
+		dc.TimeSkippingMaxSkipPerSession.Key(): []dc.ConstrainedValue{
 			{Value: 42}, // per-cell (constraint-less) value
 			{Constraints: dc.Constraints{Namespace: s.testNamespace.String()}, Value: 7}, // per-namespace override
 		},
@@ -4301,7 +4301,7 @@ func (s *WorkflowHandlerSuite) TestValidateWorkflowTimeSkippingConfig() {
 func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 	config := s.newConfig()
 	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
-	config.EnableCHASMSchedulerTimeSkipping = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.CHASMSchedulerTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
 	s.Require().ErrorIs(
 		wh.validateAndPopulateScheduleTimeSkippingConfig(
@@ -4312,7 +4312,7 @@ func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 		errScheduleTimeSkippingNotEnabled,
 	)
 
-	config.EnableCHASMSchedulerTimeSkipping = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	config.CHASMSchedulerTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	wh = s.getWorkflowHandler(config)
 
 	testCases := []struct {
@@ -4361,7 +4361,7 @@ func (s *WorkflowHandlerSuite) TestCreatePatchSchedule_TimeSkippingRoutingValida
 		config.EnableCHASMSchedulerCreation = dc.GetBoolPropertyFnFilteredByNamespace(useV2)
 		config.CHASMSchedulerCreationRolloutPercent = dc.GetIntPropertyFnFilteredByNamespace(100)
 		config.EnableCHASMSchedulerRouting = dc.GetBoolPropertyFnFilteredByNamespace(useV2)
-		config.EnableCHASMSchedulerTimeSkipping = dc.GetBoolPropertyFnFilteredByNamespace(true)
+		config.CHASMSchedulerTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 		wh := s.getWorkflowHandler(config)
 
 		patch := &schedulepb.SchedulePatch{TimeSkippingConfig: timeSkippingConfig}
@@ -6869,6 +6869,60 @@ func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesComplet
 		s.ErrorAs(err, &invalidArgument)
 		s.ErrorContains(err, "cannot attach more than 1 links per request, got 2")
 	})
+}
+
+func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_NexusSerializationContextLength() {
+	const maxLength = 64
+	atLimit := strings.Repeat("x", maxLength)
+	tooLong := strings.Repeat("x", maxLength+1)
+
+	for _, tc := range []struct {
+		name      string
+		context   *nexuspb.PropagatedSerializationContext
+		wantError string
+	}{
+		{
+			name:    "at limit",
+			context: &nexuspb.PropagatedSerializationContext{Endpoint: atLimit, Service: atLimit, Operation: atLimit},
+		},
+		{
+			name:      "endpoint too long",
+			context:   &nexuspb.PropagatedSerializationContext{Endpoint: tooLong},
+			wantError: "Nexus serialization context endpoint field too long",
+		},
+		{
+			name:      "service too long",
+			context:   &nexuspb.PropagatedSerializationContext{Service: tooLong},
+			wantError: "Nexus serialization context service field too long",
+		},
+		{
+			name:      "operation too long",
+			context:   &nexuspb.PropagatedSerializationContext{Operation: tooLong},
+			wantError: "Nexus serialization context operation field too long",
+		},
+	} {
+		s.Run(tc.name, func() {
+			config := s.newConfig()
+			config.MaxIDLengthLimit = dc.GetIntPropertyFn(maxLength)
+			wh := s.getWorkflowHandler(config)
+			err := wh.prepareUpdateWorkflowRequest(context.Background(), s.testNamespace, &workflowservice.UpdateWorkflowExecutionRequest{
+				Namespace:         s.testNamespace.String(),
+				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: testWorkflowID},
+				Request: &updatepb.Request{
+					Meta:                                &updatepb.Meta{UpdateId: "update-id"},
+					Input:                               &updatepb.Input{Name: "update-name"},
+					PropagatedNexusSerializationContext: tc.context,
+				},
+			})
+			if tc.wantError == "" {
+				s.Require().NoError(err)
+			} else {
+				var invalidArgument *serviceerror.InvalidArgument
+				s.Require().ErrorAs(err, &invalidArgument)
+				s.Require().ErrorContains(err, tc.wantError)
+			}
+		})
+	}
 }
 
 func (s *WorkflowHandlerSuite) TestUpdateActivityOptions_Priority() {

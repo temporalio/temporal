@@ -11,6 +11,7 @@ import (
 	sync "sync"
 	unsafe "unsafe"
 
+	v1 "go.temporal.io/api/nexus/v1"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 )
@@ -204,8 +205,11 @@ type UpdateInfo struct {
 	//	*UpdateInfo_Admission
 	Value                         isUpdateInfo_Value   `protobuf_oneof:"value"`
 	LastUpdateVersionedTransition *VersionedTransition `protobuf:"bytes,4,opt,name=last_update_versioned_transition,json=lastUpdateVersionedTransition,proto3" json:"last_update_versioned_transition,omitempty"`
-	unknownFields                 protoimpl.UnknownFields
-	sizeCache                     protoimpl.SizeCache
+	// Nexus serialization context from the request that admitted this update. Retained after the request
+	// payload is dropped from the registry so update responses can return it.
+	NexusSerializationContext *v1.PropagatedSerializationContext `protobuf:"bytes,5,opt,name=nexus_serialization_context,json=nexusSerializationContext,proto3" json:"nexus_serialization_context,omitempty"`
+	unknownFields             protoimpl.UnknownFields
+	sizeCache                 protoimpl.SizeCache
 }
 
 func (x *UpdateInfo) Reset() {
@@ -275,6 +279,13 @@ func (x *UpdateInfo) GetAdmission() *UpdateAdmissionInfo {
 func (x *UpdateInfo) GetLastUpdateVersionedTransition() *VersionedTransition {
 	if x != nil {
 		return x.LastUpdateVersionedTransition
+	}
+	return nil
+}
+
+func (x *UpdateInfo) GetNexusSerializationContext() *v1.PropagatedSerializationContext {
+	if x != nil {
+		return x.NexusSerializationContext
 	}
 	return nil
 }
@@ -362,7 +373,7 @@ var File_temporal_server_api_persistence_v1_update_proto protoreflect.FileDescri
 
 const file_temporal_server_api_persistence_v1_update_proto_rawDesc = "" +
 	"\n" +
-	"/temporal/server/api/persistence/v1/update.proto\x12\"temporal.server.api.persistence.v1\x1a,temporal/server/api/persistence/v1/hsm.proto\"\xe7\x01\n" +
+	"/temporal/server/api/persistence/v1/update.proto\x12\"temporal.server.api.persistence.v1\x1a#temporal/api/nexus/v1/message.proto\x1a,temporal/server/api/persistence/v1/hsm.proto\"\xe7\x01\n" +
 	"\x13UpdateAdmissionInfo\x12q\n" +
 	"\x0fhistory_pointer\x18\x01 \x01(\v2F.temporal.server.api.persistence.v1.UpdateAdmissionInfo.HistoryPointerH\x00R\x0ehistoryPointer\x1aQ\n" +
 	"\x0eHistoryPointer\x12\x19\n" +
@@ -374,7 +385,7 @@ const file_temporal_server_api_persistence_v1_update_proto_rawDesc = "" +
 	"\bevent_id\x18\x01 \x01(\x03R\aeventId\"W\n" +
 	"\x14UpdateCompletionInfo\x12\x19\n" +
 	"\bevent_id\x18\x01 \x01(\x03R\aeventId\x12$\n" +
-	"\x0eevent_batch_id\x18\x02 \x01(\x03R\feventBatchId\"\xa9\x03\n" +
+	"\x0eevent_batch_id\x18\x02 \x01(\x03R\feventBatchId\"\xa0\x04\n" +
 	"\n" +
 	"UpdateInfo\x12Z\n" +
 	"\n" +
@@ -384,7 +395,8 @@ const file_temporal_server_api_persistence_v1_update_proto_rawDesc = "" +
 	"completion\x18\x02 \x01(\v28.temporal.server.api.persistence.v1.UpdateCompletionInfoH\x00R\n" +
 	"completion\x12W\n" +
 	"\tadmission\x18\x03 \x01(\v27.temporal.server.api.persistence.v1.UpdateAdmissionInfoH\x00R\tadmission\x12\x80\x01\n" +
-	" last_update_versioned_transition\x18\x04 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x1dlastUpdateVersionedTransitionB\a\n" +
+	" last_update_versioned_transition\x18\x04 \x01(\v27.temporal.server.api.persistence.v1.VersionedTransitionR\x1dlastUpdateVersionedTransition\x12u\n" +
+	"\x1bnexus_serialization_context\x18\x05 \x01(\v25.temporal.api.nexus.v1.PropagatedSerializationContextR\x19nexusSerializationContextB\a\n" +
 	"\x05valueB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
 
 var (
@@ -407,6 +419,7 @@ var file_temporal_server_api_persistence_v1_update_proto_goTypes = []any{
 	(*UpdateInfo)(nil),                         // 3: temporal.server.api.persistence.v1.UpdateInfo
 	(*UpdateAdmissionInfo_HistoryPointer)(nil), // 4: temporal.server.api.persistence.v1.UpdateAdmissionInfo.HistoryPointer
 	(*VersionedTransition)(nil),                // 5: temporal.server.api.persistence.v1.VersionedTransition
+	(*v1.PropagatedSerializationContext)(nil),  // 6: temporal.api.nexus.v1.PropagatedSerializationContext
 }
 var file_temporal_server_api_persistence_v1_update_proto_depIdxs = []int32{
 	4, // 0: temporal.server.api.persistence.v1.UpdateAdmissionInfo.history_pointer:type_name -> temporal.server.api.persistence.v1.UpdateAdmissionInfo.HistoryPointer
@@ -414,11 +427,12 @@ var file_temporal_server_api_persistence_v1_update_proto_depIdxs = []int32{
 	2, // 2: temporal.server.api.persistence.v1.UpdateInfo.completion:type_name -> temporal.server.api.persistence.v1.UpdateCompletionInfo
 	0, // 3: temporal.server.api.persistence.v1.UpdateInfo.admission:type_name -> temporal.server.api.persistence.v1.UpdateAdmissionInfo
 	5, // 4: temporal.server.api.persistence.v1.UpdateInfo.last_update_versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
-	5, // [5:5] is the sub-list for method output_type
-	5, // [5:5] is the sub-list for method input_type
-	5, // [5:5] is the sub-list for extension type_name
-	5, // [5:5] is the sub-list for extension extendee
-	0, // [0:5] is the sub-list for field type_name
+	6, // 5: temporal.server.api.persistence.v1.UpdateInfo.nexus_serialization_context:type_name -> temporal.api.nexus.v1.PropagatedSerializationContext
+	6, // [6:6] is the sub-list for method output_type
+	6, // [6:6] is the sub-list for method input_type
+	6, // [6:6] is the sub-list for extension type_name
+	6, // [6:6] is the sub-list for extension extendee
+	0, // [0:6] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_api_persistence_v1_update_proto_init() }

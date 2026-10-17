@@ -243,6 +243,7 @@ type (
 		EndpointRegistry() EndpointRegistry
 		Now() time.Time
 		SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
+		IsTimeSkippingFeatureEnabled(archetypeID ArchetypeID) bool
 		RecordTimeSkippingTransition(transition *TimeSkippingTransition)
 	}
 
@@ -4199,6 +4200,9 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 	// conf check
 	tsi := n.backend.GetExecutionInfo().GetTimeSkippingInfo()
 	if !tsi.GetConfig().GetEnabled() {
+		return nil
+	}
+	if !n.backend.IsTimeSkippingFeatureEnabled(n.ArchetypeID()) {
 		return nil
 	}
 

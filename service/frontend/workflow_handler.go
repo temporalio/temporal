@@ -731,7 +731,7 @@ func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 		return nil
 	}
 	if tsc.GetMaxSessionSkipCount() <= 0 {
-		defaultMaxSkipPerSession := wh.config.WorkflowTimeSkippingMaxSkipPerSession(ns.String())
+		defaultMaxSkipPerSession := wh.config.TimeSkippingMaxSkipPerSession(ns.String())
 		tsc.MaxSessionSkipCount = max(1, int32(defaultMaxSkipPerSession))
 	}
 	if !tsc.GetEnabled() && tsc.GetFastForwardConfig() != nil {
@@ -779,7 +779,7 @@ func (wh *WorkflowHandler) validateAndPopulateScheduleTimeSkippingConfig(
 	}
 
 	// a separate per-ns feature flag for time skipping of schedules
-	if !wh.config.EnableCHASMSchedulerTimeSkipping(ns.String()) {
+	if !wh.config.CHASMSchedulerTimeSkippingEnabled(ns.String()) {
 		return errScheduleTimeSkippingNotEnabled
 	}
 
@@ -5586,8 +5586,14 @@ func (wh *WorkflowHandler) prepareUpdateWorkflowRequest(
 		return errUpdateMetaNotSet
 	}
 
-	if len(request.GetRequest().GetMeta().GetUpdateId()) > wh.config.MaxIDLengthLimit() {
+	maxIDLength := wh.config.MaxIDLengthLimit()
+	if len(request.GetRequest().GetMeta().GetUpdateId()) > maxIDLength {
 		return errUpdateIDTooLong
+	}
+
+	nexusContext := request.GetRequest().GetPropagatedNexusSerializationContext()
+	if err := validatePropagatedNexusSerializationContext(nexusContext, maxIDLength); err != nil {
+		return err
 	}
 
 	if request.GetRequest().GetMeta().GetUpdateId() == "" {
