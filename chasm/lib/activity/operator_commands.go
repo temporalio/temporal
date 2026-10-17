@@ -529,6 +529,9 @@ func (a *Activity) resetKeepPaused(
 	attempt.CurrentRetryInterval = nil
 	attempt.CurrentRetryIntervalSource = activitypb.ACTIVITY_RETRY_INTERVAL_SOURCE_UNSPECIFIED
 	attempt.DispatchTime = nil
+	attempt.CompleteTime = nil
+	attempt.LastFailureDetails = nil
+	attempt.LastWorkerIdentity = ""
 	if frontendReq.GetResetHeartbeat() {
 		a.clearHeartbeatDetails(ctx)
 	}
