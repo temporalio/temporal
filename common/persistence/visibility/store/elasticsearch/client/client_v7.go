@@ -131,7 +131,79 @@ func (c *clientImpl) Search(ctx context.Context, p *SearchParameters) (*elastic.
 }
 
 func (c *clientImpl) Count(ctx context.Context, index string, query elastic.Query) (int64, error) {
-	return c.esClient.Count(index).Query(query).Do(ctx)
+	// Perform the request directly instead of using esClient.Count(...).Do(ctx),
+	// because it discards everything in the response except the count (e.g., shards info).
+	path, err := uritemplates.Expand("/{index}/_count", map[string]string{
+		"index": index,
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	var body any
+	if query != nil {
+		src, err := query.Source()
+		if err != nil {
+			return 0, err
+		}
+		body = map[string]any{"query": src}
+	}
+
+	res, err := c.esClient.PerformRequest(ctx, elastic.PerformRequestOptions{
+		Method: "POST",
+		Path:   path,
+		Body:   body,
+	})
+	if err != nil {
+		return 0, err
+	}
+
+	var resp elastic.CountResponse
+	if err := json.Unmarshal(res.Body, &resp); err != nil {
+		return 0, err
+	}
+
+	// Count API doesn't support allow_partial_search_results=false, and returns a partial count
+	// if any shard failed. Return an error instead, so the caller doesn't get a wrong count.
+	if resp.Shards != nil && resp.Shards.Failed > 0 {
+		return 0, newShardFailuresError(resp.Shards)
+	}
+
+	return resp.Count, nil
+}
+
+// newShardFailuresError converts shard failures into an *elastic.Error, so it's handled
+// the same way as any other Elasticsearch error response.
+func newShardFailuresError(shards *elastic.ShardsInfo) *elastic.Error {
+	// Shard failures are reported as 429 only if all of them are rejections (i.e., overloaded).
+	status := http.StatusTooManyRequests
+	if len(shards.Failures) == 0 {
+		status = http.StatusServiceUnavailable
+	}
+	failedShards := make([]map[string]any, 0, len(shards.Failures))
+	for _, f := range shards.Failures {
+		if f == nil {
+			continue
+		}
+		if f.Status != "TOO_MANY_REQUESTS" && f.Reason["type"] != "es_rejected_execution_exception" {
+			status = http.StatusServiceUnavailable
+		}
+		failedShards = append(failedShards, map[string]any{
+			"shard":  f.Shard,
+			"index":  f.Index,
+			"node":   f.Node,
+			"status": f.Status,
+			"reason": f.Reason,
+		})
+	}
+	return &elastic.Error{
+		Status: status,
+		Details: &elastic.ErrorDetails{
+			Type:         "shard_failures",
+			Reason:       fmt.Sprintf("%d of %d shards failed", shards.Failed, shards.Total),
+			FailedShards: failedShards,
+		},
+	}
 }
 
 func (c *clientImpl) CountGroupBy(
