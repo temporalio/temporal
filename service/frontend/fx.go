@@ -696,6 +696,7 @@ func NamespaceRateLimitInterceptorProvider(
 		configs.PollTaskAPISet,
 		serviceConfig.PollWaitForNamespaceRateLimitToken,
 		metricsHandler,
+		interceptor.WithResourceExhaustedRetryDelayFloor(serviceConfig.ResourceExhaustedRetryDelayFloor),
 	)
 }
 
@@ -718,6 +719,7 @@ func NamespaceCountLimitInterceptorProvider(
 			Global:      serviceConfig.MaxGlobalInternalPerNSConcurrentLongRunningRequests,
 		},
 		configs.ExecutionAPICountLimitOverride,
+		interceptor.WithResourceExhaustedRetryDelayFloor(serviceConfig.ResourceExhaustedRetryDelayFloor),
 	)
 }
 
