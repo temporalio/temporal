@@ -773,10 +773,9 @@ func (s *ScaleManagerSuite) TestShadowModeDoesNotLogDisabledScaler() {
 	assertNoNewLogs(s, s.newTarget, 30*time.Millisecond, "disabled scaler should not log")
 }
 
-// TestShadowModeSkipsDrain verifies that shadow mode does not change real read
-// partitions by clearing backlog bits. The drain path bails before its Describe fan-out,
-// so a shadowing manager makes no outbound calls at all: the responses mocked here would
-// drain every partition if the guard regressed.
+// TestShadowModeSkipsDrain verifies that the drain path never runs in shadow mode: it
+// bails before its Describe fan-out, so a shadowing manager makes no outbound calls at
+// all and clears no backlog bits.
 func (s *ScaleManagerSuite) TestShadowModeSkipsDrain() {
 	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
@@ -788,10 +787,13 @@ func (s *ScaleManagerSuite) TestShadowModeSkipsDrain() {
 		Do(func(in PartitionScalerInput) { inputs <- in }).
 		Return(PartitionScalerDecision{NoChange: true})
 
-	// entering shadow releases the managed target to baseline (one write/push);
-	// the drain path must not write or clear backlog bits.
-	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).Return(nil).Times(1)
-	s.userData.EXPECT().SetPartitionScale(gomock.Any()).Times(2)
+	// Fail the release write, so that the leftover managed state survives into the drain
+	// path. That's the only way read partitions still exist when the drain path runs in
+	// shadow mode, and it's what makes this a real test of the guard: with state intact
+	// and DrainBufferTime 0, the drain path would clear all four backlog bits.
+	s.scaleDB.EXPECT().UpdateScaleState(gomock.Any(), gomock.Any()).
+		Return(errors.New("induced write failure")).Times(1)
+	s.userData.EXPECT().SetPartitionScale(gomock.Any()).Times(1) // start push only
 
 	initial := &persistencespb.PartitionScaleState{
 		Target:        2,
@@ -808,10 +810,10 @@ func (s *ScaleManagerSuite) TestShadowModeSkipsDrain() {
 	s.Equal(int32(4), bitSet(s.sm.scaleState.BacklogState).len())
 }
 
-// TestShadowModeReleasesManagedTargetToBaseline verifies that enabling shadow
-// mode on top of an applied managed target zeroes the target and clears private
-// state (one write), dropping the write side to baseline (Write=0) while
-// preserving read partitions (BacklogState unchanged).
+// TestShadowModeReleasesManagedTargetToBaseline verifies that enabling shadow mode on
+// top of an applied managed target disables managed scaling entirely (one write): target,
+// private state, and backlog state are all cleared, so read and write both fall back to
+// dynamic config, just as they would with a disabled scaler.
 func (s *ScaleManagerSuite) TestShadowModeReleasesManagedTargetToBaseline() {
 	s.settings.Enabled = false
 	s.settings.ShadowModeLogInterval = time.Minute
@@ -844,12 +846,14 @@ func (s *ScaleManagerSuite) TestShadowModeReleasesManagedTargetToBaseline() {
 	w := waitRecv(s, dbWrites, "release write missing")
 	s.Equal(int32(0), w.Target)
 	s.Nil(w.PrivateScalerState)
-	s.Equal(int32(10), bitSet(w.BacklogState).len(), "read partitions must be preserved")
+	s.Empty(w.BacklogState, "read partitions must fall back to dynamic config")
+	s.Empty(w.BacklogCounts)
+	s.Zero(w.BacklogCap)
 
-	// Start push (Read=10/Write=10), then the release push (Read=10/Write=0).
+	// Start push (Read=10/Write=10), then the release push (Read=0/Write=0).
 	waitRecv(s, scaleInfos, "start push missing")
 	released := waitRecv(s, scaleInfos, "release push missing")
-	s.Equal(int32(10), released.Read)
+	s.Equal(int32(0), released.Read)
 	s.Equal(int32(0), released.Write)
 }
 

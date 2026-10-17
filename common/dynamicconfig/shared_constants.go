@@ -172,7 +172,10 @@ type PartitionScaleAllowedDrift struct {
 type PartitionScaleManagerSettings struct {
 	// Enabled controls whether partition scaler decisions are put into effect. If Enabled is
 	// false (default), then the scaler acts in "shadow mode", where the scaler is consulted
-	// but the result is only logged and emitted as metrics.
+	// but the result is only logged and emitted as metrics. In shadow mode, managed scaling
+	// itself is disabled and falls back to dynamic config, exactly as with a disabled scaler.
+	// Note that this could leave tasks stranded if the scaler had scaled above the dynamic
+	// config setting.
 	Enabled bool
 	// MaxRate limits target change frequency.
 	MaxRate float32
