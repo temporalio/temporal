@@ -29,7 +29,7 @@ import (
 
 const (
 	// URIScheme is the scheme for the s3 implementation
-	URIScheme               = "s3"
+	URIScheme               = archiver.URISchemeS3store
 	errEncodeHistory        = "failed to encode history batches"
 	errWriteKey             = "failed to write history to s3"
 	defaultBlobstoreTimeout = time.Minute

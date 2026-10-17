@@ -18,6 +18,7 @@ ci-build-misc: \
 	shell-check \
 	goimports \
 	gomodtidy \
+	build-tags-check \
 	ensure-no-changes
 
 # Delete all build artifacts
@@ -423,17 +424,24 @@ lint-code-fast:
 		$(MAKE) GOLANGCI_LINT_BASE_REV="$$base" LINT_CODE_TARGETS="$$targets" lint-code; \
 	fi
 
-lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
-	@printf $(COLOR) "Linting code..."
+# Lints the Go packages $(2) with the build tags $(1).
+define lint-go
 	@$(GOLANGCI_LINT) run \
 		--verbose \
-		--build-tags $(ALL_TEST_TAGS) \
+		--build-tags $(1) \
 		--timeout 10m \
 		--fix=$(GOLANGCI_LINT_FIX) \
 		--new-from-rev=$(GOLANGCI_LINT_BASE_REV) \
 		--config=.github/.golangci.yml \
-		$(LINT_CODE_TARGETS)
-	@go vet -tags $(ALL_TEST_TAGS) -vettool="$(ERRORTYPE)" -style-check=false $(LINT_CODE_TARGETS)
+		$(2)
+	@go vet -tags $(1) -vettool="$(ERRORTYPE)" -style-check=false $(2)
+endef
+
+lint-code: $(GOLANGCI_LINT) $(ERRORTYPE)
+	@printf $(COLOR) "Linting code..."
+	$(call lint-go,$(ALL_TEST_TAGS),$(LINT_CODE_TARGETS))
+	@printf $(COLOR) "Linting code with temporal_minimal..."
+	$(call lint-go,$(MINIMAL_TEST_TAGS),$(MINIMAL_DIRS))
 
 lint-yaml: $(YAMLFMT)
 	@printf $(COLOR) "Checking YAML formatting..."
@@ -522,6 +530,36 @@ workflowcheck: $(WORKFLOWCHECK)
 		$(WORKFLOWCHECK) "$$dir" ; \
 	done
 
+# Test build tags with temporal_minimal.
+MINIMAL_TEST_TAGS = $(ALL_TEST_TAGS),temporal_minimal
+
+# Packages with a file constrained by temporal_minimal.
+MINIMAL_DIRS = $(sort $(addprefix ./,$(dir $(shell git grep -lE '^//go:build .*temporal_minimal([^a-z0-9_]|$$)' -- '*.go'))))
+
+# Packages that must not be part of the temporal_minimal server.
+MINIMAL_EXCLUDED_PACKAGES := \
+	cloud.google.com/go/storage \
+	go.temporal.io/server/common/archiver/gcloud
+
+# Compiles every package with temporal_minimal, and checks that each MINIMAL_EXCLUDED_PACKAGES entry
+# is part of the default server and of the server built with temporal_minimal plus every
+# temporal_with_* tag, but not of the temporal_minimal server.
+build-tags-check:
+	$(if $(MINIMAL_EXCLUDED_PACKAGES),,$(error MINIMAL_EXCLUDED_PACKAGES is empty))
+	@printf $(COLOR) "Check temporal_minimal build..."
+	CGO_ENABLED=$(CGO_ENABLED) go build -tags $(ALL_BUILD_TAGS),temporal_minimal ./...
+	@opt_in="$$(git grep -ohE 'temporal_with_[a-z0-9_]+' -- '*.go' | sort -u | paste -sd, -)"; \
+	for tags in "" "temporal_minimal,$$opt_in"; do \
+		deps="$$(CGO_ENABLED=$(CGO_ENABLED) go list -tags $(ALL_BUILD_TAGS),$$tags -deps ./cmd/server)" || exit 1; \
+		for pkg in $(MINIMAL_EXCLUDED_PACKAGES); do \
+			printf '%s\n' "$$deps" | grep -qxF "$$pkg" || { echo "$$pkg is not part of the server built with tags '$$tags'; update MINIMAL_EXCLUDED_PACKAGES."; exit 1; }; \
+		done; \
+	done; \
+	deps="$$(CGO_ENABLED=$(CGO_ENABLED) go list -tags $(ALL_BUILD_TAGS),temporal_minimal -deps ./cmd/server)" || exit 1; \
+	if printf '%s\n' "$$deps" | grep -xF $(addprefix -e ,$(MINIMAL_EXCLUDED_PACKAGES)); then \
+		echo "The temporal_minimal server depends on the excluded packages above."; exit 1; \
+	fi
+
 check: lint shell-check
 
 ##### Tests #####
@@ -596,6 +634,14 @@ unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
 	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(UNIT_TEST_DIRS)
+
+# The unit test packages among MINIMAL_DIRS.
+MINIMAL_UNIT_TEST_DIRS = $(filter $(UNIT_TEST_DIRS),$(MINIMAL_DIRS))
+
+# Runs the unit tests of MINIMAL_UNIT_TEST_DIRS with temporal_minimal.
+unit-test-build-tags:
+	$(if $(MINIMAL_UNIT_TEST_DIRS),,$(error No package has a file constrained by temporal_minimal))
+	$(MAKE) unit-test-coverage TEST_TAG="$(TEST_TAG),temporal_minimal" UNIT_TEST_DIRS="$(MINIMAL_UNIT_TEST_DIRS)"
 
 integration-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run integration tests with coverage..."
