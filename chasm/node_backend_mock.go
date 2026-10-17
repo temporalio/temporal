@@ -43,6 +43,7 @@ type MockNodeBackend struct {
 	HandleGetNamespaceEntry                   func() *namespace.Namespace
 	HandleEndpointRegistry                    func() EndpointRegistry
 	HandleSetTimeSkippingConfig               func(config *commonpb.TimeSkippingConfig)
+	HandleIsTimeSkippingFeatureEnabled        func(archetypeID ArchetypeID) bool
 	HandleNow                                 func() time.Time
 	HandleRecordTimeSkippingTransition        func(transition *TimeSkippingTransition)
 
@@ -82,6 +83,13 @@ func (m *MockNodeBackend) GetApproximatePersistedSize() int {
 func (m *MockNodeBackend) ChasmSkipPersistenceEnabled() bool {
 	if m.HandleChasmSkipPersistenceEnabled != nil {
 		return m.HandleChasmSkipPersistenceEnabled()
+	}
+	return false
+}
+
+func (m *MockNodeBackend) IsTimeSkippingFeatureEnabled(archetypeID ArchetypeID) bool {
+	if m.HandleIsTimeSkippingFeatureEnabled != nil {
+		return m.HandleIsTimeSkippingFeatureEnabled(archetypeID)
 	}
 	return false
 }

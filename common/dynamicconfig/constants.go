@@ -3441,12 +3441,6 @@ existing workflows to attach callbacks.`,
 		`EnableCHASMSchedulerSentinels enables ID-space collision sentinels, and must be enabled and propagated in advance of EnableCHASMSchedulerCreation.`,
 	)
 
-	EnableCHASMSchedulerTimeSkipping = NewNamespaceBoolSetting(
-		"history.enableCHASMSchedulerTimeSkipping",
-		false,
-		`EnableCHASMSchedulerTimeSkipping allows time skipping for CHASM schedules.`,
-	)
-
 	EnableCHASMCallbacks = NewNamespaceBoolSetting(
 		"history.enableCHASMCallbacks",
 		true,
@@ -3894,14 +3888,21 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 		false,
 		`WorkflowPauseEnabled is a "feature enable" flag. When enabled it allows clients to pause workflows.`,
 	)
+
+	// time-skipping config
 	WorkflowTimeSkippingEnabled = NewNamespaceBoolSetting(
-		"frontend.WorkflowTimeSkippingEnabled",
+		"system.workflowTimeSkippingEnabled",
 		false,
 		`WorkflowTimeSkippingEnabled is a "feature enable" flag. When enabled it allows clients to skip time in executions.`,
 	)
-	WorkflowTimeSkippingMaxSkipPerSession = NewNamespaceIntSetting(
-		"frontend.WorkflowTimeSkippingMaxSkipPerSession",
+	CHASMSchedulerTimeSkippingEnabled = NewNamespaceBoolSetting(
+		"system.chasmSchedulerTimeSkippingEnabled",
+		false,
+		`CHASMSchedulerTimeSkippingEnabled allows time skipping for CHASM schedules.`,
+	)
+	TimeSkippingMaxSkipPerSession = NewNamespaceIntSetting(
+		"system.timeSkippingMaxSkipPerSession",
 		200,
-		"WorkflowTimeSkippingMaxSkipPerSession is the default max-skip-per-session applied to requests that don't set one; callers may override it with a higher value.",
+		"TimeSkippingMaxSkipPerSession is the default max-skip-per-session applied to requests that don't set one; callers may override it with a higher value.",
 	)
 )

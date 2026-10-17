@@ -484,6 +484,10 @@ type Config struct {
 	EnableVersionReactivationSignals     dynamicconfig.BoolPropertyFn
 	RoutingInfoCacheTTL                  dynamicconfig.DurationPropertyFn
 	RoutingInfoCacheMaxSize              dynamicconfig.IntPropertyFn
+
+	// Time-Skipping related settings
+	WorkflowTimeSkippingEnabled       dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	CHASMSchedulerTimeSkippingEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 // NewConfig returns new service config with default values
@@ -923,6 +927,10 @@ func NewConfig(
 		WorkflowTaskCompletionBufferSizeLimit:          dynamicconfig.WorkflowTaskCompletionBufferSizeLimit.Get(dc),
 		WorkflowTaskCompletionBufferNamespaceRatio:     dynamicconfig.WorkflowTaskCompletionBufferNamespaceRatio.Get(dc),
 		WorkflowTaskCompletionBufferNewPaginationRatio: dynamicconfig.WorkflowTaskCompletionBufferNewPaginationRatio.Get(dc),
+
+		// Time-Skipping related settings
+		CHASMSchedulerTimeSkippingEnabled: dynamicconfig.CHASMSchedulerTimeSkippingEnabled.Get(dc),
+		WorkflowTimeSkippingEnabled:       dynamicconfig.WorkflowTimeSkippingEnabled.Get(dc),
 	}
 
 	return cfg

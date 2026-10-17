@@ -24,6 +24,20 @@ import (
 // =============================================================================
 // Time Skipping Configuration Management
 // =============================================================================
+
+// IsTimeSkippingFeatureEnabled reports whether the namespace flag permits time skipping for an archetype.
+func (ms *MutableStateImpl) IsTimeSkippingFeatureEnabled(archetypeID chasm.ArchetypeID) bool {
+	namespace := ms.GetNamespaceEntry().Name().String()
+	switch archetypeID {
+	case chasm.WorkflowArchetypeID:
+		return ms.config.WorkflowTimeSkippingEnabled(namespace)
+	case chasm.SchedulerArchetypeID:
+		return ms.config.CHASMSchedulerTimeSkippingEnabled(namespace)
+	default:
+		return false
+	}
+}
+
 // initTimeSkippingInfo creates TimeSkippingInfo when an execution first receives a time-skipping
 // config or propagated virtual-time state. This can happen at execution start, through an options
 // update on an existing execution, or when a CHASM component first sets its config.
@@ -304,6 +318,10 @@ func (ms *MutableStateImpl) isWorkflowSkippable() bool {
 		noSkippingReason = "time skipping is not enabled"
 		return false
 	}
+	if !ms.IsTimeSkippingFeatureEnabled(chasm.WorkflowArchetypeID) {
+		noSkippingReason = "time skipping feature flag is disabled"
+		return false
+	}
 
 	// (2) gate by workflow state and status
 	if !ms.IsWorkflowExecutionRunning() {
@@ -545,7 +563,6 @@ func (ms *MutableStateImpl) RecordTimeSkippingTransition(transition *chasm.TimeS
 	if tsi == nil {
 		return
 	}
-
 	skippedDuration := transition.GetSkippedDuration()
 	ms.executeTimeSkippingTransition(
 		skippedDuration,

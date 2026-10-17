@@ -6172,6 +6172,7 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 	// preserves the unmanaged skippable flag so IsExecutionSkippable is deterministic.
 	gateRoot := func(skippable bool) *Node {
 		s.nodeBackend = &MockNodeBackend{}
+		s.nodeBackend.HandleIsTimeSkippingFeatureEnabled = func(ArchetypeID) bool { return true }
 		s.nodeBackend.HandleNow = s.timeSource.Now
 		s.nodeBackend.HandleNextTransitionCount = func() int64 { return 1 }
 		s.nodeBackend.HandleGetCurrentVersion = func() int64 { return 1 }
@@ -6267,6 +6268,7 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 
 	s.Run("ConfigEnabledAndGateNotImplemented_InternalError", func() {
 		s.nodeBackend = &MockNodeBackend{}
+		s.nodeBackend.HandleIsTimeSkippingFeatureEnabled = func(ArchetypeID) bool { return true }
 		executionInfo(&persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		})
@@ -6280,6 +6282,19 @@ func (s *nodeSuite) TestCloseTransactionHandleTimeSkipping() {
 		s.Require().Error(err, "enabled config with no gate implementation is a misconfiguration")
 		var internalErr *serviceerror.Internal
 		s.ErrorAs(err, &internalErr, "the error must be an internal service error")
+	})
+
+	s.Run("FeatureFlagDisabled_LeavesStateUnchanged", func() {
+		root := gateRoot(true)
+		s.nodeBackend.HandleIsTimeSkippingFeatureEnabled = func(ArchetypeID) bool { return false }
+		var recorded *TimeSkippingTransition
+		s.nodeBackend.HandleRecordTimeSkippingTransition = func(tr *TimeSkippingTransition) { recorded = tr }
+
+		err := root.closeTransactionHandleTimeSkipping(NewContext(context.Background(), root))
+		s.NoError(err)
+		s.Nil(recorded)
+		s.True(s.nodeBackend.GetExecutionInfo().GetTimeSkippingInfo().GetConfig().GetEnabled())
+		s.Zero(s.nodeBackend.NumTasksAdded())
 	})
 
 	s.Run("GateNotSkippable_NoStateChange", func() {
