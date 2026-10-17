@@ -37,7 +37,4 @@ included.
 | ------------------------ | ----------------------------- | ------------------------- |
 | `temporal_with_gstorage` | Google Cloud Storage archival | Google Cloud Storage SDK  |
 
-A server built without an integration refuses to start if its configuration sets the integration up,
-for example `archival.history.provider.gstorage: Google Cloud Storage archival is not compiled into
-this server; remove this config or rebuild with the temporal_with_gstorage build tag`. Many of the `config/development-*.yaml` files
-configure the `gstorage` archival provider, so a build without it needs a config that doesn't.
+A server built without an integration refuses to start if its configuration sets the integration up.
