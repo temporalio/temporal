@@ -500,6 +500,7 @@ func (a *Activity) HandleFailed(
 	}
 
 	nextRetryDelay := failure.GetApplicationFailureInfo().GetNextRetryDelay().AsDuration()
+	attemptStartedTime := a.LastAttempt.Get(ctx).GetStartedTime().AsTime()
 	retryState, err := a.tryReschedule(
 		ctx,
 		retrypolicy.IsRetryableFailure(failure, a.GetRetryPolicy().GetNonRetryableErrorTypes()),
@@ -510,7 +511,7 @@ func (a *Activity) HandleFailed(
 		return nil, err
 	}
 	if retryState == enumspb.RETRY_STATE_IN_PROGRESS {
-		a.emitOnAttemptFailedMetrics(ctx, enrichedHandler)
+		a.emitOnAttemptFailedMetrics(enrichedHandler, attemptStartedTime)
 
 		return &historyservice.RespondActivityTaskFailedResponse{}, nil
 	}
