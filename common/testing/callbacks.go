@@ -2,7 +2,9 @@ package testing
 
 import (
 	"regexp"
+	"testing"
 
+	"github.com/stretchr/testify/require"
 	"go.temporal.io/server/common/callbacks"
 )
 
@@ -26,4 +28,14 @@ func NewCallbacksValidatorConfig() callbacks.ValidatorConfig {
 		MaxOperationNameLength:           func(string) int { return 100 },
 		NexusHandlerSourceContextMaxSize: func(string) int { return 1000 },
 	}
+}
+
+// NewCallbacksValidator returns a new [callbacks.Validator] using cfg. Tests that need
+// custom limits start from [NewCallbacksValidatorConfig] and override individual fields.
+func NewCallbacksValidator(t *testing.T, cfg callbacks.ValidatorConfig) callbacks.Validator {
+	t.Helper()
+
+	v, err := callbacks.NewValidator(cfg, nil)
+	require.NoError(t, err)
+	return v
 }
