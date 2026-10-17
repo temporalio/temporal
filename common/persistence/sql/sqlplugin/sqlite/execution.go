@@ -97,7 +97,7 @@ namespace_id = :namespace_id
 	getHistoryScheduledTasksQuery = `SELECT visibility_timestamp, task_id, data, data_encoding FROM history_scheduled_tasks 
   WHERE shard_id = ? 
   AND category_id = ? 
-  AND ((visibility_timestamp >= ? AND task_id >= ?) OR visibility_timestamp > ?) 
+  AND (visibility_timestamp, task_id) >= (?, ?)
   AND visibility_timestamp < ?
   ORDER BY visibility_timestamp,task_id LIMIT ?`
 
@@ -118,7 +118,7 @@ namespace_id = :namespace_id
 
 	getTimerTasksQuery = `SELECT visibility_timestamp, task_id, data, data_encoding FROM timer_tasks 
   WHERE shard_id = ? 
-  AND ((visibility_timestamp >= ? AND task_id >= ?) OR visibility_timestamp > ?) 
+  AND (visibility_timestamp, task_id) >= (?, ?)
   AND visibility_timestamp < ?
   ORDER BY visibility_timestamp,task_id LIMIT ?`
 
@@ -551,7 +551,6 @@ func (mdb *db) RangeSelectFromHistoryScheduledTasks(
 		filter.CategoryID,
 		filter.InclusiveMinVisibilityTimestamp,
 		filter.InclusiveMinTaskID,
-		filter.InclusiveMinVisibilityTimestamp,
 		filter.ExclusiveMaxVisibilityTimestamp,
 		filter.PageSize,
 	); err != nil {
@@ -678,7 +677,6 @@ func (mdb *db) RangeSelectFromTimerTasks(
 		filter.ShardID,
 		filter.InclusiveMinVisibilityTimestamp,
 		filter.InclusiveMinTaskID,
-		filter.InclusiveMinVisibilityTimestamp,
 		filter.ExclusiveMaxVisibilityTimestamp,
 		filter.PageSize,
 	); err != nil {
