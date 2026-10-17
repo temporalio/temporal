@@ -20,11 +20,11 @@ func (s *ProviderSuite) TestGetArchiver_GstorageExcluded() {
 
 	historyArchiver, err := provider.GetHistoryArchiver(archiver.URISchemeGstorage)
 	s.ErrorIs(err, ErrUnknownScheme)
-	s.ErrorContains(err, "temporal_with_gstorage")
+	s.EqualError(err, `unknown archiver scheme "gs": Google Cloud Storage archival is not available on this server`)
 	s.Nil(historyArchiver)
 
 	visibilityArchiver, err := provider.GetVisibilityArchiver(archiver.URISchemeGstorage)
 	s.ErrorIs(err, ErrUnknownScheme)
-	s.ErrorContains(err, "temporal_with_gstorage")
+	s.EqualError(err, `unknown archiver scheme "gs": Google Cloud Storage archival is not available on this server`)
 	s.Nil(visibilityArchiver)
 }
