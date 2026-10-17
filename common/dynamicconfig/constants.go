@@ -3877,17 +3877,17 @@ WorkerActivitiesPerSecond, MaxConcurrentActivityTaskPollers.
 
 	// time-skipping config
 	WorkflowTimeSkippingEnabled = NewNamespaceBoolSetting(
-		"system.WorkflowTimeSkippingEnabled",
+		"system.workflowTimeSkippingEnabled",
 		false,
 		`WorkflowTimeSkippingEnabled is a "feature enable" flag. When enabled it allows clients to skip time in executions.`,
 	)
 	CHASMSchedulerTimeSkippingEnabled = NewNamespaceBoolSetting(
-		"system.CHASMSchedulerTimeSkippingEnabled",
+		"system.chasmSchedulerTimeSkippingEnabled",
 		false,
 		`CHASMSchedulerTimeSkippingEnabled allows time skipping for CHASM schedules.`,
 	)
 	TimeSkippingMaxSkipPerSession = NewNamespaceIntSetting(
-		"system.TimeSkippingMaxSkipPerSession",
+		"system.timeSkippingMaxSkipPerSession",
 		200,
 		"TimeSkippingMaxSkipPerSession is the default max-skip-per-session applied to requests that don't set one; callers may override it with a higher value.",
 	)
