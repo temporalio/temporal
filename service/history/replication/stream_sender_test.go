@@ -14,6 +14,7 @@ import (
 	otellog "go.opentelemetry.io/otel/log"
 	"go.opentelemetry.io/otel/log/embedded"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -1696,6 +1697,221 @@ func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_SendFailureNotSkipped() 
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	)
+	s.Error(err)
+}
+
+func newVerifyTaskForTest(
+	taskID int64,
+	runID string,
+	transitionCount int64,
+	eventVersionHistory []*historyspb.VersionHistoryItem,
+	newRunID string,
+) *replicationspb.ReplicationTask {
+	var nextEventID int64
+	if len(eventVersionHistory) > 0 {
+		nextEventID = eventVersionHistory[len(eventVersionHistory)-1].GetEventId() + 1
+	}
+	return &replicationspb.ReplicationTask{
+		TaskType:     enumsspb.REPLICATION_TASK_TYPE_VERIFY_VERSIONED_TRANSITION_TASK,
+		SourceTaskId: taskID,
+		Attributes: &replicationspb.ReplicationTask_VerifyVersionedTransitionTaskAttributes{
+			VerifyVersionedTransitionTaskAttributes: &replicationspb.VerifyVersionedTransitionTaskAttributes{
+				NamespaceId:         "1",
+				WorkflowId:          "1",
+				RunId:               runID,
+				NewRunId:            newRunID,
+				EventVersionHistory: eventVersionHistory,
+				NextEventId:         nextEventID,
+			},
+		},
+		VersionedTransition: &persistencespb.VersionedTransition{
+			NamespaceFailoverVersion: 1,
+			TransitionCount:          transitionCount,
+		},
+		VisibilityTime: timestamppb.New(time.Unix(0, taskID)),
+	}
+}
+
+func newSyncTaskForTest(taskID int64) *replicationspb.ReplicationTask {
+	return &replicationspb.ReplicationTask{
+		TaskType:       enumsspb.REPLICATION_TASK_TYPE_SYNC_VERSIONED_TRANSITION_TASK,
+		SourceTaskId:   taskID,
+		VisibilityTime: timestamppb.New(time.Unix(0, taskID)),
+	}
+}
+
+func eventHistoryForTest(items ...int64) []*historyspb.VersionHistoryItem {
+	var result []*historyspb.VersionHistoryItem
+	for i := 0; i+1 < len(items); i += 2 {
+		result = append(result, &historyspb.VersionHistoryItem{EventId: items[i], Version: items[i+1]})
+	}
+	return result
+}
+
+// setupConvertedTasks makes sendTasks iterate one source task per converted task, followed by
+// filteredCount tasks that shouldProcessTask filters out, and records every message sent.
+func (s *streamSenderSuite) setupConvertedTasks(
+	converted []*replicationspb.ReplicationTask,
+	filteredCount int,
+) (beginInclusiveWatermark int64, endExclusiveWatermark int64, sent *[]*replicationspb.WorkflowReplicationMessages) {
+	s.streamSender.isTieredStackEnabled = false
+	beginInclusiveWatermark = converted[0].GetSourceTaskId()
+	endExclusiveWatermark = beginInclusiveWatermark + int64(len(converted)+filteredCount) + 1
+
+	byTaskID := make(map[int64]*replicationspb.ReplicationTask, len(converted))
+	items := make([]tasks.Task, 0, len(converted)+filteredCount)
+	for _, task := range converted {
+		byTaskID[task.GetSourceTaskId()] = task
+		item := tasks.NewMockTask(s.controller)
+		item.EXPECT().GetNamespaceID().Return("1").AnyTimes()
+		item.EXPECT().GetWorkflowID().Return("1").AnyTimes()
+		item.EXPECT().GetTaskID().Return(task.GetSourceTaskId()).AnyTimes()
+		item.EXPECT().GetVisibilityTime().Return(time.Now().UTC()).AnyTimes()
+		item.EXPECT().GetType().Return(enumsspb.TASK_TYPE_REPLICATION_SYNC_VERSIONED_TRANSITION).AnyTimes()
+		items = append(items, item)
+	}
+	lastTaskID := converted[len(converted)-1].GetSourceTaskId()
+	for i := 1; i <= filteredCount; i++ {
+		item := tasks.NewMockTask(s.controller)
+		item.EXPECT().GetNamespaceID().Return("2").AnyTimes()
+		item.EXPECT().GetWorkflowID().Return("1").AnyTimes()
+		item.EXPECT().GetTaskID().Return(lastTaskID + int64(i)).AnyTimes()
+		item.EXPECT().GetVisibilityTime().Return(time.Now().UTC()).AnyTimes()
+		items = append(items, item)
+	}
+
+	iter := collection.NewPagingIterator[tasks.Task](
+		func(paginationToken []byte) ([]tasks.Task, []byte, error) {
+			return items, nil, nil
+		},
+	)
+	mockRegistry := namespace.NewMockRegistry(s.controller)
+	mockRegistry.EXPECT().GetNamespaceByID(namespace.ID("1")).Return(namespace.NewGlobalNamespaceForTest(
+		nil, nil, &persistencespb.NamespaceReplicationConfig{
+			Clusters: []string{"source_cluster", "target_cluster"},
+		}, 100), nil).AnyTimes()
+	mockRegistry.EXPECT().GetNamespaceByID(namespace.ID("2")).Return(namespace.NewGlobalNamespaceForTest(
+		nil, nil, &persistencespb.NamespaceReplicationConfig{
+			Clusters: []string{"source_cluster"},
+		}, 100), nil).AnyTimes()
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(mockRegistry).AnyTimes()
+	s.historyEngine.EXPECT().GetReplicationTasksIter(
+		gomock.Any(),
+		string(s.clientShardKey.ClusterID),
+		beginInclusiveWatermark,
+		endExclusiveWatermark,
+	).Return(iter, nil)
+	s.taskConverter.EXPECT().Convert(gomock.Any(), s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, locks.PriorityLow).
+		DoAndReturn(func(item tasks.Task, _ int32, _ enumsspb.TaskPriority, _ locks.Priority) (*replicationspb.ReplicationTask, error) {
+			return byTaskID[item.GetTaskID()], nil
+		}).Times(len(converted))
+
+	var messages []*replicationspb.WorkflowReplicationMessages
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(func(resp *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+		messages = append(messages, resp.GetMessages())
+		return nil
+	}).AnyTimes()
+	return beginInclusiveWatermark, endExclusiveWatermark, &messages
+}
+
+// sentTaskIDs returns the source task ID of each task message, and -1 for a watermark-only message.
+func sentTaskIDs(messages []*replicationspb.WorkflowReplicationMessages) []int64 {
+	ids := make([]int64, 0, len(messages))
+	for _, message := range messages {
+		if len(message.GetReplicationTasks()) == 0 {
+			ids = append(ids, -1)
+			continue
+		}
+		ids = append(ids, message.GetReplicationTasks()[0].GetSourceTaskId())
+	}
+	return ids
+}
+
+func coalesceTestStream(base int64) []*replicationspb.ReplicationTask {
+	return []*replicationspb.ReplicationTask{
+		newVerifyTaskForTest(base, "run-a", 1, eventHistoryForTest(10, 1), ""),
+		newVerifyTaskForTest(base+1, "run-a", 2, eventHistoryForTest(12, 1), ""),
+		newVerifyTaskForTest(base+2, "run-a", 3, eventHistoryForTest(14, 1), ""),
+		newVerifyTaskForTest(base+3, "run-b", 1, eventHistoryForTest(5, 1), ""),
+		newSyncTaskForTest(base + 4),
+		newVerifyTaskForTest(base+5, "run-a", 5, eventHistoryForTest(20, 1), ""),
+		newVerifyTaskForTest(base+6, "run-a", 6, eventHistoryForTest(22, 1), "run-a-next"),
+		newVerifyTaskForTest(base+7, "run-c", 1, eventHistoryForTest(3, 1), ""),
+	}
+}
+
+func (s *streamSenderSuite) TestSendTasks_CoalesceVerifyTasks_Enabled() {
+	s.config.ReplicationStreamSenderCoalesceVerifyTasks = func() bool { return true }
+	base := rand.Int63n(math.MaxInt32)
+	beginInclusiveWatermark, endExclusiveWatermark, sent := s.setupConvertedTasks(coalesceTestStream(base), 0)
+
+	err := s.streamSender.sendTasks(enumsspb.TASK_PRIORITY_UNSPECIFIED, beginInclusiveWatermark, endExclusiveWatermark)
+	s.NoError(err)
+
+	// run-a's first streak collapses to its last verify; base+5 is dropped in favor of base+6,
+	// which carries a new run ID and so is sent instead of held; base+7 is flushed at the end.
+	s.Equal([]int64{base + 2, base + 3, base + 4, base + 6, base + 7, -1}, sentTaskIDs(*sent))
+	for _, message := range (*sent)[:len(*sent)-1] {
+		s.Equal(message.GetReplicationTasks()[0].GetSourceTaskId()+1, message.GetExclusiveHighWatermark())
+	}
+	s.Equal(endExclusiveWatermark, (*sent)[len(*sent)-1].GetExclusiveHighWatermark())
+}
+
+func (s *streamSenderSuite) TestSendTasks_CoalesceVerifyTasks_Disabled() {
+	base := rand.Int63n(math.MaxInt32)
+	beginInclusiveWatermark, endExclusiveWatermark, sent := s.setupConvertedTasks(coalesceTestStream(base), 0)
+
+	err := s.streamSender.sendTasks(enumsspb.TASK_PRIORITY_UNSPECIFIED, beginInclusiveWatermark, endExclusiveWatermark)
+	s.NoError(err)
+
+	s.Equal([]int64{base, base + 1, base + 2, base + 3, base + 4, base + 5, base + 6, base + 7, -1}, sentTaskIDs(*sent))
+}
+
+func (s *streamSenderSuite) TestSendTasks_CoalesceVerifyTasks_BranchChangeNotCoalesced() {
+	s.config.ReplicationStreamSenderCoalesceVerifyTasks = func() bool { return true }
+	base := rand.Int63n(math.MaxInt32)
+	converted := []*replicationspb.ReplicationTask{
+		newVerifyTaskForTest(base, "run-a", 1, eventHistoryForTest(10, 1), ""),
+		newVerifyTaskForTest(base+1, "run-a", 2, eventHistoryForTest(5, 1, 20, 2), ""),
+	}
+	beginInclusiveWatermark, endExclusiveWatermark, sent := s.setupConvertedTasks(converted, 0)
+
+	err := s.streamSender.sendTasks(enumsspb.TASK_PRIORITY_UNSPECIFIED, beginInclusiveWatermark, endExclusiveWatermark)
+	s.NoError(err)
+
+	s.Equal([]int64{base, base + 1, -1}, sentTaskIDs(*sent))
+}
+
+func (s *streamSenderSuite) TestSendTasks_CoalesceVerifyTasks_FlushHeldBeforeSkipWatermark() {
+	s.config.ReplicationStreamSenderCoalesceVerifyTasks = func() bool { return true }
+	base := rand.Int63n(math.MaxInt32)
+	converted := []*replicationspb.ReplicationTask{
+		newVerifyTaskForTest(base, "run-a", 1, eventHistoryForTest(10, 1), ""),
+	}
+	beginInclusiveWatermark, endExclusiveWatermark, sent := s.setupConvertedTasks(converted, TaskMaxSkipCount)
+
+	err := s.streamSender.sendTasks(enumsspb.TASK_PRIORITY_UNSPECIFIED, beginInclusiveWatermark, endExclusiveWatermark)
+	s.NoError(err)
+
+	// The held verify must go out before the watermark-only message that acks past it.
+	s.Equal([]int64{base, -1, -1}, sentTaskIDs(*sent))
+	s.Equal(base+int64(TaskMaxSkipCount), (*sent)[1].GetExclusiveHighWatermark())
+	s.Equal(endExclusiveWatermark, (*sent)[2].GetExclusiveHighWatermark())
+}
+
+func (s *streamSenderSuite) TestSendTasks_CoalesceVerifyTasks_HeldSendFailureReturnsError() {
+	s.config.ReplicationStreamSenderCoalesceVerifyTasks = func() bool { return true }
+	s.config.ReplicationStreamSenderErrorRetryMaxAttempts = func() int { return 1 }
+	s.config.ReplicationStreamSenderErrorRetryWait = func() time.Duration { return time.Millisecond }
+	beginInclusiveWatermark, endExclusiveWatermark, item := s.setupSingleTask()
+	task := newVerifyTaskForTest(beginInclusiveWatermark, "run-a", 1, eventHistoryForTest(10, 1), "")
+	s.taskConverter.EXPECT().Convert(item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, locks.PriorityLow).
+		Return(task, nil).Times(1)
+	// The held verify fails to send when flushed at the end of the range, so sendTasks must fail
+	// rather than send the trailing watermark past a task that never went out.
+	s.server.EXPECT().Send(gomock.Any()).Return(errors.New("send boom")).Times(1)
+
+	err := s.streamSender.sendTasks(enumsspb.TASK_PRIORITY_UNSPECIFIED, beginInclusiveWatermark, endExclusiveWatermark)
 	s.Error(err)
 }
 
