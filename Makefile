@@ -18,6 +18,7 @@ ci-build-misc: \
 	shell-check \
 	goimports \
 	gomodtidy \
+	build-minimal \
 	ensure-no-changes
 
 # Delete all build artifacts
@@ -597,24 +598,31 @@ unit-test-coverage: prepare-coverage-test
 	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(UNIT_TEST_DIRS)
 
-# Packages with a file constrained by temporal_minimal.
-MINIMAL_UNIT_TEST_DIRS = $(sort $(addprefix ./,$(dir $(shell git grep -lE '^//go:build .*temporal_minimal' -- '*.go'))))
-
 # Packages that must not be part of the temporal_minimal server.
 MINIMAL_EXCLUDED_PACKAGES := \
 	cloud.google.com/go/storage \
 	go.temporal.io/server/common/archiver/gcloud
 
-# Builds every package using `temporal_minimal` build tag, then runs the unit tests of
-# MINIMAL_UNIT_TEST_DIRS with it.
-unit-test-build-tags:
-	$(if $(MINIMAL_UNIT_TEST_DIRS),,$(error No package has a file constrained by temporal_minimal))
-	@printf $(COLOR) "Build and run unit tests with temporal_minimal..."
+# Compiles every package with temporal_minimal, and checks that each MINIMAL_EXCLUDED_PACKAGES entry
+# is part of the default server but not of the temporal_minimal server.
+build-minimal:
+	@printf $(COLOR) "Build with temporal_minimal..."
 	CGO_ENABLED=$(CGO_ENABLED) go build -tags $(ALL_BUILD_TAGS),temporal_minimal ./...
-	@deps="$$(go list -tags $(ALL_BUILD_TAGS),temporal_minimal -deps ./cmd/server)" || exit 1; \
+	@deps="$$(go list -tags $(ALL_BUILD_TAGS) -deps ./cmd/server)" || exit 1; \
+	for pkg in $(MINIMAL_EXCLUDED_PACKAGES); do \
+		printf '%s\n' "$$deps" | grep -qxF "$$pkg" || { echo "$$pkg is not part of the default server; update MINIMAL_EXCLUDED_PACKAGES."; exit 1; }; \
+	done; \
+	deps="$$(go list -tags $(ALL_BUILD_TAGS),temporal_minimal -deps ./cmd/server)" || exit 1; \
 	if printf '%s\n' "$$deps" | grep -xF $(addprefix -e ,$(MINIMAL_EXCLUDED_PACKAGES)); then \
 		echo "The temporal_minimal server depends on the excluded packages above."; exit 1; \
 	fi
+
+# Packages with a file constrained by temporal_minimal.
+MINIMAL_UNIT_TEST_DIRS = $(sort $(addprefix ./,$(dir $(shell git grep -lE '^//go:build .*temporal_minimal' -- '*.go'))))
+
+# Runs the unit tests of MINIMAL_UNIT_TEST_DIRS with temporal_minimal.
+unit-test-build-tags:
+	$(if $(MINIMAL_UNIT_TEST_DIRS),,$(error No package has a file constrained by temporal_minimal))
 	$(MAKE) unit-test-coverage TEST_TAG="$(TEST_TAG),temporal_minimal" UNIT_TEST_DIRS="$(MINIMAL_UNIT_TEST_DIRS)"
 
 integration-test-coverage: prepare-coverage-test
