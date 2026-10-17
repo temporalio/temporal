@@ -1,9 +1,13 @@
 package tests
 
 import (
+	"context"
+	"errors"
 	"math"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/lib/pq"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/log"
@@ -14,6 +18,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql" // register plugins
 	sqltests "go.temporal.io/server/common/persistence/sql/sqlplugin/tests"
+	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/temporal/environment"
 )
@@ -370,8 +375,107 @@ func (p *PostgreSQLSuite) TestPostgreSQLHistoryNodeSuite() {
 		TearDownPostgreSQLDatabase(p.T(), cfg)
 	}()
 
+	testPostgreSQLHistoryNodeUpsert(p, store)
 	s := sqltests.NewHistoryNodeSuite(p.T(), store)
 	suite.Run(p.T(), s)
+}
+
+func testPostgreSQLHistoryNodeUpsert(p *PostgreSQLSuite, store sqlplugin.DB) {
+	ctx := context.Background()
+	shardID := int32(7)
+	treeID := primitives.MustParseUUID("11111111-1111-1111-1111-111111111111")
+	branchID := primitives.MustParseUUID("22222222-2222-2222-2222-222222222222")
+	nodeID := int64(11)
+	const txnID int64 = 42
+
+	read := func() sqlplugin.HistoryNodeRow {
+		rows, err := store.RangeSelectFromHistoryNode(ctx, sqlplugin.HistoryNodeSelectFilter{
+			ShardID:   shardID,
+			TreeID:    treeID,
+			BranchID:  branchID,
+			MinNodeID: nodeID,
+			MinTxnID:  sql.MinTxnID,
+			MaxNodeID: math.MaxInt64,
+			PageSize:  10,
+		})
+		p.Require().NoError(err)
+		p.Require().Len(rows, 1)
+		row := rows[0]
+		row.ShardID = shardID
+		row.TreeID = treeID
+		row.BranchID = branchID
+		return row
+	}
+	insert := func(row *sqlplugin.HistoryNodeRow) {
+		result, err := store.InsertIntoHistoryNode(ctx, row)
+		p.Require().NoError(err)
+		rowsAffected, err := result.RowsAffected()
+		p.Require().NoError(err)
+		p.Require().Equal(int64(1), rowsAffected)
+	}
+
+	base := sqlplugin.HistoryNodeRow{
+		ShardID: shardID, TreeID: treeID, BranchID: branchID, NodeID: nodeID,
+		PrevTxnID: 7, TxnID: txnID, Data: []byte("original"), DataEncoding: "original",
+	}
+	insert(&base)
+	p.Require().Equal(-txnID, base.TxnID)
+	expected := base
+	expected.TxnID = -expected.TxnID
+	p.Require().Equal(expected, read())
+
+	changed := sqlplugin.HistoryNodeRow{
+		ShardID: shardID, TreeID: treeID, BranchID: branchID, NodeID: nodeID,
+		PrevTxnID: -9, TxnID: txnID, Data: []byte("changed"), DataEncoding: "changed",
+	}
+	insert(&changed)
+	p.Require().Equal(-txnID, changed.TxnID)
+	expected = changed
+	expected.TxnID = -expected.TxnID
+	p.Require().Equal(expected, read())
+
+	empty := sqlplugin.HistoryNodeRow{
+		ShardID: shardID, TreeID: treeID, BranchID: branchID, NodeID: nodeID,
+		PrevTxnID: 123, TxnID: txnID, Data: []byte{}, DataEncoding: "empty",
+	}
+	insert(&empty)
+	p.Require().Equal(-txnID, empty.TxnID)
+	expected = empty
+	expected.TxnID = -expected.TxnID
+	p.Require().Equal(expected, read())
+
+	rollbackRow := sqlplugin.HistoryNodeRow{
+		ShardID: shardID, TreeID: treeID, BranchID: branchID, NodeID: nodeID,
+		PrevTxnID: 321, TxnID: txnID, Data: []byte("rollback"), DataEncoding: "rollback",
+	}
+	tx, err := store.BeginTx(ctx)
+	p.Require().NoError(err)
+	result, err := tx.InsertIntoHistoryNode(ctx, &rollbackRow)
+	p.Require().NoError(err)
+	rowsAffected, err := result.RowsAffected()
+	p.Require().NoError(err)
+	p.Require().Equal(int64(1), rowsAffected)
+	p.Require().NoError(tx.Rollback())
+	p.Require().Equal(expected, read())
+
+	nilRow := empty
+	nilRow.TxnID = txnID
+	nilRow.PrevTxnID = 654
+	nilRow.Data = nil
+	nilRow.DataEncoding = "nil"
+	tx, err = store.BeginTx(ctx)
+	p.Require().NoError(err)
+	_, err = tx.InsertIntoHistoryNode(ctx, &nilRow)
+	p.Require().Error(err)
+	if pqErr, ok := errors.AsType[*pq.Error](err); ok {
+		p.Require().Equal("23502", string(pqErr.Code))
+	} else if pgxErr, ok := errors.AsType[*pgconn.PgError](err); ok {
+		p.Require().Equal("23502", pgxErr.Code)
+	} else {
+		p.Require().Failf("unexpected PostgreSQL error type", "%T: %v", err, err)
+	}
+	p.Require().NoError(tx.Rollback())
+	p.Require().Equal(expected, read())
 }
 
 func (p *PostgreSQLSuite) TestPostgreSQLHistoryTreeSuite() {
