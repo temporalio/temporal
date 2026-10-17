@@ -136,6 +136,27 @@ func TestUpdateIndexSearchAttributes(t *testing.T) {
 			out:         false,
 		},
 		{
+			name: "existing index with nil custom search attributes",
+			initialISA: map[string]*persistencespb.IndexSearchAttributes{
+				"my-index-1": {
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+					},
+				},
+			},
+			cmISA: map[string]*persistencespb.IndexSearchAttributes{
+				"my-index-1": {},
+			},
+			expectedISA: map[string]*persistencespb.IndexSearchAttributes{
+				"my-index-1": {
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"Keyword01": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+					},
+				},
+			},
+			out: true,
+		},
+		{
 			name: "noop no changes",
 			initialISA: map[string]*persistencespb.IndexSearchAttributes{
 				"my-index-1": &persistencespb.IndexSearchAttributes{
