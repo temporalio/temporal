@@ -6486,6 +6486,73 @@ func (s *nodeSuite) TestDefaultFindNextTargetTime() {
 func (s *nodeSuite) TestRegenerateTimerTasksForTimeSkipping() {
 	baseTime := time.Date(2027, 1, 1, 12, 0, 0, 0, time.UTC)
 
+	s.Run("PreCloseRegenerationDoesNotDirtyTree", func() {
+		s.nodeBackend = &MockNodeBackend{}
+		s.nodeBackend.HandleNow = s.timeSource.Now
+		s.timeSource.Update(baseTime)
+
+		root, err := s.newTestTree(map[string]*persistencespb.ChasmNode{
+			"": {
+				Metadata: &persistencespb.ChasmNodeMetadata{
+					InitialVersionedTransition:    &persistencespb.VersionedTransition{TransitionCount: 1},
+					LastUpdateVersionedTransition: &persistencespb.VersionedTransition{TransitionCount: 1},
+					Attributes: &persistencespb.ChasmNodeMetadata_ComponentAttributes{
+						ComponentAttributes: &persistencespb.ChasmComponentAttributes{
+							TypeId: testComponentTypeID,
+							SideEffectTasks: []*persistencespb.ChasmComponentAttributes_Task{{
+								TypeId:                    testSideEffectTaskTypeID,
+								ScheduledTime:             timestamppb.New(baseTime.Add(2 * time.Hour)),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 1,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							}},
+							PureTasks: []*persistencespb.ChasmComponentAttributes_Task{{
+								TypeId:                    testPureTaskTypeID,
+								ScheduledTime:             timestamppb.New(baseTime.Add(time.Hour)),
+								VersionedTransition:       &persistencespb.VersionedTransition{TransitionCount: 1},
+								VersionedTransitionOffset: 2,
+								PhysicalTaskStatus:        physicalTaskStatusCreated,
+							}},
+						},
+					},
+				},
+			},
+		})
+		s.NoError(err)
+		s.False(root.IsDirty())
+
+		s.NoError(root.RegenerateTimerTasksForTimeSkipping())
+
+		s.Equal(2, s.nodeBackend.NumTasksAdded())
+		s.Equal(baseTime.Add(time.Hour).UTC(), s.nodeBackend.LastDeletePureTaskCall())
+		s.False(root.IsDirty(), "pre-close timer re-stamping must not create a new CHASM mutation")
+
+		// Tasks added during the ensuing CHASM close were not visible to regeneration and
+		// therefore must each be emitted exactly once by CloseTransaction.
+		mutableContext := NewMutableContext(context.Background(), root)
+		component, err := root.Component(mutableContext, ComponentRef{})
+		s.NoError(err)
+		s.testLibrary.mockSideEffectTaskHandler.EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
+		mutableContext.AddTask(
+			component,
+			TaskAttributes{ScheduledTime: baseTime.Add(3 * time.Hour)},
+			&TestSideEffectTask{Data: []byte("new-timer")},
+		)
+		s.testLibrary.mockPureTaskHandler.EXPECT().
+			Validate(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil).AnyTimes()
+		mutableContext.AddTask(
+			component,
+			TaskAttributes{ScheduledTime: baseTime.Add(30 * time.Minute)},
+			&TestPureTask{Data: []byte("new-earliest-pure-task")},
+		)
+
+		_, err = root.CloseTransaction(context.Background(), true)
+		s.NoError(err)
+		s.Equal(4, s.nodeBackend.NumTasksAdded(),
+			"two existing timers are re-stamped and two newly added timers are emitted once")
+	})
+
 	s.Run("RegeneratesSideEffectTimersAndEarliestPureTask", func() {
 		s.nodeBackend = &MockNodeBackend{}
 		s.nodeBackend.HandleNow = s.timeSource.Now

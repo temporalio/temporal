@@ -7541,6 +7541,22 @@ func (ms *MutableStateImpl) AddTasks(
 			task.SetVisibilityTime(ms.ToRealTimeWithCurrentOffset(task.GetVisibilityTime()))
 		}
 
+		// A state-machine timer represents the complete timer group at one deadline. Dirty
+		// HSM task generation and time-skipping regeneration can both reach AddTasks in the
+		// same close transaction; retain only one physical task for that group. Keeping the
+		// guard at the mutable-state boundary also covers wrappers and non-concrete callers.
+		if stateMachineTimerTask, ok := task.(*tasks.StateMachineTimerTask); ok {
+			alreadyAdded := slices.ContainsFunc(ms.InsertTasks[category], func(existing tasks.Task) bool {
+				existingStateMachineTimerTask, ok := existing.(*tasks.StateMachineTimerTask)
+				return ok &&
+					existingStateMachineTimerTask.Version == stateMachineTimerTask.Version &&
+					existingStateMachineTimerTask.GetVisibilityTime().Equal(stateMachineTimerTask.GetVisibilityTime())
+			})
+			if alreadyAdded {
+				continue
+			}
+		}
+
 		if chasmPureTask, ok := task.(*tasks.ChasmTaskPure); ok {
 			ms.chasmPureTasks = append(ms.chasmPureTasks, chasmPureTask)
 			maxPureTasks := ms.config.ChasmMaxInMemoryPureTasks()
@@ -7565,6 +7581,11 @@ func (ms *MutableStateImpl) PopTasks() map[tasks.Category][]tasks.Task {
 }
 
 func (ms *MutableStateImpl) DeleteCHASMPureTasks(maxScheduledTime time.Time) {
+	// CHASM logical task deadlines are in workflow virtual time, while chasmPureTasks have
+	// already crossed the AddTasks boundary and carry wall-clock visibility timestamps.
+	if maxScheduledTime != tasks.MaximumKey.FireTime {
+		maxScheduledTime = ms.ToRealTimeWithCurrentOffset(maxScheduledTime)
+	}
 	for lastTaskIdx, task := range slices.Backward(ms.chasmPureTasks) {
 
 		if !task.GetVisibilityTime().Before(maxScheduledTime) {
@@ -7953,6 +7974,14 @@ func (ms *MutableStateImpl) closeTransaction(
 
 	if err := ms.closeTransactionInvalidateChasmTasksOnClose(ctx, transactionPolicy); err != nil {
 		return closeTransactionResult{}, err
+	}
+	// Workflow time skipping updates the virtual-to-wall-clock offset before CHASM closes its
+	// transaction. Re-stamp only the logical CHASM timers that existed before that close; new
+	// CHASM tasks are emitted by CloseTransaction below and already use the updated offset.
+	if regenTimerTasksForWorkflowTimeSkipping && ms.ChasmEnabled() {
+		if err := ms.chasmTree.RegenerateTimerTasksForTimeSkipping(); err != nil {
+			return closeTransactionResult{}, err
+		}
 	}
 
 	// CloseTransaction() on chasmTree may update execution state & status,

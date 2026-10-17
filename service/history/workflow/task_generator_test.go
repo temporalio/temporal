@@ -1320,6 +1320,50 @@ func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_ForceRegenerates(
 	require.Equal(t, 2*emitsAfterFirst, emitCount, "second call must re-emit the same tasks")
 }
 
+func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_StateMachineTimers(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now().UTC()
+	deadline := now.Add(time.Hour)
+	secondScheduledDeadline := deadline.Add(time.Hour)
+	ctrl := gomock.NewController(t)
+	mutableState := historyi.NewMockMutableState(ctrl)
+	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		TimeSkippingInfo: &persistencespb.TimeSkippingInfo{
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		},
+		StateMachineTimers: []*persistencespb.StateMachineTimerGroup{
+			{Deadline: timestamppb.New(deadline), Scheduled: true},
+			{Deadline: timestamppb.New(secondScheduledDeadline), Scheduled: true},
+			{Deadline: timestamppb.New(deadline.Add(2 * time.Hour)), Scheduled: false},
+		},
+	}).AnyTimes()
+	mutableState.EXPECT().GetPendingTimerInfos().Return(nil).AnyTimes()
+	mutableState.EXPECT().GetPendingActivityInfos().Return(nil).AnyTimes()
+	mutableState.EXPECT().GetWorkflowKey().Return(tests.WorkflowKey).AnyTimes()
+	mutableState.EXPECT().GetCurrentVersion().Return(tests.Version).AnyTimes()
+	mutableState.EXPECT().HadOrHasWorkflowTask().Return(true).AnyTimes()
+
+	var capturedTasks []tasks.Task
+	mutableState.EXPECT().AddTasks(gomock.Any()).Do(func(ts ...tasks.Task) {
+		capturedTasks = append(capturedTasks, ts...)
+	}).AnyTimes()
+
+	taskGenerator := NewTaskGenerator(nil, mutableState, timeSkippingTestConfig(true), nil, log.NewTestLogger())
+	require.NoError(t, taskGenerator.RegenerateTimerTasksForTimeSkipping())
+	require.Len(t, capturedTasks, 2)
+	require.Equal(t, &tasks.StateMachineTimerTask{
+		WorkflowKey:         tests.WorkflowKey,
+		VisibilityTimestamp: deadline,
+		Version:             tests.Version,
+	}, capturedTasks[0])
+	require.Equal(t, &tasks.StateMachineTimerTask{
+		WorkflowKey:         tests.WorkflowKey,
+		VisibilityTimestamp: secondScheduledDeadline,
+		Version:             tests.Version,
+	}, capturedTasks[1])
+}
+
 func TestTaskGeneratorImpl_RegenerateTimerTasksForTimeSkipping_EdgeCases(t *testing.T) {
 	t.Parallel()
 

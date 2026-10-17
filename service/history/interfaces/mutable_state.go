@@ -326,6 +326,8 @@ type (
 		// against wall-clock time.
 		AddTasks(tasks ...tasks.Task)
 		PopTasks() map[tasks.Category][]tasks.Task
+		// DeleteCHASMPureTasks accepts a workflow virtual-time cutoff and converts it
+		// before comparing the wall-clock task keys retained by mutable state.
 		DeleteCHASMPureTasks(maxScheduledTime time.Time)
 
 		SetUpdateCondition(int64, int64)
