@@ -33,14 +33,14 @@ func (p *HistoryArchiverProvider) validate() error {
 	if p == nil {
 		return nil
 	}
-	return p.Gstorage.validate()
+	return p.Gstorage.validate("archival.history.provider.gstorage")
 }
 
 func (p *VisibilityArchiverProvider) validate() error {
 	if p == nil {
 		return nil
 	}
-	return p.Gstorage.validate()
+	return p.Gstorage.validate("archival.visibility.provider.gstorage")
 }
 
 func isArchivalConfigValid(

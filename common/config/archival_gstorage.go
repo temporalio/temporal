@@ -2,6 +2,6 @@
 
 package config
 
-func (*GstorageArchiver) validate() error {
+func (*GstorageArchiver) validate(string) error {
 	return nil
 }

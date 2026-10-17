@@ -3,13 +3,13 @@
 package config
 
 import (
-	"errors"
+	"fmt"
 )
 
 // The Google Cloud Storage archiver is excluded from this build.
-func (g *GstorageArchiver) validate() error {
+func (g *GstorageArchiver) validate(path string) error {
 	if g != nil {
-		return errors.New("archival provider gstorage is configured, but Google Cloud Storage archival is excluded from this build, see build tag temporal_with_gstorage")
+		return fmt.Errorf("%s: Google Cloud Storage archival is not compiled into this server; remove this config or rebuild with the temporal_with_gstorage build tag", path)
 	}
 	return nil
 }
