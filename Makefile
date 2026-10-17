@@ -598,7 +598,7 @@ unit-test-coverage: prepare-coverage-test
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(UNIT_TEST_DIRS)
 
 # Packages with a file constrained by temporal_minimal.
-MINIMAL_UNIT_TEST_DIRS = $(sort $(dir $(shell grep -rlE --include='*.go' '^//go:build .*temporal_minimal' .)))
+MINIMAL_UNIT_TEST_DIRS = $(sort $(addprefix ./,$(dir $(shell git grep -lE '^//go:build .*temporal_minimal' -- '*.go'))))
 
 # Builds every package using `temporal_minimal` build tag, then runs the unit tests of
 # MINIMAL_UNIT_TEST_DIRS with it.
