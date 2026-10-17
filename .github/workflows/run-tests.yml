@@ -215,6 +215,10 @@ jobs:
         id: prepare-go
         uses: ./.github/actions/prepare-go
 
+      # Build the default server variant.
+      - run: make pre-build-functional-test-coverage
+
+      # Build the variant the functional tests use.
       - run: make pre-build-functional-test-coverage
         env:
           TEST_TAG: ${{ env.FUNCTIONAL_TEST_BUILD_TAGS }}
