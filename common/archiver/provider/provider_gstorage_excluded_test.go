@@ -8,7 +8,6 @@ import (
 )
 
 func (s *ProviderSuite) TestGetArchiver_GstorageExcluded() {
-	// A namespace can have a gs:// archival URI even if the gstorage provider isn't configured.
 	provider := NewArchiverProvider(
 		&config.HistoryArchiverProvider{},
 		&config.VisibilityArchiverProvider{},
