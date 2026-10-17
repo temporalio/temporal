@@ -6,8 +6,10 @@ import (
 	"text/template"
 	"time"
 
+	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/callbacks"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
@@ -33,6 +35,13 @@ var Enabled = dynamicconfig.NewNamespaceBoolSetting(
 	"nexusoperation.enableStandalone",
 	false,
 	`Toggles standalone Nexus operation functionality on the server.`,
+)
+
+var EnabledCallbackKinds = dynamicconfig.NewNamespaceTypedSettingWithConverter(
+	"nexusoperation.enabledCallbackKinds",
+	callbacks.ConvertEnabledKinds,
+	[]callbacks.Kind{}, // i.e. callbacks not enabled at all.
+	`The list of completion callback kinds that may be attached to a standalone Nexus operation execution.`,
 )
 
 var EnableChasmWorkflowOperations = dynamicconfig.NewNamespaceBoolSetting(
@@ -151,6 +160,40 @@ var DisallowedOperationHeaders = dynamicconfig.NewGlobalTypedSettingWithConverte
 "nexus_header" field that contains any of these disallowed keys will be rejected.`,
 )
 
+var TrackedHeaderPrefixes = dynamicconfig.NewNamespaceTypedSettingWithConverter(
+	"nexusoperation.trackedHeaderPrefixes",
+	convertHeaderPrefixes,
+	[]string{"temporal-"},
+	`Case insensitive list of Nexus header key prefixes to track. ScheduleNexusOperation commands and
+StartNexusOperationExecution requests with "nexus_header" keys that start with any of these prefixes are counted via the
+nexus_header_prefix_usage metric, tagged by prefix, and logged.`,
+)
+
+var RejectedHeaderPrefixes = dynamicconfig.NewNamespaceTypedSettingWithConverter(
+	"nexusoperation.rejectedHeaderPrefixes",
+	convertHeaderPrefixes,
+	[]string(nil),
+	`Case insensitive list of Nexus header key prefixes to reject. ScheduleNexusOperation commands and
+StartNexusOperationExecution requests with "nexus_header" keys that start with any of these prefixes will be rejected.
+Rejections are counted via the nexus_header_prefix_usage metric with rejected=true.`,
+)
+
+// convertHeaderPrefixes lower-cases the configured header prefixes and drops empty ones, which would otherwise match
+// every header key.
+func convertHeaderPrefixes(in any) ([]string, error) {
+	prefixes, err := dynamicconfig.ConvertStructure[[]string](nil)(in)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]string, 0, len(prefixes))
+	for _, p := range prefixes {
+		if p != "" {
+			result = append(result, strings.ToLower(p))
+		}
+	}
+	return result, nil
+}
+
 var MaxOperationScheduleToCloseTimeout = dynamicconfig.NewNamespaceDurationSetting(
 	"nexusoperation.limit.scheduleToCloseTimeout",
 	0,
@@ -212,18 +255,12 @@ var MetricTagConfiguration = dynamicconfig.NewGlobalTypedSetting(
 	`Controls which metric tags are included with Nexus operation metrics. This configuration supports:
 1. Service name tag - adds the Nexus service name as a metric dimension (IncludeServiceTag)
 2. Operation name tag - adds the Nexus operation name as a metric dimension (IncludeOperationTag)
-3. Header-based tags - maps values from request headers to metric tags (HeaderTagMappings)
+3. Backend tag - adds the HSM or CHASM backend to caller outcome and latency metrics (IncludeBackendTag).
+4. Header-based tags - maps values from request headers to metric tags (HeaderTagMappings)
 
 Note: default metric tags (like namespace, endpoint) are always included and not affected by this configuration.
 Adding high-cardinality tags (like unique operation names) can significantly increase metric storage requirements and
 query complexity. Consider the cardinality impact when enabling these tags.`,
-)
-
-var UseSystemCallbackURL = dynamicconfig.NewGlobalBoolSetting(
-	"nexusoperation.useSystemCallbackURL",
-	true,
-	`Controls how the executor generates callback URLs for worker targets in Nexus Operations.
-When true, uses the fixed system callback URL for all worker targets.`,
 )
 
 var MaxReasonLength = dynamicconfig.NewNamespaceIntSetting(
@@ -236,13 +273,15 @@ Uses Go's len() function to determine the length.`,
 var UseNewFailureWireFormat = dynamicconfig.NewNamespaceBoolSetting(
 	"nexusoperation.useNewFailureWireFormat",
 	true,
-	`Controls whether to use the new failure wire format via an HTTP header that is attached to StartOperation requests.
+	`Controls whether to use the new failure wire format via an HTTP header that is attached to Nexus operation requests.
 Added for safety. Defaults to true. Likely to be removed in future server versions.`,
 )
 
 type Config struct {
 	Enabled                                    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableChasm                                dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnabledCallbackKinds                       dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]callbacks.Kind]
+	MaxCallbacksPerExecution                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableChasmNexusWorkflowOperations         dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ChasmNexusWorkflowOperationsRolloutPercent dynamicconfig.IntPropertyFnWithNamespaceFilter
 	NumHistoryShards                           int32
@@ -256,10 +295,11 @@ type Config struct {
 	MaxOperationTokenLength                    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxOperationHeaderSize                     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	DisallowedOperationHeaders                 dynamicconfig.TypedPropertyFn[[]string]
+	TrackedHeaderPrefixes                      dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
+	RejectedHeaderPrefixes                     dynamicconfig.TypedPropertyFnWithNamespaceFilter[[]string]
 	MaxOperationScheduleToCloseTimeout         dynamicconfig.DurationPropertyFnWithNamespaceFilter
 	PayloadSizeLimit                           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	CallbackURLTemplate                        dynamicconfig.TypedPropertyFn[*template.Template]
-	UseSystemCallbackURL                       dynamicconfig.BoolPropertyFn
 	PayloadSizeLimitWarn                       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxUserMetadataSummarySize                 dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaxUserMetadataDetailsSize                 dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -275,6 +315,8 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 	return &Config{
 		Enabled:                            Enabled.Get(dc),
 		EnableChasm:                        dynamicconfig.EnableChasm.Get(dc),
+		EnabledCallbackKinds:               EnabledCallbackKinds.Get(dc),
+		MaxCallbacksPerExecution:           callback.MaxPerExecution.Get(dc),
 		EnableChasmNexusWorkflowOperations: EnableChasmWorkflowOperations.Get(dc),
 		ChasmNexusWorkflowOperationsRolloutPercent: ChasmWorkflowOperationsRolloutPercent.Get(dc),
 		NumHistoryShards:                   cfg.NumHistoryShards,
@@ -288,13 +330,14 @@ func configProvider(dc *dynamicconfig.Collection, cfg *config.Persistence) *Conf
 		MaxOperationTokenLength:            MaxOperationTokenLength.Get(dc),
 		MaxOperationHeaderSize:             MaxOperationHeaderSize.Get(dc),
 		DisallowedOperationHeaders:         DisallowedOperationHeaders.Get(dc),
+		TrackedHeaderPrefixes:              TrackedHeaderPrefixes.Get(dc),
+		RejectedHeaderPrefixes:             RejectedHeaderPrefixes.Get(dc),
 		MaxOperationScheduleToCloseTimeout: MaxOperationScheduleToCloseTimeout.Get(dc),
 		PayloadSizeLimit:                   dynamicconfig.BlobSizeLimitError.Get(dc),
 		PayloadSizeLimitWarn:               dynamicconfig.BlobSizeLimitWarn.Get(dc),
 		MaxUserMetadataSummarySize:         dynamicconfig.MaxUserMetadataSummarySize.Get(dc),
 		MaxUserMetadataDetailsSize:         dynamicconfig.MaxUserMetadataDetailsSize.Get(dc),
 		CallbackURLTemplate:                CallbackURLTemplate.Get(dc),
-		UseSystemCallbackURL:               UseSystemCallbackURL.Get(dc),
 		UseNewFailureWireFormat:            UseNewFailureWireFormat.Get(dc),
 		VisibilityMaxPageSize:              dynamicconfig.FrontendVisibilityMaxPageSize.Get(dc),
 		MaxIDLengthLimit:                   dynamicconfig.MaxIDLengthLimit.Get(dc),

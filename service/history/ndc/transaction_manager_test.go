@@ -22,6 +22,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/testing/testhooks"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -80,10 +81,11 @@ func (s *transactionMgrSuite) SetupTest() {
 
 	s.logger = s.mockShard.GetLogger()
 	s.namespaceEntry = tests.GlobalNamespaceEntry
+	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(s.namespaceEntry.Name(), nil).AnyTimes()
 
 	s.transactionMgr = NewTransactionManager(
 		s.mockShard,
-		wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler),
+		wcache.NewHostLevelCache(s.mockShard.GetConfig(), s.mockShard.GetLogger(), metrics.NoopMetricsHandler, testhooks.TestHooks{}),
 		s.mockEventsReapplier,
 		s.logger,
 		false,
@@ -227,6 +229,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Closed
 		lastWorkflowTaskStartedVersion,
 		nextEventID,
 		gomock.Any(),
+		gomock.Not(""),
 		targetWorkflow,
 		targetWorkflow,
 		EventsReapplicationResetWorkflowReason,
@@ -310,6 +313,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetF
 		lastWorkflowTaskStartedVersion,
 		nextEventID,
 		gomock.Any(),
+		gomock.Not(""),
 		targetWorkflow,
 		targetWorkflow,
 		EventsReapplicationResetWorkflowReason,
@@ -394,6 +398,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_ResetE
 		lastWorkflowTaskStartedVersion,
 		nextEventID,
 		gomock.Any(),
+		gomock.Not(""),
 		targetWorkflow,
 		targetWorkflow,
 		EventsReapplicationResetWorkflowReason,
@@ -551,6 +556,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_Pendin
 		scheduledEventVersion,
 		nextEventID,
 		gomock.Any(),
+		gomock.Not(""),
 		targetWorkflow,
 		targetWorkflow,
 		EventsReapplicationResetWorkflowReason,
@@ -646,6 +652,7 @@ func (s *transactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Closed_Starte
 		scheduledEventVersion,
 		nextEventID,
 		gomock.Any(),
+		gomock.Not(""),
 		targetWorkflow,
 		targetWorkflow,
 		EventsReapplicationResetWorkflowReason,

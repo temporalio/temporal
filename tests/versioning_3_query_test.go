@@ -75,7 +75,7 @@ func (s *Versioning3QuerySuite) testPinnedQueryDrainedVersion(env *VersioningTes
 		close(idlePollerDone)
 	}()
 	env.setCurrentDeployment(s, tv)
-	env.WaitForChannel(idlePollerDone)
+	s.Rcv(idlePollerDone)
 
 	wftCompleted := make(chan struct{})
 	env.pollWftAndHandle(s, tv, false, wftCompleted,
@@ -85,7 +85,7 @@ func (s *Versioning3QuerySuite) testPinnedQueryDrainedVersion(env *VersioningTes
 		})
 
 	env.startWorkflow(s, tv, tv.VersioningOverridePinned())
-	env.WaitForChannel(wftCompleted)
+	s.Rcv(wftCompleted)
 	env.verifyWorkflowVersioning(s, tv, vbPinned, tv.Deployment(), tv.VersioningOverridePinned(), nil)
 
 	// create version v2 and make it current which shall make v1 go from current -> draining/drained
@@ -96,7 +96,7 @@ func (s *Versioning3QuerySuite) testPinnedQueryDrainedVersion(env *VersioningTes
 		close(idlePollerDone)
 	}()
 	env.setCurrentDeployment(s, tv2)
-	env.WaitForChannel(idlePollerDone)
+	s.Rcv(idlePollerDone)
 
 	// wait for v1 to become drained
 	s.Await(func(s *Versioning3QuerySuite) {
@@ -175,7 +175,7 @@ func (s *Versioning3QuerySuite) testQueryWithPinnedOverride(env *VersioningTestE
 
 	runID := env.startWorkflow(s, tv, tv.VersioningOverridePinned())
 
-	env.WaitForChannel(wftCompleted)
+	s.Rcv(wftCompleted)
 	env.verifyWorkflowVersioning(s, tv, vbUnpinned, tv.Deployment(), tv.VersioningOverridePinned(), nil)
 	if sticky {
 		env.verifyWorkflowStickyQueue(s, tv.WithRunID(runID))
@@ -216,7 +216,7 @@ func (s *Versioning3QuerySuite) testUnpinnedQuery(env *VersioningTestEnv, sticky
 
 	runID := env.startWorkflow(s, tv, nil)
 
-	env.WaitForChannel(wftCompleted)
+	s.Rcv(wftCompleted)
 	env.verifyWorkflowVersioning(s, tv, vbUnpinned, tv.Deployment(), nil, nil)
 	if sticky {
 		env.verifyWorkflowStickyQueue(s, tv.WithRunID(runID))
@@ -228,7 +228,7 @@ func (s *Versioning3QuerySuite) testUnpinnedQuery(env *VersioningTestEnv, sticky
 		close(pollerDone)
 	}()
 	env.pollAndQueryWorkflow(s, tv, sticky)
-	env.WaitForChannel(pollerDone) // wait for the idle poller to complete to not interfere with the next poller
+	s.Rcv(pollerDone) // wait for the idle poller to complete to not interfere with the next poller
 
 	env.setCurrentDeployment(s, tv2)
 	env.waitForDeploymentDataPropagation(s, tv2, versionStatusCurrent, false, tqTypeWf)

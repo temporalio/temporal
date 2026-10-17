@@ -12,11 +12,14 @@ import (
 	batchpb "go.temporal.io/api/batch/v1"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -82,6 +85,80 @@ func (s *WorkflowAPIBatchSignalClientTestSuite) TestWorkflowBatchSignal_Separate
 	var result string
 	s.NoError(env.SdkClient().GetWorkflow(ctx, execution.GetWorkflowId(), execution.GetRunId()).Get(getCtx, &result))
 	s.Equal("first-signal-data,second-signal-data", result)
+}
+
+func (s *WorkflowAPIBatchSignalClientTestSuite) TestWorkflowBatchSignal_PausedWorkflow() {
+	env := newWorkflowBatchEnv(s.T())
+	t := s.T()
+	ctx := s.Context()
+
+	workflowType := testcore.RandomizeStr(t.Name())
+	env.SdkWorker().RegisterWorkflowWithOptions(signalReceivingWorkflow, workflow.RegisterOptions{Name: workflowType})
+
+	run, err := env.SdkClient().ExecuteWorkflow(ctx, sdkclient.StartWorkflowOptions{
+		ID:        testcore.RandomizeStr(t.Name()),
+		TaskQueue: env.WorkerTaskQueue(),
+	}, workflowType)
+	require.NoError(t, err)
+
+	_, err = env.FrontendClient().PauseWorkflowExecution(ctx, &workflowservice.PauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: run.GetID(),
+		RunId:      run.GetRunID(),
+		Identity:   "batch-signal-test",
+		Reason:     "test",
+		RequestId:  uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	query := fmt.Sprintf("WorkflowId = '%s'", run.GetID())
+	//nolint:forbidigo // for tests with waits
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, err := env.FrontendClient().ListWorkflowExecutions(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace: env.Namespace().String(),
+			PageSize:  1,
+			Query:     fmt.Sprintf("%s AND ExecutionStatus = 'Paused'", query),
+		})
+		require.NoError(c, err)
+		require.Len(c, resp.GetExecutions(), 1)
+	}, 10*time.Second, 100*time.Millisecond)
+
+	inputPayloads, err := converter.GetDefaultDataConverter().ToPayloads("signal-while-paused")
+	require.NoError(t, err)
+	jobID := uuid.NewString()
+	_, err = env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+		Namespace: env.Namespace().String(),
+		Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
+			SignalOperation: &batchpb.BatchOperationSignal{
+				Signal:   batchSignalTestSignalName,
+				Input:    inputPayloads,
+				Identity: "batch-signaler",
+			},
+		},
+		VisibilityQuery: query,
+		JobId:           jobID,
+		Reason:          "test",
+	})
+	require.NoError(t, err)
+	assertWorkflowBatchOperationSucceeded(ctx, t, env, jobID)
+
+	desc, err := env.SdkClient().DescribeWorkflowExecution(ctx, run.GetID(), run.GetRunID())
+	require.NoError(t, err)
+	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_PAUSED, desc.GetWorkflowExecutionInfo().GetStatus())
+
+	_, err = env.FrontendClient().UnpauseWorkflowExecution(ctx, &workflowservice.UnpauseWorkflowExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		WorkflowId: run.GetID(),
+		RunId:      run.GetRunID(),
+		Identity:   "batch-signal-test",
+		Reason:     "test",
+		RequestId:  uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	var result string
+	require.NoError(t, run.Get(ctx, &result))
+	require.Equal(t, "signal-while-paused", result)
 }
 
 // signalWorkflowViaBatch starts a batch signal operation targeting a single
@@ -166,12 +243,18 @@ func (s *WorkflowAPIBatchSignalClientTestSuite) TestWorkflowBatchSignal_Success(
 
 			// Signal all three workflows with a single batch operation.
 			jobID := uuid.NewString()
+			header := &commonpb.Header{
+				Fields: map[string]*commonpb.Payload{
+					"tracing-token": payload.EncodeString("trace-me"),
+				},
+			}
 			req := &workflowservice.StartBatchOperationRequest{
 				Namespace: env.Namespace().String(),
 				Operation: &workflowservice.StartBatchOperationRequest_SignalOperation{
 					SignalOperation: &batchpb.BatchOperationSignal{
 						Signal:   batchSignalTestSignalName,
 						Input:    inputPayloads,
+						Header:   header,
 						Identity: "batch-signaler",
 					},
 				},
@@ -191,6 +274,27 @@ func (s *WorkflowAPIBatchSignalClientTestSuite) TestWorkflowBatchSignal_Success(
 				var result string
 				s.NoError(env.SdkClient().GetWorkflow(ctx, e.GetWorkflowId(), e.GetRunId()).Get(ctx, &result))
 				s.Equal(signalData, result)
+			}
+
+			// The signal must be recorded with the requester's identity and the
+			// header it supplied -- workflows and interceptors read tracing and
+			// auth tokens from the latter.
+			for _, e := range executions {
+				history, err := env.FrontendClient().GetWorkflowExecutionHistory(ctx, &workflowservice.GetWorkflowExecutionHistoryRequest{
+					Namespace: env.Namespace().String(),
+					Execution: e,
+				})
+				s.NoError(err)
+				var signaled []*historypb.HistoryEvent
+				for _, event := range history.GetHistory().GetEvents() {
+					if event.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED {
+						signaled = append(signaled, event)
+					}
+				}
+				s.Require().Len(signaled, 1)
+				attrs := signaled[0].GetWorkflowExecutionSignaledEventAttributes()
+				s.Equal("batch-signaler", attrs.GetIdentity())
+				protorequire.ProtoEqual(t, header, attrs.GetHeader())
 			}
 		})
 	}

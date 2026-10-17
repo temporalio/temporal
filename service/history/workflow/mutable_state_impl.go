@@ -20,6 +20,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	rulespb "go.temporal.io/api/rules/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -65,12 +66,12 @@ import (
 	"go.temporal.io/server/common/tasktoken"
 	"go.temporal.io/server/common/util"
 	"go.temporal.io/server/common/worker_versioning"
-	"go.temporal.io/server/components/callbacks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/historybuilder"
 	"go.temporal.io/server/service/history/hsm"
+	"go.temporal.io/server/service/history/hsm/callbacks"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow/update"
@@ -86,6 +87,9 @@ const (
 	mutableStateInvalidHistoryActionMsgTemplate = mutableStateInvalidHistoryActionMsg + ": %v, %v"
 
 	int64SizeBytes = 8
+
+	// Retained size for one activity failure once the limit MutableStateActivityFailureTotalSizeLimitError is exceeded.
+	minRetainedActivityFailureSize = 128
 )
 
 // Scheduled tasks with timestamp after this will not be created.
@@ -118,6 +122,9 @@ var (
 	ErrMissingSignalInitiatedEvent = serviceerror.NewInternal("unable to get signal initiated event")
 	// ErrPinnedWorkflowCannotTransition indicates attempt to start a transition on a pinned workflow
 	ErrPinnedWorkflowCannotTransition = serviceerror.NewInternal("unable to start transition on pinned workflows")
+
+	errUpdateNotFound    = serviceerror.NewNotFound("update not found")
+	errUpdateNotComplete = serviceerror.NewInternal("update has not completed")
 
 	timeZeroUTC = time.Unix(0, 0).UTC()
 )
@@ -166,7 +173,9 @@ type (
 		// Running approximate total size of mutable state fields (except buffered events) when written to DB in bytes.
 		// Buffered events are added to this value when calling GetApproximatePersistedSize.
 		approximateSize int
-		chasmNodeSizes  map[string]int // chasm node path -> key + node size in bytes
+		// Running total of RetryLastFailure.Size() over pendingActivityInfoIDs.
+		activityFailureSize int
+		chasmNodeSizes      map[string]int // chasm node path -> key + node size in bytes
 		// Total number of tomestones tracked in mutable state
 		totalTombstones int
 		// Buffer events from DB
@@ -347,6 +356,7 @@ func NewMutableState(
 		chasmTree: &noopChasmTree{},
 
 		approximateSize:              0,
+		activityFailureSize:          0,
 		chasmNodeSizes:               make(map[string]int),
 		totalTombstones:              0,
 		currentVersion:               namespaceEntry.FailoverVersion(workflowID),
@@ -425,11 +435,9 @@ func NewMutableState(
 
 	s.mustInitHSM()
 
-	// TODO@time-skipping: support time skipping for chasm
 	if s.config.EnableChasm(namespaceName) {
 		s.chasmTree = chasm.NewEmptyTree(
 			shard.ChasmRegistry(),
-			shard.GetTimeSource(),
 			s,
 			chasm.DefaultPathEncoder,
 			logger,
@@ -437,9 +445,6 @@ func NewMutableState(
 		)
 	}
 
-	if s.executionInfo.GetTimeSkippingInfo() != nil {
-		s.wrapTimeSourceWithTimeSkipping()
-	}
 	return s
 }
 
@@ -471,6 +476,7 @@ func NewMutableStateFromDB(
 	for _, activityInfo := range dbRecord.ActivityInfos {
 		mutableState.pendingActivityIDToEventID[activityInfo.ActivityId] = activityInfo.ScheduledEventId
 		mutableState.approximateSize += activityInfo.Size()
+		mutableState.activityFailureSize += activityInfo.GetRetryLastFailure().Size()
 		if (activityInfo.TimerTaskStatus & TimerTaskStatusCreatedHeartbeat) > 0 {
 			// Sets last pending timer heartbeat to year 2000.
 			// This ensures at least one heartbeat task will be processed for the pending activity.
@@ -582,13 +588,11 @@ func NewMutableStateFromDB(
 		mutableState.chasmNodeSizes[key] = nodeSize
 	}
 
-	// TODO@time-skipping: support time skipping for chasm
 	if shard.GetConfig().EnableChasm(namespaceEntry.Name().String()) {
 		var err error
 		mutableState.chasmTree, err = chasm.NewTreeFromDB(
 			dbRecord.ChasmNodes,
 			shard.ChasmRegistry(),
-			shard.GetTimeSource(),
 			mutableState,
 			chasm.DefaultPathEncoder,
 			mutableState.logger, // this logger is tagged with execution key.
@@ -698,6 +702,19 @@ func (ms *MutableStateImpl) ChasmSkipPersistenceEnabled() bool {
 		ms.config.EnableCHASMSkipPersistence(ms.GetNamespaceEntry().Name().String())
 }
 
+// ChasmLogicalTaskCountAlertThreshold implements chasm.NodeBackend.
+func (ms *MutableStateImpl) ChasmLogicalTaskCountAlertThreshold(chasmTaskType string) int {
+	if ms.config.ChasmLogicalTaskCountAlertThreshold == nil {
+		return 0
+	}
+	return ms.config.ChasmLogicalTaskCountAlertThreshold(chasmTaskType)
+}
+
+func (ms *MutableStateImpl) ChasmDLQScheduledPureTaskOnValidationEnabled() bool {
+	return ms.config.ChasmDLQScheduledPureTaskOnValidation != nil &&
+		ms.config.ChasmDLQScheduledPureTaskOnValidation(ms.GetNamespaceEntry().Name().String())
+}
+
 // chasmCallbacksEnabled returns true if CHASM callbacks are enabled for this workflow.
 func (ms *MutableStateImpl) chasmCallbacksEnabled() bool {
 	if !ms.ChasmEnabled() {
@@ -711,6 +728,12 @@ func (ms *MutableStateImpl) chasmCallbacksEnabled() bool {
 // ChasmSignalBacklinksEnabled returns true if CHASM-based signal requestID backlink tracking is enabled.
 func (ms *MutableStateImpl) ChasmSignalBacklinksEnabled() bool {
 	return ms.ChasmEnabled() && ms.shard.GetConfig().EnableCHASMSignalBacklinks(ms.GetNamespaceEntry().Name().String())
+}
+
+// chasmWorkflowRootOnStartEnabled returns true if the CHASM Workflow root should be persisted when the
+// workflow starts.
+func (ms *MutableStateImpl) chasmWorkflowRootOnStartEnabled() bool {
+	return ms.ChasmEnabled() && ms.shard.GetConfig().EnableCHASMWorkflowRootOnStart(ms.GetNamespaceEntry().Name().String())
 }
 
 // ChasmWorkflowComponent gets the root workflow component from the CHASM tree.
@@ -727,21 +750,6 @@ func (ms *MutableStateImpl) ChasmWorkflowComponent(ctx context.Context) (*chasmw
 		return nil, nil, serviceerror.NewInternalf("expected workflow component, but got %T", rootComponent)
 	}
 	return wf, chasmCtx, nil
-}
-
-func (ms *MutableStateImpl) EnsureChasmWorkflowComponent(ctx context.Context) {
-	// Initialize chasm tree once for new workflows.
-	// Using context.Background() because this is done outside an actual request context and the
-	// chasmworkflow.NewWorkflow does not actually use it currently.
-	root, ok := ms.chasmTree.(*chasm.Node)
-	softassert.That(ms.logger, ok, "chasmTree cast failed")
-
-	if root.ArchetypeID() == chasm.UnspecifiedArchetypeID {
-		mutableContext := chasm.NewMutableContext(ctx, root)
-		if err := root.SetRootComponent(chasmworkflow.NewWorkflow(mutableContext, chasm.NewMSPointer(ms))); err != nil {
-			softassert.Fail(ms.logger, "SetRootComponent failed", tag.Error(err))
-		}
-	}
 }
 
 // ChasmWorkflowComponentReadOnly gets the root workflow component from the CHASM tree.
@@ -773,6 +781,13 @@ func (ms *MutableStateImpl) GetNexusUpdateCompletion(
 	cevent, err := ms.getUpdateOutcomeEvent(ctx, updateID)
 	var outcome *updatepb.Outcome
 	if err != nil {
+		// If the completion event ID is recorded but the read failed for a reason other than the
+		// event being absent, the failure is likely transient. Return it so the caller can retry.
+		if !errors.Is(err, errUpdateNotFound) &&
+			!errors.Is(err, errUpdateNotComplete) &&
+			!common.IsNotFoundError(err) {
+			return nexusrpc.CompleteOperationOptions{}, err
+		}
 		// If the workflow is complete but the update outcome is missing we need to respond to all callbacks
 		ce, errCE := ms.GetCompletionEvent(ctx)
 		if errors.Is(errCE, ErrMissingWorkflowCompletionEvent) {
@@ -1551,21 +1566,42 @@ func (ms *MutableStateImpl) GetUpdateOutcome(
 	return event.GetWorkflowExecutionUpdateCompletedEventAttributes().GetOutcome(), nil
 }
 
+func (ms *MutableStateImpl) GetUpdateAcceptedEventID(
+	ctx context.Context,
+	updateID string,
+) (int64, error) {
+	if acceptance := ms.executionInfo.GetUpdateInfos()[updateID].GetAcceptance(); acceptance != nil {
+		return acceptance.GetEventId(), nil
+	}
+	event, err := ms.getUpdateOutcomeEvent(ctx, updateID)
+	if err != nil {
+		return 0, err
+	}
+	return event.GetWorkflowExecutionUpdateCompletedEventAttributes().GetAcceptedEventId(), nil
+}
+
+func (ms *MutableStateImpl) GetUpdateNexusSerializationContext(
+	updateID string,
+) *nexuspb.PropagatedSerializationContext {
+	return ms.executionInfo.GetUpdateInfos()[updateID].GetNexusSerializationContext()
+}
+
 func (ms *MutableStateImpl) getUpdateOutcomeEvent(
 	ctx context.Context,
 	updateID string,
 ) (*historypb.HistoryEvent, error) {
 	if ms.executionInfo.UpdateInfos == nil {
-		return nil, serviceerror.NewNotFound("update not found")
+		return nil, errUpdateNotFound
 	}
 	ui, ok := ms.executionInfo.UpdateInfos[updateID]
 	if !ok {
-		return nil, serviceerror.NewNotFound("update not found")
+		return nil, errUpdateNotFound
 	}
 	completion := ui.GetCompletion()
 	if completion == nil {
-		return nil, serviceerror.NewInternal("update has not completed")
+		return nil, errUpdateNotComplete
 	}
+
 	currentBranchToken, version, err := ms.getCurrentBranchTokenAndEventVersion(completion.EventId)
 	if err != nil {
 		return nil, err
@@ -1752,8 +1788,6 @@ func (ms *MutableStateImpl) GetRetryBackoffDuration(
 		return backoff.NoBackoff, enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET
 	}
 
-	// todo@time-skipping: time skipping is naturally supported for cron backoff, and need to
-	// confirm it is the best default policy for cron
 	return getBackoffInterval(
 		ms.timeSource.Now(),
 		info.Attempt,
@@ -1772,8 +1806,6 @@ func (ms *MutableStateImpl) GetCronBackoffDuration() time.Duration {
 		return backoff.NoBackoff
 	}
 	executionTime := timestamp.TimeValue(ms.GetExecutionInfo().GetExecutionTime())
-	// todo@time-skipping: time skipping is naturally supported for cron backoff, and need to
-	// confirm it is the best default policy for cron
 	return backoff.GetBackoffForNextSchedule(ms.executionInfo.CronSchedule, executionTime, ms.timeSource.Now())
 }
 
@@ -2067,6 +2099,9 @@ func (ms *MutableStateImpl) UpdateActivityProgress(
 	}
 	ai.Version = ms.GetCurrentVersion()
 	ai.LastHeartbeatDetails = request.Details
+	if identity := request.GetIdentity(); identity != "" {
+		ai.RetryLastWorkerIdentity = identity
+	}
 	now := ms.timeSource.Now()
 	ai.LastHeartbeatUpdateTime = timestamppb.New(now)
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
@@ -2118,6 +2153,7 @@ func (ms *MutableStateImpl) UpdateActivityInfo(
 	ai.LastHeartbeatDetails = incomingActivityInfo.GetDetails()
 	ai.Attempt = incomingActivityInfo.GetAttempt()
 	ai.RetryLastWorkerIdentity = incomingActivityInfo.GetLastWorkerIdentity()
+	ms.activityFailureSize += incomingActivityInfo.LastFailure.Size() - ai.GetRetryLastFailure().Size()
 	ai.RetryLastFailure = incomingActivityInfo.LastFailure
 
 	if resetActivityTimerTaskStatus {
@@ -2180,6 +2216,7 @@ func (ms *MutableStateImpl) DeleteActivity(
 		delete(ms.pendingActivityInfoIDs, scheduledEventID)
 		delete(ms.pendingActivityTimerHeartbeats, scheduledEventID)
 		ms.approximateSize -= activityInfo.Size() + int64SizeBytes
+		ms.activityFailureSize -= activityInfo.GetRetryLastFailure().Size()
 
 		if _, ok = ms.pendingActivityIDToEventID[activityInfo.ActivityId]; ok {
 			delete(ms.pendingActivityIDToEventID, activityInfo.ActivityId)
@@ -2614,6 +2651,56 @@ func (ms *MutableStateImpl) HasRequestID(
 // Only entries with a non-nil AttachTime are sweepable; the create request ID and event-backed request
 // IDs always have a nil AttachTime and are never swept. Run lazily on transaction close, when a request
 // ID has been added.
+// closeTransactionStampPrincipal stamps events with the caller's principal when
+// principal propagation is enabled for the namespace. Otherwise it only records
+// the bytes the principal would have added to history.
+func (ms *MutableStateImpl) closeTransactionStampPrincipal(
+	ctx context.Context,
+	workflowEventsSeq []*persistence.WorkflowEvents,
+	bufferEvents []*historypb.HistoryEvent,
+) {
+	principal := headers.GetPrincipal(ctx)
+	if principal == nil {
+		return
+	}
+	nsName := ms.GetNamespaceEntry().Name().String()
+	enabled := ms.config.EnablePrincipalPropagation(nsName)
+
+	// Events that already have a principal are previously buffered events (e.g., signals)
+	// that were stamped when originally created and are now being flushed into history
+	// by a different caller (e.g., the worker completing a workflow task).
+	var stampedEvents int
+	for _, we := range workflowEventsSeq {
+		for _, event := range we.Events {
+			if event.Principal == nil {
+				stampedEvents++
+				if enabled {
+					event.Principal = principal
+				}
+			}
+		}
+	}
+	// When principal propagation is disabled, buffered events stay unstamped and are
+	// counted by the loop above in the transaction that flushes them into history.
+	if enabled {
+		for _, event := range bufferEvents {
+			event.Principal = principal
+		}
+		stampedEvents += len(bufferEvents)
+	}
+	if stampedEvents == 0 {
+		return
+	}
+
+	size := int64(stampedEvents * proto.Size(&historypb.HistoryEvent{Principal: principal}))
+	metricsHandler := ms.metricsHandler.WithTags(metrics.NamespaceTag(nsName))
+	if enabled {
+		metrics.HistoryPrincipalSize.With(metricsHandler).Record(size)
+	} else {
+		metrics.HistoryPrincipalSizeSkipped.With(metricsHandler).Record(size)
+	}
+}
+
 func (ms *MutableStateImpl) closeTransactionSweepChasmRequestIDs(transactionPolicy historyi.TransactionPolicy) {
 	if !ms.chasmRequestIDsAdded || transactionPolicy != historyi.TransactionPolicyActive {
 		return
@@ -2793,7 +2880,7 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	}
 	declinedTargetVersionUpgrade := computeDeclinedTargetVersionUpgrade(previousExecutionInfo, inheritedPinnedVersion != nil)
 
-	tsc, stateProp := propagateTimeSkippingToNextRun(previousExecutionInfo)
+	tsc, stateProp := propagateTimeSkippingToNextRun(previousExecutionInfo.GetTimeSkippingInfo())
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.NewString(),
 		Namespace:                ms.namespaceEntry.Name().String(),
@@ -2810,11 +2897,12 @@ func (ms *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 		Memo:                     command.Memo,
 		SearchAttributes:         command.SearchAttributes,
 		// No need to request eager execution here (for now)
-		RequestEagerExecution: false,
-		CompletionCallbacks:   completionCallbacks,
-		Links:                 links,
-		Priority:              previousExecutionInfo.Priority,
-		TimeSkippingConfig:    tsc,
+		RequestEagerExecution:               false,
+		CompletionCallbacks:                 completionCallbacks,
+		Links:                               links,
+		Priority:                            previousExecutionInfo.Priority,
+		TimeSkippingConfig:                  tsc,
+		PropagatedNexusSerializationContext: previousExecutionInfo.GetPropagatedNexusSerializationContext(),
 	}
 
 	enums.SetDefaultContinueAsNewInitiator(&command.Initiator)
@@ -2926,11 +3014,13 @@ func computeDeclinedTargetVersionUpgrade(
 
 func (ms *MutableStateImpl) ContinueAsNewMinBackoff(backoffDuration *durationpb.Duration) *durationpb.Duration {
 	// lifetime of previous execution
-	// todo@time-skipping: time skipping is naturally supported for continue as new backoff, and need to
-	// make sure the backoff is correctly applied in the time skipping case
-	lifetime := ms.timeSource.Now().Sub(ms.executionState.StartTime.AsTime().UTC())
+	now := ms.timeSource.Now()
+	lifetime := max(time.Duration(0), now.Sub(ms.executionState.StartTime.AsTime().UTC()))
 	if ms.executionInfo.ExecutionTime != nil {
-		lifetime = ms.timeSource.Now().Sub(ms.executionInfo.ExecutionTime.AsTime().UTC())
+		executionLifetime := now.Sub(ms.executionInfo.ExecutionTime.AsTime().UTC())
+		if executionLifetime >= 0 {
+			lifetime = executionLifetime
+		}
 	}
 
 	interval := lifetime
@@ -3058,9 +3148,20 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 	ms.executionInfo.WorkflowExecutionTimeout = event.GetWorkflowExecutionTimeout()
 	ms.executionInfo.DefaultWorkflowTaskTimeout = event.GetWorkflowTaskTimeout()
 	ms.executionInfo.OriginalExecutionRunId = event.GetOriginalExecutionRunId()
+	ms.executionInfo.PropagatedNexusSerializationContext = event.GetPropagatedNexusSerializationContext()
 
 	ms.approximateSize -= ms.executionState.Size()
 	ms.executionState.FirstExecutionRunId = event.GetFirstExecutionRunId()
+	if ms.chasmWorkflowRootOnStartEnabled() {
+		// Accessing the root with a mutable context marks it dirty, so it is persisted in this
+		// transaction with the InitialVersionedTransition assigned when NewMutableState created the
+		// tree. Otherwise the root is only persisted on first use of a CHASM feature, and for
+		// executions loaded from DB it is synthesized before the current version is known.
+		// Failing here must not block the start; the root then falls back to lazy persistence.
+		if _, _, err := ms.ChasmWorkflowComponent(context.Background()); err != nil {
+			softassert.Fail(ms.logger, "failed to persist CHASM workflow root on start", tag.Error(err))
+		}
+	}
 	if err := ms.addCompletionCallbacks(
 		startEvent,
 		requestID,
@@ -3112,7 +3213,6 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionStartedEvent(
 		ms.executionInfo.RootRunId = execution.GetRunId()
 	}
 
-	// todo@time-skipping: apply time skipping to WorkflowStartDelay
 	ms.executionInfo.ExecutionTime = timestamppb.New(
 		ms.executionState.StartTime.AsTime().Add(event.GetFirstWorkflowTaskBackoff().AsDuration()),
 	)
@@ -3417,10 +3517,6 @@ func (ms *MutableStateImpl) addUpdateCallbacks(
 		return nil
 	}
 	if ms.chasmCallbacksEnabled() && ms.config.EnableWorkflowUpdateCallbacks(ms.GetNamespaceEntry().Name().String()) {
-		// Initialize chasm tree once for new workflows.
-		// Using context.Background() because this is done outside an actual request context and the
-		// chasmworkflow.NewWorkflow does not actually use it currently.
-		ms.EnsureChasmWorkflowComponent(context.Background())
 		return ms.addUpdateCallbacksChasm(event, updateID, requestID, updateCallbacks)
 	}
 
@@ -3453,10 +3549,6 @@ func (ms *MutableStateImpl) addCompletionCallbacks(
 		return nil
 	}
 	if ms.chasmCallbacksEnabled() {
-		// Initialize chasm tree once for new workflows.
-		// Using context.Background() because this is done outside an actual request context and the
-		// chasmworkflow.NewWorkflow does not actually use it currently.
-		ms.EnsureChasmWorkflowComponent(context.Background())
 		return ms.addCompletionCallbacksChasm(event, requestID, completionCallbacks)
 	}
 
@@ -3677,8 +3769,6 @@ func (ms *MutableStateImpl) addResetPointFromCompletion(
 		}
 	}
 
-	// todo@time-skipping: time skipping is naturally supported for auto reset points, and need to
-	// decide if this the best default policy for auto reset points
 	newPoint := &workflowpb.ResetPointInfo{
 		BinaryChecksum:               binaryChecksum,
 		BuildId:                      buildId,
@@ -4279,6 +4369,10 @@ func (ms *MutableStateImpl) AddActivityTaskScheduledEvent(
 	return event, ai, err
 }
 
+func (ms *MutableStateImpl) GenerateActivityTask(scheduledEventID int64) error {
+	return ms.taskGenerator.GenerateActivityTasks(scheduledEventID)
+}
+
 func (ms *MutableStateImpl) ApplyActivityTaskScheduledEvent(
 	batchID int64,
 	event *historypb.HistoryEvent,
@@ -4431,13 +4525,17 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 		}
 	}
 
-	if deployment != nil {
+	ms.approximateSize -= ai.Size()
+	if deployment == nil {
+		ai.LastWorkerDeploymentVersion = ""
+		ai.LastDeploymentVersion = nil
+	} else {
 		ai.LastWorkerDeploymentVersion = worker_versioning.WorkerDeploymentVersionToStringV31(worker_versioning.DeploymentVersionFromDeployment(deployment))
 		ai.LastDeploymentVersion = worker_versioning.ExternalWorkerDeploymentVersionFromDeployment(deployment)
 	}
-
 	ai.WorkerControlTaskQueue = workerControlTaskQueue
 	ai.StartedClock = startedClock
+	ms.approximateSize += ai.Size()
 
 	if !ai.HasRetryPolicy {
 		event := ms.hBuilder.AddActivityTaskStartedEvent(
@@ -4457,8 +4555,11 @@ func (ms *MutableStateImpl) AddActivityTaskStartedEvent(
 
 	// This is a transient start so no events is being created for it. But we still need to process possible build
 	// ID redirect.
-	if err := ms.applyActivityBuildIdRedirect(ai, buildId, redirectCounter); err != nil {
-		return nil, err
+	ms.approximateSize -= ai.Size()
+	redirectErr := ms.applyActivityBuildIdRedirect(ai, buildId, redirectCounter)
+	ms.approximateSize += ai.Size()
+	if redirectErr != nil {
+		return nil, redirectErr
 	}
 
 	if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
@@ -4501,9 +4602,9 @@ func (ms *MutableStateImpl) ApplyActivityTaskStartedEvent(
 	ai.StartedTime = event.GetEventTime()
 	ms.updateActivityInfos[ai.ScheduledEventId] = ai
 	ms.activityInfosUserDataUpdated[ai.ScheduledEventId] = struct{}{}
-	ms.approximateSize += ai.Size()
 
 	err := ms.applyActivityBuildIdRedirect(ai, worker_versioning.BuildIdIfUsingVersioning(attributes.GetWorkerVersion()), attributes.GetBuildIdRedirectCounter())
+	ms.approximateSize += ai.Size()
 	return err
 }
 
@@ -5680,7 +5781,10 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAdmittedEvent(event *his
 	if _, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
 		return serviceerror.NewInternalf("Update ID %s is already present in mutable state", updateID)
 	}
-	ui := persistencespb.UpdateInfo{Value: admission}
+	ui := persistencespb.UpdateInfo{
+		Value:                     admission,
+		NexusSerializationContext: attrs.GetRequest().GetPropagatedNexusSerializationContext(),
+	}
 	ms.executionInfo.UpdateInfos[updateID] = &ui
 	ms.executionInfo.UpdateCount++
 	sizeDelta := ui.Size() + len(updateID)
@@ -5748,12 +5852,17 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionUpdateAcceptedEvent(
 		ui.Value = &persistencespb.UpdateInfo_Acceptance{
 			Acceptance: &persistencespb.UpdateAcceptanceInfo{EventId: event.EventId},
 		}
+		// A nil AcceptedRequest means the context was already recorded from the UpdateAdmitted event.
+		if attrs.GetAcceptedRequest() != nil {
+			ui.NexusSerializationContext = attrs.GetAcceptedRequest().GetPropagatedNexusSerializationContext()
+		}
 		sizeDelta = ui.Size() - sizeBefore
 	} else {
 		ui := persistencespb.UpdateInfo{
 			Value: &persistencespb.UpdateInfo_Acceptance{
 				Acceptance: &persistencespb.UpdateAcceptanceInfo{EventId: event.EventId},
 			},
+			NexusSerializationContext: attrs.GetAcceptedRequest().GetPropagatedNexusSerializationContext(),
 		}
 		ms.executionInfo.UpdateInfos[updateID] = &ui
 		ms.executionInfo.UpdateCount++
@@ -6008,6 +6117,8 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionOptionsUpdatedEvent(event *his
 		tsc := attributes.GetTimeSkippingConfig()
 		tsi := ms.GetExecutionInfo().GetTimeSkippingInfo()
 		if tsi == nil {
+			// A workflow started without time skipping has no TimeSkippingInfo until an
+			// options-updated event first configures it.
 			ms.initTimeSkippingInfo(tsc, nil)
 		} else {
 			ms.updateTimeSkippingInfo(tsc)
@@ -6228,9 +6339,7 @@ func (ms *MutableStateImpl) ApplyWorkflowExecutionSignaled(
 	}
 	requestID := signalEventAttrs.WorkflowExecutionSignaledEventAttributes.GetRequestId()
 	if requestID != "" && ms.ChasmSignalBacklinksEnabled() {
-		ctx := context.Background()
-		ms.EnsureChasmWorkflowComponent(ctx)
-		wf, chasmCtx, err := ms.ChasmWorkflowComponent(ctx)
+		wf, chasmCtx, err := ms.ChasmWorkflowComponent(context.Background())
 		if err != nil {
 			return err
 		}
@@ -6412,7 +6521,7 @@ func (ms *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 	if err := ms.checkMutability(opTag); err != nil {
 		return nil, nil, err
 	}
-	childTSC, childTSStateProp := propagateTimeSkippingToChild(ms.executionInfo)
+	childTSC, childTSStateProp := chasm.PropagateTimeSkippingToOtherExecution(ms.GetExecutionInfo().GetTimeSkippingInfo())
 	event, batchID := ms.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletedEventID,
 		command,
@@ -6861,7 +6970,9 @@ func (ms *MutableStateImpl) RetryActivity(
 		// need to update activity
 		if err := ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
 			ClearActivityStartedState(activityInfo)
-			activityInfo.RetryLastFailure = ms.truncateRetryableActivityFailure(activityFailure)
+			truncated := ms.truncateRetryableActivityFailure(activityInfo, activityFailure)
+			ms.activityFailureSize += truncated.Size() - activityInfo.GetRetryLastFailure().Size()
+			activityInfo.RetryLastFailure = truncated
 			activityInfo.Attempt++
 			if ms.config.EnableActivityRetryStampIncrement() {
 				activityInfo.Stamp++
@@ -6943,11 +7054,15 @@ func (ms *MutableStateImpl) updateActivityInfoForRetries(
 	activityFailure *failurepb.Failure,
 ) error {
 	return ms.UpdateActivity(ai.ScheduledEventId, func(activityInfo *persistencespb.ActivityInfo, _ historyi.MutableState) error {
+		// The truncation and the size accounting both read the failure being replaced, so they run
+		// before UpdateActivityInfoForRetries overwrites RetryLastFailure.
+		truncated := ms.truncateRetryableActivityFailure(activityInfo, activityFailure)
+		ms.activityFailureSize += truncated.Size() - activityInfo.GetRetryLastFailure().Size()
 		UpdateActivityInfoForRetries(
 			activityInfo,
 			ms.GetCurrentVersion(),
 			nextAttempt,
-			ms.truncateRetryableActivityFailure(activityFailure),
+			truncated,
 			timestamppb.New(nextScheduledTime),
 			ms.config.EnableActivityRetryStampIncrement(),
 		)
@@ -7163,11 +7278,46 @@ func (ms *MutableStateImpl) decodeReportedProblems(p *commonpb.Payload) []string
 	return problems
 }
 
+// truncateRetryableActivityFailure decides whether activityFailure needs to be fully preserved or truncated using
+// two limits: per failure limit and total limit.
 func (ms *MutableStateImpl) truncateRetryableActivityFailure(
+	activityInfo *persistencespb.ActivityInfo,
 	activityFailure *failurepb.Failure,
 ) *failurepb.Failure {
+	if activityFailure == nil {
+		return nil
+	}
+
 	namespaceName := ms.namespaceEntry.Name().String()
 	failureSize := activityFailure.Size()
+
+	// What every other pending activity holds. activityInfo's own failure is being replaced, so excluding it here.
+	totalWithout := ms.activityFailureSize - activityInfo.GetRetryLastFailure().Size()
+	metrics.ActivityFailureTotalSize.With(ms.metricsHandler).Record(
+		int64(totalWithout+failureSize),
+		metrics.NamespaceTag(namespaceName),
+	)
+
+	totalLimitError := ms.config.MutableStateActivityFailureTotalSizeLimitError(namespaceName)
+	if totalLimitError > 0 && failureSize+totalWithout > totalLimitError {
+		ms.shard.GetThrottledLogger().Warn("total activity failure size exceeds error limit.",
+			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowRunID(ms.executionState.RunId),
+			tag.NewInt("activity-failure-total-size", totalWithout+failureSize),
+		)
+		return failure.TruncateWithDepth(activityFailure, minRetainedActivityFailureSize, 0)
+	}
+
+	totalLimitWarn := ms.config.MutableStateActivityFailureTotalSizeLimitWarn(namespaceName)
+	if totalLimitWarn > 0 && totalWithout+failureSize > totalLimitWarn {
+		ms.shard.GetThrottledLogger().Warn("total activity failure size exceeds warn limit.",
+			tag.WorkflowNamespaceID(ms.executionInfo.NamespaceId),
+			tag.WorkflowID(ms.executionInfo.WorkflowId),
+			tag.WorkflowRunID(ms.executionState.RunId),
+			tag.NewInt("activity-failure-total-size", totalWithout+failureSize),
+		)
+	}
 
 	if failureSize <= ms.config.MutableStateActivityFailureSizeLimitWarn(namespaceName) {
 		return activityFailure
@@ -7338,7 +7488,7 @@ func (ms *MutableStateImpl) AddTasks(
 		// vs. real distinction. The CategoryTypeScheduled drop-check above runs first so it
 		// compares virtual-vs-virtual (now is also virtual).
 		if category.Type() == tasks.CategoryTypeScheduled {
-			task.SetVisibilityTime(ms.ToRealTime(task.GetVisibilityTime()))
+			task.SetVisibilityTime(ms.ToRealTimeWithCurrentOffset(task.GetVisibilityTime()))
 		}
 
 		if chasmPureTask, ok := task.(*tasks.ChasmTaskPure); ok {
@@ -7365,8 +7515,8 @@ func (ms *MutableStateImpl) PopTasks() map[tasks.Category][]tasks.Task {
 }
 
 func (ms *MutableStateImpl) DeleteCHASMPureTasks(maxScheduledTime time.Time) {
-	for lastTaskIdx := len(ms.chasmPureTasks) - 1; lastTaskIdx >= 0; lastTaskIdx-- {
-		task := ms.chasmPureTasks[lastTaskIdx]
+	for lastTaskIdx, task := range slices.Backward(ms.chasmPureTasks) {
+
 		if !task.GetVisibilityTime().Before(maxScheduledTime) {
 			ms.chasmPureTasks = ms.chasmPureTasks[:lastTaskIdx+1]
 			return
@@ -7407,7 +7557,7 @@ func (ms *MutableStateImpl) SetSpeculativeWorkflowTaskTimeoutTask(
 	// workflowTask.ScheduledTime / StartedTime, which come from the time-skipping wrapper).
 	// The in-memory scheduled queue dispatches against real wall-clock, so convert here —
 	// same boundary contract as AddTasks for persisted scheduled tasks.
-	task.SetVisibilityTime(ms.ToRealTime(task.GetVisibilityTime()))
+	task.SetVisibilityTime(ms.ToRealTimeWithCurrentOffset(task.GetVisibilityTime()))
 	ms.speculativeWorkflowTaskTimeoutTask = task
 	return ms.shard.AddSpeculativeWorkflowTaskTimeoutTask(task)
 }
@@ -7457,7 +7607,10 @@ func (ms *MutableStateImpl) UpdateWorkflowStateStatus(
 		ms.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		// Suppress and Revive workflows are cluster local operations.
 		ms.executionStateUpdated = true
-		ms.visibilityUpdated = true // workflow status & state change triggers visibility change as well
+		// Internal state changes do not affect visibility. Status changes do.
+		if status != ms.executionState.Status {
+			ms.visibilityUpdated = true
+		}
 	}
 	return true, setStateStatus(ms.executionState, state, status)
 }
@@ -7545,13 +7698,6 @@ func (ms *MutableStateImpl) CloseTransactionAsMutation(
 	result, err := ms.closeTransaction(ctx, transactionPolicy)
 	if err != nil {
 		return nil, nil, err
-	}
-
-	if result.skipPersistence {
-		if err := ms.cleanupTransaction(); err != nil {
-			return nil, nil, err
-		}
-		return nil, nil, nil
 	}
 
 	workflowMutation := &persistence.WorkflowMutation{
@@ -7679,7 +7825,6 @@ type closeTransactionResult struct {
 	workflowEventsSeq  []*persistence.WorkflowEvents
 	bufferEvents       []*historypb.HistoryEvent
 	clearBuffer        bool
-	skipPersistence    bool
 	checksum           *persistencespb.Checksum
 	chasmNodesMutation chasm.NodesMutation
 }
@@ -7733,17 +7878,13 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
-	// Run time-skipping after closeTransactionHandleWorkflowTask so a just-scheduled
-	// workflow task is visible to (and suppresses) the idle check, and before isStateDirty
-	// so the transition event we emit here participates in the dirty-state computation.
-	// todo@time-skipping: but chasm close transaction logic is after isStateDirty,
-	// and need to reconsider the sequence of time skipping close trx handling in this function
-	// when supporting chasm.
-	regenTimerTasksForWorkflowTimeSkipping := ms.closeTransactionHandleWorkflowTimeSkipping(ctx, transactionPolicy)
-
 	// Save if the state is dirty before closeTransactionPrepareEvents since it flushes the buffer
 	// events, and therefore change the dirty state.
 	isStateDirty := ms.isStateDirty()
+	var regenTimerTasksForWorkflowTimeSkipping bool
+	if isStateDirty {
+		regenTimerTasksForWorkflowTimeSkipping = ms.closeTransactionHandleWorkflowTimeSkipping(ctx, transactionPolicy)
+	}
 
 	// closeTransactionPrepareEvents must be called after closeTransactionHandleWorkflowTask because
 	// the latter might fail the workflow task and buffered events must be flushed afterwards.
@@ -7754,40 +7895,22 @@ func (ms *MutableStateImpl) closeTransaction(
 		return closeTransactionResult{}, err
 	}
 
-	// Stamp events with the caller's principal. Only do this on the active
-	// cluster — standby (passive) replays events that were already stamped by
-	// the active side, and we must not overwrite those principals.
+	// Only stamp on the active cluster. Standby (passive) replays events that
+	// were already stamped by the active side, and we must not overwrite those principals.
 	if transactionPolicy == historyi.TransactionPolicyActive {
-		principal := headers.GetPrincipal(ctx)
-		for _, we := range workflowEventsSeq {
-			for _, event := range we.Events {
-				// Skip events that already have a principal. Those are previously
-				// buffered events (e.g., signals) that were stamped when originally
-				// created and are now being flushed into history by a different caller
-				// (e.g., the worker completing a workflow task).
-				if event.Principal == nil {
-					event.Principal = principal
-				}
-			}
-		}
-		for _, event := range bufferEvents {
-			event.Principal = principal
-		}
+		ms.closeTransactionStampPrincipal(ctx, workflowEventsSeq, bufferEvents)
+	}
+
+	if err := ms.closeTransactionInvalidateChasmTasksOnClose(ctx, transactionPolicy); err != nil {
+		return closeTransactionResult{}, err
 	}
 
 	// CloseTransaction() on chasmTree may update execution state & status,
 	// so must be called before closeTransactionUpdateTransitionHistory().
-	chasmNodesMutation, err := ms.chasmTree.CloseTransaction()
+	chasmNodesMutation, err := ms.chasmTree.CloseTransaction(ctx, transactionPolicy == historyi.TransactionPolicyActive)
 	if err != nil {
 		return closeTransactionResult{}, err
 	}
-
-	if ms.closeTransactionShouldSkipPersistence(isStateDirty, chasmNodesMutation) {
-		return closeTransactionResult{
-			skipPersistence: true,
-		}, nil
-	}
-
 	for nodePath := range chasmNodesMutation.DeletedNodes {
 		ms.approximateSize -= ms.chasmNodeSizes[nodePath]
 		delete(ms.chasmNodeSizes, nodePath)
@@ -7814,7 +7937,6 @@ func (ms *MutableStateImpl) closeTransaction(
 		}
 	}
 
-	// todo@TimeSkipping, we can move update versioned transition to inside closeTransactionHandleWorkflowTimeSkipping
 	ms.closeTransactionTrackLastUpdateVersionedTransition(
 		transactionPolicy,
 	)
@@ -7854,10 +7976,6 @@ func (ms *MutableStateImpl) closeTransaction(
 		checksum:           checksum,
 		chasmNodesMutation: chasmNodesMutation,
 	}, nil
-}
-
-func (ms *MutableStateImpl) closeTransactionShouldSkipPersistence(isStateDirty bool, chasmNodesMutation chasm.NodesMutation) bool {
-	return !ms.IsWorkflow() && !isStateDirty && chasmNodesMutation.IsEmpty()
 }
 
 func (ms *MutableStateImpl) closeTransactionHandleWorkflowTask(
@@ -8303,12 +8421,57 @@ func (ms *MutableStateImpl) closeTransactionPrepareTasks(
 		return err
 	}
 	if regenerateTimerTasksForTimeSkipping {
-		if err := ms.closeTransactionRegenTimerTasksForWorkflowTimeSkipping(transactionPolicy); err != nil {
+		if err := ms.regenerateTimerTasksForWorkflowTimeSkipping(transactionPolicy); err != nil {
 			return err
 		}
 	}
 
 	return ms.closeTransactionPrepareReplicationTasks(transactionPolicy, eventBatches, clearBufferEvents)
+}
+
+// closeTransactionInvalidateChasmTasksOnClose marks the CHASM tree dirty when the workflow closes in the
+// current transaction, so that chasmTree.CloseTransaction() revalidates tasks of non-detached sub-components
+// (e.g. Nexus operations) and removes invalid tasks from persisted component metadata so they aren't regenerated
+// on task refresh or replication. This aligns workflows with other archetypes, whose root lifecycle change dirties
+// the tree. It covers every close path (complete, fail, timeout, cancel, terminate, continue-as-new, retry, cron,
+// reset).
+//
+// This is best effort: task validation before execution remains the correctness guarantee, since the
+// closed root fails the access check. It only runs on the active cluster to avoid diverging node versions
+// from what is replicated.
+//
+// Marking the tree dirty only triggers revalidation; what gets persisted depends on CHASM skip-persistence
+// (history.enableCHASMSkipPersistence):
+//   - Enabled: the tree is always marked dirty. Only nodes whose tasks were removed are written; the root is
+//     unchanged and skipped. New workflow sub-components are covered without updating this method.
+//   - Disabled: every dirty node is written, including the unchanged root. To avoid that write when there is
+//     nothing to revalidate, the tree is only marked dirty when there are Nexus operations, the only
+//     sub-components today whose tasks depend on the workflow being open.
+func (ms *MutableStateImpl) closeTransactionInvalidateChasmTasksOnClose(
+	ctx context.Context,
+	transactionPolicy historyi.TransactionPolicy,
+) error {
+	if transactionPolicy != historyi.TransactionPolicyActive ||
+		!ms.IsWorkflow() ||
+		!ms.ChasmEnabled() ||
+		ms.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED ||
+		ms.stateInDB == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		return nil
+	}
+
+	// CONSIDER(chanric): drop the Operations check once skip-persistence is enabled by default.
+	if !ms.ChasmSkipPersistenceEnabled() {
+		wf, _, err := ms.ChasmWorkflowComponentReadOnly(ctx)
+		if err != nil {
+			return err
+		}
+		if len(wf.Operations) == 0 {
+			return nil
+		}
+	}
+
+	_, _, err := ms.ChasmWorkflowComponent(ctx)
+	return err
 }
 
 func (ms *MutableStateImpl) closeTransactionGenerateChasmRetentionTask(
@@ -8378,18 +8541,18 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 				firstEventVersion := common.EmptyVersion
 				nextEventID := common.EmptyEventID
 				var lastVersionHistoryItem *historyspb.VersionHistoryItem
+				currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(ms.executionInfo.VersionHistories)
+				if err != nil {
+					return err
+				}
 				if len(eventBatches) > 0 {
 					firstEventID = eventBatches[0][0].EventId
 					firstEventVersion = eventBatches[0][0].Version
 					lastBatch := eventBatches[len(eventBatches)-1]
 					nextEventID = lastBatch[len(lastBatch)-1].EventId + 1
 				} else {
-					currentHistory, err := versionhistory.GetCurrentVersionHistory(ms.executionInfo.VersionHistories)
-					if err != nil {
-						return err
-					}
-					if !versionhistory.IsEmptyVersionHistory(currentHistory) {
-						item, err := versionhistory.GetLastVersionHistoryItem(currentHistory)
+					if !versionhistory.IsEmptyVersionHistory(currentVersionHistory) {
+						item, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
 						//nolint:revive // max-control-nesting: control flow nesting exceeds 5
 						if err != nil {
 							return err
@@ -8414,6 +8577,9 @@ func (ms *MutableStateImpl) closeTransactionPrepareReplicationTasks(
 						NextEventID:            nextEventID,
 						TaskEquivalents:        replicationTasks,
 						LastVersionHistoryItem: lastVersionHistoryItem,
+						CurrentVersionHistory: &historyspb.VersionHistory{
+							Items: versionhistory.CopyVersionHistoryItems(currentVersionHistory.Items),
+						},
 					}
 
 					if ms.dbRecordVersion == 1 {
@@ -9188,6 +9354,11 @@ func (ms *MutableStateImpl) ApplyMutation(
 	prevExecutionInfoSize := ms.executionInfo.Size()
 	currentVersionedTransition := ms.CurrentVersionedTransition()
 
+	// Capture the TimeSkippingInfo versioned transition and accumulated skip before syncExecutionInfo
+	// overwrites them, so we can detect whether a skip transition was applied in this delta.
+	prevTimeSkippingVT := ms.executionInfo.GetTimeSkippingInfo().GetLastUpdateVersionedTransition()
+	preAccumulatedSkipDuration := ms.accumulatedSkippedDuration()
+
 	ms.applySignalRequestedIds(mutation.SignalRequestedIds, mutation.ExecutionInfo)
 	err := ms.applyTombstones(mutation.SubStateMachineTombstoneBatches, currentVersionedTransition)
 	if err != nil {
@@ -9223,15 +9394,25 @@ func (ms *MutableStateImpl) ApplyMutation(
 	ms.approximateSize += ms.executionInfo.Size() - prevExecutionInfoSize
 
 	// approximateSize update will be handled upon closing transaction
-	return ms.chasmTree.ApplyMutation(chasm.NodesMutation{
+	if err := ms.chasmTree.ApplyMutation(chasm.NodesMutation{
 		UpdatedNodes: mutation.UpdatedChasmNodes,
-	})
+	}); err != nil {
+		return err
+	}
+	// Must run after syncExecutionInfo, which is where the incoming TimeSkippingInfo becomes
+	// visible. It only sets a flag consumed later at CloseTransaction, so its position relative
+	// to chasmTree.ApplyMutation does not matter.
+	ms.flagSkipDurationUpdateInPassive(prevTimeSkippingVT, preAccumulatedSkipDuration)
+
+	return nil
 }
 
 func (ms *MutableStateImpl) ApplySnapshot(
 	snapshot *persistencespb.WorkflowMutableState,
 ) error {
 	prevExecutionInfoSize := ms.executionInfo.Size()
+	prevTimeSkippingVT := ms.executionInfo.GetTimeSkippingInfo().GetLastUpdateVersionedTransition()
+	preAccumulatedSkipDuration := ms.accumulatedSkippedDuration()
 
 	ms.applySignalRequestedIds(snapshot.SignalRequestedIds, snapshot.ExecutionInfo)
 	err := ms.syncExecutionInfo(ms.executionInfo, snapshot.ExecutionInfo, true)
@@ -9264,9 +9445,16 @@ func (ms *MutableStateImpl) ApplySnapshot(
 	ms.approximateSize += ms.executionInfo.Size() - prevExecutionInfoSize
 
 	// approximateSize update will be handled upon closing transaction
-	return ms.chasmTree.ApplySnapshot(chasm.NodesSnapshot{
+	if err := ms.chasmTree.ApplySnapshot(chasm.NodesSnapshot{
 		Nodes: snapshot.ChasmNodes,
-	})
+	}); err != nil {
+		return err
+	}
+	// Must run after syncExecutionInfo, which is where the incoming TimeSkippingInfo becomes
+	// visible. It only sets a flag consumed later at CloseTransaction, so its position relative
+	// to chasmTree.ApplySnapshot does not matter.
+	ms.flagSkipDurationUpdateInPassive(prevTimeSkippingVT, preAccumulatedSkipDuration)
+	return nil
 }
 
 func (ms *MutableStateImpl) ShouldResetActivityTimerTaskMask(current, incoming *persistencespb.ActivityInfo) bool {
@@ -9285,6 +9473,28 @@ func (ms *MutableStateImpl) ShouldResetActivityTimerTaskMask(current, incoming *
 	return false
 }
 
+// getActivityTimerTaskStatus carries over bits for timeout tasks that remain valid
+// after applying replicated activity state. Timer validity is normally determined by
+// whether its deadline changed.
+//
+// Heartbeat progress only moves its deadline later, so the existing earlier wake-up
+// remains valid and will schedule the next task when it fires. Preserve that bit only
+// within the same activity attempt and options stamp. Reset all bits across clusters
+// because tasks generated by the previous owning cluster are stale.
+func (ms *MutableStateImpl) getActivityTimerTaskStatus(current, incoming *persistencespb.ActivityInfo) int32 {
+	if current == nil {
+		return TimerTaskStatusNone
+	}
+	if !ms.clusterMetadata.IsVersionFromSameCluster(current.Version, incoming.Version) {
+		return TimerTaskStatusNone
+	}
+	changedTimerMask := getActivityTimerDeadlines(current).changedMask(getActivityTimerDeadlines(incoming))
+	if current.Attempt == incoming.Attempt && current.Stamp == incoming.Stamp {
+		changedTimerMask &^= TimerTaskStatusCreatedHeartbeat
+	}
+	return current.TimerTaskStatus &^ changedTimerMask
+}
+
 func (ms *MutableStateImpl) applyUpdatesToSubStateMachines(
 	updatedActivityInfos map[int64]*persistencespb.ActivityInfo,
 	updatedTimerInfos map[string]*persistencespb.TimerInfo,
@@ -9294,11 +9504,8 @@ func (ms *MutableStateImpl) applyUpdatesToSubStateMachines(
 	isSnapshot bool,
 ) error {
 	err := applyUpdatesToSubStateMachine(ms, ms.pendingActivityInfoIDs, ms.updateActivityInfos, updatedActivityInfos, isSnapshot, ms.DeleteActivity, func(current, incoming *persistencespb.ActivityInfo) {
-		if current == nil || ms.ShouldResetActivityTimerTaskMask(current, incoming) {
-			incoming.TimerTaskStatus = TimerTaskStatusNone
-		} else {
-			incoming.TimerTaskStatus = current.TimerTaskStatus
-		}
+		incoming.TimerTaskStatus = ms.getActivityTimerTaskStatus(current, incoming)
+		ms.activityFailureSize += incoming.RetryLastFailure.Size() - current.GetRetryLastFailure().Size()
 	}, func(ai *persistencespb.ActivityInfo) {
 		ms.pendingActivityIDToEventID[ai.ActivityId] = ai.ScheduledEventId
 		ms.activityInfosUserDataUpdated[ai.ScheduledEventId] = struct{}{}
@@ -9450,8 +9657,8 @@ func applyUpdatesToSubStateMachine[K comparable, V lastUpdatedStateTransitionGet
 	}
 
 	for key, updated := range updatedSubStateMachine {
-		var existing V
-		if existing, ok := pendingInfos[key]; ok {
+		existing, ok := pendingInfos[key]
+		if ok {
 			if transitionhistory.Compare(existing.GetLastUpdateVersionedTransition(), updated.GetLastUpdateVersionedTransition()) == 0 {
 				continue
 			}
@@ -9488,14 +9695,14 @@ func (ms *MutableStateImpl) applyUpdatesToUpdateInfos(
 		}
 	}
 
+	// UpdateCount is the source's cumulative count and is synchronized with
+	// ExecutionInfo; inserting replicated map entries must not increment it again.
 	for updateID, ui := range updatedUpdateInfos {
 		if existing, ok := ms.executionInfo.UpdateInfos[updateID]; ok {
 			if transitionhistory.Compare(existing.GetLastUpdateVersionedTransition(), ui.GetLastUpdateVersionedTransition()) == 0 {
 				continue
 			}
 			ms.approximateSize -= existing.Size() + len(updateID)
-		} else {
-			ms.executionInfo.UpdateCount++
 		}
 		ms.executionInfo.UpdateInfos[updateID] = ui
 		ms.approximateSize += ui.Size() + len(updateID)
@@ -9582,6 +9789,9 @@ func (ms *MutableStateImpl) syncExecutionInfo(current *persistencespb.WorkflowEx
 	err := common.MergeProtoExcludingFields(current, incoming, doNotSync)
 	if err != nil {
 		return err
+	}
+	if current.GetTimeSkippingInfo() != nil {
+		ms.wrapTimeSourceWithTimeSkipping()
 	}
 
 	ms.ClearStickyTaskQueue()
@@ -10028,7 +10238,7 @@ func logError(
 	logger.Error(msg, tags...)
 }
 
-func (ms *MutableStateImpl) ToRealTime(virtualTime time.Time) time.Time {
+func (ms *MutableStateImpl) ToRealTimeWithCurrentOffset(virtualTime time.Time) time.Time {
 	if virtualTime.IsZero() {
 		return virtualTime
 	}

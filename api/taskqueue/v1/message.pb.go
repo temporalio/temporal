@@ -57,11 +57,10 @@ type TaskVersionDirective struct {
 	// If there is no Ramping Version at the time of task dispatch, the Current Version will be used instead.
 	//
 	// If use_ramping_version is false, the Target Version is chosen with the default formula:
-	//
-	//	if calcRampThreshold(workflow_id) <= ramp_percentage:
-	//	  target=ramping_version
-	//	else:
-	//	  target=current_version
+	//   if calcRampThreshold(workflow_id) <= ramp_percentage:
+	//     target=ramping_version
+	//   else:
+	//     target=current_version
 	UseRampingVersion bool `protobuf:"varint,7,opt,name=use_ramping_version,json=useRampingVersion,proto3" json:"use_ramping_version,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
@@ -250,8 +249,11 @@ type InternalTaskQueueStatus struct {
 	// check. Consumers must use version-based validation (see scaleManager) to
 	// ensure correctness.
 	BacklogDrained bool `protobuf:"varint,11,opt,name=backlog_drained,json=backlogDrained,proto3" json:"backlog_drained,omitempty"`
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// Estimate of the number of distinct fairness keys seen recently by this
+	// subqueue (fairness only).
+	FairnessKeyCountEstimate int64 `protobuf:"varint,12,opt,name=fairness_key_count_estimate,json=fairnessKeyCountEstimate,proto3" json:"fairness_key_count_estimate,omitempty"`
+	unknownFields            protoimpl.UnknownFields
+	sizeCache                protoimpl.SizeCache
 }
 
 func (x *InternalTaskQueueStatus) Reset() {
@@ -361,6 +363,13 @@ func (x *InternalTaskQueueStatus) GetBacklogDrained() bool {
 	return false
 }
 
+func (x *InternalTaskQueueStatus) GetFairnessKeyCountEstimate() int64 {
+	if x != nil {
+		return x.FairnessKeyCountEstimate
+	}
+	return 0
+}
+
 type TaskQueueVersionInfoInternal struct {
 	state                 protoimpl.MessageState `protogen:"open.v1"`
 	PhysicalTaskQueueInfo *PhysicalTaskQueueInfo `protobuf:"bytes,2,opt,name=physical_task_queue_info,json=physicalTaskQueueInfo,proto3" json:"physical_task_queue_info,omitempty"`
@@ -412,8 +421,7 @@ type PhysicalTaskQueueInfo struct {
 	InternalTaskQueueStatus []*InternalTaskQueueStatus `protobuf:"bytes,3,rep,name=internal_task_queue_status,json=internalTaskQueueStatus,proto3" json:"internal_task_queue_status,omitempty"`
 	TaskQueueStats          *v13.TaskQueueStats        `protobuf:"bytes,2,opt,name=task_queue_stats,json=taskQueueStats,proto3" json:"task_queue_stats,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
-	//
-	//	aip.dev/not-precedent: "by" is used to clarify the keys. --)
+	//     aip.dev/not-precedent: "by" is used to clarify the keys. --)
 	TaskQueueStatsByPriorityKey map[int32]*v13.TaskQueueStats `protobuf:"bytes,4,rep,name=task_queue_stats_by_priority_key,json=taskQueueStatsByPriorityKey,proto3" json:"task_queue_stats_by_priority_key,omitempty" protobuf_key:"varint,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields               protoimpl.UnknownFields
 	sizeCache                   protoimpl.SizeCache
@@ -1182,7 +1190,7 @@ const file_temporal_server_api_taskqueue_v1_message_proto_rawDesc = "" +
 	"\bbuild_id\"A\n" +
 	"\tFairLevel\x12\x1b\n" +
 	"\ttask_pass\x18\x01 \x01(\x03R\btaskPass\x12\x17\n" +
-	"\atask_id\x18\x02 \x01(\x03R\x06taskId\"\xef\x04\n" +
+	"\atask_id\x18\x02 \x01(\x03R\x06taskId\"\xae\x05\n" +
 	"\x17InternalTaskQueueStatus\x12\x1d\n" +
 	"\n" +
 	"read_level\x18\x01 \x01(\x03R\treadLevel\x12S\n" +
@@ -1196,7 +1204,8 @@ const file_temporal_server_api_taskqueue_v1_message_proto_rawDesc = "" +
 	"\x13fair_max_read_level\x18\t \x01(\v2+.temporal.server.api.taskqueue.v1.FairLevelR\x10fairMaxReadLevel\x12\x1a\n" +
 	"\bdraining\x18\n" +
 	" \x01(\bR\bdraining\x12'\n" +
-	"\x0fbacklog_drained\x18\v \x01(\bR\x0ebacklogDrained\"\x90\x01\n" +
+	"\x0fbacklog_drained\x18\v \x01(\bR\x0ebacklogDrained\x12=\n" +
+	"\x1bfairness_key_count_estimate\x18\f \x01(\x03R\x18fairnessKeyCountEstimate\"\x90\x01\n" +
 	"\x1cTaskQueueVersionInfoInternal\x12p\n" +
 	"\x18physical_task_queue_info\x18\x02 \x01(\v27.temporal.server.api.taskqueue.v1.PhysicalTaskQueueInfoR\x15physicalTaskQueueInfo\"\xc2\x04\n" +
 	"\x15PhysicalTaskQueueInfo\x12?\n" +

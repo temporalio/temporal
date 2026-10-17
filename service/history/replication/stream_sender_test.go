@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math"
 	"math/rand"
+	"strconv"
 	"testing"
 	"time"
 
@@ -17,24 +18,29 @@ import (
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/wideevents"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -54,6 +60,7 @@ type (
 
 		streamSender         *StreamSenderImpl
 		senderFlowController *MockSenderFlowController
+		timeSource           *clock.EventTimeSource
 		config               *configs.Config
 	}
 )
@@ -79,12 +86,14 @@ func (s *streamSenderSuite) SetupTest() {
 	s.historyEngine = historyi.NewMockEngine(s.controller)
 	s.taskConverter = NewMockSourceTaskConverter(s.controller)
 	s.config = tests.NewDynamicConfig()
+	s.timeSource = clock.NewEventTimeSource()
 	s.clientShardKey = NewClusterShardKey(rand.Int31(), 1)
 	s.serverShardKey = NewClusterShardKey(rand.Int31(), 1)
 	s.shardContext.EXPECT().GetEngine(gomock.Any()).Return(s.historyEngine, nil).AnyTimes()
 	s.shardContext.EXPECT().GetMetricsHandler().Return(metrics.NoopMetricsHandler).AnyTimes()
 	s.shardContext.EXPECT().GetLogger().Return(log.NewNoopLogger()).AnyTimes()
 	s.shardContext.EXPECT().GetThrottledLogger().Return(log.NewNoopLogger()).AnyTimes()
+	s.shardContext.EXPECT().GetTimeSource().Return(s.timeSource).AnyTimes()
 
 	s.streamSender = NewStreamSender(
 		s.server,
@@ -756,6 +765,253 @@ func (s *streamSenderSuite) TestSendLive() {
 	s.False(s.streamSender.IsValid())
 }
 
+func (s *streamSenderSuite) gradualConnectNamespace(
+	namespaceID string,
+	ramp *persistencespb.NamespaceReplicationRamp,
+) *namespace.Namespace {
+	replicationConfig := &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: "source_cluster",
+		Clusters:          []string{"source_cluster", "target_cluster"},
+	}
+	if ramp != nil {
+		replicationConfig.ClusterReplicationRamps = map[string]*persistencespb.NamespaceReplicationRamp{
+			"target_cluster": ramp,
+		}
+	}
+	return namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: namespaceID, Name: "test-namespace"},
+		nil,
+		replicationConfig,
+		100,
+	)
+}
+
+func (s *streamSenderSuite) TestShouldProcessTask_GradualConnect() {
+	const namespaceID = "namespace-id"
+	s.config.EnableReplicationGradualConnect = dynamicconfig.GetBoolPropertyFn(true)
+	startTime := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+	s.timeSource.Update(startTime)
+	s.streamSender.clientClusterShardCount = 1
+	registry := namespace.NewMockRegistry(s.controller)
+	registry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(
+		s.gradualConnectNamespace(namespaceID, &persistencespb.NamespaceReplicationRamp{
+			StartTime: timestamppb.New(startTime),
+			Duration:  durationpb.New(time.Hour),
+		}),
+		nil,
+	).AnyTimes()
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(registry).AnyTimes()
+	metricHandler := metricstest.NewCaptureHandler()
+	capture := metricHandler.StartCapture()
+	defer metricHandler.StopCapture(capture)
+	s.streamSender.metrics = metricHandler
+	task := &tasks.HistoryReplicationTask{WorkflowKey: definition.WorkflowKey{
+		NamespaceID: namespaceID,
+		WorkflowID:  "workflow-id",
+	}}
+
+	s.False(s.streamSender.shouldProcessTask(task))
+	s.timeSource.Update(startTime.Add(time.Hour))
+	s.True(s.streamSender.shouldProcessTask(task))
+	recordings := capture.Snapshot()
+	s.Require().Len(recordings[metrics.ReplicationTasksShedByGradualConnect.Name()], 1)
+	s.Contains(recordings[metrics.ReplicationTasksShedByGradualConnect.Name()][0].Tags, metrics.OperationTagName)
+	s.Require().Len(recordings[metrics.ReplicationGradualConnectPercent.Name()], 1)
+	s.NotContains(recordings[metrics.ReplicationGradualConnectPercent.Name()][0].Tags, metrics.OperationTagName)
+}
+
+func (s *streamSenderSuite) TestShouldProcessTask_GradualConnectDisabled() {
+	const namespaceID = "namespace-id"
+	startTime := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+	s.timeSource.Update(startTime)
+	s.streamSender.clientClusterShardCount = 1
+	registry := namespace.NewMockRegistry(s.controller)
+	registry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(
+		s.gradualConnectNamespace(namespaceID, &persistencespb.NamespaceReplicationRamp{
+			StartTime: timestamppb.New(startTime),
+			Duration:  durationpb.New(time.Hour),
+		}),
+		nil,
+	)
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(registry)
+	task := &tasks.HistoryReplicationTask{WorkflowKey: definition.WorkflowKey{
+		NamespaceID: namespaceID,
+		WorkflowID:  "workflow-id",
+	}}
+
+	s.True(s.streamSender.shouldProcessTask(task))
+}
+
+func (s *streamSenderSuite) TestShouldProcessTask_DeleteBypassesGradualConnect() {
+	const namespaceID = "namespace-id"
+	s.config.EnableReplicationGradualConnect = dynamicconfig.GetBoolPropertyFn(true)
+	startTime := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+	s.timeSource.Update(startTime)
+	s.streamSender.clientClusterShardCount = 1
+	registry := namespace.NewMockRegistry(s.controller)
+	registry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(
+		s.gradualConnectNamespace(namespaceID, &persistencespb.NamespaceReplicationRamp{
+			StartTime: timestamppb.New(startTime),
+			Duration:  durationpb.New(time.Hour),
+		}),
+		nil,
+	)
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(registry)
+	task := &tasks.DeleteExecutionReplicationTask{WorkflowKey: definition.WorkflowKey{
+		NamespaceID: namespaceID,
+		WorkflowID:  "workflow-id",
+	}}
+
+	s.True(s.streamSender.shouldProcessTask(task))
+}
+
+func (s *streamSenderSuite) TestShouldProcessTask_ForceReplicationRequiresClearedRamp() {
+	const namespaceID = "namespace-id"
+	s.config.EnableReplicationGradualConnect = dynamicconfig.GetBoolPropertyFn(true)
+	startTime := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+	s.timeSource.Update(startTime)
+	s.streamSender.clientClusterShardCount = 1
+	registry := namespace.NewMockRegistry(s.controller)
+	registry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(
+		s.gradualConnectNamespace(namespaceID, &persistencespb.NamespaceReplicationRamp{
+			StartTime: timestamppb.New(startTime),
+			Duration:  durationpb.New(time.Hour),
+		}),
+		nil,
+	)
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(registry)
+	task := &tasks.SyncWorkflowStateTask{
+		WorkflowKey: definition.WorkflowKey{
+			NamespaceID: namespaceID,
+			WorkflowID:  "workflow-id",
+		},
+		Priority:           enumsspb.TASK_PRIORITY_LOW,
+		IsForceReplication: true,
+	}
+
+	s.False(s.streamSender.shouldProcessTask(task))
+}
+
+func (s *streamSenderSuite) TestShouldProcessTask_ClockRegressionCanReduceAdmission() {
+	const namespaceID = "namespace-id"
+	s.config.EnableReplicationGradualConnect = dynamicconfig.GetBoolPropertyFn(true)
+	startTime := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+	var workflowID string
+	for i := 0; ; i++ {
+		candidate := strconv.Itoa(i)
+		if dynamicconfig.RolloutAccepts([]byte(candidate), 50) &&
+			!dynamicconfig.RolloutAccepts([]byte(candidate), 10) {
+			workflowID = candidate
+			break
+		}
+	}
+	s.streamSender.clientClusterShardCount = 1
+	registry := namespace.NewMockRegistry(s.controller)
+	registry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(
+		s.gradualConnectNamespace(namespaceID, &persistencespb.NamespaceReplicationRamp{
+			StartTime: timestamppb.New(startTime),
+			Duration:  durationpb.New(10 * time.Minute),
+		}),
+		nil,
+	).AnyTimes()
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(registry).AnyTimes()
+	task := &tasks.HistoryReplicationTask{WorkflowKey: definition.WorkflowKey{
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+	}}
+
+	s.timeSource.Update(startTime.Add(5 * time.Minute))
+	s.True(s.streamSender.shouldProcessTask(task))
+	s.timeSource.Update(startTime.Add(time.Minute))
+	s.False(s.streamSender.shouldProcessTask(task))
+}
+
+func (s *streamSenderSuite) TestSendTasks_GradualConnectSkipsConversionAndAdvancesWatermark() {
+	const namespaceID = "namespace-id"
+	s.config.EnableReplicationGradualConnect = dynamicconfig.GetBoolPropertyFn(true)
+	startTime := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+	s.timeSource.Update(startTime)
+	s.streamSender.clientClusterShardCount = 1
+	beginInclusiveWatermark := rand.Int63()
+	endExclusiveWatermark := beginInclusiveWatermark + 1
+	item := &tasks.HistoryReplicationTask{
+		WorkflowKey: definition.WorkflowKey{
+			NamespaceID: namespaceID,
+			WorkflowID:  "workflow-id",
+		},
+		TaskID:              beginInclusiveWatermark,
+		VisibilityTimestamp: startTime,
+	}
+	iter := collection.NewPagingIterator[tasks.Task](
+		func([]byte) ([]tasks.Task, []byte, error) {
+			return []tasks.Task{item}, nil, nil
+		},
+	)
+	registry := namespace.NewMockRegistry(s.controller)
+	registry.EXPECT().GetNamespaceByID(namespace.ID(namespaceID)).Return(
+		s.gradualConnectNamespace(namespaceID, &persistencespb.NamespaceReplicationRamp{
+			StartTime: timestamppb.New(startTime),
+			Duration:  durationpb.New(time.Hour),
+		}),
+		nil,
+	)
+	s.shardContext.EXPECT().GetNamespaceRegistry().Return(registry)
+	s.historyEngine.EXPECT().GetReplicationTasksIter(
+		gomock.Any(),
+		string(s.clientShardKey.ClusterID),
+		beginInclusiveWatermark,
+		endExclusiveWatermark,
+	).Return(iter, nil)
+	s.taskConverter.EXPECT().Convert(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Times(0)
+	s.server.EXPECT().Send(gomock.Any()).DoAndReturn(
+		func(response *historyservice.StreamWorkflowReplicationMessagesResponse) error {
+			s.Empty(response.GetMessages().GetReplicationTasks())
+			s.Equal(endExclusiveWatermark, response.GetMessages().GetExclusiveHighWatermark())
+			return nil
+		},
+	)
+
+	s.Require().NoError(s.streamSender.sendTasks(
+		enumsspb.TASK_PRIORITY_UNSPECIFIED,
+		beginInclusiveWatermark,
+		endExclusiveWatermark,
+	))
+}
+
+func TestGradualConnectPercent(t *testing.T) {
+	t.Parallel()
+	startTime := time.Date(2026, time.September, 1, 0, 0, 0, 0, time.UTC)
+	validRamp := func(duration time.Duration) *persistencespb.NamespaceReplicationRamp {
+		return &persistencespb.NamespaceReplicationRamp{
+			StartTime: timestamppb.New(startTime),
+			Duration:  durationpb.New(duration),
+		}
+	}
+	testCases := []struct {
+		name string
+		ramp *persistencespb.NamespaceReplicationRamp
+		now  time.Time
+		want int
+	}{
+		{name: "missing ramp", now: startTime, want: 100},
+		{name: "missing start time", ramp: &persistencespb.NamespaceReplicationRamp{Duration: durationpb.New(time.Hour)}, now: startTime, want: 100},
+		{name: "invalid start time", ramp: &persistencespb.NamespaceReplicationRamp{StartTime: &timestamppb.Timestamp{Seconds: 253402300800}, Duration: durationpb.New(time.Hour)}, now: startTime, want: 100},
+		{name: "zero duration", ramp: validRamp(0), now: startTime, want: 100},
+		{name: "negative duration", ramp: validRamp(-time.Hour), now: startTime, want: 100},
+		{name: "before start", ramp: validRamp(time.Hour), now: startTime.Add(-time.Minute), want: 0},
+		{name: "at start", ramp: validRamp(time.Hour), now: startTime, want: 0},
+		{name: "partial", ramp: validRamp(time.Hour), now: startTime.Add(15 * time.Minute), want: 25},
+		{name: "complete", ramp: validRamp(time.Hour), now: startTime.Add(time.Hour), want: 100},
+		{name: "past complete", ramp: validRamp(time.Hour), now: startTime.Add(24 * time.Hour), want: 100},
+	}
+	for _, testCase := range testCases {
+		t.Run(testCase.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, testCase.want, gradualConnectPercent(testCase.ramp, testCase.now))
+		})
+	}
+}
+
 func (s *streamSenderSuite) TestSendTasks_Noop() {
 	beginInclusiveWatermark := rand.Int63()
 	endExclusiveWatermark := beginInclusiveWatermark
@@ -857,10 +1113,10 @@ func (s *streamSenderSuite) TestSendTasks_WithTasks() {
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
-	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED).Return(task0, nil)
-	s.taskConverter.EXPECT().Convert(item1, s.clientShardKey.ClusterID, gomock.Any()).Times(0)
-	s.taskConverter.EXPECT().Convert(item2, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED).Return(task2, nil)
-	s.taskConverter.EXPECT().Convert(item3, s.clientShardKey.ClusterID, gomock.Any()).Times(0)
+	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, locks.PriorityLow).Return(task0, nil)
+	s.taskConverter.EXPECT().Convert(item1, s.clientShardKey.ClusterID, gomock.Any(), gomock.Any()).Times(0)
+	s.taskConverter.EXPECT().Convert(item2, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, locks.PriorityLow).Return(task2, nil)
+	s.taskConverter.EXPECT().Convert(item3, s.clientShardKey.ClusterID, gomock.Any(), gomock.Any()).Times(0)
 	gomock.InOrder(
 		s.server.EXPECT().Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
 			Attributes: &historyservice.StreamWorkflowReplicationMessagesResponse_Messages{
@@ -944,7 +1200,7 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_HighPriority() {
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
-	s.taskConverter.EXPECT().Convert(item1, s.clientShardKey.ClusterID, item1.Priority).Return(task1, nil)
+	s.taskConverter.EXPECT().Convert(item1, s.clientShardKey.ClusterID, item1.Priority, locks.PriorityLow).Return(task1, nil)
 
 	gomock.InOrder(
 		s.server.EXPECT().Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
@@ -1028,8 +1284,8 @@ func (s *streamSenderSuite) TestSendTasks_TieredStack_LowPriority() {
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
-	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID, item0.Priority).Return(task0, nil)
-	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID, item0.Priority).Return(task2, nil)
+	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID, item0.Priority, locks.PriorityLow).Return(task0, nil)
+	s.taskConverter.EXPECT().Convert(item0, s.clientShardKey.ClusterID, item0.Priority, locks.PriorityLow).Return(task2, nil)
 
 	gomock.InOrder(
 		s.server.EXPECT().Send(&historyservice.StreamWorkflowReplicationMessagesResponse{
@@ -1125,13 +1381,19 @@ func (s *streamSenderSuite) TestLivenessMonitor() {
 // setupSingleFailingTask wires a single replication task whose conversion always fails with
 // convertErr, and bounds retries to one fast attempt so the give-up path is reached quickly.
 func (s *streamSenderSuite) setupSingleFailingTask(convertErr error) (beginInclusiveWatermark, endExclusiveWatermark int64) {
-	s.streamSender.isTieredStackEnabled = false
 	s.config.ReplicationStreamSenderErrorRetryMaxAttempts = func() int { return 1 }
 	s.config.ReplicationStreamSenderErrorRetryWait = func() time.Duration { return time.Millisecond }
+	beginInclusiveWatermark, endExclusiveWatermark, item := s.setupSingleTask()
+	s.taskConverter.EXPECT().Convert(item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, locks.PriorityLow).
+		Return(nil, convertErr).MinTimes(1)
+	return beginInclusiveWatermark, endExclusiveWatermark
+}
 
+func (s *streamSenderSuite) setupSingleTask() (beginInclusiveWatermark, endExclusiveWatermark int64, item *tasks.MockTask) {
+	s.streamSender.isTieredStackEnabled = false
 	beginInclusiveWatermark = rand.Int63n(math.MaxInt32)
 	endExclusiveWatermark = beginInclusiveWatermark + 100
-	item := tasks.NewMockTask(s.controller)
+	item = tasks.NewMockTask(s.controller)
 	item.EXPECT().GetNamespaceID().Return("1").AnyTimes()
 	item.EXPECT().GetWorkflowID().Return("1").AnyTimes()
 	item.EXPECT().GetRunID().Return("run-1").AnyTimes()
@@ -1162,9 +1424,35 @@ func (s *streamSenderSuite) setupSingleFailingTask(convertErr error) (beginInclu
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
-	s.taskConverter.EXPECT().Convert(item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED).
-		Return(nil, convertErr).MinTimes(1)
-	return beginInclusiveWatermark, endExclusiveWatermark
+	return beginInclusiveWatermark, endExclusiveWatermark, item
+}
+
+func (s *streamSenderSuite) TestSendTasks_EscalatesWorkflowLockPriorityAfterBusyFailures() {
+	s.config.ReplicationTaskConverterLowPriorityLockMaxAttempts = func() int { return 3 }
+	s.config.ReplicationStreamSenderErrorRetryMaxAttempts = func() int { return 4 }
+	s.config.ReplicationStreamSenderErrorRetryWait = func() time.Duration { return time.Millisecond }
+	beginInclusiveWatermark, endExclusiveWatermark, item := s.setupSingleTask()
+	task := &replicationspb.ReplicationTask{
+		SourceTaskId:   beginInclusiveWatermark,
+		VisibilityTime: timestamppb.New(time.Now().UTC()),
+	}
+
+	gomock.InOrder(
+		s.taskConverter.EXPECT().Convert(
+			item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, locks.PriorityLow,
+		).Return(nil, consts.ErrResourceExhaustedBusyWorkflow).Times(3),
+		s.taskConverter.EXPECT().Convert(
+			item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, locks.PriorityHigh,
+		).Return(task, nil),
+	)
+	s.server.EXPECT().Send(gomock.Any()).Return(nil).Times(2)
+
+	err := s.streamSender.sendTasks(
+		enumsspb.TASK_PRIORITY_UNSPECIFIED,
+		beginInclusiveWatermark,
+		endExclusiveWatermark,
+	)
+	s.NoError(err)
 }
 
 func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_Enabled() {
@@ -1222,6 +1510,7 @@ func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_EmitsWideEvent() {
 	s.Equal(int64(s.serverShardKey.ShardID), fields["source_shard"].AsInt64())
 	s.Equal("convert: boom", fields["error"].AsString())
 	s.Equal(s.streamSender.clientClusterName, fields["target_cluster"].AsString())
+	s.Equal(int64(s.clientShardKey.ShardID), fields["target_shard"].AsInt64())
 	s.Equal(enumsspb.TASK_PRIORITY_UNSPECIFIED.String(), fields["priority"].AsString())
 }
 
@@ -1324,9 +1613,9 @@ func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_StreamKeepsFlowingPastSk
 	// Times(1) (not MinTimes): with MaxAttempts=1 the stuck convert is attempted exactly once, and
 	// bounding it prevents gomock from greedily matching okItem's Convert call to this expectation
 	// (mock tasks are reflect.DeepEqual-equal, so an unbounded matcher would swallow both calls).
-	s.taskConverter.EXPECT().Convert(stuckItem, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED).
+	s.taskConverter.EXPECT().Convert(stuckItem, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, locks.PriorityLow).
 		Return(nil, errors.New("boom")).Times(1)
-	s.taskConverter.EXPECT().Convert(okItem, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED).
+	s.taskConverter.EXPECT().Convert(okItem, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, locks.PriorityLow).
 		Return(okTask, nil).Times(1)
 
 	gomock.InOrder(
@@ -1396,7 +1685,7 @@ func (s *streamSenderSuite) TestSendTasks_SkipStuckTask_SendFailureNotSkipped() 
 		beginInclusiveWatermark,
 		endExclusiveWatermark,
 	).Return(iter, nil)
-	s.taskConverter.EXPECT().Convert(item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED).
+	s.taskConverter.EXPECT().Convert(item, s.clientShardKey.ClusterID, enumsspb.TASK_PRIORITY_UNSPECIFIED, locks.PriorityLow).
 		Return(task, nil).MinTimes(1)
 	// The send fails; sendToStream wraps it as a (non-retryable) StreamError, which is not a
 	// convertError, so isSkippable is false and the task must not be skipped.

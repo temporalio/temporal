@@ -1,7 +1,9 @@
-// Package await provides polling-based test assertions as a replacement
-// for testify's Eventually, EventuallyWithT, and their formatted variants.
+// Package await provides context-bounded test waits, including polling
+// assertions and blocking channel operations.
 //
-// By default, it enforces a 10s timeout for each await attempt.
+// Its polling assertions replace testify's Eventually, EventuallyWithT, and
+// their formatted variants. By default, they enforce a 10s timeout for each
+// await attempt.
 //
 // Improvements over testify's eventually functions:
 //

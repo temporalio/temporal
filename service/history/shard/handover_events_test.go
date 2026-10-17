@@ -12,6 +12,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	commonlog "go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -61,19 +62,20 @@ func recordDetails(t *testing.T, rec log.Record) map[string]any {
 	return out
 }
 
-func newHandoverEventsTracker(t *testing.T, lg log.Logger, maxTaskID int64, stateErr error) *defaultHandoverTracker {
+func newHandoverEventsTracker(t *testing.T, lg log.Logger, maxTaskID int64, stateErr error, enabled bool) *defaultHandoverTracker {
 	t.Helper()
 	clusterMetadata := cluster.NewMockMetadata(gomock.NewController(t))
 	clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	tracker := NewDefaultHandoverTrackerFactory()(HandoverTrackerParams{
-		ShardID:                 handoverEventsTestShardID,
-		ClusterMetadata:         clusterMetadata,
-		GetMaxReplicationTaskID: func() int64 { return maxTaskID },
-		ErrorByStateFn:          func() error { return stateErr },
-		NotifyReplicationFn:     func(int64) {},
-		Logger:                  commonlog.NewNoopLogger(),
-		EventLogger:             lg,
+		ShardID:                      handoverEventsTestShardID,
+		ClusterMetadata:              clusterMetadata,
+		GetMaxReplicationTaskID:      func() int64 { return maxTaskID },
+		ErrorByStateFn:               func() error { return stateErr },
+		NotifyReplicationFn:          func(int64) {},
+		Logger:                       commonlog.NewNoopLogger(),
+		EventLogger:                  lg,
+		EmitNamespaceLifecycleEvents: dynamicconfig.GetBoolPropertyFn(enabled),
 	})
 	return tracker.(*defaultHandoverTracker)
 }
@@ -93,7 +95,7 @@ func handoverEventsNamespace(state enumspb.ReplicationState) *namespace.Namespac
 
 func TestHandoverWatermarkEvents(t *testing.T) {
 	lg := &eventCaptureLogger{}
-	tracker := newHandoverEventsTracker(t, lg, 100, nil)
+	tracker := newHandoverEventsTracker(t, lg, 100, nil, true)
 
 	inHandover := handoverEventsNamespace(enumspb.REPLICATION_STATE_HANDOVER)
 
@@ -128,7 +130,7 @@ func TestHandoverWatermarkEvents(t *testing.T) {
 // emit on a real removal.
 func TestHandoverWatermarkRemovedOnlyWhenTracked(t *testing.T) {
 	lg := &eventCaptureLogger{}
-	tracker := newHandoverEventsTracker(t, lg, 100, nil)
+	tracker := newHandoverEventsTracker(t, lg, 100, nil, true)
 
 	for range 3 {
 		tracker.UpdateHandoverState(handoverEventsNamespace(enumspb.REPLICATION_STATE_NORMAL), false)
@@ -140,7 +142,7 @@ func TestHandoverWatermarkRemovedOnlyWhenTracked(t *testing.T) {
 // An unacquired shard stores the sentinel, reported as pending; resolving it later emits nothing.
 func TestHandoverWatermarkPendingThenResolved(t *testing.T) {
 	lg := &eventCaptureLogger{}
-	tracker := newHandoverEventsTracker(t, lg, 100, errors.New("shard status unknown"))
+	tracker := newHandoverEventsTracker(t, lg, 100, errors.New("shard status unknown"), true)
 
 	tracker.UpdateHandoverState(handoverEventsNamespace(enumspb.REPLICATION_STATE_HANDOVER), false)
 	require.Len(t, lg.records, 1)
@@ -149,4 +151,17 @@ func TestHandoverWatermarkPendingThenResolved(t *testing.T) {
 	tracker.ResolvePendingTaskIDs(555)
 	require.Len(t, lg.records, 1)
 	require.EqualValues(t, 555, tracker.handoverNamespaces[handoverEventsTestNsName].MaxReplicationTaskID)
+}
+
+func TestHandoverWatermarkEventsDisabled(t *testing.T) {
+	lg := &eventCaptureLogger{}
+	tracker := newHandoverEventsTracker(t, lg, 100, nil, false)
+
+	tracker.UpdateHandoverState(handoverEventsNamespace(enumspb.REPLICATION_STATE_HANDOVER), false)
+	require.True(t, tracker.IsInHandover(handoverEventsTestNsName, ""))
+	require.Empty(t, lg.records)
+
+	tracker.UpdateHandoverState(handoverEventsNamespace(enumspb.REPLICATION_STATE_NORMAL), false)
+	require.False(t, tracker.IsInHandover(handoverEventsTestNsName, ""))
+	require.Empty(t, lg.records)
 }

@@ -18,7 +18,9 @@ import (
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/contextutil"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -26,6 +28,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/protorequire"
+	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/common/testing/testvars"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/hsm"
@@ -88,6 +91,7 @@ func (s *chasmEngineSuite) SetupTest() {
 		s.mockShard.GetConfig(),
 		s.mockShard.GetLogger(),
 		metrics.NoopMetricsHandler,
+		testhooks.TestHooks{},
 	)
 	s.namespaceEntry = tests.GlobalNamespaceEntry
 
@@ -221,6 +225,41 @@ func (s *chasmEngineSuite) TestStartExecution_WaitsForShardEngine() {
 	s.ErrorIs(err, expectedErr)
 	s.False(startFnCalled)
 	s.False(result.Created)
+}
+
+func (s *chasmEngineSuite) TestStartExecution_RecordsStartedByPrincipal() {
+	tv := testvars.New(s.T())
+
+	ref := chasm.NewComponentRef[*testComponent](
+		chasm.ExecutionKey{
+			NamespaceID: string(tests.NamespaceID),
+			BusinessID:  tv.WorkflowID(),
+			RunID:       "",
+		},
+	)
+	principal := &commonpb.Principal{Type: "jwt", Name: "alice"}
+
+	var rootAttributes *persistencespb.ChasmComponentAttributes
+	s.mockExecutionManager.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(
+			_ context.Context,
+			request *persistence.CreateWorkflowExecutionRequest,
+		) (*persistence.CreateWorkflowExecutionResponse, error) {
+			rootAttributes = request.NewWorkflowSnapshot.ChasmNodes[""].GetMetadata().GetComponentAttributes()
+			return tests.CreateWorkflowExecutionResponse, nil
+		},
+	).Times(1)
+	s.mockEngine.EXPECT().NotifyChasmExecution(gomock.Any(), gomock.Any()).Return().Times(1)
+
+	_, err := s.engine.StartExecution(
+		headers.SetPrincipal(context.Background(), principal),
+		ref,
+		s.newTestExecutionFn(tv.ActivityID()),
+	)
+	s.NoError(err)
+	s.Require().NotNil(rootAttributes)
+	s.ProtoEqual(principal, rootAttributes.GetStartedByPrincipal())
+	s.Nil(rootAttributes.GetClosedByPrincipal())
 }
 
 func (s *chasmEngineSuite) TestStartExecution_SetsContextMetadata() {
@@ -1058,6 +1097,7 @@ func (s *chasmEngineSuite) TestUpdateComponent_RequestIDIdempotency() {
 	dupRef, err := update()
 	var failedPrecondition *serviceerror.FailedPrecondition
 	s.ErrorAs(err, &failedPrecondition)
+	s.ErrorIs(err, chasm.ErrRequestIDAlreadyUsed)
 	s.Nil(dupRef)
 	s.Equal(1, updateCount, "updateFn must not run again for a duplicate request ID")
 }
@@ -1535,6 +1575,70 @@ func (s *chasmEngineSuite) testPollComponentWait(useEmptyRunID bool) {
 	)
 	s.NoError(err)
 	s.Equal(activityID, <-newActivityID)
+}
+
+// TestPollComponent_ShardClosed verifies that a poll blocked waiting for notifications returns a
+// ShardOwnershipLost service error as soon as the shard moves off this host, rather than blocking
+// until the context deadline.
+func (s *chasmEngineSuite) TestPollComponent_ShardClosed() {
+	tv := testvars.New(s.T())
+	tv = tv.WithRunID(tv.Any().RunID())
+
+	resolvedKey := chasm.ExecutionKey{
+		NamespaceID: string(tests.NamespaceID),
+		BusinessID:  tv.WorkflowID(),
+		RunID:       tv.RunID(),
+	}
+	pollRef := chasm.NewComponentRef[*testComponent](resolvedKey)
+
+	s.mockExecutionManager.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).
+		Return(&persistence.GetWorkflowExecutionResponse{
+			State: s.buildPersistenceMutableState(
+				resolvedKey,
+				&persistencespb.ActivityInfo{},
+				enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+				enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+				nil),
+		}, nil).
+		AnyTimes()
+
+	s.mockShard.Resource.HistoryServiceResolver.EXPECT().
+		Lookup(convert.Int32ToString(s.mockShard.GetShardID())).
+		Return(membership.NewHostInfoFromAddress("owner-host:1234"), nil).
+		Times(1)
+	s.mockShard.Resource.HostInfoProvider.EXPECT().
+		HostInfo().
+		Return(membership.NewHostInfoFromAddress("current-host:5678")).
+		Times(1)
+
+	pollErr := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		// Predicate is never satisfied, so the poll subscribes and blocks.
+		_, err := s.engine.PollComponent(
+			ctx,
+			pollRef,
+			func(chasm.Context, chasm.Component) (bool, error) {
+				return false, nil
+			},
+		)
+		pollErr <- err
+	}()
+
+	// Let the poll park in its select, then move the shard off this host.
+	time.Sleep(100 * time.Millisecond) //nolint:forbidigo
+	s.mockShard.UnloadForOwnershipLost()
+
+	select {
+	case err := <-pollErr:
+		var solErr *serviceerrors.ShardOwnershipLost
+		s.ErrorAs(err, &solErr)
+		s.Equal("owner-host:1234", solErr.OwnerHost)
+		s.Equal("current-host:5678", solErr.CurrentHost)
+	case <-time.After(5 * time.Second):
+		s.FailNow("poll did not return after shard close")
+	}
 }
 
 // TestPollComponent_StaleState tests that PollComponent returns a user-friendly Unavailable error
@@ -2457,7 +2561,8 @@ func (l *testChasmLibrary) Name() string {
 func (l *testChasmLibrary) Components() []*chasm.RegistrableComponent {
 	return []*chasm.RegistrableComponent{
 		chasm.NewRegistrableComponent[*testComponent]("test_component",
-			chasm.WithSearchAttributes(testComponentPausedSearchAttribute)),
+			chasm.WithSearchAttributes(testComponentPausedSearchAttribute),
+			chasm.WithRecordPrincipals()),
 		chasm.NewRegistrableComponent[*testComponentNoMetadata]("test_component_no_metadata"),
 	}
 }

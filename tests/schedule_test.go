@@ -11,7 +11,6 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/nexus-rpc/sdk-go/nexus"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -31,11 +30,14 @@ import (
 	schedulerpb "go.temporal.io/server/chasm/lib/scheduler/gen/schedulerpb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives"
 	"go.temporal.io/server/common/searchattribute/sadefs"
 	"go.temporal.io/server/common/testing/await"
+	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/testcontext"
 	"go.temporal.io/server/service/worker/dummy"
@@ -61,10 +63,15 @@ var (
 	}
 )
 
+func contextFactoryFor(chasmEnabled bool) contextFactory {
+	if chasmEnabled {
+		return chasmContextFactory
+	}
+	return v1ContextFactory
+}
+
 func scheduleCommonOpts(t *testing.T) []testcore.TestOption {
 	opts := []testcore.TestOption{
-		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
-		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, true),
 		testcore.WithDynamicConfig(dynamicconfig.FrontendAllowedExperiments, []string{"*"}),
 	}
 	if strings.HasPrefix(t.Name(), "TestScheduleV1") {
@@ -247,6 +254,19 @@ func registerCountingWorkflow(env *testcore.TestEnv, wt string, runs *atomic.Int
 	}, workflow.RegisterOptions{Name: wt})
 }
 
+// registerOneDayTimerWorkflow records when each workflow starts and finishes
+// its user timer. SideEffect prevents workflow replay from double-counting.
+func registerOneDayTimerWorkflow(env *testcore.TestEnv, wt string, started, completed *atomic.Int32) {
+	env.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		_ = workflow.SideEffect(ctx, func(workflow.Context) any { started.Add(1); return 0 })
+		if err := workflow.NewTimer(ctx, 24*time.Hour).Get(ctx, nil); err != nil {
+			return err
+		}
+		_ = workflow.SideEffect(ctx, func(workflow.Context) any { completed.Add(1); return 0 })
+		return nil
+	}, workflow.RegisterOptions{Name: wt})
+}
+
 // registerGatedWorkflow is like registerCountingWorkflow but the workflow stays
 // running until the test signals completeSignalName (via completeRunningWorkflows).
 func registerGatedWorkflow(env *testcore.TestEnv, wt string, runs *atomic.Int32) {
@@ -255,6 +275,18 @@ func registerGatedWorkflow(env *testcore.TestEnv, wt string, runs *atomic.Int32)
 		workflow.GetSignalChannel(ctx, completeSignalName).Receive(ctx, nil)
 		return nil
 	}, workflow.RegisterOptions{Name: wt})
+}
+
+// countMetric returns how many captured samples of metricName carry every tag in want.
+func countMetric(capture *testcore.NamespaceMetricCapture, metricName string, want map[string]string) int {
+	return len(capture.CollectMetric(metricName, func(rec *metricstest.CapturedRecording) bool {
+		for key, value := range want {
+			if rec.Tags[key] != value {
+				return false
+			}
+		}
+		return true
+	}))
 }
 
 // scheduleClosed reports whether the schedule has closed, i.e. DescribeSchedule
@@ -272,12 +304,16 @@ func scheduleClosed(ctx context.Context, env *testcore.TestEnv, sid string) bool
 // of the schedule and returns the number it signaled.
 func completeRunningWorkflows(ctx context.Context, t *testing.T, env *testcore.TestEnv, sid string) int {
 	t.Helper()
-	desc, err := env.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
-		Namespace:  env.Namespace().String(),
-		ScheduleId: sid,
-	})
-	require.NoError(t, err)
-	running := desc.GetInfo().GetRunningWorkflows()
+	// Retry transient query-buffer rejections from overlapping V1 Describe calls.
+	var running []*commonpb.WorkflowExecution
+	await.Require(ctx, t, func(at *await.T) {
+		desc, err := env.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
+			Namespace:  env.Namespace().String(),
+			ScheduleId: sid,
+		})
+		require.NoError(at, err)
+		running = desc.GetInfo().GetRunningWorkflows()
+	}, awaitTimeout, pollInterval)
 	for _, wf := range running {
 		_, err := env.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
 			Namespace:         env.Namespace().String(),
@@ -331,12 +367,12 @@ func testPauseOnFailureIgnoresCancelTerminate(t *testing.T, newContext contextFa
 		Policies: &schedulepb.SchedulePolicies{PauseOnFailure: true},
 	})
 
-	describe := func() *workflowservice.DescribeScheduleResponse {
-		d, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+	describe := func(at *await.T) *workflowservice.DescribeScheduleResponse {
+		d, err := s.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  s.Namespace().String(),
 			ScheduleId: sid,
 		})
-		require.NoError(t, err)
+		require.NoError(at, err)
 		return d
 	}
 
@@ -345,14 +381,15 @@ func testPauseOnFailureIgnoresCancelTerminate(t *testing.T, newContext contextFa
 	// wid, e.g. a timestamp suffix, so read it from the action result rather than
 	// assuming wid).
 	var exec *commonpb.WorkflowExecution
-	require.Eventually(t, func() bool {
-		for _, a := range describe().GetInfo().GetRecentActions() {
+	await.Requiref(ctx, t, func(at *await.T) {
+		for _, a := range describe(at).GetInfo().GetRecentActions() {
 			if a.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 				exec = a.GetStartWorkflowResult()
-				return exec.GetRunId() != ""
+				require.NotEmpty(at, exec.GetRunId())
+				return
 			}
 		}
-		return false
+		require.FailNow(at, "schedule has not recorded the expected workflow status")
 	}, awaitTimeout, pollInterval, "schedule should fire a running workflow")
 	runID := exec.GetRunId()
 
@@ -383,15 +420,15 @@ func testPauseOnFailureIgnoresCancelTerminate(t *testing.T, newContext contextFa
 	// reading Paused from the SAME describe response as the terminal status is
 	// race-free: no later pause can slip in.
 	var pausedAfter bool
-	require.Eventually(t, func() bool {
-		d := describe()
+	await.Requiref(ctx, t, func(at *await.T) {
+		d := describe(at)
 		for _, a := range d.GetInfo().GetRecentActions() {
 			if a.GetStartWorkflowResult().GetRunId() == runID && a.GetStartWorkflowStatus() == wantStatus {
 				pausedAfter = d.GetSchedule().GetState().GetPaused()
-				return true
+				return
 			}
 		}
-		return false
+		require.FailNow(at, "schedule has not recorded the expected workflow status")
 	}, awaitTimeout, pollInterval, "run %s should reach %s and be recorded on the schedule", runID, wantStatus)
 
 	require.False(t, pausedAfter,
@@ -399,57 +436,391 @@ func testPauseOnFailureIgnoresCancelTerminate(t *testing.T, newContext contextFa
 			"(CanceledTerminatedCountAsFailures defaults to false)", wantStatus)
 }
 
-func TestScheduleCHASM(t *testing.T) {
-	t.Parallel()
-	runSharedScheduleTests(t, chasmContextFactory)
+func (suite *ScheduleCHASMSuite) TestPauseOnFailureCancelDoesNotPause() {
+	testPauseOnFailureIgnoresCancelTerminate(suite.T(), chasmContextFactory, stopByCancel)
+}
 
-	// CHASM-only tests
+func (suite *ScheduleCHASMSuite) TestPauseOnFailureTerminateDoesNotPause() {
+	testPauseOnFailureIgnoresCancelTerminate(suite.T(), chasmContextFactory, stopByTerminate)
+}
+
+func (suite *ScheduleCHASMSuite) TestIdleClose() {
+	t := suite.T()
 	newContext := chasmContextFactory
-	t.Run("TestCreateScheduleAlreadyExists", func(t *testing.T) { t.Parallel(); testCreateScheduleAlreadyExists(t, newContext) })
-	t.Run("TestCreateScheduleDuplicateSdkError", func(t *testing.T) { t.Parallel(); testCreateScheduleDuplicateSdkError(t, true) })
-	t.Run("TestPatchRejectsExcessBackfillers", func(t *testing.T) { t.Parallel(); testPatchRejectsExcessBackfillers(t, newContext) })
-	t.Run("TestDoubleReset_HSMCallbacks", func(t *testing.T) { t.Parallel(); testScheduledWorkflowDoubleReset(t, newContext, false) })
-	t.Run("TestDoubleReset_ChasmCallbacks", func(t *testing.T) { t.Parallel(); testScheduledWorkflowDoubleReset(t, newContext, true) })
-	t.Run("TestResetWithAdditionalCallback_HSMCallbacks", func(t *testing.T) { t.Parallel(); testResetWithAdditionalCallback(t, newContext, false) })
-	t.Run("TestResetWithAdditionalCallback_ChasmCallbacks", func(t *testing.T) { t.Parallel(); testResetWithAdditionalCallback(t, newContext, true) })
-	t.Run("TestMigrationCallbackAttach", func(t *testing.T) { t.Parallel(); testMigrationCallbackAttach(t, newContext) })
-	t.Run("TestCreatesWorkflowSentinel", func(t *testing.T) { t.Parallel(); testCreatesWorkflowSentinel(t, newContext) })
-	t.Run("TestSkipsWorkflowSentinelWhenDisabled", func(t *testing.T) { t.Parallel(); testSkipsWorkflowSentinelWhenDisabled(t, newContext) })
-	t.Run("TestLargeScheduleID", func(t *testing.T) { t.Parallel(); testLargeScheduleID(t, newContext) })
-	t.Run("TestUpdateScheduleMemo", func(t *testing.T) { t.Parallel(); testUpdateScheduleMemo(t, newContext) })
-	t.Run("TestUpdateScheduleMemoOnly", func(t *testing.T) { t.Parallel(); testUpdateScheduleMemoOnly(t, newContext) })
-	t.Run("TestStateSizeBytesReported", func(t *testing.T) { t.Parallel(); testStateSizeBytesReported(t, newContext) })
-	t.Run("TestBufferOverrunDropsActions", func(t *testing.T) { t.Parallel(); testBufferOverrunDropsActions(t, newContext) })
-	t.Run("TestDescribeCatchupWindowAfterCreateAndUpdate", func(t *testing.T) {
-		t.Parallel()
-		testDescribeCatchupWindowAfterCreateAndUpdate(t)
+	testScheduleClosesFromIdle(t, newContext)
+	suite.Run("ManualOnly", func(suite *ScheduleCHASMSuite) {
+		testManualOnlyUnpausedClosesFromIdle(suite.T(), newContext)
 	})
-	t.Run("IdleClose", func(t *testing.T) {
-		t.Parallel()
-		testScheduleClosesFromIdle(t, newContext)
-		t.Run("ManualOnly", func(t *testing.T) { t.Parallel(); testManualOnlyUnpausedClosesFromIdle(t, newContext) })
-		t.Run("PauseDuringWindow", func(t *testing.T) { t.Parallel(); testPauseDuringIdleWindow(t, newContext) })
-		t.Run("BackfillBlocks", func(t *testing.T) { t.Parallel(); testBackfillBlocksIdleClose(t, newContext) })
+	suite.Run("PauseDuringWindow", func(suite *ScheduleCHASMSuite) {
+		testPauseDuringIdleWindow(suite.T(), newContext)
 	})
-	t.Run("PausedBehavior", func(t *testing.T) {
-		t.Parallel()
-		t.Run("DropsCatchup", func(t *testing.T) { t.Parallel(); testPausedDropsCatchup(t, newContext) })
-		t.Run("RecentActionsAdvance", func(t *testing.T) { t.Parallel(); testRecentActionsAdvanceWhilePaused(t, newContext) })
-		t.Run("FutureActionTimesAdvance", func(t *testing.T) { t.Parallel(); testFutureActionTimesAdvanceWhilePaused(t, newContext) })
-		t.Run("BackfillDrains", func(t *testing.T) { t.Parallel(); testBackfillOnPausedSchedule(t, newContext) })
-	})
-	t.Run("TestScheduledWorkflowContinueAsNewCompletion", func(t *testing.T) { t.Parallel(); testScheduledWorkflowContinueAsNewCompletion(t, newContext) })
-	t.Run("PauseOnFailure_CancelDoesNotPause", func(t *testing.T) {
-		t.Parallel()
-		testPauseOnFailureIgnoresCancelTerminate(t, newContext, stopByCancel)
-	})
-	t.Run("PauseOnFailure_TerminateDoesNotPause", func(t *testing.T) {
-		t.Parallel()
-		testPauseOnFailureIgnoresCancelTerminate(t, newContext, stopByTerminate)
+	suite.Run("BackfillBlocks", func(suite *ScheduleCHASMSuite) {
+		testBackfillBlocksIdleClose(suite.T(), newContext)
 	})
 }
 
-func testDescribeCatchupWindowAfterCreateAndUpdate(t *testing.T) {
+func (suite *ScheduleCHASMSuite) TestPausedBehavior() {
+	newContext := chasmContextFactory
+	suite.Run("DropsCatchup", func(suite *ScheduleCHASMSuite) {
+		testPausedDropsCatchup(suite.T(), newContext)
+	})
+	suite.Run("RecentActionsAdvance", func(suite *ScheduleCHASMSuite) {
+		testRecentActionsAdvanceWhilePaused(suite.T(), newContext)
+	})
+	suite.Run("FutureActionTimesAdvance", func(suite *ScheduleCHASMSuite) {
+		testFutureActionTimesAdvanceWhilePaused(suite.T(), newContext)
+	})
+	suite.Run("BackfillDrains", func(suite *ScheduleCHASMSuite) {
+		testBackfillOnPausedSchedule(suite.T(), newContext)
+	})
+}
+
+func (suite *ScheduleCHASMSuite) TestTimeSkippingWeeklySkipCreateWithPatch() {
+	testScheduleTimeSkippingWeekly(suite.T(), enumspb.SCHEDULE_OVERLAP_POLICY_SKIP, true)
+}
+
+func (suite *ScheduleCHASMSuite) TestTimeSkippingWeeklyAllowAllPatch() {
+	testScheduleTimeSkippingWeekly(suite.T(), enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL, false)
+}
+
+func (suite *ScheduleCHASMSuite) TestMaxSkipCapsScheduleTimeSkipping() {
+	t := suite.T()
+	s := newScheduleEnv(t, append(
+		scheduleCommonOpts(t),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true),
+		testcore.WithDynamicConfig(dynamicconfig.CHASMSchedulerTimeSkippingEnabled, true),
+		testcore.WithDynamicConfig(dynamicconfig.TimeSkippingMaxSkipPerSession, 10),
+	)...)
+	ctx := chasmContextFactory(testcontext.For(t))
+	sid := testcore.RandomizeStr("sched-time-skipping-max-count")
+	week := 7 * 24 * time.Hour
+	firstTick := time.Now().UTC().Add(12 * time.Hour)
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{Interval: []*schedulepb.IntervalSpec{{
+				Interval: durationpb.New(week),
+				Phase:    durationpb.New(time.Duration(firstTick.UnixNano() % week.Nanoseconds())),
+			}}},
+			Action: startWorkflowAction(s,
+				testcore.RandomizeStr("sched-time-skipping-max-count-wf"),
+				testcore.RandomizeStr("sched-time-skipping-max-count-wt")),
+			Policies: &schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL},
+		},
+		InitialPatch: &schedulepb.SchedulePatch{TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+			Enabled: true,
+			FastForwardConfig: &commonpb.FastForwardConfig{
+				Id:       uuid.NewString(),
+				Duration: durationpb.New(12 * week),
+			},
+		}},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	await.Require(ctx, t, func(at *await.T) {
+		desc, err := s.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
+			Namespace: s.Namespace().String(), ScheduleId: sid,
+		})
+		require.NoError(at, err)
+		tsi := desc.GetInfo().GetTimeSkippingInfo()
+		require.Equal(at, int32(10), tsi.GetEffectiveConfig().GetMaxSessionSkipCount())
+		require.Equal(at, int32(10), tsi.GetCurrentSessionSkipCount())
+		require.False(at, tsi.GetEffectiveConfig().GetEnabled())
+		require.False(at, tsi.GetFastForwardInfo().GetHasCompleted())
+		require.True(at, tsi.GetCurrentTime().AsTime().Before(tsi.GetFastForwardInfo().GetTargetTime().AsTime()))
+	}, awaitTimeout, pollInterval)
+}
+
+func testScheduleTimeSkippingWeekly(
+	t *testing.T,
+	overlapPolicy enumspb.ScheduleOverlapPolicy,
+	createWithPatch bool,
+) {
+	opts := append(
+		scheduleCommonOpts(t),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowTimeSkippingEnabled, true),
+		testcore.WithDynamicConfig(dynamicconfig.CHASMSchedulerTimeSkippingEnabled, true),
+	)
+	s := newScheduleEnv(t, opts...)
+	ctx := chasmContextFactory(testcontext.For(t))
+
+	sid := testcore.RandomizeStr("sched-time-skipping-weekly")
+	wid := testcore.RandomizeStr("sched-time-skipping-weekly-wf")
+	wt := testcore.RandomizeStr("sched-time-skipping-weekly-wt")
+	var started, completed atomic.Int32
+	registerOneDayTimerWorkflow(s, wt, &started, &completed)
+
+	week := 7 * 24 * time.Hour
+	fastForwardDuration := 3*week + 2*24*time.Hour
+	now := time.Now().UTC()
+	firstTick := now.Add(12 * time.Hour).Truncate(time.Second)
+	schedule := &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{
+			Interval: []*schedulepb.IntervalSpec{{
+				Interval: durationpb.New(week),
+				Phase:    durationpb.New(time.Duration(firstTick.UnixNano() % week.Nanoseconds())),
+			}},
+		},
+		Action: startWorkflowAction(s, wid, wt),
+		Policies: &schedulepb.SchedulePolicies{
+			OverlapPolicy: overlapPolicy,
+		},
+		State: &schedulepb.ScheduleState{Paused: !createWithPatch},
+	}
+	fastForwardID := uuid.NewString()
+	patch := &schedulepb.SchedulePatch{
+		TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+			Enabled: true,
+			FastForwardConfig: &commonpb.FastForwardConfig{
+				Id:       fastForwardID,
+				Duration: durationpb.New(fastForwardDuration),
+			},
+		},
+	}
+	if createWithPatch {
+		_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+			Namespace:    s.Namespace().String(),
+			ScheduleId:   sid,
+			Schedule:     schedule,
+			InitialPatch: patch,
+			Identity:     "test",
+			RequestId:    uuid.NewString(),
+		})
+		require.NoError(t, err)
+	} else {
+		createSchedule(ctx, t, s, sid, schedule)
+		patch.Unpause = "start time skipping"
+		patchSchedule(ctx, t, s, sid, patch)
+	}
+
+	await.Require(ctx, t, func(at *await.T) {
+		describe, err := s.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		require.NoError(at, err)
+		info := describe.GetInfo()
+		require.Equal(at, int64(4), info.GetActionCount())
+		require.Len(at, info.GetRecentActions(), 4)
+		timeSkippingInfo := info.GetTimeSkippingInfo()
+		require.NotNil(at, timeSkippingInfo)
+		require.Equal(at, fastForwardID, timeSkippingInfo.GetFastForwardInfo().GetFastForwardId())
+		require.True(at, timeSkippingInfo.GetFastForwardInfo().GetHasCompleted())
+		require.False(at, timeSkippingInfo.GetCurrentTime().AsTime().Before(now.Add(fastForwardDuration)))
+	}, 10*time.Second, pollInterval)
+	await.RequireTruef(t, func() bool {
+		return completed.Load() >= 4
+	}, 10*time.Second, pollInterval, "four weekly workflows should finish their one-day user timers")
+	require.Equal(t, int32(4), started.Load())
+	require.Equal(t, int32(4), completed.Load())
+	describe, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	require.NoError(t, err)
+	actionsByScheduleTime := make(map[time.Time]*schedulepb.ScheduleActionResult, 4)
+	for _, action := range describe.GetInfo().GetRecentActions() {
+		require.NotNil(t, action.GetScheduleTime())
+		scheduledTime := action.GetScheduleTime().AsTime()
+		require.NotContains(t, actionsByScheduleTime, scheduledTime)
+		actionsByScheduleTime[scheduledTime] = action
+	}
+	for i := range 4 {
+		expectedStart := firstTick.Add(time.Duration(i) * week)
+		action, ok := actionsByScheduleTime[expectedStart]
+		require.True(t, ok, "missing workflow scheduled at %s", expectedStart)
+		require.NotNil(t, action.GetActualTime())
+		require.WithinRange(t, action.GetActualTime().AsTime(), expectedStart, expectedStart.Add(10*time.Second))
+		execution := action.GetStartWorkflowResult()
+		require.NotNil(t, execution)
+		workflowDescription, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(),
+			Execution: execution,
+		})
+		require.NoError(t, err)
+		workflowInfo := workflowDescription.GetWorkflowExecutionInfo()
+		require.NotNil(t, workflowInfo.GetStartTime())
+		require.WithinRange(t, workflowInfo.GetStartTime().AsTime(), expectedStart, expectedStart.Add(10*time.Second))
+		var workflowScheduledStart time.Time
+		require.NoError(t, payload.Decode(
+			workflowInfo.GetSearchAttributes().GetIndexedFields()[sadefs.TemporalScheduledStartTime],
+			&workflowScheduledStart,
+		))
+		require.Equal(t, expectedStart, workflowScheduledStart)
+	}
+}
+
+func (suite *ScheduleCHASMSuite) TestTimeSkippingDynamicConfigGate() {
+	t := suite.T()
+	s := newScheduleEnv(t, append(
+		scheduleCommonOpts(t),
+		testcore.WithDynamicConfig(dynamicconfig.CHASMSchedulerTimeSkippingEnabled, false),
+	)...)
+	ctx := chasmContextFactory(testcontext.For(t))
+
+	sid := testcore.RandomizeStr("sched-time-skipping-gate")
+	schedule := &schedulepb.Schedule{
+		Spec:     intervalSpec(7 * 24 * time.Hour),
+		Action:   startWorkflowAction(s, "time-skipping-gate-wf", "time-skipping-gate-wt"),
+		Policies: &schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP},
+		State:    &schedulepb.ScheduleState{Paused: true},
+	}
+	createSchedule(ctx, t, s, sid, schedule)
+
+	patch := &schedulepb.SchedulePatch{TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+		Enabled: true,
+		FastForwardConfig: &commonpb.FastForwardConfig{
+			Id:       uuid.NewString(),
+			Duration: durationpb.New(3*7*24*time.Hour + 24*time.Hour),
+		},
+	}}
+	_, err := s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Patch:      patch,
+		Identity:   "test",
+		RequestId:  uuid.NewString(),
+	})
+	var unimplemented *serviceerror.Unimplemented
+	require.ErrorAs(t, err, &unimplemented)
+	require.ErrorContains(t, err, "Schedule time skipping is not enabled for the namespace")
+
+	s.OverrideDynamicConfig(dynamicconfig.CHASMSchedulerTimeSkippingEnabled, true)
+	patchSchedule(ctx, t, s, sid, patch)
+	describe, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+	})
+	require.NoError(t, err)
+	require.True(t, describe.GetInfo().GetTimeSkippingInfo().GetEffectiveConfig().GetEnabled())
+}
+
+func (suite *ScheduleCHASMSuite) TestTimeSkippingFeatureDisabledWhileWorkflowRuns() {
+	t := suite.T()
+	s := newScheduleEnv(t, append(
+		scheduleCommonOpts(t),
+		testcore.WithDynamicConfig(dynamicconfig.CHASMSchedulerTimeSkippingEnabled, true),
+	)...)
+	ctx := chasmContextFactory(testcontext.For(t))
+	sid := testcore.RandomizeStr("sched-time-skipping-flag-off")
+	wt := testcore.RandomizeStr("sched-time-skipping-flag-off-wt")
+	var started atomic.Int32
+	registerGatedWorkflow(s, wt, &started)
+
+	week := 7 * 24 * time.Hour
+	firstTick := time.Now().UTC().Add(12 * time.Hour)
+	createSchedule(ctx, t, s, sid, &schedulepb.Schedule{
+		Spec: &schedulepb.ScheduleSpec{Interval: []*schedulepb.IntervalSpec{{
+			Interval: durationpb.New(week),
+			Phase:    durationpb.New(time.Duration(firstTick.UnixNano() % week.Nanoseconds())),
+		}}},
+		Action: startWorkflowAction(s, testcore.RandomizeStr("sched-time-skipping-flag-off-wf"), wt),
+		State:  &schedulepb.ScheduleState{Paused: true},
+	})
+	patchSchedule(ctx, t, s, sid, triggerPatch(enumspb.SCHEDULE_OVERLAP_POLICY_SKIP))
+	await.Require(ctx, t, func(at *await.T) {
+		desc, err := s.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
+			Namespace: s.Namespace().String(), ScheduleId: sid,
+		})
+		require.NoError(at, err)
+		require.Len(at, desc.GetInfo().GetRunningWorkflows(), 1)
+		require.Equal(at, int32(1), started.Load())
+	}, awaitTimeout, pollInterval)
+
+	patchSchedule(ctx, t, s, sid, &schedulepb.SchedulePatch{
+		TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+			Enabled: true,
+			FastForwardConfig: &commonpb.FastForwardConfig{
+				Id:       uuid.NewString(),
+				Duration: durationpb.New(2 * week),
+			},
+		},
+	})
+	await.Require(ctx, t, func(at *await.T) {
+		desc, err := s.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
+			Namespace: s.Namespace().String(), ScheduleId: sid,
+		})
+		require.NoError(at, err)
+		require.True(at, desc.GetInfo().GetTimeSkippingInfo().GetEffectiveConfig().GetEnabled())
+		require.Len(at, desc.GetInfo().GetRunningWorkflows(), 1)
+		require.Equal(at, int32(1), started.Load())
+	}, awaitTimeout, pollInterval)
+
+	s.OverrideDynamicConfig(dynamicconfig.CHASMSchedulerTimeSkippingEnabled, false)
+	_, err := s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Patch: &schedulepb.SchedulePatch{TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+			Enabled: true,
+			FastForwardConfig: &commonpb.FastForwardConfig{
+				Id:       uuid.NewString(),
+				Duration: durationpb.New(2 * week),
+			},
+		}},
+		Identity:  "test",
+		RequestId: uuid.NewString(),
+	})
+	var unimplemented *serviceerror.Unimplemented
+	require.ErrorAs(t, err, &unimplemented)
+	require.ErrorContains(t, err, "Schedule time skipping is not enabled for the namespace")
+
+	patchSchedule(ctx, t, s, sid, &schedulepb.SchedulePatch{Unpause: "feature flag turned off"})
+	await.Require(ctx, t, func(at *await.T) {
+		desc, err := s.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
+			Namespace: s.Namespace().String(), ScheduleId: sid,
+		})
+		require.NoError(at, err)
+		tsi := desc.GetInfo().GetTimeSkippingInfo()
+		require.True(at, tsi.GetEffectiveConfig().GetEnabled())
+		require.Zero(at, tsi.GetCurrentSessionSkipCount())
+		require.True(at, tsi.GetCurrentTime().AsTime().Before(firstTick))
+		require.Len(at, desc.GetInfo().GetRunningWorkflows(), 1)
+	}, awaitTimeout, pollInterval)
+
+	require.Equal(t, 1, completeRunningWorkflows(ctx, t, s, sid))
+	await.Require(ctx, t, func(at *await.T) {
+		desc, err := s.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
+			Namespace: s.Namespace().String(), ScheduleId: sid,
+		})
+		require.NoError(at, err)
+		require.Empty(at, desc.GetInfo().GetRunningWorkflows())
+		require.Equal(at, int64(1), desc.GetInfo().GetActionCount())
+		require.True(at, desc.GetInfo().GetTimeSkippingInfo().GetEffectiveConfig().GetEnabled())
+		require.Zero(at, desc.GetInfo().GetTimeSkippingInfo().GetCurrentSessionSkipCount())
+		require.True(at, desc.GetInfo().GetTimeSkippingInfo().GetCurrentTime().AsTime().Before(firstTick))
+	}, awaitTimeout, pollInterval)
+
+	s.OverrideDynamicConfig(dynamicconfig.CHASMSchedulerTimeSkippingEnabled, true)
+	fastForwardID := uuid.NewString()
+	patchSchedule(ctx, t, s, sid, &schedulepb.SchedulePatch{
+		TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+			Enabled: true,
+			FastForwardConfig: &commonpb.FastForwardConfig{
+				Id:       fastForwardID,
+				Duration: durationpb.New(6 * time.Hour),
+			},
+		},
+	})
+	await.Require(ctx, t, func(at *await.T) {
+		desc, err := s.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
+			Namespace: s.Namespace().String(), ScheduleId: sid,
+		})
+		require.NoError(at, err)
+		require.Empty(at, desc.GetInfo().GetRunningWorkflows())
+		require.Equal(at, int64(1), desc.GetInfo().GetActionCount())
+		tsi := desc.GetInfo().GetTimeSkippingInfo()
+		require.Equal(at, fastForwardID, tsi.GetFastForwardInfo().GetFastForwardId())
+		require.True(at, tsi.GetFastForwardInfo().GetHasCompleted())
+		require.Positive(at, tsi.GetCurrentSessionSkipCount())
+		require.True(at, tsi.GetCurrentTime().AsTime().Before(firstTick))
+	}, awaitTimeout, pollInterval)
+}
+
+func (suite *ScheduleCHASMSuite) TestDescribeCatchupWindowAfterCreateAndUpdate() {
+	t := suite.T()
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	ctx := chasmContextFactory(testcontext.For(t))
@@ -500,71 +871,277 @@ func testDescribeCatchupWindowAfterCreateAndUpdate(t *testing.T) {
 	}
 }
 
-func TestScheduleV1(t *testing.T) {
-	t.Parallel()
-	runSharedScheduleTests(t, v1ContextFactory)
-
-	// V1-only tests
-	newContext := v1ContextFactory
-	t.Run("TestCreateScheduleDuplicateSdkError", func(t *testing.T) { t.Parallel(); testCreateScheduleDuplicateSdkError(t, false) })
-	t.Run("TestCHASMCanListV1Schedules", func(t *testing.T) { t.Parallel(); testCHASMCanListV1Schedules(t, newContext) })
-	t.Run("TestRefresh", func(t *testing.T) { t.Parallel(); testRefresh(t, newContext) })
-	t.Run("TestListBeforeRun", func(t *testing.T) { t.Parallel(); testListBeforeRun(t, newContext) })
-	t.Run("TestRateLimit", func(t *testing.T) { t.Parallel(); testRateLimit(t, newContext) })
-	t.Run("TestNextTimeCache", func(t *testing.T) { t.Parallel(); testNextTimeCache(t, newContext) })
-	t.Run("TestCreatesCHASMSentinel", func(t *testing.T) { t.Parallel(); testCreatesCHASMSentinel(t, newContext) })
-	t.Run("TestSkipsCHASMSentinelWhenDisabled", func(t *testing.T) { t.Parallel(); testSkipsCHASMSentinelWhenDisabled(t, newContext) })
-	t.Run("TestUpdateScheduleMemoRejected", func(t *testing.T) { t.Parallel(); testUpdateScheduleMemoRejected(t, newContext) })
+type ScheduleV1Suite struct {
+	parallelsuite.Suite[*ScheduleV1Suite]
 }
 
-func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
-	t.Run("TestBasics", func(t *testing.T) { t.Parallel(); testBasics(t, newContext) })
-	t.Run("TestInput", func(t *testing.T) { t.Parallel(); testInput(t, newContext) })
-	t.Run("TestLastCompletionAndError", func(t *testing.T) { t.Parallel(); testLastCompletionAndError(t, newContext) })
-	t.Run("TestScheduleContinuesAfterWorkflowRetryFailure", func(t *testing.T) { t.Parallel(); testScheduleContinuesAfterWorkflowRetryFailure(t, newContext) })
-	t.Run("TestListSchedulesReturnsWorkflowStatus", func(t *testing.T) { t.Parallel(); testListSchedulesReturnsWorkflowStatus(t, newContext) })
-	t.Run("TestListSchedulesRecentActionsCapped", func(t *testing.T) { t.Parallel(); testListSchedulesRecentActionsCapped(t, newContext) })
-	t.Run("TestUpdateIntervalTakesEffect", func(t *testing.T) { t.Parallel(); testUpdateIntervalTakesEffect(t, newContext) })
-	t.Run("TestListScheduleMatchingTimes", func(t *testing.T) { t.Parallel(); testListScheduleMatchingTimes(t, newContext) })
-	t.Run("TestLimitMemoSpecSize", func(t *testing.T) { t.Parallel(); testLimitMemoSpecSize(t, newContext) })
-	t.Run("TestCountSchedules", func(t *testing.T) { t.Parallel(); testCountSchedules(t, newContext) })
-	t.Run("TestSchedule_InternalTaskQueue", func(t *testing.T) { t.Parallel(); testScheduleInternalTaskQueue(t, newContext) })
-	t.Run("TestDeletedScheduleOperations", func(t *testing.T) { t.Parallel(); testDeletedScheduleOperations(t, newContext) })
-	t.Run("TestUnpauseResumesProcessing", func(t *testing.T) { t.Parallel(); testCHASMUnpauseResumesProcessing(t, newContext) })
-	t.Run("TestPausedScheduleNeverIdles", func(t *testing.T) { t.Parallel(); testPausedScheduleNeverIdles(t, newContext) })
-	t.Run("TestPausedEmptySpecStaysOpen", func(t *testing.T) { t.Parallel(); testPausedEmptySpecStaysOpen(t, newContext) })
-	t.Run("TriggerImmediately", func(t *testing.T) {
-		t.Parallel()
-		t.Run("OnActiveSchedule", func(t *testing.T) { t.Parallel(); testTriggerImmediatelyOnActiveSchedule(t, newContext) })
-		t.Run("OnPausedSchedule", func(t *testing.T) { t.Parallel(); testTriggerImmediatelyOnPausedSchedule(t, newContext) })
-		t.Run("AfterActionsExhausted", func(t *testing.T) { t.Parallel(); testTriggerImmediatelyAfterActionsExhausted(t, newContext) })
+func TestScheduleV1Suite(t *testing.T) {
+	parallelsuite.Run(t, &ScheduleV1Suite{})
+}
+
+func TestScheduleV1ActionDelayMetrics(t *testing.T) {
+	newContext := v1ContextFactory
+	// The short-refresh DesiredTime path this test exercises is gated behind
+	// RefreshCompletionDesiredTime; the shipped default stays at TriggerImmediatelyTimestamp
+	// until a follow-up deploy activates it. Force it on for this run. This top-level
+	// test must stay nonparallel because the override is shared package state.
+	prevVersion := scheduler.CurrentTweakablePolicies.Version
+	scheduler.CurrentTweakablePolicies.Version = scheduler.RefreshCompletionDesiredTime
+	t.Cleanup(func() { scheduler.CurrentTweakablePolicies.Version = prevVersion })
+
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+
+	sid := testcore.RandomizeStr("sched-action-delay")
+	wid := testcore.RandomizeStr("sched-action-delay-wf")
+	wt := testcore.RandomizeStr("sched-action-delay-wt")
+
+	var activityCalls atomic.Int32
+	releaseManualActivity := make(chan struct{})
+	releaseFirstScheduledActivity := make(chan struct{})
+	activityFn := func(ctx context.Context) error {
+		var release chan struct{}
+		switch activityCalls.Add(1) {
+		case 1:
+			release = releaseManualActivity
+		case 2:
+			release = releaseFirstScheduledActivity
+		default:
+			return nil
+		}
+		select {
+		case <-release:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	s.SdkWorker().RegisterActivity(activityFn)
+	s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			StartToCloseTimeout: 30 * time.Second,
+		})
+		return workflow.ExecuteActivity(ctx, activityFn).Get(ctx, nil)
+	}, workflow.RegisterOptions{Name: wt})
+
+	ctx := newContext(testcontext.For(t))
+	metricCapture := s.StartNamespaceMetricCapture()
+	interval := 10 * time.Second
+	phaseOffset := 5 * time.Second
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{{
+					Interval: durationpb.New(interval),
+					Phase:    durationpb.New(time.Duration((time.Now().Unix()+int64(phaseOffset/time.Second))%int64(interval/time.Second)) * time.Second),
+				}},
+			},
+			Action: startWorkflowAction(s, wid, wt),
+			Policies: &schedulepb.SchedulePolicies{
+				OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE,
+			},
+			State: &schedulepb.ScheduleState{
+				LimitedActions:   true,
+				RemainingActions: 2,
+			},
+		},
+		InitialPatch: triggerPatch(enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED),
+		Identity:     "test",
+		RequestId:    uuid.NewString(),
 	})
-	t.Run("Backfill", func(t *testing.T) {
-		t.Parallel()
-		t.Run("ReprocessCompletedActionExactTimePaused", func(t *testing.T) {
-			t.Parallel()
-			testBackfillReprocessesCompletedAction(t, newContext, true, 0)
-		})
-		t.Run("ReprocessCompletedActionExactTimeActive", func(t *testing.T) {
-			t.Parallel()
-			testBackfillReprocessesCompletedAction(t, newContext, false, 0)
-		})
-		t.Run("ReprocessCompletedActionInRange", func(t *testing.T) {
-			t.Parallel()
-			testBackfillReprocessesCompletedAction(t, newContext, true, 1)
-		})
-		t.Run("SkipOverlap", func(t *testing.T) { t.Parallel(); testBackfillWithSkipOverlap(t, newContext) })
-		t.Run("BufferOneOverlap", func(t *testing.T) { t.Parallel(); testBackfillWithBufferOneOverlap(t, newContext) })
-		t.Run("MultiRangeCountedExactlyOnce", func(t *testing.T) { t.Parallel(); testMultiRangeBackfillCountedExactlyOnce(t, newContext) })
-		t.Run("RangeSmallerThanInterval", func(t *testing.T) { t.Parallel(); testBackfillRangeSmallerThanInterval(t, newContext) })
+	require.NoError(t, err)
+
+	// Query the scheduler workflow directly (not DescribeSchedule, which signals a refresh and
+	// would race the completion-discovery path each stage below is intended to cover).
+	queryBufferAndRunning := func() (bufferSize int64, running int) {
+		encoded, queryErr := s.SdkClient().QueryWorkflow(ctx, scheduler.WorkflowIDPrefix+sid, "", scheduler.QueryNameDescribe)
+		if queryErr != nil {
+			return -1, -1
+		}
+		var response schedulespb.DescribeResponse
+		if encoded.Get(&response) != nil {
+			return -1, -1
+		}
+		return response.GetInfo().GetBufferSize(), len(response.GetInfo().GetRunningWorkflows())
+	}
+	await.RequireTruef(t, func() bool {
+		bufferSize, running := queryBufferAndRunning()
+		return activityCalls.Load() == 1 && bufferSize == 1 && running == 1
+	}, awaitTimeout, pollInterval, "manual action should be running with the first scheduled action buffered")
+	close(releaseManualActivity)
+
+	// Hold the first scheduled action open past the second scheduled tick, so the second
+	// scheduled action is buffered behind a still-running (not yet closed) action -- i.e.
+	// genuinely blocked, not merely started after an unrelated, already-finished one. Note this
+	// exercises DesiredTime backdating end-to-end (via whichever path discovers the completion --
+	// a long-poll watcher is installed as soon as a start is buffered behind a running action, so
+	// that watcher, not a later refresh, is what normally wins here). The specific
+	// refresh-discovers-a-real-backlog branch (refreshBackdate == true in processWatcherResult) is
+	// pinned deterministically by TestRefreshCompletionDesiredTimeBacklog in workflow_test.go,
+	// which controls discovery timing directly instead of racing a real watcher.
+	await.RequireTruef(t, func() bool {
+		bufferSize, running := queryBufferAndRunning()
+		return activityCalls.Load() == 2 && bufferSize == 1 && running == 1
+	}, awaitTimeout, pollInterval, "first scheduled action should be running with the second scheduled action buffered")
+	close(releaseFirstScheduledActivity)
+
+	// Do not describe the schedule while waiting. The second scheduled action must discover
+	// the prior completion through processBuffer's short refresh, not a DescribeSchedule signal.
+	await.RequireTruef(t, func() bool {
+		return activityCalls.Load() == 3 && len(metricCapture.Metric(metrics.ScheduleActionDelay.Name())) == 2
+	}, awaitTimeout, pollInterval, "manual action and two scheduled actions should start")
+	desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
 	})
-	t.Run("TestUpdateScheduleRequestIDTooLong", func(t *testing.T) { t.Parallel(); testUpdateScheduleRequestIDTooLong(t, newContext) })
-	t.Run("TestUpdateScheduleBlobSizeLimit", func(t *testing.T) { t.Parallel(); testUpdateScheduleBlobSizeLimit(t, newContext) })
-	t.Run("TestListSchedulesPagination", func(t *testing.T) { t.Parallel(); testListSchedulesPagination(t, newContext) })
-	t.Run("TestListSchedulesFilterAndEntryFields", func(t *testing.T) { t.Parallel(); testListSchedulesFilterAndEntryFields(t, newContext) })
-	t.Run("TestListSchedulesFilterByScheduleId", func(t *testing.T) { t.Parallel(); testListSchedulesFilterByScheduleID(t, newContext) })
-	t.Run("TestBufferSizeReportedWhenBuffered", func(t *testing.T) { t.Parallel(); testBufferSizeReportedWhenBuffered(t, newContext) })
-	t.Run("TestBufferOneDeferredFiresAfterCompletion", func(t *testing.T) { t.Parallel(); testBufferOneDeferredFiresAfterCompletion(t, newContext) })
+	require.NoError(t, err)
+	require.Equal(t, int64(3), desc.GetInfo().GetActionCount())
+	actions := desc.GetInfo().GetRecentActions()
+	require.Len(t, actions, 3)
+
+	closeTime := func(action *schedulepb.ScheduleActionResult) time.Time {
+		t.Helper()
+		events := s.GetHistory(s.Namespace().String(), action.GetStartWorkflowResult())
+		require.NotEmpty(t, events)
+		lastEvent := events[len(events)-1]
+		require.Equal(t, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED, lastEvent.GetEventType())
+		return lastEvent.GetEventTime().AsTime()
+	}
+	// The prior action's close only backdates the desired time when it comes after this
+	// action's own scheduled time -- i.e. this action was actually blocked waiting on it.
+	// Otherwise the action ran on time and the desired time stays at its scheduled time.
+	expectedDesiredTime := func(priorClose time.Time, action *schedulepb.ScheduleActionResult) time.Time {
+		if scheduleTime := action.GetScheduleTime().AsTime(); priorClose.After(scheduleTime) {
+			return priorClose
+		}
+		return action.GetScheduleTime().AsTime()
+	}
+	recordings := metricCapture.Metric(metrics.ScheduleActionDelay.Name())
+	for _, recording := range recordings {
+		require.Equal(t, metrics.ScheduleBackendLegacy, recording.Tags[metrics.ScheduleBackendTag])
+	}
+	require.Equal(t, actions[1].GetActualTime().AsTime().Sub(expectedDesiredTime(closeTime(actions[0]), actions[1])), recordings[0].Value)
+	require.Equal(t, actions[2].GetActualTime().AsTime().Sub(expectedDesiredTime(closeTime(actions[1]), actions[2])), recordings[1].Value)
+}
+
+// testAllowAllDescribeContract verifies the customer-facing Describe state shared by V1 and CHASM.
+// ALLOW_ALL executions appear in RecentActions but not RunningWorkflows; sequential executions remain active.
+func (suite *ScheduleSuite) TestAllowAllDescribeContract(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+	sid := testcore.RandomizeStr("sched-allow-all-active")
+	wid := testcore.RandomizeStr("sched-allow-all-active-wf")
+	wt := testcore.RandomizeStr("sched-allow-all-active-wt")
+
+	var runs atomic.Int32
+	s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		_ = workflow.SideEffect(ctx, func(workflow.Context) any { runs.Add(1); return 0 })
+		failed := false
+		selector := workflow.NewSelector(ctx)
+		selector.AddReceive(workflow.GetSignalChannel(ctx, "complete"), func(c workflow.ReceiveChannel, _ bool) {
+			c.Receive(ctx, nil)
+		})
+		selector.AddReceive(workflow.GetSignalChannel(ctx, "fail"), func(c workflow.ReceiveChannel, _ bool) {
+			c.Receive(ctx, nil)
+			failed = true
+		})
+		selector.Select(ctx)
+		if failed {
+			return errors.New("allow-all failure")
+		}
+		return nil
+	}, workflow.RegisterOptions{Name: wt})
+
+	ctx := newContext(testcore.NewContext())
+	createSchedule(ctx, t, s, sid, &schedulepb.Schedule{
+		Spec:     &schedulepb.ScheduleSpec{},
+		Action:   startWorkflowAction(s, wid, wt),
+		Policies: &schedulepb.SchedulePolicies{PauseOnFailure: true},
+	})
+
+	patchSchedule(ctx, t, s, sid, triggerPatch(enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL))
+	var allowAllRun *commonpb.WorkflowExecution
+	var allowAllDescribe *workflowservice.DescribeScheduleResponse
+	await.Requiref(ctx, t, func(at *await.T) {
+		desc, err := s.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
+			Namespace: s.Namespace().String(), ScheduleId: sid,
+		})
+		require.NoError(at, err)
+		require.Equal(at, int32(1), runs.Load())
+		require.Equal(at, int64(1), desc.GetInfo().GetActionCount())
+		require.Zero(at, desc.GetInfo().GetBufferSize())
+		require.Len(at, desc.GetInfo().GetRecentActions(), 1)
+		require.Empty(at, desc.GetInfo().GetRunningWorkflows())
+		recent := desc.GetInfo().GetRecentActions()[0]
+		require.Equal(at, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, recent.GetStartWorkflowStatus())
+		require.NotNil(at, recent.GetScheduleTime())
+		require.NotNil(at, recent.GetActualTime())
+		allowAllRun = recent.GetStartWorkflowResult()
+		require.NotEmpty(at, allowAllRun.GetRunId())
+		allowAllDescribe = desc
+	}, awaitTimeout, pollInterval, "ALLOW_ALL Describe state should be recent, running, and not active")
+	require.Empty(t, allowAllDescribe.GetInfo().GetRunningWorkflows())
+	require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, allowAllDescribe.GetInfo().GetRecentActions()[0].GetStartWorkflowStatus())
+
+	allowAllNominal, err := time.Parse(time.RFC3339, strings.TrimPrefix(allowAllRun.GetWorkflowId(), wid+"-"))
+	require.NoError(t, err)
+	await.RequireTruef(t, func() bool {
+		return time.Now().UTC().Truncate(time.Second).After(allowAllNominal)
+	}, awaitTimeout, pollInterval, "next trigger should receive a distinct timestamp-based workflow ID")
+
+	patchSchedule(ctx, t, s, sid, triggerPatch(enumspb.SCHEDULE_OVERLAP_POLICY_SKIP))
+	var sequentialRun *commonpb.WorkflowExecution
+	var sequentialDescribe *workflowservice.DescribeScheduleResponse
+	await.Requiref(ctx, t, func(at *await.T) {
+		desc, err := s.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
+			Namespace: s.Namespace().String(), ScheduleId: sid,
+		})
+		require.NoError(at, err)
+		require.Equal(at, int32(2), runs.Load())
+		require.Equal(at, int64(2), desc.GetInfo().GetActionCount())
+		require.Zero(at, desc.GetInfo().GetBufferSize())
+		require.Len(at, desc.GetInfo().GetRecentActions(), 2)
+		require.Len(at, desc.GetInfo().GetRunningWorkflows(), 1)
+		sequentialRun = desc.GetInfo().GetRunningWorkflows()[0]
+		require.NotEmpty(at, sequentialRun.GetRunId())
+		require.NotEqual(at, allowAllRun.GetRunId(), sequentialRun.GetRunId())
+		for _, recent := range desc.GetInfo().GetRecentActions() {
+			require.Equal(at, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, recent.GetStartWorkflowStatus())
+			require.NotNil(at, recent.GetScheduleTime())
+			require.NotNil(at, recent.GetActualTime())
+		}
+		sequentialDescribe = desc
+	}, awaitTimeout, pollInterval, "ALLOW_ALL execution should not block a sequential trigger")
+	require.Equal(t, []*commonpb.WorkflowExecution{sequentialRun}, sequentialDescribe.GetInfo().GetRunningWorkflows())
+	require.ElementsMatch(t, []*commonpb.WorkflowExecution{allowAllRun, sequentialRun}, []*commonpb.WorkflowExecution{
+		sequentialDescribe.GetInfo().GetRecentActions()[0].GetStartWorkflowResult(),
+		sequentialDescribe.GetInfo().GetRecentActions()[1].GetStartWorkflowResult(),
+	})
+
+	require.NoError(t, s.SdkClient().SignalWorkflow(ctx, allowAllRun.GetWorkflowId(), allowAllRun.GetRunId(), "fail", nil))
+	await.Requiref(ctx, t, func(at *await.T) {
+		resp, err := s.FrontendClient().DescribeWorkflowExecution(at.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.Namespace().String(), Execution: allowAllRun,
+		})
+		require.NoError(at, err)
+		require.Equal(at, enumspb.WORKFLOW_EXECUTION_STATUS_FAILED, resp.GetWorkflowExecutionInfo().GetStatus())
+	}, awaitTimeout, pollInterval, "ALLOW_ALL workflow should fail")
+
+	desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		Namespace: s.Namespace().String(), ScheduleId: sid,
+	})
+	require.NoError(t, err)
+	require.False(t, desc.GetSchedule().GetState().GetPaused())
+	require.Equal(t, int64(2), desc.GetInfo().GetActionCount())
+	require.Zero(t, desc.GetInfo().GetBufferSize())
+	require.Equal(t, []*commonpb.WorkflowExecution{sequentialRun}, desc.GetInfo().GetRunningWorkflows())
+	require.Len(t, desc.GetInfo().GetRecentActions(), 2)
+	for _, recent := range desc.GetInfo().GetRecentActions() {
+		require.Equal(t, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, recent.GetStartWorkflowStatus())
+	}
+	require.NoError(t, s.SdkClient().SignalWorkflow(ctx, sequentialRun.GetWorkflowId(), sequentialRun.GetRunId(), "complete", nil))
 }
 
 // testBufferSizeReportedWhenBuffered verifies that ScheduleInfo.BufferSize is
@@ -572,7 +1149,9 @@ func runSharedScheduleTests(t *testing.T, newContext contextFactory) {
 // queued behind a still-running workflow. A schedule with a 1s interval and
 // BUFFER_ONE keeps exactly one start in the buffer while the first workflow
 // is still running.
-func testBufferSizeReportedWhenBuffered(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleSuite) TestBufferSizeReportedWhenBuffered(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := testcore.RandomizeStr("sched-buffer-size")
@@ -606,7 +1185,7 @@ func testBufferSizeReportedWhenBuffered(t *testing.T, newContext contextFactory)
 		},
 	}
 
-	ctx := newContext(s.Context())
+	ctx := newContext(testcontext.For(t))
 	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
 		Namespace:  s.Namespace().String(),
 		ScheduleId: sid,
@@ -614,19 +1193,18 @@ func testBufferSizeReportedWhenBuffered(t *testing.T, newContext contextFactory)
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	var lastDescribe *workflowservice.DescribeScheduleResponse
-	s.Eventually(func() bool {
-		desc, descErr := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+	await.Requiref(ctx, t, func(at *await.T) {
+		desc, descErr := s.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  s.Namespace().String(),
 			ScheduleId: sid,
 		})
-		if descErr != nil {
-			return false
-		}
+		require.NoError(at, descErr)
 		lastDescribe = desc
-		return desc.GetInfo().GetBufferSize() >= 1 && len(desc.GetInfo().GetRunningWorkflows()) >= 1
+		require.GreaterOrEqual(at, desc.GetInfo().GetBufferSize(), int64(1))
+		require.GreaterOrEqual(at, len(desc.GetInfo().GetRunningWorkflows()), 1)
 	}, 30*time.Second, 500*time.Millisecond, "DescribeSchedule should report BufferSize >= 1 with a running workflow blocking the buffer")
 
 	s.GreaterOrEqual(lastDescribe.GetInfo().GetBufferSize(), int64(1), "BufferSize must reflect at least one buffered start")
@@ -635,7 +1213,9 @@ func testBufferSizeReportedWhenBuffered(t *testing.T, newContext contextFactory)
 
 // A full buffer (MaxBufferSize reached) makes the CHASM generator drop further
 // fires and increment ScheduleInfo.BufferDropped.
-func testBufferOverrunDropsActions(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleCHASMSuite) TestBufferOverrunDropsActions() {
+	t := suite.T()
+	newContext := chasmContextFactory
 	// A small buffer plus a gated workflow under BUFFER_ALL fills within a few
 	// fast-interval ticks. Only the CHASM scheduler reads these tweakables.
 	tweakables := chasmscheduler.DefaultTweakables
@@ -661,16 +1241,14 @@ func testBufferOverrunDropsActions(t *testing.T, newContext contextFactory) {
 
 	// RunningWorkflows lags the drop (it needs the async StartWorkflow to land), so
 	// assert both together rather than after the wait.
-	require.Eventually(t, func() bool {
-		desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+	await.Requiref(ctx, t, func(at *await.T) {
+		desc, err := s.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  s.Namespace().String(),
 			ScheduleId: sid,
 		})
-		if err != nil {
-			return false
-		}
-		return desc.GetInfo().GetBufferDropped() > 0 &&
-			len(desc.GetInfo().GetRunningWorkflows()) >= 1
+		require.NoError(at, err)
+		require.Positive(at, desc.GetInfo().GetBufferDropped())
+		require.GreaterOrEqual(at, len(desc.GetInfo().GetRunningWorkflows()), 1)
 	}, awaitTimeout, pollInterval, "expected BufferDropped > 0 with a gated workflow holding the buffer full")
 
 	require.Positive(t, runs.Load(), "the gated workflow should have started")
@@ -702,7 +1280,7 @@ func testRecentActionsAdvanceWhilePaused(t *testing.T, newContext contextFactory
 	})
 
 	// Wait for the first workflow to be reported as RUNNING in ListSchedules.
-	running := getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+	running := getScheduleEntryFromVisibility(t, s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
 		return len(ent.Info.RecentActions) >= 1 &&
 			ent.Info.RecentActions[0].GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	})
@@ -716,7 +1294,7 @@ func testRecentActionsAdvanceWhilePaused(t *testing.T, newContext contextFactory
 	require.Equal(t, 1, signaled, "exactly one run should be in flight under the default SKIP overlap policy")
 
 	// While paused, the listed RecentActions entry transitions to COMPLETED.
-	getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+	getScheduleEntryFromVisibility(t, s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
 		for _, a := range ent.Info.RecentActions {
 			if a.GetStartWorkflowResult().GetRunId() == runningRunID &&
 				a.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
@@ -753,7 +1331,7 @@ func testFutureActionTimesAdvanceWhilePaused(t *testing.T, newContext contextFac
 	})
 
 	// Wait for visibility to surface an initial FutureActionTimes projection.
-	initial := getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+	initial := getScheduleEntryFromVisibility(t, s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
 		return len(ent.Info.FutureActionTimes) > 0
 	})
 	initialFirst := initial.Info.FutureActionTimes[0].AsTime()
@@ -761,7 +1339,7 @@ func testFutureActionTimesAdvanceWhilePaused(t *testing.T, newContext contextFac
 	// While still paused, the earliest projected time must advance past the
 	// initial value: the Generator keeps ticking and republishing the
 	// projection, even though no workflows fire.
-	getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+	getScheduleEntryFromVisibility(t, s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
 		return len(ent.Info.FutureActionTimes) > 0 &&
 			ent.Info.FutureActionTimes[0].AsTime().After(initialFirst)
 	})
@@ -769,11 +1347,12 @@ func testFutureActionTimesAdvanceWhilePaused(t *testing.T, newContext contextFac
 }
 
 // testBufferOneDeferredFiresAfterCompletion exercises the BUFFER_ONE deferred
-// lifecycle end-to-end: an action that gets buffered while a workflow is
-// running must fire once that workflow completes. Without re-enabling the
-// deferred start (Attempt=-1 -> 0 in recordCompletedAction), the buffered
-// fire would be stranded.
-func testBufferOneDeferredFiresAfterCompletion(t *testing.T, newContext contextFactory) {
+// lifecycle end-to-end. Later ticks must not displace or accumulate alongside
+// the first buffered action, and that action must fire once the running workflow
+// completes.
+func (suite *ScheduleSuite) TestBufferOneDeferredFiresAfterCompletion(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := testcore.RandomizeStr("sched-buffer-one-deferred")
@@ -795,20 +1374,32 @@ func testBufferOneDeferredFiresAfterCompletion(t *testing.T, newContext contextF
 	})
 
 	// Exactly one workflow runs with exactly one start buffered behind it (BUFFER_ONE caps the buffer at one).
-	await.RequireTruef(t, func() bool {
+	await.Requiref(ctx, t, func(t *await.T) {
+		desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		require.NoError(t, err)
+		require.Equal(t, int64(1), desc.GetInfo().GetBufferSize())
+		require.Len(t, desc.GetInfo().GetRunningWorkflows(), 1)
+		require.Equal(t, int32(1), runs.Load())
+	}, awaitTimeout, pollInterval, "expected exactly one running workflow with one deferred start buffered behind it")
+
+	// Keep the first workflow open across several more ticks. V1 evaluates the
+	// complete buffer and keeps its first entry; CHASM must do the same even after
+	// that entry has been marked deferred (Attempt=-1).
+	require.Never(t, func() bool {
 		desc, descErr := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
 			Namespace:  s.Namespace().String(),
 			ScheduleId: sid,
 		})
-		return descErr == nil && desc.GetInfo().GetBufferSize() == 1 && len(desc.GetInfo().GetRunningWorkflows()) == 1
-	}, awaitTimeout, pollInterval, "expected exactly one running workflow with one deferred start buffered behind it")
-	require.Equal(t, int32(1), runs.Load(), "only the first workflow should have fired before the running one completes")
+		return descErr == nil && (desc.GetInfo().GetBufferSize() != 1 ||
+			len(desc.GetInfo().GetRunningWorkflows()) != 1 || runs.Load() != 1)
+	}, 3*fastInterval, pollInterval,
+		"V1 and CHASM must retain exactly one buffered occurrence while later ticks arrive")
 
 	// Releasing the running workflow must re-enable the deferred start (Attempt=-1 -> 0) so it fires.
 	require.Equal(t, 1, completeRunningWorkflows(ctx, t, s, sid))
-	await.RequireTruef(t, func() bool { return runs.Load() == 2 },
-		awaitTimeout, pollInterval,
-		"deferred start must fire after the running workflow completes - regression for the Attempt=-1 -> 0 re-enable path")
 
 	// The fire is specifically the tick buffered directly behind the first start,
 	// not a fresh action generated after completion. RecentActions lists the
@@ -836,7 +1427,9 @@ func testBufferOneDeferredFiresAfterCompletion(t *testing.T, newContext contextF
 		"deferred fire must be the start buffered one interval after the first tick, not a later fresh action")
 }
 
-func testDeletedScheduleOperations(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleSuite) TestDeletedScheduleOperations(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-deleted-ops"
@@ -868,7 +1461,7 @@ func testDeletedScheduleOperations(t *testing.T, newContext contextFactory) {
 		Identity:   "test",
 		RequestId:  uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// Delete the schedule.
 	_, err = s.FrontendClient().DeleteSchedule(newContext(s.Context()), &workflowservice.DeleteScheduleRequest{
@@ -876,23 +1469,25 @@ func testDeletedScheduleOperations(t *testing.T, newContext contextFactory) {
 		ScheduleId: sid,
 		Identity:   "test",
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// Describe should return NotFound.
 	var notFoundErr *serviceerror.NotFound
-	s.Eventually(func() bool {
-		_, descErr := s.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
+	await.Require(newContext(testcontext.For(t)), t, func(at *await.T) {
+		_, descErr := s.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  s.Namespace().String(),
 			ScheduleId: sid,
 		})
-		return errors.As(descErr, &notFoundErr)
+		require.ErrorAs(at, descErr, &notFoundErr)
 	}, 10*time.Second, 200*time.Millisecond)
 
 	// Update, Patch, and Delete behave differently across CHASM and V1,
 	// so they are not tested here. See TestScheduleUpdateAfterDelete.
 }
 
-func testBasics(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleSuite) TestBasics(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-basics"
@@ -997,13 +1592,13 @@ func testBasics(t *testing.T, newContext contextFactory) {
 	}
 
 	// sleep until we see two runs, plus a bit more to ensure that the second run has completed
-	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 2 }, 15*time.Second, 500*time.Millisecond)
+	await.RequireTrue(t, func() bool { return atomic.LoadInt32(&runs) == 2 }, 15*time.Second, 500*time.Millisecond)
 	time.Sleep(2 * time.Second) //nolint:forbidigo
 
 	// wait for visibility to stabilize on completed before calling describe,
 	// otherwise their recent actions may flake and differ
 
-	visibilityResponse := getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+	visibilityResponse := getScheduleEntryFromVisibility(t, s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
 		recentActions := ent.GetInfo().GetRecentActions()
 		return len(recentActions) >= 2 && recentActions[1].GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
 	})
@@ -1153,8 +1748,7 @@ func testBasics(t *testing.T, newContext contextFactory) {
 	s.NoError(err)
 
 	// wait for one new run
-	s.Eventually(
-		func() bool { return atomic.LoadInt32(&runs2) == 1 },
+	await.RequireTrue(t, func() bool { return atomic.LoadInt32(&runs2) == 1 },
 		7*time.Second,
 		500*time.Millisecond,
 	)
@@ -1207,22 +1801,21 @@ func testBasics(t *testing.T, newContext contextFactory) {
 	s.NoError(err)
 
 	// wait until search attributes are updated
-	s.EventuallyWithT(
-		func(c *assert.CollectT) {
-			describeResp, err = s.FrontendClient().DescribeSchedule(
-				newContext(s.Context()),
-				&workflowservice.DescribeScheduleRequest{
-					Namespace:  s.Namespace().String(),
-					ScheduleId: sid,
-				},
-			)
-			require.NoError(c, err)
-			require.Len(c, describeResp.SearchAttributes.GetIndexedFields(), 3)
-			require.Equal(c, schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csaKeyword].Data)
-			require.Equal(c, schSAIntValue.Data, describeResp.SearchAttributes.IndexedFields[csaInt].Data)
-			require.Equal(c, schSADoubleValue.Data, describeResp.SearchAttributes.IndexedFields[csaDouble].Data)
-			require.NotContains(c, describeResp.SearchAttributes.IndexedFields, csaBool)
-		},
+	await.Require(newContext(testcontext.For(t)), t, func(c *await.T) {
+		describeResp, err = s.FrontendClient().DescribeSchedule(
+			c.Context(),
+			&workflowservice.DescribeScheduleRequest{
+				Namespace:  s.Namespace().String(),
+				ScheduleId: sid,
+			},
+		)
+		require.NoError(c, err)
+		require.Len(c, describeResp.SearchAttributes.GetIndexedFields(), 3)
+		require.Equal(c, schSAValue.Data, describeResp.SearchAttributes.IndexedFields[csaKeyword].Data)
+		require.Equal(c, schSAIntValue.Data, describeResp.SearchAttributes.IndexedFields[csaInt].Data)
+		require.Equal(c, schSADoubleValue.Data, describeResp.SearchAttributes.IndexedFields[csaDouble].Data)
+		require.NotContains(c, describeResp.SearchAttributes.IndexedFields, csaBool)
+	},
 		2*time.Second,
 		500*time.Millisecond,
 	)
@@ -1243,18 +1836,17 @@ func testBasics(t *testing.T, newContext contextFactory) {
 	s.NoError(err)
 
 	// wait until search attributes are updated
-	s.EventuallyWithT(
-		func(c *assert.CollectT) {
-			describeResp, err = s.FrontendClient().DescribeSchedule(
-				newContext(s.Context()),
-				&workflowservice.DescribeScheduleRequest{
-					Namespace:  s.Namespace().String(),
-					ScheduleId: sid,
-				},
-			)
-			require.NoError(c, err)
-			require.Empty(c, describeResp.SearchAttributes.GetIndexedFields())
-		},
+	await.Require(newContext(testcontext.For(t)), t, func(c *await.T) {
+		describeResp, err = s.FrontendClient().DescribeSchedule(
+			c.Context(),
+			&workflowservice.DescribeScheduleRequest{
+				Namespace:  s.Namespace().String(),
+				ScheduleId: sid,
+			},
+		)
+		require.NoError(c, err)
+		require.Empty(c, describeResp.SearchAttributes.GetIndexedFields())
+	},
 		5*time.Second,
 		500*time.Millisecond,
 	)
@@ -1312,17 +1904,19 @@ func testBasics(t *testing.T, newContext contextFactory) {
 	var notFoundErr *serviceerror.NotFound
 	s.ErrorAs(err, &notFoundErr)
 
-	s.Eventually(func() bool { // wait for visibility
-		listResp, err := s.FrontendClient().ListSchedules(newContext(s.Context()), &workflowservice.ListSchedulesRequest{
+	await.Require(newContext(testcontext.For(t)), t, func(at *await.T) { // wait for visibility
+		listResp, err := s.FrontendClient().ListSchedules(at.Context(), &workflowservice.ListSchedulesRequest{
 			Namespace:       s.Namespace().String(),
 			MaximumPageSize: 5,
 		})
-		s.NoError(err)
-		return len(listResp.Schedules) == 0
+		require.NoError(at, err)
+		require.Empty(at, listResp.Schedules)
 	}, 10*time.Second, 1*time.Second)
 }
 
-func testInput(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleSuite) TestInput(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-input"
@@ -1367,12 +1961,12 @@ func testInput(t *testing.T, newContext contextFactory) {
 		RequestId:  uuid.NewString(),
 	}
 
-	var runs int32
+	var runs atomic.Int32
 	workflowFn := func(ctx workflow.Context, arg1 *myData, arg2 map[int]float64) error {
 		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
 			s.Equal(*input1, *arg1)
 			s.Equal(input2, arg2)
-			atomic.AddInt32(&runs, 1)
+			runs.Add(1)
 			return 0
 		})
 		return nil
@@ -1383,10 +1977,12 @@ func testInput(t *testing.T, newContext contextFactory) {
 	_, err = s.FrontendClient().CreateSchedule(ctx, req)
 	s.NoError(err)
 
-	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 8*time.Second, 200*time.Millisecond)
+	await.RequireTrue(t, func() bool { return runs.Load() == 1 }, 8*time.Second, 200*time.Millisecond)
 }
 
-func testLastCompletionAndError(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleSuite) TestLastCompletionAndError(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-last"
@@ -1418,7 +2014,7 @@ func testLastCompletionAndError(t *testing.T, newContext contextFactory) {
 	}
 
 	runs := make(map[string]struct{})
-	var testComplete int32
+	var testComplete atomic.Int32
 
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		var num int
@@ -1446,7 +2042,7 @@ func testLastCompletionAndError(t *testing.T, newContext contextFactory) {
 		case 3:
 			s.Equal("this one succeeds", lcr)
 			s.ErrorContains(lastErr, "this one fails")
-			atomic.StoreInt32(&testComplete, 1)
+			testComplete.Store(1)
 			return "done", nil
 		default:
 			panic("shouldn't be running anymore")
@@ -1458,12 +2054,14 @@ func testLastCompletionAndError(t *testing.T, newContext contextFactory) {
 	_, err := s.FrontendClient().CreateSchedule(ctx, req)
 	s.NoError(err)
 
-	s.Eventually(func() bool { return atomic.LoadInt32(&testComplete) == 1 }, 20*time.Second, 200*time.Millisecond)
+	await.RequireTrue(t, func() bool { return testComplete.Load() == 1 }, 20*time.Second, 200*time.Millisecond)
 }
 
 // testScheduleContinuesAfterWorkflowRetryFailure verifies a schedule keeps firing actions
 // after a scheduled workflow exhausts its retry policy and fails.
-func testScheduleContinuesAfterWorkflowRetryFailure(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleSuite) TestScheduleContinuesAfterWorkflowRetryFailure(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
 	// Recording FAILED actions across the workflow's retry chain relies on the scheduler matching
 	// completions by the request ID carried in the completion callback token (which survives the new
 	// runs created by retries). That requires the envelope token format, which is gated off by default
@@ -1475,10 +2073,10 @@ func testScheduleContinuesAfterWorkflowRetryFailure(t *testing.T, newContext con
 	wid := testcore.RandomizeStr("sched-retry-fail-wf")
 	wt := testcore.RandomizeStr("sched-retry-fail-wt")
 
-	var sawRetry int32
+	var sawRetry atomic.Int32
 	workflowFn := func(ctx workflow.Context) error {
 		if workflow.GetInfo(ctx).Attempt > 1 {
-			atomic.StoreInt32(&sawRetry, 1)
+			sawRetry.Store(1)
 		}
 		return errors.New("intentional failure to force a retry")
 	}
@@ -1519,14 +2117,12 @@ func testScheduleContinuesAfterWorkflowRetryFailure(t *testing.T, newContext con
 	// Two FAILED actions proves the schedule kept firing past the first retry-failure.
 	var failedActions int
 	var lastDescribe *workflowservice.DescribeScheduleResponse
-	s.Eventually(func() bool {
-		desc, descErr := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+	await.Requiref(ctx, t, func(at *await.T) {
+		desc, descErr := s.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  s.Namespace().String(),
 			ScheduleId: sid,
 		})
-		if descErr != nil {
-			return false
-		}
+		require.NoError(at, descErr)
 		lastDescribe = desc
 		failedActions = 0
 		for _, a := range desc.GetInfo().GetRecentActions() {
@@ -1534,11 +2130,12 @@ func testScheduleContinuesAfterWorkflowRetryFailure(t *testing.T, newContext con
 				failedActions++
 			}
 		}
-		return atomic.LoadInt32(&sawRetry) == 1 && failedActions >= 2
+		require.Equal(at, int32(1), sawRetry.Load())
+		require.GreaterOrEqual(at, failedActions, 2)
 	}, 30*time.Second, 500*time.Millisecond,
 		"schedule should keep recording FAILED actions after the workflow retry-fails")
 
-	s.Equal(int32(1), atomic.LoadInt32(&sawRetry), "scheduled workflow should have retried (attempt > 1)")
+	s.Equal(int32(1), sawRetry.Load(), "scheduled workflow should have retried (attempt > 1)")
 	s.GreaterOrEqual(failedActions, 2, "schedule should record multiple retry-failed actions")
 	s.GreaterOrEqual(lastDescribe.GetInfo().GetActionCount(), int64(2))
 	s.False(lastDescribe.GetSchedule().GetState().GetPaused(), "a retry-failed workflow must not pause the schedule")
@@ -1553,7 +2150,9 @@ func testScheduleContinuesAfterWorkflowRetryFailure(t *testing.T, newContext con
 // It asserts the schedule records several COMPLETED actions (the buffer only drains as completions
 // are observed) and that the completion callback is written intact into both the original and the
 // continued-as-new run. CHASM-only: V1 uses no Nexus completion callbacks.
-func testScheduledWorkflowContinueAsNewCompletion(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleCHASMSuite) TestScheduledWorkflowContinueAsNewCompletion() {
+	t := suite.T()
+	newContext := chasmContextFactory
 	// The scheduler matches the continued-as-new run's completion by the request ID carried in the
 	// completion callback token, which only survives continue-as-new in the envelope token format.
 	// That format is gated off by default for safe rollout, so enable it explicitly here.
@@ -1627,14 +2226,12 @@ func testScheduledWorkflowContinueAsNewCompletion(t *testing.T, newContext conte
 	// callback the scheduler records, not from visibility.)
 	const wantCompleted = 3
 	var completedWFID string
-	s.Eventually(func() bool {
-		desc, descErr := s.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
+	await.Requiref(newContext(testcontext.For(t)), t, func(at *await.T) {
+		desc, descErr := s.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  s.Namespace().String(),
 			ScheduleId: sid,
 		})
-		if descErr != nil {
-			return false
-		}
+		require.NoError(at, descErr)
 		completed := 0
 		for _, a := range desc.GetInfo().GetRecentActions() {
 			if a.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
@@ -1642,7 +2239,7 @@ func testScheduledWorkflowContinueAsNewCompletion(t *testing.T, newContext conte
 				completedWFID = a.GetStartWorkflowResult().GetWorkflowId()
 			}
 		}
-		return completed >= wantCompleted
+		require.GreaterOrEqual(at, completed, wantCompleted)
 	}, 15*time.Second, 200*time.Millisecond,
 		"scheduler should record %d completed actions", wantCompleted)
 
@@ -1669,7 +2266,9 @@ func testScheduledWorkflowContinueAsNewCompletion(t *testing.T, newContext conte
 	s.Equal(origCB.GetNexus().GetHeader(), canCB.GetNexus().GetHeader(), "completion callback must be propagated intact across continue-as-new")
 }
 
-func testListSchedulesReturnsWorkflowStatus(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleSuite) TestListSchedulesReturnsWorkflowStatus(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-list-running"
@@ -1721,7 +2320,7 @@ func testListSchedulesReturnsWorkflowStatus(t *testing.T, newContext contextFact
 	s.NoError(err)
 
 	// validate RecentActions made it to visibility
-	listResp := getScheduleEntryFromVisibility(s, sid, newContext, func(listResp *schedulepb.ScheduleListEntry) bool {
+	listResp := getScheduleEntryFromVisibility(t, s, sid, newContext, func(listResp *schedulepb.ScheduleListEntry) bool {
 		return len(listResp.Info.RecentActions) >= 1
 	})
 	s.Len(listResp.Info.RecentActions, 1)
@@ -1742,7 +2341,7 @@ func testListSchedulesReturnsWorkflowStatus(t *testing.T, newContext contextFact
 	s.NoError(err)
 
 	// now wait for second recent action to land in visbility
-	listResp = getScheduleEntryFromVisibility(s, sid, newContext, func(listResp *schedulepb.ScheduleListEntry) bool {
+	listResp = getScheduleEntryFromVisibility(t, s, sid, newContext, func(listResp *schedulepb.ScheduleListEntry) bool {
 		return len(listResp.Info.RecentActions) >= 2
 	})
 
@@ -1769,7 +2368,9 @@ func testListSchedulesReturnsWorkflowStatus(t *testing.T, newContext contextFact
 // window DescribeSchedule reports. The memo is persisted to visibility, so it
 // must stay bounded no matter how many actions the schedule takes. Both the V1
 // and V2 (CHASM) schedulers apply this cap, so it runs as a shared test.
-func testListSchedulesRecentActionsCapped(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleSuite) TestListSchedulesRecentActionsCapped(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 	ctx := newContext(testcore.NewContext())
 
@@ -1793,17 +2394,18 @@ func testListSchedulesRecentActionsCapped(t *testing.T, newContext contextFactor
 	// DescribeSchedule reports a wider recent-action window than the memo. Wait
 	// until it exceeds the cap, proving the two projections are independent.
 	var describeResp *workflowservice.DescribeScheduleResponse
-	require.Eventually(t, func() bool {
+	await.Requiref(ctx, t, func(at *await.T) {
 		var err error
-		describeResp, err = s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		describeResp, err = s.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
 			Namespace:  s.Namespace().String(),
 			ScheduleId: sid,
 		})
-		return err == nil && len(describeResp.GetInfo().GetRecentActions()) > memoCap
+		require.NoError(at, err)
+		require.Greater(at, len(describeResp.GetInfo().GetRecentActions()), memoCap)
 	}, awaitTimeout, pollInterval, "DescribeSchedule should report more than %d recent actions", memoCap)
 
 	// The ListSchedules memo must stay capped even though more actions exist.
-	listResp := getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+	listResp := getScheduleEntryFromVisibility(t, s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
 		return len(ent.GetInfo().GetRecentActions()) >= memoCap
 	})
 	require.Len(t, listResp.Info.RecentActions, memoCap,
@@ -1811,17 +2413,19 @@ func testListSchedulesRecentActionsCapped(t *testing.T, newContext contextFactor
 		memoCap, len(describeResp.Info.RecentActions))
 }
 
-func testUpdateIntervalTakesEffect(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleSuite) TestUpdateIntervalTakesEffect(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-update-interval"
 	wid := "sched-test-update-interval-wf"
 	wt := "sched-test-update-interval-wt"
 
-	var runs int32
+	var runs atomic.Int32
 	workflowFn := func(ctx workflow.Context) error {
 		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
-			atomic.AddInt32(&runs, 1)
+			runs.Add(1)
 			return 0
 		})
 		return nil
@@ -1868,21 +2472,23 @@ func testUpdateIntervalTakesEffect(t *testing.T, newContext contextFactory) {
 	s.NoError(err)
 
 	// After updating to 1s interval, we should see runs start within a few seconds.
-	s.Eventually(
-		func() bool { return atomic.LoadInt32(&runs) >= 2 },
+	await.RequireTruef(t, func() bool { return runs.Load() >= 2 },
 		10*time.Second,
 		500*time.Millisecond,
 		"expected at least 2 runs within 10s after updating interval to 1s",
 	)
 }
 
-func testListScheduleMatchingTimes(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleSuite) TestListScheduleMatchingTimes(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-list-matching-times"
 
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
+			StartTime: &timestamppb.Timestamp{},
 			Interval: []*schedulepb.IntervalSpec{
 				{Interval: durationpb.New(1 * time.Hour)},
 			},
@@ -1914,18 +2520,54 @@ func testListScheduleMatchingTimes(t *testing.T, newContext contextFactory) {
 	startTime := timestamppb.New(now)
 	endTime := timestamppb.New(now.Add(5 * time.Hour))
 
-	resp, err := s.FrontendClient().ListScheduleMatchingTimes(ctx, &workflowservice.ListScheduleMatchingTimesRequest{
-		Namespace:  s.Namespace().String(),
-		ScheduleId: sid,
-		StartTime:  startTime,
-		EndTime:    endTime,
-	})
-	s.NoError(err)
-	// With 1-hour interval over 5 hours, we expect 5 matching times.
-	s.Len(resp.GetStartTime(), 5)
+	for _, tc := range []struct {
+		name          string
+		startTime     *timestamppb.Timestamp
+		endTime       *timestamppb.Timestamp
+		expectedTimes int
+		errorMessage  string
+	}{
+		{
+			name:          "valid range",
+			startTime:     startTime,
+			endTime:       endTime,
+			expectedTimes: 5,
+		},
+		{
+			name:      "epoch range",
+			startTime: &timestamppb.Timestamp{},
+			endTime:   &timestamppb.Timestamp{},
+		},
+		{
+			name:         "invalid start time",
+			startTime:    &timestamppb.Timestamp{Nanos: 1_000_000_000},
+			endTime:      endTime,
+			errorMessage: "start time is not a valid timestamp",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := s.FrontendClient().ListScheduleMatchingTimes(ctx, &workflowservice.ListScheduleMatchingTimesRequest{
+				Namespace:  s.Namespace().String(),
+				ScheduleId: sid,
+				StartTime:  tc.startTime,
+				EndTime:    tc.endTime,
+			})
+			if tc.errorMessage != "" {
+				var invalidArgument *serviceerror.InvalidArgument
+				require.ErrorAs(t, err, &invalidArgument)
+				require.ErrorContains(t, err, tc.errorMessage)
+				return
+			}
+
+			require.NoError(t, err)
+			require.Len(t, resp.GetStartTime(), tc.expectedTimes)
+		})
+	}
 }
 
-func testLimitMemoSpecSize(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleSuite) TestLimitMemoSpecSize(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	expectedLimit := scheduler.CurrentTweakablePolicies.SpecFieldLengthLimit
@@ -1988,7 +2630,7 @@ func testLimitMemoSpecSize(t *testing.T, newContext contextFactory) {
 	s.NoError(err)
 
 	// Verify the memo field length limit was enforced.
-	entry := getScheduleEntryFromVisibility(s, sid, newContext, nil)
+	entry := getScheduleEntryFromVisibility(t, s, sid, newContext, nil)
 	require.NotNil(t, entry)
 	spec := entry.GetInfo().GetSpec()
 	require.Len(t, spec.GetInterval(), expectedLimit)
@@ -1996,7 +2638,9 @@ func testLimitMemoSpecSize(t *testing.T, newContext contextFactory) {
 	require.Len(t, spec.GetExcludeStructuredCalendar(), expectedLimit)
 }
 
-func testCountSchedules(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleSuite) TestCountSchedules(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	// Create multiple schedules with different paused states
@@ -2040,33 +2684,38 @@ func testCountSchedules(t *testing.T, newContext contextFactory) {
 	}
 
 	// Test basic count (all schedules)
-	s.Eventually(func() bool {
-		countResp, err := s.FrontendClient().CountSchedules(newContext(s.Context()), &workflowservice.CountSchedulesRequest{
+	await.Requiref(newContext(testcontext.For(t)), t, func(at *await.T) {
+		countResp, err := s.FrontendClient().CountSchedules(at.Context(), &workflowservice.CountSchedulesRequest{
 			Namespace: s.Namespace().String(),
 		})
-		return err == nil && countResp.Count >= 3
+		require.NoError(at, err)
+		require.GreaterOrEqual(at, countResp.Count, int64(3))
 	}, 15*time.Second, 1*time.Second, "Expected at least 3 schedules")
 
 	// Test count with query filter for paused schedules
-	s.Eventually(func() bool {
-		countResp, err := s.FrontendClient().CountSchedules(newContext(s.Context()), &workflowservice.CountSchedulesRequest{
+	await.Requiref(newContext(testcontext.For(t)), t, func(at *await.T) {
+		countResp, err := s.FrontendClient().CountSchedules(at.Context(), &workflowservice.CountSchedulesRequest{
 			Namespace: s.Namespace().String(),
 			Query:     fmt.Sprintf("%s = true", sadefs.TemporalSchedulePaused),
 		})
-		return err == nil && countResp.Count >= 1
+		require.NoError(at, err)
+		require.GreaterOrEqual(at, countResp.Count, int64(1))
 	}, 15*time.Second, 1*time.Second, "Expected at least 1 paused schedule")
 
 	// Test count with query filter for non-paused schedules
-	s.Eventually(func() bool {
-		countResp, err := s.FrontendClient().CountSchedules(newContext(s.Context()), &workflowservice.CountSchedulesRequest{
+	await.Requiref(newContext(testcontext.For(t)), t, func(at *await.T) {
+		countResp, err := s.FrontendClient().CountSchedules(at.Context(), &workflowservice.CountSchedulesRequest{
 			Namespace: s.Namespace().String(),
 			Query:     fmt.Sprintf("%s = false", sadefs.TemporalSchedulePaused),
 		})
-		return err == nil && countResp.Count >= 2
+		require.NoError(at, err)
+		require.GreaterOrEqual(at, countResp.Count, int64(2))
 	}, 15*time.Second, 1*time.Second, "Expected at least 2 non-paused schedules")
 }
 
-func testListSchedulesPagination(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleSuite) TestListSchedulesPagination(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	const numSchedules = 4
@@ -2101,11 +2750,12 @@ func testListSchedulesPagination(t *testing.T, newContext contextFactory) {
 	}
 
 	// Wait for all schedules to be visible.
-	s.Eventually(func() bool {
-		countResp, err := s.FrontendClient().CountSchedules(newContext(s.Context()), &workflowservice.CountSchedulesRequest{
+	await.Requiref(newContext(testcontext.For(t)), t, func(at *await.T) {
+		countResp, err := s.FrontendClient().CountSchedules(at.Context(), &workflowservice.CountSchedulesRequest{
 			Namespace: s.Namespace().String(),
 		})
-		return err == nil && countResp.Count >= numSchedules
+		require.NoError(at, err)
+		require.GreaterOrEqual(at, countResp.Count, int64(numSchedules))
 	}, 15*time.Second, 1*time.Second, "Expected all schedules to be visible")
 
 	// Paginate with page size 2 and collect all schedule IDs.
@@ -2137,7 +2787,9 @@ func testListSchedulesPagination(t *testing.T, newContext contextFactory) {
 	}
 }
 
-func testListSchedulesFilterAndEntryFields(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleSuite) TestListSchedulesFilterAndEntryFields(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-list-fields"
@@ -2190,7 +2842,7 @@ func testListSchedulesFilterAndEntryFields(t *testing.T, newContext contextFacto
 	s.NoError(err)
 
 	// Wait for the schedule to appear with correct paused state.
-	entry := getScheduleEntryFromVisibility(s, sid, newContext, func(e *schedulepb.ScheduleListEntry) bool {
+	entry := getScheduleEntryFromVisibility(t, s, sid, newContext, func(e *schedulepb.ScheduleListEntry) bool {
 		return e.Info.Paused
 	})
 
@@ -2202,8 +2854,8 @@ func testListSchedulesFilterAndEntryFields(t *testing.T, newContext contextFacto
 	s.Equal("paused for test", entry.Info.Notes)
 
 	// Filter by TemporalSchedulePaused should find this schedule.
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		listResp, err := s.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
+	await.Require(ctx, t, func(c *await.T) {
+		listResp, err := s.FrontendClient().ListSchedules(c.Context(), &workflowservice.ListSchedulesRequest{
 			Namespace:       s.Namespace().String(),
 			MaximumPageSize: 10,
 			Query:           fmt.Sprintf("%s = true", sadefs.TemporalSchedulePaused),
@@ -2217,8 +2869,8 @@ func testListSchedulesFilterAndEntryFields(t *testing.T, newContext contextFacto
 	}, 15*time.Second, 1*time.Second)
 
 	// Filter for paused=false should not include this schedule.
-	s.EventuallyWithT(func(c *assert.CollectT) {
-		listResp, err := s.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
+	await.Require(ctx, t, func(c *await.T) {
+		listResp, err := s.FrontendClient().ListSchedules(c.Context(), &workflowservice.ListSchedulesRequest{
 			Namespace:       s.Namespace().String(),
 			MaximumPageSize: 10,
 			Query:           fmt.Sprintf("%s = false", sadefs.TemporalSchedulePaused),
@@ -2230,7 +2882,9 @@ func testListSchedulesFilterAndEntryFields(t *testing.T, newContext contextFacto
 	}, 15*time.Second, 1*time.Second)
 }
 
-func testListSchedulesFilterByScheduleID(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleSuite) TestListSchedulesFilterByScheduleId(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid1 := "sched-filter-by-id-alpha"
@@ -2271,17 +2925,17 @@ func testListSchedulesFilterByScheduleID(t *testing.T, newContext contextFactory
 	}
 
 	// Wait for both schedules to appear in visibility.
-	getScheduleEntryFromVisibility(s, sid1, newContext, nil)
-	getScheduleEntryFromVisibility(s, sid2, newContext, nil)
+	getScheduleEntryFromVisibility(t, s, sid1, newContext, nil)
+	getScheduleEntryFromVisibility(t, s, sid2, newContext, nil)
 
-	listScheduleIDs := func(query string) []string {
-		t.Helper()
-		listResp, err := s.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
+	listScheduleIDs := func(at *await.T, query string) []string {
+		at.Helper()
+		listResp, err := s.FrontendClient().ListSchedules(at.Context(), &workflowservice.ListSchedulesRequest{
 			Namespace:       s.Namespace().String(),
 			MaximumPageSize: 10,
 			Query:           query,
 		})
-		require.NoError(t, err)
+		require.NoError(at, err)
 		var ids []string
 		for _, e := range listResp.Schedules {
 			ids = append(ids, e.ScheduleId)
@@ -2350,8 +3004,8 @@ func testListSchedulesFilterByScheduleID(t *testing.T, newContext contextFactory
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			s.EventuallyWithT(func(c *assert.CollectT) {
-				ids := listScheduleIDs(tc.query)
+			await.Require(newContext(testcontext.For(t)), t, func(c *await.T) {
+				ids := listScheduleIDs(c, tc.query)
 				require.Len(c, ids, len(tc.wantIDs))
 				for _, want := range tc.wantIDs {
 					require.Contains(c, ids, want)
@@ -2361,7 +3015,9 @@ func testListSchedulesFilterByScheduleID(t *testing.T, newContext contextFactory
 	}
 }
 
-func testScheduleInternalTaskQueue(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleSuite) TestSchedule_InternalTaskQueue(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 	errorMessageKeyword := "internal per-namespace task queue"
 
@@ -2453,9 +3109,12 @@ func testScheduleInternalTaskQueue(t *testing.T, newContext contextFactory) {
 	})
 }
 
-func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, enableCHASMCallbacks bool) {
+func testScheduledWorkflowDoubleReset(suite *ScheduleCHASMSuite, enableCHASMCallbacks bool, resetRequestIDDeduplication bool) {
+	t := suite.T()
+	newContext := chasmContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, enableCHASMCallbacks)
+	s.OverrideDynamicConfig(dynamicconfig.EnableResetWorkflowRequestIDDeduplication, resetRequestIDDeduplication)
 
 	sid := "sched-test-double-reset"
 	wid := "sched-test-double-reset-wf"
@@ -2468,7 +3127,7 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 		return nil
 	}, workflow.RegisterOptions{Name: wt})
 
-	ctx := newContext(s.Context())
+	ctx := newContext(testcontext.For(t))
 
 	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
 		Namespace:  s.Namespace().String(),
@@ -2494,10 +3153,10 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 		},
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
 	// Wait for scheduler to start the workflow and show it as RUNNING.
-	listEntry := getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+	listEntry := getScheduleEntryFromVisibility(t, s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
 		return len(ent.Info.RecentActions) >= 1 &&
 			ent.Info.RecentActions[0].GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	})
@@ -2521,7 +3180,7 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 		Namespace: s.Namespace().String(),
 		Execution: wfExec,
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 	var originalStartReqID string
 	for reqID, info := range origDesc.GetWorkflowExtendedInfo().GetRequestIdInfos() {
 		if info.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
@@ -2530,26 +3189,35 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 		}
 	}
 	s.NotEmpty(originalStartReqID, "original run must have a request ID for WorkflowExecutionStarted")
+	// The reset run's start event is replayed with the reset request ID only when reset request ID
+	// deduplication is enabled.
+	expectedStartReqID := func(resetRequestID string) string {
+		if resetRequestIDDeduplication {
+			return resetRequestID
+		}
+		return originalStartReqID
+	}
 
+	resetRequestID1 := uuid.NewString()
 	resp1, err := s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 s.Namespace().String(),
 		WorkflowExecution:         wfExec,
 		Reason:                    "double-reset-test-first",
 		WorkflowTaskFinishEventId: 3,
-		RequestId:                 uuid.NewString(),
+		RequestId:                 resetRequestID1,
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 	resetRun1 := &commonpb.WorkflowExecution{
 		WorkflowId: wfExec.WorkflowId,
 		RunId:      resp1.RunId,
 	}
 
-	s.EventuallyWithT(func(col *assert.CollectT) {
+	suite.Await(func(suite *ScheduleCHASMSuite) {
 		resetDesc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.Namespace().String(),
 			Execution: resetRun1,
 		})
-		require.NoError(col, err)
+		suite.NoError(err)
 		var resetStartReqID string
 		for reqID, info := range resetDesc.GetWorkflowExtendedInfo().GetRequestIdInfos() {
 			if info.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
@@ -2557,29 +3225,29 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 				break
 			}
 		}
-		require.Equal(col, originalStartReqID, resetStartReqID,
-			"start request ID must be preserved across first reset")
+		suite.Equal(expectedStartReqID(resetRequestID1), resetStartReqID)
 	}, 10*time.Second, 100*time.Millisecond)
 
+	resetRequestID2 := uuid.NewString()
 	resp2, err := s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
 		Namespace:                 s.Namespace().String(),
 		WorkflowExecution:         resetRun1,
 		Reason:                    "double-reset-test-second",
 		WorkflowTaskFinishEventId: 3,
-		RequestId:                 uuid.NewString(),
+		RequestId:                 resetRequestID2,
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 	resetRun2 := &commonpb.WorkflowExecution{
 		WorkflowId: wfExec.WorkflowId,
 		RunId:      resp2.RunId,
 	}
 
-	s.EventuallyWithT(func(col *assert.CollectT) {
+	suite.Await(func(suite *ScheduleCHASMSuite) {
 		resetDesc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.Namespace().String(),
 			Execution: resetRun2,
 		})
-		require.NoError(col, err)
+		suite.NoError(err)
 		var resetStartReqID string
 		for reqID, info := range resetDesc.GetWorkflowExtendedInfo().GetRequestIdInfos() {
 			if info.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
@@ -2587,8 +3255,7 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 				break
 			}
 		}
-		require.Equal(col, originalStartReqID, resetStartReqID,
-			"start request ID must be preserved across double reset")
+		suite.Equal(expectedStartReqID(resetRequestID2), resetStartReqID)
 	}, 10*time.Second, 100*time.Millisecond)
 
 	_, err = s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
@@ -2598,9 +3265,9 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 		},
 		SignalName: "complete",
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
-	getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+	getScheduleEntryFromVisibility(t, s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
 		for _, action := range ent.Info.RecentActions {
 			if action.GetStartWorkflowResult().GetRunId() == wfExec.RunId {
 				return action.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
@@ -2610,28 +3277,39 @@ func testScheduledWorkflowDoubleReset(t *testing.T, newContext contextFactory, e
 	})
 }
 
-func testResetWithAdditionalCallback(t *testing.T, newContext contextFactory, enableCHASMCallbacks bool) {
+func (suite *ScheduleCHASMSuite) TestDoubleReset_HSMCallbacks() {
+	testScheduledWorkflowDoubleReset(suite, false, true)
+}
+
+func (suite *ScheduleCHASMSuite) TestDoubleReset_ChasmCallbacks() {
+	testScheduledWorkflowDoubleReset(suite, true, true)
+}
+
+func (suite *ScheduleCHASMSuite) TestDoubleReset_ResetRequestIDDeduplicationDisabled() {
+	testScheduledWorkflowDoubleReset(suite, true, false)
+}
+
+// testScheduledWorkflowResetAndContinueAsNew validates that the scheduler observes the completion of a
+// scheduled workflow whose chain contains both a reset and a continue-as-new, in either order.
+func testScheduledWorkflowResetAndContinueAsNew(suite *ScheduleCHASMSuite, resetFirst bool) {
+	t := suite.T()
+	newContext := chasmContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
-	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, enableCHASMCallbacks)
-	s.OverrideDynamicConfig(
-		callback.AllowedAddresses,
-		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
-	)
 
-	sid := "sched-test-reset-extra-cb"
-	wid := "sched-test-reset-extra-cb-wf"
-	wt := "sched-test-reset-extra-cb-wt"
-
-	ch, secondCallbackURL := newNexusCompletionHandler(t)
+	sid := testcore.RandomizeStr("sched-test-reset-can")
+	wid := testcore.RandomizeStr("sched-test-reset-can-wf")
+	wt := testcore.RandomizeStr("sched-test-reset-can-wt")
 
 	s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
-		sigCh := workflow.GetSignalChannel(ctx, "complete")
-		var signal any
-		sigCh.Receive(ctx, &signal)
+		if workflow.GetInfo(ctx).ContinuedExecutionRunID == "" {
+			workflow.GetSignalChannel(ctx, "continue").Receive(ctx, nil)
+			return workflow.NewContinueAsNewError(ctx, wt)
+		}
+		workflow.GetSignalChannel(ctx, "complete").Receive(ctx, nil)
 		return nil
 	}, workflow.RegisterOptions{Name: wt})
 
-	ctx := newContext(s.Context())
+	ctx := newContext(testcontext.For(t))
 
 	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
 		Namespace:  s.Namespace().String(),
@@ -2657,9 +3335,139 @@ func testResetWithAdditionalCallback(t *testing.T, newContext contextFactory, en
 		},
 		RequestId: uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
-	listEntry := getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+	listEntry := getScheduleEntryFromVisibility(t, s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+		return len(ent.Info.RecentActions) >= 1 &&
+			ent.Info.RecentActions[0].GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
+	})
+	startResult := listEntry.Info.RecentActions[0].StartWorkflowResult
+	workflowID := startResult.WorkflowId
+	scheduledRunID := startResult.RunId
+
+	waitForFirstWorkflowTask := func(runID string) {
+		s.WaitForHistoryEvents(`
+			1 WorkflowExecutionStarted
+			2 WorkflowTaskScheduled
+			3 WorkflowTaskStarted
+			4 WorkflowTaskCompleted`,
+			s.GetHistoryFunc(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID}),
+			5*time.Second,
+			10*time.Millisecond,
+		)
+	}
+	reset := func(runID string) string {
+		waitForFirstWorkflowTask(runID)
+		resp, err := s.FrontendClient().ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+			Namespace:                 s.Namespace().String(),
+			WorkflowExecution:         &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+			Reason:                    "reset-and-continue-as-new-test",
+			WorkflowTaskFinishEventId: 3,
+			RequestId:                 uuid.NewString(),
+		})
+		require.NoError(t, err)
+		return resp.RunId
+	}
+	signal := func(name string) {
+		_, err := s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
+			Namespace:         s.Namespace().String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+			SignalName:        name,
+		})
+		require.NoError(t, err)
+	}
+	continueAsNew := func(runID string) string {
+		signal("continue")
+		var newRunID string
+		suite.Await(func(suite *ScheduleCHASMSuite) {
+			desc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+				Namespace: s.Namespace().String(),
+				Execution: &commonpb.WorkflowExecution{WorkflowId: workflowID},
+			})
+			suite.NoError(err)
+			newRunID = desc.GetWorkflowExecutionInfo().GetExecution().GetRunId()
+			suite.NotEqual(runID, newRunID)
+		}, 10*time.Second, 100*time.Millisecond)
+		return newRunID
+	}
+
+	if resetFirst {
+		continueAsNew(reset(scheduledRunID))
+	} else {
+		reset(continueAsNew(scheduledRunID))
+	}
+	signal("complete")
+
+	getScheduleEntryFromVisibility(t, s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+		for _, action := range ent.Info.RecentActions {
+			if action.GetStartWorkflowResult().GetRunId() == scheduledRunID {
+				return action.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+			}
+		}
+		return false
+	})
+}
+
+func (suite *ScheduleCHASMSuite) TestResetThenContinueAsNew() {
+	testScheduledWorkflowResetAndContinueAsNew(suite, true)
+}
+
+func (suite *ScheduleCHASMSuite) TestContinueAsNewThenReset() {
+	testScheduledWorkflowResetAndContinueAsNew(suite, false)
+}
+
+func testResetWithAdditionalCallback(suite *ScheduleCHASMSuite, enableCHASMCallbacks bool) {
+	t := suite.T()
+	newContext := chasmContextFactory
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, enableCHASMCallbacks)
+	s.OverrideDynamicConfig(
+		callback.AllowedAddresses,
+		[]any{map[string]any{"Pattern": "*", "AllowInsecure": true}},
+	)
+
+	sid := "sched-test-reset-extra-cb"
+	wid := "sched-test-reset-extra-cb-wf"
+	wt := "sched-test-reset-extra-cb-wt"
+
+	ch, secondCallbackURL := newNexusCompletionHandler(t)
+
+	s.SdkWorker().RegisterWorkflowWithOptions(func(ctx workflow.Context) error {
+		sigCh := workflow.GetSignalChannel(ctx, "complete")
+		var signal any
+		sigCh.Receive(ctx, &signal)
+		return nil
+	}, workflow.RegisterOptions{Name: wt})
+
+	ctx := newContext(testcontext.For(t))
+
+	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+		Namespace:  s.Namespace().String(),
+		ScheduleId: sid,
+		Schedule: &schedulepb.Schedule{
+			Spec: &schedulepb.ScheduleSpec{
+				Interval: []*schedulepb.IntervalSpec{
+					{Interval: durationpb.New(24 * time.Hour)},
+				},
+			},
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   wid,
+						WorkflowType: &commonpb.WorkflowType{Name: wt},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					},
+				},
+			},
+		},
+		InitialPatch: &schedulepb.SchedulePatch{
+			TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{},
+		},
+		RequestId: uuid.NewString(),
+	})
+	require.NoError(t, err)
+
+	listEntry := getScheduleEntryFromVisibility(t, s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
 		return len(ent.Info.RecentActions) >= 1 &&
 			ent.Info.RecentActions[0].GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 	})
@@ -2701,7 +3509,7 @@ func testResetWithAdditionalCallback(t *testing.T, newContext contextFactory, en
 			},
 		},
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 	s.False(attachResp.Started, "expected to attach to existing run, not start a new one")
 
 	s.WaitForHistoryEvents(`
@@ -2722,32 +3530,32 @@ func testResetWithAdditionalCallback(t *testing.T, newContext contextFactory, en
 		WorkflowTaskFinishEventId: 3,
 		RequestId:                 uuid.NewString(),
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 	resetRun := &commonpb.WorkflowExecution{
 		WorkflowId: wfExec.WorkflowId,
 		RunId:      resetResp.RunId,
 	}
 
 	var startRequestID string
-	s.EventuallyWithT(func(col *assert.CollectT) {
+	suite.Await(func(suite *ScheduleCHASMSuite) {
 		descResp, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.Namespace().String(),
 			Execution: resetRun,
 		})
-		require.NoError(col, err)
-		require.Len(col, descResp.Callbacks, 2)
+		suite.NoError(err)
+		suite.Len(descResp.Callbacks, 2)
 		reqIDs := descResp.GetWorkflowExtendedInfo().GetRequestIdInfos()
 		attachInfo, ok := reqIDs[attachRequestID]
-		require.True(col, ok, "attachRequestId not found in RequestIdInfos")
-		require.Equal(col, enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, attachInfo.GetEventType())
+		suite.True(ok, "attachRequestId not found in RequestIdInfos")
+		suite.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED, attachInfo.GetEventType())
 		for reqID, info := range reqIDs {
 			if info.GetEventType() == enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED {
 				startRequestID = reqID
 				break
 			}
 		}
-		require.NotEmpty(col, startRequestID, "no request ID found for WorkflowExecutionStarted")
-		require.NotEqual(col, startRequestID, attachRequestID,
+		suite.NotEmpty(startRequestID, "no request ID found for WorkflowExecutionStarted")
+		suite.NotEqual(startRequestID, attachRequestID,
 			"schedule callback and manually-attached callback must have different request IDs")
 	}, 10*time.Second, 100*time.Millisecond)
 
@@ -2758,9 +3566,9 @@ func testResetWithAdditionalCallback(t *testing.T, newContext contextFactory, en
 		},
 		SignalName: "complete",
 	})
-	s.NoError(err)
+	require.NoError(t, err)
 
-	getScheduleEntryFromVisibility(s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
+	getScheduleEntryFromVisibility(t, s, sid, newContext, func(ent *schedulepb.ScheduleListEntry) bool {
 		for _, action := range ent.Info.RecentActions {
 			if action.GetStartWorkflowResult().GetRunId() == wfExec.RunId {
 				return action.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
@@ -2778,9 +3586,19 @@ func testResetWithAdditionalCallback(t *testing.T, newContext contextFactory, en
 	}
 }
 
+func (suite *ScheduleCHASMSuite) TestResetWithAdditionalCallback_HSMCallbacks() {
+	testResetWithAdditionalCallback(suite, false)
+}
+
+func (suite *ScheduleCHASMSuite) TestResetWithAdditionalCallback_ChasmCallbacks() {
+	testResetWithAdditionalCallback(suite, true)
+}
+
 // testCreatesWorkflowSentinel tests that creating a CHASM schedule also starts a
 // dummy workflow to reserve the schedule ID in the V1 workflow ID-space.
-func testCreatesWorkflowSentinel(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleCHASMSuite) TestCreatesWorkflowSentinel() {
+	t := suite.T()
+	newContext := chasmContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := testcore.RandomizeStr("sid")
@@ -2817,18 +3635,18 @@ func testCreatesWorkflowSentinel(t *testing.T, newContext contextFactory) {
 	// Verify the dummy workflow was created to reserve the V1 workflow ID.
 	sentinelWfID := scheduler.WorkflowIDPrefix + sid
 	var descResp *workflowservice.DescribeWorkflowExecutionResponse
-	s.Eventually(func() bool {
-		descResp, err = s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+	await.Requiref(ctx, t, func(at *await.T) {
+		descResp, err = s.FrontendClient().DescribeWorkflowExecution(at.Context(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.Namespace().String(),
 			Execution: &commonpb.WorkflowExecution{WorkflowId: sentinelWfID},
 		})
-		return err == nil
+		require.NoError(at, err)
 	}, 15*time.Second, 500*time.Millisecond, "dummy sentinel workflow should exist")
 	s.Equal(dummy.DummyWFTypeName, descResp.WorkflowExecutionInfo.Type.Name)
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
 
 	// Verify visibility shows exactly one schedule (not the dummy workflow).
-	getScheduleEntryFromVisibility(s, sid, newContext, nil)
+	getScheduleEntryFromVisibility(t, s, sid, newContext, nil)
 	listResp, err := s.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
 		Namespace:       s.Namespace().String(),
 		MaximumPageSize: 5,
@@ -2843,7 +3661,9 @@ func testCreatesWorkflowSentinel(t *testing.T, newContext contextFactory) {
 	s.Equal(int64(1), countResp.Count)
 }
 
-func testStateSizeBytesReported(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleCHASMSuite) TestStateSizeBytesReported() {
+	t := suite.T()
+	newContext := chasmContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := testcore.RandomizeStr("sched-state-size")
@@ -2886,9 +3706,11 @@ func testStateSizeBytesReported(t *testing.T, newContext contextFactory) {
 	s.Positive(desc.GetInfo().GetStateSizeBytes(), "Describe should report a non-zero StateSizeBytes")
 }
 
-// testCreatesCHASMSentinel tests that creating a V1 schedule also creates a
+// TestCreatesCHASMSentinel tests that creating a V1 schedule also creates a
 // CHASM sentinel to reserve the schedule ID in the CHASM execution space.
-func testCreatesCHASMSentinel(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleV1Suite) TestCreatesCHASMSentinel() {
+	t := suite.T()
+	newContext := v1ContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := testcore.RandomizeStr("sid")
@@ -2925,23 +3747,21 @@ func testCreatesCHASMSentinel(t *testing.T, newContext contextFactory) {
 	// Verify a CHASM sentinel was created to reserve the schedule ID.
 	// DescribeSchedule should return NotFound, as well as CreateSentinel
 	nsID := s.NamespaceID().String()
-	s.Eventually(func() bool {
+	await.Requiref(ctx, t, func(at *await.T) {
 		_, descErr := s.GetTestCluster().SchedulerClient().DescribeSchedule(
-			ctx,
+			at.Context(),
 			&schedulerpb.DescribeScheduleRequest{
 				NamespaceId:     nsID,
 				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: s.Namespace().String(), ScheduleId: sid},
 			},
 		)
 		var notFoundErr *serviceerror.NotFound
-		if !errors.As(descErr, &notFoundErr) {
-			return false
-		}
+		require.ErrorAs(at, descErr, &notFoundErr)
 
 		// A CHASM CreateSchedule should also fail with NotFound because
 		// the sentinel blocks it.
 		_, createErr := s.GetTestCluster().SchedulerClient().CreateSchedule(
-			ctx,
+			at.Context(),
 			&schedulerpb.CreateScheduleRequest{
 				NamespaceId: nsID,
 				FrontendRequest: &workflowservice.CreateScheduleRequest{
@@ -2952,11 +3772,11 @@ func testCreatesCHASMSentinel(t *testing.T, newContext contextFactory) {
 				},
 			},
 		)
-		return errors.As(createErr, &notFoundErr)
+		require.ErrorAs(at, createErr, &notFoundErr)
 	}, 15*time.Second, 500*time.Millisecond, "CHASM sentinel should exist for V1 schedule")
 
 	// Verify visibility shows exactly one schedule (not the sentinel).
-	getScheduleEntryFromVisibility(s, sid, newContext, nil)
+	getScheduleEntryFromVisibility(t, s, sid, newContext, nil)
 	listResp, err := s.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
 		Namespace:       s.Namespace().String(),
 		MaximumPageSize: 5,
@@ -2973,7 +3793,9 @@ func testCreatesCHASMSentinel(t *testing.T, newContext contextFactory) {
 
 // testSkipsWorkflowSentinelWhenDisabled asserts that a CHASM CreateSchedule
 // does not start the dummy V1 workflow when EnableCHASMSchedulerSentinels is off.
-func testSkipsWorkflowSentinelWhenDisabled(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleCHASMSuite) TestSkipsWorkflowSentinelWhenDisabled() {
+	t := suite.T()
+	newContext := chasmContextFactory
 	s := newScheduleEnv(t, append(scheduleCommonOpts(t),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, false),
 	)...)
@@ -3020,9 +3842,11 @@ func testSkipsWorkflowSentinelWhenDisabled(t *testing.T, newContext contextFacto
 	s.ErrorAs(descErr, &notFoundErr, "no dummy sentinel workflow should be created when sentinels are disabled")
 }
 
-// testSkipsCHASMSentinelWhenDisabled asserts that a V1 CreateSchedule does not
+// TestSkipsCHASMSentinelWhenDisabled asserts that a V1 CreateSchedule does not
 // create a CHASM sentinel when EnableCHASMSchedulerSentinels is off.
-func testSkipsCHASMSentinelWhenDisabled(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleV1Suite) TestSkipsCHASMSentinelWhenDisabled() {
+	t := suite.T()
+	newContext := v1ContextFactory
 	s := newScheduleEnv(t, append(scheduleCommonOpts(t),
 		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerSentinels, false),
 	)...)
@@ -3076,7 +3900,9 @@ func testSkipsCHASMSentinelWhenDisabled(t *testing.T, newContext contextFactory)
 	s.NoError(createErr, "no CHASM sentinel should block CreateSchedule when sentinels are disabled, got: %v", createErr)
 }
 
-func testCreateScheduleAlreadyExists(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleCHASMSuite) TestCreateScheduleAlreadyExists() {
+	t := suite.T()
+	newContext := chasmContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-already-exists"
@@ -3123,9 +3949,10 @@ func testCreateScheduleAlreadyExists(t *testing.T, newContext contextFactory) {
 // serviceerror.WorkflowExecutionAlreadyStarted into
 // temporal.ErrScheduleAlreadyRunning. This tests the SDK's behavior E2E against
 // the handler. A similar test exists in the features repository.
-func testCreateScheduleDuplicateSdkError(t *testing.T, useCHASM bool) {
+func (suite *ScheduleSuite) TestCreateScheduleDuplicateSdkError(chasmEnabled bool) {
+	t := suite.T()
 	opts := scheduleCommonOpts(t)
-	if useCHASM {
+	if chasmEnabled {
 		opts = append(opts, testcore.WithDynamicConfig(dynamicconfig.EnableCHASMSchedulerCreation, true))
 	}
 	s := newScheduleEnv(t, opts...)
@@ -3142,7 +3969,7 @@ func testCreateScheduleDuplicateSdkError(t *testing.T, useCHASM bool) {
 		Paused: true,
 	}
 
-	ctx := s.Context()
+	ctx := testcontext.For(t)
 	handle, err := s.SdkClient().ScheduleClient().Create(ctx, schedOpts)
 	s.NoError(err)
 	defer func() { _ = handle.Delete(context.Background()) }()
@@ -3151,7 +3978,9 @@ func testCreateScheduleDuplicateSdkError(t *testing.T, useCHASM bool) {
 	s.ErrorIs(err, temporal.ErrScheduleAlreadyRunning)
 }
 
-func testPatchRejectsExcessBackfillers(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleCHASMSuite) TestPatchRejectsExcessBackfillers() {
+	t := suite.T()
+	newContext := chasmContextFactory
 	// Hold all 100 backfillers alive through legitimate buffer backpressure rather
 	// than starvation. Backfillers are given a real (non-zero) share of an empty
 	// buffer, but each is pointed at a range far larger than the buffer under
@@ -3243,32 +4072,18 @@ func testPatchRejectsExcessBackfillers(t *testing.T, newContext contextFactory) 
 	s.Contains(err.Error(), "too many concurrent backfillers")
 }
 
-func testMigrationCallbackAttach(t *testing.T, newContext contextFactory) {
-	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
-
-	sid := testcore.RandomizeStr("sid")
-	wid := testcore.RandomizeStr("wid")
-	wt := testcore.RandomizeStr("wt")
-
-	resumeSignal := "resume"
-	s.SdkWorker().RegisterWorkflowWithOptions(
-		func(ctx workflow.Context) error {
-			workflow.GetSignalChannel(ctx, resumeSignal).Receive(ctx, nil)
-			return nil
-		},
-		workflow.RegisterOptions{Name: wt},
-	)
-
-	ctx := newContext(s.Context())
-	startResp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
-		Namespace:    s.Namespace().String(),
-		WorkflowId:   wid,
-		WorkflowType: &commonpb.WorkflowType{Name: wt},
-		TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		Identity:     testcore.RandomizeStr("identity"),
-		RequestId:    testcore.RandomizeStr("request-id"),
-	})
-	s.NoError(err)
+// createSchedulerFromMigrationState creates a V2 scheduler directly from a migration
+// state carrying a single BufferedStart pointing at (wid, runID). That start is what
+// arms the callback re-attach task: it is the only path that produces a start with a
+// RunId but no callback attached, so it is the only way to reach
+// SchedulerCallbacksTaskHandler in a running server.
+func createSchedulerFromMigrationState(
+	ctx context.Context,
+	t *testing.T,
+	s *testcore.TestEnv,
+	sid, wid, wt, runID string,
+) {
+	t.Helper()
 
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
@@ -3307,7 +4122,7 @@ func testMigrationCallbackAttach(t *testing.T, newContext contextFactory) {
 					ActualTime:  timestamppb.New(now),
 					StartTime:   timestamppb.New(now),
 					WorkflowId:  wid,
-					RunId:       startResp.RunId,
+					RunId:       runID,
 					RequestId:   uuid.NewString(),
 					Attempt:     1,
 					HasCallback: false,
@@ -3315,29 +4130,84 @@ func testMigrationCallbackAttach(t *testing.T, newContext contextFactory) {
 			},
 		},
 	}
-	_, err = s.GetTestCluster().SchedulerClient().CreateFromMigrationState(
+	_, err := s.GetTestCluster().SchedulerClient().CreateFromMigrationState(
 		ctx,
 		&schedulerpb.CreateFromMigrationStateRequest{
 			NamespaceId: nsID,
 			State:       migrationState,
 		},
 	)
+	require.NoError(t, err)
+}
+
+// awaitReattachMetric waits for a schedule_callback_reattach sample with the given
+// outcome and reason. The counter is recorded only after the re-attach's component
+// update commits, so it lags the state it describes.
+func awaitReattachMetric(t *testing.T, capture *testcore.NamespaceMetricCapture, outcome, reason string) {
+	t.Helper()
+	want := map[string]string{"outcome": outcome, "reason": reason}
+	await.RequireTruef(t, func() bool {
+		return countMetric(capture, metrics.ScheduleCallbackReattach.Name(), want) >= 1
+	}, awaitTimeout, pollInterval, "re-attach should record outcome=%s reason=%s", outcome, reason)
+}
+
+func (suite *ScheduleCHASMSuite) TestMigrationCallbackAttach() {
+	t := suite.T()
+	newContext := chasmContextFactory
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+
+	sid := testcore.RandomizeStr("sid")
+	wid := testcore.RandomizeStr("wid")
+	wt := testcore.RandomizeStr("wt")
+
+	resumeSignal := "resume"
+	s.SdkWorker().RegisterWorkflowWithOptions(
+		func(ctx workflow.Context) error {
+			workflow.GetSignalChannel(ctx, resumeSignal).Receive(ctx, nil)
+			return nil
+		},
+		workflow.RegisterOptions{Name: wt},
+	)
+
+	ctx := newContext(testcontext.For(t))
+	metricCapture := s.StartNamespaceMetricCapture()
+	startResp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+		Namespace:    s.Namespace().String(),
+		WorkflowId:   wid,
+		WorkflowType: &commonpb.WorkflowType{Name: wt},
+		TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		Identity:     testcore.RandomizeStr("identity"),
+		RequestId:    testcore.RandomizeStr("request-id"),
+	})
 	s.NoError(err)
 
-	s.Eventually(func() bool {
+	nsID := s.NamespaceID().String()
+	createSchedulerFromMigrationState(ctx, t, s, sid, wid, wt, startResp.RunId)
+
+	await.Requiref(ctx, t, func(at *await.T) {
 		descResp, err := s.GetTestCluster().SchedulerClient().DescribeSchedule(
-			ctx,
+			at.Context(),
 			&schedulerpb.DescribeScheduleRequest{
 				NamespaceId:     nsID,
 				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: s.Namespace().String(), ScheduleId: sid},
 			},
 		)
-		if err != nil {
-			return false
-		}
+		require.NoError(at, err)
 		running := descResp.GetFrontendResponse().GetInfo().GetRunningWorkflows()
-		return len(running) > 0 && running[0].WorkflowId == wid
+		require.NotEmpty(at, running)
+		require.Equal(at, wid, running[0].WorkflowId)
 	}, 15*time.Second, 500*time.Millisecond, "CHASM scheduler should show running workflow")
+
+	// A genuine attach: the target was running when the re-attach task ran, so the
+	// completion below is observed over a callback rather than synthesized from a
+	// describe. reason=none is what separates it from the two synthesizing paths covered
+	// by testMigrationCallbackReattachSynthesized.
+	//
+	// This must be waited on before signaling: RunningWorkflows is populated straight
+	// from the migration state and says nothing about whether the callback was attached
+	// yet, so completing the target first would let the re-attach describe an
+	// already-closed workflow and take the already_closed path instead.
+	awaitReattachMetric(t, metricCapture, "attached", "none")
 
 	_, err = s.FrontendClient().SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.Namespace().String(),
@@ -3349,31 +4219,223 @@ func testMigrationCallbackAttach(t *testing.T, newContext contextFactory) {
 	})
 	s.NoError(err)
 
-	s.Eventually(func() bool {
+	await.Requiref(ctx, t, func(at *await.T) {
 		descResp, err := s.GetTestCluster().SchedulerClient().DescribeSchedule(
-			ctx,
+			at.Context(),
 			&schedulerpb.DescribeScheduleRequest{
 				NamespaceId:     nsID,
 				FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: s.Namespace().String(), ScheduleId: sid},
 			},
 		)
-		if err != nil {
-			return false
-		}
+		require.NoError(at, err)
 		recent := descResp.GetFrontendResponse().GetInfo().GetRecentActions()
 		for _, action := range recent {
 			if action.GetStartWorkflowResult().GetWorkflowId() == wid &&
 				action.GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
-				return true
+				return
 			}
 		}
-		return false
+		require.FailNow(at, "workflow completion has not reached the schedule")
 	}, 15*time.Second, 500*time.Millisecond, "CHASM scheduler should reflect workflow completion")
+
+	// The re-attached callback delivers over the same internal path as a natively
+	// started action, so the delivery must be instrumented here too.
+	requireInternalCallbackDelivered(t, metricCapture)
 }
 
-// testCHASMCanListV1Schedules tests that a schedule created in the V1 stack
+// requireInternalCallbackDelivered asserts that at least one completion callback was
+// delivered over the internal (cross-shard) path and that the delivery is fully
+// instrumented: a successful delivery sample, a committed invocation event, an attempt
+// count, and no sample left at the "unknown" sentinel -- an outcome that would mean a
+// return path recorded no outcome at all, which is indistinguishable from never having
+// run.
+func requireInternalCallbackDelivered(t *testing.T, capture *testcore.NamespaceMetricCapture) {
+	t.Helper()
+
+	// The event is recorded after the callback's own state transition commits,
+	// which is strictly after the scheduler observed the completion, so poll.
+	await.RequireTruef(t, func() bool {
+		return countMetric(capture, callback.InvocationEventCounter.Name(),
+			map[string]string{"outcome": "success", "destination": chasm.NexusCompletionHandlerURL}) >= 1
+	}, awaitTimeout, pollInterval, "a committed callback event should be recorded")
+
+	deliveries := capture.Metric(callback.InternalRequestCounter.Name())
+	require.NotEmpty(t, deliveries, "internal callback delivery should be counted")
+	for _, delivery := range deliveries {
+		require.NotEqual(t, "unknown", delivery.Tags["outcome"],
+			"a delivery returned without recording an outcome")
+		require.Equal(t, chasm.NexusCompletionHandlerURL, delivery.Tags["destination"])
+	}
+	require.GreaterOrEqual(t,
+		countMetric(capture, callback.InternalRequestCounter.Name(), map[string]string{"outcome": "success"}), 1,
+		"a successful internal delivery should be counted")
+
+	// Counter and latency are recorded together on every exit path, so a latency sample
+	// missing against a counted request means a path skipped the deferred record.
+	await.RequireTruef(t, func() bool {
+		return len(capture.Metric(callback.InternalRequestLatencyHistogram.Name())) ==
+			len(capture.Metric(callback.InternalRequestCounter.Name()))
+	}, awaitTimeout, pollInterval, "every counted delivery should also record a latency sample")
+
+	// Attempts are recorded only on a terminal event, where the total is final.
+	attempts := capture.CollectMetric(callback.InvocationAttemptsHistogram.Name(),
+		func(rec *metricstest.CapturedRecording) bool { return rec.Tags["outcome"] == "success" })
+	require.NotEmpty(t, attempts, "a terminal event should record an attempt count")
+	require.GreaterOrEqual(t, attempts[0].Value, int64(1))
+
+	require.Zero(t, countMetric(capture, callback.InvocationEventCounter.Name(),
+		map[string]string{"outcome": "nonretryable-error"}), "no callback should have been dropped permanently")
+}
+
+// testCallbackCompletionMetrics pins the instrumentation on the V2 completion-callback
+// delivery path for a natively started action. The schedule learns its action finished
+// only through that callback, so a delivery that is dropped leaves the schedule
+// believing the action is still running -- and before this instrumentation that drop
+// left no trace beyond a log line.
+func (suite *ScheduleCHASMSuite) TestCallbackCompletionMetrics() {
+	t := suite.T()
+	newContext := chasmContextFactory
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+	// The instrumented delivery path is the CHASM callback implementation. It is the
+	// default, but pin it: under the HSM implementation these metrics never fire.
+	s.OverrideDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true)
+
+	sid := testcore.RandomizeStr("sched-callback-metrics")
+	wid := testcore.RandomizeStr("sched-callback-metrics-wf")
+	wt := testcore.RandomizeStr("sched-callback-metrics-wt")
+
+	var runs atomic.Int32
+	registerCountingWorkflow(s, wt, &runs)
+
+	ctx := newContext(testcontext.For(t))
+	metricCapture := s.StartNamespaceMetricCapture()
+
+	createSchedule(ctx, t, s, sid, &schedulepb.Schedule{
+		Spec:   intervalSpec(noOpInterval),
+		Action: startWorkflowAction(s, wid, wt),
+	})
+	patchSchedule(ctx, t, s, sid, triggerPatch(enumspb.SCHEDULE_OVERLAP_POLICY_UNSPECIFIED))
+
+	// A COMPLETED recent action is proof the callback landed: nothing else tells the
+	// schedule the workflow finished.
+	await.RequireTruef(t, func() bool {
+		desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		if err != nil {
+			return false
+		}
+		actions := desc.GetInfo().GetRecentActions()
+		return len(actions) == 1 &&
+			actions[0].GetStartWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	}, awaitTimeout, pollInterval, "the triggered action should be observed as completed")
+	require.Equal(t, int32(1), runs.Load())
+
+	requireInternalCallbackDelivered(t, metricCapture)
+
+	// A natively started action attaches its callback at start time, so the re-attach
+	// path -- and its counter -- must not be involved.
+	require.Empty(t, metricCapture.Metric(metrics.ScheduleCallbackReattach.Name()))
+}
+
+// testMigrationCallbackReattachSynthesized covers the two re-attach classifications
+// that synthesize an action result instead of observing one. Both fabricate a
+// completion for the schedule from a describe rather than from a callback, so they are
+// the paths where a migrated schedule can silently record an outcome the workflow never
+// had.
+func (suite *ScheduleCHASMSuite) TestMigrationCallbackReattachSynthesized() {
+	t := suite.T()
+	newContext := chasmContextFactory
+	cases := []struct {
+		name string
+		// targetMissing points the buffered start at a workflow that never existed,
+		// standing in for a target deleted before the migration's re-attach ran.
+		targetMissing bool
+		wantReason    string
+		wantStatus    enumspb.WorkflowExecutionStatus
+	}{
+		{
+			name:       "AlreadyClosed",
+			wantReason: "already_closed",
+			wantStatus: enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+		},
+		{
+			// Target gone: recorded TERMINATED, because the real outcome is unknowable.
+			name:          "TargetGone",
+			targetMissing: true,
+			wantReason:    "not_found",
+			wantStatus:    enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+
+			sid := testcore.RandomizeStr("sched-reattach")
+			wid := testcore.RandomizeStr("sched-reattach-wf")
+			wt := testcore.RandomizeStr("sched-reattach-wt")
+
+			ctx := newContext(testcontext.For(t))
+			metricCapture := s.StartNamespaceMetricCapture()
+
+			runID := uuid.NewString()
+			if !tc.targetMissing {
+				var runs atomic.Int32
+				registerCountingWorkflow(s, wt, &runs)
+				startResp, err := s.FrontendClient().StartWorkflowExecution(ctx, &workflowservice.StartWorkflowExecutionRequest{
+					Namespace:    s.Namespace().String(),
+					WorkflowId:   wid,
+					WorkflowType: &commonpb.WorkflowType{Name: wt},
+					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+					Identity:     testcore.RandomizeStr("identity"),
+					RequestId:    testcore.RandomizeStr("request-id"),
+				})
+				require.NoError(t, err)
+				runID = startResp.RunId
+
+				// Close it before migrating, so the re-attach describes a workflow that is
+				// already finished rather than racing one that is still running.
+				await.RequireTruef(t, func() bool {
+					desc, err := s.FrontendClient().DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
+						Namespace: s.Namespace().String(),
+						Execution: &commonpb.WorkflowExecution{WorkflowId: wid, RunId: runID},
+					})
+					return err == nil &&
+						desc.GetWorkflowExecutionInfo().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+				}, awaitTimeout, pollInterval, "target workflow should close before migration")
+			}
+
+			createSchedulerFromMigrationState(ctx, t, s, sid, wid, wt, runID)
+
+			awaitReattachMetric(t, metricCapture, "completed", tc.wantReason)
+
+			// The synthesized result must also reach the schedule's own view, not just
+			// the counter.
+			desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+				Namespace:  s.Namespace().String(),
+				ScheduleId: sid,
+			})
+			require.NoError(t, err)
+			require.Empty(t, desc.GetInfo().GetRunningWorkflows())
+			actions := desc.GetInfo().GetRecentActions()
+			require.Len(t, actions, 1)
+			require.Equal(t, wid, actions[0].GetStartWorkflowResult().GetWorkflowId())
+			require.Equal(t, tc.wantStatus, actions[0].GetStartWorkflowStatus())
+
+			// Nothing was actually attached, so no delivery should have been attempted.
+			require.Empty(t, metricCapture.Metric(callback.InternalRequestCounter.Name()))
+		})
+	}
+}
+
+// TestCHASMCanListV1Schedules tests that a schedule created in the V1 stack
 // will also be visible in the V2 stack.
-func testCHASMCanListV1Schedules(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleV1Suite) TestCHASMCanListV1Schedules() {
+	t := suite.T()
+	newContext := v1ContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "schedule-created-on-v1"
@@ -3418,7 +4480,7 @@ func testCHASMCanListV1Schedules(t *testing.T, newContext contextFactory) {
 	s.NoError(err)
 
 	// Sanity test, list with V1 handler.
-	v1Entry := getScheduleEntryFromVisibility(s, sid, newContext, func(sle *schedulepb.ScheduleListEntry) bool {
+	v1Entry := getScheduleEntryFromVisibility(t, s, sid, newContext, func(sle *schedulepb.ScheduleListEntry) bool {
 		return sle.GetInfo().Paused
 	})
 	s.NotNil(v1Entry.GetInfo())
@@ -3431,7 +4493,7 @@ func testCHASMCanListV1Schedules(t *testing.T, newContext contextFactory) {
 	s.GreaterOrEqual(v1CountResp.Count, int64(1), "Expected at least 1 schedule with V1 handler")
 
 	// Flip on CHASM experiment and make sure we can still list.
-	chasmEntry := getScheduleEntryFromVisibility(s, sid, chasmContextFactory, nil)
+	chasmEntry := getScheduleEntryFromVisibility(t, s, sid, chasmContextFactory, nil)
 	s.NotNil(chasmEntry.GetInfo())
 	s.ProtoEqual(chasmEntry.GetInfo(), v1Entry.GetInfo())
 
@@ -3443,8 +4505,10 @@ func testCHASMCanListV1Schedules(t *testing.T, newContext contextFactory) {
 	s.Equal(v1CountResp.Count, chasmCountResp.Count, "CHASM and V1 counts should match")
 }
 
-// testRefresh applies to V1 scheduler only; V2 does not support/need manual refresh.
-func testRefresh(t *testing.T, newContext contextFactory) {
+// TestRefresh applies to V1 scheduler only; V2 does not support/need manual refresh.
+func (suite *ScheduleV1Suite) TestRefresh() {
+	t := suite.T()
+	newContext := v1ContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-refresh"
@@ -3454,7 +4518,7 @@ func testRefresh(t *testing.T, newContext contextFactory) {
 	// Phase is computed so the first tick lands ~10s after this point. Under
 	// parallel load CreateSchedule can take several seconds; if the first
 	// tick passes before the server materializes the schedule we'd wait a
-	// full 30s for the next one, exceeding the Eventually budget below.
+	// full 30s for the next one, exceeding the await budget below.
 	phaseOffset := 10 * time.Second
 	schedule := &schedulepb.Schedule{
 		Spec: &schedulepb.ScheduleSpec{
@@ -3484,10 +4548,10 @@ func testRefresh(t *testing.T, newContext contextFactory) {
 		RequestId:  uuid.NewString(),
 	}
 
-	var runs int32
+	var runs atomic.Int32
 	workflowFn := func(ctx workflow.Context) error {
 		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
-			atomic.AddInt32(&runs, 1)
+			runs.Add(1)
 			return 0
 		})
 		s.NoError(workflow.Sleep(ctx, 10*time.Second)) // longer than execution timeout
@@ -3498,7 +4562,7 @@ func testRefresh(t *testing.T, newContext contextFactory) {
 	_, err := s.FrontendClient().CreateSchedule(newContext(s.Context()), req)
 	s.NoError(err)
 
-	s.Eventually(func() bool { return atomic.LoadInt32(&runs) == 1 }, 20*time.Second, 200*time.Millisecond)
+	await.RequireTrue(t, func() bool { return runs.Load() == 1 }, 20*time.Second, 200*time.Millisecond)
 
 	// workflow has started but is now sleeping. it will timeout in 2 seconds.
 
@@ -3546,15 +4610,22 @@ func testRefresh(t *testing.T, newContext contextFactory) {
 	s.Empty(describeResp.Info.RunningWorkflows)
 
 	// check scheduler has gotten the refresh and done some stuff. signal is sent without waiting so we need to wait.
-	s.Eventually(func() bool {
-		events3 := s.GetHistory(s.Namespace().String(), &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid})
-		return len(events3) > len(events2)
+	await.Require(testcontext.For(t), t, func(at *await.T) {
+		resp, err := s.FrontendClient().GetWorkflowExecutionHistory(at.Context(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace:       s.Namespace().String(),
+			Execution:       &commonpb.WorkflowExecution{WorkflowId: scheduler.WorkflowIDPrefix + sid},
+			MaximumPageSize: int32(len(events2) + 1),
+		})
+		require.NoError(at, err)
+		require.Greater(at, len(resp.GetHistory().GetEvents()), len(events2))
 	}, 5*time.Second, 100*time.Millisecond)
 }
 
-// testListBeforeRun only applies to V1, as V2 scheduler does not involve the
+// TestListBeforeRun only applies to V1, as V2 scheduler does not involve the
 // per-NS worker or workflow.
-func testListBeforeRun(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleV1Suite) TestListBeforeRun() {
+	t := suite.T()
+	newContext := v1ContextFactory
 	s := newScheduleEnv(t, append(scheduleCommonOpts(t),
 		testcore.WithDynamicConfig(dynamicconfig.WorkerPerNamespaceWorkerCount, 0),
 	)...)
@@ -3592,7 +4663,7 @@ func testListBeforeRun(t *testing.T, newContext contextFactory) {
 	_, err := s.FrontendClient().CreateSchedule(newContext(s.Context()), req)
 	s.NoError(err)
 
-	entry := getScheduleEntryFromVisibility(s, sid, newContext, nil)
+	entry := getScheduleEntryFromVisibility(t, s, sid, newContext, nil)
 	s.NotNil(entry.Info)
 	s.ProtoEqual(schedule.Spec, entry.Info.Spec)
 	s.Equal(wt, entry.Info.WorkflowType.Name)
@@ -3601,8 +4672,10 @@ func testListBeforeRun(t *testing.T, newContext contextFactory) {
 	s.True(entry.Info.FutureActionTimes[0].AsTime().After(startTime))
 }
 
-// testRateLimit applies only to V1, as V2 scheduler does not impose its own rate limiting.
-func testRateLimit(t *testing.T, newContext contextFactory) {
+// TestRateLimit applies only to V1, as V2 scheduler does not impose its own rate limiting.
+func (suite *ScheduleV1Suite) TestRateLimit() {
+	t := suite.T()
+	newContext := v1ContextFactory
 	s := newScheduleEnv(t, append(scheduleCommonOpts(t),
 		testcore.WithDynamicConfig(dynamicconfig.SchedulerNamespaceStartWorkflowRPS, 1.0),
 	)...)
@@ -3611,10 +4684,10 @@ func testRateLimit(t *testing.T, newContext contextFactory) {
 	wid := "sched-test-rate-limit-wf-%d"
 	wt := "sched-test-rate-limit-wt"
 
-	var runs int32
+	var runs atomic.Int32
 	workflowFn := func(ctx workflow.Context) error {
 		workflow.SideEffect(ctx, func(ctx workflow.Context) any {
-			atomic.AddInt32(&runs, 1)
+			runs.Add(1)
 			return 0
 		})
 		return nil
@@ -3653,11 +4726,13 @@ func testRateLimit(t *testing.T, newContext contextFactory) {
 
 	// With no rate limit, we'd see 10/second == 50 workflows run. With a limit of 1/sec, we
 	// expect to see around 5.
-	s.Less(atomic.LoadInt32(&runs), int32(10))
+	s.Less(runs.Load(), int32(10))
 }
 
-// testNextTimeCache only applies to V1.
-func testNextTimeCache(t *testing.T, newContext contextFactory) {
+// TestNextTimeCache only applies to V1.
+func (suite *ScheduleV1Suite) TestNextTimeCache() {
+	t := suite.T()
+	newContext := v1ContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-next-time-cache"
@@ -3703,7 +4778,7 @@ func testNextTimeCache(t *testing.T, newContext contextFactory) {
 
 	// wait for at least 13 runs
 	const count = 13
-	s.Eventually(func() bool { return runs.Load() >= count }, (count+10)*time.Second, 500*time.Millisecond)
+	await.RequireTrue(t, func() bool { return runs.Load() >= count }, (count+10)*time.Second, 500*time.Millisecond)
 
 	// there should be only four side effects for 13 runs, and only two mentioning "Next"
 	// (cache refills)
@@ -3738,27 +4813,25 @@ func testNextTimeCache(t *testing.T, newContext contextFactory) {
 
 // getScheduleEntryFromVisibility polls visibility using ListSchedules until it finds a schedule
 // with the given id and for which the optional predicate function returns true.
-func getScheduleEntryFromVisibility(env testcore.Env, sid string, newContext contextFactory, predicate func(*schedulepb.ScheduleListEntry) bool) *schedulepb.ScheduleListEntry {
-	env.T().Helper()
+func getScheduleEntryFromVisibility(t *testing.T, env testcore.Env, sid string, newContext contextFactory, predicate func(*schedulepb.ScheduleListEntry) bool) *schedulepb.ScheduleListEntry {
+	t.Helper()
 	var slEntry *schedulepb.ScheduleListEntry
-	require.Eventually(env.T(), func() bool { // wait for visibility
-		listResp, err := env.FrontendClient().ListSchedules(newContext(env.Context()), &workflowservice.ListSchedulesRequest{
+	await.Require(newContext(testcontext.For(t)), t, func(at *await.T) { // wait for visibility
+		listResp, err := env.FrontendClient().ListSchedules(at.Context(), &workflowservice.ListSchedulesRequest{
 			Namespace:       env.Namespace().String(),
 			MaximumPageSize: 5,
 		})
-		if err != nil {
-			return false
-		}
+		require.NoError(at, err)
 		for _, ent := range listResp.Schedules {
 			if ent.ScheduleId == sid {
-				if predicate != nil && !predicate(ent) {
-					return false
+				if predicate != nil {
+					require.True(at, predicate(ent), "schedule %q has not reached the expected visibility state", sid)
 				}
 				slEntry = ent
-				return true
+				return
 			}
 		}
-		return false
+		require.FailNow(at, "schedule has not appeared in visibility")
 	}, 15*time.Second, 1*time.Second)
 	return slEntry
 }
@@ -3814,7 +4887,9 @@ func assertRecentActionsNoDuplicateRunIDs(t *testing.T, actions []*schedulepb.Sc
 		seen[runID] = i
 	}
 }
-func testUpdateScheduleMemo(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleCHASMSuite) TestUpdateScheduleMemo() {
+	t := suite.T()
+	newContext := chasmContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-update-memo"
@@ -3938,7 +5013,9 @@ func testUpdateScheduleMemo(t *testing.T, newContext contextFactory) {
 	require.Empty(t, describeResp.Memo.GetFields(), "memo should be empty after replace with empty map")
 }
 
-func testUpdateScheduleMemoRejected(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleV1Suite) TestUpdateScheduleMemoRejected() {
+	t := suite.T()
+	newContext := v1ContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-update-memo-rejected"
@@ -3997,92 +5074,20 @@ func testUpdateScheduleMemoRejected(t *testing.T, newContext contextFactory) {
 	require.Contains(t, err.Error(), "memo updates are not supported on workflow-backed schedules")
 }
 
-func testUpdateScheduleMemoOnly(t *testing.T, newContext contextFactory) {
-	// UpdateScheduleRequest uses replace semantics for the schedule field, so omitting it
-	// causes the schedule to be unset. Memo-only updates require the server to skip replacing
-	// the schedule when the field is nil, similar to how memo and search_attributes are handled.
-	t.Skip("memo-only updates not yet supported: omitting the schedule field unsets the schedule")
-
-	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
-
-	sid := "sched-test-update-memo-only"
-	wid := "sched-test-update-memo-only-wf"
-	wt := "sched-test-update-memo-only-wt"
-
-	s.SdkWorker().RegisterWorkflowWithOptions(
-		func(ctx workflow.Context) error { return nil },
-		workflow.RegisterOptions{Name: wt},
-	)
-
-	schedule := &schedulepb.Schedule{
-		Spec: &schedulepb.ScheduleSpec{
-			Interval: []*schedulepb.IntervalSpec{
-				{Interval: durationpb.New(1 * time.Hour)},
-			},
-		},
-		Action: &schedulepb.ScheduleAction{
-			Action: &schedulepb.ScheduleAction_StartWorkflow{
-				StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
-					WorkflowId:   wid,
-					WorkflowType: &commonpb.WorkflowType{Name: wt},
-					TaskQueue:    &taskqueuepb.TaskQueue{Name: s.WorkerTaskQueue(), Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-				},
-			},
-		},
-	}
-
-	// Create schedule with initial memo.
-	memo1 := payload.EncodeString("val1")
-	ctx := newContext(s.Context())
-	_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
-		Namespace:  s.Namespace().String(),
-		ScheduleId: sid,
-		Schedule:   schedule,
-		Identity:   "test",
-		RequestId:  uuid.NewString(),
-		Memo: &commonpb.Memo{
-			Fields: map[string]*commonpb.Payload{"key1": memo1},
-		},
-	})
-	require.NoError(t, err)
-
-	// Update only memo, without setting the schedule field.
-	memo2 := payload.EncodeString("val2")
-	_, err = s.FrontendClient().UpdateSchedule(newContext(s.Context()), &workflowservice.UpdateScheduleRequest{
-		Namespace:  s.Namespace().String(),
-		ScheduleId: sid,
-		Identity:   "test",
-		RequestId:  uuid.NewString(),
-		Memo: &commonpb.Memo{
-			Fields: map[string]*commonpb.Payload{"key1": memo2},
-		},
-	})
-	require.NoError(t, err)
-
-	// Verify memo was updated and schedule is still intact.
-	describeResp, err := s.FrontendClient().DescribeSchedule(newContext(s.Context()), &workflowservice.DescribeScheduleRequest{
-		Namespace:  s.Namespace().String(),
-		ScheduleId: sid,
-	})
-	require.NoError(t, err)
-	require.Equal(t, memo2.Data, describeResp.Memo.Fields["key1"].Data, "memo should be updated")
-	require.NotNil(t, describeResp.Schedule.Spec, "schedule spec should not be nil")
-	require.NotEmpty(t, describeResp.Schedule.Spec.Interval, "schedule spec intervals should be preserved")
-	require.NotNil(t, describeResp.Schedule.Action, "schedule action should be preserved")
-}
-
-func testCHASMUnpauseResumesProcessing(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleSuite) TestUnpauseResumesProcessing(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-unpause-resumes"
 	wid := "sched-test-unpause-resumes-wf"
 	wt := "sched-test-unpause-resumes-wt"
 
-	var runs int32
+	var runs atomic.Int32
 	s.SdkWorker().RegisterWorkflowWithOptions(
 		func(ctx workflow.Context) error {
 			workflow.SideEffect(ctx, func(ctx workflow.Context) any {
-				atomic.AddInt32(&runs, 1)
+				runs.Add(1)
 				return 0
 			})
 			return nil
@@ -4113,7 +5118,7 @@ func testCHASMUnpauseResumesProcessing(t *testing.T, newContext contextFactory) 
 	s.NoError(err)
 
 	// Wait for the schedule to fire at least once, confirming it's running.
-	s.Eventually(func() bool { return atomic.LoadInt32(&runs) >= 1 }, 15*time.Second, 500*time.Millisecond)
+	await.RequireTrue(t, func() bool { return runs.Load() >= 1 }, 15*time.Second, 500*time.Millisecond)
 
 	// Pause.
 	_, err = s.FrontendClient().PatchSchedule(newContext(s.Context()), &workflowservice.PatchScheduleRequest{
@@ -4129,18 +5134,18 @@ func testCHASMUnpauseResumesProcessing(t *testing.T, newContext contextFactory) 
 	// observes paused state, performs no-op scheduling, and then the schedule
 	// becomes quiescent (no new runs over a stability window).
 	stableSamples := 0
-	lastRuns := atomic.LoadInt32(&runs)
-	s.Eventually(func() bool {
-		currentRuns := atomic.LoadInt32(&runs)
+	lastRuns := runs.Load()
+	await.Require(testcontext.For(t), t, func(at *await.T) {
+		currentRuns := runs.Load()
 		if currentRuns == lastRuns {
 			stableSamples++
 		} else {
 			lastRuns = currentRuns
 			stableSamples = 0
 		}
-		return stableSamples >= 6
+		require.GreaterOrEqual(at, stableSamples, 6)
 	}, 15*time.Second, 500*time.Millisecond)
-	runsBeforeUnpause := atomic.LoadInt32(&runs)
+	runsBeforeUnpause := runs.Load()
 
 	// Unpause.
 	_, err = s.FrontendClient().PatchSchedule(newContext(s.Context()), &workflowservice.PatchScheduleRequest{
@@ -4153,8 +5158,7 @@ func testCHASMUnpauseResumesProcessing(t *testing.T, newContext contextFactory) 
 	s.NoError(err)
 
 	// The generator should be kicked immediately on unpause and new runs should follow.
-	s.Eventually(
-		func() bool { return atomic.LoadInt32(&runs) > runsBeforeUnpause },
+	await.RequireTruef(t, func() bool { return runs.Load() > runsBeforeUnpause },
 		15*time.Second,
 		500*time.Millisecond,
 		"schedule should resume processing after unpause",
@@ -4205,7 +5209,9 @@ func testPausedDropsCatchup(t *testing.T, newContext contextFactory) {
 
 // testPausedScheduleNeverIdles verifies that a paused schedule is held open
 // indefinitely on both backends, even past the configured idle window.
-func testPausedScheduleNeverIdles(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleSuite) TestPausedScheduleNeverIdles(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
 	s := newEnvWithIdleTime(t, shortIdleTime)
 
 	sid := testcore.RandomizeStr("sched-paused-never-idles")
@@ -4234,12 +5240,14 @@ func testPausedScheduleNeverIdles(t *testing.T, newContext contextFactory) {
 		3*shortIdleTime, pollInterval,
 		"paused schedule must not close from idle even past IdleTime")
 
-	desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
-		Namespace:  s.Namespace().String(),
-		ScheduleId: sid,
-	})
-	require.NoError(t, err)
-	require.True(t, desc.Schedule.State.Paused, "paused schedule must stay paused")
+	await.Require(ctx, t, func(at *await.T) {
+		desc, err := s.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		require.NoError(at, err)
+		require.True(at, desc.Schedule.State.Paused, "paused schedule must stay paused")
+	}, awaitTimeout, pollInterval)
 
 	// Also verify by unpausing and seeing actions resume.
 	runsBeforeUnpause := runs.Load()
@@ -4255,7 +5263,9 @@ func testPausedScheduleNeverIdles(t *testing.T, newContext contextFactory) {
 // spec (no Calendar / CronString / Interval) and Paused=true - the SDK
 // manual-only pattern - can be created without timing out and remains
 // describable.
-func testPausedEmptySpecStaysOpen(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleSuite) TestPausedEmptySpecStaysOpen(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := testcore.RandomizeStr("sched-paused-empty-spec")
@@ -4487,34 +5497,27 @@ func testBackfillReprocessesCompletedAction(
 	))
 
 	expectedRuns := int32(2 + 2*intervalsOnEachSide)
-	await.RequireTruef(t, func() bool { return runs.Load() == expectedRuns }, neverWindow, pollInterval,
-		"backfill should reprocess the completed action exactly once")
-
-	desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
-		Namespace:  s.Namespace().String(),
-		ScheduleId: sid,
-	})
-	require.NoError(t, err)
-	require.Equal(t, int64(expectedRuns), desc.GetInfo().GetActionCount())
-	require.Empty(t, desc.GetInfo().GetRunningWorkflows())
-	require.Equal(t, paused, desc.GetSchedule().GetState().GetPaused())
+	await.Requiref(ctx, t, func(t *await.T) {
+		desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+			Namespace:  s.Namespace().String(),
+			ScheduleId: sid,
+		})
+		require.NoError(t, err)
+		require.Equal(t, expectedRuns, runs.Load())
+		require.Equal(t, int64(expectedRuns), desc.GetInfo().GetActionCount())
+		require.Empty(t, desc.GetInfo().GetRunningWorkflows())
+		require.Equal(t, paused, desc.GetSchedule().GetState().GetPaused())
+	}, awaitTimeout, pollInterval, "backfill should reprocess the completed action exactly once and settle")
+	require.Never(t, func() bool { return runs.Load() > expectedRuns },
+		neverWindow, pollInterval,
+		"the completed action must be reprocessed once, not repeatedly")
 }
 
 // testBackfillWithBufferOneOverlap pins the expected behavior of BUFFER_ONE
 // over a multi-tick backfill: the first start runs immediately, exactly one
 // follow-up is buffered (Attempt=-1 deferred), the rest are dropped, and the
-// deferred one runs once the first completes. Currently SKIPPED: fails on
-// both V1 and CHASM because the deferred start never gets re-enabled after
-// the running workflow completes. The first start fires, the rest never run.
-// Likely a real bug in the BUFFER_ONE + backfill (Manual=true) interaction -
-// recordCompletedAction's re-enable loop on Attempt==-1 may not be running
-// against backfill-buffered starts. Worth a separate investigation.
+// deferred one runs once the first completes.
 func testBackfillWithBufferOneOverlap(t *testing.T, newContext contextFactory) {
-	// TODO(temporalio/temporal): track removing this skip once the BUFFER_ONE
-	// backfill deferred re-enable path is fixed. Verify by running:
-	//   go test ./tests/ -run 'TestScheduleCHASM/Backfill/BufferOneOverlap' -v
-	t.Skip("BUFFER_ONE backfill deferred re-enable is broken on both V1 and CHASM; see test doc")
-
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := testcore.RandomizeStr("sched-backfill-buffer-one")
@@ -4536,14 +5539,16 @@ func testBackfillWithBufferOneOverlap(t *testing.T, newContext contextFactory) {
 	patchSchedule(ctx, t, s, sid, backfillPatch(now.Add(-5*time.Second), now, enumspb.SCHEDULE_OVERLAP_POLICY_BUFFER_ONE))
 
 	// First backfill start runs with exactly one buffered behind it (BUFFER_ONE drops the rest).
-	await.RequireTruef(t, func() bool {
-		desc, descErr := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+	await.Requiref(ctx, t, func(t *await.T) {
+		desc, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
 			Namespace:  s.Namespace().String(),
 			ScheduleId: sid,
 		})
-		return descErr == nil && desc.GetInfo().GetBufferSize() == 1 && len(desc.GetInfo().GetRunningWorkflows()) == 1
+		require.NoError(t, err)
+		require.Equal(t, int64(1), desc.GetInfo().GetBufferSize())
+		require.Len(t, desc.GetInfo().GetRunningWorkflows(), 1)
+		require.Equal(t, int32(1), runs.Load())
 	}, awaitTimeout, pollInterval, "expected exactly one running backfill start with one deferred behind it")
-	require.Equal(t, int32(1), runs.Load(), "only the first backfill start should have fired so far")
 
 	// Releasing the running start must re-enable the deferred one (Attempt=-1 -> 0) so it fires.
 	require.Equal(t, 1, completeRunningWorkflows(ctx, t, s, sid))
@@ -4628,7 +5633,9 @@ func testBackfillWithSkipOverlap(t *testing.T, newContext contextFactory) {
 		"SKIP backfill must collapse to a single execution, not fire all 5 ticks")
 }
 
-func testUpdateScheduleRequestIDTooLong(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleSuite) TestUpdateScheduleRequestIDTooLong(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 
 	sid := "sched-test-update-reqid-too-long"
@@ -4660,7 +5667,9 @@ func testUpdateScheduleRequestIDTooLong(t *testing.T, newContext contextFactory)
 	require.ErrorAs(t, err, &invalidArgReqID)
 }
 
-func testLargeScheduleID(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleCHASMSuite) TestLargeScheduleID() {
+	t := suite.T()
+	newContext := chasmContextFactory
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 	ctx := newContext(testcore.NewContext())
 
@@ -4684,7 +5693,9 @@ func testLargeScheduleID(t *testing.T, newContext contextFactory) {
 		"schedule ID of length %d should start a workflow", scheduleIDLength)
 }
 
-func testUpdateScheduleBlobSizeLimit(t *testing.T, newContext contextFactory) {
+func (suite *ScheduleSuite) TestUpdateScheduleBlobSizeLimit(chasmEnabled bool) {
+	t := suite.T()
+	newContext := contextFactoryFor(chasmEnabled)
 	s := newScheduleEnv(t,
 		append(scheduleCommonOpts(t),
 			testcore.WithDynamicConfig(dynamicconfig.BlobSizeLimitError, 1000),
@@ -4751,7 +5762,8 @@ func testUpdateScheduleBlobSizeLimit(t *testing.T, newContext contextFactory) {
 // CHASMSchedulerCreationRolloutPercent acts as a per-schedule sampling gate
 // after EnableCHASMSchedulerCreation is on: at 50%, two schedules whose IDs
 // bucket on opposite sides of the rollout land on different stacks.
-func TestScheduleCreationRolloutPercent(t *testing.T) {
+func (suite *ScheduleCHASMSuite) TestScheduleCreationRolloutPercent() {
+	t := suite.T()
 	opts := append(scheduleCommonOpts(t),
 		// V1 worker is needed because at 50% rollout some schedules land on V1.
 		testcore.WithWorkerService("V1 scheduler"),
@@ -4795,7 +5807,7 @@ func TestScheduleCreationRolloutPercent(t *testing.T) {
 
 	// A direct CHASM DescribeSchedule succeeds for CHASM-backed schedules and
 	// returns NotFound for V1-backed schedules (whose CHASM key is a sentinel).
-	describeOnCHASM := func(sid string) error {
+	describeOnCHASM := func(ctx context.Context, sid string) error {
 		_, err := s.GetTestCluster().SchedulerClient().DescribeSchedule(ctx, &schedulerpb.DescribeScheduleRequest{
 			NamespaceId:     nsID,
 			FrontendRequest: &workflowservice.DescribeScheduleRequest{Namespace: nsName, ScheduleId: sid},
@@ -4803,11 +5815,11 @@ func TestScheduleCreationRolloutPercent(t *testing.T) {
 		return err
 	}
 
-	require.Eventually(t, func() bool { return describeOnCHASM(chasmSID) == nil }, 15*time.Second, 250*time.Millisecond,
+	await.Requiref(ctx, t, func(at *await.T) { require.NoError(at, describeOnCHASM(at.Context(), chasmSID)) }, 15*time.Second, 250*time.Millisecond,
 		"schedule %q bucketed into CHASM should be describable via the CHASM handler", chasmSID)
 
 	var notFoundErr *serviceerror.NotFound
-	require.ErrorAs(t, describeOnCHASM(v1SID), &notFoundErr,
+	require.ErrorAs(t, describeOnCHASM(ctx, v1SID), &notFoundErr,
 		"schedule %q bucketed into V1 should not be present on the CHASM handler", v1SID)
 
 	// Both schedules must remain describable through the public frontend
@@ -4815,12 +5827,12 @@ func TestScheduleCreationRolloutPercent(t *testing.T) {
 	// must round-trip through the frontend's fallback path. The V1 workflow
 	// takes a moment to be queryable after creation, so poll.
 	for _, sid := range []string{chasmSID, v1SID} {
-		require.Eventually(t, func() bool {
-			_, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+		await.Requiref(ctx, t, func(at *await.T) {
+			_, err := s.FrontendClient().DescribeSchedule(at.Context(), &workflowservice.DescribeScheduleRequest{
 				Namespace:  nsName,
 				ScheduleId: sid,
 			})
-			return err == nil
+			require.NoError(at, err)
 		}, 15*time.Second, 250*time.Millisecond, "frontend DescribeSchedule should succeed for %q", sid)
 	}
 }
@@ -4830,6 +5842,7 @@ type scheduleClosesCase struct {
 	name         string
 	prefix       string
 	state        *schedulepb.ScheduleState
+	policies     *schedulepb.SchedulePolicies
 	expectedRuns int32
 
 	// buildSpec receives the current time at the moment the schedule is created
@@ -4881,6 +5894,17 @@ func testScheduleClosesFromIdle(t *testing.T, newContext contextFactory) {
 			strictRunCount: true,
 		},
 		{
+			name:         "FinalAllowAllAction",
+			prefix:       "sched-final-allow-all-closes",
+			expectedRuns: 1,
+			buildSpec: func(_ time.Time) *schedulepb.ScheduleSpec {
+				return intervalSpec(fastInterval)
+			},
+			state:          &schedulepb.ScheduleState{LimitedActions: true, RemainingActions: 1},
+			policies:       &schedulepb.SchedulePolicies{OverlapPolicy: enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL},
+			strictRunCount: true,
+		},
+		{
 			name:         "IntervalEndTime",
 			prefix:       "sched-interval-end-closes",
 			expectedRuns: 1,
@@ -4911,9 +5935,10 @@ func runScheduleClosesFromIdleCase(t *testing.T, newContext contextFactory, c sc
 
 	ctx := newContext(s.Context())
 	createSchedule(ctx, t, s, sid, &schedulepb.Schedule{
-		Spec:   c.buildSpec(time.Now().UTC()),
-		State:  c.state,
-		Action: startWorkflowAction(s, wid, wt),
+		Spec:     c.buildSpec(time.Now().UTC()),
+		Policies: c.policies,
+		State:    c.state,
+		Action:   startWorkflowAction(s, wid, wt),
 	})
 
 	// A hard action budget must land on exactly expectedRuns; time-bounded specs
@@ -5136,10 +6161,69 @@ func testBackfillOnPausedSchedule(t *testing.T, newContext contextFactory) {
 		"backfill should fire actions on a paused schedule")
 }
 
+type ScheduleSuite struct {
+	parallelsuite.Suite[*ScheduleSuite]
+}
+
+func TestScheduleV1SharedSuite(t *testing.T) {
+	parallelsuite.Run(t, &ScheduleSuite{}, false)
+}
+
+func TestScheduleCHASMSharedSuite(t *testing.T) {
+	parallelsuite.Run(t, &ScheduleSuite{}, true)
+}
+
+func (suite *ScheduleSuite) TestTriggerImmediately(chasmEnabled bool) {
+	newContext := contextFactoryFor(chasmEnabled)
+	suite.Run("OnActiveSchedule", func(suite *ScheduleSuite) {
+		testTriggerImmediatelyOnActiveSchedule(suite.T(), newContext)
+	})
+	suite.Run("OnPausedSchedule", func(suite *ScheduleSuite) {
+		testTriggerImmediatelyOnPausedSchedule(suite.T(), newContext)
+	})
+	suite.Run("AfterActionsExhausted", func(suite *ScheduleSuite) {
+		testTriggerImmediatelyAfterActionsExhausted(suite.T(), newContext)
+	})
+}
+
+func (suite *ScheduleSuite) TestBackfill(chasmEnabled bool) {
+	newContext := contextFactoryFor(chasmEnabled)
+	suite.Run("ReprocessCompletedActionExactTimePaused", func(suite *ScheduleSuite) {
+		testBackfillReprocessesCompletedAction(suite.T(), newContext, true, 0)
+	})
+	suite.Run("ReprocessCompletedActionExactTimeActive", func(suite *ScheduleSuite) {
+		testBackfillReprocessesCompletedAction(suite.T(), newContext, false, 0)
+	})
+	suite.Run("ReprocessCompletedActionInRange", func(suite *ScheduleSuite) {
+		testBackfillReprocessesCompletedAction(suite.T(), newContext, true, 1)
+	})
+	suite.Run("SkipOverlap", func(suite *ScheduleSuite) {
+		testBackfillWithSkipOverlap(suite.T(), newContext)
+	})
+	suite.Run("BufferOneOverlap", func(suite *ScheduleSuite) {
+		testBackfillWithBufferOneOverlap(suite.T(), newContext)
+	})
+	suite.Run("MultiRangeCountedExactlyOnce", func(suite *ScheduleSuite) {
+		testMultiRangeBackfillCountedExactlyOnce(suite.T(), newContext)
+	})
+	suite.Run("RangeSmallerThanInterval", func(suite *ScheduleSuite) {
+		testBackfillRangeSmallerThanInterval(suite.T(), newContext)
+	})
+}
+
+type ScheduleCHASMSuite struct {
+	parallelsuite.Suite[*ScheduleCHASMSuite]
+}
+
+func TestScheduleCHASMSuite(t *testing.T) {
+	parallelsuite.Run(t, &ScheduleCHASMSuite{})
+}
+
 // TestScheduleNextActionTimeVisibility asserts that the CHASM scheduler's
 // ScheduleNextActionTime search attribute is published to visibility and is
 // queryable through the frontend ListSchedules API.
-func TestScheduleNextActionTimeVisibility(t *testing.T) {
+func (suite *ScheduleCHASMSuite) TestScheduleNextActionTimeVisibility() {
+	t := suite.T()
 	opts := scheduleCommonOpts(t)
 	s := newScheduleEnv(t, opts...)
 
@@ -5198,29 +6282,308 @@ func TestScheduleNextActionTimeVisibility(t *testing.T) {
 		createTime.UTC().Format(time.RFC3339Nano),
 	)
 
-	require.Eventually(t, func() bool {
-		listResp, err := s.FrontendClient().ListSchedules(v2Ctx, &workflowservice.ListSchedulesRequest{
+	await.Requiref(v2Ctx, t, func(at *await.T) {
+		listResp, err := s.FrontendClient().ListSchedules(at.Context(), &workflowservice.ListSchedulesRequest{
 			Namespace:       s.Namespace().String(),
 			MaximumPageSize: 100,
 			Query:           query,
 		})
-		if err != nil {
-			return false
-		}
+		require.NoError(at, err)
 		for _, ent := range listResp.Schedules {
 			if ent.ScheduleId == v2Sid {
-				return true
+				return
 			}
 		}
-		return false
+		require.FailNow(at, "schedule has not appeared in visibility")
 	}, 15*time.Second, 1*time.Second,
 		"schedule %q must be returned by query %q (next action time published to visibility and in the future)",
 		v2Sid, query)
 }
 
+func (suite *ScheduleCHASMSuite) TestListSchedulesPreservesV2ScheduleIDWithV1Prefix() {
+	t := suite.T()
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+	ctx := chasmContextFactory(testcontext.For(t))
+
+	suffix := testcore.RandomizeStr("sched-list-v2-prefix")
+	plainID := "foo-" + suffix
+	prefixedID := scheduler.WorkflowIDPrefix + plainID
+	for _, scheduleID := range []string{plainID, prefixedID} {
+		createSchedule(ctx, t, s, scheduleID, &schedulepb.Schedule{
+			Spec:   intervalSpec(noOpInterval),
+			State:  &schedulepb.ScheduleState{Paused: true},
+			Action: startWorkflowAction(s, "wf-"+scheduleID, "wt-"+scheduleID),
+		})
+	}
+
+	await.Requiref(ctx, t, func(at *await.T) {
+		response, err := s.FrontendClient().ListSchedules(at.Context(), &workflowservice.ListSchedulesRequest{
+			Namespace:       s.Namespace().String(),
+			MaximumPageSize: 10,
+		})
+		require.NoError(at, err)
+		ids := make(map[string]struct{}, len(response.Schedules))
+		for _, schedule := range response.Schedules {
+			ids[schedule.GetScheduleId()] = struct{}{}
+		}
+		_, foundPlainID := ids[plainID]
+		_, foundPrefixedID := ids[prefixedID]
+		require.True(at, foundPlainID)
+		require.True(at, foundPrefixedID)
+	}, awaitTimeout, pollInterval,
+		"ListSchedules must preserve both V2 IDs %q and %q", plainID, prefixedID)
+}
+
+func (suite *ScheduleCHASMSuite) TestScheduleRejectsInvalidRequests() {
+	t := suite.T()
+	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
+	ctx := chasmContextFactory(testcontext.For(t))
+	invalidPolicy := enumspb.ScheduleOverlapPolicy(99)
+
+	validSchedule := func(scheduleID string) *schedulepb.Schedule {
+		return &schedulepb.Schedule{
+			Spec:   intervalSpec(noOpInterval),
+			State:  &schedulepb.ScheduleState{Paused: true},
+			Action: startWorkflowAction(s, "wf-"+scheduleID, "wt-"+scheduleID),
+		}
+	}
+
+	testCases := []struct {
+		name             string
+		requiresExisting bool
+		errorMessage     string
+		request          func(scheduleID string) error
+	}{
+		{
+			name:         "CreateSchedule schedule policy",
+			errorMessage: "unsupported overlap policy",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Schedule: &schedulepb.Schedule{Policies: &schedulepb.SchedulePolicies{
+						OverlapPolicy: invalidPolicy,
+					}},
+					RequestId: uuid.NewString(),
+					Identity:  "test",
+				})
+				return err
+			},
+		},
+		{
+			name:         "CreateSchedule initial patch",
+			errorMessage: "unsupported overlap policy",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Schedule:   &schedulepb.Schedule{},
+					InitialPatch: &schedulepb.SchedulePatch{BackfillRequest: []*schedulepb.BackfillRequest{{
+						OverlapPolicy: invalidPolicy,
+					}}},
+					RequestId: uuid.NewString(),
+					Identity:  "test",
+				})
+				return err
+			},
+		},
+		{
+			name:         "CreateSchedule initial patch timestamp",
+			errorMessage: "backfill request 0 start time is not a valid timestamp",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Schedule:   &schedulepb.Schedule{},
+					InitialPatch: &schedulepb.SchedulePatch{BackfillRequest: []*schedulepb.BackfillRequest{{
+						StartTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+					}}},
+					RequestId: uuid.NewString(),
+					Identity:  "test",
+				})
+				return err
+			},
+		},
+		{
+			name:         "CreateSchedule timestamp",
+			errorMessage: "start time is not a valid timestamp",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Schedule: &schedulepb.Schedule{Spec: &schedulepb.ScheduleSpec{
+						StartTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+					}},
+					RequestId: uuid.NewString(),
+					Identity:  "test",
+				})
+				return err
+			},
+		},
+		{
+			name:         "CreateSchedule remaining actions",
+			errorMessage: "remaining actions cannot be negative",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().CreateSchedule(ctx, &workflowservice.CreateScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Schedule:   &schedulepb.Schedule{State: &schedulepb.ScheduleState{RemainingActions: -1}},
+					RequestId:  uuid.NewString(),
+					Identity:   "test",
+				})
+				return err
+			},
+		},
+		{
+			name:             "UpdateSchedule schedule policy",
+			requiresExisting: true,
+			errorMessage:     "unsupported overlap policy",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Schedule: &schedulepb.Schedule{Policies: &schedulepb.SchedulePolicies{
+						OverlapPolicy: invalidPolicy,
+					}},
+					RequestId: uuid.NewString(),
+					Identity:  "test",
+				})
+				return err
+			},
+		},
+		{
+			name:             "UpdateSchedule timestamp",
+			requiresExisting: true,
+			errorMessage:     "start time is not a valid timestamp",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Schedule: &schedulepb.Schedule{Spec: &schedulepb.ScheduleSpec{
+						StartTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+					}},
+					RequestId: uuid.NewString(),
+					Identity:  "test",
+				})
+				return err
+			},
+		},
+		{
+			name:             "UpdateSchedule remaining actions",
+			requiresExisting: true,
+			errorMessage:     "remaining actions cannot be negative",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().UpdateSchedule(ctx, &workflowservice.UpdateScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Schedule:   &schedulepb.Schedule{State: &schedulepb.ScheduleState{RemainingActions: -1}},
+					RequestId:  uuid.NewString(),
+					Identity:   "test",
+				})
+				return err
+			},
+		},
+		{
+			name:             "PatchSchedule trigger",
+			requiresExisting: true,
+			errorMessage:     "unsupported overlap policy",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Patch: &schedulepb.SchedulePatch{TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{
+						OverlapPolicy: invalidPolicy,
+					}},
+					RequestId: uuid.NewString(),
+					Identity:  "test",
+				})
+				return err
+			},
+		},
+		{
+			name:             "PatchSchedule backfill",
+			requiresExisting: true,
+			errorMessage:     "unsupported overlap policy",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Patch: &schedulepb.SchedulePatch{BackfillRequest: []*schedulepb.BackfillRequest{{
+						OverlapPolicy: invalidPolicy,
+					}}},
+					RequestId: uuid.NewString(),
+					Identity:  "test",
+				})
+				return err
+			},
+		},
+		{
+			name:             "PatchSchedule trigger timestamp",
+			requiresExisting: true,
+			errorMessage:     "trigger immediately request scheduled time is not a valid timestamp",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Patch: &schedulepb.SchedulePatch{TriggerImmediately: &schedulepb.TriggerImmediatelyRequest{
+						ScheduledTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+					}},
+					RequestId: uuid.NewString(),
+					Identity:  "test",
+				})
+				return err
+			},
+		},
+		{
+			name:             "PatchSchedule backfill timestamp",
+			requiresExisting: true,
+			errorMessage:     "backfill request 0 end time is not a valid timestamp",
+			request: func(scheduleID string) error {
+				_, err := s.FrontendClient().PatchSchedule(ctx, &workflowservice.PatchScheduleRequest{
+					Namespace:  s.Namespace().String(),
+					ScheduleId: scheduleID,
+					Patch: &schedulepb.SchedulePatch{BackfillRequest: []*schedulepb.BackfillRequest{{
+						EndTime: &timestamppb.Timestamp{Nanos: 1_000_000_000},
+					}}},
+					RequestId: uuid.NewString(),
+					Identity:  "test",
+				})
+				return err
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			scheduleID := testcore.RandomizeStr("sched-invalid-request")
+			if tc.requiresExisting {
+				createSchedule(ctx, t, s, scheduleID, validSchedule(scheduleID))
+			}
+
+			var invalidArgument *serviceerror.InvalidArgument
+			err := tc.request(scheduleID)
+			require.ErrorAs(t, err, &invalidArgument)
+			require.ErrorContains(t, err, tc.errorMessage)
+
+			describeResponse, err := s.FrontendClient().DescribeSchedule(ctx, &workflowservice.DescribeScheduleRequest{
+				Namespace:  s.Namespace().String(),
+				ScheduleId: scheduleID,
+			})
+			if tc.requiresExisting {
+				require.NoError(t, err)
+				require.NotNil(t, describeResponse)
+				return
+			}
+			var notFound *serviceerror.NotFound
+			require.ErrorAs(t, err, &notFound)
+		})
+	}
+}
+
 // TestMirroredIncludeExcludeSpec sets identical interval and exclusion
 // specifications that match every 1s, effectively cancelling each other out.
-func TestMirroredIncludeExcludeSpec(t *testing.T) {
+func (suite *ScheduleCHASMSuite) TestMirroredIncludeExcludeSpec() {
+	t := suite.T()
 	// A tiny compute bound trips the mirrored spec near-instantly; the default (~1.2M candidate
 	// scans per GetNextTime) makes this test burn seconds of CPU on every scheduler code path.
 	opts := append(scheduleCommonOpts(t), testcore.WithDynamicConfig(dynamicconfig.SchedulerSpecMaxIterations, 1000))
@@ -5254,7 +6617,8 @@ func TestMirroredIncludeExcludeSpec(t *testing.T) {
 
 // TestMirroredIncludeExcludeSpecOnUpdate is like TestMirroredIncludeExcludeSpec but reaches the
 // mirrored spec via UpdateSchedule, exercising the spec-recompile path on an existing schedule.
-func TestMirroredIncludeExcludeSpecOnUpdate(t *testing.T) {
+func (suite *ScheduleCHASMSuite) TestMirroredIncludeExcludeSpecOnUpdate() {
+	t := suite.T()
 	// A tiny compute bound trips the mirrored spec near-instantly (see TestMirroredIncludeExcludeSpec).
 	opts := append(scheduleCommonOpts(t), testcore.WithDynamicConfig(dynamicconfig.SchedulerSpecMaxIterations, 1000))
 	s := testcore.NewEnv(t, opts...)
@@ -5302,7 +6666,8 @@ func TestMirroredIncludeExcludeSpecOnUpdate(t *testing.T) {
 // TestScheduleFarFutureActionTimes verifies that a schedule firing far beyond the compute
 // horizon (an interval 10x the horizon) still fills FutureActionTimes, since each far-future
 // time is found in a single interval step rather than by scanning.
-func TestScheduleFarFutureActionTimes(t *testing.T) {
+func (suite *ScheduleCHASMSuite) TestScheduleFarFutureActionTimes() {
+	t := suite.T()
 	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := testcore.RandomizeStr("sched-far-future")
@@ -5358,7 +6723,8 @@ func TestScheduleFarFutureActionTimes(t *testing.T) {
 // TestScheduleManyCalendars verifies that a spec with 50 calendars and 50 excludes still
 // evaluates cheaply, so the schedule keeps dispatching actions while RecentActions and
 // FutureActionTimes keep updating.
-func TestScheduleManyCalendars(t *testing.T) {
+func (suite *ScheduleCHASMSuite) TestScheduleManyCalendars() {
+	t := suite.T()
 	s := testcore.NewEnv(t, scheduleCommonOpts(t)...)
 
 	sid := testcore.RandomizeStr("sched-many-calendars")
@@ -5442,7 +6808,8 @@ func TestScheduleManyCalendars(t *testing.T) {
 // workflow that blocks, settles into one running workflow with one fire buffered
 // behind it. The counts aren't surfaced on the list entry, so we assert via the
 // query rather than by reading the entry's SAs.
-func TestScheduleCountsVisibility(t *testing.T) {
+func (suite *ScheduleCHASMSuite) TestScheduleCountsVisibility() {
+	t := suite.T()
 	s := newScheduleEnv(t, scheduleCommonOpts(t)...)
 	newContext := chasmContextFactory
 
@@ -5490,8 +6857,8 @@ func TestScheduleCountsVisibility(t *testing.T) {
 
 	// matchesQuery reports whether the schedule is returned when filtering on the
 	// given search-attribute query.
-	matchesQuery := func(query string) bool {
-		listResp, listErr := s.FrontendClient().ListSchedules(newContext(s.Context()), &workflowservice.ListSchedulesRequest{
+	matchesQuery := func(ctx context.Context, query string) bool {
+		listResp, listErr := s.FrontendClient().ListSchedules(ctx, &workflowservice.ListSchedulesRequest{
 			Namespace:       s.Namespace().String(),
 			MaximumPageSize: 5,
 			Query:           query,
@@ -5509,13 +6876,13 @@ func TestScheduleCountsVisibility(t *testing.T) {
 
 	// Starting the workflow and buffering the next fire takes a few seconds on top
 	// of visibility propagation, so allow 30s for each count to become queryable.
-	require.Eventually(t, func() bool {
-		return matchesQuery(fmt.Sprintf("%s >= 1", chasmscheduler.ScheduleRunningWorkflowCountName))
+	await.Requiref(ctx, t, func(at *await.T) {
+		require.True(at, matchesQuery(at.Context(), fmt.Sprintf("%s >= 1", chasmscheduler.ScheduleRunningWorkflowCountName)))
 	}, 30*time.Second, 500*time.Millisecond,
 		"schedule must be queryable by ScheduleRunningWorkflowCount >= 1")
 
-	require.Eventually(t, func() bool {
-		return matchesQuery(fmt.Sprintf("%s >= 1", chasmscheduler.ScheduleBufferedStartsCountName))
+	await.Requiref(ctx, t, func(at *await.T) {
+		require.True(at, matchesQuery(at.Context(), fmt.Sprintf("%s >= 1", chasmscheduler.ScheduleBufferedStartsCountName)))
 	}, 30*time.Second, 500*time.Millisecond,
 		"schedule must be queryable by ScheduleBufferedStartsCount >= 1")
 }

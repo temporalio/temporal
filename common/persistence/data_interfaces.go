@@ -135,6 +135,14 @@ type (
 		DBRecordVersion int64
 	}
 
+	// WorkflowRunAlreadyExistsError is returned when a write with CheckRunAlreadyExists set creates a run whose
+	// run ID already exists. Status is the existing run's status.
+	WorkflowRunAlreadyExistsError struct {
+		Msg    string
+		RunID  string
+		Status enumspb.WorkflowExecutionStatus
+	}
+
 	// ConditionFailedError represents a failed conditional update for execution record
 	ConditionFailedError struct {
 		Msg string
@@ -217,6 +225,10 @@ type (
 
 		ArchetypeID chasm.ArchetypeID
 
+		// CheckRunAlreadyExists is set when the run ID was derived rather than randomly generated. The create then
+		// fails with WorkflowRunAlreadyExistsError if a run with this run ID already exists.
+		CheckRunAlreadyExists bool
+
 		NewWorkflowSnapshot WorkflowSnapshot
 		NewWorkflowEvents   []*WorkflowEvents
 	}
@@ -234,6 +246,9 @@ type (
 		Mode UpdateWorkflowMode
 
 		ArchetypeID chasm.ArchetypeID
+
+		// CheckRunAlreadyExists is as on CreateWorkflowExecutionRequest, for NewWorkflowSnapshot only.
+		CheckRunAlreadyExists bool
 
 		UpdateWorkflowMutation WorkflowMutation
 		UpdateWorkflowEvents   []*WorkflowEvents
@@ -661,6 +676,9 @@ type (
 		ExclusiveMaxTaskID int64 // Tasks less than this ID will be completed
 		Subqueue           int
 		Limit              int // Limit on the max number of tasks that can be completed. Required param
+		// If set, only delete if the task queue's range id matches this value, otherwise return
+		// ConditionFailedError. Only supported for fair (v2) task queues.
+		ConditionRangeID int64
 	}
 
 	// CreateNamespaceRequest is used to create the namespace
@@ -925,6 +943,12 @@ type (
 	ForkHistoryBranchResponse struct {
 		// branchToken to represent the new branch
 		NewBranchToken []byte
+		// The storage layer might have changed the base branch token. This
+		// response represents the changed base branch token to be used for further
+		// processing in a workflow rebuild operation.
+		// An empty value indicates that the caller's base branch token
+		// is still correct.
+		BaseBranchToken []byte
 	}
 
 	// CompleteForkBranchRequest is used to complete forking
@@ -1165,7 +1189,8 @@ type (
 		// ReadRawHistoryBranch returns history node raw data for a branch ByBatch
 		// NOTE: this API should only be used by 3+DC
 		ReadRawHistoryBranch(ctx context.Context, request *ReadHistoryBranchRequest) (*ReadRawHistoryBranchResponse, error)
-		// ForkHistoryBranch forks a new branch from a old branch
+		// ForkHistoryBranch forks a new branch from an old branch. The response may contain a different/rewritten base token that
+		// should be used for further action.
 		ForkHistoryBranch(ctx context.Context, request *ForkHistoryBranchRequest) (*ForkHistoryBranchResponse, error)
 		// DeleteHistoryBranch removes a branch
 		// If this is the last branch to delete, it will also remove the root node
@@ -1375,6 +1400,10 @@ func (e *WorkflowConditionFailedError) Error() string {
 	return e.Msg
 }
 
+func (e *WorkflowRunAlreadyExistsError) Error() string {
+	return e.Msg
+}
+
 func (e *ConditionFailedError) Error() string {
 	return e.Msg
 }
@@ -1399,6 +1428,7 @@ func IsConflictErr(err error) bool {
 	switch err.(type) {
 	case *CurrentWorkflowConditionFailedError,
 		*WorkflowConditionFailedError,
+		*WorkflowRunAlreadyExistsError,
 		*ConditionFailedError:
 		return true
 	}

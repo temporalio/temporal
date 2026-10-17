@@ -2,6 +2,8 @@ package interceptor
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -9,7 +11,11 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.uber.org/mock/gomock"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -31,7 +37,12 @@ func (e *ErrorWithoutStatus) Error() string {
 
 // Error returns string message.
 func TestServiceErrorInterceptorUnknown(t *testing.T) {
-	interceptor := NewServiceErrorInterceptor(dynamicconfig.GetIntPropertyFn(testMaxMessageLength))
+	ctrl := gomock.NewController(t)
+	interceptor := NewServiceErrorInterceptor(
+		dynamicconfig.GetIntPropertyFn(testMaxMessageLength),
+		metrics.NewMockHandler(ctrl),
+		log.NewTestLogger(),
+	)
 
 	_, err := interceptor.Intercept(t.Context(), nil, nil,
 		func(ctx context.Context, req any) (any, error) {
@@ -54,7 +65,12 @@ func TestServiceErrorInterceptorUnknown(t *testing.T) {
 }
 
 func TestServiceErrorInterceptorSer(t *testing.T) {
-	interceptor := NewServiceErrorInterceptor(dynamicconfig.GetIntPropertyFn(testMaxMessageLength))
+	ctrl := gomock.NewController(t)
+	interceptor := NewServiceErrorInterceptor(
+		dynamicconfig.GetIntPropertyFn(testMaxMessageLength),
+		metrics.NewMockHandler(ctrl),
+		log.NewTestLogger(),
+	)
 	serErrors := []error{
 		serialization.NewDeserializationError(enumspb.ENCODING_TYPE_PROTO3, nil),
 		serialization.NewSerializationError(enumspb.ENCODING_TYPE_PROTO3, nil),
@@ -69,7 +85,12 @@ func TestServiceErrorInterceptorSer(t *testing.T) {
 }
 
 func TestServiceErrorInterceptorTruncation(t *testing.T) {
-	interceptor := NewServiceErrorInterceptor(dynamicconfig.GetIntPropertyFn(testMaxMessageLength))
+	ctrl := gomock.NewController(t)
+	interceptor := NewServiceErrorInterceptor(
+		dynamicconfig.GetIntPropertyFn(testMaxMessageLength),
+		metrics.NewMockHandler(ctrl),
+		log.NewTestLogger(),
+	)
 
 	t.Run("nil error is not affected", func(t *testing.T) {
 		_, err := interceptor.Intercept(t.Context(), nil, nil,
@@ -145,4 +166,94 @@ func TestServiceErrorInterceptorTruncation(t *testing.T) {
 			require.Equal(t, '€', r)
 		}
 	})
+}
+
+func TestServiceErrorInterceptorPanic(t *testing.T) {
+	testCases := []struct {
+		name       string
+		panicObj   any
+		errMessage string
+	}{
+		{
+			name:       "panic with error is converted to internal error",
+			panicObj:   errors.New("panic error message"),
+			errMessage: "panic error message",
+		},
+		{
+			name:       "panic with non-error value is converted to internal error",
+			panicObj:   "something went wrong",
+			errMessage: "panic: something went wrong",
+		},
+		{
+			name:       "panic with service error is still converted to internal error",
+			panicObj:   serviceerror.NewNotFound("not found message"),
+			errMessage: "not found message",
+		},
+		{
+			name:       "captured panic message is truncated",
+			panicObj:   errors.New(strings.Repeat("a", testMaxMessageLength+100)),
+			errMessage: strings.Repeat("a", testMaxMessageLength-len(truncatedSuffix)) + truncatedSuffix,
+		},
+		{
+			name:       "no panic does not log",
+			panicObj:   nil,
+			errMessage: "",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			metricsHandlerMock := metrics.NewMockHandler(ctrl)
+			loggerMock := log.NewMockLogger(ctrl)
+			interceptor := NewServiceErrorInterceptor(
+				dynamicconfig.GetIntPropertyFn(testMaxMessageLength),
+				metricsHandlerMock,
+				loggerMock,
+			)
+
+			var loggedTags []tag.Tag
+			if tc.panicObj != nil {
+				counterMock := metrics.NewMockCounterIface(ctrl)
+				counterMock.EXPECT().Record(int64(1))
+				metricsHandlerMock.EXPECT().Counter(metrics.ServicePanic.Name()).Return(counterMock)
+				loggerMock.EXPECT().Error("Panic is captured", gomock.Any(), gomock.Any()).
+					Do(func(_ string, tags ...tag.Tag) {
+						loggedTags = tags
+					}).
+					Times(1)
+			}
+
+			resp, err := interceptor.Intercept(t.Context(), nil, nil,
+				func(_ context.Context, _ any) (any, error) {
+					if tc.panicObj != nil {
+						panic(tc.panicObj)
+					}
+					return "ok", nil
+				})
+
+			if tc.panicObj != nil {
+				expectedMessage := fmt.Sprintf(
+					"rpc error: code = Internal desc = %s",
+					tc.errMessage,
+				)
+				require.Nil(t, resp)
+				require.Error(t, err)
+				require.Equal(t, codes.Internal, status.Code(err))
+				require.Equal(t, expectedMessage, err.Error())
+
+				// Logs contains the stack trace
+				tagsByKey := make(map[string]tag.Tag, len(loggedTags))
+				for _, tg := range loggedTags {
+					tagsByKey[tg.Key()] = tg
+				}
+				require.Contains(t, tagsByKey, "sys-stack-trace")
+				require.Contains(t, tagsByKey["sys-stack-trace"].Value(), "service_error_interceptor_test.go")
+				require.Contains(t, tagsByKey, "error")
+			} else {
+				require.Equal(t, "ok", resp)
+				require.NoError(t, err)
+			}
+		})
+	}
 }

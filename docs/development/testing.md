@@ -68,6 +68,18 @@ await.RequireTrue(t, func() bool {
 
 `RequireTrue` is the wrong tool when dealing with errors or assertions; use `Require` instead.
 
+### Blocking on channels
+
+Use `await.Rcv` and `await.Snd` for blocking channel operations.
+They fail the test if its context ends or the channel closes.
+
+```go
+headers := await.Rcv(t, requestHeaders)
+await.Snd(t, responses, response)
+```
+
+Keep an explicit `select` when testing non-blocking behavior or waiting on multiple channels.
+
 ### Parallelization
 
 All tests (and subtests!) should use `t.Parallel()` to be run concurrently;
@@ -187,6 +199,99 @@ You'll find a fully initialized task poller in any functional test suite, look f
 
 _NOTE: The previous `testcore.TaskPoller` has been deprecated and should not be used in new code._
 
+### gRPC fault injection
+
+The `testcore` package injects faults into gRPC calls by intercepting requests and responses.
+The fault function determines which RPCs trigger a fault and returns the error to inject.
+It returns a cleanup function that can be used to remove the fault again.
+
+**Example:**
+
+```go
+env.InjectRequestFault(
+    func(req any) error {
+        if _, ok := req.(*matchingservice.AddWorkflowTaskRequest); ok {
+            return serviceerror.NewNotFound("injected fault")
+        }
+        return nil
+    })
+```
+
+`InjectRequestFault` runs _before_ the handler, so an injected error prevents the operation from
+executing. `InjectResponseFault` runs _after_ the handler, so an injected error can model an
+operation that executed but whose response was lost. The test fails if the fault never triggers.
+Only unary RPCs are intercepted; streaming RPCs are unaffected.
+
+The `env` methods scope faults to the test's namespace.
+
+### HTTP fault injection
+
+`InjectHTTPRequestFault` and `InjectHTTPResponseFault` inject faults into HTTP clients that install
+the test fault generator. Callback delivery and Nexus operation clients support these faults. The
+faults are scoped to the test namespace and are unavailable in builds without `test_dep`.
+
+Return an `httpfaults.Outcome` with one action:
+
+- `Response` returns a synthetic HTTP response.
+- `Error` returns a transport error.
+
+```go
+env.InjectHTTPRequestFault(func(ctx context.Context, req *http.Request) *httpfaults.Outcome {
+    if req.URL.Path != "/callback" {
+        return nil
+    }
+    return &httpfaults.Outcome{
+        Response: httpfaults.NewResponse(http.StatusServiceUnavailable, "injected"),
+    }
+})
+```
+
+### Persistence fault injection
+
+Use `testcore.InjectPersistenceFault` to return custom errors from persistence calls. The fault is
+active before the test cluster starts. You can filter it by store and method.
+
+```go
+option := testcore.InjectPersistenceFault(
+    func(config.FaultInjectionTarget) error {
+        return context.DeadlineExceeded
+    },
+    testcore.WithStore(config.ShardStoreName),
+    testcore.WithMethod("UpdateShard"),
+)
+env := testcore.NewEnv(t, option)
+```
+
+The test fails if no matching call reaches the faulty path. This ensures that if we end up refactoring
+the code (i.e., "UpdateShard" doesn't exist anymore), and the path isn't reachable, that the test
+that injects fault there will intentionally fail.
+
+### Persistence order enforcement
+
+Use `testcore.NewPersistenceCallGate` when a test must control call order. It returns a
+`*testcore.PersistenceCallGate` and a `TestOption` that installs the gate. Matching calls block at
+the gate. Call `WaitForPersistenceCall` before you check other state. Call `Release` on the gate to
+continue the persistence operation. Call `ReleaseWithError` to return an error from the blocked
+operation. 
+
+```go
+gate, option := testcore.NewPersistenceCallGate(
+    testcore.WithStore(config.ShardStoreName),
+    testcore.WithMethod("UpdateShard"),
+)
+env := testcore.NewEnv(t, option)
+
+// Wait until one UpdateShard call blocks at the gate.
+testcore.WaitForPersistenceCall(t, gate, 10*time.Second)
+
+// Check state, do work, make assertions, etc... while the call is blocked.
+
+// Later, release the gate manually.
+gate.Release() // Or gate.ReleaseWithError(err) to fail the blocked call.
+```
+
+The test fails if no matching call reaches the gate.
+
 ### testhooks package
 
 The `testhooks` package injects test-specific behavior into production code paths that are otherwise
@@ -275,8 +380,6 @@ func (s* TestMyFeatureSuite) func TestXYZ(t *testing.T) {
 ```
 
 Note that each test has its own namespace (`s.Namespace()`) for isolation.
-
-> **Note:** The legacy `FunctionalTestBase` (using testify's `suite`) has been deprecated for new tests.
 
 ## OpenTelemetry (OTEL)
 

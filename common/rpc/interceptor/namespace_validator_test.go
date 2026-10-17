@@ -941,3 +941,97 @@ func (s *namespaceValidatorSuite) TestSetNamespace() {
 	nvi.setNamespace(namespaceEntry, failActivityTaskReq)
 	s.Equal(namespaceRequestName, failActivityTaskReq.Namespace)
 }
+
+// Test_Intercept_AdminVisibilityRequests covers the admin visibility APIs, where the
+// namespace is optional: an empty namespace must not be rejected nor looked up.
+func (s *namespaceValidatorSuite) Test_Intercept_AdminVisibilityRequests() {
+	testCases := []struct {
+		req          any
+		hasNamespace bool
+	}{
+		{
+			req:          &adminservice.ListExecutionsRequest{},
+			hasNamespace: false,
+		},
+		{
+			req:          &adminservice.CountExecutionsRequest{},
+			hasNamespace: false,
+		},
+		{
+			req:          &adminservice.ListExecutionsRequest{Namespace: "test-namespace"},
+			hasNamespace: true,
+		},
+		{
+			req:          &adminservice.CountExecutionsRequest{Namespace: "test-namespace"},
+			hasNamespace: true,
+		},
+	}
+
+	for _, testCase := range testCases {
+		if testCase.hasNamespace {
+			s.mockRegistry.EXPECT().GetNamespace(namespace.Name("test-namespace")).Return(nil, nil)
+		}
+
+		nvi := NewNamespaceValidatorInterceptor(
+			s.mockRegistry,
+			dynamicconfig.GetBoolPropertyFn(false),
+			dynamicconfig.GetIntPropertyFn(100),
+			nil,
+		)
+		serverInfo := &grpc.UnaryServerInfo{
+			FullMethod: api.AdminServicePrefix + "random",
+		}
+
+		handlerCalled := false
+		_, err := nvi.StateValidationIntercept(
+			context.Background(),
+			testCase.req,
+			serverInfo,
+			func(ctx context.Context, req any) (any, error) {
+				handlerCalled = true
+				return nil, nil
+			},
+		)
+		s.NoError(err)
+		s.True(handlerCalled)
+	}
+}
+
+// Test_Intercept_AdminVisibilityRequests_NamespaceNotFound covers that a namespace that is
+// set on the request is still validated.
+func (s *namespaceValidatorSuite) Test_Intercept_AdminVisibilityRequests_NamespaceNotFound() {
+	testCases := []any{
+		&adminservice.ListExecutionsRequest{Namespace: "test-namespace"},
+		&adminservice.CountExecutionsRequest{Namespace: "test-namespace"},
+	}
+
+	for _, req := range testCases {
+		s.mockRegistry.EXPECT().
+			GetNamespace(namespace.Name("test-namespace")).
+			Return(nil, serviceerror.NewNamespaceNotFound("test-namespace"))
+
+		nvi := NewNamespaceValidatorInterceptor(
+			s.mockRegistry,
+			dynamicconfig.GetBoolPropertyFn(false),
+			dynamicconfig.GetIntPropertyFn(100),
+			nil,
+		)
+		serverInfo := &grpc.UnaryServerInfo{
+			FullMethod: api.AdminServicePrefix + "random",
+		}
+
+		handlerCalled := false
+		_, err := nvi.StateValidationIntercept(
+			context.Background(),
+			req,
+			serverInfo,
+			func(ctx context.Context, req any) (any, error) {
+				handlerCalled = true
+				return nil, nil
+			},
+		)
+		var notFound *serviceerror.NamespaceNotFound
+		s.ErrorAs(err, &notFound)
+		s.False(handlerCalled)
+	}
+}

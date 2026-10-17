@@ -268,6 +268,12 @@ func recordActivityTaskStarted(
 	}
 
 	scheduleToStartLatency := ai.GetStartedTime().AsTime().Sub(ai.GetScheduledTime().AsTime())
+	config := shardContext.GetConfig()
+	breakdownMetricsByBuildID := config.BreakdownMetricsByBuildID(
+		namespaceName,
+		ai.GetTaskQueue(),
+		enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+	)
 	metrics.TaskScheduleToStartLatency.With(
 		metrics.GetPerTaskQueuePartitionTypeScope(
 			taggedMetrics,
@@ -275,11 +281,15 @@ func recordActivityTaskStarted(
 			// passing the root partition all the time as we don't care about partition ID in this metric
 			tqid.UnsafeTaskQueueFamily(namespaceEntry.ID().String(),
 				ai.GetTaskQueue()).TaskQueue(enumspb.TASK_QUEUE_TYPE_ACTIVITY).RootPartition(),
-			shardContext.GetConfig().BreakdownMetricsByTaskQueue(namespaceName,
+			config.BreakdownMetricsByTaskQueue(namespaceName,
 				ai.GetTaskQueue(),
 				enumspb.TASK_QUEUE_TYPE_ACTIVITY),
 		),
-	).Record(scheduleToStartLatency)
+	).Record(
+		scheduleToStartLatency,
+		metrics.WorkerDeploymentNameTag(pollerDeployment.GetSeriesName(), breakdownMetricsByBuildID),
+		metrics.WorkerDeploymentBuildIDTag(pollerDeployment.GetBuildId(), breakdownMetricsByBuildID),
+	)
 
 	response.Clock = clock
 

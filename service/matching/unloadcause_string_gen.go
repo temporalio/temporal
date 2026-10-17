@@ -17,15 +17,17 @@ func _() {
 	_ = x[unloadCauseForce-6]
 	_ = x[unloadCauseConfigChange-7]
 	_ = x[unloadCauseOtherError-8]
+	_ = x[unloadCauseNamespaceStateChange-9]
 }
 
-const _unloadCause_name = "UnspecifiedInitErrorIdleMembershipConflictShuttingDownForceConfigChangeOtherError"
+const _unloadCause_name = "UnspecifiedInitErrorIdleMembershipConflictShuttingDownForceConfigChangeOtherErrorNamespaceStateChange"
 
-var _unloadCause_index = [...]uint8{0, 11, 20, 24, 34, 42, 54, 59, 71, 81}
+var _unloadCause_index = [...]uint8{0, 11, 20, 24, 34, 42, 54, 59, 71, 81, 101}
 
 func (i unloadCause) String() string {
-	if i < 0 || i >= unloadCause(len(_unloadCause_index)-1) {
+	idx := int(i) - 0
+	if i < 0 || idx >= len(_unloadCause_index)-1 {
 		return "unloadCause(" + strconv.FormatInt(int64(i), 10) + ")"
 	}
-	return _unloadCause_name[_unloadCause_index[i]:_unloadCause_index[i+1]]
+	return _unloadCause_name[_unloadCause_index[idx]:_unloadCause_index[idx+1]]
 }

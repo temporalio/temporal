@@ -103,10 +103,7 @@ func (e *ExecutableSyncVersionedTransitionTask) Execute() error {
 
 	ctx, cancel := newTaskContext(namespaceName, e.Config.ReplicationTaskApplyTimeout(), callerInfo)
 	defer cancel()
-	ctx = wideevents.SetReplicationTaskOrigin(ctx, wideevents.ReplicationTaskOrigin{
-		ShardID: e.SourceShardKey().ShardID,
-		TaskID:  e.TaskID(),
-	})
+	ctx = setReplicationTaskOrigin(ctx, e.ExecutableTask, wideevents.ReplApplyArtifactSourceTaskPayload)
 	shardContext, err := e.ShardController.GetShardByNamespaceWorkflow(
 		namespace.ID(e.NamespaceID),
 		e.WorkflowID,
@@ -144,6 +141,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 		tag.TaskID(e.TaskID()),
 		tag.Error(err),
 	)
+	emitExecutableTaskError(e.ExecutableTask, wideevents.ReplOperationPassiveTaskExecution, "SyncVersionedTransition replication task encountered error", err, nil)
 	callerInfo := getReplicaitonCallerInfo(e.GetPriority())
 	switch taskErr := err.(type) {
 	case *serviceerrors.SyncState:
@@ -170,6 +168,7 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 					tag.TaskID(e.TaskID()),
 					tag.Error(syncStateErr),
 				)
+				emitExecutableTaskError(e.ExecutableTask, wideevents.ReplOperationSyncVersionedTransitionSyncState, "SyncVersionedTransition recovery failed during sync state", syncStateErr, nil)
 				return err
 			}
 			return nil
@@ -226,6 +225,10 @@ func (e *ExecutableSyncVersionedTransitionTask) HandleErr(err error) error {
 			endEventVersion,
 			"",
 		); resendErr != nil {
+			emitExecutableTaskError(e.ExecutableTask, wideevents.ReplOperationHistoryBackfill, "SyncVersionedTransition history backfill failed", resendErr, map[string]any{
+				"first_event_id": startEvent,
+				"last_event_id":  endEvent,
+			})
 			return err
 		}
 		return e.Execute()

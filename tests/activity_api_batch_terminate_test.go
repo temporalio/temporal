@@ -59,6 +59,7 @@ func newStandaloneActivityBatchEnvWithBatchOperations(t *testing.T, enabled bool
 	cluster.OverrideDynamicConfig(t, dynamicconfig.EnableChasm, nsValues(true))
 	cluster.OverrideDynamicConfig(t, activity.Enabled, nsValues(true))
 	cluster.OverrideDynamicConfig(t, activity.EnableCallbacks, nsValues(true))
+	cluster.OverrideDynamicConfig(t, activity.EnableStandaloneActivityOperatorCommands, nsValues(true))
 	cluster.OverrideDynamicConfig(t, dynamicconfig.FrontendEnableBatchOperationsForStandaloneActivities, nsValues(enabled))
 	return env
 }
@@ -113,20 +114,23 @@ func assertBatchOperationType(
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
-// waitForRunningFilterToSettle waits until visibility has settled on the target
-// set that a terminate/cancel batch over `query` will actually see: `wantTotal`
-// executions match `query`, and `wantRunning` of those also match the
-// `ExecutionStatus='Running'` filter the batcher appends
-// (adjustQueryBatchTypeEnum).
-func waitForRunningFilterToSettle(
+// waitForActivityBatchFilterToSettle waits until visibility has settled on the
+// exact target set that a terminate/cancel batch over `query` will see.
+func waitForActivityBatchFilterToSettle(
 	ctx context.Context,
 	t *testing.T,
 	env *standaloneActivityEnv,
 	query string,
-	wantTotal int,
-	wantRunning int,
+	expectedStatuses map[string]enumspb.ActivityExecutionStatus,
 ) {
 	t.Helper()
+
+	wantOpen := 0
+	for _, status := range expectedStatuses {
+		if status == enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING || status == enumspb.ACTIVITY_EXECUTION_STATUS_PAUSED {
+			wantOpen++
+		}
+	}
 
 	//nolint:forbidigo // for tests with waits
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -136,16 +140,22 @@ func waitForRunningFilterToSettle(
 			Query:     query,
 		})
 		require.NoError(c, err)
-		require.Len(c, listResp.GetExecutions(), wantTotal)
+		require.Len(c, listResp.GetExecutions(), len(expectedStatuses))
+
+		actualStatuses := make(map[string]enumspb.ActivityExecutionStatus, len(listResp.GetExecutions()))
+		for _, execution := range listResp.GetExecutions() {
+			actualStatuses[execution.GetActivityId()] = execution.GetStatus()
+		}
+		require.Equal(c, expectedStatuses, actualStatuses)
 
 		// Mirrors the query the batcher itself counts with, so this waits on
 		// exactly the value that drives TotalOperationCount.
 		countResp, err := env.FrontendClient().CountActivityExecutions(ctx, &workflowservice.CountActivityExecutionsRequest{
 			Namespace: env.Namespace().String(),
-			Query:     fmt.Sprintf("(%s) AND (ExecutionStatus='Running')", query),
+			Query:     fmt.Sprintf("(%s) AND (ExecutionStatus='Running' OR ExecutionStatus='Paused')", query),
 		})
 		require.NoError(c, err)
-		require.EqualValues(c, wantRunning, countResp.GetCount())
+		require.EqualValues(c, wantOpen, countResp.GetCount())
 	}, 20*time.Second, 100*time.Millisecond)
 }
 
@@ -386,11 +396,9 @@ func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_No
 	}, 10*time.Second, 200*time.Millisecond)
 }
 
-// TestActivityBatchTerminate_ExcludesNonRunning verifies that a batch terminate
-// query omitting `ExecutionStatus = 'Running'` still only targets the running
-// activity: the server must add the filter automatically (adjustQueryBatchTypeEnum)
-// so an already-completed activity of the same type is excluded, not (re-)terminated.
-func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_ExcludesNonRunning() {
+// TestActivityBatchTerminate_TargetsRunningAndPaused verifies that a batch terminate
+// query targets non-terminal activities while excluding completed activities.
+func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_TargetsRunningAndPaused() {
 	env := newStandaloneActivityBatchEnv(s.T())
 	t := s.T()
 	ctx := s.Context()
@@ -401,6 +409,16 @@ func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_Ex
 	// task can't race and pick up the running activity's task instead.
 	runningID := testcore.RandomizeStr(fmt.Sprintf("%s-running", t.Name()))
 	runningResp := env.startAndValidateActivity(ctx, t, runningID, testcore.RandomizeStr(fmt.Sprintf("%s-running-tq", t.Name())))
+	pausedID := testcore.RandomizeStr(fmt.Sprintf("%s-paused", t.Name()))
+	pausedResp := env.startAndValidateActivity(ctx, t, pausedID, testcore.RandomizeStr(fmt.Sprintf("%s-paused-tq", t.Name())))
+	_, err := env.FrontendClient().PauseActivityExecution(ctx, &workflowservice.PauseActivityExecutionRequest{
+		Namespace:  env.Namespace().String(),
+		ActivityId: pausedID,
+		RunId:      pausedResp.RunId,
+		Identity:   "test-identity",
+		Reason:     "test-pause",
+	})
+	require.NoError(t, err)
 
 	// This activity completes normally before the batch runs, so it must be
 	// excluded from a batch operation scoped only by ActivityType.
@@ -408,7 +426,7 @@ func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_Ex
 	completedID := testcore.RandomizeStr(fmt.Sprintf("%s-completed", t.Name()))
 	completedResp := env.startAndValidateActivity(ctx, t, completedID, completedTaskQueue)
 	pollResp := env.pollActivityTaskAndValidate(ctx, t, completedID, completedTaskQueue, completedResp.RunId)
-	_, err := env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+	_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
 		Namespace: env.Namespace().String(),
 		TaskToken: pollResp.TaskToken,
 		Result:    defaultResult,
@@ -418,9 +436,13 @@ func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_Ex
 	// Query intentionally omits ExecutionStatus = 'Running'.
 	query := fmt.Sprintf("ActivityType = '%s'", activityType)
 
-	// Wait for both activities to be indexed *and* for the completed one to no
-	// longer be indexed as Running, so the batch sees exactly one target.
-	waitForRunningFilterToSettle(ctx, t, env, query, 2, 1)
+	// Wait for all activities to be indexed and the batch filter to see the
+	// running and paused activities, but not the completed activity.
+	waitForActivityBatchFilterToSettle(ctx, t, env, query, map[string]enumspb.ActivityExecutionStatus{
+		runningID:   enumspb.ACTIVITY_EXECUTION_STATUS_RUNNING,
+		pausedID:    enumspb.ACTIVITY_EXECUTION_STATUS_PAUSED,
+		completedID: enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED,
+	})
 
 	jobID := uuid.NewString()
 	_, err = env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
@@ -437,8 +459,8 @@ func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_Ex
 	})
 	s.NoError(err)
 
-	// The server-added ExecutionStatus = 'Running' filter must exclude the
-	// already-completed activity: only 1 execution is ever targeted, not 2.
+	// The server-added open-status filter must include the paused activity and
+	// exclude the completed activity.
 	//nolint:forbidigo // for tests with waits
 	s.EventuallyWithT(func(c *assert.CollectT) {
 		desc, err := env.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
@@ -446,10 +468,11 @@ func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_Ex
 			JobId:     jobID,
 		})
 		require.NoError(c, err)
-		require.EqualValues(c, 1, desc.GetTotalOperationCount())
+		require.EqualValues(c, 2, desc.GetTotalOperationCount())
 	}, 10*time.Second, 200*time.Millisecond)
 
 	env.eventuallyTerminated(ctx, t, runningID, runningResp.RunId)
+	env.eventuallyTerminated(ctx, t, pausedID, pausedResp.RunId)
 
 	// The already-completed activity must remain untouched by the batch.
 	descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
@@ -459,4 +482,81 @@ func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_Ex
 	})
 	s.NoError(err)
 	s.Equal(enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, descResp.GetInfo().GetStatus())
+}
+
+// Configured batch rate, well above every rate requested below.
+const batchRPSConfiguredMax = 100
+
+// TestActivityBatchTerminate_MaxOperationsPerSecond verifies a batch is paced at
+// min(requested RPS, worker.batcherRPS).
+func (s *ActivityAPIBatchTerminateClientTestSuite) TestActivityBatchTerminate_MaxOperationsPerSecond() {
+	env := newStandaloneActivityBatchEnv(s.T())
+	t := s.T()
+	ctx := s.Context()
+
+	env.OverrideDynamicConfig(dynamicconfig.BatcherRPS, batchRPSConfiguredMax)
+
+	// Returns the batch job's own duration. Targets activities explicitly to keep
+	// visibility indexing out of the measurement.
+	runBatch := func(count int, requestedRPS float32) time.Duration {
+		t.Helper()
+		taskQueue := testcore.RandomizeStr(t.Name())
+		executions := make([]*commonpb.Execution, 0, count)
+		for i := range count {
+			activityID := testcore.RandomizeStr(fmt.Sprintf("%s-%d", t.Name(), i))
+			startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
+			executions = append(executions, &commonpb.Execution{
+				Type:       enumspb.EXECUTION_TYPE_ACTIVITY,
+				BusinessId: activityID,
+				RunId:      startResp.RunId,
+			})
+		}
+
+		jobID := uuid.NewString()
+		_, err := env.SdkClient().WorkflowService().StartBatchOperation(ctx, &workflowservice.StartBatchOperationRequest{
+			Namespace:        env.Namespace().String(),
+			TargetExecutions: executions,
+			Operation: &workflowservice.StartBatchOperationRequest_TerminateActivitiesOperation{
+				TerminateActivitiesOperation: &batchpb.BatchOperationTerminateActivities{
+					Identity: "batch-terminator",
+					Reason:   "test",
+				},
+			},
+			JobId:                  jobID,
+			Reason:                 "test",
+			MaxOperationsPerSecond: requestedRPS,
+		})
+		require.NoError(t, err)
+
+		var elapsed time.Duration
+		//nolint:forbidigo // for tests with waits
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			desc, err := env.FrontendClient().DescribeBatchOperation(ctx, &workflowservice.DescribeBatchOperationRequest{
+				Namespace: env.Namespace().String(),
+				JobId:     jobID,
+			})
+			require.NoError(c, err)
+			require.Equal(c, enumspb.BATCH_OPERATION_STATE_COMPLETED, desc.GetState())
+			// Rate limiting must not drop work
+			require.Equal(c, int64(count), desc.GetTotalOperationCount())
+			require.Equal(c, int64(count), desc.GetCompleteOperationCount())
+			require.Zero(c, desc.GetFailureOperationCount())
+			elapsed = desc.GetCloseTime().AsTime().Sub(desc.GetStartTime().AsTime())
+		}, 30*time.Second, 100*time.Millisecond)
+		return elapsed
+	}
+
+	// Ops beyond the limiter's burst wait at requestedRPS/sec. Assert a floor with
+	// slack; the limiter can only ever make the job slower, never faster.
+	const requestedRPS = 2
+	const count = 3 * requestedRPS
+	minWait := (count - requestedRPS) * time.Second / requestedRPS * 3 / 4
+
+	rateLimited := runBatch(count, requestedRPS)
+	t.Logf("batch of %d operations at %d rps took %v (expected at least %v)", count, requestedRPS, rateLimited, minWait)
+	require.GreaterOrEqual(t, rateLimited, minWait,
+		"MaxOperationsPerSecond=%d should have paced the batch", requestedRPS)
+
+	unlimited := runBatch(count, 0)
+	t.Logf("batch of %d operations with no requested rate took %v", count, unlimited)
 }

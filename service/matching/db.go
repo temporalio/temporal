@@ -62,7 +62,6 @@ type (
 
 	taskQueueState struct {
 		rangeID       int64
-		ackLevel      int64 // TODO(pri): old matcher cleanup, delete later
 		subqueues     []persistencespb.SubqueueInfo
 		otherHasTasks bool
 		scaleState    *persistencespb.PartitionScaleState
@@ -166,7 +165,6 @@ func (db *taskQueueDB) RenewLease(
 	}
 	return taskQueueState{
 		rangeID:       db.rangeID,
-		ackLevel:      db.subqueues[subqueueZero].AckLevel, // TODO(pri): cleanup, only used by old backlog manager
 		subqueues:     db.cloneSubqueues(),
 		otherHasTasks: !db.isDraining && db.otherHasTasks,
 		scaleState:    db.scaleState,
@@ -214,7 +212,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked(
 		// If we are the draining one, then assume the other has tasks, so we can migrate
 		// backwards safely. Also assume other has tasks if the config allows for migration
 		// (and the partition supports fairness) since we may have just turned on fairness and need to migrate.
-		canMigrate := (db.config.NewMatcher || db.config.EnableFairness) && db.queue.Partition().SupportsFairness()
+		canMigrate := db.queue.Partition().SupportsFairness()
 		db.otherHasTasks = canMigrate || db.isDraining
 
 		if _, err := db.store.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
@@ -253,36 +251,6 @@ func (db *taskQueueDB) updateTaskQueueLocked(ctx context.Context, incrementRange
 	db.lastWrite = time.Now()
 	db.rangeID = newRangeID
 	return nil
-}
-
-// OldUpdateState updates the queue state with the given value. This is used by old backlog
-// manager (not subqueue-enabled).
-// TODO(pri): old matcher cleanup
-func (db *taskQueueDB) OldUpdateState(
-	ctx context.Context,
-	ackLevel int64,
-) error {
-	db.Lock()
-	defer db.Unlock()
-	// We don't need to update lastWrite/lastChange in here since this function is only used by
-	// the old backlog manager and those fields are only used by the new backlog manager.
-
-	// Reset approximateBacklogCount to fix the count divergence issue
-	maxReadLevel := db.getMaxReadLevelLocked(subqueueZero)
-	if ackLevel == maxReadLevel {
-		db.subqueues[subqueueZero].ApproximateBacklogCount = 0
-		db.subqueues[subqueueZero].oldestTime = time.Time{} // zero time means no backlog
-	}
-
-	prevAckLevel := db.subqueues[subqueueZero].AckLevel
-	db.subqueues[subqueueZero].AckLevel = ackLevel
-
-	err := db.updateTaskQueueLocked(ctx, false)
-	if err != nil {
-		db.subqueues[subqueueZero].AckLevel = prevAckLevel
-	}
-	db.emitPhysicalBacklogGaugesLocked()
-	return err
 }
 
 // shouldUpdateMetadataOnAppendLocked returns whether a task append should also write the
@@ -404,15 +372,6 @@ func (db *taskQueueDB) setKnownFairBacklogCount(subqueue subqueueIndex, count in
 			db.subqueues[subqueue].oldestTime = time.Time{}
 		}
 	}
-}
-
-// updateApproximateBacklogCount updates the in-memory DB state with the given delta value
-// TODO(pri): old matcher cleanup
-func (db *taskQueueDB) updateBacklogStats(countDelta int64, oldestTime time.Time) {
-	db.Lock()
-	defer db.Unlock()
-	db.lastChange = time.Now()
-	db.updateBacklogStatsLocked(subqueueZero, countDelta, oldestTime)
 }
 
 func (db *taskQueueDB) updateBacklogStatsLocked(subqueue subqueueIndex, countDelta int64, oldestTime time.Time) {
@@ -774,6 +733,11 @@ func (db *taskQueueDB) CompleteFairTasksLessThan(
 	limit int,
 	subqueue subqueueIndex,
 ) (int, error) {
+	// For fair tasks, we do an LWT to avoid issues with lost ownership, therefore we should
+	// serialize this with other LWTs by holding db.lock to avoid timeouts or conflicts.
+	db.Lock()
+	defer db.Unlock()
+
 	n, err := db.store.CompleteTasksLessThan(ctx, &persistence.CompleteTasksLessThanRequest{
 		NamespaceID:        db.queue.NamespaceId(),
 		TaskQueueName:      db.queue.PersistenceName(),
@@ -782,8 +746,13 @@ func (db *taskQueueDB) CompleteFairTasksLessThan(
 		ExclusiveMaxTaskID: exclusiveMaxLevel.id,
 		Subqueue:           int(subqueue),
 		Limit:              limit,
+		// We might have lost ownership without knowing it. A new owner assigns passes
+		// starting from the ack level it loaded, which may be below our in-memory ack level,
+		// so an unconditional delete could delete the new owner's tasks.
+		ConditionRangeID: db.rangeID,
 	})
-	if err != nil {
+	// ConditionFailedError means we lost ownership: not a store failure, caller will unload.
+	if _, lostOwnership := errors.AsType[*persistence.ConditionFailedError](err); err != nil && !lostOwnership {
 		db.logger.Error("Persistent store operation failure",
 			tag.StoreOperationCompleteTasksLessThan,
 			tag.Error(err),
@@ -877,11 +846,12 @@ func (db *taskQueueDB) emitPhysicalBacklogGaugesLocked() {
 	}
 
 	var totalLag int64
-	var oldestTime time.Time
 	counts := make(map[int32]int64)
+	oldestByPriority := make(map[int32]time.Time)
 	for _, s := range db.subqueues {
-		counts[s.Key.Priority] += s.ApproximateBacklogCount
-		oldestTime = minNonZeroTime(oldestTime, s.oldestTime)
+		pri := s.Key.Priority
+		counts[pri] += s.ApproximateBacklogCount
+		oldestByPriority[pri] = minNonZeroTime(oldestByPriority[pri], s.oldestTime)
 		// note: this metric is only an estimation for the lag.
 		// taskID in DB may not be continuous, especially when task list ownership changes.
 		if s.FairMaxReadLevel != nil && s.FairAckLevel != nil {
@@ -900,13 +870,16 @@ func (db *taskQueueDB) emitPhysicalBacklogGaugesLocked() {
 		backlogAgeGauge = metrics.PhysicalApproximateBacklogAgeSeconds
 	}
 
+	// Emit count and age per priority so the two gauges share the same task_priority tag set.
 	for priority, count := range counts {
-		backlogCountGauge.With(db.metricsHandler).Record(float64(count), metrics.MatchingTaskPriorityTag(priority))
-	}
-	if oldestTime.IsZero() {
-		backlogAgeGauge.With(db.metricsHandler).Record(0)
-	} else {
-		backlogAgeGauge.With(db.metricsHandler).Record(time.Since(oldestTime).Seconds())
+		priorityTag := metrics.MatchingTaskPriorityTag(priority)
+		backlogCountGauge.With(db.metricsHandler).Record(float64(count), priorityTag)
+
+		var ageSeconds float64
+		if oldest := oldestByPriority[priority]; !oldest.IsZero() {
+			ageSeconds = time.Since(oldest).Seconds()
+		}
+		backlogAgeGauge.With(db.metricsHandler).Record(ageSeconds, priorityTag)
 	}
 	metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler).Record(float64(totalLag))
 }
@@ -995,8 +968,9 @@ func (db *taskQueueDB) emitZeroPhysicalBacklogGauges() {
 	}
 
 	for k := range priorities {
-		backlogCountGauge.With(db.metricsHandler).Record(0, metrics.MatchingTaskPriorityTag(k))
+		priorityTag := metrics.MatchingTaskPriorityTag(k)
+		backlogCountGauge.With(db.metricsHandler).Record(0, priorityTag)
+		backlogAgeGauge.With(db.metricsHandler).Record(0, priorityTag)
 	}
-	backlogAgeGauge.With(db.metricsHandler).Record(0)
 	metrics.TaskLagPerTaskQueueGauge.With(db.metricsHandler).Record(0)
 }

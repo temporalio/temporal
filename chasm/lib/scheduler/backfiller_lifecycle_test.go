@@ -35,14 +35,9 @@ func TestBackfiller_ProcessedContinuationDoesNotRunAgain(t *testing.T) {
 	// crosses the same transaction boundary as a production task.
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 	specProcessor := scheduler.NewSpecProcessor(defaultConfig(), metrics.NoopMetricsHandler, logger, newLegacySpecBuilder(0, 0))
-	registry := chasm.NewRegistry(logger)
-	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
-	require.NoError(t, registry.Register(newTestLibrary(logger, specProcessor)))
-
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(time.Now())
-	engine := chasmtest.NewEngine(t, registry, chasmtest.WithTimeSource(timeSource))
-	engineCtx := chasm.NewEngineContext(context.Background(), engine)
+	engine, engineCtx := newTestEngineContext(t, logger, withEngineSpecProcessor(specProcessor), withEngineTimeSource(timeSource))
 	rootRef := chasm.NewComponentRef[*scheduler.Scheduler](chasm.ExecutionKey{
 		NamespaceID: namespaceID,
 		BusinessID:  scheduleID,
@@ -158,14 +153,9 @@ func TestBackfiller_FutureRangeDoesNotStall(t *testing.T) {
 	// Use the full task lifecycle so validation runs after each committed batch.
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 	specProcessor := scheduler.NewSpecProcessor(defaultConfig(), metrics.NoopMetricsHandler, logger, newLegacySpecBuilder(0, 0))
-	registry := chasm.NewRegistry(logger)
-	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
-	require.NoError(t, registry.Register(newTestLibrary(logger, specProcessor)))
-
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(time.Now())
-	engine := chasmtest.NewEngine(t, registry, chasmtest.WithTimeSource(timeSource))
-	engineCtx := chasm.NewEngineContext(context.Background(), engine)
+	engine, engineCtx := newTestEngineContext(t, logger, withEngineSpecProcessor(specProcessor), withEngineTimeSource(timeSource))
 	rootRef := chasm.NewComponentRef[*scheduler.Scheduler](chasm.ExecutionKey{
 		NamespaceID: namespaceID,
 		BusinessID:  scheduleID,
@@ -251,14 +241,9 @@ func TestBackfiller_Validate_AcceptsOnlyCurrentStamp(t *testing.T) {
 	// initial task are produced by the same path used in production.
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 	specProcessor := scheduler.NewSpecProcessor(defaultConfig(), metrics.NoopMetricsHandler, logger, newLegacySpecBuilder(0, 0))
-	registry := chasm.NewRegistry(logger)
-	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
-	require.NoError(t, registry.Register(newTestLibrary(logger, specProcessor)))
-
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(time.Now())
-	engine := chasmtest.NewEngine(t, registry, chasmtest.WithTimeSource(timeSource))
-	engineCtx := chasm.NewEngineContext(context.Background(), engine)
+	engine, engineCtx := newTestEngineContext(t, logger, withEngineSpecProcessor(specProcessor), withEngineTimeSource(timeSource))
 	rootRef := chasm.NewComponentRef[*scheduler.Scheduler](chasm.ExecutionKey{
 		NamespaceID: namespaceID,
 		BusinessID:  scheduleID,
@@ -370,14 +355,9 @@ func TestBackfiller_Validate_AcceptsOnlyCurrentStamp(t *testing.T) {
 func TestBackfiller_LegacyTaskSchedulesStampedSuccessor(t *testing.T) {
 	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
 	specProcessor := scheduler.NewSpecProcessor(defaultConfig(), metrics.NoopMetricsHandler, logger, newLegacySpecBuilder(0, 0))
-	registry := chasm.NewRegistry(logger)
-	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
-	require.NoError(t, registry.Register(newTestLibrary(logger, specProcessor)))
-
 	timeSource := clock.NewEventTimeSource()
 	timeSource.Update(time.Now())
-	engine := chasmtest.NewEngine(t, registry, chasmtest.WithTimeSource(timeSource))
-	engineCtx := chasm.NewEngineContext(context.Background(), engine)
+	engine, engineCtx := newTestEngineContext(t, logger, withEngineSpecProcessor(specProcessor), withEngineTimeSource(timeSource))
 	rootRef := chasm.NewComponentRef[*scheduler.Scheduler](chasm.ExecutionKey{
 		NamespaceID: namespaceID,
 		BusinessID:  scheduleID,

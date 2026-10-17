@@ -201,6 +201,7 @@ func NewRegistry(
 				nil,
 				r.remover(updID),
 				withInstrumentation(&r.instrumentation),
+				withNexusSerializationContext(updInfo.GetNexusSerializationContext()),
 			)
 		} else if acc := updInfo.GetAcceptance(); acc != nil {
 			u := newAccepted(
@@ -208,6 +209,7 @@ func NewRegistry(
 				acc.EventId,
 				r.remover(updID),
 				withInstrumentation(&r.instrumentation),
+				withNexusSerializationContext(updInfo.GetNexusSerializationContext()),
 			)
 			if !r.store.IsWorkflowExecutionRunning() {
 				// If the Workflow is completed, accepted Update will never be completed
@@ -274,7 +276,9 @@ func (r *registry) TryResurrect(_ context.Context, acptOrRejMsg *protocolpb.Mess
 		reqAny,
 		r.remover(updateID),
 		withInstrumentation(&r.instrumentation),
+		withNexusSerializationContext(reqMsg.GetPropagatedNexusSerializationContext()),
 	)
+	upd.originalReqID = reqMsg.RequestId
 	r.updates[updateID] = upd
 
 	return upd, nil
@@ -463,20 +467,25 @@ func (r *registry) Find(ctx context.Context, id string) *Update {
 	updOutcome, err := r.store.GetUpdateOutcome(ctx, id)
 
 	// Swallow NotFound error because it means that Update doesn't exist.
-	var notFound *serviceerror.NotFound
-	if errors.As(err, &notFound) {
+	if _, ok := errors.AsType[*serviceerror.NotFound](err); ok {
 		return nil
 	}
 
 	// Other errors go to the future of completed Update,
 	// because it means that Update exists, was found, but there is something broken in it
 	// (UpdateInfo in mutable state is invalid or Update completion event is not found).
+	acceptedEventID := common.EmptyEventID
+	if err == nil {
+		acceptedEventID, err = r.store.GetUpdateAcceptedEventID(ctx, id)
+	}
 
 	// The Update is completed and its outcome loaded from the corresponding history event.
 	return newCompleted(
 		id,
+		acceptedEventID,
 		future.NewReadyFuture(updOutcome, err),
 		withInstrumentation(&r.instrumentation),
+		withNexusSerializationContext(r.store.GetUpdateNexusSerializationContext(id)),
 	)
 }
 

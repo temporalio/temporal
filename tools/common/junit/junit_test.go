@@ -142,3 +142,15 @@ func TestWrite(t *testing.T) {
     </testsuite>
 </testsuites>`, string(content))
 }
+
+func TestReadTestcases(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "junit.xml")
+	require.NoError(t, os.WriteFile(path, []byte(`<testsuites>
+	<testsuite name="suite-1"><testcase name="TestOne"></testcase></testsuite>
+	<testsuite name="suite-2"><testcase name="TestTwo"></testcase></testsuite>
+</testsuites>`), 0o600))
+
+	cases, err := ReadTestcases(path)
+	require.NoError(t, err)
+	require.Equal(t, []Testcase{{Name: "TestOne"}, {Name: "TestTwo"}}, cases)
+}

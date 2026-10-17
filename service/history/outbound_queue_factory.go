@@ -251,6 +251,8 @@ func (f *outboundQueueFactory) CreateQueue(
 		activeExecutor,
 		standbyExecutor,
 		logger,
+		metricsHandler,
+		f.TestHooks,
 	)
 
 	if f.ExecutorWrapper != nil {
@@ -292,6 +294,7 @@ func (f *outboundQueueFactory) CreateQueue(
 				PendingTasksCriticalCount: f.Config.OutboundQueuePendingTaskCriticalCount,
 				// Shared configuration with other queues.
 				ReaderStuckCriticalAttempts: f.Config.QueueReaderStuckCriticalAttempts,
+				ReaderStuckShadowMode:       f.Config.QueueReaderStuckShadowMode,
 				SliceCountCriticalThreshold: f.Config.QueueCriticalSlicesCount,
 			},
 			MaxPollRPS:                          f.Config.OutboundProcessorMaxPollRPS,
