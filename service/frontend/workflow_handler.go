@@ -772,7 +772,7 @@ func (wh *WorkflowHandler) validateAndPopulateScheduleTimeSkippingConfig(
 	}
 	if !useChasm {
 		wh.logger.Warn(
-			"Rejecting time-skipping configuration for workflow-backed schedule",
+			"rejecting time skipping configuration for workflow-backed schedule",
 			tag.WorkflowNamespace(ns.String()),
 		)
 		return errScheduleTimeSkippingNotEnabled

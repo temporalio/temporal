@@ -4210,8 +4210,13 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 	if err != nil {
 		return err
 	}
+	archetypeName, _ := n.registry.ArchetypeDisplayName(n.ArchetypeID())
 	tsRoot, ok := rootComponent.(TimeSkippingRuntimeGate)
 	if !ok {
+		metrics.ExecutionTimeSkippingTransitionedErrorCounter.With(n.metricsHandler).Record(
+			1,
+			metrics.ArchetypeTag(archetypeName),
+		)
 		n.logger.Error(
 			"root component does not implement TimeSkippingRuntimeGate when executions have turned on time skipping",
 			tag.Error(fmt.Errorf("type: %s", reflect.TypeOf(rootComponent).Name())))
@@ -4220,6 +4225,8 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 
 	// runtime check
 	if !tsRoot.IsExecutionSkippable(immutableContext) {
+		n.logger.Debug("chasm time skipping skipped because the execution is not skippable",
+			tag.Archetype(archetypeName))
 		return nil
 	}
 	transition := n.defaultFindNextTargetTime()
@@ -4229,12 +4236,12 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 
 	// state change
 	n.backend.RecordTimeSkippingTransition(transition)
-	n.logger.Info("CHASM time skipping transition recorded",
-		tag.ArchetypeID(n.ArchetypeID()),
-		tag.Time("currentTime", transition.CurrentTime),
-		tag.Time("targetTime", transition.GetTargetTime()),
-		tag.Duration("skippedDuration", transition.GetSkippedDuration()),
-		tag.Bool("disabledAfterFastForward", transition.DisabledAfterFastForward),
+	n.logger.Debug("chasm time skipping transition recorded",
+		tag.Archetype(archetypeName),
+		tag.Time("current-time", transition.CurrentTime),
+		tag.Time("target-time", transition.GetTargetTime()),
+		tag.Duration("skipped-duration", transition.GetSkippedDuration()),
+		tag.Bool("disabled-after-fast-forward", transition.DisabledAfterFastForward),
 	)
 	if transition.GetSkippedDuration() > 0 {
 		return n.regenerateTimerTasksForTimeSkipping()
@@ -4307,8 +4314,9 @@ func (n *Node) defaultFindNextTargetTime() *TimeSkippingTransition {
 				scheduledTime := task.GetScheduledTime().AsTime()
 				if !scheduledTime.After(now) {
 					taskType, _ := n.registry.TaskFqnByID(task.GetTypeId())
+					archetypeName, _ := n.registry.ArchetypeDisplayName(n.ArchetypeID())
 					n.logger.Debug("a pending task blocks chasm time skipping",
-						tag.ArchetypeID(n.ArchetypeID()),
+						tag.Archetype(archetypeName),
 						tag.String("chasm-task-type", taskType))
 					return nil
 				}

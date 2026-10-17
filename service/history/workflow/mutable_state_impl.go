@@ -3158,6 +3158,9 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 			),
 		).Record(1)
 	}
+	if event.GetWorkflowExecutionStartedEventAttributes().GetTimeSkippingConfig() != nil {
+		ms.emitTimeSkippingConfigUpdatedMetric()
+	}
 
 	return event, nil
 }
@@ -6082,6 +6085,9 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 				metrics.RunInitiatorTag("", event.GetWorkflowExecutionStartedEventAttributes()),
 			),
 		).Record(1)
+	}
+	if timeSkippingConfigUpdated {
+		ms.emitTimeSkippingConfigUpdatedMetric()
 	}
 
 	return event, nil

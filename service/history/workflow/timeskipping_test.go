@@ -2,6 +2,7 @@ package workflow
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -841,6 +843,61 @@ func (s *mutableStateSuite) TestSetTimeSkippingConfig() {
 		s.Equal(time.Hour, tsi.GetAccumulatedSkippedDuration().AsDuration())
 		s.True(s.mutableState.timeSkippingInfoUpdated)
 	})
+}
+
+func (s *mutableStateSuite) TestTimeSkippingConfigUpdatedMetric() {
+	s.Run("workflow options update", func() {
+		s.False(s.mutableState.ChasmEnabled())
+		metricsHandler := metricstest.NewCaptureHandler()
+		capture := metricsHandler.StartCapture()
+		defer metricsHandler.StopCapture(capture)
+		s.mutableState.metricsHandler = metricsHandler
+
+		event, err := s.mutableState.AddWorkflowExecutionOptionsUpdatedEvent(
+			nil, false, "", nil, nil, "test", nil,
+			&commonpb.TimeSkippingConfig{Enabled: true}, true, nil,
+		)
+		s.Require().NoError(err)
+		recordings := capture.Snapshot()[metrics.ExecutionTimeSkippingConfigUpdatedCounter.Name()]
+		s.Require().Len(recordings, 1)
+		s.requireTimeSkippingRecording(recordings[0], chasm.WorkflowComponentName)
+
+		s.Require().NoError(s.mutableState.ApplyWorkflowExecutionOptionsUpdatedEvent(event))
+		s.Len(capture.Snapshot()[metrics.ExecutionTimeSkippingConfigUpdatedCounter.Name()], 1)
+	})
+
+	s.Run("CHASM scheduler config before root assignment", func() {
+		tree := chasm.NewEmptyTree(
+			chasm.NewRegistry(s.logger),
+			s.mutableState,
+			chasm.DefaultPathEncoder,
+			s.logger,
+			metrics.NoopMetricsHandler,
+		)
+		s.mutableState.chasmTree = tree
+		s.Equal(chasm.WorkflowArchetypeID, tree.ArchetypeID())
+
+		metricsHandler := metricstest.NewCaptureHandler()
+		capture := metricsHandler.StartCapture()
+		defer metricsHandler.StopCapture(capture)
+		s.mutableState.metricsHandler = metricsHandler
+
+		ctx := chasm.NewMutableContext(context.Background(), tree)
+		ctx.SetTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true})
+		ctx.SetTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false})
+
+		recordings := capture.Snapshot()[metrics.ExecutionTimeSkippingConfigUpdatedCounter.Name()]
+		s.Require().Len(recordings, 2)
+		for _, recording := range recordings {
+			s.requireTimeSkippingRecording(recording, chasm.SchedulerComponentName)
+		}
+	})
+}
+
+func (s *mutableStateSuite) requireTimeSkippingRecording(recording *metricstest.CapturedRecording, archetypeName string) {
+	s.Equal(int64(1), recording.Value)
+	s.Equal(s.namespaceEntry.Name().String(), recording.Tags["namespace"])
+	s.Equal(archetypeName, recording.Tags[metrics.ArchetypeTagName])
 }
 
 // TestApplyFastForward covers the full branch table of applyFastForward:
@@ -1856,6 +1913,10 @@ func (s *mutableStateSuite) TestRecordTimeSkippingTransition() {
 
 	s.Run("valid transitions update time and enforce the session limit", func() {
 		setNonWorkflowArchetype()
+		metricsHandler := metricstest.NewCaptureHandler()
+		capture := metricsHandler.StartCapture()
+		defer metricsHandler.StopCapture(capture)
+		s.mutableState.metricsHandler = metricsHandler
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{
 				Enabled:             true,
@@ -1874,6 +1935,9 @@ func (s *mutableStateSuite) TestRecordTimeSkippingTransition() {
 		s.Equal(int32(2), tsi.GetSessionSkipCount())
 		s.False(tsi.GetConfig().GetEnabled())
 		s.True(s.mutableState.timeSkippingInfoUpdated)
+		recordings := capture.Snapshot()[metrics.ExecutionTimeSkippingTransitionedCounter.Name()]
+		s.Require().Len(recordings, 1)
+		s.requireTimeSkippingRecording(recordings[0], strconv.FormatUint(uint64(activity.ArchetypeID), 10))
 	})
 
 	s.Run("bare fast-forward completion disables without updating time", func() {
@@ -1903,6 +1967,27 @@ func (s *mutableStateSuite) TestRecordTimeSkippingTransition() {
 		s.NotNil(tsi.GetFastForwardInfoLastUpdateVersionedTransition())
 		s.True(s.mutableState.timeSkippingInfoUpdated)
 	})
+}
+
+func (s *mutableStateSuite) TestWorkflowTimeSkippingTransitionedMetric() {
+	ctx := context.Background()
+	metricsHandler := metricstest.NewCaptureHandler()
+	capture := metricsHandler.StartCapture()
+	defer metricsHandler.StopCapture(capture)
+	s.mutableState.metricsHandler = metricsHandler
+	s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+		Config: &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 2},
+	}
+
+	event, err := s.mutableState.AddWorkflowExecutionTimeSkippingTransitionedEvent(ctx, s.mutableState.Now().Add(time.Hour), false)
+	s.Require().NoError(err)
+	recordings := capture.Snapshot()[metrics.ExecutionTimeSkippingTransitionedCounter.Name()]
+	s.Require().Len(recordings, 1)
+	s.requireTimeSkippingRecording(recordings[0], chasm.WorkflowComponentName)
+
+	// replaying the event must not record the metric again
+	s.Require().NoError(s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx, event))
+	s.Len(capture.Snapshot()[metrics.ExecutionTimeSkippingTransitionedCounter.Name()], 1)
 }
 
 func (s *mutableStateSuite) TestWrapTimeSourceWithTimeSkipping() {
