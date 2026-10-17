@@ -14,7 +14,7 @@ import (
 	reflect "reflect"
 	time "time"
 
-	v1 "go.temporal.io/server/api/persistence/v1"
+	persistence "go.temporal.io/server/api/persistence/v1"
 	chasm "go.temporal.io/server/chasm"
 	metrics "go.temporal.io/server/common/metrics"
 	tasks "go.temporal.io/server/service/history/tasks"
@@ -258,11 +258,11 @@ func (mr *MockChasmTreeMockRecorder) MarkTotalTimeSkippedUpdatedInPassive() *gom
 }
 
 // PartitionedSnapshot mocks base method.
-func (m *MockChasmTree) PartitionedSnapshot(arg0 *v1.VersionedTransition) (chasm.NodesSnapshot, *v1.ChasmLocalState) {
+func (m *MockChasmTree) PartitionedSnapshot(arg0 *persistence.VersionedTransition) (chasm.NodesSnapshot, *persistence.ChasmLocalState) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PartitionedSnapshot", arg0)
 	ret0, _ := ret[0].(chasm.NodesSnapshot)
-	ret1, _ := ret[1].(*v1.ChasmLocalState)
+	ret1, _ := ret[1].(*persistence.ChasmLocalState)
 	return ret0, ret1
 }
 
@@ -301,7 +301,7 @@ func (mr *MockChasmTreeMockRecorder) RegenerateTimerTasksForTimeSkipping() *gomo
 }
 
 // Snapshot mocks base method.
-func (m *MockChasmTree) Snapshot(arg0 *v1.VersionedTransition) chasm.NodesSnapshot {
+func (m *MockChasmTree) Snapshot(arg0 *persistence.VersionedTransition) chasm.NodesSnapshot {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Snapshot", arg0)
 	ret0, _ := ret[0].(chasm.NodesSnapshot)
