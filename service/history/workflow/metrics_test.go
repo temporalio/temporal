@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	"go.temporal.io/server/chasm"
@@ -15,6 +16,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
 	historyi "go.temporal.io/server/service/history/interfaces"
@@ -247,7 +249,7 @@ func TestEmitWorkflowCompletionStats_WorkflowDuration(t *testing.T) {
 		closeTime:        timestamppb.New(time.Unix(130, 0)),
 	}
 
-	emitWorkflowCompletionStats(testHandler, testNamespace, completionMetric, config)
+	emitWorkflowCompletionStats(testHandler, testNamespace, completionMetric, config, nil)
 
 	snapshot, err := testHandler.Snapshot()
 	require.NoError(t, err)
@@ -325,7 +327,7 @@ func TestEmitWorkflowCompletionStats_SkipNonWorkflow(t *testing.T) {
 	testHandler, _ := metricstest.NewHandler(logger, metrics.ClientConfig{})
 	testNamespace := namespace.Name("test-namespace")
 	completionMetric := completionMetric{isWorkflow: false}
-	emitWorkflowCompletionStats(testHandler, testNamespace, completionMetric, nil)
+	emitWorkflowCompletionStats(testHandler, testNamespace, completionMetric, nil, nil)
 	snapshot, err := testHandler.Snapshot()
 	require.NoError(t, err)
 	_, err = snapshot.Histogram("workflow_schedule_to_close_latency_milliseconds")
@@ -489,5 +491,40 @@ func testActivityMetricTags(operation string) []metrics.Tag {
 		metrics.OperationTag(operation),
 		metrics.WorkflowTypeTag("test-workflow"),
 		metrics.ActivityTypeTag("test-activity"),
+	}
+}
+
+// An allowlisted search attribute is stamped as a label on the completion metrics.
+func TestEmitWorkflowCompletionStatsSearchAttributeLabels(t *testing.T) {
+	handler := metricstest.NewCaptureHandler()
+	capture := handler.StartCapture()
+	defer handler.StopCapture(capture)
+
+	clientIDPayload, err := payload.Encode("acme")
+	require.NoError(t, err)
+
+	emitWorkflowCompletionStats(handler, namespace.Name("test-namespace"), completionMetric{
+		shouldRecord:     true,
+		isWorkflow:       true,
+		taskQueue:        "test-task-queue",
+		namespaceState:   "ACTIVE",
+		workflowTypeName: "test-workflow",
+		status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
+		startTime:        timestamppb.New(time.Now().Add(-time.Minute)),
+		closeTime:        timestamppb.New(time.Now()),
+		searchAttributes: map[string]*commonpb.Payload{"ClientId": clientIDPayload},
+	}, &configs.Config{
+		BreakdownMetricsByTaskQueue: dynamicconfig.GetBoolPropertyFnFilteredByTaskQueue(false),
+		SearchAttributeLabels:       func(string) []string { return []string{"ClientId"} },
+	}, nil)
+
+	// The label lands on both the status counter and the latency timer.
+	for _, metricName := range []string{
+		metrics.WorkflowFailedCount.Name(),
+		metrics.WorkflowScheduleToCloseLatency.Name(),
+	} {
+		recordings := capture.SnapshotMetric(metricName)
+		require.Len(t, recordings, 1, metricName)
+		require.Equal(t, "acme", recordings[0].Tags["ClientId"], metricName)
 	}
 }

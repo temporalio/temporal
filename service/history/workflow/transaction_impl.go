@@ -32,6 +32,7 @@ type (
 		status           enumspb.WorkflowExecutionStatus
 		startTime        *timestamppb.Timestamp
 		closeTime        *timestamppb.Timestamp
+		searchAttributes map[string]*commonpb.Payload
 	}
 	TransactionImpl struct {
 		shard  historyi.ShardContext
@@ -804,6 +805,7 @@ func snapshotToCompletionMetric(
 		status:           workflowSnapshot.ExecutionState.Status,
 		startTime:        workflowSnapshot.ExecutionState.StartTime,
 		closeTime:        workflowSnapshot.ExecutionInfo.CloseTime,
+		searchAttributes: workflowSnapshot.ExecutionInfo.SearchAttributes,
 	}
 }
 
@@ -826,6 +828,7 @@ func mutationToCompletionMetric(
 		status:           workflowMutation.ExecutionState.Status,
 		startTime:        workflowMutation.ExecutionState.StartTime,
 		closeTime:        workflowMutation.ExecutionInfo.CloseTime,
+		searchAttributes: workflowMutation.ExecutionInfo.SearchAttributes,
 	}
 }
 
@@ -847,6 +850,7 @@ func emitCompletionMetrics(
 			namespaceName,
 			completionMetric,
 			shardContext.GetConfig(),
+			shardContext.GetSearchAttributesMapperProvider(),
 		)
 	}
 }
