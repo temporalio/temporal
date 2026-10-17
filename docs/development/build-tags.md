@@ -38,3 +38,6 @@ included.
 | `temporal_with_gstorage` | Google Cloud Storage archival | Google Cloud Storage SDK  |
 
 A server built without an integration refuses to start if its configuration sets the integration up.
+
+CI checks that the `temporal_minimal` server doesn't depend on the packages listed in
+`MINIMAL_EXCLUDED_PACKAGES` in the `Makefile`. When adding an integration, add its packages there.
