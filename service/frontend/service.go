@@ -586,7 +586,6 @@ func (s *Service) Stop() {
 	s.handler.Stop()
 	s.operatorHandler.Stop()
 	s.adminHandler.Stop()
-	s.versionChecker.Stop()
 	s.visibilityManager.Close()
 
 	s.logger.Info("ShutdownHandler: Draining traffic")
@@ -606,6 +605,7 @@ func (s *Service) Stop() {
 		})
 	}
 	wg.Wait()
+	s.versionChecker.Stop()
 
 	if s.metricsHandler != nil {
 		s.metricsHandler.Stop(s.logger)
