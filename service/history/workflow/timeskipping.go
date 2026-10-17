@@ -3,7 +3,6 @@ package workflow
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -83,7 +82,13 @@ func (ms *MutableStateImpl) SetTimeSkippingConfig(config *commonpb.TimeSkippingC
 	} else {
 		ms.updateTimeSkippingInfo(config)
 	}
-	ms.emitTimeSkippingConfigUpdatedMetric()
+	// TODO: Find a generic way to get the archetype before SetRootComponent.
+	// Scheduler is the only caller today.
+	metrics.ExecutionTimeSkippingConfigUpdatedCounter.With(ms.metricsHandler).Record(
+		1,
+		metrics.NamespaceTag(ms.namespaceEntry.Name().String()),
+		metrics.ArchetypeTag(chasm.SchedulerComponentName),
+	)
 }
 
 func (ms *MutableStateImpl) emitTimeSkippingConfigUpdatedMetric() {
@@ -92,20 +97,10 @@ func (ms *MutableStateImpl) emitTimeSkippingConfigUpdatedMetric() {
 
 func (ms *MutableStateImpl) timeSkippingMetricTags() []metrics.Tag {
 	tags := []metrics.Tag{metrics.NamespaceTag(ms.namespaceEntry.Name().String())}
-	archetypeID := ms.chasmTree.ArchetypeID()
-	var archetypeFqn string
-	switch archetypeID {
-	case chasm.UnspecifiedArchetypeID:
-	case chasm.WorkflowArchetypeID:
-		archetypeFqn = chasm.WorkflowArchetype
-	default:
-		var ok bool
-		archetypeFqn, ok = ms.shard.ChasmRegistry().ComponentFqnByID(archetypeID)
-		if !ok {
-			archetypeFqn = strconv.FormatUint(uint64(archetypeID), 10)
-		}
+	if archetypeTag, ok := getArchetypeMetricTag(ms.shard.ChasmRegistry(), ms.chasmTree.ArchetypeID()); ok {
+		tags = append(tags, archetypeTag)
 	}
-	return append(tags, metrics.ArchetypeTag(archetypeFqn))
+	return tags
 }
 
 // applyFastForward (re)computes the FastForwardInfo using the new TimeSkippingConfig (TSC) and propagated time-skippingstates.
@@ -522,7 +517,7 @@ func (ms *MutableStateImpl) AddWorkflowExecutionTimeSkippingTransitionedEvent(
 	event := ms.hBuilder.AddWorkflowExecutionTimeSkippingTransitionedEvent(
 		targetTime, disabledAfterFastForward)
 	if err := ms.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx, event); err != nil {
-		return event, err
+		return nil, err
 	}
 	metrics.ExecutionTimeSkippingTransitionedCounter.With(ms.metricsHandler).Record(1, ms.timeSkippingMetricTags()...)
 	return event, nil

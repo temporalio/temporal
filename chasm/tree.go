@@ -4210,12 +4210,12 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 	if err != nil {
 		return err
 	}
-	archetypeFqn, _ := n.registry.ComponentFqnByID(n.ArchetypeID())
+	archetypeName, _ := n.registry.ArchetypeDisplayName(n.ArchetypeID())
 	tsRoot, ok := rootComponent.(TimeSkippingRuntimeGate)
 	if !ok {
 		metrics.ExecutionTimeSkippingTransitionedErrorCounter.With(n.metricsHandler).Record(
 			1,
-			metrics.ArchetypeTag(archetypeFqn),
+			metrics.ArchetypeTag(archetypeName),
 		)
 		n.logger.Error(
 			"root component does not implement TimeSkippingRuntimeGate when executions have turned on time skipping",
@@ -4226,7 +4226,7 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 	// runtime check
 	if !tsRoot.IsExecutionSkippable(immutableContext) {
 		n.logger.Debug("chasm time skipping skipped because the execution is not skippable",
-			tag.Archetype(archetypeFqn))
+			tag.Archetype(archetypeName))
 		return nil
 	}
 	transition := n.defaultFindNextTargetTime()
@@ -4237,7 +4237,7 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 	// state change
 	n.backend.RecordTimeSkippingTransition(transition)
 	n.logger.Debug("chasm time skipping transition recorded",
-		tag.Archetype(archetypeFqn),
+		tag.Archetype(archetypeName),
 		tag.Time("current-time", transition.CurrentTime),
 		tag.Time("target-time", transition.GetTargetTime()),
 		tag.Duration("skipped-duration", transition.GetSkippedDuration()),
@@ -4314,9 +4314,9 @@ func (n *Node) defaultFindNextTargetTime() *TimeSkippingTransition {
 				scheduledTime := task.GetScheduledTime().AsTime()
 				if !scheduledTime.After(now) {
 					taskType, _ := n.registry.TaskFqnByID(task.GetTypeId())
-					archetypeFqn, _ := n.registry.ComponentFqnByID(n.ArchetypeID())
+					archetypeName, _ := n.registry.ArchetypeDisplayName(n.ArchetypeID())
 					n.logger.Debug("a pending task blocks chasm time skipping",
-						tag.Archetype(archetypeFqn),
+						tag.Archetype(archetypeName),
 						tag.String("chasm-task-type", taskType))
 					return nil
 				}

@@ -860,43 +860,44 @@ func (s *mutableStateSuite) TestTimeSkippingConfigUpdatedMetric() {
 		s.Require().NoError(err)
 		recordings := capture.Snapshot()[metrics.ExecutionTimeSkippingConfigUpdatedCounter.Name()]
 		s.Require().Len(recordings, 1)
-		s.requireTimeSkippingRecording(recordings[0], chasm.WorkflowArchetypeID)
+		s.requireTimeSkippingRecording(recordings[0], chasm.WorkflowComponentName)
 
 		s.Require().NoError(s.mutableState.ApplyWorkflowExecutionOptionsUpdatedEvent(event))
 		s.Len(capture.Snapshot()[metrics.ExecutionTimeSkippingConfigUpdatedCounter.Name()], 1)
 	})
 
-	s.Run("CHASM scheduler config", func() {
-		mockChasmTree := historyi.NewMockChasmTree(s.controller)
-		mockChasmTree.EXPECT().ArchetypeID().Return(activity.ArchetypeID).AnyTimes()
-		s.mutableState.chasmTree = mockChasmTree
+	s.Run("CHASM scheduler config before root assignment", func() {
+		tree := chasm.NewEmptyTree(
+			chasm.NewRegistry(s.logger),
+			s.mutableState,
+			chasm.DefaultPathEncoder,
+			s.logger,
+			metrics.NoopMetricsHandler,
+		)
+		s.mutableState.chasmTree = tree
+		s.Equal(chasm.WorkflowArchetypeID, tree.ArchetypeID())
+
 		metricsHandler := metricstest.NewCaptureHandler()
 		capture := metricsHandler.StartCapture()
 		defer metricsHandler.StopCapture(capture)
 		s.mutableState.metricsHandler = metricsHandler
 
-		s.mutableState.SetTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true})
-		s.mutableState.SetTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false})
+		ctx := chasm.NewMutableContext(context.Background(), tree)
+		ctx.SetTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true})
+		ctx.SetTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false})
+
 		recordings := capture.Snapshot()[metrics.ExecutionTimeSkippingConfigUpdatedCounter.Name()]
 		s.Require().Len(recordings, 2)
 		for _, recording := range recordings {
-			s.requireTimeSkippingRecording(recording, activity.ArchetypeID)
+			s.requireTimeSkippingRecording(recording, chasm.SchedulerComponentName)
 		}
 	})
 }
 
-func (s *mutableStateSuite) requireTimeSkippingRecording(recording *metricstest.CapturedRecording, archetypeID chasm.ArchetypeID) {
-	archetypeFqn := chasm.WorkflowArchetype
-	if archetypeID != chasm.WorkflowArchetypeID {
-		var ok bool
-		archetypeFqn, ok = s.mutableState.shard.ChasmRegistry().ComponentFqnByID(archetypeID)
-		if !ok {
-			archetypeFqn = strconv.FormatUint(uint64(archetypeID), 10)
-		}
-	}
+func (s *mutableStateSuite) requireTimeSkippingRecording(recording *metricstest.CapturedRecording, archetypeName string) {
 	s.Equal(int64(1), recording.Value)
 	s.Equal(s.namespaceEntry.Name().String(), recording.Tags["namespace"])
-	s.Equal(archetypeFqn, recording.Tags[metrics.ArchetypeTagName])
+	s.Equal(archetypeName, recording.Tags[metrics.ArchetypeTagName])
 }
 
 // TestApplyFastForward covers the full branch table of applyFastForward:
@@ -1936,7 +1937,7 @@ func (s *mutableStateSuite) TestRecordTimeSkippingTransition() {
 		s.True(s.mutableState.timeSkippingInfoUpdated)
 		recordings := capture.Snapshot()[metrics.ExecutionTimeSkippingTransitionedCounter.Name()]
 		s.Require().Len(recordings, 1)
-		s.requireTimeSkippingRecording(recordings[0], activity.ArchetypeID)
+		s.requireTimeSkippingRecording(recordings[0], strconv.FormatUint(uint64(activity.ArchetypeID), 10))
 	})
 
 	s.Run("bare fast-forward completion disables without updating time", func() {
@@ -1982,7 +1983,7 @@ func (s *mutableStateSuite) TestWorkflowTimeSkippingTransitionedMetric() {
 	s.Require().NoError(err)
 	recordings := capture.Snapshot()[metrics.ExecutionTimeSkippingTransitionedCounter.Name()]
 	s.Require().Len(recordings, 1)
-	s.requireTimeSkippingRecording(recordings[0], chasm.WorkflowArchetypeID)
+	s.requireTimeSkippingRecording(recordings[0], chasm.WorkflowComponentName)
 
 	// replaying the event must not record the metric again
 	s.Require().NoError(s.mutableState.ApplyWorkflowExecutionTimeSkippingTransitionedEvent(ctx, event))
