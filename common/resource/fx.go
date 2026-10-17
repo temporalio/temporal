@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"time"
 
@@ -42,10 +43,14 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/rpc/grpcfaults"
+	"go.temporal.io/server/common/rpc/httpfaults"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/grpcfaultstest"
+	"go.temporal.io/server/common/testing/httpfaultstest"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
@@ -65,6 +70,22 @@ type (
 	MatchingRawClient matchingservice.MatchingServiceClient
 	MatchingClient    matchingservice.MatchingServiceClient
 
+	// GRPCFaultParams keeps fault injection optional for standalone providers.
+	GRPCFaultParams struct {
+		fx.In
+		Generators grpcfaults.Generators `optional:"true"`
+		TestHooks  testhooks.TestHooks   `optional:"true"`
+	}
+
+	// HTTPFaultParams preserves tracing and runtime hooks without the configured-fault providers.
+	HTTPFaultParams struct {
+		fx.In
+		Generators       httpfaults.Generators                     `optional:"true"`
+		TransportWrapper httpfaults.TransportWrapper               `optional:"true"`
+		Instrumenter     telemetry.HTTPClientTransportInstrumenter `optional:"true"`
+		TestHooks        testhooks.TestHooks                       `optional:"true"`
+	}
+
 	RuntimeMetricsReporterParams struct {
 		fx.In
 
@@ -73,6 +94,24 @@ type (
 		InstanceID    InstanceID `optional:"true"`
 	}
 )
+
+func (p GRPCFaultParams) Inbound() grpcfaults.Generator {
+	if p.Generators.Inbound != nil {
+		return p.Generators.Inbound
+	}
+	return grpcfaultstest.NewGenerator(p.TestHooks)
+}
+
+func (p HTTPFaultParams) Wrap(transport http.RoundTripper) http.RoundTripper {
+	if p.TransportWrapper != nil {
+		return p.TransportWrapper(transport)
+	}
+	generator := p.Generators.Outbound
+	if generator == nil {
+		generator = httpfaultstest.NewGenerator(p.TestHooks)
+	}
+	return httpfaults.WrapTransport(generator, p.Instrumenter.Instrument(transport))
+}
 
 // Module
 // Use fx.Hook and OnStart/OnStop to manage Daemon resource lifecycle
@@ -99,6 +138,9 @@ var Module = fx.Options(
 	fx.Provide(FrontendClientProvider),
 	fx.Provide(AdminClientProvider),
 	fx.Provide(GrpcListenerProvider),
+	fx.Provide(GRPCFaultGeneratorsProvider),
+	fx.Provide(HTTPFaultGeneratorsProvider),
+	fx.Provide(HTTPTransportWrapperProvider),
 	fx.Provide(RuntimeMetricsReporterProvider),
 	metrics.RuntimeMetricsReporterLifetimeHooksModule,
 	fx.Provide(HistoryRawClientProvider),
@@ -142,6 +184,23 @@ func ThrottledLoggerProvider(
 
 func GrpcListenerProvider(factory common.RPCFactory) net.Listener {
 	return factory.GetGRPCListener()
+}
+
+func GRPCFaultGeneratorsProvider(cfg *config.Config, hooks testhooks.TestHooks) (grpcfaults.Generators, error) {
+	return grpcfaults.NewConfiguredGenerators(cfg.FaultInjection.GRPC, grpcfaults.Generators{Inbound: grpcfaultstest.NewGenerator(hooks)})
+}
+
+func HTTPFaultGeneratorsProvider(cfg *config.Config, hooks testhooks.TestHooks) (httpfaults.Generators, error) {
+	return httpfaults.NewConfiguredGenerators(cfg.FaultInjection.HTTP, httpfaults.Generators{Outbound: httpfaultstest.NewGenerator(hooks)})
+}
+
+func HTTPTransportWrapperProvider(instrumenter telemetry.HTTPClientTransportInstrumenter, generators httpfaults.Generators) httpfaults.TransportWrapper {
+	if instrumenter == nil && generators.Outbound == nil {
+		return nil
+	}
+	return func(transport http.RoundTripper) http.RoundTripper {
+		return httpfaults.WrapTransport(generators.Outbound, instrumenter.Instrument(transport))
+	}
 }
 
 func HostNameProvider() (HostName, error) {
@@ -392,6 +451,7 @@ func SdkClientFactoryProvider(
 	logger log.SnTaggedLogger,
 	resolver *membership.GRPCResolver,
 	dc *dynamicconfig.Collection,
+	faults GRPCFaultParams,
 ) (sdk.ClientFactory, error) {
 	frontendURL, _, _, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
@@ -403,6 +463,7 @@ func SdkClientFactoryProvider(
 		metricsHandler,
 		logger,
 		dynamicconfig.WorkerStickyCacheSize.Get(dc),
+		grpcfaults.ClientDialOptions(faults.Generators.Outbound)...,
 	)
 	lc.Append(fx.StopHook(factory.Close))
 	return factory, nil
@@ -436,14 +497,15 @@ func RPCFactoryProvider(
 	monitor membership.Monitor,
 	dc *dynamicconfig.Collection,
 	tokenProvider auth.TokenProvider,
-	frontendHTTPTransportInstrumenter telemetry.HTTPClientTransportInstrumenter,
+	httpFaults HTTPFaultParams,
+	faults GRPCFaultParams,
 ) (common.RPCFactory, error) {
 	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
 		return nil, err
 	}
 
-	var options []grpc.DialOption
+	options := grpcfaults.ClientDialOptions(faults.Generators.Outbound)
 	if tracingStatsHandler != nil {
 		options = append(options, grpc.WithStatsHandler(tracingStatsHandler))
 	}
@@ -459,7 +521,7 @@ func RPCFactoryProvider(
 		frontendHTTPURL,
 		frontendHTTPPort,
 		frontendTLSConfig,
-		frontendHTTPTransportInstrumenter,
+		httpFaults.Wrap,
 		options,
 		perServiceDialOptions,
 		monitor,
@@ -475,8 +537,9 @@ func RPCFactoryProvider(
 func FrontendHTTPClientCacheProvider(
 	metadata cluster.Metadata,
 	tlsConfigProvider encryption.TLSConfigProvider,
+	faults HTTPFaultParams,
 ) *cluster.FrontendHTTPClientCache {
-	return cluster.NewFrontendHTTPClientCache(metadata, tlsConfigProvider)
+	return cluster.NewFrontendHTTPClientCache(metadata, tlsConfigProvider, faults.Wrap)
 }
 
 func getFrontendConnectionDetails(

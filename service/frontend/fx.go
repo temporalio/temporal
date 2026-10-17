@@ -194,10 +194,11 @@ func NewServiceProvider(
 	)
 }
 
-// GrpcServerOptions are the options to build the frontend gRPC server along
-// with the interceptors that are already set in the options.
+// GrpcServerOptions builds the gRPC server and the HTTP gateway application interceptors.
 type GrpcServerOptions struct {
-	Options           []grpc.ServerOption
+	Options []grpc.ServerOption
+	// UnaryInterceptors contains application interceptors for the HTTP gateway.
+	// Configured gRPC transport faults are included only in Options.
 	UnaryInterceptors []grpc.UnaryServerInterceptor
 }
 
@@ -271,7 +272,7 @@ func GrpcServerOptionsProvider(
 	customInterceptors []grpc.UnaryServerInterceptor,
 	customStreamInterceptors []grpc.StreamServerInterceptor,
 	metricsHandler metrics.Handler,
-	testHooks testhooks.TestHooks,
+	faults resource.GRPCFaultParams,
 ) GrpcServerOptions {
 	kep := keepalive.EnforcementPolicy{
 		MinTime:             serviceConfig.KeepAliveMinTime(),
@@ -331,8 +332,13 @@ func GrpcServerOptionsProvider(
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
 		unaryInterceptors = append(unaryInterceptors, customInterceptors...)
 	}
-	faultGenerator := grpcfaultstest.NewGenerator(testHooks)
-	if faultInterceptor := grpcfaults.UnaryServerInterceptor(faultGenerator); faultInterceptor != nil {
+	// The HTTP gateway shares application interceptors, but has its own transport faults.
+	httpInterceptors := append([]grpc.UnaryServerInterceptor(nil), unaryInterceptors...)
+	if hook := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(faults.TestHooks)); hook != nil {
+		httpInterceptors = append(httpInterceptors, hook)
+	}
+	httpInterceptors = append(httpInterceptors, retryableInterceptor.Intercept)
+	if faultInterceptor := grpcfaults.UnaryServerInterceptor(faults.Inbound()); faultInterceptor != nil {
 		unaryInterceptors = append(unaryInterceptors, faultInterceptor)
 	}
 	// retry interceptor should be the most inner interceptor
@@ -344,6 +350,9 @@ func GrpcServerOptionsProvider(
 	}
 	if len(customStreamInterceptors) > 0 {
 		streamInterceptor = append(streamInterceptor, customStreamInterceptors...)
+	}
+	if faultInterceptor := grpcfaults.StreamServerInterceptor(faults.Inbound()); faultInterceptor != nil {
+		streamInterceptor = append(streamInterceptor, faultInterceptor)
 	}
 
 	grpcServerOptions = append(
@@ -364,7 +373,7 @@ func GrpcServerOptionsProvider(
 	if len(multiStats) > 0 {
 		grpcServerOptions = append(grpcServerOptions, grpc.StatsHandler(multiStats))
 	}
-	return GrpcServerOptions{Options: grpcServerOptions, UnaryInterceptors: unaryInterceptors}
+	return GrpcServerOptions{Options: grpcServerOptions, UnaryInterceptors: httpInterceptors}
 }
 
 func ConfigProvider(
@@ -1117,6 +1126,7 @@ func HTTPAPIServerProvider(
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 	router *mux.Router,
+	faults resource.HTTPFaultParams,
 ) (*HTTPAPIServer, error) {
 	if !httpEnabled(cfg, serviceName) {
 		return nil, nil
@@ -1134,6 +1144,7 @@ func HTTPAPIServerProvider(
 		router,
 		namespaceRegistry,
 		logger,
+		faults.Generators.Inbound,
 	)
 }
 
