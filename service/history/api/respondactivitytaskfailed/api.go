@@ -47,6 +47,7 @@ func Invoke(
 	var taskQueue string
 	var workflowTypeName string
 	var closed bool
+	var hasAccumulatedTimeSkip bool
 	var versioningBehavior enumspb.VersioningBehavior
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -101,6 +102,7 @@ func Invoke(
 			// Capture the metric inputs before that mutation so we record the attempt that just finished.
 			attemptStartedTime = timestamp.TimeValue(ai.GetStartedTime())
 			firstScheduledTime = timestamp.TimeValue(ai.FirstScheduledTime)
+			hasAccumulatedTimeSkip = workflow.NewTimeSkippingInfoUtil(mutableState.GetExecutionInfo().GetTimeSkippingInfo()).GetAccumulatedSkippedDuration() != 0
 			taskQueue = ai.TaskQueue
 			mutableState.RecordLastActivityCompleteTime(ai)
 			retryState, err := mutableState.RetryActivity(ai, failure)
@@ -130,10 +132,11 @@ func Invoke(
 	)
 	if err == nil {
 		completionMetrics := workflow.ActivityCompletionMetrics{
-			AttemptStartedTime: attemptStartedTime,
-			FirstScheduledTime: firstScheduledTime,
-			Status:             workflow.ActivityStatusFailed,
-			Closed:             closed,
+			AttemptStartedTime:     attemptStartedTime,
+			FirstScheduledTime:     firstScheduledTime,
+			HasAccumulatedTimeSkip: hasAccumulatedTimeSkip,
+			Status:                 workflow.ActivityStatusFailed,
+			Closed:                 closed,
 			VersioningInfo: workflow.VersioningMetricContext{
 				Behavior:          versioningBehavior,
 				DeploymentVersion: worker_versioning.DeploymentVersionFromOptions(request.GetDeploymentOptions()),

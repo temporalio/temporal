@@ -255,7 +255,8 @@ type ActivityCompletionMetrics struct {
 	// AttemptStartedTime is the start time of the current attempt
 	AttemptStartedTime time.Time
 	// FirstScheduledTime is the scheduled time of the first attempt
-	FirstScheduledTime time.Time
+	FirstScheduledTime     time.Time
+	HasAccumulatedTimeSkip bool
 	// Closed is true if no more attempts will be made to execute the activity.
 	Closed bool
 	// TimerType is the type of timer that caused the activity execution to timeout.
@@ -287,7 +288,7 @@ func RecordActivityCompletionMetrics(
 	)
 
 	now := shard.GetTimeSource().Now()
-	if completion.Status != ActivityStatusTimeout &&
+	if !completion.HasAccumulatedTimeSkip && completion.Status != ActivityStatusTimeout &&
 		!completion.AttemptStartedTime.IsZero() &&
 		!completion.AttemptStartedTime.After(now) {
 		latency := now.Sub(completion.AttemptStartedTime)
@@ -297,7 +298,7 @@ func RecordActivityCompletionMetrics(
 	}
 
 	// Record true end-to-end duration only for terminal states (includes retries and backoffs)
-	if completion.Closed && !completion.FirstScheduledTime.IsZero() {
+	if !completion.HasAccumulatedTimeSkip && completion.Closed && !completion.FirstScheduledTime.IsZero() {
 		scheduleToCloseLatency := now.Sub(completion.FirstScheduledTime)
 		metrics.ActivityScheduleToCloseLatency.With(metricsHandler).Record(scheduleToCloseLatency)
 	}

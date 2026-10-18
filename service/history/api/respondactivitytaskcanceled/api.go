@@ -45,6 +45,7 @@ func Invoke(
 	var firstScheduledTime time.Time
 	var taskQueue string
 	var workflowTypeName string
+	var hasAccumulatedTimeSkip bool
 	var versioningBehavior enumspb.VersioningBehavior
 	err = api.GetAndUpdateWorkflowWithNew(
 		ctx,
@@ -100,6 +101,7 @@ func Invoke(
 
 			attemptStartedTime = timestamp.TimeValue(ai.StartedTime)
 			firstScheduledTime = timestamp.TimeValue(ai.FirstScheduledTime)
+			hasAccumulatedTimeSkip = workflow.NewTimeSkippingInfoUtil(mutableState.GetExecutionInfo().GetTimeSkippingInfo()).GetAccumulatedSkippedDuration() != 0
 			taskQueue = ai.TaskQueue
 			versioningBehavior = mutableState.GetEffectiveVersioningBehavior()
 			return &api.UpdateWorkflowAction{
@@ -118,10 +120,11 @@ func Invoke(
 			namespaceName,
 			taskQueue,
 			workflow.ActivityCompletionMetrics{
-				Status:             workflow.ActivityStatusCanceled,
-				AttemptStartedTime: attemptStartedTime,
-				FirstScheduledTime: firstScheduledTime,
-				Closed:             true,
+				Status:                 workflow.ActivityStatusCanceled,
+				AttemptStartedTime:     attemptStartedTime,
+				FirstScheduledTime:     firstScheduledTime,
+				HasAccumulatedTimeSkip: hasAccumulatedTimeSkip,
+				Closed:                 true,
 				VersioningInfo: workflow.VersioningMetricContext{
 					Behavior:          versioningBehavior,
 					DeploymentVersion: worker_versioning.DeploymentVersionFromOptions(request.GetDeploymentOptions()),
