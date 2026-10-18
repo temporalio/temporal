@@ -268,7 +268,8 @@ func ResolveWorkflowIDReusePolicy(
 	// clock skew can also make timeSinceStart negative and bypass the minimum interval.
 	// Once the shard clock catches up with a virtual StartTime, this check can reject
 	// a valid reuse for up to minimalReuseInterval; retrying later can succeed.
-	// TODO@time-skipping: Pass ExecutionInfo to calculate elapsed wall-clock time accurately.
+	// TODO@time-skipping: Pass ExecutionInfo and use InitialSkippedDuration to
+	// calculate elapsed wall-clock time accurately.
 	if minimalReuseInterval == 0 || timeSinceStart < 0 || minimalReuseInterval < timeSinceStart {
 		// ie "allow" starting a new workflow
 		return nil
@@ -317,7 +318,8 @@ func resolveDuplicateWorkflowStart(
 	// clock skew can also make timeSinceStart negative and bypass the minimum interval.
 	// Once the shard clock catches up with a virtual StartTime, this check can reject
 	// a valid replacement for up to minimalReuseInterval; retrying later can succeed.
-	// TODO@time-skipping: Pass ExecutionInfo to calculate elapsed wall-clock time accurately.
+	// TODO@time-skipping: Pass ExecutionInfo and use InitialSkippedDuration to
+	// calculate elapsed wall-clock time accurately.
 	if minimalReuseInterval == 0 || timeSinceStart < 0 || minimalReuseInterval < timeSinceStart {
 		return terminateWorkflowAction(newRunID, parentExecutionInfo, childWorkflowOnly)
 	}

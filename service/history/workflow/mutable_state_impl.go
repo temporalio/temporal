@@ -3024,8 +3024,14 @@ func computeDeclinedTargetVersionUpgrade(
 }
 
 func (ms *MutableStateImpl) ContinueAsNewMinBackoff(backoffDuration *durationpb.Duration) *durationpb.Duration {
+	if NewTimeSkippingInfoUtil(ms.executionInfo.GetTimeSkippingInfo()).HasTimeSkippingClockOffset() {
+		// TODO: ExecutionTime may have a different clock offset from StartTime. Until its
+		// wall-clock time can be recovered, skip the minimum interval for time-skipped runs.
+		return backoffDuration
+	}
 	if ms.executionState.StartTime.AsTime().After(ms.shard.GetTimeSource().Now()) {
 		// A virtual start time cannot be used to enforce a wall-clock minimum interval.
+		// An unskipped execution with a future start time due to clock skew also skips the minimum backoff.
 		return backoffDuration
 	}
 
