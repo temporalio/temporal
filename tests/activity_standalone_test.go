@@ -852,6 +852,34 @@ func (s *standaloneActivityTestSuite) TestStart() {
 			var invalidArgErr *serviceerror.InvalidArgument
 			require.ErrorAs(t, err, &invalidArgErr)
 		})
+
+		t.Run("SearchAttributesReserved", func(t *testing.T) {
+			// BuildIds passes frontend validation (predefined whitelist) but is rejected by the CHASM
+			// Visibility component because it is a reserved name.
+			reservedSearchAttributes := &commonpb.SearchAttributes{
+				IndexedFields: map[string]*commonpb.Payload{
+					sadefs.BuildIds: sadefs.MustEncodeValue([]string{"build-id"}, enumspb.INDEXED_VALUE_TYPE_KEYWORD_LIST),
+				},
+			}
+
+			_, err := env.FrontendClient().StartActivityExecution(s.Context(), &workflowservice.StartActivityExecutionRequest{
+				Namespace:    env.Namespace().String(),
+				ActivityId:   env.Tv().ActivityID(),
+				ActivityType: env.Tv().ActivityType(),
+				Identity:     env.Tv().WorkerIdentity(),
+				Input:        defaultInput,
+				TaskQueue: &taskqueuepb.TaskQueue{
+					Name: env.Tv().TaskQueue().GetName(),
+				},
+				StartToCloseTimeout: durationpb.New(defaultStartToCloseTimeout),
+				RequestId:           env.Tv().RequestID(),
+				SearchAttributes:    reservedSearchAttributes,
+			})
+
+			var invalidArgErr *serviceerror.InvalidArgument
+			require.ErrorAs(t, err, &invalidArgErr)
+			require.Equal(t, "search attribute BuildIds is reserved by system", invalidArgErr.Message)
+		})
 	})
 
 	t.Run("ResponseFields", func(t *testing.T) {

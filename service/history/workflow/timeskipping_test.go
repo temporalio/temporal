@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
 	historyi "go.temporal.io/server/service/history/interfaces"
 	"go.temporal.io/server/service/history/tasks"
@@ -1014,6 +1015,32 @@ func (s *mutableStateSuite) TestApplyFastForward() {
 	})
 }
 
+func (s *mutableStateSuite) TestTrackFutureOrReportDueTaskForWorkflow() {
+	now := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
+	existingTarget := now.Add(2 * time.Hour)
+
+	for _, tc := range []struct {
+		name           string
+		candidate      time.Time
+		hasDueTask     bool
+		expectedTarget time.Time
+	}{
+		{"DueNow", now, true, existingTarget},
+		{"Overdue", now.Add(-time.Minute), true, existingTarget},
+		{"EarlierFuture", now.Add(time.Hour), false, now.Add(time.Hour)},
+		{"LaterFuture", now.Add(3 * time.Hour), false, existingTarget},
+	} {
+		s.Run(tc.name, func() {
+			transition := chasm.NewTimeSkippingTransition(now)
+			transition.TrackEarliestFutureTime(existingTarget)
+
+			s.Equal(tc.hasDueTask,
+				s.mutableState.trackFutureOrReportDueTaskForWorkflow(transition, tc.candidate, "user timer"))
+			s.Equal(tc.expectedTarget, transition.GetTargetTime())
+		})
+	}
+}
+
 func (s *mutableStateSuite) TestFindNextSkipTarget() {
 	baseTime := time.Date(2024, 1, 1, 12, 0, 0, 0, time.UTC)
 	fixedTimeSource := clock.NewEventTimeSource()
@@ -1099,6 +1126,63 @@ func (s *mutableStateSuite) TestFindNextSkipTarget() {
 		s.Require().NotNil(tr)
 		s.Equal(baseTime.Add(2*time.Hour), tr.GetTargetTime())
 	})
+
+	for _, tc := range []struct {
+		name       string
+		targetName string
+		setPending func(time.Time)
+	}{
+		{"UserTimer", "user timer", func(deadline time.Time) {
+			addTimer("due", deadline)
+		}},
+		{"ActivityRetry", "activity retry", func(deadline time.Time) {
+			s.mutableState.pendingActivityInfoIDs[1] = &persistencespb.ActivityInfo{
+				ScheduledEventId: 1,
+				HasRetryPolicy:   true,
+				Attempt:          2,
+				ScheduledTime:    timestamppb.New(deadline),
+			}
+		}},
+		{"WorkflowBackoff", "workflow backoff", func(deadline time.Time) {
+			s.mutableState.executionInfo.LastCompletedWorkflowTaskStartedEventId = common.EmptyEventID
+			s.mutableState.executionInfo.WorkflowTaskScheduledEventId = common.EmptyEventID
+			s.mutableState.executionInfo.StartTime = timestamppb.New(baseTime.Add(-2 * time.Hour))
+			s.mutableState.executionInfo.ExecutionTime = timestamppb.New(deadline)
+		}},
+		{"RunTimeout", "workflow run timeout", func(deadline time.Time) {
+			s.mutableState.executionInfo.WorkflowRunExpirationTime = timestamppb.New(deadline)
+		}},
+		{"ExecutionTimeout", "workflow execution timeout", func(deadline time.Time) {
+			s.mutableState.executionInfo.WorkflowExecutionExpirationTime = timestamppb.New(deadline)
+		}},
+	} {
+		for _, deadline := range []struct {
+			name string
+			time time.Time
+		}{
+			{name: "DueNow", time: baseTime},
+			{name: "Overdue", time: baseTime.Add(-time.Minute)},
+		} {
+			s.Run(tc.name+deadline.name+"_BlocksSkipping", func() {
+				resetMS()
+				addTimer("future", baseTime.Add(time.Hour))
+				tc.setPending(deadline.time)
+				tl := testlogger.NewTestLogger(s.T(), testlogger.FailOnExpectedErrorOnly)
+				s.mutableState.logger = tl
+				capture := tl.StartCapture()
+
+				s.Nil(s.mutableState.findNextSkipTarget(), "a pending due deadline blocks skipping to a future timer")
+				capture.RequireContains(s.T(), testlogger.CapturedLogPattern{
+					Level:   testlogger.Debug,
+					Message: "a pending task stops workflow time skipping in the current transaction",
+					Tags: map[string]any{
+						"pending-task-type":     tc.targetName,
+						"pending-task-deadline": deadline.time,
+					},
+				})
+			})
+		}
+	}
 
 	s.Run("UserTimerAndEarlierFastForward_TargetIsFastForward", func() {
 		resetMS()
@@ -1372,6 +1456,29 @@ func (s *mutableStateSuite) TestCloseTransactionHandleWorkflowTimeSkipping() {
 		s.True(s.mutableState.timeSkippingInfoUpdated, "a successful skip mutates state")
 		s.Positive(s.mutableState.executionInfo.TimeSkippingInfo.GetAccumulatedSkippedDuration().AsDuration(),
 			"the skip advances virtual time toward the timer target")
+	})
+
+	s.Run("ActiveWithDueTimer_NoSkip", func() {
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}
+		now := s.mutableState.Now()
+		s.mutableState.pendingTimerInfoIDs["due"] = &persistencespb.TimerInfo{
+			TimerId:    "due",
+			ExpiryTime: timestamppb.New(now.Add(-time.Minute)),
+		}
+		s.mutableState.pendingTimerInfoIDs["future"] = &persistencespb.TimerInfo{
+			TimerId:    "future",
+			ExpiryTime: timestamppb.New(now.Add(time.Hour)),
+		}
+		s.Require().True(s.mutableState.isWorkflowSkippable())
+
+		needRegen := s.mutableState.closeTransactionHandleWorkflowTimeSkipping(
+			context.Background(), historyi.TransactionPolicyActive)
+
+		s.False(needRegen)
+		s.False(s.mutableState.timeSkippingInfoUpdated)
+		s.Zero(s.mutableState.accumulatedSkippedDuration())
 	})
 
 	s.Run("ActiveWithBareDisable_PreservesAccumulatedDurationAndDoesNotRegenerateTasks", func() {
