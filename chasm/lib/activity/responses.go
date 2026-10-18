@@ -7,13 +7,123 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/chasm/lib/activity/gen/activitypb/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/tasktoken"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
+
+type eagerActivityTaskRequest struct {
+	namespaceID string
+	namespace   string
+	requestID   string
+}
+
+type eagerActivityTaskData struct {
+	namespaceID                         string
+	namespace                           string
+	runID                               string
+	activityType                        *commonpb.ActivityType
+	activityID                          string
+	header                              *commonpb.Header
+	input                               *commonpb.Payloads
+	heartbeatDetails                    *commonpb.Payloads
+	scheduledTime                       *timestamppb.Timestamp
+	currentAttemptScheduledTime         *timestamppb.Timestamp
+	startedTime                         *timestamppb.Timestamp
+	attempt                             int32
+	scheduleToCloseTimeout              *durationpb.Duration
+	startToCloseTimeout                 *durationpb.Duration
+	heartbeatTimeout                    *durationpb.Duration
+	retryPolicy                         *commonpb.RetryPolicy
+	priority                            *commonpb.Priority
+	propagatedNexusSerializationContext *nexuspb.PropagatedSerializationContext
+	activityAttemptStartedStamp         int32
+}
+
+func (a *Activity) eagerActivityTaskData(
+	ctx chasm.Context,
+	request eagerActivityTaskRequest,
+) (*eagerActivityTaskData, error) {
+	attempt := a.LastAttempt.Get(ctx)
+	if !a.hasAttemptInProgress() || attempt.GetCount() != 1 || attempt.GetStartRequestId() != request.requestID {
+		return nil, nil
+	}
+
+	key := ctx.ExecutionKey()
+	requestData := a.RequestData.Get(ctx)
+	lastHeartbeat, _ := a.LastHeartbeat.TryGet(ctx)
+
+	// This data is used to construct the eager response after the transaction has completed, so
+	// it must not retain mutable state owned by the transaction.
+	return &eagerActivityTaskData{
+		namespaceID:                         request.namespaceID,
+		namespace:                           request.namespace,
+		runID:                               key.RunID,
+		activityType:                        common.CloneProto(a.GetActivityType()),
+		activityID:                          key.BusinessID,
+		header:                              common.CloneProto(requestData.GetHeader()),
+		input:                               common.CloneProto(requestData.GetInput()),
+		heartbeatDetails:                    common.CloneProto(lastHeartbeat.GetDetails()),
+		scheduledTime:                       common.CloneProto(a.GetScheduleTime()),
+		currentAttemptScheduledTime:         common.CloneProto(a.dispatchTimeForAttempt(attempt)),
+		startedTime:                         common.CloneProto(attempt.GetStartedTime()),
+		attempt:                             attempt.GetCount(),
+		scheduleToCloseTimeout:              common.CloneProto(a.GetScheduleToCloseTimeout()),
+		startToCloseTimeout:                 common.CloneProto(a.GetStartToCloseTimeout()),
+		heartbeatTimeout:                    common.CloneProto(a.GetHeartbeatTimeout()),
+		retryPolicy:                         common.CloneProto(a.GetRetryPolicy()),
+		priority:                            common.CloneProto(a.GetPriority()),
+		propagatedNexusSerializationContext: common.CloneProto(requestData.GetPropagatedNexusSerializationContext()),
+		activityAttemptStartedStamp:         attempt.GetStartedStamp(),
+	}, nil
+}
+
+func (d *eagerActivityTaskData) response(componentRef []byte) (*workflowservice.PollActivityTaskQueueResponse, error) {
+	token, err := tasktoken.NewSerializer().Serialize(tasktoken.NewActivityTaskToken(
+		d.namespaceID,
+		"",
+		d.runID,
+		0,
+		d.activityID,
+		d.activityType.GetName(),
+		d.attempt,
+		nil,
+		0,
+		0,
+		componentRef,
+		d.activityAttemptStartedStamp,
+	))
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.PollActivityTaskQueueResponse{
+		TaskToken:                           token,
+		WorkflowNamespace:                   d.namespace,
+		ActivityType:                        d.activityType,
+		ActivityId:                          d.activityID,
+		Header:                              d.header,
+		Input:                               d.input,
+		HeartbeatDetails:                    d.heartbeatDetails,
+		ScheduledTime:                       d.scheduledTime,
+		CurrentAttemptScheduledTime:         d.currentAttemptScheduledTime,
+		StartedTime:                         d.startedTime,
+		Attempt:                             d.attempt,
+		ScheduleToCloseTimeout:              d.scheduleToCloseTimeout,
+		StartToCloseTimeout:                 d.startToCloseTimeout,
+		HeartbeatTimeout:                    d.heartbeatTimeout,
+		RetryPolicy:                         d.retryPolicy,
+		Priority:                            d.priority,
+		PropagatedNexusSerializationContext: d.propagatedNexusSerializationContext,
+		ActivityRunId:                       d.runID,
+	}, nil
+}
 
 // Projection of activity state onto the API response protos.
 
@@ -113,6 +223,7 @@ func (a *Activity) buildActivityExecutionInfo(
 		CanceledReason:                      a.CancelState.GetReason(),
 		CloseTime:                           closeTime,
 		CurrentRetryInterval:                a.currentRetryInterval(ctx, attempt),
+		EagerExecutionAccepted:              a.GetEagerExecutionAccepted(),
 		ExecutionDuration:                   executionDuration,
 		ExecutionTime:                       timestamppb.New(a.firstDispatchTime()),
 		ExpirationTime:                      expirationTime,

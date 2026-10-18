@@ -231,6 +231,8 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 			nil,
 			nil,
 			s.mockResource.GetLogger(),
+			s.mockResource.GetThrottledLogger(),
+			metrics.NoopMetricsHandler,
 			s.mockResource.GetNamespaceRegistry(),
 			nil,
 			s.mockResource.GetSearchAttributesMapperProvider(),
@@ -4224,47 +4226,47 @@ func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_InternalRawHistor
 	s.Equal("this workflow failed", attrs2.Failure.Message)
 }
 
-func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
+func (s *WorkflowHandlerSuite) TestValidateWorkflowTimeSkippingConfig() {
 	config := s.newConfig()
 	wh := s.getWorkflowHandler(config)
 	var unimplementedErr *serviceerror.Unimplemented
 	var invalidArgumentErr *serviceerror.InvalidArgument
 
 	// nil config is valid
-	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(nil, s.testNamespace))
+	s.Require().NoError(wh.validateAndPopulateWorkflowTimeSkippingConfig(nil, s.testNamespace))
 
 	// config with enabled=false but dynamic config disabled returns error
 	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
-	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace), &unimplementedErr)
+	s.Require().ErrorAs(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace), &unimplementedErr)
 
 	// config with enabled=true but dynamic config disabled returns error
-	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace), &unimplementedErr)
+	s.Require().ErrorAs(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace), &unimplementedErr)
 
 	// config with enabled=false and dynamic config enabled is valid
 	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
-	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace))
+	s.Require().NoError(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace))
 
 	// config with enabled=true and dynamic config enabled is valid
-	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
+	s.Require().NoError(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
 
 	// fast_forward set while enabled=false is rejected
-	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+	s.Require().ErrorAs(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{
 		Enabled: false, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10), Id: "ff-id"}}, s.testNamespace), &invalidArgumentErr)
 
 	// negative fast_forward duration is rejected
-	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+	s.Require().ErrorAs(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{
 		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * -10), Id: "ff-id"}}, s.testNamespace), &invalidArgumentErr)
 
 	// fast_forward set without a fast_forward_id is rejected
-	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+	s.Require().ErrorAs(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{
 		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10)}}, s.testNamespace), &invalidArgumentErr)
 
 	// a blank (whitespace-only) fast_forward_id is rejected
-	s.Require().ErrorAs(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+	s.Require().ErrorAs(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{
 		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10), Id: "  "}}, s.testNamespace), &invalidArgumentErr)
 
 	// fast_forward with a valid fast_forward_id is accepted
-	s.Require().NoError(wh.validateAndPopulateTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+	s.Require().NoError(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{
 		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10), Id: "ff-id"}}, s.testNamespace))
 
 	// MaxSkipPerSession is populated from dynamic config: a per-namespace override wins for that
@@ -4273,7 +4275,7 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 	const otherNamespace = "other-namespace"
 	maxSkipClient := dc.StaticClient{
 		dc.WorkflowTimeSkippingEnabled.Key(): true,
-		dc.WorkflowTimeSkippingMaxSkipPerSession.Key(): []dc.ConstrainedValue{
+		dc.TimeSkippingMaxSkipPerSession.Key(): []dc.ConstrainedValue{
 			{Value: 42}, // per-cell (constraint-less) value
 			{Constraints: dc.Constraints{Namespace: s.testNamespace.String()}, Value: 7}, // per-namespace override
 		},
@@ -4282,18 +4284,139 @@ func (s *WorkflowHandlerSuite) TestValidateTimeSkippingConfig() {
 
 	// namespace with a per-namespace override uses that value
 	tsc := &commonpb.TimeSkippingConfig{Enabled: true}
-	s.Require().NoError(maxSkipWH.validateAndPopulateTimeSkippingConfig(tsc, s.testNamespace))
+	s.Require().NoError(maxSkipWH.validateAndPopulateWorkflowTimeSkippingConfig(tsc, s.testNamespace))
 	s.Require().Equal(int32(7), tsc.GetMaxSessionSkipCount())
 
 	// namespace without a per-namespace setting falls back to the per-cell value
 	tsc = &commonpb.TimeSkippingConfig{Enabled: true}
-	s.Require().NoError(maxSkipWH.validateAndPopulateTimeSkippingConfig(tsc, namespace.Name(otherNamespace)))
+	s.Require().NoError(maxSkipWH.validateAndPopulateWorkflowTimeSkippingConfig(tsc, namespace.Name(otherNamespace)))
 	s.Require().Equal(int32(42), tsc.GetMaxSessionSkipCount())
 
 	// a value already on the request is preserved, not overwritten by dynamic config
 	tsc = &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 999}
-	s.Require().NoError(maxSkipWH.validateAndPopulateTimeSkippingConfig(tsc, s.testNamespace))
+	s.Require().NoError(maxSkipWH.validateAndPopulateWorkflowTimeSkippingConfig(tsc, s.testNamespace))
 	s.Require().Equal(int32(999), tsc.GetMaxSessionSkipCount())
+}
+
+func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
+	config := s.newConfig()
+	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	config.CHASMSchedulerTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
+	wh := s.getWorkflowHandler(config)
+	s.Require().ErrorIs(
+		wh.validateAndPopulateScheduleTimeSkippingConfig(
+			&schedulepb.SchedulePatch{TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true}},
+			s.testNamespace,
+			true,
+		),
+		errScheduleTimeSkippingNotEnabled,
+	)
+
+	config.CHASMSchedulerTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh = s.getWorkflowHandler(config)
+
+	testCases := []struct {
+		name            string
+		config          *commonpb.TimeSkippingConfig
+		wantErrContains string
+	}{
+		{name: "unset"},
+		{name: "disabled", config: &commonpb.TimeSkippingConfig{Enabled: false}},
+		{name: "enabled without fast forward", config: &commonpb.TimeSkippingConfig{Enabled: true}, wantErrContains: "fast_forward_config is required when enabled"},
+		{name: "enabled with fast forward", config: &commonpb.TimeSkippingConfig{Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{
+			Id: "fast-forward", Duration: durationpb.New(time.Hour),
+		}}},
+	}
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			err := wh.validateAndPopulateScheduleTimeSkippingConfig(
+				&schedulepb.SchedulePatch{TimeSkippingConfig: tc.config},
+				s.testNamespace,
+				true,
+			)
+			if tc.wantErrContains != "" {
+				var invalidArgumentErr *serviceerror.InvalidArgument
+				s.Require().ErrorAs(err, &invalidArgumentErr)
+				s.Require().ErrorContains(err, tc.wantErrContains)
+			} else {
+				s.Require().NoError(err)
+			}
+		})
+	}
+
+	patchWithConfig := &schedulepb.SchedulePatch{TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true}}
+	s.Require().NoError(wh.validateAndPopulateScheduleTimeSkippingConfig(nil, s.testNamespace, false))
+	s.Require().ErrorIs(
+		wh.validateAndPopulateScheduleTimeSkippingConfig(patchWithConfig, s.testNamespace, false),
+		errScheduleTimeSkippingNotEnabled,
+	)
+}
+
+func (s *WorkflowHandlerSuite) TestCreatePatchSchedule_TimeSkippingRoutingValidation() {
+	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil).AnyTimes()
+
+	invoke := func(useV2 bool, patchSchedule bool, timeSkippingConfig *commonpb.TimeSkippingConfig) error {
+		config := s.newConfig()
+		config.EnableSchedules = dc.GetBoolPropertyFnFilteredByNamespace(true)
+		config.EnableCHASMSchedulerCreation = dc.GetBoolPropertyFnFilteredByNamespace(useV2)
+		config.CHASMSchedulerCreationRolloutPercent = dc.GetIntPropertyFnFilteredByNamespace(100)
+		config.EnableCHASMSchedulerRouting = dc.GetBoolPropertyFnFilteredByNamespace(useV2)
+		config.CHASMSchedulerTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
+		wh := s.getWorkflowHandler(config)
+
+		patch := &schedulepb.SchedulePatch{TimeSkippingConfig: timeSkippingConfig}
+		if patchSchedule {
+			_, err := wh.PatchSchedule(context.Background(), &workflowservice.PatchScheduleRequest{
+				Namespace:  s.testNamespace.String(),
+				ScheduleId: "schedule-id",
+				RequestId:  uuid.NewString(),
+				Patch:      patch,
+			})
+			return err
+		}
+		schedule := &schedulepb.Schedule{
+			Action: &schedulepb.ScheduleAction{
+				Action: &schedulepb.ScheduleAction_StartWorkflow{
+					StartWorkflow: &workflowpb.NewWorkflowExecutionInfo{
+						WorkflowId:   "workflow-id",
+						WorkflowType: &commonpb.WorkflowType{Name: "workflow-type"},
+						TaskQueue:    &taskqueuepb.TaskQueue{Name: "task-queue"},
+					},
+				},
+			},
+		}
+		_, err := wh.CreateSchedule(context.Background(), &workflowservice.CreateScheduleRequest{
+			Namespace:    s.testNamespace.String(),
+			ScheduleId:   "schedule-id",
+			RequestId:    uuid.NewString(),
+			Schedule:     schedule,
+			InitialPatch: patch,
+		})
+		return err
+	}
+
+	for _, patchSchedule := range []bool{false, true} {
+		operation := "create"
+		if patchSchedule {
+			operation = "patch"
+		}
+		s.Run(operation+" validates V2 time-skipping config", func() {
+			err := invoke(true, patchSchedule, &commonpb.TimeSkippingConfig{Enabled: true})
+			var invalidArgumentErr *serviceerror.InvalidArgument
+			s.Require().ErrorAs(err, &invalidArgumentErr)
+			s.Require().ErrorContains(err, "fast_forward_config is required when enabled")
+		})
+		s.Run(operation+" rejects time-skipping config for V1", func() {
+			err := invoke(false, patchSchedule, &commonpb.TimeSkippingConfig{
+				Enabled: true,
+				FastForwardConfig: &commonpb.FastForwardConfig{
+					Id:       "fast-forward-id",
+					Duration: durationpb.New(time.Hour),
+				},
+			})
+			s.Require().ErrorIs(err, errScheduleTimeSkippingNotEnabled)
+		})
+	}
 }
 
 func (s *WorkflowHandlerSuite) TestPollWorkflowExecutionTimeSkipping() {
@@ -4419,7 +4542,7 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation_TimeSkipping_DCDisabled
 	s.ErrorAs(err, &multiOpErr)
 	var unimplemented *serviceerror.Unimplemented
 	s.ErrorAs(multiOpErr.OperationErrors()[0], &unimplemented)
-	s.ErrorContains(multiOpErr.OperationErrors()[0], "The Time-Skipping feature is not enabled for namespace")
+	s.ErrorContains(multiOpErr.OperationErrors()[0], errWorkflowTimeSkippingNotEnabled.Error())
 }
 
 // TestExecuteMultiOperation_TimeSkipping_DCEnabled verifies that when the DC gate is on,
@@ -4499,7 +4622,7 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_TimeSkipping_DCDisable
 	_, err := wh.StartWorkflowExecution(context.Background(), req)
 	var unimplemented *serviceerror.Unimplemented
 	s.ErrorAs(err, &unimplemented)
-	s.ErrorContains(err, "The Time-Skipping feature is not enabled for namespace")
+	s.ErrorContains(err, errWorkflowTimeSkippingNotEnabled.Error())
 }
 
 // TestStartWorkflowExecution_TimeSkipping_DCEnabled verifies that when the DC gate is on,
@@ -4548,7 +4671,7 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping
 	_, err := wh.SignalWithStartWorkflowExecution(context.Background(), req)
 	var unimplemented *serviceerror.Unimplemented
 	s.ErrorAs(err, &unimplemented)
-	s.ErrorContains(err, "The Time-Skipping feature is not enabled for namespace")
+	s.ErrorContains(err, errWorkflowTimeSkippingNotEnabled.Error())
 }
 
 // TestSignalWithStartWorkflowExecution_TimeSkipping_DCEnabled verifies that when the DC gate is on,
@@ -4607,7 +4730,7 @@ func (s *WorkflowHandlerSuite) TestResetWorkflowExecution_TimeSkipping_DCDisable
 	})
 	var unimplemented *serviceerror.Unimplemented
 	s.ErrorAs(err, &unimplemented)
-	s.ErrorContains(err, "The Time-Skipping feature is not enabled for namespace")
+	s.ErrorContains(err, errWorkflowTimeSkippingNotEnabled.Error())
 }
 
 // TestStartBatchOperation_ResetOperation_TimeSkipping_DCDisabled verifies that when the DC gate
@@ -4647,7 +4770,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_ResetOperation_TimeSkippi
 	})
 	var unimplemented *serviceerror.Unimplemented
 	s.ErrorAs(err, &unimplemented)
-	s.ErrorContains(err, "The Time-Skipping feature is not enabled for namespace")
+	s.ErrorContains(err, errWorkflowTimeSkippingNotEnabled.Error())
 }
 
 // TestStartBatchOperation_UpdateWorkflowOptionsOperation_TimeSkipping_DCDisabled verifies that
@@ -4676,7 +4799,7 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_UpdateWorkflowOptionsOper
 	})
 	var unimplemented *serviceerror.Unimplemented
 	s.ErrorAs(err, &unimplemented)
-	s.ErrorContains(err, "The Time-Skipping feature is not enabled for namespace")
+	s.ErrorContains(err, errWorkflowTimeSkippingNotEnabled.Error())
 }
 
 func (s *WorkflowHandlerSuite) newConfig() *Config {
@@ -6640,7 +6763,7 @@ func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_TimeSkipping_D
 	})
 	var unimplemented *serviceerror.Unimplemented
 	s.ErrorAs(err, &unimplemented)
-	s.ErrorContains(err, "The Time-Skipping feature is not enabled for namespace")
+	s.ErrorContains(err, errWorkflowTimeSkippingNotEnabled.Error())
 }
 
 func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesCompletionCallbacks() {
@@ -6746,6 +6869,60 @@ func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_ValidatesComplet
 		s.ErrorAs(err, &invalidArgument)
 		s.ErrorContains(err, "cannot attach more than 1 links per request, got 2")
 	})
+}
+
+func (s *WorkflowHandlerSuite) TestPrepareUpdateWorkflowRequest_NexusSerializationContextLength() {
+	const maxLength = 64
+	atLimit := strings.Repeat("x", maxLength)
+	tooLong := strings.Repeat("x", maxLength+1)
+
+	for _, tc := range []struct {
+		name      string
+		context   *nexuspb.PropagatedSerializationContext
+		wantError string
+	}{
+		{
+			name:    "at limit",
+			context: &nexuspb.PropagatedSerializationContext{Endpoint: atLimit, Service: atLimit, Operation: atLimit},
+		},
+		{
+			name:      "endpoint too long",
+			context:   &nexuspb.PropagatedSerializationContext{Endpoint: tooLong},
+			wantError: "Nexus serialization context endpoint field too long",
+		},
+		{
+			name:      "service too long",
+			context:   &nexuspb.PropagatedSerializationContext{Service: tooLong},
+			wantError: "Nexus serialization context service field too long",
+		},
+		{
+			name:      "operation too long",
+			context:   &nexuspb.PropagatedSerializationContext{Operation: tooLong},
+			wantError: "Nexus serialization context operation field too long",
+		},
+	} {
+		s.Run(tc.name, func() {
+			config := s.newConfig()
+			config.MaxIDLengthLimit = dc.GetIntPropertyFn(maxLength)
+			wh := s.getWorkflowHandler(config)
+			err := wh.prepareUpdateWorkflowRequest(context.Background(), s.testNamespace, &workflowservice.UpdateWorkflowExecutionRequest{
+				Namespace:         s.testNamespace.String(),
+				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: testWorkflowID},
+				Request: &updatepb.Request{
+					Meta:                                &updatepb.Meta{UpdateId: "update-id"},
+					Input:                               &updatepb.Input{Name: "update-name"},
+					PropagatedNexusSerializationContext: tc.context,
+				},
+			})
+			if tc.wantError == "" {
+				s.Require().NoError(err)
+			} else {
+				var invalidArgument *serviceerror.InvalidArgument
+				s.Require().ErrorAs(err, &invalidArgument)
+				s.Require().ErrorContains(err, tc.wantError)
+			}
+		})
+	}
 }
 
 func (s *WorkflowHandlerSuite) TestUpdateActivityOptions_Priority() {
