@@ -2328,13 +2328,14 @@ func (s *mutableStateSuite) TestContinueAsNewMinBackoffExecutionCompletesBeforeE
 	now := time.Now()
 	s.mutableState.timeSource = clock.NewEventTimeSource().Update(now)
 
-	// Guard against clock skew or malformed state making StartTime later than now.
-	// The lifetime should be clamped at zero, so the full minimal interval is still applied.
+	// A virtual StartTime later than real time bypasses the minimal interval.
 	s.mutableState.executionState.StartTime = timestamppb.New(now.Add(time.Second))
 	s.mutableState.executionInfo.ExecutionTime = nil
 
-	minBackoff := s.mutableState.ContinueAsNewMinBackoff(nil).AsDuration()
-	s.Equal(time.Second, minBackoff)
+	s.Nil(s.mutableState.ContinueAsNewMinBackoff(nil))
+	backoff := 2 * time.Second
+	minBackoff := s.mutableState.ContinueAsNewMinBackoff(durationpb.New(backoff)).AsDuration()
+	s.Equal(backoff, minBackoff)
 
 	// Simulate a delayed-start run that actually executed and closed before its ExecutionTime.
 	// In that case lifetime should fall back to close - StartTime, not become negative.
@@ -2345,7 +2346,7 @@ func (s *mutableStateSuite) TestContinueAsNewMinBackoffExecutionCompletesBeforeE
 	s.Equal(900*time.Millisecond, minBackoff)
 
 	// Existing backoff already satisfies the minimal interval when combined with the fallback lifetime.
-	backoff := time.Second
+	backoff = time.Second
 	minBackoff = s.mutableState.ContinueAsNewMinBackoff(durationpb.New(backoff)).AsDuration()
 	s.Equal(backoff, minBackoff)
 }
