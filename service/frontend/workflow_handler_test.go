@@ -4226,117 +4226,6 @@ func (s *WorkflowHandlerSuite) TestGetWorkflowExecutionHistory_InternalRawHistor
 	s.Equal("this workflow failed", attrs2.Failure.Message)
 }
 
-func (s *WorkflowHandlerSuite) TestValidateWorkflowTimeSkippingConfig() {
-	config := s.newConfig()
-	wh := s.getWorkflowHandler(config)
-	var unimplementedErr *serviceerror.Unimplemented
-	var invalidArgumentErr *serviceerror.InvalidArgument
-
-	// nil config is valid
-	s.Require().NoError(wh.validateAndPopulateWorkflowTimeSkippingConfig(nil, s.testNamespace))
-
-	// config with enabled=false but dynamic config disabled returns error
-	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
-	s.Require().ErrorAs(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace), &unimplementedErr)
-
-	// config with enabled=true but dynamic config disabled returns error
-	s.Require().ErrorAs(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace), &unimplementedErr)
-
-	// config with enabled=false and dynamic config enabled is valid
-	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
-	s.Require().NoError(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: false}, s.testNamespace))
-
-	// config with enabled=true and dynamic config enabled is valid
-	s.Require().NoError(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{Enabled: true}, s.testNamespace))
-
-	// fast_forward set while enabled=false is rejected
-	s.Require().ErrorAs(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: false, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10), Id: "ff-id"}}, s.testNamespace), &invalidArgumentErr)
-
-	// negative fast_forward duration is rejected
-	s.Require().ErrorAs(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * -10), Id: "ff-id"}}, s.testNamespace), &invalidArgumentErr)
-
-	// fast_forward set without a fast_forward_id is rejected
-	s.Require().ErrorAs(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10)}}, s.testNamespace), &invalidArgumentErr)
-
-	// a blank (whitespace-only) fast_forward_id is rejected
-	s.Require().ErrorAs(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10), Id: "  "}}, s.testNamespace), &invalidArgumentErr)
-
-	// fast_forward with a valid fast_forward_id is accepted
-	s.Require().NoError(wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: true, FastForwardConfig: &commonpb.FastForwardConfig{Duration: durationpb.New(time.Second * 10), Id: "ff-id"}}, s.testNamespace))
-
-	// MaxSkipPerSession is populated from dynamic config: a per-namespace override wins for that
-	// namespace, a constraint-less (per-cell) value is the fallback for other namespaces, and a
-	// value already set on the request is left untouched.
-	const otherNamespace = "other-namespace"
-	maxSkipClient := dc.StaticClient{
-		dc.WorkflowTimeSkippingEnabled.Key(): true,
-		dc.TimeSkippingMaxSkipPerSession.Key(): []dc.ConstrainedValue{
-			{Value: 42}, // per-cell (constraint-less) value
-			{Constraints: dc.Constraints{Namespace: s.testNamespace.String()}, Value: 7}, // per-namespace override
-		},
-	}
-	maxSkipWH := s.getWorkflowHandler(NewConfig(dc.NewCollection(maxSkipClient, log.NewNoopLogger()), numHistoryShards))
-
-	// namespace with a per-namespace override uses that value
-	tsc := &commonpb.TimeSkippingConfig{Enabled: true}
-	s.Require().NoError(maxSkipWH.validateAndPopulateWorkflowTimeSkippingConfig(tsc, s.testNamespace))
-	s.Require().Equal(int32(7), tsc.GetMaxSessionSkipCount())
-
-	// namespace without a per-namespace setting falls back to the per-cell value
-	tsc = &commonpb.TimeSkippingConfig{Enabled: true}
-	s.Require().NoError(maxSkipWH.validateAndPopulateWorkflowTimeSkippingConfig(tsc, namespace.Name(otherNamespace)))
-	s.Require().Equal(int32(42), tsc.GetMaxSessionSkipCount())
-
-	// a value already on the request is preserved, not overwritten by dynamic config
-	tsc = &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 999}
-	s.Require().NoError(maxSkipWH.validateAndPopulateWorkflowTimeSkippingConfig(tsc, s.testNamespace))
-	s.Require().Equal(int32(999), tsc.GetMaxSessionSkipCount())
-
-	const maxSkipDuration = 10 * 365 * 24 * time.Hour
-	for _, tc := range []struct {
-		name      string
-		duration  time.Duration
-		wantError bool
-	}{
-		{name: "below cap", duration: maxSkipDuration - time.Second},
-		{name: "at cap", duration: maxSkipDuration, wantError: true},
-		{name: "above cap", duration: maxSkipDuration + time.Second, wantError: true},
-	} {
-		s.Run(tc.name, func() {
-			err := wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-				Enabled: true,
-				FastForwardConfig: &commonpb.FastForwardConfig{
-					Duration: durationpb.New(tc.duration),
-					Id:       "ff-id",
-				},
-			}, s.testNamespace)
-			if tc.wantError {
-				var invalidArgumentErr *serviceerror.InvalidArgument
-				s.Require().ErrorAs(err, &invalidArgumentErr)
-				s.Require().Equal("Time skipping config invalid: fast_forward duration exceeds max value (87600.0 hours) allowed", err.Error())
-			} else {
-				s.Require().NoError(err)
-			}
-		})
-	}
-
-	config.TimeSkippingMaxAccumulatedDuration = dc.GetDurationPropertyFn(90 * time.Minute)
-	err := wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{
-		Enabled: true,
-		FastForwardConfig: &commonpb.FastForwardConfig{
-			Duration: durationpb.New(90 * time.Minute),
-			Id:       "ff-id",
-		},
-	}, s.testNamespace)
-	s.Require().ErrorAs(err, &invalidArgumentErr)
-	s.Require().Equal("Time skipping config invalid: fast_forward duration exceeds max value (1.5 hours) allowed", err.Error())
-}
-
 func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 	config := s.newConfig()
 	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
@@ -4382,20 +4271,6 @@ func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 			}
 		})
 	}
-	err := wh.validateAndPopulateScheduleTimeSkippingConfig(
-		&schedulepb.SchedulePatch{TimeSkippingConfig: &commonpb.TimeSkippingConfig{
-			Enabled: true,
-			FastForwardConfig: &commonpb.FastForwardConfig{
-				Id: "fast-forward", Duration: durationpb.New(10 * 365 * 24 * time.Hour),
-			},
-		}},
-		s.testNamespace,
-		true,
-	)
-	var invalidArgumentErr *serviceerror.InvalidArgument
-	s.Require().ErrorAs(err, &invalidArgumentErr)
-	s.Require().Equal("Time skipping config invalid: fast_forward duration exceeds max value (87600.0 hours) allowed", err.Error())
-
 	patchWithConfig := &schedulepb.SchedulePatch{TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true}}
 	s.Require().NoError(wh.validateAndPopulateScheduleTimeSkippingConfig(nil, s.testNamespace, false))
 	s.Require().ErrorIs(

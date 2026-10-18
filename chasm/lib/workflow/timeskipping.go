@@ -9,8 +9,8 @@ import (
 )
 
 var (
-	ErrWorkflowTimeSkippingNotEnabled  = serviceerror.NewUnimplemented("Workflow time skipping is not enabled for the namespace.")
-	ErrTimeSkippingFastForwardIDNotSet = serviceerror.NewInvalidArgument("Time skipping config invalid: fast_forward_id must be set")
+	ErrWorkflowTimeSkippingNotEnabled  = serviceerror.NewUnimplemented("workflow time skipping is not enabled for the namespace.")
+	ErrTimeSkippingFastForwardIDNotSet = serviceerror.NewInvalidArgument("time-skipping config invalid: fast_forward_id must be set")
 )
 
 func (c Config) validateAndPopulateWorkflowTimeSkippingConfig(tsc *commonpb.TimeSkippingConfig, namespace string) error {
@@ -52,15 +52,15 @@ func ValidateAndPopulateTimeSkippingConfig(
 		tsc.MaxSessionSkipCount = max(1, int32(maxSkipPerSession(namespace)))
 	}
 	if !tsc.GetEnabled() && tsc.GetFastForwardConfig() != nil {
-		return serviceerror.NewInvalidArgument("time_skipping_config: cannot set fast_forward when enabled is false")
+		return serviceerror.NewInvalidArgument("time-skipping config invalid: cannot set fast_forward when enabled is false")
 	}
 	if ff := tsc.GetFastForwardConfig(); ff != nil {
 		if ff.GetDuration().AsDuration() <= 0 {
-			return serviceerror.NewInvalidArgument("Time skipping config invalid: fast_forward duration must be positive")
+			return serviceerror.NewInvalidArgument("time-skipping config invalid: fast_forward duration must be positive")
 		}
 		maxDuration := maxAccumulatedDuration()
 		if ff.GetDuration().AsDuration() >= maxDuration {
-			return serviceerror.NewInvalidArgumentf("Time skipping config invalid: fast_forward duration exceeds max value (%.1f hours) allowed", maxDuration.Hours())
+			return serviceerror.NewInvalidArgumentf("time-skipping config invalid: fast_forward duration exceeds max value (%.1f hours) allowed", maxDuration.Hours())
 		}
 		if strings.TrimSpace(ff.GetId()) == "" {
 			return ErrTimeSkippingFastForwardIDNotSet
