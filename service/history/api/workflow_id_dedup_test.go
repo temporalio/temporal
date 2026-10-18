@@ -60,6 +60,11 @@ func TestResolveDuplicateWorkflowStart(t *testing.T) {
 			currentWorkflowStart: now.Add(time.Hour),
 			expectError:          false,
 		},
+		{
+			gracePeriod:          time.Second,
+			currentWorkflowStart: time.Time{},
+			expectError:          false,
+		},
 	}
 
 	config := tests.NewDynamicConfig()
@@ -125,6 +130,7 @@ func TestResolveWorkflowIDReusePolicyMinimalInterval(t *testing.T) {
 		{"within interval", time.Second, now, enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, true},
 		{"after interval", time.Second, now.Add(-2 * time.Second), enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, false},
 		{"future virtual start", time.Second, now.Add(time.Hour), enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, false},
+		{"start-time validation disabled", time.Second, time.Time{}, enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, false},
 		{"reject duplicate", time.Second, now.Add(time.Hour), enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

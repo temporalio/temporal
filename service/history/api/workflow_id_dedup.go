@@ -263,12 +263,12 @@ func ResolveWorkflowIDReusePolicy(
 	now := shardContext.GetTimeSource().Now()
 	timeSinceStart := now.Sub(currentWorkflowStartTime.UTC())
 
-	// A future start time may be virtual; it cannot be compared with the shard clock.
-	// This also bypasses the interval for an unskipped execution with a future start time due to clock skew.
-	// TODO: The current solution handles most cases, but in rare worst-case scenarios
-	// it may reject a valid start for up to minimalReuseInterval (5s if configured)
-	// after the shard clock catches up with the virtual start time. Pass ExecutionInfo
-	// and use InitialSkippedDuration to convert the start time to real time.
+	// A time-skipped StartTime can be ahead of the shard clock, so a negative
+	// timeSinceStart must not block reuse allowed by the policy. Without time skipping,
+	// clock skew can also make timeSinceStart negative and bypass the minimum interval.
+	// Once the shard clock catches up with a virtual StartTime, this check can reject
+	// a valid reuse for up to minimalReuseInterval; retrying later can succeed.
+	// TODO@time-skipping: Pass ExecutionInfo to calculate elapsed wall-clock time accurately.
 	if minimalReuseInterval == 0 || timeSinceStart < 0 || minimalReuseInterval < timeSinceStart {
 		// ie "allow" starting a new workflow
 		return nil
@@ -312,12 +312,12 @@ func resolveDuplicateWorkflowStart(
 	now := shardContext.GetTimeSource().Now()
 	timeSinceStart := now.Sub(currentWorkflowStartTime.UTC())
 
-	// A future start time may be virtual; it cannot be compared with the shard clock.
-	// This also bypasses the interval for an unskipped execution with a future start time due to clock skew.
-	// TODO: The current solution handles most cases, but in rare worst-case scenarios
-	// it may reject a valid start for up to minimalReuseInterval (5s if configured)
-	// after the shard clock catches up with the virtual start time. Pass ExecutionInfo
-	// and use InitialSkippedDuration to convert the start time to real time.
+	// A time-skipped StartTime can be ahead of the shard clock, so a negative
+	// timeSinceStart must not block TERMINATE_EXISTING. Without time skipping,
+	// clock skew can also make timeSinceStart negative and bypass the minimum interval.
+	// Once the shard clock catches up with a virtual StartTime, this check can reject
+	// a valid replacement for up to minimalReuseInterval; retrying later can succeed.
+	// TODO@time-skipping: Pass ExecutionInfo to calculate elapsed wall-clock time accurately.
 	if minimalReuseInterval == 0 || timeSinceStart < 0 || minimalReuseInterval < timeSinceStart {
 		return terminateWorkflowAction(newRunID, parentExecutionInfo, childWorkflowOnly)
 	}

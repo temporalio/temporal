@@ -255,7 +255,12 @@ type ActivityCompletionMetrics struct {
 	// AttemptStartedTime is the start time of the current attempt
 	AttemptStartedTime time.Time
 	// FirstScheduledTime is the scheduled time of the first attempt
-	FirstScheduledTime         time.Time
+	FirstScheduledTime time.Time
+	// HasTimeSkippingClockOffset indicates that skipped time has shifted the workflow clock.
+	// Latency metrics are omitted because activity timestamps may use different clock offsets;
+	// activity counters are still recorded.
+	// TODO@time-skipping: Use the workflow's virtual clock to calculate and report activity
+	// latency if doing so has no unexpected customer-facing impact.
 	HasTimeSkippingClockOffset bool
 	// Closed is true if no more attempts will be made to execute the activity.
 	Closed bool
@@ -287,8 +292,6 @@ func RecordActivityCompletionMetrics(
 		tags...,
 	)
 
-	// Once time skipping shifts the workflow clock, schedule-to-close can span virtual time.
-	// Future skips may affect attempt times too; without the offset at each event, omit both latencies.
 	now := shard.GetTimeSource().Now()
 	if !completion.HasTimeSkippingClockOffset && completion.Status != ActivityStatusTimeout &&
 		!completion.AttemptStartedTime.IsZero() &&
