@@ -2351,6 +2351,31 @@ func (s *mutableStateSuite) TestContinueAsNewMinBackoffExecutionCompletesBeforeE
 	s.Equal(backoff, minBackoff)
 }
 
+func (s *mutableStateSuite) TestContinueAsNewMinBackoffWithTimeSkippingClockOffset() {
+	s.mockConfig.WorkflowIdReuseMinimalInterval = func(string) time.Duration {
+		return 5 * time.Second
+	}
+
+	for _, tc := range []struct {
+		name    string
+		backoff *durationpb.Duration
+	}{
+		{name: "no backoff"},
+		{name: "existing backoff", backoff: durationpb.New(2 * time.Second)},
+	} {
+		s.Run(tc.name, func() {
+			startTime := timestamppb.New(time.Now().Add(-time.Second))
+			s.mutableState.executionState.StartTime = startTime
+			s.mutableState.executionInfo.ExecutionTime = startTime
+			s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+				AccumulatedSkippedDuration: durationpb.New(time.Hour),
+			}
+
+			s.Equal(tc.backoff, s.mutableState.ContinueAsNewMinBackoff(tc.backoff))
+		})
+	}
+}
+
 func (s *mutableStateSuite) TestEventReapplied() {
 	runID := uuid.NewString()
 	eventID := int64(1)

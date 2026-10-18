@@ -2304,6 +2304,9 @@ func (s *mutableStateSuite) TestTimeSkippingInfoUtil() {
 	})
 
 	s.Run("HasTimeSkippingClockOffset", func() {
+		var nilUtil *TimeSkippingInfoUtil
+		s.False(nilUtil.HasTimeSkippingClockOffset())
+		s.False(NewTimeSkippingInfoUtil(nil).HasTimeSkippingClockOffset())
 		s.False(NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
 		}).HasTimeSkippingClockOffset())

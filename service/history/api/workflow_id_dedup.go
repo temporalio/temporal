@@ -264,6 +264,11 @@ func ResolveWorkflowIDReusePolicy(
 	timeSinceStart := now.Sub(currentWorkflowStartTime.UTC())
 
 	// A future start time may be virtual; it cannot be compared with the shard clock.
+	// This also bypasses the interval for an unskipped execution with a future start time due to clock skew.
+	// TODO: The current solution handles most cases, but in rare worst-case scenarios
+	// it may reject a valid start for up to minimalReuseInterval (5s if configured)
+	// after the shard clock catches up with the virtual start time. Pass ExecutionInfo
+	// and use InitialSkippedDuration to convert the start time to real time.
 	if minimalReuseInterval == 0 || timeSinceStart < 0 || minimalReuseInterval < timeSinceStart {
 		// ie "allow" starting a new workflow
 		return nil
@@ -308,6 +313,11 @@ func resolveDuplicateWorkflowStart(
 	timeSinceStart := now.Sub(currentWorkflowStartTime.UTC())
 
 	// A future start time may be virtual; it cannot be compared with the shard clock.
+	// This also bypasses the interval for an unskipped execution with a future start time due to clock skew.
+	// TODO: The current solution handles most cases, but in rare worst-case scenarios
+	// it may reject a valid start for up to minimalReuseInterval (5s if configured)
+	// after the shard clock catches up with the virtual start time. Pass ExecutionInfo
+	// and use InitialSkippedDuration to convert the start time to real time.
 	if minimalReuseInterval == 0 || timeSinceStart < 0 || minimalReuseInterval < timeSinceStart {
 		return terminateWorkflowAction(newRunID, parentExecutionInfo, childWorkflowOnly)
 	}
