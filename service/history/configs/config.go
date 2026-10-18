@@ -486,8 +486,9 @@ type Config struct {
 	RoutingInfoCacheMaxSize              dynamicconfig.IntPropertyFn
 
 	// Time-Skipping related settings
-	WorkflowTimeSkippingEnabled       dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	CHASMSchedulerTimeSkippingEnabled dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	WorkflowTimeSkippingEnabled        dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	CHASMSchedulerTimeSkippingEnabled  dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	TimeSkippingMaxAccumulatedDuration dynamicconfig.DurationPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -929,8 +930,9 @@ func NewConfig(
 		WorkflowTaskCompletionBufferNewPaginationRatio: dynamicconfig.WorkflowTaskCompletionBufferNewPaginationRatio.Get(dc),
 
 		// Time-Skipping related settings
-		CHASMSchedulerTimeSkippingEnabled: dynamicconfig.CHASMSchedulerTimeSkippingEnabled.Get(dc),
-		WorkflowTimeSkippingEnabled:       dynamicconfig.WorkflowTimeSkippingEnabled.Get(dc),
+		CHASMSchedulerTimeSkippingEnabled:  dynamicconfig.CHASMSchedulerTimeSkippingEnabled.Get(dc),
+		WorkflowTimeSkippingEnabled:        dynamicconfig.WorkflowTimeSkippingEnabled.Get(dc),
+		TimeSkippingMaxAccumulatedDuration: dynamicconfig.TimeSkippingMaxAccumulatedDuration.Get(dc),
 	}
 
 	return cfg

@@ -256,6 +256,11 @@ func (b *readOnlyNodeBackend) IsTimeSkippingFeatureEnabled(ArchetypeID) bool {
 	return false
 }
 
+func (b *readOnlyNodeBackend) TimeSkippingMaxAccumulatedDuration() time.Duration {
+	b.unsupported("TimeSkippingMaxAccumulatedDuration")
+	return 0
+}
+
 func (b *readOnlyNodeBackend) RecordTimeSkippingTransition(*TimeSkippingTransition) {
 	b.unsupported("RecordTimeSkippingTransition")
 }

@@ -39,6 +39,10 @@ func (ms *MutableStateImpl) IsTimeSkippingFeatureEnabled(archetypeID chasm.Arche
 	}
 }
 
+func (ms *MutableStateImpl) TimeSkippingMaxAccumulatedDuration() time.Duration {
+	return ms.config.TimeSkippingMaxAccumulatedDuration()
+}
+
 // initTimeSkippingInfo creates TimeSkippingInfo when an execution first receives a time-skipping
 // config or propagated virtual-time state. This can happen at execution start, through an options
 // update on an existing execution, or when a CHASM component first sets its config.
@@ -488,7 +492,18 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 		if !transition.IsValid() {
 			return false
 		}
-		// 3. state change.
+		// 3. Check that the transition stays within the maximum accumulated skip duration.
+		accumulatedDuration := ms.accumulatedSkippedDuration()
+		maxDuration := ms.TimeSkippingMaxAccumulatedDuration()
+		if transition.GetSkippedDuration() > maxDuration-accumulatedDuration {
+			metrics.ExecutionTimeSkippingTransitionedErrorCounter.With(ms.metricsHandler).Record(1, ms.timeSkippingMetricTags()...)
+			ms.logger.Warn("workflow time skipping exceeds maximum accumulated duration",
+				tag.Duration("accumulated-skipped-duration", accumulatedDuration),
+				tag.Duration("proposed-skipped-duration", transition.GetSkippedDuration()),
+				tag.Duration("maximum-accumulated-skipped-duration", maxDuration))
+			return false
+		}
+		// 4. State change.
 		previousDuration := ms.accumulatedSkippedDuration()
 		_, err := ms.AddWorkflowExecutionTimeSkippingTransitionedEvent(
 			ctx, transition.GetTargetTime(), transition.DisabledAfterFastForward)
@@ -497,7 +512,7 @@ func (ms *MutableStateImpl) closeTransactionHandleWorkflowTimeSkipping(
 			ms.logger.Error("failed to add workflow execution time skipping transitioned event", tag.Error(err))
 			return false
 		}
-		// 4. Timer tasks only need to be re-stamped when the virtual-time offset changed.
+		// 5. Timer tasks only need to be re-stamped when the virtual-time offset changed.
 		// A valid transition may only disable time skipping or update session state.
 		return ms.accumulatedSkippedDuration() != previousDuration
 	case historyi.TransactionPolicyPassive:

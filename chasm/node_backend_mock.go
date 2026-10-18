@@ -44,6 +44,7 @@ type MockNodeBackend struct {
 	HandleEndpointRegistry                    func() EndpointRegistry
 	HandleSetTimeSkippingConfig               func(config *commonpb.TimeSkippingConfig)
 	HandleIsTimeSkippingFeatureEnabled        func(archetypeID ArchetypeID) bool
+	HandleTimeSkippingMaxAccumulatedDuration  func() time.Duration
 	HandleNow                                 func() time.Time
 	HandleRecordTimeSkippingTransition        func(transition *TimeSkippingTransition)
 
@@ -92,6 +93,13 @@ func (m *MockNodeBackend) IsTimeSkippingFeatureEnabled(archetypeID ArchetypeID) 
 		return m.HandleIsTimeSkippingFeatureEnabled(archetypeID)
 	}
 	return false
+}
+
+func (m *MockNodeBackend) TimeSkippingMaxAccumulatedDuration() time.Duration {
+	if m.HandleTimeSkippingMaxAccumulatedDuration != nil {
+		return m.HandleTimeSkippingMaxAccumulatedDuration()
+	}
+	return 10 * 365 * 24 * time.Hour
 }
 
 func (m *MockNodeBackend) ChasmLogicalTaskCountAlertThreshold(chasmTaskType string) int {
