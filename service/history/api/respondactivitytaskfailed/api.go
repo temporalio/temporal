@@ -102,7 +102,7 @@ func Invoke(
 			// Capture the metric inputs before that mutation so we record the attempt that just finished.
 			attemptStartedTime = timestamp.TimeValue(ai.GetStartedTime())
 			firstScheduledTime = timestamp.TimeValue(ai.FirstScheduledTime)
-			hasTimeSkippingClockOffset = workflow.NewTimeSkippingInfoUtil(mutableState.GetExecutionInfo().GetTimeSkippingInfo()).GetAccumulatedSkippedDuration() != 0
+			hasTimeSkippingClockOffset = workflow.NewTimeSkippingInfoUtil(mutableState.GetExecutionInfo().GetTimeSkippingInfo()).HasTimeSkippingClockOffset()
 			taskQueue = ai.TaskQueue
 			mutableState.RecordLastActivityCompleteTime(ai)
 			retryState, err := mutableState.RetryActivity(ai, failure)

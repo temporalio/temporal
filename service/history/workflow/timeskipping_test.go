@@ -2132,6 +2132,7 @@ func (s *mutableStateSuite) TestTimeSkippingInfoUtil() {
 		s.False(util.HasPendingFastForward())
 		s.False(util.IsEnabled())
 		s.Zero(util.GetAccumulatedSkippedDuration())
+		s.False(util.HasTimeSkippingClockOffset())
 		s.Nil(util.GetFastForwardTargetTime())
 		s.Nil(util.ToDescribeInfo(time.Now()))
 		s.Nil(util.ToFastForwardInfo())
@@ -2142,6 +2143,7 @@ func (s *mutableStateSuite) TestTimeSkippingInfoUtil() {
 		s.False(util.IsEnabled())
 		s.False(util.HasPendingFastForward())
 		s.Zero(util.GetAccumulatedSkippedDuration())
+		s.False(util.HasTimeSkippingClockOffset())
 		s.Nil(util.GetFastForwardTargetTime())
 		s.Nil(util.ToDescribeInfo(time.Now()))
 		s.Nil(util.ToFastForwardInfo())
@@ -2299,6 +2301,16 @@ func (s *mutableStateSuite) TestTimeSkippingInfoUtil() {
 			AccumulatedSkippedDuration: durationpb.New(90 * time.Minute),
 		})
 		s.Equal(90*time.Minute, util.GetAccumulatedSkippedDuration())
+	})
+
+	s.Run("HasTimeSkippingClockOffset", func() {
+		s.False(NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+			Config: &commonpb.TimeSkippingConfig{Enabled: true},
+		}).HasTimeSkippingClockOffset())
+		s.True(NewTimeSkippingInfoUtil(&persistencespb.TimeSkippingInfo{
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: false},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		}).HasTimeSkippingClockOffset())
 	})
 
 	s.Run("ToDescribeInfo_NilTimeSkippingInfo_ReturnsNil", func() {

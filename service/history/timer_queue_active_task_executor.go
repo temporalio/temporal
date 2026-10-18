@@ -338,7 +338,7 @@ func (t *timerQueueActiveTaskExecutor) processSingleActivityTimeoutTask(
 			Status:                     workflow.ActivityStatusTimeout,
 			AttemptStartedTime:         timestamp.TimeValue(ai.StartedTime),
 			FirstScheduledTime:         timestamp.TimeValue(ai.FirstScheduledTime),
-			HasTimeSkippingClockOffset: workflow.NewTimeSkippingInfoUtil(mutableState.GetExecutionInfo().GetTimeSkippingInfo()).GetAccumulatedSkippedDuration() != 0,
+			HasTimeSkippingClockOffset: workflow.NewTimeSkippingInfoUtil(mutableState.GetExecutionInfo().GetTimeSkippingInfo()).HasTimeSkippingClockOffset(),
 			Closed:                     retryState != enumspb.RETRY_STATE_IN_PROGRESS,
 			TimerType:                  timerSequenceID.TimerType,
 			VersioningInfo: workflow.VersioningMetricContext{
