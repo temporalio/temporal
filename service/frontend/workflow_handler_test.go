@@ -4296,6 +4296,45 @@ func (s *WorkflowHandlerSuite) TestValidateWorkflowTimeSkippingConfig() {
 	tsc = &commonpb.TimeSkippingConfig{Enabled: true, MaxSessionSkipCount: 999}
 	s.Require().NoError(maxSkipWH.validateAndPopulateWorkflowTimeSkippingConfig(tsc, s.testNamespace))
 	s.Require().Equal(int32(999), tsc.GetMaxSessionSkipCount())
+
+	const maxSkipDuration = 10 * 365 * 24 * time.Hour
+	for _, tc := range []struct {
+		name      string
+		duration  time.Duration
+		wantError bool
+	}{
+		{name: "below cap", duration: maxSkipDuration - time.Second},
+		{name: "at cap", duration: maxSkipDuration, wantError: true},
+		{name: "above cap", duration: maxSkipDuration + time.Second, wantError: true},
+	} {
+		s.Run(tc.name, func() {
+			err := wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+				Enabled: true,
+				FastForwardConfig: &commonpb.FastForwardConfig{
+					Duration: durationpb.New(tc.duration),
+					Id:       "ff-id",
+				},
+			}, s.testNamespace)
+			if tc.wantError {
+				var invalidArgumentErr *serviceerror.InvalidArgument
+				s.Require().ErrorAs(err, &invalidArgumentErr)
+				s.Require().Equal("Time skipping config invalid: fast_forward duration exceeds max value (87600.0 hours) allowed", err.Error())
+			} else {
+				s.Require().NoError(err)
+			}
+		})
+	}
+
+	config.TimeSkippingMaxAccumulatedDuration = dc.GetDurationPropertyFn(90 * time.Minute)
+	err := wh.validateAndPopulateWorkflowTimeSkippingConfig(&commonpb.TimeSkippingConfig{
+		Enabled: true,
+		FastForwardConfig: &commonpb.FastForwardConfig{
+			Duration: durationpb.New(90 * time.Minute),
+			Id:       "ff-id",
+		},
+	}, s.testNamespace)
+	s.Require().ErrorAs(err, &invalidArgumentErr)
+	s.Require().Equal("Time skipping config invalid: fast_forward duration exceeds max value (1.5 hours) allowed", err.Error())
 }
 
 func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
@@ -4343,6 +4382,19 @@ func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 			}
 		})
 	}
+	err := wh.validateAndPopulateScheduleTimeSkippingConfig(
+		&schedulepb.SchedulePatch{TimeSkippingConfig: &commonpb.TimeSkippingConfig{
+			Enabled: true,
+			FastForwardConfig: &commonpb.FastForwardConfig{
+				Id: "fast-forward", Duration: durationpb.New(10 * 365 * 24 * time.Hour),
+			},
+		}},
+		s.testNamespace,
+		true,
+	)
+	var invalidArgumentErr *serviceerror.InvalidArgument
+	s.Require().ErrorAs(err, &invalidArgumentErr)
+	s.Require().Equal("Time skipping config invalid: fast_forward duration exceeds max value (87600.0 hours) allowed", err.Error())
 
 	patchWithConfig := &schedulepb.SchedulePatch{TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true}}
 	s.Require().NoError(wh.validateAndPopulateScheduleTimeSkippingConfig(nil, s.testNamespace, false))

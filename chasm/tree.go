@@ -244,6 +244,7 @@ type (
 		Now() time.Time
 		SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
 		IsTimeSkippingFeatureEnabled(archetypeID ArchetypeID) bool
+		TimeSkippingMaxAccumulatedDuration() time.Duration
 		RecordTimeSkippingTransition(transition *TimeSkippingTransition)
 	}
 
@@ -4220,7 +4221,7 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 		n.logger.Error(
 			"root component does not implement TimeSkippingRuntimeGate when executions have turned on time skipping",
 			tag.Error(fmt.Errorf("type: %s", reflect.TypeOf(rootComponent).Name())))
-		return serviceerror.NewInternal("time skipping is not enabled for current execution type")
+		return serviceerror.NewInternal("time skipping is not implemented for current execution type")
 	}
 
 	// runtime check
@@ -4231,6 +4232,18 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 	}
 	transition := n.defaultFindNextTargetTime()
 	if !transition.IsValid() {
+		return nil
+	}
+	accumulatedDuration := tsi.GetAccumulatedSkippedDuration().AsDuration()
+	maxDuration := n.backend.TimeSkippingMaxAccumulatedDuration()
+	if transition.GetSkippedDuration() > maxDuration-accumulatedDuration {
+		metrics.ExecutionTimeSkippingTransitionedErrorCounter.With(n.metricsHandler).Record(
+			1, metrics.ArchetypeTag(archetypeName))
+		n.logger.Warn("chasm time skipping exceeds maximum accumulated duration",
+			tag.Archetype(archetypeName),
+			tag.Duration("accumulated-skipped-duration", accumulatedDuration),
+			tag.Duration("proposed-skipped-duration", transition.GetSkippedDuration()),
+			tag.Duration("maximum-accumulated-skipped-duration", maxDuration))
 		return nil
 	}
 

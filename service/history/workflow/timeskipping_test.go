@@ -1559,6 +1559,31 @@ func (s *mutableStateSuite) TestCloseTransactionHandleWorkflowTimeSkipping() {
 			"the skip advances virtual time toward the timer target")
 	})
 
+	s.Run("AccumulatedDurationCap_RejectsTransition", func() {
+		s.mockConfig.TimeSkippingMaxAccumulatedDuration = func() time.Duration { return 90 * time.Minute }
+		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
+			Config:                     &commonpb.TimeSkippingConfig{Enabled: true},
+			AccumulatedSkippedDuration: durationpb.New(time.Hour),
+		}
+		s.mutableState.pendingTimerInfoIDs["t1"] = &persistencespb.TimerInfo{
+			TimerId:    "t1",
+			ExpiryTime: timestamppb.New(s.mutableState.Now().Add(time.Hour)),
+		}
+		s.mutableState.timeSkippingInfoUpdated = false
+		metricsHandler := metricstest.NewCaptureHandler()
+		capture := metricsHandler.StartCapture()
+		defer metricsHandler.StopCapture(capture)
+		s.mutableState.metricsHandler = metricsHandler
+
+		needRegen := s.mutableState.closeTransactionHandleWorkflowTimeSkipping(
+			context.Background(), historyi.TransactionPolicyActive)
+		s.False(needRegen)
+		s.False(s.mutableState.hBuilder.IsDirty())
+		s.False(s.mutableState.timeSkippingInfoUpdated)
+		s.Equal(time.Hour, s.mutableState.accumulatedSkippedDuration())
+		s.Require().Len(capture.Snapshot()[metrics.ExecutionTimeSkippingTransitionedErrorCounter.Name()], 1)
+	})
+
 	s.Run("ActiveWithDueTimer_NoSkip", func() {
 		s.mutableState.executionInfo.TimeSkippingInfo = &persistencespb.TimeSkippingInfo{
 			Config: &commonpb.TimeSkippingConfig{Enabled: true},
