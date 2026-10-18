@@ -4221,7 +4221,7 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 		n.logger.Error(
 			"root component does not implement TimeSkippingRuntimeGate when executions have turned on time skipping",
 			tag.Error(fmt.Errorf("type: %s", reflect.TypeOf(rootComponent).Name())))
-		return serviceerror.NewInternal("time skipping is not enabled for current execution type")
+		return serviceerror.NewInternal("time skipping is not implemented for current execution type")
 	}
 
 	// runtime check
