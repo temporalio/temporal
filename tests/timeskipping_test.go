@@ -70,7 +70,7 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_FeatureDisabled() {
 		WorkflowTaskTimeout: durationpb.New(10 * time.Second),
 		TimeSkippingConfig:  &commonpb.TimeSkippingConfig{Enabled: true},
 	})
-	s.ErrorAs(err, new(*serviceerror.Unimplemented))
+	s.ErrorAs(err, new(*serviceerror.PermissionDenied))
 }
 
 // TestTimeSkipping_StartWorkflow_DCEnabled verifies that StartWorkflowExecution with
@@ -126,8 +126,8 @@ func (s *TimeSkippingTestSuite) TestTimeSkipping_FeatureDisabledAfterStart() {
 		UpdateMask:               &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
 	}
 	_, err := env.FrontendClient().UpdateWorkflowExecutionOptions(s.Context(), updateRequest)
-	s.ErrorAs(err, new(*serviceerror.Unimplemented))
-	s.ErrorContains(err, "Workflow time skipping is not enabled for the namespace")
+	s.ErrorAs(err, new(*serviceerror.PermissionDenied))
+	s.ErrorContains(err, "workflow time skipping is not enabled for the namespace")
 
 	poller := taskpoller.New(s.T(), env.FrontendClient(), env.Namespace().String())
 	_, err = poller.PollAndHandleWorkflowTask(tv, func(_ *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
