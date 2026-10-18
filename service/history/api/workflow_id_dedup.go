@@ -263,7 +263,8 @@ func ResolveWorkflowIDReusePolicy(
 	now := shardContext.GetTimeSource().Now()
 	timeSinceStart := now.Sub(currentWorkflowStartTime.UTC())
 
-	if minimalReuseInterval == 0 || minimalReuseInterval < timeSinceStart {
+	// A future start time may be virtual; it cannot be compared with the shard clock.
+	if minimalReuseInterval == 0 || timeSinceStart < 0 || minimalReuseInterval < timeSinceStart {
 		// ie "allow" starting a new workflow
 		return nil
 	}
@@ -306,7 +307,8 @@ func resolveDuplicateWorkflowStart(
 	now := shardContext.GetTimeSource().Now()
 	timeSinceStart := now.Sub(currentWorkflowStartTime.UTC())
 
-	if minimalReuseInterval == 0 || minimalReuseInterval < timeSinceStart {
+	// A future start time may be virtual; it cannot be compared with the shard clock.
+	if minimalReuseInterval == 0 || timeSinceStart < 0 || minimalReuseInterval < timeSinceStart {
 		return terminateWorkflowAction(newRunID, parentExecutionInfo, childWorkflowOnly)
 	}
 

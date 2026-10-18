@@ -55,6 +55,11 @@ func TestResolveDuplicateWorkflowStart(t *testing.T) {
 			currentWorkflowStart: now.Add(-2 * time.Second),
 			expectError:          false,
 		},
+		{
+			gracePeriod:          time.Second,
+			currentWorkflowStart: now.Add(time.Hour),
+			expectError:          false,
+		},
 	}
 
 	config := tests.NewDynamicConfig()
@@ -89,6 +94,57 @@ func TestResolveDuplicateWorkflowStart(t *testing.T) {
 		} else {
 			assert.NoError(t, err)
 		}
+	}
+}
+
+func TestResolveWorkflowIDReusePolicyMinimalInterval(t *testing.T) {
+	timeSource := clock.NewEventTimeSource()
+	now := timeSource.Now()
+	config := tests.NewDynamicConfig()
+	shardContext := shard.NewTestContextWithTimeSource(
+		gomock.NewController(t),
+		&persistencespb.ShardInfo{RangeId: 1},
+		config,
+		timeSource,
+	)
+	namespaceEntry := namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{},
+		&persistencespb.NamespaceConfig{},
+		"target_cluster",
+	)
+	workflowKey := definition.WorkflowKey{WorkflowID: "workflowID", RunID: "oldRunID"}
+
+	for _, tc := range []struct {
+		name        string
+		interval    time.Duration
+		startTime   time.Time
+		policy      enumspb.WorkflowIdReusePolicy
+		expectError bool
+	}{
+		{"no interval", 0, now, enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, false},
+		{"within interval", time.Second, now, enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, true},
+		{"after interval", time.Second, now.Add(-2 * time.Second), enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, false},
+		{"future virtual start", time.Second, now.Add(time.Hour), enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE, false},
+		{"reject duplicate", time.Second, now.Add(time.Hour), enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			config.WorkflowIdReuseMinimalInterval = dynamicconfig.GetDurationPropertyFnFilteredByNamespace(tc.interval)
+			err := ResolveWorkflowIDReusePolicy(
+				shardContext,
+				workflowKey,
+				namespaceEntry,
+				enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
+				nil,
+				workflowKey.RunID,
+				tc.policy,
+				tc.startTime,
+			)
+			if tc.expectError {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
+		})
 	}
 }
 
