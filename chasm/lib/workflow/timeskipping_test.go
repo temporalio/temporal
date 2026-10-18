@@ -38,6 +38,8 @@ func TestValidateAndPopulateWorkflowTimeSkippingConfig(t *testing.T) {
 			)
 			if tc.wantError {
 				require.ErrorIs(t, err, ErrWorkflowTimeSkippingNotEnabled)
+				var permissionDenied *serviceerror.PermissionDenied
+				require.ErrorAs(t, err, &permissionDenied)
 			} else {
 				require.NoError(t, err)
 				if tc.config != nil {

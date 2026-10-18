@@ -243,7 +243,9 @@ func (s *WorkflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		nil, // Not testing CHASM registry here
 		quotas.NoopRequestRateLimiter,
 		workflow.NewValidator(
-			workflow.NewConfig(dc.NewNoopCollection()),
+			workflow.NewConfig(dc.NewCollection(dc.StaticClient{
+				dc.WorkflowTimeSkippingEnabled.Key(): config.WorkflowTimeSkippingEnabled(s.testNamespace.String()),
+			}, log.NewNoopLogger())),
 			s.mockSearchAttributesMapperProvider,
 			saValidator,
 		),
@@ -4231,14 +4233,14 @@ func (s *WorkflowHandlerSuite) TestValidateScheduleTimeSkippingConfig() {
 	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	config.CHASMSchedulerTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
-	s.Require().ErrorIs(
-		wh.validateAndPopulateScheduleTimeSkippingConfig(
-			&schedulepb.SchedulePatch{TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true}},
-			s.testNamespace,
-			true,
-		),
-		errScheduleTimeSkippingNotEnabled,
+	err := wh.validateAndPopulateScheduleTimeSkippingConfig(
+		&schedulepb.SchedulePatch{TimeSkippingConfig: &commonpb.TimeSkippingConfig{Enabled: true}},
+		s.testNamespace,
+		true,
 	)
+	s.Require().ErrorIs(err, errScheduleTimeSkippingNotEnabled)
+	var permissionDenied *serviceerror.PermissionDenied
+	s.Require().ErrorAs(err, &permissionDenied)
 
 	config.CHASMSchedulerTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(true)
 	wh = s.getWorkflowHandler(config)
@@ -4467,8 +4469,8 @@ func (s *WorkflowHandlerSuite) TestExecuteMultiOperation_TimeSkipping_DCDisabled
 	s.Equal("Update-with-Start could not be executed.", err.Error())
 	var multiOpErr *serviceerror.MultiOperationExecution
 	s.ErrorAs(err, &multiOpErr)
-	var unimplemented *serviceerror.Unimplemented
-	s.ErrorAs(multiOpErr.OperationErrors()[0], &unimplemented)
+	var permissionDenied *serviceerror.PermissionDenied
+	s.ErrorAs(multiOpErr.OperationErrors()[0], &permissionDenied)
 	s.ErrorContains(multiOpErr.OperationErrors()[0], errWorkflowTimeSkippingNotEnabled.Error())
 }
 
@@ -4547,8 +4549,8 @@ func (s *WorkflowHandlerSuite) TestStartWorkflowExecution_TimeSkipping_DCDisable
 	}
 
 	_, err := wh.StartWorkflowExecution(context.Background(), req)
-	var unimplemented *serviceerror.Unimplemented
-	s.ErrorAs(err, &unimplemented)
+	var permissionDenied *serviceerror.PermissionDenied
+	s.ErrorAs(err, &permissionDenied)
 	s.ErrorContains(err, errWorkflowTimeSkippingNotEnabled.Error())
 }
 
@@ -4584,7 +4586,6 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping
 	config := s.newConfig()
 	config.WorkflowTimeSkippingEnabled = dc.GetBoolPropertyFnFilteredByNamespace(false)
 	wh := s.getWorkflowHandler(config)
-	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
 
 	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
 		Namespace:          s.testNamespace.String(),
@@ -4596,8 +4597,8 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping
 	}
 
 	_, err := wh.SignalWithStartWorkflowExecution(context.Background(), req)
-	var unimplemented *serviceerror.Unimplemented
-	s.ErrorAs(err, &unimplemented)
+	var permissionDenied *serviceerror.PermissionDenied
+	s.ErrorAs(err, &permissionDenied)
 	s.ErrorContains(err, errWorkflowTimeSkippingNotEnabled.Error())
 }
 
@@ -4611,7 +4612,8 @@ func (s *WorkflowHandlerSuite) TestSignalWithStartWorkflowExecution_TimeSkipping
 	s.mockSearchAttributesMapperProvider.EXPECT().GetMapper(gomock.Any()).Return(nil, nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.Name(s.testNamespace.String())).Return(s.testNamespaceID, nil)
 	s.mockHistoryClient.EXPECT().SignalWithStartWorkflowExecution(gomock.Any(), mock.MatchedBy(func(req *historyservice.SignalWithStartWorkflowExecutionRequest) bool {
-		return req.SignalWithStartRequest.GetTimeSkippingConfig().GetEnabled()
+		timeSkippingConfig := req.SignalWithStartRequest.GetTimeSkippingConfig()
+		return timeSkippingConfig.GetEnabled() && timeSkippingConfig.GetMaxSessionSkipCount() == int32(config.TimeSkippingMaxSkipPerSession(s.testNamespace.String()))
 	})).Return(&historyservice.SignalWithStartWorkflowExecutionResponse{Started: true}, nil)
 
 	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -4655,8 +4657,8 @@ func (s *WorkflowHandlerSuite) TestResetWorkflowExecution_TimeSkipping_DCDisable
 			},
 		},
 	})
-	var unimplemented *serviceerror.Unimplemented
-	s.ErrorAs(err, &unimplemented)
+	var permissionDenied *serviceerror.PermissionDenied
+	s.ErrorAs(err, &permissionDenied)
 	s.ErrorContains(err, errWorkflowTimeSkippingNotEnabled.Error())
 }
 
@@ -4695,8 +4697,8 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_ResetOperation_TimeSkippi
 			},
 		},
 	})
-	var unimplemented *serviceerror.Unimplemented
-	s.ErrorAs(err, &unimplemented)
+	var permissionDenied *serviceerror.PermissionDenied
+	s.ErrorAs(err, &permissionDenied)
 	s.ErrorContains(err, errWorkflowTimeSkippingNotEnabled.Error())
 }
 
@@ -4724,8 +4726,8 @@ func (s *WorkflowHandlerSuite) TestStartBatchOperation_UpdateWorkflowOptionsOper
 			},
 		},
 	})
-	var unimplemented *serviceerror.Unimplemented
-	s.ErrorAs(err, &unimplemented)
+	var permissionDenied *serviceerror.PermissionDenied
+	s.ErrorAs(err, &permissionDenied)
 	s.ErrorContains(err, errWorkflowTimeSkippingNotEnabled.Error())
 }
 
@@ -6688,8 +6690,8 @@ func (s *WorkflowHandlerSuite) TestUpdateWorkflowExecutionOptions_TimeSkipping_D
 		},
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"time_skipping_config"}},
 	})
-	var unimplemented *serviceerror.Unimplemented
-	s.ErrorAs(err, &unimplemented)
+	var permissionDenied *serviceerror.PermissionDenied
+	s.ErrorAs(err, &permissionDenied)
 	s.ErrorContains(err, errWorkflowTimeSkippingNotEnabled.Error())
 }
 

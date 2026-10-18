@@ -9,11 +9,11 @@ import (
 )
 
 var (
-	ErrWorkflowTimeSkippingNotEnabled  = serviceerror.NewUnimplemented("workflow time skipping is not enabled for the namespace")
+	ErrWorkflowTimeSkippingNotEnabled  = serviceerror.NewPermissionDenied("workflow time skipping is not enabled for the namespace", "")
 	ErrTimeSkippingFastForwardIDNotSet = serviceerror.NewInvalidArgument("time-skipping config invalid: fast_forward_id must be set")
 )
 
-func (c Config) validateAndPopulateWorkflowTimeSkippingConfig(tsc *commonpb.TimeSkippingConfig, namespace string) error {
+func (c *Config) validateAndPopulateWorkflowTimeSkippingConfig(tsc *commonpb.TimeSkippingConfig, namespace string) error {
 	return ValidateAndPopulateWorkflowTimeSkippingConfig(
 		tsc,
 		namespace,

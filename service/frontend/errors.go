@@ -118,7 +118,7 @@ var (
 	errListHistoryTasksNotAllowed = serviceerror.NewPermissionDenied("ListHistoryTasks feature is disabled on this cluster.", "")
 
 	errWorkflowTimeSkippingNotEnabled          = workflow.ErrWorkflowTimeSkippingNotEnabled
-	errScheduleTimeSkippingNotEnabled          = serviceerror.NewUnimplemented("schedule time skipping is not enabled for the namespace")
+	errScheduleTimeSkippingNotEnabled          = serviceerror.NewPermissionDenied("schedule time skipping is not enabled for the namespace", "")
 	errTimeSkippingStatePropagationNotInternal = serviceerror.NewPermissionDenied("Time skipping state propagation is reserved for internal Temporal services.", "")
 	errTimeSkippingFastForwardIDNotSet         = workflow.ErrTimeSkippingFastForwardIDNotSet
 )
