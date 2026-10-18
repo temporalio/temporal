@@ -18,7 +18,57 @@ var TransitionScheduleLocal = chasm.NewTransition(
 	[]namespacereplicationpb.ComponentStatus{namespacereplicationpb.COMPONENT_STATUS_RUNNING},
 	namespacereplicationpb.COMPONENT_STATUS_RUNNING,
 	func(c *NamespaceMutationComponent, ctx chasm.MutableContext, _ EventScheduleLocal) error {
-		ctx.AddTask(c, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{})
+		ctx.AddTask(c, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{Attempt: 0})
+		return nil
+	},
+)
+
+// localRetryBackoff returns the delay after the given number of unresolved
+// attempts. It uses the same capped doubling policy as peer retries without
+// relying on queue-local, in-memory attempt counters.
+func localRetryBackoff(completedAttempts int32) time.Duration {
+	delay := defaultLocalRetryInitialInterval
+	for attempt := int32(1); attempt < completedAttempts && delay < defaultLocalRetryMaximumInterval; attempt++ {
+		if delay > defaultLocalRetryMaximumInterval/2 {
+			return defaultLocalRetryMaximumInterval
+		}
+		delay *= 2
+	}
+	return min(delay, defaultLocalRetryMaximumInterval)
+}
+
+// EventLocalRetry records an unresolved local apply and schedules the next
+// durable attempt. Attempts is both the number of unresolved results recorded
+// and the generation carried by the next task.
+type EventLocalRetry struct {
+	Time     time.Time
+	Attempts int32
+	Delay    time.Duration
+	Err      error
+}
+
+var TransitionLocalRetry = chasm.NewTransition(
+	[]namespacereplicationpb.ComponentStatus{namespacereplicationpb.COMPONENT_STATUS_RUNNING},
+	namespacereplicationpb.COMPONENT_STATUS_RUNNING,
+	func(c *NamespaceMutationComponent, ctx chasm.MutableContext, event EventLocalRetry) error {
+		status := c.GetLocalApply()
+		if status == nil {
+			status = &namespacereplicationpb.LocalApplyStatus{}
+		}
+		if status.GetFirstAttemptAt() == nil {
+			status.FirstAttemptAt = timestamppb.New(event.Time)
+		}
+		status.Outcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING
+		status.AttemptCount = event.Attempts
+		status.LastAttemptAt = timestamppb.New(event.Time)
+		if event.Err != nil {
+			status.LastFailure = &failurepb.Failure{Message: event.Err.Error()}
+		}
+		c.LocalApply = status
+
+		ctx.AddTask(c, chasm.TaskAttributes{
+			ScheduledTime: event.Time.Add(event.Delay),
+		}, &namespacereplicationpb.ApplyLocalTask{Attempt: event.Attempts})
 		return nil
 	},
 )
@@ -57,26 +107,29 @@ func recordLocalSuccess(
 	resolvedAt time.Time,
 	outcome namespacereplicationpb.LocalApplyOutcome,
 ) error {
-	c.LocalApply = &namespacereplicationpb.LocalApplyStatus{
-		Outcome:    outcome,
-		ResolvedAt: timestamppb.New(resolvedAt),
+	status := c.GetLocalApply()
+	if status == nil {
+		status = &namespacereplicationpb.LocalApplyStatus{}
 	}
+	status.Outcome = outcome
+	status.ResolvedAt = timestamppb.New(resolvedAt)
+	status.Failure = nil
+	c.LocalApply = status
+
 	for _, cell := range c.GetMutation().GetPeerCells() {
 		ctx.AddTask(c, chasm.TaskAttributes{Destination: cell}, &namespacereplicationpb.ApplyPeerTask{
 			TargetCell: cell,
 			Attempt:    0,
 		})
 	}
-	// Completion — including the zero-peer case — is applied by the caller.
-	// Setting COMPLETED here would be overwritten by this transition's RUNNING
+	// Completion, including the zero-peer case, is applied by the caller.
+	// Setting COMPLETED here would be overwritten by the transition's RUNNING
 	// destination after the apply function returns.
 	return nil
 }
 
-// EventLocalFailed is emitted by ApplyLocalTask on a terminal failure (validation
-// error, or a CAS/write error whose readback proves this mutation did not commit).
-// Transitions to FAILED; peers are never contacted. This is the "no divergence
-// on caller-visible failure" guarantee.
+// EventLocalFailed records a terminal local phase failure when the mutation is
+// known not to have committed. Peers are never contacted.
 type EventLocalFailed struct {
 	Time    time.Time
 	Err     error
@@ -86,26 +139,68 @@ type EventLocalFailed struct {
 var TransitionLocalFailed = chasm.NewTransition(
 	[]namespacereplicationpb.ComponentStatus{namespacereplicationpb.COMPONENT_STATUS_RUNNING},
 	namespacereplicationpb.COMPONENT_STATUS_FAILED,
-	func(c *NamespaceMutationComponent, ctx chasm.MutableContext, event EventLocalFailed) error {
-		c.LocalApply = &namespacereplicationpb.LocalApplyStatus{
-			Outcome:    namespacereplicationpb.LOCAL_APPLY_OUTCOME_FAILED,
-			ResolvedAt: timestamppb.New(event.Time),
-			Failure: &failurepb.Failure{
-				Message: event.Err.Error(),
-				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
-					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
-						// Type carries the caller-facing error class so the handler's
-						// poll predicate can reconstruct the right gRPC error; only a
-						// CAS conflict / transient store failure (Unavailable) is retriable.
-						Type:         event.ErrType,
-						NonRetryable: event.ErrType != localFailureUnavailable,
-					},
-				},
-			},
+	func(c *NamespaceMutationComponent, _ chasm.MutableContext, event EventLocalFailed) error {
+		status := c.GetLocalApply()
+		if status == nil {
+			status = &namespacereplicationpb.LocalApplyStatus{}
 		}
+		status.Outcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_FAILED
+		status.ResolvedAt = timestamppb.New(event.Time)
+		status.Failure = localApplyFailure(event.Err, event.ErrType)
+		c.LocalApply = status
 		return nil
 	},
 )
+
+// EventLocalIndeterminate records a terminal local outcome when the retry
+// budget expires or a newer mutation erased the evidence needed to prove the
+// result. The component fails, but the outcome remains distinct from FAILED
+// because the metadata write may have committed. Peers are never contacted.
+type EventLocalIndeterminate struct {
+	Time     time.Time
+	Attempts int32
+	Err      error
+}
+
+var TransitionLocalIndeterminate = chasm.NewTransition(
+	[]namespacereplicationpb.ComponentStatus{namespacereplicationpb.COMPONENT_STATUS_RUNNING},
+	namespacereplicationpb.COMPONENT_STATUS_FAILED,
+	func(c *NamespaceMutationComponent, _ chasm.MutableContext, event EventLocalIndeterminate) error {
+		status := c.GetLocalApply()
+		if status == nil {
+			status = &namespacereplicationpb.LocalApplyStatus{}
+		}
+		if event.Attempts > status.GetAttemptCount() {
+			if status.GetFirstAttemptAt() == nil {
+				status.FirstAttemptAt = timestamppb.New(event.Time)
+			}
+			status.AttemptCount = event.Attempts
+			status.LastAttemptAt = timestamppb.New(event.Time)
+			if event.Err != nil {
+				status.LastFailure = &failurepb.Failure{Message: event.Err.Error()}
+			}
+		}
+		status.Outcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_INDETERMINATE
+		status.ResolvedAt = timestamppb.New(event.Time)
+		status.Failure = localApplyFailure(event.Err, localFailureUnavailable)
+		c.LocalApply = status
+		return nil
+	},
+)
+
+func localApplyFailure(err error, errType string) *failurepb.Failure {
+	return &failurepb.Failure{
+		Message: err.Error(),
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+			ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+				// Type carries the caller-facing error class so the handler's poll
+				// predicate can reconstruct the appropriate gRPC error.
+				Type:         errType,
+				NonRetryable: errType != localFailureUnavailable,
+			},
+		},
+	}
+}
 
 // EventPeerCompleted is emitted by ApplyPeerTask after a peer reaches a terminal
 // outcome (Applied, ShadowMatch, ShadowMismatch, NoOpStale, NotAdmitted, or

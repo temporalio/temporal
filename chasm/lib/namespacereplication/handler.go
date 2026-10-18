@@ -60,7 +60,8 @@ func (h *handler) TriggerNamespaceMutation(
 			case namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED,
 				namespacereplicationpb.LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW:
 				return &namespacereplicationpb.TriggerNamespaceMutationResponse{}, true, nil
-			case namespacereplicationpb.LOCAL_APPLY_OUTCOME_FAILED:
+			case namespacereplicationpb.LOCAL_APPLY_OUTCOME_FAILED,
+				namespacereplicationpb.LOCAL_APPLY_OUTCOME_INDETERMINATE:
 				failure := local.GetFailure()
 				return nil, true, localApplyError(failure.GetApplicationFailureInfo().GetType(), failure.GetMessage())
 			default:
