@@ -247,6 +247,11 @@ func (util *TimeSkippingInfoUtil) GetAccumulatedSkippedDuration() time.Duration 
 	return util.tsi.GetAccumulatedSkippedDuration().AsDuration()
 }
 
+// HasTimeSkippingClockOffset reports whether accumulated skipped time shifts the workflow clock.
+func (util *TimeSkippingInfoUtil) HasTimeSkippingClockOffset() bool {
+	return util.GetAccumulatedSkippedDuration() != 0
+}
+
 // HasPendingFastForward reports whether time skipping is enabled and carries a fast-forward that has
 // not yet been reached and has a real (non-zero) target time. A fast-forward on a disabled config is
 // not "pending" because it can never fire. All accesses go through nil-safe proto getters, so a nil
