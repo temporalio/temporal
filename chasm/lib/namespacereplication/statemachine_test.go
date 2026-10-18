@@ -10,6 +10,56 @@ import (
 	namespacereplicationpb "go.temporal.io/server/chasm/lib/namespacereplication/gen/namespacereplicationpb/v1"
 )
 
+func TestLocalRetryBackoff(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		attempt int32
+		want    time.Duration
+	}{
+		{name: "attempt below one uses base", attempt: 0, want: time.Second},
+		{name: "attempt one uses base", attempt: 1, want: time.Second},
+		{name: "attempt two doubles", attempt: 2, want: 2 * time.Second},
+		{name: "attempt three doubles again", attempt: 3, want: 4 * time.Second},
+		{name: "attempt nine remains below cap", attempt: 9, want: 256 * time.Second},
+		{name: "attempt ten is capped", attempt: 10, want: 5 * time.Minute},
+		{name: "large attempt is capped", attempt: 1000, want: 5 * time.Minute},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, localRetryBackoff(tc.attempt))
+		})
+	}
+}
+
+func TestTransitionLocalRetrySchedulesDurableTimer(t *testing.T) {
+	c := NewNamespaceMutationComponent(&namespacereplicationpb.NamespaceMutation{})
+	ctx := &chasm.MockMutableContext{}
+	now := time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC)
+	delay := 2 * time.Second
+
+	require.NoError(t, TransitionLocalRetry.Apply(c, ctx, EventLocalRetry{
+		Time:     now,
+		Attempts: 2,
+		Delay:    delay,
+		Err:      errors.New("outcome unresolved"),
+	}))
+
+	status := c.GetLocalApply()
+	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING, status.GetOutcome())
+	require.Equal(t, int32(2), status.GetAttemptCount())
+	require.Equal(t, now, status.GetFirstAttemptAt().AsTime())
+	require.Equal(t, now, status.GetLastAttemptAt().AsTime())
+	require.Equal(t, "outcome unresolved", status.GetLastFailure().GetMessage())
+	require.Len(t, ctx.Tasks, 1)
+	task, ok := ctx.Tasks[0].Payload.(*namespacereplicationpb.ApplyLocalTask)
+	require.True(t, ok)
+	require.Equal(t, int32(2), task.GetAttempt())
+	require.Empty(t, ctx.Tasks[0].Attributes.Destination)
+	require.Equal(t, now.Add(delay), ctx.Tasks[0].Attributes.ScheduledTime)
+}
+
 // TestPeerRetryBackoff pins the capped-exponential backoff schedule for peer
 // retries: base doubling per attempt, clamped at the configured maximum, and
 // overflow-safe for large attempt counts.

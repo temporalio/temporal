@@ -7,12 +7,20 @@ import (
 )
 
 const (
-	defaultPeerRetryInitialInterval    = time.Second
-	defaultPeerRetryMaximumInterval    = 5 * time.Minute
-	defaultPeerRetryExpirationInterval = 7 * 24 * time.Hour
+	defaultLocalRetryInitialInterval    = time.Second
+	defaultLocalRetryMaximumInterval    = 5 * time.Minute
+	defaultLocalRetryExpirationInterval = 5 * time.Minute
+	defaultPeerRetryInitialInterval     = time.Second
+	defaultPeerRetryMaximumInterval     = 5 * time.Minute
+	defaultPeerRetryExpirationInterval  = 7 * 24 * time.Hour
 )
 
 var (
+	LocalRetryExpirationInterval = dynamicconfig.NewGlobalDurationSetting(
+		"namespaceReplication.chasm.localRetry.expirationInterval",
+		defaultLocalRetryExpirationInterval,
+		`The total time to retry an unresolved local namespace mutation before recording an indeterminate terminal outcome.`,
+	)
 	PeerRetryInitialInterval = dynamicconfig.NewGlobalDurationSetting(
 		"namespaceReplication.chasm.peerRetry.initialInterval",
 		defaultPeerRetryInitialInterval,
@@ -31,17 +39,29 @@ var (
 )
 
 type config struct {
-	peerRetryInitialInterval    dynamicconfig.DurationPropertyFn
-	peerRetryMaximumInterval    dynamicconfig.DurationPropertyFn
-	peerRetryExpirationInterval dynamicconfig.DurationPropertyFn
+	localRetryExpirationInterval dynamicconfig.DurationPropertyFn
+	peerRetryInitialInterval     dynamicconfig.DurationPropertyFn
+	peerRetryMaximumInterval     dynamicconfig.DurationPropertyFn
+	peerRetryExpirationInterval  dynamicconfig.DurationPropertyFn
 }
 
 func configProvider(dc *dynamicconfig.Collection) *config {
 	return &config{
-		peerRetryInitialInterval:    PeerRetryInitialInterval.Get(dc),
-		peerRetryMaximumInterval:    PeerRetryMaximumInterval.Get(dc),
-		peerRetryExpirationInterval: PeerRetryExpirationInterval.Get(dc),
+		localRetryExpirationInterval: LocalRetryExpirationInterval.Get(dc),
+		peerRetryInitialInterval:     PeerRetryInitialInterval.Get(dc),
+		peerRetryMaximumInterval:     PeerRetryMaximumInterval.Get(dc),
+		peerRetryExpirationInterval:  PeerRetryExpirationInterval.Get(dc),
 	}
+}
+
+func (c *config) localRetryExpiration() time.Duration {
+	if c == nil || c.localRetryExpirationInterval == nil {
+		return defaultLocalRetryExpirationInterval
+	}
+	if interval := c.localRetryExpirationInterval(); interval > 0 {
+		return interval
+	}
+	return defaultLocalRetryExpirationInterval
 }
 
 type peerRetryPolicy struct {

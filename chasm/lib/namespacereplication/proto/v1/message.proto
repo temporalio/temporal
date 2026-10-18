@@ -42,7 +42,7 @@ message NamespaceMutationState {
   // Top-level lifecycle status. Drives LifecycleState().
   ComponentStatus status = 2;
 
-  // Local apply outcome, set once ApplyLocalTask completes.
+  // Local apply status, including durable retry progress and the terminal outcome.
   LocalApplyStatus local_apply = 3;
 
   // Per-peer apply outcomes, keyed by target cell name.
@@ -55,17 +55,18 @@ enum ComponentStatus {
   COMPONENT_STATUS_RUNNING = 1;
   // All tasks reached a terminal state (success or final failure). Component is done.
   COMPONENT_STATUS_COMPLETED = 2;
-  // Local apply failed. Peer fan-out was never attempted.
+  // Local apply failed or remained indeterminate. Peer fan-out was never attempted.
   COMPONENT_STATUS_FAILED = 3;
 }
 
-// LocalApplyOutcome reports the result of the local CAS write. Binary outcome:
-// pending until the write resolves, then committed or failed.
+// LocalApplyOutcome reports the result of the local CAS write. INDETERMINATE is
+// terminal, but kept distinct from FAILED because the write may have committed.
 enum LocalApplyOutcome {
   LOCAL_APPLY_OUTCOME_UNSPECIFIED = 0;
   LOCAL_APPLY_OUTCOME_PENDING = 1;
   LOCAL_APPLY_OUTCOME_COMMITTED = 2;
   LOCAL_APPLY_OUTCOME_FAILED = 3;
+  LOCAL_APPLY_OUTCOME_INDETERMINATE = 4;
 }
 
 // PeerApplyOutcome reports the result of a peer apply via the
@@ -90,10 +91,19 @@ enum PeerApplyOutcome {
 message LocalApplyStatus {
   // Current outcome of the local metadata-store apply.
   LocalApplyOutcome outcome = 1;
-  // Time the local apply reached COMMITTED or FAILED. Unset while pending.
+  // Time the local apply reached a terminal outcome. Unset while pending.
   google.protobuf.Timestamp resolved_at = 2;
-  // Failure detail when outcome is FAILED (e.g. CAS conflict, store unavailable).
+  // Failure detail when outcome is FAILED or INDETERMINATE.
   temporal.api.failure.v1.Failure failure = 3;
+  // Number of unresolved attempts recorded. This is also the attempt expected
+  // on the next ApplyLocalTask while the outcome remains PENDING.
+  int32 attempt_count = 4;
+  // Time the first unresolved attempt was recorded. This starts the retry budget.
+  google.protobuf.Timestamp first_attempt_at = 5;
+  // Time the most recent unresolved attempt was recorded.
+  google.protobuf.Timestamp last_attempt_at = 6;
+  // Most recent unresolved failure, retained for diagnostics.
+  temporal.api.failure.v1.Failure last_failure = 7;
 }
 
 message PeerApplyStatus {
