@@ -9,7 +9,7 @@ import (
 )
 
 var (
-	ErrWorkflowTimeSkippingNotEnabled  = serviceerror.NewUnimplemented("workflow time skipping is not enabled for the namespace.")
+	ErrWorkflowTimeSkippingNotEnabled  = serviceerror.NewUnimplemented("workflow time skipping is not enabled for the namespace")
 	ErrTimeSkippingFastForwardIDNotSet = serviceerror.NewInvalidArgument("time-skipping config invalid: fast_forward_id must be set")
 )
 

@@ -686,7 +686,7 @@ func (suite *ScheduleCHASMSuite) TestTimeSkippingDynamicConfigGate() {
 	})
 	var unimplemented *serviceerror.Unimplemented
 	require.ErrorAs(t, err, &unimplemented)
-	require.ErrorContains(t, err, "Schedule time skipping is not enabled for the namespace")
+	require.ErrorContains(t, err, "schedule time skipping is not enabled for the namespace")
 
 	s.OverrideDynamicConfig(dynamicconfig.CHASMSchedulerTimeSkippingEnabled, true)
 	patchSchedule(ctx, t, s, sid, patch)
@@ -765,7 +765,7 @@ func (suite *ScheduleCHASMSuite) TestTimeSkippingFeatureDisabledWhileWorkflowRun
 	})
 	var unimplemented *serviceerror.Unimplemented
 	require.ErrorAs(t, err, &unimplemented)
-	require.ErrorContains(t, err, "Schedule time skipping is not enabled for the namespace")
+	require.ErrorContains(t, err, "schedule time skipping is not enabled for the namespace")
 
 	patchSchedule(ctx, t, s, sid, &schedulepb.SchedulePatch{Unpause: "feature flag turned off"})
 	await.Require(ctx, t, func(at *await.T) {
