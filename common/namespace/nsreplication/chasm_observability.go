@@ -84,13 +84,25 @@ func RecordCHASMAuthoritativeApply(
 		)
 	}
 	if observation.PendingAge != nil {
-		metrics.NamespaceReplicationCHASMPeerPendingAge.With(metricsHandler).Record(
-			max(*observation.PendingAge, 0),
-			tags...,
-		)
+		pendingAge := max(*observation.PendingAge, 0)
+		switch observation.Stage {
+		case CHASMApplyStageLocal:
+			metrics.NamespaceReplicationCHASMLocalPendingAge.With(metricsHandler).Record(pendingAge, tags...)
+		case CHASMApplyStagePeer:
+			metrics.NamespaceReplicationCHASMPeerPendingAge.With(metricsHandler).Record(pendingAge, tags...)
+		default:
+			// Pending-age metrics are defined only for retry-owning local and peer stages.
+		}
 	}
 	if observation.PendingAgeThresholdExceeded {
-		metrics.NamespaceReplicationCHASMPeerPendingThresholdExceeded.With(metricsHandler).Record(1, tags...)
+		switch observation.Stage {
+		case CHASMApplyStageLocal:
+			metrics.NamespaceReplicationCHASMLocalPendingThresholdExceeded.With(metricsHandler).Record(1, tags...)
+		case CHASMApplyStagePeer:
+			metrics.NamespaceReplicationCHASMPeerPendingThresholdExceeded.With(metricsHandler).Record(1, tags...)
+		default:
+			// Pending-threshold metrics are defined only for retry-owning local and peer stages.
+		}
 	}
 }
 

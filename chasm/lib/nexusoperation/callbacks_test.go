@@ -459,7 +459,7 @@ func TestCompletionCallbacksRoundTripThroughTheTree(t *testing.T) {
 		ScheduledTime: timestamppb.New(defaultTime),
 	})
 	op.RequestData = chasm.NewDataField(ctx, &nexusoperationpb.OperationRequestData{})
-	op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibilityWithData(ctx, nil, nil))
+	op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibility(ctx))
 	require.NoError(t, op.addCompletionCallbacks(ctx, "req-id", []*commonpb.Callback{
 		newNexusCallback(),
 	}, 10))
@@ -490,7 +490,7 @@ func TestDescribeResponseIncludesCompletionCallbacks(t *testing.T) {
 	newOp := func(ctx chasm.MutableContext) *Operation {
 		op := newTestOperation()
 		op.RequestData = chasm.NewDataField(ctx, &nexusoperationpb.OperationRequestData{})
-		op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibilityWithData(ctx, nil, nil))
+		op.Visibility = chasm.NewComponentField(ctx, chasm.NewVisibility(ctx))
 		return op
 	}
 	req := &nexusoperationpb.DescribeNexusOperationRequest{

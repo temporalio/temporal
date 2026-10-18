@@ -306,6 +306,7 @@ func (d *namespaceHandler) RegisterNamespace(
 				replicationConfig.GetClusters(),
 				nil,
 			),
+			isGlobalNamespace,
 			namespaceID+":"+uuid.NewString(),
 			namespaceMutationModeAuthoritative,
 		); err != nil {
@@ -754,6 +755,7 @@ func (d *namespaceHandler) UpdateNamespace(
 				updateReq.Namespace,
 				notificationVersion,
 				chasmPeerCells,
+				isGlobalNamespace,
 				chasmBusinessID,
 				namespaceMutationModeAuthoritative,
 			); err != nil {
@@ -795,6 +797,7 @@ func (d *namespaceHandler) UpdateNamespace(
 			},
 			notificationVersion,
 			chasmPeerCells,
+			isGlobalNamespace,
 			chasmBusinessID,
 			namespaceMutationModeReplicateOnly,
 		); err != nil {
@@ -1655,6 +1658,7 @@ func (d *namespaceHandler) invokeShadowNamespaceMutation(
 			chasmDetail,
 			expectedVersion,
 			peerCells,
+			isGlobalNamespace,
 			businessID,
 			namespaceMutationModeShadow,
 		); err != nil {
@@ -1717,6 +1721,7 @@ func (d *namespaceHandler) triggerNamespaceMutation(
 	detail *persistencespb.NamespaceDetail,
 	expectedVersion int64,
 	peerCells []string,
+	isGlobalNamespace bool,
 	businessID string,
 	mode namespaceMutationMode,
 ) (*namespacereplicationpb.TriggerNamespaceMutationResponse, error) {
@@ -1726,12 +1731,13 @@ func (d *namespaceHandler) triggerNamespaceMutation(
 		SystemNamespaceId: primitives.SystemNamespaceID,
 		BusinessId:        businessID,
 		Mutation: &namespacereplicationpb.NamespaceMutation{
-			Operation:       operation,
-			NamespaceDetail: detail,
-			ExpectedVersion: expectedVersion,
-			PeerCells:       peerCells,
-			Shadow:          mode == namespaceMutationModeShadow,
-			ReplicateOnly:   mode == namespaceMutationModeReplicateOnly,
+			Operation:         operation,
+			NamespaceDetail:   detail,
+			ExpectedVersion:   expectedVersion,
+			IsGlobalNamespace: isGlobalNamespace,
+			PeerCells:         peerCells,
+			Shadow:            mode == namespaceMutationModeShadow,
+			ReplicateOnly:     mode == namespaceMutationModeReplicateOnly,
 		},
 	})
 }

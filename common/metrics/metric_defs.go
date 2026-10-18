@@ -1613,6 +1613,14 @@ var (
 		"namespace_replication_chasm_apply_latency",
 		WithDescription("Latency of authoritative CHASM namespace mutation attempts by apply stage."),
 	)
+	NamespaceReplicationCHASMLocalPendingAge = NewTimerDef(
+		"namespace_replication_chasm_local_pending_age",
+		WithDescription("Age of an unresolved authoritative CHASM local apply when a retry is durably scheduled."),
+	)
+	NamespaceReplicationCHASMLocalPendingThresholdExceeded = NewCounterDef(
+		"namespace_replication_chasm_local_pending_threshold_exceeded",
+		WithDescription("The number of authoritative CHASM local retries durably scheduled after the local apply has been pending for at least one minute."),
+	)
 	NamespaceReplicationCHASMPeerPendingLatency = NewTimerDef(
 		"namespace_replication_chasm_peer_pending_latency",
 		WithDescription("Time from the first authoritative CHASM peer attempt until a terminal peer outcome."),

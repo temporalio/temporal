@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -61,6 +62,12 @@ func TestValidateTriggerNamespaceMutationRequest(t *testing.T) {
 			name: "missing mutation",
 			mutate: func(req *namespacereplicationpb.TriggerNamespaceMutationRequest) {
 				req.Mutation = nil
+			},
+		},
+		{
+			name: "local namespace rejected",
+			mutate: func(req *namespacereplicationpb.TriggerNamespaceMutationRequest) {
+				req.Mutation.IsGlobalNamespace = false
 			},
 		},
 		{
@@ -231,6 +238,41 @@ func TestTriggerNamespaceMutationRetryUsesExistingExecution(t *testing.T) {
 	}
 }
 
+func TestTriggerNamespaceMutationIndeterminateReturnsUnavailable(t *testing.T) {
+	logger := log.NewTestLogger()
+	registry := chasm.NewRegistry(logger)
+	require.NoError(t, registry.Register(&chasm.CoreLibrary{}))
+	require.NoError(t, registry.Register(NewNilLibrary()))
+	engine := chasmtest.NewEngine(t, registry)
+	ctx := chasm.NewEngineContext(context.Background(), engine)
+	req := validTriggerNamespaceMutationRequest()
+	_, err := chasm.StartExecution(
+		ctx,
+		executionKey(req),
+		func(chasm.MutableContext, *namespacereplicationpb.NamespaceMutation) (*NamespaceMutationComponent, error) {
+			component := NewNamespaceMutationComponent(req.GetMutation())
+			component.Status = namespacereplicationpb.COMPONENT_STATUS_FAILED
+			component.LocalApply.Outcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_INDETERMINATE
+			component.LocalApply.Failure = &failurepb.Failure{
+				Message: "local apply outcome remained unresolved",
+				FailureInfo: &failurepb.Failure_ApplicationFailureInfo{
+					ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{Type: localFailureUnavailable},
+				},
+			}
+			return component, nil
+		},
+		req.GetMutation(),
+		chasm.WithRequestID(req.GetBusinessId()),
+	)
+	require.NoError(t, err)
+
+	response, err := newHandler(logger).TriggerNamespaceMutation(ctx, req)
+	require.Nil(t, response)
+	var unavailable *serviceerror.Unavailable
+	require.ErrorAs(t, err, &unavailable)
+	require.ErrorContains(t, err, "local apply outcome remained unresolved")
+}
+
 func validTriggerNamespaceMutationRequest() *namespacereplicationpb.TriggerNamespaceMutationRequest {
 	const namespaceID = "namespace-id"
 	return &namespacereplicationpb.TriggerNamespaceMutationRequest{
@@ -238,7 +280,8 @@ func validTriggerNamespaceMutationRequest() *namespacereplicationpb.TriggerNames
 		SystemNamespaceId: primitives.SystemNamespaceID,
 		BusinessId:        namespaceID + ":mutation-id",
 		Mutation: &namespacereplicationpb.NamespaceMutation{
-			Operation: enumsspb.NAMESPACE_OPERATION_UPDATE,
+			Operation:         enumsspb.NAMESPACE_OPERATION_UPDATE,
+			IsGlobalNamespace: true,
 			NamespaceDetail: &persistencespb.NamespaceDetail{
 				Info:              &persistencespb.NamespaceInfo{Id: namespaceID},
 				Config:            &persistencespb.NamespaceConfig{},

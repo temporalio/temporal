@@ -1,6 +1,7 @@
 package namespacereplication
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -22,6 +23,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	nsreplicationcommon "go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/softassert"
 	"go.temporal.io/server/common/testing/testhooks"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	"go.uber.org/fx"
@@ -37,6 +39,7 @@ type applyLocalTaskHandlerOptions struct {
 
 	MetadataManager persistence.MetadataManager
 	ClusterMetadata cluster.Metadata
+	Config          *config
 	MetricsHandler  metrics.Handler
 	Logger          log.Logger
 	EventLogger     otellog.Logger
@@ -49,6 +52,7 @@ type applyLocalTaskHandler struct {
 
 	metadataManager              persistence.MetadataManager
 	currentCluster               string
+	config                       *config
 	metricsHandler               metrics.Handler
 	logger                       log.Logger
 	eventLogger                  otellog.Logger
@@ -56,10 +60,28 @@ type applyLocalTaskHandler struct {
 	testHooks                    testhooks.TestHooks
 }
 
+type localApplyResolution int
+
+const (
+	localApplyResolutionUnresolved localApplyResolution = iota
+	localApplyResolutionCommitted
+	localApplyResolutionFailed
+	localApplyResolutionIndeterminate
+)
+
+type localMutationPersistenceState int
+
+const (
+	localMutationPersistenceStateAbsent localMutationPersistenceState = iota
+	localMutationPersistenceStateMatching
+	localMutationPersistenceStateDifferent
+)
+
 func newApplyLocalTaskHandler(opts applyLocalTaskHandlerOptions) *applyLocalTaskHandler {
 	return &applyLocalTaskHandler{
 		metadataManager: opts.MetadataManager,
 		currentCluster:  opts.ClusterMetadata.GetCurrentClusterName(),
+		config:          opts.Config,
 		metricsHandler:  opts.MetricsHandler,
 		logger:          opts.Logger,
 		eventLogger:     opts.EventLogger,
@@ -70,13 +92,13 @@ func newApplyLocalTaskHandler(opts applyLocalTaskHandlerOptions) *applyLocalTask
 	}
 }
 
-// Validate gates execution: only run if the component is still RUNNING and the
-// local phase hasn't already resolved.
+// Validate gates execution: only run if the component is still RUNNING, the
+// local apply is pending, and the persisted retry generation matches the task.
 func (h *applyLocalTaskHandler) Validate(
 	_ chasm.Context,
 	c *NamespaceMutationComponent,
 	_ chasm.TaskInvocation,
-	_ *namespacereplicationpb.ApplyLocalTask,
+	task *namespacereplicationpb.ApplyLocalTask,
 ) (bool, error) {
 	if c.GetStatus() != namespacereplicationpb.COMPONENT_STATUS_RUNNING {
 		return false, nil
@@ -84,28 +106,31 @@ func (h *applyLocalTaskHandler) Validate(
 	if c.GetLocalApply().GetOutcome() != namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING {
 		return false, nil
 	}
-	return true, nil
+	return c.GetLocalApply().GetAttemptCount() == task.GetAttempt(), nil
 }
 
 // Execute writes authoritative mutations to the local metadata store with
 // strict version-CAS. Shadow and replicate-only mutations skip the local write;
-// only shadow also suppresses destination writes. Authoritative ambiguous
-// results are reconciled so a retry cannot turn a committed source mutation
-// into a terminal failure.
+// only shadow also suppresses destination writes. Ambiguous authoritative
+// results are reconciled against current namespace state and retried with a
+// durable timer. A newer namespace version fences an UPDATE whose exact outcome
+// can no longer be determined; later mutations converge current peers, while a
+// peer removed only by the fenced mutation may require operator repair.
 func (h *applyLocalTaskHandler) Execute(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	_ chasm.TaskAttributes,
-	_ *namespacereplicationpb.ApplyLocalTask,
+	task *namespacereplicationpb.ApplyLocalTask,
 ) error {
 	startTime := time.Now() // nolint:forbidigo // Wall-clock time is used only for latency metrics.
 	// Read the mutation payload from component state.
 	type loadResult struct {
-		Operation     enumsspb.NamespaceOperation
-		Detail        *persistencespb.NamespaceDetail
-		ExpectedVer   int64
-		Shadow        bool
-		ReplicateOnly bool
+		Operation         enumsspb.NamespaceOperation
+		Detail            *persistencespb.NamespaceDetail
+		ExpectedVer       int64
+		IsGlobalNamespace bool
+		Shadow            bool
+		ReplicateOnly     bool
 	}
 	loaded, err := chasm.ReadComponent(
 		ctx,
@@ -113,21 +138,18 @@ func (h *applyLocalTaskHandler) Execute(
 		func(c *NamespaceMutationComponent, _ chasm.Context, _ chasm.NoValue) (loadResult, error) {
 			m := c.GetMutation()
 			return loadResult{
-				Operation:     m.GetOperation(),
-				Detail:        common.CloneProto(m.GetNamespaceDetail()),
-				ExpectedVer:   m.GetExpectedVersion(),
-				Shadow:        m.GetShadow(),
-				ReplicateOnly: m.GetReplicateOnly(),
+				Operation:         m.GetOperation(),
+				Detail:            common.CloneProto(m.GetNamespaceDetail()),
+				ExpectedVer:       m.GetExpectedVersion(),
+				IsGlobalNamespace: m.GetIsGlobalNamespace(),
+				Shadow:            m.GetShadow(),
+				ReplicateOnly:     m.GetReplicateOnly(),
 			}, nil
 		},
 		nil,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to read chasm component details: %w", err)
-	}
-	if loaded.Shadow {
-		_, resolveErr := h.resolveLocal(ctx, ref, true)
-		return resolveErr
 	}
 	namespaceTask := nsreplicationcommon.NamespaceDetailToTaskAttributes(
 		loaded.Operation,
@@ -139,15 +161,7 @@ func (h *applyLocalTaskHandler) Execute(
 	observeResult := func(applyErr error, recordErr error) {
 		h.observeLocalApplyResult(ref, namespaceTask, applyErr, recordErr, startTime)
 	}
-	if loaded.ReplicateOnly {
-		// A replicate-only mutation represents a legacy no-op UpdateNamespace: the
-		// source row is already the desired snapshot, but peer fan-out must still
-		// run authoritatively. Resolve the local phase as committed while keeping
-		// Shadow false so ApplyPeerTask writes the snapshot at destinations.
-		terminal, resolveErr := h.resolveLocal(ctx, ref, false)
-		observe(stateTransitionOutcome(nsreplicationcommon.CHASMApplyOutcomeNoChange, resolveErr), resolveErr, map[string]any{
-			"replicate_only": true,
-		})
+	emitTerminal := func(terminal *componentTerminalObservation, terminalErr error) {
 		emitComponentTerminal(
 			h.eventLogger,
 			h.emitNamespaceLifecycleEvents,
@@ -155,8 +169,53 @@ func (h *applyLocalTaskHandler) Execute(
 			ref,
 			namespaceTask,
 			terminal,
-			nil,
+			terminalErr,
 		)
+	}
+	recordRetry := func(retryErr error) error {
+		recorded, recordErr := h.recordLocalRetry(
+			ctx,
+			ref,
+			loaded.Detail.GetInfo().GetId(),
+			task,
+			retryErr,
+		)
+		if recorded.attemptCount == 0 {
+			recorded.attemptCount = int(task.GetAttempt()) + 1
+		}
+		h.observeLocalRetry(ref, namespaceTask, recorded, retryErr, recordErr, startTime)
+		if recordErr == nil {
+			emitTerminal(recorded.componentTerminal, retryErr)
+		}
+		return recordErr
+	}
+	if !loaded.IsGlobalNamespace {
+		applyErr := serviceerror.NewInvalidArgument("CHASM namespace replication only supports global namespaces")
+		terminal, recordErr := h.recordLocalFailure(
+			ctx,
+			ref,
+			loaded.Detail.GetInfo().GetId(),
+			task,
+			applyErr,
+		)
+		observeResult(applyErr, recordErr)
+		emitTerminal(terminal, applyErr)
+		return recordErr
+	}
+	if loaded.Shadow {
+		_, resolveErr := h.resolveLocal(ctx, ref, task, true)
+		return resolveErr
+	}
+	if loaded.ReplicateOnly {
+		// A replicate-only mutation represents a legacy no-op UpdateNamespace: the
+		// source row is already the desired snapshot, but peer fan-out must still
+		// run authoritatively. Resolve the local phase as committed while keeping
+		// Shadow false so ApplyPeerTask writes the snapshot at destinations.
+		terminal, resolveErr := h.resolveLocal(ctx, ref, task, false)
+		observe(stateTransitionOutcome(nsreplicationcommon.CHASMApplyOutcomeNoChange, resolveErr), resolveErr, map[string]any{
+			"replicate_only": true,
+		})
+		emitTerminal(terminal, nil)
 		return resolveErr
 	}
 
@@ -169,12 +228,12 @@ func (h *applyLocalTaskHandler) Execute(
 	case enumsspb.NAMESPACE_OPERATION_CREATE:
 		_, applyErr = h.metadataManager.CreateNamespace(ctx, &persistence.CreateNamespaceRequest{
 			Namespace:         loaded.Detail,
-			IsGlobalNamespace: true,
+			IsGlobalNamespace: loaded.IsGlobalNamespace,
 		})
 	case enumsspb.NAMESPACE_OPERATION_UPDATE:
 		applyErr = h.metadataManager.UpdateNamespace(ctx, &persistence.UpdateNamespaceRequest{
 			Namespace:           loaded.Detail,
-			IsGlobalNamespace:   true,
+			IsGlobalNamespace:   loaded.IsGlobalNamespace,
 			NotificationVersion: loaded.ExpectedVer,
 		})
 	default:
@@ -183,88 +242,88 @@ func (h *applyLocalTaskHandler) Execute(
 			ctx,
 			ref,
 			loaded.Detail.GetInfo().GetId(),
+			task,
 			applyErr,
 		)
 		observeResult(applyErr, recordErr)
-		emitComponentTerminal(
-			h.eventLogger,
-			h.emitNamespaceLifecycleEvents,
-			h.currentCluster,
-			ref,
-			namespaceTask,
-			terminal,
-			applyErr,
-		)
+		emitTerminal(terminal, applyErr)
 		return recordErr
 	}
 	if applyErr != nil {
-		if shouldReconcileLocalApply(loaded.Operation, applyErr) {
-			isCurrentPersistedState, reconcileErr := h.localMutationIsCurrentPersistedState(
+		var resolution localApplyResolution
+		var reconcileErr error
+		switch loaded.Operation {
+		case enumsspb.NAMESPACE_OPERATION_CREATE:
+			resolution, reconcileErr = h.reconcileCreateLocalApply(ctx, loaded.Detail, applyErr)
+		case enumsspb.NAMESPACE_OPERATION_UPDATE:
+			resolution, reconcileErr = h.reconcileUpdateLocalApply(
 				ctx,
-				loaded.Operation,
 				loaded.Detail,
 				loaded.ExpectedVer,
-			)
-			if reconcileErr != nil {
-				// Keep the component pending until the durable task can determine
-				// whether the metadata write committed.
-				resultErr := fmt.Errorf("reconcile local namespace mutation after %v: %w", applyErr, reconcileErr)
-				observe(nsreplicationcommon.CHASMApplyOutcomeRetryableError, resultErr, nil)
-				return resultErr
-			}
-			if isCurrentPersistedState {
-				h.logger.Info(
-					"namespacereplication recovered committed local apply",
-					tag.WorkflowNamespaceID(loaded.Detail.GetInfo().GetId()),
-					tag.NewStringTag("business_id", ref.BusinessID),
-				)
-				terminal, resolveErr := h.resolveLocal(ctx, ref, false)
-				observe(stateTransitionOutcome(nsreplicationcommon.CHASMApplyOutcomeApplied, resolveErr), resolveErr, map[string]any{
-					"reconciled": true,
-				})
-				emitComponentTerminal(
-					h.eventLogger,
-					h.emitNamespaceLifecycleEvents,
-					h.currentCluster,
-					ref,
-					namespaceTask,
-					terminal,
-					nil,
-				)
-				return resolveErr
-			}
-
-			resolvedAsFailure, resolutionErr := h.localMutationResolvedAsFailure(
-				ctx,
-				loaded.Operation,
-				loaded.ExpectedVer,
+				ref.BusinessID,
 				applyErr,
 			)
-			if resolutionErr != nil {
-				resultErr := fmt.Errorf("resolve local namespace mutation after %v: %w", applyErr, resolutionErr)
-				observe(nsreplicationcommon.CHASMApplyOutcomeRetryableError, resultErr, nil)
-				return resultErr
-			}
-			if !resolvedAsFailure {
-				// A read immediately after a timed-out write can still see the old
-				// value even when that write later commits.
-				resultErr := fmt.Errorf("local namespace mutation outcome remains unresolved: %w", applyErr)
-				observe(nsreplicationcommon.CHASMApplyOutcomeRetryableError, resultErr, nil)
-				return resultErr
-			}
+		default:
+			_, recordErr := h.recordLocalFailure(
+				ctx,
+				ref,
+				loaded.Detail.GetInfo().GetId(),
+				task,
+				fmt.Errorf("unsupported namespace operation: %v", loaded.Operation),
+			)
+			return recordErr
 		}
-		terminal, recordErr := h.recordLocalFailure(ctx, ref, loaded.Detail.GetInfo().GetId(), applyErr)
-		observeResult(applyErr, recordErr)
-		emitComponentTerminal(
-			h.eventLogger,
-			h.emitNamespaceLifecycleEvents,
-			h.currentCluster,
-			ref,
-			namespaceTask,
-			terminal,
-			applyErr,
-		)
-		return recordErr
+		if reconcileErr != nil {
+			// Persist the retry before acknowledging this task so queue-local retry
+			// limits cannot strand the component in PENDING.
+			return recordRetry(
+				fmt.Errorf("reconcile local namespace mutation after %v: %w", applyErr, reconcileErr),
+			)
+		}
+		switch resolution {
+		case localApplyResolutionCommitted:
+			h.logger.Info(
+				"namespacereplication recovered committed local apply",
+				tag.WorkflowNamespaceID(loaded.Detail.GetInfo().GetId()),
+				tag.NewStringTag("business_id", ref.BusinessID),
+			)
+			terminal, resolveErr := h.resolveLocal(ctx, ref, task, false)
+			observe(stateTransitionOutcome(nsreplicationcommon.CHASMApplyOutcomeApplied, resolveErr), resolveErr, map[string]any{
+				"reconciled": true,
+			})
+			emitTerminal(terminal, nil)
+			return resolveErr
+		case localApplyResolutionUnresolved:
+			// A read immediately after a timed-out write can still see the old
+			// value even when that write later commits.
+			return recordRetry(
+				fmt.Errorf("local namespace mutation outcome remains unresolved: %w", applyErr),
+			)
+		case localApplyResolutionFailed:
+			terminal, recordErr := h.recordLocalFailure(ctx, ref, loaded.Detail.GetInfo().GetId(), task, applyErr)
+			observeResult(applyErr, recordErr)
+			emitTerminal(terminal, applyErr)
+			return recordErr
+		case localApplyResolutionIndeterminate:
+			indeterminateErr := fmt.Errorf(
+				"local namespace mutation outcome was fenced by a newer version: %w",
+				applyErr,
+			)
+			terminal, recordErr := h.recordLocalIndeterminate(
+				ctx,
+				ref,
+				loaded.Detail.GetInfo().GetId(),
+				task,
+				indeterminateErr,
+			)
+			observe(stateTransitionOutcome(nsreplicationcommon.CHASMApplyOutcomeTerminalError, recordErr), cmp.Or(recordErr, indeterminateErr), map[string]any{
+				"resolution": "fenced_ambiguous",
+			})
+			emitTerminal(terminal, indeterminateErr)
+			return recordErr
+		default:
+			return fmt.Errorf("unknown local namespace mutation resolution: %v", resolution)
+		}
 	}
 	// Commit transition: record success and schedule peer fan-out. When there are
 	// no peers (single-cluster global namespace) allPeersTerminal() is already true,
@@ -273,57 +332,60 @@ func (h *applyLocalTaskHandler) Execute(
 	// destination after Apply returns (TransitionLocalCommitted's is RUNNING), so a
 	// COMPLETED set inside it would be clobbered — the same reason peer completion
 	// needs its own transition.
-	terminal, commitErr := h.commitAfterMetadataWrite(ctx, ref, namespace.Name(loaded.Detail.GetInfo().GetName()))
-	observe(stateTransitionOutcome(nsreplicationcommon.CHASMApplyOutcomeApplied, commitErr), commitErr, nil)
-	emitComponentTerminal(
-		h.eventLogger,
-		h.emitNamespaceLifecycleEvents,
-		h.currentCluster,
+	terminal, commitErr := h.commitAfterMetadataWrite(
+		ctx,
 		ref,
-		namespaceTask,
-		terminal,
-		nil,
+		task,
+		namespace.Name(loaded.Detail.GetInfo().GetName()),
 	)
+	observe(stateTransitionOutcome(nsreplicationcommon.CHASMApplyOutcomeApplied, commitErr), commitErr, nil)
+	emitTerminal(terminal, nil)
 	return commitErr
 }
 
-// localMutationResolvedAsFailure reports whether an ambiguous local write can
-// now safely be resolved as a caller-visible failure. A true result means either
-// this attempt definitely did not commit, or an UPDATE's CAS slot is gone. The
-// latter may mean an earlier attempt committed and was subsequently superseded;
-// in that case the newer full namespace snapshot owns peer fan-out.
-func (h *applyLocalTaskHandler) localMutationResolvedAsFailure(
+// reconcileCreateLocalApply resolves a failed CREATE attempt by comparing the
+// current namespace identity with the request. Finding a global namespace by
+// the requested ID proves that an earlier attempt committed, even if a later
+// UPDATE changed its mutable state or name. A name lookup that resolves to a
+// different ID proves a collision. If both identity lookups are absent, an
+// earlier timed-out attempt can still commit, so the durable task must retry.
+func (h *applyLocalTaskHandler) reconcileCreateLocalApply(
 	ctx context.Context,
-	operation enumsspb.NamespaceOperation,
-	expectedVersion int64,
+	detail *persistencespb.NamespaceDetail,
 	applyErr error,
-) (bool, error) {
-	if _, ok := errors.AsType[*serviceerror.NamespaceAlreadyExists](applyErr); ok &&
-		operation == enumsspb.NAMESPACE_OPERATION_CREATE {
-		// The exact-state check already ruled out a retry of our own successful
-		// create, so the existing row belongs to a conflicting create.
-		return true, nil
-	}
-	if !persistence.OperationPossiblySucceeded(applyErr) {
-		return true, nil
-	}
-	if operation != enumsspb.NAMESPACE_OPERATION_UPDATE {
-		return false, nil
+) (localApplyResolution, error) {
+	errType := classifyLocalErr(applyErr)
+	if errType != localFailureUnavailable && errType != localFailureAlreadyExists {
+		return localApplyResolutionFailed, nil
 	}
 
-	metadata, err := h.metadataManager.GetMetadata(ctx)
+	persistedState, err := h.readCreateLocalMutationPersistenceState(ctx, detail)
 	if err != nil {
-		return false, err
+		return localApplyResolutionUnresolved, err
 	}
-	// UPDATE consumes expectedVersion from the cell-global metadata counter. A
-	// later counter proves that CAS slot can no longer be won; until then, an
-	// ambiguous write can still commit after our namespace read and must retry.
-	return metadata.NotificationVersion > expectedVersion, nil
+	switch persistedState {
+	case localMutationPersistenceStateMatching:
+		return localApplyResolutionCommitted, nil
+	case localMutationPersistenceStateDifferent:
+		// A different ID or name means the original CREATE snapshot is no longer
+		// current. Fail rather than fan out stale state.
+		return localApplyResolutionFailed, nil
+	case localMutationPersistenceStateAbsent:
+		// The current attempt may have definitely failed, but an earlier timed-out
+		// attempt can still commit. Absence alone cannot resolve the mutation.
+		return localApplyResolutionUnresolved, nil
+	default:
+		return localApplyResolutionUnresolved, fmt.Errorf(
+			"unknown local namespace persistence state: %v",
+			persistedState,
+		)
+	}
 }
 
 func (h *applyLocalTaskHandler) commitAfterMetadataWrite(
 	ctx context.Context,
 	ref chasm.ComponentRef,
+	task *namespacereplicationpb.ApplyLocalTask,
 	namespaceName namespace.Name,
 ) (*componentTerminalObservation, error) {
 	if fault, ok := testhooks.Get(
@@ -335,56 +397,124 @@ func (h *applyLocalTaskHandler) commitAfterMetadataWrite(
 			return nil, err
 		}
 	}
-	return h.resolveLocal(ctx, ref, false)
+	return h.resolveLocal(ctx, ref, task, false)
 }
 
-func shouldReconcileLocalApply(
-	operation enumsspb.NamespaceOperation,
-	applyErr error,
-) bool {
-	errType := classifyLocalErr(applyErr)
-	return errType == localFailureUnavailable ||
-		(operation == enumsspb.NAMESPACE_OPERATION_CREATE && errType == localFailureAlreadyExists)
-}
-
-// localMutationIsCurrentPersistedState reports whether the current namespace
-// row can be attributed to this mutation. It deliberately returns false when a
-// later same-namespace update has superseded this mutation, even if the complete
-// namespace snapshots happen to match.
-func (h *applyLocalTaskHandler) localMutationIsCurrentPersistedState(
+// reconcileUpdateLocalApply resolves a failed UPDATE attempt by reading the
+// cell-global notification counter before the namespace row. If the counter has
+// not passed this mutation's CAS version, an in-flight write may still commit
+// and the result remains unresolved. Once the counter has passed that version,
+// the namespace row determines whether this mutation committed or was fenced.
+func (h *applyLocalTaskHandler) reconcileUpdateLocalApply(
 	ctx context.Context,
-	operation enumsspb.NamespaceOperation,
 	detail *persistencespb.NamespaceDetail,
 	expectedVersion int64,
-) (bool, error) {
+	businessID string,
+	applyErr error,
+) (localApplyResolution, error) {
+	if classifyLocalErr(applyErr) != localFailureUnavailable {
+		return localApplyResolutionFailed, nil
+	}
+
+	// Read the counter first. If an in-flight write commits after this read, the
+	// counter observed here remains at expectedVersion and the result stays
+	// unresolved instead of being misclassified from a later namespace-row read.
+	metadata, err := h.metadataManager.GetMetadata(ctx)
+	if err != nil {
+		return localApplyResolutionUnresolved, err
+	}
+	if metadata.NotificationVersion <= expectedVersion {
+		return localApplyResolutionUnresolved, nil
+	}
+
 	namespaceID := detail.GetInfo().GetId()
 	if namespaceID == "" {
-		return false, nil
+		return localApplyResolutionFailed, nil
 	}
 
 	response, err := h.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{ID: namespaceID})
 	if err != nil {
 		if _, ok := errors.AsType[*serviceerror.NamespaceNotFound](err); ok {
-			return false, nil
+			// Once the counter has passed expectedVersion, retrying can no longer
+			// win the CAS. A deletion may make the namespace absent from this
+			// ID-based lookup and cannot be represented by this UPDATE snapshot.
+			return localApplyResolutionFailed, nil
 		}
-		return false, err
+		return localApplyResolutionUnresolved, err
+	}
+	if !response.IsGlobalNamespace || response.Namespace.GetInfo().GetId() != namespaceID {
+		return localApplyResolutionFailed, nil
 	}
 
-	// The CHASM transport is global-only. IsGlobalNamespace is persisted outside
-	// NamespaceDetail, so it must be checked separately from the proto comparison.
-	if !response.IsGlobalNamespace ||
-		!namespaceDetailsEqualAfterPersistenceRead(detail, response.Namespace, h.currentCluster) {
-		return false, nil
+	observedVersion := response.NotificationVersion
+	if observedVersion > expectedVersion {
+		// A newer row can mean either this mutation lost its CAS or an ambiguous
+		// earlier attempt committed and was subsequently overwritten. The available
+		// state cannot distinguish those histories. Later mutations converge current
+		// peers, but a peer removed only by this mutation may require operator repair.
+		h.logger.Warn(
+			"namespacereplication local update outcome fenced by newer namespace version",
+			tag.WorkflowNamespaceID(namespaceID),
+			tag.NewStringTag("business_id", businessID),
+			tag.NewStringTag("resolution", "fenced_ambiguous"),
+			tag.NewInt64("expected_notification_version", expectedVersion),
+			tag.NewInt64("namespace_notification_version", observedVersion),
+			tag.NewInt64("metadata_notification_version", metadata.NotificationVersion),
+		)
+		return localApplyResolutionIndeterminate, nil
 	}
-	// An UPDATE stores the CAS version it consumed on the namespace row before
-	// advancing the cell-global metadata version. Exact equality therefore ties
-	// the observed row to this mutation. A larger row version means a later
-	// same-namespace mutation has superseded it, even if the snapshots match.
-	if operation == enumsspb.NAMESPACE_OPERATION_UPDATE &&
-		response.NotificationVersion != expectedVersion {
-		return false, nil
+	if observedVersion < expectedVersion {
+		return localApplyResolutionFailed, nil
 	}
-	return true, nil
+	if namespaceDetailsEqualAfterPersistenceRead(detail, response.Namespace, h.currentCluster) {
+		return localApplyResolutionCommitted, nil
+	}
+	return localApplyResolutionFailed, nil
+}
+
+// Classify the current namespace identity for a CREATE mutation. Finding a
+// global namespace by the requested ID proves that the create committed even if
+// a later update renamed it. A fallback lookup by name must still match the ID.
+func (h *applyLocalTaskHandler) readCreateLocalMutationPersistenceState(
+	ctx context.Context,
+	detail *persistencespb.NamespaceDetail,
+) (localMutationPersistenceState, error) {
+	namespaceID := detail.GetInfo().GetId()
+	if namespaceID == "" {
+		return localMutationPersistenceStateAbsent, nil
+	}
+
+	foundByID := true
+	response, err := h.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{ID: namespaceID})
+	if err != nil {
+		if _, ok := errors.AsType[*serviceerror.NamespaceNotFound](err); !ok {
+			return localMutationPersistenceStateAbsent, err
+		}
+		if detail.GetInfo().GetName() == "" {
+			return localMutationPersistenceStateAbsent, nil
+		}
+		foundByID = false
+		response, err = h.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{
+			Name: detail.GetInfo().GetName(),
+		})
+		if _, ok := errors.AsType[*serviceerror.NamespaceNotFound](err); ok {
+			return localMutationPersistenceStateAbsent, nil
+		}
+		if err != nil {
+			return localMutationPersistenceStateAbsent, err
+		}
+	}
+
+	// The CHASM transport is global-only. IsGlobalNamespace is not part of
+	// NamespaceDetail, so check it separately.
+	if !response.IsGlobalNamespace {
+		return localMutationPersistenceStateDifferent, nil
+	}
+	if response.Namespace.GetInfo().GetId() == namespaceID &&
+		(foundByID || response.Namespace.GetInfo().GetName() == detail.GetInfo().GetName()) {
+		return localMutationPersistenceStateMatching, nil
+	}
+	return localMutationPersistenceStateDifferent, nil
 }
 
 // namespaceDetailsEqualAfterPersistenceRead compares a mutation payload with a
@@ -438,12 +568,16 @@ func normalizeNamespaceDetailAfterPersistenceRead(
 func (h *applyLocalTaskHandler) resolveLocal(
 	ctx context.Context,
 	ref chasm.ComponentRef,
+	task *namespacereplicationpb.ApplyLocalTask,
 	shadow bool,
 ) (*componentTerminalObservation, error) {
 	terminal, _, err := chasm.UpdateComponent(
 		ctx,
 		ref,
 		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (*componentTerminalObservation, error) {
+			if !localTaskIsCurrent(c, task) {
+				return nil, nil
+			}
 			var err error
 			if shadow {
 				err = TransitionLocalShadowSkipped.Apply(c, mctx, EventLocalShadowSkipped{Time: mctx.Now(c)})
@@ -469,10 +603,94 @@ func (h *applyLocalTaskHandler) resolveLocal(
 	return terminal, nil
 }
 
+type localRetryRecord struct {
+	firstAttemptAt    time.Time
+	recordedAt        time.Time
+	attemptCount      int
+	stateUpdated      bool
+	retryScheduled    bool
+	retryExhausted    bool
+	componentTerminal *componentTerminalObservation
+}
+
+func (h *applyLocalTaskHandler) recordLocalRetry(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	namespaceID string,
+	task *namespacereplicationpb.ApplyLocalTask,
+	retryErr error,
+) (localRetryRecord, error) {
+	expiration := h.config.localRetryExpiration()
+	h.logger.Warn(
+		"namespacereplication local apply remains unresolved",
+		tag.WorkflowNamespaceID(namespaceID),
+		tag.NewStringTag("business_id", ref.BusinessID),
+		tag.NewInt32("attempt", task.GetAttempt()),
+		tag.Error(retryErr),
+	)
+	recorded, _, err := chasm.UpdateComponent(
+		ctx,
+		ref,
+		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (localRetryRecord, error) {
+			if !localTaskIsCurrent(c, task) {
+				return localRetryRecord{}, nil
+			}
+
+			now := mctx.Now(c)
+			completedAttempts := task.GetAttempt() + 1
+			firstAt := now
+			if c.GetLocalApply().GetFirstAttemptAt() != nil {
+				firstAt = c.GetLocalApply().GetFirstAttemptAt().AsTime()
+			}
+			record := localRetryRecord{
+				firstAttemptAt: firstAt,
+				recordedAt:     now,
+				attemptCount:   int(completedAttempts),
+				stateUpdated:   true,
+			}
+			deadline := firstAt.Add(expiration)
+			if !now.Before(deadline) {
+				if err := TransitionLocalIndeterminate.Apply(c, mctx, EventLocalIndeterminate{
+					Time:     now,
+					Attempts: completedAttempts,
+					Err: fmt.Errorf(
+						"local namespace mutation outcome remained unresolved after %v: %w",
+						expiration,
+						retryErr,
+					),
+				}); err != nil {
+					return record, err
+				}
+				record.retryExhausted = true
+				record.componentTerminal = newComponentTerminalObservation(
+					c,
+					namespacereplicationpb.COMPONENT_STATUS_FAILED,
+				)
+				return record, nil
+			}
+
+			delay := min(localRetryBackoff(completedAttempts), deadline.Sub(now))
+			record.retryScheduled = true
+			return record, TransitionLocalRetry.Apply(c, mctx, EventLocalRetry{
+				Time:     now,
+				Attempts: completedAttempts,
+				Delay:    delay,
+				Err:      retryErr,
+			})
+		},
+		nil,
+	)
+	if err != nil {
+		return recorded, err
+	}
+	return recorded, nil
+}
+
 func (h *applyLocalTaskHandler) recordLocalFailure(
 	ctx context.Context,
 	ref chasm.ComponentRef,
 	namespaceID string,
+	task *namespacereplicationpb.ApplyLocalTask,
 	applyErr error,
 ) (*componentTerminalObservation, error) {
 	errType := classifyLocalErr(applyErr)
@@ -486,6 +704,9 @@ func (h *applyLocalTaskHandler) recordLocalFailure(
 		ctx,
 		ref,
 		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (*componentTerminalObservation, error) {
+			if !localTaskIsCurrent(c, task) {
+				return nil, nil
+			}
 			if err := TransitionLocalFailed.Apply(c, mctx, EventLocalFailed{
 				Time:    mctx.Now(c),
 				Err:     applyErr,
@@ -501,6 +722,52 @@ func (h *applyLocalTaskHandler) recordLocalFailure(
 		return nil, err
 	}
 	return terminal, nil
+}
+
+func (h *applyLocalTaskHandler) recordLocalIndeterminate(
+	ctx context.Context,
+	ref chasm.ComponentRef,
+	namespaceID string,
+	task *namespacereplicationpb.ApplyLocalTask,
+	applyErr error,
+) (*componentTerminalObservation, error) {
+	h.logger.Warn(
+		"namespacereplication local apply outcome is indeterminate",
+		tag.WorkflowNamespaceID(namespaceID),
+		tag.NewStringTag("business_id", ref.BusinessID),
+		tag.Error(applyErr),
+	)
+	terminal, _, err := chasm.UpdateComponent(
+		ctx,
+		ref,
+		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (*componentTerminalObservation, error) {
+			if !localTaskIsCurrent(c, task) {
+				return nil, nil
+			}
+			if err := TransitionLocalIndeterminate.Apply(c, mctx, EventLocalIndeterminate{
+				Time:     mctx.Now(c),
+				Attempts: task.GetAttempt() + 1,
+				Err:      applyErr,
+			}); err != nil {
+				return nil, err
+			}
+			return newComponentTerminalObservation(c, namespacereplicationpb.COMPONENT_STATUS_FAILED), nil
+		},
+		nil,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return terminal, nil
+}
+
+func localTaskIsCurrent(
+	c *NamespaceMutationComponent,
+	task *namespacereplicationpb.ApplyLocalTask,
+) bool {
+	return c.GetStatus() == namespacereplicationpb.COMPONENT_STATUS_RUNNING &&
+		c.GetLocalApply().GetOutcome() == namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING &&
+		c.GetLocalApply().GetAttemptCount() == task.GetAttempt()
 }
 
 // Local-apply failure classes. These are carried in the persisted failure's
@@ -571,6 +838,7 @@ type applyPeerTaskHandlerOptions struct {
 
 	PeerApplier     PeerApplier
 	ClusterMetadata cluster.Metadata
+	Config          *config
 	MetricsHandler  metrics.Handler
 	Logger          log.Logger
 	EventLogger     otellog.Logger
@@ -586,9 +854,11 @@ type applyPeerTaskHandler struct {
 	// state, completion) independent of which transport is injected.
 	peerApplier    PeerApplier
 	currentCluster string
+
 	// Retriable peer failures are retried with capped exponential backoff over a
-	// 7-day budget by recordPeerOutcome + TransitionPeerRetry (see statemachine.go),
-	// not by CHASM's default task retry.
+	// configurable budget by recordPeerOutcome + TransitionPeerRetry (see
+	// statemachine.go), not by CHASM's default task retry.
+	config                       *config
 	metricsHandler               metrics.Handler
 	logger                       log.Logger
 	eventLogger                  otellog.Logger
@@ -599,6 +869,7 @@ func newApplyPeerTaskHandler(opts applyPeerTaskHandlerOptions) *applyPeerTaskHan
 	return &applyPeerTaskHandler{
 		peerApplier:    opts.PeerApplier,
 		currentCluster: opts.ClusterMetadata.GetCurrentClusterName(),
+		config:         opts.Config,
 		metricsHandler: opts.MetricsHandler,
 		logger:         opts.Logger,
 		eventLogger:    opts.EventLogger,
@@ -621,6 +892,13 @@ func (h *applyPeerTaskHandler) Validate(
 		return false, nil
 	}
 	if !localApplyAllowsPeerFanout(c.GetLocalApply().GetOutcome()) {
+		softassert.Fail(
+			h.logger,
+			"peer apply task exists before local phase allows fan-out",
+			tag.WorkflowNamespaceID(c.GetMutation().GetNamespaceDetail().GetInfo().GetId()),
+			tag.NewStringTag("target_cell", task.GetTargetCell()),
+			tag.NewStringTag("local_apply_outcome", c.GetLocalApply().GetOutcome().String()),
+		)
 		return false, nil
 	}
 	peer := c.GetPeerApply()[task.GetTargetCell()]
@@ -761,6 +1039,7 @@ type peerOutcomeRecord struct {
 	attemptedOutcome  namespacereplicationpb.PeerApplyOutcome
 	firstAttemptAt    time.Time
 	resolvedAt        time.Time
+	stateUpdated      bool
 	retryScheduled    bool
 	retryExhausted    bool
 	componentTerminal *componentTerminalObservation
@@ -776,6 +1055,7 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 	outcome namespacereplicationpb.PeerApplyOutcome,
 	execErr error,
 ) (peerOutcomeRecord, error) {
+	retryPolicy := h.config.peerRetryPolicy()
 	if execErr != nil {
 		h.logger.Warn("namespacereplication peer apply failed",
 			tag.WorkflowNamespaceID(namespaceID),
@@ -789,9 +1069,16 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 		ctx,
 		ref,
 		func(c *NamespaceMutationComponent, mctx chasm.MutableContext, _ chasm.NoValue) (peerOutcomeRecord, error) {
+			peer := c.GetPeerApply()[task.GetTargetCell()]
+			if c.GetStatus() != namespacereplicationpb.COMPONENT_STATUS_RUNNING ||
+				!localApplyAllowsPeerFanout(c.GetLocalApply().GetOutcome()) ||
+				peer == nil ||
+				peer.GetOutcome() != namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING ||
+				peer.GetAttemptCount() != task.GetAttempt() {
+				return peerOutcomeRecord{}, nil
+			}
 			now := mctx.Now(c)
 			completedAttempts := task.GetAttempt() + 1
-			peer := c.GetPeerApply()[task.GetTargetCell()]
 			attemptedOutcome := outcome
 			persistedOutcome := outcome
 			firstAt := now
@@ -807,18 +1094,20 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 			// is spent do we give up as FAILED_TERMINAL so the component can still
 			// complete.
 			if attemptedOutcome == namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE {
-				if now.Sub(firstAt) < peerRetryBudget {
+				if now.Sub(firstAt) < retryPolicy.expirationInterval {
 					record := peerOutcomeRecord{
 						outcome:          namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE,
 						attemptedOutcome: attemptedOutcome,
 						firstAttemptAt:   firstAt,
 						resolvedAt:       now,
+						stateUpdated:     true,
 						retryScheduled:   true,
 					}
 					err := TransitionPeerRetry.Apply(c, mctx, EventPeerRetry{
 						Time:       now,
 						TargetCell: task.GetTargetCell(),
 						Attempts:   completedAttempts,
+						Delay:      peerRetryBackoff(completedAttempts, retryPolicy),
 						Err:        execErr,
 					})
 					return record, err
@@ -833,6 +1122,7 @@ func (h *applyPeerTaskHandler) recordPeerOutcome(
 				attemptedOutcome: attemptedOutcome,
 				firstAttemptAt:   firstAt,
 				resolvedAt:       now,
+				stateUpdated:     true,
 				retryExhausted:   retryExhausted,
 			}
 			if err := TransitionPeerCompleted.Apply(c, mctx, EventPeerCompleted{

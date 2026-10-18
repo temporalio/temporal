@@ -1688,11 +1688,6 @@ an optional feature and also requires a metrics collection system that can handl
 The metric has dimensions: namespace, taskqueue, and task_type (Workflow, Activity, Nexus). Disabled by
 default as namespace cardinality can be high and this requires a metrics collection system that can handle it.`,
 	)
-	MatchingAutoEnableV2 = NewTaskQueueBoolSetting(
-		"matching.autoEnableV2",
-		false,
-		`MatchingAutoEnableV2 automatically enables fairness when a fairness key is seen`,
-	)
 	MatchingPartitionScaleAllowedDrift = NewTaskQueueTypedSetting(
 		"matching.partitionScaleAllowedDrift",
 		PartitionScaleAllowedDrift{
@@ -3432,6 +3427,12 @@ existing workflows to attach callbacks.`,
 		"history.enableCHASMSchedulerSentinels",
 		true,
 		`EnableCHASMSchedulerSentinels enables ID-space collision sentinels, and must be enabled and propagated in advance of EnableCHASMSchedulerCreation.`,
+	)
+
+	EnableCHASMSchedulerTimeSkipping = NewNamespaceBoolSetting(
+		"history.enableCHASMSchedulerTimeSkipping",
+		false,
+		`EnableCHASMSchedulerTimeSkipping allows time skipping for CHASM schedules.`,
 	)
 
 	EnableCHASMCallbacks = NewNamespaceBoolSetting(

@@ -270,9 +270,9 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowCompareOnly() {
 		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_CREATE,
 		Id:                 "namespace-id",
 	}
-	payload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
+	namespaceTaskPayload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
 	s.Require().NoError(err)
-	fingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(payload)
+	fingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(namespaceTaskPayload)
 
 	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
 		NamespaceTask:        namespaceTask,
@@ -282,7 +282,7 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowCompareOnly() {
 		ComponentBusinessId:  "namespace-id:mutation-id",
 		ComponentRunId:       "run-id",
 		AttemptCount:         2,
-		NamespaceTaskPayload: payload,
+		NamespaceTaskPayload: namespaceTaskPayload,
 	})
 	s.Require().NoError(err)
 	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, response.GetOutcome())
@@ -324,7 +324,7 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowMismatch() {
 		NamespaceOperation: enumsspb.NAMESPACE_OPERATION_UPDATE,
 		Id:                 "namespace-id",
 	}
-	payload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
+	namespaceTaskPayload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
 	s.Require().NoError(err)
 
 	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
@@ -335,7 +335,7 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowMismatch() {
 		ComponentBusinessId:  "namespace-id:mutation-id",
 		ComponentRunId:       "run-id",
 		AttemptCount:         3,
-		NamespaceTaskPayload: payload,
+		NamespaceTaskPayload: namespaceTaskPayload,
 	})
 	s.Require().NoError(err)
 	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH, response.GetOutcome())
@@ -371,19 +371,19 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowPayloadError() {
 	s.handler.eventLogger = eventLogger
 	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 
-	payload := []byte{0xff}
+	namespaceTaskPayload := []byte{0xff}
 	_, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
 		NamespaceTask: &replicationspb.NamespaceTaskAttributes{
 			NamespaceOperation: enumsspb.NAMESPACE_OPERATION_UPDATE,
 			Id:                 "namespace-id",
 		},
 		Shadow:               true,
-		Fingerprint:          nsreplication.NamespaceTaskFingerprintFromPayload(payload),
+		Fingerprint:          nsreplication.NamespaceTaskFingerprintFromPayload(namespaceTaskPayload),
 		SourceCluster:        "source-cluster",
 		ComponentBusinessId:  "namespace-id:mutation-id",
 		ComponentRunId:       "run-id",
 		AttemptCount:         4,
-		NamespaceTaskPayload: payload,
+		NamespaceTaskPayload: namespaceTaskPayload,
 	})
 	var invalidArgument *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgument)
@@ -434,9 +434,9 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_AuthoritativeOutcomes() {
 	for _, testCase := range testCases {
 		s.Run(testCase.name, func() {
 			namespaceTask := &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"}
-			payload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
+			namespaceTaskPayload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
 			s.Require().NoError(err)
-			fingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(payload)
+			fingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(namespaceTaskPayload)
 			s.namespaceMutationExecutor.outcome = testCase.outcome
 
 			response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
@@ -446,7 +446,7 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_AuthoritativeOutcomes() {
 				ComponentBusinessId:  "business-id",
 				ComponentRunId:       "run-id",
 				AttemptCount:         2,
-				NamespaceTaskPayload: payload,
+				NamespaceTaskPayload: namespaceTaskPayload,
 			})
 			s.Require().NoError(err)
 			s.Equal(testCase.expected, response.GetOutcome())
@@ -479,14 +479,14 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_AuthoritativeOutcomes() {
 
 func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowPayloadDiffersFromTypedTask() {
 	payloadTask := &replicationspb.NamespaceTaskAttributes{Id: "payload-namespace-id"}
-	payload, err := nsreplication.MarshalNamespaceTask(payloadTask)
+	namespaceTaskPayload, err := nsreplication.MarshalNamespaceTask(payloadTask)
 	s.Require().NoError(err)
 
 	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
 		NamespaceTask:        &replicationspb.NamespaceTaskAttributes{Id: "typed-namespace-id"},
 		Shadow:               true,
-		Fingerprint:          nsreplication.NamespaceTaskFingerprintFromPayload(payload),
-		NamespaceTaskPayload: payload,
+		Fingerprint:          nsreplication.NamespaceTaskFingerprintFromPayload(namespaceTaskPayload),
+		NamespaceTaskPayload: namespaceTaskPayload,
 	})
 	s.Require().NoError(err)
 	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MISMATCH, response.GetOutcome())
@@ -499,18 +499,18 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_ShadowHashesOriginalPaylo
 	s.Require().NoError(err)
 	unknownField := protowire.AppendTag(nil, 100, protowire.VarintType)
 	unknownField = protowire.AppendVarint(unknownField, 42)
-	payload := append(unknownField, canonicalPayload...)
+	namespaceTaskPayload := append(unknownField, canonicalPayload...)
 	namespaceTask := &replicationspb.NamespaceTaskAttributes{}
-	s.Require().NoError(proto.Unmarshal(payload, namespaceTask))
+	s.Require().NoError(proto.Unmarshal(namespaceTaskPayload, namespaceTask))
 	reencodedPayload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
 	s.Require().NoError(err)
-	s.NotEqual(payload, reencodedPayload)
+	s.NotEqual(namespaceTaskPayload, reencodedPayload)
 
 	response, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
 		NamespaceTask:        namespaceTask,
 		Shadow:               true,
-		Fingerprint:          nsreplication.NamespaceTaskFingerprintFromPayload(payload),
-		NamespaceTaskPayload: payload,
+		Fingerprint:          nsreplication.NamespaceTaskFingerprintFromPayload(namespaceTaskPayload),
+		NamespaceTaskPayload: namespaceTaskPayload,
 	})
 	s.Require().NoError(err)
 	s.Equal(adminservice.ApplyNamespaceMutationResponse_OUTCOME_SHADOW_MATCH, response.GetOutcome())
@@ -526,12 +526,12 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_RejectsMissingPayload() {
 }
 
 func (s *adminHandlerSuite) TestApplyNamespaceMutation_RejectsMalformedPayload() {
-	payload := []byte{0xff}
+	namespaceTaskPayload := []byte{0xff}
 	_, err := s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
 		NamespaceTask:        &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"},
 		Shadow:               true,
-		Fingerprint:          nsreplication.NamespaceTaskFingerprintFromPayload(payload),
-		NamespaceTaskPayload: payload,
+		Fingerprint:          nsreplication.NamespaceTaskFingerprintFromPayload(namespaceTaskPayload),
+		NamespaceTaskPayload: namespaceTaskPayload,
 	})
 	var invalidArgument *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgument)
@@ -546,7 +546,7 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_AuthoritativeRejectsFinge
 	s.handler.eventLogger = eventLogger
 	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 	namespaceTask := &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"}
-	payload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
+	namespaceTaskPayload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
 	s.Require().NoError(err)
 
 	_, err = s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
@@ -556,7 +556,7 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_AuthoritativeRejectsFinge
 		ComponentBusinessId:  "business-id",
 		ComponentRunId:       "run-id",
 		AttemptCount:         2,
-		NamespaceTaskPayload: payload,
+		NamespaceTaskPayload: namespaceTaskPayload,
 	})
 	var invalidArgument *serviceerror.InvalidArgument
 	s.ErrorAs(err, &invalidArgument)
@@ -583,9 +583,9 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_AuthoritativeApplyErrorOb
 	s.handler.config.EmitNamespaceLifecycleEvents = dynamicconfig.GetBoolPropertyFn(true)
 	s.namespaceMutationExecutor.err = serviceerror.NewUnavailable("metadata unavailable")
 	namespaceTask := &replicationspb.NamespaceTaskAttributes{Id: "namespace-id"}
-	payload, err := nsreplication.MarshalNamespaceTask(namespaceTask)
+	encodedTask, err := nsreplication.MarshalNamespaceTask(namespaceTask)
 	s.Require().NoError(err)
-	fingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(payload)
+	fingerprint := nsreplication.NamespaceTaskFingerprintFromPayload(encodedTask)
 
 	_, err = s.handler.ApplyNamespaceMutation(context.Background(), &adminservice.ApplyNamespaceMutationRequest{
 		NamespaceTask:        namespaceTask,
@@ -594,7 +594,7 @@ func (s *adminHandlerSuite) TestApplyNamespaceMutation_AuthoritativeApplyErrorOb
 		ComponentBusinessId:  "business-id",
 		ComponentRunId:       "run-id",
 		AttemptCount:         3,
-		NamespaceTaskPayload: payload,
+		NamespaceTaskPayload: encodedTask,
 	})
 	var unavailable *serviceerror.Unavailable
 	s.ErrorAs(err, &unavailable)

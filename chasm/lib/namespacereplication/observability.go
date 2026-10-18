@@ -146,6 +146,68 @@ func (h *applyLocalTaskHandler) observeLocalApply(
 	}
 }
 
+func (h *applyLocalTaskHandler) observeLocalRetry(
+	ref chasm.ComponentRef,
+	task *replicationspb.NamespaceTaskAttributes,
+	recorded localRetryRecord,
+	retryErr error,
+	saveErr error,
+	startTime time.Time,
+) {
+	outcome := nsreplicationcommon.CHASMApplyOutcomeRetryableError
+	observationErr := retryErr
+	retryScheduled := saveErr == nil && recorded.retryScheduled
+	details := map[string]any{
+		"retry_scheduled": retryScheduled,
+		"retry_exhausted": recorded.retryExhausted,
+	}
+	if saveErr != nil {
+		outcome = nsreplicationcommon.CHASMApplyOutcomeStateTransitionError
+		observationErr = saveErr
+		if recorded.retryScheduled {
+			details["retry_requested"] = true
+		}
+		details["apply_error"] = retryErr.Error()
+	} else if recorded.stateUpdated {
+		persistedOutcome := namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING
+		if recorded.retryExhausted {
+			outcome = nsreplicationcommon.CHASMApplyOutcomeRetryExhausted
+			persistedOutcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_INDETERMINATE
+		}
+		details["persisted_local_outcome"] = persistedOutcome.String()
+	} else {
+		details["state_update_skipped"] = true
+	}
+
+	var pendingAge *time.Duration
+	pendingAgeThresholdExceeded := false
+	if retryScheduled && !recorded.firstAttemptAt.IsZero() {
+		age := max(recorded.recordedAt.Sub(recorded.firstAttemptAt), 0)
+		pendingAge = &age
+		pendingAgeThresholdExceeded = age >= pendingAlertThreshold
+	}
+	observation := nsreplicationcommon.CHASMAuthoritativeApplyObservation{
+		Task:                        task,
+		Stage:                       nsreplicationcommon.CHASMApplyStageLocal,
+		Outcome:                     outcome,
+		SourceCluster:               h.currentCluster,
+		TargetCluster:               h.currentCluster,
+		ComponentBusinessID:         ref.BusinessID,
+		ComponentRunID:              ref.RunID,
+		AttemptCount:                recorded.attemptCount,
+		Duration:                    time.Since(startTime),
+		PendingAge:                  pendingAge,
+		PendingAgeThresholdExceeded: pendingAgeThresholdExceeded,
+		Error:                       observationErr,
+		Details:                     details,
+	}
+	nsreplicationcommon.RecordCHASMAuthoritativeApply(h.metricsHandler, observation)
+	if (!recorded.retryScheduled || saveErr != nil) &&
+		h.emitNamespaceLifecycleEvents != nil && h.emitNamespaceLifecycleEvents() {
+		nsreplicationcommon.EmitCHASMAuthoritativeApply(h.eventLogger, observation)
+	}
+}
+
 func (h *applyPeerTaskHandler) observePeerApply(
 	ref chasm.ComponentRef,
 	operation enumsspb.NamespaceOperation,
@@ -178,12 +240,14 @@ func (h *applyPeerTaskHandler) observePeerApply(
 		if applyErr != nil {
 			details["apply_error"] = applyErr.Error()
 		}
-	} else {
+	} else if recorded.stateUpdated {
 		persistedOutcome := recorded.outcome
 		if recorded.retryScheduled {
 			persistedOutcome = namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING
 		}
 		details["persisted_peer_outcome"] = persistedOutcome.String()
+	} else {
+		details["state_update_skipped"] = true
 	}
 
 	var pendingDuration *time.Duration
@@ -196,7 +260,7 @@ func (h *applyPeerTaskHandler) observePeerApply(
 	if retryScheduled && !recorded.firstAttemptAt.IsZero() {
 		age := max(recorded.resolvedAt.Sub(recorded.firstAttemptAt), 0)
 		pendingAge = &age
-		pendingAgeThresholdExceeded = age >= peerPendingAlertThreshold
+		pendingAgeThresholdExceeded = age >= pendingAlertThreshold
 	}
 	observation := nsreplicationcommon.CHASMAuthoritativeApplyObservation{
 		Task: nsreplicationcommon.NamespaceDetailToTaskAttributes(
