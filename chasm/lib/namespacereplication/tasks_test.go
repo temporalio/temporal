@@ -588,7 +588,7 @@ func TestApplyLocalTask_Execute_UpdateEarlierAmbiguousAttemptSurvivesDefiniteLat
 		),
 	)
 
-	for attempt := int32(0); attempt < 2; attempt++ {
+	for attempt := range int32(2) {
 		require.NoError(t, env.localHandler.Execute(
 			env.engineCtx,
 			ref,
@@ -765,7 +765,7 @@ func TestApplyLocalTask_Execute_CreateEarlierAmbiguousAttemptSurvivesDefiniteLat
 		),
 	)
 
-	for attempt := int32(0); attempt < 2; attempt++ {
+	for attempt := range int32(2) {
 		require.NoError(t, env.localHandler.Execute(
 			env.engineCtx,
 			ref,
