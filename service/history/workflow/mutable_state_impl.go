@@ -3024,6 +3024,11 @@ func computeDeclinedTargetVersionUpgrade(
 }
 
 func (ms *MutableStateImpl) ContinueAsNewMinBackoff(backoffDuration *durationpb.Duration) *durationpb.Duration {
+	if ms.executionState.StartTime.AsTime().After(ms.shard.GetTimeSource().Now()) {
+		// A virtual start time cannot be used to enforce a wall-clock minimum interval.
+		return backoffDuration
+	}
+
 	// lifetime of previous execution
 	// The time source uses virtual time for time-skipped executions.
 	now := ms.timeSource.Now()
