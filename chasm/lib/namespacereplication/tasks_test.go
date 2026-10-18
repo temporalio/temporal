@@ -21,9 +21,10 @@ import (
 	serverclient "go.temporal.io/server/client"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace/nsreplication"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/testing/testlogger"
 	queueserrors "go.temporal.io/server/service/history/queues/errors"
 	historytasks "go.temporal.io/server/service/history/tasks"
 	"go.uber.org/mock/gomock"
@@ -132,10 +133,32 @@ func TestApplyLocalTaskHandler_Validate(t *testing.T) {
 			require.Equal(t, tc.want, run)
 		})
 	}
+
+	retrying := newComp(
+		namespacereplicationpb.COMPONENT_STATUS_RUNNING,
+		namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING,
+	)
+	retrying.LocalApply.AttemptCount = 2
+	run, err := h.Validate(
+		nil,
+		retrying,
+		chasm.TaskInvocation{},
+		&namespacereplicationpb.ApplyLocalTask{Attempt: 1},
+	)
+	require.NoError(t, err)
+	require.False(t, run, "a stale retry generation must be dropped")
+	run, err = h.Validate(
+		nil,
+		retrying,
+		chasm.TaskInvocation{},
+		&namespacereplicationpb.ApplyLocalTask{Attempt: 2},
+	)
+	require.NoError(t, err)
+	require.True(t, run)
 }
 
 func TestApplyPeerTaskHandler_Validate(t *testing.T) {
-	h := &applyPeerTaskHandler{}
+	h := &applyPeerTaskHandler{logger: log.NewNoopLogger()}
 	const cell = "cellB"
 	newComp := func(status namespacereplicationpb.ComponentStatus, local namespacereplicationpb.LocalApplyOutcome, peer *namespacereplicationpb.PeerApplyStatus) *NamespaceMutationComponent {
 		peers := map[string]*namespacereplicationpb.PeerApplyStatus{}
@@ -171,6 +194,33 @@ func TestApplyPeerTaskHandler_Validate(t *testing.T) {
 			require.Equal(t, tc.want, run)
 		})
 	}
+}
+
+func TestApplyPeerTaskHandler_ValidateSoftAssertsIfLocalApplyDisallowsFanout(t *testing.T) {
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	capture := logger.StartCapture(tag.FailedAssertion)
+	h := &applyPeerTaskHandler{logger: logger}
+	c := NewNamespaceMutationComponent(&namespacereplicationpb.NamespaceMutation{
+		NamespaceDetail: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{Id: "namespace-id"},
+		},
+		PeerCells: []string{"cellB"},
+	})
+
+	run, err := h.Validate(
+		nil,
+		c,
+		chasm.TaskInvocation{},
+		&namespacereplicationpb.ApplyPeerTask{TargetCell: "cellB"},
+	)
+	require.NoError(t, err)
+	require.False(t, run)
+	require.Len(t, capture.Snapshot(), 1)
+	require.Equal(
+		t,
+		"failed assertion: peer apply task exists before local phase allows fan-out",
+		capture.Snapshot()[0].Message,
+	)
 }
 
 // -----------------------------------------------------------------------------
@@ -211,7 +261,6 @@ func newNsreplTestEnvWithOptions(t *testing.T, opts ...chasmtest.EngineOption) *
 		// bean, so the handler + default applier are covered together.
 		peerApplier:    newAdminClientPeerApplier(clientBean),
 		currentCluster: "cellA",
-		metricsHandler: metrics.NoopMetricsHandler,
 		logger:         logger,
 	}
 	backoffHandler := newApplyPeerBackoffTaskHandler()
@@ -317,10 +366,11 @@ func TestNamespaceDetailsEqualAfterPersistenceRead(t *testing.T) {
 // A successful local UPDATE commits and schedules one peer task per peer cell.
 func (env *nsreplTestEnv) mutationUpdate(peers ...string) *namespacereplicationpb.NamespaceMutation {
 	return &namespacereplicationpb.NamespaceMutation{
-		Operation:       enumsspb.NAMESPACE_OPERATION_UPDATE,
-		NamespaceDetail: testDetail(),
-		ExpectedVersion: 7,
-		PeerCells:       peers,
+		Operation:         enumsspb.NAMESPACE_OPERATION_UPDATE,
+		NamespaceDetail:   testDetail(),
+		ExpectedVersion:   7,
+		PeerCells:         peers,
+		IsGlobalNamespace: true,
 	}
 }
 
@@ -414,20 +464,64 @@ func TestApplyLocalTask_Execute_CreateCommit(t *testing.T) {
 	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, c.GetLocalApply().GetOutcome())
 }
 
+func TestApplyLocalTaskExecuteRejectsLocalNamespace(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name      string
+		operation enumsspb.NamespaceOperation
+	}{
+		{name: "create", operation: enumsspb.NAMESPACE_OPERATION_CREATE},
+		{name: "update", operation: enumsspb.NAMESPACE_OPERATION_UPDATE},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			env := newNsreplTestEnv(t)
+			mutation := env.mutationUpdate("cellB")
+			mutation.Operation = tc.operation
+			mutation.IsGlobalNamespace = false
+			ref := env.start(mutation, nil)
+
+			require.NoError(t, env.localHandler.Execute(
+				env.engineCtx,
+				ref,
+				chasm.TaskAttributes{},
+				&namespacereplicationpb.ApplyLocalTask{},
+			))
+
+			component := env.read(ref)
+			require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_FAILED, component.GetStatus())
+			require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_FAILED, component.GetLocalApply().GetOutcome())
+			require.Equal(
+				t,
+				localFailureInvalidArgument,
+				component.GetLocalApply().GetFailure().GetApplicationFailureInfo().GetType(),
+			)
+		})
+	}
+}
+
 func TestApplyLocalTask_Execute_UpdateRetryRecoversCommittedWrite(t *testing.T) {
 	env := newNsreplTestEnv(t)
 	mutation := env.mutationUpdate("cellB")
 	ref := env.start(mutation, nil)
 
-	env.metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(
-		&persistence.TimeoutError{Msg: "write result unknown"})
-	env.metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: "ns-id"}).Return(
-		&persistence.GetNamespaceResponse{
-			Namespace:           persistenceNormalizedDetail(mutation.GetNamespaceDetail()),
-			IsGlobalNamespace:   true,
-			NotificationVersion: mutation.GetExpectedVersion(),
-		},
-		nil,
+	gomock.InOrder(
+		env.metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(
+			&persistence.TimeoutError{Msg: "write result unknown"}),
+		env.metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(
+			&persistence.GetMetadataResponse{NotificationVersion: mutation.GetExpectedVersion() + 1},
+			nil,
+		),
+		env.metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: "ns-id"}).Return(
+			&persistence.GetNamespaceResponse{
+				Namespace:           persistenceNormalizedDetail(mutation.GetNamespaceDetail()),
+				IsGlobalNamespace:   true,
+				NotificationVersion: mutation.GetExpectedVersion(),
+			},
+			nil,
+		),
 	)
 
 	require.NoError(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{}))
@@ -442,28 +536,22 @@ func TestApplyLocalTask_Execute_UpdateLateCommitRecoveredOnRetry(t *testing.T) {
 	mutation := env.mutationUpdate("cellB")
 	ref := env.start(mutation, nil)
 
-	oldNamespace := proto.Clone(mutation.GetNamespaceDetail()).(*persistencespb.NamespaceDetail)
-	oldNamespace.Info.Description = "old value"
 	gomock.InOrder(
 		env.metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(
 			&persistence.TimeoutError{Msg: "write result unknown"}),
-		env.metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: "ns-id"}).Return(
-			&persistence.GetNamespaceResponse{
-				Namespace:           oldNamespace,
-				IsGlobalNamespace:   true,
-				NotificationVersion: mutation.GetExpectedVersion(),
-			},
-			nil,
-		),
 		env.metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(
 			&persistence.GetMetadataResponse{NotificationVersion: mutation.GetExpectedVersion()},
 			nil,
 		),
 		env.metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(
 			serviceerror.NewUnavailable("conditional failure")),
+		env.metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(
+			&persistence.GetMetadataResponse{NotificationVersion: mutation.GetExpectedVersion() + 1},
+			nil,
+		),
 		env.metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: "ns-id"}).Return(
 			&persistence.GetNamespaceResponse{
-				Namespace:           proto.Clone(mutation.GetNamespaceDetail()).(*persistencespb.NamespaceDetail),
+				Namespace:           persistenceNormalizedDetail(mutation.GetNamespaceDetail()),
 				IsGlobalNamespace:   true,
 				NotificationVersion: mutation.GetExpectedVersion(),
 			},
@@ -471,12 +559,74 @@ func TestApplyLocalTask_Execute_UpdateLateCommitRecoveredOnRetry(t *testing.T) {
 		),
 	)
 
-	require.Error(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{}))
+	require.NoError(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{}))
 	component := env.read(ref)
 	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING, component.GetLocalApply().GetOutcome())
+	require.Equal(t, int32(1), component.GetLocalApply().GetAttemptCount())
 
-	require.NoError(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{}))
+	require.NoError(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{Attempt: 1}))
 	component = env.read(ref)
+	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, component.GetLocalApply().GetOutcome())
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, component.GetPeerApply()["cellB"].GetOutcome())
+}
+
+func TestApplyLocalTask_Execute_UpdateEarlierAmbiguousAttemptSurvivesDefiniteLaterFailure(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	mutation := env.mutationUpdate("cellB")
+	ref := env.start(mutation, nil)
+
+	gomock.InOrder(
+		// Attempt 1 may still commit after returning a timeout.
+		env.metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(
+			&persistence.TimeoutError{Msg: "write result unknown"}),
+		env.metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(
+			&persistence.GetMetadataResponse{NotificationVersion: mutation.GetExpectedVersion()},
+			nil,
+		),
+		// Attempt 2 definitely does not commit. That says nothing about attempt 1.
+		env.metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(
+			&persistence.ConditionFailedError{Msg: "conditional failure"}),
+		env.metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(
+			&persistence.GetMetadataResponse{NotificationVersion: mutation.GetExpectedVersion()},
+			nil,
+		),
+		// A later retry observes that attempt 1 committed.
+		env.metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(
+			&persistence.ConditionFailedError{Msg: "conditional failure"}),
+		env.metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(
+			&persistence.GetMetadataResponse{NotificationVersion: mutation.GetExpectedVersion() + 1},
+			nil,
+		),
+		env.metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: "ns-id"}).Return(
+			&persistence.GetNamespaceResponse{
+				Namespace:           persistenceNormalizedDetail(mutation.GetNamespaceDetail()),
+				IsGlobalNamespace:   true,
+				NotificationVersion: mutation.GetExpectedVersion(),
+			},
+			nil,
+		),
+	)
+
+	for attempt := range int32(2) {
+		require.NoError(t, env.localHandler.Execute(
+			env.engineCtx,
+			ref,
+			chasm.TaskAttributes{},
+			&namespacereplicationpb.ApplyLocalTask{Attempt: attempt},
+		))
+		component := env.read(ref)
+		require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING, component.GetLocalApply().GetOutcome())
+		require.Equal(t, attempt+1, component.GetLocalApply().GetAttemptCount())
+		require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, component.GetStatus())
+	}
+
+	require.NoError(t, env.localHandler.Execute(
+		env.engineCtx,
+		ref,
+		chasm.TaskAttributes{},
+		&namespacereplicationpb.ApplyLocalTask{Attempt: 2},
+	))
+	component := env.read(ref)
 	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, component.GetLocalApply().GetOutcome())
 	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, component.GetPeerApply()["cellB"].GetOutcome())
 }
@@ -520,6 +670,12 @@ func TestApplyLocalTask_Execute_CreateLateCommitRecoveredOnRetry(t *testing.T) {
 			nil,
 			serviceerror.NewNamespaceNotFound("namespace not visible yet"),
 		),
+		env.metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+			Name: mutation.GetNamespaceDetail().GetInfo().GetName(),
+		}).Return(
+			nil,
+			serviceerror.NewNamespaceNotFound("namespace not visible yet"),
+		),
 		env.metadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(
 			nil,
 			serviceerror.NewNamespaceAlreadyExists("namespace already exists"),
@@ -533,16 +689,126 @@ func TestApplyLocalTask_Execute_CreateLateCommitRecoveredOnRetry(t *testing.T) {
 		),
 	)
 
-	require.Error(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{}))
+	require.NoError(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{}))
 	component := env.read(ref)
 	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING, component.GetLocalApply().GetOutcome())
+	require.Equal(t, int32(1), component.GetLocalApply().GetAttemptCount())
 
-	require.NoError(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{}))
+	require.NoError(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{Attempt: 1}))
 	component = env.read(ref)
 	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, component.GetLocalApply().GetOutcome())
 }
 
-func TestApplyLocalTask_Execute_CreateCollisionStillFails(t *testing.T) {
+func TestApplyLocalTask_Execute_CreateAlreadyExistsWithAbsentReadKeepsPending(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	mutation := env.mutationUpdate("cellB")
+	mutation.Operation = enumsspb.NAMESPACE_OPERATION_CREATE
+	ref := env.start(mutation, nil)
+
+	env.metadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(
+		nil,
+		serviceerror.NewNamespaceAlreadyExists("namespace already exists"),
+	)
+	env.metadataMgr.EXPECT().GetNamespace(
+		gomock.Any(),
+		&persistence.GetNamespaceRequest{ID: "ns-id"},
+	).Return(nil, serviceerror.NewNamespaceNotFound("namespace not visible yet"))
+	env.metadataMgr.EXPECT().GetNamespace(
+		gomock.Any(),
+		&persistence.GetNamespaceRequest{Name: mutation.GetNamespaceDetail().GetInfo().GetName()},
+	).Return(nil, serviceerror.NewNamespaceNotFound("namespace not visible yet"))
+
+	require.NoError(t, env.localHandler.Execute(
+		env.engineCtx,
+		ref,
+		chasm.TaskAttributes{},
+		&namespacereplicationpb.ApplyLocalTask{},
+	))
+	component := env.read(ref)
+	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING, component.GetLocalApply().GetOutcome())
+	require.Equal(t, int32(1), component.GetLocalApply().GetAttemptCount())
+	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, component.GetStatus())
+}
+
+func TestApplyLocalTask_Execute_CreateEarlierAmbiguousAttemptSurvivesDefiniteLaterFailure(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	mutation := env.mutationUpdate("cellB")
+	mutation.Operation = enumsspb.NAMESPACE_OPERATION_CREATE
+	ref := env.start(mutation, nil)
+
+	gomock.InOrder(
+		// Attempt 1 may still commit after returning a timeout.
+		env.metadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(
+			nil,
+			&persistence.TimeoutError{Msg: "write result unknown"},
+		),
+		env.metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: "ns-id"}).Return(
+			nil,
+			serviceerror.NewNamespaceNotFound("namespace not visible yet"),
+		),
+		env.metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+			Name: mutation.GetNamespaceDetail().GetInfo().GetName(),
+		}).Return(
+			nil,
+			serviceerror.NewNamespaceNotFound("namespace not visible yet"),
+		),
+		// Attempt 2 definitely does not commit. Attempt 1 remains unresolved.
+		env.metadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(
+			nil,
+			serviceerror.NewResourceExhausted(
+				enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_STORAGE_LIMIT,
+				"persistence limit",
+			),
+		),
+		env.metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: "ns-id"}).Return(
+			nil,
+			serviceerror.NewNamespaceNotFound("namespace not visible yet"),
+		),
+		env.metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
+			Name: mutation.GetNamespaceDetail().GetInfo().GetName(),
+		}).Return(
+			nil,
+			serviceerror.NewNamespaceNotFound("namespace not visible yet"),
+		),
+		// A later retry observes that attempt 1 committed.
+		env.metadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(
+			nil,
+			serviceerror.NewNamespaceAlreadyExists("namespace already exists"),
+		),
+		env.metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: "ns-id"}).Return(
+			&persistence.GetNamespaceResponse{
+				Namespace:         persistenceNormalizedDetail(mutation.GetNamespaceDetail()),
+				IsGlobalNamespace: true,
+			},
+			nil,
+		),
+	)
+
+	for attempt := range int32(2) {
+		require.NoError(t, env.localHandler.Execute(
+			env.engineCtx,
+			ref,
+			chasm.TaskAttributes{},
+			&namespacereplicationpb.ApplyLocalTask{Attempt: attempt},
+		))
+		component := env.read(ref)
+		require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING, component.GetLocalApply().GetOutcome())
+		require.Equal(t, attempt+1, component.GetLocalApply().GetAttemptCount())
+		require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, component.GetStatus())
+	}
+
+	require.NoError(t, env.localHandler.Execute(
+		env.engineCtx,
+		ref,
+		chasm.TaskAttributes{},
+		&namespacereplicationpb.ApplyLocalTask{Attempt: 2},
+	))
+	component := env.read(ref)
+	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, component.GetLocalApply().GetOutcome())
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, component.GetPeerApply()["cellB"].GetOutcome())
+}
+
+func TestApplyLocalTask_Execute_CreateRenamedBeforeReconciliationStillCommits(t *testing.T) {
 	env := newNsreplTestEnv(t)
 	mutation := env.mutationUpdate("cellB")
 	mutation.Operation = enumsspb.NAMESPACE_OPERATION_CREATE
@@ -562,6 +828,40 @@ func TestApplyLocalTask_Execute_CreateCollisionStillFails(t *testing.T) {
 	require.NoError(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{}))
 
 	component := env.read(ref)
+	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, component.GetLocalApply().GetOutcome())
+	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, component.GetStatus())
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, component.GetPeerApply()["cellB"].GetOutcome())
+}
+
+func TestApplyLocalTask_Execute_CreateNameCollisionStillFails(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	mutation := env.mutationUpdate("cellB")
+	mutation.Operation = enumsspb.NAMESPACE_OPERATION_CREATE
+	ref := env.start(mutation, nil)
+
+	env.metadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(
+		nil,
+		serviceerror.NewNamespaceAlreadyExists("namespace already exists"),
+	)
+	env.metadataMgr.EXPECT().GetNamespace(
+		gomock.Any(),
+		&persistence.GetNamespaceRequest{ID: "ns-id"},
+	).Return(nil, serviceerror.NewNamespaceNotFound("namespace ID does not exist"))
+	existing := proto.Clone(mutation.GetNamespaceDetail()).(*persistencespb.NamespaceDetail)
+	existing.Info.Id = "different-namespace-id"
+	env.metadataMgr.EXPECT().GetNamespace(
+		gomock.Any(),
+		&persistence.GetNamespaceRequest{Name: mutation.GetNamespaceDetail().GetInfo().GetName()},
+	).Return(&persistence.GetNamespaceResponse{Namespace: existing, IsGlobalNamespace: true}, nil)
+
+	require.NoError(t, env.localHandler.Execute(
+		env.engineCtx,
+		ref,
+		chasm.TaskAttributes{},
+		&namespacereplicationpb.ApplyLocalTask{},
+	))
+
+	component := env.read(ref)
 	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_FAILED, component.GetLocalApply().GetOutcome())
 	require.Equal(
 		t,
@@ -570,35 +870,68 @@ func TestApplyLocalTask_Execute_CreateCollisionStillFails(t *testing.T) {
 	)
 }
 
+func TestApplyLocalTask_Execute_CreateSupersededStateStillCommits(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	mutation := env.mutationUpdate("cellB")
+	mutation.Operation = enumsspb.NAMESPACE_OPERATION_CREATE
+	ref := env.start(mutation, nil)
+
+	env.metadataMgr.EXPECT().CreateNamespace(gomock.Any(), gomock.Any()).Return(
+		nil,
+		serviceerror.NewNamespaceAlreadyExists("namespace already exists"),
+	)
+	superseded := proto.Clone(mutation.GetNamespaceDetail()).(*persistencespb.NamespaceDetail)
+	superseded.Info.Description = "changed by a later update"
+	superseded.ConfigVersion++
+	env.metadataMgr.EXPECT().GetNamespace(
+		gomock.Any(),
+		&persistence.GetNamespaceRequest{ID: "ns-id"},
+	).Return(&persistence.GetNamespaceResponse{Namespace: superseded, IsGlobalNamespace: true}, nil)
+
+	require.NoError(t, env.localHandler.Execute(
+		env.engineCtx,
+		ref,
+		chasm.TaskAttributes{},
+		&namespacereplicationpb.ApplyLocalTask{},
+	))
+
+	component := env.read(ref)
+	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, component.GetLocalApply().GetOutcome())
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, component.GetPeerApply()["cellB"].GetOutcome())
+}
+
 func TestApplyLocalTask_Execute_UpdateRetryRequiresExpectedNotificationVersion(t *testing.T) {
 	env := newNsreplTestEnv(t)
 	mutation := env.mutationUpdate("cellB")
 	ref := env.start(mutation, nil)
 
-	env.metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(
-		serviceerror.NewUnavailable("conditional failure"))
-	env.metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: "ns-id"}).Return(
-		&persistence.GetNamespaceResponse{
-			Namespace:           proto.Clone(mutation.GetNamespaceDetail()).(*persistencespb.NamespaceDetail),
-			IsGlobalNamespace:   true,
-			NotificationVersion: mutation.GetExpectedVersion() + 1,
-		},
-		nil,
-	)
-	env.metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(
-		&persistence.GetMetadataResponse{NotificationVersion: mutation.GetExpectedVersion() + 1},
-		nil,
+	gomock.InOrder(
+		env.metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(
+			&persistence.ConditionFailedError{Msg: "conditional failure"}),
+		env.metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(
+			&persistence.GetMetadataResponse{NotificationVersion: mutation.GetExpectedVersion() + 2},
+			nil,
+		),
+		env.metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: "ns-id"}).Return(
+			&persistence.GetNamespaceResponse{
+				Namespace:           proto.Clone(mutation.GetNamespaceDetail()).(*persistencespb.NamespaceDetail),
+				IsGlobalNamespace:   true,
+				NotificationVersion: mutation.GetExpectedVersion() + 1,
+			},
+			nil,
+		),
 	)
 
 	require.NoError(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{}))
 
 	component := env.read(ref)
-	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_FAILED, component.GetLocalApply().GetOutcome())
+	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_INDETERMINATE, component.GetLocalApply().GetOutcome())
 }
 
-func TestLocalMutationIsCurrentPersistedStateRequiresGlobalNamespace(t *testing.T) {
+func TestReadCreateLocalMutationPersistenceStateRequiresGlobalNamespace(t *testing.T) {
 	env := newNsreplTestEnv(t)
 	mutation := env.mutationUpdate("cellB")
+	mutation.Operation = enumsspb.NAMESPACE_OPERATION_CREATE
 
 	env.metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{
 		ID: mutation.GetNamespaceDetail().GetInfo().GetId(),
@@ -608,63 +941,271 @@ func TestLocalMutationIsCurrentPersistedStateRequiresGlobalNamespace(t *testing.
 		NotificationVersion: mutation.GetExpectedVersion(),
 	}, nil)
 
-	isCurrentPersistedState, err := env.localHandler.localMutationIsCurrentPersistedState(
+	persistedState, err := env.localHandler.readCreateLocalMutationPersistenceState(
 		env.engineCtx,
-		mutation.GetOperation(),
 		mutation.GetNamespaceDetail(),
-		mutation.GetExpectedVersion(),
 	)
 	require.NoError(t, err)
-	require.False(t, isCurrentPersistedState)
+	require.Equal(t, localMutationPersistenceStateDifferent, persistedState)
+}
+
+func TestReconcileUpdateLocalApply_FencedRowsFail(t *testing.T) {
+	for _, tc := range []struct {
+		name            string
+		rowVersionDelta int64
+		isGlobal        bool
+		mutateDetail    func(*persistencespb.NamespaceDetail)
+	}{
+		{
+			name:            "older namespace row",
+			rowVersionDelta: -1,
+			isGlobal:        true,
+			mutateDetail:    func(*persistencespb.NamespaceDetail) {},
+		},
+		{
+			name:            "different namespace state at exact version",
+			rowVersionDelta: 0,
+			isGlobal:        true,
+			mutateDetail: func(detail *persistencespb.NamespaceDetail) {
+				detail.Info.Description = "different state"
+			},
+		},
+		{
+			name:            "namespace is no longer global",
+			rowVersionDelta: 0,
+			isGlobal:        false,
+			mutateDetail:    func(*persistencespb.NamespaceDetail) {},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			env := newNsreplTestEnv(t)
+			mutation := env.mutationUpdate("cellB")
+			persisted := persistenceNormalizedDetail(mutation.GetNamespaceDetail())
+			tc.mutateDetail(persisted)
+
+			gomock.InOrder(
+				env.metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(
+					&persistence.GetMetadataResponse{NotificationVersion: mutation.GetExpectedVersion() + 1},
+					nil,
+				),
+				env.metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: "ns-id"}).Return(
+					&persistence.GetNamespaceResponse{
+						Namespace:           persisted,
+						IsGlobalNamespace:   tc.isGlobal,
+						NotificationVersion: mutation.GetExpectedVersion() + tc.rowVersionDelta,
+					},
+					nil,
+				),
+			)
+
+			resolution, err := env.localHandler.reconcileUpdateLocalApply(
+				env.engineCtx,
+				mutation.GetNamespaceDetail(),
+				mutation.GetExpectedVersion(),
+				"ns-id:uuid",
+				&persistence.ConditionFailedError{Msg: "conditional failure"},
+			)
+			require.NoError(t, err)
+			require.Equal(t, localApplyResolutionFailed, resolution)
+		})
+	}
 }
 
 func TestApplyLocalTask_Execute_ReconcileReadFailureKeepsPending(t *testing.T) {
 	env := newNsreplTestEnv(t)
-	ref := env.start(env.mutationUpdate("cellB"), nil)
+	mutation := env.mutationUpdate("cellB")
+	ref := env.start(mutation, nil)
 
-	env.metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(
-		serviceerror.NewUnavailable("write result unknown"))
-	env.metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: "ns-id"}).Return(
-		nil,
-		serviceerror.NewUnavailable("read unavailable"),
+	gomock.InOrder(
+		env.metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(
+			serviceerror.NewUnavailable("write result unknown")),
+		env.metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(
+			&persistence.GetMetadataResponse{NotificationVersion: mutation.GetExpectedVersion() + 1},
+			nil,
+		),
+		env.metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: "ns-id"}).Return(
+			nil,
+			serviceerror.NewUnavailable("read unavailable"),
+		),
 	)
 
 	err := env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{})
-	require.Error(t, err)
+	require.NoError(t, err)
 
 	component := env.read(ref)
 	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING, component.GetLocalApply().GetOutcome())
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, component.GetStatus())
 }
 
-// A later metadata version means this UPDATE's CAS slot is gone. That can also
-// happen when an earlier attempt committed and a newer same-namespace mutation
-// subsequently superseded it. Resolve this component as a retryable failure and
-// leave its peers pending; the newer full namespace snapshot owns peer fan-out.
-func TestApplyLocalTask_Execute_SupersededUpdateFailsUnavailable(t *testing.T) {
-	env := newNsreplTestEnv(t)
-	ref := env.start(env.mutationUpdate("cellB", "cellC"), nil)
+func TestApplyLocalTask_Execute_RetryBudgetBoundary(t *testing.T) {
+	now := time.Date(2026, 10, 17, 12, 0, 0, 0, time.UTC)
+	retryExpiration := 5 * time.Minute
+	for _, tc := range []struct {
+		name             string
+		elapsed          time.Duration
+		wantOutcome      namespacereplicationpb.LocalApplyOutcome
+		wantStatus       namespacereplicationpb.ComponentStatus
+		wantTimerDelay   time.Duration
+		wantNewTimerTask int
+	}{
+		{
+			name:             "below budget schedules another attempt",
+			elapsed:          retryExpiration - 10*time.Second,
+			wantOutcome:      namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING,
+			wantStatus:       namespacereplicationpb.COMPONENT_STATUS_RUNNING,
+			wantTimerDelay:   4 * time.Second,
+			wantNewTimerTask: 1,
+		},
+		{
+			name:             "next attempt is clamped to deadline",
+			elapsed:          retryExpiration - 500*time.Millisecond,
+			wantOutcome:      namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING,
+			wantStatus:       namespacereplicationpb.COMPONENT_STATUS_RUNNING,
+			wantTimerDelay:   500 * time.Millisecond,
+			wantNewTimerTask: 1,
+		},
+		{
+			name:        "at budget is indeterminate",
+			elapsed:     retryExpiration,
+			wantOutcome: namespacereplicationpb.LOCAL_APPLY_OUTCOME_INDETERMINATE,
+			wantStatus:  namespacereplicationpb.COMPONENT_STATUS_FAILED,
+		},
+		{
+			name:        "above budget is indeterminate",
+			elapsed:     retryExpiration + time.Nanosecond,
+			wantOutcome: namespacereplicationpb.LOCAL_APPLY_OUTCOME_INDETERMINATE,
+			wantStatus:  namespacereplicationpb.COMPONENT_STATUS_FAILED,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			timeSource := clock.NewEventTimeSource().Update(now)
+			env := newNsreplTestEnvWithOptions(t, chasmtest.WithTimeSource(timeSource))
+			env.localHandler.config = &config{
+				localRetryExpirationInterval: func() time.Duration { return retryExpiration },
+			}
+			mutation := env.mutationUpdate("cellB")
+			ref := env.start(mutation, func(c *NamespaceMutationComponent) {
+				c.LocalApply.AttemptCount = 2
+				c.LocalApply.FirstAttemptAt = timestamppb.New(now.Add(-tc.elapsed))
+			})
 
-	env.metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(
-		serviceerror.NewUnavailable("UpdateNamespace operation failed because of conditional failure."))
+			beforeTasks, err := env.engine.Tasks(ref)
+			require.NoError(t, err)
+			beforeTimers := len(beforeTasks[historytasks.CategoryTimer])
+
+			env.metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(
+				&persistence.TimeoutError{Msg: "write result unknown"},
+			)
+			env.metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(
+				&persistence.GetMetadataResponse{NotificationVersion: mutation.GetExpectedVersion()},
+				nil,
+			)
+
+			require.NoError(t, env.localHandler.Execute(
+				env.engineCtx,
+				ref,
+				chasm.TaskAttributes{},
+				&namespacereplicationpb.ApplyLocalTask{Attempt: 2},
+			))
+
+			component := env.read(ref)
+			local := component.GetLocalApply()
+			require.Equal(t, tc.wantOutcome, local.GetOutcome())
+			require.Equal(t, tc.wantStatus, component.GetStatus())
+			require.Equal(t, int32(3), local.GetAttemptCount())
+			require.Equal(t, now.Add(-tc.elapsed), local.GetFirstAttemptAt().AsTime())
+			require.Equal(t, now, local.GetLastAttemptAt().AsTime())
+
+			afterTasks, err := env.engine.Tasks(ref)
+			require.NoError(t, err)
+			require.Equal(t, tc.wantNewTimerTask, len(afterTasks[historytasks.CategoryTimer])-beforeTimers)
+			if tc.wantNewTimerTask > 0 {
+				timerTasks := afterTasks[historytasks.CategoryTimer]
+				require.Equal(t, now.Add(tc.wantTimerDelay), timerTasks[len(timerTasks)-1].GetVisibilityTime())
+			} else {
+				require.Equal(t, localFailureUnavailable, local.GetFailure().GetApplicationFailureInfo().GetType())
+				require.False(t, local.GetFailure().GetApplicationFailureInfo().GetNonRetryable())
+			}
+		})
+	}
+}
+
+func TestApplyLocalTask_Execute_FencedMissingNamespaceFails(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	mutation := env.mutationUpdate("cellB")
+	ref := env.start(mutation, nil)
+
+	gomock.InOrder(
+		env.metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(
+			&persistence.ConditionFailedError{Msg: "conditional failure"}),
+		env.metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(
+			&persistence.GetMetadataResponse{NotificationVersion: mutation.GetExpectedVersion() + 1},
+			nil,
+		),
+		env.metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: "ns-id"}).Return(
+			nil,
+			serviceerror.NewNamespaceNotFound("namespace was deleted or renamed"),
+		),
+	)
+
+	require.NoError(t, env.localHandler.Execute(
+		env.engineCtx,
+		ref,
+		chasm.TaskAttributes{},
+		&namespacereplicationpb.ApplyLocalTask{},
+	))
+
+	component := env.read(ref)
+	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_FAILED, component.GetLocalApply().GetOutcome())
+	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_FAILED, component.GetStatus())
+}
+
+// A newer namespace-row version can mean either that this UPDATE lost its CAS,
+// or that an earlier ambiguous attempt committed and was subsequently
+// overwritten. The current state cannot distinguish those histories, so resolve
+// this component as an indeterminate outcome and make the ambiguity observable.
+func TestApplyLocalTask_Execute_SupersededUpdateIsIndeterminate(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	mutation := env.mutationUpdate("cellB", "cellC")
+	ref := env.start(mutation, nil)
+	logger := testlogger.NewTestLogger(t, testlogger.FailOnExpectedErrorOnly)
+	capture := logger.StartCapture()
+	env.localHandler.logger = logger
+
 	concurrentWinner := proto.Clone(testDetail()).(*persistencespb.NamespaceDetail)
 	concurrentWinner.Info.Description = "concurrent winner"
-	env.metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: "ns-id"}).Return(
-		&persistence.GetNamespaceResponse{
-			Namespace:           concurrentWinner,
-			IsGlobalNamespace:   true,
-			NotificationVersion: 7,
-		},
-		nil,
-	)
-	env.metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(
-		&persistence.GetMetadataResponse{NotificationVersion: 8},
-		nil,
+	gomock.InOrder(
+		env.metadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).Return(
+			serviceerror.NewUnavailable("UpdateNamespace operation failed because of conditional failure.")),
+		env.metadataMgr.EXPECT().GetMetadata(gomock.Any()).Return(
+			&persistence.GetMetadataResponse{NotificationVersion: mutation.GetExpectedVersion() + 2},
+			nil,
+		),
+		env.metadataMgr.EXPECT().GetNamespace(gomock.Any(), &persistence.GetNamespaceRequest{ID: "ns-id"}).Return(
+			&persistence.GetNamespaceResponse{
+				Namespace:           concurrentWinner,
+				IsGlobalNamespace:   true,
+				NotificationVersion: mutation.GetExpectedVersion() + 1,
+			},
+			nil,
+		),
 	)
 	require.NoError(t, env.localHandler.Execute(env.engineCtx, ref, chasm.TaskAttributes{}, &namespacereplicationpb.ApplyLocalTask{}))
+	capture.RequireContains(t, testlogger.CapturedLogPattern{
+		Level:   testlogger.Warn,
+		Message: "namespacereplication local update outcome fenced by newer namespace version",
+		Tags: map[string]any{
+			"wf-namespace-id":                "ns-id",
+			"business_id":                    ref.BusinessID,
+			"resolution":                     "fenced_ambiguous",
+			"expected_notification_version":  mutation.GetExpectedVersion(),
+			"namespace_notification_version": mutation.GetExpectedVersion() + 1,
+			"metadata_notification_version":  mutation.GetExpectedVersion() + 2,
+		},
+	})
 
 	c := env.read(ref)
-	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_FAILED, c.GetLocalApply().GetOutcome())
+	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_INDETERMINATE, c.GetLocalApply().GetOutcome())
 	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_FAILED, c.GetStatus())
 	appInfo := c.GetLocalApply().GetFailure().GetApplicationFailureInfo()
 	require.Equal(t, localFailureUnavailable, appInfo.GetType())
@@ -675,11 +1216,111 @@ func TestApplyLocalTask_Execute_SupersededUpdateFailsUnavailable(t *testing.T) {
 	}
 }
 
+func TestApplyLocalTask_ResolveLocalIgnoresResolvedLocalApply(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	ref := env.start(env.mutationUpdate("cellB"), func(c *NamespaceMutationComponent) {
+		c.LocalApply = &namespacereplicationpb.LocalApplyStatus{
+			Outcome: namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED,
+		}
+		c.PeerApply["cellB"].Outcome = namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED
+	})
+
+	require.NoError(t, env.localHandler.resolveLocal(
+		env.engineCtx,
+		ref,
+		&namespacereplicationpb.ApplyLocalTask{},
+		false,
+	))
+
+	component := env.read(ref)
+	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, component.GetStatus())
+	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, component.GetLocalApply().GetOutcome())
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_APPLIED, component.GetPeerApply()["cellB"].GetOutcome())
+}
+
+func TestApplyLocalTask_RecordLocalFailureIgnoresResolvedLocalApply(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	ref := env.start(env.mutationUpdate("cellB"), func(c *NamespaceMutationComponent) {
+		c.LocalApply = &namespacereplicationpb.LocalApplyStatus{
+			Outcome: namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED,
+		}
+	})
+
+	require.NoError(t, env.localHandler.recordLocalFailure(
+		env.engineCtx,
+		ref,
+		"ns-id",
+		&namespacereplicationpb.ApplyLocalTask{},
+		serviceerror.NewUnavailable("stale task result"),
+	))
+
+	component := env.read(ref)
+	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, component.GetStatus())
+	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED, component.GetLocalApply().GetOutcome())
+}
+
+func TestApplyLocalTask_StateUpdatesIgnoreStaleAttempt(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	ref := env.start(env.mutationUpdate("cellB"), func(c *NamespaceMutationComponent) {
+		c.LocalApply.AttemptCount = 2
+	})
+	staleTask := &namespacereplicationpb.ApplyLocalTask{Attempt: 1}
+
+	require.NoError(t, env.localHandler.resolveLocal(env.engineCtx, ref, staleTask, false))
+	require.NoError(t, env.localHandler.recordLocalFailure(
+		env.engineCtx,
+		ref,
+		"ns-id",
+		staleTask,
+		serviceerror.NewUnavailable("stale failure"),
+	))
+	require.NoError(t, env.localHandler.recordLocalRetry(
+		env.engineCtx,
+		ref,
+		"ns-id",
+		staleTask,
+		serviceerror.NewUnavailable("stale unresolved result"),
+	))
+
+	component := env.read(ref)
+	require.Equal(t, namespacereplicationpb.COMPONENT_STATUS_RUNNING, component.GetStatus())
+	require.Equal(t, namespacereplicationpb.LOCAL_APPLY_OUTCOME_PENDING, component.GetLocalApply().GetOutcome())
+	require.Equal(t, int32(2), component.GetLocalApply().GetAttemptCount())
+	tasks, err := env.engine.Tasks(ref)
+	require.NoError(t, err)
+	require.Empty(t, tasks[historytasks.CategoryTimer])
+}
+
 // startCommitted seeds a component already past local commit, ready for peer fan-out.
 func (env *nsreplTestEnv) startCommitted(peer string) chasm.ComponentRef {
 	return env.start(env.mutationUpdate(peer), func(c *NamespaceMutationComponent) {
 		c.LocalApply = &namespacereplicationpb.LocalApplyStatus{Outcome: namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED}
 	})
+}
+
+func TestApplyPeerTask_RecordOutcomeIgnoresStaleAttempt(t *testing.T) {
+	env := newNsreplTestEnv(t)
+	ref := env.start(env.mutationUpdate("cellB"), func(c *NamespaceMutationComponent) {
+		c.LocalApply.Outcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED
+		c.PeerApply["cellB"].AttemptCount = 2
+	})
+
+	require.NoError(t, env.peerHandler.recordPeerOutcome(
+		env.engineCtx,
+		ref,
+		"ns-id",
+		&namespacereplicationpb.ApplyPeerTask{TargetCell: "cellB", Attempt: 1},
+		namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_RETRIABLE,
+		serviceerror.NewUnavailable("stale result"),
+	))
+
+	component := env.read(ref)
+	peer := component.GetPeerApply()["cellB"]
+	require.Equal(t, namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING, peer.GetOutcome())
+	require.Equal(t, int32(2), peer.GetAttemptCount())
+	tasks, err := env.engine.Tasks(ref)
+	require.NoError(t, err)
+	require.Empty(t, tasks[historytasks.CategoryTimer])
 }
 
 func TestApplyPeerTask_Execute_Applied(t *testing.T) {
@@ -791,6 +1432,7 @@ func TestApplyPeerTask_Execute_RetriableReschedules(t *testing.T) {
 
 func TestApplyPeerTask_Execute_RetryBudgetBoundary(t *testing.T) {
 	now := time.Date(2026, 9, 19, 12, 0, 0, 0, time.UTC)
+	retryExpiration := 2 * time.Hour
 	testCases := []struct {
 		name             string
 		elapsed          time.Duration
@@ -800,20 +1442,20 @@ func TestApplyPeerTask_Execute_RetryBudgetBoundary(t *testing.T) {
 	}{
 		{
 			name:             "below budget retries",
-			elapsed:          peerRetryBudget - time.Nanosecond,
+			elapsed:          retryExpiration - time.Nanosecond,
 			wantOutcome:      namespacereplicationpb.PEER_APPLY_OUTCOME_PENDING,
 			wantStatus:       namespacereplicationpb.COMPONENT_STATUS_RUNNING,
 			wantNewTimerTask: 1,
 		},
 		{
 			name:        "at budget is terminal",
-			elapsed:     peerRetryBudget,
+			elapsed:     retryExpiration,
 			wantOutcome: namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL,
 			wantStatus:  namespacereplicationpb.COMPONENT_STATUS_COMPLETED,
 		},
 		{
 			name:        "above budget is terminal",
-			elapsed:     peerRetryBudget + time.Nanosecond,
+			elapsed:     retryExpiration + time.Nanosecond,
 			wantOutcome: namespacereplicationpb.PEER_APPLY_OUTCOME_FAILED_TERMINAL,
 			wantStatus:  namespacereplicationpb.COMPONENT_STATUS_COMPLETED,
 		},
@@ -823,6 +1465,11 @@ func TestApplyPeerTask_Execute_RetryBudgetBoundary(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			timeSource := clock.NewEventTimeSource().Update(now)
 			env := newNsreplTestEnvWithOptions(t, chasmtest.WithTimeSource(timeSource))
+			env.peerHandler.config = &config{
+				peerRetryInitialInterval:    func() time.Duration { return 3 * time.Second },
+				peerRetryMaximumInterval:    func() time.Duration { return 20 * time.Second },
+				peerRetryExpirationInterval: func() time.Duration { return retryExpiration },
+			}
 			ref := env.start(env.mutationUpdate("cellB"), func(c *NamespaceMutationComponent) {
 				c.LocalApply.Outcome = namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED
 				peer := c.PeerApply["cellB"]
@@ -856,6 +1503,10 @@ func TestApplyPeerTask_Execute_RetryBudgetBoundary(t *testing.T) {
 			afterTasks, err := env.engine.Tasks(ref)
 			require.NoError(t, err)
 			require.Equal(t, tc.wantNewTimerTask, len(afterTasks[historytasks.CategoryTimer])-beforeTimers)
+			if tc.wantNewTimerTask > 0 {
+				timerTasks := afterTasks[historytasks.CategoryTimer]
+				require.Equal(t, now.Add(12*time.Second), timerTasks[len(timerTasks)-1].GetVisibilityTime())
+			}
 		})
 	}
 }
@@ -1171,7 +1822,6 @@ func TestApplyPeerTask_Execute_UsesInjectedApplier(t *testing.T) {
 	handler := &applyPeerTaskHandler{
 		peerApplier:    applier,
 		currentCluster: "cellA",
-		metricsHandler: metrics.NoopMetricsHandler,
 		logger:         log.NewTestLogger(),
 	}
 
@@ -1204,7 +1854,6 @@ func TestApplyPeerTask_Execute_ClonesDetailForInjectedApplier(t *testing.T) {
 	handler := &applyPeerTaskHandler{
 		peerApplier:    applier,
 		currentCluster: "cellA",
-		metricsHandler: metrics.NoopMetricsHandler,
 		logger:         log.NewTestLogger(),
 	}
 
@@ -1227,7 +1876,6 @@ func TestApplyPeerTask_Execute_UnknownInjectedResultRetries(t *testing.T) {
 	handler := &applyPeerTaskHandler{
 		peerApplier:    applier,
 		currentCluster: "cellA",
-		metricsHandler: metrics.NoopMetricsHandler,
 		logger:         log.NewTestLogger(),
 	}
 

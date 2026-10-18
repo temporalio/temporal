@@ -60,7 +60,8 @@ func (h *handler) TriggerNamespaceMutation(
 			case namespacereplicationpb.LOCAL_APPLY_OUTCOME_COMMITTED,
 				namespacereplicationpb.LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW:
 				return &namespacereplicationpb.TriggerNamespaceMutationResponse{}, true, nil
-			case namespacereplicationpb.LOCAL_APPLY_OUTCOME_FAILED:
+			case namespacereplicationpb.LOCAL_APPLY_OUTCOME_FAILED,
+				namespacereplicationpb.LOCAL_APPLY_OUTCOME_INDETERMINATE:
 				failure := local.GetFailure()
 				return nil, true, localApplyError(failure.GetApplicationFailureInfo().GetType(), failure.GetMessage())
 			default:
@@ -78,6 +79,9 @@ func (h *handler) TriggerNamespaceMutation(
 func validateTriggerNamespaceMutationRequest(req *namespacereplicationpb.TriggerNamespaceMutationRequest) error {
 	if req == nil || req.GetMutation() == nil {
 		return serviceerror.NewInvalidArgument("mutation is required")
+	}
+	if !req.GetMutation().GetIsGlobalNamespace() {
+		return serviceerror.NewInvalidArgument("mutation.is_global_namespace must be true")
 	}
 	if !req.GetMutation().GetShadow() {
 		return serviceerror.NewFailedPrecondition("authoritative CHASM namespace replication is not enabled")

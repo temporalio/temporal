@@ -29,9 +29,13 @@ message NamespaceMutation {
   // the local cell, so a removed peer receives the final configuration.
   repeated string peer_cells = 4;
 
+  // Whether the target namespace state is global. The CHASM namespace
+  // replication component rejects local namespace mutations.
+  bool is_global_namespace = 5;
+
   // Shadow mutations exercise the full component and peer transport without
   // writing namespace state in either the source or destination cell.
-  bool shadow = 5;
+  bool shadow = 6;
 }
 
 // NamespaceMutationState is the persisted state of a NamespaceMutationComponent.
@@ -42,7 +46,7 @@ message NamespaceMutationState {
   // Top-level lifecycle status. Drives LifecycleState().
   ComponentStatus status = 2;
 
-  // Local apply outcome, set once ApplyLocalTask completes.
+  // Local apply status, including durable retry progress and the terminal outcome.
   LocalApplyStatus local_apply = 3;
 
   // Per-peer apply outcomes, keyed by target cell name.
@@ -55,19 +59,21 @@ enum ComponentStatus {
   COMPONENT_STATUS_RUNNING = 1;
   // All tasks reached a terminal state (success or final failure). Component is done.
   COMPONENT_STATUS_COMPLETED = 2;
-  // Local apply failed. Peer fan-out was never attempted.
+  // Local apply failed or remained indeterminate. Peer fan-out was never attempted.
   COMPONENT_STATUS_FAILED = 3;
 }
 
-// LocalApplyOutcome reports the result of the local phase: pending until an
-// authoritative write resolves or shadow mode deliberately skips that write.
+// LocalApplyOutcome reports the result of the local phase. INDETERMINATE is
+// terminal, but kept distinct from FAILED because an authoritative write may
+// have committed. Shadow mode deliberately skips the authoritative write.
 enum LocalApplyOutcome {
   LOCAL_APPLY_OUTCOME_UNSPECIFIED = 0;
   LOCAL_APPLY_OUTCOME_PENDING = 1;
   LOCAL_APPLY_OUTCOME_COMMITTED = 2;
   LOCAL_APPLY_OUTCOME_FAILED = 3;
+  LOCAL_APPLY_OUTCOME_INDETERMINATE = 4;
   // Shadow mode deliberately skipped the source metadata-store write.
-  LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW = 4;
+  LOCAL_APPLY_OUTCOME_SKIPPED_SHADOW = 5;
 }
 
 // PeerApplyOutcome reports the result of processing a mutation at a peer via
@@ -100,8 +106,17 @@ message LocalApplyStatus {
   LocalApplyOutcome outcome = 1;
   // Time the local apply reached a terminal outcome. Unset while pending.
   google.protobuf.Timestamp resolved_at = 2;
-  // Failure detail when outcome is FAILED (e.g. CAS conflict, store unavailable).
+  // Failure detail when outcome is FAILED or INDETERMINATE.
   temporal.api.failure.v1.Failure failure = 3;
+  // Number of unresolved attempts recorded. This is also the attempt expected
+  // on the next ApplyLocalTask while the outcome remains PENDING.
+  int32 attempt_count = 4;
+  // Time the first unresolved attempt was recorded. This starts the retry budget.
+  google.protobuf.Timestamp first_attempt_at = 5;
+  // Time the most recent unresolved attempt was recorded.
+  google.protobuf.Timestamp last_attempt_at = 6;
+  // Most recent unresolved failure, retained for diagnostics.
+  temporal.api.failure.v1.Failure last_failure = 7;
 }
 
 message PeerApplyStatus {

@@ -226,6 +226,18 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentVersionAbsorbsUnversionedBacklog
 	// Stopping the pollers so that we verify the backlog expectations
 	cancelPoller()
 
+	// Wait for the current-version routing to propagate.
+	env.waitForTaskQueueVersioningInfo(
+		s,
+		&taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		worker_versioning.ExternalWorkerDeploymentVersionToStringV31(&deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        currentBuildID,
+		}),
+		"",
+		0,
+	)
+
 	// Enqueue unversioned backlog
 	unversionedWorkflowCount := 10 * env.partitionCount
 	s.startUnversionedWorkflows(env, unversionedWorkflowCount, tqName)
@@ -478,6 +490,18 @@ func (s *TaskQueueStatsVersionSuite) TestCurrentAbsorbsUnversionedBacklog_WhenRa
 	rampPercentage := 20
 	s.setRampingVersion(env, deploymentName, "", rampPercentage)
 
+	// Wait for the current/ramping routing to propagate.
+	env.waitForTaskQueueVersioningInfo(
+		s,
+		&taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		worker_versioning.ExternalWorkerDeploymentVersionToStringV31(&deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        currentBuildID,
+		}),
+		worker_versioning.UnversionedVersionId,
+		float32(rampPercentage),
+	)
+
 	// Enqueue unversioned backlog.
 	unversionedWorkflowCount := 10 * env.partitionCount
 	s.startUnversionedWorkflows(env, unversionedWorkflowCount, tqName)
@@ -539,6 +563,18 @@ func (s *TaskQueueStatsVersionSuite) TestRampingAbsorbsUnversionedBacklog_WhenCu
 	rampPercentage := 30
 	s.setRampingVersion(env, deploymentName, rampingBuildID, rampPercentage)
 
+	// Wait for the current/ramping routing to propagate.
+	env.waitForTaskQueueVersioningInfo(
+		s,
+		&taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		worker_versioning.UnversionedVersionId,
+		worker_versioning.ExternalWorkerDeploymentVersionToStringV31(&deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        rampingBuildID,
+		}),
+		float32(rampPercentage),
+	)
+
 	// Enqueue unversioned backlog.
 	unversionedWorkflowCount := 10 * env.partitionCount
 	s.startUnversionedWorkflows(env, unversionedWorkflowCount, tqName)
@@ -598,6 +634,18 @@ func (s *TaskQueueStatsVersionSuite) TestInactiveVersionDoesNotAbsorbUnversioned
 
 	// Stopping the pollers so that we verify the backlog expectations
 	cancelPoller()
+
+	// Wait for the current-version routing to propagate.
+	env.waitForTaskQueueVersioningInfo(
+		s,
+		&taskqueuepb.TaskQueue{Name: tqName, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
+		worker_versioning.ExternalWorkerDeploymentVersionToStringV31(&deploymentpb.WorkerDeploymentVersion{
+			DeploymentName: deploymentName,
+			BuildId:        currentBuildID,
+		}),
+		"",
+		0,
+	)
 
 	// Enqueue unversioned backlog.
 	unversionedWorkflows := 10 * env.partitionCount
