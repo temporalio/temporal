@@ -379,7 +379,7 @@ func TestRecordActivityCompletionMetrics_SkipsFutureStartTime(t *testing.T) {
 	)
 }
 
-func TestRecordActivityCompletionMetrics_HasAccumulatedTimeSkip(t *testing.T) {
+func TestRecordActivityCompletionMetrics_HasTimeSkippingClockOffset(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		status  ActivityExecutionStatus
@@ -405,11 +405,11 @@ func TestRecordActivityCompletionMetrics_HasAccumulatedTimeSkip(t *testing.T) {
 				namespace.Name("test-namespace"),
 				"test-task-queue",
 				ActivityCompletionMetrics{
-					Status:                 tc.status,
-					AttemptStartedTime:     time.Now().Add(-time.Minute),
-					FirstScheduledTime:     time.Now().Add(-2 * time.Minute),
-					HasAccumulatedTimeSkip: true,
-					Closed:                 tc.closed,
+					Status:                     tc.status,
+					AttemptStartedTime:         time.Now().Add(-time.Minute),
+					FirstScheduledTime:         time.Now().Add(-2 * time.Minute),
+					HasTimeSkippingClockOffset: true,
+					Closed:                     tc.closed,
 				},
 				testActivityMetricTags(metrics.HistoryRespondActivityTaskCompletedScope)...,
 			)
@@ -434,12 +434,12 @@ func TestRecordActivityCompletionMetrics_TimeoutWithAccumulatedTimeSkip(t *testi
 		namespace.Name("test-namespace"),
 		"test-task-queue",
 		ActivityCompletionMetrics{
-			Status:                 ActivityStatusTimeout,
-			AttemptStartedTime:     time.Now().Add(-time.Minute),
-			FirstScheduledTime:     time.Now().Add(-2 * time.Minute),
-			HasAccumulatedTimeSkip: true,
-			Closed:                 true,
-			TimerType:              enumspb.TIMEOUT_TYPE_HEARTBEAT,
+			Status:                     ActivityStatusTimeout,
+			AttemptStartedTime:         time.Now().Add(-time.Minute),
+			FirstScheduledTime:         time.Now().Add(-2 * time.Minute),
+			HasTimeSkippingClockOffset: true,
+			Closed:                     true,
+			TimerType:                  enumspb.TIMEOUT_TYPE_HEARTBEAT,
 		},
 		testActivityMetricTags(metrics.TimerActiveTaskActivityTimeoutScope)...,
 	)
