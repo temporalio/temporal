@@ -6,7 +6,6 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/api"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -245,24 +244,4 @@ func (ni *NamespaceRateLimitInterceptorImpl) AllowN(
 		return ErrNamespaceRateLimitServerBusy
 	}
 	return nil
-}
-
-func IsLongPollGetWorkflowExecutionHistoryRequest(
-	req any,
-) bool {
-	switch request := req.(type) {
-	case *workflowservice.GetWorkflowExecutionHistoryRequest:
-		return request.GetWaitNewEvent()
-	}
-	return false
-}
-
-func IsLongPollDescribeActivityExecutionRequest(
-	req any,
-) bool {
-	switch request := req.(type) {
-	case *workflowservice.DescribeActivityExecutionRequest:
-		return len(request.GetLongPollToken()) > 0
-	}
-	return false
 }
