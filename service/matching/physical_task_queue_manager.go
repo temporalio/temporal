@@ -87,12 +87,12 @@ type (
 		clusterMeta         cluster.Metadata
 		metricsHandler      metrics.Handler // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
-		pollerHistory            *pollerHistory
-		currentPolls             atomic.Int64
-		taskValidator            taskValidator
+		pollerHistory                   *pollerHistory
+		currentPolls                    atomic.Int64
+		taskValidator                   taskValidator
 		deploymentRegistrationCh        chan struct{}
 		deploymentVersionMonitorRunning atomic.Bool
-		pollerScalingRateLimiter quotas.RateLimiter
+		pollerScalingRateLimiter        quotas.RateLimiter
 
 		taskTrackerLock sync.Mutex
 		tasksAdded      map[priorityKey]*taskTracker
@@ -786,8 +786,6 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		return errMissingDeploymentVersion
 	}
 
-	c.maybeStartDeploymentVersionMonitor()
-
 	userData, _, err := c.partitionMgr.getPerTypeUserData()
 	if err != nil {
 		return err
@@ -800,6 +798,8 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		// the deployment workflow.
 		return nil
 	}
+
+	c.maybeStartDeploymentVersionMonitor()
 
 	select {
 	case <-ctx.Done():
