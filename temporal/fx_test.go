@@ -6,16 +6,61 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	otelresource "go.opentelemetry.io/otel/sdk/resource"
+	otelsdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	"go.opentelemetry.io/otel/trace"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/tests/testutils"
+	"go.uber.org/fx"
 	"go.uber.org/mock/gomock"
 )
+
+func TestServiceTracingModuleSkipsResourceDetectionWithoutSpanProcessors(t *testing.T) {
+	t.Parallel()
+
+	var tracingResource *otelresource.Resource
+	var tracerProvider trace.TracerProvider
+	app := fx.New(
+		fx.NopLogger,
+		fx.Supply(primitives.FrontendService),
+		ServiceTracingModule,
+		fx.Populate(&tracingResource, &tracerProvider),
+	)
+	require.NoError(t, app.Err())
+	require.Empty(t, tracingResource.Attributes())
+	require.Equal(t, telemetry.NoopTracerProvider, tracerProvider)
+}
+
+func TestServiceTracingModuleDetectsResourceWithSpanProcessor(t *testing.T) {
+	t.Parallel()
+
+	recorder := tracetest.NewSpanRecorder()
+	var tracingResource *otelresource.Resource
+	var tracerProvider trace.TracerProvider
+	app := fx.New(
+		fx.NopLogger,
+		fx.Supply(primitives.FrontendService),
+		ServiceTracingModule,
+		fx.Replace([]otelsdktrace.SpanProcessor{recorder}),
+		fx.Populate(&tracingResource, &tracerProvider),
+	)
+	require.NoError(t, app.Err())
+	require.NotEmpty(t, tracingResource.Attributes())
+
+	_, span := tracerProvider.Tracer("test").Start(t.Context(), "test")
+	span.End()
+	require.Len(t, recorder.Ended(), 1)
+	require.Equal(t, tracingResource, recorder.Ended()[0].Resource())
+}
 
 func TestInitCurrentClusterMetadataRecord(t *testing.T) {
 	configDir := path.Join(testutils.GetRepoRootDirectory(), "config")
