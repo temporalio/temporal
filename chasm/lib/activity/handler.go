@@ -230,12 +230,12 @@ func (h *handler) newActivityForStartExecution(
 
 	eager := request.GetRequestEagerExecution()
 	if eager {
-		err = TransitionEagerStarted.Apply(newActivity, mutableContext, eagerStartEvent{
+		if err := TransitionEagerStarted.Apply(newActivity, mutableContext, eagerStartEvent{
 			requestID: request.GetRequestId(),
-		})
-		if err == nil {
-			newActivity.recordLastWorker(mutableContext, request.GetIdentity())
+		}); err != nil {
+			return nil, nil, err
 		}
+		newActivity.recordLastWorker(mutableContext, request.GetIdentity())
 	} else {
 		err = TransitionScheduled.Apply(newActivity, mutableContext, nil)
 	}
