@@ -7,8 +7,7 @@ import (
 	"go.opentelemetry.io/otel/log"
 )
 
-// stringSliceAttr records a []string as a native OTEL slice attribute, so Chronicle can map it
-// to an Array(String) column in ClickHouse.
+// stringSliceAttr records a []string as a native OTEL slice attribute.
 func stringSliceAttr(key string, values []string) log.KeyValue {
 	vals := make([]log.Value, len(values))
 	for i, v := range values {
