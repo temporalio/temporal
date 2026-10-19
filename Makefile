@@ -537,29 +537,30 @@ workflowcheck: $(WORKFLOWCHECK)
 		$(WORKFLOWCHECK) "$$dir" ; \
 	done
 
-# Packages that must not be part of the temporal_minimal server.
-MINIMAL_EXCLUDED_PACKAGES := \
-	cloud.google.com/go/storage \
-	go.temporal.io/server/common/archiver/gcloud
+comma := ,
 
-# Compiles every package with temporal_minimal, and checks that each MINIMAL_EXCLUDED_PACKAGES entry
-# is part of the default server and of the server built with temporal_minimal plus every
-# temporal_with_* tag, but not of the temporal_minimal server.
+# Packages that temporal_minimal compiles out of the server unless the temporal_with_* build tag at the
+# end of the variable name is set. Each temporal_with_* tag needs one.
+EXCLUDED_PACKAGES_temporal_with_gstorage := cloud.google.com/go/storage go.temporal.io/server/common/archiver/gcloud
+
+# $(call server-deps,<tags>): the packages the server depends on when built with <tags>.
+server-deps = $(shell CGO_ENABLED=$(CGO_ENABLED) go list -tags $(ALL_BUILD_TAGS),$(1) -deps ./cmd/server)
+
+# $(call check-build-tag,<tag>): checks that temporal_minimal compiles the packages of <tag> out of the
+# server, and that <tag> brings them back.
+define check-build-tag
+$(if $(EXCLUDED_PACKAGES_$(1)),,$(error EXCLUDED_PACKAGES_$(1) is not set))
+$(if $(filter-out $(call server-deps,),$(EXCLUDED_PACKAGES_$(1))),$(error The default server doesn't depend on all of EXCLUDED_PACKAGES_$(1)))
+$(if $(filter $(EXCLUDED_PACKAGES_$(1)),$(call server-deps,temporal_minimal)),$(error The temporal_minimal server depends on EXCLUDED_PACKAGES_$(1)))
+$(if $(filter-out $(call server-deps,temporal_minimal$(comma)$(1)),$(EXCLUDED_PACKAGES_$(1))),$(error The temporal_minimal$(comma)$(1) server doesn't depend on all of EXCLUDED_PACKAGES_$(1)))
+endef
+
+# Compiles every package with temporal_minimal, and checks the packages each temporal_with_* tag
+# compiles out of the server.
 build-tags-check:
-	$(if $(MINIMAL_EXCLUDED_PACKAGES),,$(error MINIMAL_EXCLUDED_PACKAGES is empty))
-	@printf $(COLOR) "Check temporal_minimal build..."
+	@printf $(COLOR) "Check build tags..."
 	CGO_ENABLED=$(CGO_ENABLED) go build -tags $(ALL_BUILD_TAGS),temporal_minimal ./...
-	@opt_in="$$(git grep -ohE 'temporal_with_[a-z0-9_]+' -- '*.go' | sort -u | paste -sd, -)"; \
-	for tags in "" "temporal_minimal,$$opt_in"; do \
-		deps="$$(CGO_ENABLED=$(CGO_ENABLED) go list -tags $(ALL_BUILD_TAGS),$$tags -deps ./cmd/server)" || exit 1; \
-		for pkg in $(MINIMAL_EXCLUDED_PACKAGES); do \
-			printf '%s\n' "$$deps" | grep -qxF "$$pkg" || { echo "$$pkg is not part of the server built with tags '$$tags'; update MINIMAL_EXCLUDED_PACKAGES."; exit 1; }; \
-		done; \
-	done; \
-	deps="$$(CGO_ENABLED=$(CGO_ENABLED) go list -tags $(ALL_BUILD_TAGS),temporal_minimal -deps ./cmd/server)" || exit 1; \
-	if printf '%s\n' "$$deps" | grep -xF $(addprefix -e ,$(MINIMAL_EXCLUDED_PACKAGES)); then \
-		echo "The temporal_minimal server depends on the excluded packages above."; exit 1; \
-	fi
+	$(foreach tag,$(sort $(shell git grep -ohE 'temporal_with_[a-z0-9_]+' -- '*.go')),$(call check-build-tag,$(tag)))
 
 check: lint shell-check
 
