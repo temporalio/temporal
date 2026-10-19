@@ -314,6 +314,54 @@ func (s *namespaceRateLimitInterceptorSuite) TestIntercept_RetryDelayFloorIsName
 	s.Equal([]string{firstNamespace, secondNamespace}, floorNamespaces)
 }
 
+// test namespace level override
+func (s *namespaceRateLimitInterceptorSuite) TestIntercept_RetryDelayFloorNamespaceOverride() {
+	const overrideNamespace = "override-namespace"
+	const otherNamespace = "other-namespace"
+	const lowerNamespace = "lower-namespace"
+	dynamicConfigClient := dynamicconfig.NewMemoryClient()
+	removeOverride := dynamicConfigClient.OverrideSetting(dynamicconfig.FrontendResourceExhaustedRetryDelayFloor, []dynamicconfig.ConstrainedValue{
+		// The cell-wide value is listed first on purpose: dynamic config matches by constraint, not list order.
+		{Value: time.Second},
+		{
+			Constraints: dynamicconfig.Constraints{Namespace: overrideNamespace},
+			Value:       5 * time.Second,
+		},
+		{Constraints: dynamicconfig.Constraints{Namespace: lowerNamespace}, Value: 500 * time.Millisecond},
+	})
+	defer removeOverride()
+	dynamicConfig := dynamicconfig.NewCollection(dynamicConfigClient, log.NewNoopLogger())
+	floor := dynamicconfig.FrontendResourceExhaustedRetryDelayFloor.Get(dynamicConfig)
+
+	s.mockRegistry.EXPECT().GetNamespace(namespace.Name(overrideNamespace)).Return(nil, nil)
+	s.mockRegistry.EXPECT().GetNamespace(namespace.Name(otherNamespace)).Return(nil, nil)
+	s.mockRegistry.EXPECT().GetNamespace(namespace.Name(lowerNamespace)).Return(nil, nil)
+	s.mockRateLimiter.EXPECT().Allow(gomock.Any(), gomock.Any()).Return(false).Times(3)
+	ni := NewNamespaceRateLimitInterceptor(
+		s.mockRegistry,
+		s.mockRateLimiter,
+		map[string]struct{}{},
+		func(string) bool { return false },
+		metrics.NoopMetricsHandler,
+		WithResourceExhaustedRetryDelayFloor(floor),
+	)
+
+	for _, tc := range []struct {
+		namespace string
+		wantDelay time.Duration
+	}{
+		{namespace: overrideNamespace, wantDelay: 5 * time.Second},
+		{namespace: otherNamespace, wantDelay: time.Second},
+		{namespace: lowerNamespace, wantDelay: 500 * time.Millisecond},
+	} {
+		_, err := ni.Intercept(context.Background(), &workflowservice.StartWorkflowExecutionRequest{Namespace: tc.namespace},
+			&grpc.UnaryServerInfo{FullMethod: otherMethod}, noopHandler)
+		retryInfo := retryInfoDetail(err)
+		s.Require().NotNil(retryInfo)
+		s.Equal(tc.wantDelay, retryInfo.GetRetryDelay().AsDuration())
+	}
+}
+
 // Wait() tests
 
 func (s *namespaceRateLimitInterceptorSuite) TestWait_TokenImmediatelyAvailable() {

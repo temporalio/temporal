@@ -46,6 +46,7 @@ func withResourceExhaustedRetryDelayFloor(
 		return base
 	}
 
+	// TODO: We might need a upper limit for the floor. It's possible for misconfigured dynamic config to set a floor that is too high (e.g. 5m instead of 5s).
 	delay := floorFn(namespaceName.String())
 	if delay <= 0 {
 		return base
