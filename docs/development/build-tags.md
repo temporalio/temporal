@@ -28,8 +28,6 @@ make temporal-server BUILD_TAG=temporal_minimal,temporal_with_gstorage
 make unit-test-build-tags
 ```
 
-Programs that embed the server pass the same tags to `go build -tags`.
-
 Without `temporal_minimal`, the `temporal_with_*` tags have no effect and every integration is
 included.
 
