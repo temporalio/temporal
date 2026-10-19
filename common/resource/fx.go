@@ -24,6 +24,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/deadlock"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/faultinjection"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
@@ -42,10 +43,12 @@ import (
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
+	"go.temporal.io/server/common/testing/faultinjectiontest"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
@@ -74,6 +77,20 @@ type (
 	}
 )
 
+// GRPCFaultParams keeps the fault providers optional for standalone consumers.
+type GRPCFaultParams struct {
+	fx.In
+	Generators faultinjection.Generators[any, any] `optional:"true"`
+	TestHooks  testhooks.TestHooks                 `optional:"true"`
+}
+
+func (p GRPCFaultParams) Inbound() grpcfaults.Generator {
+	if p.Generators.Inbound != nil {
+		return p.Generators.Inbound
+	}
+	return faultinjectiontest.NewServiceGenerator(p.TestHooks)
+}
+
 // Module
 // Use fx.Hook and OnStart/OnStop to manage Daemon resource lifecycle
 // See LifetimeHooksModule for detail
@@ -99,6 +116,7 @@ var Module = fx.Options(
 	fx.Provide(FrontendClientProvider),
 	fx.Provide(AdminClientProvider),
 	fx.Provide(GrpcListenerProvider),
+	fx.Provide(GRPCFaultGeneratorsProvider),
 	fx.Provide(RuntimeMetricsReporterProvider),
 	metrics.RuntimeMetricsReporterLifetimeHooksModule,
 	fx.Provide(HistoryRawClientProvider),
@@ -392,6 +410,7 @@ func SdkClientFactoryProvider(
 	logger log.SnTaggedLogger,
 	resolver *membership.GRPCResolver,
 	dc *dynamicconfig.Collection,
+	faults GRPCFaultParams,
 ) (sdk.ClientFactory, error) {
 	frontendURL, _, _, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
@@ -403,6 +422,7 @@ func SdkClientFactoryProvider(
 		metricsHandler,
 		logger,
 		dynamicconfig.WorkerStickyCacheSize.Get(dc),
+		grpcfaults.ClientDialOptions(faults.Generators.Outbound)...,
 	)
 	lc.Append(fx.StopHook(factory.Close))
 	return factory, nil
@@ -436,6 +456,7 @@ func RPCFactoryProvider(
 	monitor membership.Monitor,
 	dc *dynamicconfig.Collection,
 	tokenProvider auth.TokenProvider,
+	faults GRPCFaultParams,
 	frontendHTTPTransportInstrumenter telemetry.HTTPClientTransportInstrumenter,
 ) (common.RPCFactory, error) {
 	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
@@ -443,7 +464,7 @@ func RPCFactoryProvider(
 		return nil, err
 	}
 
-	var options []grpc.DialOption
+	options := grpcfaults.ClientDialOptions(faults.Generators.Outbound)
 	if tracingStatsHandler != nil {
 		options = append(options, grpc.WithStatsHandler(tracingStatsHandler))
 	}
@@ -537,4 +558,39 @@ func getFrontendConnectionDetails(
 	}
 
 	return frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, nil
+}
+
+func GRPCFaultGeneratorsProvider(cfg *config.Config, hooks testhooks.TestHooks) (faultinjection.Generators[any, any], error) {
+	testHookGenerators := faultinjection.Generators[any, any]{Inbound: faultinjectiontest.NewServiceGenerator(hooks)}
+	return configuredTransportGenerators(cfg.FaultInjection.GRPC, testHookGenerators, grpcfaults.NewOutcome, nil)
+}
+
+// configuredTransportGenerators is the only transport config-to-generator adapter.
+// Persistence methods use the same NewConfiguredGenerator and WithTestHooks operations.
+func configuredTransportGenerators[Req, Resp any](cfg *config.TransportFaultInjection, testHookGenerators faultinjection.Generators[Req, Resp], outcome func(string, float64) *faultinjection.Outcome[Resp], successful func(Resp) bool) (faultinjection.Generators[Req, Resp], error) {
+	if err := cfg.Validate(); err != nil {
+		return faultinjection.Generators[Req, Resp]{}, err
+	}
+	if cfg == nil {
+		return testHookGenerators, nil
+	}
+	build := func(call *config.CallFaultInjection, testHookGenerator faultinjection.Generator[Req, Resp]) (faultinjection.Generator[Req, Resp], error) {
+		if call == nil {
+			return testHookGenerator, nil
+		}
+		configured, err := faultinjection.NewConfiguredGenerator[Req, Resp](call.Request, call.Response, outcome, successful)
+		if err != nil {
+			return nil, err
+		}
+		return faultinjection.WithTestHooks(configured, testHookGenerator), nil
+	}
+	inbound, err := build(cfg.Inbound, testHookGenerators.Inbound)
+	if err != nil {
+		return faultinjection.Generators[Req, Resp]{}, err
+	}
+	outbound, err := build(cfg.Outbound, testHookGenerators.Outbound)
+	if err != nil {
+		return faultinjection.Generators[Req, Resp]{}, err
+	}
+	return faultinjection.Generators[Req, Resp]{Inbound: inbound, Outbound: outbound}, nil
 }

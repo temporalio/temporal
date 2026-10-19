@@ -1,6 +1,6 @@
 //go:build test_dep
 
-package grpcfaultstest_test
+package faultinjectiontest_test
 
 import (
 	"context"
@@ -12,7 +12,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/rpc/grpcfaults"
-	"go.temporal.io/server/common/testing/grpcfaultstest"
+	"go.temporal.io/server/common/testing/faultinjectiontest"
 	"go.temporal.io/server/common/testing/testhooks"
 	"google.golang.org/grpc"
 )
@@ -20,7 +20,7 @@ import (
 func TestUnaryServerInterceptor_NoGenerator(t *testing.T) {
 	t.Parallel()
 
-	interceptor := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(testhooks.NewTestHooks()))
+	interceptor := grpcfaults.UnaryServerInterceptor(faultinjectiontest.NewServiceGenerator(testhooks.NewTestHooks()))
 	response, err := interceptor(
 		context.Background(),
 		"request",
@@ -39,11 +39,11 @@ func TestUnaryServerInterceptor_BeforeHandler(t *testing.T) {
 
 	testHooks := testhooks.NewTestHooks()
 	injectedErr := errors.New("injected")
-	generator := grpcfaultstest.NewCallbackGenerator(testHooks)
+	generator := faultinjectiontest.NewServiceCallbackGenerator(testHooks)
 	generator.RegisterRequestCallback(grpcfaults.Scope{NamespaceID: "namespace-id"}, func(context.Context, string, any) *grpcfaults.Outcome {
 		return &grpcfaults.Outcome{Error: injectedErr}
 	})
-	interceptor := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(testHooks))
+	interceptor := grpcfaults.UnaryServerInterceptor(faultinjectiontest.NewServiceGenerator(testHooks))
 	handlerCalled := false
 
 	response, err := interceptor(
@@ -65,11 +65,11 @@ func TestUnaryServerInterceptor_AfterHandler(t *testing.T) {
 	t.Parallel()
 
 	testHooks := testhooks.NewTestHooks()
-	generator := grpcfaultstest.NewCallbackGenerator(testHooks)
+	generator := faultinjectiontest.NewServiceCallbackGenerator(testHooks)
 	generator.RegisterResponseCallback(grpcfaults.Scope{NamespaceName: "namespace-name"}, func(context.Context, string, any, any, error) *grpcfaults.Outcome {
 		return &grpcfaults.Outcome{Response: "replacement"}
 	})
-	interceptor := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(testHooks))
+	interceptor := grpcfaults.UnaryServerInterceptor(faultinjectiontest.NewServiceGenerator(testHooks))
 
 	response, err := interceptor(
 		context.Background(),
@@ -90,13 +90,13 @@ func TestUnaryServerInterceptor_HandlerError(t *testing.T) {
 	testHooks := testhooks.NewTestHooks()
 	handlerErr := errors.New("handler")
 	injectedErr := errors.New("injected")
-	generator := grpcfaultstest.NewCallbackGenerator(testHooks)
+	generator := faultinjectiontest.NewServiceCallbackGenerator(testHooks)
 	generator.RegisterResponseCallback(grpcfaults.Scope{NamespaceID: "namespace-id"}, func(_ context.Context, _ string, _, response any, err error) *grpcfaults.Outcome {
 		require.Nil(t, response)
 		require.ErrorIs(t, err, handlerErr)
 		return &grpcfaults.Outcome{Error: injectedErr}
 	})
-	interceptor := grpcfaults.UnaryServerInterceptor(grpcfaultstest.NewGenerator(testHooks))
+	interceptor := grpcfaults.UnaryServerInterceptor(faultinjectiontest.NewServiceGenerator(testHooks))
 	handlerCalled := false
 
 	response, err := interceptor(
@@ -118,7 +118,7 @@ func TestNewCallbackGenerator_UnregisterRemovesHook(t *testing.T) {
 	t.Parallel()
 
 	testHooks := testhooks.NewTestHooks()
-	generator := grpcfaultstest.NewCallbackGenerator(testHooks)
+	generator := faultinjectiontest.NewServiceCallbackGenerator(testHooks)
 	unregister := generator.RegisterRequestCallback(grpcfaults.Scope{NamespaceID: "namespace-id"}, func(context.Context, string, any) *grpcfaults.Outcome {
 		return nil
 	})

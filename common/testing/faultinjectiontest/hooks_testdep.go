@@ -106,3 +106,25 @@ func get[Callback any](
 	var zero Callback
 	return zero, false
 }
+
+// NewServiceGenerator connects shared service-method callbacks to their legacy hook keys.
+func NewServiceGenerator(hooks testhooks.TestHooks) faultinjection.Generator[any, any] {
+	return serviceAdapter(hooks)
+}
+
+func NewServiceCallbackGenerator(hooks testhooks.TestHooks) *faultinjection.CallbackGenerator[any, any] {
+	return faultinjection.NewCallbackGeneratorWithHooks[any, any](serviceAdapter(hooks))
+}
+
+func serviceAdapter(hooks testhooks.TestHooks) Adapter[any, any] {
+	return NewAdapter(hooks, HookKeys[any, any]{
+		Request: Keys[faultinjection.RequestCallback[any, any]]{
+			ByNamespaceID:   testhooks.GRPCRequestFaultGeneratorByNamespaceID,
+			ByNamespaceName: testhooks.GRPCRequestFaultGeneratorByNamespaceName,
+		},
+		Response: Keys[faultinjection.ResponseCallback[any, any]]{
+			ByNamespaceID:   testhooks.GRPCResponseFaultGeneratorByNamespaceID,
+			ByNamespaceName: testhooks.GRPCResponseFaultGeneratorByNamespaceName,
+		},
+	})
+}
