@@ -136,6 +136,11 @@ UNIT_TEST_DIRS := $(filter-out $(FUNCTIONAL_TEST_ROOT)% $(FUNCTIONAL_TEST_XDC_RO
 # Testcore unit tests are filtered out by the FUNCTIONAL_TEST_ROOT pattern, need to add them back manually.
 UNIT_TEST_DIRS += $(TESTCORE_UNITTESTS)
 endif
+
+# Packages with a file constrained by temporal_minimal.
+MINIMAL_DIRS := $(sort $(addprefix ./,$(dir $(shell git grep -lE '^//go:build .*temporal_minimal([^a-z0-9_]|$$)' -- '*.go'))))
+# The unit test packages among MINIMAL_DIRS.
+MINIMAL_UNIT_TEST_DIRS := $(filter $(UNIT_TEST_DIRS),$(MINIMAL_DIRS))
 SYSTEM_WORKFLOWS_ROOT := ./service/worker
 
 PINNED_DEPENDENCIES := \
@@ -532,9 +537,6 @@ workflowcheck: $(WORKFLOWCHECK)
 		$(WORKFLOWCHECK) "$$dir" ; \
 	done
 
-# Packages with a file constrained by temporal_minimal.
-MINIMAL_DIRS = $(sort $(addprefix ./,$(dir $(shell git grep -lE '^//go:build .*temporal_minimal([^a-z0-9_]|$$)' -- '*.go'))))
-
 # Packages that must not be part of the temporal_minimal server.
 MINIMAL_EXCLUDED_PACKAGES := \
 	cloud.google.com/go/storage \
@@ -633,9 +635,6 @@ unit-test-coverage: prepare-coverage-test
 	@printf $(COLOR) "Run unit tests with coverage..."
 	go run ./cmd/tools/test-runner test --gotestsum-path=$(GOTESTSUM) --max-attempts=$(MAX_TEST_ATTEMPTS) $(TEST_RUNNER_TIMEOUT_ARG) --junitfile=$(NEW_REPORT) -- \
 		$(COMPILED_TEST_ARGS) -coverprofile=$(NEW_COVER_PROFILE) $(UNIT_TEST_DIRS)
-
-# The unit test packages among MINIMAL_DIRS.
-MINIMAL_UNIT_TEST_DIRS = $(filter $(UNIT_TEST_DIRS),$(MINIMAL_DIRS))
 
 # Runs the unit tests of MINIMAL_UNIT_TEST_DIRS with temporal_minimal.
 unit-test-build-tags:
