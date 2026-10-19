@@ -564,19 +564,16 @@ func (a *Activity) recordLastWorker(
 ) {
 	attempt := a.LastAttempt.Get(ctx)
 	attempt.LastWorkerIdentity = identity
-	attempt.LastWorkerPrincipal = requestPrincipal(ctx)
-}
-
-func requestPrincipal(ctx chasm.Context) *commonpb.Principal {
 	principalType := ctx.RequestHeader(headers.PrincipalTypeHeaderName)
 	principalName := ctx.RequestHeader(headers.PrincipalNameHeaderName)
-	if principalType == "" && principalName == "" {
-		return nil
+	if principalType != "" || principalName != "" {
+		attempt.LastWorkerPrincipal = &commonpb.Principal{
+			Type: principalType,
+			Name: principalName,
+		}
+		return
 	}
-	return &commonpb.Principal{
-		Type: principalType,
-		Name: principalName,
-	}
+	attempt.LastWorkerPrincipal = nil
 }
 
 // Terminate implements the chasm.RootComponent interface.

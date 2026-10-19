@@ -912,6 +912,21 @@ func TestHandleFailedRetryRecordsLastWorker(t *testing.T) {
 }
 
 func TestWorkerResponsesRecordLastWorker(t *testing.T) {
+	t.Run("completed without principal clears previous principal", func(t *testing.T) {
+		ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED)
+		activity.LastAttempt.Get(ctx).LastWorkerPrincipal = &commonpb.Principal{Type: "jwt", Name: "previous-worker"}
+		_, err := activity.HandleCompleted(ctx, RespondCompletedEvent{
+			Token: token,
+			Request: &historyservice.RespondActivityTaskCompletedRequest{
+				NamespaceId:     token.GetNamespaceId(),
+				CompleteRequest: &workflowservice.RespondActivityTaskCompletedRequest{Identity: "completion-worker-identity"},
+			},
+		})
+		require.NoError(t, err)
+		require.Equal(t, "completion-worker-identity", activity.LastAttempt.Get(ctx).GetLastWorkerIdentity())
+		require.Nil(t, activity.LastAttempt.Get(ctx).GetLastWorkerPrincipal())
+	})
+
 	t.Run("completed", func(t *testing.T) {
 		ctx, activity, token := newWorkerResponseTestActivity(t, activitypb.ACTIVITY_EXECUTION_STATUS_STARTED)
 		principal := &commonpb.Principal{Type: "jwt", Name: "completion-worker"}
