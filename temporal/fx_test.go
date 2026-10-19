@@ -450,65 +450,66 @@ func TestTaskCategoryRegistryProvider(t *testing.T) {
 func TestServiceTracingModuleResource(t *testing.T) {
 	t.Parallel()
 
-	for _, tc := range []struct {
-		name              string
-		withSpanProcessor bool
-	}{
-		{name: "without span processors"},
-		{name: "with span processor", withSpanProcessor: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
+	type tracingDependencies struct {
+		fx.In
 
-			var tracing struct {
-				fx.In
-
-				Resource       *otelresource.Resource
-				TracerProvider trace.TracerProvider
-				Propagator     propagation.TextMapPropagator
-				ServerStats    telemetry.ServerStatsHandler
-				ClientStats    telemetry.ClientStatsHandler
-				HTTPClient     telemetry.HTTPClientTransportInstrumenter
-				HTTPServer     telemetry.HTTPServerHandlerInstrumenter
-			}
-			recorder := tracetest.NewSpanRecorder()
-			options := []fx.Option{
-				fx.NopLogger,
-				fx.Supply(primitives.FrontendService, resource.InstanceID("test-instance")),
-				fx.Provide(func() log.Logger { return log.NewNoopLogger() }),
-				ServiceTracingModule,
-				fx.Populate(&tracing),
-			}
-			if tc.withSpanProcessor {
-				options = append(options, fx.Replace([]otelsdktrace.SpanProcessor{recorder}))
-			}
-			app := fx.New(options...)
-			require.NoError(t, app.Err())
-			require.Equal(t, propagation.TraceContext{}, tracing.Propagator)
-
-			if !tc.withSpanProcessor {
-				require.Empty(t, tracing.Resource.Attributes())
-				require.Equal(t, telemetry.NoopTracerProvider, tracing.TracerProvider)
-				require.Nil(t, tracing.ServerStats)
-				require.Nil(t, tracing.ClientStats)
-				require.Nil(t, tracing.HTTPClient)
-				require.Nil(t, tracing.HTTPServer)
-				return
-			}
-
-			require.Subset(t, tracing.Resource.Attributes(), []attribute.KeyValue{
-				semconv.ServiceVersionKey.String(headers.ServerVersion),
-				semconv.ServiceInstanceIDKey.String("test-instance"),
-			})
-			require.NotNil(t, tracing.ServerStats)
-			require.NotNil(t, tracing.ClientStats)
-			require.NotNil(t, tracing.HTTPClient)
-			require.NotNil(t, tracing.HTTPServer)
-
-			_, span := tracing.TracerProvider.Tracer("test").Start(t.Context(), "test")
-			span.End()
-			require.Len(t, recorder.Ended(), 1)
-			require.Equal(t, tracing.Resource, recorder.Ended()[0].Resource())
-		})
+		Resource       *otelresource.Resource
+		TracerProvider trace.TracerProvider
+		Propagator     propagation.TextMapPropagator
+		ServerStats    telemetry.ServerStatsHandler
+		ClientStats    telemetry.ClientStatsHandler
+		HTTPClient     telemetry.HTTPClientTransportInstrumenter
+		HTTPServer     telemetry.HTTPServerHandlerInstrumenter
 	}
+
+	t.Run("without span processors", func(t *testing.T) {
+		t.Parallel()
+
+		var tracing tracingDependencies
+		app := fx.New(
+			fx.NopLogger,
+			fx.Supply(primitives.FrontendService, resource.InstanceID("test-instance")),
+			fx.Provide(func() log.Logger { return log.NewNoopLogger() }),
+			ServiceTracingModule,
+			fx.Populate(&tracing),
+		)
+		require.NoError(t, app.Err())
+		require.Equal(t, propagation.TraceContext{}, tracing.Propagator)
+		require.Empty(t, tracing.Resource.Attributes())
+		require.Equal(t, telemetry.NoopTracerProvider, tracing.TracerProvider)
+		require.Nil(t, tracing.ServerStats)
+		require.Nil(t, tracing.ClientStats)
+		require.Nil(t, tracing.HTTPClient)
+		require.Nil(t, tracing.HTTPServer)
+	})
+
+	t.Run("with span processor", func(t *testing.T) {
+		t.Parallel()
+
+		recorder := tracetest.NewSpanRecorder()
+		var tracing tracingDependencies
+		app := fx.New(
+			fx.NopLogger,
+			fx.Supply(primitives.FrontendService, resource.InstanceID("test-instance")),
+			fx.Provide(func() log.Logger { return log.NewNoopLogger() }),
+			ServiceTracingModule,
+			fx.Replace([]otelsdktrace.SpanProcessor{recorder}),
+			fx.Populate(&tracing),
+		)
+		require.NoError(t, app.Err())
+		require.Equal(t, propagation.TraceContext{}, tracing.Propagator)
+		require.Subset(t, tracing.Resource.Attributes(), []attribute.KeyValue{
+			semconv.ServiceVersionKey.String(headers.ServerVersion),
+			semconv.ServiceInstanceIDKey.String("test-instance"),
+		})
+		require.NotNil(t, tracing.ServerStats)
+		require.NotNil(t, tracing.ClientStats)
+		require.NotNil(t, tracing.HTTPClient)
+		require.NotNil(t, tracing.HTTPServer)
+
+		_, span := tracing.TracerProvider.Tracer("test").Start(t.Context(), "test")
+		span.End()
+		require.Len(t, recorder.Ended(), 1)
+		require.Equal(t, tracing.Resource, recorder.Ended()[0].Resource())
+	})
 }
