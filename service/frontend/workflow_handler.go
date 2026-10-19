@@ -727,38 +727,25 @@ func (wh *WorkflowHandler) validateAndPopulateTimeSkippingConfig(
 	tsc *commonpb.TimeSkippingConfig,
 	ns namespace.Name,
 ) error {
-	if tsc == nil {
-		return nil
-	}
-	if tsc.GetMaxSessionSkipCount() <= 0 {
-		defaultMaxSkipPerSession := wh.config.TimeSkippingMaxSkipPerSession(ns.String())
-		tsc.MaxSessionSkipCount = max(1, int32(defaultMaxSkipPerSession))
-	}
-	if !tsc.GetEnabled() && tsc.GetFastForwardConfig() != nil {
-		return serviceerror.NewInvalidArgument("time_skipping_config: cannot set fast_forward when enabled is false")
-	}
-	if ff := tsc.GetFastForwardConfig(); ff != nil {
-		if ff.GetDuration().AsDuration() <= 0 {
-			return serviceerror.NewInvalidArgument("Time skipping config invalid: fast_forward duration must be positive")
-		}
-		if strings.TrimSpace(ff.GetId()) == "" {
-			return errTimeSkippingFastForwardIDNotSet
-		}
-	}
-	return nil
+	return workflow.ValidateAndPopulateTimeSkippingConfig(
+		tsc,
+		ns.String(),
+		wh.config.TimeSkippingMaxSkipPerSession,
+		wh.config.TimeSkippingMaxAccumulatedDuration,
+	)
 }
 
 func (wh *WorkflowHandler) validateAndPopulateWorkflowTimeSkippingConfig(
 	tsc *commonpb.TimeSkippingConfig,
 	ns namespace.Name,
 ) error {
-	if tsc == nil {
-		return nil
-	}
-	if !wh.config.WorkflowTimeSkippingEnabled(ns.String()) {
-		return errWorkflowTimeSkippingNotEnabled
-	}
-	return wh.validateAndPopulateTimeSkippingConfig(tsc, ns)
+	return workflow.ValidateAndPopulateWorkflowTimeSkippingConfig(
+		tsc,
+		ns.String(),
+		wh.config.WorkflowTimeSkippingEnabled,
+		wh.config.TimeSkippingMaxSkipPerSession,
+		wh.config.TimeSkippingMaxAccumulatedDuration,
+	)
 }
 
 func (wh *WorkflowHandler) validateAndPopulateScheduleTimeSkippingConfig(
@@ -772,7 +759,7 @@ func (wh *WorkflowHandler) validateAndPopulateScheduleTimeSkippingConfig(
 	}
 	if !useChasm {
 		wh.logger.Warn(
-			"Rejecting time-skipping configuration for workflow-backed schedule",
+			"rejecting time skipping configuration for workflow-backed schedule",
 			tag.WorkflowNamespace(ns.String()),
 		)
 		return errScheduleTimeSkippingNotEnabled
@@ -2439,10 +2426,6 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 	}
 
 	namespaceName := namespace.Name(request.GetNamespace())
-	if err := wh.validateAndPopulateWorkflowTimeSkippingConfig(request.GetTimeSkippingConfig(), namespaceName); err != nil {
-		return nil, err
-	}
-
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
