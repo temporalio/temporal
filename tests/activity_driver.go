@@ -147,6 +147,13 @@ type activityInfo struct {
 	LastHeartbeatDetails       []byte
 }
 
+// activityHeartbeatFlags contains the flags a heartbeat response carries back to the worker.
+type activityHeartbeatFlags struct {
+	CancelRequested bool
+	ActivityPaused  bool
+	ActivityReset   bool
+}
+
 // activityTerminalProjection is the terminal status, failure type, and retry state an activity reports.
 type activityTerminalProjection struct {
 	Status      enumspb.ActivityExecutionStatus
