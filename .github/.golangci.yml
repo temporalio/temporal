@@ -50,6 +50,8 @@ linters:
           msg: "Use await.Require / s.Await for assertion conditions, or await.RequireTrue / s.AwaitTrue for bool predicates, instead of testify Eventually helpers"
         - pattern: 'assert\.\w+'
           msg: "Use require.X / protorequire.X instead of assert.X / protoassert.X — assert doesn't stop the test on failure."
+        - pattern: 'temporalproto\.DeepEqual'
+          msg: "temporalproto.DeepEqual treats any two values of the same plain struct type as equal. Use protorequire.DeepEqual (or protodiff.Equal) instead."
         - pattern: '\bActiveInCluster\b'
           msg: "ActiveInCluster is not businessID-aware. For any decision tied to a workflow / businessID, use ns.ActiveClusterName(routingKey) instead. For genuine namespace-level checks (no workflow context), suppress with //nolint:forbidigo // <justification>."
     depguard:
