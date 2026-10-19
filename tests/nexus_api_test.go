@@ -268,7 +268,6 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 		var dispatchURL string
 		if dispatchOnlyByEndpoint {
 			dispatchURL = env.dispatchByEndpointURL(endpoint.Id)
-			// Capture the original handler so the replacement does not call itself.
 			originalHandler := tc.handler
 			tc.handler = func(t *testing.T, res *workflowservice.PollNexusTaskQueueResponse) (*nexusTaskResponse, error) {
 				require.Equal(t, env.Tv().NexusEndpointName(), res.Request.Endpoint)
@@ -528,7 +527,6 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes(useTemporalFailure
 		var dispatchURL string
 		if dispatchOnlyByEndpoint {
 			dispatchURL = env.dispatchByEndpointURL(endpoint.Id)
-			// Capture the original handler so the replacement does not call itself.
 			originalHandler := tc.handler
 			tc.handler = func(t *testing.T, res *workflowservice.PollNexusTaskQueueResponse) (*nexusTaskResponse, error) {
 				require.Equal(t, env.Tv().NexusEndpointName(), res.Request.Endpoint)
