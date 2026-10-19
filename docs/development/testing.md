@@ -314,7 +314,23 @@ faultInjection:
       request:
         errors:
           Unavailable: 0.01
+  http:
+    inbound:
+      response:
+        errors:
+          Internal: 0.02
+    outbound:
+      request:
+        errors:
+          Unavailable: 0.05
 ```
+
+HTTP covers the frontend router (including Nexus routes) and outbound frontend,
+callback, and Nexus clients. Its fault names map to HTTP statuses: `Unavailable` → 503,
+`Internal` → 500, and `ResourceExhausted` → 429. HTTP error responses are preserved.
+Replaced response bodies are closed. Inbound responses are buffered while injection
+is enabled; flushing or hijacking commits the response and prevents response replacement.
+Each transport/direction samples independently, so faults can compound across boundaries.
 
 Request faults skip execution. Configured response faults replace successful results;
 actual failures are preserved. gRPC covers unary and streaming server calls and connections

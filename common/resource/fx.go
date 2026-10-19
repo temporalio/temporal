@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"net"
+	"net/http"
 	"os"
 	"time"
 
@@ -44,11 +45,13 @@ import (
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/grpcfaults"
+	"go.temporal.io/server/common/rpc/httpfaults"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/faultinjectiontest"
+	"go.temporal.io/server/common/testing/httpfaultstest"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
@@ -117,6 +120,7 @@ var Module = fx.Options(
 	fx.Provide(AdminClientProvider),
 	fx.Provide(GrpcListenerProvider),
 	fx.Provide(GRPCFaultGeneratorsProvider),
+	fx.Provide(HTTPFaultGeneratorsProvider),
 	fx.Provide(RuntimeMetricsReporterProvider),
 	metrics.RuntimeMetricsReporterLifetimeHooksModule,
 	fx.Provide(HistoryRawClientProvider),
@@ -457,7 +461,7 @@ func RPCFactoryProvider(
 	dc *dynamicconfig.Collection,
 	tokenProvider auth.TokenProvider,
 	faults GRPCFaultParams,
-	frontendHTTPTransportInstrumenter telemetry.HTTPClientTransportInstrumenter,
+	httpFaults HTTPFaultParams,
 ) (common.RPCFactory, error) {
 	frontendURL, frontendHTTPURL, frontendHTTPPort, frontendTLSConfig, err := getFrontendConnectionDetails(cfg, tlsConfigProvider, resolver)
 	if err != nil {
@@ -480,7 +484,7 @@ func RPCFactoryProvider(
 		frontendHTTPURL,
 		frontendHTTPPort,
 		frontendTLSConfig,
-		frontendHTTPTransportInstrumenter,
+		httpFaults.Wrap,
 		options,
 		perServiceDialOptions,
 		monitor,
@@ -496,8 +500,9 @@ func RPCFactoryProvider(
 func FrontendHTTPClientCacheProvider(
 	metadata cluster.Metadata,
 	tlsConfigProvider encryption.TLSConfigProvider,
+	faults HTTPFaultParams,
 ) *cluster.FrontendHTTPClientCache {
-	return cluster.NewFrontendHTTPClientCache(metadata, tlsConfigProvider)
+	return cluster.NewFrontendHTTPClientCache(metadata, tlsConfigProvider, faults.Wrap)
 }
 
 func getFrontendConnectionDetails(
@@ -593,4 +598,27 @@ func configuredTransportGenerators[Req, Resp any](cfg *config.TransportFaultInje
 		return faultinjection.Generators[Req, Resp]{}, err
 	}
 	return faultinjection.Generators[Req, Resp]{Inbound: inbound, Outbound: outbound}, nil
+}
+
+// HTTPFaultParams applies the same optional wiring to full servers and standalone providers.
+type HTTPFaultParams struct {
+	fx.In
+	Generators   faultinjection.Generators[*httpfaults.Request, *http.Response] `optional:"true"`
+	Instrumenter telemetry.HTTPClientTransportInstrumenter                      `optional:"true"`
+	TestHooks    testhooks.TestHooks                                            `optional:"true"`
+}
+
+func (p HTTPFaultParams) Wrap(underlyingTransport http.RoundTripper) http.RoundTripper {
+	generator := p.Generators.Outbound
+	if generator == nil {
+		generator = httpfaultstest.NewGenerator(p.TestHooks)
+	}
+	return httpfaults.WrapOutbound(generator, p.Instrumenter.Instrument(underlyingTransport))
+}
+
+func HTTPFaultGeneratorsProvider(cfg *config.Config, hooks testhooks.TestHooks) (faultinjection.Generators[*httpfaults.Request, *http.Response], error) {
+	testHookGenerators := faultinjection.Generators[*httpfaults.Request, *http.Response]{Outbound: httpfaultstest.NewGenerator(hooks)}
+	return configuredTransportGenerators(cfg.FaultInjection.HTTP, testHookGenerators, httpfaults.NewOutcome, func(resp *http.Response) bool {
+		return resp != nil && resp.StatusCode < http.StatusBadRequest
+	})
 }

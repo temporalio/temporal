@@ -9,6 +9,7 @@ import (
 // RPCFaultInjection configures faults uniformly for each transport and direction.
 type RPCFaultInjection struct {
 	GRPC *TransportFaultInjection `yaml:"grpc"`
+	HTTP *TransportFaultInjection `yaml:"http"`
 }
 
 // TransportFaultInjection independently configures inbound and outbound calls.
@@ -24,7 +25,7 @@ type CallFaultInjection struct {
 }
 
 func (c RPCFaultInjection) Validate() error {
-	for name, cfg := range map[string]*TransportFaultInjection{"grpc": c.GRPC} {
+	for name, cfg := range map[string]*TransportFaultInjection{"grpc": c.GRPC, "http": c.HTTP} {
 		if err := cfg.Validate(); err != nil {
 			return fmt.Errorf("faultInjection.%s: %w", name, err)
 		}

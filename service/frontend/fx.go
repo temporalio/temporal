@@ -1125,6 +1125,7 @@ func HTTPAPIServerProvider(
 	namespaceRegistry namespace.Registry,
 	logger log.Logger,
 	router *mux.Router,
+	faults resource.HTTPFaultParams,
 ) (*HTTPAPIServer, error) {
 	if !httpEnabled(cfg, serviceName) {
 		return nil, nil
@@ -1142,6 +1143,7 @@ func HTTPAPIServerProvider(
 		router,
 		namespaceRegistry,
 		logger,
+		faults.Generators.Inbound,
 	)
 }
 

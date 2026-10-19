@@ -59,6 +59,7 @@ faultInjection:
         errors:
           Unavailable: 0.1
         seed: 123
+  http:
     outbound:
       response:
         errors:
@@ -68,9 +69,9 @@ faultInjection:
 	require.NoError(t, cfg.FaultInjection.Validate())
 	require.InDelta(t, 0.1, cfg.FaultInjection.GRPC.Inbound.Request.Errors["Unavailable"], 1e-10)
 	require.Equal(t, int64(123), cfg.FaultInjection.GRPC.Inbound.Request.Seed)
-	require.InDelta(t, 0.2, cfg.FaultInjection.GRPC.Outbound.Response.Errors["ResourceExhausted"], 1e-10)
-	require.Equal(t, int64(456), cfg.FaultInjection.GRPC.Outbound.Response.Seed)
+	require.InDelta(t, 0.2, cfg.FaultInjection.HTTP.Outbound.Response.Errors["ResourceExhausted"], 1e-10)
+	require.Equal(t, int64(456), cfg.FaultInjection.HTTP.Outbound.Response.Seed)
 
-	cfg.FaultInjection.GRPC.Outbound.Response.Errors["InvalidArgument"] = 0.1
-	require.ErrorContains(t, cfg.Validate(), "faultInjection.grpc: outbound: response")
+	cfg.FaultInjection.HTTP.Outbound.Response.Errors["InvalidArgument"] = 0.1
+	require.ErrorContains(t, cfg.Validate(), "faultInjection.http: outbound: response")
 }
