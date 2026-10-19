@@ -913,14 +913,15 @@ func TestWorkerConfigEventOnlyOnFirstHeartbeat(t *testing.T) {
 	eventLogger := &captureEventLogger{}
 
 	m := newRegistryImpl(RegistryParams{
-		NumBuckets:       dynamicconfig.GetIntPropertyFn(1),
-		TTL:              dynamicconfig.GetDurationPropertyFn(time.Hour),
-		MinEvictAge:      dynamicconfig.GetDurationPropertyFn(0),
-		MaxItems:         dynamicconfig.GetIntPropertyFn(10),
-		EvictionInterval: dynamicconfig.GetDurationPropertyFn(time.Hour),
-		MetricsHandler:   metricstest.NewCaptureHandler(),
-		MetricsConfig:    WorkerMetricsConfig{},
-		EventLogger:      eventLogger,
+		NumBuckets:                  dynamicconfig.GetIntPropertyFn(1),
+		TTL:                         dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:                 dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:                    dynamicconfig.GetIntPropertyFn(10),
+		EvictionInterval:            dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:              metricstest.NewCaptureHandler(),
+		MetricsConfig:               WorkerMetricsConfig{},
+		EventLogger:                 eventLogger,
+		EnableWorkerHeartbeatEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 	})
 	defer m.Stop()
 
@@ -940,14 +941,15 @@ func TestWorkerConfigEventOnlyOnFirstHeartbeat(t *testing.T) {
 
 func TestWorkerConfigEventNilLogger(t *testing.T) {
 	m := newRegistryImpl(RegistryParams{
-		NumBuckets:       dynamicconfig.GetIntPropertyFn(1),
-		TTL:              dynamicconfig.GetDurationPropertyFn(time.Hour),
-		MinEvictAge:      dynamicconfig.GetDurationPropertyFn(0),
-		MaxItems:         dynamicconfig.GetIntPropertyFn(10),
-		EvictionInterval: dynamicconfig.GetDurationPropertyFn(time.Hour),
-		MetricsHandler:   metricstest.NewCaptureHandler(),
-		MetricsConfig:    WorkerMetricsConfig{},
-		EventLogger:      nil,
+		NumBuckets:                  dynamicconfig.GetIntPropertyFn(1),
+		TTL:                         dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MinEvictAge:                 dynamicconfig.GetDurationPropertyFn(0),
+		MaxItems:                    dynamicconfig.GetIntPropertyFn(10),
+		EvictionInterval:            dynamicconfig.GetDurationPropertyFn(time.Hour),
+		MetricsHandler:              metricstest.NewCaptureHandler(),
+		MetricsConfig:               WorkerMetricsConfig{},
+		EventLogger:                 nil,
+		EnableWorkerHeartbeatEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
 	})
 	defer m.Stop()
 

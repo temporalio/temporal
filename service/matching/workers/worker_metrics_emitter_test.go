@@ -11,11 +11,11 @@ import (
 	"go.opentelemetry.io/otel/log/embedded"
 	enumspb "go.temporal.io/api/enums/v1"
 	workerpb "go.temporal.io/api/worker/v1"
-	"google.golang.org/protobuf/types/known/timestamppb"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type captureEventLogger struct {
@@ -222,9 +222,9 @@ func TestEmitWorkerConfigEvent(t *testing.T) {
 	require.Equal(t, "1.30.0", attrs["sdk_version"].AsString())
 	require.Equal(t, "linux", attrs["os"].AsString())
 	require.Equal(t, "arm64", attrs["architecture"].AsString())
-	require.Equal(t, true, attrs["workflow_poller_autoscaling"].AsBool())
-	require.Equal(t, false, attrs["activity_poller_autoscaling"].AsBool())
-	require.Equal(t, false, attrs["nexus_poller_autoscaling"].AsBool())
+	require.True(t, attrs["workflow_poller_autoscaling"].AsBool())
+	require.False(t, attrs["activity_poller_autoscaling"].AsBool())
+	require.False(t, attrs["nexus_poller_autoscaling"].AsBool())
 
 	runtimes := attrs["runtimes"].AsSlice()
 	require.Len(t, runtimes, 2)

@@ -1684,6 +1684,11 @@ movement), at the cost of cross-key FIFO ordering for bursts of equal-weight new
 The metric has 2 dimensions: namespace_id and plugin_name. Disabled by default as this is
 an optional feature and also requires a metrics collection system that can handle higher cardinalities.`,
 	)
+	MatchingEnableWorkerHeartbeatEvents = NewNamespaceBoolSetting(
+		"matching.enableWorkerHeartbeatEvents",
+		false,
+		`MatchingEnableWorkerHeartbeatEvents controls whether to emit wide events derived from worker heartbeats.`,
+	)
 	MatchingEnablePollerAutoscalingMetrics = NewGlobalBoolSetting(
 		"matching.enablePollerAutoscalingMetrics",
 		false,
