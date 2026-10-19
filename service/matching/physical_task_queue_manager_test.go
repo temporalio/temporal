@@ -10,8 +10,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	deploymentpb "go.temporal.io/api/deployment/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	deploymentspb "go.temporal.io/server/api/deployment/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -29,6 +31,7 @@ import (
 	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/testlogger"
 	"go.temporal.io/server/common/tqid"
+	"go.temporal.io/server/common/worker_versioning"
 	"go.uber.org/mock/gomock"
 	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -999,5 +1002,103 @@ func (s *PhysicalTaskQueueManagerTestSuite) TestPollScalingSignalsV2() {
 				s.assertPollerScaleDecision(capture, tc.wantDecision, tc.wantReason)
 			}
 		})
+	}
+}
+
+func TestIsDeploymentVersionInUserData(t *testing.T) {
+	t.Parallel()
+
+	const (
+		deploymentName = "my-deployment"
+		buildID        = "build-1"
+	)
+
+	deployment := &deploymentpb.Deployment{
+		SeriesName: deploymentName,
+		BuildId:    buildID,
+	}
+	version := worker_versioning.DeploymentVersionFromDeployment(deployment)
+
+	tests := []struct {
+		name     string
+		userData *persistencespb.VersionedTaskQueueUserData
+		want     bool
+	}{
+		{
+			name:     "version present",
+			userData: userDataWithDeploymentVersion(deploymentName, buildID),
+			want:     true,
+		},
+		{
+			name:     "version missing",
+			userData: userDataWithDeploymentVersion(deploymentName, "other-build"),
+			want:     false,
+		},
+		{
+			name: "empty deployment data",
+			userData: &persistencespb.VersionedTaskQueueUserData{
+				Data: &persistencespb.TaskQueueUserData{},
+			},
+			want: false,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			controller := gomock.NewController(t)
+			logger := testlogger.NewTestLogger(t, testlogger.FailOnAnyUnexpectedError)
+			config := defaultTestConfig()
+
+			nsName := namespace.Name("ns-name")
+			ns, registry := createMockNamespaceCache(controller, nsName)
+
+			engine := createTestMatchingEngine(logger, controller, config, nil, registry)
+
+			queueKey := DeploymentQueueKey(
+				newTestTaskQueue(defaultNamespaceId, defaultRootTqID, enumspb.TASK_QUEUE_TYPE_WORKFLOW).NormalPartition(0),
+				deployment,
+			)
+			prtn := queueKey.Partition()
+			tqConfig := newTaskQueueConfig(prtn.TaskQueue(), engine.config, nsName)
+			onFatalErr := func(unloadCause) { t.Fatal("user data manager called onFatalErr") }
+			udMgr := newUserDataManager(engine.taskManager, engine.matchingRawClient, onFatalErr, nil, nil, prtn, tqConfig, engine.logger, engine.namespaceRegistry)
+
+			prtnMgr, err := newTaskQueuePartitionManager(engine, ns, prtn, tqConfig, engine.logger, nil, metrics.NoopMetricsHandler, udMgr)
+			require.NoError(t, err)
+
+			// Set user data directly on the manager.
+			udMgr.lock.Lock()
+			udMgr.userData = tc.userData
+			udMgr.userDataState = userDataEnabled
+			udMgr.lock.Unlock()
+
+			tqMgr, err := newPhysicalTaskQueueManager(prtnMgr, queueKey)
+			require.NoError(t, err)
+
+			got := tqMgr.isDeploymentVersionInUserData(version)
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func userDataWithDeploymentVersion(deploymentName, buildID string) *persistencespb.VersionedTaskQueueUserData {
+	return &persistencespb.VersionedTaskQueueUserData{
+		Data: &persistencespb.TaskQueueUserData{
+			PerType: map[int32]*persistencespb.TaskQueueTypeUserData{
+				int32(enumspb.TASK_QUEUE_TYPE_WORKFLOW): {
+					DeploymentData: &persistencespb.DeploymentData{
+						DeploymentsData: map[string]*persistencespb.WorkerDeploymentData{
+							deploymentName: {
+								Versions: map[string]*deploymentspb.WorkerDeploymentVersionData{
+									buildID: {UpdateTime: timestamppb.Now()},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
 	}
 }
