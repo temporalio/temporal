@@ -464,9 +464,9 @@ func TestServiceTracingModuleResource(t *testing.T) {
 	t.Run("with span processor", func(t *testing.T) {
 		t.Parallel()
 
-		recorder := tracetest.NewSpanRecorder()
 		var tracingResource *otelresource.Resource
 		var tracerProvider trace.TracerProvider
+		recorder := tracetest.NewSpanRecorder()
 		app := fx.New(
 			fx.NopLogger,
 			fx.Supply(primitives.FrontendService),
