@@ -194,12 +194,9 @@ message ChasmNexusCompletion {
 // by UpdateComponent, so that a retried request can be deduplicated. It is stored as a reserved child
 // of the root node (not declared by any component) and is only written when a request ID is added.
 message ChasmRequestIDs {
-  message Entry {
-    string request_id = 1;
-    // Time the request ID was recorded, truncated to whole seconds to keep entries small.
-    google.protobuf.Timestamp record_time = 2;
-  }
-  // Accepted request IDs in the order they were recorded (oldest first). Entries are dropped from the
-  // front once older than history.requestIDMaxAge or beyond history.maximumRequestIDsPerExecution.
-  repeated Entry entries = 1;
+  // Accepted request IDs, mapped to the time each was recorded (truncated to whole seconds to keep entries
+  // small). A map so the existence check is a lookup. Entries older than history.requestIDMaxAge are dropped
+  // when an ID is added; once there are more than history.maximumRequestIDsInChasmDataNode, the oldest are
+  // dropped until half that many remain, so the cost of finding the oldest is amortized.
+  map<string, google.protobuf.Timestamp> request_ids = 1;
 }

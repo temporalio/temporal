@@ -205,14 +205,12 @@ func WithBusinessIDPolicy(
 	}
 }
 
-// WithRequestID sets the requestID for the transition.
-//
-// On StartExecution() and UpdateWithStartExecution() it is the request ID
-// recorded when creating a new execution. On UpdateComponent(), it is used for
+// WithRequestID sets the request ID of an update to an execution, for UpdateComponent(). It is used for
 // execution-level idempotency of that update, recording a request's ID on success, and failing
 // subsequent requests reusing a request ID by returning a FailedPrecondition error.
 //
-// An UpdateComponent() call that completes a start request must use [WithStartRequestID] instead.
+// The request ID of a start request, including an UpdateComponent() call that completes one, must be
+// set with [WithStartRequestID] instead.
 func WithRequestID(
 	requestID string,
 ) TransitionOption {
@@ -222,13 +220,14 @@ func WithRequestID(
 	}
 }
 
-// WithStartRequestID sets the request ID of the start request that an UpdateComponent() call completes,
-// for example attaching callbacks to an existing execution when a start conflicts with it. It dedups the
-// update like [WithRequestID], but the ID is recorded where the start path checks for retried starts (the
-// execution's current record), so a retry of that start that resolves to this execution, even after the
-// execution closed, returns it instead of creating a new execution.
+// WithStartRequestID sets the request ID of a start request. A retried start is recognized by this ID
+// on the execution's current record, before any execution is loaded.
 //
-// This option only applies to UpdateComponent().
+// On StartExecution() and UpdateWithStartExecution() it is the request ID recorded when creating a new
+// execution. On UpdateComponent() it is for a call that completes a start request, for example
+// attaching callbacks to an existing execution when a start conflicts with it: it dedups the update like
+// [WithRequestID], but the ID is recorded on the current record, so a retry of that start that resolves
+// to this execution, even after the execution closed, returns it instead of creating a new execution.
 func WithStartRequestID(
 	requestID string,
 ) TransitionOption {

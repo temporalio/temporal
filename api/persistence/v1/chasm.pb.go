@@ -900,9 +900,11 @@ func (*ChasmNexusCompletion_Failure) isChasmNexusCompletion_Outcome() {}
 // of the root node (not declared by any component) and is only written when a request ID is added.
 type ChasmRequestIDs struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Accepted request IDs in the order they were recorded (oldest first). Entries are dropped from the
-	// front once older than history.requestIDMaxAge or beyond history.maximumRequestIDsPerExecution.
-	Entries       []*ChasmRequestIDs_Entry `protobuf:"bytes,1,rep,name=entries,proto3" json:"entries,omitempty"`
+	// Accepted request IDs, mapped to the time each was recorded (truncated to whole seconds to keep entries
+	// small). A map so the existence check is a lookup. Entries older than history.requestIDMaxAge are dropped
+	// when an ID is added; once there are more than history.maximumRequestIDsInChasmDataNode, the oldest are
+	// dropped until half that many remain, so the cost of finding the oldest is amortized.
+	RequestIds    map[string]*timestamppb.Timestamp `protobuf:"bytes,1,rep,name=request_ids,json=requestIds,proto3" json:"request_ids,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -937,9 +939,9 @@ func (*ChasmRequestIDs) Descriptor() ([]byte, []int) {
 	return file_temporal_server_api_persistence_v1_chasm_proto_rawDescGZIP(), []int{11}
 }
 
-func (x *ChasmRequestIDs) GetEntries() []*ChasmRequestIDs_Entry {
+func (x *ChasmRequestIDs) GetRequestIds() map[string]*timestamppb.Timestamp {
 	if x != nil {
-		return x.Entries
+		return x.RequestIds
 	}
 	return nil
 }
@@ -1097,59 +1099,6 @@ func (x *ChasmComponentAttributes_RequestMetadata) GetLinks() []*v1.Link {
 	return nil
 }
 
-type ChasmRequestIDs_Entry struct {
-	state     protoimpl.MessageState `protogen:"open.v1"`
-	RequestId string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	// Time the request ID was recorded, truncated to whole seconds to keep entries small.
-	RecordTime    *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=record_time,json=recordTime,proto3" json:"record_time,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ChasmRequestIDs_Entry) Reset() {
-	*x = ChasmRequestIDs_Entry{}
-	mi := &file_temporal_server_api_persistence_v1_chasm_proto_msgTypes[16]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ChasmRequestIDs_Entry) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ChasmRequestIDs_Entry) ProtoMessage() {}
-
-func (x *ChasmRequestIDs_Entry) ProtoReflect() protoreflect.Message {
-	mi := &file_temporal_server_api_persistence_v1_chasm_proto_msgTypes[16]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ChasmRequestIDs_Entry.ProtoReflect.Descriptor instead.
-func (*ChasmRequestIDs_Entry) Descriptor() ([]byte, []int) {
-	return file_temporal_server_api_persistence_v1_chasm_proto_rawDescGZIP(), []int{11, 0}
-}
-
-func (x *ChasmRequestIDs_Entry) GetRequestId() string {
-	if x != nil {
-		return x.RequestId
-	}
-	return ""
-}
-
-func (x *ChasmRequestIDs_Entry) GetRecordTime() *timestamppb.Timestamp {
-	if x != nil {
-		return x.RecordTime
-	}
-	return nil
-}
-
 var File_temporal_server_api_persistence_v1_chasm_proto protoreflect.FileDescriptor
 
 const file_temporal_server_api_persistence_v1_chasm_proto_rawDesc = "" +
@@ -1232,14 +1181,13 @@ const file_temporal_server_api_persistence_v1_chasm_proto_rawDesc = "" +
 	"\x0foperation_token\x18\x06 \x01(\tR\x0eoperationToken\x129\n" +
 	"\n" +
 	"start_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tstartTimeB\t\n" +
-	"\aoutcome\"\xcb\x01\n" +
-	"\x0fChasmRequestIDs\x12S\n" +
-	"\aentries\x18\x01 \x03(\v29.temporal.server.api.persistence.v1.ChasmRequestIDs.EntryR\aentries\x1ac\n" +
-	"\x05Entry\x12\x1d\n" +
-	"\n" +
-	"request_id\x18\x01 \x01(\tR\trequestId\x12;\n" +
-	"\vrecord_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"recordTimeB6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
+	"\aoutcome\"\xd2\x01\n" +
+	"\x0fChasmRequestIDs\x12d\n" +
+	"\vrequest_ids\x18\x01 \x03(\v2C.temporal.server.api.persistence.v1.ChasmRequestIDs.RequestIdsEntryR\n" +
+	"requestIds\x1aY\n" +
+	"\x0fRequestIdsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
+	"\x05value\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x05value:\x028\x01B6Z4go.temporal.io/server/api/persistence/v1;persistenceb\x06proto3"
 
 var (
 	file_temporal_server_api_persistence_v1_chasm_proto_rawDescOnce sync.Once
@@ -1271,7 +1219,7 @@ var file_temporal_server_api_persistence_v1_chasm_proto_goTypes = []any{
 	(*ChasmComponentAttributes_RequestMetadata)(nil), // 13: temporal.server.api.persistence.v1.ChasmComponentAttributes.RequestMetadata
 	nil,                           // 14: temporal.server.api.persistence.v1.ChasmComponentAttributes.RequestsEntry
 	nil,                           // 15: temporal.server.api.persistence.v1.ChasmLocalState.NodesEntry
-	(*ChasmRequestIDs_Entry)(nil), // 16: temporal.server.api.persistence.v1.ChasmRequestIDs.Entry
+	nil,                           // 16: temporal.server.api.persistence.v1.ChasmRequestIDs.RequestIdsEntry
 	(*v1.DataBlob)(nil),           // 17: temporal.api.common.v1.DataBlob
 	(*VersionedTransition)(nil),   // 18: temporal.server.api.persistence.v1.VersionedTransition
 	(*v11.UserMetadata)(nil),      // 19: temporal.api.sdk.v1.UserMetadata
@@ -1308,14 +1256,14 @@ var file_temporal_server_api_persistence_v1_chasm_proto_depIdxs = []int32{
 	23, // 23: temporal.server.api.persistence.v1.ChasmNexusCompletion.close_time:type_name -> google.protobuf.Timestamp
 	24, // 24: temporal.server.api.persistence.v1.ChasmNexusCompletion.links:type_name -> temporal.api.common.v1.Link
 	23, // 25: temporal.server.api.persistence.v1.ChasmNexusCompletion.start_time:type_name -> google.protobuf.Timestamp
-	16, // 26: temporal.server.api.persistence.v1.ChasmRequestIDs.entries:type_name -> temporal.server.api.persistence.v1.ChasmRequestIDs.Entry
+	16, // 26: temporal.server.api.persistence.v1.ChasmRequestIDs.request_ids:type_name -> temporal.server.api.persistence.v1.ChasmRequestIDs.RequestIdsEntry
 	23, // 27: temporal.server.api.persistence.v1.ChasmComponentAttributes.Task.scheduled_time:type_name -> google.protobuf.Timestamp
 	17, // 28: temporal.server.api.persistence.v1.ChasmComponentAttributes.Task.data:type_name -> temporal.api.common.v1.DataBlob
 	18, // 29: temporal.server.api.persistence.v1.ChasmComponentAttributes.Task.versioned_transition:type_name -> temporal.server.api.persistence.v1.VersionedTransition
 	24, // 30: temporal.server.api.persistence.v1.ChasmComponentAttributes.RequestMetadata.links:type_name -> temporal.api.common.v1.Link
 	13, // 31: temporal.server.api.persistence.v1.ChasmComponentAttributes.RequestsEntry.value:type_name -> temporal.server.api.persistence.v1.ChasmComponentAttributes.RequestMetadata
 	3,  // 32: temporal.server.api.persistence.v1.ChasmLocalState.NodesEntry.value:type_name -> temporal.server.api.persistence.v1.ChasmNodeLocalState
-	23, // 33: temporal.server.api.persistence.v1.ChasmRequestIDs.Entry.record_time:type_name -> google.protobuf.Timestamp
+	23, // 33: temporal.server.api.persistence.v1.ChasmRequestIDs.RequestIdsEntry.value:type_name -> google.protobuf.Timestamp
 	34, // [34:34] is the sub-list for method output_type
 	34, // [34:34] is the sub-list for method input_type
 	34, // [34:34] is the sub-list for extension type_name
