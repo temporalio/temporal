@@ -71,7 +71,7 @@ func (h *operationInvocationTaskHandler) Validate(
 func (h *operationInvocationTaskHandler) Execute(
 	ctx context.Context,
 	opRef chasm.ComponentRef,
-	attrs chasm.TaskAttributes,
+	_ chasm.TaskAttributes,
 	task *nexusoperationpb.InvocationTask,
 ) error {
 	ns, err := h.namespaceRegistry.GetNamespaceByID(namespace.ID(opRef.NamespaceID))
@@ -113,7 +113,7 @@ func (h *operationInvocationTaskHandler) Execute(
 	}
 
 	elapsed := args.currentTime.Sub(args.scheduledTime)
-	callTimeout := h.config.RequestTimeout(ns.Name().String(), attrs.Destination)
+	callTimeout := h.config.RequestTimeout(ns.Name().String(), args.endpointName)
 	var timeoutType enumspb.TimeoutType
 	// Adjust timeout based on remaining operation timeouts.
 	// ScheduleToStart takes precedence over ScheduleToClose since it is already capped by it.

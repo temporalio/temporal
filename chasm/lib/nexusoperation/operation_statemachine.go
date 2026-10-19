@@ -22,7 +22,8 @@ var TransitionScheduled = chasm.NewTransition(
 		o.Attempt++
 		// Emit an invocation task to start the operation.
 		// The destination is the endpoint name, which routes the task to the correct outbound queue.
-		ctx.AddTask(o, chasm.TaskAttributes{Destination: o.GetEndpoint()}, &nexusoperationpb.InvocationTask{
+		// System endpoint tasks have no destination and are scheduled on the transfer queue.
+		ctx.AddTask(o, chasm.TaskAttributes{Destination: taskDestination(o.GetEndpoint())}, &nexusoperationpb.InvocationTask{
 			Attempt: o.Attempt,
 		})
 
@@ -94,7 +95,7 @@ var transitionRescheduled = chasm.NewTransition(
 		o.NextAttemptScheduleTime = nil
 
 		// Emit a new invocation task for the retry attempt
-		ctx.AddTask(o, chasm.TaskAttributes{Destination: o.GetEndpoint()}, &nexusoperationpb.InvocationTask{
+		ctx.AddTask(o, chasm.TaskAttributes{Destination: taskDestination(o.GetEndpoint())}, &nexusoperationpb.InvocationTask{
 			Attempt: o.Attempt,
 		})
 
