@@ -1,12 +1,16 @@
 package chasm
 
 import (
+	"cmp"
+	"maps"
 	"reflect"
 	"slices"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/softassert"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -28,58 +32,78 @@ var requestIDsValueT = reflect.TypeFor[*persistencespb.ChasmRequestIDs]()
 // field and must survive the root's structure sync.
 var reservedRootChildren = []string{requestIDsNodeName}
 
-// HasRequestID returns true if requestID was previously recorded via AttachRequestID and has not been
-// dropped yet. An entry past its max age is still reported until the next AttachRequestID drops it.
+// HasRequestID returns true if requestID was recorded via AttachRequestID, has not been dropped, and is
+// not older than maxAge (maxAge <= 0 disables the age check). An expired entry is reported as absent; it
+// stays in the node until AttachRequestID replaces it or drops it as one of the oldest.
 // It must be called on the root node. It does not mark the node as mutated.
-func (n *Node) HasRequestID(requestID string) (bool, error) {
+func (n *Node) HasRequestID(requestID string, maxAge time.Duration) (bool, error) {
 	requestIDs, err := n.requestIDs(false)
 	if err != nil || requestIDs == nil {
 		return false, err
 	}
-	return containsRequestID(requestIDs.GetEntries(), requestID), nil
+	recordTime, ok := requestIDs.GetRequestIds()[requestID]
+	return ok && !isRequestIDExpired(recordTime, n.backend.Now(), maxAge), nil
 }
 
 // AttachRequestID records requestID so that a later request reusing it can be deduplicated.
 //
-// Entries are kept in the order they were recorded, and the oldest are dropped from the front when
-// older than maxAge or beyond maxCount; a value <= 0 disables the respective limit.
+// Expired entries are not swept here; HasRequestID ignores them, and they are the first dropped when the
+// count is trimmed. Once recording requestID would make more than maxCount entries, the oldest existing
+// ones are dropped first so that half of maxCount remain after it is recorded; the cost of ordering entries
+// by age is paid once per maxCount/2 attaches instead of on every attach. A value <= 0 disables the
+// respective limit.
 // It must be called on the root node, and only the request IDs node is marked as mutated.
 func (n *Node) AttachRequestID(requestID string, maxCount int, maxAge time.Duration) error {
 	requestIDs, err := n.requestIDs(true)
 	if err != nil {
 		return err
 	}
-	if containsRequestID(requestIDs.GetEntries(), requestID) {
-		return nil
+	if requestIDs.RequestIds == nil {
+		requestIDs.RequestIds = make(map[string]*timestamppb.Timestamp)
+	}
+	now := n.backend.Now()
+
+	if recordTime, ok := requestIDs.RequestIds[requestID]; ok {
+		// Callers check HasRequestID first under the same execution lock, so a live entry means a bug.
+		// Fail instead of silently persisting a duplicate update.
+		if !isRequestIDExpired(recordTime, now, maxAge) {
+			return softassert.UnexpectedInternalErr(
+				n.logger,
+				"request ID is already recorded",
+				nil,
+				tag.String("request-id", requestID),
+			)
+		}
+		// Expired: replace it.
+		delete(requestIDs.RequestIds, requestID)
 	}
 
-	now := n.backend.Now().Truncate(time.Second)
-	entries := append(requestIDs.Entries, &persistencespb.ChasmRequestIDs_Entry{
-		RequestId:  requestID,
-		RecordTime: timestamppb.New(now),
-	})
-
-	// Entries are appended in time order, so expired ones are at the front. The new entry is never expired.
-	if maxAge > 0 {
-		cutoff := now.Add(-maxAge)
-		expired := slices.IndexFunc(entries, func(e *persistencespb.ChasmRequestIDs_Entry) bool {
-			return !e.GetRecordTime().AsTime().Before(cutoff)
-		})
-		entries = slices.Delete(entries, 0, expired)
+	// Trim before recording requestID, so the new entry is never a candidate for dropping (record times
+	// are truncated to seconds and may tie, so "newest" can't be told apart reliably after inserting).
+	if maxCount > 0 && len(requestIDs.RequestIds) >= maxCount {
+		dropOldestRequestIDs(requestIDs.RequestIds, max(maxCount/2, 1)-1)
 	}
-	if maxCount > 0 && len(entries) > maxCount {
-		entries = slices.Delete(entries, 0, len(entries)-maxCount)
-	}
+	requestIDs.RequestIds[requestID] = timestamppb.New(now.Truncate(time.Second))
 
-	requestIDs.Entries = entries
 	n.children[requestIDsNodeName].setValueState(valueStateNeedSerialize)
 	return nil
 }
 
-func containsRequestID(entries []*persistencespb.ChasmRequestIDs_Entry, requestID string) bool {
-	return slices.ContainsFunc(entries, func(e *persistencespb.ChasmRequestIDs_Entry) bool {
-		return e.GetRequestId() == requestID
+// isRequestIDExpired reports whether a request ID recorded at recordTime is older than maxAge at now.
+// maxAge <= 0 means request IDs never expire.
+func isRequestIDExpired(recordTime *timestamppb.Timestamp, now time.Time, maxAge time.Duration) bool {
+	return maxAge > 0 && recordTime.AsTime().Before(now.Add(-maxAge))
+}
+
+// dropOldestRequestIDs drops the oldest entries of requestIDs until keep entries remain. Entries
+// recorded in the same second are ordered by request ID.
+func dropOldestRequestIDs(requestIDs map[string]*timestamppb.Timestamp, keep int) {
+	ids := slices.SortedFunc(maps.Keys(requestIDs), func(a, b string) int {
+		return cmp.Or(requestIDs[a].AsTime().Compare(requestIDs[b].AsTime()), cmp.Compare(a, b))
 	})
+	for _, id := range ids[:len(ids)-keep] {
+		delete(requestIDs, id)
+	}
 }
 
 // requestIDs returns the deserialized value of the request IDs node. If the node doesn't exist, it is

@@ -217,7 +217,6 @@ type Config struct {
 	MaximumSignalsPerExecution       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaximumRequestIDsPerExecution    dynamicconfig.IntPropertyFnWithNamespaceFilter
 	RequestIDMaxAge                  dynamicconfig.DurationPropertyFnWithNamespaceFilter
-	EnableChasmRequestIDDataNode     dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	MaximumRequestIDsInChasmDataNode dynamicconfig.IntPropertyFnWithNamespaceFilter
 	MaximumEventBatchSizeInBytes     dynamicconfig.IntPropertyFn
 
@@ -709,7 +708,6 @@ func NewConfig(
 		MaximumSignalsPerExecution:       dynamicconfig.MaximumSignalsPerExecution.Get(dc),
 		MaximumRequestIDsPerExecution:    dynamicconfig.MaximumRequestIDsPerExecution.Get(dc),
 		RequestIDMaxAge:                  dynamicconfig.RequestIDMaxAge.Get(dc),
-		EnableChasmRequestIDDataNode:     dynamicconfig.EnableChasmRequestIDDataNode.Get(dc),
 		MaximumRequestIDsInChasmDataNode: dynamicconfig.MaximumRequestIDsInChasmDataNode.Get(dc),
 		MaximumEventBatchSizeInBytes:     dynamicconfig.MaximumEventBatchSizeInBytes.Get(dc),
 		ShardUpdateMinInterval:           dynamicconfig.ShardUpdateMinInterval.Get(dc),

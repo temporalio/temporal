@@ -101,7 +101,7 @@ func (h *handler) StartActivityExecution(ctx context.Context, req *activitypb.St
 			return newActivity, nil
 		},
 		frontendReq,
-		chasm.WithRequestID(frontendReq.GetRequestId()),
+		chasm.WithStartRequestID(frontendReq.GetRequestId()),
 		chasm.WithBusinessIDPolicy(reusePolicy, conflictPolicy),
 	)
 

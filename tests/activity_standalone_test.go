@@ -519,90 +519,69 @@ func (s *standaloneActivityTestSuite) TestIDConflictPolicy() {
 			})
 
 			t.Run("ConflictUpdateIdempotentAfterClose", func(t *testing.T) {
-				// Attach request IDs complete a start request, so with the request IDs data node enabled they must
-				// still be recorded where a retried start finds them, or the retry after close starts a new run.
-				for _, tc := range []struct {
-					name            string
-					dataNodeEnabled bool
-				}{
-					{name: "DataNodeDisabled", dataNodeEnabled: false},
-					{name: "DataNodeEnabled", dataNodeEnabled: true},
-				} {
-					t.Run(tc.name, func(t *testing.T) {
-						env.GetTestCluster().OverrideDynamicConfig(
-							t,
-							dynamicconfig.EnableChasmRequestIDDataNode,
-							[]dynamicconfig.ConstrainedValue{{
-								Constraints: dynamicconfig.Constraints{Namespace: env.Namespace().String()},
-								Value:       tc.dataNodeEnabled,
-							}},
-						)
-						activityID := testcore.RandomizeStr(t.Name())
-						taskQueue := testcore.RandomizeStr(t.Name())
-						startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
-						requestID := env.Tv().Any().String()
-						ch, callbackAddress := newNexusCompletionHandler(t)
-						originalLinks := []*commonpb.Link{workflowEventLink("after-close-original")}
-						conflictReq := &workflowservice.StartActivityExecutionRequest{
-							Namespace:           env.Namespace().String(),
-							ActivityId:          activityID,
-							ActivityType:        env.Tv().ActivityType(),
-							Identity:            env.Tv().WorkerIdentity(),
-							Input:               defaultInput,
-							TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
-							StartToCloseTimeout: durationpb.New(time.Minute),
-							IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
-							RequestId:           requestID,
-							CompletionCallbacks: []*commonpb.Callback{{
-								Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackAddress}},
-							}},
-							Links:             originalLinks,
-							OnConflictOptions: onConflictOpts,
-						}
-
-						conflictResp, err := env.FrontendClient().StartActivityExecution(ctx, conflictReq)
-						require.NoError(t, err)
-						require.False(t, conflictResp.GetStarted())
-						require.Equal(t, startResp.GetRunId(), conflictResp.GetRunId())
-
-						pollResp := env.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, startResp.GetRunId())
-						_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
-							Namespace: env.Namespace().String(),
-							TaskToken: pollResp.GetTaskToken(),
-							Result:    defaultResult,
-							Identity:  defaultIdentity,
-						})
-						require.NoError(t, err)
-
-						select {
-						case <-ch.requestCh:
-						case <-ctx.Done():
-							require.Fail(t, "timed out waiting for completion callback")
-						}
-
-						conflictReq.CompletionCallbacks = []*commonpb.Callback{{
-							Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/retry-cb"}},
-						}}
-						conflictReq.Links = []*commonpb.Link{workflowEventLink("after-close-retry")}
-						retryResp, err := env.FrontendClient().StartActivityExecution(ctx, conflictReq)
-						require.NoError(t, err)
-						require.False(t, retryResp.GetStarted())
-						require.Equal(t, startResp.GetRunId(), retryResp.GetRunId())
-						ch.requestCompleteCh <- nil
-
-						descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
-							Namespace:  env.Namespace().String(),
-							ActivityId: activityID,
-							RunId:      startResp.GetRunId(),
-						})
-						require.NoError(t, err)
-						require.Len(t, descResp.GetCallbacks(), 1)
-						require.Equal(t, callbackAddress, descResp.GetCallbacks()[0].GetInfo().GetCallback().GetNexus().GetUrl())
-						protorequire.ProtoSliceEqual(t, originalLinks, descResp.GetInfo().GetLinks())
-					})
+				activityID := testcore.RandomizeStr(t.Name())
+				taskQueue := testcore.RandomizeStr(t.Name())
+				startResp := env.startAndValidateActivity(ctx, t, activityID, taskQueue)
+				requestID := env.Tv().Any().String()
+				ch, callbackAddress := newNexusCompletionHandler(t)
+				originalLinks := []*commonpb.Link{workflowEventLink("after-close-original")}
+				conflictReq := &workflowservice.StartActivityExecutionRequest{
+					Namespace:           env.Namespace().String(),
+					ActivityId:          activityID,
+					ActivityType:        env.Tv().ActivityType(),
+					Identity:            env.Tv().WorkerIdentity(),
+					Input:               defaultInput,
+					TaskQueue:           &taskqueuepb.TaskQueue{Name: taskQueue},
+					StartToCloseTimeout: durationpb.New(time.Minute),
+					IdConflictPolicy:    enumspb.ACTIVITY_ID_CONFLICT_POLICY_USE_EXISTING,
+					RequestId:           requestID,
+					CompletionCallbacks: []*commonpb.Callback{{
+						Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: callbackAddress}},
+					}},
+					Links:             originalLinks,
+					OnConflictOptions: onConflictOpts,
 				}
-			})
 
+				conflictResp, err := env.FrontendClient().StartActivityExecution(ctx, conflictReq)
+				require.NoError(t, err)
+				require.False(t, conflictResp.GetStarted())
+				require.Equal(t, startResp.GetRunId(), conflictResp.GetRunId())
+
+				pollResp := env.pollActivityTaskAndValidate(ctx, t, activityID, taskQueue, startResp.GetRunId())
+				_, err = env.FrontendClient().RespondActivityTaskCompleted(ctx, &workflowservice.RespondActivityTaskCompletedRequest{
+					Namespace: env.Namespace().String(),
+					TaskToken: pollResp.GetTaskToken(),
+					Result:    defaultResult,
+					Identity:  defaultIdentity,
+				})
+				require.NoError(t, err)
+
+				select {
+				case <-ch.requestCh:
+				case <-ctx.Done():
+					require.Fail(t, "timed out waiting for completion callback")
+				}
+
+				conflictReq.CompletionCallbacks = []*commonpb.Callback{{
+					Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost/retry-cb"}},
+				}}
+				conflictReq.Links = []*commonpb.Link{workflowEventLink("after-close-retry")}
+				retryResp, err := env.FrontendClient().StartActivityExecution(ctx, conflictReq)
+				require.NoError(t, err)
+				require.False(t, retryResp.GetStarted())
+				require.Equal(t, startResp.GetRunId(), retryResp.GetRunId())
+				ch.requestCompleteCh <- nil
+
+				descResp, err := env.FrontendClient().DescribeActivityExecution(ctx, &workflowservice.DescribeActivityExecutionRequest{
+					Namespace:  env.Namespace().String(),
+					ActivityId: activityID,
+					RunId:      startResp.GetRunId(),
+				})
+				require.NoError(t, err)
+				require.Len(t, descResp.GetCallbacks(), 1)
+				require.Equal(t, callbackAddress, descResp.GetCallbacks()[0].GetInfo().GetCallback().GetNexus().GetUrl())
+				protorequire.ProtoSliceEqual(t, originalLinks, descResp.GetInfo().GetLinks())
+			})
 			t.Run("ConcurrentAttachesWithSameRequestIdAttachOnce", func(t *testing.T) {
 				activityID := testcore.RandomizeStr(t.Name())
 				taskQueue := testcore.RandomizeStr(t.Name())

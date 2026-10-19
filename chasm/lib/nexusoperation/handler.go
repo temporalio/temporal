@@ -52,7 +52,7 @@ func (h *handler) StartNexusOperation(
 			return newStandaloneOperation(mutableCtx, req, maxCallbacks, h.linkValidator)
 		},
 		req,
-		chasm.WithRequestID(frontendReq.GetRequestId()),
+		chasm.WithStartRequestID(frontendReq.GetRequestId()),
 		chasm.WithBusinessIDPolicy(
 			idReusePolicyFromProto(frontendReq.GetIdReusePolicy()),
 			idConflictPolicyFromProto(frontendReq.GetIdConflictPolicy()),
