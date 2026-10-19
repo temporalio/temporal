@@ -10,6 +10,7 @@ import (
 	"github.com/nexus-rpc/sdk-go/nexus"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
 	"go.temporal.io/api/workflowservice/v1"
@@ -20,6 +21,7 @@ import (
 	"go.temporal.io/server/chasm/lib/callback"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/tests/testcore"
 )
 
@@ -474,6 +476,119 @@ func (s *UpdateWorkflowSdkSuite) TestUpdateSameRequestIDDeduplicatesCallbacks() 
 
 	// Clean up.
 	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "complete-update", nil))
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "stop", nil))
+}
+
+func (s *UpdateWorkflowSdkSuite) TestUpdateNexusSerializationContext() {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableChasm, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCHASMCallbacks, true),
+		testcore.WithDynamicConfig(dynamicconfig.EnableWorkflowUpdateCallbacks, true),
+		testcore.WithDynamicConfig(
+			callback.AllowedAddresses,
+			[]any{map[string]any{"Pattern": "localhost:9999", "AllowInsecure": true}},
+		),
+	)
+
+	serializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
+	otherSerializationContext := &nexuspb.PropagatedSerializationContext{
+		Endpoint:  "other-endpoint",
+		Service:   "service",
+		Operation: "operation",
+	}
+
+	// Workflow where the update handler blocks until signaled.
+	wf := func(ctx workflow.Context, input string) (string, error) {
+		if err := workflow.SetUpdateHandler(ctx, env.Tv().HandlerName(), func(ctx workflow.Context, input string) (string, error) {
+			signalCh := workflow.GetSignalChannel(ctx, "complete-update")
+			signalCh.Receive(ctx, nil)
+			return "updated: " + input, nil
+		}); err != nil {
+			return "", err
+		}
+		signalCh := workflow.GetSignalChannel(ctx, "stop")
+		signalCh.Receive(ctx, nil)
+		return "done: " + input, nil
+	}
+
+	w := worker.New(env.SdkClient(), env.WorkerTaskQueue(), worker.Options{})
+	w.RegisterWorkflow(wf)
+	s.NoError(w.Start())
+	s.T().Cleanup(w.Stop)
+
+	run, err := env.SdkClient().ExecuteWorkflow(s.Context(), sdkclient.StartWorkflowOptions{
+		ID:        env.Tv().WorkflowID(),
+		TaskQueue: env.WorkerTaskQueue(),
+	}, wf, "input")
+	s.NoError(err)
+
+	makeRequest := func(reqID string, nsCtx *nexuspb.PropagatedSerializationContext) *workflowservice.UpdateWorkflowExecutionRequest {
+		return &workflowservice.UpdateWorkflowExecutionRequest{
+			Namespace:         env.Namespace().String(),
+			WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: run.GetID()},
+			WaitPolicy:        &updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED},
+			Request: &updatepb.Request{
+				Meta:      &updatepb.Meta{UpdateId: env.Tv().UpdateID()},
+				Input:     &updatepb.Input{Name: env.Tv().HandlerName(), Args: &commonpb.Payloads{Payloads: []*commonpb.Payload{testcore.MustToPayload(s.T(), "test")}}},
+				RequestId: reqID,
+				CompletionCallbacks: []*commonpb.Callback{{
+					Variant: &commonpb.Callback_Nexus_{Nexus: &commonpb.Callback_Nexus{Url: "http://localhost:9999/callback"}},
+				}},
+				PropagatedNexusSerializationContext: nsCtx,
+			},
+		}
+	}
+	// First request admits the update with its context.
+	resp, err := env.FrontendClient().UpdateWorkflowExecution(s.Context(), makeRequest(env.Tv().RequestID(), serializationContext))
+	s.NoError(err)
+	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED, resp.GetStage())
+	protorequire.ProtoEqual(s.T(), serializationContext, resp.GetPropagatedNexusSerializationContext())
+
+	// Duplicates attach callbacks to the existing update and get back the original context.
+	resp, err = env.FrontendClient().UpdateWorkflowExecution(s.Context(), makeRequest(env.Tv().Sub("same").RequestID(), serializationContext))
+	s.NoError(err)
+	protorequire.ProtoEqual(s.T(), serializationContext, resp.GetPropagatedNexusSerializationContext())
+	resp, err = env.FrontendClient().UpdateWorkflowExecution(s.Context(), makeRequest(env.Tv().Sub("other").RequestID(), otherSerializationContext))
+	s.NoError(err)
+	protorequire.ProtoEqual(s.T(), serializationContext, resp.GetPropagatedNexusSerializationContext())
+	resp, err = env.FrontendClient().UpdateWorkflowExecution(s.Context(), makeRequest(env.Tv().Sub("missing").RequestID(), nil))
+	s.NoError(err)
+	protorequire.ProtoEqual(s.T(), serializationContext, resp.GetPropagatedNexusSerializationContext())
+
+	pollUpdate := func(stage enumspb.UpdateWorkflowExecutionLifecycleStage) *workflowservice.PollWorkflowExecutionUpdateResponse {
+		pollResp, err := env.FrontendClient().PollWorkflowExecutionUpdate(s.Context(), &workflowservice.PollWorkflowExecutionUpdateRequest{
+			Namespace: env.Namespace().String(),
+			UpdateRef: &updatepb.UpdateRef{
+				WorkflowExecution: &commonpb.WorkflowExecution{WorkflowId: run.GetID(), RunId: run.GetRunID()},
+				UpdateId:          env.Tv().UpdateID(),
+			},
+			WaitPolicy: &updatepb.WaitPolicy{LifecycleStage: stage},
+		})
+		s.NoError(err)
+		s.Equal(stage, pollResp.GetStage())
+		return pollResp
+	}
+	protorequire.ProtoEqual(s.T(), serializationContext,
+		pollUpdate(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED).GetPropagatedNexusSerializationContext())
+
+	// Once completed, the update is no longer in the registry and its context is loaded from mutable state.
+	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "complete-update", nil))
+	protorequire.ProtoEqual(s.T(), serializationContext,
+		pollUpdate(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED).GetPropagatedNexusSerializationContext())
+
+	// A duplicate of the completed update returns the result and the original context.
+	completedReq := makeRequest(env.Tv().Sub("completed").RequestID(), otherSerializationContext)
+	completedReq.WaitPolicy.LifecycleStage = enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED
+	resp, err = env.FrontendClient().UpdateWorkflowExecution(s.Context(), completedReq)
+	s.NoError(err)
+	s.Equal(enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED, resp.GetStage())
+	s.NotNil(resp.GetOutcome().GetSuccess())
+	protorequire.ProtoEqual(s.T(), serializationContext, resp.GetPropagatedNexusSerializationContext())
+
 	s.NoError(env.SdkClient().SignalWorkflow(s.Context(), run.GetID(), run.GetRunID(), "stop", nil))
 }
 

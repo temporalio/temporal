@@ -657,6 +657,10 @@ const (
 )
 
 var (
+	PrometheusMetricDefinitionConflicts = NewCounterDef(
+		"prometheus_metric_definition_conflicts",
+		WithDescription("Number of Prometheus metric registrations rejected due to conflicting label names or help text."),
+	)
 	ServiceRequests = NewCounterDef(
 		"service_requests",
 		WithDescription("The number of RPC requests received by the service."),
@@ -1047,6 +1051,10 @@ var (
 	SpeculativeWorkflowTaskRollbacks                 = NewCounterDef("speculative_workflow_task_rollbacks")
 
 	ActivityEagerExecutionCounter = NewCounterDef("activity_eager_execution")
+	EagerDispatchRequestsSent     = NewCounterDef(
+		"eager_dispatch_requests_sent",
+		WithDescription("Number of task grants sent by History through GrantEagerDispatch, summed from the request item counts."),
+	)
 	// WorkflowEagerExecutionCounter is emitted any time eager workflow start is requested.
 	WorkflowEagerExecutionCounter = NewCounterDef("workflow_eager_execution")
 	// WorkflowEagerExecutionDeniedCounter is emitted any time eager workflow start is requested and the serer fell back
@@ -1107,9 +1115,13 @@ var (
 		"persisted_mutable_state_size",
 		WithDescription("Size of the persisted Workflow Execution's state in DB, emitted each time a workflow execution is updated."),
 	)
-	ExecutionInfoSize                    = NewBytesHistogramDef("execution_info_size")
-	ExecutionStateSize                   = NewBytesHistogramDef("execution_state_size")
-	ActivityInfoSize                     = NewBytesHistogramDef("activity_info_size")
+	ExecutionInfoSize        = NewBytesHistogramDef("execution_info_size")
+	ExecutionStateSize       = NewBytesHistogramDef("execution_state_size")
+	ActivityInfoSize         = NewBytesHistogramDef("activity_info_size")
+	ActivityFailureTotalSize = NewBytesHistogramDef(
+		"activity_failure_total_size",
+		WithDescription("Total size of the last failures retained across a Workflow Execution's pending activities, emitted each time an activity failure is recorded."),
+	)
 	TimerInfoSize                        = NewBytesHistogramDef("timer_info_size")
 	ChildInfoSize                        = NewBytesHistogramDef("child_info_size")
 	RequestCancelInfoSize                = NewBytesHistogramDef("request_cancel_info_size")
@@ -1312,6 +1324,7 @@ var (
 
 	ExecutionTimeSkippingTransitionedCounter      = NewCounterDef("execution_time_skipping_transitioned_count")
 	ExecutionTimeSkippingTransitionedErrorCounter = NewCounterDef("execution_time_skipping_transitioned_error_count")
+	ExecutionTimeSkippingConfigUpdatedCounter     = NewCounterDef("execution_time_skipping_config_updated_count")
 
 	// Pagination of RespondWorkflowTaskCompleted requests
 	WorkflowTaskCompletionPaginatedBytes = NewBytesHistogramDef(
@@ -1324,7 +1337,7 @@ var (
 	)
 	WorkflowTaskCompletionBufferLost = NewCounterDef(
 		"workflow_task_completion_buffer_lost",
-		WithDescription("Paginated workflow task completions aborted because the buffer was lost (evicted, process limit exceeded, or a page was missing)."),
+		WithDescription("Paginated workflow task completions aborted because the buffer was lost."),
 	)
 
 	// Matching
@@ -1342,7 +1355,15 @@ var (
 	ConditionFailedErrorPerTaskQueueCounter   = NewCounterDef("condition_failed_errors")
 	RespondQueryTaskFailedPerTaskQueueCounter = NewCounterDef("respond_query_failed")
 	RespondNexusTaskFailedPerTaskQueueCounter = NewCounterDef("respond_nexus_failed")
-	NexusTaskRequests                         = NewCounterDef(
+	EagerDispatchRequests                     = NewCounterDef(
+		"eager_dispatch_requests",
+		WithDescription("Number of task grants requested through GrantEagerDispatch, summed from the request item counts."),
+	)
+	EagerDispatchResults = NewCounterDef(
+		"eager_dispatch_results",
+		WithDescription("Number of requested task grants by outcome: granted, error, backlog, rate_limit, or per_key_rate_limit."),
+	)
+	NexusTaskRequests = NewCounterDef(
 		"nexus_task_requests",
 		WithDescription("The number of Nexus task poll and respond requests received by the matching service, broken down by namespace, operation, client_name, and is_internal."),
 	)
@@ -1376,14 +1397,16 @@ var (
 	)
 	TaskLagPerTaskQueueGauge               = NewGaugeDef("task_lag_per_tl")
 	NoRecentPollerTasksPerTaskQueueCounter = NewCounterDef("no_poller_tasks")
-	UnknownBuildPollsCounter               = NewCounterDef("unknown_build_polls")
-	UnknownBuildTasksCounter               = NewCounterDef("unknown_build_tasks")
 	TaskDispatchLatencyPerTaskQueue        = NewTimerDef("task_dispatch_latency")
 	ApproximateBacklogCount                = NewGaugeDef("approximate_backlog_count")
 	ApproximateBacklogAgeSeconds           = NewGaugeDef("approximate_backlog_age_seconds")
 	PhysicalApproximateBacklogCount        = NewGaugeDef("physical_approximate_backlog_count")
 	PhysicalApproximateBacklogAgeSeconds   = NewGaugeDef("physical_approximate_backlog_age_seconds")
-	NonRetryableTasks                      = NewCounterDef(
+	FairnessKeyCountEstimate               = NewGaugeDef(
+		"fairness_key_count_estimate",
+		WithDescription("Estimated number of distinct fairness keys recently used in a physical task queue partition (max across priority levels)"),
+	)
+	NonRetryableTasks = NewCounterDef(
 		"non_retryable_tasks",
 		WithDescription("The number of non-retryable matching tasks which are dropped due to specific errors"),
 	)

@@ -9,6 +9,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
 	protocolpb "go.temporal.io/api/protocol/v1"
 	"go.temporal.io/api/serviceerror"
 	updatepb "go.temporal.io/api/update/v1"
@@ -63,6 +64,15 @@ type (
 		// the Update is in stateSent. Flushed to the event store in onAcceptanceMsg.
 		// Cleared on rejection, abort, or rollback. In-memory only; lost on lock release.
 		pendingCallbacks []pendingCallback
+		// nexusSerializationContext is the Nexus serialization context from the request that admitted this
+		// Update. Callers don't need to load it: it is populated on every path that produces an Update, i.e.
+		// Admit (from the request, before acceptance), Registry construction and Find (from UpdateInfo in
+		// MutableState), and TryResurrect (from the worker's echoed request). Unlike request, it is retained
+		// after acceptance. It is persisted in UpdateInfo only once an UpdateAdmitted or UpdateAccepted event
+		// is written; before that it is in-memory only, like request, since admission writes nothing so that
+		// rejected Updates leave no trace. It is nil if the Update is still in stateCreated, the request had no
+		// context, or the Update was persisted before this field existed.
+		nexusSerializationContext *nexuspb.PropagatedSerializationContext
 
 		// These fields might be accessed while not holding the workflow lock.
 		accepted future.Future[*failurepb.Failure]
@@ -153,6 +163,12 @@ func withCompletionCallback(cb func()) updateOpt {
 func withLimitChecker(cb func(req *updatepb.Request) error) updateOpt {
 	return func(u *Update) {
 		u.checkLimits = cb
+	}
+}
+
+func withNexusSerializationContext(nsCtx *nexuspb.PropagatedSerializationContext) updateOpt {
+	return func(u *Update) {
+		u.nexusSerializationContext = nsCtx
 	}
 }
 
@@ -359,6 +375,7 @@ func (u *Update) Admit(
 	}
 	u.request = reqAny
 	u.originalReqID = req.GetRequestId()
+	u.nexusSerializationContext = req.GetPropagatedNexusSerializationContext()
 
 	prevState := u.setState(stateProvisionallyAdmitted)
 	eventStore.OnAfterCommit(func(context.Context) {
@@ -859,6 +876,7 @@ func (u *Update) setState(newState state) state {
 func (u *Update) GetSize() int {
 	size := len(u.id)
 	size += proto.Size(u.request)
+	size += proto.Size(u.nexusSerializationContext)
 	if u.accepted.Ready() {
 		res, _ := u.accepted.Get(context.Background())
 		size += res.Size()
@@ -868,6 +886,14 @@ func (u *Update) GetSize() int {
 		size += res.Size()
 	}
 	return size
+}
+
+// NexusSerializationContext returns the Nexus serialization context of the request that admitted this Update.
+// For a deduplicated request, this is the original request's context. A nil result means the Update has no
+// context (see the nexusSerializationContext field), not that it still needs to be loaded.
+// It must be invoked while holding the workflow lock.
+func (u *Update) NexusSerializationContext() *nexuspb.PropagatedSerializationContext {
+	return u.nexusSerializationContext
 }
 
 // AcceptedEventID should only be invoked after the accepted/outcome futures are set.

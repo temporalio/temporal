@@ -3013,6 +3013,76 @@ func (s *mutableStateSuite) TestUpdateInfos() {
 	s.IsType((*serviceerror.NotFound)(nil), err)
 }
 
+func (s *mutableStateSuite) TestUpdateInfos_NexusSerializationContext() {
+	cacheStore := map[events.EventKey]*historypb.HistoryEvent{}
+	namespaceEntry := tests.GlobalNamespaceEntry
+	var err error
+	s.mutableState, err = NewMutableStateFromDB(
+		s.mockShard,
+		NewMapEventCache(s.T(), cacheStore),
+		s.logger,
+		namespaceEntry,
+		s.buildWorkflowMutableState(),
+		123,
+	)
+	s.NoError(err)
+	err = s.mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(tests.WorkflowID), false)
+	s.NoError(err)
+
+	admittedCtx := &nexuspb.PropagatedSerializationContext{Endpoint: "endpoint-1", Service: "service-1", Operation: "operation-1"}
+	acceptedCtx := &nexuspb.PropagatedSerializationContext{Endpoint: "endpoint-2", Service: "service-2", Operation: "operation-2"}
+
+	// Durably admitted update (e.g. after reset) accepted without a request keeps the context from admission.
+	admittedUpdateID := s.T().Name() + "-admitted"
+	_, err = s.mutableState.AddWorkflowExecutionUpdateAdmittedEvent(
+		&updatepb.Request{
+			Meta:                                &updatepb.Meta{UpdateId: admittedUpdateID},
+			PropagatedNexusSerializationContext: admittedCtx,
+		},
+		enumspb.UPDATE_ADMITTED_EVENT_ORIGIN_REAPPLY,
+	)
+	s.NoError(err)
+	protorequire.ProtoEqual(s.T(), admittedCtx, s.mutableState.GetUpdateNexusSerializationContext(admittedUpdateID))
+	_, err = s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(admittedUpdateID, "msg-1", 1, nil)
+	s.NoError(err)
+	protorequire.ProtoEqual(s.T(), admittedCtx, s.mutableState.GetUpdateNexusSerializationContext(admittedUpdateID))
+
+	// Update accepted with a request takes the context from the accepted request and retains it on completion.
+	acceptedUpdateID := s.T().Name() + "-accepted"
+	acptEvent, err := s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
+		acceptedUpdateID,
+		"msg-2",
+		1,
+		&updatepb.Request{
+			Meta:                                &updatepb.Meta{UpdateId: acceptedUpdateID},
+			PropagatedNexusSerializationContext: acceptedCtx,
+		},
+	)
+	s.NoError(err)
+	protorequire.ProtoEqual(s.T(), acceptedCtx, s.mutableState.GetUpdateNexusSerializationContext(acceptedUpdateID))
+	_, err = s.mutableState.AddWorkflowExecutionUpdateCompletedEvent(
+		acptEvent.EventId,
+		&updatepb.Response{
+			Meta:    &updatepb.Meta{UpdateId: acceptedUpdateID},
+			Outcome: &updatepb.Outcome{Value: &updatepb.Outcome_Success{Success: testPayloads}},
+		},
+	)
+	s.NoError(err)
+	protorequire.ProtoEqual(s.T(), acceptedCtx, s.mutableState.GetUpdateNexusSerializationContext(acceptedUpdateID))
+
+	// Update without a Nexus context.
+	noContextUpdateID := s.T().Name() + "-no-context"
+	_, err = s.mutableState.AddWorkflowExecutionUpdateAcceptedEvent(
+		noContextUpdateID,
+		"msg-3",
+		1,
+		&updatepb.Request{Meta: &updatepb.Meta{UpdateId: noContextUpdateID}},
+	)
+	s.NoError(err)
+	s.Nil(s.mutableState.GetUpdateNexusSerializationContext(noContextUpdateID))
+	s.Nil(s.mutableState.GetUpdateNexusSerializationContext("not_an_update_id"))
+}
+
 func (s *mutableStateSuite) TestApplyWorkflowExecutionStartedEvent_PersistsChasmWorkflowRoot() {
 	registry := chasm.NewRegistry(s.logger)
 	s.NoError(registry.Register(&chasm.CoreLibrary{}))
@@ -3485,6 +3555,341 @@ func (s *mutableStateSuite) TestRetryActivity_TruncateRetryableFailure() {
 	s.Equal(activityFailure.GetMessage(), activityInfo.RetryLastFailure.Cause.GetMessage())
 }
 
+// scheduleAndStartActivity schedules and starts one retryable activity
+func (s *mutableStateSuite) scheduleAndStartActivity(activityID string) *persistencespb.ActivityInfo {
+	_, ai, err := s.mutableState.AddActivityTaskScheduledEvent(
+		int64(4),
+		&commandpb.ScheduleActivityTaskCommandAttributes{
+			ActivityId:             activityID,
+			ActivityType:           &commonpb.ActivityType{Name: "activity-type"},
+			TaskQueue:              &taskqueuepb.TaskQueue{Name: "task-queue"},
+			ScheduleToCloseTimeout: timestamp.DurationFromSeconds(3600),
+			RetryPolicy: &commonpb.RetryPolicy{
+				InitialInterval:    timestamp.DurationFromSeconds(1),
+				BackoffCoefficient: 1,
+			},
+		},
+		false,
+	)
+	s.NoError(err)
+
+	_, err = s.mutableState.AddActivityTaskStartedEvent(
+		ai, ai.ScheduledEventId, uuid.NewString(), "worker-identity", nil, nil, nil, "", nil,
+	)
+	s.NoError(err)
+	return ai
+}
+
+// stackHeavyActivityFailure builds the shape that motivates the aggregate limit: a small message with a
+// large stack trace, sized to land between the per-failure warn and error limits so per-failure
+// truncation does not fire and only the aggregate limit can bound it.
+func stackHeavyActivityFailure(stackBytes int) *failurepb.Failure {
+	return &failurepb.Failure{
+		Message:    "unsupported interval syntax",
+		Source:     "PythonSDK",
+		StackTrace: strings.Repeat("s", stackBytes),
+		FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
+			Type:         "ValueError",
+			NonRetryable: false,
+		}},
+	}
+}
+
+// assertActivityFailureSizeConsistent recomputes the aggregate from the pending activities and compares
+// it against the incrementally maintained counter
+func (s *mutableStateSuite) assertActivityFailureSizeConsistent() {
+	expected := 0
+	for _, ai := range s.mutableState.pendingActivityInfoIDs {
+		expected += ai.GetRetryLastFailure().Size()
+	}
+	s.Equal(expected, s.mutableState.activityFailureSize)
+}
+
+func (s *mutableStateSuite) TestRetryActivity_AggregateFailureSizeLimit() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	const totalLimit = 4 * 1024
+	s.mockConfig.MutableStateActivityFailureTotalSizeLimitError = func(string) int { return totalLimit }
+	s.mockConfig.MutableStateActivityFailureTotalSizeLimitWarn = func(string) int { return totalLimit / 2 }
+
+	namespaceName := s.mutableState.namespaceEntry.Name().String()
+	activityFailure := stackHeavyActivityFailure(1500)
+	s.LessOrEqual(activityFailure.Size(), s.mockConfig.MutableStateActivityFailureSizeLimitError(namespaceName))
+
+	var full, cut int
+	for i := range 20 {
+		ai := s.scheduleAndStartActivity(fmt.Sprintf("activity-%d", i))
+		retryState, err := s.mutableState.RetryActivity(ai, activityFailure)
+		s.NoError(err)
+		s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, retryState)
+
+		stored := ai.RetryLastFailure
+		s.NotNil(stored)
+		if stored.StackTrace == activityFailure.StackTrace {
+			full++
+		} else {
+			s.Equal(activityFailure.Message, stored.Message)
+			s.Equal("ValueError", stored.GetApplicationFailureInfo().GetType())
+			s.Less(len(stored.StackTrace), len(activityFailure.StackTrace))
+			s.Nil(stored.Cause)
+			s.LessOrEqual(stored.Size(), minRetainedActivityFailureSize)
+			cut++
+		}
+		s.assertActivityFailureSizeConsistent()
+	}
+
+	s.Positive(full)
+	s.Positive(cut)
+
+	s.LessOrEqual(s.mutableState.activityFailureSize, totalLimit+cut*minRetainedActivityFailureSize)
+}
+
+func (s *mutableStateSuite) TestRetryActivity_AggregateFailureSizeLimitDisabled() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+
+	s.mockConfig.MutableStateActivityFailureTotalSizeLimitError = func(string) int { return 0 }
+	s.mockConfig.MutableStateActivityFailureTotalSizeLimitWarn = func(string) int { return 0 }
+
+	activityFailure := stackHeavyActivityFailure(1500)
+	for i := range 10 {
+		ai := s.scheduleAndStartActivity(fmt.Sprintf("activity-%d", i))
+		_, err := s.mutableState.RetryActivity(ai, activityFailure)
+		s.NoError(err)
+		s.Equal(activityFailure.StackTrace, ai.RetryLastFailure.StackTrace)
+	}
+	s.Greater(s.mutableState.activityFailureSize, 10*1500)
+	s.assertActivityFailureSizeConsistent()
+}
+
+// ResetActivity reaches RegenerateActivityRetryTask from inside an UpdateActivity updater, so
+// UpdateActivity re-enters itself while the stored failure is being cleared.
+func (s *mutableStateSuite) TestRetryActivity_AggregateFailureSizeAfterReset() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockConfig.MutableStateActivityFailureTotalSizeLimitError = func(string) int { return 0 }
+
+	ai := s.scheduleAndStartActivity("activity-0")
+	_, err := s.mutableState.RetryActivity(ai, stackHeavyActivityFailure(1500))
+	s.NoError(err)
+	s.Greater(s.mutableState.activityFailureSize, 1500)
+	s.assertActivityFailureSizeConsistent()
+
+	s.NoError(ResetActivity(context.Background(), s.mockShard, s.mutableState, "activity-0", false, false, false, 0))
+	s.Nil(ai.RetryLastFailure)
+	s.Zero(s.mutableState.activityFailureSize)
+	s.assertActivityFailureSizeConsistent()
+}
+
+// TestRetryActivity_AggregateFailureSizePausedPath covers the paused branch of RetryActivity, which
+// records the failure at its own assignment rather than through updateActivityInfoForRetries. Retrying
+// more than once is what exercises replacing a failure the activity already held.
+func (s *mutableStateSuite) TestRetryActivity_AggregateFailureSizePausedPath() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockConfig.MutableStateActivityFailureTotalSizeLimitError = func(string) int { return 0 }
+	s.mockConfig.MutableStateActivityFailureTotalSizeLimitWarn = func(string) int { return 0 }
+
+	ai := s.scheduleAndStartActivity("activity-0")
+	ai.Paused = true
+
+	// Sizes grow then shrink, so the subtraction is exercised in both directions
+	prevStored := 0
+	for i, stackBytes := range []int{200, 900, 300} {
+		retryState, err := s.mutableState.RetryActivity(ai, stackHeavyActivityFailure(stackBytes))
+		s.NoError(err)
+		s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, retryState)
+
+		stored := ai.RetryLastFailure.Size()
+		// Each failure replaces the last rather than adding to it.
+		s.Equal(stored, s.mutableState.activityFailureSize)
+		s.assertActivityFailureSizeConsistent()
+
+		if i > 0 {
+			s.NotEqual(prevStored, stored)
+		}
+		prevStored = stored
+	}
+}
+
+// TestActivityFailureSizeAccounting covers the counter across the paths that add, replace, wipe and
+// delete a stored failure. A drifting counter degrades the cap with no visible symptom.
+func (s *mutableStateSuite) TestActivityFailureSizeAccounting() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockConfig.MutableStateActivityFailureTotalSizeLimitError = func(string) int { return 0 }
+
+	s.Zero(s.mutableState.activityFailureSize)
+
+	// Scheduled and started, no failure yet.
+	ai := s.scheduleAndStartActivity("activity-0")
+	s.Zero(s.mutableState.activityFailureSize)
+	s.assertActivityFailureSizeConsistent()
+
+	// First failure.
+	_, err := s.mutableState.RetryActivity(ai, stackHeavyActivityFailure(1500))
+	s.NoError(err)
+	afterFirst := s.mutableState.activityFailureSize
+	s.Greater(afterFirst, 1500)
+	s.assertActivityFailureSizeConsistent()
+
+	// A second, larger failure on the same activity replaces the first rather than adding to it.
+	_, err = s.mutableState.AddActivityTaskStartedEvent(
+		ai, ai.ScheduledEventId, uuid.NewString(), "worker-identity", nil, nil, nil, "", nil,
+	)
+	s.NoError(err)
+	retryState, err := s.mutableState.RetryActivity(ai, stackHeavyActivityFailure(2500))
+	s.NoError(err)
+	s.Equal(enumspb.RETRY_STATE_IN_PROGRESS, retryState)
+	s.Greater(s.mutableState.activityFailureSize, afterFirst)
+	s.Less(s.mutableState.activityFailureSize, afterFirst+2500)
+	s.assertActivityFailureSizeConsistent()
+
+	// RegenerateActivityRetryTask passes a nil failure, which wipes the field.
+	err = s.mutableState.RegenerateActivityRetryTask(ai, time.Now().UTC().Add(time.Minute))
+	s.NoError(err)
+	s.Nil(ai.RetryLastFailure)
+	s.Zero(s.mutableState.activityFailureSize)
+	s.assertActivityFailureSizeConsistent()
+
+	// A second activity's failure, then deleting it.
+	other := s.scheduleAndStartActivity("activity-1")
+	_, err = s.mutableState.RetryActivity(other, stackHeavyActivityFailure(1500))
+	s.NoError(err)
+	s.Greater(s.mutableState.activityFailureSize, 1500)
+	s.assertActivityFailureSizeConsistent()
+
+	s.NoError(s.mutableState.DeleteActivity(other.ScheduledEventId))
+	s.Zero(s.mutableState.activityFailureSize)
+	s.assertActivityFailureSizeConsistent()
+}
+
+// TestActivityFailureSizeFreshLoad checks the counter is re-derived from the DB record.
+func (s *mutableStateSuite) TestActivityFailureSizeFreshLoad() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockConfig.MutableStateActivityFailureTotalSizeLimitError = func(string) int { return 0 }
+
+	for i := range 3 {
+		ai := s.scheduleAndStartActivity(fmt.Sprintf("activity-%d", i))
+		_, err := s.mutableState.RetryActivity(ai, stackHeavyActivityFailure(1500))
+		s.NoError(err)
+	}
+	expected := s.mutableState.activityFailureSize
+	s.Greater(expected, 3*1500)
+
+	reloaded, err := NewMutableStateFromDB(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		tests.LocalNamespaceEntry,
+		s.mutableState.CloneToProto(),
+		123,
+	)
+	s.NoError(err)
+	s.Equal(expected, reloaded.activityFailureSize)
+}
+
+// TestActivityFailureSizeStateReplicationApply covers the counter on the state-based replication path,
+// which swaps whole ActivityInfos rather than mutating them in place.
+func (s *mutableStateSuite) TestActivityFailureSizeStateReplicationApply() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
+	s.mockConfig.MutableStateActivityFailureTotalSizeLimitError = func(string) int { return 0 }
+
+	ai := s.scheduleAndStartActivity("activity-0")
+	_, err := s.mutableState.RetryActivity(ai, stackHeavyActivityFailure(1500))
+	s.NoError(err)
+	before := s.mutableState.activityFailureSize
+	s.Greater(before, 1500)
+
+	// A replicated copy of the same activity, carrying a larger failure, replaces it.
+	incoming := common.CloneProto(ai)
+	incoming.RetryLastFailure = stackHeavyActivityFailure(2500)
+	incoming.LastUpdateVersionedTransition = &persistencespb.VersionedTransition{
+		NamespaceFailoverVersion: 1,
+		TransitionCount:          99,
+	}
+	s.NoError(s.mutableState.applyUpdatesToSubStateMachines(
+		map[int64]*persistencespb.ActivityInfo{ai.ScheduledEventId: incoming},
+		nil, nil, nil, nil, false,
+	))
+
+	s.Greater(s.mutableState.activityFailureSize, before)
+	s.assertActivityFailureSizeConsistent()
+
+	// And the same activity going away takes its failure with it.
+	s.NoError(s.mutableState.applyUpdatesToSubStateMachines(
+		map[int64]*persistencespb.ActivityInfo{}, nil, nil, nil, nil, true,
+	))
+	s.Zero(s.mutableState.activityFailureSize)
+	s.assertActivityFailureSizeConsistent()
+}
+
+// TestActivityFailureSizeReplicationNotLimited checks the deliberate asymmetry: the aggregate limit is applied
+// only on the active path.
+func (s *mutableStateSuite) TestActivityFailureSizeReplicationNotLimited() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockConfig.MutableStateActivityFailureTotalSizeLimitError = func(string) int { return 64 }
+
+	ai := s.scheduleAndStartActivity("activity-0")
+	incomingFailure := stackHeavyActivityFailure(1500)
+	err := s.mutableState.UpdateActivityInfo(&historyservice.ActivitySyncInfo{
+		ScheduledEventId: ai.ScheduledEventId,
+		Version:          ai.Version,
+		Attempt:          2,
+		LastFailure:      incomingFailure,
+	}, false)
+	s.NoError(err)
+
+	// Stored whole, even though it is far past the limit set above.
+	s.Equal(incomingFailure.Size(), ai.RetryLastFailure.Size())
+}
+
+// TestActivityFailureSizeReplicationReplacesFailure covers the event-based replication path replacing
+// and then clearing a failure the activity already held, which is what exercises the subtraction in
+// UpdateActivityInfo. Installing a first failure only ever subtracts zero.
+func (s *mutableStateSuite) TestActivityFailureSizeReplicationReplacesFailure() {
+	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockConfig.MutableStateActivityFailureTotalSizeLimitError = func(string) int { return 0 }
+
+	ai := s.scheduleAndStartActivity("activity-0")
+
+	syncFailure := func(f *failurepb.Failure, attempt int32) {
+		s.NoError(s.mutableState.UpdateActivityInfo(&historyservice.ActivitySyncInfo{
+			ScheduledEventId: ai.ScheduledEventId,
+			Version:          ai.Version,
+			Attempt:          attempt,
+			LastFailure:      f,
+		}, false))
+	}
+
+	// A second activity holds a failure throughout, so the total is never just the activity under test
+	// and a counter that resets rather than adjusts would show up.
+	other := s.scheduleAndStartActivity("activity-1")
+	_, err := s.mutableState.RetryActivity(other, stackHeavyActivityFailure(500))
+	s.NoError(err)
+	otherSize := other.RetryLastFailure.Size()
+
+	first := stackHeavyActivityFailure(1500)
+	syncFailure(first, 2)
+	s.Equal(otherSize+first.Size(), s.mutableState.activityFailureSize)
+	s.assertActivityFailureSizeConsistent()
+
+	// Replaced by a larger one: the old size has to come off, not accumulate.
+	second := stackHeavyActivityFailure(3000)
+	syncFailure(second, 3)
+	s.Equal(otherSize+second.Size(), s.mutableState.activityFailureSize)
+	s.assertActivityFailureSizeConsistent()
+
+	// Replaced by a smaller one.
+	third := stackHeavyActivityFailure(200)
+	syncFailure(third, 4)
+	s.Equal(otherSize+third.Size(), s.mutableState.activityFailureSize)
+	s.assertActivityFailureSizeConsistent()
+
+	// Cleared: a nil LastFailure frees the bytes rather than leaving them charged.
+	syncFailure(nil, 5)
+	s.Nil(ai.RetryLastFailure)
+	s.Equal(otherSize, s.mutableState.activityFailureSize)
+	s.assertActivityFailureSizeConsistent()
+}
+
 func (s *mutableStateSuite) TestRetryActivity_PausedIncrementsStamp() {
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockConfig.EnableActivityRetryStampIncrement = dynamicconfig.GetBoolPropertyFn(true)
@@ -3894,7 +4299,7 @@ func (s *mutableStateSuite) TestCloseTransactionUpdateTransition() {
 				mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).AnyTimes()
 				gomock.InOrder(
 					mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes(),
-					mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{
+					mockChasmTree.EXPECT().CloseTransaction(gomock.Any(), gomock.Any()).Return(chasm.NodesMutation{
 						UpdatedNodes: map[string]*persistencespb.ChasmNode{
 							"node-path": {
 								Metadata: &persistencespb.ChasmNodeMetadata{
@@ -5440,7 +5845,7 @@ func (s *mutableStateSuite) TestCloseTransactionTrackTombstones() {
 				mockChasmTree.EXPECT().ArchetypeID().Return(chasm.ArchetypeID(1234)).AnyTimes()
 				gomock.InOrder(
 					mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes(),
-					mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{
+					mockChasmTree.EXPECT().CloseTransaction(gomock.Any(), gomock.Any()).Return(chasm.NodesMutation{
 						DeletedNodes: map[string]struct{}{deletedNodePath: {}},
 					}, nil),
 				)
@@ -5591,7 +5996,7 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_Workf
 	// Is workflow, should not generate retention task
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).AnyTimes()
+	mockChasmTree.EXPECT().CloseTransaction(gomock.Any(), gomock.Any()).Return(chasm.NodesMutation{}, nil).AnyTimes()
 	mutation, _, err := mutableState.CloseTransactionAsMutation(context.Background(), historyi.TransactionPolicyActive)
 	s.NoError(err)
 	s.Empty(mutation.Tasks[tasks.CategoryTimer])
@@ -5615,7 +6020,7 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWo
 
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).AnyTimes()
+	mockChasmTree.EXPECT().CloseTransaction(gomock.Any(), gomock.Any()).Return(chasm.NodesMutation{}, nil).AnyTimes()
 	_, err = mutableState.UpdateWorkflowStateStatus(
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
@@ -5653,7 +6058,7 @@ func (s *mutableStateSuite) TestCloseTransactionGenerateCHASMRetentionTask_NonWo
 
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{}, nil).AnyTimes()
+	mockChasmTree.EXPECT().CloseTransaction(gomock.Any(), gomock.Any()).Return(chasm.NodesMutation{}, nil).AnyTimes()
 	mockChasmTree.EXPECT().ApplyMutation(gomock.Any()).Return(nil).AnyTimes()
 
 	// On standby side, multiple transactions can be applied at the same time,
@@ -6082,6 +6487,7 @@ func (s *mutableStateSuite) buildSnapshot(state *MutableStateImpl) *persistences
 }
 
 func (s *mutableStateSuite) TestApplySnapshot() {
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	testCases := []struct {
 		name                        string
 		updateWorkflowTask          bool
@@ -6239,6 +6645,7 @@ func (s *mutableStateSuite) buildMutation(
 }
 
 func (s *mutableStateSuite) TestApplyMutation() {
+	s.mockShard.Resource.ClusterMetadata.EXPECT().IsVersionFromSameCluster(gomock.Any(), gomock.Any()).Return(true).AnyTimes()
 	testCases := []struct {
 		name                        string
 		updateWorkflowTask          bool
@@ -7385,7 +7792,7 @@ func (s *mutableStateSuite) TestCHASMNodeSize() {
 
 	mockChasmTree.EXPECT().IsStateDirty().Return(true).AnyTimes()
 	mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID + 101).AnyTimes()
-	mockChasmTree.EXPECT().CloseTransaction().Return(chasm.NodesMutation{
+	mockChasmTree.EXPECT().CloseTransaction(gomock.Any(), gomock.Any()).Return(chasm.NodesMutation{
 		UpdatedNodes: map[string]*persistencespb.ChasmNode{
 			nodeKeyToUpdate: &updateNode,
 			newNodeKey:      &newNode,
@@ -7930,6 +8337,39 @@ func (s *mutableStateSuite) TestCloseTransaction_PrincipalSkippedCountsBufferedE
 	s.Equal(int64(eventCount)*eventSize, s.principalSizeCounter(metrics.HistoryPrincipalSizeSkipped.Name())-skippedBefore)
 }
 
+func (s *mutableStateSuite) TestCloseTransaction_ChasmTreeReceivesPrincipal() {
+	principal := &commonpb.Principal{Type: "user", Name: "alice"}
+	for _, tc := range []struct {
+		name             string
+		policy           historyi.TransactionPolicy
+		expectedIsActive bool
+	}{
+		{"Active", historyi.TransactionPolicyActive, true},
+		{"Passive", historyi.TransactionPolicyPassive, false},
+	} {
+		s.Run(tc.name, func() {
+			namespaceEntry := tests.GlobalNamespaceEntry
+			dbState := s.buildWorkflowMutableState()
+			mutableState, err := NewMutableStateFromDB(s.mockShard, s.mockEventsCache, s.logger, namespaceEntry, dbState, 123)
+			s.NoError(err)
+			err = mutableState.UpdateCurrentVersion(namespaceEntry.FailoverVersion(tests.WorkflowID), false)
+			s.NoError(err)
+
+			mockChasmTree := historyi.NewMockChasmTree(s.controller)
+			mutableState.chasmTree = mockChasmTree
+			mockChasmTree.EXPECT().IsStateDirty().Return(false).AnyTimes()
+			mockChasmTree.EXPECT().ArchetypeID().Return(chasm.WorkflowArchetypeID).AnyTimes()
+			mockChasmTree.EXPECT().CloseTransaction(gomock.Cond(func(ctx context.Context) bool {
+				return proto.Equal(principal, headers.GetPrincipal(ctx))
+			}), tc.expectedIsActive).Return(chasm.NodesMutation{}, nil).Times(1)
+
+			ctx := headers.SetPrincipal(context.Background(), principal)
+			_, _, err = mutableState.CloseTransactionAsMutation(ctx, tc.policy)
+			s.NoError(err)
+		})
+	}
+}
+
 func (s *mutableStateSuite) TestCloseTransaction_PrincipalPreserved() {
 	s.mockConfig.EnablePrincipalPropagation = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	namespaceEntry := tests.GlobalNamespaceEntry
@@ -8286,6 +8726,7 @@ func (s *mutableStateSuite) TestAccumulatedSkippedDuration_NilSafety() {
 //   - closeTransactionRegenerateTimerTasksForTimeSkipping: regenerates UserTimerTask entries
 //     with timestamps shifted back by AccumulatedSkippedDuration.
 func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
+	s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return true }
 	failoverVersion := s.namespaceEntry.FailoverVersion(tests.WorkflowID)
 
 	// buildEligibleState returns a minimal running workflow state that satisfies
@@ -8579,6 +9020,7 @@ func (s *mutableStateSuite) TestCloseTransactionTimeSkipping() {
 // active, calls closeTransactionRegenerateTimerTasksForTimeSkipping afterward — testing
 // that the ordering is correct.
 func (s *mutableStateSuite) TestCloseTransactionPrepareTasks() {
+	s.mockConfig.WorkflowTimeSkippingEnabled = func(string) bool { return true }
 	failoverVersion := s.namespaceEntry.FailoverVersion(tests.WorkflowID)
 	now := s.mockShard.GetTimeSource().Now()
 	timerExpiry := now.Add(time.Hour)
@@ -9683,7 +10125,7 @@ func (s *mutableStateSuite) TestCloseTransactionInvalidateChasmTasksOnClose() {
 			}
 		}
 		s.NoError(tree.SetRootComponent(wf))
-		_, err := tree.CloseTransaction()
+		_, err := tree.CloseTransaction(context.Background(), true)
 		s.NoError(err)
 		s.False(tree.IsStateDirty())
 		return tree
@@ -9722,7 +10164,7 @@ func (s *mutableStateSuite) TestCloseTransactionInvalidateChasmTasksOnClose() {
 		s.True(tree.IsStateDirty())
 
 		// The root's state is unchanged, so skip-persistence keeps it from being rewritten.
-		mutation, err := tree.CloseTransaction()
+		mutation, err := tree.CloseTransaction(context.Background(), true)
 		s.NoError(err)
 		s.Empty(mutation.UpdatedNodes)
 	})
