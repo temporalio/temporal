@@ -12,6 +12,27 @@ func TestInitial(t *testing.T) {
 	require.Equal(t, AbstractState{Status: Scheduled, AttemptCount: 1}, Initial(Config{HasScheduleToClose: true}))
 }
 
+func TestEagerInitialAttempt(t *testing.T) {
+	cfg := Config{
+		InitialAttemptStarted: true,
+		HasScheduleToClose:    true,
+		HasScheduleToStart:    true,
+		HasHeartbeat:          true,
+	}
+	initial := Initial(cfg)
+	require.Equal(t, AbstractState{Status: Started, AttemptCount: 1}, initial)
+	require.False(t, FindsTask(initial), "an eager task is already started and must not be dispatched again")
+	require.False(t, Possible(cfg, initial, ScheduleToStartElapsesType), "an eager first attempt has no schedule-to-start window")
+	require.True(t, Possible(cfg, initial, ScheduleToCloseElapsesType), "schedule-to-close still protects an eager first attempt")
+	require.True(t, Possible(cfg, initial, StartToCloseElapsesType), "start-to-close still protects an eager first attempt")
+	require.True(t, Possible(cfg, initial, HeartbeatElapsesType), "heartbeat still protects an eager first attempt")
+
+	retry := Transition(cfg, initial, FailRetryably).Next
+	require.Equal(t, AbstractState{Status: Scheduled, AttemptCount: 2, Dispatchability: BackoffPending}, retry)
+	retry = Transition(cfg, retry, BackoffElapses).Next
+	require.True(t, FindsTask(retry), "an eager first attempt's retry must return to normal dispatch")
+}
+
 func TestPollFromScheduledStarts(t *testing.T) {
 	out := Transition(Config{}, Initial(Config{}), Event{Type: PollType})
 	require.Equal(t, NoError, out.Reject)
@@ -40,7 +61,10 @@ func TestPauseWhileStartedIsPauseRequested(t *testing.T) {
 // backedOffRetry returns a Scheduled state with a pending retry backoff (attempt 2), reached the way
 // a worker would: poll the first attempt, then fail it retryably.
 func backedOffRetry(t require.TestingT, cfg Config) AbstractState {
-	started := Transition(cfg, Initial(cfg), Event{Type: PollType}).Next
+	started := Initial(cfg)
+	if started.Status != Started {
+		started = Transition(cfg, started, Event{Type: PollType}).Next
+	}
 	s := Transition(cfg, started, Event{Type: RespondFailedType, Failure: &Failure{}}).Next
 	require.Equal(t, Scheduled, s.Status, "a retryable failure must schedule a retry")
 	require.Equal(t, BackoffPending, s.Dispatchability, "a retry must wait for its backoff")

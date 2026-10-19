@@ -26,6 +26,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/testing/parallelsuite"
+	"go.temporal.io/server/common/testing/protorequire"
 	"go.temporal.io/server/common/testing/protoutils"
 	"go.temporal.io/server/common/testing/taskpoller"
 	"go.temporal.io/server/common/testing/testhooks"
@@ -841,21 +842,45 @@ func (s *WorkflowUpdateSuite) TestCompletedWorkflow() {
 		_, err := poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)
 		s.NoError(err)
 
-		// Send Update request.
-		updateResultCh := sendUpdateNoError(env, env.Tv())
+		sendUpdateWithRequestID := func(requestID string) <-chan updateResponseErr {
+			resultCh := make(chan updateResponseErr, 1)
+			request := updateWorkflowRequest(env, env.Tv(), nil)
+			request.Request.RequestId = requestID
+			go func() {
+				response, err := env.FrontendClient().UpdateWorkflowExecution(testcore.NewContext(), request)
+				resultCh <- updateResponseErr{response: response, err: err}
+			}()
+			waitUpdateAdmitted(env, env.Tv())
+			return resultCh
+		}
+
+		updateResultCh := sendUpdateWithRequestID(env.Tv().RequestID())
 
 		// Complete Update and Workflow.
 		_, err = poller.PollAndProcessWorkflowTask(testcore.WithoutRetries)
 		s.NoError(err)
 
 		// Receive Update result.
-		updateResult1 := <-updateResultCh
+		updateResult := <-updateResultCh
+		s.NoError(updateResult.err)
+		updateResult1 := updateResult.response
 		s.NotNil(updateResult1.GetOutcome().GetSuccess())
 
-		// Send same Update request again, receiving the same Update result.
-		updateResultCh = sendUpdateNoError(env, env.Tv())
-		updateResult2 := <-updateResultCh
-		s.Equal(updateResult1, updateResult2)
+		acceptedEvent := s.RequireHistoryEvent(
+			env.GetHistory(env.Namespace().String(), env.Tv().WorkflowExecution()),
+			enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED,
+		)
+		// The Update was pending when requested and had no callbacks, so it links directly to the Accepted event.
+		acceptedEventLink := updateResult1.GetLink().GetWorkflowEvent().GetEventRef()
+		s.NotNil(acceptedEventLink)
+		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED, acceptedEventLink.GetEventType())
+		s.Equal(acceptedEvent.GetEventId(), acceptedEventLink.GetEventId())
+
+		// Send the same Update request again (now completed), receiving the same result and link.
+		updateResultCh = sendUpdateWithRequestID(env.Tv().Sub("request-2").RequestID())
+		updateResult = <-updateResultCh
+		s.NoError(updateResult.err)
+		protorequire.ProtoEqual(s.T(), updateResult1, updateResult.response)
 	})
 
 	s.Run("receive update failure from accepted Update", func(s *WorkflowUpdateSuite) {
@@ -5839,6 +5864,53 @@ func (s *UpdateWithStartSuite) TestReturnUpdateInFlightLimitError() {
 		s.Contains(resExhausted.Message, "limit on number of concurrent in-flight updates")
 	case <-ctx.Done():
 		s.Fail("timed out waiting for update")
+	}
+}
+
+// TestRunIDDedup_TerminateExisting asserts Update-with-Start is gated out of run ID derivation
+// (allowDerivedRunID) and does not self-deadlock on terminate-existing.
+func (s *UpdateWithStartSuite) TestRunIDDedup_TerminateExisting() {
+	env := testcore.NewEnv(s.T(),
+		testcore.WithDynamicConfig(dynamicconfig.EnableCrossRunRequestIDDedup, true),
+		testcore.WithDynamicConfig(dynamicconfig.WorkflowIdReuseMinimalInterval, 0))
+	tv := env.Tv()
+
+	firstReq := s.updateWithStartReq(env, tv)
+	firstReq.RequestId = "first-req-" + tv.WorkflowID()
+	_, err := env.FrontendClient().StartWorkflowExecution(s.Context(), firstReq)
+	s.NoError(err)
+	_, err = env.TaskPoller().PollAndHandleWorkflowTask(tv, taskpoller.DrainWorkflowTask)
+	s.NoError(err)
+
+	startReq := s.updateWithStartReq(env, tv)
+	startReq.RequestId = "uws-req-" + tv.WorkflowID()
+	startReq.WorkflowIdConflictPolicy = enumspb.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING
+	updateReq := updateWorkflowRequest(env, tv,
+		&updatepb.WaitPolicy{LifecycleStage: enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED})
+	uwsCh := s.sendUpdateWithStart(env, startReq, updateReq)
+
+	go func() {
+		_, _ = env.TaskPoller().PollAndHandleWorkflowTask(tv,
+			func(task *workflowservice.PollWorkflowTaskQueueResponse) (*workflowservice.RespondWorkflowTaskCompletedRequest, error) {
+				if len(task.Messages) == 0 {
+					return &workflowservice.RespondWorkflowTaskCompletedRequest{}, nil
+				}
+				return &workflowservice.RespondWorkflowTaskCompletedRequest{
+					Messages: env.UpdateAcceptCompleteMessages(tv, task.Messages[0]),
+				}, nil
+			})
+	}()
+
+	select {
+	case uwsRes := <-uwsCh:
+		s.NoError(uwsRes.err)
+		startResp := uwsRes.response.Responses[0].GetStartWorkflow()
+		requireStartedAndRunning(s.T(), startResp)
+
+		derived := runIDDedupDerivedRunID(env, tv.WorkflowID(), startReq.RequestId)
+		s.NotEqual(derived, startResp.RunId)
+	case <-time.After(15 * time.Second):
+		s.FailNow("update-with-start did not return within 15s - deadlock on the derived run ID")
 	}
 }
 

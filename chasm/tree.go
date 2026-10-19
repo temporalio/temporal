@@ -21,6 +21,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -209,6 +210,10 @@ type (
 		GetExecutionInfo() *persistencespb.WorkflowExecutionInfo
 		GetApproximatePersistedSize() int
 		ChasmSkipPersistenceEnabled() bool
+		// Returns the operator override of the logical task count that triggers the task count
+		// metrics for the given fully qualified task type. Zero means not set, so the registered
+		// threshold applies, and a negative value disables the metrics.
+		ChasmLogicalTaskCountAlertThreshold(chasmTaskType string) int
 		ChasmDLQScheduledPureTaskOnValidationEnabled() bool
 		GetNamespaceEntry() *namespace.Namespace
 		GetCurrentVersion() int64
@@ -238,6 +243,8 @@ type (
 		EndpointRegistry() EndpointRegistry
 		Now() time.Time
 		SetTimeSkippingConfig(config *commonpb.TimeSkippingConfig)
+		IsTimeSkippingFeatureEnabled(archetypeID ArchetypeID) bool
+		TimeSkippingMaxAccumulatedDuration() time.Duration
 		RecordTimeSkippingTransition(transition *TimeSkippingTransition)
 	}
 
@@ -465,7 +472,8 @@ func (n *Node) Component(
 		return nil, errComponentNotFound
 	}
 
-	if ref.componentInitialVT != nil && transitionhistory.Compare(
+	// The root is identified by the execution key and archetype alone; see refComponentInitialVT.
+	if !isRootPath(ref.componentPath) && ref.componentInitialVT != nil && transitionhistory.Compare(
 		ref.componentInitialVT,
 		node.serializedNode.Metadata.InitialVersionedTransition,
 	) != 0 {
@@ -1453,6 +1461,7 @@ func (n *Node) structuredRef(
 		return ComponentRef{}, errComponentNotFound
 	}
 
+	componentPath := refNode.path()
 	workflowKey := refNode.backend.GetWorkflowKey()
 	return ComponentRef{
 		ExecutionKey: ExecutionKey{
@@ -1464,10 +1473,28 @@ func (n *Node) structuredRef(
 		// TODO: Consider using node's LastUpdateVersionedTransition for checking staleness here.
 		// Using VersionedTransition of the entire tree might be too strict.
 		executionLastUpdateVT: transitionhistory.CopyVersionedTransition(refNode.backend.CurrentVersionedTransition()),
-		componentPath:         refNode.path(),
-		componentInitialVT:    refNode.serializedNode.GetMetadata().GetInitialVersionedTransition(),
+		componentPath:         componentPath,
+		componentInitialVT: refComponentInitialVT(
+			componentPath,
+			refNode.serializedNode.GetMetadata().GetInitialVersionedTransition(),
+		),
 	}, nil
 
+}
+
+// refComponentInitialVT returns the InitialVersionedTransition to embed in a ref for the component at
+// the given path. It is omitted for the root component: the root can't be deleted and recreated within
+// a run, so the execution key and archetype already identify it. The persisted value is also not
+// trustworthy for a Workflow root synthesized while loading an execution with no CHASM nodes, since
+// the root is created before the mutable state's current version is known.
+func refComponentInitialVT(
+	componentPath []string,
+	initialVT *persistencespb.VersionedTransition,
+) *persistencespb.VersionedTransition {
+	if isRootPath(componentPath) {
+		return nil
+	}
+	return initialVT
 }
 
 // componentPath returns the path of the given component relative to the root of the tree, or nil if
@@ -1576,14 +1603,8 @@ func (n *Node) closeTransactionApplyPendingComponentMetadata() error {
 		if !node.applyPendingComponentMetadata() {
 			continue
 		}
-		encodedPath, err := node.getEncodedPath()
-		if err != nil {
+		if err := n.markMetadataUpdated(node); err != nil {
 			return err
-		}
-		if _, exists := n.mutation.UpdatedNodes[encodedPath]; !exists {
-			node.updateLastUpdateVersionedTransition()
-			n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
-			delete(n.mutation.DeletedNodes, encodedPath)
 		}
 	}
 	if len(n.pendingRequestLinks) > 0 || len(n.pendingUserMetadata) > 0 {
@@ -1596,6 +1617,73 @@ func (n *Node) closeTransactionApplyPendingComponentMetadata() error {
 	n.pendingRequestLinks = make(map[any]map[string][]*commonpb.Link)
 	n.pendingUserMetadata = make(map[any]*sdkpb.UserMetadata)
 	return nil
+}
+
+// markMetadataUpdated adds a node whose metadata changed after serialization
+// to the transaction's mutation so the change is persisted and replicated.
+func (n *Node) markMetadataUpdated(node *Node) error {
+	encodedPath, err := node.getEncodedPath()
+	if err != nil {
+		return err
+	}
+	if _, exists := n.mutation.UpdatedNodes[encodedPath]; !exists {
+		node.updateLastUpdateVersionedTransition()
+		n.mutation.UpdatedNodes[encodedPath] = node.serializedNode
+		delete(n.mutation.DeletedNodes, encodedPath)
+	}
+	return nil
+}
+
+// closeTransactionRecordPrincipals records the caller's principal on the root component
+// when this transaction creates or closes the execution. Both principals are write-once:
+// rootCreated and rootClosed are only true for the transaction that first creates or
+// closes the execution.
+func (n *Node) closeTransactionRecordPrincipals(
+	ctx context.Context,
+	isActive bool,
+	rootCreated bool,
+	rootClosed bool,
+) error {
+	if !isActive || (!rootCreated && !rootClosed) || !n.recordsPrincipals() {
+		// Standby clusters receive the principals through replication.
+		return nil
+	}
+	principal := headers.GetPrincipal(ctx)
+	if principal == nil {
+		return nil
+	}
+	root := n.root()
+	attrs := root.serializedNode.GetMetadata().GetComponentAttributes()
+	if attrs == nil {
+		return softassert.UnexpectedInternalErr(
+			n.logger,
+			"root node is not a component",
+			fmt.Errorf("%v", root.serializedNode.GetMetadata().GetAttributes()))
+	}
+	updated := false
+	if rootCreated && attrs.StartedByPrincipal == nil {
+		attrs.StartedByPrincipal = principal
+		updated = true
+	}
+	if rootClosed && attrs.ClosedByPrincipal == nil {
+		attrs.ClosedByPrincipal = principal
+		updated = true
+	}
+	if !updated {
+		return nil
+	}
+	return n.markMetadataUpdated(root)
+}
+
+// recordsPrincipals reports whether the execution's archetype was registered with
+// WithRecordPrincipals.
+func (n *Node) recordsPrincipals() bool {
+	archetypeID := n.ArchetypeID()
+	if archetypeID == UnspecifiedArchetypeID {
+		return false
+	}
+	rc, ok := n.registry.ComponentByID(archetypeID)
+	return ok && rc.recordPrincipals
 }
 
 // applyPendingComponentMetadata writes staged per-component framework metadata
@@ -1700,7 +1788,13 @@ func (n *Node) AddTask(
 
 // CloseTransaction is used by MutableState to close the transaction and
 // track changes made in the current transaction.
-func (n *Node) CloseTransaction() (NodesMutation, error) {
+//
+// isActive reports whether the transaction runs on the active cluster. The principal
+// in ctx, if any, is the caller whose request is being committed. For archetypes
+// registered with WithRecordPrincipals, it is recorded on the root component when an
+// active transaction creates or closes the execution; standby clusters receive it
+// through replication.
+func (n *Node) CloseTransaction(ctx context.Context, isActive bool) (NodesMutation, error) {
 	defer n.cleanupTransaction()
 
 	if err := n.executeImmediatePureTasks(); err != nil {
@@ -1723,7 +1817,7 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 	}
 
 	immutableContext := NewContext(context.TODO(), n)
-	rootLifecycleChanged, err := n.closeTransactionHandleRootLifecycleChange(immutableContext)
+	rootLifecycleChanged, rootClosed, err := n.closeTransactionHandleRootLifecycleChange(immutableContext)
 	if err != nil {
 		return NodesMutation{}, err
 	}
@@ -1734,6 +1828,10 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 		}
 	}
 
+	// The root has no LastUpdateVersionedTransition until it is first persisted, so this
+	// must be read before serialization.
+	rootCreated := n.root().serializedNode.GetMetadata().GetLastUpdateVersionedTransition() == nil
+
 	if err := n.closeTransactionSerializeNodes(); err != nil {
 		return NodesMutation{}, err
 	}
@@ -1743,6 +1841,10 @@ func (n *Node) CloseTransaction() (NodesMutation, error) {
 	}
 
 	if err := n.closeTransactionApplyPendingComponentMetadata(); err != nil {
+		return NodesMutation{}, err
+	}
+
+	if err := n.closeTransactionRecordPrincipals(ctx, isActive, rootCreated, rootClosed); err != nil {
 		return NodesMutation{}, err
 	}
 
@@ -1801,25 +1903,28 @@ func (n *Node) executeImmediatePureTasks() error {
 	return nil
 }
 
+// closeTransactionHandleRootLifecycleChange syncs the execution state and status
+// with the root component's lifecycle state. executionClosed is true only for the
+// transaction that closes the execution.
 func (n *Node) closeTransactionHandleRootLifecycleChange(
 	immutableContext Context,
-) (bool, error) {
+) (lifecycleChanged bool, executionClosed bool, err error) {
 	if n.backend.IsWorkflow() {
 		// Workflow manages its lifecycle directly in mutable state.
-		return false, nil
+		return false, false, nil
 	}
 
 	if n.valueState != valueStateNeedSerialize {
-		return false, nil
+		return false, false, nil
 	}
 
 	if n.backend.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// Already in completed state, no need to update lifecycle state.
-		return false, nil
+		return false, false, nil
 	}
 
 	if n.terminated {
-		return n.backend.UpdateWorkflowStateStatus(
+		return n.updateRootStateStatus(
 			enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 			enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED,
 		)
@@ -1827,7 +1932,7 @@ func (n *Node) closeTransactionHandleRootLifecycleChange(
 
 	rootComponent, err := n.Component(immutableContext, ComponentRef{})
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
 	lifecycleState := rootComponent.LifecycleState(immutableContext)
 
@@ -1845,13 +1950,27 @@ func (n *Node) closeTransactionHandleRootLifecycleChange(
 		newState = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
 		newStatus = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 	default:
-		return false, softassert.UnexpectedInternalErr(
+		return false, false, softassert.UnexpectedInternalErr(
 			n.logger,
 			"unknown component lifecycle state",
 			fmt.Errorf("%v", lifecycleState))
 	}
 
-	return n.backend.UpdateWorkflowStateStatus(newState, newStatus)
+	return n.updateRootStateStatus(newState, newStatus)
+}
+
+// updateRootStateStatus applies the new execution state and status. executionClosed
+// reports whether the execution moved to the completed state. Callers only reach this
+// when the execution is not already completed.
+func (n *Node) updateRootStateStatus(
+	state enumsspb.WorkflowExecutionState,
+	status enumspb.WorkflowExecutionStatus,
+) (lifecycleChanged bool, executionClosed bool, err error) {
+	lifecycleChanged, err = n.backend.UpdateWorkflowStateStatus(state, status)
+	if err != nil {
+		return false, false, err
+	}
+	return lifecycleChanged, lifecycleChanged && state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, nil
 }
 
 func (n *Node) closeTransactionForceUpdateVisibility(
@@ -1987,6 +2106,15 @@ func (n *Node) closeTransactionSerializeNodes() error {
 			continue
 		}
 
+		// A root persisted for the first time may have been synthesized while loading an execution with
+		// no CHASM nodes, before the backend's current version was known. Stamp its creation with the
+		// transition that actually persists it.
+		if node.parent == nil && prevVersionedTransition == nil {
+			node.serializedNode.GetMetadata().InitialVersionedTransition = common.CloneProto(
+				node.serializedNode.GetMetadata().GetLastUpdateVersionedTransition(),
+			)
+		}
+
 		if componentAttr := node.serializedNode.GetMetadata().GetComponentAttributes(); componentAttr != nil &&
 			componentAttr.TypeId == visibilityComponentTypeID &&
 			len(nodePath) != 1 {
@@ -2019,6 +2147,10 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 
 	var firstPureTask *persistencespb.ChasmComponentAttributes_Task
 	var firstPureTaskNode *Node
+
+	// Keyed by task type ID and aggregated across the whole execution. Stays nil unless a
+	// type opted in.
+	var taskCounts map[uint32]int
 
 	for nodePath, node := range n.andAllChildren() {
 		// no-op if node is not a component
@@ -2081,6 +2213,9 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 			}
 		}
 
+		// Invalid tasks are removed and new tasks added by this point, so counts are final.
+		taskCounts = n.countLogicalTasks(componentAttr, taskCounts)
+
 		sideEffectTasks := componentAttr.GetSideEffectTasks()
 		for _, sideEffectTask := range slices.Backward(sideEffectTasks) {
 			if sideEffectTask.PhysicalTaskStatus == physicalTaskStatusCreated {
@@ -2108,6 +2243,8 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		}
 	}
 
+	n.emitLogicalTaskCountMetrics(taskCounts, archetypeID)
+
 	// TODO: We cannot simply assert that all tasks in n.nodeBase.newTasks are processed.
 	// That should be the case when only one transition for each transaction.
 	// However, when processing pure tasks, we run multiple pure tasks, thus multiple transitions
@@ -2119,6 +2256,74 @@ func (n *Node) closeTransactionUpdateComponentTasks(
 		firstPureTaskNode,
 		archetypeID,
 	)
+}
+
+// countLogicalTasks adds componentAttr's logical task counts, keyed by task type ID, into
+// counts, tracking only task types opted into the task count metrics, and returns the
+// possibly reallocated map.
+func (n *Node) countLogicalTasks(
+	componentAttr *persistencespb.ChasmComponentAttributes,
+	counts map[uint32]int,
+) map[uint32]int {
+	if _, ok := n.registry.taskCountMetricComponentIDs[componentAttr.GetTypeId()]; !ok {
+		return counts
+	}
+
+	for _, componentTasks := range [2][]*persistencespb.ChasmComponentAttributes_Task{
+		componentAttr.GetPureTasks(),
+		componentAttr.GetSideEffectTasks(),
+	} {
+		for _, componentTask := range componentTasks {
+			registrableTask, ok := n.registry.TaskByID(componentTask.GetTypeId())
+			if !ok || !registrableTask.taskCountMetricEnabled() {
+				continue
+			}
+			if counts == nil {
+				counts = make(map[uint32]int)
+			}
+			counts[componentTask.GetTypeId()]++
+		}
+	}
+
+	return counts
+}
+
+// emitLogicalTaskCountMetrics records the task count metrics for each task type over threshold.
+func (n *Node) emitLogicalTaskCountMetrics(
+	counts map[uint32]int,
+	archetypeID ArchetypeID,
+) {
+	if len(counts) == 0 {
+		return
+	}
+
+	// Allocated on the first breach only.
+	var metricsHandler metrics.Handler
+
+	for taskTypeID, count := range counts {
+		registrableTask, ok := n.registry.TaskByID(taskTypeID)
+		if !ok {
+			continue
+		}
+		taskFqn := registrableTask.fqType()
+		threshold := registrableTask.resolveTaskCountMetricThreshold(
+			n.backend.ChasmLogicalTaskCountAlertThreshold(taskFqn),
+		)
+		if threshold <= 0 || count <= threshold {
+			continue
+		}
+		if metricsHandler == nil {
+			archetypeTag := metrics.ArchetypeTag("")
+			if name, ok := n.registry.ArchetypeDisplayName(archetypeID); ok {
+				archetypeTag = metrics.ArchetypeTag(name)
+			}
+			metricsHandler = n.metricsHandler.WithTags(archetypeTag)
+		}
+
+		taskTypeTag := metrics.ChasmTaskTypeTag(taskFqn)
+		metrics.ChasmLogicalTaskCount.With(metricsHandler).Record(int64(count), taskTypeTag)
+		metrics.ChasmLogicalTaskCountExceeded.With(metricsHandler).Record(1, taskTypeTag)
+	}
 }
 
 func (n *Node) deserializeComponentTask(
@@ -3618,27 +3823,50 @@ func (n *Node) ExecutePureTask(
 		return true, execErr
 	}
 
-	if !taskAttributes.IsImmediate() && n.backend.ChasmDLQScheduledPureTaskOnValidationEnabled() {
-		valid, err = n.validateTask(validationContext, TaskInvocation{TaskAttributes: taskAttributes}, taskInstance)
-		if err != nil {
-			return true, err
-		}
-		if valid {
-			archetypeID := n.ArchetypeID()
-			archetype, _ := n.registry.ArchetypeDisplayName(archetypeID)
-			encodedPath, _ := n.getEncodedPath()
-			return true, NewTaskNotInvalidatedErrorWithDetails("pure", TaskNotInvalidatedDetails{
-				TaskType:             registrableTask.fqType(),
-				TaskTypeID:           registrableTask.taskTypeID,
-				Archetype:            archetype,
-				ArchetypeID:          archetypeID,
-				ComponentPath:        n.path(),
-				EncodedComponentPath: encodedPath,
-				TaskAttributes:       taskAttributes,
-			})
-		}
+	if taskAttributes.IsImmediate() {
+		return true, nil
 	}
 
+	// A scheduled pure task must be invalidated by its own successful execution, otherwise
+	// the logical task stays in the tree with no physical task left to drive it. The metric
+	// is always emitted so the condition can be observed before DLQ-ing is enabled.
+	dlqEnabled := n.backend.ChasmDLQScheduledPureTaskOnValidationEnabled()
+	valid, err = n.validateTask(validationContext, TaskInvocation{TaskAttributes: taskAttributes}, taskInstance)
+	if err != nil {
+		if dlqEnabled {
+			return true, err
+		}
+		n.logger.Warn("chasm: failed to validate pure task after successful execution", tag.Error(err))
+		return true, nil
+	}
+	if !valid {
+		return true, nil
+	}
+
+	metrics.ChasmPureTaskNotInvalidated.With(metricsHandler).Record(1, chasmTaskTypeTag)
+
+	archetypeID := n.ArchetypeID()
+	archetype, _ := n.registry.ArchetypeDisplayName(archetypeID)
+	encodedPath, _ := n.getEncodedPath()
+	notInvalidatedErr := NewTaskNotInvalidatedErrorWithDetails("pure", TaskNotInvalidatedDetails{
+		TaskType:             registrableTask.fqType(),
+		TaskTypeID:           registrableTask.taskTypeID,
+		Archetype:            archetype,
+		ArchetypeID:          archetypeID,
+		ComponentPath:        n.path(),
+		EncodedComponentPath: encodedPath,
+		TaskAttributes:       taskAttributes,
+	})
+	if dlqEnabled {
+		return true, notInvalidatedErr
+	}
+
+	workflowKey := n.backend.GetWorkflowKey()
+	n.logger.Warn(notInvalidatedErr.Error(), append([]tag.Tag{
+		tag.WorkflowNamespaceID(workflowKey.NamespaceID),
+		tag.WorkflowID(workflowKey.WorkflowID),
+		tag.WorkflowRunID(workflowKey.RunID),
+	}, notInvalidatedErr.LogTags()...)...)
 	return true, nil
 }
 
@@ -3868,7 +4096,7 @@ func (n *Node) invokeSideEffectTaskFn(
 		archetypeID:           ArchetypeID(taskInfo.GetArchetypeId()),
 		executionLastUpdateVT: taskInfo.ComponentLastUpdateVersionedTransition,
 		componentPath:         taskInfo.Path,
-		componentInitialVT:    taskInfo.ComponentInitialVersionedTransition,
+		componentInitialVT:    refComponentInitialVT(taskInfo.Path, taskInfo.ComponentInitialVersionedTransition),
 
 		// Validate the Ref only once it is accessed by the task's handler.
 		validationFn: makeValidationFn(registrableTask, validate, chasmTask.Attempt, taskAttributes, taskValue),
@@ -3975,31 +4203,63 @@ func (n *Node) closeTransactionHandleTimeSkipping(immutableContext Context) erro
 	if !tsi.GetConfig().GetEnabled() {
 		return nil
 	}
+	if !n.backend.IsTimeSkippingFeatureEnabled(n.ArchetypeID()) {
+		return nil
+	}
 
 	rootComponent, err := n.Component(immutableContext, ComponentRef{})
 	if err != nil {
 		return err
 	}
+	archetypeName, _ := n.registry.ArchetypeDisplayName(n.ArchetypeID())
 	tsRoot, ok := rootComponent.(TimeSkippingRuntimeGate)
 	if !ok {
+		metrics.ExecutionTimeSkippingTransitionedErrorCounter.With(n.metricsHandler).Record(
+			1,
+			metrics.ArchetypeTag(archetypeName),
+		)
 		n.logger.Error(
 			"root component does not implement TimeSkippingRuntimeGate when executions have turned on time skipping",
 			tag.Error(fmt.Errorf("type: %s", reflect.TypeOf(rootComponent).Name())))
-		return serviceerror.NewInternal("time skipping is not enabled for current execution type")
+		return serviceerror.NewInternal("time skipping is not implemented for current execution type")
 	}
 
 	// runtime check
 	if !tsRoot.IsExecutionSkippable(immutableContext) {
+		n.logger.Debug("chasm time skipping skipped because the execution is not skippable",
+			tag.Archetype(archetypeName))
 		return nil
 	}
 	transition := n.defaultFindNextTargetTime()
 	if !transition.IsValid() {
 		return nil
 	}
+	accumulatedDuration := tsi.GetAccumulatedSkippedDuration().AsDuration()
+	maxDuration := n.backend.TimeSkippingMaxAccumulatedDuration()
+	if transition.GetSkippedDuration() > maxDuration-accumulatedDuration {
+		metrics.ExecutionTimeSkippingTransitionedErrorCounter.With(n.metricsHandler).Record(
+			1, metrics.ArchetypeTag(archetypeName))
+		n.logger.Warn("chasm time skipping exceeds maximum accumulated duration",
+			tag.Archetype(archetypeName),
+			tag.Duration("accumulated-skipped-duration", accumulatedDuration),
+			tag.Duration("proposed-skipped-duration", transition.GetSkippedDuration()),
+			tag.Duration("maximum-accumulated-skipped-duration", maxDuration))
+		return nil
+	}
 
 	// state change
 	n.backend.RecordTimeSkippingTransition(transition)
-	return n.regenerateTimerTasksForTimeSkipping()
+	n.logger.Debug("chasm time skipping transition recorded",
+		tag.Archetype(archetypeName),
+		tag.Time("current-time", transition.CurrentTime),
+		tag.Time("target-time", transition.GetTargetTime()),
+		tag.Duration("skipped-duration", transition.GetSkippedDuration()),
+		tag.Bool("disabled-after-fast-forward", transition.DisabledAfterFastForward),
+	)
+	if transition.GetSkippedDuration() > 0 {
+		return n.regenerateTimerTasksForTimeSkipping()
+	}
+	return nil
 }
 
 func (n *Node) regenerateTimerTasksForTimeSkipping() error {
@@ -4045,9 +4305,9 @@ func (n *Node) regenerateTimerTasksForTimeSkipping() error {
 	return n.closeTransactionGeneratePhysicalPureTask(firstPureTask, firstPureTaskNode, archetypeID)
 }
 
-// defaultFindNextTargetTime finds the earliest timer task from both pure tasks and side-effect tasks
-// as the target time for time skipping, and conditionally adjusts the target time with the fast-forward time if set.
-// this method doesn't validate tasks and is assumed to be called after invalidate tasks are deleted
+// defaultFindNextTargetTime finds the earliest timer task from both pure and side-effect tasks
+// and applies the fast-forward bound. Invalidated tasks are removed before this method runs.
+// A timer still scheduled at or before now is pending and blocks time skipping until it runs.
 func (n *Node) defaultFindNextTargetTime() *TimeSkippingTransition {
 	transition := NewTimeSkippingTransition(n.Now(nil))
 	now := transition.CurrentTime
@@ -4066,7 +4326,12 @@ func (n *Node) defaultFindNextTargetTime() *TimeSkippingTransition {
 				}
 				scheduledTime := task.GetScheduledTime().AsTime()
 				if !scheduledTime.After(now) {
-					continue
+					taskType, _ := n.registry.TaskFqnByID(task.GetTypeId())
+					archetypeName, _ := n.registry.ArchetypeDisplayName(n.ArchetypeID())
+					n.logger.Debug("a pending task blocks chasm time skipping",
+						tag.Archetype(archetypeName),
+						tag.String("chasm-task-type", taskType))
+					return nil
 				}
 				transition.TrackEarliestFutureTime(scheduledTime)
 			}

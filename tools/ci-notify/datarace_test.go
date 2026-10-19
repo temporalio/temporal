@@ -53,11 +53,6 @@ func TestDataRaceLocation(t *testing.T) {
 	require.Equal(t, "Data race detected", dataRaceLocation("DATA RACE: Data race detected"))
 }
 
-func TestJobIDFromArtifactName(t *testing.T) {
-	require.Equal(t, "12345", jobIDFromArtifactName("test-summary-json--999--12345--1--unit-test"))
-	require.Empty(t, jobIDFromArtifactName("test-summary-json--999"))
-}
-
 func TestUniqueDataRaces(t *testing.T) {
 	// The same race reported by two shards: identical source lines, but the race
 	// detector prints different memory addresses and goroutine ids each run.
