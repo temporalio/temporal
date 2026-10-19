@@ -313,7 +313,7 @@ func TestEmitWorkerConfigEventMacOS(t *testing.T) {
 	require.Equal(t, "macos", attrs["os"].AsString())
 	require.Equal(t, "14.2", attrs["os_version"].AsString())
 	require.Equal(t, "arm64", attrs["architecture"].AsString())
-	require.Equal(t, "", attrs["libc"].AsString())
+	require.Empty(t, attrs["libc"].AsString())
 }
 
 func TestEmitWorkerConfigEventWindows(t *testing.T) {
@@ -373,8 +373,8 @@ func TestEmitWorkerConfigEventHostingEnvironmentVersion(t *testing.T) {
 }
 
 func TestUnknownEnumValues(t *testing.T) {
-	require.Equal(t, "", libcName(workerpb.EnvironmentInfo_LinuxPlatform_LIBC_UNSPECIFIED))
-	require.Equal(t, "", libcName(workerpb.EnvironmentInfo_LinuxPlatform_Libc(999)))
-	require.Equal(t, "", crtName(workerpb.EnvironmentInfo_WindowsPlatform_CRT_UNSPECIFIED))
-	require.Equal(t, "", crtName(workerpb.EnvironmentInfo_WindowsPlatform_Crt(999)))
+	require.Empty(t, libcName(workerpb.EnvironmentInfo_LinuxPlatform_LIBC_UNSPECIFIED))
+	require.Empty(t, libcName(workerpb.EnvironmentInfo_LinuxPlatform_Libc(999)))
+	require.Empty(t, crtName(workerpb.EnvironmentInfo_WindowsPlatform_CRT_UNSPECIFIED))
+	require.Empty(t, crtName(workerpb.EnvironmentInfo_WindowsPlatform_Crt(999)))
 }
