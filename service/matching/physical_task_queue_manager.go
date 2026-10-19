@@ -90,8 +90,8 @@ type (
 		pollerHistory            *pollerHistory
 		currentPolls             atomic.Int64
 		taskValidator            taskValidator
-		deploymentRegistrationCh     chan struct{}
-		monitorDeploymentVersionOnce sync.Once
+		deploymentRegistrationCh        chan struct{}
+		deploymentVersionMonitorRunning atomic.Bool
 		pollerScalingRateLimiter quotas.RateLimiter
 
 		taskTrackerLock sync.Mutex
@@ -786,9 +786,7 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 		return errMissingDeploymentVersion
 	}
 
-	c.monitorDeploymentVersionOnce.Do(func() {
-		go c.monitorDeploymentVersionInUserData()
-	})
+	c.maybeStartDeploymentVersionMonitor()
 
 	userData, _, err := c.partitionMgr.getPerTypeUserData()
 	if err != nil {
@@ -898,11 +896,24 @@ func (c *physicalTaskQueueManagerImpl) ensureRegisteredInDeploymentVersion(
 	return nil
 }
 
+// maybeStartDeploymentVersionMonitor starts a monitor goroutine if one is not already running.
+// The monitor checks whether this physical task queue's deployment version is present in user
+// data. It can be restarted: if the version appears then later disappears (e.g., after a
+// migration), a new poll will start a fresh monitor.
+func (c *physicalTaskQueueManagerImpl) maybeStartDeploymentVersionMonitor() {
+	if c.deploymentVersionMonitorRunning.CompareAndSwap(false, true) {
+		go c.monitorDeploymentVersionInUserData()
+	}
+}
+
 // monitorDeploymentVersionInUserData waits an initial grace period, then periodically checks
 // whether this physical task queue's deployment version is present in its task queue's user data.
 // If the version is missing after the grace period, it emits a counter on each check until the
 // version appears or the task queue unloads. No metric is emitted when the version is found.
+// Clears the running flag on exit so a future poll can restart the monitor if needed.
 func (c *physicalTaskQueueManagerImpl) monitorDeploymentVersionInUserData() {
+	defer c.deploymentVersionMonitorRunning.Store(false)
+
 	// Grace period before first check to allow normal propagation to complete.
 	select {
 	case <-c.tqCtx.Done():
