@@ -3,6 +3,7 @@ package grpcfaults
 import (
 	"context"
 
+	"go.temporal.io/server/common/faultinjection"
 	"google.golang.org/grpc"
 )
 
@@ -22,18 +23,6 @@ func UnaryServerInterceptor(generator Generator) grpc.UnaryServerInterceptor {
 		return nil
 	}
 	return func(ctx context.Context, req any, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-		// Check before the handler. A fault can short-circuit the call.
-		if outcome := generator.GenerateRequest(ctx, info.FullMethod, req); outcome != nil {
-			return outcome.Response, outcome.Error
-		}
-
-		// Call the handler.
-		resp, err := handler(ctx, req)
-
-		// Check after the handler. A fault can replace the response or error.
-		if outcome := generator.GenerateResponse(ctx, info.FullMethod, req, resp, err); outcome != nil {
-			return outcome.Response, outcome.Error
-		}
-		return resp, err
+		return faultinjection.Invoke(ctx, generator, info.FullMethod, req, func() (any, error) { return handler(ctx, req) })
 	}
 }

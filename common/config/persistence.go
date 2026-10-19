@@ -154,6 +154,9 @@ func (ds *DataStore) GetIndexName() string {
 
 // Validate validates the data store config
 func (ds *DataStore) Validate() error {
+	if err := ds.FaultInjection.Validate(); err != nil {
+		return err
+	}
 	storeConfigCount := 0
 	if ds.SQL != nil {
 		storeConfigCount++
@@ -320,4 +323,18 @@ func (c *SQL) ResolvePassword() (string, error) {
 			c.PasswordCommand.Command, c.PasswordCommand.Args, err, stderr.String())
 	}
 	return strings.TrimRight(string(out), "\n\r"), nil
+}
+
+func (fi *FaultInjection) Validate() error {
+	if fi == nil {
+		return nil
+	}
+	for store, cfg := range fi.Targets.DataStores {
+		for method, cfg := range cfg.Methods {
+			if err := cfg.Validate(); err != nil {
+				return fmt.Errorf("targets.dataStores.%s.methods.%s: %w", store, method, err)
+			}
+		}
+	}
+	return nil
 }

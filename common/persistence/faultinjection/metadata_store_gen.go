@@ -9,6 +9,7 @@ package faultinjection
 import (
 	"context"
 
+	"go.temporal.io/server/common/faultinjection"
 	_sourcePersistence "go.temporal.io/server/common/persistence"
 )
 
@@ -16,14 +17,14 @@ type (
 	// faultInjectionMetadataStore implements MetadataStore interface with fault injection.
 	faultInjectionMetadataStore struct {
 		_sourcePersistence.MetadataStore
-		generator faultGenerator
+		generator faultinjection.Generator[any, struct{}]
 	}
 )
 
 // newFaultInjectionMetadataStore returns faultInjectionMetadataStore.
 func newFaultInjectionMetadataStore(
 	baseStore _sourcePersistence.MetadataStore,
-	generator faultGenerator,
+	generator faultinjection.Generator[any, struct{}],
 ) *faultInjectionMetadataStore {
 	return &faultInjectionMetadataStore{
 		MetadataStore: baseStore,
@@ -33,63 +34,63 @@ func newFaultInjectionMetadataStore(
 
 // CreateNamespace wraps MetadataStore.CreateNamespace.
 func (d faultInjectionMetadataStore) CreateNamespace(ctx context.Context, request *_sourcePersistence.InternalCreateNamespaceRequest) (cp1 *_sourcePersistence.CreateNamespaceResponse, err error) {
-	err = d.generator.generate("CreateNamespace", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "CreateNamespace", any(request), func() (struct{}, error) {
 		cp1, err = d.MetadataStore.CreateNamespace(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // DeleteNamespace wraps MetadataStore.DeleteNamespace.
 func (d faultInjectionMetadataStore) DeleteNamespace(ctx context.Context, request *_sourcePersistence.DeleteNamespaceRequest) (err error) {
-	err = d.generator.generate("DeleteNamespace", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "DeleteNamespace", any(request), func() (struct{}, error) {
 		err = d.MetadataStore.DeleteNamespace(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // DeleteNamespaceByName wraps MetadataStore.DeleteNamespaceByName.
 func (d faultInjectionMetadataStore) DeleteNamespaceByName(ctx context.Context, request *_sourcePersistence.DeleteNamespaceByNameRequest) (err error) {
-	err = d.generator.generate("DeleteNamespaceByName", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "DeleteNamespaceByName", any(request), func() (struct{}, error) {
 		err = d.MetadataStore.DeleteNamespaceByName(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // GetNamespace wraps MetadataStore.GetNamespace.
 func (d faultInjectionMetadataStore) GetNamespace(ctx context.Context, request *_sourcePersistence.GetNamespaceRequest) (ip1 *_sourcePersistence.InternalGetNamespaceResponse, err error) {
-	err = d.generator.generate("GetNamespace", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "GetNamespace", any(request), func() (struct{}, error) {
 		ip1, err = d.MetadataStore.GetNamespace(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // ListNamespaces wraps MetadataStore.ListNamespaces.
 func (d faultInjectionMetadataStore) ListNamespaces(ctx context.Context, request *_sourcePersistence.InternalListNamespacesRequest) (ip1 *_sourcePersistence.InternalListNamespacesResponse, err error) {
-	err = d.generator.generate("ListNamespaces", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "ListNamespaces", any(request), func() (struct{}, error) {
 		ip1, err = d.MetadataStore.ListNamespaces(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // RenameNamespace wraps MetadataStore.RenameNamespace.
 func (d faultInjectionMetadataStore) RenameNamespace(ctx context.Context, request *_sourcePersistence.InternalRenameNamespaceRequest) (err error) {
-	err = d.generator.generate("RenameNamespace", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "RenameNamespace", any(request), func() (struct{}, error) {
 		err = d.MetadataStore.RenameNamespace(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // UpdateNamespace wraps MetadataStore.UpdateNamespace.
 func (d faultInjectionMetadataStore) UpdateNamespace(ctx context.Context, request *_sourcePersistence.InternalUpdateNamespaceRequest) (err error) {
-	err = d.generator.generate("UpdateNamespace", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "UpdateNamespace", any(request), func() (struct{}, error) {
 		err = d.MetadataStore.UpdateNamespace(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }

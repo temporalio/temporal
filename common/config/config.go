@@ -11,6 +11,7 @@ import (
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/faultinjection"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/masker"
 	"go.temporal.io/server/common/metrics"
@@ -334,26 +335,7 @@ type (
 		// we fetch the error generator from this map using the key "UpdateShard".
 		// The key is the name of the method to inject faults for.
 		// The value is the config for that method.
-		Methods map[string]FaultInjectionMethodConfig `yaml:"methods"`
-	}
-
-	// FaultInjectionMethodConfig is the fault injection config for a single method of a data store.
-	FaultInjectionMethodConfig struct {
-		// Errors is a map of error type to probability of returning that error.
-		// For example: `ShardOwnershipLostError: 0.1` will cause the method to return a ShardOwnershipLostError 10% of
-		// the time.
-		// The other 90% of the time, the method will call the underlying datastore.
-		// If there are multiple errors for a method, the probability of each error is independent of the others.
-		// For example, if there are two errors with probabilities 0.1 and 0.2, then the first error will be returned
-		// 10% of the time, the second error will be returned 20% of the time,
-		// and the underlying method will be called 70% of the time.
-		Errors map[string]float64 `yaml:"errors"`
-
-		// Seed is the seed for the random number generator used to sample faults from the Errors map. You can use this
-		// to make the fault injection deterministic.
-		// If the test config does not set this to a non-zero number, the fault injector will set it to the current time
-		// in nanoseconds.
-		Seed int64 `yaml:"seed"`
+		Methods map[string]faultinjection.Config `yaml:"methods"`
 	}
 
 	// Cassandra contains configuration to connect to Cassandra cluster
@@ -841,17 +823,17 @@ func (fi *FaultInjection) WithMethodSeed(storeName DataStoreName, methodName str
 	return fi
 }
 
-func (fi *FaultInjection) method(storeName DataStoreName, methodName string) FaultInjectionMethodConfig {
+func (fi *FaultInjection) method(storeName DataStoreName, methodName string) faultinjection.Config {
 	if fi.Targets.DataStores == nil {
 		fi.Targets.DataStores = map[DataStoreName]FaultInjectionDataStoreConfig{}
 	}
 	store, ok := fi.Targets.DataStores[storeName]
 	if !ok {
-		store = FaultInjectionDataStoreConfig{Methods: map[string]FaultInjectionMethodConfig{}}
+		store = FaultInjectionDataStoreConfig{Methods: map[string]faultinjection.Config{}}
 	}
 	method, ok := store.Methods[methodName]
 	if !ok {
-		method = FaultInjectionMethodConfig{Errors: map[string]float64{}}
+		method = faultinjection.Config{Errors: map[string]float64{}}
 	}
 	store.Methods[methodName] = method
 	fi.Targets.DataStores[storeName] = store

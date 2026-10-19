@@ -9,6 +9,7 @@ package faultinjection
 import (
 	"context"
 
+	"go.temporal.io/server/common/faultinjection"
 	_sourcePersistence "go.temporal.io/server/common/persistence"
 )
 
@@ -16,14 +17,14 @@ type (
 	// faultInjectionClusterMetadataStore implements ClusterMetadataStore interface with fault injection.
 	faultInjectionClusterMetadataStore struct {
 		_sourcePersistence.ClusterMetadataStore
-		generator faultGenerator
+		generator faultinjection.Generator[any, struct{}]
 	}
 )
 
 // newFaultInjectionClusterMetadataStore returns faultInjectionClusterMetadataStore.
 func newFaultInjectionClusterMetadataStore(
 	baseStore _sourcePersistence.ClusterMetadataStore,
-	generator faultGenerator,
+	generator faultinjection.Generator[any, struct{}],
 ) *faultInjectionClusterMetadataStore {
 	return &faultInjectionClusterMetadataStore{
 		ClusterMetadataStore: baseStore,
@@ -33,63 +34,63 @@ func newFaultInjectionClusterMetadataStore(
 
 // DeleteClusterMetadata wraps ClusterMetadataStore.DeleteClusterMetadata.
 func (d faultInjectionClusterMetadataStore) DeleteClusterMetadata(ctx context.Context, request *_sourcePersistence.InternalDeleteClusterMetadataRequest) (err error) {
-	err = d.generator.generate("DeleteClusterMetadata", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "DeleteClusterMetadata", any(request), func() (struct{}, error) {
 		err = d.ClusterMetadataStore.DeleteClusterMetadata(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // GetClusterMembers wraps ClusterMetadataStore.GetClusterMembers.
 func (d faultInjectionClusterMetadataStore) GetClusterMembers(ctx context.Context, request *_sourcePersistence.GetClusterMembersRequest) (gp1 *_sourcePersistence.GetClusterMembersResponse, err error) {
-	err = d.generator.generate("GetClusterMembers", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "GetClusterMembers", any(request), func() (struct{}, error) {
 		gp1, err = d.ClusterMetadataStore.GetClusterMembers(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // GetClusterMetadata wraps ClusterMetadataStore.GetClusterMetadata.
 func (d faultInjectionClusterMetadataStore) GetClusterMetadata(ctx context.Context, request *_sourcePersistence.InternalGetClusterMetadataRequest) (ip1 *_sourcePersistence.InternalGetClusterMetadataResponse, err error) {
-	err = d.generator.generate("GetClusterMetadata", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "GetClusterMetadata", any(request), func() (struct{}, error) {
 		ip1, err = d.ClusterMetadataStore.GetClusterMetadata(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // ListClusterMetadata wraps ClusterMetadataStore.ListClusterMetadata.
 func (d faultInjectionClusterMetadataStore) ListClusterMetadata(ctx context.Context, request *_sourcePersistence.InternalListClusterMetadataRequest) (ip1 *_sourcePersistence.InternalListClusterMetadataResponse, err error) {
-	err = d.generator.generate("ListClusterMetadata", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "ListClusterMetadata", any(request), func() (struct{}, error) {
 		ip1, err = d.ClusterMetadataStore.ListClusterMetadata(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // PruneClusterMembership wraps ClusterMetadataStore.PruneClusterMembership.
 func (d faultInjectionClusterMetadataStore) PruneClusterMembership(ctx context.Context, request *_sourcePersistence.PruneClusterMembershipRequest) (err error) {
-	err = d.generator.generate("PruneClusterMembership", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "PruneClusterMembership", any(request), func() (struct{}, error) {
 		err = d.ClusterMetadataStore.PruneClusterMembership(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // SaveClusterMetadata wraps ClusterMetadataStore.SaveClusterMetadata.
 func (d faultInjectionClusterMetadataStore) SaveClusterMetadata(ctx context.Context, request *_sourcePersistence.InternalSaveClusterMetadataRequest) (b1 bool, err error) {
-	err = d.generator.generate("SaveClusterMetadata", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "SaveClusterMetadata", any(request), func() (struct{}, error) {
 		b1, err = d.ClusterMetadataStore.SaveClusterMetadata(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
 
 // UpsertClusterMembership wraps ClusterMetadataStore.UpsertClusterMembership.
 func (d faultInjectionClusterMetadataStore) UpsertClusterMembership(ctx context.Context, request *_sourcePersistence.UpsertClusterMembershipRequest) (err error) {
-	err = d.generator.generate("UpsertClusterMembership", request).inject(func() error {
+	_, err = faultinjection.Invoke(ctx, d.generator, "UpsertClusterMembership", any(request), func() (struct{}, error) {
 		err = d.ClusterMetadataStore.UpsertClusterMembership(ctx, request)
-		return err
+		return struct{}{}, err
 	})
 	return
 }
