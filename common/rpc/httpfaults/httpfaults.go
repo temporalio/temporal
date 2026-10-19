@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"strings"
 
-	"go.temporal.io/server/common/rpc/faultinjection"
+	"go.temporal.io/server/common/faultinjection"
 )
 
 // Scope identifies a namespace for fault matching.
@@ -57,18 +57,14 @@ func Wrap(
 		return inner
 	}
 	return func(req *http.Request) (*http.Response, error) {
-		wrapped := &Request{Raw: req, Scope: scope}
-		operation := req.Method + " " + req.URL.Path
 
-		if outcome := generator.GenerateRequest(req.Context(), operation, wrapped); outcome != nil {
-			return outcome.Response, outcome.Error
-		}
-
-		resp, err := inner(req)
-		if outcome := generator.GenerateResponse(req.Context(), operation, wrapped, resp, err); outcome != nil {
-			return applyOutcome(resp, outcome)
-		}
-		return resp, err
+		var original *http.Response
+		resp, err := faultinjection.Invoke(req.Context(), generator, req.Method+" "+req.URL.Path, &Request{Raw: req, Scope: scope}, func() (*http.Response, error) {
+			var err error
+			original, err = inner(req)
+			return original, err
+		})
+		return applyOutcome(original, &Outcome{Response: resp, Error: err})
 	}
 }
 
