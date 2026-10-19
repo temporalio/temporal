@@ -81,10 +81,6 @@ func (s *taskValidatorSuite) SetupTest() {
 	s.taskValidator = newTaskValidator(context.Background(), cfg, s.clusterMetadata, s.namespaceCache, s.historyClient)
 }
 
-func (s *taskValidatorSuite) putCache(task *persistencespb.AllocatedTaskInfo, validationTimeNs int64) {
-	s.taskValidator.cache.Put(task, validationTimeNs)
-}
-
 func (s *taskValidatorSuite) cachedValidationTimeNs(task *persistencespb.AllocatedTaskInfo) (int64, bool) {
 	validationTimeNs, ok := s.taskValidator.cache.Get(task).(int64)
 	return validationTimeNs, ok
@@ -110,18 +106,6 @@ func (s *taskValidatorSuite) TestPreValidateActive_NewTask_Skip_WithoutCreationT
 	s.True(ok)
 	s.GreaterOrEqual(validationTimeNs, beforeNs)
 	s.LessOrEqual(validationTimeNs, time.Now().UnixNano())
-}
-
-func (s *taskValidatorSuite) TestPreValidateActive_ExistingTask_Validate() {
-	s.putCache(s.task, time.Now().Add(-s.taskValidator.config.ValidatorValidationThreshold()*2).UnixNano())
-	shouldValidate := s.taskValidator.preValidateActive(s.task)
-	s.True(shouldValidate)
-}
-
-func (s *taskValidatorSuite) TestPreValidateActive_ExistingTask_Skip() {
-	s.putCache(s.task, time.Now().Add(-s.taskValidator.config.ValidatorValidationThreshold()/2).UnixNano())
-	shouldValidate := s.taskValidator.preValidateActive(s.task)
-	s.False(shouldValidate)
 }
 
 func (s *taskValidatorSuite) TestPreValidatePassive_NewTask_Skip_WithCreationTime() {
@@ -154,18 +138,6 @@ func (s *taskValidatorSuite) TestPreValidatePassive_NewTask_Skip_WithoutCreation
 	s.True(ok)
 	s.GreaterOrEqual(validationTimeNs, beforeNs)
 	s.LessOrEqual(validationTimeNs, time.Now().UnixNano())
-}
-
-func (s *taskValidatorSuite) TestPreValidatePassive_ExistingTask_Validate() {
-	s.putCache(s.task, time.Now().Add(-s.taskValidator.config.ValidatorValidationThreshold()*2).UnixNano())
-	shouldValidate := s.taskValidator.preValidatePassive(s.task)
-	s.True(shouldValidate)
-}
-
-func (s *taskValidatorSuite) TestPreValidatePassive_ExistingTask_Skip() {
-	s.putCache(s.task, time.Now().Add(s.taskValidator.config.ValidatorValidationThreshold()*2).UnixNano())
-	shouldValidate := s.taskValidator.preValidatePassive(s.task)
-	s.False(shouldValidate)
 }
 
 func (s *taskValidatorSuite) TestCache_ConcurrentFirstSeen() {
@@ -296,6 +268,40 @@ func TestTaskValidatorTasksWithSameID(t *testing.T) {
 
 			v.postValidate(second)
 			require.False(t, preValidate(second))
+		})
+	}
+}
+
+func TestTaskValidatorValidationInterval(t *testing.T) {
+	t.Parallel()
+	cfg := newTaskQueueConfig(
+		tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
+		NewConfig(dynamicconfig.NewNoopCollection()), "nsname",
+	)
+	threshold := cfg.ValidatorValidationThreshold()
+	for _, tc := range []struct {
+		name   string
+		active bool
+		age    time.Duration
+		want   bool
+	}{
+		{name: "active within interval", active: true, age: threshold / 2},
+		{name: "active past interval", active: true, age: threshold * 2, want: true},
+		{name: "passive within interval", age: threshold / 2},
+		{name: "passive past interval", age: threshold * 2, want: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			v := newTaskValidator(t.Context(), cfg, nil, nil, nil)
+			task := &persistencespb.AllocatedTaskInfo{
+				Data: &persistencespb.TaskInfo{CreateTime: timestamppb.Now()},
+			}
+			v.cache.Put(task, time.Now().Add(-tc.age).UnixNano())
+			preValidate := v.preValidatePassive
+			if tc.active {
+				preValidate = v.preValidateActive
+			}
+			require.Equal(t, tc.want, preValidate(task))
 		})
 	}
 }
