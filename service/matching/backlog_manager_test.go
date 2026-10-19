@@ -497,7 +497,7 @@ func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_NoReloadSignalWhenCau
 
 func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_ExpiredTail() {
 	if s.fairness {
-		s.T().Skip("only for priority backlog manager")
+		s.T().Skip("this test is only for priority backlog manager")
 	}
 	for _, tc := range []struct {
 		name               string
