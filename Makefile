@@ -50,8 +50,10 @@ VISIBILITY_DB ?= temporal_visibility
 # gRPC client (storage.NewGRPCClient). Related issue: https://github.com/googleapis/google-cloud-go/issues/12343
 ALL_BUILD_TAGS := disable_grpc_modules,$(BUILD_TAG)
 ALL_TEST_TAGS := $(ALL_BUILD_TAGS),test_dep,$(TEST_TAG)
+MINIMAL_TEST_TAGS = $(ALL_TEST_TAGS),temporal_minimal
 BUILD_TAG_FLAG := -tags $(ALL_BUILD_TAGS)
 TEST_TAG_FLAG := -tags $(ALL_TEST_TAGS)
+
 
 # 20 minutes is the upper bound defined for all tests. (Tests in CI take up to about 14:30 now)
 # If you change this, also change .github/workflows/run-tests.yml!
@@ -529,9 +531,6 @@ workflowcheck: $(WORKFLOWCHECK)
 		echo "Running workflowcheck on $$dir" ; \
 		$(WORKFLOWCHECK) "$$dir" ; \
 	done
-
-# Test build tags with temporal_minimal.
-MINIMAL_TEST_TAGS = $(ALL_TEST_TAGS),temporal_minimal
 
 # Packages with a file constrained by temporal_minimal.
 MINIMAL_DIRS = $(sort $(addprefix ./,$(dir $(shell git grep -lE '^//go:build .*temporal_minimal([^a-z0-9_]|$$)' -- '*.go'))))
