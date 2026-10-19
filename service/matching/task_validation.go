@@ -16,7 +16,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-const taskValidatorCacheMaxSize = 1024
+const taskValidatorCacheMaxSize = 100
 
 type (
 	taskValidator interface {
@@ -39,7 +39,7 @@ type (
 		namespaceRegistry namespace.Registry
 		historyClient     historyservice.HistoryServiceClient
 
-		cache cache.Cache
+		cache cache.Cache // *AllocatedTaskInfo -> int64 (unix nanos)
 	}
 )
 
@@ -105,7 +105,8 @@ func (v *taskValidatorImpl) preValidate(
 }
 
 func (v *taskValidatorImpl) lookupOrInit(task *persistencespb.AllocatedTaskInfo) (validationTimeNs int64, existed bool) {
-	// Redirected tasks from different physical queues can share the same task ID.
+	// Redirected tasks from different physical queues can share the same task ID,
+	// so use *persistencespb.AllocatedTaskInfo as the cache key.
 	if validationTimeNs, ok := v.cache.Get(task).(int64); ok {
 		return validationTimeNs, true
 	}

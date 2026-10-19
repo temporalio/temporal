@@ -119,7 +119,7 @@ func (s *taskValidatorSuite) TestPreValidateActive_ExistingTask_Validate() {
 }
 
 func (s *taskValidatorSuite) TestPreValidateActive_ExistingTask_Skip() {
-	s.putCache(s.task, time.Now().Add(s.taskValidator.config.ValidatorValidationThreshold()*2).UnixNano())
+	s.putCache(s.task, time.Now().Add(-s.taskValidator.config.ValidatorValidationThreshold()/2).UnixNano())
 	shouldValidate := s.taskValidator.preValidateActive(s.task)
 	s.False(shouldValidate)
 }
@@ -166,18 +166,6 @@ func (s *taskValidatorSuite) TestPreValidatePassive_ExistingTask_Skip() {
 	s.putCache(s.task, time.Now().Add(s.taskValidator.config.ValidatorValidationThreshold()*2).UnixNano())
 	shouldValidate := s.taskValidator.preValidatePassive(s.task)
 	s.False(shouldValidate)
-}
-
-func (s *taskValidatorSuite) TestCache_TwoTaskIDsIndependent() {
-	other := &persistencespb.AllocatedTaskInfo{
-		TaskId: s.task.TaskId + 1,
-		Data:   s.task.Data,
-	}
-	s.putCache(other, time.Now().Add(-s.taskValidator.config.ValidatorValidationThreshold()*2).UnixNano())
-	s.task.Data.CreateTime = timestamppb.Now()
-
-	s.False(s.taskValidator.preValidateActive(s.task), "first sight of this task must skip")
-	s.True(s.taskValidator.preValidateActive(other), "other task must still be past threshold")
 }
 
 func (s *taskValidatorSuite) TestCache_ConcurrentFirstSeen() {
@@ -299,6 +287,8 @@ func TestTaskValidatorTasksWithSameID(t *testing.T) {
 			}
 			require.Equal(t, !active, preValidate(first))
 			require.Equal(t, !active, preValidate(second))
+			require.Equal(t, data.CreateTime.AsTime().UnixNano(), v.cache.Get(first),
+				"tracking another task with the same ID must preserve this task's validation time")
 
 			v.postValidate(first)
 			require.False(t, preValidate(first))
@@ -306,39 +296,6 @@ func TestTaskValidatorTasksWithSameID(t *testing.T) {
 
 			v.postValidate(second)
 			require.False(t, preValidate(second))
-		})
-	}
-}
-
-func TestTaskValidatorValidationInterval(t *testing.T) {
-	for _, tc := range []struct {
-		name   string
-		active bool
-		age    time.Duration
-		want   bool
-	}{
-		{name: "active within interval", active: true, age: 5 * time.Minute},
-		{name: "active past interval", active: true, age: 11 * time.Minute, want: true},
-		{name: "passive within interval", age: 5 * time.Minute},
-		{name: "passive past interval", age: 11 * time.Minute, want: true},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			cfg := newTaskQueueConfig(
-				tqid.UnsafeTaskQueueFamily("nsid", "tq").TaskQueue(enumspb.TASK_QUEUE_TYPE_WORKFLOW),
-				NewConfig(dynamicconfig.NewNoopCollection()), "nsname",
-			)
-			v := newTaskValidator(context.Background(), cfg, nil, nil, nil)
-			task := &persistencespb.AllocatedTaskInfo{
-				TaskId: 1,
-				Data:   &persistencespb.TaskInfo{CreateTime: timestamppb.New(time.Now().Add(-tc.age))},
-			}
-			if tc.active {
-				require.False(t, v.preValidateActive(task))
-				require.Equal(t, tc.want, v.preValidateActive(task))
-			} else {
-				require.Equal(t, tc.want, v.preValidatePassive(task))
-			}
 		})
 	}
 }

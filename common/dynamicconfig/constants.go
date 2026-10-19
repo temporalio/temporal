@@ -1640,7 +1640,7 @@ scoped by namespace and/or task queue.`,
 		10,
 		`MatchingValidatorBatchSize is the number of local-backlog tasks the matcher
 validator pulls and validates concurrently per batch. Values are clamped to the
-range [1, 1024].`,
+range [1, 100].`,
 	)
 	MatchingValidatorValidationThreshold = NewTaskQueueDurationSetting(
 		"matching.validatorValidationThreshold",
