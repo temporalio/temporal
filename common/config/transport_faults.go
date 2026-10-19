@@ -1,0 +1,64 @@
+package config
+
+import (
+	"fmt"
+
+	"go.temporal.io/server/common/faultinjection"
+)
+
+// RPCFaultInjection configures faults uniformly for each transport and direction.
+type RPCFaultInjection struct {
+	GRPC *TransportFaultInjection `yaml:"grpc"`
+}
+
+// TransportFaultInjection independently configures inbound and outbound calls.
+type TransportFaultInjection struct {
+	Inbound  *CallFaultInjection `yaml:"inbound"`
+	Outbound *CallFaultInjection `yaml:"outbound"`
+}
+
+// CallFaultInjection configures faults before a call and after a successful call.
+type CallFaultInjection struct {
+	Request  faultinjection.Config `yaml:"request"`
+	Response faultinjection.Config `yaml:"response"`
+}
+
+func (c RPCFaultInjection) Validate() error {
+	for name, cfg := range map[string]*TransportFaultInjection{"grpc": c.GRPC} {
+		if err := cfg.Validate(); err != nil {
+			return fmt.Errorf("faultInjection.%s: %w", name, err)
+		}
+	}
+	return nil
+}
+
+func (c *TransportFaultInjection) Validate() error {
+	if c == nil {
+		return nil
+	}
+	for direction, cfg := range map[string]*CallFaultInjection{"inbound": c.Inbound, "outbound": c.Outbound} {
+		if err := cfg.Validate(); err != nil {
+			return fmt.Errorf("%s: %w", direction, err)
+		}
+	}
+	return nil
+}
+
+func (c *CallFaultInjection) Validate() error {
+	if c == nil {
+		return nil
+	}
+	for stage, cfg := range map[string]faultinjection.Config{"request": c.Request, "response": c.Response} {
+		for name := range cfg.Errors {
+			switch name {
+			case "Unavailable", "Internal", "ResourceExhausted":
+			default:
+				return fmt.Errorf("%s: unsupported transient error %q", stage, name)
+			}
+		}
+		if err := cfg.Validate(); err != nil {
+			return fmt.Errorf("%s: %w", stage, err)
+		}
+	}
+	return nil
+}

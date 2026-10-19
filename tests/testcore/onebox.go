@@ -34,7 +34,7 @@ import (
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/grpcfaults"
 	"go.temporal.io/server/common/rpc/httpfaults"
-	"go.temporal.io/server/common/testing/grpcfaultstest"
+	"go.temporal.io/server/common/testing/faultinjectiontest"
 	"go.temporal.io/server/common/testing/httpfaultstest"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service/history/hsm/nexusoperations"
@@ -135,7 +135,7 @@ func newTemporal(t *testing.T, params *temporalParams) *temporalImpl {
 		workerConfig:              params.WorkerConfig,
 		replicationStreamRecorder: NewReplicationStreamRecorder(),
 	}
-	impl.grpcFaultGenerator = grpcfaultstest.NewCallbackGenerator(impl.testHooks)
+	impl.grpcFaultGenerator = faultinjectiontest.NewServiceCallbackGenerator(impl.testHooks)
 	impl.httpFaultGenerator = httpfaultstest.NewCallbackGenerator(impl.testHooks)
 
 	// Base options are independent of which services this test cluster starts.

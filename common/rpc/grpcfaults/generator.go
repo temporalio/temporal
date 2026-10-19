@@ -1,6 +1,10 @@
 package grpcfaults
 
-import "go.temporal.io/server/common/faultinjection"
+import (
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/faultinjection"
+)
 
 type (
 	// Outcome contains the result returned when a gRPC fault matches.
@@ -27,4 +31,25 @@ func NewCallbackGenerator() *CallbackGenerator {
 // NewCallbackGeneratorWithHooks creates a CallbackGenerator connected to external fault hooks.
 func NewCallbackGeneratorWithHooks(hooks Hooks) *CallbackGenerator {
 	return faultinjection.NewCallbackGeneratorWithHooks[any, any](hooks)
+}
+
+// NewOutcome maps a configured transient fault to a service error.
+func NewOutcome(name string, _ float64) *Outcome {
+	message := "fault injection: " + name
+	var err error
+	switch name {
+	case "Unavailable":
+		err = serviceerror.NewUnavailable(message)
+	case "Internal":
+		err = serviceerror.NewInternal(message)
+	case "ResourceExhausted":
+		err = &serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_SYSTEM,
+			Message: message,
+		}
+	default:
+		return nil
+	}
+	return &Outcome{Error: err}
 }

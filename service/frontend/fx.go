@@ -47,7 +47,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/telemetry"
-	"go.temporal.io/server/common/testing/grpcfaultstest"
+	"go.temporal.io/server/common/testing/faultinjectiontest"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
@@ -194,11 +194,10 @@ func NewServiceProvider(
 	)
 }
 
-// GrpcServerOptions are the options to build the frontend gRPC server along
-// with the interceptors that are already set in the options.
+// GrpcServerOptions configures the gRPC listener and supplies shared gateway middleware.
 type GrpcServerOptions struct {
 	Options           []grpc.ServerOption
-	UnaryInterceptors []grpc.UnaryServerInterceptor
+	UnaryInterceptors []interceptor.Interceptor
 }
 
 func AuthorizationInterceptorProvider(
@@ -271,7 +270,7 @@ func GrpcServerOptionsProvider(
 	customInterceptors []grpc.UnaryServerInterceptor,
 	customStreamInterceptors []grpc.StreamServerInterceptor,
 	metricsHandler metrics.Handler,
-	testHooks testhooks.TestHooks,
+	faults resource.GRPCFaultParams,
 ) GrpcServerOptions {
 	kep := keepalive.EnforcementPolicy{
 		MinTime:             serviceConfig.KeepAliveMinTime(),
@@ -297,7 +296,7 @@ func GrpcServerOptionsProvider(
 	if err != nil {
 		logger.Fatal("creating gRPC server options failed", tag.Error(err))
 	}
-	unaryInterceptors := []grpc.UnaryServerInterceptor{
+	applicationInterceptors := interceptor.FromGRPC(
 		// Order of interceptors is important
 		// Mask error interceptor should be the most outer interceptor since it handle the errors format
 		// Service Error Interceptor should be the next most outer interceptor on error handling
@@ -326,17 +325,23 @@ func GrpcServerOptionsProvider(
 		slowRequestLoggerInterceptor.Intercept,
 		chasmRequestVisibilityInterceptor.Intercept,
 		contextMetadataInterceptor.Intercept,
-	}
+	)
 	if len(customInterceptors) > 0 {
 		// TODO: Deprecate WithChainedFrontendGrpcInterceptors and provide a inner custom interceptor
-		unaryInterceptors = append(unaryInterceptors, customInterceptors...)
+		applicationInterceptors = append(applicationInterceptors, interceptor.FromGRPC(customInterceptors...)...)
 	}
-	faultGenerator := grpcfaultstest.NewGenerator(testHooks)
-	if faultInterceptor := grpcfaults.UnaryServerInterceptor(faultGenerator); faultInterceptor != nil {
-		unaryInterceptors = append(unaryInterceptors, faultInterceptor)
+
+	httpGatewayInterceptors := append([]interceptor.Interceptor(nil), applicationInterceptors...)
+	if testHook := interceptor.InjectFaults(faultinjectiontest.NewServiceGenerator(faults.TestHooks)); testHook != nil {
+		httpGatewayInterceptors = append(httpGatewayInterceptors, testHook)
 	}
-	// retry interceptor should be the most inner interceptor
-	unaryInterceptors = append(unaryInterceptors, retryableInterceptor.Intercept)
+	httpGatewayInterceptors = append(httpGatewayInterceptors, interceptor.FromGRPC(retryableInterceptor.Intercept)...)
+	grpcInterceptors := applicationInterceptors
+	inboundGenerator := faults.Inbound()
+	if transportFault := interceptor.InjectFaults(inboundGenerator); transportFault != nil {
+		grpcInterceptors = append(grpcInterceptors, transportFault)
+	}
+	grpcInterceptors = append(grpcInterceptors, interceptor.FromGRPC(retryableInterceptor.Intercept)...)
 
 	streamInterceptor := []grpc.StreamServerInterceptor{
 		authInterceptor.InterceptStream,
@@ -346,11 +351,14 @@ func GrpcServerOptionsProvider(
 		streamInterceptor = append(streamInterceptor, customStreamInterceptors...)
 	}
 
+	if transportFault := grpcfaults.StreamServerInterceptor(inboundGenerator); transportFault != nil {
+		streamInterceptor = append(streamInterceptor, transportFault)
+	}
 	grpcServerOptions = append(
 		grpcServerOptions,
 		grpc.KeepaliveParams(kp),
 		grpc.KeepaliveEnforcementPolicy(kep),
-		grpc.ChainUnaryInterceptor(unaryInterceptors...),
+		grpc.ChainUnaryInterceptor(interceptor.ToGRPC(grpcInterceptors...)...),
 		grpc.ChainStreamInterceptor(streamInterceptor...),
 	)
 
@@ -364,7 +372,7 @@ func GrpcServerOptionsProvider(
 	if len(multiStats) > 0 {
 		grpcServerOptions = append(grpcServerOptions, grpc.StatsHandler(multiStats))
 	}
-	return GrpcServerOptions{Options: grpcServerOptions, UnaryInterceptors: unaryInterceptors}
+	return GrpcServerOptions{Options: grpcServerOptions, UnaryInterceptors: httpGatewayInterceptors}
 }
 
 func ConfigProvider(
