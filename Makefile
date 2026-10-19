@@ -546,13 +546,21 @@ EXCLUDED_PACKAGES_temporal_with_gstorage := cloud.google.com/go/storage go.tempo
 # $(call server-deps,<tags>): the packages the server depends on when built with <tags>.
 server-deps = $(shell CGO_ENABLED=$(CGO_ENABLED) go list -tags $(ALL_BUILD_TAGS),$(1) -deps ./cmd/server)
 
-# $(call check-build-tag,<tag>): checks that temporal_minimal compiles the packages of <tag> out of the
-# server, and that <tag> brings them back.
+# $(call expect-deps,<tags>,<packages>): fails unless the server built with <tags> depends on all <packages>.
+expect-deps = $(if $(filter-out $(call server-deps,$(1)),$(2)),\
+	$(error Server built with tags "$(1)" doesn't depend on: $(filter-out $(call server-deps,$(1)),$(2))))
+
+# $(call reject-deps,<tags>,<packages>): fails if the server built with <tags> depends on any of <packages>.
+reject-deps = $(if $(filter $(2),$(call server-deps,$(1))),\
+	$(error Server built with tags "$(1)" depends on: $(filter $(2),$(call server-deps,$(1)))))
+
+# $(call check-build-tag,<tag>): temporal_minimal must compile the packages of <tag> out of the server,
+# and adding <tag> must bring them back.
 define check-build-tag
 $(if $(EXCLUDED_PACKAGES_$(1)),,$(error EXCLUDED_PACKAGES_$(1) is not set))
-$(if $(filter-out $(call server-deps,),$(EXCLUDED_PACKAGES_$(1))),$(error The default server doesn't depend on all of EXCLUDED_PACKAGES_$(1)))
-$(if $(filter $(EXCLUDED_PACKAGES_$(1)),$(call server-deps,temporal_minimal)),$(error The temporal_minimal server depends on EXCLUDED_PACKAGES_$(1)))
-$(if $(filter-out $(call server-deps,temporal_minimal$(comma)$(1)),$(EXCLUDED_PACKAGES_$(1))),$(error The temporal_minimal$(comma)$(1) server doesn't depend on all of EXCLUDED_PACKAGES_$(1)))
+$(call expect-deps,,$(EXCLUDED_PACKAGES_$(1)))
+$(call reject-deps,temporal_minimal,$(EXCLUDED_PACKAGES_$(1)))
+$(call expect-deps,temporal_minimal$(comma)$(1),$(EXCLUDED_PACKAGES_$(1)))
 endef
 
 # Compiles every package with temporal_minimal, and checks the packages each temporal_with_* tag
