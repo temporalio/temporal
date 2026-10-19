@@ -27,12 +27,15 @@ type WorkerConfigPayload struct {
 	WorkflowPollerAutoscaling bool
 	ActivityPollerAutoscaling bool
 	NexusPollerAutoscaling    bool
+	// Details holds additional properties not covered by the fields above.
+	// Empty today; reserved for future extensibility without schema changes.
+	Details map[string]any
 }
 
 func (p WorkerConfigPayload) EventName() string { return WorkerConfigEventName }
 
 func (p WorkerConfigPayload) Attributes() []log.KeyValue {
-	return []log.KeyValue{
+	attrs := []log.KeyValue{
 		log.String("namespace", p.Namespace),
 		log.String("task_queue", p.TaskQueue),
 		log.String("worker_instance_key", p.WorkerInstanceKey),
@@ -52,4 +55,8 @@ func (p WorkerConfigPayload) Attributes() []log.KeyValue {
 		log.Bool("activity_poller_autoscaling", p.ActivityPollerAutoscaling),
 		log.Bool("nexus_poller_autoscaling", p.NexusPollerAutoscaling),
 	}
+	if len(p.Details) > 0 {
+		attrs = append(attrs, jsonAttr("details", p.Details))
+	}
+	return attrs
 }
