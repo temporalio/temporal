@@ -3058,6 +3058,7 @@ func computeDeclinedTargetVersionUpgrade(
 
 func (ms *MutableStateImpl) ContinueAsNewMinBackoff(backoffDuration *durationpb.Duration) *durationpb.Duration {
 	// lifetime of previous execution
+	// The time source uses virtual time for time-skipped executions.
 	now := ms.timeSource.Now()
 	lifetime := max(time.Duration(0), now.Sub(ms.executionState.StartTime.AsTime().UTC()))
 	if ms.executionInfo.ExecutionTime != nil {
@@ -3157,6 +3158,9 @@ func (ms *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 				metrics.RunInitiatorTag(prevRunID, event.GetWorkflowExecutionStartedEventAttributes()),
 			),
 		).Record(1)
+	}
+	if event.GetWorkflowExecutionStartedEventAttributes().GetTimeSkippingConfig() != nil {
+		ms.emitTimeSkippingConfigUpdatedMetric()
 	}
 
 	return event, nil
@@ -6082,6 +6086,9 @@ func (ms *MutableStateImpl) AddWorkflowExecutionOptionsUpdatedEvent(
 				metrics.RunInitiatorTag("", event.GetWorkflowExecutionStartedEventAttributes()),
 			),
 		).Record(1)
+	}
+	if timeSkippingConfigUpdated {
+		ms.emitTimeSkippingConfigUpdatedMetric()
 	}
 
 	return event, nil
