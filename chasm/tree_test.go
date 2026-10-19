@@ -5046,6 +5046,29 @@ func (s *nodeSuite) TestExecuteSideEffectDiscardTask() {
 		s.True(chasmTask.DeserializedTask.IsValid())
 	})
 
+	s.Run("StandbyOverride", func() {
+		root, task, key, ctx, chasmContext := setup()
+		standby := NewMockStandbyTaskValidator[any, *TestDiscardableSideEffectTask](s.controller)
+		handler := standbyTaskHandler[any, *TestDiscardableSideEffectTask]{
+			SideEffectTaskHandler: s.testLibrary.mockDiscardableSideEffectHandler,
+			StandbyTaskValidator:  standby,
+		}
+		registered := NewRegistrableSideEffectTask(testDiscardableSideEffectTaskName, handler)
+		registration := s.registry.rtByID[testDiscardableSideEffectTaskTypeID]
+		previous := registration.validateStandbyFn
+		s.T().Cleanup(func() { registration.validateStandbyFn = previous })
+		registration.validateStandbyFn = registered.validateStandbyFn
+		standby.EXPECT().ValidateStandby(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(true, nil)
+		s.testLibrary.mockDiscardableSideEffectHandler.EXPECT().Discard(
+			gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any(),
+		).DoAndReturn(func(_ context.Context, ref ComponentRef, _ TaskAttributes, _ *TestDiscardableSideEffectTask) error {
+			_, err := root.Component(chasmContext, ref)
+			return err
+		})
+		err := root.ExecuteSideEffectDiscardTask(ctx, key, task, func(NodeBackend, Context, Component) error { return nil })
+		s.NoError(err)
+	})
+
 	s.Run("InvalidTask", func() {
 		root, chasmTask, executionKey, ctx, chasmContext := setup()
 
@@ -6704,4 +6727,75 @@ func (s *nodeSuite) TestCloseTransaction_MarkTotalTimeSkippedUpdatedInPassive() 
 		s.False(root.totalTimeSkippedUpdatedInPassive,
 			"the flag is reset after the transaction closes")
 	})
+}
+
+// standbyTaskHandler adds optional standby validation without changing the active handler.
+type standbyTaskHandler[C any, T any] struct {
+	SideEffectTaskHandler[C, T]
+	StandbyTaskValidator[C, T]
+}
+
+func (s *nodeSuite) TestStandbyTaskValidation() {
+	validationErr := errors.New("standby validation failed")
+	for _, tc := range []struct {
+		name     string
+		override bool
+		valid    bool
+		err      error
+	}{
+		{name: "fallback accepts", valid: true},
+		{name: "fallback rejects"},
+		{name: "fallback errors", err: validationErr},
+		{name: "override accepts", override: true, valid: true},
+		{name: "override rejects", override: true},
+		{name: "override errors", override: true, err: validationErr},
+	} {
+		s.Run(tc.name, func() {
+			root := s.testComponentTree()
+			ctx := s.T().Context()
+			task := &tasks.ChasmTask{
+				VisibilityTimestamp: s.timeSource.Now(),
+				Destination:         "destination",
+				Attempt:             7,
+				Info: &persistencespb.ChasmTaskInfo{
+					ComponentInitialVersionedTransition: &persistencespb.VersionedTransition{
+						TransitionCount: 1, NamespaceFailoverVersion: 1,
+					},
+					TypeId: testSideEffectTaskTypeID,
+					Data:   s.emptyDataBlob(),
+				},
+			}
+			invocation := TaskInvocation{
+				TaskAttributes: TaskAttributes{ScheduledTime: task.GetVisibilityTime(), Destination: task.Destination},
+				Attempt:        task.Attempt,
+			}
+			if tc.override {
+				standby := NewMockStandbyTaskValidator[any, *TestSideEffectTask](s.controller)
+				handler := standbyTaskHandler[any, *TestSideEffectTask]{
+					SideEffectTaskHandler: s.testLibrary.mockSideEffectTaskHandler,
+					StandbyTaskValidator:  standby,
+				}
+				registered := NewRegistrableSideEffectTask(testSideEffectTaskName, handler)
+				registration := s.registry.rtByID[testSideEffectTaskTypeID]
+				previous := registration.validateStandbyFn
+				s.T().Cleanup(func() { registration.validateStandbyFn = previous })
+				registration.validateStandbyFn = registered.validateStandbyFn
+				standby.EXPECT().ValidateStandby(gomock.Any(), gomock.Any(), invocation, gomock.Any()).Return(tc.valid, tc.err)
+			} else {
+				s.testLibrary.mockSideEffectTaskHandler.EXPECT().Validate(gomock.Any(), gomock.Any(), invocation, gomock.Any()).Return(tc.valid, tc.err)
+			}
+
+			inTree, valid, err := root.ValidateStandbySideEffectTask(ctx, task)
+			s.True(inTree)
+			s.Equal(tc.valid, valid)
+			s.ErrorIs(err, tc.err)
+
+			// Active validation must still use Validate, even when standby overrides it.
+			s.testLibrary.mockSideEffectTaskHandler.EXPECT().Validate(gomock.Any(), gomock.Any(), invocation, gomock.Any()).Return(false, nil)
+			inTree, valid, err = root.ValidateSideEffectTask(ctx, task)
+			s.NoError(err)
+			s.True(inTree)
+			s.False(valid)
+		})
+	}
 }
