@@ -1576,8 +1576,13 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 
 		// TODO bug fix: We cache the last response for each build ID. timeSinceLastFanOut is the last fan out time, that means some enteries in the cache can be more stale if
 		// user is calling this API back-to-back but with different version selection.
+		// The cached info only holds what the fan-out asked the partitions to report, so the key
+		// includes the report flags: an entry must neither leak pollers or stats into a response
+		// that did not request them, nor stand in for a response that requested more.
 		cacheKeyFunc := func(buildId string, taskQueueType enumspb.TaskQueueType) string {
-			return fmt.Sprintf("dtq_enhanced:%s.%s", buildId, taskQueueType.String())
+			//nolint:staticcheck // SA1019 deprecated
+			return fmt.Sprintf("dtq_enhanced:%s.%s.pollers=%t.stats=%t",
+				buildId, taskQueueType.String(), req.GetReportPollers(), req.GetReportStats())
 		}
 		missingItemsInCache := false
 		physicalTqInfos := make(map[string]map[enumspb.TaskQueueType]*taskqueuespb.PhysicalTaskQueueInfo)
@@ -1606,6 +1611,13 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 		}
 
 		if missingItemsInCache {
+			// The fan-out below reports every requested build ID and task queue type again, and
+			// merges what the partitions return. Drop the cached info found so far so that it is
+			// replaced instead of being merged with (and its stats double-counted).
+			for _, typeMap := range physicalTqInfos {
+				clear(typeMap)
+			}
+
 			// Fan out to partitions to get the needed info
 			var foundItems []struct {
 				buildId       string

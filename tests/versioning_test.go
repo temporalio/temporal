@@ -4188,6 +4188,18 @@ func (s *VersioningIntegSuite) TestDescribeTaskQueueEnhanced_ReportFlags() {
 			}
 		}
 		s.True(foundPoller)
+		// The last request below expects the worker's poller under each task queue type, and
+		// the worker's two pollers do not arrive together: wait until both are reported.
+		for _, tqType := range []enumspb.TaskQueueType{enumspb.TASK_QUEUE_TYPE_WORKFLOW, enumspb.TASK_QUEUE_TYPE_ACTIVITY} {
+			foundPoller = false
+			for _, pi := range versionInfo.GetTypesInfo()[int32(tqType)].GetPollers() {
+				if pi.GetIdentity() == wId {
+					foundPoller = true
+					break
+				}
+			}
+			s.True(foundPoller, "poller info should be reported for %s task queue", tqType)
+		}
 	}, 3*time.Second, 500*time.Millisecond)
 
 	// ask for reachability only
