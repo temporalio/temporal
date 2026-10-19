@@ -254,8 +254,10 @@ func newRegistryImpl(params RegistryParams) *registryImpl {
 		eventLogger:                 params.EventLogger,
 		enableWorkerHeartbeatEvents: params.EnableWorkerHeartbeatEvents,
 		metricsEmitter: &workerMetricsEmitter{
-			handler: params.MetricsHandler,
-			config:  params.MetricsConfig,
+			handler:                     params.MetricsHandler,
+			config:                      params.MetricsConfig,
+			eventLogger:                 params.EventLogger,
+			enableWorkerHeartbeatEvents: params.EnableWorkerHeartbeatEvents,
 		},
 	}
 

@@ -2,6 +2,7 @@ package workers
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -15,6 +16,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/wideevents"
 	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
@@ -313,7 +315,7 @@ func TestEmitWorkerConfigEventMacOS(t *testing.T) {
 	require.Equal(t, "macos", attrs["os"].AsString())
 	require.Equal(t, "14.2", attrs["os_version"].AsString())
 	require.Equal(t, "arm64", attrs["architecture"].AsString())
-	require.Equal(t, "", attrs["libc"].AsString())
+	require.Empty(t, attrs["libc"].AsString())
 }
 
 func TestEmitWorkerConfigEventWindows(t *testing.T) {
@@ -373,8 +375,170 @@ func TestEmitWorkerConfigEventHostingEnvironmentVersion(t *testing.T) {
 }
 
 func TestUnknownEnumValues(t *testing.T) {
-	require.Equal(t, "", libcName(workerpb.EnvironmentInfo_LinuxPlatform_LIBC_UNSPECIFIED))
-	require.Equal(t, "", libcName(workerpb.EnvironmentInfo_LinuxPlatform_Libc(999)))
-	require.Equal(t, "", crtName(workerpb.EnvironmentInfo_WindowsPlatform_CRT_UNSPECIFIED))
-	require.Equal(t, "", crtName(workerpb.EnvironmentInfo_WindowsPlatform_Crt(999)))
+	require.Empty(t, libcName(workerpb.EnvironmentInfo_LinuxPlatform_LIBC_UNSPECIFIED))
+	require.Empty(t, libcName(workerpb.EnvironmentInfo_LinuxPlatform_Libc(999)))
+	require.Empty(t, crtName(workerpb.EnvironmentInfo_WindowsPlatform_CRT_UNSPECIFIED))
+	require.Empty(t, crtName(workerpb.EnvironmentInfo_WindowsPlatform_Crt(999)))
+}
+
+func TestEmitWorkerMetricsEvent(t *testing.T) {
+	eventLogger := &captureEventLogger{}
+	emitter := &workerMetricsEmitter{
+		handler:                     metricstest.NewCaptureHandler(),
+		config:                      WorkerMetricsConfig{},
+		eventLogger:                 eventLogger,
+		enableWorkerHeartbeatEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+	}
+
+	hb := &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: "w1",
+		TaskQueue:         "my-queue",
+		WorkflowTaskSlotsInfo: &workerpb.WorkerSlotsInfo{
+			CurrentAvailableSlots:      8,
+			CurrentUsedSlots:           2,
+			TotalProcessedTasks:        1000,
+			TotalFailedTasks:           10,
+			LastIntervalProcessedTasks: 50,
+			LastIntervalFailureTasks:   1,
+		},
+		WorkflowPollerInfo: &workerpb.WorkerPollerInfo{
+			CurrentPollers: 3,
+		},
+		WorkflowStickyPollerInfo: &workerpb.WorkerPollerInfo{
+			CurrentPollers: 2,
+		},
+		CurrentStickyCacheSize: 100,
+		TotalStickyCacheHit:    500,
+		TotalStickyCacheMiss:   20,
+	}
+
+	emitter.emitWorkerMetricsEvent(namespace.Name("ns"), hb)
+
+	require.Len(t, eventLogger.records, 1)
+	require.Equal(t, "worker_metrics", eventLogger.records[0].EventName())
+
+	attrs := map[string]otellog.Value{}
+	eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		attrs[kv.Key] = kv.Value
+		return true
+	})
+	require.Equal(t, "w1", attrs["worker_instance_key"].AsString())
+
+	var stats map[string]wideevents.WorkerTaskTypeStats
+	require.NoError(t, json.Unmarshal([]byte(attrs["task_type_stats"].AsString()), &stats))
+	require.Equal(t, wideevents.WorkerTaskTypeStats{
+		TotalSlots:                 int32Ptr(10),
+		UsedSlots:                  int32Ptr(2),
+		CurrentPollers:             int32Ptr(3),
+		CurrentStickyPollers:       int32Ptr(2),
+		TotalProcessedTasks:        int32Ptr(1000),
+		TotalFailedTasks:           int32Ptr(10),
+		LastIntervalProcessedTasks: int32Ptr(50),
+		LastIntervalFailureTasks:   int32Ptr(1),
+	}, stats["workflow"])
+
+	var details struct {
+		StickyCacheSize int32 `json:"sticky_cache_size"`
+		StickyCacheHit  int32 `json:"sticky_cache_hit"`
+		StickyCacheMiss int32 `json:"sticky_cache_miss"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(attrs["details"].AsString()), &details))
+	require.Equal(t, int32(100), details.StickyCacheSize)
+	require.Equal(t, int32(500), details.StickyCacheHit)
+	require.Equal(t, int32(20), details.StickyCacheMiss)
+}
+
+func TestEmitWorkerMetricsEventNoSlots(t *testing.T) {
+	eventLogger := &captureEventLogger{}
+	emitter := &workerMetricsEmitter{
+		handler:                     metricstest.NewCaptureHandler(),
+		config:                      WorkerMetricsConfig{},
+		eventLogger:                 eventLogger,
+		enableWorkerHeartbeatEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+	}
+
+	emitter.emitWorkerMetricsEvent(namespace.Name("ns"), &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey:      "w1",
+		CurrentStickyCacheSize: 50,
+	})
+
+	// Event is emitted even without slots — sticky cache data is still useful
+	require.Len(t, eventLogger.records, 1)
+	attrs := map[string]otellog.Value{}
+	eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		attrs[kv.Key] = kv.Value
+		return true
+	})
+	require.Equal(t, "w1", attrs["worker_instance_key"].AsString())
+	var details struct {
+		StickyCacheSize int32 `json:"sticky_cache_size"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(attrs["details"].AsString()), &details))
+	require.Equal(t, int32(50), details.StickyCacheSize)
+}
+
+func TestEmitWorkerMetricsEventUnknownAvailableSlots(t *testing.T) {
+	eventLogger := &captureEventLogger{}
+	emitter := &workerMetricsEmitter{
+		handler:                     metricstest.NewCaptureHandler(),
+		config:                      WorkerMetricsConfig{},
+		eventLogger:                 eventLogger,
+		enableWorkerHeartbeatEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+	}
+
+	emitter.emitWorkerMetricsEvent(namespace.Name("ns"), &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: "w1",
+		WorkflowTaskSlotsInfo: &workerpb.WorkerSlotsInfo{
+			CurrentAvailableSlots: -1,
+			CurrentUsedSlots:      5,
+		},
+	})
+
+	require.Len(t, eventLogger.records, 1)
+	attrs := map[string]otellog.Value{}
+	eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		attrs[kv.Key] = kv.Value
+		return true
+	})
+	var stats map[string]wideevents.WorkerTaskTypeStats
+	require.NoError(t, json.Unmarshal([]byte(attrs["task_type_stats"].AsString()), &stats))
+	require.Equal(t, int32Ptr(-1), stats["workflow"].TotalSlots)
+	require.Equal(t, int32Ptr(5), stats["workflow"].UsedSlots)
+}
+
+func TestEmitWorkerMetricsEventPollersWithoutSlots(t *testing.T) {
+	eventLogger := &captureEventLogger{}
+	emitter := &workerMetricsEmitter{
+		handler:                     metricstest.NewCaptureHandler(),
+		config:                      WorkerMetricsConfig{},
+		eventLogger:                 eventLogger,
+		enableWorkerHeartbeatEvents: dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true),
+	}
+
+	// Worker has pollers but no slot info for activity
+	emitter.emitWorkerMetricsEvent(namespace.Name("ns"), &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: "w1",
+		ActivityPollerInfo: &workerpb.WorkerPollerInfo{
+			CurrentPollers: 5,
+		},
+	})
+
+	require.Len(t, eventLogger.records, 1)
+	attrs := map[string]otellog.Value{}
+	eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		attrs[kv.Key] = kv.Value
+		return true
+	})
+	var stats map[string]wideevents.WorkerTaskTypeStats
+	require.NoError(t, json.Unmarshal([]byte(attrs["task_type_stats"].AsString()), &stats))
+
+	// Activity should have pollers but no slot fields
+	act := stats["activity"]
+	require.Equal(t, int32Ptr(5), act.CurrentPollers)
+	require.Nil(t, act.TotalSlots)
+	require.Nil(t, act.UsedSlots)
+
+	// Workflow/nexus/local_activity should be absent (no messages)
+	_, hasWorkflow := stats["workflow"]
+	require.False(t, hasWorkflow)
 }

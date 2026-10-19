@@ -931,12 +931,15 @@ func TestWorkerConfigEventOnlyOnFirstHeartbeat(t *testing.T) {
 	}
 
 	m.RecordWorkerHeartbeats(namespace.ID("ns"), namespace.Name("ns"), nil, []*workerpb.WorkerHeartbeat{hb})
-	require.Len(t, eventLogger.records, 1)
+	// First heartbeat: worker_config + worker_metrics
+	require.Len(t, eventLogger.records, 2)
 	require.Equal(t, "worker_config", eventLogger.records[0].EventName())
+	require.Equal(t, "worker_metrics", eventLogger.records[1].EventName())
 
-	// Second heartbeat — should not emit again
+	// Second heartbeat — only worker_metrics, no second worker_config
 	m.RecordWorkerHeartbeats(namespace.ID("ns"), namespace.Name("ns"), nil, []*workerpb.WorkerHeartbeat{hb})
-	require.Len(t, eventLogger.records, 1)
+	require.Len(t, eventLogger.records, 3)
+	require.Equal(t, "worker_metrics", eventLogger.records[2].EventName())
 }
 
 func TestWorkerConfigEventNilLogger(t *testing.T) {

@@ -23,8 +23,10 @@ type WorkerMetricsConfig struct {
 
 // workerMetricsEmitter encapsulates logic for emitting metrics derived from worker heartbeats.
 type workerMetricsEmitter struct {
-	handler metrics.Handler
-	config  WorkerMetricsConfig
+	handler                     metrics.Handler
+	config                      WorkerMetricsConfig
+	eventLogger                 otellog.Logger
+	enableWorkerHeartbeatEvents dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, heartbeats []*workerpb.WorkerHeartbeat) {
@@ -36,6 +38,7 @@ func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, he
 	enablePluginMetrics := e.config.EnablePluginMetrics != nil && e.config.EnablePluginMetrics()
 	enablePollerAutoscalingMetrics := e.config.EnablePollerAutoscalingMetrics != nil && e.config.EnablePollerAutoscalingMetrics()
 	enableStorageDriverMetrics := e.config.ExternalPayloadsEnabled != nil && e.config.ExternalPayloadsEnabled(nsName.String())
+	enableWorkerHeartbeatEvents := e.enableWorkerHeartbeatEvents != nil && e.enableWorkerHeartbeatEvents(nsName.String())
 
 	recordedPlugins := make(map[string]bool)
 	recordedDrivers := make(map[string]bool)
@@ -75,6 +78,10 @@ func (e *workerMetricsEmitter) emit(nsID namespace.ID, nsName namespace.Name, he
 					recordedDrivers[driverType] = true
 				}
 			}
+		}
+
+		if enableWorkerHeartbeatEvents {
+			e.emitWorkerMetricsEvent(nsName, hb)
 		}
 	}
 }
@@ -158,6 +165,63 @@ func emitWorkerConfigEvent(logger otellog.Logger, nsName namespace.Name, hb *wor
 		NexusPollerAutoscaling:    hb.GetNexusPollerInfo().GetIsAutoscaling(),
 	})
 }
+
+func (e *workerMetricsEmitter) emitWorkerMetricsEvent(nsName namespace.Name, hb *workerpb.WorkerHeartbeat) {
+	type taskEntry struct {
+		taskType   string
+		slots      *workerpb.WorkerSlotsInfo
+		pollerInfo *workerpb.WorkerPollerInfo
+		stickyInfo *workerpb.WorkerPollerInfo
+	}
+	entries := []taskEntry{
+		{"workflow", hb.GetWorkflowTaskSlotsInfo(), hb.GetWorkflowPollerInfo(), hb.GetWorkflowStickyPollerInfo()},
+		{"activity", hb.GetActivityTaskSlotsInfo(), hb.GetActivityPollerInfo(), nil},
+		{"nexus", hb.GetNexusTaskSlotsInfo(), hb.GetNexusPollerInfo(), nil},
+		{"local_activity", hb.GetLocalActivitySlotsInfo(), nil, nil}, // local activities run in-process, no pollers
+	}
+
+	stats := make(map[string]wideevents.WorkerTaskTypeStats)
+	for _, te := range entries {
+		// Only include task types that have at least one source message present.
+		if te.slots == nil && te.pollerInfo == nil && te.stickyInfo == nil {
+			continue
+		}
+		s := wideevents.WorkerTaskTypeStats{}
+		if te.pollerInfo != nil {
+			s.CurrentPollers = int32Ptr(te.pollerInfo.GetCurrentPollers())
+		}
+		if te.stickyInfo != nil {
+			s.CurrentStickyPollers = int32Ptr(te.stickyInfo.GetCurrentPollers())
+		}
+		if te.slots != nil {
+			totalSlots := te.slots.GetCurrentAvailableSlots() + te.slots.GetCurrentUsedSlots()
+			if te.slots.GetCurrentAvailableSlots() < 0 {
+				totalSlots = -1
+			}
+			s.TotalSlots = int32Ptr(totalSlots)
+			s.UsedSlots = int32Ptr(te.slots.GetCurrentUsedSlots())
+			s.TotalProcessedTasks = int32Ptr(te.slots.GetTotalProcessedTasks())
+			s.TotalFailedTasks = int32Ptr(te.slots.GetTotalFailedTasks())
+			s.LastIntervalProcessedTasks = int32Ptr(te.slots.GetLastIntervalProcessedTasks())
+			s.LastIntervalFailureTasks = int32Ptr(te.slots.GetLastIntervalFailureTasks())
+		}
+		stats[te.taskType] = s
+	}
+
+	wideevents.Emit(e.eventLogger, wideevents.WorkerMetricsPayload{
+		Namespace:         nsName.String(),
+		TaskQueue:         hb.GetTaskQueue(),
+		WorkerInstanceKey: hb.GetWorkerInstanceKey(),
+		TaskTypeStats:     stats,
+		Details: map[string]any{
+			"sticky_cache_size": hb.GetCurrentStickyCacheSize(),
+			"sticky_cache_hit":  hb.GetTotalStickyCacheHit(),
+			"sticky_cache_miss": hb.GetTotalStickyCacheMiss(),
+		},
+	})
+}
+
+func int32Ptr(v int32) *int32 { return &v }
 
 // runtimeTypeName returns a clean tag value for a RuntimeType enum, e.g. "go", "cpython", "jvm".
 func runtimeTypeName(rt workerpb.EnvironmentInfo_Runtime_RuntimeType) string {
