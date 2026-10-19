@@ -21,6 +21,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/metrics/metricstest"
 	"go.temporal.io/server/common/retrypolicy"
+	"go.temporal.io/server/common/testing/await"
 	"go.temporal.io/server/common/testing/parallelsuite"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/tests/testcore"
@@ -834,6 +835,60 @@ func (s *activityParityTestSuite) TestReset() {
 					})
 			})
 		}
+	})
+
+	t.Run("NonRetryableTimeoutWhileResetPending", func(t *testing.T) {
+		for _, tc := range []struct {
+			name        string
+			event       model.Event
+			timeoutType enumspb.TimeoutType
+		}{
+			{name: "StartToClose", event: model.StartToCloseElapses, timeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE},
+			{name: "Heartbeat", event: model.HeartbeatElapses, timeoutType: enumspb.TIMEOUT_TYPE_HEARTBEAT},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				cfg := deferredResetCfg
+				cfg.NonRetryableErrorTypes = []string{retrypolicy.TimeoutFailureTypePrefix + tc.timeoutType.String()}
+				parityDrive(t, env, cfg, []model.Event{model.Poll, model.Reset, tc.event},
+					func(t *testing.T, a parityActivity) {
+						require.Equal(t, activityTerminalProjection{
+							Status:      enumspb.ACTIVITY_EXECUTION_STATUS_TIMED_OUT,
+							FailureType: tc.timeoutType.String(),
+							RetryState:  enumspb.RETRY_STATE_NON_RETRYABLE_FAILURE,
+						}, a.terminal(t))
+					})
+			})
+		}
+	})
+
+	t.Run("KeepPausedResetWithExhaustedRetryBudget", func(t *testing.T) {
+		trace := []model.Event{model.Poll, model.Pause, model.ResetKeepPaused}
+		// Reset counter timing currently differs between WFA and SAA.
+		// Use direct RPCs to verify resumability without asserting counter parity.
+		assertRunnable := func(t *testing.T, a drivenActivity) {
+			require.NoError(t, a.rpc(t, model.FailRetryably))
+			await.Require(a.testContext(), t, func(t *await.T) {
+				require.Equal(t, enumspb.PENDING_ACTIVITY_STATE_PAUSED, a.observedState(t).runState)
+			}, activityDriverTimeout, activityDriverPollInterval)
+
+			require.NoError(t, a.rpc(t, model.Unpause))
+			task := a.pollForTask(t, activityDriverTimeout)
+			require.NotNil(t, task, "the reset attempt must be runnable after unpause")
+			a.driverState().token = task.GetTaskToken()
+			a.driverState().startedAttempt = task.GetAttempt()
+			require.NoError(t, a.rpc(t, model.Complete))
+		}
+
+		t.Run("WorkflowActivity", func(t *testing.T) {
+			a := newWFADriver(t, env, spentBudgetCfg).driveTrace(t, trace)
+			assertRunnable(t, a)
+			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, a.terminal(t).Status)
+		})
+		t.Run("StandaloneActivity", func(t *testing.T) {
+			a := newSAADriver(t, env, spentBudgetCfg).driveTrace(t, trace)
+			assertRunnable(t, a)
+			require.Equal(t, enumspb.ACTIVITY_EXECUTION_STATUS_COMPLETED, a.terminal(t).Status)
+		})
 	})
 
 	// Heartbeats report both pending requests so the worker knows to stop work for the pause.
