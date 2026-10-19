@@ -309,6 +309,8 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 	updateBacklogStatsForTest(db, 2, time.Time{})
 	s.EqualValues(5, totalApproximateBacklogCount(s.blm))
 
+	_, ackLevelBeforeGap := blm.subqueues[subqueueZero].getLevels()
+
 	// Advance maxReadLevel past all task IDs to simulate a range renewal.
 	// After direct-add, readLevel == old maxReadLevel == last task ID.
 	maxRL := db.GetMaxReadLevel(subqueueZero) + 100
@@ -324,6 +326,12 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 		return rl >= maxRL
 	}, 5*time.Second, 10*time.Millisecond)
 
+	// All three tasks are still unfinished, so only readLevel may advance.
+	_, ackLevel := blm.subqueues[subqueueZero].getLevels()
+	s.Require().Equal(ackLevelBeforeGap, ackLevel)
+	s.Require().Equal(ackLevelBeforeGap, s.dbAckLevel(blm))
+	s.Require().EqualValues(5, totalApproximateBacklogCount(s.blm))
+
 	// Complete all tasks. On the last completion:
 	// - outstandingTasks is empty
 	// - readLevel >= maxReadLevel (pump already scanned)
@@ -334,7 +342,7 @@ func (s *BacklogManagerTestSuite) TestApproximateBacklogCount_ResetOnDrained() {
 		t.finish(taskFinishResult{consumedToken: true})
 	}
 
-	_, ackLevel := blm.subqueues[subqueueZero].getLevels()
+	_, ackLevel = blm.subqueues[subqueueZero].getLevels()
 	s.Equal(ackLevel, maxRL)
 
 	s.Zero(totalApproximateBacklogCount(s.blm))
@@ -549,39 +557,6 @@ func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_ExpiredTail() {
 			s.Require().Zero(blm.db.getTotalApproximateBacklogCount())
 		})
 	}
-}
-
-func (s *BacklogManagerTestSuite) TestSetReadLevelAfterGap_OutstandingTasks() {
-	if s.fairness {
-		s.T().Skip("this test is only for priority backlog manager")
-	}
-	s.setupToCaptureTasks()
-	blm, tr, start := s.initPriReaderAtEnd()
-
-	tr.signalNewTasks(s.createTasksAt(blm, start+1, start+2))
-	tasks := s.capturedTasks()
-	s.Require().Len(tasks, 2)
-	tasks[1].finish(taskFinishResult{consumedToken: true})
-	maxReadLevel := start + 100
-	blm.db.setMaxReadLevelForTesting(subqueueZero, maxReadLevel)
-
-	batch, err := tr.getTaskBatch(blm.tqCtx)
-	s.Require().NoError(err)
-	s.Require().Empty(batch.tasks)
-	s.Require().True(batch.isReadBatchDone)
-	tr.setReadLevelAfterGap(batch.readLevel)
-
-	readLevel, ackLevel := tr.getLevels()
-	s.Require().Equal(maxReadLevel, readLevel)
-	s.Require().Equal(start, ackLevel)
-	s.Require().Equal(start, s.dbAckLevel(blm))
-	s.Require().EqualValues(2, blm.db.getTotalApproximateBacklogCount())
-
-	tasks[0].finish(taskFinishResult{consumedToken: true})
-	_, ackLevel = tr.getLevels()
-	s.Require().Equal(maxReadLevel, ackLevel)
-	s.Require().Equal(maxReadLevel, s.dbAckLevel(blm))
-	s.Require().Zero(blm.db.getTotalApproximateBacklogCount())
 }
 
 // TestProcessTaskBatch_IgnoresAlreadyAckedTasks covers the other half of the same read/write
