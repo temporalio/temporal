@@ -60,6 +60,15 @@ type (
 		pureTaskHandler()
 	}
 
+	// StandbyTaskValidator optionally overrides a side-effect task handler's validation during standby
+	// processing, including component access from Discard. If a handler does not implement
+	// this interface, standby processing uses Validate.
+	StandbyTaskValidator[C any, T any] interface {
+		// ValidateStandby checks whether a task is still pending using replicated component
+		// state. It has the same return semantics as TaskValidator.Validate.
+		ValidateStandby(Context, C, TaskInvocation, T) (bool, error)
+	}
+
 	// TaskValidator is implemented by both [SideEffectTaskHandler] and [PureTaskHandler] to gate
 	// whether a task should proceed with execution.
 	TaskValidator[C any, T any] interface {
@@ -77,6 +86,8 @@ type (
 		//
 		// The framework automatically calls Validate at key points, such as after closing transactions, to check all
 		// generated tasks before they execute.
+		//
+		// Side-effect handlers may implement [StandbyTaskValidator] to override validation on standby.
 		//
 		// Returns:
 		// - (true, nil) if the task is valid and should be executed

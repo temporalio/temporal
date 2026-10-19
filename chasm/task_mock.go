@@ -160,6 +160,45 @@ func (mr *MockPureTaskHandlerMockRecorder[C, T]) pureTaskHandler() *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "pureTaskHandler", reflect.TypeOf((*MockPureTaskHandler[C, T])(nil).pureTaskHandler))
 }
 
+// MockStandbyTaskValidator is a mock of StandbyTaskValidator interface.
+type MockStandbyTaskValidator[C any, T any] struct {
+	ctrl     *gomock.Controller
+	recorder *MockStandbyTaskValidatorMockRecorder[C, T]
+	isgomock struct{}
+}
+
+// MockStandbyTaskValidatorMockRecorder is the mock recorder for MockStandbyTaskValidator.
+type MockStandbyTaskValidatorMockRecorder[C any, T any] struct {
+	mock *MockStandbyTaskValidator[C, T]
+}
+
+// NewMockStandbyTaskValidator creates a new mock instance.
+func NewMockStandbyTaskValidator[C any, T any](ctrl *gomock.Controller) *MockStandbyTaskValidator[C, T] {
+	mock := &MockStandbyTaskValidator[C, T]{ctrl: ctrl}
+	mock.recorder = &MockStandbyTaskValidatorMockRecorder[C, T]{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockStandbyTaskValidator[C, T]) EXPECT() *MockStandbyTaskValidatorMockRecorder[C, T] {
+	return m.recorder
+}
+
+// ValidateStandby mocks base method.
+func (m *MockStandbyTaskValidator[C, T]) ValidateStandby(arg0 Context, arg1 C, arg2 TaskInvocation, arg3 T) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ValidateStandby", arg0, arg1, arg2, arg3)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ValidateStandby indicates an expected call of ValidateStandby.
+func (mr *MockStandbyTaskValidatorMockRecorder[C, T]) ValidateStandby(arg0, arg1, arg2, arg3 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ValidateStandby", reflect.TypeOf((*MockStandbyTaskValidator[C, T])(nil).ValidateStandby), arg0, arg1, arg2, arg3)
+}
+
 // MockTaskValidator is a mock of TaskValidator interface.
 type MockTaskValidator[C any, T any] struct {
 	ctrl     *gomock.Controller
