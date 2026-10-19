@@ -264,15 +264,15 @@ func (s *NexusApiTestSuite) TestNexusStartOperation_Outcomes(useTemporalFailures
 
 	testFn := func(s *NexusApiTestSuite, tc testcase, dispatchOnlyByEndpoint bool) {
 		env := newNexusTestEnv(s.T(), useTemporalFailures)
-		// Sibling subtests run in parallel and may share a cluster, where endpoint names are unique.
-		endpointName := testcore.RandomizeStr("test-endpoint")
-		endpoint := env.createNexusEndpoint(s.Context(), s.T(), endpointName, testcore.RandomizeStr("task-queue"))
+		tv := env.Tv()
+		endpoint := env.createNexusEndpoint(s.Context(), s.T(), tv.NexusEndpointName(), tv.TaskQueue().Name)
 		handler := tc.handler
 		var dispatchURL string
 		if dispatchOnlyByEndpoint {
 			dispatchURL = env.dispatchByEndpointURL(endpoint.Id)
+			// The endpoint name is subtest-specific, so check it before the shared outcome handler.
 			handler = func(t *testing.T, res *workflowservice.PollNexusTaskQueueResponse) (*nexusTaskResponse, error) {
-				require.Equal(t, endpointName, res.Request.Endpoint)
+				require.Equal(t, tv.NexusEndpointName(), res.Request.Endpoint)
 				return tc.handler(t, res)
 			}
 		} else {
@@ -525,15 +525,15 @@ func (s *NexusApiTestSuite) TestNexusCancelOperation_Outcomes(useTemporalFailure
 
 	testFn := func(s *NexusApiTestSuite, tc testcase, dispatchOnlyByEndpoint bool) {
 		env := newNexusTestEnv(s.T(), useTemporalFailures)
-		// Sibling subtests run in parallel and may share a cluster, where endpoint names are unique.
-		endpointName := testcore.RandomizeStr("test-endpoint")
-		endpoint := env.createNexusEndpoint(s.Context(), s.T(), endpointName, testcore.RandomizeStr("task-queue"))
+		tv := env.Tv()
+		endpoint := env.createNexusEndpoint(s.Context(), s.T(), tv.NexusEndpointName(), tv.TaskQueue().Name)
 		handler := tc.handler
 		var dispatchURL string
 		if dispatchOnlyByEndpoint {
 			dispatchURL = env.dispatchByEndpointURL(endpoint.Id)
+			// The endpoint name is subtest-specific, so check it before the shared outcome handler.
 			handler = func(t *testing.T, res *workflowservice.PollNexusTaskQueueResponse) (*nexusTaskResponse, error) {
-				require.Equal(t, endpointName, res.Request.Endpoint)
+				require.Equal(t, tv.NexusEndpointName(), res.Request.Endpoint)
 				return tc.handler(t, res)
 			}
 		} else {
