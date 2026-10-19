@@ -12,7 +12,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/temporalproto"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -734,8 +733,9 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 			mutableState.GetExecutionInfo().WorkflowTaskOriginalScheduledTime = input.UpdateWorkflowMutation.ExecutionInfo.WorkflowTaskOriginalScheduledTime
 			mutableState.GetExecutionInfo().ExecutionStats = &persistencespb.ExecutionStats{}
 
-			s.True(temporalproto.DeepEqual(&persistence.UpdateWorkflowExecutionRequest{
-				ShardID: s.mockShard.GetShardID(),
+			s.DeepEqual(&persistence.UpdateWorkflowExecutionRequest{
+				ShardID:     s.mockShard.GetShardID(),
+				ArchetypeID: chasm.WorkflowArchetypeID,
 				UpdateWorkflowMutation: persistence.WorkflowMutation{
 					ExecutionInfo:             mutableState.GetExecutionInfo(),
 					ExecutionState:            mutableState.GetExecutionState(),
@@ -756,9 +756,10 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Multiple
 					DeleteSignalRequestedIDs:  map[string]struct{}{},
 					NewBufferedEvents:         nil,
 					ClearBufferedEvents:       false,
+					BestEffortDeleteTasks:     map[tasks.Category][]tasks.Key{},
 				},
 				UpdateWorkflowEvents: []*persistence.WorkflowEvents{},
-			}, input))
+			}, input)
 			return tests.UpdateWorkflowExecutionResponse, nil
 		})
 

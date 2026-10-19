@@ -10,7 +10,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/temporalproto"
 	"go.temporal.io/server/chasm"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -365,19 +364,19 @@ func (s *ESVisibilitySuite) TestCountExecutions_GroupBy() {
 		Groups: []store.InternalAggregationGroup{
 			{
 				GroupValues: []*commonpb.Payload{
-					mustEncodeValue(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+					mustEncodeValue("Completed", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 				},
 				Count: 100,
 			},
 			{
 				GroupValues: []*commonpb.Payload{
-					mustEncodeValue(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, enumspb.INDEXED_VALUE_TYPE_KEYWORD),
+					mustEncodeValue("Running", enumspb.INDEXED_VALUE_TYPE_KEYWORD),
 				},
 				Count: 10,
 			},
 		},
 	}
-	s.True(temporalproto.DeepEqual(expectedResp, resp))
+	s.DeepEqual(expectedResp, resp)
 }
 
 func (s *ESVisibilitySuite) TestCountExecutions_NamespaceNotFound() {

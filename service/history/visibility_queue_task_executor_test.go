@@ -230,6 +230,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
 				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
 			},
+			RootExecutionInfo: &workflowspb.RootExecutionInfo{Execution: rootExecution},
 			ParentExecutionInfo: &workflowspb.ParentExecutionInfo{
 				NamespaceId:      parentNamespaceID,
 				Namespace:        parentNamespace,
@@ -316,6 +317,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecutionWithWorkflow
 				WorkflowExecutionTimeout: durationpb.New(2 * time.Second),
 				WorkflowTaskTimeout:      durationpb.New(1 * time.Second),
 			},
+			RootExecutionInfo: &workflowspb.RootExecutionInfo{Execution: rootExecution},
 			ParentExecutionInfo: &workflowspb.ParentExecutionInfo{
 				NamespaceId:      parentNamespaceID,
 				Namespace:        parentNamespace,
@@ -992,6 +994,8 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionClosedRe
 	searchAttributes map[string]any,
 ) gomock.Matcher {
 	executionInfo := mutableState.GetExecutionInfo()
+	executionDuration, err := mutableState.GetWorkflowExecutionDuration(context.Background())
+	s.NoError(err)
 	return protomock.Eq(&manager.RecordWorkflowExecutionClosedRequest{
 		VisibilityRequestBase: s.createVisibilityRequestBase(
 			namespaceName,
@@ -1003,6 +1007,7 @@ func (s *visibilityQueueTaskExecutorSuite) createRecordWorkflowExecutionClosedRe
 			searchAttributes,
 		),
 		CloseTime:            timestamp.TimeValue(executionInfo.GetCloseTime()),
+		ExecutionDuration:    executionDuration,
 		HistoryLength:        mutableState.GetNextEventID() - 1,
 		HistorySizeBytes:     executionInfo.GetExecutionStats().GetHistorySize(),
 		StateTransitionCount: executionInfo.GetStateTransitionCount(),
