@@ -26,8 +26,6 @@ env:
   TEMPORAL_AWAIT_ATTEMPT_TIMEOUT: 15s
   MAX_TEST_ATTEMPTS: 3
   SHARD_COUNT: 5 # NOTE: must match shard count in optimize-test-sharding.yml
-  # Functional tests don't use all the integrations that temporal_minimal compiles out.
-  FUNCTIONAL_TEST_BUILD_TAGS: temporal_minimal
 
 jobs:
   test-setup:
@@ -215,13 +213,7 @@ jobs:
         id: prepare-go
         uses: ./.github/actions/prepare-go
 
-      # Build the default server variant.
       - run: make pre-build-functional-test-coverage
-
-      # Build the variant the functional tests use.
-      - run: make pre-build-functional-test-coverage
-        env:
-          TEST_TAG: ${{ env.FUNCTIONAL_TEST_BUILD_TAGS }}
 
       - name: Save Go dependencies
         uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
@@ -439,7 +431,6 @@ jobs:
           TEST_TOTAL_SHARDS: ${{ matrix.total_shards }}
           TEST_SHARD_INDEX: ${{ matrix.total_shards && matrix.shard_index }} # guard with total_shards to avoid falsy eval of shard_index=0
           TEST_ARGS: "${{ matrix.test_args }}"
-          TEST_TAG: ${{ env.FUNCTIONAL_TEST_BUILD_TAGS }}
           TEMPORAL_TEST_LOG_FILE: ${{ github.workspace }}/.testoutput/debug.log
           TEMPORAL_TEST_LOG_LEVEL: warn
           TEMPORAL_TEST_CLUSTER_EVENTS_FILE: ${{ github.workspace }}/.testoutput/test-cluster-events.jsonl
