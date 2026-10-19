@@ -3,6 +3,7 @@ package resource_test
 import (
 	"context"
 	"errors"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -20,10 +21,12 @@ import (
 	"go.temporal.io/server/common/rpc/auth"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/rpc/grpcfaults"
+	"go.temporal.io/server/common/rpc/httpfaults"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/common/testing/faultinjectiontest"
+	"go.temporal.io/server/common/testing/httpfaultstest"
 	"go.temporal.io/server/common/testing/testhooks"
 	"go.temporal.io/server/service"
 	"go.uber.org/fx"
@@ -109,6 +112,48 @@ func TestGRPCFaultParamsPreserveStandaloneHooks(t *testing.T) {
 			} else {
 				require.Nil(t, outcome)
 			}
+		})
+	}
+}
+
+type roundTripper func(*http.Request) (*http.Response, error)
+
+func (f roundTripper) RoundTrip(req *http.Request) (*http.Response, error) { return f(req) }
+
+func TestHTTPFaultParamsPreserveStandaloneHooksAndTracing(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{"standalone", "generator provider"} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			hooks := testhooks.NewTestHooks()
+			injected := errors.New("runtime HTTP fault")
+			calls := 0
+			unregister := httpfaultstest.NewCallbackGenerator(hooks).RegisterRequestCallback(httpfaults.Scope{NamespaceID: "namespace"}, func(context.Context, string, *httpfaults.Request) *httpfaults.Outcome {
+				calls++
+				return &httpfaults.Outcome{Error: injected}
+			})
+			defer unregister()
+			instrumented := 0
+			opts := []fx.Option{fx.NopLogger, fx.Supply(&config.Config{}, hooks, telemetry.HTTPClientTransportInstrumenter(func(rt http.RoundTripper) http.RoundTripper { instrumented++; return rt }))}
+			if mode != "standalone" {
+				opts = append(opts, fx.Provide(resource.HTTPFaultGeneratorsProvider))
+			}
+
+			var params resource.HTTPFaultParams
+			opts = append(opts, fx.Populate(&params))
+			app := fx.New(opts...)
+			require.NoError(t, app.Err())
+			transport := params.Wrap(roundTripper(func(*http.Request) (*http.Response, error) {
+				t.Fatal("fault should skip the transport")
+				return nil, nil
+			}))
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, "http://example.com", nil)
+			require.NoError(t, err)
+			resp, err := transport.RoundTrip(httpfaults.WithScope(req, httpfaults.Scope{NamespaceID: "namespace"}))
+			require.ErrorIs(t, err, injected)
+			require.Nil(t, resp)
+			require.Equal(t, 1, calls)
+			require.Equal(t, 1, instrumented)
 		})
 	}
 }
