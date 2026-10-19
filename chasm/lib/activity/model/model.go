@@ -23,13 +23,6 @@ import (
 	"slices"
 )
 
-// HeartbeatFlags are the flags a heartbeat response carries back to the worker.
-type HeartbeatFlags struct {
-	CancelRequested bool
-	ActivityPaused  bool
-	ActivityReset   bool
-}
-
 // Outcome is the return type of a transition function. It specifies the consequences of an event.
 type Outcome struct {
 	Next                       AbstractState

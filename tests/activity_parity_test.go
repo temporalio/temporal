@@ -732,7 +732,7 @@ type parityActivity interface {
 	activityInfo(require.TestingT) activityInfo
 	terminal(require.TestingT) activityTerminalProjection
 	driveEvent(testing.TB, model.Event)
-	heartbeatFlags() model.HeartbeatFlags
+	heartbeatFlags() activityHeartbeatFlags
 }
 
 // parityDrive drives trace through both implementations and hands each resulting activity to check.
@@ -751,16 +751,16 @@ func parityDrive(
 	})
 }
 
-func (a *wfaHandle) heartbeatFlags() model.HeartbeatFlags {
-	return model.HeartbeatFlags{
+func (a *wfaHandle) heartbeatFlags() activityHeartbeatFlags {
+	return activityHeartbeatFlags{
 		CancelRequested: a.lastHeartbeat.GetCancelRequested(),
 		ActivityPaused:  a.lastHeartbeat.GetActivityPaused(),
 		ActivityReset:   a.lastHeartbeat.GetActivityReset(),
 	}
 }
 
-func (a *saaHandle) heartbeatFlags() model.HeartbeatFlags {
-	return model.HeartbeatFlags{
+func (a *saaHandle) heartbeatFlags() activityHeartbeatFlags {
+	return activityHeartbeatFlags{
 		CancelRequested: a.lastHeartbeat.GetCancelRequested(),
 		ActivityPaused:  a.lastHeartbeat.GetActivityPaused(),
 		ActivityReset:   a.lastHeartbeat.GetActivityReset(),
@@ -841,7 +841,7 @@ func (s *activityParityTestSuite) TestReset() {
 		parityDrive(t, env, deferredResetCfg,
 			[]model.Event{model.Poll, model.Pause, model.ResetKeepPaused, model.Heartbeat},
 			func(t *testing.T, a parityActivity) {
-				require.Equal(t, model.HeartbeatFlags{ActivityPaused: true, ActivityReset: true}, a.heartbeatFlags(),
+				require.Equal(t, activityHeartbeatFlags{ActivityPaused: true, ActivityReset: true}, a.heartbeatFlags(),
 					"a worker whose attempt is both superseded and pause-bound must be told of both")
 			})
 	})
