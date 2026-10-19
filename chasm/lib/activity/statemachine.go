@@ -304,7 +304,12 @@ var TransitionAttemptFailedWhilePauseRequested = chasm.NewTransition(
 // invalidate any pending dispatch task, then a new dispatch task is added at the given schedule time.
 // For STARTED activities the reset is deferred — the activity transitions to RESET_REQUESTED via
 // TransitionResetRequested and lands back in SCHEDULED via TransitionResetAttemptFailedToScheduled
-// when the worker yields.
+// TransitionReset resets a SCHEDULED or PAUSED activity back to attempt 1. The stamp is bumped to
+// invalidate any pending dispatch task, then a new dispatch task is added at the given schedule time.
+// For a running activity, reset is deferred: it transitions to RESET_REQUESTED via
+// TransitionResetRequested. A retryable failure or timeout then applies the reset, transitioning
+// to SCHEDULED, or to PAUSED when the reset preserves a pending pause. Completion and
+// non-retryable failure or timeout close normally without applying the reset.
 var TransitionReset = chasm.NewTransition(
 	[]activitypb.ActivityExecutionStatus{
 		activitypb.ACTIVITY_EXECUTION_STATUS_SCHEDULED,
