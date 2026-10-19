@@ -287,3 +287,94 @@ func TestEmitWorkerConfigEventNoEnvironment(t *testing.T) {
 	require.Equal(t, "unknown", attrs["os"].AsString())
 	require.Equal(t, "unknown", attrs["architecture"].AsString())
 }
+
+func TestEmitWorkerConfigEventMacOS(t *testing.T) {
+	eventLogger := &captureEventLogger{}
+
+	emitWorkerConfigEvent(eventLogger, namespace.Name("ns"), &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: "w1",
+		Environment: &workerpb.EnvironmentInfo{
+			Platform: &workerpb.EnvironmentInfo_Platform{
+				Variant: &workerpb.EnvironmentInfo_Platform_Macos{
+					Macos: &workerpb.EnvironmentInfo_MacOSPlatform{
+						Version:      "14.2",
+						Architecture: workerpb.EnvironmentInfo_ARCHITECTURE_ARM64,
+					},
+				},
+			},
+		},
+	})
+
+	attrs := map[string]otellog.Value{}
+	eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		attrs[kv.Key] = kv.Value
+		return true
+	})
+	require.Equal(t, "macos", attrs["os"].AsString())
+	require.Equal(t, "14.2", attrs["os_version"].AsString())
+	require.Equal(t, "arm64", attrs["architecture"].AsString())
+	require.Equal(t, "", attrs["libc"].AsString())
+}
+
+func TestEmitWorkerConfigEventWindows(t *testing.T) {
+	eventLogger := &captureEventLogger{}
+
+	emitWorkerConfigEvent(eventLogger, namespace.Name("ns"), &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: "w1",
+		Environment: &workerpb.EnvironmentInfo{
+			Platform: &workerpb.EnvironmentInfo_Platform{
+				Variant: &workerpb.EnvironmentInfo_Platform_Windows{
+					Windows: &workerpb.EnvironmentInfo_WindowsPlatform{
+						Version:      "10.0.19045",
+						Architecture: workerpb.EnvironmentInfo_ARCHITECTURE_AMD64,
+						Crt:          workerpb.EnvironmentInfo_WindowsPlatform_CRT_UCRT,
+					},
+				},
+			},
+		},
+	})
+
+	attrs := map[string]otellog.Value{}
+	eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		attrs[kv.Key] = kv.Value
+		return true
+	})
+	require.Equal(t, "windows", attrs["os"].AsString())
+	require.Equal(t, "10.0.19045", attrs["os_version"].AsString())
+	require.Equal(t, "amd64", attrs["architecture"].AsString())
+	require.Equal(t, "ucrt", attrs["libc"].AsString())
+}
+
+func TestEmitWorkerConfigEventHostingEnvironmentVersion(t *testing.T) {
+	eventLogger := &captureEventLogger{}
+
+	emitWorkerConfigEvent(eventLogger, namespace.Name("ns"), &workerpb.WorkerHeartbeat{
+		WorkerInstanceKey: "w1",
+		Environment: &workerpb.EnvironmentInfo{
+			HostingEnvironments: []*workerpb.EnvironmentInfo_HostingEnvironment{
+				{
+					Type:    workerpb.EnvironmentInfo_HostingEnvironment_HOSTING_ENVIRONMENT_TYPE_AZURE_FUNCTIONS,
+					Version: "~4",
+				},
+			},
+		},
+	})
+
+	attrs := map[string]otellog.Value{}
+	eventLogger.records[0].WalkAttributes(func(kv otellog.KeyValue) bool {
+		attrs[kv.Key] = kv.Value
+		return true
+	})
+	envs := attrs["hosting_environments"].AsSlice()
+	require.Len(t, envs, 1)
+	env0 := mapValueToMap(envs[0])
+	require.Equal(t, "azure_functions", env0["type"].AsString())
+	require.Equal(t, "~4", env0["version"].AsString())
+}
+
+func TestUnknownEnumValues(t *testing.T) {
+	require.Equal(t, "", libcName(workerpb.EnvironmentInfo_LinuxPlatform_LIBC_UNSPECIFIED))
+	require.Equal(t, "", libcName(workerpb.EnvironmentInfo_LinuxPlatform_Libc(999)))
+	require.Equal(t, "", crtName(workerpb.EnvironmentInfo_WindowsPlatform_CRT_UNSPECIFIED))
+	require.Equal(t, "", crtName(workerpb.EnvironmentInfo_WindowsPlatform_Crt(999)))
+}
