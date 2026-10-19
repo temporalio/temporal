@@ -179,15 +179,15 @@ func TestEmitWorkerConfigEvent(t *testing.T) {
 		SdkName:           "temporal-go",
 		SdkVersion:        "1.30.0",
 		StartTime:         timestamppb.New(time.Date(2026, 10, 9, 12, 0, 0, 0, time.UTC)),
-		Plugins:           []*workerpb.PluginInfo{{Name: "my-plugin"}},
+		Plugins:           []*workerpb.PluginInfo{{Name: "my-plugin", Version: "1.0.0"}},
 		Drivers:           []*workerpb.StorageDriverInfo{{Type: "s3"}},
 		WorkflowPollerInfo: &workerpb.WorkerPollerInfo{
 			IsAutoscaling: true,
 		},
 		Environment: &workerpb.EnvironmentInfo{
 			Runtimes: []*workerpb.EnvironmentInfo_Runtime{
-				{Type: workerpb.EnvironmentInfo_Runtime_RUNTIME_TYPE_GO},
-				{Type: workerpb.EnvironmentInfo_Runtime_RUNTIME_TYPE_ROADRUNNER},
+				{Type: workerpb.EnvironmentInfo_Runtime_RUNTIME_TYPE_GO, Version: "go1.23.0"},
+				{Type: workerpb.EnvironmentInfo_Runtime_RUNTIME_TYPE_ROADRUNNER, Version: "v2024.3"},
 			},
 			HostingEnvironments: []*workerpb.EnvironmentInfo_HostingEnvironment{
 				{Type: workerpb.EnvironmentInfo_HostingEnvironment_HOSTING_ENVIRONMENT_TYPE_DOCKER},
@@ -196,7 +196,9 @@ func TestEmitWorkerConfigEvent(t *testing.T) {
 			Platform: &workerpb.EnvironmentInfo_Platform{
 				Variant: &workerpb.EnvironmentInfo_Platform_Linux{
 					Linux: &workerpb.EnvironmentInfo_LinuxPlatform{
+						Version:      "6.1.0",
 						Architecture: workerpb.EnvironmentInfo_ARCHITECTURE_ARM64,
+						Libc:         workerpb.EnvironmentInfo_LinuxPlatform_LIBC_MUSL,
 					},
 				},
 			},
@@ -221,28 +223,49 @@ func TestEmitWorkerConfigEvent(t *testing.T) {
 	require.Equal(t, "temporal-go", attrs["sdk_name"].AsString())
 	require.Equal(t, "1.30.0", attrs["sdk_version"].AsString())
 	require.Equal(t, "linux", attrs["os"].AsString())
+	require.Equal(t, "6.1.0", attrs["os_version"].AsString())
 	require.Equal(t, "arm64", attrs["architecture"].AsString())
+	require.Equal(t, "musl", attrs["libc"].AsString())
 	require.True(t, attrs["workflow_poller_autoscaling"].AsBool())
 	require.False(t, attrs["activity_poller_autoscaling"].AsBool())
 	require.False(t, attrs["nexus_poller_autoscaling"].AsBool())
 
+	// Runtimes: structured array with type and version
 	runtimes := attrs["runtimes"].AsSlice()
 	require.Len(t, runtimes, 2)
-	require.Equal(t, "go", runtimes[0].AsString())
-	require.Equal(t, "roadrunner", runtimes[1].AsString())
+	rt0 := mapValueToMap(runtimes[0])
+	require.Equal(t, "go", rt0["type"].AsString())
+	require.Equal(t, "go1.23.0", rt0["version"].AsString())
+	rt1 := mapValueToMap(runtimes[1])
+	require.Equal(t, "roadrunner", rt1["type"].AsString())
+	require.Equal(t, "v2024.3", rt1["version"].AsString())
 
+	// Hosting environments: structured array
 	hostingEnvs := attrs["hosting_environments"].AsSlice()
 	require.Len(t, hostingEnvs, 2)
-	require.Equal(t, "docker", hostingEnvs[0].AsString())
-	require.Equal(t, "k8s", hostingEnvs[1].AsString())
+	require.Equal(t, "docker", mapValueToMap(hostingEnvs[0])["type"].AsString())
+	require.Equal(t, "k8s", mapValueToMap(hostingEnvs[1])["type"].AsString())
 
+	// Plugins: structured array with name and version
 	plugins := attrs["plugins"].AsSlice()
 	require.Len(t, plugins, 1)
-	require.Equal(t, "my-plugin", plugins[0].AsString())
+	p0 := mapValueToMap(plugins[0])
+	require.Equal(t, "my-plugin", p0["name"].AsString())
+	require.Equal(t, "1.0.0", p0["version"].AsString())
 
+	// Drivers: string array
 	drivers := attrs["drivers"].AsSlice()
 	require.Len(t, drivers, 1)
 	require.Equal(t, "s3", drivers[0].AsString())
+}
+
+// mapValueToMap converts an OTEL MapValue to a map for test assertions.
+func mapValueToMap(v otellog.Value) map[string]otellog.Value {
+	m := map[string]otellog.Value{}
+	for _, kv := range v.AsMap() {
+		m[kv.Key] = kv.Value
+	}
+	return m
 }
 
 func TestEmitWorkerConfigEventNoEnvironment(t *testing.T) {

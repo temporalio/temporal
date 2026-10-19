@@ -105,17 +105,26 @@ func (e *workerMetricsEmitter) emitPollerAutoscaling(nsID namespace.ID, nsName n
 }
 
 func emitWorkerConfigEvent(logger otellog.Logger, nsName namespace.Name, hb *workerpb.WorkerHeartbeat) {
-	osTag, archTag := platformTags(hb.GetEnvironment().GetPlatform())
-	var runtimes, hostingEnvs []string
+	var runtimes []wideevents.RuntimeInfo
 	for _, rt := range hb.GetEnvironment().GetRuntimes() {
-		runtimes = append(runtimes, runtimeTypeName(rt.GetType()))
+		runtimes = append(runtimes, wideevents.RuntimeInfo{
+			Type:    runtimeTypeName(rt.GetType()),
+			Version: rt.GetVersion(),
+		})
 	}
+	var hostingEnvs []wideevents.HostingEnvironmentInfo
 	for _, he := range hb.GetEnvironment().GetHostingEnvironments() {
-		hostingEnvs = append(hostingEnvs, hostingEnvironmentTypeName(he.GetType()))
+		hostingEnvs = append(hostingEnvs, wideevents.HostingEnvironmentInfo{
+			Type:    hostingEnvironmentTypeName(he.GetType()),
+			Version: he.GetVersion(),
+		})
 	}
-	var plugins []string
+	var plugins []wideevents.PluginInfo
 	for _, p := range hb.GetPlugins() {
-		plugins = append(plugins, p.GetName())
+		plugins = append(plugins, wideevents.PluginInfo{
+			Name:    p.GetName(),
+			Version: p.GetVersion(),
+		})
 	}
 	var drivers []string
 	for _, d := range hb.GetDrivers() {
@@ -125,6 +134,7 @@ func emitWorkerConfigEvent(logger otellog.Logger, nsName namespace.Name, hb *wor
 	if st := hb.GetStartTime(); st != nil {
 		startTime = st.AsTime().UTC().Format("2006-01-02T15:04:05Z")
 	}
+	osTag, osVersion, archTag, libc := platformInfo(hb.GetEnvironment().GetPlatform())
 	wideevents.Emit(logger, wideevents.WorkerConfigPayload{
 		Namespace:                 nsName.String(),
 		TaskQueue:                 hb.GetTaskQueue(),
@@ -138,7 +148,9 @@ func emitWorkerConfigEvent(logger otellog.Logger, nsName namespace.Name, hb *wor
 		Runtimes:                  runtimes,
 		HostingEnvironments:       hostingEnvs,
 		OS:                        osTag,
+		OSVersion:                 osVersion,
 		Architecture:              archTag,
+		Libc:                      libc,
 		Plugins:                   plugins,
 		Drivers:                   drivers,
 		WorkflowPollerAutoscaling: hb.GetWorkflowPollerInfo().GetIsAutoscaling(),
@@ -170,6 +182,28 @@ func hostingEnvironmentTypeName(t workerpb.EnvironmentInfo_HostingEnvironment_Ho
 	return strings.ToLower(strings.TrimPrefix(string(v.Name()), "HOSTING_ENVIRONMENT_TYPE_"))
 }
 
+func libcName(l workerpb.EnvironmentInfo_LinuxPlatform_Libc) string {
+	if l == workerpb.EnvironmentInfo_LinuxPlatform_LIBC_UNSPECIFIED {
+		return ""
+	}
+	v := l.Descriptor().Values().ByNumber(l.Number())
+	if v == nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimPrefix(string(v.Name()), "LIBC_"))
+}
+
+func crtName(c workerpb.EnvironmentInfo_WindowsPlatform_Crt) string {
+	if c == workerpb.EnvironmentInfo_WindowsPlatform_CRT_UNSPECIFIED {
+		return ""
+	}
+	v := c.Descriptor().Values().ByNumber(c.Number())
+	if v == nil {
+		return ""
+	}
+	return strings.ToLower(strings.TrimPrefix(string(v.Name()), "CRT_"))
+}
+
 func architectureName(a workerpb.EnvironmentInfo_Architecture) string {
 	if a == workerpb.EnvironmentInfo_ARCHITECTURE_UNSPECIFIED {
 		return "unknown"
@@ -181,19 +215,20 @@ func architectureName(a workerpb.EnvironmentInfo_Architecture) string {
 	return strings.ToLower(strings.TrimPrefix(string(v.Name()), "ARCHITECTURE_"))
 }
 
-// platformTags extracts OS and architecture tag values from the platform oneof.
-func platformTags(p *workerpb.EnvironmentInfo_Platform) (os string, arch string) {
+// platformInfo extracts OS, version, architecture, and libc/crt from the platform oneof.
+// The libc field is used for Linux (glibc/musl) and Windows (ucrt/msvcrt/etc).
+func platformInfo(p *workerpb.EnvironmentInfo_Platform) (os, version, arch, libc string) {
 	if p == nil {
-		return "unknown", "unknown"
+		return "unknown", "", "unknown", ""
 	}
 	switch v := p.GetVariant().(type) {
 	case *workerpb.EnvironmentInfo_Platform_Linux:
-		return "linux", architectureName(v.Linux.GetArchitecture())
+		return "linux", v.Linux.GetVersion(), architectureName(v.Linux.GetArchitecture()), libcName(v.Linux.GetLibc())
 	case *workerpb.EnvironmentInfo_Platform_Macos:
-		return "macos", architectureName(v.Macos.GetArchitecture())
+		return "macos", v.Macos.GetVersion(), architectureName(v.Macos.GetArchitecture()), ""
 	case *workerpb.EnvironmentInfo_Platform_Windows:
-		return "windows", architectureName(v.Windows.GetArchitecture())
+		return "windows", v.Windows.GetVersion(), architectureName(v.Windows.GetArchitecture()), crtName(v.Windows.GetCrt())
 	default:
-		return "unknown", "unknown"
+		return "unknown", "", "unknown", ""
 	}
 }
