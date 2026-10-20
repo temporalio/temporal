@@ -40,6 +40,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type fakeEnv struct {
@@ -602,4 +604,13 @@ func TestProcessInvocationTaskChasm_Outcomes(t *testing.T) {
 			tc.assertOutcome(t, cb)
 		})
 	}
+}
+
+// tasks.Tags can't import this package, so it matches this task type by its "callbacks." prefix.
+// This test fails if it is renamed without updating tasks.Tags.
+func TestInvocationTaskTaggedAsHandlerOutbound(t *testing.T) {
+	task := &tasks.StateMachineOutboundTask{
+		StateMachineTask: tasks.StateMachineTask{Info: &persistencespb.StateMachineTaskInfo{Type: callbacks.TaskTypeInvocation}},
+	}
+	require.Contains(t, tasks.Tags(task), tag.NexusStageHandlerOutbound)
 }

@@ -39,6 +39,8 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type mockNexusCompletionGetterComponent struct {
@@ -876,4 +878,12 @@ func TestExecuteInvocationTaskChasm_Outcomes(t *testing.T) {
 			}
 		})
 	}
+}
+
+// tasks.Tags can't import this package, so it repeats InvocationTaskGroup as a string literal.
+// This test fails if the group is renamed without updating tasks.Tags.
+func TestInvocationTaskGroupTaggedAsHandlerOutbound(t *testing.T) {
+	task := &tasks.ChasmTask{Category: tasks.CategoryOutbound, Info: &persistencespb.ChasmTaskInfo{}}
+	task.SetOutboundTaskGroup(InvocationTaskGroup)
+	require.Contains(t, tasks.Tags(task), tag.NexusStageHandlerOutbound)
 }
