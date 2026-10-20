@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -401,6 +402,18 @@ func TestParseNexusCaller(t *testing.T) {
 		OperationId: "operation-id",
 		RunId:       "operation-run",
 	})
+	const maxLinkSize = 4000
+	oversizedWorkflowLink := commonnexus.ConvertLinkWorkflowEventToNexusLink(&commonpb.Link_WorkflowEvent{
+		Namespace:  "workflow-namespace",
+		WorkflowId: strings.Repeat("x", maxLinkSize),
+		RunId:      "workflow-run",
+		Reference: &commonpb.Link_WorkflowEvent_EventRef{
+			EventRef: &commonpb.Link_WorkflowEvent_EventReference{
+				EventId:   1,
+				EventType: enumspb.EVENT_TYPE_NEXUS_OPERATION_SCHEDULED,
+			},
+		},
+	})
 	workflowTags := map[string]any{
 		"caller-namespace":   "workflow-namespace",
 		"caller-workflow-id": "workflow-id",
@@ -462,9 +475,14 @@ func TestParseNexusCaller(t *testing.T) {
 				URL:  &url.URL{Scheme: "http", Path: standaloneLink.URL.Path},
 			}},
 		},
+		{
+			name:  "skip oversized links",
+			links: []nexus.Link{oversizedWorkflowLink, standaloneLink},
+			want:  standaloneTags,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			tags := parseNexusCaller(tc.links)
+			tags := parseNexusCaller(tc.links, maxLinkSize)
 			var got map[string]any
 			if len(tags) > 0 {
 				got = make(map[string]any, len(tags))

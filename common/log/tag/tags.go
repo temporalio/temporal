@@ -1062,17 +1062,20 @@ func NexusEndpointID(endpointID string) ZapTag {
 }
 
 // CallerNamespace returns a tag for the namespace of the workflow or standalone operation that called a Nexus operation.
+// The value is claimed by the caller in its Nexus-Link header and is not verified.
 func CallerNamespace(namespace string) ZapTag {
 	return NewStringTag("caller-namespace", namespace)
 }
 
 // CallerWorkflowID returns a tag for the ID of the workflow that called a Nexus operation,
 // or the standalone caller's operation ID, matching CHASM's use of wf-id for the execution's business ID.
+// The value is claimed by the caller in its Nexus-Link header and is not verified.
 func CallerWorkflowID(callerID string) ZapTag {
 	return NewStringTag("caller-workflow-id", callerID)
 }
 
 // CallerRunID returns a tag for the run ID of the workflow or standalone operation that called a Nexus operation.
+// The value is claimed by the caller in its Nexus-Link header and is not verified.
 func CallerRunID(runID string) ZapTag {
 	return NewStringTag("caller-run-id", runID)
 }

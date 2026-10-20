@@ -100,6 +100,7 @@ func NewNexusOperationHTTPHandler(
 				forwardingEnabledForNamespace: serviceConfig.EnableNamespaceNotActiveAutoForwarding,
 				forwardingClients:             clientCache,
 				payloadSizeLimit:              serviceConfig.BlobSizeLimitError,
+				linkMaxSize:                   serviceConfig.LinkMaxSize,
 				headersBlacklist:              serviceConfig.NexusRequestHeadersBlacklist,
 				useForwardByEndpoint:          serviceConfig.NexusForwardRequestUseEndpoint,
 				metricTagConfig:               serviceConfig.NexusOperationsMetricTagConfig,

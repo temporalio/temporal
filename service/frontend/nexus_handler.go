@@ -340,11 +340,16 @@ func (c *operationContext) enrichNexusOperationLogs(service, operation, requestI
 }
 
 // parseNexusCaller returns log tags identifying the caller, taken from the first of the given links that
-// parses as a workflow event or standalone Nexus operation link. Links that don't parse are skipped.
-// Returns nil if no supported caller link parses.
-func parseNexusCaller(links []nexus.Link) []tag.Tag {
+// parses as a workflow event or standalone Nexus operation link. Links that don't parse, or whose URL is
+// longer than maxLinkSize, are skipped. Returns nil if no supported caller link parses.
+//
+// The links come from the request's Nexus-Link header, which the caller controls and the server does not
+// verify against the caller's credentials, so the tags record who the caller claims to be. The size check
+// applies the limit the gRPC APIs enforce on links, since the HTTP path does not, and keeps an oversized
+// link from being copied onto every log line of the request.
+func parseNexusCaller(links []nexus.Link, maxLinkSize int) []tag.Tag {
 	for _, link := range links {
-		if link.URL == nil {
+		if link.URL == nil || len(link.URL.String()) > maxLinkSize {
 			continue
 		}
 		var callerNamespace, callerID, callerRunID string
@@ -383,6 +388,7 @@ type nexusHandler struct {
 	forwardingEnabledForNamespace dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	forwardingClients             *cluster.FrontendHTTPClientCache
 	payloadSizeLimit              dynamicconfig.IntPropertyFnWithNamespaceFilter
+	linkMaxSize                   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	headersBlacklist              dynamicconfig.TypedPropertyFn[*regexp.Regexp]
 	useForwardByEndpoint          dynamicconfig.BoolPropertyFn
 	metricTagConfig               dynamicconfig.TypedPropertyFn[chasmnexus.NexusMetricTagConfig]
@@ -453,7 +459,7 @@ func (h *nexusHandler) StartOperation(
 	ctx = oc.augmentContext(ctx, options.Header)
 	oc.enrichNexusOperationMetrics(service, operation, options.Header)
 	oc.enrichNexusOperationLogs(service, operation, options.RequestID)
-	if callerTags := parseNexusCaller(options.Links); len(callerTags) > 0 {
+	if callerTags := parseNexusCaller(options.Links, h.linkMaxSize(oc.namespaceName)); len(callerTags) > 0 {
 		oc.logger = log.With(oc.logger, callerTags...)
 	}
 	oc.annotateServerSpan(ctx, service, operation, options.RequestID)
