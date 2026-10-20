@@ -203,7 +203,7 @@ func TestReaderSignaling(t *testing.T) {
 	task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{
 		CreateTime: timestamp.TimePtr(time.Now().UTC()),
 	}, nil)
-	outcome, err := s.tqMgr.TrySyncMatch(context.TODO(), task)
+	outcome, _, err := s.tqMgr.TrySyncMatch(context.TODO(), task)
 	require.NoError(t, err)
 	require.Equal(t, syncMatchSuccess, outcome)
 	require.Len(t, readerNotifications, 0,
@@ -867,7 +867,7 @@ func (s *PhysicalTaskQueueManagerTestSuite) syncMatchOneTask(forwardInfo *taskqu
 		CreateTime: timestamppb.New(time.Now()),
 	}, forwardInfo, 0, nil)
 
-	outcome, err := s.tqMgr.TrySyncMatch(context.Background(), task)
+	outcome, _, err := s.tqMgr.TrySyncMatch(context.Background(), task)
 	s.Require().NoError(err)
 	s.Require().Equal(syncMatchSuccess, outcome)
 	s.Require().IsType(&internalTask{}, <-pollResult, "poller should have received the task")

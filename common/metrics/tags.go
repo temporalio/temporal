@@ -344,12 +344,10 @@ func PollResultTag(result string) Tag {
 	return Tag{Key: pollResultTagName, Value: result}
 }
 
+// Values of task_add_result on tasks_added. Rejected adds are covered by the Add*Task metrics.
 const (
-	TaskAddResultSyncMatch        = "sync_match"
-	TaskAddResultSyncMatchUnavail = "sync_match_unavailable"
-	TaskAddResultBacklog          = "backlog"
-	TaskAddResultThrottled        = "throttled"
-	TaskAddResultFailure          = "failure"
+	TaskAddResultSyncMatch = "sync_match"
+	TaskAddResultBacklog   = "backlog"
 )
 
 func TaskAddResultTag(result string) Tag {

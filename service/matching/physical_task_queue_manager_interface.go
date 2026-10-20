@@ -36,8 +36,9 @@ type (
 		// MarkAlive updates the liveness timer to keep this physicalTaskQueueManager alive.
 		MarkAlive()
 		// TrySyncMatch tries to match task to a local or remote poller. Returns a syncMatchOutcome
-		// indicating success or the reason the match failed.
-		TrySyncMatch(ctx context.Context, task *internalTask) (syncMatchOutcome, error)
+		// indicating success or the reason the match failed, and whether the task was forwarded
+		// to another partition (regardless of whether it matched there).
+		TrySyncMatch(ctx context.Context, task *internalTask) (syncMatchOutcome, bool, error)
 		// SpoolTask spools a task to persistence to be matched asynchronously when a poller is available.
 		SpoolTask(taskInfo *persistencespb.TaskInfo) error
 		AddSpooledTask(task *internalTask) error
@@ -68,8 +69,9 @@ type (
 		// GetFairnessWeightOverrides returns current fairness weight overrides for this queue.
 		GetFairnessWeightOverrides() fairnessWeightOverrides
 		UpdateRemotePriorityBacklogs(remotePriorityBacklogSet)
-		// RecordTaskAdd records the outcome of a task add to this physical queue using
-		// the queue's tagged metrics handler, so all per-physical-queue labels are included.
+		// RecordTaskAdd records a task added to this physical queue using the queue's tagged
+		// metrics handler, so all per-physical-queue labels are included. Only call it on the
+		// partition that received the task, for tasks that were actually added.
 		RecordTaskAdd(result string, forwarded bool, behavior enumspb.VersioningBehavior, fairnessKey string)
 	}
 )

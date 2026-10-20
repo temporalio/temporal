@@ -367,7 +367,7 @@ func (s *PriMatcherSuite) TestChildOfferForwardsToParent() {
 				synctest.Wait() // let the task forwarder get in place
 
 				task := newInternalTaskForSyncMatch(&persistencespb.TaskInfo{CreateTime: timestamppb.Now()}, nil, 0, nil)
-				outcome, err := tm.Offer(ctx, task)
+				outcome, _, err := tm.Offer(ctx, task)
 				require.NoError(t, err)
 				require.Equal(t, tc.wantOutcome, outcome)
 				require.NotNil(t, req)
@@ -457,7 +457,7 @@ func (s *PriMatcherSuite) TestRootOfferBlocksOnlyForForwardedBacklogTasks() {
 			tm.Start()
 			defer tm.Stop()
 
-			outcome, err := tm.Offer(ctx, newSyncTask(nil))
+			outcome, _, err := tm.Offer(ctx, newSyncTask(nil))
 			require.NoError(t, err)
 			require.Equal(t, syncMatchNoPoller, outcome)
 		})
@@ -471,7 +471,7 @@ func (s *PriMatcherSuite) TestRootOfferBlocksOnlyForForwardedBacklogTasks() {
 			tm.Start()
 			defer tm.Stop()
 
-			outcome, err := tm.Offer(ctx, newSyncTask(childForwardInfo(enumsspb.TASK_SOURCE_HISTORY)))
+			outcome, _, err := tm.Offer(ctx, newSyncTask(childForwardInfo(enumsspb.TASK_SOURCE_HISTORY)))
 			require.NoError(t, err)
 			require.Equal(t, syncMatchNoPoller, outcome)
 		})
@@ -490,7 +490,7 @@ func (s *PriMatcherSuite) TestRootOfferBlocksOnlyForForwardedBacklogTasks() {
 			var outcome syncMatchOutcome
 			var offerErr error
 			go func() {
-				outcome, offerErr = tm.Offer(ctx, task)
+				outcome, _, offerErr = tm.Offer(ctx, task)
 				offerDone.Store(true)
 			}()
 			time.Sleep(time.Minute) //nolint:forbidigo // virtual time
@@ -526,7 +526,7 @@ func (s *PriMatcherSuite) TestRootOfferBlocksOnlyForForwardedBacklogTasks() {
 			_ = tm.AddTask(backlogTask)
 			synctest.Wait()
 
-			outcome, err := tm.Offer(ctx, newSyncTask(childForwardInfo(enumsspb.TASK_SOURCE_DB_BACKLOG)))
+			outcome, _, err := tm.Offer(ctx, newSyncTask(childForwardInfo(enumsspb.TASK_SOURCE_DB_BACKLOG)))
 			require.NoError(t, err)
 			require.Equal(t, syncMatchBacklogPresent, outcome)
 		})

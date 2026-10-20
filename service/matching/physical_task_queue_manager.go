@@ -628,13 +628,13 @@ func (c *physicalTaskQueueManagerImpl) GetInternalTaskQueueStatus() []*taskqueue
 	return status
 }
 
-func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *internalTask) (syncMatchOutcome, error) {
+func (c *physicalTaskQueueManagerImpl) TrySyncMatch(ctx context.Context, task *internalTask) (syncMatchOutcome, bool, error) {
 	if !task.isForwarded() {
 		// request sent by history service
 		c.liveness.markAlive()
 		c.incTaskTracker(c.tasksAdded, priorityKey(task.getPriority().GetPriorityKey()), 1)
 		if disable, _ := testhooks.Get(c.partitionMgr.engine.testHooks, testhooks.MatchingDisableSyncMatch, c.partitionMgr.ns.ID()); disable {
-			return syncMatchNoPoller, nil
+			return syncMatchNoPoller, false, nil
 		}
 	}
 

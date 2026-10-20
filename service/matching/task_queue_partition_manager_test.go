@@ -2400,6 +2400,114 @@ func (s *PartitionManagerTestSuite) TestTaskAddHooks_ForwardedNoSyncMatch_HooksN
 	s.Require().Empty(hook.getCalls())
 }
 
+func (s *PartitionManagerTestSuite) TestTasksAddedMetric_Backlog() {
+	// With no poller, the task is spooled and tasks_added is emitted once as backlog.
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{loadTime: time.Minute})
+	defer cleanup()
+
+	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  "wf",
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().False(syncMatched)
+
+	recs := capture.Snapshot()[metrics.TasksAddedCounter.Name()]
+	s.Require().Len(recs, 1)
+	s.Equal(metrics.TaskAddResultBacklog, recs[0].Tags["task_add_result"])
+	s.Equal("false", recs[0].Tags["forwarded"])
+}
+
+func (s *PartitionManagerTestSuite) TestTasksAddedMetric_SyncMatch() {
+	// With a waiting poller, tasks_added is emitted once as sync_match.
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{loadTime: time.Minute})
+	defer cleanup()
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		task, _, _ := pm.PollTask(ctx, &pollMetadata{
+			workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{},
+		})
+		if task != nil && task.responseC != nil {
+			close(task.responseC)
+		}
+	}()
+
+	pq := pm.defaultQueue().(*physicalTaskQueueManagerImpl)
+	s.Require().Eventually(pq.matcher.HasWaitingPoller, 2*time.Second, time.Millisecond)
+
+	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  "wf",
+		},
+	})
+	s.Require().NoError(err)
+	s.Require().True(syncMatched)
+
+	recs := capture.Snapshot()[metrics.TasksAddedCounter.Name()]
+	s.Require().Len(recs, 1)
+	s.Equal(metrics.TaskAddResultSyncMatch, recs[0].Tags["task_add_result"])
+	s.Equal("false", recs[0].Tags["forwarded"])
+}
+
+func (s *PartitionManagerTestSuite) TestTasksAddedMetric_NotEmittedForForwardedSyncMatch() {
+	// A forwarded task that sync-matches on the parent is counted by the child, not here.
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{loadTime: time.Minute})
+	defer cleanup()
+
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		task, _, _ := pm.PollTask(ctx, &pollMetadata{
+			workerVersionCapabilities: &commonpb.WorkerVersionCapabilities{},
+		})
+		if task != nil && task.responseC != nil {
+			close(task.responseC)
+		}
+	}()
+
+	pq := pm.defaultQueue().(*physicalTaskQueueManagerImpl)
+	s.Require().Eventually(pq.matcher.HasWaitingPoller, 2*time.Second, time.Millisecond)
+
+	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  "wf",
+		},
+		forwardInfo: &taskqueuespb.TaskForwardInfo{SourcePartition: "child-partition"},
+	})
+	s.Require().NoError(err)
+	s.Require().True(syncMatched)
+
+	s.Require().Empty(capture.Snapshot()[metrics.TasksAddedCounter.Name()])
+}
+
+func (s *PartitionManagerTestSuite) TestTasksAddedMetric_NotEmittedForForwardedNoSyncMatch() {
+	// A forwarded task that fails to sync-match on the parent is counted by the child when it spools.
+	pm, capture, cleanup := s.setupPartitionManagerWithCapture(testPartitionManagerConfig{loadTime: time.Minute})
+	defer cleanup()
+
+	_, syncMatched, err := pm.AddTask(context.Background(), addTaskParams{
+		taskInfo: &persistencespb.TaskInfo{
+			NamespaceId: namespaceID,
+			RunId:       "run",
+			WorkflowId:  "wf",
+		},
+		forwardInfo: &taskqueuespb.TaskForwardInfo{SourcePartition: "child-partition"},
+	})
+	s.Require().Equal(errRemoteSyncMatchFailed, err)
+	s.Require().False(syncMatched)
+
+	s.Require().Empty(capture.Snapshot()[metrics.TasksAddedCounter.Name()])
+}
+
 func (s *PartitionManagerTestSuite) TestTaskAddHooks_MultipleHooksInvoked() {
 	hook1 := &capturingTaskMatchHook{}
 	hook2 := &capturingTaskMatchHook{}
