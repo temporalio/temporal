@@ -19,7 +19,7 @@ func WildCardStringToRegexp(pattern string) (*regexp.Regexp, error) {
 // wildcards (*) with any substring.
 func WildCardStringsToRegexp(patterns []string) (*regexp.Regexp, error) {
 	var result strings.Builder
-	result.WriteRune('^')
+	result.WriteString("^(?:")
 	for i, pattern := range patterns {
 		result.WriteRune('(')
 		first := true
@@ -36,7 +36,7 @@ func WildCardStringsToRegexp(patterns []string) (*regexp.Regexp, error) {
 			result.WriteRune('|')
 		}
 	}
-	result.WriteRune('$')
+	result.WriteString(")$")
 	return regexp.Compile(result.String())
 }
 
