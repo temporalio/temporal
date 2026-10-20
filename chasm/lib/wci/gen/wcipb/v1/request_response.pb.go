@@ -237,8 +237,10 @@ type DescribeWorkerControllerInstanceResponse struct {
 	ConflictToken        []byte                       `protobuf:"bytes,5,opt,name=conflict_token,json=conflictToken,proto3" json:"conflict_token,omitempty"`
 	LastModifierIdentity string                       `protobuf:"bytes,6,opt,name=last_modifier_identity,json=lastModifierIdentity,proto3" json:"last_modifier_identity,omitempty"`
 	ValidationStatus     *ValidationStatus            `protobuf:"bytes,7,opt,name=validation_status,json=validationStatus,proto3" json:"validation_status,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// Keyed by scaling group ID. CHASM-only, for debugging.
+	TaskQueueObservations map[string]*TaskQueueObservations `protobuf:"bytes,8,rep,name=task_queue_observations,json=taskQueueObservations,proto3" json:"task_queue_observations,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
 }
 
 func (x *DescribeWorkerControllerInstanceResponse) Reset() {
@@ -316,6 +318,13 @@ func (x *DescribeWorkerControllerInstanceResponse) GetLastModifierIdentity() str
 func (x *DescribeWorkerControllerInstanceResponse) GetValidationStatus() *ValidationStatus {
 	if x != nil {
 		return x.ValidationStatus
+	}
+	return nil
+}
+
+func (x *DescribeWorkerControllerInstanceResponse) GetTaskQueueObservations() map[string]*TaskQueueObservations {
+	if x != nil {
+		return x.TaskQueueObservations
 	}
 	return nil
 }
@@ -853,7 +862,7 @@ const file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_rawDesc
 	"'DescribeWorkerControllerInstanceRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vinstance_id\x18\x02 \x01(\tR\n" +
-	"instanceId\"\x89\x05\n" +
+	"instanceId\"\xb9\a\n" +
 	"(DescribeWorkerControllerInstanceResponse\x12'\n" +
 	"\x0fdeployment_name\x18\x01 \x01(\tR\x0edeploymentName\x12\x19\n" +
 	"\bbuild_id\x18\x02 \x01(\tR\abuildId\x12;\n" +
@@ -862,10 +871,14 @@ const file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_rawDesc
 	"\x13scaling_group_specs\x18\x04 \x03(\v2g.temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.ScalingGroupSpecsEntryR\x11scalingGroupSpecs\x12%\n" +
 	"\x0econflict_token\x18\x05 \x01(\fR\rconflictToken\x124\n" +
 	"\x16last_modifier_identity\x18\x06 \x01(\tR\x14lastModifierIdentity\x12e\n" +
-	"\x11validation_status\x18\a \x01(\v28.temporal.server.chasm.lib.wci.proto.v1.ValidationStatusR\x10validationStatus\x1a~\n" +
+	"\x11validation_status\x18\a \x01(\v28.temporal.server.chasm.lib.wci.proto.v1.ValidationStatusR\x10validationStatus\x12\xa3\x01\n" +
+	"\x17task_queue_observations\x18\b \x03(\v2k.temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.TaskQueueObservationsEntryR\x15taskQueueObservations\x1a~\n" +
 	"\x16ScalingGroupSpecsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12N\n" +
-	"\x05value\x18\x02 \x01(\v28.temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpecR\x05value:\x028\x01\"\x87\x01\n" +
+	"\x05value\x18\x02 \x01(\v28.temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpecR\x05value:\x028\x01\x1a\x87\x01\n" +
+	"\x1aTaskQueueObservationsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12S\n" +
+	"\x05value\x18\x02 \x01(\v2=.temporal.server.chasm.lib.wci.proto.v1.TaskQueueObservationsR\x05value:\x028\x01\"\x87\x01\n" +
 	"%DeleteWorkerControllerInstanceRequest\x12!\n" +
 	"\fnamespace_id\x18\x01 \x01(\tR\vnamespaceId\x12\x1f\n" +
 	"\vinstance_id\x18\x02 \x01(\tR\n" +
@@ -918,7 +931,7 @@ func file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_rawDescG
 	return file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_rawDescData
 }
 
-var file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 19)
+var file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_goTypes = []any{
 	(*UpdateWorkerControllerInstanceRequest)(nil),        // 0: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceRequest
 	(*UpdateWorkerControllerInstanceResponse)(nil),       // 1: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceResponse
@@ -937,37 +950,41 @@ var file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_goTypes =
 	nil,                                                  // 14: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceRequest.UpsertScalingGroupsEntry
 	nil,                                                  // 15: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceResponse.ScalingGroupSpecsEntry
 	nil,                                                  // 16: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.ScalingGroupSpecsEntry
-	nil,                                                  // 17: temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecRequest.UpsertScalingGroupsEntry
-	nil,                                                  // 18: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.ScalingGroupsEntry
-	(*timestamppb.Timestamp)(nil),                        // 19: google.protobuf.Timestamp
-	(*ValidationStatus)(nil),                             // 20: temporal.server.chasm.lib.wci.proto.v1.ValidationStatus
-	(*TaskAddEvent)(nil),                                 // 21: temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent
-	(*WorkerControllerInstanceState)(nil),                // 22: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceState
-	(*ScalingGroupSpecUpdate)(nil),                       // 23: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpecUpdate
-	(*ScalingGroupSpec)(nil),                             // 24: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpec
-	(*ScalingGroupState)(nil),                            // 25: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupState
+	nil,                                                  // 17: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.TaskQueueObservationsEntry
+	nil,                                                  // 18: temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecRequest.UpsertScalingGroupsEntry
+	nil,                                                  // 19: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.ScalingGroupsEntry
+	(*timestamppb.Timestamp)(nil),                        // 20: google.protobuf.Timestamp
+	(*ValidationStatus)(nil),                             // 21: temporal.server.chasm.lib.wci.proto.v1.ValidationStatus
+	(*TaskAddEvent)(nil),                                 // 22: temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent
+	(*WorkerControllerInstanceState)(nil),                // 23: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceState
+	(*ScalingGroupSpecUpdate)(nil),                       // 24: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpecUpdate
+	(*ScalingGroupSpec)(nil),                             // 25: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpec
+	(*TaskQueueObservations)(nil),                        // 26: temporal.server.chasm.lib.wci.proto.v1.TaskQueueObservations
+	(*ScalingGroupState)(nil),                            // 27: temporal.server.chasm.lib.wci.proto.v1.ScalingGroupState
 }
 var file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_depIdxs = []int32{
 	14, // 0: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceRequest.upsert_scaling_groups:type_name -> temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceRequest.UpsertScalingGroupsEntry
 	15, // 1: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceResponse.scaling_group_specs:type_name -> temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceResponse.ScalingGroupSpecsEntry
-	19, // 2: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.create_time:type_name -> google.protobuf.Timestamp
+	20, // 2: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.create_time:type_name -> google.protobuf.Timestamp
 	16, // 3: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.scaling_group_specs:type_name -> temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.ScalingGroupSpecsEntry
-	20, // 4: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.validation_status:type_name -> temporal.server.chasm.lib.wci.proto.v1.ValidationStatus
-	17, // 5: temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecRequest.upsert_scaling_groups:type_name -> temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecRequest.UpsertScalingGroupsEntry
-	21, // 6: temporal.server.chasm.lib.wci.proto.v1.RecordTaskAddRequest.event:type_name -> temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent
-	22, // 7: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.state:type_name -> temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceState
-	18, // 8: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.scaling_groups:type_name -> temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.ScalingGroupsEntry
-	21, // 9: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.pending_task_adds:type_name -> temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent
-	23, // 10: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceRequest.UpsertScalingGroupsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpecUpdate
-	24, // 11: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceResponse.ScalingGroupSpecsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpec
-	24, // 12: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.ScalingGroupSpecsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpec
-	23, // 13: temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecRequest.UpsertScalingGroupsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpecUpdate
-	25, // 14: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.ScalingGroupsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupState
-	15, // [15:15] is the sub-list for method output_type
-	15, // [15:15] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	21, // 4: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.validation_status:type_name -> temporal.server.chasm.lib.wci.proto.v1.ValidationStatus
+	17, // 5: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.task_queue_observations:type_name -> temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.TaskQueueObservationsEntry
+	18, // 6: temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecRequest.upsert_scaling_groups:type_name -> temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecRequest.UpsertScalingGroupsEntry
+	22, // 7: temporal.server.chasm.lib.wci.proto.v1.RecordTaskAddRequest.event:type_name -> temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent
+	23, // 8: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.state:type_name -> temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceState
+	19, // 9: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.scaling_groups:type_name -> temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.ScalingGroupsEntry
+	22, // 10: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.pending_task_adds:type_name -> temporal.server.chasm.lib.wci.proto.v1.TaskAddEvent
+	24, // 11: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceRequest.UpsertScalingGroupsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpecUpdate
+	25, // 12: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceResponse.ScalingGroupSpecsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpec
+	25, // 13: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.ScalingGroupSpecsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpec
+	26, // 14: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse.TaskQueueObservationsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.TaskQueueObservations
+	24, // 15: temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecRequest.UpsertScalingGroupsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupSpecUpdate
+	27, // 16: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest.ScalingGroupsEntry.value:type_name -> temporal.server.chasm.lib.wci.proto.v1.ScalingGroupState
+	17, // [17:17] is the sub-list for method output_type
+	17, // [17:17] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_init() }
@@ -982,7 +999,7 @@ func file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_rawDesc), len(file_temporal_server_chasm_lib_wci_proto_v1_request_response_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   19,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

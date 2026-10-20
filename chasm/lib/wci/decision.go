@@ -98,6 +98,7 @@ func (w *WorkerControllerInstance) ProcessTaskAdd(ctx chasm.MutableContext, even
 			recordTaskAddSignal(metricsFor(ctx, w, ""), wcimetrics.SkippedReasonSpecMissing)
 			return nil
 		}
+		group.observeTaskAdd(ctx.Now(w), event)
 		h := metricsFor(ctx, w, string(groupSpec.Compute.ProviderType))
 		algoCtx := w.algorithmContext(ctx)
 		algo, config, err := algorithmFor(algoCtx, groupSpec)
@@ -132,7 +133,12 @@ func (w *WorkerControllerInstance) ProcessTaskAdd(ctx chasm.MutableContext, even
 
 // ProcessMetricsPoll runs every group's algorithm on a snapshot and re-arms the poll timer at
 // the earliest requested time. A nil snapshot (fetch failed) only re-arms at the max interval.
-func (w *WorkerControllerInstance) ProcessMetricsPoll(ctx chasm.MutableContext, snapshot *scalingalgorithm.ScalingMetricsSnapshot) error {
+// observed is the poll's per-task-queue view, kept per group for debugging.
+func (w *WorkerControllerInstance) ProcessMetricsPoll(
+	ctx chasm.MutableContext,
+	snapshot *scalingalgorithm.ScalingMetricsSnapshot,
+	observed []*wcipb.ObservedTaskQueue,
+) error {
 	nextPoll := maxPollInterval
 	if snapshot != nil {
 		spec := w.spec()
@@ -142,6 +148,7 @@ func (w *WorkerControllerInstance) ProcessMetricsPoll(ctx chasm.MutableContext, 
 			if !ok {
 				continue
 			}
+			group.observePoll(ctx.Now(w), observed, spec.EffectiveTaskTypesForGroup(id))
 			algo, config, err := algorithmFor(algoCtx, groupSpec)
 			if err != nil {
 				ctx.Logger().Warn("Scaling algorithm unavailable for metrics poll", tag.Error(err))

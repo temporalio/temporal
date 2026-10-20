@@ -41,16 +41,12 @@ func readVersion(ctx context.Context, ref chasm.ComponentRef) (versionRef, error
 }
 
 // fetchSnapshot is the only I/O on the decision path; it runs without the execution lock.
-func fetchSnapshot(ctx context.Context, client workflowservice.WorkflowServiceClient, v versionRef) (*scalingalgorithm.ScalingMetricsSnapshot, error) {
-	resp, err := client.DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
+func fetchSnapshot(ctx context.Context, client workflowservice.WorkflowServiceClient, v versionRef) (*workflowservice.DescribeWorkerDeploymentVersionResponse, error) {
+	return client.DescribeWorkerDeploymentVersion(ctx, &workflowservice.DescribeWorkerDeploymentVersionRequest{
 		Namespace:            v.namespace,
 		DeploymentVersion:    &deploymentpb.WorkerDeploymentVersion{DeploymentName: v.deploymentName, BuildId: v.buildID},
 		ReportTaskQueueStats: true,
 	})
-	if err != nil {
-		return nil, err
-	}
-	return snapshotFromDescribe(resp), nil
 }
 
 // FetchSnapshotTaskHandler polls metrics, then runs ProcessMetricsPoll and re-arms the timer.
@@ -83,11 +79,15 @@ func (h *FetchSnapshotTaskHandler) Execute(
 	if err != nil {
 		return err
 	}
-	snapshot, err := fetchSnapshot(ctx, h.frontendClient, v)
+	var snapshot *scalingalgorithm.ScalingMetricsSnapshot
+	var observed []*wcipb.ObservedTaskQueue
+	resp, err := fetchSnapshot(ctx, h.frontendClient, v)
 	if err != nil {
 		// As in the workflow: skip this poll and retry at the max interval.
 		h.logger.Warn("Failed to fetch WCI metrics snapshot", tag.Error(err))
-		snapshot = nil
+	} else {
+		snapshot = snapshotFromDescribe(resp)
+		observed = observedTaskQueuesFromDescribe(resp)
 	}
 	_, _, err = chasm.UpdateComponent(ctx, ref, func(w *WorkerControllerInstance, mctx chasm.MutableContext, _ any) (struct{}, error) {
 		h := metricsFor(mctx, w, "")
@@ -97,7 +97,7 @@ func (h *FetchSnapshotTaskHandler) Execute(
 			recordOperation(h, wcimetrics.OperationTypePullStats, wcimetrics.ErrorTypeNone)
 			recordBacklog(h, snapshot)
 		}
-		return struct{}{}, w.ProcessMetricsPoll(mctx, snapshot)
+		return struct{}{}, w.ProcessMetricsPoll(mctx, snapshot, observed)
 	}, nil)
 	return err
 }
@@ -134,7 +134,7 @@ func (h *DeferredDecisionTaskHandler) Execute(
 	if err != nil {
 		return err
 	}
-	snapshot, err := fetchSnapshot(ctx, h.frontendClient, v)
+	resp, err := fetchSnapshot(ctx, h.frontendClient, v)
 	if err != nil {
 		// As in the workflow: drop the decision; the next metrics poll covers it.
 		h.logger.Warn("Failed to fetch snapshot for deferred scaling decision", tag.Error(err))
@@ -146,7 +146,7 @@ func (h *DeferredDecisionTaskHandler) Execute(
 	_, _, err = chasm.UpdateComponent(ctx, ref, func(w *WorkerControllerInstance, mctx chasm.MutableContext, _ any) (struct{}, error) {
 		provider := w.ScalingGroupSpecs[task.GetScalingGroupId()].GetCompute().GetProviderType()
 		recordOperation(metricsFor(mctx, w, provider), wcimetrics.OperationTypeDeferredScalingDecision, wcimetrics.ErrorTypeNone)
-		return struct{}{}, w.ProcessDeferredScalingDecision(mctx, task.GetScalingGroupId(), task.GetTaskAdd(), snapshot)
+		return struct{}{}, w.ProcessDeferredScalingDecision(mctx, task.GetScalingGroupId(), task.GetTaskAdd(), snapshotFromDescribe(resp))
 	}, nil)
 	return err
 }
