@@ -3,6 +3,7 @@ package common
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -21,6 +22,8 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/testing/protopack"
 	"google.golang.org/protobuf/types/known/durationpb"
 )
@@ -681,4 +684,94 @@ func TestCreateHistoryStartWorkflowRequestTimeSkippingStatePropagation(t *testin
 	)
 
 	require.Equal(t, state, historyRequest.GetTimeSkippingStatePropagation())
+}
+
+// statusOnlyError implements the older Status() convention that GetRPCStatus
+// checks for with a direct type assertion, rather than the canonical
+// GRPCStatus() that status.FromError looks for through errors.As.
+type statusOnlyError struct{ st *status.Status }
+
+func (e *statusOnlyError) Error() string          { return e.st.Message() }
+func (e *statusOnlyError) Status() *status.Status { return e.st }
+
+// GetRPCStatus treats the two status conventions differently, and
+// IsRetryableRPCError inherits that. Neither had a test, and the doc comment on
+// IsRetryableRPCError had already drifted into claiming it never unwraps, so
+// the behaviour is pinned here rather than left to prose. Nexus operation
+// retryability is decided from it (chasm/lib/nexusoperation, hsm/nexusoperations),
+// which is why both callers unwrap before they call.
+func TestGetRPCStatusWrapping(t *testing.T) {
+	unavailable := status.New(codes.Unavailable, "down")
+
+	for _, tc := range []struct {
+		name     string
+		err      error
+		wantOK   bool
+		wantCode codes.Code
+	}{
+		{
+			name:     "bare status error",
+			err:      unavailable.Err(),
+			wantOK:   true,
+			wantCode: codes.Unavailable,
+		},
+		{
+			// status.FromError finds a GRPCStatus() method through errors.As.
+			name:     "wrapped status error is unwrapped",
+			err:      fmt.Errorf("calling handler: %w", unavailable.Err()),
+			wantOK:   true,
+			wantCode: codes.Unavailable,
+		},
+		{
+			name:     "bare Status() error",
+			err:      &statusOnlyError{st: unavailable},
+			wantOK:   true,
+			wantCode: codes.Unavailable,
+		},
+		{
+			// The Status() convention is matched by a direct type assertion,
+			// so wrapping hides it, and status.FromError does not look for it.
+			name:   "wrapped Status() error is not unwrapped",
+			err:    fmt.Errorf("calling handler: %w", &statusOnlyError{st: unavailable}),
+			wantOK: false,
+		},
+		{
+			name:   "not a gRPC error",
+			err:    errors.New("plain"),
+			wantOK: false,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			st, ok := GetRPCStatus(tc.err)
+			require.Equal(t, tc.wantOK, ok)
+			if tc.wantOK {
+				require.Equal(t, tc.wantCode, st.Code())
+			}
+		})
+	}
+}
+
+func TestIsRetryableRPCErrorWrapping(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"bare retryable status", status.Error(codes.Unavailable, "down"), true},
+		{"wrapped retryable status", fmt.Errorf("calling handler: %w", status.Error(codes.Unavailable, "down")), true},
+		{"bare non-retryable status", status.Error(codes.InvalidArgument, "bad"), false},
+		{"wrapped non-retryable status", fmt.Errorf("calling handler: %w", status.Error(codes.InvalidArgument, "bad")), false},
+		{"bare Status() error", &statusOnlyError{st: status.New(codes.Unavailable, "down")}, true},
+		// Hidden by the wrapper, so it is not a gRPC error as far as this is
+		// concerned, and an unrecognized error is not retryable.
+		{"wrapped Status() error", fmt.Errorf("calling handler: %w", &statusOnlyError{st: status.New(codes.Unavailable, "down")}), false},
+		{"not a gRPC error", errors.New("plain"), false},
+		// status.FromError(nil) reports ok with a nil status, whose Code() is
+		// OK. Worth pinning: it reads like it could panic.
+		{"nil", nil, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, IsRetryableRPCError(tc.err))
+		})
+	}
 }
