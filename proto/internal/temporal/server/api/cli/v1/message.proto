@@ -41,6 +41,8 @@ message PendingActivityInfo {
   temporal.api.enums.v1.PendingActivityState state = 3;
   string heartbeat_details = 4;
   google.protobuf.Timestamp last_heartbeat_time = 5;
+  // Time when the current activity attempt was started.
+  // Cleared when the activity retries.
   google.protobuf.Timestamp last_started_time = 6;
   int32 attempt = 7;
   int32 maximum_attempts = 8;
