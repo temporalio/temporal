@@ -4,6 +4,7 @@ import (
 	"time"
 
 	failurepb "go.temporal.io/api/failure/v1"
+	wcimetrics "go.temporal.io/auto-scaled-workers/wci/metrics"
 	"go.temporal.io/server/chasm"
 	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -11,23 +12,67 @@ import (
 
 // ---- Root ----
 
-type EventMigrateToWorkflow struct{}
+// EventMigrateToWorkflow freezes the instance for a CHASM → workflow handover.
+type EventMigrateToWorkflow struct {
+	Token string
+}
 
 var TransitionMigrateToWorkflow = chasm.NewTransition(
 	[]wcipb.WciStatus{wcipb.WCI_STATUS_RUNNING},
 	wcipb.WCI_STATUS_MIGRATING_TO_WORKFLOW,
-	func(w *WorkerControllerInstance, ctx chasm.MutableContext, _ EventMigrateToWorkflow) error {
+	func(w *WorkerControllerInstance, ctx chasm.MutableContext, event EventMigrateToWorkflow) error {
+		w.MigrationToken = event.Token
 		ctx.AddTask(w, chasm.TaskAttributes{}, &wcipb.MigrateToWorkflowTask{})
 		return nil
 	},
 )
 
-type EventWorkflowStarted struct{}
+// EventWorkflowActivated means the pending workflow accepted activation and owns the WCI now.
+type EventWorkflowActivated struct{}
 
-var TransitionWorkflowStarted = chasm.NewTransition(
+var TransitionWorkflowActivated = chasm.NewTransition(
 	[]wcipb.WciStatus{wcipb.WCI_STATUS_MIGRATING_TO_WORKFLOW},
 	wcipb.WCI_STATUS_MIGRATED,
-	func(*WorkerControllerInstance, chasm.MutableContext, EventWorkflowStarted) error { return nil },
+	func(*WorkerControllerInstance, chasm.MutableContext, EventWorkflowActivated) error { return nil },
+)
+
+// EventWorkflowMigrationAborted resumes scaling on CHASM after a failed CHASM → workflow handover.
+type EventWorkflowMigrationAborted struct{}
+
+var TransitionWorkflowMigrationAborted = chasm.NewTransition(
+	[]wcipb.WciStatus{wcipb.WCI_STATUS_MIGRATING_TO_WORKFLOW},
+	wcipb.WCI_STATUS_RUNNING,
+	func(w *WorkerControllerInstance, ctx chasm.MutableContext, _ EventWorkflowMigrationAborted) error {
+		w.MigrationToken = ""
+		w.armTimersFromState(ctx)
+		return nil
+	},
+)
+
+// EventMigrationActivated commits a workflow → CHASM handover; the caller replays queued task-adds after.
+type EventMigrationActivated struct{}
+
+var TransitionMigrationActivated = chasm.NewTransition(
+	[]wcipb.WciStatus{wcipb.WCI_STATUS_PENDING_ACTIVATION},
+	wcipb.WCI_STATUS_RUNNING,
+	func(w *WorkerControllerInstance, ctx chasm.MutableContext, _ EventMigrationActivated) error {
+		w.PendingExpireTime = nil
+		w.armTimersFromState(ctx)
+		wcimetrics.InstanceCreated.With(metricsFor(ctx, w, "")).Record(1)
+		return nil
+	},
+)
+
+// EventPendingMigrationAborted closes a pending target on abort or expiry.
+type EventPendingMigrationAborted struct{}
+
+var TransitionPendingMigrationAborted = chasm.NewTransition(
+	[]wcipb.WciStatus{wcipb.WCI_STATUS_PENDING_ACTIVATION},
+	wcipb.WCI_STATUS_MIGRATION_ABORTED,
+	func(w *WorkerControllerInstance, _ chasm.MutableContext, _ EventPendingMigrationAborted) error {
+		w.PendingExpireTime = nil
+		return nil
+	},
 )
 
 // EventDelete covers the Delete RPC and an Update that leaves zero groups.

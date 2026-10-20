@@ -2,6 +2,8 @@
 package wci
 
 import (
+	"time"
+
 	"go.temporal.io/api/serviceerror"
 	wcimetrics "go.temporal.io/auto-scaled-workers/wci/metrics"
 	"go.temporal.io/server/chasm"
@@ -15,6 +17,10 @@ var (
 	ErrClosed = serviceerror.NewFailedPrecondition("worker controller instance is closed")
 	// ErrMigrationPending: retryable while migrating to the workflow backend.
 	ErrMigrationPending = serviceerror.NewUnavailable("worker controller instance is migrating to the workflow backend")
+	// ErrMigrationNotPending: Activate/Abort on a target that is no longer pending with that token.
+	ErrMigrationNotPending = serviceerror.NewFailedPrecondition("worker controller instance migration is not pending")
+	// errPendingInvisible: a pending migration target looks absent, so callers keep using the workflow.
+	errPendingInvisible = serviceerror.NewNotFound("worker controller instance not found")
 )
 
 var (
@@ -62,40 +68,50 @@ func NewWorkerControllerInstance(
 	return w
 }
 
-// NewWorkerControllerInstanceFromMigration restores migrated state as-is, in RUNNING.
+// NewWorkerControllerInstanceFromMigration restores migrated state as a pending target: no timers,
+// no scaling, invisible to clients until TransitionMigrationActivated; it aborts itself at expireTime.
 func NewWorkerControllerInstanceFromMigration(
 	ctx chasm.MutableContext,
 	state *wcipb.WorkerControllerInstanceState,
 	groups map[string]*wcipb.ScalingGroupState,
+	token string,
+	expireTime time.Time,
 ) *WorkerControllerInstance {
 	w := &WorkerControllerInstance{
 		WorkerControllerInstanceState: state,
 		ScalingGroups:                 make(chasm.Map[string, *ScalingGroup], len(groups)),
 		Visibility:                    chasm.NewComponentField(ctx, chasm.NewVisibility(ctx)),
 	}
-	w.Status = wcipb.WCI_STATUS_RUNNING
+	w.Status = wcipb.WCI_STATUS_PENDING_ACTIVATION
+	w.MigrationToken = token
+	w.PendingExpireTime = timestamppb.New(expireTime)
 	for id, group := range groups {
 		group.Id = id
 		w.ScalingGroups[id] = chasm.NewComponentField(ctx, &ScalingGroup{ScalingGroupState: group})
 	}
-	// Keep the workflow's poll cadence; a past-due poll fires immediately.
-	now := ctx.Now(w)
-	nextPoll := now.Add(maxPollInterval)
-	if t := state.GetNextPollTime(); t != nil {
-		nextPoll = t.AsTime()
-		if nextPoll.Before(now) {
-			nextPoll = now
-		}
-	}
-	w.armPollTimer(ctx, nextPoll)
-	w.armValidationTimer(ctx, now.Add(validationInterval))
-	wcimetrics.InstanceCreated.With(metricsFor(ctx, w, "")).Record(1)
+	ctx.AddTask(w, chasm.TaskAttributes{ScheduledTime: expireTime}, &wcipb.PendingExpiryTask{ExpireTime: timestamppb.New(expireTime)})
 	return w
+}
+
+// armTimersFromState resumes the poll and validation cadence from state; past-due deadlines fire now.
+func (w *WorkerControllerInstance) armTimersFromState(ctx chasm.MutableContext) {
+	now := ctx.Now(w)
+	notBefore := func(t *timestamppb.Timestamp, fallback time.Time) time.Time {
+		if t == nil {
+			return fallback
+		}
+		if at := t.AsTime(); at.After(now) {
+			return at
+		}
+		return now
+	}
+	w.armPollTimer(ctx, notBefore(w.NextPollTime, now.Add(maxPollInterval)))
+	w.armValidationTimer(ctx, notBefore(w.NextValidationTime, now.Add(validationInterval)))
 }
 
 func (w *WorkerControllerInstance) LifecycleState(_ chasm.Context) chasm.LifecycleState {
 	switch w.Status {
-	case wcipb.WCI_STATUS_MIGRATED, wcipb.WCI_STATUS_DELETED:
+	case wcipb.WCI_STATUS_MIGRATED, wcipb.WCI_STATUS_DELETED, wcipb.WCI_STATUS_MIGRATION_ABORTED:
 		return chasm.LifecycleStateCompleted
 	default:
 		return chasm.LifecycleStateRunning
@@ -141,6 +157,8 @@ func (w *WorkerControllerInstance) CheckMutable() error {
 		return nil
 	case wcipb.WCI_STATUS_MIGRATING_TO_WORKFLOW:
 		return ErrMigrationPending
+	case wcipb.WCI_STATUS_PENDING_ACTIVATION:
+		return errPendingInvisible
 	default:
 		return ErrClosed
 	}

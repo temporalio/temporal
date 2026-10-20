@@ -449,6 +449,154 @@ func (this *CreateFromMigrationStateResponse) Equal(that interface{}) bool {
 	return proto.Equal(this, that1)
 }
 
+// Marshal an object of type ActivateMigrationRequest to the protobuf v3 wire format
+func (val *ActivateMigrationRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ActivateMigrationRequest from the protobuf v3 wire format
+func (val *ActivateMigrationRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ActivateMigrationRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ActivateMigrationRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ActivateMigrationRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ActivateMigrationRequest
+	switch t := that.(type) {
+	case *ActivateMigrationRequest:
+		that1 = t
+	case ActivateMigrationRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type ActivateMigrationResponse to the protobuf v3 wire format
+func (val *ActivateMigrationResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type ActivateMigrationResponse from the protobuf v3 wire format
+func (val *ActivateMigrationResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *ActivateMigrationResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two ActivateMigrationResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *ActivateMigrationResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *ActivateMigrationResponse
+	switch t := that.(type) {
+	case *ActivateMigrationResponse:
+		that1 = t
+	case ActivateMigrationResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type AbortMigrationRequest to the protobuf v3 wire format
+func (val *AbortMigrationRequest) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type AbortMigrationRequest from the protobuf v3 wire format
+func (val *AbortMigrationRequest) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *AbortMigrationRequest) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two AbortMigrationRequest values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *AbortMigrationRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *AbortMigrationRequest
+	switch t := that.(type) {
+	case *AbortMigrationRequest:
+		that1 = t
+	case AbortMigrationRequest:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
+// Marshal an object of type AbortMigrationResponse to the protobuf v3 wire format
+func (val *AbortMigrationResponse) Marshal() ([]byte, error) {
+	return proto.Marshal(val)
+}
+
+// Unmarshal an object of type AbortMigrationResponse from the protobuf v3 wire format
+func (val *AbortMigrationResponse) Unmarshal(buf []byte) error {
+	return proto.Unmarshal(buf, val)
+}
+
+// Size returns the size of the object, in bytes, once serialized
+func (val *AbortMigrationResponse) Size() int {
+	return proto.Size(val)
+}
+
+// Equal returns whether two AbortMigrationResponse values are equivalent by recursively
+// comparing the message's fields.
+// For more information see the documentation for
+// https://pkg.go.dev/google.golang.org/protobuf/proto#Equal
+func (this *AbortMigrationResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	var that1 *AbortMigrationResponse
+	switch t := that.(type) {
+	case *AbortMigrationResponse:
+		that1 = t
+	case AbortMigrationResponse:
+		that1 = &t
+	default:
+		return false
+	}
+
+	return proto.Equal(this, that1)
+}
+
 // Marshal an object of type MigrateToWorkflowRequest to the protobuf v3 wire format
 func (val *MigrateToWorkflowRequest) Marshal() ([]byte, error) {
 	return proto.Marshal(val)

@@ -26,7 +26,7 @@ var File_temporal_server_chasm_lib_wci_proto_v1_service_proto protoreflect.FileD
 
 const file_temporal_server_chasm_lib_wci_proto_v1_service_proto_rawDesc = "" +
 	"\n" +
-	"4temporal/server/chasm/lib/wci/proto/v1/service.proto\x12&temporal.server.chasm.lib.wci.proto.v1\x1a=temporal/server/chasm/lib/wci/proto/v1/request_response.proto\x1a.temporal/server/api/routing/v1/extension.proto2\xa0\v\n" +
+	"4temporal/server/chasm/lib/wci/proto/v1/service.proto\x12&temporal.server.chasm.lib.wci.proto.v1\x1a=temporal/server/chasm/lib/wci/proto/v1/request_response.proto\x1a.temporal/server/api/routing/v1/extension.proto2\xf3\r\n" +
 	"\x1fWorkerControllerInstanceService\x12\xd2\x01\n" +
 	"\x1eUpdateWorkerControllerInstance\x12M.temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceRequest\x1aN.temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceResponse\"\x11\xd2\xc3\x18\r\x1a\vinstance_id\x12\xd8\x01\n" +
 	" DescribeWorkerControllerInstance\x12O.temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceRequest\x1aP.temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse\"\x11\xd2\xc3\x18\r\x1a\vinstance_id\x12\xd2\x01\n" +
@@ -34,6 +34,8 @@ const file_temporal_server_chasm_lib_wci_proto_v1_service_proto_rawDesc = "" +
 	"$ValidateWorkerControllerInstanceSpec\x12S.temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecRequest\x1aT.temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecResponse\"\x11\xd2\xc3\x18\r\x1a\vinstance_id\x12\x9f\x01\n" +
 	"\rRecordTaskAdd\x12<.temporal.server.chasm.lib.wci.proto.v1.RecordTaskAddRequest\x1a=.temporal.server.chasm.lib.wci.proto.v1.RecordTaskAddResponse\"\x11\xd2\xc3\x18\r\x1a\vinstance_id\x12\xc0\x01\n" +
 	"\x18CreateFromMigrationState\x12G.temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest\x1aH.temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateResponse\"\x11\xd2\xc3\x18\r\x1a\vinstance_id\x12\xab\x01\n" +
+	"\x11ActivateMigration\x12@.temporal.server.chasm.lib.wci.proto.v1.ActivateMigrationRequest\x1aA.temporal.server.chasm.lib.wci.proto.v1.ActivateMigrationResponse\"\x11\xd2\xc3\x18\r\x1a\vinstance_id\x12\xa2\x01\n" +
+	"\x0eAbortMigration\x12=.temporal.server.chasm.lib.wci.proto.v1.AbortMigrationRequest\x1a>.temporal.server.chasm.lib.wci.proto.v1.AbortMigrationResponse\"\x11\xd2\xc3\x18\r\x1a\vinstance_id\x12\xab\x01\n" +
 	"\x11MigrateToWorkflow\x12@.temporal.server.chasm.lib.wci.proto.v1.MigrateToWorkflowRequest\x1aA.temporal.server.chasm.lib.wci.proto.v1.MigrateToWorkflowResponse\"\x11\xd2\xc3\x18\r\x1a\vinstance_idB5Z3go.temporal.io/server/chasm/lib/wci/gen/wcipb;wcipbb\x06proto3"
 
 var file_temporal_server_chasm_lib_wci_proto_v1_service_proto_goTypes = []any{
@@ -43,14 +45,18 @@ var file_temporal_server_chasm_lib_wci_proto_v1_service_proto_goTypes = []any{
 	(*ValidateWorkerControllerInstanceSpecRequest)(nil),  // 3: temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecRequest
 	(*RecordTaskAddRequest)(nil),                         // 4: temporal.server.chasm.lib.wci.proto.v1.RecordTaskAddRequest
 	(*CreateFromMigrationStateRequest)(nil),              // 5: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest
-	(*MigrateToWorkflowRequest)(nil),                     // 6: temporal.server.chasm.lib.wci.proto.v1.MigrateToWorkflowRequest
-	(*UpdateWorkerControllerInstanceResponse)(nil),       // 7: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceResponse
-	(*DescribeWorkerControllerInstanceResponse)(nil),     // 8: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse
-	(*DeleteWorkerControllerInstanceResponse)(nil),       // 9: temporal.server.chasm.lib.wci.proto.v1.DeleteWorkerControllerInstanceResponse
-	(*ValidateWorkerControllerInstanceSpecResponse)(nil), // 10: temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecResponse
-	(*RecordTaskAddResponse)(nil),                        // 11: temporal.server.chasm.lib.wci.proto.v1.RecordTaskAddResponse
-	(*CreateFromMigrationStateResponse)(nil),             // 12: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateResponse
-	(*MigrateToWorkflowResponse)(nil),                    // 13: temporal.server.chasm.lib.wci.proto.v1.MigrateToWorkflowResponse
+	(*ActivateMigrationRequest)(nil),                     // 6: temporal.server.chasm.lib.wci.proto.v1.ActivateMigrationRequest
+	(*AbortMigrationRequest)(nil),                        // 7: temporal.server.chasm.lib.wci.proto.v1.AbortMigrationRequest
+	(*MigrateToWorkflowRequest)(nil),                     // 8: temporal.server.chasm.lib.wci.proto.v1.MigrateToWorkflowRequest
+	(*UpdateWorkerControllerInstanceResponse)(nil),       // 9: temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceResponse
+	(*DescribeWorkerControllerInstanceResponse)(nil),     // 10: temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse
+	(*DeleteWorkerControllerInstanceResponse)(nil),       // 11: temporal.server.chasm.lib.wci.proto.v1.DeleteWorkerControllerInstanceResponse
+	(*ValidateWorkerControllerInstanceSpecResponse)(nil), // 12: temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecResponse
+	(*RecordTaskAddResponse)(nil),                        // 13: temporal.server.chasm.lib.wci.proto.v1.RecordTaskAddResponse
+	(*CreateFromMigrationStateResponse)(nil),             // 14: temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateResponse
+	(*ActivateMigrationResponse)(nil),                    // 15: temporal.server.chasm.lib.wci.proto.v1.ActivateMigrationResponse
+	(*AbortMigrationResponse)(nil),                       // 16: temporal.server.chasm.lib.wci.proto.v1.AbortMigrationResponse
+	(*MigrateToWorkflowResponse)(nil),                    // 17: temporal.server.chasm.lib.wci.proto.v1.MigrateToWorkflowResponse
 }
 var file_temporal_server_chasm_lib_wci_proto_v1_service_proto_depIdxs = []int32{
 	0,  // 0: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.UpdateWorkerControllerInstance:input_type -> temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceRequest
@@ -59,16 +65,20 @@ var file_temporal_server_chasm_lib_wci_proto_v1_service_proto_depIdxs = []int32{
 	3,  // 3: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.ValidateWorkerControllerInstanceSpec:input_type -> temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecRequest
 	4,  // 4: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.RecordTaskAdd:input_type -> temporal.server.chasm.lib.wci.proto.v1.RecordTaskAddRequest
 	5,  // 5: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.CreateFromMigrationState:input_type -> temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateRequest
-	6,  // 6: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.MigrateToWorkflow:input_type -> temporal.server.chasm.lib.wci.proto.v1.MigrateToWorkflowRequest
-	7,  // 7: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.UpdateWorkerControllerInstance:output_type -> temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceResponse
-	8,  // 8: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.DescribeWorkerControllerInstance:output_type -> temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse
-	9,  // 9: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.DeleteWorkerControllerInstance:output_type -> temporal.server.chasm.lib.wci.proto.v1.DeleteWorkerControllerInstanceResponse
-	10, // 10: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.ValidateWorkerControllerInstanceSpec:output_type -> temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecResponse
-	11, // 11: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.RecordTaskAdd:output_type -> temporal.server.chasm.lib.wci.proto.v1.RecordTaskAddResponse
-	12, // 12: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.CreateFromMigrationState:output_type -> temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateResponse
-	13, // 13: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.MigrateToWorkflow:output_type -> temporal.server.chasm.lib.wci.proto.v1.MigrateToWorkflowResponse
-	7,  // [7:14] is the sub-list for method output_type
-	0,  // [0:7] is the sub-list for method input_type
+	6,  // 6: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.ActivateMigration:input_type -> temporal.server.chasm.lib.wci.proto.v1.ActivateMigrationRequest
+	7,  // 7: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.AbortMigration:input_type -> temporal.server.chasm.lib.wci.proto.v1.AbortMigrationRequest
+	8,  // 8: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.MigrateToWorkflow:input_type -> temporal.server.chasm.lib.wci.proto.v1.MigrateToWorkflowRequest
+	9,  // 9: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.UpdateWorkerControllerInstance:output_type -> temporal.server.chasm.lib.wci.proto.v1.UpdateWorkerControllerInstanceResponse
+	10, // 10: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.DescribeWorkerControllerInstance:output_type -> temporal.server.chasm.lib.wci.proto.v1.DescribeWorkerControllerInstanceResponse
+	11, // 11: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.DeleteWorkerControllerInstance:output_type -> temporal.server.chasm.lib.wci.proto.v1.DeleteWorkerControllerInstanceResponse
+	12, // 12: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.ValidateWorkerControllerInstanceSpec:output_type -> temporal.server.chasm.lib.wci.proto.v1.ValidateWorkerControllerInstanceSpecResponse
+	13, // 13: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.RecordTaskAdd:output_type -> temporal.server.chasm.lib.wci.proto.v1.RecordTaskAddResponse
+	14, // 14: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.CreateFromMigrationState:output_type -> temporal.server.chasm.lib.wci.proto.v1.CreateFromMigrationStateResponse
+	15, // 15: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.ActivateMigration:output_type -> temporal.server.chasm.lib.wci.proto.v1.ActivateMigrationResponse
+	16, // 16: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.AbortMigration:output_type -> temporal.server.chasm.lib.wci.proto.v1.AbortMigrationResponse
+	17, // 17: temporal.server.chasm.lib.wci.proto.v1.WorkerControllerInstanceService.MigrateToWorkflow:output_type -> temporal.server.chasm.lib.wci.proto.v1.MigrateToWorkflowResponse
+	9,  // [9:18] is the sub-list for method output_type
+	0,  // [0:9] is the sub-list for method input_type
 	0,  // [0:0] is the sub-list for extension type_name
 	0,  // [0:0] is the sub-list for extension extendee
 	0,  // [0:0] is the sub-list for field type_name
