@@ -566,6 +566,21 @@ func (c *retryableClient) MigrateSchedule(
 	return resp, err
 }
 
+func (c *retryableClient) MigrateWorkerControllerInstance(
+	ctx context.Context,
+	request *adminservice.MigrateWorkerControllerInstanceRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.MigrateWorkerControllerInstanceResponse, error) {
+	var resp *adminservice.MigrateWorkerControllerInstanceResponse
+	op := func(ctx context.Context) error {
+		var err error
+		resp, err = c.client.MigrateWorkerControllerInstance(ctx, request, opts...)
+		return err
+	}
+	err := backoff.ThrottleRetryContext(ctx, op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) PurgeDLQMessages(
 	ctx context.Context,
 	request *adminservice.PurgeDLQMessagesRequest,

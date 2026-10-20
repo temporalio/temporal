@@ -19,6 +19,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/chasm/lib/wci"
 	wcipb "go.temporal.io/server/chasm/lib/wci/gen/wcipb/v1"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -158,7 +159,10 @@ func (s *WCIChasmMigrationSuite) TestRoundTripUnderLoad() {
 	scalesUp("CHASM")
 
 	// --- CHASM → workflow. ---
-	_, err = chasmClient.MigrateToWorkflow(ctx, &wcipb.MigrateToWorkflowRequest{NamespaceId: env.NamespaceID().String(), InstanceId: instanceID})
+	// Through the operator path (tdbg worker-controller migrate-to-workflow).
+	_, err = env.GetTestCluster().AdminClient().MigrateWorkerControllerInstance(ctx, &adminservice.MigrateWorkerControllerInstanceRequest{
+		Namespace: ns, DeploymentName: deploymentName, BuildId: buildID, Identity: "test",
+	})
 	s.NoError(err)
 	s.AwaitTruef(func() bool { return workflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING }, 30*time.Second, 200*time.Millisecond, "workflow started")
 	s.AwaitTruef(func() bool { return !onCHASM() }, 30*time.Second, 200*time.Millisecond, "CHASM closed after the hand-off")

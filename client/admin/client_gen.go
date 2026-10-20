@@ -379,6 +379,16 @@ func (c *clientImpl) MigrateSchedule(
 	return c.client.MigrateSchedule(ctx, request, opts...)
 }
 
+func (c *clientImpl) MigrateWorkerControllerInstance(
+	ctx context.Context,
+	request *adminservice.MigrateWorkerControllerInstanceRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.MigrateWorkerControllerInstanceResponse, error) {
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return c.client.MigrateWorkerControllerInstance(ctx, request, opts...)
+}
+
 func (c *clientImpl) PurgeDLQMessages(
 	ctx context.Context,
 	request *adminservice.PurgeDLQMessagesRequest,

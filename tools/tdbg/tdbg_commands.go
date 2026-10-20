@@ -72,6 +72,12 @@ func getCommands(
 			Subcommands: newAdminScheduleCommands(clientFactory),
 		},
 		{
+			Name:        "worker-controller",
+			Aliases:     []string{"wc"},
+			Usage:       "Run admin operation on a worker controller instance",
+			Subcommands: newAdminWorkerControllerCommands(clientFactory),
+		},
+		{
 			Name:        "delegated-batch",
 			Usage:       "Delegate workflow or activity termination or deletion from a user namespace to temporal-system",
 			Subcommands: newAdminBatchCommands(clientFactory, prompterFactory),
